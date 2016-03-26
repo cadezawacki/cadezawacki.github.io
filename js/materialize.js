@@ -443,12 +443,23 @@ if ($) {
   };
 
   $(document).ready(function(){
-    $('.collapsible').collapsible();
-  });
+  	$(window).scroll(function() {
+		  if( $(this).scrollTop() > $('body').height() - 80 ) { //
+		    $(".main-nav").addClass(("main-nav-scrolled"));
+		  } else {
+		    $(".main-nav").removeClass(("main-nav-scrolled"));
+		  }
+		});
+  	$('.scrollspy').scrollSpy();
+  	$('.button-collapse').sideNav({
+	      menuWidth: 300, // Default is 240
+	      edge: 'left', // Choose the horizontal origin
+	      closeOnClick: true // Closes side-nav on <a> clicks, useful for Angular/Meteor
+		    }
+		  );
+  	   });
 }( jQuery ));;(function ($) {
-	$(".button-collapse").sideNav();
-  // Add posibility to scroll to selected option
-  // usefull for select for example
+        
   $.fn.scrollTo = function(elem) {
     $(this).scrollTop($(this).scrollTop() - $(this).offset().top + $(elem).offset().top);
     return this;
@@ -1025,6 +1036,8 @@ if ($) {
           returnToOriginal();
         }
       });
+
+
 
       // Return on ESC
       $(document).keyup(function(e) {

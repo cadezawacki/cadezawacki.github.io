@@ -3,6 +3,7 @@
  * Copyright 2014-2015 Materialize
  * MIT License (https://raw.githubusercontent.com/Dogfalo/materialize/master/LICENSE)
  */
+
 .materialize-red.lighten-5 {
   background-color: #fdeaeb !important;
 }
@@ -2852,7 +2853,7 @@ ul.staggered-list li {
   }
 }
 
-@media only screen and (max-width: 992px) {
+@media only screen and (max-width: 1250px) {
   .hide-on-med-and-down {
     display: none !important;
   }
@@ -7302,16 +7303,21 @@ nav ul a span.badge {
   }
 }
 
+.grayish-text {
+  color: #212121 !important;
+}
+
 nav {
   color: #fff;
-  background-color: #ee6e73;
+  background-color: #f9f9f9;
   width: 100%;
   height: 56px;
   line-height: 56px;
+  margin-bottom: -80px;
 }
 
 nav a {
-  color: #fff;
+  color: ##212121;
 }
 
 nav i,
@@ -7328,16 +7334,16 @@ nav .nav-wrapper {
   height: 100%;
 }
 
-@media only screen and (min-width: 993px) {
+@media only screen and (min-width: 1250px) {
   nav a.button-collapse {
     display: none;
+    z-index: 1;
   }
 }
 
 nav .button-collapse {
   float: left;
   position: relative;
-  z-index: 1;
   height: 56px;
 }
 
@@ -7480,6 +7486,18 @@ nav .input-field label.active {
 }
 
 @font-face {
+  font-family: "BPreplay";
+  src: url("../font/BPreplay.otf");
+  font-weight: 200;
+}
+
+@font-face {
+  font-family: "BEBAS";
+  src: url("../font/BEBAS___.ttf");
+  font-weight: 200;
+}
+
+@font-face {
   font-family: "Roboto";
   src: local(Roboto Thin), url("../font/roboto/Roboto-Thin.eot");
   src: url("../font/roboto/Roboto-Thin.eot?#iefix") format("embedded-opentype"), url("../font/roboto/Roboto-Thin.woff2") format("woff2"), url("../font/roboto/Roboto-Thin.woff") format("woff"), url("../font/roboto/Roboto-Thin.ttf") format("truetype");
@@ -7508,7 +7526,7 @@ nav .input-field label.active {
 }
 
 @font-face {
-  font-family: "Roboto";
+  font-family: "Roboto Bold";
   src: url("../font/roboto/Roboto-Bold.eot");
   src: url("../font/roboto/Roboto-Bold.eot?#iefix") format("embedded-opentype"), url("../font/roboto/Roboto-Bold.woff2") format("woff2"), url("../font/roboto/Roboto-Bold.woff") format("woff"), url("../font/roboto/Roboto-Bold.ttf") format("truetype");
   font-weight: 700;
@@ -7520,7 +7538,7 @@ a {
 
 html {
   line-height: 1.5;
-  font-family: "Roboto", sans-serif;
+  font-family: "BEBAS", sans-serif;
   font-weight: normal;
   color: rgba(0, 0, 0, 0.87);
 }
@@ -9865,7 +9883,7 @@ select {
   right: 0;
   height: 120vh;
   background-color: rgba(0, 0, 0, 0.5);
-  z-index: 997;
+  z-index: 1;
   will-change: opacity;
 }
 

@@ -1,0 +1,8 @@
+
+.navbar-header {
+    float: left;
+    padding: 2px;
+    text-align: center;
+    width: 100%;
+}
+.navbar-brand {float:none;}

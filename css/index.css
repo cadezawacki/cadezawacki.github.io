@@ -1,0 +1,57 @@
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  padding-top: 250px;
+}
+header {
+  height: 500px;
+  padding-top: 20px;
+  background: #ffffff;
+  text-align: center;
+}
+
+h2 {
+  font-size: 20px;
+  font-family: "Roboto Bold"
+}
+
+img.resize{
+   max-width:40%;
+   max-height:20%;
+}
+
+.main-nav,
+.main {
+  position: relative;
+  top: 43em;
+}
+.main-nav {
+  margin-bottom: -65px;
+  z-index: 150;
+}
+header,
+.main-nav-scrolled {
+  position: fixed;
+  width: 100%;
+  top: 0;
+}
+.main {
+  background: #f2f2f2;
+  padding-top: 100px;
+  padding-left: 30%;
+  padding-right: 30%;
+}
+
+@media only screen and (max-width: 767px) {
+
+   h1 {
+      font-size: 3em;
+   }
+
+   h2 {
+      font-size: 1.5em;
+   }
+
+}
