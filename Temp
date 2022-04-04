@@ -1,0 +1,25 @@
+list_of_dict = [
+  {"name": "Tom", "age": 10},
+  {"name": "Mark", "age": 5},
+  {"name": "Pam", "age": 7}
+]
+
+def construct_table(list_of_dict):
+    columns = set().union(*(d.keys() for d in list_of_dict))
+    table = html.Div(id="table", children=[html.Thead(children=[html.Tr(
+        children=[
+            html.Th(column)
+            for column in columns
+        ]
+    )]), html.Tbody(
+        children=[
+            html.Tr(
+                children=[
+                    html.Td(row_values)
+                    for row_values in row.values()
+                ]
+            )
+            for row in list_of_dict]
+
+    )])
+    return table
