@@ -1,0 +1,922 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Cade's Color Manager</title>
+  <!-- Chroma.js for color math -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/chroma-js/2.4.2/chroma.min.js"></script>
+  <style>
+    /* Basic Reset & Styling */
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: Arial, sans-serif; background: #f5f5f5; padding: 1rem; }
+    .container {
+      max-width: 1200px;
+      margin: auto;
+      background: #fff;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    h1, h2, h3 { text-align: center; margin-bottom: 10px; }
+    .section { margin-bottom: 20px; padding-bottom: 10px; border-bottom: 1px solid #eee; }
+    .input-group {
+      margin-bottom: 10px;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .input-group label {
+      flex: 0 0 120px;
+      margin-right: 10px;
+    }
+    .input-group input {
+      flex: 1 1 200px;
+      padding: 5px;
+      margin-right: 10px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      transition: border 0.2s;
+    }
+    .input-group input.error { border: 1px solid red; }
+    .input-group span.error-msg { color: red; font-size: 0.8rem; }
+    button {
+      padding: 8px 12px;
+      margin: 5px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    button:hover { background: #ddd; }
+    .color-picker { text-align: center; margin-bottom: 20px; }
+    .color-picker input[type="color"] {
+      width: 50px; height: 50px; border: none; cursor: pointer;
+    }
+    #gradientDisplay {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 10px;
+    }
+    .gradient-swatch {
+      flex: 1;
+      height: 50px;
+      margin: 0 3px;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: transform 0.15s, border 0.15s;
+      border: 2px solid transparent;
+    }
+    .gradient-swatch:hover { transform: scale(1.05); border-color: #666; }
+    .swatch-container {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .swatch {
+      width: 60px;
+      height: 60px;
+      margin: 5px;
+      border-radius: 4px;
+      cursor: pointer;
+      border: 2px solid transparent;
+      transition: transform 0.15s, border 0.15s;
+    }
+    .swatch:hover { transform: scale(1.05); border-color: #666; }
+    .preview { text-align: center; margin-top: 10px; }
+    #previewButton {
+      padding: 10px 20px;
+      font-size: 1rem;
+      border: none;
+      border-radius: 4px;
+      transition: background 0.3s, color 0.3s;
+    }
+    #previewCard {
+      margin: 10px auto;
+      padding: 20px;
+      width: 80%;
+      border-radius: 4px;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+      transition: background 0.3s, color 0.3s;
+    }
+    #contrastCheck { text-align: center; margin-top: 10px; font-size: 0.9rem; }
+    /* History & Saved Palettes */
+    .history-container, .saved-palettes {
+      display: flex;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+    .history-swatch, .saved-swatch {
+      width: 40px;
+      height: 40px;
+      margin: 5px;
+      border-radius: 4px;
+      cursor: pointer;
+      border: 2px solid transparent;
+      transition: transform 0.15s, border 0.15s;
+    }
+    .history-swatch:hover, .saved-swatch:hover { transform: scale(1.1); border-color: #333; }
+    /* 2D Grid */
+    #gridDisplay {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 3px;
+      margin-top: 10px;
+    }
+    /* CSS Filter Generator Section */
+    #cssFilterSection {
+      text-align: center;
+    }
+    #cssFilterSection svg {
+      margin-top: 10px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Advanced Color Manager for UI Design</h1>
+    
+    <!-- Color Inputs Section -->
+    <div class="section" id="colorInputsSection">
+      <h2>Color Inputs</h2>
+      <div class="input-group">
+        <label for="hexInput">Hex:</label>
+        <input type="text" id="hexInput" placeholder="#RRGGBB">
+        <span class="error-msg" id="hexError"></span>
+      </div>
+      <div class="input-group">
+        <label for="rgbaInput">RGBA:</label>
+        <input type="text" id="rgbaInput" placeholder="rgba(255,0,0,1)">
+        <span class="error-msg" id="rgbaError"></span>
+      </div>
+      <div class="input-group">
+        <label for="hslInput">HSL:</label>
+        <input type="text" id="hslInput" placeholder="hsl(0,100%,50%)">
+        <span class="error-msg" id="hslError"></span>
+      </div>
+      <div class="input-group">
+        <label for="labInput">Lab:</label>
+        <input type="text" id="labInput" placeholder="lab(53, 80, 67)">
+        <span class="error-msg" id="labError"></span>
+      </div>
+      <div class="input-group">
+        <label for="cmykInput">CMYK:</label>
+        <input type="text" id="cmykInput" placeholder="cmyk(0%, 50%, 50%, 0%)">
+        <span class="error-msg" id="cmykError"></span>
+      </div>
+      <div class="input-group">
+        <label for="filterInput">CSS Filter:</label>
+        <input type="text" id="filterInput" placeholder="invert(0%) hue-rotate(0deg)">
+        <span class="error-msg" id="filterError"></span>
+      </div>
+    </div>
+    
+    <!-- Color Picker & Eye Dropper -->
+    <div class="section color-picker">
+      <h2>Color Picker &amp; Eye Dropper</h2>
+      <input type="color" id="colorPicker">
+      <button id="eyeDropperBtn">Eye Dropper</button>
+    </div>
+    
+    <!-- Live Preview Section -->
+    <div class="section" id="livePreviewSection">
+      <h2>Live Preview</h2>
+      <div class="preview">
+        <button id="previewButton">Sample Button</button>
+        <div id="previewCard">Sample Card</div>
+        <p id="previewText">This is sample text.</p>
+      </div>
+      <div id="contrastCheck"></div>
+    </div>
+    
+    <!-- 1D Gradient Section (7 swatches) -->
+    <div class="section" id="gradientSection">
+      <h2>7‑Color Gradient</h2>
+      <div class="input-group" style="justify-content:center;">
+        <label for="gradientSlider">Intensity:</label>
+        <input type="range" id="gradientSlider" min="0" max="100" value="50">
+      </div>
+      <div id="gradientDisplay"></div>
+    </div>
+    
+    <!-- Vibe Presets -->
+    <div class="section" id="vibeSection" style="text-align:center;">
+      <h2>Vibe Presets</h2>
+      <select id="vibeSelect">
+        <option value="default">Default</option>
+        <option value="pastel">Pastel</option>
+        <option value="retro">Retro</option>
+        <option value="cyberpunk">Cyberpunk</option>
+        <option value="vintage">Vintage</option>
+        <option value="vibrant">Vibrant</option>
+        <option value="professional">Professional</option>
+        <option value="earthy">Earthy</option>
+        <option value="neon">Neon</option>
+        <option value="monochrome">Monochrome</option>
+        <option value="warm">Warm</option>
+        <option value="cool">Cool</option>
+      </select>
+    </div>
+    
+    <!-- Color Harmonies -->
+    <div class="section" id="harmoniesSection">
+      <h2>Color Harmonies</h2>
+      <div id="harmonySimilar">
+        <h3>Similar Colors</h3>
+        <div class="swatch-container" id="similarColors"></div>
+      </div>
+      <div id="harmonyComplementary">
+        <h3>Complementary Colors</h3>
+        <div class="swatch-container" id="complementaryColors"></div>
+      </div>
+      <div id="harmonyAnalogous">
+        <h3>Analogous Colors</h3>
+        <div class="swatch-container" id="analogousColors"></div>
+      </div>
+      <div id="harmonyTriadic">
+        <h3>Triadic Colors</h3>
+        <div class="swatch-container" id="triadicColors"></div>
+      </div>
+      <div id="harmonyTetradic">
+        <h3>Tetradic Colors</h3>
+        <div class="swatch-container" id="tetradicColors"></div>
+      </div>
+      <div id="harmonySplit">
+        <h3>Split‑Complementary</h3>
+        <div class="swatch-container" id="splitColors"></div>
+      </div>
+    </div>
+    
+    <!-- Saved Palettes -->
+    <div class="section" id="savedPalettesSection">
+      <h2>Saved Palettes</h2>
+      <button id="savePaletteBtn">Save Palette</button>
+      <div class="saved-palettes" id="savedPalettes"></div>
+    </div>
+    
+    <!-- 2D Gradient Grid Section -->
+    <div class="section" id="gridGradientSection">
+      <h2>2D Gradient Grid</h2>
+      <div class="input-group" style="justify-content:center;">
+        <label for="gridSatSlider">Saturation Variation:</label>
+        <input type="range" id="gridSatSlider" min="0" max="100" value="50">
+      </div>
+      <div class="input-group" style="justify-content:center;">
+        <label for="gridLightSlider">Lightness Variation:</label>
+        <input type="range" id="gridLightSlider" min="0" max="100" value="50">
+      </div>
+      <div id="gridDisplay"></div>
+    </div>
+    
+    <!-- CSS Filter Generator Section -->
+    <div class="section" id="cssFilterSection">
+      <h2>CSS Filter Generator</h2>
+      <p>Target color: <span id="cssTargetColor"></span></p>
+      <p>Computed Filter: <span id="computedFilter"></span></p>
+      <p id="filterLoss"></p>
+      <button id="recomputeFilterBtn">Recompute Filter</button>
+      <svg id="filterSvg" width="100" height="100" viewBox="0 0 100 100">
+        <!-- A simple circle with black stroke; the filter will tint it to the selected color -->
+        <circle cx="50" cy="50" r="40" stroke="black" stroke-width="5" fill="none" />
+      </svg>
+    </div>
+    
+    <!-- History Section (moved to the bottom, limited to 10 entries) -->
+    <div class="section" id="historySection" style="text-align:center;">
+      <h2>History (Last 10)</h2>
+      <button id="undoBtn">Undo</button>
+      <button id="redoBtn">Redo</button>
+      <div class="history-container" id="historyContainer"></div>
+    </div>
+    
+  </div>
+  
+  <script>
+    /***********************
+     * Global Variables
+     ***********************/
+    let currentColor = chroma("#3498db");
+    let updatingUI = false;
+    let undoStack = [];
+    let redoStack = [];
+    let savedPalettes = [];
+    
+    /***********************
+     * History & Saved Palettes
+     ***********************/
+    function setColor(newColor, pushHistory = true) {
+      if (!newColor || !chroma.valid(newColor)) return;
+      if (pushHistory) {
+        // Push the current color into history (limit to 10)
+        undoStack.push(currentColor.hex());
+        if (undoStack.length > 10) { undoStack.shift(); }
+        redoStack = [];
+        updateHistoryUI();
+      }
+      currentColor = chroma(newColor);
+      updateUI();
+    }
+    
+    function updateHistoryUI() {
+      const historyContainer = document.getElementById("historyContainer");
+      historyContainer.innerHTML = "";
+      // Display most recent history first
+      undoStack.slice().reverse().forEach(colorHex => {
+        const swatch = document.createElement("div");
+        swatch.className = "history-swatch";
+        swatch.style.backgroundColor = colorHex;
+        swatch.addEventListener("click", () => setColor(colorHex));
+        historyContainer.appendChild(swatch);
+      });
+    }
+    
+    function updateSavedPalettesUI() {
+      const container = document.getElementById("savedPalettes");
+      container.innerHTML = "";
+      savedPalettes.forEach(colorHex => {
+        const swatch = document.createElement("div");
+        swatch.className = "saved-swatch";
+        swatch.style.backgroundColor = colorHex;
+        swatch.title = colorHex;
+        swatch.addEventListener("click", () => setColor(colorHex));
+        container.appendChild(swatch);
+      });
+    }
+    
+    /***********************
+     * Live Preview & Contrast
+     ***********************/
+    function updateLivePreview() {
+      const previewButton = document.getElementById("previewButton");
+      const previewCard = document.getElementById("previewCard");
+      const previewText = document.getElementById("previewText");
+      const textColor = currentColor.luminance() < 0.5 ? "#fff" : "#000";
+      previewButton.style.backgroundColor = currentColor.hex();
+      previewButton.style.color = textColor;
+      previewCard.style.backgroundColor = currentColor.hex();
+      previewCard.style.color = textColor;
+      previewText.style.color = currentColor.hex();
+      
+      const contrastWithWhite = chroma.contrast(currentColor, "white").toFixed(2);
+      const contrastWithBlack = chroma.contrast(currentColor, "black").toFixed(2);
+      document.getElementById("contrastCheck").innerText =
+        "Contrast with white: " + contrastWithWhite +
+        " | Contrast with black: " + contrastWithBlack;
+    }
+    
+    /***********************
+     * 1D Gradient (7 swatches)
+     ***********************/
+    function updateGradientDisplay() {
+      const sliderVal = document.getElementById("gradientSlider").value;
+      const intensity = sliderVal / 250; // roughly 0 to 0.4
+      const baseHSL = currentColor.hsl();
+      const clampL = (l) => Math.max(0, Math.min(1, l));
+      let steps = [-3, -2, -1, 0, 1, 2, 3];
+      let colors = steps.map(step =>
+        chroma.hsl(baseHSL[0], baseHSL[1], clampL(baseHSL[2] + (step/3)*intensity))
+      );
+      const gradContainer = document.getElementById("gradientDisplay");
+      gradContainer.innerHTML = "";
+      colors.forEach(col => {
+        const swatch = document.createElement("div");
+        swatch.className = "gradient-swatch";
+        swatch.style.backgroundColor = col.hex();
+        swatch.addEventListener("click", () => setColor(col));
+        gradContainer.appendChild(swatch);
+      });
+    }
+    
+    /***********************
+     * 2D Gradient Grid
+     ***********************/
+    function updateGridDisplay() {
+      const gridContainer = document.getElementById("gridDisplay");
+      gridContainer.innerHTML = "";
+      const gridSize = 5;
+      const center = Math.floor(gridSize/2);
+      const baseHSL = currentColor.hsl();
+      const baseHue = baseHSL[0], baseSat = baseHSL[1], baseLight = baseHSL[2];
+      let satVar = document.getElementById("gridSatSlider").value / 100 * 0.5; // 0 to 0.5
+      let lightVar = document.getElementById("gridLightSlider").value / 100 * 0.5; // 0 to 0.5
+      
+      for (let row = 0; row < gridSize; row++) {
+        for (let col = 0; col < gridSize; col++) {
+          let offsetX = col - center;
+          let offsetY = row - center;
+          let newSat = Math.min(1, Math.max(0, baseSat + offsetX * satVar));
+          let newLight = Math.min(1, Math.max(0, baseLight + offsetY * lightVar));
+          let newColor = chroma.hsl(baseHue, newSat, newLight);
+          let cell = document.createElement("div");
+          cell.style.backgroundColor = newColor.hex();
+          cell.style.width = "100%";
+          cell.style.paddingTop = "100%"; // square cell
+          cell.style.position = "relative";
+          cell.style.cursor = "pointer";
+          cell.title = newColor.hex();
+          cell.addEventListener("click", () => setColor(newColor));
+          let inner = document.createElement("div");
+          inner.style.position = "absolute";
+          inner.style.top = "0";
+          inner.style.bottom = "0";
+          inner.style.left = "0";
+          inner.style.right = "0";
+          cell.appendChild(inner);
+          gridContainer.appendChild(cell);
+        }
+      }
+    }
+    
+    /***********************
+     * Color Harmonies & Vibe Adjustments
+     ***********************/
+    function updateHarmonies() {
+      const vibe = document.getElementById("vibeSelect").value;
+      // Clear harmony containers
+      ["similarColors", "complementaryColors", "analogousColors",
+       "triadicColors", "tetradicColors", "splitColors"].forEach(id => {
+         document.getElementById(id).innerHTML = "";
+      });
+      const baseHSL = currentColor.hsl();
+      
+      // Similar Colors (using more offsets)
+      const similarOffsets = [-30, -20, -10, 10, 20, 30];
+      similarOffsets.forEach(off => {
+        let col = chroma.hsl((baseHSL[0] + off + 360) % 360, baseHSL[1], baseHSL[2]);
+        col = adjustForVibe(col, vibe);
+        addSwatch(col, document.getElementById("similarColors"));
+      });
+      
+      // Complementary Colors (base and two offsets)
+      let comp = getComplement(currentColor);
+      comp = adjustForVibe(comp, vibe);
+      addSwatch(comp, document.getElementById("complementaryColors"));
+      let compPlus = chroma.hsl((comp.hsl()[0] + 10) % 360, comp.hsl()[1], comp.hsl()[2]);
+      let compMinus = chroma.hsl((comp.hsl()[0] - 10 + 360) % 360, comp.hsl()[1], comp.hsl()[2]);
+      compPlus = adjustForVibe(compPlus, vibe);
+      compMinus = adjustForVibe(compMinus, vibe);
+      addSwatch(compPlus, document.getElementById("complementaryColors"));
+      addSwatch(compMinus, document.getElementById("complementaryColors"));
+      
+      // Analogous (±30°)
+      let ana1 = chroma.hsl((baseHSL[0] + 30) % 360, baseHSL[1], baseHSL[2]);
+      let ana2 = chroma.hsl((baseHSL[0] - 30 + 360) % 360, baseHSL[1], baseHSL[2]);
+      ana1 = adjustForVibe(ana1, vibe);
+      ana2 = adjustForVibe(ana2, vibe);
+      addSwatch(ana1, document.getElementById("analogousColors"));
+      addSwatch(ana2, document.getElementById("analogousColors"));
+      
+      // Triadic (±120°)
+      let tri1 = chroma.hsl((baseHSL[0] + 120) % 360, baseHSL[1], baseHSL[2]);
+      let tri2 = chroma.hsl((baseHSL[0] + 240) % 360, baseHSL[1], baseHSL[2]);
+      tri1 = adjustForVibe(tri1, vibe);
+      tri2 = adjustForVibe(tri2, vibe);
+      addSwatch(tri1, document.getElementById("triadicColors"));
+      addSwatch(tri2, document.getElementById("triadicColors"));
+      
+      // Tetradic (square: 90° offsets)
+      let tet1 = chroma.hsl((baseHSL[0] + 90) % 360, baseHSL[1], baseHSL[2]);
+      let tet2 = chroma.hsl((baseHSL[0] + 180) % 360, baseHSL[1], baseHSL[2]);
+      let tet3 = chroma.hsl((baseHSL[0] + 270) % 360, baseHSL[1], baseHSL[2]);
+      tet1 = adjustForVibe(tet1, vibe);
+      tet2 = adjustForVibe(tet2, vibe);
+      tet3 = adjustForVibe(tet3, vibe);
+      addSwatch(tet1, document.getElementById("tetradicColors"));
+      addSwatch(tet2, document.getElementById("tetradicColors"));
+      addSwatch(tet3, document.getElementById("tetradicColors"));
+      
+      // Split‑Complementary (complement ±30°)
+      let split1 = chroma.hsl((baseHSL[0] + 180 - 30 + 360) % 360, baseHSL[1], baseHSL[2]);
+      let split2 = chroma.hsl((baseHSL[0] + 180 + 30) % 360, baseHSL[1], baseHSL[2]);
+      split1 = adjustForVibe(split1, vibe);
+      split2 = adjustForVibe(split2, vibe);
+      addSwatch(split1, document.getElementById("splitColors"));
+      addSwatch(split2, document.getElementById("splitColors"));
+    }
+    
+    // Helper: add a swatch element to a container
+    function addSwatch(color, container) {
+      const swatch = document.createElement("div");
+      swatch.className = "swatch";
+      swatch.style.backgroundColor = color.hex();
+      swatch.title = color.hex();
+      swatch.addEventListener("click", () => setColor(color));
+      container.appendChild(swatch);
+    }
+    
+    // Get the complementary color (hue + 180°)
+    function getComplement(color) {
+      let hsl = color.hsl();
+      hsl[0] = (hsl[0] + 180) % 360;
+      return chroma.hsl(hsl[0], hsl[1], hsl[2]);
+    }
+    
+    // Adjust a color based on a selected vibe preset
+    function adjustForVibe(color, vibe) {
+      let hsl = color.hsl();
+      switch(vibe) {
+        case "pastel":
+          return chroma.hsl(hsl[0], hsl[1] * 0.5, Math.min(hsl[2] + 0.15, 1));
+        case "retro":
+          return chroma.hsl(hsl[0], hsl[1] * 0.8, hsl[2] * 0.9);
+        case "cyberpunk":
+          return chroma.hsl(hsl[0], Math.min(hsl[1] * 1.3, 1), Math.min(hsl[2] + 0.1, 1));
+        case "vintage":
+          return chroma.hsl((hsl[0] + 10) % 360, hsl[1] * 0.7, hsl[2]);
+        case "vibrant":
+          return chroma.hsl(hsl[0], Math.min(hsl[1] * 1.5, 1), hsl[2]);
+        case "professional":
+          return chroma.hsl(hsl[0], hsl[1] * 0.85, hsl[2]);
+        case "earthy":
+          return chroma.hsl((hsl[0] - 20 + 360) % 360, Math.max(hsl[1] - 0.2, 0), hsl[2]);
+        case "neon":
+          return chroma.hsl(hsl[0], 1, Math.min(hsl[2] + 0.2, 1));
+        case "monochrome":
+          return chroma.hsl(hsl[0], 0, hsl[2]);
+        case "warm":
+          return chroma.hsl((hsl[0] + 10) % 360, hsl[1], hsl[2]);
+        case "cool":
+          return chroma.hsl((hsl[0] - 10 + 360) % 360, hsl[1], hsl[2]);
+        default:
+          return color;
+      }
+    }
+    
+    /***********************
+     * CMYK Conversions
+     ***********************/
+    function rgbToCmyk(r, g, b) {
+      let rP = r / 255, gP = g / 255, bP = b / 255;
+      let k = 1 - Math.max(rP, gP, bP);
+      let c = (1 - rP - k) / (1 - k) || 0;
+      let m = (1 - gP - k) / (1 - k) || 0;
+      let y = (1 - bP - k) / (1 - k) || 0;
+      return [c, m, y, k];
+    }
+    
+    function cmykToRgb(c, m, y, k) {
+      let r = 255 * (1 - c) * (1 - k);
+      let g = 255 * (1 - m) * (1 - k);
+      let b = 255 * (1 - y) * (1 - k);
+      return [r, g, b];
+    }
+    
+    /***********************
+     * Update All UI Fields
+     ***********************/
+    function updateUI() {
+      updatingUI = true;
+      // Update color picker
+      document.getElementById("colorPicker").value = currentColor.hex();
+      
+      // Hex
+      document.getElementById("hexInput").value = currentColor.hex();
+      document.getElementById("hexInput").classList.remove("error");
+      document.getElementById("hexError").innerText = "";
+      
+      // RGBA
+      let rgba = currentColor.rgba();
+      document.getElementById("rgbaInput").value = `rgba(${rgba[0]}, ${rgba[1]}, ${rgba[2]}, ${parseFloat(rgba[3].toFixed(2))})`;
+      document.getElementById("rgbaInput").classList.remove("error");
+      document.getElementById("rgbaError").innerText = "";
+      
+      // HSL
+      let hsl = currentColor.hsl();
+      document.getElementById("hslInput").value = `hsl(${Math.round(hsl[0])}, ${Math.round(hsl[1]*100)}%, ${Math.round(hsl[2]*100)}%)`;
+      document.getElementById("hslInput").classList.remove("error");
+      document.getElementById("hslError").innerText = "";
+      
+      // Lab
+      let lab = currentColor.lab();
+      document.getElementById("labInput").value = `lab(${lab[0].toFixed(1)}, ${lab[1].toFixed(1)}, ${lab[2].toFixed(1)})`;
+      document.getElementById("labInput").classList.remove("error");
+      document.getElementById("labError").innerText = "";
+      
+      // CMYK
+      let rgb = currentColor.rgb();
+      let cmyk = rgbToCmyk(rgb[0], rgb[1], rgb[2]);
+      let cmykPercent = cmyk.map(v => Math.round(v * 100));
+      document.getElementById("cmykInput").value = `cmyk(${cmykPercent[0]}%, ${cmykPercent[1]}%, ${cmykPercent[2]}%, ${cmykPercent[3]}%)`;
+      document.getElementById("cmykInput").classList.remove("error");
+      document.getElementById("cmykError").innerText = "";
+      
+      // CSS Filter input will be updated by updateCssFilter()
+      document.getElementById("filterInput").classList.remove("error");
+      document.getElementById("filterError").innerText = "";
+      
+      // Update Live Preview, Gradient, Harmonies, 2D Grid, and CSS Filter Generator
+      updateLivePreview();
+      updateGradientDisplay();
+      updateHarmonies();
+      updateGridDisplay();
+      updateCssFilter();
+      
+      updatingUI = false;
+    }
+    
+    // A simple CSS Filter conversion (our original simplified version for the input field)
+    function colorToFilter(color) {
+      let lum = color.luminance();
+      let inv = ((1 - lum) * 100).toFixed(0);
+      return `invert(${inv}%) hue-rotate(0deg)`;
+    }
+    
+    // Parse a simplified CSS filter string back to a color
+    function filterToColor(filterStr) {
+      const invMatch = filterStr.match(/invert\(\s*(\d+)%\s*\)/);
+      const hueMatch = filterStr.match(/hue-rotate\(\s*(\d+)deg\s*\)/);
+      let invFactor = invMatch ? parseInt(invMatch[1], 10) / 100 : 0;
+      let hueAdj = hueMatch ? parseInt(hueMatch[1], 10) : 0;
+      let comp = getComplement(currentColor);
+      let newColor = chroma.mix(currentColor, comp, invFactor, 'rgb');
+      let hsl = newColor.hsl();
+      hsl[0] = (hsl[0] + hueAdj) % 360;
+      return chroma.hsl(hsl[0], hsl[1], hsl[2]);
+    }
+    
+    /***********************
+     * Parsing & Validation for Inputs
+     ***********************/
+    function parseHex(val) {
+      if (!/^#([A-Fa-f0-9]{3}|[A-Fa-f0-9]{6})$/.test(val.trim()))
+        throw new Error("Invalid hex format");
+      return chroma(val.trim());
+    }
+    
+    function parseRGBA(val) {
+      let m = val.match(/rgba?\s*\(\s*(\d+)[,\s]+(\d+)[,\s]+(\d+)(?:[,\s]+([\d.]+))?\s*\)/);
+      if (!m) throw new Error("Invalid RGBA format");
+      let r = parseInt(m[1], 10),
+          g = parseInt(m[2], 10),
+          b = parseInt(m[3], 10),
+          a = m[4] !== undefined ? parseFloat(m[4]) : 1;
+      return chroma(r, g, b, a);
+    }
+    
+    function parseHSL(val) {
+      let m = val.match(/hsl\s*\(\s*(\d+)[,\s]+(\d+)%[,\s]+(\d+)%\s*\)/);
+      if (!m) throw new Error("Invalid HSL format");
+      let h = parseInt(m[1], 10),
+          s = parseInt(m[2], 10) / 100,
+          l = parseInt(m[3], 10) / 100;
+      return chroma.hsl(h, s, l);
+    }
+    
+    function parseLab(val) {
+      let m = val.match(/lab\s*\(\s*([\d.]+)[,\s]+([-]?[\d.]+)[,\s]+([-]?[\d.]+)\s*\)/);
+      if (!m) throw new Error("Invalid Lab format");
+      let L = parseFloat(m[1]),
+          a = parseFloat(m[2]),
+          b = parseFloat(m[3]);
+      return chroma.lab(L, a, b);
+    }
+    
+    function parseCMYK(val) {
+      let m = val.match(/cmyk\s*\(\s*([\d.]+)%?\s*,\s*([\d.]+)%?\s*,\s*([\d.]+)%?\s*,\s*([\d.]+)%?\s*\)/);
+      if (!m) throw new Error("Invalid CMYK format");
+      let c = parseFloat(m[1]),
+          mC = parseFloat(m[2]),
+          y = parseFloat(m[3]),
+          k = parseFloat(m[4]);
+      if (c > 1 || mC > 1 || y > 1 || k > 1) {
+        c /= 100; mC /= 100; y /= 100; k /= 100;
+      }
+      let rgbArr = cmykToRgb(c, mC, y, k);
+      return chroma(rgbArr);
+    }
+    
+    function parseFilter(val) {
+      return filterToColor(val);
+    }
+    
+    document.getElementById("hexInput").addEventListener("input", (e) => {
+      if (updatingUI) return;
+      try {
+        let col = parseHex(e.target.value);
+        setColor(col);
+      } catch (err) {
+        e.target.classList.add("error");
+        document.getElementById("hexError").innerText = err.message;
+      }
+    });
+    
+    document.getElementById("rgbaInput").addEventListener("input", (e) => {
+      if (updatingUI) return;
+      try {
+        let col = parseRGBA(e.target.value);
+        setColor(col);
+      } catch (err) {
+        e.target.classList.add("error");
+        document.getElementById("rgbaError").innerText = err.message;
+      }
+    });
+    
+    document.getElementById("hslInput").addEventListener("input", (e) => {
+      if (updatingUI) return;
+      try {
+        let col = parseHSL(e.target.value);
+        setColor(col);
+      } catch (err) {
+        e.target.classList.add("error");
+        document.getElementById("hslError").innerText = err.message;
+      }
+    });
+    
+    document.getElementById("labInput").addEventListener("input", (e) => {
+      if (updatingUI) return;
+      try {
+        let col = parseLab(e.target.value);
+        setColor(col);
+      } catch (err) {
+        e.target.classList.add("error");
+        document.getElementById("labError").innerText = err.message;
+      }
+    });
+    
+    document.getElementById("cmykInput").addEventListener("input", (e) => {
+      if (updatingUI) return;
+      try {
+        let col = parseCMYK(e.target.value);
+        setColor(col);
+      } catch (err) {
+        e.target.classList.add("error");
+        document.getElementById("cmykError").innerText = err.message;
+      }
+    });
+    
+    document.getElementById("filterInput").addEventListener("input", (e) => {
+      if (updatingUI) return;
+      try {
+        let col = parseFilter(e.target.value);
+        setColor(col);
+      } catch (err) {
+        e.target.classList.add("error");
+        document.getElementById("filterError").innerText = err.message;
+      }
+    });
+    
+    document.getElementById("colorPicker").addEventListener("input", (e) => {
+      if (updatingUI) return;
+      setColor(e.target.value);
+    });
+    
+    document.getElementById("eyeDropperBtn").addEventListener("click", async () => {
+      if (window.EyeDropper) {
+        try {
+          const eye = new EyeDropper();
+          const result = await eye.open();
+          setColor(result.sRGBHex);
+        } catch (err) {
+          alert("EyeDropper error: " + err);
+        }
+      } else {
+        alert("EyeDropper API not supported in this browser.");
+      }
+    });
+    
+    document.getElementById("gradientSlider").addEventListener("input", updateGradientDisplay);
+    document.getElementById("vibeSelect").addEventListener("change", updateHarmonies);
+    document.getElementById("gridSatSlider").addEventListener("input", updateGridDisplay);
+    document.getElementById("gridLightSlider").addEventListener("input", updateGridDisplay);
+    
+    document.getElementById("undoBtn").addEventListener("click", () => {
+      if (undoStack.length > 0) {
+        redoStack.push(currentColor.hex());
+        let prevColor = undoStack.pop();
+        setColor(prevColor, false);
+        updateHistoryUI();
+      }
+    });
+    
+    document.getElementById("redoBtn").addEventListener("click", () => {
+      if (redoStack.length > 0) {
+        undoStack.push(currentColor.hex());
+        if (undoStack.length > 10) { undoStack.shift(); }
+        let nextColor = redoStack.pop();
+        setColor(nextColor, false);
+        updateHistoryUI();
+      }
+    });
+    
+    document.getElementById("savePaletteBtn").addEventListener("click", () => {
+      savedPalettes.push(currentColor.hex());
+      updateSavedPalettesUI();
+    });
+    
+    // New: CSS Filter Generator functions
+    function applyFilterToBlack(params) {
+      // Start with black [0,0,0]. Then simulate the filter chain.
+      let inv = params.invert / 100;
+      // invert: mix black and white (if invert is 100, result is white)
+      let r = (1 - inv) * 0 + inv * 255;
+      let g = (1 - inv) * 0 + inv * 255;
+      let b = (1 - inv) * 0 + inv * 255;
+      // sepia: apply a simple sepia transformation
+      let s = params.sepia / 100;
+      let rSep = r * (1 - s) + (r * 0.393 + g * 0.769 + b * 0.189) * s;
+      let gSep = g * (1 - s) + (r * 0.349 + g * 0.686 + b * 0.168) * s;
+      let bSep = b * (1 - s) + (r * 0.272 + g * 0.534 + b * 0.131) * s;
+      r = rSep; g = gSep; b = bSep;
+      // saturate: adjust saturation via HSL
+      let col = chroma([r, g, b]);
+      let hsl = col.hsl();
+      let satFactor = params.saturate / 100; // 100 means no change
+      hsl[1] = hsl[1] * satFactor;
+      col = chroma.hsl(hsl[0], hsl[1], hsl[2]);
+      [r, g, b] = col.rgb();
+      // hue-rotate: add hue rotation (in degrees)
+      col = chroma([r, g, b]);
+      hsl = col.hsl();
+      hsl[0] = (hsl[0] + params.hueRotate) % 360;
+      col = chroma.hsl(hsl[0], hsl[1], hsl[2]);
+      [r, g, b] = col.rgb();
+      // brightness: multiply each channel
+      let bright = params.brightness / 100;
+      r *= bright; g *= bright; b *= bright;
+      // contrast: adjust contrast using a simple formula
+      let contrast = params.contrast / 100;
+      r = 128 + contrast * (r - 128);
+      g = 128 + contrast * (g - 128);
+      b = 128 + contrast * (b - 128);
+      // Clamp channels to [0,255]
+      r = Math.max(0, Math.min(255, r));
+      g = Math.max(0, Math.min(255, g));
+      b = Math.max(0, Math.min(255, b));
+      return [r, g, b];
+    }
+    
+    function solveCssFilter(targetHex) {
+      let target = chroma(targetHex).rgb();
+      let best = { params: { invert: 100, sepia: 0, saturate: 100, hueRotate: 0, brightness: 100, contrast: 100 }, loss: Infinity };
+      // Random search initial phase
+      for (let i = 0; i < 1000; i++) {
+        let candidate = {
+          invert: Math.random() * 100,
+          sepia: Math.random() * 100,
+          saturate: 100 + Math.random() * 500,
+          hueRotate: Math.random() * 360,
+          brightness: 50 + Math.random() * 150,
+          contrast: 50 + Math.random() * 150
+        };
+        let result = applyFilterToBlack(candidate);
+        let loss = 0;
+        for (let j = 0; j < 3; j++) {
+          loss += Math.pow(result[j] - target[j], 2);
+        }
+        if (loss < best.loss) {
+          best = { params: candidate, loss: loss };
+        }
+      }
+      // Local refinement phase
+      for (let i = 0; i < 1000; i++) {
+        let candidate = {
+          invert: best.params.invert + (Math.random() - 0.5) * 10,
+          sepia: best.params.sepia + (Math.random() - 0.5) * 10,
+          saturate: best.params.saturate + (Math.random() - 0.5) * 50,
+          hueRotate: best.params.hueRotate + (Math.random() - 0.5) * 20,
+          brightness: best.params.brightness + (Math.random() - 0.5) * 20,
+          contrast: best.params.contrast + (Math.random() - 0.5) * 20
+        };
+        candidate.invert = Math.max(0, Math.min(100, candidate.invert));
+        candidate.sepia = Math.max(0, Math.min(100, candidate.sepia));
+        candidate.saturate = Math.max(0, candidate.saturate);
+        candidate.hueRotate = ((candidate.hueRotate % 360) + 360) % 360;
+        candidate.brightness = Math.max(0, candidate.brightness);
+        candidate.contrast = Math.max(0, candidate.contrast);
+        let result = applyFilterToBlack(candidate);
+        let loss = 0;
+        for (let j = 0; j < 3; j++) {
+          loss += Math.pow(result[j] - target[j], 2);
+        }
+        if (loss < best.loss) {
+          best = { params: candidate, loss: loss };
+        }
+      }
+      return best;
+    }
+    
+    function cssFilterString(params) {
+      return `invert(${params.invert.toFixed(0)}%) sepia(${params.sepia.toFixed(0)}%) saturate(${params.saturate.toFixed(0)}%) hue-rotate(${params.hueRotate.toFixed(0)}deg) brightness(${params.brightness.toFixed(0)}%) contrast(${params.contrast.toFixed(0)}%)`;
+    }
+    
+    function updateCssFilter() {
+      let result = solveCssFilter(currentColor.hex());
+      let filterStr = cssFilterString(result.params);
+      document.getElementById("computedFilter").innerText = filterStr;
+      document.getElementById("cssTargetColor").innerText = currentColor.hex();
+      document.getElementById("filterLoss").innerText = "Loss: " + result.loss.toFixed(2);
+      document.getElementById("filterSvg").style.filter = filterStr;
+      // Link computed filter value to the CSS Filter input box
+      document.getElementById("filterInput").value = filterStr;
+    }
+    
+    document.getElementById("recomputeFilterBtn").addEventListener("click", updateCssFilter);
+    
+    /***********************
+     * Initialize UI on load
+     ***********************/
+    updateUI();
+  </script>
+</body>
+</html>
