@@ -3,12 +3,22 @@
 <head>
   <meta charset="UTF-8">
   <title>Cade's Color Manager</title>
+  <!-- Mobile & PWA Meta Tags -->
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#3498db">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <!-- Inline Manifest via Data URL (URL-encoded JSON) -->
+  <link rel="manifest" href="data:application/manifest+json,%7B%22name%22%3A%22Cade%27s%20Color%20Manager%22%2C%22short_name%22%3A%22ColorMgr%22%2C%22start_url%22%3A%22.%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%23ffffff%22%2C%22theme_color%22%3A%22%233498db%22%7D">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,100..800;1,100..800&display=swap" rel="stylesheet">
   <!-- Chroma.js for color math -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/chroma-js/2.4.2/chroma.min.js"></script>
   <style>
     /* Basic Reset & Styling */
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: Arial, sans-serif; background: #f5f5f5; padding: 1rem; }
+    body { font-family:"JetBrains Mono", serif; background: #f5f5f5; padding: 1rem; }
     .container {
       max-width: 1200px;
       margin: auto;
@@ -16,6 +26,7 @@
       padding: 20px;
       border-radius: 8px;
       box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+
     }
     h1, h2, h3 { text-align: center; margin-bottom: 10px; }
     .section { margin-bottom: 20px; padding-bottom: 10px; border-bottom: 1px solid #eee; }
@@ -90,14 +101,6 @@
       border-radius: 4px;
       transition: background 0.3s, color 0.3s;
     }
-    #previewCard {
-      margin: 10px auto;
-      padding: 20px;
-      width: 80%;
-      border-radius: 4px;
-      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-      transition: background 0.3s, color 0.3s;
-    }
     #contrastCheck { text-align: center; margin-top: 10px; font-size: 0.9rem; }
     /* History & Saved Palettes */
     .history-container, .saved-palettes {
@@ -121,21 +124,103 @@
       grid-template-columns: repeat(5, 1fr);
       gap: 3px;
       margin-top: 10px;
+      border: 2px solid black;
+      padding: 1rem;
+    }
+    #gridDisplay>div{
+      border-radius:8px;
+    }
+    #gridDisplay>div:hover{
+      box-shadow: 1px 1px 4px 0px rgba(0, 0, 0, 0.4);
     }
     /* CSS Filter Generator Section */
     #cssFilterSection {
       text-align: center;
     }
-    #cssFilterSection svg {
-      margin-top: 10px;
-      border: 1px solid #ccc;
-      border-radius: 4px;
-    }
+    #luminanceConstrast>div {
+      border: 1px solid black;
+  }
+  #lossString {
+    font-weight: bold;
+  }
+  #loss-container {
+    display: flex;
+    flex-direction: row;
+    align-items:center;
+    justify-content: center;
+    gap: 1rem;
+    margin-top:0.5rem;
+  }
+  #filter-example-container  {
+    display:flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width:100%;
+  }
+
+  #icon-container {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+  }
+  #recomputeFilterBtn {
+    width:fit-content;
+  }
+  #gradientSection>.input-group {
+    display:flex;
+    flex-direction:column;
+    width:100%;
+  }
+  #gradientSection>.input-group label{
+    flex:auto;
+  }
+  #gradientSection>.input-group input{
+    flex:auto;
+    width:100%;
+  }
+  #harmoniesSection {
+      justify-items: center;
+  }
+  #vibeSelect {
+      margin-bottom: 1rem;
+  }
+  #savedPalettesSection {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  #pallete-container {
+    display:flex;
+    flex-direction: row;
+    gap: 1rem;
+  }
+  #clearPaletteBtn {
+    background-color:#b30000;
+    color: white;
+    font-weight: bold;
+  }
+  #color-picker-container {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+  }
+  .copy-btn {
+    padding:0px;
+    margin:0px;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    font-size: 1.2em;
+  }
   </style>
 </head>
 <body>
   <div class="container">
-    <h1>Advanced Color Manager for UI Design</h1>
+    <h1>Cade's Color Manager</h1>
     
     <!-- Color Inputs Section -->
     <div class="section" id="colorInputsSection">
@@ -143,40 +228,68 @@
       <div class="input-group">
         <label for="hexInput">Hex:</label>
         <input type="text" id="hexInput" placeholder="#RRGGBB">
+        <button class="copy-btn" data-target="hexInput" title="Copy to clipboard"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"><path fill="currentColor" d="M9 18q-.825 0-1.412-.587T7 16V4q0-.825.588-1.412T9 2h9q.825 0 1.413.588T20 4v12q0 .825-.587 1.413T18 18zm0-2h9V4H9zm-4 6q-.825 0-1.412-.587T3 20V6h2v14h11v2zm4-6V4z"/></svg></button>
         <span class="error-msg" id="hexError"></span>
       </div>
       <div class="input-group">
         <label for="rgbaInput">RGBA:</label>
         <input type="text" id="rgbaInput" placeholder="rgba(255,0,0,1)">
+        <button class="copy-btn" data-target="rgbaInput" title="Copy to clipboard"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"><path fill="currentColor" d="M9 18q-.825 0-1.412-.587T7 16V4q0-.825.588-1.412T9 2h9q.825 0 1.413.588T20 4v12q0 .825-.587 1.413T18 18zm0-2h9V4H9zm-4 6q-.825 0-1.412-.587T3 20V6h2v14h11v2zm4-6V4z"/></svg></button>
         <span class="error-msg" id="rgbaError"></span>
       </div>
       <div class="input-group">
         <label for="hslInput">HSL:</label>
         <input type="text" id="hslInput" placeholder="hsl(0,100%,50%)">
+        <button class="copy-btn" data-target="hslInput" title="Copy to clipboard"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"><path fill="currentColor" d="M9 18q-.825 0-1.412-.587T7 16V4q0-.825.588-1.412T9 2h9q.825 0 1.413.588T20 4v12q0 .825-.587 1.413T18 18zm0-2h9V4H9zm-4 6q-.825 0-1.412-.587T3 20V6h2v14h11v2zm4-6V4z"/></svg></button>
         <span class="error-msg" id="hslError"></span>
       </div>
       <div class="input-group">
         <label for="labInput">Lab:</label>
         <input type="text" id="labInput" placeholder="lab(53, 80, 67)">
+        <button class="copy-btn" data-target="labInput" title="Copy to clipboard"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"><path fill="currentColor" d="M9 18q-.825 0-1.412-.587T7 16V4q0-.825.588-1.412T9 2h9q.825 0 1.413.588T20 4v12q0 .825-.587 1.413T18 18zm0-2h9V4H9zm-4 6q-.825 0-1.412-.587T3 20V6h2v14h11v2zm4-6V4z"/></svg></button>
         <span class="error-msg" id="labError"></span>
       </div>
       <div class="input-group">
         <label for="cmykInput">CMYK:</label>
         <input type="text" id="cmykInput" placeholder="cmyk(0%, 50%, 50%, 0%)">
+        <button class="copy-btn" data-target="cmykInput" title="Copy to clipboard"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"><path fill="currentColor" d="M9 18q-.825 0-1.412-.587T7 16V4q0-.825.588-1.412T9 2h9q.825 0 1.413.588T20 4v12q0 .825-.587 1.413T18 18zm0-2h9V4H9zm-4 6q-.825 0-1.412-.587T3 20V6h2v14h11v2zm4-6V4z"/></svg></button>
         <span class="error-msg" id="cmykError"></span>
       </div>
       <div class="input-group">
         <label for="filterInput">CSS Filter:</label>
         <input type="text" id="filterInput" placeholder="invert(0%) hue-rotate(0deg)">
+        <button class="copy-btn" data-target="filterInput" title="Copy to clipboard"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"><path fill="currentColor" d="M9 18q-.825 0-1.412-.587T7 16V4q0-.825.588-1.412T9 2h9q.825 0 1.413.588T20 4v12q0 .825-.587 1.413T18 18zm0-2h9V4H9zm-4 6q-.825 0-1.412-.587T3 20V6h2v14h11v2zm4-6V4z"/></svg></button>
         <span class="error-msg" id="filterError"></span>
+      </div>
+    </div>
+
+    <!-- CSS Filter Generator Section -->
+    <div class="section" id="cssFilterSection">
+      <h2>CSS Filter Generator</h2>
+      <p>Target color: <span id="cssTargetColor"></span></p>
+      <p>Computed Filter: <span id="computedFilter"></span></p>
+      <div id="loss-container">
+        <p id="filterLoss"></p>
+        <p>⇒</p>
+        <p id="lossString"></p>
+      </div>
+      <div id="filter-example-container">
+        <div id="icon-container">
+          <svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" fill="#000000" viewBox="0 0 256 256"><path d="M224,64H154.67L126.93,43.2a16.12,16.12,0,0,0-9.6-3.2H72A16,16,0,0,0,56,56V72H40A16,16,0,0,0,24,88V200a16,16,0,0,0,16,16H192.89A15.13,15.13,0,0,0,208,200.89V184h16.89A15.13,15.13,0,0,0,240,168.89V80A16,16,0,0,0,224,64Zm0,104H208V112a16,16,0,0,0-16-16H122.67L94.93,75.2a16.12,16.12,0,0,0-9.6-3.2H72V56h45.33L147.2,78.4A8,8,0,0,0,152,80h72Z"></path></svg>
+          <svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" fill="#000000" viewBox="0 0 256 256"><path d="M80,192a8,8,0,0,1-8,8H32a8,8,0,0,1,0-16H72A8,8,0,0,1,80,192Zm144-8H184a8,8,0,0,0,0,16h40a8,8,0,0,0,0-16Zm-72,0H104a8,8,0,0,0,0,16h48a8,8,0,0,0,0-16ZM32,168h80a8,8,0,0,0,0-16H32a8,8,0,0,0,0,16Zm192-16H144a8,8,0,0,0,0,16h80a8,8,0,0,0,0-16Zm0-96H32a8,8,0,0,0-8,8V88a8,8,0,0,0,8,8H224a8,8,0,0,0,8-8V64A8,8,0,0,0,224,56Zm0,56H32a8,8,0,0,0-8,8v8a8,8,0,0,0,8,8H224a8,8,0,0,0,8-8v-8A8,8,0,0,0,224,112Z"></path></svg>
+          <svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" fill="#000000" viewBox="0 0 256 256"><path d="M254.88,195.92l-54.56-92.08A15.87,15.87,0,0,0,186.55,96h0a15.85,15.85,0,0,0-13.76,7.84l-15.64,26.39a4,4,0,0,0,0,4.07l26.8,45.47a8.13,8.13,0,0,1-1.89,10.55,8,8,0,0,1-11.8-2.26L101.79,71.88a16,16,0,0,0-27.58,0L1.11,195.94a8,8,0,0,0,1,9.52A8.23,8.23,0,0,0,8.23,208H247.77a8.29,8.29,0,0,0,6.09-2.55A8,8,0,0,0,254.88,195.92ZM64.43,120,88,80l23.57,40ZM140,52a24,24,0,1,1,24,24A24,24,0,0,1,140,52Z"></path></svg>
+        </div>
+        <button id="recomputeFilterBtn">Recompute Filter</button>
       </div>
     </div>
     
     <!-- Color Picker & Eye Dropper -->
     <div class="section color-picker">
       <h2>Color Picker &amp; Eye Dropper</h2>
-      <input type="color" id="colorPicker">
-      <button id="eyeDropperBtn">Eye Dropper</button>
+      <div id='color-picker-container'>
+        <input type="color" id="colorPicker">
+        <button id="eyeDropperBtn">Eye Dropper</button>
+      </div>
     </div>
     
     <!-- Live Preview Section -->
@@ -184,44 +297,57 @@
       <h2>Live Preview</h2>
       <div class="preview">
         <button id="previewButton">Sample Button</button>
-        <div id="previewCard">Sample Card</div>
+        <p style="margin-top:1rem"></p>
         <p id="previewText">This is sample text.</p>
+        <p id="previewTextLighter" style="font-weight:lighter">This is sample light text.</p>
+        <p id="previewTextBold" style="font-weight:bold">This is sample bold text.</p>
+        <p style="margin-bottom:1rem"></p>
       </div>
       <div id="contrastCheck"></div>
+    </div>
+
+    <!-- Saved Palettes -->
+    <div class="section" id="savedPalettesSection">
+      <h2>Saved Palette</h2>
+      <div id="pallete-container">
+        <button id="savePaletteBtn">Save Current Color</button>
+        <button id="clearPaletteBtn">Clear Pallete</button>
+      </div>
+      <div class="saved-palettes" id="savedPalettes"></div>
     </div>
     
     <!-- 1D Gradient Section (7 swatches) -->
     <div class="section" id="gradientSection">
-      <h2>7‑Color Gradient</h2>
+      <h2>Gradient</h2>
       <div class="input-group" style="justify-content:center;">
         <label for="gradientSlider">Intensity:</label>
         <input type="range" id="gradientSlider" min="0" max="100" value="50">
       </div>
       <div id="gradientDisplay"></div>
     </div>
-    
-    <!-- Vibe Presets -->
-    <div class="section" id="vibeSection" style="text-align:center;">
-      <h2>Vibe Presets</h2>
-      <select id="vibeSelect">
-        <option value="default">Default</option>
-        <option value="pastel">Pastel</option>
-        <option value="retro">Retro</option>
-        <option value="cyberpunk">Cyberpunk</option>
-        <option value="vintage">Vintage</option>
-        <option value="vibrant">Vibrant</option>
-        <option value="professional">Professional</option>
-        <option value="earthy">Earthy</option>
-        <option value="neon">Neon</option>
-        <option value="monochrome">Monochrome</option>
-        <option value="warm">Warm</option>
-        <option value="cool">Cool</option>
-      </select>
-    </div>
-    
+        
     <!-- Color Harmonies -->
     <div class="section" id="harmoniesSection">
       <h2>Color Harmonies</h2>
+
+      <div id="vibe-container">
+        <label>Adjust Colors by Vibe:</label>
+        <select id="vibeSelect">
+          <option value="default">None</option>
+          <option value="pastel">Pastel</option>
+          <option value="retro">Retro</option>
+          <option value="cyberpunk">Cyberpunk</option>
+          <option value="vintage">Vintage</option>
+          <option value="vibrant">Vibrant</option>
+          <option value="professional" selected>Professional</option>
+          <option value="earthy">Earthy</option>
+          <option value="neon">Neon</option>
+          <option value="monochrome">Monochrome</option>
+          <option value="warm">Warm</option>
+          <option value="cool">Cool</option>
+        </select>
+      </div>
+
       <div id="harmonySimilar">
         <h3>Similar Colors</h3>
         <div class="swatch-container" id="similarColors"></div>
@@ -246,13 +372,10 @@
         <h3>Split‑Complementary</h3>
         <div class="swatch-container" id="splitColors"></div>
       </div>
-    </div>
-    
-    <!-- Saved Palettes -->
-    <div class="section" id="savedPalettesSection">
-      <h2>Saved Palettes</h2>
-      <button id="savePaletteBtn">Save Palette</button>
-      <div class="saved-palettes" id="savedPalettes"></div>
+      <div id="harmonyLuminance">
+        <h3>Luminance Contrast</h3>
+        <div class="swatch-container" id="luminanceConstrast"></div>
+      </div>
     </div>
     
     <!-- 2D Gradient Grid Section -->
@@ -264,30 +387,35 @@
       </div>
       <div class="input-group" style="justify-content:center;">
         <label for="gridLightSlider">Lightness Variation:</label>
-        <input type="range" id="gridLightSlider" min="0" max="100" value="50">
+        <input type="range" id="gridLightSlider" min="0" max="100" value="30">
       </div>
       <div id="gridDisplay"></div>
     </div>
-    
-    <!-- CSS Filter Generator Section -->
-    <div class="section" id="cssFilterSection">
-      <h2>CSS Filter Generator</h2>
-      <p>Target color: <span id="cssTargetColor"></span></p>
-      <p>Computed Filter: <span id="computedFilter"></span></p>
-      <p id="filterLoss"></p>
-      <button id="recomputeFilterBtn">Recompute Filter</button>
-      <svg id="filterSvg" width="100" height="100" viewBox="0 0 100 100">
-        <!-- A simple circle with black stroke; the filter will tint it to the selected color -->
-        <circle cx="50" cy="50" r="40" stroke="black" stroke-width="5" fill="none" />
-      </svg>
-    </div>
-    
+        
     <!-- History Section (moved to the bottom, limited to 10 entries) -->
     <div class="section" id="historySection" style="text-align:center;">
-      <h2>History (Last 10)</h2>
+      <h2>History</h2>
       <button id="undoBtn">Undo</button>
       <button id="redoBtn">Redo</button>
       <div class="history-container" id="historyContainer"></div>
+    </div>
+
+    <!-- Set Background Color -->
+    <div class="section" id="setBackground" style="text-align:center;">
+      <h2>Set Background Color</h2>
+      <button id="changeBackground">Change</button>
+      <button id="resetBackground">Reset</button>
+    </div>
+
+    <div class="section" id="hotkeys" style="text-align:center;">
+      <h2>Hot-Keys</h2>
+      <p>Shift+B : Change the Background Color</p>
+      <p>Shift+W : Reset the Background Color</p>
+      <p>Shift+I : Inverts the whole page</p>
+      <p>Shift+L : Inverts the whole page temporarily</p>
+      <p>Shift+S : Save Current Color</p>
+      <p>Ctrl+Z : Undo</p>
+      <p>Ctrl+Y : Redo</p>
     </div>
     
   </div>
@@ -301,6 +429,7 @@
     let undoStack = [];
     let redoStack = [];
     let savedPalettes = [];
+    let historyLimit = 100;
     
     /***********************
      * History & Saved Palettes
@@ -308,9 +437,8 @@
     function setColor(newColor, pushHistory = true) {
       if (!newColor || !chroma.valid(newColor)) return;
       if (pushHistory) {
-        // Push the current color into history (limit to 10)
         undoStack.push(currentColor.hex());
-        if (undoStack.length > 10) { undoStack.shift(); }
+        if (undoStack.length > historyLimit) { undoStack.shift(); }
         redoStack = [];
         updateHistoryUI();
       }
@@ -349,15 +477,15 @@
      ***********************/
     function updateLivePreview() {
       const previewButton = document.getElementById("previewButton");
-      const previewCard = document.getElementById("previewCard");
       const previewText = document.getElementById("previewText");
+      const previewTextBold = document.getElementById("previewTextBold");
+      const previewTextLighter = document.getElementById("previewTextLighter");
       const textColor = currentColor.luminance() < 0.5 ? "#fff" : "#000";
       previewButton.style.backgroundColor = currentColor.hex();
       previewButton.style.color = textColor;
-      previewCard.style.backgroundColor = currentColor.hex();
-      previewCard.style.color = textColor;
       previewText.style.color = currentColor.hex();
-      
+      previewTextBold.style.color = currentColor.hex();
+      previewTextLighter.style.color = currentColor.hex();
       const contrastWithWhite = chroma.contrast(currentColor, "white").toFixed(2);
       const contrastWithBlack = chroma.contrast(currentColor, "black").toFixed(2);
       document.getElementById("contrastCheck").innerText =
@@ -435,7 +563,7 @@
       const vibe = document.getElementById("vibeSelect").value;
       // Clear harmony containers
       ["similarColors", "complementaryColors", "analogousColors",
-       "triadicColors", "tetradicColors", "splitColors"].forEach(id => {
+       "triadicColors", "tetradicColors", "splitColors", "luminanceConstrast"].forEach(id => {
          document.getElementById(id).innerHTML = "";
       });
       const baseHSL = currentColor.hsl();
@@ -493,6 +621,11 @@
       split2 = adjustForVibe(split2, vibe);
       addSwatch(split1, document.getElementById("splitColors"));
       addSwatch(split2, document.getElementById("splitColors"));
+
+      // High-contrast: choose black or white depending on luminance.
+      let contrast = currentColor.luminance() > 0.5 ? chroma("black") : chroma("white");
+      addSwatch(contrast, document.getElementById("luminanceConstrast"));
+
     }
     
     // Helper: add a swatch element to a container
@@ -640,8 +773,14 @@
      ***********************/
     function parseHex(val) {
       if (!/^#([A-Fa-f0-9]{3}|[A-Fa-f0-9]{6})$/.test(val.trim()))
-        throw new Error("Invalid hex format");
+        return parseQuickHex(val);
       return chroma(val.trim());
+    }
+
+    function parseQuickHex(val) {
+      if (!/([A-Fa-f0-9]{3}|[A-Fa-f0-9]{6})$/.test(val.trim()))
+        throw new Error("Invalid hex format");
+      return chroma("#" + val.trim());
     }
     
     function parseRGBA(val) {
@@ -689,9 +828,17 @@
     function parseFilter(val) {
       return filterToColor(val);
     }
+
+    function debounce(func, wait) {
+      let timeout;
+      return function(...args) {
+        clearTimeout(timeout);
+        timeout = setTimeout(() => func.apply(this, args), wait);
+      };
+    }
     
-    document.getElementById("hexInput").addEventListener("input", (e) => {
-      if (updatingUI) return;
+    document.getElementById("hexInput").addEventListener("input", debounce((e) => {
+      if(updatingUI) return;
       try {
         let col = parseHex(e.target.value);
         setColor(col);
@@ -699,9 +846,9 @@
         e.target.classList.add("error");
         document.getElementById("hexError").innerText = err.message;
       }
-    });
-    
-    document.getElementById("rgbaInput").addEventListener("input", (e) => {
+    }, 500));
+
+    document.getElementById("rgbaInput").addEventListener("input", debounce((e) => {
       if (updatingUI) return;
       try {
         let col = parseRGBA(e.target.value);
@@ -710,9 +857,9 @@
         e.target.classList.add("error");
         document.getElementById("rgbaError").innerText = err.message;
       }
-    });
+    }, 500));
     
-    document.getElementById("hslInput").addEventListener("input", (e) => {
+    document.getElementById("hslInput").addEventListener("input", debounce((e) => {
       if (updatingUI) return;
       try {
         let col = parseHSL(e.target.value);
@@ -721,9 +868,9 @@
         e.target.classList.add("error");
         document.getElementById("hslError").innerText = err.message;
       }
-    });
+    }, 500));
     
-    document.getElementById("labInput").addEventListener("input", (e) => {
+    document.getElementById("labInput").addEventListener("input", debounce((e) => {
       if (updatingUI) return;
       try {
         let col = parseLab(e.target.value);
@@ -732,9 +879,9 @@
         e.target.classList.add("error");
         document.getElementById("labError").innerText = err.message;
       }
-    });
+    }, 500));
     
-    document.getElementById("cmykInput").addEventListener("input", (e) => {
+    document.getElementById("cmykInput").addEventListener("input", debounce((e) => {
       if (updatingUI) return;
       try {
         let col = parseCMYK(e.target.value);
@@ -743,9 +890,9 @@
         e.target.classList.add("error");
         document.getElementById("cmykError").innerText = err.message;
       }
-    });
+    }, 500));
     
-    document.getElementById("filterInput").addEventListener("input", (e) => {
+    document.getElementById("filterInput").addEventListener("input", debounce((e) => {
       if (updatingUI) return;
       try {
         let col = parseFilter(e.target.value);
@@ -754,12 +901,12 @@
         e.target.classList.add("error");
         document.getElementById("filterError").innerText = err.message;
       }
-    });
+    }, 500));
     
-    document.getElementById("colorPicker").addEventListener("input", (e) => {
+    document.getElementById("colorPicker").addEventListener("input", debounce((e) => {
       if (updatingUI) return;
       setColor(e.target.value);
-    });
+    }, 500));
     
     document.getElementById("eyeDropperBtn").addEventListener("click", async () => {
       if (window.EyeDropper) {
@@ -780,16 +927,16 @@
     document.getElementById("gridSatSlider").addEventListener("input", updateGridDisplay);
     document.getElementById("gridLightSlider").addEventListener("input", updateGridDisplay);
     
-    document.getElementById("undoBtn").addEventListener("click", () => {
+    function undo(){
       if (undoStack.length > 0) {
         redoStack.push(currentColor.hex());
         let prevColor = undoStack.pop();
         setColor(prevColor, false);
         updateHistoryUI();
       }
-    });
-    
-    document.getElementById("redoBtn").addEventListener("click", () => {
+    }
+
+    function redo(){
       if (redoStack.length > 0) {
         undoStack.push(currentColor.hex());
         if (undoStack.length > 10) { undoStack.shift(); }
@@ -797,12 +944,92 @@
         setColor(nextColor, false);
         updateHistoryUI();
       }
+    }
+
+    document.getElementById("undoBtn").addEventListener("click", () => {
+      undo()
+    });
+    
+    document.getElementById("redoBtn").addEventListener("click", () => {
+      redo()
     });
     
     document.getElementById("savePaletteBtn").addEventListener("click", () => {
       savedPalettes.push(currentColor.hex());
       updateSavedPalettesUI();
     });
+
+    
+    document.getElementById("clearPaletteBtn").addEventListener("click", () => {
+      savedPalettes = [];
+      updateSavedPalettesUI();
+    });
+
+    function changeBackgroundColor(){
+      document.querySelector(".container").style.backgroundColor = currentColor.hex();
+    }
+
+    function resetBackgroundColor(){
+      document.querySelector(".container").style.backgroundColor = "#fff"
+    }
+
+    document.getElementById("changeBackground").addEventListener("click", () => {
+      changeBackgroundColor()
+    });
+
+    document.getElementById("resetBackground").addEventListener("click", () => {
+      resetBackgroundColor()
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (e.shiftKey && e.code == 'KeyL') {
+        document.querySelector(".container").style.filter = "invert(1)"
+      } else if (e.shiftKey && e.code == 'KeyI') {
+        if (document.querySelector(".container").style.filter === "invert(1)") {
+          document.querySelector(".container").style.filter = "invert(0)"
+        } else {
+          document.querySelector(".container").style.filter = "invert(1)"
+        }
+      } else if (e.shiftKey && e.code == 'KeyB') {
+        changeBackgroundColor()
+      } else if (e.shiftKey && e.code == 'KeyW') {
+        resetBackgroundColor()
+      } else if (e.ctrlKey && e.code == 'KeyZ') {
+        undo()
+      } else if (e.ctrlKey && e.code == 'KeyY') {
+        redo()
+      } else if (e.shiftKey && e.code == 'KeyS') {
+          savedPalettes.push(currentColor.hex());
+          updateSavedPalettesUI();
+      } else if (e.shiftKey && e.code == 'KeyC') {
+          navigator.clipboard.writeText(currentColor.hex())
+      }
+    }, false);
+
+    document.addEventListener('keyup', (e) => {
+      if (e.shiftKey && e.code == 'KeyL') {
+        document.querySelector(".container").style.filter = "invert(0)"
+      }
+    }, false);
+
+    document.querySelectorAll('.copy-btn').forEach(button => {
+      button.addEventListener('click', () => {
+        const targetId = button.getAttribute('data-target');
+        const inputElem = document.getElementById(targetId);
+        if (inputElem) {
+          navigator.clipboard.writeText(inputElem.value).then(() => {
+            button.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"><path fill="currentColor" d="m9.55 18l-5.7-5.7l1.425-1.425L9.55 15.15l9.175-9.175L20.15 7.4z"/></svg>';
+            setTimeout(() => {
+              button.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"><path fill="currentColor" d="M9 18q-.825 0-1.412-.587T7 16V4q0-.825.588-1.412T9 2h9q.825 0 1.413.588T20 4v12q0 .825-.587 1.413T18 18zm0-2h9V4H9zm-4 6q-.825 0-1.412-.587T3 20V6h2v14h11v2zm4-6V4z"/></svg>`;
+            }, 1000);
+          }).catch(err => {
+            console.error('Copy failed:', err);
+          });
+        }
+      });
+    });
+
+    
     
     // New: CSS Filter Generator functions
     function applyFilterToBlack(params) {
@@ -847,8 +1074,11 @@
     }
     
     function solveCssFilter(targetHex) {
-      let target = chroma(targetHex).rgb();
-      let best = { params: { invert: 100, sepia: 0, saturate: 100, hueRotate: 0, brightness: 100, contrast: 100 }, loss: Infinity };
+      let targetColor = chroma(targetHex);
+      let best = { 
+        params: { invert: 100, sepia: 0, saturate: 100, hueRotate: 0, brightness: 100, contrast: 100 }, 
+        loss: Infinity 
+      };
       // Random search initial phase
       for (let i = 0; i < 1000; i++) {
         let candidate = {
@@ -860,10 +1090,8 @@
           contrast: 50 + Math.random() * 150
         };
         let result = applyFilterToBlack(candidate);
-        let loss = 0;
-        for (let j = 0; j < 3; j++) {
-          loss += Math.pow(result[j] - target[j], 2);
-        }
+        let candidateColor = chroma.rgb(result);
+        let loss = chroma.deltaE(candidateColor, targetColor);
         if (loss < best.loss) {
           best = { params: candidate, loss: loss };
         }
@@ -885,10 +1113,8 @@
         candidate.brightness = Math.max(0, candidate.brightness);
         candidate.contrast = Math.max(0, candidate.contrast);
         let result = applyFilterToBlack(candidate);
-        let loss = 0;
-        for (let j = 0; j < 3; j++) {
-          loss += Math.pow(result[j] - target[j], 2);
-        }
+        let candidateColor = chroma.rgb(result);
+        let loss = chroma.deltaE(candidateColor, targetColor);
         if (loss < best.loss) {
           best = { params: candidate, loss: loss };
         }
@@ -906,7 +1132,24 @@
       document.getElementById("computedFilter").innerText = filterStr;
       document.getElementById("cssTargetColor").innerText = currentColor.hex();
       document.getElementById("filterLoss").innerText = "Loss: " + result.loss.toFixed(2);
-      document.getElementById("filterSvg").style.filter = filterStr;
+
+      // String to evaluate loss
+      let lossStr;
+      if (result.loss < 1) {
+        lossStr = "Probably good.";
+      } else if (result.loss < 5) {
+        lossStr = "Meh.";
+      } else if (result.loss < 15) {
+        lossStr = "Not great. Likely want to re-run.";
+      } else {
+        lossStr = "Yikes. Extremely off, please recompute."
+      }
+      
+      document.getElementById("lossString").innerText = lossStr;
+
+      // Update Filter for Svgs
+      Array.from(document.querySelectorAll("#icon-container>svg")).forEach((e) => e.style.filter = filterStr);
+
       // Link computed filter value to the CSS Filter input box
       document.getElementById("filterInput").value = filterStr;
     }
@@ -917,6 +1160,35 @@
      * Initialize UI on load
      ***********************/
     updateUI();
+    
+    /***********************
+     * Service Worker Registration (PWA)
+     ***********************/
+    if ('serviceWorker' in navigator) {
+      const swCode = `
+        const CACHE_NAME = 'color-manager-cache-v1';
+        const urlsToCache = [location.href];
+        self.addEventListener('install', event => {
+          event.waitUntil(
+            caches.open(CACHE_NAME).then(cache => cache.addAll(urlsToCache))
+          );
+        });
+        self.addEventListener('fetch', event => {
+          event.respondWith(
+            caches.match(event.request).then(response => response || fetch(event.request))
+          );
+        });
+      `;
+      const blob = new Blob([swCode], { type: 'text/javascript' });
+      const swUrl = URL.createObjectURL(blob);
+      navigator.serviceWorker.register(swUrl)
+        .then(registration => {
+          console.log('Service worker registered:', registration);
+        })
+        .catch(error => {
+          console.error('Service worker registration failed:', error);
+        });
+    }
   </script>
 </body>
 </html>
