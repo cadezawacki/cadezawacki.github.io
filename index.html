@@ -29,7 +29,7 @@
 
     }
     h1, h2, h3 { text-align: center; margin-bottom: 10px; }
-    .section { margin-bottom: 20px; padding-bottom: 10px; border-bottom: 1px solid #eee; }
+    .section { margin-bottom: 10px; padding-bottom: 10px; border-bottom: 1px solid #eee; }
     .input-group {
       margin-bottom: 10px;
       display: flex;
@@ -204,7 +204,7 @@
   }
   #color-picker-container {
     display: flex;
-    flex-direction: row;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
   }
@@ -215,6 +215,16 @@
     border: none;
     cursor: pointer;
     font-size: 1.2em;
+  }
+  #sampleBlock {
+    width:100%;
+    height:3rem;
+    margin-top:0px;
+    padding-top:0px;
+  }
+  #colorPicker {
+    width:300px;
+    height:50px;
   }
   </style>
 </head>
@@ -263,6 +273,14 @@
       </div>
     </div>
 
+    <!-- Color Block -->
+    <div class="section" id="colorBlockSection">
+      <div id='color-picker-container'>
+        <input type="color" id="colorPicker">
+        <button id="eyeDropperBtn">Eye Dropper</button>
+      </div>
+    </div>
+
     <!-- CSS Filter Generator Section -->
     <div class="section" id="cssFilterSection">
       <h2>CSS Filter Generator</h2>
@@ -280,15 +298,6 @@
           <svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" fill="#000000" viewBox="0 0 256 256"><path d="M254.88,195.92l-54.56-92.08A15.87,15.87,0,0,0,186.55,96h0a15.85,15.85,0,0,0-13.76,7.84l-15.64,26.39a4,4,0,0,0,0,4.07l26.8,45.47a8.13,8.13,0,0,1-1.89,10.55,8,8,0,0,1-11.8-2.26L101.79,71.88a16,16,0,0,0-27.58,0L1.11,195.94a8,8,0,0,0,1,9.52A8.23,8.23,0,0,0,8.23,208H247.77a8.29,8.29,0,0,0,6.09-2.55A8,8,0,0,0,254.88,195.92ZM64.43,120,88,80l23.57,40ZM140,52a24,24,0,1,1,24,24A24,24,0,0,1,140,52Z"></path></svg>
         </div>
         <button id="recomputeFilterBtn">Recompute Filter</button>
-      </div>
-    </div>
-    
-    <!-- Color Picker & Eye Dropper -->
-    <div class="section color-picker">
-      <h2>Color Picker &amp; Eye Dropper</h2>
-      <div id='color-picker-container'>
-        <input type="color" id="colorPicker">
-        <button id="eyeDropperBtn">Eye Dropper</button>
       </div>
     </div>
     
