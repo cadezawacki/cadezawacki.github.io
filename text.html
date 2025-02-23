@@ -368,8 +368,8 @@
           // Also send the current user count.
           connection.send({ type: "userCount", count: connections.length + 1 });
         } else if(data.type === "update"){
-          // Accept update only if the timestamp is newer.
-          if(data.timestamp > lastUpdateTimestamp){
+          // Accept update if the timestamp is newer or equal.
+          if(data.timestamp >= lastUpdateTimestamp){
             currentText = data.text;
             lastUpdateTimestamp = data.timestamp;
             updateTextArea(currentText);
@@ -389,7 +389,7 @@
           updateTextArea(currentText);
           updateLastUpdateDisplay(lastUpdateTimestamp);
         } else if(data.type === "update"){
-          if(data.timestamp > lastUpdateTimestamp){
+          if(data.timestamp >= lastUpdateTimestamp){
             currentText = data.text;
             lastUpdateTimestamp = data.timestamp;
             updateTextArea(currentText);
