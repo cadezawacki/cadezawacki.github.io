@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Transfer</title>
+  <style>
+    :root {
+      --bg: #0a0a0a;
+      --surface: #141414;
+      --border: #1a1a1a;
+      --text: #e0e0e0;
+      --text-dim: #666666;
+      --accent: #3d5afe;
+      --accent-dim: #1a237e;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+
+    body {
+      font-family: monospace;
+      background-color: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+      margin: 0;
+      padding: 20px;
+      min-height: 100vh;
+    }
+
+    #homepage, #room {
+      max-width: 1200px;
+      margin: 0 auto;
+      opacity: 0;
+      animation: fade-in 0.5s forwards;
+    }
+
+    @keyframes fade-in {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+
+    .header {
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 20px;
+      margin-bottom: 40px;
+      font-size: 14px;
+      color: var(--text-dim);
+    }
+
+    input {
+      width: 100%;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 12px;
+      font-family: inherit;
+      font-size: 14px;
+      margin-bottom: 15px;
+    }
+
+    input:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+
+    label {
+      display: block;
+      color: var(--text-dim);
+      margin-bottom: 8px;
+      font-size: 14px;
+    }
+
+    button {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 15px 20px;
+      font-family: inherit;
+      font-size: 14px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    button:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    #roomHeader {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 20px;
+      margin-bottom: 20px;
+      padding: 15px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      font-size: 14px;
+    }
+
+    #roomHeader span {
+      color: var(--text-dim);
+      margin-right: 20px;
+    }
+
+    textarea {
+      width: 100%;
+      height: 75vh;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 20px;
+      font-family: inherit;
+      font-size: 14px;
+      resize: none;
+      line-height: 1.6;
+    }
+
+    textarea:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+
+    textarea::selection {
+      background: var(--accent-dim);
+    }
+
+    #formContainer {
+      display: none;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      padding: 20px;
+      margin-top: 20px;
+      animation: slide-up 0.3s ease;
+      max-width: 400px;
+    }
+
+    @keyframes slide-up {
+      from { transform: translateY(10px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+
+    .action-container {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 20px;
+      margin-top: 40px;
+    }
+
+    @media (max-width: 768px) {
+      body {
+        padding: 15px;
+      }
+
+      #roomHeader {
+        grid-template-columns: 1fr;
+      }
+
+      #roomHeader span {
+        display: block;
+        margin-bottom: 10px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="homepage">
+    <div class="header">Transfer Interface</div>
+    <div class="action-container">
+      <button id="createRoomBtn">Create Channel</button>
+      <button id="joinRoomBtn">Join Channel</button>
+    </div>
+    <div id="formContainer"></div>
+  </div>
+
+  <div id="room" style="display:none;">
+    <div id="roomHeader">
+      <div>
+        <span id="lastUpdate">Last update: N/A</span>
+        <span id="timeRemaining">Time remaining: N/A</span>
+      </div>
+      <div>
+        <button id="clearBtn">Clear</button>
+        <button id="copyBtn">Copy</button>
+      </div>
+    </div>
+    <textarea id="textArea" spellcheck="false" placeholder="Type or paste text here..."></textarea>
+  </div>
+
+  <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
+  <script>
+    
+    document.addEventListener("DOMContentLoaded", (event) => {
+      // Global state variables
+      var mode = null; // "host" or "client"
+      var peer = null;
+      var connections = []; // for host: all client connections
+      var conn = null;    // for client: connection to host
+      var roomId = "";
+      var roomPassword = "";
+      var creationTime = 0; // timestamp (ms) when room was created
+      var currentText = "";
+      var lastUpdateTimestamp = 0;
+      var isUpdating = false; // to avoid loops when updating textarea
+      var updateTimeout = null; // for debouncing
+
+      // DOM elements
+      var homepage = document.getElementById("homepage");
+      var formContainer = document.getElementById("formContainer");
+      var roomDiv = document.getElementById("room");
+      var textArea = document.getElementById("textArea");
+      var lastUpdateElem = document.getElementById("lastUpdate");
+      var timeRemainingElem = document.getElementById("timeRemaining");
+      var clearBtn = document.getElementById("clearBtn");
+      var copyBtn = document.getElementById("copyBtn");
+
+      // Event listeners for homepage buttons
+      document.getElementById("createRoomBtn").addEventListener("click", showCreateRoomForm);
+      document.getElementById("joinRoomBtn").addEventListener("click", showJoinRoomForm);
+
+      function showCreateRoomForm(){
+        formContainer.style.display = "block";
+        formContainer.innerHTML = `
+          <h2>Create Room</h2>
+          <label>Password (optional): <input type="text" id="createPassword"></label><br>
+          <button id="createBtn">Create</button>
+        `;
+        document.getElementById("createBtn").addEventListener("click", function(){
+          roomPassword = document.getElementById("createPassword").value;
+          roomId = generateRoomId();
+          mode = "host";
+          creationTime = Date.now();
+          initRoom();
+          initHost();
+        });
+      }
+
+      function showJoinRoomForm(){
+        formContainer.style.display = "block";
+        formContainer.innerHTML = `
+          <h2>Join Room</h2>
+          <label>Room ID: <input type="text" id="joinRoomId"></label><br>
+          <label>Password (if any): <input type="text" id="joinPassword"></label><br>
+          <button id="joinBtn">Join</button>
+        `;
+        document.getElementById("joinBtn").addEventListener("click", function(){
+          roomId = document.getElementById("joinRoomId").value.trim();
+          roomPassword = document.getElementById("joinPassword").value;
+          if(!roomId){
+            alert("Please enter a valid Room ID.");
+            return;
+          }
+          mode = "client";
+          initRoom();
+          initClient();
+        });
+      }
+
+      // Generate a random 6-character alphanumeric room id.
+      function generateRoomId(){
+        return Math.random().toString(36).substr(2, 6);
+      }
+
+      // Prepare the room UI and hide the homepage.
+      function initRoom(){
+        homepage.style.display = "none";
+        formContainer.style.display = "none";
+        roomDiv.style.display = "block";
+        // Optionally, display the room id in the header.
+        document.getElementById("roomHeader").innerHTML += `<span>Room ID: ${roomId}</span>`;
+        updateLastUpdateDisplay(lastUpdateTimestamp);
+      }
+
+      // Initialize as host: create a Peer with roomId as the id.
+      function initHost(){
+        peer = new Peer(roomId, { debug: 2 });
+        peer.on('open', function(id) {
+          console.log("Host Peer opened with ID:", id);
+        });
+        peer.on('connection', function(connection){
+          console.log("New connection from", connection.peer);
+          connection.on('data', function(data){
+            handleHostData(connection, data);
+          });
+          connections.push(connection);
+        });
+        peer.on('error', function(err){
+          console.error(err);
+          alert("Peer error: " + err);
+        });
+      }
+
+      // Initialize as client: create a Peer and connect to the host (roomId).
+      function initClient(){
+        peer = new Peer({ debug: 2 });
+        peer.on('open', function(id) {
+          console.log("Client Peer opened with ID:", id);
+          conn = peer.connect(roomId, { reliable: true });
+          conn.on('open', function(){
+            // Immediately send a join request including the (optional) password.
+            conn.send({ type: "join", password: roomPassword });
+          });
+          conn.on('data', function(data){
+            handleClientData(data);
+          });
+        });
+        peer.on('error', function(err){
+          console.error(err);
+          alert("Peer error: " + err);
+        });
+      }
+
+      // Host: Handle incoming data from a connection.
+      function handleHostData(connection, data){
+        if(data.type === "join"){
+          // If a password was set at room creation, verify it.
+          if(roomPassword && data.password !== roomPassword){
+            connection.send({ type: "error", message: "Incorrect password" });
+            connection.close();
+            return;
+          }
+          // Send an init message with the current text state.
+          connection.send({ type: "init", text: currentText, timestamp: lastUpdateTimestamp, creationTime: creationTime });
+        } else if(data.type === "update"){
+          // Accept update only if the timestamp is newer.
+          if(data.timestamp > lastUpdateTimestamp){
+            currentText = data.text;
+            lastUpdateTimestamp = data.timestamp;
+            updateTextArea(currentText);
+            updateLastUpdateDisplay(lastUpdateTimestamp);
+            // Broadcast this update to all connected clients.
+            broadcastUpdate(data);
+          }
+        }
+      }
+
+      // Client: Handle data received from the host.
+      function handleClientData(data){
+        if(data.type === "init"){
+          currentText = data.text;
+          lastUpdateTimestamp = data.timestamp;
+          creationTime = data.creationTime;
+          updateTextArea(currentText);
+          updateLastUpdateDisplay(lastUpdateTimestamp);
+        } else if(data.type === "update"){
+          if(data.timestamp > lastUpdateTimestamp){
+            currentText = data.text;
+            lastUpdateTimestamp = data.timestamp;
+            updateTextArea(currentText);
+            updateLastUpdateDisplay(lastUpdateTimestamp);
+          }
+        } else if(data.type === "error"){
+          alert("Error: " + data.message);
+        }
+      }
+
+      // Host: Broadcast an update message to all connected clients.
+      function broadcastUpdate(data){
+        connections.forEach(function(conn){
+          if(conn.open){
+            conn.send(data);
+          }
+        });
+      }
+
+      // Update the textarea content without triggering an input event.
+      function updateTextArea(text){
+        isUpdating = true;
+        textArea.value = text;
+        isUpdating = false;
+      }
+
+      // Update the "Last update" display.
+      function updateLastUpdateDisplay(timestamp){
+        if(timestamp){
+          var date = new Date(timestamp);
+          lastUpdateElem.textContent = "Last update: " + date.toLocaleString();
+        } else {
+          lastUpdateElem.textContent = "Last update: N/A";
+        }
+      }
+
+      // Debounce text input so that updates aren't sent on every keystroke.
+      textArea.addEventListener("input", function(){
+        if(isUpdating) return;
+        if(updateTimeout) clearTimeout(updateTimeout);
+        updateTimeout = setTimeout(handleTextUpdate, 500);
+      });
+
+      // Called after debouncing – send the update.
+      function handleTextUpdate(){
+        var text = textArea.value;
+        var timestamp = Date.now();
+        if(text === currentText) return;
+        currentText = text;
+        lastUpdateTimestamp = timestamp;
+        updateLastUpdateDisplay(timestamp);
+        var data = { type: "update", text: text, timestamp: timestamp };
+        if(mode === "host"){
+          broadcastUpdate(data);
+        } else if(mode === "client" && conn && conn.open){
+          conn.send(data);
+        }
+      }
+
+      // Clear button: clear the textarea and update.
+      clearBtn.addEventListener("click", function(){
+        textArea.value = "";
+        handleTextUpdate();
+      });
+
+      // Copy button: copy textarea contents to the clipboard.
+      copyBtn.addEventListener("click", function(){
+        navigator.clipboard.writeText(textArea.value).then(function(){
+          alert("Text copied to clipboard!");
+        });
+      });
+
+      // Every second, update the time remaining until the room expires.
+      setInterval(function(){
+        if(!creationTime) return;
+        var elapsed = Date.now() - creationTime;
+        var remaining = 24 * 60 * 60 * 1000 - elapsed;
+        if(remaining <= 0){
+          timeRemainingElem.textContent = "Room expired";
+          textArea.disabled = true;
+          if(peer && !peer.destroyed){
+            peer.destroy();
+          }
+        } else {
+          var hours = Math.floor(remaining / (1000 * 60 * 60));
+          var minutes = Math.floor((remaining % (1000 * 60 * 60)) / (1000 * 60));
+          var seconds = Math.floor((remaining % (1000 * 60)) / 1000);
+          timeRemainingElem.textContent = "Time remaining: " + hours + "h " + minutes + "m " + seconds + "s";
+        }
+      }, 1000);
+    });
+  </script>
+</body>
+</html>
