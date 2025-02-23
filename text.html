@@ -1,200 +1,42 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Transfer</title>
+  <title>Clipboard Transfer</title>
   <style>
-    :root {
-      --bg: #0a0a0a;
-      --surface: #141414;
-      --border: #1a1a1a;
-      --text: #e0e0e0;
-      --text-dim: #666666;
-      --accent: #3d5afe;
-      --accent-dim: #1a237e;
-    }
-
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-    }
-
-
-    body {
-      font-family: monospace;
-      background-color: var(--bg);
-      color: var(--text);
-      line-height: 1.5;
-      margin: 0;
-      padding: 20px;
-      min-height: 100vh;
-    }
-
-    #homepage, #room {
-      max-width: 1200px;
-      margin: 0 auto;
-      opacity: 0;
-      animation: fade-in 0.5s forwards;
-    }
-
-    @keyframes fade-in {
-      from { opacity: 0; }
-      to { opacity: 1; }
-    }
-
-    .header {
-      border-bottom: 1px solid var(--border);
-      padding-bottom: 20px;
-      margin-bottom: 40px;
-      font-size: 14px;
-      color: var(--text-dim);
-    }
-
-    input {
-      width: 100%;
-      background: var(--bg);
-      border: 1px solid var(--border);
-      color: var(--text);
-      padding: 12px;
-      font-family: inherit;
-      font-size: 14px;
-      margin-bottom: 15px;
-    }
-
-    input:focus {
-      outline: none;
-      border-color: var(--accent);
-    }
-
-    label {
-      display: block;
-      color: var(--text-dim);
-      margin-bottom: 8px;
-      font-size: 14px;
-    }
-
-    button {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      color: var(--text);
-      padding: 15px 20px;
-      font-family: inherit;
-      font-size: 14px;
-      cursor: pointer;
-      transition: all 0.2s ease;
-    }
-
-    button:hover {
-      border-color: var(--accent);
-      color: var(--accent);
-    }
-
-    #roomHeader {
-      display: grid;
-      grid-template-columns: 1fr auto;
-      gap: 20px;
-      margin-bottom: 20px;
-      padding: 15px;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      font-size: 14px;
-    }
-
-    #roomHeader span {
-      color: var(--text-dim);
-      margin-right: 20px;
-    }
-
-    textarea {
-      width: 100%;
-      height: 75vh;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      color: var(--text);
-      padding: 20px;
-      font-family: inherit;
-      font-size: 14px;
-      resize: none;
-      line-height: 1.6;
-    }
-
-    textarea:focus {
-      outline: none;
-      border-color: var(--accent);
-    }
-
-    textarea::selection {
-      background: var(--accent-dim);
-    }
-
-    #formContainer {
-      display: none;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      padding: 20px;
-      margin-top: 20px;
-      animation: slide-up 0.3s ease;
-      max-width: 400px;
-    }
-
-    @keyframes slide-up {
-      from { transform: translateY(10px); opacity: 0; }
-      to { transform: translateY(0); opacity: 1; }
-    }
-
-    .action-container {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-      gap: 20px;
-      margin-top: 40px;
-    }
-
-    @media (max-width: 768px) {
-      body {
-        padding: 15px;
-      }
-
-      #roomHeader {
-        grid-template-columns: 1fr;
-      }
-
-      #roomHeader span {
-        display: block;
-        margin-bottom: 10px;
-      }
-    }
+    body { font-family: sans-serif; margin: 0; padding: 0; }
+    #homepage, #room { padding: 20px; }
+    button { margin: 5px; padding: 8px 12px; }
+    #roomHeader { margin-bottom: 10px; }
+    #roomHeader span { margin-right: 15px; }
+    textarea { width: 100%; height: 80vh; font-size: 16px; }
+    input { padding: 4px; margin: 4px 0; }
   </style>
 </head>
 <body>
+  <!-- Homepage with options -->
   <div id="homepage">
-    <div class="header">Transfer Interface</div>
-    <div class="action-container">
-      <button id="createRoomBtn">Create Channel</button>
-      <button id="joinRoomBtn">Join Channel</button>
-    </div>
-    <div id="formContainer"></div>
+    <h1>Clipboard Transfer</h1>
+    <button id="createRoomBtn">Create Room</button>
+    <button id="joinRoomBtn">Join Room</button>
+    <div id="formContainer" style="margin-top:20px;"></div>
   </div>
 
+  <!-- Room interface -->
   <div id="room" style="display:none;">
     <div id="roomHeader">
-      <div>
-        <span id="lastUpdate">Last update: N/A</span>
-        <span id="timeRemaining">Time remaining: N/A</span>
-      </div>
-      <div>
-        <button id="clearBtn">Clear</button>
-        <button id="copyBtn">Copy</button>
-      </div>
+      <span id="lastUpdate">Last update: N/A</span>
+      <span id="timeRemaining">Time remaining: N/A</span>
+      <button id="clearBtn">Clear</button>
+      <button id="copyBtn">Copy</button>
     </div>
-    <textarea id="textArea" spellcheck="false" placeholder="Type or paste text here..."></textarea>
+    <textarea id="textArea" placeholder="Type or paste text here..."></textarea>
   </div>
 
+  <!-- Include PeerJS from a CDN -->
   <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
   <script>
-    
-    document.addEventListener("DOMContentLoaded", (event) => {
+    (function(){
       // Global state variables
       var mode = null; // "host" or "client"
       var peer = null;
@@ -223,7 +65,6 @@
       document.getElementById("joinRoomBtn").addEventListener("click", showJoinRoomForm);
 
       function showCreateRoomForm(){
-        formContainer.style.display = "block";
         formContainer.innerHTML = `
           <h2>Create Room</h2>
           <label>Password (optional): <input type="text" id="createPassword"></label><br>
@@ -240,7 +81,6 @@
       }
 
       function showJoinRoomForm(){
-        formContainer.style.display = "block";
         formContainer.innerHTML = `
           <h2>Join Room</h2>
           <label>Room ID: <input type="text" id="joinRoomId"></label><br>
@@ -384,7 +224,7 @@
         }
       }
 
-      // Debounce text input so that updates aren't sent on every keystroke.
+      // Debounce text input so that updates aren’t sent on every keystroke.
       textArea.addEventListener("input", function(){
         if(isUpdating) return;
         if(updateTimeout) clearTimeout(updateTimeout);
@@ -438,7 +278,8 @@
           timeRemainingElem.textContent = "Time remaining: " + hours + "h " + minutes + "m " + seconds + "s";
         }
       }, 1000);
-    });
+
+    })();
   </script>
 </body>
 </html>
