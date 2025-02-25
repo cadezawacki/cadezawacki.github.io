@@ -1,0 +1,1713 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hydrate</title>
+    <style>
+        /* Modern design system */
+        :root {
+            --primary: #2196F3;
+            --primary-dark: #1976D2;
+            --primary-light: #BBDEFB;
+            --secondary: #00BCD4;
+            --accent: #00E5FF;
+            --text: #263238;
+            --text-light: #78909C;
+            --text-on-dark: #ECEFF1;
+            --background: #FAFAFA;
+            --surface: #FFFFFF;
+            --error: #F44336;
+            --success: #4CAF50;
+            --border-radius: 12px;
+            --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.08);
+            --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.12);
+            --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.16);
+            --anim-duration: 0.3s;
+            --font-main: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+        }
+
+        [data-theme="dark"] {
+            --primary: #42A5F5;
+            --primary-dark: #1E88E5;
+            --primary-light: #90CAF9;
+            --text: #ECEFF1;
+            --text-light: #B0BEC5;
+            --text-on-dark: #ECEFF1;
+            --background: #121212;
+            --surface: #1E1E1E;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: var(--font-main);
+            background-color: var(--background);
+            color: var(--text);
+            min-height: 100vh;
+            transition: background-color var(--anim-duration) ease;
+            font-size: 16px;
+            line-height: 1.5;
+            overflow-x: hidden;
+        }
+
+        h1, h2, h3, h4, h5, h6 {
+            font-weight: 600;
+            margin-bottom: 0.5em;
+            line-height: 1.2;
+        }
+
+        .app-container {
+            max-width: 500px;
+            margin: 0 auto;
+            padding: 24px;
+            min-height: 100vh;
+            position: relative;
+        }
+
+        /* Header */
+        .app-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 24px;
+        }
+
+        .app-title {
+            font-size: 24px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .app-title svg {
+            width: 24px;
+            height: 24px;
+            fill: var(--primary);
+        }
+
+        .theme-toggle {
+            background: none;
+            border: none;
+            cursor: pointer;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background-color 0.2s;
+            color: var(--text);
+        }
+
+        .theme-toggle:hover {
+            background-color: rgba(0, 0, 0, 0.05);
+        }
+
+        [data-theme="dark"] .theme-toggle:hover {
+            background-color: rgba(255, 255, 255, 0.1);
+        }
+
+        .tabs {
+            display: flex;
+            background-color: var(--surface);
+            border-radius: var(--border-radius);
+            padding: 4px;
+            box-shadow: var(--shadow-sm);
+            margin-bottom: 24px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .tab {
+            flex: 1;
+            text-align: center;
+            padding: 12px;
+            cursor: pointer;
+            border-radius: 8px;
+            font-weight: 500;
+            transition: all var(--anim-duration) ease;
+            z-index: 2;
+            color: var(--text-light);
+        }
+
+        .tab.active {
+            color: var(--primary);
+            font-weight: 600;
+        }
+
+        .tab-slider {
+            position: absolute;
+            height: calc(100% - 8px);
+            background-color: rgba(33, 150, 243, 0.1);
+            border-radius: 8px;
+            transition: all var(--anim-duration) cubic-bezier(0.4, 0, 0.2, 1);
+            z-index: 1;
+            top: 4px;
+        }
+
+        .tab-content {
+            display: none;
+            animation: fadeIn var(--anim-duration) ease;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Water Progress Section */
+        .water-progress {
+            background-color: var(--surface);
+            border-radius: var(--border-radius);
+            box-shadow: var(--shadow-md);
+            padding: 24px;
+            margin-bottom: 24px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .water-drops {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            pointer-events: none;
+        }
+
+        .water-wave {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            background: linear-gradient(180deg, rgba(33, 150, 243, 0.7) 0%, rgba(33, 150, 243, 0.9) 100%);
+            transition: height 1s cubic-bezier(0.4, 0, 0.2, 1);
+            border-radius: 50% 50% 0 0 / 100% 100% 0 0;
+            transform: scaleX(1.5);
+            transform-origin: bottom;
+        }
+
+        .water-wave::before,
+        .water-wave::after {
+            content: "";
+            position: absolute;
+            width: 200%;
+            height: 20px;
+            top: -10px;
+            left: -50%;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .water-wave::after {
+            top: -5px;
+            animation: wave 8s linear infinite;
+        }
+
+        @keyframes wave {
+            0% { transform: translateX(0); }
+            100% { transform: translateX(100px); }
+        }
+
+        .water-info {
+            position: relative;
+            z-index: 1;
+            text-align: center;
+            min-height: 250px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+
+        .water-percentage {
+            font-size: 48px;
+            font-weight: 700;
+            margin-bottom: 8px;
+            color: var(--primary);
+        }
+
+        .water-amount {
+            font-size: 16px;
+            color: var(--text-light);
+            margin-bottom: 24px;
+        }
+
+        .water-goal {
+            font-weight: 500;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 8px;
+            margin: 16px 0;
+        }
+
+        .next-reminder {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            margin-top: 16px;
+            color: var(--text-light);
+            font-size: 14px;
+        }
+
+        /* Stats Cards */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .stat-card {
+            background-color: var(--surface);
+            border-radius: var(--border-radius);
+            box-shadow: var(--shadow-sm);
+            padding: 16px;
+            text-align: center;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-md);
+        }
+
+        .stat-value {
+            font-size: 24px;
+            font-weight: 700;
+            color: var(--primary);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 4px;
+        }
+
+        .stat-label {
+            font-size: 14px;
+            color: var(--text-light);
+        }
+
+        /* Glass Buttons */
+        .section-title {
+            margin: 24px 0 16px;
+            font-size: 18px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .section-title svg {
+            width: 18px;
+            height: 18px;
+            fill: var(--primary);
+        }
+
+        .glass-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .glass-btn {
+            background-color: var(--surface);
+            border: 2px solid transparent;
+            border-radius: var(--border-radius);
+            padding: 16px 8px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            box-shadow: var(--shadow-sm);
+        }
+
+        .glass-btn:hover {
+            transform: translateY(-3px);
+            box-shadow: var(--shadow-md);
+            border-color: rgba(33, 150, 243, 0.2);
+        }
+
+        .glass-btn:active {
+            transform: translateY(0);
+        }
+
+        .glass-icon {
+            font-size: 28px;
+            margin-bottom: 8px;
+        }
+
+        .glass-name {
+            font-weight: 500;
+            margin-bottom: 4px;
+        }
+
+        .glass-size {
+            font-size: 14px;
+            color: var(--text-light);
+        }
+
+        /* Action Buttons */
+        .action-buttons {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 24px;
+        }
+
+        .btn {
+            flex: 1;
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            border-radius: var(--border-radius);
+            padding: 12px 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            box-shadow: var(--shadow-sm);
+        }
+
+        .btn svg {
+            width: 18px;
+            height: 18px;
+            fill: currentColor;
+        }
+
+        .btn:hover {
+            background-color: var(--primary-dark);
+            box-shadow: var(--shadow-md);
+            transform: translateY(-2px);
+        }
+
+        .btn:active {
+            transform: translateY(0);
+        }
+
+        .btn.secondary {
+            background-color: transparent;
+            border: 1px solid var(--primary);
+            color: var(--primary);
+        }
+
+        .btn.secondary:hover {
+            background-color: rgba(33, 150, 243, 0.05);
+        }
+
+        /* Forms */
+        .settings-section {
+            background-color: var(--surface);
+            border-radius: var(--border-radius);
+            box-shadow: var(--shadow-md);
+            padding: 20px;
+            margin-bottom: 24px;
+            animation: fadeIn var(--anim-duration) ease;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group:last-child {
+            margin-bottom: 0;
+        }
+
+        .form-label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+        }
+
+        .form-control {
+            width: 100%;
+            padding: 12px 16px;
+            border: 1px solid rgba(0, 0, 0, 0.1);
+            border-radius: var(--border-radius);
+            background-color: var(--surface);
+            color: var(--text);
+            font-size: 16px;
+            transition: border-color 0.2s;
+        }
+
+        [data-theme="dark"] .form-control {
+            border-color: rgba(255, 255, 255, 0.1);
+            background-color: rgba(255, 255, 255, 0.05);
+        }
+
+        .form-control:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 2px rgba(33, 150, 243, 0.2);
+        }
+
+        .work-hours {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+        }
+
+        /* Glass Settings */
+        .glass-settings-list {
+            margin-bottom: 12px;
+        }
+
+        .glass-settings-item {
+            display: grid;
+            grid-template-columns: 60px 1fr 80px 40px;
+            gap: 10px;
+            margin-bottom: 12px;
+            align-items: center;
+        }
+
+        .item-delete {
+            background: none;
+            border: none;
+            cursor: pointer;
+            color: var(--error);
+            font-size: 18px;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background-color 0.2s;
+        }
+
+        .item-delete:hover {
+            background-color: rgba(244, 67, 54, 0.1);
+        }
+
+        /* History Section */
+        .history-list {
+            background-color: var(--surface);
+            border-radius: var(--border-radius);
+            box-shadow: var(--shadow-md);
+            margin-bottom: 24px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .history-item {
+            padding: 16px;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        [data-theme="dark"] .history-item {
+            border-bottom-color: rgba(255, 255, 255, 0.05);
+        }
+
+        .history-item:last-child {
+            border-bottom: none;
+        }
+
+        .history-icon {
+            background-color: rgba(33, 150, 243, 0.1);
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--primary);
+            flex-shrink: 0;
+        }
+
+        .history-content {
+            flex: 1;
+        }
+
+        .history-time {
+            font-size: 12px;
+            color: var(--text-light);
+            margin-bottom: 4px;
+        }
+
+        .history-text {
+            font-weight: 500;
+        }
+
+        .history-amount {
+            font-weight: 600;
+            color: var(--primary);
+        }
+
+        .empty-list {
+            padding: 20px;
+            text-align: center;
+            color: var(--text-light);
+        }
+
+        /* Notification Panel */
+        .notification-container {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            width: 320px;
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            pointer-events: none;
+        }
+
+        .notification {
+            background-color: var(--surface);
+            color: var(--text);
+            border-radius: var(--border-radius);
+            box-shadow: var(--shadow-lg);
+            padding: 16px;
+            margin-bottom: 12px;
+            transform: translateX(120%);
+            transition: transform 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            pointer-events: auto;
+            max-width: 100%;
+            display: flex;
+            align-items: center;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .notification.show {
+            transform: translateX(0);
+        }
+
+        .notification-icon {
+            background-color: rgba(33, 150, 243, 0.1);
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--primary);
+            margin-right: 12px;
+            flex-shrink: 0;
+        }
+
+        .notification-content {
+            flex: 1;
+        }
+
+        .notification-title {
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .notification-text {
+            font-size: 14px;
+            color: var(--text-light);
+        }
+
+        .notification-actions {
+            display: flex;
+            margin-top: 12px;
+            gap: 8px;
+        }
+
+        .notification-btn {
+            flex: 1;
+            padding: 8px 12px;
+            border-radius: 4px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            text-align: center;
+        }
+
+        .notification-btn.primary {
+            background-color: var(--primary);
+            color: white;
+        }
+
+        .notification-btn.secondary {
+            background-color: transparent;
+            color: var(--text-light);
+        }
+
+        .notification-progress {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            height: 3px;
+            background-color: var(--primary);
+            animation: progress-shrink 30s linear forwards;
+        }
+
+        @keyframes progress-shrink {
+            from { width: 100%; }
+            to { width: 0%; }
+        }
+
+        /* Tooltip */
+        .tooltip {
+            position: relative;
+            display: inline-block;
+        }
+
+        .tooltip .tooltiptext {
+            visibility: hidden;
+            width: 120px;
+            background-color: rgba(0, 0, 0, 0.8);
+            color: #fff;
+            text-align: center;
+            border-radius: 6px;
+            padding: 5px;
+            position: absolute;
+            z-index: 1;
+            bottom: 125%;
+            left: 50%;
+            transform: translateX(-50%);
+            opacity: 0;
+            transition: opacity 0.3s;
+            font-size: 12px;
+            pointer-events: none;
+        }
+
+        .tooltip .tooltiptext::after {
+            content: "";
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            margin-left: -5px;
+            border-width: 5px;
+            border-style: solid;
+            border-color: rgba(0, 0, 0, 0.8) transparent transparent transparent;
+        }
+
+        .tooltip:hover .tooltiptext {
+            visibility: visible;
+            opacity: 1;
+        }
+
+        /* Dark Mode Specific Styles */
+        [data-theme="dark"] .water-progress {
+            background-color: rgba(255, 255, 255, 0.05);
+        }
+
+        [data-theme="dark"] .stat-card, 
+        [data-theme="dark"] .glass-btn, 
+        [data-theme="dark"] .settings-section,
+        [data-theme="dark"] .history-list,
+        [data-theme="dark"] .notification {
+            background-color: rgba(255, 255, 255, 0.05);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+        }
+
+        /* Responsive Styles */
+        @media (max-width: 480px) {
+            .app-container {
+                padding: 16px;
+            }
+
+            .stats-grid {
+                grid-template-columns: 1fr;
+                gap: 12px;
+            }
+
+            .glass-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .water-percentage {
+                font-size: 36px;
+            }
+
+            .glass-settings-item {
+                grid-template-columns: 50px 1fr 70px 40px;
+                gap: 8px;
+            }
+
+            .notification-container {
+                width: calc(100% - 32px);
+                right: 16px;
+                bottom: 16px;
+            }
+        }
+
+        /* For Microsoft Edge scrollbar */
+        @supports (-ms-ime-align: auto) {
+            body {
+                scrollbar-width: thin;
+                scrollbar-color: var(--primary) transparent;
+            }
+        }
+
+        /* For WebKit browsers (Chrome, Safari) scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background-color: rgba(0, 0, 0, 0.2);
+            border-radius: 20px;
+        }
+
+        [data-theme="dark"] ::-webkit-scrollbar-thumb {
+            background-color: rgba(255, 255, 255, 0.2);
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background-color: rgba(0, 0, 0, 0.3);
+        }
+
+        [data-theme="dark"] ::-webkit-scrollbar-thumb:hover {
+            background-color: rgba(255, 255, 255, 0.3);
+        }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <!-- App Header -->
+        <div class="app-header">
+            <div class="app-title">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12,2C17.52,2 22,6.48 22,12C22,17.52 17.52,22 12,22C6.48,22 2,17.52 2,12C2,6.48 6.48,2 12,2M12,4C7.58,4 4,7.58 4,12C4,16.42 7.58,20 12,20C16.42,20 20,16.42 20,12C20,7.58 16.42,4 12,4M12,7.5C12.83,7.5 13.5,8.17 13.5,9C13.5,9.83 12.83,10.5 12,10.5C11.17,10.5 10.5,9.83 10.5,9C10.5,8.17 11.17,7.5 12,7.5M12,9.5C12.28,9.5 12.5,9.28 12.5,9C12.5,8.72 12.28,8.5 12,8.5C11.72,8.5 11.5,8.72 11.5,9C11.5,9.28 11.72,9.5 12,9.5M12,12C14.21,12 16,13.79 16,16C16,18.21 14.21,20 12,20C9.79,20 8,18.21 8,16C8,13.79 9.79,12 12,12Z" /></svg>
+                Cade's Hydrate
+            </div>
+            <button id="themeToggle" class="theme-toggle">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
+            </button>
+        </div>
+
+        <!-- Tab Navigation -->
+        <div class="tabs">
+            <div class="tab active" data-tab="dashboard">Dashboard</div>
+            <div class="tab" data-tab="settings">Settings</div>
+            <div class="tab" data-tab="history">History</div>
+            <div class="tab-slider"></div>
+        </div>
+
+        <!-- Dashboard Tab -->
+        <div id="dashboard" class="tab-content active">
+            <!-- Water Progress Card -->
+            <div class="water-progress">
+                <div class="water-drops">
+                    <div id="waterWave" class="water-wave"></div>
+                </div>
+                <div class="water-info">
+                    <div>
+                        <div id="waterPercentage" class="water-percentage">0%</div>
+                        <div id="waterAmount" class="water-amount">0 of 2000 ml</div>
+                    </div>
+                    <div>
+                        <div class="water-goal">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20a6 6 0 0 0 6-6c0-4-6-10-6-10S6 10 6 14a6 6 0 0 0 6 6Z"></path></svg>
+                            Daily Goal: <span id="dailyGoalDisplay">2000 ml</span>
+                        </div>
+                        <div class="next-reminder">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                            Next reminder: <span id="nextReminderDisplay">--:--</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Stats Cards -->
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-value">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.66V20a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h5.34"></path><polygon points="18 2 22 6 12 16 8 16 8 12 18 2"></polygon></svg>
+                        &nbsp;<span id="todayIntakeDisplay">0</span>
+                    </div>
+                    <div class="stat-label">Total Intake Today</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 5H5v14h14V5z"></path><path d="M9 5v14"></path><path d="M5 9h4"></path><path d="M5 15h4"></path></svg>
+                        &nbsp;<span id="glassTodayDisplay">0</span>
+                    </div>
+                    <div class="stat-label">Glasses Today</div>
+                </div>
+            </div>
+
+            <!-- Quick Add Water Section -->
+            <h3 class="section-title">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19,13H13V19H11V13H5V11H11V5H13V11H19V13Z" /></svg>
+                Quick Add Water
+            </h3>
+
+            <div id="glassButtons" class="glass-grid">
+                <!-- Glass buttons will be added here dynamically -->
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="action-buttons">
+                <button id="customAmountBtn" class="btn secondary">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M17,13H13V17H11V13H7V11H11V7H13V11H17M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2Z" /></svg>
+                    Custom Amount
+                </button>
+                <button id="reminderNowBtn" class="btn">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21,19V20H3V19L5,17V11C5,7.9 7.03,5.17 10,4.29C10,4.19 10,4.1 10,4A2,2 0 0,1 12,2A2,2 0 0,1 14,4C14,4.1 14,4.19 14,4.29C16.97,5.17 19,7.9 19,11V17L21,19M14,21A2,2 0 0,1 12,23A2,2 0 0,1 10,21H14Z" /></svg>
+                    Remind Now
+                </button>
+            </div>
+        </div>
+
+        <!-- Settings Tab -->
+        <div id="settings" class="tab-content">
+            <div class="settings-section">
+                <h3 class="section-title">General Settings</h3>
+                
+                <div class="form-group">
+                    <label class="form-label" for="dailyGoalInput">Daily Water Goal (ml)</label>
+                    <input type="number" id="dailyGoalInput" class="form-control" min="500" step="100" value="2000">
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label" for="reminderIntervalInput">Reminder Interval (minutes)</label>
+                    <input type="number" id="reminderIntervalInput" class="form-control" min="15" step="5" value="60">
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Work Hours</label>
+                    <div class="work-hours">
+                        <div>
+                            <label class="form-label" for="workStartInput">Start</label>
+                            <input type="time" id="workStartInput" class="form-control" value="09:00">
+                        </div>
+                        <div>
+                            <label class="form-label" for="workEndInput">End</label>
+                            <input type="time" id="workEndInput" class="form-control" value="17:00">
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="settings-section">
+                <h3 class="section-title">Container Sizes</h3>
+                
+                <div id="glassSettingsList" class="glass-settings-list">
+                    <!-- Glass settings will be added dynamically -->
+                </div>
+                
+                <button id="addGlassSizeBtn" class="btn secondary">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19,13H13V19H11V13H5V11H11V5H13V11H19V13Z" /></svg>
+                    Add Container
+                </button>
+            </div>
+            
+            <div class="action-buttons">
+                <button id="saveSettingsBtn" class="btn">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M15,9H5V5H15M12,19A3,3 0 0,1 9,16A3,3 0 0,1 12,13A3,3 0 0,1 15,16A3,3 0 0,1 12,19M17,3H5C3.89,3 3,3.9 3,5V19A2,2 0 0,0 5,21H19A2,2 0 0,0 21,19V7L17,3Z" /></svg>
+                    Save Settings
+                </button>
+                <button id="resetDataBtn" class="btn secondary">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19,4H15.5L14.5,3H9.5L8.5,4H5V6H19M6,19A2,2 0 0,0 8,21H16A2,2 0 0,0 18,19V7H6V19Z" /></svg>
+                    Reset All Data
+                </button>
+            </div>
+        </div>
+
+        <!-- History Tab -->
+        <div id="history" class="tab-content">
+            <h3 class="section-title">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13.5,8H12V13L16.28,15.54L17,14.33L13.5,12.25V8M13,3A9,9 0 0,0 4,12H1L4.96,16.03L9,12H6A7,7 0 0,1 13,5A7,7 0 0,1 20,12A7,7 0 0,1 13,19C11.07,19 9.32,18.21 8.06,16.94L6.64,18.36C8.27,20 10.5,21 13,21A9,9 0 0,0 22,12A9,9 0 0,0 13,3" /></svg>
+                Today's Water Log
+            </h3>
+            <div id="waterLogList" class="history-list">
+                <!-- Water log entries will be added dynamically -->
+            </div>
+            
+            <h3 class="section-title">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21,19V20H3V19L5,17V11C5,7.9 7.03,5.17 10,4.29C10,4.19 10,4.1 10,4A2,2 0 0,1 12,2A2,2 0 0,1 14,4C14,4.1 14,4.19 14,4.29C16.97,5.17 19,7.9 19,11V17L21,19M14,21A2,2 0 0,1 12,23A2,2 0 0,1 10,21H14Z" /></svg>
+                Notification History
+            </h3>
+            <div id="notificationLogList" class="history-list">
+                <!-- Notification history will be added dynamically -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Notification Panel -->
+    <div id="notificationContainer" class="notification-container"></div>
+
+    <script>
+        // Wait for DOM to be fully loaded before accessing elements
+        document.addEventListener('DOMContentLoaded', function() {
+            // App State
+            const state = {
+                dailyGoal: 2000, // ml
+                currentAmount: 0,
+                glassCount: 0,
+                reminderInterval: 30, // minutes
+                workHoursStart: '07:00',
+                workHoursEnd: '17:00',
+                glassSizes: [
+                    { id: 1, size: 250, icon: '🥤', name: 'Small' },
+                    { id: 2, size: 350, icon: '🥛', name: 'Medium' },
+                    { id: 3, size: 500, icon: '🍶', name: 'Large' }
+                ],
+                waterLog: [],
+                notificationHistory: [],
+                reminderTimer: null,
+                nextReminderTime: null,
+                today: new Date().toLocaleDateString(),
+                theme: 'light',
+                notificationIds: []
+            };
+
+            // DOM Elements - using safe selection with fallbacks
+            const elements = {};
+            
+            // Function to safely get DOM elements
+            function getElement(id) {
+                const element = document.getElementById(id);
+                if (!element) {
+                    console.warn(`Element with ID "${id}" not found`);
+                }
+                return element;
+            }
+
+            // Safely initialize element references
+            elements.waterWave = getElement('waterWave');
+            elements.waterPercentage = getElement('waterPercentage');
+            elements.waterAmount = getElement('waterAmount');
+            elements.dailyGoalDisplay = getElement('dailyGoalDisplay');
+            elements.nextReminderDisplay = getElement('nextReminderDisplay');
+            elements.todayIntakeDisplay = getElement('todayIntakeDisplay');
+            elements.glassTodayDisplay = getElement('glassTodayDisplay');
+            elements.glassButtons = getElement('glassButtons');
+            elements.dailyGoalInput = getElement('dailyGoalInput');
+            elements.reminderIntervalInput = getElement('reminderIntervalInput');
+            elements.workStartInput = getElement('workStartInput');
+            elements.workEndInput = getElement('workEndInput');
+            elements.glassSettingsList = getElement('glassSettingsList');
+            elements.customAmountBtn = getElement('customAmountBtn');
+            elements.reminderNowBtn = getElement('reminderNowBtn');
+            elements.addGlassSizeBtn = getElement('addGlassSizeBtn');
+            elements.saveSettingsBtn = getElement('saveSettingsBtn');
+            elements.resetDataBtn = getElement('resetDataBtn');
+            elements.themeToggle = getElement('themeToggle');
+            elements.waterLogList = getElement('waterLogList');
+            elements.notificationLogList = getElement('notificationLogList');
+            elements.notificationContainer = getElement('notificationContainer');
+            
+            // Tab elements
+            elements.tabs = document.querySelectorAll('.tab');
+            elements.tabContents = document.querySelectorAll('.tab-content');
+            elements.tabSlider = document.querySelector('.tab-slider');
+
+            // Initialize the app
+            function init() {
+                loadData();
+                renderUI();
+                setupEventListeners();
+                scheduleNextReminder();
+                checkNewDay();
+                setTabSliderPosition();
+                applyTheme();
+
+                // Check for new day every minute
+                setInterval(checkNewDay, 60000);
+                
+                console.log('App initialized successfully');
+            }
+
+            // Load data from localStorage
+            function loadData() {
+                try {
+                    const savedData = localStorage.getItem('waterReminderData');
+                    if (savedData) {
+                        const parsedData = JSON.parse(savedData);
+                        
+                        // Validate data before using it
+                        if (typeof parsedData === 'object' && parsedData !== null) {
+                            // Make sure we don't override properties that aren't in the saved data
+                            if (typeof parsedData.dailyGoal === 'number') state.dailyGoal = parsedData.dailyGoal;
+                            if (typeof parsedData.currentAmount === 'number') state.currentAmount = parsedData.currentAmount;
+                            if (typeof parsedData.glassCount === 'number') state.glassCount = parsedData.glassCount;
+                            if (typeof parsedData.reminderInterval === 'number') state.reminderInterval = parsedData.reminderInterval;
+                            if (typeof parsedData.workHoursStart === 'string') state.workHoursStart = parsedData.workHoursStart;
+                            if (typeof parsedData.workHoursEnd === 'string') state.workHoursEnd = parsedData.workHoursEnd;
+                            if (Array.isArray(parsedData.glassSizes)) state.glassSizes = parsedData.glassSizes;
+                            if (Array.isArray(parsedData.waterLog)) state.waterLog = parsedData.waterLog;
+                            if (Array.isArray(parsedData.notificationHistory)) state.notificationHistory = parsedData.notificationHistory;
+                            if (typeof parsedData.today === 'string') state.today = parsedData.today;
+                            if (typeof parsedData.theme === 'string') state.theme = parsedData.theme;
+                        }
+                    }
+                } catch (error) {
+                    console.error('Error loading data:', error);
+                    // If there's an error, we'll just use the default state
+                }
+
+                // Set form values from state if elements exist
+                if (elements.dailyGoalInput) elements.dailyGoalInput.value = state.dailyGoal;
+                if (elements.reminderIntervalInput) elements.reminderIntervalInput.value = state.reminderInterval;
+                if (elements.workStartInput) elements.workStartInput.value = state.workHoursStart;
+                if (elements.workEndInput) elements.workEndInput.value = state.workHoursEnd;
+            }
+
+            // Save data to localStorage
+            function saveData() {
+                try {
+                    const today = new Date().toLocaleDateString();
+                    if (state.today !== today) {
+                        state.today = today;
+                        state.currentAmount = 0;
+                        state.glassCount = 0;
+                        state.waterLog = [];
+                    }
+
+                    localStorage.setItem('waterReminderData', JSON.stringify(state));
+                } catch (error) {
+                    console.error('Error saving data:', error);
+                    showNotification('Error saving data', 'Failed to save your data. Please check your browser storage settings.', 'error');
+                }
+            }
+
+            // Check if it's a new day and reset daily counters
+            function checkNewDay() {
+                const today = new Date().toLocaleDateString();
+                if (state.today !== today) {
+                    state.today = today;
+                    state.currentAmount = 0;
+                    state.glassCount = 0;
+                    state.waterLog = [];
+                    saveData();
+                    renderUI();
+                }
+            }
+
+            // Render the UI based on current state
+            function renderUI() {
+                // Update water level and percentage
+                const percentage = Math.min((state.currentAmount / state.dailyGoal) * 100, 100);
+                if (elements.waterWave) elements.waterWave.style.height = `${percentage}%`;
+                if (elements.waterPercentage) elements.waterPercentage.textContent = `${Math.round(percentage)}%`;
+                if (elements.waterAmount) elements.waterAmount.textContent = `${state.currentAmount} of ${state.dailyGoal} ml`;
+                
+                // Update displays
+                if (elements.dailyGoalDisplay) elements.dailyGoalDisplay.textContent = `${state.dailyGoal} ml`;
+                if (elements.todayIntakeDisplay) elements.todayIntakeDisplay.textContent = state.currentAmount;
+                if (elements.glassTodayDisplay) elements.glassTodayDisplay.textContent = state.glassCount;
+
+                // Update next reminder time
+                if (elements.nextReminderDisplay) {
+                    if (state.nextReminderTime) {
+                        const nextTime = new Date(state.nextReminderTime);
+                        elements.nextReminderDisplay.textContent = nextTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                    } else {
+                        elements.nextReminderDisplay.textContent = '--:--';
+                    }
+                }
+
+                // Render glass buttons
+                renderGlassButtons();
+
+                // Render glass settings
+                renderGlassSettings();
+
+                // Render water log
+                renderWaterLog();
+
+                // Render notification history
+                renderNotificationHistory();
+            }
+
+            // Render glass buttons for quick adding
+            function renderGlassButtons() {
+                if (!elements.glassButtons) return;
+                
+                elements.glassButtons.innerHTML = '';
+                
+                state.glassSizes.forEach(glass => {
+                    const button = document.createElement('div');
+                    button.className = 'glass-btn';
+                    button.dataset.id = glass.id;
+                    button.dataset.size = glass.size;
+                    
+                    button.innerHTML = `
+                        <div class="glass-icon">${glass.icon}</div>
+                        <div class="glass-name">${glass.name}</div>
+                        <div class="glass-size">${glass.size} ml</div>
+                    `;
+                    
+                    button.addEventListener('click', () => {
+                        logWater(glass.size, glass.name, glass.icon);
+                    });
+                    
+                    elements.glassButtons.appendChild(button);
+                });
+            }
+
+            // Render glass size settings
+            function renderGlassSettings() {
+                if (!elements.glassSettingsList) return;
+                
+                elements.glassSettingsList.innerHTML = '';
+                
+                if (state.glassSizes.length === 0) {
+                    const emptyMessage = document.createElement('div');
+                    emptyMessage.className = 'empty-list';
+                    emptyMessage.textContent = 'No containers added yet.';
+                    elements.glassSettingsList.appendChild(emptyMessage);
+                    return;
+                }
+                
+                state.glassSizes.forEach(glass => {
+                    const item = document.createElement('div');
+                    item.className = 'glass-settings-item';
+                    
+                    const iconInput = document.createElement('input');
+                    iconInput.type = 'text';
+                    iconInput.className = 'form-control';
+                    iconInput.value = glass.icon;
+                    iconInput.dataset.id = glass.id;
+                    iconInput.dataset.field = 'icon';
+                    
+                    const nameInput = document.createElement('input');
+                    nameInput.type = 'text';
+                    nameInput.className = 'form-control';
+                    nameInput.value = glass.name;
+                    nameInput.dataset.id = glass.id;
+                    nameInput.dataset.field = 'name';
+                    
+                    const sizeInput = document.createElement('input');
+                    sizeInput.type = 'number';
+                    sizeInput.className = 'form-control';
+                    sizeInput.value = glass.size;
+                    sizeInput.min = 50;
+                    sizeInput.step = 10;
+                    sizeInput.dataset.id = glass.id;
+                    sizeInput.dataset.field = 'size';
+                    
+                    const deleteBtn = document.createElement('button');
+                    deleteBtn.className = 'item-delete';
+                    deleteBtn.innerHTML = '&times;';
+                    deleteBtn.dataset.id = glass.id;
+                    deleteBtn.title = 'Delete';
+                    
+                    deleteBtn.addEventListener('click', (e) => {
+                        const id = parseInt(e.target.dataset.id);
+                        if (state.glassSizes.length > 1) {
+                            state.glassSizes = state.glassSizes.filter(g => g.id !== id);
+                            renderGlassSettings();
+                            renderGlassButtons();
+                        } else {
+                            showNotification('Cannot Delete', 'You need at least one container size.', 'error');
+                        }
+                    });
+                    
+                    item.appendChild(iconInput);
+                    item.appendChild(nameInput);
+                    item.appendChild(sizeInput);
+                    item.appendChild(deleteBtn);
+                    
+                    elements.glassSettingsList.appendChild(item);
+                });
+                
+                // Add event listeners for input changes
+                const inputs = elements.glassSettingsList.querySelectorAll('input');
+                inputs.forEach(input => {
+                    input.addEventListener('change', (e) => {
+                        const id = parseInt(e.target.dataset.id);
+                        const field = e.target.dataset.field;
+                        const value = field === 'size' ? parseInt(e.target.value) : e.target.value;
+                        
+                        const glassIndex = state.glassSizes.findIndex(g => g.id === id);
+                        if (glassIndex !== -1) {
+                            state.glassSizes[glassIndex][field] = value;
+                        }
+                    });
+                });
+            }
+
+            // Render water log
+            function renderWaterLog() {
+                if (!elements.waterLogList) return;
+                
+                elements.waterLogList.innerHTML = '';
+                
+                if (state.waterLog.length === 0) {
+                    const emptyMessage = document.createElement('div');
+                    emptyMessage.className = 'empty-list';
+                    emptyMessage.textContent = 'No water logged today.';
+                    elements.waterLogList.appendChild(emptyMessage);
+                    return;
+                }
+                
+                // Sort by timestamp descending
+                const sortedLog = [...state.waterLog].sort((a, b) => b.timestamp - a.timestamp);
+                
+                sortedLog.forEach(entry => {
+                    const item = document.createElement('div');
+                    item.className = 'history-item';
+                    
+                    const time = new Date(entry.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                    
+                    item.innerHTML = `
+                        <div class="history-icon">${entry.icon || '💧'}</div>
+                        <div class="history-content">
+                            <div class="history-time">${time}</div>
+                            <div class="history-text">
+                                Added <span class="history-amount">${entry.amount} ml</span> 
+                                ${entry.name ? `(${entry.name})` : ''}
+                            </div>
+                        </div>
+                    `;
+                    
+                    elements.waterLogList.appendChild(item);
+                });
+            }
+
+            // Render notification history
+            function renderNotificationHistory() {
+                if (!elements.notificationLogList) return;
+                
+                elements.notificationLogList.innerHTML = '';
+                
+                if (state.notificationHistory.length === 0) {
+                    const emptyMessage = document.createElement('div');
+                    emptyMessage.className = 'empty-list';
+                    emptyMessage.textContent = 'No notifications yet.';
+                    elements.notificationLogList.appendChild(emptyMessage);
+                    return;
+                }
+                
+                // Sort by timestamp descending
+                const sortedHistory = [...state.notificationHistory].sort((a, b) => b.timestamp - a.timestamp);
+                
+                sortedHistory.forEach(entry => {
+                    const item = document.createElement('div');
+                    item.className = 'history-item';
+                    
+                    const time = new Date(entry.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                    
+                    let statusText = 'Pending';
+                    let statusClass = 'text-light';
+                    
+                    if (entry.responded) {
+                        statusText = 'Responded';
+                        statusClass = 'success';
+                    } else if (entry.dismissed) {
+                        statusText = 'Dismissed';
+                        statusClass = 'text-light';
+                    }
+                    
+                    item.innerHTML = `
+                        <div class="history-icon">🔔</div>
+                        <div class="history-content">
+                            <div class="history-time">${time} - <span class="${statusClass}">${statusText}</span></div>
+                            <div class="history-text">${entry.title || 'Notification'}</div>
+                        </div>
+                    `;
+                    
+                    elements.notificationLogList.appendChild(item);
+                });
+            }
+
+            // Set the tab slider position
+            function setTabSliderPosition() {
+                if (!elements.tabSlider) return;
+                
+                const activeTab = document.querySelector('.tab.active');
+                if (activeTab && elements.tabs.length) {
+                    const tabWidth = 100 / elements.tabs.length;
+                    const tabIndex = Array.from(elements.tabs).indexOf(activeTab);
+                    elements.tabSlider.style.width = `${tabWidth}%`;
+                    elements.tabSlider.style.left = `${tabWidth * tabIndex}%`;
+                }
+            }
+
+            // Apply theme
+            function applyTheme() {
+                document.body.setAttribute('data-theme', state.theme);
+                
+                // Update theme toggle icon if it exists
+                if (elements.themeToggle) {
+                    elements.themeToggle.innerHTML = state.theme === 'dark' 
+                        ? '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>'
+                        : '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>';
+                }
+            }
+
+            // Set up event listeners
+            function setupEventListeners() {
+                // Tab navigation
+                if (elements.tabs) {
+                    elements.tabs.forEach(tab => {
+                        tab.addEventListener('click', (e) => {
+                            const tabId = e.target.dataset.tab;
+                            
+                            // Update active tab
+                            elements.tabs.forEach(t => t.classList.remove('active'));
+                            e.target.classList.add('active');
+                            
+                            // Show active content
+                            if (elements.tabContents) {
+                                elements.tabContents.forEach(content => {
+                                    content.classList.remove('active');
+                                    if (content.id === tabId) {
+                                        content.classList.add('active');
+                                    }
+                                });
+                            }
+                            
+                            // Update slider position
+                            setTabSliderPosition();
+                        });
+                    });
+                }
+
+                // Custom amount button
+                if (elements.customAmountBtn) {
+                    elements.customAmountBtn.addEventListener('click', () => {
+                        const amount = prompt('Enter water amount in ml:', '250');
+                        if (amount !== null && !isNaN(amount) && parseInt(amount) > 0) {
+                            logWater(parseInt(amount), 'Custom');
+                        }
+                    });
+                }
+
+                // Remind now button
+                if (elements.reminderNowBtn) {
+                    elements.reminderNowBtn.addEventListener('click', () => {
+                        showNotification('Time to Hydrate!', 'Remember to drink water regularly.', 'reminder');
+                    });
+                }
+
+                // Add glass size button
+                if (elements.addGlassSizeBtn) {
+                    elements.addGlassSizeBtn.addEventListener('click', () => {
+                        const newId = state.glassSizes.length > 0 
+                            ? Math.max(...state.glassSizes.map(g => g.id)) + 1
+                            : 1;
+                        
+                        state.glassSizes.push({
+                            id: newId,
+                            size: 250,
+                            icon: '🥤',
+                            name: 'New'
+                        });
+                        
+                        renderGlassSettings();
+                    });
+                }
+
+                // Save settings
+                if (elements.saveSettingsBtn) {
+                    elements.saveSettingsBtn.addEventListener('click', () => {
+                        if (!elements.dailyGoalInput || !elements.reminderIntervalInput) {
+                            console.error('Form elements not found');
+                            return;
+                        }
+                        
+                        // Validate inputs
+                        const goalInput = parseInt(elements.dailyGoalInput.value);
+                        const intervalInput = parseInt(elements.reminderIntervalInput.value);
+                        
+                        if (isNaN(goalInput) || goalInput < 500) {
+                            showNotification('Invalid Input', 'Daily goal should be at least 500 ml.', 'error');
+                            return;
+                        }
+                        
+                        if (isNaN(intervalInput) || intervalInput < 15) {
+                            showNotification('Invalid Input', 'Reminder interval should be at least 15 minutes.', 'error');
+                            return;
+                        }
+                        
+                        // Get values from form
+                        state.dailyGoal = goalInput;
+                        state.reminderInterval = intervalInput;
+                        
+                        if (elements.workStartInput) state.workHoursStart = elements.workStartInput.value;
+                        if (elements.workEndInput) state.workHoursEnd = elements.workEndInput.value;
+                        
+                        // Update glass sizes from inputs
+                        if (elements.glassSettingsList) {
+                            const glassInputs = elements.glassSettingsList.querySelectorAll('.glass-settings-item');
+                            glassInputs.forEach(item => {
+                                const inputs = item.querySelectorAll('input');
+                                const iconInput = [...inputs].find(input => input.dataset.field === 'icon');
+                                const nameInput = [...inputs].find(input => input.dataset.field === 'name');
+                                const sizeInput = [...inputs].find(input => input.dataset.field === 'size');
+                                
+                                if (iconInput && nameInput && sizeInput) {
+                                    const id = parseInt(iconInput.dataset.id);
+                                    const glassIndex = state.glassSizes.findIndex(g => g.id === id);
+                                    
+                                    if (glassIndex !== -1) {
+                                        state.glassSizes[glassIndex].icon = iconInput.value;
+                                        state.glassSizes[glassIndex].name = nameInput.value;
+                                        state.glassSizes[glassIndex].size = parseInt(sizeInput.value) || 250;
+                                    }
+                                }
+                            });
+                        }
+                        
+                        saveData();
+                        renderUI();
+                        scheduleNextReminder();
+                        
+                        showNotification('Settings Saved', 'Your preferences have been updated.', 'success');
+                    });
+                }
+
+                // Reset data
+                if (elements.resetDataBtn) {
+                    elements.resetDataBtn.addEventListener('click', () => {
+                        if (confirm('Are you sure you want to reset all data? This cannot be undone.')) {
+                            localStorage.removeItem('waterReminderData');
+                            location.reload();
+                        }
+                    });
+                }
+                
+                // Theme toggle
+                if (elements.themeToggle) {
+                    elements.themeToggle.addEventListener('click', () => {
+                        state.theme = state.theme === 'light' ? 'dark' : 'light';
+                        applyTheme();
+                        saveData();
+                    });
+                }
+            }
+
+            // Log water consumption
+            function logWater(amount, name = '', icon = '💧') {
+                state.currentAmount += amount;
+                state.glassCount += 1;
+                
+                const logEntry = {
+                    timestamp: Date.now(),
+                    amount: amount,
+                    name: name,
+                    icon: icon,
+                    runningTotal: state.currentAmount
+                };
+                
+                state.waterLog.push(logEntry);
+                saveData();
+                renderUI();
+                
+                // Show success notification
+                showNotification('Water Added', `Added ${amount} ml of water! Total: ${state.currentAmount} ml.`, 'success');
+                
+                // If we've reached our goal
+                if (state.currentAmount >= state.dailyGoal && state.waterLog.length === 1) {
+                    // Only show congrats notification if this is the first time reaching the goal today
+                    setTimeout(() => {
+                        showNotification('Goal Reached! 🎉', 'Congratulations! You\'ve reached your daily water goal.', 'success');
+                    }, 1000);
+                }
+            }
+
+            // Schedule the next reminder
+            function scheduleNextReminder() {
+                if (state.reminderTimer) {
+                    clearTimeout(state.reminderTimer);
+                }
+                
+                const now = new Date();
+                const intervalMs = state.reminderInterval * 60 * 1000;
+                
+                // Calculate next reminder time
+                state.nextReminderTime = now.getTime() + intervalMs;
+                
+                // Schedule notification
+                state.reminderTimer = setTimeout(() => {
+                    // Check if we're within work hours
+                    if (isWithinWorkHours()) {
+                        showNotification('Time to Hydrate!', 'Remember to drink water regularly.', 'reminder');
+                    }
+                    
+                    // Schedule the next reminder
+                    scheduleNextReminder();
+                }, intervalMs);
+                
+                saveData();
+                renderUI();
+            }
+
+            // Check if current time is within work hours
+            function isWithinWorkHours() {
+                const now = new Date();
+                const currentTime = now.getHours() * 60 + now.getMinutes();
+                
+                const [startHours, startMinutes] = state.workHoursStart.split(':').map(Number);
+                const [endHours, endMinutes] = state.workHoursEnd.split(':').map(Number);
+                
+                const workStartTime = startHours * 60 + startMinutes;
+                const workEndTime = endHours * 60 + endMinutes;
+                
+                return currentTime >= workStartTime && currentTime <= workEndTime;
+            }
+
+            // Show in-app notification
+            function showNotification(title, message, type = 'info') {
+                if (!elements.notificationContainer) {
+                    console.warn('Notification container not found, showing alert instead');
+                    alert(`${title}: ${message}`);
+                    return;
+                }
+                
+                // Add to notification history
+                const notificationEntry = {
+                    timestamp: Date.now(),
+                    title: title,
+                    message: message,
+                    type: type,
+                    responded: false,
+                    dismissed: false
+                };
+                
+                state.notificationHistory.push(notificationEntry);
+                saveData();
+                
+                // Create notification element
+                const notification = document.createElement('div');
+                notification.className = 'notification';
+                
+                // Generate a unique ID for this notification
+                const notificationId = `notification-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+                notification.id = notificationId;
+                state.notificationIds.push(notificationId);
+                
+                // Set icon based on type
+                let icon = '💧';
+                switch (type) {
+                    case 'reminder':
+                        icon = '🔔';
+                        break;
+                    case 'success':
+                        icon = '✅';
+                        break;
+                    case 'error':
+                        icon = '⚠️';
+                        break;
+                }
+                
+                // Create notification content
+                let notificationContent = `
+                    <div class="notification-icon">${icon}</div>
+                    <div class="notification-content">
+                        <div class="notification-title">${title}</div>
+                        <div class="notification-text">${message}</div>
+                `;
+                
+                // Add actions for reminder notifications
+                if (type === 'reminder') {
+                    notificationContent += `
+                        <div class="notification-actions">
+                            <div class="notification-btn primary" data-action="log" data-id="${notificationId}">Log Water</div>
+                            <div class="notification-btn secondary" data-action="dismiss" data-id="${notificationId}">Dismiss</div>
+                        </div>
+                    `;
+                }
+                
+                notificationContent += `</div>`;
+                
+                // Add progress bar for auto-dismiss
+                notificationContent += `<div class="notification-progress"></div>`;
+                
+                notification.innerHTML = notificationContent;
+                
+                // Add notification to container
+                elements.notificationContainer.appendChild(notification);
+                
+                // Show the notification with a slight delay for animation
+                setTimeout(() => {
+                    notification.classList.add('show');
+                }, 10);
+                
+                // Set up event listeners for actions
+                if (type === 'reminder') {
+                    const logBtn = notification.querySelector('[data-action="log"]');
+                    const dismissBtn = notification.querySelector('[data-action="dismiss"]');
+                    
+                    if (logBtn) {
+                        logBtn.addEventListener('click', () => {
+                            // Find default glass
+                            const defaultGlass = state.glassSizes[0];
+                            logWater(defaultGlass.size, defaultGlass.name, defaultGlass.icon);
+                            
+                            // Update notification history
+                            const index = state.notificationHistory.findIndex(n => n.timestamp === notificationEntry.timestamp);
+                            if (index !== -1) {
+                                state.notificationHistory[index].responded = true;
+                            }
+                            
+                            // Close notification
+                            closeNotification(notificationId);
+                        });
+                    }
+                    
+                    if (dismissBtn) {
+                        dismissBtn.addEventListener('click', () => {
+                            // Update notification history
+                            const index = state.notificationHistory.findIndex(n => n.timestamp === notificationEntry.timestamp);
+                            if (index !== -1) {
+                                state.notificationHistory[index].dismissed = true;
+                            }
+                            
+                            // Close notification
+                            closeNotification(notificationId);
+                        });
+                    }
+                }
+
+                notification.addEventListener('click', () => {
+                    closeNotification(notification.id);
+                })
+                
+                // Auto-dismiss after 10 seconds
+                setTimeout(() => {
+                    closeNotification(notificationId);
+                }, 10000);
+                
+                renderNotificationHistory();
+            }
+
+            // Close a notification
+            function closeNotification(id) {
+                const notification = document.getElementById(id);
+                if (notification) {
+                    notification.classList.remove('show');
+                    
+                    // Remove after animation completes
+                    setTimeout(() => {
+                        if (notification.parentNode) {
+                            notification.parentNode.removeChild(notification);
+                        }
+                        
+                        // Remove from tracked IDs
+                        const index = state.notificationIds.indexOf(id);
+                        if (index !== -1) {
+                            state.notificationIds.splice(index, 1);
+                        }
+                    }, 500);
+                }
+            }
+
+            // Initialize the app
+            init();
+        });
+    </script>
+</body>
+</html>
