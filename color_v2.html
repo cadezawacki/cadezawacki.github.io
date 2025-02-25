@@ -1,0 +1,1919 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Cade's Color Manager</title>
+  <!-- Mobile & PWA Meta Tags -->
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#3498db">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <!-- Inline Manifest via Data URL (URL-encoded JSON) -->
+  <link rel="manifest" href="data:application/manifest+json,%7B%22name%22%3A%22Cade%27s%20Color%20Manager%22%2C%22short_name%22%3A%22ColorMgr%22%2C%22start_url%22%3A%22.%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%23ffffff%22%2C%22theme_color%22%3A%22%233498db%22%7D">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,300;0,400;0,500;0,700;1,400&display=swap" rel="stylesheet">
+  <!-- Chroma.js for color math -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/chroma-js/2.4.2/chroma.min.js"></script>
+  <!-- Feather Icons -->
+  <script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
+  <style>
+    :root {
+      --surface-primary: #0f172a;
+      --surface-secondary: #1e293b;
+      --surface-tertiary: #334155;
+      --surface-quaternary: #475569;
+      --text-primary: #f8fafc;
+      --text-secondary: #cbd5e1;
+      --text-tertiary: #94a3b8;
+      --accent-primary: #3b82f6;
+      --accent-secondary: #2563eb;
+      --accent-tertiary: #1e40af;
+      --green: #10b981;
+      --red: #ef4444;
+      --yellow: #eab308;
+      --purple: #8b5cf6;
+      --radius-sm: 4px;
+      --radius-md: 8px;
+      --radius-lg: 12px;
+      --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+      --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+      --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+      --transition-all: all 0.2s ease;
+      --font-mono: 'JetBrains Mono', monospace;
+      --font-sans: 'Inter', sans-serif;
+    }
+
+    /* Base styling */
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: var(--font-sans);
+      background: var(--surface-primary);
+      color: var(--text-primary);
+      line-height: 1.5;
+      overflow-x: hidden;
+      transition: var(--transition-all);
+      padding: 0;
+      margin: 0;
+    }
+
+    .app-container {
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+      width: 100%;
+    }
+
+    .header {
+      padding: 1.5rem 2rem;
+      background: var(--surface-secondary);
+      border-bottom: 1px solid var(--surface-tertiary);
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .header h1 {
+      font-size: 1.75rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .header h1 span.highlight {
+      color: var(--accent-primary);
+    }
+
+    .theme-toggle {
+      background: var(--surface-tertiary);
+      border: none;
+      color: var(--text-secondary);
+      padding: 0.5rem;
+      border-radius: var(--radius-md);
+      cursor: pointer;
+      transition: var(--transition-all);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .theme-toggle:hover {
+      background: var(--surface-quaternary);
+      color: var(--text-primary);
+    }
+
+    .main-content {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      padding: 1.5rem;
+      gap: 1.5rem;
+      max-width: 1400px;
+      margin: 0 auto;
+      width: 100%;
+    }
+
+    .card {
+      background: var(--surface-secondary);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-md);
+      overflow: hidden;
+      transition: var(--transition-all);
+      border: 1px solid var(--surface-tertiary);
+    }
+
+    .card:hover {
+      box-shadow: var(--shadow-lg);
+      transform: translateY(-2px);
+    }
+
+    .card-header {
+      padding: 1.25rem 1.5rem;
+      background: var(--surface-tertiary);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .card-header h2 {
+      font-size: 1.25rem;
+      font-weight: 600;
+      margin: 0;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .card-header h2 .icon {
+      opacity: 0.8;
+    }
+
+    .card-body {
+      padding: 1.5rem;
+    }
+
+    /* Color Input Styles */
+    .input-group {
+      margin-bottom: 1rem;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .input-group:last-child {
+      margin-bottom: 0;
+    }
+
+    .input-group label {
+      flex: 0 0 80px;
+      font-size: 0.875rem;
+      color: var(--text-secondary);
+      font-weight: 500;
+    }
+
+    .input-wrapper {
+      position: relative;
+      flex: 1;
+      display: flex;
+      align-items: center;
+    }
+
+    .input-wrapper input {
+      width: 100%;
+      padding: 0.625rem 0.875rem;
+      background: var(--surface-primary);
+      color: var(--text-primary);
+      border: 1px solid var(--surface-quaternary);
+      border-radius: var(--radius-md);
+      font-family: var(--font-mono);
+      font-size: 0.875rem;
+      transition: var(--transition-all);
+    }
+
+    .input-wrapper input:focus {
+      outline: none;
+      border-color: var(--accent-primary);
+      box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3);
+    }
+
+    .input-wrapper input.error {
+      border-color: var(--red);
+    }
+
+    .copy-btn {
+      position: absolute;
+      right: 0.5rem;
+      background: transparent;
+      border: none;
+      color: var(--text-tertiary);
+      cursor: pointer;
+      padding: 0.25rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: var(--transition-all);
+    }
+
+    .copy-btn:hover {
+      color: var(--text-primary);
+    }
+
+    .error-msg {
+      color: var(--red);
+      font-size: 0.75rem;
+      margin-top: 0.25rem;
+      font-weight: 500;
+    }
+
+    /* Color Picker */
+    .color-picker-container {
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+    }
+
+    .color-display {
+      height: 140px;
+      border-radius: var(--radius-lg);
+      position: relative;
+      overflow: hidden;
+      transition: var(--transition-all);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .color-display .color-hex {
+      font-family: var(--font-mono);
+      font-size: 1.5rem;
+      font-weight: 600;
+      text-shadow: 0 0 10px rgba(0, 0, 0, 0.25);
+    }
+
+    .picker-controls {
+      display: flex;
+      gap: 1rem;
+      align-items: center;
+    }
+
+    .color-picker-input {
+      flex: 1;
+      position: relative;
+    }
+
+    .color-picker-input input[type="color"] {
+      width: 100%;
+      height: 50px;
+      border: none;
+      border-radius: var(--radius-md);
+      background: var(--surface-tertiary);
+      cursor: pointer;
+      box-shadow: var(--shadow-sm);
+      transition: var(--transition-all);
+    }
+
+    .color-picker-input input[type="color"]::-webkit-color-swatch-wrapper {
+      padding: 0;
+    }
+
+    .color-picker-input input[type="color"]::-webkit-color-swatch {
+      border: none;
+      border-radius: var(--radius-md);
+    }
+
+    .btn {
+      background: var(--surface-tertiary);
+      color: var(--text-primary);
+      border: none;
+      border-radius: var(--radius-md);
+      padding: 0.75rem 1.25rem;
+      font-weight: 500;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      transition: var(--transition-all);
+      height: 50px;
+      font-family: var(--font-sans);
+    }
+
+    .btn:hover {
+      background: var(--surface-quaternary);
+      transform: translateY(-1px);
+    }
+
+    .btn-primary {
+      background: var(--accent-primary);
+      color: white;
+    }
+
+    .btn-primary:hover {
+      background: var(--accent-secondary);
+    }
+
+    .btn-danger {
+      background: var(--red);
+      color: white;
+    }
+
+    .btn-danger:hover {
+      background: #dc2626;
+    }
+
+    .btn-icon {
+      width: 50px;
+      min-width: 50px;
+      padding: 0;
+      justify-content: center;
+    }
+
+    /* CSS Filter */
+    .filter-section {
+      display: flex;
+      flex-direction: column;
+      gap: 1.25rem;
+    }
+
+    .filter-info {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+    }
+
+    .filter-tag {
+      background: var(--surface-tertiary);
+      padding: 0.5rem 1rem;
+      border-radius: var(--radius-lg);
+      font-family: var(--font-mono);
+      font-size: 0.875rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .filter-tag span {
+      color: var(--text-tertiary);
+    }
+
+    .filter-tag.highlight {
+      background: rgba(59, 130, 246, 0.2);
+      border: 1px solid rgba(59, 130, 246, 0.3);
+    }
+
+    .filter-examples {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    .icon-container {
+      display: flex;
+      justify-content: space-around;
+      align-items: center;
+      padding: 1.5rem;
+      background: var(--surface-primary);
+      border-radius: var(--radius-lg);
+    }
+
+    .icon-container svg {
+      width: 64px;
+      height: 64px;
+    }
+
+    .loss-indicator {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.75rem;
+      padding: 0.75rem;
+      background: var(--surface-primary);
+      border-radius: var(--radius-md);
+    }
+
+    .loss-value {
+      font-family: var(--font-mono);
+      font-weight: 500;
+    }
+
+    .loss-message {
+      font-weight: 500;
+    }
+
+    /* Preview Section */
+    .preview-container {
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+    }
+
+    .preview-button {
+      width: 100%;
+      padding: 1rem 1.5rem;
+      font-size: 1rem;
+      font-weight: 500;
+      border: none;
+      border-radius: var(--radius-md);
+      transition: var(--transition-all);
+      text-align: center;
+    }
+
+    .preview-text-container {
+      background: var(--surface-primary);
+      padding: 1.5rem;
+      border-radius: var(--radius-lg);
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    .contrast-info {
+      display: flex;
+      gap: 1rem;
+      flex-wrap: wrap;
+      justify-content: center;
+      margin-top: 0.5rem;
+    }
+
+    .contrast-tag {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.5rem 1rem;
+      background: var(--surface-primary);
+      border-radius: var(--radius-md);
+      font-size: 0.875rem;
+    }
+
+    .contrast-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+    }
+
+    /* Palette and Harmonies */
+    .palette-controls {
+      display: flex;
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .color-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(60px, 1fr));
+      gap: 0.75rem;
+      margin-top: 1rem;
+    }
+
+    .color-swatch {
+      aspect-ratio: 1/1;
+      border-radius: var(--radius-md);
+      cursor: pointer;
+      position: relative;
+      overflow: hidden;
+      transition: var(--transition-all);
+      border: 2px solid transparent;
+    }
+
+    .color-swatch:hover {
+      transform: scale(1.05);
+      border-color: var(--text-primary);
+      box-shadow: var(--shadow-md);
+    }
+
+    .harmony-container {
+      display: flex;
+      flex-direction: column;
+      gap: 2rem;
+    }
+
+    .harmony-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    .harmony-group h3 {
+      font-size: 1rem;
+      font-weight: 500;
+      color: var(--text-secondary);
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    /* Gradient */
+    .gradient-controls {
+      margin-bottom: 1.5rem;
+    }
+
+    .slider-group {
+      display: flex;
+      gap: 0.75rem;
+      align-items: center;
+      margin-bottom: 1rem;
+    }
+
+    .slider-group label {
+      flex: 0 0 140px;
+      font-size: 0.875rem;
+      color: var(--text-secondary);
+    }
+
+    .slider-input {
+      flex: 1;
+      position: relative;
+    }
+
+    .slider-input input[type="range"] {
+      width: 100%;
+      height: 6px;
+      background: var(--surface-tertiary);
+      border-radius: var(--radius-sm);
+      appearance: none;
+      outline: none;
+      transition: var(--transition-all);
+    }
+
+    .slider-input input[type="range"]::-webkit-slider-thumb {
+      appearance: none;
+      width: 18px;
+      height: 18px;
+      background: var(--accent-primary);
+      border-radius: 50%;
+      cursor: pointer;
+      transition: var(--transition-all);
+    }
+
+    .slider-input input[type="range"]::-webkit-slider-thumb:hover {
+      background: var(--accent-secondary);
+      transform: scale(1.1);
+    }
+
+    .gradient-display {
+      display: flex;
+      height: 80px;
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      margin-top: 1rem;
+    }
+
+    .gradient-swatch {
+      flex: 1;
+      cursor: pointer;
+      transition: var(--transition-all);
+      position: relative;
+    }
+
+    .gradient-swatch:hover {
+      transform: scale(1.02);
+      z-index: 1;
+      box-shadow: var(--shadow-md);
+    }
+
+    /* Grid */
+    .grid-display {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 6px;
+      margin-top: 1.5rem;
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      padding: 6px;
+      background: var(--surface-tertiary);
+    }
+
+    .grid-cell {
+      aspect-ratio: 1/1;
+      border-radius: var(--radius-md);
+      cursor: pointer;
+      transition: var(--transition-all);
+    }
+    
+    .grid-cell:hover {
+      transform: scale(1.05);
+      z-index: 1;
+      box-shadow: var(--shadow-md);
+    }
+
+    /* History */
+    .history-header {
+      display: flex;
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+      align-items: center;
+    }
+
+    .two-column {
+      display: grid;
+      grid-template-columns: 2fr 1fr;
+      gap: 1.5rem;
+    }
+
+    @media (max-width: 1200px) {
+      .two-column {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    /* Vibe selector */
+    .select-group {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .select-group label {
+      font-size: 0.875rem;
+      color: var(--text-secondary);
+      min-width: 120px;
+    }
+
+    .select-wrapper {
+      position: relative;
+      flex: 1;
+    }
+
+    .select-wrapper select {
+      width: 100%;
+      padding: 0.75rem 1rem;
+      background: var(--surface-primary);
+      color: var(--text-primary);
+      border: 1px solid var(--surface-quaternary);
+      border-radius: var(--radius-md);
+      appearance: none;
+      font-family: var(--font-sans);
+      transition: var(--transition-all);
+    }
+
+    .select-wrapper::after {
+      content: "";
+      position: absolute;
+      right: 1rem;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 0;
+      height: 0;
+      border-left: 5px solid transparent;
+      border-right: 5px solid transparent;
+      border-top: 5px solid var(--text-tertiary);
+      pointer-events: none;
+    }
+
+    .select-wrapper select:focus {
+      outline: none;
+      border-color: var(--accent-primary);
+    }
+
+    /* Hotkeys section */
+    .hotkeys-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+      gap: 0.75rem;
+    }
+
+    .hotkey-item {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.75rem 1rem;
+      background: var(--surface-primary);
+      border-radius: var(--radius-md);
+    }
+
+    .hotkey-combo {
+      display: flex;
+      gap: 0.25rem;
+      align-items: center;
+    }
+
+    .key {
+      background: var(--surface-tertiary);
+      color: var(--text-secondary);
+      padding: 0.25rem 0.5rem;
+      border-radius: var(--radius-sm);
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      min-width: 1.75rem;
+      text-align: center;
+    }
+
+    .key-plus {
+      color: var(--text-tertiary);
+    }
+
+    .hotkey-description {
+      color: var(--text-secondary);
+      font-size: 0.875rem;
+    }
+
+    /* Footer */
+    .footer {
+      padding: 1.5rem;
+      text-align: center;
+      background: var(--surface-secondary);
+      border-top: 1px solid var(--surface-tertiary);
+      color: var(--text-tertiary);
+      font-size: 0.875rem;
+    }
+
+    /* Animations */
+    @keyframes pulse {
+      0% { opacity: 0.6; }
+      50% { opacity: 1; }
+      100% { opacity: 0.6; }
+    }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      .header {
+        padding: 1rem;
+      }
+      
+      .header h1 {
+        font-size: 1.25rem;
+      }
+      
+      .main-content {
+        padding: 1rem;
+        gap: 1rem;
+      }
+      
+      .card-header {
+        padding: 1rem;
+      }
+      
+      .card-body {
+        padding: 1rem;
+      }
+      
+      .input-group {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+      
+      .input-group label {
+        margin-bottom: 0.25rem;
+        flex: none;
+      }
+      
+      .input-wrapper {
+        width: 100%;
+      }
+      
+      .palette-controls {
+        flex-direction: column;
+      }
+    }
+
+    /* Theme Light Mode Overrides */
+    .light-mode {
+      --surface-primary: #f8fafc;
+      --surface-secondary: #f1f5f9;
+      --surface-tertiary: #e2e8f0;
+      --surface-quaternary: #cbd5e1;
+      --text-primary: #0f172a;
+      --text-secondary: #1e293b;
+      --text-tertiary: #475569;
+    }
+  </style>
+</head>
+<body>
+  <div class="app-container">
+    <header class="header">
+      <h1>
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r="2.5"></circle><circle cx="19" cy="17" r="2"></circle><circle cx="6" cy="14" r="3"></circle><path d="M9 18l6-3"></path><path d="M15 9l-6-3"></path></svg>
+        Cade's <span class="highlight">Color Manager</span>
+      </h1>
+      <button id="themeToggle" class="theme-toggle">
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+      </button>
+    </header>
+
+    <main class="main-content">
+      <div class="two-column">
+        <div class="card">
+          <div class="card-header">
+            <h2>
+              <span class="icon">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v4m0 12v4M4.93 4.93l2.83 2.83m8.48 8.48 2.83 2.83M2 12h4m12 0h4M4.93 19.07l2.83-2.83m8.48-8.48 2.83-2.83"></path></svg>
+              </span>
+              Color Manager
+            </h2>
+          </div>
+          <div class="card-body">
+            <div class="color-picker-container">
+              <div id="colorDisplay" class="color-display">
+                <div id="colorHex" class="color-hex">#3498db</div>
+              </div>
+              <div class="picker-controls">
+                <div class="color-picker-input">
+                  <input type="color" id="colorPicker" value="#3498db">
+                </div>
+                <button id="eyeDropperBtn" class="btn">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 16.8a2 2 0 1 1 0 4 2 2 0 0 1 0-4z"></path><path d="m15 12-8.5 8.5c-.83.83-2.17.83-3 0 0 0 0 0 0 0a2.12 2.12 0 0 1 0-3L12 9"></path><path d="M16.8 20H22"></path><path d="M22 16.8V22"></path><path d="m2 2 20 20"></path><path d="M22 2 2 22"></path></svg>
+                  Eye Dropper
+                </button>
+              </div>
+            </div>
+            
+            <div class="input-section">
+              <div class="input-group">
+                <label for="hexInput">Hex</label>
+                <div class="input-wrapper">
+                  <input type="text" id="hexInput" placeholder="#RRGGBB">
+                  <button class="copy-btn" data-target="hexInput" title="Copy to clipboard">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"></rect><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path></svg>
+                  </button>
+                </div>
+                <div class="error-msg" id="hexError"></div>
+              </div>
+              
+              <div class="input-group">
+                <label for="rgbaInput">RGBA</label>
+                <div class="input-wrapper">
+                  <input type="text" id="rgbaInput" placeholder="rgba(255,0,0,1)">
+                  <button class="copy-btn" data-target="rgbaInput" title="Copy to clipboard">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"></rect><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path></svg>
+                  </button>
+                </div>
+                <div class="error-msg" id="rgbaError"></div>
+              </div>
+              
+              <div class="input-group">
+                <label for="hslInput">HSL</label>
+                <div class="input-wrapper">
+                  <input type="text" id="hslInput" placeholder="hsl(0,100%,50%)">
+                  <button class="copy-btn" data-target="hslInput" title="Copy to clipboard">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"></rect><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path></svg>
+                  </button>
+                </div>
+                <div class="error-msg" id="hslError"></div>
+              </div>
+              
+              <div class="input-group">
+                <label for="labInput">Lab</label>
+                <div class="input-wrapper">
+                  <input type="text" id="labInput" placeholder="lab(53, 80, 67)">
+                  <button class="copy-btn" data-target="labInput" title="Copy to clipboard">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"></rect><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path></svg>
+                  </button>
+                </div>
+                <div class="error-msg" id="labError"></div>
+              </div>
+              
+              <div class="input-group">
+                <label for="cmykInput">CMYK</label>
+                <div class="input-wrapper">
+                  <input type="text" id="cmykInput" placeholder="cmyk(0%, 50%, 50%, 0%)">
+                  <button class="copy-btn" data-target="cmykInput" title="Copy to clipboard">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"></rect><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path></svg>
+                  </button>
+                </div>
+                <div class="error-msg" id="cmykError"></div>
+              </div>
+              
+              <div class="input-group">
+                <label for="filterInput">CSS Filter</label>
+                <div class="input-wrapper">
+                  <input type="text" id="filterInput" placeholder="invert(0%) hue-rotate(0deg)">
+                  <button class="copy-btn" data-target="filterInput" title="Copy to clipboard">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"></rect><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path></svg>
+                  </button>
+                </div>
+                <div class="error-msg" id="filterError"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <div class="card">
+          <div class="card-header">
+            <h2>
+              <span class="icon">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
+              </span>
+              Saved Colors
+            </h2>
+          </div>
+          <div class="card-body">
+            <div class="palette-controls">
+              <button id="savePaletteBtn" class="btn btn-primary">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20v-8m0 0V4m0 8h8m-8 0H4"></path></svg>
+                Save Current Color
+              </button>
+              <button id="clearPaletteBtn" class="btn btn-danger">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path></svg>
+                Clear Palette
+              </button>
+            </div>
+            <div class="color-grid" id="savedPalettes"></div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- CSS Filter Generator -->
+      <div class="card">
+        <div class="card-header">
+          <h2>
+            <span class="icon">
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9h2m8-7v2m6 6h2m-8 8v2M4 4l2 2m12-2-2 2m0 12 2 2m-12-2-2 2m3-7a5 5 0 1 0 10 0 5 5 0 0 0-10 0Z"></path></svg>
+            </span>
+            CSS Filter Generator
+          </h2>
+        </div>
+        <div class="card-body">
+          <div class="filter-section">
+            <div class="filter-info">
+              <div class="filter-tag">
+                <span>Target:</span>
+                <span id="cssTargetColor">#3498db</span>
+              </div>
+              <div class="filter-tag highlight">
+                <span>Filter:</span>
+                <span id="computedFilter">invert(0%) hue-rotate(0deg)</span>
+              </div>
+              <div class="loss-indicator">
+                <div id="filterLoss" class="loss-value">Loss: 0.00</div>
+                <span>⇒</span>
+                <div id="lossString" class="loss-message">Calculating...</div>
+              </div>
+            </div>
+            
+            <div class="filter-examples">
+              <div class="icon-container" id="icon-container">
+                <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" fill="#000000" viewBox="0 0 256 256"><path d="M224,64H154.67L126.93,43.2a16.12,16.12,0,0,0-9.6-3.2H72A16,16,0,0,0,56,56V72H40A16,16,0,0,0,24,88V200a16,16,0,0,0,16,16H192.89A15.13,15.13,0,0,0,208,200.89V184h16.89A15.13,15.13,0,0,0,240,168.89V80A16,16,0,0,0,224,64Zm0,104H208V112a16,16,0,0,0-16-16H122.67L94.93,75.2a16.12,16.12,0,0,0-9.6-3.2H72V56h45.33L147.2,78.4A8,8,0,0,0,152,80h72Z"></path></svg>
+                <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" fill="#000000" viewBox="0 0 256 256"><path d="M80,192a8,8,0,0,1-8,8H32a8,8,0,0,1,0-16H72A8,8,0,0,1,80,192Zm144-8H184a8,8,0,0,0,0,16h40a8,8,0,0,0,0-16Zm-72,0H104a8,8,0,0,0,0,16h48a8,8,0,0,0,0-16ZM32,168h80a8,8,0,0,0,0-16H32a8,8,0,0,0,0,16Zm192-16H144a8,8,0,0,0,0,16h80a8,8,0,0,0,0-16Zm0-96H32a8,8,0,0,0-8,8V88a8,8,0,0,0,8,8H224a8,8,0,0,0,8-8V64A8,8,0,0,0,224,56Zm0,56H32a8,8,0,0,0-8,8v8a8,8,0,0,0,8,8H224a8,8,0,0,0,8-8v-8A8,8,0,0,0,224,112Z"></path></svg>
+                <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" fill="#000000" viewBox="0 0 256 256"><path d="M254.88,195.92l-54.56-92.08A15.87,15.87,0,0,0,186.55,96h0a15.85,15.85,0,0,0-13.76,7.84l-15.64,26.39a4,4,0,0,0,0,4.07l26.8,45.47a8.13,8.13,0,0,1-1.89,10.55,8,8,0,0,1-11.8-2.26L101.79,71.88a16,16,0,0,0-27.58,0L1.11,195.94a8,8,0,0,0,1,9.52A8.23,8.23,0,0,0,8.23,208H247.77a8.29,8.29,0,0,0,6.09-2.55A8,8,0,0,0,254.88,195.92ZM64.43,120,88,80l23.57,40ZM140,52a24,24,0,1,1,24,24A24,24,0,0,1,140,52Z"></path></svg>
+              </div>
+              <button id="recomputeFilterBtn" class="btn">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"></path><path d="M21 3v5h-5"></path><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"></path><path d="M8 16H3v5"></path></svg>
+                Recompute Filter
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Live Preview -->
+      <div class="card">
+        <div class="card-header">
+          <h2>
+            <span class="icon">
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 8V6a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-2"></path><rect width="14" height="14" x="2" y="8" rx="2"></rect></svg>
+            </span>
+            Live Preview
+          </h2>
+        </div>
+        <div class="card-body">
+          <div class="preview-container">
+            <button id="previewButton" class="preview-button">Sample Button</button>
+            
+            <div class="preview-text-container">
+              <p id="previewText">This is sample text.</p>
+              <p id="previewTextLighter" style="font-weight:lighter">This is sample light text.</p>
+              <p id="previewTextBold" style="font-weight:bold">This is sample bold text.</p>
+            </div>
+            
+            <div class="contrast-info" id="contrastCheck">
+              <div class="contrast-tag">
+                <div class="contrast-dot" style="background-color: white;"></div>
+                <span>Contrast with white: 1.5</span>
+              </div>
+              <div class="contrast-tag">
+                <div class="contrast-dot" style="background-color: black;"></div>
+                <span>Contrast with black: 10.5</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Gradient -->
+      <div class="card">
+        <div class="card-header">
+          <h2>
+            <span class="icon">
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"></rect><circle cx="12" cy="12" r="5"></circle></svg>
+            </span>
+            Gradient
+          </h2>
+        </div>
+        <div class="card-body">
+          <div class="gradient-controls">
+            <div class="slider-group">
+              <label for="gradientSlider">Intensity</label>
+              <div class="slider-input">
+                <input type="range" id="gradientSlider" min="0" max="100" value="50">
+              </div>
+            </div>
+          </div>
+          <div class="gradient-display" id="gradientDisplay"></div>
+        </div>
+      </div>
+      
+      <!-- Color Harmonies -->
+      <div class="card">
+        <div class="card-header">
+          <h2>
+            <span class="icon">
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v8"></path><path d="m4.93 10.93 1.41 1.41"></path><path d="M2 18h2"></path><path d="M20 18h2"></path><path d="m19.07 10.93-1.41 1.41"></path><path d="M22 22H2"></path><path d="m16 6-4 4-4-4"></path><path d="M16 18a4 4 0 0 0-8 0"></path></svg>
+            </span>
+            Color Harmonies
+          </h2>
+        </div>
+        <div class="card-body">
+          <div class="select-group">
+            <label for="vibeSelect">Adjust Colors by Vibe</label>
+            <div class="select-wrapper">
+              <select id="vibeSelect">
+                <option value="default">None</option>
+                <option value="pastel">Pastel</option>
+                <option value="retro">Retro</option>
+                <option value="cyberpunk">Cyberpunk</option>
+                <option value="vintage">Vintage</option>
+                <option value="vibrant">Vibrant</option>
+                <option value="professional" selected>Professional</option>
+                <option value="earthy">Earthy</option>
+                <option value="neon">Neon</option>
+                <option value="monochrome">Monochrome</option>
+                <option value="warm">Warm</option>
+                <option value="cool">Cool</option>
+              </select>
+            </div>
+          </div>
+          
+          <div class="harmony-container">
+            <div class="harmony-group">
+              <h3>
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5.5 8.5 9 12l-3.5 3.5L2 12l3.5-3.5Z"></path><path d="m12 2 3.5 3.5L12 9 8.5 5.5 12 2Z"></path><path d="M18.5 8.5 22 12l-3.5 3.5L15 12l3.5-3.5Z"></path><path d="m12 15 3.5 3.5L12 22l-3.5-3.5L12 15Z"></path></svg>
+                Similar Colors
+              </h3>
+              <div class="color-grid" id="similarColors"></div>
+            </div>
+            
+            <div class="harmony-group">
+              <h3>
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="4"></circle><path d="M21.17 8H12"></path></svg>
+                Complementary Colors
+              </h3>
+              <div class="color-grid" id="complementaryColors"></div>
+            </div>
+            
+            <div class="harmony-group">
+              <h3>
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"></rect><path d="M12 8v8"></path><path d="m8.5 14 7-4"></path><path d="m8.5 10 7 4"></path></svg>
+                Analogous Colors
+              </h3>
+              <div class="color-grid" id="analogousColors"></div>
+            </div>
+            
+            <div class="harmony-group">
+              <h3>
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 20 12 12 22 4 12"></polygon></svg>
+                Triadic Colors
+              </h3>
+              <div class="color-grid" id="triadicColors"></div>
+            </div>
+            
+            <div class="harmony-group">
+              <h3>
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="16" height="16" x="4" y="4" rx="2"></rect></svg>
+                Tetradic Colors
+              </h3>
+              <div class="color-grid" id="tetradicColors"></div>
+            </div>
+            
+            <div class="harmony-group">
+              <h3>
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="2 12 10 6 10 18 2 12"></polygon><polygon points="22 12 14 6 14 18 22 12"></polygon></svg>
+                Split‑Complementary
+              </h3>
+              <div class="color-grid" id="splitColors"></div>
+            </div>
+            
+            <div class="harmony-group">
+              <h3>
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 2v20"></path><path d="M2 12h20"></path></svg>
+                Luminance Contrast
+              </h3>
+              <div class="color-grid" id="luminanceConstrast"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- 2D Gradient Grid -->
+      <div class="card">
+        <div class="card-header">
+          <h2>
+            <span class="icon">
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"></rect><path d="M7 8h10M7 12h10M7 16h10"></path></svg>
+            </span>
+            2D Gradient Grid
+          </h2>
+        </div>
+        <div class="card-body">
+          <div class="gradient-controls">
+            <div class="slider-group">
+              <label for="gridSatSlider">Saturation Variation</label>
+              <div class="slider-input">
+                <input type="range" id="gridSatSlider" min="0" max="100" value="50">
+              </div>
+            </div>
+            <div class="slider-group">
+              <label for="gridLightSlider">Lightness Variation</label>
+              <div class="slider-input">
+                <input type="range" id="gridLightSlider" min="0" max="100" value="30">
+              </div>
+            </div>
+          </div>
+          <div class="grid-display" id="gridDisplay"></div>
+        </div>
+      </div>
+      
+      <!-- History & Background -->
+      <div class="two-column">
+        <div class="card">
+          <div class="card-header">
+            <h2>
+              <span class="icon">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v5h5"></path><path d="M3 3 9 9"></path><path d="M21 3v5h-5"></path><path d="m15 9 6-6"></path><path d="M3 21v-5h5"></path><path d="m3 21 6-6"></path><path d="M21 21v-5h-5"></path><path d="m15 15 6 6"></path></svg>
+              </span>
+              History
+            </h2>
+          </div>
+          <div class="card-body">
+            <div class="history-header">
+              <button id="undoBtn" class="btn">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"></path><path d="M4 9h16"></path></svg>
+                Undo
+              </button>
+              <button id="redoBtn" class="btn">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 14 5-5-5-5"></path><path d="M4 9h16"></path></svg>
+                Redo
+              </button>
+            </div>
+            <div class="color-grid" id="historyContainer"></div>
+          </div>
+        </div>
+        
+        <div class="card">
+          <div class="card-header">
+            <h2>
+              <span class="icon">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 14V7a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10"></path><circle cx="18" cy="14" r="4"></circle><path d="M18 12v4"></path><path d="M16 14h4"></path></svg>
+              </span>
+              Set Background
+            </h2>
+          </div>
+          <div class="card-body">
+            <div class="history-header">
+              <button id="changeBackground" class="btn btn-primary">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="5" rx="2"></rect><line x1="2" x2="22" y1="10" y2="10"></line></svg>
+                Change
+              </button>
+              <button id="resetBackground" class="btn">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 1-9 9c-2.2 0-4.3-.8-6-2.2L3 21"></path><path d="M3 16V9h7"></path><path d="M18 3a9 9 0 0 1 3 6.7"></path><path d="M3 12a9 9 0 0 1 14.8-7"></path></svg>
+                Reset
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Hotkeys -->
+      <div class="card">
+        <div class="card-header">
+          <h2>
+            <span class="icon">
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"></rect><path d="M7 9h10"></path><path d="M7 12h10"></path><path d="M7 15h10"></path></svg>
+            </span>
+            Hotkeys
+          </h2>
+        </div>
+        <div class="card-body">
+          <div class="hotkeys-grid">
+            <div class="hotkey-item">
+              <div class="hotkey-combo">
+                <span class="key">Shift</span>
+                <span class="key-plus">+</span>
+                <span class="key">B</span>
+              </div>
+              <span class="hotkey-description">Change Background Color</span>
+            </div>
+            <div class="hotkey-item">
+              <div class="hotkey-combo">
+                <span class="key">Shift</span>
+                <span class="key-plus">+</span>
+                <span class="key">W</span>
+              </div>
+              <span class="hotkey-description">Reset Background Color</span>
+            </div>
+            <div class="hotkey-item">
+              <div class="hotkey-combo">
+                <span class="key">Shift</span>
+                <span class="key-plus">+</span>
+                <span class="key">I</span>
+              </div>
+              <span class="hotkey-description">Toggle Page Inversion</span>
+            </div>
+            <div class="hotkey-item">
+              <div class="hotkey-combo">
+                <span class="key">Shift</span>
+                <span class="key-plus">+</span>
+                <span class="key">L</span>
+              </div>
+              <span class="hotkey-description">Temporarily Invert Page</span>
+            </div>
+            <div class="hotkey-item">
+              <div class="hotkey-combo">
+                <span class="key">Shift</span>
+                <span class="key-plus">+</span>
+                <span class="key">S</span>
+              </div>
+              <span class="hotkey-description">Save Current Color</span>
+            </div>
+            <div class="hotkey-item">
+              <div class="hotkey-combo">
+                <span class="key">Ctrl</span>
+                <span class="key-plus">+</span>
+                <span class="key">Z</span>
+              </div>
+              <span class="hotkey-description">Undo</span>
+            </div>
+            <div class="hotkey-item">
+              <div class="hotkey-combo">
+                <span class="key">Ctrl</span>
+                <span class="key-plus">+</span>
+                <span class="key">Y</span>
+              </div>
+              <span class="hotkey-description">Redo</span>
+            </div>
+            <div class="hotkey-item">
+              <div class="hotkey-combo">
+                <span class="key">Shift</span>
+                <span class="key-plus">+</span>
+                <span class="key">C</span>
+              </div>
+              <span class="hotkey-description">Copy Current Color</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <footer class="footer">
+      <p>Cade's Color Manager • Built with ❤️ • All functionality preserved with a modern refresh</p>
+    </footer>
+  </div>
+  
+  <script>
+    /***********************
+     * Global Variables
+     ***********************/
+    let currentColor = chroma("#3498db");
+    let updatingUI = false;
+    let undoStack = [];
+    let redoStack = [];
+    let savedPalettes = [];
+    let historyLimit = 100;
+    let isDarkMode = true;
+    
+    /***********************
+     * Theme Toggle
+     ***********************/
+    document.getElementById("themeToggle").addEventListener("click", () => {
+      document.body.classList.toggle("light-mode");
+      isDarkMode = !document.body.classList.contains("light-mode");
+      
+      // Update the icon
+      const icon = isDarkMode 
+        ? '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"></circle><path d="M12 1v2"></path><path d="M12 21v2"></path><path d="M4.22 4.22l1.42 1.42"></path><path d="M18.36 18.36l1.42 1.42"></path><path d="M1 12h2"></path><path d="M21 12h2"></path><path d="M4.22 19.78l1.42-1.42"></path><path d="M18.36 5.64l1.42-1.42"></path></svg>'
+        : '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>';
+      document.getElementById("themeToggle").innerHTML = icon;
+      
+      // Update UI with new theme colors
+      updateUI();
+    });
+    
+    /***********************
+     * History & Saved Palettes
+     ***********************/
+    function setColor(newColor, pushHistory = true) {
+      if (!newColor || !chroma.valid(newColor)) return;
+      if (pushHistory) {
+        undoStack.push(currentColor.hex());
+        if (undoStack.length > historyLimit) { undoStack.shift(); }
+        redoStack = [];
+        updateHistoryUI();
+      }
+      currentColor = chroma(newColor);
+      updateUI();
+      
+      // Update the primary color display
+      document.getElementById("colorDisplay").style.backgroundColor = currentColor.hex();
+      document.getElementById("colorHex").innerText = currentColor.hex();
+      
+      // Set text color based on luminance
+      const textColor = currentColor.luminance() < 0.5 ? "#ffffff" : "#000000";
+      document.getElementById("colorHex").style.color = textColor;
+    }
+    
+    function updateHistoryUI() {
+      const historyContainer = document.getElementById("historyContainer");
+      historyContainer.innerHTML = "";
+      // Display most recent history first
+      undoStack.slice().reverse().forEach(colorHex => {
+        const swatch = document.createElement("div");
+        swatch.className = "color-swatch";
+        swatch.style.backgroundColor = colorHex;
+        swatch.title = colorHex;
+        swatch.addEventListener("click", () => setColor(colorHex));
+        historyContainer.appendChild(swatch);
+      });
+    }
+    
+    function updateSavedPalettesUI() {
+      const container = document.getElementById("savedPalettes");
+      container.innerHTML = "";
+      savedPalettes.forEach(colorHex => {
+        const swatch = document.createElement("div");
+        swatch.className = "color-swatch";
+        swatch.style.backgroundColor = colorHex;
+        swatch.title = colorHex;
+        swatch.addEventListener("click", () => setColor(colorHex));
+        container.appendChild(swatch);
+      });
+    }
+    
+    /***********************
+     * Live Preview & Contrast
+     ***********************/
+    function updateLivePreview() {
+      const previewButton = document.getElementById("previewButton");
+      const previewText = document.getElementById("previewText");
+      const previewTextBold = document.getElementById("previewTextBold");
+      const previewTextLighter = document.getElementById("previewTextLighter");
+      const textColor = currentColor.luminance() < 0.5 ? "#fff" : "#000";
+      previewButton.style.backgroundColor = currentColor.hex();
+      previewButton.style.color = textColor;
+      previewText.style.color = currentColor.hex();
+      previewTextBold.style.color = currentColor.hex();
+      previewTextLighter.style.color = currentColor.hex();
+      const contrastWithWhite = chroma.contrast(currentColor, "white").toFixed(2);
+      const contrastWithBlack = chroma.contrast(currentColor, "black").toFixed(2);
+      
+      // Update contrast section with modern design
+      const contrastCheck = document.getElementById("contrastCheck");
+      contrastCheck.innerHTML = `
+        <div class="contrast-tag">
+          <div class="contrast-dot" style="background-color: white;"></div>
+          <span>Contrast with white: ${contrastWithWhite}</span>
+        </div>
+        <div class="contrast-tag">
+          <div class="contrast-dot" style="background-color: black;"></div>
+          <span>Contrast with black: ${contrastWithBlack}</span>
+        </div>
+      `;
+    }
+    
+    /***********************
+     * 1D Gradient (7 swatches)
+     ***********************/
+    function updateGradientDisplay() {
+      const sliderVal = document.getElementById("gradientSlider").value;
+      const intensity = sliderVal / 250; // roughly 0 to 0.4
+      const baseHSL = currentColor.hsl();
+      const clampL = (l) => Math.max(0, Math.min(1, l));
+      let steps = [-3, -2, -1, 0, 1, 2, 3];
+      let colors = steps.map(step =>
+        chroma.hsl(baseHSL[0], baseHSL[1], clampL(baseHSL[2] + (step/3)*intensity))
+      );
+      const gradContainer = document.getElementById("gradientDisplay");
+      gradContainer.innerHTML = "";
+      colors.forEach(col => {
+        const swatch = document.createElement("div");
+        swatch.className = "gradient-swatch";
+        swatch.style.backgroundColor = col.hex();
+        swatch.title = col.hex();
+        swatch.addEventListener("click", () => setColor(col));
+        gradContainer.appendChild(swatch);
+      });
+    }
+    
+    /***********************
+     * 2D Gradient Grid
+     ***********************/
+    function updateGridDisplay() {
+      const gridContainer = document.getElementById("gridDisplay");
+      gridContainer.innerHTML = "";
+      const gridSize = 5;
+      const center = Math.floor(gridSize/2);
+      const baseHSL = currentColor.hsl();
+      const baseHue = baseHSL[0], baseSat = baseHSL[1], baseLight = baseHSL[2];
+      let satVar = document.getElementById("gridSatSlider").value / 100 * 0.5; // 0 to 0.5
+      let lightVar = document.getElementById("gridLightSlider").value / 100 * 0.5; // 0 to 0.5
+      
+      for (let row = 0; row < gridSize; row++) {
+        for (let col = 0; col < gridSize; col++) {
+          let offsetX = col - center;
+          let offsetY = row - center;
+          let newSat = Math.min(1, Math.max(0, baseSat + offsetX * satVar));
+          let newLight = Math.min(1, Math.max(0, baseLight + offsetY * lightVar));
+          let newColor = chroma.hsl(baseHue, newSat, newLight);
+          let cell = document.createElement("div");
+          cell.className = "grid-cell";
+          cell.style.backgroundColor = newColor.hex();
+          cell.title = newColor.hex();
+          cell.addEventListener("click", () => setColor(newColor));
+          gridContainer.appendChild(cell);
+        }
+      }
+    }
+    
+    /***********************
+     * Color Harmonies & Vibe Adjustments
+     ***********************/
+    function updateHarmonies() {
+      const vibe = document.getElementById("vibeSelect").value;
+      // Clear harmony containers
+      ["similarColors", "complementaryColors", "analogousColors",
+       "triadicColors", "tetradicColors", "splitColors", "luminanceConstrast"].forEach(id => {
+         document.getElementById(id).innerHTML = "";
+      });
+      const baseHSL = currentColor.hsl();
+      
+      // Similar Colors (using more offsets)
+      const similarOffsets = [-30, -20, -10, 10, 20, 30];
+      similarOffsets.forEach(off => {
+        let col = chroma.hsl((baseHSL[0] + off + 360) % 360, baseHSL[1], baseHSL[2]);
+        col = adjustForVibe(col, vibe);
+        addSwatch(col, document.getElementById("similarColors"));
+      });
+      
+      // Complementary Colors (base and two offsets)
+      let comp = getComplement(currentColor);
+      comp = adjustForVibe(comp, vibe);
+      addSwatch(comp, document.getElementById("complementaryColors"));
+      let compPlus = chroma.hsl((comp.hsl()[0] + 10) % 360, comp.hsl()[1], comp.hsl()[2]);
+      let compMinus = chroma.hsl((comp.hsl()[0] - 10 + 360) % 360, comp.hsl()[1], comp.hsl()[2]);
+      compPlus = adjustForVibe(compPlus, vibe);
+      compMinus = adjustForVibe(compMinus, vibe);
+      addSwatch(compPlus, document.getElementById("complementaryColors"));
+      addSwatch(compMinus, document.getElementById("complementaryColors"));
+      
+      // Analogous (±30°)
+      let ana1 = chroma.hsl((baseHSL[0] + 30) % 360, baseHSL[1], baseHSL[2]);
+      let ana2 = chroma.hsl((baseHSL[0] - 30 + 360) % 360, baseHSL[1], baseHSL[2]);
+      ana1 = adjustForVibe(ana1, vibe);
+      ana2 = adjustForVibe(ana2, vibe);
+      addSwatch(ana1, document.getElementById("analogousColors"));
+      addSwatch(ana2, document.getElementById("analogousColors"));
+      
+      // Triadic (±120°)
+      let tri1 = chroma.hsl((baseHSL[0] + 120) % 360, baseHSL[1], baseHSL[2]);
+      let tri2 = chroma.hsl((baseHSL[0] + 240) % 360, baseHSL[1], baseHSL[2]);
+      tri1 = adjustForVibe(tri1, vibe);
+      tri2 = adjustForVibe(tri2, vibe);
+      addSwatch(tri1, document.getElementById("triadicColors"));
+      addSwatch(tri2, document.getElementById("triadicColors"));
+      
+      // Tetradic (square: 90° offsets)
+      let tet1 = chroma.hsl((baseHSL[0] + 90) % 360, baseHSL[1], baseHSL[2]);
+      let tet2 = chroma.hsl((baseHSL[0] + 180) % 360, baseHSL[1], baseHSL[2]);
+      let tet3 = chroma.hsl((baseHSL[0] + 270) % 360, baseHSL[1], baseHSL[2]);
+      tet1 = adjustForVibe(tet1, vibe);
+      tet2 = adjustForVibe(tet2, vibe);
+      tet3 = adjustForVibe(tet3, vibe);
+      addSwatch(tet1, document.getElementById("tetradicColors"));
+      addSwatch(tet2, document.getElementById("tetradicColors"));
+      addSwatch(tet3, document.getElementById("tetradicColors"));
+      
+      // Split‑Complementary (complement ±30°)
+      let split1 = chroma.hsl((baseHSL[0] + 180 - 30 + 360) % 360, baseHSL[1], baseHSL[2]);
+      let split2 = chroma.hsl((baseHSL[0] + 180 + 30) % 360, baseHSL[1], baseHSL[2]);
+      split1 = adjustForVibe(split1, vibe);
+      split2 = adjustForVibe(split2, vibe);
+      addSwatch(split1, document.getElementById("splitColors"));
+      addSwatch(split2, document.getElementById("splitColors"));
+
+      // High-contrast: choose black or white depending on luminance.
+      let contrast = currentColor.luminance() > 0.5 ? chroma("black") : chroma("white");
+      addSwatch(contrast, document.getElementById("luminanceConstrast"));
+    }
+    
+    // Helper: add a swatch element to a container
+    function addSwatch(color, container) {
+      const swatch = document.createElement("div");
+      swatch.className = "color-swatch";
+      swatch.style.backgroundColor = color.hex();
+      swatch.title = color.hex();
+      swatch.addEventListener("click", () => setColor(color));
+      container.appendChild(swatch);
+    }
+    
+    // Get the complementary color (hue + 180°)
+    function getComplement(color) {
+      let hsl = color.hsl();
+      hsl[0] = (hsl[0] + 180) % 360;
+      return chroma.hsl(hsl[0], hsl[1], hsl[2]);
+    }
+    
+    // Adjust a color based on a selected vibe preset
+    function adjustForVibe(color, vibe) {
+      let hsl = color.hsl();
+      switch(vibe) {
+        case "pastel":
+          return chroma.hsl(hsl[0], hsl[1] * 0.5, Math.min(hsl[2] + 0.15, 1));
+        case "retro":
+          return chroma.hsl(hsl[0], hsl[1] * 0.8, hsl[2] * 0.9);
+        case "cyberpunk":
+          return chroma.hsl(hsl[0], Math.min(hsl[1] * 1.3, 1), Math.min(hsl[2] + 0.1, 1));
+        case "vintage":
+          return chroma.hsl((hsl[0] + 10) % 360, hsl[1] * 0.7, hsl[2]);
+        case "vibrant":
+          return chroma.hsl(hsl[0], Math.min(hsl[1] * 1.5, 1), hsl[2]);
+        case "professional":
+          return chroma.hsl(hsl[0], hsl[1] * 0.85, hsl[2]);
+        case "earthy":
+          return chroma.hsl((hsl[0] - 20 + 360) % 360, Math.max(hsl[1] - 0.2, 0), hsl[2]);
+        case "neon":
+          return chroma.hsl(hsl[0], 1, Math.min(hsl[2] + 0.2, 1));
+        case "monochrome":
+          return chroma.hsl(hsl[0], 0, hsl[2]);
+        case "warm":
+          return chroma.hsl((hsl[0] + 10) % 360, hsl[1], hsl[2]);
+        case "cool":
+          return chroma.hsl((hsl[0] - 10 + 360) % 360, hsl[1], hsl[2]);
+        default:
+          return color;
+      }
+    }
+    
+    /***********************
+     * CMYK Conversions
+     ***********************/
+    function rgbToCmyk(r, g, b) {
+      let rP = r / 255, gP = g / 255, bP = b / 255;
+      let k = 1 - Math.max(rP, gP, bP);
+      let c = (1 - rP - k) / (1 - k) || 0;
+      let m = (1 - gP - k) / (1 - k) || 0;
+      let y = (1 - bP - k) / (1 - k) || 0;
+      return [c, m, y, k];
+    }
+    
+    function cmykToRgb(c, m, y, k) {
+      let r = 255 * (1 - c) * (1 - k);
+      let g = 255 * (1 - m) * (1 - k);
+      let b = 255 * (1 - y) * (1 - k);
+      return [r, g, b];
+    }
+    
+    /***********************
+     * CSS Filter Generator functions
+     ***********************/
+
+    
+    /***********************
+     * Update All UI Fields
+     ***********************/
+    function updateUI() {
+      updatingUI = true;
+      // Update color picker
+      document.getElementById("colorPicker").value = currentColor.hex();
+      document.getElementById("colorDisplay").style.backgroundColor = currentColor.hex();
+      document.getElementById("colorHex").innerText = currentColor.hex();
+      
+      // Set text color based on luminance
+      const textColor = currentColor.luminance() < 0.5 ? "#ffffff" : "#000000";
+      document.getElementById("colorHex").style.color = textColor;
+      
+      // Hex
+      document.getElementById("hexInput").value = currentColor.hex();
+      document.getElementById("hexInput").classList.remove("error");
+      document.getElementById("hexError").innerText = "";
+      
+      // RGBA
+      let rgba = currentColor.rgba();
+      document.getElementById("rgbaInput").value = `rgba(${rgba[0]}, ${rgba[1]}, ${rgba[2]}, ${parseFloat(rgba[3].toFixed(2))})`;
+      document.getElementById("rgbaInput").classList.remove("error");
+      document.getElementById("rgbaError").innerText = "";
+      
+      // HSL
+      let hsl = currentColor.hsl();
+      document.getElementById("hslInput").value = `hsl(${Math.round(hsl[0])}, ${Math.round(hsl[1]*100)}%, ${Math.round(hsl[2]*100)}%)`;
+      document.getElementById("hslInput").classList.remove("error");
+      document.getElementById("hslError").innerText = "";
+      
+      // Lab
+      let lab = currentColor.lab();
+      document.getElementById("labInput").value = `lab(${lab[0].toFixed(1)}, ${lab[1].toFixed(1)}, ${lab[2].toFixed(1)})`;
+      document.getElementById("labInput").classList.remove("error");
+      document.getElementById("labError").innerText = "";
+      
+      // CMYK
+      let rgb = currentColor.rgb();
+      let cmyk = rgbToCmyk(rgb[0], rgb[1], rgb[2]);
+      let cmykPercent = cmyk.map(v => Math.round(v * 100));
+      document.getElementById("cmykInput").value = `cmyk(${cmykPercent[0]}%, ${cmykPercent[1]}%, ${cmykPercent[2]}%, ${cmykPercent[3]}%)`;
+      document.getElementById("cmykInput").classList.remove("error");
+      document.getElementById("cmykError").innerText = "";
+      
+      // CSS Filter input will be updated by updateCssFilter()
+      document.getElementById("filterInput").classList.remove("error");
+      document.getElementById("filterError").innerText = "";
+      
+      // Update Live Preview, Gradient, Harmonies, 2D Grid, and CSS Filter Generator
+      updateLivePreview();
+      updateGradientDisplay();
+      updateHarmonies();
+      updateGridDisplay();
+      updateCssFilter();
+      
+      updatingUI = false;
+    }
+    
+    // A simple CSS Filter conversion (our original simplified version for the input field)
+    function colorToFilter(color) {
+      let lum = color.luminance();
+      let inv = ((1 - lum) * 100).toFixed(0);
+      return `invert(${inv}%) hue-rotate(0deg)`;
+    }
+    
+    // Parse a simplified CSS filter string back to a color
+    function filterToColor(filterStr) {
+      const invMatch = filterStr.match(/invert\(\s*(\d+)%\s*\)/);
+      const hueMatch = filterStr.match(/hue-rotate\(\s*(\d+)deg\s*\)/);
+      let invFactor = invMatch ? parseInt(invMatch[1], 10) / 100 : 0;
+      let hueAdj = hueMatch ? parseInt(hueMatch[1], 10) : 0;
+      let comp = getComplement(currentColor);
+      let newColor = chroma.mix(currentColor, comp, invFactor, 'rgb');
+      let hsl = newColor.hsl();
+      hsl[0] = (hsl[0] + hueAdj) % 360;
+      return chroma.hsl(hsl[0], hsl[1], hsl[2]);
+    }
+    
+    /***********************
+     * Parsing & Validation for Inputs
+     ***********************/
+    function parseHex(val) {
+      if (!/^#([A-Fa-f0-9]{3}|[A-Fa-f0-9]{6})$/.test(val.trim()))
+        return parseQuickHex(val);
+      return chroma(val.trim());
+    }
+
+    function parseQuickHex(val) {
+      if (!/([A-Fa-f0-9]{3}|[A-Fa-f0-9]{6})$/.test(val.trim()))
+        throw new Error("Invalid hex format");
+      return chroma("#" + val.trim());
+    }
+    
+    function parseRGBA(val) {
+      let m = val.match(/rgba?\s*\(\s*(\d+)[,\s]+(\d+)[,\s]+(\d+)(?:[,\s]+([\d.]+))?\s*\)/);
+      if (!m) throw new Error("Invalid RGBA format");
+      let r = parseInt(m[1], 10),
+          g = parseInt(m[2], 10),
+          b = parseInt(m[3], 10),
+          a = m[4] !== undefined ? parseFloat(m[4]) : 1;
+      return chroma(r, g, b, a);
+    }
+    
+    function parseHSL(val) {
+      let m = val.match(/hsl\s*\(\s*(\d+)[,\s]+(\d+)%[,\s]+(\d+)%\s*\)/);
+      if (!m) throw new Error("Invalid HSL format");
+      let h = parseInt(m[1], 10),
+          s = parseInt(m[2], 10) / 100,
+          l = parseInt(m[3], 10) / 100;
+      return chroma.hsl(h, s, l);
+    }
+    
+    function parseLab(val) {
+      let m = val.match(/lab\s*\(\s*([\d.]+)[,\s]+([-]?[\d.]+)[,\s]+([-]?[\d.]+)\s*\)/);
+      if (!m) throw new Error("Invalid Lab format");
+      let L = parseFloat(m[1]),
+          a = parseFloat(m[2]),
+          b = parseFloat(m[3]);
+      return chroma.lab(L, a, b);
+    }
+    
+    function parseCMYK(val) {
+      let m = val.match(/cmyk\s*\(\s*([\d.]+)%?\s*,\s*([\d.]+)%?\s*,\s*([\d.]+)%?\s*,\s*([\d.]+)%?\s*\)/);
+      if (!m) throw new Error("Invalid CMYK format");
+      let c = parseFloat(m[1]),
+          mC = parseFloat(m[2]),
+          y = parseFloat(m[3]),
+          k = parseFloat(m[4]);
+      if (c > 1 || mC > 1 || y > 1 || k > 1) {
+        c /= 100; mC /= 100; y /= 100; k /= 100;
+      }
+      let rgbArr = cmykToRgb(c, mC, y, k);
+      return chroma(rgbArr);
+    }
+    
+    function parseFilter(val) {
+      return filterToColor(val);
+    }
+
+    function debounce(func, wait) {
+      let timeout;
+      return function(...args) {
+        clearTimeout(timeout);
+        timeout = setTimeout(() => func.apply(this, args), wait);
+      };
+    }
+    
+    document.getElementById("hexInput").addEventListener("input", debounce((e) => {
+      if(updatingUI) return;
+      try {
+        let col = parseHex(e.target.value);
+        setColor(col);
+      } catch (err) {
+        e.target.classList.add("error");
+        document.getElementById("hexError").innerText = err.message;
+      }
+    }, 500));
+
+    document.getElementById("rgbaInput").addEventListener("input", debounce((e) => {
+      if (updatingUI) return;
+      try {
+        let col = parseRGBA(e.target.value);
+        setColor(col);
+      } catch (err) {
+        e.target.classList.add("error");
+        document.getElementById("rgbaError").innerText = err.message;
+      }
+    }, 500));
+    
+    document.getElementById("hslInput").addEventListener("input", debounce((e) => {
+      if (updatingUI) return;
+      try {
+        let col = parseHSL(e.target.value);
+        setColor(col);
+      } catch (err) {
+        e.target.classList.add("error");
+        document.getElementById("hslError").innerText = err.message;
+      }
+    }, 500));
+    
+    document.getElementById("labInput").addEventListener("input", debounce((e) => {
+      if (updatingUI) return;
+      try {
+        let col = parseLab(e.target.value);
+        setColor(col);
+      } catch (err) {
+        e.target.classList.add("error");
+        document.getElementById("labError").innerText = err.message;
+      }
+    }, 500));
+    
+    document.getElementById("cmykInput").addEventListener("input", debounce((e) => {
+      if (updatingUI) return;
+      try {
+        let col = parseCMYK(e.target.value);
+        setColor(col);
+      } catch (err) {
+        e.target.classList.add("error");
+        document.getElementById("cmykError").innerText = err.message;
+      }
+    }, 500));
+    
+    document.getElementById("filterInput").addEventListener("input", debounce((e) => {
+      if (updatingUI) return;
+      try {
+        let col = parseFilter(e.target.value);
+        setColor(col);
+      } catch (err) {
+        e.target.classList.add("error");
+        document.getElementById("filterError").innerText = err.message;
+      }
+    }, 500));
+    
+    document.getElementById("colorPicker").addEventListener("input", debounce((e) => {
+      if (updatingUI) return;
+      setColor(e.target.value);
+    }, 300));
+    
+    document.getElementById("eyeDropperBtn").addEventListener("click", async () => {
+      if (window.EyeDropper) {
+        try {
+          const eye = new EyeDropper();
+          const result = await eye.open();
+          setColor(result.sRGBHex);
+          showNotification('Color picked: ' + result.sRGBHex, 'success');
+        } catch (err) {
+          console.error("EyeDropper error:", err);
+          showNotification('EyeDropper error: ' + err.message, 'error');
+        }
+      } else {
+        showNotification('EyeDropper API not supported in this browser', 'error');
+      }
+    });
+    
+    document.getElementById("gradientSlider").addEventListener("input", updateGradientDisplay);
+    document.getElementById("vibeSelect").addEventListener("change", updateHarmonies);
+    document.getElementById("gridSatSlider").addEventListener("input", updateGridDisplay);
+    document.getElementById("gridLightSlider").addEventListener("input", updateGridDisplay);
+    
+    function undo() {
+      if (undoStack.length > 0) {
+        redoStack.push(currentColor.hex());
+        let prevColor = undoStack.pop();
+        setColor(prevColor, false);
+        updateHistoryUI();
+      }
+    }
+
+    function redo() {
+      if (redoStack.length > 0) {
+        undoStack.push(currentColor.hex());
+        if (undoStack.length > historyLimit) { undoStack.shift(); }
+        let nextColor = redoStack.pop();
+        setColor(nextColor, false);
+        updateHistoryUI();
+      }
+    }
+
+    document.getElementById("undoBtn").addEventListener("click", () => {
+      undo();
+    });
+    
+    document.getElementById("redoBtn").addEventListener("click", () => {
+      redo();
+    });
+    
+    document.getElementById("savePaletteBtn").addEventListener("click", () => {
+      savedPalettes.push(currentColor.hex());
+      updateSavedPalettesUI();
+    });
+    
+    document.getElementById("clearPaletteBtn").addEventListener("click", () => {
+      savedPalettes = [];
+      updateSavedPalettesUI();
+    });
+
+    function changeBackgroundColor() {
+      document.body.style.backgroundColor = currentColor.hex();
+      // Set text color based on luminance for body text
+      document.body.style.color = currentColor.luminance() < 0.5 ? "#ffffff" : "#000000";
+      showNotification('Background color changed', 'success');
+    }
+
+    function resetBackgroundColor() {
+      document.body.style.backgroundColor = "";
+      document.body.style.color = "";
+      document.body.classList.toggle("light-mode", !isDarkMode);
+      showNotification('Background color reset', 'success');
+    }
+
+    document.getElementById("changeBackground").addEventListener("click", () => {
+      changeBackgroundColor();
+    });
+
+    document.getElementById("resetBackground").addEventListener("click", () => {
+      resetBackgroundColor();
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (e.shiftKey && e.code == 'KeyL') {
+        document.body.style.filter = "invert(1)";
+      } else if (e.shiftKey && e.code == 'KeyI') {
+        if (document.body.style.filter === "invert(1)") {
+          document.body.style.filter = "";
+        } else {
+          document.body.style.filter = "invert(1)";
+        }
+      } else if (e.shiftKey && e.code == 'KeyB') {
+        changeBackgroundColor();
+      } else if (e.shiftKey && e.code == 'KeyW') {
+        resetBackgroundColor();
+      } else if (e.ctrlKey && e.code == 'KeyZ') {
+        undo();
+      } else if (e.ctrlKey && e.code == 'KeyY') {
+        redo();
+      } else if (e.shiftKey && e.code == 'KeyS') {
+        savedPalettes.push(currentColor.hex());
+        updateSavedPalettesUI();
+      } else if (e.shiftKey && e.code == 'KeyC') {
+        navigator.clipboard.writeText(currentColor.hex());
+      }
+    }, false);
+
+    document.addEventListener('keyup', (e) => {
+      if (e.shiftKey && e.code == 'KeyL') {
+        document.body.style.filter = "";
+      }
+    }, false);
+  </script>
+</body>
+</html>
