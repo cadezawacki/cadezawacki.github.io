@@ -44,14 +44,12 @@
       --font-mono: 'JetBrains Mono', monospace;
       --font-sans: 'Inter', sans-serif;
     }
-
     /* Base styling */
     * {
       box-sizing: border-box;
       margin: 0;
       padding: 0;
     }
-
     body {
       font-family: var(--font-sans);
       background: var(--surface-primary);
@@ -62,14 +60,12 @@
       padding: 0;
       margin: 0;
     }
-
     .app-container {
       display: flex;
       flex-direction: column;
       min-height: 100vh;
       width: 100%;
     }
-
     .header {
       padding: 1.5rem 2rem;
       background: var(--surface-secondary);
@@ -81,7 +77,6 @@
       justify-content: space-between;
       align-items: center;
     }
-
     .header h1 {
       font-size: 1.75rem;
       font-weight: 700;
@@ -89,11 +84,9 @@
       align-items: center;
       gap: 0.75rem;
     }
-
     .header h1 span.highlight {
       color: var(--accent-primary);
     }
-
     .theme-toggle {
       background: var(--surface-tertiary);
       border: none;
@@ -106,12 +99,10 @@
       align-items: center;
       justify-content: center;
     }
-
     .theme-toggle:hover {
       background: var(--surface-quaternary);
       color: var(--text-primary);
     }
-
     .main-content {
       flex: 1;
       display: flex;
@@ -122,7 +113,6 @@
       margin: 0 auto;
       width: 100%;
     }
-
     .card {
       background: var(--surface-secondary);
       border-radius: var(--radius-lg);
@@ -131,12 +121,10 @@
       transition: var(--transition-all);
       border: 1px solid var(--surface-tertiary);
     }
-
     .card:hover {
       box-shadow: var(--shadow-lg);
       transform: translateY(-2px);
     }
-
     .card-header {
       padding: 1.25rem 1.5rem;
       background: var(--surface-tertiary);
@@ -144,7 +132,6 @@
       align-items: center;
       justify-content: space-between;
     }
-
     .card-header h2 {
       font-size: 1.25rem;
       font-weight: 600;
@@ -153,15 +140,12 @@
       align-items: center;
       gap: 0.5rem;
     }
-
     .card-header h2 .icon {
       opacity: 0.8;
     }
-
     .card-body {
       padding: 1.5rem;
     }
-
     /* Color Input Styles */
     .input-group {
       margin-bottom: 1rem;
@@ -169,25 +153,21 @@
       align-items: center;
       gap: 0.75rem;
     }
-
     .input-group:last-child {
       margin-bottom: 0;
     }
-
     .input-group label {
       flex: 0 0 80px;
       font-size: 0.875rem;
       color: var(--text-secondary);
       font-weight: 500;
     }
-
     .input-wrapper {
       position: relative;
       flex: 1;
       display: flex;
       align-items: center;
     }
-
     .input-wrapper input {
       width: 100%;
       padding: 0.625rem 0.875rem;
@@ -199,17 +179,14 @@
       font-size: 0.875rem;
       transition: var(--transition-all);
     }
-
     .input-wrapper input:focus {
       outline: none;
       border-color: var(--accent-primary);
       box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3);
     }
-
     .input-wrapper input.error {
       border-color: var(--red);
     }
-
     .copy-btn {
       position: absolute;
       right: 0.5rem;
@@ -223,25 +200,22 @@
       justify-content: center;
       transition: var(--transition-all);
     }
-
     .copy-btn:hover {
       color: var(--text-primary);
     }
-
     .error-msg {
       color: var(--red);
       font-size: 0.75rem;
       margin-top: 0.25rem;
       font-weight: 500;
     }
-
     /* Color Picker */
     .color-picker-container {
       display: flex;
       flex-direction: column;
       gap: 1.5rem;
+      margin-bottom:1.5rem;
     }
-
     .color-display {
       height: 140px;
       border-radius: var(--radius-lg);
@@ -252,25 +226,21 @@
       align-items: center;
       justify-content: center;
     }
-
     .color-display .color-hex {
       font-family: var(--font-mono);
       font-size: 1.5rem;
       font-weight: 600;
       text-shadow: 0 0 10px rgba(0, 0, 0, 0.25);
     }
-
     .picker-controls {
       display: flex;
       gap: 1rem;
       align-items: center;
     }
-
     .color-picker-input {
       flex: 1;
       position: relative;
     }
-
     .color-picker-input input[type="color"] {
       width: 100%;
       height: 50px;
@@ -281,16 +251,13 @@
       box-shadow: var(--shadow-sm);
       transition: var(--transition-all);
     }
-
     .color-picker-input input[type="color"]::-webkit-color-swatch-wrapper {
       padding: 0;
     }
-
     .color-picker-input input[type="color"]::-webkit-color-swatch {
       border: none;
       border-radius: var(--radius-md);
     }
-
     .btn {
       background: var(--surface-tertiary);
       color: var(--text-primary);
@@ -306,50 +273,41 @@
       height: 50px;
       font-family: var(--font-sans);
     }
-
     .btn:hover {
       background: var(--surface-quaternary);
       transform: translateY(-1px);
     }
-
     .btn-primary {
       background: var(--accent-primary);
       color: white;
     }
-
     .btn-primary:hover {
       background: var(--accent-secondary);
     }
-
     .btn-danger {
       background: var(--red);
       color: white;
     }
-
     .btn-danger:hover {
       background: #dc2626;
     }
-
     .btn-icon {
       width: 50px;
       min-width: 50px;
       padding: 0;
       justify-content: center;
     }
-
     /* CSS Filter */
     .filter-section {
       display: flex;
       flex-direction: column;
       gap: 1.25rem;
     }
-
     .filter-info {
       display: flex;
       flex-wrap: wrap;
       gap: 0.75rem;
     }
-
     .filter-tag {
       background: var(--surface-tertiary);
       padding: 0.5rem 1rem;
@@ -360,22 +318,18 @@
       align-items: center;
       gap: 0.5rem;
     }
-
     .filter-tag span {
       color: var(--text-tertiary);
     }
-
     .filter-tag.highlight {
       background: rgba(59, 130, 246, 0.2);
       border: 1px solid rgba(59, 130, 246, 0.3);
     }
-
     .filter-examples {
       display: flex;
       flex-direction: column;
       gap: 1rem;
     }
-
     .icon-container {
       display: flex;
       justify-content: space-around;
@@ -384,12 +338,10 @@
       background: var(--surface-primary);
       border-radius: var(--radius-lg);
     }
-
     .icon-container svg {
       width: 64px;
       height: 64px;
     }
-
     .loss-indicator {
       display: flex;
       align-items: center;
@@ -399,23 +351,26 @@
       background: var(--surface-primary);
       border-radius: var(--radius-md);
     }
-
     .loss-value {
       font-family: var(--font-mono);
       font-weight: 500;
     }
-
     .loss-message {
       font-weight: 500;
     }
-
+    /* Advanced Filter Controls */
+    .advanced-filter-controls {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      margin-top: 1rem;
+    }
     /* Preview Section */
     .preview-container {
       display: flex;
       flex-direction: column;
       gap: 1.5rem;
     }
-
     .preview-button {
       width: 100%;
       padding: 1rem 1.5rem;
@@ -426,7 +381,6 @@
       transition: var(--transition-all);
       text-align: center;
     }
-
     .preview-text-container {
       background: var(--surface-primary);
       padding: 1.5rem;
@@ -435,7 +389,6 @@
       flex-direction: column;
       gap: 1rem;
     }
-
     .contrast-info {
       display: flex;
       gap: 1rem;
@@ -443,7 +396,6 @@
       justify-content: center;
       margin-top: 0.5rem;
     }
-
     .contrast-tag {
       display: flex;
       align-items: center;
@@ -453,27 +405,23 @@
       border-radius: var(--radius-md);
       font-size: 0.875rem;
     }
-
     .contrast-dot {
       width: 10px;
       height: 10px;
       border-radius: 50%;
     }
-
     /* Palette and Harmonies */
     .palette-controls {
       display: flex;
       gap: 1rem;
       margin-bottom: 1.5rem;
     }
-
     .color-grid {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(60px, 1fr));
       gap: 0.75rem;
       margin-top: 1rem;
     }
-
     .color-swatch {
       aspect-ratio: 1/1;
       border-radius: var(--radius-md);
@@ -483,25 +431,21 @@
       transition: var(--transition-all);
       border: 2px solid transparent;
     }
-
     .color-swatch:hover {
       transform: scale(1.05);
       border-color: var(--text-primary);
       box-shadow: var(--shadow-md);
     }
-
     .harmony-container {
       display: flex;
       flex-direction: column;
       gap: 2rem;
     }
-
     .harmony-group {
       display: flex;
       flex-direction: column;
       gap: 0.75rem;
     }
-
     .harmony-group h3 {
       font-size: 1rem;
       font-weight: 500;
@@ -510,30 +454,25 @@
       align-items: center;
       gap: 0.5rem;
     }
-
     /* Gradient */
     .gradient-controls {
       margin-bottom: 1.5rem;
     }
-
     .slider-group {
       display: flex;
       gap: 0.75rem;
       align-items: center;
       margin-bottom: 1rem;
     }
-
     .slider-group label {
       flex: 0 0 140px;
       font-size: 0.875rem;
       color: var(--text-secondary);
     }
-
     .slider-input {
       flex: 1;
       position: relative;
     }
-
     .slider-input input[type="range"] {
       width: 100%;
       height: 6px;
@@ -543,7 +482,6 @@
       outline: none;
       transition: var(--transition-all);
     }
-
     .slider-input input[type="range"]::-webkit-slider-thumb {
       appearance: none;
       width: 18px;
@@ -553,12 +491,10 @@
       cursor: pointer;
       transition: var(--transition-all);
     }
-
     .slider-input input[type="range"]::-webkit-slider-thumb:hover {
       background: var(--accent-secondary);
       transform: scale(1.1);
     }
-
     .gradient-display {
       display: flex;
       height: 80px;
@@ -566,20 +502,17 @@
       overflow: hidden;
       margin-top: 1rem;
     }
-
     .gradient-swatch {
       flex: 1;
       cursor: pointer;
       transition: var(--transition-all);
       position: relative;
     }
-
     .gradient-swatch:hover {
       transform: scale(1.02);
       z-index: 1;
       box-shadow: var(--shadow-md);
     }
-
     /* Grid */
     .grid-display {
       display: grid;
@@ -591,20 +524,17 @@
       padding: 6px;
       background: var(--surface-tertiary);
     }
-
     .grid-cell {
       aspect-ratio: 1/1;
       border-radius: var(--radius-md);
       cursor: pointer;
       transition: var(--transition-all);
     }
-    
     .grid-cell:hover {
       transform: scale(1.05);
       z-index: 1;
       box-shadow: var(--shadow-md);
     }
-
     /* History */
     .history-header {
       display: flex;
@@ -612,19 +542,16 @@
       margin-bottom: 1.5rem;
       align-items: center;
     }
-
     .two-column {
       display: grid;
       grid-template-columns: 2fr 1fr;
       gap: 1.5rem;
     }
-
     @media (max-width: 1200px) {
       .two-column {
         grid-template-columns: 1fr;
       }
     }
-
     /* Vibe selector */
     .select-group {
       display: flex;
@@ -632,18 +559,15 @@
       gap: 1rem;
       margin-bottom: 1.5rem;
     }
-
     .select-group label {
       font-size: 0.875rem;
       color: var(--text-secondary);
       min-width: 120px;
     }
-
     .select-wrapper {
       position: relative;
       flex: 1;
     }
-
     .select-wrapper select {
       width: 100%;
       padding: 0.75rem 1rem;
@@ -655,7 +579,6 @@
       font-family: var(--font-sans);
       transition: var(--transition-all);
     }
-
     .select-wrapper::after {
       content: "";
       position: absolute;
@@ -669,19 +592,16 @@
       border-top: 5px solid var(--text-tertiary);
       pointer-events: none;
     }
-
     .select-wrapper select:focus {
       outline: none;
       border-color: var(--accent-primary);
     }
-
     /* Hotkeys section */
     .hotkeys-grid {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
       gap: 0.75rem;
     }
-
     .hotkey-item {
       display: flex;
       align-items: center;
@@ -690,13 +610,11 @@
       background: var(--surface-primary);
       border-radius: var(--radius-md);
     }
-
     .hotkey-combo {
       display: flex;
       gap: 0.25rem;
       align-items: center;
     }
-
     .key {
       background: var(--surface-tertiary);
       color: var(--text-secondary);
@@ -707,16 +625,13 @@
       min-width: 1.75rem;
       text-align: center;
     }
-
     .key-plus {
       color: var(--text-tertiary);
     }
-
     .hotkey-description {
       color: var(--text-secondary);
       font-size: 0.875rem;
     }
-
     /* Footer */
     .footer {
       padding: 1.5rem;
@@ -726,56 +641,266 @@
       color: var(--text-tertiary);
       font-size: 0.875rem;
     }
-
     /* Animations */
     @keyframes pulse {
       0% { opacity: 0.6; }
       50% { opacity: 1; }
       100% { opacity: 0.6; }
     }
-
+    /* Notification */
+    .notification {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--surface-secondary);
+      color: var(--text-primary);
+      padding: 0.75rem 1.5rem;
+      border-radius: var(--radius-md);
+      box-shadow: var(--shadow-md);
+      opacity: 0;
+      animation: fadeInOut 3s forwards;
+      z-index: 1000;
+    }
+    @keyframes fadeInOut {
+      0% { opacity: 0; transform: translateX(-50%) translateY(20px); }
+      10% { opacity: 1; transform: translateX(-50%) translateY(0); }
+      90% { opacity: 1; }
+      100% { opacity: 0; transform: translateX(-50%) translateY(20px); }
+    }
+    
+    /* NEW STYLES FOR ADDED FEATURES */
+    
+    /* Shadow Generator */
+    .shadow-preview {
+      width: 100%;
+      height: 200px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--surface-primary);
+      border-radius: var(--radius-lg);
+      margin-bottom: 1.5rem;
+      position: relative;
+      overflow: hidden;
+    }
+    
+    .shadow-box {
+      width: 100px;
+      height: 100px;
+      border-radius: 8px;
+      position: relative;
+      transition: all 0.3s ease;
+    }
+    
+    .shadow-controls {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+    
+    .shadow-type-options {
+      display: flex;
+      gap: 1rem;
+      margin-bottom: 1rem;
+    }
+    
+    .shadow-option {
+      padding: 0.75rem 1rem;
+      background: var(--surface-primary);
+      border-radius: var(--radius-md);
+      cursor: pointer;
+      transition: all 0.2s ease;
+      flex: 1;
+      text-align: center;
+    }
+    
+    .shadow-option.active {
+      background: var(--accent-primary);
+      color: white;
+    }
+    
+    .shadow-controls .color-option {
+      display: flex;
+      gap: 1rem;
+      margin-bottom: 1rem;
+    }
+    
+    /* Color Mixer */
+    .color-mixer-controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+    
+    .color-input {
+      flex: 1;
+      min-width: 150px;
+    }
+    
+    .color-input label {
+      display: block;
+      margin-bottom: 0.5rem;
+      font-size: 0.875rem;
+      color: var(--text-secondary);
+    }
+    
+    .color-input input[type="color"] {
+      width: 100%;
+      height: 40px;
+      border: none;
+      border-radius: var(--radius-md);
+      background: var(--surface-tertiary);
+      cursor: pointer;
+    }
+    
+    .gradient-preview {
+      height: 100px;
+      border-radius: var(--radius-lg);
+      margin: 1.5rem 0;
+      background: linear-gradient(to right, #3498db, #e74c3c);
+    }
+    
+    .gradient-options {
+      display: flex;
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+    
+    .gradient-type {
+      padding: 0.5rem 1rem;
+      background: var(--surface-primary);
+      border-radius: var(--radius-md);
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    
+    .gradient-type.active {
+      background: var(--accent-primary);
+      color: white;
+    }
+    
+    /* Mode Toggle Viewer */
+    .mode-toggle-preview {
+      position: relative;
+      height: 200px;
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      margin-bottom: 1.5rem;
+    }
+    
+    .mode-toggle-half {
+      position: absolute;
+      width: 50%;
+      height: 100%;
+      top: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      transition: all 0.3s ease;
+    }
+    
+    .mode-toggle-light {
+      left: 0;
+      background-color: #f8fafc;
+      color: #0f172a;
+    }
+    
+    .mode-toggle-dark {
+      right: 0;
+      background-color: #0f172a;
+      color: #f8fafc;
+    }
+    
+    .mode-toggle-divider {
+      position: absolute;
+      left: 50%;
+      top: 0;
+      width: 2px;
+      height: 100%;
+      background-color: var(--surface-tertiary);
+      z-index: 2;
+    }
+    
+    .mode-toggle-control {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background-color: var(--accent-primary);
+      cursor: pointer;
+      z-index: 3;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-size: 1.2rem;
+      box-shadow: 0 0 15px rgba(0, 0, 0, 0.3);
+    }
+    
+    .mode-colors-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+    }
+    
+    .mode-color-box {
+      padding: 1rem;
+      border-radius: var(--radius-md);
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      align-items: center;
+      background: var(--surface-primary);
+    }
+    
+    .mode-color-swatch {
+      width: 60px;
+      height: 60px;
+      border-radius: var(--radius-md);
+      border: 2px solid var(--surface-tertiary);
+      cursor: pointer;
+    }
+    
     /* Responsive */
     @media (max-width: 768px) {
       .header {
         padding: 1rem;
       }
-      
       .header h1 {
         font-size: 1.25rem;
       }
-      
       .main-content {
         padding: 1rem;
         gap: 1rem;
       }
-      
       .card-header {
         padding: 1rem;
       }
-      
       .card-body {
         padding: 1rem;
       }
-      
       .input-group {
         flex-direction: column;
         align-items: flex-start;
       }
-      
       .input-group label {
         margin-bottom: 0.25rem;
         flex: none;
       }
-      
       .input-wrapper {
         width: 100%;
       }
-      
       .palette-controls {
         flex-direction: column;
       }
     }
-
     /* Theme Light Mode Overrides */
     .light-mode {
       --surface-primary: #f8fafc;
@@ -788,11 +913,11 @@
     }
   </style>
 </head>
-<body>
+<body class="light-mode">
   <div class="app-container">
     <header class="header">
       <h1>
-        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r="2.5"></circle><circle cx="19" cy="17" r="2"></circle><circle cx="6" cy="14" r="3"></circle><path d="M9 18l6-3"></path><path d="M15 9l-6-3"></path></svg>
+        <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" fill="currentColor" viewBox="0 0 256 256"><path d="M135.88,43.11l-25,143.14a35.71,35.71,0,0,1-41.34,29.2h0a36,36,0,0,1-28.95-41.71l25-143.13a8,8,0,0,1,9.19-6.49l54.67,9.73A8,8,0,0,1,135.88,43.11Z" opacity="0.2"></path><path d="M88,180a12,12,0,1,1-12-12A12,12,0,0,1,88,180Zm152-23.81V208a16,16,0,0,1-16,16H76a46.36,46.36,0,0,1-7.94-.68,44,44,0,0,1-35.43-50.95l25-143.13a15.94,15.94,0,0,1,18.47-13L130.84,26a16,16,0,0,1,12.92,18.52l-12.08,69L199.49,89a16,16,0,0,1,20.45,9.52L239,150.69A18.35,18.35,0,0,1,240,156.19ZM103,184.87,128,41.74,73.46,32l-25,143.1A28,28,0,0,0,70.9,207.57,27.29,27.29,0,0,0,91.46,203,27.84,27.84,0,0,0,103,184.87ZM116.78,195,224,156.11,204.92,104,128.5,131.7l-9.78,55.92A44.63,44.63,0,0,1,116.78,195ZM224,173.12,127.74,208H224Z"></path></svg>
         Cade's <span class="highlight">Color Manager</span>
       </h1>
       <button id="themeToggle" class="theme-toggle">
@@ -823,6 +948,10 @@
                 <button id="eyeDropperBtn" class="btn">
                   <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 16.8a2 2 0 1 1 0 4 2 2 0 0 1 0-4z"></path><path d="m15 12-8.5 8.5c-.83.83-2.17.83-3 0 0 0 0 0 0 0a2.12 2.12 0 0 1 0-3L12 9"></path><path d="M16.8 20H22"></path><path d="M22 16.8V22"></path><path d="m2 2 20 20"></path><path d="M22 2 2 22"></path></svg>
                   Eye Dropper
+                </button>
+                <button id="randomColorBtn" class="btn">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 3 21 3 21 8"></polyline><line x1="4" y1="20" x2="21" y2="3"></line><polyline points="21 16 21 21 16 21"></polyline><line x1="3" y1="4" x2="21" y2="21"></line></svg>
+                  Random Color
                 </button>
               </div>
             </div>
@@ -870,6 +999,17 @@
                   </button>
                 </div>
                 <div class="error-msg" id="labError"></div>
+              </div>
+              
+              <div class="input-group">
+                <label for="lchInput">LCH</label>
+                <div class="input-wrapper">
+                  <input type="text" id="lchInput" placeholder="lch(53, 80, 67)">
+                  <button class="copy-btn" data-target="lchInput" title="Copy to clipboard">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"></rect><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path></svg>
+                  </button>
+                </div>
+                <div class="error-msg" id="lchError"></div>
               </div>
               
               <div class="input-group">
@@ -922,6 +1062,8 @@
         </div>
       </div>
       
+      
+      
       <!-- CSS Filter Generator -->
       <div class="card">
         <div class="card-header">
@@ -946,7 +1088,7 @@
               <div class="loss-indicator">
                 <div id="filterLoss" class="loss-value">Loss: 0.00</div>
                 <span>⇒</span>
-                <div id="lossString" class="loss-message">Calculating...</div>
+                <div id="lossString" class="loss-message">No loss</div>
               </div>
             </div>
             
@@ -956,11 +1098,51 @@
                 <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" fill="#000000" viewBox="0 0 256 256"><path d="M80,192a8,8,0,0,1-8,8H32a8,8,0,0,1,0-16H72A8,8,0,0,1,80,192Zm144-8H184a8,8,0,0,0,0,16h40a8,8,0,0,0,0-16Zm-72,0H104a8,8,0,0,0,0,16h48a8,8,0,0,0,0-16ZM32,168h80a8,8,0,0,0,0-16H32a8,8,0,0,0,0,16Zm192-16H144a8,8,0,0,0,0,16h80a8,8,0,0,0,0-16Zm0-96H32a8,8,0,0,0-8,8V88a8,8,0,0,0,8,8H224a8,8,0,0,0,8-8V64A8,8,0,0,0,224,56Zm0,56H32a8,8,0,0,0-8,8v8a8,8,0,0,0,8,8H224a8,8,0,0,0,8-8v-8A8,8,0,0,0,224,112Z"></path></svg>
                 <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" fill="#000000" viewBox="0 0 256 256"><path d="M254.88,195.92l-54.56-92.08A15.87,15.87,0,0,0,186.55,96h0a15.85,15.85,0,0,0-13.76,7.84l-15.64,26.39a4,4,0,0,0,0,4.07l26.8,45.47a8.13,8.13,0,0,1-1.89,10.55,8,8,0,0,1-11.8-2.26L101.79,71.88a16,16,0,0,0-27.58,0L1.11,195.94a8,8,0,0,0,1,9.52A8.23,8.23,0,0,0,8.23,208H247.77a8.29,8.29,0,0,0,6.09-2.55A8,8,0,0,0,254.88,195.92ZM64.43,120,88,80l23.57,40ZM140,52a24,24,0,1,1,24,24A24,24,0,0,1,140,52Z"></path></svg>
               </div>
-              <button id="recomputeFilterBtn" class="btn">
-                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"></path><path d="M21 3v5h-5"></path><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"></path><path d="M8 16H3v5"></path></svg>
-                Recompute Filter
-              </button>
             </div>
+            
+            <div class="advanced-filter-controls">
+              <div class="slider-group">
+                <label for="filterInvert">Invert</label>
+                <div class="slider-input">
+                  <input type="range" id="filterInvert" min="0" max="100" value="0">
+                </div>
+              </div>
+              <div class="slider-group">
+                <label for="filterSepia">Sepia</label>
+                <div class="slider-input">
+                  <input type="range" id="filterSepia" min="0" max="100" value="0">
+                </div>
+              </div>
+              <div class="slider-group">
+                <label for="filterSaturate">Saturate</label>
+                <div class="slider-input">
+                  <input type="range" id="filterSaturate" min="0" max="300" value="100">
+                </div>
+              </div>
+              <div class="slider-group">
+                <label for="filterHue">Hue‑Rotate</label>
+                <div class="slider-input">
+                  <input type="range" id="filterHue" min="0" max="360" value="0">
+                </div>
+              </div>
+              <div class="slider-group">
+                <label for="filterBrightness">Brightness</label>
+                <div class="slider-input">
+                  <input type="range" id="filterBrightness" min="0" max="200" value="100">
+                </div>
+              </div>
+              <div class="slider-group">
+                <label for="filterContrast">Contrast</label>
+                <div class="slider-input">
+                  <input type="range" id="filterContrast" min="0" max="200" value="100">
+                </div>
+              </div>
+            </div>
+            
+            <button id="recomputeFilterBtn" class="btn">
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"></path><path d="M21 3v5h-5"></path><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"></path><path d="M8 16H3v5"></path></svg>
+              Recompute Filter
+            </button>
           </div>
         </div>
       </div>
@@ -978,13 +1160,11 @@
         <div class="card-body">
           <div class="preview-container">
             <button id="previewButton" class="preview-button">Sample Button</button>
-            
             <div class="preview-text-container">
               <p id="previewText">This is sample text.</p>
               <p id="previewTextLighter" style="font-weight:lighter">This is sample light text.</p>
               <p id="previewTextBold" style="font-weight:bold">This is sample bold text.</p>
             </div>
-            
             <div class="contrast-info" id="contrastCheck">
               <div class="contrast-tag">
                 <div class="contrast-dot" style="background-color: white;"></div>
@@ -1052,7 +1232,6 @@
               </select>
             </div>
           </div>
-          
           <div class="harmony-container">
             <div class="harmony-group">
               <h3>
@@ -1061,7 +1240,6 @@
               </h3>
               <div class="color-grid" id="similarColors"></div>
             </div>
-            
             <div class="harmony-group">
               <h3>
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="4"></circle><path d="M21.17 8H12"></path></svg>
@@ -1069,7 +1247,6 @@
               </h3>
               <div class="color-grid" id="complementaryColors"></div>
             </div>
-            
             <div class="harmony-group">
               <h3>
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"></rect><path d="M12 8v8"></path><path d="m8.5 14 7-4"></path><path d="m8.5 10 7 4"></path></svg>
@@ -1077,7 +1254,6 @@
               </h3>
               <div class="color-grid" id="analogousColors"></div>
             </div>
-            
             <div class="harmony-group">
               <h3>
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 20 12 12 22 4 12"></polygon></svg>
@@ -1085,7 +1261,6 @@
               </h3>
               <div class="color-grid" id="triadicColors"></div>
             </div>
-            
             <div class="harmony-group">
               <h3>
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="16" height="16" x="4" y="4" rx="2"></rect></svg>
@@ -1093,7 +1268,6 @@
               </h3>
               <div class="color-grid" id="tetradicColors"></div>
             </div>
-            
             <div class="harmony-group">
               <h3>
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="2 12 10 6 10 18 2 12"></polygon><polygon points="22 12 14 6 14 18 22 12"></polygon></svg>
@@ -1101,7 +1275,6 @@
               </h3>
               <div class="color-grid" id="splitColors"></div>
             </div>
-            
             <div class="harmony-group">
               <h3>
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 2v20"></path><path d="M2 12h20"></path></svg>
@@ -1141,6 +1314,192 @@
           <div class="grid-display" id="gridDisplay"></div>
         </div>
       </div>
+
+      <!-- NEW: Dark/Light Mode Color Suggestions -->
+      <div class="card">
+        <div class="card-header">
+          <h2>
+            <span class="icon">
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8a2.83 2.83 0 0 0 4 4 4 4 0 1 1-4-4"></path><path d="M12 2v2"></path><path d="M12 20v2"></path><path d="m4.9 4.9 1.4 1.4"></path><path d="m17.7 17.7 1.4 1.4"></path><path d="M2 12h2"></path><path d="M20 12h2"></path><path d="m6.3 17.7-1.4 1.4"></path><path d="m19.1 4.9-1.4 1.4"></path></svg>
+              </span>
+              Mode Color Suggestions
+            </h2>
+        </div>
+        <div class="card-body">
+          <div class="mode-toggle-preview">
+            <div class="mode-toggle-half mode-toggle-light" id="lightModePreview">
+              Light Mode
+            </div>
+            <div class="mode-toggle-half mode-toggle-dark" id="darkModePreview">
+              Dark Mode
+            </div>
+            <div class="mode-toggle-divider"></div>
+            <div class="mode-toggle-control" id="modeToggleControl">
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v8"></path><path d="m16 6-4-4-4 4"></path><path d="M12 22v-8"></path><path d="m16 18-4 4-4-4"></path></svg>
+            </div>
+          </div>
+          
+          <div class="mode-colors-grid">
+            <div class="mode-color-box">
+              <h3>Light Mode Version</h3>
+              <div class="mode-color-swatch" id="lightModeColor"></div>
+              <div id="lightModeHex">#ffffff</div>
+              <button class="btn" id="applyLightMode">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5L20 7"></path></svg>
+                Apply Light Version
+              </button>
+            </div>
+            <div class="mode-color-box">
+              <h3>Dark Mode Version</h3>
+              <div class="mode-color-swatch" id="darkModeColor"></div>
+              <div id="darkModeHex">#000000</div>
+              <button class="btn" id="applyDarkMode">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5L20 7"></path></svg>
+                Apply Dark Version
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- NEW: Shadow Generator -->
+      <div class="card">
+        <div class="card-header">
+          <h2>
+            <span class="icon">
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4h3a1 1 0 0 1 1 1v15"></path><path d="M20 17c-6.192.974-9.929 1.382-18.364-4.36"></path><path d="M15 8v.01"></path><path d="M12 8v.01"></path><path d="M9 8v.01"></path><path d="M6 8v.01"></path><path d="M3 8v.01"></path><rect width="12" height="4" x="3" y="4" rx="1"></rect><path d="M4 12h9"></path><path d="M9 12v4"></path><path d="M4 17h4"></path></svg>
+              </span>
+              Shadow Generator
+            </h2>
+        </div>
+        <div class="card-body">
+          <div class="shadow-preview" id="shadowPreview">
+            <div class="shadow-box" id="shadowBox"></div>
+          </div>
+          
+          <div class="shadow-controls">
+            <div class="shadow-type-options">
+              <div class="shadow-option active" data-type="outside">Outside Shadow</div>
+              <div class="shadow-option" data-type="inside">Inside Shadow</div>
+            </div>
+            
+            <div class="shadow-type-options">
+              <div class="shadow-option active" data-color-type="color-box">COLOR Box + Black/White Shadow</div>
+              <div class="shadow-option" data-color-type="bw-box">Black/White Box + COLOR Shadow</div>
+            </div>
+            
+            <div class="slider-group">
+              <label for="shadowX">X Offset</label>
+              <div class="slider-input">
+                <input type="range" id="shadowX" min="-30" max="30" value="5">
+              </div>
+            </div>
+            
+            <div class="slider-group">
+              <label for="shadowY">Y Offset</label>
+              <div class="slider-input">
+                <input type="range" id="shadowY" min="-30" max="30" value="5">
+              </div>
+            </div>
+            
+            <div class="slider-group">
+              <label for="shadowBlur">Blur Radius</label>
+              <div class="slider-input">
+                <input type="range" id="shadowBlur" min="0" max="50" value="10">
+              </div>
+            </div>
+            
+            <div class="slider-group">
+              <label for="shadowSpread">Spread Radius</label>
+              <div class="slider-input">
+                <input type="range" id="shadowSpread" min="-20" max="50" value="0">
+              </div>
+            </div>
+            
+            <div class="slider-group">
+              <label for="shadowOpacity">Shadow Opacity</label>
+              <div class="slider-input">
+                <input type="range" id="shadowOpacity" min="0" max="100" value="30">
+              </div>
+            </div>
+            
+            <div class="input-group">
+              <label for="shadowCssOutput">CSS Output</label>
+              <div class="input-wrapper">
+                <input type="text" id="shadowCssOutput" readonly>
+                <button class="copy-btn" data-target="shadowCssOutput" title="Copy to clipboard">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"></rect><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path></svg>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- NEW: Color Mixer/Gradient Generator -->
+      <div class="card">
+        <div class="card-header">
+          <h2>
+            <span class="icon">
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6.1 8.022A2.2 2.2 0 0 1 4 5.811c-.01-.557.188-1.078.55-1.504.362-.426.856-.757 1.39-1.04C7.88 2.167 9.331 1.827 9.9 2.2c.57.374.385 1.3-.387 2.436-.344.501-.696.92-1.011 1.258"></path><path d="M16.5 13a4.5 4.5 0 1 1 0 9 4.5 4.5 0 0 1 0-9z"></path><path d="M8.5 21a.5.5 0 1 0 0-1 .5.5 0 0 0 0 1z"></path><path d="M18.281 11.888c.038-.142.059-.291.059-.444a2.003 2.003 0 0 0-2.088-1.997c-.946.04-1.75.672-2.038 1.542a1.99 1.99 0 0 0 .702 2.114c.506.328 1.13.418 1.865.291 1.453-.278 2.834-.693 3.28-.878.196-.08.356-.158.392-.35a.501.501 0 0 0-.208-.503 2.944 2.944 0 0 0-1.964-.775z"></path><path d="M6.82 14.656c-1.86.437-3.42 1.037-3.565 1.755-.117.581.544 1.135 1.588 1.319.906.159 1.323-.147 2.37-.868.996-.683 2.165-1.33 2.903-1.705.192-.097.371-.187.432-.36a.491.491 0 0 0-.11-.523 5.784 5.784 0 0 0-3.618.382z"></path></svg>
+              </span>
+              Color Mixer & Gradient Generator
+            </h2>
+        </div>
+        <div class="card-body">
+          <div class="color-mixer-controls">
+            <div class="color-input">
+              <label for="mixColor1">Color 1</label>
+              <input type="color" id="mixColor1" value="#3498db">
+            </div>
+            <div class="color-input">
+              <label for="mixColor2">Color 2</label>
+              <input type="color" id="mixColor2" value="#e74c3c">
+            </div>
+            <div class="color-input">
+              <label for="mixColor3">Color 3 (Optional)</label>
+              <input type="color" id="mixColor3" value="#2ecc71">
+            </div>
+          </div>
+          
+          <div class="gradient-options">
+            <div class="shadow-option active" data-gradient-type="linear">Linear Gradient</div>
+            <div class="shadow-option" data-gradient-type="radial">Radial Gradient</div>
+            <div class="shadow-option" data-gradient-type="mix">Color Mix</div>
+          </div>
+          
+          <div class="slider-group">
+            <label for="gradientAngle">Angle (deg)</label>
+            <div class="slider-input">
+              <input type="range" id="gradientAngle" min="0" max="360" value="90">
+            </div>
+          </div>
+          
+          <div class="slider-group" id="mixRatioControl">
+            <label for="mixRatio">Mix Ratio</label>
+            <div class="slider-input">
+              <input type="range" id="mixRatio" min="0" max="100" value="50">
+            </div>
+          </div>
+          
+          <div class="gradient-preview" id="gradientMixPreview"></div>
+          
+          <div class="input-group">
+            <label for="gradientCssOutput">CSS Output</label>
+            <div class="input-wrapper">
+              <input type="text" id="gradientCssOutput" readonly>
+              <button class="copy-btn" data-target="gradientCssOutput" title="Copy to clipboard">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"></rect><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path></svg>
+              </button>
+            </div>
+          </div>
+          
+          <button id="useMixResult" class="btn btn-primary" style="margin-top: 1rem;">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5L20 7"></path></svg>
+            Use Mix Result
+          </button>
+        </div>
+      </div>
       
       <!-- History & Background -->
       <div class="two-column">
@@ -1167,7 +1526,6 @@
             <div class="color-grid" id="historyContainer"></div>
           </div>
         </div>
-        
         <div class="card">
           <div class="card-header">
             <h2>
@@ -1271,649 +1629,1028 @@
           </div>
         </div>
       </div>
+          
     </main>
 
     <footer class="footer">
-      <p>Cade's Color Manager • Built with ❤️ • All functionality preserved with a modern refresh</p>
+      <p>Cade's Color Manager</p>
     </footer>
   </div>
   
   <script>
     /***********************
-     * Global Variables
-     ***********************/
-    let currentColor = chroma("#3498db");
-    let updatingUI = false;
-    let undoStack = [];
-    let redoStack = [];
-    let savedPalettes = [];
-    let historyLimit = 100;
-    let isDarkMode = true;
-    
-    /***********************
-     * Theme Toggle
-     ***********************/
-    document.getElementById("themeToggle").addEventListener("click", () => {
-      document.body.classList.toggle("light-mode");
-      isDarkMode = !document.body.classList.contains("light-mode");
-      
-      // Update the icon
-      const icon = isDarkMode 
-        ? '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"></circle><path d="M12 1v2"></path><path d="M12 21v2"></path><path d="M4.22 4.22l1.42 1.42"></path><path d="M18.36 18.36l1.42 1.42"></path><path d="M1 12h2"></path><path d="M21 12h2"></path><path d="M4.22 19.78l1.42-1.42"></path><path d="M18.36 5.64l1.42-1.42"></path></svg>'
-        : '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>';
-      document.getElementById("themeToggle").innerHTML = icon;
-      
-      // Update UI with new theme colors
-      updateUI();
-    });
-    
-    /***********************
-     * History & Saved Palettes
-     ***********************/
-    function setColor(newColor, pushHistory = true) {
-      if (!newColor || !chroma.valid(newColor)) return;
-      if (pushHistory) {
-        undoStack.push(currentColor.hex());
-        if (undoStack.length > historyLimit) { undoStack.shift(); }
-        redoStack = [];
-        updateHistoryUI();
-      }
-      currentColor = chroma(newColor);
-      updateUI();
-      
-      // Update the primary color display
-      document.getElementById("colorDisplay").style.backgroundColor = currentColor.hex();
-      document.getElementById("colorHex").innerText = currentColor.hex();
-      
-      // Set text color based on luminance
-      const textColor = currentColor.luminance() < 0.5 ? "#ffffff" : "#000000";
-      document.getElementById("colorHex").style.color = textColor;
-    }
-    
-    function updateHistoryUI() {
-      const historyContainer = document.getElementById("historyContainer");
-      historyContainer.innerHTML = "";
-      // Display most recent history first
-      undoStack.slice().reverse().forEach(colorHex => {
-        const swatch = document.createElement("div");
-        swatch.className = "color-swatch";
-        swatch.style.backgroundColor = colorHex;
-        swatch.title = colorHex;
-        swatch.addEventListener("click", () => setColor(colorHex));
-        historyContainer.appendChild(swatch);
-      });
-    }
-    
-    function updateSavedPalettesUI() {
-      const container = document.getElementById("savedPalettes");
-      container.innerHTML = "";
-      savedPalettes.forEach(colorHex => {
-        const swatch = document.createElement("div");
-        swatch.className = "color-swatch";
-        swatch.style.backgroundColor = colorHex;
-        swatch.title = colorHex;
-        swatch.addEventListener("click", () => setColor(colorHex));
-        container.appendChild(swatch);
-      });
-    }
-    
-    /***********************
-     * Live Preview & Contrast
-     ***********************/
-    function updateLivePreview() {
-      const previewButton = document.getElementById("previewButton");
-      const previewText = document.getElementById("previewText");
-      const previewTextBold = document.getElementById("previewTextBold");
-      const previewTextLighter = document.getElementById("previewTextLighter");
-      const textColor = currentColor.luminance() < 0.5 ? "#fff" : "#000";
-      previewButton.style.backgroundColor = currentColor.hex();
-      previewButton.style.color = textColor;
-      previewText.style.color = currentColor.hex();
-      previewTextBold.style.color = currentColor.hex();
-      previewTextLighter.style.color = currentColor.hex();
-      const contrastWithWhite = chroma.contrast(currentColor, "white").toFixed(2);
-      const contrastWithBlack = chroma.contrast(currentColor, "black").toFixed(2);
-      
-      // Update contrast section with modern design
-      const contrastCheck = document.getElementById("contrastCheck");
-      contrastCheck.innerHTML = `
-        <div class="contrast-tag">
-          <div class="contrast-dot" style="background-color: white;"></div>
-          <span>Contrast with white: ${contrastWithWhite}</span>
-        </div>
-        <div class="contrast-tag">
-          <div class="contrast-dot" style="background-color: black;"></div>
-          <span>Contrast with black: ${contrastWithBlack}</span>
-        </div>
-      `;
-    }
-    
-    /***********************
-     * 1D Gradient (7 swatches)
-     ***********************/
-    function updateGradientDisplay() {
-      const sliderVal = document.getElementById("gradientSlider").value;
-      const intensity = sliderVal / 250; // roughly 0 to 0.4
-      const baseHSL = currentColor.hsl();
-      const clampL = (l) => Math.max(0, Math.min(1, l));
-      let steps = [-3, -2, -1, 0, 1, 2, 3];
-      let colors = steps.map(step =>
-        chroma.hsl(baseHSL[0], baseHSL[1], clampL(baseHSL[2] + (step/3)*intensity))
-      );
-      const gradContainer = document.getElementById("gradientDisplay");
-      gradContainer.innerHTML = "";
-      colors.forEach(col => {
-        const swatch = document.createElement("div");
-        swatch.className = "gradient-swatch";
-        swatch.style.backgroundColor = col.hex();
-        swatch.title = col.hex();
-        swatch.addEventListener("click", () => setColor(col));
-        gradContainer.appendChild(swatch);
-      });
-    }
-    
-    /***********************
-     * 2D Gradient Grid
-     ***********************/
-    function updateGridDisplay() {
-      const gridContainer = document.getElementById("gridDisplay");
-      gridContainer.innerHTML = "";
-      const gridSize = 5;
-      const center = Math.floor(gridSize/2);
-      const baseHSL = currentColor.hsl();
-      const baseHue = baseHSL[0], baseSat = baseHSL[1], baseLight = baseHSL[2];
-      let satVar = document.getElementById("gridSatSlider").value / 100 * 0.5; // 0 to 0.5
-      let lightVar = document.getElementById("gridLightSlider").value / 100 * 0.5; // 0 to 0.5
-      
-      for (let row = 0; row < gridSize; row++) {
-        for (let col = 0; col < gridSize; col++) {
-          let offsetX = col - center;
-          let offsetY = row - center;
-          let newSat = Math.min(1, Math.max(0, baseSat + offsetX * satVar));
-          let newLight = Math.min(1, Math.max(0, baseLight + offsetY * lightVar));
-          let newColor = chroma.hsl(baseHue, newSat, newLight);
-          let cell = document.createElement("div");
-          cell.className = "grid-cell";
-          cell.style.backgroundColor = newColor.hex();
-          cell.title = newColor.hex();
-          cell.addEventListener("click", () => setColor(newColor));
-          gridContainer.appendChild(cell);
-        }
-      }
-    }
-    
-    /***********************
-     * Color Harmonies & Vibe Adjustments
-     ***********************/
-    function updateHarmonies() {
-      const vibe = document.getElementById("vibeSelect").value;
-      // Clear harmony containers
-      ["similarColors", "complementaryColors", "analogousColors",
-       "triadicColors", "tetradicColors", "splitColors", "luminanceConstrast"].forEach(id => {
-         document.getElementById(id).innerHTML = "";
-      });
-      const baseHSL = currentColor.hsl();
-      
-      // Similar Colors (using more offsets)
-      const similarOffsets = [-30, -20, -10, 10, 20, 30];
-      similarOffsets.forEach(off => {
-        let col = chroma.hsl((baseHSL[0] + off + 360) % 360, baseHSL[1], baseHSL[2]);
-        col = adjustForVibe(col, vibe);
-        addSwatch(col, document.getElementById("similarColors"));
-      });
-      
-      // Complementary Colors (base and two offsets)
-      let comp = getComplement(currentColor);
-      comp = adjustForVibe(comp, vibe);
-      addSwatch(comp, document.getElementById("complementaryColors"));
-      let compPlus = chroma.hsl((comp.hsl()[0] + 10) % 360, comp.hsl()[1], comp.hsl()[2]);
-      let compMinus = chroma.hsl((comp.hsl()[0] - 10 + 360) % 360, comp.hsl()[1], comp.hsl()[2]);
-      compPlus = adjustForVibe(compPlus, vibe);
-      compMinus = adjustForVibe(compMinus, vibe);
-      addSwatch(compPlus, document.getElementById("complementaryColors"));
-      addSwatch(compMinus, document.getElementById("complementaryColors"));
-      
-      // Analogous (±30°)
-      let ana1 = chroma.hsl((baseHSL[0] + 30) % 360, baseHSL[1], baseHSL[2]);
-      let ana2 = chroma.hsl((baseHSL[0] - 30 + 360) % 360, baseHSL[1], baseHSL[2]);
-      ana1 = adjustForVibe(ana1, vibe);
-      ana2 = adjustForVibe(ana2, vibe);
-      addSwatch(ana1, document.getElementById("analogousColors"));
-      addSwatch(ana2, document.getElementById("analogousColors"));
-      
-      // Triadic (±120°)
-      let tri1 = chroma.hsl((baseHSL[0] + 120) % 360, baseHSL[1], baseHSL[2]);
-      let tri2 = chroma.hsl((baseHSL[0] + 240) % 360, baseHSL[1], baseHSL[2]);
-      tri1 = adjustForVibe(tri1, vibe);
-      tri2 = adjustForVibe(tri2, vibe);
-      addSwatch(tri1, document.getElementById("triadicColors"));
-      addSwatch(tri2, document.getElementById("triadicColors"));
-      
-      // Tetradic (square: 90° offsets)
-      let tet1 = chroma.hsl((baseHSL[0] + 90) % 360, baseHSL[1], baseHSL[2]);
-      let tet2 = chroma.hsl((baseHSL[0] + 180) % 360, baseHSL[1], baseHSL[2]);
-      let tet3 = chroma.hsl((baseHSL[0] + 270) % 360, baseHSL[1], baseHSL[2]);
-      tet1 = adjustForVibe(tet1, vibe);
-      tet2 = adjustForVibe(tet2, vibe);
-      tet3 = adjustForVibe(tet3, vibe);
-      addSwatch(tet1, document.getElementById("tetradicColors"));
-      addSwatch(tet2, document.getElementById("tetradicColors"));
-      addSwatch(tet3, document.getElementById("tetradicColors"));
-      
-      // Split‑Complementary (complement ±30°)
-      let split1 = chroma.hsl((baseHSL[0] + 180 - 30 + 360) % 360, baseHSL[1], baseHSL[2]);
-      let split2 = chroma.hsl((baseHSL[0] + 180 + 30) % 360, baseHSL[1], baseHSL[2]);
-      split1 = adjustForVibe(split1, vibe);
-      split2 = adjustForVibe(split2, vibe);
-      addSwatch(split1, document.getElementById("splitColors"));
-      addSwatch(split2, document.getElementById("splitColors"));
+ * Global Variables
+ ***********************/
+let currentColor = chroma("#3498db");
+let updatingUI = false;
+let undoStack = [];
+let redoStack = [];
+let savedPalettes = [];
+let historyLimit = 100;
+let isDarkMode = false;
 
-      // High-contrast: choose black or white depending on luminance.
-      let contrast = currentColor.luminance() > 0.5 ? chroma("black") : chroma("white");
-      addSwatch(contrast, document.getElementById("luminanceConstrast"));
-    }
-    
-    // Helper: add a swatch element to a container
-    function addSwatch(color, container) {
-      const swatch = document.createElement("div");
-      swatch.className = "color-swatch";
-      swatch.style.backgroundColor = color.hex();
-      swatch.title = color.hex();
-      swatch.addEventListener("click", () => setColor(color));
-      container.appendChild(swatch);
-    }
-    
-    // Get the complementary color (hue + 180°)
-    function getComplement(color) {
-      let hsl = color.hsl();
-      hsl[0] = (hsl[0] + 180) % 360;
-      return chroma.hsl(hsl[0], hsl[1], hsl[2]);
-    }
-    
-    // Adjust a color based on a selected vibe preset
-    function adjustForVibe(color, vibe) {
-      let hsl = color.hsl();
-      switch(vibe) {
-        case "pastel":
-          return chroma.hsl(hsl[0], hsl[1] * 0.5, Math.min(hsl[2] + 0.15, 1));
-        case "retro":
-          return chroma.hsl(hsl[0], hsl[1] * 0.8, hsl[2] * 0.9);
-        case "cyberpunk":
-          return chroma.hsl(hsl[0], Math.min(hsl[1] * 1.3, 1), Math.min(hsl[2] + 0.1, 1));
-        case "vintage":
-          return chroma.hsl((hsl[0] + 10) % 360, hsl[1] * 0.7, hsl[2]);
-        case "vibrant":
-          return chroma.hsl(hsl[0], Math.min(hsl[1] * 1.5, 1), hsl[2]);
-        case "professional":
-          return chroma.hsl(hsl[0], hsl[1] * 0.85, hsl[2]);
-        case "earthy":
-          return chroma.hsl((hsl[0] - 20 + 360) % 360, Math.max(hsl[1] - 0.2, 0), hsl[2]);
-        case "neon":
-          return chroma.hsl(hsl[0], 1, Math.min(hsl[2] + 0.2, 1));
-        case "monochrome":
-          return chroma.hsl(hsl[0], 0, hsl[2]);
-        case "warm":
-          return chroma.hsl((hsl[0] + 10) % 360, hsl[1], hsl[2]);
-        case "cool":
-          return chroma.hsl((hsl[0] - 10 + 360) % 360, hsl[1], hsl[2]);
-        default:
-          return color;
-      }
-    }
-    
-    /***********************
-     * CMYK Conversions
-     ***********************/
-    function rgbToCmyk(r, g, b) {
-      let rP = r / 255, gP = g / 255, bP = b / 255;
-      let k = 1 - Math.max(rP, gP, bP);
-      let c = (1 - rP - k) / (1 - k) || 0;
-      let m = (1 - gP - k) / (1 - k) || 0;
-      let y = (1 - bP - k) / (1 - k) || 0;
-      return [c, m, y, k];
-    }
-    
-    function cmykToRgb(c, m, y, k) {
-      let r = 255 * (1 - c) * (1 - k);
-      let g = 255 * (1 - m) * (1 - k);
-      let b = 255 * (1 - y) * (1 - k);
-      return [r, g, b];
-    }
-    
-    /***********************
-     * CSS Filter Generator functions
-     ***********************/
+/***********************
+ * Theme Toggle
+ ***********************/
+document.getElementById("themeToggle").addEventListener("click", () => {
+  document.body.classList.toggle("light-mode");
+  isDarkMode = !document.body.classList.contains("light-mode");
+  const icon = isDarkMode 
+    ? '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"></circle><path d="M12 1v2"></path><path d="M12 21v2"></path><path d="M4.22 4.22l1.42 1.42"></path><path d="M18.36 18.36l1.42 1.42"></path><path d="M1 12h2"></path><path d="M21 12h2"></path><path d="M4.22 19.78l1.42-1.42"></path><path d="M18.36 5.64l1.42-1.42"></path></svg>'
+    : '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>';
+  document.getElementById("themeToggle").innerHTML = icon;
+  updateUI();
+});
 
-    
-    /***********************
-     * Update All UI Fields
-     ***********************/
-    function updateUI() {
-      updatingUI = true;
-      // Update color picker
-      document.getElementById("colorPicker").value = currentColor.hex();
-      document.getElementById("colorDisplay").style.backgroundColor = currentColor.hex();
-      document.getElementById("colorHex").innerText = currentColor.hex();
-      
-      // Set text color based on luminance
-      const textColor = currentColor.luminance() < 0.5 ? "#ffffff" : "#000000";
-      document.getElementById("colorHex").style.color = textColor;
-      
-      // Hex
-      document.getElementById("hexInput").value = currentColor.hex();
-      document.getElementById("hexInput").classList.remove("error");
-      document.getElementById("hexError").innerText = "";
-      
-      // RGBA
-      let rgba = currentColor.rgba();
-      document.getElementById("rgbaInput").value = `rgba(${rgba[0]}, ${rgba[1]}, ${rgba[2]}, ${parseFloat(rgba[3].toFixed(2))})`;
-      document.getElementById("rgbaInput").classList.remove("error");
-      document.getElementById("rgbaError").innerText = "";
-      
-      // HSL
-      let hsl = currentColor.hsl();
-      document.getElementById("hslInput").value = `hsl(${Math.round(hsl[0])}, ${Math.round(hsl[1]*100)}%, ${Math.round(hsl[2]*100)}%)`;
-      document.getElementById("hslInput").classList.remove("error");
-      document.getElementById("hslError").innerText = "";
-      
-      // Lab
-      let lab = currentColor.lab();
-      document.getElementById("labInput").value = `lab(${lab[0].toFixed(1)}, ${lab[1].toFixed(1)}, ${lab[2].toFixed(1)})`;
-      document.getElementById("labInput").classList.remove("error");
-      document.getElementById("labError").innerText = "";
-      
-      // CMYK
-      let rgb = currentColor.rgb();
-      let cmyk = rgbToCmyk(rgb[0], rgb[1], rgb[2]);
-      let cmykPercent = cmyk.map(v => Math.round(v * 100));
-      document.getElementById("cmykInput").value = `cmyk(${cmykPercent[0]}%, ${cmykPercent[1]}%, ${cmykPercent[2]}%, ${cmykPercent[3]}%)`;
-      document.getElementById("cmykInput").classList.remove("error");
-      document.getElementById("cmykError").innerText = "";
-      
-      // CSS Filter input will be updated by updateCssFilter()
-      document.getElementById("filterInput").classList.remove("error");
-      document.getElementById("filterError").innerText = "";
-      
-      // Update Live Preview, Gradient, Harmonies, 2D Grid, and CSS Filter Generator
-      updateLivePreview();
-      updateGradientDisplay();
-      updateHarmonies();
-      updateGridDisplay();
-      updateCssFilter();
-      
-      updatingUI = false;
-    }
-    
-    // A simple CSS Filter conversion (our original simplified version for the input field)
-    function colorToFilter(color) {
-      let lum = color.luminance();
-      let inv = ((1 - lum) * 100).toFixed(0);
-      return `invert(${inv}%) hue-rotate(0deg)`;
-    }
-    
-    // Parse a simplified CSS filter string back to a color
-    function filterToColor(filterStr) {
-      const invMatch = filterStr.match(/invert\(\s*(\d+)%\s*\)/);
-      const hueMatch = filterStr.match(/hue-rotate\(\s*(\d+)deg\s*\)/);
-      let invFactor = invMatch ? parseInt(invMatch[1], 10) / 100 : 0;
-      let hueAdj = hueMatch ? parseInt(hueMatch[1], 10) : 0;
-      let comp = getComplement(currentColor);
-      let newColor = chroma.mix(currentColor, comp, invFactor, 'rgb');
-      let hsl = newColor.hsl();
-      hsl[0] = (hsl[0] + hueAdj) % 360;
-      return chroma.hsl(hsl[0], hsl[1], hsl[2]);
-    }
-    
-    /***********************
-     * Parsing & Validation for Inputs
-     ***********************/
-    function parseHex(val) {
-      if (!/^#([A-Fa-f0-9]{3}|[A-Fa-f0-9]{6})$/.test(val.trim()))
-        return parseQuickHex(val);
-      return chroma(val.trim());
-    }
-
-    function parseQuickHex(val) {
-      if (!/([A-Fa-f0-9]{3}|[A-Fa-f0-9]{6})$/.test(val.trim()))
-        throw new Error("Invalid hex format");
-      return chroma("#" + val.trim());
-    }
-    
-    function parseRGBA(val) {
-      let m = val.match(/rgba?\s*\(\s*(\d+)[,\s]+(\d+)[,\s]+(\d+)(?:[,\s]+([\d.]+))?\s*\)/);
-      if (!m) throw new Error("Invalid RGBA format");
-      let r = parseInt(m[1], 10),
-          g = parseInt(m[2], 10),
-          b = parseInt(m[3], 10),
-          a = m[4] !== undefined ? parseFloat(m[4]) : 1;
-      return chroma(r, g, b, a);
-    }
-    
-    function parseHSL(val) {
-      let m = val.match(/hsl\s*\(\s*(\d+)[,\s]+(\d+)%[,\s]+(\d+)%\s*\)/);
-      if (!m) throw new Error("Invalid HSL format");
-      let h = parseInt(m[1], 10),
-          s = parseInt(m[2], 10) / 100,
-          l = parseInt(m[3], 10) / 100;
-      return chroma.hsl(h, s, l);
-    }
-    
-    function parseLab(val) {
-      let m = val.match(/lab\s*\(\s*([\d.]+)[,\s]+([-]?[\d.]+)[,\s]+([-]?[\d.]+)\s*\)/);
-      if (!m) throw new Error("Invalid Lab format");
-      let L = parseFloat(m[1]),
-          a = parseFloat(m[2]),
-          b = parseFloat(m[3]);
-      return chroma.lab(L, a, b);
-    }
-    
-    function parseCMYK(val) {
-      let m = val.match(/cmyk\s*\(\s*([\d.]+)%?\s*,\s*([\d.]+)%?\s*,\s*([\d.]+)%?\s*,\s*([\d.]+)%?\s*\)/);
-      if (!m) throw new Error("Invalid CMYK format");
-      let c = parseFloat(m[1]),
-          mC = parseFloat(m[2]),
-          y = parseFloat(m[3]),
-          k = parseFloat(m[4]);
-      if (c > 1 || mC > 1 || y > 1 || k > 1) {
-        c /= 100; mC /= 100; y /= 100; k /= 100;
-      }
-      let rgbArr = cmykToRgb(c, mC, y, k);
-      return chroma(rgbArr);
-    }
-    
-    function parseFilter(val) {
-      return filterToColor(val);
-    }
-
-    function debounce(func, wait) {
-      let timeout;
-      return function(...args) {
-        clearTimeout(timeout);
-        timeout = setTimeout(() => func.apply(this, args), wait);
-      };
-    }
-    
-    document.getElementById("hexInput").addEventListener("input", debounce((e) => {
-      if(updatingUI) return;
-      try {
-        let col = parseHex(e.target.value);
-        setColor(col);
-      } catch (err) {
-        e.target.classList.add("error");
-        document.getElementById("hexError").innerText = err.message;
-      }
-    }, 500));
-
-    document.getElementById("rgbaInput").addEventListener("input", debounce((e) => {
-      if (updatingUI) return;
-      try {
-        let col = parseRGBA(e.target.value);
-        setColor(col);
-      } catch (err) {
-        e.target.classList.add("error");
-        document.getElementById("rgbaError").innerText = err.message;
-      }
-    }, 500));
-    
-    document.getElementById("hslInput").addEventListener("input", debounce((e) => {
-      if (updatingUI) return;
-      try {
-        let col = parseHSL(e.target.value);
-        setColor(col);
-      } catch (err) {
-        e.target.classList.add("error");
-        document.getElementById("hslError").innerText = err.message;
-      }
-    }, 500));
-    
-    document.getElementById("labInput").addEventListener("input", debounce((e) => {
-      if (updatingUI) return;
-      try {
-        let col = parseLab(e.target.value);
-        setColor(col);
-      } catch (err) {
-        e.target.classList.add("error");
-        document.getElementById("labError").innerText = err.message;
-      }
-    }, 500));
-    
-    document.getElementById("cmykInput").addEventListener("input", debounce((e) => {
-      if (updatingUI) return;
-      try {
-        let col = parseCMYK(e.target.value);
-        setColor(col);
-      } catch (err) {
-        e.target.classList.add("error");
-        document.getElementById("cmykError").innerText = err.message;
-      }
-    }, 500));
-    
-    document.getElementById("filterInput").addEventListener("input", debounce((e) => {
-      if (updatingUI) return;
-      try {
-        let col = parseFilter(e.target.value);
-        setColor(col);
-      } catch (err) {
-        e.target.classList.add("error");
-        document.getElementById("filterError").innerText = err.message;
-      }
-    }, 500));
-    
-    document.getElementById("colorPicker").addEventListener("input", debounce((e) => {
-      if (updatingUI) return;
-      setColor(e.target.value);
-    }, 300));
-    
-    document.getElementById("eyeDropperBtn").addEventListener("click", async () => {
-      if (window.EyeDropper) {
-        try {
-          const eye = new EyeDropper();
-          const result = await eye.open();
-          setColor(result.sRGBHex);
-          showNotification('Color picked: ' + result.sRGBHex, 'success');
-        } catch (err) {
-          console.error("EyeDropper error:", err);
-          showNotification('EyeDropper error: ' + err.message, 'error');
-        }
-      } else {
-        showNotification('EyeDropper API not supported in this browser', 'error');
-      }
-    });
-    
-    document.getElementById("gradientSlider").addEventListener("input", updateGradientDisplay);
-    document.getElementById("vibeSelect").addEventListener("change", updateHarmonies);
-    document.getElementById("gridSatSlider").addEventListener("input", updateGridDisplay);
-    document.getElementById("gridLightSlider").addEventListener("input", updateGridDisplay);
-    
-    function undo() {
-      if (undoStack.length > 0) {
-        redoStack.push(currentColor.hex());
-        let prevColor = undoStack.pop();
-        setColor(prevColor, false);
-        updateHistoryUI();
-      }
-    }
-
-    function redo() {
-      if (redoStack.length > 0) {
-        undoStack.push(currentColor.hex());
-        if (undoStack.length > historyLimit) { undoStack.shift(); }
-        let nextColor = redoStack.pop();
-        setColor(nextColor, false);
-        updateHistoryUI();
-      }
-    }
-
-    document.getElementById("undoBtn").addEventListener("click", () => {
-      undo();
-    });
-    
-    document.getElementById("redoBtn").addEventListener("click", () => {
-      redo();
-    });
-    
-    document.getElementById("savePaletteBtn").addEventListener("click", () => {
-      savedPalettes.push(currentColor.hex());
+/***********************
+ * History & Saved Palettes with LocalStorage
+ ***********************/
+// Load saved palettes from localStorage
+function loadSavedPalettes() {
+  const savedPalettesString = localStorage.getItem('colorManagerPalettes');
+  if (savedPalettesString) {
+    try {
+      savedPalettes = JSON.parse(savedPalettesString);
       updateSavedPalettesUI();
-    });
+    } catch (e) {
+      console.error('Error loading saved palettes:', e);
+    }
+  }
+}
+
+// Save palettes to localStorage
+function savePalettesToLocalStorage() {
+  try {
+    localStorage.setItem('colorManagerPalettes', JSON.stringify(savedPalettes));
+  } catch (e) {
+    console.error('Error saving palettes to localStorage:', e);
+    showNotification('Error saving palette to local storage', 'error');
+  }
+}
+
+function setColor(newColor, pushHistory = true) {
+  if (!newColor || !chroma.valid(newColor)) return;
+  if (pushHistory) {
+    undoStack.push(currentColor.hex());
+    if (undoStack.length > historyLimit) { undoStack.shift(); }
+    redoStack = [];
+    updateHistoryUI();
+  }
+  currentColor = chroma(newColor);
+  updateUI();
+  document.getElementById("colorDisplay").style.backgroundColor = currentColor.hex();
+  document.getElementById("colorHex").innerText = currentColor.hex();
+  const textColor = currentColor.luminance() < 0.5 ? "#ffffff" : "#000000";
+  document.getElementById("colorHex").style.color = textColor;
+}
+
+function updateHistoryUI() {
+  const historyContainer = document.getElementById("historyContainer");
+  historyContainer.innerHTML = "";
+  undoStack.slice().reverse().forEach(colorHex => {
+    const swatch = document.createElement("div");
+    swatch.className = "color-swatch";
+    swatch.style.backgroundColor = colorHex;
+    swatch.title = colorHex;
+    swatch.addEventListener("click", () => setColor(colorHex));
+    historyContainer.appendChild(swatch);
+  });
+}
+
+function updateSavedPalettesUI() {
+  const container = document.getElementById("savedPalettes");
+  container.innerHTML = "";
+  savedPalettes.forEach(colorHex => {
+    const swatch = document.createElement("div");
+    swatch.className = "color-swatch";
+    swatch.style.backgroundColor = colorHex;
+    swatch.title = colorHex;
+    swatch.addEventListener("click", () => setColor(colorHex));
+    container.appendChild(swatch);
+  });
+}
+
+/***********************
+ * Live Preview & Contrast
+ ***********************/
+function updateLivePreview() {
+  const previewButton = document.getElementById("previewButton");
+  const previewText = document.getElementById("previewText");
+  const previewTextBold = document.getElementById("previewTextBold");
+  const previewTextLighter = document.getElementById("previewTextLighter");
+  const textColor = currentColor.luminance() < 0.5 ? "#fff" : "#000";
+  previewButton.style.backgroundColor = currentColor.hex();
+  previewButton.style.color = textColor;
+  previewText.style.color = currentColor.hex();
+  previewTextBold.style.color = currentColor.hex();
+  previewTextLighter.style.color = currentColor.hex();
+  const contrastWithWhite = chroma.contrast(currentColor, "white").toFixed(2);
+  const contrastWithBlack = chroma.contrast(currentColor, "black").toFixed(2);
+  const contrastCheck = document.getElementById("contrastCheck");
+  contrastCheck.innerHTML = `
+    <div class="contrast-tag">
+      <div class="contrast-dot" style="background-color: white;"></div>
+      <span>Contrast with white: ${contrastWithWhite}</span>
+    </div>
+    <div class="contrast-tag">
+      <div class="contrast-dot" style="background-color: black;"></div>
+      <span>Contrast with black: ${contrastWithBlack}</span>
+    </div>
+  `;
+}
+
+/***********************
+ * 1D Gradient (7 swatches)
+ ***********************/
+function updateGradientDisplay() {
+  const sliderVal = document.getElementById("gradientSlider").value;
+  const intensity = sliderVal / 250;
+  const baseHSL = currentColor.hsl();
+  const clampL = (l) => Math.max(0, Math.min(1, l));
+  let steps = [-3, -2, -1, 0, 1, 2, 3];
+  let colors = steps.map(step =>
+    chroma.hsl(baseHSL[0], baseHSL[1], clampL(baseHSL[2] + (step/3)*intensity))
+  );
+  const gradContainer = document.getElementById("gradientDisplay");
+  gradContainer.innerHTML = "";
+  colors.forEach(col => {
+    const swatch = document.createElement("div");
+    swatch.className = "gradient-swatch";
+    swatch.style.backgroundColor = col.hex();
+    swatch.title = col.hex();
+    swatch.addEventListener("click", () => setColor(col));
+    gradContainer.appendChild(swatch);
+  });
+}
+
+/***********************
+ * 2D Gradient Grid
+ ***********************/
+function updateGridDisplay() {
+  const gridContainer = document.getElementById("gridDisplay");
+  gridContainer.innerHTML = "";
+  const gridSize = 5;
+  const center = Math.floor(gridSize/2);
+  const baseHSL = currentColor.hsl();
+  const baseHue = baseHSL[0], baseSat = baseHSL[1], baseLight = baseHSL[2];
+  let satVar = document.getElementById("gridSatSlider").value / 100 * 0.5;
+  let lightVar = document.getElementById("gridLightSlider").value / 100 * 0.5;
+  for (let row = 0; row < gridSize; row++) {
+    for (let col = 0; col < gridSize; col++) {
+      let offsetX = col - center;
+      let offsetY = row - center;
+      let newSat = Math.min(1, Math.max(0, baseSat + offsetX * satVar));
+      let newLight = Math.min(1, Math.max(0, baseLight + offsetY * lightVar));
+      let newColor = chroma.hsl(baseHue, newSat, newLight);
+      let cell = document.createElement("div");
+      cell.className = "grid-cell";
+      cell.style.backgroundColor = newColor.hex();
+      cell.title = newColor.hex();
+      cell.addEventListener("click", () => setColor(newColor));
+      gridContainer.appendChild(cell);
+    }
+  }
+}
+
+/***********************
+ * Color Harmonies & Vibe Adjustments
+ ***********************/
+function updateHarmonies() {
+  const vibe = document.getElementById("vibeSelect").value;
+  ["similarColors", "complementaryColors", "analogousColors", "triadicColors", "tetradicColors", "splitColors", "luminanceConstrast"].forEach(id => {
+     document.getElementById(id).innerHTML = "";
+  });
+  const baseHSL = currentColor.hsl();
+  const similarOffsets = [-30, -20, -10, 10, 20, 30];
+  similarOffsets.forEach(off => {
+    let col = chroma.hsl((baseHSL[0] + off + 360) % 360, baseHSL[1], baseHSL[2]);
+    col = adjustForVibe(col, vibe);
+    addSwatch(col, document.getElementById("similarColors"));
+  });
+  let comp = getComplement(currentColor);
+  comp = adjustForVibe(comp, vibe);
+  addSwatch(comp, document.getElementById("complementaryColors"));
+  let compPlus = chroma.hsl((comp.hsl()[0] + 10) % 360, comp.hsl()[1], comp.hsl()[2]);
+  let compMinus = chroma.hsl((comp.hsl()[0] - 10 + 360) % 360, comp.hsl()[1], comp.hsl()[2]);
+  compPlus = adjustForVibe(compPlus, vibe);
+  compMinus = adjustForVibe(compMinus, vibe);
+  addSwatch(compPlus, document.getElementById("complementaryColors"));
+  addSwatch(compMinus, document.getElementById("complementaryColors"));
+  let ana1 = chroma.hsl((baseHSL[0] + 30) % 360, baseHSL[1], baseHSL[2]);
+  let ana2 = chroma.hsl((baseHSL[0] - 30 + 360) % 360, baseHSL[1], baseHSL[2]);
+  ana1 = adjustForVibe(ana1, vibe);
+  ana2 = adjustForVibe(ana2, vibe);
+  addSwatch(ana1, document.getElementById("analogousColors"));
+  addSwatch(ana2, document.getElementById("analogousColors"));
+  let tri1 = chroma.hsl((baseHSL[0] + 120) % 360, baseHSL[1], baseHSL[2]);
+  let tri2 = chroma.hsl((baseHSL[0] + 240) % 360, baseHSL[1], baseHSL[2]);
+  tri1 = adjustForVibe(tri1, vibe);
+  tri2 = adjustForVibe(tri2, vibe);
+  addSwatch(tri1, document.getElementById("triadicColors"));
+  addSwatch(tri2, document.getElementById("triadicColors"));
+  let tet1 = chroma.hsl((baseHSL[0] + 90) % 360, baseHSL[1], baseHSL[2]);
+  let tet2 = chroma.hsl((baseHSL[0] + 180) % 360, baseHSL[1], baseHSL[2]);
+  let tet3 = chroma.hsl((baseHSL[0] + 270) % 360, baseHSL[1], baseHSL[2]);
+  tet1 = adjustForVibe(tet1, vibe);
+  tet2 = adjustForVibe(tet2, vibe);
+  tet3 = adjustForVibe(tet3, vibe);
+  addSwatch(tet1, document.getElementById("tetradicColors"));
+  addSwatch(tet2, document.getElementById("tetradicColors"));
+  addSwatch(tet3, document.getElementById("tetradicColors"));
+  let split1 = chroma.hsl((baseHSL[0] + 180 - 30 + 360) % 360, baseHSL[1], baseHSL[2]);
+  let split2 = chroma.hsl((baseHSL[0] + 180 + 30) % 360, baseHSL[1], baseHSL[2]);
+  split1 = adjustForVibe(split1, vibe);
+  split2 = adjustForVibe(split2, vibe);
+  addSwatch(split1, document.getElementById("splitColors"));
+  addSwatch(split2, document.getElementById("splitColors"));
+  let contrast = currentColor.luminance() > 0.5 ? chroma("black") : chroma("white");
+  addSwatch(contrast, document.getElementById("luminanceConstrast"));
+}
+
+function addSwatch(color, container) {
+  const swatch = document.createElement("div");
+  swatch.className = "color-swatch";
+  swatch.style.backgroundColor = color.hex();
+  swatch.title = color.hex();
+  swatch.addEventListener("click", () => setColor(color));
+  container.appendChild(swatch);
+}
+
+function getComplement(color) {
+  let hsl = color.hsl();
+  hsl[0] = (hsl[0] + 180) % 360;
+  return chroma.hsl(hsl[0], hsl[1], hsl[2]);
+}
+
+function adjustForVibe(color, vibe) {
+  let hsl = color.hsl();
+  switch(vibe) {
+    case "pastel":
+      return chroma.hsl(hsl[0], hsl[1] * 0.5, Math.min(hsl[2] + 0.15, 1));
+    case "retro":
+      return chroma.hsl(hsl[0], hsl[1] * 0.8, hsl[2] * 0.9);
+    case "cyberpunk":
+      return chroma.hsl(hsl[0], Math.min(hsl[1] * 1.3, 1), Math.min(hsl[2] + 0.1, 1));
+    case "vintage":
+      return chroma.hsl((hsl[0] + 10) % 360, hsl[1] * 0.7, hsl[2]);
+    case "vibrant":
+      return chroma.hsl(hsl[0], Math.min(hsl[1] * 1.5, 1), hsl[2]);
+    case "professional":
+      return chroma.hsl(hsl[0], hsl[1] * 0.85, hsl[2]);
+    case "earthy":
+      return chroma.hsl((hsl[0] - 20 + 360) % 360, Math.max(hsl[1] - 0.2, 0), hsl[2]);
+    case "neon":
+      return chroma.hsl(hsl[0], 1, Math.min(hsl[2] + 0.2, 1));
+    case "monochrome":
+      return chroma.hsl(hsl[0], 0, hsl[2]);
+    case "warm":
+      return chroma.hsl((hsl[0] + 10) % 360, hsl[1], hsl[2]);
+    case "cool":
+      return chroma.hsl((hsl[0] - 10 + 360) % 360, hsl[1], hsl[2]);
+    default:
+      return color;
+  }
+}
+
+/***********************
+ * CMYK Conversions
+ ***********************/
+function rgbToCmyk(r, g, b) {
+  let rP = r / 255, gP = g / 255, bP = b / 255;
+  let k = 1 - Math.max(rP, gP, bP);
+  let c = (1 - rP - k) / (1 - k) || 0;
+  let m = (1 - gP - k) / (1 - k) || 0;
+  let y = (1 - bP - k) / (1 - k) || 0;
+  return [c, m, y, k];
+}
+
+function cmykToRgb(c, m, y, k) {
+  let r = 255 * (1 - c) * (1 - k);
+  let g = 255 * (1 - m) * (1 - k);
+  let b = 255 * (1 - y) * (1 - k);
+  return [r, g, b];
+}
+
+/***********************
+ * CSS Filter Generator functions - IMPROVED!
+ ***********************/
+// Function to manually apply CSS filter based on slider values
+function updateManualCssFilter() {
+  const invert = document.getElementById("filterInvert").value;
+  const sepia = document.getElementById("filterSepia").value;
+  const saturate = document.getElementById("filterSaturate").value;
+  const hueRotate = document.getElementById("filterHue").value;
+  const brightness = document.getElementById("filterBrightness").value;
+  const contrast = document.getElementById("filterContrast").value;
+  
+  const filterStr = `invert(${invert}%) sepia(${sepia}%) saturate(${saturate}%) hue-rotate(${hueRotate}deg) brightness(${brightness}%) contrast(${contrast}%)`;
+  
+  document.getElementById("computedFilter").innerText = filterStr;
+  document.getElementById("cssTargetColor").innerText = currentColor.hex();
+  document.getElementById("filterInput").value = filterStr;
+  
+  // Apply filter to SVG icons
+  Array.from(document.querySelectorAll("#icon-container>svg")).forEach((e) => e.style.filter = filterStr);
+}
+
+function applyFilterToBlack(params) {
+  // Start with black [0,0,0]. Then simulate the filter chain.
+  let inv = params.invert / 100;
+  // invert: mix black and white (if invert is 100, result is white)
+  let r = (1 - inv) * 0 + inv * 255;
+  let g = (1 - inv) * 0 + inv * 255;
+  let b = (1 - inv) * 0 + inv * 255;
+  // sepia: apply a simple sepia transformation
+  let s = params.sepia / 100;
+  let rSep = r * (1 - s) + (r * 0.393 + g * 0.769 + b * 0.189) * s;
+  let gSep = g * (1 - s) + (r * 0.349 + g * 0.686 + b * 0.168) * s;
+  let bSep = b * (1 - s) + (r * 0.272 + g * 0.534 + b * 0.131) * s;
+  r = rSep; g = gSep; b = bSep;
+  // saturate: adjust saturation via HSL
+  let col = chroma([r, g, b]);
+  let hsl = col.hsl();
+  let satFactor = params.saturate / 100; // 100 means no change
+  hsl[1] = hsl[1] * satFactor;
+  col = chroma.hsl(hsl[0], hsl[1], hsl[2]);
+  [r, g, b] = col.rgb();
+  // hue-rotate: add hue rotation (in degrees)
+  col = chroma([r, g, b]);
+  hsl = col.hsl();
+  hsl[0] = (hsl[0] + params.hueRotate) % 360;
+  col = chroma.hsl(hsl[0], hsl[1], hsl[2]);
+  [r, g, b] = col.rgb();
+  // brightness: multiply each channel
+  let bright = params.brightness / 100;
+  r *= bright; g *= bright; b *= bright;
+  // contrast: adjust contrast using a simple formula
+  let contrast = params.contrast / 100;
+  r = 128 + contrast * (r - 128);
+  g = 128 + contrast * (g - 128);
+  b = 128 + contrast * (b - 128);
+  // Clamp channels to [0,255]
+  r = Math.max(0, Math.min(255, r));
+  g = Math.max(0, Math.min(255, g));
+  b = Math.max(0, Math.min(255, b));
+  return [r, g, b];
+}
+
+function solveCssFilter(targetHex) {
+  let targetColor = chroma(targetHex);
+  let best = { 
+    params: { invert: 0, sepia: 0, saturate: 100, hueRotate: 0, brightness: 100, contrast: 100 }, 
+    loss: Infinity 
+  };
+  // Random search initial phase
+  for (let i = 0; i < 1000; i++) {
+    let candidate = {
+      invert: Math.random() * 100,
+      sepia: Math.random() * 100,
+      saturate: 100 + Math.random() * 500,
+      hueRotate: Math.random() * 360,
+      brightness: 50 + Math.random() * 150,
+      contrast: 50 + Math.random() * 150
+    };
+    let result = applyFilterToBlack(candidate);
+    let candidateColor = chroma.rgb(result);
+    let loss = chroma.deltaE(candidateColor, targetColor);
+    if (loss < best.loss) {
+      best = { params: candidate, loss: loss };
+    }
+  }
+  // Local refinement phase
+  for (let i = 0; i < 1000; i++) {
+    let candidate = {
+      invert: best.params.invert + (Math.random() - 0.5) * 10,
+      sepia: best.params.sepia + (Math.random() - 0.5) * 10,
+      saturate: best.params.saturate + (Math.random() - 0.5) * 50,
+      hueRotate: best.params.hueRotate + (Math.random() - 0.5) * 20,
+      brightness: best.params.brightness + (Math.random() - 0.5) * 20,
+      contrast: best.params.contrast + (Math.random() - 0.5) * 20
+    };
+    candidate.invert = Math.max(0, Math.min(100, candidate.invert));
+    candidate.sepia = Math.max(0, Math.min(100, candidate.sepia));
+    candidate.saturate = Math.max(0, candidate.saturate);
+    candidate.hueRotate = ((candidate.hueRotate % 360) + 360) % 360;
+    candidate.brightness = Math.max(0, candidate.brightness);
+    candidate.contrast = Math.max(0, candidate.contrast);
+    let result = applyFilterToBlack(candidate);
+    let candidateColor = chroma.rgb(result);
+    let loss = chroma.deltaE(candidateColor, targetColor);
+    if (loss < best.loss) {
+      best = { params: candidate, loss: loss };
+    }
+  }
+  
+  // Update UI sliders with computed values
+  document.getElementById("filterInvert").value = Math.round(best.params.invert);
+  document.getElementById("filterSepia").value = Math.round(best.params.sepia);
+  document.getElementById("filterSaturate").value = Math.round(best.params.saturate);
+  document.getElementById("filterHue").value = Math.round(best.params.hueRotate);
+  document.getElementById("filterBrightness").value = Math.round(best.params.brightness);
+  document.getElementById("filterContrast").value = Math.round(best.params.contrast);
+  
+  return best;
+}
+
+function cssFilterString(params) {
+  return `invert(${params.invert.toFixed(0)}%) sepia(${params.sepia.toFixed(0)}%) saturate(${params.saturate.toFixed(0)}%) hue-rotate(${params.hueRotate.toFixed(0)}deg) brightness(${params.brightness.toFixed(0)}%) contrast(${params.contrast.toFixed(0)}%)`;
+}
+
+function updateCssFilter() {
+  let result = solveCssFilter(currentColor.hex());
+  let filterStr = cssFilterString(result.params);
+  document.getElementById("computedFilter").innerText = filterStr;
+  document.getElementById("cssTargetColor").innerText = currentColor.hex();
+  document.getElementById("filterLoss").innerText = "Loss: " + result.loss.toFixed(2);
+
+  // String to evaluate loss
+  let lossStr;
+  if (result.loss < 1) {
+    lossStr = "Probably good.";
+  } else if (result.loss < 5) {
+    lossStr = "Meh.";
+  } else if (result.loss < 15) {
+    lossStr = "Not great. Likely want to re-run.";
+  } else {
+    lossStr = "Yikes. Extremely off, please recompute."
+  }
+  
+  document.getElementById("lossString").innerText = lossStr;
+
+  // Update Filter for Svgs
+  Array.from(document.querySelectorAll("#icon-container>svg")).forEach((e) => e.style.filter = filterStr);
+
+  // Link computed filter value to the CSS Filter input box
+  document.getElementById("filterInput").value = filterStr;
+}
+
+function colorToFilter(color) {
+  let lum = color.luminance();
+  let inv = ((1 - lum) * 100).toFixed(0);
+  return `invert(${inv}%) hue-rotate(0deg)`;
+}
+
+function filterToColor(filterStr) {
+  const invMatch = filterStr.match(/invert\(\s*(\d+)%\s*\)/);
+  const hueMatch = filterStr.match(/hue-rotate\(\s*(\d+)deg\s*\)/);
+  let invFactor = invMatch ? parseInt(invMatch[1], 10) / 100 : 0;
+  let hueAdj = hueMatch ? parseInt(hueMatch[1], 10) : 0;
+  let comp = getComplement(currentColor);
+  let newColor = chroma.mix(currentColor, comp, invFactor, 'rgb');
+  let hsl = newColor.hsl();
+  hsl[0] = (hsl[0] + hueAdj) % 360;
+  return chroma.hsl(hsl[0], hsl[1], hsl[2]);
+}
+
+/***********************
+ * NEW: Shadow Generator
+ ***********************/
+function updateShadowPreview() {
+  const shadowType = document.querySelector('.shadow-option[data-type].active').getAttribute('data-type');
+  const colorType = document.querySelector('.shadow-option[data-color-type].active').getAttribute('data-color-type');
+  
+  const xOffset = document.getElementById('shadowX').value;
+  const yOffset = document.getElementById('shadowY').value;
+  const blurRadius = document.getElementById('shadowBlur').value;
+  const spreadRadius = document.getElementById('shadowSpread').value;
+  const opacity = document.getElementById('shadowOpacity').value / 100;
+  
+  const colorHex = currentColor.hex();
+  const shadowBox = document.getElementById('shadowBox');
+  
+  // Determine shadow color based on current color luminance
+  const shadowColorBase = currentColor.luminance() > 0.5 ? "#000000" : "#ffffff";
+  const shadowColor = chroma(shadowColorBase).alpha(opacity).css();
+  
+  // Determine box and shadow color based on options
+  if (colorType === 'color-box') {
+    shadowBox.style.backgroundColor = colorHex;
     
-    document.getElementById("clearPaletteBtn").addEventListener("click", () => {
-      savedPalettes = [];
-      updateSavedPalettesUI();
-    });
+    // Set text color based on background color
+    shadowBox.style.color = currentColor.luminance() > 0.5 ? "#000" : "#fff";
+  } else {
+    // Black/white box with color shadow
+    shadowBox.style.backgroundColor = currentColor.luminance() > 0.5 ? "#000" : "#fff";
+    shadowBox.style.color = currentColor.luminance() > 0.5 ? "#fff" : "#000";
+  }
+  
+  // Clear previous shadow
+  shadowBox.style.boxShadow = '';
+  shadowBox.style.textShadow = '';
+  
+  // Create shadow string
+  const shadowColorToUse = colorType === 'color-box' ? shadowColor : currentColor.alpha(opacity).css();
+  const shadowString = `${xOffset}px ${yOffset}px ${blurRadius}px ${spreadRadius}px ${shadowColorToUse}`;
+  
+  // Apply shadow based on type
+  if (shadowType === 'outside') {
+    shadowBox.style.boxShadow = shadowString;
+  } else {
+    shadowBox.style.boxShadow = `inset ${shadowString}`;
+  }
+  
+  // Update CSS output
+  const cssPrefix = shadowType === 'outside' ? 'box-shadow: ' : 'box-shadow: inset ';
+  document.getElementById('shadowCssOutput').value = cssPrefix + shadowString + ';';
+}
 
-    function changeBackgroundColor() {
-      document.body.style.backgroundColor = currentColor.hex();
-      // Set text color based on luminance for body text
-      document.body.style.color = currentColor.luminance() < 0.5 ? "#ffffff" : "#000000";
-      showNotification('Background color changed', 'success');
+// Setup shadow type options
+document.querySelectorAll('.shadow-option[data-type]').forEach(option => {
+  option.addEventListener('click', function() {
+    document.querySelectorAll('.shadow-option[data-type]').forEach(el => el.classList.remove('active'));
+    this.classList.add('active');
+    updateShadowPreview();
+  });
+});
+
+// Setup shadow color type options
+document.querySelectorAll('.shadow-option[data-color-type]').forEach(option => {
+  option.addEventListener('click', function() {
+    document.querySelectorAll('.shadow-option[data-color-type]').forEach(el => el.classList.remove('active'));
+    this.classList.add('active');
+    updateShadowPreview();
+  });
+});
+
+// Setup shadow control sliders
+['shadowX', 'shadowY', 'shadowBlur', 'shadowSpread', 'shadowOpacity'].forEach(id => {
+  document.getElementById(id).addEventListener('input', updateShadowPreview);
+});
+
+/***********************
+ * NEW: Color Mixer & Gradient Generator
+ ***********************/
+function updateColorMixer() {
+  const color1 = chroma(document.getElementById('mixColor1').value);
+  const color2 = chroma(document.getElementById('mixColor2').value);
+  const color3 = chroma(document.getElementById('mixColor3').value);
+  const gradientType = document.querySelector('.shadow-option[data-gradient-type].active').getAttribute('data-gradient-type');
+  const angle = document.getElementById('gradientAngle').value;
+  const mixRatio = document.getElementById('mixRatio').value / 100;
+  const preview = document.getElementById('gradientMixPreview');
+  
+  let cssOutput = '';
+  
+  if (gradientType === 'linear') {
+    const gradient = `linear-gradient(${angle}deg, ${color1.hex()}, ${color2.hex()}, ${color3.hex()})`;
+    preview.style.background = gradient;
+    cssOutput = `background: ${gradient};`;
+    document.getElementById('mixRatioControl').style.display = 'none';
+  } 
+  else if (gradientType === 'radial') {
+    const gradient = `radial-gradient(circle, ${color1.hex()}, ${color2.hex()}, ${color3.hex()})`;
+    preview.style.background = gradient;
+    cssOutput = `background: ${gradient};`;
+    document.getElementById('mixRatioControl').style.display = 'none';
+  } 
+  else if (gradientType === 'mix') {
+    // Simple mix between two colors
+    const mixedColor = chroma.mix(color1, color2, mixRatio, 'rgb');
+    preview.style.background = mixedColor.hex();
+    cssOutput = `background-color: ${mixedColor.hex()};`;
+    document.getElementById('mixRatioControl').style.display = 'flex';
+    
+    // Store the mixed color for the "Use Mix Result" button
+    preview.dataset.mixedColor = mixedColor.hex();
+  }
+  
+  document.getElementById('gradientCssOutput').value = cssOutput;
+}
+
+// Setup gradient type options
+document.querySelectorAll('.shadow-option[data-gradient-type]').forEach(option => {
+  option.addEventListener('click', function() {
+    document.querySelectorAll('.shadow-option[data-gradient-type]').forEach(el => el.classList.remove('active'));
+    this.classList.add('active');
+    updateColorMixer();
+  });
+});
+
+// Setup color mixer controls
+['mixColor1', 'mixColor2', 'mixColor3', 'gradientAngle', 'mixRatio'].forEach(id => {
+  document.getElementById(id).addEventListener('input', updateColorMixer);
+});
+
+// Apply mixed color
+document.getElementById('useMixResult').addEventListener('click', function() {
+  const mixedColor = document.getElementById('gradientMixPreview').dataset.mixedColor;
+  if (mixedColor) {
+    setColor(mixedColor);
+    showNotification('Applied mixed color: ' + mixedColor, 'success');
+  }
+});
+
+/***********************
+ * NEW: Dark/Light Mode Suggestions
+ ***********************/
+function updateModeColorSuggestions() {
+  const colorHSL = currentColor.hsl();
+  const isCurrentColorDark = currentColor.luminance() < 0.4;
+  let lightVersion, darkVersion;
+  
+  if (isCurrentColorDark) {
+    // For dark colors, create a lighter version
+    lightVersion = chroma.hsl(
+      colorHSL[0],
+      Math.max(0, colorHSL[1] - 0.1), // Slightly reduce saturation
+      Math.min(0.85, colorHSL[2] + 0.4) // Boost lightness
+    );
+    
+    // Keep dark version similar but adjust for better contrast
+    darkVersion = chroma.hsl(
+      colorHSL[0],
+      Math.min(1, colorHSL[1] + 0.05), // Slightly increase saturation
+      Math.max(0.1, colorHSL[2] - 0.05) // Make slightly darker
+    );
+  } else {
+    // For light colors, create a darker version
+    darkVersion = chroma.hsl(
+      colorHSL[0],
+      Math.min(1, colorHSL[1] + 0.1), // Increase saturation
+      Math.max(0.15, colorHSL[2] - 0.4) // Reduce lightness
+    );
+    
+    // Keep light version similar but adjust for better contrast
+    lightVersion = chroma.hsl(
+      colorHSL[0],
+      Math.max(0, colorHSL[1] - 0.05), // Slightly reduce saturation
+      Math.min(0.95, colorHSL[2] + 0.05) // Make slightly lighter
+    );
+  }
+  
+  // Update the preview colors
+  document.getElementById('lightModeColor').style.backgroundColor = lightVersion.hex();
+  document.getElementById('darkModeColor').style.backgroundColor = darkVersion.hex();
+  document.getElementById('lightModeHex').innerText = lightVersion.hex();
+  document.getElementById('darkModeHex').innerText = darkVersion.hex();
+  
+  // Store the colors for the apply buttons
+  document.getElementById('applyLightMode').dataset.color = lightVersion.hex();
+  document.getElementById('applyDarkMode').dataset.color = darkVersion.hex();
+  
+  // Update the mode toggle preview
+  document.getElementById('lightModePreview').style.backgroundColor = lightVersion.hex();
+  document.getElementById('lightModePreview').style.color = lightVersion.luminance() > 0.5 ? '#000' : '#fff';
+  document.getElementById('darkModePreview').style.backgroundColor = darkVersion.hex();
+  document.getElementById('darkModePreview').style.color = darkVersion.luminance() > 0.5 ? '#000' : '#fff';
+}
+
+// Apply light or dark version
+document.getElementById('applyLightMode').addEventListener('click', function() {
+  const color = this.dataset.color;
+  if (color) {
+    setColor(color);
+    showNotification('Applied light mode color: ' + color, 'success');
+  }
+});
+
+document.getElementById('applyDarkMode').addEventListener('click', function() {
+  const color = this.dataset.color;
+  if (color) {
+    setColor(color);
+    showNotification('Applied dark mode color: ' + color, 'success');
+  }
+});
+
+/***********************
+ * Parsing & Validation for Inputs
+ ***********************/
+function parseHex(val) {
+  if (!/^#([A-Fa-f0-9]{3}|[A-Fa-f0-9]{6})$/.test(val.trim()))
+    return parseQuickHex(val);
+  return chroma(val.trim());
+}
+function parseQuickHex(val) {
+  if (!/([A-Fa-f0-9]{3}|[A-Fa-f0-9]{6})$/.test(val.trim()))
+    throw new Error("Invalid hex format");
+  return chroma("#" + val.trim());
+}
+function parseRGBA(val) {
+  let m = val.match(/rgba?\s*\(\s*(\d+)[,\s]+(\d+)[,\s]+(\d+)(?:[,\s]+([\d.]+))?\s*\)/);
+  if (!m) throw new Error("Invalid RGBA format");
+  let r = parseInt(m[1], 10),
+      g = parseInt(m[2], 10),
+      b = parseInt(m[3], 10),
+      a = m[4] !== undefined ? parseFloat(m[4]) : 1;
+  return chroma(r, g, b, a);
+}
+function parseHSL(val) {
+  let m = val.match(/hsl\s*\(\s*(\d+)[,\s]+(\d+)%[,\s]+(\d+)%\s*\)/);
+  if (!m) throw new Error("Invalid HSL format");
+  let h = parseInt(m[1], 10),
+      s = parseInt(m[2], 10) / 100,
+      l = parseInt(m[3], 10) / 100;
+  return chroma.hsl(h, s, l);
+}
+function parseLab(val) {
+  let m = val.match(/lab\s*\(\s*([\d.]+)[,\s]+([-]?[\d.]+)[,\s]+([-]?[\d.]+)\s*\)/);
+  if (!m) throw new Error("Invalid Lab format");
+  let L = parseFloat(m[1]),
+      a = parseFloat(m[2]),
+      b = parseFloat(m[3]);
+  return chroma.lab(L, a, b);
+}
+function parseLCH(val) {
+  let m = val.match(/lch\s*\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)\s*\)/);
+  if (!m) throw new Error("Invalid LCH format");
+  let L = parseFloat(m[1]),
+      C = parseFloat(m[2]),
+      h = parseFloat(m[3]);
+  return chroma.lch(L, C, h);
+}
+function parseCMYK(val) {
+  let m = val.match(/cmyk\s*\(\s*([\d.]+)%?\s*,\s*([\d.]+)%?\s*,\s*([\d.]+)%?\s*,\s*([\d.]+)%?\s*\)/);
+  if (!m) throw new Error("Invalid CMYK format");
+  let c = parseFloat(m[1]),
+      mC = parseFloat(m[2]),
+      y = parseFloat(m[3]),
+      k = parseFloat(m[4]);
+  if (c > 1 || mC > 1 || y > 1 || k > 1) {
+    c /= 100; mC /= 100; y /= 100; k /= 100;
+  }
+  let rgbArr = cmykToRgb(c, mC, y, k);
+  return chroma(rgbArr);
+}
+function parseFilter(val) {
+  return filterToColor(val);
+}
+function debounce(func, wait) {
+  let timeout;
+  return function(...args) {
+    clearTimeout(timeout);
+    timeout = setTimeout(() => func.apply(this, args), wait);
+  };
+}
+
+document.getElementById("hexInput").addEventListener("input", debounce((e) => {
+  if(updatingUI) return;
+  try {
+    let col = parseHex(e.target.value);
+    setColor(col);
+  } catch (err) {
+    e.target.classList.add("error");
+    document.getElementById("hexError").innerText = err.message;
+  }
+}, 500));
+document.getElementById("rgbaInput").addEventListener("input", debounce((e) => {
+  if (updatingUI) return;
+  try {
+    let col = parseRGBA(e.target.value);
+    setColor(col);
+  } catch (err) {
+    e.target.classList.add("error");
+    document.getElementById("rgbaError").innerText = err.message;
+  }
+}, 500));
+document.getElementById("hslInput").addEventListener("input", debounce((e) => {
+  if (updatingUI) return;
+  try {
+    let col = parseHSL(e.target.value);
+    setColor(col);
+  } catch (err) {
+    e.target.classList.add("error");
+    document.getElementById("hslError").innerText = err.message;
+  }
+}, 500));
+document.getElementById("labInput").addEventListener("input", debounce((e) => {
+  if (updatingUI) return;
+  try {
+    let col = parseLab(e.target.value);
+    setColor(col);
+  } catch (err) {
+    e.target.classList.add("error");
+    document.getElementById("labError").innerText = err.message;
+  }
+}, 500));
+document.getElementById("lchInput").addEventListener("input", debounce((e) => {
+  if (updatingUI) return;
+  try {
+    let col = parseLCH(e.target.value);
+    setColor(col);
+  } catch (err) {
+    e.target.classList.add("error");
+    document.getElementById("lchError").innerText = err.message;
+  }
+}, 500));
+document.getElementById("cmykInput").addEventListener("input", debounce((e) => {
+  if (updatingUI) return;
+  try {
+    let col = parseCMYK(e.target.value);
+    setColor(col);
+  } catch (err) {
+    e.target.classList.add("error");
+    document.getElementById("cmykError").innerText = err.message;
+  }
+}, 500));
+document.getElementById("filterInput").addEventListener("input", debounce((e) => {
+  if (updatingUI) return;
+  try {
+    let col = parseFilter(e.target.value);
+    setColor(col);
+  } catch (err) {
+    e.target.classList.add("error");
+    document.getElementById("filterError").innerText = err.message;
+  }
+}, 500));
+document.getElementById("colorPicker").addEventListener("input", debounce((e) => {
+  if (updatingUI) return;
+  setColor(e.target.value);
+}, 300));
+document.getElementById("eyeDropperBtn").addEventListener("click", async () => {
+  if (window.EyeDropper) {
+    try {
+      const eye = new EyeDropper();
+      const result = await eye.open();
+      setColor(result.sRGBHex);
+      showNotification('Color picked: ' + result.sRGBHex, 'success');
+    } catch (err) {
+      console.error("EyeDropper error:", err);
+      showNotification('EyeDropper error: ' + err.message, 'error');
     }
+  } else {
+    showNotification('EyeDropper API not supported in this browser', 'error');
+  }
+});
+document.getElementById("randomColorBtn").addEventListener("click", () => {
+  let rand = chroma.random();
+  setColor(rand);
+  showNotification('Random color generated: ' + rand.hex(), 'success');
+});
+document.getElementById("gradientSlider").addEventListener("input", updateGradientDisplay);
+document.getElementById("vibeSelect").addEventListener("change", updateHarmonies);
+document.getElementById("gridSatSlider").addEventListener("input", updateGridDisplay);
+document.getElementById("gridLightSlider").addEventListener("input", updateGridDisplay);
 
-    function resetBackgroundColor() {
-      document.body.style.backgroundColor = "";
-      document.body.style.color = "";
-      document.body.classList.toggle("light-mode", !isDarkMode);
-      showNotification('Background color reset', 'success');
+// CSS Filter sliders - IMPROVED to directly update filters without recomputing
+["filterInvert", "filterSepia", "filterSaturate", "filterHue", "filterBrightness", "filterContrast"].forEach(id => {
+  document.getElementById(id).addEventListener("input", updateManualCssFilter);
+});
+document.getElementById("recomputeFilterBtn").addEventListener("click", updateCssFilter);
+
+function undo() {
+  if (undoStack.length > 0) {
+    redoStack.push(currentColor.hex());
+    let prevColor = undoStack.pop();
+    setColor(prevColor, false);
+    updateHistoryUI();
+  }
+}
+function redo() {
+  if (redoStack.length > 0) {
+    undoStack.push(currentColor.hex());
+    if (undoStack.length > historyLimit) { undoStack.shift(); }
+    let nextColor = redoStack.pop();
+    setColor(nextColor, false);
+    updateHistoryUI();
+  }
+}
+document.getElementById("undoBtn").addEventListener("click", () => { undo(); });
+document.getElementById("redoBtn").addEventListener("click", () => { redo(); });
+document.getElementById("savePaletteBtn").addEventListener("click", () => {
+  savedPalettes.push(currentColor.hex());
+  updateSavedPalettesUI();
+  savePalettesToLocalStorage();
+  showNotification('Color saved to palette', 'success');
+});
+document.getElementById("clearPaletteBtn").addEventListener("click", () => {
+  savedPalettes = [];
+  updateSavedPalettesUI();
+  savePalettesToLocalStorage();
+  showNotification('Palette cleared', 'success');
+});
+function changeBackgroundColor() {
+  document.body.style.backgroundColor = currentColor.hex();
+  document.body.style.color = currentColor.luminance() < 0.5 ? "#ffffff" : "#000000";
+  showNotification('Background color changed', 'success');
+}
+function resetBackgroundColor() {
+  document.body.style.backgroundColor = "";
+  document.body.style.color = "";
+  document.body.classList.toggle("light-mode", !isDarkMode);
+  showNotification('Background color reset', 'success');
+}
+document.getElementById("changeBackground").addEventListener("click", () => { changeBackgroundColor(); });
+document.getElementById("resetBackground").addEventListener("click", () => { resetBackgroundColor(); });
+
+document.addEventListener('keydown', (e) => {
+  if (e.shiftKey && e.code == 'KeyL') {
+    document.body.style.filter = "invert(1)";
+  } else if (e.shiftKey && e.code == 'KeyI') {
+    document.body.style.filter = document.body.style.filter === "invert(1)" ? "" : "invert(1)";
+  } else if (e.shiftKey && e.code == 'KeyB') {
+    changeBackgroundColor();
+  } else if (e.shiftKey && e.code == 'KeyW') {
+    resetBackgroundColor();
+  } else if (e.ctrlKey && e.code == 'KeyZ') {
+    undo();
+  } else if (e.ctrlKey && e.code == 'KeyY') {
+    redo();
+  } else if (e.shiftKey && e.code == 'KeyS') {
+    savedPalettes.push(currentColor.hex());
+    updateSavedPalettesUI();
+    savePalettesToLocalStorage();
+  } else if (e.shiftKey && e.code == 'KeyC') {
+    navigator.clipboard.writeText(currentColor.hex());
+  }
+}, false);
+document.addEventListener('keyup', (e) => {
+  if (e.shiftKey && e.code == 'KeyL') {
+    document.body.style.filter = "";
+  }
+}, false);
+
+
+/***********************
+ * Update All UI Fields
+ ***********************/
+function updateUI() {
+  updatingUI = true;
+  document.getElementById("colorPicker").value = currentColor.hex();
+  document.getElementById("colorDisplay").style.backgroundColor = currentColor.hex();
+  document.getElementById("colorHex").innerText = currentColor.hex();
+  const textColor = currentColor.luminance() < 0.5 ? "#ffffff" : "#000000";
+  document.getElementById("colorHex").style.color = textColor;
+  document.getElementById("hexInput").value = currentColor.hex();
+  document.getElementById("hexInput").classList.remove("error");
+  document.getElementById("hexError").innerText = "";
+  let rgba = currentColor.rgba();
+  document.getElementById("rgbaInput").value = `rgba(${rgba[0]}, ${rgba[1]}, ${rgba[2]}, ${parseFloat(rgba[3].toFixed(2))})`;
+  document.getElementById("rgbaInput").classList.remove("error");
+  document.getElementById("rgbaError").innerText = "";
+  let hsl = currentColor.hsl();
+  document.getElementById("hslInput").value = `hsl(${Math.round(hsl[0])}, ${Math.round(hsl[1]*100)}%, ${Math.round(hsl[2]*100)}%)`;
+  document.getElementById("hslInput").classList.remove("error");
+  document.getElementById("hslError").innerText = "";
+  let lab = currentColor.lab();
+  document.getElementById("labInput").value = `lab(${lab[0].toFixed(1)}, ${lab[1].toFixed(1)}, ${lab[2].toFixed(1)})`;
+  document.getElementById("labInput").classList.remove("error");
+  document.getElementById("labError").innerText = "";
+  let lch = currentColor.lch();
+  document.getElementById("lchInput").value = `lch(${lch[0].toFixed(1)}, ${lch[1].toFixed(1)}, ${lch[2].toFixed(1)})`;
+  document.getElementById("lchInput").classList.remove("error");
+  document.getElementById("lchError").innerText = "";
+  let rgb = currentColor.rgb();
+  let cmyk = rgbToCmyk(rgb[0], rgb[1], rgb[2]);
+  let cmykPercent = cmyk.map(v => Math.round(v * 100));
+  document.getElementById("cmykInput").value = `cmyk(${cmykPercent[0]}%, ${cmykPercent[1]}%, ${cmykPercent[2]}%, ${cmykPercent[3]}%)`;
+  document.getElementById("cmykInput").classList.remove("error");
+  document.getElementById("cmykError").innerText = "";
+  document.getElementById("filterInput").classList.remove("error");
+  document.getElementById("filterError").innerText = "";
+  
+  updateLivePreview();
+  updateGradientDisplay();
+  updateHarmonies();
+  updateGridDisplay();
+  updateCssFilter();
+  updateShadowPreview();
+  updateColorMixer();
+  updateModeColorSuggestions();
+  
+  // Set default input values for color mixer
+  document.getElementById('mixColor1').value = currentColor.hex();
+  
+  updatingUI = false;
+}
+
+/***********************
+ * Notification Helper
+ ***********************/
+function showNotification(message, type) {
+  let notif = document.createElement("div");
+  notif.className = "notification";
+  if (type === "error") {
+    notif.style.backgroundColor = "var(--red)";
+    notif.style.color = "#fff";
+  }
+  notif.innerText = message;
+  document.body.appendChild(notif);
+  setTimeout(() => { notif.remove(); }, 3000);
+}
+
+/***********************
+ * Copy to Clipboard for Copy Buttons
+ ***********************/
+document.querySelectorAll(".copy-btn").forEach(btn => {
+  btn.addEventListener("click", function() {
+    const targetId = this.getAttribute("data-target");
+    const targetInput = document.getElementById(targetId);
+    if (targetInput) {
+      navigator.clipboard.writeText(targetInput.value).then(() => {
+        showNotification('Copied: ' + targetInput.value, 'success');
+      }).catch(() => {
+        showNotification('Copy failed', 'error');
+      });
     }
+  });
+});
 
-    document.getElementById("changeBackground").addEventListener("click", () => {
-      changeBackgroundColor();
-    });
-
-    document.getElementById("resetBackground").addEventListener("click", () => {
-      resetBackgroundColor();
-    });
-
-    document.addEventListener('keydown', (e) => {
-      if (e.shiftKey && e.code == 'KeyL') {
-        document.body.style.filter = "invert(1)";
-      } else if (e.shiftKey && e.code == 'KeyI') {
-        if (document.body.style.filter === "invert(1)") {
-          document.body.style.filter = "";
-        } else {
-          document.body.style.filter = "invert(1)";
-        }
-      } else if (e.shiftKey && e.code == 'KeyB') {
-        changeBackgroundColor();
-      } else if (e.shiftKey && e.code == 'KeyW') {
-        resetBackgroundColor();
-      } else if (e.ctrlKey && e.code == 'KeyZ') {
-        undo();
-      } else if (e.ctrlKey && e.code == 'KeyY') {
-        redo();
-      } else if (e.shiftKey && e.code == 'KeyS') {
-        savedPalettes.push(currentColor.hex());
-        updateSavedPalettesUI();
-      } else if (e.shiftKey && e.code == 'KeyC') {
-        navigator.clipboard.writeText(currentColor.hex());
-      }
-    }, false);
-
-    document.addEventListener('keyup', (e) => {
-      if (e.shiftKey && e.code == 'KeyL') {
-        document.body.style.filter = "";
-      }
-    }, false);
+/***********************
+ * Initial Draw and Setup
+ ***********************/
+// Load saved palettes from local storage on startup
+loadSavedPalettes();
+updateUI();
   </script>
 </body>
 </html>
