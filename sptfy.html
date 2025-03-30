@@ -562,7 +562,7 @@
 
             // Create the player instance
             player = new Spotify.Player({
-                name: 'Minimal Web Player (Gemini)', // Give it a unique name
+                name: 'Minimal Web Player', // Give it a unique name
                 getOAuthToken: cb => {
                     // This function provides the token to the SDK
                     console.log("SDK requesting OAuth token.");
@@ -621,7 +621,7 @@
             player.addListener('ready', ({ device_id }) => {
                 console.log('Player ready with Device ID:', device_id);
                 deviceId = device_id; // Store the device ID
-                trackInfoDiv.textContent = "Player Ready. Select this device ('Minimal Web Player (Gemini)') in Spotify app.";
+                trackInfoDiv.textContent = "Player Ready. Select this device ('Minimal Web Player') in Spotify app.";
                 updateUI(null); // Update UI elements like device info span
                 // Optionally transfer playback automatically here if desired
                 // transferPlayback(device_id);
