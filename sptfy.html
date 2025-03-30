@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Minimal Spotify Player</title>
+    <title>Minimal Spotify Player</title> 
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         /* Basic styling using monospace font and dark theme */
@@ -23,8 +23,8 @@
             max-width: 600px;
             width: 100%;
         }
-        /* Styling for buttons and button-like links */
-        button, a.button-style {
+        /* Styling for buttons */
+        button {
             background: none;
             border: 1px solid #b3b3b3;
             color: #b3b3b3;
@@ -38,7 +38,7 @@
             vertical-align: middle; /* Align buttons and inputs */
             transition: all 0.2s ease; /* Smooth hover effect */
         }
-        button:hover, a.button-style:hover {
+        button:hover {
             border-color: #ffffff;
             color: #ffffff;
             background-color: rgba(255, 255, 255, 0.1); /* Subtle background on hover */
@@ -97,12 +97,20 @@
             padding: 5px;
             border-top: 1px solid #282828; /* Subtle separator */
         }
+        /* Styling for refresh button (kept in case needed, but less critical now) */
+        #refresh-button {
+            font-size: 0.8em;
+            padding: 3px 6px;
+            margin-left: 10px;
+            display: none; /* Hide by default, less needed with Playback SDK events */
+        }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1 class="text-xl mb-4">[ Cade's Minimal Player ]</h1>
-
+        <h1 class="text-xl mb-4">[ Cade's Minimal Player ]</h1> 
+        
+        
         <div id="login-section">
             <div class="input-section client-id-section">
                 <label for="client-id-input" class="block mb-1">1. Spotify Client ID:</label>
@@ -115,52 +123,55 @@
             <div class="input-section access-token-section">
                 <label for="access-token-input" class="block mb-1">2. Access Token (Optional):</label>
                 <input type="text" id="access-token-input" placeholder="Enter existing Access Token (optional)">
-                 <p class="info-message">If provided, login will use this token directly.</p>
+                 <p class="info-message">If provided, login uses this token & skips Spotify redirect.</p>
             </div>
 
             <p class="mb-2" id="login-prompt">Enter Client ID (and optionally Access Token), then Login.</p>
-            <button id="login-button" class="button-style">[ Login / Connect ]</button>
-            <p class="text-xs mt-2">(Requires Spotify Premium for playback control)</p>
+            <button id="login-button">[ Login / Connect Player ]</button>
+            <p class="text-xs mt-2">(Requires Spotify Premium for playback)</p> 
         </div>
 
+        
         <div id="player-section" style="display: none;">
             <div class="controls">
                 <button id="prev-button" title="Previous Track" disabled>[ Prev ]</button>
                 <button id="play-pause-button" title="Play/Pause" disabled>[ Play ]</button>
                 <button id="next-button" title="Next Track" disabled>[ Next ]</button>
+                <button id="refresh-button" title="Refresh playback state">[ Refresh API State ]</button> 
             </div>
             <div id="track-info" class="track-info">
-                Connecting...
+                Initializing Player...
             </div>
-            <div id="device-info" class="text-sm mt-2">
-                Device: <span id="device-name"></span> (<span id="device-id"></span>)
+            <div id="device-info" class="text-sm mt-2"> 
+                Player Device: <span id="device-name">N/A</span> (<span id="device-id">N/A</span>)
             </div>
             <div id="token-footer" class="token-footer">
                 Access Token: N/A
             </div>
         </div>
 
+        
         <div id="error-message" class="error-message"></div>
     </div>
 
-    <script src="https://sdk.scdn.co/spotify-player.js"></script>
+    
+    <script src="https://cdn.jsdelivr.net/npm/spotify-web-api-js/src/spotify-web-api.js"></script> 
+    
+    <script src="https://sdk.scdn.co/spotify-player.js"></script> 
     <script>
         // --- Configuration ---
-        // Client ID will be loaded from localStorage or input
         let clientId = null;
         const CLIENT_ID_STORAGE_KEY = 'spotifyMinimalPlayerClientId';
-        // IMPORTANT: Replace with your actual Redirect URI registered in Spotify Dashboard
-        const redirectUri = 'https://cadezawacki.github.io/sptfy.html';
-        // IMPORTANT: Replace with actual Spotify API endpoints if needed
-        const spotifyAuthorizeUrl = 'https://accounts.spotify.com/authorize'; // Standard Spotify Auth URL
-        const spotifyPlayerApiUrl = 'https://api.spotify.com/v1/me/player'; // Standard Spotify Player API URL
+        const redirectUri = 'https://cadezawacki.github.io/sptfy.html'; // MUST match Spotify Dashboard
+        const spotifyAuthorizeUrl = 'https://accounts.spotify.com/authorize'; 
 
+        // Scopes needed for playback and control
         const scopes = [
-            'streaming',            // Required for Web Playback SDK
-            'user-read-email',      // Read user profile
-            'user-read-private',    // Read user profile
-            'user-read-playback-state', // Read playback state
-            'user-modify-playback-state' // Control playback
+            'streaming', // Needed for Web Playback SDK
+            'user-read-email',
+            'user-read-private',
+            'user-read-playback-state',    // Read playback state (useful for API fallback/initial state)
+            'user-modify-playback-state'   // Control playback (both SDK and API)
         ].join(' ');
 
         // --- DOM Elements ---
@@ -170,75 +181,54 @@
         const prevButton = document.getElementById('prev-button');
         const playPauseButton = document.getElementById('play-pause-button');
         const nextButton = document.getElementById('next-button');
+        const refreshButton = document.getElementById('refresh-button');
         const trackInfoDiv = document.getElementById('track-info');
         const deviceInfoDiv = document.getElementById('device-info');
         const deviceNameSpan = document.getElementById('device-name');
-        const deviceIdSpan = document.getElementById('device-id');
+        const deviceIdSpan = document.getElementById('device-id'); // Using this for Player SDK Device ID
         const errorMessageDiv = document.getElementById('error-message');
         const clientIdInput = document.getElementById('client-id-input');
         const saveClientIdButton = document.getElementById('save-client-id-button');
         const clearClientIdButton = document.getElementById('clear-client-id-button');
         const clientIdStatus = document.getElementById('client-id-status');
         const loginPrompt = document.getElementById('login-prompt');
-        const accessTokenInput = document.getElementById('access-token-input'); // New element
-        const tokenFooterDiv = document.getElementById('token-footer'); // New element
-
+        const accessTokenInput = document.getElementById('access-token-input');
+        const tokenFooterDiv = document.getElementById('token-footer');
 
         // --- Global Variables ---
-        let player = null;
-        let deviceId = null;
+        let spotifyApi = null; // spotify-web-api-js instance
+        let player = null; // Spotify.Player instance (Playback SDK)
         let currentAccessToken = null;
-        let isPlaying = false;
-        let isSdkReady = false; // Flag to track if Spotify SDK is loaded
-        let pendingInitializationToken = null; // Store token if login happens before SDK is ready
+        let localPlayerDeviceId = null; // Device ID for the browser player
+        let isPlayerReady = false; // Flag for Playback SDK player readiness
+        let isSdkReady = false; // Flag if the Playback SDK script itself has loaded
+        let pendingInitializationToken = null; // Token waiting for SDK script to load
 
         // --- Functions ---
 
-        /**
-         * Displays an error message to the user.
-         * @param {string} message - The error message to display.
-         */
-        function displayError(message) {
-            console.error("Error:", message);
-            errorMessageDiv.textContent = `Error: ${message}`;
+        function displayError(message, isWarning = false) {
+            console.error(isWarning ? "Warning:" : "Error:", message);
+            errorMessageDiv.textContent = `${isWarning ? 'Warning' : 'Error'}: ${message}`;
+            errorMessageDiv.style.color = isWarning ? '#ecc94b' : '#f56565';
         }
 
-        /**
-         * Clears any displayed error message.
-         */
         function clearError() {
             errorMessageDiv.textContent = '';
         }
 
-        /**
-         * Updates the status message related to the Client ID.
-         * @param {string} message - The message to display.
-         * @param {boolean} isError - Optional: style as error if true.
-         */
         function updateClientIdStatus(message, isError = false) {
             clientIdStatus.textContent = message;
-            clientIdStatus.style.color = isError ? '#f56565' : '#a0aec0'; // Red for error, grey for info
+            clientIdStatus.style.color = isError ? '#f56565' : '#a0aec0';
         }
 
-       /**
-         * Updates the footer with the current access token.
-         * WARNING: Displaying tokens is a security risk. For debugging/specific use only.
-         * @param {string | null} token - The access token to display, or null.
-         */
         function updateTokenFooter(token) {
             if (token) {
-                 // WARNING: Displaying the access token directly in the UI is generally
-                 //          a security risk. Use with caution or for debugging purposes only.
                 tokenFooterDiv.textContent = `Access Token: ${token}`;
             } else {
                 tokenFooterDiv.textContent = 'Access Token: N/A';
             }
         }
 
-
-        /**
-         * Loads Client ID from Local Storage.
-         */
         function loadClientId() {
             try {
                 const savedId = localStorage.getItem(CLIENT_ID_STORAGE_KEY);
@@ -247,25 +237,21 @@
                     clientIdInput.value = savedId;
                     updateClientIdStatus(`Loaded saved Client ID.`);
                     loginPrompt.textContent = "Client ID loaded. Enter optional token or Login.";
-                    console.log("Client ID loaded from storage.");
-                    return true; // Indicate success
+                    return true;
                 } else {
                     updateClientIdStatus("No Client ID saved. Please enter and save.");
                     loginPrompt.textContent = "Please enter and save your Client ID, then login.";
-                    return false; // Indicate none found
+                    return false;
                 }
             } catch (e) {
+                // Handle storage access errors
                 console.error("Could not access localStorage:", e);
                 displayError("Could not access browser storage to load Client ID.");
                 updateClientIdStatus("Could not load Client ID from storage.", true);
-                return false; // Indicate failure
+                return false;
             }
         }
 
-        /**
-         * Saves Client ID to Local Storage.
-         * @returns {boolean} True if saved successfully, false otherwise.
-         */
         function saveClientId() {
             const enteredId = clientIdInput.value.trim();
             if (!enteredId) {
@@ -274,13 +260,13 @@
             }
             try {
                 localStorage.setItem(CLIENT_ID_STORAGE_KEY, enteredId);
-                clientId = enteredId; // Update the global variable
+                clientId = enteredId;
                 updateClientIdStatus("Client ID saved successfully.");
                 loginPrompt.textContent = "Client ID saved. Enter optional token or Login.";
-                console.log("Client ID saved to storage.");
-                clearError(); // Clear previous errors if save is successful
+                clearError();
                 return true;
             } catch (e) {
+                // Handle storage access errors
                 console.error("Could not access localStorage:", e);
                 displayError("Could not access browser storage to save Client ID.");
                 updateClientIdStatus("Failed to save Client ID to storage.", true);
@@ -288,48 +274,49 @@
             }
         }
 
-        /**
-         * Clears Client ID from Local Storage.
-         */
         function clearClientId() {
              try {
                 localStorage.removeItem(CLIENT_ID_STORAGE_KEY);
-                clientId = null; // Clear the global variable
-                clientIdInput.value = ''; // Clear the input field
+                clientId = null;
+                clientIdInput.value = '';
                 updateClientIdStatus("Saved Client ID cleared.");
                 loginPrompt.textContent = "Please enter and save your Client ID, then login.";
-                console.log("Client ID cleared from storage.");
                 clearError();
             } catch (e) {
+                // Handle storage access errors
                 console.error("Could not access localStorage:", e);
                 displayError("Could not access browser storage to clear Client ID.");
                 updateClientIdStatus("Failed to clear Client ID from storage.", true);
             }
         }
 
-
         /**
-         * Updates the UI with the current track information.
-         * @param {object | null} state - The playback state object from the Spotify SDK, or null.
+         * Updates the UI based primarily on the Web Playback SDK's state.
+         * @param {object | null} state - The state object from Spotify.Player's player_state_changed event.
          */
-        function updateUI(state) {
-             if (!state) {
-                // Handle cases where state is null (e.g., player not ready, disconnected)
-                trackInfoDiv.textContent = player && deviceId ? "Player Ready. Select in Spotify." : "Player offline or initializing.";
+        function updatePlayerUI(state) {
+             if (!isPlayerReady || !state) {
+                // Player not ready or state is null (disconnected?)
+                trackInfoDiv.textContent = isPlayerReady ? "Player Ready. Select in Spotify or start playback." : "Player offline or initializing...";
                 playPauseButton.textContent = '[ Play ]';
-                playPauseButton.disabled = true;
+                playPauseButton.disabled = !isPlayerReady; // Only enable play if player is ready
                 prevButton.disabled = true;
                 nextButton.disabled = true;
-                isPlaying = false;
-                // Update device info even if state is null, if we have the info
+                // Update device info even if state is null, if player is ready
                 deviceNameSpan.textContent = player ? player._options.name : 'N/A';
-                deviceIdSpan.textContent = deviceId || 'N/A';
+                deviceIdSpan.textContent = localPlayerDeviceId || 'N/A';
                 return;
             }
 
+            // --- Player is ready and has state ---
             const track = state.track_window.current_track;
-            isPlaying = !state.paused;
+            const isPlaying = !state.paused;
 
+            // Device Info (already set mostly)
+            deviceNameSpan.textContent = player._options.name;
+            deviceIdSpan.textContent = localPlayerDeviceId;
+
+            // Track Info
             if (track) {
                 const artists = track.artists.map(artist => artist.name).join(', ');
                 trackInfoDiv.textContent = `${artists} - ${track.name}`;
@@ -337,303 +324,168 @@
                 trackInfoDiv.textContent = "No track loaded.";
             }
 
+            // Controls State
             playPauseButton.textContent = isPlaying ? '[ Pause ]' : '[ Play ]';
-            // Enable controls once a valid state is received and device is active
-            const isActive = state.device_id === deviceId;
-            playPauseButton.disabled = !isActive;
-            prevButton.disabled = !isActive || !state.track_window.previous_tracks.length;
-            nextButton.disabled = !isActive || !state.track_window.next_tracks.length;
+            playPauseButton.disabled = false; // Enable controls now that we have state
 
-            // Update device info from the state
-            deviceNameSpan.textContent = player ? player._options.name : 'N/A'; // Player name is from options
-            deviceIdSpan.textContent = deviceId || 'N/A'; // Device ID comes from 'ready' or 'state_changed'
+            // Use SDK state for prev/next availability
+            prevButton.disabled = !state.track_window.previous_tracks.length;
+            nextButton.disabled = !state.track_window.next_tracks.length;
         }
 
         /**
-         * Handles the Spotify authentication redirect callback.
+         * Fetches playback state using the Web API (spotify-web-api-js).
+         * Primarily useful for getting initial state or state of other devices.
+         * NOTE: This state might differ from the local player's state if playback is elsewhere.
          */
-        function handleAuthenticationCallback() {
-            loadClientId(); // Ensure Client ID is loaded if page was reloaded
-
-            const params = new URLSearchParams(window.location.hash.substring(1));
-            const accessToken = params.get('access_token');
-            const error = params.get('error');
-
-            // Clear the hash from the URL
-            if (window.location.hash) {
-                 history.pushState("", document.title, window.location.pathname + window.location.search);
+        async function fetchApiPlaybackState() {
+            if (!spotifyApi) {
+                // displayError("API client not initialized.", true); // Maybe just log this
+                console.warn("API client not initialized for fetchApiPlaybackState.");
+                return null; // Return null if API not ready
             }
+            console.log("Fetching playback state via API...");
+            // clearError(); // Don't clear errors here, might overwrite player errors
 
-
-            if (error) {
-                displayError(`Authentication failed: ${error}`);
-                showLogin();
-                return;
-            }
-
-            if (accessToken) {
-                console.log("Access Token received via redirect.");
-                currentAccessToken = accessToken;
-
-                if (!clientId) {
-                    // This case should ideally not happen if login was initiated correctly,
-                    // but handle it defensively.
-                    displayError("Logged in via redirect, but Client ID is missing. Please save it again.");
-                    showLogin();
+            try {
+                const state = await spotifyApi.getMyCurrentPlaybackState();
+                console.log('API Playback state received:', state);
+                return state; // Return the fetched state
+            } catch (error) {
+                console.error("Error fetching API playback state:", error);
+                if (error.status === 401) {
+                    displayError(`API Auth error: ${error.message || 'Token may be expired.'}. Please login again.`);
+                    showLogin(); // Force re-login if token is bad for API
                 } else {
-                    // Successfully authenticated via redirect
-                    showPlayer();
-                    updateTokenFooter(currentAccessToken); // Display the new token
-                    // Now, initialize the player if SDK is ready, or defer
-                    if (isSdkReady) {
-                        initializeSpotifyPlayer(currentAccessToken);
-                    } else {
-                        console.log("SDK not ready yet, deferring player initialization.");
-                        pendingInitializationToken = currentAccessToken; // Store token for later
-                    }
+                    // Don't necessarily show error in main div, could conflict with player status
+                    console.error(`Failed to fetch API playback state: ${error.message || error}`);
                 }
-            } else if (!currentAccessToken) {
-                // No token in hash and no token provided directly earlier, show login
-                showLogin();
+                return null; // Return null on error
             }
-            // If currentAccessToken was set by direct input, handleAuthenticationCallback doesn't need to do anything else
         }
 
-        /**
-         * Redirects the user to Spotify's login page for authorization.
-         */
-        function redirectToSpotifyLogin() {
-            clearError();
 
-            // Ensure Client ID is available
-            if (!clientId) {
-                 displayError("Spotify Client ID is missing. Please enter and save it.");
-                 updateClientIdStatus("Client ID is required before login.", true);
-                 clientIdInput.focus();
+        /**
+         * Initializes the Spotify API client (spotify-web-api-js).
+         * @param {string} token - The Spotify Access Token.
+         */
+        function initializeApiClient(token) {
+             if (!token) {
+                console.warn("Cannot initialize API client: Access token is missing.");
+                return; // Don't show error, might be intentional if only player is needed initially
+            }
+             // Avoid re-initializing if already done with the same token
+             if (spotifyApi && currentAccessToken === token) {
+                 console.log("API client already initialized with this token.");
                  return;
-            }
-             // Validate Redirect URI (basic check)
-            if (!redirectUri || redirectUri === 'YOUR_REDIRECT_URI') {
-                displayError("Spotify Redirect URI is not configured correctly in the code.");
-                 // Avoid alert in production, but useful for development
-                console.error("Developer Error: Configure redirectUri variable.");
-                return;
-            }
-
-            // Construct the authorization URL
-            const authUrl = `${spotifyAuthorizeUrl}?${new URLSearchParams({
-                response_type: 'token',
-                client_id: clientId,
-                scope: scopes,
-                redirect_uri: redirectUri,
-                // show_dialog: 'true' // Optional: forces user to re-approve permissions
-            })}`;
-
-            console.log(`Redirecting to Spotify login with Client ID: ${clientId}`);
-            window.location.href = authUrl; // Perform the redirect
-        }
-
-       /**
-         * Initiates the login process based on user input.
-         * Either uses a provided token or redirects for authorization.
-         */
-        function initiateLogin() {
-            clearError();
-            const enteredClientId = clientIdInput.value.trim();
-            const enteredAccessToken = accessTokenInput.value.trim();
-
-            // 1. Validate Client ID (must always be present)
-            if (!enteredClientId) {
-                displayError("Spotify Client ID is required.");
-                updateClientIdStatus("Please enter your Client ID.", true);
-                clientIdInput.focus();
-                return;
-            }
-            // Use the entered Client ID (and save it if not already saved)
-            if (enteredClientId !== clientId) {
-                if (!saveClientId()) { // saveClientId updates global `clientId` if successful
-                    // Saving failed, error message already shown by saveClientId
-                    return;
-                }
-            }
-
-            // 2. Check if an Access Token was provided
-            if (enteredAccessToken) {
-                console.log("Attempting login with provided Access Token.");
-                currentAccessToken = enteredAccessToken;
-                showPlayer();
-                updateTokenFooter(currentAccessToken); // Show the provided token
-
-                // Initialize player if SDK is ready, otherwise defer
-                if (isSdkReady) {
-                    initializeSpotifyPlayer(currentAccessToken);
-                } else {
-                    console.log("SDK not ready yet, deferring player initialization.");
-                    pendingInitializationToken = currentAccessToken; // Store token
-                }
-            } else {
-                // 3. No Access Token provided, proceed with standard redirect flow
-                console.log("No Access Token provided, redirecting for Spotify authorization.");
-                redirectToSpotifyLogin();
-            }
-        }
-
-
-        /**
-         * Shows the login section and hides the player.
-         */
-        function showLogin() {
-            loginSection.style.display = 'block';
-            playerSection.style.display = 'none';
-            updateClientIdStatus(clientId ? "Client ID loaded." : "No Client ID saved."); // Refresh status
-            updateTokenFooter(null); // Clear token footer
-             // Clear token input field when going back to login
-             accessTokenInput.value = '';
-             currentAccessToken = null; // Clear token if we are back at login screen
-             if (player) {
-                console.log("Disconnecting player as returning to login screen.");
-                player.disconnect();
-                player = null;
-                deviceId = null;
              }
-        }
 
-        /**
-         * Shows the player section and hides the login section.
-         */
-        function showPlayer() {
-            loginSection.style.display = 'none';
-            playerSection.style.display = 'block';
-            updateClientIdStatus(""); // Clear client ID status message
-            clearError(); // Clear any login errors
+            currentAccessToken = token; // Update token even if re-initializing
+            console.log("Initializing Spotify Web API client...");
+            try {
+                 spotifyApi = new SpotifyWebApi();
+                 spotifyApi.setAccessToken(currentAccessToken);
+                 console.log("API client initialized and token set.");
+                 updateTokenFooter(currentAccessToken);
+                 // Optionally fetch initial API state - but player state might be more relevant soon
+                 // fetchApiPlaybackState().then(apiState => {
+                 //    if (!isPlayerReady && apiState) { /* Maybe update UI if player isn't ready? */ }
+                 // });
+            } catch (e) {
+                 console.error("Failed to instantiate SpotifyWebApi:", e);
+                 displayError("Failed to load Spotify API library. Check console.");
+                 // Don't necessarily force logout, player might still work
+            }
         }
 
         /**
          * Initializes the Spotify Web Playback SDK Player.
-         * This function is called by the SDK script once loaded.
-         */
-        window.onSpotifyWebPlaybackSDKReady = () => {
-            console.log("Spotify SDK Ready.");
-            isSdkReady = true;
-            // If initialization was pending because the SDK wasn't ready, start it now
-            if (pendingInitializationToken) {
-                console.log("SDK is now ready, initializing player with pending token.");
-                initializeSpotifyPlayer(pendingInitializationToken);
-                pendingInitializationToken = null; // Clear the pending token
-            }
-        };
-
-        /**
-         * Creates and connects the Spotify Player instance.
-         * @param {string} token - The Spotify Access Token.
+         * This is called by window.onSpotifyWebPlaybackSDKReady or when token becomes available later.
          */
         function initializeSpotifyPlayer(token) {
-             if (!token) {
+            if (!token) {
                 displayError("Cannot initialize player: Access token is missing.");
-                showLogin();
+                showLogin(); // Player needs token
                 return;
             }
-            if (!isSdkReady) {
-                 displayError("Cannot initialize player: SDK is not ready yet.");
-                 // Store the token to try again when SDK is ready
-                 pendingInitializationToken = token;
+             if (!isSdkReady) {
+                 console.log("SDK script not ready yet, deferring player initialization.");
+                 pendingInitializationToken = token; // Store token for later
                  return;
-            }
+             }
              if (player) {
-                console.log("Player already exists. Disconnecting previous instance before reconnecting.");
+                console.log("Player already exists. Disconnecting previous instance.");
+                isPlayerReady = false; // Mark as not ready while disconnecting
                 player.disconnect();
-                // Allow a brief moment for disconnection before creating new player
-                // setTimeout(() => createAndConnectPlayer(token), 100); // Optional delay
-                player = null; // Ensure old player reference is cleared
+                player = null; // Ensure old reference is cleared
             }
 
-            createAndConnectPlayer(token);
-        }
-
-        /**
-         * Helper function to create and connect the player instance.
-         * Separated to handle potential re-initialization.
-         * @param {string} token - The Spotify Access Token.
-         */
-        function createAndConnectPlayer(token) {
             console.log("Initializing Spotify Player instance...");
             trackInfoDiv.textContent = "Initializing Player...";
             updateTokenFooter(token); // Ensure footer shows the token being used
 
             // Create the player instance
             player = new Spotify.Player({
-                name: 'Minimal Web Player', // Give it a unique name
+                name: 'Minimal Web Player', // Unique name
                 getOAuthToken: cb => {
-                    // This function provides the token to the SDK
-                    console.log("SDK requesting OAuth token.");
-                    // Check if the current token is still valid (basic check)
-                    if (!currentAccessToken || currentAccessToken !== token) {
-                        console.warn("Token mismatch or missing when SDK requested. Using provided token.");
-                        // Potentially handle token refresh logic here in a real app
-                        currentAccessToken = token; // Update if needed
-                    }
-                     // WARNING: Displaying the token here again is redundant but shows when SDK asks
-                     console.log("Providing token to SDK:", currentAccessToken ? "********" : "null");
-                    cb(currentAccessToken);
+                    // Provide the token to the SDK when requested
+                    console.log("Playback SDK requesting OAuth token.");
+                    // You might add token refresh logic here in a real app
+                    cb(currentAccessToken); // Provide the current token
                 },
                 volume: 0.5 // Default volume
             });
 
             // --- Player Event Listeners ---
             player.addListener('initialization_error', ({ message }) => {
-                displayError(`Initialization failed: ${message}. Ensure Spotify Premium and check console.`);
-                showLogin(); // Go back to login on critical error
+                displayError(`Player Init failed: ${message}. Check Premium status, browser settings (DRM), and console.`);
+                showLogin(); // Go back to login on critical init error
             });
             player.addListener('authentication_error', ({ message }) => {
-                displayError(`Authentication failed: ${message}. Token might be expired or invalid.`);
-                currentAccessToken = null; // Token is bad, clear it
+                displayError(`Player Auth failed: ${message}. Token might be expired or invalid.`);
+                currentAccessToken = null; // Token is bad for player
                 showLogin(); // Force re-login
             });
             player.addListener('account_error', ({ message }) => {
-                // E.g., Premium required
-                displayError(`Account error: ${message}. Spotify Premium might be required.`);
-                // Don't necessarily force logout, user might fix account issue
+                displayError(`Player Account error: ${message}. Spotify Premium required.`);
+                // Don't force logout, user might fix it
             });
             player.addListener('playback_error', ({ message }) => {
-                // E.g., Content restriction
-                displayError(`Playback error: ${message}. Content might be restricted or unavailable.`);
+                displayError(`Player Playback error: ${message}. Content might be restricted.`, true); // Show as warning
             });
 
-            // State changes (track change, play/pause, etc.)
+            // State changes (track change, play/pause, etc.) - PRIMARY UI UPDATE SOURCE
             player.addListener('player_state_changed', (state) => {
                 console.log('Player state changed:', state);
-                clearError(); // Clear previous non-critical errors on state change
                 if (!state) {
-                    // State can be null if player disconnects or has an issue
-                    displayError("Player state is null. Disconnected or issue occurred.");
-                    updateUI(null); // Update UI to reflect offline state
-                    // Consider if re-login should be forced here depending on cause
-                    return;
+                    // State is null if player disconnects or has an issue
+                    console.warn("Player state is null. Player may have disconnected.");
+                    isPlayerReady = false; // Mark as not ready if state is null
+                    // Optionally try to reconnect or show specific message
                 }
-                // Update the global device ID if it changes (though usually set in 'ready')
-                if (state.device_id) {
-                    deviceId = state.device_id;
-                }
-                updateUI(state); // Update track info, buttons, etc.
+                // Update UI based on the player's state
+                updatePlayerUI(state);
             });
 
             // Player is ready to accept commands
             player.addListener('ready', ({ device_id }) => {
                 console.log('Player ready with Device ID:', device_id);
-                deviceId = device_id; // Store the device ID
+                localPlayerDeviceId = device_id; // Store the local device ID
+                isPlayerReady = true;
                 trackInfoDiv.textContent = "Player Ready. Select this device ('Minimal Web Player') in Spotify app.";
-                updateUI(null); // Update UI elements like device info span
-                // Optionally transfer playback automatically here if desired
-                // transferPlayback(device_id);
+                updatePlayerUI(null); // Update UI elements like device info span
+                // You could automatically transfer playback here if desired:
+                // transferPlaybackToLocalPlayer();
             });
 
             // Player is not ready (e.g., disconnected)
             player.addListener('not_ready', ({ device_id }) => {
-                console.log('Device ID has gone offline:', device_id);
-                if (deviceId === device_id) { // Check if it's our device
-                    deviceId = null;
-                    displayError("Player has gone offline.");
-                    updateUI(null); // Update UI to reflect offline state
+                console.log('Player device ID has gone offline:', device_id);
+                if (localPlayerDeviceId === device_id) { // Check if it's our player
+                    localPlayerDeviceId = null;
+                    isPlayerReady = false;
+                    displayError("Player has gone offline.", true);
+                    updatePlayerUI(null); // Update UI to reflect offline state
                 }
             });
 
@@ -644,91 +496,218 @@
                     trackInfoDiv.textContent = "Connected. Waiting for player ready...";
                 } else {
                      console.error('Web Playback SDK failed to connect.');
-                     displayError("Failed to connect the SDK. Check browser console (e.g., active device limit).");
-                     // Don't necessarily force logout immediately, might be temporary
-                     // showLogin();
+                     displayError("Failed to connect the SDK. Check console (e.g., active device limit, browser issues).");
+                     // Don't force logout immediately, might be temporary
                 }
             }).catch(error => {
                  console.error('Error connecting player:', error);
-                 displayError(`Connection error: ${error.message || error}. Check console.`);
+                 displayError(`Player Connection error: ${error.message || error}. Check console.`);
                  showLogin(); // Force logout on connection error
             });
         }
 
-         /**
-         * Transfers playback to this web player.
-         * @param {string} targetDeviceId - The device ID of this web player.
+        /**
+         * This function is called by the Spotify Playback SDK script once it's loaded.
          */
-        async function transferPlayback(targetDeviceId) {
-            if (!currentAccessToken || !targetDeviceId) {
-                console.warn("Cannot transfer playback: Missing token or device ID.");
+        window.onSpotifyWebPlaybackSDKReady = () => {
+            console.log("Spotify Playback SDK Script Ready.");
+            isSdkReady = true;
+            // If initialization was pending because the SDK script wasn't loaded, start it now
+            if (pendingInitializationToken) {
+                console.log("SDK script is now ready, initializing player with pending token.");
+                initializeSpotifyPlayer(pendingInitializationToken);
+                pendingInitializationToken = null; // Clear the pending token
+            }
+        };
+
+
+        /**
+         * Handles the Spotify authentication redirect callback.
+         */
+        function handleAuthenticationCallback() {
+            loadClientId(); // Ensure Client ID is loaded
+
+            const params = new URLSearchParams(window.location.hash.substring(1));
+            const accessToken = params.get('access_token');
+            const error = params.get('error');
+
+            // Clear the hash from the URL
+            if (window.location.hash) {
+                 history.pushState("", document.title, window.location.pathname + window.location.search);
+            }
+
+            if (error) {
+                displayError(`Authentication failed: ${error}`);
+                showLogin();
                 return;
             }
-            console.log(`Requesting playback transfer to device ${targetDeviceId}`);
-            try {
-                const response = await fetch(spotifyPlayerApiUrl, { // Use standard API endpoint
-                    method: 'PUT',
-                    headers: {
-                        'Authorization': `Bearer ${currentAccessToken}`,
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        device_ids: [targetDeviceId],
-                        play: false // Set to true to start playing immediately after transfer
-                    }),
-                });
-                if (!response.ok) {
-                    // Handle non-2xx responses (e.g., 401 Unauthorized, 403 Forbidden, 404 Not Found)
-                    const errorBody = await response.text(); // Get error details if possible
-                    throw new Error(`API Error ${response.status}: ${response.statusText}. ${errorBody}`);
+
+            if (accessToken) {
+                console.log("Access Token received via redirect.");
+                if (!clientId) {
+                    displayError("Logged in via redirect, but Client ID is missing. Please save it again.");
+                    showLogin();
+                } else {
+                    // Successfully authenticated via redirect
+                    currentAccessToken = accessToken; // Store the token
+                    showPlayer();
+                    // Initialize BOTH the API client and the Playback SDK Player
+                    initializeApiClient(currentAccessToken);
+                    initializeSpotifyPlayer(currentAccessToken);
                 }
-                console.log(`Playback transfer request successful to device ${targetDeviceId}`);
-                // Playback state will update via the 'player_state_changed' listener
-            } catch (error) {
-                displayError(`Failed to transfer playback: ${error.message}`);
-                console.error("Error transferring playback:", error);
+            } else if (!currentAccessToken) {
+                // No token in hash and no token provided directly earlier, show login
+                showLogin();
             }
+            // If currentAccessToken was set by direct input, this callback doesn't need to re-init
+        }
+
+        /**
+         * Redirects the user to Spotify's login page for authorization.
+         */
+        function redirectToSpotifyLogin() {
+            clearError();
+            if (!clientId) {
+                 displayError("Spotify Client ID is missing. Please enter and save it.");
+                 updateClientIdStatus("Client ID is required before login.", true);
+                 clientIdInput.focus();
+                 return;
+            }
+            // Basic validation for redirect URI
+            if (!redirectUri || redirectUri === 'YOUR_REDIRECT_URI' || !redirectUri.startsWith('http')) {
+                displayError("Spotify Redirect URI is not configured correctly in the code.");
+                console.error("Developer Error: Configure redirectUri variable properly.");
+                return;
+            }
+
+            const authUrl = `${spotifyAuthorizeUrl}?${new URLSearchParams({
+                response_type: 'token',
+                client_id: clientId,
+                scope: scopes, // Use updated scopes including 'streaming'
+                redirect_uri: redirectUri,
+            })}`;
+
+            console.log(`Redirecting to Spotify login with Client ID: ${clientId}`);
+            window.location.href = authUrl;
+        }
+
+       /**
+         * Initiates the login process based on user input.
+         * Initializes Player and API client if token is provided, otherwise redirects.
+         */
+        function initiateLogin() {
+            clearError();
+            const enteredClientId = clientIdInput.value.trim();
+            const enteredAccessToken = accessTokenInput.value.trim();
+
+            // 1. Validate Client ID
+            if (!enteredClientId) {
+                displayError("Spotify Client ID is required.");
+                updateClientIdStatus("Please enter your Client ID.", true);
+                clientIdInput.focus();
+                return;
+            }
+            // Save Client ID if it's different or not loaded
+            if (enteredClientId !== clientId) {
+                if (!saveClientId()) { return; } // saveClientId updates global `clientId`
+            }
+
+            // 2. Check for manually entered Access Token
+            if (enteredAccessToken) {
+                console.log("Attempting login with provided Access Token (skipping redirect).");
+                currentAccessToken = enteredAccessToken; // Store the token
+                showPlayer();
+                // Initialize BOTH the API client and the Playback SDK Player
+                initializeApiClient(currentAccessToken);
+                initializeSpotifyPlayer(currentAccessToken);
+            } else {
+                // 3. No token provided, proceed with standard redirect flow
+                console.log("No Access Token provided, redirecting for Spotify authorization.");
+                redirectToSpotifyLogin(); // This redirect is necessary to get a token
+            }
+        }
+
+        /**
+         * Shows the login section and hides the player section. Cleans up player state.
+         */
+        function showLogin() {
+            loginSection.style.display = 'block';
+            playerSection.style.display = 'none';
+            updateClientIdStatus(clientId ? "Client ID loaded." : "No Client ID saved.");
+            updateTokenFooter(null);
+            accessTokenInput.value = ''; // Clear token input
+            currentAccessToken = null;
+            spotifyApi = null; // Clear API instance
+            isPlayerReady = false;
+            localPlayerDeviceId = null;
+            pendingInitializationToken = null;
+            if (player) {
+                console.log("Disconnecting player instance.");
+                player.disconnect(); // Disconnect SDK player
+                player = null;
+            }
+            updatePlayerUI(null); // Reset UI elements
+        }
+
+        /**
+         * Shows the player section and hides the login section.
+         */
+        function showPlayer() {
+            loginSection.style.display = 'none';
+            playerSection.style.display = 'block';
+            updateClientIdStatus(""); // Clear client ID status message
+            clearError(); // Clear any login errors
+            trackInfoDiv.textContent = "Initializing..."; // Initial message
         }
 
 
         // --- Event Listeners ---
         saveClientIdButton.addEventListener('click', saveClientId);
         clearClientIdButton.addEventListener('click', clearClientId);
+        clientIdInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') saveClientId(); });
+        loginButton.addEventListener('click', (e) => { e.preventDefault(); initiateLogin(); });
+        refreshButton.addEventListener('click', fetchApiPlaybackState); // Keep for debugging API state
 
-        // Optional: Save Client ID when pressing Enter in the input field
-        clientIdInput.addEventListener('keypress', function (e) {
-            if (e.key === 'Enter') {
-                saveClientId();
-            }
-        });
-
-        // Login button now calls initiateLogin
-        loginButton.addEventListener('click', (e) => {
-            e.preventDefault(); // Prevent default if it were a link
-            initiateLogin();
-        });
-
-        // Player controls
+        // --- Player Controls (use SDK Player methods) ---
         playPauseButton.addEventListener('click', () => {
-            if (!player) return;
-            player.togglePlay().catch(err => displayError(`Toggle play failed: ${err.message || err}`));
+            if (!player || !isPlayerReady) return;
+            clearError(); // Clear minor errors on interaction
+            console.log("Toggling play/pause via SDK player...");
+            player.togglePlay().catch(err => {
+                 console.error("Toggle play error:", err);
+                 displayError(`Toggle play failed: ${err.message || err}`);
+            });
+            // UI will update via the 'player_state_changed' listener
         });
 
         prevButton.addEventListener('click', () => {
-            if (!player) return;
-            player.previousTrack().catch(err => displayError(`Previous track failed: ${err.message || err}`));
+            if (!player || !isPlayerReady) return;
+            clearError();
+            console.log("Skipping to previous via SDK player...");
+            player.previousTrack().catch(err => {
+                console.error("Previous track error:", err);
+                displayError(`Previous track failed: ${err.message || err}`);
+            });
+            // UI will update via the 'player_state_changed' listener
         });
 
         nextButton.addEventListener('click', () => {
-            if (!player) return;
-            player.nextTrack().catch(err => displayError(`Next track failed: ${err.message || err}`));
+            if (!player || !isPlayerReady) return;
+            clearError();
+            console.log("Skipping to next via SDK player...");
+            player.nextTrack().catch(err => {
+                console.error("Next track error:", err);
+                displayError(`Next track failed: ${err.message || err}`);
+            });
+             // UI will update via the 'player_state_changed' listener
         });
 
         // --- Initialization ---
-        // Load Client ID and handle potential authentication callback on page load
         window.addEventListener('load', () => {
-            loadClientId(); // Load Client ID first
-            handleAuthenticationCallback(); // Check if we are returning from Spotify Auth
+            loadClientId();
+            // Check for token in URL hash from redirect
+            // handleAuthenticationCallback will initialize player/api if token found
+            handleAuthenticationCallback();
         });
 
     </script>
