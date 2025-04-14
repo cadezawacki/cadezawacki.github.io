@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Term Player</title>
+    <style>
+        /* --- Basic Terminal Styling --- */
+        :root {
+            --term-bg: #1a1a1a; /* Dark background */
+            --term-fg: #00ff00; /* Bright green foreground */
+            --term-fg-dim: #008000; /* Dimmer green */
+            --term-border: #008000;
+        }
+
+        html, body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            background-color: var(--term-bg);
+            color: var(--term-fg);
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 16px;
+            overflow: hidden; /* Prevent scrollbars if content fits */
+        }
+
+        #terminal {
+            border: 2px solid var(--term-border);
+            padding: 15px;
+            margin: 20px;
+            height: calc(100vh - 40px - 4px); /* Full height minus margin/border */
+            display: flex;
+            flex-direction: column;
+            box-sizing: border-box; /* Include padding/border in height */
+        }
+
+        /* --- Header/Prompt Area --- */
+        .prompt::before {
+            content: 'user@termplayer:~$ ';
+            color: var(--term-fg-dim);
+        }
+
+        /* --- Playlist Selector --- */
+        #playlist-selector {
+            margin-bottom: 15px;
+        }
+
+        #playlist-selector label {
+            margin-right: 5px;
+        }
+
+        #playlist-select {
+            background-color: var(--term-bg);
+            color: var(--term-fg);
+            border: 1px solid var(--term-fg-dim);
+            font-family: inherit;
+            font-size: inherit;
+            padding: 3px 5px;
+        }
+        #playlist-select:focus {
+            outline: 1px dashed var(--term-fg);
+        }
+
+        /* --- Display Area --- */
+        #display {
+            border: 1px dashed var(--term-fg-dim);
+            padding: 10px;
+            margin-bottom: 15px;
+            min-height: 50px; /* Ensure some space */
+            overflow-y: auto; /* Scroll if needed */
+            flex-grow: 1; /* Take up remaining space */
+            white-space: pre-wrap; /* Allow wrapping but keep spaces */
+        }
+        #display .status {
+            color: var(--term-fg-dim);
+        }
+        #display .track-info {
+            color: var(--term-fg);
+        }
+
+        /* --- Controls --- */
+        #controls {
+            margin-bottom: 10px;
+            text-align: center; /* Center buttons */
+        }
+
+        #controls button {
+            background: none;
+            border: 1px solid var(--term-fg-dim);
+            color: var(--term-fg);
+            font-family: inherit;
+            font-size: inherit;
+            padding: 5px 10px;
+            margin: 0 5px;
+            cursor: pointer;
+            min-width: 80px; /* Consistent button width */
+        }
+
+        #controls button:hover {
+            background-color: var(--term-fg-dim);
+            color: var(--term-bg);
+        }
+         #controls button:active {
+            background-color: var(--term-fg);
+            color: var(--term-bg);
+         }
+
+        /* --- Hidden Audio Element --- */
+        #audio-player {
+            display: none; /* Hide the default player */
+        }
+
+        /* --- Blinking Cursor (Optional) --- */
+        .cursor {
+            display: inline-block;
+            width: 8px; /* Width of the cursor */
+            height: 1em; /* Height based on font size */
+            background-color: var(--term-fg);
+            animation: blink 1s step-end infinite;
+            margin-left: 5px;
+            vertical-align: bottom; /* Align with text baseline */
+        }
+
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0; }
+        }
+
+    </style>
+</head>
+<body>
+
+    <div id="terminal">
+        <div class="prompt">cat ./player_info.txt</div>
+        <div>Initializing Terminal Media Player v0.1... Done.</div>
+        <div>Ready.</div>
+        <br>
+
+        <div id="playlist-selector">
+            <span class="prompt">ls ./playlists</span><br>
+            <label for="playlist-select">Select Playlist:</label>
+            <select id="playlist-select">
+                <option value="">-- Choose --</option>
+                </select>
+        </div>
+
+        <div id="display">
+            <span class="status">Waiting for command...</span><span class="cursor"></span>
+        </div>
+
+        <div id="controls">
+             <span class="prompt">./controls</span><br>
+            <button id="prev-button">[&lt;&lt;] Prev</button>
+            <button id="play-pause-button">[&gt;] Play</button>
+            <button id="next-button">[&gt;&gt;] Next</button>
+        </div>
+
+        <audio id="audio-player"></audio>
+
+    </div>
+
+    <script>
+        // --- Configuration ---
+        // IMPORTANT: Manually list your playlists and their tracks here!
+        // The key is the exact name of the folder inside ./playlists/
+        // The value is an array of exact audio filenames within that folder.
+        const playlists = {
+            "Chill Beats": [
+                "beat1.mp3",
+                "relaxing_sound.wav",
+                "lofi_study.ogg"
+            ],
+            "Workout Mix": [
+                "energy_track1.mp3",
+                "power_up.mp3",
+                "run_fast.mp3"
+            ],
+            "Classical": [
+                 // Add your classical tracks here, e.g., "bach_concerto.mp3"
+            ]
+            // Add more playlists like the examples above
+        };
+        // --- End Configuration ---
+
+
+        // --- DOM Elements ---
+        const playlistSelect = document.getElementById('playlist-select');
+        const display = document.getElementById('display');
+        const prevButton = document.getElementById('prev-button');
+        const playPauseButton = document.getElementById('play-pause-button');
+        const nextButton = document.getElementById('next-button');
+        const audioPlayer = document.getElementById('audio-player');
+        const cursor = document.createElement('span'); // Create cursor dynamically
+        cursor.className = 'cursor';
+
+
+        // --- State Variables ---
+        let currentPlaylistName = null;
+        let currentTracks = [];
+        let currentTrackIndex = 0;
+        let isPlaying = false;
+
+        // --- Functions ---
+
+        function updateDisplay(message, isStatus = false) {
+            display.innerHTML = ''; // Clear previous content
+            const textNode = document.createElement('span');
+            textNode.textContent = message;
+            if (isStatus) {
+                 textNode.className = 'status';
+            } else {
+                 textNode.className = 'track-info';
+            }
+            display.appendChild(textNode);
+            display.appendChild(cursor); // Append cursor after the text
+        }
+
+
+        function populatePlaylistDropdown() {
+            // Clear existing options except the default
+            playlistSelect.innerHTML = '<option value="">-- Choose --</option>';
+
+            for (const name in playlists) {
+                if (playlists.hasOwnProperty(name) && playlists[name].length > 0) { // Only add if playlist has tracks
+                    const option = document.createElement('option');
+                    option.value = name;
+                    option.textContent = name;
+                    playlistSelect.appendChild(option);
+                }
+            }
+             if (playlistSelect.options.length <= 1) {
+                 updateDisplay('Status: No playlists defined or playlists are empty in the script configuration.', true);
+             } else {
+                 updateDisplay('Status: Select a playlist to begin.', true);
+             }
+        }
+
+        function loadPlaylist(playlistName) {
+            if (!playlists[playlistName] || playlists[playlistName].length === 0) {
+                updateDisplay(`Error: Playlist "${playlistName}" not found or empty. Check configuration.`, true);
+                currentPlaylistName = null;
+                currentTracks = [];
+                audioPlayer.src = ''; // Clear src
+                return;
+            }
+
+            currentPlaylistName = playlistName;
+            currentTracks = playlists[playlistName];
+            currentTrackIndex = 0;
+            loadTrack(currentTrackIndex);
+            updateDisplay(`Playlist Loaded: ${currentPlaylistName}\nUse controls or wait for playback...`);
+        }
+
+        function loadTrack(index) {
+            if (!currentTracks || currentTracks.length === 0 || index < 0 || index >= currentTracks.length) {
+                updateDisplay('Error: Invalid track index or no tracks loaded.', true);
+                isPlaying = false;
+                 updatePlayPauseButton();
+                return; // Exit if no tracks or index is bad
+            }
+
+            currentTrackIndex = index;
+            const trackName = currentTracks[currentTrackIndex];
+            const trackPath = `./playlists/${trackName}`; // Relative path
+
+            audioPlayer.src = trackPath;
+            updateDisplay(`Loading: [${currentTrackIndex + 1}/${currentTracks.length}] ${trackName} (${currentPlaylistName})`);
+
+            // Attempt to play immediately after loading
+            playAudio();
+
+        }
+
+         function playAudio() {
+            if (!audioPlayer.src) {
+                updateDisplay('Status: No track loaded to play.', true);
+                return;
+            }
+            audioPlayer.play()
+                .then(() => {
+                    isPlaying = true;
+                    updatePlayPauseButton();
+                    updateDisplay(`Playing: [${currentTrackIndex + 1}/${currentTracks.length}] ${currentTracks[currentTrackIndex]} (${currentPlaylistName})`);
+                })
+                .catch(error => {
+                    console.error("Playback Error:", error);
+                    updateDisplay(`Error: Could not play ${currentTracks[currentTrackIndex]}. Check file path/format or browser console.\n${error.message}`, true);
+                    isPlaying = false;
+                    updatePlayPauseButton();
+                });
+        }
+
+        function pauseAudio() {
+            audioPlayer.pause();
+            isPlaying = false;
+            updatePlayPauseButton();
+             updateDisplay(`Paused: [${currentTrackIndex + 1}/${currentTracks.length}] ${currentTracks[currentTrackIndex]} (${currentPlaylistName})`);
+        }
+
+        function togglePlayPause() {
+            if (!currentPlaylistName) {
+                updateDisplay('Status: Select a playlist first.', true);
+                return;
+            }
+            if (isPlaying) {
+                pauseAudio();
+            } else {
+                 // If paused or stopped, ensure src is set before playing
+                if (!audioPlayer.src || audioPlayer.src !== `./playlists/${currentPlaylistName}/${currentTracks[currentTrackIndex]}`) {
+                    loadTrack(currentTrackIndex); // Reload if src is missing or wrong
+                } else {
+                    playAudio(); // Just play if src is correct
+                }
+            }
+        }
+
+        function playNextTrack() {
+            if (!currentTracks || currentTracks.length === 0) return;
+            const nextIndex = (currentTrackIndex + 1) % currentTracks.length; // Wrap around
+            loadTrack(nextIndex);
+        }
+
+        function playPrevTrack() {
+             if (!currentTracks || currentTracks.length === 0) return;
+            const prevIndex = (currentTrackIndex - 1 + currentTracks.length) % currentTracks.length; // Wrap around correctly
+            loadTrack(prevIndex);
+        }
+
+         function updatePlayPauseButton() {
+             if (isPlaying) {
+                 playPauseButton.textContent = '[||] Pause';
+             } else {
+                 playPauseButton.textContent = '[ >] Play';
+             }
+         }
+
+        // --- Event Listeners ---
+        playlistSelect.addEventListener('change', (event) => {
+            const selectedPlaylist = event.target.value;
+            if (selectedPlaylist) {
+                loadPlaylist(selectedPlaylist);
+            } else {
+                 // Handle "-- Choose --" selection
+                 audioPlayer.pause();
+                 audioPlayer.src = '';
+                 currentPlaylistName = null;
+                 currentTracks = [];
+                 currentTrackIndex = 0;
+                 isPlaying = false;
+                 updatePlayPauseButton();
+                 updateDisplay('Status: Select a playlist to begin.', true);
+            }
+        });
+
+        playPauseButton.addEventListener('click', togglePlayPause);
+        nextButton.addEventListener('click', playNextTrack);
+        prevButton.addEventListener('click', playPrevTrack);
+
+        // Auto-play next track when the current one ends
+        audioPlayer.addEventListener('ended', () => {
+             updateDisplay(`Finished: ${currentTracks[currentTrackIndex]}. Loading next...`);
+            playNextTrack();
+        });
+
+         // Update button state if playback is controlled externally (less likely here)
+         audioPlayer.addEventListener('play', () => {
+             isPlaying = true;
+             updatePlayPauseButton();
+         });
+         audioPlayer.addEventListener('pause', () => {
+             // Don't mark as paused if it just ended and is about to load next
+             if (audioPlayer.currentTime < audioPlayer.duration) {
+                  isPlaying = false;
+                  updatePlayPauseButton();
+             }
+         });
+         audioPlayer.addEventListener('error', (e) => {
+             console.error("Audio Element Error:", audioPlayer.error);
+              updateDisplay(`Error loading/playing track: ${currentTracks[currentTrackIndex]}\nDetails: ${audioPlayer.error?.message || 'Unknown error'}. Check file path and console.`, true);
+              isPlaying = false;
+              updatePlayPauseButton();
+         });
+
+
+        // --- Initialization ---
+        document.addEventListener('DOMContentLoaded', () => {
+            populatePlaylistDropdown();
+            // Initial state message is set within populatePlaylistDropdown
+             updatePlayPauseButton(); // Set initial button text
+        });
+
+    </script>
+
+</body>
+</html>
