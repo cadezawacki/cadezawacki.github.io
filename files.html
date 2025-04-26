@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cade's File Formatter</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+            color: #2c3e50;
+        }
+        .container {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        .drop-zone {
+            border: 3px dashed #3498db;
+            border-radius: 10px;
+            padding: 40px 20px;
+            text-align: center;
+            transition: all 0.3s ease;
+            background-color: #f8f9fa;
+            cursor: pointer;
+        }
+        .drop-zone.highlight {
+            background-color: #e3f2fd;
+            border-color: #2196f3;
+        }
+        .drop-zone p {
+            font-size: 18px;
+            margin: 0;
+        }
+        .drop-zone .icon {
+            font-size: 48px;
+            color: #3498db;
+            margin-bottom: 10px;
+        }
+        .output-container {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .output-area {
+            width: 100%;
+            min-height: 300px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            white-space: pre-wrap;
+            font-family: monospace;
+            background-color: #f8f9fa;
+            overflow-y: auto;
+        }
+        .button-container {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+        }
+        button {
+            padding: 10px 20px;
+            background-color: #3498db;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #2980b9;
+        }
+        .file-list {
+            margin-top: 20px;
+        }
+        .file-item {
+            background-color: #f1f1f1;
+            padding: 8px 15px;
+            margin-bottom: 5px;
+            border-radius: 5px;
+            display: flex;
+            justify-content: space-between;
+        }
+        .file-info {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .status {
+            font-size: 14px;
+            color: #666;
+        }
+        .success {
+            color: #27ae60;
+        }
+        .error {
+            color: #e74c3c;
+        }
+    </style>
+</head>
+<body>
+    <h1>File Formatter</h1>
+    <div class="container">
+        <div class="drop-zone" id="dropZone">
+            <div class="icon">📁</div>
+            <p>Drag and drop files here</p>
+            <p style="font-size: 14px; margin-top: 10px;">or click to select files</p>
+            <input type="file" id="fileInput" multiple style="display: none;">
+        </div>
+
+        <div class="file-list" id="fileList">
+            <!-- Files will be listed here -->
+        </div>
+
+        <div class="output-container">
+            <div class="button-container">
+                <button id="copyBtn">Copy to Clipboard</button>
+                <button id="clearBtn">Clear All</button>
+            </div>
+            <pre class="output-area" id="outputArea"></pre>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const dropZone = document.getElementById('dropZone');
+            const fileInput = document.getElementById('fileInput');
+            const fileList = document.getElementById('fileList');
+            const outputArea = document.getElementById('outputArea');
+            const copyBtn = document.getElementById('copyBtn');
+            const clearBtn = document.getElementById('clearBtn');
+            
+            let processedFiles = [];
+
+            // Open file picker when clicking on drop zone
+            dropZone.addEventListener('click', () => {
+                fileInput.click();
+            });
+            
+            // Handle files from file input
+            fileInput.addEventListener('change', (e) => {
+                handleFiles(e.target.files);
+            });
+
+            // Prevent default behavior for drag events
+            ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+                dropZone.addEventListener(eventName, preventDefaults, false);
+                document.body.addEventListener(eventName, preventDefaults, false);
+            });
+
+            // Highlight drop zone on drag over
+            ['dragenter', 'dragover'].forEach(eventName => {
+                dropZone.addEventListener(eventName, () => {
+                    dropZone.classList.add('highlight');
+                });
+            });
+
+            // Remove highlight on drag leave or drop
+            ['dragleave', 'drop'].forEach(eventName => {
+                dropZone.addEventListener(eventName, () => {
+                    dropZone.classList.remove('highlight');
+                });
+            });
+
+            // Handle dropped files
+            dropZone.addEventListener('drop', (e) => {
+                const dt = e.dataTransfer;
+                const files = dt.files;
+                handleFiles(files);
+            });
+
+            // Copy output to clipboard
+            copyBtn.addEventListener('click', () => {
+                const textToCopy = outputArea.textContent;
+                navigator.clipboard.writeText(textToCopy)
+                    .then(() => {
+                        const originalText = copyBtn.textContent;
+                        copyBtn.textContent = 'Copied!';
+                        setTimeout(() => {
+                            copyBtn.textContent = originalText;
+                        }, 2000);
+                    })
+                    .catch(err => {
+                        console.error('Failed to copy: ', err);
+                    });
+            });
+
+            // Clear all output
+            clearBtn.addEventListener('click', () => {
+                outputArea.textContent = '';
+                fileList.innerHTML = '';
+                processedFiles = [];
+            });
+
+            function preventDefaults(e) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+
+            function handleFiles(files) {
+                if (!files.length) return;
+                
+                // Process each file
+                Array.from(files).forEach(file => {
+                    const fileItem = document.createElement('div');
+                    fileItem.className = 'file-item';
+                    fileItem.innerHTML = `
+                        <div class="file-info">
+                            <span class="file-name">${file.name}</span>
+                        </div>
+                        <span class="status">Processing...</span>
+                    `;
+                    fileList.appendChild(fileItem);
+
+                    readFile(file)
+                        .then(content => {
+                            const formattedContent = formatFile(file.name, content);
+                            processedFiles.push(formattedContent);
+                            updateOutput();
+                            fileItem.querySelector('.status').textContent = 'Complete';
+                            fileItem.querySelector('.status').classList.add('success');
+                        })
+                        .catch(error => {
+                            console.error('Error reading file:', error);
+                            fileItem.querySelector('.status').textContent = 'Error';
+                            fileItem.querySelector('.status').classList.add('error');
+                        });
+                });
+            }
+
+            function readFile(file) {
+                return new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = () => resolve(reader.result);
+                    reader.onerror = () => reject(new Error('Error reading file'));
+                    reader.readAsText(file);
+                });
+            }
+
+            function formatFile(fileName, content) {
+                return `${fileName}\n\`\`\`\n${content}\n\`\`\`\n\n`;
+            }
+
+            function updateOutput() {
+                outputArea.textContent = processedFiles.join('');
+            }
+        });
+    </script>
+</body>
+</html>
