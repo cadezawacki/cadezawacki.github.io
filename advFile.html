@@ -1,0 +1,962 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>File Stringify-er</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            line-height: 1.5;
+            color: #1f2937;
+            background: #fafafa;
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem 1rem;
+        }
+        
+        h1 {
+            font-size: 1.875rem;
+            font-weight: 600;
+            text-align: center;
+            margin-bottom: 2rem;
+            color: #111827;
+        }
+        
+        .tabs {
+            display: flex;
+            background: white;
+            border-radius: 8px;
+            border: 1px solid #e5e7eb;
+            margin-bottom: 2rem;
+            overflow: hidden;
+        }
+        
+        .tab {
+            flex: 1;
+            padding: 0.75rem 1rem;
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: #6b7280;
+            transition: all 0.15s ease;
+        }
+        
+        .tab.active {
+            background: #f9fafb;
+            color: #111827;
+            border-bottom: 2px solid #111827;
+        }
+        
+        .tab:hover:not(.active) {
+            color: #374151;
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        .section {
+            background: white;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+        
+        .section h3 {
+            font-size: 1rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            color: #111827;
+        }
+        
+        .controls {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+        
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+        
+        .control-group label {
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: #374151;
+        }
+        
+        .control-group input {
+            padding: 0.5rem;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            font-size: 0.875rem;
+            transition: border-color 0.15s ease;
+        }
+        
+        .control-group input:focus {
+            outline: none;
+            border-color: #111827;
+        }
+        
+        .checkbox-group {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 0.75rem;
+        }
+        
+        .checkbox-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .checkbox-item input[type="checkbox"] {
+            width: 16px;
+            height: 16px;
+        }
+        
+        .checkbox-item label {
+            font-size: 0.875rem;
+            cursor: pointer;
+        }
+        
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+        
+        .stat {
+            text-align: center;
+            padding: 1rem;
+            background: #f9fafb;
+            border-radius: 6px;
+            border: 1px solid #f3f4f6;
+        }
+        
+        .stat-value {
+            display: block;
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: #111827;
+        }
+        
+        .stat-label {
+            font-size: 0.75rem;
+            color: #6b7280;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        
+        .upload-area {
+            border: 2px dashed #d1d5db;
+            border-radius: 8px;
+            padding: 2rem;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            margin-bottom: 1.5rem;
+        }
+        
+        .upload-area:hover,
+        .upload-area.highlight {
+            border-color: #9ca3af;
+            background: #f9fafb;
+        }
+        
+        .upload-area p {
+            margin: 0.5rem 0;
+            color: #6b7280;
+        }
+        
+        .upload-area .primary {
+            font-weight: 500;
+            color: #374151;
+        }
+        
+        .upload-options {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+            margin-top: 1rem;
+        }
+        
+        .upload-btn {
+            padding: 0.5rem 1rem;
+            border: 1px solid #d1d5db;
+            background: white;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.875rem;
+            transition: all 0.15s ease;
+        }
+        
+        .upload-btn:hover {
+            border-color: #9ca3af;
+            background: #f9fafb;
+        }
+        
+        .file-list {
+            max-height: 300px;
+            overflow-y: auto;
+            margin-bottom: 1.5rem;
+        }
+        
+        .file-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.75rem;
+            border: 1px solid #f3f4f6;
+            border-radius: 6px;
+            margin-bottom: 0.5rem;
+            background: #fafafa;
+        }
+        
+        .file-info {
+            flex: 1;
+            min-width: 0;
+        }
+        
+        .file-name {
+            font-weight: 500;
+            color: #111827;
+            display: block;
+        }
+        
+        .file-path {
+            font-size: 0.75rem;
+            color: #6b7280;
+            font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
+            margin-top: 0.25rem;
+        }
+        
+        .file-actions {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+        
+        .status {
+            font-size: 0.75rem;
+            padding: 0.25rem 0.5rem;
+            border-radius: 12px;
+            font-weight: 500;
+        }
+        
+        .status.success {
+            background: #dcfce7;
+            color: #166534;
+        }
+        
+        .status.error {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+        
+        .status.processing {
+            background: #fef3c7;
+            color: #92400e;
+        }
+        
+        .remove-btn {
+            width: 24px;
+            height: 24px;
+            border: none;
+            background: #f3f4f6;
+            border-radius: 4px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            color: #6b7280;
+            transition: all 0.15s ease;
+        }
+        
+        .remove-btn:hover {
+            background: #e5e7eb;
+            color: #374151;
+        }
+        
+        .textarea {
+            width: 100%;
+            min-height: 300px;
+            padding: 1rem;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
+            font-size: 0.875rem;
+            line-height: 1.5;
+            resize: vertical;
+            background: #fafafa;
+        }
+        
+        .textarea:focus {
+            outline: none;
+            border-color: #111827;
+            background: white;
+        }
+        
+        .button-group {
+            display: flex;
+            gap: 0.75rem;
+            justify-content: flex-end;
+            margin-bottom: 1rem;
+        }
+        
+        button {
+            padding: 0.5rem 1rem;
+            border: 1px solid #d1d5db;
+            background: white;
+            color: #374151;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.875rem;
+            font-weight: 500;
+            transition: all 0.15s ease;
+        }
+        
+        button:hover {
+            border-color: #9ca3af;
+            background: #f9fafb;
+        }
+        
+        button.primary {
+            background: #111827;
+            color: white;
+            border-color: #111827;
+        }
+        
+        button.primary:hover {
+            background: #374151;
+            border-color: #374151;
+        }
+        
+        button.success {
+            background: #059669;
+            color: white;
+            border-color: #059669;
+        }
+        
+        button.success:hover {
+            background: #047857;
+            border-color: #047857;
+        }
+        
+        .instructions {
+            background: #f9fafb;
+            border: 1px solid #e5e7eb;
+            border-radius: 6px;
+            padding: 1rem;
+            margin-bottom: 1.5rem;
+        }
+        
+        .instructions h4 {
+            margin-bottom: 0.5rem;
+            font-size: 0.875rem;
+            font-weight: 600;
+        }
+        
+        .instructions pre {
+            font-size: 0.75rem;
+            background: white;
+            padding: 0.75rem;
+            border-radius: 4px;
+            border: 1px solid #e5e7eb;
+            margin: 0.5rem 0;
+            overflow-x: auto;
+        }
+        
+        .result {
+            margin-top: 1rem;
+            padding: 1rem;
+            border-radius: 6px;
+            border: 1px solid #e5e7eb;
+        }
+        
+        .result.success {
+            background: #f0fdf4;
+            border-color: #bbf7d0;
+        }
+        
+        .result.error {
+            background: #fef2f2;
+            border-color: #fecaca;
+        }
+        
+        .result h4 {
+            margin-bottom: 0.5rem;
+            font-size: 0.875rem;
+            font-weight: 600;
+        }
+        
+        .result ul {
+            margin: 0.5rem 0;
+            padding-left: 1.25rem;
+        }
+        
+        .result li {
+            font-size: 0.875rem;
+            margin-bottom: 0.25rem;
+        }
+        
+        .hidden {
+            display: none !important;
+        }
+        
+        @media (max-width: 768px) {
+            .controls {
+                grid-template-columns: 1fr;
+            }
+            
+            .checkbox-group {
+                grid-template-columns: 1fr;
+            }
+            
+            .button-group {
+                flex-direction: column;
+            }
+            
+            .upload-options {
+                flex-direction: column;
+                align-items: center;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>File Stringify-er</h1>
+        
+        <div class="tabs">
+            <button class="tab active" onclick="switchTab('input')">Input</button>
+            <button class="tab" onclick="switchTab('output')">Output</button>
+        </div>
+
+        <!-- INPUT TAB -->
+        <div id="input-tab" class="tab-content active">
+            <div class="section">
+                <h3>Configuration</h3>
+                <div class="controls">
+                    <div class="control-group">
+                        <label for="rootDir">Root Directory (optional)</label>
+                        <input type="text" id="rootDir" placeholder="e.g., 'app' or 'src'" 
+                               title="Extract path from this directory onwards">
+                    </div>
+                    <div class="control-group">
+                        <label>Cleaning Options</label>
+                        <div class="checkbox-group">
+                            <div class="checkbox-item">
+                                <input type="checkbox" id="removeComments">
+                                <label for="removeComments">Remove Comments</label>
+                            </div>
+                            <div class="checkbox-item">
+                                <input type="checkbox" id="prettifyCode">
+                                <label for="prettifyCode">Prettify Code</label>
+                            </div>
+                            <div class="checkbox-item">
+                                <input type="checkbox" id="removeEmptyLines">
+                                <label for="removeEmptyLines">Remove Empty Lines</label>
+                            </div>
+                            <div class="checkbox-item">
+                                <input type="checkbox" id="trimWhitespace">
+                                <label for="trimWhitespace">Trim Whitespace</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section">
+                <div class="stats">
+                    <div class="stat">
+                        <span class="stat-value" id="fileCount">0</span>
+                        <span class="stat-label">Files</span>
+                    </div>
+                    <div class="stat">
+                        <span class="stat-value" id="totalChars">0</span>
+                        <span class="stat-label">Characters</span>
+                    </div>
+                    <div class="stat">
+                        <span class="stat-value" id="totalLines">0</span>
+                        <span class="stat-label">Lines</span>
+                    </div>
+                    <div class="stat">
+                        <span class="stat-value" id="totalSize">0 KB</span>
+                        <span class="stat-label">Size</span>
+                    </div>
+                </div>
+
+                <div class="upload-area" id="dropZone">
+                    <p class="primary">Drop files or folders here</p>
+                    <p>or choose upload method</p>
+                    <div class="upload-options">
+                        <button class="upload-btn" onclick="document.getElementById('fileInput').click()">
+                            Select Files
+                        </button>
+                        <button class="upload-btn" onclick="document.getElementById('folderInput').click()">
+                            Select Folder
+                        </button>
+                    </div>
+                    <input type="file" id="fileInput" multiple style="display: none;">
+                    <input type="file" id="folderInput" webkitdirectory style="display: none;">
+                </div>
+
+                <div class="file-list" id="fileList"></div>
+
+                <div class="button-group">
+                    <button onclick="refreshOutput()">Refresh</button>
+                    <button onclick="clearAll()">Clear All</button>
+                    <button onclick="copyToClipboard()" class="primary">Copy to Clipboard</button>
+                </div>
+                
+                <textarea class="textarea" id="outputArea" readonly placeholder="Processed files will appear here..."></textarea>
+            </div>
+        </div>
+
+        <!-- OUTPUT TAB -->
+        <div id="output-tab" class="tab-content">
+            <div class="instructions">
+                <h4>Generate Files from Stringified Content</h4>
+                <p>Paste content in this format:</p>
+                <pre>filename.ext
+```
+file content here
+```
+
+folder/another_file.ext
+```
+more content
+```</pre>
+            </div>
+
+            <textarea class="textarea" id="inputTextArea" 
+                      placeholder="Paste your stringified files here..."></textarea>
+
+            <div class="button-group">
+                <button onclick="clearInput()">Clear</button>
+                <button onclick="parseContent()">Parse Content</button>
+                <button onclick="generateZip()" class="success">Generate Zip</button>
+            </div>
+
+            <div id="parseResults"></div>
+        </div>
+    </div>
+
+    <script>
+        let processedFiles = [];
+        let parsedFiles = [];
+
+        // Tab switching
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+            
+            document.querySelector(`[onclick="switchTab('${tabName}')"]`).classList.add('active');
+            document.getElementById(`${tabName}-tab`).classList.add('active');
+        }
+
+        // Initialize drag and drop
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('fileInput');
+        const folderInput = document.getElementById('folderInput');
+
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, preventDefaults, false);
+            document.body.addEventListener(eventName, preventDefaults, false);
+        });
+
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropZone.addEventListener(eventName, () => dropZone.classList.add('highlight'));
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, () => dropZone.classList.remove('highlight'));
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            const items = Array.from(e.dataTransfer.items);
+            handleDroppedItems(items);
+        });
+
+        fileInput.addEventListener('change', (e) => handleFiles(Array.from(e.target.files)));
+        folderInput.addEventListener('change', (e) => handleFiles(Array.from(e.target.files)));
+
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+
+        async function handleDroppedItems(items) {
+            const files = [];
+            
+            for (const item of items) {
+                if (item.kind === 'file') {
+                    const entry = item.webkitGetAsEntry();
+                    if (entry) {
+                        await traverseFileTree(entry, '', files);
+                    }
+                }
+            }
+            
+            handleFiles(files);
+        }
+
+        function traverseFileTree(item, path, files) {
+            return new Promise((resolve) => {
+                if (item.isFile) {
+                    item.file((file) => {
+                        file.relativePath = path + file.name;
+                        files.push(file);
+                        resolve();
+                    });
+                } else if (item.isDirectory) {
+                    const dirReader = item.createReader();
+                    dirReader.readEntries(async (entries) => {
+                        for (const entry of entries) {
+                            await traverseFileTree(entry, path + item.name + '/', files);
+                        }
+                        resolve();
+                    });
+                }
+            });
+        }
+
+        function handleFiles(files) {
+            if (!files.length) return;
+            
+            files.forEach(file => {
+                const fileId = Date.now() + Math.random();
+                const displayPath = getDisplayPath(file);
+                
+                const fileItem = document.createElement('div');
+                fileItem.className = 'file-item';
+                fileItem.dataset.fileId = fileId;
+                
+                fileItem.innerHTML = `
+                    <div class="file-info">
+                        <span class="file-name">${file.name}</span>
+                        <div class="file-path">${displayPath}</div>
+                    </div>
+                    <div class="file-actions">
+                        <span class="status processing">Processing...</span>
+                        <button class="remove-btn" onclick="removeFile('${fileId}')">×</button>
+                    </div>
+                `;
+                document.getElementById('fileList').appendChild(fileItem);
+
+                readFile(file)
+                    .then(content => {
+                        const cleanedContent = applyCleaningOptions(content, file.name);
+                        const formattedContent = formatFile(displayPath, cleanedContent);
+                        
+                        processedFiles.push({
+                            id: fileId,
+                            name: file.name,
+                            path: displayPath,
+                            content: formattedContent,
+                            originalSize: content.length,
+                            cleanedSize: cleanedContent.length
+                        });
+                        
+                        updateOutput();
+                        updateStats();
+                        
+                        const statusElement = fileItem.querySelector('.status');
+                        statusElement.textContent = 'Complete';
+                        statusElement.classList.remove('processing');
+                        statusElement.classList.add('success');
+                    })
+                    .catch(error => {
+                        console.error('Error reading file:', error);
+                        const statusElement = fileItem.querySelector('.status');
+                        statusElement.textContent = 'Error';
+                        statusElement.classList.remove('processing');
+                        statusElement.classList.add('error');
+                    });
+            });
+        }
+
+        function getDisplayPath(file) {
+            const rootDir = document.getElementById('rootDir').value.trim();
+            
+            // Use webkitRelativePath if available (from folder upload or drag)
+            let fullPath = file.webkitRelativePath || file.relativePath || file.name;
+            
+            if (!rootDir) {
+                return fullPath;
+            }
+            
+            // Find the root directory in the path and extract from there
+            const parts = fullPath.split(/[\/\\]/);
+            const rootIndex = parts.findIndex(part => part.toLowerCase() === rootDir.toLowerCase());
+            
+            if (rootIndex !== -1) {
+                return '\\' + parts.slice(rootIndex).join('\\');
+            }
+            
+            // If root not found in path, just prefix it
+            return `\\${rootDir}\\${file.name}`;
+        }
+
+        function applyCleaningOptions(content, fileName) {
+            let cleaned = content;
+            const fileExt = fileName.split('.').pop().toLowerCase();
+            
+            if (document.getElementById('removeComments').checked) {
+                cleaned = removeComments(cleaned, fileExt);
+            }
+            
+            if (document.getElementById('removeEmptyLines').checked) {
+                cleaned = cleaned.replace(/^\s*[\r\n]/gm, '');
+            }
+            
+            if (document.getElementById('trimWhitespace').checked) {
+                cleaned = cleaned.split('\n').map(line => line.trim()).join('\n');
+            }
+            
+            if (document.getElementById('prettifyCode').checked) {
+                cleaned = prettifyCode(cleaned, fileExt);
+            }
+            
+            return cleaned;
+        }
+
+        function removeComments(content, fileExt) {
+            const lines = content.split('\n');
+            return lines.filter(line => {
+                const trimmed = line.trim();
+                
+                if (['py', 'sh', 'yml', 'yaml'].includes(fileExt) && trimmed.startsWith('#')) {
+                    return false;
+                }
+                
+                if (['js', 'cpp', 'java', 'ts', 'c'].includes(fileExt) && trimmed.startsWith('//')) {
+                    return false;
+                }
+                
+                if (['html', 'htm'].includes(fileExt) && trimmed.startsWith('<!--')) {
+                    return false;
+                }
+                
+                if (['css'].includes(fileExt) && trimmed.startsWith('/*')) {
+                    return false;
+                }
+                
+                return true;
+            }).join('\n');
+        }
+
+        function prettifyCode(content, fileExt) {
+            if (fileExt === 'json') {
+                try {
+                    return JSON.stringify(JSON.parse(content), null, 2);
+                } catch (e) {
+                    return content;
+                }
+            }
+            return content;
+        }
+
+        function removeFile(fileId) {
+            // Convert to string for comparison since onclick passes string
+            processedFiles = processedFiles.filter(file => file.id.toString() !== fileId.toString());
+            document.querySelector(`[data-file-id="${fileId}"]`).remove();
+            updateOutput();
+            updateStats();
+        }
+
+        function readFile(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = () => reject(new Error('Error reading file'));
+                reader.readAsText(file);
+            });
+        }
+
+        function formatFile(filePath, content) {
+            return `${filePath}\n\`\`\`\n${content}\n\`\`\`\n\n`;
+        }
+
+        function updateOutput() {
+            document.getElementById('outputArea').value = processedFiles.map(file => file.content).join('');
+        }
+
+        function updateStats() {
+            const fileCount = processedFiles.length;
+            const totalChars = processedFiles.reduce((sum, file) => sum + file.cleanedSize, 0);
+            const totalLines = processedFiles.reduce((sum, file) => {
+                return sum + file.content.split('\n').length;
+            }, 0);
+            const totalSize = (totalChars / 1024).toFixed(1);
+
+            document.getElementById('fileCount').textContent = fileCount;
+            document.getElementById('totalChars').textContent = totalChars.toLocaleString();
+            document.getElementById('totalLines').textContent = totalLines.toLocaleString();
+            document.getElementById('totalSize').textContent = `${totalSize} KB`;
+        }
+
+        function refreshOutput() {
+            updateOutput();
+        }
+
+        function clearAll() {
+            document.getElementById('outputArea').value = '';
+            document.getElementById('fileList').innerHTML = '';
+            processedFiles = [];
+            updateStats();
+        }
+
+        function copyToClipboard() {
+            const outputArea = document.getElementById('outputArea');
+            outputArea.select();
+            document.execCommand('copy');
+            
+            const btn = event.target;
+            const originalText = btn.textContent;
+            btn.textContent = 'Copied!';
+            btn.classList.add('success');
+            setTimeout(() => {
+                btn.textContent = originalText;
+                btn.classList.remove('success');
+            }, 2000);
+        }
+
+        // OUTPUT TAB FUNCTIONS
+        function parseContent() {
+            const content = document.getElementById('inputTextArea').value.trim();
+            if (!content) {
+                showResult('Please paste some content first.', 'error');
+                return;
+            }
+
+            try {
+                parsedFiles = parseStringifiedFiles(content);
+                showParseResults();
+            } catch (error) {
+                showResult(`Error parsing content: ${error.message}`, 'error');
+            }
+        }
+
+        function parseStringifiedFiles(content) {
+            const files = [];
+            
+            // Split by ``` blocks to find code sections
+            const parts = content.split('```');
+            
+            for (let i = 0; i < parts.length - 1; i += 2) {
+                const beforeCode = parts[i];
+                const codeContent = parts[i + 1];
+                
+                if (!codeContent) continue;
+                
+                // Get the last non-empty line before the code block as the filename
+                const beforeLines = beforeCode.trim().split('\n');
+                const filePath = beforeLines[beforeLines.length - 1]?.trim();
+                
+                if (filePath && !filePath.includes('```')) {
+                    files.push({
+                        path: filePath,
+                        content: codeContent
+                    });
+                }
+            }
+            
+            return files;
+        }
+
+        function showParseResults() {
+            if (parsedFiles.length === 0) {
+                showResult('No valid files found in the content.', 'error');
+                return;
+            }
+
+            const totalSize = (parsedFiles.reduce((sum, file) => sum + file.content.length, 0) / 1024).toFixed(1);
+            
+            showResult(
+                `Successfully parsed ${parsedFiles.length} files:\n\n` +
+                parsedFiles.map(file => `• ${file.path} (${file.content.length} chars)`).join('\n') +
+                `\n\nTotal size: ${totalSize} KB`,
+                'success'
+            );
+        }
+
+        async function generateZip() {
+            if (parsedFiles.length === 0) {
+                showResult('Please parse the content first.', 'error');
+                return;
+            }
+
+            try {
+                const zip = new JSZip();
+                
+                parsedFiles.forEach(file => {
+                    const normalizedPath = file.path.replace(/\\/g, '/');
+                    zip.file(normalizedPath, file.content);
+                });
+
+                const content = await zip.generateAsync({type: "blob"});
+                
+                const url = window.URL.createObjectURL(content);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `files-${new Date().getTime()}.zip`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                window.URL.revokeObjectURL(url);
+
+                const btn = event.target;
+                const originalText = btn.textContent;
+                btn.textContent = 'Downloaded!';
+                setTimeout(() => {
+                    btn.textContent = originalText;
+                }, 3000);
+
+            } catch (error) {
+                showResult(`Error generating zip: ${error.message}`, 'error');
+            }
+        }
+
+        function clearInput() {
+            document.getElementById('inputTextArea').value = '';
+            document.getElementById('parseResults').innerHTML = '';
+            parsedFiles = [];
+        }
+
+        function showResult(message, type) {
+            const resultsDiv = document.getElementById('parseResults');
+            resultsDiv.innerHTML = `
+                <div class="result ${type}">
+                    <pre style="white-space: pre-wrap; margin: 0; font-family: inherit;">${message}</pre>
+                </div>
+            `;
+        }
+    </script>
+</body>
+</html>
