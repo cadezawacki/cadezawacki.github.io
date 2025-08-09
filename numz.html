@@ -1,0 +1,1058 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Number Sync - Multiplayer Guessing Game</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.1/peerjs.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      color: #333;
+      overflow-x: hidden; /* prevent horizontal bleed */
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .container { max-width: 980px; margin: 0 auto; padding: 16px; width: 100%; }
+
+    .screen { display: none; animation: fadeIn 0.3s ease-in; }
+    .screen.active { display: block; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+    .card {
+      background: rgba(255,255,255,0.95);
+      border-radius: 20px;
+      padding: 24px;
+      box-shadow: 0 20px 60px rgba(0,0,0,.3);
+      backdrop-filter: blur(10px);
+      margin-bottom: 16px;
+    }
+
+    h1 {
+      text-align: center; color: #1a202c; margin-bottom: 20px; font-size: clamp(1.6rem, 2.8vw, 2.5rem);
+      text-shadow: 2px 2px 4px rgba(0,0,0,.1);
+    }
+
+    .muted { color: #e6f2ff; }
+
+    .input-group { margin-bottom: 14px; }
+    label { display: block; margin-bottom: 8px; color: #4a5568; font-weight: 600; }
+    input[type="text"] {
+      width: 100%; padding: 12px 14px; border: 2px solid #e2e8f0; border-radius: 12px; font-size: 16px; transition: all .3s ease;
+    }
+    input[type="text"]:focus { outline: none; border-color: #14b8a6; box-shadow: 0 0 0 3px rgba(20,184,166,.1); }
+
+    .btn {
+      background: #14b8a6; color: #fff; border: none; padding: 12px 22px; border-radius: 12px;
+      font-size: 16px; font-weight: 600; cursor: pointer; transition: all .25s ease; margin: 5px; display: inline-block;
+      touch-action: manipulation;
+    }
+    .btn:hover { background:#0f9d8f; transform: translateY(-2px); box-shadow: 0 10px 20px rgba(20,184,166,.3); }
+    .btn:active { transform: translateY(0); }
+    .btn-secondary { background: #64748b; }
+    .btn-secondary:hover { background: #475569; }
+    .btn-ghost { background: transparent; color: #14b8a6; border: 2px solid #14b8a6; }
+
+    .nav-bar {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 16px; padding: 12px; background: rgba(255,255,255,.12); border-radius: 12px; color: #fff;
+      gap: 12px; flex-wrap: wrap;
+    }
+    .nav-info { font-weight: 600; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .badge { font-size: 12px; padding: 4px 8px; border-radius: 999px; background: rgba(255,255,255,.2); }
+    .badge.ok { background: rgba(16,185,129,.25); }
+    .badge.err { background: rgba(239,68,68,.25); }
+
+    .timer {
+      text-align: center; font-size: clamp(1.8rem, 6vw, 3rem); font-weight: 800; margin: 12px 0; color: #1a202c;
+      min-height: 64px; display: flex; align-items: center; justify-content: center;
+    }
+    .timer.success { color: #10b981; }
+    .timer.fail { color: #ef4444; }
+
+    /* RESPONSIVE GRID */
+    .grid {
+      --cols: 10; /* default on large screens */
+      display: grid;
+      grid-template-columns: repeat(var(--cols), minmax(0,1fr));
+      gap: 8px;
+      margin: 16px 0;
+      padding: 14px;
+      background: rgba(241,245,249,.5);
+      border-radius: 16px;
+      max-width: 100%;
+      width: 100%;
+    }
+    @media (max-width: 900px) { .grid { --cols: 8; } }
+    @media (max-width: 520px) { .grid { --cols: 5; padding: 10px; gap: 6px; } }
+
+    .number-cell {
+      aspect-ratio: 1;
+      display: flex; align-items: center; justify-content: center; background: #fff;
+      border: 3px solid transparent; border-radius: 10px; font-weight: 700;
+      font-size: clamp(12px, 2.8vw, 16px);
+      cursor: pointer; transition: transform .15s ease, box-shadow .15s ease, background .15s ease, border-color .15s ease;
+      user-select: none; -webkit-user-select: none; touch-action: manipulation;
+    }
+    .number-cell:hover { transform: scale(1.05); box-shadow: 0 4px 12px rgba(0,0,0,.15); z-index: 1; }
+    .number-cell.selected { border-color: #3b82f6; background: #eff6ff; }
+    .number-cell.match { border-color: #10b981; background: #d1fae5; }
+    .number-cell.no-match { border-color: #ef4444; background: #fee2e2; }
+    .number-cell.other-player { border-color: #fb923c; }
+
+    .players-list { margin-top: 12px; padding: 12px; background: rgba(241,245,249,.5); border-radius: 12px; }
+    .player-item {
+      padding: 8px 12px; margin: 4px 0; background: #fff; border-radius: 8px; display: flex; justify-content: space-between; align-items: center;
+    }
+    .player-name { font-weight: 600; color: #1a202c; }
+    .player-status { font-size: 12px; padding: 4px 8px; border-radius: 6px; background: #e2e8f0; color: #64748b; }
+
+    .room-code { text-align: center; margin: 16px 0; padding: 16px; background: rgba(20,184,166,.1); border-radius: 12px; border: 2px dashed #14b8a6; }
+    .room-code h3 { color: #0f9d8f; margin-bottom: 8px; }
+    .room-code .code { font-size: clamp(1.2rem, 4vw, 2rem); font-weight: 800; color: #14b8a6; letter-spacing: 2px; word-break: break-word; }
+
+    .stats-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(200px,1fr)); gap: 12px; margin-top: 12px;
+    }
+    .stat-card { background: rgba(241,245,249,.8); padding: 12px; border-radius: 12px; border-left: 4px solid #14b8a6; }
+    .stat-label { font-size: 12px; color: #64748b; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 5px; }
+    .stat-value { font-size: 22px; font-weight: 800; color: #1a202c; }
+
+    .heatmap { margin-top: 16px; }
+    .heatmap-grid { display: grid; grid-template-columns: repeat(10, 1fr); gap: 4px; margin-top: 8px; }
+    .heatmap-cell {
+      aspect-ratio: 1; display: flex; align-items: center; justify-content: center; border-radius: 4px;
+      font-size: 10px; font-weight: 600; color: #fff; user-select: none;
+    }
+
+    .history-list { max-height: 300px; overflow-y: auto; margin-top: 10px; padding: 10px; background: rgba(241,245,249,.5); border-radius: 8px; }
+    .history-item { padding: 8px; margin: 4px 0; background: #fff; border-radius: 6px; font-size: 14px; display: flex; justify-content: space-between; }
+
+    .adv {
+      background: rgba(255,255,255,0.12); color: #fff; border-radius: 12px; padding: 12px; margin-top: 8px;
+    }
+    .adv h3 { margin-bottom: 8px; font-size: 1rem; }
+    .adv label { color: #e7f7ff; font-weight: 600; }
+    .adv input[type="text"] { background: #fff; }
+
+    .tip { font-size: 13px; color: #e7f7ff; margin-top: 6px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Welcome Screen -->
+    <div id="welcomeScreen" class="screen active">
+      <div class="card">
+        <h1>🎯 Number Sync</h1>
+        <p class="muted" style="text-align:center;margin-bottom:16px;">Guess the same number as other players to win!</p>
+        <div class="input-group">
+          <label for="nickname">Your Nickname</label>
+          <input type="text" id="nickname" placeholder="Enter your nickname" maxlength="20" />
+        </div>
+        <div style="text-align:center;margin-bottom:6px;">
+          <button class="btn" id="btnFriends">Play with Friends</button>
+          <button class="btn" id="btnGlobal">Global Game</button>
+          <button class="btn btn-secondary" id="btnStats">View Statistics</button>
+        </div>
+
+        <!-- Link-join helper (shown only when URL has ?room=...#join) -->
+        <div id="linkJoinCard" class="adv" style="display:none;">
+          <h3>🔗 Join Room from Link</h3>
+          <div class="input-group">
+            <label>Room Code</label>
+            <input type="text" id="linkRoomCode" readonly />
+          </div>
+          <div class="input-group">
+            <label for="linkNickname">Nickname</label>
+            <input type="text" id="linkNickname" placeholder="Enter your nickname" maxlength="20" />
+          </div>
+          <button class="btn" id="btnLinkJoin">Join Now</button>
+          <div class="tip">Tip: your nickname is required before joining rooms from links.</div>
+        </div>
+
+        <!-- Advanced connection settings -->
+        <div class="adv">
+          <h3>⚙️ Advanced Connection</h3>
+          <div class="input-group" style="display:flex;gap:10px;align-items:center;">
+            <input type="checkbox" id="useCustomServer" />
+            <label for="useCustomServer" style="margin:0;">Use custom PeerServer (recommended for reliability)</label>
+          </div>
+          <div class="input-group">
+            <label for="serverHost">Host</label>
+            <input type="text" id="serverHost" placeholder="e.g. your-domain.com or 0.0.0.0" />
+          </div>
+          <div class="input-group" style="display:flex;gap:10px;">
+            <div style="flex:1;">
+              <label for="serverPort">Port</label>
+              <input type="text" id="serverPort" placeholder="e.g. 9000 or 443" />
+            </div>
+            <div style="flex:1;">
+              <label for="serverPath">Path</label>
+              <input type="text" id="serverPath" placeholder="/myapp" />
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <input type="checkbox" id="serverSecure" />
+              <label for="serverSecure" style="margin:0;">Secure (HTTPS/WSS)</label>
+            </div>
+          </div>
+          <div>
+            <button class="btn btn-ghost" id="btnSaveConn">Save Settings</button>
+            <span class="tip">Run your own server: <code>npx peerjs --port 9000 --path /myapp</code></span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Friends Mode Screen -->
+    <div id="friendsScreen" class="screen">
+      <div class="card">
+        <h1>🤝 Play with Friends</h1>
+        <div style="text-align:center;margin-bottom:16px;">
+          <button class="btn" id="btnCreateRoom">Create Room</button>
+          <button class="btn" id="btnShowJoin">Join Room</button>
+          <button class="btn btn-secondary" id="btnBack1">Back</button>
+        </div>
+        <div id="joinRoomSection" style="display:none;">
+          <div class="input-group">
+            <label for="roomCode">Room Code</label>
+            <input type="text" id="roomCode" placeholder="Enter 6-character room code" maxlength="6" />
+          </div>
+          <div class="input-group">
+            <label for="joinNickname">Nickname</label>
+            <input type="text" id="joinNickname" placeholder="Enter your nickname" maxlength="20" />
+          </div>
+          <button class="btn" id="btnJoinRoom">Join</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Game Screen -->
+    <div id="gameScreen" class="screen">
+      <div class="nav-bar">
+        <div class="nav-info">
+          <span id="playerName"></span>
+          <span>•</span>
+          <span id="gameMode"></span>
+          <span id="roomInfo" class="badge"></span>
+          <span id="connStatus" class="badge">Disconnected</span>
+        </div>
+        <div>
+          <button class="btn btn-ghost" id="btnCopyLink" title="Copy shareable room link" style="display:none;">Copy Link</button>
+          <button class="btn btn-secondary" id="btnShowStats">Stats</button>
+          <button class="btn btn-secondary" id="btnLeave">Leave</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="timer" id="timer">Waiting for players…</div>
+        <div class="grid" id="numberGrid"></div>
+
+        <div class="players-list" id="playersList">
+          <h3>Players in Room</h3>
+          <div id="playersContainer"></div>
+        </div>
+
+        <div id="roomCodeDisplay" class="room-code" style="display:none;">
+          <h3>Share this code with friends:</h3>
+          <div class="code" id="displayCode"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Statistics Screen -->
+    <div id="statsScreen" class="screen">
+      <div class="card">
+        <h1>📊 Your Statistics</h1>
+        <div style="margin-bottom:10px;">
+          <button class="btn btn-secondary" id="btnBack2">Back</button>
+          <button class="btn btn-secondary" id="btnClearStats">Clear Stats</button>
+        </div>
+
+        <div class="stats-grid">
+          <div class="stat-card"><div class="stat-label">Total Games</div><div class="stat-value" id="totalGames">0</div></div>
+          <div class="stat-card"><div class="stat-label">Total Wins</div><div class="stat-value" id="totalWins">0</div></div>
+          <div class="stat-card"><div class="stat-label">Win Rate</div><div class="stat-value" id="winRate">0%</div></div>
+          <div class="stat-card"><div class="stat-label">Current Streak</div><div class="stat-value" id="currentStreak">0</div></div>
+          <div class="stat-card"><div class="stat-label">Best Streak</div><div class="stat-value" id="bestStreak">0</div></div>
+          <div class="stat-card"><div class="stat-label">Avg Turns Between Wins</div><div class="stat-value" id="avgTurnsBetweenWins">-</div></div>
+          <div class="stat-card"><div class="stat-label">Most Picked Number</div><div class="stat-value" id="mostPickedNumber">-</div></div>
+          <div class="stat-card"><div class="stat-label">Lucky Number</div><div class="stat-value" id="luckyNumber">-</div></div>
+          <div class="stat-card"><div class="stat-label">Unlucky Number</div><div class="stat-value" id="unluckyNumber">-</div></div>
+          <div class="stat-card"><div class="stat-label">Total Matches</div><div class="stat-value" id="totalMatches">0</div></div>
+          <div class="stat-card"><div class="stat-label">Avg Matches/Game</div><div class="stat-value" id="avgMatchesPerGame">0</div></div>
+          <div class="stat-card"><div class="stat-label">Time Played</div><div class="stat-value" id="timePlayed">0m</div></div>
+        </div>
+
+        <div class="heatmap">
+          <h3>Number Selection Heatmap</h3>
+          <div class="heatmap-grid" id="heatmapGrid"></div>
+        </div>
+
+        <div style="margin-top: 20px;">
+          <h3>Recent Games History</h3>
+          <div class="history-list" id="historyList"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ----------------------------
+    // Game & Networking State
+    // ----------------------------
+    let peer = null;
+    /** @type {Peer.DataConnection[]} */
+    let connections = [];
+    let connByPlayerId = new Map(); // playerId -> DataConnection
+    let isHost = false;
+    let currentRoom = null;
+    let nickname = '';
+    let gameMode = '';
+    let selectedNumber = null;
+    let roundActive = false;
+    let players = new Map(); // playerId -> {id, nickname, selectedNumber, isReady}
+    let gameStartTime = null;
+    let roundCountdownTimer = null;
+    let inRoundTimer = null;
+    let openTimeoutHandle = null;
+
+    const GLOBAL_ROOM_ID = 'NSYNC_GLOBAL_ROOM_V1';
+    const COUNTDOWN_SECONDS = 8;
+    const ROUND_SECONDS = 6;
+    const PAUSE_BETWEEN_ROUNDS_MS = 1600;
+
+    // ----------------------------
+    // Stats (local)
+    // ----------------------------
+    let stats = loadStats();
+
+    function loadStats() {
+      try {
+        const saved = localStorage.getItem('numberSyncStats');
+        if (saved) return JSON.parse(saved);
+      } catch {}
+      return {
+        totalGames: 0, totalWins: 0, currentStreak: 0, bestStreak: 0,
+        numberPicks: {}, numberWins: {}, turnsBetweenWins: [],
+        gameHistory: [], totalMatches: 0, timePlayed: 0, lastWinTurn: 0, currentTurn: 0
+      };
+    }
+    function saveStats() { try { localStorage.setItem('numberSyncStats', JSON.stringify(stats)); } catch {} }
+
+    // ----------------------------
+    // UI Helpers
+    // ----------------------------
+    const $ = (id) => document.getElementById(id);
+    function showScreen(id) {
+      document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+      $(id).classList.add('active');
+    }
+    function setConnStatus(ok, text) {
+      const badge = $('connStatus');
+      badge.textContent = text || (ok ? 'Connected' : 'Disconnected');
+      badge.classList.toggle('ok', !!ok);
+      badge.classList.toggle('err', !ok);
+    }
+
+    // ----------------------------
+    // Advanced connection settings
+    // ----------------------------
+    const SETTINGS_KEY = 'nsyncConnSettings';
+    function loadConnSettings() {
+      const d = { useCustom: false, host: '', port: '', path: '', secure: true };
+      try { Object.assign(d, JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}')); } catch {}
+      $('useCustomServer').checked = d.useCustom;
+      $('serverHost').value = d.host || '';
+      $('serverPort').value = d.port || '';
+      $('serverPath').value = d.path || '';
+      $('serverSecure').checked = d.secure ?? true;
+      return d;
+    }
+    function saveConnSettings() {
+      const d = {
+        useCustom: $('useCustomServer').checked,
+        host: $('serverHost').value.trim(),
+        port: $('serverPort').value.trim(),
+        path: $('serverPath').value.trim(),
+        secure: $('serverSecure').checked
+      };
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify(d));
+      alert('Connection settings saved.');
+    }
+    $('btnSaveConn').onclick = saveConnSettings;
+    const connSettings = loadConnSettings();
+
+    function buildPeerOptions() {
+      // Default: use PeerJS Cloud (no host/port/path set)
+      const base = {
+        debug: 2,
+        config: {
+          iceServers: [
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:stun1.l.google.com:19302' }
+            // For reliability behind strict NAT, add your TURN here:
+            // { urls: 'turn:YOUR_TURN_HOST:3478', username: 'user', credential: 'pass' }
+          ]
+        }
+      };
+      if ($('useCustomServer').checked) {
+        const host = $('serverHost').value.trim();
+        const port = parseInt($('serverPort').value.trim(), 10) || undefined;
+        const path = $('serverPath').value.trim() || '/myapp';
+        const secure = $('serverSecure').checked;
+        return Object.assign(base, { host, port, path, secure });
+      }
+      return base;
+    }
+
+    function startOpenTimeout(kind) {
+      clearTimeout(openTimeoutHandle);
+      openTimeoutHandle = setTimeout(() => {
+        setConnStatus(false, 'Connecting…');
+        const usingCustom = $('useCustomServer').checked;
+        const tip = usingCustom
+          ? 'Check your PeerServer URL/port/path and HTTPS config. Ensure the server is reachable and not blocked by CORS/firewall.'
+          : 'The free PeerJS cloud can be spotty. Try again, switch to a custom PeerServer (recommended), or add a TURN server.';
+        alert(`Still connecting (${kind}).\n\n${tip}\n\nQuick start your own server:\n  npx peerjs --port 9000 --path /myapp\nThen set Host to your domain/IP, Port 9000, Path /myapp, and Secure OFF for http or ON behind https.`);
+      }, 10000);
+    }
+
+    // ----------------------------
+    // Navigation / Entrypoints
+    // ----------------------------
+    $('btnFriends').onclick = () => {
+      nickname = ($('nickname').value || '').trim();
+      if (!nickname) { alert('Please enter a nickname'); return; }
+      gameMode = 'friends';
+      showScreen('friendsScreen');
+    };
+
+    $('btnGlobal').onclick = () => {
+      nickname = ($('nickname').value || '').trim();
+      if (!nickname) { alert('Please enter a nickname'); return; }
+      gameMode = 'global';
+      hostOrJoinGlobal();
+    };
+
+    $('btnStats').onclick = () => { updateStatsDisplay(); showScreen('statsScreen'); };
+    $('btnBack1').onclick = () => { leaveGame(); showScreen('welcomeScreen'); };
+    $('btnBack2').onclick = () => { showScreen('welcomeScreen'); };
+
+    $('btnCreateRoom').onclick = () => {
+      const code = Math.random().toString(36).substring(2, 8).toUpperCase();
+      const joinNick = ($('joinNickname').value || $('nickname').value || '').trim();
+      nickname = joinNick || `Player${Math.floor(Math.random()*1000)}`;
+      startHosting(code);
+    };
+    $('btnShowJoin').onclick = () => { $('joinRoomSection').style.display = 'block'; $('joinNickname').value = $('nickname').value; };
+    $('btnJoinRoom').onclick = () => {
+      const code = ($('roomCode').value || '').trim().toUpperCase();
+      const joinNick = ($('joinNickname').value || $('nickname').value || '').trim();
+      if (!/^[A-Z0-9]{6}$/.test(code)) { alert('Please enter a valid 6-character room code'); return; }
+      if (!joinNick) { alert('Please enter a nickname'); return; }
+      nickname = joinNick;
+      startJoining(code);
+    };
+    $('btnShowStats').onclick = () => { updateStatsDisplay(); showScreen('statsScreen'); };
+    $('btnClearStats').onclick = () => clearStats();
+    $('btnLeave').onclick = () => leaveGame();
+    $('btnCopyLink').onclick = async () => {
+      const url = `${location.origin}${location.pathname}?room=${encodeURIComponent(currentRoom)}#join`;
+      try { await navigator.clipboard.writeText(url); alert('Room link copied!'); } catch { alert(url); }
+    };
+
+    // Join via URL (e.g., ?room=ABC123#join): show nickname prompt card instead of auto-joining
+    (function prepareLinkJoin() {
+      const params = new URLSearchParams(location.search);
+      const room = (params.get('room') || '').toUpperCase();
+      if (room && location.hash === '#join') {
+        $('linkJoinCard').style.display = 'block';
+        $('linkRoomCode').value = room;
+        $('linkNickname').value = $('nickname').value;
+        $('btnLinkJoin').onclick = () => {
+          const nick = ($('linkNickname').value || '').trim();
+          if (!nick) { alert('Please enter a nickname'); return; }
+          nickname = nick;
+          gameMode = 'friends';
+          startJoining(room);
+        };
+      }
+    })();
+
+    // ----------------------------
+    // Game Screen Init
+    // ----------------------------
+    function startGameScreen() {
+      showScreen('gameScreen');
+      $('playerName').textContent = nickname;
+      $('gameMode').textContent = isHost ? 'Host' : (gameMode === 'global' ? 'Global' : 'Friends');
+      $('roomInfo').textContent = currentRoom ? `Room: ${currentRoom}` : '';
+      $('roomInfo').style.display = currentRoom ? 'inline-block' : 'none';
+      $('btnCopyLink').style.display = isHost ? 'inline-block' : 'none';
+      createNumberGrid();
+
+      gameStartTime = Date.now();
+      setConnStatus(false, 'Connecting…');
+    }
+
+    function createNumberGrid() {
+      const grid = $('numberGrid');
+      grid.innerHTML = '';
+      for (let i = 1; i <= 100; i++) {
+        const cell = document.createElement('div');
+        cell.className = 'number-cell';
+        cell.textContent = i;
+        cell.dataset.number = String(i);
+        cell.addEventListener('click', () => selectNumber(i));
+        grid.appendChild(cell);
+      }
+    }
+
+    function selectNumber(num) {
+      if (!roundActive) return;
+
+      document.querySelectorAll('.number-cell').forEach(c => c.classList.remove('selected'));
+      selectedNumber = num;
+      document.querySelector(`.number-cell[data-number="${num}"]`)?.classList.add('selected');
+
+      if (!isHost) {
+        const hostConn = connections[0];
+        if (hostConn && hostConn.open) {
+          hostConn.send({ type: 'select', playerId: peer.id, number: num });
+        }
+      } else {
+        const me = players.get(peer.id);
+        if (me) { me.selectedNumber = num; me.isReady = true; }
+        checkAllReady();
+        broadcastPlayers();
+      }
+    }
+
+    // ----------------------------
+    // Networking (PeerJS)
+    // ----------------------------
+    function startHosting(roomId) {
+      isHost = true;
+      currentRoom = roomId;
+      startGameScreen();
+
+      const options = buildPeerOptions();
+      peer = new Peer(roomId, options);
+      wirePeerCommonEvents();
+
+      startOpenTimeout('host');
+      peer.on('open', () => {
+        clearTimeout(openTimeoutHandle);
+        setConnStatus(true, 'Host ready');
+        setupHost();
+        startGameLoopSoon();
+        updatePlayersList();
+      });
+
+      peer.on('error', (err) => {
+        console.error('[Peer Host Error]', err);
+        alert('Could not host room. ' + (err?.message || 'Unknown error'));
+        leaveGame();
+      });
+    }
+
+    function startJoining(roomId) {
+      isHost = false;
+      currentRoom = roomId;
+      startGameScreen();
+
+      const options = buildPeerOptions();
+      peer = new Peer(undefined, options);
+      wirePeerCommonEvents();
+
+      startOpenTimeout('client');
+      peer.on('open', () => {
+        clearTimeout(openTimeoutHandle);
+        setConnStatus(true, 'Ready');
+        connectToHost(roomId);
+      });
+
+      peer.on('error', (err) => {
+        console.error('[Peer Client Error]', err);
+        alert('Connection error: ' + (err?.message || 'Unknown error'));
+        leaveGame();
+      });
+    }
+
+    function hostOrJoinGlobal() {
+      currentRoom = GLOBAL_ROOM_ID;
+
+      isHost = true;
+      startGameScreen();
+
+      const options = buildPeerOptions();
+      peer = new Peer(currentRoom, options);
+      wirePeerCommonEvents();
+
+      startOpenTimeout('global-host');
+      peer.on('open', () => {
+        clearTimeout(openTimeoutHandle);
+        setConnStatus(true, 'Hosting Global Room');
+        setupHost();
+        startGameLoopSoon();
+        updatePlayersList();
+      });
+
+      peer.on('error', (err) => {
+        if (err?.type === 'unavailable-id') {
+          console.log('[Global] ID taken, joining as client.');
+          isHost = false;
+          try { peer.destroy(); } catch {}
+          peer = new Peer(undefined, options);
+          wirePeerCommonEvents();
+
+          startOpenTimeout('global-client');
+          peer.on('open', () => {
+            clearTimeout(openTimeoutHandle);
+            setConnStatus(true, 'Joining Global Room');
+            connectToHost(currentRoom);
+          });
+        } else {
+          console.error('[Peer Global Error]', err);
+          alert('Global room error: ' + (err?.message || 'Unknown error'));
+          leaveGame();
+        }
+      });
+    }
+
+    function wirePeerCommonEvents() {
+      peer.on('disconnected', () => {
+        setConnStatus(false, 'Reconnecting…');
+        // Attempt peerjs reconnect
+        try { peer.reconnect(); } catch {}
+      });
+      peer.on('close', () => setConnStatus(false, 'Closed'));
+    }
+
+    function setupHost() {
+      // Host as a real player with actual peer.id
+      players.clear();
+      players.set(peer.id, { id: peer.id, nickname, selectedNumber: null, isReady: false });
+
+      peer.on('connection', (conn) => {
+        conn.on('open', () => {
+          connections.push(conn);
+
+          conn.on('data', (data) => handleMessage(data, conn));
+
+          conn.on('close', () => {
+            // Identify the leaving player
+            let leavingPlayerId = null;
+            for (const [pid, c] of connByPlayerId.entries()) {
+              if (c === conn) { leavingPlayerId = pid; break; }
+            }
+            if (leavingPlayerId) {
+              players.delete(leavingPlayerId);
+              connByPlayerId.delete(leavingPlayerId);
+              broadcastPlayers();
+            }
+            connections = connections.filter(c => c !== conn);
+          });
+
+          // Warm hello
+          conn.send({ type: 'hello', hostId: peer.id, room: currentRoom });
+          broadcastPlayers();
+        });
+      });
+    }
+
+    function connectToHost(hostId) {
+      const conn = peer.connect(hostId, { reliable: true, metadata: { nickname, ver: 1 } });
+
+      conn.on('open', () => {
+        connections = [conn]; // single host connection on clients
+        setConnStatus(true, 'Connected');
+        conn.send({ type: 'join', playerId: peer.id, nickname });
+        conn.on('data', (data) => handleMessage(data, conn));
+        conn.on('close', () => {
+          alert('Disconnected from host');
+          leaveGame();
+        });
+        conn.on('error', (err) => {
+          console.error('[Connection Error]', err);
+          alert('Could not connect to room. Is the host online?');
+          leaveGame();
+        });
+      });
+
+      conn.on('error', (err) => {
+        console.error('[Connection Error]', err);
+        alert('Could not connect to room. Is the host online?');
+        leaveGame();
+      });
+    }
+
+    function broadcast(msg) {
+      for (const c of connections) {
+        if (c.open) c.send(msg);
+      }
+    }
+
+    function handleMessage(data, conn) {
+      switch (data.type) {
+        case 'join': {
+          if (!isHost) break;
+          const { playerId, nickname: nick } = data;
+          players.set(playerId, { id: playerId, nickname: nick, selectedNumber: null, isReady: false });
+          connByPlayerId.set(playerId, conn);
+
+          broadcastPlayers();
+          sendPhaseSync(conn);
+          break;
+        }
+        case 'players': {
+          players.clear();
+          for (const p of data.players) players.set(p.id, { ...p });
+          updatePlayersList();
+          break;
+        }
+        case 'select': {
+          if (!isHost) break;
+          const p = players.get(data.playerId);
+          if (p) {
+            p.selectedNumber = data.number;
+            p.isReady = true;
+            broadcastPlayers();
+            checkAllReady();
+          }
+          break;
+        }
+        case 'phase': {
+          updateTimer(data.value, data.phase);
+          break;
+        }
+        case 'roundStart': {
+          startRound(false);
+          break;
+        }
+        case 'roundEnd': {
+          endRound(data.results, false);
+          break;
+        }
+        case 'hello': break;
+      }
+    }
+
+    function broadcastPlayers() {
+      const list = Array.from(players.values()).map(p => ({
+        id: p.id, nickname: p.nickname, isReady: !!p.isReady
+      }));
+      broadcast({ type: 'players', players: list });
+      updatePlayersList();
+    }
+
+    function sendPhaseSync(conn) {
+      const timerEl = $('timer');
+      const text = timerEl.textContent || '';
+      let phase = 'idle';
+      if (timerEl.classList.contains('success')) phase = 'success';
+      else if (timerEl.classList.contains('fail')) phase = 'fail';
+      else if (/Next round in/i.test(text)) phase = 'countdown';
+      else if (/^\d+$/.test(text.trim())) phase = 'round';
+      conn.send({ type: 'phase', phase, value: text });
+    }
+
+    // ----------------------------
+    // Game Loop (host-authoritative)
+    // ----------------------------
+    function startGameLoopSoon() {
+      if (!isHost) return;
+      setTimeout(() => countdownThenRound(), 700);
+    }
+
+    function countdownThenRound() {
+      if (!isHost) return;
+
+      clearInterval(roundCountdownTimer);
+      let t = COUNTDOWN_SECONDS;
+      updateTimer(`Next round in ${t}…`, 'countdown');
+      broadcast({ type: 'phase', phase: 'countdown', value: `Next round in ${t}…` });
+
+      roundCountdownTimer = setInterval(() => {
+        t--;
+        if (t >= 0) {
+          updateTimer(`Next round in ${t}…`, 'countdown');
+          broadcast({ type: 'phase', phase: 'countdown', value: `Next round in ${t}…` });
+        }
+        if (t < 0) {
+          clearInterval(roundCountdownTimer);
+          startRound(true);
+          broadcast({ type: 'roundStart' });
+
+          let r = ROUND_SECONDS;
+          clearInterval(inRoundTimer);
+          inRoundTimer = setInterval(() => {
+            updateTimer(String(r), 'round');
+            broadcast({ type: 'phase', phase: 'round', value: String(r) });
+            r--;
+            if (r < 0) {
+              clearInterval(inRoundTimer);
+              processRoundEnd();
+            }
+          }, 1000);
+        }
+      }, 1000);
+    }
+
+    function startRound(authoritative) {
+      roundActive = true;
+      selectedNumber = null;
+
+      document.querySelectorAll('.number-cell').forEach(cell => cell.className = 'number-cell');
+
+      if (authoritative) {
+        for (const p of players.values()) {
+          p.selectedNumber = null;
+          p.isReady = false;
+        }
+        broadcastPlayers();
+      }
+
+      stats.currentTurn++;
+    }
+
+    function checkAllReady() {
+      if (!isHost || !roundActive) return;
+      const atLeastTwo = players.size > 1;
+      const allReady = atLeastTwo && Array.from(players.values()).every(p => p.isReady);
+      if (allReady) {
+        clearInterval(inRoundTimer);
+        processRoundEnd();
+      }
+    }
+
+    function processRoundEnd() {
+      roundActive = false;
+      const results = [];
+      const numberCounts = {};
+      for (const p of players.values()) {
+        if (typeof p.selectedNumber === 'number') {
+          results.push({ playerId: p.id, nickname: p.nickname, number: p.selectedNumber });
+          numberCounts[p.selectedNumber] = (numberCounts[p.selectedNumber] || 0) + 1;
+        }
+      }
+      endRound(results, true);
+      broadcast({ type: 'roundEnd', results });
+      setTimeout(() => countdownThenRound(), PAUSE_BETWEEN_ROUNDS_MS);
+    }
+
+    function endRound(results, authoritativeSide) {
+      const numberCounts = {};
+      for (const r of results) numberCounts[r.number] = (numberCounts[r.number] || 0) + 1;
+
+      if (selectedNumber != null) {
+        stats.totalGames++;
+        stats.numberPicks[selectedNumber] = (stats.numberPicks[selectedNumber] || 0) + 1;
+
+        const matches = numberCounts[selectedNumber] || 0;
+        if (matches > 1) {
+          stats.totalWins++;
+          stats.totalMatches += (matches - 1);
+          stats.numberWins[selectedNumber] = (stats.numberWins[selectedNumber] || 0) + 1;
+          stats.currentStreak++;
+          stats.bestStreak = Math.max(stats.bestStreak, stats.currentStreak);
+          if (stats.lastWinTurn > 0) stats.turnsBetweenWins.push(stats.currentTurn - stats.lastWinTurn);
+          stats.lastWinTurn = stats.currentTurn;
+          updateTimer(`${matches - 1} MATCH${matches > 2 ? 'ES' : ''}!`, 'success');
+        } else {
+          stats.currentStreak = 0;
+          updateTimer('FAIL', 'fail');
+        }
+      } else {
+        updateTimer('Round over', 'idle');
+      }
+
+      document.querySelectorAll('.number-cell').forEach(cell => {
+        const num = parseInt(cell.dataset.number, 10);
+        cell.classList.remove('selected', 'match', 'no-match', 'other-player');
+        if (num === selectedNumber) {
+          if ((numberCounts[num] || 0) > 1) cell.classList.add('match');
+          else cell.classList.add('no-match');
+        } else if ((numberCounts[num] || 0) > 0) {
+          cell.classList.add('other-player');
+        }
+      });
+
+      stats.gameHistory.unshift({
+        timestamp: Date.now(),
+        number: selectedNumber,
+        matched: (numberCounts[selectedNumber] || 0) > 1,
+        totalPlayers: results.length
+      });
+      if (stats.gameHistory.length > 100) stats.gameHistory.length = 100;
+
+      saveStats();
+    }
+
+    function updateTimer(value, phase = 'countdown') {
+      const timer = $('timer');
+      timer.className = 'timer';
+      if (phase === 'success') timer.classList.add('success');
+      else if (phase === 'fail') timer.classList.add('fail');
+      timer.textContent = String(value);
+    }
+
+    function updatePlayersList() {
+      const container = $('playersContainer');
+      container.innerHTML = '';
+
+      const meFirst = [];
+      const others = [];
+      for (const p of players.values()) {
+        (peer && p.id === peer.id) ? meFirst.push(p) : others.push(p);
+      }
+      const list = meFirst.concat(others);
+
+      for (const p of list) {
+        const item = document.createElement('div');
+        item.className = 'player-item';
+        const status = p.isReady ? 'Ready' : 'Waiting';
+        item.innerHTML = `
+          <span class="player-name">${escapeHtml(p.nickname || 'Player')}</span>
+          <span class="player-status">${status}</span>
+        `;
+        container.appendChild(item);
+      }
+    }
+
+    // ----------------------------
+    // Housekeeping / Leave
+    // ----------------------------
+    function leaveGame() {
+      try { if (peer) peer.destroy(); } catch {}
+      peer = null;
+      connections = [];
+      connByPlayerId.clear();
+      players.clear();
+      isHost = false;
+
+      if (gameStartTime) {
+        stats.timePlayed += Math.floor((Date.now() - gameStartTime) / 1000);
+        gameStartTime = null;
+        saveStats();
+      }
+
+      setConnStatus(false, 'Disconnected');
+      showScreen('welcomeScreen');
+    }
+
+    window.addEventListener('beforeunload', () => {
+      if (gameStartTime) {
+        stats.timePlayed += Math.floor((Date.now() - gameStartTime) / 1000);
+        saveStats();
+      }
+      try { if (peer) peer.destroy(); } catch {}
+    });
+
+    // ----------------------------
+    // Stats Screen
+    // ----------------------------
+    function updateStatsDisplay() {
+      $('totalGames').textContent = stats.totalGames;
+      $('totalWins').textContent = stats.totalWins;
+      $('winRate').textContent = stats.totalGames ? Math.round((stats.totalWins / stats.totalGames) * 100) + '%' : '0%';
+      $('currentStreak').textContent = stats.currentStreak;
+      $('bestStreak').textContent = stats.bestStreak;
+      $('totalMatches').textContent = stats.totalMatches;
+      $('avgMatchesPerGame').textContent = stats.totalGames ? (stats.totalMatches / stats.totalGames).toFixed(2) : '0';
+
+      if (stats.turnsBetweenWins.length) {
+        const avg = stats.turnsBetweenWins.reduce((a,b)=>a+b,0) / stats.turnsBetweenWins.length;
+        $('avgTurnsBetweenWins').textContent = avg.toFixed(1);
+      } else $('avgTurnsBetweenWins').textContent = '-';
+
+      if (Object.keys(stats.numberPicks).length) {
+        const mostPicked = Object.entries(stats.numberPicks).sort((a,b)=>b[1]-a[1])[0];
+        $('mostPickedNumber').textContent = `${mostPicked[0]} (${mostPicked[1]}x)`;
+      } else $('mostPickedNumber').textContent = '-';
+
+      if (Object.keys(stats.numberWins).length) {
+        const lucky = Object.entries(stats.numberWins)
+          .map(([num,wins]) => ({ num, rate: wins / (stats.numberPicks[num] || 1) }))
+          .sort((a,b)=>b.rate-a.rate)[0];
+        $('luckyNumber').textContent = `${lucky.num} (${Math.round(lucky.rate*100)}%)`;
+      } else $('luckyNumber').textContent = '-';
+
+      const unluckyNumbers = Object.keys(stats.numberPicks).filter(n=>!stats.numberWins[n])
+        .sort((a,b)=>stats.numberPicks[b]-stats.numberPicks[a]);
+      if (unluckyNumbers.length) {
+        const u = unluckyNumbers[0];
+        $('unluckyNumber').textContent = `${u} (${stats.numberPicks[u]}x, 0 wins)`;
+      } else $('unluckyNumber').textContent = '-';
+
+      const minutes = Math.floor(stats.timePlayed / 60);
+      const hours = Math.floor(minutes / 60);
+      $('timePlayed').textContent = hours ? `${hours}h ${minutes % 60}m` : `${minutes}m`;
+
+      createHeatmap();
+      showHistory();
+    }
+
+    function createHeatmap() {
+      const grid = $('heatmapGrid');
+      grid.innerHTML = '';
+      const values = Object.values(stats.numberPicks);
+      const maxPicks = values.length ? Math.max(...values, 1) : 1;
+
+      for (let i = 1; i <= 100; i++) {
+        const picks = stats.numberPicks[i] || 0;
+        const intensity = picks / maxPicks;
+        const cell = document.createElement('div');
+        cell.className = 'heatmap-cell';
+        cell.style.background = `rgba(20,184,166, ${0.18 + intensity * 0.82})`;
+        cell.textContent = i;
+        cell.title = `#${i}: ${picks} pick${picks===1?'':'s'}`;
+        if (picks) {
+          const wins = stats.numberWins[i] || 0;
+          const rate = Math.round((wins / picks) * 100);
+          cell.title += `, ${wins} win${wins===1?'':'s'} (${rate}%)`;
+        }
+        grid.appendChild(cell);
+      }
+    }
+
+    function showHistory() {
+      const list = $('historyList');
+      list.innerHTML = '';
+      if (!stats.gameHistory.length) {
+        list.innerHTML = '<div class="history-item">No games played yet</div>';
+        return;
+      }
+      stats.gameHistory.slice(0, 50).forEach(game => {
+        const item = document.createElement('div'); item.className = 'history-item';
+        const time = new Date(game.timestamp).toLocaleTimeString();
+        const result = game.matched ? '✓ Match!' : '✗ No match';
+        const color = game.matched ? '#10b981' : '#ef4444';
+        item.innerHTML = `<span>${time} - #${game.number ?? '-'}</span><span style="color:${color};font-weight:600;">${result}</span>`;
+        list.appendChild(item);
+      });
+    }
+
+    function clearStats() {
+      if (!confirm('Clear all statistics? This cannot be undone.')) return;
+      stats = {
+        totalGames: 0, totalWins: 0, currentStreak: 0, bestStreak: 0,
+        numberPicks: {}, numberWins: {}, turnsBetweenWins: [],
+        gameHistory: [], totalMatches: 0, timePlayed: 0, lastWinTurn: 0, currentTurn: 0
+      };
+      saveStats(); updateStatsDisplay();
+    }
+
+    // ----------------------------
+    // Utilities
+    // ----------------------------
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    }
+  </script>
+</body>
+</html>
