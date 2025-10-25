@@ -324,6 +324,12 @@
 
   // --- cleanup ---
   window.addEventListener('beforeunload', ()=>{ try { pc && pc.close(); } catch {} });
+  
+  document.addEventListener('keydown', (event) => {
+    if (event.ctrlKey && event.key === 'Backspace') {
+      window.location.href = 'https://cadezawacki.github.io/';
+    }
+  });
 
 })();
 </script>
