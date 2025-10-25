@@ -20,6 +20,7 @@
     --maxw: 1120px;
     
     user-select: none;
+    touch-action: manipulation;
 
     /* theme defaults (light) */
     --bg: #fafaf7;
@@ -467,6 +468,11 @@ function moveFocus(dir){
 }
 
 
+function clearFilter() {
+  input.value = '';
+	filter('');
+}
+
 window.addEventListener('keydown', (e)=>{
   if(e.key === '/' && document.activeElement !== input){
     e.preventDefault();
@@ -494,8 +500,7 @@ window.addEventListener('keydown', (e)=>{
 		input.focus();
 		input.select();
 	}
-	input.value = '';
-	filter('');
+	clearFilter();
 	return;
   }
   if(e.key === 'Enter' && document.activeElement?.classList.contains('card')){ document.activeElement.querySelector('a.hit').click(); return; }
@@ -777,6 +782,10 @@ const canvas = document.getElementById('bg');
 
   [$color, $alpha, $prob, $radius, $downMult, $fishEye].forEach(el => el.addEventListener('input', sendDistortParams));
   themeBtn.addEventListener('click', () => { setTimeout(sendDistortParams, 0); });
+  
+  document.addEventListener('DOMContentLoaded', () => {
+    clearFilter();
+  }
   
 })();
 
