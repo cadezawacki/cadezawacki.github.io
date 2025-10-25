@@ -1,0 +1,331 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Utility</title>
+<style>
+  html,body{height:100%} body{margin:0;font-family:system-ui,Segoe UI,Roboto,Arial;background:#0c0f14;color:#e8edf2}
+  .wrap{max-width:820px;margin:0 auto;padding:18px}
+  .card{background:#0f141c;border:1px solid #233048;border-radius:10px;padding:12px;margin-top:12px}
+  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  button{border:1px solid #233048;background:#141c28;color:#e8edf2;padding:8px 12px;border-radius:8px;cursor:pointer}
+  textarea,input[type=text],input[type=password]{width:100%;box-sizing:border-box;background:#0d1522;color:#e8edf2;border:1px solid #233048;border-radius:8px;padding:10px}
+  .muted{color:#9eb0c3}
+  .status{font-weight:600;color:#87e3c2}
+  .log{height:140px;overflow:auto;background:#0d1522;border:1px solid #233048;border-radius:8px;padding:10px}
+  .grow{flex:1}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <div class="row" style="justify-content:space-between">
+      <div class="row"><button id="start">Start</button></div>
+      <div class="status" id="state">idle</div>
+    </div>
+
+    <div style="margin-top:8px" class="row">
+      <div class="grow">
+        <label class="muted">turn user (optional)</label>
+        <input id="turnUser" type="text" placeholder="(optional)" />
+      </div>
+      <div class="grow">
+        <label class="muted">turn pass (optional)</label>
+        <input id="turnPass" type="password" placeholder="(optional)" />
+      </div>
+    </div>
+
+    <div style="margin-top:8px" class="row">
+      <div class="grow">
+        <label class="muted">passphrase (optional)</label>
+        <input id="passphrase" type="password" placeholder="shared secret (optional)" />
+      </div>
+      <div style="min-width:220px">
+        <label class="muted">Encrypt channel payloads <input id="encPayload" type="checkbox" /></label>
+      </div>
+    </div>
+    <small class="muted">Passphrase is only used locally to derive keys. It is not sent to any server.</small>
+  </div>
+
+  <div class="card">
+    <div class="row" style="justify-content:space-between">
+      <div>link: <span id="conn" class="status">down</span></div>
+      <div class="row">
+        <button id="btnA">A</button>
+        <button id="btnB">B</button>
+        <button id="btnF">Finish</button>
+      </div>
+    </div>
+
+    <label class="muted">Local</label>
+    <textarea id="local" readonly></textarea>
+
+    <label class="muted">Remote</label>
+    <textarea id="remote" placeholder="paste offer or answer here"></textarea>
+  </div>
+
+  <div class="card">
+    <label class="muted">Text</label>
+    <textarea id="pad" placeholder="type here…"></textarea>
+    <div style="margin-top:10px" class="row">
+      <label class="muted"><input id="cbToggle" type="checkbox" /> Clipboard optional</label>
+      <button id="cbRead" disabled>Read</button>
+      <button id="cbWrite" disabled>Write</button>
+    </div>
+    <div style="margin-top:10px" class="muted">log</div>
+    <div id="log" class="log" aria-live="polite"></div>
+  </div>
+</div>
+
+<script>
+(async ()=> {
+  // --- DOM ---
+  const $ = id => document.getElementById(id);
+  const start = $('start'), state = $('state'), conn = $('conn');
+  const turnUser = $('turnUser'), turnPass = $('turnPass');
+  const passphraseEl = $('passphrase'), encPayloadEl = $('encPayload');
+  const btnA = $('btnA'), btnB = $('btnB'), btnF = $('btnF');
+  const localEl = $('local'), remoteEl = $('remote');
+  const pad = $('pad');
+  const cbToggle = $('cbToggle'), cbRead = $('cbRead'), cbWrite = $('cbWrite');
+  const logEl = $('log');
+
+  // --- state ---
+  let pc = null, dc = null;
+  let encKey = null;   // CryptoKey for payload encryption (derived from passphrase)
+  const log = (m, cls='muted') => { const t=new Date().toLocaleTimeString(); const d=document.createElement('div'); d.className=cls; d.textContent=`[${t}] ${m}`; logEl.appendChild(d); logEl.scrollTop = logEl.scrollHeight; };
+
+  // --- helpers: base64 ---
+  const toB64 = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf)));
+  const fromB64 = (s) => Uint8Array.from(atob(s), c=>c.charCodeAt(0));
+
+  // --- crypto helpers (PBKDF2 -> AES-GCM) ---
+  async function deriveKeyFromPass(pass, saltBytes) {
+    const enc = new TextEncoder();
+    const passKey = await crypto.subtle.importKey('raw', enc.encode(pass), 'PBKDF2', false, ['deriveKey']);
+    return crypto.subtle.deriveKey(
+      { name: 'PBKDF2', salt: saltBytes, iterations: 250000, hash: 'SHA-256' },
+      passKey,
+      { name: 'AES-GCM', length: 256 },
+      false,
+      ['encrypt','decrypt']
+    );
+  }
+
+  // Encrypt text with passphrase -> returns base64(salt|iv|cipher)
+  async function encryptWithPass(text, pass) {
+    const enc = new TextEncoder();
+    const salt = crypto.getRandomValues(new Uint8Array(16));
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const key = await deriveKeyFromPass(pass, salt);
+    const cipher = await crypto.subtle.encrypt({ name:'AES-GCM', iv }, key, enc.encode(text));
+    // concat salt+iv+cipher
+    const combined = new Uint8Array(salt.byteLength + iv.byteLength + cipher.byteLength);
+    combined.set(salt, 0); combined.set(iv, salt.byteLength); combined.set(new Uint8Array(cipher), salt.byteLength + iv.byteLength);
+    return toB64(combined.buffer);
+  }
+
+  // Decrypt base64(salt|iv|cipher) with passphrase
+  async function decryptWithPass(b64, pass) {
+    try {
+      const data = fromB64(b64);
+      const salt = data.slice(0,16);
+      const iv = data.slice(16,28);
+      const cipher = data.slice(28);
+      const key = await deriveKeyFromPass(pass, salt);
+      const plainBuf = await crypto.subtle.decrypt({ name:'AES-GCM', iv }, key, cipher);
+      return new TextDecoder().decode(plainBuf);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // --- SDP blob helpers (encrypt if passphrase set) ---
+  function encodeSDP(obj) {
+    return btoa(unescape(encodeURIComponent(JSON.stringify(obj))));
+  }
+  function decodeSDP(s) {
+    try { return JSON.parse(decodeURIComponent(escape(atob(s.trim())))); } catch(e) { return null; }
+  }
+
+  async function makeLocalBlob(desc) {
+    const raw = JSON.stringify(desc);
+    const pass = passphraseEl.value.trim();
+    if (pass) {
+      return await encryptWithPass(raw, pass);
+    } else {
+      return encodeSDP(desc);
+    }
+  }
+
+  async function parseRemoteBlob(blob) {
+    const pass = passphraseEl.value.trim();
+    if (pass) {
+      const dec = await decryptWithPass(blob, pass);
+      if (!dec) return null;
+      try { return JSON.parse(dec); } catch { return null; }
+    } else {
+      return decodeSDP(blob);
+    }
+  }
+
+  // --- ICE servers builder (credentials saved locally) ---
+  turnUser.value = localStorage.getItem('turnUser') || '';
+  turnPass.value = localStorage.getItem('turnPass') || '';
+  function saveCreds(){ localStorage.setItem('turnUser', turnUser.value || ''); localStorage.setItem('turnPass', turnPass.value || ''); }
+  turnUser.addEventListener('change', saveCreds);
+  turnPass.addEventListener('change', saveCreds);
+
+  function buildIceServers() {
+    const u = (turnUser.value || '').trim();
+    const p = (turnPass.value || '').trim();
+    const servers = [{ urls: 'stun:stun.relay.metered.ca:80' }];
+    if (u && p) {
+      ['turn:standard.relay.metered.ca:80',
+       'turn:standard.relay.metered.ca:80?transport=tcp',
+       'turn:standard.relay.metered.ca:443',
+       'turns:standard.relay.metered.ca:443?transport=tcp']
+       .forEach(url => servers.push({ urls: url, username: u, credential: p }));
+    }
+    return servers;
+  }
+
+  // --- PC creation and binding ---
+  async function ensurePC() {
+    if (pc) return pc;
+    pc = new RTCPeerConnection({ iceServers: buildIceServers() });
+    pc.oniceconnectionstatechange = () => { conn.textContent = pc.iceConnectionState; if (pc.iceConnectionState === 'failed') log('link failed','err'); };
+    pc.onconnectionstatechange = () => { conn.textContent = pc.connectionState; };
+    pc.onicecandidate = async () => {
+      if (!pc.localDescription) return;
+      // produce encrypted or plain blob depending on passphrase
+      localEl.value = await makeLocalBlob(pc.localDescription);
+    };
+    pc.ondatachannel = ev => { dc = ev.channel; bindDC(); };
+    return pc;
+  }
+
+  function bindDC() {
+    if (!dc) return;
+    dc.onopen = () => { conn.textContent = 'up'; log('channel open','status'); };
+    dc.onclose = () => log('channel closed','warn');
+    dc.onmessage = async (ev) => {
+      // Try to parse message (we'll expect JSON with {t:'pad',v:...} or an encrypted string)
+      try {
+        const raw = ev.data;
+        if (encPayloadEl.checked && passphraseEl.value.trim()) {
+          // decrypt application payload
+          const dec = await decryptWithPass(raw, passphraseEl.value.trim());
+          if (dec === null) { log('payload decrypt failed','err'); return; }
+          const obj = JSON.parse(dec);
+          if (obj.t === 'pad') {
+            if (pad.value !== obj.v) { pad.value = String(obj.v || ''); log('updated (enc)','status'); }
+            if (cbToggle.checked) { navigator.clipboard.writeText(String(obj.v||'')).catch(()=>log('cb write blocked','warn')); }
+          }
+        } else {
+          // expect plain JSON
+          const obj = JSON.parse(raw);
+          if (obj.t === 'pad') {
+            if (pad.value !== obj.v) { pad.value = String(obj.v || ''); log('updated','status'); }
+            if (cbToggle.checked) { navigator.clipboard.writeText(String(obj.v||'')).catch(()=>log('cb write blocked','warn')); }
+          }
+        }
+      } catch (e) { /* ignore */ }
+    };
+  }
+
+  // --- Send pad either encrypted or plain ---
+  async function sendPad() {
+    if (!dc || dc.readyState !== 'open') { log('link not ready','warn'); return; }
+    const payload = { t:'pad', v: pad.value || '' };
+    if (encPayloadEl.checked && passphraseEl.value.trim()) {
+      const raw = JSON.stringify(payload);
+      const enc = await encryptWithPass(raw, passphraseEl.value.trim());
+      dc.send(enc);
+      log(`sent (enc ${String((pad.value||'').length)})`);
+    } else {
+      dc.send(JSON.stringify(payload));
+      log(`sent (${String((pad.value||'').length)})`);
+    }
+  }
+
+  // debounce pad changes slightly
+  let debounceTimer = 0;
+  pad.addEventListener('input', ()=>{ clearTimeout(debounceTimer); debounceTimer = setTimeout(sendPad, 180); });
+
+  // --- Buttons: A (offer), B (answer), Finish ---
+  btnA.addEventListener('click', async ()=> {
+    await ensurePC();
+    // create datachannel as offerer
+    dc = pc.createDataChannel('d');
+    bindDC();
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+    // local blob will populate via onicecandidate handler (may take a moment)
+    setTimeout(()=>{ if (pc.localDescription) makeLocalBlob(pc.localDescription).then(b => localEl.value = b); }, 300);
+  });
+
+  btnB.addEventListener('click', async ()=> {
+    await ensurePC();
+    const remoteBlob = remoteEl.value.trim();
+    if (!remoteBlob) { log('no remote','err'); return; }
+    const desc = await parseRemoteBlob(remoteBlob);
+    if (!desc) { log('bad remote / passphrase?','err'); return; }
+    await pc.setRemoteDescription(desc);
+    const answer = await pc.createAnswer();
+    await pc.setLocalDescription(answer);
+    setTimeout(()=>{ if (pc.localDescription) makeLocalBlob(pc.localDescription).then(b => localEl.value = b); }, 300);
+  });
+
+  btnF.addEventListener('click', async ()=> {
+    const remoteBlob = remoteEl.value.trim();
+    if (!remoteBlob) { log('no remote','err'); return; }
+    const desc = await parseRemoteBlob(remoteBlob);
+    if (!desc) { log('bad remote / passphrase?','err'); return; }
+    await pc.setRemoteDescription(desc);
+    log('accepted remote','muted');
+  });
+
+  // --- optional clipboard read/write ---
+  cbToggle.addEventListener('change', ()=>{ const en = cbToggle.checked; cbRead.disabled = cbWrite.disabled = !en; });
+  cbToggle.checked = false; cbRead.disabled = cbWrite.disabled = true;
+  cbRead.addEventListener('click', async ()=>{ try { const t = await navigator.clipboard.readText(); pad.value = t || ''; sendPad(); } catch { log('cb read blocked','warn'); } });
+  cbWrite.addEventListener('click', async ()=>{ try { await navigator.clipboard.writeText(pad.value || ''); } catch { log('cb write blocked','warn'); } });
+
+  // --- start button: prepare local UI and optionally derive key for payload encryption ---
+  start.addEventListener('click', async ()=> {
+    start.disabled = true;
+    state.textContent = 'ready';
+    saveCreds();
+    // If user provided a passphrase and wants to encrypt payloads, try deriving a key (test)
+    if (passphraseEl.value.trim() && encPayloadEl.checked) {
+      try {
+        // just attempt derive to detect obvious failures (not storing globally)
+        const testSalt = new Uint8Array(16);
+        encKey = await deriveKeyFromPass(passphraseEl.value.trim(), testSalt);
+      } catch { log('key derive failed','err'); }
+    }
+    log('ready','status');
+  });
+
+  // --- derive helper exposed here for start test ---
+  async function deriveKeyFromPass(pass, saltBytes) {
+    const enc = new TextEncoder();
+    const passKey = await crypto.subtle.importKey('raw', enc.encode(pass), 'PBKDF2', false, ['deriveKey']);
+    return crypto.subtle.deriveKey(
+      { name: 'PBKDF2', salt: saltBytes, iterations: 250000, hash: 'SHA-256' },
+      passKey,
+      { name: 'AES-GCM', length: 256 },
+      false,
+      ['encrypt','decrypt']
+    );
+  }
+
+  // --- cleanup ---
+  window.addEventListener('beforeunload', ()=>{ try { pc && pc.close(); } catch {} });
+
+})();
+</script>
+</body>
+</html>
