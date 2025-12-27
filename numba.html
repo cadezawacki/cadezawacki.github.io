@@ -1,0 +1,925 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"/>
+  <meta name="theme-color" content="#0b1020"/>
+  <title>GridMatch (10×10)</title>
+  <style>
+    :root{
+      --bg:#0b1020;
+      --panel:rgba(255,255,255,0.08);
+      --cellBorder:rgba(255,255,255,0.12);
+      --text:#e9eefc;
+      --muted:rgba(233,238,252,0.65);
+      --danger:#ff3b3b;
+      --good:#2bd66a;
+      --accent:#5aaaff;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%;margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);color:var(--text)}
+    #app{
+      min-height:100%;
+      display:flex;
+      flex-direction:column;
+      gap:12px;
+      padding:12px 12px 16px;
+      max-width:720px;
+      margin:0 auto;
+      touch-action:manipulation;
+      user-select:none;
+      -webkit-tap-highlight-color:transparent;
+    }
+
+    header{display:flex;flex-direction:column;gap:10px}
+    .topRow{display:flex;gap:10px;align-items:stretch}
+    .card{
+      flex:1;
+      background:var(--panel);
+      border:1px solid var(--cellBorder);
+      border-radius:14px;
+      padding:10px 12px;
+    }
+    .card.small{flex:0 0 auto;min-width:150px}
+    .label{font-size:12px;color:var(--muted)}
+    .value{font-size:22px;font-weight:800;line-height:1.1;margin-top:4px}
+    #status{
+      font-size:12px;
+      color:var(--muted);
+      display:flex;
+      flex-direction:column;
+      justify-content:center;
+      gap:6px;
+    }
+    #status .line{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    #statusDot{
+      display:inline-block;
+      width:8px;height:8px;border-radius:50%;
+      background:#999;margin-right:6px;vertical-align:middle;
+    }
+
+    #roundLine{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      gap:10px;
+      color:var(--muted);
+      font-size:12px;
+    }
+
+    main{flex:1;display:flex;justify-content:center}
+    #gridWrap{width:min(96vw,560px)}
+    #grid{
+      display:grid;
+      grid-template-columns:repeat(10,1fr);
+      gap:6px;
+      width:100%;
+      aspect-ratio:1/1;
+    }
+
+    .cell{
+      position:relative;
+      border-radius:10px;
+      border:1px solid var(--cellBorder);
+      background:rgba(255,255,255,0.04);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-weight:700;
+      font-size:14px;
+      line-height:1;
+      overflow:hidden;
+    }
+    .cell .num{position:relative;z-index:3;transform:translateY(0.5px)}
+    .cell .badge{
+      position:absolute;
+      right:6px;bottom:6px;
+      z-index:4;
+      min-width:18px;height:18px;padding:0 6px;
+      border-radius:999px;
+      background:rgba(0,0,0,0.35);
+      border:1px solid rgba(255,255,255,0.18);
+      display:none;
+      align-items:center;
+      justify-content:center;
+      font-size:12px;
+      font-weight:900;
+    }
+
+    .cell.selected{
+      outline:2px solid rgba(90,170,255,0.95);
+      outline-offset:2px;
+    }
+
+    /* RESULTS */
+    .cell.red{
+      background:rgba(255,59,59,0.78);
+      border-color:rgba(255,255,255,0.10);
+    }
+
+    .cell.green{
+      background:rgba(255,255,255,0.06);
+      border-color:rgba(255,255,255,0.12);
+    }
+    .cell.green::before{
+      content:"";
+      position:absolute;
+      left:0;bottom:0;
+      width:100%;
+      height:var(--fill,0%);
+      background:rgba(43,214,106,0.85);
+      z-index:1;
+    }
+    .cell.green .badge{display:flex}
+    .cell.dimtext .num{color:rgba(11,16,32,0.85)}
+    .cell.max{
+      box-shadow:
+        0 0 0 2px rgba(43,214,106,0.95) inset,
+        0 0 0 3px rgba(0,0,0,0.35) inset;
+    }
+
+    #hint{
+      font-size:12px;
+      color:var(--muted);
+      margin-top:10px;
+      line-height:1.35;
+    }
+
+    footer{display:flex;flex-direction:column;gap:10px}
+    details{
+      background:var(--panel);
+      border:1px solid var(--cellBorder);
+      border-radius:14px;
+      padding:10px 12px;
+    }
+    details>summary{
+      cursor:pointer;
+      list-style:none;
+      font-weight:900;
+    }
+    details>summary::-webkit-details-marker{display:none}
+    .statsGrid{
+      margin-top:10px;
+      display:grid;
+      grid-template-columns:repeat(2,minmax(0,1fr));
+      gap:10px;
+    }
+    .stat{
+      padding:10px 10px;
+      background:rgba(255,255,255,0.06);
+      border:1px solid rgba(255,255,255,0.10);
+      border-radius:12px;
+    }
+    .stat .k{font-size:12px;color:var(--muted)}
+    .stat .v{font-size:18px;font-weight:900;margin-top:6px}
+    #topPicks{
+      margin-top:10px;
+      font-size:12px;
+      color:var(--muted);
+      line-height:1.4;
+    }
+
+    /* Results overlay (freezes until tap) */
+    #overlay{
+      position:fixed;
+      inset:0;
+      display:none;
+      align-items:flex-end;
+      justify-content:center;
+      padding:12px;
+      background:rgba(0,0,0,0.38);
+      z-index:999;
+    }
+    #overlay.show{display:flex}
+    #overlayCard{
+      width:min(96vw,560px);
+      background:rgba(11,16,32,0.92);
+      border:1px solid rgba(255,255,255,0.14);
+      border-radius:16px;
+      padding:12px 14px;
+      backdrop-filter:blur(10px);
+    }
+    #overlayTitle{font-weight:950;font-size:16px}
+    #overlayBody{
+      margin-top:8px;
+      color:var(--muted);
+      font-size:13px;
+      line-height:1.35;
+    }
+    #overlayHint{
+      margin-top:10px;
+      font-size:12px;
+      font-weight:900;
+      color:rgba(233,238,252,0.85);
+    }
+
+    @media (max-width:420px){
+      .value{font-size:20px}
+      #grid{gap:5px}
+      .cell{border-radius:9px;font-size:13px}
+      .card.small{min-width:130px}
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <header>
+      <div class="topRow">
+        <div class="card">
+          <div class="label">Countdown</div>
+          <div class="value"><span id="timer">10</span>s</div>
+        </div>
+        <div class="card">
+          <div class="label">Active players</div>
+          <div class="value" id="players">1</div>
+        </div>
+        <div class="card small" id="status">
+          <div class="line"><span id="statusDot"></span><span id="statusText">Connecting…</span></div>
+          <div class="line" id="statusSub">—</div>
+        </div>
+      </div>
+      <div id="roundLine">
+        <div id="roundText">Round —</div>
+        <div id="pickText">Your pick: —</div>
+      </div>
+    </header>
+
+    <main>
+      <div id="gridWrap">
+        <div id="grid" aria-label="10 by 10 grid"></div>
+        <div id="hint">
+          Tap a number to select it. If 2+ players pick the same cell, it turns green (more matches = more green fill).<br/>
+          This runs on a free public MQTT relay (messages are public). Don’t send anything sensitive.
+        </div>
+      </div>
+    </main>
+
+    <footer>
+      <details id="statsPanel">
+        <summary>Stats</summary>
+        <div class="statsGrid">
+          <div class="stat"><div class="k">You: rounds played</div><div class="v" id="uRounds">0</div></div>
+          <div class="stat"><div class="k">You: wins (top match)</div><div class="v" id="uWins">0</div></div>
+          <div class="stat"><div class="k">You: best match</div><div class="v" id="uBest">0</div></div>
+          <div class="stat"><div class="k">World: rounds observed</div><div class="v" id="wRounds">0</div></div>
+          <div class="stat"><div class="k">World: largest match ever</div><div class="v" id="wMax">0</div></div>
+          <div class="stat"><div class="k">World: most picked cell</div><div class="v" id="wPopular">—</div></div>
+        </div>
+        <div id="topPicks"></div>
+      </details>
+    </footer>
+  </div>
+
+  <div id="overlay" role="button" aria-label="Tap to continue">
+    <div id="overlayCard">
+      <div id="overlayTitle">Round results</div>
+      <div id="overlayBody">—</div>
+      <div id="overlayHint">Tap anywhere to continue</div>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+  <script>
+  (() => {
+    'use strict';
+
+    // ====== Game timing ======
+    const GRID_N = 10;
+    const CELL_COUNT = GRID_N * GRID_N;
+
+    const ROUND_MS = 10000;     // 10s round
+    const PAUSE_MS = 1000;      // 1s delay before next round starts
+    const CYCLE_MS = ROUND_MS + PAUSE_MS;
+
+    // ====== Free public JS relay (MQTT over WebSockets) ======
+    // Primary: EMQX public broker (wss 8084)
+    // Fallback: Eclipse Mosquitto test broker (wss 8081)
+    const BROKERS = [
+      { name: 'EMQX Public',    url: 'wss://broker.emqx.io:8084/mqtt' },
+      { name: 'Mosquitto Test', url: 'wss://test.mosquitto.org:8081/mqtt' },
+    ];
+
+    // One global game for everyone using this HTML file:
+    const TOPIC_BASE  = 'gpt5/gridmatch/v1';
+    const TOPIC_SEL   = TOPIC_BASE + '/sel';
+    const TOPIC_PRES  = TOPIC_BASE + '/pres';
+    const TOPIC_WORLD = TOPIC_BASE + '/worldstats';
+
+    const PRESENCE_INTERVAL_MS = 3000;
+    const ACTIVE_THRESHOLD_MS  = 12000;
+    const SEND_SEL_EVERY_MS    = 900;
+
+    // ====== DOM ======
+    const $ = (sel) => document.querySelector(sel);
+    const gridEl       = $('#grid');
+    const timerEl      = $('#timer');
+    const playersEl    = $('#players');
+    const roundTextEl  = $('#roundText');
+    const pickTextEl   = $('#pickText');
+    const statusDotEl  = $('#statusDot');
+    const statusTextEl = $('#statusText');
+    const statusSubEl  = $('#statusSub');
+
+    const overlayEl      = $('#overlay');
+    const overlayTitleEl = $('#overlayTitle');
+    const overlayBodyEl  = $('#overlayBody');
+
+    const uRoundsEl  = $('#uRounds');
+    const uWinsEl    = $('#uWins');
+    const uBestEl    = $('#uBest');
+    const wRoundsEl  = $('#wRounds');
+    const wMaxEl     = $('#wMax');
+    const wPopularEl = $('#wPopular');
+    const topPicksEl = $('#topPicks');
+
+    // ====== Helpers / storage ======
+    function randId(len = 10) {
+      const a = new Uint8Array(len);
+      crypto.getRandomValues(a);
+      return [...a].map(b => b.toString(16).padStart(2, '0')).join('').slice(0, len);
+    }
+    function loadJSON(key, fallback) {
+      try {
+        const raw = localStorage.getItem(key);
+        if (!raw) return fallback;
+        const parsed = JSON.parse(raw);
+        return parsed ?? fallback;
+      } catch { return fallback; }
+    }
+    function saveJSON(key, obj) {
+      try { localStorage.setItem(key, JSON.stringify(obj)); } catch {}
+    }
+    function emptyArray101() {
+      const a = new Array(101);
+      for (let i = 0; i < 101; i++) a[i] = 0;
+      return a;
+    }
+
+    const clientId = (() => {
+      const k = 'gridmatch_clientId_v1';
+      let id = '';
+      try { id = localStorage.getItem(k) || ''; } catch {}
+      if (!id) {
+        id = 'p' + randId(12);
+        try { localStorage.setItem(k, id); } catch {}
+      }
+      return id;
+    })();
+
+    // ====== Stats ======
+    let userStats = loadJSON('gridmatch_userStats_v1', null);
+    if (!userStats || userStats.clientId !== clientId) {
+      userStats = {
+        clientId,
+        firstSeen: Date.now(),
+        roundsPlayed: 0,
+        wins: 0,
+        bestMatch: 0,
+        picksByCell: emptyArray101(),
+      };
+    }
+
+    let worldStats = loadJSON('gridmatch_worldStats_v1', null);
+    if (!worldStats) {
+      worldStats = {
+        version: 0,
+        updatedAt: 0,
+        writerId: '',
+        roundsObserved: 0,
+        totalSelections: 0,
+        cellPickCounts: emptyArray101(),
+        largestMatchEver: { count: 0, cell: null, round: null, at: null },
+      };
+    }
+
+    // ====== Runtime state ======
+    const cellEls = new Array(CELL_COUNT + 1);
+    let mqttClient = null;
+    let connected = false;
+    let brokerIdx = 0;
+
+    const presence = new Map(); // id -> lastSeenMs
+    presence.set(clientId, Date.now());
+
+    const selectionsByRound = new Map(); // round -> Map<id, {cell, ts, seq}>
+    const processedRounds = new Set();
+    let lastRoundId = null;
+
+    let myPick = null;   // your selected cell (persists until changed)
+    let mySeq  = 0;
+
+    let lastSentSelAt = 0;
+    let lastSentSelRound = null;
+
+    // Results overlay snapshot (frozen until tap)
+    let overlayVisible = false;
+    let overlaySnapshot = null;
+
+    // ====== UI ======
+    function setStatus(state, detail = '') {
+      if (state === 'online') {
+        statusDotEl.style.background = '#2bd66a';
+        statusTextEl.textContent = 'Online';
+      } else if (state === 'connecting') {
+        statusDotEl.style.background = '#f7c948';
+        statusTextEl.textContent = 'Connecting…';
+      } else {
+        statusDotEl.style.background = '#ff3b3b';
+        statusTextEl.textContent = 'Offline';
+      }
+      statusSubEl.textContent = detail || '—';
+    }
+
+    function formatRound(roundId) { return '#' + (roundId % 100000); }
+
+    function getPhase(nowMs) {
+      const cyclePos = nowMs % CYCLE_MS;
+      return {
+        roundId: Math.floor(nowMs / CYCLE_MS),
+        cyclePos,
+        playing: cyclePos < ROUND_MS,
+        timeLeft: cyclePos < ROUND_MS ? Math.ceil((ROUND_MS - cyclePos) / 1000) : 0,
+      };
+    }
+
+    function renderPickLine() {
+      pickTextEl.textContent = 'Your pick: ' + (myPick ? myPick : '—');
+    }
+
+    function renderPlayGrid() {
+      for (let i = 1; i <= CELL_COUNT; i++) {
+        const el = cellEls[i];
+        el.classList.remove('red','green','max','dimtext');
+        el.style.removeProperty('--fill');
+        el.querySelector('.badge').textContent = '';
+        if (myPick === i) el.classList.add('selected'); else el.classList.remove('selected');
+      }
+    }
+
+    function renderResultGrid(snapshot) {
+      const max = snapshot.maxCount || 0;
+      for (let i = 1; i <= CELL_COUNT; i++) {
+        const el = cellEls[i];
+        const c  = snapshot.counts[i] || 0;
+
+        el.classList.remove('red','green','max','dimtext');
+        el.style.removeProperty('--fill');
+        el.querySelector('.badge').textContent = '';
+
+        // Keep selection outline visible in results
+        if (myPick === i) el.classList.add('selected'); else el.classList.remove('selected');
+
+        if (c > 1) {
+          el.classList.add('green','dimtext');
+          const fill = max > 1 ? Math.round((c / max) * 100) : 0;
+          el.style.setProperty('--fill', fill + '%');
+          el.querySelector('.badge').textContent = String(c);
+          if (c === max && max > 1) el.classList.add('max');
+        } else {
+          // 0 or 1 guess => red
+          el.classList.add('red');
+        }
+      }
+    }
+
+    function activePlayersNow(nowMs) {
+      let n = 0;
+      for (const [, t] of presence) if (nowMs - t <= ACTIVE_THRESHOLD_MS) n++;
+      return Math.max(1, n);
+    }
+
+    function getLeaderId(nowMs) {
+      let leader = clientId;
+      for (const [id, t] of presence) {
+        if (nowMs - t <= ACTIVE_THRESHOLD_MS && id < leader) leader = id;
+      }
+      return leader;
+    }
+
+    function topNFromCounts(arr101, n=5) {
+      const pairs = [];
+      for (let i = 1; i <= 100; i++) {
+        const v = arr101[i] || 0;
+        if (v > 0) pairs.push([i, v]);
+      }
+      pairs.sort((a,b) => b[1] - a[1] || a[0] - b[0]);
+      return pairs.slice(0, n).map(([cell, count]) => ({cell, count}));
+    }
+
+    function updateStatsUI() {
+      uRoundsEl.textContent = String(userStats.roundsPlayed || 0);
+      uWinsEl.textContent   = String(userStats.wins || 0);
+      uBestEl.textContent   = String(userStats.bestMatch || 0);
+
+      wRoundsEl.textContent = String(worldStats.roundsObserved || 0);
+
+      const lme = worldStats.largestMatchEver || {count:0};
+      if ((lme.count || 0) > 0 && lme.cell) wMaxEl.textContent = `${lme.count} on ${lme.cell}`;
+      else wMaxEl.textContent = String(lme.count || 0);
+
+      let popularCell = null, popularCount = 0;
+      for (let i = 1; i <= 100; i++) {
+        const v = worldStats.cellPickCounts[i] || 0;
+        if (v > popularCount) { popularCount = v; popularCell = i; }
+      }
+      wPopularEl.textContent = popularCell ? `${popularCell} (${popularCount})` : '—';
+
+      const top = topNFromCounts(worldStats.cellPickCounts, 5);
+      if (top.length) {
+        topPicksEl.innerHTML =
+          '<div style="margin-top:12px;font-weight:900;color:rgba(233,238,252,0.85)">Most picked (world)</div>' +
+          '<div style="margin-top:6px">' + top.map(t => `#${t.cell}×${t.count}`).join(' · ') + '</div>';
+      } else {
+        topPicksEl.textContent = 'No world stats yet — play a round to start populating them.';
+      }
+    }
+
+    // ====== Build grid ======
+    (function buildGrid(){
+      const frag = document.createDocumentFragment();
+      for (let i = 1; i <= CELL_COUNT; i++) {
+        const d = document.createElement('div');
+        d.className = 'cell';
+        d.dataset.cell = String(i);
+        d.innerHTML = `<div class="num">${i}</div><div class="badge"></div>`;
+        cellEls[i] = d;
+        frag.appendChild(d);
+      }
+      gridEl.appendChild(frag);
+    })();
+
+    renderPickLine();
+    updateStatsUI();
+
+    // ====== MQTT ======
+    function safeParsePayload(payload) {
+      try {
+        // mqtt.js in browser gives Uint8Array
+        const text = (payload instanceof Uint8Array)
+          ? new TextDecoder().decode(payload)
+          : String(payload);
+        return JSON.parse(text);
+      } catch { return null; }
+    }
+
+    function ensureRoundMap(roundId) {
+      let rm = selectionsByRound.get(roundId);
+      if (!rm) { rm = new Map(); selectionsByRound.set(roundId, rm); }
+      return rm;
+    }
+
+    function markSeen(id, nowMs) {
+      if (!id) return;
+      presence.set(id, nowMs);
+    }
+
+    function handleSel(msg, nowMs) {
+      if (!msg || msg.type !== 'sel') return;
+      const id = String(msg.id || '');
+      const round = Number(msg.round);
+      const cell = Number(msg.cell);
+      const ts = Number(msg.ts || nowMs);
+      const seq = Number(msg.seq || 0);
+      if (!id || !Number.isFinite(round) || !Number.isFinite(cell)) return;
+      if (cell < 1 || cell > 100) return;
+
+      markSeen(id, nowMs);
+
+      const rm = ensureRoundMap(round);
+      const prev = rm.get(id);
+      if (!prev || ts > prev.ts || (ts === prev.ts && seq > prev.seq)) {
+        rm.set(id, { cell, ts, seq });
+      }
+    }
+
+    function handlePresence(msg, nowMs) {
+      if (!msg || msg.type !== 'presence') return;
+      const id = String(msg.id || '');
+      if (!id) return;
+      markSeen(id, nowMs);
+    }
+
+    function isValidWorldStats(ws) {
+      if (!ws || ws.type !== 'worldstats') return false;
+      if (typeof ws.version !== 'number' || typeof ws.updatedAt !== 'number') return false;
+      if (!Array.isArray(ws.cellPickCounts) || ws.cellPickCounts.length < 101) return false;
+      return true;
+    }
+
+    function mergeWorldStats(incoming) {
+      const incV = incoming.version || 0;
+      const curV = worldStats.version || 0;
+      const incT = incoming.updatedAt || 0;
+      const curT = worldStats.updatedAt || 0;
+
+      if (incV > curV || (incV === curV && incT > curT)) {
+        worldStats = {
+          version: incV,
+          updatedAt: incT,
+          writerId: String(incoming.writerId || ''),
+          roundsObserved: Number(incoming.roundsObserved || 0),
+          totalSelections: Number(incoming.totalSelections || 0),
+          cellPickCounts: incoming.cellPickCounts.slice(0, 101),
+          largestMatchEver: incoming.largestMatchEver || { count: 0, cell: null, round: null, at: null },
+        };
+        saveJSON('gridmatch_worldStats_v1', worldStats);
+        updateStatsUI();
+      }
+    }
+
+    function publishPresence() {
+      const nowMs = Date.now();
+      markSeen(clientId, nowMs);
+      if (!connected || !mqttClient) return;
+      mqttClient.publish(TOPIC_PRES, JSON.stringify({ type:'presence', id:clientId, ts:nowMs }));
+    }
+
+    function publishSelection(roundId, cell) {
+      const nowMs = Date.now();
+      markSeen(clientId, nowMs);
+      if (!connected || !mqttClient) return;
+
+      mySeq++;
+      const msg = { type:'sel', id:clientId, round:roundId, cell, ts:nowMs, seq:mySeq };
+      mqttClient.publish(TOPIC_SEL, JSON.stringify(msg));
+      handleSel(msg, nowMs); // local immediate
+    }
+
+    function publishWorldStatsSnapshot(nowMs) {
+      if (!connected || !mqttClient) return;
+
+      const msg = {
+        type: 'worldstats',
+        version: worldStats.version || 0,
+        updatedAt: worldStats.updatedAt || nowMs,
+        writerId: worldStats.writerId || clientId,
+        roundsObserved: worldStats.roundsObserved || 0,
+        totalSelections: worldStats.totalSelections || 0,
+        cellPickCounts: worldStats.cellPickCounts.slice(0, 101),
+        largestMatchEver: worldStats.largestMatchEver || { count: 0, cell: null, round: null, at: null },
+      };
+
+      // Retained snapshot: new clients can receive latest quickly (broker may or may not honor retain).
+      mqttClient.publish(TOPIC_WORLD, JSON.stringify(msg), { retain: true });
+    }
+
+    function startMqtt() {
+      if (!window.mqtt || typeof window.mqtt.connect !== 'function') {
+        setStatus('offline', 'MQTT.js failed to load');
+        return;
+      }
+
+      function connectToBroker(idx) {
+        brokerIdx = idx % BROKERS.length;
+        const b = BROKERS[brokerIdx];
+        setStatus('connecting', b.name);
+
+        const mqttClientId = ('gm_' + clientId + '_' + randId(4)).slice(0, 23);
+
+        mqttClient = window.mqtt.connect(b.url, {
+          clientId: mqttClientId,
+          clean: true,
+          connectTimeout: 9000,
+          reconnectPeriod: 2000,
+          keepalive: 30,
+        });
+
+        mqttClient.on('connect', () => {
+          connected = true;
+          setStatus('online', b.name);
+          mqttClient.subscribe([TOPIC_SEL, TOPIC_PRES, TOPIC_WORLD], { qos: 0 });
+          publishPresence();
+        });
+
+        mqttClient.on('reconnect', () => setStatus('connecting', b.name + ' (reconnecting)'));
+        mqttClient.on('offline',   () => { connected = false; setStatus('offline', b.name + ' (offline)'); });
+        mqttClient.on('close',     () => { connected = false; setStatus('offline', b.name + ' (closed)'); });
+
+        mqttClient.on('error', () => {
+          connected = false;
+          setStatus('offline', b.name + ' (error)');
+          try { mqttClient.end(true); } catch {}
+          setTimeout(() => connectToBroker(brokerIdx + 1), 900);
+        });
+
+        mqttClient.on('message', (topic, payload) => {
+          const nowMs = Date.now();
+          const msg = safeParsePayload(payload);
+          if (!msg || typeof msg.type !== 'string') return;
+
+          if (topic === TOPIC_SEL) handleSel(msg, nowMs);
+          else if (topic === TOPIC_PRES) handlePresence(msg, nowMs);
+          else if (topic === TOPIC_WORLD && isValidWorldStats(msg)) mergeWorldStats(msg);
+        });
+      }
+
+      connectToBroker(0);
+    }
+
+    startMqtt();
+
+    // ====== Input ======
+    function setPick(cell) {
+      myPick = cell;
+      renderPickLine();
+    }
+
+    gridEl.addEventListener('pointerdown', (ev) => {
+      const cellEl = ev.target.closest('.cell');
+      if (!cellEl) return;
+
+      // Freeze screen: must tap overlay to continue
+      if (overlayVisible) return;
+
+      const nowMs = Date.now();
+      const ph = getPhase(nowMs);
+      if (!ph.playing) return;
+
+      const cell = Number(cellEl.dataset.cell);
+      if (!Number.isFinite(cell) || cell < 1 || cell > 100) return;
+
+      setPick(cell);
+      publishSelection(ph.roundId, cell);
+      renderPlayGrid();
+    });
+
+    overlayEl.addEventListener('pointerdown', () => {
+      overlayVisible = false;
+      overlaySnapshot = null;
+      overlayEl.classList.remove('show');
+      overlayTitleEl.textContent = 'Round results';
+      overlayBodyEl.textContent = '—';
+
+      // Show current play state immediately (even if we’re mid-round)
+      renderPlayGrid();
+    });
+
+    // ====== Round processing ======
+    function computeCountsForRound(roundId) {
+      const rm = selectionsByRound.get(roundId);
+      const counts = new Array(101);
+      for (let i = 0; i < 101; i++) counts[i] = 0;
+
+      let totalPlayers = 0;
+      if (rm) {
+        totalPlayers = rm.size;
+        for (const { cell } of rm.values()) counts[cell] += 1;
+      }
+
+      let maxCount = 0;
+      let maxCells = [];
+      for (let i = 1; i <= 100; i++) {
+        const c = counts[i];
+        if (c > maxCount) { maxCount = c; maxCells = [i]; }
+        else if (c === maxCount) maxCells.push(i);
+      }
+
+      const myCell = rm && rm.get(clientId) ? rm.get(clientId).cell : null;
+      const myCount = myCell ? counts[myCell] : 0;
+
+      return { round: roundId, counts, maxCount, maxCells, totalPlayers, myCell, myCount };
+    }
+
+    function updateStatsFromRound(result) {
+      // user stats
+      if (result.myCell) {
+        userStats.roundsPlayed = (userStats.roundsPlayed || 0) + 1;
+        userStats.picksByCell[result.myCell] = (userStats.picksByCell[result.myCell] || 0) + 1;
+        userStats.bestMatch = Math.max(userStats.bestMatch || 0, result.myCount || 0);
+
+        if ((result.maxCount || 0) > 1 && (result.myCount || 0) === (result.maxCount || 0)) {
+          userStats.wins = (userStats.wins || 0) + 1;
+        }
+        saveJSON('gridmatch_userStats_v1', userStats);
+      }
+
+      // world stats (as observed by this client)
+      worldStats.roundsObserved = (worldStats.roundsObserved || 0) + 1;
+      worldStats.totalSelections = (worldStats.totalSelections || 0) + (result.totalPlayers || 0);
+
+      for (let i = 1; i <= 100; i++) {
+        const c = result.counts[i] || 0;
+        if (c) worldStats.cellPickCounts[i] = (worldStats.cellPickCounts[i] || 0) + c;
+      }
+
+      if ((result.maxCount || 0) > (worldStats.largestMatchEver?.count || 0)) {
+        worldStats.largestMatchEver = {
+          count: result.maxCount || 0,
+          cell: (result.maxCells && result.maxCells.length) ? result.maxCells[0] : null,
+          round: result.round,
+          at: Date.now(),
+        };
+      }
+
+      saveJSON('gridmatch_worldStats_v1', worldStats);
+    }
+
+    function maybePublishWorldStats(nowMs) {
+      // reduce collisions: only "leader" among active players publishes retained snapshot
+      if (getLeaderId(nowMs) !== clientId) return;
+      worldStats.version = (worldStats.version || 0) + 1;
+      worldStats.updatedAt = nowMs;
+      worldStats.writerId = clientId;
+      publishWorldStatsSnapshot(nowMs);
+    }
+
+    function showOverlayForRound(result) {
+      overlaySnapshot = result;
+      overlayVisible = true;
+
+      const max = result.maxCount || 0;
+      const topCells = (result.maxCells || []).filter(c => (result.counts[c] || 0) > 1);
+
+      const topLine = (max > 1 && topCells.length)
+        ? `Top match: ${max} players on cell ${topCells.slice(0,4).join(', ')}${topCells.length > 4 ? '…' : ''}.`
+        : `No matches this round (every cell had 0–1 pick).`;
+
+      const youLine = result.myCell
+        ? `You picked ${result.myCell} → ${result.myCount || 0} pick${(result.myCount || 0) === 1 ? '' : 's'}.`
+        : `You did not pick a cell this round.`;
+
+      overlayTitleEl.textContent = `Round ${formatRound(result.round)} results`;
+      overlayBodyEl.textContent = `${topLine} ${youLine} (${result.totalPlayers || 0} players counted)`;
+      overlayEl.classList.add('show');
+
+      renderResultGrid(result);
+    }
+
+    function onRoundReveal(roundId) {
+      if (processedRounds.has(roundId)) return;
+      processedRounds.add(roundId);
+
+      const result = computeCountsForRound(roundId);
+
+      updateStatsFromRound(result);
+      updateStatsUI();
+
+      // show results only if not already frozen on an earlier overlay
+      if (!overlayVisible) showOverlayForRound(result);
+
+      // best-effort global stats snapshot
+      maybePublishWorldStats(Date.now());
+    }
+
+    function pruneOldData(currentRoundId) {
+      const cutoff = currentRoundId - 25; // ~4.5 minutes
+      for (const r of selectionsByRound.keys()) if (r < cutoff) selectionsByRound.delete(r);
+      for (const r of processedRounds) if (r < cutoff) processedRounds.delete(r);
+
+      const nowMs = Date.now();
+      for (const [id, t] of presence) {
+        if (id !== clientId && nowMs - t > 60000) presence.delete(id);
+      }
+    }
+
+    // ====== Main loop ======
+    function tick() {
+      const nowMs = Date.now();
+      const ph = getPhase(nowMs);
+
+      timerEl.textContent = String(ph.timeLeft);
+      playersEl.textContent = String(activePlayersNow(nowMs));
+      roundTextEl.textContent = `Round ${formatRound(ph.roundId)}${ph.playing ? ' (picking)' : ' (reveal)'}`;
+
+      // keep yourself active locally
+      markSeen(clientId, nowMs);
+
+      // round change
+      if (lastRoundId !== ph.roundId) {
+        lastRoundId = ph.roundId;
+        pruneOldData(ph.roundId);
+
+        // if not on frozen results, show play grid at new round start
+        if (!overlayVisible) renderPlayGrid();
+
+        lastSentSelRound = null;
+        lastSentSelAt = 0;
+      }
+
+      // publish selection during play (while not frozen on results)
+      if (ph.playing && myPick && !overlayVisible && connected) {
+        const shouldSend = (lastSentSelRound !== ph.roundId) || (nowMs - lastSentSelAt >= SEND_SEL_EVERY_MS);
+        if (shouldSend) {
+          publishSelection(ph.roundId, myPick);
+          lastSentSelRound = ph.roundId;
+          lastSentSelAt = nowMs;
+        }
+      }
+
+      // reveal phase: compute/paint results for the round that just ended
+      if (!ph.playing) onRoundReveal(ph.roundId);
+    }
+
+    setInterval(tick, 120);
+    tick();
+
+    setInterval(() => publishPresence(), PRESENCE_INTERVAL_MS);
+
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) publishPresence();
+    });
+
+  })();
+  </script>
+</body>
+</html>
