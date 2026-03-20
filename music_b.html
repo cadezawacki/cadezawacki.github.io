@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Term Player</title>
+    <style>
+        /* --- Modern Terminal Styling --- */
+        :root {
+            --term-bg: #1e1e2e;
+            --term-fg: #cdd6f4;
+            --term-fg-dim: #a6adc8;
+            --term-accent: #89b4fa;
+            --term-border: #45475a;
+            --term-success: #a6e3a1;
+            --term-error: #f38ba8;
+            --term-prompt: #f5c2e7;
+            --term-command: #89dceb;
+        }
+
+        html, body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            background-color: var(--term-bg);
+            color: var(--term-fg);
+            font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', Monaco, 'Cascadia Code', Consolas, 'Courier New', monospace;
+            font-size: 15px;
+            overflow: hidden;
+        }
+
+        #terminal {
+            border: 1px solid var(--term-border);
+            padding: 16px;
+            margin: 20px;
+            height: calc(100vh - 40px - 2px);
+            display: flex;
+            flex-direction: column;
+            box-sizing: border-box;
+            border-radius: 4px;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+        }
+
+        /* --- Header Area --- */
+        .term-header {
+            padding-bottom: 12px;
+            margin-bottom: 12px;
+            border-bottom: 1px solid var(--term-border);
+            font-size: 14px;
+            color: var(--term-fg-dim);
+        }
+
+        .title-bar {
+            display: flex;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        .title-bar .dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 6px;
+            opacity: 0.5;
+        }
+
+        .dot-red { background-color: var(--term-error); }
+        .dot-yellow { background-color: #f9e2af; }
+        .dot-green { background-color: var(--term-success); }
+
+        .title-text {
+            margin-left: 10px;
+            flex-grow: 1;
+            text-align: center;
+            color: var(--term-fg-dim);
+        }
+
+        /* --- Prompt Area --- */
+        .prompt {
+            margin-bottom: 8px;
+        }
+
+        .prompt::before {
+            content: '$ ';
+            color: var(--term-prompt);
+        }
+
+        .command {
+            color: var(--term-command);
+        }
+
+        /* --- Playlist Selector --- */
+        #playlist-selector {
+            margin-bottom: 16px;
+        }
+
+        #playlist-select {
+            background-color: var(--term-bg);
+            color: var(--term-fg);
+            border: 1px solid var(--term-border);
+            font-family: inherit;
+            font-size: inherit;
+            padding: 4px 8px;
+            border-radius: 2px;
+            width: 100%;
+            margin-top: 4px;
+        }
+
+        #playlist-select:focus {
+            outline: none;
+            border-color: var(--term-accent);
+        }
+
+        /* --- Display Area --- */
+        #display {
+            border: 1px solid var(--term-border);
+            padding: 12px;
+            margin-bottom: 16px;
+            min-height: 80px;
+            overflow-y: auto;
+            flex-grow: 1;
+            white-space: pre-wrap;
+            background-color: rgba(0, 0, 0, 0.2);
+            border-radius: 2px;
+            position: relative;
+        }
+
+        #display .status {
+            color: var(--term-fg-dim);
+        }
+
+        #display .track-info {
+            color: var(--term-fg);
+        }
+
+        #display .error {
+            color: var(--term-error);
+        }
+
+        /* --- Progress Bar --- */
+        #progress-container {
+            height: 4px;
+            background-color: var(--term-border);
+            margin-bottom: 16px;
+            border-radius: 2px;
+            overflow: hidden;
+            display: none;
+        }
+
+        #progress-bar {
+            height: 100%;
+            width: 0;
+            background-color: var(--term-accent);
+            transition: width 0.1s linear;
+        }
+
+        /* --- Controls --- */
+        #controls {
+            margin-bottom: 8px;
+        }
+
+        .control-prompt {
+            margin-bottom: 8px;
+        }
+
+        .controls-grid {
+            display: flex;
+            gap: 8px;
+        }
+
+        #controls button {
+            background-color: var(--term-bg);
+            border: 1px solid var(--term-border);
+            color: var(--term-fg);
+            font-family: inherit;
+            font-size: inherit;
+            padding: 6px 12px;
+            cursor: pointer;
+            flex: 1;
+            border-radius: 2px;
+            transition: all 0.2s ease;
+        }
+
+        #controls button:hover {
+            background-color: var(--term-border);
+        }
+
+        #controls button:active {
+            background-color: var(--term-accent);
+            color: var(--term-bg);
+        }
+
+        /* --- Cursor --- */
+        .cursor {
+            display: inline-block;
+            width: 8px;
+            height: 1em;
+            background-color: var(--term-accent);
+            animation: blink 1s step-end infinite;
+            margin-left: 5px;
+            vertical-align: text-bottom;
+        }
+
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0; }
+        }
+
+        /* --- Hidden Audio Element --- */
+        #audio-player {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="terminal">
+        <div class="term-header">
+            <div class="title-bar">
+                <div class="dot dot-red"></div>
+                <div class="dot dot-yellow"></div>
+                <div class="dot dot-green"></div>
+                <div class="title-text">cades-term-player v1.0.0</div>
+            </div>
+            <div>session started at <span id="current-time"></span></div>
+        </div>
+
+        <div class="prompt"><span class="command">cat ./info.txt</span></div>
+        <div>Terminal Media Player - By Cade</div>
+        <div>Ready for commands...</div>
+        <br>
+
+        <div id="playlist-selector">
+            <div class="prompt"><span class="command">ls ./playlists</span></div>
+            <select id="playlist-select">
+                <option value="">-- select playlist --</option>
+            </select>
+        </div>
+
+        <div id="display">
+            <span class="status">Waiting for command...</span><span class="cursor"></span>
+        </div>
+
+        <div id="progress-container">
+            <div id="progress-bar"></div>
+        </div>
+
+        <div id="controls">
+            <div class="control-prompt prompt"><span class="command">./player --controls</span></div>
+            <div class="controls-grid">
+                <button id="prev-button">prev</button>
+                <button id="play-pause-button">play</button>
+                <button id="next-button">next</button>
+            </div>
+        </div>
+
+        <audio id="audio-player"></audio>
+    </div>
+
+    <script>
+        // --- Configuration ---
+        const playlists = {
+            "Coding": [
+                "coding_1.mp3",
+                "coding_2.mp3",
+                "coding_3.mp3",
+                "coding_4.mp3",
+                "coding_5.mp3",
+                "coding_6.mp3",
+                "coding_7.mp3",
+                "coding_8.mp3",
+                "coding_9.mp3",
+                "coding_10.mp3",
+                "coding_11.mp3",
+                "coding_12.mp3",
+                "coding_13.mp3",
+            ],
+            "Phoenix":[
+                "phoenix_1.mp3",
+                "phoenix_2.mp3",
+                "phoenix_3.mp3",
+            ]
+        };
+        // --- End Configuration ---
+
+        // --- DOM Elements ---
+        const playlistSelect = document.getElementById('playlist-select');
+        const display = document.getElementById('display');
+        const prevButton = document.getElementById('prev-button');
+        const playPauseButton = document.getElementById('play-pause-button');
+        const nextButton = document.getElementById('next-button');
+        const audioPlayer = document.getElementById('audio-player');
+        const progressContainer = document.getElementById('progress-container');
+        const progressBar = document.getElementById('progress-bar');
+        const currentTimeElement = document.getElementById('current-time');
+        const cursor = document.createElement('span');
+        cursor.className = 'cursor';
+
+        // --- State Variables ---
+        let currentPlaylistName = null;
+        let currentTracks = [];
+        let currentTrackIndex = 0;
+        let isPlaying = false;
+
+        // --- Functions ---
+        function updateDisplay(message, isStatus = false, isError = false) {
+            display.innerHTML = ''; // Clear previous content
+            const textNode = document.createElement('span');
+            textNode.textContent = message;
+            
+            if (isError) {
+                textNode.className = 'error';
+            } else if (isStatus) {
+                textNode.className = 'status';
+            } else {
+                textNode.className = 'track-info';
+            }
+            
+            display.appendChild(textNode);
+            if (isStatus && !isError) {
+                display.appendChild(cursor); // Append cursor after status text
+            }
+        }
+
+        function populatePlaylistDropdown() {
+            // Clear existing options except the default
+            playlistSelect.innerHTML = '<option value="">-- select playlist --</option>';
+
+            for (const name in playlists) {
+                if (playlists.hasOwnProperty(name) && playlists[name].length > 0) {
+                    const option = document.createElement('option');
+                    option.value = name;
+                    option.textContent = name;
+                    playlistSelect.appendChild(option);
+                }
+            }
+            
+            if (playlistSelect.options.length <= 1) {
+                updateDisplay('[ error ] No playlists defined in configuration file', true, true);
+            } else {
+                updateDisplay('Playlists found. Select one to begin playback.', true);
+            }
+        }
+
+        function loadPlaylist(playlistName) {
+            if (!playlists[playlistName] || playlists[playlistName].length === 0) {
+                updateDisplay(`[ error ] Playlist "${playlistName}" not found or empty`, true, true);
+                currentPlaylistName = null;
+                currentTracks = [];
+                audioPlayer.src = ''; // Clear src
+                progressContainer.style.display = 'none';
+                return;
+            }
+
+            currentPlaylistName = playlistName;
+            currentTracks = playlists[playlistName];
+            currentTrackIndex = 0;
+            loadTrack(currentTrackIndex);
+            updateDisplay(`> loaded playlist: ${currentPlaylistName}\n> tracks: ${currentTracks.length}\n> selected: ${currentTracks[currentTrackIndex]}`);
+        }
+
+        function loadTrack(index) {
+            if (!currentTracks || currentTracks.length === 0 || index < 0 || index >= currentTracks.length) {
+                updateDisplay('[ error ] Invalid track index or no tracks loaded', true, true);
+                isPlaying = false;
+                updatePlayPauseButton();
+                progressContainer.style.display = 'none';
+                return;
+            }
+
+            currentTrackIndex = index;
+            const trackName = currentTracks[currentTrackIndex];
+            const trackPath = `./playlists/${trackName}`;
+
+            audioPlayer.src = trackPath;
+            updateDisplay(`> loading: ${trackName}\n> index: ${currentTrackIndex + 1}/${currentTracks.length}\n> playlist: ${currentPlaylistName}`);
+
+            // Attempt to play immediately after loading
+            playAudio();
+        }
+
+        function playAudio() {
+            if (!audioPlayer.src) {
+                updateDisplay('[ error ] No track loaded', true, true);
+                return;
+            }
+            
+            audioPlayer.play()
+                .then(() => {
+                    isPlaying = true;
+                    updatePlayPauseButton();
+                    updateDisplay(`> playing: ${currentTracks[currentTrackIndex]}\n> index: ${currentTrackIndex + 1}/${currentTracks.length}\n> playlist: ${currentPlaylistName}`);
+                    progressContainer.style.display = 'block';
+                })
+                .catch(error => {
+                    console.error("Playback Error:", error);
+                    updateDisplay(`[ error ] Failed to play: ${currentTracks[currentTrackIndex]}\n${error.message}`, true, true);
+                    isPlaying = false;
+                    updatePlayPauseButton();
+                    progressContainer.style.display = 'none';
+                });
+        }
+
+        function pauseAudio() {
+            audioPlayer.pause();
+            isPlaying = false;
+            updatePlayPauseButton();
+            updateDisplay(`> paused: ${currentTracks[currentTrackIndex]}\n> index: ${currentTrackIndex + 1}/${currentTracks.length}\n> playlist: ${currentPlaylistName}`);
+        }
+
+        function togglePlayPause() {
+            if (!currentPlaylistName) {
+                updateDisplay('[ info ] Please select a playlist first', true);
+                return;
+            }
+            
+            if (isPlaying) {
+                pauseAudio();
+            } else {
+                if (!audioPlayer.src || audioPlayer.src.indexOf(encodeURIComponent(currentTracks[currentTrackIndex])) === -1) {
+                    loadTrack(currentTrackIndex); // Reload if src is missing or wrong
+                } else {
+                    playAudio(); // Just play if src is correct
+                }
+            }
+        }
+
+        function playNextTrack() {
+            if (!currentTracks || currentTracks.length === 0) return;
+            const nextIndex = (currentTrackIndex + 1) % currentTracks.length; // Wrap around
+            loadTrack(nextIndex);
+        }
+
+        function playPrevTrack() {
+            if (!currentTracks || currentTracks.length === 0) return;
+            const prevIndex = (currentTrackIndex - 1 + currentTracks.length) % currentTracks.length; // Wrap around correctly
+            loadTrack(prevIndex);
+        }
+
+        function updatePlayPauseButton() {
+            playPauseButton.textContent = isPlaying ? 'pause' : 'play';
+        }
+
+        function updateProgressBar() {
+            if (audioPlayer.duration) {
+                const percentage = (audioPlayer.currentTime / audioPlayer.duration) * 100;
+                progressBar.style.width = percentage + '%';
+            }
+        }
+
+        function updateCurrentTime() {
+            const now = new Date();
+            const hours = now.getHours().toString().padStart(2, '0');
+            const minutes = now.getMinutes().toString().padStart(2, '0');
+            const seconds = now.getSeconds().toString().padStart(2, '0');
+            currentTimeElement.textContent = `${hours}:${minutes}:${seconds}`;
+        }
+
+        // --- Event Listeners ---
+        playlistSelect.addEventListener('change', (event) => {
+            const selectedPlaylist = event.target.value;
+            if (selectedPlaylist) {
+                loadPlaylist(selectedPlaylist);
+            } else {
+                // Handle default selection
+                audioPlayer.pause();
+                audioPlayer.src = '';
+                currentPlaylistName = null;
+                currentTracks = [];
+                currentTrackIndex = 0;
+                isPlaying = false;
+                updatePlayPauseButton();
+                updateDisplay('Awaiting playlist selection...', true);
+                progressContainer.style.display = 'none';
+            }
+        });
+
+        playPauseButton.addEventListener('click', togglePlayPause);
+        nextButton.addEventListener('click', playNextTrack);
+        prevButton.addEventListener('click', playPrevTrack);
+
+        // Auto-play next track when the current one ends
+        audioPlayer.addEventListener('ended', () => {
+            updateDisplay(`> track complete: ${currentTracks[currentTrackIndex]}\n> loading next track...`);
+            playNextTrack();
+        });
+
+        // Update progress bar
+        audioPlayer.addEventListener('timeupdate', updateProgressBar);
+
+        // Update button state if playback is controlled externally
+        audioPlayer.addEventListener('play', () => {
+            isPlaying = true;
+            updatePlayPauseButton();
+            progressContainer.style.display = 'block';
+        });
+        
+        audioPlayer.addEventListener('pause', () => {
+            // Don't mark as paused if it just ended and is about to load next
+            if (audioPlayer.currentTime < audioPlayer.duration) {
+                isPlaying = false;
+                updatePlayPauseButton();
+            }
+        });
+        
+        audioPlayer.addEventListener('error', (e) => {
+            console.error("Audio Element Error:", audioPlayer.error);
+            updateDisplay(`[ error ] Failed to load: ${currentTracks[currentTrackIndex]}\nDetails: ${audioPlayer.error?.message || 'Unknown error'}`, true, true);
+            isPlaying = false;
+            updatePlayPauseButton();
+            progressContainer.style.display = 'none';
+        });
+
+        // --- Initialization ---
+        document.addEventListener('DOMContentLoaded', () => {
+            updateCurrentTime();
+            setInterval(updateCurrentTime, 1000);
+            populatePlaylistDropdown();
+            updatePlayPauseButton();
+        });
+    </script>
+
+</body>
+</html>
