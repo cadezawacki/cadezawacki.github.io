@@ -2584,16 +2584,29 @@ async function encryptText(text, password) {
   const combined = new Uint8Array(iv.byteLength + ciphertext.byteLength);
   combined.set(iv, 0);
   combined.set(new Uint8Array(ciphertext), iv.byteLength);
-  return btoa(String.fromCharCode(...combined));
+  // Convert to base64 without spread to avoid stack overflow on large texts
+  let binary = '';
+  const chunk = 8192;
+  for (let i = 0; i < combined.length; i += chunk) {
+    binary += String.fromCharCode.apply(null, combined.subarray(i, i + chunk));
+  }
+  return btoa(binary);
 }
 
 async function decryptText(encoded, password) {
   const key = await deriveKey(password);
-  const combined = Uint8Array.from(atob(encoded), c => c.charCodeAt(0));
+  const raw = atob(encoded);
+  const combined = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) combined[i] = raw.charCodeAt(i);
   const iv = combined.slice(0, 12);
   const ciphertext = combined.slice(12);
-  const decrypted = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ciphertext);
-  return new TextDecoder().decode(decrypted);
+  try {
+    const decrypted = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ciphertext);
+    return new TextDecoder().decode(decrypted);
+  } catch (e) {
+    console.warn('Decrypt failed (wrong key or corrupted data)');
+    return null;
+  }
 }
 
 function initFirebase(databaseURL) {
@@ -2675,6 +2688,7 @@ window.syncConnect = async function() {
       if (!val) return;
       try {
         const text = await decryptText(val, syncState.encKey);
+        if (text === null) return; // decrypt failed, skip
         const currentText = editor.state.doc.toString();
         if (text !== currentText) {
           syncState.pendingRemoteText = text;
@@ -2853,6 +2867,7 @@ window.switchRoom = async function(name) {
       if (!val) return;
       try {
         const text = await decryptText(val, syncState.encKey);
+        if (text === null) return; // decrypt failed, skip
         const currentText = editor.state.doc.toString();
         if (text !== currentText) {
           syncState.pendingRemoteText = text;
