@@ -288,6 +288,23 @@ body {
 }
 .room-tab-add:hover { color: var(--accent); border-color: var(--accent); }
 
+/* Mobile room select — hidden on desktop, shown on mobile */
+.room-mobile-select {
+  display: none;
+  align-items: center;
+  margin-left: var(--space-2);
+}
+.room-mobile-select select {
+  padding: 2px 6px;
+  font-size: var(--text-xs);
+  font-family: var(--font-mono);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text);
+  max-width: 100px;
+}
+
 /* Room manager */
 .room-manager-list { margin-bottom: var(--space-4); }
 .room-manager-item {
@@ -807,6 +824,8 @@ body {
   .form-input, .form-input:focus {
     font-size: 16px;
   }
+  .room-tabs { display: none !important; }
+  .room-mobile-select { display: flex !important; }
 }
 </style>
 </head>
@@ -888,12 +907,14 @@ body {
     </div>
   </div>
 
-  <!-- Room Tabs -->
+  <!-- Room Tabs (desktop) -->
   <div class="room-tabs" id="room-tabs"></div>
+  <!-- Room Select (mobile) -->
+  <div class="room-mobile-select" id="room-mobile-select"></div>
 
   <div class="menubar-spacer"></div>
 
-  <button class="menubar-btn" title="Copy all to clipboard" onclick="copyAllToClipboard()">
+  <button class="menubar-btn" id="copy-all-btn" title="Copy all to clipboard" onclick="copyAllToClipboard()">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
       <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
     </svg>
@@ -1204,27 +1225,42 @@ const editor = new EditorView({
   parent: document.getElementById('editor-wrap'),
 });
 
-// Persist content
+// Persist content — saves to both global key and per-room key
 let saveTimer = null;
 function saveContentDebounced() {
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
-    store.set('cade-content', editor.state.doc.toString());
+    const text = editor.state.doc.toString();
+    store.set('cade-content', text);
+    // Also save per-room cache if connected
+    if (syncState.roomName) {
+      store.set('cade-room-cache:' + syncState.roomName, text);
+    }
   }, 300);
 }
 
-// Toggle line numbers
+function loadRoomCache(roomName) {
+  return store.get('cade-room-cache:' + roomName) || '';
+}
+
+// Toggle line numbers — hide via CSS since basicSetup includes its own lineNumbers
 window.toggleLineNumbers = function() {
   showLineNums = !showLineNums;
   store.set('cade-linenums', showLineNums);
-  editor.dispatch({
-    effects: lineNumCompartment.reconfigure(showLineNums ? lineNumbers() : [])
-  });
+  const gutters = document.querySelector('.cm-gutters');
+  if (gutters) gutters.style.display = showLineNums ? '' : 'none';
   document.getElementById('linenums-label').textContent = showLineNums ? 'Hide Line Numbers' : 'Show Line Numbers';
   closeAllMenus();
 };
 
+// Apply initial state
 document.getElementById('linenums-label').textContent = showLineNums ? 'Hide Line Numbers' : 'Show Line Numbers';
+if (!showLineNums) {
+  setTimeout(() => {
+    const gutters = document.querySelector('.cm-gutters');
+    if (gutters) gutters.style.display = 'none';
+  }, 50);
+}
 
 // ============================================
 // FOOTER STATS
@@ -1234,10 +1270,20 @@ function updateFooter() {
   const sel = editor.state.selection.main;
   const line = doc.lineAt(sel.head);
   const col = sel.head - line.from + 1;
+  const hasSelection = sel.from !== sel.to;
 
   document.getElementById('footer-line').textContent = `Ln ${line.number}, Col ${col}`;
-  document.getElementById('footer-chars').textContent = `${doc.length} chars`;
-  document.getElementById('footer-lines').textContent = `${doc.lines} lines`;
+
+  if (hasSelection) {
+    const selText = editor.state.sliceDoc(sel.from, sel.to);
+    const selChars = selText.length;
+    const selLines = doc.lineAt(sel.to).number - doc.lineAt(sel.from).number + 1;
+    document.getElementById('footer-chars').textContent = `${selChars} of ${doc.length} chars`;
+    document.getElementById('footer-lines').textContent = `${selLines} of ${doc.lines} lines`;
+  } else {
+    document.getElementById('footer-chars').textContent = `${doc.length} chars`;
+    document.getElementById('footer-lines').textContent = `${doc.lines} lines`;
+  }
 }
 
 updateFooter();
@@ -2410,8 +2456,12 @@ window.clearEditor = function() {
 
 window.copyAllToClipboard = function() {
   const text = editor.state.doc.toString();
+  const btn = document.getElementById('copy-all-btn');
+  const copyIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+  const checkIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="var(--success, #4ade80)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
   navigator.clipboard.writeText(text).then(() => {
-    showToast('Copied to clipboard', 'success', 2000);
+    btn.innerHTML = checkIcon;
+    setTimeout(() => { btn.innerHTML = copyIcon; }, 1500);
   }).catch(() => {
     showToast('Failed to copy', 'error');
   });
@@ -2775,8 +2825,10 @@ function saveRooms() {
 }
 
 function renderRoomTabs() {
+  // Desktop tabs
   const container = document.getElementById('room-tabs');
-  if (rooms.length === 0) { container.innerHTML = ''; return; }
+  const mobileContainer = document.getElementById('room-mobile-select');
+  if (rooms.length === 0) { container.innerHTML = ''; mobileContainer.innerHTML = ''; return; }
   let html = rooms.map(name => {
     const isActive = name === activeRoom && syncState.connected;
     return `<button class="room-tab ${isActive ? 'active' : ''}" data-room="${name}" onclick="switchRoom('${name.replace(/'/g, "\\'")}')" title="${name}">${name}</button>`;
@@ -2785,6 +2837,18 @@ function renderRoomTabs() {
     html += `<button class="room-tab-add" onclick="addRoomPrompt()" title="Add room">+</button>`;
   }
   container.innerHTML = html;
+
+  // Mobile dropdown
+  let mobileHtml = '<select onchange="if(this.value===\'+\'){addRoomPrompt();this.value=activeRoom||\'\';}else{switchRoom(this.value);}">';
+  rooms.forEach(name => {
+    const sel = (name === activeRoom && syncState.connected) ? ' selected' : '';
+    mobileHtml += `<option value="${name}"${sel}>${name}</option>`;
+  });
+  if (rooms.length < roomCap) {
+    mobileHtml += '<option value="+">+ Room</option>';
+  }
+  mobileHtml += '</select>';
+  mobileContainer.innerHTML = mobileHtml;
 }
 
 window.switchRoom = async function(name) {
@@ -2809,9 +2873,10 @@ window.switchRoom = async function(name) {
   store.set('cade-active-room', name);
   document.getElementById('sync-room-name').value = name;
 
-  // Clear editor before syncing so stale content doesn't persist if room is empty
+  // Load cached content for this room (or clear if no cache)
+  const cached = loadRoomCache(name);
   syncState.suppressUpdate = true;
-  editor.dispatch({ changes: { from: 0, to: editor.state.doc.length, insert: '' } });
+  editor.dispatch({ changes: { from: 0, to: editor.state.doc.length, insert: cached } });
   syncState.suppressUpdate = false;
 
   // Connect to new room
