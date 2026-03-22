@@ -2888,7 +2888,7 @@ window.addRoomPrompt = function() {
   }
   const name = prompt('Room name:');
   if (!name || !name.trim()) return;
-  const trimmed = name.trim();
+  const trimmed = name.trim().toLowerCase();
   if (rooms.includes(trimmed)) {
     switchRoom(trimmed);
     return;
