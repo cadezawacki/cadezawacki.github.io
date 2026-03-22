@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Cade.txt</title>
 <link href="https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600&f[]=jetbrains-mono@400,500&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <style>
 /* ============================================
    CADE.TXT — Design Tokens & Base
@@ -825,14 +827,16 @@ body {
 
     <!-- Step 0: TURN credentials (persisted) -->
     <div id="sync-step-creds">
-      <div class="modal-desc">Enter your Cloudflare TURN credentials. These are saved locally.</div>
+      <div class="modal-desc">Enter your sync credentials. These are saved locally.</div>
       <div class="form-group">
-        <label class="form-label" for="sync-turn-id">TURN Token ID</label>
-        <input class="form-input" id="sync-turn-id" type="text" placeholder="xxxxxxxx" spellcheck="false" autocomplete="off">
+        <label class="form-label" for="sync-firebase-url">Firebase Database URL</label>
+        <input class="form-input" id="sync-firebase-url" type="text" placeholder="https://your-project.firebaseio.com" spellcheck="false" autocomplete="off">
+        <div class="form-hint">Your Firebase Realtime Database URL. Saved locally.</div>
       </div>
       <div class="form-group">
-        <label class="form-label" for="sync-api-token">API Token</label>
-        <input class="form-input" id="sync-api-token" type="password" placeholder="Bearer token" spellcheck="false" autocomplete="off">
+        <label class="form-label" for="sync-room-name">Room Name</label>
+        <input class="form-input" id="sync-room-name" type="text" placeholder="my-room" spellcheck="false" autocomplete="off">
+        <div class="form-hint">Both peers must use the same room name.</div>
       </div>
       <div class="form-group">
         <label class="form-label" for="sync-enc-key">Encryption Key</label>
@@ -841,55 +845,7 @@ body {
       </div>
       <div class="modal-actions">
         <button class="btn" onclick="closeSyncModal()">Cancel</button>
-        <button class="btn btn-primary" onclick="syncStartCreate()">Create Room</button>
-        <button class="btn btn-primary" onclick="syncStartJoin()">Join Room</button>
-      </div>
-    </div>
-
-    <!-- Step 1a: Creator waiting for joiner -->
-    <div id="sync-step-offer" style="display:none;">
-      <div class="modal-desc">Send this code to your partner. They paste it into "Join Room".</div>
-      <div class="form-group">
-        <label class="form-label">Your Offer Code</label>
-        <textarea class="form-input" id="sync-offer-out" rows="4" readonly style="font-family:var(--font-mono);font-size:var(--text-xs);word-break:break-all;resize:none;"></textarea>
-        <button class="btn" style="margin-top:var(--space-2);width:100%;" onclick="copyToClipboard('sync-offer-out')">Copy Offer</button>
-      </div>
-      <div class="form-group">
-        <label class="form-label" for="sync-answer-in">Paste Partner's Answer Code</label>
-        <textarea class="form-input" id="sync-answer-in" rows="4" placeholder="Paste answer code here..." style="font-family:var(--font-mono);font-size:var(--text-xs);word-break:break-all;resize:none;"></textarea>
-      </div>
-      <div class="modal-actions">
-        <button class="btn" onclick="syncCancel()">Cancel</button>
-        <button class="btn btn-primary" onclick="syncAcceptAnswer()">Connect</button>
-      </div>
-    </div>
-
-    <!-- Step 1b: Joiner -->
-    <div id="sync-step-join" style="display:none;">
-      <div class="modal-desc">Paste the offer code from your partner.</div>
-      <div class="form-group">
-        <label class="form-label" for="sync-offer-in">Paste Offer Code</label>
-        <textarea class="form-input" id="sync-offer-in" rows="4" placeholder="Paste offer code here..." style="font-family:var(--font-mono);font-size:var(--text-xs);word-break:break-all;resize:none;"></textarea>
-      </div>
-      <div class="modal-actions">
-        <button class="btn" onclick="syncCancel()">Cancel</button>
-        <button class="btn btn-primary" onclick="syncProcessOffer()">Generate Answer</button>
-      </div>
-    </div>
-
-    <!-- Step 2b: Joiner shows answer -->
-    <div id="sync-step-answer" style="display:none;">
-      <div class="modal-desc">Send this answer code back to your partner.</div>
-      <div class="form-group">
-        <label class="form-label">Your Answer Code</label>
-        <textarea class="form-input" id="sync-answer-out" rows="4" readonly style="font-family:var(--font-mono);font-size:var(--text-xs);word-break:break-all;resize:none;"></textarea>
-        <button class="btn" style="margin-top:var(--space-2);width:100%;" onclick="copyToClipboard('sync-answer-out')">Copy Answer</button>
-      </div>
-      <div class="form-group">
-        <div class="form-hint" id="sync-join-status">Waiting for connection...</div>
-      </div>
-      <div class="modal-actions">
-        <button class="btn" onclick="syncCancel()">Cancel</button>
+        <button class="btn btn-primary" onclick="syncConnect()">Connect</button>
       </div>
     </div>
 
@@ -1017,7 +973,10 @@ const editorState = EditorState.create({
       }
       if (update.docChanged) {
         saveContentDebounced();
-        if (syncState.connected) broadcastText();
+        if (syncState.connected && !syncState.suppressUpdate) {
+          syncState.lastLocalEdit = Date.now();
+          broadcastText();
+        }
       }
     }),
     EditorView.lineWrapping,
@@ -1746,23 +1705,23 @@ document.getElementById('picker-overlay').addEventListener('click', (e) => {
 // ============================================
 const syncState = {
   connected: false,
-  pc: null, // RTCPeerConnection
-  dc: null, // RTCDataChannel
   encKey: '',
   suppressUpdate: false,
-  iceServers: null,
-  iceExpiry: 0,
-  turnTokenId: '',
-  apiToken: '',
-  credentialRefreshTimer: null,
+  firebaseApp: null,
+  firebaseDb: null,
+  roomName: '',
+  firebaseListener: null,
+  lastLocalEdit: 0,
+  pendingRemoteText: null,
+  idleCheckTimer: null,
 };
 
 // Restore saved config
-const savedTurnId = store.get('cade-turn-id') || '';
-const savedApiToken = store.get('cade-api-token') || '';
+const savedFirebaseUrl = store.get('cade-firebase-url') || '';
+const savedRoomName = store.get('cade-room-name') || '';
 const savedEncKey = store.get('cade-sync-key') || '';
-document.getElementById('sync-turn-id').value = savedTurnId;
-document.getElementById('sync-api-token').value = savedApiToken;
+document.getElementById('sync-firebase-url').value = savedFirebaseUrl;
+document.getElementById('sync-room-name').value = savedRoomName;
 document.getElementById('sync-enc-key').value = savedEncKey;
 
 // AES-GCM encryption helpers
@@ -1798,80 +1757,19 @@ async function decryptText(encoded, password) {
   return new TextDecoder().decode(decrypted);
 }
 
-// --- Cloudflare TURN credential management ---
-async function fetchTurnCredentials(turnTokenId, apiToken) {
-  const resp = await fetch(
-    `https://rtc.live.cloudflare.com/v1/turn/keys/${turnTokenId}/credentials/generate-ice-servers`,
-    {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiToken}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ ttl: 86400 }),
-    }
-  );
-  if (!resp.ok) {
-    const msg = await resp.text();
-    throw new Error(`TURN credential error (${resp.status}): ${msg}`);
+function initFirebase(databaseURL) {
+  if (syncState.firebaseApp) return syncState.firebaseDb;
+  const app = firebase.initializeApp({ databaseURL }, 'cade-sync');
+  syncState.firebaseApp = app;
+  syncState.firebaseDb = firebase.database(app);
+  return syncState.firebaseDb;
+}
+
+function cleanupFirebase() {
+  if (syncState.firebaseListener && syncState.firebaseDb && syncState.roomName) {
+    syncState.firebaseDb.ref(`rooms/${syncState.roomName}/text`).off('value', syncState.firebaseListener);
+    syncState.firebaseListener = null;
   }
-  return resp.json();
-}
-
-async function ensureIceServers() {
-  const now = Date.now();
-  // Refresh if we have less than 1 hour of validity left
-  if (syncState.iceServers && syncState.iceExpiry - now > 3600000) {
-    return syncState.iceServers;
-  }
-  const turnId = document.getElementById('sync-turn-id').value.trim();
-  const apiToken = document.getElementById('sync-api-token').value.trim();
-  if (!turnId || !apiToken) throw new Error('TURN Token ID and API Token are required');
-
-  const data = await fetchTurnCredentials(turnId, apiToken);
-  syncState.iceServers = data.iceServers;
-  syncState.iceExpiry = now + 86400000; // 24h
-  syncState.turnTokenId = turnId;
-  syncState.apiToken = apiToken;
-
-  // Save credentials
-  store.set('cade-turn-id', turnId);
-  store.set('cade-api-token', apiToken);
-
-  // Schedule auto-refresh at ~22 hours
-  clearTimeout(syncState.credentialRefreshTimer);
-  syncState.credentialRefreshTimer = setTimeout(async () => {
-    try {
-      await ensureIceServers();
-      // If connected, update the peer connection's ICE servers
-      if (syncState.pc && syncState.connected) {
-        syncState.pc.setConfiguration({ iceServers: syncState.iceServers });
-      }
-    } catch (e) {
-      console.error('TURN credential refresh failed:', e);
-    }
-  }, 79200000); // 22 hours
-
-  return syncState.iceServers;
-}
-
-// --- SDP compression: gzip + base64 ---
-async function compressSDP(sdpObj) {
-  const json = JSON.stringify(sdpObj);
-  const blob = new Blob([json]);
-  const cs = new CompressionStream('gzip');
-  const stream = blob.stream().pipeThrough(cs);
-  const buf = await new Response(stream).arrayBuffer();
-  return btoa(String.fromCharCode(...new Uint8Array(buf)));
-}
-
-async function decompressSDP(b64) {
-  const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
-  const blob = new Blob([bytes]);
-  const ds = new DecompressionStream('gzip');
-  const stream = blob.stream().pipeThrough(ds);
-  const text = await new Response(stream).text();
-  return JSON.parse(text);
 }
 
 // --- Sync UI helpers ---
@@ -1884,195 +1782,88 @@ function updateSyncUI(status, text) {
 }
 
 function showSyncStep(stepId) {
-  ['sync-step-creds', 'sync-step-offer', 'sync-step-join', 'sync-step-answer'].forEach(id => {
-    document.getElementById(id).style.display = id === stepId ? 'block' : 'none';
+  document.getElementById('sync-step-creds').style.display = stepId === 'sync-step-creds' ? 'block' : 'none';
+}
+
+function tryApplyPendingRemote() {
+  if (!syncState.pendingRemoteText) return;
+  const idleMs = Date.now() - syncState.lastLocalEdit;
+  if (idleMs < 2000) return; // Still typing, wait
+
+  const text = syncState.pendingRemoteText;
+  syncState.pendingRemoteText = null;
+  const currentText = editor.state.doc.toString();
+  if (text === currentText) return;
+
+  // Save cursor position
+  const cursor = editor.state.selection.main;
+  const cursorOffset = Math.min(cursor.anchor, text.length);
+  const cursorHead = Math.min(cursor.head, text.length);
+
+  syncState.suppressUpdate = true;
+  editor.dispatch({
+    changes: { from: 0, to: currentText.length, insert: text },
+    selection: { anchor: cursorOffset, head: cursorHead },
   });
-}
-
-function copyToClipboard(elId) {
-  const el = document.getElementById(elId);
-  navigator.clipboard.writeText(el.value).then(() => {
-    showToast('Copied to clipboard', 'success', 1500);
-  }).catch(() => {
-    el.select();
-    document.execCommand('copy');
-    showToast('Copied to clipboard', 'success', 1500);
-  });
-}
-
-// --- WebRTC peer connection setup ---
-function setupDataChannel(dc) {
-  syncState.dc = dc;
-  dc.onopen = () => {
-    syncState.connected = true;
-    updateSyncUI('connected', 'Synced');
-    closeSyncModal();
-    showToast('Sync connected', 'success', 2000);
-  };
-  dc.onclose = () => {
-    syncState.connected = false;
-    updateSyncUI('', 'Sync off');
-    showToast('Sync disconnected', 'error', 2500);
-  };
-  dc.onerror = (e) => {
-    console.error('Data channel error:', e);
-    showToast('Sync error', 'error', 2500);
-  };
-  dc.onmessage = async (event) => {
-    if (syncState.suppressUpdate) return;
-    try {
-      const text = await decryptText(event.data, syncState.encKey);
-      const currentText = editor.state.doc.toString();
-      if (text !== currentText) {
-        syncState.suppressUpdate = true;
-        editor.dispatch({
-          changes: { from: 0, to: currentText.length, insert: text },
-        });
-        syncState.suppressUpdate = false;
-      }
-    } catch (e) {
-      console.error('Sync decrypt error:', e);
-    }
-  };
-}
-
-function createPeerConnection(iceServers) {
-  const pc = new RTCPeerConnection({ iceServers });
-  syncState.pc = pc;
-
-  pc.oniceconnectionstatechange = () => {
-    const s = pc.iceConnectionState;
-    if (s === 'connected' || s === 'completed') {
-      updateSyncUI('connected', 'Synced');
-    } else if (s === 'disconnected' || s === 'failed' || s === 'closed') {
-      syncState.connected = false;
-      updateSyncUI('', 'Sync off');
-    }
-  };
-
-  return pc;
-}
-
-// Collect all ICE candidates into the local description
-function waitForIceComplete(pc) {
-  return new Promise((resolve) => {
-    if (pc.iceGatheringState === 'complete') {
-      resolve(pc.localDescription);
-      return;
-    }
-    const check = () => {
-      if (pc.iceGatheringState === 'complete') {
-        pc.removeEventListener('icegatheringstatechange', check);
-        resolve(pc.localDescription);
-      }
-    };
-    pc.addEventListener('icegatheringstatechange', check);
-    // Safety timeout: resolve after 5s even if not all candidates gathered
-    setTimeout(() => resolve(pc.localDescription), 5000);
-  });
+  syncState.suppressUpdate = false;
 }
 
 // --- Sync flow functions ---
-window.syncStartCreate = async function() {
+window.syncConnect = async function() {
+  const firebaseUrl = document.getElementById('sync-firebase-url').value.trim();
+  const roomName = document.getElementById('sync-room-name').value.trim();
   const encKey = document.getElementById('sync-enc-key').value.trim();
+  if (!firebaseUrl) { showToast('Firebase Database URL is required', 'error'); return; }
+  if (!roomName) { showToast('Room name is required', 'error'); return; }
   if (!encKey) { showToast('Encryption key is required', 'error'); return; }
-  syncState.encKey = encKey;
+
+  // Save config
+  store.set('cade-firebase-url', firebaseUrl);
+  store.set('cade-room-name', roomName);
   store.set('cade-sync-key', encKey);
+  syncState.encKey = encKey;
+  syncState.roomName = roomName;
 
   try {
-    updateSyncUI('connecting', 'Creating...');
-    const iceServers = await ensureIceServers();
-    const pc = createPeerConnection(iceServers);
+    updateSyncUI('connecting', 'Connecting...');
+    const db = initFirebase(firebaseUrl);
+    const textRef = db.ref(`rooms/${roomName}/text`);
 
-    // Create data channel (offerer creates it)
-    const dc = pc.createDataChannel('cade-sync', { ordered: true });
-    setupDataChannel(dc);
-
-    const offer = await pc.createOffer();
-    await pc.setLocalDescription(offer);
-
-    // Wait for ICE candidates
-    const fullOffer = await waitForIceComplete(pc);
-    const compressed = await compressSDP({
-      type: fullOffer.type,
-      sdp: fullOffer.sdp,
+    // Listen for remote changes
+    syncState.firebaseListener = textRef.on('value', async (snap) => {
+      if (syncState.suppressUpdate) return;
+      const val = snap.val();
+      if (!val) return;
+      try {
+        const text = await decryptText(val, syncState.encKey);
+        const currentText = editor.state.doc.toString();
+        if (text !== currentText) {
+          syncState.pendingRemoteText = text;
+          tryApplyPendingRemote();
+        }
+      } catch (e) {
+        console.error('Sync decrypt error:', e);
+      }
     });
 
-    document.getElementById('sync-offer-out').value = compressed;
-    document.getElementById('sync-answer-in').value = '';
-    showSyncStep('sync-step-offer');
+    syncState.connected = true;
+    clearInterval(syncState.idleCheckTimer);
+    syncState.idleCheckTimer = setInterval(tryApplyPendingRemote, 500);
+    updateSyncUI('connected', 'Synced');
+    closeSyncModal();
+    showToast('Sync connected', 'success', 2000);
   } catch (e) {
-    console.error('Create room error:', e);
-    showToast(e.message || 'Failed to create room', 'error', 3000);
+    console.error('Sync connect error:', e);
+    showToast(e.message || 'Failed to connect', 'error', 3000);
     updateSyncUI('', 'Sync off');
-  }
-};
-
-window.syncStartJoin = function() {
-  const encKey = document.getElementById('sync-enc-key').value.trim();
-  if (!encKey) { showToast('Encryption key is required', 'error'); return; }
-  syncState.encKey = encKey;
-  store.set('cade-sync-key', encKey);
-
-  document.getElementById('sync-offer-in').value = '';
-  showSyncStep('sync-step-join');
-};
-
-window.syncProcessOffer = async function() {
-  const offerB64 = document.getElementById('sync-offer-in').value.trim();
-  if (!offerB64) { showToast('Paste the offer code first', 'error'); return; }
-
-  try {
-    updateSyncUI('connecting', 'Joining...');
-    const iceServers = await ensureIceServers();
-    const pc = createPeerConnection(iceServers);
-
-    // Answerer receives data channel
-    pc.ondatachannel = (event) => {
-      setupDataChannel(event.channel);
-    };
-
-    const offerSDP = await decompressSDP(offerB64);
-    await pc.setRemoteDescription(new RTCSessionDescription(offerSDP));
-
-    const answer = await pc.createAnswer();
-    await pc.setLocalDescription(answer);
-
-    const fullAnswer = await waitForIceComplete(pc);
-    const compressed = await compressSDP({
-      type: fullAnswer.type,
-      sdp: fullAnswer.sdp,
-    });
-
-    document.getElementById('sync-answer-out').value = compressed;
-    document.getElementById('sync-join-status').textContent = 'Waiting for connection...';
-    showSyncStep('sync-step-answer');
-  } catch (e) {
-    console.error('Join room error:', e);
-    showToast(e.message || 'Failed to join room', 'error', 3000);
-    updateSyncUI('', 'Sync off');
-  }
-};
-
-window.syncAcceptAnswer = async function() {
-  const answerB64 = document.getElementById('sync-answer-in').value.trim();
-  if (!answerB64) { showToast('Paste the answer code first', 'error'); return; }
-
-  try {
-    const answerSDP = await decompressSDP(answerB64);
-    await syncState.pc.setRemoteDescription(new RTCSessionDescription(answerSDP));
-    showToast('Connecting...', 'success', 2000);
-  } catch (e) {
-    console.error('Accept answer error:', e);
-    showToast(e.message || 'Failed to accept answer', 'error', 3000);
   }
 };
 
 window.syncCancel = function() {
-  if (syncState.pc && !syncState.connected) {
-    syncState.pc.close();
-    syncState.pc = null;
-  }
+  cleanupFirebase();
+  clearInterval(syncState.idleCheckTimer);
+  syncState.pendingRemoteText = null;
+  syncState.connected = false;
   updateSyncUI('', 'Sync off');
   showSyncStep('sync-step-creds');
 };
@@ -2082,13 +1873,15 @@ let broadcastTimer = null;
 window.broadcastText = function() {
   clearTimeout(broadcastTimer);
   broadcastTimer = setTimeout(async () => {
-    if (!syncState.connected || !syncState.dc || syncState.suppressUpdate) return;
-    if (syncState.dc.readyState !== 'open') return;
+    if (!syncState.connected || syncState.suppressUpdate) return;
     try {
       const text = editor.state.doc.toString();
       const encrypted = await encryptText(text, syncState.encKey);
-      syncState.dc.send(encrypted);
+      syncState.suppressUpdate = true;
+      await syncState.firebaseDb.ref(`rooms/${syncState.roomName}/text`).set(encrypted);
+      syncState.suppressUpdate = false;
     } catch (e) {
+      syncState.suppressUpdate = false;
       console.error('Sync broadcast error:', e);
     }
   }, 500);
@@ -2098,7 +1891,7 @@ window.openSyncModal = function() {
   closeAllMenus();
   showSyncStep('sync-step-creds');
   document.getElementById('sync-overlay').classList.add('open');
-  document.getElementById('sync-turn-id').focus();
+  document.getElementById('sync-firebase-url').focus();
 };
 
 window.closeSyncModal = function() {
@@ -2113,25 +1906,20 @@ window.connectSync = function() {
 
 window.disconnectSync = function() {
   closeAllMenus();
-  if (syncState.dc) {
-    try { syncState.dc.close(); } catch {}
-    syncState.dc = null;
-  }
-  if (syncState.pc) {
-    try { syncState.pc.close(); } catch {}
-    syncState.pc = null;
-  }
+  cleanupFirebase();
+  clearInterval(syncState.idleCheckTimer);
+  syncState.pendingRemoteText = null;
   syncState.connected = false;
-  clearTimeout(syncState.credentialRefreshTimer);
   updateSyncUI('', 'Sync off');
   showToast('Disconnected from sync', 'success', 2000);
 };
 
 window.forceSyncReload = function() {
   closeAllMenus();
-  if (syncState.connected) {
+  if (syncState.connected || syncState.roomName) {
     window.disconnectSync();
-    showToast('Disconnected. Open Sync to reconnect.', 'success', 2500);
+    setTimeout(() => syncConnect(), 1000);
+    showToast('Reconnecting...', 'success', 2500);
   } else {
     showToast('Not connected to sync', 'error', 2500);
   }
@@ -2145,6 +1933,11 @@ document.getElementById('sync-overlay').addEventListener('click', (e) => {
 document.getElementById('sync-overlay').addEventListener('keydown', (e) => {
   if (e.key === 'Escape') closeSyncModal();
 });
+
+// Auto-connect on page load if config is saved
+if (savedFirebaseUrl && savedRoomName && savedEncKey) {
+  syncConnect();
+}
 
 // ============================================
 // HOTKEY SYSTEM
