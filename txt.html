@@ -58,6 +58,7 @@
   --picker-bg: rgba(250,250,249,0.92);
   --kbd-bg: #e7e5e4;
   --kbd-border: #d6d3d1;
+  --border-tab: #004949;
 }
 
 [data-theme="dark"] {
@@ -83,33 +84,7 @@
   --picker-bg: rgba(17,17,16,0.92);
   --kbd-bg: #333231;
   --kbd-border: #444342;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme]) {
-    --bg: #111110;
-    --surface: #1a1918;
-    --surface-2: #222120;
-    --surface-hover: #2a2928;
-    --border: #333231;
-    --border-focus: #0f9598;
-    --text: #e7e5e3;
-    --text-muted: #8c8a87;
-    --text-faint: #5c5a58;
-    --accent: #0f9598;
-    --accent-hover: #12b3b7;
-    --accent-bg: rgba(56, 189, 248, 0.1);
-    --error: #f87171;
-    --error-bg: rgba(248, 113, 113, 0.1);
-    --success: #4ade80;
-    --success-bg: rgba(74, 222, 128, 0.1);
-    --shadow-sm: 0 1px 3px rgba(0,0,0,0.2);
-    --shadow-md: 0 4px 16px rgba(0,0,0,0.3);
-    --shadow-lg: 0 12px 40px rgba(0,0,0,0.4);
-    --picker-bg: rgba(17,17,16,0.92);
-    --kbd-bg: #333231;
-    --kbd-border: #444342;
-  }
+  --border-tab: #26b3b3;
 }
 
 html {
@@ -155,6 +130,7 @@ body {
   font-size: var(--text-sm);
   color: var(--text);
   letter-spacing: -0.01em;
+  line-height: 16px;
 }
 
 .menubar-logo svg {
@@ -261,6 +237,100 @@ body {
 }
 
 .menubar-btn svg { width: 16px; height: 16px; }
+
+/* Room tabs */
+.room-tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: var(--space-2);
+}
+.room-tab { 
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 10px;
+  font-size: var(--text-xs);
+  font-family: var(--font-mono);
+  color: var(--text-faint);
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all var(--transition);
+  max-width: 120px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+}
+.room-tab:hover { color: var(--text); border-color: var(--text-muted); }
+.room-tab.active {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--border-tab);
+  font-weight: 600;
+}
+.room-tab-add {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-faint);
+  background: none;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all var(--transition);
+}
+.room-tab-add:hover { color: var(--accent); border-color: var(--accent); }
+
+/* Room manager */
+.room-manager-list { margin-bottom: var(--space-4); }
+.room-manager-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+.room-manager-item:last-child { border-bottom: none; }
+.room-manager-name {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--text);
+}
+.room-manager-active {
+  font-size: var(--text-xs);
+  color: var(--accent);
+  font-weight: 500;
+  margin-left: var(--space-2);
+}
+.room-add-row {
+  display: flex;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+}
+.room-add-row input { flex: 1; }
+.room-cap-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  margin-bottom: var(--space-4);
+}
+.room-cap-row select {
+  padding: 2px 6px;
+  font-size: var(--text-sm);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text);
+}
 
 /* ============================================
    EDITOR AREA
@@ -811,8 +881,15 @@ body {
         <span>Hotkey Settings</span>
         <span></span>
       </button>
+      <button class="menu-item" onclick="openRoomManager()">
+        <span>Room Manager</span>
+        <span></span>
+      </button>
     </div>
   </div>
+
+  <!-- Room Tabs -->
+  <div class="room-tabs" id="room-tabs"></div>
 
   <div class="menubar-spacer"></div>
 
@@ -907,6 +984,33 @@ body {
     <div class="modal-actions">
       <button class="btn" onclick="resetHotkeys()">Reset Defaults</button>
       <button class="btn btn-primary" onclick="closeSettings()">Done</button>
+    </div>
+  </div>
+</div>
+
+<!-- ========== ROOM MANAGER MODAL ========== -->
+<div class="modal-overlay" id="room-manager-overlay">
+  <div class="modal-dialog" style="max-width: 440px;">
+    <div class="modal-title">Room Manager</div>
+    <div class="modal-desc">Manage your synced rooms (max <span id="room-cap-display">3</span>).</div>
+    <div class="room-add-row">
+      <input class="form-input" id="room-add-input" type="text" placeholder="New room name" spellcheck="false">
+      <button class="btn btn-primary" onclick="addRoomFromManager()">Add</button>
+    </div>
+    <div class="room-manager-list" id="room-manager-list"></div>
+    <div class="room-cap-row">
+      <label>Room cap:</label>
+      <select id="room-cap-select" onchange="updateRoomCap(this.value)">
+        <option value="1">1</option>
+        <option value="2">2</option>
+        <option value="3" selected>3</option>
+        <option value="4">4</option>
+        <option value="5">5</option>
+        <option value="6">6</option>
+      </select>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-primary" onclick="closeRoomManager()">Done</button>
     </div>
   </div>
 </div>
@@ -1030,6 +1134,67 @@ const editorState = EditorState.create({
       { key: 'Mod-z', run: undo },
       { key: 'Mod-Shift-z', run: redo },
       { key: 'Mod-y', run: redo },
+      { key: 'Tab', run: (view) => {
+        const sel = view.state.selection.main;
+        const doc = view.state.doc;
+        const fromLine = doc.lineAt(sel.from).number;
+        const toLine = doc.lineAt(sel.to).number;
+        if (fromLine !== toLine || sel.from !== sel.to) {
+          // Multi-line or selection: indent all lines
+          const changes = [];
+          for (let i = fromLine; i <= toLine; i++) {
+            const line = doc.line(i);
+            changes.push({ from: line.from, insert: '    ' });
+          }
+          view.dispatch({ changes, userEvent: 'input.indent' });
+        } else {
+          view.dispatch({ changes: { from: sel.from, insert: '    ' }, selection: { anchor: sel.from + 4 }, userEvent: 'input' });
+        }
+        return true;
+      }},
+      { key: 'Shift-Tab', run: (view) => {
+        const sel = view.state.selection.main;
+        const doc = view.state.doc;
+        const fromLine = doc.lineAt(sel.from).number;
+        const toLine = doc.lineAt(sel.to).number;
+        const changes = [];
+        for (let i = fromLine; i <= toLine; i++) {
+          const line = doc.line(i);
+          const text = line.text;
+          const spaces = text.match(/^ {1,4}/);
+          if (spaces) changes.push({ from: line.from, to: line.from + spaces[0].length, insert: '' });
+        }
+        if (changes.length) view.dispatch({ changes, userEvent: 'input.dedent' });
+        return true;
+      }},
+      { key: 'Mod-]', run: (view) => {
+        const sel = view.state.selection.main;
+        const doc = view.state.doc;
+        const fromLine = doc.lineAt(sel.from).number;
+        const toLine = doc.lineAt(sel.to).number;
+        const changes = [];
+        for (let i = fromLine; i <= toLine; i++) {
+          const line = doc.line(i);
+          changes.push({ from: line.from, insert: '    ' });
+        }
+        view.dispatch({ changes, userEvent: 'input.indent' });
+        return true;
+      }},
+      { key: 'Mod-[', run: (view) => {
+        const sel = view.state.selection.main;
+        const doc = view.state.doc;
+        const fromLine = doc.lineAt(sel.from).number;
+        const toLine = doc.lineAt(sel.to).number;
+        const changes = [];
+        for (let i = fromLine; i <= toLine; i++) {
+          const line = doc.line(i);
+          const text = line.text;
+          const spaces = text.match(/^ {1,4}/);
+          if (spaces) changes.push({ from: line.from, to: line.from + spaces[0].length, insert: '' });
+        }
+        if (changes.length) view.dispatch({ changes, userEvent: 'input.dedent' });
+        return true;
+      }},
     ]),
   ],
 });
@@ -1175,6 +1340,10 @@ function main(ctx) {
 }
 
 function smartCompare(a, b) {
+  // Blank lines always sort to end
+  if (a.trim() === '' && b.trim() === '') return 0;
+  if (a.trim() === '') return 1;
+  if (b.trim() === '') return -1;
   const stripQuotes = s => s.replace(/^["']|["']$/g, '');
   a = stripQuotes(a);
   b = stripQuotes(b);
@@ -1258,16 +1427,33 @@ function main(ctx) {
 registerScript(`/**
   {
     "name": "Sum",
-    "description": "Sum all numbers found in text (handles thousands separators)",
+    "description": "Sum numbers: 1,2,3 or 1 2 3 or one per line (handles trailing commas)",
     "author": "Cade",
     "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><line x1='12' y1='5' x2='12' y2='19'/><line x1='5' y1='12' x2='19' y2='12'/></svg>",
-    "tags": "sum,add,total,math,numbers"
+    "tags": "sum,add,total,math,numbers,calculator"
   }
 **/
 function main(ctx) {
   const text = ctx.selection || ctx.fullText;
-  const numbers = text.match(/-?[\\d,]+(\\.[\\d]+)?/g) || [];
-  const sum = numbers.reduce((acc, n) => acc + parseFloat(n.replace(/,/g, '')), 0);
+  const lines = text.split('\\n').map(l => l.trim()).filter(Boolean);
+  let numbers = [];
+  if (lines.length === 1) {
+    // Single line: try comma-separated first, then space-separated
+    const line = lines[0].replace(/,\\s*$/,''); // strip trailing comma
+    if (line.includes(',')) {
+      numbers = line.split(',').map(s => s.trim()).filter(Boolean).map(s => parseFloat(s.replace(/[^\\d.\\-]/g, '')));
+    } else if (line.includes(' ')) {
+      numbers = line.split(/\\s+/).map(s => parseFloat(s.replace(/[^\\d.\\-]/g, '')));
+    } else {
+      numbers = [parseFloat(line.replace(/[^\\d.\\-]/g, ''))];
+    }
+  } else {
+    // Multi-line: one number per line (strip trailing commas)
+    numbers = lines.map(l => l.replace(/,\\s*$/, '')).map(s => parseFloat(s.replace(/[^\\d.\\-]/g, '')));
+  }
+  numbers = numbers.filter(n => !isNaN(n));
+  if (numbers.length === 0) { showToast('No numbers found', 'error'); return; }
+  const sum = numbers.reduce((a, b) => a + b, 0);
   const result = text + '\\n\\n= ' + sum.toLocaleString('en-US', { maximumFractionDigits: 10 });
   if (ctx.selection) { ctx.selection = result; }
   else { ctx.fullText = result; }
@@ -1276,7 +1462,7 @@ function main(ctx) {
 registerScript(`/**
   {
     "name": "UTC → Local Time",
-    "description": "Convert UTC date/time strings to your local timezone",
+    "description": "Convert UTC times to local (supports 10:01, 14:01:00Z, ISO dates, epoch)",
     "author": "Cade",
     "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='12' r='10'/><polyline points='12 6 12 12 16 14'/></svg>",
     "tags": "utc,local,time,timezone,convert,date"
@@ -1284,23 +1470,53 @@ registerScript(`/**
 **/
 function main(ctx) {
   const text = ctx.selection || ctx.fullText;
-  const result = text.replace(
-    /\\d{4}-\\d{2}-\\d{2}[T ]\\d{2}:\\d{2}(:\\d{2})?(\\.\\d+)?(Z|[+-]\\d{2}:?\\d{2})?/g,
-    match => {
-      try {
-        const d = new Date(match.includes('Z') || /[+-]\\d{2}/.test(match) ? match : match + 'Z');
-        if (isNaN(d)) return match;
-        return d.toLocaleString();
-      } catch { return match; }
+  function expandTime(t) {
+    let clean = t.replace(/\\s*(AM|PM)/i, (_, ap) => ' ' + ap.toUpperCase()).trim();
+    const ampm = clean.match(/(AM|PM)$/i);
+    clean = clean.replace(/\\s*(AM|PM)$/i, '').trim();
+    const parts = clean.split(':');
+    let h = parseInt(parts[0]);
+    if (ampm) {
+      if (ampm[1].toUpperCase() === 'PM' && h < 12) h += 12;
+      if (ampm[1].toUpperCase() === 'AM' && h === 12) h = 0;
     }
-  );
+    return String(h).padStart(2, '0') + ':' + (parts[1] || '00') + ':' + (parts[2] || '00');
+  }
+  const today = new Date().toISOString().split('T')[0];
+  let result = text;
+  let changed = false;
+
+  // ISO 8601 with date: 2024-01-15T10:01:00Z
+  if (!changed) { const r = result.replace(/\\d{4}-\\d{2}-\\d{2}[T ]\\d{1,2}:\\d{2}(:\\d{2})?(\\.\\d+)?(Z|[+-]\\d{2}:?\\d{2})?/g, m => {
+    const d = new Date(m.includes('Z') || /[+-]\\d{2}/.test(m) ? m : m + 'Z');
+    return isNaN(d) ? m : d.toLocaleString();
+  }); if (r !== result) { result = r; changed = true; } }
+
+  // Unix epoch
+  if (!changed) { const r = result.replace(/\\b(1\\d{9,12})\\b/g, m => {
+    const n = parseInt(m); const d = new Date(n > 9999999999 ? n : n * 1000);
+    return isNaN(d) ? m : d.toLocaleString();
+  }); if (r !== result) { result = r; changed = true; } }
+
+  // Bare time with Z suffix: 14:01:00Z or 14:01Z
+  if (!changed) { const r = result.replace(/(\\d{1,2}:\\d{2}(:\\d{2})?)Z/g, (m, time) => {
+    const d = new Date(today + 'T' + expandTime(time) + 'Z');
+    return isNaN(d) ? m : d.toLocaleTimeString();
+  }); if (r !== result) { result = r; changed = true; } }
+
+  // Bare time without Z: 10:01, 3:05 PM — assume UTC
+  if (!changed) { const r = result.replace(/(?:^|(?<=\\s))(\\d{1,2}:\\d{2}(:\\d{2})?\\s*(AM|PM)?)(?=\\s|$)/gi, (m, t) => {
+    const d = new Date(today + 'T' + expandTime(t.trim()) + 'Z');
+    return isNaN(d) ? m : d.toLocaleTimeString();
+  }); if (r !== result) { result = r; changed = true; } }
+
   if (ctx.selection) ctx.selection = result; else ctx.fullText = result;
 }`);
 
 registerScript(`/**
   {
     "name": "Local Time → UTC",
-    "description": "Convert local date/time strings to UTC",
+    "description": "Convert local times to UTC (supports 10:01, dates, etc.)",
     "author": "Cade",
     "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='12' r='10'/><polyline points='12 6 12 12 8 14'/><path d='M2 12h2M20 12h2'/></svg>",
     "tags": "local,utc,time,timezone,convert,date"
@@ -1308,16 +1524,36 @@ registerScript(`/**
 **/
 function main(ctx) {
   const text = ctx.selection || ctx.fullText;
-  const result = text.replace(
-    /\\d{1,2}\\/\\d{1,2}\\/\\d{2,4}[,\\s]+\\d{1,2}:\\d{2}(:\\d{2})?\\s*(AM|PM)?/gi,
-    match => {
-      try {
-        const d = new Date(match);
-        if (isNaN(d)) return match;
-        return d.toISOString().replace('.000', '');
-      } catch { return match; }
+  function expandTime(t) {
+    let clean = t.replace(/\\s*(AM|PM)/i, (_, ap) => ' ' + ap.toUpperCase()).trim();
+    const ampm = clean.match(/(AM|PM)$/i);
+    clean = clean.replace(/\\s*(AM|PM)$/i, '').trim();
+    const parts = clean.split(':');
+    let h = parseInt(parts[0]);
+    if (ampm) {
+      if (ampm[1].toUpperCase() === 'PM' && h < 12) h += 12;
+      if (ampm[1].toUpperCase() === 'AM' && h === 12) h = 0;
     }
-  );
+    return String(h).padStart(2, '0') + ':' + (parts[1] || '00') + ':' + (parts[2] || '00');
+  }
+  function toUTCTime(d) {
+    return String(d.getUTCHours()).padStart(2,'0') + ':' + String(d.getUTCMinutes()).padStart(2,'0') + ':' + String(d.getUTCSeconds()).padStart(2,'0') + 'Z';
+  }
+  const today = new Date().toISOString().split('T')[0];
+  let result = text;
+  let changed = false;
+
+  // ISO-ish local (no Z or offset): 2024-01-15T10:01:00
+  if (!changed) { const r = result.replace(/\\d{4}-\\d{2}-\\d{2}[T ]\\d{1,2}:\\d{2}(:\\d{2})?(\\.\\d+)?(?!Z)(?![+-]\\d{2})/g, m => {
+    const d = new Date(m); return isNaN(d) ? m : d.toISOString().replace('.000', '');
+  }); if (r !== result) { result = r; changed = true; } }
+
+  // Bare time (no Z): 10:01, 3:05 PM — treat as local, output HH:MM:SSZ
+  if (!changed) { const r = result.replace(/(?:^|(?<=\\s))(\\d{1,2}:\\d{2}(:\\d{2})?\\s*(AM|PM)?)(?=\\s|$)/gi, (m, t) => {
+    const d = new Date(today + 'T' + expandTime(t.trim()));
+    return isNaN(d) ? m : toUTCTime(d);
+  }); if (r !== result) { result = r; changed = true; } }
+
   if (ctx.selection) ctx.selection = result; else ctx.fullText = result;
 }`);
 
@@ -1572,6 +1808,36 @@ function main(ctx) {
 
 registerScript(`/**
   {
+    "name": "Bullet List",
+    "description": "Toggle bullet points on lines (add or remove)",
+    "author": "Cade",
+    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><line x1='8' y1='6' x2='21' y2='6'/><line x1='8' y1='12' x2='21' y2='12'/><line x1='8' y1='18' x2='21' y2='18'/><line x1='3' y1='6' x2='3.01' y2='6'/><line x1='3' y1='12' x2='3.01' y2='12'/><line x1='3' y1='18' x2='3.01' y2='18'/></svg>",
+    "tags": "bullet,list,toggle,unordered,dash,point"
+  }
+**/
+function main(ctx) {
+  const text = ctx.selection || ctx.fullText;
+  const lines = text.split('\\n');
+  const nonEmpty = lines.filter(l => l.trim());
+  const allBulleted = nonEmpty.length > 0 && nonEmpty.every(l => /^\\s*[-•*]\\s/.test(l));
+  let result;
+  if (allBulleted) {
+    // Remove bullets
+    result = lines.map(l => l.replace(/^(\\s*)[-•*]\\s+/, '$1')).join('\\n');
+  } else {
+    // Add bullets
+    result = lines.map(l => {
+      if (l.trim() === '') return l;
+      const indent = l.match(/^(\\s*)/)[1];
+      const content = l.trim().replace(/^[-•*]\\s+/, '');
+      return indent + '- ' + content;
+    }).join('\\n');
+  }
+  if (ctx.selection) ctx.selection = result; else ctx.fullText = result;
+}`);
+
+registerScript(`/**
+  {
     "name": "Shuffle Lines",
     "description": "Randomly shuffle the order of lines",
     "author": "Cade",
@@ -1712,8 +1978,23 @@ function main(ctx) {
 
 registerScript(`/**
   {
-    "name": "Split to Lines",
-    "description": "Split text by a delimiter into separate lines",
+    "name": "Split by Comma",
+    "description": "Split comma-separated text into separate lines",
+    "author": "Cade",
+    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><line x1='12' y1='2' x2='12' y2='22'/><line x1='4' y1='12' x2='20' y2='12'/></svg>",
+    "tags": "split,comma,lines,csv,separate"
+  }
+**/
+function main(ctx) {
+  const text = ctx.selection || ctx.fullText;
+  const result = text.split(',').map(s => s.trim()).filter(Boolean).join('\\n');
+  if (ctx.selection) ctx.selection = result; else ctx.fullText = result;
+}`);
+
+registerScript(`/**
+  {
+    "name": "Split by Delimiter",
+    "description": "Split text by a custom delimiter into separate lines",
     "author": "Cade",
     "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><line x1='12' y1='2' x2='12' y2='22'/><path d='M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6'/></svg>",
     "tags": "split,lines,delimiter,separate,explode"
@@ -2479,10 +2760,234 @@ document.getElementById('sync-overlay').addEventListener('keydown', (e) => {
   if (e.key === 'Escape') closeSyncModal();
 });
 
-// Auto-connect on page load if config is saved
-if (savedFirebaseUrl && savedRoomName && savedEncKey) {
-  syncConnect();
+// ============================================
+// ROOM SYSTEM
+// ============================================
+let roomCap = parseInt(store.get('cade-room-cap')) || 3;
+let rooms = [];
+try { rooms = JSON.parse(store.get('cade-rooms')) || []; } catch {}
+let activeRoom = store.get('cade-active-room') || '';
+
+function saveRooms() {
+  store.set('cade-rooms', JSON.stringify(rooms));
+  store.set('cade-active-room', activeRoom);
+  store.set('cade-room-cap', roomCap);
 }
+
+function renderRoomTabs() {
+  const container = document.getElementById('room-tabs');
+  if (rooms.length === 0) { container.innerHTML = ''; return; }
+  let html = rooms.map(name => {
+    const isActive = name === activeRoom && syncState.connected;
+    return `<button class="room-tab ${isActive ? 'active' : ''}" data-room="${name}" onclick="switchRoom('${name.replace(/'/g, "\\'")}')" title="${name}">${name}</button>`;
+  }).join('');
+  if (rooms.length < roomCap) {
+    html += `<button class="room-tab-add" onclick="addRoomPrompt()" title="Add room">+</button>`;
+  }
+  container.innerHTML = html;
+}
+
+window.switchRoom = async function(name) {
+  const firebaseUrl = store.get('cade-firebase-url');
+  const encKey = store.get('cade-sync-key');
+  if (!firebaseUrl || !encKey) {
+    showToast('Set up Firebase URL and encryption key in Sync first', 'error');
+    window.openSyncModal();
+    return;
+  }
+  // Disconnect current room listener
+  cleanupFirebase();
+  clearInterval(syncState.idleCheckTimer);
+  syncState.pendingRemoteText = null;
+  syncState.connected = false;
+
+  // Set new room
+  activeRoom = name;
+  syncState.roomName = name;
+  syncState.encKey = encKey;
+  store.set('cade-room-name', name);
+  store.set('cade-active-room', name);
+  document.getElementById('sync-room-name').value = name;
+
+  // Clear editor before syncing so stale content doesn't persist if room is empty
+  syncState.suppressUpdate = true;
+  editor.dispatch({ changes: { from: 0, to: editor.state.doc.length, insert: '' } });
+  syncState.suppressUpdate = false;
+
+  // Connect to new room
+  try {
+    updateSyncUI('connecting', 'Connecting...');
+    const db = initFirebase(firebaseUrl);
+    const textRef = db.ref(`rooms/${name}/text`);
+    syncState.firebaseListener = textRef.on('value', async (snap) => {
+      if (syncState.suppressUpdate) return;
+      const val = snap.val();
+      if (!val) return;
+      try {
+        const text = await decryptText(val, syncState.encKey);
+        const currentText = editor.state.doc.toString();
+        if (text !== currentText) {
+          syncState.pendingRemoteText = text;
+          tryApplyPendingRemote();
+        }
+      } catch (e) { console.error('Sync decrypt error:', e); }
+    });
+    syncState.connected = true;
+    clearInterval(syncState.idleCheckTimer);
+    syncState.idleCheckTimer = setInterval(tryApplyPendingRemote, 500);
+    updateSyncUI('connected', name);
+    renderRoomTabs();
+    showToast('Switched to room: ' + name, 'success', 2000);
+  } catch (e) {
+    console.error('Room switch error:', e);
+    showToast(e.message || 'Failed to switch room', 'error');
+    updateSyncUI('', 'Sync off');
+    renderRoomTabs();
+  }
+};
+
+window.addRoomPrompt = function() {
+  const firebaseUrl = store.get('cade-firebase-url');
+  const encKey = store.get('cade-sync-key');
+  if (!firebaseUrl || !encKey) {
+    showToast('Set up Firebase URL and encryption key in Sync first', 'error');
+    window.openSyncModal();
+    return;
+  }
+  if (rooms.length >= roomCap) {
+    showToast('Room cap reached (' + roomCap + '). Remove a room or increase the cap in View → Room Manager.', 'error');
+    return;
+  }
+  const name = prompt('Room name:');
+  if (!name || !name.trim()) return;
+  const trimmed = name.trim();
+  if (rooms.includes(trimmed)) {
+    switchRoom(trimmed);
+    return;
+  }
+  rooms.push(trimmed);
+  saveRooms();
+  switchRoom(trimmed);
+};
+
+// Room Manager modal
+window.openRoomManager = function() {
+  closeAllMenus();
+  renderRoomManagerList();
+  document.getElementById('room-cap-select').value = roomCap;
+  document.getElementById('room-cap-display').textContent = roomCap;
+  document.getElementById('room-manager-overlay').classList.add('open');
+  document.getElementById('room-add-input').focus();
+};
+
+window.closeRoomManager = function() {
+  document.getElementById('room-manager-overlay').classList.remove('open');
+  editor.focus();
+};
+
+function renderRoomManagerList() {
+  const list = document.getElementById('room-manager-list');
+  if (rooms.length === 0) {
+    list.innerHTML = '<div style="color:var(--text-faint);font-size:var(--text-sm);padding:8px 0;">No rooms added yet.</div>';
+    return;
+  }
+  list.innerHTML = rooms.map(name => {
+    const isActive = name === activeRoom && syncState.connected;
+    return `<div class="room-manager-item">
+      <div>
+        <span class="room-manager-name">${name}</span>
+        ${isActive ? '<span class="room-manager-active">● active</span>' : ''}
+      </div>
+      <button class="btn btn-danger" onclick="removeRoom('${name.replace(/'/g, "\\'")}')">Remove</button>
+    </div>`;
+  }).join('');
+}
+
+window.addRoomFromManager = function() {
+  const input = document.getElementById('room-add-input');
+  const name = input.value.trim();
+  if (!name) return;
+  if (rooms.includes(name)) { showToast('Room already exists', 'error'); return; }
+  if (rooms.length >= roomCap) { showToast('Room cap reached (' + roomCap + ')', 'error'); return; }
+  rooms.push(name);
+  saveRooms();
+  renderRoomManagerList();
+  renderRoomTabs();
+  input.value = '';
+  showToast('Room added: ' + name, 'success', 2000);
+};
+
+window.removeRoom = function(name) {
+  rooms = rooms.filter(r => r !== name);
+  saveRooms();
+  if (activeRoom === name && syncState.connected) {
+    window.disconnectSync();
+    activeRoom = '';
+    store.set('cade-active-room', '');
+  }
+  renderRoomManagerList();
+  renderRoomTabs();
+  showToast('Room removed: ' + name, 'success', 2000);
+};
+
+window.updateRoomCap = function(val) {
+  roomCap = parseInt(val) || 3;
+  store.set('cade-room-cap', roomCap);
+  document.getElementById('room-cap-display').textContent = roomCap;
+  // Trim excess rooms
+  while (rooms.length > roomCap) {
+    const removed = rooms.pop();
+    if (activeRoom === removed && syncState.connected) {
+      window.disconnectSync();
+      activeRoom = '';
+    }
+  }
+  saveRooms();
+  renderRoomManagerList();
+  renderRoomTabs();
+};
+
+// Room manager modal events
+document.getElementById('room-manager-overlay').addEventListener('click', (e) => {
+  if (e.target === document.getElementById('room-manager-overlay')) closeRoomManager();
+});
+document.getElementById('room-manager-overlay').addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closeRoomManager();
+  if (e.key === 'Enter' && e.target.id === 'room-add-input') addRoomFromManager();
+});
+
+// Auto-connect on page load
+if (savedFirebaseUrl && savedEncKey) {
+  // If rooms exist, connect to active room
+  if (rooms.length > 0 && activeRoom && rooms.includes(activeRoom)) {
+    switchRoom(activeRoom);
+  } else if (savedRoomName) {
+    // Legacy: single room mode
+    if (!rooms.includes(savedRoomName)) {
+      rooms.push(savedRoomName);
+      activeRoom = savedRoomName;
+      saveRooms();
+    }
+    switchRoom(savedRoomName);
+  }
+}
+renderRoomTabs();
+
+// Also update room tabs when syncConnect runs
+const origSyncConnect = window.syncConnect;
+window.syncConnect = async function() {
+  await origSyncConnect();
+  // After connecting, ensure the room is in the rooms list
+  const roomName = syncState.roomName;
+  if (roomName && !rooms.includes(roomName)) {
+    if (rooms.length >= roomCap) rooms.pop();
+    rooms.push(roomName);
+  }
+  activeRoom = roomName;
+  saveRooms();
+  renderRoomTabs();
+  updateSyncUI('connected', roomName);
+};
 
 // ============================================
 // HOTKEY SYSTEM
@@ -2508,6 +3013,17 @@ try {
   const saved = JSON.parse(store.get('cade-hotkeys'));
   if (saved) hotkeys = { ...defaultHotkeys, ...saved };
 } catch {}
+
+// Script-specific hotkeys: { hotkeyString: scriptName }
+let scriptHotkeys = {};
+try {
+  const saved = JSON.parse(store.get('cade-script-hotkeys'));
+  if (saved) scriptHotkeys = saved;
+} catch {}
+
+function saveScriptHotkeys() {
+  store.set('cade-script-hotkeys', JSON.stringify(scriptHotkeys));
+}
 
 function saveHotkeys() {
   store.set('cade-hotkeys', JSON.stringify(hotkeys));
@@ -2555,50 +3071,88 @@ function hotkeyStringFromEvent(e) {
 }
 
 // Global hotkey handler
+// Use capture phase so hotkeys fire BEFORE CM6 processes the event
+// (prevents CM6's built-in Ctrl+Shift+K "delete line" from firing)
 document.addEventListener('keydown', (e) => {
-  // Don't intercept if we're in a modal input
   const tag = e.target.tagName;
   const isInputField = (tag === 'INPUT' || tag === 'TEXTAREA') && !e.target.closest('.cm-editor');
 
   if (eventMatchesHotkey(e, hotkeys.openPicker) && !isInputField) {
-    e.preventDefault();
+    e.preventDefault(); e.stopPropagation();
     if (pickerOpen) closePicker(); else window.openPicker();
     return;
   }
   if (eventMatchesHotkey(e, hotkeys.rerunScript) && !isInputField) {
-    e.preventDefault();
+    e.preventDefault(); e.stopPropagation();
     window.rerunLastScript();
     return;
   }
   if (eventMatchesHotkey(e, hotkeys.clearEditor) && !isInputField) {
-    e.preventDefault();
+    e.preventDefault(); e.stopPropagation();
     window.clearEditor();
     return;
   }
   if (eventMatchesHotkey(e, hotkeys.openSync) && !isInputField) {
-    e.preventDefault();
+    e.preventDefault(); e.stopPropagation();
     window.openSyncModal();
     return;
   }
   if (eventMatchesHotkey(e, hotkeys.forceSync) && !isInputField) {
-    e.preventDefault();
+    e.preventDefault(); e.stopPropagation();
     window.forceSyncReload();
     return;
   }
-});
+
+  // Script hotkeys
+  for (const [hk, scriptName] of Object.entries(scriptHotkeys)) {
+    if (eventMatchesHotkey(e, hk)) {
+      e.preventDefault(); e.stopPropagation();
+      const script = scripts.find(s => s.name === scriptName);
+      if (script) executeScript(script);
+      else showToast('Script "' + scriptName + '" not found', 'error');
+      return;
+    }
+  }
+}, true);
 
 // Settings modal
 window.openSettings = function() {
   closeAllMenus();
   const listEl = document.getElementById('hotkey-list');
-  listEl.innerHTML = Object.keys(hotkeys).map(id => `
+
+  // System hotkeys
+  let html = '<div style="font-size:var(--text-xs);color:var(--text-faint);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px;">System</div>';
+  html += Object.keys(hotkeys).map(id => `
     <div class="hotkey-row">
       <span class="hotkey-label">${hotkeyLabels[id]}</span>
       <input class="hotkey-input" data-hotkey-id="${id}" value="${hotkeys[id]}" readonly>
     </div>
   `).join('');
 
-  listEl.querySelectorAll('.hotkey-input').forEach(input => {
+  // Script hotkeys
+  html += '<div style="font-size:var(--text-xs);color:var(--text-faint);text-transform:uppercase;letter-spacing:0.05em;margin:12px 0 4px;">Script Bindings</div>';
+  const entries = Object.entries(scriptHotkeys);
+  if (entries.length > 0) {
+    html += entries.map(([hk, name]) => `
+      <div class="hotkey-row">
+        <span class="hotkey-label">${name}</span>
+        <div style="display:flex;gap:4px;align-items:center;">
+          <input class="hotkey-input" data-script-hk="${hk}" value="${hk}" readonly>
+          <button class="btn btn-danger" style="padding:2px 8px;font-size:var(--text-xs);" onclick="removeScriptHotkey('${hk.replace(/'/g, "\\'")}')">×</button>
+        </div>
+      </div>
+    `).join('');
+  } else {
+    html += '<div style="color:var(--text-faint);font-size:var(--text-sm);padding:4px 0;">None bound. Click "Add Script Hotkey" below.</div>';
+  }
+  html += `<div style="margin-top:8px;">
+    <button class="btn" style="font-size:var(--text-xs);width:100%;" onclick="addScriptHotkeyPrompt()">+ Add Script Hotkey</button>
+  </div>`;
+
+  listEl.innerHTML = html;
+
+  // Attach key recording to system hotkey inputs
+  listEl.querySelectorAll('.hotkey-input[data-hotkey-id]').forEach(input => {
     input.addEventListener('focus', () => input.classList.add('recording'));
     input.addEventListener('blur', () => input.classList.remove('recording'));
     input.addEventListener('keydown', (e) => {
@@ -2612,7 +3166,47 @@ window.openSettings = function() {
     });
   });
 
+  // Attach key recording to script hotkey inputs
+  listEl.querySelectorAll('.hotkey-input[data-script-hk]').forEach(input => {
+    input.addEventListener('focus', () => input.classList.add('recording'));
+    input.addEventListener('blur', () => input.classList.remove('recording'));
+    input.addEventListener('keydown', (e) => {
+      e.preventDefault();
+      const str = hotkeyStringFromEvent(e);
+      if (str) {
+        const oldHk = input.dataset.scriptHk;
+        const scriptName = scriptHotkeys[oldHk];
+        delete scriptHotkeys[oldHk];
+        scriptHotkeys[str] = scriptName;
+        saveScriptHotkeys();
+        window.openSettings(); // Re-render
+      }
+    });
+  });
+
   document.getElementById('settings-overlay').classList.add('open');
+};
+
+window.addScriptHotkeyPrompt = function() {
+  // Show a script picker for selection
+  const scriptNames = scripts.map(s => s.name);
+  const name = prompt('Script name (type to search):\\n\\n' + scriptNames.join('\\n'));
+  if (!name) return;
+  const script = scripts.find(s => s.name.toLowerCase() === name.toLowerCase());
+  if (!script) { showToast('Script not found: ' + name, 'error'); return; }
+  const hk = prompt('Press and type the hotkey (e.g. Ctrl+Shift+1):');
+  if (!hk) return;
+  scriptHotkeys[hk] = script.name;
+  saveScriptHotkeys();
+  window.openSettings(); // Re-render
+  showToast('Bound "' + script.name + '" to ' + hk, 'success', 2000);
+};
+
+window.removeScriptHotkey = function(hk) {
+  delete scriptHotkeys[hk];
+  saveScriptHotkeys();
+  window.openSettings(); // Re-render
+  showToast('Script hotkey removed', 'success', 2000);
 };
 
 window.closeSettings = function() {
@@ -2622,7 +3216,9 @@ window.closeSettings = function() {
 
 window.resetHotkeys = function() {
   hotkeys = { ...defaultHotkeys };
+  scriptHotkeys = {};
   saveHotkeys();
+  saveScriptHotkeys();
   window.openSettings(); // Re-render
   showToast('Hotkeys reset to defaults', 'success', 2000);
 };
