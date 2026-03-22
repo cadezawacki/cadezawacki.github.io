@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Cade.txt</title>
 <link href="https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600&f[]=jetbrains-mono@400,500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
@@ -697,6 +697,47 @@ body {
 
 .hotkey-input:focus { border-color: var(--accent); }
 .hotkey-input.recording { border-color: var(--accent); background: var(--accent-bg); }
+
+/* ============================================
+   MOBILE
+   ============================================ */
+@media (max-width: 600px) {
+  .menubar {
+    padding: var(--space-1) var(--space-2);
+    gap: 0;
+  }
+  .menubar-logo {
+    padding: 0 var(--space-1);
+    gap: 4px;
+  }
+  .menubar-btn {
+    padding: var(--space-1) var(--space-2);
+    font-size: var(--text-xs);
+  }
+  .editor-wrap .cm-scroller {
+    padding: var(--space-2) var(--space-3);
+  }
+  .editor-wrap .cm-editor,
+  .editor-wrap .cm-editor .cm-content,
+  .editor-wrap .cm-editor .cm-line {
+    font-size: 16px !important;
+  }
+  .footer {
+    gap: var(--space-2);
+    padding: 0 var(--space-2);
+    font-size: 10px;
+  }
+  .footer-left { gap: var(--space-2); }
+  .footer-right { gap: var(--space-2); }
+  .modal-dialog {
+    padding: var(--space-4);
+    max-height: calc(100vh - 40px);
+    overflow-y: auto;
+  }
+  .form-input, .form-input:focus {
+    font-size: 16px;
+  }
+}
 </style>
 </head>
 <body>
