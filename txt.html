@@ -3190,7 +3190,7 @@ window.openSettings = function() {
 window.addScriptHotkeyPrompt = function() {
   // Show a script picker for selection
   const scriptNames = scripts.map(s => s.name);
-  const name = prompt('Script name (type to search):\\n\\n' + scriptNames.join('\\n'));
+  const name = prompt('Script name: ' + scriptNames.join(', '));
   if (!name) return;
   const script = scripts.find(s => s.name.toLowerCase() === name.toLowerCase());
   if (!script) { showToast('Script not found: ' + name, 'error'); return; }
