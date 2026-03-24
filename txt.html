@@ -2455,6 +2455,25 @@ function main(ctx) {
   if (ctx.selection) ctx.selection = output; else ctx.fullText = output;
 }`);
 
+registerScript(`/**
+  {
+    "name": "Flatten",
+    "description": "Collapse multiple lines into a single line, with a single space between each, skipping blank lines",
+    "author": "Cade",
+    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><line x1='3' y1='8' x2='21' y2='8'/><line x1='3' y1='12' x2='21' y2='12'/><line x1='3' y1='16' x2='21' y2='16'/><polyline points='8 5 12 1 16 5'/><polyline points='8 19 12 23 16 19'/></svg>",
+    "tags": "flatten,join,single line,collapse,condense,unwrap"
+  }
+**/
+function main(ctx) {
+  const text = ctx.selection || ctx.fullText;
+  const result = text
+    .split('\\n')
+    .map(l => l.trim())
+    .filter(l => l.length > 0)
+    .join(' ');
+  if (ctx.selection) ctx.selection = result; else ctx.fullText = result;
+}`);
+
 // ============================================
 // SCRIPT EXECUTION ENGINE
 // ============================================
