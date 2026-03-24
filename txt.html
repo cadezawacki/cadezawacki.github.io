@@ -2375,6 +2375,86 @@ function main(ctx) {
   if (ctx.selection) ctx.selection = result; else ctx.fullText = result;
 }`);
 
+registerScript(`/**
+  {
+    "name": "Align Comments",
+    "description": "Pad inline comments so they line up across consecutive lines. Auto-detects Python (#) and JS (//) syntax.",
+    "author": "Cade",
+    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><line x1='3' y1='6' x2='21' y2='6'/><line x1='3' y1='12' x2='15' y2='12'/><line x1='3' y1='18' x2='18' y2='18'/></svg>",
+    "tags": "align,comments,padding,format,python,javascript"
+  }
+**/
+function main(ctx) {
+  const text = ctx.selection || ctx.fullText;
+  const lines = text.split('\\n');
+
+  // Auto-detect language by scoring keywords
+  const pyScore = (text.match(/\\bdef \\b|\\bimport \\b|\\bclass \\b|\\bself\\b/g) || []).length;
+  const jsScore = (text.match(/\\bfunction\\b|\\bconst\\b|\\blet\\b|\\bvar\\b|=>/g) || []).length;
+  const marker = pyScore >= jsScore ? '#' : '//';
+
+  // Return the character index of the inline comment marker, or null if none / full-line comment
+  function findInlineComment(line) {
+    let inSingle = false, inDouble = false, inTemplate = false;
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (ch === '\\\\' && (inSingle || inDouble || inTemplate)) { i++; continue; }
+      if (ch === '\`' && !inSingle && !inDouble) { inTemplate = !inTemplate; continue; }
+      if (ch === "'" && !inDouble && !inTemplate) { inSingle = !inSingle; continue; }
+      if (ch === '"' && !inSingle && !inTemplate) { inDouble = !inDouble; continue; }
+      if (!inSingle && !inDouble && !inTemplate) {
+        if (marker === '#' && ch === '#') {
+          if (line.slice(0, i).trim() === '') return null; // full-line comment
+          return i;
+        }
+        if (marker === '//' && ch === '/' && line[i + 1] === '/') {
+          if (line.slice(0, i).trim() === '') return null; // full-line comment
+          return i;
+        }
+      }
+    }
+    return null;
+  }
+
+  const result = [];
+  let i = 0;
+
+  while (i < lines.length) {
+    const groupStart = i;
+    const group = [];
+
+    // Collect consecutive lines that each have an inline comment
+    while (i < lines.length) {
+      const commentIdx = findInlineComment(lines[i]);
+      if (commentIdx !== null) {
+        const codePart = lines[i].slice(0, commentIdx).trimEnd();
+        const commentPart = lines[i].slice(commentIdx);
+        group.push({ line: lines[i], codePart, commentPart });
+        i++;
+      } else {
+        break;
+      }
+    }
+
+    if (group.length >= 2) {
+      const maxLen = Math.max(...group.map(g => g.codePart.length));
+      for (const g of group) {
+        result.push(g.codePart + ' '.repeat(maxLen - g.codePart.length + 2) + g.commentPart);
+      }
+    } else if (group.length === 1) {
+      result.push(group[0].line); // single line — nothing to align
+    }
+
+    if (i === groupStart) {
+      result.push(lines[i]); // line with no comment, pass through
+      i++;
+    }
+  }
+
+  const output = result.join('\\n');
+  if (ctx.selection) ctx.selection = output; else ctx.fullText = output;
+}`);
+
 // ============================================
 // SCRIPT EXECUTION ENGINE
 // ============================================
