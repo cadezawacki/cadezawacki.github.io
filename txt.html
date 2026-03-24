@@ -895,6 +895,15 @@ body {
         <span id="linenums-label">Hide Line Numbers</span>
         <span></span>
       </button>
+      <button class="menu-item" onclick="toggleInjections()">
+        <span id="injections-label">Injections: On</span>
+        <span></span>
+      </button>
+      <div class="menu-separator"></div>
+      <button class="menu-item" onclick="shareLink()">
+        <span>Share Link</span>
+        <span></span>
+      </button>
       <div class="menu-separator"></div>
       <button class="menu-item" onclick="openSettings()">
         <span>Hotkey Settings</span>
@@ -2474,6 +2483,134 @@ function main(ctx) {
   if (ctx.selection) ctx.selection = result; else ctx.fullText = result;
 }`);
 
+registerScript(`/**
+  {
+    "name": "Convert",
+    "description": "Unit conversions: °F↔°C, in↔cm, ft↔m, mi↔km, lb↔kg, oz↔g, KB↔MB↔GB, and more",
+    "author": "Cade",
+    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M8 3L4 7l4 4'/><path d='M4 7h16'/><path d='M16 21l4-4-4-4'/><path d='M20 17H4'/></svg>",
+    "tags": "convert,unit,temperature,length,weight,data,fahrenheit,celsius,inches,centimeters,feet,meters,miles,kilometers,pounds,kilograms,kilobyte,megabyte,gigabyte"
+  }
+**/
+function main(ctx) {
+  const CONVERSIONS = {
+    // Temperature
+    'f>c':   { label: '°F → °C',   fn: v => (v - 32) * 5/9,    fmt: v => v.toFixed(2) + ' °C' },
+    'c>f':   { label: '°C → °F',   fn: v => v * 9/5 + 32,      fmt: v => v.toFixed(2) + ' °F' },
+    // Length
+    'in>cm': { label: 'in → cm',   fn: v => v * 2.54,           fmt: v => v.toFixed(4) + ' cm' },
+    'cm>in': { label: 'cm → in',   fn: v => v / 2.54,           fmt: v => v.toFixed(4) + ' in' },
+    'ft>m':  { label: 'ft → m',    fn: v => v * 0.3048,         fmt: v => v.toFixed(4) + ' m' },
+    'm>ft':  { label: 'm → ft',    fn: v => v / 0.3048,         fmt: v => v.toFixed(4) + ' ft' },
+    'mi>km': { label: 'mi → km',   fn: v => v * 1.60934,        fmt: v => v.toFixed(4) + ' km' },
+    'km>mi': { label: 'km → mi',   fn: v => v / 1.60934,        fmt: v => v.toFixed(4) + ' mi' },
+    'yd>m':  { label: 'yd → m',    fn: v => v * 0.9144,         fmt: v => v.toFixed(4) + ' m' },
+    'm>yd':  { label: 'm → yd',    fn: v => v / 0.9144,         fmt: v => v.toFixed(4) + ' yd' },
+    // Weight
+    'lb>kg': { label: 'lb → kg',   fn: v => v * 0.453592,       fmt: v => v.toFixed(4) + ' kg' },
+    'kg>lb': { label: 'kg → lb',   fn: v => v / 0.453592,       fmt: v => v.toFixed(4) + ' lb' },
+    'oz>g':  { label: 'oz → g',    fn: v => v * 28.3495,        fmt: v => v.toFixed(4) + ' g' },
+    'g>oz':  { label: 'g → oz',    fn: v => v / 28.3495,        fmt: v => v.toFixed(4) + ' oz' },
+    // Data
+    'kb>mb': { label: 'KB → MB',   fn: v => v / 1024,           fmt: v => v.toFixed(4) + ' MB' },
+    'mb>kb': { label: 'MB → KB',   fn: v => v * 1024,           fmt: v => v.toFixed(0) + ' KB' },
+    'mb>gb': { label: 'MB → GB',   fn: v => v / 1024,           fmt: v => v.toFixed(4) + ' GB' },
+    'gb>mb': { label: 'GB → MB',   fn: v => v * 1024,           fmt: v => v.toFixed(0) + ' MB' },
+    'kb>gb': { label: 'KB → GB',   fn: v => v / 1048576,        fmt: v => v.toFixed(6) + ' GB' },
+    'gb>kb': { label: 'GB → KB',   fn: v => v * 1048576,        fmt: v => v.toFixed(0) + ' KB' },
+    'gb>tb': { label: 'GB → TB',   fn: v => v / 1024,           fmt: v => v.toFixed(4) + ' TB' },
+    'tb>gb': { label: 'TB → GB',   fn: v => v * 1024,           fmt: v => v.toFixed(0) + ' GB' },
+    // Speed
+    'mph>kph': { label: 'mph → km/h', fn: v => v * 1.60934,     fmt: v => v.toFixed(2) + ' km/h' },
+    'kph>mph': { label: 'km/h → mph', fn: v => v / 1.60934,     fmt: v => v.toFixed(2) + ' mph' },
+    // Area
+    'sqft>sqm': { label: 'ft² → m²', fn: v => v * 0.092903,    fmt: v => v.toFixed(4) + ' m²' },
+    'sqm>sqft': { label: 'm² → ft²', fn: v => v / 0.092903,    fmt: v => v.toFixed(4) + ' ft²' },
+    // Volume
+    'l>gal':  { label: 'L → gal',  fn: v => v * 0.264172,       fmt: v => v.toFixed(4) + ' gal' },
+    'gal>l':  { label: 'gal → L',  fn: v => v / 0.264172,       fmt: v => v.toFixed(4) + ' L' },
+    // Pressure
+    'psi>bar':  { label: 'psi → bar', fn: v => v * 0.0689476,   fmt: v => v.toFixed(4) + ' bar' },
+    'bar>psi':  { label: 'bar → psi', fn: v => v / 0.0689476,   fmt: v => v.toFixed(2) + ' psi' },
+  };
+
+  const MENU = [
+    '── Temperature ──────────────────',
+    '  f>c   °F → °C',
+    '  c>f   °C → °F',
+    '── Length ───────────────────────',
+    '  in>cm  inches → centimeters',
+    '  cm>in  centimeters → inches',
+    '  ft>m   feet → meters',
+    '  m>ft   meters → feet',
+    '  mi>km  miles → kilometers',
+    '  km>mi  kilometers → miles',
+    '  yd>m   yards → meters',
+    '  m>yd   meters → yards',
+    '── Weight ───────────────────────',
+    '  lb>kg  pounds → kilograms',
+    '  kg>lb  kilograms → pounds',
+    '  oz>g   ounces → grams',
+    '  g>oz   grams → ounces',
+    '── Data Storage ─────────────────',
+    '  kb>mb  KB → MB',
+    '  mb>kb  MB → KB',
+    '  mb>gb  MB → GB',
+    '  gb>mb  GB → MB',
+    '  kb>gb  KB → GB',
+    '  gb>kb  GB → KB',
+    '  gb>tb  GB → TB',
+    '  tb>gb  TB → GB',
+    '── Speed ────────────────────────',
+    '  mph>kph  mph → km/h',
+    '  kph>mph  km/h → mph',
+    '── Area ─────────────────────────',
+    '  sqft>sqm  ft² → m²',
+    '  sqm>sqft  m² → ft²',
+    '── Volume ───────────────────────',
+    '  l>gal  litres → gallons',
+    '  gal>l  gallons → litres',
+    '── Pressure ─────────────────────',
+    '  psi>bar  psi → bar',
+    '  bar>psi  bar → psi',
+  ].join('\\n');
+
+  const text = (ctx.selection || ctx.fullText).trim();
+  // Try to auto-detect: "42.5 f>c" or just a number when a code is in selection hint
+  const autoMatch = text.match(/^([\\d.\\-]+)\\s+([a-z>]+)$/i);
+  let code, value;
+
+  if (autoMatch) {
+    value = parseFloat(autoMatch[1]);
+    code = autoMatch[2].toLowerCase();
+  } else {
+    const raw = prompt('Convert: Enter code and value (e.g. "98.6 f>c") or just a code to see options:\\n\\n' + MENU);
+    if (!raw) return;
+    const parts = raw.trim().split(/\\s+/);
+    // Support "98.6 f>c" or "f>c 98.6"
+    if (parts.length === 2) {
+      if (!isNaN(parts[0])) { value = parseFloat(parts[0]); code = parts[1].toLowerCase(); }
+      else { code = parts[0].toLowerCase(); value = parseFloat(parts[1]); }
+    } else if (parts.length === 1) {
+      code = parts[0].toLowerCase();
+      const numStr = prompt('Enter the value to convert:');
+      if (numStr === null) return;
+      value = parseFloat(numStr);
+    } else {
+      showToast('Invalid input. Try "98.6 f>c"', 'error');
+      return;
+    }
+  }
+
+  const conv = CONVERSIONS[code];
+  if (!conv) { showToast('Unknown conversion: ' + code, 'error'); return; }
+  if (isNaN(value)) { showToast('Invalid number', 'error'); return; }
+
+  const result = conv.fmt(conv.fn(value));
+  if (ctx.selection) ctx.selection = result; else ctx.fullText += (ctx.fullText ? '\\n' : '') + result;
+  showToast(value + ' ' + conv.label.split(' → ')[0].replace('°','°') + ' = ' + result, 'success', 3000);
+}`);
+
 // ============================================
 // SCRIPT EXECUTION ENGINE
 // ============================================
@@ -2581,6 +2718,9 @@ function closePicker() {
   editor.focus();
 }
 
+// Track whether last picker navigation was keyboard (prevents hover glitch on re-render)
+let pickerKeyboardNav = false;
+
 function renderPickerList() {
   const listEl = document.getElementById('picker-list');
   if (filteredScripts.length === 0) {
@@ -2603,22 +2743,26 @@ function renderPickerList() {
       closePicker();
       executeScript(filteredScripts[idx]);
     });
-    el.addEventListener('mouseenter', () => {
-      pickerIndex = parseInt(el.dataset.index);
+    // Use mousemove instead of mouseenter — only fires on actual movement, not re-renders
+    el.addEventListener('mousemove', () => {
+      pickerKeyboardNav = false;
+      const idx = parseInt(el.dataset.index);
+      if (idx === pickerIndex) return;
+      pickerIndex = idx;
       listEl.querySelectorAll('.picker-item').forEach((e, i) => {
         e.classList.toggle('selected', i === pickerIndex);
       });
     });
   });
 
-  // Scroll selected into view
-  const selected = listEl.querySelector('.picker-item.selected');
-  if (selected) selected.scrollIntoView({ block: 'nearest' });
+  // Scroll selected into view only during keyboard navigation
+  if (pickerKeyboardNav) {
+    const selected = listEl.querySelector('.picker-item.selected');
+    if (selected) selected.scrollIntoView({ block: 'nearest' });
+  }
 }
 
 function fuzzyMatch(query, text) {
-  query = query.toLowerCase();
-  text = text.toLowerCase();
   if (text.includes(query)) return true;
   let qi = 0;
   for (let i = 0; i < text.length && qi < query.length; i++) {
@@ -2627,14 +2771,34 @@ function fuzzyMatch(query, text) {
   return qi === query.length;
 }
 
+// Score a script match for sorting — higher = better match
+function scoreScript(query, script) {
+  const q = query.toLowerCase();
+  const name = script.name.toLowerCase();
+  const desc = (script.description || '').toLowerCase();
+  const tags = (script.tags || '').toLowerCase();
+  if (name === q) return 1000;
+  if (name.startsWith(q)) return 900;
+  if (name.includes(q)) return 800;
+  const tagList = tags.split(',').map(t => t.trim());
+  if (tagList.includes(q)) return 700;
+  if (tags.includes(q)) return 600;
+  if (desc.includes(q)) return 500;
+  if (fuzzyMatch(q, name)) return 400;
+  if (fuzzyMatch(q, tags) || fuzzyMatch(q, desc)) return 300;
+  return 0;
+}
+
 document.getElementById('picker-search').addEventListener('input', (e) => {
   const q = e.target.value.trim();
   if (!q) {
     filteredScripts = [...scripts];
   } else {
-    filteredScripts = scripts.filter(s =>
-      fuzzyMatch(q, s.name) || fuzzyMatch(q, s.description) || fuzzyMatch(q, s.tags || '')
-    );
+    filteredScripts = scripts
+      .map(s => ({ s, score: scoreScript(q, s) }))
+      .filter(({ score }) => score > 0)
+      .sort((a, b) => b.score - a.score)
+      .map(({ s }) => s);
   }
   pickerIndex = 0;
   renderPickerList();
@@ -2643,10 +2807,12 @@ document.getElementById('picker-search').addEventListener('input', (e) => {
 document.getElementById('picker-search').addEventListener('keydown', (e) => {
   if (e.key === 'ArrowDown') {
     e.preventDefault();
+    pickerKeyboardNav = true;
     pickerIndex = Math.min(pickerIndex + 1, filteredScripts.length - 1);
     renderPickerList();
   } else if (e.key === 'ArrowUp') {
     e.preventDefault();
+    pickerKeyboardNav = true;
     pickerIndex = Math.max(pickerIndex - 1, 0);
     renderPickerList();
   } else if (e.key === 'Enter') {
@@ -2689,6 +2855,45 @@ document.getElementById('sync-firebase-url').value = savedFirebaseUrl;
 document.getElementById('sync-room-name').value = savedRoomName;
 document.getElementById('sync-enc-key').value = savedEncKey;
 
+// ============================================
+// COMPRESSION HELPERS (deflate-raw via Streams API)
+// ============================================
+async function _compress(data) {
+  const cs = new CompressionStream('deflate-raw');
+  const writer = cs.writable.getWriter();
+  writer.write(data);
+  writer.close();
+  const chunks = [];
+  const reader = cs.readable.getReader();
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+  }
+  let len = 0; for (const c of chunks) len += c.length;
+  const out = new Uint8Array(len); let off = 0;
+  for (const c of chunks) { out.set(c, off); off += c.length; }
+  return out;
+}
+
+async function _decompress(data) {
+  const ds = new DecompressionStream('deflate-raw');
+  const writer = ds.writable.getWriter();
+  writer.write(data);
+  writer.close();
+  const chunks = [];
+  const reader = ds.readable.getReader();
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+  }
+  let len = 0; for (const c of chunks) len += c.length;
+  const out = new Uint8Array(len); let off = 0;
+  for (const c of chunks) { out.set(c, off); off += c.length; }
+  return new TextDecoder().decode(out);
+}
+
 // AES-GCM encryption helpers
 async function deriveKey(password) {
   const enc = new TextEncoder();
@@ -2705,12 +2910,14 @@ async function deriveKey(password) {
 async function encryptText(text, password) {
   const key = await deriveKey(password);
   const iv = crypto.getRandomValues(new Uint8Array(12));
-  const enc = new TextEncoder();
-  const ciphertext = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, enc.encode(text));
-  const combined = new Uint8Array(iv.byteLength + ciphertext.byteLength);
-  combined.set(iv, 0);
-  combined.set(new Uint8Array(ciphertext), iv.byteLength);
-  // Convert to base64 without spread to avoid stack overflow on large texts
+  // Compress before encrypting for smaller Firebase payloads
+  const plainBytes = await _compress(new TextEncoder().encode(text));
+  const ciphertext = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, plainBytes);
+  // Format: [0x01 version][IV 12 bytes][ciphertext] — version 0x01 = deflate-raw compressed
+  const combined = new Uint8Array(1 + iv.byteLength + ciphertext.byteLength);
+  combined[0] = 0x01;
+  combined.set(iv, 1);
+  combined.set(new Uint8Array(ciphertext), 1 + iv.byteLength);
   let binary = '';
   const chunk = 8192;
   for (let i = 0; i < combined.length; i += chunk) {
@@ -2724,10 +2931,20 @@ async function decryptText(encoded, password) {
   const raw = atob(encoded);
   const combined = new Uint8Array(raw.length);
   for (let i = 0; i < raw.length; i++) combined[i] = raw.charCodeAt(i);
-  const iv = combined.slice(0, 12);
-  const ciphertext = combined.slice(12);
+  // Detect format: version byte 0x01 = deflate-raw compressed; legacy = no version byte
+  let iv, ciphertext, isCompressed;
+  if (combined[0] === 0x01) {
+    iv = combined.slice(1, 13);
+    ciphertext = combined.slice(13);
+    isCompressed = true;
+  } else {
+    iv = combined.slice(0, 12);
+    ciphertext = combined.slice(12);
+    isCompressed = false;
+  }
   try {
     const decrypted = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ciphertext);
+    if (isCompressed) return await _decompress(new Uint8Array(decrypted));
     return new TextDecoder().decode(decrypted);
   } catch (e) {
     console.warn('Decrypt failed (wrong key or corrupted data)');
@@ -3157,6 +3374,173 @@ window.syncConnect = async function() {
   renderRoomTabs();
   updateSyncUI('connected', roomName);
 };
+
+// ============================================
+// SHAREABLE LINK
+// ============================================
+window.shareLink = function() {
+  closeAllMenus();
+  const fbUrl = store.get('cade-firebase-url') || '';
+  const roomName = syncState.roomName || store.get('cade-room-name') || '';
+  if (!fbUrl || !roomName) {
+    showToast('Configure Firebase URL and room in Sync first', 'error', 3000);
+    return;
+  }
+  const url = new URL(window.location.href.split('?')[0]);
+  url.searchParams.set('fb', fbUrl);
+  url.searchParams.set('room', roomName);
+  const link = url.toString();
+  navigator.clipboard.writeText(link).then(() => {
+    showToast('Share link copied! (password not included)', 'success', 3000);
+  }).catch(() => {
+    prompt('Copy this share link:', link);
+  });
+};
+
+// Pre-populate sync fields from URL params on load
+(function() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const fbParam = params.get('fb');
+    const roomParam = params.get('room');
+    if (fbParam) {
+      document.getElementById('sync-firebase-url').value = fbParam;
+      if (!store.get('cade-firebase-url')) store.set('cade-firebase-url', fbParam);
+    }
+    if (roomParam) {
+      document.getElementById('sync-room-name').value = roomParam;
+      if (!store.get('cade-room-name')) store.set('cade-room-name', roomParam);
+      // Pre-add room to room list
+      if (!rooms.includes(roomParam)) {
+        if (rooms.length >= roomCap) rooms.shift();
+        rooms.push(roomParam);
+        if (!activeRoom) activeRoom = roomParam;
+        saveRooms();
+        renderRoomTabs();
+      }
+    }
+    if (fbParam || roomParam) {
+      showToast('Shared link loaded — enter your password in Sync to connect', 'success', 5000);
+    }
+  } catch (e) { /* ignore */ }
+})();
+
+// ============================================
+// TEXT INJECTIONS
+// ============================================
+let injectionsEnabled = store.get('cade-injections') !== 'false';
+
+function updateInjectionsLabel() {
+  const el = document.getElementById('injections-label');
+  if (el) el.textContent = 'Injections: ' + (injectionsEnabled ? 'On' : 'Off');
+}
+updateInjectionsLabel();
+
+window.toggleInjections = function() {
+  closeAllMenus();
+  injectionsEnabled = !injectionsEnabled;
+  store.set('cade-injections', injectionsEnabled);
+  updateInjectionsLabel();
+  showToast('Text injections ' + (injectionsEnabled ? 'enabled' : 'disabled'), 'success', 2000);
+};
+
+// Token resolution
+function resolveInjection(token) {
+  const now = new Date();
+  const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const DAYS = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+
+  function ordinal(n) {
+    const v = n % 100;
+    return n + (['th','st','nd','rd'][(v - 20) % 10] || ['th','st','nd','rd'][v] || 'th');
+  }
+  function pad(n) { return String(n).padStart(2, '0'); }
+  function fmtTime(d) {
+    let h = d.getHours(), m = d.getMinutes();
+    const ap = h >= 12 ? 'PM' : 'AM';
+    h = h % 12 || 12;
+    return h + ':' + pad(m) + ' ' + ap;
+  }
+  function fmtDate(d) { return MONTHS[d.getMonth()] + ' ' + ordinal(d.getDate()) + ', ' + d.getFullYear(); }
+  function fmtISO(d) { return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
+  function fmtNow(d) { return fmtISO(d) + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds()); }
+  function offsetDate(n) { const d = new Date(now); d.setDate(d.getDate() + n); return fmtDate(d); }
+
+  switch (token) {
+    case '@time':  return fmtTime(now);
+    case '@date':  return fmtDate(now);
+    case '@day':   return DAYS[now.getDay()];
+    case '@month': return MONTHS[now.getMonth()];
+    case '@year':  return String(now.getFullYear());
+    case '@now':   return fmtNow(now);
+    case '@dt':    return fmtISO(now);
+    case '@t':     return fmtDate(now);
+  }
+
+  // @t+n / @t-n  (date offset)
+  const offsetMatch = token.match(/^@t([+\-]\d+)$/);
+  if (offsetMatch) return offsetDate(parseInt(offsetMatch[1]));
+
+  // @math — only digits/operators/parens, no letters
+  const mathMatch = token.match(/^@([\d.()+\-*\/ ]+)$/);
+  if (mathMatch) {
+    const expr = mathMatch[1].trim();
+    if (!expr || !/\d/.test(expr)) return null;
+    try {
+      // eslint-disable-next-line no-new-func
+      const result = Function('"use strict";return(' + expr + ')')();
+      if (typeof result !== 'number' || !isFinite(result)) return null;
+      return String(Number.isInteger(result) ? result : parseFloat(result.toFixed(10)));
+    } catch { return null; }
+  }
+
+  return null;
+}
+
+// Injection token regex — ordered: named first, then t-offset, then bare @t, then math
+const INJECT_RE = /@(time|date|day|month|year|now|dt|t[+\-]\d+|t(?!\w)|[\d.()+\-*\/ ]+)$/;
+
+// Track paste — do NOT inject on paste
+let _editorPasting = false;
+editor.dom.addEventListener('paste', () => {
+  _editorPasting = true;
+  setTimeout(() => { _editorPasting = false; }, 200);
+}, true);
+
+// Async injection scan — only checks current line up to cursor (not full doc)
+function tryInjectAtCursor() {
+  if (!injectionsEnabled || _editorPasting) return;
+  const state = editor.state;
+  const cursor = state.selection.main.head;
+  const line = state.doc.lineAt(cursor);
+  const lineTextToCursor = line.text.slice(0, cursor - line.from);
+
+  const m = lineTextToCursor.match(INJECT_RE);
+  if (!m) return;
+
+  const token = '@' + m[1];
+  const replacement = resolveInjection(token);
+  if (replacement === null) return;
+
+  const tokenStart = cursor - token.length;
+  editor.dispatch({
+    changes: { from: tokenStart, to: cursor, insert: replacement },
+    userEvent: 'input.injection',
+  });
+}
+
+// Hook: trigger on space, tab, enter — fire synchronously BEFORE CM6 inserts the character
+// so the cursor is still right after @token (the trigger char hasn't landed yet)
+editor.dom.addEventListener('keydown', (e) => {
+  if (e.key === ' ' || e.key === 'Tab' || e.key === 'Enter') {
+    tryInjectAtCursor();
+  }
+}, true);
+
+// On blur, run after event settles
+editor.contentDOM.addEventListener('blur', () => {
+  requestAnimationFrame(tryInjectAtCursor);
+});
 
 // ============================================
 // HOTKEY SYSTEM
