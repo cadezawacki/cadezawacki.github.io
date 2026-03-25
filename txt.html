@@ -898,6 +898,17 @@ body {
   opacity: 0.7;
   margin-left: 2px;
 }
+.room-unlock-cancel {
+  background: none;
+  border: none;
+  color: var(--text-faint);
+  font-size: var(--text-sm);
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: var(--radius);
+  margin-top: -4px;
+}
+.room-unlock-cancel:hover { color: var(--text); background: var(--surface-2); }
 </style>
 </head>
 <body>
@@ -1133,6 +1144,20 @@ body {
       <input class="form-input" id="room-unlock-input" type="password" placeholder="Room password" autocomplete="off" spellcheck="false">
       <div class="room-unlock-error" id="room-unlock-error"></div>
       <button class="btn btn-primary" style="width:100%;" onclick="submitRoomUnlock()">Unlock</button>
+      <button class="room-unlock-cancel" onclick="cancelRoomUnlock()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ========== ADD ROOM MODAL ========== -->
+<div class="room-unlock-overlay" id="add-room-overlay">
+  <div class="room-unlock-card">
+    <div class="room-unlock-form" style="width:300px;">
+      <div style="font-weight:600;font-size:1rem;font-family:var(--font-mono);text-align:center;margin-bottom:4px;">Add Room</div>
+      <input class="form-input" id="add-room-input" type="text" placeholder="Room name" autocomplete="off" spellcheck="false">
+      <div class="room-unlock-error" id="add-room-error"></div>
+      <button class="btn btn-primary" style="width:100%;" onclick="submitAddRoom()">Add</button>
+      <button class="room-unlock-cancel" onclick="hideAddRoomModal()">Cancel</button>
     </div>
   </div>
 </div>
@@ -3491,9 +3516,18 @@ async function _doSwitchRoom(name, firebaseUrl, baseEncKey) {
     if (lockedSnap.val() === true && !roomIsUnlocked(name)) {
       updateSyncUI('', 'Sync off');
       renderRoomTabs();
+      // For remote locks, pass a verifyFn that test-decrypts current Firebase content
+      const isRemoteLock = !store.get('cade-room-pw-hash:' + name);
+      const verifyFn = isRemoteLock ? async (pw) => {
+        const testSnap = await db.ref(`rooms/${name}/text`).once('value');
+        if (!testSnap.val()) return true; // No content yet, can't verify — accept
+        const testKey = baseEncKey + '\n' + pw;
+        const result = await decryptText(testSnap.val(), testKey);
+        return result !== null;
+      } : null;
       showRoomUnlock(name, async () => {
         await _doSwitchRoom(name, firebaseUrl, baseEncKey);
-      });
+      }, verifyFn);
       return;
     }
 
@@ -3527,10 +3561,18 @@ async function _doSwitchRoom(name, firebaseUrl, baseEncKey) {
         store.remove('cade-room-pw-remote:' + name);
       }
       if (snap.val() === true && !roomIsUnlocked(name)) {
+        const isRemoteLock = !store.get('cade-room-pw-hash:' + name);
+        const verifyFn = isRemoteLock ? async (pw) => {
+          const testSnap = await db.ref(`rooms/${name}/text`).once('value');
+          if (!testSnap.val()) return true;
+          const testKey = baseEncKey + '\n' + pw;
+          const result = await decryptText(testSnap.val(), testKey);
+          return result !== null;
+        } : null;
         showRoomUnlock(name, async (pw) => {
           syncState.encKey = getRoomEncKey(name, baseEncKey);
           renderRoomTabs();
-        });
+        }, verifyFn);
       }
       renderRoomTabs();
     };
@@ -3562,16 +3604,7 @@ window.addRoomPrompt = function() {
     showToast('Room cap reached (' + roomCap + '). Remove a room or increase the cap in View → Room Manager.', 'error');
     return;
   }
-  const name = prompt('Room name:');
-  if (!name || !name.trim()) return;
-  const trimmed = name.trim().toLowerCase();
-  if (rooms.includes(trimmed)) {
-    switchRoom(trimmed);
-    return;
-  }
-  rooms.push(trimmed);
-  saveRooms();
-  switchRoom(trimmed);
+  showAddRoomModal();
 };
 
 // Room Manager modal
@@ -3931,9 +3964,11 @@ editor.contentDOM.addEventListener('blur', () => {
 // ============================================
 // (core declarations hoisted — see before ROOM SYSTEM)
 let _unlockCallback = null;
+let _unlockVerifyFn = null;
 
-function showRoomUnlock(name, callback) {
+function showRoomUnlock(name, callback, verifyFn = null) {
   _unlockCallback = callback;
+  _unlockVerifyFn = verifyFn;
   document.getElementById('room-unlock-name').textContent = name;
   document.getElementById('room-unlock-input').value = '';
   document.getElementById('room-unlock-error').textContent = '';
@@ -3944,7 +3979,13 @@ function showRoomUnlock(name, callback) {
 function hideRoomUnlock() {
   document.getElementById('room-unlock-overlay').classList.remove('open');
   _unlockCallback = null;
+  _unlockVerifyFn = null;
 }
+
+window.cancelRoomUnlock = function() {
+  hideRoomUnlock();
+  renderRoomTabs();
+};
 
 window.submitRoomUnlock = async function() {
   const pw = document.getElementById('room-unlock-input').value;
@@ -3960,8 +4001,19 @@ window.submitRoomUnlock = async function() {
       document.getElementById('room-unlock-input').focus();
       return;
     }
+  } else if (_unlockVerifyFn) {
+    // Remote lock — verify by test-decrypting Firebase content
+    document.getElementById('room-unlock-error').textContent = 'Verifying...';
+    const ok = await _unlockVerifyFn(pw);
+    if (!ok) {
+      document.getElementById('room-unlock-error').textContent = 'Incorrect password';
+      document.getElementById('room-unlock-input').value = '';
+      document.getElementById('room-unlock-input').focus();
+      return;
+    }
+    document.getElementById('room-unlock-error').textContent = '';
   }
-  // No local hash = remotely locked room; accept password and let AES-GCM + sentinel verify it
+  // Password accepted
   sessionRoomPasswords[name] = pw;
   hideRoomUnlock();
   if (_unlockCallback) _unlockCallback(pw);
@@ -3969,6 +4021,31 @@ window.submitRoomUnlock = async function() {
 
 document.getElementById('room-unlock-input').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') { e.preventDefault(); window.submitRoomUnlock(); }
+  if (e.key === 'Escape') { e.preventDefault(); window.cancelRoomUnlock(); }
+});
+
+// Add room modal
+function showAddRoomModal() {
+  document.getElementById('add-room-input').value = '';
+  document.getElementById('add-room-error').textContent = '';
+  document.getElementById('add-room-overlay').classList.add('open');
+  setTimeout(() => document.getElementById('add-room-input').focus(), 80);
+}
+window.hideAddRoomModal = function() {
+  document.getElementById('add-room-overlay').classList.remove('open');
+};
+window.submitAddRoom = function() {
+  const name = document.getElementById('add-room-input').value.trim().toLowerCase();
+  if (!name) { document.getElementById('add-room-input').focus(); return; }
+  window.hideAddRoomModal();
+  if (rooms.includes(name)) { switchRoom(name); return; }
+  rooms.push(name);
+  saveRooms();
+  switchRoom(name);
+};
+document.getElementById('add-room-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); window.submitAddRoom(); }
+  if (e.key === 'Escape') { e.preventDefault(); window.hideAddRoomModal(); }
 });
 
 // Room manager password actions
