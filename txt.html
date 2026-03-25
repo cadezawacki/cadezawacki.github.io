@@ -3516,14 +3516,20 @@ async function _doSwitchRoom(name, firebaseUrl, baseEncKey) {
     if (lockedSnap.val() === true && !roomIsUnlocked(name)) {
       updateSyncUI('', 'Sync off');
       renderRoomTabs();
-      // For remote locks, pass a verifyFn that test-decrypts current Firebase content
+      // For remote locks, pass a verifyFn that checks the dedicated verify blob
       const isRemoteLock = !store.get('cade-room-pw-hash:' + name);
       const verifyFn = isRemoteLock ? async (pw) => {
-        const testSnap = await db.ref(`rooms/${name}/text`).once('value');
-        if (!testSnap.val()) return true; // No content yet, can't verify — accept
         const testKey = baseEncKey + '\n' + pw;
-        const result = await decryptText(testSnap.val(), testKey);
-        return result !== null;
+        const verifySnap = await db.ref(`rooms/${name}/verify`).once('value');
+        if (verifySnap.val()) {
+          const result = await decryptText(verifySnap.val(), testKey);
+          return result !== null && result.startsWith(ROOM_LOCK_SENTINEL);
+        }
+        // No verify blob — fall back to checking text for sentinel
+        const textSnap = await db.ref(`rooms/${name}/text`).once('value');
+        if (!textSnap.val()) return false; // No content to verify — reject
+        const result = await decryptText(textSnap.val(), testKey);
+        return result !== null && result.startsWith(ROOM_LOCK_SENTINEL);
       } : null;
       showRoomUnlock(name, async () => {
         await _doSwitchRoom(name, firebaseUrl, baseEncKey);
@@ -3563,11 +3569,16 @@ async function _doSwitchRoom(name, firebaseUrl, baseEncKey) {
       if (snap.val() === true && !roomIsUnlocked(name)) {
         const isRemoteLock = !store.get('cade-room-pw-hash:' + name);
         const verifyFn = isRemoteLock ? async (pw) => {
-          const testSnap = await db.ref(`rooms/${name}/text`).once('value');
-          if (!testSnap.val()) return true;
           const testKey = baseEncKey + '\n' + pw;
-          const result = await decryptText(testSnap.val(), testKey);
-          return result !== null;
+          const verifySnap = await db.ref(`rooms/${name}/verify`).once('value');
+          if (verifySnap.val()) {
+            const result = await decryptText(verifySnap.val(), testKey);
+            return result !== null && result.startsWith(ROOM_LOCK_SENTINEL);
+          }
+          const textSnap = await db.ref(`rooms/${name}/text`).once('value');
+          if (!textSnap.val()) return false;
+          const result = await decryptText(textSnap.val(), testKey);
+          return result !== null && result.startsWith(ROOM_LOCK_SENTINEL);
         } : null;
         showRoomUnlock(name, async (pw) => {
           syncState.encKey = getRoomEncKey(name, baseEncKey);
@@ -4099,6 +4110,9 @@ window.submitRoomPwAction = async function(name) {
       syncState.encKey = getRoomEncKey(name, baseKey);
       // Signal to all peers that this room is now locked
       await syncState.firebaseDb.ref(`rooms/${name}/locked`).set(true);
+      // Write verify blob so peers can confirm the correct password
+      const verifyBlob = await encryptText(ROOM_LOCK_SENTINEL, syncState.encKey);
+      await syncState.firebaseDb.ref(`rooms/${name}/verify`).set(verifyBlob);
       // Re-broadcast with sentinel so peers get correctly encrypted content
       broadcastText();
     }
@@ -4119,6 +4133,9 @@ window.submitRoomPwAction = async function(name) {
     sessionRoomPasswords[name] = newPw;
     if (isActive) {
       syncState.encKey = getRoomEncKey(name, baseKey);
+      // Update verify blob for the new password
+      const verifyBlob = await encryptText(ROOM_LOCK_SENTINEL, syncState.encKey);
+      await syncState.firebaseDb.ref(`rooms/${name}/verify`).set(verifyBlob);
       // Re-broadcast so content is re-encrypted under new password
       broadcastText();
     }
@@ -4137,8 +4154,9 @@ window.submitRoomPwAction = async function(name) {
     if (isActive) {
       // Drop back to base key (no room password)
       syncState.encKey = baseKey;
-      // Tell peers room is unlocked, then push content without sentinel
+      // Tell peers room is unlocked, remove verify blob, push content without sentinel
       await syncState.firebaseDb.ref(`rooms/${name}/locked`).set(false);
+      await syncState.firebaseDb.ref(`rooms/${name}/verify`).remove();
       broadcastText();
     }
     _roomPwActionTarget = null; _roomPwActionMode = null;
