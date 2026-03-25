@@ -3092,17 +3092,22 @@ async function deriveKey(password) {
   );
 }
 
+// 4-byte magic prefix for compressed payloads: [0xCA, 0xDE, 0x01, 0x00]
+// Probability of random IV starting with these exact 4 bytes: 1 in 4,294,967,296
+const _CRYPT_MAGIC = [0xCA, 0xDE, 0x01, 0x00];
+const _MAGIC_LEN = _CRYPT_MAGIC.length;
+
 async function encryptText(text, password) {
   const key = await deriveKey(password);
   const iv = crypto.getRandomValues(new Uint8Array(12));
   // Compress before encrypting for smaller Firebase payloads
   const plainBytes = await _compress(new TextEncoder().encode(text));
   const ciphertext = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, plainBytes);
-  // Format: [0x01 version][IV 12 bytes][ciphertext] — version 0x01 = deflate-raw compressed
-  const combined = new Uint8Array(1 + iv.byteLength + ciphertext.byteLength);
-  combined[0] = 0x01;
-  combined.set(iv, 1);
-  combined.set(new Uint8Array(ciphertext), 1 + iv.byteLength);
+  // Format: [magic 4 bytes][IV 12 bytes][ciphertext]
+  const combined = new Uint8Array(_MAGIC_LEN + iv.byteLength + ciphertext.byteLength);
+  combined.set(_CRYPT_MAGIC, 0);
+  combined.set(iv, _MAGIC_LEN);
+  combined.set(new Uint8Array(ciphertext), _MAGIC_LEN + iv.byteLength);
   let binary = '';
   const chunk = 8192;
   for (let i = 0; i < combined.length; i += chunk) {
@@ -3116,9 +3121,21 @@ async function decryptText(encoded, password) {
   const raw = atob(encoded);
   const combined = new Uint8Array(raw.length);
   for (let i = 0; i < raw.length; i++) combined[i] = raw.charCodeAt(i);
-  // Detect format: version byte 0x01 = deflate-raw compressed; legacy = no version byte
+
+  // Detect format:
+  //   4-byte magic [0xCA,0xDE,0x01,0x00] = new compressed format
+  //   first byte 0x01 = old single-byte compressed format (legacy)
+  //   otherwise = uncompressed legacy format
   let iv, ciphertext, isCompressed;
-  if (combined[0] === 0x01) {
+  const hasMagic = combined.length >= _MAGIC_LEN &&
+    combined[0] === _CRYPT_MAGIC[0] && combined[1] === _CRYPT_MAGIC[1] &&
+    combined[2] === _CRYPT_MAGIC[2] && combined[3] === _CRYPT_MAGIC[3];
+  if (hasMagic) {
+    iv = combined.slice(_MAGIC_LEN, _MAGIC_LEN + 12);
+    ciphertext = combined.slice(_MAGIC_LEN + 12);
+    isCompressed = true;
+  } else if (combined[0] === 0x01) {
+    // Legacy single-byte version marker
     iv = combined.slice(1, 13);
     ciphertext = combined.slice(13);
     isCompressed = true;
@@ -3146,9 +3163,15 @@ function initFirebase(databaseURL) {
 }
 
 function cleanupFirebase() {
-  if (syncState.firebaseListener && syncState.firebaseDb && syncState.roomName) {
-    syncState.firebaseDb.ref(`rooms/${syncState.roomName}/text`).off('value', syncState.firebaseListener);
-    syncState.firebaseListener = null;
+  if (syncState.firebaseDb && syncState.roomName) {
+    if (syncState.firebaseListener) {
+      syncState.firebaseDb.ref(`rooms/${syncState.roomName}/text`).off('value', syncState.firebaseListener);
+      syncState.firebaseListener = null;
+    }
+    if (syncState.lockedListener) {
+      syncState.firebaseDb.ref(`rooms/${syncState.roomName}/locked`).off('value', syncState.lockedListener);
+      syncState.lockedListener = null;
+    }
   }
 }
 
@@ -3459,6 +3482,12 @@ async function _doSwitchRoom(name, firebaseUrl, baseEncKey) {
 
     // Check Firebase lock flag — another client may have set this room as locked
     const lockedSnap = await db.ref(`rooms/${name}/locked`).once('value');
+    // Update remote flag before checking so roomHasPassword/roomIsUnlocked are accurate
+    if (lockedSnap.val() === true && !store.get('cade-room-pw-hash:' + name)) {
+      store.set('cade-room-pw-remote:' + name, 'true');
+    } else if (lockedSnap.val() !== true) {
+      store.remove('cade-room-pw-remote:' + name);
+    }
     if (lockedSnap.val() === true && !roomIsUnlocked(name)) {
       updateSyncUI('', 'Sync off');
       renderRoomTabs();
@@ -3490,21 +3519,22 @@ async function _doSwitchRoom(name, firebaseUrl, baseEncKey) {
     });
 
     // Watch lock flag — if another peer locks this room while we're connected
-    db.ref(`rooms/${name}/locked`).on('value', (snap) => {
-      if (snap.val() === true && !roomIsUnlocked(name)) {
-        showRoomUnlock(name, async (pw) => {
-          syncState.encKey = getRoomEncKey(name, baseEncKey);
-        });
-      }
-      // Update local hash record so room manager lock icon stays accurate
+    syncState.lockedListener = (snap) => {
+      // Update remote flag FIRST so roomHasPassword/roomIsUnlocked reflect current state
       if (snap.val() === true && !store.get('cade-room-pw-hash:' + name)) {
-        // Remote locked but we have no local hash — record that it's remotely locked
         store.set('cade-room-pw-remote:' + name, 'true');
       } else if (snap.val() !== true) {
         store.remove('cade-room-pw-remote:' + name);
       }
+      if (snap.val() === true && !roomIsUnlocked(name)) {
+        showRoomUnlock(name, async (pw) => {
+          syncState.encKey = getRoomEncKey(name, baseEncKey);
+          renderRoomTabs();
+        });
+      }
       renderRoomTabs();
-    });
+    };
+    db.ref(`rooms/${name}/locked`).on('value', syncState.lockedListener);
 
     syncState.connected = true;
     clearInterval(syncState.idleCheckTimer);
@@ -3920,14 +3950,18 @@ window.submitRoomUnlock = async function() {
   const pw = document.getElementById('room-unlock-input').value;
   if (!pw) { document.getElementById('room-unlock-input').focus(); return; }
   const name = document.getElementById('room-unlock-name').textContent;
-  const hash = await sha256hex(pw);
   const stored = store.get('cade-room-pw-hash:' + name);
-  if (hash !== stored) {
-    document.getElementById('room-unlock-error').textContent = 'Incorrect password';
-    document.getElementById('room-unlock-input').value = '';
-    document.getElementById('room-unlock-input').focus();
-    return;
+  if (stored) {
+    // Local hash exists — verify against it
+    const hash = await sha256hex(pw);
+    if (hash !== stored) {
+      document.getElementById('room-unlock-error').textContent = 'Incorrect password';
+      document.getElementById('room-unlock-input').value = '';
+      document.getElementById('room-unlock-input').focus();
+      return;
+    }
   }
+  // No local hash = remotely locked room; accept password and let AES-GCM + sentinel verify it
   sessionRoomPasswords[name] = pw;
   hideRoomUnlock();
   if (_unlockCallback) _unlockCallback(pw);
