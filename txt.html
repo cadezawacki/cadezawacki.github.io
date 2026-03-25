@@ -2345,7 +2345,7 @@ function main(ctx) {
     });
   }
   if (ctx.selection) ctx.selection = result; else ctx.fullText = result;
-});
+}`); 
 
 registerScript(`/**
   {
@@ -3315,6 +3315,27 @@ document.getElementById('sync-overlay').addEventListener('keydown', (e) => {
   if (e.key === 'Escape') closeSyncModal();
 });
 
+// Core room-password declarations — must live before ROOM SYSTEM auto-connect
+const sessionRoomPasswords = {}; // { roomName: password } — in-memory only
+
+async function sha256hex(str) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+function roomHasPassword(name) {
+  return !!store.get('cade-room-pw-hash:' + name);
+}
+
+function roomIsUnlocked(name) {
+  return !roomHasPassword(name) || (name in sessionRoomPasswords);
+}
+
+function getRoomEncKey(name, baseKey) {
+  const pw = sessionRoomPasswords[name];
+  return pw ? baseKey + '\n' + pw : baseKey;
+}
+
 // ============================================
 // ROOM SYSTEM
 // ============================================
@@ -3812,27 +3833,8 @@ editor.contentDOM.addEventListener('blur', () => {
 // ============================================
 // ROOM PASSWORD SYSTEM
 // ============================================
-const sessionRoomPasswords = {}; // { roomName: password } — in-memory, cleared on page close
+// (core declarations hoisted — see before ROOM SYSTEM)
 let _unlockCallback = null;
-
-async function sha256hex(str) {
-  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
-  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
-}
-
-function roomHasPassword(name) {
-  return !!store.get('cade-room-pw-hash:' + name);
-}
-
-function roomIsUnlocked(name) {
-  return !roomHasPassword(name) || (name in sessionRoomPasswords);
-}
-
-// Effective enc key = base key + room password (if set and unlocked)
-function getRoomEncKey(name, baseKey) {
-  const pw = sessionRoomPasswords[name];
-  return pw ? baseKey + '\n' + pw : baseKey;
-}
 
 function showRoomUnlock(name, callback) {
   _unlockCallback = callback;
