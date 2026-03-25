@@ -3201,12 +3201,26 @@ window.syncConnect = async function() {
   store.set('cade-firebase-url', firebaseUrl);
   store.set('cade-room-name', roomName);
   store.set('cade-sync-key', encKey);
-  syncState.encKey = encKey;
   syncState.roomName = roomName;
 
   try {
     updateSyncUI('connecting', 'Connecting...');
     const db = initFirebase(firebaseUrl);
+
+    // Check if this room is locked on Firebase (set by any peer)
+    const lockedSnap = await db.ref(`rooms/${roomName}/locked`).once('value');
+    if (lockedSnap.val() === true && !roomIsUnlocked(roomName)) {
+      updateSyncUI('', 'Sync off');
+      showRoomUnlock(roomName, async () => {
+        // Password is now in sessionRoomPasswords; re-run connect
+        await window.syncConnect();
+      });
+      return;
+    }
+
+    // Apply room password to enc key (if unlocked this session)
+    syncState.encKey = getRoomEncKey(roomName, encKey);
+
     const textRef = db.ref(`rooms/${roomName}/text`);
 
     // Listen for remote changes
@@ -3215,8 +3229,10 @@ window.syncConnect = async function() {
       const val = snap.val();
       if (!val) return;
       try {
-        const text = await decryptText(val, syncState.encKey);
-        if (text === null) return; // decrypt failed, skip
+        let text = await decryptText(val, syncState.encKey);
+        if (text === null) return;
+        // Strip sentinel if present (content was written by a locked client)
+        if (text.startsWith(ROOM_LOCK_SENTINEL)) text = text.slice(ROOM_LOCK_SENTINEL.length);
         const currentText = editor.state.doc.toString();
         if (text !== currentText) {
           syncState.pendingRemoteText = text;
@@ -3224,6 +3240,15 @@ window.syncConnect = async function() {
         }
       } catch (e) {
         console.error('Sync decrypt error:', e);
+      }
+    });
+
+    // Watch lock status changes from peers
+    db.ref(`rooms/${roomName}/locked`).on('value', (snap) => {
+      if (snap.val() === true && !roomIsUnlocked(roomName)) {
+        showRoomUnlock(roomName, async (pw) => {
+          syncState.encKey = getRoomEncKey(roomName, encKey);
+        });
       }
     });
 
@@ -3256,8 +3281,12 @@ window.broadcastText = function() {
   broadcastTimer = setTimeout(async () => {
     if (!syncState.connected || syncState.suppressUpdate) return;
     try {
-      const text = editor.state.doc.toString();
-      const encrypted = await encryptText(text, syncState.encKey);
+      const raw = editor.state.doc.toString();
+      // Prepend sentinel when room has an active password — lets other clients
+      // verify decryption succeeded with the correct password
+      const isLocked = !!(syncState.roomName && sessionRoomPasswords[syncState.roomName]);
+      const textToSend = isLocked ? ROOM_LOCK_SENTINEL + raw : raw;
+      const encrypted = await encryptText(textToSend, syncState.encKey);
       syncState.suppressUpdate = true;
       await syncState.firebaseDb.ref(`rooms/${syncState.roomName}/text`).set(encrypted);
       syncState.suppressUpdate = false;
@@ -3316,6 +3345,11 @@ document.getElementById('sync-overlay').addEventListener('keydown', (e) => {
 });
 
 // Core room-password declarations — must live before ROOM SYSTEM auto-connect
+// Sentinel prepended to plaintext before encrypt when a room is password-locked.
+// Presence after decryption confirms the correct password was used.
+// Never shown to the user; stripped before display.
+const ROOM_LOCK_SENTINEL = '\x00CADE_LOCK\x00';
+
 const sessionRoomPasswords = {}; // { roomName: password } — in-memory only
 
 async function sha256hex(str) {
@@ -3324,7 +3358,8 @@ async function sha256hex(str) {
 }
 
 function roomHasPassword(name) {
-  return !!store.get('cade-room-pw-hash:' + name);
+  // Either we have a local hash, or we observed a remote lock flag on Firebase
+  return !!store.get('cade-room-pw-hash:' + name) || !!store.get('cade-room-pw-remote:' + name);
 }
 
 function roomIsUnlocked(name) {
@@ -3399,40 +3434,53 @@ window.switchRoom = async function(name) {
 };
 
 async function _doSwitchRoom(name, firebaseUrl, baseEncKey) {
-  const effectiveEncKey = getRoomEncKey(name, baseEncKey);
-
   // Disconnect current room listener
   cleanupFirebase();
   clearInterval(syncState.idleCheckTimer);
   syncState.pendingRemoteText = null;
   syncState.connected = false;
 
-  // Set new room
+  // Set new room identity
   activeRoom = name;
   syncState.roomName = name;
-  syncState.encKey = effectiveEncKey;
   store.set('cade-room-name', name);
   store.set('cade-active-room', name);
   document.getElementById('sync-room-name').value = name;
 
-  // Load cached content for this room (or clear if no cache)
+  // Load cached content for this room
   const cached = loadRoomCache(name);
   syncState.suppressUpdate = true;
   editor.dispatch({ changes: { from: 0, to: editor.state.doc.length, insert: cached } });
   syncState.suppressUpdate = false;
 
-  // Connect to new room
   try {
     updateSyncUI('connecting', 'Connecting...');
     const db = initFirebase(firebaseUrl);
+
+    // Check Firebase lock flag — another client may have set this room as locked
+    const lockedSnap = await db.ref(`rooms/${name}/locked`).once('value');
+    if (lockedSnap.val() === true && !roomIsUnlocked(name)) {
+      updateSyncUI('', 'Sync off');
+      renderRoomTabs();
+      showRoomUnlock(name, async () => {
+        await _doSwitchRoom(name, firebaseUrl, baseEncKey);
+      });
+      return;
+    }
+
+    // Derive effective key (base + room password if unlocked)
+    syncState.encKey = getRoomEncKey(name, baseEncKey);
+
     const textRef = db.ref(`rooms/${name}/text`);
     syncState.firebaseListener = textRef.on('value', async (snap) => {
       if (syncState.suppressUpdate) return;
       const val = snap.val();
       if (!val) return;
       try {
-        const text = await decryptText(val, syncState.encKey);
-        if (text === null) return; // decrypt failed, skip
+        let text = await decryptText(val, syncState.encKey);
+        if (text === null) return;
+        // Strip sentinel — present when content was encrypted by a locked client
+        if (text.startsWith(ROOM_LOCK_SENTINEL)) text = text.slice(ROOM_LOCK_SENTINEL.length);
         const currentText = editor.state.doc.toString();
         if (text !== currentText) {
           syncState.pendingRemoteText = text;
@@ -3440,6 +3488,24 @@ async function _doSwitchRoom(name, firebaseUrl, baseEncKey) {
         }
       } catch (e) { console.error('Sync decrypt error:', e); }
     });
+
+    // Watch lock flag — if another peer locks this room while we're connected
+    db.ref(`rooms/${name}/locked`).on('value', (snap) => {
+      if (snap.val() === true && !roomIsUnlocked(name)) {
+        showRoomUnlock(name, async (pw) => {
+          syncState.encKey = getRoomEncKey(name, baseEncKey);
+        });
+      }
+      // Update local hash record so room manager lock icon stays accurate
+      if (snap.val() === true && !store.get('cade-room-pw-hash:' + name)) {
+        // Remote locked but we have no local hash — record that it's remotely locked
+        store.set('cade-room-pw-remote:' + name, 'true');
+      } else if (snap.val() !== true) {
+        store.remove('cade-room-pw-remote:' + name);
+      }
+      renderRoomTabs();
+    });
+
     syncState.connected = true;
     clearInterval(syncState.idleCheckTimer);
     syncState.idleCheckTimer = setInterval(tryApplyPendingRemote, 500);
@@ -3909,15 +3975,21 @@ window.submitRoomPwAction = async function(name) {
   const inp2 = document.getElementById('rpm-pw-input2-' + safeId);
   if (!inp) return;
 
+  const baseKey = store.get('cade-sync-key') || '';
+  const isActive = name === activeRoom && syncState.connected && syncState.firebaseDb;
+
   if (_roomPwActionMode === 'set') {
     const pw = inp.value;
     if (!pw) return;
     const hash = await sha256hex(pw);
     store.set('cade-room-pw-hash:' + name, hash);
     sessionRoomPasswords[name] = pw;
-    // Re-derive enc key if this is the active room
-    if (name === activeRoom && syncState.connected) {
-      syncState.encKey = getRoomEncKey(name, store.get('cade-sync-key') || '');
+    if (isActive) {
+      syncState.encKey = getRoomEncKey(name, baseKey);
+      // Signal to all peers that this room is now locked
+      await syncState.firebaseDb.ref(`rooms/${name}/locked`).set(true);
+      // Re-broadcast with sentinel so peers get correctly encrypted content
+      broadcastText();
     }
     _roomPwActionTarget = null; _roomPwActionMode = null;
     renderRoomManagerList(); renderRoomTabs();
@@ -3934,8 +4006,10 @@ window.submitRoomPwAction = async function(name) {
     const newHash = await sha256hex(newPw);
     store.set('cade-room-pw-hash:' + name, newHash);
     sessionRoomPasswords[name] = newPw;
-    if (name === activeRoom && syncState.connected) {
-      syncState.encKey = getRoomEncKey(name, store.get('cade-sync-key') || '');
+    if (isActive) {
+      syncState.encKey = getRoomEncKey(name, baseKey);
+      // Re-broadcast so content is re-encrypted under new password
+      broadcastText();
     }
     _roomPwActionTarget = null; _roomPwActionMode = null;
     renderRoomManagerList(); renderRoomTabs();
@@ -3949,8 +4023,12 @@ window.submitRoomPwAction = async function(name) {
     if (hash !== stored) { showToast('Incorrect password', 'error'); return; }
     store.remove('cade-room-pw-hash:' + name);
     delete sessionRoomPasswords[name];
-    if (name === activeRoom && syncState.connected) {
-      syncState.encKey = getRoomEncKey(name, store.get('cade-sync-key') || '');
+    if (isActive) {
+      // Drop back to base key (no room password)
+      syncState.encKey = baseKey;
+      // Tell peers room is unlocked, then push content without sentinel
+      await syncState.firebaseDb.ref(`rooms/${name}/locked`).set(false);
+      broadcastText();
     }
     _roomPwActionTarget = null; _roomPwActionMode = null;
     renderRoomManagerList(); renderRoomTabs();
