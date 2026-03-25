@@ -827,6 +827,77 @@ body {
   .room-tabs { display: none !important; }
   .room-mobile-select { display: flex !important; }
 }
+
+/* ============================================
+   ROOM UNLOCK OVERLAY
+   ============================================ */
+.room-unlock-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 600;
+  background: var(--bg);
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  animation: overlayIn 150ms ease-out;
+}
+.room-unlock-overlay.open { display: flex; }
+
+.room-unlock-card {
+  width: 300px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.room-unlock-icon {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--surface-2);
+  color: var(--text-faint);
+}
+.room-unlock-icon svg { width: 20px; height: 20px; }
+
+.room-unlock-label {
+  font-size: var(--text-xs);
+  font-family: var(--font-mono);
+  color: var(--text-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  text-align: center;
+}
+.room-unlock-name {
+  font-weight: 600;
+  font-size: 1.05rem;
+  color: var(--text);
+  text-align: center;
+  font-family: var(--font-mono);
+  margin-top: -8px;
+}
+.room-unlock-form {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.room-unlock-error {
+  font-size: var(--text-xs);
+  color: var(--error);
+  text-align: center;
+  min-height: 1.2em;
+}
+/* Lock badge on room tabs */
+.room-tab-lock {
+  font-size: 9px;
+  opacity: 0.7;
+  margin-left: 2px;
+}
 </style>
 </head>
 <body>
@@ -1041,6 +1112,27 @@ body {
     </div>
     <div class="modal-actions">
       <button class="btn btn-primary" onclick="closeRoomManager()">Done</button>
+    </div>
+  </div>
+</div>
+
+<!-- ========== ROOM UNLOCK OVERLAY ========== -->
+<div class="room-unlock-overlay" id="room-unlock-overlay">
+  <div class="room-unlock-card">
+    <div class="room-unlock-icon">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+        <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+      </svg>
+    </div>
+    <div>
+      <div class="room-unlock-label">Locked Room</div>
+      <div class="room-unlock-name" id="room-unlock-name">room</div>
+    </div>
+    <div class="room-unlock-form">
+      <input class="form-input" id="room-unlock-input" type="password" placeholder="Room password" autocomplete="off" spellcheck="false">
+      <div class="room-unlock-error" id="room-unlock-error"></div>
+      <button class="btn btn-primary" style="width:100%;" onclick="submitRoomUnlock()">Unlock</button>
     </div>
   </div>
 </div>
@@ -2235,18 +2327,25 @@ registerScript(`/**
 **/
 function main(ctx) {
   const text = ctx.selection || ctx.fullText;
-  let result = text;
-  result = result.replace(/#([0-9a-fA-F]{6})\\b/g, (match, hex) => {
-    const r = parseInt(hex.substr(0,2), 16);
-    const g = parseInt(hex.substr(2,2), 16);
-    const b = parseInt(hex.substr(4,2), 16);
-    return 'rgb(' + r + ', ' + g + ', ' + b + ')';
-  });
-  result = result.replace(/rgb\\(\\s*(\\d+)\\s*,\\s*(\\d+)\\s*,\\s*(\\d+)\\s*\\)/g, (match, r, g, b) => {
-    return '#' + [r,g,b].map(n => parseInt(n).toString(16).padStart(2,'0')).join('');
-  });
+  const hasHex = /#([0-9a-fA-F]{3}){1,2}\\b/.test(text);
+  let result;
+  if (hasHex) {
+    result = text
+      .replace(/#([0-9a-fA-F]{6})\\b/gi, (_, h) => {
+        const r = parseInt(h.substr(0,2),16), g = parseInt(h.substr(2,2),16), b = parseInt(h.substr(4,2),16);
+        return 'rgb(' + r + ', ' + g + ', ' + b + ')';
+      })
+      .replace(/#([0-9a-fA-F]{3})\\b/gi, (_, h) => {
+        const r = parseInt(h[0]+h[0],16), g = parseInt(h[1]+h[1],16), b = parseInt(h[2]+h[2],16);
+        return 'rgb(' + r + ', ' + g + ', ' + b + ')';
+      });
+  } else {
+    result = text.replace(/rgb\\(\\s*(\\d+)\\s*,\\s*(\\d+)\\s*,\\s*(\\d+)\\s*\\)/gi, (_, r, g, b) => {
+      return '#' + [r,g,b].map(n => parseInt(n).toString(16).padStart(2,'0')).join('');
+    });
+  }
   if (ctx.selection) ctx.selection = result; else ctx.fullText = result;
-}`);
+});
 
 registerScript(`/**
   {
@@ -2485,6 +2584,69 @@ function main(ctx) {
 
 registerScript(`/**
   {
+    "name": "Toggle Commas",
+    "description": "Add or remove thousands-place commas from numbers (1234567 ↔ 1,234,567)",
+    "author": "Cade",
+    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><line x1='12' y1='20' x2='12' y2='10'/><line x1='18' y1='20' x2='18' y2='4'/><line x1='6' y1='20' x2='6' y2='16'/></svg>",
+    "tags": "comma,commas,thousands,number,format,1000"
+  }
+**/
+function main(ctx) {
+  const text = ctx.selection || ctx.fullText;
+  const hasCommaNumbers = /\d{1,3}(,\d{3})+/.test(text);
+  let result;
+  if (hasCommaNumbers) {
+    // Remove commas from numbers
+    result = text.replace(/(\d{1,3})(,\d{3})+/g, m => m.replace(/,/g, ''));
+  } else {
+    // Add commas to numbers
+    result = text.replace(/\b(\d+)(\.\d+)?\b/g, (_, int, dec) => {
+      const withCommas = int.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+      return dec ? withCommas + dec : withCommas;
+    });
+  }
+  if (ctx.selection) ctx.selection = result; else ctx.fullText = result;
+}`);
+
+registerScript(`/**
+  {
+    "name": "Round To",
+    "description": "Round all decimal numbers to a specified number of decimal places",
+    "author": "Cade",
+    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='12' r='10'/><line x1='12' y1='8' x2='12' y2='12'/><line x1='12' y1='16' x2='12.01' y2='16'/></svg>",
+    "tags": "round,decimal,places,precision,number,format"
+  }
+**/
+function main(ctx) {
+  const decimals = parseInt(prompt('Decimal places (0–10):', '2'), 10);
+  if (isNaN(decimals) || decimals < 0 || decimals > 10) return;
+  const text = ctx.selection || ctx.fullText;
+  const result = text.replace(/\b\d+\.\d+\b/g, m => parseFloat(m).toFixed(decimals));
+  if (ctx.selection) ctx.selection = result; else ctx.fullText = result;
+}`);
+
+registerScript(`/**
+  {
+    "name": "Copy Block",
+    "description": "Copy the current contiguous block (to next blank line or end of doc) to clipboard",
+    "author": "Cade",
+    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='9' y='9' width='13' height='13' rx='2' ry='2'/><path d='M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1'/></svg>",
+    "tags": "copy,clipboard,block,paragraph"
+  }
+**/
+function main(ctx) {
+  // Uses the contiguous block via ctx.selection (new block-aware behaviour)
+  const text = ctx.selection || ctx.fullText;
+  if (!text.trim()) { showToast('Nothing to copy', 'error', 2000); return; }
+  navigator.clipboard.writeText(text).then(() => {
+    showToast('Copied ' + text.split('\n').length + ' lines to clipboard', 'success', 2000);
+  }).catch(() => {
+    showToast('Copy failed', 'error', 2000);
+  });
+}`);
+
+registerScript(`/**
+  {
     "name": "Convert",
     "description": "Unit conversions: °F↔°C, in↔cm, ft↔m, mi↔km, lb↔kg, oz↔g, KB↔MB↔GB, and more",
     "author": "Cade",
@@ -2618,25 +2780,52 @@ let lastScript = null;
 
 function executeScript(script) {
   lastScript = script;
-  const sel = editor.state.selection.main;
-  const hasSelection = sel.from !== sel.to;
-  const fullText = editor.state.doc.toString();
-  const selectionText = hasSelection ? editor.state.sliceDoc(sel.from, sel.to) : '';
+  const state = editor.state;
+  const sel = state.selection.main;
+  const hasExplicitSelection = sel.from !== sel.to;
+  const fullText = state.doc.toString();
+
+  // Determine effective edit range:
+  // - explicit selection → use it
+  // - no selection → use the contiguous non-blank block around the cursor
+  let editFrom, editTo, editText, hasSelection;
+  if (hasExplicitSelection) {
+    editFrom = sel.from;
+    editTo = sel.to;
+    editText = state.sliceDoc(sel.from, sel.to);
+    hasSelection = true;
+  } else {
+    const doc = state.doc;
+    const cursorLine = doc.lineAt(sel.head);
+    if (cursorLine.text.trim() === '') {
+      // Cursor is on a blank line — no block to operate on
+      editFrom = sel.head; editTo = sel.head; editText = ''; hasSelection = false;
+    } else {
+      let startLine = cursorLine.number;
+      while (startLine > 1 && doc.line(startLine - 1).text.trim() !== '') startLine--;
+      let endLine = cursorLine.number;
+      while (endLine < doc.lines && doc.line(endLine + 1).text.trim() !== '') endLine++;
+      editFrom = doc.line(startLine).from;
+      editTo = doc.line(endLine).to;
+      editText = state.sliceDoc(editFrom, editTo);
+      hasSelection = editText.length > 0;
+    }
+  }
 
   let newFullText = fullText;
-  let newSelection = selectionText;
+  let newEditText = editText;
   let fullTextChanged = false;
-  let selectionChanged = false;
+  let editTextChanged = false;
 
   const ctx = {
     get fullText() { return newFullText; },
     set fullText(v) { newFullText = v; fullTextChanged = true; },
-    get selection() { return hasSelection ? newSelection : ''; },
+    get selection() { return hasSelection ? newEditText : ''; },
     set selection(v) {
-      if (hasSelection) { newSelection = v; selectionChanged = true; }
+      if (hasSelection) { newEditText = v; editTextChanged = true; }
       else { newFullText = v; fullTextChanged = true; }
     },
-    get text() { return hasSelection ? newSelection : newFullText; },
+    get text() { return hasSelection ? newEditText : newFullText; },
   };
 
   try {
@@ -2646,14 +2835,10 @@ function executeScript(script) {
     `);
     fn(window, document, ctx, showToast);
 
-    if (selectionChanged && hasSelection) {
-      editor.dispatch({
-        changes: { from: sel.from, to: sel.to, insert: newSelection },
-      });
+    if (editTextChanged && hasSelection) {
+      editor.dispatch({ changes: { from: editFrom, to: editTo, insert: newEditText } });
     } else if (fullTextChanged) {
-      editor.dispatch({
-        changes: { from: 0, to: fullText.length, insert: newFullText },
-      });
+      editor.dispatch({ changes: { from: 0, to: fullText.length, insert: newFullText } });
     }
 
     showToast(`Ran "${script.name}"`, 'success', 2000);
@@ -3151,7 +3336,8 @@ function renderRoomTabs() {
   if (rooms.length === 0) { container.innerHTML = ''; mobileContainer.innerHTML = ''; return; }
   let html = rooms.map(name => {
     const isActive = name === activeRoom && syncState.connected;
-    return `<button class="room-tab ${isActive ? 'active' : ''}" data-room="${name}" onclick="switchRoom('${name.replace(/'/g, "\\'")}')" title="${name}">${name}</button>`;
+    const hasLock = roomHasPassword(name);
+    return `<button class="room-tab ${isActive ? 'active' : ''}" data-room="${name}" onclick="switchRoom('${name.replace(/'/g, "\\'")}')" title="${name}">${name}${hasLock ? '<span class=\'room-tab-lock\'>🔒</span>' : ''}</button>`;
   }).join('');
   if (rooms.length < roomCap) {
     html += `<button class="room-tab-add" onclick="addRoomPrompt()" title="Add room">+</button>`;
@@ -3173,12 +3359,27 @@ function renderRoomTabs() {
 
 window.switchRoom = async function(name) {
   const firebaseUrl = store.get('cade-firebase-url');
-  const encKey = store.get('cade-sync-key');
-  if (!firebaseUrl || !encKey) {
+  const baseEncKey = store.get('cade-sync-key');
+  if (!firebaseUrl || !baseEncKey) {
     showToast('Set up Firebase URL and encryption key in Sync first', 'error');
     window.openSyncModal();
     return;
   }
+
+  // If room is password-protected and not yet unlocked this session, prompt first
+  if (roomHasPassword(name) && !roomIsUnlocked(name)) {
+    showRoomUnlock(name, async () => {
+      await _doSwitchRoom(name, firebaseUrl, baseEncKey);
+    });
+    return;
+  }
+
+  await _doSwitchRoom(name, firebaseUrl, baseEncKey);
+};
+
+async function _doSwitchRoom(name, firebaseUrl, baseEncKey) {
+  const effectiveEncKey = getRoomEncKey(name, baseEncKey);
+
   // Disconnect current room listener
   cleanupFirebase();
   clearInterval(syncState.idleCheckTimer);
@@ -3188,7 +3389,7 @@ window.switchRoom = async function(name) {
   // Set new room
   activeRoom = name;
   syncState.roomName = name;
-  syncState.encKey = encKey;
+  syncState.encKey = effectiveEncKey;
   store.set('cade-room-name', name);
   store.set('cade-active-room', name);
   document.getElementById('sync-room-name').value = name;
@@ -3230,7 +3431,7 @@ window.switchRoom = async function(name) {
     updateSyncUI('', 'Sync off');
     renderRoomTabs();
   }
-};
+}
 
 window.addRoomPrompt = function() {
   const firebaseUrl = store.get('cade-firebase-url');
@@ -3279,12 +3480,50 @@ function renderRoomManagerList() {
   }
   list.innerHTML = rooms.map(name => {
     const isActive = name === activeRoom && syncState.connected;
-    return `<div class="room-manager-item">
-      <div>
-        <span class="room-manager-name">${name}</span>
-        ${isActive ? '<span class="room-manager-active">● active</span>' : ''}
+    const hasPassword = roomHasPassword(name);
+    const safeId = _safeId(name);
+    const isTarget = _roomPwActionTarget === name;
+    const mode = _roomPwActionMode;
+    const esc = s => s.replace(/'/g, "\\'");
+
+    let pwForm = '';
+    if (isTarget && mode === 'set') {
+      pwForm = `<div style="margin-top:6px;display:flex;gap:4px;">
+        <input id="rpm-pw-input-${safeId}" class="form-input" type="password" placeholder="New password" style="font-size:var(--text-xs);padding:4px 8px;">
+        <button class="btn btn-primary" style="padding:2px 8px;font-size:var(--text-xs);" onclick="submitRoomPwAction('${esc(name)}')">Save</button>
+        <button class="btn" style="padding:2px 8px;font-size:var(--text-xs);" onclick="cancelRoomPwAction()">Cancel</button>
+      </div>`;
+    } else if (isTarget && mode === 'change') {
+      pwForm = `<div style="margin-top:6px;display:flex;flex-direction:column;gap:4px;">
+        <input id="rpm-pw-input-${safeId}" class="form-input" type="password" placeholder="Current password" style="font-size:var(--text-xs);padding:4px 8px;">
+        <input id="rpm-pw-input2-${safeId}" class="form-input" type="password" placeholder="New password" style="font-size:var(--text-xs);padding:4px 8px;">
+        <div style="display:flex;gap:4px;">
+          <button class="btn btn-primary" style="padding:2px 8px;font-size:var(--text-xs);" onclick="submitRoomPwAction('${esc(name)}')">Save</button>
+          <button class="btn" style="padding:2px 8px;font-size:var(--text-xs);" onclick="cancelRoomPwAction()">Cancel</button>
+        </div>
+      </div>`;
+    } else if (isTarget && mode === 'remove') {
+      pwForm = `<div style="margin-top:6px;display:flex;gap:4px;">
+        <input id="rpm-pw-input-${safeId}" class="form-input" type="password" placeholder="Confirm password" style="font-size:var(--text-xs);padding:4px 8px;">
+        <button class="btn btn-danger" style="padding:2px 8px;font-size:var(--text-xs);" onclick="submitRoomPwAction('${esc(name)}')">Remove</button>
+        <button class="btn" style="padding:2px 8px;font-size:var(--text-xs);" onclick="cancelRoomPwAction()">Cancel</button>
+      </div>`;
+    }
+
+    return `<div class="room-manager-item" style="flex-direction:column;align-items:flex-start;gap:2px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;width:100%;">
+        <div style="display:flex;align-items:center;gap:6px;">
+          <span class="room-manager-name">${name}</span>
+          ${isActive ? '<span class="room-manager-active">● active</span>' : ''}
+          ${hasPassword ? '<span style="font-size:10px;color:var(--text-faint);" title="Password protected">🔒</span>' : ''}
+        </div>
+        <div style="display:flex;gap:4px;">
+          <button class="btn" style="padding:2px 8px;font-size:var(--text-xs);" onclick="roomPasswordAction('${esc(name)}')">${hasPassword ? 'Change PW' : 'Set PW'}</button>
+          ${hasPassword ? `<button class="btn btn-danger" style="padding:2px 8px;font-size:var(--text-xs);" onclick="removeRoomPassword('${esc(name)}')">Remove PW</button>` : ''}
+          <button class="btn btn-danger" style="padding:2px 8px;font-size:var(--text-xs);" onclick="removeRoom('${esc(name)}')">Remove</button>
+        </div>
       </div>
-      <button class="btn btn-danger" onclick="removeRoom('${name.replace(/'/g, "\\'")}')">Remove</button>
+      ${pwForm}
     </div>`;
   }).join('');
 }
@@ -3420,6 +3659,8 @@ window.shareLink = function() {
       }
     }
     if (fbParam || roomParam) {
+      // Clean the URL so refresh doesn't re-trigger the join
+      window.history.replaceState({}, document.title, window.location.pathname);
       showToast('Shared link loaded — enter your password in Sync to connect', 'success', 5000);
     }
   } catch (e) { /* ignore */ }
@@ -3475,6 +3716,7 @@ function resolveInjection(token) {
     case '@now':   return fmtNow(now);
     case '@dt':    return fmtISO(now);
     case '@t':     return fmtDate(now);
+    case '@today':  return fmtDate(now);
   }
 
   // @t+n / @t-n  (date offset)
@@ -3498,7 +3740,7 @@ function resolveInjection(token) {
 }
 
 // Injection token regex — ordered: named first, then t-offset, then bare @t, then math
-const INJECT_RE = /@(time|date|day|month|year|now|dt|t[+\-]\d+|t(?!\w)|[\d.()+\-*\/ ]+)$/;
+const INJECT_RE = /@(copy|time|date|today|day|month|year|now|dt|t[+\-]\d+|t(?!\w)|[\d.()+\-*\/ ]+)$/;
 
 // Track paste — do NOT inject on paste
 let _editorPasting = false;
@@ -3519,10 +3761,35 @@ function tryInjectAtCursor() {
   if (!m) return;
 
   const token = '@' + m[1];
+  const tokenStart = cursor - token.length;
+
+  // @copy — copy content below until double-newline or EOF, then remove token
+  if (token === '@copy') {
+    const doc = state.doc;
+    const lineEnd = line.to;
+    const docLen = doc.length;
+    // Collect text starting from the line AFTER the @copy line
+    const searchFrom = lineEnd < docLen ? lineEnd + 1 : docLen;
+    const remaining = doc.sliceString(searchFrom, docLen);
+    // Stop at first double-newline (blank line separator)
+    const stopIdx = remaining.search(/\n[ \t]*\n/);
+    const blockText = (stopIdx === -1 ? remaining : remaining.slice(0, stopIdx)).trimEnd();
+    navigator.clipboard.writeText(blockText).then(() => {
+      showToast('Block copied (' + blockText.split('\n').length + ' lines)', 'success', 2000);
+    }).catch(() => {
+      showToast('Copy failed', 'error', 2000);
+    });
+    // Remove @copy token from document
+    editor.dispatch({
+      changes: { from: tokenStart, to: cursor, insert: '' },
+      userEvent: 'input.injection',
+    });
+    return;
+  }
+
   const replacement = resolveInjection(token);
   if (replacement === null) return;
 
-  const tokenStart = cursor - token.length;
   editor.dispatch({
     changes: { from: tokenStart, to: cursor, insert: replacement },
     userEvent: 'input.injection',
@@ -3541,6 +3808,158 @@ editor.dom.addEventListener('keydown', (e) => {
 editor.contentDOM.addEventListener('blur', () => {
   requestAnimationFrame(tryInjectAtCursor);
 });
+
+// ============================================
+// ROOM PASSWORD SYSTEM
+// ============================================
+const sessionRoomPasswords = {}; // { roomName: password } — in-memory, cleared on page close
+let _unlockCallback = null;
+
+async function sha256hex(str) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+function roomHasPassword(name) {
+  return !!store.get('cade-room-pw-hash:' + name);
+}
+
+function roomIsUnlocked(name) {
+  return !roomHasPassword(name) || (name in sessionRoomPasswords);
+}
+
+// Effective enc key = base key + room password (if set and unlocked)
+function getRoomEncKey(name, baseKey) {
+  const pw = sessionRoomPasswords[name];
+  return pw ? baseKey + '\n' + pw : baseKey;
+}
+
+function showRoomUnlock(name, callback) {
+  _unlockCallback = callback;
+  document.getElementById('room-unlock-name').textContent = name;
+  document.getElementById('room-unlock-input').value = '';
+  document.getElementById('room-unlock-error').textContent = '';
+  document.getElementById('room-unlock-overlay').classList.add('open');
+  setTimeout(() => document.getElementById('room-unlock-input').focus(), 80);
+}
+
+function hideRoomUnlock() {
+  document.getElementById('room-unlock-overlay').classList.remove('open');
+  _unlockCallback = null;
+}
+
+window.submitRoomUnlock = async function() {
+  const pw = document.getElementById('room-unlock-input').value;
+  if (!pw) { document.getElementById('room-unlock-input').focus(); return; }
+  const name = document.getElementById('room-unlock-name').textContent;
+  const hash = await sha256hex(pw);
+  const stored = store.get('cade-room-pw-hash:' + name);
+  if (hash !== stored) {
+    document.getElementById('room-unlock-error').textContent = 'Incorrect password';
+    document.getElementById('room-unlock-input').value = '';
+    document.getElementById('room-unlock-input').focus();
+    return;
+  }
+  sessionRoomPasswords[name] = pw;
+  hideRoomUnlock();
+  if (_unlockCallback) _unlockCallback(pw);
+};
+
+document.getElementById('room-unlock-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); window.submitRoomUnlock(); }
+});
+
+// Room manager password actions
+window.roomPasswordAction = async function(name) {
+  const hasPassword = roomHasPassword(name);
+  if (hasPassword) {
+    // Need to verify current password first — show inline in room manager
+    _roomPwActionTarget = name;
+    _roomPwActionMode = 'change';
+    renderRoomManagerList();
+    const inp = document.getElementById('rpm-pw-input-' + _safeId(name));
+    if (inp) inp.focus();
+  } else {
+    _roomPwActionTarget = name;
+    _roomPwActionMode = 'set';
+    renderRoomManagerList();
+    const inp = document.getElementById('rpm-pw-input-' + _safeId(name));
+    if (inp) inp.focus();
+  }
+};
+
+window.removeRoomPassword = function(name) {
+  _roomPwActionTarget = name;
+  _roomPwActionMode = 'remove';
+  renderRoomManagerList();
+  const inp = document.getElementById('rpm-pw-input-' + _safeId(name));
+  if (inp) inp.focus();
+};
+
+function _safeId(s) { return s.replace(/[^a-z0-9]/gi, '_'); }
+
+let _roomPwActionTarget = null;
+let _roomPwActionMode = null; // 'set' | 'change' | 'remove'
+
+window.submitRoomPwAction = async function(name) {
+  const safeId = _safeId(name);
+  const inp = document.getElementById('rpm-pw-input-' + safeId);
+  const inp2 = document.getElementById('rpm-pw-input2-' + safeId);
+  if (!inp) return;
+
+  if (_roomPwActionMode === 'set') {
+    const pw = inp.value;
+    if (!pw) return;
+    const hash = await sha256hex(pw);
+    store.set('cade-room-pw-hash:' + name, hash);
+    sessionRoomPasswords[name] = pw;
+    // Re-derive enc key if this is the active room
+    if (name === activeRoom && syncState.connected) {
+      syncState.encKey = getRoomEncKey(name, store.get('cade-sync-key') || '');
+    }
+    _roomPwActionTarget = null; _roomPwActionMode = null;
+    renderRoomManagerList(); renderRoomTabs();
+    showToast('Password set for ' + name, 'success', 2000);
+
+  } else if (_roomPwActionMode === 'change') {
+    const current = inp.value;
+    const newPw = inp2 ? inp2.value : '';
+    if (!current) return;
+    const hash = await sha256hex(current);
+    const stored = store.get('cade-room-pw-hash:' + name);
+    if (hash !== stored) { showToast('Incorrect current password', 'error'); return; }
+    if (!newPw) { showToast('New password cannot be empty', 'error'); return; }
+    const newHash = await sha256hex(newPw);
+    store.set('cade-room-pw-hash:' + name, newHash);
+    sessionRoomPasswords[name] = newPw;
+    if (name === activeRoom && syncState.connected) {
+      syncState.encKey = getRoomEncKey(name, store.get('cade-sync-key') || '');
+    }
+    _roomPwActionTarget = null; _roomPwActionMode = null;
+    renderRoomManagerList(); renderRoomTabs();
+    showToast('Password changed for ' + name, 'success', 2000);
+
+  } else if (_roomPwActionMode === 'remove') {
+    const current = inp.value;
+    if (!current) return;
+    const hash = await sha256hex(current);
+    const stored = store.get('cade-room-pw-hash:' + name);
+    if (hash !== stored) { showToast('Incorrect password', 'error'); return; }
+    store.remove('cade-room-pw-hash:' + name);
+    delete sessionRoomPasswords[name];
+    if (name === activeRoom && syncState.connected) {
+      syncState.encKey = getRoomEncKey(name, store.get('cade-sync-key') || '');
+    }
+    _roomPwActionTarget = null; _roomPwActionMode = null;
+    renderRoomManagerList(); renderRoomTabs();
+    showToast('Password removed from ' + name, 'success', 2000);
+  }
+};
+
+window.cancelRoomPwAction = function() {
+  _roomPwActionTarget = null; _roomPwActionMode = null;
+  renderRoomManagerList();
+};
 
 // ============================================
 // HOTKEY SYSTEM
@@ -3663,6 +4082,28 @@ document.addEventListener('keydown', (e) => {
       const script = scripts.find(s => s.name === scriptName);
       if (script) executeScript(script);
       else showToast('Script "' + scriptName + '" not found', 'error');
+      return;
+    }
+  }
+
+  // Room tab navigation: Ctrl+Tab / Ctrl+Shift+Tab
+  const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+  const modKey = isMac ? e.metaKey : e.ctrlKey;
+  if (modKey && e.key === 'Tab' && rooms.length > 0) {
+    e.preventDefault(); e.stopPropagation();
+    const idx = rooms.indexOf(activeRoom);
+    const next = e.shiftKey
+      ? (idx - 1 + rooms.length) % rooms.length
+      : (idx + 1) % rooms.length;
+    switchRoom(rooms[next]);
+    return;
+  }
+  // Ctrl+1 / Ctrl+2 / ... for specific room tabs
+  if (modKey && !e.shiftKey && !e.altKey && e.key >= '1' && e.key <= '9') {
+    const tabIdx = parseInt(e.key) - 1;
+    if (tabIdx < rooms.length) {
+      e.preventDefault(); e.stopPropagation();
+      switchRoom(rooms[tabIdx]);
       return;
     }
   }
