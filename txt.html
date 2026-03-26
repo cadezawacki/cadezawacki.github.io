@@ -826,6 +826,7 @@ body {
   }
   .room-tabs { display: none !important; }
   .room-mobile-select { display: flex !important; }
+  .mobile-toolbar { display: flex; }
 }
 
 /* ============================================
@@ -892,6 +893,34 @@ body {
   text-align: center;
   min-height: 1.2em;
 }
+/* Mobile toolbar */
+.mobile-toolbar {
+  display: none;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 6px;
+  background: var(--surface-1);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.mob-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  padding: 7px 10px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--text-xs);
+  font-family: var(--font-mono);
+  -webkit-tap-highlight-color: transparent;
+}
+.mob-btn:active { background: var(--surface-2); color: var(--text); }
+.mob-btn svg { width: 16px; height: 16px; flex-shrink: 0; }
+.mob-sep { width: 1px; height: 18px; background: var(--border); margin: 0 2px; flex-shrink: 0; }
+
 /* Lock badge on room tabs */
 .room-tab-lock {
   font-size: 9px;
@@ -1014,6 +1043,23 @@ body {
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
       <circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
     </svg>
+  </button>
+</div>
+
+<!-- ========== MOBILE TOOLBAR ========== -->
+<div class="mobile-toolbar" id="mobile-toolbar">
+  <button class="mob-btn" onclick="mobileUndo()" title="Undo">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.51"/></svg>Undo
+  </button>
+  <button class="mob-btn" onclick="mobileRedo()" title="Redo">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-.49-3.51"/></svg>Redo
+  </button>
+  <div class="mob-sep"></div>
+  <button class="mob-btn" onclick="mobileCopy()" title="Copy selection or all">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>Copy
+  </button>
+  <button class="mob-btn" onclick="mobilePaste()" title="Paste">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>Paste
   </button>
 </div>
 
@@ -3221,7 +3267,10 @@ function tryApplyPendingRemote() {
   const text = syncState.pendingRemoteText;
   syncState.pendingRemoteText = null;
   const currentText = editor.state.doc.toString();
-  if (text === currentText) return;
+  if (text === currentText) {
+    if (!syncState.pageTypeApplied) { syncState.pageTypeApplied = true; applyPageType(); }
+    return;
+  }
 
   // Save cursor position
   const cursor = editor.state.selection.main;
@@ -3234,6 +3283,7 @@ function tryApplyPendingRemote() {
     selection: { anchor: cursorOffset, head: cursorHead },
   });
   syncState.suppressUpdate = false;
+  if (!syncState.pageTypeApplied) { syncState.pageTypeApplied = true; applyPageType(); }
 }
 
 // --- Sync flow functions ---
@@ -3516,14 +3566,20 @@ async function _doSwitchRoom(name, firebaseUrl, baseEncKey) {
     if (lockedSnap.val() === true && !roomIsUnlocked(name)) {
       updateSyncUI('', 'Sync off');
       renderRoomTabs();
-      // For remote locks, pass a verifyFn that test-decrypts current Firebase content
+      // For remote locks, pass a verifyFn that checks the dedicated verify blob
       const isRemoteLock = !store.get('cade-room-pw-hash:' + name);
       const verifyFn = isRemoteLock ? async (pw) => {
-        const testSnap = await db.ref(`rooms/${name}/text`).once('value');
-        if (!testSnap.val()) return true; // No content yet, can't verify — accept
         const testKey = baseEncKey + '\n' + pw;
-        const result = await decryptText(testSnap.val(), testKey);
-        return result !== null;
+        const verifySnap = await db.ref(`rooms/${name}/verify`).once('value');
+        if (verifySnap.val()) {
+          const result = await decryptText(verifySnap.val(), testKey);
+          return result !== null && result.startsWith(ROOM_LOCK_SENTINEL);
+        }
+        // No verify blob — fall back to checking text for sentinel
+        const textSnap = await db.ref(`rooms/${name}/text`).once('value');
+        if (!textSnap.val()) return false; // No content to verify — reject
+        const result = await decryptText(textSnap.val(), testKey);
+        return result !== null && result.startsWith(ROOM_LOCK_SENTINEL);
       } : null;
       showRoomUnlock(name, async () => {
         await _doSwitchRoom(name, firebaseUrl, baseEncKey);
@@ -3563,11 +3619,16 @@ async function _doSwitchRoom(name, firebaseUrl, baseEncKey) {
       if (snap.val() === true && !roomIsUnlocked(name)) {
         const isRemoteLock = !store.get('cade-room-pw-hash:' + name);
         const verifyFn = isRemoteLock ? async (pw) => {
-          const testSnap = await db.ref(`rooms/${name}/text`).once('value');
-          if (!testSnap.val()) return true;
           const testKey = baseEncKey + '\n' + pw;
-          const result = await decryptText(testSnap.val(), testKey);
-          return result !== null;
+          const verifySnap = await db.ref(`rooms/${name}/verify`).once('value');
+          if (verifySnap.val()) {
+            const result = await decryptText(verifySnap.val(), testKey);
+            return result !== null && result.startsWith(ROOM_LOCK_SENTINEL);
+          }
+          const textSnap = await db.ref(`rooms/${name}/text`).once('value');
+          if (!textSnap.val()) return false;
+          const result = await decryptText(textSnap.val(), testKey);
+          return result !== null && result.startsWith(ROOM_LOCK_SENTINEL);
         } : null;
         showRoomUnlock(name, async (pw) => {
           syncState.encKey = getRoomEncKey(name, baseEncKey);
@@ -3579,8 +3640,11 @@ async function _doSwitchRoom(name, firebaseUrl, baseEncKey) {
     db.ref(`rooms/${name}/locked`).on('value', syncState.lockedListener);
 
     syncState.connected = true;
+    syncState.pageTypeApplied = false;
     clearInterval(syncState.idleCheckTimer);
     syncState.idleCheckTimer = setInterval(tryApplyPendingRemote, 500);
+    // Fallback: if no Firebase update arrives within 2s, still apply page type
+    setTimeout(() => { if (!syncState.pageTypeApplied) { syncState.pageTypeApplied = true; applyPageType(); } }, 2000);
     updateSyncUI('connected', name);
     renderRoomTabs();
     showToast('Switched to room: ' + name, 'success', 2000);
@@ -4099,6 +4163,9 @@ window.submitRoomPwAction = async function(name) {
       syncState.encKey = getRoomEncKey(name, baseKey);
       // Signal to all peers that this room is now locked
       await syncState.firebaseDb.ref(`rooms/${name}/locked`).set(true);
+      // Write verify blob so peers can confirm the correct password
+      const verifyBlob = await encryptText(ROOM_LOCK_SENTINEL, syncState.encKey);
+      await syncState.firebaseDb.ref(`rooms/${name}/verify`).set(verifyBlob);
       // Re-broadcast with sentinel so peers get correctly encrypted content
       broadcastText();
     }
@@ -4119,6 +4186,9 @@ window.submitRoomPwAction = async function(name) {
     sessionRoomPasswords[name] = newPw;
     if (isActive) {
       syncState.encKey = getRoomEncKey(name, baseKey);
+      // Update verify blob for the new password
+      const verifyBlob = await encryptText(ROOM_LOCK_SENTINEL, syncState.encKey);
+      await syncState.firebaseDb.ref(`rooms/${name}/verify`).set(verifyBlob);
       // Re-broadcast so content is re-encrypted under new password
       broadcastText();
     }
@@ -4137,8 +4207,9 @@ window.submitRoomPwAction = async function(name) {
     if (isActive) {
       // Drop back to base key (no room password)
       syncState.encKey = baseKey;
-      // Tell peers room is unlocked, then push content without sentinel
+      // Tell peers room is unlocked, remove verify blob, push content without sentinel
       await syncState.firebaseDb.ref(`rooms/${name}/locked`).set(false);
+      await syncState.firebaseDb.ref(`rooms/${name}/verify`).remove();
       broadcastText();
     }
     _roomPwActionTarget = null; _roomPwActionMode = null;
@@ -4418,6 +4489,109 @@ document.getElementById('settings-overlay').addEventListener('keydown', (e) => {
 
 // Focus editor on load
 setTimeout(() => editor.focus(), 100);
+
+// ============================================
+// MOBILE TOOLBAR
+// ============================================
+window.mobileUndo = function() { undo(editor); editor.focus(); };
+window.mobileRedo = function() { redo(editor); editor.focus(); };
+window.mobileCopy = function() {
+  const sel = editor.state.selection.main;
+  const text = sel.empty
+    ? editor.state.doc.toString()
+    : editor.state.sliceDoc(sel.from, sel.to);
+  navigator.clipboard.writeText(text).then(() => showToast('Copied', 'success', 1200));
+};
+window.mobilePaste = function() {
+  navigator.clipboard.readText().then(text => {
+    const sel = editor.state.selection.main;
+    editor.dispatch({ changes: { from: sel.from, to: sel.to, insert: text }, userEvent: 'input.paste' });
+    editor.focus();
+  }).catch(() => showToast('Clipboard read denied', 'error'));
+};
+
+// ============================================
+// PAGE TYPES
+// ============================================
+const _MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+function _ordinal(n) { const v = n % 100; return n + (['th','st','nd','rd'][(v-20)%10] || ['th','st','nd','rd'][v] || 'th'); }
+function _fmtDate(d) { return _MONTHS[d.getMonth()] + ' ' + _ordinal(d.getDate()) + ', ' + d.getFullYear(); }
+
+// Regex that matches a diary date header line: "Month Dth, YYYY -"
+const DIARY_HEADER_RE = /^(January|February|March|April|May|June|July|August|September|October|November|December) \d+(?:st|nd|rd|th), \d{4} -$/;
+
+function getPageType() {
+  const firstLine = editor.state.doc.line(1).text.trim().toLowerCase();
+  if (firstLine === '@type: diary' || firstLine === '@type:diary') return 'diary';
+  return null;
+}
+
+function applyPageType() {
+  const type = getPageType();
+  if (type !== 'diary') return;
+
+  const todayHeader = _fmtDate(new Date()) + ' -';
+  const doc = editor.state.doc;
+  const full = doc.toString();
+
+  // Check if today's header already exists
+  for (let i = 1; i <= doc.lines; i++) {
+    if (doc.line(i).text === todayHeader) return; // already there
+  }
+
+  // Append today's header with a blank line before and cursor below
+  const needsNewline = full.length > 0 && !full.endsWith('\n');
+  const insert = (needsNewline ? '\n' : '') + '\n' + todayHeader + '\n';
+  const insertAt = doc.length;
+  editor.dispatch({
+    changes: { from: insertAt, to: insertAt, insert },
+    selection: { anchor: insertAt + insert.length },
+    userEvent: 'input.pagetype',
+  });
+  editor.focus();
+}
+
+syncState.pageTypeApplied = false;
+
+registerScript(`/**
+  {
+    "name": "Clean Diary",
+    "description": "Remove empty date entries from a @type: diary document",
+    "author": "Cade",
+    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='3 6 5 6 21 6'/><path d='M19 6l-1 14H6L5 6'/><path d='M10 11v6M14 11v6'/><path d='M9 6V4h6v2'/></svg>",
+    "tags": "diary,clean,empty,date"
+  }
+**/
+function main(ctx) {
+  const lines = ctx.fullText.split('\\n');
+  const HEADER = /^(January|February|March|April|May|June|July|August|September|October|November|December) \\d+(?:st|nd|rd|th), \\d{4} -$/;
+  const out = [];
+  let i = 0;
+  while (i < lines.length) {
+    if (HEADER.test(lines[i])) {
+      const header = lines[i];
+      let j = i + 1;
+      while (j < lines.length && !HEADER.test(lines[j])) j++;
+      const block = lines.slice(i + 1, j);
+      const hasContent = block.some(l => l.trim() !== '');
+      if (hasContent) { out.push(header); out.push(...block); }
+      i = j;
+    } else {
+      out.push(lines[i]);
+      i++;
+    }
+  }
+  while (out.length > 1 && out[out.length - 1].trim() === '') out.pop();
+  ctx.fullText = out.join('\\n');
+}
+`);
+
+// Service Worker registration for offline support
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch(() => {});
+  });
+}
 
 </script>
 <script data-pplx-inline-edit>
