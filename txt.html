@@ -244,7 +244,12 @@ body {
   align-items: center;
   gap: 4px;
   margin-left: var(--space-2);
+  min-width: 0;
+  flex-shrink: 1;
+  overflow: hidden;
 }
+.room-tabs.dropdown-mode { display: none !important; }
+.room-mobile-select.dropdown-mode { display: flex !important; }
 .room-tab { 
   display: flex;
   align-items: center;
@@ -3526,7 +3531,21 @@ function renderRoomTabs() {
   }
   mobileHtml += '</select>';
   mobileContainer.innerHTML = mobileHtml;
+
+  // Switch to dropdown mode if >5 rooms or tabs overflow
+  // Temporarily ensure tabs are visible so we can measure overflow
+  container.classList.remove('dropdown-mode');
+  mobileContainer.classList.remove('dropdown-mode');
+  const useDropdown = rooms.length > 5 || container.scrollWidth > container.clientWidth;
+  container.classList.toggle('dropdown-mode', useDropdown);
+  mobileContainer.classList.toggle('dropdown-mode', useDropdown);
 }
+
+// Re-check room tab overflow on resize (debounced)
+{ let _rtResize; window.addEventListener('resize', () => {
+  clearTimeout(_rtResize);
+  _rtResize = setTimeout(() => { if (rooms.length > 0) renderRoomTabs(); }, 150);
+}); }
 
 window.switchRoom = async function(name) {
   const firebaseUrl = store.get('cade-firebase-url');
