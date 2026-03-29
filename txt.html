@@ -318,8 +318,20 @@ body {
   justify-content: space-between;
   padding: 8px 0;
   border-bottom: 1px solid var(--border);
+  transition: background 0.15s, opacity 0.15s;
 }
 .room-manager-item:last-child { border-bottom: none; }
+.room-manager-item.drag-over { background: var(--bg-hover, rgba(128,128,128,0.1)); }
+.room-manager-item.dragging { opacity: 0.4; }
+.room-manager-drag {
+  cursor: grab;
+  color: var(--text-faint);
+  font-size: 14px;
+  padding: 0 6px 0 0;
+  user-select: none;
+  line-height: 1;
+}
+.room-manager-drag:active { cursor: grabbing; }
 .room-manager-name {
   font-family: var(--font-mono);
   font-size: var(--text-sm);
@@ -3760,9 +3772,10 @@ function renderRoomManagerList() {
       </div>`;
     }
 
-    return `<div class="room-manager-item" style="flex-direction:column;align-items:flex-start;gap:2px;">
+    return `<div class="room-manager-item" draggable="true" data-room="${name}" style="flex-direction:column;align-items:flex-start;gap:2px;">
       <div style="display:flex;align-items:center;justify-content:space-between;width:100%;">
         <div style="display:flex;align-items:center;gap:6px;">
+          <span class="room-manager-drag" title="Drag to reorder">⠿</span>
           <span class="room-manager-name">${name}</span>
           ${isActive ? '<span class="room-manager-active">● active</span>' : ''}
           ${hasPassword ? '<span style="font-size:10px;color:var(--text-faint);" title="Password protected">🔒</span>' : ''}
@@ -3777,6 +3790,46 @@ function renderRoomManagerList() {
     </div>`;
   }).join('');
 }
+
+// Drag-and-drop reordering for room manager list
+(function() {
+  let dragRoom = null;
+  const list = document.getElementById('room-manager-list');
+  list.addEventListener('dragstart', (e) => {
+    const item = e.target.closest('.room-manager-item[data-room]');
+    if (!item) return;
+    dragRoom = item.dataset.room;
+    item.classList.add('dragging');
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', dragRoom);
+  });
+  list.addEventListener('dragend', (e) => {
+    const item = e.target.closest('.room-manager-item');
+    if (item) item.classList.remove('dragging');
+    list.querySelectorAll('.room-manager-item').forEach(el => el.classList.remove('drag-over'));
+    dragRoom = null;
+  });
+  list.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    const item = e.target.closest('.room-manager-item[data-room]');
+    list.querySelectorAll('.room-manager-item').forEach(el => el.classList.remove('drag-over'));
+    if (item && item.dataset.room !== dragRoom) item.classList.add('drag-over');
+  });
+  list.addEventListener('drop', (e) => {
+    e.preventDefault();
+    const target = e.target.closest('.room-manager-item[data-room]');
+    if (!target || !dragRoom) return;
+    const from = rooms.indexOf(dragRoom);
+    const to = rooms.indexOf(target.dataset.room);
+    if (from === -1 || to === -1 || from === to) return;
+    rooms.splice(from, 1);
+    rooms.splice(to, 0, dragRoom);
+    saveRooms();
+    renderRoomManagerList();
+    renderRoomTabs();
+  });
+})();
 
 window.addRoomFromManager = function() {
   const input = document.getElementById('room-add-input');
