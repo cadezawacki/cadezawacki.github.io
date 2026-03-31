@@ -2934,19 +2934,38 @@ function executeScript(script) {
   };
 
   try {
-    const fn = new Function('window', 'document', 'ctx', 'showToast', `
-      ${script.code}
-      main(ctx);
-    `);
-    fn(window, document, ctx, showToast);
+    const isAsync = script.code.includes('async function main');
+    if (isAsync) {
+      const AsyncFunction = Object.getPrototypeOf(async function(){}).constructor;
+      const fn = new AsyncFunction('window', 'document', 'ctx', 'showToast', 'secureKeywordPrompt', 'encryptText', 'decryptText', `
+        ${script.code}
+        await main(ctx);
+      `);
+      fn(window, document, ctx, showToast, secureKeywordPrompt, encryptText, decryptText).then(() => {
+        if (editTextChanged && hasSelection) {
+          editor.dispatch({ changes: { from: editFrom, to: editTo, insert: newEditText } });
+        } else if (fullTextChanged) {
+          editor.dispatch({ changes: { from: 0, to: fullText.length, insert: newFullText } });
+        }
+        showToast(`Ran "${script.name}"`, 'success', 2000);
+      }).catch((e) => {
+        showToast(`Script error: ${e.message}`, 'error', 5000);
+        console.error('Script error:', e);
+      });
+    } else {
+      const fn = new Function('window', 'document', 'ctx', 'showToast', `
+        ${script.code}
+        main(ctx);
+      `);
+      fn(window, document, ctx, showToast);
 
-    if (editTextChanged && hasSelection) {
-      editor.dispatch({ changes: { from: editFrom, to: editTo, insert: newEditText } });
-    } else if (fullTextChanged) {
-      editor.dispatch({ changes: { from: 0, to: fullText.length, insert: newFullText } });
+      if (editTextChanged && hasSelection) {
+        editor.dispatch({ changes: { from: editFrom, to: editTo, insert: newEditText } });
+      } else if (fullTextChanged) {
+        editor.dispatch({ changes: { from: 0, to: fullText.length, insert: newFullText } });
+      }
+      showToast(`Ran "${script.name}"`, 'success', 2000);
     }
-
-    showToast(`Ran "${script.name}"`, 'success', 2000);
   } catch (e) {
     showToast(`Script error: ${e.message}`, 'error', 5000);
     console.error('Script error:', e);
@@ -4641,6 +4660,111 @@ function applyPageType() {
 }
 
 syncState.pageTypeApplied = false;
+
+// Secure keyword prompt (password-masked input, not interceptable via prompt())
+function secureKeywordPrompt(title) {
+  return new Promise((resolve) => {
+    const overlay = document.createElement('div');
+    Object.assign(overlay.style, {
+      position: 'fixed', inset: '0', zIndex: '999999',
+      background: 'rgba(0,0,0,0.45)', display: 'flex',
+      alignItems: 'center', justifyContent: 'center'
+    });
+    const box = document.createElement('div');
+    Object.assign(box.style, {
+      background: 'var(--surface)', border: '1px solid var(--border)',
+      borderRadius: 'var(--radius-lg)', padding: '1.25rem',
+      minWidth: '300px', maxWidth: '90vw', boxShadow: 'var(--shadow-lg)',
+      fontFamily: 'var(--font-body)', color: 'var(--text)'
+    });
+    const label = document.createElement('div');
+    label.textContent = title;
+    Object.assign(label.style, { marginBottom: '0.75rem', fontWeight: '600', fontSize: 'var(--text-base)' });
+    const input = document.createElement('input');
+    input.type = 'password';
+    input.autocomplete = 'off';
+    input.spellcheck = false;
+    Object.assign(input.style, {
+      width: '100%', padding: '0.5rem 0.6rem', fontSize: 'var(--text-base)',
+      border: '1px solid var(--border)', borderRadius: 'var(--radius-md)',
+      background: 'var(--surface-2)', color: 'var(--text)',
+      fontFamily: 'var(--font-mono)', outline: 'none'
+    });
+    input.addEventListener('focus', () => { input.style.borderColor = 'var(--border-focus)'; });
+    input.addEventListener('blur', () => { input.style.borderColor = 'var(--border)'; });
+    const btnRow = document.createElement('div');
+    Object.assign(btnRow.style, { marginTop: '0.75rem', display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' });
+    const cancel = document.createElement('button');
+    cancel.textContent = 'Cancel';
+    Object.assign(cancel.style, {
+      padding: '0.35rem 0.9rem', border: '1px solid var(--border)',
+      borderRadius: 'var(--radius-md)', background: 'var(--surface-2)',
+      color: 'var(--text-muted)', cursor: 'pointer', fontSize: 'var(--text-sm)'
+    });
+    const ok = document.createElement('button');
+    ok.textContent = 'OK';
+    Object.assign(ok.style, {
+      padding: '0.35rem 0.9rem', border: 'none',
+      borderRadius: 'var(--radius-md)', background: 'var(--accent)',
+      color: '#fff', cursor: 'pointer', fontSize: 'var(--text-sm)'
+    });
+    function close(val) { overlay.remove(); resolve(val); }
+    cancel.addEventListener('click', () => close(null));
+    ok.addEventListener('click', () => close(input.value || null));
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') close(input.value || null);
+      if (e.key === 'Escape') close(null);
+    });
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) close(null); });
+    btnRow.append(cancel, ok);
+    box.append(label, input, btnRow);
+    overlay.append(box);
+    document.body.append(overlay);
+    input.focus();
+  });
+}
+
+registerScript(`/**
+  {
+    "name": "Encode (AES)",
+    "description": "Encrypt text with a keyword using AES-256-GCM",
+    "author": "Cade",
+    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='3' y='11' width='18' height='11' rx='2'/><path d='M7 11V7a5 5 0 0 1 10 0v4'/></svg>",
+    "tags": "encode,encrypt,aes,cipher,password,lock"
+  }
+**/
+async function main(ctx) {
+  const keyword = await secureKeywordPrompt('Enter encryption keyword:');
+  if (!keyword) return;
+  const text = ctx.selection || ctx.fullText;
+  if (!text.trim()) return;
+  const encrypted = await encryptText(text, keyword);
+  if (ctx.selection) ctx.selection = encrypted; else ctx.fullText = encrypted;
+}
+`);
+
+registerScript(`/**
+  {
+    "name": "Decode (AES)",
+    "description": "Decrypt text with a keyword using AES-256-GCM",
+    "author": "Cade",
+    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='3' y='11' width='18' height='11' rx='2'/><path d='M7 11V7a5 5 0 0 1 5-5 5 5 0 0 1 5 5'/><line x1='12' y1='3' x2='17' y2='3'/></svg>",
+    "tags": "decode,decrypt,aes,cipher,password,unlock"
+  }
+**/
+async function main(ctx) {
+  const keyword = await secureKeywordPrompt('Enter decryption keyword:');
+  if (!keyword) return;
+  const text = (ctx.selection || ctx.fullText).trim();
+  if (!text) return;
+  try {
+    const decrypted = await decryptText(text, keyword);
+    if (ctx.selection) ctx.selection = decrypted; else ctx.fullText = decrypted;
+  } catch (e) {
+    alert('Decryption failed — wrong keyword or corrupted data.');
+  }
+}
+`);
 
 registerScript(`/**
   {
