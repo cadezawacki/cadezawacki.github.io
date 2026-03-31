@@ -1,0 +1,2105 @@
+<!DOCTYPE html>
+<html lang="en">
+
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Cades Color Swap</title>
+        <style>
+            @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box
+            }
+            :root {
+                --bg: #0e0f13;
+                --surface: #16171d;
+                --surface2: #1e1f27;
+                --border: #2a2b35;
+                --text: #e4e4e8;
+                --text2: #8b8c95;
+                --accent: #6ee7b7;
+                --accent2: #34d399;
+                --danger: #f87171;
+                --warn: #fbbf24
+            }
+            body {
+                font-family: 'DM Sans', sans-serif;
+                background: var(--bg);
+                color: var(--text);
+                min-height: 100vh;
+                overflow-x: hidden
+            }
+            header {
+                padding: 10px 20px;
+                display: flex;
+                align-items: center;
+                gap: 12px;
+                border-bottom: 1px solid var(--border);
+                background: var(--surface)
+            }
+            header .logo {
+                font-size: 18px;
+                font-weight: 700;
+                letter-spacing: -0.5px;
+                background: linear-gradient(135deg, var(--accent), #a78bfa);
+                -webkit-background-clip: text;
+                -webkit-text-fill-color: transparent
+            }
+            .compare-toggle {
+                margin-left: auto;
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                font-size: 12px;
+                font-weight: 600;
+                color: var(--text2)
+            }
+            .compare-toggle label {
+                min-width: unset;
+                cursor: pointer;
+                font-size: 12px
+            }
+            .processing-dot {
+                width: 8px;
+                height: 8px;
+                border-radius: 50%;
+                background: var(--accent);
+                opacity: 0;
+                transition: opacity .15s
+            }
+            .processing-dot.active {
+                opacity: 1;
+                animation: blink .4s ease-in-out
+            }
+            @keyframes blink {
+                0%, 100% {
+                    opacity: .3
+                }
+                50% {
+                    opacity: 1
+                }
+            }
+            .layout {
+                display: flex;
+                height: calc(100vh - 45px)
+            }
+            .sidebar {
+                width: 330px;
+                min-width: 330px;
+                background: var(--surface);
+                border-right: 1px solid var(--border);
+                overflow-y: auto;
+                display: flex;
+                flex-direction: column
+            }
+            .panel {
+                padding: 10px 16px;
+                border-bottom: 1px solid var(--border)
+            }
+            .panel-title {
+                font-size: 10px;
+                font-weight: 700;
+                text-transform: uppercase;
+                letter-spacing: 1.2px;
+                color: var(--text2);
+                margin-bottom: 7px
+            }
+            .row {
+                display: flex;
+                align-items: center;
+                gap: 7px;
+                margin-bottom: 7px
+            }
+            .row:last-child {
+                margin-bottom: 0
+            }
+            label {
+                font-size: 12px;
+                color: var(--text2);
+                min-width: 66px;
+                flex-shrink: 0
+            }
+            input[type="color"] {
+                -webkit-appearance: none;
+                border: 2px solid var(--border);
+                border-radius: 7px;
+                width: 30px;
+                height: 26px;
+                cursor: pointer;
+                background: transparent;
+                padding: 2px
+            }
+            input[type="color"]::-webkit-color-swatch-wrapper {
+                padding: 0
+            }
+            input[type="color"]::-webkit-color-swatch {
+                border: none;
+                border-radius: 4px
+            }
+            input[type="range"] {
+                -webkit-appearance: none;
+                flex: 1;
+                height: 5px;
+                background: var(--surface2);
+                border-radius: 3px;
+                outline: none;
+                border: 1px solid var(--border)
+            }
+            input[type="range"]::-webkit-slider-thumb {
+                -webkit-appearance: none;
+                width: 13px;
+                height: 13px;
+                border-radius: 50%;
+                background: var(--accent);
+                cursor: pointer;
+                box-shadow: 0 0 5px rgba(110, 231, 183, .3)
+            }
+            .val {
+                font-family: 'JetBrains Mono', monospace;
+                font-size: 10px;
+                color: var(--accent);
+                min-width: 30px;
+                text-align: right;
+                cursor: default;
+                user-select: none;
+                border-radius: 4px;
+                padding: 1px 3px;
+                transition: background .15s
+            }
+            .val:hover {
+                background: var(--surface2)
+            }
+            .val-edit {
+                font-family: 'JetBrains Mono', monospace;
+                font-size: 10px;
+                color: var(--accent);
+                background: var(--bg);
+                border: 1px solid var(--accent);
+                border-radius: 4px;
+                padding: 1px 3px;
+                width: 40px;
+                text-align: right;
+                outline: none
+            }
+            .hex-input {
+                font-family: 'JetBrains Mono', monospace;
+                font-size: 11px;
+                background: var(--surface2);
+                border: 1px solid var(--border);
+                color: var(--text);
+                padding: 3px 6px;
+                border-radius: 6px;
+                width: 72px;
+                outline: none
+            }
+            .hex-input:focus {
+                border-color: var(--accent)
+            }
+            .btn {
+                font-family: 'DM Sans', sans-serif;
+                font-size: 11px;
+                font-weight: 600;
+                border: none;
+                border-radius: 6px;
+                padding: 6px 10px;
+                cursor: pointer;
+                transition: all .15s;
+                display: inline-flex;
+                align-items: center;
+                gap: 4px;
+                white-space: nowrap
+            }
+            .btn-primary {
+                background: var(--accent);
+                color: #0e0f13
+            }
+            .btn-primary:hover {
+                background: var(--accent2)
+            }
+            .btn-secondary {
+                background: var(--surface2);
+                color: var(--text);
+                border: 1px solid var(--border)
+            }
+            .btn-secondary:hover {
+                border-color: var(--accent);
+                color: var(--accent)
+            }
+            .btn-danger {
+                background: transparent;
+                color: var(--danger);
+                border: 1px solid rgba(248, 113, 113, .3)
+            }
+            .btn-danger:hover {
+                background: rgba(248, 113, 113, .1)
+            }
+            .btn-sm {
+                padding: 4px 8px;
+                font-size: 10px
+            }
+            .btn-warn {
+                background: var(--warn);
+                color: var(--bg)
+            }
+            .btn-warn:hover {
+                filter: brightness(1.1)
+            }
+            .actions {
+                display: flex;
+                gap: 5px;
+                flex-wrap: wrap
+            }
+            .checkbox-row {
+                display: flex;
+                align-items: center;
+                gap: 7px;
+                margin-bottom: 6px
+            }
+            .checkbox-row input[type="checkbox"] {
+                accent-color: var(--accent);
+                width: 14px;
+                height: 14px
+            }
+            .checkbox-row label {
+                min-width: unset;
+                cursor: pointer
+            }
+            .hint {
+                font-size: 10px;
+                color: var(--text2);
+                line-height: 1.4;
+                margin-top: 4px
+            }
+            .canvas-area {
+                flex: 1;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                position: relative;
+                overflow: hidden;
+                background: repeating-conic-gradient(#1a1b22 0% 25%, #16171d 0% 50%) 0 0/20px 20px
+            }
+            .drop-zone {
+                position: absolute;
+                inset: 0;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                gap: 12px;
+                pointer-events: none;
+                z-index: 5
+            }
+            .drop-zone.hidden {
+                display: none
+            }
+            .drop-zone .icon {
+                width: 64px;
+                height: 64px;
+                border-radius: 16px;
+                background: var(--surface);
+                border: 2px dashed var(--border);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                animation: pulse 2s ease-in-out infinite
+            }
+            @keyframes pulse {
+                0%, 100% {
+                    opacity: .6;
+                    transform: scale(1)
+                }
+                50% {
+                    opacity: 1;
+                    transform: scale(1.05)
+                }
+            }
+            .drop-zone p {
+                font-size: 14px;
+                color: var(--text2)
+            }
+            .canvas-wrap {
+                position: relative;
+                display: inline-block;
+                max-width: 100%;
+                max-height: 100%
+            }
+            #mainCanvas {
+                max-width: 100%;
+                max-height: 100%;
+                display: block
+            }
+            #overlayCanvas {
+                position: absolute;
+                top: 0;
+                left: 0;
+                display: block;
+                pointer-events: auto
+            }
+            .eyedropper-info {
+                position: fixed;
+                bottom: 14px;
+                left: 50%;
+                transform: translateX(-50%);
+                background: var(--surface);
+                border: 1px solid var(--border);
+                border-radius: 10px;
+                padding: 6px 12px;
+                display: none;
+                align-items: center;
+                gap: 7px;
+                font-size: 11px;
+                z-index: 100;
+                box-shadow: 0 4px 20px rgba(0, 0, 0, .4)
+            }
+            .eyedropper-info.show {
+                display: flex
+            }
+            .eyedropper-info .swatch {
+                width: 20px;
+                height: 20px;
+                border-radius: 5px;
+                border: 2px solid var(--border)
+            }
+            .toast {
+                position: fixed;
+                bottom: 14px;
+                right: 14px;
+                background: var(--surface);
+                border: 1px solid var(--accent);
+                border-radius: 10px;
+                padding: 8px 16px;
+                font-size: 12px;
+                font-weight: 500;
+                color: var(--accent);
+                z-index: 200;
+                opacity: 0;
+                transform: translateY(10px);
+                transition: all .25s;
+                pointer-events: none;
+                box-shadow: 0 4px 20px rgba(110, 231, 183, .15)
+            }
+            .toast.show {
+                opacity: 1;
+                transform: translateY(0)
+            }
+            .toggle-section {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                margin-bottom: 7px
+            }
+            .toggle-section .switch {
+                width: 34px;
+                min-width: 34px
+            }
+            .section-label {
+                font-size: 10px;
+                font-weight: 700;
+                text-transform: uppercase;
+                letter-spacing: .8px;
+                color: var(--text2);
+                margin: 0
+            }
+            .switch {
+                position: relative;
+                width: 34px;
+                height: 17px
+            }
+            .switch input {
+                opacity: 0;
+                width: 0;
+                height: 0
+            }
+            .switch .slider {
+                position: absolute;
+                inset: 0;
+                background: var(--surface2);
+                border: 1px solid var(--border);
+                border-radius: 9px;
+                cursor: pointer;
+                transition: .2s;
+                width: 34px
+            }
+            .switch .slider::before {
+                content: '';
+                position: absolute;
+                width: 11px;
+                height: 11px;
+                left: 2px;
+                bottom: 2px;
+                background: var(--text2);
+                border-radius: 50%;
+                transition: .2s
+            }
+            .switch input:checked+.slider {
+                background: var(--accent);
+                border-color: var(--accent)
+            }
+            .switch input:checked+.slider::before {
+                transform: translateX(16px);
+                background: var(--bg)
+            }
+            .section-body.disabled {
+                opacity: .35;
+                pointer-events: none
+            }
+            .tool-bar {
+                display: flex;
+                gap: 3px;
+                margin-bottom: 6px;
+                flex-wrap: wrap
+            }
+            .tool-btn {
+                font-family: 'DM Sans', sans-serif;
+                font-size: 10px;
+                font-weight: 600;
+                padding: 4px 8px;
+                border: 1px solid var(--border);
+                border-radius: 5px;
+                background: var(--surface2);
+                color: var(--text2);
+                cursor: pointer;
+                transition: all .15s;
+                display: flex;
+                align-items: center;
+                gap: 3px
+            }
+            .tool-btn:hover {
+                border-color: var(--accent);
+                color: var(--text)
+            }
+            .tool-btn.active {
+                background: var(--accent);
+                color: var(--bg);
+                border-color: var(--accent)
+            }
+            .sel-info {
+                font-family: 'JetBrains Mono', monospace;
+                font-size: 10px;
+                color: var(--text2);
+                padding: 2px 0
+            }
+            .alpha-row {
+                display: flex;
+                align-items: center;
+                gap: 5px;
+                margin-top: 2px
+            }
+            .alpha-row label {
+                min-width: 66px
+            }
+            .alpha-preview {
+                width: 18px;
+                height: 18px;
+                border-radius: 4px;
+                border: 1px solid var(--border);
+                background: repeating-conic-gradient(#ccc 0% 25%, #fff 0% 50%) 0 0/8px 8px;
+                position: relative;
+                overflow: hidden;
+                flex-shrink: 0
+            }
+            .alpha-preview .fill {
+                position: absolute;
+                inset: 0;
+                border-radius: 3px
+            }
+            .divider-line {
+                position: absolute;
+                top: 0;
+                bottom: 0;
+                width: 3px;
+                background: var(--accent);
+                cursor: ew-resize;
+                z-index: 10;
+                box-shadow: 0 0 8px rgba(110, 231, 183, .4)
+            }
+            .divider-line::before {
+                content: '⟨⟩';
+                position: absolute;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                background: var(--accent);
+                color: var(--bg);
+                font-size: 9px;
+                padding: 3px 2px;
+                border-radius: 3px;
+                font-weight: bold
+            }
+            .compare-label {
+                font-size: 10px;
+                padding: 2px 7px;
+                border-radius: 4px;
+                position: absolute;
+                top: 6px;
+                z-index: 10;
+                font-weight: 600;
+                background: rgba(0, 0, 0, .6);
+                color: var(--text2);
+                pointer-events: none
+            }
+            .compare-label.left {
+                left: 6px
+            }
+            .compare-label.right {
+                right: 6px
+            }
+            .text-input {
+                font-family: 'DM Sans', sans-serif;
+                font-size: 12px;
+                background: var(--surface2);
+                border: 1px solid var(--border);
+                color: var(--text);
+                padding: 5px 8px;
+                border-radius: 6px;
+                width: 100%;
+                outline: none;
+                resize: none
+            }
+            .text-input:focus {
+                border-color: var(--accent)
+            }
+            select {
+                font-family: 'DM Sans', sans-serif;
+                font-size: 11px;
+                background: var(--surface2);
+                border: 1px solid var(--border);
+                color: var(--text);
+                padding: 4px 6px;
+                border-radius: 5px;
+                outline: none;
+                cursor: pointer;
+                flex: 1
+            }
+            @media(max-width:780px) {
+                .layout {
+                    flex-direction: column-reverse
+                }
+                .sidebar {
+                    width: 100%;
+                    min-width: unset;
+                    max-height: 50vh;
+                    border-right: none;
+                    border-top: 1px solid var(--border)
+                }
+                .canvas-area {
+                    min-height: 50vh
+                }
+            }
+        </style>
+    </head>
+
+    <body>
+        <header>
+            <span class="logo">Cades Color Swap</span>
+            <div class="compare-toggle">
+                <label for="compareOn">Before / After</label>
+                <label class="switch"><input type="checkbox" id="compareOn"><span class="slider"></span></label>
+            </div>
+            <div class="processing-dot" id="procDot"></div>
+        </header>
+        <div class="layout">
+            <aside class="sidebar">
+                <div class="panel">
+                    <div class="panel-title">Selection &amp; Tools</div>
+                    <div class="tool-bar">
+                        <button class="tool-btn active" id="toolEye">👁 Eye</button>
+                        <button class="tool-btn" id="toolRect">▭ Rect</button>
+                        <button class="tool-btn" id="toolEllipse">◯ Ellipse</button>
+                        <button class="tool-btn" id="toolLasso">✂ Lasso</button>
+                        <button class="tool-btn" id="toolWand">✦ Wand</button>
+                        <button class="tool-btn" id="toolCrop">⬒ Crop</button>
+                        <button class="tool-btn" id="toolText">T Text</button>
+                    </div>
+                    <div id="selControls" style="display:none">
+                        <div class="row"><label>Feather</label><input type="range" id="selFeather" min="0" max="80"
+                                value="0"><span class="val" id="featherVal">0px</span></div>
+                        <div id="wandTolRow" class="row" style="display:none"><label>Wand Tol.</label><input
+                                type="range" id="wandTol" min="1" max="600" value="32"><span class="val"
+                                id="wandTolVal">32</span></div>
+                        <div id="snapRow" class="row" style="display:none"><label>Edge Snap</label><input type="range"
+                                id="snapStrength" min="0" max="150" value="20"><span class="val"
+                                id="snapVal">20px</span></div>
+                        <div id="snapItersRow" class="row" style="display:none"><label>Refine</label><input type="range"
+                                id="snapIters" min="0" max="40" value="12"><span class="val" id="snapItersVal">12</span>
+                        </div>
+                        <div class="checkbox-row"><input type="checkbox" id="selInvert"><label for="selInvert">Invert
+                                selection</label></div>
+                        <div class="actions"><button class="btn btn-secondary btn-sm" id="clearSelBtn">✕ Clear</button>
+                        </div>
+                        <div class="sel-info" id="selInfo"></div>
+                    </div>
+                    <div id="cropControls" style="display:none">
+                        <p class="hint">Drag on canvas to define crop region.</p>
+                        <div class="actions" style="margin-top:5px"><button class="btn btn-warn btn-sm"
+                                id="applyCropBtn">✓ Apply Crop</button><button class="btn btn-secondary btn-sm"
+                                id="cancelCropBtn">✕ Cancel</button></div>
+                        <div class="sel-info" id="cropInfo"></div>
+                    </div>
+                    <div id="textControls" style="display:none">
+                        <textarea class="text-input" id="textInput" rows="2" placeholder="Type text here..."></textarea>
+                        <div class="row" style="margin-top:5px"><label>Size</label><input type="range" id="textSize"
+                                min="8" max="400" value="48"><span class="val" id="textSizeVal">48</span></div>
+                        <div class="row"><label>Color</label><input type="color" id="textColor" value="#ffffff"><input
+                                class="hex-input" id="textColorHex" value="#ffffff" style="width:60px"></div>
+                        <div class="row"><label>Font</label><select id="textFont">
+                                <option>DM Sans</option>
+                                <option>JetBrains Mono</option>
+                                <option>Georgia</option>
+                                <option>Impact</option>
+                                <option>Arial Black</option>
+                                <option>Courier New</option>
+                                <option>serif</option>
+                            </select></div>
+                        <div class="checkbox-row"><input type="checkbox" id="textBold" checked><label
+                                for="textBold">Bold</label></div>
+                        <div class="checkbox-row"><input type="checkbox" id="textStroke"><label
+                                for="textStroke">Outline</label></div>
+                        <div class="row"><label>Opacity</label><input type="range" id="textOpacity" min="0" max="100"
+                                value="100"><span class="val" id="textOpVal">100%</span></div>
+                        <p class="hint">Click canvas to place, drag to move.</p>
+                        <div class="actions" style="margin-top:5px"><button class="btn btn-warn btn-sm"
+                                id="stampTextBtn">✓ Stamp</button><button class="btn btn-secondary btn-sm"
+                                id="clearTextBtn">✕ Clear</button></div>
+                    </div>
+                </div>
+                <div class="panel">
+                    <div class="toggle-section"><span class="section-label">🎯 Color Replace</span><label
+                            class="switch"><input type="checkbox" id="replaceOn"><span class="slider"></span></label>
+                    </div>
+                    <div class="section-body disabled" id="replaceBody">
+                        <div class="row"><label>Source</label><input type="color" id="srcColor" value="#ff0000"><input
+                                class="hex-input" id="srcHex" value="#ff0000"></div>
+                        <div class="alpha-row"><label>Src Alpha</label><input type="range" id="srcAlpha" min="0"
+                                max="255" value="255"><span class="val" id="srcAlphaVal">255</span></div>
+                        <div class="row" style="margin-top:4px"><label>Target</label><input type="color" id="tgtColor"
+                                value="#00ff00"><input class="hex-input" id="tgtHex" value="#00ff00"></div>
+                        <div class="alpha-row"><label>Tgt Alpha</label><input type="range" id="tgtAlpha" min="0"
+                                max="255" value="255"><span class="val" id="tgtAlphaVal">255</span>
+                            <div class="alpha-preview">
+                                <div class="fill" id="tgtAlphaFill"></div>
+                            </div>
+                        </div>
+                        <div class="row" style="margin-top:4px"><label>Tolerance</label><input type="range"
+                                id="tolerance" min="0" max="150" value="40"><span class="val" id="tolVal">40</span>
+                        </div>
+                        <div class="row"><label>Softness</label><input type="range" id="softness" min="0" max="50"
+                                value="10"><span class="val" id="softVal">10</span></div>
+                        <div class="checkbox-row"><input type="checkbox" id="preserveLum" checked><label
+                                for="preserveLum">Preserve luminance</label></div>
+                    </div>
+                </div>
+                <div class="panel">
+                    <div class="toggle-section"><span class="section-label">🌈 HSL / Contrast</span><label
+                            class="switch"><input type="checkbox" id="adjustOn"><span class="slider"></span></label>
+                    </div>
+                    <div class="section-body disabled" id="adjustBody">
+                        <div class="row"><label>Hue</label><input type="range" id="hueShift" min="-180" max="180"
+                                value="0"><span class="val" id="hueVal">0°</span></div>
+                        <div class="row"><label>Saturation</label><input type="range" id="saturation" min="-100"
+                                max="100" value="0"><span class="val" id="satVal">0</span></div>
+                        <div class="row"><label>Brightness</label><input type="range" id="brightness" min="-100"
+                                max="100" value="0"><span class="val" id="briVal">0</span></div>
+                        <div class="row"><label>Contrast</label><input type="range" id="contrast" min="-100" max="100"
+                                value="0"><span class="val" id="conVal">0</span></div>
+                    </div>
+                </div>
+                <div class="panel">
+                    <div class="toggle-section"><span class="section-label">✨ Filters</span><label class="switch"><input
+                                type="checkbox" id="filterOn"><span class="slider"></span></label></div>
+                    <div class="section-body disabled" id="filterBody">
+                        <div class="row"><label>Colorize</label><input type="color" id="colorizeColor"
+                                value="#6ee7b7"><input type="range" id="colorizeAmt" min="0" max="100" value="0"><span
+                                class="val" id="colVal">0%</span></div>
+                        <div class="row"><label>Invert</label><input type="range" id="invertAmt" min="0" max="100"
+                                value="0"><span class="val" id="invVal">0%</span></div>
+                        <div class="row"><label>Grayscale</label><input type="range" id="grayAmt" min="0" max="100"
+                                value="0"><span class="val" id="grayVal">0%</span></div>
+                    </div>
+                </div>
+                <div class="panel">
+                    <div class="panel-title">Actions</div>
+                    <div class="actions">
+                        <button class="btn btn-primary" id="copyBtn">📋 Copy</button>
+                        <button class="btn btn-secondary" id="commitBtn">🧱 Bake</button>
+                        <button class="btn btn-secondary" id="downloadBtn">⬇ Save</button>
+                        <button class="btn btn-danger" id="resetBtn">↩ Reset</button>
+                    </div>
+                    <div class="panel-title" style="margin-top:8px">Transform</div>
+                    <div class="actions">
+                        <button class="btn btn-secondary btn-sm" id="flipHBtn">↔ Flip H</button>
+                        <button class="btn btn-secondary btn-sm" id="flipVBtn">↕ Flip V</button>
+                        <button class="btn btn-secondary btn-sm" id="rot90Btn">↻ 90°</button>
+                        <button class="btn btn-secondary btn-sm" id="rot270Btn">↺ -90°</button>
+                    </div>
+                </div>
+                <div class="panel" style="border-bottom:none;margin-top:auto">
+                    <p class="hint">Paste · drop · click to browse. Double-click values to type. Everything local.</p>
+                </div>
+            </aside>
+            <main class="canvas-area" id="canvasArea">
+                <div class="drop-zone" id="dropZone">
+                    <div class="icon"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--text2)"
+                            stroke-width="1.5">
+                            <rect x="3" y="3" width="18" height="18" rx="3" />
+                            <circle cx="8.5" cy="8.5" r="1.5" />
+                            <path d="m21 15-5-5L5 21" />
+                        </svg></div>
+                    <p>Paste or drop an image to begin</p>
+                </div>
+                <div class="canvas-wrap" id="canvasWrap" style="display:none">
+                    <canvas id="mainCanvas"></canvas><canvas id="overlayCanvas"></canvas>
+                    <div class="divider-line" id="dividerLine" style="display:none"></div>
+                    <span class="compare-label left" id="lblBefore" style="display:none">BEFORE</span>
+                    <span class="compare-label right" id="lblAfter" style="display:none">AFTER</span>
+                </div>
+            </main>
+        </div>
+        <div class="eyedropper-info" id="eyedropperInfo">
+            <div class="swatch" id="eyedropSwatch"></div><span id="eyedropHex">#000000</span><span
+                style="color:var(--text2)" id="eyedropHint">· click to pick source</span>
+        </div>
+        <div class="toast" id="toast"></div>
+        <script>
+            (() => {
+                const mc = document.getElementById('mainCanvas'),
+                    mctx = mc.getContext('2d', { willReadFrequently: true });
+                const oc = document.getElementById('overlayCanvas'),
+                    octx = oc.getContext('2d');
+                const dropZone = document.getElementById('dropZone'),
+                    canvasWrap = document.getElementById('canvasWrap');
+                const $ = id => document.getElementById(id);
+                let base = null,
+                    rafId = null,
+                    dirty = false,
+                    activeTool = 'eyedrop';
+                let selMask = null,
+                    marchAnim = null,
+                    wandOrigin = null;
+                let lassoRaw = [],
+                    lassoSnapped = [],
+                    lassoDrawing = false;
+                let rectDrag = null,
+                    edgeMap = null,
+                    overlayDirty = true,
+                    dimCache = null;
+                let compareOn = false,
+                    splitRatio = .5,
+                    draggingSplit = false;
+                let cropRect = null,
+                    cropDragging = false;
+                let textPos = null,
+                    textDragging = false,
+                    textDragOff = { x: 0, y: 0 };
+
+                const allTools = ['toolEye', 'toolRect', 'toolEllipse', 'toolLasso', 'toolWand', 'toolCrop',
+                    'toolText'
+                ];
+                const toolMap = {
+                    toolEye: 'eyedrop',
+                    toolRect: 'rect',
+                    toolEllipse: 'ellipse',
+                    toolLasso: 'lasso',
+                    toolWand: 'wand',
+                    toolCrop: 'crop',
+                    toolText: 'text'
+                };
+
+                function setTool(t) {
+                    activeTool = t;
+                    allTools.forEach(id => $(id).classList.toggle('active', toolMap[id] === t));
+                    const isSel = ['rect', 'ellipse', 'lasso', 'wand'].includes(t);
+                    $('selControls').style.display = isSel ? 'block' : 'none';
+                    $('cropControls').style.display = t === 'crop' ? 'block' : 'none';
+                    $('textControls').style.display = t === 'text' ? 'block' : 'none';
+                    $('wandTolRow').style.display = (t === 'wand' || wandOrigin) ? 'flex' : 'none';
+                    $('snapRow').style.display = (t === 'lasso' || lassoRaw.length > 0) ? 'flex' : 'none';
+                    $('snapItersRow').style.display = $('snapRow').style.display;
+                    if (t === 'crop') {
+                        cropRect = null;
+                        drawOverlay()
+                    }
+                    if (t !== 'text') drawOverlay();
+                    schedulePaint()
+                }
+                allTools.forEach(id => $(id).onclick = () => setTool(toolMap[id]));
+
+                function wireToggle(c, b) {
+                    $(c).addEventListener('change', () => {
+                        $(b).classList.toggle(
+                            'disabled', !$(c).checked);
+                        schedulePaint()
+                    })
+                }
+                wireToggle('replaceOn', 'replaceBody');
+                wireToggle('adjustOn', 'adjustBody');
+                wireToggle('filterOn', 'filterBody');
+
+                function syncCH(c, h) {
+                    c.addEventListener('input', () => {
+                        h.value = c.value;
+                        schedulePaint()
+                    });
+                    h.addEventListener('input', () => {
+                        if (/^#[0-9a-fA-F]{6}$/.test(h.value)) {
+                            c.value = h.value;
+                            schedulePaint()
+                        }
+                    })
+                }
+                syncCH($('srcColor'), $('srcHex'));
+                syncCH($('tgtColor'), $('tgtHex'));
+                syncCH($('textColor'), $('textColorHex'));
+                document.querySelectorAll(
+                        '.sidebar input[type="range"],.sidebar input[type="checkbox"],.sidebar input[type="color"]')
+                    .forEach(el => {
+                        if (['wandTol', 'snapStrength', 'snapIters', 'selFeather', 'selInvert']
+                            .includes(el.id)) return;
+                        el.addEventListener('input', schedulePaint)
+                    });
+
+                function updateAP() {
+                    $('tgtAlphaFill').style.background = $('tgtColor').value;
+                    $('tgtAlphaFill').style.opacity = +$('tgtAlpha').value / 255
+                }
+                $('tgtAlpha').addEventListener('input', () => {
+                    $('tgtAlphaVal').textContent = $('tgtAlpha').value;
+                    updateAP();
+                    schedulePaint()
+                });
+                $('srcAlpha').addEventListener('input', () => {
+                    $('srcAlphaVal').textContent = $('srcAlpha').value;
+                    schedulePaint()
+                });
+                $('tgtColor').addEventListener('input', updateAP);
+                updateAP();
+                ['textInput', 'textSize', 'textColor', 'textFont', 'textBold', 'textStroke', 'textOpacity'].forEach(
+                    id => $(id).addEventListener('input', () => {
+                        schedulePaint();
+                        drawOverlay()
+                    }));
+                $('textSize').addEventListener('input', () => $('textSizeVal').textContent = $('textSize').value);
+                $('textOpacity').addEventListener('input', () => $('textOpVal').textContent = $('textOpacity')
+                    .value + '%');
+                $('wandTol').addEventListener('input', () => {
+                    $('wandTolVal').textContent = $('wandTol')
+                        .value;
+                    if (wandOrigin) rebuildWandMask()
+                });
+                $('snapStrength').addEventListener('input', () => {
+                    $('snapVal').textContent = $('snapStrength')
+                        .value + 'px';
+                    if (lassoRaw.length > 4) rebuildLassoMask()
+                });
+                $('snapIters').addEventListener('input', () => {
+                    $('snapItersVal').textContent = $('snapIters')
+                        .value;
+                    if (lassoRaw.length > 4) rebuildLassoMask()
+                });
+                $('selFeather').addEventListener('input', () => {
+                    $('featherVal').textContent = $('selFeather')
+                        .value + 'px';
+                    if (wandOrigin) rebuildWandMask();
+                    else if (lassoRaw.length > 4) rebuildLassoMask();
+                    else if (rectDrag) buildRectMask();
+                    else schedulePaint()
+                });
+                $('selInvert').addEventListener('change', () => {
+                    if (selMask) {
+                        for (let i = 0; i < selMask
+                            .length; i++) selMask[i] = 1 - selMask[i];
+                        overlayDirty = true;
+                        drawOverlay();
+                        schedulePaint()
+                    }
+                });
+                $('clearSelBtn').addEventListener('click', clearSel);
+
+                function clearSel() {
+                    selMask = null;
+                    wandOrigin = null;
+                    lassoRaw = [];
+                    lassoSnapped = [];
+                    rectDrag = null;
+                    overlayDirty = true;
+                    $('selInfo').textContent = '';
+                    drawOverlay();
+                    schedulePaint()
+                }
+                const RR = {
+                    tolerance: v => v,
+                    softness: v => v,
+                    hueShift: v => v + '°',
+                    saturation: v => v,
+                    brightness: v => v,
+                    contrast: v => v,
+                    colorizeAmt: v => v + '%',
+                    invertAmt: v => v + '%',
+                    grayAmt: v => v + '%'
+                };
+                const MR = {
+                    tolerance: 'tolVal',
+                    softness: 'softVal',
+                    hueShift: 'hueVal',
+                    saturation: 'satVal',
+                    brightness: 'briVal',
+                    contrast: 'conVal',
+                    colorizeAmt: 'colVal',
+                    invertAmt: 'invVal',
+                    grayAmt: 'grayVal'
+                };
+                Object.entries(MR).forEach(([i, v]) => $(i).addEventListener('input', () => $(v).textContent = RR[i]
+                    ($(i).value)));
+                // dblclick edit
+                const vts = {
+                    tolVal: { s: 'tolerance', x: '' },
+                    softVal: { s: 'softness', x: '' },
+                    hueVal: { s: 'hueShift', x: '°' },
+                    satVal: { s: 'saturation', x: '' },
+                    briVal: { s: 'brightness', x: '' },
+                    conVal: { s: 'contrast', x: '' },
+                    colVal: { s: 'colorizeAmt', x: '%' },
+                    invVal: { s: 'invertAmt', x: '%' },
+                    grayVal: { s: 'grayAmt', x: '%' },
+                    featherVal: { s: 'selFeather', x: 'px' },
+                    wandTolVal: { s: 'wandTol', x: '' },
+                    snapVal: { s: 'snapStrength', x: 'px' },
+                    snapItersVal: { s: 'snapIters', x: '' },
+                    srcAlphaVal: { s: 'srcAlpha', x: '' },
+                    tgtAlphaVal: { s: 'tgtAlpha', x: '' },
+                    textSizeVal: { s: 'textSize', x: '' },
+                    textOpVal: { s: 'textOpacity', x: '%' }
+                };
+                Object.entries(vts).forEach(([vid, cfg]) => {
+                    const sp = $(vid);
+                    if (!sp) return;
+                    sp.title = 'Double-click to edit';
+                    sp.addEventListener('dblclick', () => {
+                        const sl = $(cfg.s),
+                            inp = document.createElement('input');
+                        inp.type = 'text';
+                        inp.className = 'val-edit';
+                        inp.value = sl.value;
+                        sp.style.display = 'none';
+                        sp.parentNode.insertBefore(inp, sp.nextSibling);
+                        inp.focus();
+                        inp.select();
+
+                        function commit() {
+                            let v = parseFloat(inp.value);
+                            if (isNaN(v)) v = 0;
+                            v = Math.max(+sl.min, Math.min(+sl.max, v));
+                            sl.value = v;
+                            sp.textContent = v + cfg.x;
+                            sp.style.display = '';
+                            inp.remove();
+                            sl.dispatchEvent(new Event('input', { bubbles: true }))
+                        }
+                        inp
+                            .addEventListener('blur', commit);
+                        inp.addEventListener('keydown', e => {
+                            if (e.key === 'Enter') {
+                                e
+                                    .preventDefault();
+                                commit()
+                            }
+                            if (e.key === 'Escape') {
+                                sp.style.display = '';
+                                inp.remove()
+                            }
+                        })
+                    })
+                });
+                // Compare
+                $('compareOn').addEventListener('change', () => {
+                    compareOn = $('compareOn').checked;
+                    ['dividerLine', 'lblBefore', 'lblAfter'].forEach(id => $(id).style.display = compareOn ?
+                        'block' : 'none');
+                    updateDP();
+                    schedulePaint()
+                });
+
+                function updateDP() {
+                    if (compareOn) $('dividerLine').style.left =
+                        `calc(${splitRatio*100}% - 1px)`
+                }
+                $('dividerLine').addEventListener('mousedown', e => {
+                    e.preventDefault();
+                    draggingSplit = true
+                });
+                document.addEventListener('mousemove', e => {
+                    if (!draggingSplit) return;
+                    const r = canvasWrap
+                        .getBoundingClientRect();
+                    splitRatio = Math.max(.02, Math.min(.98, (e.clientX - r.left) / r.width));
+                    updateDP();
+                    schedulePaint()
+                });
+                document.addEventListener('mouseup', () => { draggingSplit = false });
+                // Load
+                function loadImage(img) {
+                    const w = img.naturalWidth || img.width,
+                        h = img.naturalHeight || img.height;
+                    mc.width = w;
+                    mc.height = h;
+                    oc.width = w;
+                    oc.height = h;
+                    syncOL();
+                    mctx.drawImage(img, 0, 0);
+                    base = mctx.getImageData(0, 0, w, h);
+                    canvasWrap.style.display = 'inline-block';
+                    dropZone.classList.add('hidden');
+                    clearSel();
+                    edgeMap = null;
+                    dimCache = null;
+                    cropRect = null;
+                    textPos = null;
+                    updateDP();
+                    schedulePaint();
+                    requestAnimationFrame(syncOL)
+                }
+
+                function syncOL() {
+                    const r = mc.getBoundingClientRect();
+                    oc.style.width = r.width + 'px';
+                    oc.style.height = r.height + 'px'
+                }
+                window.addEventListener('resize', syncOL);
+
+                function loadFromBlob(b) {
+                    const img = new Image();
+                    img.onload = () => {
+                        loadImage(img);
+                        URL.revokeObjectURL(img.src)
+                    };
+                    img.src = URL.createObjectURL(b)
+                }
+                document.addEventListener('paste', e => {
+                    const items = e.clipboardData?.items;
+                    if (!items)
+                        return;
+                    for (const item of items)
+                        if (item.type.startsWith('image/')) {
+                            e.preventDefault();
+                            loadFromBlob(item.getAsFile());
+                            return
+                        }
+                });
+                const ca = $('canvasArea');
+                ca.addEventListener('dragover', e => {
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = 'copy'
+                });
+                ca.addEventListener('drop', e => {
+                    e.preventDefault();
+                    const f = e.dataTransfer.files[0];
+                    if (f
+                        ?.type.startsWith('image/')) loadFromBlob(f)
+                });
+                ca.addEventListener('click', e => {
+                    if (canvasWrap.style.display === 'none' || canvasWrap.style
+                        .display === '') {
+                        if (e.target !== oc && e.target !== mc) {
+                            const inp = document
+                                .createElement('input');
+                            inp.type = 'file';
+                            inp.accept = 'image/*';
+                            inp.onchange = () => { if (inp.files[0]) loadFromBlob(inp.files[0]) };
+                            inp.click()
+                        }
+                    }
+                });
+
+                function cc(e) {
+                    const r = oc.getBoundingClientRect();
+                    return {
+                        x: Math.floor((e.clientX - r.left) *
+                            mc.width / r.width),
+                        y: Math.floor((e.clientY - r.top) * mc.height / r.height)
+                    }
+                }
+                // Edge map
+                function computeEdge() {
+                    if (edgeMap || !base) return;
+                    const w = mc.width,
+                        h = mc.height,
+                        d = base.data;
+                    edgeMap = new Float32Array(w * h);
+                    const lum = i => 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[
+                        i + 2];
+                    for (let y = 1; y < h - 1; y++)
+                        for (let x = 1; x < w - 1; x++) {
+                            const tl = lum(((y - 1) * w + x - 1) * 4),
+                                tc = lum(((y - 1) * w + x) * 4),
+                                tr = lum(((y - 1) * w + x + 1) * 4),
+                                ml = lum((y * w + x - 1) * 4),
+                                mr = lum((y * w + x + 1) * 4),
+                                bl = lum(((y + 1) * w + x - 1) * 4),
+                                bc = lum(((y + 1) * w + x) * 4),
+                                br = lum(((y + 1) * w + x + 1) * 4);
+                            const gx = -tl - 2 * ml - bl + tr + 2 * mr +
+                                br,
+                                gy = -tl - 2 * tc - tr + bl + 2 * bc + br;
+                            edgeMap[y * w + x] = Math.sqrt(gx * gx + gy * gy)
+                        }
+                }
+                // Active contour lasso
+                function activeContourSnap(raw, radius, iters) {
+                    if (!edgeMap || radius < 1 || iters < 1) return raw.slice();
+                    const w = mc.width,
+                        h = mc.height;
+                    let maxE = 1;
+                    for (let i = 0; i < edgeMap.length; i++)
+                        if (edgeMap[i] > maxE) maxE = edgeMap[i];
+                    // Subsample
+                    let pts = raw.length > 500 ? (() => {
+                        const step = raw.length / 500,
+                            o = [];
+                        for (let i = 0; i < 500; i++) o.push(raw[Math.floor(i *
+                            step)]);
+                        return o
+                    })() : raw.slice();
+                    const n = pts.length;
+                    for (let it = 0; it < iters; it++) {
+                        const nxt = [],
+                            a = 0.25,
+                            b = 0.6,
+                            g = 0.15;
+                        const r = Math.max(3, radius * (1 - it / iters * 0.5));
+                        const ri = Math.ceil(r);
+                        for (let i = 0; i < n; i++) {
+                            const prev = pts[(i - 1 + n) % n],
+                                cur = pts[i],
+                                next = pts[(i + 1) % n];
+                            const mx = (prev.x + next.x) / 2,
+                                my = (prev.y + next.y) / 2;
+                            let bx = cur.x,
+                                by = cur.y,
+                                bg = -1;
+                            for (let dy = -ri; dy <= ri; dy++)
+                                for (let dx = -ri; dx <= ri; dx++) {
+                                    if (dx * dx + dy * dy > r * r) continue;
+                                    const nx = cur.x + dx,
+                                        ny = cur.y + dy;
+                                    if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+                                    const sc = edgeMap[ny * w + nx] / maxE * (1 - Math.sqrt(dx * dx + dy * dy) / r *
+                                        0.3);
+                                    if (sc > bg) {
+                                        bg = sc;
+                                        bx = nx;
+                                        by = ny
+                                    }
+                                }
+                            const ex = bg > 0.05 ? bx : cur.x,
+                                ey = bg > 0.05 ? by : cur.y;
+                            nxt.push({
+                                x: Math.max(0, Math.min(w - 1, Math.round(g * cur.x + a * mx + b * ex))),
+                                y: Math.max(0, Math.min(h - 1, Math.round(g * cur.y + a * my + b * ey)))
+                            });
+                        }
+                        pts = nxt;
+                    }
+                    return pts;
+                }
+                // Wand
+                function floodFill(sx, sy, tol) {
+                    const w = mc.width,
+                        h = mc.height,
+                        d = base.data,
+                        mask = new Float32Array(w * h),
+                        vis = new Uint8Array(w * h);
+                    const si = (sy * w + sx) * 4,
+                        sr = d[si],
+                        sg = d[si + 1],
+                        sb = d[si + 2];
+                    const q = new Int32Array(w * h * 2);
+                    let hd = 0,
+                        tl = 0;
+                    q[tl++] = sx;
+                    q[tl++] = sy;
+                    vis[sy * w + sx] = 1;
+                    while (hd < tl) {
+                        const cx = q[hd++],
+                            cy = q[hd++],
+                            ci = (cy * w + cx) * 4;
+                        if (cDist(d[ci], d[ci + 1], d[ci + 2], sr, sg, sb) <=
+                            tol) {
+                            mask[cy * w + cx] = 1;
+                            if (cx > 0 && !vis[cy * w + cx - 1]) {
+                                vis[cy * w + cx -
+                                    1] = 1;
+                                q[tl++] = cx - 1;
+                                q[tl++] = cy
+                            }
+                            if (cx < w - 1 && !vis[cy * w + cx + 1]) {
+                                vis[cy * w + cx + 1] = 1;
+                                q[tl++] = cx + 1;
+                                q[tl++] = cy
+                            }
+                            if (cy > 0 && !vis[(cy - 1) * w + cx]) {
+                                vis[(cy - 1) * w + cx] = 1;
+                                q[tl++] = cx;
+                                q[tl++] = cy - 1
+                            }
+                            if (cy < h - 1 && !vis[(cy + 1) * w + cx]) {
+                                vis[(cy + 1) * w +
+                                    cx] = 1;
+                                q[tl++] = cx;
+                                q[tl++] = cy + 1
+                            }
+                        }
+                    }
+                    return mask
+                }
+
+                function rebuildWandMask() {
+                    if (!wandOrigin || !base) return;
+                    let m = floodFill(wandOrigin.x,
+                        wandOrigin.y, +$('wandTol').value);
+                    const f = +$('selFeather').value;
+                    if (f > 0) m =
+                        blurMask(m, mc.width, mc.height, f);
+                    if ($('selInvert').checked)
+                        for (let i = 0; i < m.length; i++) m[i] = 1 - m[i];
+                    selMask = m;
+                    let c = 0;
+                    for (let i = 0; i < m.length; i++)
+                        if (m[i] > .5) c++;
+                    $('selInfo').textContent = c + 'px';
+                    overlayDirty = true;
+                    drawOverlay();
+                    schedulePaint()
+                }
+
+                function rebuildLassoMask() {
+                    if (lassoRaw.length < 4 || !base) return;
+                    computeEdge();
+                    const s = +$('snapStrength').value,
+                        it = +$('snapIters').value;
+                    lassoSnapped = s > 0 && it > 0 ? activeContourSnap(lassoRaw, s, it) : lassoRaw.slice();
+                    const
+                        f = +$('selFeather').value,
+                        inv = $('selInvert').checked;
+                    let m = rasterPoly(lassoSnapped, mc.width, mc.height);
+                    if (f >
+                        0) m = blurMask(m, mc.width, mc.height, f);
+                    if (inv)
+                        for (let i = 0; i < m.length; i++) m[i] = 1 - m[i];
+                    selMask = m;
+                    let c = 0;
+                    for (let i = 0; i < m.length; i++)
+                        if (m[i] > .5) c++;
+                    $('selInfo').textContent = c + 'px';
+                    overlayDirty = true;
+                    drawOverlay();
+                    schedulePaint()
+                }
+
+                function rasterPoly(pts, w, h) {
+                    const m = new Float32Array(w * h),
+                        n = pts.length;
+                    for (let y = 0; y < h; y++) {
+                        const nd = [];
+                        for (let i = 0, j = n - 1; i <
+                            n; j = i++)
+                            if ((pts[i].y <= y && pts[j].y > y) || (pts[j].y <= y && pts[i].y > y)) nd.push(pts[i]
+                                .x + (y - pts[i].y) / (pts[j].y - pts[i].y) * (pts[j].x - pts[i].x));
+                        nd.sort((a, b) => a - b);
+                        for (let i = 0; i < nd.length - 1; i += 2) {
+                            const x0 = Math.max(
+                                    0, Math.ceil(nd[i])),
+                                x1 = Math.min(w - 1, Math.floor(nd[i + 1]));
+                            for (let x = x0; x <= x1; x++) m[y *
+                                w + x] = 1
+                        }
+                    }
+                    return m
+                }
+
+                function buildRectMask() {
+                    if (!rectDrag || !base) return;
+                    const w = mc.width,
+                        h = mc.height,
+                        f = +$('selFeather').value,
+                        inv = $('selInvert').checked,
+                        { x1, y1, x2, y2, shape } = rectDrag;
+                    const sx = Math.min(x1, x2),
+                        sy = Math.min(y1, y2),
+                        sw = Math.max(x1, x2) - sx,
+                        sh = Math.max(y1, y2) - sy;
+                    const m = new Float32Array(w * h),
+                        cx = sx + sw / 2,
+                        cy = sy + sh / 2,
+                        rx = sw / 2 || .5,
+                        ry = sh / 2 || .5;
+                    for (let py = 0; py < h; py++)
+                        for (let px = 0; px < w; px++) {
+                            let ins;
+                            if (shape === 'ellipse') {
+                                const dx = (px - cx) /
+                                    rx,
+                                    dy = (py - cy) / ry,
+                                    d = Math.sqrt(dx * dx + dy * dy);
+                                ins = f > 0 ? (d <= 1 - f / Math.max(rx, ry, 1) ? 1 : d >= 1 + f / Math.max(rx, ry,
+                                    1) ? 0 : 1 - (d - (1 - f / Math.max(rx, ry, 1))) / (2 * f / Math.max(rx,
+                                    ry, 1))) : d <= 1 ? 1 : 0
+                            } else {
+                                if (f > 0) {
+                                    const dm = Math.min(px - sx,
+                                        sx + sw - px, py - sy, sy + sh - py);
+                                    ins = dm >= f ? 1 : dm <= 0 ? 0 : dm / f
+                                } else ins = (px >= sx && px < sx +
+                                    sw && py >= sy && py < sy + sh) ? 1 : 0
+                            }
+                            m[py * w + px] = ins
+                        }
+                    if (inv)
+                        for (let i = 0; i < m.length; i++) m[i] = 1 - m[i];
+                    selMask = m;
+                    overlayDirty = true
+                }
+
+                function blurMask(s, w, h, r) {
+                    r = Math.ceil(r);
+                    const t = new Float32Array(w * h),
+                        o = new Float32Array(w * h);
+                    for (let y = 0; y < h; y++) {
+                        let sm = 0;
+                        for (let x = 0; x <
+                            r && x < w; x++) sm += s[y * w + x];
+                        for (let x = 0; x < w; x++) {
+                            if (x + r < w) sm +=
+                                s[y * w + x + r];
+                            if (x - r - 1 >= 0) sm -= s[y * w + x - r - 1];
+                            t[y * w + x] = sm / (Math.min(x + r, w - 1) - Math.max(x - r, 0) + 1)
+                        }
+                    }
+                    for (let x =
+                            0; x < w; x++) {
+                        let sm = 0;
+                        for (let y = 0; y < r && y < h; y++) sm += t[y * w + x];
+                        for (
+                            let y = 0; y < h; y++) {
+                            if (y + r < h) sm += t[(y + r) * w + x];
+                            if (y - r - 1 >= 0)
+                                sm -= t[(y - r - 1) * w + x];
+                            o[y * w + x] = sm / (Math.min(y + r, h - 1) - Math.max(y - r, 0) + 1)
+                        }
+                    }
+                    return o
+                }
+                // Canvas interaction
+                oc.addEventListener('mousedown', e => {
+                    if (!base || draggingSplit) return;
+                    const p = cc(e);
+                    if (activeTool === 'rect' || activeTool === 'ellipse') {
+                        wandOrigin = null;
+                        lassoRaw = [];
+                        rectDrag = { x1: p.x, y1: p.y, x2: p.x, y2: p.y, shape: activeTool };
+                        selMask = null;
+                        overlayDirty = true
+                    } else if (activeTool === 'lasso') {
+                        wandOrigin = null;
+                        rectDrag = null;
+                        lassoDrawing = true;
+                        lassoRaw = [{ x: p.x, y: p.y }];
+                        lassoSnapped = [];
+                        selMask = null;
+                        overlayDirty = true
+                    } else if (activeTool === 'wand') {
+                        lassoRaw = [];
+                        rectDrag = null;
+                        if (p.x >= 0 && p.y >= 0 && p.x < mc.width && p.y < mc
+                            .height) {
+                            wandOrigin = { x: p.x, y: p.y };
+                            rebuildWandMask();
+                            $('wandTolRow').style.display = 'flex'
+                        }
+                    } else if (activeTool ===
+                        'crop') {
+                        cropRect = { x1: p.x, y1: p.y, x2: p.x, y2: p.y };
+                        cropDragging = true;
+                        drawOverlay()
+                    } else if (activeTool === 'text') {
+                        if (textPos && Math.abs(p.x -
+                                textPos.x) < 150 && Math.abs(p.y - textPos.y) < 60) {
+                            textDragging = true;
+                            textDragOff = { x: p.x - textPos.x, y: p.y - textPos.y }
+                        } else {
+                            textPos
+                                = { x: p.x, y: p.y };
+                            schedulePaint();
+                            drawOverlay()
+                        }
+                    }
+                });
+                oc.addEventListener('mousemove', e => {
+                    if (!base) return;
+                    const p = cc(e);
+                    if (p.x >= 0 && p.y >= 0 && p.x < mc.width && p.y < mc.height) {
+                        const i = (p.y * mc
+                                .width + p.x) * 4,
+                            d = base.data;
+                        $('eyedropperInfo').classList.add('show');
+                        $('eyedropSwatch').style.background = rgbHex(d[i], d[i + 1], d[i + 2]);
+                        $('eyedropHex').textContent = rgbHex(d[i], d[i + 1], d[i + 2]) + ' a' + d[i + 3]
+                    }
+                    if (rectDrag && ['rect', 'ellipse'].includes(activeTool)) {
+                        rectDrag.x2 = Math.max(0,
+                            Math.min(mc.width, p.x));
+                        rectDrag.y2 = Math.max(0, Math.min(mc.height, p.y));
+                        buildRectMask();
+                        drawOverlay();
+                        schedulePaint()
+                    }
+                    if (lassoDrawing) {
+                        const l = lassoRaw[lassoRaw.length - 1];
+                        if (Math.abs(p.x - l.x) +
+                            Math.abs(p.y - l.y) > 2) {
+                            lassoRaw.push({ x: p.x, y: p.y });
+                            overlayDirty = true;
+                            drawOverlay()
+                        }
+                    }
+                    if (cropDragging && cropRect) {
+                        cropRect.x2 = Math.max(0, Math.min(mc.width, p.x));
+                        cropRect.y2 = Math.max(0, Math.min(mc.height, p.y));
+                        $('cropInfo').textContent = Math.abs(cropRect.x2 - cropRect.x1) + '×' + Math.abs(
+                            cropRect.y2 - cropRect.y1);
+                        drawOverlay()
+                    }
+                    if (textDragging && textPos) {
+                        textPos.x = p.x - textDragOff.x;
+                        textPos.y = p.y - textDragOff.y;
+                        schedulePaint();
+                        drawOverlay()
+                    }
+                });
+                oc.addEventListener('mouseup', () => {
+                    if (rectDrag && ['rect', 'ellipse'].includes(activeTool)) {
+                        const { x1, y1, x2, y2 } =
+                        rectDrag;
+                        if (Math.abs(x2 - x1) < 3 || Math.abs(y2 - y1) < 3) {
+                            clearSel
+                                ();
+                            return
+                        }
+                        rectDrag.x1 = Math.min(x1, x2);
+                        rectDrag.y1 = Math.min(y1, y2);
+                        rectDrag.x2 = Math.max(x1, x2);
+                        rectDrag.y2 = Math.max(y1, y2);
+                        buildRectMask();
+                        $('selInfo').textContent = Math.abs(x2 - x1) + '×' + Math.abs(y2 - y1) + 'px';
+                        drawOverlay();
+                        schedulePaint()
+                    }
+                    if (lassoDrawing) {
+                        lassoDrawing = false;
+                        if (lassoRaw.length > 4) {
+                            rebuildLassoMask();
+                            $('snapRow').style.display = 'flex';
+                            $('snapItersRow').style.display = 'flex'
+                        } else {
+                            lassoRaw = [];
+                            selMask = null;
+                            overlayDirty = true;
+                            drawOverlay();
+                            schedulePaint()
+                        }
+                    }
+                    cropDragging = false;
+                    textDragging = false
+                });
+                oc.addEventListener('mouseleave', () => $('eyedropperInfo').classList.remove('show'));
+                oc.addEventListener('click', e => {
+                    if (!base || activeTool !== 'eyedrop') return;
+                    const p = cc(
+                        e);
+                    if (p.x < 0 || p.y < 0 || p.x >= mc.width || p.y >= mc.height) return;
+                    const i = (p
+                            .y * mc.width + p.x) * 4,
+                        d = base.data,
+                        hex = rgbHex(d[i], d[i + 1], d[i + 2]);
+                    $('srcColor').value = hex;
+                    $('srcHex').value = hex;
+                    $('srcAlpha').value = d[i + 3];
+                    $('srcAlphaVal').textContent = d[i + 3];
+                    $('replaceOn').checked = true;
+                    $('replaceBody').classList.remove('disabled');
+                    schedulePaint();
+                    showToast('Source: ' + hex)
+                });
+                // Crop
+                $('applyCropBtn').addEventListener('click', () => {
+                    if (!cropRect || !base) return;
+                    const x = Math
+                        .min(cropRect.x1, cropRect.x2),
+                        y = Math.min(cropRect.y1, cropRect.y2),
+                        w = Math.abs(cropRect.x2 - cropRect.x1),
+                        h = Math.abs(cropRect.y2 - cropRect.y1);
+                    if (w < 2 || h < 2) return;
+                    const id = mctx
+                        .getImageData(x, y, w, h);
+                    mc.width = w;
+                    mc.height = h;
+                    oc.width = w;
+                    oc.height = h;
+                    mctx.putImageData(id, 0, 0);
+                    base = mctx.getImageData(0, 0, w, h);
+                    cropRect = null;
+                    edgeMap = null;
+                    dimCache = null;
+                    clearSel();
+                    syncOL();
+                    requestAnimationFrame(syncOL);
+                    schedulePaint();
+                    showToast('Cropped ' + w + '×' + h)
+                });
+                $('cancelCropBtn').addEventListener('click', () => {
+                    cropRect = null;
+                    drawOverlay()
+                });
+                // Text
+                function drawTxt(ctx) {
+                    if (!textPos) return;
+                    const t = $('textInput').value || 'Text',
+                        sz = +$('textSize').value,
+                        b = $('textBold').checked ? 'bold ' : '',
+                        f = $('textFont').value;
+                    ctx.save();
+                    ctx.globalAlpha = +$('textOpacity').value / 100;
+                    ctx.font = b + sz + 'px "' + f + '"';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillStyle = $('textColor').value;
+                    if ($('textStroke').checked) {
+                        ctx.strokeStyle = '#000';
+                        ctx.lineWidth = Math.max(1, sz / 15);
+                        ctx.strokeText(t, textPos.x, textPos.y)
+                    }
+                    ctx.fillText(t, textPos.x, textPos.y);
+                    ctx.restore()
+                }
+                $('stampTextBtn').addEventListener('click', () => {
+                    if (!textPos || !base) return;
+                    drawTxt(mctx);
+                    base = mctx.getImageData(0, 0, mc.width, mc.height);
+                    textPos = null;
+                    schedulePaint();
+                    drawOverlay();
+                    showToast('Text stamped')
+                });
+                $('clearTextBtn').addEventListener('click', () => {
+                    textPos = null;
+                    schedulePaint();
+                    drawOverlay()
+                });
+                // Transforms
+                function xform(fn) {
+                    if (!base) return;
+                    const tc = document.createElement('canvas'),
+                        tx = tc.getContext('2d');
+                    tc.width = mc.width;
+                    tc.height = mc.height;
+                    tx.putImageData(base, 0, 0);
+                    fn(tc, tx);
+                    mc.width = tc.width;
+                    mc.height = tc.height;
+                    oc.width = tc.width;
+                    oc.height = tc.height;
+                    mctx.drawImage(tc, 0, 0);
+                    base = mctx.getImageData(0, 0, mc.width, mc.height);
+                    edgeMap = null;
+                    dimCache = null;
+                    clearSel();
+                    syncOL();
+                    requestAnimationFrame(syncOL);
+                    schedulePaint()
+                }
+
+                function mkC(id, w, h) {
+                    const c = document.createElement('canvas');
+                    c.width = w;
+                    c.height = h;
+                    c.getContext('2d').putImageData(id, 0, 0);
+                    return c
+                }
+                $('flipHBtn').addEventListener('click', () => {
+                    xform((c, x) => {
+                        x.save();
+                        x.scale(-1, 1);
+                        x.drawImage(c, -c.width, 0);
+                        x.restore()
+                    });
+                    showToast('Flipped H')
+                });
+                $('flipVBtn').addEventListener('click', () => {
+                    xform((c, x) => {
+                        x.save();
+                        x.scale(1, -1);
+                        x.drawImage(c, 0, -c.height);
+                        x.restore()
+                    });
+                    showToast('Flipped V')
+                });
+                $('rot90Btn').addEventListener('click', () => {
+                    xform((c, x) => {
+                        const w = c.width,
+                            h = c.height,
+                            id = x.getImageData(0, 0, w, h);
+                        c.width = h;
+                        c.height = w;
+                        const t = c.getContext('2d');
+                        t.translate(h, 0);
+                        t.rotate(Math.PI / 2);
+                        t.drawImage(mkC(id, w, h), 0, 0)
+                    });
+                    showToast('Rotated 90°')
+                });
+                $('rot270Btn').addEventListener('click', () => {
+                    xform((c, x) => {
+                        const w = c.width,
+                            h = c.height,
+                            id = x.getImageData(0, 0, w, h);
+                        c.width = h;
+                        c.height = w;
+                        const t = c.getContext('2d');
+                        t.translate(0, w);
+                        t.rotate(-Math.PI / 2);
+                        t.drawImage(mkC(id, w, h), 0, 0)
+                    });
+                    showToast('Rotated -90°')
+                });
+                // Overlay
+                function buildDim() {
+                    const w = mc.width,
+                        h = mc.height;
+                    if (!dimCache) {
+                        dimCache = document.createElement('canvas');
+                        dimCache.width = w;
+                        dimCache.height = h
+                    } else if (dimCache.width !== w || dimCache.height !== h) {
+                        dimCache
+                            .width = w;
+                        dimCache.height = h
+                    }
+                    const dx = dimCache.getContext('2d');
+                    if (selMask) {
+                        const id = dx
+                            .createImageData(w, h),
+                            dd = id.data;
+                        for (let i = 0; i < selMask.length; i++) dd[i * 4 + 3] = Math.round((1 -
+                            selMask[i]) * 90);
+                        dx.putImageData(id, 0, 0)
+                    } else dx.clearRect(0, 0, w, h);
+                    overlayDirty = false
+                }
+
+                function drawOverlay() {
+                    if (marchAnim) {
+                        cancelAnimationFrame(marchAnim);
+                        marchAnim = null
+                    }
+
+                    function frame() {
+                        octx.clearRect(0, 0, oc.width, oc.height);
+                        const hasSel = selMask || lassoDrawing || (rectDrag && ['rect', 'ellipse'].includes(
+                            activeTool));
+                        if (selMask) {
+                            if (overlayDirty) buildDim();
+                            octx.drawImage(dimCache, 0, 0)
+                        } else if (lassoDrawing && lassoRaw.length > 2) {
+                            octx
+                                .save();
+                            octx.fillStyle = 'rgba(0,0,0,0.35)';
+                            octx.fillRect(0, 0, oc.width, oc.height);
+                            octx.globalCompositeOperation = 'destination-out';
+                            octx.fillStyle = 'white';
+                            octx.beginPath();
+                            octx.moveTo(lassoRaw[0].x, lassoRaw[0].y);
+                            for (let i = 1; i < lassoRaw.length; i++)
+                                octx.lineTo(lassoRaw[i].x, lassoRaw[i].y);
+                            octx.closePath();
+                            octx.fill();
+                            octx.restore()
+                        }
+                        if (activeTool === 'crop' && cropRect) {
+                            octx.save();
+                            octx.fillStyle = 'rgba(0,0,0,0.5)';
+                            octx.fillRect(0, 0, oc.width, oc.height);
+                            const sx = Math.min(cropRect.x1, cropRect.x2),
+                                sy = Math.min(cropRect.y1, cropRect.y2),
+                                sw = Math.abs(cropRect.x2 - cropRect.x1),
+                                sh = Math.abs(cropRect.y2 - cropRect.y1);
+                            octx.clearRect(sx, sy, sw, sh);
+                            octx.strokeStyle = 'rgba(110,231,183,0.85)';
+                            octx.lineWidth = 2;
+                            octx.setLineDash([6, 4]);
+                            octx.lineDashOffset = -(performance.now() / 30) % 20;
+                            octx.strokeRect(sx, sy, sw, sh);
+                            octx.strokeStyle = 'rgba(255,255,255,0.15)';
+                            octx.lineWidth = 1;
+                            octx.setLineDash([]);
+                            for (let i = 1; i < 3; i++) {
+                                octx.beginPath();
+                                octx.moveTo(sx + sw * i / 3, sy);
+                                octx.lineTo(sx + sw * i / 3, sy + sh);
+                                octx.stroke();
+                                octx.beginPath();
+                                octx.moveTo(sx, sy + sh * i / 3);
+                                octx.lineTo(sx + sw, sy + sh * i / 3);
+                                octx.stroke()
+                            }
+                            octx.restore()
+                        }
+                        if (activeTool === 'text' && textPos) drawTxt(octx);
+                        if (hasSel) {
+                            octx.save();
+                            octx.strokeStyle = 'rgba(110,231,183,0.85)';
+                            octx.lineWidth = Math.max(1, mc.width / 500);
+                            const d = Math.max(4, mc.width / 100);
+                            octx.setLineDash([d, d]);
+                            octx.lineDashOffset = -(performance.now() / 30) % (d * 2);
+                            if (rectDrag && selMask) {
+                                const s = rectDrag,
+                                    sx = Math.min(s.x1, s.x2),
+                                    sy = Math.min(s.y1, s.y2),
+                                    sw = Math.abs(s.x2 - s.x1),
+                                    sh = Math.abs(s.y2 - s.y1);
+                                if (s.shape === 'ellipse') {
+                                    octx.beginPath();
+                                    octx.ellipse(sx + sw / 2, sy + sh / 2, sw / 2, sh / 2, 0, 0, Math.PI * 2);
+                                    octx.stroke()
+                                } else octx.strokeRect(sx, sy, sw, sh)
+                            } else if (lassoSnapped
+                                .length > 2) {
+                                octx.beginPath();
+                                octx.moveTo(lassoSnapped[0].x, lassoSnapped[0].y);
+                                for (let i = 1; i < lassoSnapped
+                                    .length; i++) octx.lineTo(lassoSnapped[i].x, lassoSnapped[i].y);
+                                octx.closePath();
+                                octx.stroke()
+                            } else if (lassoDrawing && lassoRaw.length > 1) {
+                                octx.beginPath();
+                                octx.moveTo(lassoRaw[0].x, lassoRaw[0].y);
+                                for (let i = 1; i < lassoRaw.length; i++)
+                                    octx.lineTo(lassoRaw[i].x, lassoRaw[i].y);
+                                octx.stroke()
+                            } else if (wandOrigin && selMask) {
+                                octx.setLineDash([]);
+                                octx.strokeStyle = 'rgba(110,231,183,0.5)';
+                                octx.beginPath();
+                                octx.moveTo(wandOrigin.x - 8, wandOrigin.y);
+                                octx.lineTo(wandOrigin.x + 8, wandOrigin.y);
+                                octx.moveTo(wandOrigin.x, wandOrigin.y - 8);
+                                octx.lineTo(wandOrigin.x, wandOrigin.y + 8);
+                                octx.stroke()
+                            }
+                            octx.restore()
+                        }
+                        if (hasSel || (activeTool === 'crop' && cropRect) || (activeTool === 'text' && textPos))
+                            marchAnim = requestAnimationFrame(frame)
+                    }
+                    frame()
+                }
+                // Paint
+                function schedulePaint() { dirty = true; if (!rafId) rafId = requestAnimationFrame(paint) }
+
+                function paint() {
+                    rafId = null;
+                    if (!base || !dirty) return;
+                    dirty = false;
+                    $('procDot').classList.add('active');
+                    setTimeout(() => $('procDot').classList.remove('active'), 300);
+                    const src = base.data,
+                        len = src.length,
+                        w = mc.width,
+                        h = mc.height,
+                        out = new Uint8ClampedArray(len);
+                    out.set(src);
+                    const hasR = $('replaceOn').checked,
+                        hasA = $('adjustOn').checked,
+                        hasF = $('filterOn').checked,
+                        hasMask = selMask !== null;
+                    let sr, sg, sb, sa, tr, tg, tb, ta, tol, soft, keepL, tH;
+                    if (hasR) {
+                        [sr, sg, sb] = hexRgb($('srcColor').value);
+                        sa = +$('srcAlpha').value;
+                        [tr, tg, tb] = hexRgb($('tgtColor').value);
+                        ta = +$('tgtAlpha').value;
+                        tol = +$('tolerance').value;
+                        soft = +$('softness').value;
+                        keepL = $('preserveLum').checked;
+                        tH = rgbHsl(tr, tg, tb)
+                    }
+                    let hS, sD, bD, cD, cF;
+                    if (hasA) {
+                        hS = +$('hueShift').value;
+                        sD = +$('saturation').value;
+                        bD = +$('brightness').value;
+                        cD = +$('contrast').value;
+                        cF = (259 * (cD + 255)) / (255 * (259 - cD))
+                    }
+                    let colA, colH, inv, gray;
+                    if (hasF) {
+                        colA = +$('colorizeAmt').value / 100;
+                        const [cr, cg, cb] = hexRgb($('colorizeColor')
+                            .value);
+                        colH = rgbHsl(cr, cg, cb);
+                        inv = +$('invertAmt').value / 100;
+                        gray = +$('grayAmt').value / 100
+                    }
+                    const splitPx = compareOn ? Math.round(splitRatio * w) : w;
+                    for (let i = 0; i < len; i += 4) {
+                        const pi = i >> 2;
+                        if (compareOn && (pi % w) < splitPx) continue;
+                        const mask = hasMask ? selMask[pi] : 1;
+                        if (mask < .002) continue;
+                        let r = src[i],
+                            g = src[i + 1],
+                            b = src[i + 2],
+                            a = src[i + 3],
+                            mr = r,
+                            mg = g,
+                            mb = b,
+                            ma = a;
+                        if (hasR) {
+                            const cd = cDist(mr, mg, mb, sr, sg, sb),
+                                ad = Math.abs(a - sa),
+                                dist = Math.sqrt(cd * cd + ad * ad);
+                            if (dist <= tol + soft) {
+                                let bl = dist <=
+                                    tol ? 1 : 1 - (dist - tol) / soft;
+                                bl = bl < 0 ? 0 : bl > 1 ? 1 : bl;
+                                let nr, ng, nb;
+                                if (keepL) {
+                                    const sh = rgbHsl(
+                                        mr, mg, mb);
+                                    [nr, ng, nb] = hslRgb(tH[0], tH[1], sh[2])
+                                } else {
+                                    nr = tr;
+                                    ng = tg;
+                                    nb = tb
+                                }
+                                mr = mr + (nr - mr) * bl + .5 | 0;
+                                mg = mg + (ng - mg) * bl + .5 | 0;
+                                mb = mb + (nb - mb) * bl + .5 | 0;
+                                ma = ma + (ta - ma) * bl + .5 | 0
+                            }
+                        }
+                        if (hasA) {
+                            let [hh, ss, ll] = rgbHsl(mr, mg, mb);
+                            hh = (hh + hS + 360) % 360;
+                            ss = Math.max(0, Math.min(100, ss + sD));
+                            ll = Math.max(0, Math.min(100, ll + bD * .5));
+                            let [rr, gg, bb] = hslRgb(hh, ss, ll);
+                            mr = cl(cF * (rr - 128) + 128);
+                            mg = cl(cF * (gg - 128) + 128);
+                            mb = cl(cF * (bb - 128) + 128)
+                        }
+                        if (hasF) {
+                            let rr = mr,
+                                gg = mg,
+                                bb = mb;
+                            if (colA > 0) {
+                                const [, , l] = rgbHsl(rr, gg, bb);
+                                const [nr, ng, nb] =
+                                hslRgb(colH[0], colH[1], l);
+                                rr += (nr - rr) * colA;
+                                gg += (ng - gg) * colA;
+                                bb += (nb - bb) * colA
+                            }
+                            if (inv > 0) {
+                                rr += (255 - 2 * rr) * inv;
+                                gg += (255 - 2 * gg) * inv;
+                                bb += (255 - 2 * bb) * inv
+                            }
+                            if (gray > 0) {
+                                const lm = .299 * rr + .587 * gg +
+                                    .114 * bb;
+                                rr += (lm - rr) * gray;
+                                gg += (lm - gg) * gray;
+                                bb += (lm - bb) * gray
+                            }
+                            mr = cl(rr);
+                            mg = cl(gg);
+                            mb = cl(bb)
+                        }
+                        if (mask >= .998) {
+                            out[i] = mr;
+                            out[i + 1] = mg;
+                            out[i + 2] = mb;
+                            out[i + 3] = ma
+                        } else {
+                            out[i] = r + (mr - r) * mask + .5 | 0;
+                            out[i + 1] = g + (mg - g) * mask + .5 | 0;
+                            out[i + 2] = b + (mb - b) * mask + .5 | 0;
+                            out[i + 3] = a + (ma - a) * mask + .5 | 0
+                        }
+                    }
+                    mctx.putImageData(new ImageData(out, w, h), 0, 0);
+                    if (activeTool === 'text' && textPos) drawTxt(mctx)
+                }
+                // Buttons
+                $('copyBtn').addEventListener('click', async () => {
+                    if (!base) return;
+                    octx.clearRect(0, 0, oc.width, oc.height);
+                    try {
+                        const b = await new Promise(r => mc
+                            .toBlob(r, 'image/png'));
+                        await navigator.clipboard.write([new ClipboardItem({ 'image/png': b })]);
+                        showToast('Copied!')
+                    } catch { showToast('Copy failed') } drawOverlay()
+                });
+                $('downloadBtn').addEventListener('click', () => {
+                    if (!base) return;
+                    const a = document
+                        .createElement('a');
+                    a.download = 'colorswap-' + Date.now() + '.png';
+                    a.href = mc.toDataURL('image/png');
+                    a.click();
+                    showToast('Downloading...')
+                });
+                $('commitBtn').addEventListener('click', () => {
+                    if (!base) return;
+                    base = mctx.getImageData(0, 0, mc.width, mc.height);
+                    clearSel();
+                    edgeMap = null;
+                    dimCache = null;
+                    ['replaceOn', 'adjustOn', 'filterOn'].forEach(id => { $(id).checked = false });
+                    ['replaceBody', 'adjustBody', 'filterBody'].forEach(id => $(id).classList.add(
+                        'disabled'));
+                    [
+                        ['tolerance', 0, 'tolVal', '0'],
+                        ['softness', 0, 'softVal', '0'],
+                        ['hueShift', 0, 'hueVal', '0°'],
+                        ['saturation', 0, 'satVal', '0'],
+                        ['brightness', 0, 'briVal', '0'],
+                        ['contrast', 0, 'conVal', '0'],
+                        ['colorizeAmt', 0, 'colVal', '0%'],
+                        ['invertAmt', 0, 'invVal', '0%'],
+                        ['grayAmt', 0, 'grayVal', '0%'],
+                        ['selFeather', 0, 'featherVal', '0px'],
+                        ['srcAlpha', 255, 'srcAlphaVal', '255'],
+                        ['tgtAlpha', 255, 'tgtAlphaVal', '255']
+                    ].forEach(([s, v, l, t]) => {
+                        $(s).value = v;
+                        $(l).textContent = t
+                    });
+                    $('selInvert').checked = false;
+                    updateAP();
+                    schedulePaint();
+                    showToast('Baked + reset')
+                });
+                $('resetBtn').addEventListener('click', () => {
+                    if (!base) return;
+                    ['replaceOn', 'adjustOn', 'filterOn'].forEach(id => { $(id).checked = false });
+                    ['replaceBody', 'adjustBody', 'filterBody'].forEach(id => $(id).classList.add(
+                        'disabled'));
+                    [
+                        ['tolerance', 0, 'tolVal', '0'],
+                        ['softness', 0, 'softVal', '0'],
+                        ['hueShift', 0, 'hueVal', '0°'],
+                        ['saturation', 0, 'satVal', '0'],
+                        ['brightness', 0, 'briVal', '0'],
+                        ['contrast', 0, 'conVal', '0'],
+                        ['colorizeAmt', 0, 'colVal', '0%'],
+                        ['invertAmt', 0, 'invVal', '0%'],
+                        ['grayAmt', 0, 'grayVal', '0%'],
+                        ['selFeather', 0, 'featherVal', '0px'],
+                        ['wandTol', 32, 'wandTolVal', '32'],
+                        ['snapStrength', 20, 'snapVal', '20px'],
+                        ['snapIters', 12, 'snapItersVal', '12'],
+                        ['srcAlpha', 255, 'srcAlphaVal', '255'],
+                        ['tgtAlpha', 255, 'tgtAlphaVal', '255']
+                    ].forEach(([s, v, l, t]) => {
+                        $(s).value = v;
+                        $(l).textContent = t
+                    });
+                    $('selInvert').checked = false;
+                    updateAP();
+                    clearSel();
+                    edgeMap = null;
+                    dimCache = null;
+                    textPos = null;
+                    cropRect = null;
+                    schedulePaint();
+                    showToast('Reset')
+                });
+                // Color math
+                function rgbHex(r, g, b) {
+                    return '#' + [r, g, b].map(c => c.toString(16).padStart(2, '0')).join(
+                        '')
+                }
+
+                function hexRgb(h) {
+                    const m = h.match(/^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i);
+                    return m ? [
+                        parseInt(m[1], 16), parseInt(m[2], 16), parseInt(m[3], 16)
+                    ] : [0, 0, 0]
+                }
+
+                function cl(v) { return v < 0 ? 0 : v > 255 ? 255 : v + .5 | 0 }
+
+                function cDist(r1, g1, b1, r2, g2, b2) {
+                    return Math.sqrt((r1 - r2) ** 2 + (g1 - g2) ** 2 + (b1 -
+                        b2) ** 2)
+                }
+
+                function rgbHsl(r, g, b) {
+                    r /= 255;
+                    g /= 255;
+                    b /= 255;
+                    const mx = Math.max(r, g, b),
+                        mn = Math.min(r, g, b);
+                    let h = 0,
+                        s = 0,
+                        l = (mx + mn) / 2;
+                    if (mx !== mn) {
+                        const d = mx - mn;
+                        s = l > .5 ? d / (2 - mx - mn) : d / (mx + mn);
+                        if (mx === r) h = ((g - b) / d + (g < b ?
+                            6 : 0)) / 6;
+                        else if (mx === g) h = ((b - r) / d + 2) / 6;
+                        else h = ((r - g) / d + 4) / 6
+                    }
+                    return [h * 360, s * 100, l * 100]
+                }
+
+                function hslRgb(h, s, l) {
+                    h /= 360;
+                    s /= 100;
+                    l /= 100;
+                    let r, g, b;
+                    if (s === 0) { r = g = b = l } else {
+                        const h2r = (p, q, t) => {
+                            if (t <
+                                0) t += 1;
+                            if (t > 1) t -= 1;
+                            return t < 1 / 6 ? p + (q - p) * 6 * t : t < .5 ?
+                                q : t < 2 / 3 ? p + (q - p) * (2 / 3 - t) * 6 : p
+                        };
+                        const q = l < .5 ? l * (1 +
+                                s) : l + s - l * s,
+                            p = 2 * l - q;
+                        r = h2r(p, q, h + 1 / 3);
+                        g = h2r(p, q, h);
+                        b = h2r(p, q, h - 1 / 3)
+                    }
+                    return [r * 255 + .5 | 0, g * 255 + .5 | 0, b * 255 + .5 | 0]
+                }
+
+                function showToast(m) {
+                    const t = $('toast');
+                    t.textContent = m;
+                    t.classList.add('show');
+                    clearTimeout(t._to);
+                    t._to = setTimeout(() => t.classList.remove('show'), 1800)
+                }
+            })();
+        </script>
+    </body>
+
+</html>
