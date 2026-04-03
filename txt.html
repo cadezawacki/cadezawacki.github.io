@@ -7,6 +7,7 @@
 <link href="https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600&f[]=jetbrains-mono@400,500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <style>
 /* ============================================
    CADE.TXT — Design Tokens & Base
@@ -1083,11 +1084,15 @@ body {
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-.49-3.51"/></svg>Redo
     </button>
     <div class="mob-sep"></div>
-    <button class="mob-btn" onclick="mobileCopy()" title="Copy selection or all">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>Copy
+    <button class="mob-btn" id="mob-copy-btn" onclick="mobileCopy()" title="Copy selection or all">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span>Copy</span>
     </button>
     <button class="mob-btn" onclick="mobilePaste()" title="Paste">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>Paste
+    </button>
+    <div class="mob-sep"></div>
+    <button class="mob-btn" onclick="mobileDownload()" title="Download as Zip">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Download
     </button>
   </div>
 </div>
@@ -4608,7 +4613,45 @@ window.mobileCopy = function() {
   const text = sel.empty
     ? editor.state.doc.toString()
     : editor.state.sliceDoc(sel.from, sel.to);
-  navigator.clipboard.writeText(text).then(() => showToast('Copied', 'success', 1200));
+  const btn = document.getElementById('mob-copy-btn');
+  const copyIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span>Copy</span>';
+  const checkIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="var(--success, #4ade80)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg><span style="color:var(--success,#4ade80)">Copied</span>';
+  navigator.clipboard.writeText(text).then(() => {
+    btn.innerHTML = checkIcon;
+    setTimeout(() => { btn.innerHTML = copyIcon; }, 1500);
+  }).catch(() => {
+    showToast('Failed to copy', 'error');
+  });
+};
+window.mobileDownload = function() {
+  const content = editor.state.doc.toString().trim();
+  if (!content) { showToast('Nothing to download', 'error'); return; }
+  const files = [];
+  const parts = content.split('```');
+  for (let i = 0; i < parts.length - 1; i += 2) {
+    const before = parts[i];
+    const code = parts[i + 1];
+    if (!code) continue;
+    const beforeLines = before.trim().split('\n');
+    const filePath = beforeLines[beforeLines.length - 1]?.trim();
+    if (filePath && !filePath.includes('```')) {
+      files.push({ path: filePath, content: code });
+    }
+  }
+  if (files.length === 0) { showToast('No files found — use filename + ``` blocks', 'error'); return; }
+  const zip = new JSZip();
+  files.forEach(f => zip.file(f.path.replace(/\\/g, '/'), f.content));
+  zip.generateAsync({ type: 'blob' }).then(blob => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'files-' + Date.now() + '.zip';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast('Downloaded ' + files.length + ' file(s)', 'success', 2000);
+  }).catch(err => showToast('Zip error: ' + err.message, 'error'));
 };
 window.mobilePaste = function() {
   navigator.clipboard.readText().then(text => {
@@ -4796,6 +4839,47 @@ function main(ctx) {
   }
   while (out.length > 1 && out[out.length - 1].trim() === '') out.pop();
   ctx.fullText = out.join('\\n');
+}
+`);
+
+registerScript(`/**
+  {
+    "name": "Download as Zip",
+    "description": "Parse filename + code-block content and download as a zip file",
+    "author": "Cade",
+    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'/><polyline points='7 10 12 15 17 10'/><line x1='12' y1='15' x2='12' y2='3'/></svg>",
+    "tags": "download,zip,export,files,parse"
+  }
+**/
+async function main(ctx) {
+  const content = ctx.fullText.trim();
+  if (!content) return;
+  const delim = String.fromCharCode(96,96,96);
+  const files = [];
+  const parts = content.split(delim);
+  for (let i = 0; i < parts.length - 1; i += 2) {
+    const before = parts[i];
+    const code = parts[i + 1];
+    if (!code) continue;
+    const beforeLines = before.trim().split('\\n');
+    const filePath = beforeLines[beforeLines.length - 1]?.trim();
+    if (filePath && !filePath.includes(delim)) {
+      files.push({ path: filePath, content: code });
+    }
+  }
+  if (files.length === 0) { showToast('No files found \\u2014 use filename + code blocks', 'error'); return; }
+  const zip = new JSZip();
+  files.forEach(f => zip.file(f.path.replace(/\\\\/g, '/'), f.content));
+  const blob = await zip.generateAsync({ type: 'blob' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'files-' + Date.now() + '.zip';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showToast('Downloaded ' + files.length + ' file(s)', 'success', 2000);
 }
 `);
 
