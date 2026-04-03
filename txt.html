@@ -4638,7 +4638,19 @@ window.mobileDownload = function() {
       files.push({ path: filePath, content: code });
     }
   }
-  if (files.length === 0) { showToast('No files found — use filename + ``` blocks', 'error'); return; }
+  if (files.length === 0) {
+    const blob = new Blob([content], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'document.txt';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast('Downloaded as file', 'success', 2000);
+    return;
+  }
   const zip = new JSZip();
   files.forEach(f => zip.file(f.path.replace(/\\/g, '/'), f.content));
   zip.generateAsync({ type: 'blob' }).then(blob => {
@@ -4650,7 +4662,7 @@ window.mobileDownload = function() {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    showToast('Downloaded ' + files.length + ' file(s)', 'success', 2000);
+    showToast('Downloaded ' + files.length + ' file(s) as zip', 'success', 2000);
   }).catch(err => showToast('Zip error: ' + err.message, 'error'));
 };
 window.mobilePaste = function() {
@@ -4844,8 +4856,8 @@ function main(ctx) {
 
 registerScript(`/**
   {
-    "name": "Download as Zip",
-    "description": "Parse filename + code-block content and download as a zip file",
+    "name": "Download",
+    "description": "Download as zip if code-blocks found, otherwise as a plain text file",
     "author": "Cade",
     "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'/><polyline points='7 10 12 15 17 10'/><line x1='12' y1='15' x2='12' y2='3'/></svg>",
     "tags": "download,zip,export,files,parse"
@@ -4867,7 +4879,19 @@ async function main(ctx) {
       files.push({ path: filePath, content: code });
     }
   }
-  if (files.length === 0) { showToast('No files found \\u2014 use filename + code blocks', 'error'); return; }
+  if (files.length === 0) {
+    const blob = new Blob([content], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'document.txt';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast('Downloaded as file', 'success', 2000);
+    return;
+  }
   const zip = new JSZip();
   files.forEach(f => zip.file(f.path.replace(/\\\\/g, '/'), f.content));
   const blob = await zip.generateAsync({ type: 'blob' });
@@ -4879,7 +4903,7 @@ async function main(ctx) {
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
-  showToast('Downloaded ' + files.length + ' file(s)', 'success', 2000);
+  showToast('Downloaded ' + files.length + ' file(s) as zip', 'success', 2000);
 }
 `);
 
