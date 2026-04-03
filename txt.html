@@ -721,6 +721,26 @@ body {
 
 .btn-danger:hover { background: var(--error-bg); }
 
+.dl-quick-picks {
+  display: flex;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+}
+.dl-pick {
+  flex: 1;
+  padding: 8px 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all var(--transition);
+}
+.dl-pick:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-bg); }
+
 /* ============================================
    TOAST NOTIFICATIONS
    ============================================ */
@@ -1208,6 +1228,27 @@ body {
     </div>
     <div class="modal-actions">
       <button class="btn btn-primary" onclick="closeRoomManager()">Done</button>
+    </div>
+  </div>
+</div>
+
+<!-- ========== DOWNLOAD MODAL ========== -->
+<div class="modal-overlay" id="download-overlay">
+  <div class="modal-dialog" style="max-width: 360px;">
+    <div class="modal-title">Download as</div>
+    <div class="modal-desc">Choose a file extension or type your own filename.</div>
+    <div class="dl-quick-picks">
+      <button class="dl-pick" onclick="dlPick('.txt')">.txt</button>
+      <button class="dl-pick" onclick="dlPick('.md')">.md</button>
+      <button class="dl-pick" onclick="dlPick('.py')">.py</button>
+      <button class="dl-pick" onclick="dlPick('.js')">.js</button>
+    </div>
+    <div class="form-group" style="margin-bottom:0">
+      <input class="form-input" id="dl-filename" placeholder="filename.txt" autocomplete="off" spellcheck="false">
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeDownloadModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="confirmDownload()">Download</button>
     </div>
   </div>
 </div>
@@ -4623,7 +4664,7 @@ window.mobileCopy = function() {
     showToast('Failed to copy', 'error');
   });
 };
-window.mobileDownload = function() {
+window.triggerDownload = function() {
   const content = editor.state.doc.toString().trim();
   if (!content) { showToast('Nothing to download', 'error'); return; }
   const files = [];
@@ -4639,16 +4680,7 @@ window.mobileDownload = function() {
     }
   }
   if (files.length === 0) {
-    const blob = new Blob([content], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'document.txt';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    showToast('Downloaded as file', 'success', 2000);
+    openDownloadModal();
     return;
   }
   const zip = new JSZip();
@@ -4665,6 +4697,45 @@ window.mobileDownload = function() {
     showToast('Downloaded ' + files.length + ' file(s) as zip', 'success', 2000);
   }).catch(err => showToast('Zip error: ' + err.message, 'error'));
 };
+window.mobileDownload = window.triggerDownload;
+
+window.openDownloadModal = function() {
+  document.getElementById('dl-filename').value = 'document.txt';
+  document.getElementById('download-overlay').classList.add('open');
+  setTimeout(() => document.getElementById('dl-filename').select(), 50);
+};
+window.closeDownloadModal = function() {
+  document.getElementById('download-overlay').classList.remove('open');
+};
+window.dlPick = function(ext) {
+  const input = document.getElementById('dl-filename');
+  const current = input.value.trim();
+  const base = current.includes('.') ? current.substring(0, current.lastIndexOf('.')) : current || 'document';
+  input.value = base + ext;
+  input.focus();
+};
+window.confirmDownload = function() {
+  const filename = document.getElementById('dl-filename').value.trim() || 'document.txt';
+  const content = editor.state.doc.toString();
+  const blob = new Blob([content], { type: 'text/plain' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  closeDownloadModal();
+  showToast('Downloaded ' + filename, 'success', 2000);
+};
+document.getElementById('download-overlay').addEventListener('click', function(e) {
+  if (e.target === this) closeDownloadModal();
+});
+document.getElementById('dl-filename').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') { e.preventDefault(); confirmDownload(); }
+  if (e.key === 'Escape') { e.preventDefault(); closeDownloadModal(); }
+});
 window.mobilePaste = function() {
   navigator.clipboard.readText().then(text => {
     const sel = editor.state.selection.main;
@@ -4857,53 +4928,14 @@ function main(ctx) {
 registerScript(`/**
   {
     "name": "Download",
-    "description": "Download as zip if code-blocks found, otherwise as a plain text file",
+    "description": "Download as zip if code-blocks found, otherwise pick a file type",
     "author": "Cade",
     "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'/><polyline points='7 10 12 15 17 10'/><line x1='12' y1='15' x2='12' y2='3'/></svg>",
     "tags": "download,zip,export,files,parse"
   }
 **/
-async function main(ctx) {
-  const content = ctx.fullText.trim();
-  if (!content) return;
-  const delim = String.fromCharCode(96,96,96);
-  const files = [];
-  const parts = content.split(delim);
-  for (let i = 0; i < parts.length - 1; i += 2) {
-    const before = parts[i];
-    const code = parts[i + 1];
-    if (!code) continue;
-    const beforeLines = before.trim().split('\\n');
-    const filePath = beforeLines[beforeLines.length - 1]?.trim();
-    if (filePath && !filePath.includes(delim)) {
-      files.push({ path: filePath, content: code });
-    }
-  }
-  if (files.length === 0) {
-    const blob = new Blob([content], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'document.txt';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    showToast('Downloaded as file', 'success', 2000);
-    return;
-  }
-  const zip = new JSZip();
-  files.forEach(f => zip.file(f.path.replace(/\\\\/g, '/'), f.content));
-  const blob = await zip.generateAsync({ type: 'blob' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'files-' + Date.now() + '.zip';
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-  showToast('Downloaded ' + files.length + ' file(s) as zip', 'success', 2000);
+function main(ctx) {
+  window.triggerDownload();
 }
 `);
 
