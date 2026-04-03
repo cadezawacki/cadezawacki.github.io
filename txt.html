@@ -3898,7 +3898,7 @@ function renderRoomManagerList() {
 
 window.addRoomFromManager = function() {
   const input = document.getElementById('room-add-input');
-  const name = input.value.trim();
+  const name = input.value.trim().toLowerCase();
   if (!name) return;
   if (rooms.includes(name)) { showToast('Room already exists', 'error'); return; }
   if (rooms.length >= roomCap) { showToast('Room cap reached (' + roomCap + ')', 'error'); return; }
