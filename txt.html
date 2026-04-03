@@ -3200,6 +3200,8 @@ const syncState = {
   lastLocalEdit: 0,
   pendingRemoteText: null,
   idleCheckTimer: null,
+  offlineBase: null,    // snapshot of text when we went offline
+  wasOffline: false,    // true if we detected offline while connected
 };
 
 // Restore saved config
@@ -3363,15 +3365,31 @@ function tryApplyPendingRemote() {
   const idleMs = Date.now() - syncState.lastLocalEdit;
   if (idleMs < 2000) return; // Still typing, wait
 
-  const text = syncState.pendingRemoteText;
+  let text = syncState.pendingRemoteText;
   syncState.pendingRemoteText = null;
   const currentText = editor.state.doc.toString();
+
+  // If we were offline and made edits, append the offline additions
+  if (syncState.wasOffline && syncState.offlineBase !== null) {
+    const base = syncState.offlineBase;
+    syncState.offlineBase = null;
+    syncState.wasOffline = false;
+    // Determine what the user added while offline
+    const offlineNew = currentText.startsWith(base)
+      ? currentText.slice(base.length)
+      : (currentText !== base ? '\n' + currentText : '');
+    if (offlineNew.trim().length > 0) {
+      text = text + offlineNew;
+      showToast('Merged offline edits', 'success', 2500);
+    }
+  }
+
   if (text === currentText) {
     if (!syncState.pageTypeApplied) { syncState.pageTypeApplied = true; applyPageType(); }
     return;
   }
 
-  // Save cursor position
+  // Save cursor position — place at end since we appended offline text
   const cursor = editor.state.selection.main;
   const cursorOffset = Math.min(cursor.anchor, text.length);
   const cursorHead = Math.min(cursor.head, text.length);
@@ -3517,9 +3535,28 @@ window.disconnectSync = function() {
   clearInterval(syncState.idleCheckTimer);
   syncState.pendingRemoteText = null;
   syncState.connected = false;
+  syncState.offlineBase = null;
+  syncState.wasOffline = false;
   updateSyncUI('', 'Sync off');
   showToast('Disconnected from sync', 'success', 2000);
 };
+
+// Offline/online detection — snapshot text when going offline so we can
+// merge edits made while disconnected once connectivity returns.
+window.addEventListener('offline', () => {
+  if (syncState.connected) {
+    syncState.offlineBase = editor.state.doc.toString();
+    syncState.wasOffline = true;
+    updateSyncUI('connecting', 'Offline');
+  }
+});
+window.addEventListener('online', () => {
+  if (syncState.connected && syncState.wasOffline) {
+    updateSyncUI('connected', 'Synced');
+    // Firebase will re-deliver the latest value automatically;
+    // tryApplyPendingRemote will handle merging.
+  }
+});
 
 window.forceSyncReload = function() {
   closeAllMenus();
@@ -4939,12 +4976,6 @@ function main(ctx) {
 }
 `);
 
-// Service Worker registration for offline support
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./sw.js').catch(() => {});
-  });
-}
 
 </script>
 <script data-pplx-inline-edit>
