@@ -4270,8 +4270,9 @@ window.submitRoomUnlock = async function() {
   }
   // Password accepted
   sessionRoomPasswords[name] = pw;
+  const cb = _unlockCallback;
   hideRoomUnlock();
-  if (_unlockCallback) _unlockCallback(pw);
+  if (cb) cb(pw);
 };
 
 document.getElementById('room-unlock-input').addEventListener('keydown', (e) => {
