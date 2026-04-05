@@ -3365,7 +3365,7 @@ function showSyncStep(stepId) {
 }
 
 function tryApplyPendingRemote() {
-  if (!syncState.pendingRemoteText) return;
+  if (syncState.pendingRemoteText == null) return;
   const idleMs = Date.now() - syncState.lastLocalEdit;
   if (idleMs < 2000) return; // Still typing, wait
 
@@ -3691,6 +3691,7 @@ async function _doSwitchRoom(name, firebaseUrl, baseEncKey) {
   clearInterval(syncState.idleCheckTimer);
   syncState.pendingRemoteText = null;
   syncState.connected = false;
+  syncState.lastLocalEdit = 0;
 
   // Set new room identity
   activeRoom = name;
@@ -3745,6 +3746,7 @@ async function _doSwitchRoom(name, firebaseUrl, baseEncKey) {
     syncState.encKey = getRoomEncKey(name, baseEncKey);
 
     const textRef = db.ref(`rooms/${name}/text`);
+    let firstSnapshot = true;
     syncState.firebaseListener = textRef.on('value', async (snap) => {
       if (syncState.suppressUpdate) return;
       const val = snap.val();
@@ -3756,8 +3758,25 @@ async function _doSwitchRoom(name, firebaseUrl, baseEncKey) {
         if (text.startsWith(ROOM_LOCK_SENTINEL)) text = text.slice(ROOM_LOCK_SENTINEL.length);
         const currentText = editor.state.doc.toString();
         if (text !== currentText) {
-          syncState.pendingRemoteText = text;
-          tryApplyPendingRemote();
+          // Apply first snapshot immediately (skip idle gate) to avoid
+          // showing stale/empty cache after a room switch or unlock
+          if (firstSnapshot) {
+            firstSnapshot = false;
+            syncState.suppressUpdate = true;
+            const cursor = editor.state.selection.main;
+            editor.dispatch({
+              changes: { from: 0, to: currentText.length, insert: text },
+              selection: { anchor: Math.min(cursor.anchor, text.length), head: Math.min(cursor.head, text.length) },
+            });
+            syncState.suppressUpdate = false;
+            if (!syncState.pageTypeApplied) { syncState.pageTypeApplied = true; applyPageType(); }
+          } else {
+            syncState.pendingRemoteText = text;
+            tryApplyPendingRemote();
+          }
+        } else {
+          firstSnapshot = false;
+          if (!syncState.pageTypeApplied) { syncState.pageTypeApplied = true; applyPageType(); }
         }
       } catch (e) { console.error('Sync decrypt error:', e); }
     });
@@ -5146,5 +5165,30 @@ function main(ctx) {
     }
   });
 })();
+</script>
+<script>
+// Service Worker registration
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('./sw.js').then(reg => {
+    // When a new SW is waiting, notify it to activate immediately
+    if (reg.waiting) reg.waiting.postMessage('SKIP_WAITING');
+    reg.addEventListener('updatefound', () => {
+      const newSW = reg.installing;
+      if (!newSW) return;
+      newSW.addEventListener('statechange', () => {
+        if (newSW.state === 'installed' && navigator.serviceWorker.controller) {
+          newSW.postMessage('SKIP_WAITING');
+        }
+      });
+    });
+  }).catch(() => {});
+
+  // On reconnect: bust cache so next navigation fetches fresh HTML
+  window.addEventListener('online', () => {
+    if (navigator.serviceWorker.controller) {
+      navigator.serviceWorker.controller.postMessage('CACHE_BUST');
+    }
+  });
+}
 </script></body>
 </html>
