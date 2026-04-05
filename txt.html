@@ -331,8 +331,12 @@ body {
   padding: 0 6px 0 0;
   user-select: none;
   line-height: 1;
+  touch-action: none;
 }
 .room-manager-drag:active { cursor: grabbing; }
+@media (pointer: coarse) {
+  .room-manager-drag { font-size: 18px; padding: 6px 10px 6px 2px; }
+}
 .room-manager-name {
   font-family: var(--font-mono);
   font-size: var(--text-sm);
@@ -3893,10 +3897,12 @@ function renderRoomManagerList() {
   }).join('');
 }
 
-// Drag-and-drop reordering for room manager list
+// Drag-and-drop reordering for room manager list (desktop + mobile touch)
 (function() {
   let dragRoom = null;
   const list = document.getElementById('room-manager-list');
+
+  // --- Desktop HTML5 drag-and-drop ---
   list.addEventListener('dragstart', (e) => {
     const item = e.target.closest('.room-manager-item[data-room]');
     if (!item) return;
@@ -3931,6 +3937,106 @@ function renderRoomManagerList() {
     renderRoomManagerList();
     renderRoomTabs();
   });
+
+  // --- Mobile touch drag-and-drop ---
+  let touchDragItem = null;
+  let touchDragRoom = null;
+  let touchClone = null;
+  let touchStartY = 0;
+  let touchMoved = false;
+  let touchOverItem = null;
+
+  function getTouchTarget(y) {
+    const items = list.querySelectorAll('.room-manager-item[data-room]');
+    for (const item of items) {
+      const rect = item.getBoundingClientRect();
+      if (y >= rect.top && y <= rect.bottom) return item;
+    }
+    return null;
+  }
+
+  list.addEventListener('touchstart', (e) => {
+    const handle = e.target.closest('.room-manager-drag');
+    if (!handle) return;
+    const item = handle.closest('.room-manager-item[data-room]');
+    if (!item) return;
+    touchDragItem = item;
+    touchDragRoom = item.dataset.room;
+    touchStartY = e.touches[0].clientY;
+    touchMoved = false;
+    touchOverItem = null;
+  }, { passive: true });
+
+  list.addEventListener('touchmove', (e) => {
+    if (!touchDragItem) return;
+    const touch = e.touches[0];
+
+    // Only start drag after a small vertical threshold to avoid accidental drags
+    if (!touchMoved && Math.abs(touch.clientY - touchStartY) < 8) return;
+
+    if (!touchMoved) {
+      touchMoved = true;
+      touchDragItem.classList.add('dragging');
+
+      // Create a floating clone to follow the finger
+      touchClone = touchDragItem.cloneNode(true);
+      touchClone.classList.remove('dragging');
+      touchClone.style.cssText = `
+        position: fixed; left: 0; right: 0; z-index: 99999;
+        pointer-events: none; opacity: 0.85;
+        background: var(--surface-1, #333); border-radius: 6px;
+        padding: 8px; box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+        width: ${touchDragItem.offsetWidth}px;
+      `;
+      document.body.appendChild(touchClone);
+    }
+
+    e.preventDefault(); // prevent scroll while dragging
+
+    // Position the clone at the touch point
+    if (touchClone) {
+      touchClone.style.top = (touch.clientY - 20) + 'px';
+    }
+
+    // Highlight the item under the finger
+    const over = getTouchTarget(touch.clientY);
+    list.querySelectorAll('.room-manager-item').forEach(el => el.classList.remove('drag-over'));
+    if (over && over.dataset.room !== touchDragRoom) {
+      over.classList.add('drag-over');
+      touchOverItem = over;
+    } else {
+      touchOverItem = null;
+    }
+  }, { passive: false });
+
+  function touchEnd() {
+    if (!touchDragItem) return;
+
+    // Perform the reorder if we have a valid target
+    if (touchMoved && touchOverItem && touchOverItem.dataset.room !== touchDragRoom) {
+      const from = rooms.indexOf(touchDragRoom);
+      const to = rooms.indexOf(touchOverItem.dataset.room);
+      if (from !== -1 && to !== -1 && from !== to) {
+        rooms.splice(from, 1);
+        rooms.splice(to, 0, touchDragRoom);
+        saveRooms();
+        renderRoomManagerList();
+        renderRoomTabs();
+      }
+    }
+
+    // Cleanup
+    if (touchDragItem) touchDragItem.classList.remove('dragging');
+    list.querySelectorAll('.room-manager-item').forEach(el => el.classList.remove('drag-over'));
+    if (touchClone) { touchClone.remove(); touchClone = null; }
+    touchDragItem = null;
+    touchDragRoom = null;
+    touchMoved = false;
+    touchOverItem = null;
+  }
+
+  list.addEventListener('touchend', touchEnd);
+  list.addEventListener('touchcancel', touchEnd);
 })();
 
 window.addRoomFromManager = function() {
