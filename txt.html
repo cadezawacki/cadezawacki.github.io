@@ -392,7 +392,6 @@ body {
 .editor-wrap .cm-scroller {
   overflow: auto;
   padding: var(--space-3) var(--space-4);
-  line-height: 1.65;
 }
 
 .editor-wrap .cm-content {
@@ -1424,14 +1423,14 @@ let showLineNums = store.get('cade-linenums') !== 'false';
 
 const editorTheme = EditorView.theme({
   '&': { height: '100%', background: 'var(--bg)' },
-  '.cm-scroller': { overflow: 'auto', padding: '12px 16px', lineHeight: '1.65' },
+  '.cm-scroller': { overflow: 'auto', padding: '12px 16px' },
   '.cm-content': { caretColor: 'var(--accent)', fontFamily: 'var(--font-mono)', fontSize: 'var(--text-base)' },
   '.cm-cursor, .cm-dropCursor': { borderLeftColor: 'var(--accent)' },
   '.cm-activeLine': { background: 'var(--accent-bg)' },
   '.cm-selectionBackground, &.cm-focused .cm-selectionBackground': { background: 'rgba(14,165,233,0.15) !important' },
   '.cm-gutters': { background: 'var(--bg)', borderRight: '1px solid var(--border)', color: 'var(--text-faint)', fontSize: 'var(--text-xs)' },
   '.cm-activeLineGutter': { color: 'var(--text-muted)', background: 'transparent' },
-  '.cm-line': { padding: '0' },
+  '.cm-line': { padding: '0', lineHeight: '1.45', marginBottom: '0.2em' },
 }, { dark: false });
 
 const savedContent = store.get('cade-content') || '';
@@ -1917,6 +1916,250 @@ function main(ctx) {
   }
   if (ctx.selection) { ctx.selection = titleCase(ctx.selection); }
   else { ctx.fullText = titleCase(ctx.fullText); }
+}`);
+
+// ============================================
+// UNICODE FANCY TEXT SCRIPTS
+// ============================================
+// Shared helper: apply a character-mapping function to text, preserving unmapped chars
+registerScript(`/**
+  {
+    "name": "Bold (𝗕𝗼𝗹𝗱)",
+    "description": "Convert to Unicode sans-serif bold — toggles off if already bold",
+    "author": "Cade",
+    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><path d='M6 4h8a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z'/><path d='M6 12h9a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z'/></svg>",
+    "tags": "bold,strong,fancy,unicode,text,format"
+  }
+**/
+function main(ctx) {
+  const text = ctx.selection || ctx.fullText;
+  function toBold(ch) {
+    const c = ch.codePointAt(0);
+    if (c >= 0x41 && c <= 0x5A) return String.fromCodePoint(0x1D5D4 + c - 0x41);
+    if (c >= 0x61 && c <= 0x7A) return String.fromCodePoint(0x1D5EE + c - 0x61);
+    if (c >= 0x30 && c <= 0x39) return String.fromCodePoint(0x1D7EC + c - 0x30);
+    return null;
+  }
+  function fromBold(cp) {
+    if (cp >= 0x1D5D4 && cp <= 0x1D5ED) return String.fromCodePoint(0x41 + cp - 0x1D5D4);
+    if (cp >= 0x1D5EE && cp <= 0x1D607) return String.fromCodePoint(0x61 + cp - 0x1D5EE);
+    if (cp >= 0x1D7EC && cp <= 0x1D7F5) return String.fromCodePoint(0x30 + cp - 0x1D7EC);
+    return null;
+  }
+  const cps = [...text];
+  const isBold = cps.some(ch => fromBold(ch.codePointAt(0)));
+  const result = cps.map(ch => {
+    const cp = ch.codePointAt(0);
+    if (isBold) return fromBold(cp) || ch;
+    return toBold(ch) || ch;
+  }).join('');
+  if (ctx.selection) ctx.selection = result; else ctx.fullText = result;
+}`);
+
+registerScript(`/**
+  {
+    "name": "Italic (𝘐𝘵𝘢𝘭𝘪𝘤)",
+    "description": "Convert to Unicode sans-serif italic — uses bold italic if already bold",
+    "author": "Cade",
+    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><line x1='19' y1='4' x2='10' y2='4'/><line x1='14' y1='20' x2='5' y2='20'/><line x1='15' y1='4' x2='9' y2='20'/></svg>",
+    "tags": "italic,emphasis,fancy,unicode,text,format"
+  }
+**/
+function main(ctx) {
+  const text = ctx.selection || ctx.fullText;
+  // Detect if text is already bold (sans-serif bold)
+  function isBoldChar(cp) {
+    return (cp >= 0x1D5D4 && cp <= 0x1D607) || (cp >= 0x1D7EC && cp <= 0x1D7F5);
+  }
+  // Detect if text is already italic
+  function isItalicChar(cp) {
+    return (cp >= 0x1D608 && cp <= 0x1D63B);
+  }
+  // Detect if text is already bold-italic
+  function isBoldItalicChar(cp) {
+    return (cp >= 0x1D63C && cp <= 0x1D66F);
+  }
+  function toItalic(ch) {
+    const c = ch.codePointAt(0);
+    if (c >= 0x41 && c <= 0x5A) return String.fromCodePoint(0x1D608 + c - 0x41);
+    if (c >= 0x61 && c <= 0x7A) return String.fromCodePoint(0x1D622 + c - 0x61);
+    return null;
+  }
+  function toBoldItalic(ch) {
+    const c = ch.codePointAt(0);
+    // From bold → bold-italic
+    if (c >= 0x1D5D4 && c <= 0x1D5ED) return String.fromCodePoint(0x1D63C + c - 0x1D5D4);
+    if (c >= 0x1D5EE && c <= 0x1D607) return String.fromCodePoint(0x1D656 + c - 0x1D5EE);
+    // From plain → bold-italic
+    if (c >= 0x41 && c <= 0x5A) return String.fromCodePoint(0x1D63C + c - 0x41);
+    if (c >= 0x61 && c <= 0x7A) return String.fromCodePoint(0x1D656 + c - 0x61);
+    return null;
+  }
+  function fromItalic(cp) {
+    if (cp >= 0x1D608 && cp <= 0x1D621) return String.fromCodePoint(0x41 + cp - 0x1D608);
+    if (cp >= 0x1D622 && cp <= 0x1D63B) return String.fromCodePoint(0x61 + cp - 0x1D622);
+    return null;
+  }
+  function fromBoldItalic(cp) {
+    if (cp >= 0x1D63C && cp <= 0x1D655) return String.fromCodePoint(0x1D5D4 + cp - 0x1D63C);
+    if (cp >= 0x1D656 && cp <= 0x1D66F) return String.fromCodePoint(0x1D5EE + cp - 0x1D656);
+    return null;
+  }
+  const cps = [...text];
+  const hasBoldItalic = cps.some(ch => isBoldItalicChar(ch.codePointAt(0)));
+  const hasItalic = cps.some(ch => isItalicChar(ch.codePointAt(0)));
+  const hasBold = cps.some(ch => isBoldChar(ch.codePointAt(0)));
+  let result;
+  if (hasBoldItalic) {
+    // Remove italic, keep bold
+    result = cps.map(ch => fromBoldItalic(ch.codePointAt(0)) || ch).join('');
+  } else if (hasItalic) {
+    // Remove italic
+    result = cps.map(ch => fromItalic(ch.codePointAt(0)) || ch).join('');
+  } else if (hasBold) {
+    // Bold → bold-italic
+    result = cps.map(ch => toBoldItalic(ch) || ch).join('');
+  } else {
+    // Plain → italic
+    result = cps.map(ch => toItalic(ch) || ch).join('');
+  }
+  if (ctx.selection) ctx.selection = result; else ctx.fullText = result;
+}`);
+
+registerScript(`/**
+  {
+    "name": "Double-Struck (𝔻𝕠𝕦𝕓𝕝𝕖)",
+    "description": "Convert to Unicode double-struck (blackboard bold) — toggles off",
+    "author": "Cade",
+    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='3' y='3' width='18' height='18' rx='2'/><text x='12' y='16' font-size='12' font-weight='bold' text-anchor='middle' fill='currentColor' stroke='none'>𝔻</text></svg>",
+    "tags": "doublestruck,blackboard,fancy,unicode,text,format,math"
+  }
+**/
+function main(ctx) {
+  const text = ctx.selection || ctx.fullText;
+  // Special uppercase chars not in the sequential block
+  const dsSpecial = {C:0x2102,H:0x210D,N:0x2115,P:0x2119,Q:0x211A,R:0x211D,Z:0x2124};
+  // Build reverse map for specials
+  const dsSpecialRev = {};
+  for (const [k,v] of Object.entries(dsSpecial)) dsSpecialRev[v] = k;
+  // Sequential block skips the special letters, so we need offset mapping
+  const dsUpperSeq = 'ABDEFGIJKLMOSTUVWXY';
+  function toDS(ch) {
+    const c = ch.codePointAt(0);
+    if (c >= 0x61 && c <= 0x7A) return String.fromCodePoint(0x1D552 + c - 0x61);
+    if (c >= 0x30 && c <= 0x39) return String.fromCodePoint(0x1D7D8 + c - 0x30);
+    const upper = String.fromCharCode(c);
+    if (dsSpecial[upper]) return String.fromCodePoint(dsSpecial[upper]);
+    if (c >= 0x41 && c <= 0x5A) return String.fromCodePoint(0x1D538 + c - 0x41);
+    return null;
+  }
+  function fromDS(cp) {
+    if (cp >= 0x1D552 && cp <= 0x1D56B) return String.fromCodePoint(0x61 + cp - 0x1D552);
+    if (cp >= 0x1D7D8 && cp <= 0x1D7E1) return String.fromCodePoint(0x30 + cp - 0x1D7D8);
+    if (dsSpecialRev[cp]) return dsSpecialRev[cp];
+    if (cp >= 0x1D538 && cp <= 0x1D551) return String.fromCodePoint(0x41 + cp - 0x1D538);
+    return null;
+  }
+  const cps = [...text];
+  const isDS = cps.some(ch => fromDS(ch.codePointAt(0)));
+  const result = cps.map(ch => {
+    const cp = ch.codePointAt(0);
+    if (isDS) return fromDS(cp) || ch;
+    return toDS(ch) || ch;
+  }).join('');
+  if (ctx.selection) ctx.selection = result; else ctx.fullText = result;
+}`);
+
+registerScript(`/**
+  {
+    "name": "Small Caps (ꜱᴍᴀʟʟ)",
+    "description": "Convert to Unicode small capitals — toggles off",
+    "author": "Cade",
+    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><text x='5' y='18' font-size='18' font-weight='bold' fill='currentColor' stroke='none'>A</text><text x='15' y='18' font-size='12' fill='currentColor' stroke='none'>ᴀ</text></svg>",
+    "tags": "smallcaps,small,capitals,fancy,unicode,text,format"
+  }
+**/
+function main(ctx) {
+  const text = ctx.selection || ctx.fullText;
+  const scMap = {a:0x1D00,b:0x0299,c:0x1D04,d:0x1D05,e:0x1D07,f:0xA730,g:0x0262,h:0x029C,i:0x026A,j:0x1D0A,k:0x1D0B,l:0x029F,m:0x1D0D,n:0x0274,o:0x1D0F,p:0x1D18,r:0x0280,s:0xA731,t:0x1D1B,u:0x1D1C,v:0x1D20,w:0x1D21,y:0x028F,z:0x1D22};
+  const scRev = {};
+  for (const [k,v] of Object.entries(scMap)) scRev[v] = k;
+  function toSC(ch) {
+    const lower = ch.toLowerCase();
+    if (scMap[lower]) return String.fromCodePoint(scMap[lower]);
+    return null;
+  }
+  const cps = [...text];
+  const isSC = cps.some(ch => scRev[ch.codePointAt(0)]);
+  const result = cps.map(ch => {
+    const cp = ch.codePointAt(0);
+    if (isSC) return scRev[cp] || ch;
+    return toSC(ch) || ch;
+  }).join('');
+  if (ctx.selection) ctx.selection = result; else ctx.fullText = result;
+}`);
+
+registerScript(`/**
+  {
+    "name": "Underline (U̲n̲d̲e̲r̲)",
+    "description": "Add/remove Unicode combining underline on each character",
+    "author": "Cade",
+    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M6 3v7a6 6 0 0 0 6 6 6 6 0 0 0 6-6V3'/><line x1='4' y1='21' x2='20' y2='21'/></svg>",
+    "tags": "underline,under,fancy,unicode,text,format"
+  }
+**/
+function main(ctx) {
+  const text = ctx.selection || ctx.fullText;
+  const COMBINING = '\\u0332';
+  if (text.includes(COMBINING)) {
+    const result = text.split(COMBINING).join('');
+    if (ctx.selection) ctx.selection = result; else ctx.fullText = result;
+  } else {
+    const result = [...text].map(ch => ch === '\\n' || ch === '\\r' ? ch : ch + COMBINING).join('');
+    if (ctx.selection) ctx.selection = result; else ctx.fullText = result;
+  }
+}`);
+
+registerScript(`/**
+  {
+    "name": "Double Underline (U̳n̳d̳e̳r̳)",
+    "description": "Add/remove Unicode combining double underline on each character",
+    "author": "Cade",
+    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M6 3v7a6 6 0 0 0 6 6 6 6 0 0 0 6-6V3'/><line x1='4' y1='19' x2='20' y2='19'/><line x1='4' y1='22' x2='20' y2='22'/></svg>",
+    "tags": "double,underline,under,fancy,unicode,text,format"
+  }
+**/
+function main(ctx) {
+  const text = ctx.selection || ctx.fullText;
+  const COMBINING = '\\u0333';
+  if (text.includes(COMBINING)) {
+    const result = text.split(COMBINING).join('');
+    if (ctx.selection) ctx.selection = result; else ctx.fullText = result;
+  } else {
+    const result = [...text].map(ch => ch === '\\n' || ch === '\\r' ? ch : ch + COMBINING).join('');
+    if (ctx.selection) ctx.selection = result; else ctx.fullText = result;
+  }
+}`);
+
+registerScript(`/**
+  {
+    "name": "Strikethrough (S̶t̶r̶i̶k̶e̶)",
+    "description": "Add/remove Unicode combining strikethrough on each character",
+    "author": "Cade",
+    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><line x1='4' y1='12' x2='20' y2='12'/><path d='M17.5 7.5C17.5 5 15.3 3 12 3 9 3 6.5 4.7 6.5 7c0 1.5.8 2.8 2.5 3.5'/><path d='M8.5 16.5C8.5 19 10.7 21 14 21c2.5 0 4.5-1.3 5-3.5'/></svg>",
+    "tags": "strikethrough,strike,cross,fancy,unicode,text,format"
+  }
+**/
+function main(ctx) {
+  const text = ctx.selection || ctx.fullText;
+  const COMBINING = '\\u0336';
+  if (text.includes(COMBINING)) {
+    const result = text.split(COMBINING).join('');
+    if (ctx.selection) ctx.selection = result; else ctx.fullText = result;
+  } else {
+    const result = [...text].map(ch => ch === '\\n' || ch === '\\r' ? ch : ch + COMBINING).join('');
+    if (ctx.selection) ctx.selection = result; else ctx.fullText = result;
+  }
 }`);
 
 registerScript(`/**
