@@ -5165,5 +5165,30 @@ function main(ctx) {
     }
   });
 })();
+</script>
+<script>
+// Service Worker registration
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('./sw.js').then(reg => {
+    // When a new SW is waiting, notify it to activate immediately
+    if (reg.waiting) reg.waiting.postMessage('SKIP_WAITING');
+    reg.addEventListener('updatefound', () => {
+      const newSW = reg.installing;
+      if (!newSW) return;
+      newSW.addEventListener('statechange', () => {
+        if (newSW.state === 'installed' && navigator.serviceWorker.controller) {
+          newSW.postMessage('SKIP_WAITING');
+        }
+      });
+    });
+  }).catch(() => {});
+
+  // On reconnect: bust cache so next navigation fetches fresh HTML
+  window.addEventListener('online', () => {
+    if (navigator.serviceWorker.controller) {
+      navigator.serviceWorker.controller.postMessage('CACHE_BUST');
+    }
+  });
+}
 </script></body>
 </html>
