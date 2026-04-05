@@ -3561,6 +3561,12 @@ function executeScript(script) {
     if (cursorLine.text.trim() === '') {
       // Cursor is on a blank line — no block to operate on
       editFrom = sel.head; editTo = sel.head; editText = ''; hasSelection = false;
+    } else if (sel.head === cursorLine.to && cursorLine.text.length > 0 && cursorLine.number < doc.lines) {
+      // Cursor at end of a non-empty, non-last line — treat as single-line selection
+      editFrom = cursorLine.from;
+      editTo = cursorLine.to;
+      editText = cursorLine.text;
+      hasSelection = true;
     } else {
       let startLine = cursorLine.number;
       while (startLine > 1 && doc.line(startLine - 1).text.trim() !== '') startLine--;
