@@ -2164,6 +2164,58 @@ function main(ctx) {
 
 registerScript(`/**
   {
+    "name": "Defancify",
+    "description": "Strip all Unicode fancy formatting — bold, italic, double-struck, small caps, combining marks",
+    "author": "Cade",
+    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><line x1='4' y1='4' x2='20' y2='20'/><line x1='4' y1='20' x2='20' y2='4'/></svg>",
+    "tags": "defancify,strip,clean,plain,unicode,remove,format,reset"
+  }
+**/
+function main(ctx) {
+  const text = ctx.selection || ctx.fullText;
+  // Build reverse maps for all fancy ranges → plain ASCII
+  const map = {};
+  // Sans-serif bold: upper, lower, digits
+  for (let i = 0; i < 26; i++) {
+    map[0x1D5D4 + i] = 0x41 + i;
+    map[0x1D5EE + i] = 0x61 + i;
+  }
+  for (let i = 0; i < 10; i++) map[0x1D7EC + i] = 0x30 + i;
+  // Sans-serif italic: upper, lower
+  for (let i = 0; i < 26; i++) {
+    map[0x1D608 + i] = 0x41 + i;
+    map[0x1D622 + i] = 0x61 + i;
+  }
+  // Sans-serif bold italic: upper, lower
+  for (let i = 0; i < 26; i++) {
+    map[0x1D63C + i] = 0x41 + i;
+    map[0x1D656 + i] = 0x61 + i;
+  }
+  // Double-struck: upper, lower, digits
+  for (let i = 0; i < 26; i++) {
+    map[0x1D538 + i] = 0x41 + i;
+    map[0x1D552 + i] = 0x61 + i;
+  }
+  for (let i = 0; i < 10; i++) map[0x1D7D8 + i] = 0x30 + i;
+  // Double-struck specials
+  const dsSpecial = {0x2102:0x43,0x210D:0x48,0x2115:0x4E,0x2119:0x50,0x211A:0x51,0x211D:0x52,0x2124:0x5A};
+  for (const [k,v] of Object.entries(dsSpecial)) map[parseInt(k)] = v;
+  // Small caps
+  const sc = {0x1D00:0x61,0x0299:0x62,0x1D04:0x63,0x1D05:0x64,0x1D07:0x65,0xA730:0x66,0x0262:0x67,0x029C:0x68,0x026A:0x69,0x1D0A:0x6A,0x1D0B:0x6B,0x029F:0x6C,0x1D0D:0x6D,0x0274:0x6E,0x1D0F:0x6F,0x1D18:0x70,0x0280:0x72,0xA731:0x73,0x1D1B:0x74,0x1D1C:0x75,0x1D20:0x76,0x1D21:0x77,0x028F:0x79,0x1D22:0x7A};
+  for (const [k,v] of Object.entries(sc)) map[parseInt(k)] = v;
+  // Strip combining marks: underline, double underline, strikethrough
+  const combining = new Set([0x0332, 0x0333, 0x0336]);
+  const result = [...text].map(ch => {
+    const cp = ch.codePointAt(0);
+    if (combining.has(cp)) return '';
+    if (map[cp]) return String.fromCodePoint(map[cp]);
+    return ch;
+  }).join('');
+  if (ctx.selection) ctx.selection = result; else ctx.fullText = result;
+}`);
+
+registerScript(`/**
+  {
     "name": "Sum",
     "description": "Sum numbers: 1,2,3 or 1 2 3 or one per line (handles trailing commas)",
     "author": "Cade",
