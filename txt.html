@@ -1490,7 +1490,7 @@ function findPrecedingBlock(doc, lineNum) {
   return {start: i + 1, end};
 }
 
-const COMPLETED_RE = /^@completed\s*$/i;
+const COMPLETED_RE = /^@complete\s*$/i;
 
 function buildTodoDecorations(view) {
   if (!isTodoPage(view.state)) return Decoration.none;
@@ -1516,12 +1516,14 @@ function buildTodoDecorations(view) {
         }
         continue;
       }
-      // Check for @completed tag
+      // Check for @complete tag
       if (COMPLETED_RE.test(line.text.trim())) {
         const block = findPrecedingBlock(doc, i);
-        const {done, total} = block
+        let {done, total} = block
           ? countTodosInRange(doc, block.start, block.end)
-          : countTodosInRange(doc, 1, doc.lines);
+          : {done: 0, total: 0};
+        // If preceding block has no todos, use full page
+        if (total === 0) ({done, total} = countTodosInRange(doc, 1, doc.lines));
         ranges.push(Decoration.widget({
           widget: new CompletedWidget(done, total),
           side: 1,
