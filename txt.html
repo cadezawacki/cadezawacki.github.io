@@ -997,26 +997,29 @@ body {
 .cm-line.cm-list-indent-5 { padding-left: 5ch !important; text-indent: -5ch; }
 .cm-line.cm-list-indent-6 { padding-left: 6ch !important; text-indent: -6ch; }
 
-/* Todo checkbox — hides raw [ ]/[x] and renders visual checkbox via ::before */
+/* Todo checkbox — brackets stay in document flow but invisible; ::before renders checkbox */
 .cm-todo-box {
-  font-size: 0;
-  letter-spacing: 0;
+  color: transparent;
   position: relative;
   cursor: pointer;
+  /* prevent brackets from being selected visually */
+  -webkit-user-select: none;
+  user-select: none;
 }
 .cm-todo-box::before {
   content: '';
   display: inline-block;
-  font-size: var(--text-base, 14px);
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
   width: 1.1em;
   height: 1.1em;
   border: 1.5px solid var(--text-muted);
   border-radius: 3px;
-  vertical-align: middle;
-  margin-right: 0.4em;
-  position: relative;
-  top: -0.08em;
   transition: background 0.12s, border-color 0.12s;
+  pointer-events: none;
+  font-size: var(--text-base, 14px);
 }
 .cm-todo-box:hover::before { border-color: var(--accent); }
 .cm-todo-box-done::before {
@@ -1027,27 +1030,28 @@ body {
   content: '';
   position: absolute;
   left: 3.5px;
-  top: 1.5px;
+  top: 50%;
+  transform: translateY(-50%) translateY(-0.5px);
   width: 4.5px;
   height: 9px;
   border: solid var(--bg);
   border-width: 0 2px 2px 0;
-  transform: rotate(45deg);
+  transform: translateY(-50%) rotate(45deg);
+  margin-top: -1px;
+  pointer-events: none;
 }
 /* Larger touch target on mobile */
 @media (pointer: coarse) {
   .cm-todo-box::before {
-    width: 1.5em;
-    height: 1.5em;
+    width: 1.4em;
+    height: 1.4em;
     border-width: 2px;
-    margin-right: 0.5em;
     border-radius: 4px;
   }
   .cm-todo-box-done::after {
-    left: 4.5px;
-    top: 1.5px;
-    width: 6px;
-    height: 12px;
+    left: 4px;
+    width: 5.5px;
+    height: 11px;
     border-width: 0 2.5px 2.5px 0;
   }
 }
@@ -1567,23 +1571,28 @@ function todoToggleLine(view, line) {
   return true;
 }
 
-function todoHitTest(view, x, y) {
+function todoHitTest(view, target, x, y) {
   if (!isTodoPage(view.state)) return null;
+  // Primary: check if the click/tap landed directly on a checkbox element
+  const box = target && target.closest ? target.closest('.cm-todo-box') : null;
+  if (box) {
+    const pos = view.posAtDOM(box, 0);
+    if (pos != null) return view.state.doc.lineAt(pos);
+  }
+  // Fallback: use coordinates — generous zone from line start through bracket end + margin
   const pos = view.posAtCoords({ x, y });
   if (pos == null) return null;
   const line = view.state.doc.lineAt(pos);
   const m = line.text.match(TODO_LINE_RE);
   if (!m) return null;
   const bracketEnd = line.from + m[1].length + 3;
-  // Allow a generous hit zone: anywhere from line start through 2 chars past the bracket
-  // On touch devices posAtCoords can be imprecise, so extra margin helps
   if (pos > bracketEnd + 2) return null;
   return line;
 }
 
 const todoClickHandler = EditorView.domEventHandlers({
   mousedown(event, view) {
-    const line = todoHitTest(view, event.clientX, event.clientY);
+    const line = todoHitTest(view, event.target, event.clientX, event.clientY);
     if (!line) return false;
     event.preventDefault();
     todoToggleLine(view, line);
@@ -1592,7 +1601,7 @@ const todoClickHandler = EditorView.domEventHandlers({
   touchend(event, view) {
     if (!event.changedTouches || event.changedTouches.length === 0) return false;
     const touch = event.changedTouches[0];
-    const line = todoHitTest(view, touch.clientX, touch.clientY);
+    const line = todoHitTest(view, event.target, touch.clientX, touch.clientY);
     if (!line) return false;
     event.preventDefault();
     todoToggleLine(view, line);
