@@ -1572,29 +1572,88 @@ window.toggleTodoAtCursor = function() {
   editor.dispatch({ changes });
 };
 
-// Enter key handler for @type: todo — auto-insert [ ] on new lines
-const todoEnterHandler = keymap.of([{
+// Enter key handler — auto-continue list items, remove empty ones
+// Supports: [ ] checkboxes, 1. 2. 3. numbers, A. B. C. letters,
+//           [1] [2] [3] bracketed numbers, - • * bullets
+const listEnterHandler = keymap.of([{
   key: 'Enter',
   run(view) {
-    if (!isTodoPage(view.state)) return false;
     const sel = view.state.selection.main;
-    if (sel.from !== sel.to) return false; // has selection, let default handle
+    if (sel.from !== sel.to) return false;
     const line = view.state.doc.lineAt(sel.head);
-    const m = line.text.match(TODO_LINE_RE);
-    if (!m) return false;
-    const prefix = m[1]; // preserve indent/bullet prefix
-    // If the current line is just an empty checkbox with nothing after, remove it
-    const afterCheckbox = line.text.slice(m[0].length);
-    if (afterCheckbox.trim() === '') {
-      view.dispatch({
-        changes: { from: line.from, to: line.to, insert: '' },
-      });
-      return true;
+    const text = line.text;
+
+    // Try each list pattern in order of specificity
+    let match, nextInsert, emptyCheck;
+
+    // [ ] checkbox (only on @type: todo pages)
+    if (isTodoPage(view.state) && (match = text.match(/^(\s*(?:[-•*]\s+)?)\[([ xX])\]\s(.*)/))) {
+      const prefix = match[1];
+      const after = match[3];
+      if (after.trim() === '') {
+        // Empty checkbox — remove line
+        view.dispatch({ changes: { from: line.from, to: line.to, insert: '' } });
+        return true;
+      }
+      nextInsert = '\n' + prefix + '[ ] ';
     }
-    // Insert new line with matching prefix + [ ]
+    // [1] [2] [3] bracketed numbers
+    else if ((match = text.match(/^(\s*)\[(\d+)\]\s(.*)/))) {
+      const indent = match[1];
+      const num = parseInt(match[2], 10);
+      const after = match[3];
+      if (after.trim() === '') {
+        view.dispatch({ changes: { from: line.from, to: line.to, insert: '' } });
+        return true;
+      }
+      nextInsert = '\n' + indent + '[' + (num + 1) + '] ';
+    }
+    // 1. 2. 3. numbered list
+    else if ((match = text.match(/^(\s*)(\d+)\.\s(.*)/))) {
+      const indent = match[1];
+      const num = parseInt(match[2], 10);
+      const after = match[3];
+      if (after.trim() === '') {
+        view.dispatch({ changes: { from: line.from, to: line.to, insert: '' } });
+        return true;
+      }
+      nextInsert = '\n' + indent + (num + 1) + '. ';
+    }
+    // A. B. C. or a. b. c. letter list
+    else if ((match = text.match(/^(\s*)([A-Za-z])\.\s(.*)/))) {
+      const indent = match[1];
+      const letter = match[2];
+      const after = match[3];
+      if (after.trim() === '') {
+        view.dispatch({ changes: { from: line.from, to: line.to, insert: '' } });
+        return true;
+      }
+      const nextChar = String.fromCharCode(letter.charCodeAt(0) + 1);
+      // Only continue if next char is still a letter
+      if (/[A-Za-z]/.test(nextChar)) {
+        nextInsert = '\n' + indent + nextChar + '. ';
+      } else {
+        return false;
+      }
+    }
+    // - • * bullet lists
+    else if ((match = text.match(/^(\s*)([-•*])\s(.*)/))) {
+      const indent = match[1];
+      const bullet = match[2];
+      const after = match[3];
+      if (after.trim() === '') {
+        view.dispatch({ changes: { from: line.from, to: line.to, insert: '' } });
+        return true;
+      }
+      nextInsert = '\n' + indent + bullet + ' ';
+    }
+    else {
+      return false;
+    }
+
     view.dispatch({
-      changes: { from: sel.head, insert: '\n' + prefix + '[ ] ' },
-      selection: { anchor: sel.head + 1 + prefix.length + 4 },
+      changes: { from: sel.head, insert: nextInsert },
+      selection: { anchor: sel.head + nextInsert.length },
     });
     return true;
   },
@@ -1622,7 +1681,7 @@ const editorState = EditorState.create({
     EditorView.lineWrapping,
     listIndentPlugin,
     todoPlugin,
-    todoEnterHandler,
+    listEnterHandler,
     keymap.of([
       { key: 'Mod-z', run: undo },
       { key: 'Mod-Shift-z', run: redo },
