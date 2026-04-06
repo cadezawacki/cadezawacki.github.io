@@ -997,64 +997,7 @@ body {
 .cm-line.cm-list-indent-5 { padding-left: 5ch !important; text-indent: -5ch; }
 .cm-line.cm-list-indent-6 { padding-left: 6ch !important; text-indent: -6ch; }
 
-/* Todo checkbox — brackets stay in document flow but invisible; ::before renders checkbox */
-.cm-todo-box {
-  color: transparent;
-  position: relative;
-  cursor: pointer;
-  /* prevent brackets from being selected visually */
-  -webkit-user-select: none;
-  user-select: none;
-}
-.cm-todo-box::before {
-  content: '';
-  display: inline-block;
-  position: absolute;
-  left: 0;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 1.1em;
-  height: 1.1em;
-  border: 1.5px solid var(--text-muted);
-  border-radius: 3px;
-  transition: background 0.12s, border-color 0.12s;
-  pointer-events: none;
-  font-size: var(--text-base, 14px);
-}
-.cm-todo-box:hover::before { border-color: var(--accent); }
-.cm-todo-box-done::before {
-  background: var(--accent);
-  border-color: var(--accent);
-}
-.cm-todo-box-done::after {
-  content: '';
-  position: absolute;
-  left: 3.5px;
-  top: 50%;
-  transform: translateY(-50%) translateY(-0.5px);
-  width: 4.5px;
-  height: 9px;
-  border: solid var(--bg);
-  border-width: 0 2px 2px 0;
-  transform: translateY(-50%) rotate(45deg);
-  margin-top: -1px;
-  pointer-events: none;
-}
-/* Larger touch target on mobile */
-@media (pointer: coarse) {
-  .cm-todo-box::before {
-    width: 1.4em;
-    height: 1.4em;
-    border-width: 2px;
-    border-radius: 4px;
-  }
-  .cm-todo-box-done::after {
-    left: 4px;
-    width: 5.5px;
-    height: 11px;
-    border-width: 0 2.5px 2.5px 0;
-  }
-}
+/* Todo styling — minimal, no visual replacement of brackets */
 .cm-line.cm-todo-done .cm-todo-text { text-decoration: line-through; color: var(--text-faint); }
 </style>
 </head>
@@ -1519,18 +1462,13 @@ function buildTodoDecorations(view) {
       if (isDone) {
         ranges.push(Decoration.line({ class: 'cm-todo-done' }).range(line.from));
       }
-      // Replace [ ]/[x] with a visual checkbox via ::before
-      const boxClass = 'cm-todo-box' + (isDone ? ' cm-todo-box-done' : '');
-      ranges.push(Decoration.mark({ class: boxClass }).range(bracketStart, bracketEnd));
       // Mark the text content for strikethrough on done items
-      // bracketEnd points right after ']'; skip the space after it
-      const textStart = bracketEnd + 1; // skip the space after [x]
-      if (textStart <= line.to) {
+      const textStart = bracketStart + 4; // skip [x] + space
+      if (isDone && textStart <= line.to) {
         ranges.push(Decoration.mark({ class: 'cm-todo-text' }).range(textStart, line.to));
       }
     }
   }
-  // Ranges must be sorted by from position
   ranges.sort((a, b) => a.from - b.from || a.startSide - b.startSide);
   return Decoration.set(ranges, true);
 }
@@ -1544,11 +1482,13 @@ const todoPlugin = ViewPlugin.fromClass(class {
   }
 }, { decorations: v => v.decorations });
 
-// Click handler: toggle checkbox when clicking on the [ ]/[x] region
-// Shared toggle logic for click and touch handlers
-function todoToggleLine(view, line) {
+// Toggle todo on the current line — used by hotkey
+window.toggleTodoAtCursor = function() {
+  if (!isTodoPage(editor.state)) return;
+  const sel = editor.state.selection.main;
+  const line = editor.state.doc.lineAt(sel.head);
   const m = line.text.match(TODO_LINE_RE);
-  if (!m) return false;
+  if (!m) return;
   const bracketStart = line.from + m[1].length;
   const bracketEnd = bracketStart + 3;
   const isDone = m[2] !== ' ';
@@ -1567,47 +1507,8 @@ function todoToggleLine(view, line) {
       changes.push({ from: textStart, to: line.to, insert: struck });
     }
   }
-  view.dispatch({ changes });
-  return true;
-}
-
-function todoHitTest(view, target, x, y) {
-  if (!isTodoPage(view.state)) return null;
-  // Primary: check if the click/tap landed directly on a checkbox element
-  const box = target && target.closest ? target.closest('.cm-todo-box') : null;
-  if (box) {
-    const pos = view.posAtDOM(box, 0);
-    if (pos != null) return view.state.doc.lineAt(pos);
-  }
-  // Fallback: use coordinates — generous zone from line start through bracket end + margin
-  const pos = view.posAtCoords({ x, y });
-  if (pos == null) return null;
-  const line = view.state.doc.lineAt(pos);
-  const m = line.text.match(TODO_LINE_RE);
-  if (!m) return null;
-  const bracketEnd = line.from + m[1].length + 3;
-  if (pos > bracketEnd + 2) return null;
-  return line;
-}
-
-const todoClickHandler = EditorView.domEventHandlers({
-  mousedown(event, view) {
-    const line = todoHitTest(view, event.target, event.clientX, event.clientY);
-    if (!line) return false;
-    event.preventDefault();
-    todoToggleLine(view, line);
-    return true;
-  },
-  touchend(event, view) {
-    if (!event.changedTouches || event.changedTouches.length === 0) return false;
-    const touch = event.changedTouches[0];
-    const line = todoHitTest(view, event.target, touch.clientX, touch.clientY);
-    if (!line) return false;
-    event.preventDefault();
-    todoToggleLine(view, line);
-    return true;
-  },
-});
+  editor.dispatch({ changes });
+};
 
 // Enter key handler for @type: todo — auto-insert [ ] on new lines
 const todoEnterHandler = keymap.of([{
@@ -1659,7 +1560,6 @@ const editorState = EditorState.create({
     EditorView.lineWrapping,
     listIndentPlugin,
     todoPlugin,
-    todoClickHandler,
     todoEnterHandler,
     keymap.of([
       { key: 'Mod-z', run: undo },
@@ -5210,6 +5110,7 @@ const defaultHotkeys = {
   'clearEditor': 'Ctrl+L',
   'openSync': 'Ctrl+S',
   'forceSync': 'Ctrl+Shift+S',
+  'toggleTodo': 'Ctrl+D',
 };
 
 const hotkeyLabels = {
@@ -5218,6 +5119,7 @@ const hotkeyLabels = {
   'clearEditor': 'Clear Editor',
   'openSync': 'Open Sync',
   'forceSync': 'Force Sync Reload',
+  'toggleTodo': 'Toggle Todo Checkbox',
 };
 
 let hotkeys = { ...defaultHotkeys };
@@ -5312,6 +5214,11 @@ document.addEventListener('keydown', (e) => {
   if (eventMatchesHotkey(e, hotkeys.forceSync) && !isInputField) {
     e.preventDefault(); e.stopPropagation();
     window.forceSyncReload();
+    return;
+  }
+  if (eventMatchesHotkey(e, hotkeys.toggleTodo) && !isInputField) {
+    e.preventDefault(); e.stopPropagation();
+    window.toggleTodoAtCursor();
     return;
   }
 
