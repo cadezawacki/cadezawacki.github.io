@@ -991,11 +991,11 @@ body {
 .room-unlock-cancel:hover { color: var(--text); background: var(--surface-2); }
 
 /* Hanging indent for list lines — wrapped text aligns with content, not bullet */
-.cm-line.cm-list-indent-2 { padding-left: 2ch !important; text-indent: -2ch; }
-.cm-line.cm-list-indent-3 { padding-left: 3ch !important; text-indent: -3ch; }
-.cm-line.cm-list-indent-4 { padding-left: 4ch !important; text-indent: -4ch; }
-.cm-line.cm-list-indent-5 { padding-left: 5ch !important; text-indent: -5ch; }
-.cm-line.cm-list-indent-6 { padding-left: 6ch !important; text-indent: -6ch; }
+.cm-line.cm-list-indent-2 { padding-left: 2ch !important; }
+.cm-line.cm-list-indent-3 { padding-left: 3ch !important; }
+.cm-line.cm-list-indent-4 { padding-left: 4ch !important; }
+.cm-line.cm-list-indent-5 { padding-left: 5ch !important; }
+.cm-line.cm-list-indent-6 { padding-left: 6ch !important; }
 
 /* Todo styling — minimal, no visual replacement of brackets */
 .cm-line.cm-todo-done .cm-todo-text { text-decoration: line-through; color: var(--text-faint); }
@@ -1439,10 +1439,16 @@ const listIndentPlugin = ViewPlugin.fromClass(class {
 // Renders visual checkboxes, strikethrough on done items, click-to-toggle
 const TODO_LINE_RE = /^(\s*(?:[-•*]\s+)?)\[([ xX])\]\s/;
 
-function isTodoPage(state) {
-  if (state.doc.lines < 1) return false;
+function getPageTypes(state) {
+  if (state.doc.lines < 1) return [];
   const fl = state.doc.line(1).text.trim().toLowerCase();
-  return fl === '@type: todo' || fl === '@type:todo';
+  const m = fl.match(/^@type:\s*(.+)$/);
+  if (!m) return [];
+  return m[1].split(',').map(t => t.trim()).filter(Boolean);
+}
+
+function isTodoPage(state) {
+  return getPageTypes(state).includes('todo');
 }
 
 function buildTodoDecorations(view) {
@@ -2652,9 +2658,29 @@ registerScript(`/**
 **/
 function main(ctx) {
   const text = ctx.selection || ctx.fullText;
+  const full = ctx.fullText;
   const lines = text.split('\\n');
   const todoRe = /^(\\s*(?:[-•*]\\s+)?)\\[([ xX])\\](\\s.*)?$/;
   const hasTodos = lines.some(l => todoRe.test(l));
+
+  // If checkboxes found but page missing @type: todo, prompt to add it
+  if (hasTodos) {
+    const firstLine = full.split('\\n')[0].trim().toLowerCase();
+    const hasTypeDirective = firstLine.startsWith('@type:');
+    const hasTodoType = hasTypeDirective && firstLine.split(':')[1].split(',').map(t => t.trim()).includes('todo');
+    if (!hasTodoType) {
+      if (confirm('This page is not marked as @type: todo. Add it?')) {
+        if (hasTypeDirective) {
+          // Append todo to existing @type line
+          const origFirst = full.split('\\n')[0];
+          ctx.fullText = full.replace(origFirst, origFirst + ', todo');
+        } else {
+          ctx.fullText = '@type: todo\\n' + full;
+        }
+      }
+    }
+  }
+
   let result;
   if (hasTodos) {
     // Toggle existing checkboxes + apply/remove strikethrough
@@ -5485,16 +5511,9 @@ function _fmtDate(d) { return _MONTHS[d.getMonth()] + ' ' + _ordinal(d.getDate()
 // Regex that matches a diary date header line: "Month Dth, YYYY -"
 const DIARY_HEADER_RE = /^(January|February|March|April|May|June|July|August|September|October|November|December) \d+(?:st|nd|rd|th), \d{4} -$/;
 
-function getPageType() {
-  const firstLine = editor.state.doc.line(1).text.trim().toLowerCase();
-  if (firstLine === '@type: diary' || firstLine === '@type:diary') return 'diary';
-  if (firstLine === '@type: todo' || firstLine === '@type:todo') return 'todo';
-  return null;
-}
-
 function applyPageType() {
-  const type = getPageType();
-  if (type !== 'diary') return;
+  const types = getPageTypes(editor.state);
+  if (!types.includes('diary')) return;
 
   const todayHeader = _fmtDate(new Date()) + ' -';
   const doc = editor.state.doc;
