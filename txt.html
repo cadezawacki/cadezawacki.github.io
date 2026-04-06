@@ -1034,6 +1034,23 @@ body {
   border-width: 0 2px 2px 0;
   transform: rotate(45deg);
 }
+/* Larger touch target on mobile */
+@media (pointer: coarse) {
+  .cm-todo-box::before {
+    width: 1.5em;
+    height: 1.5em;
+    border-width: 2px;
+    margin-right: 0.5em;
+    border-radius: 4px;
+  }
+  .cm-todo-box-done::after {
+    left: 4.5px;
+    top: 1.5px;
+    width: 6px;
+    height: 12px;
+    border-width: 0 2.5px 2.5px 0;
+  }
+}
 .cm-line.cm-todo-done .cm-todo-text { text-decoration: line-through; color: var(--text-faint); }
 </style>
 </head>
@@ -1524,38 +1541,61 @@ const todoPlugin = ViewPlugin.fromClass(class {
 }, { decorations: v => v.decorations });
 
 // Click handler: toggle checkbox when clicking on the [ ]/[x] region
+// Shared toggle logic for click and touch handlers
+function todoToggleLine(view, line) {
+  const m = line.text.match(TODO_LINE_RE);
+  if (!m) return false;
+  const bracketStart = line.from + m[1].length;
+  const bracketEnd = bracketStart + 3;
+  const isDone = m[2] !== ' ';
+  const newChar = isDone ? ' ' : 'x';
+  const textStart = bracketEnd + 1;
+  const textContent = line.text.slice(bracketEnd + 1 - line.from);
+  const changes = [{ from: bracketStart + 1, to: bracketStart + 2, insert: newChar }];
+  if (isDone) {
+    const cleaned = textContent.replace(/\u0336/g, '');
+    if (cleaned !== textContent && textStart <= line.to) {
+      changes.push({ from: textStart, to: line.to, insert: cleaned });
+    }
+  } else {
+    if (textContent.length > 0 && textStart <= line.to) {
+      const struck = [...textContent].map(ch => ch === '\n' || ch === '\r' ? ch : ch + '\u0336').join('');
+      changes.push({ from: textStart, to: line.to, insert: struck });
+    }
+  }
+  view.dispatch({ changes });
+  return true;
+}
+
+function todoHitTest(view, x, y) {
+  if (!isTodoPage(view.state)) return null;
+  const pos = view.posAtCoords({ x, y });
+  if (pos == null) return null;
+  const line = view.state.doc.lineAt(pos);
+  const m = line.text.match(TODO_LINE_RE);
+  if (!m) return null;
+  const bracketEnd = line.from + m[1].length + 3;
+  // Allow a generous hit zone: anywhere from line start through 2 chars past the bracket
+  // On touch devices posAtCoords can be imprecise, so extra margin helps
+  if (pos > bracketEnd + 2) return null;
+  return line;
+}
+
 const todoClickHandler = EditorView.domEventHandlers({
   mousedown(event, view) {
-    if (!isTodoPage(view.state)) return false;
-    const pos = view.posAtCoords({ x: event.clientX, y: event.clientY });
-    if (pos == null) return false;
-    const line = view.state.doc.lineAt(pos);
-    const m = line.text.match(TODO_LINE_RE);
-    if (!m) return false;
-    const bracketStart = line.from + m[1].length;
-    const bracketEnd = bracketStart + 3;
-    // Check if click is within or near the checkbox region
-    if (pos > bracketEnd) return false;
+    const line = todoHitTest(view, event.clientX, event.clientY);
+    if (!line) return false;
     event.preventDefault();
-    const isDone = m[2] !== ' ';
-    const newChar = isDone ? ' ' : 'x';
-    const textStart = bracketEnd + 1; // skip space after ]
-    const textContent = line.text.slice(bracketEnd + 1 - line.from);
-    const changes = [{ from: bracketStart + 1, to: bracketStart + 2, insert: newChar }];
-    if (isDone) {
-      // Unchecking: strip combining strikethrough from text
-      const cleaned = textContent.replace(/\u0336/g, '');
-      if (cleaned !== textContent && textStart <= line.to) {
-        changes.push({ from: textStart, to: line.to, insert: cleaned });
-      }
-    } else {
-      // Checking: apply combining strikethrough to text
-      if (textContent.length > 0 && textStart <= line.to) {
-        const struck = [...textContent].map(ch => ch === '\n' || ch === '\r' ? ch : ch + '\u0336').join('');
-        changes.push({ from: textStart, to: line.to, insert: struck });
-      }
-    }
-    view.dispatch({ changes });
+    todoToggleLine(view, line);
+    return true;
+  },
+  touchend(event, view) {
+    if (!event.changedTouches || event.changedTouches.length === 0) return false;
+    const touch = event.changedTouches[0];
+    const line = todoHitTest(view, touch.clientX, touch.clientY);
+    if (!line) return false;
+    event.preventDefault();
+    todoToggleLine(view, line);
     return true;
   },
 });
