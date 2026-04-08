@@ -512,8 +512,8 @@
                 </div>
 
                 <div class="upload-area" id="dropZone">
-                    <p class="primary">Drop files or folders here</p>
-                    <p>or choose upload method</p>
+                    <p class="primary">Drop files, folders, or .zip archives here</p>
+                    <p>or choose upload method (.zip files are extracted automatically)</p>
                     <div class="upload-options">
                         <button class="upload-btn" onclick="document.getElementById('fileInput').click()">
                             Select Files
@@ -646,10 +646,39 @@ more content
             });
         }
 
-        function handleFiles(files) {
+        async function handleFiles(files) {
             if (!files.length) return;
-            
-            files.forEach(file => {
+
+            // Expand zip files into their extracted contents
+            const expandedFiles = [];
+            for (const file of files) {
+                if (file.name.toLowerCase().endsWith('.zip')) {
+                    try {
+                        const zip = await JSZip.loadAsync(file);
+                        const zipEntries = [];
+                        zip.forEach((relativePath, zipEntry) => {
+                            if (!zipEntry.dir) {
+                                zipEntries.push({ relativePath, zipEntry });
+                            }
+                        });
+                        for (const { relativePath, zipEntry } of zipEntries) {
+                            const blob = await zipEntry.async('blob');
+                            const name = relativePath.split('/').pop();
+                            const extracted = new File([blob], name, { type: blob.type });
+                            extracted.relativePath = relativePath;
+                            expandedFiles.push(extracted);
+                        }
+                    } catch (err) {
+                        console.error('Error extracting zip:', err);
+                        // If extraction fails, add the zip as-is
+                        expandedFiles.push(file);
+                    }
+                } else {
+                    expandedFiles.push(file);
+                }
+            }
+
+            expandedFiles.forEach(file => {
                 const fileId = Date.now() + Math.random();
                 const displayPath = getDisplayPath(file);
                 
