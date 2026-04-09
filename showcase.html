@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -172,6 +173,8 @@
       font-weight: 800;
       font-size: 0.96rem;
       line-height: 1.35;
+	  text-align: center;
+	  opacity: 0.6;
       overflow-wrap: anywhere;
     }
 
@@ -180,7 +183,7 @@
       display: grid;
       grid-template-columns: 56px minmax(0, 1fr);
       gap: 10px;
-      align-items: start;
+      align-items: center;
     }
 
     .label {
@@ -222,8 +225,8 @@
     <header class="hero">
       <div class="hero-top">
         <div>
-          <h1>Color Palette Showcase</h1>
-          <p class="subtitle">A single-page HTML gallery for your palette. Every swatch shows the CSS variable name, a normalized hex value, and the original source value. The card layout uses responsive grid sizing and aggressive text wrapping rules so long variable names do not create awkward overflow.</p>
+          <h1>Webtool Color Palette</h1>
+          <p class="subtitle">A gallery of the color palette used on my webtool. teal-500 is the main accent.</p>
         </div>
         <nav class="nav" aria-label="Section navigation">
           <a href="#main">Main</a>
@@ -246,7 +249,7 @@
         <span class="swatch-code">#FAFAFA</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--white-100</div>
+        <div class="var-name">white-100</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#FAFAFA</code>
@@ -263,7 +266,7 @@
         <span class="swatch-code">#F0F0F0</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--white-200</div>
+        <div class="var-name">white-200</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#F0F0F0</code>
@@ -280,7 +283,7 @@
         <span class="swatch-code">#E9E9E9</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--white-300</div>
+        <div class="var-name">white-300</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#E9E9E9</code>
@@ -297,7 +300,7 @@
         <span class="swatch-code">#DCDCDC</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--white-400</div>
+        <div class="var-name">white-400</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#DCDCDC</code>
@@ -314,7 +317,7 @@
         <span class="swatch-code">#B8B8B8</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--white-500</div>
+        <div class="var-name">white-500</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#B8B8B8</code>
@@ -331,7 +334,7 @@
         <span class="swatch-code">#8C8C8C</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--white-600</div>
+        <div class="var-name">white-600</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#8C8C8C</code>
@@ -348,7 +351,7 @@
         <span class="swatch-code">#666666</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--white-700</div>
+        <div class="var-name">white-700</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#666666</code>
@@ -365,7 +368,7 @@
         <span class="swatch-code">#454545</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--white-800</div>
+        <div class="var-name">white-800</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#454545</code>
@@ -382,7 +385,7 @@
         <span class="swatch-code">#292929</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--white-900</div>
+        <div class="var-name">white-900</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#292929</code>
@@ -399,7 +402,7 @@
         <span class="swatch-code">#FFFFFF</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--white-highlight</div>
+        <div class="var-name">white-highlight</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#FFFFFF</code>
@@ -416,7 +419,7 @@
         <span class="swatch-code">#F8F9FA</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--slate-100</div>
+        <div class="var-name">slate-100</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#F8F9FA</code>
@@ -433,7 +436,7 @@
         <span class="swatch-code">#F1F3F5</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--slate-200</div>
+        <div class="var-name">slate-200</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#F1F3F5</code>
@@ -450,7 +453,7 @@
         <span class="swatch-code">#E9ECEF</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--slate-300</div>
+        <div class="var-name">slate-300</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#E9ECEF</code>
@@ -467,7 +470,7 @@
         <span class="swatch-code">#DEE2E6</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--slate-400</div>
+        <div class="var-name">slate-400</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#DEE2E6</code>
@@ -484,7 +487,7 @@
         <span class="swatch-code">#ADB5BD</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--slate-500</div>
+        <div class="var-name">slate-500</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#ADB5BD</code>
@@ -501,7 +504,7 @@
         <span class="swatch-code">#868E96</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--slate-600</div>
+        <div class="var-name">slate-600</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#868E96</code>
@@ -518,7 +521,7 @@
         <span class="swatch-code">#495057</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--slate-700</div>
+        <div class="var-name">slate-700</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#495057</code>
@@ -535,7 +538,7 @@
         <span class="swatch-code">#343A40</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--slate-800</div>
+        <div class="var-name">slate-800</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#343A40</code>
@@ -552,7 +555,7 @@
         <span class="swatch-code">#212529</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--slate-900</div>
+        <div class="var-name">slate-900</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#212529</code>
@@ -569,7 +572,7 @@
         <span class="swatch-code">#BDBDBD</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--slate-highlight</div>
+        <div class="var-name">slate-highlight</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#BDBDBD</code>
@@ -586,7 +589,7 @@
         <span class="swatch-code">#F5F6F7</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--gray-100</div>
+        <div class="var-name">gray-100</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#F5F6F7</code>
@@ -603,7 +606,7 @@
         <span class="swatch-code">#ECEDEF</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--gray-200</div>
+        <div class="var-name">gray-200</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#ECEDEF</code>
@@ -620,7 +623,7 @@
         <span class="swatch-code">#DFE1E5</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--gray-300</div>
+        <div class="var-name">gray-300</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#DFE1E5</code>
@@ -637,7 +640,7 @@
         <span class="swatch-code">#C1C6CC</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--gray-400</div>
+        <div class="var-name">gray-400</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#C1C6CC</code>
@@ -654,7 +657,7 @@
         <span class="swatch-code">#9AA0A8</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--gray-500</div>
+        <div class="var-name">gray-500</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#9AA0A8</code>
@@ -671,7 +674,7 @@
         <span class="swatch-code">#72787F</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--gray-600</div>
+        <div class="var-name">gray-600</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#72787F</code>
@@ -688,7 +691,7 @@
         <span class="swatch-code">#555B61</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--gray-700</div>
+        <div class="var-name">gray-700</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#555B61</code>
@@ -705,7 +708,7 @@
         <span class="swatch-code">#3A3F43</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--gray-800</div>
+        <div class="var-name">gray-800</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#3A3F43</code>
@@ -722,7 +725,7 @@
         <span class="swatch-code">#242628</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--gray-900</div>
+        <div class="var-name">gray-900</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#242628</code>
@@ -739,7 +742,7 @@
         <span class="swatch-code">#E0DCD6</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--gray-highlight</div>
+        <div class="var-name">gray-highlight</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#E0DCD6</code>
@@ -756,7 +759,7 @@
         <span class="swatch-code">#F2F2F3</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--black-100</div>
+        <div class="var-name">black-100</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#F2F2F3</code>
@@ -773,7 +776,7 @@
         <span class="swatch-code">#E5E6E7</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--black-200</div>
+        <div class="var-name">black-200</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#E5E6E7</code>
@@ -790,7 +793,7 @@
         <span class="swatch-code">#D4D5D7</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--black-300</div>
+        <div class="var-name">black-300</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#D4D5D7</code>
@@ -807,7 +810,7 @@
         <span class="swatch-code">#B0B2B5</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--black-400</div>
+        <div class="var-name">black-400</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#B0B2B5</code>
@@ -824,7 +827,7 @@
         <span class="swatch-code">#888A8D</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--black-500</div>
+        <div class="var-name">black-500</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#888A8D</code>
@@ -841,7 +844,7 @@
         <span class="swatch-code">#636567</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--black-600</div>
+        <div class="var-name">black-600</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#636567</code>
@@ -858,7 +861,7 @@
         <span class="swatch-code">#45474A</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--black-700</div>
+        <div class="var-name">black-700</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#45474A</code>
@@ -875,7 +878,7 @@
         <span class="swatch-code">#2C2D2F</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--black-800</div>
+        <div class="var-name">black-800</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#2C2D2F</code>
@@ -892,7 +895,7 @@
         <span class="swatch-code">#18191A</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--black-900</div>
+        <div class="var-name">black-900</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#18191A</code>
@@ -909,7 +912,7 @@
         <span class="swatch-code">#3A332F</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--black-highlight</div>
+        <div class="var-name">black-highlight</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#3A332F</code>
@@ -926,7 +929,7 @@
         <span class="swatch-code">#F5F0E8</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--brown-100</div>
+        <div class="var-name">brown-100</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#F5F0E8</code>
@@ -943,7 +946,7 @@
         <span class="swatch-code">#EBE1D2</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--brown-200</div>
+        <div class="var-name">brown-200</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#EBE1D2</code>
@@ -960,7 +963,7 @@
         <span class="swatch-code">#DCCDB8</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--brown-300</div>
+        <div class="var-name">brown-300</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#DCCDB8</code>
@@ -977,7 +980,7 @@
         <span class="swatch-code">#C8B398</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--brown-400</div>
+        <div class="var-name">brown-400</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#C8B398</code>
@@ -994,7 +997,7 @@
         <span class="swatch-code">#AD9474</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--brown-500</div>
+        <div class="var-name">brown-500</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#AD9474</code>
@@ -1011,7 +1014,7 @@
         <span class="swatch-code">#8A7257</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--brown-600</div>
+        <div class="var-name">brown-600</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#8A7257</code>
@@ -1028,7 +1031,7 @@
         <span class="swatch-code">#685641</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--brown-700</div>
+        <div class="var-name">brown-700</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#685641</code>
@@ -1045,7 +1048,7 @@
         <span class="swatch-code">#4C3E2F</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--brown-800</div>
+        <div class="var-name">brown-800</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#4C3E2F</code>
@@ -1062,7 +1065,7 @@
         <span class="swatch-code">#332A20</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--brown-900</div>
+        <div class="var-name">brown-900</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#332A20</code>
@@ -1079,7 +1082,7 @@
         <span class="swatch-code">#C49A6D</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--brown-highlight</div>
+        <div class="var-name">brown-highlight</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#C49A6D</code>
@@ -1096,7 +1099,7 @@
         <span class="swatch-code">#E5F0E3</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--green-100</div>
+        <div class="var-name">green-100</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#E5F0E3</code>
@@ -1113,7 +1116,7 @@
         <span class="swatch-code">#CBE1C8</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--green-200</div>
+        <div class="var-name">green-200</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#CBE1C8</code>
@@ -1130,7 +1133,7 @@
         <span class="swatch-code">#A8CDA3</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--green-300</div>
+        <div class="var-name">green-300</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#A8CDA3</code>
@@ -1147,7 +1150,7 @@
         <span class="swatch-code">#7FB377</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--green-400</div>
+        <div class="var-name">green-400</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#7FB377</code>
@@ -1164,7 +1167,7 @@
         <span class="swatch-code">#56964D</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--green-500</div>
+        <div class="var-name">green-500</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#56964D</code>
@@ -1181,7 +1184,7 @@
         <span class="swatch-code">#3F7338</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--green-600</div>
+        <div class="var-name">green-600</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#3F7338</code>
@@ -1198,7 +1201,7 @@
         <span class="swatch-code">#2F5729</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--green-700</div>
+        <div class="var-name">green-700</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#2F5729</code>
@@ -1215,7 +1218,7 @@
         <span class="swatch-code">#223F1E</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--green-800</div>
+        <div class="var-name">green-800</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#223F1E</code>
@@ -1232,7 +1235,7 @@
         <span class="swatch-code">#182A16</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--green-900</div>
+        <div class="var-name">green-900</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#182A16</code>
@@ -1249,7 +1252,7 @@
         <span class="swatch-code">#5DB35A</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--green-highlight</div>
+        <div class="var-name">green-highlight</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#5DB35A</code>
@@ -1266,7 +1269,7 @@
         <span class="swatch-code">#E3F2E8</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--emerald-100</div>
+        <div class="var-name">emerald-100</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#E3F2E8</code>
@@ -1283,7 +1286,7 @@
         <span class="swatch-code">#C7E5D1</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--emerald-200</div>
+        <div class="var-name">emerald-200</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#C7E5D1</code>
@@ -1300,7 +1303,7 @@
         <span class="swatch-code">#A3D2B3</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--emerald-300</div>
+        <div class="var-name">emerald-300</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#A3D2B3</code>
@@ -1317,7 +1320,7 @@
         <span class="swatch-code">#77B98F</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--emerald-400</div>
+        <div class="var-name">emerald-400</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#77B98F</code>
@@ -1334,7 +1337,7 @@
         <span class="swatch-code">#4D9968</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--emerald-500</div>
+        <div class="var-name">emerald-500</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#4D9968</code>
@@ -1351,7 +1354,7 @@
         <span class="swatch-code">#39754D</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--emerald-600</div>
+        <div class="var-name">emerald-600</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#39754D</code>
@@ -1368,7 +1371,7 @@
         <span class="swatch-code">#2B583A</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--emerald-700</div>
+        <div class="var-name">emerald-700</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#2B583A</code>
@@ -1385,7 +1388,7 @@
         <span class="swatch-code">#203F2A</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--emerald-800</div>
+        <div class="var-name">emerald-800</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#203F2A</code>
@@ -1402,7 +1405,7 @@
         <span class="swatch-code">#172A1D</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--emerald-900</div>
+        <div class="var-name">emerald-900</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#172A1D</code>
@@ -1419,7 +1422,7 @@
         <span class="swatch-code">#5DBD6D</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--emerald-highlight</div>
+        <div class="var-name">emerald-highlight</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#5DBD6D</code>
@@ -1436,7 +1439,7 @@
         <span class="swatch-code">#FAF0E3</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--amber-100</div>
+        <div class="var-name">amber-100</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#FAF0E3</code>
@@ -1453,7 +1456,7 @@
         <span class="swatch-code">#F5E1C79E</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--amber-200</div>
+        <div class="var-name">amber-200</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#F5E1C79E</code>
@@ -1470,7 +1473,7 @@
         <span class="swatch-code">#EDCEA6</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--amber-300</div>
+        <div class="var-name">amber-300</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#EDCEA6</code>
@@ -1487,7 +1490,7 @@
         <span class="swatch-code">#E2B67E</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--amber-400</div>
+        <div class="var-name">amber-400</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#E2B67E</code>
@@ -1504,7 +1507,7 @@
         <span class="swatch-code">#D49A55</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--amber-500</div>
+        <div class="var-name">amber-500</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#D49A55</code>
@@ -1521,7 +1524,7 @@
         <span class="swatch-code">#A87A41</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--amber-600</div>
+        <div class="var-name">amber-600</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#A87A41</code>
@@ -1538,7 +1541,7 @@
         <span class="swatch-code">#7F5C31</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--amber-700</div>
+        <div class="var-name">amber-700</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#7F5C31</code>
@@ -1555,7 +1558,7 @@
         <span class="swatch-code">#5C4324</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--amber-800</div>
+        <div class="var-name">amber-800</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#5C4324</code>
@@ -1572,7 +1575,7 @@
         <span class="swatch-code">#3D2D18</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--amber-900</div>
+        <div class="var-name">amber-900</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#3D2D18</code>
@@ -1589,7 +1592,7 @@
         <span class="swatch-code">#FFB347</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--amber-highlight</div>
+        <div class="var-name">amber-highlight</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#FFB347</code>
@@ -1606,7 +1609,7 @@
         <span class="swatch-code">#F9E9E8</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--red-100</div>
+        <div class="var-name">red-100</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#F9E9E8</code>
@@ -1623,7 +1626,7 @@
         <span class="swatch-code">#F2D4D3</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--red-200</div>
+        <div class="var-name">red-200</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#F2D4D3</code>
@@ -1640,7 +1643,7 @@
         <span class="swatch-code">#E8B9B8</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--red-300</div>
+        <div class="var-name">red-300</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#E8B9B8</code>
@@ -1657,7 +1660,7 @@
         <span class="swatch-code">#D89594</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--red-400</div>
+        <div class="var-name">red-400</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#D89594</code>
@@ -1674,7 +1677,7 @@
         <span class="swatch-code">#C07372</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--red-500</div>
+        <div class="var-name">red-500</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#C07372</code>
@@ -1691,7 +1694,7 @@
         <span class="swatch-code">#9D5958</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--red-600</div>
+        <div class="var-name">red-600</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#9D5958</code>
@@ -1708,7 +1711,7 @@
         <span class="swatch-code">#7A4342</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--red-700</div>
+        <div class="var-name">red-700</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#7A4342</code>
@@ -1725,7 +1728,7 @@
         <span class="swatch-code">#5C3231</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--red-800</div>
+        <div class="var-name">red-800</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#5C3231</code>
@@ -1742,7 +1745,7 @@
         <span class="swatch-code">#3F2323</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--red-900</div>
+        <div class="var-name">red-900</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#3F2323</code>
@@ -1759,7 +1762,7 @@
         <span class="swatch-code">#D75151</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--red-highlight</div>
+        <div class="var-name">red-highlight</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#D75151</code>
@@ -1776,7 +1779,7 @@
         <span class="swatch-code">#F7EFE6</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--orange-100</div>
+        <div class="var-name">orange-100</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#F7EFE6</code>
@@ -1793,7 +1796,7 @@
         <span class="swatch-code">#EEDFCE</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--orange-200</div>
+        <div class="var-name">orange-200</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#EEDFCE</code>
@@ -1810,7 +1813,7 @@
         <span class="swatch-code">#E2CAB0</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--orange-300</div>
+        <div class="var-name">orange-300</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#E2CAB0</code>
@@ -1827,7 +1830,7 @@
         <span class="swatch-code">#D2AF8D</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--orange-400</div>
+        <div class="var-name">orange-400</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#D2AF8D</code>
@@ -1844,7 +1847,7 @@
         <span class="swatch-code">#BB906A</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--orange-500</div>
+        <div class="var-name">orange-500</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#BB906A</code>
@@ -1861,7 +1864,7 @@
         <span class="swatch-code">#946E4F</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--orange-600</div>
+        <div class="var-name">orange-600</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#946E4F</code>
@@ -1878,7 +1881,7 @@
         <span class="swatch-code">#70543C</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--orange-700</div>
+        <div class="var-name">orange-700</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#70543C</code>
@@ -1895,7 +1898,7 @@
         <span class="swatch-code">#523D2C</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--orange-800</div>
+        <div class="var-name">orange-800</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#523D2C</code>
@@ -1912,7 +1915,7 @@
         <span class="swatch-code">#38291E</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--orange-900</div>
+        <div class="var-name">orange-900</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#38291E</code>
@@ -1929,7 +1932,7 @@
         <span class="swatch-code">#E07E4A</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--orange-highlight</div>
+        <div class="var-name">orange-highlight</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#E07E4A</code>
@@ -1946,7 +1949,7 @@
         <span class="swatch-code">#F8F4DF</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--yellow-100</div>
+        <div class="var-name">yellow-100</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#F8F4DF</code>
@@ -1963,7 +1966,7 @@
         <span class="swatch-code">#F1E9C0</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--yellow-200</div>
+        <div class="var-name">yellow-200</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#F1E9C0</code>
@@ -1980,7 +1983,7 @@
         <span class="swatch-code">#E6DA9E</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--yellow-300</div>
+        <div class="var-name">yellow-300</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#E6DA9E</code>
@@ -1997,7 +2000,7 @@
         <span class="swatch-code">#D6C67D</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--yellow-400</div>
+        <div class="var-name">yellow-400</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#D6C67D</code>
@@ -2014,7 +2017,7 @@
         <span class="swatch-code">#BDAB5E</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--yellow-500</div>
+        <div class="var-name">yellow-500</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#BDAB5E</code>
@@ -2031,7 +2034,7 @@
         <span class="swatch-code">#958746</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--yellow-600</div>
+        <div class="var-name">yellow-600</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#958746</code>
@@ -2048,7 +2051,7 @@
         <span class="swatch-code">#706534</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--yellow-700</div>
+        <div class="var-name">yellow-700</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#706534</code>
@@ -2065,7 +2068,7 @@
         <span class="swatch-code">#514925</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--yellow-800</div>
+        <div class="var-name">yellow-800</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#514925</code>
@@ -2082,7 +2085,7 @@
         <span class="swatch-code">#352F19</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--yellow-900</div>
+        <div class="var-name">yellow-900</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#352F19</code>
@@ -2099,7 +2102,7 @@
         <span class="swatch-code">#E8C44A</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--yellow-highlight</div>
+        <div class="var-name">yellow-highlight</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#E8C44A</code>
@@ -2116,7 +2119,7 @@
         <span class="swatch-code">#E3F0EF</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--teal-100</div>
+        <div class="var-name">teal-100</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#E3F0EF</code>
@@ -2133,7 +2136,7 @@
         <span class="swatch-code">#C7E1DF</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--teal-200</div>
+        <div class="var-name">teal-200</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#C7E1DF</code>
@@ -2150,7 +2153,7 @@
         <span class="swatch-code">#A4CECB</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--teal-300</div>
+        <div class="var-name">teal-300</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#A4CECB</code>
@@ -2167,7 +2170,7 @@
         <span class="swatch-code">#7DB5B2</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--teal-400</div>
+        <div class="var-name">teal-400</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#7DB5B2</code>
@@ -2184,7 +2187,7 @@
         <span class="swatch-code">#5A9996</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--teal-500</div>
+        <div class="var-name">teal-500</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#5A9996</code>
@@ -2201,7 +2204,7 @@
         <span class="swatch-code">#437572</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--teal-600</div>
+        <div class="var-name">teal-600</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#437572</code>
@@ -2218,7 +2221,7 @@
         <span class="swatch-code">#325955</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--teal-700</div>
+        <div class="var-name">teal-700</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#325955</code>
@@ -2235,7 +2238,7 @@
         <span class="swatch-code">#24403D</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--teal-800</div>
+        <div class="var-name">teal-800</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#24403D</code>
@@ -2252,7 +2255,7 @@
         <span class="swatch-code">#18292754</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--teal-900</div>
+        <div class="var-name">teal-900</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#18292754</code>
@@ -2269,7 +2272,7 @@
         <span class="swatch-code">#4DB8B3</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--teal-highlight</div>
+        <div class="var-name">teal-highlight</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#4DB8B3</code>
@@ -2286,7 +2289,7 @@
         <span class="swatch-code">#E0F2EC</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--sea-green-100</div>
+        <div class="var-name">sea-green-100</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#E0F2EC</code>
@@ -2303,7 +2306,7 @@
         <span class="swatch-code">#C1E5D9</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--sea-green-200</div>
+        <div class="var-name">sea-green-200</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#C1E5D9</code>
@@ -2320,7 +2323,7 @@
         <span class="swatch-code">#9DD2C2</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--sea-green-300</div>
+        <div class="var-name">sea-green-300</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#9DD2C2</code>
@@ -2337,7 +2340,7 @@
         <span class="swatch-code">#73B9A6</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--sea-green-400</div>
+        <div class="var-name">sea-green-400</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#73B9A6</code>
@@ -2354,7 +2357,7 @@
         <span class="swatch-code">#4A9D8A</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--sea-green-500</div>
+        <div class="var-name">sea-green-500</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#4A9D8A</code>
@@ -2371,7 +2374,7 @@
         <span class="swatch-code">#2F7A6A</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--sea-green-600</div>
+        <div class="var-name">sea-green-600</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#2F7A6A</code>
@@ -2388,7 +2391,7 @@
         <span class="swatch-code">#1D5C4F</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--sea-green-700</div>
+        <div class="var-name">sea-green-700</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#1D5C4F</code>
@@ -2405,7 +2408,7 @@
         <span class="swatch-code">#104238</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--sea-green-800</div>
+        <div class="var-name">sea-green-800</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#104238</code>
@@ -2422,7 +2425,7 @@
         <span class="swatch-code">#064E3B</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--sea-green-900</div>
+        <div class="var-name">sea-green-900</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#064E3B</code>
@@ -2439,7 +2442,7 @@
         <span class="swatch-code">#2F7A6A</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--sea-green-highlight</div>
+        <div class="var-name">sea-green-highlight</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#2F7A6A</code>
@@ -2456,7 +2459,7 @@
         <span class="swatch-code">#E8EFF7</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--blue-100</div>
+        <div class="var-name">blue-100</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#E8EFF7</code>
@@ -2473,7 +2476,7 @@
         <span class="swatch-code">#D1DFEF</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--blue-200</div>
+        <div class="var-name">blue-200</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#D1DFEF</code>
@@ -2490,7 +2493,7 @@
         <span class="swatch-code">#B3CAE3</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--blue-300</div>
+        <div class="var-name">blue-300</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#B3CAE3</code>
@@ -2507,7 +2510,7 @@
         <span class="swatch-code">#8FAFD3</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--blue-400</div>
+        <div class="var-name">blue-400</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#8FAFD3</code>
@@ -2524,7 +2527,7 @@
         <span class="swatch-code">#6A8FBE</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--blue-500</div>
+        <div class="var-name">blue-500</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#6A8FBE</code>
@@ -2541,7 +2544,7 @@
         <span class="swatch-code">#4F6D94</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--blue-600</div>
+        <div class="var-name">blue-600</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#4F6D94</code>
@@ -2558,7 +2561,7 @@
         <span class="swatch-code">#3C526F</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--blue-700</div>
+        <div class="var-name">blue-700</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#3C526F</code>
@@ -2575,7 +2578,7 @@
         <span class="swatch-code">#2C3B4F</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--blue-800</div>
+        <div class="var-name">blue-800</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#2C3B4F</code>
@@ -2592,7 +2595,7 @@
         <span class="swatch-code">#1D2634</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--blue-900</div>
+        <div class="var-name">blue-900</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#1D2634</code>
@@ -2609,7 +2612,7 @@
         <span class="swatch-code">#5A9DE6</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--blue-highlight</div>
+        <div class="var-name">blue-highlight</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#5A9DE6</code>
@@ -2626,7 +2629,7 @@
         <span class="swatch-code">#F0EBF2</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--purple-100</div>
+        <div class="var-name">purple-100</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#F0EBF2</code>
@@ -2643,7 +2646,7 @@
         <span class="swatch-code">#E1D7E5</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--purple-200</div>
+        <div class="var-name">purple-200</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#E1D7E5</code>
@@ -2660,7 +2663,7 @@
         <span class="swatch-code">#CDBED3</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--purple-300</div>
+        <div class="var-name">purple-300</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#CDBED3</code>
@@ -2677,7 +2680,7 @@
         <span class="swatch-code">#B39FBB</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--purple-400</div>
+        <div class="var-name">purple-400</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#B39FBB</code>
@@ -2694,7 +2697,7 @@
         <span class="swatch-code">#947D9A</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--purple-500</div>
+        <div class="var-name">purple-500</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#947D9A</code>
@@ -2711,7 +2714,7 @@
         <span class="swatch-code">#6F5D73</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--purple-600</div>
+        <div class="var-name">purple-600</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#6F5D73</code>
@@ -2728,7 +2731,7 @@
         <span class="swatch-code">#534653</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--purple-700</div>
+        <div class="var-name">purple-700</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#534653</code>
@@ -2745,7 +2748,7 @@
         <span class="swatch-code">#3C333C</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--purple-800</div>
+        <div class="var-name">purple-800</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#3C333C</code>
@@ -2762,7 +2765,7 @@
         <span class="swatch-code">#272227</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--purple-900</div>
+        <div class="var-name">purple-900</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#272227</code>
@@ -2779,7 +2782,7 @@
         <span class="swatch-code">#8D00BB</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--purple-highlight</div>
+        <div class="var-name">purple-highlight</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#8D00BB</code>
@@ -2796,7 +2799,7 @@
         <span class="swatch-code">#F9E9ED</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--pink-100</div>
+        <div class="var-name">pink-100</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#F9E9ED</code>
@@ -2813,7 +2816,7 @@
         <span class="swatch-code">#F2D4DB</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--pink-200</div>
+        <div class="var-name">pink-200</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#F2D4DB</code>
@@ -2830,7 +2833,7 @@
         <span class="swatch-code">#E8B9C5</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--pink-300</div>
+        <div class="var-name">pink-300</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#E8B9C5</code>
@@ -2847,7 +2850,7 @@
         <span class="swatch-code">#D895A6</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--pink-400</div>
+        <div class="var-name">pink-400</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#D895A6</code>
@@ -2864,7 +2867,7 @@
         <span class="swatch-code">#C07386</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--pink-500</div>
+        <div class="var-name">pink-500</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#C07386</code>
@@ -2881,7 +2884,7 @@
         <span class="swatch-code">#9D596A</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--pink-600</div>
+        <div class="var-name">pink-600</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#9D596A</code>
@@ -2898,7 +2901,7 @@
         <span class="swatch-code">#7A4351</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--pink-700</div>
+        <div class="var-name">pink-700</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#7A4351</code>
@@ -2915,7 +2918,7 @@
         <span class="swatch-code">#5C323D</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--pink-800</div>
+        <div class="var-name">pink-800</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#5C323D</code>
@@ -2932,7 +2935,7 @@
         <span class="swatch-code">#3F232B</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--pink-900</div>
+        <div class="var-name">pink-900</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#3F232B</code>
@@ -2949,7 +2952,7 @@
         <span class="swatch-code">#D85A7A</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--pink-highlight</div>
+        <div class="var-name">pink-highlight</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#D85A7A</code>
@@ -2966,7 +2969,7 @@
         <span class="swatch-code">#E9EBF2</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--indigo-100</div>
+        <div class="var-name">indigo-100</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#E9EBF2</code>
@@ -2983,7 +2986,7 @@
         <span class="swatch-code">#D3D7E5</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--indigo-200</div>
+        <div class="var-name">indigo-200</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#D3D7E5</code>
@@ -3000,7 +3003,7 @@
         <span class="swatch-code">#B6BDD3</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--indigo-300</div>
+        <div class="var-name">indigo-300</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#B6BDD3</code>
@@ -3017,7 +3020,7 @@
         <span class="swatch-code">#929CBB</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--indigo-400</div>
+        <div class="var-name">indigo-400</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#929CBB</code>
@@ -3034,7 +3037,7 @@
         <span class="swatch-code">#6D789A</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--indigo-500</div>
+        <div class="var-name">indigo-500</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#6D789A</code>
@@ -3051,7 +3054,7 @@
         <span class="swatch-code">#525B73</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--indigo-600</div>
+        <div class="var-name">indigo-600</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#525B73</code>
@@ -3068,7 +3071,7 @@
         <span class="swatch-code">#3D4453</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--indigo-700</div>
+        <div class="var-name">indigo-700</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#3D4453</code>
@@ -3085,7 +3088,7 @@
         <span class="swatch-code">#2C313C</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--indigo-800</div>
+        <div class="var-name">indigo-800</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#2C313C</code>
@@ -3102,7 +3105,7 @@
         <span class="swatch-code">#1D2027</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--indigo-900</div>
+        <div class="var-name">indigo-900</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#1D2027</code>
@@ -3119,7 +3122,7 @@
         <span class="swatch-code">#7A89C2</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--indigo-highlight</div>
+        <div class="var-name">indigo-highlight</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#7A89C2</code>
@@ -3136,7 +3139,7 @@
         <span class="swatch-code">#E6F4F5</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--cyan-100</div>
+        <div class="var-name">cyan-100</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#E6F4F5</code>
@@ -3153,7 +3156,7 @@
         <span class="swatch-code">#CDE9EB</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--cyan-200</div>
+        <div class="var-name">cyan-200</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#CDE9EB</code>
@@ -3170,7 +3173,7 @@
         <span class="swatch-code">#AAD9DD</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--cyan-300</div>
+        <div class="var-name">cyan-300</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#AAD9DD</code>
@@ -3187,7 +3190,7 @@
         <span class="swatch-code">#7FC3C9</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--cyan-400</div>
+        <div class="var-name">cyan-400</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#7FC3C9</code>
@@ -3204,7 +3207,7 @@
         <span class="swatch-code">#54A8B0</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--cyan-500</div>
+        <div class="var-name">cyan-500</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#54A8B0</code>
@@ -3221,7 +3224,7 @@
         <span class="swatch-code">#3E8188</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--cyan-600</div>
+        <div class="var-name">cyan-600</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#3E8188</code>
@@ -3238,7 +3241,7 @@
         <span class="swatch-code">#2F6166</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--cyan-700</div>
+        <div class="var-name">cyan-700</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#2F6166</code>
@@ -3255,7 +3258,7 @@
         <span class="swatch-code">#23464A</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--cyan-800</div>
+        <div class="var-name">cyan-800</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#23464A</code>
@@ -3272,7 +3275,7 @@
         <span class="swatch-code">#182F32</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--cyan-900</div>
+        <div class="var-name">cyan-900</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#182F32</code>
@@ -3289,7 +3292,7 @@
         <span class="swatch-code">#4DC9D4</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--cyan-highlight</div>
+        <div class="var-name">cyan-highlight</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#4DC9D4</code>
@@ -3316,7 +3319,7 @@
         <span class="swatch-code">#325955</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--primary</div>
+        <div class="var-name">primary</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#325955</code>
@@ -3333,7 +3336,7 @@
         <span class="swatch-code">#B5D5D2</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--primary-content</div>
+        <div class="var-name">primary-content</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#B5D5D2</code>
@@ -3350,7 +3353,7 @@
         <span class="swatch-code">#447A74</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--primary-light</div>
+        <div class="var-name">primary-light</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#447A74</code>
@@ -3367,7 +3370,7 @@
         <span class="swatch-code">#203836</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--primary-dark</div>
+        <div class="var-name">primary-dark</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#203836</code>
@@ -3384,7 +3387,7 @@
         <span class="swatch-code">#413259</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--secondary</div>
+        <div class="var-name">secondary</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#413259</code>
@@ -3401,7 +3404,7 @@
         <span class="swatch-code">#C1B5D5</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--secondary-content</div>
+        <div class="var-name">secondary-content</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#C1B5D5</code>
@@ -3418,7 +3421,7 @@
         <span class="swatch-code">#59447A</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--secondary-light</div>
+        <div class="var-name">secondary-light</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#59447A</code>
@@ -3435,7 +3438,7 @@
         <span class="swatch-code">#292038</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--secondary-dark</div>
+        <div class="var-name">secondary-dark</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#292038</code>
@@ -3452,7 +3455,7 @@
         <span class="swatch-code">#593236</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--tertiary</div>
+        <div class="var-name">tertiary</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#593236</code>
@@ -3469,7 +3472,7 @@
         <span class="swatch-code">#D5B5B8</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--tertiary-content</div>
+        <div class="var-name">tertiary-content</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#D5B5B8</code>
@@ -3486,7 +3489,7 @@
         <span class="swatch-code">#7A444A</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--tertiary-light</div>
+        <div class="var-name">tertiary-light</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#7A444A</code>
@@ -3503,7 +3506,7 @@
         <span class="swatch-code">#382022</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--tertiary-dark</div>
+        <div class="var-name">tertiary-dark</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#382022</code>
@@ -3520,7 +3523,7 @@
         <span class="swatch-code">#495932</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--quaternary</div>
+        <div class="var-name">quaternary</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#495932</code>
@@ -3537,7 +3540,7 @@
         <span class="swatch-code">#C8D5B5</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--quaternary-content</div>
+        <div class="var-name">quaternary-content</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#C8D5B5</code>
@@ -3554,7 +3557,7 @@
         <span class="swatch-code">#647A44</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--quaternary-light</div>
+        <div class="var-name">quaternary-light</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#647A44</code>
@@ -3571,7 +3574,7 @@
         <span class="swatch-code">#2E3820</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--quaternary-dark</div>
+        <div class="var-name">quaternary-dark</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#2E3820</code>
@@ -3588,7 +3591,7 @@
         <span class="swatch-code">#325932</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--primary-success</div>
+        <div class="var-name">primary-success</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#325932</code>
@@ -3605,7 +3608,7 @@
         <span class="swatch-code">#595932</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--primary-warning</div>
+        <div class="var-name">primary-warning</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#595932</code>
@@ -3622,7 +3625,7 @@
         <span class="swatch-code">#593232</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--primary-error</div>
+        <div class="var-name">primary-error</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#593232</code>
@@ -3639,7 +3642,7 @@
         <span class="swatch-code">#324959</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--primary-info</div>
+        <div class="var-name">primary-info</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#324959</code>
@@ -3656,7 +3659,7 @@
         <span class="swatch-code">#B5D5B5</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--primary-success-content</div>
+        <div class="var-name">primary-success-content</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#B5D5B5</code>
@@ -3673,7 +3676,7 @@
         <span class="swatch-code">#D5D5B5</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--primary-warning-content</div>
+        <div class="var-name">primary-warning-content</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#D5D5B5</code>
@@ -3690,7 +3693,7 @@
         <span class="swatch-code">#D5B5B5</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--primary-error-content</div>
+        <div class="var-name">primary-error-content</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#D5B5B5</code>
@@ -3707,7 +3710,7 @@
         <span class="swatch-code">#B5C8D5</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--primary-info-content</div>
+        <div class="var-name">primary-info-content</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#B5C8D5</code>
@@ -3724,7 +3727,7 @@
         <span class="swatch-code">#FBFBFB</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--primary-foreground-neutral</div>
+        <div class="var-name">primary-foreground-neutral</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#FBFBFB</code>
@@ -3741,7 +3744,7 @@
         <span class="swatch-code">#F0F0F0</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--primary-background-neutral</div>
+        <div class="var-name">primary-background-neutral</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#F0F0F0</code>
@@ -3758,7 +3761,7 @@
         <span class="swatch-code">#DFDFDF</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--primary-border-neutral</div>
+        <div class="var-name">primary-border-neutral</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#DFDFDF</code>
@@ -3775,7 +3778,7 @@
         <span class="swatch-code">#262626</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--primary-copy-neutral</div>
+        <div class="var-name">primary-copy-neutral</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#262626</code>
@@ -3792,7 +3795,7 @@
         <span class="swatch-code">#666666</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--primary-copy-light-neutral</div>
+        <div class="var-name">primary-copy-light-neutral</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#666666</code>
@@ -3809,7 +3812,7 @@
         <span class="swatch-code">#8C8C8C</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--primary-copy-lighter-neutral</div>
+        <div class="var-name">primary-copy-lighter-neutral</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#8C8C8C</code>
@@ -3826,7 +3829,7 @@
         <span class="swatch-code">#454545</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--primary-neutral</div>
+        <div class="var-name">primary-neutral</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#454545</code>
@@ -3843,7 +3846,7 @@
         <span class="swatch-code">#C4C4C4</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--primary-content-neutral</div>
+        <div class="var-name">primary-content-neutral</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#C4C4C4</code>
@@ -3860,7 +3863,7 @@
         <span class="swatch-code">#5E5E5E</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--primary-light-neutral</div>
+        <div class="var-name">primary-light-neutral</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#5E5E5E</code>
@@ -3877,7 +3880,7 @@
         <span class="swatch-code">#2B2B2B</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--primary-dark-neutral</div>
+        <div class="var-name">primary-dark-neutral</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#2B2B2B</code>
@@ -3894,7 +3897,7 @@
         <span class="swatch-code">#FCFBFB</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--primary-foreground</div>
+        <div class="var-name">primary-foreground</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#FCFBFB</code>
@@ -3911,7 +3914,7 @@
         <span class="swatch-code">#EDF3F2</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--primary-background-color</div>
+        <div class="var-name">primary-background-color</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#EDF3F2</code>
@@ -3928,7 +3931,7 @@
         <span class="swatch-code">#DAE4E3</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--primary-border</div>
+        <div class="var-name">primary-border</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#DAE4E3</code>
@@ -3945,7 +3948,7 @@
         <span class="swatch-code">#212C2B</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--primary-copy</div>
+        <div class="var-name">primary-copy</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#212C2B</code>
@@ -3962,7 +3965,7 @@
         <span class="swatch-code">#577572</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--primary-copy-light</div>
+        <div class="var-name">primary-copy-light</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#577572</code>
@@ -3979,7 +3982,7 @@
         <span class="swatch-code">#7B9D9A</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--primary-copy-lighter</div>
+        <div class="var-name">primary-copy-lighter</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#7B9D9A</code>
@@ -3996,7 +3999,7 @@
         <span class="swatch-code">#FAFCFC</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--primary-foreground-saturated</div>
+        <div class="var-name">primary-foreground-saturated</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#FAFCFC</code>
@@ -4013,7 +4016,7 @@
         <span class="swatch-code">#EBF4F3</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--primary-background-saturated</div>
+        <div class="var-name">primary-background-saturated</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#EBF4F3</code>
@@ -4030,7 +4033,7 @@
         <span class="swatch-code">#D6E8E6</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--primary-border-saturated</div>
+        <div class="var-name">primary-border-saturated</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#D6E8E6</code>
@@ -4047,7 +4050,7 @@
         <span class="swatch-code">#1C312F</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--primary-copy-saturated</div>
+        <div class="var-name">primary-copy-saturated</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#1C312F</code>
@@ -4064,7 +4067,7 @@
         <span class="swatch-code">#4A827C</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--primary-copy-light-saturated</div>
+        <div class="var-name">primary-copy-light-saturated</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#4A827C</code>
@@ -4081,7 +4084,7 @@
         <span class="swatch-code">#6DACA5</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--primary-copy-lighter-saturated</div>
+        <div class="var-name">primary-copy-lighter-saturated</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#6DACA5</code>
@@ -4098,7 +4101,7 @@
         <span class="swatch-code">#FBFBFB</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--primary-foreground-dull</div>
+        <div class="var-name">primary-foreground-dull</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#FBFBFB</code>
@@ -4115,7 +4118,7 @@
         <span class="swatch-code">#EFF1F1</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--primary-background-dull</div>
+        <div class="var-name">primary-background-dull</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#EFF1F1</code>
@@ -4132,7 +4135,7 @@
         <span class="swatch-code">#DDE2E1</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--primary-border-dull</div>
+        <div class="var-name">primary-border-dull</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#DDE2E1</code>
@@ -4149,7 +4152,7 @@
         <span class="swatch-code">#232929</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--primary-copy-dull</div>
+        <div class="var-name">primary-copy-dull</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#232929</code>
@@ -4166,7 +4169,7 @@
         <span class="swatch-code">#5E6E6C</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--primary-copy-dull-light</div>
+        <div class="var-name">primary-copy-dull-light</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#5E6E6C</code>
@@ -4183,7 +4186,7 @@
         <span class="swatch-code">#849593</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--primary-copy-dull-lighter</div>
+        <div class="var-name">primary-copy-dull-lighter</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#849593</code>
@@ -4200,7 +4203,7 @@
         <span class="swatch-code">#212C2B</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--primary-foreground-inverse</div>
+        <div class="var-name">primary-foreground-inverse</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#212C2B</code>
@@ -4217,7 +4220,7 @@
         <span class="swatch-code">#161D1D</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--primary-background-inverse</div>
+        <div class="var-name">primary-background-inverse</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#161D1D</code>
@@ -4234,7 +4237,7 @@
         <span class="swatch-code">#364947</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--primary-border-inverse</div>
+        <div class="var-name">primary-border-inverse</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#364947</code>
@@ -4251,7 +4254,7 @@
         <span class="swatch-code">#FBFCFC</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--primary-copy-inverse</div>
+        <div class="var-name">primary-copy-inverse</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#FBFCFC</code>
@@ -4268,7 +4271,7 @@
         <span class="swatch-code">#D3DEDD</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--primary-copy-light-inverse</div>
+        <div class="var-name">primary-copy-light-inverse</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#D3DEDD</code>
@@ -4285,7 +4288,7 @@
         <span class="swatch-code">#98B3B0</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--primary-copy-lighter-inverse</div>
+        <div class="var-name">primary-copy-lighter-inverse</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#98B3B0</code>
@@ -4302,7 +4305,7 @@
         <span class="swatch-code">#1B322F</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--primary-foreground-saturated-inverse</div>
+        <div class="var-name">primary-foreground-saturated-inverse</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#1B322F</code>
@@ -4319,7 +4322,7 @@
         <span class="swatch-code">#122120</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--primary-background-saturated-inverse</div>
+        <div class="var-name">primary-background-saturated-inverse</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#122120</code>
@@ -4336,7 +4339,7 @@
         <span class="swatch-code">#2D534F</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--primary-border-saturated-inverse</div>
+        <div class="var-name">primary-border-saturated-inverse</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#2D534F</code>
@@ -4353,7 +4356,7 @@
         <span class="swatch-code">#FAFCFC</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--primary-copy-saturated-inverse</div>
+        <div class="var-name">primary-copy-saturated-inverse</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#FAFCFC</code>
@@ -4370,7 +4373,7 @@
         <span class="swatch-code">#CDE4E2</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--primary-copy-light-saturated-inverse</div>
+        <div class="var-name">primary-copy-light-saturated-inverse</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#CDE4E2</code>
@@ -4387,7 +4390,7 @@
         <span class="swatch-code">#8BC1BB</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--primary-copy-lighter-saturated-inverse</div>
+        <div class="var-name">primary-copy-lighter-saturated-inverse</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#8BC1BB</code>
@@ -4404,7 +4407,7 @@
         <span class="swatch-code">#FCFBFB</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--secondary-foreground</div>
+        <div class="var-name">secondary-foreground</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#FCFBFB</code>
@@ -4421,7 +4424,7 @@
         <span class="swatch-code">#EFEDF2</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--secondary-background-color</div>
+        <div class="var-name">secondary-background-color</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#EFEDF2</code>
@@ -4438,7 +4441,7 @@
         <span class="swatch-code">#DEDAE4</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--secondary-border</div>
+        <div class="var-name">secondary-border</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#DEDAE4</code>
@@ -4455,7 +4458,7 @@
         <span class="swatch-code">#25212C</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--secondary-copy</div>
+        <div class="var-name">secondary-copy</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#25212C</code>
@@ -4472,7 +4475,7 @@
         <span class="swatch-code">#625775</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--secondary-copy-light</div>
+        <div class="var-name">secondary-copy-light</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#625775</code>
@@ -4489,7 +4492,7 @@
         <span class="swatch-code">#887B9D</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--secondary-copy-lighter</div>
+        <div class="var-name">secondary-copy-lighter</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#887B9D</code>
@@ -4506,7 +4509,7 @@
         <span class="swatch-code">#25212C</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--secondary-foreground-inverse</div>
+        <div class="var-name">secondary-foreground-inverse</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#25212C</code>
@@ -4523,7 +4526,7 @@
         <span class="swatch-code">#19161D</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--secondary-background-inverse</div>
+        <div class="var-name">secondary-background-inverse</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#19161D</code>
@@ -4540,7 +4543,7 @@
         <span class="swatch-code">#3E3649</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--secondary-border-inverse</div>
+        <div class="var-name">secondary-border-inverse</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#3E3649</code>
@@ -4557,7 +4560,7 @@
         <span class="swatch-code">#FBFBFC</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--secondary-copy-inverse</div>
+        <div class="var-name">secondary-copy-inverse</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#FBFBFC</code>
@@ -4574,7 +4577,7 @@
         <span class="swatch-code">#D7D3DE</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--secondary-copy-light-inverse</div>
+        <div class="var-name">secondary-copy-light-inverse</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#D7D3DE</code>
@@ -4591,7 +4594,7 @@
         <span class="swatch-code">#A398B3</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--secondary-copy-lighter-inverse</div>
+        <div class="var-name">secondary-copy-lighter-inverse</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#A398B3</code>
@@ -4608,7 +4611,7 @@
         <span class="swatch-code">#FBFAFC</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--secondary-foreground-saturated</div>
+        <div class="var-name">secondary-foreground-saturated</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#FBFAFC</code>
@@ -4625,7 +4628,7 @@
         <span class="swatch-code">#EFEBF4</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--secondary-background-saturated</div>
+        <div class="var-name">secondary-background-saturated</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#EFEBF4</code>
@@ -4642,7 +4645,7 @@
         <span class="swatch-code">#DDD6E8</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--secondary-border-saturated</div>
+        <div class="var-name">secondary-border-saturated</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#DDD6E8</code>
@@ -4659,7 +4662,7 @@
         <span class="swatch-code">#241C31</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--secondary-copy-saturated</div>
+        <div class="var-name">secondary-copy-saturated</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#241C31</code>
@@ -4676,7 +4679,7 @@
         <span class="swatch-code">#604A82</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--secondary-copy-light-saturated</div>
+        <div class="var-name">secondary-copy-light-saturated</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#604A82</code>
@@ -4693,7 +4696,7 @@
         <span class="swatch-code">#856DAC</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--secondary-copy-lighter-saturated</div>
+        <div class="var-name">secondary-copy-lighter-saturated</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#856DAC</code>
@@ -4710,7 +4713,7 @@
         <span class="swatch-code">#241C31</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--secondary-foreground-saturated-inverse</div>
+        <div class="var-name">secondary-foreground-saturated-inverse</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#241C31</code>
@@ -4727,7 +4730,7 @@
         <span class="swatch-code">#241C31</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--secondary-background-saturated-inverse</div>
+        <div class="var-name">secondary-background-saturated-inverse</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#241C31</code>
@@ -4744,7 +4747,7 @@
         <span class="swatch-code">#3C2E51</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--secondary-border-saturated-inverse</div>
+        <div class="var-name">secondary-border-saturated-inverse</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#3C2E51</code>
@@ -4761,7 +4764,7 @@
         <span class="swatch-code">#FBFAFC</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--secondary-copy-saturated-inverse</div>
+        <div class="var-name">secondary-copy-saturated-inverse</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#FBFAFC</code>
@@ -4778,7 +4781,7 @@
         <span class="swatch-code">#D6CEE3</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--secondary-copy-light-saturated-inverse</div>
+        <div class="var-name">secondary-copy-light-saturated-inverse</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#D6CEE3</code>
@@ -4795,7 +4798,7 @@
         <span class="swatch-code">#A08DBE</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--secondary-copy-lighter-saturated-inverse</div>
+        <div class="var-name">secondary-copy-lighter-saturated-inverse</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#A08DBE</code>
@@ -4812,7 +4815,7 @@
         <span class="swatch-code">#FBFBFB</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--secondary-foreground-dull</div>
+        <div class="var-name">secondary-foreground-dull</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#FBFBFB</code>
@@ -4829,7 +4832,7 @@
         <span class="swatch-code">#EFEFF1</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--secondary-background-dull</div>
+        <div class="var-name">secondary-background-dull</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#EFEFF1</code>
@@ -4846,7 +4849,7 @@
         <span class="swatch-code">#DFDDE2</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--secondary-border-dull</div>
+        <div class="var-name">secondary-border-dull</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#DFDDE2</code>
@@ -4863,7 +4866,7 @@
         <span class="swatch-code">#262329</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--secondary-copy-dull</div>
+        <div class="var-name">secondary-copy-dull</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#262329</code>
@@ -4880,7 +4883,7 @@
         <span class="swatch-code">#645E6E</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--secondary-copy-light-dull</div>
+        <div class="var-name">secondary-copy-light-dull</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#645E6E</code>
@@ -4897,7 +4900,7 @@
         <span class="swatch-code">#8A8495</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--secondary-copy-lighter-dull</div>
+        <div class="var-name">secondary-copy-lighter-dull</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#8A8495</code>
@@ -4914,7 +4917,7 @@
         <span class="swatch-code">#262329</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--secondary-foreground-dull-inverse</div>
+        <div class="var-name">secondary-foreground-dull-inverse</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#262329</code>
@@ -4931,7 +4934,7 @@
         <span class="swatch-code">#19181B</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--secondary-background-dull-inverse</div>
+        <div class="var-name">secondary-background-dull-inverse</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#19181B</code>
@@ -4948,7 +4951,7 @@
         <span class="swatch-code">#3F3B45</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--secondary-border-dull-inverse</div>
+        <div class="var-name">secondary-border-dull-inverse</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#3F3B45</code>
@@ -4965,7 +4968,7 @@
         <span class="swatch-code">#FBFBFB</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--secondary-copy-dull-inverse</div>
+        <div class="var-name">secondary-copy-dull-inverse</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#FBFBFB</code>
@@ -4982,7 +4985,7 @@
         <span class="swatch-code">#D8D6DC</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--secondary-copy-light-dull-inverse</div>
+        <div class="var-name">secondary-copy-light-dull-inverse</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#D8D6DC</code>
@@ -4999,7 +5002,7 @@
         <span class="swatch-code">#A49FAC</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--secondary-copy-lighter-dull-inverse</div>
+        <div class="var-name">secondary-copy-lighter-dull-inverse</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#A49FAC</code>
@@ -5016,7 +5019,7 @@
         <span class="swatch-code">#FCFBFB</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--tertiary-foreground</div>
+        <div class="var-name">tertiary-foreground</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#FCFBFB</code>
@@ -5033,7 +5036,7 @@
         <span class="swatch-code">#F2EDEE</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--tertiary-background-color</div>
+        <div class="var-name">tertiary-background-color</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#F2EDEE</code>
@@ -5050,7 +5053,7 @@
         <span class="swatch-code">#E4DADB</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--tertiary-border</div>
+        <div class="var-name">tertiary-border</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#E4DADB</code>
@@ -5067,7 +5070,7 @@
         <span class="swatch-code">#2C2122</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--tertiary-copy</div>
+        <div class="var-name">tertiary-copy</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#2C2122</code>
@@ -5084,7 +5087,7 @@
         <span class="swatch-code">#75575A</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--tertiary-copy-light</div>
+        <div class="var-name">tertiary-copy-light</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#75575A</code>
@@ -5101,7 +5104,7 @@
         <span class="swatch-code">#9D7B7F</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--tertiary-copy-lighter</div>
+        <div class="var-name">tertiary-copy-lighter</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#9D7B7F</code>
@@ -5118,7 +5121,7 @@
         <span class="swatch-code">#2C2122</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--tertiary-foreground-inverse</div>
+        <div class="var-name">tertiary-foreground-inverse</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#2C2122</code>
@@ -5135,7 +5138,7 @@
         <span class="swatch-code">#1D1616</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--tertiary-background-inverse</div>
+        <div class="var-name">tertiary-background-inverse</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#1D1616</code>
@@ -5152,7 +5155,7 @@
         <span class="swatch-code">#493638</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--tertiary-border-inverse</div>
+        <div class="var-name">tertiary-border-inverse</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#493638</code>
@@ -5169,7 +5172,7 @@
         <span class="swatch-code">#FCFBFB</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--tertiary-copy-inverse</div>
+        <div class="var-name">tertiary-copy-inverse</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#FCFBFB</code>
@@ -5186,7 +5189,7 @@
         <span class="swatch-code">#DED3D4</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--tertiary-copy-light-inverse</div>
+        <div class="var-name">tertiary-copy-light-inverse</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#DED3D4</code>
@@ -5203,7 +5206,7 @@
         <span class="swatch-code">#B3989B</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--tertiary-copy-lighter-inverse</div>
+        <div class="var-name">tertiary-copy-lighter-inverse</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#B3989B</code>
@@ -5220,7 +5223,7 @@
         <span class="swatch-code">#FCFAFA</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--tertiary-foreground-saturated</div>
+        <div class="var-name">tertiary-foreground-saturated</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#FCFAFA</code>
@@ -5237,7 +5240,7 @@
         <span class="swatch-code">#F4EBEC</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--tertiary-background-saturated</div>
+        <div class="var-name">tertiary-background-saturated</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#F4EBEC</code>
@@ -5254,7 +5257,7 @@
         <span class="swatch-code">#E8D6D8</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--tertiary-border-saturated</div>
+        <div class="var-name">tertiary-border-saturated</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#E8D6D8</code>
@@ -5271,7 +5274,7 @@
         <span class="swatch-code">#311C1E</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--tertiary-copy-saturated</div>
+        <div class="var-name">tertiary-copy-saturated</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#311C1E</code>
@@ -5288,7 +5291,7 @@
         <span class="swatch-code">#824A50</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--tertiary-copy-light-saturated</div>
+        <div class="var-name">tertiary-copy-light-saturated</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#824A50</code>
@@ -5305,7 +5308,7 @@
         <span class="swatch-code">#AC6D73</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--tertiary-copy-lighter-saturated</div>
+        <div class="var-name">tertiary-copy-lighter-saturated</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#AC6D73</code>
@@ -5322,7 +5325,7 @@
         <span class="swatch-code">#311C1E</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--tertiary-foreground-saturated-inverse</div>
+        <div class="var-name">tertiary-foreground-saturated-inverse</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#311C1E</code>
@@ -5339,7 +5342,7 @@
         <span class="swatch-code">#211214</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--tertiary-background-saturated-inverse</div>
+        <div class="var-name">tertiary-background-saturated-inverse</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#211214</code>
@@ -5356,7 +5359,7 @@
         <span class="swatch-code">#512E32</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--tertiary-border-saturated-inverse</div>
+        <div class="var-name">tertiary-border-saturated-inverse</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#512E32</code>
@@ -5373,7 +5376,7 @@
         <span class="swatch-code">#FCFAFA</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--tertiary-copy-saturated-inverse</div>
+        <div class="var-name">tertiary-copy-saturated-inverse</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#FCFAFA</code>
@@ -5390,7 +5393,7 @@
         <span class="swatch-code">#E3CED0</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--tertiary-copy-light-saturated-inverse</div>
+        <div class="var-name">tertiary-copy-light-saturated-inverse</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#E3CED0</code>
@@ -5407,7 +5410,7 @@
         <span class="swatch-code">#BE8D92</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--tertiary-copy-lighter-saturated-inverse</div>
+        <div class="var-name">tertiary-copy-lighter-saturated-inverse</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#BE8D92</code>
@@ -5424,7 +5427,7 @@
         <span class="swatch-code">#FBFBFB</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--tertiary-foreground-dull</div>
+        <div class="var-name">tertiary-foreground-dull</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#FBFBFB</code>
@@ -5441,7 +5444,7 @@
         <span class="swatch-code">#F1EFEF</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--tertiary-background-dull</div>
+        <div class="var-name">tertiary-background-dull</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#F1EFEF</code>
@@ -5458,7 +5461,7 @@
         <span class="swatch-code">#E2DDDD</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--tertiary-border-dull</div>
+        <div class="var-name">tertiary-border-dull</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#E2DDDD</code>
@@ -5475,7 +5478,7 @@
         <span class="swatch-code">#292324</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--tertiary-copy-dull</div>
+        <div class="var-name">tertiary-copy-dull</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#292324</code>
@@ -5492,7 +5495,7 @@
         <span class="swatch-code">#6E5E60</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--tertiary-copy-light-dull</div>
+        <div class="var-name">tertiary-copy-light-dull</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#6E5E60</code>
@@ -5509,7 +5512,7 @@
         <span class="swatch-code">#958485</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--tertiary-copy-lighter-dull</div>
+        <div class="var-name">tertiary-copy-lighter-dull</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#958485</code>
@@ -5526,7 +5529,7 @@
         <span class="swatch-code">#292324</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--tertiary-foreground-dull-inverse</div>
+        <div class="var-name">tertiary-foreground-dull-inverse</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#292324</code>
@@ -5543,7 +5546,7 @@
         <span class="swatch-code">#1B1818</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--tertiary-background-dull-inverse</div>
+        <div class="var-name">tertiary-background-dull-inverse</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#1B1818</code>
@@ -5560,7 +5563,7 @@
         <span class="swatch-code">#453B3C</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--tertiary-border-dull-inverse</div>
+        <div class="var-name">tertiary-border-dull-inverse</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#453B3C</code>
@@ -5577,7 +5580,7 @@
         <span class="swatch-code">#FBFBFB</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--tertiary-copy-dull-inverse</div>
+        <div class="var-name">tertiary-copy-dull-inverse</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#FBFBFB</code>
@@ -5594,7 +5597,7 @@
         <span class="swatch-code">#DCD6D6</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--tertiary-copy-light-dull-inverse</div>
+        <div class="var-name">tertiary-copy-light-dull-inverse</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#DCD6D6</code>
@@ -5611,7 +5614,7 @@
         <span class="swatch-code">#AC9FA0</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--tertiary-copy-lighter-dull-inverse</div>
+        <div class="var-name">tertiary-copy-lighter-dull-inverse</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#AC9FA0</code>
@@ -5628,7 +5631,7 @@
         <span class="swatch-code">#FBFCFB</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--quaternary-foreground</div>
+        <div class="var-name">quaternary-foreground</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#FBFCFB</code>
@@ -5645,7 +5648,7 @@
         <span class="swatch-code">#F0F2ED</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--quaternary-background-color</div>
+        <div class="var-name">quaternary-background-color</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#F0F2ED</code>
@@ -5662,7 +5665,7 @@
         <span class="swatch-code">#E0E4DA</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--quaternary-border</div>
+        <div class="var-name">quaternary-border</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#E0E4DA</code>
@@ -5679,7 +5682,7 @@
         <span class="swatch-code">#272C21</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--quaternary-copy</div>
+        <div class="var-name">quaternary-copy</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#272C21</code>
@@ -5696,7 +5699,7 @@
         <span class="swatch-code">#697557</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--quaternary-copy-light</div>
+        <div class="var-name">quaternary-copy-light</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#697557</code>
@@ -5713,7 +5716,7 @@
         <span class="swatch-code">#8F9D7B</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--quaternary-copy-lighter</div>
+        <div class="var-name">quaternary-copy-lighter</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#8F9D7B</code>
@@ -5730,7 +5733,7 @@
         <span class="swatch-code">#272C21</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--quaternary-foreground-inverse</div>
+        <div class="var-name">quaternary-foreground-inverse</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#272C21</code>
@@ -5747,7 +5750,7 @@
         <span class="swatch-code">#1A1D16</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--quaternary-background-inverse</div>
+        <div class="var-name">quaternary-background-inverse</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#1A1D16</code>
@@ -5764,7 +5767,7 @@
         <span class="swatch-code">#414936</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--quaternary-border-inverse</div>
+        <div class="var-name">quaternary-border-inverse</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#414936</code>
@@ -5781,7 +5784,7 @@
         <span class="swatch-code">#FBFCFB</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--quaternary-copy-inverse</div>
+        <div class="var-name">quaternary-copy-inverse</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#FBFCFB</code>
@@ -5798,7 +5801,7 @@
         <span class="swatch-code">#DADED3</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--quaternary-copy-light-inverse</div>
+        <div class="var-name">quaternary-copy-light-inverse</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#DADED3</code>
@@ -5815,7 +5818,7 @@
         <span class="swatch-code">#A8B398</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--quaternary-copy-lighter-inverse</div>
+        <div class="var-name">quaternary-copy-lighter-inverse</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#A8B398</code>
@@ -5832,7 +5835,7 @@
         <span class="swatch-code">#FBFCFA</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--quaternary-foreground-saturated</div>
+        <div class="var-name">quaternary-foreground-saturated</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#FBFCFA</code>
@@ -5849,7 +5852,7 @@
         <span class="swatch-code">#F0F4EB</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--quaternary-background-saturated</div>
+        <div class="var-name">quaternary-background-saturated</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#F0F4EB</code>
@@ -5866,7 +5869,7 @@
         <span class="swatch-code">#E1E8D6</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--quaternary-border-saturated</div>
+        <div class="var-name">quaternary-border-saturated</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#E1E8D6</code>
@@ -5883,7 +5886,7 @@
         <span class="swatch-code">#28311C</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--quaternary-copy-saturated</div>
+        <div class="var-name">quaternary-copy-saturated</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#28311C</code>
@@ -5900,7 +5903,7 @@
         <span class="swatch-code">#6B824A</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--quaternary-copy-light-saturated</div>
+        <div class="var-name">quaternary-copy-light-saturated</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#6B824A</code>
@@ -5917,7 +5920,7 @@
         <span class="swatch-code">#92AC6D</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--quaternary-copy-lighter-saturated</div>
+        <div class="var-name">quaternary-copy-lighter-saturated</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#92AC6D</code>
@@ -5934,7 +5937,7 @@
         <span class="swatch-code">#28311C</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--quaternary-foreground-saturated-inverse</div>
+        <div class="var-name">quaternary-foreground-saturated-inverse</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#28311C</code>
@@ -5951,7 +5954,7 @@
         <span class="swatch-code">#1B2112</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--quaternary-background-saturated-inverse</div>
+        <div class="var-name">quaternary-background-saturated-inverse</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#1B2112</code>
@@ -5968,7 +5971,7 @@
         <span class="swatch-code">#43512E</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--quaternary-border-saturated-inverse</div>
+        <div class="var-name">quaternary-border-saturated-inverse</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#43512E</code>
@@ -5985,7 +5988,7 @@
         <span class="swatch-code">#FCFAFA</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--quaternary-copy-saturated-inverse</div>
+        <div class="var-name">quaternary-copy-saturated-inverse</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#FCFAFA</code>
@@ -6002,7 +6005,7 @@
         <span class="swatch-code">#DBE3CE</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--quaternary-copy-light-saturated-inverse</div>
+        <div class="var-name">quaternary-copy-light-saturated-inverse</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#DBE3CE</code>
@@ -6019,7 +6022,7 @@
         <span class="swatch-code">#AABE8D</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--quaternary-copy-lighter-saturated-inverse</div>
+        <div class="var-name">quaternary-copy-lighter-saturated-inverse</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#AABE8D</code>
@@ -6036,7 +6039,7 @@
         <span class="swatch-code">#FBFBFB</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--quaternary-foreground-dull</div>
+        <div class="var-name">quaternary-foreground-dull</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#FBFBFB</code>
@@ -6053,7 +6056,7 @@
         <span class="swatch-code">#F0F1EF</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--quaternary-background-dull</div>
+        <div class="var-name">quaternary-background-dull</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#F0F1EF</code>
@@ -6070,7 +6073,7 @@
         <span class="swatch-code">#E0E2DD</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--quaternary-border-dull</div>
+        <div class="var-name">quaternary-border-dull</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#E0E2DD</code>
@@ -6087,7 +6090,7 @@
         <span class="swatch-code">#272923</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--quaternary-copy-dull</div>
+        <div class="var-name">quaternary-copy-dull</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#272923</code>
@@ -6104,7 +6107,7 @@
         <span class="swatch-code">#676E5E</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--quaternary-copy-light-dull</div>
+        <div class="var-name">quaternary-copy-light-dull</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#676E5E</code>
@@ -6121,7 +6124,7 @@
         <span class="swatch-code">#8E9584</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--quaternary-copy-lighter-dull</div>
+        <div class="var-name">quaternary-copy-lighter-dull</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#8E9584</code>
@@ -6138,7 +6141,7 @@
         <span class="swatch-code">#272923</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--quaternary-foreground-dull-inverse</div>
+        <div class="var-name">quaternary-foreground-dull-inverse</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#272923</code>
@@ -6155,7 +6158,7 @@
         <span class="swatch-code">#1A1B18</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--quaternary-background-dull-inverse</div>
+        <div class="var-name">quaternary-background-dull-inverse</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#1A1B18</code>
@@ -6172,7 +6175,7 @@
         <span class="swatch-code">#41453B</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--quaternary-border-dull-inverse</div>
+        <div class="var-name">quaternary-border-dull-inverse</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#41453B</code>
@@ -6189,7 +6192,7 @@
         <span class="swatch-code">#FBFBFB</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--quaternary-copy-dull-inverse</div>
+        <div class="var-name">quaternary-copy-dull-inverse</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#FBFBFB</code>
@@ -6206,7 +6209,7 @@
         <span class="swatch-code">#D9DCD6</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--quaternary-copy-light-dull-inverse</div>
+        <div class="var-name">quaternary-copy-light-dull-inverse</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#D9DCD6</code>
@@ -6223,7 +6226,7 @@
         <span class="swatch-code">#A7AC9F</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--quaternary-copy-lighter-dull-inverse</div>
+        <div class="var-name">quaternary-copy-lighter-dull-inverse</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#A7AC9F</code>
@@ -6250,7 +6253,7 @@
         <span class="swatch-code">#D6ECEB</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--blue-lightest</div>
+        <div class="var-name">blue-lightest</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#D6ECEB</code>
@@ -6267,7 +6270,7 @@
         <span class="swatch-code">#C8E5E4</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--blue-lighter</div>
+        <div class="var-name">blue-lighter</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#C8E5E4</code>
@@ -6284,7 +6287,7 @@
         <span class="swatch-code">#BADEDD</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--blue-base</div>
+        <div class="var-name">blue-base</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#BADEDD</code>
@@ -6301,7 +6304,7 @@
         <span class="swatch-code">#ACCED0</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--blue-darker</div>
+        <div class="var-name">blue-darker</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#ACCED0</code>
@@ -6318,7 +6321,7 @@
         <span class="swatch-code">#9EC2C4</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--blue-darkest</div>
+        <div class="var-name">blue-darkest</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#9EC2C4</code>
@@ -6335,7 +6338,7 @@
         <span class="swatch-code">#59CEE0</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--azure-lightest</div>
+        <div class="var-name">azure-lightest</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#59CEE0</code>
@@ -6352,7 +6355,7 @@
         <span class="swatch-code">#3CC3D6</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--azure-lighter</div>
+        <div class="var-name">azure-lighter</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#3CC3D6</code>
@@ -6369,7 +6372,7 @@
         <span class="swatch-code">#1FB8CD</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--azure-base</div>
+        <div class="var-name">azure-base</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#1FB8CD</code>
@@ -6386,7 +6389,7 @@
         <span class="swatch-code">#17A6BA</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--azure-darker</div>
+        <div class="var-name">azure-darker</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#17A6BA</code>
@@ -6403,7 +6406,7 @@
         <span class="swatch-code">#1094A7</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--azure-darkest</div>
+        <div class="var-name">azure-darkest</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#1094A7</code>
@@ -6420,7 +6423,7 @@
         <span class="swatch-code">#35B4C5</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--teal-lightest</div>
+        <div class="var-name">teal-lightest</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#35B4C5</code>
@@ -6437,7 +6440,7 @@
         <span class="swatch-code">#2A9AA9</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--teal-lighter</div>
+        <div class="var-name">teal-lighter</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#2A9AA9</code>
@@ -6454,7 +6457,7 @@
         <span class="swatch-code">#20808D</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--teal-base</div>
+        <div class="var-name">teal-base</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#20808D</code>
@@ -6471,7 +6474,7 @@
         <span class="swatch-code">#17697A</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--teal-darker</div>
+        <div class="var-name">teal-darker</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#17697A</code>
@@ -6488,7 +6491,7 @@
         <span class="swatch-code">#0F5367</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--teal-darkest</div>
+        <div class="var-name">teal-darkest</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#0F5367</code>
@@ -6505,7 +6508,7 @@
         <span class="swatch-code">#25545F</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--navy-lightest</div>
+        <div class="var-name">navy-lightest</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#25545F</code>
@@ -6522,7 +6525,7 @@
         <span class="swatch-code">#1C444D</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--navy-lighter</div>
+        <div class="var-name">navy-lighter</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#1C444D</code>
@@ -6539,7 +6542,7 @@
         <span class="swatch-code">#13343B</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--navy-base</div>
+        <div class="var-name">navy-base</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#13343B</code>
@@ -6556,7 +6559,7 @@
         <span class="swatch-code">#0B272D</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--navy-darker</div>
+        <div class="var-name">navy-darker</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#0B272D</code>
@@ -6573,7 +6576,7 @@
         <span class="swatch-code">#041A1F</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--navy-darkest</div>
+        <div class="var-name">navy-darkest</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#041A1F</code>
@@ -6590,7 +6593,7 @@
         <span class="swatch-code">#467882</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--slate-lightest</div>
+        <div class="var-name">slate-lightest</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#467882</code>
@@ -6607,7 +6610,7 @@
         <span class="swatch-code">#3A6770</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--slate-lighter</div>
+        <div class="var-name">slate-lighter</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#3A6770</code>
@@ -6624,7 +6627,7 @@
         <span class="swatch-code">#2E565E</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--slate-base</div>
+        <div class="var-name">slate-base</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#2E565E</code>
@@ -6641,7 +6644,7 @@
         <span class="swatch-code">#23454C</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--slate-darker</div>
+        <div class="var-name">slate-darker</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#23454C</code>
@@ -6658,7 +6661,7 @@
         <span class="swatch-code">#18343A</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--slate-darkest</div>
+        <div class="var-name">slate-darkest</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#18343A</code>
@@ -6675,7 +6678,7 @@
         <span class="swatch-code">#88A7AC</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--steel-lightest</div>
+        <div class="var-name">steel-lightest</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#88A7AC</code>
@@ -6692,7 +6695,7 @@
         <span class="swatch-code">#759499</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--steel-lighter</div>
+        <div class="var-name">steel-lighter</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#759499</code>
@@ -6709,7 +6712,7 @@
         <span class="swatch-code">#628086</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--steel-base</div>
+        <div class="var-name">steel-base</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#628086</code>
@@ -6726,7 +6729,7 @@
         <span class="swatch-code">#506C71</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--steel-darker</div>
+        <div class="var-name">steel-darker</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#506C71</code>
@@ -6743,7 +6746,7 @@
         <span class="swatch-code">#3F585C</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--steel-darkest</div>
+        <div class="var-name">steel-darkest</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#3F585C</code>
@@ -6760,7 +6763,7 @@
         <span class="swatch-code">#B8C7CA</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--pewter-lightest</div>
+        <div class="var-name">pewter-lightest</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#B8C7CA</code>
@@ -6777,7 +6780,7 @@
         <span class="swatch-code">#A7B9BC</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--pewter-lighter</div>
+        <div class="var-name">pewter-lighter</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#A7B9BC</code>
@@ -6794,7 +6797,7 @@
         <span class="swatch-code">#96AAAE</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--pewter-base</div>
+        <div class="var-name">pewter-base</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#96AAAE</code>
@@ -6811,7 +6814,7 @@
         <span class="swatch-code">#85999D</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--pewter-darker</div>
+        <div class="var-name">pewter-darker</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#85999D</code>
@@ -6828,7 +6831,7 @@
         <span class="swatch-code">#74888C</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--pewter-darkest</div>
+        <div class="var-name">pewter-darkest</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#74888C</code>
@@ -6845,7 +6848,7 @@
         <span class="swatch-code">#EFF3F4</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--mist-lightest</div>
+        <div class="var-name">mist-lightest</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#EFF3F4</code>
@@ -6862,7 +6865,7 @@
         <span class="swatch-code">#E2E8E9</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--mist-lighter</div>
+        <div class="var-name">mist-lighter</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#E2E8E9</code>
@@ -6879,7 +6882,7 @@
         <span class="swatch-code">#D5DDDF</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--mist-base</div>
+        <div class="var-name">mist-base</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#D5DDDF</code>
@@ -6896,7 +6899,7 @@
         <span class="swatch-code">#C8D2D5</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--mist-darker</div>
+        <div class="var-name">mist-darker</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#C8D2D5</code>
@@ -6913,7 +6916,7 @@
         <span class="swatch-code">#BBC7CA</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--mist-darkest</div>
+        <div class="var-name">mist-darkest</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#BBC7CA</code>
@@ -6930,7 +6933,7 @@
         <span class="swatch-code">#FFFFFF</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--frost-lightest</div>
+        <div class="var-name">frost-lightest</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#FFFFFF</code>
@@ -6947,7 +6950,7 @@
         <span class="swatch-code">#F5F7F7</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--frost-lighter</div>
+        <div class="var-name">frost-lighter</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#F5F7F7</code>
@@ -6964,7 +6967,7 @@
         <span class="swatch-code">#EAEEEF</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--frost-base</div>
+        <div class="var-name">frost-base</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#EAEEEF</code>
@@ -6981,7 +6984,7 @@
         <span class="swatch-code">#DEE3E5</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--frost-darker</div>
+        <div class="var-name">frost-darker</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#DEE3E5</code>
@@ -6998,7 +7001,7 @@
         <span class="swatch-code">#D2D8DB</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--frost-darkest</div>
+        <div class="var-name">frost-darkest</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#D2D8DB</code>
@@ -7015,7 +7018,7 @@
         <span class="swatch-code">#F7F7EF</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--cream-lightest</div>
+        <div class="var-name">cream-lightest</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#F7F7EF</code>
@@ -7032,7 +7035,7 @@
         <span class="swatch-code">#EEEEE2</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--cream-lighter</div>
+        <div class="var-name">cream-lighter</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#EEEEE2</code>
@@ -7049,7 +7052,7 @@
         <span class="swatch-code">#E4E3D4</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--cream-base</div>
+        <div class="var-name">cream-base</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#E4E3D4</code>
@@ -7066,7 +7069,7 @@
         <span class="swatch-code">#D9D8C6</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--cream-darker</div>
+        <div class="var-name">cream-darker</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#D9D8C6</code>
@@ -7083,7 +7086,7 @@
         <span class="swatch-code">#CECDB8</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--cream-darkest</div>
+        <div class="var-name">cream-darkest</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#CECDB8</code>
@@ -7100,7 +7103,7 @@
         <span class="swatch-code">#FFFFFF</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--ivory-lightest</div>
+        <div class="var-name">ivory-lightest</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#FFFFFF</code>
@@ -7117,7 +7120,7 @@
         <span class="swatch-code">#FFFFFF</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--ivory-lighter</div>
+        <div class="var-name">ivory-lighter</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#FFFFFF</code>
@@ -7134,7 +7137,7 @@
         <span class="swatch-code">#FBFAF4</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--ivory-base</div>
+        <div class="var-name">ivory-base</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#FBFAF4</code>
@@ -7151,7 +7154,7 @@
         <span class="swatch-code">#F0EFE6</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--ivory-darker</div>
+        <div class="var-name">ivory-darker</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#F0EFE6</code>
@@ -7168,7 +7171,7 @@
         <span class="swatch-code">#E5E3D8</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--ivory-darkest</div>
+        <div class="var-name">ivory-darkest</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#E5E3D8</code>
@@ -7185,7 +7188,7 @@
         <span class="swatch-code">#FFFFFF</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--eggshell-lightest</div>
+        <div class="var-name">eggshell-lightest</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#FFFFFF</code>
@@ -7202,7 +7205,7 @@
         <span class="swatch-code">#FAFAF7</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--eggshell-lighter</div>
+        <div class="var-name">eggshell-lighter</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#FAFAF7</code>
@@ -7219,7 +7222,7 @@
         <span class="swatch-code">#F3F3EE</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--eggshell-base</div>
+        <div class="var-name">eggshell-base</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#F3F3EE</code>
@@ -7236,7 +7239,7 @@
         <span class="swatch-code">#E8E8E1</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--eggshell-darker</div>
+        <div class="var-name">eggshell-darker</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#E8E8E1</code>
@@ -7253,7 +7256,7 @@
         <span class="swatch-code">#DDDDD4</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--eggshell-darkest</div>
+        <div class="var-name">eggshell-darkest</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#DDDDD4</code>
@@ -7270,7 +7273,7 @@
         <span class="swatch-code">#FFFFFF</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--offwhite-lightest</div>
+        <div class="var-name">offwhite-lightest</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#FFFFFF</code>
@@ -7287,7 +7290,7 @@
         <span class="swatch-code">#FFFFFF</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--offwhite-lighter</div>
+        <div class="var-name">offwhite-lighter</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#FFFFFF</code>
@@ -7304,7 +7307,7 @@
         <span class="swatch-code">#FCFCF9</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--offwhite-base</div>
+        <div class="var-name">offwhite-base</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#FCFCF9</code>
@@ -7321,7 +7324,7 @@
         <span class="swatch-code">#F1F1EB</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--offwhite-darker</div>
+        <div class="var-name">offwhite-darker</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#F1F1EB</code>
@@ -7338,7 +7341,7 @@
         <span class="swatch-code">#E6E6DD</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--offwhite-darkest</div>
+        <div class="var-name">offwhite-darkest</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#E6E6DD</code>
@@ -7355,7 +7358,7 @@
         <span class="swatch-code">#FFFFFF</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--white-lightest</div>
+        <div class="var-name">white-lightest</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#FFFFFF</code>
@@ -7372,7 +7375,7 @@
         <span class="swatch-code">#FFFFFF</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--white-lighter</div>
+        <div class="var-name">white-lighter</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#FFFFFF</code>
@@ -7389,7 +7392,7 @@
         <span class="swatch-code">#FFFFFF</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--white-base</div>
+        <div class="var-name">white-base</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#FFFFFF</code>
@@ -7406,7 +7409,7 @@
         <span class="swatch-code">#F2F2F2</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--white-darker</div>
+        <div class="var-name">white-darker</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#F2F2F2</code>
@@ -7423,7 +7426,7 @@
         <span class="swatch-code">#E6E6E6</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--white-darkest</div>
+        <div class="var-name">white-darkest</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#E6E6E6</code>
@@ -7440,7 +7443,7 @@
         <span class="swatch-code">#FFEACC</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--peach-lightest</div>
+        <div class="var-name">peach-lightest</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#FFEACC</code>
@@ -7457,7 +7460,7 @@
         <span class="swatch-code">#FFDEB9</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--peach-lighter</div>
+        <div class="var-name">peach-lighter</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#FFDEB9</code>
@@ -7474,7 +7477,7 @@
         <span class="swatch-code">#FFD2A6</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--peach-base</div>
+        <div class="var-name">peach-base</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#FFD2A6</code>
@@ -7491,7 +7494,7 @@
         <span class="swatch-code">#FFC693</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--peach-darker</div>
+        <div class="var-name">peach-darker</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#FFC693</code>
@@ -7508,7 +7511,7 @@
         <span class="swatch-code">#FFBA80</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--peach-darkest</div>
+        <div class="var-name">peach-darkest</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#FFBA80</code>
@@ -7525,7 +7528,7 @@
         <span class="swatch-code">#D26949</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--rust-lightest</div>
+        <div class="var-name">rust-lightest</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#D26949</code>
@@ -7542,7 +7545,7 @@
         <span class="swatch-code">#BD5A3C</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--rust-lighter</div>
+        <div class="var-name">rust-lighter</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#BD5A3C</code>
@@ -7559,7 +7562,7 @@
         <span class="swatch-code">#A84B2F</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--rust-base</div>
+        <div class="var-name">rust-base</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#A84B2F</code>
@@ -7576,7 +7579,7 @@
         <span class="swatch-code">#933D23</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--rust-darker</div>
+        <div class="var-name">rust-darker</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#933D23</code>
@@ -7593,7 +7596,7 @@
         <span class="swatch-code">#7E2F18</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--rust-darkest</div>
+        <div class="var-name">rust-darkest</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#7E2F18</code>
@@ -7610,7 +7613,7 @@
         <span class="swatch-code">#BC6274</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--burgundy-lightest</div>
+        <div class="var-name">burgundy-lightest</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#BC6274</code>
@@ -7627,7 +7630,7 @@
         <span class="swatch-code">#A85364</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--burgundy-lighter</div>
+        <div class="var-name">burgundy-lighter</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#A85364</code>
@@ -7644,7 +7647,7 @@
         <span class="swatch-code">#944454</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--burgundy-base</div>
+        <div class="var-name">burgundy-base</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#944454</code>
@@ -7661,7 +7664,7 @@
         <span class="swatch-code">#803644</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--burgundy-darker</div>
+        <div class="var-name">burgundy-darker</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#803644</code>
@@ -7678,7 +7681,7 @@
         <span class="swatch-code">#6C2834</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--burgundy-darkest</div>
+        <div class="var-name">burgundy-darkest</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#6C2834</code>
@@ -7695,7 +7698,7 @@
         <span class="swatch-code">#D25C4C</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--brick-lightest</div>
+        <div class="var-name">brick-lightest</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#D25C4C</code>
@@ -7712,7 +7715,7 @@
         <span class="swatch-code">#BD4D3F</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--brick-lighter</div>
+        <div class="var-name">brick-lighter</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#BD4D3F</code>
@@ -7729,7 +7732,7 @@
         <span class="swatch-code">#A83E32</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--brick-base</div>
+        <div class="var-name">brick-base</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#A83E32</code>
@@ -7746,7 +7749,7 @@
         <span class="swatch-code">#932F25</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--brick-darker</div>
+        <div class="var-name">brick-darker</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#932F25</code>
@@ -7763,7 +7766,7 @@
         <span class="swatch-code">#7E2118</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--brick-darkest</div>
+        <div class="var-name">brick-darkest</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#7E2118</code>
@@ -7780,7 +7783,7 @@
         <span class="swatch-code">#F73D3D</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--crimson-lightest</div>
+        <div class="var-name">crimson-lightest</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#F73D3D</code>
@@ -7797,7 +7800,7 @@
         <span class="swatch-code">#E02A2A</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--crimson-lighter</div>
+        <div class="var-name">crimson-lighter</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#E02A2A</code>
@@ -7814,7 +7817,7 @@
         <span class="swatch-code">#C91717</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--crimson-base</div>
+        <div class="var-name">crimson-base</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#C91717</code>
@@ -7831,7 +7834,7 @@
         <span class="swatch-code">#B20D0D</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--crimson-darker</div>
+        <div class="var-name">crimson-darker</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#B20D0D</code>
@@ -7848,7 +7851,7 @@
         <span class="swatch-code">#9B0303</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--crimson-darkest</div>
+        <div class="var-name">crimson-darkest</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#9B0303</code>
@@ -7865,7 +7868,7 @@
         <span class="swatch-code">#424252</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--charcoal-lightest</div>
+        <div class="var-name">charcoal-lightest</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#424252</code>
@@ -7882,7 +7885,7 @@
         <span class="swatch-code">#363642</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--charcoal-lighter</div>
+        <div class="var-name">charcoal-lighter</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#363642</code>
@@ -7899,7 +7902,7 @@
         <span class="swatch-code">#2A2A32</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--charcoal-base</div>
+        <div class="var-name">charcoal-base</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#2A2A32</code>
@@ -7916,7 +7919,7 @@
         <span class="swatch-code">#1F1F25</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--charcoal-darker</div>
+        <div class="var-name">charcoal-darker</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#1F1F25</code>
@@ -7933,7 +7936,7 @@
         <span class="swatch-code">#141418</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--charcoal-darkest</div>
+        <div class="var-name">charcoal-darkest</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#141418</code>
@@ -7950,7 +7953,7 @@
         <span class="swatch-code">#33C798</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--emerald-lightest</div>
+        <div class="var-name">emerald-lightest</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#33C798</code>
@@ -7967,7 +7970,7 @@
         <span class="swatch-code">#25B788</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--emerald-lighter</div>
+        <div class="var-name">emerald-lighter</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#25B788</code>
@@ -7984,7 +7987,7 @@
         <span class="swatch-code">#17A778</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--emerald-base</div>
+        <div class="var-name">emerald-base</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#17A778</code>
@@ -8001,7 +8004,7 @@
         <span class="swatch-code">#0F9768</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--emerald-darker</div>
+        <div class="var-name">emerald-darker</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#0F9768</code>
@@ -8018,7 +8021,7 @@
         <span class="swatch-code">#078758</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--emerald-darkest</div>
+        <div class="var-name">emerald-darkest</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#078758</code>
@@ -8035,7 +8038,7 @@
         <span class="swatch-code">#FFE198</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--amber-lightest</div>
+        <div class="var-name">amber-lightest</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#FFE198</code>
@@ -8052,7 +8055,7 @@
         <span class="swatch-code">#FFD97F</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--amber-lighter</div>
+        <div class="var-name">amber-lighter</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#FFD97F</code>
@@ -8069,7 +8072,7 @@
         <span class="swatch-code">#FFD166</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--amber-base</div>
+        <div class="var-name">amber-base</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#FFD166</code>
@@ -8086,7 +8089,7 @@
         <span class="swatch-code">#FFC94D</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--amber-darker</div>
+        <div class="var-name">amber-darker</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#FFC94D</code>
@@ -8103,7 +8106,7 @@
         <span class="swatch-code">#FFC134</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--amber-darkest</div>
+        <div class="var-name">amber-darkest</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#FFC134</code>
@@ -8120,7 +8123,7 @@
         <span class="swatch-code">#9F84C7</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--lavender-lightest</div>
+        <div class="var-name">lavender-lightest</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#9F84C7</code>
@@ -8137,7 +8140,7 @@
         <span class="swatch-code">#8D71B7</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--lavender-lighter</div>
+        <div class="var-name">lavender-lighter</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#8D71B7</code>
@@ -8154,7 +8157,7 @@
         <span class="swatch-code">#7B5EA7</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--lavender-base</div>
+        <div class="var-name">lavender-base</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#7B5EA7</code>
@@ -8171,7 +8174,7 @@
         <span class="swatch-code">#694D92</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--lavender-darker</div>
+        <div class="var-name">lavender-darker</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#694D92</code>
@@ -8188,7 +8191,7 @@
         <span class="swatch-code">#573C7D</span>
       </div>
       <div class="swatch-meta">
-        <div class="var-name">--lavender-darkest</div>
+        <div class="var-name">lavender-darkest</div>
         <div class="value-row">
           <span class="label">Hex</span>
           <code>#573C7D</code>
