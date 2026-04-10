@@ -5914,10 +5914,10 @@ if ('serviceWorker' in navigator) {
     });
   }).catch(() => {});
 
-  // On reconnect: bust cache so next navigation fetches fresh HTML
+  // On reconnect: refresh the cached HTML in the background (do NOT delete the cache)
   window.addEventListener('online', () => {
     if (navigator.serviceWorker.controller) {
-      navigator.serviceWorker.controller.postMessage('CACHE_BUST');
+      navigator.serviceWorker.controller.postMessage('REFRESH_CACHE');
     }
   });
 }

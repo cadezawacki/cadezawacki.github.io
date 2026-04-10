@@ -3,7 +3,7 @@
 // Strategy: Network-first for pages, stale-while-revalidate for assets
 // ============================================
 
-const CACHE_VERSION = 1;
+const CACHE_VERSION = 2;
 const CACHE_NAME = `cade-v${CACHE_VERSION}`;
 
 // Same-origin pages to precache on install
@@ -27,8 +27,9 @@ self.addEventListener('install', (e) => {
         fetch(url, { mode: 'no-cors' }).then(r => cache.put(url, r))
       )
     );
+    // skipWaiting after caching is done so the SW never activates with an empty cache
+    await self.skipWaiting();
   })());
-  self.skipWaiting();
 });
 
 // ---- Activate: purge old caches, claim clients ----
@@ -68,11 +69,11 @@ self.addEventListener('fetch', (e) => {
 // ---- Message channel ----
 self.addEventListener('message', (e) => {
   if (e.data === 'SKIP_WAITING') self.skipWaiting();
-  if (e.data === 'CACHE_BUST') {
+  // REFRESH_CACHE: re-fetch and update the HTML cache in the background when back online.
+  // (Replaces the old CACHE_BUST which deleted everything — that was causing white screens.)
+  if (e.data === 'REFRESH_CACHE') {
     caches.open(CACHE_NAME).then(cache =>
-      cache.keys().then(keys =>
-        Promise.all(keys.map(k => cache.delete(k)))
-      )
+      cache.addAll(PRECACHE).catch(() => {})
     );
   }
 });
