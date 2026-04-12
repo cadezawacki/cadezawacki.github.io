@@ -5961,16 +5961,16 @@ function main(ctx) {
   var topBtn = document.getElementById('mobile-scroll-top');
   var btmBtn = document.getElementById('mobile-scroll-bottom');
   if (!topBtn || !btmBtn) return;
-  function getScroller() {
-    return document.querySelector('.cm-scroller');
-  }
   topBtn.addEventListener('click', function() {
-    var s = getScroller();
-    if (s) s.scrollTo({ top: 0, behavior: 'smooth' });
+    // Use CM6's API so virtualized content scrolls correctly
+    if (typeof editor !== 'undefined' && typeof EditorView !== 'undefined') {
+      editor.dispatch({ effects: EditorView.scrollIntoView(0) });
+    }
   });
   btmBtn.addEventListener('click', function() {
-    var s = getScroller();
-    if (s) s.scrollTo({ top: s.scrollHeight, behavior: 'smooth' });
+    if (typeof editor !== 'undefined' && typeof EditorView !== 'undefined') {
+      editor.dispatch({ effects: EditorView.scrollIntoView(editor.state.doc.length) });
+    }
   });
 })();
 
