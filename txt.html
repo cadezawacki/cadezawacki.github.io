@@ -1002,6 +1002,54 @@ body {
 
 /* @completed tag styling */
 .cm-completed-count { color: var(--text-muted); font-size: var(--text-sm); margin-left: 0.5ch; }
+
+/* ============================================
+   MOBILE SCROLL BUTTONS
+   ============================================ */
+.mobile-scroll-btns {
+  display: none;
+}
+
+@media (max-width: 600px) {
+  .mobile-scroll-btns {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    position: fixed;
+    right: 10px;
+    bottom: 36px;
+    z-index: 500;
+    pointer-events: none;
+  }
+  .mobile-scroll-btn {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    border: 1px solid rgba(128, 128, 128, 0.2);
+    background: rgba(15, 149, 152, 0.15);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    color: var(--text);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    opacity: 0.55;
+    transition: opacity 120ms ease;
+    -webkit-tap-highlight-color: transparent;
+    pointer-events: all;
+  }
+  .mobile-scroll-btn:active {
+    opacity: 1;
+    background: rgba(15, 149, 152, 0.35);
+  }
+  .mobile-scroll-btn svg {
+    width: 15px;
+    height: 15px;
+    stroke: var(--text);
+    flex-shrink: 0;
+  }
+}
 </style>
 </head>
 <body>
@@ -1135,6 +1183,16 @@ body {
 
 <!-- ========== EDITOR ========== -->
 <div class="editor-wrap" id="editor-wrap"></div>
+
+<!-- ========== MOBILE SCROLL BUTTONS ========== -->
+<div class="mobile-scroll-btns" aria-hidden="true">
+  <button class="mobile-scroll-btn" id="mobile-scroll-top" aria-label="Scroll to top">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>
+  </button>
+  <button class="mobile-scroll-btn" id="mobile-scroll-bottom" aria-label="Scroll to bottom">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+  </button>
+</div>
 
 <!-- ========== FOOTER ========== -->
 <div class="footer">
@@ -5898,6 +5956,24 @@ function main(ctx) {
 })();
 </script>
 <script>
+// Mobile scroll buttons
+(function() {
+  var topBtn = document.getElementById('mobile-scroll-top');
+  var btmBtn = document.getElementById('mobile-scroll-bottom');
+  if (!topBtn || !btmBtn) return;
+  function getScroller() {
+    return document.querySelector('.cm-scroller');
+  }
+  topBtn.addEventListener('click', function() {
+    var s = getScroller();
+    if (s) s.scrollTo({ top: 0, behavior: 'smooth' });
+  });
+  btmBtn.addEventListener('click', function() {
+    var s = getScroller();
+    if (s) s.scrollTo({ top: s.scrollHeight, behavior: 'smooth' });
+  });
+})();
+
 // Service Worker registration
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('./sw.js').then(reg => {
