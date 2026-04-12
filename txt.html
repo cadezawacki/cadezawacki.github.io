@@ -1080,11 +1080,16 @@ body {
         <kbd id="kbd-rerun">Ctrl+Shift+K</kbd>
       </button>
       <div class="menu-separator"></div>
+      <button class="menu-item" onclick="importFiles()">
+        <span>Import Files…</span>
+        <span></span>
+      </button>
       <button class="menu-item" onclick="clearEditor()">
         <span>Clear Editor</span>
         <kbd id="kbd-clear">Ctrl+L</kbd>
       </button>
     </div>
+    <input type="file" id="import-file-input" multiple style="display:none;">
   </div>
 
   <!-- Sync Menu -->
@@ -1631,91 +1636,79 @@ window.toggleTodoAtCursor = function() {
 };
 
 // Enter key handler — auto-continue list items, remove empty ones
-// Supports: [ ] checkboxes, 1. 2. 3. numbers, A. B. C. letters,
+// Supports: [ ] checkboxes, 1. / 1) numbers, A. / a) letters,
 //           [1] [2] [3] bracketed numbers, - • * bullets
-const listEnterHandler = keymap.of([{
-  key: 'Enter',
-  run(view) {
-    const sel = view.state.selection.main;
-    if (sel.from !== sel.to) return false;
-    const line = view.state.doc.lineAt(sel.head);
-    const text = line.text;
+// Returns { nextInsert } for continuation, 'empty' to break out of the list,
+// or null when the current line is not a list item.
+function resolveListContinuation(state, line) {
+  const text = line.text;
+  let match;
 
-    // Try each list pattern in order of specificity
-    let match, nextInsert, emptyCheck;
+  // [ ] checkbox (only on @type: todo pages)
+  if (isTodoPage(state) && (match = text.match(/^(\s*(?:[-•*]\s+)?)\[([ xX])\](\s)(.*)/))) {
+    const prefix = match[1];
+    const after = match[4];
+    if (after.trim() === '') return 'empty';
+    return { nextInsert: '\n' + prefix + '[ ] ' };
+  }
+  // [1] [2] [3] bracketed numbers
+  if ((match = text.match(/^(\s*)\[(\d+)\](\s)(.*)/))) {
+    const indent = match[1];
+    const num = parseInt(match[2], 10);
+    const after = match[4];
+    if (after.trim() === '') return 'empty';
+    return { nextInsert: '\n' + indent + '[' + (num + 1) + '] ' };
+  }
+  // 1. 2. 3. or 1) 2) 3) numbered list
+  if ((match = text.match(/^(\s*)(\d+)([.)])(\s)(.*)/))) {
+    const indent = match[1];
+    const num = parseInt(match[2], 10);
+    const sep = match[3];
+    const after = match[5];
+    if (after.trim() === '') return 'empty';
+    return { nextInsert: '\n' + indent + (num + 1) + sep + ' ' };
+  }
+  // A. B. C. / a. b. c. / A) a) letter list
+  if ((match = text.match(/^(\s*)([A-Za-z])([.)])(\s)(.*)/))) {
+    const indent = match[1];
+    const letter = match[2];
+    const sep = match[3];
+    const after = match[5];
+    if (after.trim() === '') return 'empty';
+    const nextChar = String.fromCharCode(letter.charCodeAt(0) + 1);
+    // Only continue if next char is still a letter
+    if (!/[A-Za-z]/.test(nextChar)) return null;
+    return { nextInsert: '\n' + indent + nextChar + sep + ' ' };
+  }
+  // - • * bullet lists
+  if ((match = text.match(/^(\s*)([-•*])(\s)(.*)/))) {
+    const indent = match[1];
+    const bullet = match[2];
+    const after = match[4];
+    if (after.trim() === '') return 'empty';
+    return { nextInsert: '\n' + indent + bullet + ' ' };
+  }
+  return null;
+}
 
-    // [ ] checkbox (only on @type: todo pages)
-    if (isTodoPage(view.state) && (match = text.match(/^(\s*(?:[-•*]\s+)?)\[([ xX])\]\s(.*)/))) {
-      const prefix = match[1];
-      const after = match[3];
-      if (after.trim() === '') {
-        // Empty checkbox — remove line
-        view.dispatch({ changes: { from: line.from, to: line.to, insert: '' } });
-        return true;
-      }
-      nextInsert = '\n' + prefix + '[ ] ';
-    }
-    // [1] [2] [3] bracketed numbers
-    else if ((match = text.match(/^(\s*)\[(\d+)\]\s(.*)/))) {
-      const indent = match[1];
-      const num = parseInt(match[2], 10);
-      const after = match[3];
-      if (after.trim() === '') {
-        view.dispatch({ changes: { from: line.from, to: line.to, insert: '' } });
-        return true;
-      }
-      nextInsert = '\n' + indent + '[' + (num + 1) + '] ';
-    }
-    // 1. 2. 3. numbered list
-    else if ((match = text.match(/^(\s*)(\d+)\.\s(.*)/))) {
-      const indent = match[1];
-      const num = parseInt(match[2], 10);
-      const after = match[3];
-      if (after.trim() === '') {
-        view.dispatch({ changes: { from: line.from, to: line.to, insert: '' } });
-        return true;
-      }
-      nextInsert = '\n' + indent + (num + 1) + '. ';
-    }
-    // A. B. C. or a. b. c. letter list
-    else if ((match = text.match(/^(\s*)([A-Za-z])\.\s(.*)/))) {
-      const indent = match[1];
-      const letter = match[2];
-      const after = match[3];
-      if (after.trim() === '') {
-        view.dispatch({ changes: { from: line.from, to: line.to, insert: '' } });
-        return true;
-      }
-      const nextChar = String.fromCharCode(letter.charCodeAt(0) + 1);
-      // Only continue if next char is still a letter
-      if (/[A-Za-z]/.test(nextChar)) {
-        nextInsert = '\n' + indent + nextChar + '. ';
-      } else {
-        return false;
-      }
-    }
-    // - • * bullet lists
-    else if ((match = text.match(/^(\s*)([-•*])\s(.*)/))) {
-      const indent = match[1];
-      const bullet = match[2];
-      const after = match[3];
-      if (after.trim() === '') {
-        view.dispatch({ changes: { from: line.from, to: line.to, insert: '' } });
-        return true;
-      }
-      nextInsert = '\n' + indent + bullet + ' ';
-    }
-    else {
-      return false;
-    }
-
-    view.dispatch({
-      changes: { from: sel.head, insert: nextInsert },
-      selection: { anchor: sel.head + nextInsert.length },
-    });
+function handleListEnter(view) {
+  const sel = view.state.selection.main;
+  if (sel.from !== sel.to) return false;
+  const line = view.state.doc.lineAt(sel.head);
+  const result = resolveListContinuation(view.state, line);
+  if (!result) return false;
+  if (result === 'empty') {
+    view.dispatch({ changes: { from: line.from, to: line.to, insert: '' } });
     return true;
-  },
-}]);
+  }
+  view.dispatch({
+    changes: { from: sel.head, insert: result.nextInsert },
+    selection: { anchor: sel.head + result.nextInsert.length },
+  });
+  return true;
+}
+
+const listEnterHandler = keymap.of([{ key: 'Enter', run: handleListEnter }]);
 
 const editorState = EditorState.create({
   doc: savedContent,
@@ -3827,6 +3820,123 @@ window.clearEditor = function() {
   showToast('Editor cleared', 'success', 2000);
 };
 
+// ============================================
+// IMPORT FILES — multi-select files and append to editor in advFile.html style:
+//   <filename>
+//   ```
+//   <contents>
+//   ```
+// JSZip is already loaded globally, so .zip archives are unpacked transparently.
+// ============================================
+function readFileAsText(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error('Error reading ' + file.name));
+    reader.readAsText(file);
+  });
+}
+
+function formatImportedFile(path, content) {
+  return `${path}\n\`\`\`\n${content}\n\`\`\`\n\n`;
+}
+
+async function expandZipFiles(files) {
+  const out = [];
+  for (const file of files) {
+    const isZip = file.name.toLowerCase().endsWith('.zip');
+    if (isZip && typeof JSZip !== 'undefined') {
+      try {
+        const zip = await JSZip.loadAsync(file);
+        const entries = [];
+        zip.forEach((relativePath, zipEntry) => {
+          if (!zipEntry.dir) entries.push({ relativePath, zipEntry });
+        });
+        for (const { relativePath, zipEntry } of entries) {
+          const blob = await zipEntry.async('blob');
+          const name = relativePath.split('/').pop();
+          const extracted = new File([blob], name, { type: blob.type });
+          extracted.relativePath = relativePath;
+          out.push(extracted);
+        }
+      } catch (err) {
+        console.error('Error extracting zip:', err);
+        out.push(file);
+      }
+    } else {
+      out.push(file);
+    }
+  }
+  return out;
+}
+
+async function appendFilesToEditor(fileList) {
+  const files = Array.from(fileList || []);
+  if (!files.length) return;
+
+  const expanded = await expandZipFiles(files);
+
+  const chunks = [];
+  let okCount = 0;
+  let failCount = 0;
+  for (const file of expanded) {
+    try {
+      const content = await readFileAsText(file);
+      const path = file.relativePath || file.webkitRelativePath || file.name;
+      chunks.push(formatImportedFile(path, content));
+      okCount++;
+    } catch (err) {
+      console.error(err);
+      failCount++;
+    }
+  }
+
+  if (!chunks.length) {
+    showToast('No files could be read', 'error', 3000);
+    return;
+  }
+
+  const doc = editor.state.doc;
+  const docLen = doc.length;
+  // Make sure we start on a fresh line and leave a blank line of separation
+  // if the current document already has content.
+  let prefix = '';
+  if (docLen > 0) {
+    const tail = doc.sliceString(Math.max(0, docLen - 2), docLen);
+    if (tail.endsWith('\n\n')) prefix = '';
+    else if (tail.endsWith('\n')) prefix = '\n';
+    else prefix = '\n\n';
+  }
+  const insertText = prefix + chunks.join('');
+
+  editor.dispatch({
+    changes: { from: docLen, insert: insertText },
+    selection: { anchor: docLen + insertText.length },
+    scrollIntoView: true,
+  });
+
+  const msg = failCount
+    ? `Imported ${okCount} file${okCount === 1 ? '' : 's'} (${failCount} failed)`
+    : `Imported ${okCount} file${okCount === 1 ? '' : 's'}`;
+  showToast(msg, failCount ? 'error' : 'success', 2500);
+}
+
+window.importFiles = function() {
+  closeAllMenus();
+  const input = document.getElementById('import-file-input');
+  if (!input) {
+    showToast('Import input not found', 'error', 2500);
+    return;
+  }
+  // Reset value so selecting the same files twice still fires change
+  input.value = '';
+  input.onchange = async (e) => {
+    await appendFilesToEditor(e.target.files);
+    input.value = '';
+  };
+  input.click();
+};
+
 window.copyAllToClipboard = function() {
   const text = editor.state.doc.toString();
   const btn = document.getElementById('copy-all-btn');
@@ -5119,6 +5229,20 @@ function tryInjectAtCursor() {
 editor.dom.addEventListener('keydown', (e) => {
   if (e.key === ' ' || e.key === 'Tab' || e.key === 'Enter') {
     tryInjectAtCursor();
+  }
+}, true);
+
+// Capture-phase Enter handler — guarantees list auto-continue runs before CM6's
+// default Enter binding, regardless of keymap precedence quirks. Also acts as
+// the single source of truth so it doesn't double-fire with the keymap binding
+// below (it stops propagation, so the keymap handler never sees the event).
+editor.dom.addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter') return;
+  if (e.shiftKey || e.ctrlKey || e.metaKey || e.altKey) return;
+  if (e.isComposing || e.keyCode === 229) return;
+  if (handleListEnter(editor)) {
+    e.preventDefault();
+    e.stopImmediatePropagation();
   }
 }, true);
 
