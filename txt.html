@@ -1082,7 +1082,7 @@ body {
       <div class="menu-separator"></div>
       <button class="menu-item" onclick="importFiles()">
         <span>Import Files…</span>
-        <span></span>
+        <kbd id="kbd-import">Ctrl+Shift+I</kbd>
       </button>
       <button class="menu-item" onclick="clearEditor()">
         <span>Clear Editor</span>
@@ -5459,6 +5459,7 @@ const defaultHotkeys = {
   'openPicker': 'Ctrl+K',
   'rerunScript': 'Ctrl+Shift+K',
   'clearEditor': 'Ctrl+L',
+  'importFiles': 'Ctrl+Shift+I',
   'openSync': 'Ctrl+S',
   'forceSync': 'Ctrl+Shift+S',
   'toggleTodo': 'Ctrl+D',
@@ -5468,6 +5469,7 @@ const hotkeyLabels = {
   'openPicker': 'Open Script Picker',
   'rerunScript': 'Rerun Last Script',
   'clearEditor': 'Clear Editor',
+  'importFiles': 'Import Files',
   'openSync': 'Open Sync',
   'forceSync': 'Force Sync Reload',
   'toggleTodo': 'Toggle Todo Checkbox',
@@ -5499,6 +5501,7 @@ function updateHotkeyDisplay() {
   document.getElementById('kbd-picker').textContent = hotkeys.openPicker;
   document.getElementById('kbd-rerun').textContent = hotkeys.rerunScript;
   document.getElementById('kbd-clear').textContent = hotkeys.clearEditor;
+  document.getElementById('kbd-import').textContent = hotkeys.importFiles;
   document.getElementById('kbd-sync').textContent = hotkeys.openSync;
   document.getElementById('kbd-force-sync').textContent = hotkeys.forceSync;
 }
@@ -5555,6 +5558,11 @@ document.addEventListener('keydown', (e) => {
   if (eventMatchesHotkey(e, hotkeys.clearEditor) && !isInputField) {
     e.preventDefault(); e.stopPropagation();
     window.clearEditor();
+    return;
+  }
+  if (eventMatchesHotkey(e, hotkeys.importFiles) && !isInputField) {
+    e.preventDefault(); e.stopPropagation();
+    window.importFiles();
     return;
   }
   if (eventMatchesHotkey(e, hotkeys.openSync) && !isInputField) {
