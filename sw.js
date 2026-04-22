@@ -7,7 +7,7 @@
 //   - Firebase realtime DB: bypass (live data, needs network)
 // ============================================
 
-const CACHE_VERSION = 4;
+const CACHE_VERSION = 5;
 const CACHE_NAME = `cade-v${CACHE_VERSION}`;
 
 // Same-origin pages to precache on install.
@@ -111,14 +111,27 @@ self.addEventListener('message', (e) => {
 });
 
 // ---- Strategy: navigation (HTML) ----
-// Serve cached HTML instantly, revalidate in background. If no cache yet
-// (first visit), go to network; on failure, fall back to './txt.html'.
+// Serve cached HTML instantly, revalidate in background. Cache under the
+// requested URL (never under a hard-coded key) so sibling pages at the
+// SW's root scope can't overwrite the txt.html offline shell.
+// Only txt.html itself is used as the offline fallback.
 async function navigationHandler(request) {
   const cache = await caches.open(CACHE_NAME);
-  const cached = await cache.match(request) || await cache.match('./txt.html');
+  const url = new URL(request.url);
+  const isAppShell =
+    url.origin === self.location.origin &&
+    /(^|\/)txt\.html$/.test(url.pathname);
+
+  const cached = await cache.match(request);
 
   const networkPromise = fetch(request).then((response) => {
-    if (response && response.ok) cache.put('./txt.html', response.clone());
+    if (response && response.ok) {
+      // Cache under the exact request, not a shared key.
+      cache.put(request, response.clone());
+      // Also keep a canonical './txt.html' copy in sync, but ONLY when
+      // the request actually IS txt.html.
+      if (isAppShell) cache.put('./txt.html', response.clone());
+    }
     return response;
   }).catch(() => null);
 
@@ -128,7 +141,16 @@ async function navigationHandler(request) {
   }
 
   const network = await networkPromise;
-  return network || new Response(
+  if (network) return network;
+
+  // Offline and no cache for this exact URL.
+  // Only fall back to the txt.html shell if that's what was requested.
+  if (isAppShell) {
+    const shell = await cache.match('./txt.html');
+    if (shell) return shell;
+  }
+
+  return new Response(
     '<!doctype html><meta charset=utf-8><title>Offline</title>' +
     '<body style="font-family:system-ui;padding:2rem;background:#111;color:#eee">' +
     '<h1>Offline</h1><p>Open the app once while online so it can cache itself.</p>',
