@@ -1,33 +1,57 @@
 // ============================================
 // Cade.txt Service Worker
-// Strategy: Network-first for pages, stale-while-revalidate for assets
+// Strategy:
+//   - HTML + manifest: stale-while-revalidate (instant offline, updates in bg)
+//   - Fontshare CSS + font files: stale-while-revalidate
+//   - CDN scripts (firebase, jszip): stale-while-revalidate (opaque OK)
+//   - Firebase realtime DB: bypass (live data, needs network)
 // ============================================
 
-const CACHE_VERSION = 2;
+const CACHE_VERSION = 4;
 const CACHE_NAME = `cade-v${CACHE_VERSION}`;
 
-// Same-origin pages to precache on install
-const PRECACHE = ['./txt.html'];
+// Same-origin pages to precache on install.
+// Note: we use absolute paths so the cache keys match navigation requests.
+const PRECACHE = [
+  './txt.html',
+  './manifest.webmanifest',
+];
 
-// CDN assets to precache (opaque, no-cors)
-const PRECACHE_CDN = [
+// Cross-origin assets to precache (opaque, no-cors).
+// IMPORTANT: the fontshare stylesheet must be cached or the page can
+// stall / render unstyled when offline on iOS.
+const PRECACHE_CROSS_ORIGIN = [
+  'https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600&f[]=jetbrains-mono@400,500&display=swap',
   'https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js',
   'https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js',
   'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js',
 ];
 
-// ---- Install: precache critical resources ----
+// ---- Install: precache critical resources (best-effort, per-URL) ----
 self.addEventListener('install', (e) => {
   e.waitUntil((async () => {
     const cache = await caches.open(CACHE_NAME);
-    await cache.addAll(PRECACHE).catch(() => {});
-    // CDN scripts require no-cors (opaque responses still serve offline)
+
+    // Same-origin: fetch individually so one failure doesn't kill all.
     await Promise.allSettled(
-      PRECACHE_CDN.map(url =>
-        fetch(url, { mode: 'no-cors' }).then(r => cache.put(url, r))
-      )
+      PRECACHE.map(async (url) => {
+        try {
+          const r = await fetch(url, { cache: 'reload' });
+          if (r.ok) await cache.put(url, r);
+        } catch {}
+      })
     );
-    // skipWaiting after caching is done so the SW never activates with an empty cache
+
+    // Cross-origin: opaque responses still serve offline via <script>/<link>.
+    await Promise.allSettled(
+      PRECACHE_CROSS_ORIGIN.map(async (url) => {
+        try {
+          const r = await fetch(url, { mode: 'no-cors' });
+          await cache.put(url, r);
+        } catch {}
+      })
+    );
+
     await self.skipWaiting();
   })());
 });
@@ -43,68 +67,82 @@ self.addEventListener('activate', (e) => {
   })());
 });
 
-// ---- Fetch strategies ----
+// ---- Fetch handler ----
 self.addEventListener('fetch', (e) => {
   const { request } = e;
   if (request.method !== 'GET') return;
 
   const url = new URL(request.url);
 
-  // Ignore non-http(s), Firebase realtime / API calls, and font requests
-  // (fonts are cross-origin with CORS headers, they cache fine via browser)
+  // Only handle http(s)
   if (!url.protocol.startsWith('http')) return;
-  if (url.hostname.includes('firebaseio.com')) return;
-  if (url.hostname.includes('fontshare.com')) return;
 
-  // Navigation (the HTML page): network-first
+  // Firebase realtime DB needs live network; never intercept.
+  if (url.hostname.includes('firebaseio.com')) return;
+  if (url.hostname.includes('googleapis.com')) return;
+
+  // Navigation (the HTML page itself): stale-while-revalidate with offline fallback.
   if (request.mode === 'navigate') {
-    e.respondWith(networkFirst(request));
+    e.respondWith(navigationHandler(request));
     return;
   }
 
-  // CDN scripts: stale-while-revalidate
+  // Everything else (CSS/JS/fonts): stale-while-revalidate.
   e.respondWith(staleWhileRevalidate(request));
 });
 
 // ---- Message channel ----
 self.addEventListener('message', (e) => {
   if (e.data === 'SKIP_WAITING') self.skipWaiting();
-  // REFRESH_CACHE: re-fetch and update the HTML cache in the background when back online.
-  // (Replaces the old CACHE_BUST which deleted everything — that was causing white screens.)
   if (e.data === 'REFRESH_CACHE') {
-    caches.open(CACHE_NAME).then(cache =>
-      cache.addAll(PRECACHE).catch(() => {})
-    );
+    caches.open(CACHE_NAME).then(async (cache) => {
+      await Promise.allSettled(
+        [...PRECACHE, ...PRECACHE_CROSS_ORIGIN].map(async (url) => {
+          try {
+            const mode = url.startsWith('http') && !url.includes(self.location.host)
+              ? 'no-cors' : 'same-origin';
+            const r = await fetch(url, { mode, cache: 'reload' });
+            if (mode === 'no-cors' || r.ok) await cache.put(url, r);
+          } catch {}
+        })
+      );
+    });
   }
 });
 
-// ---- Strategy: network-first ----
-// Try network; on success, cache the fresh response. On failure, serve cache.
-async function networkFirst(request) {
-  try {
-    const response = await fetch(request);
-    if (response.ok) {
-      const cache = await caches.open(CACHE_NAME);
-      cache.put(request, response.clone());
-    }
+// ---- Strategy: navigation (HTML) ----
+// Serve cached HTML instantly, revalidate in background. If no cache yet
+// (first visit), go to network; on failure, fall back to './txt.html'.
+async function navigationHandler(request) {
+  const cache = await caches.open(CACHE_NAME);
+  const cached = await cache.match(request) || await cache.match('./txt.html');
+
+  const networkPromise = fetch(request).then((response) => {
+    if (response && response.ok) cache.put('./txt.html', response.clone());
     return response;
-  } catch {
-    const cached = await caches.match(request) || await caches.match('./txt.html');
-    return cached || new Response('Offline — no cached version available', {
-      status: 503,
-      headers: { 'Content-Type': 'text/plain' },
-    });
+  }).catch(() => null);
+
+  if (cached) {
+    networkPromise; // fire-and-forget refresh
+    return cached;
   }
+
+  const network = await networkPromise;
+  return network || new Response(
+    '<!doctype html><meta charset=utf-8><title>Offline</title>' +
+    '<body style="font-family:system-ui;padding:2rem;background:#111;color:#eee">' +
+    '<h1>Offline</h1><p>Open the app once while online so it can cache itself.</p>',
+    { status: 503, headers: { 'Content-Type': 'text/html; charset=utf-8' } }
+  );
 }
 
 // ---- Strategy: stale-while-revalidate ----
-// Serve from cache immediately if available; refresh cache in background.
 async function staleWhileRevalidate(request) {
   const cache = await caches.open(CACHE_NAME);
   const cached = await cache.match(request);
 
-  const networkPromise = fetch(request).then(response => {
-    if (response.ok || response.type === 'opaque') {
+  const networkPromise = fetch(request).then((response) => {
+    if (response && (response.ok || response.type === 'opaque')) {
       cache.put(request, response.clone());
     }
     return response;
