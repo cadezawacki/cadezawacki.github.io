@@ -105,6 +105,10 @@ html {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  overscroll-behavior: none;
 }
 
 body {
@@ -113,13 +117,16 @@ body {
   color: var(--text);
   background: var(--bg);
   line-height: 1.5;
-  height: 100vh;
-  height: 100dvh;
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
   padding-left: env(safe-area-inset-left);
   padding-right: env(safe-area-inset-right);
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  overscroll-behavior: none;
 }
 
 /* ============================================
@@ -6124,6 +6131,17 @@ function main(ctx) {
       editor.dispatch({ effects: EditorView.scrollIntoView(editor.state.doc.length) });
     }
   });
+})();
+
+// iOS standalone PWA: belt-and-suspenders against the document
+// scrolling (e.g. when CM6 brings a caret into view, iOS drags the
+// whole page up, hiding the menubar's safe-area inset).
+(function() {
+  var reset = function() {
+    if (window.scrollX || window.scrollY) window.scrollTo(0, 0);
+  };
+  window.addEventListener('scroll', reset, { passive: true });
+  window.addEventListener('resize', reset);
 })();
 
 // Service Worker registration
