@@ -6134,17 +6134,6 @@ function main(ctx) {
   });
 })();
 
-// iOS standalone PWA: belt-and-suspenders against the document
-// scrolling (e.g. when CM6 brings a caret into view, iOS drags the
-// whole page up, hiding the menubar's safe-area inset).
-(function() {
-  var reset = function() {
-    if (window.scrollX || window.scrollY) window.scrollTo(0, 0);
-  };
-  window.addEventListener('scroll', reset, { passive: true });
-  window.addEventListener('resize', reset);
-})();
-
 // Service Worker registration
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('./sw.js').then(reg => {
