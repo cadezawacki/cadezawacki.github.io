@@ -1297,6 +1297,212 @@
         --text-secondary: #1e293b;
         --text-tertiary: #475569;
     }
+
+    /* Copy flash on swatches */
+    @keyframes copyFlash {
+        0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255,255,255,0.9); }
+        40% { transform: scale(1.18); box-shadow: 0 0 18px 6px rgba(255,255,255,0.85); }
+        100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255,255,255,0); }
+    }
+    .color-swatch.copy-flash, .gradient-swatch.copy-flash, .grid-cell.copy-flash {
+        animation: copyFlash 0.55s ease;
+        z-index: 2;
+    }
+
+    /* Checkmark overlay on copy */
+    .copy-check-overlay {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(0, 0, 0, 0.45);
+        color: #fff;
+        font-weight: 700;
+        font-size: 1.5rem;
+        border-radius: inherit;
+        opacity: 0;
+        pointer-events: none;
+        animation: checkPop 0.7s ease forwards;
+    }
+    @keyframes checkPop {
+        0% { opacity: 0; transform: scale(0.6); }
+        30% { opacity: 1; transform: scale(1); }
+        80% { opacity: 1; transform: scale(1); }
+        100% { opacity: 0; transform: scale(0.9); }
+    }
+
+    /* Harmony group header w/ add-all */
+    .harmony-add-all {
+        margin-left: auto;
+        background: var(--surface-tertiary);
+        color: var(--text-secondary);
+        border: none;
+        border-radius: var(--radius-sm);
+        padding: 0.25rem 0.6rem;
+        font-size: 0.75rem;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.25rem;
+        transition: var(--transition-all);
+        font-family: var(--font-sans);
+    }
+    .harmony-add-all:hover {
+        background: var(--accent-primary);
+        color: #fff;
+    }
+
+    /* Bucket / bulk-add controls */
+    .bucket-value {
+        display: inline-block;
+        min-width: 2ch;
+        text-align: right;
+        font-family: var(--font-mono);
+        color: var(--text-secondary);
+        font-size: 0.875rem;
+        margin-left: 0.5rem;
+    }
+
+    /* Export Modal */
+    .modal-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.6);
+        backdrop-filter: blur(4px);
+        z-index: 2000;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        padding: 1rem;
+        animation: fadeIn 0.2s ease;
+    }
+    .modal-overlay.active {
+        display: flex;
+    }
+    @keyframes fadeIn {
+        from { opacity: 0; }
+        to { opacity: 1; }
+    }
+    .modal {
+        background: var(--surface-secondary);
+        border-radius: var(--radius-lg);
+        border: 1px solid var(--surface-tertiary);
+        width: 100%;
+        max-width: 720px;
+        max-height: 90vh;
+        display: flex;
+        flex-direction: column;
+        box-shadow: var(--shadow-lg);
+        animation: modalSlideIn 0.25s ease;
+    }
+    @keyframes modalSlideIn {
+        from { opacity: 0; transform: translateY(20px) scale(0.97); }
+        to   { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    .modal-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 1rem 1.5rem;
+        background: var(--surface-tertiary);
+        border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    }
+    .modal-header h2 {
+        font-size: 1.125rem;
+        font-weight: 600;
+        margin: 0;
+    }
+    .modal-close {
+        background: transparent;
+        border: none;
+        color: var(--text-secondary);
+        font-size: 1.5rem;
+        cursor: pointer;
+        line-height: 1;
+        padding: 0.25rem 0.5rem;
+        border-radius: var(--radius-sm);
+    }
+    .modal-close:hover {
+        background: var(--surface-quaternary);
+        color: var(--text-primary);
+    }
+    .modal-body {
+        padding: 1.25rem 1.5rem;
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+    }
+    .format-tabs {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+    }
+    .format-tab {
+        padding: 0.5rem 0.875rem;
+        background: var(--surface-primary);
+        border-radius: var(--radius-md);
+        cursor: pointer;
+        transition: var(--transition-all);
+        font-size: 0.875rem;
+        border: 1px solid var(--surface-tertiary);
+    }
+    .format-tab.active {
+        background: var(--accent-primary);
+        color: white;
+        border-color: var(--accent-primary);
+    }
+    .format-tab:hover:not(.active) {
+        background: var(--surface-tertiary);
+    }
+    .format-output {
+        background: var(--surface-primary);
+        border-radius: var(--radius-md);
+        border: 1px solid var(--surface-tertiary);
+        padding: 1rem;
+        max-height: 320px;
+        overflow: auto;
+    }
+    .format-output pre {
+        font-family: var(--font-mono);
+        font-size: 0.8125rem;
+        color: var(--text-primary);
+        white-space: pre;
+        margin: 0;
+    }
+    .format-actions {
+        display: flex;
+        gap: 0.75rem;
+        align-items: center;
+        justify-content: flex-end;
+    }
+    .palette-color-strip {
+        display: flex;
+        height: 28px;
+        border-radius: var(--radius-sm);
+        overflow: hidden;
+        border: 1px solid var(--surface-tertiary);
+    }
+    .palette-color-strip > div {
+        flex: 1;
+    }
+    .palette-color-strip.empty {
+        align-items: center;
+        justify-content: center;
+        color: var(--text-tertiary);
+        font-size: 0.75rem;
+        padding: 0 0.75rem;
+    }
+
+    /* Bulk-add button alignment */
+    .gradient-bulk-controls {
+        display: flex;
+        gap: 0.75rem;
+        align-items: center;
+        margin-top: 1rem;
+        flex-wrap: wrap;
+    }
 </style>
 <body class="light-mode">
 <div class="app-container">
@@ -1511,6 +1717,16 @@
                             </svg>
                             Save Current Color
                         </button>
+                        <button id="exportPaletteBtn" class="btn">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
+                                 fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                 stroke-linejoin="round">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                <polyline points="7 10 12 15 17 10"></polyline>
+                                <line x1="12" y1="15" x2="12" y2="3"></line>
+                            </svg>
+                            Save Palette
+                        </button>
                         <button id="clearPaletteBtn" class="btn btn-danger">
                             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
                                  fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
@@ -1522,6 +1738,7 @@
                             Clear Palette
                         </button>
                     </div>
+                    <p style="font-size:0.75rem;color:var(--text-tertiary);margin-bottom:0.5rem;">Click to apply, right‑click to copy hex.</p>
                     <div class="color-grid" id="savedPalettes"></div>
                 </div>
             </div>
@@ -1866,8 +2083,25 @@
                             <input type="range" id="gradientSlider" min="0" max="100" value="50">
                         </div>
                     </div>
+                    <div class="slider-group">
+                        <label for="gradientBuckets">Buckets <span id="gradientBucketsValue" class="bucket-value">7</span></label>
+                        <div class="slider-input">
+                            <input type="range" id="gradientBuckets" min="3" max="25" step="2" value="7">
+                        </div>
+                    </div>
                 </div>
                 <div class="gradient-display" id="gradientDisplay"></div>
+                <div class="gradient-bulk-controls">
+                    <button id="bulkAddGradientBtn" class="btn btn-primary">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
+                             fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                             stroke-linejoin="round">
+                            <path d="M12 5v14M5 12h14"></path>
+                        </svg>
+                        Bulk Add to Palette
+                    </button>
+                    <span style="font-size:0.75rem;color:var(--text-tertiary);">Right‑click any swatch to copy its hex.</span>
+                </div>
             </div>
         </div>
 
@@ -1905,6 +2139,7 @@
                         </select>
                     </div>
                 </div>
+                <p style="font-size:0.75rem;color:var(--text-tertiary);margin-bottom:1rem;">Click a swatch to apply, right‑click to copy hex, or use “+ Add all” to bulk save the group.</p>
                 <div class="harmony-container">
                     <div class="harmony-group">
                         <h3>
@@ -1917,6 +2152,7 @@
                                 <path d="m12 15 3.5 3.5L12 22l-3.5-3.5L12 15Z"></path>
                             </svg>
                             Similar Colors
+                            <button class="harmony-add-all" data-harmony="similarColors" title="Add all to palette">+ Add all</button>
                         </h3>
                         <div class="color-grid" id="similarColors"></div>
                     </div>
@@ -1930,6 +2166,7 @@
                                 <path d="M21.17 8H12"></path>
                             </svg>
                             Complementary Colors
+                            <button class="harmony-add-all" data-harmony="complementaryColors" title="Add all to palette">+ Add all</button>
                         </h3>
                         <div class="color-grid" id="complementaryColors"></div>
                     </div>
@@ -1944,6 +2181,7 @@
                                 <path d="m8.5 10 7 4"></path>
                             </svg>
                             Analogous Colors
+                            <button class="harmony-add-all" data-harmony="analogousColors" title="Add all to palette">+ Add all</button>
                         </h3>
                         <div class="color-grid" id="analogousColors"></div>
                     </div>
@@ -1955,6 +2193,7 @@
                                 <polygon points="12 2 20 12 12 22 4 12"></polygon>
                             </svg>
                             Triadic Colors
+                            <button class="harmony-add-all" data-harmony="triadicColors" title="Add all to palette">+ Add all</button>
                         </h3>
                         <div class="color-grid" id="triadicColors"></div>
                     </div>
@@ -1966,6 +2205,7 @@
                                 <rect width="16" height="16" x="4" y="4" rx="2"></rect>
                             </svg>
                             Tetradic Colors
+                            <button class="harmony-add-all" data-harmony="tetradicColors" title="Add all to palette">+ Add all</button>
                         </h3>
                         <div class="color-grid" id="tetradicColors"></div>
                     </div>
@@ -1978,8 +2218,22 @@
                                 <polygon points="22 12 14 6 14 18 22 12"></polygon>
                             </svg>
                             Split‑Complementary
+                            <button class="harmony-add-all" data-harmony="splitColors" title="Add all to palette">+ Add all</button>
                         </h3>
                         <div class="color-grid" id="splitColors"></div>
+                    </div>
+                    <div class="harmony-group">
+                        <h3>
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
+                                 fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                 stroke-linejoin="round">
+                                <circle cx="12" cy="12" r="6"></circle>
+                                <path d="M12 2v4M12 18v4M2 12h4M18 12h4"></path>
+                            </svg>
+                            Monochromatic (Shades &amp; Tints)
+                            <button class="harmony-add-all" data-harmony="monochromaticColors" title="Add all to palette">+ Add all</button>
+                        </h3>
+                        <div class="color-grid" id="monochromaticColors"></div>
                     </div>
                     <div class="harmony-group">
                         <h3>
@@ -1991,6 +2245,7 @@
                                 <path d="M2 12h20"></path>
                             </svg>
                             Luminance Contrast
+                            <button class="harmony-add-all" data-harmony="luminanceConstrast" title="Add all to palette">+ Add all</button>
                         </h3>
                         <div class="color-grid" id="luminanceConstrast"></div>
                     </div>
@@ -2402,6 +2657,43 @@
         <p>Cade's Color Manager</p>
     </footer>
 </div>
+
+<!-- Export Palette Modal -->
+<div id="exportModal" class="modal-overlay" role="dialog" aria-hidden="true">
+    <div class="modal" role="document">
+        <div class="modal-header">
+            <h2>Export Palette</h2>
+            <button id="exportModalClose" class="modal-close" aria-label="Close">×</button>
+        </div>
+        <div class="modal-body">
+            <div id="exportPaletteStrip" class="palette-color-strip empty">No saved colors yet</div>
+            <div class="format-tabs" id="formatTabs">
+                <div class="format-tab active" data-format="cssvars">CSS Variables</div>
+                <div class="format-tab" data-format="hex">Hex List</div>
+                <div class="format-tab" data-format="rgba">RGBA List</div>
+                <div class="format-tab" data-format="hsl">HSL List</div>
+                <div class="format-tab" data-format="scss">SCSS</div>
+                <div class="format-tab" data-format="json">JSON</div>
+                <div class="format-tab" data-format="tailwind">Tailwind</div>
+            </div>
+            <div class="format-output">
+                <pre id="formatOutput">/* No colors saved yet. Save some colors first. */</pre>
+            </div>
+            <div class="format-actions">
+                <button id="copyFormatBtn" class="btn btn-primary">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
+                         fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                         stroke-linejoin="round">
+                        <rect width="14" height="14" x="8" y="8" rx="2" ry="2"></rect>
+                        <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path>
+                    </svg>
+                    Copy to Clipboard
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
     /***********************
      * Global Variables
@@ -2534,8 +2826,12 @@
             const swatch = document.createElement("div");
             swatch.className = "color-swatch";
             swatch.style.backgroundColor = colorHex;
-            swatch.title = colorHex;
+            swatch.title = `${colorHex} — click to apply, right‑click to copy`;
             swatch.addEventListener("click", () => setColor(colorHex));
+            swatch.addEventListener("contextmenu", (e) => {
+                e.preventDefault();
+                copyToClipboard(colorHex, swatch);
+            });
 
             const removeBtn = document.createElement("button");
             removeBtn.className = "remove-swatch-btn";
@@ -2674,23 +2970,40 @@
     /***********************
      * 1D Gradient (7 swatches)
      ***********************/
-    function updateGradientDisplay() {
+    function computeGradientColors() {
         const sliderVal = document.getElementById("gradientSlider").value;
         const intensity = sliderVal / 250;
+        let buckets = parseInt(document.getElementById("gradientBuckets").value, 10) || 7;
+        if (buckets < 3) buckets = 3;
+        if (buckets % 2 === 0) buckets += 1; // keep odd so the base color sits in the middle
         const baseHSL = currentColor.hsl();
         const clampL = (l) => Math.max(0, Math.min(1, l));
-        let steps = [-3, -2, -1, 0, 1, 2, 3];
-        let colors = steps.map(step =>
-            chroma.hsl(baseHSL[0], baseHSL[1], clampL(baseHSL[2] + (step / 3) * intensity))
-        );
+        const half = (buckets - 1) / 2;
+        const colors = [];
+        for (let i = -half; i <= half; i++) {
+            colors.push(chroma.hsl(baseHSL[0], baseHSL[1], clampL(baseHSL[2] + (i / half) * intensity)));
+        }
+        return colors;
+    }
+
+    function updateGradientDisplay() {
+        const colors = computeGradientColors();
+        document.getElementById("gradientBucketsValue").textContent =
+            document.getElementById("gradientBuckets").value;
         const gradContainer = document.getElementById("gradientDisplay");
         gradContainer.innerHTML = "";
         colors.forEach(col => {
+            const hex = col.hex();
             const swatch = document.createElement("div");
             swatch.className = "gradient-swatch";
-            swatch.style.backgroundColor = col.hex();
-            swatch.title = col.hex();
+            swatch.style.backgroundColor = hex;
+            swatch.title = `${hex} — click to apply, right‑click to copy`;
+            swatch.dataset.hex = hex;
             swatch.addEventListener("click", () => setColor(col));
+            swatch.addEventListener("contextmenu", (e) => {
+                e.preventDefault();
+                copyToClipboard(hex, swatch);
+            });
             gradContainer.appendChild(swatch);
         });
     }
@@ -2716,10 +3029,15 @@
                 let newLight = Math.min(1, Math.max(0, baseLight + offsetY * lightVar));
                 let newColor = chroma.hsl(baseHue, newSat, newLight);
                 let cell = document.createElement("div");
+                const cellHex = newColor.hex();
                 cell.className = "grid-cell";
-                cell.style.backgroundColor = newColor.hex();
-                cell.title = newColor.hex();
+                cell.style.backgroundColor = cellHex;
+                cell.title = `${cellHex} — click to apply, right‑click to copy`;
                 cell.addEventListener("click", () => setColor(newColor));
+                cell.addEventListener("contextmenu", (e) => {
+                    e.preventDefault();
+                    copyToClipboard(cellHex, cell);
+                });
                 gridContainer.appendChild(cell);
             }
         }
@@ -2730,7 +3048,7 @@
      ***********************/
     function updateHarmonies() {
         const vibe = document.getElementById("vibeSelect").value;
-        ["similarColors", "complementaryColors", "analogousColors", "triadicColors", "tetradicColors", "splitColors", "luminanceConstrast"].forEach(id => {
+        ["similarColors", "complementaryColors", "analogousColors", "triadicColors", "tetradicColors", "splitColors", "monochromaticColors", "luminanceConstrast"].forEach(id => {
             document.getElementById(id).innerHTML = "";
         });
         const baseHSL = currentColor.hsl();
@@ -2776,16 +3094,36 @@
         split2 = adjustForVibe(split2, vibe);
         addSwatch(split1, document.getElementById("splitColors"));
         addSwatch(split2, document.getElementById("splitColors"));
+
+        // Monochromatic — same hue, varying lightness (shades + tints)
+        const monoContainer = document.getElementById("monochromaticColors");
+        const monoSteps = [-0.4, -0.27, -0.14, 0, 0.14, 0.27, 0.4];
+        monoSteps.forEach(step => {
+            const newL = Math.max(0.04, Math.min(0.96, baseHSL[2] + step));
+            let mono = chroma.hsl(baseHSL[0], baseHSL[1], newL);
+            mono = adjustForVibe(mono, vibe);
+            addSwatch(mono, monoContainer);
+        });
+
+        // Luminance contrast — show pairing on both ends so users see the safer choice
         let contrast = currentColor.luminance() > 0.5 ? chroma("black") : chroma("white");
         addSwatch(contrast, document.getElementById("luminanceConstrast"));
+        const altContrast = currentColor.luminance() > 0.5 ? chroma("#1a1a1a") : chroma("#f5f5f5");
+        addSwatch(altContrast, document.getElementById("luminanceConstrast"));
     }
 
     function addSwatch(color, container) {
+        const hex = color.hex();
         const swatch = document.createElement("div");
         swatch.className = "color-swatch";
-        swatch.style.backgroundColor = color.hex();
-        swatch.title = color.hex();
+        swatch.style.backgroundColor = hex;
+        swatch.title = `${hex} — click to apply, right‑click to copy`;
+        swatch.dataset.hex = hex;
         swatch.addEventListener("click", () => setColor(color));
+        swatch.addEventListener("contextmenu", (e) => {
+            e.preventDefault();
+            copyToClipboard(hex, swatch);
+        });
         container.appendChild(swatch);
     }
 
@@ -3661,16 +3999,290 @@
     }
 
     /***********************
-     * Copy to Clipboard for Copy Buttons
+     * Clipboard helpers + copy animations
+     ***********************/
+    function showCopyNotification(msg) {
+        document.querySelectorAll('.notification').forEach(n => n.remove());
+        const note = document.createElement('div');
+        note.className = 'notification';
+        note.textContent = msg;
+        document.body.appendChild(note);
+        setTimeout(() => { if (note.parentNode) note.remove(); }, 3000);
+    }
+
+    function flashCopySuccess(el) {
+        if (!el) return;
+        el.classList.remove('copy-flash');
+        // re-trigger animation
+        void el.offsetWidth;
+        el.classList.add('copy-flash');
+        setTimeout(() => el.classList.remove('copy-flash'), 600);
+
+        // Add a checkmark overlay only on elements large enough (swatches/cells)
+        const swatchLike = ['color-swatch', 'gradient-swatch', 'grid-cell']
+            .some(cls => el.classList && el.classList.contains(cls));
+        if (swatchLike) {
+            const style = window.getComputedStyle(el);
+            if (style.position === 'static') el.style.position = 'relative';
+            const overlay = document.createElement('div');
+            overlay.className = 'copy-check-overlay';
+            overlay.textContent = '✓';
+            el.appendChild(overlay);
+            setTimeout(() => { if (overlay.parentNode) overlay.remove(); }, 700);
+        }
+    }
+
+    function copyToClipboard(text, el, msg) {
+        if (!text) return Promise.resolve();
+        return navigator.clipboard.writeText(text).then(() => {
+            showCopyNotification(msg || `Copied ${text}`);
+            flashCopySuccess(el);
+        }).catch(err => {
+            console.error('Clipboard write failed:', err);
+            showCopyNotification('Copy failed');
+        });
+    }
+
+    /***********************
+     * Copy to Clipboard for Copy Buttons (input fields)
      ***********************/
     document.querySelectorAll(".copy-btn").forEach(btn => {
         btn.addEventListener("click", function () {
             const targetId = this.getAttribute("data-target");
             const targetInput = document.getElementById(targetId);
             if (targetInput) {
-                navigator.clipboard.writeText(targetInput.value);
+                copyToClipboard(targetInput.value, this, `Copied ${targetInput.value}`);
             }
         });
+    });
+
+    /***********************
+     * 1D Gradient — bucket count + bulk add
+     ***********************/
+    document.getElementById("gradientBuckets").addEventListener("input", () => {
+        document.getElementById("gradientBucketsValue").textContent =
+            document.getElementById("gradientBuckets").value;
+        updateGradientDisplay();
+    });
+
+    document.getElementById("bulkAddGradientBtn").addEventListener("click", function () {
+        const colors = computeGradientColors().map(c => c.hex());
+        const before = savedPalettes.length;
+        colors.forEach(hex => {
+            if (!savedPalettes.includes(hex)) savedPalettes.push(hex);
+        });
+        const added = savedPalettes.length - before;
+        updateSavedPalettesUI();
+        savePalettesToLocalStorage();
+        flashCopySuccess(this);
+        showCopyNotification(added > 0
+            ? `Added ${added} color${added === 1 ? '' : 's'} to palette`
+            : `All ${colors.length} already in palette`);
+    });
+
+    /***********************
+     * Harmony "+ Add all" buttons
+     ***********************/
+    document.querySelectorAll(".harmony-add-all").forEach(btn => {
+        btn.addEventListener("click", function (e) {
+            e.stopPropagation();
+            const harmonyId = this.getAttribute("data-harmony");
+            const swatches = document.querySelectorAll(`#${harmonyId} .color-swatch`);
+            const before = savedPalettes.length;
+            swatches.forEach(s => {
+                const hex = s.dataset.hex || s.title.split(' ')[0];
+                if (hex && !savedPalettes.includes(hex)) savedPalettes.push(hex);
+            });
+            const added = savedPalettes.length - before;
+            updateSavedPalettesUI();
+            savePalettesToLocalStorage();
+            flashCopySuccess(this);
+            showCopyNotification(added > 0
+                ? `Added ${added} color${added === 1 ? '' : 's'} to palette`
+                : 'All colors already in palette');
+        });
+    });
+
+    /***********************
+     * Smart naming for export
+     ***********************/
+    function getColorName(color) {
+        const hsl = color.hsl();
+        const h = isNaN(hsl[0]) ? 0 : hsl[0];
+        const s = hsl[1];
+        const l = hsl[2];
+
+        if (s < 0.08) {
+            if (l < 0.08) return 'black';
+            if (l > 0.94) return 'white';
+            if (l < 0.35) return 'charcoal';
+            if (l > 0.7) return 'silver';
+            return 'gray';
+        }
+
+        let hueName;
+        if (h < 15 || h >= 345) hueName = 'red';
+        else if (h < 40)  hueName = 'orange';
+        else if (h < 65)  hueName = 'yellow';
+        else if (h < 95)  hueName = 'lime';
+        else if (h < 150) hueName = 'green';
+        else if (h < 180) hueName = 'teal';
+        else if (h < 210) hueName = 'cyan';
+        else if (h < 250) hueName = 'blue';
+        else if (h < 280) hueName = 'indigo';
+        else if (h < 310) hueName = 'purple';
+        else if (h < 330) hueName = 'magenta';
+        else hueName = 'pink';
+
+        let prefix = '';
+        if (l < 0.28) prefix = 'dark-';
+        else if (l > 0.78) prefix = 'light-';
+        return prefix + hueName;
+    }
+
+    function generatePaletteNames(hexes) {
+        const bases = hexes.map(hex => getColorName(chroma(hex)));
+        const totals = {};
+        bases.forEach(b => { totals[b] = (totals[b] || 0) + 1; });
+        const counts = {};
+        return bases.map(b => {
+            if (totals[b] === 1) return b;
+            counts[b] = (counts[b] || 0) + 1;
+            return `${b}-${counts[b]}`;
+        });
+    }
+
+    /***********************
+     * Format generators
+     ***********************/
+    function formatCssVars(hexes, names) {
+        return ':root {\n' +
+            hexes.map((hex, i) => `  --color-${names[i]}: ${hex};`).join('\n') +
+            '\n}';
+    }
+
+    function formatHexList(hexes) {
+        return hexes.join('\n');
+    }
+
+    function formatRgbaList(hexes) {
+        return hexes.map(hex => {
+            const [r, g, b, a] = chroma(hex).rgba();
+            return `rgba(${r}, ${g}, ${b}, ${a})`;
+        }).join('\n');
+    }
+
+    function formatHslList(hexes) {
+        return hexes.map(hex => {
+            const [h, s, l] = chroma(hex).hsl();
+            const hh = isNaN(h) ? 0 : Math.round(h);
+            return `hsl(${hh}, ${Math.round(s * 100)}%, ${Math.round(l * 100)}%)`;
+        }).join('\n');
+    }
+
+    function formatScss(hexes, names) {
+        return hexes.map((hex, i) => `$color-${names[i]}: ${hex};`).join('\n');
+    }
+
+    function formatJson(hexes, names) {
+        const obj = {};
+        hexes.forEach((hex, i) => { obj[names[i]] = hex; });
+        return JSON.stringify(obj, null, 2);
+    }
+
+    function formatTailwind(hexes, names) {
+        const lines = hexes.map((hex, i) => `        '${names[i]}': '${hex}',`);
+        return [
+            '// tailwind.config.js',
+            'module.exports = {',
+            '  theme: {',
+            '    extend: {',
+            '      colors: {',
+            ...lines,
+            '      }',
+            '    }',
+            '  }',
+            '}',
+        ].join('\n');
+    }
+
+    function buildFormatOutput(format) {
+        if (savedPalettes.length === 0) {
+            return '/* No colors saved yet. Save some colors first. */';
+        }
+        const hexes = savedPalettes.slice();
+        const names = generatePaletteNames(hexes);
+        switch (format) {
+            case 'cssvars':  return formatCssVars(hexes, names);
+            case 'hex':      return formatHexList(hexes);
+            case 'rgba':     return formatRgbaList(hexes);
+            case 'hsl':      return formatHslList(hexes);
+            case 'scss':     return formatScss(hexes, names);
+            case 'json':     return formatJson(hexes, names);
+            case 'tailwind': return formatTailwind(hexes, names);
+            default:         return formatCssVars(hexes, names);
+        }
+    }
+
+    /***********************
+     * Export Modal
+     ***********************/
+    let activeFormat = 'cssvars';
+
+    function refreshExportModal() {
+        // Update color preview strip
+        const strip = document.getElementById('exportPaletteStrip');
+        strip.innerHTML = '';
+        if (savedPalettes.length === 0) {
+            strip.classList.add('empty');
+            strip.textContent = 'No saved colors yet';
+        } else {
+            strip.classList.remove('empty');
+            savedPalettes.forEach(hex => {
+                const cell = document.createElement('div');
+                cell.style.background = hex;
+                cell.title = hex;
+                strip.appendChild(cell);
+            });
+        }
+        document.getElementById('formatOutput').textContent = buildFormatOutput(activeFormat);
+    }
+
+    function openExportModal() {
+        refreshExportModal();
+        document.getElementById('exportModal').classList.add('active');
+        document.getElementById('exportModal').setAttribute('aria-hidden', 'false');
+    }
+
+    function closeExportModal() {
+        document.getElementById('exportModal').classList.remove('active');
+        document.getElementById('exportModal').setAttribute('aria-hidden', 'true');
+    }
+
+    document.getElementById('exportPaletteBtn').addEventListener('click', openExportModal);
+    document.getElementById('exportModalClose').addEventListener('click', closeExportModal);
+    document.getElementById('exportModal').addEventListener('click', (e) => {
+        if (e.target.id === 'exportModal') closeExportModal();
+    });
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' &&
+            document.getElementById('exportModal').classList.contains('active')) {
+            closeExportModal();
+        }
+    });
+
+    document.querySelectorAll('.format-tab').forEach(tab => {
+        tab.addEventListener('click', function () {
+            document.querySelectorAll('.format-tab').forEach(t => t.classList.remove('active'));
+            this.classList.add('active');
+            activeFormat = this.getAttribute('data-format');
+            document.getElementById('formatOutput').textContent = buildFormatOutput(activeFormat);
+        });
+    });
+
+    document.getElementById('copyFormatBtn').addEventListener('click', function () {
+        const text = document.getElementById('formatOutput').textContent;
+        copyToClipboard(text, this, `Copied palette as ${activeFormat}`);
     });
 
     /***********************
