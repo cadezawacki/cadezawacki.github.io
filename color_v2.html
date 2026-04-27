@@ -552,11 +552,6 @@
     }
 
     /* Palette and Harmonies */
-    .palette-controls {
-        display: flex;
-        gap: 1rem;
-        margin-bottom: 1.5rem;
-    }
 
     .color-grid {
         display: grid;
@@ -582,9 +577,9 @@
     }
 
     .harmony-container {
-        display: flex;
-        flex-direction: column;
-        gap: 2rem;
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+        gap: 1.5rem;
     }
 
     .harmony-group {
@@ -1107,10 +1102,6 @@
         .input-wrapper {
             width: 100%;
         }
-
-        .palette-controls {
-            flex-direction: column;
-        }
     }
 
     .light-mode #title-highlight {
@@ -1503,6 +1494,73 @@
         margin-top: 1rem;
         flex-wrap: wrap;
     }
+
+    /* Saved palette: scrollable grid + sticky footer */
+    .palette-card-body {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+        padding: 1.25rem 1.5rem 0;
+        height: 100%;
+    }
+    .palette-scroll {
+        flex: 1 1 auto;
+        max-height: 460px;
+        min-height: 120px;
+        overflow-y: auto;
+        padding: 0.25rem;
+        margin: 0 -0.25rem;
+        border-radius: var(--radius-md);
+    }
+    .palette-scroll::-webkit-scrollbar { width: 8px; }
+    .palette-scroll::-webkit-scrollbar-track { background: transparent; }
+    .palette-scroll::-webkit-scrollbar-thumb {
+        background: var(--surface-quaternary);
+        border-radius: 4px;
+    }
+    .palette-empty {
+        padding: 2rem 1rem;
+        text-align: center;
+        color: var(--text-tertiary);
+        font-size: 0.875rem;
+        background: var(--surface-primary);
+        border-radius: var(--radius-md);
+    }
+    .palette-footer {
+        position: sticky;
+        bottom: 0;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        padding: 0.75rem 0 1rem;
+        background: var(--surface-secondary);
+        border-top: 1px solid var(--surface-tertiary);
+        z-index: 1;
+        margin-top: auto;
+    }
+    .palette-footer .btn {
+        height: 40px;
+        padding: 0.5rem 0.875rem;
+        font-size: 0.875rem;
+        flex: 1;
+        min-width: 110px;
+        justify-content: center;
+    }
+
+    /* Duplicate save warning */
+    @keyframes duplicateFlash {
+        0%, 100% {
+            border-color: var(--surface-tertiary);
+            box-shadow: var(--shadow-md);
+        }
+        25%, 75% {
+            border-color: var(--red);
+            box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.35);
+        }
+    }
+    .card.duplicate-warning {
+        animation: duplicateFlash 0.65s ease;
+    }
 </style>
 <body class="light-mode">
 <div class="app-container">
@@ -1707,18 +1765,31 @@
                         Saved Colors
                     </h2>
                 </div>
-                <div class="card-body">
-                    <div class="palette-controls">
-                        <button id="savePaletteBtn" class="btn btn-primary">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
+                <div class="card-body palette-card-body">
+                    <p style="font-size:0.75rem;color:var(--text-tertiary);margin:0;">Click to apply, right‑click to copy hex.</p>
+                    <div class="palette-scroll">
+                        <div class="color-grid" id="savedPalettes"></div>
+                    </div>
+                    <div class="palette-footer">
+                        <button id="savePaletteBtn" class="btn btn-primary" title="Save the current color to the palette">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
                                  fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
                                  stroke-linejoin="round">
                                 <path d="M12 20v-8m0 0V4m0 8h8m-8 0H4"></path>
                             </svg>
-                            Save Current Color
+                            Save Color
                         </button>
-                        <button id="exportPaletteBtn" class="btn">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
+                        <button id="dedupePaletteBtn" class="btn" title="Remove duplicate colors">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
+                                 fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                 stroke-linejoin="round">
+                                <rect width="14" height="14" x="3" y="7" rx="2"></rect>
+                                <path d="M7 7V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-2"></path>
+                            </svg>
+                            Dedupe
+                        </button>
+                        <button id="exportPaletteBtn" class="btn" title="Export palette as CSS, SCSS, JSON, etc.">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
                                  fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
                                  stroke-linejoin="round">
                                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
@@ -1727,19 +1798,17 @@
                             </svg>
                             Save Palette
                         </button>
-                        <button id="clearPaletteBtn" class="btn btn-danger">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
+                        <button id="clearPaletteBtn" class="btn btn-danger" title="Clear all saved colors">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
                                  fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
                                  stroke-linejoin="round">
                                 <path d="M3 6h18"></path>
                                 <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path>
                                 <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path>
                             </svg>
-                            Clear Palette
+                            Clear
                         </button>
                     </div>
-                    <p style="font-size:0.75rem;color:var(--text-tertiary);margin-bottom:0.5rem;">Click to apply, right‑click to copy hex.</p>
-                    <div class="color-grid" id="savedPalettes"></div>
                 </div>
             </div>
         </div>
@@ -2030,8 +2099,8 @@
                 </div>
 
                 <div class="gradient-options">
-                    <div class="shadow-option" data-gradient-type="linear">Linear Gradient</div>
-                    <div class="shadow-option active" data-gradient-type="radial">Radial Gradient</div>
+                    <div class="shadow-option active" data-gradient-type="linear">Linear Gradient</div>
+                    <div class="shadow-option" data-gradient-type="radial">Radial Gradient</div>
                 </div>
 
                 <div class="slider-group">
@@ -2136,6 +2205,18 @@
                             <option value="monochrome">Monochrome</option>
                             <option value="warm">Warm</option>
                             <option value="cool">Cool</option>
+                            <option value="ocean">Ocean</option>
+                            <option value="sunset">Sunset</option>
+                            <option value="forest">Forest</option>
+                            <option value="desert">Desert</option>
+                            <option value="candy">Candy</option>
+                            <option value="gothic">Gothic</option>
+                            <option value="dreamy">Dreamy</option>
+                            <option value="moody">Moody</option>
+                            <option value="autumn">Autumn</option>
+                            <option value="spring">Spring</option>
+                            <option value="muted">Muted</option>
+                            <option value="high-contrast">High Contrast</option>
                         </select>
                     </div>
                 </div>
@@ -2818,6 +2899,19 @@
     function updateSavedPalettesUI() {
         const container = document.getElementById("savedPalettes");
         container.innerHTML = "";
+        // Show empty state inline so the sticky footer still shows
+        const scrollWrap = container.closest('.palette-scroll');
+        let emptyEl = scrollWrap ? scrollWrap.querySelector('.palette-empty') : null;
+        if (savedPalettes.length === 0) {
+            if (scrollWrap && !emptyEl) {
+                emptyEl = document.createElement('div');
+                emptyEl.className = 'palette-empty';
+                emptyEl.textContent = 'No colors saved yet — pick a color and hit “Save Color”.';
+                scrollWrap.appendChild(emptyEl);
+            }
+        } else if (emptyEl) {
+            emptyEl.remove();
+        }
         savedPalettes.forEach((colorHex, index) => {
             const swatchContainer = document.createElement("div");
             swatchContainer.className = "color-swatch-container";
@@ -3135,29 +3229,69 @@
 
     function adjustForVibe(color, vibe) {
         let hsl = color.hsl();
+        const h = isNaN(hsl[0]) ? 0 : hsl[0];
+        const s = hsl[1];
+        const l = hsl[2];
+        const clamp = (v, min = 0, max = 1) => Math.max(min, Math.min(max, v));
         switch (vibe) {
             case "pastel":
-                return chroma.hsl(hsl[0], hsl[1] * 0.5, Math.min(hsl[2] + 0.15, 1));
+                return chroma.hsl(h, s * 0.5, clamp(l + 0.15));
             case "retro":
-                return chroma.hsl(hsl[0], hsl[1] * 0.8, hsl[2] * 0.9);
+                return chroma.hsl(h, s * 0.8, l * 0.9);
             case "cyberpunk":
-                return chroma.hsl(hsl[0], Math.min(hsl[1] * 1.3, 1), Math.min(hsl[2] + 0.1, 1));
+                return chroma.hsl(h, clamp(s * 1.3), clamp(l + 0.1));
             case "vintage":
-                return chroma.hsl((hsl[0] + 10) % 360, hsl[1] * 0.7, hsl[2]);
+                return chroma.hsl((h + 10) % 360, s * 0.7, l);
             case "vibrant":
-                return chroma.hsl(hsl[0], Math.min(hsl[1] * 1.5, 1), hsl[2]);
+                return chroma.hsl(h, clamp(s * 1.5), l);
             case "professional":
-                return chroma.hsl(hsl[0], hsl[1] * 0.85, hsl[2]);
+                return chroma.hsl(h, s * 0.85, l);
             case "earthy":
-                return chroma.hsl((hsl[0] - 20 + 360) % 360, Math.max(hsl[1] - 0.2, 0), hsl[2]);
+                return chroma.hsl((h - 20 + 360) % 360, clamp(s - 0.2), l);
             case "neon":
-                return chroma.hsl(hsl[0], 1, Math.min(hsl[2] + 0.2, 1));
+                return chroma.hsl(h, 1, clamp(l + 0.2));
             case "monochrome":
-                return chroma.hsl(hsl[0], 0, hsl[2]);
+                return chroma.hsl(h, 0, l);
             case "warm":
-                return chroma.hsl((hsl[0] + 10) % 360, hsl[1], hsl[2]);
+                return chroma.hsl((h + 10) % 360, s, l);
             case "cool":
-                return chroma.hsl((hsl[0] - 10 + 360) % 360, hsl[1], hsl[2]);
+                return chroma.hsl((h - 10 + 360) % 360, s, l);
+            case "ocean":
+                // Pull hues toward teal/blue (~200°)
+                return chroma.hsl(h * 0.3 + 200 * 0.7, clamp(s * 0.85), clamp(l * 0.95));
+            case "sunset":
+                // Pull toward warm orange/red (~20°)
+                return chroma.hsl((h * 0.3 + 20 * 0.7) % 360, clamp(s * 1.15), clamp(l + 0.05));
+            case "forest":
+                // Pull toward deep green (~130°), darker
+                return chroma.hsl(h * 0.4 + 130 * 0.6, clamp(s * 0.9), clamp(l * 0.85));
+            case "desert":
+                // Dusty oranges/tans (~30°), desaturated
+                return chroma.hsl(h * 0.4 + 30 * 0.6, clamp(s * 0.6), clamp(l + 0.05));
+            case "candy":
+                // Bright sweet pastels
+                return chroma.hsl(h, clamp(s * 1.1), clamp(l + 0.18));
+            case "gothic":
+                // Very dark, slightly desaturated
+                return chroma.hsl(h, clamp(s * 0.7), clamp(l * 0.45));
+            case "dreamy":
+                // Soft, lifted, lower saturation
+                return chroma.hsl(h, clamp(s * 0.55), clamp(l + 0.12));
+            case "moody":
+                // Darker + desaturated
+                return chroma.hsl(h, clamp(s * 0.6), clamp(l - 0.12));
+            case "autumn":
+                // Rotate toward orange/red, warmer + slightly darker
+                return chroma.hsl((h * 0.5 + 25 * 0.5) % 360, clamp(s * 0.95), clamp(l * 0.85));
+            case "spring":
+                // Pull toward yellow-green (~100°), brighter
+                return chroma.hsl(h * 0.5 + 100 * 0.5, clamp(s * 0.85), clamp(l + 0.1));
+            case "muted":
+                // Heavily desaturated
+                return chroma.hsl(h, clamp(s * 0.4), l);
+            case "high-contrast":
+                // Push toward extreme — saturated + lightness pushed to nearest end
+                return chroma.hsl(h, clamp(s * 1.4), l > 0.5 ? clamp(l + 0.15) : clamp(l - 0.15));
             default:
                 return color;
         }
@@ -3874,16 +4008,67 @@
         redo();
     });
 
-    document.getElementById("savePaletteBtn").addEventListener("click", () => {
-        savedPalettes.push(currentColor.hex());
+    function flashPaletteCardWarning() {
+        const card = document.getElementById('savedPalettes').closest('.card');
+        if (!card) return;
+        card.classList.remove('duplicate-warning');
+        // re-trigger animation
+        void card.offsetWidth;
+        card.classList.add('duplicate-warning');
+        setTimeout(() => card.classList.remove('duplicate-warning'), 700);
+    }
+
+    function saveCurrentColorToPalette() {
+        const hex = currentColor.hex();
+        const isDuplicate = savedPalettes.some(c => c.toLowerCase() === hex.toLowerCase());
+        if (isDuplicate) {
+            flashPaletteCardWarning();
+            const proceed = confirm(
+                `${hex} is already in your palette.\n\nAdd it again anyway?`
+            );
+            if (!proceed) {
+                showCopyNotification(`${hex} already in palette`);
+                return;
+            }
+        }
+        savedPalettes.push(hex);
         updateSavedPalettesUI();
         savePalettesToLocalStorage();
-    });
+    }
+
+    document.getElementById("savePaletteBtn").addEventListener("click", saveCurrentColorToPalette);
 
     document.getElementById("clearPaletteBtn").addEventListener("click", () => {
+        if (savedPalettes.length === 0) {
+            showCopyNotification('Palette is already empty');
+            return;
+        }
+        const ok = confirm(
+            `Clear all ${savedPalettes.length} saved color${savedPalettes.length === 1 ? '' : 's'}?\n\nThis can’t be undone.`
+        );
+        if (!ok) return;
         savedPalettes = [];
         updateSavedPalettesUI();
         savePalettesToLocalStorage();
+        showCopyNotification('Palette cleared');
+    });
+
+    document.getElementById("dedupePaletteBtn").addEventListener("click", function () {
+        const before = savedPalettes.length;
+        const seen = new Set();
+        savedPalettes = savedPalettes.filter(hex => {
+            const k = hex.toLowerCase();
+            if (seen.has(k)) return false;
+            seen.add(k);
+            return true;
+        });
+        const removed = before - savedPalettes.length;
+        updateSavedPalettesUI();
+        savePalettesToLocalStorage();
+        flashCopySuccess(this);
+        showCopyNotification(removed > 0
+            ? `Removed ${removed} duplicate${removed === 1 ? '' : 's'}`
+            : 'No duplicates found');
     });
 
     function changeBackgroundColor() {
@@ -3917,9 +4102,7 @@
         } else if (e.ctrlKey && e.code == 'KeyY') {
             redo();
         } else if (e.shiftKey && e.code == 'KeyS') {
-            savedPalettes.push(currentColor.hex());
-            updateSavedPalettesUI();
-            savePalettesToLocalStorage();
+            saveCurrentColorToPalette();
         } else if (e.shiftKey && e.code == 'KeyC') {
             navigator.clipboard.writeText(currentColor.hex());
         }
@@ -4155,10 +4338,58 @@
     /***********************
      * Format generators
      ***********************/
-    function formatCssVars(hexes, names) {
-        return ':root {\n' +
-            hexes.map((hex, i) => `  --color-${names[i]}: ${hex};`).join('\n') +
-            '\n}';
+    // Build a 100..800 ramp from a set of saved hexes that share a hue.
+    // Lightest input maps near 100 and darkest near 800; missing tiers are
+    // interpolated through LCH for perceptual smoothness.
+    function buildHueScale(hexes) {
+        const sorted = hexes.slice().sort((a, b) => chroma(b).hsl()[2] - chroma(a).hsl()[2]);
+        const tiers = [100, 200, 300, 400, 500, 600, 700, 800];
+        let scale;
+
+        if (sorted.length === 1) {
+            const base = chroma(sorted[0]);
+            const hsl = base.hsl();
+            const h = isNaN(hsl[0]) ? 0 : hsl[0];
+            const s = hsl[1];
+            const lightest = chroma.hsl(h, Math.max(0.15, s * 0.4), 0.95);
+            const darkest = chroma.hsl(h, Math.min(1, s * 1.05), 0.18);
+            scale = chroma.scale([lightest.hex(), base.hex(), darkest.hex()])
+                .mode('lch').domain([100, 500, 800]);
+        } else if (sorted.length === 2) {
+            scale = chroma.scale([sorted[0], sorted[1]]).mode('lch').domain([100, 800]);
+        } else {
+            const mid = sorted[Math.floor(sorted.length / 2)];
+            scale = chroma.scale([sorted[0], mid, sorted[sorted.length - 1]])
+                .mode('lch').domain([100, 500, 800]);
+        }
+
+        return tiers.map(t => ({ tier: t, hex: scale(t).hex() }));
+    }
+
+    function formatCssVars(hexes /*, names */) {
+        // Group saved colors by their base hue name (drop dark-/light- prefix
+        // so "dark-blue" and "light-blue" merge into one --blue-100..800 ramp).
+        const groups = {};
+        const order = [];
+        hexes.forEach(hex => {
+            const base = getColorName(chroma(hex)).replace(/^(dark|light)-/, '');
+            if (!groups[base]) {
+                groups[base] = [];
+                order.push(base);
+            }
+            groups[base].push(hex);
+        });
+
+        const lines = [];
+        order.forEach((name, idx) => {
+            if (idx > 0) lines.push('');
+            lines.push(`  /* ${name} (from ${groups[name].length} saved color${groups[name].length === 1 ? '' : 's'}) */`);
+            buildHueScale(groups[name]).forEach(({ tier, hex }) => {
+                lines.push(`  --${name}-${tier}: ${hex};`);
+            });
+        });
+
+        return ':root {\n' + lines.join('\n') + '\n}';
     }
 
     function formatHexList(hexes) {
