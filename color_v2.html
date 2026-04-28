@@ -1486,6 +1486,45 @@
         padding: 0 0.75rem;
     }
 
+    /* Modal export options (toggles) */
+    .export-options {
+        display: flex;
+        gap: 1rem;
+        flex-wrap: wrap;
+        padding: 0.75rem;
+        background: var(--surface-primary);
+        border: 1px solid var(--surface-tertiary);
+        border-radius: var(--radius-md);
+    }
+    .export-option {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: 0.8125rem;
+        color: var(--text-secondary);
+        cursor: pointer;
+        user-select: none;
+    }
+    .export-option input {
+        accent-color: var(--accent-primary);
+        cursor: pointer;
+    }
+    .export-option .hint {
+        color: var(--text-tertiary);
+        font-size: 0.7rem;
+    }
+    .palette-strip-group {
+        display: flex;
+        flex-direction: column;
+        gap: 0.25rem;
+    }
+    .palette-strip-label {
+        font-size: 0.7rem;
+        color: var(--text-tertiary);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+
     /* Bulk-add button alignment */
     .gradient-bulk-controls {
         display: flex;
@@ -1813,6 +1852,208 @@
             </div>
         </div>
 
+        <!-- 1D Gradient -->
+        <div class="card">
+            <div class="card-header">
+                <h2>
+            <span class="icon">
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"
+                   stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect
+                      width="18" height="18" x="3" y="3" rx="2"></rect><circle cx="12" cy="12" r="5"></circle></svg>
+            </span>
+                    Gradient
+                </h2>
+            </div>
+            <div class="card-body">
+                <div class="gradient-controls">
+                    <div class="slider-group">
+                        <label for="gradientSlider">Intensity</label>
+                        <div class="slider-input">
+                            <input type="range" id="gradientSlider" min="0" max="100" value="50">
+                        </div>
+                    </div>
+                    <div class="slider-group">
+                        <label for="gradientBuckets">Buckets <span id="gradientBucketsValue" class="bucket-value">7</span></label>
+                        <div class="slider-input">
+                            <input type="range" id="gradientBuckets" min="3" max="25" step="2" value="7">
+                        </div>
+                    </div>
+                </div>
+                <div class="gradient-display" id="gradientDisplay"></div>
+                <div class="gradient-bulk-controls">
+                    <button id="bulkAddGradientBtn" class="btn btn-primary">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
+                             fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                             stroke-linejoin="round">
+                            <path d="M12 5v14M5 12h14"></path>
+                        </svg>
+                        Bulk Add to Palette
+                    </button>
+                    <span style="font-size:0.75rem;color:var(--text-tertiary);">Right‑click any swatch to copy its hex.</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Color Harmonies -->
+        <div class="card">
+            <div class="card-header">
+                <h2>
+            <span class="icon">
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"
+                   stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path
+                      d="M12 2v8"></path><path d="m4.93 10.93 1.41 1.41"></path><path d="M2 18h2"></path><path
+                      d="M20 18h2"></path><path d="m19.07 10.93-1.41 1.41"></path><path d="M22 22H2"></path><path
+                      d="m16 6-4 4-4-4"></path><path d="M16 18a4 4 0 0 0-8 0"></path></svg>
+            </span>
+                    Color Harmonies
+                </h2>
+            </div>
+            <div class="card-body">
+                <div class="select-group">
+                    <label for="vibeSelect">Adjust Colors by Vibe</label>
+                    <div class="select-wrapper">
+                        <select id="vibeSelect">
+                            <option value="default">None</option>
+                            <option value="pastel">Pastel</option>
+                            <option value="retro">Retro</option>
+                            <option value="cyberpunk">Cyberpunk</option>
+                            <option value="vintage">Vintage</option>
+                            <option value="vibrant">Vibrant</option>
+                            <option value="professional" selected>Professional</option>
+                            <option value="earthy">Earthy</option>
+                            <option value="neon">Neon</option>
+                            <option value="monochrome">Monochrome</option>
+                            <option value="warm">Warm</option>
+                            <option value="cool">Cool</option>
+                            <option value="ocean">Ocean</option>
+                            <option value="sunset">Sunset</option>
+                            <option value="forest">Forest</option>
+                            <option value="desert">Desert</option>
+                            <option value="candy">Candy</option>
+                            <option value="gothic">Gothic</option>
+                            <option value="dreamy">Dreamy</option>
+                            <option value="moody">Moody</option>
+                            <option value="autumn">Autumn</option>
+                            <option value="spring">Spring</option>
+                            <option value="muted">Muted</option>
+                            <option value="high-contrast">High Contrast</option>
+                        </select>
+                    </div>
+                </div>
+                <p style="font-size:0.75rem;color:var(--text-tertiary);margin-bottom:1rem;">Click a swatch to apply, right‑click to copy hex, or use “+ Add all” to bulk save the group.</p>
+                <div class="harmony-container">
+                    <div class="harmony-group">
+                        <h3>
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
+                                 fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                 stroke-linejoin="round">
+                                <path d="M5.5 8.5 9 12l-3.5 3.5L2 12l3.5-3.5Z"></path>
+                                <path d="m12 2 3.5 3.5L12 9 8.5 5.5 12 2Z"></path>
+                                <path d="M18.5 8.5 22 12l-3.5 3.5L15 12l3.5-3.5Z"></path>
+                                <path d="m12 15 3.5 3.5L12 22l-3.5-3.5L12 15Z"></path>
+                            </svg>
+                            Similar Colors
+                            <button class="harmony-add-all" data-harmony="similarColors" title="Add all to palette">+ Add all</button>
+                        </h3>
+                        <div class="color-grid" id="similarColors"></div>
+                    </div>
+                    <div class="harmony-group">
+                        <h3>
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
+                                 fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                 stroke-linejoin="round">
+                                <circle cx="12" cy="12" r="10"></circle>
+                                <circle cx="12" cy="12" r="4"></circle>
+                                <path d="M21.17 8H12"></path>
+                            </svg>
+                            Complementary Colors
+                            <button class="harmony-add-all" data-harmony="complementaryColors" title="Add all to palette">+ Add all</button>
+                        </h3>
+                        <div class="color-grid" id="complementaryColors"></div>
+                    </div>
+                    <div class="harmony-group">
+                        <h3>
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
+                                 fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                 stroke-linejoin="round">
+                                <rect width="18" height="18" x="3" y="3" rx="2"></rect>
+                                <path d="M12 8v8"></path>
+                                <path d="m8.5 14 7-4"></path>
+                                <path d="m8.5 10 7 4"></path>
+                            </svg>
+                            Analogous Colors
+                            <button class="harmony-add-all" data-harmony="analogousColors" title="Add all to palette">+ Add all</button>
+                        </h3>
+                        <div class="color-grid" id="analogousColors"></div>
+                    </div>
+                    <div class="harmony-group">
+                        <h3>
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
+                                 fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                 stroke-linejoin="round">
+                                <polygon points="12 2 20 12 12 22 4 12"></polygon>
+                            </svg>
+                            Triadic Colors
+                            <button class="harmony-add-all" data-harmony="triadicColors" title="Add all to palette">+ Add all</button>
+                        </h3>
+                        <div class="color-grid" id="triadicColors"></div>
+                    </div>
+                    <div class="harmony-group">
+                        <h3>
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
+                                 fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                 stroke-linejoin="round">
+                                <rect width="16" height="16" x="4" y="4" rx="2"></rect>
+                            </svg>
+                            Tetradic Colors
+                            <button class="harmony-add-all" data-harmony="tetradicColors" title="Add all to palette">+ Add all</button>
+                        </h3>
+                        <div class="color-grid" id="tetradicColors"></div>
+                    </div>
+                    <div class="harmony-group">
+                        <h3>
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
+                                 fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                 stroke-linejoin="round">
+                                <polygon points="2 12 10 6 10 18 2 12"></polygon>
+                                <polygon points="22 12 14 6 14 18 22 12"></polygon>
+                            </svg>
+                            Split‑Complementary
+                            <button class="harmony-add-all" data-harmony="splitColors" title="Add all to palette">+ Add all</button>
+                        </h3>
+                        <div class="color-grid" id="splitColors"></div>
+                    </div>
+                    <div class="harmony-group">
+                        <h3>
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
+                                 fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                 stroke-linejoin="round">
+                                <circle cx="12" cy="12" r="6"></circle>
+                                <path d="M12 2v4M12 18v4M2 12h4M18 12h4"></path>
+                            </svg>
+                            Monochromatic (Shades &amp; Tints)
+                            <button class="harmony-add-all" data-harmony="monochromaticColors" title="Add all to palette">+ Add all</button>
+                        </h3>
+                        <div class="color-grid" id="monochromaticColors"></div>
+                    </div>
+                    <div class="harmony-group">
+                        <h3>
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
+                                 fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                 stroke-linejoin="round">
+                                <circle cx="12" cy="12" r="10"></circle>
+                                <path d="M12 2v20"></path>
+                                <path d="M2 12h20"></path>
+                            </svg>
+                            Luminance Contrast
+                            <button class="harmony-add-all" data-harmony="luminanceConstrast" title="Add all to palette">+ Add all</button>
+                        </h3>
+                        <div class="color-grid" id="luminanceConstrast"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- CSS Filter Generator -->
         <div class="card">
             <div class="card-header">
@@ -2129,208 +2370,6 @@
                     </div>
                 </div>
 
-            </div>
-        </div>
-
-        <!-- 1D Gradient -->
-        <div class="card">
-            <div class="card-header">
-                <h2>
-            <span class="icon">
-              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"
-                   stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect
-                      width="18" height="18" x="3" y="3" rx="2"></rect><circle cx="12" cy="12" r="5"></circle></svg>
-            </span>
-                    Gradient
-                </h2>
-            </div>
-            <div class="card-body">
-                <div class="gradient-controls">
-                    <div class="slider-group">
-                        <label for="gradientSlider">Intensity</label>
-                        <div class="slider-input">
-                            <input type="range" id="gradientSlider" min="0" max="100" value="50">
-                        </div>
-                    </div>
-                    <div class="slider-group">
-                        <label for="gradientBuckets">Buckets <span id="gradientBucketsValue" class="bucket-value">7</span></label>
-                        <div class="slider-input">
-                            <input type="range" id="gradientBuckets" min="3" max="25" step="2" value="7">
-                        </div>
-                    </div>
-                </div>
-                <div class="gradient-display" id="gradientDisplay"></div>
-                <div class="gradient-bulk-controls">
-                    <button id="bulkAddGradientBtn" class="btn btn-primary">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
-                             fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                             stroke-linejoin="round">
-                            <path d="M12 5v14M5 12h14"></path>
-                        </svg>
-                        Bulk Add to Palette
-                    </button>
-                    <span style="font-size:0.75rem;color:var(--text-tertiary);">Right‑click any swatch to copy its hex.</span>
-                </div>
-            </div>
-        </div>
-
-        <!-- Color Harmonies -->
-        <div class="card">
-            <div class="card-header">
-                <h2>
-            <span class="icon">
-              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"
-                   stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path
-                      d="M12 2v8"></path><path d="m4.93 10.93 1.41 1.41"></path><path d="M2 18h2"></path><path
-                      d="M20 18h2"></path><path d="m19.07 10.93-1.41 1.41"></path><path d="M22 22H2"></path><path
-                      d="m16 6-4 4-4-4"></path><path d="M16 18a4 4 0 0 0-8 0"></path></svg>
-            </span>
-                    Color Harmonies
-                </h2>
-            </div>
-            <div class="card-body">
-                <div class="select-group">
-                    <label for="vibeSelect">Adjust Colors by Vibe</label>
-                    <div class="select-wrapper">
-                        <select id="vibeSelect">
-                            <option value="default">None</option>
-                            <option value="pastel">Pastel</option>
-                            <option value="retro">Retro</option>
-                            <option value="cyberpunk">Cyberpunk</option>
-                            <option value="vintage">Vintage</option>
-                            <option value="vibrant">Vibrant</option>
-                            <option value="professional" selected>Professional</option>
-                            <option value="earthy">Earthy</option>
-                            <option value="neon">Neon</option>
-                            <option value="monochrome">Monochrome</option>
-                            <option value="warm">Warm</option>
-                            <option value="cool">Cool</option>
-                            <option value="ocean">Ocean</option>
-                            <option value="sunset">Sunset</option>
-                            <option value="forest">Forest</option>
-                            <option value="desert">Desert</option>
-                            <option value="candy">Candy</option>
-                            <option value="gothic">Gothic</option>
-                            <option value="dreamy">Dreamy</option>
-                            <option value="moody">Moody</option>
-                            <option value="autumn">Autumn</option>
-                            <option value="spring">Spring</option>
-                            <option value="muted">Muted</option>
-                            <option value="high-contrast">High Contrast</option>
-                        </select>
-                    </div>
-                </div>
-                <p style="font-size:0.75rem;color:var(--text-tertiary);margin-bottom:1rem;">Click a swatch to apply, right‑click to copy hex, or use “+ Add all” to bulk save the group.</p>
-                <div class="harmony-container">
-                    <div class="harmony-group">
-                        <h3>
-                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
-                                 fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                                 stroke-linejoin="round">
-                                <path d="M5.5 8.5 9 12l-3.5 3.5L2 12l3.5-3.5Z"></path>
-                                <path d="m12 2 3.5 3.5L12 9 8.5 5.5 12 2Z"></path>
-                                <path d="M18.5 8.5 22 12l-3.5 3.5L15 12l3.5-3.5Z"></path>
-                                <path d="m12 15 3.5 3.5L12 22l-3.5-3.5L12 15Z"></path>
-                            </svg>
-                            Similar Colors
-                            <button class="harmony-add-all" data-harmony="similarColors" title="Add all to palette">+ Add all</button>
-                        </h3>
-                        <div class="color-grid" id="similarColors"></div>
-                    </div>
-                    <div class="harmony-group">
-                        <h3>
-                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
-                                 fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                                 stroke-linejoin="round">
-                                <circle cx="12" cy="12" r="10"></circle>
-                                <circle cx="12" cy="12" r="4"></circle>
-                                <path d="M21.17 8H12"></path>
-                            </svg>
-                            Complementary Colors
-                            <button class="harmony-add-all" data-harmony="complementaryColors" title="Add all to palette">+ Add all</button>
-                        </h3>
-                        <div class="color-grid" id="complementaryColors"></div>
-                    </div>
-                    <div class="harmony-group">
-                        <h3>
-                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
-                                 fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                                 stroke-linejoin="round">
-                                <rect width="18" height="18" x="3" y="3" rx="2"></rect>
-                                <path d="M12 8v8"></path>
-                                <path d="m8.5 14 7-4"></path>
-                                <path d="m8.5 10 7 4"></path>
-                            </svg>
-                            Analogous Colors
-                            <button class="harmony-add-all" data-harmony="analogousColors" title="Add all to palette">+ Add all</button>
-                        </h3>
-                        <div class="color-grid" id="analogousColors"></div>
-                    </div>
-                    <div class="harmony-group">
-                        <h3>
-                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
-                                 fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                                 stroke-linejoin="round">
-                                <polygon points="12 2 20 12 12 22 4 12"></polygon>
-                            </svg>
-                            Triadic Colors
-                            <button class="harmony-add-all" data-harmony="triadicColors" title="Add all to palette">+ Add all</button>
-                        </h3>
-                        <div class="color-grid" id="triadicColors"></div>
-                    </div>
-                    <div class="harmony-group">
-                        <h3>
-                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
-                                 fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                                 stroke-linejoin="round">
-                                <rect width="16" height="16" x="4" y="4" rx="2"></rect>
-                            </svg>
-                            Tetradic Colors
-                            <button class="harmony-add-all" data-harmony="tetradicColors" title="Add all to palette">+ Add all</button>
-                        </h3>
-                        <div class="color-grid" id="tetradicColors"></div>
-                    </div>
-                    <div class="harmony-group">
-                        <h3>
-                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
-                                 fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                                 stroke-linejoin="round">
-                                <polygon points="2 12 10 6 10 18 2 12"></polygon>
-                                <polygon points="22 12 14 6 14 18 22 12"></polygon>
-                            </svg>
-                            Split‑Complementary
-                            <button class="harmony-add-all" data-harmony="splitColors" title="Add all to palette">+ Add all</button>
-                        </h3>
-                        <div class="color-grid" id="splitColors"></div>
-                    </div>
-                    <div class="harmony-group">
-                        <h3>
-                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
-                                 fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                                 stroke-linejoin="round">
-                                <circle cx="12" cy="12" r="6"></circle>
-                                <path d="M12 2v4M12 18v4M2 12h4M18 12h4"></path>
-                            </svg>
-                            Monochromatic (Shades &amp; Tints)
-                            <button class="harmony-add-all" data-harmony="monochromaticColors" title="Add all to palette">+ Add all</button>
-                        </h3>
-                        <div class="color-grid" id="monochromaticColors"></div>
-                    </div>
-                    <div class="harmony-group">
-                        <h3>
-                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
-                                 fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                                 stroke-linejoin="round">
-                                <circle cx="12" cy="12" r="10"></circle>
-                                <path d="M12 2v20"></path>
-                                <path d="M2 12h20"></path>
-                            </svg>
-                            Luminance Contrast
-                            <button class="harmony-add-all" data-harmony="luminanceConstrast" title="Add all to palette">+ Add all</button>
-                        </h3>
-                        <div class="color-grid" id="luminanceConstrast"></div>
-                    </div>
-                </div>
             </div>
         </div>
 
@@ -2747,7 +2786,19 @@
             <button id="exportModalClose" class="modal-close" aria-label="Close">×</button>
         </div>
         <div class="modal-body">
-            <div id="exportPaletteStrip" class="palette-color-strip empty">No saved colors yet</div>
+            <div id="exportPreview"></div>
+            <div class="export-options" id="exportOptions">
+                <label class="export-option">
+                    <input type="checkbox" id="optAutoRamp" checked>
+                    <span>Auto‑ramp 100‑800 scale</span>
+                    <span class="hint">(group hues into a tint→shade ramp)</span>
+                </label>
+                <label class="export-option">
+                    <input type="checkbox" id="optDarkMode">
+                    <span>Generate <code>[data-theme="dark"]</code></span>
+                    <span class="hint">(invert ramp for dark mode)</span>
+                </label>
+            </div>
             <div class="format-tabs" id="formatTabs">
                 <div class="format-tab active" data-format="cssvars">CSS Variables</div>
                 <div class="format-tab" data-format="hex">Hex List</div>
@@ -4338,14 +4389,39 @@
     /***********************
      * Format generators
      ***********************/
-    // Build a 100..800 ramp from a set of saved hexes that share a hue.
-    // Lightest input maps near 100 and darkest near 800; missing tiers are
-    // interpolated through LCH for perceptual smoothness.
-    function buildHueScale(hexes) {
-        const sorted = hexes.slice().sort((a, b) => chroma(b).hsl()[2] - chroma(a).hsl()[2]);
-        const tiers = [100, 200, 300, 400, 500, 600, 700, 800];
-        let scale;
+    // Pick the smallest "nice" step that fits N tiers inside [100, 800].
+    function pickRampStep(n) {
+        const candidates = [100, 50, 25, 20, 10, 5, 1];
+        for (const s of candidates) {
+            if (Math.floor(700 / s) + 1 >= n) return s;
+        }
+        return 1;
+    }
 
+    // Produce N monotonically-increasing tier numbers from 100 to 800,
+    // snapped to a "nice" step. Bumps subsequent tiers up if rounding collides.
+    function buildTierList(n) {
+        if (n <= 0) return [];
+        if (n === 1) return [500];
+        const step = pickRampStep(n);
+        const tiers = [];
+        for (let i = 0; i < n; i++) {
+            const raw = 100 + (700 * i) / (n - 1);
+            tiers.push(Math.round(raw / step) * step);
+        }
+        for (let i = 1; i < tiers.length; i++) {
+            if (tiers[i] <= tiers[i - 1]) tiers[i] = tiers[i - 1] + step;
+        }
+        // Pin endpoints to ensure 100 and 800 always anchor the ramp.
+        tiers[0] = Math.min(tiers[0], 100);
+        if (tiers[0] < 100) tiers[0] = 100;
+        if (tiers[tiers.length - 1] < 800) tiers[tiers.length - 1] = 800;
+        return tiers;
+    }
+
+    // Build a chroma.scale that maps 100→lightest, 800→darkest (via LCH).
+    function buildHueScaleFunction(hexes) {
+        const sorted = hexes.slice().sort((a, b) => chroma(b).hsl()[2] - chroma(a).hsl()[2]);
         if (sorted.length === 1) {
             const base = chroma(sorted[0]);
             const hsl = base.hsl();
@@ -4353,22 +4429,34 @@
             const s = hsl[1];
             const lightest = chroma.hsl(h, Math.max(0.15, s * 0.4), 0.95);
             const darkest = chroma.hsl(h, Math.min(1, s * 1.05), 0.18);
-            scale = chroma.scale([lightest.hex(), base.hex(), darkest.hex()])
-                .mode('lch').domain([100, 500, 800]);
-        } else if (sorted.length === 2) {
-            scale = chroma.scale([sorted[0], sorted[1]]).mode('lch').domain([100, 800]);
-        } else {
-            const mid = sorted[Math.floor(sorted.length / 2)];
-            scale = chroma.scale([sorted[0], mid, sorted[sorted.length - 1]])
+            return chroma.scale([lightest.hex(), base.hex(), darkest.hex()])
                 .mode('lch').domain([100, 500, 800]);
         }
-
-        return tiers.map(t => ({ tier: t, hex: scale(t).hex() }));
+        if (sorted.length === 2) {
+            return chroma.scale([sorted[0], sorted[1]]).mode('lch').domain([100, 800]);
+        }
+        const mid = sorted[Math.floor(sorted.length / 2)];
+        return chroma.scale([sorted[0], mid, sorted[sorted.length - 1]])
+            .mode('lch').domain([100, 500, 800]);
     }
 
-    function formatCssVars(hexes /*, names */) {
-        // Group saved colors by their base hue name (drop dark-/light- prefix
-        // so "dark-blue" and "light-blue" merge into one --blue-100..800 ramp).
+    // Sample the scale at one tier per saved color, with the bucket count
+    // (and step granularity) growing to fit the input. dark=true mirrors the
+    // tier→color mapping so 100 in dark mode is the darkest shade and 800
+    // is the lightest, suitable for a [data-theme="dark"] override.
+    function buildHueScale(hexes, opts = {}) {
+        const dark = !!opts.dark;
+        const tiers = buildTierList(hexes.length);
+        const scale = buildHueScaleFunction(hexes);
+        return tiers.map(t => {
+            const sampleAt = dark ? (900 - t) : t;
+            return { tier: t, hex: scale(sampleAt).hex() };
+        });
+    }
+
+    // Group saved colors by their base hue name (drop dark-/light- prefix so
+    // "dark-blue" and "light-blue" merge into one --blue-… ramp).
+    function groupByHue(hexes) {
         const groups = {};
         const order = [];
         hexes.forEach(hex => {
@@ -4379,17 +4467,49 @@
             }
             groups[base].push(hex);
         });
+        return { groups, order };
+    }
 
-        const lines = [];
+    function formatCssVars(hexes, names, opts = {}) {
+        const ramp = opts.ramp !== false;
+        const darkMode = !!opts.darkMode;
+
+        if (!ramp) {
+            const lines = hexes.map((hex, i) => `  --${names[i]}: ${hex};`);
+            const rootBlock = ':root {\n' + lines.join('\n') + '\n}';
+            if (!darkMode) return rootBlock;
+            // For dark-mode without ramp, we don't have a meaningful inversion —
+            // emit a placeholder block the user can fill in.
+            const darkLines = hexes.map((hex, i) => {
+                const c = chroma(hex);
+                const adj = c.luminance() < 0.5
+                    ? c.set('hsl.l', Math.min(0.85, c.hsl()[2] + 0.4)).hex()
+                    : c.set('hsl.l', Math.max(0.15, c.hsl()[2] - 0.4)).hex();
+                return `  --${names[i]}: ${adj};`;
+            });
+            return rootBlock + '\n\n[data-theme="dark"] {\n' + darkLines.join('\n') + '\n}';
+        }
+
+        const { groups, order } = groupByHue(hexes);
+        const lightLines = [];
+        const darkLines = [];
         order.forEach((name, idx) => {
-            if (idx > 0) lines.push('');
-            lines.push(`  /* ${name} (from ${groups[name].length} saved color${groups[name].length === 1 ? '' : 's'}) */`);
-            buildHueScale(groups[name]).forEach(({ tier, hex }) => {
-                lines.push(`  --${name}-${tier}: ${hex};`);
+            if (idx > 0) { lightLines.push(''); darkLines.push(''); }
+            const groupHexes = groups[name];
+            const header = `  /* ${name} (from ${groupHexes.length} saved color${groupHexes.length === 1 ? '' : 's'}) */`;
+            lightLines.push(header);
+            darkLines.push(header);
+            buildHueScale(groupHexes, { dark: false }).forEach(({ tier, hex }) => {
+                lightLines.push(`  --${name}-${tier}: ${hex};`);
+            });
+            buildHueScale(groupHexes, { dark: true }).forEach(({ tier, hex }) => {
+                darkLines.push(`  --${name}-${tier}: ${hex};`);
             });
         });
 
-        return ':root {\n' + lines.join('\n') + '\n}';
+        const rootBlock = ':root {\n' + lightLines.join('\n') + '\n}';
+        if (!darkMode) return rootBlock;
+        return rootBlock + '\n\n[data-theme="dark"] {\n' + darkLines.join('\n') + '\n}';
     }
 
     function formatHexList(hexes) {
@@ -4437,21 +4557,28 @@
         ].join('\n');
     }
 
+    function getExportOptions() {
+        const ramp = document.getElementById('optAutoRamp').checked;
+        const darkMode = document.getElementById('optDarkMode').checked;
+        return { ramp, darkMode };
+    }
+
     function buildFormatOutput(format) {
         if (savedPalettes.length === 0) {
             return '/* No colors saved yet. Save some colors first. */';
         }
         const hexes = savedPalettes.slice();
         const names = generatePaletteNames(hexes);
+        const opts = getExportOptions();
         switch (format) {
-            case 'cssvars':  return formatCssVars(hexes, names);
+            case 'cssvars':  return formatCssVars(hexes, names, opts);
             case 'hex':      return formatHexList(hexes);
             case 'rgba':     return formatRgbaList(hexes);
             case 'hsl':      return formatHslList(hexes);
             case 'scss':     return formatScss(hexes, names);
             case 'json':     return formatJson(hexes, names);
             case 'tailwind': return formatTailwind(hexes, names);
-            default:         return formatCssVars(hexes, names);
+            default:         return formatCssVars(hexes, names, opts);
         }
     }
 
@@ -4460,22 +4587,66 @@
      ***********************/
     let activeFormat = 'cssvars';
 
-    function refreshExportModal() {
-        // Update color preview strip
-        const strip = document.getElementById('exportPaletteStrip');
-        strip.innerHTML = '';
-        if (savedPalettes.length === 0) {
+    function makeStrip(label, colors) {
+        const wrap = document.createElement('div');
+        wrap.className = 'palette-strip-group';
+        const lbl = document.createElement('div');
+        lbl.className = 'palette-strip-label';
+        lbl.textContent = label;
+        const strip = document.createElement('div');
+        strip.className = 'palette-color-strip';
+        if (colors.length === 0) {
             strip.classList.add('empty');
             strip.textContent = 'No saved colors yet';
         } else {
-            strip.classList.remove('empty');
-            savedPalettes.forEach(hex => {
+            colors.forEach(({ hex, label: cellLabel }) => {
                 const cell = document.createElement('div');
                 cell.style.background = hex;
-                cell.title = hex;
+                cell.title = cellLabel ? `${cellLabel}: ${hex}` : hex;
                 strip.appendChild(cell);
             });
         }
+        wrap.appendChild(lbl);
+        wrap.appendChild(strip);
+        return wrap;
+    }
+
+    function refreshExportModal() {
+        const preview = document.getElementById('exportPreview');
+        preview.innerHTML = '';
+
+        if (savedPalettes.length === 0) {
+            preview.appendChild(makeStrip('Saved palette', []));
+            document.getElementById('formatOutput').textContent = buildFormatOutput(activeFormat);
+            return;
+        }
+
+        const opts = getExportOptions();
+
+        if (!opts.ramp) {
+            preview.appendChild(makeStrip(
+                `Saved palette (${savedPalettes.length})`,
+                savedPalettes.map(hex => ({ hex }))
+            ));
+        } else {
+            const { groups, order } = groupByHue(savedPalettes);
+            order.forEach(name => {
+                const groupHexes = groups[name];
+                const lightRamp = buildHueScale(groupHexes, { dark: false });
+                preview.appendChild(makeStrip(
+                    `${name} ramp (${lightRamp.length} buckets, ${groupHexes.length} saved)`,
+                    lightRamp.map(({ tier, hex }) => ({ hex, label: `--${name}-${tier}` }))
+                ));
+                if (opts.darkMode) {
+                    const darkRamp = buildHueScale(groupHexes, { dark: true });
+                    preview.appendChild(makeStrip(
+                        `${name} ramp (dark)`,
+                        darkRamp.map(({ tier, hex }) => ({ hex, label: `--${name}-${tier}` }))
+                    ));
+                }
+            });
+        }
+
         document.getElementById('formatOutput').textContent = buildFormatOutput(activeFormat);
     }
 
@@ -4507,8 +4678,12 @@
             document.querySelectorAll('.format-tab').forEach(t => t.classList.remove('active'));
             this.classList.add('active');
             activeFormat = this.getAttribute('data-format');
-            document.getElementById('formatOutput').textContent = buildFormatOutput(activeFormat);
+            refreshExportModal();
         });
+    });
+
+    ['optAutoRamp', 'optDarkMode'].forEach(id => {
+        document.getElementById(id).addEventListener('change', refreshExportModal);
     });
 
     document.getElementById('copyFormatBtn').addEventListener('click', function () {
