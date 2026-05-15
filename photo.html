@@ -402,7 +402,7 @@ a{color:var(--primary);}
 .control-body{
   padding:4px 14px 12px;
   overflow-y:auto;-webkit-overflow-scrolling:touch;
-  flex:1;min-width:0;
+  flex:1 1 auto;min-width:0;min-height:0;
 }
 
 /* slider */
@@ -3911,6 +3911,10 @@ function updateToolPanel() {
     case 'frame':    buildFramePanel(body, actions); break;
     case 'layers':   buildLayersPanel(body, actions); break;
   }
+  // When the active tool changes, restore that tool's stored panel-height snap.
+  if (!sameTool && typeof restorePanelHeightForTool === 'function') {
+    restorePanelHeightForTool(App.activeTool);
+  }
   _toolPanelLastTool = App.activeTool;
   if (scrollSnap) {
     restoreScrollPositions(scrollSnap);
@@ -3918,6 +3922,162 @@ function updateToolPanel() {
     requestAnimationFrame(() => restoreScrollPositions(scrollSnap));
   }
 }
+
+/* ================================================================
+   CONTROL PANEL — DRAG-TO-RESIZE
+   Snap points: Compact ~22dvh, Mid ~48dvh, Full ~78dvh.
+   - Pointer drag on the handle lets the user resize live.
+   - On release, snap to the nearest of the three points (smooth).
+   - Tap (no drag) cycles Compact -> Mid -> Full -> Compact.
+   - Vertical swipe on the handle: down dismisses to Compact, up to Full.
+   - Per-tool snap state persisted in localStorage as `studio.panelHeight.{tool}`.
+   - After every resize-end, fitCanvasToView() re-centers the image.
+   ================================================================ */
+const CP_SNAPS = { compact: 22, mid: 48, full: 78 }; // % of dvh
+const CP_SNAP_NAMES = ['compact', 'mid', 'full'];
+const CP_MIN_VH = 14;
+const CP_MAX_VH = 85;
+const CP_STORAGE_PREFIX = 'studio.panelHeight.';
+let _cpCurrentSnap = 'compact'; // logical snap-name
+let _cpDragState = null;
+let _cpLiveVh = CP_SNAPS.compact; // last live VH applied (only during drag)
+let _cpRestoring = false;
+
+function _cpStorageKey(tool) {
+  return CP_STORAGE_PREFIX + (tool || App.activeTool || 'adjust');
+}
+function _cpReadStoredSnap(tool) {
+  try {
+    const v = localStorage.getItem(_cpStorageKey(tool));
+    if (v && CP_SNAP_NAMES.indexOf(v) !== -1) return v;
+  } catch (_) {}
+  return 'compact';
+}
+function _cpWriteStoredSnap(tool, snap) {
+  try { localStorage.setItem(_cpStorageKey(tool), snap); } catch (_) {}
+}
+function _cpApplyVh(vh, smooth) {
+  const panel = els.controlPanel;
+  if (!panel) return;
+  const v = Math.max(CP_MIN_VH, Math.min(CP_MAX_VH, vh));
+  if (smooth) {
+    panel.classList.remove('cp-dragging');
+  } else {
+    panel.classList.add('cp-dragging');
+  }
+  panel.style.setProperty('--cp-h', v + 'dvh');
+  _cpLiveVh = v;
+}
+function _cpSnapToName(name, opts) {
+  const target = CP_SNAPS[name];
+  if (target == null) return;
+  _cpCurrentSnap = name;
+  _cpApplyVh(target, /*smooth*/ true);
+  if (!_cpRestoring) _cpWriteStoredSnap(App.activeTool, name);
+  // After the height transition settles, refit canvas to fill new space.
+  if (opts && opts.skipFit) return;
+  // Use a short delay matching the CSS transition duration.
+  clearTimeout(_cpSnapToName._fitT);
+  _cpSnapToName._fitT = setTimeout(() => {
+    if (App.layers && App.layers.length) fitCanvasToView();
+  }, 220);
+}
+function _cpNearestSnapVh(vh) {
+  let best = 'compact', bestD = Infinity;
+  for (const k of CP_SNAP_NAMES) {
+    const d = Math.abs(CP_SNAPS[k] - vh);
+    if (d < bestD) { bestD = d; best = k; }
+  }
+  return best;
+}
+function _cpCycleSnap() {
+  const i = CP_SNAP_NAMES.indexOf(_cpCurrentSnap);
+  const next = CP_SNAP_NAMES[(i + 1) % CP_SNAP_NAMES.length];
+  _cpSnapToName(next);
+}
+function restorePanelHeightForTool(tool) {
+  _cpRestoring = true;
+  const snap = _cpReadStoredSnap(tool);
+  _cpSnapToName(snap, { skipFit: true });
+  _cpRestoring = false;
+}
+
+(function setupPanelDragHandle() {
+  const handle = els.cpDragHandle;
+  const panel = els.controlPanel;
+  if (!handle || !panel) return;
+
+  // Initial paint: respect persisted snap for the starting tool (default compact).
+  restorePanelHeightForTool(App.activeTool);
+
+  let pointerId = null;
+  let startY = 0;
+  let startVh = 0;
+  let startTime = 0;
+  let didDrag = false;
+  const DRAG_THRESHOLD_PX = 4;
+
+  function vhFromPx(px) {
+    return (px / window.innerHeight) * 100;
+  }
+
+  function onDown(e) {
+    if (pointerId !== null) return;
+    pointerId = e.pointerId != null ? e.pointerId : 1;
+    startY = e.clientY;
+    startVh = _cpLiveVh;
+    startTime = Date.now();
+    didDrag = false;
+    panel.classList.add('cp-dragging');
+    try { handle.setPointerCapture(pointerId); } catch (_) {}
+    e.preventDefault();
+  }
+  function onMove(e) {
+    if (pointerId === null) return;
+    if (e.pointerId != null && e.pointerId !== pointerId) return;
+    const dy = e.clientY - startY;
+    if (!didDrag && Math.abs(dy) > DRAG_THRESHOLD_PX) didDrag = true;
+    // Dragging down (positive dy) shrinks the panel; dragging up grows it.
+    const nextVh = startVh - vhFromPx(dy);
+    _cpApplyVh(nextVh, /*smooth*/ false);
+    e.preventDefault();
+  }
+  function endDrag(e) {
+    if (pointerId === null) return;
+    if (e && e.pointerId != null && e.pointerId !== pointerId) return;
+    const elapsed = Date.now() - startTime;
+    const dy = e ? (e.clientY - startY) : 0;
+    try { handle.releasePointerCapture(pointerId); } catch (_) {}
+    pointerId = null;
+    if (!didDrag) {
+      // No-drag tap: cycle compact -> mid -> full.
+      _cpCycleSnap();
+      return;
+    }
+    // Detect swipe: short time, large vertical distance.
+    const isSwipeDown = elapsed < 320 && dy >  Math.max(24, window.innerHeight * 0.06);
+    const isSwipeUp   = elapsed < 320 && dy < -Math.max(24, window.innerHeight * 0.06);
+    if (isSwipeDown) {
+      _cpSnapToName('compact');
+    } else if (isSwipeUp) {
+      _cpSnapToName('full');
+    } else {
+      _cpSnapToName(_cpNearestSnapVh(_cpLiveVh));
+    }
+  }
+
+  handle.addEventListener('pointerdown', onDown);
+  handle.addEventListener('pointermove', onMove);
+  handle.addEventListener('pointerup', endDrag);
+  handle.addEventListener('pointercancel', endDrag);
+  // Keyboard accessibility: arrow keys cycle.
+  handle.tabIndex = 0;
+  handle.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowUp')        { _cpSnapToName('full'); e.preventDefault(); }
+    else if (e.key === 'ArrowDown') { _cpSnapToName('compact'); e.preventDefault(); }
+    else if (e.key === 'Enter' || e.key === ' ') { _cpCycleSnap(); e.preventDefault(); }
+  });
+})();
 
 /* ================================================================
    SLIDER HELPER
