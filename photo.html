@@ -1680,7 +1680,9 @@ a{color:var(--primary);}
       <div class="text-sel-box" id="textSelBox">
         <div class="text-sel-frame" id="textSelFrame"></div>
         <div class="text-sel-rotline"></div>
-        <div class="text-sel-handle rot" data-handle="rot" title="Rotate"></div>
+        <div class="text-sel-rotpin" data-handle="rot" title="Rotate">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"/><polyline points="3 4 3 10 9 10"/></svg>
+        </div>
         <div class="text-sel-handle tl" data-handle="tl"></div>
         <div class="text-sel-handle tm" data-handle="tm"></div>
         <div class="text-sel-handle tr" data-handle="tr"></div>
@@ -1696,7 +1698,9 @@ a{color:var(--primary);}
       <div class="text-sel-box" id="shapeSelBox">
         <div class="text-sel-frame" id="shapeSelFrame"></div>
         <div class="text-sel-rotline"></div>
-        <div class="text-sel-handle rot" data-handle="rot" title="Rotate"></div>
+        <div class="text-sel-rotpin" data-handle="rot" title="Rotate">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"/><polyline points="3 4 3 10 9 10"/></svg>
+        </div>
         <div class="text-sel-handle tl" data-handle="tl"></div>
         <div class="text-sel-handle tm" data-handle="tm"></div>
         <div class="text-sel-handle tr" data-handle="tr"></div>
@@ -2073,13 +2077,14 @@ const App = {
   cropRect: null,
 
   // ----- Drawing -----
-  drawTool: 'brush',       // brush | eraser
+  drawTool: 'brush',       // brush | eraser | fill
   brushSize: 12,
   brushColor: '#0f766e',
   brushOpacity: 1,         // 0..1, applies during stroke
   brushHardness: 1,        // 0..1; 1=hard edge, <1 = soft stamp
   paintMaskMode: false,    // true => paint on layer.mask instead of canvas
   eraserInvertMask: false, // future: invert mask interpretation
+  fillTolerance: 32,       // 0..255; flood-fill match threshold
 
   // ----- Shapes (S2) -----
   shape: {
@@ -2117,6 +2122,22 @@ const App = {
     previewLayerId: null,  // id of the layer the cache belongs to
   },
   activeEffectExtra: null, // 'tint' | 'colorReplace' | 'bgRemove' | null
+
+  // ----- Background removal LIVE-TUNE cache (post-model) -----
+  // Populated after removeBackground() finishes. While `active` is true the
+  // Effects panel shows Edge + Feather sliders that recompose the base-layer
+  // canvas from `originPixels` + a tweaked `mask` (single-channel alpha).
+  // Apply -> commit + drop cache. Cancel -> restore originPixels.
+  bgRemove: {
+    active: false,
+    originPixels: null,    // Uint8ClampedArray | null (pre-removal RGBA)
+    mask: null,            // Uint8Array (single channel, model's alpha)
+    w: 0,
+    h: 0,
+    edge: 0,               // -100..+100; -negative erodes, +positive dilates
+    feather: 0,            // 0..100; Gaussian-blur radius proportional
+    layerId: null,
+  },
 
   // ----- Canvas size dialog (S6) -----
   canvasSize: { lockAspect: true, resample: 'smooth' },
@@ -3881,6 +3902,11 @@ function setTool(tool) {
     exitColorReplaceMode();
     App.activeEffectExtra = null;
   }
+  // Switching tools while a BG-Remove live tune is open -> revert it.
+  if (tool !== 'effect' && App.bgRemove && App.bgRemove.active) {
+    exitBgRemoveMode();
+    App.activeEffectExtra = null;
+  }
   // Cancel color replace pick mode
   if (App.colorReplace) App.colorReplace.pickingSource = false;
   if (els.eyedropperHint) els.eyedropperHint.classList.remove('show');
@@ -4603,20 +4629,35 @@ function buildCropPanel(body, actions) {
   });
   $('cropApply').addEventListener('click', applyCrop);
 
-  initCropRect();
+  // Only seed a default crop rect when entering crop with no existing one.
+  // (Mid-crop the rect is already set; aspect-chip handlers call initCropRect
+  // explicitly to recompute for the new ratio.)
+  if (!App.cropRect) initCropRect();
   updateCropOverlay();
 }
 
 function initCropRect() {
+  // Default crop frame = full image (no inset). For Free aspect, that's the
+  // whole canvas. For aspect-locked presets, that's the LARGEST rectangle
+  // with the chosen aspect that fits inside the canvas, centered.
   const W = App.workW, H = App.workH;
   const ap = ASPECT_PRESETS.find(a => a.id === App.cropAspect);
-  let ratio = ap.ratio;
-  if (ratio === 'orig') ratio = W / H;
+  let ratio = ap ? ap.ratio : null;
+  if (App.cropAspect === 'free') ratio = null;
+  else if (ratio === 'orig') ratio = W / H;
 
-  let cw = W * 0.86, ch = H * 0.86;
+  let cw = W, ch = H;
   if (ratio) {
-    if (cw / ch > ratio) cw = ch * ratio;
-    else ch = cw / ratio;
+    // Largest centered rect with this aspect that fits within W x H.
+    if (W / H > ratio) {
+      // Canvas is wider than ratio -> height-limited
+      ch = H;
+      cw = H * ratio;
+    } else {
+      // Canvas is taller (or equal) -> width-limited
+      cw = W;
+      ch = W / ratio;
+    }
   }
   App.cropRect = {
     x: (W - cw) / 2,
@@ -4843,9 +4884,12 @@ const BRUSH_COLORS = [
 ];
 
 function buildDrawPanel(body, actions) {
-  els.cpTitle.innerHTML = `Draw <span class="cp-title-val">${App.brushSize}px</span>`;
+  const isFill = App.drawTool === 'fill';
+  els.cpTitle.innerHTML = isFill
+    ? `Draw <span class="cp-title-val">Fill</span>`
+    : `Draw <span class="cp-title-val">${App.brushSize}px</span>`;
 
-  // Tool row
+  // Tool row — Brush / Eraser / Fill / Clear
   const toolRow = document.createElement('div');
   toolRow.className = 'draw-row';
   toolRow.innerHTML = `
@@ -4856,13 +4900,16 @@ function buildDrawPanel(body, actions) {
       <button class="draw-tool-btn ${App.drawTool==='eraser'?'active':''}" data-dtool="eraser" title="Eraser">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20H7l-3.5-3.5a2.12 2.12 0 0 1 0-3l9.5-9.5a2.12 2.12 0 0 1 3 0l5 5a2.12 2.12 0 0 1 0 3L10 22"/><line x1="18" y1="13" x2="13" y2="8"/></svg>
       </button>
+      <button class="draw-tool-btn ${App.drawTool==='fill'?'active':''}" data-dtool="fill" title="Fill bucket">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 11L9.5 1.5 4 7l9.5 9.5L19 11z"/><path d="M5 10l9 9"/><path d="M19 22a2 2 0 0 0 2-2c0-1.6-2-4-2-4s-2 2.4-2 4a2 2 0 0 0 2 2z"/></svg>
+      </button>
       <button class="draw-tool-btn" data-dtool="clear" title="Clear current layer">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/></svg>
       </button>
     </div>
-    <div class="slider-track" style="flex:1;">
+    <div class="slider-track" style="flex:1;${isFill ? 'opacity:.4;pointer-events:none;' : ''}">
       <div class="slider-fill" style="width:${(App.brushSize/200)*100}%"></div>
-      <input type="range" min="1" max="200" value="${App.brushSize}">
+      <input type="range" min="1" max="200" value="${App.brushSize}" ${isFill ? 'disabled' : ''}>
     </div>
   `;
   body.appendChild(toolRow);
@@ -4892,13 +4939,13 @@ function buildDrawPanel(body, actions) {
     onInput: (v) => {
       App.brushSize = v;
       const tv = els.cpTitle.querySelector('.cp-title-val');
-      if (tv) tv.textContent = v + 'px';
+      if (tv && !isFill) tv.textContent = v + 'px';
       invalidateBrushStamp();
       updateBrushCursorSize();
     },
   });
 
-  // Opacity slider
+  // Opacity slider (always visible — Fill respects it too).
   const opacityRow = document.createElement('div');
   opacityRow.className = 'slider-row';
   const opacityPct = Math.round(App.brushOpacity * 100);
@@ -4915,49 +4962,73 @@ function buildDrawPanel(body, actions) {
     onInput: (v) => { App.brushOpacity = v / 100; },
   });
 
-  // Hardness slider
-  const hardRow = document.createElement('div');
-  hardRow.className = 'slider-row';
-  const hardPct = Math.round(App.brushHardness * 100);
-  hardRow.innerHTML = `
-    <div class="slider-label">Hardness</div>
-    <div class="slider-track">
-      <div class="slider-fill" style="width:${hardPct}%"></div>
-      <input type="range" min="0" max="100" value="${hardPct}">
-    </div>
-    <div class="slider-value">${hardPct}%</div>
-  `;
-  body.appendChild(hardRow);
-  setupSlider(hardRow, { bipolar: false, min: 0, max: 100, defaultValue: 100 }, {
-    onInput: (v) => {
-      App.brushHardness = v / 100;
-      invalidateBrushStamp();
-      updateBrushCursorSize();
-    },
-  });
+  // Fill-specific: Tolerance slider (only when Fill is active)
+  if (isFill) {
+    const tRow = document.createElement('div');
+    tRow.className = 'slider-row';
+    const tVal = App.fillTolerance;
+    tRow.innerHTML = `
+      <div class="slider-label">Tolerance</div>
+      <div class="slider-track">
+        <div class="slider-fill" style="width:${(tVal/255)*100}%"></div>
+        <input type="range" min="0" max="255" value="${tVal}">
+      </div>
+      <div class="slider-value">${tVal}</div>
+    `;
+    body.appendChild(tRow);
+    setupSlider(tRow, { bipolar: false, min: 0, max: 255, defaultValue: 32 }, {
+      onInput: v => { App.fillTolerance = v; },
+      skipHistory: true,
+    });
+  }
 
-  // Mode toggles
-  const modeRow = document.createElement('div');
-  modeRow.style.cssText = 'display:flex;gap:6px;flex-wrap:wrap;padding:6px 0;';
-  modeRow.innerHTML = `
-    <button class="draw-toggle ${App.paintMaskMode?'on':''}" id="paintMaskToggle">Paint mask</button>
-    <button class="draw-toggle ${App.eraserInvertMask?'on':''}" id="eraserInvertToggle">Eraser inverts mask</button>
-  `;
-  body.appendChild(modeRow);
-  modeRow.querySelector('#paintMaskToggle').addEventListener('click', () => {
-    App.paintMaskMode = !App.paintMaskMode;
-    updateToolPanel();
-  });
-  modeRow.querySelector('#eraserInvertToggle').addEventListener('click', () => {
-    App.eraserInvertMask = !App.eraserInvertMask;
-    const layer = activeLayer();
-    if (layer) {
-      layer.maskInverted = App.eraserInvertMask;
-      renderFull();
-      pushHistory();
-    }
-    updateToolPanel();
-  });
+  // Hardness slider — hidden in Fill mode (irrelevant).
+  if (!isFill) {
+    const hardRow = document.createElement('div');
+    hardRow.className = 'slider-row';
+    const hardPct = Math.round(App.brushHardness * 100);
+    hardRow.innerHTML = `
+      <div class="slider-label">Hardness</div>
+      <div class="slider-track">
+        <div class="slider-fill" style="width:${hardPct}%"></div>
+        <input type="range" min="0" max="100" value="${hardPct}">
+      </div>
+      <div class="slider-value">${hardPct}%</div>
+    `;
+    body.appendChild(hardRow);
+    setupSlider(hardRow, { bipolar: false, min: 0, max: 100, defaultValue: 100 }, {
+      onInput: (v) => {
+        App.brushHardness = v / 100;
+        invalidateBrushStamp();
+        updateBrushCursorSize();
+      },
+    });
+  }
+
+  // Mode toggles — hidden in Fill mode (those modes are brush/eraser only).
+  if (!isFill) {
+    const modeRow = document.createElement('div');
+    modeRow.style.cssText = 'display:flex;gap:6px;flex-wrap:wrap;padding:6px 0;';
+    modeRow.innerHTML = `
+      <button class="draw-toggle ${App.paintMaskMode?'on':''}" id="paintMaskToggle">Paint mask</button>
+      <button class="draw-toggle ${App.eraserInvertMask?'on':''}" id="eraserInvertToggle">Eraser inverts mask</button>
+    `;
+    body.appendChild(modeRow);
+    modeRow.querySelector('#paintMaskToggle').addEventListener('click', () => {
+      App.paintMaskMode = !App.paintMaskMode;
+      updateToolPanel();
+    });
+    modeRow.querySelector('#eraserInvertToggle').addEventListener('click', () => {
+      App.eraserInvertMask = !App.eraserInvertMask;
+      const layer = activeLayer();
+      if (layer) {
+        layer.maskInverted = App.eraserInvertMask;
+        renderFull();
+        pushHistory();
+      }
+      updateToolPanel();
+    });
+  }
 
   // Color row
   const colorRow = document.createElement('div');
@@ -5071,7 +5142,7 @@ function showBrushCursor(show) {
     return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
   }
   document.addEventListener('pointermove', e => {
-    if (App.activeTool !== 'draw') {
+    if (App.activeTool !== 'draw' || App.drawTool === 'fill') {
       if (_brushCursorVisible) showBrushCursor(false);
       return;
     }
@@ -5089,6 +5160,154 @@ function showBrushCursor(show) {
     if (_brushCursorVisible) showBrushCursor(false);
   });
 })();
+
+/* ----------------------------------------------------------------
+   FILL BUCKET — iterative scanline flood fill on the active layer.
+   Targets:
+     - If the active layer is unlocked + drawing/image type, fill INTO it.
+     - Otherwise (text / shape / frame / locked base), auto-create a new
+       Drawing layer above and fill there. Matches brush-stroke layer policy
+       so background-removal workflows (re-fill transparency) work without
+       baking into the base.
+   Match rule: |dR|<=t && |dG|<=t && |dB|<=t && |dA|<=t against the seed.
+     Transparent-region case: alpha=0 pixels form their own group; tapping
+     such a pixel fills exactly the connected transparent area.
+   Fill color: App.brushColor with alpha = round(App.brushOpacity * 255).
+   Algorithm: scanline flood with explicit queue (no recursion). Each step
+     finds the horizontal run of matching pixels around the seed, fills it,
+     then enqueues N/S neighbors at row boundaries (4-connected).
+   Complexity: O(N) pixels touched, where N is the matched region size.
+*/
+function runFloodFillAtPoint(seedX, seedY) {
+  const W = App.workW, H = App.workH;
+  const sx = Math.floor(seedX), sy = Math.floor(seedY);
+  if (sx < 0 || sy < 0 || sx >= W || sy >= H) return;
+  // Decide the target layer (similar policy to brush stroke).
+  //   - Unlocked drawing/image layer: fill INTO it (sample its own pixels).
+  //   - Locked base / text / shape / frame: sample from the SOURCE layer
+  //     (where the seed lives visually) and fill into a NEW Drawing layer
+  //     above. The new layer is initially transparent, so we use the source
+  //     for color matching; we draw the result onto the new layer.
+  let layer = activeLayer();
+  let sourceLayer = layer;
+  let createdNewLayer = false;
+  if (!layer || (layer.type === 'image' && layer.locked) || layer.type === 'text' || layer.type === 'shape' || layer.type === 'frame') {
+    // sourceLayer remains the original (locked) base so we match its pixels.
+    if (!layer) return;
+    sourceLayer = layer;
+    const newLayer = makeLayer({
+      name: 'Drawing',
+      type: 'drawing',
+      canvas: createBlankLayerCanvas(),
+    });
+    addLayer(newLayer);
+    createdNewLayer = true;
+    layer = newLayer; // target for the fill output
+  }
+  const cnv = layer.canvas;
+  if (cnv.width !== W || cnv.height !== H) return;
+  const srcCnv = sourceLayer.canvas;
+  if (srcCnv.width !== W || srcCnv.height !== H) return;
+  // Show a spinner if the operation runs long (>100ms).
+  let spinnerShown = false;
+  const spinnerTimer = setTimeout(() => {
+    spinnerShown = true;
+    loading(true, 'Filling…', '');
+  }, 100);
+  // Run on next tick so the spinner has a chance to show.
+  setTimeout(() => {
+    try {
+      const ctx = cnv.getContext('2d');
+      // Source pixels = where we measure colors against the seed.
+      // Target = where we write the fill.
+      const srcCtx = srcCnv.getContext('2d');
+      const srcImg = srcCtx.getImageData(0, 0, W, H);
+      const srcData = srcImg.data;
+      const dstImg = ctx.getImageData(0, 0, W, H);
+      const dstData = dstImg.data;
+      const seedIdx = (sy * W + sx) * 4;
+      const sR = srcData[seedIdx], sG = srcData[seedIdx + 1], sB = srcData[seedIdx + 2], sA = srcData[seedIdx + 3];
+      const tol = clamp(App.fillTolerance | 0, 0, 255);
+      // Fill color = current brush color, alpha = brush opacity * 255.
+      const rgb = hexToRgb(App.brushColor) || { r: 0, g: 0, b: 0 };
+      const fA = Math.max(0, Math.min(255, Math.round(App.brushOpacity * 255)));
+      const fR = rgb.r, fG = rgb.g, fB = rgb.b;
+      // Match against the IMMUTABLE source snapshot (srcData).
+      const matches = (idx) => (
+        Math.abs(srcData[idx]     - sR) <= tol &&
+        Math.abs(srcData[idx + 1] - sG) <= tol &&
+        Math.abs(srcData[idx + 2] - sB) <= tol &&
+        Math.abs(srcData[idx + 3] - sA) <= tol
+      );
+      // Visited bitmap (one byte per pixel).
+      const visited = new Uint8Array(W * H);
+      // Queue of cell indices (encode y*W+x).
+      const queue = [];
+      queue.push(sy * W + sx);
+      visited[sy * W + sx] = 1;
+      while (queue.length) {
+        const cell = queue.pop();
+        const cy = (cell / W) | 0;
+        const cx = cell - cy * W;
+        // Scan left & right to find the matching horizontal run (against the
+        // source snapshot). Mark visited as we go.
+        let xL = cx;
+        while (xL > 0) {
+          const ni = cy * W + (xL - 1);
+          if (visited[ni] || !matches(ni * 4)) break;
+          xL--;
+          visited[ni] = 1;
+        }
+        let xR = cx;
+        while (xR < W - 1) {
+          const ni = cy * W + (xR + 1);
+          if (visited[ni] || !matches(ni * 4)) break;
+          xR++;
+          visited[ni] = 1;
+        }
+        // Fill the run on the TARGET layer.
+        for (let x = xL; x <= xR; x++) {
+          const i = (cy * W + x) * 4;
+          dstData[i]     = fR;
+          dstData[i + 1] = fG;
+          dstData[i + 2] = fB;
+          dstData[i + 3] = fA;
+        }
+        // Enqueue matching, unvisited neighbors above & below the run.
+        if (cy > 0) {
+          const row = (cy - 1) * W;
+          for (let x = xL; x <= xR; x++) {
+            const ni = row + x;
+            if (!visited[ni] && matches(ni * 4)) {
+              visited[ni] = 1;
+              queue.push(ni);
+            }
+          }
+        }
+        if (cy < H - 1) {
+          const row = (cy + 1) * W;
+          for (let x = xL; x <= xR; x++) {
+            const ni = row + x;
+            if (!visited[ni] && matches(ni * 4)) {
+              visited[ni] = 1;
+              queue.push(ni);
+            }
+          }
+        }
+      }
+      ctx.putImageData(dstImg, 0, 0);
+      renderFull();
+      pushHistory();
+      if (createdNewLayer) updateToolPanel();
+    } catch (err) {
+      console.error(err);
+      toast('Fill failed', 'error');
+    } finally {
+      clearTimeout(spinnerTimer);
+      if (spinnerShown) loading(false);
+    }
+  }, 0);
+}
 
 /* Drawing on interactCanvas — targets the ACTIVE layer's canvas (or mask).
  *
@@ -5255,6 +5474,13 @@ function showBrushCursor(show) {
 
   c.addEventListener('pointerdown', e => {
     if (App.activeTool !== 'draw') return;
+    // Fill bucket: single-tap flood-fill; no drag stroke.
+    if (App.drawTool === 'fill') {
+      e.preventDefault();
+      const pt = getPt(e);
+      runFloodFillAtPoint(pt.x, pt.y);
+      return;
+    }
     e.preventDefault();
     c.setPointerCapture(e.pointerId);
     const layer = ensureDrawTarget();
@@ -5277,6 +5503,7 @@ function showBrushCursor(show) {
   });
 
   c.addEventListener('pointermove', e => {
+    if (App.drawTool === 'fill') return;
     if (!drawing) return;
     e.preventDefault();
     const pt = getPt(e);
@@ -6357,19 +6584,30 @@ function updateTextSelection() {
     else if (h.classList.contains('bm')) { h.style.bottom = -halfH + 'px'; h.style.left = '50%'; h.style.transform = 'translateX(-50%)'; h.style.right=''; h.style.top=''; }
     else if (h.classList.contains('lm')) { h.style.left = -halfH + 'px'; h.style.top = '50%'; h.style.transform = 'translateY(-50%)'; h.style.right=''; h.style.bottom=''; }
     else if (h.classList.contains('rm')) { h.style.right = -halfH + 'px'; h.style.top = '50%'; h.style.transform = 'translateY(-50%)'; h.style.left=''; h.style.bottom=''; }
-    else if (h.classList.contains('rot')) {
-      h.style.top = (-46 * invScale) + 'px';
-      h.style.left = '50%';
-      h.style.transform = 'translateX(-50%)';
-      h.style.right=''; h.style.bottom='';
-    }
-    // The ::before dot scales via this CSS var; we use inline override on a child <i> element instead.
-    // Simpler: just rely on ::before being 12px native — at high zoom this is fine.
-    // We'll size with CSS variable later if needed.
   });
+  // Rotation pin: a dedicated round target floating ABOVE the box top edge,
+  // connected by a thin line. It's the ONLY rotation affordance.
+  // Hit area counter-scales to ~32px on screen (>=28px minimum touch target).
+  const pin = box.querySelector('.text-sel-rotpin');
+  if (pin) {
+    const pinPx = 32 * invScale;
+    const lineLen = 28 * invScale;
+    pin.style.width = pinPx + 'px';
+    pin.style.height = pinPx + 'px';
+    pin.style.top = -(lineLen + pinPx) + 'px';
+    pin.style.left = '50%';
+    pin.style.marginLeft = -(pinPx / 2) + 'px';
+    pin.style.transform = '';
+    const svg = pin.querySelector('svg');
+    if (svg) {
+      const ic = 18 * invScale;
+      svg.style.width = ic + 'px';
+      svg.style.height = ic + 'px';
+    }
+  }
   const rotLine = box.querySelector('.text-sel-rotline');
   if (rotLine) {
-    const h = 34 * invScale;
+    const h = 28 * invScale;
     rotLine.style.height = h + 'px';
     rotLine.style.top = -h + 'px';
     rotLine.style.width = Math.max(1, 2 * invScale) + 'px';
@@ -6435,17 +6673,33 @@ function updateTextSelection() {
     if (App.activeTool !== 'text') return;
     // Ignore if pointer started on a control surface
     if (e.target.closest('.text-input-wrap, .control-panel, .tool-bar, .canvas-hud, .modal, .sheet')) return;
-    // Identify whether this is on a handle, on the box frame, or on canvas
+    // Identify whether this is on a handle (scale), the rotation pin (rotate),
+    // on the box frame (move), or on canvas.
     const handleEl = e.target.closest('.text-sel-handle');
+    const rotPinEl = e.target.closest('.text-sel-rotpin');
     const frameEl = e.target.closest('.text-sel-frame');
     layer = currentTextLayer();
     const pt = clientToWork(e);
 
+    if (rotPinEl && layer) {
+      e.preventDefault(); e.stopPropagation();
+      wrap.setPointerCapture(e.pointerId);
+      handle = 'rot';
+      mode = 'rotate';
+      startState = {
+        x: layer.x, y: layer.y, scale: layer.scale, rotation: layer.rotation,
+        pointer: pt,
+        canvasW: layer.canvas.width, canvasH: layer.canvas.height,
+        centerWork: { x: App.workW/2 + layer.x, y: App.workH/2 + layer.y },
+      };
+      return;
+    }
     if (handleEl && layer) {
       e.preventDefault(); e.stopPropagation();
       wrap.setPointerCapture(e.pointerId);
       handle = handleEl.dataset.handle;
-      mode = (handle === 'rot') ? 'rotate' : 'scale';
+      // 8 scale handles only — the rotation pin lives in .text-sel-rotpin.
+      mode = 'scale';
       startState = {
         x: layer.x, y: layer.y, scale: layer.scale, rotation: layer.rotation,
         pointer: pt,
@@ -8090,16 +8344,28 @@ function updateShapeSelection() {
     else if (h.classList.contains('bm')) { h.style.bottom = -halfH + 'px'; h.style.left = '50%'; h.style.transform = 'translateX(-50%)'; h.style.right=''; h.style.top=''; }
     else if (h.classList.contains('lm')) { h.style.left = -halfH + 'px'; h.style.top = '50%'; h.style.transform = 'translateY(-50%)'; h.style.right=''; h.style.bottom=''; }
     else if (h.classList.contains('rm')) { h.style.right = -halfH + 'px'; h.style.top = '50%'; h.style.transform = 'translateY(-50%)'; h.style.left=''; h.style.bottom=''; }
-    else if (h.classList.contains('rot')) {
-      h.style.top = (-46 * invScale) + 'px';
-      h.style.left = '50%';
-      h.style.transform = 'translateX(-50%)';
-      h.style.right=''; h.style.bottom='';
-    }
   });
+  // Rotation pin — same treatment as text overlay
+  const pin = box.querySelector('.text-sel-rotpin');
+  if (pin) {
+    const pinPx = 32 * invScale;
+    const lineLen = 28 * invScale;
+    pin.style.width = pinPx + 'px';
+    pin.style.height = pinPx + 'px';
+    pin.style.top = -(lineLen + pinPx) + 'px';
+    pin.style.left = '50%';
+    pin.style.marginLeft = -(pinPx / 2) + 'px';
+    pin.style.transform = '';
+    const svg = pin.querySelector('svg');
+    if (svg) {
+      const ic = 18 * invScale;
+      svg.style.width = ic + 'px';
+      svg.style.height = ic + 'px';
+    }
+  }
   const rotLine = box.querySelector('.text-sel-rotline');
   if (rotLine) {
-    const hh = 34 * invScale;
+    const hh = 28 * invScale;
     rotLine.style.height = hh + 'px';
     rotLine.style.top = -hh + 'px';
     rotLine.style.width = Math.max(1, 2 * invScale) + 'px';
@@ -8160,6 +8426,7 @@ function updateShapeSelection() {
   function handleSelDown(e) {
     if (App.activeTool !== 'shape') return;
     const handleEl = e.target.closest('.text-sel-handle');
+    const rotPinEl = e.target.closest('.text-sel-rotpin');
     const frameEl = e.target.closest('.text-sel-frame');
     // Only respond if the event is inside the shape selection box specifically
     const box = e.target.closest('#shapeSelBox');
@@ -8167,11 +8434,25 @@ function updateShapeSelection() {
     activeLayerRef = currentShapeLayer();
     if (!activeLayerRef) return;
     const pt = clientToWork(e);
+    if (rotPinEl) {
+      e.preventDefault(); e.stopPropagation();
+      wrap.setPointerCapture && wrap.setPointerCapture(e.pointerId);
+      handle = 'rot';
+      mode = 'rotate';
+      startState = {
+        x: activeLayerRef.x, y: activeLayerRef.y, scale: activeLayerRef.scale, rotation: activeLayerRef.rotation,
+        pointer: pt,
+        canvasW: activeLayerRef.canvas.width, canvasH: activeLayerRef.canvas.height,
+        centerWork: { x: App.workW/2 + activeLayerRef.x, y: App.workH/2 + activeLayerRef.y },
+      };
+      return;
+    }
     if (handleEl) {
       e.preventDefault(); e.stopPropagation();
       wrap.setPointerCapture && wrap.setPointerCapture(e.pointerId);
       handle = handleEl.dataset.handle;
-      mode = (handle === 'rot') ? 'rotate' : 'scale';
+      // 8 scale handles — rotation lives in the dedicated pin above.
+      mode = 'scale';
       startState = {
         x: activeLayerRef.x, y: activeLayerRef.y, scale: activeLayerRef.scale, rotation: activeLayerRef.rotation,
         pointer: pt,
@@ -8247,7 +8528,7 @@ function updateShapeSelection() {
   // 2) Drag-to-create on interactCanvas (when no shape selection ongoing)
   c.addEventListener('pointerdown', e => {
     if (App.activeTool !== 'shape') return;
-    if (e.target.closest('.text-sel-handle, .text-sel-frame')) return;
+    if (e.target.closest('.text-sel-handle, .text-sel-frame, .text-sel-rotpin')) return;
     e.preventDefault();
     c.setPointerCapture(e.pointerId);
     const pt = getPt(e);
@@ -8977,27 +9258,281 @@ async function removeBackground() {
         } catch (e) {}
       },
     });
-    // Replace base layer
+    // Decode the result so we can grab its alpha channel as our mask.
     const img = await new Promise((resolve, reject) => {
       const i = new Image();
       i.onload = () => resolve(i);
       i.onerror = reject;
       i.src = URL.createObjectURL(outBlob);
     });
-    const ctx = bg.canvas.getContext('2d');
-    ctx.clearRect(0, 0, bg.canvas.width, bg.canvas.height);
-    ctx.drawImage(img, 0, 0, bg.canvas.width, bg.canvas.height);
-    // Show transparency
+    const w = bg.canvas.width, h = bg.canvas.height;
+    // 1) Cache the PRE-removal RGBA so Cancel can restore exactly.
+    const baseCtx = bg.canvas.getContext('2d');
+    const beforeImg = baseCtx.getImageData(0, 0, w, h);
+    const originPixels = new Uint8ClampedArray(beforeImg.data);
+    // 2) Read the model output into an offscreen canvas; extract alpha as mask.
+    const off = document.createElement('canvas');
+    off.width = w; off.height = h;
+    const offCtx = off.getContext('2d');
+    offCtx.clearRect(0, 0, w, h);
+    offCtx.drawImage(img, 0, 0, w, h);
+    const outImg = offCtx.getImageData(0, 0, w, h);
+    const mask = new Uint8Array(w * h);
+    for (let i = 0, p = 0; i < mask.length; i++, p += 4) mask[i] = outImg.data[p + 3];
+    // 3) Stash everything in the cache.
+    App.bgRemove.active = true;
+    App.bgRemove.originPixels = originPixels;
+    App.bgRemove.mask = mask;
+    App.bgRemove.w = w;
+    App.bgRemove.h = h;
+    App.bgRemove.edge = 0;
+    App.bgRemove.feather = 0;
+    App.bgRemove.layerId = bg.id;
+    // 4) Apply the unmodified mask as initial preview so the canvas reflects
+    //    the model output (transparent background visible).
     if (els.canvasStage) els.canvasStage.classList.add('has-trans');
-    renderFull();
-    pushHistory();
+    applyBgRemovePreview();
     loading(false);
-    toast('Background removed', 'success');
+    toast('Tune edge & feather, then Apply', 'success');
+    // Rebuild the Effects panel so the bgRemove sub-panel shows tune sliders.
+    updateToolPanel();
   } catch (e) {
     console.error(e);
     loading(false);
     toast('Background removal failed', 'error');
   }
+}
+
+/* ------------- Background removal LIVE-TUNE ----------------
+ * The mask is a single-channel Uint8Array (one byte per pixel = alpha).
+ * Edge slider: morphological erode/dilate via a separable distance-from-edge
+ *   approximation. We compute a quick 1-D pass: scan rows and cols, propagate
+ *   the threshold-crossing distance up to `radius` pixels. Negative -> erode
+ *   (shrink), positive -> dilate (grow). Implementation favors clarity over
+ *   accuracy — perfect Euclidean distance not required for this UI.
+ * Feather slider: applies a box-blur (separable, 1-D horiz + vert) to the
+ *   tweaked mask. Two passes of box-blur approximate a Gaussian.
+ * Final compose: out RGBA = origin RGB + (mask/255) * origin A. */
+let _bgRemovePreviewRAF = 0;
+
+function applyBgRemovePreview() {
+  // Coalesce rapid slider changes into a single rAF.
+  if (_bgRemovePreviewRAF) return;
+  _bgRemovePreviewRAF = requestAnimationFrame(_runBgRemovePreviewNow);
+}
+
+function _runBgRemovePreviewNow() {
+  _bgRemovePreviewRAF = 0;
+  const br = App.bgRemove;
+  if (!br.active || !br.originPixels || !br.mask) return;
+  const layer = findLayer(br.layerId);
+  if (!layer || layer.canvas.width !== br.w || layer.canvas.height !== br.h) return;
+  const w = br.w, h = br.h;
+  // Step 1: tweak mask via Edge (erode/dilate) — produces tweakedMask.
+  const tweakedMask = bgRemoveEdgeAdjust(br.mask, w, h, br.edge);
+  // Step 2: feather (blur) the mask.
+  const finalMask = bgRemoveFeather(tweakedMask, w, h, br.feather);
+  // Step 3: compose RGBA into base canvas using origin RGB + finalMask alpha
+  //   pre-multiplied by origin's own alpha (in case input had transparency).
+  const ctx = layer.canvas.getContext('2d');
+  const img = ctx.createImageData(w, h);
+  const dst = img.data;
+  const src = br.originPixels;
+  for (let i = 0, p = 0; i < finalMask.length; i++, p += 4) {
+    dst[p]     = src[p];
+    dst[p + 1] = src[p + 1];
+    dst[p + 2] = src[p + 2];
+    // Combine origin alpha with mask alpha multiplicatively in [0..255].
+    // `(a*b + 127) / 255` rounds; we precompute as integer math.
+    const aSrc = src[p + 3];
+    const aMsk = finalMask[i];
+    dst[p + 3] = ((aSrc * aMsk + 127) / 255) | 0;
+  }
+  ctx.putImageData(img, 0, 0);
+  renderFull();
+}
+
+/* Edge: erode/dilate the mask.
+ *   edge < 0 -> erode (shrink cutout). For each pixel, if any neighbor within
+ *     radius is below threshold (background), become background too.
+ *   edge > 0 -> dilate (grow cutout). For each background pixel, if any
+ *     neighbor within radius is foreground, become foreground.
+ * Implementation: 1-D separable min/max with radius = |edge| / 4 (capped 30).
+ * Returns a NEW Uint8Array (caller can use safely without mutating input). */
+function bgRemoveEdgeAdjust(mask, w, h, edge) {
+  if (!edge) return new Uint8Array(mask); // no-op copy
+  // Map slider 1..100 to radius 1..16 (clamped). Kept modest so the live
+  // preview stays interactive on multi-megapixel canvases.
+  const radius = Math.min(16, Math.max(1, Math.round(Math.abs(edge) / 6.25)));
+  const dilate = edge > 0;
+  // Separable sliding-window max (dilate) / min (erode) using a monotonic
+  // deque — O(1) amortized per pixel regardless of radius. Two 1-D passes.
+  const tmp = new Uint8Array(w * h);
+  const out = new Uint8Array(w * h);
+  slidingExtreme1D(mask, tmp, w, h, radius, dilate, /*horizontal*/ true);
+  slidingExtreme1D(tmp, out, w, h, radius, dilate, /*horizontal*/ false);
+  return out;
+}
+
+/* Sliding-window max/min along one axis, using a monotonic deque of indices.
+ * For max: keeps indices with strictly-decreasing values; front is the max.
+ * For min: indices with strictly-increasing values; front is the min.
+ * Window: [i-radius, i+radius] centered, clipped to [0..N-1]. */
+function slidingExtreme1D(src, dst, w, h, radius, isMax, horizontal) {
+  if (horizontal) {
+    const deque = new Int32Array(w);
+    for (let y = 0; y < h; y++) {
+      const rowOff = y * w;
+      let head = 0, tail = 0;
+      // Prime the deque with the initial window for x=0: indices [0..radius].
+      for (let i = 0; i <= radius && i < w; i++) {
+        const vi = src[rowOff + i];
+        if (isMax) while (head < tail && src[rowOff + deque[tail - 1]] <= vi) tail--;
+        else      while (head < tail && src[rowOff + deque[tail - 1]] >= vi) tail--;
+        deque[tail++] = i;
+      }
+      for (let x = 0; x < w; x++) {
+        // 1) Drop front indices that have fallen out of the window on the left.
+        while (head < tail && deque[head] < x - radius) head++;
+        // 2) Read the current max/min.
+        dst[rowOff + x] = src[rowOff + deque[head]];
+        // 3) Bring in the next index entering on the right (for the NEXT step).
+        const nextIn = x + radius + 1;
+        if (nextIn < w) {
+          const vi = src[rowOff + nextIn];
+          if (isMax) while (head < tail && src[rowOff + deque[tail - 1]] <= vi) tail--;
+          else      while (head < tail && src[rowOff + deque[tail - 1]] >= vi) tail--;
+          deque[tail++] = nextIn;
+        }
+      }
+    }
+  } else {
+    const deque = new Int32Array(h);
+    for (let x = 0; x < w; x++) {
+      let head = 0, tail = 0;
+      for (let i = 0; i <= radius && i < h; i++) {
+        const vi = src[i * w + x];
+        if (isMax) while (head < tail && src[deque[tail - 1] * w + x] <= vi) tail--;
+        else      while (head < tail && src[deque[tail - 1] * w + x] >= vi) tail--;
+        deque[tail++] = i;
+      }
+      for (let y = 0; y < h; y++) {
+        while (head < tail && deque[head] < y - radius) head++;
+        dst[y * w + x] = src[deque[head] * w + x];
+        const nextIn = y + radius + 1;
+        if (nextIn < h) {
+          const vi = src[nextIn * w + x];
+          if (isMax) while (head < tail && src[deque[tail - 1] * w + x] <= vi) tail--;
+          else      while (head < tail && src[deque[tail - 1] * w + x] >= vi) tail--;
+          deque[tail++] = nextIn;
+        }
+      }
+    }
+  }
+}
+
+/* Feather: Gaussian-like blur via two box-blur passes (separable).
+ * radius proportional to slider 0..100 (mapped to 0..24 pixels). */
+function bgRemoveFeather(mask, w, h, feather) {
+  if (!feather) return mask; // caller may reuse — but harmless: no further mutation
+  const radius = Math.min(24, Math.max(1, Math.round(feather * 0.24)));
+  // Two box-blur passes approximate a Gaussian; both passes are separable.
+  let src = mask;
+  let dst = new Uint8Array(mask.length);
+  for (let pass = 0; pass < 2; pass++) {
+    boxBlur1D(src, dst, w, h, radius, /*horizontal*/ true);
+    [src, dst] = [dst, src];
+    boxBlur1D(src, dst, w, h, radius, /*horizontal*/ false);
+    [src, dst] = [dst, src];
+  }
+  return src;
+}
+
+function boxBlur1D(src, dst, w, h, radius, horizontal) {
+  const span = radius * 2 + 1;
+  if (horizontal) {
+    for (let y = 0; y < h; y++) {
+      const rowOff = y * w;
+      // Init sum for x=0 covering [-radius..+radius] clamped to row.
+      let sum = 0;
+      for (let i = -radius; i <= radius; i++) {
+        const xi = i < 0 ? 0 : (i >= w ? w - 1 : i);
+        sum += src[rowOff + xi];
+      }
+      dst[rowOff] = (sum / span) | 0;
+      for (let x = 1; x < w; x++) {
+        const xAdd = x + radius;
+        const xRem = x - radius - 1;
+        const ai = xAdd >= w ? w - 1 : xAdd;
+        const ri = xRem < 0 ? 0 : xRem;
+        sum += src[rowOff + ai] - src[rowOff + ri];
+        dst[rowOff + x] = (sum / span) | 0;
+      }
+    }
+  } else {
+    for (let x = 0; x < w; x++) {
+      let sum = 0;
+      for (let i = -radius; i <= radius; i++) {
+        const yi = i < 0 ? 0 : (i >= h ? h - 1 : i);
+        sum += src[yi * w + x];
+      }
+      dst[x] = (sum / span) | 0;
+      for (let y = 1; y < h; y++) {
+        const yAdd = y + radius;
+        const yRem = y - radius - 1;
+        const ai = yAdd >= h ? h - 1 : yAdd;
+        const ri = yRem < 0 ? 0 : yRem;
+        sum += src[ai * w + x] - src[ri * w + x];
+        dst[y * w + x] = (sum / span) | 0;
+      }
+    }
+  }
+}
+
+/* Commit the bg-removal live preview into the base layer. The canvas is
+ * already showing the tuned result, so we just snapshot + clear cache. */
+function commitBgRemovePreview() {
+  const br = App.bgRemove;
+  if (!br.active) return false;
+  if (_bgRemovePreviewRAF) { cancelAnimationFrame(_bgRemovePreviewRAF); _bgRemovePreviewRAF = 0; }
+  _runBgRemovePreviewNow();
+  br.active = false;
+  br.originPixels = null;
+  br.mask = null;
+  br.w = 0; br.h = 0;
+  br.edge = 0; br.feather = 0;
+  br.layerId = null;
+  pushHistory();
+  return true;
+}
+
+/* Restore origin pixels back to the base layer, drop cache, no history. */
+function cancelBgRemovePreview() {
+  const br = App.bgRemove;
+  if (!br.active || !br.originPixels) return false;
+  if (_bgRemovePreviewRAF) { cancelAnimationFrame(_bgRemovePreviewRAF); _bgRemovePreviewRAF = 0; }
+  const layer = findLayer(br.layerId);
+  if (layer && layer.canvas.width === br.w && layer.canvas.height === br.h) {
+    const ctx = layer.canvas.getContext('2d');
+    const img = ctx.createImageData(br.w, br.h);
+    img.data.set(br.originPixels);
+    ctx.putImageData(img, 0, 0);
+    renderFull();
+  }
+  br.active = false;
+  br.originPixels = null;
+  br.mask = null;
+  br.w = 0; br.h = 0;
+  br.edge = 0; br.feather = 0;
+  br.layerId = null;
+  return true;
+}
+
+/* Auto-exit: if user navigates away without applying, treat as Cancel. */
+function exitBgRemoveMode(opts) {
+  if (!App.bgRemove.active) return;
+  if (opts && opts.commit) commitBgRemovePreview();
+  else cancelBgRemovePreview();
 }
 
 /* ----------------------------------------------------------------
@@ -9036,6 +9571,10 @@ function buildEffectExtras(body) {
       // Leaving colorReplace without an explicit Apply -> revert preview.
       if (App.activeEffectExtra === 'colorReplace' && nextExtra !== 'colorReplace') {
         exitColorReplaceMode();
+      }
+      // Leaving bgRemove without an explicit Apply -> revert removal.
+      if (App.activeEffectExtra === 'bgRemove' && nextExtra !== 'bgRemove' && App.bgRemove.active) {
+        exitBgRemoveMode();
       }
       App.activeEffectExtra = nextExtra;
       updateToolPanel();
@@ -9240,17 +9779,82 @@ function buildBgRemoveControls() {
   const wrap = document.createElement('div');
   wrap.style.cssText = 'padding:6px 0;';
 
-  const desc = document.createElement('div');
-  desc.style.cssText = 'font-size:12px;color:var(--text-3);line-height:1.4;padding:6px 0 10px;';
-  desc.textContent = 'Removes the background of the base image using AI. The model downloads on first use (~30 MB).';
-  wrap.appendChild(desc);
+  // Two-state panel: idle (Remove button) vs tune (sliders + Apply/Cancel).
+  if (!App.bgRemove.active) {
+    const desc = document.createElement('div');
+    desc.style.cssText = 'font-size:12px;color:var(--text-3);line-height:1.4;padding:6px 0 10px;';
+    desc.textContent = 'Removes the background of the base image using AI. The model downloads on first use (~30 MB). After it runs, tweak Edge and Feather to refine the cutout.';
+    wrap.appendChild(desc);
 
-  const btn = document.createElement('button');
-  btn.className = 'cp-action primary';
-  btn.style.cssText = 'width:100%;padding:12px;font-size:13px;';
-  btn.textContent = 'Remove Background';
-  btn.addEventListener('click', () => { removeBackground(); });
-  wrap.appendChild(btn);
+    const btn = document.createElement('button');
+    btn.className = 'cp-action primary';
+    btn.style.cssText = 'width:100%;padding:12px;font-size:13px;';
+    btn.textContent = 'Remove Background';
+    btn.addEventListener('click', () => { removeBackground(); });
+    wrap.appendChild(btn);
+    return wrap;
+  }
+
+  // Tune UI — live-preview Edge + Feather, plus Apply/Cancel.
+  const heading = document.createElement('div');
+  heading.style.cssText = 'font-size:12px;color:var(--text-3);line-height:1.4;padding:4px 0 8px;';
+  heading.textContent = 'Tune the cutout. Edge erodes / dilates the mask, Feather softens its edges.';
+  wrap.appendChild(heading);
+
+  // Edge slider (-100..+100, bipolar, default 0)
+  const eRow = document.createElement('div');
+  eRow.className = 'slider-row';
+  const eVal = App.bgRemove.edge;
+  eRow.innerHTML = `
+    <div class="slider-label">Edge</div>
+    <div class="slider-track"><div class="mid-mark"></div><div class="slider-fill bipolar"></div><input type="range" min="-100" max="100" step="1" value="${eVal}"></div>
+    <div class="slider-value">${eVal}</div>
+  `;
+  wrap.appendChild(eRow);
+  setupSlider(eRow, { bipolar: true, min: -100, max: 100, defaultValue: 0 }, {
+    onInput: v => { App.bgRemove.edge = v; applyBgRemovePreview(); },
+    skipHistory: true,
+  });
+
+  // Feather slider (0..100, default 0)
+  const fRow = document.createElement('div');
+  fRow.className = 'slider-row';
+  const fVal = App.bgRemove.feather;
+  fRow.innerHTML = `
+    <div class="slider-label">Feather</div>
+    <div class="slider-track"><div class="slider-fill" style="width:${fVal}%"></div><input type="range" min="0" max="100" step="1" value="${fVal}"></div>
+    <div class="slider-value">${fVal}</div>
+  `;
+  wrap.appendChild(fRow);
+  setupSlider(fRow, { bipolar: false, min: 0, max: 100, defaultValue: 0 }, {
+    onInput: v => { App.bgRemove.feather = v; applyBgRemovePreview(); },
+    skipHistory: true,
+  });
+
+  // Apply / Cancel row
+  const btnRow = document.createElement('div');
+  btnRow.style.cssText = 'display:flex;gap:8px;margin-top:10px;';
+  const cBtn = document.createElement('button');
+  cBtn.className = 'cp-action';
+  cBtn.style.cssText = 'flex:1;padding:10px;';
+  cBtn.textContent = 'Cancel';
+  cBtn.addEventListener('click', () => {
+    cancelBgRemovePreview();
+    toast('Background restored', 'success');
+    updateToolPanel();
+  });
+  const aBtn = document.createElement('button');
+  aBtn.className = 'cp-action primary';
+  aBtn.style.cssText = 'flex:1;padding:10px;';
+  aBtn.textContent = 'Apply';
+  aBtn.addEventListener('click', () => {
+    commitBgRemovePreview();
+    toast('Background removed', 'success');
+    updateToolPanel();
+  });
+  btnRow.appendChild(cBtn);
+  btnRow.appendChild(aBtn);
+  wrap.appendChild(btnRow);
 
   return wrap;
 }
