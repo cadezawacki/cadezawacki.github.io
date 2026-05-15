@@ -329,13 +329,40 @@ a{color:var(--primary);}
   -webkit-backdrop-filter:saturate(180%) blur(20px);
   border-top:1px solid var(--border);
   flex-shrink:0;position:relative;z-index:30;
-  max-height:60dvh;
+  /* Height is driven via CSS variable controlled in JS.
+     Snap points: compact ~22dvh, mid ~48dvh, full ~78dvh. */
+  --cp-h:22dvh;
+  height:var(--cp-h);
+  min-height:14dvh;max-height:85dvh;
   display:flex;flex-direction:column;
   min-width:0;
+  transition:height .2s cubic-bezier(.2,.8,.2,1);
+}
+.control-panel.cp-dragging{transition:none !important;}
+.cp-drag-handle{
+  position:relative;
+  display:flex;align-items:center;justify-content:center;
+  padding:6px 0 4px;
+  cursor:row-resize;
+  touch-action:none;
+  user-select:none;-webkit-user-select:none;
+  flex-shrink:0;
+}
+.cp-drag-handle::before{
+  content:"";
+  width:44px;height:5px;border-radius:3px;
+  background:color-mix(in srgb,var(--primary) 55%,var(--text-3));
+  opacity:.65;
+  transition:opacity .15s,background .15s,transform .15s;
+}
+.cp-drag-handle:hover::before{opacity:.9;}
+.cp-drag-handle:active::before,
+.control-panel.cp-dragging .cp-drag-handle::before{
+  opacity:1;background:var(--primary);transform:scaleX(1.15);
 }
 .control-panel-header{
   display:flex;align-items:center;justify-content:space-between;
-  padding:10px 14px 4px;gap:8px;
+  padding:2px 14px 4px;gap:8px;
 }
 .cp-title{
   font-size:12px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;
@@ -343,6 +370,14 @@ a{color:var(--primary);}
   display:flex;align-items:center;gap:8px;
   min-width:0;overflow:hidden;
 }
+.cp-lock-badge{
+  display:inline-flex;align-items:center;justify-content:center;
+  width:18px;height:18px;border-radius:6px;
+  background:color-mix(in srgb,var(--primary) 16%,transparent);
+  color:var(--primary);
+  flex-shrink:0;
+}
+.cp-lock-badge svg{width:11px;height:11px;}
 .cp-title-val{
   font-size:12px;font-weight:700;color:var(--text);
   letter-spacing:0;text-transform:none;
@@ -1038,18 +1073,7 @@ a{color:var(--primary);}
   transform:translateX(-50%);
   pointer-events:none;opacity:.6;
 }
-.text-mode-hint{
-  position:absolute;top:10px;left:50%;transform:translateX(-50%) translateY(40px);
-  background:color-mix(in srgb,var(--primary) 92%,transparent);
-  color:#fff;padding:5px 12px;border-radius:20px;
-  font-size:11px;font-weight:600;letter-spacing:.3px;
-  z-index:11;
-  box-shadow:0 4px 14px rgba(0,0,0,0.18);
-  display:none;
-  pointer-events:none;
-}
-.text-mode-hint.show{display:flex;align-items:center;gap:6px;}
-.text-mode-hint.show svg{width:13px;height:13px;}
+/* (text-mode-hint banner removed; replaced by a small lock badge in cpTitle) */
 
 /* ---------- BRUSH CURSOR (screen-space, follows pointer) ---------- */
 .brush-cursor{
@@ -1282,8 +1306,6 @@ a{color:var(--primary);}
   border-radius:8px;padding:6px 10px;font-size:12px;color:var(--text);
   outline:none;
 }
-.text-mode-hint.show{display:flex;align-items:center;gap:6px;}
-.text-mode-hint svg{width:12px;height:12px;}
 .btn{
   padding:9px 16px;border-radius:10px;font-weight:600;font-size:14px;
   background:var(--surface-2);border:1px solid var(--border);color:var(--text);
@@ -1674,15 +1696,11 @@ a{color:var(--primary);}
   </div>
   <!-- Brush cursor (screen-space, not inside stage) -->
   <div class="brush-cursor" id="brushCursor"></div>
-  <!-- Text-mode hint (in canvas-wrap so it doesn't scale) -->
-  <div class="text-mode-hint" id="textModeHint">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-    Text · pan locked
-  </div>
 </main>
 
 <!-- ========== CONTROL PANEL ========== -->
 <section class="control-panel" id="controlPanel">
+  <div class="cp-drag-handle" id="cpDragHandle" role="separator" aria-label="Resize panel" aria-orientation="horizontal" title="Drag to resize  ·  Tap to cycle Compact / Mid / Full"></div>
   <div class="control-panel-header" id="cpHeader">
     <div class="cp-title" id="cpTitle">Adjustments</div>
     <div class="cp-actions" id="cpActions"></div>
@@ -2321,7 +2339,7 @@ const els = {
   textSelOverlay:    $('textSelOverlay'),
   textSelBox:        $('textSelBox'),
   textSelFrame:      $('textSelFrame'),
-  textModeHint:      $('textModeHint'),
+  cpDragHandle:      $('cpDragHandle'),
   shapeSelOverlay:   $('shapeSelOverlay'),
   shapeSelBox:       $('shapeSelBox'),
   shapeSelFrame:     $('shapeSelFrame'),
@@ -3765,10 +3783,6 @@ function setTool(tool) {
   });
   els.cropOverlay.classList.toggle('active', tool === 'crop');
   els.interactCanvas.classList.toggle('active', tool === 'draw' || tool === 'shape');
-  // Text mode UI
-  if (els.textModeHint) {
-    els.textModeHint.classList.toggle('show', tool === 'text');
-  }
   if (tool === 'text') {
     // If active layer is a text layer, select it; otherwise pick last text layer
     const cur = activeLayer();
@@ -5314,7 +5328,10 @@ function renderTextLayer(layer) {
    text layer. If no text layer is active, shows Add prompt.
    ---------------------------------------------------------------- */
 function buildTextPanel(body, actions) {
-  els.cpTitle.innerHTML = 'Text';
+  els.cpTitle.innerHTML = '<span>Text</span>' +
+    '<span class="cp-lock-badge" title="Canvas pan locked in Text mode" aria-label="Canvas pan locked in Text mode">' +
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>' +
+    '</span>';
   const sel = currentTextLayer();
   if (!sel) {
     const info = document.createElement('div');
@@ -5329,7 +5346,7 @@ function buildTextPanel(body, actions) {
   sel.meta = m;
 
   // Quick text content edit
-  const contentSection = makeAccordion('Content', true);
+  const contentSection = makeAccordion('Content', false);
   body.appendChild(contentSection.wrap);
   const contentBody = contentSection.body;
   const ta = document.createElement('textarea');
@@ -5394,14 +5411,17 @@ function makeAccordion(title, open) {
   const wrap = document.createElement('section');
   wrap.className = 'text-section' + (open ? ' open' : '');
   wrap.innerHTML = `
-    <button class="text-section-head" type="button">
+    <button class="text-section-head" type="button" aria-expanded="${open ? 'true' : 'false'}">
       <span>${title}</span>
       <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
     </button>
     <div class="text-section-body"></div>
   `;
   const head = wrap.querySelector('.text-section-head');
-  head.addEventListener('click', () => wrap.classList.toggle('open'));
+  head.addEventListener('click', () => {
+    const opened = wrap.classList.toggle('open');
+    head.setAttribute('aria-expanded', opened ? 'true' : 'false');
+  });
   return { wrap, body: wrap.querySelector('.text-section-body') };
 }
 
@@ -7542,7 +7562,12 @@ function buildShapePanel(body, actions) {
     });
     kindGrid.appendChild(b);
   });
-  body.appendChild(kindGrid);
+
+  // ----- Section: Kind & Fill (open by default) -----
+  const kindSection = makeAccordion('Kind & Fill', true);
+  body.appendChild(kindSection.wrap);
+  const kindBody = kindSection.body;
+  kindBody.appendChild(kindGrid);
 
   // Fill row
   const fillRow = document.createElement('div');
@@ -7582,132 +7607,9 @@ function buildShapePanel(body, actions) {
     }
   });
   fillRow.appendChild(fillSwatch);
-  body.appendChild(fillRow);
+  kindBody.appendChild(fillRow);
 
-  // Stroke row
-  const strokeRow = document.createElement('div');
-  strokeRow.className = 'slider-row';
-  const curStroke = editing ? (m.strokeWidth || 0) : App.shape.strokeWidth;
-  strokeRow.innerHTML = `
-    <div class="slider-label">Outline</div>
-    <div class="slider-track">
-      <div class="slider-fill" style="width:${(curStroke/40)*100}%"></div>
-      <input type="range" min="0" max="40" value="${curStroke}">
-    </div>
-    <div class="slider-value">${curStroke}px</div>
-  `;
-  body.appendChild(strokeRow);
-  setupSlider(strokeRow, { bipolar:false, min:0, max:40, defaultValue:0 }, {
-    onInput: v => {
-      if (editing) {
-        m.strokeWidth = v;
-        renderShapeLayer(sel);
-        requestRender();
-        updateShapeSelection();
-      } else {
-        App.shape.strokeWidth = v;
-      }
-    },
-    onCommit: () => { if (editing) pushHistory(); }
-  });
-
-  // Stroke color
-  const sColorRow = document.createElement('div');
-  sColorRow.className = 'shape-row';
-  sColorRow.innerHTML = `<label>Outline Color</label>`;
-  const sColor = document.createElement('label');
-  sColor.className = 'inline-color';
-  const curStrokeC = editing ? (m.strokeColor || '#000') : App.shape.strokeColor;
-  sColor.innerHTML = `<span class="inline-color-swatch" style="background:${curStrokeC}"><input type="color" value="${curStrokeC}"></span><span class="inline-color-hex">${curStrokeC.toUpperCase()}</span>`;
-  sColor.querySelector('input').addEventListener('input', e => {
-    const v = e.target.value;
-    sColor.querySelector('.inline-color-swatch').style.background = v;
-    sColor.querySelector('.inline-color-hex').textContent = v.toUpperCase();
-    if (editing) {
-      m.strokeColor = v;
-      renderShapeLayer(sel);
-      requestRender();
-      pushHistoryDebounced(400);
-    } else {
-      App.shape.strokeColor = v;
-    }
-  });
-  sColorRow.appendChild(sColor);
-  body.appendChild(sColorRow);
-
-  // Corner radius (rect only) / Sides (polygon) / Points (star)
-  const cur = editing ? m : App.shape;
-  if ((editing ? m.shape : App.shape.kind) === 'rect') {
-    const rRow = document.createElement('div');
-    rRow.className = 'slider-row';
-    const v0 = cur.radius || 0;
-    rRow.innerHTML = `
-      <div class="slider-label">Radius</div>
-      <div class="slider-track"><div class="slider-fill" style="width:${(v0/100)*100}%"></div><input type="range" min="0" max="100" value="${v0}"></div>
-      <div class="slider-value">${v0}px</div>
-    `;
-    body.appendChild(rRow);
-    setupSlider(rRow, { bipolar:false, min:0, max:100, defaultValue:0 }, {
-      onInput: v => {
-        if (editing) {
-          m.radius = v;
-          renderShapeLayer(sel);
-          requestRender();
-        } else {
-          App.shape.radius = v;
-        }
-      },
-      onCommit: () => { if (editing) pushHistory(); },
-    });
-  }
-  if ((editing ? m.shape : App.shape.kind) === 'polygon') {
-    const sRow = document.createElement('div');
-    sRow.className = 'slider-row';
-    const v0 = cur.sides || 5;
-    sRow.innerHTML = `
-      <div class="slider-label">Sides</div>
-      <div class="slider-track"><div class="slider-fill" style="width:${((v0-3)/(12-3))*100}%"></div><input type="range" min="3" max="12" value="${v0}"></div>
-      <div class="slider-value">${v0}</div>
-    `;
-    body.appendChild(sRow);
-    setupSlider(sRow, { bipolar:false, min:3, max:12, defaultValue:5 }, {
-      onInput: v => {
-        if (editing) {
-          m.sides = v;
-          renderShapeLayer(sel);
-          requestRender();
-        } else {
-          App.shape.sides = v;
-        }
-      },
-      onCommit: () => { if (editing) pushHistory(); },
-    });
-  }
-  if ((editing ? m.shape : App.shape.kind) === 'star') {
-    const pRow = document.createElement('div');
-    pRow.className = 'slider-row';
-    const v0 = cur.points || 5;
-    pRow.innerHTML = `
-      <div class="slider-label">Points</div>
-      <div class="slider-track"><div class="slider-fill" style="width:${((v0-3)/(12-3))*100}%"></div><input type="range" min="3" max="12" value="${v0}"></div>
-      <div class="slider-value">${v0}</div>
-    `;
-    body.appendChild(pRow);
-    setupSlider(pRow, { bipolar:false, min:3, max:12, defaultValue:5 }, {
-      onInput: v => {
-        if (editing) {
-          m.points = v;
-          renderShapeLayer(sel);
-          requestRender();
-        } else {
-          App.shape.points = v;
-        }
-      },
-      onCommit: () => { if (editing) pushHistory(); },
-    });
-  }
-
-  // Quick swatch row
+  // Quick swatch row (inside Kind & Fill so the open section has color picks ready)
   const swatchRow = document.createElement('div');
   swatchRow.className = 'color-row';
   SHAPE_COLORS.forEach(c => {
@@ -7728,7 +7630,141 @@ function buildShapePanel(body, actions) {
     });
     swatchRow.appendChild(sw);
   });
-  body.appendChild(swatchRow);
+  kindBody.appendChild(swatchRow);
+
+  // ----- Section: Outline (closed) -----
+  const outlineSection = makeAccordion('Outline', false);
+  body.appendChild(outlineSection.wrap);
+  const outlineBody = outlineSection.body;
+
+  // Stroke width
+  const strokeRow = document.createElement('div');
+  strokeRow.className = 'slider-row';
+  const curStroke = editing ? (m.strokeWidth || 0) : App.shape.strokeWidth;
+  strokeRow.innerHTML = `
+    <div class="slider-label">Width</div>
+    <div class="slider-track">
+      <div class="slider-fill" style="width:${(curStroke/40)*100}%"></div>
+      <input type="range" min="0" max="40" value="${curStroke}">
+    </div>
+    <div class="slider-value">${curStroke}px</div>
+  `;
+  outlineBody.appendChild(strokeRow);
+  setupSlider(strokeRow, { bipolar:false, min:0, max:40, defaultValue:0 }, {
+    onInput: v => {
+      if (editing) {
+        m.strokeWidth = v;
+        renderShapeLayer(sel);
+        requestRender();
+        updateShapeSelection();
+      } else {
+        App.shape.strokeWidth = v;
+      }
+    },
+    onCommit: () => { if (editing) pushHistory(); }
+  });
+
+  // Stroke color
+  const sColorRow = document.createElement('div');
+  sColorRow.className = 'shape-row';
+  sColorRow.innerHTML = `<label>Color</label>`;
+  const sColor = document.createElement('label');
+  sColor.className = 'inline-color';
+  const curStrokeC = editing ? (m.strokeColor || '#000') : App.shape.strokeColor;
+  sColor.innerHTML = `<span class="inline-color-swatch" style="background:${curStrokeC}"><input type="color" value="${curStrokeC}"></span><span class="inline-color-hex">${curStrokeC.toUpperCase()}</span>`;
+  sColor.querySelector('input').addEventListener('input', e => {
+    const v = e.target.value;
+    sColor.querySelector('.inline-color-swatch').style.background = v;
+    sColor.querySelector('.inline-color-hex').textContent = v.toUpperCase();
+    if (editing) {
+      m.strokeColor = v;
+      renderShapeLayer(sel);
+      requestRender();
+      pushHistoryDebounced(400);
+    } else {
+      App.shape.strokeColor = v;
+    }
+  });
+  sColorRow.appendChild(sColor);
+  outlineBody.appendChild(sColorRow);
+
+  // ----- Section: Options (closed) — kind-specific knobs -----
+  const cur = editing ? m : App.shape;
+  const curKind = editing ? m.shape : App.shape.kind;
+  if (curKind === 'rect' || curKind === 'polygon' || curKind === 'star') {
+    const optsSection = makeAccordion('Options', false);
+    body.appendChild(optsSection.wrap);
+    const optsBody = optsSection.body;
+    if (curKind === 'rect') {
+      const rRow = document.createElement('div');
+      rRow.className = 'slider-row';
+      const v0 = cur.radius || 0;
+      rRow.innerHTML = `
+        <div class="slider-label">Radius</div>
+        <div class="slider-track"><div class="slider-fill" style="width:${(v0/100)*100}%"></div><input type="range" min="0" max="100" value="${v0}"></div>
+        <div class="slider-value">${v0}px</div>
+      `;
+      optsBody.appendChild(rRow);
+      setupSlider(rRow, { bipolar:false, min:0, max:100, defaultValue:0 }, {
+        onInput: v => {
+          if (editing) {
+            m.radius = v;
+            renderShapeLayer(sel);
+            requestRender();
+          } else {
+            App.shape.radius = v;
+          }
+        },
+        onCommit: () => { if (editing) pushHistory(); },
+      });
+    }
+    if (curKind === 'polygon') {
+      const sRow = document.createElement('div');
+      sRow.className = 'slider-row';
+      const v0 = cur.sides || 5;
+      sRow.innerHTML = `
+        <div class="slider-label">Sides</div>
+        <div class="slider-track"><div class="slider-fill" style="width:${((v0-3)/(12-3))*100}%"></div><input type="range" min="3" max="12" value="${v0}"></div>
+        <div class="slider-value">${v0}</div>
+      `;
+      optsBody.appendChild(sRow);
+      setupSlider(sRow, { bipolar:false, min:3, max:12, defaultValue:5 }, {
+        onInput: v => {
+          if (editing) {
+            m.sides = v;
+            renderShapeLayer(sel);
+            requestRender();
+          } else {
+            App.shape.sides = v;
+          }
+        },
+        onCommit: () => { if (editing) pushHistory(); },
+      });
+    }
+    if (curKind === 'star') {
+      const pRow = document.createElement('div');
+      pRow.className = 'slider-row';
+      const v0 = cur.points || 5;
+      pRow.innerHTML = `
+        <div class="slider-label">Points</div>
+        <div class="slider-track"><div class="slider-fill" style="width:${((v0-3)/(12-3))*100}%"></div><input type="range" min="3" max="12" value="${v0}"></div>
+        <div class="slider-value">${v0}</div>
+      `;
+      optsBody.appendChild(pRow);
+      setupSlider(pRow, { bipolar:false, min:3, max:12, defaultValue:5 }, {
+        onInput: v => {
+          if (editing) {
+            m.points = v;
+            renderShapeLayer(sel);
+            requestRender();
+          } else {
+            App.shape.points = v;
+          }
+        },
+        onCommit: () => { if (editing) pushHistory(); },
+      });
+    }
+  }
 
   // Hint / actions
   if (editing) {
