@@ -298,15 +298,17 @@ a{color:var(--primary);}
 .fit-btn{
   background:color-mix(in srgb,var(--surface) 92%,transparent);
   backdrop-filter:blur(10px);
-  border:1px solid var(--border);
-  width:34px;height:30px;border-radius:18px;
+  -webkit-backdrop-filter:blur(10px);
+  border:1px solid var(--border-strong);
+  width:36px;height:32px;border-radius:18px;
   display:flex;align-items:center;justify-content:center;
-  color:var(--text-2);pointer-events:auto;
-  transition:color .15s,border-color .15s,background .15s;
+  color:var(--text);pointer-events:auto;
+  transition:color .15s,border-color .15s,background .15s,transform .12s;
+  box-shadow:0 2px 8px rgba(0,0,0,0.08);
 }
-.fit-btn:hover{color:var(--primary);border-color:var(--primary);}
+.fit-btn:hover{color:var(--primary);border-color:var(--primary);background:var(--surface);}
 .fit-btn:active{transform:scale(.92);}
-.fit-btn svg{width:14px;height:14px;}
+.fit-btn svg{width:15px;height:15px;}
 
 .compare-hint{
   position:absolute;top:10px;right:10px;
@@ -1291,6 +1293,72 @@ a{color:var(--primary);}
 .btn.primary{background:var(--primary);border-color:var(--primary);color:#fff;}
 .btn.primary:hover{background:color-mix(in srgb,var(--primary) 88%,black);}
 
+/* ---------- EXPORT MODAL EXTRA ---------- */
+.export-modal .modal-card{max-width:420px;}
+.export-modal .modal-body{max-height:calc(100dvh - 220px);overflow-y:auto;}
+.exp-section{display:flex;flex-direction:column;gap:8px;}
+.exp-label{
+  font-size:11px;font-weight:600;color:var(--text-2);
+  letter-spacing:.4px;text-transform:uppercase;
+}
+.exp-filename{
+  display:flex;align-items:stretch;gap:0;
+  background:var(--surface-2);border:1px solid var(--border);
+  border-radius:10px;overflow:hidden;
+}
+.exp-filename input{
+  flex:1;min-width:0;background:transparent;border:none;outline:none;
+  font-size:14px;font-weight:600;color:var(--text);
+  padding:9px 10px;
+}
+.exp-filename .ext-suffix{
+  font-size:13px;font-weight:600;color:var(--text-3);
+  display:flex;align-items:center;padding:0 12px;
+  background:var(--surface);border-left:1px solid var(--border);
+  letter-spacing:.4px;text-transform:lowercase;font-family:ui-monospace,monospace;
+}
+.format-grid.four{grid-template-columns:repeat(4,1fr);}
+.format-grid.four .format-tile{padding:12px 4px;}
+.format-grid.four .format-tile-name{font-size:14px;}
+.format-grid.four .format-tile span:not(.format-tile-name){font-size:10px;}
+.exp-resolution{
+  display:flex;gap:6px;flex-wrap:wrap;
+}
+.exp-res-chip{
+  padding:7px 12px;border-radius:9px;
+  background:var(--surface-2);border:1px solid var(--border);
+  font-size:12px;font-weight:600;color:var(--text-2);
+  transition:all .15s;
+  display:flex;align-items:center;gap:5px;
+}
+.exp-res-chip:hover{border-color:color-mix(in srgb,var(--primary) 35%,var(--border));color:var(--text);}
+.exp-res-chip:active{transform:scale(.96);}
+.exp-res-chip.active{
+  background:color-mix(in srgb,var(--primary) 14%,var(--surface));
+  border-color:var(--primary);color:var(--primary);
+}
+.exp-res-info{
+  font-size:11px;color:var(--text-3);font-weight:500;
+  letter-spacing:.3px;
+}
+.exp-ico-sizes{
+  display:grid;grid-template-columns:repeat(3,1fr);gap:6px;
+}
+.exp-ico-size{
+  position:relative;padding:8px 6px;border-radius:9px;
+  background:var(--surface-2);border:1px solid var(--border);
+  font-size:12px;font-weight:600;color:var(--text-2);
+  display:flex;align-items:center;justify-content:center;gap:4px;
+  transition:all .15s;cursor:pointer;
+}
+.exp-ico-size:hover{border-color:color-mix(in srgb,var(--primary) 35%,var(--border));color:var(--text);}
+.exp-ico-size:active{transform:scale(.96);}
+.exp-ico-size.active{
+  background:color-mix(in srgb,var(--primary) 14%,var(--surface));
+  border-color:var(--primary);color:var(--primary);
+}
+.exp-ico-size svg{width:11px;height:11px;}
+
 /* ---------- EXPORT MODAL ---------- */
 .modal{
   position:fixed;inset:0;z-index:160;
@@ -1704,35 +1772,72 @@ a{color:var(--primary);}
 </div>
 
 <!-- ========== EXPORT MODAL ========== -->
-<div class="modal" id="exportModal">
+<div class="modal export-modal" id="exportModal">
   <div class="modal-card">
     <div class="modal-header">
-      <div class="modal-title">Export</div>
-      <div class="modal-sub">Save, share, or copy</div>
+      <div class="modal-title">Save</div>
+      <div class="modal-sub">Pick a name, format, and size</div>
       <button class="modal-close" id="exportClose">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
     </div>
     <div class="modal-body">
-      <div class="format-grid">
-        <button class="format-tile active" data-format="png">
-          <span class="format-tile-name">PNG</span>
-          <span>Lossless</span>
-        </button>
-        <button class="format-tile" data-format="jpeg">
-          <span class="format-tile-name">JPEG</span>
-          <span>Smaller</span>
-        </button>
-        <button class="format-tile" data-format="webp">
-          <span class="format-tile-name">WebP</span>
-          <span>Modern</span>
-        </button>
+      <div class="exp-section">
+        <div class="exp-label">Filename</div>
+        <div class="exp-filename">
+          <input type="text" id="exportFilename" autocomplete="off" spellcheck="false" maxlength="80" placeholder="image">
+          <span class="ext-suffix" id="exportExt">.png</span>
+        </div>
+      </div>
+      <div class="exp-section">
+        <div class="exp-label">Format</div>
+        <div class="format-grid four">
+          <button class="format-tile active" data-format="png">
+            <span class="format-tile-name">PNG</span>
+            <span>Lossless</span>
+          </button>
+          <button class="format-tile" data-format="jpeg">
+            <span class="format-tile-name">JPG</span>
+            <span>Smaller</span>
+          </button>
+          <button class="format-tile" data-format="webp">
+            <span class="format-tile-name">WebP</span>
+            <span>Modern</span>
+          </button>
+          <button class="format-tile" data-format="ico">
+            <span class="format-tile-name">ICO</span>
+            <span>Favicon</span>
+          </button>
+        </div>
       </div>
       <div class="quality-row" id="qualityRow">
         <div class="quality-head"><span>Quality</span><span id="qualityVal">95%</span></div>
         <div class="slider-track">
           <div class="slider-fill" id="qualityFill" style="width:95%"></div>
           <input type="range" min="10" max="100" value="95" id="qualitySlider">
+        </div>
+      </div>
+      <div class="exp-section" id="exportResolutionRow">
+        <div class="exp-label">Resolution <span class="exp-res-info" id="exportResInfo"></span></div>
+        <div class="exp-resolution" id="exportResolution">
+          <button class="exp-res-chip active" data-res="orig">Original</button>
+          <button class="exp-res-chip" data-res="work">Workspace</button>
+          <button class="exp-res-chip" data-res="50">50%</button>
+          <button class="exp-res-chip" data-res="75">75%</button>
+          <button class="exp-res-chip" data-res="100">100%</button>
+          <button class="exp-res-chip" data-res="150">150%</button>
+          <button class="exp-res-chip" data-res="200">200%</button>
+        </div>
+      </div>
+      <div class="exp-section" id="exportIcoRow" style="display:none;">
+        <div class="exp-label">Icon Sizes</div>
+        <div class="exp-ico-sizes" id="exportIcoSizes">
+          <button class="exp-ico-size active" data-icosize="16">16</button>
+          <button class="exp-ico-size active" data-icosize="32">32</button>
+          <button class="exp-ico-size active" data-icosize="48">48</button>
+          <button class="exp-ico-size active" data-icosize="64">64</button>
+          <button class="exp-ico-size" data-icosize="128">128</button>
+          <button class="exp-ico-size" data-icosize="256">256</button>
         </div>
       </div>
     </div>
@@ -2196,6 +2301,13 @@ const els = {
   exportCopy:        $('exportCopy'),
   exportShare:       $('exportShare'),
   exportDownload:    $('exportDownload'),
+  exportFilename:    $('exportFilename'),
+  exportExt:         $('exportExt'),
+  exportResolution:  $('exportResolution'),
+  exportResolutionRow: $('exportResolutionRow'),
+  exportResInfo:     $('exportResInfo'),
+  exportIcoRow:      $('exportIcoRow'),
+  exportIcoSizes:    $('exportIcoSizes'),
   qualityRow:        $('qualityRow'),
   qualitySlider:     $('qualitySlider'),
   qualityFill:       $('qualityFill'),
@@ -3084,13 +3196,25 @@ function drawBaseLayer(target, tctx, layer, W, H, scale) {
   const tx = _composeTmpCtx;
   tx.clearRect(0, 0, W, H);
 
-  // apply base transform (rotation/flip) — straighten in [-45..45]
+  // For export at supra-workspace resolutions, draw the original image directly
+  // so we don't upsample an already-rasterized lo-res base. Falls back to the
+  // working layer canvas otherwise.
+  const useOriginal = App.isExporting && scale > 1
+    && layer.meta && layer.meta.originalImage
+    && layer.meta.originalImage.complete !== false;
+
+  // apply base transform (rotation/flip)
   tx.save();
   tx.translate(W/2, H/2);
   if (App.rotation) tx.rotate(App.rotation * Math.PI / 180);
   tx.scale(App.flipH ? -1 : 1, App.flipV ? -1 : 1);
-  // Scale layer canvas (which is at App.workW x App.workH) into target W x H
-  tx.drawImage(layer.canvas, -W/2, -H/2, W, H);
+  if (useOriginal) {
+    tx.imageSmoothingEnabled = true;
+    tx.imageSmoothingQuality = 'high';
+    tx.drawImage(layer.meta.originalImage, -W/2, -H/2, W, H);
+  } else {
+    tx.drawImage(layer.canvas, -W/2, -H/2, W, H);
+  }
   tx.restore();
 
   // 2) Apply filter preset (as additional adjustment values)
@@ -3104,7 +3228,8 @@ function drawBaseLayer(target, tctx, layer, W, H, scale) {
   }
 
   // 3) Pixel pass — apply adjustments + tone shift + effects
-  const previewMode = App.isPreviewActive || scale < 1;
+  // For export we always run full-quality regardless of render scale.
+  const previewMode = !App.isExporting && (App.isPreviewActive || scale < 1);
   const imgData = tx.getImageData(0, 0, W, H);
   applyAdjustmentsToImageData(imgData, merged, { skipExpensive: previewMode });
   if (filt.tone && App.filterStrength > 0) {
@@ -3687,9 +3812,77 @@ document.querySelectorAll('.tool-tab').forEach(t => {
   t.addEventListener('click', () => setTool(t.dataset.tool));
 });
 
+/* Capture horizontal scroll positions for every scroll row in the control body,
+ * keyed by class signature so they line up after rebuild and only restore
+ * if the same row identity reappears. */
+const HSCROLL_SELECTORS = '.h-scroll, .color-row, .font-list';
+function _scrollKeyFor(el) {
+  // Use the className as identity; for `.h-scroll` rows the variant class
+  // (e.g. "adjust-row", "filter-row") gives row-specific identity.
+  return (el.className || '').trim();
+}
+function captureScrollPositions() {
+  const body = els.controlBody;
+  if (!body) return new Map();
+  const list = body.querySelectorAll(HSCROLL_SELECTORS);
+  const snap = new Map();
+  list.forEach((el) => {
+    const key = _scrollKeyFor(el);
+    // If multiple rows share the same className, store as array.
+    if (snap.has(key)) {
+      snap.get(key).push({ x: el.scrollLeft, y: el.scrollTop });
+    } else {
+      snap.set(key, [{ x: el.scrollLeft, y: el.scrollTop }]);
+    }
+  });
+  return snap;
+}
+function restoreScrollPositions(snap) {
+  if (!snap || !snap.size) return;
+  const body = els.controlBody;
+  if (!body) return;
+  // Track index per key as we iterate.
+  const cursor = new Map();
+  body.querySelectorAll(HSCROLL_SELECTORS).forEach((el) => {
+    const key = _scrollKeyFor(el);
+    const arr = snap.get(key);
+    if (!arr || !arr.length) return;
+    const i = cursor.get(key) || 0;
+    if (i < arr.length) {
+      el.scrollLeft = arr[i].x;
+      el.scrollTop = arr[i].y;
+      cursor.set(key, i + 1);
+    }
+  });
+}
+
+/* Generic helper: capture scrollLeft on a node matching selector,
+ * run rebuild(), then restore the closest match.
+ * Used by panel-internal partial rebuilds. */
+function preserveScrollX(selector, rebuild) {
+  const body = els.controlBody;
+  let snapshot = [];
+  if (body) {
+    body.querySelectorAll(selector).forEach((el, i) => {
+      snapshot.push({ i, x: el.scrollLeft });
+    });
+  }
+  rebuild();
+  if (body) {
+    body.querySelectorAll(selector).forEach((el, i) => {
+      const s = snapshot[i];
+      if (s) el.scrollLeft = s.x;
+    });
+  }
+}
+
+let _toolPanelLastTool = null;
 function updateToolPanel() {
   const body = els.controlBody;
   const actions = els.cpActions;
+  // Only preserve scroll position when staying on the same tool (intra-panel rebuild).
+  const sameTool = _toolPanelLastTool === App.activeTool;
+  const scrollSnap = sameTool ? captureScrollPositions() : null;
   body.innerHTML = '';
   actions.innerHTML = '';
 
@@ -3704,6 +3897,12 @@ function updateToolPanel() {
     case 'frame':    buildFramePanel(body, actions); break;
     case 'layers':   buildLayersPanel(body, actions); break;
   }
+  _toolPanelLastTool = App.activeTool;
+  if (scrollSnap) {
+    restoreScrollPositions(scrollSnap);
+    // Re-run on next frame in case any thumbs lazy-loaded affect layout.
+    requestAnimationFrame(() => restoreScrollPositions(scrollSnap));
+  }
 }
 
 /* ================================================================
@@ -3715,12 +3914,13 @@ function formatValue(v, bipolar) {
 }
 
 function setupSlider(row, meta, opts) {
-  // meta: { id, min, max, bipolar, defaultValue }
+  // meta: { id, min, max, bipolar, defaultValue, suffix }
   // opts: { onInput, onCommit, onChange? }
   const input = row.querySelector('input[type=range]');
   const fill = row.querySelector('.slider-fill');
   const valEl = row.querySelector('.slider-value');
   const defaultValue = meta.defaultValue != null ? meta.defaultValue : (meta.bipolar ? 0 : meta.min);
+  const suffix = meta.suffix || '';
 
   function updateUI() {
     const v = +input.value;
@@ -3739,7 +3939,7 @@ function setupSlider(row, meta, opts) {
       fill.style.left = '0%';
       fill.style.width = pct + '%';
     }
-    if (valEl) valEl.textContent = formatValue(v, meta.bipolar);
+    if (valEl) valEl.textContent = formatValue(v, meta.bipolar) + suffix;
   }
   updateUI();
 
@@ -4061,18 +4261,19 @@ function buildCropPanel(body, actions) {
 
   const rotRow = document.createElement('div');
   rotRow.className = 'slider-row';
-  const curRot = Math.max(-45, Math.min(45, App.rotation));
+  const curRot = Math.max(-360, Math.min(360, App.rotation || 0));
   rotRow.innerHTML = `
-    <div class="slider-label">Straighten</div>
+    <div class="slider-label">Rotate</div>
     <div class="slider-track">
       <div class="mid-mark"></div>
       <div class="slider-fill bipolar"></div>
-      <input type="range" min="-45" max="45" step="1" value="${curRot}">
+      <input type="range" min="-360" max="360" step="1" value="${curRot}">
     </div>
     <div class="slider-value">${curRot}°</div>
   `;
   body.appendChild(rotRow);
-  setupSlider(rotRow, { bipolar: true, min: -45, max: 45, defaultValue: 0 }, {
+  const rotSlider = rotRow.querySelector('input[type=range]');
+  setupSlider(rotRow, { bipolar: true, min: -360, max: 360, defaultValue: 0, suffix: '°' }, {
     onInput: (v) => {
       App.rotation = v;
       requestRender();
@@ -4082,6 +4283,32 @@ function buildCropPanel(body, actions) {
       requestRender();
     },
   });
+  // Quick "Reset rotation" — double-tap the label
+  const rotLabel = rotRow.querySelector('.slider-label');
+  if (rotLabel) {
+    let lastTap = 0;
+    rotLabel.style.cursor = 'pointer';
+    rotLabel.title = 'Double-tap to reset rotation';
+    rotLabel.addEventListener('click', () => {
+      const now = Date.now();
+      if (now - lastTap < 350) {
+        if (rotSlider) {
+          rotSlider.value = 0;
+          // Dispatch input + change so the slider's bound onInput/onCommit
+          // sync App.rotation, the slider fill, and history together.
+          rotSlider.dispatchEvent(new Event('input', { bubbles: true }));
+          rotSlider.dispatchEvent(new Event('change', { bubbles: true }));
+        } else {
+          App.rotation = 0;
+          renderFull();
+          pushHistory();
+        }
+        lastTap = 0;
+      } else {
+        lastTap = now;
+      }
+    });
+  }
 
   const tx = document.createElement('div');
   tx.className = 'transform-buttons';
@@ -4119,9 +4346,10 @@ function buildCropPanel(body, actions) {
     <button class="cp-action primary" id="cropApply">Apply</button>
   `;
   $('cropCancel').addEventListener('click', () => {
-    // Fully exit crop, revert in-progress straighten back to last committed state
+    // Exit crop. Rotation is already committed to history via the slider's
+    // own onCommit; undo is the right way to revert it. We do NOT touch
+    // App.rotation here so an in-progress straighten/rotate isn't blown away.
     App.cropRect = null;
-    App.rotation = 0;  // best-effort revert; real "in-progress" rotation is per-session
     els.cropOverlay.classList.remove('active');
     updateCropOverlay();
     renderFull();
@@ -6608,43 +6836,93 @@ els.welcomePasteBtn.addEventListener('click', pasteFromClipboard);
 /* ================================================================
    EXPORT
    ================================================================ */
-let exportFormat = 'png';
+let exportFormat = 'png';        // 'png' | 'jpeg' | 'webp' | 'ico'
 let exportQuality = 0.95;
+let exportResolution = 'orig';   // 'orig' | 'work' | '50' | '75' | '100' | '150' | '200'
+let exportIcoSizes = [16, 32, 48, 64];  // active ICO sizes
+let exportFilenameDirty = false; // true if user has typed a custom name
 
-els.exportBtn.addEventListener('click', () => {
-  if (!App.layers.length) { toast('Open a photo first', 'error'); return; }
-  els.exportModal.classList.add('active');
-  updateQualityVisibility();
-});
-els.exportClose.addEventListener('click', () => els.exportModal.classList.remove('active'));
-els.exportModal.addEventListener('click', e => {
-  if (e.target === els.exportModal) els.exportModal.classList.remove('active');
-});
-document.querySelectorAll('.format-tile').forEach(t => {
-  t.addEventListener('click', () => {
-    document.querySelectorAll('.format-tile').forEach(x => x.classList.remove('active'));
-    t.classList.add('active');
-    exportFormat = t.dataset.format;
-    updateQualityVisibility();
-  });
-});
-function updateQualityVisibility() {
-  els.qualityRow.style.display = exportFormat === 'png' ? 'none' : 'flex';
+function defaultExportFilename() {
+  const d = new Date();
+  const p = n => String(n).padStart(2, '0');
+  const stamp = d.getFullYear() + p(d.getMonth()+1) + p(d.getDate()) + '-' + p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds());
+  return 'studio-' + stamp;
 }
-els.qualitySlider.addEventListener('input', () => {
-  const v = +els.qualitySlider.value;
-  exportQuality = v / 100;
-  els.qualityVal.textContent = v + '%';
-  els.qualityFill.style.width = v + '%';
-});
+
+/* Strip characters that aren't safe in filenames on Windows/macOS/Linux.
+ * Always returns a non-empty string. */
+function sanitizeFilename(name) {
+  // Trim, replace illegal/control chars with underscore, collapse repeats, strip trailing dots/spaces.
+  let s = String(name || '').trim();
+  s = s.replace(/[\x00-\x1F\x7F]/g, '');
+  s = s.replace(/[\/\\?%*:|"<>]/g, '_');
+  s = s.replace(/_+/g, '_');
+  s = s.replace(/\.+$/g, '');
+  s = s.replace(/^\.+/g, '');
+  s = s.replace(/^_+|_+$/g, '');
+  // Strip any trailing extension the user typed (we'll append the format's extension)
+  s = s.replace(/\.(png|jpg|jpeg|webp|ico|gif|bmp|tiff)$/i, '');
+  if (s.length > 80) s = s.slice(0, 80);
+  return s || 'image';
+}
+
+function extensionFor(format) {
+  if (format === 'jpeg') return 'jpg';
+  return format;
+}
+
+/* Compute the export target dimensions in workspace coords (PNG/JPG/WebP).
+ * Returns { w, h, label }. */
+function getExportDims() {
+  const w0 = App.workW, h0 = App.workH;
+  const bg = backgroundLayer();
+  const origImg = bg && bg.meta ? bg.meta.originalImage : null;
+  const origW = origImg ? origImg.naturalWidth || w0 : (App.imgW || w0);
+  const origH = origImg ? origImg.naturalHeight || h0 : (App.imgH || h0);
+  switch (exportResolution) {
+    case 'orig': {
+      // "Original" = at least the original source resolution. If the workspace
+      // is bigger (e.g. user upsized via Canvas Size), keep that.
+      const k = origW > 0 && w0 > 0 ? Math.max(1, origW / w0) : 1;
+      const W = Math.max(w0, Math.round(w0 * k));
+      const H = Math.max(h0, Math.round(h0 * k));
+      return { w: W, h: H, label: 'Original' };
+    }
+    case 'work': return { w: w0, h: h0, label: 'Workspace' };
+    case '50':   return { w: Math.max(1, Math.round(w0 * 0.5)), h: Math.max(1, Math.round(h0 * 0.5)), label: '50%' };
+    case '75':   return { w: Math.max(1, Math.round(w0 * 0.75)), h: Math.max(1, Math.round(h0 * 0.75)), label: '75%' };
+    case '100':  return { w: w0, h: h0, label: '100%' };
+    case '150':  return { w: Math.max(1, Math.round(w0 * 1.5)), h: Math.max(1, Math.round(h0 * 1.5)), label: '150%' };
+    case '200':  return { w: Math.max(1, Math.round(w0 * 2)), h: Math.max(1, Math.round(h0 * 2)), label: '200%' };
+  }
+  return { w: w0, h: h0, label: 'Workspace' };
+}
+
+/* Compose all visible layers onto a fresh canvas at the given target size.
+ * For PNG/JPG/WebP path. Sets App.isExporting so full-quality adjustments run
+ * even when target < workspace dims. */
+async function composeFullForExport(targetW, targetH) {
+  const out = document.createElement('canvas');
+  out.width = targetW;
+  out.height = targetH;
+  const octx = out.getContext('2d');
+  const scale = targetW / App.workW;
+  const prev = App.isExporting;
+  App.isExporting = true;
+  try {
+    composeLayers(out, octx, targetW, targetH, scale);
+  } finally {
+    App.isExporting = prev;
+  }
+  return out;
+}
 
 async function buildExportBlob() {
-  // Use the current composite at working resolution.
-  // (Agent 4 will upgrade to true full-res export.)
-  const out = document.createElement('canvas');
-  out.width = App.workW;
-  out.height = App.workH;
-  out.getContext('2d').drawImage(App.canvas, 0, 0);
+  if (exportFormat === 'ico') {
+    return buildIcoBlob();
+  }
+  const { w: tw, h: th } = getExportDims();
+  const out = await composeFullForExport(tw, th);
   const mimeMap = { png: 'image/png', jpeg: 'image/jpeg', webp: 'image/webp' };
   const mime = mimeMap[exportFormat] || 'image/png';
   return new Promise(resolve => {
@@ -6652,21 +6930,244 @@ async function buildExportBlob() {
   });
 }
 
+/* ICO encoder
+ * --------------------------------------------------------------------
+ * Render each requested size into a square canvas (letterboxed to keep
+ * aspect ratio with transparent padding), encode each as PNG, then pack
+ * into the ICO container format. */
+async function _renderSquareAtSize(size) {
+  // Render the composite at high quality, then letterbox onto a `size x size`
+  // canvas with transparent padding so aspect ratio is preserved.
+  const w0 = App.workW, h0 = App.workH;
+  const maxSide = Math.max(w0, h0);
+  const interW = Math.max(1, Math.round((w0 / maxSide) * size));
+  const interH = Math.max(1, Math.round((h0 / maxSide) * size));
+  const tmp = document.createElement('canvas');
+  tmp.width = interW;
+  tmp.height = interH;
+  const prev = App.isExporting;
+  App.isExporting = true;
+  try {
+    composeLayers(tmp, tmp.getContext('2d'), tmp.width, tmp.height, tmp.width / w0);
+  } finally {
+    App.isExporting = prev;
+  }
+  const out = document.createElement('canvas');
+  out.width = size;
+  out.height = size;
+  const ctx = out.getContext('2d');
+  ctx.clearRect(0, 0, size, size);
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  const dx = Math.round((size - tmp.width) / 2);
+  const dy = Math.round((size - tmp.height) / 2);
+  ctx.drawImage(tmp, dx, dy);
+  return out;
+}
+
+async function _canvasToPngBytes(canvas) {
+  const blob = await new Promise(r => canvas.toBlob(b => r(b), 'image/png'));
+  const buf = await blob.arrayBuffer();
+  return new Uint8Array(buf);
+}
+
+/* Pack PNG byte arrays for each size into a multi-image ICO file. */
+function _packIco(sizes, pngs) {
+  // 6-byte header + 16 bytes per image + concatenated PNG data
+  const n = pngs.length;
+  const headerSize = 6;
+  const dirEntrySize = 16;
+  let totalPngBytes = 0;
+  for (const p of pngs) totalPngBytes += p.length;
+  const total = headerSize + n * dirEntrySize + totalPngBytes;
+  const out = new Uint8Array(total);
+  const dv = new DataView(out.buffer);
+  // Header
+  dv.setUint16(0, 0, true);   // reserved
+  dv.setUint16(2, 1, true);   // type = 1 (icon)
+  dv.setUint16(4, n, true);   // image count
+  // Entries + data
+  let dataOffset = headerSize + n * dirEntrySize;
+  for (let i = 0; i < n; i++) {
+    const s = sizes[i];
+    const png = pngs[i];
+    const entryOff = headerSize + i * dirEntrySize;
+    // width / height: 0 means 256
+    out[entryOff + 0] = s >= 256 ? 0 : s;
+    out[entryOff + 1] = s >= 256 ? 0 : s;
+    out[entryOff + 2] = 0; // color count
+    out[entryOff + 3] = 0; // reserved
+    dv.setUint16(entryOff + 4, 1, true);   // color planes
+    dv.setUint16(entryOff + 6, 32, true);  // bits per pixel
+    dv.setUint32(entryOff + 8, png.length, true);  // image size
+    dv.setUint32(entryOff + 12, dataOffset, true); // image offset
+    // Copy PNG bytes into output buffer
+    out.set(png, dataOffset);
+    dataOffset += png.length;
+  }
+  return out;
+}
+
+async function buildIcoBlob() {
+  const sizes = exportIcoSizes.slice().sort((a, b) => a - b);
+  if (sizes.length === 0) {
+    throw new Error('Select at least one ICO size');
+  }
+  const canvases = [];
+  for (const s of sizes) {
+    canvases.push(await _renderSquareAtSize(s));
+  }
+  const pngs = [];
+  for (const c of canvases) {
+    pngs.push(await _canvasToPngBytes(c));
+  }
+  const icoBytes = _packIco(sizes, pngs);
+  return {
+    blob: new Blob([icoBytes], { type: 'image/x-icon' }),
+    mime: 'image/x-icon',
+  };
+}
+
+/* --------- Modal wiring --------- */
+
+function _getExportFilename() {
+  const raw = els.exportFilename ? els.exportFilename.value : '';
+  return sanitizeFilename(raw || defaultExportFilename());
+}
+
+function updateExportExtUi() {
+  const ext = '.' + extensionFor(exportFormat);
+  if (els.exportExt) els.exportExt.textContent = ext;
+}
+
+function updateQualityVisibility() {
+  // Quality slider only for JPG/WebP (not PNG, not ICO)
+  els.qualityRow.style.display = (exportFormat === 'jpeg' || exportFormat === 'webp') ? 'flex' : 'none';
+  // Resolution row hidden for ICO; ICO row shown only for ICO
+  if (els.exportResolutionRow) {
+    els.exportResolutionRow.style.display = exportFormat === 'ico' ? 'none' : 'flex';
+  }
+  if (els.exportIcoRow) {
+    els.exportIcoRow.style.display = exportFormat === 'ico' ? 'flex' : 'none';
+  }
+  updateExportResInfo();
+}
+
+function updateExportResInfo() {
+  if (!els.exportResInfo) return;
+  if (exportFormat === 'ico') {
+    const sel = exportIcoSizes.slice().sort((a, b) => a - b);
+    els.exportResInfo.textContent = sel.length ? '· ' + sel.join('×') : '';
+    return;
+  }
+  const d = getExportDims();
+  els.exportResInfo.textContent = '· ' + d.w + ' × ' + d.h + ' px';
+}
+
+els.exportBtn.addEventListener('click', () => {
+  if (!App.layers.length) { toast('Open a photo first', 'error'); return; }
+  // Reset filename if user hasn't customized it (so it's a fresh timestamp each time).
+  if (!exportFilenameDirty && els.exportFilename) {
+    els.exportFilename.value = defaultExportFilename();
+  } else if (els.exportFilename && !els.exportFilename.value) {
+    els.exportFilename.value = defaultExportFilename();
+  }
+  els.exportModal.classList.add('active');
+  updateExportExtUi();
+  updateQualityVisibility();
+  updateExportResInfo();
+});
+
+if (els.exportFilename) {
+  els.exportFilename.addEventListener('input', () => {
+    exportFilenameDirty = !!els.exportFilename.value;
+  });
+  els.exportFilename.addEventListener('blur', () => {
+    // Strip invalid chars live on blur for visual feedback.
+    const cleaned = sanitizeFilename(els.exportFilename.value);
+    els.exportFilename.value = cleaned;
+  });
+  els.exportFilename.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); els.exportFilename.blur(); }
+  });
+}
+
+els.exportClose.addEventListener('click', () => els.exportModal.classList.remove('active'));
+els.exportModal.addEventListener('click', e => {
+  if (e.target === els.exportModal) els.exportModal.classList.remove('active');
+});
+
+document.querySelectorAll('.format-tile').forEach(t => {
+  t.addEventListener('click', () => {
+    document.querySelectorAll('.format-tile').forEach(x => x.classList.remove('active'));
+    t.classList.add('active');
+    exportFormat = t.dataset.format;
+    updateExportExtUi();
+    updateQualityVisibility();
+  });
+});
+
+if (els.exportResolution) {
+  els.exportResolution.querySelectorAll('.exp-res-chip').forEach(c => {
+    c.addEventListener('click', () => {
+      els.exportResolution.querySelectorAll('.exp-res-chip').forEach(x => x.classList.remove('active'));
+      c.classList.add('active');
+      exportResolution = c.dataset.res;
+      updateExportResInfo();
+    });
+  });
+}
+
+if (els.exportIcoSizes) {
+  // Initial state: chips with class "active" match exportIcoSizes
+  els.exportIcoSizes.querySelectorAll('.exp-ico-size').forEach(b => {
+    const s = +b.dataset.icosize;
+    b.classList.toggle('active', exportIcoSizes.includes(s));
+    b.addEventListener('click', () => {
+      const isOn = b.classList.toggle('active');
+      if (isOn) {
+        if (!exportIcoSizes.includes(s)) exportIcoSizes.push(s);
+      } else {
+        exportIcoSizes = exportIcoSizes.filter(x => x !== s);
+      }
+      updateExportResInfo();
+    });
+  });
+}
+
+els.qualitySlider.addEventListener('input', () => {
+  const v = +els.qualitySlider.value;
+  exportQuality = v / 100;
+  els.qualityVal.textContent = v + '%';
+  els.qualityFill.style.width = v + '%';
+});
+
+/* --------- Export actions --------- */
+
+function _downloadBlob(blob, filenameWithExt) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filenameWithExt;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1500);
+}
+
 els.exportDownload.addEventListener('click', async () => {
-  loading(true, 'Exporting…');
+  if (exportFormat === 'ico' && exportIcoSizes.length === 0) {
+    toast('Select at least one icon size', 'error');
+    return;
+  }
+  loading(true, 'Exporting…', exportFormat === 'ico' ? 'Encoding ICO' : 'Encoding ' + exportFormat.toUpperCase());
   try {
     const { blob } = await buildExportBlob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `studio-${Date.now()}.${exportFormat === 'jpeg' ? 'jpg' : exportFormat}`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    const fname = _getExportFilename() + '.' + extensionFor(exportFormat);
+    _downloadBlob(blob, fname);
     loading(false);
     els.exportModal.classList.remove('active');
-    toast('Saved', 'success');
+    toast('Saved as ' + fname, 'success');
   } catch (e) {
     loading(false);
     toast('Export failed', 'error');
@@ -6677,32 +7178,39 @@ els.exportDownload.addEventListener('click', async () => {
 els.exportCopy.addEventListener('click', async () => {
   loading(true, 'Copying…');
   try {
-    const { blob } = await buildExportBlob();
     if (!navigator.clipboard?.write) {
       loading(false);
       toast('Clipboard not supported here', 'error');
       return;
     }
-    let finalBlob = blob;
-    if (exportFormat !== 'png') {
-      finalBlob = await new Promise(r => {
-        const c = document.createElement('canvas');
-        const img = new Image();
-        img.onload = () => {
-          c.width = img.width; c.height = img.height;
-          c.getContext('2d').drawImage(img, 0, 0);
-          c.toBlob(b => r(b), 'image/png');
-        };
-        img.src = URL.createObjectURL(blob);
-      });
+    // Clipboard typically only accepts image/png. For ICO/JPG/WebP, fall back to PNG copy.
+    let copyBlob;
+    let isFallback = false;
+    if (exportFormat === 'png') {
+      const r = await buildExportBlob();
+      copyBlob = r.blob;
+    } else if (exportFormat === 'ico') {
+      // ICO can't be put on the clipboard (clipboard image MIME is image/png).
+      // Build a 256x256 (or largest selected) PNG and copy that instead.
+      const fallbackSize = Math.max(...(exportIcoSizes.length ? exportIcoSizes : [256]));
+      const sq = await _renderSquareAtSize(fallbackSize);
+      copyBlob = await new Promise(r => sq.toBlob(b => r(b), 'image/png'));
+      isFallback = true;
+    } else {
+      // JPG/WebP: render PNG at the same resolution so clipboard accepts it.
+      const { w, h } = getExportDims();
+      const c = await composeFullForExport(w, h);
+      copyBlob = await new Promise(r => c.toBlob(b => r(b), 'image/png'));
+      isFallback = true;
     }
-    await navigator.clipboard.write([new ClipboardItem({ 'image/png': finalBlob })]);
+    await navigator.clipboard.write([new ClipboardItem({ 'image/png': copyBlob })]);
     loading(false);
     els.exportModal.classList.remove('active');
-    toast('Copied to clipboard', 'success');
+    toast(isFallback ? 'Copied as PNG (clipboard limitation)' : 'Copied to clipboard', 'success');
   } catch (e) {
     loading(false);
     toast('Copy failed', 'error');
+    console.error(e);
   }
 });
 
@@ -6711,11 +7219,16 @@ els.exportShare.addEventListener('click', async () => {
     toast('Share not supported here', 'error');
     return;
   }
+  if (exportFormat === 'ico' && exportIcoSizes.length === 0) {
+    toast('Select at least one icon size', 'error');
+    return;
+  }
   loading(true, 'Preparing share…');
   try {
     const { blob } = await buildExportBlob();
-    const ext = exportFormat === 'jpeg' ? 'jpg' : exportFormat;
-    const file = new File([blob], `studio-${Date.now()}.${ext}`, { type: blob.type });
+    const ext = extensionFor(exportFormat);
+    const fname = _getExportFilename() + '.' + ext;
+    const file = new File([blob], fname, { type: blob.type });
     if (navigator.canShare({ files: [file] })) {
       loading(false);
       els.exportModal.classList.remove('active');
@@ -6734,15 +7247,14 @@ async function doCopyClipboard() {
   if (!App.layers.length) return;
   loading(true, 'Copying…');
   try {
-    const oldFormat = exportFormat;
-    exportFormat = 'png';
-    const { blob } = await buildExportBlob();
-    exportFormat = oldFormat;
     if (!navigator.clipboard?.write) {
       loading(false);
       toast('Clipboard not supported', 'error');
       return;
     }
+    // Always copy as PNG at workspace dims for the Ctrl+C path.
+    const c = await composeFullForExport(App.workW, App.workH);
+    const blob = await new Promise(r => c.toBlob(b => r(b), 'image/png'));
     await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
     loading(false);
     toast('Copied to clipboard', 'success');
@@ -6757,11 +7269,9 @@ async function doShare() {
   if (!navigator.share) { toast('Share not supported', 'error'); return; }
   loading(true, 'Preparing…');
   try {
-    const oldFormat = exportFormat;
-    exportFormat = 'jpeg';
-    const { blob } = await buildExportBlob();
-    exportFormat = oldFormat;
-    const file = new File([blob], `studio-${Date.now()}.jpg`, { type: 'image/jpeg' });
+    const c = await composeFullForExport(App.workW, App.workH);
+    const blob = await new Promise(r => c.toBlob(b => r(b), 'image/jpeg', 0.92));
+    const file = new File([blob], _getExportFilename() + '.jpg', { type: 'image/jpeg' });
     loading(false);
     if (navigator.canShare?.({ files: [file] })) {
       await navigator.share({ files: [file], title: 'Studio Export' });
