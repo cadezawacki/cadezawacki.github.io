@@ -329,13 +329,40 @@ a{color:var(--primary);}
   -webkit-backdrop-filter:saturate(180%) blur(20px);
   border-top:1px solid var(--border);
   flex-shrink:0;position:relative;z-index:30;
-  max-height:60dvh;
+  /* Height is driven via CSS variable controlled in JS.
+     Snap points: compact ~22dvh, mid ~48dvh, full ~78dvh. */
+  --cp-h:22dvh;
+  height:var(--cp-h);
+  min-height:14dvh;max-height:85dvh;
   display:flex;flex-direction:column;
   min-width:0;
+  transition:height .2s cubic-bezier(.2,.8,.2,1);
+}
+.control-panel.cp-dragging{transition:none !important;}
+.cp-drag-handle{
+  position:relative;
+  display:flex;align-items:center;justify-content:center;
+  padding:6px 0 4px;
+  cursor:row-resize;
+  touch-action:none;
+  user-select:none;-webkit-user-select:none;
+  flex-shrink:0;
+}
+.cp-drag-handle::before{
+  content:"";
+  width:44px;height:5px;border-radius:3px;
+  background:color-mix(in srgb,var(--primary) 55%,var(--text-3));
+  opacity:.65;
+  transition:opacity .15s,background .15s,transform .15s;
+}
+.cp-drag-handle:hover::before{opacity:.9;}
+.cp-drag-handle:active::before,
+.control-panel.cp-dragging .cp-drag-handle::before{
+  opacity:1;background:var(--primary);transform:scaleX(1.15);
 }
 .control-panel-header{
   display:flex;align-items:center;justify-content:space-between;
-  padding:10px 14px 4px;gap:8px;
+  padding:2px 14px 4px;gap:8px;
 }
 .cp-title{
   font-size:12px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;
@@ -343,6 +370,14 @@ a{color:var(--primary);}
   display:flex;align-items:center;gap:8px;
   min-width:0;overflow:hidden;
 }
+.cp-lock-badge{
+  display:inline-flex;align-items:center;justify-content:center;
+  width:18px;height:18px;border-radius:6px;
+  background:color-mix(in srgb,var(--primary) 16%,transparent);
+  color:var(--primary);
+  flex-shrink:0;
+}
+.cp-lock-badge svg{width:11px;height:11px;}
 .cp-title-val{
   font-size:12px;font-weight:700;color:var(--text);
   letter-spacing:0;text-transform:none;
@@ -367,7 +402,7 @@ a{color:var(--primary);}
 .control-body{
   padding:4px 14px 12px;
   overflow-y:auto;-webkit-overflow-scrolling:touch;
-  flex:1;min-width:0;
+  flex:1 1 auto;min-width:0;min-height:0;
 }
 
 /* slider */
@@ -1024,32 +1059,35 @@ a{color:var(--primary);}
 .text-sel-handle.bm{bottom:-12px;left:50%;transform:translateX(-50%);cursor:ns-resize;}
 .text-sel-handle.lm{left:-12px;top:50%;transform:translateY(-50%);cursor:ew-resize;}
 .text-sel-handle.rm{right:-12px;top:50%;transform:translateY(-50%);cursor:ew-resize;}
-.text-sel-handle.rot{
-  top:-46px;left:50%;transform:translateX(-50%);cursor:grab;
-}
-.text-sel-handle.rot::before{
-  background:var(--primary);border-color:#fff;
-  width:14px;height:14px;
-}
-.text-sel-handle.rot:active{cursor:grabbing;}
-.text-sel-rotline{
-  position:absolute;left:50%;top:-34px;
-  width:2px;height:34px;background:var(--primary);
+/* Dedicated rotation pin: a clearly distinct circular target floating above
+ * the top edge with a curved-arrow rotation glyph. It is the ONLY rotation
+ * affordance; the body/frame moves the layer and the 8 handles scale.
+ * Hit target stays >=28px for touch. */
+.text-sel-rotpin{
+  position:absolute;top:-44px;left:50%;
   transform:translateX(-50%);
-  pointer-events:none;opacity:.6;
+  width:32px;height:32px;
+  display:flex;align-items:center;justify-content:center;
+  background:var(--primary);
+  border:2px solid #fff;
+  border-radius:50%;
+  box-shadow:0 2px 6px rgba(0,0,0,.32);
+  color:#fff;
+  pointer-events:auto;cursor:grab;
+  touch-action:none;
+  z-index:2;
 }
-.text-mode-hint{
-  position:absolute;top:10px;left:50%;transform:translateX(-50%) translateY(40px);
-  background:color-mix(in srgb,var(--primary) 92%,transparent);
-  color:#fff;padding:5px 12px;border-radius:20px;
-  font-size:11px;font-weight:600;letter-spacing:.3px;
-  z-index:11;
-  box-shadow:0 4px 14px rgba(0,0,0,0.18);
-  display:none;
-  pointer-events:none;
+.text-sel-rotpin:hover{transform:translateX(-50%) scale(1.06);}
+.text-sel-rotpin:active{cursor:grabbing;}
+.text-sel-rotpin svg{width:18px;height:18px;display:block;pointer-events:none;}
+.text-sel-rotline{
+  position:absolute;left:50%;top:-28px;
+  width:2px;height:28px;background:var(--primary);
+  transform:translateX(-50%);
+  pointer-events:none;opacity:.7;
+  z-index:1;
 }
-.text-mode-hint.show{display:flex;align-items:center;gap:6px;}
-.text-mode-hint.show svg{width:13px;height:13px;}
+/* (text-mode-hint banner removed; replaced by a small lock badge in cpTitle) */
 
 /* ---------- BRUSH CURSOR (screen-space, follows pointer) ---------- */
 .brush-cursor{
@@ -1282,8 +1320,6 @@ a{color:var(--primary);}
   border-radius:8px;padding:6px 10px;font-size:12px;color:var(--text);
   outline:none;
 }
-.text-mode-hint.show{display:flex;align-items:center;gap:6px;}
-.text-mode-hint svg{width:12px;height:12px;}
 .btn{
   padding:9px 16px;border-radius:10px;font-weight:600;font-size:14px;
   background:var(--surface-2);border:1px solid var(--border);color:var(--text);
@@ -1644,7 +1680,9 @@ a{color:var(--primary);}
       <div class="text-sel-box" id="textSelBox">
         <div class="text-sel-frame" id="textSelFrame"></div>
         <div class="text-sel-rotline"></div>
-        <div class="text-sel-handle rot" data-handle="rot" title="Rotate"></div>
+        <div class="text-sel-rotpin" data-handle="rot" title="Rotate">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"/><polyline points="3 4 3 10 9 10"/></svg>
+        </div>
         <div class="text-sel-handle tl" data-handle="tl"></div>
         <div class="text-sel-handle tm" data-handle="tm"></div>
         <div class="text-sel-handle tr" data-handle="tr"></div>
@@ -1660,7 +1698,9 @@ a{color:var(--primary);}
       <div class="text-sel-box" id="shapeSelBox">
         <div class="text-sel-frame" id="shapeSelFrame"></div>
         <div class="text-sel-rotline"></div>
-        <div class="text-sel-handle rot" data-handle="rot" title="Rotate"></div>
+        <div class="text-sel-rotpin" data-handle="rot" title="Rotate">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"/><polyline points="3 4 3 10 9 10"/></svg>
+        </div>
         <div class="text-sel-handle tl" data-handle="tl"></div>
         <div class="text-sel-handle tm" data-handle="tm"></div>
         <div class="text-sel-handle tr" data-handle="tr"></div>
@@ -1674,15 +1714,11 @@ a{color:var(--primary);}
   </div>
   <!-- Brush cursor (screen-space, not inside stage) -->
   <div class="brush-cursor" id="brushCursor"></div>
-  <!-- Text-mode hint (in canvas-wrap so it doesn't scale) -->
-  <div class="text-mode-hint" id="textModeHint">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-    Text · pan locked
-  </div>
 </main>
 
 <!-- ========== CONTROL PANEL ========== -->
 <section class="control-panel" id="controlPanel">
+  <div class="cp-drag-handle" id="cpDragHandle" role="separator" aria-label="Resize panel" aria-orientation="horizontal" title="Drag to resize  ·  Tap to cycle Compact / Mid / Full"></div>
   <div class="control-panel-header" id="cpHeader">
     <div class="cp-title" id="cpTitle">Adjustments</div>
     <div class="cp-actions" id="cpActions"></div>
@@ -2041,13 +2077,14 @@ const App = {
   cropRect: null,
 
   // ----- Drawing -----
-  drawTool: 'brush',       // brush | eraser
+  drawTool: 'brush',       // brush | eraser | fill
   brushSize: 12,
   brushColor: '#0f766e',
   brushOpacity: 1,         // 0..1, applies during stroke
   brushHardness: 1,        // 0..1; 1=hard edge, <1 = soft stamp
   paintMaskMode: false,    // true => paint on layer.mask instead of canvas
   eraserInvertMask: false, // future: invert mask interpretation
+  fillTolerance: 32,       // 0..255; flood-fill match threshold
 
   // ----- Shapes (S2) -----
   shape: {
@@ -2074,10 +2111,33 @@ const App = {
   colorReplace: {
     src: '#ff0000',
     dst: '#00aaff',
+    dstAlpha: 1.0,         // replacement alpha 0..1 (1 = opaque replace, 0 = erase matched)
     tolerance: 50,
     pickingSource: false,  // eyedropper mode flag
+    // Live-preview cache (non-destructive). When non-null, the base layer's
+    // current pixels reflect a *preview* derived from these original bytes.
+    previewOrigin: null,   // Uint8ClampedArray | null
+    previewW: 0,
+    previewH: 0,
+    previewLayerId: null,  // id of the layer the cache belongs to
   },
   activeEffectExtra: null, // 'tint' | 'colorReplace' | 'bgRemove' | null
+
+  // ----- Background removal LIVE-TUNE cache (post-model) -----
+  // Populated after removeBackground() finishes. While `active` is true the
+  // Effects panel shows Edge + Feather sliders that recompose the base-layer
+  // canvas from `originPixels` + a tweaked `mask` (single-channel alpha).
+  // Apply -> commit + drop cache. Cancel -> restore originPixels.
+  bgRemove: {
+    active: false,
+    originPixels: null,    // Uint8ClampedArray | null (pre-removal RGBA)
+    mask: null,            // Uint8Array (single channel, model's alpha)
+    w: 0,
+    h: 0,
+    edge: 0,               // -100..+100; -negative erodes, +positive dilates
+    feather: 0,            // 0..100; Gaussian-blur radius proportional
+    layerId: null,
+  },
 
   // ----- Canvas size dialog (S6) -----
   canvasSize: { lockAspect: true, resample: 'smooth' },
@@ -2321,7 +2381,7 @@ const els = {
   textSelOverlay:    $('textSelOverlay'),
   textSelBox:        $('textSelBox'),
   textSelFrame:      $('textSelFrame'),
-  textModeHint:      $('textModeHint'),
+  cpDragHandle:      $('cpDragHandle'),
   shapeSelOverlay:   $('shapeSelOverlay'),
   shapeSelBox:       $('shapeSelBox'),
   shapeSelFrame:     $('shapeSelFrame'),
@@ -2446,7 +2506,11 @@ function initFromImage(img) {
   App.framePreset = 'none';
   App.colorOverlay = { color: '#14b8a6', strength: 0, blendMode: 'overlay' };
   App.activeEffectExtra = null;
-  if (App.colorReplace) App.colorReplace.pickingSource = false;
+  if (App.colorReplace) {
+    App.colorReplace.pickingSource = false;
+    App.colorReplace.previewOrigin = null;
+    App.colorReplace.previewLayerId = null;
+  }
   App.nextLayerId = 1;
 
   // Create background layer
@@ -3238,15 +3302,43 @@ function drawBaseLayer(target, tctx, layer, W, H, scale) {
   applyEffectsToImageData(imgData, App.effects, App.adjustments, { skipExpensive: previewMode });
   tx.putImageData(imgData, 0, 0);
 
-  // 3b) Color overlay (tint) — applied via blend mode on top of the base pixels
+  // 3b) Color overlay (tint) — applied via blend mode on top of the base pixels.
+  // Crucially: must respect base alpha so fully-transparent pixels stay transparent
+  // (e.g., after Background Removal). fillRect with a blend mode paints into every
+  // pixel including alpha=0 regions, so we snapshot the pre-tint alpha and restore
+  // it after the fill. We also blend the tint contribution toward 0 in proportion
+  // to the source alpha for semi-transparent pixels, which gives a natural fade.
   const co = App.colorOverlay;
   if (co && co.strength > 0) {
+    // Snapshot alpha + RGB before tint so we can restore on transparent pixels.
+    const preTint = tx.getImageData(0, 0, W, H);
     tx.save();
     tx.globalAlpha = clamp(co.strength / 100, 0, 1);
     tx.globalCompositeOperation = co.blendMode || 'overlay';
     tx.fillStyle = co.color || '#ffffff';
     tx.fillRect(0, 0, W, H);
     tx.restore();
+    const postTint = tx.getImageData(0, 0, W, H);
+    const preD = preTint.data, postD = postTint.data;
+    for (let i = 0; i < preD.length; i += 4) {
+      const srcA = preD[i + 3];
+      if (srcA === 0) {
+        // Fully transparent: erase any tint that bled in.
+        postD[i] = 0; postD[i + 1] = 0; postD[i + 2] = 0; postD[i + 3] = 0;
+      } else if (srcA < 255) {
+        // Semi-transparent: scale the tint contribution by alpha (smooth edges
+        // get a proportionally lighter tint), and restore the original alpha.
+        const a = srcA / 255;
+        postD[i]     = Math.round(preD[i]     * (1 - a) + postD[i]     * a);
+        postD[i + 1] = Math.round(preD[i + 1] * (1 - a) + postD[i + 1] * a);
+        postD[i + 2] = Math.round(preD[i + 2] * (1 - a) + postD[i + 2] * a);
+        postD[i + 3] = srcA;
+      } else {
+        // Fully opaque: alpha is unchanged (already 255 in postD as well).
+        postD[i + 3] = 255;
+      }
+    }
+    tx.putImageData(postTint, 0, 0);
   }
 
   // 4) Apply mask if any
@@ -3643,6 +3735,16 @@ function restoreFromSnap(snap) {
   if (snap.framePreset != null) App.framePreset = snap.framePreset;
   if (snap.frameWidthPct != null) App.frameWidthPct = snap.frameWidthPct;
   if (snap.frameColor != null) App.frameColor = snap.frameColor;
+  // Drop any live Color Replace preview cache — its baseline pixels no longer
+  // match the layer state we're restoring to.
+  if (App.colorReplace) {
+    App.colorReplace.previewOrigin = null;
+    App.colorReplace.previewLayerId = null;
+  }
+  if (typeof _crPreviewRAF !== 'undefined' && _crPreviewRAF) {
+    cancelAnimationFrame(_crPreviewRAF);
+    _crPreviewRAF = 0;
+  }
   App.canvas.width = App.workW;
   App.canvas.height = App.workH;
   App.composite.width = App.workW;
@@ -3765,10 +3867,6 @@ function setTool(tool) {
   });
   els.cropOverlay.classList.toggle('active', tool === 'crop');
   els.interactCanvas.classList.toggle('active', tool === 'draw' || tool === 'shape');
-  // Text mode UI
-  if (els.textModeHint) {
-    els.textModeHint.classList.toggle('show', tool === 'text');
-  }
   if (tool === 'text') {
     // If active layer is a text layer, select it; otherwise pick last text layer
     const cur = activeLayer();
@@ -3798,6 +3896,16 @@ function setTool(tool) {
   // Cancel any in-progress crop when switching off
   if (tool !== 'crop') {
     App.cropRect = null;
+  }
+  // Switching tools while a Color Replace preview is live -> revert it.
+  if (tool !== 'effect' && App.colorReplace && App.colorReplace.previewOrigin) {
+    exitColorReplaceMode();
+    App.activeEffectExtra = null;
+  }
+  // Switching tools while a BG-Remove live tune is open -> revert it.
+  if (tool !== 'effect' && App.bgRemove && App.bgRemove.active) {
+    exitBgRemoveMode();
+    App.activeEffectExtra = null;
   }
   // Cancel color replace pick mode
   if (App.colorReplace) App.colorReplace.pickingSource = false;
@@ -3897,6 +4005,10 @@ function updateToolPanel() {
     case 'frame':    buildFramePanel(body, actions); break;
     case 'layers':   buildLayersPanel(body, actions); break;
   }
+  // When the active tool changes, restore that tool's stored panel-height snap.
+  if (!sameTool && typeof restorePanelHeightForTool === 'function') {
+    restorePanelHeightForTool(App.activeTool);
+  }
   _toolPanelLastTool = App.activeTool;
   if (scrollSnap) {
     restoreScrollPositions(scrollSnap);
@@ -3904,6 +4016,162 @@ function updateToolPanel() {
     requestAnimationFrame(() => restoreScrollPositions(scrollSnap));
   }
 }
+
+/* ================================================================
+   CONTROL PANEL — DRAG-TO-RESIZE
+   Snap points: Compact ~22dvh, Mid ~48dvh, Full ~78dvh.
+   - Pointer drag on the handle lets the user resize live.
+   - On release, snap to the nearest of the three points (smooth).
+   - Tap (no drag) cycles Compact -> Mid -> Full -> Compact.
+   - Vertical swipe on the handle: down dismisses to Compact, up to Full.
+   - Per-tool snap state persisted in localStorage as `studio.panelHeight.{tool}`.
+   - After every resize-end, fitCanvasToView() re-centers the image.
+   ================================================================ */
+const CP_SNAPS = { compact: 22, mid: 48, full: 78 }; // % of dvh
+const CP_SNAP_NAMES = ['compact', 'mid', 'full'];
+const CP_MIN_VH = 14;
+const CP_MAX_VH = 85;
+const CP_STORAGE_PREFIX = 'studio.panelHeight.';
+let _cpCurrentSnap = 'compact'; // logical snap-name
+let _cpDragState = null;
+let _cpLiveVh = CP_SNAPS.compact; // last live VH applied (only during drag)
+let _cpRestoring = false;
+
+function _cpStorageKey(tool) {
+  return CP_STORAGE_PREFIX + (tool || App.activeTool || 'adjust');
+}
+function _cpReadStoredSnap(tool) {
+  try {
+    const v = localStorage.getItem(_cpStorageKey(tool));
+    if (v && CP_SNAP_NAMES.indexOf(v) !== -1) return v;
+  } catch (_) {}
+  return 'compact';
+}
+function _cpWriteStoredSnap(tool, snap) {
+  try { localStorage.setItem(_cpStorageKey(tool), snap); } catch (_) {}
+}
+function _cpApplyVh(vh, smooth) {
+  const panel = els.controlPanel;
+  if (!panel) return;
+  const v = Math.max(CP_MIN_VH, Math.min(CP_MAX_VH, vh));
+  if (smooth) {
+    panel.classList.remove('cp-dragging');
+  } else {
+    panel.classList.add('cp-dragging');
+  }
+  panel.style.setProperty('--cp-h', v + 'dvh');
+  _cpLiveVh = v;
+}
+function _cpSnapToName(name, opts) {
+  const target = CP_SNAPS[name];
+  if (target == null) return;
+  _cpCurrentSnap = name;
+  _cpApplyVh(target, /*smooth*/ true);
+  if (!_cpRestoring) _cpWriteStoredSnap(App.activeTool, name);
+  // After the height transition settles, refit canvas to fill new space.
+  if (opts && opts.skipFit) return;
+  // Use a short delay matching the CSS transition duration.
+  clearTimeout(_cpSnapToName._fitT);
+  _cpSnapToName._fitT = setTimeout(() => {
+    if (App.layers && App.layers.length) fitCanvasToView();
+  }, 220);
+}
+function _cpNearestSnapVh(vh) {
+  let best = 'compact', bestD = Infinity;
+  for (const k of CP_SNAP_NAMES) {
+    const d = Math.abs(CP_SNAPS[k] - vh);
+    if (d < bestD) { bestD = d; best = k; }
+  }
+  return best;
+}
+function _cpCycleSnap() {
+  const i = CP_SNAP_NAMES.indexOf(_cpCurrentSnap);
+  const next = CP_SNAP_NAMES[(i + 1) % CP_SNAP_NAMES.length];
+  _cpSnapToName(next);
+}
+function restorePanelHeightForTool(tool) {
+  _cpRestoring = true;
+  const snap = _cpReadStoredSnap(tool);
+  _cpSnapToName(snap, { skipFit: true });
+  _cpRestoring = false;
+}
+
+(function setupPanelDragHandle() {
+  const handle = els.cpDragHandle;
+  const panel = els.controlPanel;
+  if (!handle || !panel) return;
+
+  // Initial paint: respect persisted snap for the starting tool (default compact).
+  restorePanelHeightForTool(App.activeTool);
+
+  let pointerId = null;
+  let startY = 0;
+  let startVh = 0;
+  let startTime = 0;
+  let didDrag = false;
+  const DRAG_THRESHOLD_PX = 4;
+
+  function vhFromPx(px) {
+    return (px / window.innerHeight) * 100;
+  }
+
+  function onDown(e) {
+    if (pointerId !== null) return;
+    pointerId = e.pointerId != null ? e.pointerId : 1;
+    startY = e.clientY;
+    startVh = _cpLiveVh;
+    startTime = Date.now();
+    didDrag = false;
+    panel.classList.add('cp-dragging');
+    try { handle.setPointerCapture(pointerId); } catch (_) {}
+    e.preventDefault();
+  }
+  function onMove(e) {
+    if (pointerId === null) return;
+    if (e.pointerId != null && e.pointerId !== pointerId) return;
+    const dy = e.clientY - startY;
+    if (!didDrag && Math.abs(dy) > DRAG_THRESHOLD_PX) didDrag = true;
+    // Dragging down (positive dy) shrinks the panel; dragging up grows it.
+    const nextVh = startVh - vhFromPx(dy);
+    _cpApplyVh(nextVh, /*smooth*/ false);
+    e.preventDefault();
+  }
+  function endDrag(e) {
+    if (pointerId === null) return;
+    if (e && e.pointerId != null && e.pointerId !== pointerId) return;
+    const elapsed = Date.now() - startTime;
+    const dy = e ? (e.clientY - startY) : 0;
+    try { handle.releasePointerCapture(pointerId); } catch (_) {}
+    pointerId = null;
+    if (!didDrag) {
+      // No-drag tap: cycle compact -> mid -> full.
+      _cpCycleSnap();
+      return;
+    }
+    // Detect swipe: short time, large vertical distance.
+    const isSwipeDown = elapsed < 320 && dy >  Math.max(24, window.innerHeight * 0.06);
+    const isSwipeUp   = elapsed < 320 && dy < -Math.max(24, window.innerHeight * 0.06);
+    if (isSwipeDown) {
+      _cpSnapToName('compact');
+    } else if (isSwipeUp) {
+      _cpSnapToName('full');
+    } else {
+      _cpSnapToName(_cpNearestSnapVh(_cpLiveVh));
+    }
+  }
+
+  handle.addEventListener('pointerdown', onDown);
+  handle.addEventListener('pointermove', onMove);
+  handle.addEventListener('pointerup', endDrag);
+  handle.addEventListener('pointercancel', endDrag);
+  // Keyboard accessibility: arrow keys cycle.
+  handle.tabIndex = 0;
+  handle.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowUp')        { _cpSnapToName('full'); e.preventDefault(); }
+    else if (e.key === 'ArrowDown') { _cpSnapToName('compact'); e.preventDefault(); }
+    else if (e.key === 'Enter' || e.key === ' ') { _cpCycleSnap(); e.preventDefault(); }
+  });
+})();
 
 /* ================================================================
    SLIDER HELPER
@@ -3915,12 +4183,16 @@ function formatValue(v, bipolar) {
 
 function setupSlider(row, meta, opts) {
   // meta: { id, min, max, bipolar, defaultValue, suffix }
-  // opts: { onInput, onCommit, onChange? }
+  // opts: { onInput, onCommit, onChange?, skipHistory? }
+  //   skipHistory: when true, do not call pushHistoryDebounced/pushHistory
+  //   automatically — the caller manages history (used by non-destructive
+  //   previews such as Color Replace, which commit only on Apply).
   const input = row.querySelector('input[type=range]');
   const fill = row.querySelector('.slider-fill');
   const valEl = row.querySelector('.slider-value');
   const defaultValue = meta.defaultValue != null ? meta.defaultValue : (meta.bipolar ? 0 : meta.min);
   const suffix = meta.suffix || '';
+  const skipHistory = !!(opts && opts.skipHistory);
 
   function updateUI() {
     const v = +input.value;
@@ -3954,7 +4226,7 @@ function setupSlider(row, meta, opts) {
     // commit at full res
     requestRender();
     if (opts.onCommit) opts.onCommit(+input.value);
-    pushHistoryDebounced(300);
+    if (!skipHistory) pushHistoryDebounced(300);
   }
   input.addEventListener('pointerup', endPreview);
   input.addEventListener('pointercancel', endPreview);
@@ -3975,7 +4247,7 @@ function setupSlider(row, meta, opts) {
       requestRender();
     }
     if (opts.onCommit) opts.onCommit(+input.value);
-    pushHistoryDebounced(200);
+    if (!skipHistory) pushHistoryDebounced(200);
   });
 
   // Double-tap on slider thumb resets to default
@@ -3987,7 +4259,7 @@ function setupSlider(row, meta, opts) {
       if (opts.onInput) opts.onInput(defaultValue);
       if (opts.onCommit) opts.onCommit(defaultValue);
       updateUI();
-      pushHistory();
+      if (!skipHistory) pushHistory();
       lastTap = 0;
     } else {
       lastTap = now;
@@ -3999,7 +4271,7 @@ function setupSlider(row, meta, opts) {
     if (opts.onInput) opts.onInput(defaultValue);
     if (opts.onCommit) opts.onCommit(defaultValue);
     updateUI();
-    pushHistory();
+    if (!skipHistory) pushHistory();
   });
 
   return { input, updateUI };
@@ -4357,20 +4629,35 @@ function buildCropPanel(body, actions) {
   });
   $('cropApply').addEventListener('click', applyCrop);
 
-  initCropRect();
+  // Only seed a default crop rect when entering crop with no existing one.
+  // (Mid-crop the rect is already set; aspect-chip handlers call initCropRect
+  // explicitly to recompute for the new ratio.)
+  if (!App.cropRect) initCropRect();
   updateCropOverlay();
 }
 
 function initCropRect() {
+  // Default crop frame = full image (no inset). For Free aspect, that's the
+  // whole canvas. For aspect-locked presets, that's the LARGEST rectangle
+  // with the chosen aspect that fits inside the canvas, centered.
   const W = App.workW, H = App.workH;
   const ap = ASPECT_PRESETS.find(a => a.id === App.cropAspect);
-  let ratio = ap.ratio;
-  if (ratio === 'orig') ratio = W / H;
+  let ratio = ap ? ap.ratio : null;
+  if (App.cropAspect === 'free') ratio = null;
+  else if (ratio === 'orig') ratio = W / H;
 
-  let cw = W * 0.86, ch = H * 0.86;
+  let cw = W, ch = H;
   if (ratio) {
-    if (cw / ch > ratio) cw = ch * ratio;
-    else ch = cw / ratio;
+    // Largest centered rect with this aspect that fits within W x H.
+    if (W / H > ratio) {
+      // Canvas is wider than ratio -> height-limited
+      ch = H;
+      cw = H * ratio;
+    } else {
+      // Canvas is taller (or equal) -> width-limited
+      cw = W;
+      ch = W / ratio;
+    }
   }
   App.cropRect = {
     x: (W - cw) / 2,
@@ -4597,9 +4884,12 @@ const BRUSH_COLORS = [
 ];
 
 function buildDrawPanel(body, actions) {
-  els.cpTitle.innerHTML = `Draw <span class="cp-title-val">${App.brushSize}px</span>`;
+  const isFill = App.drawTool === 'fill';
+  els.cpTitle.innerHTML = isFill
+    ? `Draw <span class="cp-title-val">Fill</span>`
+    : `Draw <span class="cp-title-val">${App.brushSize}px</span>`;
 
-  // Tool row
+  // Tool row — Brush / Eraser / Fill / Clear
   const toolRow = document.createElement('div');
   toolRow.className = 'draw-row';
   toolRow.innerHTML = `
@@ -4610,13 +4900,16 @@ function buildDrawPanel(body, actions) {
       <button class="draw-tool-btn ${App.drawTool==='eraser'?'active':''}" data-dtool="eraser" title="Eraser">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20H7l-3.5-3.5a2.12 2.12 0 0 1 0-3l9.5-9.5a2.12 2.12 0 0 1 3 0l5 5a2.12 2.12 0 0 1 0 3L10 22"/><line x1="18" y1="13" x2="13" y2="8"/></svg>
       </button>
+      <button class="draw-tool-btn ${App.drawTool==='fill'?'active':''}" data-dtool="fill" title="Fill bucket">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 11L9.5 1.5 4 7l9.5 9.5L19 11z"/><path d="M5 10l9 9"/><path d="M19 22a2 2 0 0 0 2-2c0-1.6-2-4-2-4s-2 2.4-2 4a2 2 0 0 0 2 2z"/></svg>
+      </button>
       <button class="draw-tool-btn" data-dtool="clear" title="Clear current layer">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/></svg>
       </button>
     </div>
-    <div class="slider-track" style="flex:1;">
+    <div class="slider-track" style="flex:1;${isFill ? 'opacity:.4;pointer-events:none;' : ''}">
       <div class="slider-fill" style="width:${(App.brushSize/200)*100}%"></div>
-      <input type="range" min="1" max="200" value="${App.brushSize}">
+      <input type="range" min="1" max="200" value="${App.brushSize}" ${isFill ? 'disabled' : ''}>
     </div>
   `;
   body.appendChild(toolRow);
@@ -4646,13 +4939,13 @@ function buildDrawPanel(body, actions) {
     onInput: (v) => {
       App.brushSize = v;
       const tv = els.cpTitle.querySelector('.cp-title-val');
-      if (tv) tv.textContent = v + 'px';
+      if (tv && !isFill) tv.textContent = v + 'px';
       invalidateBrushStamp();
       updateBrushCursorSize();
     },
   });
 
-  // Opacity slider
+  // Opacity slider (always visible — Fill respects it too).
   const opacityRow = document.createElement('div');
   opacityRow.className = 'slider-row';
   const opacityPct = Math.round(App.brushOpacity * 100);
@@ -4669,49 +4962,73 @@ function buildDrawPanel(body, actions) {
     onInput: (v) => { App.brushOpacity = v / 100; },
   });
 
-  // Hardness slider
-  const hardRow = document.createElement('div');
-  hardRow.className = 'slider-row';
-  const hardPct = Math.round(App.brushHardness * 100);
-  hardRow.innerHTML = `
-    <div class="slider-label">Hardness</div>
-    <div class="slider-track">
-      <div class="slider-fill" style="width:${hardPct}%"></div>
-      <input type="range" min="0" max="100" value="${hardPct}">
-    </div>
-    <div class="slider-value">${hardPct}%</div>
-  `;
-  body.appendChild(hardRow);
-  setupSlider(hardRow, { bipolar: false, min: 0, max: 100, defaultValue: 100 }, {
-    onInput: (v) => {
-      App.brushHardness = v / 100;
-      invalidateBrushStamp();
-      updateBrushCursorSize();
-    },
-  });
+  // Fill-specific: Tolerance slider (only when Fill is active)
+  if (isFill) {
+    const tRow = document.createElement('div');
+    tRow.className = 'slider-row';
+    const tVal = App.fillTolerance;
+    tRow.innerHTML = `
+      <div class="slider-label">Tolerance</div>
+      <div class="slider-track">
+        <div class="slider-fill" style="width:${(tVal/255)*100}%"></div>
+        <input type="range" min="0" max="255" value="${tVal}">
+      </div>
+      <div class="slider-value">${tVal}</div>
+    `;
+    body.appendChild(tRow);
+    setupSlider(tRow, { bipolar: false, min: 0, max: 255, defaultValue: 32 }, {
+      onInput: v => { App.fillTolerance = v; },
+      skipHistory: true,
+    });
+  }
 
-  // Mode toggles
-  const modeRow = document.createElement('div');
-  modeRow.style.cssText = 'display:flex;gap:6px;flex-wrap:wrap;padding:6px 0;';
-  modeRow.innerHTML = `
-    <button class="draw-toggle ${App.paintMaskMode?'on':''}" id="paintMaskToggle">Paint mask</button>
-    <button class="draw-toggle ${App.eraserInvertMask?'on':''}" id="eraserInvertToggle">Eraser inverts mask</button>
-  `;
-  body.appendChild(modeRow);
-  modeRow.querySelector('#paintMaskToggle').addEventListener('click', () => {
-    App.paintMaskMode = !App.paintMaskMode;
-    updateToolPanel();
-  });
-  modeRow.querySelector('#eraserInvertToggle').addEventListener('click', () => {
-    App.eraserInvertMask = !App.eraserInvertMask;
-    const layer = activeLayer();
-    if (layer) {
-      layer.maskInverted = App.eraserInvertMask;
-      renderFull();
-      pushHistory();
-    }
-    updateToolPanel();
-  });
+  // Hardness slider — hidden in Fill mode (irrelevant).
+  if (!isFill) {
+    const hardRow = document.createElement('div');
+    hardRow.className = 'slider-row';
+    const hardPct = Math.round(App.brushHardness * 100);
+    hardRow.innerHTML = `
+      <div class="slider-label">Hardness</div>
+      <div class="slider-track">
+        <div class="slider-fill" style="width:${hardPct}%"></div>
+        <input type="range" min="0" max="100" value="${hardPct}">
+      </div>
+      <div class="slider-value">${hardPct}%</div>
+    `;
+    body.appendChild(hardRow);
+    setupSlider(hardRow, { bipolar: false, min: 0, max: 100, defaultValue: 100 }, {
+      onInput: (v) => {
+        App.brushHardness = v / 100;
+        invalidateBrushStamp();
+        updateBrushCursorSize();
+      },
+    });
+  }
+
+  // Mode toggles — hidden in Fill mode (those modes are brush/eraser only).
+  if (!isFill) {
+    const modeRow = document.createElement('div');
+    modeRow.style.cssText = 'display:flex;gap:6px;flex-wrap:wrap;padding:6px 0;';
+    modeRow.innerHTML = `
+      <button class="draw-toggle ${App.paintMaskMode?'on':''}" id="paintMaskToggle">Paint mask</button>
+      <button class="draw-toggle ${App.eraserInvertMask?'on':''}" id="eraserInvertToggle">Eraser inverts mask</button>
+    `;
+    body.appendChild(modeRow);
+    modeRow.querySelector('#paintMaskToggle').addEventListener('click', () => {
+      App.paintMaskMode = !App.paintMaskMode;
+      updateToolPanel();
+    });
+    modeRow.querySelector('#eraserInvertToggle').addEventListener('click', () => {
+      App.eraserInvertMask = !App.eraserInvertMask;
+      const layer = activeLayer();
+      if (layer) {
+        layer.maskInverted = App.eraserInvertMask;
+        renderFull();
+        pushHistory();
+      }
+      updateToolPanel();
+    });
+  }
 
   // Color row
   const colorRow = document.createElement('div');
@@ -4825,7 +5142,7 @@ function showBrushCursor(show) {
     return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
   }
   document.addEventListener('pointermove', e => {
-    if (App.activeTool !== 'draw') {
+    if (App.activeTool !== 'draw' || App.drawTool === 'fill') {
       if (_brushCursorVisible) showBrushCursor(false);
       return;
     }
@@ -4843,6 +5160,154 @@ function showBrushCursor(show) {
     if (_brushCursorVisible) showBrushCursor(false);
   });
 })();
+
+/* ----------------------------------------------------------------
+   FILL BUCKET — iterative scanline flood fill on the active layer.
+   Targets:
+     - If the active layer is unlocked + drawing/image type, fill INTO it.
+     - Otherwise (text / shape / frame / locked base), auto-create a new
+       Drawing layer above and fill there. Matches brush-stroke layer policy
+       so background-removal workflows (re-fill transparency) work without
+       baking into the base.
+   Match rule: |dR|<=t && |dG|<=t && |dB|<=t && |dA|<=t against the seed.
+     Transparent-region case: alpha=0 pixels form their own group; tapping
+     such a pixel fills exactly the connected transparent area.
+   Fill color: App.brushColor with alpha = round(App.brushOpacity * 255).
+   Algorithm: scanline flood with explicit queue (no recursion). Each step
+     finds the horizontal run of matching pixels around the seed, fills it,
+     then enqueues N/S neighbors at row boundaries (4-connected).
+   Complexity: O(N) pixels touched, where N is the matched region size.
+*/
+function runFloodFillAtPoint(seedX, seedY) {
+  const W = App.workW, H = App.workH;
+  const sx = Math.floor(seedX), sy = Math.floor(seedY);
+  if (sx < 0 || sy < 0 || sx >= W || sy >= H) return;
+  // Decide the target layer (similar policy to brush stroke).
+  //   - Unlocked drawing/image layer: fill INTO it (sample its own pixels).
+  //   - Locked base / text / shape / frame: sample from the SOURCE layer
+  //     (where the seed lives visually) and fill into a NEW Drawing layer
+  //     above. The new layer is initially transparent, so we use the source
+  //     for color matching; we draw the result onto the new layer.
+  let layer = activeLayer();
+  let sourceLayer = layer;
+  let createdNewLayer = false;
+  if (!layer || (layer.type === 'image' && layer.locked) || layer.type === 'text' || layer.type === 'shape' || layer.type === 'frame') {
+    // sourceLayer remains the original (locked) base so we match its pixels.
+    if (!layer) return;
+    sourceLayer = layer;
+    const newLayer = makeLayer({
+      name: 'Drawing',
+      type: 'drawing',
+      canvas: createBlankLayerCanvas(),
+    });
+    addLayer(newLayer);
+    createdNewLayer = true;
+    layer = newLayer; // target for the fill output
+  }
+  const cnv = layer.canvas;
+  if (cnv.width !== W || cnv.height !== H) return;
+  const srcCnv = sourceLayer.canvas;
+  if (srcCnv.width !== W || srcCnv.height !== H) return;
+  // Show a spinner if the operation runs long (>100ms).
+  let spinnerShown = false;
+  const spinnerTimer = setTimeout(() => {
+    spinnerShown = true;
+    loading(true, 'Filling…', '');
+  }, 100);
+  // Run on next tick so the spinner has a chance to show.
+  setTimeout(() => {
+    try {
+      const ctx = cnv.getContext('2d');
+      // Source pixels = where we measure colors against the seed.
+      // Target = where we write the fill.
+      const srcCtx = srcCnv.getContext('2d');
+      const srcImg = srcCtx.getImageData(0, 0, W, H);
+      const srcData = srcImg.data;
+      const dstImg = ctx.getImageData(0, 0, W, H);
+      const dstData = dstImg.data;
+      const seedIdx = (sy * W + sx) * 4;
+      const sR = srcData[seedIdx], sG = srcData[seedIdx + 1], sB = srcData[seedIdx + 2], sA = srcData[seedIdx + 3];
+      const tol = clamp(App.fillTolerance | 0, 0, 255);
+      // Fill color = current brush color, alpha = brush opacity * 255.
+      const rgb = hexToRgb(App.brushColor) || { r: 0, g: 0, b: 0 };
+      const fA = Math.max(0, Math.min(255, Math.round(App.brushOpacity * 255)));
+      const fR = rgb.r, fG = rgb.g, fB = rgb.b;
+      // Match against the IMMUTABLE source snapshot (srcData).
+      const matches = (idx) => (
+        Math.abs(srcData[idx]     - sR) <= tol &&
+        Math.abs(srcData[idx + 1] - sG) <= tol &&
+        Math.abs(srcData[idx + 2] - sB) <= tol &&
+        Math.abs(srcData[idx + 3] - sA) <= tol
+      );
+      // Visited bitmap (one byte per pixel).
+      const visited = new Uint8Array(W * H);
+      // Queue of cell indices (encode y*W+x).
+      const queue = [];
+      queue.push(sy * W + sx);
+      visited[sy * W + sx] = 1;
+      while (queue.length) {
+        const cell = queue.pop();
+        const cy = (cell / W) | 0;
+        const cx = cell - cy * W;
+        // Scan left & right to find the matching horizontal run (against the
+        // source snapshot). Mark visited as we go.
+        let xL = cx;
+        while (xL > 0) {
+          const ni = cy * W + (xL - 1);
+          if (visited[ni] || !matches(ni * 4)) break;
+          xL--;
+          visited[ni] = 1;
+        }
+        let xR = cx;
+        while (xR < W - 1) {
+          const ni = cy * W + (xR + 1);
+          if (visited[ni] || !matches(ni * 4)) break;
+          xR++;
+          visited[ni] = 1;
+        }
+        // Fill the run on the TARGET layer.
+        for (let x = xL; x <= xR; x++) {
+          const i = (cy * W + x) * 4;
+          dstData[i]     = fR;
+          dstData[i + 1] = fG;
+          dstData[i + 2] = fB;
+          dstData[i + 3] = fA;
+        }
+        // Enqueue matching, unvisited neighbors above & below the run.
+        if (cy > 0) {
+          const row = (cy - 1) * W;
+          for (let x = xL; x <= xR; x++) {
+            const ni = row + x;
+            if (!visited[ni] && matches(ni * 4)) {
+              visited[ni] = 1;
+              queue.push(ni);
+            }
+          }
+        }
+        if (cy < H - 1) {
+          const row = (cy + 1) * W;
+          for (let x = xL; x <= xR; x++) {
+            const ni = row + x;
+            if (!visited[ni] && matches(ni * 4)) {
+              visited[ni] = 1;
+              queue.push(ni);
+            }
+          }
+        }
+      }
+      ctx.putImageData(dstImg, 0, 0);
+      renderFull();
+      pushHistory();
+      if (createdNewLayer) updateToolPanel();
+    } catch (err) {
+      console.error(err);
+      toast('Fill failed', 'error');
+    } finally {
+      clearTimeout(spinnerTimer);
+      if (spinnerShown) loading(false);
+    }
+  }, 0);
+}
 
 /* Drawing on interactCanvas — targets the ACTIVE layer's canvas (or mask).
  *
@@ -5009,6 +5474,13 @@ function showBrushCursor(show) {
 
   c.addEventListener('pointerdown', e => {
     if (App.activeTool !== 'draw') return;
+    // Fill bucket: single-tap flood-fill; no drag stroke.
+    if (App.drawTool === 'fill') {
+      e.preventDefault();
+      const pt = getPt(e);
+      runFloodFillAtPoint(pt.x, pt.y);
+      return;
+    }
     e.preventDefault();
     c.setPointerCapture(e.pointerId);
     const layer = ensureDrawTarget();
@@ -5031,6 +5503,7 @@ function showBrushCursor(show) {
   });
 
   c.addEventListener('pointermove', e => {
+    if (App.drawTool === 'fill') return;
     if (!drawing) return;
     e.preventDefault();
     const pt = getPt(e);
@@ -5314,7 +5787,10 @@ function renderTextLayer(layer) {
    text layer. If no text layer is active, shows Add prompt.
    ---------------------------------------------------------------- */
 function buildTextPanel(body, actions) {
-  els.cpTitle.innerHTML = 'Text';
+  els.cpTitle.innerHTML = '<span>Text</span>' +
+    '<span class="cp-lock-badge" title="Canvas pan locked in Text mode" aria-label="Canvas pan locked in Text mode">' +
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>' +
+    '</span>';
   const sel = currentTextLayer();
   if (!sel) {
     const info = document.createElement('div');
@@ -5329,7 +5805,7 @@ function buildTextPanel(body, actions) {
   sel.meta = m;
 
   // Quick text content edit
-  const contentSection = makeAccordion('Content', true);
+  const contentSection = makeAccordion('Content', false);
   body.appendChild(contentSection.wrap);
   const contentBody = contentSection.body;
   const ta = document.createElement('textarea');
@@ -5394,14 +5870,17 @@ function makeAccordion(title, open) {
   const wrap = document.createElement('section');
   wrap.className = 'text-section' + (open ? ' open' : '');
   wrap.innerHTML = `
-    <button class="text-section-head" type="button">
+    <button class="text-section-head" type="button" aria-expanded="${open ? 'true' : 'false'}">
       <span>${title}</span>
       <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
     </button>
     <div class="text-section-body"></div>
   `;
   const head = wrap.querySelector('.text-section-head');
-  head.addEventListener('click', () => wrap.classList.toggle('open'));
+  head.addEventListener('click', () => {
+    const opened = wrap.classList.toggle('open');
+    head.setAttribute('aria-expanded', opened ? 'true' : 'false');
+  });
   return { wrap, body: wrap.querySelector('.text-section-body') };
 }
 
@@ -6105,19 +6584,30 @@ function updateTextSelection() {
     else if (h.classList.contains('bm')) { h.style.bottom = -halfH + 'px'; h.style.left = '50%'; h.style.transform = 'translateX(-50%)'; h.style.right=''; h.style.top=''; }
     else if (h.classList.contains('lm')) { h.style.left = -halfH + 'px'; h.style.top = '50%'; h.style.transform = 'translateY(-50%)'; h.style.right=''; h.style.bottom=''; }
     else if (h.classList.contains('rm')) { h.style.right = -halfH + 'px'; h.style.top = '50%'; h.style.transform = 'translateY(-50%)'; h.style.left=''; h.style.bottom=''; }
-    else if (h.classList.contains('rot')) {
-      h.style.top = (-46 * invScale) + 'px';
-      h.style.left = '50%';
-      h.style.transform = 'translateX(-50%)';
-      h.style.right=''; h.style.bottom='';
-    }
-    // The ::before dot scales via this CSS var; we use inline override on a child <i> element instead.
-    // Simpler: just rely on ::before being 12px native — at high zoom this is fine.
-    // We'll size with CSS variable later if needed.
   });
+  // Rotation pin: a dedicated round target floating ABOVE the box top edge,
+  // connected by a thin line. It's the ONLY rotation affordance.
+  // Hit area counter-scales to ~32px on screen (>=28px minimum touch target).
+  const pin = box.querySelector('.text-sel-rotpin');
+  if (pin) {
+    const pinPx = 32 * invScale;
+    const lineLen = 28 * invScale;
+    pin.style.width = pinPx + 'px';
+    pin.style.height = pinPx + 'px';
+    pin.style.top = -(lineLen + pinPx) + 'px';
+    pin.style.left = '50%';
+    pin.style.marginLeft = -(pinPx / 2) + 'px';
+    pin.style.transform = '';
+    const svg = pin.querySelector('svg');
+    if (svg) {
+      const ic = 18 * invScale;
+      svg.style.width = ic + 'px';
+      svg.style.height = ic + 'px';
+    }
+  }
   const rotLine = box.querySelector('.text-sel-rotline');
   if (rotLine) {
-    const h = 34 * invScale;
+    const h = 28 * invScale;
     rotLine.style.height = h + 'px';
     rotLine.style.top = -h + 'px';
     rotLine.style.width = Math.max(1, 2 * invScale) + 'px';
@@ -6183,17 +6673,33 @@ function updateTextSelection() {
     if (App.activeTool !== 'text') return;
     // Ignore if pointer started on a control surface
     if (e.target.closest('.text-input-wrap, .control-panel, .tool-bar, .canvas-hud, .modal, .sheet')) return;
-    // Identify whether this is on a handle, on the box frame, or on canvas
+    // Identify whether this is on a handle (scale), the rotation pin (rotate),
+    // on the box frame (move), or on canvas.
     const handleEl = e.target.closest('.text-sel-handle');
+    const rotPinEl = e.target.closest('.text-sel-rotpin');
     const frameEl = e.target.closest('.text-sel-frame');
     layer = currentTextLayer();
     const pt = clientToWork(e);
 
+    if (rotPinEl && layer) {
+      e.preventDefault(); e.stopPropagation();
+      wrap.setPointerCapture(e.pointerId);
+      handle = 'rot';
+      mode = 'rotate';
+      startState = {
+        x: layer.x, y: layer.y, scale: layer.scale, rotation: layer.rotation,
+        pointer: pt,
+        canvasW: layer.canvas.width, canvasH: layer.canvas.height,
+        centerWork: { x: App.workW/2 + layer.x, y: App.workH/2 + layer.y },
+      };
+      return;
+    }
     if (handleEl && layer) {
       e.preventDefault(); e.stopPropagation();
       wrap.setPointerCapture(e.pointerId);
       handle = handleEl.dataset.handle;
-      mode = (handle === 'rot') ? 'rotate' : 'scale';
+      // 8 scale handles only — the rotation pin lives in .text-sel-rotpin.
+      mode = 'scale';
       startState = {
         x: layer.x, y: layer.y, scale: layer.scale, rotation: layer.rotation,
         pointer: pt,
@@ -6741,6 +7247,8 @@ document.querySelectorAll('.sheet [data-action]').forEach(b => {
       App.framePreset = 'none';
       App.colorOverlay = { color: '#14b8a6', strength: 0, blendMode: 'overlay' };
       App.colorReplace.pickingSource = false;
+      App.colorReplace.previewOrigin = null;
+      App.colorReplace.previewLayerId = null;
       App.activeEffectExtra = null;
       App.history = [];
       App.historyIndex = -1;
@@ -7542,7 +8050,12 @@ function buildShapePanel(body, actions) {
     });
     kindGrid.appendChild(b);
   });
-  body.appendChild(kindGrid);
+
+  // ----- Section: Kind & Fill (open by default) -----
+  const kindSection = makeAccordion('Kind & Fill', true);
+  body.appendChild(kindSection.wrap);
+  const kindBody = kindSection.body;
+  kindBody.appendChild(kindGrid);
 
   // Fill row
   const fillRow = document.createElement('div');
@@ -7582,132 +8095,9 @@ function buildShapePanel(body, actions) {
     }
   });
   fillRow.appendChild(fillSwatch);
-  body.appendChild(fillRow);
+  kindBody.appendChild(fillRow);
 
-  // Stroke row
-  const strokeRow = document.createElement('div');
-  strokeRow.className = 'slider-row';
-  const curStroke = editing ? (m.strokeWidth || 0) : App.shape.strokeWidth;
-  strokeRow.innerHTML = `
-    <div class="slider-label">Outline</div>
-    <div class="slider-track">
-      <div class="slider-fill" style="width:${(curStroke/40)*100}%"></div>
-      <input type="range" min="0" max="40" value="${curStroke}">
-    </div>
-    <div class="slider-value">${curStroke}px</div>
-  `;
-  body.appendChild(strokeRow);
-  setupSlider(strokeRow, { bipolar:false, min:0, max:40, defaultValue:0 }, {
-    onInput: v => {
-      if (editing) {
-        m.strokeWidth = v;
-        renderShapeLayer(sel);
-        requestRender();
-        updateShapeSelection();
-      } else {
-        App.shape.strokeWidth = v;
-      }
-    },
-    onCommit: () => { if (editing) pushHistory(); }
-  });
-
-  // Stroke color
-  const sColorRow = document.createElement('div');
-  sColorRow.className = 'shape-row';
-  sColorRow.innerHTML = `<label>Outline Color</label>`;
-  const sColor = document.createElement('label');
-  sColor.className = 'inline-color';
-  const curStrokeC = editing ? (m.strokeColor || '#000') : App.shape.strokeColor;
-  sColor.innerHTML = `<span class="inline-color-swatch" style="background:${curStrokeC}"><input type="color" value="${curStrokeC}"></span><span class="inline-color-hex">${curStrokeC.toUpperCase()}</span>`;
-  sColor.querySelector('input').addEventListener('input', e => {
-    const v = e.target.value;
-    sColor.querySelector('.inline-color-swatch').style.background = v;
-    sColor.querySelector('.inline-color-hex').textContent = v.toUpperCase();
-    if (editing) {
-      m.strokeColor = v;
-      renderShapeLayer(sel);
-      requestRender();
-      pushHistoryDebounced(400);
-    } else {
-      App.shape.strokeColor = v;
-    }
-  });
-  sColorRow.appendChild(sColor);
-  body.appendChild(sColorRow);
-
-  // Corner radius (rect only) / Sides (polygon) / Points (star)
-  const cur = editing ? m : App.shape;
-  if ((editing ? m.shape : App.shape.kind) === 'rect') {
-    const rRow = document.createElement('div');
-    rRow.className = 'slider-row';
-    const v0 = cur.radius || 0;
-    rRow.innerHTML = `
-      <div class="slider-label">Radius</div>
-      <div class="slider-track"><div class="slider-fill" style="width:${(v0/100)*100}%"></div><input type="range" min="0" max="100" value="${v0}"></div>
-      <div class="slider-value">${v0}px</div>
-    `;
-    body.appendChild(rRow);
-    setupSlider(rRow, { bipolar:false, min:0, max:100, defaultValue:0 }, {
-      onInput: v => {
-        if (editing) {
-          m.radius = v;
-          renderShapeLayer(sel);
-          requestRender();
-        } else {
-          App.shape.radius = v;
-        }
-      },
-      onCommit: () => { if (editing) pushHistory(); },
-    });
-  }
-  if ((editing ? m.shape : App.shape.kind) === 'polygon') {
-    const sRow = document.createElement('div');
-    sRow.className = 'slider-row';
-    const v0 = cur.sides || 5;
-    sRow.innerHTML = `
-      <div class="slider-label">Sides</div>
-      <div class="slider-track"><div class="slider-fill" style="width:${((v0-3)/(12-3))*100}%"></div><input type="range" min="3" max="12" value="${v0}"></div>
-      <div class="slider-value">${v0}</div>
-    `;
-    body.appendChild(sRow);
-    setupSlider(sRow, { bipolar:false, min:3, max:12, defaultValue:5 }, {
-      onInput: v => {
-        if (editing) {
-          m.sides = v;
-          renderShapeLayer(sel);
-          requestRender();
-        } else {
-          App.shape.sides = v;
-        }
-      },
-      onCommit: () => { if (editing) pushHistory(); },
-    });
-  }
-  if ((editing ? m.shape : App.shape.kind) === 'star') {
-    const pRow = document.createElement('div');
-    pRow.className = 'slider-row';
-    const v0 = cur.points || 5;
-    pRow.innerHTML = `
-      <div class="slider-label">Points</div>
-      <div class="slider-track"><div class="slider-fill" style="width:${((v0-3)/(12-3))*100}%"></div><input type="range" min="3" max="12" value="${v0}"></div>
-      <div class="slider-value">${v0}</div>
-    `;
-    body.appendChild(pRow);
-    setupSlider(pRow, { bipolar:false, min:3, max:12, defaultValue:5 }, {
-      onInput: v => {
-        if (editing) {
-          m.points = v;
-          renderShapeLayer(sel);
-          requestRender();
-        } else {
-          App.shape.points = v;
-        }
-      },
-      onCommit: () => { if (editing) pushHistory(); },
-    });
-  }
-
-  // Quick swatch row
+  // Quick swatch row (inside Kind & Fill so the open section has color picks ready)
   const swatchRow = document.createElement('div');
   swatchRow.className = 'color-row';
   SHAPE_COLORS.forEach(c => {
@@ -7728,7 +8118,141 @@ function buildShapePanel(body, actions) {
     });
     swatchRow.appendChild(sw);
   });
-  body.appendChild(swatchRow);
+  kindBody.appendChild(swatchRow);
+
+  // ----- Section: Outline (closed) -----
+  const outlineSection = makeAccordion('Outline', false);
+  body.appendChild(outlineSection.wrap);
+  const outlineBody = outlineSection.body;
+
+  // Stroke width
+  const strokeRow = document.createElement('div');
+  strokeRow.className = 'slider-row';
+  const curStroke = editing ? (m.strokeWidth || 0) : App.shape.strokeWidth;
+  strokeRow.innerHTML = `
+    <div class="slider-label">Width</div>
+    <div class="slider-track">
+      <div class="slider-fill" style="width:${(curStroke/40)*100}%"></div>
+      <input type="range" min="0" max="40" value="${curStroke}">
+    </div>
+    <div class="slider-value">${curStroke}px</div>
+  `;
+  outlineBody.appendChild(strokeRow);
+  setupSlider(strokeRow, { bipolar:false, min:0, max:40, defaultValue:0 }, {
+    onInput: v => {
+      if (editing) {
+        m.strokeWidth = v;
+        renderShapeLayer(sel);
+        requestRender();
+        updateShapeSelection();
+      } else {
+        App.shape.strokeWidth = v;
+      }
+    },
+    onCommit: () => { if (editing) pushHistory(); }
+  });
+
+  // Stroke color
+  const sColorRow = document.createElement('div');
+  sColorRow.className = 'shape-row';
+  sColorRow.innerHTML = `<label>Color</label>`;
+  const sColor = document.createElement('label');
+  sColor.className = 'inline-color';
+  const curStrokeC = editing ? (m.strokeColor || '#000') : App.shape.strokeColor;
+  sColor.innerHTML = `<span class="inline-color-swatch" style="background:${curStrokeC}"><input type="color" value="${curStrokeC}"></span><span class="inline-color-hex">${curStrokeC.toUpperCase()}</span>`;
+  sColor.querySelector('input').addEventListener('input', e => {
+    const v = e.target.value;
+    sColor.querySelector('.inline-color-swatch').style.background = v;
+    sColor.querySelector('.inline-color-hex').textContent = v.toUpperCase();
+    if (editing) {
+      m.strokeColor = v;
+      renderShapeLayer(sel);
+      requestRender();
+      pushHistoryDebounced(400);
+    } else {
+      App.shape.strokeColor = v;
+    }
+  });
+  sColorRow.appendChild(sColor);
+  outlineBody.appendChild(sColorRow);
+
+  // ----- Section: Options (closed) — kind-specific knobs -----
+  const cur = editing ? m : App.shape;
+  const curKind = editing ? m.shape : App.shape.kind;
+  if (curKind === 'rect' || curKind === 'polygon' || curKind === 'star') {
+    const optsSection = makeAccordion('Options', false);
+    body.appendChild(optsSection.wrap);
+    const optsBody = optsSection.body;
+    if (curKind === 'rect') {
+      const rRow = document.createElement('div');
+      rRow.className = 'slider-row';
+      const v0 = cur.radius || 0;
+      rRow.innerHTML = `
+        <div class="slider-label">Radius</div>
+        <div class="slider-track"><div class="slider-fill" style="width:${(v0/100)*100}%"></div><input type="range" min="0" max="100" value="${v0}"></div>
+        <div class="slider-value">${v0}px</div>
+      `;
+      optsBody.appendChild(rRow);
+      setupSlider(rRow, { bipolar:false, min:0, max:100, defaultValue:0 }, {
+        onInput: v => {
+          if (editing) {
+            m.radius = v;
+            renderShapeLayer(sel);
+            requestRender();
+          } else {
+            App.shape.radius = v;
+          }
+        },
+        onCommit: () => { if (editing) pushHistory(); },
+      });
+    }
+    if (curKind === 'polygon') {
+      const sRow = document.createElement('div');
+      sRow.className = 'slider-row';
+      const v0 = cur.sides || 5;
+      sRow.innerHTML = `
+        <div class="slider-label">Sides</div>
+        <div class="slider-track"><div class="slider-fill" style="width:${((v0-3)/(12-3))*100}%"></div><input type="range" min="3" max="12" value="${v0}"></div>
+        <div class="slider-value">${v0}</div>
+      `;
+      optsBody.appendChild(sRow);
+      setupSlider(sRow, { bipolar:false, min:3, max:12, defaultValue:5 }, {
+        onInput: v => {
+          if (editing) {
+            m.sides = v;
+            renderShapeLayer(sel);
+            requestRender();
+          } else {
+            App.shape.sides = v;
+          }
+        },
+        onCommit: () => { if (editing) pushHistory(); },
+      });
+    }
+    if (curKind === 'star') {
+      const pRow = document.createElement('div');
+      pRow.className = 'slider-row';
+      const v0 = cur.points || 5;
+      pRow.innerHTML = `
+        <div class="slider-label">Points</div>
+        <div class="slider-track"><div class="slider-fill" style="width:${((v0-3)/(12-3))*100}%"></div><input type="range" min="3" max="12" value="${v0}"></div>
+        <div class="slider-value">${v0}</div>
+      `;
+      optsBody.appendChild(pRow);
+      setupSlider(pRow, { bipolar:false, min:3, max:12, defaultValue:5 }, {
+        onInput: v => {
+          if (editing) {
+            m.points = v;
+            renderShapeLayer(sel);
+            requestRender();
+          } else {
+            App.shape.points = v;
+          }
+        },
+        onCommit: () => { if (editing) pushHistory(); },
+      });
+    }
+  }
 
   // Hint / actions
   if (editing) {
@@ -7820,16 +8344,28 @@ function updateShapeSelection() {
     else if (h.classList.contains('bm')) { h.style.bottom = -halfH + 'px'; h.style.left = '50%'; h.style.transform = 'translateX(-50%)'; h.style.right=''; h.style.top=''; }
     else if (h.classList.contains('lm')) { h.style.left = -halfH + 'px'; h.style.top = '50%'; h.style.transform = 'translateY(-50%)'; h.style.right=''; h.style.bottom=''; }
     else if (h.classList.contains('rm')) { h.style.right = -halfH + 'px'; h.style.top = '50%'; h.style.transform = 'translateY(-50%)'; h.style.left=''; h.style.bottom=''; }
-    else if (h.classList.contains('rot')) {
-      h.style.top = (-46 * invScale) + 'px';
-      h.style.left = '50%';
-      h.style.transform = 'translateX(-50%)';
-      h.style.right=''; h.style.bottom='';
-    }
   });
+  // Rotation pin — same treatment as text overlay
+  const pin = box.querySelector('.text-sel-rotpin');
+  if (pin) {
+    const pinPx = 32 * invScale;
+    const lineLen = 28 * invScale;
+    pin.style.width = pinPx + 'px';
+    pin.style.height = pinPx + 'px';
+    pin.style.top = -(lineLen + pinPx) + 'px';
+    pin.style.left = '50%';
+    pin.style.marginLeft = -(pinPx / 2) + 'px';
+    pin.style.transform = '';
+    const svg = pin.querySelector('svg');
+    if (svg) {
+      const ic = 18 * invScale;
+      svg.style.width = ic + 'px';
+      svg.style.height = ic + 'px';
+    }
+  }
   const rotLine = box.querySelector('.text-sel-rotline');
   if (rotLine) {
-    const hh = 34 * invScale;
+    const hh = 28 * invScale;
     rotLine.style.height = hh + 'px';
     rotLine.style.top = -hh + 'px';
     rotLine.style.width = Math.max(1, 2 * invScale) + 'px';
@@ -7890,6 +8426,7 @@ function updateShapeSelection() {
   function handleSelDown(e) {
     if (App.activeTool !== 'shape') return;
     const handleEl = e.target.closest('.text-sel-handle');
+    const rotPinEl = e.target.closest('.text-sel-rotpin');
     const frameEl = e.target.closest('.text-sel-frame');
     // Only respond if the event is inside the shape selection box specifically
     const box = e.target.closest('#shapeSelBox');
@@ -7897,11 +8434,25 @@ function updateShapeSelection() {
     activeLayerRef = currentShapeLayer();
     if (!activeLayerRef) return;
     const pt = clientToWork(e);
+    if (rotPinEl) {
+      e.preventDefault(); e.stopPropagation();
+      wrap.setPointerCapture && wrap.setPointerCapture(e.pointerId);
+      handle = 'rot';
+      mode = 'rotate';
+      startState = {
+        x: activeLayerRef.x, y: activeLayerRef.y, scale: activeLayerRef.scale, rotation: activeLayerRef.rotation,
+        pointer: pt,
+        canvasW: activeLayerRef.canvas.width, canvasH: activeLayerRef.canvas.height,
+        centerWork: { x: App.workW/2 + activeLayerRef.x, y: App.workH/2 + activeLayerRef.y },
+      };
+      return;
+    }
     if (handleEl) {
       e.preventDefault(); e.stopPropagation();
       wrap.setPointerCapture && wrap.setPointerCapture(e.pointerId);
       handle = handleEl.dataset.handle;
-      mode = (handle === 'rot') ? 'rotate' : 'scale';
+      // 8 scale handles — rotation lives in the dedicated pin above.
+      mode = 'scale';
       startState = {
         x: activeLayerRef.x, y: activeLayerRef.y, scale: activeLayerRef.scale, rotation: activeLayerRef.rotation,
         pointer: pt,
@@ -7977,7 +8528,7 @@ function updateShapeSelection() {
   // 2) Drag-to-create on interactCanvas (when no shape selection ongoing)
   c.addEventListener('pointerdown', e => {
     if (App.activeTool !== 'shape') return;
-    if (e.target.closest('.text-sel-handle, .text-sel-frame')) return;
+    if (e.target.closest('.text-sel-handle, .text-sel-frame, .text-sel-rotpin')) return;
     e.preventDefault();
     c.setPointerCapture(e.pointerId);
     const pt = getPt(e);
@@ -8421,9 +8972,69 @@ function buildFramePanel(body, actions) {
 
 /* Apply color overlay (tint) — already integrated in drawBaseLayer. */
 
-/* Color Replace: bake into the BASE LAYER. Walks pixels and replaces colors
- * within HSL tolerance. */
-function applyColorReplace(srcHex, dstHex, tolerance) {
+/* Color Replace — core pixel pass. Operates on an ImageData reading source
+ * bytes from `sourceData` (typed array) and writing results back to imgData.
+ * This split lets us run repeatedly against a cached "preview origin" without
+ * mutating it (so the result is always derived from the same baseline pixels
+ * — non-destructive preview).
+ *
+ * Replacement-alpha model (chosen):
+ *   When a pixel matches the source color, its RGB is always replaced with the
+ *   computed destination RGB. The OUTPUT ALPHA is interpolated:
+ *     outA = srcA * dstAlpha
+ *   So dstAlpha = 1.0 -> same alpha as before (today's behavior, full replace).
+ *      dstAlpha = 0.0 -> matched pixels become fully transparent (erase color).
+ *      dstAlpha = 0.5 -> matched pixels keep half their original opacity.
+ *   This is the cleaner "erase-this-color" model rather than blending RGB toward
+ *   the previous value, and it matches what users intuitively expect when they
+ *   drag a transparency slider on the replacement swatch.
+ *
+ * `sourceData` defaults to imgData.data, allowing in-place use when no cache is
+ * needed (e.g., the bake-on-Apply path).
+ */
+function performColorReplaceOnImageData(imgData, srcHex, dstHex, tolerance, dstAlpha, sourceData) {
+  const d = imgData.data;
+  const sd = sourceData || d;
+  const src = hexToRgb(srcHex);
+  const dst = hexToRgb(dstHex);
+  if (!src || !dst) return false;
+  const srcHSL = rgbToHsl(src.r, src.g, src.b);
+  const tol = clamp(tolerance, 0, 255);
+  const hueTol = (tol / 255) * 360 * 0.5;
+  const lTol   = (tol / 255) * 0.6;
+  const sTol   = (tol / 255) * 0.9;
+  const dstHSL = rgbToHsl(dst.r, dst.g, dst.b);
+  const da = clamp(dstAlpha == null ? 1 : dstAlpha, 0, 1);
+  const len = sd.length;
+  for (let i = 0; i < len; i += 4) {
+    const sr = sd[i], sg = sd[i+1], sb = sd[i+2], sa = sd[i+3];
+    const hsl = rgbToHsl(sr, sg, sb);
+    let dh = Math.abs(hsl[0] - srcHSL[0]);
+    if (dh > 180) dh = 360 - dh;
+    const ds = Math.abs(hsl[1] - srcHSL[1]);
+    const dl = Math.abs(hsl[2] - srcHSL[2]);
+    if (dh <= hueTol && ds <= sTol && dl <= lTol) {
+      const targetL = clamp(dstHSL[2] + (hsl[2] - srcHSL[2]), 0, 1);
+      const targetS = clamp(dstHSL[1] * (1 - 0.2) + hsl[1] * 0.2, 0, 1);
+      const rgb = hslToRgb(dstHSL[0], targetS, targetL);
+      d[i]   = rgb[0];
+      d[i+1] = rgb[1];
+      d[i+2] = rgb[2];
+      d[i+3] = Math.round(sa * da);
+    } else if (sd !== d) {
+      // Carry through unchanged pixels when sourcing from a separate buffer.
+      d[i]   = sr;
+      d[i+1] = sg;
+      d[i+2] = sb;
+      d[i+3] = sa;
+    }
+  }
+  return true;
+}
+
+/* Color Replace: bake into the BASE LAYER (one-shot, no preview cache).
+ * Used by Apply when no preview is active. */
+function applyColorReplace(srcHex, dstHex, tolerance, dstAlpha) {
   const bg = backgroundLayer();
   if (!bg) return;
   loading(true, 'Replacing color…');
@@ -8431,35 +9042,9 @@ function applyColorReplace(srcHex, dstHex, tolerance) {
     const ctx = bg.canvas.getContext('2d');
     const w = bg.canvas.width, h = bg.canvas.height;
     const img = ctx.getImageData(0, 0, w, h);
-    const d = img.data;
-    const src = hexToRgb(srcHex);
-    const dst = hexToRgb(dstHex);
-    if (!src || !dst) { loading(false); return; }
-    const srcHSL = rgbToHsl(src.r, src.g, src.b);
-    const tol = clamp(tolerance, 0, 255);
-    // Tolerance combines hue + lightness + saturation
-    const hueTol = (tol / 255) * 360 * 0.5;     // up to 180deg hue range
-    const lTol = (tol / 255) * 0.6;             // up to 60% lightness range
-    const sTol = (tol / 255) * 0.9;             // up to 90% saturation range
-    const dstHSL = rgbToHsl(dst.r, dst.g, dst.b);
-    for (let i = 0; i < d.length; i += 4) {
-      const r = d[i], g = d[i+1], b = d[i+2];
-      const hsl = rgbToHsl(r, g, b);
-      // Hue diff with wrap
-      let dh = Math.abs(hsl[0] - srcHSL[0]);
-      if (dh > 180) dh = 360 - dh;
-      const ds = Math.abs(hsl[1] - srcHSL[1]);
-      const dl = Math.abs(hsl[2] - srcHSL[2]);
-      if (dh <= hueTol && ds <= sTol && dl <= lTol) {
-        // Compute output color: preserve source lightness adjustment relative to srcHSL.
-        const targetL = clamp(dstHSL[2] + (hsl[2] - srcHSL[2]), 0, 1);
-        const targetS = clamp(dstHSL[1] * (1 - 0.2) + hsl[1] * 0.2, 0, 1);
-        const rgb = hslToRgb(dstHSL[0], targetS, targetL);
-        d[i]   = rgb[0];
-        d[i+1] = rgb[1];
-        d[i+2] = rgb[2];
-        // leave alpha alone
-      }
+    if (!performColorReplaceOnImageData(img, srcHex, dstHex, tolerance, dstAlpha)) {
+      loading(false);
+      return;
     }
     ctx.putImageData(img, 0, 0);
     renderFull();
@@ -8467,6 +9052,109 @@ function applyColorReplace(srcHex, dstHex, tolerance) {
     loading(false);
     toast('Color replaced', 'success');
   }, 30);
+}
+
+/* ----- Color Replace LIVE PREVIEW ----------------------------------
+ * `App.colorReplace.previewOrigin` caches the BASE LAYER's pixels at the
+ * moment the user enters the colorReplace tile (or first picks/changes a
+ * relevant parameter). All preview renders derive from that cache, so the
+ * operation is non-destructive: Cancel restores it, Apply commits it.
+ *
+ * Throttling: previewColorReplace() coalesces rapid calls (slider drag) into
+ * a single rAF tick. The internal `_crPreviewRAF` flag tracks the pending
+ * frame so multiple onInput events collapse to one repaint. */
+let _crPreviewRAF = 0;
+
+function ensureColorReplacePreviewOrigin() {
+  const cr = App.colorReplace;
+  const bg = backgroundLayer();
+  if (!bg) return false;
+  if (cr.previewOrigin && cr.previewLayerId === bg.id
+      && cr.previewW === bg.canvas.width && cr.previewH === bg.canvas.height) {
+    return true; // cache is fresh
+  }
+  const ctx = bg.canvas.getContext('2d');
+  const w = bg.canvas.width, h = bg.canvas.height;
+  const img = ctx.getImageData(0, 0, w, h);
+  // Make an immutable-ish copy so subsequent writes to the base canvas
+  // don't aliased-corrupt our baseline.
+  cr.previewOrigin = new Uint8ClampedArray(img.data);
+  cr.previewW = w;
+  cr.previewH = h;
+  cr.previewLayerId = bg.id;
+  return true;
+}
+
+function _crRunPreviewNow() {
+  _crPreviewRAF = 0;
+  const cr = App.colorReplace;
+  if (!cr.previewOrigin) return;
+  const bg = backgroundLayer();
+  if (!bg || bg.id !== cr.previewLayerId) return;
+  const ctx = bg.canvas.getContext('2d');
+  const w = bg.canvas.width, h = bg.canvas.height;
+  if (w !== cr.previewW || h !== cr.previewH) return;
+  // Build an ImageData backed by a fresh buffer, then run replace using the
+  // cached origin as the source.
+  const out = ctx.createImageData(w, h);
+  performColorReplaceOnImageData(out, cr.src, cr.dst, cr.tolerance, cr.dstAlpha, cr.previewOrigin);
+  ctx.putImageData(out, 0, 0);
+  renderFull();
+}
+
+function previewColorReplace() {
+  if (App.activeEffectExtra !== 'colorReplace') return;
+  if (!ensureColorReplacePreviewOrigin()) return;
+  if (_crPreviewRAF) return; // coalesce to next frame (~rAF cadence, ≤60fps)
+  _crPreviewRAF = requestAnimationFrame(_crRunPreviewNow);
+}
+
+/* Commit the live-preview state into the base layer (Apply path).
+ * Caller has been live-rendering already, so the canvas is already correct —
+ * we just drop the cache and snapshot history. We force one final synchronous
+ * preview-render with the current params so that anything pending in the rAF
+ * queue is materialized before we drop the cache. */
+function commitColorReplacePreview() {
+  const cr = App.colorReplace;
+  if (!cr.previewOrigin) return false;
+  if (_crPreviewRAF) { cancelAnimationFrame(_crPreviewRAF); _crPreviewRAF = 0; }
+  _crRunPreviewNow();
+  cr.previewOrigin = null;
+  cr.previewLayerId = null;
+  pushHistory();
+  return true;
+}
+
+/* Restore the cached origin pixels back to the base layer canvas; drop cache.
+ * No history entry — the user explicitly discarded their preview. */
+function cancelColorReplacePreview() {
+  const cr = App.colorReplace;
+  if (!cr.previewOrigin) return false;
+  if (_crPreviewRAF) { cancelAnimationFrame(_crPreviewRAF); _crPreviewRAF = 0; }
+  const bg = App.layers.find(l => l.id === cr.previewLayerId);
+  if (bg && bg.canvas.width === cr.previewW && bg.canvas.height === cr.previewH) {
+    const ctx = bg.canvas.getContext('2d');
+    const img = ctx.createImageData(cr.previewW, cr.previewH);
+    img.data.set(cr.previewOrigin);
+    ctx.putImageData(img, 0, 0);
+    renderFull();
+  }
+  cr.previewOrigin = null;
+  cr.previewLayerId = null;
+  return true;
+}
+
+/* Auto-exit helper: commit-or-cancel when leaving the Color Replace UI.
+ * Spec: "leaving the panel without applying -> restore" — so default is cancel.
+ */
+function exitColorReplaceMode(opts) {
+  const cr = App.colorReplace;
+  if (!cr || !cr.previewOrigin) return;
+  if (opts && opts.commit) {
+    commitColorReplacePreview();
+  } else {
+    cancelColorReplacePreview();
+  }
 }
 
 function hexToRgb(hex) {
@@ -8570,27 +9258,281 @@ async function removeBackground() {
         } catch (e) {}
       },
     });
-    // Replace base layer
+    // Decode the result so we can grab its alpha channel as our mask.
     const img = await new Promise((resolve, reject) => {
       const i = new Image();
       i.onload = () => resolve(i);
       i.onerror = reject;
       i.src = URL.createObjectURL(outBlob);
     });
-    const ctx = bg.canvas.getContext('2d');
-    ctx.clearRect(0, 0, bg.canvas.width, bg.canvas.height);
-    ctx.drawImage(img, 0, 0, bg.canvas.width, bg.canvas.height);
-    // Show transparency
+    const w = bg.canvas.width, h = bg.canvas.height;
+    // 1) Cache the PRE-removal RGBA so Cancel can restore exactly.
+    const baseCtx = bg.canvas.getContext('2d');
+    const beforeImg = baseCtx.getImageData(0, 0, w, h);
+    const originPixels = new Uint8ClampedArray(beforeImg.data);
+    // 2) Read the model output into an offscreen canvas; extract alpha as mask.
+    const off = document.createElement('canvas');
+    off.width = w; off.height = h;
+    const offCtx = off.getContext('2d');
+    offCtx.clearRect(0, 0, w, h);
+    offCtx.drawImage(img, 0, 0, w, h);
+    const outImg = offCtx.getImageData(0, 0, w, h);
+    const mask = new Uint8Array(w * h);
+    for (let i = 0, p = 0; i < mask.length; i++, p += 4) mask[i] = outImg.data[p + 3];
+    // 3) Stash everything in the cache.
+    App.bgRemove.active = true;
+    App.bgRemove.originPixels = originPixels;
+    App.bgRemove.mask = mask;
+    App.bgRemove.w = w;
+    App.bgRemove.h = h;
+    App.bgRemove.edge = 0;
+    App.bgRemove.feather = 0;
+    App.bgRemove.layerId = bg.id;
+    // 4) Apply the unmodified mask as initial preview so the canvas reflects
+    //    the model output (transparent background visible).
     if (els.canvasStage) els.canvasStage.classList.add('has-trans');
-    renderFull();
-    pushHistory();
+    applyBgRemovePreview();
     loading(false);
-    toast('Background removed', 'success');
+    toast('Tune edge & feather, then Apply', 'success');
+    // Rebuild the Effects panel so the bgRemove sub-panel shows tune sliders.
+    updateToolPanel();
   } catch (e) {
     console.error(e);
     loading(false);
     toast('Background removal failed', 'error');
   }
+}
+
+/* ------------- Background removal LIVE-TUNE ----------------
+ * The mask is a single-channel Uint8Array (one byte per pixel = alpha).
+ * Edge slider: morphological erode/dilate via a separable distance-from-edge
+ *   approximation. We compute a quick 1-D pass: scan rows and cols, propagate
+ *   the threshold-crossing distance up to `radius` pixels. Negative -> erode
+ *   (shrink), positive -> dilate (grow). Implementation favors clarity over
+ *   accuracy — perfect Euclidean distance not required for this UI.
+ * Feather slider: applies a box-blur (separable, 1-D horiz + vert) to the
+ *   tweaked mask. Two passes of box-blur approximate a Gaussian.
+ * Final compose: out RGBA = origin RGB + (mask/255) * origin A. */
+let _bgRemovePreviewRAF = 0;
+
+function applyBgRemovePreview() {
+  // Coalesce rapid slider changes into a single rAF.
+  if (_bgRemovePreviewRAF) return;
+  _bgRemovePreviewRAF = requestAnimationFrame(_runBgRemovePreviewNow);
+}
+
+function _runBgRemovePreviewNow() {
+  _bgRemovePreviewRAF = 0;
+  const br = App.bgRemove;
+  if (!br.active || !br.originPixels || !br.mask) return;
+  const layer = findLayer(br.layerId);
+  if (!layer || layer.canvas.width !== br.w || layer.canvas.height !== br.h) return;
+  const w = br.w, h = br.h;
+  // Step 1: tweak mask via Edge (erode/dilate) — produces tweakedMask.
+  const tweakedMask = bgRemoveEdgeAdjust(br.mask, w, h, br.edge);
+  // Step 2: feather (blur) the mask.
+  const finalMask = bgRemoveFeather(tweakedMask, w, h, br.feather);
+  // Step 3: compose RGBA into base canvas using origin RGB + finalMask alpha
+  //   pre-multiplied by origin's own alpha (in case input had transparency).
+  const ctx = layer.canvas.getContext('2d');
+  const img = ctx.createImageData(w, h);
+  const dst = img.data;
+  const src = br.originPixels;
+  for (let i = 0, p = 0; i < finalMask.length; i++, p += 4) {
+    dst[p]     = src[p];
+    dst[p + 1] = src[p + 1];
+    dst[p + 2] = src[p + 2];
+    // Combine origin alpha with mask alpha multiplicatively in [0..255].
+    // `(a*b + 127) / 255` rounds; we precompute as integer math.
+    const aSrc = src[p + 3];
+    const aMsk = finalMask[i];
+    dst[p + 3] = ((aSrc * aMsk + 127) / 255) | 0;
+  }
+  ctx.putImageData(img, 0, 0);
+  renderFull();
+}
+
+/* Edge: erode/dilate the mask.
+ *   edge < 0 -> erode (shrink cutout). For each pixel, if any neighbor within
+ *     radius is below threshold (background), become background too.
+ *   edge > 0 -> dilate (grow cutout). For each background pixel, if any
+ *     neighbor within radius is foreground, become foreground.
+ * Implementation: 1-D separable min/max with radius = |edge| / 4 (capped 30).
+ * Returns a NEW Uint8Array (caller can use safely without mutating input). */
+function bgRemoveEdgeAdjust(mask, w, h, edge) {
+  if (!edge) return new Uint8Array(mask); // no-op copy
+  // Map slider 1..100 to radius 1..16 (clamped). Kept modest so the live
+  // preview stays interactive on multi-megapixel canvases.
+  const radius = Math.min(16, Math.max(1, Math.round(Math.abs(edge) / 6.25)));
+  const dilate = edge > 0;
+  // Separable sliding-window max (dilate) / min (erode) using a monotonic
+  // deque — O(1) amortized per pixel regardless of radius. Two 1-D passes.
+  const tmp = new Uint8Array(w * h);
+  const out = new Uint8Array(w * h);
+  slidingExtreme1D(mask, tmp, w, h, radius, dilate, /*horizontal*/ true);
+  slidingExtreme1D(tmp, out, w, h, radius, dilate, /*horizontal*/ false);
+  return out;
+}
+
+/* Sliding-window max/min along one axis, using a monotonic deque of indices.
+ * For max: keeps indices with strictly-decreasing values; front is the max.
+ * For min: indices with strictly-increasing values; front is the min.
+ * Window: [i-radius, i+radius] centered, clipped to [0..N-1]. */
+function slidingExtreme1D(src, dst, w, h, radius, isMax, horizontal) {
+  if (horizontal) {
+    const deque = new Int32Array(w);
+    for (let y = 0; y < h; y++) {
+      const rowOff = y * w;
+      let head = 0, tail = 0;
+      // Prime the deque with the initial window for x=0: indices [0..radius].
+      for (let i = 0; i <= radius && i < w; i++) {
+        const vi = src[rowOff + i];
+        if (isMax) while (head < tail && src[rowOff + deque[tail - 1]] <= vi) tail--;
+        else      while (head < tail && src[rowOff + deque[tail - 1]] >= vi) tail--;
+        deque[tail++] = i;
+      }
+      for (let x = 0; x < w; x++) {
+        // 1) Drop front indices that have fallen out of the window on the left.
+        while (head < tail && deque[head] < x - radius) head++;
+        // 2) Read the current max/min.
+        dst[rowOff + x] = src[rowOff + deque[head]];
+        // 3) Bring in the next index entering on the right (for the NEXT step).
+        const nextIn = x + radius + 1;
+        if (nextIn < w) {
+          const vi = src[rowOff + nextIn];
+          if (isMax) while (head < tail && src[rowOff + deque[tail - 1]] <= vi) tail--;
+          else      while (head < tail && src[rowOff + deque[tail - 1]] >= vi) tail--;
+          deque[tail++] = nextIn;
+        }
+      }
+    }
+  } else {
+    const deque = new Int32Array(h);
+    for (let x = 0; x < w; x++) {
+      let head = 0, tail = 0;
+      for (let i = 0; i <= radius && i < h; i++) {
+        const vi = src[i * w + x];
+        if (isMax) while (head < tail && src[deque[tail - 1] * w + x] <= vi) tail--;
+        else      while (head < tail && src[deque[tail - 1] * w + x] >= vi) tail--;
+        deque[tail++] = i;
+      }
+      for (let y = 0; y < h; y++) {
+        while (head < tail && deque[head] < y - radius) head++;
+        dst[y * w + x] = src[deque[head] * w + x];
+        const nextIn = y + radius + 1;
+        if (nextIn < h) {
+          const vi = src[nextIn * w + x];
+          if (isMax) while (head < tail && src[deque[tail - 1] * w + x] <= vi) tail--;
+          else      while (head < tail && src[deque[tail - 1] * w + x] >= vi) tail--;
+          deque[tail++] = nextIn;
+        }
+      }
+    }
+  }
+}
+
+/* Feather: Gaussian-like blur via two box-blur passes (separable).
+ * radius proportional to slider 0..100 (mapped to 0..24 pixels). */
+function bgRemoveFeather(mask, w, h, feather) {
+  if (!feather) return mask; // caller may reuse — but harmless: no further mutation
+  const radius = Math.min(24, Math.max(1, Math.round(feather * 0.24)));
+  // Two box-blur passes approximate a Gaussian; both passes are separable.
+  let src = mask;
+  let dst = new Uint8Array(mask.length);
+  for (let pass = 0; pass < 2; pass++) {
+    boxBlur1D(src, dst, w, h, radius, /*horizontal*/ true);
+    [src, dst] = [dst, src];
+    boxBlur1D(src, dst, w, h, radius, /*horizontal*/ false);
+    [src, dst] = [dst, src];
+  }
+  return src;
+}
+
+function boxBlur1D(src, dst, w, h, radius, horizontal) {
+  const span = radius * 2 + 1;
+  if (horizontal) {
+    for (let y = 0; y < h; y++) {
+      const rowOff = y * w;
+      // Init sum for x=0 covering [-radius..+radius] clamped to row.
+      let sum = 0;
+      for (let i = -radius; i <= radius; i++) {
+        const xi = i < 0 ? 0 : (i >= w ? w - 1 : i);
+        sum += src[rowOff + xi];
+      }
+      dst[rowOff] = (sum / span) | 0;
+      for (let x = 1; x < w; x++) {
+        const xAdd = x + radius;
+        const xRem = x - radius - 1;
+        const ai = xAdd >= w ? w - 1 : xAdd;
+        const ri = xRem < 0 ? 0 : xRem;
+        sum += src[rowOff + ai] - src[rowOff + ri];
+        dst[rowOff + x] = (sum / span) | 0;
+      }
+    }
+  } else {
+    for (let x = 0; x < w; x++) {
+      let sum = 0;
+      for (let i = -radius; i <= radius; i++) {
+        const yi = i < 0 ? 0 : (i >= h ? h - 1 : i);
+        sum += src[yi * w + x];
+      }
+      dst[x] = (sum / span) | 0;
+      for (let y = 1; y < h; y++) {
+        const yAdd = y + radius;
+        const yRem = y - radius - 1;
+        const ai = yAdd >= h ? h - 1 : yAdd;
+        const ri = yRem < 0 ? 0 : yRem;
+        sum += src[ai * w + x] - src[ri * w + x];
+        dst[y * w + x] = (sum / span) | 0;
+      }
+    }
+  }
+}
+
+/* Commit the bg-removal live preview into the base layer. The canvas is
+ * already showing the tuned result, so we just snapshot + clear cache. */
+function commitBgRemovePreview() {
+  const br = App.bgRemove;
+  if (!br.active) return false;
+  if (_bgRemovePreviewRAF) { cancelAnimationFrame(_bgRemovePreviewRAF); _bgRemovePreviewRAF = 0; }
+  _runBgRemovePreviewNow();
+  br.active = false;
+  br.originPixels = null;
+  br.mask = null;
+  br.w = 0; br.h = 0;
+  br.edge = 0; br.feather = 0;
+  br.layerId = null;
+  pushHistory();
+  return true;
+}
+
+/* Restore origin pixels back to the base layer, drop cache, no history. */
+function cancelBgRemovePreview() {
+  const br = App.bgRemove;
+  if (!br.active || !br.originPixels) return false;
+  if (_bgRemovePreviewRAF) { cancelAnimationFrame(_bgRemovePreviewRAF); _bgRemovePreviewRAF = 0; }
+  const layer = findLayer(br.layerId);
+  if (layer && layer.canvas.width === br.w && layer.canvas.height === br.h) {
+    const ctx = layer.canvas.getContext('2d');
+    const img = ctx.createImageData(br.w, br.h);
+    img.data.set(br.originPixels);
+    ctx.putImageData(img, 0, 0);
+    renderFull();
+  }
+  br.active = false;
+  br.originPixels = null;
+  br.mask = null;
+  br.w = 0; br.h = 0;
+  br.edge = 0; br.feather = 0;
+  br.layerId = null;
+  return true;
+}
+
+/* Auto-exit: if user navigates away without applying, treat as Cancel. */
+function exitBgRemoveMode(opts) {
+  if (!App.bgRemove.active) return;
+  if (opts && opts.commit) commitBgRemovePreview();
+  else cancelBgRemovePreview();
 }
 
 /* ----------------------------------------------------------------
@@ -8625,7 +9567,16 @@ function buildEffectExtras(body) {
   tiles.querySelectorAll('[data-extra]').forEach(t => {
     t.addEventListener('click', () => {
       const k = t.dataset.extra;
-      App.activeEffectExtra = (App.activeEffectExtra === k) ? null : k;
+      const nextExtra = (App.activeEffectExtra === k) ? null : k;
+      // Leaving colorReplace without an explicit Apply -> revert preview.
+      if (App.activeEffectExtra === 'colorReplace' && nextExtra !== 'colorReplace') {
+        exitColorReplaceMode();
+      }
+      // Leaving bgRemove without an explicit Apply -> revert removal.
+      if (App.activeEffectExtra === 'bgRemove' && nextExtra !== 'bgRemove' && App.bgRemove.active) {
+        exitBgRemoveMode();
+      }
+      App.activeEffectExtra = nextExtra;
       updateToolPanel();
     });
   });
@@ -8707,6 +9658,10 @@ function buildColorReplaceControls() {
   const wrap = document.createElement('div');
   wrap.style.cssText = 'padding:6px 0;';
 
+  // Entering this control implies entering color-replace mode; cache base
+  // pixels right away so the first slider movement is non-destructive.
+  ensureColorReplacePreviewOrigin();
+
   // Source color
   const srcRow = document.createElement('div');
   srcRow.className = 'shape-row';
@@ -8719,6 +9674,7 @@ function buildColorReplaceControls() {
     App.colorReplace.src = v;
     srcSwatch.querySelector('.inline-color-swatch').style.background = v;
     srcSwatch.querySelector('.inline-color-hex').textContent = v.toUpperCase();
+    previewColorReplace();
   });
   srcRow.appendChild(srcSwatch);
   const pickBtn = document.createElement('button');
@@ -8733,7 +9689,7 @@ function buildColorReplaceControls() {
   srcRow.appendChild(pickBtn);
   wrap.appendChild(srcRow);
 
-  // Destination color
+  // Destination color + alpha (custom control: swatch + alpha slider)
   const dstRow = document.createElement('div');
   dstRow.className = 'shape-row';
   dstRow.innerHTML = `<label>To</label>`;
@@ -8745,9 +9701,30 @@ function buildColorReplaceControls() {
     App.colorReplace.dst = v;
     dstSwatch.querySelector('.inline-color-swatch').style.background = v;
     dstSwatch.querySelector('.inline-color-hex').textContent = v.toUpperCase();
+    previewColorReplace();
   });
   dstRow.appendChild(dstSwatch);
   wrap.appendChild(dstRow);
+
+  // Replacement alpha slider (0..100% -> dstAlpha 0..1).
+  // Source color stays opaque (it's sampled from existing pixels), so we only
+  // expose an alpha control for the REPLACEMENT color.
+  const aRow = document.createElement('div');
+  aRow.className = 'slider-row';
+  const a0pct = Math.round(clamp(App.colorReplace.dstAlpha == null ? 1 : App.colorReplace.dstAlpha, 0, 1) * 100);
+  aRow.innerHTML = `
+    <div class="slider-label">Opacity</div>
+    <div class="slider-track"><div class="slider-fill" style="width:${a0pct}%"></div><input type="range" min="0" max="100" value="${a0pct}"></div>
+    <div class="slider-value">${a0pct}%</div>
+  `;
+  wrap.appendChild(aRow);
+  setupSlider(aRow, { bipolar:false, min:0, max:100, defaultValue:100 }, {
+    onInput: v => {
+      App.colorReplace.dstAlpha = clamp(v / 100, 0, 1);
+      previewColorReplace();
+    },
+    skipHistory: true, // non-destructive preview; history captured on Apply
+  });
 
   // Tolerance
   const tRow = document.createElement('div');
@@ -8760,18 +9737,40 @@ function buildColorReplaceControls() {
   `;
   wrap.appendChild(tRow);
   setupSlider(tRow, { bipolar:false, min:0, max:255, defaultValue:50 }, {
-    onInput: v => { App.colorReplace.tolerance = v; },
+    onInput: v => {
+      App.colorReplace.tolerance = v;
+      previewColorReplace();
+    },
+    skipHistory: true, // non-destructive preview; history captured on Apply
   });
 
-  // Apply button
+  // Apply / Cancel — Apply commits the live preview as a single history entry,
+  // Cancel reverts the base layer to the cached pre-preview pixels.
+  const btnRow = document.createElement('div');
+  btnRow.style.cssText = 'display:flex;gap:8px;margin-top:8px;';
+  const cBtn = document.createElement('button');
+  cBtn.className = 'cp-action';
+  cBtn.style.cssText = 'flex:1;padding:10px;';
+  cBtn.textContent = 'Cancel';
+  cBtn.addEventListener('click', () => {
+    cancelColorReplacePreview();
+  });
   const aBtn = document.createElement('button');
   aBtn.className = 'cp-action primary';
-  aBtn.style.cssText = 'width:100%;padding:10px;margin-top:8px;';
-  aBtn.textContent = 'Apply Color Replace';
+  aBtn.style.cssText = 'flex:1;padding:10px;';
+  aBtn.textContent = 'Apply';
   aBtn.addEventListener('click', () => {
-    applyColorReplace(App.colorReplace.src, App.colorReplace.dst, App.colorReplace.tolerance);
+    if (App.colorReplace.previewOrigin) {
+      commitColorReplacePreview();
+      toast('Color replaced', 'success');
+    } else {
+      // Fallback: no cache (edge case). Bake in one shot.
+      applyColorReplace(App.colorReplace.src, App.colorReplace.dst, App.colorReplace.tolerance, App.colorReplace.dstAlpha);
+    }
   });
-  wrap.appendChild(aBtn);
+  btnRow.appendChild(cBtn);
+  btnRow.appendChild(aBtn);
+  wrap.appendChild(btnRow);
 
   return wrap;
 }
@@ -8780,17 +9779,82 @@ function buildBgRemoveControls() {
   const wrap = document.createElement('div');
   wrap.style.cssText = 'padding:6px 0;';
 
-  const desc = document.createElement('div');
-  desc.style.cssText = 'font-size:12px;color:var(--text-3);line-height:1.4;padding:6px 0 10px;';
-  desc.textContent = 'Removes the background of the base image using AI. The model downloads on first use (~30 MB).';
-  wrap.appendChild(desc);
+  // Two-state panel: idle (Remove button) vs tune (sliders + Apply/Cancel).
+  if (!App.bgRemove.active) {
+    const desc = document.createElement('div');
+    desc.style.cssText = 'font-size:12px;color:var(--text-3);line-height:1.4;padding:6px 0 10px;';
+    desc.textContent = 'Removes the background of the base image using AI. The model downloads on first use (~30 MB). After it runs, tweak Edge and Feather to refine the cutout.';
+    wrap.appendChild(desc);
 
-  const btn = document.createElement('button');
-  btn.className = 'cp-action primary';
-  btn.style.cssText = 'width:100%;padding:12px;font-size:13px;';
-  btn.textContent = 'Remove Background';
-  btn.addEventListener('click', () => { removeBackground(); });
-  wrap.appendChild(btn);
+    const btn = document.createElement('button');
+    btn.className = 'cp-action primary';
+    btn.style.cssText = 'width:100%;padding:12px;font-size:13px;';
+    btn.textContent = 'Remove Background';
+    btn.addEventListener('click', () => { removeBackground(); });
+    wrap.appendChild(btn);
+    return wrap;
+  }
+
+  // Tune UI — live-preview Edge + Feather, plus Apply/Cancel.
+  const heading = document.createElement('div');
+  heading.style.cssText = 'font-size:12px;color:var(--text-3);line-height:1.4;padding:4px 0 8px;';
+  heading.textContent = 'Tune the cutout. Edge erodes / dilates the mask, Feather softens its edges.';
+  wrap.appendChild(heading);
+
+  // Edge slider (-100..+100, bipolar, default 0)
+  const eRow = document.createElement('div');
+  eRow.className = 'slider-row';
+  const eVal = App.bgRemove.edge;
+  eRow.innerHTML = `
+    <div class="slider-label">Edge</div>
+    <div class="slider-track"><div class="mid-mark"></div><div class="slider-fill bipolar"></div><input type="range" min="-100" max="100" step="1" value="${eVal}"></div>
+    <div class="slider-value">${eVal}</div>
+  `;
+  wrap.appendChild(eRow);
+  setupSlider(eRow, { bipolar: true, min: -100, max: 100, defaultValue: 0 }, {
+    onInput: v => { App.bgRemove.edge = v; applyBgRemovePreview(); },
+    skipHistory: true,
+  });
+
+  // Feather slider (0..100, default 0)
+  const fRow = document.createElement('div');
+  fRow.className = 'slider-row';
+  const fVal = App.bgRemove.feather;
+  fRow.innerHTML = `
+    <div class="slider-label">Feather</div>
+    <div class="slider-track"><div class="slider-fill" style="width:${fVal}%"></div><input type="range" min="0" max="100" step="1" value="${fVal}"></div>
+    <div class="slider-value">${fVal}</div>
+  `;
+  wrap.appendChild(fRow);
+  setupSlider(fRow, { bipolar: false, min: 0, max: 100, defaultValue: 0 }, {
+    onInput: v => { App.bgRemove.feather = v; applyBgRemovePreview(); },
+    skipHistory: true,
+  });
+
+  // Apply / Cancel row
+  const btnRow = document.createElement('div');
+  btnRow.style.cssText = 'display:flex;gap:8px;margin-top:10px;';
+  const cBtn = document.createElement('button');
+  cBtn.className = 'cp-action';
+  cBtn.style.cssText = 'flex:1;padding:10px;';
+  cBtn.textContent = 'Cancel';
+  cBtn.addEventListener('click', () => {
+    cancelBgRemovePreview();
+    toast('Background restored', 'success');
+    updateToolPanel();
+  });
+  const aBtn = document.createElement('button');
+  aBtn.className = 'cp-action primary';
+  aBtn.style.cssText = 'flex:1;padding:10px;';
+  aBtn.textContent = 'Apply';
+  aBtn.addEventListener('click', () => {
+    commitBgRemovePreview();
+    toast('Background removed', 'success');
+    updateToolPanel();
+  });
+  btnRow.appendChild(cBtn);
+  btnRow.appendChild(aBtn);
+  wrap.appendChild(btnRow);
 
   return wrap;
 }
@@ -8808,14 +9872,30 @@ function buildBgRemoveControls() {
     const x = Math.round(((e.clientX - r.left) / r.width) * App.workW);
     const y = Math.round(((e.clientY - r.top) / r.height) * App.workH);
     if (x < 0 || y < 0 || x >= App.workW || y >= App.workH) return;
-    // Sample composited canvas
+    // Sample from the cached preview-origin pixels if a live preview is active
+    // (otherwise the user would sample post-replace pixels and feedback-loop).
+    // Falls back to the composited display canvas otherwise.
     try {
-      const data = App.ctx.getImageData(x, y, 1, 1).data;
-      const hex = rgbToHex(data[0], data[1], data[2]);
+      let hex;
+      const cr = App.colorReplace;
+      if (cr.previewOrigin && cr.previewW > 0 && cr.previewH > 0) {
+        // Translate from displayed canvas coords to base-layer coords. The
+        // base layer canvas is workW x workH like the display, so the index
+        // arithmetic is direct.
+        const sx = Math.max(0, Math.min(cr.previewW - 1, x));
+        const sy = Math.max(0, Math.min(cr.previewH - 1, y));
+        const idx = (sy * cr.previewW + sx) * 4;
+        hex = rgbToHex(cr.previewOrigin[idx], cr.previewOrigin[idx + 1], cr.previewOrigin[idx + 2]);
+      } else {
+        const data = App.ctx.getImageData(x, y, 1, 1).data;
+        hex = rgbToHex(data[0], data[1], data[2]);
+      }
       App.colorReplace.src = hex;
       App.colorReplace.pickingSource = false;
       if (els.eyedropperHint) els.eyedropperHint.classList.remove('show');
       updateToolPanel();
+      // After rebuilding the panel, fire a live preview reflecting the new src.
+      previewColorReplace();
       toast('Picked ' + hex.toUpperCase(), 'success');
     } catch (err) {
       console.error(err);
