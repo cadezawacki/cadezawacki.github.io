@@ -9,10 +9,11 @@
 <meta name="mobile-web-app-capable" content="yes">
 <title>Studio · Photo Editor</title>
 
-<!-- IBM Plex Sans -->
+<!-- IBM Plex Sans (UI) + curated text fonts for Text tool -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,100..700;1,100..700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Archivo+Black&family=Bebas+Neue&family=Caveat:wght@400;700&family=Cormorant+Garamond:ital,wght@0,400;0,700;1,400&family=Dancing+Script:wght@400;700&family=DM+Sans:ital,wght@0,400;0,700;1,400&family=DM+Serif+Display:ital@0;1&family=Fira+Code:wght@400;700&family=Great+Vibes&family=Inter:wght@100;300;400;500;700;900&family=JetBrains+Mono:ital,wght@0,400;0,700;1,400&family=Lato:ital,wght@0,400;0,700;0,900;1,400&family=Lobster&family=Lora:ital,wght@0,400;0,700;1,400&family=Merriweather:ital,wght@0,400;0,700;1,400&family=Montserrat:ital,wght@0,400;0,700;0,900;1,400&family=Nunito:ital,wght@0,400;0,700;0,900;1,400&family=Open+Sans:ital,wght@0,400;0,700;1,400&family=Oswald:wght@400;700&family=Pacifico&family=Permanent+Marker&family=Playfair+Display:ital,wght@0,400;0,700;0,900;1,400&family=Poppins:ital,wght@0,400;0,700;0,900;1,400&family=Roboto:ital,wght@0,400;0,700;0,900;1,400&family=Shadows+Into+Light&family=Work+Sans:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
 
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
@@ -783,6 +784,266 @@ a{color:var(--primary);}
 }
 .font-select:focus,.size-input:focus{border-color:var(--primary);}
 .text-actions{display:flex;gap:10px;justify-content:flex-end;}
+
+/* ---------- TEXT PANEL (per-layer controls) ---------- */
+.text-empty{
+  padding:14px;background:var(--surface);border:1px solid var(--border);
+  border-radius:14px;font-size:13px;color:var(--text-2);line-height:1.5;
+}
+.text-section{
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:14px;margin-bottom:8px;overflow:hidden;
+}
+.text-section-head{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:10px 14px;cursor:pointer;
+  font-size:11px;font-weight:700;color:var(--text-2);
+  text-transform:uppercase;letter-spacing:.6px;
+  user-select:none;
+}
+.text-section-head:hover{color:var(--text);}
+.text-section-head .chev{
+  width:14px;height:14px;color:var(--text-3);
+  transition:transform .2s ease;
+}
+.text-section.open .chev{transform:rotate(90deg);}
+.text-section-body{
+  display:none;padding:6px 14px 14px;flex-direction:column;gap:10px;
+}
+.text-section.open .text-section-body{display:flex;}
+.tp-row{display:flex;align-items:center;gap:8px;}
+.tp-label{
+  font-size:11px;font-weight:600;color:var(--text-2);
+  text-transform:uppercase;letter-spacing:.4px;
+  min-width:74px;flex-shrink:0;
+}
+.tp-value{
+  font-size:12px;font-weight:600;color:var(--text);
+  min-width:42px;text-align:right;font-variant-numeric:tabular-nums;
+}
+.tp-input{
+  flex:1;background:var(--surface-2);border:1px solid var(--border);
+  color:var(--text);padding:7px 10px;border-radius:8px;
+  font-size:13px;outline:none;font-family:inherit;min-width:0;
+}
+.tp-input:focus{border-color:var(--primary);}
+.tp-text-area{
+  width:100%;min-height:60px;background:var(--surface-2);
+  border:1px solid var(--border);border-radius:10px;padding:10px 12px;
+  color:var(--text);font-size:14px;line-height:1.4;
+  outline:none;resize:vertical;font-family:inherit;
+}
+.tp-text-area:focus{border-color:var(--primary);}
+.tp-seg{
+  display:flex;gap:0;flex:1;background:var(--surface-2);
+  border:1px solid var(--border);border-radius:9px;overflow:hidden;
+  min-width:0;
+}
+.tp-seg button{
+  flex:1;padding:7px 6px;font-size:11px;font-weight:600;
+  color:var(--text-2);background:transparent;border:none;
+  transition:background .15s,color .15s;
+  display:flex;align-items:center;justify-content:center;
+  min-width:0;
+}
+.tp-seg button:not(:first-child){border-left:1px solid var(--border);}
+.tp-seg button:hover{color:var(--text);}
+.tp-seg button.active{background:var(--primary);color:#fff;}
+.tp-seg svg{width:14px;height:14px;}
+.tp-toggle{
+  padding:7px 12px;border-radius:9px;font-size:11px;font-weight:600;
+  color:var(--text-2);background:var(--surface-2);
+  border:1px solid var(--border);
+  text-transform:uppercase;letter-spacing:.4px;
+  transition:all .15s;flex-shrink:0;
+}
+.tp-toggle:hover{border-color:var(--primary);}
+.tp-toggle.on{
+  background:color-mix(in srgb,var(--primary) 14%,var(--surface));
+  border-color:var(--primary);color:var(--primary);
+}
+.tp-color-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+.tp-color-swatches{
+  display:flex;gap:6px;flex:1;overflow-x:auto;
+  padding:2px 0;scrollbar-width:none;
+}
+.tp-color-swatches::-webkit-scrollbar{display:none;}
+.tp-color-swatch{
+  flex-shrink:0;width:28px;height:28px;border-radius:50%;
+  border:2px solid var(--border);
+  transition:transform .12s,border-color .15s;
+  position:relative;
+}
+.tp-color-swatch:active{transform:scale(.9);}
+.tp-color-swatch.active{
+  border-color:var(--primary);
+  box-shadow:0 0 0 2px color-mix(in srgb,var(--primary) 40%,transparent);
+}
+.tp-color-swatch.none{
+  background:var(--surface);position:relative;overflow:hidden;
+}
+.tp-color-swatch.none::before{
+  content:"";position:absolute;left:50%;top:0;bottom:0;
+  width:2px;background:var(--danger);
+  transform:translateX(-50%) rotate(45deg);
+}
+.tp-color-custom{
+  flex-shrink:0;width:28px;height:28px;border-radius:50%;
+  border:2px solid var(--border);position:relative;overflow:hidden;
+  background:conic-gradient(from 0deg,red,orange,yellow,green,blue,indigo,violet,red);
+}
+.tp-color-custom input{
+  position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%;
+}
+.tp-color-preview{
+  width:28px;height:28px;border-radius:50%;
+  border:2px solid var(--border-strong);flex-shrink:0;
+  background-image:
+    linear-gradient(45deg,var(--checker-a) 25%,transparent 25%),
+    linear-gradient(-45deg,var(--checker-a) 25%,transparent 25%),
+    linear-gradient(45deg,transparent 75%,var(--checker-a) 75%),
+    linear-gradient(-45deg,transparent 75%,var(--checker-a) 75%);
+  background-size:8px 8px;
+}
+.tp-color-preview .fill{
+  width:100%;height:100%;border-radius:50%;
+}
+
+/* ---------- FONT PICKER (custom dropdown) ---------- */
+.font-picker{
+  flex:1;min-width:0;position:relative;
+}
+.font-picker-trigger{
+  width:100%;display:flex;align-items:center;justify-content:space-between;
+  padding:9px 12px;border-radius:9px;
+  background:var(--surface-2);border:1px solid var(--border);
+  color:var(--text);font-size:13px;font-weight:500;
+  cursor:pointer;text-align:left;
+  transition:border-color .15s;
+}
+.font-picker-trigger:hover{border-color:var(--primary);}
+.font-picker-trigger .name{
+  flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  min-width:0;padding-right:8px;font-size:14px;
+}
+.font-picker-trigger svg{width:12px;height:12px;color:var(--text-3);flex-shrink:0;}
+.font-picker-pop{
+  position:fixed;z-index:170;
+  background:var(--elevated);border:1px solid var(--border-strong);
+  border-radius:14px;box-shadow:var(--shadow-lg);
+  display:none;flex-direction:column;
+  width:280px;max-width:calc(100vw - 24px);
+  max-height:60vh;overflow:hidden;
+}
+.font-picker-pop.open{display:flex;}
+.font-picker-search{
+  padding:10px 12px;border-bottom:1px solid var(--border);
+}
+.font-picker-search input{
+  width:100%;padding:8px 10px;border-radius:8px;
+  background:var(--surface-2);border:1px solid var(--border);
+  color:var(--text);font-size:13px;outline:none;font-family:inherit;
+}
+.font-picker-search input:focus{border-color:var(--primary);}
+.font-picker-list{
+  flex:1;overflow-y:auto;padding:6px 0;
+  scrollbar-width:thin;scrollbar-color:var(--border-strong) transparent;
+}
+.font-picker-list::-webkit-scrollbar{width:6px;}
+.font-picker-list::-webkit-scrollbar-thumb{background:var(--border-strong);border-radius:3px;}
+.font-picker-item{
+  width:100%;padding:10px 14px;text-align:left;
+  display:flex;align-items:center;gap:10px;
+  font-size:16px;color:var(--text);
+  cursor:pointer;border:none;background:transparent;
+  transition:background .12s;
+  line-height:1;
+  min-height:40px;
+}
+.font-picker-item:hover{background:var(--surface-2);}
+.font-picker-item.active{
+  background:color-mix(in srgb,var(--primary) 12%,transparent);
+  color:var(--primary);
+}
+.font-picker-item .label-sm{
+  font-size:10px;color:var(--text-3);font-family:"IBM Plex Sans",sans-serif;
+  flex-shrink:0;text-transform:uppercase;letter-spacing:.5px;
+}
+.font-picker-empty{
+  padding:18px 14px;text-align:center;color:var(--text-3);font-size:13px;
+}
+
+/* ---------- TEXT SELECTION OVERLAY (on canvas-stage) ---------- */
+.text-sel-overlay{
+  position:absolute;
+  pointer-events:none;
+  z-index:5;
+  inset:0;
+}
+.text-sel-box{
+  position:absolute;
+  pointer-events:none;
+  transform-origin:center center;
+  display:none;
+}
+.text-sel-box.active{display:block;}
+.text-sel-frame{
+  position:absolute;inset:0;
+  border:1.5px dashed var(--primary);
+  background:color-mix(in srgb,var(--primary) 5%,transparent);
+  pointer-events:auto;cursor:move;
+  touch-action:none;
+}
+.text-sel-handle{
+  position:absolute;width:24px;height:24px;
+  display:flex;align-items:center;justify-content:center;
+  pointer-events:auto;
+  touch-action:none;
+}
+.text-sel-handle::before{
+  content:"";
+  width:var(--handle-dot-size,12px);
+  height:var(--handle-dot-size,12px);
+  border-radius:50%;
+  background:#fff;border:2px solid var(--primary);
+  box-shadow:0 1px 4px rgba(0,0,0,0.25);
+  transition:transform .12s;
+}
+.text-sel-handle:hover::before{transform:scale(1.18);}
+.text-sel-handle.tl{top:-12px;left:-12px;cursor:nwse-resize;}
+.text-sel-handle.tr{top:-12px;right:-12px;cursor:nesw-resize;}
+.text-sel-handle.bl{bottom:-12px;left:-12px;cursor:nesw-resize;}
+.text-sel-handle.br{bottom:-12px;right:-12px;cursor:nwse-resize;}
+.text-sel-handle.tm{top:-12px;left:50%;transform:translateX(-50%);cursor:ns-resize;}
+.text-sel-handle.bm{bottom:-12px;left:50%;transform:translateX(-50%);cursor:ns-resize;}
+.text-sel-handle.lm{left:-12px;top:50%;transform:translateY(-50%);cursor:ew-resize;}
+.text-sel-handle.rm{right:-12px;top:50%;transform:translateY(-50%);cursor:ew-resize;}
+.text-sel-handle.rot{
+  top:-46px;left:50%;transform:translateX(-50%);cursor:grab;
+}
+.text-sel-handle.rot::before{
+  background:var(--primary);border-color:#fff;
+  width:14px;height:14px;
+}
+.text-sel-handle.rot:active{cursor:grabbing;}
+.text-sel-rotline{
+  position:absolute;left:50%;top:-34px;
+  width:2px;height:34px;background:var(--primary);
+  transform:translateX(-50%);
+  pointer-events:none;opacity:.6;
+}
+.text-mode-hint{
+  position:absolute;top:10px;left:50%;transform:translateX(-50%) translateY(40px);
+  background:color-mix(in srgb,var(--primary) 92%,transparent);
+  color:#fff;padding:5px 12px;border-radius:20px;
+  font-size:11px;font-weight:600;letter-spacing:.3px;
+  z-index:11;
+  box-shadow:0 4px 14px rgba(0,0,0,0.18);
+  display:none;
+  pointer-events:none;
+}
+.text-mode-hint.show{display:flex;align-items:center;gap:6px;}
+.text-mode-hint svg{width:12px;height:12px;}
 .btn{
   padding:9px 16px;border-radius:10px;font-weight:600;font-size:14px;
   background:var(--surface-2);border:1px solid var(--border);color:var(--text);
@@ -1068,6 +1329,27 @@ a{color:var(--primary);}
         <div class="crop-handle br"></div>
       </div>
     </div>
+    <!-- Text selection overlay (scales with stage transform) -->
+    <div class="text-sel-overlay" id="textSelOverlay">
+      <div class="text-sel-box" id="textSelBox">
+        <div class="text-sel-frame" id="textSelFrame"></div>
+        <div class="text-sel-rotline"></div>
+        <div class="text-sel-handle rot" data-handle="rot" title="Rotate"></div>
+        <div class="text-sel-handle tl" data-handle="tl"></div>
+        <div class="text-sel-handle tm" data-handle="tm"></div>
+        <div class="text-sel-handle tr" data-handle="tr"></div>
+        <div class="text-sel-handle lm" data-handle="lm"></div>
+        <div class="text-sel-handle rm" data-handle="rm"></div>
+        <div class="text-sel-handle bl" data-handle="bl"></div>
+        <div class="text-sel-handle bm" data-handle="bm"></div>
+        <div class="text-sel-handle br" data-handle="br"></div>
+      </div>
+    </div>
+  </div>
+  <!-- Text-mode hint (in canvas-wrap so it doesn't scale) -->
+  <div class="text-mode-hint" id="textModeHint">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+    Text · pan locked
   </div>
 </main>
 
@@ -1207,19 +1489,15 @@ a{color:var(--primary);}
   <div class="text-input-card">
     <textarea class="text-input" id="textInput" placeholder="Type your text..." rows="2"></textarea>
     <div class="text-options">
-      <div class="text-opt-group">
+      <div class="text-opt-group" style="flex:1;min-width:0;">
         <span class="text-opt-label">Font</span>
-        <select class="font-select" id="fontSelect">
-          <option value="'IBM Plex Sans', system-ui, sans-serif">Sans</option>
-          <option value="Georgia, serif">Serif</option>
-          <option value="'Courier New', monospace">Mono</option>
-          <option value="'Brush Script MT', cursive">Brush</option>
-          <option value="Impact, sans-serif">Impact</option>
+        <select class="font-select" id="fontSelect" style="flex:1;min-width:0;">
+          <!-- Options injected by JS from TEXT_FONTS -->
         </select>
       </div>
       <div class="text-opt-group">
         <span class="text-opt-label">Size</span>
-        <input type="number" class="size-input" id="textSize" value="48" min="8" max="500" style="width:64px;">
+        <input type="number" class="size-input" id="textSize" value="96" min="8" max="600" style="width:72px;">
       </div>
     </div>
     <div class="text-actions">
@@ -1349,6 +1627,11 @@ const App = {
 
   // ----- Sliders -----
   sliderTapTimes: new Map(),  // last touchend per slider for double-tap detect
+
+  // ----- Text editing -----
+  // Currently selected text layer id (mirrors activeLayerId when type==='text')
+  textSelectionId: null,
+  textEditingId: null,  // layer id we're editing in the text modal
 };
 
 function createDefaultAdjustments() {
@@ -1446,12 +1729,23 @@ function removeLayer(id) {
   if (App.activeLayerId === id) {
     App.activeLayerId = App.layers[App.layers.length - 1]?.id || null;
   }
+  if (App.textSelectionId === id) {
+    App.textSelectionId = null;
+  }
 }
 function duplicateLayer(id) {
   const src = findLayer(id);
   if (!src) return null;
-  const nc = createBlankLayerCanvas();
-  nc.getContext('2d').drawImage(src.canvas, 0, 0);
+  let nc;
+  if (src.type === 'text') {
+    nc = document.createElement('canvas');
+    nc.width = src.canvas.width;
+    nc.height = src.canvas.height;
+    nc.getContext('2d').drawImage(src.canvas, 0, 0);
+  } else {
+    nc = createBlankLayerCanvas();
+    nc.getContext('2d').drawImage(src.canvas, 0, 0);
+  }
   let nm = null;
   if (src.mask) {
     nm = createBlankLayerCanvas();
@@ -1464,7 +1758,9 @@ function duplicateLayer(id) {
     visible: src.visible,
     opacity: src.opacity,
     blendMode: src.blendMode,
-    x: src.x, y: src.y, scale: src.scale, rotation: src.rotation,
+    x: src.x + (src.type === 'text' ? 24 : 0),
+    y: src.y + (src.type === 'text' ? 24 : 0),
+    scale: src.scale, rotation: src.rotation,
     mask: nm, maskInverted: src.maskInverted,
     locked: false,
     meta: JSON.parse(JSON.stringify(src.meta)),
@@ -1472,6 +1768,8 @@ function duplicateLayer(id) {
   const idx = indexOfLayer(id);
   App.layers.splice(idx + 1, 0, copy);
   App.activeLayerId = copy.id;
+  // For text layers, also update selection
+  if (copy.type === 'text') App.textSelectionId = copy.id;
   return copy;
 }
 function reorderLayer(id, newIndex) {
@@ -1535,6 +1833,10 @@ const els = {
   textSize:          $('textSize'),
   textCancel:        $('textCancel'),
   textApply:         $('textApply'),
+  textSelOverlay:    $('textSelOverlay'),
+  textSelBox:        $('textSelBox'),
+  textSelFrame:      $('textSelFrame'),
+  textModeHint:      $('textModeHint'),
   toastWrap:         $('toastWrap'),
   loadingOverlay:    $('loadingOverlay'),
   loadingText:       $('loadingText'),
@@ -1632,6 +1934,7 @@ function initFromImage(img) {
   App.historyIndex = -1;
   App.layers = [];
   App.activeLayerId = null;
+  App.textSelectionId = null;
   App.nextLayerId = 1;
 
   // Create background layer
@@ -2318,6 +2621,8 @@ function renderFull() {
 
   // Refresh layer thumbs after a stable render
   scheduleLayerThumbsUpdate();
+  // Keep text selection overlay in sync (layer canvas dims may have changed).
+  if (typeof updateTextSelection === 'function') updateTextSelection();
 }
 
 function renderPreview() {
@@ -2421,6 +2726,10 @@ function drawBaseLayer(target, tctx, layer, W, H, scale) {
 
 /**
  * Draw a non-base layer.
+ * For 'text' layers, the layer.canvas can be smaller than the workspace —
+ * we draw it centered on (layer.x, layer.y) at native pixel dims (× layer.scale).
+ * For other layers, the canvas is assumed to be the workspace size and
+ * stretched into render-target W x H.
  */
 function drawLayer(target, tctx, layer, W, H, scale) {
   // Build effective canvas with transform + mask in a temp canvas
@@ -2435,7 +2744,14 @@ function drawLayer(target, tctx, layer, W, H, scale) {
   tx.translate(cx, cy);
   if (layer.rotation) tx.rotate(layer.rotation * Math.PI / 180);
   if (layer.scale !== 1) tx.scale(layer.scale, layer.scale);
-  tx.drawImage(layer.canvas, -W/2, -H/2, W, H);
+  if (layer.type === 'text') {
+    // Text layer: draw native canvas centered, scaled by the *workspace -> render* scale
+    const cw = layer.canvas.width;
+    const ch = layer.canvas.height;
+    tx.drawImage(layer.canvas, -cw/2 * scale, -ch/2 * scale, cw * scale, ch * scale);
+  } else {
+    tx.drawImage(layer.canvas, -W/2, -H/2, W, H);
+  }
   tx.restore();
 
   // mask
@@ -2496,6 +2812,8 @@ function applyStageTransform() {
   els.canvasStage.style.transform = t;
   els.canvasStage.style.width = App.workW + 'px';
   els.canvasStage.style.height = App.workH + 'px';
+  // Selection overlay (text mode) needs to refresh handle counter-scaling.
+  if (typeof updateTextSelection === 'function') updateTextSelection();
 }
 
 /** Clamp pan so at least 20% of image dims stays on screen. */
@@ -2547,9 +2865,10 @@ fixViewport();
   }
 
   function shouldHandle() {
-    // Pan/pinch is for adjust/filter/effect/text (and outside layers)
+    // Pan/pinch is for adjust/filter/effect (and outside layers/text)
     if (App.activeTool === 'draw' || App.activeTool === 'crop') return false;
     if (App.activeTool === 'layers') return false;
+    if (App.activeTool === 'text') return false;
     return true;
   }
 
@@ -2704,7 +3023,10 @@ function snapshotLayers() {
     let canvasData = null;
     let maskData = null;
     try {
-      canvasData = l.canvas.toDataURL('image/png');
+      // Skip storing bitmap for text layers — they re-render from meta.
+      if (l.type !== 'text') {
+        canvasData = l.canvas.toDataURL('image/png');
+      }
       if (l.mask) maskData = l.mask.toDataURL('image/png');
     } catch (e) { /* ignore tainted canvas */ }
     return {
@@ -2772,13 +3094,19 @@ function restoreFromSnap(snap) {
   const promises = snap.layers.map((ls, idx) => new Promise(res => {
     const layer = {
       id: ls.id, name: ls.name, type: ls.type,
-      canvas: createBlankLayerCanvas(),
+      canvas: ls.type === 'text' ? document.createElement('canvas') : createBlankLayerCanvas(),
       visible: ls.visible, opacity: ls.opacity, blendMode: ls.blendMode,
       x: ls.x, y: ls.y, scale: ls.scale, rotation: ls.rotation,
       mask: null, maskInverted: ls.maskInverted,
       locked: ls.locked, meta: { ...ls.meta },
     };
     newLayers[idx] = layer;
+    // For text layers we re-render rather than restoring the bitmap, so the canvas
+    // dims are always in sync with the current meta.
+    if (ls.type === 'text') {
+      renderTextLayer(layer);
+      return res();
+    }
     if (!ls.canvasData) return res();
     const img = new Image();
     img.onload = () => {
@@ -2849,6 +3177,24 @@ function setTool(tool) {
   });
   els.cropOverlay.classList.toggle('active', tool === 'crop');
   els.interactCanvas.classList.toggle('active', tool === 'draw');
+  // Text mode UI
+  if (els.textModeHint) {
+    els.textModeHint.classList.toggle('show', tool === 'text');
+  }
+  if (tool === 'text') {
+    // If active layer is a text layer, select it; otherwise pick last text layer
+    const cur = activeLayer();
+    if (cur && cur.type === 'text') {
+      App.textSelectionId = cur.id;
+    } else {
+      const lastText = [...App.layers].reverse().find(l => l.type === 'text');
+      App.textSelectionId = lastText ? lastText.id : null;
+      if (lastText) setActiveLayer(lastText.id);
+    }
+  } else {
+    App.textSelectionId = null;
+  }
+  updateTextSelection();
   updateToolPanel();
 }
 document.querySelectorAll('.tool-tab').forEach(t => {
@@ -3616,8 +3962,8 @@ function buildDrawPanel(body, actions) {
 
   function ensureDrawTarget() {
     let layer = activeLayer();
-    // If active is base/background image layer, auto-create a Drawing layer above it
-    if (!layer || (layer.type === 'image' && layer.locked)) {
+    // If active is base/background image layer or a text layer, auto-create a Drawing layer above it
+    if (!layer || (layer.type === 'image' && layer.locked) || layer.type === 'text') {
       const newLayer = makeLayer({
         name: 'Drawing',
         type: 'drawing',
@@ -3722,63 +4068,1275 @@ function buildDrawPanel(body, actions) {
 })();
 
 /* ================================================================
-   TEXT PANEL — simple add-text only (Agent 2 will rebuild)
+   TEXT — fonts, rendering, panel, selection, hit-testing
    ================================================================ */
-function buildTextPanel(body, actions) {
-  els.cpTitle.innerHTML = 'Text';
-  const info = document.createElement('div');
-  info.style.cssText = 'padding:14px;background:var(--surface);border:1px solid var(--border);border-radius:14px;font-size:13px;color:var(--text-2);line-height:1.5;';
-  info.innerHTML = 'Tap "Add Text" to place text at the center. Each text becomes its own layer.';
-  body.appendChild(info);
 
-  actions.innerHTML = '<button class="cp-action primary" id="addTextBtn">+ Add Text</button>';
-  $('addTextBtn').addEventListener('click', () => openTextModal());
+/* List of fonts (label = display name, family = canvas font-family value).
+   Each entry tracks supported weights and whether italic exists. */
+const TEXT_FONTS = [
+  // System
+  { label:'System Sans', family:'system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif', weights:[400,700], italic:true, category:'sans' },
+  { label:'System Serif', family:'ui-serif, Georgia, Cambria, "Times New Roman", serif', weights:[400,700], italic:true, category:'serif' },
+  // Sans
+  { label:'Inter', family:'"Inter", sans-serif', weights:[100,300,400,500,700,900], italic:false, category:'sans' },
+  { label:'Roboto', family:'"Roboto", sans-serif', weights:[400,700,900], italic:true, category:'sans' },
+  { label:'Montserrat', family:'"Montserrat", sans-serif', weights:[400,700,900], italic:true, category:'sans' },
+  { label:'Poppins', family:'"Poppins", sans-serif', weights:[400,700,900], italic:true, category:'sans' },
+  { label:'Work Sans', family:'"Work Sans", sans-serif', weights:[400,700], italic:true, category:'sans' },
+  { label:'DM Sans', family:'"DM Sans", sans-serif', weights:[400,700], italic:true, category:'sans' },
+  { label:'Lato', family:'"Lato", sans-serif', weights:[400,700,900], italic:true, category:'sans' },
+  { label:'Open Sans', family:'"Open Sans", sans-serif', weights:[400,700], italic:true, category:'sans' },
+  { label:'Nunito', family:'"Nunito", sans-serif', weights:[400,700,900], italic:true, category:'sans' },
+  { label:'Oswald', family:'"Oswald", sans-serif', weights:[400,700], italic:false, category:'sans' },
+  { label:'Anton', family:'"Anton", sans-serif', weights:[400], italic:false, category:'display' },
+  { label:'Bebas Neue', family:'"Bebas Neue", sans-serif', weights:[400], italic:false, category:'display' },
+  { label:'Archivo Black', family:'"Archivo Black", sans-serif', weights:[400], italic:false, category:'display' },
+  // Serif
+  { label:'Playfair Display', family:'"Playfair Display", serif', weights:[400,700,900], italic:true, category:'serif' },
+  { label:'DM Serif Display', family:'"DM Serif Display", serif', weights:[400], italic:true, category:'serif' },
+  { label:'Lora', family:'"Lora", serif', weights:[400,700], italic:true, category:'serif' },
+  { label:'Merriweather', family:'"Merriweather", serif', weights:[400,700], italic:true, category:'serif' },
+  { label:'Cormorant Garamond', family:'"Cormorant Garamond", serif', weights:[400,700], italic:true, category:'serif' },
+  // Display / Handwriting
+  { label:'Pacifico', family:'"Pacifico", cursive', weights:[400], italic:false, category:'handwriting' },
+  { label:'Lobster', family:'"Lobster", cursive', weights:[400], italic:false, category:'handwriting' },
+  { label:'Caveat', family:'"Caveat", cursive', weights:[400,700], italic:false, category:'handwriting' },
+  { label:'Permanent Marker', family:'"Permanent Marker", cursive', weights:[400], italic:false, category:'handwriting' },
+  { label:'Shadows Into Light', family:'"Shadows Into Light", cursive', weights:[400], italic:false, category:'handwriting' },
+  { label:'Dancing Script', family:'"Dancing Script", cursive', weights:[400,700], italic:false, category:'handwriting' },
+  { label:'Great Vibes', family:'"Great Vibes", cursive', weights:[400], italic:false, category:'handwriting' },
+  // Mono
+  { label:'JetBrains Mono', family:'"JetBrains Mono", monospace', weights:[400,700], italic:true, category:'mono' },
+  { label:'Fira Code', family:'"Fira Code", monospace', weights:[400,700], italic:false, category:'mono' },
+];
+
+function findFontByFamily(family) {
+  return TEXT_FONTS.find(f => f.family === family) || TEXT_FONTS[0];
 }
 
-function openTextModal() {
-  els.textInput.value = '';
+/* Theme-aware default text color */
+function defaultTextColor() {
+  return document.documentElement.getAttribute('data-theme') === 'dark' ? '#f6f6f4' : '#161716';
+}
+
+/* Default meta for a new text layer */
+function createDefaultTextMeta(text) {
+  return {
+    text: text || 'Text',
+    fontFamily: TEXT_FONTS[2].family,  // Inter
+    fontLabel: TEXT_FONTS[2].label,
+    size: 96,
+    color: defaultTextColor(),
+    fontWeight: 700,
+    italic: false,
+    lineHeight: 1.15,
+    letterSpacing: 0,
+    align: 'center',                  // left|center|right
+    strokeColor: '#000000',
+    strokeWidth: 0,
+    shadowColor: 'rgba(0,0,0,0.45)',
+    shadowBlur: 0,
+    shadowOffsetX: 0,
+    shadowOffsetY: 0,
+    bgColor: null,                    // null = off
+    bgPadding: 12,
+    _bounds: { w: 0, h: 0 },
+  };
+}
+
+/* Migrate legacy text meta (font/stroke fields) from earlier sessions */
+function migrateTextMeta(m) {
+  if (!m) return createDefaultTextMeta('');
+  if (m.fontFamily == null && m.font) {
+    m.fontFamily = m.font;
+    const found = TEXT_FONTS.find(f => f.family === m.font);
+    m.fontLabel = found ? found.label : 'Inter';
+  }
+  const def = createDefaultTextMeta('');
+  for (const k of Object.keys(def)) {
+    if (m[k] == null) m[k] = def[k];
+  }
+  return m;
+}
+
+/* Build the CSS font shorthand: [italic] weight size family */
+function buildCanvasFont(m) {
+  const style = m.italic ? 'italic ' : '';
+  const w = m.fontWeight || 400;
+  return `${style}${w} ${m.size}px ${m.fontFamily}`;
+}
+
+/* Measure one line of text including optional letter-spacing.
+   Returns the rendered width. */
+function _measureLineWidth(ctx, text, letterSpacing) {
+  if (!text) return 0;
+  if (!letterSpacing) return ctx.measureText(text).width;
+  let w = 0;
+  for (let i = 0; i < text.length; i++) {
+    w += ctx.measureText(text[i]).width;
+    if (i < text.length - 1) w += letterSpacing;
+  }
+  return w;
+}
+
+/* Paint one line: shadow, bg already handled by caller. Stroke if needed, then fill.
+   `x0` is the LEFT edge of the line bounding box. */
+function _paintLine(ctx, line, x0, baselineY, m) {
+  const ls = m.letterSpacing || 0;
+  if (!ls) {
+    let drawX = x0;
+    if (m.align === 'center') drawX = x0 + ctx.measureText(line).width / 2;
+    else if (m.align === 'right') drawX = x0 + ctx.measureText(line).width;
+    ctx.textAlign = m.align;
+    if (m.strokeWidth > 0) {
+      ctx.strokeText(line, drawX, baselineY);
+    }
+    ctx.fillText(line, drawX, baselineY);
+    return;
+  }
+  // Letter-spacing path: paint character by character starting at x0
+  ctx.textAlign = 'left';
+  const lineW = _measureLineWidth(ctx, line, ls);
+  let xCursor = x0;
+  if (m.align === 'center') {
+    // Compute longest line width is already done; here we receive x0 as left.
+    // We just paint left-aligned at x0.
+  }
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    const w = ctx.measureText(ch).width;
+    if (m.strokeWidth > 0) ctx.strokeText(ch, xCursor, baselineY);
+    ctx.fillText(ch, xCursor, baselineY);
+    xCursor += w + ls;
+  }
+}
+
+/* Master text renderer. Sizes layer.canvas to fit measured text + padding + stroke + shadow. */
+function renderTextLayer(layer) {
+  const m = migrateTextMeta(layer.meta);
+  layer.meta = m;
+  const lines = (m.text || '').split('\n');
+  // Measurement using a scratch context
+  const scratch = document.createElement('canvas').getContext('2d');
+  scratch.font = buildCanvasFont(m);
+  // Width
+  let maxW = 0;
+  for (const ln of lines) {
+    const w = _measureLineWidth(scratch, ln, m.letterSpacing);
+    if (w > maxW) maxW = w;
+  }
+  // Height (line-height * lines)
+  const lineH = Math.max(1, m.size * m.lineHeight);
+  const blockH = lineH * lines.length;
+  // Stroke and shadow expand bounds
+  const stroke = Math.max(0, m.strokeWidth);
+  const shadowBlur = Math.max(0, m.shadowBlur);
+  const shadowOffX = Math.abs(m.shadowOffsetX || 0);
+  const shadowOffY = Math.abs(m.shadowOffsetY || 0);
+  const shadowPad = shadowBlur + Math.max(shadowOffX, shadowOffY);
+  // Highlight bg padding
+  const bgPad = m.bgColor ? Math.max(0, m.bgPadding || 0) : 0;
+  // Outer padding margin to avoid clipping descenders
+  const safety = Math.ceil(m.size * 0.45);
+  const padX = stroke / 2 + shadowPad + bgPad + safety;
+  const padY = stroke / 2 + shadowPad + bgPad + safety;
+
+  const cw = Math.max(1, Math.ceil(maxW + 2 * padX));
+  const ch = Math.max(1, Math.ceil(blockH + 2 * padY));
+
+  // Resize canvas only when needed (avoid clearing during interaction)
+  if (layer.canvas.width !== cw) layer.canvas.width = cw;
+  if (layer.canvas.height !== ch) layer.canvas.height = ch;
+
+  const ctx = layer.canvas.getContext('2d');
+  ctx.clearRect(0, 0, cw, ch);
+  ctx.save();
+  ctx.font = buildCanvasFont(m);
+  ctx.textBaseline = 'alphabetic';
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+
+  // Box anchor: text bounding box origin in canvas coords
+  const boxLeft = padX - bgPad;
+  const boxTop = padY - bgPad;
+  const boxW = maxW + 2 * bgPad;
+  const boxH = blockH + 2 * bgPad;
+
+  // 1) Highlight background
+  if (m.bgColor) {
+    ctx.fillStyle = m.bgColor;
+    const r = Math.min(boxH * 0.18, 18);
+    if (ctx.roundRect) {
+      ctx.beginPath();
+      ctx.roundRect(boxLeft, boxTop, boxW, boxH, r);
+      ctx.fill();
+    } else {
+      ctx.fillRect(boxLeft, boxTop, boxW, boxH);
+    }
+  }
+
+  // 2) Shadow + fill in a single pass; we set shadow on context for the fill/stroke calls.
+  if (m.shadowBlur > 0 || m.shadowOffsetX !== 0 || m.shadowOffsetY !== 0) {
+    ctx.shadowColor = m.shadowColor || 'rgba(0,0,0,0.5)';
+    ctx.shadowBlur = m.shadowBlur || 0;
+    ctx.shadowOffsetX = m.shadowOffsetX || 0;
+    ctx.shadowOffsetY = m.shadowOffsetY || 0;
+  }
+
+  ctx.fillStyle = m.color || defaultTextColor();
+  ctx.strokeStyle = m.strokeColor || '#000';
+  ctx.lineWidth = stroke;
+  ctx.lineJoin = 'round';
+
+  // Baseline of first line: top + ascent. We approximate ascent = size * 0.82.
+  const ascent = m.size * 0.82;
+  for (let i = 0; i < lines.length; i++) {
+    const baselineY = padY + i * lineH + ascent;
+    // X0 = left edge of this line within the text block
+    let x0 = padX;
+    if (m.align === 'center') {
+      x0 = padX + maxW / 2 - _measureLineWidth(scratch, lines[i], m.letterSpacing) / 2;
+    } else if (m.align === 'right') {
+      x0 = padX + maxW - _measureLineWidth(scratch, lines[i], m.letterSpacing);
+    }
+    _paintLine(ctx, lines[i], x0, baselineY, m);
+    // To avoid the shadow being drawn multiple times if lines overlap
+    if (i === 0) {
+      // Clear shadow for subsequent passes (each call will draw shadow again — fine since lines don't overlap)
+    }
+  }
+  ctx.restore();
+
+  m._bounds = {
+    w: cw, h: ch,
+    textW: maxW, textH: blockH,
+    boxW, boxH, boxLeft, boxTop,
+    padX, padY,
+  };
+  // Layer canvas has been resized; recompute draw target offset for the composite.
+  // We render the text canvas centered on (layer.x, layer.y) at layer.scale.
+}
+
+/* ----------------------------------------------------------------
+   TEXT PANEL — renders ALL controls for the currently selected
+   text layer. If no text layer is active, shows Add prompt.
+   ---------------------------------------------------------------- */
+function buildTextPanel(body, actions) {
+  els.cpTitle.innerHTML = 'Text';
+  const sel = currentTextLayer();
+  if (!sel) {
+    const info = document.createElement('div');
+    info.className = 'text-empty';
+    info.innerHTML = 'Tap <strong>Add Text</strong> to place text. Each text becomes its own layer and can be moved, scaled, and rotated on the canvas.';
+    body.appendChild(info);
+    actions.innerHTML = '<button class="cp-action primary" id="addTextBtn">+ Add Text</button>';
+    $('addTextBtn').addEventListener('click', () => openTextModal());
+    return;
+  }
+  const m = migrateTextMeta(sel.meta);
+  sel.meta = m;
+
+  // Quick text content edit
+  const contentSection = makeAccordion('Content', true);
+  body.appendChild(contentSection.wrap);
+  const contentBody = contentSection.body;
+  const ta = document.createElement('textarea');
+  ta.className = 'tp-text-area';
+  ta.value = m.text;
+  ta.rows = 2;
+  ta.placeholder = 'Type text…';
+  contentBody.appendChild(ta);
+  ta.addEventListener('input', () => {
+    m.text = ta.value;
+    renderTextLayer(sel);
+    requestRender();
+    updateTextSelection();
+    pushHistoryDebounced(400);
+  });
+  // Edit in modal button
+  const editRow = document.createElement('div');
+  editRow.className = 'tp-row';
+  editRow.innerHTML = `<button class="btn" id="tpEditModalBtn" style="flex:1;">Open full editor</button>`;
+  contentBody.appendChild(editRow);
+  editRow.querySelector('#tpEditModalBtn').addEventListener('click', () => openTextModal(sel.id));
+
+  // Font section
+  const fontSection = makeAccordion('Font', true);
+  body.appendChild(fontSection.wrap);
+  buildFontControls(fontSection.body, sel);
+
+  // Layout section
+  const layoutSection = makeAccordion('Layout', false);
+  body.appendChild(layoutSection.wrap);
+  buildLayoutControls(layoutSection.body, sel);
+
+  // Color / Highlight section
+  const colorSection = makeAccordion('Color', false);
+  body.appendChild(colorSection.wrap);
+  buildColorControls(colorSection.body, sel);
+
+  // Outline section
+  const strokeSection = makeAccordion('Outline', false);
+  body.appendChild(strokeSection.wrap);
+  buildStrokeControls(strokeSection.body, sel);
+
+  // Shadow section
+  const shadowSection = makeAccordion('Shadow', false);
+  body.appendChild(shadowSection.wrap);
+  buildShadowControls(shadowSection.body, sel);
+
+  actions.innerHTML = `
+    <button class="cp-action" id="tpDuplicate" title="Duplicate text">Duplicate</button>
+    <button class="cp-action primary" id="addTextBtn">+ Add</button>
+  `;
+  $('addTextBtn').addEventListener('click', () => openTextModal());
+  $('tpDuplicate').addEventListener('click', () => {
+    duplicateLayer(sel.id);
+    renderFull();
+    pushHistory();
+    updateToolPanel();
+  });
+}
+
+function makeAccordion(title, open) {
+  const wrap = document.createElement('section');
+  wrap.className = 'text-section' + (open ? ' open' : '');
+  wrap.innerHTML = `
+    <button class="text-section-head" type="button">
+      <span>${title}</span>
+      <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+    </button>
+    <div class="text-section-body"></div>
+  `;
+  const head = wrap.querySelector('.text-section-head');
+  head.addEventListener('click', () => wrap.classList.toggle('open'));
+  return { wrap, body: wrap.querySelector('.text-section-body') };
+}
+
+function currentTextLayer() {
+  // active layer if it's a text layer, else null
+  const a = activeLayer();
+  if (a && a.type === 'text') return a;
+  if (App.textSelectionId != null) {
+    const l = findLayer(App.textSelectionId);
+    if (l && l.type === 'text') return l;
+  }
+  return null;
+}
+
+function makeNumberSlider({ label, min, max, step, value, bipolar, suffix }, onChange) {
+  const row = document.createElement('div');
+  row.className = 'slider-row';
+  row.innerHTML = `
+    <div class="slider-label">${label}</div>
+    <div class="slider-track">
+      <div class="slider-fill"></div>
+      <input type="range" min="${min}" max="${max}" step="${step||1}" value="${value}">
+      ${bipolar ? '<div class="mid-mark"></div>' : ''}
+    </div>
+    <div class="slider-value">${value}${suffix||''}</div>
+  `;
+  const input = row.querySelector('input[type=range]');
+  const fill = row.querySelector('.slider-fill');
+  const valEl = row.querySelector('.slider-value');
+  function paint() {
+    const v = +input.value;
+    const lo = +input.min, hi = +input.max;
+    const pct = (v - lo) / (hi - lo) * 100;
+    if (bipolar) {
+      const midPct = (-lo / (hi - lo)) * 100;
+      if (pct >= midPct) {
+        fill.style.left = midPct + '%';
+        fill.style.width = (pct - midPct) + '%';
+      } else {
+        fill.style.left = pct + '%';
+        fill.style.width = (midPct - pct) + '%';
+      }
+    } else {
+      fill.style.left = '0%';
+      fill.style.width = pct + '%';
+    }
+    valEl.textContent = (bipolar && v > 0 ? '+' : '') + v + (suffix||'');
+  }
+  paint();
+  input.addEventListener('input', () => {
+    paint();
+    onChange(+input.value, /*final*/ false);
+  });
+  input.addEventListener('change', () => onChange(+input.value, /*final*/ true));
+  return row;
+}
+
+function buildFontControls(body, layer) {
+  const m = layer.meta;
+
+  // Family picker
+  const famRow = document.createElement('div');
+  famRow.className = 'tp-row';
+  famRow.innerHTML = `<div class="tp-label">Family</div>`;
+  const picker = createFontPicker(m.fontFamily, (fontEntry) => {
+    m.fontFamily = fontEntry.family;
+    m.fontLabel = fontEntry.label;
+    // Coerce weight if not available in new family
+    if (!fontEntry.weights.includes(m.fontWeight)) {
+      m.fontWeight = fontEntry.weights[fontEntry.weights.length-1] || 400;
+    }
+    if (!fontEntry.italic) m.italic = false;
+    renderTextLayer(layer);
+    requestRender();
+    updateTextSelection();
+    pushHistory();
+    updateToolPanel();
+  });
+  famRow.appendChild(picker);
+  body.appendChild(famRow);
+
+  // Weight
+  const curFont = findFontByFamily(m.fontFamily);
+  const wRow = document.createElement('div');
+  wRow.className = 'tp-row';
+  wRow.innerHTML = `<div class="tp-label">Weight</div>`;
+  const wSeg = document.createElement('div');
+  wSeg.className = 'tp-seg';
+  curFont.weights.forEach(w => {
+    const b = document.createElement('button');
+    b.textContent = w;
+    if (w === m.fontWeight) b.classList.add('active');
+    b.addEventListener('click', () => {
+      m.fontWeight = w;
+      wSeg.querySelectorAll('button').forEach(x => x.classList.toggle('active', +x.textContent === w));
+      renderTextLayer(layer);
+      requestRender();
+      updateTextSelection();
+      pushHistory();
+    });
+    wSeg.appendChild(b);
+  });
+  wRow.appendChild(wSeg);
+  body.appendChild(wRow);
+
+  // Italic toggle
+  if (curFont.italic) {
+    const iRow = document.createElement('div');
+    iRow.className = 'tp-row';
+    iRow.innerHTML = `<div class="tp-label">Italic</div>`;
+    const iBtn = document.createElement('button');
+    iBtn.className = 'tp-toggle' + (m.italic ? ' on' : '');
+    iBtn.textContent = m.italic ? 'On' : 'Off';
+    iBtn.style.flex = '1';
+    iBtn.addEventListener('click', () => {
+      m.italic = !m.italic;
+      iBtn.classList.toggle('on', m.italic);
+      iBtn.textContent = m.italic ? 'On' : 'Off';
+      renderTextLayer(layer);
+      requestRender();
+      updateTextSelection();
+      pushHistory();
+    });
+    iRow.appendChild(iBtn);
+    body.appendChild(iRow);
+  }
+}
+
+function buildLayoutControls(body, layer) {
+  const m = layer.meta;
+
+  // Size
+  const sizeRow = makeNumberSlider(
+    { label: 'Size', min: 8, max: 600, value: m.size, suffix: 'px' },
+    (v, final) => {
+      m.size = v;
+      renderTextLayer(layer);
+      requestRender();
+      updateTextSelection();
+      if (final) pushHistoryDebounced(300);
+    }
+  );
+  body.appendChild(sizeRow);
+
+  // Line height
+  const lhRow = makeNumberSlider(
+    { label: 'Line Ht', min: 60, max: 240, value: Math.round(m.lineHeight*100), suffix: '%' },
+    (v, final) => {
+      m.lineHeight = v/100;
+      renderTextLayer(layer);
+      requestRender();
+      updateTextSelection();
+      if (final) pushHistoryDebounced(300);
+    }
+  );
+  body.appendChild(lhRow);
+
+  // Letter spacing
+  const lsRow = makeNumberSlider(
+    { label: 'Tracking', min: -10, max: 50, value: m.letterSpacing, bipolar: true, suffix: 'px' },
+    (v, final) => {
+      m.letterSpacing = v;
+      renderTextLayer(layer);
+      requestRender();
+      updateTextSelection();
+      if (final) pushHistoryDebounced(300);
+    }
+  );
+  body.appendChild(lsRow);
+
+  // Align
+  const aRow = document.createElement('div');
+  aRow.className = 'tp-row';
+  aRow.innerHTML = `<div class="tp-label">Align</div>`;
+  const aSeg = document.createElement('div');
+  aSeg.className = 'tp-seg';
+  const ALIGN_OPTS = [
+    { id:'left', svg:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="13" y2="12"/><line x1="3" y1="18" x2="17" y2="18"/></svg>' },
+    { id:'center', svg:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="6" y1="12" x2="18" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/></svg>' },
+    { id:'right', svg:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="11" y1="12" x2="21" y2="12"/><line x1="7" y1="18" x2="21" y2="18"/></svg>' },
+  ];
+  ALIGN_OPTS.forEach(opt => {
+    const b = document.createElement('button');
+    b.dataset.align = opt.id;
+    b.innerHTML = opt.svg;
+    if (opt.id === m.align) b.classList.add('active');
+    b.addEventListener('click', () => {
+      m.align = opt.id;
+      aSeg.querySelectorAll('button').forEach(x => x.classList.toggle('active', x.dataset.align === opt.id));
+      renderTextLayer(layer);
+      requestRender();
+      updateTextSelection();
+      pushHistory();
+    });
+    aSeg.appendChild(b);
+  });
+  aRow.appendChild(aSeg);
+  body.appendChild(aRow);
+}
+
+/* Curated swatch sets used in text panels */
+const TEXT_TEXT_COLORS = [
+  '#ffffff','#161716','#dc2626','#f59e0b','#eab308','#22c55e',
+  '#3b82f6','#0f766e','#14b8a6','#a855f7','#ec4899','#10b981',
+];
+const TEXT_BG_COLORS = [
+  '#ffffff','#000000','#0f766e','#dc2626','#f59e0b','#22c55e',
+  '#3b82f6','#a855f7','#ec4899','rgba(255,255,255,.6)','rgba(0,0,0,.6)','#fde68a',
+];
+
+function buildColorSwatchesRow({ label, swatches, includeNone, currentColor, onPick }) {
+  const row = document.createElement('div');
+  row.className = 'tp-row';
+  row.innerHTML = `<div class="tp-label">${label}</div>`;
+  const wrap = document.createElement('div');
+  wrap.className = 'tp-color-row';
+  const list = document.createElement('div');
+  list.className = 'tp-color-swatches';
+  // Preview swatch (current color)
+  const preview = document.createElement('div');
+  preview.className = 'tp-color-preview';
+  const previewFill = document.createElement('div');
+  previewFill.className = 'fill';
+  previewFill.style.background = currentColor || 'transparent';
+  preview.appendChild(previewFill);
+  wrap.appendChild(preview);
+
+  if (includeNone) {
+    const sw = document.createElement('button');
+    sw.className = 'tp-color-swatch none';
+    sw.title = 'None';
+    if (currentColor == null) sw.classList.add('active');
+    sw.addEventListener('click', () => {
+      previewFill.style.background = 'transparent';
+      list.querySelectorAll('.tp-color-swatch').forEach(x => x.classList.remove('active'));
+      sw.classList.add('active');
+      onPick(null);
+    });
+    list.appendChild(sw);
+  }
+  swatches.forEach(c => {
+    const sw = document.createElement('button');
+    sw.className = 'tp-color-swatch';
+    if (c === currentColor) sw.classList.add('active');
+    sw.style.background = c;
+    sw.addEventListener('click', () => {
+      previewFill.style.background = c;
+      list.querySelectorAll('.tp-color-swatch').forEach(x => x.classList.remove('active'));
+      sw.classList.add('active');
+      onPick(c);
+    });
+    list.appendChild(sw);
+  });
+  wrap.appendChild(list);
+  const custom = document.createElement('label');
+  custom.className = 'tp-color-custom';
+  // Convert rgba to #rrggbb fallback for input[type=color]
+  const initialHex = colorToHex(currentColor) || '#000000';
+  custom.innerHTML = `<input type="color" value="${initialHex}">`;
+  const colorInput = custom.querySelector('input');
+  colorInput.addEventListener('input', e => {
+    const v = e.target.value;
+    previewFill.style.background = v;
+    list.querySelectorAll('.tp-color-swatch').forEach(x => x.classList.remove('active'));
+    onPick(v);
+  });
+  wrap.appendChild(custom);
+  row.appendChild(wrap);
+  return row;
+}
+
+function colorToHex(c) {
+  if (!c) return null;
+  if (/^#([0-9a-f]{6}|[0-9a-f]{3})$/i.test(c)) return c.length === 4 ? '#' + c[1]+c[1]+c[2]+c[2]+c[3]+c[3] : c;
+  // Try rgba/rgb
+  const m = c.match(/rgba?\(([^)]+)\)/);
+  if (m) {
+    const parts = m[1].split(',').map(s => +s.trim());
+    const [r,g,b] = parts;
+    return '#' + [r,g,b].map(n => Math.max(0, Math.min(255, n|0)).toString(16).padStart(2,'0')).join('');
+  }
+  return null;
+}
+
+function buildColorControls(body, layer) {
+  const m = layer.meta;
+
+  // Text color row
+  body.appendChild(buildColorSwatchesRow({
+    label: 'Text',
+    swatches: TEXT_TEXT_COLORS,
+    includeNone: false,
+    currentColor: m.color,
+    onPick: (c) => {
+      m.color = c;
+      renderTextLayer(layer);
+      requestRender();
+      pushHistoryDebounced(300);
+    }
+  }));
+
+  // Highlight bg toggle row
+  const togRow = document.createElement('div');
+  togRow.className = 'tp-row';
+  togRow.innerHTML = `<div class="tp-label">Highlight</div>`;
+  const tBtn = document.createElement('button');
+  tBtn.className = 'tp-toggle' + (m.bgColor ? ' on' : '');
+  tBtn.textContent = m.bgColor ? 'On' : 'Off';
+  tBtn.style.flex = '1';
+  tBtn.addEventListener('click', () => {
+    if (m.bgColor) {
+      m.bgColor = null;
+    } else {
+      m.bgColor = TEXT_BG_COLORS[2]; // teal default
+    }
+    renderTextLayer(layer);
+    requestRender();
+    updateTextSelection();
+    pushHistory();
+    updateToolPanel();
+  });
+  togRow.appendChild(tBtn);
+  body.appendChild(togRow);
+
+  if (m.bgColor) {
+    body.appendChild(buildColorSwatchesRow({
+      label: 'Bg',
+      swatches: TEXT_BG_COLORS,
+      includeNone: false,
+      currentColor: m.bgColor,
+      onPick: (c) => {
+        m.bgColor = c;
+        renderTextLayer(layer);
+        requestRender();
+        updateTextSelection();
+        pushHistoryDebounced(300);
+      }
+    }));
+    body.appendChild(makeNumberSlider(
+      { label: 'Padding', min: 0, max: 80, value: m.bgPadding, suffix: 'px' },
+      (v, final) => {
+        m.bgPadding = v;
+        renderTextLayer(layer);
+        requestRender();
+        updateTextSelection();
+        if (final) pushHistoryDebounced(300);
+      }
+    ));
+  }
+}
+
+function buildStrokeControls(body, layer) {
+  const m = layer.meta;
+
+  body.appendChild(makeNumberSlider(
+    { label: 'Width', min: 0, max: 30, value: m.strokeWidth, suffix: 'px' },
+    (v, final) => {
+      m.strokeWidth = v;
+      renderTextLayer(layer);
+      requestRender();
+      updateTextSelection();
+      if (final) pushHistoryDebounced(300);
+    }
+  ));
+
+  body.appendChild(buildColorSwatchesRow({
+    label: 'Color',
+    swatches: TEXT_TEXT_COLORS,
+    includeNone: false,
+    currentColor: m.strokeColor,
+    onPick: (c) => {
+      m.strokeColor = c;
+      renderTextLayer(layer);
+      requestRender();
+      pushHistoryDebounced(300);
+    }
+  }));
+}
+
+function buildShadowControls(body, layer) {
+  const m = layer.meta;
+
+  body.appendChild(makeNumberSlider(
+    { label: 'Blur', min: 0, max: 100, value: m.shadowBlur, suffix: 'px' },
+    (v, final) => {
+      m.shadowBlur = v;
+      renderTextLayer(layer);
+      requestRender();
+      updateTextSelection();
+      if (final) pushHistoryDebounced(300);
+    }
+  ));
+  body.appendChild(makeNumberSlider(
+    { label: 'Offset X', min: -80, max: 80, value: m.shadowOffsetX, bipolar: true, suffix: 'px' },
+    (v, final) => {
+      m.shadowOffsetX = v;
+      renderTextLayer(layer);
+      requestRender();
+      updateTextSelection();
+      if (final) pushHistoryDebounced(300);
+    }
+  ));
+  body.appendChild(makeNumberSlider(
+    { label: 'Offset Y', min: -80, max: 80, value: m.shadowOffsetY, bipolar: true, suffix: 'px' },
+    (v, final) => {
+      m.shadowOffsetY = v;
+      renderTextLayer(layer);
+      requestRender();
+      updateTextSelection();
+      if (final) pushHistoryDebounced(300);
+    }
+  ));
+  body.appendChild(buildColorSwatchesRow({
+    label: 'Color',
+    swatches: TEXT_TEXT_COLORS,
+    includeNone: false,
+    currentColor: m.shadowColor,
+    onPick: (c) => {
+      m.shadowColor = c;
+      renderTextLayer(layer);
+      requestRender();
+      pushHistoryDebounced(300);
+    }
+  }));
+}
+
+/* ----------------------------------------------------------------
+   FONT PICKER (custom dropdown)
+   ---------------------------------------------------------------- */
+function createFontPicker(currentFamily, onPick) {
+  const wrap = document.createElement('div');
+  wrap.className = 'font-picker';
+
+  const curFont = findFontByFamily(currentFamily);
+  const trigger = document.createElement('button');
+  trigger.type = 'button';
+  trigger.className = 'font-picker-trigger';
+  trigger.innerHTML = `
+    <span class="name" style="font-family:${curFont.family};">${curFont.label}</span>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+  `;
+  wrap.appendChild(trigger);
+
+  const pop = document.createElement('div');
+  pop.className = 'font-picker-pop';
+  pop.innerHTML = `
+    <div class="font-picker-search">
+      <input type="text" placeholder="Search fonts…">
+    </div>
+    <div class="font-picker-list"></div>
+  `;
+  document.body.appendChild(pop);
+  const list = pop.querySelector('.font-picker-list');
+  const search = pop.querySelector('input');
+
+  function renderList(query) {
+    list.innerHTML = '';
+    const q = (query || '').trim().toLowerCase();
+    const items = TEXT_FONTS.filter(f => !q || f.label.toLowerCase().includes(q));
+    if (items.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'font-picker-empty';
+      empty.textContent = 'No fonts match';
+      list.appendChild(empty);
+      return;
+    }
+    items.forEach(f => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'font-picker-item' + (f.family === currentFamily ? ' active' : '');
+      b.style.fontFamily = f.family;
+      b.innerHTML = `<span>${f.label}</span><span class="label-sm">${f.category}</span>`;
+      b.addEventListener('click', () => {
+        currentFamily = f.family;
+        trigger.querySelector('.name').style.fontFamily = f.family;
+        trigger.querySelector('.name').textContent = f.label;
+        closePop();
+        onPick(f);
+      });
+      list.appendChild(b);
+    });
+  }
+  renderList('');
+
+  function openPop() {
+    pop.classList.add('open');
+    document.querySelectorAll('.font-picker-pop').forEach(p => { if (p !== pop) p.classList.remove('open'); });
+    const r = trigger.getBoundingClientRect();
+    let top = r.bottom + 6;
+    let left = r.left;
+    const maxH = Math.min(window.innerHeight * 0.6, 380);
+    pop.style.maxHeight = maxH + 'px';
+    // Flip up if no room below
+    if (top + maxH > window.innerHeight - 12) {
+      top = Math.max(8, r.top - maxH - 6);
+    }
+    if (left + 280 > window.innerWidth - 8) left = window.innerWidth - 288;
+    if (left < 8) left = 8;
+    pop.style.left = left + 'px';
+    pop.style.top = top + 'px';
+    search.value = '';
+    renderList('');
+    setTimeout(() => search.focus(), 50);
+    setTimeout(() => document.addEventListener('pointerdown', onDocDown, true), 0);
+  }
+  function closePop() {
+    pop.classList.remove('open');
+    document.removeEventListener('pointerdown', onDocDown, true);
+  }
+  function onDocDown(e) {
+    if (pop.contains(e.target) || trigger.contains(e.target)) return;
+    closePop();
+  }
+  trigger.addEventListener('click', e => {
+    e.stopPropagation();
+    if (pop.classList.contains('open')) closePop();
+    else openPop();
+  });
+  search.addEventListener('input', () => renderList(search.value));
+
+  // Clean up when wrap removed (best effort via observer)
+  const obs = new MutationObserver(() => {
+    if (!document.body.contains(wrap)) {
+      pop.remove();
+      obs.disconnect();
+    }
+  });
+  obs.observe(document.body, { childList: true, subtree: true });
+
+  return wrap;
+}
+
+/* ----------------------------------------------------------------
+   TEXT MODAL — used for creating new text AND editing existing.
+   When App.textEditingId is set, Apply updates that layer instead.
+   ---------------------------------------------------------------- */
+function openTextModal(editingLayerId) {
+  if (editingLayerId != null) {
+    const layer = findLayer(editingLayerId);
+    if (layer && layer.type === 'text') {
+      App.textEditingId = editingLayerId;
+      els.textInput.value = layer.meta.text || '';
+      // Sync the legacy font select if value matches one of the options; else leave first option
+      try {
+        const opts = [...els.fontSelect.options].map(o => o.value);
+        if (opts.includes(layer.meta.fontFamily)) {
+          els.fontSelect.value = layer.meta.fontFamily;
+        }
+      } catch (e) {}
+      els.textSize.value = layer.meta.size || 96;
+    }
+  } else {
+    App.textEditingId = null;
+    els.textInput.value = '';
+  }
   els.textInputWrap.classList.add('active');
   setTimeout(() => els.textInput.focus(), 100);
 }
-els.textCancel.addEventListener('click', () => els.textInputWrap.classList.remove('active'));
+els.textCancel.addEventListener('click', () => {
+  els.textInputWrap.classList.remove('active');
+  App.textEditingId = null;
+});
 els.textApply.addEventListener('click', () => {
-  const text = els.textInput.value.trim();
-  if (!text) {
+  const text = els.textInput.value;
+  const trimmed = text.trim();
+  // If editing an existing layer
+  if (App.textEditingId != null) {
+    const layer = findLayer(App.textEditingId);
+    App.textEditingId = null;
+    els.textInputWrap.classList.remove('active');
+    if (!layer || layer.type !== 'text') return;
+    if (!trimmed) {
+      // empty -> keep modal closed, no change
+      return;
+    }
+    layer.meta.text = text;
+    // Apply font/size from legacy modal as a convenience
+    const fam = els.fontSelect.value;
+    const sz = +els.textSize.value;
+    if (fam && fam.length) {
+      // If the chosen family matches our font list, also update fontLabel
+      const found = TEXT_FONTS.find(f => f.family === fam);
+      if (found) {
+        layer.meta.fontFamily = found.family;
+        layer.meta.fontLabel = found.label;
+      }
+    }
+    if (sz && Number.isFinite(sz)) layer.meta.size = clamp(sz, 8, 600);
+    // Update layer name
+    layer.name = trimmed.length > 20 ? trimmed.slice(0,20) + '…' : trimmed;
+    renderTextLayer(layer);
+    renderFull();
+    pushHistory();
+    updateTextSelection();
+    updateToolPanel();
+    return;
+  }
+  // Creating a new layer
+  if (!trimmed) {
     els.textInputWrap.classList.remove('active');
     return;
   }
-  // Build text layer
+  const meta = createDefaultTextMeta(text);
+  // Apply font/size from modal if present
+  const fam = els.fontSelect.value;
+  const sz = +els.textSize.value;
+  if (fam && fam.length) {
+    const found = TEXT_FONTS.find(f => f.family === fam);
+    if (found) {
+      meta.fontFamily = found.family;
+      meta.fontLabel = found.label;
+    } else {
+      meta.fontFamily = fam;
+      meta.fontLabel = (fam.split(',')[0] || fam).replace(/['"]/g,'').trim() || 'Custom';
+    }
+  }
+  if (sz && Number.isFinite(sz)) meta.size = clamp(sz, 8, 600);
   const layer = makeLayer({
-    name: text.length > 20 ? text.slice(0, 20) + '…' : text,
+    name: trimmed.length > 20 ? trimmed.slice(0,20) + '…' : trimmed,
     type: 'text',
-    canvas: createBlankLayerCanvas(),
-    meta: {
-      text,
-      font: els.fontSelect.value,
-      size: +els.textSize.value,
-      color: App.brushColor || '#000',
-      stroke: false,
-    },
+    canvas: document.createElement('canvas'),
+    meta,
   });
   renderTextLayer(layer);
   addLayer(layer);
+  App.textSelectionId = layer.id;
   els.textInputWrap.classList.remove('active');
   renderFull();
   pushHistory();
-  updateToolPanel();
+  updateTextSelection();
+  // Switch to text panel + show new layer's controls
+  if (App.activeTool !== 'text') {
+    setTool('text');
+  } else {
+    updateToolPanel();
+  }
   toast('Text added', 'success');
 });
 
-function renderTextLayer(layer) {
-  const ctx = layer.canvas.getContext('2d');
-  ctx.clearRect(0, 0, layer.canvas.width, layer.canvas.height);
-  const m = layer.meta;
-  ctx.font = `${m.size}px ${m.font}`;
-  ctx.fillStyle = m.color;
-  ctx.textBaseline = 'middle';
-  ctx.textAlign = 'center';
-  ctx.fillText(m.text, App.workW/2, App.workH/2);
+/* ----------------------------------------------------------------
+   TEXT SELECTION OVERLAY — handles the visible bounding box and
+   8 transform handles on the canvas-stage. Lives inside the
+   .canvas-stage so it scales with zoom, but handles use border-box
+   pixels relative to the layer's apparent rect.
+   ---------------------------------------------------------------- */
+function updateTextSelection() {
+  const box = els.textSelBox;
+  if (!box) return;
+  if (App.activeTool !== 'text') {
+    box.classList.remove('active');
+    return;
+  }
+  const layer = currentTextLayer();
+  if (!layer) {
+    box.classList.remove('active');
+    return;
+  }
+  const W = App.workW, H = App.workH;
+  const cw = layer.canvas.width;
+  const ch = layer.canvas.height;
+  if (!cw || !ch) {
+    box.classList.remove('active');
+    return;
+  }
+  const layerCx = W/2 + layer.x;
+  const layerCy = H/2 + layer.y;
+  const boxW = cw * layer.scale;
+  const boxH = ch * layer.scale;
+  const boxLeft = layerCx - boxW/2;
+  const boxTop = layerCy - boxH/2;
+
+  box.style.left = boxLeft + 'px';
+  box.style.top = boxTop + 'px';
+  box.style.width = boxW + 'px';
+  box.style.height = boxH + 'px';
+  box.style.transform = `rotate(${layer.rotation || 0}deg)`;
+  box.classList.add('active');
+
+  // Counter-scale handles & dashed border thickness so they stay constant on-screen.
+  const stageScale = Math.max(0.001, App.fitScale * App.zoom);
+  const invScale = 1 / stageScale;
+  // Set border thickness on frame (use inline style override)
+  const frame = box.querySelector('.text-sel-frame');
+  if (frame) {
+    frame.style.borderWidth = Math.max(0.6, 1.5 * invScale) + 'px';
+  }
+  // Resize the dashed pattern... canvas pattern only — we'll scale handle hit areas.
+  // Use width/height to keep handles visually constant
+  const handleSize = 24 * invScale;
+  const halfH = handleSize / 2;
+  const dotSize = 12 * invScale;
+  box.querySelectorAll('.text-sel-handle').forEach(h => {
+    h.style.width = handleSize + 'px';
+    h.style.height = handleSize + 'px';
+    // recenter the handle on the corner / edge midpoint
+    if (h.classList.contains('tl')) { h.style.top = -halfH + 'px'; h.style.left = -halfH + 'px'; h.style.right=''; h.style.bottom=''; h.style.transform=''; }
+    else if (h.classList.contains('tr')) { h.style.top = -halfH + 'px'; h.style.right = -halfH + 'px'; h.style.left=''; h.style.bottom=''; h.style.transform=''; }
+    else if (h.classList.contains('bl')) { h.style.bottom = -halfH + 'px'; h.style.left = -halfH + 'px'; h.style.top=''; h.style.right=''; h.style.transform=''; }
+    else if (h.classList.contains('br')) { h.style.bottom = -halfH + 'px'; h.style.right = -halfH + 'px'; h.style.top=''; h.style.left=''; h.style.transform=''; }
+    else if (h.classList.contains('tm')) { h.style.top = -halfH + 'px'; h.style.left = '50%'; h.style.transform = 'translateX(-50%)'; h.style.right=''; h.style.bottom=''; }
+    else if (h.classList.contains('bm')) { h.style.bottom = -halfH + 'px'; h.style.left = '50%'; h.style.transform = 'translateX(-50%)'; h.style.right=''; h.style.top=''; }
+    else if (h.classList.contains('lm')) { h.style.left = -halfH + 'px'; h.style.top = '50%'; h.style.transform = 'translateY(-50%)'; h.style.right=''; h.style.bottom=''; }
+    else if (h.classList.contains('rm')) { h.style.right = -halfH + 'px'; h.style.top = '50%'; h.style.transform = 'translateY(-50%)'; h.style.left=''; h.style.bottom=''; }
+    else if (h.classList.contains('rot')) {
+      h.style.top = (-46 * invScale) + 'px';
+      h.style.left = '50%';
+      h.style.transform = 'translateX(-50%)';
+      h.style.right=''; h.style.bottom='';
+    }
+    // The ::before dot scales via this CSS var; we use inline override on a child <i> element instead.
+    // Simpler: just rely on ::before being 12px native — at high zoom this is fine.
+    // We'll size with CSS variable later if needed.
+  });
+  const rotLine = box.querySelector('.text-sel-rotline');
+  if (rotLine) {
+    const h = 34 * invScale;
+    rotLine.style.height = h + 'px';
+    rotLine.style.top = -h + 'px';
+    rotLine.style.width = Math.max(1, 2 * invScale) + 'px';
+  }
+  // Apply CSS variable for the ::before dot size
+  box.style.setProperty('--handle-dot-size', (12 * invScale) + 'px');
 }
+
+/* applyStageTransform already calls updateTextSelection when present */
+
+/* ----------------------------------------------------------------
+   TEXT CANVAS INTERACTION — hit testing + drag/scale/rotate
+   Hosted by the canvas-stage's pointerdown handlers in text mode.
+   ---------------------------------------------------------------- */
+(function setupTextInteraction() {
+  const wrap = els.canvasWrap;
+  let mode = null;      // 'move' | 'scale-<handle>' | 'rotate' | 'hit'
+  let handle = null;
+  let startState = null;
+  let layer = null;
+  let lastTapTime = 0;
+  let lastTapId = null;
+  // Touch-friendly hit test: convert pointer client coord to layer-local coord
+  function clientToWork(e) {
+    const r = els.canvasStage.getBoundingClientRect();
+    return {
+      x: ((e.clientX - r.left) / r.width) * App.workW,
+      y: ((e.clientY - r.top) / r.height) * App.workH,
+    };
+  }
+  function getStageScale() {
+    const r = els.canvasStage.getBoundingClientRect();
+    return r.width / App.workW;
+  }
+
+  // Hit test: figure out which text layer a point falls into.
+  // Iterates topmost first; uses rotated bounding box.
+  function hitTestTextLayer(pt) {
+    for (let i = App.layers.length - 1; i >= 0; i--) {
+      const l = App.layers[i];
+      if (l.type !== 'text') continue;
+      if (!l.visible) continue;
+      const cw = l.canvas.width;
+      const ch = l.canvas.height;
+      const cx = App.workW/2 + l.x;
+      const cy = App.workH/2 + l.y;
+      // Translate point to layer-centered frame
+      const dx = pt.x - cx;
+      const dy = pt.y - cy;
+      // Inverse rotate
+      const ang = -(l.rotation || 0) * Math.PI / 180;
+      const lx = dx * Math.cos(ang) - dy * Math.sin(ang);
+      const ly = dx * Math.sin(ang) + dy * Math.cos(ang);
+      // Compare to scaled bounds
+      const halfW = cw * l.scale / 2;
+      const halfH = ch * l.scale / 2;
+      if (Math.abs(lx) <= halfW && Math.abs(ly) <= halfH) return l;
+    }
+    return null;
+  }
+
+  function handleDown(e) {
+    if (App.activeTool !== 'text') return;
+    // Ignore if pointer started on a control surface
+    if (e.target.closest('.text-input-wrap, .control-panel, .tool-bar, .canvas-hud, .modal, .sheet')) return;
+    // Identify whether this is on a handle, on the box frame, or on canvas
+    const handleEl = e.target.closest('.text-sel-handle');
+    const frameEl = e.target.closest('.text-sel-frame');
+    layer = currentTextLayer();
+    const pt = clientToWork(e);
+
+    if (handleEl && layer) {
+      e.preventDefault(); e.stopPropagation();
+      wrap.setPointerCapture(e.pointerId);
+      handle = handleEl.dataset.handle;
+      mode = (handle === 'rot') ? 'rotate' : 'scale';
+      startState = {
+        x: layer.x, y: layer.y, scale: layer.scale, rotation: layer.rotation,
+        pointer: pt,
+        canvasW: layer.canvas.width, canvasH: layer.canvas.height,
+        centerWork: { x: App.workW/2 + layer.x, y: App.workH/2 + layer.y },
+      };
+      return;
+    }
+    if (frameEl && layer) {
+      e.preventDefault(); e.stopPropagation();
+      wrap.setPointerCapture(e.pointerId);
+      mode = 'move';
+      startState = { x: layer.x, y: layer.y, pointer: pt };
+      // Double-tap detection on frame
+      const now = Date.now();
+      if (now - lastTapTime < 320 && lastTapId === layer.id) {
+        mode = null;
+        openTextModal(layer.id);
+        return;
+      }
+      lastTapTime = now;
+      lastTapId = layer.id;
+      return;
+    }
+    // Otherwise, hit-test text layers
+    const hit = hitTestTextLayer(pt);
+    if (hit) {
+      e.preventDefault(); e.stopPropagation();
+      wrap.setPointerCapture(e.pointerId);
+      // Double-tap detection
+      const now = Date.now();
+      const isDoubleTap = (now - lastTapTime < 320 && lastTapId === hit.id);
+      lastTapTime = now;
+      lastTapId = hit.id;
+      // Select this layer
+      App.textSelectionId = hit.id;
+      setActiveLayer(hit.id);
+      layer = hit;
+      updateTextSelection();
+      updateToolPanel();
+      if (isDoubleTap) {
+        mode = null;
+        openTextModal(hit.id);
+        return;
+      }
+      mode = 'move';
+      startState = { x: layer.x, y: layer.y, pointer: pt };
+    } else {
+      // Tap on empty area — deselect
+      e.preventDefault();
+      App.textSelectionId = null;
+      // Keep layer selection but hide overlay box
+      updateTextSelection();
+    }
+  }
+  function handleMove(e) {
+    if (!mode || !layer) return;
+    e.preventDefault();
+    const pt = clientToWork(e);
+    if (mode === 'move') {
+      layer.x = startState.x + (pt.x - startState.pointer.x);
+      layer.y = startState.y + (pt.y - startState.pointer.y);
+      requestRender();
+      updateTextSelection();
+    } else if (mode === 'rotate') {
+      // Angle from center to current point
+      const cx = startState.centerWork.x;
+      const cy = startState.centerWork.y;
+      const ang = Math.atan2(pt.y - cy, pt.x - cx) * 180 / Math.PI;
+      // The rotation handle is "above" the box (initial angle = -90deg relative to center)
+      // Compute initial pointer angle and use delta from that
+      if (startState.initialAng == null) {
+        startState.initialAng = Math.atan2(startState.pointer.y - cy, startState.pointer.x - cx) * 180 / Math.PI;
+      }
+      let delta = ang - startState.initialAng;
+      let newRot = startState.rotation + delta;
+      // Shift-key snaps to 15deg
+      if (e.shiftKey) newRot = Math.round(newRot / 15) * 15;
+      layer.rotation = newRot;
+      requestRender();
+      updateTextSelection();
+    } else if (mode === 'scale') {
+      // Compute layer-local pointer offset (un-rotate)
+      const cx = startState.centerWork.x;
+      const cy = startState.centerWork.y;
+      const ang = -(startState.rotation || 0) * Math.PI / 180;
+      const dx = pt.x - cx;
+      const dy = pt.y - cy;
+      const lx = dx * Math.cos(ang) - dy * Math.sin(ang);
+      const ly = dx * Math.sin(ang) + dy * Math.cos(ang);
+      const halfW0 = startState.canvasW * startState.scale / 2;
+      const halfH0 = startState.canvasH * startState.scale / 2;
+      // Each handle adjusts a different dimension; we keep aspect for corners,
+      // and we only modify scale (not separate x/y scales) because layers have a single scale.
+      // For corner handles: scale = max(|lx|/halfW0_orig, |ly|/halfH0_orig)
+      // For mid handles, use a single axis but still keep aspect.
+      const halfW = startState.canvasW / 2;
+      const halfH = startState.canvasH / 2;
+      let newScale = startState.scale;
+      switch (handle) {
+        case 'tl': case 'tr': case 'bl': case 'br': {
+          const sx = Math.abs(lx) / halfW;
+          const sy = Math.abs(ly) / halfH;
+          newScale = Math.max(sx, sy);
+          break;
+        }
+        case 'tm': case 'bm': {
+          newScale = Math.abs(ly) / halfH;
+          break;
+        }
+        case 'lm': case 'rm': {
+          newScale = Math.abs(lx) / halfW;
+          break;
+        }
+      }
+      newScale = clamp(newScale, 0.05, 12);
+      layer.scale = newScale;
+      requestRender();
+      updateTextSelection();
+    }
+  }
+  function handleEnd(e) {
+    if (mode && (mode === 'move' || mode === 'rotate' || mode === 'scale')) {
+      pushHistory();
+    }
+    mode = null;
+    handle = null;
+    startState = null;
+  }
+  // Use capture so we beat the gesture handlers
+  wrap.addEventListener('pointerdown', handleDown, true);
+  wrap.addEventListener('pointermove', handleMove, true);
+  wrap.addEventListener('pointerup', handleEnd, true);
+  wrap.addEventListener('pointercancel', handleEnd, true);
+})();
 
 /* ================================================================
    LAYERS PANEL
@@ -4184,9 +5742,11 @@ document.querySelectorAll('.sheet [data-action]').forEach(b => {
     else if (a === 'discard') {
       App.layers = [];
       App.activeLayerId = null;
+      App.textSelectionId = null;
       App.history = [];
       App.historyIndex = -1;
       els.welcome.classList.remove('hidden');
+      updateTextSelection();
     }
   });
 });
@@ -4460,6 +6020,32 @@ document.addEventListener('keydown', e => {
 /* ================================================================
    INIT
    ================================================================ */
+// Populate legacy font select with our curated TEXT_FONTS list
+(function initFontSelect() {
+  if (!els.fontSelect) return;
+  els.fontSelect.innerHTML = '';
+  TEXT_FONTS.forEach(f => {
+    const opt = document.createElement('option');
+    opt.value = f.family;
+    opt.textContent = f.label;
+    opt.style.fontFamily = f.family;
+    els.fontSelect.appendChild(opt);
+  });
+  // Default to Inter
+  const inter = TEXT_FONTS.find(f => f.label === 'Inter');
+  if (inter) els.fontSelect.value = inter.family;
+})();
+
+// Re-render existing text layers when theme changes so default colors track
+(function watchTheme() {
+  const observer = new MutationObserver(() => {
+    // No-op for current text layers: their meta.color is captured at creation.
+    // But we re-render selection so dashed border picks up new theme color.
+    updateTextSelection();
+  });
+  observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+})();
+
 updateToolPanel();
 
 </script>
