@@ -1059,19 +1059,33 @@ a{color:var(--primary);}
 .text-sel-handle.bm{bottom:-12px;left:50%;transform:translateX(-50%);cursor:ns-resize;}
 .text-sel-handle.lm{left:-12px;top:50%;transform:translateY(-50%);cursor:ew-resize;}
 .text-sel-handle.rm{right:-12px;top:50%;transform:translateY(-50%);cursor:ew-resize;}
-.text-sel-handle.rot{
-  top:-46px;left:50%;transform:translateX(-50%);cursor:grab;
-}
-.text-sel-handle.rot::before{
-  background:var(--primary);border-color:#fff;
-  width:14px;height:14px;
-}
-.text-sel-handle.rot:active{cursor:grabbing;}
-.text-sel-rotline{
-  position:absolute;left:50%;top:-34px;
-  width:2px;height:34px;background:var(--primary);
+/* Dedicated rotation pin: a clearly distinct circular target floating above
+ * the top edge with a curved-arrow rotation glyph. It is the ONLY rotation
+ * affordance; the body/frame moves the layer and the 8 handles scale.
+ * Hit target stays >=28px for touch. */
+.text-sel-rotpin{
+  position:absolute;top:-44px;left:50%;
   transform:translateX(-50%);
-  pointer-events:none;opacity:.6;
+  width:32px;height:32px;
+  display:flex;align-items:center;justify-content:center;
+  background:var(--primary);
+  border:2px solid #fff;
+  border-radius:50%;
+  box-shadow:0 2px 6px rgba(0,0,0,.32);
+  color:#fff;
+  pointer-events:auto;cursor:grab;
+  touch-action:none;
+  z-index:2;
+}
+.text-sel-rotpin:hover{transform:translateX(-50%) scale(1.06);}
+.text-sel-rotpin:active{cursor:grabbing;}
+.text-sel-rotpin svg{width:18px;height:18px;display:block;pointer-events:none;}
+.text-sel-rotline{
+  position:absolute;left:50%;top:-28px;
+  width:2px;height:28px;background:var(--primary);
+  transform:translateX(-50%);
+  pointer-events:none;opacity:.7;
+  z-index:1;
 }
 /* (text-mode-hint banner removed; replaced by a small lock badge in cpTitle) */
 
@@ -3700,6 +3714,16 @@ function restoreFromSnap(snap) {
   if (snap.framePreset != null) App.framePreset = snap.framePreset;
   if (snap.frameWidthPct != null) App.frameWidthPct = snap.frameWidthPct;
   if (snap.frameColor != null) App.frameColor = snap.frameColor;
+  // Drop any live Color Replace preview cache — its baseline pixels no longer
+  // match the layer state we're restoring to.
+  if (App.colorReplace) {
+    App.colorReplace.previewOrigin = null;
+    App.colorReplace.previewLayerId = null;
+  }
+  if (typeof _crPreviewRAF !== 'undefined' && _crPreviewRAF) {
+    cancelAnimationFrame(_crPreviewRAF);
+    _crPreviewRAF = 0;
+  }
   App.canvas.width = App.workW;
   App.canvas.height = App.workH;
   App.composite.width = App.workW;
@@ -3851,6 +3875,11 @@ function setTool(tool) {
   // Cancel any in-progress crop when switching off
   if (tool !== 'crop') {
     App.cropRect = null;
+  }
+  // Switching tools while a Color Replace preview is live -> revert it.
+  if (tool !== 'effect' && App.colorReplace && App.colorReplace.previewOrigin) {
+    exitColorReplaceMode();
+    App.activeEffectExtra = null;
   }
   // Cancel color replace pick mode
   if (App.colorReplace) App.colorReplace.pickingSource = false;
@@ -4128,12 +4157,16 @@ function formatValue(v, bipolar) {
 
 function setupSlider(row, meta, opts) {
   // meta: { id, min, max, bipolar, defaultValue, suffix }
-  // opts: { onInput, onCommit, onChange? }
+  // opts: { onInput, onCommit, onChange?, skipHistory? }
+  //   skipHistory: when true, do not call pushHistoryDebounced/pushHistory
+  //   automatically — the caller manages history (used by non-destructive
+  //   previews such as Color Replace, which commit only on Apply).
   const input = row.querySelector('input[type=range]');
   const fill = row.querySelector('.slider-fill');
   const valEl = row.querySelector('.slider-value');
   const defaultValue = meta.defaultValue != null ? meta.defaultValue : (meta.bipolar ? 0 : meta.min);
   const suffix = meta.suffix || '';
+  const skipHistory = !!(opts && opts.skipHistory);
 
   function updateUI() {
     const v = +input.value;
@@ -4167,7 +4200,7 @@ function setupSlider(row, meta, opts) {
     // commit at full res
     requestRender();
     if (opts.onCommit) opts.onCommit(+input.value);
-    pushHistoryDebounced(300);
+    if (!skipHistory) pushHistoryDebounced(300);
   }
   input.addEventListener('pointerup', endPreview);
   input.addEventListener('pointercancel', endPreview);
@@ -4188,7 +4221,7 @@ function setupSlider(row, meta, opts) {
       requestRender();
     }
     if (opts.onCommit) opts.onCommit(+input.value);
-    pushHistoryDebounced(200);
+    if (!skipHistory) pushHistoryDebounced(200);
   });
 
   // Double-tap on slider thumb resets to default
@@ -4200,7 +4233,7 @@ function setupSlider(row, meta, opts) {
       if (opts.onInput) opts.onInput(defaultValue);
       if (opts.onCommit) opts.onCommit(defaultValue);
       updateUI();
-      pushHistory();
+      if (!skipHistory) pushHistory();
       lastTap = 0;
     } else {
       lastTap = now;
@@ -4212,7 +4245,7 @@ function setupSlider(row, meta, opts) {
     if (opts.onInput) opts.onInput(defaultValue);
     if (opts.onCommit) opts.onCommit(defaultValue);
     updateUI();
-    pushHistory();
+    if (!skipHistory) pushHistory();
   });
 
   return { input, updateUI };
@@ -8797,13 +8830,14 @@ function previewColorReplace() {
 
 /* Commit the live-preview state into the base layer (Apply path).
  * Caller has been live-rendering already, so the canvas is already correct —
- * we just drop the cache and snapshot history. */
+ * we just drop the cache and snapshot history. We force one final synchronous
+ * preview-render with the current params so that anything pending in the rAF
+ * queue is materialized before we drop the cache. */
 function commitColorReplacePreview() {
   const cr = App.colorReplace;
   if (!cr.previewOrigin) return false;
-  // Cancel any pending preview tick; do a final at-rest render to be safe.
   if (_crPreviewRAF) { cancelAnimationFrame(_crPreviewRAF); _crPreviewRAF = 0; }
-  _crRunPreviewNow.call(null);
+  _crRunPreviewNow();
   cr.previewOrigin = null;
   cr.previewLayerId = null;
   pushHistory();
@@ -8998,7 +9032,12 @@ function buildEffectExtras(body) {
   tiles.querySelectorAll('[data-extra]').forEach(t => {
     t.addEventListener('click', () => {
       const k = t.dataset.extra;
-      App.activeEffectExtra = (App.activeEffectExtra === k) ? null : k;
+      const nextExtra = (App.activeEffectExtra === k) ? null : k;
+      // Leaving colorReplace without an explicit Apply -> revert preview.
+      if (App.activeEffectExtra === 'colorReplace' && nextExtra !== 'colorReplace') {
+        exitColorReplaceMode();
+      }
+      App.activeEffectExtra = nextExtra;
       updateToolPanel();
     });
   });
@@ -9145,6 +9184,7 @@ function buildColorReplaceControls() {
       App.colorReplace.dstAlpha = clamp(v / 100, 0, 1);
       previewColorReplace();
     },
+    skipHistory: true, // non-destructive preview; history captured on Apply
   });
 
   // Tolerance
@@ -9162,6 +9202,7 @@ function buildColorReplaceControls() {
       App.colorReplace.tolerance = v;
       previewColorReplace();
     },
+    skipHistory: true, // non-destructive preview; history captured on Apply
   });
 
   // Apply / Cancel — Apply commits the live preview as a single history entry,
@@ -9227,14 +9268,30 @@ function buildBgRemoveControls() {
     const x = Math.round(((e.clientX - r.left) / r.width) * App.workW);
     const y = Math.round(((e.clientY - r.top) / r.height) * App.workH);
     if (x < 0 || y < 0 || x >= App.workW || y >= App.workH) return;
-    // Sample composited canvas
+    // Sample from the cached preview-origin pixels if a live preview is active
+    // (otherwise the user would sample post-replace pixels and feedback-loop).
+    // Falls back to the composited display canvas otherwise.
     try {
-      const data = App.ctx.getImageData(x, y, 1, 1).data;
-      const hex = rgbToHex(data[0], data[1], data[2]);
+      let hex;
+      const cr = App.colorReplace;
+      if (cr.previewOrigin && cr.previewW > 0 && cr.previewH > 0) {
+        // Translate from displayed canvas coords to base-layer coords. The
+        // base layer canvas is workW x workH like the display, so the index
+        // arithmetic is direct.
+        const sx = Math.max(0, Math.min(cr.previewW - 1, x));
+        const sy = Math.max(0, Math.min(cr.previewH - 1, y));
+        const idx = (sy * cr.previewW + sx) * 4;
+        hex = rgbToHex(cr.previewOrigin[idx], cr.previewOrigin[idx + 1], cr.previewOrigin[idx + 2]);
+      } else {
+        const data = App.ctx.getImageData(x, y, 1, 1).data;
+        hex = rgbToHex(data[0], data[1], data[2]);
+      }
       App.colorReplace.src = hex;
       App.colorReplace.pickingSource = false;
       if (els.eyedropperHint) els.eyedropperHint.classList.remove('show');
       updateToolPanel();
+      // After rebuilding the panel, fire a live preview reflecting the new src.
+      previewColorReplace();
       toast('Picked ' + hex.toUpperCase(), 'success');
     } catch (err) {
       console.error(err);
