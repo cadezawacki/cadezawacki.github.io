@@ -2092,8 +2092,15 @@ const App = {
   colorReplace: {
     src: '#ff0000',
     dst: '#00aaff',
+    dstAlpha: 1.0,         // replacement alpha 0..1 (1 = opaque replace, 0 = erase matched)
     tolerance: 50,
     pickingSource: false,  // eyedropper mode flag
+    // Live-preview cache (non-destructive). When non-null, the base layer's
+    // current pixels reflect a *preview* derived from these original bytes.
+    previewOrigin: null,   // Uint8ClampedArray | null
+    previewW: 0,
+    previewH: 0,
+    previewLayerId: null,  // id of the layer the cache belongs to
   },
   activeEffectExtra: null, // 'tint' | 'colorReplace' | 'bgRemove' | null
 
@@ -2464,7 +2471,11 @@ function initFromImage(img) {
   App.framePreset = 'none';
   App.colorOverlay = { color: '#14b8a6', strength: 0, blendMode: 'overlay' };
   App.activeEffectExtra = null;
-  if (App.colorReplace) App.colorReplace.pickingSource = false;
+  if (App.colorReplace) {
+    App.colorReplace.pickingSource = false;
+    App.colorReplace.previewOrigin = null;
+    App.colorReplace.previewLayerId = null;
+  }
   App.nextLayerId = 1;
 
   // Create background layer
@@ -3256,15 +3267,43 @@ function drawBaseLayer(target, tctx, layer, W, H, scale) {
   applyEffectsToImageData(imgData, App.effects, App.adjustments, { skipExpensive: previewMode });
   tx.putImageData(imgData, 0, 0);
 
-  // 3b) Color overlay (tint) — applied via blend mode on top of the base pixels
+  // 3b) Color overlay (tint) — applied via blend mode on top of the base pixels.
+  // Crucially: must respect base alpha so fully-transparent pixels stay transparent
+  // (e.g., after Background Removal). fillRect with a blend mode paints into every
+  // pixel including alpha=0 regions, so we snapshot the pre-tint alpha and restore
+  // it after the fill. We also blend the tint contribution toward 0 in proportion
+  // to the source alpha for semi-transparent pixels, which gives a natural fade.
   const co = App.colorOverlay;
   if (co && co.strength > 0) {
+    // Snapshot alpha + RGB before tint so we can restore on transparent pixels.
+    const preTint = tx.getImageData(0, 0, W, H);
     tx.save();
     tx.globalAlpha = clamp(co.strength / 100, 0, 1);
     tx.globalCompositeOperation = co.blendMode || 'overlay';
     tx.fillStyle = co.color || '#ffffff';
     tx.fillRect(0, 0, W, H);
     tx.restore();
+    const postTint = tx.getImageData(0, 0, W, H);
+    const preD = preTint.data, postD = postTint.data;
+    for (let i = 0; i < preD.length; i += 4) {
+      const srcA = preD[i + 3];
+      if (srcA === 0) {
+        // Fully transparent: erase any tint that bled in.
+        postD[i] = 0; postD[i + 1] = 0; postD[i + 2] = 0; postD[i + 3] = 0;
+      } else if (srcA < 255) {
+        // Semi-transparent: scale the tint contribution by alpha (smooth edges
+        // get a proportionally lighter tint), and restore the original alpha.
+        const a = srcA / 255;
+        postD[i]     = Math.round(preD[i]     * (1 - a) + postD[i]     * a);
+        postD[i + 1] = Math.round(preD[i + 1] * (1 - a) + postD[i + 1] * a);
+        postD[i + 2] = Math.round(preD[i + 2] * (1 - a) + postD[i + 2] * a);
+        postD[i + 3] = srcA;
+      } else {
+        // Fully opaque: alpha is unchanged (already 255 in postD as well).
+        postD[i + 3] = 255;
+      }
+    }
+    tx.putImageData(postTint, 0, 0);
   }
 
   // 4) Apply mask if any
@@ -6921,6 +6960,8 @@ document.querySelectorAll('.sheet [data-action]').forEach(b => {
       App.framePreset = 'none';
       App.colorOverlay = { color: '#14b8a6', strength: 0, blendMode: 'overlay' };
       App.colorReplace.pickingSource = false;
+      App.colorReplace.previewOrigin = null;
+      App.colorReplace.previewLayerId = null;
       App.activeEffectExtra = null;
       App.history = [];
       App.historyIndex = -1;
@@ -8617,9 +8658,69 @@ function buildFramePanel(body, actions) {
 
 /* Apply color overlay (tint) — already integrated in drawBaseLayer. */
 
-/* Color Replace: bake into the BASE LAYER. Walks pixels and replaces colors
- * within HSL tolerance. */
-function applyColorReplace(srcHex, dstHex, tolerance) {
+/* Color Replace — core pixel pass. Operates on an ImageData reading source
+ * bytes from `sourceData` (typed array) and writing results back to imgData.
+ * This split lets us run repeatedly against a cached "preview origin" without
+ * mutating it (so the result is always derived from the same baseline pixels
+ * — non-destructive preview).
+ *
+ * Replacement-alpha model (chosen):
+ *   When a pixel matches the source color, its RGB is always replaced with the
+ *   computed destination RGB. The OUTPUT ALPHA is interpolated:
+ *     outA = srcA * dstAlpha
+ *   So dstAlpha = 1.0 -> same alpha as before (today's behavior, full replace).
+ *      dstAlpha = 0.0 -> matched pixels become fully transparent (erase color).
+ *      dstAlpha = 0.5 -> matched pixels keep half their original opacity.
+ *   This is the cleaner "erase-this-color" model rather than blending RGB toward
+ *   the previous value, and it matches what users intuitively expect when they
+ *   drag a transparency slider on the replacement swatch.
+ *
+ * `sourceData` defaults to imgData.data, allowing in-place use when no cache is
+ * needed (e.g., the bake-on-Apply path).
+ */
+function performColorReplaceOnImageData(imgData, srcHex, dstHex, tolerance, dstAlpha, sourceData) {
+  const d = imgData.data;
+  const sd = sourceData || d;
+  const src = hexToRgb(srcHex);
+  const dst = hexToRgb(dstHex);
+  if (!src || !dst) return false;
+  const srcHSL = rgbToHsl(src.r, src.g, src.b);
+  const tol = clamp(tolerance, 0, 255);
+  const hueTol = (tol / 255) * 360 * 0.5;
+  const lTol   = (tol / 255) * 0.6;
+  const sTol   = (tol / 255) * 0.9;
+  const dstHSL = rgbToHsl(dst.r, dst.g, dst.b);
+  const da = clamp(dstAlpha == null ? 1 : dstAlpha, 0, 1);
+  const len = sd.length;
+  for (let i = 0; i < len; i += 4) {
+    const sr = sd[i], sg = sd[i+1], sb = sd[i+2], sa = sd[i+3];
+    const hsl = rgbToHsl(sr, sg, sb);
+    let dh = Math.abs(hsl[0] - srcHSL[0]);
+    if (dh > 180) dh = 360 - dh;
+    const ds = Math.abs(hsl[1] - srcHSL[1]);
+    const dl = Math.abs(hsl[2] - srcHSL[2]);
+    if (dh <= hueTol && ds <= sTol && dl <= lTol) {
+      const targetL = clamp(dstHSL[2] + (hsl[2] - srcHSL[2]), 0, 1);
+      const targetS = clamp(dstHSL[1] * (1 - 0.2) + hsl[1] * 0.2, 0, 1);
+      const rgb = hslToRgb(dstHSL[0], targetS, targetL);
+      d[i]   = rgb[0];
+      d[i+1] = rgb[1];
+      d[i+2] = rgb[2];
+      d[i+3] = Math.round(sa * da);
+    } else if (sd !== d) {
+      // Carry through unchanged pixels when sourcing from a separate buffer.
+      d[i]   = sr;
+      d[i+1] = sg;
+      d[i+2] = sb;
+      d[i+3] = sa;
+    }
+  }
+  return true;
+}
+
+/* Color Replace: bake into the BASE LAYER (one-shot, no preview cache).
+ * Used by Apply when no preview is active. */
+function applyColorReplace(srcHex, dstHex, tolerance, dstAlpha) {
   const bg = backgroundLayer();
   if (!bg) return;
   loading(true, 'Replacing color…');
@@ -8627,35 +8728,9 @@ function applyColorReplace(srcHex, dstHex, tolerance) {
     const ctx = bg.canvas.getContext('2d');
     const w = bg.canvas.width, h = bg.canvas.height;
     const img = ctx.getImageData(0, 0, w, h);
-    const d = img.data;
-    const src = hexToRgb(srcHex);
-    const dst = hexToRgb(dstHex);
-    if (!src || !dst) { loading(false); return; }
-    const srcHSL = rgbToHsl(src.r, src.g, src.b);
-    const tol = clamp(tolerance, 0, 255);
-    // Tolerance combines hue + lightness + saturation
-    const hueTol = (tol / 255) * 360 * 0.5;     // up to 180deg hue range
-    const lTol = (tol / 255) * 0.6;             // up to 60% lightness range
-    const sTol = (tol / 255) * 0.9;             // up to 90% saturation range
-    const dstHSL = rgbToHsl(dst.r, dst.g, dst.b);
-    for (let i = 0; i < d.length; i += 4) {
-      const r = d[i], g = d[i+1], b = d[i+2];
-      const hsl = rgbToHsl(r, g, b);
-      // Hue diff with wrap
-      let dh = Math.abs(hsl[0] - srcHSL[0]);
-      if (dh > 180) dh = 360 - dh;
-      const ds = Math.abs(hsl[1] - srcHSL[1]);
-      const dl = Math.abs(hsl[2] - srcHSL[2]);
-      if (dh <= hueTol && ds <= sTol && dl <= lTol) {
-        // Compute output color: preserve source lightness adjustment relative to srcHSL.
-        const targetL = clamp(dstHSL[2] + (hsl[2] - srcHSL[2]), 0, 1);
-        const targetS = clamp(dstHSL[1] * (1 - 0.2) + hsl[1] * 0.2, 0, 1);
-        const rgb = hslToRgb(dstHSL[0], targetS, targetL);
-        d[i]   = rgb[0];
-        d[i+1] = rgb[1];
-        d[i+2] = rgb[2];
-        // leave alpha alone
-      }
+    if (!performColorReplaceOnImageData(img, srcHex, dstHex, tolerance, dstAlpha)) {
+      loading(false);
+      return;
     }
     ctx.putImageData(img, 0, 0);
     renderFull();
@@ -8663,6 +8738,108 @@ function applyColorReplace(srcHex, dstHex, tolerance) {
     loading(false);
     toast('Color replaced', 'success');
   }, 30);
+}
+
+/* ----- Color Replace LIVE PREVIEW ----------------------------------
+ * `App.colorReplace.previewOrigin` caches the BASE LAYER's pixels at the
+ * moment the user enters the colorReplace tile (or first picks/changes a
+ * relevant parameter). All preview renders derive from that cache, so the
+ * operation is non-destructive: Cancel restores it, Apply commits it.
+ *
+ * Throttling: previewColorReplace() coalesces rapid calls (slider drag) into
+ * a single rAF tick. The internal `_crPreviewRAF` flag tracks the pending
+ * frame so multiple onInput events collapse to one repaint. */
+let _crPreviewRAF = 0;
+
+function ensureColorReplacePreviewOrigin() {
+  const cr = App.colorReplace;
+  const bg = backgroundLayer();
+  if (!bg) return false;
+  if (cr.previewOrigin && cr.previewLayerId === bg.id
+      && cr.previewW === bg.canvas.width && cr.previewH === bg.canvas.height) {
+    return true; // cache is fresh
+  }
+  const ctx = bg.canvas.getContext('2d');
+  const w = bg.canvas.width, h = bg.canvas.height;
+  const img = ctx.getImageData(0, 0, w, h);
+  // Make an immutable-ish copy so subsequent writes to the base canvas
+  // don't aliased-corrupt our baseline.
+  cr.previewOrigin = new Uint8ClampedArray(img.data);
+  cr.previewW = w;
+  cr.previewH = h;
+  cr.previewLayerId = bg.id;
+  return true;
+}
+
+function _crRunPreviewNow() {
+  _crPreviewRAF = 0;
+  const cr = App.colorReplace;
+  if (!cr.previewOrigin) return;
+  const bg = backgroundLayer();
+  if (!bg || bg.id !== cr.previewLayerId) return;
+  const ctx = bg.canvas.getContext('2d');
+  const w = bg.canvas.width, h = bg.canvas.height;
+  if (w !== cr.previewW || h !== cr.previewH) return;
+  // Build an ImageData backed by a fresh buffer, then run replace using the
+  // cached origin as the source.
+  const out = ctx.createImageData(w, h);
+  performColorReplaceOnImageData(out, cr.src, cr.dst, cr.tolerance, cr.dstAlpha, cr.previewOrigin);
+  ctx.putImageData(out, 0, 0);
+  renderFull();
+}
+
+function previewColorReplace() {
+  if (App.activeEffectExtra !== 'colorReplace') return;
+  if (!ensureColorReplacePreviewOrigin()) return;
+  if (_crPreviewRAF) return; // coalesce to next frame (~rAF cadence, ≤60fps)
+  _crPreviewRAF = requestAnimationFrame(_crRunPreviewNow);
+}
+
+/* Commit the live-preview state into the base layer (Apply path).
+ * Caller has been live-rendering already, so the canvas is already correct —
+ * we just drop the cache and snapshot history. */
+function commitColorReplacePreview() {
+  const cr = App.colorReplace;
+  if (!cr.previewOrigin) return false;
+  // Cancel any pending preview tick; do a final at-rest render to be safe.
+  if (_crPreviewRAF) { cancelAnimationFrame(_crPreviewRAF); _crPreviewRAF = 0; }
+  _crRunPreviewNow.call(null);
+  cr.previewOrigin = null;
+  cr.previewLayerId = null;
+  pushHistory();
+  return true;
+}
+
+/* Restore the cached origin pixels back to the base layer canvas; drop cache.
+ * No history entry — the user explicitly discarded their preview. */
+function cancelColorReplacePreview() {
+  const cr = App.colorReplace;
+  if (!cr.previewOrigin) return false;
+  if (_crPreviewRAF) { cancelAnimationFrame(_crPreviewRAF); _crPreviewRAF = 0; }
+  const bg = App.layers.find(l => l.id === cr.previewLayerId);
+  if (bg && bg.canvas.width === cr.previewW && bg.canvas.height === cr.previewH) {
+    const ctx = bg.canvas.getContext('2d');
+    const img = ctx.createImageData(cr.previewW, cr.previewH);
+    img.data.set(cr.previewOrigin);
+    ctx.putImageData(img, 0, 0);
+    renderFull();
+  }
+  cr.previewOrigin = null;
+  cr.previewLayerId = null;
+  return true;
+}
+
+/* Auto-exit helper: commit-or-cancel when leaving the Color Replace UI.
+ * Spec: "leaving the panel without applying -> restore" — so default is cancel.
+ */
+function exitColorReplaceMode(opts) {
+  const cr = App.colorReplace;
+  if (!cr || !cr.previewOrigin) return;
+  if (opts && opts.commit) {
+    commitColorReplacePreview();
+  } else {
+    cancelColorReplacePreview();
+  }
 }
 
 function hexToRgb(hex) {
@@ -8903,6 +9080,10 @@ function buildColorReplaceControls() {
   const wrap = document.createElement('div');
   wrap.style.cssText = 'padding:6px 0;';
 
+  // Entering this control implies entering color-replace mode; cache base
+  // pixels right away so the first slider movement is non-destructive.
+  ensureColorReplacePreviewOrigin();
+
   // Source color
   const srcRow = document.createElement('div');
   srcRow.className = 'shape-row';
@@ -8915,6 +9096,7 @@ function buildColorReplaceControls() {
     App.colorReplace.src = v;
     srcSwatch.querySelector('.inline-color-swatch').style.background = v;
     srcSwatch.querySelector('.inline-color-hex').textContent = v.toUpperCase();
+    previewColorReplace();
   });
   srcRow.appendChild(srcSwatch);
   const pickBtn = document.createElement('button');
@@ -8929,7 +9111,7 @@ function buildColorReplaceControls() {
   srcRow.appendChild(pickBtn);
   wrap.appendChild(srcRow);
 
-  // Destination color
+  // Destination color + alpha (custom control: swatch + alpha slider)
   const dstRow = document.createElement('div');
   dstRow.className = 'shape-row';
   dstRow.innerHTML = `<label>To</label>`;
@@ -8941,9 +9123,29 @@ function buildColorReplaceControls() {
     App.colorReplace.dst = v;
     dstSwatch.querySelector('.inline-color-swatch').style.background = v;
     dstSwatch.querySelector('.inline-color-hex').textContent = v.toUpperCase();
+    previewColorReplace();
   });
   dstRow.appendChild(dstSwatch);
   wrap.appendChild(dstRow);
+
+  // Replacement alpha slider (0..100% -> dstAlpha 0..1).
+  // Source color stays opaque (it's sampled from existing pixels), so we only
+  // expose an alpha control for the REPLACEMENT color.
+  const aRow = document.createElement('div');
+  aRow.className = 'slider-row';
+  const a0pct = Math.round(clamp(App.colorReplace.dstAlpha == null ? 1 : App.colorReplace.dstAlpha, 0, 1) * 100);
+  aRow.innerHTML = `
+    <div class="slider-label">Opacity</div>
+    <div class="slider-track"><div class="slider-fill" style="width:${a0pct}%"></div><input type="range" min="0" max="100" value="${a0pct}"></div>
+    <div class="slider-value">${a0pct}%</div>
+  `;
+  wrap.appendChild(aRow);
+  setupSlider(aRow, { bipolar:false, min:0, max:100, defaultValue:100 }, {
+    onInput: v => {
+      App.colorReplace.dstAlpha = clamp(v / 100, 0, 1);
+      previewColorReplace();
+    },
+  });
 
   // Tolerance
   const tRow = document.createElement('div');
@@ -8956,18 +9158,39 @@ function buildColorReplaceControls() {
   `;
   wrap.appendChild(tRow);
   setupSlider(tRow, { bipolar:false, min:0, max:255, defaultValue:50 }, {
-    onInput: v => { App.colorReplace.tolerance = v; },
+    onInput: v => {
+      App.colorReplace.tolerance = v;
+      previewColorReplace();
+    },
   });
 
-  // Apply button
+  // Apply / Cancel — Apply commits the live preview as a single history entry,
+  // Cancel reverts the base layer to the cached pre-preview pixels.
+  const btnRow = document.createElement('div');
+  btnRow.style.cssText = 'display:flex;gap:8px;margin-top:8px;';
+  const cBtn = document.createElement('button');
+  cBtn.className = 'cp-action';
+  cBtn.style.cssText = 'flex:1;padding:10px;';
+  cBtn.textContent = 'Cancel';
+  cBtn.addEventListener('click', () => {
+    cancelColorReplacePreview();
+  });
   const aBtn = document.createElement('button');
   aBtn.className = 'cp-action primary';
-  aBtn.style.cssText = 'width:100%;padding:10px;margin-top:8px;';
-  aBtn.textContent = 'Apply Color Replace';
+  aBtn.style.cssText = 'flex:1;padding:10px;';
+  aBtn.textContent = 'Apply';
   aBtn.addEventListener('click', () => {
-    applyColorReplace(App.colorReplace.src, App.colorReplace.dst, App.colorReplace.tolerance);
+    if (App.colorReplace.previewOrigin) {
+      commitColorReplacePreview();
+      toast('Color replaced', 'success');
+    } else {
+      // Fallback: no cache (edge case). Bake in one shot.
+      applyColorReplace(App.colorReplace.src, App.colorReplace.dst, App.colorReplace.tolerance, App.colorReplace.dstAlpha);
+    }
   });
-  wrap.appendChild(aBtn);
+  btnRow.appendChild(cBtn);
+  btnRow.appendChild(aBtn);
+  wrap.appendChild(btnRow);
 
   return wrap;
 }
