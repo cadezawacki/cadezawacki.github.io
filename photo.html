@@ -552,26 +552,50 @@ a{color:var(--primary);}
   position:absolute;
   border:1px solid #fff;
   box-shadow:0 0 0 9999px rgba(0,0,0,0.5);
+  /* --crop-handle-size and --crop-border-width are set inline by JS so the
+   * handles & border stay visually constant regardless of canvas zoom. */
+  --crop-handle-size:24px;
+  --crop-border-width:1px;
+  border-width:var(--crop-border-width);
 }
 .crop-grid-line{
   position:absolute;background:rgba(255,255,255,0.4);
 }
 .crop-handle{
-  position:absolute;width:24px;height:24px;
+  position:absolute;
+  width:var(--crop-handle-size,24px);
+  height:var(--crop-handle-size,24px);
   display:flex;align-items:center;justify-content:center;
+  touch-action:none;
 }
 .crop-handle::before{
-  content:"";width:12px;height:12px;border:2px solid #fff;
+  content:"";
+  width:calc(var(--crop-handle-size,24px) * 0.5);
+  height:calc(var(--crop-handle-size,24px) * 0.5);
+  border:2px solid #fff;
   background:var(--primary);border-radius:50%;
+  box-shadow:0 1px 4px rgba(0,0,0,0.32);
 }
-.crop-handle.tl{top:-12px;left:-12px;cursor:nwse-resize;}
-.crop-handle.tr{top:-12px;right:-12px;cursor:nesw-resize;}
-.crop-handle.bl{bottom:-12px;left:-12px;cursor:nesw-resize;}
-.crop-handle.br{bottom:-12px;right:-12px;cursor:nwse-resize;}
-.crop-handle.tm{top:-12px;left:50%;transform:translateX(-50%);cursor:ns-resize;}
-.crop-handle.bm{bottom:-12px;left:50%;transform:translateX(-50%);cursor:ns-resize;}
-.crop-handle.lm{top:50%;left:-12px;transform:translateY(-50%);cursor:ew-resize;}
-.crop-handle.rm{top:50%;right:-12px;transform:translateY(-50%);cursor:ew-resize;}
+.crop-handle.tl{top:calc(var(--crop-handle-size,24px) * -0.5);left:calc(var(--crop-handle-size,24px) * -0.5);cursor:nwse-resize;}
+.crop-handle.tr{top:calc(var(--crop-handle-size,24px) * -0.5);right:calc(var(--crop-handle-size,24px) * -0.5);cursor:nesw-resize;}
+.crop-handle.bl{bottom:calc(var(--crop-handle-size,24px) * -0.5);left:calc(var(--crop-handle-size,24px) * -0.5);cursor:nesw-resize;}
+.crop-handle.br{bottom:calc(var(--crop-handle-size,24px) * -0.5);right:calc(var(--crop-handle-size,24px) * -0.5);cursor:nwse-resize;}
+.crop-handle.tm{top:calc(var(--crop-handle-size,24px) * -0.5);left:50%;transform:translateX(-50%);cursor:ns-resize;}
+.crop-handle.bm{bottom:calc(var(--crop-handle-size,24px) * -0.5);left:50%;transform:translateX(-50%);cursor:ns-resize;}
+.crop-handle.lm{top:50%;left:calc(var(--crop-handle-size,24px) * -0.5);transform:translateY(-50%);cursor:ew-resize;}
+.crop-handle.rm{top:50%;right:calc(var(--crop-handle-size,24px) * -0.5);transform:translateY(-50%);cursor:ew-resize;}
+/* Hint outline showing the original image boundary when the crop frame
+ * has been pulled beyond the canvas (the new transparent area). Drawn
+ * by JS as a thin dashed rect inside the .crop-frame children. */
+.crop-image-hint{
+  position:absolute;
+  border:1px dashed rgba(255,255,255,0.85);
+  background:transparent;
+  pointer-events:none;
+  box-shadow:0 0 0 1px rgba(0,0,0,0.25);
+  display:none;
+}
+.crop-image-hint.show{display:block;}
 
 /* transform buttons */
 .transform-buttons{
@@ -1086,6 +1110,19 @@ a{color:var(--primary);}
   transform:translateX(-50%);
   pointer-events:none;opacity:.7;
   z-index:1;
+}
+/* Locked-state warp box: visible but greyed out, no interactive handles.
+ * Used for the Background image and Frame/Adjustment layers — they get a
+ * visible selection indicator but no transform gestures. */
+.text-sel-box.locked .text-sel-frame{
+  border-color:var(--text-3);
+  background:color-mix(in srgb,var(--text-3) 6%,transparent);
+  cursor:not-allowed;
+}
+.text-sel-box.locked .text-sel-handle,
+.text-sel-box.locked .text-sel-rotpin,
+.text-sel-box.locked .text-sel-rotline{
+  display:none !important;
 }
 /* (text-mode-hint banner removed; replaced by a small lock badge in cpTitle) */
 
@@ -1756,6 +1793,11 @@ a{color:var(--primary);}
     <canvas id="mainCanvas"></canvas>
     <canvas id="interactCanvas"></canvas>
     <div id="cropOverlay">
+      <!-- Hint outline: a dashed rectangle showing the original image boundary
+           when the crop frame has been pulled beyond the canvas. Sits in the
+           overlay's coordinate space (workspace pixels), NOT inside cropFrame,
+           so it stays anchored to the image regardless of where the crop is. -->
+      <div class="crop-image-hint" id="cropImageHint"></div>
       <div class="crop-frame" id="cropFrame">
         <div class="crop-grid-line" style="top:33.33%;left:0;right:0;height:1px;"></div>
         <div class="crop-grid-line" style="top:66.66%;left:0;right:0;height:1px;"></div>
@@ -1793,6 +1835,26 @@ a{color:var(--primary);}
     <div class="text-sel-overlay" id="shapeSelOverlay">
       <div class="text-sel-box" id="shapeSelBox">
         <div class="text-sel-frame" id="shapeSelFrame"></div>
+        <div class="text-sel-rotline"></div>
+        <div class="text-sel-rotpin" data-handle="rot" title="Rotate">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"/><polyline points="3 4 3 10 9 10"/></svg>
+        </div>
+        <div class="text-sel-handle tl" data-handle="tl"></div>
+        <div class="text-sel-handle tm" data-handle="tm"></div>
+        <div class="text-sel-handle tr" data-handle="tr"></div>
+        <div class="text-sel-handle lm" data-handle="lm"></div>
+        <div class="text-sel-handle rm" data-handle="rm"></div>
+        <div class="text-sel-handle bl" data-handle="bl"></div>
+        <div class="text-sel-handle bm" data-handle="bm"></div>
+        <div class="text-sel-handle br" data-handle="br"></div>
+      </div>
+    </div>
+    <!-- Generic layer selection overlay — used for image/drawing/frame/adjustment
+         layers when the Layers tool is active. Same DOM shape as text/shape so
+         the shared updateSelectionBoxGeometry helper can size handles uniformly. -->
+    <div class="text-sel-overlay" id="layerSelOverlay">
+      <div class="text-sel-box" id="layerSelBox">
+        <div class="text-sel-frame" id="layerSelFrame"></div>
         <div class="text-sel-rotline"></div>
         <div class="text-sel-rotpin" data-handle="rot" title="Rotate">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"/><polyline points="3 4 3 10 9 10"/></svg>
@@ -2196,6 +2258,12 @@ const App = {
   },
   shapeSelectionId: null,
 
+  // ----- Generic layer selection (image/drawing/frame/adjustment) -----
+  // Set when the user taps a non-text/non-shape layer in the Layers panel
+  // so the unified warp box can render around it. Cleared when switching
+  // away from the Layers tool.
+  layerSelectionId: null,
+
   // ----- Frames (S3) -----
   framePreset: 'none',
   frameWidthPct: 5,        // % of short edge
@@ -2481,6 +2549,10 @@ const els = {
   shapeSelOverlay:   $('shapeSelOverlay'),
   shapeSelBox:       $('shapeSelBox'),
   shapeSelFrame:     $('shapeSelFrame'),
+  layerSelOverlay:   $('layerSelOverlay'),
+  layerSelBox:       $('layerSelBox'),
+  layerSelFrame:     $('layerSelFrame'),
+  cropImageHint:     $('cropImageHint'),
   brushCursor:       $('brushCursor'),
   canvasSizeModal:   $('canvasSizeModal'),
   canvasSizeSub:     $('canvasSizeSub'),
@@ -2598,6 +2670,7 @@ function initFromImage(img) {
   App.activeLayerId = null;
   App.textSelectionId = null;
   App.shapeSelectionId = null;
+  App.layerSelectionId = null;
   App.frameLayerId = null;
   App.framePreset = 'none';
   App.colorOverlay = { color: '#14b8a6', strength: 0, blendMode: 'overlay' };
@@ -7452,6 +7525,7 @@ document.querySelectorAll('.sheet [data-action]').forEach(b => {
       App.activeLayerId = null;
       App.textSelectionId = null;
       App.shapeSelectionId = null;
+      App.layerSelectionId = null;
       App.frameLayerId = null;
       App.framePreset = 'none';
       App.colorOverlay = { color: '#14b8a6', strength: 0, blendMode: 'overlay' };
@@ -7464,6 +7538,7 @@ document.querySelectorAll('.sheet [data-action]').forEach(b => {
       els.welcome.classList.remove('hidden');
       updateTextSelection();
       updateShapeSelection();
+      updateLayerSelection();
       showBrushCursor(false);
     }
   });
