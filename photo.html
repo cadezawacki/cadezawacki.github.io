@@ -557,6 +557,7 @@ a{color:var(--primary);}
   --crop-handle-size:24px;
   --crop-border-width:1px;
   border-width:var(--crop-border-width);
+  z-index:1;
 }
 .crop-grid-line{
   position:absolute;background:rgba(255,255,255,0.4);
@@ -594,6 +595,10 @@ a{color:var(--primary);}
   pointer-events:none;
   box-shadow:0 0 0 1px rgba(0,0,0,0.25);
   display:none;
+  /* Must paint ABOVE the crop-frame's outset box-shadow which darkens the
+   * "outside the crop" area. Otherwise the hint outline gets buried under
+   * the dark overlay when it falls outside the crop frame. */
+  z-index:2;
 }
 .crop-image-hint.show{display:block;}
 
