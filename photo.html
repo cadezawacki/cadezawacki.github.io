@@ -552,26 +552,55 @@ a{color:var(--primary);}
   position:absolute;
   border:1px solid #fff;
   box-shadow:0 0 0 9999px rgba(0,0,0,0.5);
+  /* --crop-handle-size and --crop-border-width are set inline by JS so the
+   * handles & border stay visually constant regardless of canvas zoom. */
+  --crop-handle-size:24px;
+  --crop-border-width:1px;
+  border-width:var(--crop-border-width);
+  z-index:1;
 }
 .crop-grid-line{
   position:absolute;background:rgba(255,255,255,0.4);
 }
 .crop-handle{
-  position:absolute;width:24px;height:24px;
+  position:absolute;
+  width:var(--crop-handle-size,24px);
+  height:var(--crop-handle-size,24px);
   display:flex;align-items:center;justify-content:center;
+  touch-action:none;
 }
 .crop-handle::before{
-  content:"";width:12px;height:12px;border:2px solid #fff;
+  content:"";
+  width:calc(var(--crop-handle-size,24px) * 0.5);
+  height:calc(var(--crop-handle-size,24px) * 0.5);
+  border:2px solid #fff;
   background:var(--primary);border-radius:50%;
+  box-shadow:0 1px 4px rgba(0,0,0,0.32);
 }
-.crop-handle.tl{top:-12px;left:-12px;cursor:nwse-resize;}
-.crop-handle.tr{top:-12px;right:-12px;cursor:nesw-resize;}
-.crop-handle.bl{bottom:-12px;left:-12px;cursor:nesw-resize;}
-.crop-handle.br{bottom:-12px;right:-12px;cursor:nwse-resize;}
-.crop-handle.tm{top:-12px;left:50%;transform:translateX(-50%);cursor:ns-resize;}
-.crop-handle.bm{bottom:-12px;left:50%;transform:translateX(-50%);cursor:ns-resize;}
-.crop-handle.lm{top:50%;left:-12px;transform:translateY(-50%);cursor:ew-resize;}
-.crop-handle.rm{top:50%;right:-12px;transform:translateY(-50%);cursor:ew-resize;}
+.crop-handle.tl{top:calc(var(--crop-handle-size,24px) * -0.5);left:calc(var(--crop-handle-size,24px) * -0.5);cursor:nwse-resize;}
+.crop-handle.tr{top:calc(var(--crop-handle-size,24px) * -0.5);right:calc(var(--crop-handle-size,24px) * -0.5);cursor:nesw-resize;}
+.crop-handle.bl{bottom:calc(var(--crop-handle-size,24px) * -0.5);left:calc(var(--crop-handle-size,24px) * -0.5);cursor:nesw-resize;}
+.crop-handle.br{bottom:calc(var(--crop-handle-size,24px) * -0.5);right:calc(var(--crop-handle-size,24px) * -0.5);cursor:nwse-resize;}
+.crop-handle.tm{top:calc(var(--crop-handle-size,24px) * -0.5);left:50%;transform:translateX(-50%);cursor:ns-resize;}
+.crop-handle.bm{bottom:calc(var(--crop-handle-size,24px) * -0.5);left:50%;transform:translateX(-50%);cursor:ns-resize;}
+.crop-handle.lm{top:50%;left:calc(var(--crop-handle-size,24px) * -0.5);transform:translateY(-50%);cursor:ew-resize;}
+.crop-handle.rm{top:50%;right:calc(var(--crop-handle-size,24px) * -0.5);transform:translateY(-50%);cursor:ew-resize;}
+/* Hint outline showing the original image boundary when the crop frame
+ * has been pulled beyond the canvas (the new transparent area). Drawn
+ * by JS as a thin dashed rect inside the .crop-frame children. */
+.crop-image-hint{
+  position:absolute;
+  border:1px dashed rgba(255,255,255,0.85);
+  background:transparent;
+  pointer-events:none;
+  box-shadow:0 0 0 1px rgba(0,0,0,0.25);
+  display:none;
+  /* Must paint ABOVE the crop-frame's outset box-shadow which darkens the
+   * "outside the crop" area. Otherwise the hint outline gets buried under
+   * the dark overlay when it falls outside the crop frame. */
+  z-index:2;
+}
+.crop-image-hint.show{display:block;}
 
 /* transform buttons */
 .transform-buttons{
@@ -691,12 +720,14 @@ a{color:var(--primary);}
   padding:8px 10px;
   background:var(--surface);border:1px solid var(--border);
   border-radius:11px;
-  transition:border-color .15s,background .15s;
+  transition:border-color .15s,background .15s,box-shadow .15s;
   touch-action:none;
+  position:relative;
 }
 .layer-row.active{
   border-color:var(--primary);
-  background:color-mix(in srgb,var(--primary) 8%,var(--surface));
+  background:color-mix(in srgb,var(--primary) 10%,var(--surface));
+  box-shadow:inset 3px 0 0 0 var(--primary);
 }
 .layer-row.dragging{opacity:.6;}
 .layer-eye{
@@ -1086,6 +1117,29 @@ a{color:var(--primary);}
   transform:translateX(-50%);
   pointer-events:none;opacity:.7;
   z-index:1;
+}
+/* Locked-state warp box: visible but greyed out, no interactive handles.
+ * Used for the Background image and Frame/Adjustment layers — they get a
+ * visible selection indicator but no transform gestures. */
+.text-sel-box.locked .text-sel-frame{
+  border-color:var(--text-3);
+  background:color-mix(in srgb,var(--text-3) 6%,transparent);
+  cursor:not-allowed;
+}
+.text-sel-box.locked .text-sel-handle,
+.text-sel-box.locked .text-sel-rotpin,
+.text-sel-box.locked .text-sel-rotline{
+  display:none !important;
+}
+/* Uniform-scale mode: only corner handles are interactive (used for image and
+ * drawing layers which have a single uniform scale field and stretching mid
+ * edges would imply non-uniform scale). The mid-edge handles are hidden so
+ * the user only sees the four corners + rotation pin. */
+.text-sel-box.uniform-only .text-sel-handle.tm,
+.text-sel-box.uniform-only .text-sel-handle.bm,
+.text-sel-box.uniform-only .text-sel-handle.lm,
+.text-sel-box.uniform-only .text-sel-handle.rm{
+  display:none !important;
 }
 /* (text-mode-hint banner removed; replaced by a small lock badge in cpTitle) */
 
@@ -1574,6 +1628,102 @@ a{color:var(--primary);}
   .filter-tile{width:78px;}
   .adjust-tile{width:74px;}
 }
+
+/* ================================================================
+   DESKTOP LAYOUT (>=900px)
+   Top bar stays at top spanning full width; below it we use CSS grid
+   to lay out: [vertical tool rail] | [canvas] | [sidebar control panel]
+   Note: body becomes a grid so we don't need a wrapper div.
+   ================================================================ */
+@media (min-width:900px){
+  body.desktop-layout{
+    display:grid;
+    grid-template-rows:auto 1fr;
+    grid-template-columns:auto 1fr var(--cp-w,360px);
+    grid-template-areas:
+      "topbar topbar topbar"
+      "rail   canvas panel";
+    height:100dvh;
+  }
+  body.desktop-layout .topbar{grid-area:topbar;}
+  body.desktop-layout .canvas-wrap{
+    grid-area:canvas;min-width:0;min-height:0;
+  }
+  body.desktop-layout .control-panel{grid-area:panel;}
+  body.desktop-layout .tool-bar{grid-area:rail;}
+  /* Tool rail (left) */
+  body.desktop-layout .tool-bar{
+    height:auto;width:72px;
+    flex-direction:column;align-items:stretch;
+    padding:8px 0 calc(var(--safe-b) + 8px);
+    border-top:none;border-right:1px solid var(--border);
+    overflow-y:auto;overflow-x:hidden;
+    background:color-mix(in srgb,var(--bg-2) 92%,transparent);
+    flex-shrink:0;
+  }
+  body.desktop-layout .tool-tab{
+    flex:0 0 auto;min-width:0;width:100%;
+    padding:11px 4px;gap:4px;
+    font-size:10px;letter-spacing:.3px;
+  }
+  body.desktop-layout .tool-tab svg{width:22px;height:22px;}
+  body.desktop-layout .tool-tab.active::before{
+    /* Move the active indicator from the top edge to the right edge */
+    left:auto;right:0;top:50%;transform:translateY(-50%);
+    width:3px;height:36px;border-radius:3px 0 0 3px;
+    background:var(--primary);
+  }
+  /* Control panel becomes a fixed-width sidebar on the right */
+  body.desktop-layout .control-panel{
+    --cp-w:360px;
+    width:var(--cp-w);
+    height:auto;min-height:0;max-height:none;
+    border-top:none;border-left:1px solid var(--border);
+    transition:none;
+    position:relative;
+  }
+  /* The drag-to-resize handle becomes a left-edge WIDTH resizer */
+  body.desktop-layout .cp-drag-handle{
+    position:absolute;top:0;bottom:0;left:-4px;
+    width:8px;height:auto;padding:0;
+    cursor:col-resize;
+    display:flex;align-items:center;justify-content:center;
+    z-index:5;
+    background:transparent;
+  }
+  body.desktop-layout .cp-drag-handle::before{
+    content:"";width:3px;height:48px;border-radius:3px;
+    background:color-mix(in srgb,var(--primary) 55%,var(--text-3));
+    opacity:0;transform:none;
+    transition:opacity .15s,background .15s,height .15s;
+  }
+  body.desktop-layout .cp-drag-handle:hover::before{opacity:.6;}
+  body.desktop-layout .cp-drag-handle:active::before,
+  body.desktop-layout .control-panel.cp-dragging .cp-drag-handle::before{
+    opacity:1;background:var(--primary);height:64px;
+  }
+  body.desktop-layout .control-panel.cp-dragging{transition:none;}
+  body.desktop-layout .control-panel-header{
+    padding:14px 18px 6px 18px;
+  }
+  body.desktop-layout .control-body{
+    padding:6px 18px 18px;
+  }
+  /* Sidebar variants tweak some inner grids so they fit comfortably */
+  body.desktop-layout .frame-grid{grid-template-columns:repeat(2,1fr);}
+  body.desktop-layout .effect-grid{grid-template-columns:repeat(3,1fr);}
+  body.desktop-layout .shape-grid{grid-template-columns:repeat(4,1fr);}
+  body.desktop-layout .tool-extra-grid{grid-template-columns:repeat(2,1fr);}
+  /* While resizing the sidebar width, prevent text selection */
+  body.desktop-layout.cp-width-dragging{
+    user-select:none;-webkit-user-select:none;cursor:col-resize;
+  }
+}
+
+/* Tighter rail for very wide displays */
+@media (min-width:1400px){
+  body.desktop-layout{grid-template-columns:auto 1fr var(--cp-w,400px);}
+}
 </style>
 </head>
 <body>
@@ -1660,6 +1810,11 @@ a{color:var(--primary);}
     <canvas id="mainCanvas"></canvas>
     <canvas id="interactCanvas"></canvas>
     <div id="cropOverlay">
+      <!-- Hint outline: a dashed rectangle showing the original image boundary
+           when the crop frame has been pulled beyond the canvas. Sits in the
+           overlay's coordinate space (workspace pixels), NOT inside cropFrame,
+           so it stays anchored to the image regardless of where the crop is. -->
+      <div class="crop-image-hint" id="cropImageHint"></div>
       <div class="crop-frame" id="cropFrame">
         <div class="crop-grid-line" style="top:33.33%;left:0;right:0;height:1px;"></div>
         <div class="crop-grid-line" style="top:66.66%;left:0;right:0;height:1px;"></div>
@@ -1697,6 +1852,26 @@ a{color:var(--primary);}
     <div class="text-sel-overlay" id="shapeSelOverlay">
       <div class="text-sel-box" id="shapeSelBox">
         <div class="text-sel-frame" id="shapeSelFrame"></div>
+        <div class="text-sel-rotline"></div>
+        <div class="text-sel-rotpin" data-handle="rot" title="Rotate">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"/><polyline points="3 4 3 10 9 10"/></svg>
+        </div>
+        <div class="text-sel-handle tl" data-handle="tl"></div>
+        <div class="text-sel-handle tm" data-handle="tm"></div>
+        <div class="text-sel-handle tr" data-handle="tr"></div>
+        <div class="text-sel-handle lm" data-handle="lm"></div>
+        <div class="text-sel-handle rm" data-handle="rm"></div>
+        <div class="text-sel-handle bl" data-handle="bl"></div>
+        <div class="text-sel-handle bm" data-handle="bm"></div>
+        <div class="text-sel-handle br" data-handle="br"></div>
+      </div>
+    </div>
+    <!-- Generic layer selection overlay — used for image/drawing/frame/adjustment
+         layers when the Layers tool is active. Same DOM shape as text/shape so
+         the shared updateSelectionBoxGeometry helper can size handles uniformly. -->
+    <div class="text-sel-overlay" id="layerSelOverlay">
+      <div class="text-sel-box" id="layerSelBox">
+        <div class="text-sel-frame" id="layerSelFrame"></div>
         <div class="text-sel-rotline"></div>
         <div class="text-sel-rotpin" data-handle="rot" title="Rotate">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"/><polyline points="3 4 3 10 9 10"/></svg>
@@ -1787,9 +1962,9 @@ a{color:var(--primary);}
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
       Bake (Flatten)
     </button>
-    <button class="sheet-item" data-action="canvasSize">
+    <button class="sheet-item" data-action="canvasSize" aria-label="Adjust Image Size" title="Adjust Image Size">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 12h18M12 3v18"/></svg>
-      Canvas Size
+      Adjust Image Size
     </button>
     <button class="sheet-item" data-action="copyToClipboard">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
@@ -1897,13 +2072,13 @@ a{color:var(--primary);}
   </div>
 </div>
 
-<!-- ========== CANVAS SIZE MODAL ========== -->
-<div class="modal" id="canvasSizeModal">
+<!-- ========== ADJUST IMAGE SIZE MODAL (formerly "Canvas Size") ========== -->
+<div class="modal" id="canvasSizeModal" aria-label="Adjust Image Size">
   <div class="modal-card">
     <div class="modal-header">
-      <div class="modal-title">Canvas Size</div>
+      <div class="modal-title">Adjust Image Size</div>
       <div class="modal-sub" id="canvasSizeSub">Current: 0 x 0</div>
-      <button class="modal-close" id="canvasSizeClose">
+      <button class="modal-close" id="canvasSizeClose" aria-label="Close Adjust Image Size">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
     </div>
@@ -2100,6 +2275,12 @@ const App = {
   },
   shapeSelectionId: null,
 
+  // ----- Generic layer selection (image/drawing/frame/adjustment) -----
+  // Set when the user taps a non-text/non-shape layer in the Layers panel
+  // so the unified warp box can render around it. Cleared when switching
+  // away from the Layers tool.
+  layerSelectionId: null,
+
   // ----- Frames (S3) -----
   framePreset: 'none',
   frameWidthPct: 5,        // % of short edge
@@ -2255,7 +2436,7 @@ function addLayer(layer, opts={}) {
     if (frameIdx >= 0 && insertAt > frameIdx) insertAt = frameIdx;
   }
   App.layers.splice(insertAt, 0, layer);
-  if (!opts.silent) App.activeLayerId = layer.id;
+  if (!opts.silent) setActiveLayer(layer.id);
   return layer;
 }
 
@@ -2267,9 +2448,9 @@ function removeLayer(id) {
   if (App.activeLayerId === id) {
     App.activeLayerId = App.layers[App.layers.length - 1]?.id || null;
   }
-  if (App.textSelectionId === id) {
-    App.textSelectionId = null;
-  }
+  if (App.textSelectionId === id) App.textSelectionId = null;
+  if (App.shapeSelectionId === id) App.shapeSelectionId = null;
+  if (App.layerSelectionId === id) App.layerSelectionId = null;
 }
 function duplicateLayer(id) {
   const src = findLayer(id);
@@ -2305,9 +2486,9 @@ function duplicateLayer(id) {
   });
   const idx = indexOfLayer(id);
   App.layers.splice(idx + 1, 0, copy);
-  App.activeLayerId = copy.id;
-  // For text layers, also update selection
-  if (copy.type === 'text') App.textSelectionId = copy.id;
+  // Use setActiveLayer so the per-type selection slot
+  // (text/shape/layerSelectionId) is mirrored consistently.
+  setActiveLayer(copy.id);
   return copy;
 }
 function reorderLayer(id, newIndex) {
@@ -2319,6 +2500,19 @@ function reorderLayer(id, newIndex) {
 }
 function setActiveLayer(id) {
   App.activeLayerId = id;
+  // Mirror selection state to the right per-type slot. The unified warp box
+  // and Layers tool both need to know what's currently selected; downstream
+  // tools (text/shape) read their own *SelectionId.
+  const l = findLayer(id);
+  if (l) {
+    if (l.type === 'text') {
+      App.textSelectionId = id;
+    } else if (l.type === 'shape') {
+      App.shapeSelectionId = id;
+    } else if (l.type === 'image' || l.type === 'drawing' || l.type === 'frame' || l.type === 'adjustment') {
+      App.layerSelectionId = id;
+    }
+  }
 }
 
 /* ================================================================
@@ -2385,6 +2579,10 @@ const els = {
   shapeSelOverlay:   $('shapeSelOverlay'),
   shapeSelBox:       $('shapeSelBox'),
   shapeSelFrame:     $('shapeSelFrame'),
+  layerSelOverlay:   $('layerSelOverlay'),
+  layerSelBox:       $('layerSelBox'),
+  layerSelFrame:     $('layerSelFrame'),
+  cropImageHint:     $('cropImageHint'),
   brushCursor:       $('brushCursor'),
   canvasSizeModal:   $('canvasSizeModal'),
   canvasSizeSub:     $('canvasSizeSub'),
@@ -2502,6 +2700,7 @@ function initFromImage(img) {
   App.activeLayerId = null;
   App.textSelectionId = null;
   App.shapeSelectionId = null;
+  App.layerSelectionId = null;
   App.frameLayerId = null;
   App.framePreset = 'none';
   App.colorOverlay = { color: '#14b8a6', strength: 0, blendMode: 'overlay' };
@@ -3197,8 +3396,10 @@ function renderFull() {
 
   // Refresh layer thumbs after a stable render
   scheduleLayerThumbsUpdate();
-  // Keep text selection overlay in sync (layer canvas dims may have changed).
+  // Keep selection overlays in sync (layer canvas dims may have changed).
   if (typeof updateTextSelection === 'function') updateTextSelection();
+  if (typeof updateShapeSelection === 'function') updateShapeSelection();
+  if (typeof updateLayerSelection === 'function') updateLayerSelection();
 }
 
 function renderPreview() {
@@ -3440,9 +3641,11 @@ function applyStageTransform() {
   els.canvasStage.style.transform = t;
   els.canvasStage.style.width = App.workW + 'px';
   els.canvasStage.style.height = App.workH + 'px';
-  // Selection overlay (text mode) needs to refresh handle counter-scaling.
+  // Selection overlays need to refresh handle counter-scaling.
   if (typeof updateTextSelection === 'function') updateTextSelection();
   if (typeof updateShapeSelection === 'function') updateShapeSelection();
+  if (typeof updateLayerSelection === 'function') updateLayerSelection();
+  if (typeof updateCropOverlay === 'function') updateCropOverlay();
   if (typeof updateBrushCursorSize === 'function') updateBrushCursorSize();
 }
 
@@ -3893,6 +4096,20 @@ function setTool(tool) {
   } else {
     App.shapeSelectionId = null;
   }
+  // Layers tool: pick the topmost generic layer (or use current active layer
+  // if it's a generic layer) as the warp-box subject. Other tools: clear.
+  if (tool === 'layers') {
+    const cur = activeLayer();
+    if (cur && isGenericLayerType(cur.type)) {
+      App.layerSelectionId = cur.id;
+    } else {
+      const lastGen = [...App.layers].reverse().find(l => isGenericLayerType(l.type));
+      App.layerSelectionId = lastGen ? lastGen.id : null;
+      if (lastGen) setActiveLayer(lastGen.id);
+    }
+  } else {
+    App.layerSelectionId = null;
+  }
   // Cancel any in-progress crop when switching off
   if (tool !== 'crop') {
     App.cropRect = null;
@@ -3914,6 +4131,7 @@ function setTool(tool) {
   if (els.brushCursor && tool !== 'draw') els.brushCursor.classList.remove('show');
   updateTextSelection();
   updateShapeSelection();
+  if (typeof updateLayerSelection === 'function') updateLayerSelection();
   updateToolPanel();
 }
 document.querySelectorAll('.tool-tab').forEach(t => {
@@ -4096,6 +4314,68 @@ function restorePanelHeightForTool(tool) {
   _cpRestoring = false;
 }
 
+/* ================================================================
+   DESKTOP LAYOUT (>=900px)
+   Adds a `desktop-layout` class to <body> when the viewport is wide
+   enough. This flips the CSS layout to a top-bar + 3-column grid
+   (tool rail | canvas | sidebar). Width of the sidebar is persisted
+   in localStorage as `studio.panelWidth` and snaps to 280/360/480
+   on release.
+   ================================================================ */
+const DESKTOP_BREAKPOINT = 900;
+const PANEL_WIDTH_KEY = 'studio.panelWidth';
+const PANEL_WIDTH_MIN = 260;
+const PANEL_WIDTH_MAX = 640;
+const PANEL_WIDTH_SNAPS = [280, 360, 480];
+
+function isDesktopLayout() {
+  return window.innerWidth >= DESKTOP_BREAKPOINT;
+}
+function readStoredPanelWidth() {
+  try {
+    const v = parseInt(localStorage.getItem(PANEL_WIDTH_KEY), 10);
+    if (isFinite(v) && v >= PANEL_WIDTH_MIN && v <= PANEL_WIDTH_MAX) return v;
+  } catch (_) {}
+  return 360;
+}
+function writeStoredPanelWidth(w) {
+  try { localStorage.setItem(PANEL_WIDTH_KEY, String(Math.round(w))); } catch (_) {}
+}
+function applyPanelWidth(px) {
+  const v = Math.max(PANEL_WIDTH_MIN, Math.min(PANEL_WIDTH_MAX, Math.round(px)));
+  document.body.style.setProperty('--cp-w', v + 'px');
+}
+function snapPanelWidth(px) {
+  let best = PANEL_WIDTH_SNAPS[0], bd = Infinity;
+  for (const s of PANEL_WIDTH_SNAPS) {
+    const d = Math.abs(px - s);
+    if (d < bd) { bd = d; best = s; }
+  }
+  // Snap only if within 28px of a snap target; otherwise keep custom.
+  return bd <= 28 ? best : Math.round(px);
+}
+
+function syncDesktopLayoutClass() {
+  const want = isDesktopLayout();
+  const has = document.body.classList.contains('desktop-layout');
+  if (want && !has) {
+    applyPanelWidth(readStoredPanelWidth());
+    document.body.classList.add('desktop-layout');
+    // Refit canvas after layout change.
+    if (App.layers && App.layers.length) {
+      requestAnimationFrame(() => fitCanvasToView());
+    }
+  } else if (!want && has) {
+    document.body.classList.remove('desktop-layout');
+    if (App.layers && App.layers.length) {
+      requestAnimationFrame(() => fitCanvasToView());
+    }
+  }
+}
+// Initialize early — before layout-dependent measurements run.
+syncDesktopLayoutClass();
+window.addEventListener('resize', syncDesktopLayoutClass);
+
 (function setupPanelDragHandle() {
   const handle = els.cpDragHandle;
   const panel = els.controlPanel;
@@ -4106,9 +4386,12 @@ function restorePanelHeightForTool(tool) {
 
   let pointerId = null;
   let startY = 0;
+  let startX = 0;
   let startVh = 0;
+  let startWidth = 0;
   let startTime = 0;
   let didDrag = false;
+  let mode = 'height'; // 'height' on mobile, 'width' on desktop
   const DRAG_THRESHOLD_PX = 4;
 
   function vhFromPx(px) {
@@ -4118,17 +4401,38 @@ function restorePanelHeightForTool(tool) {
   function onDown(e) {
     if (pointerId !== null) return;
     pointerId = e.pointerId != null ? e.pointerId : 1;
+    mode = isDesktopLayout() ? 'width' : 'height';
     startY = e.clientY;
+    startX = e.clientX;
     startVh = _cpLiveVh;
+    startWidth = panel.getBoundingClientRect().width;
     startTime = Date.now();
     didDrag = false;
     panel.classList.add('cp-dragging');
+    if (mode === 'width') document.body.classList.add('cp-width-dragging');
     try { handle.setPointerCapture(pointerId); } catch (_) {}
     e.preventDefault();
   }
+  let _widthFitRaf = 0;
   function onMove(e) {
     if (pointerId === null) return;
     if (e.pointerId != null && e.pointerId !== pointerId) return;
+    if (mode === 'width') {
+      const dx = e.clientX - startX;
+      if (!didDrag && Math.abs(dx) > DRAG_THRESHOLD_PX) didDrag = true;
+      // Dragging LEFT (negative dx) widens the right-side sidebar; right shrinks it.
+      const nextW = startWidth - dx;
+      applyPanelWidth(nextW);
+      // Coalesce refit calls via rAF so we don't trash layout on every pointer event.
+      if (App.layers && App.layers.length && !_widthFitRaf) {
+        _widthFitRaf = requestAnimationFrame(() => {
+          _widthFitRaf = 0;
+          fitCanvasToView();
+        });
+      }
+      e.preventDefault();
+      return;
+    }
     const dy = e.clientY - startY;
     if (!didDrag && Math.abs(dy) > DRAG_THRESHOLD_PX) didDrag = true;
     // Dragging down (positive dy) shrinks the panel; dragging up grows it.
@@ -4140,9 +4444,19 @@ function restorePanelHeightForTool(tool) {
     if (pointerId === null) return;
     if (e && e.pointerId != null && e.pointerId !== pointerId) return;
     const elapsed = Date.now() - startTime;
-    const dy = e ? (e.clientY - startY) : 0;
     try { handle.releasePointerCapture(pointerId); } catch (_) {}
     pointerId = null;
+    panel.classList.remove('cp-dragging');
+    document.body.classList.remove('cp-width-dragging');
+    if (mode === 'width') {
+      const finalW = parseFloat(getComputedStyle(panel).width);
+      const snapped = snapPanelWidth(finalW);
+      applyPanelWidth(snapped);
+      writeStoredPanelWidth(snapped);
+      if (App.layers && App.layers.length) fitCanvasToView();
+      return;
+    }
+    const dy = e ? (e.clientY - startY) : 0;
     if (!didDrag) {
       // No-drag tap: cycle compact -> mid -> full.
       _cpCycleSnap();
@@ -4167,6 +4481,23 @@ function restorePanelHeightForTool(tool) {
   // Keyboard accessibility: arrow keys cycle.
   handle.tabIndex = 0;
   handle.addEventListener('keydown', (e) => {
+    if (isDesktopLayout()) {
+      // On desktop, arrows step width through the snap list.
+      const cur = parseFloat(getComputedStyle(panel).width);
+      const idx = PANEL_WIDTH_SNAPS.findIndex(s => Math.abs(s - cur) < 20);
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+        const next = PANEL_WIDTH_SNAPS[Math.min(PANEL_WIDTH_SNAPS.length - 1, (idx < 0 ? 0 : idx) + 1)];
+        applyPanelWidth(next); writeStoredPanelWidth(next);
+        if (App.layers && App.layers.length) fitCanvasToView();
+        e.preventDefault();
+      } else if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+        const next = PANEL_WIDTH_SNAPS[Math.max(0, (idx < 0 ? PANEL_WIDTH_SNAPS.length - 1 : idx) - 1)];
+        applyPanelWidth(next); writeStoredPanelWidth(next);
+        if (App.layers && App.layers.length) fitCanvasToView();
+        e.preventDefault();
+      }
+      return;
+    }
     if (e.key === 'ArrowUp')        { _cpSnapToName('full'); e.preventDefault(); }
     else if (e.key === 'ArrowDown') { _cpSnapToName('compact'); e.preventDefault(); }
     else if (e.key === 'Enter' || e.key === ' ') { _cpCycleSnap(); e.preventDefault(); }
@@ -4531,6 +4862,14 @@ function buildCropPanel(body, actions) {
   });
   body.appendChild(chips);
 
+  // Hint: tell users they can pull the crop rect beyond the image edge to
+  // expand the canvas (transparent padding added). The same control is the
+  // existing one — no new gesture — just discoverability help.
+  const expandHint = document.createElement('div');
+  expandHint.style.cssText = 'padding:4px 2px 2px;font-size:11px;color:var(--text-3);line-height:1.4;letter-spacing:.1px;';
+  expandHint.textContent = 'Tip: drag a corner past the image edge to expand the canvas.';
+  body.appendChild(expandHint);
+
   const rotRow = document.createElement('div');
   rotRow.className = 'slider-row';
   const curRot = Math.max(-360, Math.min(360, App.rotation || 0));
@@ -4667,7 +5006,10 @@ function initCropRect() {
 }
 
 function updateCropOverlay() {
-  if (!App.cropRect) return;
+  if (!App.cropRect) {
+    if (els.cropImageHint) els.cropImageHint.classList.remove('show');
+    return;
+  }
   const r = App.cropRect;
   const frame = els.cropFrame;
   frame.style.left = r.x + 'px';
@@ -4676,6 +5018,37 @@ function updateCropOverlay() {
   frame.style.height = r.h + 'px';
   els.cropOverlay.style.width = App.workW + 'px';
   els.cropOverlay.style.height = App.workH + 'px';
+
+  // Inverse-scale handles + border thickness so they stay constant on screen
+  // regardless of canvas zoom. Without this, when the user zooms in on a
+  // large canvas the 24px handles become almost invisible.
+  const stageScale = Math.max(0.001, App.fitScale * App.zoom);
+  const invScale = 1 / stageScale;
+  // Aim for ≥28px handle target on screen.
+  const handlePx = Math.max(20, 28 * invScale);
+  const borderPx = Math.max(0.6, 1.5 * invScale);
+  frame.style.setProperty('--crop-handle-size', handlePx + 'px');
+  frame.style.setProperty('--crop-border-width', borderPx + 'px');
+
+  // Update / position the "original image boundary" hint if the crop frame
+  // has been pulled past the image. The hint lives in the overlay coord
+  // space (workspace pixels). It's a faint dashed rect showing where the
+  // original image sits, so the user can see the transparent padding area.
+  if (els.cropImageHint) {
+    const W = App.workW, H = App.workH;
+    const extendsBeyond = (r.x < 0) || (r.y < 0) || (r.x + r.w > W) || (r.y + r.h > H);
+    if (extendsBeyond) {
+      els.cropImageHint.classList.add('show');
+      els.cropImageHint.style.left = 0 + 'px';
+      els.cropImageHint.style.top = 0 + 'px';
+      els.cropImageHint.style.width = W + 'px';
+      els.cropImageHint.style.height = H + 'px';
+      // Inverse-scale the hint border too.
+      els.cropImageHint.style.borderWidth = Math.max(0.6, 1.5 * invScale) + 'px';
+    } else {
+      els.cropImageHint.classList.remove('show');
+    }
+  }
 }
 
 (function setupCropHandles() {
@@ -4705,9 +5078,21 @@ function updateCropOverlay() {
     const dy = (e.clientY - startPos.y) / scale;
     let r = { ...startRect };
     const W = App.workW, H = App.workH;
+    // Outer bounds: allow the crop frame to extend up to 4× the workspace
+    // dimensions in either direction so users can EXPAND the canvas by
+    // pulling the frame beyond the image. The original image stays put;
+    // applyCrop() will pad the new transparent area + shift other layers
+    // so they remain visually anchored.
+    const PAD_MAX = 4;
+    const minX = -W * (PAD_MAX - 1);
+    const minY = -H * (PAD_MAX - 1);
+    const maxR = W + W * (PAD_MAX - 1); // right edge can reach
+    const maxB = H + H * (PAD_MAX - 1); // bottom edge can reach
+
     if (dragMode === 'move') {
-      r.x = clamp(startRect.x + dx, 0, W - r.w);
-      r.y = clamp(startRect.y + dy, 0, H - r.h);
+      // Free-move: keep within outer bounds but allow negative origin (expansion).
+      r.x = clamp(startRect.x + dx, minX, maxR - r.w);
+      r.y = clamp(startRect.y + dy, minY, maxB - r.h);
     } else {
       const ap = ASPECT_PRESETS.find(a => a.id === App.cropAspect);
       let ratio = ap ? ap.ratio : null;
@@ -4743,12 +5128,15 @@ function updateCropOverlay() {
           r.h = newH;
         }
       }
+      // Minimum size — never go below 40 in either axis.
       if (r.w < 40) r.w = 40;
       if (r.h < 40) r.h = 40;
-      if (r.x < 0) { r.w += r.x; r.x = 0; }
-      if (r.y < 0) { r.h += r.y; r.y = 0; }
-      if (r.x + r.w > W) r.w = W - r.x;
-      if (r.y + r.h > H) r.h = H - r.y;
+      // Outer maximum: clamp into the [minX, maxR] × [minY, maxB] box.
+      // Negative origin / past-edge are ALLOWED (this triggers canvas expansion).
+      if (r.x < minX) { r.w += (r.x - minX); r.x = minX; if (r.w < 40) r.w = 40; }
+      if (r.y < minY) { r.h += (r.y - minY); r.y = minY; if (r.h < 40) r.h = 40; }
+      if (r.x + r.w > maxR) r.w = maxR - r.x;
+      if (r.y + r.h > maxB) r.h = maxB - r.y;
     }
     App.cropRect = r;
     updateCropOverlay();
@@ -4804,24 +5192,177 @@ function bakeQuarterTurn(degrees) {
 function applyCrop() {
   if (!App.cropRect) return;
   const r = App.cropRect;
-  // Ensure pre-crop state is in history so undo restores.
-  // We deliberately keep history intact and just push a new snapshot afterward.
-  loading(true, 'Applying crop…');
+  const W = App.workW, H = App.workH;
+  const expandsCanvas = (r.x < 0) || (r.y < 0) || (r.x + r.w > W) || (r.y + r.h > H);
+  loading(true, expandsCanvas ? 'Expanding canvas…' : 'Applying crop…');
   setTimeout(() => {
-    const flat = document.createElement('canvas');
-    flat.width = App.workW;
-    flat.height = App.workH;
-    flat.getContext('2d').drawImage(App.canvas, 0, 0);
+    const newW = Math.round(r.w);
+    const newH = Math.round(r.h);
 
-    const cropC = document.createElement('canvas');
-    cropC.width = Math.round(r.w);
-    cropC.height = Math.round(r.h);
-    cropC.getContext('2d').drawImage(flat, r.x, r.y, r.w, r.h, 0, 0, r.w, r.h);
+    if (!expandsCanvas) {
+      // Simple crop: shrink the image into a new bitmap and rebuild.
+      const flat = document.createElement('canvas');
+      flat.width = W; flat.height = H;
+      flat.getContext('2d').drawImage(App.canvas, 0, 0);
+      const cropC = document.createElement('canvas');
+      cropC.width = newW;
+      cropC.height = newH;
+      cropC.getContext('2d').drawImage(flat, r.x, r.y, r.w, r.h, 0, 0, r.w, r.h);
+      rebuildFromImageCanvas(cropC, /*keepHistory*/ true);
+      setTool('adjust');
+      loading(false);
+      toast('Cropped', 'success');
+      return;
+    }
 
-    rebuildFromImageCanvas(cropC, /*keepHistory*/ true);
+    // EXPANSION PATH:
+    // The crop rect extends beyond the image. Resize the workspace canvas to
+    // the rect dimensions, redraw each layer's content at a SHIFTED offset
+    // so it remains in the same visual position relative to the image.
+    // The original image becomes a smaller patch within the new (larger) canvas.
+    //
+    // Offset = -rect.origin. e.g. if rect.x = -100, the image shifts +100 px
+    // to keep its visual position. Other layers' (x,y) — which are stored as
+    // offsets from canvas center — also need shifting (in workspace units).
+    //
+    // For a layer with x/y stored as an offset from the canvas CENTER, the
+    // visual coordinate of the layer's center inside the OLD canvas was
+    //   oldCx = W/2 + layer.x
+    // After resize, the new canvas center is at newW/2 (in new-canvas coords),
+    // and the new canvas's (0,0) maps to OLD coord (r.x, r.y). So the layer's
+    // old visual center maps to NEW coord = (oldCx - r.x, oldCy - r.y).
+    // We want layer.x' such that newW/2 + layer.x' = oldCx - r.x.
+    //   => layer.x' = (oldCx - r.x) - newW/2
+    //              = (W/2 + layer.x - r.x) - newW/2
+    //              = layer.x + (W - newW)/2 - r.x
+    //
+    // For the locked BACKGROUND image (whose canvas is workspace-sized, no
+    // x/y offset by convention), we resize the canvas to (newW, newH) and
+    // draw the old bitmap at (-r.x, -r.y) — that places the original pixels
+    // at their original visual coords inside the new bigger canvas.
+    //
+    // Drawing layers also have workspace-sized canvases. We resize their
+    // canvas to (newW, newH) and draw the old bitmap at (-r.x, -r.y) too.
+    // (Their x/y is typically 0,0 since they pan via their canvas content.)
+    //
+    // Text / shape layers have native-size canvases; we adjust layer.x/y
+    // via the formula above.
+    //
+    // Frame layers re-render to the new workspace dims.
+    //
+    // History: push a single snapshot AFTER the change so undo reverts.
+
+    const dxShift = (W - newW) / 2 - r.x;
+    const dyShift = (H - newH) / 2 - r.y;
+
+    for (let i = 0; i < App.layers.length; i++) {
+      const layer = App.layers[i];
+      if (layer.type === 'image' && layer.locked) {
+        // Background: bake the base layer's adjustments/filter/effects/base
+        // transform into a fresh bitmap (NOT the live composite — that has
+        // all layers in it, which would double-draw drawings/text/shapes).
+        // Run the full base-layer pipeline into a temp canvas the same size
+        // as the old workspace, then re-anchor at (-r.x, -r.y) in the new.
+        const baked = document.createElement('canvas');
+        baked.width = W; baked.height = H;
+        const bakedCtx = baked.getContext('2d');
+        // Snapshot + neutralize layer opacity/blend so drawBaseLayer paints
+        // the bg pixels into `baked` at full strength. We restore the user's
+        // values after; the bg layer remains opacity=1/normal in practice.
+        const _bgOpacity = layer.opacity, _bgBlend = layer.blendMode;
+        layer.opacity = 1;
+        layer.blendMode = 'source-over';
+        // drawBaseLayer takes the same params used during compose; the bg
+        // layer's mask is applied inside, which is exactly what we want.
+        drawBaseLayer(baked, bakedCtx, layer, W, H, 1);
+        layer.opacity = _bgOpacity;
+        layer.blendMode = _bgBlend;
+        const nc = document.createElement('canvas');
+        nc.width = newW; nc.height = newH;
+        nc.getContext('2d').drawImage(baked, -r.x, -r.y);
+        layer.canvas = nc;
+        // Reset base transforms since they're now baked in.
+        App.adjustments = createDefaultAdjustments();
+        App.effects = createDefaultEffects();
+        App.activeFilter = 'none';
+        App.filterStrength = 100;
+        App.rotation = 0;
+        App.flipH = false; App.flipV = false;
+        App.colorOverlay = { color: '#14b8a6', strength: 0, blendMode: 'overlay' };
+        // Mask was already baked into the canvas by drawBaseLayer — clear it
+        // so we don't double-apply.
+        layer.mask = null;
+        if (layer.meta) layer.meta.originalImage = null;
+        continue;
+      }
+      if (layer.type === 'drawing') {
+        // Workspace-sized layer: resize canvas to the new dims and redraw
+        // its content at (-r.x, -r.y) so brush strokes stay anchored.
+        //
+        // Why we DON'T also shift layer.x/y: the canvas content shift already
+        // moves the pixels to their correct visual position. A drawing
+        // pixel at OLD canvas coord (px, py) was at workspace (px + layer.x).
+        // After we copy it into NEW canvas at (px - r.x, py - r.y), and
+        // because the new layer (still untranslated x,y) renders the new
+        // canvas with no offset, that pixel ends up at new workspace
+        // ((px - r.x) + layer.x). Old visual workspace = px + layer.x.
+        // New target workspace (after canvas expansion) = (px + layer.x) - r.x.
+        // ✓ matches. So layer.x/y stay unchanged.
+        const nc = document.createElement('canvas');
+        nc.width = newW; nc.height = newH;
+        nc.getContext('2d').drawImage(layer.canvas, -r.x, -r.y);
+        layer.canvas = nc;
+        if (layer.mask) {
+          const nm = document.createElement('canvas');
+          nm.width = newW; nm.height = newH;
+          nm.getContext('2d').drawImage(layer.mask, -r.x, -r.y);
+          layer.mask = nm;
+        }
+        continue;
+      }
+      if (layer.type === 'text' || layer.type === 'shape') {
+        // Native-size canvas; just shift the offset.
+        layer.x = (layer.x || 0) + dxShift;
+        layer.y = (layer.y || 0) + dyShift;
+        continue;
+      }
+      if (layer.type === 'frame') {
+        // Frame is workspace-sized — re-render to new dims after we update workW/H.
+        // We'll handle below.
+        continue;
+      }
+      // Adjustment / other: shift offset for safety.
+      layer.x = (layer.x || 0) + dxShift;
+      layer.y = (layer.y || 0) + dyShift;
+    }
+
+    // Update workspace dims
+    App.imgW = newW;
+    App.imgH = newH;
+    App.workW = newW;
+    App.workH = newH;
+    App.canvas.width = newW;
+    App.canvas.height = newH;
+    App.composite.width = newW;
+    App.composite.height = newH;
+    els.interactCanvas.width = newW;
+    els.interactCanvas.height = newH;
+    setupPreview();
+
+    // Re-render any frame layers now that workW/H are updated
+    for (const layer of App.layers) {
+      if (layer.type === 'frame') {
+        renderFrameLayer(layer);
+      }
+    }
+
+    App.cropRect = null;
+    fitCanvasToView();
+    renderFull();
+    pushHistory();
     setTool('adjust');
     loading(false);
-    toast('Cropped', 'success');
+    toast('Canvas expanded', 'success');
   }, 50);
 }
 
@@ -6521,34 +7062,46 @@ els.textApply.addEventListener('click', () => {
 });
 
 /* ----------------------------------------------------------------
-   TEXT SELECTION OVERLAY — handles the visible bounding box and
-   8 transform handles on the canvas-stage. Lives inside the
-   .canvas-stage so it scales with zoom, but handles use border-box
-   pixels relative to the layer's apparent rect.
+   TEXT / SHAPE / LAYER SELECTION OVERLAY (unified geometry)
+
+   We have three sibling overlay elements (#textSelBox, #shapeSelBox,
+   #layerSelBox) that share the same DOM shape and visual style. The
+   per-tool wrappers (updateTextSelection / updateShapeSelection /
+   updateLayerSelection) decide WHICH box to show and pass the active
+   layer + flags to applyWarpBoxGeometry(), which does all the
+   position/handle/inverse-scale math.
+
+   Flags:
+     - locked:       greyed-out style, handles hidden (Background, frame,
+                     adjustment, or anything unmovable). Drag is a no-op.
+     - uniformOnly:  only corner handles + rotation pin are visible. Used
+                     for image/drawing layers which have a single uniform
+                     scale field (mid handles would imply scaleX/scaleY).
    ---------------------------------------------------------------- */
-function updateTextSelection() {
-  const box = els.textSelBox;
+function applyWarpBoxGeometry(box, layer, opts) {
   if (!box) return;
-  if (App.activeTool !== 'text') {
-    box.classList.remove('active');
-    return;
-  }
-  const layer = currentTextLayer();
-  if (!layer) {
-    box.classList.remove('active');
-    return;
-  }
+  if (!layer) { box.classList.remove('active'); return; }
   const W = App.workW, H = App.workH;
-  const cw = layer.canvas.width;
-  const ch = layer.canvas.height;
-  if (!cw || !ch) {
-    box.classList.remove('active');
-    return;
+  // Bounds source: text/shape use their native canvas size; image/drawing/
+  // frame/adjustment layers are workspace-sized so we measure WxH.
+  let bw, bh;
+  if (layer.type === 'text' || layer.type === 'shape') {
+    bw = layer.canvas ? layer.canvas.width : 0;
+    bh = layer.canvas ? layer.canvas.height : 0;
+  } else {
+    // image / drawing / frame / adjustment — bounds = workspace
+    bw = W; bh = H;
   }
-  const layerCx = W/2 + layer.x;
-  const layerCy = H/2 + layer.y;
-  const boxW = cw * layer.scale;
-  const boxH = ch * layer.scale;
+  if (!bw || !bh) { box.classList.remove('active'); return; }
+
+  const scale = layer.scale != null ? layer.scale : 1;
+  // For text/shape, x/y are offsets from canvas center. For workspace-sized
+  // layers (image/drawing/frame/adj), x/y are also offsets from the centered
+  // origin (default 0,0 = layer covers workspace), so the same math applies.
+  const layerCx = W/2 + (layer.x || 0);
+  const layerCy = H/2 + (layer.y || 0);
+  const boxW = bw * scale;
+  const boxH = bh * scale;
   const boxLeft = layerCx - boxW/2;
   const boxTop = layerCy - boxH/2;
 
@@ -6558,24 +7111,19 @@ function updateTextSelection() {
   box.style.height = boxH + 'px';
   box.style.transform = `rotate(${layer.rotation || 0}deg)`;
   box.classList.add('active');
+  box.classList.toggle('locked', !!(opts && opts.locked));
+  box.classList.toggle('uniform-only', !!(opts && opts.uniformOnly));
 
-  // Counter-scale handles & dashed border thickness so they stay constant on-screen.
+  // Counter-scale all visible interactive bits so they stay ~constant on screen.
   const stageScale = Math.max(0.001, App.fitScale * App.zoom);
   const invScale = 1 / stageScale;
-  // Set border thickness on frame (use inline style override)
   const frame = box.querySelector('.text-sel-frame');
-  if (frame) {
-    frame.style.borderWidth = Math.max(0.6, 1.5 * invScale) + 'px';
-  }
-  // Resize the dashed pattern... canvas pattern only — we'll scale handle hit areas.
-  // Use width/height to keep handles visually constant
-  const handleSize = 24 * invScale;
+  if (frame) frame.style.borderWidth = Math.max(0.6, 1.5 * invScale) + 'px';
+  const handleSize = 28 * invScale;   // bumped from 24 -> touch-friendly target
   const halfH = handleSize / 2;
-  const dotSize = 12 * invScale;
   box.querySelectorAll('.text-sel-handle').forEach(h => {
     h.style.width = handleSize + 'px';
     h.style.height = handleSize + 'px';
-    // recenter the handle on the corner / edge midpoint
     if (h.classList.contains('tl')) { h.style.top = -halfH + 'px'; h.style.left = -halfH + 'px'; h.style.right=''; h.style.bottom=''; h.style.transform=''; }
     else if (h.classList.contains('tr')) { h.style.top = -halfH + 'px'; h.style.right = -halfH + 'px'; h.style.left=''; h.style.bottom=''; h.style.transform=''; }
     else if (h.classList.contains('bl')) { h.style.bottom = -halfH + 'px'; h.style.left = -halfH + 'px'; h.style.top=''; h.style.right=''; h.style.transform=''; }
@@ -6585,9 +7133,6 @@ function updateTextSelection() {
     else if (h.classList.contains('lm')) { h.style.left = -halfH + 'px'; h.style.top = '50%'; h.style.transform = 'translateY(-50%)'; h.style.right=''; h.style.bottom=''; }
     else if (h.classList.contains('rm')) { h.style.right = -halfH + 'px'; h.style.top = '50%'; h.style.transform = 'translateY(-50%)'; h.style.left=''; h.style.bottom=''; }
   });
-  // Rotation pin: a dedicated round target floating ABOVE the box top edge,
-  // connected by a thin line. It's the ONLY rotation affordance.
-  // Hit area counter-scales to ~32px on screen (>=28px minimum touch target).
   const pin = box.querySelector('.text-sel-rotpin');
   if (pin) {
     const pinPx = 32 * invScale;
@@ -6612,8 +7157,14 @@ function updateTextSelection() {
     rotLine.style.top = -h + 'px';
     rotLine.style.width = Math.max(1, 2 * invScale) + 'px';
   }
-  // Apply CSS variable for the ::before dot size
   box.style.setProperty('--handle-dot-size', (12 * invScale) + 'px');
+}
+
+function updateTextSelection() {
+  const box = els.textSelBox;
+  if (!box) return;
+  if (App.activeTool !== 'text') { box.classList.remove('active'); return; }
+  applyWarpBoxGeometry(box, currentTextLayer(), { locked: false, uniformOnly: false });
 }
 
 /* applyStageTransform already calls updateTextSelection when present */
@@ -6925,12 +7476,27 @@ function buildLayerRow(layer) {
     </div>
   `;
 
-  // Activate on tap (anywhere except inputs/buttons)
+  // Activate on tap (anywhere except inputs/buttons).
+  // setActiveLayer also mirrors selection state into the right per-type slot
+  // (textSelectionId / shapeSelectionId / layerSelectionId) so the matching
+  // warp box renders immediately. For text/shape, switch the tool so the
+  // dedicated panel (and warp box) takes over.
   row.addEventListener('pointerdown', e => {
     if (e.target.closest('button,input,.layer-grip,.layer-actions')) return;
     setActiveLayer(layer.id);
     document.querySelectorAll('.layer-row').forEach(r => r.classList.remove('active'));
     row.classList.add('active');
+    if (layer.type === 'text') {
+      setTool('text');
+      return;
+    }
+    if (layer.type === 'shape') {
+      setTool('shape');
+      return;
+    }
+    if (typeof updateTextSelection === 'function') updateTextSelection();
+    if (typeof updateShapeSelection === 'function') updateShapeSelection();
+    if (typeof updateLayerSelection === 'function') updateLayerSelection();
   });
 
   // Visibility
@@ -7134,8 +7700,53 @@ function updateLayerThumbs() {
 }
 
 /* ================================================================
-   LAYER MOVE / SCALE / ROTATE ON CANVAS (non-background)
-   Long-press on canvas to enter move mode? We'll allow it when activeTool === 'layers'
+   LAYER SELECTION OVERLAY (image / drawing / frame / adjustment)
+   ================================================================ */
+/* Helpers ---------------------------------------------------------*/
+/* Layer is selectable as a "generic layer" (renders the layerSelBox)
+ * when it's NOT a text or shape (those have their own dedicated
+ * overlays). Background image still gets a visible box but locked. */
+function isGenericLayerType(t) {
+  return t === 'image' || t === 'drawing' || t === 'frame' || t === 'adjustment';
+}
+/* Should the warp-box for a layer of this type allow transform gestures? */
+function isLayerTransformable(layer) {
+  if (!layer) return false;
+  if (layer.locked) return false;                  // Background image
+  if (layer.type === 'frame') return false;        // workspace-sized, can't translate
+  if (layer.type === 'adjustment') return false;   // no visual transform
+  return true;
+}
+/* Layer the Layers tool considers "selected" for the warp box */
+function currentLayerSelection() {
+  if (App.layerSelectionId != null) {
+    const l = findLayer(App.layerSelectionId);
+    if (l && isGenericLayerType(l.type)) return l;
+  }
+  const a = activeLayer();
+  if (a && isGenericLayerType(a.type)) return a;
+  return null;
+}
+
+function updateLayerSelection() {
+  const box = els.layerSelBox;
+  if (!box) return;
+  if (App.activeTool !== 'layers') { box.classList.remove('active'); return; }
+  const layer = currentLayerSelection();
+  if (!layer) { box.classList.remove('active'); return; }
+  const locked = !isLayerTransformable(layer);
+  // Image/drawing keep uniform scale (single `scale` field) — corner handles only.
+  // Frame/adjustment are locked anyway (mid handles hidden by locked class).
+  const uniformOnly = (layer.type === 'image' || layer.type === 'drawing');
+  applyWarpBoxGeometry(box, layer, { locked, uniformOnly });
+}
+
+/* ================================================================
+   LAYER MOVE / SCALE / ROTATE ON CANVAS (image / drawing layers)
+   Gestures route through the unified warp box (#layerSelBox) plus
+   a tap-to-select fallback on the canvas body. Pinch on the canvas
+   still works as a quick two-finger transform for transformable
+   layers.
    ================================================================ */
 (function setupLayerInteraction() {
   const wrap = els.canvasWrap;
@@ -7143,6 +7754,11 @@ function updateLayerThumbs() {
   let pinchStart = null;
   let dragStart = null;
   let layerStart = null;
+  // Warp-box specific state
+  let warpMode = null;       // 'move' | 'rotate' | 'scale-<handle>'
+  let warpHandle = null;
+  let warpState = null;
+  let warpLayer = null;
 
   function getPt(e) {
     const r = els.canvasStage.getBoundingClientRect();
@@ -7151,21 +7767,180 @@ function updateLayerThumbs() {
       y: ((e.clientY - r.top) / r.height) * App.workH,
     };
   }
-  function active() {
-    const l = activeLayer();
-    if (!l) return null;
-    if (l.locked) return null; // can't move background
+  function shouldHandle() { return App.activeTool === 'layers'; }
+  function transformableSelection() {
+    const l = currentLayerSelection();
+    if (!l || !isLayerTransformable(l)) return null;
     return l;
   }
-  function shouldHandle() {
-    return App.activeTool === 'layers';
+
+  // Hit-test a generic layer at workspace point pt. For image/drawing/frame
+  // layers, the bounds are workspace-sized → effectively always a hit, so we
+  // prefer the topmost layer that contains it inside its rotated/scaled box.
+  function hitTestLayerAt(pt) {
+    const W = App.workW, H = App.workH;
+    for (let i = App.layers.length - 1; i >= 0; i--) {
+      const l = App.layers[i];
+      if (!l.visible) continue;
+      if (!isGenericLayerType(l.type)) continue;
+      // Bounds source
+      const bw = (l.type === 'image' || l.type === 'drawing' || l.type === 'frame' || l.type === 'adjustment') ? W : (l.canvas?.width || W);
+      const bh = (l.type === 'image' || l.type === 'drawing' || l.type === 'frame' || l.type === 'adjustment') ? H : (l.canvas?.height || H);
+      const cx = W/2 + (l.x || 0);
+      const cy = H/2 + (l.y || 0);
+      const dx = pt.x - cx;
+      const dy = pt.y - cy;
+      const ang = -(l.rotation || 0) * Math.PI / 180;
+      const lx = dx * Math.cos(ang) - dy * Math.sin(ang);
+      const ly = dx * Math.sin(ang) + dy * Math.cos(ang);
+      const sc = l.scale || 1;
+      const halfW = bw * sc / 2;
+      const halfH = bh * sc / 2;
+      if (Math.abs(lx) <= halfW && Math.abs(ly) <= halfH) return l;
+    }
+    return null;
   }
 
+  /* ----- Warp box handle/frame/rotpin gestures --------------------*/
+  function onSelDown(e) {
+    if (!shouldHandle()) return;
+    const handleEl = e.target.closest('.text-sel-handle');
+    const rotPinEl = e.target.closest('.text-sel-rotpin');
+    const frameEl = e.target.closest('.text-sel-frame');
+    // Only respond if the event is on the LAYER box (not text/shape boxes).
+    const box = e.target.closest('#layerSelBox');
+    if (!box) return;
+    const layer = transformableSelection();
+    if (!layer) return;
+    const pt = getPt(e);
+
+    if (rotPinEl) {
+      e.preventDefault(); e.stopPropagation();
+      if (wrap.setPointerCapture) wrap.setPointerCapture(e.pointerId);
+      warpHandle = 'rot';
+      warpMode = 'rotate';
+      warpLayer = layer;
+      warpState = layerStateSnapshot(layer, pt);
+      return;
+    }
+    if (handleEl) {
+      e.preventDefault(); e.stopPropagation();
+      if (wrap.setPointerCapture) wrap.setPointerCapture(e.pointerId);
+      warpHandle = handleEl.dataset.handle;
+      warpMode = 'scale';
+      warpLayer = layer;
+      warpState = layerStateSnapshot(layer, pt);
+      return;
+    }
+    if (frameEl) {
+      e.preventDefault(); e.stopPropagation();
+      if (wrap.setPointerCapture) wrap.setPointerCapture(e.pointerId);
+      warpMode = 'move';
+      warpLayer = layer;
+      warpState = { x: layer.x || 0, y: layer.y || 0, pointer: pt };
+    }
+  }
+  function layerStateSnapshot(layer, pt) {
+    const W = App.workW, H = App.workH;
+    let bw, bh;
+    if (layer.type === 'text' || layer.type === 'shape') {
+      bw = layer.canvas?.width || 0; bh = layer.canvas?.height || 0;
+    } else {
+      bw = W; bh = H;
+    }
+    return {
+      x: layer.x || 0, y: layer.y || 0,
+      scale: layer.scale || 1, rotation: layer.rotation || 0,
+      pointer: pt,
+      canvasW: bw, canvasH: bh,
+      centerWork: { x: W/2 + (layer.x || 0), y: H/2 + (layer.y || 0) },
+    };
+  }
+  function onSelMove(e) {
+    if (!shouldHandle() || !warpMode || !warpLayer) return;
+    e.preventDefault();
+    const pt = getPt(e);
+    if (warpMode === 'move') {
+      warpLayer.x = warpState.x + (pt.x - warpState.pointer.x);
+      warpLayer.y = warpState.y + (pt.y - warpState.pointer.y);
+      requestRender();
+      updateLayerSelection();
+      return;
+    }
+    if (warpMode === 'rotate') {
+      const cx = warpState.centerWork.x;
+      const cy = warpState.centerWork.y;
+      if (warpState.initialAng == null) {
+        warpState.initialAng = Math.atan2(warpState.pointer.y - cy, warpState.pointer.x - cx) * 180 / Math.PI;
+      }
+      const ang = Math.atan2(pt.y - cy, pt.x - cx) * 180 / Math.PI;
+      let newRot = warpState.rotation + (ang - warpState.initialAng);
+      if (e.shiftKey) newRot = Math.round(newRot / 15) * 15;
+      warpLayer.rotation = newRot;
+      requestRender();
+      updateLayerSelection();
+      return;
+    }
+    if (warpMode === 'scale') {
+      const cx = warpState.centerWork.x;
+      const cy = warpState.centerWork.y;
+      const ang = -(warpState.rotation || 0) * Math.PI / 180;
+      const dx = pt.x - cx;
+      const dy = pt.y - cy;
+      const lx = dx * Math.cos(ang) - dy * Math.sin(ang);
+      const ly = dx * Math.sin(ang) + dy * Math.cos(ang);
+      const halfW = warpState.canvasW / 2;
+      const halfH = warpState.canvasH / 2;
+      let newScale = warpState.scale;
+      switch (warpHandle) {
+        case 'tl': case 'tr': case 'bl': case 'br': {
+          const sx = Math.abs(lx) / halfW;
+          const sy = Math.abs(ly) / halfH;
+          // Uniform: average of the two axis stretches (gives a natural feel).
+          newScale = (sx + sy) / 2;
+          break;
+        }
+        case 'tm': case 'bm': newScale = Math.abs(ly) / halfH; break;
+        case 'lm': case 'rm': newScale = Math.abs(lx) / halfW; break;
+      }
+      newScale = clamp(newScale, 0.05, 12);
+      warpLayer.scale = newScale;
+      requestRender();
+      updateLayerSelection();
+    }
+  }
+  function onSelEnd(e) {
+    if (warpMode) {
+      pushHistory();
+    }
+    warpMode = null; warpHandle = null; warpState = null; warpLayer = null;
+  }
+  wrap.addEventListener('pointerdown', onSelDown, true);
+  wrap.addEventListener('pointermove', onSelMove, true);
+  wrap.addEventListener('pointerup', onSelEnd, true);
+  wrap.addEventListener('pointercancel', onSelEnd, true);
+
+  /* ----- Body / pinch fallback -----------------------------------*/
   wrap.addEventListener('pointerdown', e => {
     if (!shouldHandle()) return;
-    const l = active();
-    if (!l) return;
-    if (e.target.closest('button,input,select,.layer-row')) return;
+    if (warpMode) return; // already handled by warp gestures
+    if (e.target.closest('button,input,select,.layer-row,.text-sel-box,.text-sel-handle,.text-sel-rotpin,.text-sel-frame')) return;
+    // Tap to select the topmost generic layer at this point. If no hit,
+    // keep current selection.
+    const pt = getPt(e);
+    const hit = hitTestLayerAt(pt);
+    if (hit) {
+      // Don't clobber active selection of text/shape since they're separate tools.
+      App.layerSelectionId = hit.id;
+      setActiveLayer(hit.id);
+      updateLayerSelection();
+      // Refresh layer-row highlights in the panel
+      document.querySelectorAll('.layer-row').forEach(r => {
+        r.classList.toggle('active', +r.dataset.layerId === hit.id);
+      });
+    }
+    const layer = transformableSelection();
+    if (!layer) return;
     e.preventDefault();
     e.stopPropagation();
     wrap.setPointerCapture(e.pointerId);
@@ -7175,18 +7950,20 @@ function updateLayerThumbs() {
       pinchStart = {
         dist: Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y),
         angle: Math.atan2(pts[1].y - pts[0].y, pts[1].x - pts[0].x),
-        scale: l.scale,
-        rot: l.rotation,
+        scale: layer.scale,
+        rot: layer.rotation,
       };
     } else {
       dragStart = pointers.get(e.pointerId);
-      layerStart = { x: l.x, y: l.y };
+      layerStart = { x: layer.x, y: layer.y };
     }
   }, true);
 
+  let bodyMoved = false;
   wrap.addEventListener('pointermove', e => {
     if (!shouldHandle()) return;
-    const l = active();
+    if (warpMode) return;
+    const l = transformableSelection();
     if (!l) return;
     if (!pointers.has(e.pointerId)) return;
     pointers.set(e.pointerId, getPt(e));
@@ -7198,12 +7975,16 @@ function updateLayerThumbs() {
       l.scale = clamp(pinchStart.scale * k, 0.1, 8);
       const dAng = (angle - pinchStart.angle) * 180 / Math.PI;
       l.rotation = pinchStart.rot + dAng;
+      bodyMoved = true;
       requestRender();
+      updateLayerSelection();
     } else if (pointers.size === 1 && dragStart) {
       const pt = pointers.get(e.pointerId);
       l.x = layerStart.x + (pt.x - dragStart.x);
       l.y = layerStart.y + (pt.y - dragStart.y);
+      bodyMoved = true;
       requestRender();
+      updateLayerSelection();
     }
   }, true);
 
@@ -7211,9 +7992,10 @@ function updateLayerThumbs() {
     if (pointers.size === 2) pinchStart = null;
     pointers.delete(e.pointerId);
     if (pointers.size === 0) {
-      if (dragStart || pinchStart) pushHistory();
+      if (bodyMoved) pushHistory();
       dragStart = null;
       pinchStart = null;
+      bodyMoved = false;
     }
   }
   wrap.addEventListener('pointerup', end, true);
@@ -7243,6 +8025,7 @@ document.querySelectorAll('.sheet [data-action]').forEach(b => {
       App.activeLayerId = null;
       App.textSelectionId = null;
       App.shapeSelectionId = null;
+      App.layerSelectionId = null;
       App.frameLayerId = null;
       App.framePreset = 'none';
       App.colorOverlay = { color: '#14b8a6', strength: 0, blendMode: 'overlay' };
@@ -7255,6 +8038,7 @@ document.querySelectorAll('.sheet [data-action]').forEach(b => {
       els.welcome.classList.remove('hidden');
       updateTextSelection();
       updateShapeSelection();
+      updateLayerSelection();
       showBrushCursor(false);
     }
   });
@@ -7390,7 +8174,7 @@ function getExportDims() {
   switch (exportResolution) {
     case 'orig': {
       // "Original" = at least the original source resolution. If the workspace
-      // is bigger (e.g. user upsized via Canvas Size), keep that.
+      // is bigger (e.g. user upsized via Adjust Image Size), keep that.
       const k = origW > 0 && w0 > 0 ? Math.max(1, origW / w0) : 1;
       const W = Math.max(w0, Math.round(w0 * k));
       const H = Math.max(h0, Math.round(h0 * k));
@@ -7794,13 +8578,172 @@ async function doShare() {
 
 /* ================================================================
    KEYBOARD SHORTCUTS
+   The original guard `e.target.matches('input,textarea,select')` blocked
+   undo/redo whenever a SLIDER had focus (range inputs match `input`).
+   That alone made Ctrl+Z appear broken after any slider drag. We now
+   check for text-entry inputs only (text/number/search/email/textarea)
+   and also ignore the textInput modal if open.
    ================================================================ */
+function _isTextInputFocused(t) {
+  if (!t) return false;
+  if (t.isContentEditable) return true;
+  const tag = t.tagName;
+  if (tag === 'TEXTAREA') return true;
+  if (tag === 'SELECT') return true; // select also captures arrow keys
+  if (tag !== 'INPUT') return false;
+  const type = (t.type || 'text').toLowerCase();
+  // These input types should NOT block keyboard shortcuts.
+  // Notably: range (sliders) and color picker buttons. Sliders are the
+  // historical culprit for "undo doesn't work".
+  if (type === 'range' || type === 'color' || type === 'checkbox'
+      || type === 'radio' || type === 'button' || type === 'submit'
+      || type === 'reset' || type === 'file' || type === 'image') return false;
+  return true; // text/number/search/email/url/tel/password/etc.
+}
+
+function _nudgeLayer(layer, dx, dy) {
+  if (!layer) return;
+  layer.x = (layer.x || 0) + dx;
+  layer.y = (layer.y || 0) + dy;
+  renderFull();
+  if (typeof updateTextSelection === 'function') updateTextSelection();
+  if (typeof updateShapeSelection === 'function') updateShapeSelection();
+  pushHistoryDebounced(400);
+}
+
+function _selectAllLayers() {
+  // We don't have a multi-select model, so this just makes all layers
+  // visible and toasts a hint. Safe noop semantics requested by spec.
+  if (!App.layers.length) return;
+  let count = 0;
+  App.layers.forEach(l => { if (!l.visible) { l.visible = true; count++; } });
+  if (count > 0) { renderFull(); updateToolPanel(); pushHistory(); toast('All layers shown'); }
+}
+
+function _zoomBy(factor) {
+  if (!App.layers.length) return;
+  // Match the bounds used by the pinch/wheel zoom (0.4 .. 8) so all paths agree.
+  const next = clamp(App.zoom * factor, 0.4, 8);
+  App.zoom = next;
+  if (typeof clampPan === 'function') clampPan();
+  applyStageTransform();
+  els.zoomIndicator.textContent = Math.round(App.zoom * 100) + '%';
+  els.zoomIndicator.classList.add('show');
+  clearTimeout(_zoomBy._t);
+  _zoomBy._t = setTimeout(() => els.zoomIndicator.classList.remove('show'), 800);
+}
+
 document.addEventListener('keydown', e => {
-  if (e.target.matches('input,textarea,select')) return;
-  if ((e.metaKey || e.ctrlKey) && e.key === 'z' && !e.shiftKey) { e.preventDefault(); undo(); }
-  else if ((e.metaKey || e.ctrlKey) && (e.key === 'y' || (e.shiftKey && e.key === 'Z'))) { e.preventDefault(); redo(); }
-  else if ((e.metaKey || e.ctrlKey) && e.key === 's') { e.preventDefault(); els.exportBtn.click(); }
-  else if ((e.metaKey || e.ctrlKey) && e.key === 'c') { e.preventDefault(); doCopyClipboard(); }
+  // Skip when a real text-entry field has focus; sliders/buttons no longer block.
+  if (_isTextInputFocused(e.target)) return;
+  // Skip when the textInput modal is showing (its textarea catches keys).
+  if (els.textInputWrap && els.textInputWrap.classList.contains('active')) return;
+
+  const mod = e.metaKey || e.ctrlKey;
+  const key = e.key;
+
+  // Undo / Redo
+  if (mod && (key === 'z' || key === 'Z') && !e.shiftKey) { e.preventDefault(); undo(); return; }
+  if (mod && (key === 'y' || key === 'Y')) { e.preventDefault(); redo(); return; }
+  if (mod && (key === 'z' || key === 'Z') && e.shiftKey) { e.preventDefault(); redo(); return; }
+
+  // Save modal
+  if (mod && (key === 's' || key === 'S')) { e.preventDefault(); els.exportBtn.click(); return; }
+  // Copy to clipboard
+  if (mod && (key === 'c' || key === 'C')) { e.preventDefault(); doCopyClipboard(); return; }
+  // Duplicate active layer
+  if (mod && (key === 'd' || key === 'D')) {
+    e.preventDefault();
+    const a = activeLayer();
+    if (a && !(a.type === 'image' && a.locked)) {
+      duplicateLayer(a.id);
+      renderFull();
+      updateToolPanel();
+      pushHistory();
+      toast('Layer duplicated');
+    }
+    return;
+  }
+  // Select all (noop with hint; show all hidden layers)
+  if (mod && (key === 'a' || key === 'A')) {
+    e.preventDefault();
+    _selectAllLayers();
+    return;
+  }
+
+  // Delete selected text/shape/active layer (not the locked background)
+  if (key === 'Delete' || key === 'Backspace') {
+    // Prefer text/shape selection if set; otherwise active layer.
+    let targetId = null;
+    if (App.textSelectionId != null) targetId = App.textSelectionId;
+    else if (App.shapeSelectionId != null) targetId = App.shapeSelectionId;
+    else if (App.activeLayerId != null) {
+      const a = activeLayer();
+      if (a && !(a.type === 'image' && a.locked)) targetId = a.id;
+    }
+    if (targetId != null) {
+      e.preventDefault();
+      const wasFrame = (App.frameLayerId === targetId);
+      removeLayer(targetId);
+      if (wasFrame) { App.frameLayerId = null; App.framePreset = 'none'; }
+      App.textSelectionId = null;
+      App.shapeSelectionId = null;
+      renderFull();
+      updateToolPanel();
+      pushHistory();
+      toast('Layer deleted');
+    }
+    return;
+  }
+
+  // Escape: deselect everything, cancel in-progress crop
+  if (key === 'Escape') {
+    let changed = false;
+    if (App.textSelectionId != null) { App.textSelectionId = null; changed = true; }
+    if (App.shapeSelectionId != null) { App.shapeSelectionId = null; changed = true; }
+    if (App.cropRect != null) {
+      App.cropRect = null;
+      if (els.cropOverlay) els.cropOverlay.classList.remove('active');
+      changed = true;
+    }
+    if (changed) {
+      e.preventDefault();
+      if (typeof updateTextSelection === 'function') updateTextSelection();
+      if (typeof updateShapeSelection === 'function') updateShapeSelection();
+      updateToolPanel();
+    }
+    return;
+  }
+
+  // Arrow keys: nudge selected text/shape layer 1px (10 with Shift)
+  if (key === 'ArrowLeft' || key === 'ArrowRight' || key === 'ArrowUp' || key === 'ArrowDown') {
+    const targetId = App.textSelectionId != null ? App.textSelectionId
+                   : App.shapeSelectionId != null ? App.shapeSelectionId
+                   : null;
+    if (targetId != null) {
+      const layer = findLayer(targetId);
+      if (layer) {
+        const step = e.shiftKey ? 10 : 1;
+        let dx = 0, dy = 0;
+        if (key === 'ArrowLeft')  dx = -step;
+        if (key === 'ArrowRight') dx =  step;
+        if (key === 'ArrowUp')    dy = -step;
+        if (key === 'ArrowDown')  dy =  step;
+        e.preventDefault();
+        _nudgeLayer(layer, dx, dy);
+      }
+    }
+    return;
+  }
+
+  // +/- zoom canvas (no modifier so doesn't conflict with browser zoom)
+  if (!mod && (key === '+' || key === '=')) { e.preventDefault(); _zoomBy(1.15); return; }
+  if (!mod && (key === '-' || key === '_')) { e.preventDefault(); _zoomBy(1 / 1.15); return; }
+  if (!mod && key === '0') {
+    // Bonus: 0 fits to view (common convention).
+    if (App.layers.length) { e.preventDefault(); fitCanvasToView(); }
+    return;
+  }
 });
 
 /* Prevent iOS gesture defaults */
@@ -8295,82 +9238,13 @@ function buildShapePanel(body, actions) {
 
 /* ----------------------------------------------------------------
    SHAPE SELECTION OVERLAY — handles + bounding box for shape layers.
-   Mirrors text selection.
+   Mirrors text selection — both delegate to applyWarpBoxGeometry().
    ---------------------------------------------------------------- */
 function updateShapeSelection() {
   const box = els.shapeSelBox;
   if (!box) return;
-  if (App.activeTool !== 'shape') {
-    box.classList.remove('active');
-    return;
-  }
-  const layer = currentShapeLayer();
-  if (!layer) {
-    box.classList.remove('active');
-    return;
-  }
-  const W = App.workW, H = App.workH;
-  const cw = layer.canvas.width;
-  const ch = layer.canvas.height;
-  if (!cw || !ch) { box.classList.remove('active'); return; }
-  const layerCx = W/2 + layer.x;
-  const layerCy = H/2 + layer.y;
-  const boxW = cw * layer.scale;
-  const boxH = ch * layer.scale;
-  const boxLeft = layerCx - boxW/2;
-  const boxTop = layerCy - boxH/2;
-
-  box.style.left = boxLeft + 'px';
-  box.style.top = boxTop + 'px';
-  box.style.width = boxW + 'px';
-  box.style.height = boxH + 'px';
-  box.style.transform = `rotate(${layer.rotation || 0}deg)`;
-  box.classList.add('active');
-
-  const stageScale = Math.max(0.001, App.fitScale * App.zoom);
-  const invScale = 1 / stageScale;
-  const frame = box.querySelector('.text-sel-frame');
-  if (frame) frame.style.borderWidth = Math.max(0.6, 1.5 * invScale) + 'px';
-  const handleSize = 24 * invScale;
-  const halfH = handleSize / 2;
-  box.querySelectorAll('.text-sel-handle').forEach(h => {
-    h.style.width = handleSize + 'px';
-    h.style.height = handleSize + 'px';
-    if (h.classList.contains('tl')) { h.style.top = -halfH + 'px'; h.style.left = -halfH + 'px'; h.style.right=''; h.style.bottom=''; h.style.transform=''; }
-    else if (h.classList.contains('tr')) { h.style.top = -halfH + 'px'; h.style.right = -halfH + 'px'; h.style.left=''; h.style.bottom=''; h.style.transform=''; }
-    else if (h.classList.contains('bl')) { h.style.bottom = -halfH + 'px'; h.style.left = -halfH + 'px'; h.style.top=''; h.style.right=''; h.style.transform=''; }
-    else if (h.classList.contains('br')) { h.style.bottom = -halfH + 'px'; h.style.right = -halfH + 'px'; h.style.top=''; h.style.left=''; h.style.transform=''; }
-    else if (h.classList.contains('tm')) { h.style.top = -halfH + 'px'; h.style.left = '50%'; h.style.transform = 'translateX(-50%)'; h.style.right=''; h.style.bottom=''; }
-    else if (h.classList.contains('bm')) { h.style.bottom = -halfH + 'px'; h.style.left = '50%'; h.style.transform = 'translateX(-50%)'; h.style.right=''; h.style.top=''; }
-    else if (h.classList.contains('lm')) { h.style.left = -halfH + 'px'; h.style.top = '50%'; h.style.transform = 'translateY(-50%)'; h.style.right=''; h.style.bottom=''; }
-    else if (h.classList.contains('rm')) { h.style.right = -halfH + 'px'; h.style.top = '50%'; h.style.transform = 'translateY(-50%)'; h.style.left=''; h.style.bottom=''; }
-  });
-  // Rotation pin — same treatment as text overlay
-  const pin = box.querySelector('.text-sel-rotpin');
-  if (pin) {
-    const pinPx = 32 * invScale;
-    const lineLen = 28 * invScale;
-    pin.style.width = pinPx + 'px';
-    pin.style.height = pinPx + 'px';
-    pin.style.top = -(lineLen + pinPx) + 'px';
-    pin.style.left = '50%';
-    pin.style.marginLeft = -(pinPx / 2) + 'px';
-    pin.style.transform = '';
-    const svg = pin.querySelector('svg');
-    if (svg) {
-      const ic = 18 * invScale;
-      svg.style.width = ic + 'px';
-      svg.style.height = ic + 'px';
-    }
-  }
-  const rotLine = box.querySelector('.text-sel-rotline');
-  if (rotLine) {
-    const hh = 28 * invScale;
-    rotLine.style.height = hh + 'px';
-    rotLine.style.top = -hh + 'px';
-    rotLine.style.width = Math.max(1, 2 * invScale) + 'px';
-  }
-  box.style.setProperty('--handle-dot-size', (12 * invScale) + 'px');
+  if (App.activeTool !== 'shape') { box.classList.remove('active'); return; }
+  applyWarpBoxGeometry(box, currentShapeLayer(), { locked: false, uniformOnly: false });
 }
 
 /* ----------------------------------------------------------------
@@ -8642,7 +9516,16 @@ const FRAME_PRESETS = [
   { id:'torn',     name:'Torn Paper',   description:'Irregular edge' },
 ];
 
-/** Render the frame layer's canvas at workspace dims with current preset/width/color. */
+/** Render the frame layer's canvas at workspace dims with current preset/width/color.
+ *
+ * Frame thickness is ALWAYS computed from the WORKSPACE canvas (App.workW/H),
+ * NEVER from the viewport or the displayed canvas size. This ensures that a
+ * frame set to 8% looks identical on mobile, tablet, and desktop renders —
+ * the exported file is identical regardless of how big the canvas was when
+ * the frame was applied. Width is bounded to a reasonable 20% of the short
+ * edge (more becomes visually overpowering and risks the inner clip-area
+ * collapsing on narrow images). */
+const FRAME_MAX_PCT = 20;
 function renderFrameLayer(layer) {
   const W = App.workW, H = App.workH;
   if (layer.canvas.width !== W) layer.canvas.width = W;
@@ -8651,8 +9534,9 @@ function renderFrameLayer(layer) {
   ctx.clearRect(0, 0, W, H);
   const preset = layer.meta.preset || 'none';
   if (preset === 'none') return;
-  const widthPct = clamp(layer.meta.widthPct != null ? layer.meta.widthPct : 5, 0, 30);
+  const widthPct = clamp(layer.meta.widthPct != null ? layer.meta.widthPct : 5, 0, FRAME_MAX_PCT);
   const color = layer.meta.color || '#ffffff';
+  // Short edge of the WORKSPACE canvas — independent of zoom/display/viewport.
   const shortEdge = Math.min(W, H);
   const fw = Math.max(2, Math.round(shortEdge * widthPct / 100));
   drawFrame(ctx, W, H, fw, color, preset);
@@ -8889,7 +9773,10 @@ function buildFramePanel(body, actions) {
     tctx.fillStyle = grad;
     tctx.fillRect(0, 0, 80, 64);
     if (p.id !== 'none') {
-      drawFrame(tctx, 80, 64, Math.max(3, Math.floor(64 * (App.frameWidthPct / 100) * 1.0)), App.frameColor, p.id);
+      // Same math as renderFrameLayer: pct * short edge of THIS preview canvas.
+      const shortEdge = Math.min(80, 64);
+      const fw = Math.max(3, Math.floor(shortEdge * (App.frameWidthPct / 100)));
+      drawFrame(tctx, 80, 64, fw, App.frameColor, p.id);
     }
     thumb.appendChild(tc);
     tile.appendChild(thumb);
@@ -8904,20 +9791,22 @@ function buildFramePanel(body, actions) {
   });
   body.appendChild(grid);
 
-  // Width slider
+  // Width slider — capped at FRAME_MAX_PCT (20%) so frames never overpower
+  // the image. Pct is always measured against the WORKSPACE short edge, so
+  // the result looks identical on mobile and desktop.
   const wRow = document.createElement('div');
   wRow.className = 'slider-row';
-  const v0 = App.frameWidthPct;
+  const v0 = Math.min(App.frameWidthPct, FRAME_MAX_PCT);
   wRow.innerHTML = `
     <div class="slider-label">Width</div>
     <div class="slider-track">
-      <div class="slider-fill" style="width:${(v0/30)*100}%"></div>
-      <input type="range" min="1" max="30" value="${v0}">
+      <div class="slider-fill" style="width:${(v0/FRAME_MAX_PCT)*100}%"></div>
+      <input type="range" min="1" max="${FRAME_MAX_PCT}" value="${v0}">
     </div>
     <div class="slider-value">${v0}%</div>
   `;
   body.appendChild(wRow);
-  setupSlider(wRow, { bipolar:false, min:1, max:30, defaultValue:5 }, {
+  setupSlider(wRow, { bipolar:false, min:1, max:FRAME_MAX_PCT, defaultValue:5 }, {
     onInput: v => {
       App.frameWidthPct = v;
       const fl = App.frameLayerId != null ? findLayer(App.frameLayerId) : null;
@@ -9975,7 +10864,7 @@ function applyCanvasResize(newW, newH, resample) {
   const oldW = App.workW, oldH = App.workH;
   const sx = newW / oldW;
   const sy = newH / oldH;
-  loading(true, 'Resizing canvas…');
+  loading(true, 'Resizing image…');
   setTimeout(() => {
     App.workW = newW;
     App.workH = newH;
@@ -10066,7 +10955,7 @@ function applyCanvasResize(newW, newH, resample) {
     renderFull();
     pushHistory();
     loading(false);
-    toast('Canvas resized', 'success');
+    toast('Image resized', 'success');
   }, 30);
 }
 
@@ -10095,6 +10984,8 @@ function applyCanvasResize(newW, newH, resample) {
     // No-op for current text layers: their meta.color is captured at creation.
     // But we re-render selection so dashed border picks up new theme color.
     updateTextSelection();
+    updateShapeSelection();
+    if (typeof updateLayerSelection === 'function') updateLayerSelection();
   });
   observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
 })();
