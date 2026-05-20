@@ -1339,6 +1339,19 @@ body {
   </div>
 </div>
 
+<!-- ========== STORAGE CLEANUP MODAL ========== -->
+<div class="modal-overlay" id="storage-cleanup-overlay">
+  <div class="modal-dialog" style="max-width: 440px;">
+    <div class="modal-title">Storage Full</div>
+    <div class="modal-desc">Browser storage is out of space. Select rooms to clear from offline storage and free up room. Their content stays synced and reloads when you open them.</div>
+    <div class="room-manager-list" id="storage-cleanup-list"></div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeStorageCleanup()">Cancel</button>
+      <button class="btn btn-danger" onclick="confirmStorageCleanup()">Free Selected</button>
+    </div>
+  </div>
+</div>
+
 <!-- ========== DOWNLOAD MODAL ========== -->
 <div class="modal-overlay" id="download-overlay">
   <div class="modal-dialog" style="max-width: 360px;">
@@ -1430,11 +1443,103 @@ const store = (() => {
   const _s = (() => { try { return window[['local','Storage'].join('')]; } catch { return null; } })();
   let ok = false;
   try { if (_s) { const k = '__t'; _s.setItem(k, '1'); _s.removeItem(k); ok = true; } } catch {}
-  return {
-    get(key) { return ok ? _s.getItem(key) : (mem[key] ?? null); },
-    set(key, val) { if (ok) _s.setItem(key, val); else mem[key] = val; },
-    remove(key) { if (ok) _s.removeItem(key); else delete mem[key]; },
-  };
+
+  // Large values are split across "<key>\0chunk\0<i>" entries so each write
+  // stays small; the base key then holds a manifest marker instead of data.
+  const CHUNK_SIZE = 500000;
+  const CHUNK_SEP = '\u0000chunk\u0000';
+  const CHUNK_MARK = '\u0000CHUNKED\u0000';
+  const chunkKey = (key, i) => key + CHUNK_SEP + i;
+
+  const isQuotaError = e => !!e && (
+    e.name === 'QuotaExceededError' ||
+    e.name === 'NS_ERROR_DOM_QUOTA_REACHED' ||
+    e.code === 22 || e.code === 1014
+  );
+
+  function clearChunks(key) {
+    if (!ok) return;
+    const prefix = key + CHUNK_SEP;
+    const stale = [];
+    for (let i = 0; i < _s.length; i++) {
+      const k = _s.key(i);
+      if (k && k.startsWith(prefix)) stale.push(k);
+    }
+    stale.forEach(k => _s.removeItem(k));
+  }
+
+  // Writes a value, splitting it into chunks when oversized. Throws on quota.
+  function writeRaw(key, val) {
+    if (!ok) { mem[key] = val; return; }
+    clearChunks(key);
+    if (val.length <= CHUNK_SIZE) { _s.setItem(key, val); return; }
+    const n = Math.ceil(val.length / CHUNK_SIZE);
+    for (let i = 0; i < n; i++) {
+      _s.setItem(chunkKey(key, i), val.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE));
+    }
+    _s.setItem(key, CHUNK_MARK + n);
+  }
+
+  function get(key) {
+    if (Object.prototype.hasOwnProperty.call(mem, key)) return mem[key];
+    if (!ok) return null;
+    const v = _s.getItem(key);
+    if (v == null || !v.startsWith(CHUNK_MARK)) return v;
+    const n = parseInt(v.slice(CHUNK_MARK.length), 10) || 0;
+    let out = '';
+    for (let i = 0; i < n; i++) {
+      const part = _s.getItem(chunkKey(key, i));
+      if (part == null) return null;
+      out += part;
+    }
+    return out;
+  }
+
+  function set(key, val) {
+    val = String(val);
+    try {
+      writeRaw(key, val);
+      if (ok) delete mem[key];
+      return;
+    } catch (e) {
+      if (!isQuotaError(e)) { mem[key] = val; return; }
+    }
+    // Out of space — step 1: drop offline caches for rooms no longer in view.
+    try {
+      if (window.__evictStaleRoomCaches) window.__evictStaleRoomCaches();
+      writeRaw(key, val);
+      delete mem[key];
+      return;
+    } catch (e2) {
+      if (!isQuotaError(e2)) { mem[key] = val; return; }
+    }
+    // Still full — step 2: keep the value in memory and ask which rooms to drop.
+    mem[key] = val;
+    if (window.__promptStorageCleanup) window.__promptStorageCleanup();
+  }
+
+  function remove(key) {
+    delete mem[key];
+    if (ok) { clearChunks(key); _s.removeItem(key); }
+  }
+
+  // Lists logical keys (chunk sub-entries excluded), including memory fallbacks.
+  function keys() {
+    const seen = new Set();
+    const out = [];
+    if (ok) {
+      for (let i = 0; i < _s.length; i++) {
+        const k = _s.key(i);
+        if (k && k.indexOf(CHUNK_SEP) === -1) { seen.add(k); out.push(k); }
+      }
+    }
+    for (const k in mem) if (!seen.has(k) && k.indexOf(CHUNK_SEP) === -1) out.push(k);
+    return out;
+  }
+
+  const sizeOf = key => { const v = get(key); return v ? v.length * 2 : 0; };
+
+  return { get, set, remove, keys, sizeOf, ok };
 })();
 
 // ============================================
@@ -1834,19 +1939,21 @@ const editor = new EditorView({
   state: editorState,
   parent: document.getElementById('editor-wrap'),
 });
+window.editor = editor;
 
 // Persist content — saves to both global key and per-room key
 let saveTimer = null;
+function persistContent() {
+  const text = editor.state.doc.toString();
+  store.set('cade-content', text);
+  // Also save per-room cache if connected
+  if (syncState.roomName) {
+    store.set('cade-room-cache:' + syncState.roomName, text);
+  }
+}
 function saveContentDebounced() {
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => {
-    const text = editor.state.doc.toString();
-    store.set('cade-content', text);
-    // Also save per-room cache if connected
-    if (syncState.roomName) {
-      store.set('cade-room-cache:' + syncState.roomName, text);
-    }
-  }, 300);
+  saveTimer = setTimeout(persistContent, 300);
 }
 
 function loadRoomCache(roomName) {
@@ -5001,6 +5108,7 @@ window.addRoomFromManager = function() {
 window.removeRoom = function(name) {
   rooms = rooms.filter(r => r !== name);
   saveRooms();
+  store.remove('cade-room-cache:' + name);
   if (activeRoom === name && syncState.connected) {
     window.disconnectSync();
     activeRoom = '';
@@ -5035,6 +5143,89 @@ document.getElementById('room-manager-overlay').addEventListener('click', (e) =>
 document.getElementById('room-manager-overlay').addEventListener('keydown', (e) => {
   if (e.key === 'Escape') closeRoomManager();
   if (e.key === 'Enter' && e.target.id === 'room-add-input') addRoomFromManager();
+});
+
+// ============================================
+// STORAGE QUOTA MANAGEMENT
+// These hooks are invoked by store.set() when localStorage runs out of space.
+// ============================================
+
+// Step 1 (automatic): drop offline caches for rooms no longer in view —
+// i.e. rooms that are not in the tab list and not the active room.
+window.__evictStaleRoomCaches = function() {
+  if (!store.ok) return;
+  const prefix = 'cade-room-cache:';
+  const keep = new Set(rooms);
+  if (activeRoom) keep.add(activeRoom);
+  if (syncState.roomName) keep.add(syncState.roomName);
+  store.keys().forEach(k => {
+    if (k.startsWith(prefix) && !keep.has(k.slice(prefix.length))) {
+      store.remove(k);
+    }
+  });
+};
+
+// Step 2 (interactive): still full after eviction — ask which in-view rooms
+// to clear. Snoozed briefly after a dismissal so saves don't re-spam it.
+let _storageCleanupOpen = false;
+let _storageCleanupSnoozeUntil = 0;
+
+window.__promptStorageCleanup = function() {
+  if (_storageCleanupOpen || Date.now() < _storageCleanupSnoozeUntil) return;
+  const prefix = 'cade-room-cache:';
+  const current = activeRoom || syncState.roomName || '';
+  const items = store.keys()
+    .filter(k => k.startsWith(prefix) && k.slice(prefix.length) && k.slice(prefix.length) !== current)
+    .map(k => ({ key: k, room: k.slice(prefix.length), bytes: store.sizeOf(k) }))
+    .sort((a, b) => b.bytes - a.bytes);
+
+  if (items.length === 0) {
+    showToast('Storage full — recent changes are kept in memory only', 'error', 6000);
+    _storageCleanupSnoozeUntil = Date.now() + 60000;
+    return;
+  }
+
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  document.getElementById('storage-cleanup-list').innerHTML = items.map(it => `
+    <label class="room-manager-item" style="cursor:pointer;gap:8px;">
+      <input type="checkbox" value="${esc(it.key)}">
+      <span class="room-manager-name" style="flex:1;">${esc(it.room)}</span>
+      <span style="color:var(--text-faint);font-size:var(--text-xs);">${Math.max(1, Math.round(it.bytes / 1024))} KB</span>
+    </label>
+  `).join('');
+
+  _storageCleanupOpen = true;
+  document.getElementById('storage-cleanup-overlay').classList.add('open');
+};
+
+function closeStorageCleanupModal() {
+  document.getElementById('storage-cleanup-overlay').classList.remove('open');
+  _storageCleanupOpen = false;
+}
+
+window.closeStorageCleanup = function() {
+  closeStorageCleanupModal();
+  _storageCleanupSnoozeUntil = Date.now() + 60000;
+};
+
+window.confirmStorageCleanup = function() {
+  const checked = [...document.querySelectorAll('#storage-cleanup-list input[type="checkbox"]:checked')];
+  closeStorageCleanupModal();
+  if (checked.length === 0) {
+    _storageCleanupSnoozeUntil = Date.now() + 60000;
+    return;
+  }
+  checked.forEach(cb => store.remove(cb.value));
+  showToast(`Cleared ${checked.length} room cache${checked.length > 1 ? 's' : ''}`, 'success', 2500);
+  // Retry persisting the current document into the space we just freed.
+  persistContent();
+};
+
+document.getElementById('storage-cleanup-overlay').addEventListener('click', (e) => {
+  if (e.target.id === 'storage-cleanup-overlay') closeStorageCleanup();
+});
+document.getElementById('storage-cleanup-overlay').addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closeStorageCleanup();
 });
 
 // Auto-connect on page load
@@ -6048,6 +6239,22 @@ registerScript(`/**
 **/
 function main(ctx) {
   window.triggerDownload();
+}
+`);
+
+registerScript(`/**
+  {
+    "name": "Select All",
+    "description": "Highlight the entire document",
+    "author": "Cade",
+    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M4 8V6a2 2 0 0 1 2-2h2'/><path d='M16 4h2a2 2 0 0 1 2 2v2'/><path d='M20 16v2a2 2 0 0 1-2 2h-2'/><path d='M8 20H6a2 2 0 0 1-2-2v-2'/><rect x='8' y='8' width='8' height='8' rx='1'/></svg>",
+    "tags": "select,all,highlight,document,everything"
+  }
+**/
+function main(ctx) {
+  const ed = window.editor;
+  ed.dispatch({ selection: { anchor: 0, head: ed.state.doc.length } });
+  ed.focus();
 }
 `);
 
