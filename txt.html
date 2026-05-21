@@ -4363,6 +4363,39 @@ async function decryptText(encoded, password) {
   }
 }
 
+// Firebase Realtime Database caps a single string value at 10 MB. Encrypted
+// room text larger than that is split across child nodes under `text` and
+// reassembled on read. Payloads that fit stay a plain string, so small rooms
+// remain wire-compatible with the previous (unchunked) format.
+const FB_CHUNK_SIZE = 8000000;
+
+function packRoomText(encoded) {
+  if (encoded.length <= FB_CHUNK_SIZE) return encoded;
+  const n = Math.ceil(encoded.length / FB_CHUNK_SIZE);
+  const parts = {};
+  for (let i = 0; i < n; i++) {
+    parts[i] = encoded.slice(i * FB_CHUNK_SIZE, (i + 1) * FB_CHUNK_SIZE);
+  }
+  return { _chunks: n, parts };
+}
+
+function unpackRoomText(val) {
+  if (val == null) return null;
+  if (typeof val === 'string') return val;
+  // Chunked object: { _chunks: N, parts: {0:..,1:..} } — Firebase may return
+  // `parts` as an array, which is index-readable the same way.
+  if (typeof val === 'object' && val._chunks && val.parts) {
+    let out = '';
+    for (let i = 0; i < val._chunks; i++) {
+      const part = val.parts[i];
+      if (typeof part !== 'string') return null;
+      out += part;
+    }
+    return out;
+  }
+  return null;
+}
+
 function initFirebase(databaseURL) {
   if (syncState.firebaseApp) return syncState.firebaseDb;
   const app = firebase.initializeApp({ databaseURL }, 'cade-sync');
@@ -4478,10 +4511,10 @@ window.syncConnect = async function() {
     // Listen for remote changes
     syncState.firebaseListener = textRef.on('value', async (snap) => {
       if (syncState.suppressUpdate) return;
-      const val = snap.val();
-      if (!val) return;
+      const encoded = unpackRoomText(snap.val());
+      if (!encoded) return;
       try {
-        let text = await decryptText(val, syncState.encKey);
+        let text = await decryptText(encoded, syncState.encKey);
         if (text === null) return;
         // Strip sentinel if present (content was written by a locked client)
         if (text.startsWith(ROOM_LOCK_SENTINEL)) text = text.slice(ROOM_LOCK_SENTINEL.length);
@@ -4540,7 +4573,7 @@ window.broadcastText = function() {
       const textToSend = isLocked ? ROOM_LOCK_SENTINEL + raw : raw;
       const encrypted = await encryptText(textToSend, syncState.encKey);
       syncState.suppressUpdate = true;
-      await syncState.firebaseDb.ref(`rooms/${syncState.roomName}/text`).set(encrypted);
+      await syncState.firebaseDb.ref(`rooms/${syncState.roomName}/text`).set(packRoomText(encrypted));
       syncState.suppressUpdate = false;
     } catch (e) {
       syncState.suppressUpdate = false;
@@ -4765,8 +4798,9 @@ async function _doSwitchRoom(name, firebaseUrl, baseEncKey) {
         }
         // No verify blob — fall back to checking text for sentinel
         const textSnap = await db.ref(`rooms/${name}/text`).once('value');
-        if (!textSnap.val()) return false; // No content to verify — reject
-        const result = await decryptText(textSnap.val(), testKey);
+        const textEncoded = unpackRoomText(textSnap.val());
+        if (!textEncoded) return false; // No content to verify — reject
+        const result = await decryptText(textEncoded, testKey);
         return result !== null && result.startsWith(ROOM_LOCK_SENTINEL);
       } : null;
       showRoomUnlock(name, async () => {
@@ -4782,10 +4816,10 @@ async function _doSwitchRoom(name, firebaseUrl, baseEncKey) {
     let firstSnapshot = true;
     syncState.firebaseListener = textRef.on('value', async (snap) => {
       if (syncState.suppressUpdate) return;
-      const val = snap.val();
-      if (!val) return;
+      const encoded = unpackRoomText(snap.val());
+      if (!encoded) return;
       try {
-        let text = await decryptText(val, syncState.encKey);
+        let text = await decryptText(encoded, syncState.encKey);
         if (text === null) return;
         // Strip sentinel — present when content was encrypted by a locked client
         if (text.startsWith(ROOM_LOCK_SENTINEL)) text = text.slice(ROOM_LOCK_SENTINEL.length);
@@ -4832,8 +4866,9 @@ async function _doSwitchRoom(name, firebaseUrl, baseEncKey) {
             return result !== null && result.startsWith(ROOM_LOCK_SENTINEL);
           }
           const textSnap = await db.ref(`rooms/${name}/text`).once('value');
-          if (!textSnap.val()) return false;
-          const result = await decryptText(textSnap.val(), testKey);
+          const textEncoded = unpackRoomText(textSnap.val());
+          if (!textEncoded) return false;
+          const result = await decryptText(textEncoded, testKey);
           return result !== null && result.startsWith(ROOM_LOCK_SENTINEL);
         } : null;
         showRoomUnlock(name, async (pw) => {
