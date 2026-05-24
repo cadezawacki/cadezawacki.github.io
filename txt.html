@@ -1032,6 +1032,28 @@ body {
 /* @completed tag styling */
 .cm-completed-count { color: var(--text-muted); font-size: var(--text-sm); margin-left: 0.5ch; }
 
+/* Rendered Markdown table widget (shown when cursor is outside the table) */
+.cm-md-table-wrap {
+  margin: 4px 0;
+  overflow-x: auto;
+  font-family: var(--font-body);
+}
+.cm-md-table-wrap table {
+  border-collapse: collapse;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  font-size: var(--text-base);
+}
+.cm-md-table-wrap th,
+.cm-md-table-wrap td {
+  border: 1px solid var(--border);
+  padding: 4px 10px;
+  text-align: left;
+  vertical-align: top;
+}
+.cm-md-table-wrap thead { background: var(--surface-2); }
+.cm-md-table-wrap th { font-weight: 600; color: var(--text); }
+
 /* ============================================
    MOBILE SCROLL BUTTONS
    ============================================ */
@@ -1740,6 +1762,123 @@ const todoPlugin = ViewPlugin.fromClass(class {
   }
 }, { decorations: v => v.decorations });
 
+// ============================================
+// MARKDOWN TABLE SUPPORT (parse / render / clipboard helpers)
+// ============================================
+const MD_TABLE_ROW_RE = /^\s*\|.*\|\s*$/;
+const MD_TABLE_SEP_RE = /^\s*\|?[\s:|]*-{3,}[\s:|-]*\|?\s*$/;
+
+function findMarkdownTableAtLine(doc, lineNum) {
+  if (lineNum < 1 || lineNum > doc.lines) return null;
+  if (!MD_TABLE_ROW_RE.test(doc.line(lineNum).text)) return null;
+  let start = lineNum, end = lineNum;
+  while (start > 1 && MD_TABLE_ROW_RE.test(doc.line(start - 1).text)) start--;
+  while (end < doc.lines && MD_TABLE_ROW_RE.test(doc.line(end + 1).text)) end++;
+  if (end - start < 1) return null;
+  let hasSep = false;
+  for (let i = start; i <= end; i++) {
+    if (MD_TABLE_SEP_RE.test(doc.line(i).text)) { hasSep = true; break; }
+  }
+  return hasSep ? { fromLine: start, toLine: end } : null;
+}
+
+function splitMarkdownRow(line) {
+  let l = line.trim();
+  if (l.startsWith('|')) l = l.slice(1);
+  if (l.endsWith('|')) l = l.slice(0, -1);
+  const cells = [];
+  let buf = '';
+  for (let i = 0; i < l.length; i++) {
+    if (l[i] === '\\' && l[i + 1] === '|') { buf += '|'; i++; }
+    else if (l[i] === '|') { cells.push(buf.trim()); buf = ''; }
+    else buf += l[i];
+  }
+  cells.push(buf.trim());
+  return cells;
+}
+
+function markdownTableToHtml(text) {
+  const allLines = text.split('\n').filter(l => MD_TABLE_ROW_RE.test(l) || MD_TABLE_SEP_RE.test(l));
+  if (!allLines.length) return '';
+  let sepIdx = -1;
+  for (let i = 0; i < allLines.length; i++) {
+    if (MD_TABLE_SEP_RE.test(allLines[i])) { sepIdx = i; break; }
+  }
+  const rows = [];
+  allLines.forEach((line, i) => { if (i !== sepIdx) rows.push(splitMarkdownRow(line)); });
+  if (!rows.length) return '';
+  const headerIdx = sepIdx > 0 ? sepIdx - 1 : -1;
+  const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const parts = ['<table>'];
+  let inBody = false;
+  rows.forEach((row, idx) => {
+    if (idx === headerIdx) {
+      parts.push('<thead><tr>' + row.map(c => '<th>' + esc(c) + '</th>').join('') + '</tr></thead>');
+    } else {
+      if (!inBody) { parts.push('<tbody>'); inBody = true; }
+      parts.push('<tr>' + row.map(c => '<td>' + esc(c) + '</td>').join('') + '</tr>');
+    }
+  });
+  if (inBody) parts.push('</tbody>');
+  parts.push('</table>');
+  return parts.join('');
+}
+
+// Render Markdown tables as real <table> elements when the cursor is outside
+// the table block. Source remains in the doc and is shown when the cursor
+// enters the range, allowing cell-by-cell text editing.
+class MarkdownTableWidget extends WidgetType {
+  constructor(source) { super(); this.source = source; }
+  eq(other) { return this.source === other.source; }
+  toDOM() {
+    const wrap = document.createElement('div');
+    wrap.className = 'cm-md-table-wrap';
+    wrap.innerHTML = markdownTableToHtml(this.source);
+    return wrap;
+  }
+  ignoreEvent() { return false; }
+}
+
+function buildTableDecorations(view) {
+  const doc = view.state.doc;
+  const sel = view.state.selection.main;
+  const selFromLine = doc.lineAt(sel.from).number;
+  const selToLine = doc.lineAt(sel.to).number;
+  const ranges = [];
+  const seen = new Set();
+  for (const {from, to} of view.visibleRanges) {
+    const startLine = doc.lineAt(from).number;
+    const endLine = doc.lineAt(to).number;
+    for (let i = startLine; i <= endLine; i++) {
+      if (seen.has(i)) continue;
+      const range = findMarkdownTableAtLine(doc, i);
+      if (!range) { seen.add(i); continue; }
+      for (let j = range.fromLine; j <= range.toLine; j++) seen.add(j);
+      // Skip if selection touches this table (let user edit source)
+      if (selToLine >= range.fromLine && selFromLine <= range.toLine) continue;
+      const startPos = doc.line(range.fromLine).from;
+      const endPos = doc.line(range.toLine).to;
+      const source = doc.sliceString(startPos, endPos);
+      ranges.push(
+        Decoration.replace({
+          widget: new MarkdownTableWidget(source),
+          block: true,
+        }).range(startPos, endPos)
+      );
+    }
+  }
+  return Decoration.set(ranges, true);
+}
+
+const tablePlugin = ViewPlugin.fromClass(class {
+  constructor(view) { this.decorations = buildTableDecorations(view); }
+  update(update) {
+    if (update.docChanged || update.selectionSet || update.viewportChanged) {
+      this.decorations = buildTableDecorations(update.view);
+    }
+  }
+}, { decorations: v => v.decorations });
+
 // Toggle todo on the current line — used by hotkey
 window.toggleTodoAtCursor = function() {
   if (!isTodoPage(editor.state)) return;
@@ -1865,6 +2004,7 @@ const editorState = EditorState.create({
     EditorView.lineWrapping,
     listIndentPlugin,
     todoPlugin,
+    tablePlugin,
     listEnterHandler,
     keymap.of([
       { key: 'Mod-z', run: undo },
@@ -5515,9 +5655,6 @@ editor.contentDOM.addEventListener('blur', () => {
 // gets both text/plain (Markdown) and text/html (real <table>) so it round-
 // trips into Sheets/Docs cleanly.
 
-const MD_TABLE_ROW_RE = /^\s*\|.*\|\s*$/;
-const MD_TABLE_SEP_RE = /^\s*\|?[\s:|]*-{3,}[\s:|-]*\|?\s*$/;
-
 function tableElToMarkdown(tableEl) {
   const trs = tableEl.querySelectorAll(':scope > thead > tr, :scope > tbody > tr, :scope > tfoot > tr, :scope > tr');
   if (!trs.length) return '';
@@ -5563,61 +5700,6 @@ function tsvToMarkdown(text) {
   out.push('|' + Array(maxCols).fill(' --- ').join('|') + '|');
   rows.forEach(r => out.push('| ' + r.map(c => c || ' ').join(' | ') + ' |'));
   return out.join('\n');
-}
-
-function findMarkdownTableAtLine(doc, lineNum) {
-  if (!MD_TABLE_ROW_RE.test(doc.line(lineNum).text)) return null;
-  let start = lineNum, end = lineNum;
-  while (start > 1 && MD_TABLE_ROW_RE.test(doc.line(start - 1).text)) start--;
-  while (end < doc.lines && MD_TABLE_ROW_RE.test(doc.line(end + 1).text)) end++;
-  if (end - start < 1) return null;
-  let hasSep = false;
-  for (let i = start; i <= end; i++) {
-    if (MD_TABLE_SEP_RE.test(doc.line(i).text)) { hasSep = true; break; }
-  }
-  return hasSep ? { fromLine: start, toLine: end } : null;
-}
-
-function splitMarkdownRow(line) {
-  let l = line.trim();
-  if (l.startsWith('|')) l = l.slice(1);
-  if (l.endsWith('|')) l = l.slice(0, -1);
-  const cells = [];
-  let buf = '';
-  for (let i = 0; i < l.length; i++) {
-    if (l[i] === '\\' && l[i + 1] === '|') { buf += '|'; i++; }
-    else if (l[i] === '|') { cells.push(buf.trim()); buf = ''; }
-    else buf += l[i];
-  }
-  cells.push(buf.trim());
-  return cells;
-}
-
-function markdownTableToHtml(text) {
-  const allLines = text.split('\n').filter(l => MD_TABLE_ROW_RE.test(l) || MD_TABLE_SEP_RE.test(l));
-  if (!allLines.length) return '';
-  let sepIdx = -1;
-  for (let i = 0; i < allLines.length; i++) {
-    if (MD_TABLE_SEP_RE.test(allLines[i])) { sepIdx = i; break; }
-  }
-  const rows = [];
-  allLines.forEach((line, i) => { if (i !== sepIdx) rows.push(splitMarkdownRow(line)); });
-  if (!rows.length) return '';
-  const headerIdx = sepIdx > 0 ? sepIdx - 1 : -1;
-  const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  const parts = ['<table>'];
-  let inBody = false;
-  rows.forEach((row, idx) => {
-    if (idx === headerIdx) {
-      parts.push('<thead><tr>' + row.map(c => '<th>' + esc(c) + '</th>').join('') + '</tr></thead>');
-    } else {
-      if (!inBody) { parts.push('<tbody>'); inBody = true; }
-      parts.push('<tr>' + row.map(c => '<td>' + esc(c) + '</td>').join('') + '</tr>');
-    }
-  });
-  if (inBody) parts.push('</tbody>');
-  parts.push('</table>');
-  return parts.join('');
 }
 
 // Capture-phase paste intercept on editor.dom — runs before CM6's default
