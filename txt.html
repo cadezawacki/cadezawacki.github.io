@@ -745,11 +745,22 @@ body {
 /* Mobile: pill stays visible; bottom-sheet handled below */
 @media (max-width: 600px) {
   .ws-pill {
-    max-width: 110px;
     font-size: 11px;
     padding: 2px 6px;
+    gap: 4px;
   }
+  .ws-pill .ws-pill-name { display: none; } /* icon-only pill on mobile */
   .ws-pill-wrap { margin-left: 4px; }
+}
+
+/* Desktop: hide the duplicate Sync entries inside the View menu */
+@media (min-width: 601px) {
+  .view-sync-only { display: none !important; }
+}
+/* Mobile: hide the dedicated Sync menu (entries live under View instead) */
+@media (max-width: 600px) {
+  .menu-sync-wrap { display: none !important; }
+  .menubar-logo-text { display: none !important; } /* icon-only logo on mobile */
 }
 
 /* ============================================
@@ -1498,7 +1509,7 @@ body {
       <line x1="16" y1="17" x2="8" y2="17"/>
       <line x1="10" y1="9" x2="8" y2="9"/>
     </svg>
-    Cade.txt
+    <span class="menubar-logo-text">Cade.txt</span>
   </a>
 
   <!-- Scripts Menu -->
@@ -1526,8 +1537,8 @@ body {
     <input type="file" id="import-file-input" multiple style="display:none;">
   </div>
 
-  <!-- Sync Menu -->
-  <div style="position:relative;">
+  <!-- Sync Menu (desktop only; on mobile, Sync items live under View) -->
+  <div style="position:relative;" class="menu-sync-wrap">
     <button class="menu-trigger" id="menu-sync-btn">Sync</button>
     <div class="menu-dropdown" id="menu-sync">
       <button class="menu-item" onclick="openSyncModal()">
@@ -1559,6 +1570,20 @@ body {
       </button>
       <button class="menu-item" onclick="toggleInjections()">
         <span id="injections-label">Injections: On</span>
+        <span></span>
+      </button>
+      <!-- Sync items (mobile only — Sync menu is hidden) -->
+      <div class="menu-separator view-sync-only"></div>
+      <button class="menu-item view-sync-only" onclick="openSyncModal()">
+        <span>Connect</span>
+        <kbd>Ctrl+S</kbd>
+      </button>
+      <button class="menu-item view-sync-only" onclick="forceSyncReload()">
+        <span>Force Reload</span>
+        <kbd>Ctrl+Shift+S</kbd>
+      </button>
+      <button class="menu-item view-sync-only" id="view-disconnect-btn" onclick="disconnectSync()" style="display:none;">
+        <span>Disconnect</span>
         <span></span>
       </button>
       <div class="menu-separator"></div>
@@ -4877,6 +4902,7 @@ function updateSyncUI(status, text) {
   dot.className = 'sync-dot ' + status;
   statusEl.textContent = text;
   document.getElementById('disconnect-btn').style.display = syncState.connected ? 'flex' : 'none';
+  document.getElementById('view-disconnect-btn').style.display = syncState.connected ? 'flex' : 'none';
 }
 
 function showSyncStep(stepId) {
