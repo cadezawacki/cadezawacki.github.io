@@ -1,0 +1,1466 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Workspaces — Refined Prototype</title>
+<link href="https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600&f[]=jetbrains-mono@400,500&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --font-body: 'General Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
+  --text-xs: 0.75rem;
+  --text-sm: 0.8125rem;
+  --text-base: 0.875rem;
+  --text-lg: 1rem;
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+  --transition: 150ms cubic-bezier(0.16, 1, 0.3, 1);
+
+  --bg: #111110;
+  --surface: #1a1918;
+  --surface-2: #222120;
+  --surface-hover: #2a2928;
+  --border: #333231;
+  --text: #e7e5e3;
+  --text-muted: #8c8a87;
+  --text-faint: #5c5a58;
+  --accent: #0f9598;
+  --accent-hover: #12b3b7;
+  --shadow-md: 0 4px 16px rgba(0,0,0,0.3);
+  --shadow-lg: 0 12px 40px rgba(0,0,0,0.4);
+  --border-tab: #004949;
+}
+
+/* Workspace color palette (dark-tuned, contrast-verified) */
+.ws-neutral { --ws-fg: #a8a29e; --ws-bg: rgba(168,162,158,0.10); --ws-bd: rgba(168,162,158,0.35); }
+.ws-teal    { --ws-fg: #5eead4; --ws-bg: rgba(94,234,212,0.10);  --ws-bd: rgba(94,234,212,0.35); }
+.ws-blue    { --ws-fg: #7dd3fc; --ws-bg: rgba(125,211,252,0.10); --ws-bd: rgba(125,211,252,0.35); }
+.ws-green   { --ws-fg: #86efac; --ws-bg: rgba(134,239,172,0.10); --ws-bd: rgba(134,239,172,0.35); }
+.ws-amber   { --ws-fg: #fcd34d; --ws-bg: rgba(252,211,77,0.10);  --ws-bd: rgba(252,211,77,0.35); }
+.ws-orange  { --ws-fg: #fdba74; --ws-bg: rgba(253,186,116,0.10); --ws-bd: rgba(253,186,116,0.35); }
+.ws-pink    { --ws-fg: #f9a8d4; --ws-bg: rgba(249,168,212,0.10); --ws-bd: rgba(249,168,212,0.35); }
+.ws-purple  { --ws-fg: #c4b5fd; --ws-bg: rgba(196,181,253,0.10); --ws-bd: rgba(196,181,253,0.35); }
+
+html, body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: var(--text-base);
+  min-height: 100vh;
+  line-height: 1.5;
+}
+
+.page {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: var(--space-6) var(--space-4) var(--space-8);
+}
+
+h1 { font-size: 1.6rem; font-weight: 600; margin-bottom: var(--space-2); letter-spacing: -0.01em; }
+h2 { font-size: 1.15rem; font-weight: 600; margin-bottom: var(--space-3); margin-top: var(--space-8); letter-spacing: -0.005em; }
+h3 { font-size: 0.95rem; font-weight: 600; margin-bottom: var(--space-2); }
+
+.lede {
+  color: var(--text-muted);
+  margin-bottom: var(--space-2);
+  font-size: var(--text-sm);
+  line-height: 1.55;
+}
+.subhead {
+  color: var(--text-faint);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  margin-bottom: var(--space-2);
+}
+
+code, .mono { font-family: var(--font-mono); font-size: 0.85em; }
+code {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  padding: 0 4px;
+  border-radius: 3px;
+  font-size: 0.85em;
+}
+
+.divider { height: 1px; background: var(--border); margin: var(--space-8) 0 var(--space-6); }
+
+/* ========== DECISION CARDS ========== */
+.decisions {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-3);
+  margin-bottom: var(--space-6);
+}
+@media (max-width: 720px) { .decisions { grid-template-columns: 1fr; } }
+.decision {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+}
+.decision .q {
+  font-size: var(--text-xs);
+  color: var(--text-faint);
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 2px;
+}
+.decision .a {
+  font-weight: 600;
+  font-size: var(--text-base);
+  margin-bottom: 4px;
+  color: var(--text);
+}
+.decision .why {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+/* ========== DEMO BLOCK ========== */
+.demo {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+.demo-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  margin-bottom: var(--space-3);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.demo-label .step {
+  display: inline-flex;
+  width: 18px; height: 18px;
+  align-items: center; justify-content: center;
+  background: var(--accent);
+  color: #fff;
+  border-radius: 50%;
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 11px;
+}
+
+/* ========== MENUBAR MOCK ========== */
+.menubar {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  padding: var(--space-2) var(--space-3);
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+.menubar-logo {
+  font-weight: 600;
+  color: var(--accent);
+  padding-right: var(--space-2);
+  border-right: 1px solid var(--border);
+}
+.menubar-menu {
+  padding: 2px 8px;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+}
+.menubar-menu:hover { background: var(--surface-hover); color: var(--text); }
+.menubar-divider { width: 1px; height: 18px; background: var(--border); margin: 0 4px; }
+.menubar-grow { flex: 1; min-width: 8px; }
+
+/* ========== WORKSPACE PILL ========== */
+.ws-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 10px;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--ws-fg);
+  background: var(--ws-bg);
+  border: 1px solid var(--ws-bd);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background var(--transition);
+  user-select: none;
+}
+.ws-pill:hover { background: color-mix(in srgb, var(--ws-bg) 70%, var(--surface-hover)); }
+.ws-pill .dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--ws-fg);
+  flex: 0 0 7px;
+}
+.ws-pill .caret { color: var(--ws-fg); opacity: 0.6; font-size: 10px; }
+.ws-pill.all { --ws-fg: var(--text-muted); --ws-bg: transparent; --ws-bd: var(--border); }
+.ws-pill.all .dot { background: linear-gradient(90deg,#5eead4 0%,#fcd34d 50%,#c4b5fd 100%); }
+
+/* ========== ROOM TABS ========== */
+.room-tabs { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; }
+.room-tab {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 2px 10px;
+  font-size: var(--text-xs);
+  font-family: var(--font-mono);
+  color: var(--text-faint);
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  text-transform: uppercase;
+  transition: all var(--transition);
+  position: relative;
+}
+.room-tab:hover { color: var(--text); border-color: var(--text-muted); }
+.room-tab.active {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--border-tab);
+  font-weight: 600;
+}
+.room-tab.active .ws-dot { background: #fff; }
+.room-tab .ws-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--ws-fg, var(--text-faint));
+  flex: 0 0 6px;
+}
+.room-tab-add {
+  padding: 2px 8px;
+  font-size: var(--text-xs);
+  color: var(--text-faint);
+  background: none;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.room-tab-add:hover { color: var(--accent); border-color: var(--accent); }
+
+/* ========== DROPDOWN PANEL ========== */
+.ctx-wrap { position: relative; display: inline-block; }
+.ws-dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  min-width: 240px;
+  padding: 4px;
+  z-index: 50;
+  display: none;
+}
+.ws-dropdown.open { display: block; }
+.ws-dd-section {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  padding: 8px 10px 4px;
+}
+.ws-dd-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 10px;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+}
+.ws-dd-item:hover { background: var(--surface-hover); }
+.ws-dd-item .dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--ws-fg, var(--text-faint));
+  flex: 0 0 8px;
+}
+.ws-dd-item .count {
+  color: var(--text-faint);
+  font-size: 10px;
+  margin-left: auto;
+}
+.ws-dd-item.current { background: rgba(15,149,152,0.12); color: var(--text); }
+.ws-dd-divider { height: 1px; background: var(--border); margin: 4px 0; }
+.ws-dd-action {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 10px;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+}
+.ws-dd-action:hover { background: var(--surface-hover); color: var(--text); }
+
+/* ========== MODAL MOCK ========== */
+.modal-shell {
+  display: flex;
+  justify-content: center;
+  padding: var(--space-4);
+  background: rgba(0,0,0,0.4);
+  border-radius: var(--radius-md);
+}
+.modal-mock {
+  width: 480px;
+  max-width: 100%;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+  max-height: 600px;
+  overflow: hidden;
+}
+.modal-header {
+  padding: var(--space-4) var(--space-4) var(--space-3);
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  flex: 0 0 auto;
+}
+.modal-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-3) var(--space-4);
+}
+.modal-footer {
+  padding: var(--space-3) var(--space-4);
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  flex: 0 0 auto;
+}
+.modal-title { font-size: var(--text-lg); font-weight: 600; margin-bottom: 2px; }
+.modal-desc { font-size: var(--text-sm); color: var(--text-muted); line-height: 1.45; margin-bottom: var(--space-3); }
+
+/* Modal: workspace context bar */
+.ws-context-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--space-3);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+.ws-context-bar .ws-pill { flex: 0 0 auto; }
+.ws-context-bar .meta { color: var(--text-faint); }
+
+.add-row { display: flex; gap: var(--space-2); }
+.row-input {
+  flex: 1;
+  padding: 6px 10px;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  outline: none;
+}
+.row-input:focus { border-color: var(--accent); }
+
+.btn {
+  padding: 5px 12px;
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.btn:hover { background: var(--surface-hover); }
+.btn-primary { background: var(--accent); color: #fff; border-color: var(--border-tab); }
+.btn-primary:hover { background: var(--accent-hover); }
+.btn-small { padding: 2px 8px; font-size: var(--text-xs); }
+.btn-icon { padding: 2px 6px; font-size: var(--text-xs); font-family: var(--font-mono); }
+.btn-danger { color: #f87171; }
+
+/* ========== ROOM LIST ========== */
+.room-list { font-family: var(--font-mono); font-size: var(--text-sm); }
+.room-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 4px;
+  border-bottom: 1px solid var(--border);
+  user-select: none;
+}
+.room-row:last-child { border-bottom: none; }
+.room-row .drag {
+  color: var(--text-faint);
+  cursor: grab;
+  font-size: 14px;
+  padding: 0 4px;
+}
+.room-row .name { flex: 1 1 auto; color: var(--text); }
+.room-row .ws-badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 10px;
+  background: var(--ws-bg);
+  color: var(--ws-fg);
+  border: 1px solid var(--ws-bd);
+}
+.room-row .ws-badge .dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--ws-fg);
+}
+.room-row .meta {
+  font-size: 10px;
+  color: var(--text-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.room-row .actions {
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity var(--transition);
+}
+.room-row:hover .actions { opacity: 1; }
+.room-row.is-active { background: rgba(15,149,152,0.10); }
+.room-row.is-active .name { font-weight: 600; }
+
+/* Action menu (popover) */
+.action-menu {
+  position: absolute;
+  right: 0;
+  top: 100%;
+  margin-top: 4px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  min-width: 200px;
+  padding: 4px;
+  z-index: 80;
+  display: none;
+}
+.action-menu.open { display: block; }
+.action-menu-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 10px;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+}
+.action-menu-item:hover { background: var(--surface-hover); }
+.action-menu-divider { height: 1px; background: var(--border); margin: 4px 0; }
+.action-menu .nested-list {
+  margin-left: 16px;
+  padding-left: 4px;
+  border-left: 1px dashed var(--border);
+}
+
+/* ========== COLOR PALETTE ========== */
+.palette {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--space-2);
+}
+@media (max-width: 720px) { .palette { grid-template-columns: repeat(2, 1fr); } }
+.swatch {
+  padding: var(--space-3);
+  border: 1px solid var(--ws-bd);
+  background: var(--ws-bg);
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--ws-fg);
+}
+.swatch .dot {
+  width: 12px; height: 12px;
+  border-radius: 50%;
+  background: var(--ws-fg);
+  flex: 0 0 12px;
+}
+.swatch .name { font-weight: 600; }
+.swatch .hex { color: var(--text-faint); margin-left: auto; font-size: 10px; }
+
+/* ========== COLOR PICKER (in modal mock) ========== */
+.color-picker {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 4px 0;
+}
+.color-dot {
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  background: var(--ws-fg);
+  cursor: pointer;
+  border: 2px solid transparent;
+  transition: transform var(--transition);
+}
+.color-dot:hover { transform: scale(1.1); }
+.color-dot.selected { border-color: var(--text); box-shadow: 0 0 0 2px var(--bg); }
+.color-dot.neutral { background: var(--ws-fg); border: 2px dashed var(--text-faint); }
+
+/* ========== MOBILE MOCK ========== */
+.phone {
+  width: 290px;
+  height: 580px;
+  margin: 0 auto;
+  background: var(--bg);
+  border: 8px solid #050505;
+  border-radius: 32px;
+  box-shadow: var(--shadow-lg);
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.phone-notch {
+  background: #050505;
+  height: 22px;
+  width: 110px;
+  border-radius: 0 0 14px 14px;
+  margin: 0 auto;
+  flex: 0 0 auto;
+}
+.phone-content {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+}
+.phone .menubar {
+  border: none;
+  border-radius: 0;
+  border-bottom: 1px solid var(--border);
+  padding: 4px 6px;
+  font-size: 10px;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+}
+.phone .ws-pill { font-size: 10px; padding: 1px 6px; }
+.phone .menubar-grow { display: none; }
+.mobile-select {
+  display: inline-flex; align-items: center;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 2px 6px;
+  margin-left: 4px;
+  color: var(--text);
+}
+.phone-editor {
+  flex: 1;
+  padding: var(--space-3);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: pre-wrap;
+  line-height: 1.5;
+}
+
+.bottom-sheet {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  border-radius: 16px 16px 0 0;
+  padding: 8px 0 16px;
+  box-shadow: 0 -8px 24px rgba(0,0,0,0.4);
+  transform: translateY(0);
+  z-index: 5;
+}
+.bottom-sheet .grabber {
+  width: 36px; height: 4px;
+  background: var(--text-faint);
+  border-radius: 2px;
+  margin: 0 auto 12px;
+}
+.bottom-sheet .title {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-faint);
+  padding: 0 14px 4px;
+}
+.bottom-sheet .row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 14px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  cursor: pointer;
+}
+.bottom-sheet .row:hover { background: var(--surface-hover); }
+.bottom-sheet .row .dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--ws-fg, var(--text-faint));
+}
+.bottom-sheet .row.current { background: rgba(15,149,152,0.10); }
+.bottom-sheet .row .count { color: var(--text-faint); font-size: 10px; margin-left: auto; }
+
+/* ========== TWO-COL GRID ========== */
+.grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+@media (max-width: 880px) { .grid-2 { grid-template-columns: 1fr; } }
+
+.grid-3 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-4);
+}
+@media (max-width: 880px) { .grid-3 { grid-template-columns: 1fr; } }
+
+/* ========== DATA MODEL BLOCK ========== */
+.code-block {
+  background: #0a0a09;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: 1.6;
+  color: var(--text);
+  overflow-x: auto;
+  white-space: pre;
+}
+.code-comment { color: var(--text-faint); }
+.code-key { color: #7dd3fc; }
+.code-str { color: #86efac; }
+.code-num { color: #fcd34d; }
+
+/* ========== TOC ========== */
+.toc {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  margin-bottom: var(--space-6);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+.toc-title {
+  color: var(--text-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: var(--space-2);
+  font-size: 10px;
+}
+.toc ol { list-style: none; counter-reset: toc; }
+.toc li {
+  counter-increment: toc;
+  padding: 3px 0;
+}
+.toc li::before {
+  content: "§" counter(toc) " ";
+  color: var(--text-faint);
+}
+.toc a { color: var(--text-muted); text-decoration: none; }
+.toc a:hover { color: var(--text); }
+
+.callout {
+  background: rgba(15,149,152,0.08);
+  border-left: 3px solid var(--accent);
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--text-sm);
+  color: var(--text);
+  margin: var(--space-3) 0;
+}
+.callout strong { color: var(--accent); }
+
+.warn {
+  background: rgba(248,113,113,0.06);
+  border-left: 3px solid #f87171;
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--text-sm);
+  color: var(--text);
+  margin: var(--space-3) 0;
+}
+.warn strong { color: #f87171; }
+
+.steps {
+  list-style: none;
+  counter-reset: step;
+  padding: 0;
+}
+.steps li {
+  counter-increment: step;
+  padding: 8px 0 8px 32px;
+  position: relative;
+  font-size: var(--text-sm);
+  color: var(--text);
+  line-height: 1.5;
+  border-bottom: 1px dashed var(--border);
+}
+.steps li:last-child { border-bottom: none; }
+.steps li::before {
+  content: counter(step);
+  position: absolute;
+  left: 0; top: 8px;
+  width: 22px; height: 22px;
+  background: var(--accent);
+  color: #fff;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-body);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.scroll-helper { scroll-margin-top: var(--space-4); }
+</style>
+</head>
+<body>
+
+<div class="page">
+  <h1>Workspaces — Refined Prototype</h1>
+  <p class="lede">
+    A focused, ship-ready design for organizing rooms into workspaces. Builds on Variant B
+    from the first prototype; goes deeper on every open question: multi-belong, moving rooms,
+    sorting, colors, mobile, "All Rooms" view, and migration.
+  </p>
+
+  <div class="toc">
+    <div class="toc-title">contents</div>
+    <ol>
+      <li><a href="#decisions">Open questions — answered</a></li>
+      <li><a href="#anatomy">Anatomy of the menubar</a></li>
+      <li><a href="#switcher">Workspace switcher</a></li>
+      <li><a href="#manager">Room Manager — full UX</a></li>
+      <li><a href="#move">Moving rooms between workspaces</a></li>
+      <li><a href="#colors">Custom colors</a></li>
+      <li><a href="#all-rooms">"All Rooms" view</a></li>
+      <li><a href="#mobile">Mobile flow</a></li>
+      <li><a href="#sort">Sort order</a></li>
+      <li><a href="#model">Data model &amp; migration</a></li>
+      <li><a href="#followups">Things still TBD</a></li>
+    </ol>
+  </div>
+
+  <!-- ===== §1 DECISIONS ===== -->
+  <h2 id="decisions" class="scroll-helper">§1 · Open questions, answered</h2>
+  <div class="decisions">
+    <div class="decision">
+      <div class="q">Can a doc live in multiple workspaces?</div>
+      <div class="a">No — strict one room → one workspace.</div>
+      <div class="why">
+        Keeps "delete" unambiguous and counts honest. If you ever need cross-listing,
+        we layer tags in as a complementary concept on top of workspaces — but don't
+        bake it in now. (Note: share-link already covers "give someone this room
+        without restructuring my org.")
+      </div>
+    </div>
+    <div class="decision">
+      <div class="q">Where do new rooms go when I'm in "All Rooms"?</div>
+      <div class="a">Into "Unfiled" — a real, auto-managed workspace.</div>
+      <div class="why">
+        "All Rooms" is a <em>view</em>, not a workspace. Every room must belong to
+        exactly one workspace; rooms with no chosen home go to Unfiled. Migration
+        path is trivial: every existing room lands here on first load.
+      </div>
+    </div>
+    <div class="decision">
+      <div class="q">How do I move a room between workspaces?</div>
+      <div class="a">Three converging paths: drag, ⚙ menu, right-click.</div>
+      <div class="why">
+        All call the same <code>setWorkspace(roomId, ws)</code>. Drag-onto-pill for
+        desktop power users; ⚙ → "Move to…" for mobile + discovery; right-click on
+        room tabs for desktop. Pick whichever feels natural.
+      </div>
+    </div>
+    <div class="decision">
+      <div class="q">Custom workspace colors — helpful or hurtful?</div>
+      <div class="a">Helpful, with guardrails: 8 curated colors, not free-form.</div>
+      <div class="why">
+        Color shows on the <em>pill</em> and on "All Rooms" badges — not on every
+        room tab (would be visual noise while typing). Limited palette = no clashes,
+        consistent accessibility, painless theming. Default is neutral grey.
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== §2 ANATOMY ===== -->
+  <h2 id="anatomy" class="scroll-helper">§2 · Anatomy of the menubar</h2>
+  <p class="lede">
+    Two ingredients added next to the existing menubar: a workspace <strong>pill</strong> (active context)
+    and the existing room tabs, now filtered to that workspace. Everything else is unchanged.
+  </p>
+
+  <div class="demo">
+    <div class="demo-label"><span class="step">1</span> Loaded into workspace "work" — desktop</div>
+    <div class="menubar">
+      <span class="menubar-logo">▸ cade.txt</span>
+      <span class="menubar-menu">File</span>
+      <span class="menubar-menu">Edit</span>
+      <span class="menubar-menu">View</span>
+      <span class="menubar-divider"></span>
+      <div class="ctx-wrap">
+        <span class="ws-pill ws-blue" onclick="toggleDD('dd-1')">
+          <span class="dot"></span>
+          <span>work</span>
+          <span class="caret">▾</span>
+        </span>
+      </div>
+      <div class="room-tabs">
+        <button class="room-tab active">specs</button>
+        <button class="room-tab">meeting-notes</button>
+        <button class="room-tab">research</button>
+        <button class="room-tab">inbox</button>
+        <button class="room-tab-add">+</button>
+      </div>
+      <span class="menubar-grow"></span>
+      <span class="menubar-menu">⎘ copy</span>
+      <span class="menubar-menu">⤓ dl</span>
+    </div>
+    <p class="lede" style="margin-top: var(--space-3);">
+      Tabs only show rooms in <code>work</code>. Hit <code>+</code> to add a room
+      to this workspace. The pill is the only new UI; everything else looks like today.
+    </p>
+  </div>
+
+  <div class="demo">
+    <div class="demo-label"><span class="step">2</span> Loaded into "All Rooms" — tabs show every room with workspace dot</div>
+    <div class="menubar">
+      <span class="menubar-logo">▸ cade.txt</span>
+      <span class="menubar-menu">File</span>
+      <span class="menubar-menu">Edit</span>
+      <span class="menubar-menu">View</span>
+      <span class="menubar-divider"></span>
+      <div class="ctx-wrap">
+        <span class="ws-pill all" onclick="toggleDD('dd-2')">
+          <span class="dot"></span>
+          <span>All Rooms</span>
+          <span class="caret">▾</span>
+        </span>
+      </div>
+      <div class="room-tabs">
+        <button class="room-tab active ws-blue"><span class="ws-dot"></span>specs</button>
+        <button class="room-tab ws-blue"><span class="ws-dot"></span>research</button>
+        <button class="room-tab ws-purple"><span class="ws-dot"></span>journal</button>
+        <button class="room-tab ws-green"><span class="ws-dot"></span>client-x/specs</button>
+        <button class="room-tab ws-neutral"><span class="ws-dot"></span>scratch</button>
+        <button class="room-tab-add">+</button>
+      </div>
+    </div>
+    <p class="lede" style="margin-top: var(--space-3);">
+      In "All Rooms", every tab gets a colored dot showing its workspace.
+      Quickly orients you when scanning a long list.
+    </p>
+  </div>
+
+  <!-- ===== §3 SWITCHER ===== -->
+  <h2 id="switcher" class="scroll-helper">§3 · Workspace switcher (the pill dropdown)</h2>
+  <p class="lede">
+    Click the pill, get a menu. Workspaces grouped at top with room counts; "All Rooms"
+    is always present; manage / new actions live at the bottom.
+  </p>
+
+  <div class="demo">
+    <div class="demo-label"><span class="step">3</span> Pill dropdown — click "work" pill above to expand</div>
+    <div style="display:flex; gap: var(--space-6); align-items: flex-start; flex-wrap: wrap;">
+      <div class="ctx-wrap">
+        <span class="ws-pill ws-blue" onclick="toggleDD('dd-static')">
+          <span class="dot"></span>
+          <span>work</span>
+          <span class="caret">▾</span>
+        </span>
+        <div class="ws-dropdown open" id="dd-static" style="position:relative;display:block;margin-top:8px;">
+          <div class="ws-dd-section">workspaces</div>
+          <div class="ws-dd-item current ws-blue">
+            <span class="dot"></span>
+            <span>work</span>
+            <span class="count">4 rooms</span>
+          </div>
+          <div class="ws-dd-item ws-purple">
+            <span class="dot"></span>
+            <span>personal</span>
+            <span class="count">2</span>
+          </div>
+          <div class="ws-dd-item ws-green">
+            <span class="dot"></span>
+            <span>client-x</span>
+            <span class="count">3</span>
+          </div>
+          <div class="ws-dd-item ws-neutral">
+            <span class="dot"></span>
+            <span>unfiled</span>
+            <span class="count">1</span>
+          </div>
+          <div class="ws-dd-divider"></div>
+          <div class="ws-dd-item">
+            <span class="dot" style="background:linear-gradient(90deg,#5eead4,#fcd34d,#c4b5fd);"></span>
+            <span>★ All Rooms</span>
+            <span class="count">10 rooms</span>
+          </div>
+          <div class="ws-dd-divider"></div>
+          <div class="ws-dd-action">+ New workspace…</div>
+          <div class="ws-dd-action">⚙ Manage workspaces…</div>
+        </div>
+      </div>
+      <div style="flex:1; min-width: 260px;">
+        <h3>Anatomy</h3>
+        <ul style="font-size: var(--text-sm); color: var(--text-muted); line-height: 1.6; padding-left: var(--space-4);">
+          <li><strong>Workspaces section</strong> — your custom ones plus auto-managed Unfiled. Counts shown.</li>
+          <li><strong>All Rooms</strong> — always present, separated, shows total.</li>
+          <li><strong>New workspace</strong> — inline create flow (name + color).</li>
+          <li><strong>Manage</strong> — opens the Room Manager modal at the "workspaces" tab.</li>
+        </ul>
+        <p class="lede" style="margin-top: var(--space-3);">
+          Keyboard: <code>⌘K</code> or <code>⌃K</code> opens this same picker as a command palette so you can fuzzy-search for either a workspace or a room name in one go.
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== §4 MANAGER ===== -->
+  <h2 id="manager" class="scroll-helper">§4 · Room Manager — full UX</h2>
+  <p class="lede">
+    The modal gets two views toggled at the top: <strong>Rooms</strong> (default — manage rooms in the current workspace)
+    and <strong>Workspaces</strong> (manage the workspaces themselves). Header / footer stay sticky as we just shipped.
+  </p>
+
+  <div class="grid-2">
+    <div class="demo" style="background: var(--surface-2);">
+      <div class="demo-label"><span class="step">4a</span> Rooms tab — inside "work"</div>
+      <div class="modal-shell">
+        <div class="modal-mock">
+          <div class="modal-header">
+            <div class="modal-title">Room Manager</div>
+            <div style="display:flex; gap: 4px; margin-bottom: var(--space-3);">
+              <button class="btn btn-small" style="background:var(--accent);color:#fff;border-color:var(--border-tab);">Rooms</button>
+              <button class="btn btn-small">Workspaces</button>
+            </div>
+            <div class="ws-context-bar">
+              <span style="color:var(--text-faint);">SHOWING:</span>
+              <span class="ws-pill ws-blue">
+                <span class="dot"></span><span>work</span><span class="caret">▾</span>
+              </span>
+              <span class="meta">4 of 10 rooms</span>
+            </div>
+            <div class="add-row">
+              <input class="row-input" type="text" placeholder="new room name (→ work)">
+              <button class="btn btn-primary">Add</button>
+            </div>
+          </div>
+          <div class="modal-body">
+            <div class="room-list">
+              <div class="room-row is-active">
+                <span class="drag">⠿</span>
+                <span class="name">specs</span>
+                <span class="meta">● active</span>
+                <span class="actions">
+                  <button class="btn btn-small btn-icon" title="Move / lock / rename">⚙</button>
+                  <button class="btn btn-small btn-danger btn-icon">×</button>
+                </span>
+              </div>
+              <div class="room-row">
+                <span class="drag">⠿</span>
+                <span class="name">meeting-notes</span>
+                <span class="actions"><button class="btn btn-small btn-icon">⚙</button><button class="btn btn-small btn-danger btn-icon">×</button></span>
+              </div>
+              <div class="room-row">
+                <span class="drag">⠿</span>
+                <span class="name">research</span>
+                <span class="actions"><button class="btn btn-small btn-icon">⚙</button><button class="btn btn-small btn-danger btn-icon">×</button></span>
+              </div>
+              <div class="room-row">
+                <span class="drag">⠿</span>
+                <span class="name">inbox</span>
+                <span class="actions"><button class="btn btn-small btn-icon">⚙</button><button class="btn btn-small btn-danger btn-icon">×</button></span>
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <div style="display:flex; justify-content:space-between; gap:var(--space-2); align-items:center;">
+              <span style="font-size:11px; color:var(--text-faint); font-family:var(--font-mono);">cap: 12 ▾</span>
+              <button class="btn btn-primary">Done</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="demo" style="background: var(--surface-2);">
+      <div class="demo-label"><span class="step">4b</span> Workspaces tab — manage the workspaces themselves</div>
+      <div class="modal-shell">
+        <div class="modal-mock">
+          <div class="modal-header">
+            <div class="modal-title">Room Manager</div>
+            <div style="display:flex; gap: 4px; margin-bottom: var(--space-3);">
+              <button class="btn btn-small">Rooms</button>
+              <button class="btn btn-small" style="background:var(--accent);color:#fff;border-color:var(--border-tab);">Workspaces</button>
+            </div>
+            <div class="modal-desc">Create, rename, recolor, and reorder workspaces. Delete moves the workspace's rooms to Unfiled.</div>
+            <div class="add-row">
+              <input class="row-input" type="text" placeholder="new workspace name…">
+              <button class="btn btn-primary">+ Create</button>
+            </div>
+          </div>
+          <div class="modal-body">
+            <div class="room-list">
+              <div class="room-row">
+                <span class="drag">⠿</span>
+                <span class="name" style="display:flex; align-items:center; gap:8px;">
+                  <span class="ws-badge ws-blue"><span class="dot"></span>work</span>
+                  <span style="color:var(--text-faint); font-size:10px;">4 rooms</span>
+                </span>
+                <span class="actions"><button class="btn btn-small btn-icon">🎨</button><button class="btn btn-small btn-icon">✎</button><button class="btn btn-small btn-danger btn-icon">×</button></span>
+              </div>
+              <div class="room-row">
+                <span class="drag">⠿</span>
+                <span class="name" style="display:flex; align-items:center; gap:8px;">
+                  <span class="ws-badge ws-purple"><span class="dot"></span>personal</span>
+                  <span style="color:var(--text-faint); font-size:10px;">2 rooms</span>
+                </span>
+                <span class="actions"><button class="btn btn-small btn-icon">🎨</button><button class="btn btn-small btn-icon">✎</button><button class="btn btn-small btn-danger btn-icon">×</button></span>
+              </div>
+              <div class="room-row">
+                <span class="drag">⠿</span>
+                <span class="name" style="display:flex; align-items:center; gap:8px;">
+                  <span class="ws-badge ws-green"><span class="dot"></span>client-x</span>
+                  <span style="color:var(--text-faint); font-size:10px;">3 rooms</span>
+                </span>
+                <span class="actions"><button class="btn btn-small btn-icon">🎨</button><button class="btn btn-small btn-icon">✎</button><button class="btn btn-small btn-danger btn-icon">×</button></span>
+              </div>
+              <div class="room-row" style="opacity:0.8;">
+                <span class="drag" style="opacity:0.3;cursor:not-allowed;">⠿</span>
+                <span class="name" style="display:flex; align-items:center; gap:8px;">
+                  <span class="ws-badge ws-neutral"><span class="dot"></span>unfiled</span>
+                  <span style="color:var(--text-faint); font-size:10px;">1 room · auto</span>
+                </span>
+                <span class="actions" style="opacity:0.5;"><button class="btn btn-small btn-icon" disabled>—</button></span>
+              </div>
+            </div>
+            <p class="lede" style="font-size: var(--text-xs); margin-top: var(--space-3); padding-top:var(--space-3); border-top: 1px dashed var(--border);">
+              Unfiled is system-managed: it auto-exists when any room lives there, and disappears when empty. Can't be renamed or deleted.
+            </p>
+          </div>
+          <div class="modal-footer">
+            <div style="display:flex; justify-content:flex-end; gap:var(--space-2);">
+              <button class="btn btn-primary">Done</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="callout">
+    <strong>Why two tabs in one modal?</strong> Keeps everything room-related in one place. The most-used view (Rooms) is the default; managing workspaces is rarer and lives one click away. Beats forcing users to find a separate "Workspace Settings" elsewhere.
+  </div>
+
+  <!-- ===== §5 MOVE ===== -->
+  <h2 id="move" class="scroll-helper">§5 · Moving rooms between workspaces</h2>
+  <p class="lede">
+    Three converging paths. All call the same <code>setWorkspace(room, ws)</code>;
+    each suits a different context.
+  </p>
+
+  <div class="grid-3">
+    <div class="demo">
+      <div class="demo-label"><span class="step">5a</span> Drag — desktop power users</div>
+      <p class="lede" style="font-size: var(--text-xs); margin-bottom: var(--space-3);">
+        Drag a room tab onto the workspace pill, or drag inside the Room Manager between sections.
+      </p>
+      <div class="menubar">
+        <div class="ctx-wrap">
+          <span class="ws-pill ws-blue" style="box-shadow: 0 0 0 2px var(--accent); transform: scale(1.05);">
+            <span class="dot"></span>
+            <span>work</span>
+            <span class="caret">▾</span>
+          </span>
+        </div>
+        <button class="room-tab" style="opacity:0.4;">specs</button>
+        <button class="room-tab active" style="transform: translate(8px, 4px); box-shadow: var(--shadow-md);">research →</button>
+      </div>
+      <p class="lede" style="font-size: 11px; margin-top: var(--space-2); color: var(--accent);">
+        Hovering "work" pill while dragging "research" → drop adds it to work.
+      </p>
+    </div>
+
+    <div class="demo">
+      <div class="demo-label"><span class="step">5b</span> ⚙ Menu — mobile + discovery</div>
+      <p class="lede" style="font-size: var(--text-xs); margin-bottom: var(--space-3);">
+        In Room Manager, the ⚙ button on a room opens move / lock / rename actions.
+      </p>
+      <div style="position: relative; display: inline-block;">
+        <button class="btn btn-small btn-icon">⚙ menu</button>
+        <div class="action-menu open" style="position: relative; margin-top: 8px;">
+          <div class="action-menu-item">✎ Rename</div>
+          <div class="action-menu-item">🔒 Set password</div>
+          <div class="action-menu-divider"></div>
+          <div class="action-menu-item" style="color: var(--text-faint);">Move to workspace…</div>
+          <div class="nested-list">
+            <div class="action-menu-item ws-blue"><span class="ws-dot" style="width:8px;height:8px;border-radius:50%;background:var(--ws-fg);display:inline-block;"></span> work <span style="margin-left:auto; color:var(--text-faint);">● here</span></div>
+            <div class="action-menu-item ws-purple"><span class="ws-dot" style="width:8px;height:8px;border-radius:50%;background:var(--ws-fg);display:inline-block;"></span> personal</div>
+            <div class="action-menu-item ws-green"><span class="ws-dot" style="width:8px;height:8px;border-radius:50%;background:var(--ws-fg);display:inline-block;"></span> client-x</div>
+            <div class="action-menu-item ws-neutral"><span class="ws-dot" style="width:8px;height:8px;border-radius:50%;background:var(--ws-fg);display:inline-block;"></span> unfiled</div>
+            <div class="action-menu-item" style="color: var(--text-muted);">+ new workspace…</div>
+          </div>
+          <div class="action-menu-divider"></div>
+          <div class="action-menu-item btn-danger">× Remove from list</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="demo">
+      <div class="demo-label"><span class="step">5c</span> Right-click — power desktop</div>
+      <p class="lede" style="font-size: var(--text-xs); margin-bottom: var(--space-3);">
+        Right-click a room tab to get the same menu without opening the manager.
+      </p>
+      <div style="position: relative;">
+        <button class="room-tab active">research <span style="font-size:9px;margin-left:4px;">⌥click</span></button>
+        <div class="action-menu open" style="position: relative; margin-top: 8px;">
+          <div class="action-menu-item">↗ Switch to here</div>
+          <div class="action-menu-item">✎ Rename</div>
+          <div class="action-menu-divider"></div>
+          <div class="action-menu-item">Move to →</div>
+          <div class="action-menu-divider"></div>
+          <div class="action-menu-item btn-danger">× Remove</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="callout">
+    <strong>Created in "All Rooms"?</strong> The <code>+</code> button respects the active context. In a workspace, new rooms go there. In "All Rooms", a small inline picker appears: <em>"Add to: [Unfiled ▾]"</em> — defaults to Unfiled, but you can pick any workspace before hitting Enter. No modal popup, no friction.
+  </div>
+
+  <!-- ===== §6 COLORS ===== -->
+  <h2 id="colors" class="scroll-helper">§6 · Custom colors — curated palette</h2>
+  <p class="lede">
+    Eight colors. All pass contrast on both themes. Default is neutral grey (no color picked).
+    Colors apply to the pill, switcher dropdown, and All-Rooms badges — not to individual room tabs.
+  </p>
+
+  <div class="demo">
+    <div class="demo-label">The palette</div>
+    <div class="palette">
+      <div class="swatch ws-neutral"><span class="dot"></span><span class="name">neutral</span><span class="hex">#a8a29e</span></div>
+      <div class="swatch ws-teal"><span class="dot"></span><span class="name">teal</span><span class="hex">#5eead4</span></div>
+      <div class="swatch ws-blue"><span class="dot"></span><span class="name">blue</span><span class="hex">#7dd3fc</span></div>
+      <div class="swatch ws-green"><span class="dot"></span><span class="name">green</span><span class="hex">#86efac</span></div>
+      <div class="swatch ws-amber"><span class="dot"></span><span class="name">amber</span><span class="hex">#fcd34d</span></div>
+      <div class="swatch ws-orange"><span class="dot"></span><span class="name">orange</span><span class="hex">#fdba74</span></div>
+      <div class="swatch ws-pink"><span class="dot"></span><span class="name">pink</span><span class="hex">#f9a8d4</span></div>
+      <div class="swatch ws-purple"><span class="dot"></span><span class="name">purple</span><span class="hex">#c4b5fd</span></div>
+    </div>
+    <p class="lede" style="margin-top: var(--space-3);">
+      In light mode, the same hues shift to ~30% darker shades; bg/border opacity stays the same. Each color is a single CSS class — colors live in one block, themes adapt automatically.
+    </p>
+  </div>
+
+  <div class="demo">
+    <div class="demo-label">Inline color picker (in workspace create / edit)</div>
+    <div style="display: flex; align-items: center; gap: var(--space-3); padding: var(--space-2);">
+      <span style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--text-faint);">color:</span>
+      <div class="color-picker">
+        <span class="color-dot ws-neutral neutral" title="neutral"></span>
+        <span class="color-dot ws-teal" title="teal"></span>
+        <span class="color-dot ws-blue selected" title="blue"></span>
+        <span class="color-dot ws-green" title="green"></span>
+        <span class="color-dot ws-amber" title="amber"></span>
+        <span class="color-dot ws-orange" title="orange"></span>
+        <span class="color-dot ws-pink" title="pink"></span>
+        <span class="color-dot ws-purple" title="purple"></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="warn">
+    <strong>What I won't ship:</strong> free-form hex pickers. Easy to make a workspace
+    invisible against the bg. Easy to clash with the accent color. Easy to break a11y.
+    The 8-color palette stays small on purpose.
+  </div>
+
+  <!-- ===== §7 ALL ROOMS ===== -->
+  <h2 id="all-rooms" class="scroll-helper">§7 · "All Rooms" view</h2>
+  <p class="lede">
+    The escape hatch for finding anything across workspaces. Behaves like a virtual workspace
+    everywhere except: room tabs show colored workspace dots, the <code>+</code> button asks
+    where to put new rooms, and Room Manager shows everything grouped by workspace.
+  </p>
+
+  <div class="demo">
+    <div class="demo-label">All Rooms — Room Manager grouped view</div>
+    <div class="modal-shell">
+      <div class="modal-mock" style="max-height: 480px;">
+        <div class="modal-header">
+          <div class="ws-context-bar">
+            <span style="color:var(--text-faint);">SHOWING:</span>
+            <span class="ws-pill all"><span class="dot"></span><span>All Rooms</span><span class="caret">▾</span></span>
+            <span class="meta">10 rooms · 4 workspaces</span>
+          </div>
+          <div class="add-row">
+            <input class="row-input" type="text" placeholder="new room name…">
+            <select class="row-input" style="flex:0 0 130px;">
+              <option>→ Unfiled</option>
+              <option>→ work</option>
+              <option>→ personal</option>
+              <option>→ client-x</option>
+            </select>
+            <button class="btn btn-primary">Add</button>
+          </div>
+        </div>
+        <div class="modal-body">
+          <div class="ws-dd-section">work · 4 rooms</div>
+          <div class="room-list">
+            <div class="room-row"><span class="drag">⠿</span><span class="name">specs <span class="ws-badge ws-blue"><span class="dot"></span>work</span></span></div>
+            <div class="room-row"><span class="drag">⠿</span><span class="name">meeting-notes <span class="ws-badge ws-blue"><span class="dot"></span>work</span></span></div>
+            <div class="room-row"><span class="drag">⠿</span><span class="name">research <span class="ws-badge ws-blue"><span class="dot"></span>work</span></span></div>
+            <div class="room-row"><span class="drag">⠿</span><span class="name">inbox <span class="ws-badge ws-blue"><span class="dot"></span>work</span></span></div>
+          </div>
+          <div class="ws-dd-section" style="margin-top: var(--space-3);">personal · 2 rooms</div>
+          <div class="room-list">
+            <div class="room-row"><span class="drag">⠿</span><span class="name">journal <span class="ws-badge ws-purple"><span class="dot"></span>personal</span></span></div>
+            <div class="room-row"><span class="drag">⠿</span><span class="name">ideas <span class="ws-badge ws-purple"><span class="dot"></span>personal</span></span></div>
+          </div>
+          <div class="ws-dd-section" style="margin-top: var(--space-3);">unfiled · 1 room</div>
+          <div class="room-list">
+            <div class="room-row"><span class="drag">⠿</span><span class="name">scratch <span class="ws-badge ws-neutral"><span class="dot"></span>unfiled</span></span></div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <div style="display:flex; justify-content:flex-end;"><button class="btn btn-primary">Done</button></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== §8 MOBILE ===== -->
+  <h2 id="mobile" class="scroll-helper">§8 · Mobile flow</h2>
+  <p class="lede">
+    Tabs are already hidden on mobile (replaced by a dropdown). The pill becomes the
+    workspace switcher; tapping it opens a bottom sheet listing workspaces. The room
+    dropdown follows the active workspace.
+  </p>
+
+  <div class="grid-3">
+    <div class="demo">
+      <div class="demo-label"><span class="step">8a</span> Default — workspace pill + room dropdown</div>
+      <div class="phone">
+        <div class="phone-notch"></div>
+        <div class="phone-content">
+          <div class="menubar">
+            <span class="menubar-logo">▸</span>
+            <span class="menubar-menu">≡</span>
+            <span class="ws-pill ws-blue"><span class="dot"></span>work<span class="caret">▾</span></span>
+            <span class="mobile-select">specs ▾</span>
+          </div>
+          <div class="phone-editor">In a small room with no view of the world.
+The walls were once white but now they
+are a shade of grey, like the inside of
+a fish.
+
+I write here because the editor
+loads faster than my breath.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="demo">
+      <div class="demo-label"><span class="step">8b</span> Tap pill → bottom-sheet switcher</div>
+      <div class="phone">
+        <div class="phone-notch"></div>
+        <div class="phone-content">
+          <div class="menubar">
+            <span class="menubar-logo">▸</span>
+            <span class="menubar-menu">≡</span>
+            <span class="ws-pill ws-blue" style="opacity:0.6;"><span class="dot"></span>work<span class="caret">▾</span></span>
+            <span class="mobile-select" style="opacity:0.4;">specs ▾</span>
+          </div>
+          <div class="phone-editor" style="opacity:0.3;">…</div>
+          <div class="bottom-sheet">
+            <div class="grabber"></div>
+            <div class="title">workspaces</div>
+            <div class="row current ws-blue"><span class="dot"></span><span>work</span><span class="count">4</span></div>
+            <div class="row ws-purple"><span class="dot"></span><span>personal</span><span class="count">2</span></div>
+            <div class="row ws-green"><span class="dot"></span><span>client-x</span><span class="count">3</span></div>
+            <div class="row ws-neutral"><span class="dot"></span><span>unfiled</span><span class="count">1</span></div>
+            <div style="height:1px;background:var(--border);margin:4px 14px;"></div>
+            <div class="row"><span class="dot" style="background:linear-gradient(90deg,#5eead4,#fcd34d,#c4b5fd);"></span><span>★ All Rooms</span><span class="count">10</span></div>
+            <div style="height:1px;background:var(--border);margin:4px 14px;"></div>
+            <div class="row" style="color:var(--text-muted);"><span>+ new workspace…</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="demo">
+      <div class="demo-label"><span class="step">8c</span> Long-press room → move sheet</div>
+      <div class="phone">
+        <div class="phone-notch"></div>
+        <div class="phone-content">
+          <div class="menubar">
+            <span class="menubar-logo">▸</span>
+            <span class="menubar-menu">≡</span>
+            <span class="ws-pill ws-blue" style="opacity:0.6;"><span class="dot"></span>work<span class="caret">▾</span></span>
+            <span class="mobile-select" style="opacity:0.4;">research ▾</span>
+          </div>
+          <div class="phone-editor" style="opacity:0.3;">…</div>
+          <div class="bottom-sheet">
+            <div class="grabber"></div>
+            <div class="title">move "research" to…</div>
+            <div class="row ws-blue" style="opacity:0.5;"><span class="dot"></span><span>work</span><span class="count">● here</span></div>
+            <div class="row ws-purple"><span class="dot"></span><span>personal</span></div>
+            <div class="row ws-green"><span class="dot"></span><span>client-x</span></div>
+            <div class="row ws-neutral"><span class="dot"></span><span>unfiled</span></div>
+            <div style="height:1px;background:var(--border);margin:4px 14px;"></div>
+            <div class="row" style="color:var(--text-muted);"><span>+ new workspace…</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== §9 SORT ===== -->
+  <h2 id="sort" class="scroll-helper">§9 · Sort order</h2>
+  <p class="lede">
+    Two layers: workspace order (in the switcher), and room order (within a workspace).
+  </p>
+  <div class="grid-2">
+    <div class="demo">
+      <div class="demo-label">Workspace order</div>
+      <ul class="steps">
+        <li><strong>Drag in the "Workspaces" tab</strong> of Room Manager. Persists to <code>workspaces[]</code>.</li>
+        <li><strong>Unfiled is pinned last</strong> — can't be reordered.</li>
+        <li><strong>"All Rooms" is pinned first</strong> in the switcher dropdown (above the divider).</li>
+      </ul>
+    </div>
+    <div class="demo">
+      <div class="demo-label">Room order (per workspace)</div>
+      <ul class="steps">
+        <li><strong>Manual (default)</strong> — drag in Room Manager; persists per workspace.</li>
+        <li><strong>Auto-sort options</strong> in the workspace's ✎ settings: <code>manual</code>, <code>A-Z</code>, <code>recent edit</code>, <code>created</code>.</li>
+        <li><strong>Tab strip respects the same order</strong> — no second source of truth.</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ===== §10 DATA MODEL ===== -->
+  <h2 id="model" class="scroll-helper">§10 · Data model &amp; migration</h2>
+  <p class="lede">Minimal-touch schema. Lives entirely in localStorage; Firebase is unchanged.</p>
+
+  <div class="demo">
+    <div class="demo-label">Schema (TypeScript-ish)</div>
+    <div class="code-block"><span class="code-comment">// localStorage: 'cade-workspaces' (new)</span>
+<span class="code-key">type</span> Workspace = {
+  <span class="code-key">id</span>: <span class="code-str">string</span>,        <span class="code-comment">// e.g. "ws_3a9f" — generated, immutable</span>
+  <span class="code-key">name</span>: <span class="code-str">string</span>,      <span class="code-comment">// user-facing, editable</span>
+  <span class="code-key">color</span>: <span class="code-str">"neutral" | "teal" | "blue" | "green" | "amber" | "orange" | "pink" | "purple"</span>,
+  <span class="code-key">sort</span>: <span class="code-str">"manual" | "az" | "recent" | "created"</span>,
+};
+
+<span class="code-comment">// localStorage: 'cade-rooms' (existing — extended)</span>
+<span class="code-key">type</span> Room = {
+  <span class="code-key">name</span>: <span class="code-str">string</span>,
+  <span class="code-key">workspaceId</span>: <span class="code-str">string</span>,   <span class="code-comment">// NEW — points to Workspace.id, or "unfiled"</span>
+  <span class="code-key">order</span>: <span class="code-num">number</span>,        <span class="code-comment">// NEW — manual sort within workspace</span>
+};
+
+<span class="code-comment">// localStorage: 'cade-active-workspace' (new)</span>
+<span class="code-key">type</span> ActiveContext = <span class="code-str">string</span> | <span class="code-str">"all"</span>;   <span class="code-comment">// workspace id, or "all" for All Rooms view</span></div>
+  </div>
+
+  <div class="demo">
+    <div class="demo-label">Migration on first load with the new build</div>
+    <ul class="steps">
+      <li><strong>If <code>cade-workspaces</code> doesn't exist</strong> — create it as <code>[]</code>. No "default" workspace forced on the user.</li>
+      <li><strong>Every existing room</strong> gets <code>workspaceId: "unfiled"</code> and keeps its position via the existing index → <code>order</code>.</li>
+      <li><strong>Active context</strong> = the workspace containing the previously-active room, or <code>"all"</code> if it's in Unfiled.</li>
+      <li><strong>No Firebase touch.</strong> Workspaces are purely a client-side organization layer; the room's Firebase path is its <code>name</code>, same as today.</li>
+    </ul>
+    <p class="lede" style="margin-top: var(--space-3); font-size: var(--text-xs); color: var(--text-faint);">
+      → A user who already has 5 rooms opens the new build and sees: pill = "All Rooms",
+      tabs = their 5 rooms (each with a neutral grey dot), Room Manager has one workspace
+      ("Unfiled") containing all 5. They can ignore workspaces entirely and the app keeps working.
+    </p>
+  </div>
+
+  <div class="callout">
+    <strong>Sync implications:</strong> Workspaces are <em>local</em>. Different devices may organize the same set of rooms differently. If you want workspaces to sync too, that's a separate feature (encrypted blob written to <code>config/{deviceKey}/workspaces</code> in Firebase). Mention this if you want it built in v1.
+  </div>
+
+  <!-- ===== §11 OPEN QUESTIONS ===== -->
+  <h2 id="followups" class="scroll-helper">§11 · Things still TBD — your call</h2>
+  <p class="lede">A few I deliberately deferred. Pick before I start implementing.</p>
+  <ol style="padding-left: var(--space-6); font-size: var(--text-sm); line-height: 1.65;">
+    <li style="margin-bottom: var(--space-2);"><strong>Sync workspaces across devices?</strong> Default: no (local-only). Yes adds an encrypted config blob to Firebase.</li>
+    <li style="margin-bottom: var(--space-2);"><strong>Workspace icons in addition to color?</strong> Default: no (color + name is enough). Could add a small emoji slot if you want stronger visual identity.</li>
+    <li style="margin-bottom: var(--space-2);"><strong>Per-workspace room cap, or one global cap?</strong> Default: global cap (today's behavior). Per-workspace would mean a small caps editor in the Workspaces tab.</li>
+    <li style="margin-bottom: var(--space-2);"><strong>Command palette (⌘K)?</strong> Default: yes — same picker as the pill dropdown, with fuzzy search across both workspaces and rooms.</li>
+    <li style="margin-bottom: var(--space-2);"><strong>"Pin to multiple workspaces" as a future tag-like feature?</strong> Default: not in v1. Reopens "delete vs unpin" ambiguity; ship strict first.</li>
+    <li style="margin-bottom: var(--space-2);"><strong>Empty-workspace UX</strong>. When a workspace has 0 rooms: show a soft empty state with "+ Add room" CTA, or hide the workspace from the switcher? I'd default to <em>show</em> (predictable).</li>
+  </ol>
+
+</div>
+
+<script>
+function toggleDD(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const wasOpen = el.classList.contains('open');
+  document.querySelectorAll('.ws-dropdown.open').forEach(d => {
+    if (d.id !== 'dd-static') d.classList.remove('open');
+  });
+  if (id !== 'dd-static' && !wasOpen) el.classList.add('open');
+  if (event) event.stopPropagation();
+}
+document.addEventListener('click', () => {
+  document.querySelectorAll('.ws-dropdown.open').forEach(d => {
+    if (d.id !== 'dd-static') d.classList.remove('open');
+  });
+});
+
+// Color picker: clickable selection
+document.querySelectorAll('.color-picker .color-dot').forEach(d => {
+  d.addEventListener('click', () => {
+    d.parentElement.querySelectorAll('.color-dot').forEach(x => x.classList.remove('selected'));
+    d.classList.add('selected');
+  });
+});
+</script>
+
+</body>
+</html>

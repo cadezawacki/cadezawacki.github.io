@@ -398,6 +398,361 @@ body {
 }
 
 /* ============================================
+   WORKSPACES (organize rooms into projects)
+   ============================================ */
+/* 8-color palette, light-tuned in :root, dark-tuned via [data-theme="dark"] */
+:root {
+  --ws-neutral-fg: #57534e; --ws-neutral-bg: rgba(120,113,108,0.08); --ws-neutral-bd: rgba(120,113,108,0.30);
+  --ws-teal-fg:    #0d9488; --ws-teal-bg:    rgba(20,184,166,0.10);  --ws-teal-bd:    rgba(20,184,166,0.35);
+  --ws-blue-fg:    #0284c7; --ws-blue-bg:    rgba(14,165,233,0.10);  --ws-blue-bd:    rgba(14,165,233,0.35);
+  --ws-green-fg:   #16a34a; --ws-green-bg:   rgba(34,197,94,0.10);   --ws-green-bd:   rgba(34,197,94,0.35);
+  --ws-amber-fg:   #b45309; --ws-amber-bg:   rgba(245,158,11,0.12);  --ws-amber-bd:   rgba(245,158,11,0.35);
+  --ws-orange-fg:  #c2410c; --ws-orange-bg:  rgba(249,115,22,0.12);  --ws-orange-bd:  rgba(249,115,22,0.35);
+  --ws-pink-fg:    #be185d; --ws-pink-bg:    rgba(236,72,153,0.10);  --ws-pink-bd:    rgba(236,72,153,0.35);
+  --ws-purple-fg:  #7c3aed; --ws-purple-bg:  rgba(139,92,246,0.10);  --ws-purple-bd:  rgba(139,92,246,0.35);
+}
+[data-theme="dark"] {
+  --ws-neutral-fg: #a8a29e; --ws-neutral-bg: rgba(168,162,158,0.10); --ws-neutral-bd: rgba(168,162,158,0.35);
+  --ws-teal-fg:    #5eead4; --ws-teal-bg:    rgba(94,234,212,0.10);  --ws-teal-bd:    rgba(94,234,212,0.35);
+  --ws-blue-fg:    #7dd3fc; --ws-blue-bg:    rgba(125,211,252,0.10); --ws-blue-bd:    rgba(125,211,252,0.35);
+  --ws-green-fg:   #86efac; --ws-green-bg:   rgba(134,239,172,0.10); --ws-green-bd:   rgba(134,239,172,0.35);
+  --ws-amber-fg:   #fcd34d; --ws-amber-bg:   rgba(252,211,77,0.10);  --ws-amber-bd:   rgba(252,211,77,0.35);
+  --ws-orange-fg:  #fdba74; --ws-orange-bg:  rgba(253,186,116,0.10); --ws-orange-bd:  rgba(253,186,116,0.35);
+  --ws-pink-fg:    #f9a8d4; --ws-pink-bg:    rgba(249,168,212,0.10); --ws-pink-bd:    rgba(249,168,212,0.35);
+  --ws-purple-fg:  #c4b5fd; --ws-purple-bg:  rgba(196,181,253,0.10); --ws-purple-bd:  rgba(196,181,253,0.35);
+}
+.ws-color-neutral { --ws-fg: var(--ws-neutral-fg); --ws-bg: var(--ws-neutral-bg); --ws-bd: var(--ws-neutral-bd); }
+.ws-color-teal    { --ws-fg: var(--ws-teal-fg);    --ws-bg: var(--ws-teal-bg);    --ws-bd: var(--ws-teal-bd); }
+.ws-color-blue    { --ws-fg: var(--ws-blue-fg);    --ws-bg: var(--ws-blue-bg);    --ws-bd: var(--ws-blue-bd); }
+.ws-color-green   { --ws-fg: var(--ws-green-fg);   --ws-bg: var(--ws-green-bg);   --ws-bd: var(--ws-green-bd); }
+.ws-color-amber   { --ws-fg: var(--ws-amber-fg);   --ws-bg: var(--ws-amber-bg);   --ws-bd: var(--ws-amber-bd); }
+.ws-color-orange  { --ws-fg: var(--ws-orange-fg);  --ws-bg: var(--ws-orange-bg);  --ws-bd: var(--ws-orange-bd); }
+.ws-color-pink    { --ws-fg: var(--ws-pink-fg);    --ws-bg: var(--ws-pink-bg);    --ws-bd: var(--ws-pink-bd); }
+.ws-color-purple  { --ws-fg: var(--ws-purple-fg);  --ws-bg: var(--ws-purple-bg);  --ws-bd: var(--ws-purple-bd); }
+
+/* Workspace pill — sits in the menubar to show active workspace */
+.ws-pill-wrap { position: relative; display: inline-flex; align-items: center; margin-left: var(--space-2); margin-right: 2px; }
+.ws-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  user-select: none;
+  border: 1px solid var(--ws-bd, var(--border));
+  background: var(--ws-bg, transparent);
+  color: var(--ws-fg, var(--text-faint));
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  max-width: 160px;
+  transition: filter var(--transition);
+}
+.ws-pill:hover { filter: brightness(1.15); }
+.ws-pill.ws-pill-all { --ws-fg: var(--text-muted); --ws-bg: transparent; --ws-bd: var(--border); }
+.ws-pill .ws-pill-dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--ws-fg);
+  flex: 0 0 7px;
+}
+.ws-pill.ws-pill-all .ws-pill-dot {
+  background: linear-gradient(90deg, #5eead4 0%, #fcd34d 50%, #c4b5fd 100%);
+}
+.ws-pill .ws-pill-name { overflow: hidden; text-overflow: ellipsis; }
+.ws-pill .ws-pill-caret { opacity: 0.6; font-size: 9px; flex: 0 0 auto; }
+.ws-pill.drop-target { box-shadow: 0 0 0 2px var(--accent); transform: scale(1.04); }
+
+/* Workspace dropdown */
+.ws-dropdown {
+  display: none;
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  min-width: 240px;
+  max-width: 320px;
+  padding: 4px;
+  z-index: 250;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+.ws-dropdown.open { display: block; }
+.ws-dd-section {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  padding: 8px 10px 4px;
+}
+.ws-dd-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+}
+.ws-dd-item:hover { background: var(--surface-hover); }
+.ws-dd-item.current { background: rgba(15,149,152,0.14); }
+.ws-dd-item .ws-dd-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--ws-fg, var(--text-faint));
+  flex: 0 0 8px;
+}
+.ws-dd-item.ws-pill-all .ws-dd-dot {
+  background: linear-gradient(90deg, #5eead4, #fcd34d, #c4b5fd);
+}
+.ws-dd-item .ws-dd-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.ws-dd-item .ws-dd-count { color: var(--text-faint); font-size: 10px; flex: 0 0 auto; }
+.ws-dd-divider { height: 1px; background: var(--border); margin: 4px 6px; }
+.ws-dd-action {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+}
+.ws-dd-action:hover { background: var(--surface-hover); color: var(--text); }
+.ws-dd-empty {
+  padding: 8px 10px;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text-faint);
+  font-style: italic;
+}
+
+/* Tiny workspace dot on room tabs (shown only in All Rooms mode) */
+.ws-tab-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--ws-fg, var(--text-faint));
+  flex: 0 0 6px;
+  display: inline-block;
+  margin-right: 2px;
+}
+.room-tab.active .ws-tab-dot { background: rgba(255,255,255,0.85); }
+
+/* Workspace badge (used inside Room Manager list rows) */
+.ws-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 10px;
+  background: var(--ws-bg);
+  color: var(--ws-fg);
+  border: 1px solid var(--ws-bd);
+  margin-left: 6px;
+  text-transform: lowercase;
+}
+.ws-badge .ws-badge-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--ws-fg);
+  flex: 0 0 6px;
+}
+
+/* Room Manager: tab toggle + workspace context bar */
+.rm-tabs { display: flex; gap: 4px; margin-bottom: var(--space-3); }
+.rm-tab {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  padding: 4px 12px;
+  background: none;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+.rm-tab:hover { color: var(--text); }
+.rm-tab.active {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--border-tab);
+  font-weight: 600;
+}
+.ws-context-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 6px 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--space-2);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+.ws-context-bar .ws-cb-label { color: var(--text-faint); }
+.ws-context-bar .ws-cb-meta { color: var(--text-faint); margin-left: auto; }
+
+/* Workspace list (Workspaces tab) */
+.ws-mgr-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 4px;
+  border-bottom: 1px solid var(--border);
+}
+.ws-mgr-row:last-child { border-bottom: none; }
+.ws-mgr-row.is-unlabeled { opacity: 0.85; }
+.ws-mgr-row .ws-mgr-drag {
+  color: var(--text-faint);
+  cursor: grab;
+  font-size: 14px;
+  padding: 0 4px;
+  user-select: none;
+  touch-action: none;
+}
+.ws-mgr-row.is-unlabeled .ws-mgr-drag { opacity: 0.3; cursor: not-allowed; }
+.ws-mgr-row .ws-mgr-name-cell { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 6px; }
+.ws-mgr-row .ws-mgr-name-cell .ws-badge { margin-left: 0; }
+.ws-mgr-row .ws-mgr-count {
+  font-size: 10px; color: var(--text-faint); font-family: var(--font-mono); text-transform: uppercase;
+}
+.ws-mgr-row .ws-mgr-actions { display: flex; gap: 4px; }
+.ws-mgr-row.editing { background: var(--surface-2); border-radius: var(--radius-sm); padding: 8px; }
+.ws-mgr-edit-name {
+  flex: 1;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 4px 8px;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  border-radius: var(--radius-sm);
+  outline: none;
+}
+.ws-mgr-edit-name:focus { border-color: var(--accent); }
+
+/* Color picker for workspace edit */
+.color-picker-row {
+  display: flex; align-items: center; gap: 6px;
+  padding: 6px 0 2px;
+  flex-wrap: wrap;
+}
+.color-picker-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-faint);
+  text-transform: uppercase;
+  margin-right: 4px;
+}
+.color-dot {
+  width: 20px; height: 20px;
+  border-radius: 50%;
+  background: var(--ws-fg);
+  cursor: pointer;
+  border: 2px solid transparent;
+  transition: transform var(--transition);
+  display: inline-block;
+}
+.color-dot:hover { transform: scale(1.12); }
+.color-dot.selected {
+  border-color: var(--text);
+  box-shadow: 0 0 0 2px var(--bg);
+}
+.color-dot.ws-color-neutral {
+  border: 2px dashed var(--text-faint);
+  background: var(--ws-fg);
+}
+.color-dot.ws-color-neutral.selected { border-style: solid; border-color: var(--text); }
+
+/* Workspace add row */
+.ws-add-row { display: flex; gap: var(--space-2); margin-bottom: var(--space-3); }
+.ws-add-row input { flex: 1; }
+
+/* Room manager: workspace target picker (next to add input) */
+.rm-target-select {
+  padding: 6px 10px;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--text);
+  max-width: 140px;
+}
+
+/* Room row in the manager, badge variant */
+.room-manager-item .ws-badge { vertical-align: middle; }
+
+/* Action menu (popover for ⚙ button in room rows / right-click on tab) */
+.rm-action-menu {
+  position: fixed;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  min-width: 200px;
+  padding: 4px;
+  z-index: 500;
+  display: none;
+}
+.rm-action-menu.open { display: block; }
+.rm-action-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+}
+.rm-action-item:hover { background: var(--surface-hover); }
+.rm-action-item.danger { color: #f87171; }
+.rm-action-item .rm-action-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--ws-fg, var(--text-faint));
+  flex: 0 0 8px;
+}
+.rm-action-item.current { color: var(--text-faint); }
+.rm-action-item.current::after { content: '✓'; margin-left: auto; color: var(--accent); }
+.rm-action-divider { height: 1px; background: var(--border); margin: 4px 0; }
+.rm-action-section {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-faint);
+  padding: 6px 10px 2px;
+}
+
+/* Mobile: pill stays visible; bottom-sheet handled below */
+@media (max-width: 600px) {
+  .ws-pill {
+    max-width: 110px;
+    font-size: 11px;
+    padding: 2px 6px;
+  }
+  .ws-pill-wrap { margin-left: 4px; }
+}
+
+/* ============================================
    EDITOR AREA
    ============================================ */
 .editor-wrap {
@@ -669,6 +1024,42 @@ body {
   animation: pickerIn 150ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
+/* Scrollable variant: flex-column dialog with sticky opaque header/footer
+   and an overflow-y body. Use by adding .modal-dialog-scroll and wrapping
+   content in .modal-header / .modal-body / .modal-footer. */
+.modal-dialog.modal-dialog-scroll {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 40px);
+  padding: 0;
+  overflow: hidden;
+}
+.modal-dialog.modal-dialog-scroll .modal-header {
+  flex: 0 0 auto;
+  padding: var(--space-6) var(--space-6) var(--space-4);
+  background: var(--surface);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  border-bottom: 1px solid var(--border);
+}
+.modal-dialog.modal-dialog-scroll .modal-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-4) var(--space-6);
+}
+.modal-dialog.modal-dialog-scroll .modal-footer {
+  flex: 0 0 auto;
+  padding: var(--space-4) var(--space-6) var(--space-6);
+  background: var(--surface);
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+  border-top: 1px solid var(--border);
+}
+/* Strip trailing margins so sticky section bounds are tight */
+.modal-dialog.modal-dialog-scroll .modal-header > :last-child,
+.modal-dialog.modal-dialog-scroll .modal-footer > :last-child { margin-bottom: 0; }
+.modal-dialog.modal-dialog-scroll .modal-header .modal-desc { margin-bottom: var(--space-4); }
+.modal-dialog.modal-dialog-scroll .modal-footer .modal-actions { margin-top: var(--space-3); }
+
 .modal-title {
   font-size: var(--text-lg);
   font-weight: 600;
@@ -928,6 +1319,20 @@ body {
     max-height: calc(100vh - 40px);
     overflow-y: auto;
   }
+  .modal-dialog.modal-dialog-scroll {
+    padding: 0;
+    overflow: hidden;
+    max-height: calc(100vh - 20px);
+  }
+  .modal-dialog.modal-dialog-scroll .modal-header {
+    padding: var(--space-4) var(--space-4) var(--space-3);
+  }
+  .modal-dialog.modal-dialog-scroll .modal-body {
+    padding: var(--space-3) var(--space-4);
+  }
+  .modal-dialog.modal-dialog-scroll .modal-footer {
+    padding: var(--space-3) var(--space-4) var(--space-4);
+  }
   .form-input, .form-input:focus {
     font-size: 16px;
   }
@@ -1173,6 +1578,16 @@ body {
     </div>
   </div>
 
+  <!-- Workspace pill (active workspace + switcher) -->
+  <div class="ws-pill-wrap" id="ws-pill-wrap">
+    <button class="ws-pill ws-pill-all" id="ws-pill" type="button" title="Switch workspace" onclick="toggleWorkspaceDropdown(event)">
+      <span class="ws-pill-dot"></span>
+      <span class="ws-pill-name">All Rooms</span>
+      <span class="ws-pill-caret">▾</span>
+    </button>
+    <div class="ws-dropdown" id="ws-dropdown"></div>
+  </div>
+
   <!-- Room Tabs (desktop) -->
   <div class="room-tabs" id="room-tabs"></div>
   <!-- Room Select (mobile) -->
@@ -1309,32 +1724,67 @@ body {
 
 <!-- ========== ROOM MANAGER MODAL ========== -->
 <div class="modal-overlay" id="room-manager-overlay">
-  <div class="modal-dialog" style="max-width: 440px;">
-    <div class="modal-title">Room Manager</div>
-    <div class="modal-desc">Manage your synced rooms (max <span id="room-cap-display">3</span>).</div>
-    <div class="room-add-row">
-      <input class="form-input" id="room-add-input" type="text" placeholder="New room name" spellcheck="false">
-      <button class="btn btn-primary" onclick="addRoomFromManager()">Add</button>
+  <div class="modal-dialog modal-dialog-scroll" style="max-width: 480px;">
+    <div class="modal-header">
+      <div class="modal-title">Room Manager</div>
+      <div class="rm-tabs">
+        <button class="rm-tab active" id="rm-tab-rooms" type="button" onclick="switchManagerTab('rooms')">Rooms</button>
+        <button class="rm-tab" id="rm-tab-workspaces" type="button" onclick="switchManagerTab('workspaces')">Workspaces</button>
+      </div>
+
+      <!-- Rooms tab header -->
+      <div id="rm-header-rooms">
+        <div class="ws-context-bar" id="rm-context-bar">
+          <span class="ws-cb-label">SHOWING:</span>
+          <span id="rm-context-pill"></span>
+          <span class="ws-cb-meta" id="rm-context-meta"></span>
+        </div>
+        <div class="room-add-row" style="margin-bottom:0;">
+          <input class="form-input" id="room-add-input" type="text" placeholder="New room name" spellcheck="false">
+          <select id="room-add-workspace" class="rm-target-select" style="display:none;"></select>
+          <button class="btn btn-primary" onclick="addRoomFromManager()">Add</button>
+        </div>
+      </div>
+
+      <!-- Workspaces tab header -->
+      <div id="rm-header-workspaces" style="display:none;">
+        <div class="modal-desc" style="margin-bottom: var(--space-3);">Create, rename, recolor, and reorder workspaces. Deleting moves its rooms to Unlabeled.</div>
+        <div class="ws-add-row" style="margin-bottom:0;">
+          <input class="form-input" id="ws-add-input" type="text" placeholder="New workspace name" spellcheck="false">
+          <button class="btn btn-primary" onclick="addWorkspaceFromManager()">+ Create</button>
+        </div>
+      </div>
     </div>
-    <div class="room-manager-list" id="room-manager-list"></div>
-    <div class="room-cap-row">
-      <label>Room cap:</label>
-      <select id="room-cap-select" onchange="updateRoomCap(this.value)">
-        <option value="1">1</option>
-        <option value="2">2</option>
-        <option value="3" selected>3</option>
-        <option value="4">4</option>
-        <option value="5">5</option>
-        <option value="6">6</option>
-        <option value="7">7</option>
-        <option value="8">8</option>
-        <option value="9">9</option>
-        <option value="10">10</option>
-        <option value="99">99</option>
-      </select>
+
+    <div class="modal-body">
+      <div id="rm-body-rooms">
+        <div class="room-manager-list" id="room-manager-list" style="margin-bottom:0;"></div>
+      </div>
+      <div id="rm-body-workspaces" style="display:none;">
+        <div class="room-manager-list" id="workspace-manager-list" style="margin-bottom:0;"></div>
+      </div>
     </div>
-    <div class="modal-actions">
-      <button class="btn btn-primary" onclick="closeRoomManager()">Done</button>
+
+    <div class="modal-footer">
+      <div class="room-cap-row" id="rm-footer-cap" style="margin-bottom:0;">
+        <label>Room cap:</label>
+        <select id="room-cap-select" onchange="updateRoomCap(this.value)">
+          <option value="1">1</option>
+          <option value="2">2</option>
+          <option value="3" selected>3</option>
+          <option value="4">4</option>
+          <option value="5">5</option>
+          <option value="6">6</option>
+          <option value="7">7</option>
+          <option value="8">8</option>
+          <option value="9">9</option>
+          <option value="10">10</option>
+          <option value="99">99</option>
+        </select>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-primary" onclick="closeRoomManager()">Done</button>
+      </div>
     </div>
   </div>
 </div>
@@ -1351,6 +1801,9 @@ body {
     </div>
   </div>
 </div>
+
+<!-- ========== ROOM ACTION MENU (popover) ========== -->
+<div class="rm-action-menu" id="rm-action-menu"></div>
 
 <!-- ========== DOWNLOAD MODAL ========== -->
 <div class="modal-overlay" id="download-overlay">
@@ -4690,23 +5143,33 @@ function saveRooms() {
 }
 
 function renderRoomTabs() {
+  renderWorkspacePill();
   // Desktop tabs
   const container = document.getElementById('room-tabs');
   const mobileContainer = document.getElementById('room-mobile-select');
-  if (rooms.length === 0) { container.innerHTML = ''; mobileContainer.innerHTML = ''; return; }
-  let html = rooms.map(name => {
+  const visibleRooms = roomsInActiveWorkspace();
+  const showDots = activeWorkspace === WS_ALL;
+  if (visibleRooms.length === 0 && rooms.length === 0) {
+    container.innerHTML = '';
+    mobileContainer.innerHTML = '';
+    return;
+  }
+  let html = visibleRooms.map(name => {
     const isActive = name === activeRoom && syncState.connected;
     const hasLock = roomHasPassword(name);
-    return `<button class="room-tab ${isActive ? 'active' : ''}" data-room="${name}" onclick="switchRoom('${name.replace(/'/g, "\\'")}')" title="${name}">${name}${hasLock ? '<span class=\'room-tab-lock\'>🔒</span>' : ''}</button>`;
+    const colorClass = workspaceColorClassForRoom(name);
+    const dotHtml = showDots ? `<span class="ws-tab-dot ${colorClass}"></span>` : '';
+    const esc = name.replace(/'/g, "\\'");
+    return `<button class="room-tab ${isActive ? 'active' : ''}" data-room="${name}" oncontextmenu="showRoomTabContextMenu(event, '${esc}'); return false;" onclick="switchRoom('${esc}')" title="${name}">${dotHtml}${name}${hasLock ? '<span class=\'room-tab-lock\'>🔒</span>' : ''}</button>`;
   }).join('');
   if (rooms.length < roomCap) {
     html += `<button class="room-tab-add" onclick="addRoomPrompt()" title="Add room">+</button>`;
   }
   container.innerHTML = html;
 
-  // Mobile dropdown
+  // Mobile dropdown — same filter
   let mobileHtml = '<select onchange="if(this.value===\'+\'){addRoomPrompt();this.value=activeRoom||\'\';}else{switchRoom(this.value);}">';
-  rooms.forEach(name => {
+  visibleRooms.forEach(name => {
     const sel = (name === activeRoom && syncState.connected) ? ' selected' : '';
     mobileHtml += `<option value="${name}"${sel}>${name}</option>`;
   });
@@ -4717,10 +5180,9 @@ function renderRoomTabs() {
   mobileContainer.innerHTML = mobileHtml;
 
   // Switch to dropdown mode if >5 rooms or tabs overflow
-  // Temporarily ensure tabs are visible so we can measure overflow
   container.classList.remove('dropdown-mode');
   mobileContainer.classList.remove('dropdown-mode');
-  const useDropdown = rooms.length > 5 || container.scrollWidth > container.clientWidth;
+  const useDropdown = visibleRooms.length > 5 || container.scrollWidth > container.clientWidth;
   container.classList.toggle('dropdown-mode', useDropdown);
   mobileContainer.classList.toggle('dropdown-mode', useDropdown);
 }
@@ -4913,75 +5375,191 @@ window.addRoomPrompt = function() {
 };
 
 // Room Manager modal
-window.openRoomManager = function() {
+let _rmActiveTab = 'rooms';
+window.openRoomManager = function(tab) {
   closeAllMenus();
+  _rmActiveTab = tab === 'workspaces' ? 'workspaces' : 'rooms';
+  renderManagerTabs();
   renderRoomManagerList();
+  renderWorkspaceManagerList();
   document.getElementById('room-cap-select').value = roomCap;
-  document.getElementById('room-cap-display').textContent = roomCap;
   document.getElementById('room-manager-overlay').classList.add('open');
-  document.getElementById('room-add-input').focus();
+  if (_rmActiveTab === 'rooms') {
+    document.getElementById('room-add-input').focus();
+  } else {
+    document.getElementById('ws-add-input').focus();
+  }
 };
 
 window.closeRoomManager = function() {
   document.getElementById('room-manager-overlay').classList.remove('open');
+  closeActionMenu();
   editor.focus();
 };
 
+window.switchManagerTab = function(tab) {
+  _rmActiveTab = tab;
+  renderManagerTabs();
+  if (tab === 'rooms') {
+    renderRoomManagerList();
+    setTimeout(() => document.getElementById('room-add-input').focus(), 10);
+  } else {
+    renderWorkspaceManagerList();
+    setTimeout(() => document.getElementById('ws-add-input').focus(), 10);
+  }
+};
+
+function renderManagerTabs() {
+  const tabRooms = document.getElementById('rm-tab-rooms');
+  const tabWs = document.getElementById('rm-tab-workspaces');
+  const headRooms = document.getElementById('rm-header-rooms');
+  const headWs = document.getElementById('rm-header-workspaces');
+  const bodyRooms = document.getElementById('rm-body-rooms');
+  const bodyWs = document.getElementById('rm-body-workspaces');
+  const footerCap = document.getElementById('rm-footer-cap');
+  const isRooms = _rmActiveTab === 'rooms';
+  tabRooms.classList.toggle('active', isRooms);
+  tabWs.classList.toggle('active', !isRooms);
+  headRooms.style.display = isRooms ? '' : 'none';
+  headWs.style.display = isRooms ? 'none' : '';
+  bodyRooms.style.display = isRooms ? '' : 'none';
+  bodyWs.style.display = isRooms ? 'none' : '';
+  footerCap.style.display = isRooms ? '' : 'none';
+}
+
 function renderRoomManagerList() {
+  // Update context bar (which workspace we're filtering by)
+  renderManagerContextBar();
+  // Update the Add-row workspace-target select (only visible in All Rooms view)
+  renderAddRowTargetPicker();
+
   const list = document.getElementById('room-manager-list');
+  const showAll = activeWorkspace === WS_ALL;
+  const visibleRooms = roomsInActiveWorkspace();
   if (rooms.length === 0) {
     list.innerHTML = '<div style="color:var(--text-faint);font-size:var(--text-sm);padding:8px 0;">No rooms added yet.</div>';
     return;
   }
-  list.innerHTML = rooms.map(name => {
-    const isActive = name === activeRoom && syncState.connected;
-    const hasPassword = roomHasPassword(name);
-    const safeId = _safeId(name);
-    const isTarget = _roomPwActionTarget === name;
-    const mode = _roomPwActionMode;
-    const esc = s => s.replace(/'/g, "\\'");
+  if (visibleRooms.length === 0) {
+    const wsName = activeWorkspace === WS_UNLABELED ? 'Unlabeled' : (getWorkspace(activeWorkspace)?.name || 'this workspace');
+    list.innerHTML = `<div style="color:var(--text-faint);font-size:var(--text-sm);padding:8px 0;">No rooms in <em>${escapeHtml(wsName)}</em> yet. Add one above, or switch context.</div>`;
+    return;
+  }
 
-    let pwForm = '';
-    if (isTarget && mode === 'set') {
-      pwForm = `<div style="margin-top:6px;display:flex;gap:4px;">
-        <input id="rpm-pw-input-${safeId}" class="form-input" type="password" placeholder="New password" style="font-size:var(--text-xs);padding:4px 8px;">
+  // In "All Rooms" view, group by workspace for visual clarity
+  if (showAll) {
+    list.innerHTML = renderGroupedRoomList(visibleRooms);
+  } else {
+    list.innerHTML = visibleRooms.map(name => renderRoomRow(name, false)).join('');
+  }
+}
+
+function renderManagerContextBar() {
+  const pillSlot = document.getElementById('rm-context-pill');
+  const metaEl = document.getElementById('rm-context-meta');
+  if (!pillSlot) return;
+  pillSlot.innerHTML = workspacePillHtml(activeWorkspace, true);
+  pillSlot.firstElementChild?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    toggleWorkspaceDropdown(e);
+  });
+  const visible = roomsInActiveWorkspace().length;
+  metaEl.textContent = activeWorkspace === WS_ALL
+    ? `${rooms.length} room${rooms.length !== 1 ? 's' : ''}`
+    : `${visible} of ${rooms.length}`;
+}
+
+function renderAddRowTargetPicker() {
+  const sel = document.getElementById('room-add-workspace');
+  if (!sel) return;
+  if (activeWorkspace !== WS_ALL) {
+    sel.style.display = 'none';
+    return;
+  }
+  sel.style.display = '';
+  const opts = workspacesForDropdown();
+  let html = '<option value="' + WS_UNLABELED + '">→ Unlabeled</option>';
+  opts.forEach(w => {
+    if (w.id === WS_UNLABELED) return;
+    html += `<option value="${escapeHtml(w.id)}">→ ${escapeHtml(w.name)}</option>`;
+  });
+  sel.innerHTML = html;
+}
+
+function renderGroupedRoomList(visibleRooms) {
+  const groups = workspacesForDropdown();
+  const seen = new Set();
+  let html = '';
+  groups.forEach(g => {
+    const inGroup = visibleRooms.filter(r => getRoomWorkspaceId(r) === g.id);
+    if (inGroup.length === 0) return;
+    inGroup.forEach(n => seen.add(n));
+    html += `<div class="ws-dd-section" style="padding:10px 0 4px;">${escapeHtml(g.name)} · ${inGroup.length} room${inGroup.length !== 1 ? 's' : ''}</div>`;
+    html += inGroup.map(name => renderRoomRow(name, true)).join('');
+  });
+  // Catch any orphaned rooms (shouldn't happen, but just in case)
+  const orphans = visibleRooms.filter(r => !seen.has(r));
+  if (orphans.length) {
+    html += '<div class="ws-dd-section" style="padding:10px 0 4px;">Other</div>';
+    html += orphans.map(name => renderRoomRow(name, true)).join('');
+  }
+  return html;
+}
+
+function renderRoomRow(name, showBadge) {
+  const isActive = name === activeRoom && syncState.connected;
+  const hasPassword = roomHasPassword(name);
+  const safeId = _safeId(name);
+  const isTarget = _roomPwActionTarget === name;
+  const mode = _roomPwActionMode;
+  const esc = s => s.replace(/'/g, "\\'");
+  const colorClass = workspaceColorClassForRoom(name);
+  const wsId = getRoomWorkspaceId(name);
+  const wsName = wsId === WS_UNLABELED ? 'unlabeled' : (getWorkspace(wsId)?.name || 'unlabeled');
+  const badgeHtml = showBadge
+    ? `<span class="ws-badge ${colorClass}"><span class="ws-badge-dot"></span>${escapeHtml(wsName)}</span>`
+    : '';
+
+  let pwForm = '';
+  if (isTarget && mode === 'set') {
+    pwForm = `<div style="margin-top:6px;display:flex;gap:4px;">
+      <input id="rpm-pw-input-${safeId}" class="form-input" type="password" placeholder="New password" style="font-size:var(--text-xs);padding:4px 8px;">
+      <button class="btn btn-primary" style="padding:2px 8px;font-size:var(--text-xs);" onclick="submitRoomPwAction('${esc(name)}')">Save</button>
+      <button class="btn" style="padding:2px 8px;font-size:var(--text-xs);" onclick="cancelRoomPwAction()">Cancel</button>
+    </div>`;
+  } else if (isTarget && mode === 'change') {
+    pwForm = `<div style="margin-top:6px;display:flex;flex-direction:column;gap:4px;">
+      <input id="rpm-pw-input-${safeId}" class="form-input" type="password" placeholder="Current password" style="font-size:var(--text-xs);padding:4px 8px;">
+      <input id="rpm-pw-input2-${safeId}" class="form-input" type="password" placeholder="New password" style="font-size:var(--text-xs);padding:4px 8px;">
+      <div style="display:flex;gap:4px;">
         <button class="btn btn-primary" style="padding:2px 8px;font-size:var(--text-xs);" onclick="submitRoomPwAction('${esc(name)}')">Save</button>
         <button class="btn" style="padding:2px 8px;font-size:var(--text-xs);" onclick="cancelRoomPwAction()">Cancel</button>
-      </div>`;
-    } else if (isTarget && mode === 'change') {
-      pwForm = `<div style="margin-top:6px;display:flex;flex-direction:column;gap:4px;">
-        <input id="rpm-pw-input-${safeId}" class="form-input" type="password" placeholder="Current password" style="font-size:var(--text-xs);padding:4px 8px;">
-        <input id="rpm-pw-input2-${safeId}" class="form-input" type="password" placeholder="New password" style="font-size:var(--text-xs);padding:4px 8px;">
-        <div style="display:flex;gap:4px;">
-          <button class="btn btn-primary" style="padding:2px 8px;font-size:var(--text-xs);" onclick="submitRoomPwAction('${esc(name)}')">Save</button>
-          <button class="btn" style="padding:2px 8px;font-size:var(--text-xs);" onclick="cancelRoomPwAction()">Cancel</button>
-        </div>
-      </div>`;
-    } else if (isTarget && mode === 'remove') {
-      pwForm = `<div style="margin-top:6px;display:flex;gap:4px;">
-        <input id="rpm-pw-input-${safeId}" class="form-input" type="password" placeholder="Confirm password" style="font-size:var(--text-xs);padding:4px 8px;">
-        <button class="btn btn-danger" style="padding:2px 8px;font-size:var(--text-xs);" onclick="submitRoomPwAction('${esc(name)}')">Remove</button>
-        <button class="btn" style="padding:2px 8px;font-size:var(--text-xs);" onclick="cancelRoomPwAction()">Cancel</button>
-      </div>`;
-    }
-
-    return `<div class="room-manager-item" draggable="true" data-room="${name}" style="flex-direction:column;align-items:flex-start;gap:2px;">
-      <div style="display:flex;align-items:center;justify-content:space-between;width:100%;">
-        <div style="display:flex;align-items:center;gap:6px;">
-          <span class="room-manager-drag" title="Drag to reorder">⠿</span>
-          <span class="room-manager-name">${name}</span>
-          ${isActive ? '<span class="room-manager-active">● active</span>' : ''}
-          ${hasPassword ? '<span style="font-size:10px;color:var(--text-faint);" title="Password protected">🔒</span>' : ''}
-        </div>
-        <div style="display:flex;gap:4px;">
-          <button class="btn" style="padding:2px 8px;font-size:var(--text-xs);" onclick="roomPasswordAction('${esc(name)}')">${hasPassword ? 'Change PW' : 'Set PW'}</button>
-          ${hasPassword ? `<button class="btn btn-danger" style="padding:2px 8px;font-size:var(--text-xs);" onclick="removeRoomPassword('${esc(name)}')">Remove PW</button>` : ''}
-          <button class="btn btn-danger" style="padding:2px 8px;font-size:var(--text-xs);" onclick="removeRoom('${esc(name)}')">Remove</button>
-        </div>
       </div>
-      ${pwForm}
     </div>`;
-  }).join('');
+  } else if (isTarget && mode === 'remove') {
+    pwForm = `<div style="margin-top:6px;display:flex;gap:4px;">
+      <input id="rpm-pw-input-${safeId}" class="form-input" type="password" placeholder="Confirm password" style="font-size:var(--text-xs);padding:4px 8px;">
+      <button class="btn btn-danger" style="padding:2px 8px;font-size:var(--text-xs);" onclick="submitRoomPwAction('${esc(name)}')">Remove</button>
+      <button class="btn" style="padding:2px 8px;font-size:var(--text-xs);" onclick="cancelRoomPwAction()">Cancel</button>
+    </div>`;
+  }
+
+  return `<div class="room-manager-item" draggable="true" data-room="${name}" style="flex-direction:column;align-items:flex-start;gap:2px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;width:100%;">
+      <div style="display:flex;align-items:center;gap:6px;min-width:0;flex:1;">
+        <span class="room-manager-drag" title="Drag to reorder">⠿</span>
+        <span class="room-manager-name" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(name)}</span>
+        ${badgeHtml}
+        ${isActive ? '<span class="room-manager-active">● active</span>' : ''}
+        ${hasPassword ? '<span style="font-size:10px;color:var(--text-faint);" title="Password protected">🔒</span>' : ''}
+      </div>
+      <div style="display:flex;gap:4px;flex-shrink:0;">
+        <button class="btn" style="padding:2px 8px;font-size:var(--text-xs);" onclick="showRoomActionMenu(event, '${esc(name)}')" title="More actions">⚙</button>
+        <button class="btn btn-danger" style="padding:2px 8px;font-size:var(--text-xs);" onclick="removeRoom('${esc(name)}')">×</button>
+      </div>
+    </div>
+    ${pwForm}
+  </div>`;
 }
 
 // Drag-and-drop reordering for room manager list (desktop + mobile touch)
@@ -5133,8 +5711,21 @@ window.addRoomFromManager = function() {
   if (rooms.includes(name)) { showToast('Room already exists', 'error'); return; }
   if (rooms.length >= roomCap) { showToast('Room cap reached (' + roomCap + ')', 'error'); return; }
   rooms.push(name);
+  // Determine workspace target
+  let targetWs;
+  if (activeWorkspace === WS_ALL) {
+    const sel = document.getElementById('room-add-workspace');
+    targetWs = sel && sel.value ? sel.value : WS_UNLABELED;
+  } else {
+    targetWs = activeWorkspace; // current context (workspace or unlabeled)
+  }
+  if (targetWs !== WS_UNLABELED) {
+    roomWorkspace[name] = targetWs;
+  }
   saveRooms();
+  saveWorkspaces();
   renderRoomManagerList();
+  renderWorkspaceManagerList();
   renderRoomTabs();
   input.value = '';
   showToast('Room added: ' + name, 'success', 2000);
@@ -5142,7 +5733,9 @@ window.addRoomFromManager = function() {
 
 window.removeRoom = function(name) {
   rooms = rooms.filter(r => r !== name);
+  delete roomWorkspace[name];
   saveRooms();
+  saveWorkspaces();
   store.remove('cade-room-cache:' + name);
   if (activeRoom === name && syncState.connected) {
     window.disconnectSync();
@@ -5150,6 +5743,7 @@ window.removeRoom = function(name) {
     store.set('cade-active-room', '');
   }
   renderRoomManagerList();
+  renderWorkspaceManagerList();
   renderRoomTabs();
   showToast('Room removed: ' + name, 'success', 2000);
 };
@@ -5157,7 +5751,6 @@ window.removeRoom = function(name) {
 window.updateRoomCap = function(val) {
   roomCap = parseInt(val) || 3;
   store.set('cade-room-cap', roomCap);
-  document.getElementById('room-cap-display').textContent = roomCap;
   // Trim excess rooms
   while (rooms.length > roomCap) {
     const removed = rooms.pop();
@@ -5176,8 +5769,19 @@ document.getElementById('room-manager-overlay').addEventListener('click', (e) =>
   if (e.target === document.getElementById('room-manager-overlay')) closeRoomManager();
 });
 document.getElementById('room-manager-overlay').addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') closeRoomManager();
+  if (e.key === 'Escape') {
+    // If an action menu or workspace dropdown is open, close that first
+    const am = document.getElementById('rm-action-menu');
+    if (am && am.classList.contains('open')) { e.stopPropagation(); closeActionMenu(); return; }
+    if (_wsEditingId) { e.stopPropagation(); cancelWorkspaceEdit(); return; }
+    closeRoomManager();
+  }
   if (e.key === 'Enter' && e.target.id === 'room-add-input') addRoomFromManager();
+  if (e.key === 'Enter' && e.target.id === 'ws-add-input') addWorkspaceFromManager();
+  if (e.key === 'Enter' && e.target.classList?.contains('ws-mgr-edit-name')) {
+    const id = e.target.id.replace('ws-edit-name-', '');
+    saveWorkspaceEdit(id);
+  }
 });
 
 // ============================================
@@ -5263,8 +5867,714 @@ document.getElementById('storage-cleanup-overlay').addEventListener('keydown', (
   if (e.key === 'Escape') closeStorageCleanup();
 });
 
+// ============================================
+// WORKSPACES — organize rooms into projects
+// Sync model: encrypted blob at `config/{keyFp}/workspaces` in Firebase,
+// pulled on startup and subscribed for remote updates. Last-write-wins by ts.
+// ============================================
+const WS_ALL = '__all__';
+const WS_UNLABELED = '__unlabeled__';
+const WS_COLORS = ['neutral', 'teal', 'blue', 'green', 'amber', 'orange', 'pink', 'purple'];
+
+let workspaces = [];      // [{id, name, color, sort, order}]
+let roomWorkspace = {};   // {roomName: workspaceId} — absent key = unlabeled
+let activeWorkspace = store.get('cade-active-workspace') || WS_ALL;
+
+try { workspaces = JSON.parse(store.get('cade-workspaces')) || []; } catch {}
+try { roomWorkspace = JSON.parse(store.get('cade-room-workspace')) || {}; } catch {}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+}
+
+function newWorkspaceId() {
+  return 'ws_' + Math.random().toString(36).slice(2, 8) + Date.now().toString(36).slice(-4);
+}
+
+function getWorkspace(id) {
+  if (!id || id === WS_ALL || id === WS_UNLABELED) return null;
+  return workspaces.find(w => w.id === id) || null;
+}
+
+function getRoomWorkspaceId(name) {
+  const id = roomWorkspace[name];
+  if (id && workspaces.find(w => w.id === id)) return id;
+  return WS_UNLABELED;
+}
+
+function workspaceColorClassForRoom(name) {
+  const id = getRoomWorkspaceId(name);
+  if (id === WS_UNLABELED) return 'ws-color-neutral';
+  const ws = getWorkspace(id);
+  return 'ws-color-' + (ws && WS_COLORS.includes(ws.color) ? ws.color : 'neutral');
+}
+
+function roomsInActiveWorkspace() {
+  if (activeWorkspace === WS_ALL) return rooms.slice();
+  if (activeWorkspace === WS_UNLABELED) return rooms.filter(r => getRoomWorkspaceId(r) === WS_UNLABELED);
+  return rooms.filter(r => getRoomWorkspaceId(r) === activeWorkspace);
+}
+
+function workspacesForDropdown() {
+  const list = workspaces.slice().sort((a, b) => (a.order ?? 0) - (b.order ?? 0)).map(w => ({
+    ...w,
+    count: rooms.filter(r => getRoomWorkspaceId(r) === w.id).length,
+  }));
+  const unlabeledCount = rooms.filter(r => getRoomWorkspaceId(r) === WS_UNLABELED).length;
+  if (unlabeledCount > 0) {
+    list.push({ id: WS_UNLABELED, name: 'Unlabeled', color: 'neutral', count: unlabeledCount, isUnlabeled: true });
+  }
+  return list;
+}
+
+function workspacePillHtml(wsId, asLabel) {
+  if (wsId === WS_ALL) {
+    return `<span class="ws-pill ws-pill-all" data-ws="${WS_ALL}"><span class="ws-pill-dot"></span><span class="ws-pill-name">All Rooms</span>${asLabel ? '' : '<span class="ws-pill-caret">▾</span>'}</span>`;
+  }
+  if (wsId === WS_UNLABELED) {
+    return `<span class="ws-pill ws-color-neutral" data-ws="${WS_UNLABELED}"><span class="ws-pill-dot"></span><span class="ws-pill-name">Unlabeled</span>${asLabel ? '' : '<span class="ws-pill-caret">▾</span>'}</span>`;
+  }
+  const ws = getWorkspace(wsId);
+  if (!ws) return workspacePillHtml(WS_ALL, asLabel);
+  const color = WS_COLORS.includes(ws.color) ? ws.color : 'neutral';
+  return `<span class="ws-pill ws-color-${color}" data-ws="${escapeHtml(ws.id)}"><span class="ws-pill-dot"></span><span class="ws-pill-name">${escapeHtml(ws.name)}</span>${asLabel ? '' : '<span class="ws-pill-caret">▾</span>'}</span>`;
+}
+
+function saveWorkspaces(skipSync) {
+  store.set('cade-workspaces', JSON.stringify(workspaces));
+  store.set('cade-room-workspace', JSON.stringify(roomWorkspace));
+  store.set('cade-active-workspace', activeWorkspace);
+  if (!skipSync) schedulePushWorkspaces();
+}
+
+// ---------- Workspace CRUD ----------
+function createWorkspace(name, color) {
+  name = (name || '').trim();
+  if (!name) return null;
+  if (workspaces.some(w => w.name.toLowerCase() === name.toLowerCase())) {
+    showToast('Workspace already exists', 'error'); return null;
+  }
+  const ws = {
+    id: newWorkspaceId(),
+    name,
+    color: WS_COLORS.includes(color) ? color : 'neutral',
+    sort: 'manual',
+    order: workspaces.length,
+  };
+  workspaces.push(ws);
+  saveWorkspaces();
+  return ws;
+}
+
+function deleteWorkspace(id) {
+  // Move its rooms to unlabeled
+  Object.keys(roomWorkspace).forEach(n => {
+    if (roomWorkspace[n] === id) delete roomWorkspace[n];
+  });
+  workspaces = workspaces.filter(w => w.id !== id);
+  if (activeWorkspace === id) activeWorkspace = WS_ALL;
+  saveWorkspaces();
+}
+
+function renameWorkspace(id, newName) {
+  const ws = getWorkspace(id);
+  if (!ws) return;
+  newName = (newName || '').trim();
+  if (!newName || newName === ws.name) return;
+  if (workspaces.some(w => w.id !== id && w.name.toLowerCase() === newName.toLowerCase())) {
+    showToast('Workspace name already in use', 'error'); return;
+  }
+  ws.name = newName;
+  saveWorkspaces();
+}
+
+function recolorWorkspace(id, color) {
+  const ws = getWorkspace(id);
+  if (!ws || !WS_COLORS.includes(color)) return;
+  ws.color = color;
+  saveWorkspaces();
+}
+
+function moveRoomToWorkspace(roomName, wsId) {
+  if (!rooms.includes(roomName)) return;
+  if (wsId === WS_UNLABELED || !wsId) {
+    delete roomWorkspace[roomName];
+  } else if (workspaces.find(w => w.id === wsId)) {
+    roomWorkspace[roomName] = wsId;
+  } else {
+    return; // unknown workspace
+  }
+  saveWorkspaces();
+}
+
+// ---------- Pill rendering ----------
+function renderWorkspacePill() {
+  const pill = document.getElementById('ws-pill');
+  if (!pill) return;
+  // Reset color classes
+  pill.className = 'ws-pill';
+  const wrap = pill;
+  if (activeWorkspace === WS_ALL) {
+    wrap.classList.add('ws-pill-all');
+    pill.innerHTML = '<span class="ws-pill-dot"></span><span class="ws-pill-name">All Rooms</span><span class="ws-pill-caret">▾</span>';
+  } else if (activeWorkspace === WS_UNLABELED) {
+    wrap.classList.add('ws-color-neutral');
+    pill.innerHTML = '<span class="ws-pill-dot"></span><span class="ws-pill-name">Unlabeled</span><span class="ws-pill-caret">▾</span>';
+  } else {
+    const ws = getWorkspace(activeWorkspace);
+    if (!ws) {
+      activeWorkspace = WS_ALL;
+      saveWorkspaces(true);
+      renderWorkspacePill();
+      return;
+    }
+    const color = WS_COLORS.includes(ws.color) ? ws.color : 'neutral';
+    wrap.classList.add('ws-color-' + color);
+    pill.innerHTML = `<span class="ws-pill-dot"></span><span class="ws-pill-name">${escapeHtml(ws.name)}</span><span class="ws-pill-caret">▾</span>`;
+  }
+}
+
+function renderWorkspaceDropdown() {
+  const dd = document.getElementById('ws-dropdown');
+  if (!dd) return;
+  const list = workspacesForDropdown();
+  const totalRooms = rooms.length;
+  let html = '<div class="ws-dd-section">workspaces</div>';
+  if (list.length === 0) {
+    html += '<div class="ws-dd-empty">no workspaces yet — create one to organize</div>';
+  } else {
+    list.forEach(ws => {
+      const isCurrent = ws.id === activeWorkspace;
+      const colorClass = ws.id === WS_UNLABELED ? 'ws-color-neutral' : ('ws-color-' + (WS_COLORS.includes(ws.color) ? ws.color : 'neutral'));
+      html += `<div class="ws-dd-item ${colorClass} ${isCurrent ? 'current' : ''}" data-ws="${escapeHtml(ws.id)}" onclick="switchToWorkspace('${escapeHtml(ws.id)}')">
+        <span class="ws-dd-dot"></span>
+        <span class="ws-dd-name">${escapeHtml(ws.name)}</span>
+        <span class="ws-dd-count">${ws.count}</span>
+      </div>`;
+    });
+  }
+  html += '<div class="ws-dd-divider"></div>';
+  const isAll = activeWorkspace === WS_ALL;
+  html += `<div class="ws-dd-item ws-pill-all ${isAll ? 'current' : ''}" onclick="switchToWorkspace('${WS_ALL}')">
+    <span class="ws-dd-dot"></span>
+    <span class="ws-dd-name">★ All Rooms</span>
+    <span class="ws-dd-count">${totalRooms}</span>
+  </div>`;
+  html += '<div class="ws-dd-divider"></div>';
+  html += `<div class="ws-dd-action" onclick="openWorkspaceManager()">+ New workspace…</div>`;
+  html += `<div class="ws-dd-action" onclick="openWorkspaceManager()">⚙ Manage workspaces…</div>`;
+  dd.innerHTML = html;
+}
+
+window.toggleWorkspaceDropdown = function(evt) {
+  const dd = document.getElementById('ws-dropdown');
+  const isOpen = dd.classList.contains('open');
+  if (isOpen) {
+    dd.classList.remove('open');
+  } else {
+    renderWorkspaceDropdown();
+    dd.classList.add('open');
+  }
+  if (evt) evt.stopPropagation();
+};
+
+window.switchToWorkspace = function(wsId) {
+  activeWorkspace = wsId;
+  store.set('cade-active-workspace', wsId);
+  document.getElementById('ws-dropdown').classList.remove('open');
+  renderRoomTabs();
+  // Update any open manager
+  if (document.getElementById('room-manager-overlay').classList.contains('open')) {
+    renderRoomManagerList();
+  }
+};
+
+window.openWorkspaceManager = function() {
+  document.getElementById('ws-dropdown').classList.remove('open');
+  openRoomManager('workspaces');
+};
+
+// Close dropdown on outside click / escape
+document.addEventListener('click', (e) => {
+  const dd = document.getElementById('ws-dropdown');
+  const wrap = document.getElementById('ws-pill-wrap');
+  if (!dd || !wrap) return;
+  if (!wrap.contains(e.target)) dd.classList.remove('open');
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    const dd = document.getElementById('ws-dropdown');
+    if (dd && dd.classList.contains('open')) {
+      dd.classList.remove('open');
+    }
+  }
+});
+
+// ---------- Workspaces tab rendering (in Room Manager) ----------
+let _wsEditingId = null;
+
+window.addWorkspaceFromManager = function() {
+  const input = document.getElementById('ws-add-input');
+  const name = input.value.trim();
+  if (!name) return;
+  const ws = createWorkspace(name, 'neutral');
+  if (!ws) return;
+  input.value = '';
+  renderWorkspaceManagerList();
+  renderRoomManagerList();
+  showToast('Workspace created: ' + ws.name, 'success', 2000);
+  // Start editing it so user can pick a color
+  _wsEditingId = ws.id;
+  renderWorkspaceManagerList();
+};
+
+function renderWorkspaceManagerList() {
+  const list = document.getElementById('workspace-manager-list');
+  if (!list) return;
+  const items = workspaces.slice().sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  const unlabeledCount = rooms.filter(r => getRoomWorkspaceId(r) === WS_UNLABELED).length;
+  let html = '';
+  if (items.length === 0 && unlabeledCount === 0) {
+    html = '<div style="color:var(--text-faint);font-size:var(--text-sm);padding:8px 0;">No workspaces yet. Add one above.</div>';
+  } else {
+    items.forEach(ws => {
+      const count = rooms.filter(r => getRoomWorkspaceId(r) === ws.id).length;
+      const color = WS_COLORS.includes(ws.color) ? ws.color : 'neutral';
+      const isEditing = _wsEditingId === ws.id;
+      const escId = ws.id.replace(/'/g, "\\'");
+      const escName = ws.name.replace(/'/g, "\\'");
+      if (isEditing) {
+        let colorPicker = '<div class="color-picker-row"><span class="color-picker-label">color</span>';
+        WS_COLORS.forEach(c => {
+          const sel = c === color ? ' selected' : '';
+          colorPicker += `<span class="color-dot ws-color-${c}${sel}" onclick="setWorkspaceColorFromUI('${escId}', '${c}')" title="${c}"></span>`;
+        });
+        colorPicker += '</div>';
+        html += `<div class="ws-mgr-row editing" draggable="true" data-ws="${ws.id}">
+          <span class="ws-mgr-drag" title="Drag to reorder">⠿</span>
+          <div style="flex:1;display:flex;flex-direction:column;gap:6px;min-width:0;">
+            <input class="ws-mgr-edit-name" id="ws-edit-name-${ws.id}" value="${escapeHtml(ws.name)}" placeholder="workspace name">
+            ${colorPicker}
+          </div>
+          <div class="ws-mgr-actions">
+            <button class="btn btn-primary" style="padding:2px 8px;font-size:var(--text-xs);" onclick="saveWorkspaceEdit('${escId}')">Save</button>
+            <button class="btn" style="padding:2px 8px;font-size:var(--text-xs);" onclick="cancelWorkspaceEdit()">Cancel</button>
+          </div>
+        </div>`;
+      } else {
+        html += `<div class="ws-mgr-row" draggable="true" data-ws="${ws.id}">
+          <span class="ws-mgr-drag" title="Drag to reorder">⠿</span>
+          <div class="ws-mgr-name-cell">
+            <span class="ws-badge ws-color-${color}"><span class="ws-badge-dot"></span>${escapeHtml(ws.name)}</span>
+            <span class="ws-mgr-count">${count} room${count !== 1 ? 's' : ''}</span>
+          </div>
+          <div class="ws-mgr-actions">
+            <button class="btn" style="padding:2px 8px;font-size:var(--text-xs);" onclick="beginWorkspaceEdit('${escId}')" title="Rename / recolor">✎</button>
+            <button class="btn btn-danger" style="padding:2px 8px;font-size:var(--text-xs);" onclick="confirmDeleteWorkspace('${escId}', '${escName}')" title="Delete (moves rooms to Unlabeled)">×</button>
+          </div>
+        </div>`;
+      }
+    });
+    if (unlabeledCount > 0) {
+      html += `<div class="ws-mgr-row is-unlabeled">
+        <span class="ws-mgr-drag">⠿</span>
+        <div class="ws-mgr-name-cell">
+          <span class="ws-badge ws-color-neutral"><span class="ws-badge-dot"></span>unlabeled</span>
+          <span class="ws-mgr-count">${unlabeledCount} room${unlabeledCount !== 1 ? 's' : ''} · auto</span>
+        </div>
+        <div class="ws-mgr-actions"><button class="btn" style="padding:2px 8px;font-size:var(--text-xs);opacity:0.4;" disabled title="System-managed; can't rename or delete">—</button></div>
+      </div>`;
+    }
+  }
+  list.innerHTML = html;
+  if (_wsEditingId) {
+    const inp = document.getElementById('ws-edit-name-' + _wsEditingId);
+    if (inp) inp.focus();
+  }
+}
+
+window.beginWorkspaceEdit = function(id) {
+  _wsEditingId = id;
+  renderWorkspaceManagerList();
+};
+
+window.cancelWorkspaceEdit = function() {
+  _wsEditingId = null;
+  renderWorkspaceManagerList();
+};
+
+window.saveWorkspaceEdit = function(id) {
+  const inp = document.getElementById('ws-edit-name-' + id);
+  if (inp) renameWorkspace(id, inp.value);
+  _wsEditingId = null;
+  renderWorkspaceManagerList();
+  renderRoomManagerList();
+  renderRoomTabs();
+};
+
+window.setWorkspaceColorFromUI = function(id, color) {
+  recolorWorkspace(id, color);
+  renderWorkspaceManagerList();
+  renderRoomManagerList();
+  renderRoomTabs();
+};
+
+window.confirmDeleteWorkspace = function(id, name) {
+  const ws = getWorkspace(id);
+  if (!ws) return;
+  const count = rooms.filter(r => getRoomWorkspaceId(r) === id).length;
+  const msg = count > 0
+    ? `Delete workspace "${name}"? Its ${count} room${count !== 1 ? 's' : ''} will move to Unlabeled.`
+    : `Delete workspace "${name}"?`;
+  if (!confirm(msg)) return;
+  deleteWorkspace(id);
+  renderWorkspaceManagerList();
+  renderRoomManagerList();
+  renderRoomTabs();
+  showToast('Workspace deleted', 'success', 2000);
+};
+
+// ---------- Workspace drag-and-drop reordering (Workspaces tab) ----------
+(function() {
+  const list = document.getElementById('workspace-manager-list');
+  if (!list) return;
+  let dragId = null;
+  list.addEventListener('dragstart', (e) => {
+    const item = e.target.closest('.ws-mgr-row[data-ws]');
+    if (!item || item.classList.contains('is-unlabeled')) { e.preventDefault(); return; }
+    dragId = item.dataset.ws;
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', dragId);
+  });
+  list.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  });
+  list.addEventListener('drop', (e) => {
+    e.preventDefault();
+    if (!dragId) return;
+    const target = e.target.closest('.ws-mgr-row[data-ws]');
+    if (!target || target.classList.contains('is-unlabeled')) return;
+    const targetId = target.dataset.ws;
+    if (targetId === dragId) return;
+    const from = workspaces.findIndex(w => w.id === dragId);
+    const to = workspaces.findIndex(w => w.id === targetId);
+    if (from === -1 || to === -1) return;
+    const moved = workspaces.splice(from, 1)[0];
+    workspaces.splice(to, 0, moved);
+    workspaces.forEach((w, i) => { w.order = i; });
+    saveWorkspaces();
+    renderWorkspaceManagerList();
+    dragId = null;
+  });
+})();
+
+// ---------- Room action menu (⚙ button in room rows; right-click on room tabs) ----------
+let _actionMenuTargetRoom = null;
+window.closeActionMenu = function() {
+  const m = document.getElementById('rm-action-menu');
+  if (m) { m.classList.remove('open'); m.innerHTML = ''; }
+  _actionMenuTargetRoom = null;
+};
+
+window.showRoomActionMenu = function(evt, roomName) {
+  evt.stopPropagation();
+  evt.preventDefault();
+  _actionMenuTargetRoom = roomName;
+  const menu = document.getElementById('rm-action-menu');
+  if (!menu) return;
+  const currentWs = getRoomWorkspaceId(roomName);
+  const hasPassword = roomHasPassword(roomName);
+  const esc = s => s.replace(/'/g, "\\'");
+  const er = esc(roomName);
+
+  let wsItems = '';
+  workspacesForDropdown().forEach(w => {
+    if (w.id === WS_UNLABELED) return;
+    const isCurrent = w.id === currentWs;
+    const colorClass = 'ws-color-' + (WS_COLORS.includes(w.color) ? w.color : 'neutral');
+    wsItems += `<div class="rm-action-item ${colorClass} ${isCurrent ? 'current' : ''}" onclick="moveRoomToWsFromMenu('${er}', '${esc(w.id)}')">
+      <span class="rm-action-dot"></span>${escapeHtml(w.name)}
+    </div>`;
+  });
+  const isUnlabeled = currentWs === WS_UNLABELED;
+  wsItems += `<div class="rm-action-item ws-color-neutral ${isUnlabeled ? 'current' : ''}" onclick="moveRoomToWsFromMenu('${er}', '${WS_UNLABELED}')">
+    <span class="rm-action-dot"></span>Unlabeled
+  </div>`;
+  wsItems += `<div class="rm-action-item" onclick="newWorkspaceFromMoveMenu('${er}')" style="color:var(--text-muted);">+ New workspace…</div>`;
+
+  menu.innerHTML = `
+    <div class="rm-action-section">move "${escapeHtml(roomName)}" to</div>
+    ${wsItems}
+    <div class="rm-action-divider"></div>
+    <div class="rm-action-item" onclick="closeActionMenu(); roomPasswordAction('${er}')">${hasPassword ? '🔑 Change password' : '🔒 Set password'}</div>
+    ${hasPassword ? `<div class="rm-action-item" onclick="closeActionMenu(); removeRoomPassword('${er}')">Remove password</div>` : ''}
+    <div class="rm-action-divider"></div>
+    <div class="rm-action-item danger" onclick="closeActionMenu(); removeRoom('${er}')">× Remove room</div>
+  `;
+  menu.classList.add('open');
+  positionActionMenu(menu, evt);
+};
+
+window.showRoomTabContextMenu = function(evt, roomName) {
+  evt.preventDefault();
+  evt.stopPropagation();
+  _actionMenuTargetRoom = roomName;
+  const menu = document.getElementById('rm-action-menu');
+  if (!menu) return;
+  const currentWs = getRoomWorkspaceId(roomName);
+  const esc = s => s.replace(/'/g, "\\'");
+  const er = esc(roomName);
+
+  let wsItems = '';
+  workspacesForDropdown().forEach(w => {
+    if (w.id === WS_UNLABELED) return;
+    const isCurrent = w.id === currentWs;
+    const colorClass = 'ws-color-' + (WS_COLORS.includes(w.color) ? w.color : 'neutral');
+    wsItems += `<div class="rm-action-item ${colorClass} ${isCurrent ? 'current' : ''}" onclick="moveRoomToWsFromMenu('${er}', '${esc(w.id)}')">
+      <span class="rm-action-dot"></span>${escapeHtml(w.name)}
+    </div>`;
+  });
+  const isUnlabeled = currentWs === WS_UNLABELED;
+  wsItems += `<div class="rm-action-item ws-color-neutral ${isUnlabeled ? 'current' : ''}" onclick="moveRoomToWsFromMenu('${er}', '${WS_UNLABELED}')">
+    <span class="rm-action-dot"></span>Unlabeled
+  </div>`;
+
+  menu.innerHTML = `
+    <div class="rm-action-item" onclick="closeActionMenu(); switchRoom('${er}')">↗ Switch to here</div>
+    <div class="rm-action-divider"></div>
+    <div class="rm-action-section">move to</div>
+    ${wsItems}
+    <div class="rm-action-divider"></div>
+    <div class="rm-action-item danger" onclick="closeActionMenu(); removeRoom('${er}')">× Remove from list</div>
+  `;
+  menu.classList.add('open');
+  positionActionMenu(menu, evt);
+};
+
+function positionActionMenu(menu, evt) {
+  // First make it visible to measure
+  menu.style.left = '0px';
+  menu.style.top = '0px';
+  const rect = menu.getBoundingClientRect();
+  const x = evt.clientX;
+  const y = evt.clientY;
+  const maxX = window.innerWidth - rect.width - 8;
+  const maxY = window.innerHeight - rect.height - 8;
+  menu.style.left = Math.max(8, Math.min(x, maxX)) + 'px';
+  menu.style.top = Math.max(8, Math.min(y, maxY)) + 'px';
+}
+
+window.moveRoomToWsFromMenu = function(roomName, wsId) {
+  moveRoomToWorkspace(roomName, wsId);
+  closeActionMenu();
+  renderRoomManagerList();
+  renderWorkspaceManagerList();
+  renderRoomTabs();
+  const wsName = wsId === WS_UNLABELED ? 'Unlabeled' : (getWorkspace(wsId)?.name || 'workspace');
+  showToast(`Moved "${roomName}" → ${wsName}`, 'success', 2000);
+};
+
+window.newWorkspaceFromMoveMenu = function(roomName) {
+  closeActionMenu();
+  const name = prompt('New workspace name:');
+  if (!name) return;
+  const ws = createWorkspace(name.trim(), 'neutral');
+  if (!ws) return;
+  moveRoomToWorkspace(roomName, ws.id);
+  renderRoomManagerList();
+  renderWorkspaceManagerList();
+  renderRoomTabs();
+  showToast(`Created "${ws.name}" and moved "${roomName}" into it`, 'success', 2500);
+};
+
+// Click-outside / escape closes the action menu
+document.addEventListener('click', (e) => {
+  const menu = document.getElementById('rm-action-menu');
+  if (menu && menu.classList.contains('open') && !menu.contains(e.target)) {
+    closeActionMenu();
+  }
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closeActionMenu();
+});
+
+// ---------- Drag-to-pill: drop a tab on the workspace pill to move ----------
+(function() {
+  const wrap = document.getElementById('ws-pill-wrap');
+  const tabsContainer = document.getElementById('room-tabs');
+  if (!wrap || !tabsContainer) return;
+  let dragRoom = null;
+  tabsContainer.addEventListener('dragstart', (e) => {
+    const tab = e.target.closest('.room-tab[data-room]');
+    if (!tab) return;
+    dragRoom = tab.dataset.room;
+    e.dataTransfer.effectAllowed = 'move';
+    try { e.dataTransfer.setData('text/plain', dragRoom); } catch {}
+  });
+  tabsContainer.querySelectorAll('.room-tab').forEach(t => t.setAttribute('draggable', 'true'));
+  // Re-apply draggable after each render
+  const obs = new MutationObserver(() => {
+    tabsContainer.querySelectorAll('.room-tab').forEach(t => t.setAttribute('draggable', 'true'));
+  });
+  obs.observe(tabsContainer, { childList: true });
+
+  wrap.addEventListener('dragover', (e) => {
+    if (!dragRoom) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    document.getElementById('ws-pill').classList.add('drop-target');
+  });
+  wrap.addEventListener('dragleave', () => {
+    document.getElementById('ws-pill').classList.remove('drop-target');
+  });
+  wrap.addEventListener('drop', (e) => {
+    e.preventDefault();
+    document.getElementById('ws-pill').classList.remove('drop-target');
+    if (!dragRoom) return;
+    // Drop target = current pill's workspace; if "all", show menu instead
+    if (activeWorkspace === WS_ALL) {
+      // Pop the dropdown so user picks where to move it
+      const evt2 = { clientX: e.clientX, clientY: e.clientY, preventDefault: () => {}, stopPropagation: () => {} };
+      showRoomTabContextMenu(evt2, dragRoom);
+    } else {
+      moveRoomToWorkspace(dragRoom, activeWorkspace);
+      const wsName = activeWorkspace === WS_UNLABELED ? 'Unlabeled' : (getWorkspace(activeWorkspace)?.name || 'workspace');
+      showToast(`Moved "${dragRoom}" → ${wsName}`, 'success', 2000);
+      renderRoomTabs();
+    }
+    dragRoom = null;
+  });
+})();
+
+// ============================================
+// WORKSPACES — Firebase sync (encrypted blob per encryption-key fingerprint)
+// ============================================
+let _wsPushTimer = null;
+let _wsLastWriteTs = 0;
+let _wsKeyFp = null;
+let _wsConfigRef = null;
+let _wsRemoteListener = null;
+
+async function _computeKeyFingerprint(key) {
+  // 16-hex-char fingerprint from SHA-256, used as Firebase path component
+  if (!key) return null;
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('ws-fp:' + key));
+  const arr = Array.from(new Uint8Array(buf)).slice(0, 8);
+  return arr.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+function schedulePushWorkspaces() {
+  if (_wsPushTimer) clearTimeout(_wsPushTimer);
+  _wsPushTimer = setTimeout(pushWorkspacesNow, 800);
+}
+
+async function pushWorkspacesNow() {
+  _wsPushTimer = null;
+  const baseKey = store.get('cade-sync-key') || '';
+  const fbUrl = store.get('cade-firebase-url') || '';
+  if (!baseKey || !fbUrl) return;
+  try {
+    const db = initFirebase(fbUrl);
+    const fp = _wsKeyFp || await _computeKeyFingerprint(baseKey);
+    _wsKeyFp = fp;
+    const blob = { ts: Date.now(), workspaces, roomWorkspace };
+    _wsLastWriteTs = blob.ts;
+    const encrypted = await encryptText(JSON.stringify(blob), baseKey);
+    await db.ref(`config/${fp}/workspaces`).set(encrypted);
+    store.set('cade-workspaces-ts', String(blob.ts));
+  } catch (e) {
+    console.warn('Workspace sync push failed:', e);
+  }
+}
+
+async function applyRemoteWorkspaceBlob(encrypted, baseKey, source) {
+  if (!encrypted) return false;
+  try {
+    const decrypted = await decryptText(encrypted, baseKey);
+    if (!decrypted) return false;
+    const blob = JSON.parse(decrypted);
+    if (!blob || typeof blob !== 'object') return false;
+    const remoteTs = blob.ts || 0;
+    // Skip echoes of our own writes
+    if (Math.abs(remoteTs - _wsLastWriteTs) < 250) return false;
+    const localTs = parseInt(store.get('cade-workspaces-ts') || '0', 10);
+    if (remoteTs <= localTs) return false;
+    workspaces = Array.isArray(blob.workspaces) ? blob.workspaces : [];
+    roomWorkspace = (blob.roomWorkspace && typeof blob.roomWorkspace === 'object') ? blob.roomWorkspace : {};
+    // If activeWorkspace points to something deleted remotely, drop back to all
+    if (activeWorkspace !== WS_ALL && activeWorkspace !== WS_UNLABELED && !getWorkspace(activeWorkspace)) {
+      activeWorkspace = WS_ALL;
+    }
+    store.set('cade-workspaces', JSON.stringify(workspaces));
+    store.set('cade-room-workspace', JSON.stringify(roomWorkspace));
+    store.set('cade-active-workspace', activeWorkspace);
+    store.set('cade-workspaces-ts', String(remoteTs));
+    renderRoomTabs();
+    if (document.getElementById('room-manager-overlay').classList.contains('open')) {
+      renderRoomManagerList();
+      renderWorkspaceManagerList();
+    }
+    if (source === 'remote') showToast('Workspaces synced', 'success', 1500);
+    return true;
+  } catch (e) {
+    console.warn('Workspace sync apply failed:', e);
+    return false;
+  }
+}
+
+async function ensureWorkspaceSync() {
+  const baseKey = store.get('cade-sync-key') || '';
+  const fbUrl = store.get('cade-firebase-url') || '';
+  if (!baseKey || !fbUrl) return;
+  try {
+    const db = initFirebase(fbUrl);
+    const fp = await _computeKeyFingerprint(baseKey);
+    _wsKeyFp = fp;
+    const ref = db.ref(`config/${fp}/workspaces`);
+    // Initial pull
+    const snap = await ref.once('value');
+    const val = snap.val();
+    const localHasData = workspaces.length > 0 || Object.keys(roomWorkspace).length > 0;
+    if (val) {
+      const applied = await applyRemoteWorkspaceBlob(val, baseKey, 'initial');
+      // If remote was older than local, push our newer data
+      if (!applied && localHasData) {
+        schedulePushWorkspaces();
+      }
+    } else if (localHasData) {
+      // No remote yet — push current local state so other devices can sync
+      schedulePushWorkspaces();
+    }
+    // Subscribe for remote changes (replace if any)
+    if (_wsRemoteListener && _wsConfigRef) {
+      _wsConfigRef.off('value', _wsRemoteListener);
+    }
+    _wsConfigRef = ref;
+    _wsRemoteListener = ref.on('value', (s) => {
+      const v = s.val();
+      if (v) applyRemoteWorkspaceBlob(v, baseKey, 'remote');
+    });
+  } catch (e) {
+    console.warn('Workspace sync setup failed:', e);
+  }
+}
+
+// Re-sync whenever sync settings change
+const _origSyncConnectForWs = window.syncConnect;
+// (the syncConnect wrapper later below will also trigger ensureWorkspaceSync)
+
+// ============================================
+// END WORKSPACES
+// ============================================
+
+// Initial pill render (before any rooms-related rendering)
+renderWorkspacePill();
+
 // Auto-connect on page load
 if (savedFirebaseUrl && savedEncKey) {
+  // Kick off workspace sync independently (so workspaces appear even if no room is active)
+  ensureWorkspaceSync();
   // If rooms exist, connect to active room
   if (rooms.length > 0 && activeRoom && rooms.includes(activeRoom)) {
     switchRoom(activeRoom);
@@ -5292,6 +6602,8 @@ window.syncConnect = async function() {
   }
   activeRoom = roomName;
   saveRooms();
+  // Now that Firebase URL + key are set, start syncing workspaces too
+  ensureWorkspaceSync();
   renderRoomTabs();
   updateSyncUI('connected', roomName);
 };
@@ -5587,6 +6899,11 @@ window.submitAddRoom = function() {
   window.hideAddRoomModal();
   if (rooms.includes(name)) { switchRoom(name); return; }
   rooms.push(name);
+  // Assign to active workspace (Unlabeled if in All Rooms view)
+  if (activeWorkspace !== WS_ALL && activeWorkspace !== WS_UNLABELED && getWorkspace(activeWorkspace)) {
+    roomWorkspace[name] = activeWorkspace;
+    saveWorkspaces();
+  }
   saveRooms();
   switchRoom(name);
 };
