@@ -5383,7 +5383,6 @@ window.openRoomManager = function(tab) {
   renderRoomManagerList();
   renderWorkspaceManagerList();
   document.getElementById('room-cap-select').value = roomCap;
-  document.getElementById('room-cap-display').textContent = roomCap;
   document.getElementById('room-manager-overlay').classList.add('open');
   if (_rmActiveTab === 'rooms') {
     document.getElementById('room-add-input').focus();
@@ -5752,7 +5751,6 @@ window.removeRoom = function(name) {
 window.updateRoomCap = function(val) {
   roomCap = parseInt(val) || 3;
   store.set('cade-room-cap', roomCap);
-  document.getElementById('room-cap-display').textContent = roomCap;
   // Trim excess rooms
   while (rooms.length > roomCap) {
     const removed = rooms.pop();
