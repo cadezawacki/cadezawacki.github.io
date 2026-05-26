@@ -669,6 +669,42 @@ body {
   animation: pickerIn 150ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
+/* Scrollable variant: flex-column dialog with sticky opaque header/footer
+   and an overflow-y body. Use by adding .modal-dialog-scroll and wrapping
+   content in .modal-header / .modal-body / .modal-footer. */
+.modal-dialog.modal-dialog-scroll {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 40px);
+  padding: 0;
+  overflow: hidden;
+}
+.modal-dialog.modal-dialog-scroll .modal-header {
+  flex: 0 0 auto;
+  padding: var(--space-6) var(--space-6) var(--space-4);
+  background: var(--surface);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  border-bottom: 1px solid var(--border);
+}
+.modal-dialog.modal-dialog-scroll .modal-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-4) var(--space-6);
+}
+.modal-dialog.modal-dialog-scroll .modal-footer {
+  flex: 0 0 auto;
+  padding: var(--space-4) var(--space-6) var(--space-6);
+  background: var(--surface);
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+  border-top: 1px solid var(--border);
+}
+/* Strip trailing margins so sticky section bounds are tight */
+.modal-dialog.modal-dialog-scroll .modal-header > :last-child,
+.modal-dialog.modal-dialog-scroll .modal-footer > :last-child { margin-bottom: 0; }
+.modal-dialog.modal-dialog-scroll .modal-header .modal-desc { margin-bottom: var(--space-4); }
+.modal-dialog.modal-dialog-scroll .modal-footer .modal-actions { margin-top: var(--space-3); }
+
 .modal-title {
   font-size: var(--text-lg);
   font-weight: 600;
@@ -927,6 +963,20 @@ body {
     padding: var(--space-4);
     max-height: calc(100vh - 40px);
     overflow-y: auto;
+  }
+  .modal-dialog.modal-dialog-scroll {
+    padding: 0;
+    overflow: hidden;
+    max-height: calc(100vh - 20px);
+  }
+  .modal-dialog.modal-dialog-scroll .modal-header {
+    padding: var(--space-4) var(--space-4) var(--space-3);
+  }
+  .modal-dialog.modal-dialog-scroll .modal-body {
+    padding: var(--space-3) var(--space-4);
+  }
+  .modal-dialog.modal-dialog-scroll .modal-footer {
+    padding: var(--space-3) var(--space-4) var(--space-4);
   }
   .form-input, .form-input:focus {
     font-size: 16px;
@@ -1309,32 +1359,38 @@ body {
 
 <!-- ========== ROOM MANAGER MODAL ========== -->
 <div class="modal-overlay" id="room-manager-overlay">
-  <div class="modal-dialog" style="max-width: 440px;">
-    <div class="modal-title">Room Manager</div>
-    <div class="modal-desc">Manage your synced rooms (max <span id="room-cap-display">3</span>).</div>
-    <div class="room-add-row">
-      <input class="form-input" id="room-add-input" type="text" placeholder="New room name" spellcheck="false">
-      <button class="btn btn-primary" onclick="addRoomFromManager()">Add</button>
+  <div class="modal-dialog modal-dialog-scroll" style="max-width: 440px;">
+    <div class="modal-header">
+      <div class="modal-title">Room Manager</div>
+      <div class="modal-desc">Manage your synced rooms (max <span id="room-cap-display">3</span>).</div>
+      <div class="room-add-row" style="margin-bottom:0;">
+        <input class="form-input" id="room-add-input" type="text" placeholder="New room name" spellcheck="false">
+        <button class="btn btn-primary" onclick="addRoomFromManager()">Add</button>
+      </div>
     </div>
-    <div class="room-manager-list" id="room-manager-list"></div>
-    <div class="room-cap-row">
-      <label>Room cap:</label>
-      <select id="room-cap-select" onchange="updateRoomCap(this.value)">
-        <option value="1">1</option>
-        <option value="2">2</option>
-        <option value="3" selected>3</option>
-        <option value="4">4</option>
-        <option value="5">5</option>
-        <option value="6">6</option>
-        <option value="7">7</option>
-        <option value="8">8</option>
-        <option value="9">9</option>
-        <option value="10">10</option>
-        <option value="99">99</option>
-      </select>
+    <div class="modal-body">
+      <div class="room-manager-list" id="room-manager-list" style="margin-bottom:0;"></div>
     </div>
-    <div class="modal-actions">
-      <button class="btn btn-primary" onclick="closeRoomManager()">Done</button>
+    <div class="modal-footer">
+      <div class="room-cap-row" style="margin-bottom:0;">
+        <label>Room cap:</label>
+        <select id="room-cap-select" onchange="updateRoomCap(this.value)">
+          <option value="1">1</option>
+          <option value="2">2</option>
+          <option value="3" selected>3</option>
+          <option value="4">4</option>
+          <option value="5">5</option>
+          <option value="6">6</option>
+          <option value="7">7</option>
+          <option value="8">8</option>
+          <option value="9">9</option>
+          <option value="10">10</option>
+          <option value="99">99</option>
+        </select>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-primary" onclick="closeRoomManager()">Done</button>
+      </div>
     </div>
   </div>
 </div>
