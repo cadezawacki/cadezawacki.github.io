@@ -479,7 +479,7 @@ body {
   min-width: 240px;
   max-width: 320px;
   padding: 4px;
-  z-index: 250;
+  z-index: 450; /* above modal-overlay (300) so it works from inside Room Manager */
   max-height: 60vh;
   overflow-y: auto;
 }
@@ -745,11 +745,22 @@ body {
 /* Mobile: pill stays visible; bottom-sheet handled below */
 @media (max-width: 600px) {
   .ws-pill {
-    max-width: 110px;
     font-size: 11px;
     padding: 2px 6px;
+    gap: 4px;
   }
+  .ws-pill .ws-pill-name { display: none; } /* icon-only pill on mobile */
   .ws-pill-wrap { margin-left: 4px; }
+}
+
+/* Desktop: hide the duplicate Sync entries inside the View menu */
+@media (min-width: 601px) {
+  .view-sync-only { display: none !important; }
+}
+/* Mobile: hide the dedicated Sync menu (entries live under View instead) */
+@media (max-width: 600px) {
+  .menu-sync-wrap { display: none !important; }
+  .menubar-logo-text { display: none !important; } /* icon-only logo on mobile */
 }
 
 /* ============================================
@@ -1498,7 +1509,7 @@ body {
       <line x1="16" y1="17" x2="8" y2="17"/>
       <line x1="10" y1="9" x2="8" y2="9"/>
     </svg>
-    Cade.txt
+    <span class="menubar-logo-text">Cade.txt</span>
   </a>
 
   <!-- Scripts Menu -->
@@ -1526,8 +1537,8 @@ body {
     <input type="file" id="import-file-input" multiple style="display:none;">
   </div>
 
-  <!-- Sync Menu -->
-  <div style="position:relative;">
+  <!-- Sync Menu (desktop only; on mobile, Sync items live under View) -->
+  <div style="position:relative;" class="menu-sync-wrap">
     <button class="menu-trigger" id="menu-sync-btn">Sync</button>
     <div class="menu-dropdown" id="menu-sync">
       <button class="menu-item" onclick="openSyncModal()">
@@ -1559,6 +1570,20 @@ body {
       </button>
       <button class="menu-item" onclick="toggleInjections()">
         <span id="injections-label">Injections: On</span>
+        <span></span>
+      </button>
+      <!-- Sync items (mobile only — Sync menu is hidden) -->
+      <div class="menu-separator view-sync-only"></div>
+      <button class="menu-item view-sync-only" onclick="openSyncModal()">
+        <span>Connect</span>
+        <kbd>Ctrl+S</kbd>
+      </button>
+      <button class="menu-item view-sync-only" onclick="forceSyncReload()">
+        <span>Force Reload</span>
+        <kbd>Ctrl+Shift+S</kbd>
+      </button>
+      <button class="menu-item view-sync-only" id="view-disconnect-btn" onclick="disconnectSync()" style="display:none;">
+        <span>Disconnect</span>
         <span></span>
       </button>
       <div class="menu-separator"></div>
@@ -4877,6 +4902,7 @@ function updateSyncUI(status, text) {
   dot.className = 'sync-dot ' + status;
   statusEl.textContent = text;
   document.getElementById('disconnect-btn').style.display = syncState.connected ? 'flex' : 'none';
+  document.getElementById('view-disconnect-btn').style.display = syncState.connected ? 'flex' : 'none';
 }
 
 function showSyncStep(stepId) {
@@ -6063,8 +6089,29 @@ function renderWorkspaceDropdown() {
   html += '<div class="ws-dd-divider"></div>';
   html += `<div class="ws-dd-action" onclick="openWorkspaceManager()">+ New workspace…</div>`;
   html += `<div class="ws-dd-action" onclick="openWorkspaceManager()">⚙ Manage workspaces…</div>`;
+  const fbConfigured = !!(store.get('cade-firebase-url') && store.get('cade-sync-key'));
+  if (fbConfigured) {
+    html += `<div class="ws-dd-action" onclick="forceWorkspaceSync()">↻ Refresh from cloud</div>`;
+  }
   dd.innerHTML = html;
 }
+
+window.forceWorkspaceSync = async function() {
+  document.getElementById('ws-dropdown').classList.remove('open');
+  if (!store.get('cade-firebase-url') || !store.get('cade-sync-key')) {
+    showToast('Set up Firebase URL + encryption key in Sync first', 'error', 4000);
+    return;
+  }
+  // Reset the "first cloud load" flag so the success toast fires again
+  _wsLoadedFromCloud = false;
+  // Also reset localTs so we always accept whatever's on the cloud
+  const prevTs = store.get('cade-workspaces-ts');
+  store.set('cade-workspaces-ts', '0');
+  showToast('Refreshing workspaces…', 'success', 1200);
+  await ensureWorkspaceSync();
+  // If nothing came back (no remote, or apply skipped), restore prevTs to avoid clobber on next push
+  if (!_wsLoadedFromCloud && prevTs) store.set('cade-workspaces-ts', prevTs);
+};
 
 window.toggleWorkspaceDropdown = function(evt) {
   const dd = document.getElementById('ws-dropdown');
@@ -6082,8 +6129,27 @@ window.switchToWorkspace = function(wsId) {
   activeWorkspace = wsId;
   store.set('cade-active-workspace', wsId);
   document.getElementById('ws-dropdown').classList.remove('open');
+  // If the active room isn't visible in the new context, follow through:
+  // switch to the first room in the new context, or clear the editor if empty.
+  const visible = roomsInActiveWorkspace();
+  if (!visible.includes(activeRoom)) {
+    if (visible.length > 0) {
+      // switchRoom handles disconnect+content swap+reconnect for us;
+      // it also calls renderRoomTabs when it completes (async)
+      switchRoom(visible[0]);
+    } else {
+      // Empty workspace: disconnect sync and blank the editor
+      if (syncState.connected) window.disconnectSync();
+      activeRoom = '';
+      store.set('cade-active-room', '');
+      syncState.suppressUpdate = true;
+      editor.dispatch({ changes: { from: 0, to: editor.state.doc.length, insert: '' } });
+      syncState.suppressUpdate = false;
+    }
+  }
+  // Always render so the pill + filtered tabs update immediately, even if
+  // switchRoom early-returns (e.g., no Firebase configured yet)
   renderRoomTabs();
-  // Update any open manager
   if (document.getElementById('room-manager-overlay').classList.contains('open')) {
     renderRoomManagerList();
   }
@@ -6448,13 +6514,28 @@ document.addEventListener('keydown', (e) => {
 })();
 
 // ============================================
-// WORKSPACES — Firebase sync (encrypted blob per encryption-key fingerprint)
+// WORKSPACES — Firebase sync (encrypted blob, one per encryption-key fingerprint)
+//
+// Storage path lives under `rooms/` so it inherits whatever rules already
+// permit room sync — putting it under a separate `config/` top-level used to
+// silently fail for users whose Firebase rules only allowed `rooms/*`.
 // ============================================
 let _wsPushTimer = null;
 let _wsLastWriteTs = 0;
 let _wsKeyFp = null;
 let _wsConfigRef = null;
 let _wsRemoteListener = null;
+let _wsAuxRef = null;          // legacy config/{fp}/workspaces — read on first load if main path empty
+let _wsLoadedFromCloud = false;
+
+function _wsConfigPath(fp) {
+  // Reserved "room name" that the UI never lets users create. Underscore prefix
+  // keeps it visually distinct and Firebase rules for `rooms/*` already cover it.
+  return `rooms/__cade_ws_${fp}/blob`;
+}
+function _wsLegacyConfigPath(fp) {
+  return `config/${fp}/workspaces`;
+}
 
 async function _computeKeyFingerprint(key) {
   // 16-hex-char fingerprint from SHA-256, used as Firebase path component
@@ -6473,7 +6554,10 @@ async function pushWorkspacesNow() {
   _wsPushTimer = null;
   const baseKey = store.get('cade-sync-key') || '';
   const fbUrl = store.get('cade-firebase-url') || '';
-  if (!baseKey || !fbUrl) return;
+  if (!baseKey || !fbUrl) {
+    // Local-only mode — nothing to push to
+    return;
+  }
   try {
     const db = initFirebase(fbUrl);
     const fp = _wsKeyFp || await _computeKeyFingerprint(baseKey);
@@ -6481,10 +6565,12 @@ async function pushWorkspacesNow() {
     const blob = { ts: Date.now(), workspaces, roomWorkspace };
     _wsLastWriteTs = blob.ts;
     const encrypted = await encryptText(JSON.stringify(blob), baseKey);
-    await db.ref(`config/${fp}/workspaces`).set(encrypted);
+    await db.ref(_wsConfigPath(fp)).set(encrypted);
     store.set('cade-workspaces-ts', String(blob.ts));
   } catch (e) {
+    const msg = (e && (e.code || e.message)) || 'unknown';
     console.warn('Workspace sync push failed:', e);
+    showToast('Workspace sync (push) failed: ' + msg, 'error', 5000);
   }
 }
 
@@ -6492,7 +6578,12 @@ async function applyRemoteWorkspaceBlob(encrypted, baseKey, source) {
   if (!encrypted) return false;
   try {
     const decrypted = await decryptText(encrypted, baseKey);
-    if (!decrypted) return false;
+    if (!decrypted) {
+      if (source === 'remote' || source === 'initial') {
+        console.warn('Workspace blob present but decrypt returned null — encryption key mismatch?');
+      }
+      return false;
+    }
     const blob = JSON.parse(decrypted);
     if (!blob || typeof blob !== 'object') return false;
     const remoteTs = blob.ts || 0;
@@ -6515,7 +6606,12 @@ async function applyRemoteWorkspaceBlob(encrypted, baseKey, source) {
       renderRoomManagerList();
       renderWorkspaceManagerList();
     }
-    if (source === 'remote') showToast('Workspaces synced', 'success', 1500);
+    if (source === 'initial' && !_wsLoadedFromCloud) {
+      _wsLoadedFromCloud = true;
+      showToast(`Workspaces loaded from cloud (${workspaces.length})`, 'success', 2000);
+    } else if (source === 'remote') {
+      showToast('Workspaces synced', 'success', 1500);
+    }
     return true;
   } catch (e) {
     console.warn('Workspace sync apply failed:', e);
@@ -6531,10 +6627,30 @@ async function ensureWorkspaceSync() {
     const db = initFirebase(fbUrl);
     const fp = await _computeKeyFingerprint(baseKey);
     _wsKeyFp = fp;
-    const ref = db.ref(`config/${fp}/workspaces`);
-    // Initial pull
-    const snap = await ref.once('value');
-    const val = snap.val();
+    const ref = db.ref(_wsConfigPath(fp));
+    // Initial pull (with legacy path fallback)
+    let val;
+    try {
+      const snap = await ref.once('value');
+      val = snap.val();
+    } catch (e) {
+      const msg = (e && (e.code || e.message)) || 'unknown';
+      console.warn('Workspace sync read failed:', e);
+      showToast('Workspace sync (read) failed: ' + msg, 'error', 5000);
+      return;
+    }
+    if (!val) {
+      // Fall back to the legacy `config/{fp}/workspaces` location for existing users
+      try {
+        const legacySnap = await db.ref(_wsLegacyConfigPath(fp)).once('value');
+        const legacyVal = legacySnap.val();
+        if (legacyVal) {
+          val = legacyVal;
+          // Migrate by pushing to the new path on next debounce
+          schedulePushWorkspaces();
+        }
+      } catch (_) { /* legacy path may be denied — that's fine */ }
+    }
     const localHasData = workspaces.length > 0 || Object.keys(roomWorkspace).length > 0;
     if (val) {
       const applied = await applyRemoteWorkspaceBlob(val, baseKey, 'initial');
