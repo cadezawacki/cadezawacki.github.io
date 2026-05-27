@@ -2438,6 +2438,27 @@ function loadRoomCache(roomName) {
   return store.get('cade-room-cache:' + roomName) || '';
 }
 
+// Per-room "last-known synced text" — the snapshot of room text most recently
+// confirmed to be in sync with Firebase (either via a successful broadcast or
+// by adopting a remote snapshot). If the editor's current text differs from
+// this, the user has unsynced local edits we must preserve across reconnects.
+function loadRoomSynced(roomName) {
+  // null if never synced (distinct from empty string, which means "we know server is empty")
+  const v = store.get('cade-room-synced:' + roomName);
+  return v == null ? null : v;
+}
+function saveRoomSynced(roomName, text) {
+  if (!roomName) return;
+  store.set('cade-room-synced:' + roomName, text);
+}
+
+// Deliberately no migration from cache → synced-base. Pre-upgrade caches may
+// contain unsynced edits (the whole class of bugs we're fixing). Treating
+// them as "synced" would silently cause those edits to be overwritten by the
+// first remote snapshot. Instead, safeApplyRemote treats a missing synced
+// base + non-empty local as "unsynced; preserve local and push it" — which
+// is the local-wins behavior this project wants.
+
 // Toggle line numbers — hide via CSS since basicSetup includes its own lineNumbers
 window.toggleLineNumbers = function() {
   showLineNums = !showLineNums;
@@ -4909,46 +4930,57 @@ function showSyncStep(stepId) {
   document.getElementById('sync-step-creds').style.display = stepId === 'sync-step-creds' ? 'block' : 'none';
 }
 
-function tryApplyPendingRemote() {
-  if (syncState.pendingRemoteText == null) return;
-  const idleMs = Date.now() - syncState.lastLocalEdit;
-  if (idleMs < 2000) return; // Still typing, wait
-
-  let text = syncState.pendingRemoteText;
-  syncState.pendingRemoteText = null;
+// Safely accept a remote text update for `roomName`, preserving any unsynced
+// local edits. Returns true if the editor was updated to `text`, false if we
+// kept local content (in which case a re-broadcast is scheduled).
+//
+// Local-wins policy (per project requirement: no multi-user conflict handling).
+// We compare the current editor text against the last-known synced base for
+// this room; if local has diverged, those are offline/unsynced edits and we
+// keep them. If local matches the synced base (or local is empty and we have
+// no synced base recorded), it's safe to adopt the remote snapshot.
+function safeApplyRemote(text, roomName) {
+  if (text == null || !roomName) return false;
   const currentText = editor.state.doc.toString();
-
-  // If we were offline and made edits, append the offline additions
-  if (syncState.wasOffline && syncState.offlineBase !== null) {
-    const base = syncState.offlineBase;
-    syncState.offlineBase = null;
-    syncState.wasOffline = false;
-    // Determine what the user added while offline
-    const offlineNew = currentText.startsWith(base)
-      ? currentText.slice(base.length)
-      : (currentText !== base ? '\n' + currentText : '');
-    if (offlineNew.trim().length > 0) {
-      text = text + offlineNew;
-      showToast('Merged offline edits', 'success', 2500);
-    }
-  }
-
   if (text === currentText) {
-    if (!syncState.pageTypeApplied) { syncState.pageTypeApplied = true; applyPageType(); }
-    return;
+    saveRoomSynced(roomName, text);
+    return true;
+  }
+  const syncedBase = loadRoomSynced(roomName);
+  const localHasUnsyncedEdits = (syncedBase == null)
+    ? currentText.length > 0   // No tracking yet + local has content => assume unsynced
+    : currentText !== syncedBase;
+
+  if (localHasUnsyncedEdits) {
+    // Preserve local edits. Schedule a broadcast to push them to the server.
+    if (typeof window.broadcastText === 'function' && syncState.connected) {
+      window.broadcastText();
+    }
+    return false;
   }
 
-  // Save cursor position — place at end since we appended offline text
+  // No local divergence — safe to adopt remote.
   const cursor = editor.state.selection.main;
   const cursorOffset = Math.min(cursor.anchor, text.length);
   const cursorHead = Math.min(cursor.head, text.length);
-
   syncState.suppressUpdate = true;
   editor.dispatch({
     changes: { from: 0, to: currentText.length, insert: text },
     selection: { anchor: cursorOffset, head: cursorHead },
   });
   syncState.suppressUpdate = false;
+  saveRoomSynced(roomName, text);
+  return true;
+}
+
+function tryApplyPendingRemote() {
+  if (syncState.pendingRemoteText == null) return;
+  const idleMs = Date.now() - syncState.lastLocalEdit;
+  if (idleMs < 2000) return; // Still typing, wait
+
+  const text = syncState.pendingRemoteText;
+  syncState.pendingRemoteText = null;
+  safeApplyRemote(text, syncState.roomName);
   if (!syncState.pageTypeApplied) { syncState.pageTypeApplied = true; applyPageType(); }
 }
 
@@ -5038,28 +5070,59 @@ window.syncCancel = function() {
   showSyncStep('sync-step-creds');
 };
 
-// Broadcast text changes
+// Broadcast text changes. On successful write to Firebase we record the text
+// as the room's synced base; on failure we schedule a retry so offline edits
+// aren't lost.
 let broadcastTimer = null;
+async function _doBroadcast() {
+  if (!syncState.connected || syncState.suppressUpdate) return;
+  const roomName = syncState.roomName;
+  if (!roomName || !syncState.firebaseDb) return;
+  let raw;
+  try {
+    raw = editor.state.doc.toString();
+    const isLocked = !!(roomName && sessionRoomPasswords[roomName]);
+    const textToSend = isLocked ? ROOM_LOCK_SENTINEL + raw : raw;
+    const encrypted = await encryptText(textToSend, syncState.encKey);
+    syncState.suppressUpdate = true;
+    await syncState.firebaseDb.ref(`rooms/${roomName}/text`).set(packRoomText(encrypted));
+    syncState.suppressUpdate = false;
+    // If the editor hasn't moved on, mark this text as synced. If it has
+    // (user kept typing during the in-flight broadcast — those edits couldn't
+    // schedule their own broadcast because suppressUpdate was true), schedule
+    // a follow-up pass so the latest content reaches the server.
+    if (syncState.roomName !== roomName) return;
+    if (editor.state.doc.toString() === raw) {
+      saveRoomSynced(roomName, raw);
+    } else {
+      clearTimeout(broadcastTimer);
+      broadcastTimer = setTimeout(_doBroadcast, 500);
+    }
+  } catch (e) {
+    syncState.suppressUpdate = false;
+    console.warn('Sync broadcast failed (will retry):', e && (e.message || e.code) || e);
+    // Retry: the local text is unsynced; re-attempt after a delay. Subsequent
+    // edits will reset the debounce; otherwise this keeps trying until success.
+    clearTimeout(broadcastTimer);
+    broadcastTimer = setTimeout(_doBroadcast, 5000);
+  }
+}
 window.broadcastText = function() {
   clearTimeout(broadcastTimer);
-  broadcastTimer = setTimeout(async () => {
-    if (!syncState.connected || syncState.suppressUpdate) return;
-    try {
-      const raw = editor.state.doc.toString();
-      // Prepend sentinel when room has an active password — lets other clients
-      // verify decryption succeeded with the correct password
-      const isLocked = !!(syncState.roomName && sessionRoomPasswords[syncState.roomName]);
-      const textToSend = isLocked ? ROOM_LOCK_SENTINEL + raw : raw;
-      const encrypted = await encryptText(textToSend, syncState.encKey);
-      syncState.suppressUpdate = true;
-      await syncState.firebaseDb.ref(`rooms/${syncState.roomName}/text`).set(packRoomText(encrypted));
-      syncState.suppressUpdate = false;
-    } catch (e) {
-      syncState.suppressUpdate = false;
-      console.error('Sync broadcast error:', e);
-    }
-  }, 500);
+  broadcastTimer = setTimeout(_doBroadcast, 500);
 };
+
+// Force a broadcast attempt if the current editor text differs from the room's
+// last-known synced base — used after reconnects to flush offline edits.
+function flushIfDirty() {
+  const roomName = syncState.roomName;
+  if (!roomName || !syncState.connected) return;
+  const currentText = editor.state.doc.toString();
+  const syncedBase = loadRoomSynced(roomName);
+  if (syncedBase == null || currentText !== syncedBase) {
+    window.broadcastText();
+  }
+}
 
 window.openSyncModal = function() {
   closeAllMenus();
@@ -5090,20 +5153,17 @@ window.disconnectSync = function() {
   showToast('Disconnected from sync', 'success', 2000);
 };
 
-// Offline/online detection — snapshot text when going offline so we can
-// merge edits made while disconnected once connectivity returns.
+// Offline/online detection — adjusts the UI label and flushes any unsynced
+// local edits on reconnect. The actual merge logic lives in safeApplyRemote,
+// which compares the editor against each room's synced base, so we don't need
+// to snapshot text here.
 window.addEventListener('offline', () => {
-  if (syncState.connected) {
-    syncState.offlineBase = editor.state.doc.toString();
-    syncState.wasOffline = true;
-    updateSyncUI('connecting', 'Offline');
-  }
+  if (syncState.connected) updateSyncUI('connecting', 'Offline');
 });
 window.addEventListener('online', () => {
-  if (syncState.connected && syncState.wasOffline) {
-    updateSyncUI('connected', 'Synced');
-    // Firebase will re-deliver the latest value automatically;
-    // tryApplyPendingRemote will handle merging.
+  if (syncState.connected) {
+    updateSyncUI('connected', syncState.roomName || 'Synced');
+    flushIfDirty();
   }
 });
 
@@ -5222,123 +5282,170 @@ function renderRoomTabs() {
 window.switchRoom = async function(name) {
   const firebaseUrl = store.get('cade-firebase-url');
   const baseEncKey = store.get('cade-sync-key');
-  if (!firebaseUrl || !baseEncKey) {
-    showToast('Set up Firebase URL and encryption key in Sync first', 'error');
-    window.openSyncModal();
-    return;
-  }
 
-  // If room is password-protected and not yet unlocked this session, prompt first
+  // If room is password-protected and not yet unlocked this session, prompt first.
+  // We can only verify a password against Firebase, so this requires sync config.
   if (roomHasPassword(name) && !roomIsUnlocked(name)) {
+    if (!firebaseUrl || !baseEncKey) {
+      // Can't verify the password offline — but we can still show the cached
+      // content. Fall through to the local switch; user can unlock later.
+      await _doSwitchRoom(name, null, null);
+      showToast('Offline — locked room shown from cache. Reconnect to verify.', 'success', 3500);
+      return;
+    }
     showRoomUnlock(name, async () => {
       await _doSwitchRoom(name, firebaseUrl, baseEncKey);
     });
     return;
   }
 
-  await _doSwitchRoom(name, firebaseUrl, baseEncKey);
+  await _doSwitchRoom(name, firebaseUrl || null, baseEncKey || null);
 };
 
+// Switch to room `name`. Always commits the local switch (load cache into the
+// editor, set activeRoom) before attempting Firebase; if Firebase is missing
+// or fails, we stay in the room locally and let reconnect handlers catch up.
 async function _doSwitchRoom(name, firebaseUrl, baseEncKey) {
-  // Disconnect current room listener
+  // Flush the previous room's pending edits synchronously so a fast type-then-
+  // switch doesn't lose the last few keystrokes (the 300ms saveContentDebounced
+  // timer would otherwise get cancelled when we dispatch the new room's text).
+  if (saveTimer != null && syncState.roomName && syncState.roomName !== name) {
+    clearTimeout(saveTimer);
+    saveTimer = null;
+    persistContent();
+  }
+  // Tear down any previous room's listeners — the local switch is committed
+  // regardless of whether sync setup succeeds below.
   cleanupFirebase();
   clearInterval(syncState.idleCheckTimer);
   syncState.pendingRemoteText = null;
   syncState.connected = false;
   syncState.lastLocalEdit = 0;
+  syncState.pageTypeApplied = false;
 
-  // Set new room identity
+  // Local-first: commit the new room identity, restore its cached text, and
+  // refresh the UI. This must succeed offline so the user never loses access
+  // to data they have locally.
   activeRoom = name;
   syncState.roomName = name;
   store.set('cade-room-name', name);
   store.set('cade-active-room', name);
-  document.getElementById('sync-room-name').value = name;
+  const syncRoomInput = document.getElementById('sync-room-name');
+  if (syncRoomInput) syncRoomInput.value = name;
 
-  // Load cached content for this room
   const cached = loadRoomCache(name);
   syncState.suppressUpdate = true;
   editor.dispatch({ changes: { from: 0, to: editor.state.doc.length, insert: cached } });
   syncState.suppressUpdate = false;
+  renderRoomTabs();
 
+  // No Firebase config — local-only mode. The user can still edit and we'll
+  // persist to per-room cache. As soon as creds are set + we reconnect, the
+  // syncConnect path or `online` handler will push the dirty cache up.
+  if (!firebaseUrl || !baseEncKey) {
+    updateSyncUI('', 'Local only');
+    if (!syncState.pageTypeApplied) { syncState.pageTypeApplied = true; applyPageType(); }
+    return;
+  }
+
+  // Set up the per-room Firebase listener. Attaching with `.on('value', ...)`
+  // doesn't throw if offline — Firebase queues the subscription and fires the
+  // callback whenever data arrives. For locked rooms we briefly try to fetch
+  // the lock state up front so we can prompt for a password before showing
+  // (necessarily encrypted-garbage) content; on a flaky connection that probe
+  // times out and we fall back to the locked listener, never blocking the
+  // local switch.
   try {
-    updateSyncUI('connecting', 'Connecting...');
+    updateSyncUI('connecting', 'Connecting…');
     const db = initFirebase(firebaseUrl);
 
-    // Check Firebase lock flag — another client may have set this room as locked
-    const lockedSnap = await db.ref(`rooms/${name}/locked`).once('value');
-    // Update remote flag before checking so roomHasPassword/roomIsUnlocked are accurate
-    if (lockedSnap.val() === true && !store.get('cade-room-pw-hash:' + name)) {
-      store.set('cade-room-pw-remote:' + name, 'true');
-    } else if (lockedSnap.val() !== true) {
-      store.remove('cade-room-pw-remote:' + name);
-    }
-    if (lockedSnap.val() === true && !roomIsUnlocked(name)) {
-      updateSyncUI('', 'Sync off');
-      renderRoomTabs();
-      // For remote locks, pass a verifyFn that checks the dedicated verify blob
-      const isRemoteLock = !store.get('cade-room-pw-hash:' + name);
-      const verifyFn = isRemoteLock ? async (pw) => {
-        const testKey = baseEncKey + '\n' + pw;
-        const verifySnap = await db.ref(`rooms/${name}/verify`).once('value');
-        if (verifySnap.val()) {
-          const result = await decryptText(verifySnap.val(), testKey);
+    // Best-effort upfront lock probe — bounded so a bad connection never
+    // strands the user in "Connecting…". On timeout we just attach the
+    // listener; the locked listener catches the lock state once data arrives.
+    const LOCK_PROBE_TIMEOUT_MS = 3000;
+    let lockedVal = null;
+    try {
+      lockedVal = await Promise.race([
+        db.ref(`rooms/${name}/locked`).once('value').then(s => s.val()),
+        new Promise(resolve => setTimeout(() => resolve('__timeout__'), LOCK_PROBE_TIMEOUT_MS)),
+      ]);
+    } catch (_) { lockedVal = null; }
+    if (lockedVal !== '__timeout__') {
+      if (lockedVal === true && !store.get('cade-room-pw-hash:' + name)) {
+        store.set('cade-room-pw-remote:' + name, 'true');
+      } else if (lockedVal !== true) {
+        store.remove('cade-room-pw-remote:' + name);
+      }
+      if (lockedVal === true && !roomIsUnlocked(name)) {
+        // Locked + we don't have the password — prompt, then re-enter the
+        // switch flow with the password applied. Keep the local cache visible
+        // (already dispatched above) so user data isn't hidden in the meantime.
+        updateSyncUI('', 'Locked — unlock to sync');
+        const isRemoteLock = !store.get('cade-room-pw-hash:' + name);
+        const verifyFn = isRemoteLock ? async (pw) => {
+          const testKey = baseEncKey + '\n' + pw;
+          const verifySnap = await db.ref(`rooms/${name}/verify`).once('value');
+          if (verifySnap.val()) {
+            const result = await decryptText(verifySnap.val(), testKey);
+            return result !== null && result.startsWith(ROOM_LOCK_SENTINEL);
+          }
+          const textSnap = await db.ref(`rooms/${name}/text`).once('value');
+          const textEncoded = unpackRoomText(textSnap.val());
+          if (!textEncoded) return false;
+          const result = await decryptText(textEncoded, testKey);
           return result !== null && result.startsWith(ROOM_LOCK_SENTINEL);
-        }
-        // No verify blob — fall back to checking text for sentinel
-        const textSnap = await db.ref(`rooms/${name}/text`).once('value');
-        const textEncoded = unpackRoomText(textSnap.val());
-        if (!textEncoded) return false; // No content to verify — reject
-        const result = await decryptText(textEncoded, testKey);
-        return result !== null && result.startsWith(ROOM_LOCK_SENTINEL);
-      } : null;
-      showRoomUnlock(name, async () => {
-        await _doSwitchRoom(name, firebaseUrl, baseEncKey);
-      }, verifyFn);
-      return;
+        } : null;
+        showRoomUnlock(name, async () => {
+          await _doSwitchRoom(name, firebaseUrl, baseEncKey);
+        }, verifyFn);
+        if (!syncState.pageTypeApplied) { syncState.pageTypeApplied = true; applyPageType(); }
+        renderRoomTabs();
+        return;
+      }
     }
 
-    // Derive effective key (base + room password if unlocked)
+    // Effective encryption key (folds in the room password if unlocked).
     syncState.encKey = getRoomEncKey(name, baseEncKey);
 
     const textRef = db.ref(`rooms/${name}/text`);
-    let firstSnapshot = true;
+
     syncState.firebaseListener = textRef.on('value', async (snap) => {
       if (syncState.suppressUpdate) return;
       const encoded = unpackRoomText(snap.val());
-      if (!encoded) return;
+      if (!encoded) {
+        // Server has no content for this room yet. If we have local content,
+        // make sure it gets pushed; otherwise nothing to do.
+        if (!syncState.pageTypeApplied) { syncState.pageTypeApplied = true; applyPageType(); }
+        flushIfDirty();
+        return;
+      }
       try {
         let text = await decryptText(encoded, syncState.encKey);
         if (text === null) return;
-        // Strip sentinel — present when content was encrypted by a locked client
         if (text.startsWith(ROOM_LOCK_SENTINEL)) text = text.slice(ROOM_LOCK_SENTINEL.length);
+        // Defer to safeApplyRemote, which checks the synced base so we never
+        // clobber unsynced local edits (the old "first snapshot" path here
+        // overwrote the editor blindly — that was the truncation bug).
         const currentText = editor.state.doc.toString();
-        if (text !== currentText) {
-          // Apply first snapshot immediately (skip idle gate) to avoid
-          // showing stale/empty cache after a room switch or unlock
-          if (firstSnapshot) {
-            firstSnapshot = false;
-            syncState.suppressUpdate = true;
-            const cursor = editor.state.selection.main;
-            editor.dispatch({
-              changes: { from: 0, to: currentText.length, insert: text },
-              selection: { anchor: Math.min(cursor.anchor, text.length), head: Math.min(cursor.head, text.length) },
-            });
-            syncState.suppressUpdate = false;
-            if (!syncState.pageTypeApplied) { syncState.pageTypeApplied = true; applyPageType(); }
-          } else {
-            syncState.pendingRemoteText = text;
-            tryApplyPendingRemote();
-          }
-        } else {
-          firstSnapshot = false;
+        if (text === currentText) {
+          saveRoomSynced(name, text);
           if (!syncState.pageTypeApplied) { syncState.pageTypeApplied = true; applyPageType(); }
+          return;
         }
-      } catch (e) { console.error('Sync decrypt error:', e); }
+        // For ongoing updates, queue through the idle gate so we don't disrupt
+        // active typing. For the first snapshot in a session (no local edits
+        // recorded against this base), apply immediately via safeApplyRemote.
+        syncState.pendingRemoteText = text;
+        tryApplyPendingRemote();
+      } catch (e) {
+        console.error('Sync decrypt error:', e);
+      }
     });
 
-    // Watch lock flag — if another peer locks this room while we're connected
+    // Watch lock flag — also the canonical mechanism to discover a remote lock
+    // when initial connection was offline (locked listener fires once data is
+    // reachable).
     syncState.lockedListener = (snap) => {
-      // Update remote flag FIRST so roomHasPassword/roomIsUnlocked reflect current state
       if (snap.val() === true && !store.get('cade-room-pw-hash:' + name)) {
         store.set('cade-room-pw-remote:' + name, 'true');
       } else if (snap.val() !== true) {
@@ -5369,30 +5476,28 @@ async function _doSwitchRoom(name, firebaseUrl, baseEncKey) {
     db.ref(`rooms/${name}/locked`).on('value', syncState.lockedListener);
 
     syncState.connected = true;
-    syncState.pageTypeApplied = false;
     clearInterval(syncState.idleCheckTimer);
     syncState.idleCheckTimer = setInterval(tryApplyPendingRemote, 500);
-    // Fallback: if no Firebase update arrives within 2s, still apply page type
+    // If no Firebase update arrives within 2s (room empty on server, or
+    // offline), still apply page type so the editor isn't stuck in a loading
+    // state.
     setTimeout(() => { if (!syncState.pageTypeApplied) { syncState.pageTypeApplied = true; applyPageType(); } }, 2000);
     updateSyncUI('connected', name);
     renderRoomTabs();
-    showToast('Switched to room: ' + name, 'success', 2000);
+    // Flush any local edits that diverge from the synced base — covers the
+    // case where the user typed into this room while offline last session.
+    flushIfDirty();
   } catch (e) {
-    console.error('Room switch error:', e);
-    showToast(e.message || 'Failed to switch room', 'error');
-    updateSyncUI('', 'Sync off');
-    renderRoomTabs();
+    // Set-up failure (bad URL, etc.) — never undo the local switch.
+    console.warn('Room sync setup deferred:', e);
+    updateSyncUI('connecting', 'Offline — will sync');
+    if (!syncState.pageTypeApplied) { syncState.pageTypeApplied = true; applyPageType(); }
   }
 }
 
 window.addRoomPrompt = function() {
-  const firebaseUrl = store.get('cade-firebase-url');
-  const encKey = store.get('cade-sync-key');
-  if (!firebaseUrl || !encKey) {
-    showToast('Set up Firebase URL and encryption key in Sync first', 'error');
-    window.openSyncModal();
-    return;
-  }
+  // Rooms are created locally first (works offline); Firebase sync attaches as
+  // soon as URL+key are configured and the network is reachable.
   if (rooms.length >= roomCap) {
     showToast('Room cap reached (' + roomCap + '). Remove a room or increase the cap in View → Room Manager.', 'error');
     return;
@@ -5763,6 +5868,7 @@ window.removeRoom = function(name) {
   saveRooms();
   saveWorkspaces();
   store.remove('cade-room-cache:' + name);
+  store.remove('cade-room-synced:' + name);
   if (activeRoom === name && syncState.connected) {
     window.disconnectSync();
     activeRoom = '';
@@ -5819,13 +5925,16 @@ document.getElementById('room-manager-overlay').addEventListener('keydown', (e) 
 // i.e. rooms that are not in the tab list and not the active room.
 window.__evictStaleRoomCaches = function() {
   if (!store.ok) return;
-  const prefix = 'cade-room-cache:';
+  const prefixes = ['cade-room-cache:', 'cade-room-synced:'];
   const keep = new Set(rooms);
   if (activeRoom) keep.add(activeRoom);
   if (syncState.roomName) keep.add(syncState.roomName);
   store.keys().forEach(k => {
-    if (k.startsWith(prefix) && !keep.has(k.slice(prefix.length))) {
-      store.remove(k);
+    for (const prefix of prefixes) {
+      if (k.startsWith(prefix) && !keep.has(k.slice(prefix.length))) {
+        store.remove(k);
+        return;
+      }
     }
   });
 };
@@ -6710,11 +6819,16 @@ renderRoomTabs();
 const origSyncConnect = window.syncConnect;
 window.syncConnect = async function() {
   await origSyncConnect();
-  // After connecting, ensure the room is in the rooms list
+  // After connecting, ensure the room is in the rooms list. Never silently
+  // evict an existing room to make space — that would orphan its cached data
+  // (the user reported "rooms disappear and I lose data inside"). Pushing
+  // beyond cap is fine; the cap is only enforced for the in-tab "+" button.
   const roomName = syncState.roomName;
   if (roomName && !rooms.includes(roomName)) {
-    if (rooms.length >= roomCap) rooms.pop();
     rooms.push(roomName);
+    if (rooms.length > roomCap) {
+      showToast('Over room cap (' + rooms.length + '/' + roomCap + ') — manage rooms in View → Room Manager', 'success', 4000);
+    }
   }
   activeRoom = roomName;
   saveRooms();
@@ -6759,9 +6873,9 @@ window.shareLink = function() {
     if (roomParam) {
       document.getElementById('sync-room-name').value = roomParam;
       if (!store.get('cade-room-name')) store.set('cade-room-name', roomParam);
-      // Pre-add room to room list
+      // Pre-add room to room list. Never silently evict an existing room to
+      // make space — the user's local data for that room would be orphaned.
       if (!rooms.includes(roomParam)) {
-        if (rooms.length >= roomCap) rooms.shift();
         rooms.push(roomParam);
         if (!activeRoom) activeRoom = roomParam;
         saveRooms();
