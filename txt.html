@@ -1495,6 +1495,78 @@ body {
     flex-shrink: 0;
   }
 }
+
+/* ============================================
+   SPELL CHECK
+   ============================================ */
+/* Red wavy underline on misspelled words (works on light + dark). */
+.cm-misspelled {
+  text-decoration: underline;
+  text-decoration-style: wavy;
+  text-decoration-color: #e5484d;
+  text-decoration-skip-ink: none;
+  text-underline-offset: 2px;
+  -webkit-text-decoration: underline wavy #e5484d;
+  cursor: pointer;
+}
+
+/* Suggestion popup shown on tap. */
+.spell-popup {
+  position: fixed;
+  z-index: 500;
+  min-width: 150px;
+  max-width: min(260px, calc(100vw - 16px));
+  max-height: 280px;
+  overflow-y: auto;
+  padding: 4px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  font-family: var(--font-body);
+  -webkit-overflow-scrolling: touch;
+}
+.spell-popup-header {
+  padding: 5px 10px 4px;
+  font-size: var(--text-xs);
+  color: var(--text-faint);
+  font-weight: 500;
+}
+.spell-suggestion {
+  display: block;
+  width: 100%;
+  padding: 7px 10px;
+  font-size: var(--text-sm);
+  font-family: var(--font-body);
+  color: var(--text);
+  border: none;
+  background: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  text-align: left;
+}
+.spell-suggestion:hover,
+.spell-suggestion:active { background: var(--accent-bg); color: var(--accent); }
+.spell-empty {
+  padding: 7px 10px;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+.spell-popup-sep { height: 1px; margin: 4px 6px; background: var(--border); }
+.spell-action {
+  display: block;
+  width: 100%;
+  padding: 6px 10px;
+  font-size: var(--text-xs);
+  font-family: var(--font-body);
+  color: var(--text-muted);
+  border: none;
+  background: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  text-align: left;
+}
+.spell-action:hover, .spell-action:active { background: var(--surface-hover); color: var(--text); }
 </style>
 </head>
 <body>
@@ -1570,6 +1642,10 @@ body {
       </button>
       <button class="menu-item" onclick="toggleInjections()">
         <span id="injections-label">Injections: On</span>
+        <span></span>
+      </button>
+      <button class="menu-item" onclick="toggleSpellcheck()">
+        <span id="spellcheck-label">Spell Check: On</span>
         <span></span>
       </button>
       <!-- Sync items (mobile only — Sync menu is hidden) -->
@@ -2321,6 +2397,75 @@ function handleListEnter(view) {
 
 const listEnterHandler = keymap.of([{ key: 'Enter', run: handleListEnter }]);
 
+// ============================================
+// SPELL CHECK (English, offline-capable)
+// ============================================
+// Strategy: lazily load typo-js + the en_US Hunspell dictionary from a CDN
+// (cached by the service worker on first online visit, then served offline).
+// A ViewPlugin underlines misspelled words in the visible viewport only, so it
+// stays fast on large documents. Tapping an underlined word opens a suggestion
+// popup. The dictionary parse is deferred so it never blocks editor startup.
+let spellEnabled = store.get('cade-spellcheck') !== 'false'; // default on
+let spellChecker = null;        // Typo instance once loaded
+let spellLoading = false;
+let spellVersion = 0;           // bump to force decoration rebuild
+let spellRanges = [];           // [{from,to,word}] for the current viewport (tap lookup)
+
+// User-accepted words (lowercased). Persisted so "Add to dictionary" sticks.
+const ignoredWords = new Set((() => {
+  try { return JSON.parse(store.get('cade-spell-ignore') || '[]'); } catch { return []; }
+})());
+
+// Words: letters with optional internal apostrophes (don't, it's).
+const SPELL_WORD_RE = /[A-Za-z]+(?:['’][A-Za-z]+)*/g;
+
+// Skip things that aren't really prose words to cut down on noise.
+function shouldSkipWord(w) {
+  if (w.length < 2) return true;
+  if (w === w.toUpperCase()) return true;           // ALL-CAPS acronyms (API, CSS)
+  if (/[A-Z]/.test(w.slice(1))) return true;        // camelCase / mixedCase identifiers
+  if (ignoredWords.has(w.toLowerCase())) return true;
+  return false;
+}
+
+function buildSpellDecorations(view) {
+  spellRanges = [];
+  if (!spellEnabled || !spellChecker) return Decoration.none;
+  const doc = view.state.doc;
+  const ranges = [];
+  for (const { from, to } of view.visibleRanges) {
+    const startLine = doc.lineAt(from).number;
+    const endLine = doc.lineAt(to).number;
+    for (let i = startLine; i <= endLine; i++) {
+      const line = doc.line(i);
+      const text = line.text;
+      SPELL_WORD_RE.lastIndex = 0;
+      let m;
+      while ((m = SPELL_WORD_RE.exec(text)) !== null) {
+        const word = m[0];
+        // Skip @-prefixed tokens (@type, @complete, injection tokens).
+        if (m.index > 0 && text[m.index - 1] === '@') continue;
+        if (shouldSkipWord(word)) continue;
+        if (spellChecker.check(word)) continue;
+        const start = line.from + m.index;
+        ranges.push(Decoration.mark({ class: 'cm-misspelled' }).range(start, start + word.length));
+        spellRanges.push({ from: start, to: start + word.length, word });
+      }
+    }
+  }
+  return Decoration.set(ranges);
+}
+
+const spellPlugin = ViewPlugin.fromClass(class {
+  constructor(view) { this.v = spellVersion; this.decorations = buildSpellDecorations(view); }
+  update(update) {
+    if (update.docChanged || update.viewportChanged || this.v !== spellVersion) {
+      this.v = spellVersion;
+      this.decorations = buildSpellDecorations(update.view);
+    }
+  }
+}, { decorations: v => v.decorations });
+
 const editorState = EditorState.create({
   doc: savedContent,
   extensions: [
@@ -2343,6 +2488,7 @@ const editorState = EditorState.create({
     EditorView.lineWrapping,
     listIndentPlugin,
     todoPlugin,
+    spellPlugin,
     listEnterHandler,
     keymap.of([
       { key: 'Mod-z', run: undo },
@@ -2418,6 +2564,181 @@ const editor = new EditorView({
   parent: document.getElementById('editor-wrap'),
 });
 window.editor = editor;
+
+// ============================================
+// SPELL CHECK — runtime (loader, toggle, suggestion popup)
+// ============================================
+// Hide the browser's own red squiggle so only our underline shows. CM6 does
+// not manage the `spellcheck` attribute, so this set sticks across updates.
+try { editor.contentDOM.setAttribute('spellcheck', 'false'); } catch {}
+
+const SPELL_CDN = 'https://cdn.jsdelivr.net/npm/typo-js@1.2.5';
+
+// Force spellPlugin to recompute (after load, toggle, or dictionary change).
+function refreshSpell() {
+  spellVersion++;
+  editor.dispatch({});
+}
+
+function loadScriptOnce(src) {
+  return new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = src;
+    s.async = true;
+    s.onload = () => resolve();
+    s.onerror = () => reject(new Error('script load failed: ' + src));
+    document.head.appendChild(s);
+  });
+}
+
+// Loads typo-js + the en_US dictionary. Both come from a CDN the service worker
+// caches on first online visit, so subsequent loads work fully offline.
+async function loadSpellChecker() {
+  if (spellChecker || spellLoading) return;
+  spellLoading = true;
+  try {
+    if (typeof Typo === 'undefined') await loadScriptOnce(SPELL_CDN + '/typo.js');
+    const [aff, dic] = await Promise.all([
+      fetch(SPELL_CDN + '/dictionaries/en_US/en_US.aff').then(r => r.text()),
+      fetch(SPELL_CDN + '/dictionaries/en_US/en_US.dic').then(r => r.text()),
+    ]);
+    if (!aff || !dic) throw new Error('empty dictionary (not cached?)');
+    // Defer the synchronous parse one tick so startup stays smooth.
+    await new Promise(r => setTimeout(r, 0));
+    spellChecker = new Typo('en_US', aff, dic, { platform: 'any' });
+    refreshSpell();
+  } catch (e) {
+    if (!navigator.onLine) {
+      showToast('Spell check needs one online load to cache its dictionary', 'error', 3500);
+    } else {
+      showToast('Could not load spell checker', 'error', 3000);
+    }
+  } finally {
+    spellLoading = false;
+  }
+}
+
+function updateSpellLabel() {
+  const el = document.getElementById('spellcheck-label');
+  if (el) el.textContent = 'Spell Check: ' + (spellEnabled ? 'On' : 'Off');
+}
+updateSpellLabel();
+
+window.toggleSpellcheck = function() {
+  closeAllMenus();
+  spellEnabled = !spellEnabled;
+  store.set('cade-spellcheck', spellEnabled);
+  updateSpellLabel();
+  if (!spellEnabled) closeSpellPopup();
+  if (spellEnabled && !spellChecker) loadSpellChecker();
+  else refreshSpell();
+  showToast('Spell check ' + (spellEnabled ? 'on' : 'off'), 'success', 1500);
+};
+
+// ---- Suggestion popup ----
+let spellPopupEl = null;
+
+function closeSpellPopup() {
+  if (spellPopupEl) { spellPopupEl.remove(); spellPopupEl = null; }
+  document.removeEventListener('pointerdown', onSpellOutside, true);
+}
+
+function onSpellOutside(e) {
+  if (spellPopupEl && !spellPopupEl.contains(e.target)) closeSpellPopup();
+}
+
+function replaceWord(target, replacement) {
+  editor.dispatch({
+    changes: { from: target.from, to: target.to, insert: replacement },
+    selection: { anchor: target.from + replacement.length },
+  });
+  closeSpellPopup();
+  editor.focus();
+}
+
+function addToDictionary(word) {
+  ignoredWords.add(word.toLowerCase());
+  store.set('cade-spell-ignore', JSON.stringify([...ignoredWords]));
+  closeSpellPopup();
+  refreshSpell();
+}
+
+function openSpellPopup(target) {
+  closeSpellPopup();
+  let suggestions = [];
+  try { suggestions = spellChecker.suggest(target.word, 7) || []; } catch {}
+
+  const pop = document.createElement('div');
+  pop.className = 'spell-popup';
+
+  const header = document.createElement('div');
+  header.className = 'spell-popup-header';
+  header.textContent = target.word;
+  pop.appendChild(header);
+
+  if (suggestions.length) {
+    suggestions.forEach(s => {
+      const b = document.createElement('button');
+      b.className = 'spell-suggestion';
+      b.textContent = s;
+      b.addEventListener('click', () => replaceWord(target, s));
+      pop.appendChild(b);
+    });
+  } else {
+    const none = document.createElement('div');
+    none.className = 'spell-empty';
+    none.textContent = 'No suggestions';
+    pop.appendChild(none);
+  }
+
+  const sep = document.createElement('div');
+  sep.className = 'spell-popup-sep';
+  pop.appendChild(sep);
+
+  const add = document.createElement('button');
+  add.className = 'spell-action';
+  add.textContent = 'Add to dictionary';
+  add.addEventListener('click', () => addToDictionary(target.word));
+  pop.appendChild(add);
+
+  document.body.appendChild(pop);
+  spellPopupEl = pop;
+
+  // Anchor under the word, clamped to the viewport.
+  const coords = editor.coordsAtPos(target.from);
+  const rect = pop.getBoundingClientRect();
+  let left = coords ? coords.left : 8;
+  let top = coords ? coords.bottom + 4 : 8;
+  if (left + rect.width > window.innerWidth - 8) left = window.innerWidth - rect.width - 8;
+  if (left < 8) left = 8;
+  if (coords && top + rect.height > window.innerHeight - 8) top = coords.top - rect.height - 4;
+  if (top < 8) top = 8;
+  pop.style.left = left + 'px';
+  pop.style.top = top + 'px';
+
+  // Defer so the opening tap doesn't immediately dismiss it.
+  setTimeout(() => document.addEventListener('pointerdown', onSpellOutside, true), 0);
+}
+
+// Tap an underlined word to open suggestions.
+editor.dom.addEventListener('click', (e) => {
+  if (!spellEnabled || !spellChecker) return;
+  const pos = editor.posAtCoords({ x: e.clientX, y: e.clientY });
+  if (pos == null) { closeSpellPopup(); return; }
+  if (!editor.state.selection.main.empty) { closeSpellPopup(); return; } // ignore drag-selections
+  const hit = spellRanges.find(r => pos >= r.from && pos <= r.to);
+  if (hit) openSpellPopup(hit);
+  else closeSpellPopup();
+});
+
+// The popup is position:fixed and anchored to the word — close it if the
+// editor scrolls so it can't drift away from its word.
+editor.scrollDOM.addEventListener('scroll', closeSpellPopup, { passive: true });
+window.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeSpellPopup(); });
+
+// Begin loading the dictionary shortly after startup (deferred so first paint
+// and the initial editor interaction stay snappy). Only when enabled.
+if (spellEnabled) setTimeout(loadSpellChecker, 1200);
 
 // Persist content — saves to both global key and per-room key
 let saveTimer = null;

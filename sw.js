@@ -3,11 +3,13 @@
 // Strategy:
 //   - HTML + manifest: stale-while-revalidate (instant offline, updates in bg)
 //   - Fontshare CSS + font files: stale-while-revalidate
-//   - CDN scripts (firebase, jszip): stale-while-revalidate (opaque OK)
+//   - CDN scripts (firebase, jszip, typo.js): stale-while-revalidate (opaque OK)
+//   - Spell-check dictionary (.aff/.dic): precached CORS-readable so the
+//     page can read them with fetch().text() while offline
 //   - Firebase realtime DB: bypass (live data, needs network)
 // ============================================
 
-const CACHE_VERSION = 5;
+const CACHE_VERSION = 6;
 const CACHE_NAME = `cade-v${CACHE_VERSION}`;
 
 // Same-origin pages to precache on install.
@@ -25,6 +27,16 @@ const PRECACHE_CROSS_ORIGIN = [
   'https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js',
   'https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js',
   'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js',
+  // Spell-checker library — loaded via <script>, so an opaque cache entry is fine.
+  'https://cdn.jsdelivr.net/npm/typo-js@1.2.5/typo.js',
+];
+
+// Cross-origin assets the PAGE reads as text via fetch().text(). These must be
+// cached CORS-readable (NOT opaque) or the text comes back empty offline.
+// jsDelivr serves Access-Control-Allow-Origin:* so a 'cors' fetch succeeds.
+const PRECACHE_CORS = [
+  'https://cdn.jsdelivr.net/npm/typo-js@1.2.5/dictionaries/en_US/en_US.aff',
+  'https://cdn.jsdelivr.net/npm/typo-js@1.2.5/dictionaries/en_US/en_US.dic',
 ];
 
 // ---- Install: precache critical resources (best-effort, per-URL) ----
@@ -48,6 +60,17 @@ self.addEventListener('install', (e) => {
         try {
           const r = await fetch(url, { mode: 'no-cors' });
           await cache.put(url, r);
+        } catch {}
+      })
+    );
+
+    // Cross-origin but CORS-readable (dictionary): must stay non-opaque so the
+    // page can read them with fetch().text() while offline.
+    await Promise.allSettled(
+      PRECACHE_CORS.map(async (url) => {
+        try {
+          const r = await fetch(url, { mode: 'cors' });
+          if (r.ok) await cache.put(url, r);
         } catch {}
       })
     );
@@ -103,6 +126,15 @@ self.addEventListener('message', (e) => {
               ? 'no-cors' : 'same-origin';
             const r = await fetch(url, { mode, cache: 'reload' });
             if (mode === 'no-cors' || r.ok) await cache.put(url, r);
+          } catch {}
+        })
+      );
+      // Dictionary stays CORS-readable.
+      await Promise.allSettled(
+        PRECACHE_CORS.map(async (url) => {
+          try {
+            const r = await fetch(url, { mode: 'cors', cache: 'reload' });
+            if (r.ok) await cache.put(url, r);
           } catch {}
         })
       );
