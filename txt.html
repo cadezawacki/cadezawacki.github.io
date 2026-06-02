@@ -1153,6 +1153,23 @@ body {
 
 .btn-danger:hover { background: var(--error-bg); }
 
+/* Sync Conflict modal: vertical stack of full-width choices */
+.sync-conflict-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+.sync-conflict-btn {
+  width: 100%;
+  text-align: left;
+  padding: 10px 14px;
+  line-height: 1.35;
+}
+.sync-conflict-btn:hover { border-color: var(--accent); }
+.sync-conflict-btn .scb-title { font-weight: 600; }
+.sync-conflict-btn .scb-desc { display: block; font-size: var(--text-xs); color: var(--text-muted); margin-top: 2px; }
+
 .dl-quick-picks {
   display: flex;
   gap: var(--space-2);
@@ -1807,6 +1824,40 @@ body {
       </div>
     </div>
 
+  </div>
+</div>
+
+<!-- ========== SYNC CONFLICT MODAL ========== -->
+<div class="modal-overlay" id="sync-conflict-overlay">
+  <div class="modal-dialog" style="max-width: 460px;">
+    <div class="modal-title">Sync Conflict</div>
+    <div class="modal-desc">
+      Offline changes to “<span id="sync-conflict-room"></span>” conflict with the
+      latest synced version. Choose how to resolve. Closing this dialog keeps both
+      copies by saving the server version as a new document.
+    </div>
+    <div class="sync-conflict-actions">
+      <button class="btn sync-conflict-btn" data-choice="local">
+        <span class="scb-title">Local</span>
+        <span class="scb-desc">Keep this device's version, replace the server copy.</span>
+      </button>
+      <button class="btn sync-conflict-btn" data-choice="server">
+        <span class="scb-title">Server</span>
+        <span class="scb-desc">Keep the server version, replace this device's copy.</span>
+      </button>
+      <button class="btn sync-conflict-btn" data-choice="append-down">
+        <span class="scb-title">Append ⬇️</span>
+        <span class="scb-desc">Append the server version below the local version.</span>
+      </button>
+      <button class="btn sync-conflict-btn" data-choice="append-up">
+        <span class="scb-title">Append ⬆️</span>
+        <span class="scb-desc">Append the server version above the local version.</span>
+      </button>
+      <button class="btn sync-conflict-btn" data-choice="new">
+        <span class="scb-title">New</span>
+        <span class="scb-desc">Keep local here; save the server version as a new document.</span>
+      </button>
+    </div>
   </div>
 </div>
 
@@ -5059,6 +5110,12 @@ const syncState = {
   idleCheckTimer: null,
   offlineBase: null,    // snapshot of text when we went offline
   wasOffline: false,    // true if we detected offline while connected
+  // --- Offline→online reconciliation ---
+  streamConnected: false,   // Firebase `.info/connected` — is the live stream up?
+  pendingReconcile: false,  // we (re)connected and haven't reconciled local vs server yet
+  conflictResolving: false, // reconciliation/conflict-resolution in progress (gates live sync)
+  connRef: null,            // the `.info/connected` ref (for detach)
+  connListener: null,       // the `.info/connected` listener handle
 };
 
 // Restore saved config
@@ -5235,6 +5292,14 @@ function cleanupFirebase() {
       syncState.lockedListener = null;
     }
   }
+  if (syncState.connRef && syncState.connListener) {
+    syncState.connRef.off('value', syncState.connListener);
+  }
+  syncState.connRef = null;
+  syncState.connListener = null;
+  syncState.streamConnected = false;
+  syncState.pendingReconcile = false;
+  syncState.conflictResolving = false;
 }
 
 // --- Sync UI helpers ---
@@ -5296,6 +5361,9 @@ function safeApplyRemote(text, roomName) {
 
 function tryApplyPendingRemote() {
   if (syncState.pendingRemoteText == null) return;
+  // While reconciling an offline→online reconnect, the reconcile flow owns the
+  // document; don't let a queued live snapshot clobber it mid-resolution.
+  if (syncState.pendingReconcile || syncState.conflictResolving) return;
   const idleMs = Date.now() - syncState.lastLocalEdit;
   if (idleMs < 2000) return; // Still typing, wait
 
@@ -5343,6 +5411,9 @@ window.syncConnect = async function() {
     // Listen for remote changes
     syncState.firebaseListener = textRef.on('value', async (snap) => {
       if (syncState.suppressUpdate) return;
+      // During an offline→online reconcile, the reconcile flow fetches the
+      // server snapshot itself and owns the merge decision — stay out of its way.
+      if (syncState.pendingReconcile || syncState.conflictResolving) return;
       const encoded = unpackRoomText(snap.val());
       if (!encoded) return;
       try {
@@ -5370,6 +5441,10 @@ window.syncConnect = async function() {
     });
 
     syncState.connected = true;
+    // We've just (re)attached — reconcile local vs server before resuming live
+    // sync. attachConnListener fires reconcileOnLive once the stream is up.
+    syncState.pendingReconcile = true;
+    attachConnListener(db);
     clearInterval(syncState.idleCheckTimer);
     syncState.idleCheckTimer = setInterval(tryApplyPendingRemote, 500);
     updateSyncUI('connected', 'Synced');
@@ -5394,20 +5469,34 @@ window.syncCancel = function() {
 // Broadcast text changes. On successful write to Firebase we record the text
 // as the room's synced base; on failure we schedule a retry so offline edits
 // aren't lost.
+// Encrypt `text` for `roomName` (prepending the lock sentinel if the room is
+// password-locked this session) and write it to Firebase. `encKey` overrides
+// the active room key — used when mirroring a conflict into a *different* room.
+async function pushTextToServer(roomName, text, encKey) {
+  const key = encKey || syncState.encKey;
+  const isLocked = !!sessionRoomPasswords[roomName];
+  const textToSend = isLocked ? ROOM_LOCK_SENTINEL + text : text;
+  const encrypted = await encryptText(textToSend, key);
+  syncState.suppressUpdate = true;
+  try {
+    await syncState.firebaseDb.ref(`rooms/${roomName}/text`).set(packRoomText(encrypted));
+  } finally {
+    syncState.suppressUpdate = false;
+  }
+}
+
 let broadcastTimer = null;
 async function _doBroadcast() {
   if (!syncState.connected || syncState.suppressUpdate) return;
+  // Don't push local edits up until we've reconciled with the server — otherwise
+  // unsynced offline edits would clobber the server before the user can choose.
+  if (syncState.pendingReconcile || syncState.conflictResolving) return;
   const roomName = syncState.roomName;
   if (!roomName || !syncState.firebaseDb) return;
   let raw;
   try {
     raw = editor.state.doc.toString();
-    const isLocked = !!(roomName && sessionRoomPasswords[roomName]);
-    const textToSend = isLocked ? ROOM_LOCK_SENTINEL + raw : raw;
-    const encrypted = await encryptText(textToSend, syncState.encKey);
-    syncState.suppressUpdate = true;
-    await syncState.firebaseDb.ref(`rooms/${roomName}/text`).set(packRoomText(encrypted));
-    syncState.suppressUpdate = false;
+    await pushTextToServer(roomName, raw, syncState.encKey);
     // If the editor hasn't moved on, mark this text as synced. If it has
     // (user kept typing during the in-flight broadcast — those edits couldn't
     // schedule their own broadcast because suppressUpdate was true), schedule
@@ -5445,6 +5534,257 @@ function flushIfDirty() {
   }
 }
 
+// ============================================
+// OFFLINE → ONLINE RECONCILIATION
+// ------------------------------------------------------------------
+// When the user edits while the live sync stream is NOT connected (network
+// offline, Firebase stream down, or carried over from a previous offline
+// session), reconnecting must not blindly clobber either side. On the first
+// time the stream goes live for a room (`pendingReconcile`), we fetch the most
+// recent server text and reconcile it against local using a deterministic
+// decision tree, falling back to an explicit "Sync Conflict" modal when the
+// two genuinely diverge. While the stream stays live, normal real-time sync
+// (the `.on('value')` listener + broadcast) runs untouched.
+// ============================================
+
+// Does the editor hold edits that were never confirmed-synced for this room?
+function localHasUnsyncedEdits(roomName) {
+  const cur = editor.state.doc.toString();
+  const base = loadRoomSynced(roomName);
+  // No synced base recorded yet: treat any non-empty local content as unsynced.
+  if (base == null) return cur.length > 0;
+  return cur !== base;
+}
+
+// Is the live realtime stream actually usable right now?
+function isStreamLive() {
+  return syncState.streamConnected && navigator.onLine;
+}
+
+// Attach the Firebase `.info/connected` listener — the authoritative signal for
+// whether the realtime stream is live. Transitions drive the sync UI and kick
+// off reconciliation when we come back online with a reconcile pending.
+function attachConnListener(db) {
+  if (syncState.connRef && syncState.connListener) {
+    syncState.connRef.off('value', syncState.connListener);
+  }
+  syncState.streamConnected = false;
+  const ref = db.ref('.info/connected');
+  syncState.connRef = ref;
+  syncState.connListener = ref.on('value', (snap) => {
+    const isConn = snap.val() === true;
+    syncState.streamConnected = isConn;
+    if (!syncState.connected) return;
+    if (isConn) {
+      updateSyncUI('connected', syncState.roomName || 'Synced');
+      reconcileOnLive();
+    } else {
+      // Stream dropped — the next time it comes back we must reconcile before
+      // resuming live sync, in case the user edits in the meantime.
+      syncState.pendingReconcile = true;
+      updateSyncUI('connecting', 'Offline');
+    }
+  });
+}
+
+// Run reconciliation once the stream is live and a reconcile is pending. Guarded
+// so it runs a single resolution at a time; leaves `pendingReconcile` set if the
+// server fetch fails so it retries on the next live signal.
+async function reconcileOnLive() {
+  if (!syncState.connected || !syncState.pendingReconcile || syncState.conflictResolving) return;
+  if (!isStreamLive()) return;
+  syncState.conflictResolving = true;
+  try {
+    await reconcileRoom();
+    syncState.pendingReconcile = false;
+  } catch (e) {
+    console.warn('Reconcile deferred (will retry):', e);
+    // Keep pendingReconcile set and retry shortly so a transient fetch failure
+    // doesn't permanently leave live sync gated.
+    setTimeout(reconcileOnLive, 4000);
+  } finally {
+    syncState.conflictResolving = false;
+    syncState.pendingRemoteText = null;
+  }
+}
+
+// Fetch the latest server text for the active room and reconcile it with local.
+async function reconcileRoom() {
+  const roomName = syncState.roomName;
+  if (!roomName || !syncState.firebaseDb) return;
+  syncState.pendingRemoteText = null;
+
+  // Bounded fetch of the most recent server text so we never hang on a flaky link.
+  let snapVal;
+  snapVal = await Promise.race([
+    syncState.firebaseDb.ref(`rooms/${roomName}/text`).once('value').then(s => s.val()),
+    new Promise((_, rej) => setTimeout(() => rej(new Error('reconcile-timeout')), 10000)),
+  ]);
+
+  let serverText = '';
+  const encoded = unpackRoomText(snapVal);
+  if (encoded) {
+    let decoded = await decryptText(encoded, syncState.encKey);
+    // Undecryptable (wrong key / locked room not yet unlocked): don't risk
+    // clobbering — bail and let the lock/unlock flow handle it.
+    if (decoded === null) return;
+    if (decoded.startsWith(ROOM_LOCK_SENTINEL)) decoded = decoded.slice(ROOM_LOCK_SENTINEL.length);
+    serverText = decoded;
+  }
+
+  const localText = editor.state.doc.toString();
+
+  // No unsynced local edits → behave exactly like normal sync: adopt the server.
+  if (!localHasUnsyncedEdits(roomName)) {
+    if (serverText !== localText) applyResolvedServer(roomName, serverText);
+    else saveRoomSynced(roomName, localText);
+    if (!syncState.pageTypeApplied) { syncState.pageTypeApplied = true; applyPageType(); }
+    return;
+  }
+
+  // --- Offline edits present: deterministic decision tree ---------------------
+  if (serverText === localText) {
+    saveRoomSynced(roomName, localText);                 // already identical
+  } else if (serverText === '') {
+    await applyResolvedLocal(roomName, localText);        // incoming blank, local has content → local
+  } else if (localText === '') {
+    applyResolvedServer(roomName, serverText);            // local blank, incoming has content → server
+  } else if (localText.includes(serverText)) {
+    await applyResolvedLocal(roomName, localText);        // entire incoming already inside local → local
+  } else {
+    await showSyncConflictModal(roomName, localText, serverText); // genuine conflict → ask
+  }
+  if (!syncState.pageTypeApplied) { syncState.pageTypeApplied = true; applyPageType(); }
+}
+
+// --- Resolution primitives ---------------------------------------------------
+
+// Keep the local version; push it up so the server matches (replacing incoming).
+async function applyResolvedLocal(roomName, localText) {
+  saveRoomSynced(roomName, localText);
+  try { await pushTextToServer(roomName, localText, syncState.encKey); }
+  catch (e) { console.warn('Failed to push local after resolve:', e); }
+}
+
+// Adopt the server version, replacing local entirely.
+function applyResolvedServer(roomName, serverText) {
+  const cur = editor.state.doc.toString();
+  const sel = editor.state.selection.main;
+  const anchor = Math.min(sel.anchor, serverText.length);
+  const head = Math.min(sel.head, serverText.length);
+  syncState.suppressUpdate = true;
+  editor.dispatch({
+    changes: { from: 0, to: cur.length, insert: serverText },
+    selection: { anchor, head },
+  });
+  syncState.suppressUpdate = false;
+  saveRoomSynced(roomName, serverText);
+  persistContent();
+}
+
+// Concatenate local + incoming (where = 'down' puts incoming below, 'up' above),
+// adopt the merged text locally, and push it up.
+async function applyResolvedAppend(roomName, localText, serverText, where) {
+  const sep = '\n\n';
+  const merged = where === 'up' ? (serverText + sep + localText) : (localText + sep + serverText);
+  const cur = editor.state.doc.toString();
+  syncState.suppressUpdate = true;
+  editor.dispatch({ changes: { from: 0, to: cur.length, insert: merged } });
+  syncState.suppressUpdate = false;
+  saveRoomSynced(roomName, merged);
+  persistContent();
+  try { await pushTextToServer(roomName, merged, syncState.encKey); }
+  catch (e) { console.warn('Failed to push merged after resolve:', e); }
+}
+
+// Build the conflict document name: <room>_conflict_<YYYY-MM-DD_HH-MM-SS>.
+function makeConflictRoomName(base) {
+  const d = new Date();
+  const p = n => String(n).padStart(2, '0');
+  const stamp = `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}_${p(d.getHours())}-${p(d.getMinutes())}-${p(d.getSeconds())}`;
+  return `${base}_conflict_${stamp}`;
+}
+
+// Keep local in the current room; save the incoming payload as a brand-new
+// document mirrored into the current workspace, registered in the room manager
+// and synced to Firebase under its own room.
+async function applyResolvedNew(roomName, localText, serverText) {
+  const conflictName = makeConflictRoomName(roomName);
+
+  // Register the new room (bypasses the room cap on purpose — preserving the
+  // conflicting copy matters more than the soft limit), mirroring the workspace.
+  if (!rooms.includes(conflictName)) rooms.push(conflictName);
+  const wsId = getRoomWorkspaceId(roomName);
+  if (wsId && wsId !== WS_UNLABELED) roomWorkspace[conflictName] = wsId;
+  saveRooms();
+  if (typeof saveWorkspaces === 'function') saveWorkspaces();
+
+  // Persist the incoming payload as the new room's content + synced base, and
+  // mirror it up to Firebase using the base key (the new room isn't locked).
+  store.set('cade-room-cache:' + conflictName, serverText);
+  saveRoomSynced(conflictName, serverText);
+  const baseKey = store.get('cade-sync-key') || syncState.encKey;
+  try { await pushTextToServer(conflictName, serverText, baseKey); }
+  catch (e) { console.warn('Failed to mirror conflict doc to server:', e); }
+
+  // The current room keeps local — push it so the server matches.
+  await applyResolvedLocal(roomName, localText);
+
+  if (typeof renderRoomTabs === 'function') renderRoomTabs();
+  if (typeof renderRoomManagerList === 'function') renderRoomManagerList();
+  if (typeof renderWorkspaceManagerList === 'function') renderWorkspaceManagerList();
+  showToast('Conflict saved as new doc: ' + conflictName, 'success', 4000);
+}
+
+// --- Sync Conflict modal ------------------------------------------------------
+// Returns a promise that resolves once the conflict is handled. Abandoning the
+// modal (Escape / backdrop click) defaults to option 5 ("New") so a conflict is
+// never silently dropped.
+function showSyncConflictModal(roomName, localText, serverText) {
+  return new Promise((resolve) => {
+    const overlay = document.getElementById('sync-conflict-overlay');
+    const roomSpan = document.getElementById('sync-conflict-room');
+    if (roomSpan) roomSpan.textContent = roomName;
+    const btns = Array.from(overlay.querySelectorAll('.sync-conflict-btn'));
+    let settled = false;
+
+    const cleanup = () => {
+      overlay.classList.remove('open');
+      overlay.removeEventListener('click', onBackdrop);
+      document.removeEventListener('keydown', onKey, true);
+      btns.forEach(b => b.removeEventListener('click', onClick));
+    };
+
+    const finish = async (choice) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      try {
+        if (choice === 'local') await applyResolvedLocal(roomName, localText);
+        else if (choice === 'server') applyResolvedServer(roomName, serverText);
+        else if (choice === 'append-down') await applyResolvedAppend(roomName, localText, serverText, 'down');
+        else if (choice === 'append-up') await applyResolvedAppend(roomName, localText, serverText, 'up');
+        else await applyResolvedNew(roomName, localText, serverText); // 'new' or abandoned
+      } catch (e) {
+        console.error('Conflict resolution failed:', e);
+      }
+      resolve();
+    };
+
+    const onClick = (e) => finish(e.currentTarget.getAttribute('data-choice'));
+    const onBackdrop = (e) => { if (e.target === overlay) finish('new'); };
+    const onKey = (e) => {
+      if (e.key === 'Escape') { e.stopPropagation(); e.preventDefault(); finish('new'); }
+    };
+
+    btns.forEach(b => b.addEventListener('click', onClick));
+    overlay.addEventListener('click', onBackdrop);
+    document.addEventListener('keydown', onKey, true);
+    closeAllMenus();
+    overlay.classList.add('open');
+  });
+}
+
 window.openSyncModal = function() {
   closeAllMenus();
   showSyncStep('sync-step-creds');
@@ -5474,17 +5814,24 @@ window.disconnectSync = function() {
   showToast('Disconnected from sync', 'success', 2000);
 };
 
-// Offline/online detection — adjusts the UI label and flushes any unsynced
-// local edits on reconnect. The actual merge logic lives in safeApplyRemote,
-// which compares the editor against each room's synced base, so we don't need
-// to snapshot text here.
+// Offline/online detection — adjusts the UI label and triggers reconciliation
+// on reconnect. The merge decision lives in reconcileRoom (gated behind
+// pendingReconcile); the Firebase `.info/connected` listener is the primary
+// driver, these window events are a faster-reacting backup.
 window.addEventListener('offline', () => {
-  if (syncState.connected) updateSyncUI('connecting', 'Offline');
+  if (syncState.connected) {
+    // We're no longer live — force a reconcile before resuming sync next time.
+    syncState.pendingReconcile = true;
+    updateSyncUI('connecting', 'Offline');
+  }
 });
 window.addEventListener('online', () => {
   if (syncState.connected) {
-    updateSyncUI('connected', syncState.roomName || 'Synced');
-    flushIfDirty();
+    updateSyncUI(syncState.streamConnected ? 'connected' : 'connecting',
+                 syncState.streamConnected ? (syncState.roomName || 'Synced') : 'Reconnecting…');
+    // If the Firebase stream is already live, reconcile now; otherwise the
+    // `.info/connected` listener will reconcile once the stream comes back.
+    reconcileOnLive();
   }
 });
 
@@ -5732,6 +6079,9 @@ async function _doSwitchRoom(name, firebaseUrl, baseEncKey) {
 
     syncState.firebaseListener = textRef.on('value', async (snap) => {
       if (syncState.suppressUpdate) return;
+      // During an offline→online reconcile, reconcileRoom fetches the server
+      // snapshot itself and owns the merge decision — stay out of its way.
+      if (syncState.pendingReconcile || syncState.conflictResolving) return;
       const encoded = unpackRoomText(snap.val());
       if (!encoded) {
         // Server has no content for this room yet. If we have local content,
@@ -5797,6 +6147,11 @@ async function _doSwitchRoom(name, firebaseUrl, baseEncKey) {
     db.ref(`rooms/${name}/locked`).on('value', syncState.lockedListener);
 
     syncState.connected = true;
+    // Reconcile this room (local cache vs server) before resuming live sync —
+    // attachConnListener fires reconcileOnLive once the stream is confirmed up.
+    // This is what handles "typed into this room while offline last session".
+    syncState.pendingReconcile = true;
+    attachConnListener(db);
     clearInterval(syncState.idleCheckTimer);
     syncState.idleCheckTimer = setInterval(tryApplyPendingRemote, 500);
     // If no Firebase update arrives within 2s (room empty on server, or
@@ -5805,9 +6160,6 @@ async function _doSwitchRoom(name, firebaseUrl, baseEncKey) {
     setTimeout(() => { if (!syncState.pageTypeApplied) { syncState.pageTypeApplied = true; applyPageType(); } }, 2000);
     updateSyncUI('connected', name);
     renderRoomTabs();
-    // Flush any local edits that diverge from the synced base — covers the
-    // case where the user typed into this room while offline last session.
-    flushIfDirty();
   } catch (e) {
     // Set-up failure (bad URL, etc.) — never undo the local switch.
     console.warn('Room sync setup deferred:', e);
