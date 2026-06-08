@@ -3173,13 +3173,16 @@ editor.dom.addEventListener('click', (e) => {
   closeSpellPopup();
 });
 
-// Right-click: link menu, or (desktop) spell suggestions.
+// Right-click: link menu, or spell suggestions. A contextmenu event only
+// fires on a real right-click (or some long-presses), so we handle it
+// regardless of pointer type — the (pointer: coarse) gate could misfire on
+// hybrid/touchscreen laptops and let the native menu through.
 editor.dom.addEventListener('contextmenu', (e) => {
   const pos = editor.posAtCoords({ x: e.clientX, y: e.clientY });
   if (pos == null) return;
   const link = linkRanges.find(r => pos >= r.from && pos < r.to);
   if (link && link.kind !== 'nav') { e.preventDefault(); openLinkMenu(link, e.clientX, e.clientY); return; }
-  if (!isCoarsePointer() && spellEnabled && spellChecker) {
+  if (spellEnabled && spellChecker) {
     const hit = spellRanges.find(r => pos >= r.from && pos <= r.to);
     if (hit) { e.preventDefault(); openSpellPopup(hit); return; }
   }
@@ -7363,7 +7366,12 @@ window.openExploreRooms = async function() {
     exploreRoomList = Object.keys(val).filter(k => k && !k.startsWith('__')).sort();
     renderExploreRoomsList();
   } catch (e) {
-    renderExploreMessage('Could not load rooms: ' + (e && e.message ? e.message : 'error'));
+    const msg = (e && e.message) ? e.message : 'error';
+    if (/permission/i.test(msg)) {
+      renderExploreMessage('Permission denied listing rooms. Your Firebase rules let you read individual rooms but not list them — add a read rule on the "rooms" node (".read": true) to enable Explore Rooms.');
+    } else {
+      renderExploreMessage('Could not load rooms: ' + msg);
+    }
   }
 };
 
