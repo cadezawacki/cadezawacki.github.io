@@ -73,6 +73,16 @@
   --kbd-bg: #e7e5e4;
   --kbd-border: #d6d3d1;
   --border-tab: #004949;
+
+  /* Highlight colors — translucent so theme text stays readable in both modes */
+  --hl-yellow: rgba(250, 204, 21, 0.40);
+  --hl-green:  rgba(34, 197, 94, 0.32);
+  --hl-blue:   rgba(59, 130, 246, 0.30);
+  --hl-red:    rgba(239, 68, 68, 0.30);
+  --hl-pink:   rgba(236, 72, 153, 0.30);
+  --hl-purple: rgba(168, 85, 247, 0.32);
+  --hl-orange: rgba(249, 115, 22, 0.32);
+  --hl-gray:   rgba(148, 163, 184, 0.35);
 }
 
 [data-theme="dark"] {
@@ -99,6 +109,16 @@
   --kbd-bg: #333231;
   --kbd-border: #444342;
   --border-tab: #26b3b3;
+
+  /* Highlight colors (dark) — a touch brighter so they read on the dark bg */
+  --hl-yellow: rgba(250, 204, 21, 0.32);
+  --hl-green:  rgba(74, 222, 128, 0.28);
+  --hl-blue:   rgba(96, 165, 250, 0.30);
+  --hl-red:    rgba(248, 113, 113, 0.30);
+  --hl-pink:   rgba(244, 114, 182, 0.28);
+  --hl-purple: rgba(192, 132, 252, 0.30);
+  --hl-orange: rgba(251, 146, 60, 0.30);
+  --hl-gray:   rgba(148, 163, 184, 0.30);
 }
 
 html {
@@ -1634,6 +1654,28 @@ body {
 .cm-ctx-item:hover, .cm-ctx-item:active { background: var(--accent-bg); color: var(--accent); }
 .cm-ctx-item.danger:hover, .cm-ctx-item.danger:active { background: rgba(229,72,77,0.12); color: #e5484d; }
 .cm-ctx-sep { height: 1px; margin: 4px 6px; background: var(--border); }
+.cm-ctx-swatches { display: flex; flex-wrap: wrap; gap: 6px; padding: 6px 8px 8px; }
+.cm-ctx-swatch {
+  width: 22px; height: 22px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  padding: 0;
+}
+.cm-ctx-swatch.current { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* ============================================
+   TEXT HIGHLIGHTS (==color|text== sentinel)
+   ============================================ */
+.cm-hl { border-radius: 2px; box-decoration-break: clone; -webkit-box-decoration-break: clone; padding: 0.05em 0; }
+.cm-hl-yellow { background: var(--hl-yellow); }
+.cm-hl-green  { background: var(--hl-green); }
+.cm-hl-blue   { background: var(--hl-blue); }
+.cm-hl-red    { background: var(--hl-red); }
+.cm-hl-pink   { background: var(--hl-pink); }
+.cm-hl-purple { background: var(--hl-purple); }
+.cm-hl-orange { background: var(--hl-orange); }
+.cm-hl-gray   { background: var(--hl-gray); }
 
 /* ============================================
    PLUGIN AUTOCOMPLETE
@@ -2758,15 +2800,17 @@ class LinkWidget extends WidgetType {
     a.dataset.url = this.url;
     a.setAttribute('spellcheck', 'false');
     const self = this;
+    const menuLink = () => ({ kind: 'md', from: self.from, to: self.to, url: self.url, title: self.title });
     a.addEventListener('mousedown', (e) => {
-      if (e.button === 0 && !e.ctrlKey && !e.metaKey) { e.preventDefault(); e.stopPropagation(); openLink(self.url); }
+      if (e.button !== 0 || e.ctrlKey || e.metaKey) return;
+      e.preventDefault(); e.stopPropagation();
+      // Mobile: tap opens the menu (with Open inside). Desktop: tap opens link.
+      if (isCoarsePointer()) openLinkMenu(menuLink(), e.clientX, e.clientY);
+      else openLink(self.url);
     });
     a.addEventListener('contextmenu', (e) => {
       e.preventDefault(); e.stopPropagation();
-      openLinkMenu({ kind: 'md', from: self.from, to: self.to, url: self.url, title: self.title }, e.clientX, e.clientY);
-    });
-    attachLongPress(a, (x, y) => {
-      openLinkMenu({ kind: 'md', from: self.from, to: self.to, url: self.url, title: self.title }, x, y);
+      openLinkMenu(menuLink(), e.clientX, e.clientY);
     });
     return a;
   }
@@ -2814,6 +2858,84 @@ const linkPlugin = ViewPlugin.fromClass(class {
 }, { decorations: v => v.decorations });
 
 // ============================================
+// TEXT HIGHLIGHTS  ==color|text==  (color optional → default yellow)
+// ============================================
+// The sentinel markup is hidden; only the inner text shows, tinted with a
+// theme-adaptive translucent background. Tap (mobile) / right-click (desktop)
+// opens a menu to recolor or remove. Stored as plain text so it survives sync.
+const HL_COLORS = ['yellow', 'green', 'blue', 'red', 'pink', 'purple', 'orange', 'gray'];
+const HL_DEFAULT = 'yellow';
+const RE_HL = /==([^=]+?)==/g;
+
+// Split a sentinel's inner text into {color, text, openLen} where openLen is the
+// number of leading chars ("==" plus an optional "color|") before the text.
+function parseHighlight(inner) {
+  // Allow empty text after the color (the @color injection produces "color|"
+  // momentarily) — buildHighlightDecorations skips zero-length highlights.
+  const m = inner.match(/^([a-zA-Z]+)\|([\s\S]*)$/);
+  if (m && HL_COLORS.includes(m[1].toLowerCase())) {
+    return { color: m[1].toLowerCase(), text: m[2], openLen: 2 + m[1].length + 1 };
+  }
+  return { color: HL_DEFAULT, text: inner, openLen: 2 };
+}
+
+// Line-relative spans of the sentinel markup ("==color|" and trailing "==") so
+// spell check can skip the color token without skipping the highlighted prose.
+function highlightMarkupSpans(text) {
+  const spans = [];
+  RE_HL.lastIndex = 0;
+  let m;
+  while ((m = RE_HL.exec(text)) !== null) {
+    const start = m.index, end = start + m[0].length;
+    const { openLen } = parseHighlight(m[1]);
+    if (end - 2 <= start + openLen) continue;
+    spans.push({ start, end: start + openLen });
+    spans.push({ start: end - 2, end });
+  }
+  return spans;
+}
+
+let highlightRanges = []; // viewport spans: {from,to,color,textFrom,textTo}
+
+function buildHighlightDecorations(view) {
+  highlightRanges = [];
+  const doc = view.state.doc;
+  const ranges = [];
+  for (const { from, to } of view.visibleRanges) {
+    const startLine = doc.lineAt(from).number;
+    const endLine = doc.lineAt(to).number;
+    for (let i = startLine; i <= endLine; i++) {
+      const line = doc.line(i);
+      const text = line.text;
+      RE_HL.lastIndex = 0;
+      let m;
+      while ((m = RE_HL.exec(text)) !== null) {
+        const start = line.from + m.index;
+        const end = start + m[0].length;
+        const { color, openLen } = parseHighlight(m[1]);
+        const textFrom = start + openLen;
+        const textTo = end - 2;
+        if (textTo <= textFrom) continue; // empty highlight — leave markup visible
+        // Hide the opening markup, tint the text, hide the closing "==".
+        ranges.push(Decoration.replace({}).range(start, textFrom));
+        ranges.push(Decoration.mark({ class: 'cm-hl cm-hl-' + color }).range(textFrom, textTo));
+        ranges.push(Decoration.replace({}).range(textTo, end));
+        highlightRanges.push({ from: start, to: end, color, textFrom, textTo });
+      }
+    }
+  }
+  ranges.sort((a, b) => a.from - b.from || a.startSide - b.startSide);
+  return Decoration.set(ranges, true);
+}
+
+const highlightPlugin = ViewPlugin.fromClass(class {
+  constructor(view) { this.decorations = buildHighlightDecorations(view); }
+  update(update) {
+    if (update.docChanged || update.viewportChanged) this.decorations = buildHighlightDecorations(update.view);
+  }
+}, { decorations: v => v.decorations });
+
+// ============================================
 // SPELL CHECK (English, offline-capable)
 // ============================================
 // Strategy: lazily load typo-js + the en_US Hunspell dictionary from a CDN
@@ -2855,16 +2977,18 @@ function buildSpellDecorations(view) {
     for (let i = startLine; i <= endLine; i++) {
       const line = doc.line(i);
       const text = line.text;
-      // Don't spell-check inside links (URLs, [title](url), @ws:room).
+      // Don't spell-check inside links (URLs, [title](url), @ws:room) or inside
+      // highlight markup (the "==color|" / "==" sentinel pieces).
       const linkSpans = findLinksInLine(text);
+      const skipSpans = linkSpans.concat(highlightMarkupSpans(text));
       SPELL_WORD_RE.lastIndex = 0;
       let m;
       while ((m = SPELL_WORD_RE.exec(text)) !== null) {
         const word = m[0];
         // Skip @-prefixed tokens (@todo, @complete, injection tokens).
         if (m.index > 0 && text[m.index - 1] === '@') continue;
-        // Skip words overlapping any link span.
-        if (linkSpans.some(s => m.index < s.end && m.index + word.length > s.start)) continue;
+        // Skip words overlapping any link or highlight-markup span.
+        if (skipSpans.some(s => m.index < s.end && m.index + word.length > s.start)) continue;
         if (shouldSkipWord(word)) continue;
         if (spellChecker.check(word)) continue;
         const start = line.from + m.index;
@@ -2911,6 +3035,7 @@ const editorState = EditorState.create({
     listIndentPlugin,
     todoPlugin,
     linkPlugin,
+    highlightPlugin,
     spellPlugin,
     listEnterHandler,
     keymap.of([
@@ -3143,78 +3268,67 @@ function openSpellPopup(target) {
   setTimeout(() => document.addEventListener('pointerdown', onSpellOutside, true), 0);
 }
 
-// Coarse pointer = touch device (phone/tablet). On touch we keep tap-to-open
-// for spell suggestions; on desktop those move to right-click (contextmenu).
+// Coarse pointer = touch device (phone/tablet). Touch opens our menus on a
+// single tap (long-press is unreliable inside contenteditable); desktop uses
+// left-click for the primary action and right-click for menus.
 function isCoarsePointer() { return window.matchMedia('(pointer: coarse)').matches; }
 
-// Set briefly after a mobile long-press opens a link menu so the trailing
-// click/tap doesn't also follow the link.
-let _suppressNextClick = false;
+function hitHighlight(pos) { return highlightRanges.find(r => pos >= r.from && pos < r.to); }
+function hitLink(pos) { return linkRanges.find(r => pos >= r.from && pos < r.to); }
+function hitSpell(pos) {
+  if (!spellEnabled || !spellChecker) return null;
+  return spellRanges.find(r => pos >= r.from && pos <= r.to);
+}
 
-// Click: follow links; on touch devices also open spell suggestions.
+// Tap / left-click.
 editor.dom.addEventListener('click', (e) => {
-  if (_suppressNextClick) { _suppressNextClick = false; e.preventDefault(); return; }
   if (!editor.state.selection.main.empty) return; // ignore drag-selections
   const pos = editor.posAtCoords({ x: e.clientX, y: e.clientY });
-  if (pos == null) { closeSpellPopup(); return; }
-  // Links (raw URL / @ws:room marks). Ctrl/Cmd-click bypasses so you can edit.
-  const link = linkRanges.find(r => pos >= r.from && pos < r.to);
+  if (pos == null) { closeSpellPopup(); closeCtxMenu(); return; }
+  const coarse = isCoarsePointer();
+
+  if (coarse) {
+    // Mobile: a tap on a highlight or link opens its menu; misspelling opens
+    // suggestions; anything else just moves the cursor.
+    const hl = hitHighlight(pos);
+    if (hl) { e.preventDefault(); openHighlightMenu(hl, e.clientX, e.clientY); return; }
+    const link = hitLink(pos);
+    if (link) {
+      e.preventDefault();
+      if (link.kind === 'nav') navigateToDoc(link.ws, link.room);
+      else openLinkMenu(link, e.clientX, e.clientY);
+      return;
+    }
+    const hit = hitSpell(pos);
+    if (hit) { openSpellPopup(hit); return; }
+    closeSpellPopup(); closeCtxMenu();
+    return;
+  }
+
+  // Desktop: left-click follows links (Ctrl/Cmd-click bypasses to edit).
+  const link = hitLink(pos);
   if (link && !e.ctrlKey && !e.metaKey) {
     e.preventDefault();
     if (link.kind === 'nav') navigateToDoc(link.ws, link.room);
     else openLink(link.url);
     return;
   }
-  // Spell suggestions — touch only (desktop uses right-click).
-  if (isCoarsePointer() && spellEnabled && spellChecker) {
-    const hit = spellRanges.find(r => pos >= r.from && pos <= r.to);
-    if (hit) { openSpellPopup(hit); return; }
-  }
-  closeSpellPopup();
+  closeSpellPopup(); closeCtxMenu();
 });
 
-// Right-click: link menu, or spell suggestions. A contextmenu event only
-// fires on a real right-click (or some long-presses), so we handle it
-// regardless of pointer type — the (pointer: coarse) gate could misfire on
-// hybrid/touchscreen laptops and let the native menu through.
+// Right-click (desktop, and any device that fires contextmenu): highlight /
+// link / spell menus. Handled regardless of pointer type so it also works on
+// hybrid/touchscreen laptops.
 editor.dom.addEventListener('contextmenu', (e) => {
   const pos = editor.posAtCoords({ x: e.clientX, y: e.clientY });
   if (pos == null) return;
-  const link = linkRanges.find(r => pos >= r.from && pos < r.to);
+  const hl = hitHighlight(pos);
+  if (hl) { e.preventDefault(); openHighlightMenu(hl, e.clientX, e.clientY); return; }
+  const link = hitLink(pos);
   if (link && link.kind !== 'nav') { e.preventDefault(); openLinkMenu(link, e.clientX, e.clientY); return; }
-  if (spellEnabled && spellChecker) {
-    const hit = spellRanges.find(r => pos >= r.from && pos <= r.to);
-    if (hit) { e.preventDefault(); openSpellPopup(hit); return; }
-  }
+  const hit = hitSpell(pos);
+  if (hit) { e.preventDefault(); openSpellPopup(hit); return; }
 });
-
-// Long-press on touch over a raw-URL link opens the link menu.
-{
-  let lpTimer = null, lpStart = null;
-  const cancelLP = () => { if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; } };
-  editor.dom.addEventListener('touchstart', (e) => {
-    if (e.touches.length !== 1) return;
-    const tch = e.touches[0];
-    const pos = editor.posAtCoords({ x: tch.clientX, y: tch.clientY });
-    if (pos == null) return;
-    const link = linkRanges.find(r => pos >= r.from && pos < r.to);
-    if (!link || link.kind === 'nav') return; // nav: tap to navigate
-    lpStart = { x: tch.clientX, y: tch.clientY };
-    lpTimer = setTimeout(() => {
-      lpTimer = null;
-      _suppressNextClick = true;
-      openLinkMenu(link, tch.clientX, tch.clientY);
-    }, 500);
-  }, { passive: true });
-  editor.dom.addEventListener('touchmove', (e) => {
-    if (lpTimer && lpStart) {
-      const t = e.touches[0];
-      if (Math.hypot(t.clientX - lpStart.x, t.clientY - lpStart.y) > 10) cancelLP();
-    }
-  }, { passive: true });
-  editor.dom.addEventListener('touchend', cancelLP, { passive: true });
-  editor.dom.addEventListener('touchcancel', cancelLP, { passive: true });
-}
 
 // The popup is position:fixed and anchored to the word — close it if the
 // editor scrolls so it can't drift away from its word.
@@ -3244,24 +3358,7 @@ function navigateToDoc(wsName, room) {
   if (window.switchRoom) window.switchRoom(room);
 }
 
-// Generic long-press helper for touch (used by titled-link widgets).
-function attachLongPress(el, handler) {
-  let timer = null, sx = 0, sy = 0;
-  const cancel = () => { if (timer) { clearTimeout(timer); timer = null; } };
-  el.addEventListener('touchstart', (e) => {
-    if (e.touches.length !== 1) return;
-    const t = e.touches[0]; sx = t.clientX; sy = t.clientY;
-    timer = setTimeout(() => { timer = null; _suppressNextClick = true; handler(sx, sy); }, 500);
-  }, { passive: true });
-  el.addEventListener('touchmove', (e) => {
-    const t = e.touches[0];
-    if (timer && Math.hypot(t.clientX - sx, t.clientY - sy) > 10) cancel();
-  }, { passive: true });
-  el.addEventListener('touchend', cancel, { passive: true });
-  el.addEventListener('touchcancel', cancel, { passive: true });
-}
-
-// ---- Shared popover menu (links) ----
+// ---- Shared popover menu ----
 let ctxMenuEl = null;
 function onCtxOutside(e) { if (ctxMenuEl && !ctxMenuEl.contains(e.target)) closeCtxMenu(); }
 function closeCtxMenu() {
@@ -3274,6 +3371,19 @@ function openMenu(items, x, y) {
   menu.className = 'cm-ctx-menu';
   items.forEach(it => {
     if (it.sep) { const s = document.createElement('div'); s.className = 'cm-ctx-sep'; menu.appendChild(s); return; }
+    if (it.swatches) {
+      const row = document.createElement('div');
+      row.className = 'cm-ctx-swatches';
+      it.swatches.forEach(c => {
+        const sw = document.createElement('button');
+        sw.className = 'cm-ctx-swatch cm-hl-' + c + (c === it.current ? ' current' : '');
+        sw.title = c;
+        sw.addEventListener('click', () => { closeCtxMenu(); it.onPick(c); });
+        row.appendChild(sw);
+      });
+      menu.appendChild(row);
+      return;
+    }
     const b = document.createElement('button');
     b.className = 'cm-ctx-item' + (it.danger ? ' danger' : '');
     b.textContent = it.label;
@@ -3293,11 +3403,25 @@ function openMenu(items, x, y) {
   setTimeout(() => document.addEventListener('pointerdown', onCtxOutside, true), 0);
 }
 
+// ---- Copy / paste (shared by the link & highlight menus) ----
+function ctxCopy(text) {
+  try { navigator.clipboard.writeText(text).then(() => showToast('Copied', 'success', 1000)).catch(() => {}); } catch {}
+}
+function ctxPaste() {
+  try {
+    navigator.clipboard.readText().then(t => {
+      const sel = editor.state.selection.main;
+      editor.dispatch({ changes: { from: sel.from, to: sel.to, insert: t }, selection: { anchor: sel.from + t.length }, userEvent: 'input.paste' });
+      editor.focus();
+    }).catch(() => showToast('Clipboard read denied', 'error', 2000));
+  } catch {}
+}
+
 // Build the menu for a URL / titled-markdown link.
 function openLinkMenu(link, x, y) {
   const items = [
     { label: 'Open link', run: () => openLink(link.url) },
-    { label: 'Copy link', run: () => { try { navigator.clipboard.writeText(link.url); showToast('Link copied', 'success', 1200); } catch {} } },
+    { label: 'Copy link', run: () => ctxCopy(link.url) },
     { sep: true },
     { label: link.kind === 'md' ? 'Edit title…' : 'Add title…', run: () => retitleLink(link) },
   ];
@@ -3305,7 +3429,33 @@ function openLinkMenu(link, x, y) {
   if (link.kind === 'md') {
     items.push({ label: 'Remove link', danger: true, run: () => removeLink(link) });
   }
+  items.push({ sep: true });
+  items.push({ label: 'Paste', run: () => ctxPaste() });
   openMenu(items, x, y);
+}
+
+// Build the menu for a highlight: recolor swatches, remove, copy, paste.
+function openHighlightMenu(hl, x, y) {
+  const innerText = editor.state.doc.sliceString(hl.textFrom, hl.textTo);
+  openMenu([
+    { swatches: HL_COLORS, current: hl.color, onPick: (c) => changeHighlightColor(hl, c) },
+    { label: 'Remove highlight', danger: true, run: () => removeHighlight(hl) },
+    { sep: true },
+    { label: 'Copy', run: () => ctxCopy(innerText) },
+    { label: 'Paste', run: () => ctxPaste() },
+  ], x, y);
+}
+
+function changeHighlightColor(hl, color) {
+  const innerText = editor.state.doc.sliceString(hl.textFrom, hl.textTo);
+  editor.dispatch({ changes: { from: hl.from, to: hl.to, insert: '==' + color + '|' + innerText + '==' } });
+  editor.focus();
+}
+
+function removeHighlight(hl) {
+  const innerText = editor.state.doc.sliceString(hl.textFrom, hl.textTo);
+  editor.dispatch({ changes: { from: hl.from, to: hl.to, insert: innerText } });
+  editor.focus();
 }
 
 function retitleLink(link) {
@@ -3407,6 +3557,13 @@ function buildAutocompleteItems(prefix) {
       items.push({ label: p.insert, insert: p.insert, desc: p.desc, kind: p.kind });
     }
   }
+  // @color highlight + palette (the palette only once you're typing "color").
+  if (prefix && 'color'.startsWith(prefix)) {
+    items.push({ label: '@color', insert: '@color', desc: 'Highlight (default)', kind: 'color' });
+    for (const c of HL_COLORS) items.push({ label: '@color:' + c, insert: '@color:' + c, desc: 'Highlight ' + c, kind: 'color' });
+  } else if (!prefix) {
+    items.push({ label: '@color', insert: '@color', desc: 'Highlight text', kind: 'color' });
+  }
   // Quick document links for subscribed rooms.
   try {
     for (const room of rooms) {
@@ -3490,8 +3647,9 @@ function acAccept(i) {
   });
   closeAutocomplete();
   editor.focus();
-  // Inline macros resolve right away (@date → the date; @copy → copies block).
-  if (it.kind === 'inline' || it.kind === 'action') {
+  // Inline macros resolve right away (@date → the date; @copy → copies block;
+  // @color → drops in the highlight sentinel with the cursor inside).
+  if (it.kind === 'inline' || it.kind === 'action' || it.kind === 'color') {
     try { tryInjectAtCursor(); } catch {}
   }
 }
@@ -3747,6 +3905,30 @@ function main(ctx) {
   if (ctx.selection) { ctx.selection = ctx.selection.toUpperCase(); }
   else { ctx.fullText = ctx.fullText.toUpperCase(); }
 }`);
+
+// ---- Highlight colors (wrap selection in the ==color|text== sentinel) ----
+registerScript(`/**
+  {
+    "name": "Add Color",
+    "description": "Highlight the selected text in a color you choose",
+    "author": "Cade",
+    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M9 11l-6 6v3h3l6-6'/><path d='M14 6l4 4'/><path d='M3 21h18'/></svg>",
+    "tags": "color,highlight,mark,marker"
+  }
+**/
+function main(ctx) {
+  if (!ctx.selection) { showToast('Select text to highlight', 'error', 2000); return; }
+  var palette = ['yellow','green','blue','red','pink','purple','orange','gray'];
+  var color = (prompt('Highlight color (' + palette.join(', ') + '):', 'yellow') || '').trim().toLowerCase();
+  if (!color) return;
+  if (palette.indexOf(color) === -1) { showToast('Unknown color: ' + color, 'error', 2500); return; }
+  ctx.selection = '==' + color + '|' + ctx.selection + '==';
+}`);
+
+['Yellow','Green','Blue','Red','Pink','Purple','Orange','Gray'].forEach(function(C) {
+  var c = C.toLowerCase();
+  registerScript('/**\n  {\n    "name": "Add Color (' + C + ')",\n    "description": "Highlight the selection ' + c + '",\n    "author": "Cade",\n    "icon": "<svg viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'currentColor\' stroke-width=\'2\' stroke-linecap=\'round\' stroke-linejoin=\'round\'><path d=\'M9 11l-6 6v3h3l6-6\'/><path d=\'M14 6l4 4\'/><path d=\'M3 21h18\'/></svg>",\n    "tags": "color,highlight,mark,' + c + '"\n  }\n**/\nfunction main(ctx) {\n  if (!ctx.selection) { showToast(\'Select text to highlight\', \'error\', 2000); return; }\n  ctx.selection = \'==' + c + '|\' + ctx.selection + \'==\';\n}');
+});
 
 registerScript(`/**
   {
@@ -8455,8 +8637,8 @@ function resolveInjection(token) {
   return null;
 }
 
-// Injection token regex — ordered: named first, then t-offset, then bare @t, then math
-const INJECT_RE = /@(copy|time|date|today|day|month|year|now|dt|t[+\-]\d+|t(?!\w)|[\d.()+\-*\/ ]+)$/;
+// Injection token regex — ordered: color, named, then t-offset, bare @t, math
+const INJECT_RE = /@(color(?::[a-zA-Z]+)?|copy|time|date|today|day|month|year|now|dt|t[+\-]\d+|t(?!\w)|[\d.()+\-*\/ ]+)$/;
 
 // Track paste — do NOT inject on paste
 let _editorPasting = false;
@@ -8478,6 +8660,21 @@ function tryInjectAtCursor() {
 
   const token = '@' + m[1];
   const tokenStart = cursor - token.length;
+
+  // @color / @color:name — inject an empty highlight sentinel and drop the
+  // cursor inside it, ready to type the text. Unknown color → default (no name).
+  const colorM = m[1].match(/^color(?::([a-zA-Z]+))?$/);
+  if (colorM) {
+    const name = (colorM[1] || '').toLowerCase();
+    const open = HL_COLORS.includes(name) ? '==' + name + '|' : '==';
+    const insert = open + '==';
+    editor.dispatch({
+      changes: { from: tokenStart, to: cursor, insert },
+      selection: { anchor: tokenStart + open.length },
+      userEvent: 'input.injection',
+    });
+    return 'color';
+  }
 
   // @copy — copy content below until double-newline or EOF, then remove token
   if (token === '@copy') {
@@ -8516,7 +8713,10 @@ function tryInjectAtCursor() {
 // so the cursor is still right after @token (the trigger char hasn't landed yet)
 editor.dom.addEventListener('keydown', (e) => {
   if (e.key === ' ' || e.key === 'Tab' || e.key === 'Enter') {
-    tryInjectAtCursor();
+    const r = tryInjectAtCursor();
+    // For @color the cursor lands inside the new sentinel — swallow the trigger
+    // key so the space/tab doesn't get typed in there.
+    if (r === 'color' && (e.key === ' ' || e.key === 'Tab')) { e.preventDefault(); e.stopImmediatePropagation(); }
   }
 }, true);
 
