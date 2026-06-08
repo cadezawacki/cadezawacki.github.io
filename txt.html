@@ -1584,6 +1584,112 @@ body {
   text-align: left;
 }
 .spell-action:hover, .spell-action:active { background: var(--surface-hover); color: var(--text); }
+
+/* ============================================
+   HYPERLINKS & DOCUMENT LINKS
+   ============================================ */
+.cm-link {
+  text-decoration: underline;
+  text-decoration-color: var(--accent);
+  text-underline-offset: 2px;
+  color: var(--accent);
+  cursor: pointer;
+  -webkit-touch-callout: none;
+}
+.cm-link-titled { font-weight: 500; }
+.cm-navlink {
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 2px;
+  color: var(--accent);
+  cursor: pointer;
+  -webkit-touch-callout: none;
+}
+
+/* Shared popover menu (link actions) */
+.cm-ctx-menu {
+  position: fixed;
+  z-index: 400;
+  min-width: 160px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  padding: 4px;
+  animation: pickerIn 120ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.cm-ctx-item {
+  display: block;
+  width: 100%;
+  padding: 7px 10px;
+  font-size: var(--text-sm);
+  font-family: var(--font-body);
+  color: var(--text);
+  border: none;
+  background: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  text-align: left;
+}
+.cm-ctx-item:hover, .cm-ctx-item:active { background: var(--accent-bg); color: var(--accent); }
+.cm-ctx-item.danger:hover, .cm-ctx-item.danger:active { background: rgba(229,72,77,0.12); color: #e5484d; }
+.cm-ctx-sep { height: 1px; margin: 4px 6px; background: var(--border); }
+
+/* ============================================
+   PLUGIN AUTOCOMPLETE
+   ============================================ */
+.cm-autocomplete {
+  position: fixed;
+  z-index: 400;
+  min-width: 220px;
+  max-width: 320px;
+  max-height: 260px;
+  overflow-y: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  padding: 4px;
+  animation: pickerIn 100ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.cm-ac-item {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  padding: 6px 10px;
+  border: none;
+  background: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  text-align: left;
+}
+.cm-ac-item.active, .cm-ac-item:hover { background: var(--accent-bg); }
+.cm-ac-label { font-family: var(--font-mono); font-size: var(--text-sm); color: var(--accent); white-space: nowrap; }
+.cm-ac-desc { font-size: var(--text-xs); color: var(--text-faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ============================================
+   EXPLORE ROOMS
+   ============================================ */
+.explore-room-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--border);
+}
+.explore-room-row:last-child { border-bottom: none; }
+.explore-room-name {
+  flex: 1 1 auto;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.explore-ws-select { flex: 0 0 auto; width: auto; max-width: 130px; }
+.explore-room-row .btn { flex: 0 0 auto; }
 </style>
 </head>
 <body>
@@ -1658,7 +1764,7 @@ body {
         <span></span>
       </button>
       <button class="menu-item" onclick="toggleInjections()">
-        <span id="injections-label">Injections: On</span>
+        <span id="injections-label">Plugins: On</span>
         <span></span>
       </button>
       <button class="menu-item" onclick="toggleSpellcheck()">
@@ -1691,6 +1797,10 @@ body {
       </button>
       <button class="menu-item" onclick="openRoomManager()">
         <span>Room Manager</span>
+        <span></span>
+      </button>
+      <button class="menu-item" onclick="openExploreRooms()">
+        <span>Explore Rooms</span>
         <span></span>
       </button>
     </div>
@@ -1936,6 +2046,24 @@ body {
       </div>
       <div class="modal-actions">
         <button class="btn btn-primary" onclick="closeRoomManager()">Done</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ========== EXPLORE ROOMS MODAL ========== -->
+<div class="modal-overlay" id="explore-rooms-overlay">
+  <div class="modal-dialog modal-dialog-scroll" style="max-width: 460px;">
+    <div class="modal-header">
+      <div class="modal-title">Explore Rooms</div>
+      <div class="modal-desc" style="margin-bottom:0;">Rooms in the connected database. Pick a workspace and add to subscribe — the list stays open so you can add several.</div>
+    </div>
+    <div class="modal-body">
+      <div id="explore-rooms-list"></div>
+    </div>
+    <div class="modal-footer">
+      <div class="modal-actions">
+        <button class="btn btn-primary" onclick="closeExploreRooms()">Done</button>
       </div>
     </div>
   </div>
@@ -2220,8 +2348,14 @@ function buildListDecorations(view) {
       const line = view.state.doc.line(i);
       const m = line.text.match(LIST_RE);
       if (m) {
-        const indent = Math.min(Math.max(m[1].length, 2), 6);
-        ranges.push(Decoration.line({ class: `cm-list-indent-${indent}` }).range(line.from));
+        // Hanging indent: pad the whole line by the prefix width, then pull the
+        // first line back by the same amount with a negative text-indent. The
+        // bullet/number sits at the margin while wrapped continuation lines align
+        // with the first word after the marker. (Monospace → ch units line up.)
+        const n = Math.min(m[1].length, 40);
+        ranges.push(Decoration.line({
+          attributes: { style: `padding-left:${n}ch;text-indent:-${n}ch` },
+        }).range(line.from));
       }
     }
   }
@@ -2238,22 +2372,57 @@ const listIndentPlugin = ViewPlugin.fromClass(class {
 }, { decorations: v => v.decorations });
 
 // ============================================
-// TODO SYSTEM (@type: todo)
+// TODO SYSTEM (@todo plugin)
 // ============================================
 // Detects [ ] and [x]/[X] at line start (with optional indent/bullet prefix)
 // Renders visual checkboxes, strikethrough on done items, click-to-toggle
 const TODO_LINE_RE = /^(\s*(?:[-•*]\s+)?)\[([ xX])\]\s/;
 
-function getPageTypes(state) {
-  if (state.doc.lines < 1) return [];
-  const fl = state.doc.line(1).text.trim().toLowerCase();
-  const m = fl.match(/^@type:\s*(.+)$/);
-  if (!m) return [];
-  return m[1].split(',').map(t => t.trim()).filter(Boolean);
+// Plugins are declared with directive lines like "@todo" or "@journal".
+// Several may share a line separated by commas/semicolons, optionally with
+// space-separated args: "@todo, @journal".  Block/page plugins below activate
+// document behaviors; inline macros (@date, @time, …) and navigation links
+// (@ws:room) are handled elsewhere and are NOT activators.
+const BLOCK_PLUGINS = new Set(['todo', 'journal']);
+
+// If `lineText` is a clean directive line, return the lowercase plugin base
+// names it declares (args stripped). Otherwise return [].
+function parseDirectiveNames(lineText) {
+  const t = lineText.trim();
+  if (!t || t[0] !== '@') return [];
+  const parts = t.split(/[,;]/).map(s => s.trim()).filter(Boolean);
+  const names = [];
+  for (const p of parts) {
+    // name only — reject "@ws:room" links (the (?![\w:]) guard) so they never
+    // get mistaken for a directive line.
+    const mm = p.match(/^@([a-zA-Z]+)(?![\w:])/);
+    if (!mm) return [];
+    names.push(mm[1].toLowerCase());
+  }
+  return names;
 }
 
+// Scan the whole doc for the set of active block/page plugins.
+function getActivePlugins(state) {
+  const set = new Set();
+  const n = state.doc.lines;
+  for (let i = 1; i <= n; i++) {
+    const names = parseDirectiveNames(state.doc.line(i).text);
+    for (const nm of names) {
+      if (nm === 'todo') set.add('todo');
+      else if (nm === 'journal' || nm === 'diary') set.add('journal');
+    }
+  }
+  return set;
+}
+
+// Cached active-plugin set — refreshed on docChanged by the todo plugin so the
+// per-frame decoration builders don't re-scan the whole document on every
+// scroll. On-demand callers (key handlers) use getActivePlugins() directly.
+let activePlugins = new Set();
+
 function isTodoPage(state) {
-  return getPageTypes(state).includes('todo');
+  return getActivePlugins(state).has('todo');
 }
 
 // @completed widget — shows done/total count from preceding block
@@ -2294,7 +2463,7 @@ function findPrecedingBlock(doc, lineNum) {
 const COMPLETED_RE = /^@complete\s*$/i;
 
 function buildTodoDecorations(view) {
-  if (!isTodoPage(view.state)) return Decoration.none;
+  if (!activePlugins.has('todo')) return Decoration.none;
   const doc = view.state.doc;
   const ranges = [];
   for (const {from, to} of view.visibleRanges) {
@@ -2317,7 +2486,7 @@ function buildTodoDecorations(view) {
         }
         continue;
       }
-      // Check for @complete tag
+      // Explicit @complete tag (kept for back-compat — counts preceding block).
       if (COMPLETED_RE.test(line.text.trim())) {
         const block = findPrecedingBlock(doc, i);
         let {done, total} = block
@@ -2329,6 +2498,25 @@ function buildTodoDecorations(view) {
           widget: new CompletedWidget(done, total),
           side: 1,
         }).range(line.to));
+        continue;
+      }
+      // Auto completion %: a non-empty, non-checkbox "title" line directly
+      // followed by a contiguous [ ] block gets a (done/total) count appended.
+      // A blank line ends the block (so a new title/block can start below).
+      if (line.text.trim() !== '' && i < doc.lines && TODO_LINE_RE.test(doc.line(i + 1).text)) {
+        let j = i + 1, done = 0, total = 0;
+        while (j <= doc.lines) {
+          const mm = doc.line(j).text.match(TODO_LINE_RE);
+          if (!mm) break;
+          total++; if (mm[2] !== ' ') done++;
+          j++;
+        }
+        if (total > 0) {
+          ranges.push(Decoration.widget({
+            widget: new CompletedWidget(done, total),
+            side: 1,
+          }).range(line.to));
+        }
       }
     }
   }
@@ -2337,8 +2525,9 @@ function buildTodoDecorations(view) {
 }
 
 const todoPlugin = ViewPlugin.fromClass(class {
-  constructor(view) { this.decorations = buildTodoDecorations(view); }
+  constructor(view) { activePlugins = getActivePlugins(view.state); this.decorations = buildTodoDecorations(view); }
   update(update) {
+    if (update.docChanged) activePlugins = getActivePlugins(update.state);
     if (update.docChanged || update.viewportChanged) {
       this.decorations = buildTodoDecorations(update.view);
     }
@@ -2449,6 +2638,182 @@ function handleListEnter(view) {
 const listEnterHandler = keymap.of([{ key: 'Enter', run: handleListEnter }]);
 
 // ============================================
+// NUMBERED-LIST AUTO-RENUMBER (on delete)
+// ============================================
+// When a numbered list item is removed, the items after it renumber so the
+// sequence stays contiguous. We only act on deletions (not while typing) and
+// guard against re-entrancy so the renumber dispatch doesn't loop.
+const NUM_LINE_RE = /^(\s*)(\d+)([.)])(\s)/;
+let _renumbering = false;
+
+function renumberListener(update) {
+  if (_renumbering || !update.docChanged) return;
+  if (syncState && syncState.suppressUpdate) return; // don't fight remote sync
+  let deletion = false, pos = null;
+  update.changes.iterChanges((fromA, toA, fromB, toB, inserted) => {
+    if (toA > fromA && inserted.length === 0) { deletion = true; pos = fromB; }
+  });
+  if (!deletion) return;
+  const view = update.view;
+  setTimeout(() => { try { renumberAround(view, pos); } catch {} }, 0);
+}
+
+function renumberAround(view, pos) {
+  const doc = view.state.doc;
+  if (pos == null) return;
+  pos = Math.min(pos, doc.length);
+  const isNum = (i) => i >= 1 && i <= doc.lines && NUM_LINE_RE.test(doc.line(i).text);
+  let ln = doc.lineAt(pos).number;
+  if (!isNum(ln)) {
+    if (isNum(ln - 1)) ln = ln - 1;
+    else if (isNum(ln + 1)) ln = ln + 1;
+    else return;
+  }
+  const indentOf = (i) => doc.line(i).text.match(NUM_LINE_RE)[1].length;
+  const baseIndent = indentOf(ln);
+  // Expand over the contiguous run of numbered lines sharing this indent level.
+  let start = ln, end = ln;
+  while (start - 1 >= 1 && isNum(start - 1) && indentOf(start - 1) === baseIndent) start--;
+  while (end + 1 <= doc.lines && isNum(end + 1) && indentOf(end + 1) === baseIndent) end++;
+  // Renumber sequentially starting from the first item's current number.
+  let num = parseInt(doc.line(start).text.match(NUM_LINE_RE)[2], 10);
+  const changes = [];
+  for (let i = start; i <= end; i++) {
+    const line = doc.line(i);
+    const mm = line.text.match(NUM_LINE_RE);
+    if (!mm || indentOf(i) !== baseIndent) continue;
+    const want = String(num);
+    if (mm[2] !== want) {
+      const numStart = line.from + mm[1].length;
+      changes.push({ from: numStart, to: numStart + mm[2].length, insert: want });
+    }
+    num++;
+  }
+  if (changes.length) {
+    _renumbering = true;
+    try { view.dispatch({ changes }); } finally { _renumbering = false; }
+  }
+}
+
+// ============================================
+// HYPERLINKS & DOCUMENT LINKS
+// ============================================
+// Auto-detect http/https/www URLs and markdown [title](url) links, plus
+// internal @ws:room document links. URLs/nav links are mark decorations
+// (the raw text stays editable); titled markdown links render as an atomic
+// widget showing just the title. Spell check skips all link spans.
+const RE_MD  = /\[([^\]\n]+)\]\((https?:\/\/[^\s)]+|www\.[^\s)]+)\)/g;
+const RE_URL = /(?:https?:\/\/|www\.)[^\s<>()\[\]]+/g;
+// Leading boundary captured in group 1 (no lookbehind — keeps older iOS Safari
+// from choking on the regex literal). @ws:room with ws optional ("@:room").
+const RE_NAV = /(^|[^\w@])@([\w.-]*):([\w.-]+)/g;
+
+function normalizeUrl(u) { return /^https?:\/\//i.test(u) ? u : 'https://' + u; }
+function trimTrailingPunct(s) {
+  const m = s.match(/[)\].,!?;:'"]+$/);
+  return m ? s.slice(0, s.length - m[0].length) : s;
+}
+
+// Find inline link spans on a single line. Returns line-relative, sorted,
+// non-overlapping spans. Shared by the link decorator and the spell checker.
+function findLinksInLine(text) {
+  const spans = [];
+  const taken = [];
+  const overlaps = (s, e) => taken.some(t => s < t[1] && e > t[0]);
+  let m;
+  RE_MD.lastIndex = 0;
+  while ((m = RE_MD.exec(text)) !== null) {
+    const start = m.index, end = start + m[0].length;
+    spans.push({ start, end, kind: 'md', title: m[1], url: normalizeUrl(m[2]) });
+    taken.push([start, end]);
+  }
+  RE_URL.lastIndex = 0;
+  while ((m = RE_URL.exec(text)) !== null) {
+    const raw = trimTrailingPunct(m[0]);
+    if (!raw) continue;
+    const start = m.index, end = start + raw.length;
+    if (overlaps(start, end)) continue;
+    spans.push({ start, end, kind: 'url', url: normalizeUrl(raw) });
+    taken.push([start, end]);
+  }
+  RE_NAV.lastIndex = 0;
+  while ((m = RE_NAV.exec(text)) !== null) {
+    const start = m.index + m[1].length; // skip the captured boundary char
+    const end = m.index + m[0].length;
+    if (overlaps(start, end)) continue;
+    spans.push({ start, end, kind: 'nav', ws: m[2], room: m[3] });
+    taken.push([start, end]);
+  }
+  spans.sort((a, b) => a.start - b.start);
+  return spans;
+}
+
+class LinkWidget extends WidgetType {
+  constructor(title, url, from, to) { super(); this.title = title; this.url = url; this.from = from; this.to = to; }
+  eq(o) { return this.title === o.title && this.url === o.url && this.from === o.from; }
+  toDOM() {
+    const a = document.createElement('span');
+    a.className = 'cm-link cm-link-titled';
+    a.textContent = this.title;
+    a.dataset.url = this.url;
+    a.setAttribute('spellcheck', 'false');
+    const self = this;
+    a.addEventListener('mousedown', (e) => {
+      if (e.button === 0 && !e.ctrlKey && !e.metaKey) { e.preventDefault(); e.stopPropagation(); openLink(self.url); }
+    });
+    a.addEventListener('contextmenu', (e) => {
+      e.preventDefault(); e.stopPropagation();
+      openLinkMenu({ kind: 'md', from: self.from, to: self.to, url: self.url, title: self.title }, e.clientX, e.clientY);
+    });
+    attachLongPress(a, (x, y) => {
+      openLinkMenu({ kind: 'md', from: self.from, to: self.to, url: self.url, title: self.title }, x, y);
+    });
+    return a;
+  }
+  ignoreEvent() { return false; }
+}
+
+let linkRanges = []; // viewport spans for url/nav marks: {from,to,kind,url,ws,room}
+
+function buildLinkDecorations(view) {
+  linkRanges = [];
+  const doc = view.state.doc;
+  const ranges = [];
+  for (const { from, to } of view.visibleRanges) {
+    const startLine = doc.lineAt(from).number;
+    const endLine = doc.lineAt(to).number;
+    for (let i = startLine; i <= endLine; i++) {
+      const line = doc.line(i);
+      const spans = findLinksInLine(line.text);
+      for (const sp of spans) {
+        const f = line.from + sp.start, t = line.from + sp.end;
+        if (sp.kind === 'md') {
+          // Titled links render as an atomic widget that handles its own
+          // click/right-click/long-press, so they're intentionally NOT added to
+          // linkRanges (which drives the editor-level pointer handlers).
+          ranges.push(Decoration.replace({ widget: new LinkWidget(sp.title, sp.url, f, t) }).range(f, t));
+        } else if (sp.kind === 'url') {
+          ranges.push(Decoration.mark({ class: 'cm-link', attributes: { 'data-url': sp.url } }).range(f, t));
+          linkRanges.push({ from: f, to: t, kind: 'url', url: sp.url });
+        } else {
+          ranges.push(Decoration.mark({ class: 'cm-navlink' }).range(f, t));
+          linkRanges.push({ from: f, to: t, kind: 'nav', ws: sp.ws, room: sp.room });
+        }
+      }
+    }
+  }
+  ranges.sort((a, b) => a.from - b.from || a.startSide - b.startSide);
+  return Decoration.set(ranges, true);
+}
+
+const linkPlugin = ViewPlugin.fromClass(class {
+  constructor(view) { this.decorations = buildLinkDecorations(view); }
+  update(update) {
+    if (update.docChanged || update.viewportChanged) this.decorations = buildLinkDecorations(update.view);
+  }
+}, { decorations: v => v.decorations });
+
+// ============================================
 // SPELL CHECK (English, offline-capable)
 // ============================================
 // Strategy: lazily load typo-js + the en_US Hunspell dictionary from a CDN
@@ -2490,12 +2855,16 @@ function buildSpellDecorations(view) {
     for (let i = startLine; i <= endLine; i++) {
       const line = doc.line(i);
       const text = line.text;
+      // Don't spell-check inside links (URLs, [title](url), @ws:room).
+      const linkSpans = findLinksInLine(text);
       SPELL_WORD_RE.lastIndex = 0;
       let m;
       while ((m = SPELL_WORD_RE.exec(text)) !== null) {
         const word = m[0];
-        // Skip @-prefixed tokens (@type, @complete, injection tokens).
+        // Skip @-prefixed tokens (@todo, @complete, injection tokens).
         if (m.index > 0 && text[m.index - 1] === '@') continue;
+        // Skip words overlapping any link span.
+        if (linkSpans.some(s => m.index < s.end && m.index + word.length > s.start)) continue;
         if (shouldSkipWord(word)) continue;
         if (spellChecker.check(word)) continue;
         const start = line.from + m.index;
@@ -2527,6 +2896,7 @@ const editorState = EditorState.create({
     EditorView.updateListener.of(update => {
       if (update.docChanged || update.selectionSet) {
         updateFooter();
+        try { maybeAutocomplete(); } catch {}
       }
       if (update.docChanged) {
         saveContentDebounced();
@@ -2536,9 +2906,11 @@ const editorState = EditorState.create({
         }
       }
     }),
+    EditorView.updateListener.of(renumberListener),
     EditorView.lineWrapping,
     listIndentPlugin,
     todoPlugin,
+    linkPlugin,
     spellPlugin,
     listEnterHandler,
     keymap.of([
@@ -2771,21 +3143,371 @@ function openSpellPopup(target) {
   setTimeout(() => document.addEventListener('pointerdown', onSpellOutside, true), 0);
 }
 
-// Tap an underlined word to open suggestions.
+// Coarse pointer = touch device (phone/tablet). On touch we keep tap-to-open
+// for spell suggestions; on desktop those move to right-click (contextmenu).
+function isCoarsePointer() { return window.matchMedia('(pointer: coarse)').matches; }
+
+// Set briefly after a mobile long-press opens a link menu so the trailing
+// click/tap doesn't also follow the link.
+let _suppressNextClick = false;
+
+// Click: follow links; on touch devices also open spell suggestions.
 editor.dom.addEventListener('click', (e) => {
-  if (!spellEnabled || !spellChecker) return;
+  if (_suppressNextClick) { _suppressNextClick = false; e.preventDefault(); return; }
+  if (!editor.state.selection.main.empty) return; // ignore drag-selections
   const pos = editor.posAtCoords({ x: e.clientX, y: e.clientY });
   if (pos == null) { closeSpellPopup(); return; }
-  if (!editor.state.selection.main.empty) { closeSpellPopup(); return; } // ignore drag-selections
-  const hit = spellRanges.find(r => pos >= r.from && pos <= r.to);
-  if (hit) openSpellPopup(hit);
-  else closeSpellPopup();
+  // Links (raw URL / @ws:room marks). Ctrl/Cmd-click bypasses so you can edit.
+  const link = linkRanges.find(r => pos >= r.from && pos < r.to);
+  if (link && !e.ctrlKey && !e.metaKey) {
+    e.preventDefault();
+    if (link.kind === 'nav') navigateToDoc(link.ws, link.room);
+    else openLink(link.url);
+    return;
+  }
+  // Spell suggestions — touch only (desktop uses right-click).
+  if (isCoarsePointer() && spellEnabled && spellChecker) {
+    const hit = spellRanges.find(r => pos >= r.from && pos <= r.to);
+    if (hit) { openSpellPopup(hit); return; }
+  }
+  closeSpellPopup();
 });
+
+// Right-click: link menu, or (desktop) spell suggestions.
+editor.dom.addEventListener('contextmenu', (e) => {
+  const pos = editor.posAtCoords({ x: e.clientX, y: e.clientY });
+  if (pos == null) return;
+  const link = linkRanges.find(r => pos >= r.from && pos < r.to);
+  if (link && link.kind !== 'nav') { e.preventDefault(); openLinkMenu(link, e.clientX, e.clientY); return; }
+  if (!isCoarsePointer() && spellEnabled && spellChecker) {
+    const hit = spellRanges.find(r => pos >= r.from && pos <= r.to);
+    if (hit) { e.preventDefault(); openSpellPopup(hit); return; }
+  }
+});
+
+// Long-press on touch over a raw-URL link opens the link menu.
+{
+  let lpTimer = null, lpStart = null;
+  const cancelLP = () => { if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; } };
+  editor.dom.addEventListener('touchstart', (e) => {
+    if (e.touches.length !== 1) return;
+    const tch = e.touches[0];
+    const pos = editor.posAtCoords({ x: tch.clientX, y: tch.clientY });
+    if (pos == null) return;
+    const link = linkRanges.find(r => pos >= r.from && pos < r.to);
+    if (!link || link.kind === 'nav') return; // nav: tap to navigate
+    lpStart = { x: tch.clientX, y: tch.clientY };
+    lpTimer = setTimeout(() => {
+      lpTimer = null;
+      _suppressNextClick = true;
+      openLinkMenu(link, tch.clientX, tch.clientY);
+    }, 500);
+  }, { passive: true });
+  editor.dom.addEventListener('touchmove', (e) => {
+    if (lpTimer && lpStart) {
+      const t = e.touches[0];
+      if (Math.hypot(t.clientX - lpStart.x, t.clientY - lpStart.y) > 10) cancelLP();
+    }
+  }, { passive: true });
+  editor.dom.addEventListener('touchend', cancelLP, { passive: true });
+  editor.dom.addEventListener('touchcancel', cancelLP, { passive: true });
+}
 
 // The popup is position:fixed and anchored to the word — close it if the
 // editor scrolls so it can't drift away from its word.
 editor.scrollDOM.addEventListener('scroll', closeSpellPopup, { passive: true });
 window.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeSpellPopup(); });
+
+// ============================================
+// LINK ACTIONS, CONTEXT MENU & DOCUMENT NAVIGATION
+// ============================================
+function openLink(url) {
+  closeCtxMenu();
+  try { window.open(url, '_blank', 'noopener'); } catch {}
+}
+
+// Navigate to an internal @ws:room document link.
+function navigateToDoc(wsName, room) {
+  closeCtxMenu();
+  let targetWs = WS_ALL;
+  const nm = (wsName || '').trim().toLowerCase();
+  if (nm && nm !== 'all') {
+    const ws = workspaces.find(w => w.name.toLowerCase() === nm);
+    targetWs = ws ? ws.id : WS_ALL; // unknown name → All Rooms
+  }
+  activeWorkspace = targetWs;
+  store.set('cade-active-workspace', activeWorkspace);
+  try { renderWorkspacePill(); } catch {}
+  if (window.switchRoom) window.switchRoom(room);
+}
+
+// Generic long-press helper for touch (used by titled-link widgets).
+function attachLongPress(el, handler) {
+  let timer = null, sx = 0, sy = 0;
+  const cancel = () => { if (timer) { clearTimeout(timer); timer = null; } };
+  el.addEventListener('touchstart', (e) => {
+    if (e.touches.length !== 1) return;
+    const t = e.touches[0]; sx = t.clientX; sy = t.clientY;
+    timer = setTimeout(() => { timer = null; _suppressNextClick = true; handler(sx, sy); }, 500);
+  }, { passive: true });
+  el.addEventListener('touchmove', (e) => {
+    const t = e.touches[0];
+    if (timer && Math.hypot(t.clientX - sx, t.clientY - sy) > 10) cancel();
+  }, { passive: true });
+  el.addEventListener('touchend', cancel, { passive: true });
+  el.addEventListener('touchcancel', cancel, { passive: true });
+}
+
+// ---- Shared popover menu (links) ----
+let ctxMenuEl = null;
+function onCtxOutside(e) { if (ctxMenuEl && !ctxMenuEl.contains(e.target)) closeCtxMenu(); }
+function closeCtxMenu() {
+  if (ctxMenuEl) { ctxMenuEl.remove(); ctxMenuEl = null; }
+  document.removeEventListener('pointerdown', onCtxOutside, true);
+}
+function openMenu(items, x, y) {
+  closeCtxMenu();
+  const menu = document.createElement('div');
+  menu.className = 'cm-ctx-menu';
+  items.forEach(it => {
+    if (it.sep) { const s = document.createElement('div'); s.className = 'cm-ctx-sep'; menu.appendChild(s); return; }
+    const b = document.createElement('button');
+    b.className = 'cm-ctx-item' + (it.danger ? ' danger' : '');
+    b.textContent = it.label;
+    b.addEventListener('click', () => { closeCtxMenu(); it.run(); });
+    menu.appendChild(b);
+  });
+  document.body.appendChild(menu);
+  ctxMenuEl = menu;
+  const rect = menu.getBoundingClientRect();
+  let left = x, top = y;
+  if (left + rect.width > window.innerWidth - 8) left = window.innerWidth - rect.width - 8;
+  if (left < 8) left = 8;
+  if (top + rect.height > window.innerHeight - 8) top = y - rect.height;
+  if (top < 8) top = 8;
+  menu.style.left = left + 'px';
+  menu.style.top = top + 'px';
+  setTimeout(() => document.addEventListener('pointerdown', onCtxOutside, true), 0);
+}
+
+// Build the menu for a URL / titled-markdown link.
+function openLinkMenu(link, x, y) {
+  const items = [
+    { label: 'Open link', run: () => openLink(link.url) },
+    { label: 'Copy link', run: () => { try { navigator.clipboard.writeText(link.url); showToast('Link copied', 'success', 1200); } catch {} } },
+    { sep: true },
+    { label: link.kind === 'md' ? 'Edit title…' : 'Add title…', run: () => retitleLink(link) },
+  ];
+  // "Remove link" leaves the bare URL behind (only meaningful for titled links).
+  if (link.kind === 'md') {
+    items.push({ label: 'Remove link', danger: true, run: () => removeLink(link) });
+  }
+  openMenu(items, x, y);
+}
+
+function retitleLink(link) {
+  const initial = link.kind === 'md' ? link.title : '';
+  textPrompt('Link title', initial).then(title => {
+    if (title == null) return;
+    title = title.trim();
+    if (!title) return;
+    // Strip ] and ) so the markdown stays well-formed.
+    title = title.replace(/[\]()]/g, '');
+    const insert = '[' + title + '](' + link.url + ')';
+    editor.dispatch({ changes: { from: link.from, to: link.to, insert } });
+    editor.focus();
+  });
+}
+
+function removeLink(link) {
+  // Replace [title](url) with the bare URL.
+  editor.dispatch({ changes: { from: link.from, to: link.to, insert: link.url } });
+  editor.focus();
+}
+
+// ---- Small text prompt (modeled on secureKeywordPrompt, but plain text) ----
+function textPrompt(label, initial) {
+  return new Promise((resolve) => {
+    const overlay = document.createElement('div');
+    Object.assign(overlay.style, {
+      position: 'fixed', inset: '0', zIndex: '999999',
+      background: 'rgba(0,0,0,0.45)', display: 'flex',
+      alignItems: 'center', justifyContent: 'center',
+    });
+    const box = document.createElement('div');
+    Object.assign(box.style, {
+      background: 'var(--surface)', border: '1px solid var(--border)',
+      borderRadius: 'var(--radius-lg)', padding: 'var(--space-5)',
+      width: '300px', maxWidth: 'calc(100vw - 40px)', boxShadow: 'var(--shadow-lg)',
+    });
+    box.innerHTML = '<div style="font-weight:600;margin-bottom:8px;">' + escapeHtml(label) + '</div>';
+    const input = document.createElement('input');
+    input.className = 'form-input';
+    input.type = 'text';
+    input.value = initial || '';
+    input.style.width = '100%';
+    box.appendChild(input);
+    const row = document.createElement('div');
+    Object.assign(row.style, { display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '12px' });
+    const cancel = document.createElement('button');
+    cancel.className = 'btn'; cancel.textContent = 'Cancel';
+    const ok = document.createElement('button');
+    ok.className = 'btn btn-primary'; ok.textContent = 'Save';
+    row.appendChild(cancel); row.appendChild(ok);
+    box.appendChild(row);
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+    const done = (val) => { overlay.remove(); resolve(val); };
+    cancel.addEventListener('click', () => done(null));
+    ok.addEventListener('click', () => done(input.value));
+    overlay.addEventListener('mousedown', (e) => { if (e.target === overlay) done(null); });
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); done(input.value); }
+      if (e.key === 'Escape') { e.preventDefault(); done(null); }
+    });
+    setTimeout(() => { input.focus(); input.select(); }, 0);
+  });
+}
+
+// ============================================
+// PLUGIN AUTOCOMPLETE (@…)
+// ============================================
+// Typing "@" (at a token boundary) followed by letters shows a dropdown of
+// available plugins plus quick links to subscribed rooms. Accepting an inline
+// macro resolves it immediately; block/page plugins and links just insert.
+const PLUGIN_DEFS = [
+  { name: 'todo',    insert: '@todo',    kind: 'block',  desc: 'Checklist with completion %' },
+  { name: 'journal', insert: '@journal', kind: 'page',   desc: 'Daily journal entries' },
+  { name: 'date',    insert: '@date',    kind: 'inline', desc: "Today's date" },
+  { name: 'time',    insert: '@time',    kind: 'inline', desc: 'Current time' },
+  { name: 'now',     insert: '@now',     kind: 'inline', desc: 'Date and time' },
+  { name: 'today',   insert: '@today',   kind: 'inline', desc: "Today's date" },
+  { name: 'day',     insert: '@day',     kind: 'inline', desc: 'Day of week' },
+  { name: 'month',   insert: '@month',   kind: 'inline', desc: 'Current month' },
+  { name: 'year',    insert: '@year',    kind: 'inline', desc: 'Current year' },
+  { name: 'dt',      insert: '@dt',      kind: 'inline', desc: 'ISO date' },
+  { name: 'copy',    insert: '@copy',    kind: 'action', desc: 'Copy block below' },
+];
+
+let acEl = null;        // dropdown element
+let acItems = [];       // current suggestions
+let acIndex = 0;        // highlighted index
+let acFrom = 0, acTo = 0; // doc range of the token being completed
+let acSuppress = false;   // skip one re-open right after accepting
+
+function isAutocompleteOpen() { return !!acEl; }
+
+function buildAutocompleteItems(prefix) {
+  const items = [];
+  for (const p of PLUGIN_DEFS) {
+    if (!prefix || p.name.startsWith(prefix)) {
+      items.push({ label: p.insert, insert: p.insert, desc: p.desc, kind: p.kind });
+    }
+  }
+  // Quick document links for subscribed rooms.
+  try {
+    for (const room of rooms) {
+      const wsId = getRoomWorkspaceId(room);
+      const ws = getWorkspace(wsId);
+      const wsLabel = ws ? ws.name : '';
+      const token = '@' + wsLabel + ':' + room;
+      if (!prefix || room.toLowerCase().startsWith(prefix) || (wsLabel && wsLabel.toLowerCase().startsWith(prefix))) {
+        items.push({ label: token, insert: token, desc: 'Go to document', kind: 'nav' });
+      }
+    }
+  } catch {}
+  return items.slice(0, 8);
+}
+
+function maybeAutocomplete() {
+  if (acSuppress) { acSuppress = false; closeAutocomplete(); return; }
+  if (typeof injectionsEnabled !== 'undefined' && !injectionsEnabled) { closeAutocomplete(); return; }
+  const sel = editor.state.selection.main;
+  if (!sel.empty) { closeAutocomplete(); return; }
+  const line = editor.state.doc.lineAt(sel.head);
+  const before = line.text.slice(0, sel.head - line.from);
+  // "@word" where @ sits at start of line or after a separator.
+  const m = before.match(/(?:^|[\s,;(])@([a-zA-Z]*)$/);
+  if (!m) { closeAutocomplete(); return; }
+  const prefix = m[1].toLowerCase();
+  const items = buildAutocompleteItems(prefix);
+  if (!items.length) { closeAutocomplete(); return; }
+  acFrom = sel.head - prefix.length - 1; // position of '@'
+  acTo = sel.head;
+  showAutocomplete(items);
+}
+
+function showAutocomplete(items) {
+  acItems = items;
+  acIndex = 0;
+  if (!acEl) {
+    acEl = document.createElement('div');
+    acEl.className = 'cm-autocomplete';
+    document.body.appendChild(acEl);
+  }
+  renderAutocomplete();
+  const coords = editor.coordsAtPos(acFrom);
+  if (!coords) { closeAutocomplete(); return; }
+  const rect = acEl.getBoundingClientRect();
+  let left = coords.left;
+  let top = coords.bottom + 2;
+  if (left + rect.width > window.innerWidth - 8) left = window.innerWidth - rect.width - 8;
+  if (left < 8) left = 8;
+  if (top + rect.height > window.innerHeight - 8) top = coords.top - rect.height - 2;
+  acEl.style.left = left + 'px';
+  acEl.style.top = top + 'px';
+}
+
+function renderAutocomplete() {
+  if (!acEl) return;
+  acEl.innerHTML = '';
+  acItems.forEach((it, i) => {
+    const row = document.createElement('button');
+    row.className = 'cm-ac-item' + (i === acIndex ? ' active' : '');
+    row.innerHTML = '<span class="cm-ac-label">' + escapeHtml(it.label) + '</span>' +
+      (it.desc ? '<span class="cm-ac-desc">' + escapeHtml(it.desc) + '</span>' : '');
+    row.addEventListener('mousedown', (e) => { e.preventDefault(); acAccept(i); });
+    acEl.appendChild(row);
+  });
+}
+
+function acMove(delta) {
+  if (!acItems.length) return;
+  acIndex = (acIndex + delta + acItems.length) % acItems.length;
+  renderAutocomplete();
+}
+
+function acAccept(i) {
+  const it = acItems[i == null ? acIndex : i];
+  if (!it) { closeAutocomplete(); return; }
+  acSuppress = true; // don't let the resulting doc change re-open the dropdown
+  editor.dispatch({
+    changes: { from: acFrom, to: acTo, insert: it.insert },
+    selection: { anchor: acFrom + it.insert.length },
+  });
+  closeAutocomplete();
+  editor.focus();
+  // Inline macros resolve right away (@date → the date; @copy → copies block).
+  if (it.kind === 'inline' || it.kind === 'action') {
+    try { tryInjectAtCursor(); } catch {}
+  }
+}
+
+function closeAutocomplete() {
+  if (acEl) { acEl.remove(); acEl = null; }
+  acItems = [];
+}
+
+// Capture-phase key handling for the dropdown (beats CM6 + the list/inject
+// handlers, which bail out early while the dropdown is open).
+editor.dom.addEventListener('keydown', (e) => {
+  if (!acEl) return;
+  if (e.key === 'ArrowDown') { e.preventDefault(); e.stopImmediatePropagation(); acMove(1); }
+  else if (e.key === 'ArrowUp') { e.preventDefault(); e.stopImmediatePropagation(); acMove(-1); }
+  else if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); e.stopImmediatePropagation(); acAccept(); }
+  else if (e.key === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); closeAutocomplete(); }
+}, true);
+editor.scrollDOM.addEventListener('scroll', closeAutocomplete, { passive: true });
 
 // Begin loading the dictionary shortly after startup (deferred so first paint
 // and the initial editor interaction stay snappy). Only when enabled.
@@ -6569,6 +7291,94 @@ window.updateRoomCap = function(val) {
   renderRoomTabs();
 };
 
+// ============================================
+// EXPLORE ROOMS — browse & subscribe to existing rooms in the database
+// ============================================
+let exploreRoomList = null;
+
+function renderExploreMessage(msg) {
+  const list = document.getElementById('explore-rooms-list');
+  if (list) list.innerHTML = '<div style="color:var(--text-faint);font-size:var(--text-sm);padding:8px 2px;">' + escapeHtml(msg) + '</div>';
+}
+function renderExploreLoading() { renderExploreMessage('Loading rooms…'); }
+
+function exploreWsOptions() {
+  let o = '<option value="">Unlabeled</option>';
+  workspaces.slice().sort((a, b) => (a.order ?? 0) - (b.order ?? 0)).forEach(w => {
+    o += '<option value="' + escapeHtml(w.id) + '">' + escapeHtml(w.name) + '</option>';
+  });
+  return o;
+}
+
+function renderExploreRoomsList() {
+  const list = document.getElementById('explore-rooms-list');
+  if (!list) return;
+  if (!exploreRoomList || !exploreRoomList.length) { renderExploreMessage('No rooms found in this database.'); return; }
+  list.innerHTML = exploreRoomList.map((name, idx) => {
+    const added = rooms.includes(name);
+    const selId = 'explore-ws-' + idx;
+    const esc = escapeHtml(name);
+    const jsName = String(name).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+    return '<div class="explore-room-row">' +
+      '<span class="explore-room-name" title="' + esc + '">' + esc + '</span>' +
+      '<select id="' + selId + '" class="form-input explore-ws-select"' + (added ? ' disabled' : '') + '>' + exploreWsOptions() + '</select>' +
+      (added
+        ? '<button class="btn" disabled>Added</button>'
+        : '<button class="btn btn-primary" onclick="exploreAddRoom(\'' + jsName + '\',\'' + selId + '\')">Add</button>') +
+      '</div>';
+  }).join('');
+}
+
+window.exploreAddRoom = function(name, selId) {
+  if (rooms.includes(name)) return;
+  if (rooms.length >= roomCap) {
+    showToast('Room cap reached (' + roomCap + '). Raise it in Room Manager.', 'error', 2800);
+    return;
+  }
+  rooms.push(name);
+  const sel = document.getElementById(selId);
+  const wsId = sel ? sel.value : '';
+  if (wsId && wsId !== WS_UNLABELED && workspaces.find(w => w.id === wsId)) {
+    roomWorkspace[name] = wsId;
+  }
+  saveRooms();
+  saveWorkspaces();
+  renderRoomTabs();
+  renderExploreRoomsList(); // keep modal open; reflect the new "Added" state
+  showToast('Subscribed to ' + name, 'success', 1500);
+};
+
+window.openExploreRooms = async function() {
+  closeAllMenus();
+  const overlay = document.getElementById('explore-rooms-overlay');
+  overlay.classList.add('open');
+  renderExploreLoading();
+  const url = store.get('cade-firebase-url');
+  if (!url) { renderExploreMessage('Connect to Firebase first (Sync) to browse rooms.'); return; }
+  try {
+    const db = initFirebase(url);
+    const snap = await db.ref('rooms').once('value');
+    const val = snap.val() || {};
+    // Skip internal keys (e.g. workspace blobs stored under rooms/__cade_…).
+    exploreRoomList = Object.keys(val).filter(k => k && !k.startsWith('__')).sort();
+    renderExploreRoomsList();
+  } catch (e) {
+    renderExploreMessage('Could not load rooms: ' + (e && e.message ? e.message : 'error'));
+  }
+};
+
+window.closeExploreRooms = function() {
+  document.getElementById('explore-rooms-overlay').classList.remove('open');
+  editor.focus();
+};
+
+document.getElementById('explore-rooms-overlay').addEventListener('click', (e) => {
+  if (e.target === document.getElementById('explore-rooms-overlay')) closeExploreRooms();
+});
+document.getElementById('explore-rooms-overlay').addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closeExploreRooms();
+});
+
 // Room manager modal events
 document.getElementById('room-manager-overlay').addEventListener('click', (e) => {
   if (e.target === document.getElementById('room-manager-overlay')) closeRoomManager();
@@ -7570,7 +8380,7 @@ let injectionsEnabled = store.get('cade-injections') !== 'false';
 
 function updateInjectionsLabel() {
   const el = document.getElementById('injections-label');
-  if (el) el.textContent = 'Injections: ' + (injectionsEnabled ? 'On' : 'Off');
+  if (el) el.textContent = 'Plugins: ' + (injectionsEnabled ? 'On' : 'Off');
 }
 updateInjectionsLabel();
 
@@ -7579,7 +8389,8 @@ window.toggleInjections = function() {
   injectionsEnabled = !injectionsEnabled;
   store.set('cade-injections', injectionsEnabled);
   updateInjectionsLabel();
-  showToast('Text injections ' + (injectionsEnabled ? 'enabled' : 'disabled'), 'success', 2000);
+  if (!injectionsEnabled) { try { closeAutocomplete(); } catch {} }
+  showToast('Plugins ' + (injectionsEnabled ? 'enabled' : 'disabled'), 'success', 2000);
 };
 
 // Token resolution
@@ -8315,12 +9126,11 @@ const _MONTHS = ['January','February','March','April','May','June','July','Augus
 function _ordinal(n) { const v = n % 100; return n + (['th','st','nd','rd'][(v-20)%10] || ['th','st','nd','rd'][v] || 'th'); }
 function _fmtDate(d) { return _MONTHS[d.getMonth()] + ' ' + _ordinal(d.getDate()) + ', ' + d.getFullYear(); }
 
-// Regex that matches a diary date header line: "Month Dth, YYYY -"
+// Regex that matches a journal date header line: "Month Dth, YYYY -"
 const DIARY_HEADER_RE = /^(January|February|March|April|May|June|July|August|September|October|November|December) \d+(?:st|nd|rd|th), \d{4} -$/;
 
 function applyPageType() {
-  const types = getPageTypes(editor.state);
-  if (!types.includes('diary')) return;
+  if (!getActivePlugins(editor.state).has('journal')) return;
 
   const todayHeader = _fmtDate(new Date()) + ' -';
   const doc = editor.state.doc;
