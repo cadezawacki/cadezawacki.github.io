@@ -1875,6 +1875,56 @@ body {
 .cm-tok-prop { color: var(--tok-prop); }
 .cm-tok-bui  { color: var(--tok-bui); }
 
+/* "Copy (N lines)" button overlaid on fence delimiter lines */
+.cm-md-fence { position: relative; }
+.cm-fence-copy {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.5;
+  padding: 1px 8px;
+  color: var(--text-muted);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  opacity: 0.85;
+  z-index: 2;
+  white-space: nowrap;
+  transition: all var(--transition);
+}
+.cm-fence-copy:hover { color: var(--accent); border-color: var(--accent); opacity: 1; }
+.cm-fence-copy:active { transform: translateY(-50%) scale(0.96); }
+
+/* ============================================
+   COLOR RULES MODAL
+   ============================================ */
+.cr-add-row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.cr-add-row .form-input { flex: 1 1 140px; min-width: 120px; }
+.cr-cb {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.cr-swatch {
+  padding: 0 8px;
+  border-radius: 3px;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* ============================================
    SNAPSHOTS (local version history)
    ============================================ */
@@ -2007,6 +2057,10 @@ body {
       </button>
       <button class="menu-item" onclick="openSnapshots()">
         <span>Snapshots / History</span>
+        <span></span>
+      </button>
+      <button class="menu-item" onclick="openColorRules()">
+        <span>Color Rules</span>
         <span></span>
       </button>
       <!-- Sync items (mobile only — Sync menu is hidden) -->
@@ -2281,8 +2335,12 @@ body {
     </div>
 
     <div class="modal-footer">
-      <div class="room-cap-row" id="rm-footer-cap" style="margin-bottom:0;">
-        <label>Room cap:</label>
+      <div class="room-cap-row" id="rm-footer-cap" style="margin-bottom:0;flex-wrap:wrap;">
+        <label style="display:flex;align-items:center;gap:5px;cursor:pointer;" title="Subscribe to every room found in the database (rooms with @local / @nosync on their first lines are skipped)">
+          <input type="checkbox" id="autosync-rooms-cb" onchange="toggleAutoAddRooms(this.checked)">
+          Auto-add cloud rooms
+        </label>
+        <label style="margin-left:auto;">Room cap:</label>
         <select id="room-cap-select" onchange="updateRoomCap(this.value)">
           <option value="1">1</option>
           <option value="2">2</option>
@@ -2355,6 +2413,31 @@ body {
     <div class="modal-actions">
       <button class="btn" onclick="closeDownloadModal()">Cancel</button>
       <button class="btn btn-primary" onclick="confirmDownload()">Download</button>
+    </div>
+  </div>
+</div>
+
+<!-- ========== COLOR RULES MODAL ========== -->
+<div class="modal-overlay" id="color-rules-overlay">
+  <div class="modal-dialog modal-dialog-scroll" style="max-width: 540px;">
+    <div class="modal-header">
+      <div class="modal-title">Color Rules</div>
+      <div class="modal-desc">Automatically highlight matching text as you write. Matching is literal unless <code>.*</code> (regex) is checked. The word under your cursor stays uncolored until you move past it — colors appear right after a space or tap away.</div>
+      <div class="cr-add-row">
+        <input class="form-input" id="cr-pattern" type="text" placeholder="Text or pattern…" spellcheck="false" autocomplete="off">
+        <label class="cr-cb" title="Regular expression"><input type="checkbox" id="cr-regex"> .*</label>
+        <select class="rm-target-select" id="cr-color"></select>
+        <select class="rm-target-select" id="cr-scope"></select>
+        <button class="btn btn-primary" onclick="addColorRuleFromUI()">Add</button>
+      </div>
+    </div>
+    <div class="modal-body">
+      <div class="room-manager-list" id="color-rules-list" style="margin-bottom:0;"></div>
+    </div>
+    <div class="modal-footer">
+      <div class="modal-actions">
+        <button class="btn btn-primary" onclick="closeColorRules()">Done</button>
+      </div>
     </div>
   </div>
 </div>
@@ -2691,6 +2774,22 @@ function parseDirectiveNames(lineText) {
     names.push(mm[1].toLowerCase());
   }
   return names;
+}
+
+// Does the document opt out of cloud sync / auto-add? True when a directive
+// line containing @local or @nosync appears within the first 10 lines. Scans
+// without splitting the whole doc so it's safe to call per broadcast.
+function docHasNoSyncDirective(text) {
+  let pos = 0;
+  for (let i = 0; i < 10 && pos <= text.length; i++) {
+    let nl = text.indexOf('\n', pos);
+    if (nl === -1) nl = text.length;
+    const names = parseDirectiveNames(text.slice(pos, nl));
+    if (names.includes('local') || names.includes('nosync')) return true;
+    if (nl >= text.length) break;
+    pos = nl + 1;
+  }
+  return false;
 }
 
 // Scan the whole doc for the set of active block/page plugins.
@@ -3442,14 +3541,76 @@ function fenceContaining(pos) {
   return null;
 }
 
+// ---- Fence pair auto-removal ----
+// Deleting (or breaking) one delimiter of a closed ``` pair removes its
+// partner line too, so a code block unwraps cleanly instead of swallowing the
+// rest of the document into an accidental fence. Runs against the PRE-rescan
+// block list, async via setTimeout like the list renumberer.
+let _fencePairFixing = false;
+
+function checkOrphanedFences(update) {
+  if (_fencePairFixing) return;
+  if (typeof syncState !== 'undefined' && syncState.suppressUpdate) return; // remote applies aren't user edits
+  const closed = fenceBlocks.filter(b => b.closeFrom !== -1);
+  if (!closed.length) return;
+  const doc = update.state.doc;
+  const oldDoc = update.startState.doc;
+  const removals = [];
+  // A delimiter "survives" if the line at its mapped position is still a fence.
+  const surviving = (oldPos) => {
+    const line = doc.lineAt(Math.min(update.changes.mapPos(oldPos, 1), doc.length));
+    return line.text.startsWith('```') ? line : null;
+  };
+  for (const b of closed) {
+    const oLine = surviving(b.openFrom);
+    const cLine = surviving(b.closeFrom);
+    if (!!oLine === !!cLine) continue; // both alive (untouched) or both gone (block deleted whole)
+    const aliveLine = oLine || cLine;
+    const aliveOld = oldDoc.lineAt(oLine ? b.openFrom : b.closeFrom);
+    const deadOld = oldDoc.lineAt(oLine ? b.closeFrom : b.openFrom);
+    // The edit must have hit the dead delimiter's line and NOT the surviving
+    // one. A bulk rewrite (script run, paste-over, replace-all) touches both —
+    // the "surviving" fence there is really NEW text that just happens to map
+    // onto the old position, and must not be deleted.
+    if (update.changes.touchesRange(aliveOld.from, aliveOld.to)) continue;
+    if (!update.changes.touchesRange(deadOld.from, Math.min(deadOld.to + 1, oldDoc.length))) continue;
+    removals.push([aliveLine.from, Math.min(aliveLine.to + 1, doc.length)]);
+    // If the user broke the ticks (rather than deleting the line), the line
+    // remains as a remnant like "``python" — a strict suffix of the old
+    // delimiter text. Remove the remnant too. A fully deleted line maps onto
+    // unrelated content, which fails the suffix test and is left alone.
+    const remLine = doc.lineAt(Math.min(update.changes.mapPos(deadOld.from, 1), doc.length));
+    if (remLine.text.length > 0 && remLine.text.length < deadOld.text.length && deadOld.text.endsWith(remLine.text)) {
+      removals.push([remLine.from, Math.min(remLine.to + 1, doc.length)]);
+    }
+  }
+  if (!removals.length) return;
+  removals.sort((a, b) => a[0] - b[0]);
+  const view = update.view;
+  _fencePairFixing = true;
+  setTimeout(() => {
+    try {
+      // Abort if anything else changed the doc in the meantime — the captured
+      // positions would be stale.
+      if (view.state.doc === doc) {
+        view.dispatch({ changes: removals.map(([from, to]) => ({ from, to })), userEvent: 'delete.fencepair' });
+      }
+    } catch {} finally { _fencePairFixing = false; }
+  }, 0);
+}
+
 // Registered FIRST in the extensions list so every other plugin's update sees
 // current fence state within the same transaction.
 const fenceTrackerPlugin = ViewPlugin.fromClass(class {
   constructor(view) { rescanFences(view.state.doc); }
   update(update) {
     if (!update.docChanged) return;
-    if (fencesMayHaveChanged(update)) rescanFences(update.state.doc);
-    else remapFences(update);
+    if (fencesMayHaveChanged(update)) {
+      checkOrphanedFences(update); // needs the pre-rescan pair list
+      rescanFences(update.state.doc);
+    } else {
+      remapFences(update);
+    }
   }
 });
 
@@ -3593,6 +3754,45 @@ function tokensForBlock(block, doc) {
   return { contentFrom, tokens };
 }
 
+// ---- "Copy (N lines)" overlay button on both fence delimiter lines ----
+// The widget resolves its block at CLICK time (posAtDOM → fenceContaining) so
+// it can never copy stale ranges, no matter how the doc shifted since render.
+class FenceCopyWidget extends WidgetType {
+  constructor(count) { super(); this.count = count; }
+  eq(o) { return o.count === this.count; }
+  toDOM() {
+    const b = document.createElement('button');
+    b.className = 'cm-fence-copy';
+    b.type = 'button';
+    b.textContent = `Copy (${this.count} line${this.count === 1 ? '' : 's'})`;
+    b.setAttribute('aria-label', 'Copy code block contents');
+    // Don't move the caret / open the keyboard when tapping the button.
+    b.addEventListener('mousedown', (e) => { e.preventDefault(); e.stopPropagation(); });
+    b.addEventListener('click', (e) => {
+      e.preventDefault(); e.stopPropagation();
+      try {
+        const pos = editor.posAtDOM(b);
+        const blk = fenceContaining(pos);
+        if (!blk) return;
+        const doc = editor.state.doc;
+        const openLine = doc.lineAt(blk.openFrom);
+        const contentFrom = Math.min(openLine.to + 1, blk.to);
+        const contentTo = blk.closeFrom === -1
+          ? blk.to
+          : Math.max(contentFrom, doc.lineAt(blk.closeFrom).from - 1);
+        const text = contentTo > contentFrom ? doc.sliceString(contentFrom, contentTo) : '';
+        const n = text ? text.split('\n').length : 0;
+        navigator.clipboard.writeText(text).then(
+          () => showToast(`Copied ${n} line${n === 1 ? '' : 's'}`, 'success', 1500),
+          () => showToast('Copy failed', 'error', 2000)
+        );
+      } catch {}
+    });
+    return b;
+  }
+  ignoreEvent() { return true; }
+}
+
 // ============================================
 // MARKDOWN STYLING (headings, blockquotes, inline code, rules)
 // ============================================
@@ -3622,6 +3822,11 @@ function buildMdDecorations(view) {
       if (blk) {
         if (line.from === blk.openFrom || line.from === blk.closeFrom) {
           ranges.push(Decoration.line({ class: 'cm-md-fence' }).range(line.from));
+          // Copy button on both delimiters of a closed block.
+          if (blk.closeFrom !== -1) {
+            const count = doc.lineAt(blk.closeFrom).number - doc.lineAt(blk.openFrom).number - 1;
+            ranges.push(Decoration.widget({ widget: new FenceCopyWidget(count), side: 1 }).range(line.to));
+          }
         } else {
           ranges.push(Decoration.line({ class: 'cm-codeblock' }).range(line.from));
         }
@@ -3672,6 +3877,110 @@ const mdStylePlugin = ViewPlugin.fromClass(class {
   }
 }, { decorations: v => v.decorations });
 
+// ============================================
+// COLOR RULES — auto-highlight matching text (async, zero typing cost)
+// ============================================
+// User-defined rules (literal or regex → highlight color, scoped to a
+// workspace or global) paint matches with the same cm-hl classes as manual
+// ==color|…== highlights, but as pure decorations: the document is never
+// mutated, so nothing loops, syncs dirty, or pollutes undo.
+//
+// Performance contract: a keystroke only REMAPS the existing decoration set
+// (O(visible matches)); the actual scan is debounced 350ms behind the last
+// edit/selection change and only walks visible lines. The match containing
+// the cursor is skipped while the editor has focus, so text colors exactly
+// when you "navigate away via a tap or a space" — never mid-word.
+let colorRules = []; // [{id, pattern, regex, color, ws}] — ws: '__all__' | workspace id | '__unlabeled__'
+try { colorRules = JSON.parse(store.get('cade-color-rules')) || []; } catch {}
+
+let ruleHlVersion = 0;            // bumped when a freshly built set is ready
+let _ruleHlDecos = Decoration.none;
+let _ruleScanTimer = null;
+let _colorRulesStamp = 0;         // bumped on any rules change (local or remote)
+let _ruleCompiled = null;
+let _ruleCompiledKey = null;
+
+function escapeRegexLiteral(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+
+function compiledColorRules() {
+  // Scope by the ACTIVE ROOM's workspace (not the viewing filter) — a rule
+  // bound to workspace W applies inside W's documents. try/catch guards the
+  // narrow window where the room system's `let`s haven't initialized yet.
+  let wsId = '__unlabeled__';
+  try { if (activeRoom) wsId = getRoomWorkspaceId(activeRoom); } catch {}
+  const key = wsId + ':' + _colorRulesStamp;
+  if (_ruleCompiledKey === key) return _ruleCompiled;
+  const out = [];
+  for (const rule of colorRules) {
+    if (rule.ws && rule.ws !== '__all__' && rule.ws !== wsId) continue;
+    if (!rule.pattern) continue;
+    try {
+      const src = rule.regex ? rule.pattern : escapeRegexLiteral(rule.pattern);
+      out.push({ re: new RegExp(src, 'g'), color: HL_COLORS.includes(rule.color) ? rule.color : HL_DEFAULT });
+    } catch { /* invalid regex — rule is inert until edited */ }
+  }
+  _ruleCompiled = out;
+  _ruleCompiledKey = key;
+  return out;
+}
+
+function buildRuleDecorations(view) {
+  const rules = compiledColorRules();
+  if (!rules.length) return Decoration.none;
+  const doc = view.state.doc;
+  const sel = view.state.selection.main;
+  // Skip the match being typed: cursor touching a match (editor focused).
+  const skipPos = (sel.empty && view.hasFocus) ? sel.head : -1;
+  const ranges = [];
+  for (const { from, to } of view.visibleRanges) {
+    const startLine = doc.lineAt(from).number;
+    const endLine = doc.lineAt(to).number;
+    for (let i = startLine; i <= endLine; i++) {
+      const line = doc.line(i);
+      const text = line.text;
+      if (!text) continue;
+      for (const r of rules) {
+        r.re.lastIndex = 0;
+        let m;
+        while ((m = r.re.exec(text)) !== null) {
+          if (m[0].length === 0) { r.re.lastIndex++; continue; }
+          const s = line.from + m.index, e = s + m[0].length;
+          if (skipPos >= s && skipPos <= e) continue;
+          ranges.push(Decoration.mark({ class: 'cm-hl cm-hl-' + r.color }).range(s, e));
+        }
+      }
+    }
+  }
+  ranges.sort((a, b) => a.from - b.from || a.startSide - b.startSide);
+  return Decoration.set(ranges, true);
+}
+
+function scheduleRuleScan() {
+  clearTimeout(_ruleScanTimer);
+  _ruleScanTimer = setTimeout(() => {
+    try {
+      if (!window.editor) return;
+      _ruleHlDecos = buildRuleDecorations(editor);
+      ruleHlVersion++;
+      editor.dispatch({}); // empty tx: plugin picks the new set up below
+    } catch {}
+  }, 350);
+}
+
+const ruleHighlightPlugin = ViewPlugin.fromClass(class {
+  constructor(view) { this.v = ruleHlVersion; this.decorations = _ruleHlDecos; if (colorRules.length) scheduleRuleScan(); }
+  update(update) {
+    // Cheap per-keystroke path: shift existing marks along with the edit.
+    if (update.docChanged) this.decorations = this.decorations.map(update.changes);
+    if (this.v !== ruleHlVersion) { this.v = ruleHlVersion; this.decorations = _ruleHlDecos; }
+    // Note: the version-pickup dispatch above is empty and matches none of
+    // these flags, so it cannot re-schedule (no rebuild feedback loop).
+    if (update.docChanged || update.viewportChanged || update.selectionSet || update.focusChanged) {
+      if (compiledColorRules().length || this.decorations.size) scheduleRuleScan();
+    }
+  }
+}, { decorations: v => v.decorations });
+
 const editorState = EditorState.create({
   doc: savedContent,
   extensions: [
@@ -3703,6 +4012,7 @@ const editorState = EditorState.create({
     spellPlugin,
     searchPlugin,
     mdStylePlugin,
+    ruleHighlightPlugin,
     listEnterHandler,
     keymap.of([
       { key: 'Mod-z', run: undo },
@@ -4208,6 +4518,9 @@ const PLUGIN_DEFS = [
   { name: 'uuid',    insert: '@uuid',    kind: 'inline', desc: 'Random UUID' },
   { name: 'week',    insert: '@week',    kind: 'inline', desc: 'ISO week number' },
   { name: 'copy',    insert: '@copy',    kind: 'action', desc: 'Copy block below' },
+  { name: 'code',    insert: '@code',    kind: 'action', desc: 'Insert ``` code block' },
+  { name: 'local',   insert: '@local',   kind: 'page',   desc: 'Keep this doc out of cloud sync' },
+  { name: 'nosync',  insert: '@nosync',  kind: 'page',   desc: 'Keep this doc out of cloud sync' },
 ];
 
 let acEl = null;        // dropdown element
@@ -7111,6 +7424,9 @@ async function _doBroadcast() {
   let raw;
   try {
     raw = editor.state.doc.toString();
+    // @local / @nosync atop the doc: this room's content stays off the server
+    // entirely (and other devices' auto-add skips it).
+    if (docHasNoSyncDirective(raw)) return;
     await pushTextToServer(roomName, raw, syncState.encKey);
     // If the editor hasn't moved on, mark this text as synced. If it has
     // (user kept typing during the in-flight broadcast — those edits couldn't
@@ -7830,6 +8146,7 @@ window.openRoomManager = function(tab) {
   renderRoomManagerList();
   renderWorkspaceManagerList();
   document.getElementById('room-cap-select').value = roomCap;
+  try { document.getElementById('autosync-rooms-cb').checked = autoAddRooms; } catch {}
   document.getElementById('room-manager-overlay').classList.add('open');
   if (_rmActiveTab === 'rooms') {
     document.getElementById('room-add-input').focus();
@@ -8160,6 +8477,7 @@ window.addRoomFromManager = function() {
   if (rooms.includes(name)) { showToast('Room already exists', 'error'); return; }
   if (rooms.length >= roomCap) { showToast('Room cap reached (' + roomCap + ')', 'error'); return; }
   rooms.push(name);
+  try { clearAutoAddIgnore(name); } catch {}
   // Determine workspace target
   let targetWs;
   if (activeWorkspace === WS_ALL) {
@@ -8183,6 +8501,8 @@ window.addRoomFromManager = function() {
 window.removeRoom = function(name) {
   rooms = rooms.filter(r => r !== name);
   delete roomWorkspace[name];
+  // Remember the explicit removal so the auto-add scanner never resurrects it.
+  try { autoAddIgnore[name] = true; saveAutoAddState(); } catch {}
   saveRooms();
   saveWorkspaces();
   store.remove('cade-room-cache:' + name);
@@ -8261,6 +8581,7 @@ window.exploreAddRoom = function(name, selId) {
     return;
   }
   rooms.push(name);
+  try { clearAutoAddIgnore(name); } catch {}
   const sel = document.getElementById(selId);
   const wsId = sel ? sel.value : '';
   if (wsId && wsId !== WS_UNLABELED && workspaces.find(w => w.id === wsId)) {
@@ -9084,7 +9405,7 @@ async function pushWorkspacesNow() {
     const db = initFirebase(fbUrl);
     const fp = _wsKeyFp || await _computeKeyFingerprint(baseKey);
     _wsKeyFp = fp;
-    const blob = { ts: Date.now(), workspaces, roomWorkspace };
+    const blob = { ts: Date.now(), workspaces, roomWorkspace, colorRules };
     _wsLastWriteTs = blob.ts;
     const encrypted = await encryptText(JSON.stringify(blob), baseKey);
     await db.ref(_wsConfigPath(fp)).set(encrypted);
@@ -9115,6 +9436,14 @@ async function applyRemoteWorkspaceBlob(encrypted, baseKey, source) {
     if (remoteTs <= localTs) return false;
     workspaces = Array.isArray(blob.workspaces) ? blob.workspaces : [];
     roomWorkspace = (blob.roomWorkspace && typeof blob.roomWorkspace === 'object') ? blob.roomWorkspace : {};
+    // Color rules ride in the same blob; keep local rules if the (older) blob
+    // doesn't carry the field.
+    if (Array.isArray(blob.colorRules)) {
+      colorRules = blob.colorRules;
+      store.set('cade-color-rules', JSON.stringify(colorRules));
+      _colorRulesStamp++;
+      try { scheduleRuleScan(); } catch {}
+    }
     // If activeWorkspace points to something deleted remotely, drop back to all
     if (activeWorkspace !== WS_ALL && activeWorkspace !== WS_UNLABELED && !getWorkspace(activeWorkspace)) {
       activeWorkspace = WS_ALL;
@@ -9249,7 +9578,120 @@ window.syncConnect = async function() {
   ensureWorkspaceSync();
   renderRoomTabs();
   updateSyncUI('connected', roomName);
+  // Creds are confirmed working — a good moment to discover new cloud rooms.
+  setTimeout(autoAddScan, 1500);
 };
+
+// ============================================
+// AUTO-ADD CLOUD ROOMS (opt-in)
+// ============================================
+// When enabled, every room found in the database is subscribed automatically.
+// Fully background: discovery uses Firebase's REST `?shallow=true` query so
+// only the room NAMES come over the wire (never the payloads); each genuinely
+// new room is then fetched once to honor an @local / @nosync directive on its
+// first lines. Workspace assignments arrive via the synced workspace blob
+// (rooms/__cade_ws_<fp>/blob), so auto-added rooms land in the right
+// workspace with their color dot intact.
+//
+// Memory:
+//  - autoAddIgnore: rooms the user explicitly removed — never re-added
+//    (manually re-adding via Add/Explore clears the mark).
+//  - autoAddSkip:   rooms that opted out via directive — re-checked hourly in
+//    case the directive is later removed.
+let autoAddRooms = store.get('cade-autosync-rooms') === 'true';
+let autoAddIgnore = {};
+let autoAddSkip = {};
+try { autoAddIgnore = JSON.parse(store.get('cade-autosync-ignore')) || {}; } catch {}
+try { autoAddSkip = JSON.parse(store.get('cade-autosync-skip')) || {}; } catch {}
+let _autoAddBusy = false;
+const AUTO_ADD_RECHECK_MS = 60 * 60 * 1000;
+
+function saveAutoAddState() {
+  store.set('cade-autosync-rooms', autoAddRooms);
+  store.set('cade-autosync-ignore', JSON.stringify(autoAddIgnore));
+  store.set('cade-autosync-skip', JSON.stringify(autoAddSkip));
+}
+
+// Forget a user-removal mark when a room is added back deliberately.
+function clearAutoAddIgnore(name) {
+  if (autoAddIgnore[name]) { delete autoAddIgnore[name]; saveAutoAddState(); }
+}
+
+window.toggleAutoAddRooms = function(on) {
+  autoAddRooms = !!on;
+  saveAutoAddState();
+  if (autoAddRooms) {
+    showToast('Auto-add cloud rooms: on — scanning…', 'success', 2000);
+    autoAddScan();
+  } else {
+    showToast('Auto-add cloud rooms: off', 'success', 1800);
+  }
+};
+
+async function autoAddScan() {
+  if (!autoAddRooms || _autoAddBusy || !navigator.onLine) return;
+  const fbUrl = (store.get('cade-firebase-url') || '').replace(/\/+$/, '');
+  const baseKey = store.get('cade-sync-key') || '';
+  if (!fbUrl || !baseKey) return;
+  _autoAddBusy = true;
+  try {
+    // Names only — shallow REST keeps this scan a few hundred bytes.
+    const resp = await fetch(fbUrl + '/rooms.json?shallow=true');
+    if (!resp.ok) return;
+    const val = await resp.json();
+    const now = Date.now();
+    const candidates = Object.keys(val || {}).filter(k =>
+      k && !k.startsWith('__') &&
+      !rooms.includes(k) &&
+      !autoAddIgnore[k] &&
+      !(autoAddSkip[k] && now - autoAddSkip[k] < AUTO_ADD_RECHECK_MS)
+    );
+    if (!candidates.length) return;
+    const db = initFirebase(fbUrl);
+    const added = [];
+    for (const name of candidates) {
+      // One-time content fetch to honor @local/@nosync. Undecryptable rooms
+      // (locked / different key) can't be checked — add them; locked-room
+      // flows handle the rest on first open.
+      let optedOut = false;
+      try {
+        const snap = await db.ref('rooms/' + name + '/text').once('value');
+        const encoded = unpackRoomText(snap.val());
+        if (encoded) {
+          let txt = await decryptText(encoded, baseKey);
+          if (txt != null) {
+            if (txt.startsWith(ROOM_LOCK_SENTINEL)) txt = txt.slice(ROOM_LOCK_SENTINEL.length);
+            optedOut = docHasNoSyncDirective(txt);
+          }
+        }
+      } catch { /* unreadable — treat as addable */ }
+      if (!autoAddRooms) break; // user toggled off mid-scan
+      if (optedOut) { autoAddSkip[name] = Date.now(); continue; }
+      delete autoAddSkip[name];
+      if (!rooms.includes(name)) { rooms.push(name); added.push(name); }
+    }
+    saveAutoAddState();
+    if (added.length) {
+      saveRooms();
+      renderRoomTabs();
+      if (document.getElementById('room-manager-overlay').classList.contains('open')) {
+        renderRoomManagerList();
+        renderWorkspaceManagerList();
+      }
+      const shown = added.slice(0, 3).join(', ') + (added.length > 3 ? ', +' + (added.length - 3) + ' more' : '');
+      showToast(`Auto-added ${added.length} room${added.length === 1 ? '' : 's'}: ${shown}`, 'success', 4000);
+      if (rooms.length > roomCap) {
+        showToast('Over room cap (' + rooms.length + '/' + roomCap + ') — adjust in Room Manager if you like', 'success', 3000);
+      }
+    }
+  } catch { /* network hiccup — next cycle retries */ }
+  finally { _autoAddBusy = false; }
+}
+
+// Discovery cadence: shortly after load, on reconnect, and every 5 minutes.
+setTimeout(autoAddScan, 4000);
+setInterval(autoAddScan, 5 * 60 * 1000);
+window.addEventListener('online', () => setTimeout(autoAddScan, 2500));
 
 // ============================================
 // SHAREABLE LINK
@@ -9394,7 +9836,9 @@ function resolveInjection(token) {
 }
 
 // Injection token regex — ordered: color, named, then t-offset, bare @t, math
-const INJECT_RE = /@(color(?::[a-zA-Z]+)?|copy|time|date|today|day|month|year|now|dt|uuid|week|t[+\-]\d+|t(?!\w)|[\d.()+\-*\/ ]+)$/;
+// Note: @local / @nosync are directives that STAY in the doc — they are
+// deliberately absent here so they never get replaced.
+const INJECT_RE = /@(color(?::[a-zA-Z]+)?|copy|code|time|date|today|day|month|year|now|dt|uuid|week|t[+\-]\d+|t(?!\w)|[\d.()+\-*\/ ]+)$/;
 
 // Track paste — do NOT inject on paste
 let _editorPasting = false;
@@ -9430,6 +9874,21 @@ function tryInjectAtCursor() {
       userEvent: 'input.injection',
     });
     return 'color';
+  }
+
+  // @code — drop in a ready-made ``` fence pair with the cursor on the empty
+  // middle line, so mobile users never have to hunt for the backtick key.
+  if (token === '@code') {
+    const hasBefore = tokenStart > line.from;   // text on the line before the token
+    const hasAfter = cursor < line.to;          // text on the line after the cursor
+    const open = (hasBefore ? '\n' : '') + '```\n';
+    const insert = open + '\n```' + (hasAfter ? '\n' : '');
+    editor.dispatch({
+      changes: { from: tokenStart, to: cursor, insert },
+      selection: { anchor: tokenStart + open.length },
+      userEvent: 'input.injection',
+    });
+    return 'code';
   }
 
   // @copy — copy content below until double-newline or EOF, then remove token
@@ -9471,8 +9930,11 @@ editor.dom.addEventListener('keydown', (e) => {
   if (e.key === ' ' || e.key === 'Tab' || e.key === 'Enter') {
     const r = tryInjectAtCursor();
     // For @color the cursor lands inside the new sentinel — swallow the trigger
-    // key so the space/tab doesn't get typed in there.
+    // key so the space/tab doesn't get typed in there. Same for @code, where
+    // the cursor lands on the empty line between the fences (including Enter,
+    // which would otherwise add a stray blank line inside the block).
     if (r === 'color' && (e.key === ' ' || e.key === 'Tab')) { e.preventDefault(); e.stopImmediatePropagation(); }
+    if (r === 'code') { e.preventDefault(); e.stopImmediatePropagation(); }
   }
 }, true);
 
@@ -9577,6 +10039,7 @@ window.submitAddRoom = function() {
   window.hideAddRoomModal();
   if (rooms.includes(name)) { switchRoom(name); return; }
   rooms.push(name);
+  try { clearAutoAddIgnore(name); } catch {}
   // Assign to active workspace (Unlabeled if in All Rooms view)
   if (activeWorkspace !== WS_ALL && activeWorkspace !== WS_UNLABELED && getWorkspace(activeWorkspace)) {
     roomWorkspace[name] = activeWorkspace;
@@ -10034,6 +10497,110 @@ document.getElementById('snapshots-overlay').addEventListener('keydown', (e) => 
 
 // Background auto-capture (no-ops when nothing changed since the last one).
 setInterval(snapshotNow, SNAP_AUTO_MS);
+
+// ============================================
+// COLOR RULES — management UI
+// ============================================
+function saveColorRules() {
+  store.set('cade-color-rules', JSON.stringify(colorRules));
+  _colorRulesStamp++;
+  scheduleRuleScan();
+  schedulePushWorkspaces(); // rules ride along in the encrypted workspace blob
+}
+
+// Programmatic API (also used by the modal): returns the rule or null.
+window.addColorRule = function(pattern, color, opts) {
+  pattern = String(pattern || '').trim();
+  if (!pattern) return null;
+  opts = opts || {};
+  if (opts.regex) {
+    try { new RegExp(pattern, 'g'); }
+    catch (e) { showToast('Invalid regex: ' + e.message, 'error', 3000); return null; }
+  }
+  const rule = {
+    id: 'cr_' + Math.random().toString(36).slice(2, 9),
+    pattern,
+    regex: !!opts.regex,
+    color: HL_COLORS.includes(color) ? color : HL_DEFAULT,
+    ws: opts.ws || '__all__',
+  };
+  colorRules.push(rule);
+  saveColorRules();
+  return rule;
+};
+
+window.deleteColorRule = function(id) {
+  colorRules = colorRules.filter(r => r.id !== id);
+  saveColorRules();
+  renderColorRulesUI();
+};
+
+function colorRuleScopeName(ws) {
+  if (!ws || ws === '__all__') return 'Global';
+  if (ws === WS_UNLABELED || ws === '__unlabeled__') return 'Unlabeled';
+  const w = getWorkspace(ws);
+  return w ? w.name : 'Global';
+}
+
+function renderColorRulesUI() {
+  // Color picker options
+  const colorSel = document.getElementById('cr-color');
+  colorSel.innerHTML = HL_COLORS.map(c => `<option value="${c}">${c}</option>`).join('');
+  // Scope options: Global + every workspace + Unlabeled
+  const scopeSel = document.getElementById('cr-scope');
+  let scopes = '<option value="__all__">Global</option>';
+  workspaces.slice().sort((a, b) => (a.order ?? 0) - (b.order ?? 0)).forEach(w => {
+    scopes += `<option value="${escapeHtml(w.id)}">${escapeHtml(w.name)}</option>`;
+  });
+  scopes += `<option value="${WS_UNLABELED}">Unlabeled</option>`;
+  scopeSel.innerHTML = scopes;
+  // Rule list
+  const list = document.getElementById('color-rules-list');
+  if (!colorRules.length) {
+    list.innerHTML = '<div style="color:var(--text-faint);font-size:var(--text-sm);padding:8px 0;">No rules yet. Add one above — e.g. the word <em>yellow</em> → yellow.</div>';
+    return;
+  }
+  list.innerHTML = colorRules.map(r => `
+    <div class="snap-row">
+      <span class="cr-swatch cm-hl cm-hl-${HL_COLORS.includes(r.color) ? r.color : HL_DEFAULT}" title="${escapeHtml(r.pattern)}">${escapeHtml(r.pattern)}</span>
+      ${r.regex ? '<span class="snap-meta" title="Regular expression">.*</span>' : ''}
+      <span class="snap-meta" style="margin-left:auto;">${escapeHtml(colorRuleScopeName(r.ws))}</span>
+      <button class="btn btn-danger" style="padding:2px 8px;font-size:var(--text-xs);" onclick="deleteColorRule('${r.id}')">×</button>
+    </div>
+  `).join('');
+}
+
+window.addColorRuleFromUI = function() {
+  const pattern = document.getElementById('cr-pattern').value;
+  const regex = document.getElementById('cr-regex').checked;
+  const color = document.getElementById('cr-color').value;
+  const ws = document.getElementById('cr-scope').value;
+  const rule = window.addColorRule(pattern, color, { regex, ws });
+  if (!rule) { document.getElementById('cr-pattern').focus(); return; }
+  document.getElementById('cr-pattern').value = '';
+  renderColorRulesUI();
+  showToast('Rule added: "' + rule.pattern + '" → ' + rule.color, 'success', 2000);
+};
+
+window.openColorRules = function() {
+  closeAllMenus();
+  renderColorRulesUI();
+  document.getElementById('color-rules-overlay').classList.add('open');
+  setTimeout(() => document.getElementById('cr-pattern').focus(), 60);
+};
+
+window.closeColorRules = function() {
+  document.getElementById('color-rules-overlay').classList.remove('open');
+  editor.focus();
+};
+
+document.getElementById('color-rules-overlay').addEventListener('click', (e) => {
+  if (e.target === document.getElementById('color-rules-overlay')) closeColorRules();
+});
+document.getElementById('color-rules-overlay').addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closeColorRules();
+  if (e.key === 'Enter' && e.target.id === 'cr-pattern') { e.preventDefault(); addColorRuleFromUI(); }
+});
 
 // ============================================
 // HOTKEY SYSTEM
