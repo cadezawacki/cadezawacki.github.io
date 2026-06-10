@@ -1835,6 +1835,47 @@ body {
 }
 
 /* ============================================
+   CODE BLOCKS (``` fences) + SYNTAX TOKENS
+   ============================================ */
+:root {
+  --tok-kw:   #7c3aed;
+  --tok-str:  #15803d;
+  --tok-com:  #a8a29e;
+  --tok-num:  #b45309;
+  --tok-fn:   #0284c7;
+  --tok-tag:  #be185d;
+  --tok-attr: #b45309;
+  --tok-prop: #0284c7;
+  --tok-bui:  #0d9488;
+}
+[data-theme="dark"] {
+  --tok-kw:   #c4b5fd;
+  --tok-str:  #86efac;
+  --tok-com:  #6e6b68;
+  --tok-num:  #fcd34d;
+  --tok-fn:   #7dd3fc;
+  --tok-tag:  #f9a8d4;
+  --tok-attr: #fcd34d;
+  --tok-prop: #7dd3fc;
+  --tok-bui:  #5eead4;
+}
+.cm-codeblock { background: var(--surface-2); }
+.cm-md-fence {
+  background: var(--surface-2);
+  color: var(--text-faint);
+  font-size: var(--text-xs);
+}
+.cm-tok-kw   { color: var(--tok-kw); }
+.cm-tok-str  { color: var(--tok-str); }
+.cm-tok-com  { color: var(--tok-com); font-style: italic; }
+.cm-tok-num  { color: var(--tok-num); }
+.cm-tok-fn   { color: var(--tok-fn); }
+.cm-tok-tag  { color: var(--tok-tag); }
+.cm-tok-attr { color: var(--tok-attr); }
+.cm-tok-prop { color: var(--tok-prop); }
+.cm-tok-bui  { color: var(--tok-bui); }
+
+/* ============================================
    SNAPSHOTS (local version history)
    ============================================ */
 .snap-row {
@@ -2595,6 +2636,7 @@ function buildListDecorations(view) {
     const endLine = view.state.doc.lineAt(to).number;
     for (let i = startLine; i <= endLine; i++) {
       const line = view.state.doc.line(i);
+      if (fenceContaining(line.from)) continue; // no hanging indent inside ``` code
       const m = line.text.match(LIST_RE);
       if (m) {
         // Hanging indent: pad the whole line by the prefix width, then pull the
@@ -2720,6 +2762,7 @@ function buildTodoDecorations(view) {
     const endLine = doc.lineAt(to).number;
     for (let i = startLine; i <= endLine; i++) {
       const line = doc.line(i);
+      if (fenceContaining(line.from)) continue; // "[ ]" inside ``` code is a list literal, not a todo
       const m = line.text.match(TODO_LINE_RE);
       if (m) {
         const isDone = m[2] !== ' ';
@@ -3220,6 +3263,7 @@ function buildSpellDecorations(view) {
     const endLine = doc.lineAt(to).number;
     for (let i = startLine; i <= endLine; i++) {
       const line = doc.line(i);
+      if (fenceContaining(line.from)) continue; // identifiers in ``` code aren't prose
       const text = line.text;
       // Don't spell-check inside links (URLs, [title](url), @ws:room) or inside
       // highlight markup (the "==color|" / "==" sentinel pieces).
@@ -3314,6 +3358,242 @@ const searchPlugin = ViewPlugin.fromClass(class {
 }, { decorations: v => v.decorations });
 
 // ============================================
+// FENCED CODE BLOCKS (```) — tracking + syntax tokenizers
+// ============================================
+// Fences are tracked document-wide (a block can start far above the viewport,
+// so per-viewport scanning can't know the state). The tracker plugin keeps the
+// block list current: a full rescan only when an edit could have changed a
+// fence (backtick in the edit or on a touched line); otherwise positions are
+// just mapped through the change, O(blocks) per keystroke.
+//
+// Every line-oriented decorator consults fenceContaining() so code blocks are
+// exempt from markdown styling (a Python "# comment" is NOT a heading), list
+// hanging-indent, todo checkboxes, and spell check.
+let fenceBlocks = []; // [{from,to,openFrom,closeFrom,lang}] sorted by from
+
+function rescanFences(doc) {
+  const blocks = [];
+  let open = null;
+  for (let i = 1; i <= doc.lines; i++) {
+    const line = doc.line(i);
+    if (!line.text.startsWith('```')) continue;
+    if (!open) {
+      // Language: ```python info string, else the filename line the importer
+      // writes directly above bare fences ("path/file.py" then ```).
+      let lang = normalizeFenceLang(line.text.slice(3).trim());
+      if (!lang && i > 1) lang = langFromFilename(doc.line(i - 1).text.trim());
+      open = { openFrom: line.from, from: line.from, lang, closeFrom: -1, to: doc.length };
+    } else {
+      open.closeFrom = line.from;
+      open.to = line.to;
+      blocks.push(open);
+      open = null;
+    }
+  }
+  if (open) blocks.push(open);
+  fenceBlocks = blocks;
+}
+
+// Could this edit have created/removed/relabeled a fence? Backticks in the
+// inserted or deleted text, or on a touched line — plus the line *after* the
+// touched range, since editing a filename line re-labels the fence below it.
+function fencesMayHaveChanged(update) {
+  let may = false;
+  update.changes.iterChanges((fromA, toA, fromB, toB, inserted) => {
+    if (may) return;
+    if (inserted.length && inserted.toString().indexOf('`') !== -1) { may = true; return; }
+    if (toA > fromA && update.startState.doc.sliceString(fromA, toA).indexOf('`') !== -1) { may = true; return; }
+    const doc = update.state.doc;
+    const fromLine = doc.lineAt(Math.min(fromB, doc.length)).number;
+    const toLine = Math.min(doc.lineAt(Math.min(toB, doc.length)).number + 1, doc.lines);
+    for (let i = fromLine; i <= toLine; i++) {
+      if (doc.line(i).text.indexOf('`') !== -1) { may = true; return; }
+    }
+  });
+  return may;
+}
+
+function remapFences(update) {
+  const doc = update.state.doc;
+  for (const b of fenceBlocks) {
+    const openLine = doc.lineAt(update.changes.mapPos(b.openFrom, 1));
+    b.openFrom = openLine.from;
+    b.from = openLine.from;
+    if (b.closeFrom !== -1) {
+      const closeLine = doc.lineAt(update.changes.mapPos(b.closeFrom, 1));
+      b.closeFrom = closeLine.from;
+      b.to = closeLine.to;
+    } else {
+      b.to = doc.length;
+    }
+  }
+}
+
+function fenceContaining(pos) {
+  const bs = fenceBlocks;
+  let lo = 0, hi = bs.length - 1;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    const b = bs[mid];
+    if (pos < b.from) hi = mid - 1;
+    else if (pos > b.to) lo = mid + 1;
+    else return b;
+  }
+  return null;
+}
+
+// Registered FIRST in the extensions list so every other plugin's update sees
+// current fence state within the same transaction.
+const fenceTrackerPlugin = ViewPlugin.fromClass(class {
+  constructor(view) { rescanFences(view.state.doc); }
+  update(update) {
+    if (!update.docChanged) return;
+    if (fencesMayHaveChanged(update)) rescanFences(update.state.doc);
+    else remapFences(update);
+  }
+});
+
+// ---- Language resolution ----
+const FENCE_LANG_ALIASES = {
+  python: 'python', py: 'python', python3: 'python',
+  js: 'js', javascript: 'js', jsx: 'js', ts: 'js', tsx: 'js', typescript: 'js', mjs: 'js', node: 'js', json: 'js',
+  html: 'html', htm: 'html', xml: 'html', svg: 'html', vue: 'html',
+  css: 'css', scss: 'css', less: 'css',
+};
+
+function normalizeFenceLang(info) {
+  if (!info) return null;
+  return FENCE_LANG_ALIASES[info.split(/\s+/)[0].toLowerCase()] || null;
+}
+
+function langFromFilename(line) {
+  if (!line || line.length > 200 || /\s/.test(line)) return null;
+  const m = line.match(/\.([a-zA-Z0-9]+)$/);
+  return m ? (FENCE_LANG_ALIASES[m[1].toLowerCase()] || null) : null;
+}
+
+// Content sniff for unlabeled blocks — only ever python / js / html / css here.
+function detectFenceLang(text) {
+  const sample = text.slice(0, 2000);
+  if (/^\s*</.test(sample) || /<\/?(?:div|html|head|body|span|p|a|ul|li|script|style|img|h\d)\b/i.test(sample)) return 'html';
+  const css = (sample.match(/[{;]\s*[-a-z]+\s*:[^;{}]+/g) || []).length;
+  const py = (sample.match(/\b(?:def |elif |import |self\.|print\()|#[^\n]*/g) || []).length;
+  const js = (sample.match(/\b(?:function |const |let |var |=>|console\.)|\/\/[^\n]*/g) || []).length;
+  if (css > py && css > js && /\{[^{}]*:[^{}]*\}/.test(sample)) return 'css';
+  if (py > js) return 'python';
+  if (js > 0) return 'js';
+  return null;
+}
+
+// ---- Tokenizers ----
+// Single-pass alternation regexes: comments and strings are leading branches,
+// so the engine consumes them whole and keywords can never match inside them.
+// Emits [start, end, cls] relative to the block text, in document order.
+function tokPython(text) {
+  const out = [];
+  const re = /(#[^\n]*)|([rRbBuUfF]{0,2}(?:'''[\s\S]*?(?:'''|$)|"""[\s\S]*?(?:"""|$)|'(?:\\.|[^'\\\n])*'?|"(?:\\.|[^"\\\n])*"?))|\b(def|class)\s+([A-Za-z_]\w*)|\b(return|if|elif|else|for|while|in|not|and|or|import|from|as|pass|break|continue|try|except|finally|raise|with|lambda|yield|global|nonlocal|assert|del|async|await|is|def|class)\b|\b(True|False|None|self|cls)\b|(@[A-Za-z_][\w.]*)|\b(0[xXoObB][0-9a-fA-F_]+|\d[\d_]*(?:\.\d[\d_]*)?(?:[eE][+-]?\d+)?[jJ]?)\b/g;
+  let m;
+  while ((m = re.exec(text)) !== null) {
+    const s = m.index, e = s + m[0].length;
+    if (m[1] !== undefined) out.push([s, e, 'com']);
+    else if (m[2] !== undefined) out.push([s, e, 'str']);
+    else if (m[3] !== undefined) { out.push([s, s + m[3].length, 'kw']); out.push([e - m[4].length, e, 'fn']); }
+    else if (m[5] !== undefined) out.push([s, e, 'kw']);
+    else if (m[6] !== undefined) out.push([s, e, 'bui']);
+    else if (m[7] !== undefined) out.push([s, e, 'fn']);
+    else if (m[8] !== undefined) out.push([s, e, 'num']);
+    if (m[0].length === 0) re.lastIndex++;
+  }
+  return out;
+}
+
+function tokJs(text) {
+  const out = [];
+  const re = /(\/\/[^\n]*|\/\*[\s\S]*?(?:\*\/|$))|('(?:\\.|[^'\\\n])*'?|"(?:\\.|[^"\\\n])*"?|`(?:\\.|[^`\\])*`?)|\b(function|class)\s+([A-Za-z_$][\w$]*)|\b(const|let|var|function|class|return|if|else|for|while|do|switch|case|default|break|continue|new|delete|typeof|instanceof|in|of|try|catch|finally|throw|async|await|yield|import|export|from|extends|super|static|get|set|void|debugger)\b|\b(true|false|null|undefined|this|NaN|Infinity)\b|\b(0[xXbBoO][0-9a-fA-F_]+n?|\d[\d_]*(?:\.\d[\d_]*)?(?:[eE][+-]?\d+)?n?)\b/g;
+  let m;
+  while ((m = re.exec(text)) !== null) {
+    const s = m.index, e = s + m[0].length;
+    if (m[1] !== undefined) out.push([s, e, 'com']);
+    else if (m[2] !== undefined) out.push([s, e, 'str']);
+    else if (m[3] !== undefined) { out.push([s, s + m[3].length, 'kw']); out.push([e - m[4].length, e, 'fn']); }
+    else if (m[5] !== undefined) out.push([s, e, 'kw']);
+    else if (m[6] !== undefined) out.push([s, e, 'bui']);
+    else if (m[7] !== undefined) out.push([s, e, 'num']);
+    if (m[0].length === 0) re.lastIndex++;
+  }
+  return out;
+}
+
+function tokCss(text) {
+  const out = [];
+  const re = /(\/\*[\s\S]*?(?:\*\/|$))|('(?:\\.|[^'\\\n])*'?|"(?:\\.|[^"\\\n])*"?)|(@[\w-]+)|([-a-zA-Z]+)(?=\s*:)|(#[0-9a-fA-F]{3,8}\b)|([.#][-\w]+)|(\d+(?:\.\d+)?(?:px|em|rem|vh|vw|vmin|vmax|s|ms|deg|fr|ch|pt)?%?)/g;
+  let m;
+  while ((m = re.exec(text)) !== null) {
+    const s = m.index, e = s + m[0].length;
+    if (m[1] !== undefined) out.push([s, e, 'com']);
+    else if (m[2] !== undefined) out.push([s, e, 'str']);
+    else if (m[3] !== undefined) out.push([s, e, 'kw']);
+    else if (m[4] !== undefined) out.push([s, e, 'prop']);
+    else if (m[5] !== undefined) out.push([s, e, 'num']);
+    else if (m[6] !== undefined) out.push([s, e, 'tag']);
+    else if (m[7] !== undefined) out.push([s, e, 'num']);
+    if (m[0].length === 0) re.lastIndex++;
+  }
+  return out;
+}
+
+function tokHtml(text) {
+  const out = [];
+  const re = /(<!--[\s\S]*?(?:-->|$))|(<![^>]*>?)|(<\/?[a-zA-Z][\w-]*)((?:"[^"]*"?|'[^']*'?|[^<>"'])*)(\/?>)?/g;
+  const attrRe = /([a-zA-Z_:][-\w:.]*)|("[^"]*"?|'[^']*'?)/g;
+  let m;
+  while ((m = re.exec(text)) !== null) {
+    const s = m.index;
+    if (m[1] !== undefined) { out.push([s, s + m[0].length, 'com']); }
+    else if (m[2] !== undefined) { out.push([s, s + m[0].length, 'kw']); }
+    else if (m[3] !== undefined) {
+      out.push([s, s + m[3].length, 'tag']);
+      const attrsStart = s + m[3].length;
+      attrRe.lastIndex = 0;
+      let a;
+      while ((a = attrRe.exec(m[4])) !== null) {
+        const as = attrsStart + a.index, ae = as + a[0].length;
+        out.push([as, ae, a[1] !== undefined ? 'attr' : 'str']);
+        if (a[0].length === 0) attrRe.lastIndex++;
+      }
+      if (m[5]) out.push([attrsStart + m[4].length, attrsStart + m[4].length + m[5].length, 'tag']);
+    }
+    if (m[0].length === 0) re.lastIndex++;
+  }
+  return out;
+}
+
+const FENCE_TOKENIZERS = { python: tokPython, js: tokJs, css: tokCss, html: tokHtml };
+const FENCE_TOKEN_CHAR_CAP = 60000; // beyond this a block gets bg-only styling
+
+// Tokenize a whole block (so multi-line strings/comments stay correct) with a
+// per-block memo keyed on the block object; remapFences preserves identity, so
+// scrolling re-uses tokens and only edits inside the block recompute them.
+const _fenceTokCache = new WeakMap();
+function tokensForBlock(block, doc) {
+  const openLine = doc.lineAt(block.openFrom);
+  const contentFrom = Math.min(openLine.to + 1, block.to);
+  const contentTo = block.closeFrom === -1
+    ? block.to
+    : Math.max(contentFrom, doc.lineAt(block.closeFrom).from - 1);
+  if (contentTo <= contentFrom || contentTo - contentFrom > FENCE_TOKEN_CHAR_CAP) {
+    return { contentFrom, tokens: [] };
+  }
+  const text = doc.sliceString(contentFrom, contentTo);
+  const cached = _fenceTokCache.get(block);
+  if (cached && cached.text === text) return { contentFrom, tokens: cached.tokens };
+  const lang = block.lang || detectFenceLang(text);
+  const tokens = lang && FENCE_TOKENIZERS[lang] ? FENCE_TOKENIZERS[lang](text) : [];
+  _fenceTokCache.set(block, { text, tokens });
+  return { contentFrom, tokens };
+}
+
+// ============================================
 // MARKDOWN STYLING (headings, blockquotes, inline code, rules)
 // ============================================
 // Purely visual — the raw text is untouched, so it stays plain text for sync,
@@ -3336,6 +3616,17 @@ function buildMdDecorations(view) {
     for (let i = startLine; i <= endLine; i++) {
       const line = doc.line(i);
       const text = line.text;
+      // Inside a ``` fence: code-block styling only — never markdown. This is
+      // what keeps a Python "# comment" from rendering as a giant heading.
+      const blk = fenceContaining(line.from);
+      if (blk) {
+        if (line.from === blk.openFrom || line.from === blk.closeFrom) {
+          ranges.push(Decoration.line({ class: 'cm-md-fence' }).range(line.from));
+        } else {
+          ranges.push(Decoration.line({ class: 'cm-codeblock' }).range(line.from));
+        }
+        continue;
+      }
       const h = text.match(MD_H_RE);
       if (h) {
         ranges.push(Decoration.line({ class: 'cm-md-h' + h[1].length }).range(line.from));
@@ -3352,6 +3643,18 @@ function buildMdDecorations(view) {
       while ((m = MD_CODE_RE.exec(text)) !== null) {
         const s = line.from + m.index, e = s + m[0].length;
         ranges.push(Decoration.mark({ class: 'cm-md-code' }).range(s, e));
+      }
+    }
+    // Syntax-highlight tokens for code blocks intersecting this range.
+    for (const blk of fenceBlocks) {
+      if (blk.to < from) continue;
+      if (blk.from > to) break;
+      const { contentFrom, tokens } = tokensForBlock(blk, doc);
+      for (const t of tokens) {
+        const s = contentFrom + t[0], e = contentFrom + t[1];
+        if (e <= from) continue;
+        if (s > to) break;
+        if (e > s) ranges.push(Decoration.mark({ class: 'cm-tok-' + t[2] }).range(s, e));
       }
     }
   }
@@ -3392,6 +3695,7 @@ const editorState = EditorState.create({
     }),
     EditorView.updateListener.of(renumberListener),
     EditorView.lineWrapping,
+    fenceTrackerPlugin, // must precede the decorators that consult fence state
     listIndentPlugin,
     todoPlugin,
     linkPlugin,
