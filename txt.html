@@ -948,6 +948,12 @@ body {
 .ws-mgr-parent-row { display: flex; align-items: center; gap: 6px; }
 .ws-mgr-parent-select { font-size: var(--text-xs, 11px); padding: 2px 6px; }
 
+.share-opts { display: flex; flex-direction: column; gap: 8px; }
+.share-opt { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; padding: 10px 12px; height: auto; width: 100%; }
+.share-opt .scb-title { font-weight: 600; }
+.share-opt .scb-desc { font-size: var(--text-xs); color: var(--text-muted); font-weight: 400; white-space: normal; }
+.share-opt:disabled { opacity: 0.5; cursor: not-allowed; }
+
 .sync-indicator {
   display: flex;
   align-items: center;
@@ -2310,6 +2316,33 @@ body {
   <div class="footer-spacer"></div>
   <div class="footer-right">
     <span id="sync-status" style="display:none;"></span>
+  </div>
+</div>
+
+<!-- ========== SHARE ========== -->
+<div class="modal-overlay" id="share-overlay">
+  <div class="modal-dialog" style="max-width: 500px;">
+    <div class="modal-title">Share</div>
+    <div class="modal-desc">Choose how to share this document.</div>
+    <div class="share-opts">
+      <button class="btn share-opt" id="share-opt-synced" type="button" onclick="generateShareLink('synced')">
+        <span class="scb-title">🔗 Synced Link</span>
+        <span class="scb-desc">Opens live for anyone connected to the same database (password not included).</span>
+      </button>
+      <button class="btn share-opt" id="share-opt-public" type="button" onclick="generateShareLink('public')">
+        <span class="scb-title">📄 Public Link</span>
+        <span class="scb-desc">Embeds a compressed copy of the text in the link — anyone can read it. No sync.</span>
+      </button>
+    </div>
+    <div class="form-group" style="margin-top: var(--space-3);">
+      <textarea class="form-input" id="share-link-out" readonly rows="3" spellcheck="false" style="resize:none;font-size:11px;font-family:var(--font-mono);" placeholder="Pick an option above…"></textarea>
+      <div class="form-hint" id="share-link-hint"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeShareModal()">Close</button>
+      <button class="btn" id="share-native-btn" onclick="shareNative()" style="display:none;">Share…</button>
+      <button class="btn btn-primary" id="share-copy-btn" onclick="copyShareLink()" disabled>Copy</button>
+    </div>
   </div>
 </div>
 
@@ -10833,24 +10866,85 @@ window.syncConnect = async function() {
 // ============================================
 // SHAREABLE LINK
 // ============================================
+// --- Share (Synced vs Public links) (#15) ---
+function _bytesToB64Url(bytes) {
+  let bin = '';
+  const chunk = 8192;
+  for (let i = 0; i < bytes.length; i += chunk) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+function _b64UrlToBytes(s) {
+  s = String(s).replace(/-/g, '+').replace(/_/g, '/');
+  while (s.length % 4) s += '=';
+  const bin = atob(s);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
 window.shareLink = function() {
   closeAllMenus();
-  const fbUrl = store.get('cade-firebase-url') || '';
-  const roomName = syncState.roomName || store.get('cade-room-name') || '';
-  if (!fbUrl || !roomName) {
-    showToast('Configure Firebase URL and room in Sync first', 'error', 3000);
-    return;
-  }
-  const url = new URL(window.location.href.split('?')[0]);
-  url.searchParams.set('fb', fbUrl);
-  url.searchParams.set('room', roomName);
-  const link = url.toString();
-  navigator.clipboard.writeText(link).then(() => {
-    showToast('Share link copied! (password not included)', 'success', 3000);
-  }).catch(() => {
-    prompt('Copy this share link:', link);
-  });
+  const out = document.getElementById('share-link-out');
+  if (out) { out.value = ''; out.removeAttribute('data-link'); }
+  const hint = document.getElementById('share-link-hint');
+  if (hint) hint.textContent = '';
+  const copyBtn = document.getElementById('share-copy-btn');
+  if (copyBtn) copyBtn.disabled = true;
+  const syncedBtn = document.getElementById('share-opt-synced');
+  const hasSync = !!(store.get('cade-firebase-url') && (syncState.roomName || store.get('cade-room-name') || activeRoom));
+  if (syncedBtn) { syncedBtn.disabled = !hasSync; syncedBtn.title = hasSync ? '' : 'Configure Sync first to use a synced link'; }
+  const nativeBtn = document.getElementById('share-native-btn');
+  if (nativeBtn) nativeBtn.style.display = navigator.share ? '' : 'none';
+  document.getElementById('share-overlay').classList.add('open');
 };
+window.closeShareModal = function() { document.getElementById('share-overlay').classList.remove('open'); };
+
+window.generateShareLink = async function(kind) {
+  const out = document.getElementById('share-link-out');
+  const hint = document.getElementById('share-link-hint');
+  const roomName = syncState.roomName || store.get('cade-room-name') || activeRoom || 'shared';
+  const base = window.location.href.split('#')[0].split('?')[0];
+  try {
+    let link;
+    if (kind === 'synced') {
+      const fbUrl = store.get('cade-firebase-url') || '';
+      if (!fbUrl) { showToast('Configure Sync first', 'error', 2500); return; }
+      const url = new URL(base);
+      url.searchParams.set('fb', fbUrl);
+      url.searchParams.set('room', roomName);
+      link = url.toString();
+      hint.textContent = 'Opens live for anyone connected to the same database. The password is never included.';
+    } else {
+      const text = editor.state.doc.toString();
+      const payload = JSON.stringify({ v: 1, r: roomName, t: text });
+      const bytes = await _compress(new TextEncoder().encode(payload));
+      link = base + '#p=' + _bytesToB64Url(bytes);
+      const kb = (link.length / 1024).toFixed(1);
+      hint.textContent = 'Anyone with the link can read this copy — it does not sync. Link size: ' + kb + ' KB.';
+      if (link.length > 28000) hint.textContent += ' ⚠ Very long; some chat apps may truncate it.';
+    }
+    out.value = link;
+    out.dataset.link = link;
+    out.focus(); out.select();
+    document.getElementById('share-copy-btn').disabled = false;
+  } catch (e) {
+    showToast('Could not build link: ' + (e.message || e), 'error', 3000);
+  }
+};
+
+window.copyShareLink = function() {
+  const link = document.getElementById('share-link-out').value;
+  if (!link) return;
+  navigator.clipboard.writeText(link).then(
+    () => showToast('Link copied', 'success', 2000),
+    () => { const o = document.getElementById('share-link-out'); o.focus(); o.select(); showToast('Press Ctrl/Cmd+C to copy', 'success', 2500); }
+  );
+};
+window.shareNative = function() {
+  const link = document.getElementById('share-link-out').value;
+  if (link && navigator.share) navigator.share({ url: link, title: 'Cade.txt' }).catch(() => {});
+};
+{ const so = document.getElementById('share-overlay'); if (so) so.addEventListener('click', e => { if (e.target === so) closeShareModal(); }); }
 
 // Pre-populate sync fields from URL params on load
 (function() {
@@ -10879,6 +10973,65 @@ window.shareLink = function() {
       window.history.replaceState({}, document.title, window.location.pathname);
       showToast('Shared link loaded — enter your password in Sync to connect', 'success', 5000);
     }
+  } catch (e) { /* ignore */ }
+})();
+
+// Public share link (#p=...) — a compressed, self-contained copy of a document
+// embedded in the URL hash (so the text never hits the server). Read on load,
+// after the bootstrap, so it can switch into the shared room (#15).
+function shareConflictPrompt(roomName) {
+  return new Promise(resolve => {
+    // Safe subset: never silently overwrite local data from an untrusted link.
+    const openNew = confirm('A room named "' + roomName + '" already exists here with different content.\n\nOK = open the shared copy as a NEW room.\nCancel = keep your version (discard the shared copy).');
+    resolve(openNew ? 'new' : 'cancel');
+  });
+}
+function loadSharedIntoRoom(roomName, text) {
+  store.set('cade-room-cache:' + roomName, text);
+  if (!rooms.includes(roomName)) { rooms.push(roomName); saveRooms(); }
+  try { renderRoomTabs(); } catch {}
+  switchRoom(roomName);
+  showToast('Loaded shared document into "' + roomName + '"', 'success', 3000);
+}
+function importSharedAsNewRoom(baseName, text) {
+  const name = baseName + '_shared_' + Date.now().toString(36);
+  store.set('cade-room-cache:' + name, text);
+  rooms.push(name); saveRooms();
+  try { renderRoomTabs(); } catch {}
+  switchRoom(name);
+  showToast('Shared copy opened as new room "' + name + '"', 'success', 3500);
+}
+(async function() {
+  try {
+    const m = (window.location.hash || '').match(/[#&]p=([^&]+)/);
+    if (!m) return;
+    // Clean the hash immediately so a refresh doesn't re-import.
+    window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
+    let data;
+    try { data = JSON.parse(await _decompress(_b64UrlToBytes(m[1]))); }
+    catch (e) { showToast('Shared link is invalid or corrupted', 'error', 3500); return; }
+    if (!data || typeof data.t !== 'string') { showToast('Shared link has no content', 'error', 3000); return; }
+    const roomName = String(data.r || 'shared');
+    const text = data.t;
+    const haveRoom = rooms.includes(roomName);
+    const synced = !!(store.get('cade-firebase-url') && store.get('cade-sync-key'));
+    // Already subscribed + synced to the same DB → prefer the live copy.
+    if (haveRoom && synced) {
+      switchRoom(roomName);
+      showToast('Opened your synced copy of "' + roomName + '" (shared text not imported)', 'success', 4500);
+      return;
+    }
+    // Local room with the same name but different content → conflict prompt.
+    if (haveRoom) {
+      const existing = loadRoomCache(roomName);
+      if (existing && existing !== text) {
+        const choice = await shareConflictPrompt(roomName);
+        if (choice === 'cancel') return;
+        importSharedAsNewRoom(roomName, text);
+        return;
+      }
+    }
+    loadSharedIntoRoom(roomName, text);
   } catch (e) { /* ignore */ }
 })();
 
