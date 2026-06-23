@@ -7284,17 +7284,31 @@ async function _decompress(data) {
   return new TextDecoder().decode(out);
 }
 
-// AES-GCM encryption helpers
-async function deriveKey(password) {
-  const enc = new TextEncoder();
-  const keyMaterial = await crypto.subtle.importKey('raw', enc.encode(password), 'PBKDF2', false, ['deriveKey']);
-  return crypto.subtle.deriveKey(
-    { name: 'PBKDF2', salt: enc.encode('cade.txt-salt'), iterations: 100000, hash: 'SHA-256' },
-    keyMaterial,
-    { name: 'AES-GCM', length: 256 },
-    false,
-    ['encrypt', 'decrypt']
-  );
+// AES-GCM encryption helpers.
+// deriveKey runs PBKDF2 with 100k iterations — expensive. Sync encrypts/decrypts
+// on every broadcast and every remote update, so without caching a multi-window
+// sync storm fires hundreds of PBKDF2s and starves the main thread. Memoize the
+// derived CryptoKey per password (the salt is constant); the cache is bounded.
+const _deriveKeyCache = new Map();
+function deriveKey(password) {
+  let p = _deriveKeyCache.get(password);
+  if (p) return p;
+  p = (async () => {
+    const enc = new TextEncoder();
+    const keyMaterial = await crypto.subtle.importKey('raw', enc.encode(password), 'PBKDF2', false, ['deriveKey']);
+    return crypto.subtle.deriveKey(
+      { name: 'PBKDF2', salt: enc.encode('cade.txt-salt'), iterations: 100000, hash: 'SHA-256' },
+      keyMaterial,
+      { name: 'AES-GCM', length: 256 },
+      false,
+      ['encrypt', 'decrypt']
+    );
+  })();
+  // Don't cache a rejected derivation.
+  p.catch(() => { if (_deriveKeyCache.get(password) === p) _deriveKeyCache.delete(password); });
+  if (_deriveKeyCache.size > 50) _deriveKeyCache.clear();
+  _deriveKeyCache.set(password, p);
+  return p;
 }
 
 // 4-byte magic prefix for compressed payloads: [0xCA, 0xDE, 0x01, 0x00]
@@ -7457,10 +7471,11 @@ function safeApplyRemote(text, roomName) {
     : currentText !== syncedBase;
 
   if (localHasUnsyncedEdits) {
-    // Preserve local edits. Schedule a broadcast to push them to the server.
-    if (typeof window.broadcastText === 'function' && syncState.connected) {
-      window.broadcastText();
-    }
+    // Keep local edits. Do NOT re-broadcast here: with two windows open on the
+    // same room, each remote update would trigger a counter-push, and the other
+    // window would push back — an infinite broadcast war that jams the main
+    // thread (the unusable-lag bug). The user's next actual edit (updateListener
+    // -> broadcastText) and reconnect's flushIfDirty already push local up.
     return false;
   }
 
@@ -8453,6 +8468,15 @@ window.quickSwitchPick = function(name) {
 function hotkeyLabelQuickSwitch() { return 'Ctrl+P'; }
 
 window.switchRoom = async function(name) {
+  // Clicking the room you're already in must be a no-op: re-running the switch
+  // scrolled to top, tore down/rebuilt sync (the green->orange->green flicker),
+  // and could let a queued remote snapshot clobber the live doc. The initial
+  // bootstrap switch is still allowed because _activeRoomReady is false then.
+  if (name === activeRoom && _activeRoomReady) {
+    try { editor.focus(); } catch {}
+    return;
+  }
+
   const firebaseUrl = store.get('cade-firebase-url');
   const baseEncKey = store.get('cade-sync-key');
 
@@ -8481,6 +8505,9 @@ window.switchRoom = async function(name) {
 // the old room's listener ends up live while syncState points at the new room,
 // cross-contaminating documents.
 let _switchEpoch = 0;
+// True once the first room switch has committed locally. Gates the same-room
+// no-op in switchRoom so the bootstrap's initial switch still runs.
+let _activeRoomReady = false;
 
 // Per-room editor state cache (text + selection + undo history). Switching
 // rooms saves the outgoing room's state here and restores the incoming room's,
@@ -8578,6 +8605,7 @@ async function _doSwitchRoom(name, firebaseUrl, baseEncKey) {
   renderRoomTabs();
   // Keep an open Snapshots panel pointed at the new room's history (#6).
   try { if (document.getElementById('snapshots-overlay').classList.contains('open')) renderSnapshotsList(); } catch {}
+  _activeRoomReady = true; // local switch committed; same-room clicks now no-op
 
   // No Firebase config — local-only mode. The user can still edit and we'll
   // persist to per-room cache. As soon as creds are set + we reconnect, the
@@ -8991,7 +9019,6 @@ function renderRoomRow(name, showBadge) {
           ? `<button class="btn" style="padding:2px 8px;font-size:var(--text-xs);" onclick="toggleRoomArchive('${esc(name)}')" title="Restore">↩ Restore</button>`
           : `<button class="btn ${pickerOpen ? 'btn-primary' : ''}" style="padding:2px 8px;font-size:var(--text-xs);" onclick="toggleRmTagPicker('${esc(name)}')" title="Edit workspaces">🏷</button>`}
         <button class="btn" style="padding:2px 8px;font-size:var(--text-xs);" onclick="showRoomActionMenu(event, '${esc(name)}')" title="More actions">⚙</button>
-        <button class="btn btn-danger" style="padding:2px 8px;font-size:var(--text-xs);" onclick="removeRoom('${esc(name)}')" title="Remove from this device's list">×</button>
       </div>
     </div>
     ${tagPicker}
@@ -9226,7 +9253,7 @@ window.deleteRoomFromServer = async function(name) {
   const fbUrl = store.get('cade-firebase-url');
   const baseKey = store.get('cade-sync-key');
   if (!fbUrl || !baseKey) {
-    showToast('Sync isn\'t configured — can\'t delete server data. Use "Remove from list" instead.', 'error', 5000);
+    showToast('Sync isn\'t configured — there is no server data to delete for this room.', 'error', 5000);
     return;
   }
   if (!navigator.onLine) {
@@ -10242,7 +10269,6 @@ window.showRoomActionMenu = function(evt, roomName) {
     <div class="rm-action-item" onclick="closeActionMenu(); roomPasswordAction('${er}')">${hasPassword ? '🔑 Change password' : '🔒 Set password'}</div>
     ${hasPassword ? `<div class="rm-action-item" onclick="closeActionMenu(); removeRoomPassword('${er}')">Remove password</div>` : ''}
     <div class="rm-action-divider"></div>
-    <div class="rm-action-item" onclick="closeActionMenu(); removeRoom('${er}')">⤫ Remove from list</div>
     <div class="rm-action-item danger" onclick="deleteRoomFromServer('${er}')">🗑 Delete from server…</div>
   `;
   menu.classList.add('open');
@@ -10269,8 +10295,6 @@ window.showRoomTabContextMenu = function(evt, roomName) {
     <div class="rm-action-divider"></div>
     <div class="rm-action-section">workspaces</div>
     ${wsItems}
-    <div class="rm-action-divider"></div>
-    <div class="rm-action-item" onclick="closeActionMenu(); removeRoom('${er}')">⤫ Remove from list</div>
   `;
   menu.classList.add('open');
   positionActionMenu(menu, evt);
@@ -11568,8 +11592,12 @@ document.addEventListener('keydown', (e) => {
   }
 
   // Script hotkeys (not while typing in a form field — a binding like
-  // Ctrl+Shift+1 must not rewrite the document from inside a modal input)
-  if (!isInputField) {
+  // Ctrl+Shift+1 must not rewrite the document from inside a modal input).
+  // Ctrl/Cmd+P is reserved for the quick switcher below, so skip script
+  // hotkeys for it (a stale saved "sort on Ctrl+P" binding must not fire).
+  const _qsMod = (navigator.platform.toUpperCase().indexOf('MAC') >= 0 ? e.metaKey : e.ctrlKey);
+  const _isQuickSwitchKey = _qsMod && !e.shiftKey && !e.altKey && (e.key === 'p' || e.key === 'P');
+  if (!isInputField && !_isQuickSwitchKey) {
     for (const [hk, scriptName] of Object.entries(scriptHotkeys)) {
       if (eventMatchesHotkey(e, hk)) {
         e.preventDefault(); e.stopPropagation();
