@@ -2154,6 +2154,14 @@ body.zen.zen-tw .editor-wrap .cm-content { padding-top: 38vh; padding-bottom: 38
 .zen-exit { position: fixed; top: 10px; right: 12px; z-index: 6000; opacity: 0.25; transition: opacity 0.2s; }
 .zen-exit:hover { opacity: 1; }
 
+.drop-overlay { position: fixed; inset: 0; z-index: 9000; background: rgba(0,0,0,0.45); display: flex; align-items: center; justify-content: center; color: #fff; font-size: 20px; font-weight: 600; pointer-events: none; border: 3px dashed var(--accent); }
+
+/* Snapshot diff viewer (#101) */
+.snap-diff { font-family: var(--font-mono); font-size: var(--text-xs); white-space: pre-wrap; word-break: break-word; max-height: 50vh; overflow: auto; border: 1px solid var(--border); border-radius: var(--radius); padding: 8px; margin-top: 8px; background: var(--bg); }
+.snap-diff .d-add { background: color-mix(in srgb, #10b981 22%, transparent); }
+.snap-diff .d-del { background: color-mix(in srgb, #ef4444 22%, transparent); text-decoration: line-through; opacity: 0.8; }
+.snap-diff .d-ctx { color: var(--text-muted); }
+
 @media (max-width: 768px) {
   #outline-panel, #pomodoro-panel, #daycal-panel { right: 8px; left: 8px; width: auto; }
 }
@@ -2900,7 +2908,7 @@ const store = (() => {
 const idbStore = (() => {
   const DB_NAME = 'cadetxt-blobs';
   const STORE_NAME = 'kv';
-  const FB_PREFIX = ' idbfb '; // namespace fallback keys inside `store`
+  const FB_PREFIX = '\u0000idbfb\u0000'; // namespace fallback keys inside `store`
 
   let _dbPromise = null;
   let _idbBroken = false;
@@ -4959,11 +4967,30 @@ const SLASH_CODES = {
   'sqr':'🟥','sqb':'🟦','sqo':'🟧','sqy':'🟨','sqg':'🟩','sqp':'🟪','sqn':'🟫',
   'cr':'🔴','cb':'🔵','co':'🟠','cy':'🟡','cg':'🟢','cp':'🟣','cn':'🟤',
 };
+// Structural slash-commands (#111): insert multi-line blocks. \u0000 marks where
+// the caret lands. Values are functions so date/time are evaluated on accept.
+const SLASH_SNIPPETS = {
+  table: () => '| Column 1 | Column 2 |\n| --- | --- |\n| \u0000 |  |',
+  todo: () => '- [ ] \u0000',
+  hr: () => '\n---\n\u0000',
+  code: () => '```\n\u0000\n```',
+  quote: () => '> \u0000',
+  note: () => '> [!note] \u0000',
+  h1: () => '# \u0000', h2: () => '## \u0000', h3: () => '### \u0000',
+  date: () => new Date().toISOString().slice(0, 10) + '\u0000',
+  time: () => new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + '\u0000',
+  now: () => new Date().toLocaleString() + '\u0000',
+};
 function buildSlashItems(code) {
   const items = [];
   for (const key in SLASH_CODES) {
     if (key === code || key.startsWith(code)) {
       items.push({ label: '/' + key, insert: SLASH_CODES[key], desc: SLASH_CODES[key], kind: 'symbol' });
+    }
+  }
+  for (const key in SLASH_SNIPPETS) {
+    if (key === code || key.startsWith(code)) {
+      items.push({ label: '/' + key, insert: SLASH_SNIPPETS[key](), desc: 'insert ' + key, kind: 'snippet' });
     }
   }
   items.sort((a, b) =>
@@ -5048,9 +5075,13 @@ function acAccept(i) {
   const it = acItems[i == null ? acIndex : i];
   if (!it) { closeAutocomplete(); return; }
   acSuppress = true; // don't let the resulting doc change re-open the dropdown
+  // Snippets may carry a \u0000 marker for where the caret should land.
+  let insert = it.insert;
+  let caret = insert.indexOf('\u0000');
+  if (caret >= 0) insert = insert.replace('\u0000', '');
   editor.dispatch({
-    changes: { from: acFrom, to: acTo, insert: it.insert },
-    selection: { anchor: acFrom + it.insert.length },
+    changes: { from: acFrom, to: acTo, insert },
+    selection: { anchor: acFrom + (caret >= 0 ? caret : insert.length) },
   });
   closeAutocomplete();
   editor.focus();
@@ -11967,11 +11998,50 @@ function renderSnapshotsList() {
       <span class="snap-time" title="${new Date(s.t).toLocaleString()}">${snapRelTime(s.t)}</span>
       <span class="snap-preview" title="${escapeHtml(firstLine)}">${escapeHtml(firstLine)}</span>
       <span class="snap-meta">${s.c.length.toLocaleString()} ch</span>
+      <button class="btn" style="padding:2px 8px;font-size:var(--text-xs);" onclick="diffSnapshot(${i})">Diff</button>
       <button class="btn" style="padding:2px 8px;font-size:var(--text-xs);" onclick="restoreSnapshot(${i})">Restore</button>
       <button class="btn btn-danger" style="padding:2px 8px;font-size:var(--text-xs);" onclick="deleteSnapshot(${i})">×</button>
-    </div>`;
+    </div>
+    <div class="snap-diff" id="snap-diff-${i}" style="display:none;"></div>`;
   }).join('');
 }
+
+// Simple LCS line-diff between a snapshot and the current document (#101).
+function _lineDiff(aLines, bLines) {
+  const n = aLines.length, m = bLines.length;
+  // LCS table (capped to keep it cheap; falls back to a coarse diff if huge).
+  if (n * m > 4000000) return null;
+  const dp = Array.from({ length: n + 1 }, () => new Uint32Array(m + 1));
+  for (let i = n - 1; i >= 0; i--)
+    for (let j = m - 1; j >= 0; j--)
+      dp[i][j] = aLines[i] === bLines[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+  const out = [];
+  let i = 0, j = 0;
+  while (i < n && j < m) {
+    if (aLines[i] === bLines[j]) { out.push(['ctx', aLines[i]]); i++; j++; }
+    else if (dp[i + 1][j] >= dp[i][j + 1]) { out.push(['del', aLines[i]]); i++; }
+    else { out.push(['add', bLines[j]]); j++; }
+  }
+  while (i < n) out.push(['del', aLines[i++]]);
+  while (j < m) out.push(['add', bLines[j++]]);
+  return out;
+}
+window.diffSnapshot = function(i) {
+  const el = document.getElementById('snap-diff-' + i);
+  if (!el) return;
+  if (el.style.display !== 'none') { el.style.display = 'none'; el.innerHTML = ''; return; }
+  const snaps = loadSnaps();
+  const snap = snaps[i];
+  if (!snap) return;
+  const diff = _lineDiff(snap.c.split('\n'), editor.state.doc.toString().split('\n'));
+  if (!diff) { el.innerHTML = '<span class="d-ctx">Documents too large to diff.</span>'; el.style.display = 'block'; return; }
+  const cls = { ctx: 'd-ctx', add: 'd-add', del: 'd-del' };
+  const sign = { ctx: ' ', add: '+', del: '−' };
+  el.innerHTML = diff.map(([k, line]) =>
+    '<div class="' + cls[k] + '">' + sign[k] + ' ' + (escapeHtml(line) || ' ') + '</div>'
+  ).join('') || '<span class="d-ctx">Identical.</span>';
+  el.style.display = 'block';
+};
 
 window.openSnapshots = function() {
   closeAllMenus();
@@ -12377,6 +12447,30 @@ window.installApp = function() {
     showToast('To install: use your browser menu → "Add to Home Screen" / "Install".', 'success', 5000);
   }
 };
+
+// Drag-and-drop file import (#103): drop .txt/.md/.zip (and images, if image
+// embedding is enabled) onto the window to import. Reuses appendFilesToEditor.
+(function() {
+  let depth = 0, overlay = null;
+  const hasFiles = e => e.dataTransfer && Array.from(e.dataTransfer.types || []).indexOf('Files') >= 0;
+  const show = () => { if (!overlay) { overlay = document.createElement('div'); overlay.className = 'drop-overlay'; overlay.textContent = 'Drop files to import'; document.body.appendChild(overlay); } };
+  const hide = () => { if (overlay) { overlay.remove(); overlay = null; } depth = 0; };
+  window.addEventListener('dragover', e => { if (hasFiles(e)) e.preventDefault(); });
+  window.addEventListener('dragenter', e => { if (hasFiles(e)) { e.preventDefault(); depth++; show(); } });
+  window.addEventListener('dragleave', () => { depth = Math.max(0, depth - 1); if (!depth) hide(); });
+  window.addEventListener('drop', async e => {
+    if (!hasFiles(e)) return;
+    e.preventDefault(); hide();
+    const files = Array.from(e.dataTransfer.files);
+    const imgs = files.filter(f => /^image\//.test(f.type));
+    const others = files.filter(f => !/^image\//.test(f.type));
+    if (others.length) { try { await appendFilesToEditor(others); } catch { showToast('Import failed', 'error', 2500); } }
+    for (const im of imgs) {
+      if (typeof insertImageFile === 'function') { try { await insertImageFile(im); } catch {} }
+      else { showToast('Image embedding is off for this drop', 'error', 2500); break; }
+    }
+  });
+})();
 
 // ============================================
 // HOTKEY SYSTEM
