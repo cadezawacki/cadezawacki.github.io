@@ -4753,22 +4753,73 @@ function buildAutocompleteItems(prefix) {
   return items.slice(0, 8);
 }
 
+// Slash symbol codes (#17): type "/code" then accept (Tab/Enter/click) to insert
+// the symbol. Case-sensitive (so /x and /X differ). Configurable — add entries
+// here. Avoid emoji except where explicitly intended.
+const SLASH_CODES = {
+  '->':'➞','=>':'⇒','<-':'⟵','<->':'⟷','->|':'⏵','!=':'≠','~=':'≈','==':'≡',
+  '>>':'»','<<':'«','<=':'≤','>=':'≥',
+  'cent':'￠','euro':'€','pound':'£','yen':'¥',
+  'x':'✗','X':'✘','check':'✓','tick':'✓','bullet':'•','star':'★','star4':'✦',
+  'flag':'⚐','flagf':'⚑','flagr':'🚩',
+  'yes':'✅','no':'❌',
+  'cmd':'⌘','del':'␡','esc':'␛','sub':'␚','ack':'␆',
+  'down':'↓','up':'↑','...':'…','..':'…',
+  '(c)':'ⓒ','(r)':'Ⓡ','tm':'™',
+  'deg':'°','degc':'℃','degf':'℉',
+  'box':'☐','boxx':'☒','boxh':'▧',
+  '--':'–','---':'—',
+  'sigma':'σ','Sigma':'Σ','sum':'∑','mu':'μ','delta':'Δ','Delta':'Δ','dot':'⦿',
+  'iff':'⟺','play':'⏵','rew':'⏴','up2':'⏶','down2':'⏷',
+  'lll':'⇇','lr':'⇆','tri':'🛆','notri':'🛇','llama':'𐙼','circ':'🞅',
+  '1':'➀','2':'➁','3':'➂','4':'➃','5':'➄','6':'➅','7':'➆','8':'➇','9':'➈',
+  'b1':'➊','b2':'➋','b3':'➌','b4':'➍','b5':'➎','b6':'➏','b7':'➐','b8':'➑','b9':'➒',
+  'sqr':'🟥','sqb':'🟦','sqo':'🟧','sqy':'🟨','sqg':'🟩','sqp':'🟪','sqn':'🟫',
+  'cr':'🔴','cb':'🔵','co':'🟠','cy':'🟡','cg':'🟢','cp':'🟣','cn':'🟤',
+};
+function buildSlashItems(code) {
+  const items = [];
+  for (const key in SLASH_CODES) {
+    if (key === code || key.startsWith(code)) {
+      items.push({ label: '/' + key, insert: SLASH_CODES[key], desc: SLASH_CODES[key], kind: 'symbol' });
+    }
+  }
+  items.sort((a, b) =>
+    (a.label === '/' + code ? 0 : 1) - (b.label === '/' + code ? 0 : 1) || a.label.length - b.label.length);
+  return items.slice(0, 8);
+}
+
 function maybeAutocomplete() {
   if (acSuppress) { acSuppress = false; closeAutocomplete(); return; }
-  if (typeof injectionsEnabled !== 'undefined' && !injectionsEnabled) { closeAutocomplete(); return; }
   const sel = editor.state.selection.main;
   if (!sel.empty) { closeAutocomplete(); return; }
   const line = editor.state.doc.lineAt(sel.head);
   const before = line.text.slice(0, sel.head - line.from);
-  // "@word" where @ sits at start of line or after a separator.
-  const m = before.match(/(?:^|[\s,;(])@([a-zA-Z]*)$/);
-  if (!m) { closeAutocomplete(); return; }
-  const prefix = m[1].toLowerCase();
-  const items = buildAutocompleteItems(prefix);
-  if (!items.length) { closeAutocomplete(); return; }
-  acFrom = sel.head - prefix.length - 1; // position of '@'
-  acTo = sel.head;
-  showAutocomplete(items);
+  const injOn = !(typeof injectionsEnabled !== 'undefined' && !injectionsEnabled);
+  // "@word" where @ sits at start of line or after a separator (gated by the
+  // Plugins/injections toggle).
+  const m = injOn ? before.match(/(?:^|[\s,;(])@([a-zA-Z]*)$/) : null;
+  if (m) {
+    const prefix = m[1].toLowerCase();
+    const items = buildAutocompleteItems(prefix);
+    if (!items.length) { closeAutocomplete(); return; }
+    acFrom = sel.head - prefix.length - 1; // position of '@'
+    acTo = sel.head;
+    showAutocomplete(items);
+    return;
+  }
+  // "/code" symbol shortcuts (always available).
+  const sm = before.match(/(?:^|[\s,;(])\/([-A-Za-z0-9<>=!~*.()$|]{1,6})$/);
+  if (sm) {
+    const items = buildSlashItems(sm[1]);
+    if (items.length) {
+      acFrom = sel.head - sm[1].length - 1; // position of '/'
+      acTo = sel.head;
+      showAutocomplete(items);
+      return;
+    }
+  }
+  closeAutocomplete();
 }
 
 function showAutocomplete(items) {
@@ -6283,6 +6334,49 @@ function main(ctx) {
   if (delim === null) return;
   const text = ctx.selection || ctx.fullText;
   const result = text.split(delim).map(s => s.trim()).join('\\n');
+  if (ctx.selection) ctx.selection = result; else ctx.fullText = result;
+}`);
+
+registerScript(`/**
+  {
+    "name": "Split (Keep Delimiter)",
+    "description": "One entry per line, split on a delimiter but KEEP the delimiter in the text",
+    "author": "Cade",
+    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><line x1='12' y1='2' x2='12' y2='22'/><path d='M5 9h14'/></svg>",
+    "tags": "split,keep,delimiter,lines,separate,unflatten,explode"
+  }
+**/
+function main(ctx) {
+  const delim = prompt('Delimiter to split on (kept in text):', ',');
+  if (delim === null || delim === '') return;
+  const text = ctx.selection || ctx.fullText;
+  const parts = text.split(delim);
+  const result = parts
+    .map((p, i) => i < parts.length - 1 ? p + delim : p)
+    .map(s => s.trim())
+    .filter(s => s.length)
+    .join('\\n');
+  if (ctx.selection) ctx.selection = result; else ctx.fullText = result;
+}`);
+
+registerScript(`/**
+  {
+    "name": "Listify (One Per Row)",
+    "description": "Quote each item on its own row, with a comma after each except the last",
+    "author": "Cade",
+    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M8 6h13'/><path d='M8 12h13'/><path d='M8 18h13'/><circle cx='3' cy='6' r='1' fill='currentColor'/><circle cx='3' cy='12' r='1' fill='currentColor'/><circle cx='3' cy='18' r='1' fill='currentColor'/></svg>",
+    "tags": "list,listify,rows,quote,column,array,one per line,csv"
+  }
+**/
+function main(ctx) {
+  const text = ctx.selection || ctx.fullText;
+  let items;
+  if (text.includes('\\n')) items = text.split('\\n');
+  else if (text.includes('\\t')) items = text.split('\\t');
+  else if (text.includes(',')) items = text.split(',');
+  else items = text.split(/\\s+/);
+  items = items.map(s => s.trim()).filter(Boolean);
+  const result = items.map((s, i) => '"' + s + '"' + (i < items.length - 1 ? ',' : '')).join('\\n');
   if (ctx.selection) ctx.selection = result; else ctx.fullText = result;
 }`);
 
@@ -11692,6 +11786,18 @@ document.addEventListener('keydown', (e) => {
     if (overlay && overlay.classList.contains('open')) closeQuickSwitcher();
     else openQuickSwitcher();
     return;
+  }
+
+  // Bold / Italic / Underline on the selection (Ctrl/Cmd+B/I/U) via the
+  // matching transform scripts (#13). Capture phase so CM6/contenteditable
+  // never see the key first.
+  if (modKey && !e.shiftKey && !e.altKey && !isInputField) {
+    const k = (e.key || '').toLowerCase();
+    const prefix = k === 'b' ? 'Bold (' : k === 'i' ? 'Italic (' : k === 'u' ? 'Underline (' : null;
+    if (prefix) {
+      const sc = scripts.find(s => s.name.startsWith(prefix));
+      if (sc) { e.preventDefault(); e.stopPropagation(); executeScript(sc); return; }
+    }
   }
 
   if (modKey && e.key === 'Tab' && rooms.length > 0 && !isInputField) {
