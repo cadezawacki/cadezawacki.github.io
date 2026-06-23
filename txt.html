@@ -383,6 +383,13 @@ body {
 .room-manager-drag:active { cursor: grabbing; }
 @media (pointer: coarse) {
   .room-manager-drag { font-size: 18px; padding: 6px 10px 6px 2px; }
+  /* Bigger tap targets on touch devices (#81). */
+  .menu-item { min-height: 40px; }
+  .rm-action-item { min-height: 38px; display: flex; align-items: center; }
+  .room-tab { min-height: 34px; }
+  .cm-autocomplete .cm-ac-item { min-height: 36px; }
+  .spell-suggestion, .spell-action { min-height: 36px; }
+  .cade-panel-head .cade-panel-x { min-width: 32px; text-align: center; }
 }
 .room-manager-name {
   font-family: var(--font-mono);
@@ -831,6 +838,23 @@ body {
 .editor-wrap .cm-editor.cm-focused .cm-selectionBackground {
   background: rgba(14, 165, 233, 0.15) !important;
 }
+/* Dark mode: the selection was too faint — use a brighter teal (#12). */
+[data-theme="dark"] .editor-wrap .cm-selectionBackground,
+[data-theme="dark"] .editor-wrap .cm-editor .cm-selectionBackground,
+[data-theme="dark"] .editor-wrap .cm-editor.cm-focused .cm-selectionBackground {
+  background: rgba(20, 184, 166, 0.34) !important;
+}
+/* Matching words elsewhere (highlightSelectionMatches): a distinct teal, boxed
+   so it reads differently from the solid selection (was the default green). */
+.editor-wrap .cm-selectionMatch {
+  background: rgba(45, 212, 191, 0.16) !important;
+  border-radius: 2px;
+  box-shadow: inset 0 0 0 1px rgba(20, 184, 166, 0.55);
+}
+[data-theme="dark"] .editor-wrap .cm-selectionMatch {
+  background: rgba(45, 212, 191, 0.15) !important;
+  box-shadow: inset 0 0 0 1px rgba(94, 234, 212, 0.6);
+}
 
 .editor-wrap .cm-cursor, .editor-wrap .cm-dropCursor {
   border-left-color: var(--accent);
@@ -856,7 +880,13 @@ body {
   -webkit-user-select: none;
 }
 
-.footer-left { display: flex; gap: var(--space-4); align-items: center; }
+/* Tabular figures + fixed slots so the stats never shift each other (#9). */
+.footer-left { display: flex; gap: var(--space-4); align-items: center; font-variant-numeric: tabular-nums; }
+.footer-left > span { white-space: nowrap; }
+#footer-line  { min-width: 86px; }
+#footer-chars { min-width: 74px; }
+#footer-words { min-width: 66px; }
+#footer-lines { min-width: 58px; }
 .footer-spacer { flex: 1; }
 .footer-right { display: flex; gap: var(--space-4); align-items: center; }
 
@@ -865,13 +895,21 @@ body {
 .footer-breadcrumb:empty { display: none; }
 .footer-breadcrumb .bc-ws, .footer-breadcrumb .bc-room {
   display: inline-flex; align-items: center; gap: 4px; cursor: pointer;
-  max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   padding: 1px 4px; border-radius: 4px;
 }
+.footer-breadcrumb .bc-ws { flex-shrink: 0; max-width: 140px; }
+.footer-breadcrumb .bc-room { flex-shrink: 1; min-width: 0; max-width: 220px; }
+.footer-breadcrumb .bc-ws-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .footer-breadcrumb .bc-ws:hover, .footer-breadcrumb .bc-room:hover { background: var(--surface-hover, rgba(127,127,127,0.15)); }
-.footer-breadcrumb .bc-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ws-dot, currentColor); flex-shrink: 0; }
+/* Dot takes the workspace's own color (--ws-fg from the ws-color-* class). */
+.footer-breadcrumb .bc-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ws-fg, currentColor); flex-shrink: 0; }
 .footer-breadcrumb .bc-sep { opacity: 0.5; }
 .footer-breadcrumb .bc-room { color: var(--text, inherit); font-weight: 500; }
+/* Compact: collapse the workspace segment to just its colored dot (no label,
+   no ellipsis) so the room name keeps priority when space is tight. */
+.footer-breadcrumb.compact .bc-ws-label,
+.footer-breadcrumb.compact .bc-sep { display: none; }
 
 /* Quick switcher (Feature 50) — higher specificity so it beats .modal-overlay */
 .modal-overlay.qs-overlay { align-items: flex-start; }
@@ -894,14 +932,14 @@ body {
 .qs-item .qs-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ws-dot, #888); flex-shrink: 0; }
 .qs-item .qs-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .qs-item .qs-meta { color: var(--text-faint, #888); font-size: var(--text-xs, 11px); }
-.qs-item .qs-pin { font-size: 11px; }
+.qs-item .qs-pin { font-size: 11px; color: var(--accent, #6c9); font-weight: 700; }
 .qs-empty { padding: 14px 10px; color: var(--text-faint, #888); font-size: var(--text-sm, 13px); }
 
 /* Tree twisties + tag picker + pin/archive (Features 51/52/54) */
 .ws-dd-twisty, .ws-mgr-twisty { display: inline-flex; width: 14px; justify-content: center; cursor: pointer; opacity: 0.7; font-size: 10px; flex-shrink: 0; }
 .ws-dd-twisty:hover, .ws-mgr-twisty:hover { opacity: 1; }
 .ws-dd-twisty-empty { cursor: default; opacity: 0; }
-.room-tab-pin { font-size: 10px; margin-right: 2px; }
+.room-tab-pin { font-size: 10px; margin-right: 2px; color: var(--accent, #6c9); font-weight: 700; }
 .room-tab.pinned { font-weight: 600; }
 .room-manager-item.rm-archived { opacity: 0.62; }
 .rm-tag-picker { width: 100%; padding: 6px 0 2px 22px; }
@@ -917,6 +955,12 @@ body {
 .ws-mgr-parent-row { display: flex; align-items: center; gap: 6px; }
 .ws-mgr-parent-select { font-size: var(--text-xs, 11px); padding: 2px 6px; }
 
+.share-opts { display: flex; flex-direction: column; gap: 8px; }
+.share-opt { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; padding: 10px 12px; height: auto; width: 100%; }
+.share-opt .scb-title { font-weight: 600; }
+.share-opt .scb-desc { font-size: var(--text-xs); color: var(--text-muted); font-weight: 400; white-space: normal; }
+.share-opt:disabled { opacity: 0.5; cursor: not-allowed; }
+
 .sync-indicator {
   display: flex;
   align-items: center;
@@ -924,11 +968,14 @@ body {
 }
 
 .sync-dot {
-  width: 7px;
-  height: 7px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   background: var(--text-faint);
   transition: background var(--transition);
+  flex-shrink: 0;
+  margin-right: 2px;
+  cursor: default;
 }
 
 .sync-dot.connected { background: var(--success); }
@@ -1450,6 +1497,8 @@ body {
 .mob-btn:active { background: var(--surface-2); color: var(--text); }
 .mob-btn svg { width: 12px; height: 12px; flex-shrink: 0; }
 .mob-sep { width: 1px; height: 14px; background: var(--border); margin: 0 2px; flex-shrink: 0; }
+.mob-md-row { border-top: 1px solid var(--border); }
+.mob-md-btn { min-width: 40px; font-weight: 600; justify-content: center; }
 
 /* ============================================
    MOBILE
@@ -1470,7 +1519,11 @@ body {
   }
   .editor-wrap .cm-scroller {
     padding: var(--space-2) var(--space-3);
+    /* Leave room so the caret line can scroll clear of the footer/keyboard (#18). */
+    scroll-padding-bottom: 96px;
   }
+  /* Trailing buffer so the last line is reachable above the keyboard. */
+  .editor-wrap .cm-content { padding-bottom: 30vh; }
   .editor-wrap .cm-editor,
   .editor-wrap .cm-editor .cm-content,
   .editor-wrap .cm-editor .cm-line {
@@ -1482,8 +1535,19 @@ body {
     padding-bottom: env(safe-area-inset-bottom);
     font-size: 10px;
   }
-  .footer-left { gap: var(--space-2); }
+  .footer-left { gap: 6px; }
   .footer-right { gap: var(--space-2); }
+  /* Compact stats: drop labels + Ln/Col, show bare "500 / 38 / 10" (#9). */
+  #footer-line { display: none; }
+  .footer-left .flabel { display: none; }
+  #footer-chars, #footer-words { position: relative; padding-right: 9px; }
+  #footer-chars::after, #footer-words::after {
+    content: "/"; position: absolute; right: 0; opacity: 0.5;
+  }
+  #footer-line, #footer-chars, #footer-words, #footer-lines { min-width: 0; }
+  /* Keep the breadcrumb compact on mobile: workspace as a dot only. */
+  .footer-breadcrumb { margin-left: 6px; }
+  .footer-breadcrumb .bc-ws-label, .footer-breadcrumb .bc-sep { display: none; }
   .modal-dialog {
     padding: var(--space-4);
     max-height: calc(100vh - 40px);
@@ -1944,6 +2008,14 @@ body {
   font-style: italic;
   border-left: 3px solid var(--border);
 }
+/* Callout blocks (#60) — left bar + faint tint, coloured per type. */
+.cm-callout { border-left: 3px solid var(--co, #3b82f6); background: color-mix(in srgb, var(--co, #3b82f6) 8%, transparent); padding-left: 4px; }
+.cm-callout-note, .cm-callout-info, .cm-callout-quote { --co: #3b82f6; }
+.cm-callout-tip, .cm-callout-success { --co: #10b981; }
+.cm-callout-warning, .cm-callout-caution { --co: #f59e0b; }
+.cm-callout-important, .cm-callout-danger { --co: #ef4444; }
+.cm-callout-question { --co: #8b5cf6; }
+.cm-md-footnote { color: var(--accent); font-size: 0.85em; vertical-align: super; }
 .cm-md-code {
   background: var(--surface-2);
   border: 1px solid var(--border);
@@ -2031,6 +2103,74 @@ body {
   text-overflow: ellipsis;
   white-space: nowrap;
   max-width: 160px;
+}
+
+/* ===== Widgets (Round 2): outline, pomodoro, zen, clock, daily note ===== */
+.cade-panel {
+  position: fixed; z-index: 5000; background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-lg); box-shadow: var(--shadow-lg); display: flex; flex-direction: column;
+  font-size: var(--text-sm); color: var(--text); min-width: 180px;
+}
+.cade-panel-head { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-bottom: 1px solid var(--border); cursor: move; user-select: none; }
+.cade-panel-head .cade-panel-title { font-weight: 600; flex: 1; font-size: var(--text-sm); }
+.cade-panel-head .cade-panel-x { cursor: pointer; opacity: 0.6; padding: 0 6px; border-radius: 4px; font-size: 16px; line-height: 1; }
+.cade-panel-head .cade-panel-x:hover { opacity: 1; background: var(--surface-hover, rgba(127,127,127,0.15)); }
+.cade-panel-body { overflow: auto; }
+
+#outline-panel { top: 50px; right: 12px; width: 250px; max-height: 62vh; }
+#outline-list { padding: 4px; }
+.outline-item { display: block; width: 100%; text-align: left; padding: 4px 8px; border-radius: 4px; cursor: pointer; background: none; border: none; color: var(--text-muted); font: inherit; font-size: var(--text-sm); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.outline-item:hover { background: var(--surface-hover, rgba(127,127,127,0.15)); color: var(--text); }
+.outline-item.h1 { font-weight: 600; color: var(--text); }
+.outline-item.h2 { padding-left: 18px; }
+.outline-item.h3 { padding-left: 30px; }
+.outline-item.h4, .outline-item.h5, .outline-item.h6 { padding-left: 42px; font-size: var(--text-xs); }
+.outline-empty { padding: 12px; color: var(--text-faint); font-size: var(--text-xs); }
+
+#pomodoro-panel { top: 50px; right: 12px; width: 200px; }
+.pomo-time { font-size: 34px; font-weight: 700; text-align: center; font-variant-numeric: tabular-nums; padding: 10px 0 2px; }
+.pomo-phase { text-align: center; font-size: var(--text-xs); color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+.pomo-count { text-align: center; font-size: var(--text-xs); color: var(--text-faint); padding: 4px 0; }
+.pomo-btns { display: flex; gap: 6px; padding: 8px 10px 10px; }
+.pomo-btns .btn { flex: 1; }
+#pomodoro-panel.break .pomo-time { color: var(--success, #10b981); }
+
+#footer-clock { font-variant-numeric: tabular-nums; color: var(--text-muted); cursor: default; }
+#footer-clock .fc-tz { opacity: 0.7; margin-left: 8px; }
+
+#daycal-panel { top: 50px; right: 12px; width: 244px; }
+.daycal-head { display: flex; align-items: center; justify-content: space-between; padding: 8px 10px 2px; font-weight: 600; }
+.daycal-head button { background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 18px; line-height: 1; padding: 0 8px; border-radius: 4px; }
+.daycal-head button:hover { background: var(--surface-hover, rgba(127,127,127,0.15)); }
+.daycal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; padding: 8px; }
+.daycal-cell { text-align: center; padding: 6px 0; border-radius: 4px; cursor: pointer; font-size: var(--text-xs); }
+.daycal-cell:hover { background: var(--surface-hover, rgba(127,127,127,0.15)); }
+.daycal-cell.today { outline: 1px solid var(--accent); }
+.daycal-cell.has { font-weight: 700; color: var(--accent); }
+.daycal-cell.dow { color: var(--text-faint); cursor: default; font-weight: 600; }
+.daycal-cell.empty { cursor: default; }
+
+body.zen .menubar, body.zen .footer, body.zen .mobile-toolbar, body.zen .mobile-scroll-btns { display: none !important; }
+body.zen .editor-wrap .cm-scroller { padding-left: max(8vw, var(--space-4)); padding-right: max(8vw, var(--space-4)); }
+body.zen.zen-tw .editor-wrap .cm-content { padding-top: 38vh; padding-bottom: 38vh; }
+.zen-exit { position: fixed; top: 10px; right: 12px; z-index: 6000; opacity: 0.25; transition: opacity 0.2s; }
+.zen-exit:hover { opacity: 1; }
+
+.drop-overlay { position: fixed; inset: 0; z-index: 9000; background: rgba(0,0,0,0.45); display: flex; align-items: center; justify-content: center; color: #fff; font-size: 20px; font-weight: 600; pointer-events: none; border: 3px dashed var(--accent); }
+
+/* Embedded images (#28) */
+.cm-img-embed { display: inline-block; vertical-align: bottom; max-width: 100%; }
+.cm-img-embed img { max-width: min(100%, 460px); max-height: 340px; border-radius: 6px; border: 1px solid var(--border); display: block; }
+.cm-img-embed.missing { color: var(--text-faint); font-size: var(--text-xs); border: 1px dashed var(--border); padding: 4px 8px; border-radius: 6px; }
+
+/* Snapshot diff viewer (#101) */
+.snap-diff { font-family: var(--font-mono); font-size: var(--text-xs); white-space: pre-wrap; word-break: break-word; max-height: 50vh; overflow: auto; border: 1px solid var(--border); border-radius: var(--radius); padding: 8px; margin-top: 8px; background: var(--bg); }
+.snap-diff .d-add { background: color-mix(in srgb, #10b981 22%, transparent); }
+.snap-diff .d-del { background: color-mix(in srgb, #ef4444 22%, transparent); text-decoration: line-through; opacity: 0.8; }
+.snap-diff .d-ctx { color: var(--text-muted); }
+
+@media (max-width: 768px) {
+  #outline-panel, #pomodoro-panel, #daycal-panel { right: 8px; left: 8px; width: auto; }
 }
 </style>
 </head>
@@ -2138,6 +2278,27 @@ body {
         <span>Snapshots / History</span>
         <span></span>
       </button>
+      <div class="menu-separator"></div>
+      <button class="menu-item" onclick="toggleOutline()">
+        <span id="outline-label">Outline</span>
+        <span></span>
+      </button>
+      <button class="menu-item" onclick="togglePomodoro()">
+        <span id="pomodoro-label">Focus Timer</span>
+        <span></span>
+      </button>
+      <button class="menu-item" onclick="toggleZen()">
+        <span id="zen-label">Zen Mode</span>
+        <span></span>
+      </button>
+      <button class="menu-item" onclick="openDailyNote()">
+        <span>Today's Note</span>
+        <span></span>
+      </button>
+      <button class="menu-item" onclick="installApp()">
+        <span>Install App</span>
+        <span></span>
+      </button>
       <!-- Sync items (mobile only — Sync menu is hidden) -->
       <div class="menu-separator view-sync-only"></div>
       <button class="menu-item view-sync-only" onclick="openSyncModal()">
@@ -2223,6 +2384,7 @@ body {
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Download
     </button>
   </div>
+  <div class="mob-toolbar-inner mob-md-row" id="mob-md-row" style="display:none;"></div>
 </div>
 
 <!-- ========== FIND & REPLACE PANEL ========== -->
@@ -2255,6 +2417,7 @@ body {
 <!-- ========== FOOTER ========== -->
 <div class="footer">
   <div class="footer-left">
+    <div class="sync-dot" id="sync-dot" title="Sync off"></div>
     <span id="footer-line">Ln 1, Col 1</span>
     <span id="footer-chars">0 chars</span>
     <span id="footer-words">0 words</span>
@@ -2263,9 +2426,33 @@ body {
   <div class="footer-breadcrumb" id="footer-breadcrumb"></div>
   <div class="footer-spacer"></div>
   <div class="footer-right">
-    <div class="sync-indicator">
-      <div class="sync-dot" id="sync-dot"></div>
-      <span id="sync-status">Sync off</span>
+    <span id="sync-status" style="display:none;"></span>
+  </div>
+</div>
+
+<!-- ========== SHARE ========== -->
+<div class="modal-overlay" id="share-overlay">
+  <div class="modal-dialog" style="max-width: 500px;">
+    <div class="modal-title">Share</div>
+    <div class="modal-desc">Choose how to share this document.</div>
+    <div class="share-opts">
+      <button class="btn share-opt" id="share-opt-synced" type="button" onclick="generateShareLink('synced')">
+        <span class="scb-title">🔗 Synced Link</span>
+        <span class="scb-desc">Opens live for anyone connected to the same database (password not included).</span>
+      </button>
+      <button class="btn share-opt" id="share-opt-public" type="button" onclick="generateShareLink('public')">
+        <span class="scb-title">📄 Public Link</span>
+        <span class="scb-desc">Embeds a compressed copy of the text in the link — anyone can read it. No sync.</span>
+      </button>
+    </div>
+    <div class="form-group" style="margin-top: var(--space-3);">
+      <textarea class="form-input" id="share-link-out" readonly rows="3" spellcheck="false" style="resize:none;font-size:11px;font-family:var(--font-mono);" placeholder="Pick an option above…"></textarea>
+      <div class="form-hint" id="share-link-hint"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeShareModal()">Close</button>
+      <button class="btn" id="share-native-btn" onclick="shareNative()" style="display:none;">Share…</button>
+      <button class="btn btn-primary" id="share-copy-btn" onclick="copyShareLink()" disabled>Copy</button>
     </div>
   </div>
 </div>
@@ -2729,7 +2916,7 @@ const store = (() => {
 const idbStore = (() => {
   const DB_NAME = 'cadetxt-blobs';
   const STORE_NAME = 'kv';
-  const FB_PREFIX = ' idbfb '; // namespace fallback keys inside `store`
+  const FB_PREFIX = '\u0000idbfb\u0000'; // namespace fallback keys inside `store`
 
   let _dbPromise = null;
   let _idbBroken = false;
@@ -3295,6 +3482,7 @@ window.toggleTodoAtCursor = function() {
   const line = editor.state.doc.lineAt(sel.head);
   const m = line.text.match(TODO_LINE_RE);
   if (!m) return;
+  try { if (window.haptic) haptic(10); } catch {}
   const bracketStart = line.from + m[1].length;
   const bracketEnd = bracketStart + 3;
   const isDone = m[2] !== ' ';
@@ -4045,6 +4233,8 @@ const MD_H_RE = /^(#{1,3})\s+\S/;
 const MD_QUOTE_RE = /^>\s/;
 const MD_HR_RE = /^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/;
 const MD_CODE_RE = /`([^`\n]+)`/g;
+const MD_FN_RE = /\[\^[^\]\s]+\]/g;
+const CALLOUT_TYPES = ['note', 'tip', 'info', 'warning', 'important', 'caution', 'danger', 'success', 'question', 'quote'];
 
 function buildMdDecorations(view) {
   if (!mdStyleEnabled) return Decoration.none;
@@ -4073,7 +4263,21 @@ function buildMdDecorations(view) {
         // De-emphasize the leading hashes so the title text carries the weight.
         ranges.push(Decoration.mark({ class: 'cm-md-hashes' }).range(line.from, line.from + h[1].length));
       } else if (MD_QUOTE_RE.test(text)) {
-        ranges.push(Decoration.line({ class: 'cm-md-quote' }).range(line.from));
+        // Callout block (> [!note] …): colour the whole contiguous blockquote by
+        // the type declared on its header line (#60). Bounded lookback.
+        let type = null;
+        for (let j = i; j >= 1 && j > i - 60; j--) {
+          const lt = doc.line(j).text;
+          if (!/^>/.test(lt)) break;
+          const cm = lt.match(/^>\s*\[!(\w+)\]/);
+          if (cm) { type = cm[1].toLowerCase(); break; }
+        }
+        if (type) {
+          const known = CALLOUT_TYPES.indexOf(type) >= 0 ? type : 'note';
+          ranges.push(Decoration.line({ class: 'cm-callout cm-callout-' + known }).range(line.from));
+        } else {
+          ranges.push(Decoration.line({ class: 'cm-md-quote' }).range(line.from));
+        }
       } else if (MD_HR_RE.test(text) && text.trim().length >= 3) {
         ranges.push(Decoration.line({ class: 'cm-md-hr' }).range(line.from));
       }
@@ -4083,6 +4287,12 @@ function buildMdDecorations(view) {
       while ((m = MD_CODE_RE.exec(text)) !== null) {
         const s = line.from + m.index, e = s + m[0].length;
         ranges.push(Decoration.mark({ class: 'cm-md-code' }).range(s, e));
+      }
+      // Footnote markers [^id] (#60).
+      MD_FN_RE.lastIndex = 0;
+      while ((m = MD_FN_RE.exec(text)) !== null) {
+        const s = line.from + m.index, e = s + m[0].length;
+        ranges.push(Decoration.mark({ class: 'cm-md-footnote' }).range(s, e));
       }
     }
     // Syntax-highlight tokens for code blocks intersecting this range.
@@ -4112,6 +4322,54 @@ const mdStylePlugin = ViewPlugin.fromClass(class {
   }
 }, { decorations: v => v.decorations });
 
+// ===== Embedded images (#28) =====
+// The compressed image rides INSIDE the document as a sentinel token
+// "![img:<base64-jpeg>]" so it syncs to the database like any other text; the
+// frontend renders the token as an <img>. Dramatic compression keeps it small.
+const IMG_TOKEN_RE = /!\[img:([A-Za-z0-9+/=]+)\]/g;
+const IMG_DATA_PREFIX = 'data:image/jpeg;base64,';
+class ImageWidget extends WidgetType {
+  constructor(data) { super(); this.data = data; }
+  eq(o) { return o.data === this.data; }
+  toDOM() {
+    const wrap = document.createElement('span');
+    wrap.className = 'cm-img-embed';
+    const img = document.createElement('img');
+    img.alt = 'embedded image';
+    img.src = IMG_DATA_PREFIX + this.data;
+    img.onerror = () => { wrap.classList.add('missing'); wrap.textContent = '⚠ broken image'; };
+    wrap.appendChild(img);
+    return wrap;
+  }
+  ignoreEvent() { return true; }
+}
+function buildImageDecorations(view) {
+  const ranges = [];
+  const doc = view.state.doc;
+  const seen = new Set();
+  for (const { from, to } of view.visibleRanges) {
+    const lineFrom = doc.lineAt(from).number, lineTo = doc.lineAt(to).number;
+    for (let i = lineFrom; i <= lineTo; i++) {
+      if (seen.has(i)) continue; seen.add(i);
+      const line = doc.line(i);
+      if (line.text.indexOf('![img:') === -1) continue;
+      IMG_TOKEN_RE.lastIndex = 0;
+      let m;
+      while ((m = IMG_TOKEN_RE.exec(line.text)) !== null) {
+        if (m[1].length < 24) continue;
+        const s = line.from + m.index, e = s + m[0].length;
+        ranges.push(Decoration.replace({ widget: new ImageWidget(m[1]) }).range(s, e));
+      }
+    }
+  }
+  ranges.sort((a, b) => a.from - b.from);
+  return Decoration.set(ranges, true);
+}
+const imagePlugin = ViewPlugin.fromClass(class {
+  constructor(view) { this.decorations = buildImageDecorations(view); }
+  update(update) { if (update.docChanged || update.viewportChanged) this.decorations = buildImageDecorations(update.view); }
+}, { decorations: v => v.decorations });
+
 function buildEditorExtensions() {
   return [
     basicSetup,
@@ -4131,6 +4389,8 @@ function buildEditorExtensions() {
           broadcastText();
         }
       }
+      // Widget refresh hook (outline, typewriter scroll, etc.).
+      if (typeof _onEditorUpdate === 'function') { try { _onEditorUpdate(update); } catch {} }
     }),
     EditorView.updateListener.of(renumberListener),
     // Respect the soft-wrap preference when rebuilding state on room switch.
@@ -4147,6 +4407,7 @@ function buildEditorExtensions() {
     spellPlugin,
     searchPlugin,
     mdStylePlugin,
+    imagePlugin,
     listEnterHandler,
     keymap.of([
       { key: 'Mod-z', run: undo },
@@ -4233,6 +4494,27 @@ const editor = new EditorView({
   parent: document.getElementById('editor-wrap'),
 });
 window.editor = editor;
+
+// Mobile keyboard handling (#18): the app is position:fixed/inset:0, so when the
+// on-screen keyboard opens the layout viewport doesn't change and the footer +
+// caret end up hidden behind the keyboard. Pin the body to the visual viewport
+// (height + top only — never transform, which would reparent fixed modals) so
+// the footer sits just above the keyboard and CM6 can scroll the caret into the
+// visible area instead of the page lurching upward.
+(function() {
+  const vv = window.visualViewport;
+  if (!vv) return;
+  let raf = 0;
+  function apply() {
+    raf = 0;
+    document.body.style.height = vv.height + 'px';
+    document.body.style.top = (vv.offsetTop || 0) + 'px';
+  }
+  function schedule() { if (!raf) raf = requestAnimationFrame(apply); }
+  vv.addEventListener('resize', schedule);
+  vv.addEventListener('scroll', schedule);
+  apply();
+})();
 
 // ============================================
 // SPELL CHECK — runtime (loader, toggle, suggestion popup)
@@ -4409,12 +4691,20 @@ function hitSpell(pos) {
   return spellRanges.find(r => pos >= r.from && pos <= r.to);
 }
 
+// Track whether the most recent interaction was touch/pen, so tap routing
+// works even on devices the media query misreports as fine pointers (a touch
+// laptop) — relying on long-press for spell suggestions was unreliable (#7).
+let _lastPointerWasTouch = false;
+editor.dom.addEventListener('pointerdown', (e) => {
+  _lastPointerWasTouch = (e.pointerType === 'touch' || e.pointerType === 'pen');
+}, true);
+
 // Tap / left-click.
 editor.dom.addEventListener('click', (e) => {
   if (!editor.state.selection.main.empty) return; // ignore drag-selections
   const pos = editor.posAtCoords({ x: e.clientX, y: e.clientY });
   if (pos == null) { closeSpellPopup(); closeCtxMenu(); return; }
-  const coarse = isCoarsePointer();
+  const coarse = isCoarsePointer() || _lastPointerWasTouch;
 
   if (coarse) {
     // Mobile: a tap on a highlight or link opens its menu; misspelling opens
@@ -4710,22 +5000,92 @@ function buildAutocompleteItems(prefix) {
   return items.slice(0, 8);
 }
 
+// Slash symbol codes (#17): type "/code" then accept (Tab/Enter/click) to insert
+// the symbol. Case-sensitive (so /x and /X differ). Configurable — add entries
+// here. Avoid emoji except where explicitly intended.
+const SLASH_CODES = {
+  '->':'➞','=>':'⇒','<-':'⟵','<->':'⟷','->|':'⏵','!=':'≠','~=':'≈','==':'≡',
+  '>>':'»','<<':'«','<=':'≤','>=':'≥',
+  'cent':'￠','euro':'€','pound':'£','yen':'¥',
+  'x':'✗','X':'✘','check':'✓','tick':'✓','bullet':'•','star':'★','star4':'✦',
+  'flag':'⚐','flagf':'⚑','flagr':'🚩',
+  'yes':'✅','no':'❌',
+  'cmd':'⌘','del':'␡','esc':'␛','sub':'␚','ack':'␆',
+  'down':'↓','up':'↑','...':'…','..':'…',
+  '(c)':'ⓒ','(r)':'Ⓡ','tm':'™',
+  'deg':'°','degc':'℃','degf':'℉',
+  'box':'☐','boxx':'☒','boxh':'▧',
+  '--':'–','---':'—',
+  'sigma':'σ','Sigma':'Σ','sum':'∑','mu':'μ','delta':'Δ','Delta':'Δ','dot':'⦿',
+  'iff':'⟺','play':'⏵','rew':'⏴','up2':'⏶','down2':'⏷',
+  'lll':'⇇','lr':'⇆','tri':'🛆','notri':'🛇','llama':'𐙼','circ':'🞅',
+  '1':'➀','2':'➁','3':'➂','4':'➃','5':'➄','6':'➅','7':'➆','8':'➇','9':'➈',
+  'b1':'➊','b2':'➋','b3':'➌','b4':'➍','b5':'➎','b6':'➏','b7':'➐','b8':'➑','b9':'➒',
+  'sqr':'🟥','sqb':'🟦','sqo':'🟧','sqy':'🟨','sqg':'🟩','sqp':'🟪','sqn':'🟫',
+  'cr':'🔴','cb':'🔵','co':'🟠','cy':'🟡','cg':'🟢','cp':'🟣','cn':'🟤',
+};
+// Structural slash-commands (#111): insert multi-line blocks. \u0000 marks where
+// the caret lands. Values are functions so date/time are evaluated on accept.
+const SLASH_SNIPPETS = {
+  table: () => '| Column 1 | Column 2 |\n| --- | --- |\n| \u0000 |  |',
+  todo: () => '- [ ] \u0000',
+  hr: () => '\n---\n\u0000',
+  code: () => '```\n\u0000\n```',
+  quote: () => '> \u0000',
+  note: () => '> [!note] \u0000',
+  h1: () => '# \u0000', h2: () => '## \u0000', h3: () => '### \u0000',
+  date: () => new Date().toISOString().slice(0, 10) + '\u0000',
+  time: () => new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + '\u0000',
+  now: () => new Date().toLocaleString() + '\u0000',
+};
+function buildSlashItems(code) {
+  const items = [];
+  for (const key in SLASH_CODES) {
+    if (key === code || key.startsWith(code)) {
+      items.push({ label: '/' + key, insert: SLASH_CODES[key], desc: SLASH_CODES[key], kind: 'symbol' });
+    }
+  }
+  for (const key in SLASH_SNIPPETS) {
+    if (key === code || key.startsWith(code)) {
+      items.push({ label: '/' + key, insert: SLASH_SNIPPETS[key](), desc: 'insert ' + key, kind: 'snippet' });
+    }
+  }
+  items.sort((a, b) =>
+    (a.label === '/' + code ? 0 : 1) - (b.label === '/' + code ? 0 : 1) || a.label.length - b.label.length);
+  return items.slice(0, 8);
+}
+
 function maybeAutocomplete() {
   if (acSuppress) { acSuppress = false; closeAutocomplete(); return; }
-  if (typeof injectionsEnabled !== 'undefined' && !injectionsEnabled) { closeAutocomplete(); return; }
   const sel = editor.state.selection.main;
   if (!sel.empty) { closeAutocomplete(); return; }
   const line = editor.state.doc.lineAt(sel.head);
   const before = line.text.slice(0, sel.head - line.from);
-  // "@word" where @ sits at start of line or after a separator.
-  const m = before.match(/(?:^|[\s,;(])@([a-zA-Z]*)$/);
-  if (!m) { closeAutocomplete(); return; }
-  const prefix = m[1].toLowerCase();
-  const items = buildAutocompleteItems(prefix);
-  if (!items.length) { closeAutocomplete(); return; }
-  acFrom = sel.head - prefix.length - 1; // position of '@'
-  acTo = sel.head;
-  showAutocomplete(items);
+  const injOn = !(typeof injectionsEnabled !== 'undefined' && !injectionsEnabled);
+  // "@word" where @ sits at start of line or after a separator (gated by the
+  // Plugins/injections toggle).
+  const m = injOn ? before.match(/(?:^|[\s,;(])@([a-zA-Z]*)$/) : null;
+  if (m) {
+    const prefix = m[1].toLowerCase();
+    const items = buildAutocompleteItems(prefix);
+    if (!items.length) { closeAutocomplete(); return; }
+    acFrom = sel.head - prefix.length - 1; // position of '@'
+    acTo = sel.head;
+    showAutocomplete(items);
+    return;
+  }
+  // "/code" symbol shortcuts (always available).
+  const sm = before.match(/(?:^|[\s,;(])\/([-A-Za-z0-9<>=!~*.()$|]{1,6})$/);
+  if (sm) {
+    const items = buildSlashItems(sm[1]);
+    if (items.length) {
+      acFrom = sel.head - sm[1].length - 1; // position of '/'
+      acTo = sel.head;
+      showAutocomplete(items);
+      return;
+    }
+  }
+  closeAutocomplete();
 }
 
 function showAutocomplete(items) {
@@ -4772,9 +5132,13 @@ function acAccept(i) {
   const it = acItems[i == null ? acIndex : i];
   if (!it) { closeAutocomplete(); return; }
   acSuppress = true; // don't let the resulting doc change re-open the dropdown
+  // Snippets may carry a \u0000 marker for where the caret should land.
+  let insert = it.insert;
+  let caret = insert.indexOf('\u0000');
+  if (caret >= 0) insert = insert.replace('\u0000', '');
   editor.dispatch({
-    changes: { from: acFrom, to: acTo, insert: it.insert },
-    selection: { anchor: acFrom + it.insert.length },
+    changes: { from: acFrom, to: acTo, insert },
+    selection: { anchor: acFrom + (caret >= 0 ? caret : insert.length) },
   });
   closeAutocomplete();
   editor.focus();
@@ -4904,10 +5268,19 @@ let _wordCountSeq = 0; // guards against out-of-order async results
 // paste doesn't jank typing, with the main-thread countWords as the automatic
 // fallback inside runInWorker. The footer always reflects the latest doc.
 const WORD_COUNT_OFFLOAD_THRESHOLD = 100000;
+// Past this size, counting exactly (or even posting the string to the worker)
+// would jank the UI, so we show a rough estimate and stay responsive. This is a
+// safety net for pathologically large/corrupted documents.
+const WORD_COUNT_MAX = 5000000;
 function scheduleWordCount() {
   clearTimeout(_wordCountTimer);
   _wordCountTimer = setTimeout(() => {
     const text = editor.state.doc.toString();
+    if (text.length > WORD_COUNT_MAX) {
+      _docWordCount = Math.round(text.length / 6); // ~chars-per-word estimate
+      updateFooter();
+      return;
+    }
     if (text.length <= WORD_COUNT_OFFLOAD_THRESHOLD) {
       _docWordCount = countWords(text);
       updateFooter();
@@ -4935,18 +5308,24 @@ function updateFooter() {
 
   document.getElementById('footer-line').textContent = `Ln ${line.number}, Col ${col}`;
 
+  // Numbers and their labels are separate spans: on mobile the labels are
+  // hidden and the bare numbers shown compactly ("500 / 38 / 10") via CSS (#9).
+  const nl = n => n.toLocaleString();
+  let cNum, cLbl, wNum, wLbl, lNum, lLbl;
   if (hasSelection) {
     const selText = editor.state.sliceDoc(sel.from, sel.to);
-    const selChars = selText.length;
     const selLines = doc.lineAt(sel.to).number - doc.lineAt(sel.from).number + 1;
-    document.getElementById('footer-chars').textContent = `${selChars} of ${doc.length} chars`;
-    document.getElementById('footer-words').textContent = `${countWords(selText)} of ${_docWordCount} words`;
-    document.getElementById('footer-lines').textContent = `${selLines} of ${doc.lines} lines`;
+    cNum = nl(selText.length); cLbl = ` of ${nl(doc.length)} chars`;
+    wNum = nl(countWords(selText)); wLbl = ` of ${nl(_docWordCount)} words`;
+    lNum = nl(selLines); lLbl = ` of ${nl(doc.lines)} lines`;
   } else {
-    document.getElementById('footer-chars').textContent = `${doc.length} chars`;
-    document.getElementById('footer-words').textContent = `${_docWordCount} words`;
-    document.getElementById('footer-lines').textContent = `${doc.lines} lines`;
+    cNum = nl(doc.length); cLbl = ' chars';
+    wNum = nl(_docWordCount); wLbl = ' words';
+    lNum = nl(doc.lines); lLbl = ' lines';
   }
+  document.getElementById('footer-chars').innerHTML = `<span class="fnum">${cNum}</span><span class="flabel">${cLbl}</span>`;
+  document.getElementById('footer-words').innerHTML = `<span class="fnum">${wNum}</span><span class="flabel">${wLbl}</span>`;
+  document.getElementById('footer-lines').innerHTML = `<span class="fnum">${lNum}</span><span class="flabel">${lLbl}</span>`;
 }
 
 _docWordCount = countWords(editor.state.doc.toString());
@@ -6230,6 +6609,120 @@ function main(ctx) {
 
 registerScript(`/**
   {
+    "name": "Split (Keep Delimiter)",
+    "description": "One entry per line, split on a delimiter but KEEP the delimiter in the text",
+    "author": "Cade",
+    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><line x1='12' y1='2' x2='12' y2='22'/><path d='M5 9h14'/></svg>",
+    "tags": "split,keep,delimiter,lines,separate,unflatten,explode"
+  }
+**/
+function main(ctx) {
+  const delim = prompt('Delimiter to split on (kept in text):', ',');
+  if (delim === null || delim === '') return;
+  const text = ctx.selection || ctx.fullText;
+  const parts = text.split(delim);
+  const result = parts
+    .map((p, i) => i < parts.length - 1 ? p + delim : p)
+    .map(s => s.trim())
+    .filter(s => s.length)
+    .join('\\n');
+  if (ctx.selection) ctx.selection = result; else ctx.fullText = result;
+}`);
+
+registerScript(`/**
+  {
+    "name": "Listify (One Per Row)",
+    "description": "Quote each item on its own row, with a comma after each except the last",
+    "author": "Cade",
+    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M8 6h13'/><path d='M8 12h13'/><path d='M8 18h13'/><circle cx='3' cy='6' r='1' fill='currentColor'/><circle cx='3' cy='12' r='1' fill='currentColor'/><circle cx='3' cy='18' r='1' fill='currentColor'/></svg>",
+    "tags": "list,listify,rows,quote,column,array,one per line,csv"
+  }
+**/
+function main(ctx) {
+  const text = ctx.selection || ctx.fullText;
+  let items;
+  if (text.includes('\\n')) items = text.split('\\n');
+  else if (text.includes('\\t')) items = text.split('\\t');
+  else if (text.includes(',')) items = text.split(',');
+  else items = text.split(/\\s+/);
+  items = items.map(s => s.trim()).filter(Boolean);
+  const result = items.map((s, i) => '"' + s + '"' + (i < items.length - 1 ? ',' : '')).join('\\n');
+  if (ctx.selection) ctx.selection = result; else ctx.fullText = result;
+}`);
+
+registerScript(`/**
+  {
+    "name": "Format Table",
+    "description": "Align Markdown pipe-table columns (respects :--- alignment)",
+    "author": "Cade",
+    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='3' y='3' width='18' height='18' rx='2'/><line x1='3' y1='9' x2='21' y2='9'/><line x1='3' y1='15' x2='21' y2='15'/><line x1='12' y1='3' x2='12' y2='21'/></svg>",
+    "tags": "table,align,markdown,format,pipe,columns"
+  }
+**/
+function main(ctx) {
+  const usingSel = !!ctx.selection;
+  const text = usingSel ? ctx.selection : ctx.fullText;
+  const lines = text.split('\\n');
+  const isRow = l => l.indexOf('|') !== -1;
+  const isSep = l => /^\\s*\\|?\\s*:?-{2,}:?\\s*(\\|\\s*:?-{2,}:?\\s*)*\\|?\\s*$/.test(l);
+  const parseCells = l => {
+    let s = l.trim();
+    if (s.startsWith('|')) s = s.slice(1);
+    if (s.endsWith('|')) s = s.slice(0, -1);
+    return s.split('|').map(c => c.trim());
+  };
+  const pad = (s, w, a) => {
+    s = s || '';
+    const d = w - s.length;
+    if (d <= 0) return s;
+    if (a === 'r') return ' '.repeat(d) + s;
+    if (a === 'c') { const l = Math.floor(d / 2); return ' '.repeat(l) + s + ' '.repeat(d - l); }
+    return s + ' '.repeat(d);
+  };
+  const out = [];
+  let i = 0;
+  while (i < lines.length) {
+    if (isRow(lines[i]) && i + 1 < lines.length && isSep(lines[i + 1])) {
+      let j = i; const block = [];
+      while (j < lines.length && isRow(lines[j])) { block.push(lines[j]); j++; }
+      const rows = block.map(parseCells);
+      const aligns = parseCells(block[1]).map(c => {
+        const L = c.startsWith(':'), R = c.endsWith(':');
+        return L && R ? 'c' : R ? 'r' : L ? 'l2' : 'l';
+      });
+      const ncol = Math.max.apply(null, rows.map(r => r.length));
+      const widths = [];
+      for (let c = 0; c < ncol; c++) {
+        let w = 3;
+        for (let r = 0; r < rows.length; r++) { if (r === 1) continue; const cell = (rows[r][c] || ''); if (cell.length > w) w = cell.length; }
+        widths[c] = w;
+      }
+      for (let r = 0; r < rows.length; r++) {
+        if (r === 1) {
+          const seps = [];
+          for (let c = 0; c < ncol; c++) {
+            const a = aligns[c] || 'l', w = widths[c];
+            if (a === 'c') seps.push(':' + '-'.repeat(Math.max(1, w - 2)) + ':');
+            else if (a === 'r') seps.push('-'.repeat(Math.max(2, w - 1)) + ':');
+            else if (a === 'l2') seps.push(':' + '-'.repeat(Math.max(2, w - 1)));
+            else seps.push('-'.repeat(Math.max(3, w)));
+          }
+          out.push('| ' + seps.join(' | ') + ' |');
+        } else {
+          const cells = [];
+          for (let c = 0; c < ncol; c++) cells.push(pad(rows[r][c], widths[c], aligns[c]));
+          out.push('| ' + cells.join(' | ') + ' |');
+        }
+      }
+      i = j;
+    } else { out.push(lines[i]); i++; }
+  }
+  const joined = out.join('\\n');
+  if (usingSel) ctx.selection = joined; else ctx.fullText = joined;
+}`);
+
+registerScript(`/**
+  {
     "name": "Find & Replace",
     "description": "Find and replace text (supports regex)",
     "author": "Cade",
@@ -7275,17 +7768,31 @@ async function _decompress(data) {
   return new TextDecoder().decode(out);
 }
 
-// AES-GCM encryption helpers
-async function deriveKey(password) {
-  const enc = new TextEncoder();
-  const keyMaterial = await crypto.subtle.importKey('raw', enc.encode(password), 'PBKDF2', false, ['deriveKey']);
-  return crypto.subtle.deriveKey(
-    { name: 'PBKDF2', salt: enc.encode('cade.txt-salt'), iterations: 100000, hash: 'SHA-256' },
-    keyMaterial,
-    { name: 'AES-GCM', length: 256 },
-    false,
-    ['encrypt', 'decrypt']
-  );
+// AES-GCM encryption helpers.
+// deriveKey runs PBKDF2 with 100k iterations — expensive. Sync encrypts/decrypts
+// on every broadcast and every remote update, so without caching a multi-window
+// sync storm fires hundreds of PBKDF2s and starves the main thread. Memoize the
+// derived CryptoKey per password (the salt is constant); the cache is bounded.
+const _deriveKeyCache = new Map();
+function deriveKey(password) {
+  let p = _deriveKeyCache.get(password);
+  if (p) return p;
+  p = (async () => {
+    const enc = new TextEncoder();
+    const keyMaterial = await crypto.subtle.importKey('raw', enc.encode(password), 'PBKDF2', false, ['deriveKey']);
+    return crypto.subtle.deriveKey(
+      { name: 'PBKDF2', salt: enc.encode('cade.txt-salt'), iterations: 100000, hash: 'SHA-256' },
+      keyMaterial,
+      { name: 'AES-GCM', length: 256 },
+      false,
+      ['encrypt', 'decrypt']
+    );
+  })();
+  // Don't cache a rejected derivation.
+  p.catch(() => { if (_deriveKeyCache.get(password) === p) _deriveKeyCache.delete(password); });
+  if (_deriveKeyCache.size > 50) _deriveKeyCache.clear();
+  _deriveKeyCache.set(password, p);
+  return p;
 }
 
 // 4-byte magic prefix for compressed payloads: [0xCA, 0xDE, 0x01, 0x00]
@@ -7413,13 +7920,27 @@ function cleanupFirebase() {
 }
 
 // --- Sync UI helpers ---
-function updateSyncUI(status, text) {
+let _connectingTimer = null;
+function _applySyncUI(status, text) {
   const dot = document.getElementById('sync-dot');
+  if (dot) { dot.className = 'sync-dot ' + status; dot.title = text || ''; }
   const statusEl = document.getElementById('sync-status');
-  dot.className = 'sync-dot ' + status;
-  statusEl.textContent = text;
-  document.getElementById('disconnect-btn').style.display = syncState.connected ? 'flex' : 'none';
-  document.getElementById('view-disconnect-btn').style.display = syncState.connected ? 'flex' : 'none';
+  if (statusEl) statusEl.textContent = text;
+  const db = document.getElementById('disconnect-btn');
+  if (db) db.style.display = syncState.connected ? 'flex' : 'none';
+  const vdb = document.getElementById('view-disconnect-btn');
+  if (vdb) vdb.style.display = syncState.connected ? 'flex' : 'none';
+}
+function updateSyncUI(status, text) {
+  if (_connectingTimer) { clearTimeout(_connectingTimer); _connectingTimer = null; }
+  if (status === 'connecting') {
+    // Defer the amber "connecting" state so brief reconnects (a normal room
+    // switch) don't flicker green->amber->green. If we reach connected/off
+    // within the buffer, the amber state never shows (#3).
+    _connectingTimer = setTimeout(() => { _connectingTimer = null; _applySyncUI('connecting', text); }, 550);
+    return;
+  }
+  _applySyncUI(status, text);
 }
 
 function showSyncStep(stepId) {
@@ -7442,16 +7963,24 @@ function safeApplyRemote(text, roomName) {
     saveRoomSynced(roomName, text);
     return true;
   }
+  // Never replace the editor within a few seconds of a local edit, even if the
+  // local copy looks "clean" — a stale snapshot from another window must not
+  // clobber what the user just typed (#4). Re-queue; the idle check retries.
+  if (Date.now() - (syncState.lastLocalEdit || 0) < 4000) {
+    syncState.pendingRemoteText = text;
+    return false;
+  }
   const syncedBase = loadRoomSynced(roomName);
   const localHasUnsyncedEdits = (syncedBase == null)
     ? currentText.length > 0   // No tracking yet + local has content => assume unsynced
     : currentText !== syncedBase;
 
   if (localHasUnsyncedEdits) {
-    // Preserve local edits. Schedule a broadcast to push them to the server.
-    if (typeof window.broadcastText === 'function' && syncState.connected) {
-      window.broadcastText();
-    }
+    // Keep local edits. Do NOT re-broadcast here: with two windows open on the
+    // same room, each remote update would trigger a counter-push, and the other
+    // window would push back — an infinite broadcast war that jams the main
+    // thread (the unusable-lag bug). The user's next actual edit (updateListener
+    // -> broadcastText) and reconnect's flushIfDirty already push local up.
     return false;
   }
 
@@ -7862,6 +8391,15 @@ async function applyResolvedLocal(roomName, localText) {
 
 // Adopt the server version, replacing local entirely.
 function applyResolvedServer(roomName, serverText, serverVer) {
+  // The conflict modal/reconcile awaits a user choice; if they switched rooms
+  // meanwhile, writing into the (now different) editor would bleed one room's
+  // text into another. Persist to the target room's cache/base instead.
+  if (syncState.roomName !== roomName) {
+    saveRoomSynced(roomName, serverText);
+    if (serverVer != null) saveRoomVersion(roomName, serverVer);
+    store.set('cade-room-cache:' + roomName, serverText);
+    return;
+  }
   const cur = editor.state.doc.toString();
   const sel = editor.state.selection.main;
   const anchor = Math.min(sel.anchor, serverText.length);
@@ -7883,6 +8421,13 @@ function applyResolvedServer(roomName, serverText, serverVer) {
 async function applyResolvedAppend(roomName, localText, serverText, where) {
   const sep = '\n\n';
   const merged = where === 'up' ? (serverText + sep + localText) : (localText + sep + serverText);
+  // Switched rooms during the modal — persist the merge to the target room's
+  // cache (left dirty vs its synced base, so the next reconcile pushes it) and
+  // never touch the live editor of a different room.
+  if (syncState.roomName !== roomName) {
+    store.set('cade-room-cache:' + roomName, merged);
+    return;
+  }
   const cur = editor.state.doc.toString();
   syncState.suppressUpdate = true;
   editor.dispatch({ changes: { from: 0, to: cur.length, insert: merged } });
@@ -8205,7 +8750,7 @@ function renderRoomTabs() {
     const pinned = roomIsPinned(name);
     const colorClass = workspaceColorClassForRoom(name);
     const dotHtml = showDots ? `<span class="ws-tab-dot ${colorClass}"></span>` : '';
-    const pinHtml = pinned ? '<span class="room-tab-pin" title="Pinned">📌</span>' : '';
+    const pinHtml = pinned ? '<span class="room-tab-pin" title="Pinned">╳</span>' : '';
     // Room names can originate from the shared database (Explore Rooms, share
     // links), so they're untrusted: escape both the JS-string quotes and the
     // HTML special chars or a hostile name breaks out of the attribute.
@@ -8272,9 +8817,16 @@ function renderBreadcrumb() {
     if (!ws) wsId = WS_ALL;
   }
   el.innerHTML =
-    `<span class="bc-ws ws-color-${wsColor}" title="Switch workspace" onclick="breadcrumbWsClick(event)"><span class="bc-dot"></span>${escapeHtml(wsLabel)}</span>` +
+    `<span class="bc-ws ws-color-${wsColor}" title="${escapeHtml(wsLabel)} — switch workspace" onclick="breadcrumbWsClick(event)"><span class="bc-dot"></span><span class="bc-ws-label">${escapeHtml(wsLabel)}</span></span>` +
     `<span class="bc-sep">›</span>` +
     `<span class="bc-room" title="Switch room (${typeof hotkeyLabelQuickSwitch === 'function' ? hotkeyLabelQuickSwitch() : 'Ctrl+P'})" onclick="breadcrumbRoomClick(event)">${escapeHtml(activeRoom)}</span>`;
+  // Desktop overflow: if the crumb is wider than its room allows, collapse the
+  // workspace to just its colored dot (keeps the room name — the important part
+  // — visible). The mobile media query already forces this.
+  el.classList.remove('compact');
+  requestAnimationFrame(() => {
+    if (el.scrollWidth > el.clientWidth + 1) el.classList.add('compact');
+  });
 }
 
 window.breadcrumbWsClick = function(evt) {
@@ -8358,7 +8910,7 @@ function renderQuickSwitchList() {
     const wsIds = getRoomWorkspaceIds(name);
     const ws = wsIds.length ? getWorkspace(wsIds[0]) : null;
     const wsLabel = ws ? ws.name + (wsIds.length > 1 ? ' +' + (wsIds.length - 1) : '') : 'Unlabeled';
-    const pin = roomIsPinned(name) ? '<span class="qs-pin" title="Pinned">📌</span>' : '';
+    const pin = roomIsPinned(name) ? '<span class="qs-pin" title="Pinned">╳</span>' : '';
     const lock = roomHasPassword(name) ? ' 🔒' : '';
     const escAttr = escapeHtml(name.replace(/\\/g, '\\\\').replace(/'/g, "\\'"));
     return `<div class="qs-item ${i === _qsIndex ? 'active' : ''}" data-idx="${i}" onclick="quickSwitchPick('${escAttr}')">
@@ -8428,6 +8980,15 @@ window.quickSwitchPick = function(name) {
 function hotkeyLabelQuickSwitch() { return 'Ctrl+P'; }
 
 window.switchRoom = async function(name) {
+  // Clicking the room you're already in must be a no-op: re-running the switch
+  // scrolled to top, tore down/rebuilt sync (the green->orange->green flicker),
+  // and could let a queued remote snapshot clobber the live doc. The initial
+  // bootstrap switch is still allowed because _activeRoomReady is false then.
+  if (name === activeRoom && _activeRoomReady) {
+    try { editor.focus(); } catch {}
+    return;
+  }
+
   const firebaseUrl = store.get('cade-firebase-url');
   const baseEncKey = store.get('cade-sync-key');
 
@@ -8456,6 +9017,9 @@ window.switchRoom = async function(name) {
 // the old room's listener ends up live while syncState points at the new room,
 // cross-contaminating documents.
 let _switchEpoch = 0;
+// True once the first room switch has committed locally. Gates the same-room
+// no-op in switchRoom so the bootstrap's initial switch still runs.
+let _activeRoomReady = false;
 
 // Per-room editor state cache (text + selection + undo history). Switching
 // rooms saves the outgoing room's state here and restores the incoming room's,
@@ -8553,6 +9117,7 @@ async function _doSwitchRoom(name, firebaseUrl, baseEncKey) {
   renderRoomTabs();
   // Keep an open Snapshots panel pointed at the new room's history (#6).
   try { if (document.getElementById('snapshots-overlay').classList.contains('open')) renderSnapshotsList(); } catch {}
+  _activeRoomReady = true; // local switch committed; same-room clicks now no-op
 
   // No Firebase config — local-only mode. The user can still edit and we'll
   // persist to per-room cache. As soon as creds are set + we reconnect, the
@@ -8577,14 +9142,19 @@ async function _doSwitchRoom(name, firebaseUrl, baseEncKey) {
     // Best-effort upfront lock probe — bounded so a bad connection never
     // strands the user in "Connecting…". On timeout we just attach the
     // listener; the locked listener catches the lock state once data arrives.
-    const LOCK_PROBE_TIMEOUT_MS = 3000;
-    let lockedVal = null;
-    try {
-      lockedVal = await Promise.race([
-        db.ref(`rooms/${name}/locked`).once('value').then(s => s.val()),
-        new Promise(resolve => setTimeout(() => resolve('__timeout__'), LOCK_PROBE_TIMEOUT_MS)),
-      ]);
-    } catch (_) { lockedVal = null; }
+    const LOCK_PROBE_TIMEOUT_MS = 1500;
+    let lockedVal = '__timeout__';
+    // Skip the probe entirely when offline so an offline room switch never
+    // waits on the network — the cached text is already showing and the locked
+    // listener will catch the lock state once data arrives (#5).
+    if (navigator.onLine) {
+      try {
+        lockedVal = await Promise.race([
+          db.ref(`rooms/${name}/locked`).once('value').then(s => s.val()),
+          new Promise(resolve => setTimeout(() => resolve('__timeout__'), LOCK_PROBE_TIMEOUT_MS)),
+        ]);
+      } catch (_) { lockedVal = null; }
+    }
     // Another switch started while we awaited the probe — abandon this one
     // before it attaches listeners for a room the user has already left.
     if (epoch !== _switchEpoch) return;
@@ -8954,7 +9524,7 @@ function renderRoomRow(name, showBadge) {
     <div style="display:flex;align-items:center;justify-content:space-between;width:100%;">
       <div style="display:flex;align-items:center;gap:6px;min-width:0;flex:1;flex-wrap:wrap;">
         <span class="room-manager-drag" title="Drag to reorder">⠿</span>
-        ${pinned ? '<span title="Pinned" style="font-size:11px;">📌</span>' : ''}
+        ${pinned ? '<span title="Pinned" style="font-size:11px;">╳</span>' : ''}
         <span class="room-manager-name" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(name)}</span>
         ${badgeHtml}
         ${isActive ? '<span class="room-manager-active">● active</span>' : ''}
@@ -8966,7 +9536,6 @@ function renderRoomRow(name, showBadge) {
           ? `<button class="btn" style="padding:2px 8px;font-size:var(--text-xs);" onclick="toggleRoomArchive('${esc(name)}')" title="Restore">↩ Restore</button>`
           : `<button class="btn ${pickerOpen ? 'btn-primary' : ''}" style="padding:2px 8px;font-size:var(--text-xs);" onclick="toggleRmTagPicker('${esc(name)}')" title="Edit workspaces">🏷</button>`}
         <button class="btn" style="padding:2px 8px;font-size:var(--text-xs);" onclick="showRoomActionMenu(event, '${esc(name)}')" title="More actions">⚙</button>
-        <button class="btn btn-danger" style="padding:2px 8px;font-size:var(--text-xs);" onclick="removeRoom('${esc(name)}')" title="Remove from this device's list">×</button>
       </div>
     </div>
     ${tagPicker}
@@ -9201,7 +9770,7 @@ window.deleteRoomFromServer = async function(name) {
   const fbUrl = store.get('cade-firebase-url');
   const baseKey = store.get('cade-sync-key');
   if (!fbUrl || !baseKey) {
-    showToast('Sync isn\'t configured — can\'t delete server data. Use "Remove from list" instead.', 'error', 5000);
+    showToast('Sync isn\'t configured — there is no server data to delete for this room.', 'error', 5000);
     return;
   }
   if (!navigator.onLine) {
@@ -9525,6 +10094,19 @@ function normalizeRoomWorkspace(map) {
 }
 roomWorkspace = normalizeRoomWorkspace(roomWorkspace);
 if (!roomMeta || typeof roomMeta !== 'object') roomMeta = {};
+
+// One-time: after upgrading to many-to-many workspace membership, make the
+// locally-migrated associations authoritative — bump the workspace timestamp
+// and push — so a stale remote blob (written by an older client, or empty)
+// can't silently wipe them on first sync (#6).
+if (!store.get('cade-ws-m2m-migrated')) {
+  store.set('cade-ws-m2m-migrated', '1');
+  if (roomWorkspace && Object.keys(roomWorkspace).length) {
+    store.set('cade-workspaces-ts', String(Date.now()));
+    store.set('cade-room-workspace', JSON.stringify(roomWorkspace));
+    setTimeout(() => { try { if (typeof schedulePushWorkspaces === 'function') schedulePushWorkspaces(); } catch {} }, 1500);
+  }
+}
 
 function saveRoomMeta() {
   store.set('cade-room-meta', JSON.stringify(roomMeta));
@@ -10060,7 +10642,7 @@ function renderWorkspaceManagerList() {
             <span class="ws-mgr-count">${count} room${count !== 1 ? 's' : ''}</span>
           </div>
           <div class="ws-mgr-actions">
-            <button class="btn" style="padding:2px 8px;font-size:var(--text-xs);" onclick="beginWorkspaceEdit('${escId}')" title="Rename / recolor / nest">✎</button>
+            <button class="btn" style="padding:2px 7px;font-size:var(--text-xs);display:inline-flex;align-items:center;" onclick="beginWorkspaceEdit('${escId}')" title="Rename / recolor / nest"><svg width="14" height="14" viewBox="0 0 24 24" style="display:block;"><path fill="currentColor" d="m14.06 9.02l.92.92L5.92 19H5v-.92zM17.66 3c-.25 0-.51.1-.7.29l-1.83 1.83l3.75 3.75l1.83-1.83a.996.996 0 0 0 0-1.41l-2.34-2.34c-.2-.2-.45-.29-.71-.29m-3.6 3.19L3 17.25V21h3.75L17.81 9.94z"/></svg></button>
             <button class="btn btn-danger" style="padding:2px 8px;font-size:var(--text-xs);" onclick="confirmDeleteWorkspace('${escId}', '${escName}')" title="Delete (rooms become Unlabeled; subfolders move up)">×</button>
           </div>
         </div>`;
@@ -10211,13 +10793,12 @@ window.showRoomActionMenu = function(evt, roomName) {
     <div class="rm-action-section">workspaces for "${escapeHtml(roomName)}"</div>
     ${wsItems}
     <div class="rm-action-divider"></div>
-    <div class="rm-action-item" onclick="toggleRoomPin('${er}')">${pinned ? '📌 Unpin' : '📌 Pin to top'}</div>
+    <div class="rm-action-item" onclick="toggleRoomPin('${er}')">${pinned ? '╳ Unpin' : '╳ Pin to top'}</div>
     <div class="rm-action-item" onclick="toggleRoomArchive('${er}')">${archived ? '↩ Restore from archive' : '🗄 Archive'}</div>
     <div class="rm-action-divider"></div>
     <div class="rm-action-item" onclick="closeActionMenu(); roomPasswordAction('${er}')">${hasPassword ? '🔑 Change password' : '🔒 Set password'}</div>
     ${hasPassword ? `<div class="rm-action-item" onclick="closeActionMenu(); removeRoomPassword('${er}')">Remove password</div>` : ''}
     <div class="rm-action-divider"></div>
-    <div class="rm-action-item" onclick="closeActionMenu(); removeRoom('${er}')">⤫ Remove from list</div>
     <div class="rm-action-item danger" onclick="deleteRoomFromServer('${er}')">🗑 Delete from server…</div>
   `;
   menu.classList.add('open');
@@ -10239,13 +10820,11 @@ window.showRoomTabContextMenu = function(evt, roomName) {
 
   menu.innerHTML = `
     <div class="rm-action-item" onclick="closeActionMenu(); switchRoom('${er}')">↗ Switch to here</div>
-    <div class="rm-action-item" onclick="toggleRoomPin('${er}')">${pinned ? '📌 Unpin' : '📌 Pin to top'}</div>
+    <div class="rm-action-item" onclick="toggleRoomPin('${er}')">${pinned ? '╳ Unpin' : '╳ Pin to top'}</div>
     <div class="rm-action-item" onclick="toggleRoomArchive('${er}')">${archived ? '↩ Restore' : '🗄 Archive'}</div>
     <div class="rm-action-divider"></div>
     <div class="rm-action-section">workspaces</div>
     ${wsItems}
-    <div class="rm-action-divider"></div>
-    <div class="rm-action-item" onclick="closeActionMenu(); removeRoom('${er}')">⤫ Remove from list</div>
   `;
   menu.classList.add('open');
   positionActionMenu(menu, evt);
@@ -10587,24 +11166,85 @@ window.syncConnect = async function() {
 // ============================================
 // SHAREABLE LINK
 // ============================================
+// --- Share (Synced vs Public links) (#15) ---
+function _bytesToB64Url(bytes) {
+  let bin = '';
+  const chunk = 8192;
+  for (let i = 0; i < bytes.length; i += chunk) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+function _b64UrlToBytes(s) {
+  s = String(s).replace(/-/g, '+').replace(/_/g, '/');
+  while (s.length % 4) s += '=';
+  const bin = atob(s);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
 window.shareLink = function() {
   closeAllMenus();
-  const fbUrl = store.get('cade-firebase-url') || '';
-  const roomName = syncState.roomName || store.get('cade-room-name') || '';
-  if (!fbUrl || !roomName) {
-    showToast('Configure Firebase URL and room in Sync first', 'error', 3000);
-    return;
-  }
-  const url = new URL(window.location.href.split('?')[0]);
-  url.searchParams.set('fb', fbUrl);
-  url.searchParams.set('room', roomName);
-  const link = url.toString();
-  navigator.clipboard.writeText(link).then(() => {
-    showToast('Share link copied! (password not included)', 'success', 3000);
-  }).catch(() => {
-    prompt('Copy this share link:', link);
-  });
+  const out = document.getElementById('share-link-out');
+  if (out) { out.value = ''; out.removeAttribute('data-link'); }
+  const hint = document.getElementById('share-link-hint');
+  if (hint) hint.textContent = '';
+  const copyBtn = document.getElementById('share-copy-btn');
+  if (copyBtn) copyBtn.disabled = true;
+  const syncedBtn = document.getElementById('share-opt-synced');
+  const hasSync = !!(store.get('cade-firebase-url') && (syncState.roomName || store.get('cade-room-name') || activeRoom));
+  if (syncedBtn) { syncedBtn.disabled = !hasSync; syncedBtn.title = hasSync ? '' : 'Configure Sync first to use a synced link'; }
+  const nativeBtn = document.getElementById('share-native-btn');
+  if (nativeBtn) nativeBtn.style.display = navigator.share ? '' : 'none';
+  document.getElementById('share-overlay').classList.add('open');
 };
+window.closeShareModal = function() { document.getElementById('share-overlay').classList.remove('open'); };
+
+window.generateShareLink = async function(kind) {
+  const out = document.getElementById('share-link-out');
+  const hint = document.getElementById('share-link-hint');
+  const roomName = syncState.roomName || store.get('cade-room-name') || activeRoom || 'shared';
+  const base = window.location.href.split('#')[0].split('?')[0];
+  try {
+    let link;
+    if (kind === 'synced') {
+      const fbUrl = store.get('cade-firebase-url') || '';
+      if (!fbUrl) { showToast('Configure Sync first', 'error', 2500); return; }
+      const url = new URL(base);
+      url.searchParams.set('fb', fbUrl);
+      url.searchParams.set('room', roomName);
+      link = url.toString();
+      hint.textContent = 'Opens live for anyone connected to the same database. The password is never included.';
+    } else {
+      const text = editor.state.doc.toString();
+      const payload = JSON.stringify({ v: 1, r: roomName, t: text });
+      const bytes = await _compress(new TextEncoder().encode(payload));
+      link = base + '#p=' + _bytesToB64Url(bytes);
+      const kb = (link.length / 1024).toFixed(1);
+      hint.textContent = 'Anyone with the link can read this copy — it does not sync. Link size: ' + kb + ' KB.';
+      if (link.length > 28000) hint.textContent += ' ⚠ Very long; some chat apps may truncate it.';
+    }
+    out.value = link;
+    out.dataset.link = link;
+    out.focus(); out.select();
+    document.getElementById('share-copy-btn').disabled = false;
+  } catch (e) {
+    showToast('Could not build link: ' + (e.message || e), 'error', 3000);
+  }
+};
+
+window.copyShareLink = function() {
+  const link = document.getElementById('share-link-out').value;
+  if (!link) return;
+  navigator.clipboard.writeText(link).then(
+    () => showToast('Link copied', 'success', 2000),
+    () => { const o = document.getElementById('share-link-out'); o.focus(); o.select(); showToast('Press Ctrl/Cmd+C to copy', 'success', 2500); }
+  );
+};
+window.shareNative = function() {
+  const link = document.getElementById('share-link-out').value;
+  if (link && navigator.share) navigator.share({ url: link, title: 'Cade.txt' }).catch(() => {});
+};
+{ const so = document.getElementById('share-overlay'); if (so) so.addEventListener('click', e => { if (e.target === so) closeShareModal(); }); }
 
 // Pre-populate sync fields from URL params on load
 (function() {
@@ -10633,6 +11273,65 @@ window.shareLink = function() {
       window.history.replaceState({}, document.title, window.location.pathname);
       showToast('Shared link loaded — enter your password in Sync to connect', 'success', 5000);
     }
+  } catch (e) { /* ignore */ }
+})();
+
+// Public share link (#p=...) — a compressed, self-contained copy of a document
+// embedded in the URL hash (so the text never hits the server). Read on load,
+// after the bootstrap, so it can switch into the shared room (#15).
+function shareConflictPrompt(roomName) {
+  return new Promise(resolve => {
+    // Safe subset: never silently overwrite local data from an untrusted link.
+    const openNew = confirm('A room named "' + roomName + '" already exists here with different content.\n\nOK = open the shared copy as a NEW room.\nCancel = keep your version (discard the shared copy).');
+    resolve(openNew ? 'new' : 'cancel');
+  });
+}
+function loadSharedIntoRoom(roomName, text) {
+  store.set('cade-room-cache:' + roomName, text);
+  if (!rooms.includes(roomName)) { rooms.push(roomName); saveRooms(); }
+  try { renderRoomTabs(); } catch {}
+  switchRoom(roomName);
+  showToast('Loaded shared document into "' + roomName + '"', 'success', 3000);
+}
+function importSharedAsNewRoom(baseName, text) {
+  const name = baseName + '_shared_' + Date.now().toString(36);
+  store.set('cade-room-cache:' + name, text);
+  rooms.push(name); saveRooms();
+  try { renderRoomTabs(); } catch {}
+  switchRoom(name);
+  showToast('Shared copy opened as new room "' + name + '"', 'success', 3500);
+}
+(async function() {
+  try {
+    const m = (window.location.hash || '').match(/[#&]p=([^&]+)/);
+    if (!m) return;
+    // Clean the hash immediately so a refresh doesn't re-import.
+    window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
+    let data;
+    try { data = JSON.parse(await _decompress(_b64UrlToBytes(m[1]))); }
+    catch (e) { showToast('Shared link is invalid or corrupted', 'error', 3500); return; }
+    if (!data || typeof data.t !== 'string') { showToast('Shared link has no content', 'error', 3000); return; }
+    const roomName = String(data.r || 'shared');
+    const text = data.t;
+    const haveRoom = rooms.includes(roomName);
+    const synced = !!(store.get('cade-firebase-url') && store.get('cade-sync-key'));
+    // Already subscribed + synced to the same DB → prefer the live copy.
+    if (haveRoom && synced) {
+      switchRoom(roomName);
+      showToast('Opened your synced copy of "' + roomName + '" (shared text not imported)', 'success', 4500);
+      return;
+    }
+    // Local room with the same name but different content → conflict prompt.
+    if (haveRoom) {
+      const existing = loadRoomCache(roomName);
+      if (existing && existing !== text) {
+        const choice = await shareConflictPrompt(roomName);
+        if (choice === 'cancel') return;
+        importSharedAsNewRoom(roomName, text);
+        return;
+      }
+    }
+    loadSharedIntoRoom(roomName, text);
   } catch (e) { /* ignore */ }
 })();
 
@@ -10831,9 +11530,12 @@ editor.contentDOM.addEventListener('blur', () => {
 // ============================================
 // ROOM PASSWORD SYSTEM
 // ============================================
-// (core declarations hoisted — see before ROOM SYSTEM)
-let _unlockCallback = null;
-let _unlockVerifyFn = null;
+// `var` (not `let`) so these are hoisted: the page bootstrap can call
+// switchRoom -> showRoomUnlock for a locked active room before this line is
+// reached during top-level execution. A `let` here is in its temporal dead
+// zone at that point and throws "cannot access before initialization".
+var _unlockCallback = null;
+var _unlockVerifyFn = null;
 
 function showRoomUnlock(name, callback, verifyFn = null) {
   _unlockCallback = callback;
@@ -11290,6 +11992,10 @@ window.toggleMdStyle = function() {
 // count and size so it can't crowd out room caches.
 const SNAP_MAX = 10;
 const SNAP_MAX_CHARS = 400000;
+// Hard cap on TOTAL snapshot bytes per room so version history can't quietly
+// bloat localStorage (a 2KB room had grown a 190KB snapshot store). Oldest
+// snapshots are pruned until under this; at least one is always kept (#14).
+const SNAP_MAX_TOTAL = 150000;
 const SNAP_AUTO_MS = 5 * 60 * 1000;
 
 function snapKey() { return 'cade-snap:' + (syncState.roomName || activeRoom || '__local__'); }
@@ -11311,6 +12017,12 @@ window.takeSnapshot = function(silent) {
   if (snaps.length && snaps[0].c === text) { if (isManual) showToast('No changes since last snapshot', 'success', 1500); return false; }
   snaps.unshift({ t: Date.now(), c: text });
   while (snaps.length > SNAP_MAX) snaps.pop();
+  // Byte-cap: drop oldest until under the total budget (always keep newest).
+  let total = snaps.reduce((n, s) => n + (s.c ? s.c.length : 0), 0);
+  while (snaps.length > 1 && total > SNAP_MAX_TOTAL) {
+    total -= (snaps[snaps.length - 1].c || '').length;
+    snaps.pop();
+  }
   saveSnaps(snaps);
   if (isManual) showToast('Snapshot saved', 'success', 1500);
   if (document.getElementById('snapshots-overlay').classList.contains('open')) renderSnapshotsList();
@@ -11343,11 +12055,50 @@ function renderSnapshotsList() {
       <span class="snap-time" title="${new Date(s.t).toLocaleString()}">${snapRelTime(s.t)}</span>
       <span class="snap-preview" title="${escapeHtml(firstLine)}">${escapeHtml(firstLine)}</span>
       <span class="snap-meta">${s.c.length.toLocaleString()} ch</span>
+      <button class="btn" style="padding:2px 8px;font-size:var(--text-xs);" onclick="diffSnapshot(${i})">Diff</button>
       <button class="btn" style="padding:2px 8px;font-size:var(--text-xs);" onclick="restoreSnapshot(${i})">Restore</button>
       <button class="btn btn-danger" style="padding:2px 8px;font-size:var(--text-xs);" onclick="deleteSnapshot(${i})">×</button>
-    </div>`;
+    </div>
+    <div class="snap-diff" id="snap-diff-${i}" style="display:none;"></div>`;
   }).join('');
 }
+
+// Simple LCS line-diff between a snapshot and the current document (#101).
+function _lineDiff(aLines, bLines) {
+  const n = aLines.length, m = bLines.length;
+  // LCS table (capped to keep it cheap; falls back to a coarse diff if huge).
+  if (n * m > 4000000) return null;
+  const dp = Array.from({ length: n + 1 }, () => new Uint32Array(m + 1));
+  for (let i = n - 1; i >= 0; i--)
+    for (let j = m - 1; j >= 0; j--)
+      dp[i][j] = aLines[i] === bLines[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+  const out = [];
+  let i = 0, j = 0;
+  while (i < n && j < m) {
+    if (aLines[i] === bLines[j]) { out.push(['ctx', aLines[i]]); i++; j++; }
+    else if (dp[i + 1][j] >= dp[i][j + 1]) { out.push(['del', aLines[i]]); i++; }
+    else { out.push(['add', bLines[j]]); j++; }
+  }
+  while (i < n) out.push(['del', aLines[i++]]);
+  while (j < m) out.push(['add', bLines[j++]]);
+  return out;
+}
+window.diffSnapshot = function(i) {
+  const el = document.getElementById('snap-diff-' + i);
+  if (!el) return;
+  if (el.style.display !== 'none') { el.style.display = 'none'; el.innerHTML = ''; return; }
+  const snaps = loadSnaps();
+  const snap = snaps[i];
+  if (!snap) return;
+  const diff = _lineDiff(snap.c.split('\n'), editor.state.doc.toString().split('\n'));
+  if (!diff) { el.innerHTML = '<span class="d-ctx">Documents too large to diff.</span>'; el.style.display = 'block'; return; }
+  const cls = { ctx: 'd-ctx', add: 'd-add', del: 'd-del' };
+  const sign = { ctx: ' ', add: '+', del: '−' };
+  el.innerHTML = diff.map(([k, line]) =>
+    '<div class="' + cls[k] + '">' + sign[k] + ' ' + (escapeHtml(line) || ' ') + '</div>'
+  ).join('') || '<span class="d-ctx">Identical.</span>';
+  el.style.display = 'block';
+};
 
 window.openSnapshots = function() {
   closeAllMenus();
@@ -11389,6 +12140,511 @@ document.getElementById('snapshots-overlay').addEventListener('keydown', (e) => 
 
 // Background auto-capture (no-ops when nothing changed since the last one).
 setInterval(snapshotNow, SNAP_AUTO_MS);
+
+// ============================================
+// WIDGETS (Round 2): outline, pomodoro, zen, clock, daily note
+// ============================================
+// Shared draggable, closeable floating panel.
+function _mkPanel(id, title, bodyHtml) {
+  let p = document.getElementById(id);
+  if (p) return p;
+  p = document.createElement('div');
+  p.className = 'cade-panel';
+  p.id = id;
+  p.innerHTML = '<div class="cade-panel-head"><span class="cade-panel-title"></span>' +
+    '<span class="cade-panel-x" title="Close">×</span></div><div class="cade-panel-body">' + bodyHtml + '</div>';
+  p.querySelector('.cade-panel-title').textContent = title;
+  document.body.appendChild(p);
+  p.querySelector('.cade-panel-x').addEventListener('click', () => { p.remove(); if (p._onClose) p._onClose(); });
+  const head = p.querySelector('.cade-panel-head');
+  let sx, sy, ox, oy, drag = false;
+  head.addEventListener('pointerdown', e => {
+    if (e.target.classList.contains('cade-panel-x')) return;
+    drag = true; sx = e.clientX; sy = e.clientY;
+    const r = p.getBoundingClientRect(); ox = r.left; oy = r.top;
+    p.style.right = 'auto'; p.style.left = ox + 'px'; p.style.top = oy + 'px';
+    try { head.setPointerCapture(e.pointerId); } catch {}
+  });
+  head.addEventListener('pointermove', e => {
+    if (!drag) return;
+    p.style.left = Math.max(0, Math.min(window.innerWidth - 60, ox + e.clientX - sx)) + 'px';
+    p.style.top = Math.max(0, Math.min(window.innerHeight - 40, oy + e.clientY - sy)) + 'px';
+  });
+  head.addEventListener('pointerup', e => { drag = false; try { head.releasePointerCapture(e.pointerId); } catch {} });
+  return p;
+}
+
+// ---- Outline / TOC (#34) ----
+function buildOutline() {
+  const list = document.getElementById('outline-list');
+  if (!list) return;
+  const doc = editor.state.doc;
+  const items = [];
+  const cap = Math.min(doc.lines, 6000);
+  for (let i = 1; i <= cap; i++) {
+    const m = doc.line(i).text.match(/^(#{1,6})\s+(.*)$/);
+    if (m) items.push({ level: m[1].length, text: m[2].trim() || '(untitled)', line: i });
+  }
+  if (!items.length) { list.innerHTML = '<div class="outline-empty">No headings yet. Use "# Heading" lines to build an outline.</div>'; return; }
+  list.innerHTML = items.map(it =>
+    '<button class="outline-item h' + it.level + '" onclick="outlineGoto(' + it.line + ')">' + escapeHtml(it.text) + '</button>'
+  ).join('');
+}
+window.outlineGoto = function(lineNo) {
+  const doc = editor.state.doc;
+  const line = doc.line(Math.max(1, Math.min(lineNo, doc.lines)));
+  editor.dispatch({ selection: { anchor: line.from }, effects: EditorView.scrollIntoView(line.from, { y: 'start', yMargin: 40 }) });
+  editor.focus();
+};
+window.toggleOutline = function() {
+  closeAllMenus();
+  const existing = document.getElementById('outline-panel');
+  if (existing) { existing.remove(); store.set('cade-outline-open', '0'); return; }
+  const p = _mkPanel('outline-panel', 'Outline', '<div id="outline-list"></div>');
+  p._onClose = () => store.set('cade-outline-open', '0');
+  buildOutline();
+  store.set('cade-outline-open', '1');
+};
+
+// ---- Pomodoro / focus timer (#31) ----
+const _pomo = { phase: 'work', remaining: 25 * 60, timer: null, running: false, count: 0, work: 25, brk: 5 };
+function pomoLoad() {
+  try { const s = JSON.parse(store.get('cade-pomodoro') || '{}'); _pomo.work = +s.work || 25; _pomo.brk = +s.brk || 5; } catch {}
+}
+function pomoFmt(s) { const m = Math.floor(s / 60), ss = s % 60; return m + ':' + String(ss).padStart(2, '0'); }
+function pomoRender() {
+  const p = document.getElementById('pomodoro-panel'); if (!p) return;
+  p.querySelector('.pomo-time').textContent = pomoFmt(_pomo.remaining);
+  p.querySelector('.pomo-phase').textContent = _pomo.phase === 'work' ? 'Focus' : 'Break';
+  p.querySelector('.pomo-count').textContent = 'Completed: ' + _pomo.count;
+  p.classList.toggle('break', _pomo.phase !== 'work');
+  const b = p.querySelector('.pomo-start'); if (b) b.textContent = _pomo.running ? 'Pause' : 'Start';
+}
+function pomoNotify(title, body) {
+  try { navigator.vibrate && navigator.vibrate([120, 60, 120]); } catch {}
+  try {
+    if (window.Notification && Notification.permission === 'granted') { new Notification(title, { body }); return; }
+  } catch {}
+  showToast(body, 'success', 4000);
+}
+function pomoTick() {
+  if (_pomo.remaining > 0) { _pomo.remaining--; pomoRender(); return; }
+  if (_pomo.phase === 'work') { _pomo.count++; _pomo.phase = 'break'; _pomo.remaining = _pomo.brk * 60; pomoNotify('Break time', 'Take a ' + _pomo.brk + ' minute break.'); }
+  else { _pomo.phase = 'work'; _pomo.remaining = _pomo.work * 60; pomoNotify('Focus time', 'Back to it — ' + _pomo.work + ' minutes.'); }
+  pomoRender();
+}
+window.pomoToggleRun = function() {
+  _pomo.running = !_pomo.running;
+  if (_pomo.running) {
+    try { if (window.Notification && Notification.permission === 'default') Notification.requestPermission(); } catch {}
+    clearInterval(_pomo.timer); _pomo.timer = setInterval(pomoTick, 1000);
+  } else { clearInterval(_pomo.timer); }
+  pomoRender();
+};
+window.pomoReset = function() {
+  clearInterval(_pomo.timer); _pomo.running = false; _pomo.phase = 'work'; _pomo.remaining = _pomo.work * 60; pomoRender();
+};
+window.togglePomodoro = function() {
+  closeAllMenus();
+  const existing = document.getElementById('pomodoro-panel');
+  if (existing) { existing.remove(); store.set('cade-pomo-open', '0'); return; }
+  pomoLoad();
+  if (!_pomo.running) _pomo.remaining = _pomo.work * 60;
+  const p = _mkPanel('pomodoro-panel', 'Focus Timer',
+    '<div class="pomo-time"></div><div class="pomo-phase"></div><div class="pomo-count"></div>' +
+    '<div class="pomo-btns"><button class="btn btn-primary pomo-start" onclick="pomoToggleRun()">Start</button>' +
+    '<button class="btn" onclick="pomoReset()">Reset</button></div>');
+  p._onClose = () => store.set('cade-pomo-open', '0');
+  pomoRender();
+  store.set('cade-pomo-open', '1');
+};
+
+// ---- Zen / typewriter mode (#33) ----
+window.toggleZen = function() {
+  closeAllMenus();
+  const on = document.body.classList.toggle('zen');
+  document.body.classList.toggle('zen-tw', on && store.get('cade-zen-tw') !== '0');
+  store.set('cade-zen', on ? '1' : '0');
+  let x = document.getElementById('zen-exit');
+  if (on) {
+    if (!x) {
+      x = document.createElement('button');
+      x.id = 'zen-exit'; x.className = 'btn zen-exit'; x.textContent = 'Exit Zen (Esc)';
+      x.onclick = () => window.toggleZen();
+      document.body.appendChild(x);
+    }
+  } else if (x) { x.remove(); }
+  const lbl = document.getElementById('zen-label'); if (lbl) lbl.textContent = on ? 'Exit Zen Mode' : 'Zen Mode';
+  setTimeout(() => { try { editor.requestMeasure(); } catch {} try { editor.focus(); } catch {} }, 60);
+};
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && document.body.classList.contains('zen')) { e.preventDefault(); window.toggleZen(); }
+});
+
+// ---- Clock / timezone strip (#42) ----
+let _clockTimer = null;
+function clockTzs() { try { return String(window.Settings ? Settings.get('widgets.clockTz') : '').split(',').map(s => s.trim()).filter(Boolean); } catch { return []; } }
+function clockTick() {
+  const el = document.getElementById('footer-clock'); if (!el) return;
+  const now = new Date();
+  const opt = { hour: '2-digit', minute: '2-digit' };
+  let html = now.toLocaleTimeString([], opt);
+  for (const tz of clockTzs()) {
+    try {
+      const label = tz.split('/').pop().replace(/_/g, ' ');
+      html += '<span class="fc-tz">' + escapeHtml(label) + ' ' + now.toLocaleTimeString([], Object.assign({ timeZone: tz }, opt)) + '</span>';
+    } catch {}
+  }
+  el.innerHTML = html;
+}
+function setClockEnabled(on) {
+  let el = document.getElementById('footer-clock');
+  if (on) {
+    if (!el) {
+      el = document.createElement('span'); el.id = 'footer-clock';
+      const fr = document.querySelector('.footer-right'); if (fr) fr.insertBefore(el, fr.firstChild);
+    }
+    clockTick();
+    clearInterval(_clockTimer); _clockTimer = setInterval(clockTick, 10000);
+  } else {
+    if (el) el.remove(); clearInterval(_clockTimer); _clockTimer = null;
+  }
+}
+
+// ---- Daily notes / mini calendar (#40) ----
+const DAILY_ROOM = 'journal';
+function _dailyHeading(d) {
+  const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const iso = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  return { iso, line: '## ' + iso + ' (' + days[d.getDay()] + ')' };
+}
+function gotoDailyEntry(d) {
+  const h = _dailyHeading(d);
+  const ensure = () => {
+    const doc = editor.state.doc;
+    let foundLine = 0;
+    for (let i = 1; i <= doc.lines; i++) { if (doc.line(i).text.trim() === h.line) { foundLine = i; break; } }
+    if (foundLine) { outlineGoto(foundLine); }
+    else {
+      // Prepend a new dated section.
+      const insert = h.line + '\n\n\n';
+      editor.dispatch({ changes: { from: 0, insert }, selection: { anchor: h.line.length + 2 } });
+      editor.dispatch({ effects: EditorView.scrollIntoView(0, { y: 'start' }) });
+    }
+    editor.focus();
+  };
+  if (activeRoom !== DAILY_ROOM) {
+    if (!rooms.includes(DAILY_ROOM)) { rooms.push(DAILY_ROOM); saveRooms(); try { renderRoomTabs(); } catch {} }
+    Promise.resolve(switchRoom(DAILY_ROOM)).then(() => setTimeout(ensure, 120));
+  } else { ensure(); }
+}
+function dailyHasEntry(d) {
+  // Best-effort: scan the journal room's cache for the dated heading.
+  const h = _dailyHeading(d);
+  const text = (activeRoom === DAILY_ROOM) ? editor.state.doc.toString() : (store.get('cade-room-cache:' + DAILY_ROOM) || '');
+  return text.indexOf('\n' + h.line) >= 0 || text.indexOf(h.line + '\n') === 0 || text.indexOf(h.line) >= 0;
+}
+let _dayCalMonth = null;
+function renderDayCal() {
+  const p = document.getElementById('daycal-panel'); if (!p) return;
+  const ref = _dayCalMonth || new Date();
+  const y = ref.getFullYear(), mo = ref.getMonth();
+  const first = new Date(y, mo, 1);
+  const days = new Date(y, mo + 1, 0).getDate();
+  const today = new Date();
+  const monthName = ref.toLocaleDateString([], { month: 'long', year: 'numeric' });
+  let grid = ['S', 'M', 'T', 'W', 'T', 'F', 'S'].map(d => '<div class="daycal-cell dow">' + d + '</div>').join('');
+  for (let i = 0; i < first.getDay(); i++) grid += '<div class="daycal-cell empty"></div>';
+  for (let d = 1; d <= days; d++) {
+    const date = new Date(y, mo, d);
+    const isToday = date.toDateString() === today.toDateString();
+    const has = dailyHasEntry(date);
+    grid += '<div class="daycal-cell' + (isToday ? ' today' : '') + (has ? ' has' : '') + '" onclick="dayCalPick(' + y + ',' + mo + ',' + d + ')">' + d + '</div>';
+  }
+  p.querySelector('.cade-panel-body').innerHTML =
+    '<div class="daycal-head"><button onclick="dayCalNav(-1)">‹</button><span>' + monthName + '</span><button onclick="dayCalNav(1)">›</button></div>' +
+    '<div class="daycal-grid">' + grid + '</div>';
+}
+window.dayCalNav = function(delta) {
+  const ref = _dayCalMonth || new Date();
+  _dayCalMonth = new Date(ref.getFullYear(), ref.getMonth() + delta, 1);
+  renderDayCal();
+};
+window.dayCalPick = function(y, mo, d) { gotoDailyEntry(new Date(y, mo, d)); renderDayCal(); };
+window.openDailyNote = function() {
+  closeAllMenus();
+  const existing = document.getElementById('daycal-panel');
+  if (existing) { existing.remove(); return; }
+  _dayCalMonth = new Date();
+  _mkPanel('daycal-panel', "Daily Notes", '');
+  renderDayCal();
+  gotoDailyEntry(new Date());
+};
+
+// Inline math (#41/#26): typing "=" at the end of a pure-arithmetic line
+// appends the result; "sum=" / "total=" sums the numbers in the block above.
+function _fmtNum(n) { return String(Math.round(n * 1e10) / 1e10); }
+function maybeEvalMath(update) {
+  let typedEq = false;
+  update.changes.iterChanges((fA, tA, fB, tB, ins) => { if (ins.toString().indexOf('=') >= 0) typedEq = true; });
+  if (!typedEq) return;
+  const sel = editor.state.selection.main;
+  if (!sel.empty) return;
+  const line = editor.state.doc.lineAt(sel.head);
+  if (sel.head !== line.to) return; // '=' must be the last char on the line
+  const appendResult = (out) => setTimeout(() => {
+    try {
+      const l2 = editor.state.doc.lineAt(editor.state.selection.main.head);
+      if (!/=\s*$/.test(l2.text)) return; // user kept typing — abort
+      editor.dispatch({ changes: { from: l2.to, insert: out }, selection: { anchor: l2.to + out.length } });
+    } catch {}
+  }, 0);
+  const wm = line.text.match(/^\s*(sum|total)\s*=\s*$/i);
+  if (wm) {
+    let total = 0, any = false;
+    for (let i = line.number - 1; i >= 1; i--) {
+      const t = editor.state.doc.line(i).text;
+      if (!t.trim()) break;
+      const nums = t.match(/-?\d+(?:\.\d+)?/g);
+      if (nums) nums.forEach(n => { total += parseFloat(n); any = true; });
+    }
+    if (any) appendResult(' ' + _fmtNum(total));
+    return;
+  }
+  const m = line.text.match(/^\s*([0-9.+\-*/%()\s]+?)\s*=\s*$/);
+  if (!m) return;
+  const expr = m[1];
+  if (!/[0-9]/.test(expr) || !/[-+*/%]/.test(expr)) return; // need a real operation
+  let val;
+  try { val = Function('"use strict";return (' + expr + ')')(); } catch { return; }
+  if (typeof val !== 'number' || !isFinite(val)) return;
+  appendResult(' ' + _fmtNum(val));
+}
+
+// Editor update hook (function declaration so it's hoisted for the listener).
+var _twScrollRaf = 0;
+var _outlineTimer = 0;
+function _onEditorUpdate(update) {
+  if (update.docChanged) { try { maybeEvalMath(update); } catch {} }
+  if (update.docChanged && document.getElementById('outline-panel')) {
+    clearTimeout(_outlineTimer); _outlineTimer = setTimeout(() => { try { buildOutline(); } catch {} }, 300);
+  }
+  // Typewriter scrolling: keep the caret line vertically centred.
+  if (document.body.classList.contains('zen-tw') && (update.selectionSet || update.docChanged)) {
+    if (!_twScrollRaf) _twScrollRaf = requestAnimationFrame(() => {
+      _twScrollRaf = 0;
+      try { editor.dispatch({ effects: EditorView.scrollIntoView(editor.state.selection.main.head, { y: 'center' }) }); } catch {}
+    });
+  }
+}
+
+// Clock setting (toggle + extra timezones).
+try {
+  if (typeof registerSetting === 'function') {
+    registerSetting({ key: 'widgets.clock', label: 'Footer clock', type: 'toggle', default: false, section: 'Appearance', apply(v) { setClockEnabled(!!v); } });
+    registerSetting({ key: 'widgets.clockTz', label: 'Extra timezones', type: 'text', default: '', section: 'Appearance', hint: 'Comma-separated IANA names, e.g. America/New_York, Europe/London', apply() { if (document.getElementById('footer-clock')) clockTick(); } });
+  }
+} catch {}
+
+// Restore open widgets from last session.
+setTimeout(() => {
+  try { if (store.get('cade-outline-open') === '1') window.toggleOutline(); } catch {}
+  try { if (store.get('cade-pomo-open') === '1') window.togglePomodoro(); } catch {}
+  try { if (store.get('cade-zen') === '1') window.toggleZen(); } catch {}
+}, 400);
+
+// ============================================
+// MOBILE ENHANCEMENTS: swipe, haptics, install prompt (Round 2)
+// ============================================
+window.haptic = function(ms) { try { if (navigator.vibrate) navigator.vibrate(ms || 12); } catch {} };
+
+// Swipe between rooms (#77): a quick horizontal flick on the editor switches to
+// the prev/next visible room. Tuned so it never fires during scroll/selection.
+(function() {
+  const el = editor.scrollDOM;
+  if (!el) return;
+  let x0 = 0, y0 = 0, t0 = 0, tracking = false;
+  el.addEventListener('touchstart', e => {
+    if (e.touches.length !== 1) { tracking = false; return; }
+    x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; t0 = Date.now(); tracking = true;
+  }, { passive: true });
+  el.addEventListener('touchend', e => {
+    if (!tracking) return; tracking = false;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - x0, dy = t.clientY - y0, dt = Date.now() - t0;
+    if (dt > 600) return;                                   // not a flick
+    if (Math.abs(dx) < 80 || Math.abs(dy) > 45) return;      // too short / too vertical
+    if (Math.abs(dx) < Math.abs(dy) * 2) return;             // not clearly horizontal
+    if (!editor.state.selection.main.empty) return;          // user is selecting
+    let list;
+    try { list = (typeof roomsInActiveWorkspace === 'function') ? roomsInActiveWorkspace(false) : rooms.slice(); } catch { list = rooms.slice(); }
+    try { if (typeof orderRooms === 'function') list = orderRooms(list); } catch {}
+    if (!list || list.length < 2) return;
+    const idx = list.indexOf(activeRoom);
+    if (idx < 0) return;
+    const next = dx < 0 ? (idx + 1) % list.length : (idx - 1 + list.length) % list.length;
+    haptic(12);
+    switchRoom(list[next]);
+  }, { passive: true });
+})();
+
+// PWA install prompt (#82): capture the deferred prompt; the View > Install App
+// item triggers it (or shows the iOS hint when there's no prompt to defer).
+let _deferredInstall = null;
+window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); _deferredInstall = e; });
+window.installApp = function() {
+  closeAllMenus();
+  if (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) {
+    showToast('App is already installed', 'success', 2500); return;
+  }
+  if (_deferredInstall) {
+    _deferredInstall.prompt();
+    _deferredInstall.userChoice.finally(() => { _deferredInstall = null; });
+  } else {
+    showToast('To install: use your browser menu → "Add to Home Screen" / "Install".', 'success', 5000);
+  }
+};
+
+// Drag-and-drop file import (#103): drop .txt/.md/.zip (and images, if image
+// embedding is enabled) onto the window to import. Reuses appendFilesToEditor.
+(function() {
+  let depth = 0, overlay = null;
+  const hasFiles = e => e.dataTransfer && Array.from(e.dataTransfer.types || []).indexOf('Files') >= 0;
+  const show = () => { if (!overlay) { overlay = document.createElement('div'); overlay.className = 'drop-overlay'; overlay.textContent = 'Drop files to import'; document.body.appendChild(overlay); } };
+  const hide = () => { if (overlay) { overlay.remove(); overlay = null; } depth = 0; };
+  window.addEventListener('dragover', e => { if (hasFiles(e)) e.preventDefault(); });
+  window.addEventListener('dragenter', e => { if (hasFiles(e)) { e.preventDefault(); depth++; show(); } });
+  window.addEventListener('dragleave', () => { depth = Math.max(0, depth - 1); if (!depth) hide(); });
+  window.addEventListener('drop', async e => {
+    if (!hasFiles(e)) return;
+    e.preventDefault(); hide();
+    const files = Array.from(e.dataTransfer.files);
+    const imgs = files.filter(f => /^image\//.test(f.type));
+    const others = files.filter(f => !/^image\//.test(f.type));
+    if (others.length) { try { await appendFilesToEditor(others); } catch { showToast('Import failed', 'error', 2500); } }
+    for (const im of imgs) {
+      if (typeof insertImageFile === 'function') { try { await insertImageFile(im); } catch {} }
+      else { showToast('Image embedding is off for this drop', 'error', 2500); break; }
+    }
+  });
+})();
+
+// Mobile markdown toolbar row (#78): configurable buttons that insert markdown
+// around the selection / at the cursor.
+const MD_BTN_DEFS = {
+  bold: { label: 'B', title: 'Bold', wrap: ['**', '**'] },
+  italic: { label: 'I', title: 'Italic', wrap: ['*', '*'] },
+  code: { label: '<>', title: 'Code', wrap: ['`', '`'] },
+  head: { label: 'H', title: 'Heading', prefix: '# ' },
+  list: { label: '•', title: 'List', prefix: '- ' },
+  todo: { label: '☐', title: 'Checkbox', prefix: '- [ ] ' },
+  quote: { label: '"', title: 'Quote', prefix: '> ' },
+  link: { label: '🔗', title: 'Link', special: 'link' },
+};
+window.mdBtn = function(kind) {
+  const def = MD_BTN_DEFS[kind]; if (!def) return;
+  try { if (window.haptic) haptic(8); } catch {}
+  const sel = editor.state.selection.main;
+  if (def.special === 'link') {
+    const t = editor.state.sliceDoc(sel.from, sel.to) || 'text';
+    const ins = '[' + t + '](url)';
+    editor.dispatch({ changes: { from: sel.from, to: sel.to, insert: ins }, selection: { anchor: sel.from + ins.length - 4, head: sel.from + ins.length - 1 } });
+  } else if (def.wrap) {
+    const t = editor.state.sliceDoc(sel.from, sel.to);
+    editor.dispatch({ changes: { from: sel.from, to: sel.to, insert: def.wrap[0] + t + def.wrap[1] }, selection: { anchor: sel.from + def.wrap[0].length, head: sel.from + def.wrap[0].length + t.length } });
+  } else if (def.prefix) {
+    const line = editor.state.doc.lineAt(sel.from);
+    editor.dispatch({ changes: { from: line.from, insert: def.prefix }, selection: { anchor: sel.head + def.prefix.length } });
+  }
+  editor.focus();
+};
+function renderMobileMdRow() {
+  const row = document.getElementById('mob-md-row'); if (!row) return;
+  const on = window.Settings ? Settings.get('mobile.mdRow') : false;
+  row.style.display = on ? '' : 'none';
+  if (!on) { row.innerHTML = ''; return; }
+  const keys = String(window.Settings ? Settings.get('mobile.mdButtons') : 'bold,italic,head,list,todo,code,link')
+    .split(',').map(s => s.trim()).filter(k => MD_BTN_DEFS[k]);
+  row.innerHTML = keys.map(k => '<button class="mob-btn mob-md-btn" title="' + MD_BTN_DEFS[k].title + '" onclick="mdBtn(\'' + k + '\')">' + MD_BTN_DEFS[k].label + '</button>').join('');
+}
+try {
+  if (typeof registerSetting === 'function') {
+    registerSetting({ key: 'mobile.mdRow', label: 'Mobile markdown toolbar row', type: 'toggle', default: false, section: 'Behavior', apply() { try { renderMobileMdRow(); } catch {} } });
+    registerSetting({ key: 'mobile.mdButtons', label: 'Markdown row buttons', type: 'text', default: 'bold,italic,head,list,todo,code,link', section: 'Behavior', hint: 'Comma list: bold, italic, code, head, list, todo, quote, link', apply() { try { renderMobileMdRow(); } catch {} } });
+  }
+} catch {}
+
+// ============================================
+// EMBEDDED IMAGES: paste/insert, compress, garbage-collect (#28)
+// ============================================
+// Dramatic compression so the base64 stays small enough to live in the synced
+// document without blowing up Firebase / the local cache (quality loss is fine
+// as long as it stays viewable). Returns base64 (no data: prefix) or null.
+const IMG_MAX_B64 = 90 * 1024; // ~90KB of base64 per image
+function compressImage(file) {
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      let w = img.width || 1, h = img.height || 1;
+      const maxDim = 800;
+      if (w > maxDim || h > maxDim) { const r = Math.min(maxDim / w, maxDim / h); w = Math.round(w * r); h = Math.round(h * r); }
+      const canvas = document.createElement('canvas');
+      const draw = (cw, ch, q) => { canvas.width = cw; canvas.height = ch; canvas.getContext('2d').drawImage(img, 0, 0, cw, ch); return canvas.toDataURL('image/jpeg', q); };
+      let q = 0.55, out = draw(w, h, q);
+      while (out.length > IMG_MAX_B64 && q > 0.22) { q -= 0.12; out = draw(w, h, q); }
+      let scale = 0.7;
+      while (out.length > IMG_MAX_B64 && Math.round(w * scale) > 200) { out = draw(Math.round(w * scale), Math.round(h * scale), 0.35); scale -= 0.2; }
+      if (out.length > IMG_MAX_B64) { resolve(null); return; }
+      const comma = out.indexOf(',');
+      resolve(comma >= 0 ? out.slice(comma + 1) : null);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); resolve(null); };
+    img.src = url;
+  });
+}
+async function insertImageFile(file) {
+  if (!file || !/^image\//.test(file.type)) { showToast('Not an image', 'error', 2000); return; }
+  let b64;
+  try { b64 = await compressImage(file); } catch { b64 = null; }
+  if (!b64) { showToast('Image too large to embed even after compression', 'error', 3500); return; }
+  const token = '![img:' + b64 + ']';
+  const sel = editor.state.selection.main;
+  const doc = editor.state.doc;
+  const pre = (sel.from > 0 && doc.sliceString(sel.from - 1, sel.from) !== '\n') ? '\n' : '';
+  editor.dispatch({ changes: { from: sel.from, to: sel.to, insert: pre + token + '\n' }, selection: { anchor: sel.from + pre.length + token.length + 1 } });
+  showToast('Image embedded (' + Math.round(b64.length / 1024) + ' KB)', 'success', 2000);
+}
+window.insertImageFile = insertImageFile;
+
+// Paste an image from the clipboard.
+editor.contentDOM.addEventListener('paste', (e) => {
+  const items = e.clipboardData && e.clipboardData.items;
+  if (!items) return;
+  for (const it of items) {
+    if (it.type && it.type.indexOf('image/') === 0) {
+      const f = it.getAsFile();
+      if (f) { e.preventDefault(); insertImageFile(f); return; }
+    }
+  }
+});
+
+registerScript(`/**
+  {
+    "name": "Insert Image",
+    "description": "Pick an image; it is compressed and embedded inline",
+    "author": "Cade",
+    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='3' y='3' width='18' height='18' rx='2'/><circle cx='8.5' cy='8.5' r='1.5'/><path d='M21 15l-5-5L5 21'/></svg>",
+    "tags": "image,embed,picture,photo,insert,paste"
+  }
+**/
+function main(ctx) {
+  const inp = document.createElement('input');
+  inp.type = 'file'; inp.accept = 'image/*';
+  inp.onchange = () => { if (inp.files && inp.files[0] && window.insertImageFile) window.insertImageFile(inp.files[0]); };
+  inp.click();
+}`);
 
 // ============================================
 // HOTKEY SYSTEM
@@ -11540,8 +12796,12 @@ document.addEventListener('keydown', (e) => {
   }
 
   // Script hotkeys (not while typing in a form field — a binding like
-  // Ctrl+Shift+1 must not rewrite the document from inside a modal input)
-  if (!isInputField) {
+  // Ctrl+Shift+1 must not rewrite the document from inside a modal input).
+  // Ctrl/Cmd+P is reserved for the quick switcher below, so skip script
+  // hotkeys for it (a stale saved "sort on Ctrl+P" binding must not fire).
+  const _qsMod = (navigator.platform.toUpperCase().indexOf('MAC') >= 0 ? e.metaKey : e.ctrlKey);
+  const _isQuickSwitchKey = _qsMod && !e.shiftKey && !e.altKey && (e.key === 'p' || e.key === 'P');
+  if (!isInputField && !_isQuickSwitchKey) {
     for (const [hk, scriptName] of Object.entries(scriptHotkeys)) {
       if (eventMatchesHotkey(e, hk)) {
         e.preventDefault(); e.stopPropagation();
@@ -11566,6 +12826,18 @@ document.addEventListener('keydown', (e) => {
     if (overlay && overlay.classList.contains('open')) closeQuickSwitcher();
     else openQuickSwitcher();
     return;
+  }
+
+  // Bold / Italic / Underline on the selection (Ctrl/Cmd+B/I/U) via the
+  // matching transform scripts (#13). Capture phase so CM6/contenteditable
+  // never see the key first.
+  if (modKey && !e.shiftKey && !e.altKey && !isInputField) {
+    const k = (e.key || '').toLowerCase();
+    const prefix = k === 'b' ? 'Bold (' : k === 'i' ? 'Italic (' : k === 'u' ? 'Underline (' : null;
+    if (prefix) {
+      const sc = scripts.find(s => s.name.startsWith(prefix));
+      if (sc) { e.preventDefault(); e.stopPropagation(); executeScript(sc); return; }
+    }
   }
 
   if (modKey && e.key === 'Tab' && rooms.length > 0 && !isInputField) {
