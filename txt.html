@@ -4452,12 +4452,20 @@ function hitSpell(pos) {
   return spellRanges.find(r => pos >= r.from && pos <= r.to);
 }
 
+// Track whether the most recent interaction was touch/pen, so tap routing
+// works even on devices the media query misreports as fine pointers (a touch
+// laptop) — relying on long-press for spell suggestions was unreliable (#7).
+let _lastPointerWasTouch = false;
+editor.dom.addEventListener('pointerdown', (e) => {
+  _lastPointerWasTouch = (e.pointerType === 'touch' || e.pointerType === 'pen');
+}, true);
+
 // Tap / left-click.
 editor.dom.addEventListener('click', (e) => {
   if (!editor.state.selection.main.empty) return; // ignore drag-selections
   const pos = editor.posAtCoords({ x: e.clientX, y: e.clientY });
   if (pos == null) { closeSpellPopup(); closeCtxMenu(); return; }
-  const coarse = isCoarsePointer();
+  const coarse = isCoarsePointer() || _lastPointerWasTouch;
 
   if (coarse) {
     // Mobile: a tap on a highlight or link opens its menu; misspelling opens
@@ -11506,6 +11514,10 @@ window.toggleMdStyle = function() {
 // count and size so it can't crowd out room caches.
 const SNAP_MAX = 10;
 const SNAP_MAX_CHARS = 400000;
+// Hard cap on TOTAL snapshot bytes per room so version history can't quietly
+// bloat localStorage (a 2KB room had grown a 190KB snapshot store). Oldest
+// snapshots are pruned until under this; at least one is always kept (#14).
+const SNAP_MAX_TOTAL = 150000;
 const SNAP_AUTO_MS = 5 * 60 * 1000;
 
 function snapKey() { return 'cade-snap:' + (syncState.roomName || activeRoom || '__local__'); }
@@ -11527,6 +11539,12 @@ window.takeSnapshot = function(silent) {
   if (snaps.length && snaps[0].c === text) { if (isManual) showToast('No changes since last snapshot', 'success', 1500); return false; }
   snaps.unshift({ t: Date.now(), c: text });
   while (snaps.length > SNAP_MAX) snaps.pop();
+  // Byte-cap: drop oldest until under the total budget (always keep newest).
+  let total = snaps.reduce((n, s) => n + (s.c ? s.c.length : 0), 0);
+  while (snaps.length > 1 && total > SNAP_MAX_TOTAL) {
+    total -= (snaps[snaps.length - 1].c || '').length;
+    snaps.pop();
+  }
   saveSnaps(snaps);
   if (isManual) showToast('Snapshot saved', 'success', 1500);
   if (document.getElementById('snapshots-overlay').classList.contains('open')) renderSnapshotsList();
