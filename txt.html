@@ -2087,6 +2087,61 @@ body {
   white-space: nowrap;
   max-width: 160px;
 }
+
+/* ===== Widgets (Round 2): outline, pomodoro, zen, clock, daily note ===== */
+.cade-panel {
+  position: fixed; z-index: 5000; background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-lg); box-shadow: var(--shadow-lg); display: flex; flex-direction: column;
+  font-size: var(--text-sm); color: var(--text); min-width: 180px;
+}
+.cade-panel-head { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-bottom: 1px solid var(--border); cursor: move; user-select: none; }
+.cade-panel-head .cade-panel-title { font-weight: 600; flex: 1; font-size: var(--text-sm); }
+.cade-panel-head .cade-panel-x { cursor: pointer; opacity: 0.6; padding: 0 6px; border-radius: 4px; font-size: 16px; line-height: 1; }
+.cade-panel-head .cade-panel-x:hover { opacity: 1; background: var(--surface-hover, rgba(127,127,127,0.15)); }
+.cade-panel-body { overflow: auto; }
+
+#outline-panel { top: 50px; right: 12px; width: 250px; max-height: 62vh; }
+#outline-list { padding: 4px; }
+.outline-item { display: block; width: 100%; text-align: left; padding: 4px 8px; border-radius: 4px; cursor: pointer; background: none; border: none; color: var(--text-muted); font: inherit; font-size: var(--text-sm); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.outline-item:hover { background: var(--surface-hover, rgba(127,127,127,0.15)); color: var(--text); }
+.outline-item.h1 { font-weight: 600; color: var(--text); }
+.outline-item.h2 { padding-left: 18px; }
+.outline-item.h3 { padding-left: 30px; }
+.outline-item.h4, .outline-item.h5, .outline-item.h6 { padding-left: 42px; font-size: var(--text-xs); }
+.outline-empty { padding: 12px; color: var(--text-faint); font-size: var(--text-xs); }
+
+#pomodoro-panel { top: 50px; right: 12px; width: 200px; }
+.pomo-time { font-size: 34px; font-weight: 700; text-align: center; font-variant-numeric: tabular-nums; padding: 10px 0 2px; }
+.pomo-phase { text-align: center; font-size: var(--text-xs); color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+.pomo-count { text-align: center; font-size: var(--text-xs); color: var(--text-faint); padding: 4px 0; }
+.pomo-btns { display: flex; gap: 6px; padding: 8px 10px 10px; }
+.pomo-btns .btn { flex: 1; }
+#pomodoro-panel.break .pomo-time { color: var(--success, #10b981); }
+
+#footer-clock { font-variant-numeric: tabular-nums; color: var(--text-muted); cursor: default; }
+#footer-clock .fc-tz { opacity: 0.7; margin-left: 8px; }
+
+#daycal-panel { top: 50px; right: 12px; width: 244px; }
+.daycal-head { display: flex; align-items: center; justify-content: space-between; padding: 8px 10px 2px; font-weight: 600; }
+.daycal-head button { background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 18px; line-height: 1; padding: 0 8px; border-radius: 4px; }
+.daycal-head button:hover { background: var(--surface-hover, rgba(127,127,127,0.15)); }
+.daycal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; padding: 8px; }
+.daycal-cell { text-align: center; padding: 6px 0; border-radius: 4px; cursor: pointer; font-size: var(--text-xs); }
+.daycal-cell:hover { background: var(--surface-hover, rgba(127,127,127,0.15)); }
+.daycal-cell.today { outline: 1px solid var(--accent); }
+.daycal-cell.has { font-weight: 700; color: var(--accent); }
+.daycal-cell.dow { color: var(--text-faint); cursor: default; font-weight: 600; }
+.daycal-cell.empty { cursor: default; }
+
+body.zen .menubar, body.zen .footer, body.zen .mobile-toolbar, body.zen .mobile-scroll-btns { display: none !important; }
+body.zen .editor-wrap .cm-scroller { padding-left: max(8vw, var(--space-4)); padding-right: max(8vw, var(--space-4)); }
+body.zen.zen-tw .editor-wrap .cm-content { padding-top: 38vh; padding-bottom: 38vh; }
+.zen-exit { position: fixed; top: 10px; right: 12px; z-index: 6000; opacity: 0.25; transition: opacity 0.2s; }
+.zen-exit:hover { opacity: 1; }
+
+@media (max-width: 768px) {
+  #outline-panel, #pomodoro-panel, #daycal-panel { right: 8px; left: 8px; width: auto; }
+}
 </style>
 </head>
 <body>
@@ -2191,6 +2246,23 @@ body {
       </button>
       <button class="menu-item" onclick="openSnapshots()">
         <span>Snapshots / History</span>
+        <span></span>
+      </button>
+      <div class="menu-separator"></div>
+      <button class="menu-item" onclick="toggleOutline()">
+        <span id="outline-label">Outline</span>
+        <span></span>
+      </button>
+      <button class="menu-item" onclick="togglePomodoro()">
+        <span id="pomodoro-label">Focus Timer</span>
+        <span></span>
+      </button>
+      <button class="menu-item" onclick="toggleZen()">
+        <span id="zen-label">Zen Mode</span>
+        <span></span>
+      </button>
+      <button class="menu-item" onclick="openDailyNote()">
+        <span>Today's Note</span>
         <span></span>
       </button>
       <!-- Sync items (mobile only — Sync menu is hidden) -->
@@ -4211,6 +4283,8 @@ function buildEditorExtensions() {
           broadcastText();
         }
       }
+      // Widget refresh hook (outline, typewriter scroll, etc.).
+      if (typeof _onEditorUpdate === 'function') { try { _onEditorUpdate(update); } catch {} }
     }),
     EditorView.updateListener.of(renumberListener),
     // Respect the soft-wrap preference when rebuilding state on room switch.
@@ -11826,6 +11900,277 @@ document.getElementById('snapshots-overlay').addEventListener('keydown', (e) => 
 
 // Background auto-capture (no-ops when nothing changed since the last one).
 setInterval(snapshotNow, SNAP_AUTO_MS);
+
+// ============================================
+// WIDGETS (Round 2): outline, pomodoro, zen, clock, daily note
+// ============================================
+// Shared draggable, closeable floating panel.
+function _mkPanel(id, title, bodyHtml) {
+  let p = document.getElementById(id);
+  if (p) return p;
+  p = document.createElement('div');
+  p.className = 'cade-panel';
+  p.id = id;
+  p.innerHTML = '<div class="cade-panel-head"><span class="cade-panel-title"></span>' +
+    '<span class="cade-panel-x" title="Close">×</span></div><div class="cade-panel-body">' + bodyHtml + '</div>';
+  p.querySelector('.cade-panel-title').textContent = title;
+  document.body.appendChild(p);
+  p.querySelector('.cade-panel-x').addEventListener('click', () => { p.remove(); if (p._onClose) p._onClose(); });
+  const head = p.querySelector('.cade-panel-head');
+  let sx, sy, ox, oy, drag = false;
+  head.addEventListener('pointerdown', e => {
+    if (e.target.classList.contains('cade-panel-x')) return;
+    drag = true; sx = e.clientX; sy = e.clientY;
+    const r = p.getBoundingClientRect(); ox = r.left; oy = r.top;
+    p.style.right = 'auto'; p.style.left = ox + 'px'; p.style.top = oy + 'px';
+    try { head.setPointerCapture(e.pointerId); } catch {}
+  });
+  head.addEventListener('pointermove', e => {
+    if (!drag) return;
+    p.style.left = Math.max(0, Math.min(window.innerWidth - 60, ox + e.clientX - sx)) + 'px';
+    p.style.top = Math.max(0, Math.min(window.innerHeight - 40, oy + e.clientY - sy)) + 'px';
+  });
+  head.addEventListener('pointerup', e => { drag = false; try { head.releasePointerCapture(e.pointerId); } catch {} });
+  return p;
+}
+
+// ---- Outline / TOC (#34) ----
+function buildOutline() {
+  const list = document.getElementById('outline-list');
+  if (!list) return;
+  const doc = editor.state.doc;
+  const items = [];
+  const cap = Math.min(doc.lines, 6000);
+  for (let i = 1; i <= cap; i++) {
+    const m = doc.line(i).text.match(/^(#{1,6})\s+(.*)$/);
+    if (m) items.push({ level: m[1].length, text: m[2].trim() || '(untitled)', line: i });
+  }
+  if (!items.length) { list.innerHTML = '<div class="outline-empty">No headings yet. Use "# Heading" lines to build an outline.</div>'; return; }
+  list.innerHTML = items.map(it =>
+    '<button class="outline-item h' + it.level + '" onclick="outlineGoto(' + it.line + ')">' + escapeHtml(it.text) + '</button>'
+  ).join('');
+}
+window.outlineGoto = function(lineNo) {
+  const doc = editor.state.doc;
+  const line = doc.line(Math.max(1, Math.min(lineNo, doc.lines)));
+  editor.dispatch({ selection: { anchor: line.from }, effects: EditorView.scrollIntoView(line.from, { y: 'start', yMargin: 40 }) });
+  editor.focus();
+};
+window.toggleOutline = function() {
+  closeAllMenus();
+  const existing = document.getElementById('outline-panel');
+  if (existing) { existing.remove(); store.set('cade-outline-open', '0'); return; }
+  const p = _mkPanel('outline-panel', 'Outline', '<div id="outline-list"></div>');
+  p._onClose = () => store.set('cade-outline-open', '0');
+  buildOutline();
+  store.set('cade-outline-open', '1');
+};
+
+// ---- Pomodoro / focus timer (#31) ----
+const _pomo = { phase: 'work', remaining: 25 * 60, timer: null, running: false, count: 0, work: 25, brk: 5 };
+function pomoLoad() {
+  try { const s = JSON.parse(store.get('cade-pomodoro') || '{}'); _pomo.work = +s.work || 25; _pomo.brk = +s.brk || 5; } catch {}
+}
+function pomoFmt(s) { const m = Math.floor(s / 60), ss = s % 60; return m + ':' + String(ss).padStart(2, '0'); }
+function pomoRender() {
+  const p = document.getElementById('pomodoro-panel'); if (!p) return;
+  p.querySelector('.pomo-time').textContent = pomoFmt(_pomo.remaining);
+  p.querySelector('.pomo-phase').textContent = _pomo.phase === 'work' ? 'Focus' : 'Break';
+  p.querySelector('.pomo-count').textContent = 'Completed: ' + _pomo.count;
+  p.classList.toggle('break', _pomo.phase !== 'work');
+  const b = p.querySelector('.pomo-start'); if (b) b.textContent = _pomo.running ? 'Pause' : 'Start';
+}
+function pomoNotify(title, body) {
+  try { navigator.vibrate && navigator.vibrate([120, 60, 120]); } catch {}
+  try {
+    if (window.Notification && Notification.permission === 'granted') { new Notification(title, { body }); return; }
+  } catch {}
+  showToast(body, 'success', 4000);
+}
+function pomoTick() {
+  if (_pomo.remaining > 0) { _pomo.remaining--; pomoRender(); return; }
+  if (_pomo.phase === 'work') { _pomo.count++; _pomo.phase = 'break'; _pomo.remaining = _pomo.brk * 60; pomoNotify('Break time', 'Take a ' + _pomo.brk + ' minute break.'); }
+  else { _pomo.phase = 'work'; _pomo.remaining = _pomo.work * 60; pomoNotify('Focus time', 'Back to it — ' + _pomo.work + ' minutes.'); }
+  pomoRender();
+}
+window.pomoToggleRun = function() {
+  _pomo.running = !_pomo.running;
+  if (_pomo.running) {
+    try { if (window.Notification && Notification.permission === 'default') Notification.requestPermission(); } catch {}
+    clearInterval(_pomo.timer); _pomo.timer = setInterval(pomoTick, 1000);
+  } else { clearInterval(_pomo.timer); }
+  pomoRender();
+};
+window.pomoReset = function() {
+  clearInterval(_pomo.timer); _pomo.running = false; _pomo.phase = 'work'; _pomo.remaining = _pomo.work * 60; pomoRender();
+};
+window.togglePomodoro = function() {
+  closeAllMenus();
+  const existing = document.getElementById('pomodoro-panel');
+  if (existing) { existing.remove(); store.set('cade-pomo-open', '0'); return; }
+  pomoLoad();
+  if (!_pomo.running) _pomo.remaining = _pomo.work * 60;
+  const p = _mkPanel('pomodoro-panel', 'Focus Timer',
+    '<div class="pomo-time"></div><div class="pomo-phase"></div><div class="pomo-count"></div>' +
+    '<div class="pomo-btns"><button class="btn btn-primary pomo-start" onclick="pomoToggleRun()">Start</button>' +
+    '<button class="btn" onclick="pomoReset()">Reset</button></div>');
+  p._onClose = () => store.set('cade-pomo-open', '0');
+  pomoRender();
+  store.set('cade-pomo-open', '1');
+};
+
+// ---- Zen / typewriter mode (#33) ----
+window.toggleZen = function() {
+  closeAllMenus();
+  const on = document.body.classList.toggle('zen');
+  document.body.classList.toggle('zen-tw', on && store.get('cade-zen-tw') !== '0');
+  store.set('cade-zen', on ? '1' : '0');
+  let x = document.getElementById('zen-exit');
+  if (on) {
+    if (!x) {
+      x = document.createElement('button');
+      x.id = 'zen-exit'; x.className = 'btn zen-exit'; x.textContent = 'Exit Zen (Esc)';
+      x.onclick = () => window.toggleZen();
+      document.body.appendChild(x);
+    }
+  } else if (x) { x.remove(); }
+  const lbl = document.getElementById('zen-label'); if (lbl) lbl.textContent = on ? 'Exit Zen Mode' : 'Zen Mode';
+  setTimeout(() => { try { editor.requestMeasure(); } catch {} try { editor.focus(); } catch {} }, 60);
+};
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && document.body.classList.contains('zen')) { e.preventDefault(); window.toggleZen(); }
+});
+
+// ---- Clock / timezone strip (#42) ----
+let _clockTimer = null;
+function clockTzs() { try { return String(window.Settings ? Settings.get('widgets.clockTz') : '').split(',').map(s => s.trim()).filter(Boolean); } catch { return []; } }
+function clockTick() {
+  const el = document.getElementById('footer-clock'); if (!el) return;
+  const now = new Date();
+  const opt = { hour: '2-digit', minute: '2-digit' };
+  let html = now.toLocaleTimeString([], opt);
+  for (const tz of clockTzs()) {
+    try {
+      const label = tz.split('/').pop().replace(/_/g, ' ');
+      html += '<span class="fc-tz">' + escapeHtml(label) + ' ' + now.toLocaleTimeString([], Object.assign({ timeZone: tz }, opt)) + '</span>';
+    } catch {}
+  }
+  el.innerHTML = html;
+}
+function setClockEnabled(on) {
+  let el = document.getElementById('footer-clock');
+  if (on) {
+    if (!el) {
+      el = document.createElement('span'); el.id = 'footer-clock';
+      const fr = document.querySelector('.footer-right'); if (fr) fr.insertBefore(el, fr.firstChild);
+    }
+    clockTick();
+    clearInterval(_clockTimer); _clockTimer = setInterval(clockTick, 10000);
+  } else {
+    if (el) el.remove(); clearInterval(_clockTimer); _clockTimer = null;
+  }
+}
+
+// ---- Daily notes / mini calendar (#40) ----
+const DAILY_ROOM = 'journal';
+function _dailyHeading(d) {
+  const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const iso = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  return { iso, line: '## ' + iso + ' (' + days[d.getDay()] + ')' };
+}
+function gotoDailyEntry(d) {
+  const h = _dailyHeading(d);
+  const ensure = () => {
+    const doc = editor.state.doc;
+    let foundLine = 0;
+    for (let i = 1; i <= doc.lines; i++) { if (doc.line(i).text.trim() === h.line) { foundLine = i; break; } }
+    if (foundLine) { outlineGoto(foundLine); }
+    else {
+      // Prepend a new dated section.
+      const insert = h.line + '\n\n\n';
+      editor.dispatch({ changes: { from: 0, insert }, selection: { anchor: h.line.length + 2 } });
+      editor.dispatch({ effects: EditorView.scrollIntoView(0, { y: 'start' }) });
+    }
+    editor.focus();
+  };
+  if (activeRoom !== DAILY_ROOM) {
+    if (!rooms.includes(DAILY_ROOM)) { rooms.push(DAILY_ROOM); saveRooms(); try { renderRoomTabs(); } catch {} }
+    Promise.resolve(switchRoom(DAILY_ROOM)).then(() => setTimeout(ensure, 120));
+  } else { ensure(); }
+}
+function dailyHasEntry(d) {
+  // Best-effort: scan the journal room's cache for the dated heading.
+  const h = _dailyHeading(d);
+  const text = (activeRoom === DAILY_ROOM) ? editor.state.doc.toString() : (store.get('cade-room-cache:' + DAILY_ROOM) || '');
+  return text.indexOf('\n' + h.line) >= 0 || text.indexOf(h.line + '\n') === 0 || text.indexOf(h.line) >= 0;
+}
+let _dayCalMonth = null;
+function renderDayCal() {
+  const p = document.getElementById('daycal-panel'); if (!p) return;
+  const ref = _dayCalMonth || new Date();
+  const y = ref.getFullYear(), mo = ref.getMonth();
+  const first = new Date(y, mo, 1);
+  const days = new Date(y, mo + 1, 0).getDate();
+  const today = new Date();
+  const monthName = ref.toLocaleDateString([], { month: 'long', year: 'numeric' });
+  let grid = ['S', 'M', 'T', 'W', 'T', 'F', 'S'].map(d => '<div class="daycal-cell dow">' + d + '</div>').join('');
+  for (let i = 0; i < first.getDay(); i++) grid += '<div class="daycal-cell empty"></div>';
+  for (let d = 1; d <= days; d++) {
+    const date = new Date(y, mo, d);
+    const isToday = date.toDateString() === today.toDateString();
+    const has = dailyHasEntry(date);
+    grid += '<div class="daycal-cell' + (isToday ? ' today' : '') + (has ? ' has' : '') + '" onclick="dayCalPick(' + y + ',' + mo + ',' + d + ')">' + d + '</div>';
+  }
+  p.querySelector('.cade-panel-body').innerHTML =
+    '<div class="daycal-head"><button onclick="dayCalNav(-1)">‹</button><span>' + monthName + '</span><button onclick="dayCalNav(1)">›</button></div>' +
+    '<div class="daycal-grid">' + grid + '</div>';
+}
+window.dayCalNav = function(delta) {
+  const ref = _dayCalMonth || new Date();
+  _dayCalMonth = new Date(ref.getFullYear(), ref.getMonth() + delta, 1);
+  renderDayCal();
+};
+window.dayCalPick = function(y, mo, d) { gotoDailyEntry(new Date(y, mo, d)); renderDayCal(); };
+window.openDailyNote = function() {
+  closeAllMenus();
+  const existing = document.getElementById('daycal-panel');
+  if (existing) { existing.remove(); return; }
+  _dayCalMonth = new Date();
+  _mkPanel('daycal-panel', "Daily Notes", '');
+  renderDayCal();
+  gotoDailyEntry(new Date());
+};
+
+// Editor update hook (function declaration so it's hoisted for the listener).
+var _twScrollRaf = 0;
+var _outlineTimer = 0;
+function _onEditorUpdate(update) {
+  if (update.docChanged && document.getElementById('outline-panel')) {
+    clearTimeout(_outlineTimer); _outlineTimer = setTimeout(() => { try { buildOutline(); } catch {} }, 300);
+  }
+  // Typewriter scrolling: keep the caret line vertically centred.
+  if (document.body.classList.contains('zen-tw') && (update.selectionSet || update.docChanged)) {
+    if (!_twScrollRaf) _twScrollRaf = requestAnimationFrame(() => {
+      _twScrollRaf = 0;
+      try { editor.dispatch({ effects: EditorView.scrollIntoView(editor.state.selection.main.head, { y: 'center' }) }); } catch {}
+    });
+  }
+}
+
+// Clock setting (toggle + extra timezones).
+try {
+  if (typeof registerSetting === 'function') {
+    registerSetting({ key: 'widgets.clock', label: 'Footer clock', type: 'toggle', default: false, section: 'Appearance', apply(v) { setClockEnabled(!!v); } });
+    registerSetting({ key: 'widgets.clockTz', label: 'Extra timezones', type: 'text', default: '', section: 'Appearance', hint: 'Comma-separated IANA names, e.g. America/New_York, Europe/London', apply() { if (document.getElementById('footer-clock')) clockTick(); } });
+  }
+} catch {}
+
+// Restore open widgets from last session.
+setTimeout(() => {
+  try { if (store.get('cade-outline-open') === '1') window.toggleOutline(); } catch {}
+  try { if (store.get('cade-pomo-open') === '1') window.togglePomodoro(); } catch {}
+  try { if (store.get('cade-zen') === '1') window.toggleZen(); } catch {}
+}, 400);
 
 // ============================================
 // HOTKEY SYSTEM
