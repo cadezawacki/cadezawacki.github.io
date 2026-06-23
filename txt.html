@@ -860,6 +860,63 @@ body {
 .footer-spacer { flex: 1; }
 .footer-right { display: flex; gap: var(--space-4); align-items: center; }
 
+/* Breadcrumb (Feature 94) */
+.footer-breadcrumb { display: flex; align-items: center; gap: 5px; min-width: 0; margin-left: var(--space-4); overflow: hidden; }
+.footer-breadcrumb:empty { display: none; }
+.footer-breadcrumb .bc-ws, .footer-breadcrumb .bc-room {
+  display: inline-flex; align-items: center; gap: 4px; cursor: pointer;
+  max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  padding: 1px 4px; border-radius: 4px;
+}
+.footer-breadcrumb .bc-ws:hover, .footer-breadcrumb .bc-room:hover { background: var(--surface-hover, rgba(127,127,127,0.15)); }
+.footer-breadcrumb .bc-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ws-dot, currentColor); flex-shrink: 0; }
+.footer-breadcrumb .bc-sep { opacity: 0.5; }
+.footer-breadcrumb .bc-room { color: var(--text, inherit); font-weight: 500; }
+
+/* Quick switcher (Feature 50) — higher specificity so it beats .modal-overlay */
+.modal-overlay.qs-overlay { align-items: flex-start; }
+.qs-dialog {
+  margin-top: 12vh; width: min(560px, 92vw); background: var(--surface, #1e1e1e);
+  border: 1px solid var(--border, #333); border-radius: 10px; overflow: hidden;
+  box-shadow: 0 16px 48px rgba(0,0,0,0.45); display: flex; flex-direction: column;
+}
+.qs-input {
+  border: none; outline: none; background: transparent; color: var(--text, #eee);
+  font-size: 15px; padding: 14px 16px; border-bottom: 1px solid var(--border, #333);
+}
+.qs-list { max-height: 48vh; overflow-y: auto; padding: 6px; }
+.qs-item {
+  display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 6px;
+  cursor: pointer; font-size: var(--text-sm, 13px);
+}
+.qs-item.active { background: var(--accent-soft, rgba(120,150,255,0.18)); }
+.qs-item:hover { background: var(--surface-hover, rgba(127,127,127,0.12)); }
+.qs-item .qs-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ws-dot, #888); flex-shrink: 0; }
+.qs-item .qs-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.qs-item .qs-meta { color: var(--text-faint, #888); font-size: var(--text-xs, 11px); }
+.qs-item .qs-pin { font-size: 11px; }
+.qs-empty { padding: 14px 10px; color: var(--text-faint, #888); font-size: var(--text-sm, 13px); }
+
+/* Tree twisties + tag picker + pin/archive (Features 51/52/54) */
+.ws-dd-twisty, .ws-mgr-twisty { display: inline-flex; width: 14px; justify-content: center; cursor: pointer; opacity: 0.7; font-size: 10px; flex-shrink: 0; }
+.ws-dd-twisty:hover, .ws-mgr-twisty:hover { opacity: 1; }
+.ws-dd-twisty-empty { cursor: default; opacity: 0; }
+.room-tab-pin { font-size: 10px; margin-right: 2px; }
+.room-tab.pinned { font-weight: 600; }
+.room-manager-item.rm-archived { opacity: 0.62; }
+.rm-tag-picker { width: 100%; padding: 6px 0 2px 22px; }
+.rm-tag-picker-label { font-size: var(--text-xs, 11px); color: var(--text-faint, #888); margin-bottom: 4px; }
+.rm-tag-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+.rm-tag-chip {
+  display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px;
+  font-size: var(--text-xs, 11px); cursor: pointer; border: 1px solid var(--border, #333);
+  opacity: 0.65;
+}
+.rm-tag-chip.on { opacity: 1; border-color: currentColor; background: var(--surface-hover, rgba(127,127,127,0.12)); }
+.rm-tag-chip .ws-badge-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ws-dot, currentColor); }
+.ws-mgr-parent-row { display: flex; align-items: center; gap: 6px; }
+.ws-mgr-parent-select { font-size: var(--text-xs, 11px); padding: 2px 6px; }
+
 .sync-indicator {
   display: flex;
   align-items: center;
@@ -2203,6 +2260,7 @@ body {
     <span id="footer-words">0 words</span>
     <span id="footer-lines">0 lines</span>
   </div>
+  <div class="footer-breadcrumb" id="footer-breadcrumb"></div>
   <div class="footer-spacer"></div>
   <div class="footer-right">
     <div class="sync-indicator">
@@ -2421,6 +2479,14 @@ body {
 
 <!-- ========== ROOM ACTION MENU (popover) ========== -->
 <div class="rm-action-menu" id="rm-action-menu"></div>
+
+<!-- ========== QUICK SWITCHER (Ctrl+P) ========== -->
+<div class="modal-overlay qs-overlay" id="qs-overlay">
+  <div class="qs-dialog">
+    <input class="qs-input" id="qs-input" type="text" placeholder="Switch to room…  (↑↓ to move, Enter to open, Esc to close)" spellcheck="false" autocomplete="off">
+    <div class="qs-list" id="qs-list"></div>
+  </div>
+</div>
 
 <!-- ========== DOWNLOAD MODAL ========== -->
 <div class="modal-overlay" id="download-overlay">
@@ -4067,7 +4133,10 @@ function buildEditorExtensions() {
       }
     }),
     EditorView.updateListener.of(renumberListener),
-    wrapCompartment.of(EditorView.lineWrapping),
+    // Respect the soft-wrap preference when rebuilding state on room switch
+    // (Settings isn't defined yet at initial editor creation — its registration
+    // re-applies the stored value then, so defaulting to wrap-on here is safe).
+    wrapCompartment.of((typeof Settings !== 'undefined' && Settings.get('editor.softWrap') === false) ? [] : EditorView.lineWrapping),
     fenceTrackerPlugin, // must precede the decorators that consult fence state
     listIndentPlugin,
     todoPlugin,
@@ -7840,8 +7909,9 @@ async function applyResolvedNew(roomName, localText, serverText) {
   // Register the new room (bypasses the room cap on purpose — preserving the
   // conflicting copy matters more than the soft limit), mirroring the workspace.
   if (!rooms.includes(conflictName)) rooms.push(conflictName);
-  const wsId = getRoomWorkspaceId(roomName);
-  if (wsId && wsId !== WS_UNLABELED) roomWorkspace[conflictName] = wsId;
+  // Mirror the source room's full workspace membership onto the conflict copy.
+  const wsIds = getRoomWorkspaceIds(roomName);
+  if (wsIds.length) roomWorkspace[conflictName] = wsIds.slice();
   saveRooms();
   if (typeof saveWorkspaces === 'function') saveWorkspaces();
 
@@ -8130,14 +8200,16 @@ function renderRoomTabs() {
   let html = visibleRooms.map(name => {
     const isActive = name === activeRoom && syncState.connected;
     const hasLock = roomHasPassword(name);
+    const pinned = roomIsPinned(name);
     const colorClass = workspaceColorClassForRoom(name);
     const dotHtml = showDots ? `<span class="ws-tab-dot ${colorClass}"></span>` : '';
+    const pinHtml = pinned ? '<span class="room-tab-pin" title="Pinned">📌</span>' : '';
     // Room names can originate from the shared database (Explore Rooms, share
     // links), so they're untrusted: escape both the JS-string quotes and the
     // HTML special chars or a hostile name breaks out of the attribute.
     const escAttr = escapeHtml(name.replace(/\\/g, '\\\\').replace(/'/g, "\\'"));
     const escName = escapeHtml(name);
-    return `<button class="room-tab ${isActive ? 'active' : ''}" data-room="${escName}" oncontextmenu="showRoomTabContextMenu(event, '${escAttr}'); return false;" onclick="switchRoom('${escAttr}')" title="${escName}">${dotHtml}${escName}${hasLock ? '<span class=\'room-tab-lock\'>🔒</span>' : ''}</button>`;
+    return `<button class="room-tab ${isActive ? 'active' : ''}${pinned ? ' pinned' : ''}" data-room="${escName}" oncontextmenu="showRoomTabContextMenu(event, '${escAttr}'); return false;" onclick="switchRoom('${escAttr}')" title="${escName}">${pinHtml}${dotHtml}${escName}${hasLock ? '<span class=\'room-tab-lock\'>🔒</span>' : ''}</button>`;
   }).join('');
   if (rooms.length < roomCap) {
     html += `<button class="room-tab-add" onclick="addRoomPrompt()" title="Add room">+</button>`;
@@ -8162,6 +8234,7 @@ function renderRoomTabs() {
   const useDropdown = visibleRooms.length > 5 || container.scrollWidth > container.clientWidth;
   container.classList.toggle('dropdown-mode', useDropdown);
   mobileContainer.classList.toggle('dropdown-mode', useDropdown);
+  try { renderBreadcrumb(); } catch {}
 }
 
 // Re-check room tab overflow on resize (debounced)
@@ -8169,6 +8242,188 @@ function renderRoomTabs() {
   clearTimeout(_rtResize);
   _rtResize = setTimeout(() => { if (rooms.length > 0) renderRoomTabs(); }, 150);
 }); }
+
+// ---------- Breadcrumb (Feature 94): "Workspace › Room" in the footer ----------
+// Both segments are clickable: the workspace opens its dropdown, the room opens
+// the quick-switcher. When the active room belongs to several workspaces we show
+// the active context (or its first membership) so the trail is unambiguous.
+function renderBreadcrumb() {
+  const el = document.getElementById('footer-breadcrumb');
+  if (!el) return;
+  if (!activeRoom) { el.innerHTML = ''; return; }
+  // Pick the workspace segment: active workspace if the room is in it, else its
+  // first membership, else Unlabeled / All.
+  let wsId;
+  if (activeWorkspace !== WS_ALL && roomInWorkspace(activeRoom, activeWorkspace)) {
+    wsId = activeWorkspace;
+  } else {
+    const ids = getRoomWorkspaceIds(activeRoom);
+    wsId = ids.length ? ids[0] : (activeWorkspace === WS_UNLABELED ? WS_UNLABELED : WS_ALL);
+  }
+  let wsLabel, wsColor;
+  if (wsId === WS_ALL) { wsLabel = 'All Rooms'; wsColor = 'neutral'; }
+  else if (wsId === WS_UNLABELED) { wsLabel = 'Unlabeled'; wsColor = 'neutral'; }
+  else {
+    const ws = getWorkspace(wsId);
+    wsLabel = ws ? ws.name : 'All Rooms';
+    wsColor = ws && WS_COLORS.includes(ws.color) ? ws.color : 'neutral';
+    if (!ws) wsId = WS_ALL;
+  }
+  el.innerHTML =
+    `<span class="bc-ws ws-color-${wsColor}" title="Switch workspace" onclick="breadcrumbWsClick(event)"><span class="bc-dot"></span>${escapeHtml(wsLabel)}</span>` +
+    `<span class="bc-sep">›</span>` +
+    `<span class="bc-room" title="Switch room (${typeof hotkeyLabelQuickSwitch === 'function' ? hotkeyLabelQuickSwitch() : 'Ctrl+P'})" onclick="breadcrumbRoomClick(event)">${escapeHtml(activeRoom)}</span>`;
+}
+
+window.breadcrumbWsClick = function(evt) {
+  if (evt) evt.stopPropagation();
+  // Open the workspace dropdown so the user can switch context.
+  const dd = document.getElementById('ws-dropdown');
+  if (dd) { renderWorkspaceDropdown(); dd.classList.add('open'); }
+};
+window.breadcrumbRoomClick = function(evt) {
+  if (evt) evt.stopPropagation();
+  openQuickSwitcher();
+};
+
+// ---------- Quick switcher / fuzzy room finder (Feature 50) ----------
+// Recency order: most-recently-visited rooms first. Persisted device-local.
+let roomRecency = [];
+try { roomRecency = JSON.parse(store.get('cade-room-recency')) || []; } catch {}
+function recordRoomVisit(name) {
+  if (!name) return;
+  roomRecency = [name, ...roomRecency.filter(r => r !== name)].slice(0, 100);
+  store.set('cade-room-recency', JSON.stringify(roomRecency));
+}
+// Rooms ordered by recency, then pinned-first, then list order, for the empty
+// (no-query) quick-switcher view. Excludes archived rooms.
+function quickSwitchBaseOrder() {
+  const live = rooms.filter(r => !roomIsArchived(r));
+  const recencyRank = new Map();
+  roomRecency.forEach((r, i) => recencyRank.set(r, i));
+  return live.slice().sort((a, b) => {
+    const pa = roomIsPinned(a) ? 0 : 1, pb = roomIsPinned(b) ? 0 : 1;
+    if (pa !== pb) return pa - pb;
+    const ra = recencyRank.has(a) ? recencyRank.get(a) : Infinity;
+    const rb = recencyRank.has(b) ? recencyRank.get(b) : Infinity;
+    if (ra !== rb) return ra - rb;
+    return rooms.indexOf(a) - rooms.indexOf(b);
+  });
+}
+
+let _qsIndex = 0;
+let _qsResults = [];
+
+function quickSwitchResults(query) {
+  const q = query.trim().toLowerCase();
+  if (!q) return quickSwitchBaseOrder().map(name => ({ name, score: 0 }));
+  // Score: exact > prefix > substring > subsequence (fuzzyMatch). Break ties by
+  // recency then pinned.
+  const recencyRank = new Map();
+  roomRecency.forEach((r, i) => recencyRank.set(r, i));
+  return rooms
+    .filter(r => !roomIsArchived(r))
+    .map(name => {
+      const n = name.toLowerCase();
+      let score = 0;
+      if (n === q) score = 1000;
+      else if (n.startsWith(q)) score = 800;
+      else if (n.includes(q)) score = 600;
+      else if (fuzzyMatch(q, n)) score = 300;
+      return { name, score };
+    })
+    .filter(x => x.score > 0)
+    .sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score;
+      const ra = recencyRank.has(a.name) ? recencyRank.get(a.name) : Infinity;
+      const rb = recencyRank.has(b.name) ? recencyRank.get(b.name) : Infinity;
+      return ra - rb;
+    });
+}
+
+function renderQuickSwitchList() {
+  const listEl = document.getElementById('qs-list');
+  if (!listEl) return;
+  if (_qsResults.length === 0) {
+    listEl.innerHTML = '<div class="qs-empty">No matching rooms.</div>';
+    return;
+  }
+  if (_qsIndex < 0) _qsIndex = 0;
+  if (_qsIndex >= _qsResults.length) _qsIndex = _qsResults.length - 1;
+  listEl.innerHTML = _qsResults.map((res, i) => {
+    const name = res.name;
+    const colorClass = workspaceColorClassForRoom(name);
+    const wsIds = getRoomWorkspaceIds(name);
+    const ws = wsIds.length ? getWorkspace(wsIds[0]) : null;
+    const wsLabel = ws ? ws.name + (wsIds.length > 1 ? ' +' + (wsIds.length - 1) : '') : 'Unlabeled';
+    const pin = roomIsPinned(name) ? '<span class="qs-pin" title="Pinned">📌</span>' : '';
+    const lock = roomHasPassword(name) ? ' 🔒' : '';
+    const escAttr = escapeHtml(name.replace(/\\/g, '\\\\').replace(/'/g, "\\'"));
+    return `<div class="qs-item ${i === _qsIndex ? 'active' : ''}" data-idx="${i}" onclick="quickSwitchPick('${escAttr}')">
+      ${pin}<span class="qs-dot ${colorClass}"></span>
+      <span class="qs-name">${escapeHtml(name)}${lock}</span>
+      <span class="qs-meta">${escapeHtml(wsLabel)}</span>
+    </div>`;
+  }).join('');
+  const active = listEl.querySelector('.qs-item.active');
+  if (active) active.scrollIntoView({ block: 'nearest' });
+}
+
+window.openQuickSwitcher = function() {
+  closeAllMenus && closeAllMenus();
+  const overlay = document.getElementById('qs-overlay');
+  const input = document.getElementById('qs-input');
+  if (!overlay || !input) return;
+  input.value = '';
+  _qsIndex = 0;
+  _qsResults = quickSwitchResults('');
+  renderQuickSwitchList();
+  overlay.classList.add('open');
+  setTimeout(() => input.focus(), 10);
+};
+
+window.closeQuickSwitcher = function() {
+  const overlay = document.getElementById('qs-overlay');
+  if (overlay) overlay.classList.remove('open');
+  try { editor.focus(); } catch {}
+};
+
+window.quickSwitchPick = function(name) {
+  closeQuickSwitcher();
+  if (!name || name === activeRoom) return;
+  // If the room is hidden by the active workspace filter, drop to All Rooms so
+  // the switch is visible in the tab bar.
+  if (!roomInWorkspace(name, activeWorkspace) || roomIsArchived(name)) {
+    activeWorkspace = WS_ALL;
+    store.set('cade-active-workspace', WS_ALL);
+  }
+  switchRoom(name);
+};
+
+(function() {
+  const input = document.getElementById('qs-input');
+  const overlay = document.getElementById('qs-overlay');
+  if (!input || !overlay) return;
+  input.addEventListener('input', () => {
+    _qsResults = quickSwitchResults(input.value);
+    _qsIndex = 0;
+    renderQuickSwitchList();
+  });
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowDown') { e.preventDefault(); _qsIndex++; renderQuickSwitchList(); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); _qsIndex--; renderQuickSwitchList(); }
+    else if (e.key === 'Enter') {
+      e.preventDefault();
+      const res = _qsResults[_qsIndex];
+      if (res) quickSwitchPick(res.name);
+    } else if (e.key === 'Escape') {
+      e.preventDefault(); e.stopPropagation(); closeQuickSwitcher();
+    }
+  });
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) closeQuickSwitcher(); });
+})();
+
+function hotkeyLabelQuickSwitch() { return 'Ctrl+P'; }
 
 window.switchRoom = async function(name) {
   const firebaseUrl = store.get('cade-firebase-url');
@@ -8265,6 +8520,7 @@ async function _doSwitchRoom(name, firebaseUrl, baseEncKey) {
   syncState.roomName = name;
   store.set('cade-room-name', name);
   store.set('cade-active-room', name);
+  try { recordRoomVisit(name); } catch {}
   const syncRoomInput = document.getElementById('sync-room-name');
   if (syncRoomInput) syncRoomInput.value = name;
 
@@ -8537,23 +8793,33 @@ function renderRoomManagerList() {
 
   const list = document.getElementById('room-manager-list');
   const showAll = activeWorkspace === WS_ALL;
-  const visibleRooms = roomsInActiveWorkspace();
+  // Room Manager shows archived rooms too (under a dedicated section).
+  const allInContext = roomsInActiveWorkspace(true);
+  const activeRooms = allInContext.filter(r => !roomIsArchived(r));
+  const archivedRooms = allInContext.filter(r => roomIsArchived(r));
   if (rooms.length === 0) {
     list.innerHTML = '<div style="color:var(--text-faint);font-size:var(--text-sm);padding:8px 0;">No rooms added yet.</div>';
     return;
   }
-  if (visibleRooms.length === 0) {
+  if (allInContext.length === 0) {
     const wsName = activeWorkspace === WS_UNLABELED ? 'Unlabeled' : (getWorkspace(activeWorkspace)?.name || 'this workspace');
     list.innerHTML = `<div style="color:var(--text-faint);font-size:var(--text-sm);padding:8px 0;">No rooms in <em>${escapeHtml(wsName)}</em> yet. Add one above, or switch context.</div>`;
     return;
   }
 
   // In "All Rooms" view, group by workspace for visual clarity
+  let html;
   if (showAll) {
-    list.innerHTML = renderGroupedRoomList(visibleRooms);
+    html = renderGroupedRoomList(activeRooms);
   } else {
-    list.innerHTML = visibleRooms.map(name => renderRoomRow(name, false)).join('');
+    html = activeRooms.map(name => renderRoomRow(name, false)).join('');
   }
+  // Archived section (Feature 52) — always at the bottom, with a Restore action.
+  if (archivedRooms.length) {
+    html += `<div class="ws-dd-section rm-archived-section" style="padding:14px 0 4px;">🗄 Archived · ${archivedRooms.length}</div>`;
+    html += archivedRooms.map(name => renderRoomRow(name, showAll)).join('');
+  }
+  list.innerHTML = html;
 }
 
 function renderManagerContextBar() {
@@ -8565,7 +8831,7 @@ function renderManagerContextBar() {
     e.stopPropagation();
     toggleWorkspaceDropdown(e);
   });
-  const visible = roomsInActiveWorkspace().length;
+  const visible = roomsInActiveWorkspace(true).length;
   metaEl.textContent = activeWorkspace === WS_ALL
     ? `${rooms.length} room${rooms.length !== 1 ? 's' : ''}`
     : `${visible} of ${rooms.length}`;
@@ -8589,21 +8855,29 @@ function renderAddRowTargetPicker() {
 }
 
 function renderGroupedRoomList(visibleRooms) {
-  const groups = workspacesForDropdown();
-  const seen = new Set();
+  const set = new Set(visibleRooms);
   let html = '';
-  groups.forEach(g => {
-    const inGroup = visibleRooms.filter(r => getRoomWorkspaceId(r) === g.id);
-    if (inGroup.length === 0) return;
-    inGroup.forEach(n => seen.add(n));
-    html += `<div class="ws-dd-section" style="padding:10px 0 4px;">${escapeHtml(g.name)} · ${inGroup.length} room${inGroup.length !== 1 ? 's' : ''}</div>`;
+  // Walk the workspace tree so groups appear in folder order, indented by depth.
+  // A room in several workspaces appears under EACH of them (Feature 51).
+  workspaceTreeRows().forEach(row => {
+    const g = row.ws;
+    const inGroup = orderRooms(visibleRooms.filter(r => roomInWorkspace(r, g.id)));
+    const indent = row.depth * 14;
+    if (inGroup.length === 0) {
+      // Still show empty folders so the structure is legible, but quietly.
+      if (row.hasChildren) {
+        html += `<div class="ws-dd-section rm-group-head" style="padding:10px 0 4px;margin-left:${indent}px;opacity:0.6;">${escapeHtml(g.name)}</div>`;
+      }
+      return;
+    }
+    html += `<div class="ws-dd-section rm-group-head" style="padding:10px 0 4px;margin-left:${indent}px;">${escapeHtml(g.name)} · ${inGroup.length} room${inGroup.length !== 1 ? 's' : ''}</div>`;
     html += inGroup.map(name => renderRoomRow(name, true)).join('');
   });
-  // Catch any orphaned rooms (shouldn't happen, but just in case)
-  const orphans = visibleRooms.filter(r => !seen.has(r));
-  if (orphans.length) {
-    html += '<div class="ws-dd-section" style="padding:10px 0 4px;">Other</div>';
-    html += orphans.map(name => renderRoomRow(name, true)).join('');
+  // Unlabeled bucket — rooms with no workspace at all.
+  const unlabeled = orderRooms(visibleRooms.filter(r => roomIsUnlabeled(r)));
+  if (unlabeled.length) {
+    html += `<div class="ws-dd-section rm-group-head" style="padding:10px 0 4px;">Unlabeled · ${unlabeled.length} room${unlabeled.length !== 1 ? 's' : ''}</div>`;
+    html += unlabeled.map(name => renderRoomRow(name, true)).join('');
   }
   return html;
 }
@@ -8617,12 +8891,38 @@ function renderRoomRow(name, showBadge) {
   // Escape for inline-handler context: JS-string quoting AND html entities,
   // since room names can come from the shared database.
   const esc = s => escapeHtml(s.replace(/\\/g, '\\\\').replace(/'/g, "\\'"));
-  const colorClass = workspaceColorClassForRoom(name);
-  const wsId = getRoomWorkspaceId(name);
-  const wsName = wsId === WS_UNLABELED ? 'unlabeled' : (getWorkspace(wsId)?.name || 'unlabeled');
-  const badgeHtml = showBadge
-    ? `<span class="ws-badge ${colorClass}"><span class="ws-badge-dot"></span>${escapeHtml(wsName)}</span>`
-    : '';
+  const pinned = roomIsPinned(name);
+  const archived = roomIsArchived(name);
+  // Show ALL workspace memberships as chips (Feature 51), each colour-coded.
+  const wsIds = getRoomWorkspaceIds(name);
+  let badgeHtml = '';
+  if (showBadge) {
+    if (wsIds.length === 0) {
+      badgeHtml = `<span class="ws-badge ws-color-neutral"><span class="ws-badge-dot"></span>unlabeled</span>`;
+    } else {
+      badgeHtml = wsIds.map(id => {
+        const ws = getWorkspace(id);
+        const cc = 'ws-color-' + (ws && WS_COLORS.includes(ws.color) ? ws.color : 'neutral');
+        return `<span class="ws-badge ${cc}"><span class="ws-badge-dot"></span>${escapeHtml(ws ? ws.name : 'unlabeled')}</span>`;
+      }).join('');
+    }
+  }
+  // Tag-style multi-select membership picker, toggled per-row.
+  const pickerOpen = _rmTagPickerRoom === name;
+  let tagPicker = '';
+  if (pickerOpen) {
+    let chips = workspaces.slice().sort((a, b) => (a.order ?? 0) - (b.order ?? 0)).map(w => {
+      const on = wsIds.includes(w.id);
+      const cc = 'ws-color-' + (WS_COLORS.includes(w.color) ? w.color : 'neutral');
+      return `<span class="rm-tag-chip ${cc} ${on ? 'on' : ''}" onclick="toggleRoomWsTag('${esc(name)}', '${esc(w.id)}')">
+        <span class="ws-badge-dot"></span>${escapeHtml(w.name)}${on ? ' ✓' : ''}</span>`;
+    }).join('');
+    if (!workspaces.length) chips = '<span style="color:var(--text-faint);font-size:var(--text-xs);">No workspaces yet — create one in the Workspaces tab.</span>';
+    tagPicker = `<div class="rm-tag-picker">
+      <div class="rm-tag-picker-label">in workspaces:</div>
+      <div class="rm-tag-chips">${chips}</div>
+    </div>`;
+  }
 
   let pwForm = '';
   if (isTarget && mode === 'set') {
@@ -8648,23 +8948,42 @@ function renderRoomRow(name, showBadge) {
     </div>`;
   }
 
-  return `<div class="room-manager-item" draggable="true" data-room="${escapeHtml(name)}" style="flex-direction:column;align-items:flex-start;gap:2px;">
+  return `<div class="room-manager-item${archived ? ' rm-archived' : ''}" draggable="true" data-room="${escapeHtml(name)}" style="flex-direction:column;align-items:flex-start;gap:2px;">
     <div style="display:flex;align-items:center;justify-content:space-between;width:100%;">
-      <div style="display:flex;align-items:center;gap:6px;min-width:0;flex:1;">
+      <div style="display:flex;align-items:center;gap:6px;min-width:0;flex:1;flex-wrap:wrap;">
         <span class="room-manager-drag" title="Drag to reorder">⠿</span>
+        ${pinned ? '<span title="Pinned" style="font-size:11px;">📌</span>' : ''}
         <span class="room-manager-name" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(name)}</span>
         ${badgeHtml}
         ${isActive ? '<span class="room-manager-active">● active</span>' : ''}
+        ${archived ? '<span class="room-manager-archived" style="font-size:10px;color:var(--text-faint);">archived</span>' : ''}
         ${hasPassword ? '<span style="font-size:10px;color:var(--text-faint);" title="Password protected">🔒</span>' : ''}
       </div>
       <div style="display:flex;gap:4px;flex-shrink:0;">
+        ${archived
+          ? `<button class="btn" style="padding:2px 8px;font-size:var(--text-xs);" onclick="toggleRoomArchive('${esc(name)}')" title="Restore">↩ Restore</button>`
+          : `<button class="btn ${pickerOpen ? 'btn-primary' : ''}" style="padding:2px 8px;font-size:var(--text-xs);" onclick="toggleRmTagPicker('${esc(name)}')" title="Edit workspaces">🏷</button>`}
         <button class="btn" style="padding:2px 8px;font-size:var(--text-xs);" onclick="showRoomActionMenu(event, '${esc(name)}')" title="More actions">⚙</button>
-        <button class="btn btn-danger" style="padding:2px 8px;font-size:var(--text-xs);" onclick="removeRoom('${esc(name)}')">×</button>
+        <button class="btn btn-danger" style="padding:2px 8px;font-size:var(--text-xs);" onclick="removeRoom('${esc(name)}')" title="Remove from this device's list">×</button>
       </div>
     </div>
+    ${tagPicker}
     ${pwForm}
   </div>`;
 }
+
+// Per-row state for the inline tag-style workspace picker.
+let _rmTagPickerRoom = null;
+window.toggleRmTagPicker = function(name) {
+  _rmTagPickerRoom = (_rmTagPickerRoom === name) ? null : name;
+  renderRoomManagerList();
+};
+window.toggleRoomWsTag = function(name, wsId) {
+  toggleRoomWorkspace(name, wsId);
+  renderRoomManagerList();
+  renderWorkspaceManagerList();
+  renderRoomTabs();
+};
 
 // Drag-and-drop reordering for room manager list (desktop + mobile touch)
 (function() {
@@ -8823,8 +9142,8 @@ window.addRoomFromManager = function() {
   } else {
     targetWs = activeWorkspace; // current context (workspace or unlabeled)
   }
-  if (targetWs !== WS_UNLABELED) {
-    roomWorkspace[name] = targetWs;
+  if (targetWs !== WS_UNLABELED && targetWs !== WS_ALL) {
+    addRoomToWorkspace(name, targetWs);
   }
   saveRooms();
   saveWorkspaces();
@@ -8835,25 +9154,104 @@ window.addRoomFromManager = function() {
   showToast('Room added: ' + name, 'success', 2000);
 };
 
-window.removeRoom = function(name) {
+// Purge every device-local trace of a room: list entry, membership, flags,
+// cached/synced text, snapshots, passwords, per-room editor state. Shared by
+// the non-destructive "Remove from list" and the destructive server delete.
+function purgeLocalRoom(name) {
   rooms = rooms.filter(r => r !== name);
   delete roomWorkspace[name];
-  saveRooms();
-  saveWorkspaces();
+  delete roomMeta[name];
   store.remove('cade-room-cache:' + name);
   store.remove('cade-room-synced:' + name);
   store.remove('cade-room-ver:' + name);
   store.remove('cade-snap:' + name);
-  roomStates.delete(roomStateKey(name));
+  store.remove('cade-room-pw-hash:' + name);
+  store.remove('cade-room-pw-remote:' + name);
+  try { delete sessionRoomPasswords[name]; } catch {}
+  // Per-room editor state cache (roomStates feature from items 1–10).
+  try { if (typeof roomStates !== 'undefined') roomStates.delete(typeof roomStateKey === 'function' ? roomStateKey(name) : name); } catch {}
   if (activeRoom === name && syncState.connected) {
     window.disconnectSync();
     activeRoom = '';
     store.set('cade-active-room', '');
   }
+  saveRooms();
+  saveWorkspaces();
+  saveRoomMeta();
+}
+
+// Non-destructive: drop the room from THIS device's list. Server data is left
+// untouched — the room can be re-subscribed via Explore Rooms.
+window.removeRoom = function(name) {
+  purgeLocalRoom(name);
   renderRoomManagerList();
   renderWorkspaceManagerList();
   renderRoomTabs();
-  showToast('Room removed: ' + name, 'success', 2000);
+  try { renderBreadcrumb(); } catch {}
+  showToast('Removed from list: ' + name, 'success', 2000);
+};
+
+// Destructive: wipe the room's Firebase data (text/locked/verify/v) AND all
+// local caches (Feature 52). Requires the user to type the room name to
+// confirm. Refuses if offline or sync isn't configured — never pretends.
+window.deleteRoomFromServer = async function(name) {
+  closeActionMenu();
+  const fbUrl = store.get('cade-firebase-url');
+  const baseKey = store.get('cade-sync-key');
+  if (!fbUrl || !baseKey) {
+    showToast('Sync isn\'t configured — can\'t delete server data. Use "Remove from list" instead.', 'error', 5000);
+    return;
+  }
+  if (!navigator.onLine) {
+    showToast('You appear offline — reconnect before deleting server data.', 'error', 4500);
+    return;
+  }
+  const typed = await textPrompt(`Permanently DELETE "${name}" from the server?\nThis erases its content for everyone. Type the room name to confirm:`, '');
+  if (typed == null) return;
+  if (typed.trim() !== name) { showToast('Name did not match — nothing deleted.', 'error', 3500); return; }
+
+  let db;
+  try { db = initFirebase(fbUrl); }
+  catch (e) { showToast('Firebase error: ' + (e.message || e), 'error', 4000); return; }
+
+  try {
+    // Remove the whole room node (covers text, locked, verify, v and anything else).
+    await db.ref('rooms/' + name).remove();
+  } catch (e) {
+    showToast('Server delete failed: ' + (e.message || e) + ' — local data kept.', 'error', 6000);
+    return;
+  }
+  // Server gone — now purge locally and tear down listeners.
+  purgeLocalRoom(name);
+  renderRoomManagerList();
+  renderWorkspaceManagerList();
+  renderRoomTabs();
+  try { renderBreadcrumb(); } catch {}
+  showToast('Deleted "' + name + '" from server and this device', 'success', 3000);
+};
+
+// Pin / archive toggles surfaced by Room Manager + context menus.
+window.toggleRoomPin = function(name) {
+  setRoomPinned(name, !roomIsPinned(name));
+  closeActionMenu();
+  renderRoomManagerList();
+  renderRoomTabs();
+  showToast(roomIsPinned(name) ? 'Pinned: ' + name : 'Unpinned: ' + name, 'success', 1800);
+};
+
+window.toggleRoomArchive = function(name) {
+  const nowArchived = !roomIsArchived(name);
+  setRoomArchived(name, nowArchived);
+  closeActionMenu();
+  // If we just archived the active room, follow to the first visible room.
+  if (nowArchived && activeRoom === name) {
+    const visible = roomsInActiveWorkspace();
+    if (visible.length) switchRoom(visible[0]);
+  }
+  renderRoomManagerList();
+  renderRoomTabs();
+  try { renderBreadcrumb(); } catch {}
+  showToast(nowArchived ? 'Archived: ' + name : 'Restored: ' + name, 'success', 1800);
 };
 
 window.updateRoomCap = function(val) {
@@ -8921,7 +9319,7 @@ window.exploreAddRoom = function(name, selId) {
   const sel = document.getElementById(selId);
   const wsId = sel ? sel.value : '';
   if (wsId && wsId !== WS_UNLABELED && workspaces.find(w => w.id === wsId)) {
-    roomWorkspace[name] = wsId;
+    addRoomToWorkspace(name, wsId);
   }
   saveRooms();
   saveWorkspaces();
@@ -9081,12 +9479,54 @@ const WS_ALL = '__all__';
 const WS_UNLABELED = '__unlabeled__';
 const WS_COLORS = ['neutral', 'teal', 'blue', 'green', 'amber', 'orange', 'pink', 'purple'];
 
-let workspaces = [];      // [{id, name, color, sort, order}]
-let roomWorkspace = {};   // {roomName: workspaceId} — absent key = unlabeled
+// workspaces: [{id, name, color, sort, order, parentId, collapsed}]
+//   parentId — id of parent workspace (folder tree) or null/absent for a root.
+//   collapsed — UI-only: tree node folded in dropdown / Room Manager.
+// roomWorkspace: { roomName: [workspaceId, ...] } — MANY-TO-MANY (Feature 51).
+//   A room may live in several workspaces at once. An absent key or empty
+//   array means "Unlabeled". Reads tolerate the legacy string form.
+// roomMeta: { roomName: {pinned, archived} } — per-room device-local flags
+//   (Features 51/52). Persisted to local store only (never synced).
+let workspaces = [];
+let roomWorkspace = {};
+let roomMeta = {};
 let activeWorkspace = store.get('cade-active-workspace') || WS_ALL;
 
 try { workspaces = JSON.parse(store.get('cade-workspaces')) || []; } catch {}
 try { roomWorkspace = JSON.parse(store.get('cade-room-workspace')) || {}; } catch {}
+try { roomMeta = JSON.parse(store.get('cade-room-meta')) || {}; } catch {}
+
+// One-time migration + normalization: coerce every roomWorkspace value into an
+// array of valid (known) workspace ids. Tolerates the legacy single-string
+// shape (room -> "ws_xxx") and stray empties. Idempotent — safe to run on
+// already-migrated data and on every remote-blob apply.
+function normalizeRoomWorkspace(map) {
+  const out = {};
+  if (!map || typeof map !== 'object') return out;
+  Object.keys(map).forEach(room => {
+    const v = map[room];
+    let ids;
+    if (Array.isArray(v)) ids = v.slice();
+    else if (typeof v === 'string' && v) ids = [v];
+    else ids = [];
+    const seen = new Set();
+    const clean = [];
+    ids.forEach(id => {
+      if (!id || id === WS_UNLABELED || id === WS_ALL) return;
+      if (seen.has(id)) return;
+      seen.add(id);
+      clean.push(id);
+    });
+    if (clean.length) out[room] = clean;
+  });
+  return out;
+}
+roomWorkspace = normalizeRoomWorkspace(roomWorkspace);
+if (!roomMeta || typeof roomMeta !== 'object') roomMeta = {};
+
+function saveRoomMeta() {
+  store.set('cade-room-meta', JSON.stringify(roomMeta));
+}
 
 function escapeHtml(s) {
   return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -9101,10 +9541,76 @@ function getWorkspace(id) {
   return workspaces.find(w => w.id === id) || null;
 }
 
+// ---------- Many-to-many room↔workspace accessors (Feature 51) ----------
+// Returns the list of valid workspace ids a room belongs to (may be empty).
+function getRoomWorkspaceIds(name) {
+  const v = roomWorkspace[name];
+  if (!v) return [];
+  const arr = Array.isArray(v) ? v : [v];
+  return arr.filter(id => id && workspaces.find(w => w.id === id));
+}
+
+// True if the room is in NO workspace (the "Unlabeled" bucket).
+function roomIsUnlabeled(name) {
+  return getRoomWorkspaceIds(name).length === 0;
+}
+
+function roomInWorkspace(name, wsId) {
+  if (wsId === WS_ALL) return true;
+  if (wsId === WS_UNLABELED) return roomIsUnlabeled(name);
+  return getRoomWorkspaceIds(name).includes(wsId);
+}
+
+// Back-compat: a single "primary" workspace id for colour/breadcrumb purposes.
+// Prefers the active workspace if the room is in it, else first membership.
 function getRoomWorkspaceId(name) {
-  const id = roomWorkspace[name];
-  if (id && workspaces.find(w => w.id === id)) return id;
-  return WS_UNLABELED;
+  const ids = getRoomWorkspaceIds(name);
+  if (!ids.length) return WS_UNLABELED;
+  if (activeWorkspace && ids.includes(activeWorkspace)) return activeWorkspace;
+  return ids[0];
+}
+
+function addRoomToWorkspace(name, wsId) {
+  if (!wsId || wsId === WS_UNLABELED || wsId === WS_ALL) return;
+  if (!workspaces.find(w => w.id === wsId)) return;
+  const ids = getRoomWorkspaceIds(name);
+  if (ids.includes(wsId)) return;
+  ids.push(wsId);
+  roomWorkspace[name] = ids;
+}
+
+function removeRoomFromWorkspace(name, wsId) {
+  const ids = getRoomWorkspaceIds(name).filter(id => id !== wsId);
+  if (ids.length) roomWorkspace[name] = ids;
+  else delete roomWorkspace[name];
+}
+
+// ---------- Pin / Archive flags (Features 51/52) ----------
+function roomIsPinned(name) { return !!(roomMeta[name] && roomMeta[name].pinned); }
+function roomIsArchived(name) { return !!(roomMeta[name] && roomMeta[name].archived); }
+function setRoomPinned(name, on) {
+  roomMeta[name] = roomMeta[name] || {};
+  roomMeta[name].pinned = !!on;
+  if (!roomMeta[name].pinned && !roomMeta[name].archived) delete roomMeta[name];
+  saveRoomMeta();
+}
+function setRoomArchived(name, on) {
+  roomMeta[name] = roomMeta[name] || {};
+  roomMeta[name].archived = !!on;
+  if (!roomMeta[name].pinned && !roomMeta[name].archived) delete roomMeta[name];
+  saveRoomMeta();
+}
+
+// Order rooms: pinned first (keeping their relative order in `rooms`), then the
+// rest. Shared ordering primitive — tabs, dropdowns and the quick-switcher all
+// build on this (a future mobile swipe-between-rooms feature can reuse it).
+function orderRooms(list) {
+  return list.slice().sort((a, b) => {
+    const pa = roomIsPinned(a) ? 0 : 1;
+    const pb = roomIsPinned(b) ? 0 : 1;
+    if (pa !== pb) return pa - pb;
+    return rooms.indexOf(a) - rooms.indexOf(b);
+  });
 }
 
 function workspaceColorClassForRoom(name) {
@@ -9114,23 +9620,97 @@ function workspaceColorClassForRoom(name) {
   return 'ws-color-' + (ws && WS_COLORS.includes(ws.color) ? ws.color : 'neutral');
 }
 
-function roomsInActiveWorkspace() {
-  if (activeWorkspace === WS_ALL) return rooms.slice();
-  if (activeWorkspace === WS_UNLABELED) return rooms.filter(r => getRoomWorkspaceId(r) === WS_UNLABELED);
-  return rooms.filter(r => getRoomWorkspaceId(r) === activeWorkspace);
+// Rooms visible in the active workspace context. Archived rooms are hidden
+// (they surface only in the Room Manager); pinned rooms float to the top.
+function roomsInActiveWorkspace(includeArchived) {
+  let base;
+  if (activeWorkspace === WS_ALL) base = rooms.slice();
+  else if (activeWorkspace === WS_UNLABELED) base = rooms.filter(r => roomIsUnlabeled(r));
+  else base = rooms.filter(r => roomInWorkspace(r, activeWorkspace));
+  if (!includeArchived) base = base.filter(r => !roomIsArchived(r));
+  return orderRooms(base);
+}
+
+// ---------- Workspace tree helpers (Feature 54) ----------
+function workspaceChildren(parentId) {
+  return workspaces
+    .filter(w => (w.parentId || null) === (parentId || null))
+    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+}
+function workspaceDepth(id) {
+  let d = 0, cur = getWorkspace(id), guard = 0;
+  while (cur && cur.parentId && guard++ < 50) { d++; cur = getWorkspace(cur.parentId); }
+  return d;
+}
+// Would setting `parentId` as parent of `id` create a cycle?
+function wouldCreateCycle(id, parentId) {
+  if (!parentId) return false;
+  if (id === parentId) return true;
+  let cur = getWorkspace(parentId), guard = 0;
+  while (cur && guard++ < 50) {
+    if (cur.id === id) return true;
+    cur = cur.parentId ? getWorkspace(cur.parentId) : null;
+  }
+  return false;
+}
+
+// Room count for a workspace including its subtree (so a folder shows the total
+// rooms beneath it). A room counted in several descendants is counted once.
+function workspaceRoomCountSafe(id) {
+  const ids = new Set([id]);
+  const stack = [id];
+  let guard = 0;
+  while (stack.length && guard++ < 500) {
+    const p = stack.pop();
+    workspaceChildren(p).forEach(c => { if (!ids.has(c.id)) { ids.add(c.id); stack.push(c.id); } });
+  }
+  return rooms.filter(r => getRoomWorkspaceIds(r).some(w => ids.has(w))).length;
 }
 
 function workspacesForDropdown() {
   const list = workspaces.slice().sort((a, b) => (a.order ?? 0) - (b.order ?? 0)).map(w => ({
     ...w,
-    count: rooms.filter(r => getRoomWorkspaceId(r) === w.id).length,
+    count: rooms.filter(r => roomInWorkspace(r, w.id)).length,
   }));
-  const unlabeledCount = rooms.filter(r => getRoomWorkspaceId(r) === WS_UNLABELED).length;
+  const unlabeledCount = rooms.filter(r => roomIsUnlabeled(r)).length;
   if (unlabeledCount > 0) {
     list.push({ id: WS_UNLABELED, name: 'Unlabeled', color: 'neutral', count: unlabeledCount, isUnlabeled: true });
   }
   return list;
 }
+
+// Flatten the workspace tree into render rows: {ws, depth, hasChildren,
+// collapsed, hidden}. `hidden` rows are inside a collapsed ancestor.
+function workspaceTreeRows() {
+  const rows = [];
+  function walk(parentId, depth, ancestorCollapsed) {
+    workspaceChildren(parentId).forEach(w => {
+      const kids = workspaceChildren(w.id);
+      rows.push({
+        ws: w,
+        depth,
+        hasChildren: kids.length > 0,
+        collapsed: !!w.collapsed,
+        hidden: ancestorCollapsed,
+      });
+      walk(w.id, depth + 1, ancestorCollapsed || !!w.collapsed);
+    });
+  }
+  walk(null, 0, false);
+  return rows;
+}
+
+window.toggleWorkspaceCollapse = function(id, evt) {
+  if (evt) { evt.stopPropagation(); evt.preventDefault(); }
+  const ws = getWorkspace(id);
+  if (!ws) return;
+  ws.collapsed = !ws.collapsed;
+  saveWorkspaces();
+  renderWorkspaceDropdown();
+  if (document.getElementById('room-manager-overlay').classList.contains('open')) {
+    renderWorkspaceManagerList();
+  }
+};
 
 function workspacePillHtml(wsId, asLabel) {
   if (wsId === WS_ALL) {
@@ -9172,13 +9752,28 @@ function createWorkspace(name, color) {
 }
 
 function deleteWorkspace(id) {
-  // Move its rooms to unlabeled
-  Object.keys(roomWorkspace).forEach(n => {
-    if (roomWorkspace[n] === id) delete roomWorkspace[n];
-  });
+  const deleted = getWorkspace(id);
+  // Detach this workspace from every room's membership list.
+  Object.keys(roomWorkspace).forEach(n => removeRoomFromWorkspace(n, id));
+  // Re-parent any child workspaces up to this node's parent so the subtree
+  // isn't orphaned (Feature 54).
+  const newParent = deleted ? (deleted.parentId || null) : null;
+  workspaces.forEach(w => { if ((w.parentId || null) === id) w.parentId = newParent; });
   workspaces = workspaces.filter(w => w.id !== id);
   if (activeWorkspace === id) activeWorkspace = WS_ALL;
   saveWorkspaces();
+}
+
+// Set/clear a workspace's parent (folder nesting). Guards against cycles.
+function setWorkspaceParent(id, parentId) {
+  const ws = getWorkspace(id);
+  if (!ws) return false;
+  parentId = parentId || null;
+  if (parentId && !getWorkspace(parentId)) return false;
+  if (wouldCreateCycle(id, parentId)) { showToast('Cannot nest a folder inside itself', 'error', 3000); return false; }
+  ws.parentId = parentId;
+  saveWorkspaces();
+  return true;
 }
 
 function renameWorkspace(id, newName) {
@@ -9200,15 +9795,26 @@ function recolorWorkspace(id, color) {
   saveWorkspaces();
 }
 
+// Legacy single-target "move": replaces the room's membership with exactly this
+// one workspace (or clears it for Unlabeled). Used by drag-to-pill and the
+// quick move menus; the multi-select picker uses toggleRoomWorkspace instead.
 function moveRoomToWorkspace(roomName, wsId) {
   if (!rooms.includes(roomName)) return;
   if (wsId === WS_UNLABELED || !wsId) {
     delete roomWorkspace[roomName];
   } else if (workspaces.find(w => w.id === wsId)) {
-    roomWorkspace[roomName] = wsId;
+    roomWorkspace[roomName] = [wsId];
   } else {
     return; // unknown workspace
   }
+  saveWorkspaces();
+}
+
+// Multi-membership toggle for the tag-style picker (Feature 51).
+function toggleRoomWorkspace(roomName, wsId) {
+  if (!rooms.includes(roomName)) return;
+  if (roomInWorkspace(roomName, wsId)) removeRoomFromWorkspace(roomName, wsId);
+  else addRoomToWorkspace(roomName, wsId);
   saveWorkspaces();
 }
 
@@ -9242,21 +9848,41 @@ function renderWorkspacePill() {
 function renderWorkspaceDropdown() {
   const dd = document.getElementById('ws-dropdown');
   if (!dd) return;
-  const list = workspacesForDropdown();
   const totalRooms = rooms.length;
   let html = '<div class="ws-dd-section">workspaces</div>';
-  if (list.length === 0) {
+  const treeRows = workspaceTreeRows();
+  const unlabeledCount = rooms.filter(r => roomIsUnlabeled(r)).length;
+  if (treeRows.length === 0 && unlabeledCount === 0) {
     html += '<div class="ws-dd-empty">no workspaces yet — create one to organize</div>';
   } else {
-    list.forEach(ws => {
+    // Collapsible tree (Feature 54): indent by depth; a ▸/▾ twisty toggles
+    // collapse on folders; rows inside a collapsed ancestor are skipped.
+    treeRows.forEach(row => {
+      if (row.hidden) return;
+      const ws = row.ws;
       const isCurrent = ws.id === activeWorkspace;
-      const colorClass = ws.id === WS_UNLABELED ? 'ws-color-neutral' : ('ws-color-' + (WS_COLORS.includes(ws.color) ? ws.color : 'neutral'));
-      html += `<div class="ws-dd-item ${colorClass} ${isCurrent ? 'current' : ''}" data-ws="${escapeHtml(ws.id)}" onclick="switchToWorkspace('${escapeHtml(ws.id)}')">
+      const colorClass = 'ws-color-' + (WS_COLORS.includes(ws.color) ? ws.color : 'neutral');
+      const count = workspaceRoomCountSafe(ws.id);
+      const esc = escapeHtml(ws.id);
+      const twisty = row.hasChildren
+        ? `<span class="ws-dd-twisty" onclick="toggleWorkspaceCollapse('${esc}', event)">${row.collapsed ? '▸' : '▾'}</span>`
+        : '<span class="ws-dd-twisty ws-dd-twisty-empty"></span>';
+      html += `<div class="ws-dd-item ${colorClass} ${isCurrent ? 'current' : ''}" data-ws="${esc}" style="padding-left:${8 + row.depth * 16}px;" onclick="switchToWorkspace('${esc}')">
+        ${twisty}
         <span class="ws-dd-dot"></span>
         <span class="ws-dd-name">${escapeHtml(ws.name)}</span>
-        <span class="ws-dd-count">${ws.count}</span>
+        <span class="ws-dd-count">${count}</span>
       </div>`;
     });
+    if (unlabeledCount > 0) {
+      const isCurrent = activeWorkspace === WS_UNLABELED;
+      html += `<div class="ws-dd-item ws-color-neutral ${isCurrent ? 'current' : ''}" data-ws="${WS_UNLABELED}" onclick="switchToWorkspace('${WS_UNLABELED}')">
+        <span class="ws-dd-twisty ws-dd-twisty-empty"></span>
+        <span class="ws-dd-dot"></span>
+        <span class="ws-dd-name">Unlabeled</span>
+        <span class="ws-dd-count">${unlabeledCount}</span>
+      </div>`;
+    }
   }
   html += '<div class="ws-dd-divider"></div>';
   const isAll = activeWorkspace === WS_ALL;
@@ -9376,18 +10002,25 @@ window.addWorkspaceFromManager = function() {
 function renderWorkspaceManagerList() {
   const list = document.getElementById('workspace-manager-list');
   if (!list) return;
-  const items = workspaces.slice().sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-  const unlabeledCount = rooms.filter(r => getRoomWorkspaceId(r) === WS_UNLABELED).length;
+  const rows = workspaceTreeRows();
+  const unlabeledCount = rooms.filter(r => roomIsUnlabeled(r)).length;
   let html = '';
-  if (items.length === 0 && unlabeledCount === 0) {
+  if (rows.length === 0 && unlabeledCount === 0) {
     html = '<div style="color:var(--text-faint);font-size:var(--text-sm);padding:8px 0;">No workspaces yet. Add one above.</div>';
   } else {
-    items.forEach(ws => {
-      const count = rooms.filter(r => getRoomWorkspaceId(r) === ws.id).length;
+    // Tree render (Feature 54): twisty to collapse, indentation by depth.
+    rows.forEach(row => {
+      if (row.hidden) return;
+      const ws = row.ws;
+      const count = rooms.filter(r => roomInWorkspace(r, ws.id)).length;
       const color = WS_COLORS.includes(ws.color) ? ws.color : 'neutral';
       const isEditing = _wsEditingId === ws.id;
       const escId = ws.id.replace(/'/g, "\\'");
       const escName = ws.name.replace(/'/g, "\\'");
+      const indent = 8 + row.depth * 18;
+      const twisty = row.hasChildren
+        ? `<span class="ws-mgr-twisty" onclick="toggleWorkspaceCollapse('${escId}', event)">${row.collapsed ? '▸' : '▾'}</span>`
+        : '<span class="ws-mgr-twisty ws-dd-twisty-empty"></span>';
       if (isEditing) {
         let colorPicker = '<div class="color-picker-row"><span class="color-picker-label">color</span>';
         WS_COLORS.forEach(c => {
@@ -9395,11 +10028,21 @@ function renderWorkspaceManagerList() {
           colorPicker += `<span class="color-dot ws-color-${c}${sel}" onclick="setWorkspaceColorFromUI('${escId}', '${c}')" title="${c}"></span>`;
         });
         colorPicker += '</div>';
-        html += `<div class="ws-mgr-row editing" draggable="true" data-ws="${ws.id}">
+        // Parent (folder) picker — exclude self and descendants to avoid cycles.
+        let parentOpts = '<option value="">— top level —</option>';
+        workspaces.slice().sort((a, b) => (a.order ?? 0) - (b.order ?? 0)).forEach(p => {
+          if (p.id === ws.id || wouldCreateCycle(p.id, ws.id)) return;
+          const selp = (ws.parentId || '') === p.id ? ' selected' : '';
+          parentOpts += `<option value="${escapeHtml(p.id)}"${selp}>${escapeHtml(p.name)}</option>`;
+        });
+        html += `<div class="ws-mgr-row editing" draggable="true" data-ws="${ws.id}" style="padding-left:${indent}px;">
           <span class="ws-mgr-drag" title="Drag to reorder">⠿</span>
           <div style="flex:1;display:flex;flex-direction:column;gap:6px;min-width:0;">
             <input class="ws-mgr-edit-name" id="ws-edit-name-${ws.id}" value="${escapeHtml(ws.name)}" placeholder="workspace name">
             ${colorPicker}
+            <div class="ws-mgr-parent-row"><span class="color-picker-label">folder</span>
+              <select class="form-input ws-mgr-parent-select" onchange="setWorkspaceParentFromUI('${escId}', this.value)">${parentOpts}</select>
+            </div>
           </div>
           <div class="ws-mgr-actions">
             <button class="btn btn-primary" style="padding:2px 8px;font-size:var(--text-xs);" onclick="saveWorkspaceEdit('${escId}')">Save</button>
@@ -9407,15 +10050,16 @@ function renderWorkspaceManagerList() {
           </div>
         </div>`;
       } else {
-        html += `<div class="ws-mgr-row" draggable="true" data-ws="${ws.id}">
+        html += `<div class="ws-mgr-row" draggable="true" data-ws="${ws.id}" style="padding-left:${indent}px;">
+          ${twisty}
           <span class="ws-mgr-drag" title="Drag to reorder">⠿</span>
           <div class="ws-mgr-name-cell">
             <span class="ws-badge ws-color-${color}"><span class="ws-badge-dot"></span>${escapeHtml(ws.name)}</span>
             <span class="ws-mgr-count">${count} room${count !== 1 ? 's' : ''}</span>
           </div>
           <div class="ws-mgr-actions">
-            <button class="btn" style="padding:2px 8px;font-size:var(--text-xs);" onclick="beginWorkspaceEdit('${escId}')" title="Rename / recolor">✎</button>
-            <button class="btn btn-danger" style="padding:2px 8px;font-size:var(--text-xs);" onclick="confirmDeleteWorkspace('${escId}', '${escName}')" title="Delete (moves rooms to Unlabeled)">×</button>
+            <button class="btn" style="padding:2px 8px;font-size:var(--text-xs);" onclick="beginWorkspaceEdit('${escId}')" title="Rename / recolor / nest">✎</button>
+            <button class="btn btn-danger" style="padding:2px 8px;font-size:var(--text-xs);" onclick="confirmDeleteWorkspace('${escId}', '${escName}')" title="Delete (rooms become Unlabeled; subfolders move up)">×</button>
           </div>
         </div>`;
       }
@@ -9464,13 +10108,22 @@ window.setWorkspaceColorFromUI = function(id, color) {
   renderRoomTabs();
 };
 
+window.setWorkspaceParentFromUI = function(id, parentId) {
+  if (setWorkspaceParent(id, parentId || null)) {
+    renderWorkspaceManagerList();
+    renderWorkspaceDropdown();
+  }
+};
+
 window.confirmDeleteWorkspace = function(id, name) {
   const ws = getWorkspace(id);
   if (!ws) return;
-  const count = rooms.filter(r => getRoomWorkspaceId(r) === id).length;
-  const msg = count > 0
-    ? `Delete workspace "${name}"? Its ${count} room${count !== 1 ? 's' : ''} will move to Unlabeled.`
+  const count = rooms.filter(r => roomInWorkspace(r, id)).length;
+  const childCount = workspaceChildren(id).length;
+  let msg = count > 0
+    ? `Delete workspace "${name}"? Its ${count} room${count !== 1 ? 's' : ''} will be detached (becoming Unlabeled if in no other workspace).`
     : `Delete workspace "${name}"?`;
+  if (childCount > 0) msg += ` Its ${childCount} subfolder${childCount !== 1 ? 's' : ''} will move up a level.`;
   if (!confirm(msg)) return;
   deleteWorkspace(id);
   renderWorkspaceManagerList();
@@ -9516,46 +10169,54 @@ window.confirmDeleteWorkspace = function(id, name) {
 
 // ---------- Room action menu (⚙ button in room rows; right-click on room tabs) ----------
 let _actionMenuTargetRoom = null;
+let _actionMenuKind = 'manager'; // 'manager' | 'tab' — which menu shape is open
 window.closeActionMenu = function() {
   const m = document.getElementById('rm-action-menu');
   if (m) { m.classList.remove('open'); m.innerHTML = ''; }
   _actionMenuTargetRoom = null;
 };
 
+// Build the many-to-many membership toggle list shared by both menus. Each
+// row checkmarks the workspaces the room is currently in; clicking toggles.
+function _roomWsToggleItems(roomName, er, esc) {
+  let wsItems = '';
+  workspaces.slice().sort((a, b) => (a.order ?? 0) - (b.order ?? 0)).forEach(w => {
+    const on = roomInWorkspace(roomName, w.id);
+    const colorClass = 'ws-color-' + (WS_COLORS.includes(w.color) ? w.color : 'neutral');
+    wsItems += `<div class="rm-action-item ${colorClass} ${on ? 'current' : ''}" onclick="toggleRoomWsFromMenu('${er}', '${esc(w.id)}')">
+      <span class="rm-action-dot"></span>${escapeHtml(w.name)}${on ? ' ✓' : ''}
+    </div>`;
+  });
+  wsItems += `<div class="rm-action-item" onclick="newWorkspaceFromMoveMenu('${er}')" style="color:var(--text-muted);">+ New workspace…</div>`;
+  return wsItems;
+}
+
 window.showRoomActionMenu = function(evt, roomName) {
   evt.stopPropagation();
   evt.preventDefault();
   _actionMenuTargetRoom = roomName;
+  _actionMenuKind = 'manager';
   const menu = document.getElementById('rm-action-menu');
   if (!menu) return;
-  const currentWs = getRoomWorkspaceId(roomName);
   const hasPassword = roomHasPassword(roomName);
+  const pinned = roomIsPinned(roomName);
+  const archived = roomIsArchived(roomName);
   const esc = s => escapeHtml(s.replace(/\\/g, '\\\\').replace(/'/g, "\\'"));
   const er = esc(roomName);
-
-  let wsItems = '';
-  workspacesForDropdown().forEach(w => {
-    if (w.id === WS_UNLABELED) return;
-    const isCurrent = w.id === currentWs;
-    const colorClass = 'ws-color-' + (WS_COLORS.includes(w.color) ? w.color : 'neutral');
-    wsItems += `<div class="rm-action-item ${colorClass} ${isCurrent ? 'current' : ''}" onclick="moveRoomToWsFromMenu('${er}', '${esc(w.id)}')">
-      <span class="rm-action-dot"></span>${escapeHtml(w.name)}
-    </div>`;
-  });
-  const isUnlabeled = currentWs === WS_UNLABELED;
-  wsItems += `<div class="rm-action-item ws-color-neutral ${isUnlabeled ? 'current' : ''}" onclick="moveRoomToWsFromMenu('${er}', '${WS_UNLABELED}')">
-    <span class="rm-action-dot"></span>Unlabeled
-  </div>`;
-  wsItems += `<div class="rm-action-item" onclick="newWorkspaceFromMoveMenu('${er}')" style="color:var(--text-muted);">+ New workspace…</div>`;
+  const wsItems = _roomWsToggleItems(roomName, er, esc);
 
   menu.innerHTML = `
-    <div class="rm-action-section">move "${escapeHtml(roomName)}" to</div>
+    <div class="rm-action-section">workspaces for "${escapeHtml(roomName)}"</div>
     ${wsItems}
+    <div class="rm-action-divider"></div>
+    <div class="rm-action-item" onclick="toggleRoomPin('${er}')">${pinned ? '📌 Unpin' : '📌 Pin to top'}</div>
+    <div class="rm-action-item" onclick="toggleRoomArchive('${er}')">${archived ? '↩ Restore from archive' : '🗄 Archive'}</div>
     <div class="rm-action-divider"></div>
     <div class="rm-action-item" onclick="closeActionMenu(); roomPasswordAction('${er}')">${hasPassword ? '🔑 Change password' : '🔒 Set password'}</div>
     ${hasPassword ? `<div class="rm-action-item" onclick="closeActionMenu(); removeRoomPassword('${er}')">Remove password</div>` : ''}
     <div class="rm-action-divider"></div>
-    <div class="rm-action-item danger" onclick="closeActionMenu(); removeRoom('${er}')">× Remove room</div>
+    <div class="rm-action-item" onclick="closeActionMenu(); removeRoom('${er}')">⤫ Remove from list</div>
+    <div class="rm-action-item danger" onclick="deleteRoomFromServer('${er}')">🗑 Delete from server…</div>
   `;
   menu.classList.add('open');
   positionActionMenu(menu, evt);
@@ -9565,33 +10226,24 @@ window.showRoomTabContextMenu = function(evt, roomName) {
   evt.preventDefault();
   evt.stopPropagation();
   _actionMenuTargetRoom = roomName;
+  _actionMenuKind = 'tab';
   const menu = document.getElementById('rm-action-menu');
   if (!menu) return;
-  const currentWs = getRoomWorkspaceId(roomName);
+  const pinned = roomIsPinned(roomName);
+  const archived = roomIsArchived(roomName);
   const esc = s => escapeHtml(s.replace(/\\/g, '\\\\').replace(/'/g, "\\'"));
   const er = esc(roomName);
-
-  let wsItems = '';
-  workspacesForDropdown().forEach(w => {
-    if (w.id === WS_UNLABELED) return;
-    const isCurrent = w.id === currentWs;
-    const colorClass = 'ws-color-' + (WS_COLORS.includes(w.color) ? w.color : 'neutral');
-    wsItems += `<div class="rm-action-item ${colorClass} ${isCurrent ? 'current' : ''}" onclick="moveRoomToWsFromMenu('${er}', '${esc(w.id)}')">
-      <span class="rm-action-dot"></span>${escapeHtml(w.name)}
-    </div>`;
-  });
-  const isUnlabeled = currentWs === WS_UNLABELED;
-  wsItems += `<div class="rm-action-item ws-color-neutral ${isUnlabeled ? 'current' : ''}" onclick="moveRoomToWsFromMenu('${er}', '${WS_UNLABELED}')">
-    <span class="rm-action-dot"></span>Unlabeled
-  </div>`;
+  const wsItems = _roomWsToggleItems(roomName, er, esc);
 
   menu.innerHTML = `
     <div class="rm-action-item" onclick="closeActionMenu(); switchRoom('${er}')">↗ Switch to here</div>
+    <div class="rm-action-item" onclick="toggleRoomPin('${er}')">${pinned ? '📌 Unpin' : '📌 Pin to top'}</div>
+    <div class="rm-action-item" onclick="toggleRoomArchive('${er}')">${archived ? '↩ Restore' : '🗄 Archive'}</div>
     <div class="rm-action-divider"></div>
-    <div class="rm-action-section">move to</div>
+    <div class="rm-action-section">workspaces</div>
     ${wsItems}
     <div class="rm-action-divider"></div>
-    <div class="rm-action-item danger" onclick="closeActionMenu(); removeRoom('${er}')">× Remove from list</div>
+    <div class="rm-action-item" onclick="closeActionMenu(); removeRoom('${er}')">⤫ Remove from list</div>
   `;
   menu.classList.add('open');
   positionActionMenu(menu, evt);
@@ -9610,6 +10262,7 @@ function positionActionMenu(menu, evt) {
   menu.style.top = Math.max(8, Math.min(y, maxY)) + 'px';
 }
 
+// Legacy single-target move (kept for drag-to-pill).
 window.moveRoomToWsFromMenu = function(roomName, wsId) {
   moveRoomToWorkspace(roomName, wsId);
   closeActionMenu();
@@ -9620,17 +10273,37 @@ window.moveRoomToWsFromMenu = function(roomName, wsId) {
   showToast(`Moved "${roomName}" → ${wsName}`, 'success', 2000);
 };
 
+// Many-to-many toggle from the action menus — keeps the menu open so several
+// memberships can be added/removed in one pass.
+window.toggleRoomWsFromMenu = function(roomName, wsId) {
+  toggleRoomWorkspace(roomName, wsId);
+  renderRoomManagerList();
+  renderWorkspaceManagerList();
+  renderRoomTabs();
+  // Re-render the SAME menu shape in place so the checkmarks update and the
+  // menu stays open for multi-toggling.
+  if (_actionMenuTargetRoom === roomName) {
+    const menuEl = document.getElementById('rm-action-menu');
+    const fakeEvt = { stopPropagation() {}, preventDefault() {},
+      clientX: parseInt(menuEl.style.left) || 40,
+      clientY: parseInt(menuEl.style.top) || 40 };
+    if (_actionMenuKind === 'tab') showRoomTabContextMenu(fakeEvt, roomName);
+    else showRoomActionMenu(fakeEvt, roomName);
+  }
+};
+
 window.newWorkspaceFromMoveMenu = function(roomName) {
   closeActionMenu();
   const name = prompt('New workspace name:');
   if (!name) return;
   const ws = createWorkspace(name.trim(), 'neutral');
   if (!ws) return;
-  moveRoomToWorkspace(roomName, ws.id);
+  addRoomToWorkspace(roomName, ws.id);
+  saveWorkspaces();
   renderRoomManagerList();
   renderWorkspaceManagerList();
   renderRoomTabs();
-  showToast(`Created "${ws.name}" and moved "${roomName}" into it`, 'success', 2500);
+  showToast(`Created "${ws.name}" and added "${roomName}" to it`, 'success', 2500);
 };
 
 // Click-outside / escape closes the action menu
@@ -9771,7 +10444,8 @@ async function applyRemoteWorkspaceBlob(encrypted, baseKey, source) {
     const localTs = parseInt(store.get('cade-workspaces-ts') || '0', 10);
     if (remoteTs <= localTs) return false;
     workspaces = Array.isArray(blob.workspaces) ? blob.workspaces : [];
-    roomWorkspace = (blob.roomWorkspace && typeof blob.roomWorkspace === 'object') ? blob.roomWorkspace : {};
+    // Tolerate both the legacy single-string and the new array shape on read.
+    roomWorkspace = normalizeRoomWorkspace((blob.roomWorkspace && typeof blob.roomWorkspace === 'object') ? blob.roomWorkspace : {});
     // If activeWorkspace points to something deleted remotely, drop back to all
     if (activeWorkspace !== WS_ALL && activeWorkspace !== WS_UNLABELED && !getWorkspace(activeWorkspace)) {
       activeWorkspace = WS_ALL;
@@ -10236,7 +10910,7 @@ window.submitAddRoom = function() {
   rooms.push(name);
   // Assign to active workspace (Unlabeled if in All Rooms view)
   if (activeWorkspace !== WS_ALL && activeWorkspace !== WS_UNLABELED && getWorkspace(activeWorkspace)) {
-    roomWorkspace[name] = activeWorkspace;
+    addRoomToWorkspace(name, activeWorkspace);
     saveWorkspaces();
   }
   saveRooms();
@@ -10880,6 +11554,18 @@ document.addEventListener('keydown', (e) => {
   // Room tab navigation: Ctrl+Tab / Ctrl+Shift+Tab
   const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
   const modKey = isMac ? e.metaKey : e.ctrlKey;
+
+  // Quick switcher (Feature 50): Ctrl/Cmd+P. Hard-coded so it never clobbers a
+  // configurable binding; overrides the browser print dialog. Allowed from the
+  // editor; suppressed only while typing in a non-editor form field.
+  if (modKey && !e.shiftKey && !e.altKey && (e.key === 'p' || e.key === 'P') && !isInputField) {
+    e.preventDefault(); e.stopPropagation();
+    const overlay = document.getElementById('qs-overlay');
+    if (overlay && overlay.classList.contains('open')) closeQuickSwitcher();
+    else openQuickSwitcher();
+    return;
+  }
+
   if (modKey && e.key === 'Tab' && rooms.length > 0 && !isInputField) {
     e.preventDefault(); e.stopPropagation();
     const idx = rooms.indexOf(activeRoom);
