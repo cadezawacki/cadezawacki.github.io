@@ -1497,6 +1497,8 @@ body {
 .mob-btn:active { background: var(--surface-2); color: var(--text); }
 .mob-btn svg { width: 12px; height: 12px; flex-shrink: 0; }
 .mob-sep { width: 1px; height: 14px; background: var(--border); margin: 0 2px; flex-shrink: 0; }
+.mob-md-row { border-top: 1px solid var(--border); }
+.mob-md-btn { min-width: 40px; font-weight: 600; justify-content: center; }
 
 /* ============================================
    MOBILE
@@ -2377,6 +2379,7 @@ body.zen.zen-tw .editor-wrap .cm-content { padding-top: 38vh; padding-bottom: 38
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Download
     </button>
   </div>
+  <div class="mob-toolbar-inner mob-md-row" id="mob-md-row" style="display:none;"></div>
 </div>
 
 <!-- ========== FIND & REPLACE PANEL ========== -->
@@ -12471,6 +12474,51 @@ window.installApp = function() {
     }
   });
 })();
+
+// Mobile markdown toolbar row (#78): configurable buttons that insert markdown
+// around the selection / at the cursor.
+const MD_BTN_DEFS = {
+  bold: { label: 'B', title: 'Bold', wrap: ['**', '**'] },
+  italic: { label: 'I', title: 'Italic', wrap: ['*', '*'] },
+  code: { label: '<>', title: 'Code', wrap: ['`', '`'] },
+  head: { label: 'H', title: 'Heading', prefix: '# ' },
+  list: { label: '•', title: 'List', prefix: '- ' },
+  todo: { label: '☐', title: 'Checkbox', prefix: '- [ ] ' },
+  quote: { label: '"', title: 'Quote', prefix: '> ' },
+  link: { label: '🔗', title: 'Link', special: 'link' },
+};
+window.mdBtn = function(kind) {
+  const def = MD_BTN_DEFS[kind]; if (!def) return;
+  try { if (window.haptic) haptic(8); } catch {}
+  const sel = editor.state.selection.main;
+  if (def.special === 'link') {
+    const t = editor.state.sliceDoc(sel.from, sel.to) || 'text';
+    const ins = '[' + t + '](url)';
+    editor.dispatch({ changes: { from: sel.from, to: sel.to, insert: ins }, selection: { anchor: sel.from + ins.length - 4, head: sel.from + ins.length - 1 } });
+  } else if (def.wrap) {
+    const t = editor.state.sliceDoc(sel.from, sel.to);
+    editor.dispatch({ changes: { from: sel.from, to: sel.to, insert: def.wrap[0] + t + def.wrap[1] }, selection: { anchor: sel.from + def.wrap[0].length, head: sel.from + def.wrap[0].length + t.length } });
+  } else if (def.prefix) {
+    const line = editor.state.doc.lineAt(sel.from);
+    editor.dispatch({ changes: { from: line.from, insert: def.prefix }, selection: { anchor: sel.head + def.prefix.length } });
+  }
+  editor.focus();
+};
+function renderMobileMdRow() {
+  const row = document.getElementById('mob-md-row'); if (!row) return;
+  const on = window.Settings ? Settings.get('mobile.mdRow') : false;
+  row.style.display = on ? '' : 'none';
+  if (!on) { row.innerHTML = ''; return; }
+  const keys = String(window.Settings ? Settings.get('mobile.mdButtons') : 'bold,italic,head,list,todo,code,link')
+    .split(',').map(s => s.trim()).filter(k => MD_BTN_DEFS[k]);
+  row.innerHTML = keys.map(k => '<button class="mob-btn mob-md-btn" title="' + MD_BTN_DEFS[k].title + '" onclick="mdBtn(\'' + k + '\')">' + MD_BTN_DEFS[k].label + '</button>').join('');
+}
+try {
+  if (typeof registerSetting === 'function') {
+    registerSetting({ key: 'mobile.mdRow', label: 'Mobile markdown toolbar row', type: 'toggle', default: false, section: 'Behavior', apply() { try { renderMobileMdRow(); } catch {} } });
+    registerSetting({ key: 'mobile.mdButtons', label: 'Markdown row buttons', type: 'text', default: 'bold,italic,head,list,todo,code,link', section: 'Behavior', hint: 'Comma list: bold, italic, code, head, list, todo, quote, link', apply() { try { renderMobileMdRow(); } catch {} } });
+  }
+} catch {}
 
 // ============================================
 // HOTKEY SYSTEM
