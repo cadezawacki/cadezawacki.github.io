@@ -894,14 +894,14 @@ body {
 .qs-item .qs-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ws-dot, #888); flex-shrink: 0; }
 .qs-item .qs-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .qs-item .qs-meta { color: var(--text-faint, #888); font-size: var(--text-xs, 11px); }
-.qs-item .qs-pin { font-size: 11px; }
+.qs-item .qs-pin { font-size: 11px; color: var(--accent, #6c9); font-weight: 700; }
 .qs-empty { padding: 14px 10px; color: var(--text-faint, #888); font-size: var(--text-sm, 13px); }
 
 /* Tree twisties + tag picker + pin/archive (Features 51/52/54) */
 .ws-dd-twisty, .ws-mgr-twisty { display: inline-flex; width: 14px; justify-content: center; cursor: pointer; opacity: 0.7; font-size: 10px; flex-shrink: 0; }
 .ws-dd-twisty:hover, .ws-mgr-twisty:hover { opacity: 1; }
 .ws-dd-twisty-empty { cursor: default; opacity: 0; }
-.room-tab-pin { font-size: 10px; margin-right: 2px; }
+.room-tab-pin { font-size: 10px; margin-right: 2px; color: var(--accent, #6c9); font-weight: 700; }
 .room-tab.pinned { font-weight: 600; }
 .room-manager-item.rm-archived { opacity: 0.62; }
 .rm-tag-picker { width: 100%; padding: 6px 0 2px 22px; }
@@ -4904,10 +4904,19 @@ let _wordCountSeq = 0; // guards against out-of-order async results
 // paste doesn't jank typing, with the main-thread countWords as the automatic
 // fallback inside runInWorker. The footer always reflects the latest doc.
 const WORD_COUNT_OFFLOAD_THRESHOLD = 100000;
+// Past this size, counting exactly (or even posting the string to the worker)
+// would jank the UI, so we show a rough estimate and stay responsive. This is a
+// safety net for pathologically large/corrupted documents.
+const WORD_COUNT_MAX = 5000000;
 function scheduleWordCount() {
   clearTimeout(_wordCountTimer);
   _wordCountTimer = setTimeout(() => {
     const text = editor.state.doc.toString();
+    if (text.length > WORD_COUNT_MAX) {
+      _docWordCount = Math.round(text.length / 6); // ~chars-per-word estimate
+      updateFooter();
+      return;
+    }
     if (text.length <= WORD_COUNT_OFFLOAD_THRESHOLD) {
       _docWordCount = countWords(text);
       updateFooter();
@@ -7862,6 +7871,15 @@ async function applyResolvedLocal(roomName, localText) {
 
 // Adopt the server version, replacing local entirely.
 function applyResolvedServer(roomName, serverText, serverVer) {
+  // The conflict modal/reconcile awaits a user choice; if they switched rooms
+  // meanwhile, writing into the (now different) editor would bleed one room's
+  // text into another. Persist to the target room's cache/base instead.
+  if (syncState.roomName !== roomName) {
+    saveRoomSynced(roomName, serverText);
+    if (serverVer != null) saveRoomVersion(roomName, serverVer);
+    store.set('cade-room-cache:' + roomName, serverText);
+    return;
+  }
   const cur = editor.state.doc.toString();
   const sel = editor.state.selection.main;
   const anchor = Math.min(sel.anchor, serverText.length);
@@ -7883,6 +7901,13 @@ function applyResolvedServer(roomName, serverText, serverVer) {
 async function applyResolvedAppend(roomName, localText, serverText, where) {
   const sep = '\n\n';
   const merged = where === 'up' ? (serverText + sep + localText) : (localText + sep + serverText);
+  // Switched rooms during the modal — persist the merge to the target room's
+  // cache (left dirty vs its synced base, so the next reconcile pushes it) and
+  // never touch the live editor of a different room.
+  if (syncState.roomName !== roomName) {
+    store.set('cade-room-cache:' + roomName, merged);
+    return;
+  }
   const cur = editor.state.doc.toString();
   syncState.suppressUpdate = true;
   editor.dispatch({ changes: { from: 0, to: cur.length, insert: merged } });
@@ -8205,7 +8230,7 @@ function renderRoomTabs() {
     const pinned = roomIsPinned(name);
     const colorClass = workspaceColorClassForRoom(name);
     const dotHtml = showDots ? `<span class="ws-tab-dot ${colorClass}"></span>` : '';
-    const pinHtml = pinned ? '<span class="room-tab-pin" title="Pinned">📌</span>' : '';
+    const pinHtml = pinned ? '<span class="room-tab-pin" title="Pinned">╳</span>' : '';
     // Room names can originate from the shared database (Explore Rooms, share
     // links), so they're untrusted: escape both the JS-string quotes and the
     // HTML special chars or a hostile name breaks out of the attribute.
@@ -8358,7 +8383,7 @@ function renderQuickSwitchList() {
     const wsIds = getRoomWorkspaceIds(name);
     const ws = wsIds.length ? getWorkspace(wsIds[0]) : null;
     const wsLabel = ws ? ws.name + (wsIds.length > 1 ? ' +' + (wsIds.length - 1) : '') : 'Unlabeled';
-    const pin = roomIsPinned(name) ? '<span class="qs-pin" title="Pinned">📌</span>' : '';
+    const pin = roomIsPinned(name) ? '<span class="qs-pin" title="Pinned">╳</span>' : '';
     const lock = roomHasPassword(name) ? ' 🔒' : '';
     const escAttr = escapeHtml(name.replace(/\\/g, '\\\\').replace(/'/g, "\\'"));
     return `<div class="qs-item ${i === _qsIndex ? 'active' : ''}" data-idx="${i}" onclick="quickSwitchPick('${escAttr}')">
@@ -8954,7 +8979,7 @@ function renderRoomRow(name, showBadge) {
     <div style="display:flex;align-items:center;justify-content:space-between;width:100%;">
       <div style="display:flex;align-items:center;gap:6px;min-width:0;flex:1;flex-wrap:wrap;">
         <span class="room-manager-drag" title="Drag to reorder">⠿</span>
-        ${pinned ? '<span title="Pinned" style="font-size:11px;">📌</span>' : ''}
+        ${pinned ? '<span title="Pinned" style="font-size:11px;">╳</span>' : ''}
         <span class="room-manager-name" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(name)}</span>
         ${badgeHtml}
         ${isActive ? '<span class="room-manager-active">● active</span>' : ''}
@@ -10211,7 +10236,7 @@ window.showRoomActionMenu = function(evt, roomName) {
     <div class="rm-action-section">workspaces for "${escapeHtml(roomName)}"</div>
     ${wsItems}
     <div class="rm-action-divider"></div>
-    <div class="rm-action-item" onclick="toggleRoomPin('${er}')">${pinned ? '📌 Unpin' : '📌 Pin to top'}</div>
+    <div class="rm-action-item" onclick="toggleRoomPin('${er}')">${pinned ? '╳ Unpin' : '╳ Pin to top'}</div>
     <div class="rm-action-item" onclick="toggleRoomArchive('${er}')">${archived ? '↩ Restore from archive' : '🗄 Archive'}</div>
     <div class="rm-action-divider"></div>
     <div class="rm-action-item" onclick="closeActionMenu(); roomPasswordAction('${er}')">${hasPassword ? '🔑 Change password' : '🔒 Set password'}</div>
@@ -10239,7 +10264,7 @@ window.showRoomTabContextMenu = function(evt, roomName) {
 
   menu.innerHTML = `
     <div class="rm-action-item" onclick="closeActionMenu(); switchRoom('${er}')">↗ Switch to here</div>
-    <div class="rm-action-item" onclick="toggleRoomPin('${er}')">${pinned ? '📌 Unpin' : '📌 Pin to top'}</div>
+    <div class="rm-action-item" onclick="toggleRoomPin('${er}')">${pinned ? '╳ Unpin' : '╳ Pin to top'}</div>
     <div class="rm-action-item" onclick="toggleRoomArchive('${er}')">${archived ? '↩ Restore' : '🗄 Archive'}</div>
     <div class="rm-action-divider"></div>
     <div class="rm-action-section">workspaces</div>
@@ -10831,9 +10856,12 @@ editor.contentDOM.addEventListener('blur', () => {
 // ============================================
 // ROOM PASSWORD SYSTEM
 // ============================================
-// (core declarations hoisted — see before ROOM SYSTEM)
-let _unlockCallback = null;
-let _unlockVerifyFn = null;
+// `var` (not `let`) so these are hoisted: the page bootstrap can call
+// switchRoom -> showRoomUnlock for a locked active room before this line is
+// reached during top-level execution. A `let` here is in its temporal dead
+// zone at that point and throws "cannot access before initialization".
+var _unlockCallback = null;
+var _unlockVerifyFn = null;
 
 function showRoomUnlock(name, callback, verifyFn = null) {
   _unlockCallback = callback;
