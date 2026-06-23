@@ -1974,6 +1974,10 @@ body {
         <span>Force Reload</span>
         <kbd id="kbd-force-sync">Ctrl+Shift+S</kbd>
       </button>
+      <button class="menu-item" onclick="rotateEncryptionKey()">
+        <span>Change Encryption Key…</span>
+        <span></span>
+      </button>
       <button class="menu-item" id="disconnect-btn" onclick="disconnectSync()" style="display:none;">
         <span>Disconnect</span>
         <span></span>
@@ -3672,9 +3676,8 @@ const mdStylePlugin = ViewPlugin.fromClass(class {
   }
 }, { decorations: v => v.decorations });
 
-const editorState = EditorState.create({
-  doc: savedContent,
-  extensions: [
+function buildEditorExtensions() {
+  return [
     basicSetup,
     editorTheme,
     lineNumCompartment.of(showLineNums ? lineNumbers() : []),
@@ -3770,8 +3773,19 @@ const editorState = EditorState.create({
         return true;
       }},
     ]),
-  ],
-});
+  ];
+}
+
+// Build a fresh EditorState (its own undo history, decorations and selection)
+// for a given document. Used for the initial editor and on every room switch,
+// so each room carries an isolated undo history — Ctrl+Z can never reach back
+// into another room's edits (the "undo bleeds across rooms" bug).
+function makeEditorState(doc, selection) {
+  const cfg = { doc: doc || '', extensions: buildEditorExtensions() };
+  if (selection) cfg.selection = selection;
+  return EditorState.create(cfg);
+}
+const editorState = makeEditorState(savedContent);
 
 const editor = new EditorView({
   state: editorState,
@@ -3852,7 +3866,11 @@ window.toggleSpellcheck = function() {
 // ---- Suggestion popup ----
 let spellPopupEl = null;
 
+let _spellOutsideTimer = null;
 function closeSpellPopup() {
+  // Cancel a deferred listener-add that hasn't fired yet, otherwise it would
+  // attach a pointerdown handler *after* the popup is gone and leak it.
+  if (_spellOutsideTimer) { clearTimeout(_spellOutsideTimer); _spellOutsideTimer = null; }
   if (spellPopupEl) { spellPopupEl.remove(); spellPopupEl = null; }
   document.removeEventListener('pointerdown', onSpellOutside, true);
 }
@@ -3930,8 +3948,12 @@ function openSpellPopup(target) {
   pop.style.left = left + 'px';
   pop.style.top = top + 'px';
 
-  // Defer so the opening tap doesn't immediately dismiss it.
-  setTimeout(() => document.addEventListener('pointerdown', onSpellOutside, true), 0);
+  // Defer so the opening tap doesn't immediately dismiss it. Tracked so
+  // closeSpellPopup can cancel it and never leak a dangling listener (#8).
+  _spellOutsideTimer = setTimeout(() => {
+    _spellOutsideTimer = null;
+    document.addEventListener('pointerdown', onSpellOutside, true);
+  }, 0);
 }
 
 // Coarse pointer = touch device (phone/tablet). Touch opens our menus on a
@@ -4373,6 +4395,20 @@ function loadRoomSynced(roomName) {
 function saveRoomSynced(roomName, text) {
   if (!roomName) return;
   store.set('cade-room-synced:' + roomName, text);
+}
+
+// Per-room server version counter. Firebase holds a monotonically-incrementing
+// `rooms/<room>/v`; we cache the version of the text we last synced so that, on
+// reconnect, reconcileRoom can tell whether the server actually advanced past
+// our base (genuine divergence → ask) or not (our offline edits are strictly
+// newer → keep local, no spurious conflict). null = unknown/legacy room.
+function loadRoomVersion(roomName) {
+  const v = store.get('cade-room-ver:' + roomName);
+  return v == null ? null : (parseInt(v, 10) || 0);
+}
+function saveRoomVersion(roomName, v) {
+  if (!roomName || v == null) return;
+  store.set('cade-room-ver:' + roomName, String(v));
 }
 
 // Deliberately no migration from cache → synced-base. Pre-upgrade caches may
@@ -6728,6 +6764,7 @@ const syncState = {
   conflictResolving: false, // reconciliation/conflict-resolution in progress (gates live sync)
   connRef: null,            // the `.info/connected` ref (for detach)
   connListener: null,       // the `.info/connected` listener handle
+  serverVersion: null,      // last-known server version counter for active room
 };
 
 // Restore saved config
@@ -6968,7 +7005,25 @@ function safeApplyRemote(text, roomName) {
   });
   syncState.suppressUpdate = false;
   saveRoomSynced(roomName, text);
+  // Refresh our cached version so a later reconcile doesn't mistake this
+  // already-adopted live update for a fresh server advance (#3). Best-effort.
+  try {
+    syncState.firebaseDb.ref(`rooms/${roomName}/v`).once('value')
+      .then(s => { const v = s.val(); if (v != null) { saveRoomVersion(roomName, v); if (roomName === syncState.roomName) syncState.serverVersion = v; } })
+      .catch(() => {});
+  } catch {}
+  redecorateAfterRemote();
   return true;
+}
+
+// After a remote snapshot replaces the document wholesale, decoration caches
+// keyed to the previous text (spell results, search matches) can be left
+// pointing at stale offsets. Bump the version-gated decorators and recompute
+// search so everything repaints against the new text (#9).
+function redecorateAfterRemote() {
+  try { spellVersion++; } catch {}
+  try { if (searchState && searchState.open) searchRecomputeAndRefresh(false); } catch {}
+  try { editor.dispatch({}); } catch {}
 }
 
 function tryApplyPendingRemote() {
@@ -7095,14 +7150,52 @@ async function pushTextToServer(roomName, text, encKey) {
   syncState.suppressUpdate = true;
   try {
     await syncState.firebaseDb.ref(`rooms/${roomName}/text`).set(packRoomText(encrypted));
+    // Bump the room's version counter so reconnecting peers can tell the server
+    // advanced (#3). Fire-and-forget so it never extends the suppress window or
+    // blocks the caller; a failure here is harmless (reconcile falls back to the
+    // text-based heuristics when the version is unknown).
+    syncState.firebaseDb.ref(`rooms/${roomName}/v`).transaction(cur => (cur || 0) + 1)
+      .then(res => {
+        const v = res && res.snapshot ? res.snapshot.val() : null;
+        if (v != null) {
+          saveRoomVersion(roomName, v);
+          if (roomName === syncState.roomName) syncState.serverVersion = v;
+        }
+      })
+      .catch(() => {});
   } finally {
     syncState.suppressUpdate = false;
   }
 }
 
+// Encrypt + write `text` for `roomName` WITHOUT touching the global
+// suppressUpdate flag. Safe only when the active editor is not this room's
+// live-listener target (used to flush an outgoing room during a switch, after
+// its listeners are detached — see #4). Records the synced base on success so
+// reconcile won't re-push, and bumps the version counter.
+async function pushRoomTextQuiet(roomName, text, encKey) {
+  if (!roomName || !syncState.firebaseDb) return;
+  const key = encKey || syncState.encKey;
+  const isLocked = !!sessionRoomPasswords[roomName];
+  const textToSend = isLocked ? ROOM_LOCK_SENTINEL + text : text;
+  const encrypted = await encryptText(textToSend, key);
+  await syncState.firebaseDb.ref(`rooms/${roomName}/text`).set(packRoomText(encrypted));
+  saveRoomSynced(roomName, text); // confirmed on the server
+  try {
+    const res = await syncState.firebaseDb.ref(`rooms/${roomName}/v`).transaction(cur => (cur || 0) + 1);
+    const v = res && res.snapshot ? res.snapshot.val() : null;
+    if (v != null) saveRoomVersion(roomName, v);
+  } catch (_) {}
+}
+
 let broadcastTimer = null;
+let _broadcastEpoch = -1; // _switchEpoch captured when the broadcast was queued
 async function _doBroadcast() {
   if (!syncState.connected || syncState.suppressUpdate) return;
+  // A room switch happened after this broadcast was queued — the editor now
+  // holds a different room's text. Abandon so we never push the wrong room's
+  // content (#5). _doSwitchRoom also clears the timer; this is belt-and-braces.
+  if (_broadcastEpoch !== _switchEpoch) return;
   // Don't push local edits up until we've reconciled with the server — otherwise
   // unsynced offline edits would clobber the server before the user can choose.
   if (syncState.pendingReconcile || syncState.conflictResolving) return;
@@ -7134,6 +7227,7 @@ async function _doBroadcast() {
 }
 window.broadcastText = function() {
   clearTimeout(broadcastTimer);
+  _broadcastEpoch = _switchEpoch; // tie this push to the current room (#5)
   broadcastTimer = setTimeout(_doBroadcast, 500);
 };
 
@@ -7251,25 +7345,45 @@ async function reconcileRoom() {
     serverText = decoded;
   }
 
+  // Read the server version counter (null on legacy rooms predating versioning,
+  // in which case we fall back to the text-based heuristics below).
+  let serverVer = null;
+  try {
+    serverVer = await syncState.firebaseDb.ref(`rooms/${roomName}/v`).once('value').then(s => s.val());
+  } catch (_) { serverVer = null; }
+  if (syncState.roomName !== roomName) return;
+
   const localText = editor.state.doc.toString();
 
   // No unsynced local edits → behave exactly like normal sync: adopt the server.
   if (!localHasUnsyncedEdits(roomName)) {
-    if (serverText !== localText) applyResolvedServer(roomName, serverText);
-    else saveRoomSynced(roomName, localText);
+    if (serverText !== localText) applyResolvedServer(roomName, serverText, serverVer);
+    else {
+      saveRoomSynced(roomName, localText);
+      if (serverVer != null) { saveRoomVersion(roomName, serverVer); syncState.serverVersion = serverVer; }
+    }
     if (!syncState.pageTypeApplied) { syncState.pageTypeApplied = true; applyPageType(); }
     return;
   }
 
-  // --- Offline edits present: deterministic decision tree ---------------------
+  // --- Offline edits present: version-aware decision tree ---------------------
+  const localVer = loadRoomVersion(roomName);
   if (serverText === localText) {
     saveRoomSynced(roomName, localText);                 // already identical
+    if (serverVer != null) { saveRoomVersion(roomName, serverVer); syncState.serverVersion = serverVer; }
+  } else if (serverVer != null && localVer != null && serverVer <= localVer) {
+    // The server has NOT advanced past the version our base was synced at, so
+    // our offline edits are strictly newer — keep local and push it, with no
+    // spurious conflict prompt. This is the core offline→online fix (#3).
+    await applyResolvedLocal(roomName, localText);
   } else if (serverText === '') {
     await applyResolvedLocal(roomName, localText);        // incoming blank, local has content → local
   } else if (localText === '') {
-    applyResolvedServer(roomName, serverText);            // local blank, incoming has content → server
+    applyResolvedServer(roomName, serverText, serverVer); // local blank, incoming has content → server
   } else if (localText.includes(serverText)) {
     await applyResolvedLocal(roomName, localText);        // entire incoming already inside local → local
+  } else if (serverText.includes(localText)) {
+    applyResolvedServer(roomName, serverText, serverVer); // server strictly extended local → adopt server
   } else {
     await showSyncConflictModal(roomName, localText, serverText); // genuine conflict → ask
   }
@@ -7286,7 +7400,7 @@ async function applyResolvedLocal(roomName, localText) {
 }
 
 // Adopt the server version, replacing local entirely.
-function applyResolvedServer(roomName, serverText) {
+function applyResolvedServer(roomName, serverText, serverVer) {
   const cur = editor.state.doc.toString();
   const sel = editor.state.selection.main;
   const anchor = Math.min(sel.anchor, serverText.length);
@@ -7298,7 +7412,9 @@ function applyResolvedServer(roomName, serverText) {
   });
   syncState.suppressUpdate = false;
   saveRoomSynced(roomName, serverText);
+  if (serverVer != null) { saveRoomVersion(roomName, serverVer); syncState.serverVersion = serverVer; }
   persistContent();
+  redecorateAfterRemote();
 }
 
 // Concatenate local + incoming (where = 'down' puts incoming below, 'up' above),
@@ -7312,6 +7428,7 @@ async function applyResolvedAppend(roomName, localText, serverText, where) {
   syncState.suppressUpdate = false;
   saveRoomSynced(roomName, merged);
   persistContent();
+  redecorateAfterRemote();
   try { await pushTextToServer(roomName, merged, syncState.encKey); }
   catch (e) { console.warn('Failed to push merged after resolve:', e); }
 }
@@ -7465,6 +7582,99 @@ window.forceSyncReload = function() {
   }
 };
 
+// Encryption key rotation (#10). Changing the shared passphrase used to orphan
+// every server blob — the new key couldn't decrypt the old ciphertext, so
+// reconcile bailed and rooms read as empty. This re-encrypts every room we can
+// decrypt under the new key, pushes the new ciphertext, then switches the app
+// over. Locked rooms whose password isn't unlocked this session are skipped
+// (their content key folds in the password) and reported.
+window.rotateEncryptionKey = async function() {
+  closeAllMenus();
+  const firebaseUrl = store.get('cade-firebase-url') || '';
+  const oldKey = store.get('cade-sync-key') || '';
+  if (!firebaseUrl || !oldKey) {
+    showToast('Configure and connect sync before changing the key', 'error', 4000);
+    return;
+  }
+  if (!navigator.onLine) {
+    showToast('You appear offline — reconnect before changing the key', 'error', 4000);
+    return;
+  }
+  const cur = await textPrompt('Confirm CURRENT encryption key', '');
+  if (cur == null) return;
+  if (cur !== oldKey) { showToast('Current key does not match', 'error', 3000); return; }
+  const newKey = await textPrompt('NEW encryption key', '');
+  if (newKey == null) return;
+  if (!newKey.trim()) { showToast('New key cannot be empty', 'error', 2500); return; }
+  if (newKey === oldKey) { showToast('New key is the same as the current key', 'error', 2500); return; }
+  const confirmKey = await textPrompt('Re-enter NEW encryption key', '');
+  if (confirmKey == null) return;
+  if (confirmKey !== newKey) { showToast('New keys do not match', 'error', 3000); return; }
+
+  let db;
+  try { db = initFirebase(firebaseUrl); }
+  catch (e) { showToast('Firebase error: ' + (e.message || e), 'error', 4000); return; }
+
+  updateSyncUI('connecting', 'Re-keying…');
+  const targets = (rooms && rooms.length) ? rooms.slice() : (activeRoom ? [activeRoom] : []);
+  let rekeyed = 0;
+  const skipped = [];
+  for (const room of targets) {
+    // Skip reserved workspace-config pseudo-rooms (handled separately below).
+    if (room.indexOf('__cade_ws_') === 0) continue;
+    // Locked rooms we don't hold the session password for can't be re-encrypted
+    // correctly — their content key folds in the password.
+    if (roomHasPassword(room) && !(room in sessionRoomPasswords)) { skipped.push(room); continue; }
+    const text = (room === activeRoom) ? editor.state.doc.toString() : loadRoomCache(room);
+    const pw = sessionRoomPasswords[room];
+    const newRoomKey = pw ? newKey + '\n' + pw : newKey;
+    const isLocked = !!pw;
+    try {
+      const payload = isLocked ? ROOM_LOCK_SENTINEL + text : text;
+      const encrypted = await encryptText(payload, newRoomKey);
+      await db.ref(`rooms/${room}/text`).set(packRoomText(encrypted));
+      db.ref(`rooms/${room}/v`).transaction(c => (c || 0) + 1)
+        .then(res => { const v = res && res.snapshot ? res.snapshot.val() : null; if (v != null) saveRoomVersion(room, v); })
+        .catch(() => {});
+      if (isLocked) {
+        const verifyBlob = await encryptText(ROOM_LOCK_SENTINEL, newRoomKey);
+        await db.ref(`rooms/${room}/verify`).set(verifyBlob);
+      }
+      saveRoomSynced(room, text);
+      rekeyed++;
+    } catch (e) {
+      console.warn('Re-key failed for room', room, e);
+      skipped.push(room);
+    }
+  }
+
+  // Commit the new base key everywhere it's read from.
+  store.set('cade-sync-key', newKey);
+  syncState.encKey = getRoomEncKey(activeRoom, newKey);
+  const keyInput = document.getElementById('sync-enc-key');
+  if (keyInput) keyInput.value = newKey;
+
+  // Re-publish the workspace config under the new key. Its storage path is
+  // derived from a key fingerprint, so clear the cached fingerprint first.
+  try { _wsKeyFp = null; if (typeof pushWorkspacesNow === 'function') await pushWorkspacesNow(); }
+  catch (e) { console.warn('Workspace re-key push failed:', e); }
+
+  // Reconnect the active room so its live listener uses the new key. The server
+  // text we just wrote matches local with a saved synced base, so reconcile is
+  // a no-op (no spurious conflict).
+  if (activeRoom) {
+    await _doSwitchRoom(activeRoom, firebaseUrl, newKey);
+  } else {
+    updateSyncUI(syncState.connected ? 'connected' : '', syncState.connected ? 'Synced' : 'Sync off');
+  }
+
+  if (skipped.length) {
+    showToast(`Key changed. Re-keyed ${rekeyed} room(s); skipped ${skipped.length} locked/unreadable: ${skipped.join(', ')}`, 'error', 7000);
+  } else {
+    showToast(`Encryption key changed — re-keyed ${rekeyed} room(s)`, 'success', 4000);
+  }
+};
+
 // Sync modal keyboard
 document.getElementById('sync-overlay').addEventListener('click', (e) => {
   if (e.target === document.getElementById('sync-overlay')) closeSyncModal();
@@ -7600,6 +7810,13 @@ window.switchRoom = async function(name) {
 // cross-contaminating documents.
 let _switchEpoch = 0;
 
+// Per-room editor state cache (text + selection + undo history). Switching
+// rooms saves the outgoing room's state here and restores the incoming room's,
+// so every room keeps its own undo/redo stack instead of sharing one global
+// history. Cleared for a room when it is removed (see removeRoom).
+const roomStates = new Map();
+function roomStateKey(name) { return name || '__local__'; }
+
 // Switch to room `name`. Always commits the local switch (load cache into the
 // editor, set activeRoom) before attempting Firebase; if Firebase is missing
 // or fails, we stay in the room locally and let reconnect handlers catch up.
@@ -7613,12 +7830,31 @@ async function _doSwitchRoom(name, firebaseUrl, baseEncKey) {
     saveTimer = null;
     persistContent();
   }
+  // #4: capture the outgoing room's unsynced edits so we can push them to the
+  // server right after detaching its listeners, instead of leaving them
+  // stranded until the next reconcile. Local persistence above already prevents
+  // data loss; this just gets them to the server promptly.
+  let _outFlush = null;
+  if (syncState.roomName && syncState.roomName !== name && syncState.connected && syncState.firebaseDb
+      && !syncState.pendingReconcile && !syncState.conflictResolving) {
+    const _outText = editor.state.doc.toString();
+    const _outBase = loadRoomSynced(syncState.roomName);
+    if (_outBase == null || _outText !== _outBase) {
+      _outFlush = { room: syncState.roomName, text: _outText, key: syncState.encKey };
+    }
+  }
   // A broadcast queued for the previous room must not fire against the new
   // room's freshly loaded text.
   clearTimeout(broadcastTimer);
   // Tear down any previous room's listeners — the local switch is committed
   // regardless of whether sync setup succeeds below.
   cleanupFirebase();
+  // Listeners are now detached, so this write can't echo back into the new
+  // room. Fire-and-forget: a failure leaves the synced base untouched, so the
+  // edits are simply re-pushed on the next reconcile (never lost).
+  if (_outFlush) {
+    pushRoomTextQuiet(_outFlush.room, _outFlush.text, _outFlush.key).catch(() => {});
+  }
   clearInterval(syncState.idleCheckTimer);
   syncState.pendingRemoteText = null;
   syncState.connected = false;
@@ -7628,6 +7864,13 @@ async function _doSwitchRoom(name, firebaseUrl, baseEncKey) {
   // Local-first: commit the new room identity, restore its cached text, and
   // refresh the UI. This must succeed offline so the user never loses access
   // to data they have locally.
+  // Save the outgoing room's full editor state (text + selection + undo
+  // history) so returning to it restores exactly where the user left off,
+  // with its undo stack isolated from every other room.
+  const _prevStateKey = roomStateKey(activeRoom);
+  const _newStateKey = roomStateKey(name);
+  if (_prevStateKey !== _newStateKey) roomStates.set(_prevStateKey, editor.state);
+
   activeRoom = name;
   syncState.roomName = name;
   store.set('cade-room-name', name);
@@ -7635,11 +7878,33 @@ async function _doSwitchRoom(name, firebaseUrl, baseEncKey) {
   const syncRoomInput = document.getElementById('sync-room-name');
   if (syncRoomInput) syncRoomInput.value = name;
 
+  // A spell-suggestion popup anchored in the old document must not linger over
+  // the new one (also detaches its outside-click listener — see #8).
+  try { closeSpellPopup(); } catch {}
+
   const cached = loadRoomCache(name);
   syncState.suppressUpdate = true;
-  editor.dispatch({ changes: { from: 0, to: editor.state.doc.length, insert: cached } });
+  const _savedState = roomStates.get(_newStateKey);
+  if (_savedState && _savedState.doc.toString() === cached) {
+    // Restore this room's own state — preserves its undo history and cursor.
+    editor.setState(_savedState);
+  } else {
+    // First visit this session, or the cache changed while we were away (e.g.
+    // a remote sync): start a clean state so undo can't reach into the
+    // previous room's edits, and drop any now-stale saved state.
+    editor.setState(makeEditorState(cached));
+    roomStates.delete(_newStateKey);
+  }
   syncState.suppressUpdate = false;
+  // setState bypasses the docChanged update path, so refresh derived UI here.
+  try { updateFooter(); } catch {}
+  try { scheduleWordCount(); } catch {}
+  // Keep line-number gutter visibility in sync with the toggle (it's CSS-driven,
+  // and swapping states can re-show a gutter the user had hidden).
+  try { const g = document.querySelector('.cm-gutters'); if (g) g.style.display = showLineNums ? '' : 'none'; } catch {}
   renderRoomTabs();
+  // Keep an open Snapshots panel pointed at the new room's history (#6).
+  try { if (document.getElementById('snapshots-overlay').classList.contains('open')) renderSnapshotsList(); } catch {}
 
   // No Firebase config — local-only mode. The user can still edit and we'll
   // persist to per-room cache. As soon as creds are set + we reconnect, the
@@ -8187,7 +8452,9 @@ window.removeRoom = function(name) {
   saveWorkspaces();
   store.remove('cade-room-cache:' + name);
   store.remove('cade-room-synced:' + name);
+  store.remove('cade-room-ver:' + name);
   store.remove('cade-snap:' + name);
+  roomStates.delete(roomStateKey(name));
   if (activeRoom === name && syncState.connected) {
     window.disconnectSync();
     activeRoom = '';
@@ -9708,18 +9975,22 @@ window.cancelRoomPwAction = function() {
 // plugins); this section owns match computation, navigation, and the panel.
 const MAX_SEARCH_MATCHES = 5000;
 
-function computeMatches() {
+// Scan the whole document for the current query, collecting up to `cap` matches.
+// Returns null for an invalid regex. Shared by the live match list (capped at
+// MAX_SEARCH_MATCHES so navigation + decoration stay cheap on huge docs) and by
+// Replace All (called with an unbounded cap so it never silently skips matches
+// past the display cap — the replace-all correctness guarantee).
+function scanMatches(cap) {
   const out = [];
-  searchState.invalid = false;
   const q = searchState.query;
-  if (!q) { searchState.matches = out; searchState.current = -1; return; }
+  if (!q) return out;
   const text = editor.state.doc.toString();
   if (searchState.regex) {
     let re;
     try { re = new RegExp(q, searchState.caseSensitive ? 'g' : 'gi'); }
-    catch { searchState.invalid = true; searchState.matches = []; searchState.current = -1; return; }
+    catch { return null; }
     let m;
-    while ((m = re.exec(text)) !== null && out.length < MAX_SEARCH_MATCHES) {
+    while ((m = re.exec(text)) !== null && out.length < cap) {
       if (m[0].length === 0) { re.lastIndex++; continue; } // zero-width guard
       out.push({ from: m.index, to: m.index + m[0].length });
     }
@@ -9727,13 +9998,20 @@ function computeMatches() {
     const hay = searchState.caseSensitive ? text : text.toLowerCase();
     const needle = searchState.caseSensitive ? q : q.toLowerCase();
     let idx = 0;
-    while ((idx = hay.indexOf(needle, idx)) !== -1 && out.length < MAX_SEARCH_MATCHES) {
+    while ((idx = hay.indexOf(needle, idx)) !== -1 && out.length < cap) {
       out.push({ from: idx, to: idx + needle.length });
       idx += needle.length;
     }
   }
-  searchState.matches = out;
-  if (searchState.current >= out.length) searchState.current = out.length ? 0 : -1;
+  return out;
+}
+
+function computeMatches() {
+  searchState.invalid = false;
+  const res = scanMatches(MAX_SEARCH_MATCHES);
+  if (res === null) { searchState.invalid = true; searchState.matches = []; searchState.current = -1; return; }
+  searchState.matches = res;
+  if (searchState.current >= res.length) searchState.current = res.length ? 0 : -1;
 }
 
 function updateFindCountUI() {
@@ -9809,8 +10087,11 @@ window.findReplaceCurrent = function() {
 };
 
 window.findReplaceAll = function() {
-  computeMatches();
-  const ms = searchState.matches;
+  // Replace across the *entire* document, not just the capped display set — the
+  // live match list stops at MAX_SEARCH_MATCHES for perf, but Replace All must
+  // touch every occurrence (#7).
+  const ms = scanMatches(Infinity);
+  if (ms === null) { showToast('Invalid regex', 'error', 1500); return; }
   if (!ms.length) { showToast('No matches', 'error', 1500); return; }
   const doc = editor.state.doc;
   const changes = ms.map(m => ({
@@ -9858,10 +10139,18 @@ window.closeFindPanel = function() {
   const caseBtn = document.getElementById('find-case');
   const regexBtn = document.getElementById('find-regex');
 
+  // On large documents a full re-scan per keystroke in the find box is costly,
+  // so debounce it there; small docs stay instant (#7).
+  let _findInputTimer = null;
   input.addEventListener('input', () => {
     searchState.query = input.value;
     searchState.current = -1;
-    searchRecomputeAndRefresh(true);
+    clearTimeout(_findInputTimer);
+    if (editor.state.doc.length > 50000) {
+      _findInputTimer = setTimeout(() => searchRecomputeAndRefresh(true), 140);
+    } else {
+      searchRecomputeAndRefresh(true);
+    }
   });
   input.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') { e.preventDefault(); findStep(e.shiftKey ? -1 : 1); }
