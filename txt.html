@@ -383,6 +383,13 @@ body {
 .room-manager-drag:active { cursor: grabbing; }
 @media (pointer: coarse) {
   .room-manager-drag { font-size: 18px; padding: 6px 10px 6px 2px; }
+  /* Bigger tap targets on touch devices (#81). */
+  .menu-item { min-height: 40px; }
+  .rm-action-item { min-height: 38px; display: flex; align-items: center; }
+  .room-tab { min-height: 34px; }
+  .cm-autocomplete .cm-ac-item { min-height: 36px; }
+  .spell-suggestion, .spell-action { min-height: 36px; }
+  .cade-panel-head .cade-panel-x { min-width: 32px; text-align: center; }
 }
 .room-manager-name {
   font-family: var(--font-mono);
@@ -2273,6 +2280,10 @@ body.zen.zen-tw .editor-wrap .cm-content { padding-top: 38vh; padding-bottom: 38
         <span>Today's Note</span>
         <span></span>
       </button>
+      <button class="menu-item" onclick="installApp()">
+        <span>Install App</span>
+        <span></span>
+      </button>
       <!-- Sync items (mobile only — Sync menu is hidden) -->
       <div class="menu-separator view-sync-only"></div>
       <button class="menu-item view-sync-only" onclick="openSyncModal()">
@@ -3455,6 +3466,7 @@ window.toggleTodoAtCursor = function() {
   const line = editor.state.doc.lineAt(sel.head);
   const m = line.text.match(TODO_LINE_RE);
   if (!m) return;
+  try { if (window.haptic) haptic(10); } catch {}
   const bracketStart = line.from + m[1].length;
   const bracketEnd = bracketStart + 3;
   const isDone = m[2] !== ' ';
@@ -12313,6 +12325,58 @@ setTimeout(() => {
   try { if (store.get('cade-pomo-open') === '1') window.togglePomodoro(); } catch {}
   try { if (store.get('cade-zen') === '1') window.toggleZen(); } catch {}
 }, 400);
+
+// ============================================
+// MOBILE ENHANCEMENTS: swipe, haptics, install prompt (Round 2)
+// ============================================
+window.haptic = function(ms) { try { if (navigator.vibrate) navigator.vibrate(ms || 12); } catch {} };
+
+// Swipe between rooms (#77): a quick horizontal flick on the editor switches to
+// the prev/next visible room. Tuned so it never fires during scroll/selection.
+(function() {
+  const el = editor.scrollDOM;
+  if (!el) return;
+  let x0 = 0, y0 = 0, t0 = 0, tracking = false;
+  el.addEventListener('touchstart', e => {
+    if (e.touches.length !== 1) { tracking = false; return; }
+    x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; t0 = Date.now(); tracking = true;
+  }, { passive: true });
+  el.addEventListener('touchend', e => {
+    if (!tracking) return; tracking = false;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - x0, dy = t.clientY - y0, dt = Date.now() - t0;
+    if (dt > 600) return;                                   // not a flick
+    if (Math.abs(dx) < 80 || Math.abs(dy) > 45) return;      // too short / too vertical
+    if (Math.abs(dx) < Math.abs(dy) * 2) return;             // not clearly horizontal
+    if (!editor.state.selection.main.empty) return;          // user is selecting
+    let list;
+    try { list = (typeof roomsInActiveWorkspace === 'function') ? roomsInActiveWorkspace(false) : rooms.slice(); } catch { list = rooms.slice(); }
+    try { if (typeof orderRooms === 'function') list = orderRooms(list); } catch {}
+    if (!list || list.length < 2) return;
+    const idx = list.indexOf(activeRoom);
+    if (idx < 0) return;
+    const next = dx < 0 ? (idx + 1) % list.length : (idx - 1 + list.length) % list.length;
+    haptic(12);
+    switchRoom(list[next]);
+  }, { passive: true });
+})();
+
+// PWA install prompt (#82): capture the deferred prompt; the View > Install App
+// item triggers it (or shows the iOS hint when there's no prompt to defer).
+let _deferredInstall = null;
+window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); _deferredInstall = e; });
+window.installApp = function() {
+  closeAllMenus();
+  if (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) {
+    showToast('App is already installed', 'success', 2500); return;
+  }
+  if (_deferredInstall) {
+    _deferredInstall.prompt();
+    _deferredInstall.userChoice.finally(() => { _deferredInstall = null; });
+  } else {
+    showToast('To install: use your browser menu → "Add to Home Screen" / "Install".', 'success', 5000);
+  }
+};
 
 // ============================================
 // HOTKEY SYSTEM
