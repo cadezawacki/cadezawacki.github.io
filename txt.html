@@ -2158,6 +2158,11 @@ body.zen.zen-tw .editor-wrap .cm-content { padding-top: 38vh; padding-bottom: 38
 
 .drop-overlay { position: fixed; inset: 0; z-index: 9000; background: rgba(0,0,0,0.45); display: flex; align-items: center; justify-content: center; color: #fff; font-size: 20px; font-weight: 600; pointer-events: none; border: 3px dashed var(--accent); }
 
+/* Embedded images (#28) */
+.cm-img-embed { display: inline-block; vertical-align: bottom; max-width: 100%; }
+.cm-img-embed img { max-width: min(100%, 460px); max-height: 340px; border-radius: 6px; border: 1px solid var(--border); display: block; }
+.cm-img-embed.missing { color: var(--text-faint); font-size: var(--text-xs); border: 1px dashed var(--border); padding: 4px 8px; border-radius: 6px; }
+
 /* Snapshot diff viewer (#101) */
 .snap-diff { font-family: var(--font-mono); font-size: var(--text-xs); white-space: pre-wrap; word-break: break-word; max-height: 50vh; overflow: auto; border: 1px solid var(--border); border-radius: var(--radius); padding: 8px; margin-top: 8px; background: var(--bg); }
 .snap-diff .d-add { background: color-mix(in srgb, #10b981 22%, transparent); }
@@ -4317,6 +4322,54 @@ const mdStylePlugin = ViewPlugin.fromClass(class {
   }
 }, { decorations: v => v.decorations });
 
+// ===== Embedded images (#28) =====
+// The compressed image rides INSIDE the document as a sentinel token
+// "![img:<base64-jpeg>]" so it syncs to the database like any other text; the
+// frontend renders the token as an <img>. Dramatic compression keeps it small.
+const IMG_TOKEN_RE = /!\[img:([A-Za-z0-9+/=]+)\]/g;
+const IMG_DATA_PREFIX = 'data:image/jpeg;base64,';
+class ImageWidget extends WidgetType {
+  constructor(data) { super(); this.data = data; }
+  eq(o) { return o.data === this.data; }
+  toDOM() {
+    const wrap = document.createElement('span');
+    wrap.className = 'cm-img-embed';
+    const img = document.createElement('img');
+    img.alt = 'embedded image';
+    img.src = IMG_DATA_PREFIX + this.data;
+    img.onerror = () => { wrap.classList.add('missing'); wrap.textContent = '⚠ broken image'; };
+    wrap.appendChild(img);
+    return wrap;
+  }
+  ignoreEvent() { return true; }
+}
+function buildImageDecorations(view) {
+  const ranges = [];
+  const doc = view.state.doc;
+  const seen = new Set();
+  for (const { from, to } of view.visibleRanges) {
+    const lineFrom = doc.lineAt(from).number, lineTo = doc.lineAt(to).number;
+    for (let i = lineFrom; i <= lineTo; i++) {
+      if (seen.has(i)) continue; seen.add(i);
+      const line = doc.line(i);
+      if (line.text.indexOf('![img:') === -1) continue;
+      IMG_TOKEN_RE.lastIndex = 0;
+      let m;
+      while ((m = IMG_TOKEN_RE.exec(line.text)) !== null) {
+        if (m[1].length < 24) continue;
+        const s = line.from + m.index, e = s + m[0].length;
+        ranges.push(Decoration.replace({ widget: new ImageWidget(m[1]) }).range(s, e));
+      }
+    }
+  }
+  ranges.sort((a, b) => a.from - b.from);
+  return Decoration.set(ranges, true);
+}
+const imagePlugin = ViewPlugin.fromClass(class {
+  constructor(view) { this.decorations = buildImageDecorations(view); }
+  update(update) { if (update.docChanged || update.viewportChanged) this.decorations = buildImageDecorations(update.view); }
+}, { decorations: v => v.decorations });
+
 function buildEditorExtensions() {
   return [
     basicSetup,
@@ -4354,6 +4407,7 @@ function buildEditorExtensions() {
     spellPlugin,
     searchPlugin,
     mdStylePlugin,
+    imagePlugin,
     listEnterHandler,
     keymap.of([
       { key: 'Mod-z', run: undo },
@@ -12519,6 +12573,78 @@ try {
     registerSetting({ key: 'mobile.mdButtons', label: 'Markdown row buttons', type: 'text', default: 'bold,italic,head,list,todo,code,link', section: 'Behavior', hint: 'Comma list: bold, italic, code, head, list, todo, quote, link', apply() { try { renderMobileMdRow(); } catch {} } });
   }
 } catch {}
+
+// ============================================
+// EMBEDDED IMAGES: paste/insert, compress, garbage-collect (#28)
+// ============================================
+// Dramatic compression so the base64 stays small enough to live in the synced
+// document without blowing up Firebase / the local cache (quality loss is fine
+// as long as it stays viewable). Returns base64 (no data: prefix) or null.
+const IMG_MAX_B64 = 90 * 1024; // ~90KB of base64 per image
+function compressImage(file) {
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      let w = img.width || 1, h = img.height || 1;
+      const maxDim = 800;
+      if (w > maxDim || h > maxDim) { const r = Math.min(maxDim / w, maxDim / h); w = Math.round(w * r); h = Math.round(h * r); }
+      const canvas = document.createElement('canvas');
+      const draw = (cw, ch, q) => { canvas.width = cw; canvas.height = ch; canvas.getContext('2d').drawImage(img, 0, 0, cw, ch); return canvas.toDataURL('image/jpeg', q); };
+      let q = 0.55, out = draw(w, h, q);
+      while (out.length > IMG_MAX_B64 && q > 0.22) { q -= 0.12; out = draw(w, h, q); }
+      let scale = 0.7;
+      while (out.length > IMG_MAX_B64 && Math.round(w * scale) > 200) { out = draw(Math.round(w * scale), Math.round(h * scale), 0.35); scale -= 0.2; }
+      if (out.length > IMG_MAX_B64) { resolve(null); return; }
+      const comma = out.indexOf(',');
+      resolve(comma >= 0 ? out.slice(comma + 1) : null);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); resolve(null); };
+    img.src = url;
+  });
+}
+async function insertImageFile(file) {
+  if (!file || !/^image\//.test(file.type)) { showToast('Not an image', 'error', 2000); return; }
+  let b64;
+  try { b64 = await compressImage(file); } catch { b64 = null; }
+  if (!b64) { showToast('Image too large to embed even after compression', 'error', 3500); return; }
+  const token = '![img:' + b64 + ']';
+  const sel = editor.state.selection.main;
+  const doc = editor.state.doc;
+  const pre = (sel.from > 0 && doc.sliceString(sel.from - 1, sel.from) !== '\n') ? '\n' : '';
+  editor.dispatch({ changes: { from: sel.from, to: sel.to, insert: pre + token + '\n' }, selection: { anchor: sel.from + pre.length + token.length + 1 } });
+  showToast('Image embedded (' + Math.round(b64.length / 1024) + ' KB)', 'success', 2000);
+}
+window.insertImageFile = insertImageFile;
+
+// Paste an image from the clipboard.
+editor.contentDOM.addEventListener('paste', (e) => {
+  const items = e.clipboardData && e.clipboardData.items;
+  if (!items) return;
+  for (const it of items) {
+    if (it.type && it.type.indexOf('image/') === 0) {
+      const f = it.getAsFile();
+      if (f) { e.preventDefault(); insertImageFile(f); return; }
+    }
+  }
+});
+
+registerScript(`/**
+  {
+    "name": "Insert Image",
+    "description": "Pick an image; it is compressed and embedded inline",
+    "author": "Cade",
+    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='3' y='3' width='18' height='18' rx='2'/><circle cx='8.5' cy='8.5' r='1.5'/><path d='M21 15l-5-5L5 21'/></svg>",
+    "tags": "image,embed,picture,photo,insert,paste"
+  }
+**/
+function main(ctx) {
+  const inp = document.createElement('input');
+  inp.type = 'file'; inp.accept = 'image/*';
+  inp.onchange = () => { if (inp.files && inp.files[0] && window.insertImageFile) window.insertImageFile(inp.files[0]); };
+  inp.click();
+}`);
 
 // ============================================
 // HOTKEY SYSTEM
