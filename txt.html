@@ -1510,7 +1510,11 @@ body {
   }
   .editor-wrap .cm-scroller {
     padding: var(--space-2) var(--space-3);
+    /* Leave room so the caret line can scroll clear of the footer/keyboard (#18). */
+    scroll-padding-bottom: 96px;
   }
+  /* Trailing buffer so the last line is reachable above the keyboard. */
+  .editor-wrap .cm-content { padding-bottom: 30vh; }
   .editor-wrap .cm-editor,
   .editor-wrap .cm-editor .cm-content,
   .editor-wrap .cm-editor .cm-line {
@@ -4309,6 +4313,27 @@ const editor = new EditorView({
   parent: document.getElementById('editor-wrap'),
 });
 window.editor = editor;
+
+// Mobile keyboard handling (#18): the app is position:fixed/inset:0, so when the
+// on-screen keyboard opens the layout viewport doesn't change and the footer +
+// caret end up hidden behind the keyboard. Pin the body to the visual viewport
+// (height + top only — never transform, which would reparent fixed modals) so
+// the footer sits just above the keyboard and CM6 can scroll the caret into the
+// visible area instead of the page lurching upward.
+(function() {
+  const vv = window.visualViewport;
+  if (!vv) return;
+  let raf = 0;
+  function apply() {
+    raf = 0;
+    document.body.style.height = vv.height + 'px';
+    document.body.style.top = (vv.offsetTop || 0) + 'px';
+  }
+  function schedule() { if (!raf) raf = requestAnimationFrame(apply); }
+  vv.addEventListener('resize', schedule);
+  vv.addEventListener('scroll', schedule);
+  apply();
+})();
 
 // ============================================
 // SPELL CHECK — runtime (loader, toggle, suggestion popup)
