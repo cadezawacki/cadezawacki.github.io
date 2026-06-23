@@ -831,6 +831,23 @@ body {
 .editor-wrap .cm-editor.cm-focused .cm-selectionBackground {
   background: rgba(14, 165, 233, 0.15) !important;
 }
+/* Dark mode: the selection was too faint — use a brighter teal (#12). */
+[data-theme="dark"] .editor-wrap .cm-selectionBackground,
+[data-theme="dark"] .editor-wrap .cm-editor .cm-selectionBackground,
+[data-theme="dark"] .editor-wrap .cm-editor.cm-focused .cm-selectionBackground {
+  background: rgba(20, 184, 166, 0.34) !important;
+}
+/* Matching words elsewhere (highlightSelectionMatches): a distinct teal, boxed
+   so it reads differently from the solid selection (was the default green). */
+.editor-wrap .cm-selectionMatch {
+  background: rgba(45, 212, 191, 0.16) !important;
+  border-radius: 2px;
+  box-shadow: inset 0 0 0 1px rgba(20, 184, 166, 0.55);
+}
+[data-theme="dark"] .editor-wrap .cm-selectionMatch {
+  background: rgba(45, 212, 191, 0.15) !important;
+  box-shadow: inset 0 0 0 1px rgba(94, 234, 212, 0.6);
+}
 
 .editor-wrap .cm-cursor, .editor-wrap .cm-dropCursor {
   border-left-color: var(--accent);
@@ -856,7 +873,13 @@ body {
   -webkit-user-select: none;
 }
 
-.footer-left { display: flex; gap: var(--space-4); align-items: center; }
+/* Tabular figures + fixed slots so the stats never shift each other (#9). */
+.footer-left { display: flex; gap: var(--space-4); align-items: center; font-variant-numeric: tabular-nums; }
+.footer-left > span { white-space: nowrap; }
+#footer-line  { min-width: 86px; }
+#footer-chars { min-width: 74px; }
+#footer-words { min-width: 66px; }
+#footer-lines { min-width: 58px; }
 .footer-spacer { flex: 1; }
 .footer-right { display: flex; gap: var(--space-4); align-items: center; }
 
@@ -865,13 +888,21 @@ body {
 .footer-breadcrumb:empty { display: none; }
 .footer-breadcrumb .bc-ws, .footer-breadcrumb .bc-room {
   display: inline-flex; align-items: center; gap: 4px; cursor: pointer;
-  max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   padding: 1px 4px; border-radius: 4px;
 }
+.footer-breadcrumb .bc-ws { flex-shrink: 0; max-width: 140px; }
+.footer-breadcrumb .bc-room { flex-shrink: 1; min-width: 0; max-width: 220px; }
+.footer-breadcrumb .bc-ws-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .footer-breadcrumb .bc-ws:hover, .footer-breadcrumb .bc-room:hover { background: var(--surface-hover, rgba(127,127,127,0.15)); }
-.footer-breadcrumb .bc-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ws-dot, currentColor); flex-shrink: 0; }
+/* Dot takes the workspace's own color (--ws-fg from the ws-color-* class). */
+.footer-breadcrumb .bc-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ws-fg, currentColor); flex-shrink: 0; }
 .footer-breadcrumb .bc-sep { opacity: 0.5; }
 .footer-breadcrumb .bc-room { color: var(--text, inherit); font-weight: 500; }
+/* Compact: collapse the workspace segment to just its colored dot (no label,
+   no ellipsis) so the room name keeps priority when space is tight. */
+.footer-breadcrumb.compact .bc-ws-label,
+.footer-breadcrumb.compact .bc-sep { display: none; }
 
 /* Quick switcher (Feature 50) — higher specificity so it beats .modal-overlay */
 .modal-overlay.qs-overlay { align-items: flex-start; }
@@ -924,11 +955,14 @@ body {
 }
 
 .sync-dot {
-  width: 7px;
-  height: 7px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   background: var(--text-faint);
   transition: background var(--transition);
+  flex-shrink: 0;
+  margin-right: 2px;
+  cursor: default;
 }
 
 .sync-dot.connected { background: var(--success); }
@@ -1482,8 +1516,19 @@ body {
     padding-bottom: env(safe-area-inset-bottom);
     font-size: 10px;
   }
-  .footer-left { gap: var(--space-2); }
+  .footer-left { gap: 6px; }
   .footer-right { gap: var(--space-2); }
+  /* Compact stats: drop labels + Ln/Col, show bare "500 / 38 / 10" (#9). */
+  #footer-line { display: none; }
+  .footer-left .flabel { display: none; }
+  #footer-chars, #footer-words { position: relative; padding-right: 9px; }
+  #footer-chars::after, #footer-words::after {
+    content: "/"; position: absolute; right: 0; opacity: 0.5;
+  }
+  #footer-line, #footer-chars, #footer-words, #footer-lines { min-width: 0; }
+  /* Keep the breadcrumb compact on mobile: workspace as a dot only. */
+  .footer-breadcrumb { margin-left: 6px; }
+  .footer-breadcrumb .bc-ws-label, .footer-breadcrumb .bc-sep { display: none; }
   .modal-dialog {
     padding: var(--space-4);
     max-height: calc(100vh - 40px);
@@ -2255,6 +2300,7 @@ body {
 <!-- ========== FOOTER ========== -->
 <div class="footer">
   <div class="footer-left">
+    <div class="sync-dot" id="sync-dot" title="Sync off"></div>
     <span id="footer-line">Ln 1, Col 1</span>
     <span id="footer-chars">0 chars</span>
     <span id="footer-words">0 words</span>
@@ -2263,10 +2309,7 @@ body {
   <div class="footer-breadcrumb" id="footer-breadcrumb"></div>
   <div class="footer-spacer"></div>
   <div class="footer-right">
-    <div class="sync-indicator">
-      <div class="sync-dot" id="sync-dot"></div>
-      <span id="sync-status">Sync off</span>
-    </div>
+    <span id="sync-status" style="display:none;"></span>
   </div>
 </div>
 
@@ -4944,18 +4987,24 @@ function updateFooter() {
 
   document.getElementById('footer-line').textContent = `Ln ${line.number}, Col ${col}`;
 
+  // Numbers and their labels are separate spans: on mobile the labels are
+  // hidden and the bare numbers shown compactly ("500 / 38 / 10") via CSS (#9).
+  const nl = n => n.toLocaleString();
+  let cNum, cLbl, wNum, wLbl, lNum, lLbl;
   if (hasSelection) {
     const selText = editor.state.sliceDoc(sel.from, sel.to);
-    const selChars = selText.length;
     const selLines = doc.lineAt(sel.to).number - doc.lineAt(sel.from).number + 1;
-    document.getElementById('footer-chars').textContent = `${selChars} of ${doc.length} chars`;
-    document.getElementById('footer-words').textContent = `${countWords(selText)} of ${_docWordCount} words`;
-    document.getElementById('footer-lines').textContent = `${selLines} of ${doc.lines} lines`;
+    cNum = nl(selText.length); cLbl = ` of ${nl(doc.length)} chars`;
+    wNum = nl(countWords(selText)); wLbl = ` of ${nl(_docWordCount)} words`;
+    lNum = nl(selLines); lLbl = ` of ${nl(doc.lines)} lines`;
   } else {
-    document.getElementById('footer-chars').textContent = `${doc.length} chars`;
-    document.getElementById('footer-words').textContent = `${_docWordCount} words`;
-    document.getElementById('footer-lines').textContent = `${doc.lines} lines`;
+    cNum = nl(doc.length); cLbl = ' chars';
+    wNum = nl(_docWordCount); wLbl = ' words';
+    lNum = nl(doc.lines); lLbl = ' lines';
   }
+  document.getElementById('footer-chars').innerHTML = `<span class="fnum">${cNum}</span><span class="flabel">${cLbl}</span>`;
+  document.getElementById('footer-words').innerHTML = `<span class="fnum">${wNum}</span><span class="flabel">${wLbl}</span>`;
+  document.getElementById('footer-lines').innerHTML = `<span class="fnum">${lNum}</span><span class="flabel">${lLbl}</span>`;
 }
 
 _docWordCount = countWords(editor.state.doc.toString());
@@ -7436,13 +7485,27 @@ function cleanupFirebase() {
 }
 
 // --- Sync UI helpers ---
-function updateSyncUI(status, text) {
+let _connectingTimer = null;
+function _applySyncUI(status, text) {
   const dot = document.getElementById('sync-dot');
+  if (dot) { dot.className = 'sync-dot ' + status; dot.title = text || ''; }
   const statusEl = document.getElementById('sync-status');
-  dot.className = 'sync-dot ' + status;
-  statusEl.textContent = text;
-  document.getElementById('disconnect-btn').style.display = syncState.connected ? 'flex' : 'none';
-  document.getElementById('view-disconnect-btn').style.display = syncState.connected ? 'flex' : 'none';
+  if (statusEl) statusEl.textContent = text;
+  const db = document.getElementById('disconnect-btn');
+  if (db) db.style.display = syncState.connected ? 'flex' : 'none';
+  const vdb = document.getElementById('view-disconnect-btn');
+  if (vdb) vdb.style.display = syncState.connected ? 'flex' : 'none';
+}
+function updateSyncUI(status, text) {
+  if (_connectingTimer) { clearTimeout(_connectingTimer); _connectingTimer = null; }
+  if (status === 'connecting') {
+    // Defer the amber "connecting" state so brief reconnects (a normal room
+    // switch) don't flicker green->amber->green. If we reach connected/off
+    // within the buffer, the amber state never shows (#3).
+    _connectingTimer = setTimeout(() => { _connectingTimer = null; _applySyncUI('connecting', text); }, 550);
+    return;
+  }
+  _applySyncUI(status, text);
 }
 
 function showSyncStep(stepId) {
@@ -8312,9 +8375,16 @@ function renderBreadcrumb() {
     if (!ws) wsId = WS_ALL;
   }
   el.innerHTML =
-    `<span class="bc-ws ws-color-${wsColor}" title="Switch workspace" onclick="breadcrumbWsClick(event)"><span class="bc-dot"></span>${escapeHtml(wsLabel)}</span>` +
+    `<span class="bc-ws ws-color-${wsColor}" title="${escapeHtml(wsLabel)} — switch workspace" onclick="breadcrumbWsClick(event)"><span class="bc-dot"></span><span class="bc-ws-label">${escapeHtml(wsLabel)}</span></span>` +
     `<span class="bc-sep">›</span>` +
     `<span class="bc-room" title="Switch room (${typeof hotkeyLabelQuickSwitch === 'function' ? hotkeyLabelQuickSwitch() : 'Ctrl+P'})" onclick="breadcrumbRoomClick(event)">${escapeHtml(activeRoom)}</span>`;
+  // Desktop overflow: if the crumb is wider than its room allows, collapse the
+  // workspace to just its colored dot (keeps the room name — the important part
+  // — visible). The mobile media query already forces this.
+  el.classList.remove('compact');
+  requestAnimationFrame(() => {
+    if (el.scrollWidth > el.clientWidth + 1) el.classList.add('compact');
+  });
 }
 
 window.breadcrumbWsClick = function(evt) {
@@ -10112,7 +10182,7 @@ function renderWorkspaceManagerList() {
             <span class="ws-mgr-count">${count} room${count !== 1 ? 's' : ''}</span>
           </div>
           <div class="ws-mgr-actions">
-            <button class="btn" style="padding:2px 8px;font-size:var(--text-xs);" onclick="beginWorkspaceEdit('${escId}')" title="Rename / recolor / nest">✎</button>
+            <button class="btn" style="padding:2px 7px;font-size:var(--text-xs);display:inline-flex;align-items:center;" onclick="beginWorkspaceEdit('${escId}')" title="Rename / recolor / nest"><svg width="14" height="14" viewBox="0 0 24 24" style="display:block;"><path fill="currentColor" d="m14.06 9.02l.92.92L5.92 19H5v-.92zM17.66 3c-.25 0-.51.1-.7.29l-1.83 1.83l3.75 3.75l1.83-1.83a.996.996 0 0 0 0-1.41l-2.34-2.34c-.2-.2-.45-.29-.71-.29m-3.6 3.19L3 17.25V21h3.75L17.81 9.94z"/></svg></button>
             <button class="btn btn-danger" style="padding:2px 8px;font-size:var(--text-xs);" onclick="confirmDeleteWorkspace('${escId}', '${escName}')" title="Delete (rooms become Unlabeled; subfolders move up)">×</button>
           </div>
         </div>`;
