@@ -7630,6 +7630,13 @@ function safeApplyRemote(text, roomName) {
     saveRoomSynced(roomName, text);
     return true;
   }
+  // Never replace the editor within a few seconds of a local edit, even if the
+  // local copy looks "clean" — a stale snapshot from another window must not
+  // clobber what the user just typed (#4). Re-queue; the idle check retries.
+  if (Date.now() - (syncState.lastLocalEdit || 0) < 4000) {
+    syncState.pendingRemoteText = text;
+    return false;
+  }
   const syncedBase = loadRoomSynced(roomName);
   const localHasUnsyncedEdits = (syncedBase == null)
     ? currentText.length > 0   // No tracking yet + local has content => assume unsynced
@@ -8802,14 +8809,19 @@ async function _doSwitchRoom(name, firebaseUrl, baseEncKey) {
     // Best-effort upfront lock probe — bounded so a bad connection never
     // strands the user in "Connecting…". On timeout we just attach the
     // listener; the locked listener catches the lock state once data arrives.
-    const LOCK_PROBE_TIMEOUT_MS = 3000;
-    let lockedVal = null;
-    try {
-      lockedVal = await Promise.race([
-        db.ref(`rooms/${name}/locked`).once('value').then(s => s.val()),
-        new Promise(resolve => setTimeout(() => resolve('__timeout__'), LOCK_PROBE_TIMEOUT_MS)),
-      ]);
-    } catch (_) { lockedVal = null; }
+    const LOCK_PROBE_TIMEOUT_MS = 1500;
+    let lockedVal = '__timeout__';
+    // Skip the probe entirely when offline so an offline room switch never
+    // waits on the network — the cached text is already showing and the locked
+    // listener will catch the lock state once data arrives (#5).
+    if (navigator.onLine) {
+      try {
+        lockedVal = await Promise.race([
+          db.ref(`rooms/${name}/locked`).once('value').then(s => s.val()),
+          new Promise(resolve => setTimeout(() => resolve('__timeout__'), LOCK_PROBE_TIMEOUT_MS)),
+        ]);
+      } catch (_) { lockedVal = null; }
+    }
     // Another switch started while we awaited the probe — abandon this one
     // before it attaches listeners for a room the user has already left.
     if (epoch !== _switchEpoch) return;
@@ -9749,6 +9761,19 @@ function normalizeRoomWorkspace(map) {
 }
 roomWorkspace = normalizeRoomWorkspace(roomWorkspace);
 if (!roomMeta || typeof roomMeta !== 'object') roomMeta = {};
+
+// One-time: after upgrading to many-to-many workspace membership, make the
+// locally-migrated associations authoritative — bump the workspace timestamp
+// and push — so a stale remote blob (written by an older client, or empty)
+// can't silently wipe them on first sync (#6).
+if (!store.get('cade-ws-m2m-migrated')) {
+  store.set('cade-ws-m2m-migrated', '1');
+  if (roomWorkspace && Object.keys(roomWorkspace).length) {
+    store.set('cade-workspaces-ts', String(Date.now()));
+    store.set('cade-room-workspace', JSON.stringify(roomWorkspace));
+    setTimeout(() => { try { if (typeof schedulePushWorkspaces === 'function') schedulePushWorkspaces(); } catch {} }, 1500);
+  }
+}
 
 function saveRoomMeta() {
   store.set('cade-room-meta', JSON.stringify(roomMeta));
