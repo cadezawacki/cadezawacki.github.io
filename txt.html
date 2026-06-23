@@ -4133,10 +4133,12 @@ function buildEditorExtensions() {
       }
     }),
     EditorView.updateListener.of(renumberListener),
-    // Respect the soft-wrap preference when rebuilding state on room switch
-    // (Settings isn't defined yet at initial editor creation — its registration
-    // re-applies the stored value then, so defaulting to wrap-on here is safe).
-    wrapCompartment.of((typeof Settings !== 'undefined' && Settings.get('editor.softWrap') === false) ? [] : EditorView.lineWrapping),
+    // Respect the soft-wrap preference when rebuilding state on room switch.
+    // Use window.Settings (a plain property access, safely undefined early)
+    // rather than the `Settings` binding, which is in its temporal dead zone at
+    // initial editor creation and would throw on access. Its registration
+    // re-applies the stored value then, so defaulting to wrap-on here is safe.
+    wrapCompartment.of((window.Settings && window.Settings.get('editor.softWrap') === false) ? [] : EditorView.lineWrapping),
     fenceTrackerPlugin, // must precede the decorators that consult fence state
     listIndentPlugin,
     todoPlugin,
