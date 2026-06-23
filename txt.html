@@ -1293,6 +1293,70 @@ body {
 .hotkey-input:focus { border-color: var(--accent); }
 .hotkey-input.recording { border-color: var(--accent); background: var(--accent-bg); }
 
+/* ===== Device Settings UI (see DEVICE SETTINGS section in JS) ===== */
+.settings-section { margin-bottom: var(--space-5); }
+.settings-section:last-child { margin-bottom: 0; }
+.settings-section-title {
+  font-size: var(--text-xs);
+  color: var(--text-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 600;
+  margin-bottom: var(--space-1);
+}
+.settings-section-desc {
+  font-size: var(--text-xs);
+  color: var(--text-faint);
+  margin-bottom: var(--space-2);
+  line-height: 1.4;
+}
+.setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+.setting-row:last-child { border-bottom: none; }
+.setting-info { min-width: 0; flex: 1 1 auto; }
+.setting-label { font-size: var(--text-sm); color: var(--text); }
+.setting-hint { font-size: var(--text-xs); color: var(--text-faint); margin-top: 2px; line-height: 1.4; }
+.setting-control { flex: 0 0 auto; }
+.setting-control select.form-input,
+.setting-control input.form-input { width: 160px; }
+.setting-control input[type="number"].form-input { width: 100px; }
+/* Toggle switch */
+.setting-toggle {
+  position: relative;
+  display: inline-block;
+  width: 38px;
+  height: 22px;
+  flex: 0 0 auto;
+  cursor: pointer;
+}
+.setting-toggle input { opacity: 0; width: 0; height: 0; position: absolute; }
+.setting-toggle .toggle-track {
+  position: absolute;
+  inset: 0;
+  background: var(--border);
+  border-radius: 22px;
+  transition: background var(--transition);
+}
+.setting-toggle .toggle-thumb {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  background: var(--surface);
+  border-radius: 50%;
+  transition: transform var(--transition);
+  box-shadow: var(--shadow-sm);
+}
+.setting-toggle input:checked ~ .toggle-track { background: var(--accent); }
+.setting-toggle input:checked ~ .toggle-thumb { transform: translateX(16px); }
+
 /* Mobile toolbar */
 .mobile-toolbar {
   display: none;
@@ -2005,6 +2069,10 @@ body {
         <span id="mdstyle-label">Markdown Styling: On</span>
         <span></span>
       </button>
+      <button class="menu-item" onclick="toggleSoftWrap()">
+        <span id="softwrap-label">Soft Wrap: On</span>
+        <span></span>
+      </button>
       <button class="menu-item" onclick="openSnapshots()">
         <span>Snapshots / History</span>
         <span></span>
@@ -2226,13 +2294,25 @@ body {
 
 <!-- ========== SETTINGS MODAL ========== -->
 <div class="modal-overlay" id="settings-overlay">
-  <div class="modal-dialog">
-    <div class="modal-title">Hotkey Settings</div>
-    <div class="modal-desc">Click a field and press your desired key combination.</div>
-    <div id="hotkey-list"></div>
-    <div class="modal-actions">
-      <button class="btn" onclick="resetHotkeys()">Reset Defaults</button>
-      <button class="btn btn-primary" onclick="closeSettings()">Done</button>
+  <div class="modal-dialog modal-dialog-scroll" style="max-width: 480px;">
+    <div class="modal-header">
+      <div class="modal-title">Settings</div>
+    </div>
+    <div class="modal-body">
+      <!-- Auto-rendered device settings sections (see DEVICE SETTINGS section in JS) -->
+      <div id="settings-sections"></div>
+      <!-- Hotkeys section (unchanged behaviour) -->
+      <div class="settings-section">
+        <div class="settings-section-title">Hotkeys</div>
+        <div class="settings-section-desc">Click a field and press your desired key combination.</div>
+        <div id="hotkey-list"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <div class="modal-actions">
+        <button class="btn" onclick="resetHotkeys()">Reset Hotkeys</button>
+        <button class="btn btn-primary" onclick="closeSettings()">Done</button>
+      </div>
     </div>
   </div>
 </div>
@@ -2607,6 +2687,9 @@ function updateThemeIcon() {
 // ============================================
 const lineNumCompartment = new Compartment();
 let showLineNums = store.get('cade-linenums') !== 'false';
+// Feature 23 — soft-wrap toggle. lineWrapping lives in a compartment so it can be
+// reconfigured at runtime by the editor.softWrap device setting (default ON).
+const wrapCompartment = new Compartment();
 
 const editorTheme = EditorView.theme({
   '&': { height: '100%', background: 'var(--bg)' },
@@ -3694,7 +3777,7 @@ const editorState = EditorState.create({
       }
     }),
     EditorView.updateListener.of(renumberListener),
-    EditorView.lineWrapping,
+    wrapCompartment.of(EditorView.lineWrapping),
     fenceTrackerPlugin, // must precede the decorators that consult fence state
     listIndentPlugin,
     todoPlugin,
@@ -10221,9 +10304,260 @@ document.addEventListener('keydown', (e) => {
   }
 }, true);
 
+// ============================================
+// DEVICE SETTINGS  (Agent A — Settings & Preferences core)
+// ============================================
+// A small device-settings layer on top of `store`. Each setting persists to the
+// local cache under the key `cade-pref:<name>` and is surfaced as a control in
+// the Settings modal under its declared `section`.
+//
+// PUBLIC API (also exposed as window.Settings / window.registerSetting):
+//
+//   registerSetting({
+//     key,            // string, unique id, also the storage key suffix (cade-pref:<key>)
+//     label,          // string, shown next to the control
+//     type,           // 'toggle' | 'select' | 'number' | 'text'
+//     default,        // default value if not yet stored
+//     section,        // group heading, e.g. 'Appearance' | 'Editor' | 'Behavior'
+//     options,        // [{value,label}] — required for type 'select'
+//     hint,           // optional helper text under the label
+//     apply(value),   // optional: called immediately on register + on every change
+//     getState,       // optional: () => current value, for settings whose source of
+//                     //           truth lives elsewhere (e.g. existing ad-hoc toggles).
+//                     //           When present, the control reflects getState() and the
+//                     //           value is NOT persisted under cade-pref by Settings.
+//   })
+//
+//   Settings.get(name)            -> value (typed)
+//   Settings.set(name, val)       -> persists + notifies listeners + calls apply()
+//   Settings.getAll()             -> { key: value, ... } for all registered settings
+//   Settings.onChange(name, cb)   -> cb(value) on change; returns an unsubscribe fn
+//
+//   Section names rendered in the modal, in order: 'Appearance', 'Editor', 'Behavior'.
+//   (Any other section string is rendered too, appended after the known ones.)
+const Settings = (() => {
+  const PREFIX = 'cade-pref:';
+  const registry = new Map();       // key -> definition
+  const listeners = new Map();      // key -> Set<cb>
+  const SECTION_ORDER = ['Appearance', 'Editor', 'Behavior'];
+
+  function coerce(def, raw) {
+    if (raw == null) return def.default;
+    if (def.type === 'toggle') return raw === true || raw === 'true';
+    if (def.type === 'number') { const n = Number(raw); return Number.isNaN(n) ? def.default : n; }
+    return String(raw); // select / text
+  }
+
+  // Read the persisted (or default) value for a registered key.
+  function readStored(def) {
+    return coerce(def, store.get(PREFIX + def.key));
+  }
+
+  function get(name) {
+    const def = registry.get(name);
+    if (!def) return undefined;
+    if (typeof def.getState === 'function') return def.getState();
+    return readStored(def);
+  }
+
+  function set(name, val) {
+    const def = registry.get(name);
+    if (!def) return;
+    if (typeof def.getState !== 'function') {
+      // Persist only settings owned by this layer; proxied (getState) settings
+      // keep their own storage via their existing toggle function / apply().
+      store.set(PREFIX + def.key, def.type === 'toggle' ? !!val : String(val));
+    }
+    try { if (typeof def.apply === 'function') def.apply(val); } catch (e) { console.error('Setting apply failed:', name, e); }
+    const subs = listeners.get(name);
+    if (subs) subs.forEach(cb => { try { cb(val); } catch (e) { console.error(e); } });
+    renderSettingsSections(); // keep UI in sync if open
+  }
+
+  function getAll() {
+    const out = {};
+    registry.forEach((def, key) => { out[key] = get(key); });
+    return out;
+  }
+
+  function onChange(name, cb) {
+    if (!listeners.has(name)) listeners.set(name, new Set());
+    listeners.get(name).add(cb);
+    return () => { const s = listeners.get(name); if (s) s.delete(cb); };
+  }
+
+  function registerSetting(def) {
+    if (!def || !def.key) { console.warn('registerSetting: missing key'); return; }
+    registry.set(def.key, def);
+    // Store default if unset (only for settings this layer owns).
+    if (typeof def.getState !== 'function' && store.get(PREFIX + def.key) == null && def.default != null) {
+      store.set(PREFIX + def.key, def.type === 'toggle' ? !!def.default : String(def.default));
+    }
+    // Apply current value immediately.
+    try { if (typeof def.apply === 'function') def.apply(get(def.key)); } catch (e) { console.error('Setting apply failed:', def.key, e); }
+    renderSettingsSections();
+  }
+
+  // ---- Rendering into #settings-sections ----
+  function renderSettingsSections() {
+    const host = document.getElementById('settings-sections');
+    if (!host) return;
+    // Group registered settings by section, preserving registration order.
+    const groups = new Map();
+    registry.forEach((def) => {
+      const sec = def.section || 'Other';
+      if (!groups.has(sec)) groups.set(sec, []);
+      groups.get(sec).push(def);
+    });
+    const ordered = [...SECTION_ORDER.filter(s => groups.has(s)),
+                     ...[...groups.keys()].filter(s => !SECTION_ORDER.includes(s))];
+    host.innerHTML = ordered.map(sec => {
+      const rows = groups.get(sec).map(def => renderRow(def)).join('');
+      return `<div class="settings-section"><div class="settings-section-title">${escAttr(sec)}</div>${rows}</div>`;
+    }).join('');
+    // Wire up controls.
+    host.querySelectorAll('[data-setting-key]').forEach(el => {
+      const key = el.getAttribute('data-setting-key');
+      const def = registry.get(key);
+      if (!def) return;
+      const ev = (def.type === 'toggle') ? 'change'
+               : (def.type === 'select') ? 'change' : 'input';
+      el.addEventListener(ev, () => {
+        let val;
+        if (def.type === 'toggle') val = el.checked;
+        else if (def.type === 'number') val = Number(el.value);
+        else val = el.value;
+        set(key, val);
+      });
+    });
+  }
+
+  function escAttr(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+  function renderRow(def) {
+    const cur = get(def.key);
+    const hint = def.hint ? `<div class="setting-hint">${escAttr(def.hint)}</div>` : '';
+    let control = '';
+    if (def.type === 'toggle') {
+      control = `<label class="setting-toggle">
+        <input type="checkbox" data-setting-key="${escAttr(def.key)}" ${cur ? 'checked' : ''}>
+        <span class="toggle-track"></span><span class="toggle-thumb"></span>
+      </label>`;
+    } else if (def.type === 'select') {
+      const opts = (def.options || []).map(o =>
+        `<option value="${escAttr(o.value)}" ${String(o.value) === String(cur) ? 'selected' : ''}>${escAttr(o.label)}</option>`).join('');
+      control = `<select class="form-input" data-setting-key="${escAttr(def.key)}">${opts}</select>`;
+    } else if (def.type === 'number') {
+      control = `<input type="number" class="form-input" data-setting-key="${escAttr(def.key)}" value="${escAttr(cur)}">`;
+    } else { // text
+      control = `<input type="text" class="form-input" data-setting-key="${escAttr(def.key)}" value="${escAttr(cur == null ? '' : cur)}">`;
+    }
+    return `<div class="setting-row">
+      <div class="setting-info"><div class="setting-label">${escAttr(def.label)}</div>${hint}</div>
+      <div class="setting-control">${control}</div>
+    </div>`;
+  }
+
+  return { get, set, getAll, onChange, registerSetting, _render: renderSettingsSections };
+})();
+
+const registerSetting = Settings.registerSetting;
+window.Settings = Settings;
+window.registerSetting = registerSetting;
+// Convenience for openSettings() to re-render the auto section.
+function renderSettingsSections() { Settings._render(); }
+
+// ---- Register the soft-wrap setting (Feature 23) ----
+registerSetting({
+  key: 'editor.softWrap',
+  label: 'Soft wrap long lines',
+  type: 'toggle',
+  default: true,
+  section: 'Editor',
+  hint: 'When off, long lines scroll horizontally instead of wrapping.',
+  apply(value) {
+    try {
+      editor.dispatch({ effects: wrapCompartment.reconfigure(value ? EditorView.lineWrapping : []) });
+    } catch {}
+    const lbl = document.getElementById('softwrap-label');
+    if (lbl) lbl.textContent = 'Soft Wrap: ' + (value ? 'On' : 'Off');
+  }
+});
+
+// ---- Surface existing ad-hoc prefs as toggles (backward compatible). ----
+// These use getState() so their existing storage keys + toggle functions stay
+// the canonical source of truth; we only proxy a control into the new UI.
+registerSetting({
+  key: 'appearance.darkMode',
+  label: 'Dark mode',
+  type: 'toggle',
+  default: false,
+  section: 'Appearance',
+  getState: () => (typeof currentTheme !== 'undefined' && currentTheme === 'dark'),
+  apply(value) {
+    const isDark = (typeof currentTheme !== 'undefined' && currentTheme === 'dark');
+    if (!!value !== isDark) window.toggleTheme();
+  }
+});
+registerSetting({
+  key: 'editor.lineNumbers',
+  label: 'Show line numbers',
+  type: 'toggle',
+  default: true,
+  section: 'Editor',
+  getState: () => (typeof showLineNums !== 'undefined' ? !!showLineNums : true),
+  apply(value) {
+    if (typeof showLineNums !== 'undefined' && !!value !== !!showLineNums) window.toggleLineNumbers();
+  }
+});
+registerSetting({
+  key: 'editor.spellcheck',
+  label: 'Spell check',
+  type: 'toggle',
+  default: true,
+  section: 'Editor',
+  getState: () => (typeof spellEnabled !== 'undefined' ? !!spellEnabled : true),
+  apply(value) {
+    if (typeof spellEnabled !== 'undefined' && !!value !== !!spellEnabled) window.toggleSpellcheck();
+  }
+});
+registerSetting({
+  key: 'editor.markdownStyling',
+  label: 'Markdown styling',
+  type: 'toggle',
+  default: true,
+  section: 'Editor',
+  getState: () => (typeof mdStyleEnabled !== 'undefined' ? !!mdStyleEnabled : true),
+  apply(value) {
+    if (typeof mdStyleEnabled !== 'undefined' && !!value !== !!mdStyleEnabled) window.toggleMdStyle();
+  }
+});
+registerSetting({
+  key: 'behavior.injections',
+  label: 'Plugins / token injections',
+  type: 'toggle',
+  default: true,
+  section: 'Behavior',
+  hint: 'Inline tokens like date/time expansion and autocomplete.',
+  getState: () => (typeof injectionsEnabled !== 'undefined' ? !!injectionsEnabled : true),
+  apply(value) {
+    if (typeof injectionsEnabled !== 'undefined' && !!value !== !!injectionsEnabled) window.toggleInjections();
+  }
+});
+
+// Soft-wrap View-menu entry handler (button added in the View dropdown markup).
+window.toggleSoftWrap = function() {
+  closeAllMenus();
+  const next = !Settings.get('editor.softWrap');
+  Settings.set('editor.softWrap', next);
+  showToast('Soft wrap ' + (next ? 'on' : 'off'), 'success', 1500);
+};
+
 // Settings modal
 window.openSettings = function() {
   closeAllMenus();
+  // Render the auto device-settings sections (reflect current state).
+  try { renderSettingsSections(); } catch {}
   const listEl = document.getElementById('hotkey-list');
 
   // System hotkeys
