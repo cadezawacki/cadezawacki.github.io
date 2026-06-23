@@ -2570,6 +2570,293 @@ const store = (() => {
 })();
 
 // ============================================
+// HYBRID IDB STORE  (Feature 73)
+// ============================================
+// Async IndexedDB-backed store for LARGE blobs (image attachments) that would
+// blow the synchronous localStorage quota. The existing `store` API is left
+// untouched and remains the home for all small keys. This store is purely
+// local (no network), so it works fully offline. If IndexedDB is unavailable
+// (private mode / disabled), every operation transparently falls back to the
+// synchronous `store`, so callers see the same Promise-based contract either
+// way. Values may be any structured-cloneable type (strings, Uint8Array,
+// Blob, ...). The fallback path stores them via `store` as strings.
+const idbStore = (() => {
+  const DB_NAME = 'cadetxt-blobs';
+  const STORE_NAME = 'kv';
+  const FB_PREFIX = ' idbfb '; // namespace fallback keys inside `store`
+
+  let _dbPromise = null;
+  let _idbBroken = false;
+
+  function idbAvailable() {
+    try { return typeof indexedDB !== 'undefined' && indexedDB !== null; }
+    catch { return false; }
+  }
+
+  function openDB() {
+    if (_idbBroken || !idbAvailable()) return Promise.reject(new Error('idb-unavailable'));
+    if (_dbPromise) return _dbPromise;
+    _dbPromise = new Promise((resolve, reject) => {
+      let req;
+      try { req = indexedDB.open(DB_NAME, 1); }
+      catch (e) { _idbBroken = true; reject(e); return; }
+      req.onupgradeneeded = () => {
+        const db = req.result;
+        if (!db.objectStoreNames.contains(STORE_NAME)) db.createObjectStore(STORE_NAME);
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => { _idbBroken = true; reject(req.error || new Error('idb-open-failed')); };
+      req.onblocked = () => { /* another tab holds an older version open; will resolve once freed */ };
+    });
+    // If the open promise rejects, allow a later retry to re-evaluate.
+    _dbPromise.catch(() => { _dbPromise = null; });
+    return _dbPromise;
+  }
+
+  function tx(mode, fn) {
+    return openDB().then(db => new Promise((resolve, reject) => {
+      let t;
+      try { t = db.transaction(STORE_NAME, mode); }
+      catch (e) { reject(e); return; }
+      const os = t.objectStore(STORE_NAME);
+      let result;
+      let reqErr = null;
+      try { result = fn(os, r => { result = r; }); }
+      catch (e) { reject(e); return; }
+      t.oncomplete = () => resolve(result);
+      t.onabort = () => reject(t.error || reqErr || new Error('idb-abort'));
+      t.onerror = () => reject(t.error || reqErr || new Error('idb-error'));
+    }));
+  }
+
+  // ---- synchronous-store fallback (used when IndexedDB is unavailable) ----
+  function fbGet(key) {
+    const v = store.get(FB_PREFIX + key);
+    if (v == null) return null;
+    try { return JSON.parse(v); } catch { return v; }
+  }
+  function fbSet(key, value) { store.set(FB_PREFIX + key, JSON.stringify(value)); }
+  function fbRemove(key) { store.remove(FB_PREFIX + key); }
+  function fbKeys() {
+    return store.keys()
+      .filter(k => k.startsWith(FB_PREFIX))
+      .map(k => k.slice(FB_PREFIX.length));
+  }
+
+  function get(key) {
+    key = String(key);
+    return tx('readonly', (os, set) => {
+      const r = os.get(key);
+      r.onsuccess = () => set(r.result === undefined ? null : r.result);
+    }).catch(() => fbGet(key));
+  }
+
+  function set(key, value) {
+    key = String(key);
+    return tx('readwrite', os => { os.put(value, key); })
+      .then(() => undefined)
+      .catch(() => { fbSet(key, value); });
+  }
+
+  function remove(key) {
+    key = String(key);
+    return tx('readwrite', os => { os.delete(key); })
+      .then(() => undefined)
+      .catch(() => { fbRemove(key); });
+  }
+
+  function keys() {
+    return tx('readonly', (os, set) => {
+      // getAllKeys is widely supported; fall back to a cursor if absent.
+      if (os.getAllKeys) {
+        const r = os.getAllKeys();
+        r.onsuccess = () => set(r.result.map(String));
+      } else {
+        const out = [];
+        const r = os.openKeyCursor();
+        r.onsuccess = () => {
+          const c = r.result;
+          if (c) { out.push(String(c.key)); c.continue(); } else set(out);
+        };
+      }
+    }).catch(() => fbKeys());
+  }
+
+  return { get, set, remove, keys };
+})();
+window.idbStore = idbStore;
+
+// ============================================
+// WORKER HARNESS  (Feature 72)
+// ============================================
+// Offload CPU-heavy tasks to a Web Worker built ENTIRELY from an inline blob
+// (URL.createObjectURL over a stringified function) so the app stays a single
+// file and works fully offline -- no external .js URL is ever fetched. If
+// Workers (or the required platform APIs inside them) are unavailable, every
+// task transparently runs on the main thread via the same task implementations,
+// so observable results never change.
+//
+// runInWorker(taskName, payload) -> Promise<result>
+//   'compress'    payload: { bytes: Uint8Array }                  -> Uint8Array (deflate-raw)
+//   'decompress'  payload: { bytes: Uint8Array }                  -> string (utf-8 of inflated bytes)
+//   'scanMatches' payload: { text, query, regex, caseSensitive, cap }
+//                                                                  -> Array<{from,to}>
+//   'countWords'  payload: { text }                               -> number
+const runInWorker = (() => {
+  // The worker body. Kept self-contained (no closure refs) so it survives
+  // stringification. The same TASKS object is reused on the main thread.
+  function workerMain() {
+    async function _compress(data) {
+      const cs = new CompressionStream('deflate-raw');
+      const writer = cs.writable.getWriter();
+      writer.write(data); writer.close();
+      const chunks = []; const reader = cs.readable.getReader();
+      for (;;) { const { done, value } = await reader.read(); if (done) break; chunks.push(value); }
+      let len = 0; for (const c of chunks) len += c.length;
+      const out = new Uint8Array(len); let off = 0;
+      for (const c of chunks) { out.set(c, off); off += c.length; }
+      return out;
+    }
+    async function _decompress(data) {
+      const ds = new DecompressionStream('deflate-raw');
+      const writer = ds.writable.getWriter();
+      writer.write(data); writer.close();
+      const chunks = []; const reader = ds.readable.getReader();
+      for (;;) { const { done, value } = await reader.read(); if (done) break; chunks.push(value); }
+      let len = 0; for (const c of chunks) len += c.length;
+      const out = new Uint8Array(len); let off = 0;
+      for (const c of chunks) { out.set(c, off); off += c.length; }
+      return new TextDecoder().decode(out);
+    }
+    function countWords(s) {
+      let n = 0, inWord = false;
+      for (let i = 0; i < s.length; i++) {
+        const c = s.charCodeAt(i);
+        const ws = c === 32 || c === 10 || c === 9 || c === 13 || c === 12;
+        if (ws) inWord = false;
+        else if (!inWord) { n++; inWord = true; }
+      }
+      return n;
+    }
+    // Mirrors computeMatches(): same regex flags, zero-width guard, and cap.
+    function scanMatches(p) {
+      const out = [];
+      const q = p.query;
+      const cap = (p.cap != null) ? p.cap : Infinity;
+      if (!q) return out;
+      const text = p.text || '';
+      if (p.regex) {
+        let re;
+        try { re = new RegExp(q, p.caseSensitive ? 'g' : 'gi'); }
+        catch { return { __invalid: true }; }
+        let m;
+        while ((m = re.exec(text)) !== null && out.length < cap) {
+          if (m[0].length === 0) { re.lastIndex++; continue; }
+          out.push({ from: m.index, to: m.index + m[0].length });
+        }
+      } else {
+        const hay = p.caseSensitive ? text : text.toLowerCase();
+        const needle = p.caseSensitive ? q : q.toLowerCase();
+        let idx = 0;
+        while ((idx = hay.indexOf(needle, idx)) !== -1 && out.length < cap) {
+          out.push({ from: idx, to: idx + needle.length });
+          idx += needle.length;
+        }
+      }
+      return out;
+    }
+    const TASKS = {
+      compress: p => _compress(p.bytes),
+      decompress: p => _decompress(p.bytes),
+      scanMatches: p => scanMatches(p),
+      countWords: p => countWords(p.text || ''),
+    };
+    self.onmessage = async (e) => {
+      const { id, task, payload } = e.data;
+      try {
+        const fn = TASKS[task];
+        if (!fn) throw new Error('unknown-task:' + task);
+        const result = await fn(payload);
+        self.postMessage({ id, ok: true, result });
+      } catch (err) {
+        self.postMessage({ id, ok: false, error: String(err && err.message || err) });
+      }
+    };
+    return TASKS; // returned for the main-thread fallback reuse
+  }
+
+  // Build the main-thread TASKS table once by invoking workerMain in a sandbox
+  // where `self` is a throwaway object (so the onmessage assignment is harmless).
+  const _mainTasks = (() => {
+    const fakeSelf = {};
+    try { return workerMain.call(fakeSelf); }
+    catch { return null; }
+  })();
+
+  function runOnMain(task, payload) {
+    if (!_mainTasks || !_mainTasks[task]) return Promise.reject(new Error('unknown-task:' + task));
+    return Promise.resolve().then(() => _mainTasks[task](payload));
+  }
+
+  // Lazily construct the worker; null if Workers are unavailable.
+  let _worker = null;
+  let _workerTried = false;
+  let _seq = 0;
+  const _pending = new Map();
+
+  function getWorker() {
+    if (_workerTried) return _worker;
+    _workerTried = true;
+    try {
+      if (typeof Worker === 'undefined' || typeof URL === 'undefined' || !URL.createObjectURL) return null;
+      const src = '(' + workerMain.toString() + ')();';
+      const blob = new Blob([src], { type: 'application/javascript' });
+      const url = URL.createObjectURL(blob);
+      _worker = new Worker(url);
+      // The worker keeps its own copy of the source; revoke the URL immediately.
+      URL.revokeObjectURL(url);
+      _worker.onmessage = (e) => {
+        const { id, ok, result, error } = e.data;
+        const p = _pending.get(id);
+        if (!p) return;
+        _pending.delete(id);
+        if (ok) p.resolve(result);
+        else p.reject(new Error(error));
+      };
+      _worker.onerror = () => {
+        // Worker crashed: reject everything in flight and disable it so future
+        // calls use the main-thread fallback.
+        for (const [, p] of _pending) p.reject(new Error('worker-error'));
+        _pending.clear();
+        try { _worker.terminate(); } catch {}
+        _worker = null;
+      };
+    } catch {
+      _worker = null;
+    }
+    return _worker;
+  }
+
+  function runInWorker(task, payload) {
+    const w = getWorker();
+    if (!w) return runOnMain(task, payload);
+    return new Promise((resolve, reject) => {
+      const id = ++_seq;
+      _pending.set(id, { resolve, reject });
+      try { w.postMessage({ id, task, payload }); }
+      catch (e) {
+        // Non-cloneable payload or dead worker: fall back to main thread.
+        _pending.delete(id);
+        runOnMain(task, payload).then(resolve, reject);
+      }
+    }).catch(() => runOnMain(task, payload));
+  }
+
+  return runInWorker;
+})();
+window.runInWorker = runInWorker;
+
+// ============================================
 // LOCAL BUNDLE IMPORTS
 // ============================================
 const {EditorView, basicSetup} = window.__CM6__;
@@ -4457,11 +4744,31 @@ function countWords(s) {
 
 let _docWordCount = 0;
 let _wordCountTimer = null;
+let _wordCountSeq = 0; // guards against out-of-order async results
+// (Feature 76) Throttle + offload. Small docs are counted synchronously on the
+// debounce; large docs (> ~100k chars) are handed to the worker so a huge
+// paste doesn't jank typing, with the main-thread countWords as the automatic
+// fallback inside runInWorker. The footer always reflects the latest doc.
+const WORD_COUNT_OFFLOAD_THRESHOLD = 100000;
 function scheduleWordCount() {
   clearTimeout(_wordCountTimer);
   _wordCountTimer = setTimeout(() => {
-    _docWordCount = countWords(editor.state.doc.toString());
-    updateFooter();
+    const text = editor.state.doc.toString();
+    if (text.length <= WORD_COUNT_OFFLOAD_THRESHOLD) {
+      _docWordCount = countWords(text);
+      updateFooter();
+      return;
+    }
+    const seq = ++_wordCountSeq;
+    runInWorker('countWords', { text }).then(n => {
+      if (seq !== _wordCountSeq) return; // a newer count superseded this one
+      _docWordCount = n;
+      updateFooter();
+    }).catch(() => {
+      if (seq !== _wordCountSeq) return;
+      _docWordCount = countWords(text);
+      updateFooter();
+    });
   }, 250);
 }
 
