@@ -8984,11 +8984,14 @@ window.quickSwitchPick = function(name) {
 function hotkeyLabelQuickSwitch() { return 'Ctrl+P'; }
 
 window.switchRoom = async function(name) {
-  // Clicking the room you're already in must be a no-op: re-running the switch
+  // Clicking the room you're already in is a no-op: re-running the switch
   // scrolled to top, tore down/rebuilt sync (the green->orange->green flicker),
   // and could let a queued remote snapshot clobber the live doc. The initial
   // bootstrap switch is still allowed because _activeRoomReady is false then.
-  if (name === activeRoom && _activeRoomReady) {
+  // EXCEPTION: a locked active room that isn't unlocked yet must still reach the
+  // unlock flow below (otherwise a cancelled/deferred prompt can never be
+  // re-opened by tapping its tab, and sync can't resume for the visible room).
+  if (name === activeRoom && _activeRoomReady && !(roomHasPassword(name) && !roomIsUnlocked(name))) {
     try { editor.focus(); } catch {}
     return;
   }
@@ -11282,29 +11285,8 @@ window.shareNative = function() {
 
 // Public share link (#p=...) — a compressed, self-contained copy of a document
 // embedded in the URL hash (so the text never hits the server). Read on load,
-// after the bootstrap, so it can switch into the shared room (#15).
-function shareConflictPrompt(roomName) {
-  return new Promise(resolve => {
-    // Safe subset: never silently overwrite local data from an untrusted link.
-    const openNew = confirm('A room named "' + roomName + '" already exists here with different content.\n\nOK = open the shared copy as a NEW room.\nCancel = keep your version (discard the shared copy).');
-    resolve(openNew ? 'new' : 'cancel');
-  });
-}
-function loadSharedIntoRoom(roomName, text) {
-  store.set('cade-room-cache:' + roomName, text);
-  if (!rooms.includes(roomName)) { rooms.push(roomName); saveRooms(); }
-  try { renderRoomTabs(); } catch {}
-  switchRoom(roomName);
-  showToast('Loaded shared document into "' + roomName + '"', 'success', 3000);
-}
-function importSharedAsNewRoom(baseName, text) {
-  const name = baseName + '_shared_' + Date.now().toString(36);
-  store.set('cade-room-cache:' + name, text);
-  rooms.push(name); saveRooms();
-  try { renderRoomTabs(); } catch {}
-  switchRoom(name);
-  showToast('Shared copy opened as new room "' + name + '"', 'success', 3500);
-}
+// after the bootstrap, so it can open the shared text (#15). Core promise:
+// opening a public link ALWAYS shows the embedded body.
 (async function() {
   try {
     const m = (window.location.hash || '').match(/[#&]p=([^&]+)/);
@@ -11315,27 +11297,28 @@ function importSharedAsNewRoom(baseName, text) {
     try { data = JSON.parse(await _decompress(_b64UrlToBytes(m[1]))); }
     catch (e) { showToast('Shared link is invalid or corrupted', 'error', 3500); return; }
     if (!data || typeof data.t !== 'string') { showToast('Shared link has no content', 'error', 3000); return; }
-    const roomName = String(data.r || 'shared');
+    const baseName = String(data.r || 'shared');
     const text = data.t;
-    const haveRoom = rooms.includes(roomName);
-    const synced = !!(store.get('cade-firebase-url') && store.get('cade-sync-key'));
-    // Already subscribed + synced to the same DB → prefer the live copy.
-    if (haveRoom && synced) {
-      switchRoom(roomName);
-      showToast('Opened your synced copy of "' + roomName + '" (shared text not imported)', 'success', 4500);
-      return;
+    // Pick a target room that won't clobber different local content.
+    let target = baseName;
+    if (rooms.includes(baseName)) {
+      const existing = loadRoomCache(baseName);
+      if (existing && existing !== text) target = baseName + '_shared_' + Date.now().toString(36);
     }
-    // Local room with the same name but different content → conflict prompt.
-    if (haveRoom) {
-      const existing = loadRoomCache(roomName);
-      if (existing && existing !== text) {
-        const choice = await shareConflictPrompt(roomName);
-        if (choice === 'cancel') return;
-        importSharedAsNewRoom(roomName, text);
-        return;
-      }
-    }
-    loadSharedIntoRoom(roomName, text);
+    store.set('cade-room-cache:' + target, text);
+    if (!rooms.includes(target)) { rooms.push(target); saveRooms(); }
+    try { renderRoomTabs(); } catch {}
+    // Drop any cached editor state for this room so the shared text is shown,
+    // then load via _doSwitchRoom directly (bypasses switchRoom's same-room
+    // no-op and password prompt — the point is to display the embedded body).
+    try { roomStates.delete(roomStateKey(target)); } catch {}
+    const fbUrl = store.get('cade-firebase-url') || null;
+    const key = store.get('cade-sync-key') || null;
+    // Run after the bootstrap's own switch settles so it can't override us.
+    setTimeout(() => {
+      _doSwitchRoom(target, fbUrl, key);
+      showToast('Loaded shared document into "' + target + '"', 'success', 3500);
+    }, 50);
   } catch (e) { /* ignore */ }
 })();
 
