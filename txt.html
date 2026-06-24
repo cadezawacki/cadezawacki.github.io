@@ -4355,12 +4355,66 @@ class ImageWidget extends WidgetType {
     wrap.className = 'cm-img-embed';
     const img = document.createElement('img');
     img.alt = 'embedded image';
-    img.src = 'data:' + (IMG_MIME[this.code] || 'image/jpeg') + ';base64,' + this.data;
+    const mime = IMG_MIME[this.code] || 'image/jpeg';
+    img.src = 'data:' + mime + ';base64,' + this.data;
     img.onerror = () => { wrap.classList.add('missing'); wrap.textContent = '⚠ broken image'; };
     wrap.appendChild(img);
+    const data = this.data;
+    wrap.addEventListener('contextmenu', (e) => {
+      e.preventDefault(); e.stopPropagation();
+      showImageMenu(e.clientX, e.clientY, mime, data);
+    });
     return wrap;
   }
   ignoreEvent() { return true; }
+}
+// Right-click an embedded image → copy (as PNG, universally clipboard-safe) or
+// download.
+function showImageMenu(x, y, mime, b64) {
+  const dataUrl = 'data:' + mime + ';base64,' + b64;
+  const ext = (mime.split('/')[1] || 'jpg').replace('jpeg', 'jpg');
+  openMenu([
+    { label: 'Copy image', run: () => {
+        try {
+          const im = new Image();
+          im.onload = () => {
+            try {
+              const c = document.createElement('canvas');
+              c.width = im.naturalWidth; c.height = im.naturalHeight;
+              c.getContext('2d').drawImage(im, 0, 0);
+              c.toBlob(async (blob) => {
+                try { await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]); showToast('Image copied', 'success', 1500); }
+                catch { showToast('Copy image not supported in this browser', 'error', 2800); }
+              }, 'image/png');
+            } catch { showToast('Copy failed', 'error', 2000); }
+          };
+          im.src = dataUrl;
+        } catch { showToast('Copy failed', 'error', 2000); }
+      } },
+    { label: 'Download image', run: () => {
+        const a = document.createElement('a');
+        a.href = dataUrl; a.download = 'image-' + Date.now() + '.' + ext;
+        document.body.appendChild(a); a.click(); a.remove();
+      } },
+  ], x, y);
+}
+// Backspace/Delete next to (or inside) an image token removes the WHOLE token
+// instead of breaking it into raw base64. Returns true if it handled the key.
+function deleteImageIfAdjacent(view, dir) {
+  const sel = view.state.selection.main;
+  if (!sel.empty) return false;
+  const pos = sel.head;
+  const line = view.state.doc.lineAt(pos);
+  if (line.text.indexOf('![img:') === -1) return false;
+  IMG_TOKEN_RE.lastIndex = 0;
+  let m;
+  while ((m = IMG_TOKEN_RE.exec(line.text)) !== null) {
+    if ((m[2] || '').length < 24) continue;
+    const s = line.from + m.index, e = s + m[0].length;
+    const hit = (pos > s && pos < e) || (dir < 0 && pos === e) || (dir > 0 && pos === s);
+    if (hit) { view.dispatch({ changes: { from: s, to: e }, selection: { anchor: s } }); return true; }
+  }
+  return false;
 }
 function buildImageDecorations(view) {
   const ranges = [];
@@ -4427,8 +4481,15 @@ function buildEditorExtensions() {
     searchPlugin,
     mdStylePlugin,
     imagePlugin,
+    // Treat embedded-image tokens as atomic units for the caret/selection so a
+    // partial delete can't shred one into raw base64 (where available).
+    ...(EditorView.atomicRanges ? [EditorView.atomicRanges.of(view => {
+      const p = view.plugin(imagePlugin); return p ? p.decorations : Decoration.none;
+    })] : []),
     listEnterHandler,
     keymap.of([
+      { key: 'Backspace', run: (view) => deleteImageIfAdjacent(view, -1) },
+      { key: 'Delete', run: (view) => deleteImageIfAdjacent(view, 1) },
       { key: 'Mod-z', run: undo },
       { key: 'Mod-Shift-z', run: redo },
       { key: 'Mod-y', run: redo },
