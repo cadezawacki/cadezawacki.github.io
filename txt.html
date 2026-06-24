@@ -218,6 +218,10 @@ body {
   padding: var(--space-1);
   z-index: 100;
   animation: menuFadeIn 100ms ease-out;
+  /* Never grow past the viewport — scroll instead (long View menu on mobile). */
+  max-height: calc(100vh - 52px - env(safe-area-inset-bottom));
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .menu-dropdown.open { display: block; }
@@ -4326,17 +4330,17 @@ const mdStylePlugin = ViewPlugin.fromClass(class {
 // The compressed image rides INSIDE the document as a sentinel token
 // "![img:<base64-jpeg>]" so it syncs to the database like any other text; the
 // frontend renders the token as an <img>. Dramatic compression keeps it small.
-const IMG_TOKEN_RE = /!\[img:([A-Za-z0-9+/=]+)\]/g;
-const IMG_DATA_PREFIX = 'data:image/jpeg;base64,';
+const IMG_TOKEN_RE = /!\[img:(?:([jwa]):)?([A-Za-z0-9+/=]+)\]/g;
+const IMG_MIME = { j: 'image/jpeg', w: 'image/webp', a: 'image/avif' };
 class ImageWidget extends WidgetType {
-  constructor(data) { super(); this.data = data; }
-  eq(o) { return o.data === this.data; }
+  constructor(code, data) { super(); this.code = code || 'j'; this.data = data; }
+  eq(o) { return o.data === this.data && o.code === this.code; }
   toDOM() {
     const wrap = document.createElement('span');
     wrap.className = 'cm-img-embed';
     const img = document.createElement('img');
     img.alt = 'embedded image';
-    img.src = IMG_DATA_PREFIX + this.data;
+    img.src = 'data:' + (IMG_MIME[this.code] || 'image/jpeg') + ';base64,' + this.data;
     img.onerror = () => { wrap.classList.add('missing'); wrap.textContent = '⚠ broken image'; };
     wrap.appendChild(img);
     return wrap;
@@ -4356,9 +4360,9 @@ function buildImageDecorations(view) {
       IMG_TOKEN_RE.lastIndex = 0;
       let m;
       while ((m = IMG_TOKEN_RE.exec(line.text)) !== null) {
-        if (m[1].length < 24) continue;
+        if (m[2].length < 24) continue;
         const s = line.from + m.index, e = s + m[0].length;
-        ranges.push(Decoration.replace({ widget: new ImageWidget(m[1]) }).range(s, e));
+        ranges.push(Decoration.replace({ widget: new ImageWidget(m[1], m[2]) }).range(s, e));
       }
     }
   }
@@ -12577,28 +12581,41 @@ try {
 // ============================================
 // EMBEDDED IMAGES: paste/insert, compress, garbage-collect (#28)
 // ============================================
-// Dramatic compression so the base64 stays small enough to live in the synced
-// document without blowing up Firebase / the local cache (quality loss is fine
-// as long as it stays viewable). Returns base64 (no data: prefix) or null.
-const IMG_MAX_B64 = 90 * 1024; // ~90KB of base64 per image
+// Dramatic compression so the encoded image stays small enough to live in the
+// synced document without blowing up Firebase / the local cache (quality loss
+// is fine as long as it stays viewable). The real win is the codec: prefer
+// AVIF/WebP (25-40% smaller than JPEG) where the browser can encode them — note
+// base64 is just the text container, not the compressor. Returns {code,b64}.
+let _imgFmt = null;
+function bestImageFormat() {
+  if (_imgFmt) return _imgFmt;
+  const c = document.createElement('canvas'); c.width = c.height = 2;
+  const canEncode = mime => { try { return c.toDataURL(mime).indexOf('data:' + mime) === 0; } catch { return false; } };
+  _imgFmt = canEncode('image/avif') ? { mime: 'image/avif', code: 'a' }
+          : canEncode('image/webp') ? { mime: 'image/webp', code: 'w' }
+          : { mime: 'image/jpeg', code: 'j' };
+  return _imgFmt;
+}
+const IMG_MAX_B64 = 90 * 1024; // ~90KB of encoded base64 per image
 function compressImage(file) {
   return new Promise((resolve) => {
     const url = URL.createObjectURL(file);
     const img = new Image();
     img.onload = () => {
       URL.revokeObjectURL(url);
+      const fmt = bestImageFormat();
       let w = img.width || 1, h = img.height || 1;
       const maxDim = 800;
       if (w > maxDim || h > maxDim) { const r = Math.min(maxDim / w, maxDim / h); w = Math.round(w * r); h = Math.round(h * r); }
       const canvas = document.createElement('canvas');
-      const draw = (cw, ch, q) => { canvas.width = cw; canvas.height = ch; canvas.getContext('2d').drawImage(img, 0, 0, cw, ch); return canvas.toDataURL('image/jpeg', q); };
+      const draw = (cw, ch, q) => { canvas.width = cw; canvas.height = ch; canvas.getContext('2d').drawImage(img, 0, 0, cw, ch); return canvas.toDataURL(fmt.mime, q); };
       let q = 0.55, out = draw(w, h, q);
       while (out.length > IMG_MAX_B64 && q > 0.22) { q -= 0.12; out = draw(w, h, q); }
       let scale = 0.7;
       while (out.length > IMG_MAX_B64 && Math.round(w * scale) > 200) { out = draw(Math.round(w * scale), Math.round(h * scale), 0.35); scale -= 0.2; }
       if (out.length > IMG_MAX_B64) { resolve(null); return; }
       const comma = out.indexOf(',');
-      resolve(comma >= 0 ? out.slice(comma + 1) : null);
+      resolve(comma >= 0 ? { code: fmt.code, b64: out.slice(comma + 1) } : null);
     };
     img.onerror = () => { URL.revokeObjectURL(url); resolve(null); };
     img.src = url;
@@ -12606,15 +12623,15 @@ function compressImage(file) {
 }
 async function insertImageFile(file) {
   if (!file || !/^image\//.test(file.type)) { showToast('Not an image', 'error', 2000); return; }
-  let b64;
-  try { b64 = await compressImage(file); } catch { b64 = null; }
-  if (!b64) { showToast('Image too large to embed even after compression', 'error', 3500); return; }
-  const token = '![img:' + b64 + ']';
+  let res;
+  try { res = await compressImage(file); } catch { res = null; }
+  if (!res) { showToast('Image too large to embed even after compression', 'error', 3500); return; }
+  const token = '![img:' + res.code + ':' + res.b64 + ']';
   const sel = editor.state.selection.main;
   const doc = editor.state.doc;
   const pre = (sel.from > 0 && doc.sliceString(sel.from - 1, sel.from) !== '\n') ? '\n' : '';
   editor.dispatch({ changes: { from: sel.from, to: sel.to, insert: pre + token + '\n' }, selection: { anchor: sel.from + pre.length + token.length + 1 } });
-  showToast('Image embedded (' + Math.round(b64.length / 1024) + ' KB)', 'success', 2000);
+  showToast('Image embedded (' + Math.round(res.b64.length / 1024) + ' KB ' + res.code.toUpperCase() + ')', 'success', 2000);
 }
 window.insertImageFile = insertImageFile;
 
