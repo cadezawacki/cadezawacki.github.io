@@ -8582,15 +8582,31 @@ window.addEventListener('online', () => {
   }
 });
 
-window.forceSyncReload = function() {
+window.forceSyncReload = async function() {
   closeAllMenus();
-  if (syncState.connected || syncState.roomName) {
-    window.disconnectSync();
-    setTimeout(() => syncConnect(), 1000);
-    showToast('Reconnecting...', 'success', 2500);
-  } else {
-    showToast('Not connected to sync', 'error', 2500);
-  }
+  showToast('Refreshing app & sync…', 'success', 2000);
+  // Save local content first so the hard reload can't lose anything.
+  try { persistContent(); } catch {}
+  try {
+    // Pull fresh app assets (JS/CSS/wasm/fonts) from the server, not the cache:
+    // wipe the service-worker caches and ask the SW to update + skip waiting.
+    if (window.caches && caches.keys) {
+      const names = await caches.keys();
+      await Promise.all(names.map(n => caches.delete(n)));
+    }
+    if (navigator.serviceWorker) {
+      try {
+        const c = navigator.serviceWorker.controller;
+        if (c) { c.postMessage('REFRESH_CACHE'); c.postMessage('SKIP_WAITING'); }
+      } catch {}
+      if (navigator.serviceWorker.getRegistrations) {
+        const regs = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(regs.map(r => r.update().catch(() => {})));
+      }
+    }
+  } catch {}
+  // Hard reload from the network; sync auto-reconnects on boot.
+  setTimeout(() => { try { location.reload(); } catch { location.href = location.href; } }, 300);
 };
 
 // Encryption key rotation (#10). Changing the shared passphrase used to orphan
@@ -10525,24 +10541,11 @@ window.switchToWorkspace = function(wsId) {
   activeWorkspace = wsId;
   store.set('cade-active-workspace', wsId);
   document.getElementById('ws-dropdown').classList.remove('open');
-  // If the active room isn't visible in the new context, follow through:
-  // switch to the first room in the new context, or clear the editor if empty.
-  const visible = roomsInActiveWorkspace();
-  if (!visible.includes(activeRoom)) {
-    if (visible.length > 0) {
-      // switchRoom handles disconnect+content swap+reconnect for us;
-      // it also calls renderRoomTabs when it completes (async)
-      switchRoom(visible[0]);
-    } else {
-      // Empty workspace: disconnect sync and blank the editor
-      if (syncState.connected) window.disconnectSync();
-      activeRoom = '';
-      store.set('cade-active-room', '');
-      syncState.suppressUpdate = true;
-      editor.dispatch({ changes: { from: 0, to: editor.state.doc.length, insert: '' } });
-      syncState.suppressUpdate = false;
-    }
-  }
+  // Changing the workspace only changes which tabs are *shown* — it must never
+  // disconnect sync or blank the document. Navigating into a folder (a parent
+  // workspace with no direct rooms) previously hit an "empty workspace" branch
+  // that disconnected and cleared the editor — that was the crash. Keep the
+  // active room open and synced; just re-render the filtered tabs below.
   // Always render so the pill + filtered tabs update immediately, even if
   // switchRoom early-returns (e.g., no Firebase configured yet)
   renderRoomTabs();
