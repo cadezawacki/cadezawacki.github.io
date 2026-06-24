@@ -8906,6 +8906,7 @@ function renderRoomTabs() {
   if (visibleRooms.length === 0 && rooms.length === 0) {
     container.innerHTML = '';
     mobileContainer.innerHTML = '';
+    try { renderBreadcrumb(); } catch {}
     return;
   }
   let html = visibleRooms.map(name => {
@@ -10685,13 +10686,34 @@ window.switchToWorkspace = function(wsId) {
   activeWorkspace = wsId;
   store.set('cade-active-workspace', wsId);
   document.getElementById('ws-dropdown').classList.remove('open');
-  // Changing the workspace only changes which tabs are *shown* — it must never
-  // disconnect sync or blank the document. Navigating into a folder (a parent
-  // workspace with no direct rooms) previously hit an "empty workspace" branch
-  // that disconnected and cleared the editor — that was the crash. Keep the
-  // active room open and synced; just re-render the filtered tabs below.
+  // Follow the workspace: if the open room isn't part of the workspace we just
+  // entered, switch into one that *is* (most-recently-visited first, preferring
+  // an unlocked room so changing context doesn't fire a surprise password
+  // prompt) so the editor AND footer breadcrumb reflect the new workspace.
+  //
+  // If the workspace has no direct rooms (e.g. a parent folder), keep the
+  // current room open and just re-render the filtered tabs. Blanking /
+  // disconnecting in that case was the old sub-workspace crash, so never do it.
+  const stayInRoom = activeRoom && roomInWorkspace(activeRoom, wsId) && !roomIsArchived(activeRoom);
+  if (!stayInRoom) {
+    const candidates = roomsInActiveWorkspace(); // honors the just-set activeWorkspace
+    if (candidates.length) {
+      const byRecency = candidates.slice().sort((a, b) => {
+        const ia = roomRecency.indexOf(a), ib = roomRecency.indexOf(b);
+        return (ia < 0 ? Infinity : ia) - (ib < 0 ? Infinity : ib);
+      });
+      const target = byRecency.find(r => roomIsUnlocked(r)) || byRecency[0];
+      if (target && target !== activeRoom) {
+        switchRoom(target); // re-renders tabs + breadcrumb itself
+        if (document.getElementById('room-manager-overlay').classList.contains('open')) {
+          renderRoomManagerList();
+        }
+        return;
+      }
+    }
+  }
   // Always render so the pill + filtered tabs update immediately, even if
-  // switchRoom early-returns (e.g., no Firebase configured yet)
+  // switchRoom early-returns (e.g., no Firebase configured yet).
   renderRoomTabs();
   if (document.getElementById('room-manager-overlay').classList.contains('open')) {
     renderRoomManagerList();
