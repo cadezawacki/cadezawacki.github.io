@@ -3737,6 +3737,7 @@ function buildLinkDecorations(view) {
     const endLine = doc.lineAt(to).number;
     for (let i = startLine; i <= endLine; i++) {
       const line = doc.line(i);
+      if (line.text.length > 2000) continue; // skip data lines (embedded images)
       const spans = findLinksInLine(line.text);
       for (const sp of spans) {
         const f = line.from + sp.start, t = line.from + sp.end;
@@ -3816,6 +3817,7 @@ function buildHighlightDecorations(view) {
     for (let i = startLine; i <= endLine; i++) {
       const line = doc.line(i);
       const text = line.text;
+      if (text.length > 2000) continue; // skip data lines (embedded images)
       RE_HL.lastIndex = 0;
       let m;
       while ((m = RE_HL.exec(text)) !== null) {
@@ -3900,6 +3902,10 @@ function buildSpellDecorations(view) {
     const endLine = doc.lineAt(to).number;
     for (let i = startLine; i <= endLine; i++) {
       const line = doc.line(i);
+      // Skip data lines (embedded-image base64, minified blobs): they aren't
+      // prose, and spell-checking a 90KB line produces thousands of ranges that
+      // jank the UI and can trip the sorted-ranges invariant.
+      if (line.text.length > 2000) continue;
       if (fenceContaining(line.from)) continue; // identifiers in ``` code aren't prose
       const text = line.text;
       // Don't spell-check inside links (URLs, [title](url), @ws:room) or inside
@@ -3922,7 +3928,10 @@ function buildSpellDecorations(view) {
       }
     }
   }
-  return Decoration.set(ranges);
+  // Sort defensively: overlapping/duplicate visible ranges (e.g. a wrapped huge
+  // line) could otherwise present ranges out of order and crash the plugin.
+  ranges.sort((a, b) => a.from - b.from || a.startSide - b.startSide);
+  return Decoration.set(ranges, true);
 }
 
 const spellPlugin = ViewPlugin.fromClass(class {
@@ -4255,6 +4264,7 @@ function buildMdDecorations(view) {
     for (let i = startLine; i <= endLine; i++) {
       const line = doc.line(i);
       const text = line.text;
+      if (text.length > 2000) continue; // skip data lines (embedded images, etc.)
       // Inside a ``` fence: code-block styling only — never markdown. This is
       // what keeps a Python "# comment" from rendering as a giant heading.
       const blk = fenceContaining(line.from);
