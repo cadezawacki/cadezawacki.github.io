@@ -877,31 +877,32 @@ body {
 .footer {
   display: flex;
   align-items: center;
-  gap: var(--space-4);
+  gap: var(--space-3);
   padding: 0 var(--space-3);
   padding-bottom: env(safe-area-inset-bottom);
-  height: calc(26px + env(safe-area-inset-bottom));
+  height: calc(21px + env(safe-area-inset-bottom));
   background: var(--surface);
   border-top: 1px solid var(--border);
   font-size: var(--text-xs);
+  line-height: 1;
   color: var(--text-muted);
   flex-shrink: 0;
   user-select: none;
   -webkit-user-select: none;
 }
 
-/* Tabular figures + fixed slots so the stats never shift each other (#9). */
-.footer-left { display: flex; gap: var(--space-4); align-items: center; font-variant-numeric: tabular-nums; }
-.footer-left > span { white-space: nowrap; }
-#footer-line  { min-width: 86px; }
-#footer-chars { min-width: 74px; }
-#footer-words { min-width: 66px; }
-#footer-lines { min-width: 58px; }
+/* Stats live on the RIGHT, right-justified, with tabular figures + fixed slots
+   so the numbers never shift each other. */
+.footer-stats { display: flex; gap: var(--space-3); align-items: center; font-variant-numeric: tabular-nums; flex-shrink: 0; }
+.footer-stats > span { white-space: nowrap; text-align: right; }
+#footer-line  { min-width: 78px; }
+#footer-chars { min-width: 68px; }
+#footer-words { min-width: 60px; }
+#footer-lines { min-width: 52px; }
 .footer-spacer { flex: 1; }
-.footer-right { display: flex; gap: var(--space-4); align-items: center; }
 
-/* Breadcrumb (Feature 94) */
-.footer-breadcrumb { display: flex; align-items: center; gap: 5px; min-width: 0; margin-left: var(--space-4); overflow: hidden; }
+/* Breadcrumb (Feature 94) — hard left. */
+.footer-breadcrumb { display: flex; align-items: center; gap: 5px; min-width: 0; overflow: hidden; flex-shrink: 1; }
 .footer-breadcrumb:empty { display: none; }
 .footer-breadcrumb .bc-ws, .footer-breadcrumb .bc-room {
   display: inline-flex; align-items: center; gap: 4px; cursor: pointer;
@@ -990,6 +991,8 @@ body {
 
 .sync-dot.connected { background: var(--success); }
 .sync-dot.connecting { background: #eab308; animation: pulse 1.5s ease infinite; }
+/* Sync dot lives in the header now — clickable (opens Sync), a touch larger. */
+.menubar-sync-dot { width: 10px; height: 10px; margin: 0 8px 0 4px; cursor: pointer; }
 
 @keyframes pulse {
   0%, 100% { opacity: 1; }
@@ -1545,18 +1548,16 @@ body {
     padding-bottom: env(safe-area-inset-bottom);
     font-size: 10px;
   }
-  .footer-left { gap: 6px; }
-  .footer-right { gap: var(--space-2); }
-  /* Compact stats: drop labels + Ln/Col, show bare "500 / 38 / 10" (#9). */
-  #footer-line { display: none; }
-  .footer-left .flabel { display: none; }
+  .footer-stats { gap: 6px; }
+  /* Compact on mobile: keep Ln/Col, drop the chars/words/lines labels and show
+     bare "500 / 38 / 10". */
+  .footer-stats .flabel { display: none; }
   #footer-chars, #footer-words { position: relative; padding-right: 9px; }
   #footer-chars::after, #footer-words::after {
     content: "/"; position: absolute; right: 0; opacity: 0.5;
   }
   #footer-line, #footer-chars, #footer-words, #footer-lines { min-width: 0; }
   /* Keep the breadcrumb compact on mobile: workspace as a dot only. */
-  .footer-breadcrumb { margin-left: 6px; }
   .footer-breadcrumb .bc-ws-label, .footer-breadcrumb .bc-sep { display: none; }
   .modal-dialog {
     padding: var(--space-4);
@@ -2361,6 +2362,7 @@ body.zen.zen-tw .editor-wrap .cm-content { padding-top: 38vh; padding-bottom: 38
 
   <div class="menubar-spacer"></div>
 
+  <div class="sync-dot menubar-sync-dot" id="sync-dot" title="Sync off" onclick="openSyncModal()"></div>
   <button class="menubar-btn" id="copy-all-btn" title="Copy all to clipboard" onclick="copyAllToClipboard()">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
       <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
@@ -2426,18 +2428,15 @@ body.zen.zen-tw .editor-wrap .cm-content { padding-top: 38vh; padding-bottom: 38
 
 <!-- ========== FOOTER ========== -->
 <div class="footer">
-  <div class="footer-left">
-    <div class="sync-dot" id="sync-dot" title="Sync off"></div>
+  <div class="footer-breadcrumb" id="footer-breadcrumb"></div>
+  <div class="footer-spacer"></div>
+  <div class="footer-stats">
     <span id="footer-line">Ln 1, Col 1</span>
     <span id="footer-chars">0 chars</span>
     <span id="footer-words">0 words</span>
     <span id="footer-lines">0 lines</span>
   </div>
-  <div class="footer-breadcrumb" id="footer-breadcrumb"></div>
-  <div class="footer-spacer"></div>
-  <div class="footer-right">
-    <span id="sync-status" style="display:none;"></span>
-  </div>
+  <span id="sync-status" style="display:none;"></span>
 </div>
 
 <!-- ========== SHARE ========== -->
