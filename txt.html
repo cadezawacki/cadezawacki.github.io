@@ -950,8 +950,29 @@ body {
 .ws-dd-twisty, .ws-mgr-twisty { display: inline-flex; width: 14px; justify-content: center; cursor: pointer; opacity: 0.7; font-size: 10px; flex-shrink: 0; }
 .ws-dd-twisty:hover, .ws-mgr-twisty:hover { opacity: 1; }
 .ws-dd-twisty-empty { cursor: default; opacity: 0; }
-.room-tab-pin { font-size: 10px; margin-right: 2px; color: var(--accent, #6c9); font-weight: 700; }
-.room-tab.pinned { font-weight: 600; }
+.room-tab-pin { display: none; } /* legacy glyph — pin is now shown via the cross-stitch texture + accent color below */
+/* Pinned rooms: a subtle cross-stitch (crosshatch) texture + accent color so
+   they read as "pinned / pinned-everywhere" without a glyph eating tab width.
+   Two diagonal repeating gradients overlap to form the little stitched x's. */
+.room-tab.pinned {
+  font-weight: 600;
+  color: var(--accent);
+  border-color: var(--accent);
+  background-color: transparent;
+  background-image:
+    repeating-linear-gradient(45deg,  rgba(127,127,127,0.20) 0 1px, transparent 1px 4px),
+    repeating-linear-gradient(135deg, rgba(127,127,127,0.20) 0 1px, transparent 1px 4px);
+}
+.room-tab.pinned:hover { color: var(--accent); border-color: var(--accent); }
+.room-tab.pinned.active {
+  color: #fff;
+  border-color: var(--accent);
+  background-color: var(--accent);
+  /* lighter stitch so the texture stays visible over the filled accent bg */
+  background-image:
+    repeating-linear-gradient(45deg,  rgba(255,255,255,0.24) 0 1px, transparent 1px 4px),
+    repeating-linear-gradient(135deg, rgba(255,255,255,0.24) 0 1px, transparent 1px 4px);
+}
 .room-manager-item.rm-archived { opacity: 0.62; }
 .rm-tag-picker { width: 100%; padding: 6px 0 2px 22px; }
 .rm-tag-picker-label { font-size: var(--text-xs, 11px); color: var(--text-faint, #888); margin-bottom: 4px; }
@@ -8949,13 +8970,15 @@ function renderRoomTabs() {
     const pinned = roomIsPinned(name);
     const colorClass = workspaceColorClassForRoom(name);
     const dotHtml = showDots ? `<span class="ws-tab-dot ${colorClass}"></span>` : '';
-    const pinHtml = pinned ? '<span class="room-tab-pin" title="Pinned">╳</span>' : '';
+    // Pinned rooms are conveyed by the cross-stitch texture + accent color (CSS
+    // .room-tab.pinned), not a glyph — keeps the tab compact. Title hints it.
+    const pinTitle = pinned ? ' · pinned' : '';
     // Room names can originate from the shared database (Explore Rooms, share
     // links), so they're untrusted: escape both the JS-string quotes and the
     // HTML special chars or a hostile name breaks out of the attribute.
     const escAttr = escapeHtml(name.replace(/\\/g, '\\\\').replace(/'/g, "\\'"));
     const escName = escapeHtml(name);
-    return `<button class="room-tab ${isActive ? 'active' : ''}${pinned ? ' pinned' : ''}" data-room="${escName}" oncontextmenu="showRoomTabContextMenu(event, '${escAttr}'); return false;" onclick="switchRoom('${escAttr}')" title="${escName}">${pinHtml}${dotHtml}${escName}${hasLock ? '<span class=\'room-tab-lock\'>🔒</span>' : ''}</button>`;
+    return `<button class="room-tab ${isActive ? 'active' : ''}${pinned ? ' pinned' : ''}" data-room="${escName}" oncontextmenu="showRoomTabContextMenu(event, '${escAttr}'); return false;" onclick="switchRoom('${escAttr}')" title="${escName}${pinTitle}">${dotHtml}${escName}${hasLock ? '<span class=\'room-tab-lock\'>🔒</span>' : ''}</button>`;
   }).join('');
   if (rooms.length < roomCap) {
     html += `<button class="room-tab-add" onclick="addRoomPrompt()" title="Add room">+</button>`;
@@ -10410,9 +10433,11 @@ function workspaceColorClassForRoom(name) {
 // (they surface only in the Room Manager); pinned rooms float to the top.
 function roomsInActiveWorkspace(includeArchived) {
   let base;
+  // Pinned rooms are "global" — they stay visible in every workspace view (a
+  // pinned room is reachable no matter which workspace you're filtered into).
   if (activeWorkspace === WS_ALL) base = rooms.slice();
-  else if (activeWorkspace === WS_UNLABELED) base = rooms.filter(r => roomIsUnlabeled(r));
-  else base = rooms.filter(r => roomInWorkspace(r, activeWorkspace));
+  else if (activeWorkspace === WS_UNLABELED) base = rooms.filter(r => roomIsUnlabeled(r) || roomIsPinned(r));
+  else base = rooms.filter(r => roomInWorkspace(r, activeWorkspace) || roomIsPinned(r));
   if (!includeArchived) base = base.filter(r => !roomIsArchived(r));
   return orderRooms(base);
 }
@@ -10728,7 +10753,10 @@ window.switchToWorkspace = function(wsId) {
   // If the workspace has no direct rooms (e.g. a parent folder), keep the
   // current room open and just re-render the filtered tabs. Blanking /
   // disconnecting in that case was the old sub-workspace crash, so never do it.
-  const stayInRoom = activeRoom && roomInWorkspace(activeRoom, wsId) && !roomIsArchived(activeRoom);
+  // Pinned rooms are global (visible in every workspace), so staying in one
+  // when you change workspace is fine — don't bounce out of it.
+  const stayInRoom = activeRoom && !roomIsArchived(activeRoom) &&
+    (roomInWorkspace(activeRoom, wsId) || roomIsPinned(activeRoom));
   if (!stayInRoom) {
     const candidates = roomsInActiveWorkspace(); // honors the just-set activeWorkspace
     if (candidates.length) {
