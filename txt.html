@@ -2194,6 +2194,8 @@ body.zen.zen-tw .editor-wrap .cm-content { padding-top: 38vh; padding-bottom: 38
 .cm-img-embed { display: inline-block; vertical-align: bottom; max-width: 100%; }
 .cm-img-embed img { max-width: min(100%, 460px); max-height: 340px; border-radius: 6px; border: 1px solid var(--border); display: block; }
 .cm-img-embed.missing { color: var(--text-faint); font-size: var(--text-xs); border: 1px dashed var(--border); padding: 4px 8px; border-radius: 6px; }
+/* Out-of-document image still resolving from IndexedDB / Firebase. */
+.cm-img-embed.loading img { min-width: 64px; min-height: 40px; background: repeating-linear-gradient(45deg, var(--surface-hover, rgba(127,127,127,0.12)) 0 6px, transparent 6px 12px); border-style: dashed; }
 
 /* Snapshot diff viewer (#101) */
 .snap-diff { font-family: var(--font-mono); font-size: var(--text-xs); white-space: pre-wrap; word-break: break-word; max-height: 50vh; overflow: auto; border: 1px solid var(--border); border-radius: var(--radius); padding: 8px; margin-top: 8px; background: var(--bg); }
@@ -4411,36 +4413,40 @@ const mdStylePlugin = ViewPlugin.fromClass(class {
 }, { decorations: v => v.decorations });
 
 // ===== Embedded images (#28) =====
-// The compressed image rides INSIDE the document as a sentinel token
-// "![img:<base64-jpeg>]" so it syncs to the database like any other text; the
-// frontend renders the token as an <img>. Dramatic compression keeps it small.
-const IMG_TOKEN_RE = /!\[img:(?:([jwa]):)?([A-Za-z0-9+/=]+)\]/g;
+// Two on-document representations, both rendered as <img>:
+//   • OUT-OF-DOCUMENT (preferred):  "![img:<code>#<hash>]"  — the document holds
+//     only a short content hash; the actual codec bytes live in IndexedDB
+//     locally and, when synced, under images/<keyFp>/<hash> on Firebase (encrypted,
+//     deduplicated by content hash). This keeps the document text tiny so editing
+//     and local-cache size aren't dominated by image data.
+//   • LEGACY INLINE: "![img:<code>:<base64>]" or "![img:<base64>]" — the codec
+//     bytes ride inline in the text. Still rendered for backward compatibility.
+// Combined matcher: m[1]=code(optional), m[2]=separator(':'inline|'#'ref), m[3]=data.
+const IMG_TOKEN_RE = /!\[img:(?:([jwa])([:#]))?([A-Za-z0-9+/=]+)\]/g;
 const IMG_MIME = { j: 'image/jpeg', w: 'image/webp', a: 'image/avif' };
-// Decode-once cache: base64 → a Blob object URL. The widget's toDOM runs again
-// every time an image scrolls back into the viewport or the decoration set is
-// rebuilt; without this we'd re-atob() ~90KB and rebuild a giant data: URL each
-// time (the re-decode the user flagged). Keyed by the base64 itself — V8 caches
-// a string's hash after first use, so Map lookups on the long key stay cheap —
-// so identical images across rooms/rebuilds share one decoded blob. Bounded LRU
-// with revoke-on-evict so blob URLs don't leak.
-const _imgBlobCache = new Map();
-const _IMG_CACHE_MAX = 64;
-function imageSrcFor(code, b64) {
-  let url = _imgBlobCache.get(b64);
-  if (url) {
-    // Touch for LRU recency (delete + re-insert moves it to the end).
-    _imgBlobCache.delete(b64); _imgBlobCache.set(b64, url);
-    return url;
-  }
+
+// base64 (codec bytes) → a Blob object URL. Decode happens once; browsers cache
+// the decoded frame per URL. Shared by inline + ref rendering.
+function _b64ToBlobUrl(code, b64) {
   const mime = IMG_MIME[code] || 'image/jpeg';
   try {
     const bin = atob(b64);
     const bytes = new Uint8Array(bin.length);
     for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-    url = URL.createObjectURL(new Blob([bytes], { type: mime }));
+    return URL.createObjectURL(new Blob([bytes], { type: mime }));
   } catch {
-    url = 'data:' + mime + ';base64,' + b64; // fall back to inline data URL
+    return 'data:' + mime + ';base64,' + b64; // fall back to inline data URL
   }
+}
+
+// Decode-once cache for INLINE images, keyed by the base64 (V8 caches a string's
+// hash after first use, so lookups on the long key stay cheap). Bounded LRU.
+const _imgBlobCache = new Map();
+const _IMG_CACHE_MAX = 64;
+function imageSrcFor(code, b64) {
+  let url = _imgBlobCache.get(b64);
+  if (url) { _imgBlobCache.delete(b64); _imgBlobCache.set(b64, url); return url; }
+  url = _b64ToBlobUrl(code, b64);
   while (_imgBlobCache.size >= _IMG_CACHE_MAX) {
     const k = _imgBlobCache.keys().next().value;
     const u = _imgBlobCache.get(k);
@@ -4450,23 +4456,88 @@ function imageSrcFor(code, b64) {
   _imgBlobCache.set(b64, url);
   return url;
 }
+
+// Decode-once cache for REF images, keyed by hash → { url, b64 }. The bytes are
+// resolved from IndexedDB (fast path) or fetched + decrypted from Firebase once.
+const _imgRefCache = new Map();
+let _imgKeyFp = null; // cached fingerprint of the base sync key (Firebase namespace)
+function _imgStoredToParts(stored, fallbackCode) {
+  const ci = stored.indexOf(':');
+  const code = ci > 0 ? stored.slice(0, ci) : (fallbackCode || 'j');
+  const b64 = ci > 0 ? stored.slice(ci + 1) : stored;
+  return { code, b64 };
+}
+// Pull an image's bytes from Firebase into IndexedDB. Returns the stored
+// "<code>:<b64>" payload, or null if unavailable (offline / not uploaded yet).
+async function fetchImageFromServer(hash) {
+  const baseKey = store.get('cade-sync-key') || '';
+  const fbUrl = store.get('cade-firebase-url') || '';
+  if (!baseKey || !fbUrl) return null;
+  try {
+    const db = initFirebase(fbUrl);
+    const fp = _imgKeyFp || (_imgKeyFp = await _computeKeyFingerprint(baseKey));
+    const snap = await db.ref('images/' + fp + '/' + hash).once('value');
+    const enc = snap.val();
+    if (!enc) return null;
+    const dec = await decryptText(enc, baseKey);
+    if (!dec) return null;
+    try { idbStore.set('img:' + hash, dec); } catch {}
+    return dec;
+  } catch { return null; }
+}
+async function resolveImageRef(code, hash) {
+  let hit = _imgRefCache.get(hash);
+  if (hit) { _imgRefCache.delete(hash); _imgRefCache.set(hash, hit); return hit; }
+  let stored = null;
+  try { stored = await idbStore.get('img:' + hash); } catch {}
+  if (!stored) stored = await fetchImageFromServer(hash);
+  if (!stored) return null;
+  const { code: c, b64 } = _imgStoredToParts(stored, code);
+  const rec = { url: _b64ToBlobUrl(c, b64), b64 };
+  while (_imgRefCache.size >= _IMG_CACHE_MAX) {
+    const k = _imgRefCache.keys().next().value;
+    const old = _imgRefCache.get(k);
+    if (old && old.url.indexOf('blob:') === 0) { try { URL.revokeObjectURL(old.url); } catch {} }
+    _imgRefCache.delete(k);
+  }
+  _imgRefCache.set(hash, rec);
+  return rec;
+}
+
 class ImageWidget extends WidgetType {
-  constructor(code, data) { super(); this.code = code || 'j'; this.data = data; }
-  eq(o) { return o.data === this.data && o.code === this.code; }
+  // isRef: data is a content hash to resolve out-of-band; else data is base64.
+  constructor(code, data, isRef) { super(); this.code = code || 'j'; this.data = data; this.isRef = !!isRef; }
+  eq(o) { return o.data === this.data && o.code === this.code && o.isRef === this.isRef; }
   toDOM() {
     const wrap = document.createElement('span');
     wrap.className = 'cm-img-embed';
     const img = document.createElement('img');
     img.alt = 'embedded image';
     const mime = IMG_MIME[this.code] || 'image/jpeg';
-    img.src = imageSrcFor(this.code, this.data);
+    const code = this.code;
+    const attachMenu = (b64) => wrap.addEventListener('contextmenu', (e) => {
+      e.preventDefault(); e.stopPropagation();
+      showImageMenu(e.clientX, e.clientY, mime, b64);
+    });
     img.onerror = () => { wrap.classList.add('missing'); wrap.textContent = '⚠ broken image'; };
     wrap.appendChild(img);
-    const data = this.data;
-    wrap.addEventListener('contextmenu', (e) => {
-      e.preventDefault(); e.stopPropagation();
-      showImageMenu(e.clientX, e.clientY, mime, data);
-    });
+    if (!this.isRef) {
+      img.src = imageSrcFor(code, this.data);
+      attachMenu(this.data);
+    } else {
+      wrap.classList.add('loading');
+      const hash = this.data;
+      resolveImageRef(code, hash).then((r) => {
+        if (!r) {
+          wrap.classList.remove('loading'); wrap.classList.add('missing');
+          if (!img.src) { img.remove(); wrap.textContent = '⌛ image not downloaded'; }
+          return;
+        }
+        wrap.classList.remove('loading');
+        img.src = r.url;
+        attachMenu(r.b64);
+      }).catch(() => { wrap.classList.remove('loading'); wrap.classList.add('missing'); });
+    }
     return wrap;
   }
   ignoreEvent() { return true; }
@@ -4512,7 +4583,9 @@ function deleteImageIfAdjacent(view, dir) {
   IMG_TOKEN_RE.lastIndex = 0;
   let m;
   while ((m = IMG_TOKEN_RE.exec(line.text)) !== null) {
-    if ((m[2] || '').length < 24) continue;
+    // Refs (sep '#') are always real tokens; inline (sep ':' or bare) need a
+    // base64 long enough to not be an accidental match.
+    if (m[2] !== '#' && m[3].length < 24) continue;
     const s = line.from + m.index, e = s + m[0].length;
     const hit = (pos > s && pos < e) || (dir < 0 && pos === e) || (dir > 0 && pos === s);
     if (hit) { view.dispatch({ changes: { from: s, to: e }, selection: { anchor: s } }); return true; }
@@ -4532,9 +4605,10 @@ function buildImageDecorations(view) {
       IMG_TOKEN_RE.lastIndex = 0;
       let m;
       while ((m = IMG_TOKEN_RE.exec(line.text)) !== null) {
-        if (m[2].length < 24) continue;
+        const isRef = m[2] === '#';
+        if (!isRef && m[3].length < 24) continue;
         const s = line.from + m.index, e = s + m[0].length;
-        ranges.push(Decoration.replace({ widget: new ImageWidget(m[1], m[2]) }).range(s, e));
+        ranges.push(Decoration.replace({ widget: new ImageWidget(m[1], m[3], isRef) }).range(s, e));
       }
     }
   }
@@ -8479,6 +8553,8 @@ function attachConnListener(db) {
     if (isConn) {
       updateSyncUI('connected', syncState.roomName || 'Synced');
       reconcileOnLive();
+      // Push up any images embedded while offline / before sync was configured.
+      try { flushPendingImageUploads(); } catch {}
     } else {
       // Stream dropped — the next time it comes back we must reconcile before
       // resuming live sync, in case the user edits in the meantime.
@@ -12836,12 +12912,69 @@ function compressImage(file) {
     img.src = url;
   });
 }
+// ---- Out-of-document image store (content-addressed) ----
+// 16-byte (32 hex) content hash of the codec payload. Identical images produce
+// the same hash, so storage and uploads dedupe automatically.
+async function _imgHash(payload) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(payload));
+  return Array.from(new Uint8Array(buf)).slice(0, 16).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+// Pending-upload queue: hashes of images stored locally but not yet confirmed on
+// the server (added when offline / sync not configured). Flushed on connect.
+function _imgPendingGet() { try { return JSON.parse(store.get('cade-img-pending') || '[]') || []; } catch { return []; } }
+function _imgPendingAdd(hash) { const q = _imgPendingGet(); if (!q.includes(hash)) { q.push(hash); store.set('cade-img-pending', JSON.stringify(q)); } }
+function _imgPendingRemove(hash) { store.set('cade-img-pending', JSON.stringify(_imgPendingGet().filter(h => h !== hash))); }
+// Upload an image payload ("<code>:<b64>") to Firebase under its content hash,
+// deduplicated (skip if already present). Queues for retry if it can't reach the
+// server. The document only ever stores the hash, so this never blocks editing.
+async function uploadImage(hash, payload) {
+  const baseKey = store.get('cade-sync-key') || '';
+  const fbUrl = store.get('cade-firebase-url') || '';
+  if (!baseKey || !fbUrl || !navigator.onLine) { _imgPendingAdd(hash); return; }
+  try {
+    const db = initFirebase(fbUrl);
+    const fp = _imgKeyFp || (_imgKeyFp = await _computeKeyFingerprint(baseKey));
+    const ref = db.ref('images/' + fp + '/' + hash);
+    const existing = await ref.once('value');
+    if (existing.val()) { _imgPendingRemove(hash); return; } // already there — dedupe
+    const enc = await encryptText(payload, baseKey);
+    await ref.set(enc);
+    _imgPendingRemove(hash);
+  } catch { _imgPendingAdd(hash); }
+}
+// Re-attempt any queued uploads (called on (re)connect).
+async function flushPendingImageUploads() {
+  const q = _imgPendingGet();
+  if (!q.length) return;
+  for (const hash of q) {
+    let payload = null;
+    try { payload = await idbStore.get('img:' + hash); } catch {}
+    if (payload) await uploadImage(hash, payload);
+    else _imgPendingRemove(hash); // bytes no longer local — nothing to upload
+  }
+}
+window.flushPendingImageUploads = flushPendingImageUploads;
+
 async function insertImageFile(file) {
   if (!file || !/^image\//.test(file.type)) { showToast('Not an image', 'error', 2000); return; }
   let res;
   try { res = await compressImage(file); } catch { res = null; }
   if (!res) { showToast('Image too large to embed even after compression', 'error', 3500); return; }
-  const token = '![img:' + res.code + ':' + res.b64 + ']';
+  const payload = res.code + ':' + res.b64;
+  // Content-address the image; on a crypto failure, fall back to a legacy inline
+  // token so the image still embeds (it just won't be out-of-document).
+  let hash = null;
+  try { hash = await _imgHash(payload); } catch {}
+  let token;
+  if (hash) {
+    try { await idbStore.set('img:' + hash, payload); } catch {}
+    // Prime the render cache so it shows instantly without a round-trip.
+    _imgRefCache.set(hash, { url: _b64ToBlobUrl(res.code, res.b64), b64: res.b64 });
+    uploadImage(hash, payload); // fire-and-forget (queues if offline)
+    token = '![img:' + res.code + '#' + hash + ']';
+  } else {
+    token = '![img:' + res.code + ':' + res.b64 + ']';
+  }
   const sel = editor.state.selection.main;
   const doc = editor.state.doc;
   const pre = (sel.from > 0 && doc.sliceString(sel.from - 1, sel.from) !== '\n') ? '\n' : '';
