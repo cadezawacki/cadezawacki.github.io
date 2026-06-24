@@ -3210,22 +3210,37 @@ window.runInWorker = runInWorker;
 // ============================================
 window.__op = '(idle)';
 window.__lag = [];
+window.__maxPhase = '';       // slowest individually-timed phase since last report
+window.__maxPhaseDur = 0;
 function __mark(op) { window.__op = op; }
+// Time a named sub-phase (decoration builder, etc.); the observer reports the
+// single slowest one seen since the last long task, which pins the culprit even
+// when many phases run inside one 'editing' dispatch task.
+function __timed(name, fn) {
+  const t = performance.now();
+  try { return fn(); }
+  finally {
+    const d = performance.now() - t;
+    if (d > window.__maxPhaseDur) { window.__maxPhaseDur = d; window.__maxPhase = name + '(' + Math.round(d) + 'ms)'; }
+  }
+}
 (function installLongTaskObserver() {
   if (typeof PerformanceObserver === 'undefined') return;
   try {
     const obs = new PerformanceObserver((list) => {
       for (const e of list.getEntries()) {
         if (e.duration < 200) continue;
-        const rec = { at: new Date().toLocaleTimeString(), dur: Math.round(e.duration), op: window.__op };
+        const rec = { at: new Date().toLocaleTimeString(), dur: Math.round(e.duration), op: window.__op, phase: window.__maxPhase };
         window.__lag.push(rec);
         if (window.__lag.length > 60) window.__lag.shift();
         if (e.duration >= 500) {
-          console.warn('[longtask] ' + rec.dur + 'ms main-thread block — last op: ' + rec.op);
+          console.warn('[longtask] ' + rec.dur + 'ms main-thread block — op: ' + rec.op +
+            (rec.phase ? ' | slowest phase: ' + rec.phase : ''));
         }
       }
-      // Reset to idle so a later block isn't misattributed to a finished op.
+      // Reset so a later block isn't misattributed to finished work.
       window.__op = '(idle)';
+      window.__maxPhase = ''; window.__maxPhaseDur = 0;
     });
     obs.observe({ entryTypes: ['longtask'] });
   } catch {}
@@ -4476,6 +4491,19 @@ const imagePlugin = ViewPlugin.fromClass(class {
   update(update) { if (update.docChanged || update.viewportChanged) this.decorations = buildImageDecorations(update.view); }
 }, { decorations: v => v.decorations });
 
+// DIAG: time each decoration builder so the long-task observer can name the
+// slowest one. These are mutable function-declaration bindings, and the plugins
+// resolve them by name at call time (the editor is created later), so wrapping
+// here transparently times every build. Cheap (two performance.now per call).
+buildListDecorations      = (o => v => __timed('list',      () => o(v)))(buildListDecorations);
+buildTodoDecorations      = (o => v => __timed('todo',      () => o(v)))(buildTodoDecorations);
+buildLinkDecorations      = (o => v => __timed('link',      () => o(v)))(buildLinkDecorations);
+buildHighlightDecorations = (o => v => __timed('highlight', () => o(v)))(buildHighlightDecorations);
+buildSpellDecorations     = (o => v => __timed('spell',     () => o(v)))(buildSpellDecorations);
+buildSearchDecorations    = (o => v => __timed('search',    () => o(v)))(buildSearchDecorations);
+buildMdDecorations        = (o => v => __timed('md',        () => o(v)))(buildMdDecorations);
+buildImageDecorations     = (o => v => __timed('image',     () => o(v)))(buildImageDecorations);
+
 function buildEditorExtensions() {
   return [
     basicSetup,
@@ -4488,7 +4516,7 @@ function buildEditorExtensions() {
         try { maybeAutocomplete(); } catch {}
       }
       if (update.docChanged) {
-        __mark('editing');
+        __mark('editing(' + update.state.doc.length + 'ch)');
         saveContentDebounced();
         scheduleWordCount();
         if (syncState.connected && !syncState.suppressUpdate) {
