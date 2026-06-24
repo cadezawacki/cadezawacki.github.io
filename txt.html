@@ -4395,6 +4395,40 @@ const mdStylePlugin = ViewPlugin.fromClass(class {
 // frontend renders the token as an <img>. Dramatic compression keeps it small.
 const IMG_TOKEN_RE = /!\[img:(?:([jwa]):)?([A-Za-z0-9+/=]+)\]/g;
 const IMG_MIME = { j: 'image/jpeg', w: 'image/webp', a: 'image/avif' };
+// Decode-once cache: base64 → a Blob object URL. The widget's toDOM runs again
+// every time an image scrolls back into the viewport or the decoration set is
+// rebuilt; without this we'd re-atob() ~90KB and rebuild a giant data: URL each
+// time (the re-decode the user flagged). Keyed by the base64 itself — V8 caches
+// a string's hash after first use, so Map lookups on the long key stay cheap —
+// so identical images across rooms/rebuilds share one decoded blob. Bounded LRU
+// with revoke-on-evict so blob URLs don't leak.
+const _imgBlobCache = new Map();
+const _IMG_CACHE_MAX = 64;
+function imageSrcFor(code, b64) {
+  let url = _imgBlobCache.get(b64);
+  if (url) {
+    // Touch for LRU recency (delete + re-insert moves it to the end).
+    _imgBlobCache.delete(b64); _imgBlobCache.set(b64, url);
+    return url;
+  }
+  const mime = IMG_MIME[code] || 'image/jpeg';
+  try {
+    const bin = atob(b64);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    url = URL.createObjectURL(new Blob([bytes], { type: mime }));
+  } catch {
+    url = 'data:' + mime + ';base64,' + b64; // fall back to inline data URL
+  }
+  while (_imgBlobCache.size >= _IMG_CACHE_MAX) {
+    const k = _imgBlobCache.keys().next().value;
+    const u = _imgBlobCache.get(k);
+    if (u && u.indexOf('blob:') === 0) { try { URL.revokeObjectURL(u); } catch {} }
+    _imgBlobCache.delete(k);
+  }
+  _imgBlobCache.set(b64, url);
+  return url;
+}
 class ImageWidget extends WidgetType {
   constructor(code, data) { super(); this.code = code || 'j'; this.data = data; }
   eq(o) { return o.data === this.data && o.code === this.code; }
@@ -4404,7 +4438,7 @@ class ImageWidget extends WidgetType {
     const img = document.createElement('img');
     img.alt = 'embedded image';
     const mime = IMG_MIME[this.code] || 'image/jpeg';
-    img.src = 'data:' + mime + ';base64,' + this.data;
+    img.src = imageSrcFor(this.code, this.data);
     img.onerror = () => { wrap.classList.add('missing'); wrap.textContent = '⚠ broken image'; };
     wrap.appendChild(img);
     const data = this.data;
