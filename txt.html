@@ -218,10 +218,16 @@ body {
   padding: var(--space-1);
   z-index: 100;
   animation: menuFadeIn 100ms ease-out;
-  /* Never grow past the viewport — scroll instead (long View menu on mobile). */
-  max-height: calc(100vh - 52px - env(safe-area-inset-bottom));
+  /* Stay well within the viewport and scroll — keep it short (long View menu).
+     Fixed px fallback first, then dvh-aware cap for modern browsers. */
+  max-height: 340px;
+  max-height: min(60dvh, 340px);
   overflow-y: auto;
   overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+@media (max-width: 768px) {
+  .menu-dropdown { max-height: 300px; max-height: min(55dvh, 300px); }
 }
 
 .menu-dropdown.open { display: block; }
