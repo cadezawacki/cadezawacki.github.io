@@ -3199,6 +3199,39 @@ const runInWorker = (() => {
 window.runInWorker = runInWorker;
 
 // ============================================
+// PERF DIAGNOSTICS — main-thread long-task tracer
+// --------------------------------------------------------------------------
+// A persistent, periodic multi-second block is hard to attribute after the
+// fact, so we breadcrumb the start of every heavy/periodic operation into
+// window.__op and have a PerformanceObserver report any task that blocks the
+// main thread. The breadcrumb still points at the culprit when the longtask
+// callback fires (synchronous work runs to completion before the observer is
+// notified). Inspect window.__lag for recent offenders; >500ms tasks warn.
+// ============================================
+window.__op = '(idle)';
+window.__lag = [];
+function __mark(op) { window.__op = op; }
+(function installLongTaskObserver() {
+  if (typeof PerformanceObserver === 'undefined') return;
+  try {
+    const obs = new PerformanceObserver((list) => {
+      for (const e of list.getEntries()) {
+        if (e.duration < 200) continue;
+        const rec = { at: new Date().toLocaleTimeString(), dur: Math.round(e.duration), op: window.__op };
+        window.__lag.push(rec);
+        if (window.__lag.length > 60) window.__lag.shift();
+        if (e.duration >= 500) {
+          console.warn('[longtask] ' + rec.dur + 'ms main-thread block — last op: ' + rec.op);
+        }
+      }
+      // Reset to idle so a later block isn't misattributed to a finished op.
+      window.__op = '(idle)';
+    });
+    obs.observe({ entryTypes: ['longtask'] });
+  } catch {}
+})();
+
+// ============================================
 // LOCAL BUNDLE IMPORTS
 // ============================================
 const {EditorView, basicSetup} = window.__CM6__;
@@ -4455,6 +4488,7 @@ function buildEditorExtensions() {
         try { maybeAutocomplete(); } catch {}
       }
       if (update.docChanged) {
+        __mark('editing');
         saveContentDebounced();
         scheduleWordCount();
         if (syncState.connected && !syncState.suppressUpdate) {
@@ -5253,6 +5287,7 @@ if (spellEnabled) setTimeout(loadSpellChecker, 1200);
 let saveTimer = null;
 function persistContent() {
   const text = editor.state.doc.toString();
+  __mark('persist(' + text.length + 'ch)');
   store.set('cade-content', text);
   // Also save per-room cache if connected
   if (syncState.roomName) {
@@ -5356,6 +5391,7 @@ function scheduleWordCount() {
   clearTimeout(_wordCountTimer);
   _wordCountTimer = setTimeout(() => {
     const text = editor.state.doc.toString();
+    __mark('wordcount(' + text.length + 'ch)');
     if (text.length > WORD_COUNT_MAX) {
       _docWordCount = Math.round(text.length / 6); // ~chars-per-word estimate
       updateFooter();
@@ -8038,6 +8074,7 @@ function showSyncStep(stepId) {
 // no synced base recorded), it's safe to adopt the remote snapshot.
 function safeApplyRemote(text, roomName) {
   if (text == null || !roomName) return false;
+  __mark('safeApplyRemote(' + text.length + 'ch)');
   const currentText = editor.state.doc.toString();
   if (text === currentText) {
     saveRoomSynced(roomName, text);
@@ -8154,6 +8191,7 @@ window.syncConnect = async function() {
       const encoded = unpackRoomText(snap.val());
       if (!encoded) return;
       try {
+        __mark('sync:recv-decrypt(' + encoded.length + 'b)');
         let text = await decryptText(encoded, syncState.encKey);
         if (text === null) return;
         // Strip sentinel if present (content was written by a locked client)
@@ -8274,6 +8312,7 @@ async function _doBroadcast() {
   let raw;
   try {
     raw = editor.state.doc.toString();
+    __mark('sync:broadcast(' + raw.length + 'ch)');
     await pushTextToServer(roomName, raw, syncState.encKey);
     // If the editor hasn't moved on, mark this text as synced. If it has
     // (user kept typing during the in-flight broadcast — those edits couldn't
@@ -8391,6 +8430,7 @@ async function reconcileOnLive() {
 async function reconcileRoom() {
   const roomName = syncState.roomName;
   if (!roomName || !syncState.firebaseDb) return;
+  __mark('sync:reconcile');
   syncState.pendingRemoteText = null;
 
   // Bounded fetch of the most recent server text so we never hang on a flaky link.
@@ -12076,6 +12116,7 @@ function saveSnaps(snaps) {
 // used for the background auto-capture and the pre-restore/pre-clear guards.
 window.takeSnapshot = function(silent) {
   const isManual = !silent;
+  __mark('snapshot');
   const text = editor.state.doc.toString();
   if (!text.trim()) { if (isManual) showToast('Nothing to snapshot', 'error', 2000); return false; }
   if (text.length > SNAP_MAX_CHARS) { if (isManual) showToast('Document too large for snapshots', 'error', 2500); return false; }
