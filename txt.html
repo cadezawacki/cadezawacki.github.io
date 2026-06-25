@@ -1594,13 +1594,17 @@ body {
   .footer-breadcrumb .bc-ws-label, .footer-breadcrumb .bc-sep { display: none; }
   .modal-dialog {
     padding: var(--space-4);
-    max-height: calc(100vh - 40px);
+    max-width: calc(100vw - 32px);
+    /* Leave clear breathing room on all sides — especially top/bottom — so the
+       Room Manager (and other modals) never fill the whole screen on mobile. */
+    max-height: calc(100dvh - 96px);
+    margin: 16px auto;
     overflow-y: auto;
   }
   .modal-dialog.modal-dialog-scroll {
     padding: 0;
     overflow: hidden;
-    max-height: calc(100vh - 20px);
+    max-height: calc(100dvh - 96px);
   }
   .modal-dialog.modal-dialog-scroll .modal-header {
     padding: var(--space-4) var(--space-4) var(--space-3);
@@ -2626,6 +2630,7 @@ body.zen.zen-tw .editor-wrap .cm-content { padding-top: 38vh; padding-bottom: 38
         </select>
       </div>
       <div class="modal-actions">
+        <button class="btn" onclick="openExploreRooms()">Explore Rooms…</button>
         <button class="btn btn-primary" onclick="closeRoomManager()">Done</button>
       </div>
     </div>
@@ -5417,6 +5422,10 @@ function persistContent() {
   if (syncState.roomName) {
     store.set('cade-room-cache:' + syncState.roomName, text);
   }
+  // Stamp last-modified for room sorting (no re-render here; tabs re-sort on the
+  // next natural render, so this never reorders tabs mid-keystroke).
+  const _rm = activeRoom || syncState.roomName;
+  if (_rm) { try { touchRoomModified(_rm); } catch {} }
 }
 function saveContentDebounced() {
   clearTimeout(saveTimer);
@@ -9982,6 +9991,7 @@ window.addRoomFromManager = function() {
   if (rooms.includes(name)) { showToast('Room already exists', 'error'); return; }
   if (rooms.length >= roomCap) { showToast('Room cap reached (' + roomCap + ')', 'error'); return; }
   rooms.push(name);
+  touchRoomCreated(name);
   // Determine workspace target
   let targetWs;
   if (activeWorkspace === WS_ALL) {
@@ -10164,6 +10174,7 @@ window.exploreAddRoom = function(name, selId) {
     return;
   }
   rooms.push(name);
+  touchRoomCreated(name);
   const sel = document.getElementById(selId);
   const wsId = sel ? sel.value : '';
   if (wsId && wsId !== WS_UNLABELED && workspaces.find(w => w.id === wsId)) {
@@ -10449,29 +10460,59 @@ function removeRoomFromWorkspace(name, wsId) {
 // ---------- Pin / Archive flags (Features 51/52) ----------
 function roomIsPinned(name) { return !!(roomMeta[name] && roomMeta[name].pinned); }
 function roomIsArchived(name) { return !!(roomMeta[name] && roomMeta[name].archived); }
+// Drop a room's meta only when it carries no flags AND no sort timestamps —
+// otherwise unpinning/unarchiving would wipe created/modified used by sorting.
+function _maybeDropRoomMeta(name) {
+  const m = roomMeta[name];
+  if (m && !m.pinned && !m.archived && !m.created && !m.modified) delete roomMeta[name];
+}
 function setRoomPinned(name, on) {
   roomMeta[name] = roomMeta[name] || {};
   roomMeta[name].pinned = !!on;
-  if (!roomMeta[name].pinned && !roomMeta[name].archived) delete roomMeta[name];
+  _maybeDropRoomMeta(name);
   saveRoomMeta();
 }
 function setRoomArchived(name, on) {
   roomMeta[name] = roomMeta[name] || {};
   roomMeta[name].archived = !!on;
-  if (!roomMeta[name].pinned && !roomMeta[name].archived) delete roomMeta[name];
+  _maybeDropRoomMeta(name);
   saveRoomMeta();
 }
 
-// Order rooms: pinned first (keeping their relative order in `rooms`), then the
-// rest. Shared ordering primitive — tabs, dropdowns and the quick-switcher all
-// build on this (a future mobile swipe-between-rooms feature can reuse it).
+// Order rooms: pinned ALWAYS first, then by the chosen sort preference
+// (behavior.roomSort): 'modified' (default), 'created', 'alpha', or 'custom'
+// (manual order = position in the `rooms` array, drag-reorderable in the Room
+// Manager). Shared by tabs, dropdowns and the quick-switcher.
+function _roomSortMode() {
+  try { return (window.Settings && Settings.get('behavior.roomSort')) || 'modified'; }
+  catch { return 'modified'; }
+}
+function _roomCreated(n) { return (roomMeta[n] && roomMeta[n].created) || 0; }
+function _roomModified(n) { return (roomMeta[n] && roomMeta[n].modified) || _roomCreated(n) || 0; }
 function orderRooms(list) {
+  const mode = _roomSortMode();
+  const idx = (n) => rooms.indexOf(n);
   return list.slice().sort((a, b) => {
-    const pa = roomIsPinned(a) ? 0 : 1;
-    const pb = roomIsPinned(b) ? 0 : 1;
+    const pa = roomIsPinned(a) ? 0 : 1, pb = roomIsPinned(b) ? 0 : 1;
     if (pa !== pb) return pa - pb;
-    return rooms.indexOf(a) - rooms.indexOf(b);
+    if (mode === 'alpha') return a.localeCompare(b, undefined, { sensitivity: 'base' }) || (idx(a) - idx(b));
+    if (mode === 'created') return (_roomCreated(b) - _roomCreated(a)) || (idx(a) - idx(b));
+    if (mode === 'custom') return idx(a) - idx(b);
+    return (_roomModified(b) - _roomModified(a)) || (idx(a) - idx(b)); // 'modified' (default)
   });
+}
+// Stamp creation / modification times used by the sort (device-local; kept in
+// roomMeta). created is set once; modified bumps on edits (debounced via persist).
+function touchRoomCreated(name) {
+  if (!name) return;
+  roomMeta[name] = roomMeta[name] || {};
+  if (!roomMeta[name].created) { roomMeta[name].created = Date.now(); saveRoomMeta(); }
+}
+function touchRoomModified(name) {
+  if (!name) return;
+  roomMeta[name] = roomMeta[name] || {};
+  roomMeta[name].modified = Date.now();
+  saveRoomMeta();
 }
 
 function workspaceColorClassForRoom(name) {
@@ -13566,6 +13607,24 @@ registerSetting({
   getState: () => (typeof injectionsEnabled !== 'undefined' ? !!injectionsEnabled : true),
   apply(value) {
     if (typeof injectionsEnabled !== 'undefined' && !!value !== !!injectionsEnabled) window.toggleInjections();
+  }
+});
+registerSetting({
+  key: 'behavior.roomSort',
+  label: 'Room order',
+  type: 'select',
+  default: 'modified',
+  section: 'Behavior',
+  hint: 'Pinned rooms always stay on top. "Custom" = your manual drag order in the Room Manager.',
+  options: [
+    { value: 'modified', label: 'Last modified' },
+    { value: 'created', label: 'Last created' },
+    { value: 'alpha', label: 'Alphabetical' },
+    { value: 'custom', label: 'Custom (manual)' },
+  ],
+  apply() {
+    try { renderRoomTabs(); } catch {}
+    try { if (document.getElementById('room-manager-overlay').classList.contains('open')) renderRoomManagerList(); } catch {}
   }
 });
 
