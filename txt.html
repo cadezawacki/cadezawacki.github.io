@@ -9628,6 +9628,7 @@ async function _doSwitchRoom(name, firebaseUrl, baseEncKey) {
   // Keep an open Snapshots panel pointed at the new room's history (#6).
   try { if (document.getElementById('snapshots-overlay').classList.contains('open')) renderSnapshotsList(); } catch {}
   _activeRoomReady = true; // local switch committed; same-room clicks now no-op
+  try { _updateLocationForRoom(); } catch {} // reflect ws/room in the URL (item 5)
 
   // No Firebase config — local-only mode. The user can still edit and we'll
   // persist to per-room cache. As soon as creds are set + we reconnect, the
@@ -11109,6 +11110,7 @@ window.switchToWorkspace = function(wsId) {
   // Always render so the pill + filtered tabs update immediately, even if
   // switchRoom early-returns (e.g., no Firebase configured yet).
   renderRoomTabs();
+  try { _updateLocationForRoom(); } catch {} // reflect the new workspace in the URL (item 5)
   if (document.getElementById('room-manager-overlay').classList.contains('open')) {
     renderRoomManagerList();
   }
@@ -11692,6 +11694,41 @@ const _origSyncConnectForWs = window.syncConnect;
 // Initial pill render (before any rooms-related rendering)
 renderWorkspacePill();
 
+// Deep link via URL query (?ws=<name|unlabeled|all>&room=<room>) — overrides the
+// saved active workspace/room so a shared/bookmarked link opens straight into it.
+// (Query params, not a path: the app is a single static file, so /ws/room would
+// 404 on reload — params survive a refresh and are shareable.)
+function _updateLocationForRoom() {
+  try {
+    if (!activeRoom) return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('fb')) return; // don't fight an in-flight sync-share link
+    let wsLabel = 'all';
+    if (activeWorkspace === WS_UNLABELED) wsLabel = 'unlabeled';
+    else if (activeWorkspace !== WS_ALL) { const ws = getWorkspace(activeWorkspace); if (ws) wsLabel = ws.name; }
+    params.set('ws', wsLabel);
+    params.set('room', activeRoom);
+    const qs = params.toString();
+    history.replaceState(null, '', window.location.pathname + (qs ? '?' + qs : '') + window.location.hash);
+  } catch {}
+}
+window._updateLocationForRoom = _updateLocationForRoom;
+try {
+  const _dl = new URLSearchParams(window.location.search);
+  const _dlRoom = _dl.get('room'), _dlWs = _dl.get('ws');
+  if (_dlWs && !_dl.get('fb')) {
+    const w = _dlWs.toLowerCase();
+    if (w === 'all') activeWorkspace = WS_ALL;
+    else if (w === 'unlabeled') activeWorkspace = WS_UNLABELED;
+    else { const ws = workspaces.find(x => x.name && x.name.toLowerCase() === w); if (ws) activeWorkspace = ws.id; }
+    store.set('cade-active-workspace', activeWorkspace);
+  }
+  if (_dlRoom && !_dl.get('fb')) {
+    if (!rooms.includes(_dlRoom)) { rooms.push(_dlRoom); saveRooms(); }
+    activeRoom = _dlRoom; store.set('cade-active-room', _dlRoom);
+  }
+} catch {}
+
 // Auto-connect on page load
 if (savedFirebaseUrl && savedEncKey) {
   // Kick off workspace sync independently (so workspaces appear even if no room is active)
@@ -11785,6 +11822,11 @@ window.generateShareLink = async function(kind) {
       const url = new URL(base);
       url.searchParams.set('fb', fbUrl);
       url.searchParams.set('room', roomName);
+      // Include the workspace so the link lands in the right context (item 5).
+      let _ws = 'all';
+      if (activeWorkspace === WS_UNLABELED) _ws = 'unlabeled';
+      else if (activeWorkspace !== WS_ALL) { const w = getWorkspace(activeWorkspace); if (w) _ws = w.name; }
+      url.searchParams.set('ws', _ws);
       link = url.toString();
       hint.textContent = 'Opens live for anyone connected to the same database. The password is never included.';
     } else {
@@ -11834,9 +11876,17 @@ window.shareNative = function() {
     const params = new URLSearchParams(window.location.search);
     const fbParam = params.get('fb');
     const roomParam = params.get('room');
+    const wsParam = params.get('ws');
     if (fbParam) {
       document.getElementById('sync-firebase-url').value = fbParam;
       if (!store.get('cade-firebase-url')) store.set('cade-firebase-url', fbParam);
+    }
+    if (fbParam && wsParam) {
+      const w = wsParam.toLowerCase();
+      if (w === 'all') activeWorkspace = WS_ALL;
+      else if (w === 'unlabeled') activeWorkspace = WS_UNLABELED;
+      else { const ws = workspaces.find(x => x.name && x.name.toLowerCase() === w); if (ws) activeWorkspace = ws.id; }
+      store.set('cade-active-workspace', activeWorkspace);
     }
     if (roomParam) {
       document.getElementById('sync-room-name').value = roomParam;
@@ -11850,8 +11900,9 @@ window.shareNative = function() {
         renderRoomTabs();
       }
     }
-    if (fbParam || roomParam) {
-      // Clean the URL so refresh doesn't re-trigger the join
+    if (fbParam) {
+      // Sync-share link: clean the URL so refresh doesn't re-trigger the join.
+      // (Plain ?ws/?room deep-links are kept so refresh/bookmark still works.)
       window.history.replaceState({}, document.title, window.location.pathname);
       showToast('Shared link loaded — enter your password in Sync to connect', 'success', 5000);
     }
