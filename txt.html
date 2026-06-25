@@ -2104,6 +2104,10 @@ body {
 .cm-md-italic { font-style: italic; }
 .cm-md-strike { text-decoration: line-through; }
 .cm-md-underline { text-decoration: underline; text-underline-offset: 2px; }
+/* Hide emphasis markers (** * __ _ ~~ <u>); reveal them on the active line so
+   they stay editable (B1). */
+.cm-md-mark { display: none; }
+.cm-activeLine .cm-md-mark { display: inline; color: var(--text-faint); }
 .cm-md-code {
   background: var(--surface-2);
   border: 1px solid var(--border);
@@ -3426,7 +3430,7 @@ function hardWrapPass() {
     try { editor.dispatch({ changes, userEvent: 'input.hardwrap' }); } finally { _hardWrapBusy = false; }
   }
 }
-function scheduleHardWrap() { if (_wrapMode !== 'hard') return; clearTimeout(_hardWrapTimer); _hardWrapTimer = setTimeout(hardWrapPass, 350); }
+function scheduleHardWrap() { if (_wrapMode !== 'hard') return; clearTimeout(_hardWrapTimer); _hardWrapTimer = setTimeout(hardWrapPass, 120); }
 // Apply the current wrap mode to the live editor. Called on setting change AND
 // after every room switch (saved per-room states carry a stale compartment, so
 // the mode must be re-applied or it only sticks on the room you set it in).
@@ -3435,7 +3439,11 @@ function applyWrapMode(mode) {
     _wrapMode = mode;
     try { store.set('cade-pref:editor.wrapMode', mode); } catch {}
   }
-  try { editor.dispatch({ effects: wrapCompartment.reconfigure(_wrapMode === 'soft' ? EditorView.lineWrapping : []) }); } catch {}
+  // Both 'soft' and 'hard' use visual line wrapping so text NEVER needs
+  // horizontal scrolling while typing (B4). In 'hard' the debounced pass then
+  // converts each visual wrap into a real newline shortly after; the visual wrap
+  // means there's no horizontal-scroll flash in between.
+  try { editor.dispatch({ effects: wrapCompartment.reconfigure(_wrapMode === 'none' ? [] : EditorView.lineWrapping) }); } catch {}
   if (_wrapMode === 'hard') scheduleHardWrap();
 }
 window.applyWrapMode = applyWrapMode;
@@ -4011,28 +4019,29 @@ function buildHighlightDecorations(view) {
   highlightRanges = [];
   const doc = view.state.doc;
   const ranges = [];
+  // Scan each visible range as one contiguous string (spanning line breaks) so a
+  // highlight that wraps across newlines still matches and tints every line.
   for (const { from, to } of view.visibleRanges) {
-    const startLine = doc.lineAt(from).number;
-    const endLine = doc.lineAt(to).number;
-    for (let i = startLine; i <= endLine; i++) {
-      const line = doc.line(i);
-      const text = line.text;
-      if (text.length > 2000) continue; // skip data lines (embedded images)
-      RE_HL.lastIndex = 0;
-      let m;
-      while ((m = RE_HL.exec(text)) !== null) {
-        const start = line.from + m.index;
-        const end = start + m[0].length;
-        const { color, openLen } = parseHighlight(m[1]);
-        const textFrom = start + openLen;
-        const textTo = end - 2;
-        if (textTo <= textFrom) continue; // empty highlight — leave markup visible
-        // Hide the opening markup, tint the text, hide the closing "==".
-        ranges.push(Decoration.replace({}).range(start, textFrom));
-        ranges.push(Decoration.mark({ class: 'cm-hl cm-hl-' + color }).range(textFrom, textTo));
-        ranges.push(Decoration.replace({}).range(textTo, end));
-        highlightRanges.push({ from: start, to: end, color, textFrom, textTo });
-      }
+    // Expand to whole-line bounds so a highlight straddling the viewport edge
+    // still resolves its open/close markers.
+    const blockFrom = doc.lineAt(from).from;
+    const blockTo = doc.lineAt(to).to;
+    const text = doc.sliceString(blockFrom, blockTo);
+    RE_HL.lastIndex = 0;
+    let m;
+    while ((m = RE_HL.exec(text)) !== null) {
+      if (m[0].length > 4000) continue; // skip data blobs (embedded images)
+      const start = blockFrom + m.index;
+      const end = start + m[0].length;
+      const { color, openLen } = parseHighlight(m[1]);
+      const textFrom = start + openLen;
+      const textTo = end - 2;
+      if (textTo <= textFrom) continue; // empty highlight — leave markup visible
+      // Hide the opening markup, tint the text (across any line breaks), hide "==".
+      ranges.push(Decoration.replace({}).range(start, textFrom));
+      ranges.push(Decoration.mark({ class: 'cm-hl cm-hl-' + color }).range(textFrom, textTo));
+      ranges.push(Decoration.replace({}).range(textTo, end));
+      highlightRanges.push({ from: start, to: end, color, textFrom, textTo });
     }
   }
   ranges.sort((a, b) => a.from - b.from || a.startSide - b.startSide);
@@ -4522,26 +4531,34 @@ function buildMdDecorations(view) {
         const s = line.from + m.index, e = s + m[0].length;
         ranges.push(Decoration.mark({ class: 'cm-md-footnote' }).range(s, e));
       }
-      // Inline emphasis: **bold**, __bold__, *italic*, _italic_, ~~strike~~, <u>.
+      // Inline emphasis: style the CONTENT and hide the markers (revealed on the
+      // active line via CSS so they stay editable). _pushEmph(idx,len, openLen,
+      // closeLen, cls).
+      const _pushEmph = (idx, len, openLen, closeLen, cls) => {
+        const s = line.from + idx, e = s + len;
+        ranges.push(Decoration.mark({ class: 'cm-md-mark' }).range(s, s + openLen));
+        if (e - closeLen > s + openLen) ranges.push(Decoration.mark({ class: cls }).range(s + openLen, e - closeLen));
+        ranges.push(Decoration.mark({ class: 'cm-md-mark' }).range(e - closeLen, e));
+      };
       MD_BOLD_RE.lastIndex = 0;
-      while ((m = MD_BOLD_RE.exec(text)) !== null) { const s = line.from + m.index; ranges.push(Decoration.mark({ class: 'cm-md-bold' }).range(s, s + m[0].length)); }
+      while ((m = MD_BOLD_RE.exec(text)) !== null) _pushEmph(m.index, m[0].length, 2, 2, 'cm-md-bold');
       MD_BOLDU_RE.lastIndex = 0;
-      while ((m = MD_BOLDU_RE.exec(text)) !== null) { const s = line.from + m.index; ranges.push(Decoration.mark({ class: 'cm-md-bold' }).range(s, s + m[0].length)); }
+      while ((m = MD_BOLDU_RE.exec(text)) !== null) _pushEmph(m.index, m[0].length, 2, 2, 'cm-md-bold');
       MD_ITAL_STAR_RE.lastIndex = 0;
       while ((m = MD_ITAL_STAR_RE.exec(text)) !== null) {
         if (text[m.index - 1] === '*' || text[m.index + m[0].length] === '*') continue; // part of **bold**
-        const s = line.from + m.index; ranges.push(Decoration.mark({ class: 'cm-md-italic' }).range(s, s + m[0].length));
+        _pushEmph(m.index, m[0].length, 1, 1, 'cm-md-italic');
       }
       MD_ITAL_UND_RE.lastIndex = 0;
       while ((m = MD_ITAL_UND_RE.exec(text)) !== null) {
         if (text[m.index - 1] === '_' || text[m.index + m[0].length] === '_') continue; // part of __bold__
         if (/[A-Za-z0-9]/.test(text[m.index - 1] || '') || /[A-Za-z0-9]/.test(text[m.index + m[0].length] || '')) continue; // snake_case
-        const s = line.from + m.index; ranges.push(Decoration.mark({ class: 'cm-md-italic' }).range(s, s + m[0].length));
+        _pushEmph(m.index, m[0].length, 1, 1, 'cm-md-italic');
       }
       MD_STRIKE_RE.lastIndex = 0;
-      while ((m = MD_STRIKE_RE.exec(text)) !== null) { const s = line.from + m.index; ranges.push(Decoration.mark({ class: 'cm-md-strike' }).range(s, s + m[0].length)); }
+      while ((m = MD_STRIKE_RE.exec(text)) !== null) _pushEmph(m.index, m[0].length, 2, 2, 'cm-md-strike');
       MD_UND_RE.lastIndex = 0;
-      while ((m = MD_UND_RE.exec(text)) !== null) { const s = line.from + m.index; ranges.push(Decoration.mark({ class: 'cm-md-underline' }).range(s, s + m[0].length)); }
+      while ((m = MD_UND_RE.exec(text)) !== null) _pushEmph(m.index, m[0].length, 3, 4, 'cm-md-underline');
     }
     // Syntax-highlight tokens for code blocks intersecting this range.
     for (const blk of fenceBlocks) {
@@ -13548,13 +13565,25 @@ const MD_BTN_DEFS = {
 };
 // Highlight color picker (dash button): wraps the selection in the app's
 // ==color|text== sentinel, or strips an existing wrapper for "No color".
+// Return the {from,to} bounds of the ==color|text== token enclosing the caret /
+// selection, or null. Uses the viewport highlight spans so "No color" and
+// recolor work when the caret is merely inside a highlight (its == markers are
+// hidden, so the word-range probe can't see them).
+function _findEnclosingHighlight(a, b) {
+  for (const r of highlightRanges) {
+    if (a >= r.from && b <= r.to) return { from: r.from, to: r.to };
+  }
+  return null;
+}
 window.applyHighlight = function(color) {
   closeHighlightPicker();
   const sel = editor.state.selection.main;
   // No selection: target the word just typed if the caret is at its end,
   // otherwise insert an empty highlight at the caret (item 2).
   let from = sel.from, to = sel.to;
-  if (sel.empty) { const wr = _wordRangeBeforeCursor(); if (wr) { from = wr.from; to = wr.to; } }
+  const encl = _findEnclosingHighlight(sel.from, sel.to);
+  if (encl) { from = encl.from; to = encl.to; }
+  else if (sel.empty) { const wr = _wordRangeBeforeCursor(); if (wr) { from = wr.from; to = wr.to; } }
   let text = editor.state.sliceDoc(from, to);
   const m = /^==(?:([a-z]+)\|)?([\s\S]*?)==$/.exec(text);
   if (m) text = m[2]; // peel an existing highlight so re-applying / No color works
