@@ -2209,6 +2209,13 @@ body {
 @keyframes timerFlash { 0%, 100% { box-shadow: 0 0 0 1px var(--border), 0 8px 28px rgba(0,0,0,0.28); } 50% { box-shadow: 0 0 0 3px var(--accent), 0 0 18px var(--accent); } }
 #timer-panel.timer-flash { animation: timerFlash 0.7s ease-in-out infinite; }
 #timer-panel.timer-flash .timer-time { color: var(--accent); }
+/* Long-press room picker HUD (item 10). */
+.room-hud { position: fixed; inset: 0; z-index: 5500; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; animation: overlayIn 120ms ease-out; }
+.room-hud-inner { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; box-shadow: 0 12px 40px rgba(0,0,0,0.4); padding: 10px; max-height: 70vh; overflow-y: auto; min-width: 220px; max-width: 86vw; display: flex; flex-direction: column; gap: 4px; }
+.room-hud-title { font-size: var(--text-xs); color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.05em; padding: 4px 8px 6px; }
+.room-hud-item { text-align: left; background: none; border: none; color: var(--text); cursor: pointer; padding: 12px 14px; border-radius: 8px; font-size: 1rem; font-family: var(--font-mono); }
+.room-hud-item:active { background: var(--surface-hover, rgba(127,127,127,0.15)); }
+.room-hud-item.active { background: var(--accent); color: #fff; }
 .timer-cfg { display: flex; gap: 8px; justify-content: center; padding: 6px 10px; }
 .timer-cfg label { display: flex; align-items: center; gap: 4px; font-size: var(--text-xs); color: var(--text-muted); }
 .timer-cfg input { width: 64px; padding: 3px 5px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface, transparent); color: var(--text); font-size: var(--text-xs); }
@@ -13232,31 +13239,73 @@ setTimeout(() => { try { scheduleImageMigration(); } catch {} }, 2500);
 // ============================================
 window.haptic = function(ms) { try { if (navigator.vibrate) navigator.vibrate(ms || 12); } catch {} };
 
-// Swipe between rooms (#77): a quick horizontal flick on the editor switches to
-// the prev/next visible room. Tuned so it never fires during scroll/selection.
+// Swipe between rooms (#77, item 10): a deliberate horizontal flick switches to
+// the prev/next visible room — ONE room per gesture, with a cooldown so it can't
+// jump several at once, skipping locked (not-yet-unlocked) rooms. A 2s long-press
+// near a side edge opens a room-picker HUD instead.
+function _swipeRoomList() {
+  let list;
+  try { list = (typeof roomsInActiveWorkspace === 'function') ? roomsInActiveWorkspace(false) : rooms.slice(); } catch { list = rooms.slice(); }
+  try { if (typeof orderRooms === 'function') list = orderRooms(list); } catch {}
+  return list || [];
+}
+function _roomLockedClosed(r) { try { return roomHasPassword(r) && !roomIsUnlocked(r); } catch { return false; } }
+window.showRoomHud = function() {
+  closeRoomHud();
+  const list = _swipeRoomList();
+  if (!list.length) return;
+  const hud = document.createElement('div');
+  hud.id = 'room-hud'; hud.className = 'room-hud';
+  hud.innerHTML = '<div class="room-hud-inner"><div class="room-hud-title">Switch room</div>' + list.map(r => {
+    const esc = escapeHtml(r.replace(/\\/g, '\\\\').replace(/'/g, "\\'"));
+    return '<button class="room-hud-item' + (r === activeRoom ? ' active' : '') + '" onclick="closeRoomHud(); switchRoom(\'' + esc + '\')">' +
+      escapeHtml(r) + (_roomLockedClosed(r) ? ' 🔒' : '') + '</button>';
+  }).join('') + '</div>';
+  hud.addEventListener('click', e => { if (e.target === hud) closeRoomHud(); });
+  document.body.appendChild(hud);
+  try { haptic(20); } catch {}
+};
+window.closeRoomHud = function() { const h = document.getElementById('room-hud'); if (h) h.remove(); };
 (function() {
   const el = editor.scrollDOM;
   if (!el) return;
-  let x0 = 0, y0 = 0, t0 = 0, tracking = false;
+  let x0 = 0, y0 = 0, t0 = 0, tracking = false, moved = false, holdTimer = null, lastSwitch = 0;
   el.addEventListener('touchstart', e => {
+    clearTimeout(holdTimer);
     if (e.touches.length !== 1) { tracking = false; return; }
-    x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; t0 = Date.now(); tracking = true;
+    x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; t0 = Date.now(); tracking = true; moved = false;
+    const w = window.innerWidth, edge = Math.min(48, w * 0.12);
+    if (x0 <= edge || x0 >= w - edge) {
+      holdTimer = setTimeout(() => { if (!moved && tracking) { tracking = false; window.showRoomHud(); } }, 2000);
+    }
+  }, { passive: true });
+  el.addEventListener('touchmove', e => {
+    const t = e.touches[0]; if (!t) return;
+    if (Math.abs(t.clientX - x0) > 12 || Math.abs(t.clientY - y0) > 12) { moved = true; clearTimeout(holdTimer); }
   }, { passive: true });
   el.addEventListener('touchend', e => {
+    clearTimeout(holdTimer);
     if (!tracking) return; tracking = false;
     const t = e.changedTouches[0];
     const dx = t.clientX - x0, dy = t.clientY - y0, dt = Date.now() - t0;
-    if (dt > 600) return;                                   // not a flick
-    if (Math.abs(dx) < 80 || Math.abs(dy) > 45) return;      // too short / too vertical
-    if (Math.abs(dx) < Math.abs(dy) * 2) return;             // not clearly horizontal
+    if (dt > 450) return;                                    // must be a quick flick
+    if (Math.abs(dx) < 110 || Math.abs(dy) > 40) return;      // longer + flatter than before
+    if (Math.abs(dx) < Math.abs(dy) * 2.5) return;           // clearly horizontal
     if (!editor.state.selection.main.empty) return;          // user is selecting
-    let list;
-    try { list = (typeof roomsInActiveWorkspace === 'function') ? roomsInActiveWorkspace(false) : rooms.slice(); } catch { list = rooms.slice(); }
-    try { if (typeof orderRooms === 'function') list = orderRooms(list); } catch {}
-    if (!list || list.length < 2) return;
+    if (Date.now() - lastSwitch < 700) return;               // cooldown: one room per gesture window
+    const list = _swipeRoomList();
+    if (list.length < 2) return;
     const idx = list.indexOf(activeRoom);
     if (idx < 0) return;
-    const next = dx < 0 ? (idx + 1) % list.length : (idx - 1 + list.length) % list.length;
+    const dir = dx < 0 ? 1 : -1, n = list.length;
+    let next = -1;
+    for (let step = 1; step <= n; step++) {                   // skip locked rooms
+      const j = ((idx + dir * step) % n + n) % n;
+      if (j === idx) break;
+      if (!_roomLockedClosed(list[j])) { next = j; break; }
+    }
+    if (next < 0) return;
+    lastSwitch = Date.now();
     haptic(12);
     switchRoom(list[next]);
   }, { passive: true });
