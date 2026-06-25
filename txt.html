@@ -3020,11 +3020,14 @@ const idbStore = (() => {
     }).catch(() => fbGet(key));
   }
 
+  // Resolves to true when the value was durably written to IndexedDB; false when
+  // it fell back to the `store` path (which may be in-memory-only under storage
+  // pressure / private mode). Callers that must not lose data can act on this.
   function set(key, value) {
     key = String(key);
     return tx('readwrite', os => { os.put(value, key); })
-      .then(() => undefined)
-      .catch(() => { fbSet(key, value); });
+      .then(() => true)
+      .catch(() => { fbSet(key, value); return false; });
   }
 
   function remove(key) {
@@ -4536,18 +4539,32 @@ class ImageWidget extends WidgetType {
       img.src = imageSrcFor(code, this.data);
       attachMenu(this.data);
     } else {
+      // Refs resolve from IndexedDB, falling back to a server fetch. The bytes
+      // may not be on the server yet (a peer just migrated/inserted and the
+      // upload is still in flight), so retry with backoff and swap the image in
+      // once it lands — otherwise a peer stays stuck at "not downloaded" until a
+      // reload. Stops when resolved, when the widget is detached, or after a few
+      // tries (then shows the placeholder).
       wrap.classList.add('loading');
       const hash = this.data;
-      resolveImageRef(code, hash).then((r) => {
-        if (!r) {
-          wrap.classList.remove('loading'); wrap.classList.add('missing');
-          if (!img.src) { img.remove(); wrap.textContent = '⌛ image not downloaded'; }
-          return;
-        }
-        wrap.classList.remove('loading');
-        img.src = r.url;
-        attachMenu(r.b64);
-      }).catch(() => { wrap.classList.remove('loading'); wrap.classList.add('missing'); });
+      let attempt = 0;
+      const tryResolve = () => {
+        resolveImageRef(code, hash).then((r) => {
+          if (!wrap.isConnected) return; // decoration replaced — stop retrying
+          if (!r) {
+            attempt++;
+            if (attempt < 8) { setTimeout(tryResolve, Math.min(1500 * attempt, 12000)); return; }
+            wrap.classList.remove('loading'); wrap.classList.add('missing');
+            if (!img.src) { img.remove(); wrap.textContent = '⌛ image not downloaded'; }
+            return;
+          }
+          wrap.classList.remove('loading', 'missing');
+          if (!img.parentNode) { wrap.textContent = ''; wrap.appendChild(img); }
+          img.src = r.url;
+          attachMenu(r.b64);
+        }).catch(() => { if (wrap.isConnected) { wrap.classList.remove('loading'); wrap.classList.add('missing'); } });
+      };
+      tryResolve();
     }
     return wrap;
   }
@@ -13241,20 +13258,23 @@ function _imgPendingRemove(hash) { store.set('cade-img-pending', JSON.stringify(
 // Upload an image payload ("<code>:<b64>") to Firebase under its content hash,
 // deduplicated (skip if already present). Queues for retry if it can't reach the
 // server. The document only ever stores the hash, so this never blocks editing.
+// Returns true once the image is confirmed present on the server (freshly
+// written or already there); false if it was only queued for a later retry.
 async function uploadImage(hash, payload) {
   const baseKey = store.get('cade-sync-key') || '';
   const fbUrl = store.get('cade-firebase-url') || '';
-  if (!baseKey || !fbUrl || !navigator.onLine) { _imgPendingAdd(hash); return; }
+  if (!baseKey || !fbUrl || !navigator.onLine) { _imgPendingAdd(hash); return false; }
   try {
     const db = initFirebase(fbUrl);
     const fp = _imgKeyFp || (_imgKeyFp = await _computeKeyFingerprint(baseKey));
     const ref = db.ref('images/' + fp + '/' + hash);
     const existing = await ref.once('value');
-    if (existing.val()) { _imgPendingRemove(hash); return; } // already there — dedupe
+    if (existing.val()) { _imgPendingRemove(hash); return true; } // already there — dedupe
     const enc = await encryptText(payload, baseKey);
     await ref.set(enc);
     _imgPendingRemove(hash);
-  } catch { _imgPendingAdd(hash); }
+    return true;
+  } catch { _imgPendingAdd(hash); return false; }
 }
 // Re-attempt any queued uploads (called on (re)connect).
 async function flushPendingImageUploads() {
@@ -13304,23 +13324,47 @@ async function migrateInlineImages() {
     }
     if (!toks.length) return;
     const changes = [];
+    let savedBytes = 0, deferred = false;
     for (const t of toks) {
       const payload = t.code + ':' + t.b64;
       let hash; try { hash = await _imgHash(payload); } catch { continue; }
-      try { await idbStore.set('img:' + hash, payload); } catch {}
-      _imgRefCache.set(hash, { url: _b64ToBlobUrl(t.code, t.b64), b64: t.b64 });
-      uploadImage(hash, payload);
+      // Durability gate: never drop the inline bytes (the only copy) unless we
+      // can get them back after a reload. idbStore.set reports whether it hit
+      // IndexedDB durably; if not (storage pressure / private mode), require a
+      // confirmed server upload before rewriting. If neither, keep this image
+      // inline this pass and try again later.
+      let durable = false;
+      try { durable = await idbStore.set('img:' + hash, payload); } catch { durable = false; }
+      if (!durable) {
+        let uploaded = false;
+        try { uploaded = await uploadImage(hash, payload); } catch {}
+        if (!uploaded) { deferred = true; continue; }
+      } else {
+        // Fire-and-forget the upload; peers retry resolving the ref until it
+        // lands (ImageWidget backoff), and the pending queue flushes on reconnect.
+        // Do NOT eagerly _b64ToBlobUrl here — that decodes every image (even
+        // offscreen ones) and bypasses the bounded LRU. Visible widgets decode
+        // lazily through resolveImageRef instead.
+        uploadImage(hash, payload);
+      }
       changes.push({ from: t.from, to: t.to, insert: '![img:' + t.code + '#' + hash + ']' });
+      savedBytes += t.b64.length;
     }
     // Apply only if the document is still exactly what we hashed against, so the
     // offsets are valid and we never corrupt edits made meanwhile.
     if (changes.length && editor.state.doc.toString() === text) {
       changes.sort((a, b) => a.from - b.from);
       editor.dispatch({ changes });
-      const saved = toks.reduce((n, t) => n + t.b64.length, 0);
-      showToast('Optimized ' + changes.length + ' embedded image(s) (−' + Math.round(saved / 1024) + ' KB in-doc)', 'success', 3500);
+      showToast('Optimized ' + changes.length + ' embedded image(s) (−' + Math.round(savedBytes / 1024) + ' KB in-doc)', 'success', 3500);
     } else if (changes.length) {
-      scheduleImageMigration(); // doc moved under us — retry shortly
+      deferred = true; // doc moved under us — retry shortly
+    }
+    // Some images were kept inline (couldn't be made durable yet). Retry later
+    // on a long delay so we don't spin while offline / storage-constrained;
+    // a reconnect also re-flushes the upload queue.
+    if (deferred) {
+      clearTimeout(_imgMigrateTimer);
+      _imgMigrateTimer = setTimeout(() => { migrateInlineImages().catch(() => {}); }, 30000);
     }
   } finally { _imgMigrateBusy = false; }
 }
