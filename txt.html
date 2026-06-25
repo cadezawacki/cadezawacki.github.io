@@ -10711,9 +10711,21 @@ function roomIsUnlabeled(name) {
   return getRoomWorkspaceIds(name).length === 0;
 }
 
+// A "global" workspace (F1): any room assigned to it surfaces in EVERY other
+// workspace's dropdown/tab list. Marked via the `global` flag on the workspace.
+function workspaceIsGlobal(id) {
+  const w = getWorkspace(id);
+  return !!(w && w.global);
+}
+function _roomIsGlobal(name) {
+  return getRoomWorkspaceIds(name).some(id => workspaceIsGlobal(id));
+}
+
 function roomInWorkspace(name, wsId) {
   if (wsId === WS_ALL) return true;
   if (wsId === WS_UNLABELED) return roomIsUnlabeled(name);
+  // Rooms in a global workspace appear under every (real) workspace (F1).
+  if (_roomIsGlobal(name)) return true;
   return getRoomWorkspaceIds(name).includes(wsId);
 }
 
@@ -10987,6 +10999,16 @@ function recolorWorkspace(id, color) {
   saveWorkspaces();
 }
 
+// Mark/unmark a workspace as "global" — its rooms appear in every other
+// workspace's list (F1). Only one global at a time keeps the mental model simple.
+function setWorkspaceGlobal(id, on) {
+  const ws = getWorkspace(id);
+  if (!ws) return;
+  if (on) workspaces.forEach(w => { if (w.id !== id) delete w.global; });
+  if (on) ws.global = true; else delete ws.global;
+  saveWorkspaces();
+}
+
 // Legacy single-target "move": replaces the room's membership with exactly this
 // one workspace (or clears it for Unlabeled). Used by drag-to-pill and the
 // quick move menus; the multi-select picker uses toggleRoomWorkspace instead.
@@ -11247,6 +11269,10 @@ function renderWorkspaceManagerList() {
             <div class="ws-mgr-parent-row"><span class="color-picker-label">folder</span>
               <select class="form-input ws-mgr-parent-select" onchange="setWorkspaceParentFromUI('${escId}', this.value)">${parentOpts}</select>
             </div>
+            <label class="ws-mgr-global-row" style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:var(--text-muted);cursor:pointer;">
+              <input type="checkbox" ${ws.global ? 'checked' : ''} onchange="setWorkspaceGlobalFromUI('${escId}', this.checked)">
+              <span>🌐 Global — its rooms show in every workspace</span>
+            </label>
           </div>
           <div class="ws-mgr-actions">
             <button class="btn btn-primary" style="padding:2px 8px;font-size:var(--text-xs);" onclick="saveWorkspaceEdit('${escId}')">Save</button>
@@ -11258,7 +11284,7 @@ function renderWorkspaceManagerList() {
           ${twisty}
           <span class="ws-mgr-drag" title="Drag to reorder">⠿</span>
           <div class="ws-mgr-name-cell">
-            <span class="ws-badge ws-color-${color}"><span class="ws-badge-dot"></span>${escapeHtml(ws.name)}</span>
+            <span class="ws-badge ws-color-${color}"><span class="ws-badge-dot"></span>${escapeHtml(ws.name)}${ws.global ? ' 🌐' : ''}</span>
             <span class="ws-mgr-count">${count} room${count !== 1 ? 's' : ''}</span>
           </div>
           <div class="ws-mgr-actions">
@@ -11310,6 +11336,14 @@ window.setWorkspaceColorFromUI = function(id, color) {
   renderWorkspaceManagerList();
   renderRoomManagerList();
   renderRoomTabs();
+};
+
+window.setWorkspaceGlobalFromUI = function(id, on) {
+  setWorkspaceGlobal(id, on);
+  renderWorkspaceManagerList();
+  renderRoomManagerList();
+  renderRoomTabs();
+  try { renderWorkspaceDropdown(); } catch {}
 };
 
 window.setWorkspaceParentFromUI = function(id, parentId) {
@@ -11890,7 +11924,15 @@ window.generateShareLink = async function(kind) {
         payload = JSON.stringify({ v: 1, r: roomName, t: text });
       }
       const bytes = await _compress(new TextEncoder().encode(payload));
-      link = base + '#p=' + _bytesToB64Url(bytes);
+      // Carry the same ws/room deep params as the synced link (B5) so a public
+      // link also lands in the right-named room context, not just /txt.html.
+      const purl = new URL(base);
+      let _pws = 'all';
+      if (activeWorkspace === WS_UNLABELED) _pws = 'unlabeled';
+      else if (activeWorkspace !== WS_ALL) { const w = getWorkspace(activeWorkspace); if (w) _pws = w.name; }
+      purl.searchParams.set('ws', _pws);
+      purl.searchParams.set('room', roomName);
+      link = purl.toString() + '#p=' + _bytesToB64Url(bytes);
       const kb = (link.length / 1024).toFixed(1);
       hint.textContent = (pw ? '🔒 Password-protected. ' : '') + 'Anyone with the link' + (pw ? ' and password' : '') + ' can read this copy — it does not sync. Link size: ' + kb + ' KB.';
       if (link.length > 28000) hint.textContent += ' ⚠ Very long; some chat apps may truncate it.';
