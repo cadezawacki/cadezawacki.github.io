@@ -8304,6 +8304,9 @@ function redecorateAfterRemote() {
   try { spellVersion++; } catch {}
   try { if (searchState && searchState.open) searchRecomputeAndRefresh(false); } catch {}
   try { editor.dispatch({}); } catch {}
+  // A just-adopted server doc may carry legacy inline images — shrink them so
+  // the bloat doesn't keep round-tripping through sync/heap.
+  try { if (typeof scheduleImageMigration === 'function') scheduleImageMigration(); } catch {}
 }
 
 function tryApplyPendingRemote() {
@@ -8622,6 +8625,7 @@ async function reconcileRoom() {
   let serverText = '';
   const encoded = unpackRoomText(snapVal);
   if (encoded) {
+    __mark('sync:reconcile-decrypt(' + encoded.length + 'b)');
     let decoded = await decryptText(encoded, syncState.encKey);
     if (syncState.roomName !== roomName) return;
     // Undecryptable (wrong key / locked room not yet unlocked): don't risk
@@ -9442,6 +9446,9 @@ async function _doSwitchRoom(name, firebaseUrl, baseEncKey) {
   // setState bypasses the docChanged update path, so refresh derived UI here.
   try { updateFooter(); } catch {}
   try { scheduleWordCount(); } catch {}
+  // If this room still carries legacy inline base64 images, shrink them to hash
+  // refs in the background — removes the doc/heap bloat behind the GC freezes.
+  try { if (typeof scheduleImageMigration === 'function') scheduleImageMigration(); } catch {}
   // Keep line-number gutter visibility in sync with the toggle (it's CSS-driven,
   // and swapping states can re-show a gutter the user had hidden).
   try { const g = document.querySelector('.cm-gutters'); if (g) g.style.display = showLineNums ? '' : 'none'; } catch {}
@@ -13000,6 +13007,9 @@ setTimeout(() => {
   try { if (store.get('cade-timer-open') === '1' || store.get('cade-pomo-open') === '1') window.openTimer(); } catch {}
   try { if (store.get('cade-zen') === '1') window.toggleZen(); } catch {}
 }, 400);
+// One-time pass over the initially-loaded room: migrate any legacy inline
+// base64 images out of the document (the doc/heap bloat behind the GC freezes).
+setTimeout(() => { try { scheduleImageMigration(); } catch {} }, 2500);
 
 // ============================================
 // MOBILE ENHANCEMENTS: swipe, haptics, install prompt (Round 2)
@@ -13258,6 +13268,62 @@ async function flushPendingImageUploads() {
   }
 }
 window.flushPendingImageUploads = flushPendingImageUploads;
+
+// ---- Migrate legacy INLINE base64 images -> out-of-document hash refs ----
+// Old documents (and rooms authored before the out-of-document store) carry the
+// full base64 inline, which bloats the document text, the localStorage cache,
+// and — worst — the Firebase value the SDK must parse on the main thread, plus
+// the heap, which drives multi-second GC pauses (the "random freeze"). This
+// rewrites each inline token to a short hash ref, moving the bytes to IndexedDB
+// + the images node. Content-addressed, so it's idempotent and safe to re-run.
+function _hasLegacyInlineImage(text) {
+  if (!text || text.indexOf('![img:') === -1) return false;
+  IMG_TOKEN_RE.lastIndex = 0; let m;
+  while ((m = IMG_TOKEN_RE.exec(text)) !== null) {
+    if (m[2] !== '#' && m[3].length >= 24) return true; // inline/bare with a real payload
+  }
+  return false;
+}
+let _imgMigrateTimer = null, _imgMigrateBusy = false;
+function scheduleImageMigration() {
+  clearTimeout(_imgMigrateTimer);
+  _imgMigrateTimer = setTimeout(() => { migrateInlineImages().catch(() => {}); }, 1500);
+}
+window.scheduleImageMigration = scheduleImageMigration;
+async function migrateInlineImages() {
+  if (_imgMigrateBusy) return;
+  const text = editor.state.doc.toString();
+  if (!_hasLegacyInlineImage(text)) return;
+  _imgMigrateBusy = true;
+  try {
+    IMG_TOKEN_RE.lastIndex = 0; let m;
+    const toks = [];
+    while ((m = IMG_TOKEN_RE.exec(text)) !== null) {
+      if (m[2] === '#' || m[3].length < 24) continue; // skip existing refs / non-images
+      toks.push({ from: m.index, to: m.index + m[0].length, code: m[1] || 'j', b64: m[3] });
+    }
+    if (!toks.length) return;
+    const changes = [];
+    for (const t of toks) {
+      const payload = t.code + ':' + t.b64;
+      let hash; try { hash = await _imgHash(payload); } catch { continue; }
+      try { await idbStore.set('img:' + hash, payload); } catch {}
+      _imgRefCache.set(hash, { url: _b64ToBlobUrl(t.code, t.b64), b64: t.b64 });
+      uploadImage(hash, payload);
+      changes.push({ from: t.from, to: t.to, insert: '![img:' + t.code + '#' + hash + ']' });
+    }
+    // Apply only if the document is still exactly what we hashed against, so the
+    // offsets are valid and we never corrupt edits made meanwhile.
+    if (changes.length && editor.state.doc.toString() === text) {
+      changes.sort((a, b) => a.from - b.from);
+      editor.dispatch({ changes });
+      const saved = toks.reduce((n, t) => n + t.b64.length, 0);
+      showToast('Optimized ' + changes.length + ' embedded image(s) (−' + Math.round(saved / 1024) + ' KB in-doc)', 'success', 3500);
+    } else if (changes.length) {
+      scheduleImageMigration(); // doc moved under us — retry shortly
+    }
+  } finally { _imgMigrateBusy = false; }
+}
 
 async function insertImageFile(file) {
   if (!file || !/^image\//.test(file.type)) { showToast('Not an image', 'error', 2000); return; }
