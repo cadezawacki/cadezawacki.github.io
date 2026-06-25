@@ -822,7 +822,20 @@ body {
 .editor-wrap .cm-scroller {
   overflow: auto;
   padding: var(--space-3) var(--space-4);
+  scrollbar-width: thin;                 /* Firefox */
+  scrollbar-color: var(--accent) transparent;
 }
+/* Main editor scrollbar: transparent track, teal accent thumb (item 8). */
+.editor-wrap .cm-scroller::-webkit-scrollbar { width: 10px; height: 10px; }
+.editor-wrap .cm-scroller::-webkit-scrollbar-track { background: transparent; }
+.editor-wrap .cm-scroller::-webkit-scrollbar-thumb {
+  background: var(--accent);
+  border-radius: 6px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+.editor-wrap .cm-scroller::-webkit-scrollbar-thumb:hover { background: var(--accent); background-clip: padding-box; }
+.editor-wrap .cm-scroller::-webkit-scrollbar-corner { background: transparent; }
 
 .editor-wrap .cm-content {
   caret-color: var(--accent);
@@ -1501,7 +1514,7 @@ body {
   justify-content: center;
   align-items: center;
   gap: 4px;
-  padding: 5px 12px;
+  padding: 3px 12px;
   flex-shrink: 0;
 }
 /* Icon-only buttons: hide any trailing text label, keep the SVG. */
@@ -1632,7 +1645,10 @@ body {
 .room-unlock-overlay {
   display: none;
   position: fixed;
-  inset: 0;
+  /* Start below the menubar so the room tabs / workspace pill stay visible and
+     usable while a room is locked (item 4). */
+  top: calc(36px + env(safe-area-inset-top));
+  left: 0; right: 0; bottom: 0;
   z-index: 600;
   background: var(--bg);
   align-items: center;
@@ -2067,6 +2083,10 @@ body {
 .cm-callout-important, .cm-callout-danger { --co: #ef4444; }
 .cm-callout-question { --co: #8b5cf6; }
 .cm-md-footnote { color: var(--accent); font-size: 0.85em; vertical-align: super; }
+.cm-md-bold { font-weight: 700; }
+.cm-md-italic { font-style: italic; }
+.cm-md-strike { text-decoration: line-through; }
+.cm-md-underline { text-decoration: underline; text-underline-offset: 2px; }
 .cm-md-code {
   background: var(--surface-2);
   border: 1px solid var(--border);
@@ -2186,6 +2206,16 @@ body {
 .timer-time { display: block; font-size: 34px; font-weight: 700; text-align: center; font-variant-numeric: tabular-nums; }
 .timer-sub { display: block; text-align: center; font-size: var(--text-xs); color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
 #timer-panel.break .timer-time { color: var(--success, #10b981); }
+@keyframes timerFlash { 0%, 100% { box-shadow: 0 0 0 1px var(--border), 0 8px 28px rgba(0,0,0,0.28); } 50% { box-shadow: 0 0 0 3px var(--accent), 0 0 18px var(--accent); } }
+#timer-panel.timer-flash { animation: timerFlash 0.7s ease-in-out infinite; }
+#timer-panel.timer-flash .timer-time { color: var(--accent); }
+/* Long-press room picker HUD (item 10). */
+.room-hud { position: fixed; inset: 0; z-index: 5500; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; animation: overlayIn 120ms ease-out; }
+.room-hud-inner { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; box-shadow: 0 12px 40px rgba(0,0,0,0.4); padding: 10px; max-height: 70vh; overflow-y: auto; min-width: 220px; max-width: 86vw; display: flex; flex-direction: column; gap: 4px; }
+.room-hud-title { font-size: var(--text-xs); color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.05em; padding: 4px 8px 6px; }
+.room-hud-item { text-align: left; background: none; border: none; color: var(--text); cursor: pointer; padding: 12px 14px; border-radius: 8px; font-size: 1rem; font-family: var(--font-mono); }
+.room-hud-item:active { background: var(--surface-hover, rgba(127,127,127,0.15)); }
+.room-hud-item.active { background: var(--accent); color: #fff; }
 .timer-cfg { display: flex; gap: 8px; justify-content: center; padding: 6px 10px; }
 .timer-cfg label { display: flex; align-items: center; gap: 4px; font-size: var(--text-xs); color: var(--text-muted); }
 .timer-cfg input { width: 64px; padding: 3px 5px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface, transparent); color: var(--text); font-size: var(--text-xs); }
@@ -3324,9 +3354,69 @@ function updateThemeIcon() {
 // ============================================
 const lineNumCompartment = new Compartment();
 let showLineNums = store.get('cade-linenums') !== 'false';
-// Feature 23 — soft-wrap toggle. lineWrapping lives in a compartment so it can be
-// reconfigured at runtime by the editor.softWrap device setting (default ON).
+// Feature 23 — line wrapping. lineWrapping lives in a compartment so it can be
+// reconfigured at runtime. Modes (item 3): 'none' (horizontal scroll), 'soft'
+// (default, visual wrap), 'hard' (insert real newlines so each visual row is its
+// own line). Migrates the old boolean editor.softWrap pref.
 const wrapCompartment = new Compartment();
+let _wrapMode = (() => {
+  try {
+    const v = store.get('cade-pref:editor.wrapMode');
+    if (v === 'none' || v === 'soft' || v === 'hard') return v;
+    return store.get('cade-pref:editor.softWrap') === 'false' ? 'none' : 'soft';
+  } catch { return 'soft'; }
+})();
+function _editorMaxCols() {
+  try {
+    const cw = editor.defaultCharacterWidth || 8;
+    const w = (editor.scrollDOM ? editor.scrollDOM.clientWidth : 700) - 48; // minus gutter/padding
+    return Math.max(20, Math.floor(w / cw));
+  } catch { return 80; }
+}
+let _hardWrapBusy = false, _hardWrapTimer = null;
+function hardWrapPass() {
+  if (_wrapMode !== 'hard' || _hardWrapBusy) return;
+  const max = _editorMaxCols();
+  const doc = editor.state.doc;
+  const cap = Math.min(doc.lines, 4000);
+  const changes = [];
+  for (let i = 1; i <= cap; i++) {
+    const line = doc.line(i);
+    const text = line.text;
+    if (text.length <= max || text.indexOf('![img:') !== -1) continue; // skip short + image/data lines
+    let pos = 0;
+    while (text.length - pos > max) {
+      const seg = text.slice(pos, pos + max);
+      let br = seg.lastIndexOf(' ');
+      if (br <= 0) br = max; // no space in the window → hard cut the word
+      const cutAbs = line.from + pos + br;
+      if (text[pos + br] === ' ') changes.push({ from: cutAbs, to: cutAbs + 1, insert: '\n' });
+      else changes.push({ from: cutAbs, insert: '\n' });
+      pos = pos + br + 1;
+    }
+  }
+  if (changes.length) {
+    _hardWrapBusy = true;
+    try { editor.dispatch({ changes, userEvent: 'input.hardwrap' }); } finally { _hardWrapBusy = false; }
+  }
+}
+function scheduleHardWrap() { if (_wrapMode !== 'hard') return; clearTimeout(_hardWrapTimer); _hardWrapTimer = setTimeout(hardWrapPass, 350); }
+// Apply the current wrap mode to the live editor. Called on setting change AND
+// after every room switch (saved per-room states carry a stale compartment, so
+// the mode must be re-applied or it only sticks on the room you set it in).
+function applyWrapMode(mode) {
+  if (mode === 'none' || mode === 'soft' || mode === 'hard') {
+    _wrapMode = mode;
+    try { store.set('cade-pref:editor.wrapMode', mode); } catch {}
+  }
+  try { editor.dispatch({ effects: wrapCompartment.reconfigure(_wrapMode === 'soft' ? EditorView.lineWrapping : []) }); } catch {}
+  if (_wrapMode === 'hard') scheduleHardWrap();
+}
+window.applyWrapMode = applyWrapMode;
+// Re-break on viewport resize (narrower). Note: hard wrap only ever *adds*
+// breaks, so widening won't reflow already-broken lines.
+let _wrapResizeTimer = null;
+window.addEventListener('resize', () => { if (_wrapMode === 'hard') { clearTimeout(_wrapResizeTimer); _wrapResizeTimer = setTimeout(hardWrapPass, 400); } });
 
 const editorTheme = EditorView.theme({
   '&': { height: '100%', background: 'var(--bg)' },
@@ -4336,6 +4426,15 @@ const MD_QUOTE_RE = /^>\s/;
 const MD_HR_RE = /^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/;
 const MD_CODE_RE = /`([^`\n]+)`/g;
 const MD_FN_RE = /\[\^[^\]\s]+\]/g;
+// Inline emphasis (visual only — the markers stay in the text). No lookbehind
+// (older iOS Safari chokes on it); bold/italic '*' overlaps are disambiguated
+// with an adjacency check in the builder.
+const MD_BOLD_RE = /\*\*([^*\n]+?)\*\*/g;
+const MD_BOLDU_RE = /__([^_\n]+?)__/g;
+const MD_ITAL_STAR_RE = /\*([^*\n]+?)\*/g;
+const MD_ITAL_UND_RE = /_([^_\n]+?)_/g;
+const MD_STRIKE_RE = /~~([^~\n]+?)~~/g;
+const MD_UND_RE = /<u>([\s\S]*?)<\/u>/gi;
 const CALLOUT_TYPES = ['note', 'tip', 'info', 'warning', 'important', 'caution', 'danger', 'success', 'question', 'quote'];
 
 function buildMdDecorations(view) {
@@ -4397,6 +4496,26 @@ function buildMdDecorations(view) {
         const s = line.from + m.index, e = s + m[0].length;
         ranges.push(Decoration.mark({ class: 'cm-md-footnote' }).range(s, e));
       }
+      // Inline emphasis: **bold**, __bold__, *italic*, _italic_, ~~strike~~, <u>.
+      MD_BOLD_RE.lastIndex = 0;
+      while ((m = MD_BOLD_RE.exec(text)) !== null) { const s = line.from + m.index; ranges.push(Decoration.mark({ class: 'cm-md-bold' }).range(s, s + m[0].length)); }
+      MD_BOLDU_RE.lastIndex = 0;
+      while ((m = MD_BOLDU_RE.exec(text)) !== null) { const s = line.from + m.index; ranges.push(Decoration.mark({ class: 'cm-md-bold' }).range(s, s + m[0].length)); }
+      MD_ITAL_STAR_RE.lastIndex = 0;
+      while ((m = MD_ITAL_STAR_RE.exec(text)) !== null) {
+        if (text[m.index - 1] === '*' || text[m.index + m[0].length] === '*') continue; // part of **bold**
+        const s = line.from + m.index; ranges.push(Decoration.mark({ class: 'cm-md-italic' }).range(s, s + m[0].length));
+      }
+      MD_ITAL_UND_RE.lastIndex = 0;
+      while ((m = MD_ITAL_UND_RE.exec(text)) !== null) {
+        if (text[m.index - 1] === '_' || text[m.index + m[0].length] === '_') continue; // part of __bold__
+        if (/[A-Za-z0-9]/.test(text[m.index - 1] || '') || /[A-Za-z0-9]/.test(text[m.index + m[0].length] || '')) continue; // snake_case
+        const s = line.from + m.index; ranges.push(Decoration.mark({ class: 'cm-md-italic' }).range(s, s + m[0].length));
+      }
+      MD_STRIKE_RE.lastIndex = 0;
+      while ((m = MD_STRIKE_RE.exec(text)) !== null) { const s = line.from + m.index; ranges.push(Decoration.mark({ class: 'cm-md-strike' }).range(s, s + m[0].length)); }
+      MD_UND_RE.lastIndex = 0;
+      while ((m = MD_UND_RE.exec(text)) !== null) { const s = line.from + m.index; ranges.push(Decoration.mark({ class: 'cm-md-underline' }).range(s, s + m[0].length)); }
     }
     // Syntax-highlight tokens for code blocks intersecting this range.
     for (const blk of fenceBlocks) {
@@ -4676,6 +4795,7 @@ function buildEditorExtensions() {
         __mark('editing(' + update.state.doc.length + 'ch)');
         saveContentDebounced();
         scheduleWordCount();
+        if (_wrapMode === 'hard' && !_hardWrapBusy) scheduleHardWrap();
         if (syncState.connected && !syncState.suppressUpdate) {
           syncState.lastLocalEdit = Date.now();
           broadcastText();
@@ -4685,12 +4805,9 @@ function buildEditorExtensions() {
       if (typeof _onEditorUpdate === 'function') { try { _onEditorUpdate(update); } catch {} }
     }),
     EditorView.updateListener.of(renumberListener),
-    // Respect the soft-wrap preference when rebuilding state on room switch.
-    // Use window.Settings (a plain property access, safely undefined early)
-    // rather than the `Settings` binding, which is in its temporal dead zone at
-    // initial editor creation and would throw on access. Its registration
-    // re-applies the stored value then, so defaulting to wrap-on here is safe.
-    wrapCompartment.of((window.Settings && window.Settings.get('editor.softWrap') === false) ? [] : EditorView.lineWrapping),
+    // Respect the wrap mode when rebuilding state on room switch (item 3).
+    // Only 'soft' uses lineWrapping; 'none'/'hard' scroll/insert-breaks.
+    wrapCompartment.of(_wrapMode === 'soft' ? EditorView.lineWrapping : []),
     fenceTrackerPlugin, // must precede the decorators that consult fence state
     listIndentPlugin,
     todoPlugin,
@@ -5685,6 +5802,10 @@ function closeAllMenus() {
     const menu = document.getElementById(menuId); if (menu) menu.classList.remove('open');
     const btn = document.getElementById(btnId); if (btn) btn.setAttribute('aria-expanded', 'false');
   });
+  // Also close the workspace dropdown — it's a separate popover that otherwise
+  // stays open when a header menu is opened (item 9).
+  const wsdd = document.getElementById('ws-dropdown');
+  if (wsdd) wsdd.classList.remove('open');
 }
 
 document.addEventListener('click', closeAllMenus);
@@ -6161,6 +6282,37 @@ function main(ctx) {
     if (map[cp]) return String.fromCodePoint(map[cp]);
     return ch;
   }).join('');
+  if (ctx.selection) ctx.selection = result; else ctx.fullText = result;
+}`);
+
+registerScript(`/**
+  {
+    "name": "Clear Markdown",
+    "description": "Strip markdown emphasis (bold/italic/underline/strike/code/highlight) but keep # heading marks",
+    "author": "Cade",
+    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M3 7h18'/><path d='M3 12h12'/><path d='M3 17h6'/></svg>",
+    "tags": "clear,strip,markdown,plain,bold,italic,underline,remove,format"
+  }
+**/
+function main(ctx) {
+  var text = ctx.selection || ctx.fullText;
+  var result = window.clearMarkdownInline ? window.clearMarkdownInline(text) : text;
+  if (ctx.selection) ctx.selection = result; else ctx.fullText = result;
+}`);
+
+registerScript(`/**
+  {
+    "name": "Super Clear Styles",
+    "description": "Strip BOTH Unicode fancy text and markdown formatting — back to plain (keeps # headings)",
+    "author": "Cade",
+    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M3 3l18 18'/><path d='M21 3L3 21'/></svg>",
+    "tags": "clear,strip,plain,reset,defancify,markdown,super,all,format,remove"
+  }
+**/
+function main(ctx) {
+  var text = ctx.selection || ctx.fullText;
+  var result = window.defancifyText ? window.defancifyText(text) : text;
+  result = window.clearMarkdownInline ? window.clearMarkdownInline(result) : result;
   if (ctx.selection) ctx.selection = result; else ctx.fullText = result;
 }`);
 
@@ -9463,6 +9615,9 @@ async function _doSwitchRoom(name, firebaseUrl, baseEncKey) {
   // setState bypasses the docChanged update path, so refresh derived UI here.
   try { updateFooter(); } catch {}
   try { scheduleWordCount(); } catch {}
+  // Restored per-room states carry a stale wrap compartment — re-apply the
+  // current wrap mode so the setting follows across rooms (item 3).
+  try { applyWrapMode(); } catch {}
   // If this room still carries legacy inline base64 images, shrink them to hash
   // refs in the background — removes the doc/heap bloat behind the GC freezes.
   try { if (typeof scheduleImageMigration === 'function') scheduleImageMigration(); } catch {}
@@ -9473,6 +9628,7 @@ async function _doSwitchRoom(name, firebaseUrl, baseEncKey) {
   // Keep an open Snapshots panel pointed at the new room's history (#6).
   try { if (document.getElementById('snapshots-overlay').classList.contains('open')) renderSnapshotsList(); } catch {}
   _activeRoomReady = true; // local switch committed; same-room clicks now no-op
+  try { _updateLocationForRoom(); } catch {} // reflect ws/room in the URL (item 5)
 
   // No Firebase config — local-only mode. The user can still edit and we'll
   // persist to per-room cache. As soon as creds are set + we reconnect, the
@@ -9634,6 +9790,16 @@ async function _doSwitchRoom(name, firebaseUrl, baseEncKey) {
     // This is what handles "typed into this room while offline last session".
     syncState.pendingReconcile = true;
     attachConnListener(db);
+    // Belt-and-braces for cold page loads: the Firebase stream often isn't live
+    // yet when attachConnListener first runs, so the initial reconcile can miss
+    // its `.info/connected` -> true edge and the room shows stale local content
+    // until a manual reconnect (item 11). reconcileOnLive is idempotent (guarded
+    // by pendingReconcile + conflictResolving + isStreamLive), so these retries
+    // safely catch up once the stream comes up.
+    const _kickEpoch = epoch;
+    [800, 2500, 6000].forEach(ms => setTimeout(() => {
+      if (_kickEpoch === _switchEpoch && syncState.pendingReconcile) { try { reconcileOnLive(); } catch {} }
+    }, ms));
     clearInterval(syncState.idleCheckTimer);
     syncState.idleCheckTimer = setInterval(tryApplyPendingRemote, 500);
     // If no Firebase update arrives within 2s (room empty on server, or
@@ -10899,9 +11065,9 @@ window.forceWorkspaceSync = async function() {
 window.toggleWorkspaceDropdown = function(evt) {
   const dd = document.getElementById('ws-dropdown');
   const isOpen = dd.classList.contains('open');
-  if (isOpen) {
-    dd.classList.remove('open');
-  } else {
+  // Close any open header menu first so only one popover shows at a time (item 9).
+  try { closeAllMenus(); } catch {}
+  if (!isOpen) {
     renderWorkspaceDropdown();
     dd.classList.add('open');
   }
@@ -10944,6 +11110,7 @@ window.switchToWorkspace = function(wsId) {
   // Always render so the pill + filtered tabs update immediately, even if
   // switchRoom early-returns (e.g., no Firebase configured yet).
   renderRoomTabs();
+  try { _updateLocationForRoom(); } catch {} // reflect the new workspace in the URL (item 5)
   if (document.getElementById('room-manager-overlay').classList.contains('open')) {
     renderRoomManagerList();
   }
@@ -11527,6 +11694,41 @@ const _origSyncConnectForWs = window.syncConnect;
 // Initial pill render (before any rooms-related rendering)
 renderWorkspacePill();
 
+// Deep link via URL query (?ws=<name|unlabeled|all>&room=<room>) — overrides the
+// saved active workspace/room so a shared/bookmarked link opens straight into it.
+// (Query params, not a path: the app is a single static file, so /ws/room would
+// 404 on reload — params survive a refresh and are shareable.)
+function _updateLocationForRoom() {
+  try {
+    if (!activeRoom) return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('fb')) return; // don't fight an in-flight sync-share link
+    let wsLabel = 'all';
+    if (activeWorkspace === WS_UNLABELED) wsLabel = 'unlabeled';
+    else if (activeWorkspace !== WS_ALL) { const ws = getWorkspace(activeWorkspace); if (ws) wsLabel = ws.name; }
+    params.set('ws', wsLabel);
+    params.set('room', activeRoom);
+    const qs = params.toString();
+    history.replaceState(null, '', window.location.pathname + (qs ? '?' + qs : '') + window.location.hash);
+  } catch {}
+}
+window._updateLocationForRoom = _updateLocationForRoom;
+try {
+  const _dl = new URLSearchParams(window.location.search);
+  const _dlRoom = _dl.get('room'), _dlWs = _dl.get('ws');
+  if (_dlWs && !_dl.get('fb')) {
+    const w = _dlWs.toLowerCase();
+    if (w === 'all') activeWorkspace = WS_ALL;
+    else if (w === 'unlabeled') activeWorkspace = WS_UNLABELED;
+    else { const ws = workspaces.find(x => x.name && x.name.toLowerCase() === w); if (ws) activeWorkspace = ws.id; }
+    store.set('cade-active-workspace', activeWorkspace);
+  }
+  if (_dlRoom && !_dl.get('fb')) {
+    if (!rooms.includes(_dlRoom)) { rooms.push(_dlRoom); saveRooms(); }
+    activeRoom = _dlRoom; store.set('cade-active-room', _dlRoom);
+  }
+} catch {}
+
 // Auto-connect on page load
 if (savedFirebaseUrl && savedEncKey) {
   // Kick off workspace sync independently (so workspaces appear even if no room is active)
@@ -11620,6 +11822,11 @@ window.generateShareLink = async function(kind) {
       const url = new URL(base);
       url.searchParams.set('fb', fbUrl);
       url.searchParams.set('room', roomName);
+      // Include the workspace so the link lands in the right context (item 5).
+      let _ws = 'all';
+      if (activeWorkspace === WS_UNLABELED) _ws = 'unlabeled';
+      else if (activeWorkspace !== WS_ALL) { const w = getWorkspace(activeWorkspace); if (w) _ws = w.name; }
+      url.searchParams.set('ws', _ws);
       link = url.toString();
       hint.textContent = 'Opens live for anyone connected to the same database. The password is never included.';
     } else {
@@ -11669,9 +11876,17 @@ window.shareNative = function() {
     const params = new URLSearchParams(window.location.search);
     const fbParam = params.get('fb');
     const roomParam = params.get('room');
+    const wsParam = params.get('ws');
     if (fbParam) {
       document.getElementById('sync-firebase-url').value = fbParam;
       if (!store.get('cade-firebase-url')) store.set('cade-firebase-url', fbParam);
+    }
+    if (fbParam && wsParam) {
+      const w = wsParam.toLowerCase();
+      if (w === 'all') activeWorkspace = WS_ALL;
+      else if (w === 'unlabeled') activeWorkspace = WS_UNLABELED;
+      else { const ws = workspaces.find(x => x.name && x.name.toLowerCase() === w); if (ws) activeWorkspace = ws.id; }
+      store.set('cade-active-workspace', activeWorkspace);
     }
     if (roomParam) {
       document.getElementById('sync-room-name').value = roomParam;
@@ -11685,8 +11900,9 @@ window.shareNative = function() {
         renderRoomTabs();
       }
     }
-    if (fbParam || roomParam) {
-      // Clean the URL so refresh doesn't re-trigger the join
+    if (fbParam) {
+      // Sync-share link: clean the URL so refresh doesn't re-trigger the join.
+      // (Plain ?ws/?room deep-links are kept so refresh/bookmark still works.)
       window.history.replaceState({}, document.title, window.location.pathname);
       showToast('Shared link loaded — enter your password in Sync to connect', 'success', 5000);
     }
@@ -12616,6 +12832,7 @@ window.toggleOutline = function() {
 
 // ---- Pomodoro / focus timer (#31) ----
 // ---- Generic timer (#31, reworked): pomodoro · countdown · time-of-day · stopwatch ----
+let _timerMinimized = false, _timerFlashing = false;
 const _timer = {
   mode: 'pomodoro',      // 'pomodoro' | 'countdown' | 'clock' | 'stopwatch'
   running: false, timer: null,
@@ -12686,12 +12903,31 @@ function _timerTick() {
     else { t.phase = 'work'; t.remaining = t.work * 60; _timerNotify('Focus time', 'Back to it — ' + t.work + ' minutes.'); }
   } else if (t.mode === 'countdown') {
     if (t.cdRemaining > 0) t.cdRemaining--;
-    if (t.cdRemaining <= 0) { _timerStop(); _timerNotify('Timer done', 'Countdown finished.'); }
+    if (t.cdRemaining <= 0) { _timerStop(); _timerFire('Timer done', 'Countdown finished.'); }
   } else if (t.mode === 'clock') {
-    if (_clockRemaining(t.clockTarget) <= 0) { _timerStop(); _timerNotify('Time reached', (t.clockTarget || '') + ' reached.'); }
+    if (_clockRemaining(t.clockTarget) <= 0) { _timerStop(); _timerFire('Time reached', (t.clockTarget || '') + ' reached.'); }
   } /* stopwatch: display is computed live from swStart, nothing to increment */
   _timerRender();
   _timerChipUpdate();
+}
+function _timerPref(key, dflt) { try { const v = window.Settings && Settings.get('widgets.' + key); return v == null ? dflt : v; } catch { return dflt; } }
+// Timer reached zero: notify, un-minimize so it's visible, and flash for attention.
+function _timerFire(title, body) {
+  _timerNotify(title, body);
+  if (!document.getElementById('timer-panel')) { _timerMinimized = false; try { window.openTimer(); } catch {} }
+  _timerStartFlash();
+}
+function _timerStartFlash() {
+  const p = document.getElementById('timer-panel'); if (!p) return;
+  p.classList.add('timer-flash');
+  _timerFlashing = true;
+  if (!_timerPref('timerFlashUntilAck', true)) {
+    setTimeout(() => { if (_timerFlashing) _timerStopFlash(); }, 4000); // a few flashes then stop
+  }
+}
+function _timerStopFlash() {
+  const p = document.getElementById('timer-panel'); if (p) p.classList.remove('timer-flash');
+  _timerFlashing = false;
 }
 // Current display value for the active mode (used by panel + footer chip).
 function _timerCurrentDisp() {
@@ -12705,9 +12941,11 @@ function _timerCurrentDisp() {
 function _timerChipUpdate() {
   const chip = document.getElementById('timer-chip'); if (!chip) return;
   const panelOpen = !!document.getElementById('timer-panel');
-  const show = _timer.running && !panelOpen;
+  // Show while minimized whether running OR paused (a paused timer can be
+  // minimized too). Running timers also show even if not explicitly minimized.
+  const show = !panelOpen && (_timerMinimized || _timer.running);
   chip.style.display = show ? '' : 'none';
-  if (show) chip.textContent = '⏱ ' + _timerCurrentDisp();
+  if (show) chip.textContent = (_timer.running ? '⏱ ' : '⏸ ') + _timerCurrentDisp();
 }
 const _TIMER_TABS = [['pomodoro', 'Pomodoro'], ['countdown', 'Countdown'], ['clock', 'Time of day'], ['stopwatch', 'Stopwatch']];
 function _timerBodyHtml() {
@@ -12719,7 +12957,9 @@ function _timerBodyHtml() {
     html += `<div class="timer-cfg"><label>Focus<input type="number" min="1" max="180" value="${t.work}" onchange="timerCfg('work',this.value)"></label>` +
             `<label>Break<input type="number" min="1" max="60" value="${t.brk}" onchange="timerCfg('brk',this.value)"></label></div>`;
   } else if (t.mode === 'countdown') {
-    html += `<div class="timer-cfg"><label>Minutes<input type="number" min="0" max="600" value="${Math.round(t.cdTotal / 60)}" onchange="timerCfg('cd',this.value)"></label></div>`;
+    // Sub-minute allowed (e.g. 0.5 = 30s). Trim trailing zeros for display.
+    const mins = +(t.cdTotal / 60).toFixed(3);
+    html += `<div class="timer-cfg"><label>Minutes<input type="number" min="0" max="600" step="any" value="${mins}" onchange="timerCfg('cd',this.value)"></label></div>`;
   } else if (t.mode === 'clock') {
     html += `<div class="timer-cfg"><label>Target<input type="time" value="${t.clockTarget || ''}" onchange="timerCfg('clock',this.value)"></label></div>`;
   }
@@ -12767,6 +13007,8 @@ function _timerRender() {
   _timerChipUpdate();
 }
 window.timerMinimize = function() {
+  _timerStopFlash();
+  _timerMinimized = true;           // chip stays even when paused
   const p = document.getElementById('timer-panel');
   if (p) { p.remove(); }            // keeps _timer.timer running in the background
   store.set('cade-timer-open', '0');
@@ -12783,6 +13025,7 @@ window.timerCfg = function(k, v) {
   _timerSaveCfg(); _timerRender();
 };
 window.timerToggleRun = function() {
+  _timerStopFlash(); // any control press acknowledges a firing timer
   const t = _timer; t.running = !t.running;
   if (t.running) {
     try { if (window.Notification && Notification.permission === 'default') Notification.requestPermission(); } catch {}
@@ -12796,16 +13039,28 @@ window.timerToggleRun = function() {
   }
   _timerRender();
 };
-window.timerReset = function() { _timerStop(); _timerPrime(); _timerRender(); };
+window.timerReset = function() { _timerStopFlash(); _timerStop(); _timerPrime(); _timerRender(); };
 window.timerLap = function() { if (_timer.mode !== 'stopwatch') return; _timer.laps.push(_swNow()); _timerRender(); };
 window.openTimer = function() {
   closeAllMenus();
   const existing = document.getElementById('timer-panel');
-  if (existing) { existing.remove(); store.set('cade-timer-open', '0'); _timerChipUpdate(); return; }
+  // Toggling from the menu while open = minimize (don't lose a running timer).
+  if (existing) { window.timerMinimize(); return; }
   _timerLoadCfg();
+  _timerMinimized = false;
   if (!_timer.running) _timerPrime();
   const p = _mkPanel('timer-panel', 'Timer', _timerBodyHtml());
-  p._onClose = () => { store.set('cade-timer-open', '0'); _timerChipUpdate(); };
+  // The X (close): if a timer is live and the "minimize on close" pref is on,
+  // keep it running with the footer chip; otherwise stop + dismiss fully.
+  p._onClose = () => {
+    _timerStopFlash();
+    if (_timer.running && _timerPref('timerMinimizeOnClose', true)) { _timerMinimized = true; }
+    else { _timerStop(); _timerMinimized = false; }
+    store.set('cade-timer-open', '0');
+    _timerChipUpdate();
+  };
+  // Clicking anywhere in the panel acknowledges a firing timer.
+  p.addEventListener('pointerdown', () => { if (_timerFlashing) _timerStopFlash(); });
   _timerRender();
   _timerChipUpdate();
   store.set('cade-timer-open', '1');
@@ -13015,6 +13270,8 @@ try {
   if (typeof registerSetting === 'function') {
     registerSetting({ key: 'widgets.clock', label: 'Footer clock', type: 'toggle', default: false, section: 'Appearance', apply(v) { setClockEnabled(!!v); } });
     registerSetting({ key: 'widgets.clockTz', label: 'Extra timezones', type: 'text', default: '', section: 'Appearance', hint: 'Comma-separated IANA names, e.g. America/New_York, Europe/London', apply() { if (document.getElementById('footer-clock')) clockTick(); } });
+    registerSetting({ key: 'widgets.timerFlashUntilAck', label: 'Timer flashes until acknowledged', type: 'toggle', default: true, section: 'Behavior', hint: 'When a timer fires, keep flashing the popup until you click it / press Stop / close it.' });
+    registerSetting({ key: 'widgets.timerMinimizeOnClose', label: 'Minimize running timer on close', type: 'toggle', default: true, section: 'Behavior', hint: 'Closing the timer while it is running keeps it going as a footer chip instead of stopping it.' });
   }
 } catch {}
 
@@ -13033,31 +13290,73 @@ setTimeout(() => { try { scheduleImageMigration(); } catch {} }, 2500);
 // ============================================
 window.haptic = function(ms) { try { if (navigator.vibrate) navigator.vibrate(ms || 12); } catch {} };
 
-// Swipe between rooms (#77): a quick horizontal flick on the editor switches to
-// the prev/next visible room. Tuned so it never fires during scroll/selection.
+// Swipe between rooms (#77, item 10): a deliberate horizontal flick switches to
+// the prev/next visible room — ONE room per gesture, with a cooldown so it can't
+// jump several at once, skipping locked (not-yet-unlocked) rooms. A 2s long-press
+// near a side edge opens a room-picker HUD instead.
+function _swipeRoomList() {
+  let list;
+  try { list = (typeof roomsInActiveWorkspace === 'function') ? roomsInActiveWorkspace(false) : rooms.slice(); } catch { list = rooms.slice(); }
+  try { if (typeof orderRooms === 'function') list = orderRooms(list); } catch {}
+  return list || [];
+}
+function _roomLockedClosed(r) { try { return roomHasPassword(r) && !roomIsUnlocked(r); } catch { return false; } }
+window.showRoomHud = function() {
+  closeRoomHud();
+  const list = _swipeRoomList();
+  if (!list.length) return;
+  const hud = document.createElement('div');
+  hud.id = 'room-hud'; hud.className = 'room-hud';
+  hud.innerHTML = '<div class="room-hud-inner"><div class="room-hud-title">Switch room</div>' + list.map(r => {
+    const esc = escapeHtml(r.replace(/\\/g, '\\\\').replace(/'/g, "\\'"));
+    return '<button class="room-hud-item' + (r === activeRoom ? ' active' : '') + '" onclick="closeRoomHud(); switchRoom(\'' + esc + '\')">' +
+      escapeHtml(r) + (_roomLockedClosed(r) ? ' 🔒' : '') + '</button>';
+  }).join('') + '</div>';
+  hud.addEventListener('click', e => { if (e.target === hud) closeRoomHud(); });
+  document.body.appendChild(hud);
+  try { haptic(20); } catch {}
+};
+window.closeRoomHud = function() { const h = document.getElementById('room-hud'); if (h) h.remove(); };
 (function() {
   const el = editor.scrollDOM;
   if (!el) return;
-  let x0 = 0, y0 = 0, t0 = 0, tracking = false;
+  let x0 = 0, y0 = 0, t0 = 0, tracking = false, moved = false, holdTimer = null, lastSwitch = 0;
   el.addEventListener('touchstart', e => {
+    clearTimeout(holdTimer);
     if (e.touches.length !== 1) { tracking = false; return; }
-    x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; t0 = Date.now(); tracking = true;
+    x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; t0 = Date.now(); tracking = true; moved = false;
+    const w = window.innerWidth, edge = Math.min(48, w * 0.12);
+    if (x0 <= edge || x0 >= w - edge) {
+      holdTimer = setTimeout(() => { if (!moved && tracking) { tracking = false; window.showRoomHud(); } }, 2000);
+    }
+  }, { passive: true });
+  el.addEventListener('touchmove', e => {
+    const t = e.touches[0]; if (!t) return;
+    if (Math.abs(t.clientX - x0) > 12 || Math.abs(t.clientY - y0) > 12) { moved = true; clearTimeout(holdTimer); }
   }, { passive: true });
   el.addEventListener('touchend', e => {
+    clearTimeout(holdTimer);
     if (!tracking) return; tracking = false;
     const t = e.changedTouches[0];
     const dx = t.clientX - x0, dy = t.clientY - y0, dt = Date.now() - t0;
-    if (dt > 600) return;                                   // not a flick
-    if (Math.abs(dx) < 80 || Math.abs(dy) > 45) return;      // too short / too vertical
-    if (Math.abs(dx) < Math.abs(dy) * 2) return;             // not clearly horizontal
+    if (dt > 450) return;                                    // must be a quick flick
+    if (Math.abs(dx) < 110 || Math.abs(dy) > 40) return;      // longer + flatter than before
+    if (Math.abs(dx) < Math.abs(dy) * 2.5) return;           // clearly horizontal
     if (!editor.state.selection.main.empty) return;          // user is selecting
-    let list;
-    try { list = (typeof roomsInActiveWorkspace === 'function') ? roomsInActiveWorkspace(false) : rooms.slice(); } catch { list = rooms.slice(); }
-    try { if (typeof orderRooms === 'function') list = orderRooms(list); } catch {}
-    if (!list || list.length < 2) return;
+    if (Date.now() - lastSwitch < 700) return;               // cooldown: one room per gesture window
+    const list = _swipeRoomList();
+    if (list.length < 2) return;
     const idx = list.indexOf(activeRoom);
     if (idx < 0) return;
-    const next = dx < 0 ? (idx + 1) % list.length : (idx - 1 + list.length) % list.length;
+    const dir = dx < 0 ? 1 : -1, n = list.length;
+    let next = -1;
+    for (let step = 1; step <= n; step++) {                   // skip locked rooms
+      const j = ((idx + dir * step) % n + n) % n;
+      if (j === idx) break;
+      if (!_roomLockedClosed(list[j])) { next = j; break; }
+    }
+    if (next < 0) return;
+    lastSwitch = Date.now();
     haptic(12);
     switchRoom(list[next]);
   }, { passive: true });
@@ -13104,6 +13403,96 @@ window.installApp = function() {
   });
 })();
 
+// Fancy unicode text transforms — used when Markdown styling is OFF so the
+// bold/italic/underline buttons produce styled text instead of literal markdown
+// tags (item 1). Shared by the buttons and the "Clear Styles" scripts.
+const Fancy = (() => {
+  const A = 0x41, Z = 0x5A, a = 0x61, z = 0x7A, n0 = 0x30, n9 = 0x39;
+  const cp = String.fromCodePoint;
+  function toBold(s) { return [...s].map(ch => { const c = ch.codePointAt(0);
+    if (c >= A && c <= Z) return cp(0x1D5D4 + c - A);
+    if (c >= a && c <= z) return cp(0x1D5EE + c - a);
+    if (c >= n0 && c <= n9) return cp(0x1D7EC + c - n0);
+    return ch; }).join(''); }
+  function toItalic(s) { return [...s].map(ch => { const c = ch.codePointAt(0);
+    if (c >= A && c <= Z) return cp(0x1D608 + c - A);
+    if (c >= a && c <= z) return cp(0x1D622 + c - a);
+    return ch; }).join(''); }
+  function toUnder(s) { return [...s].map(ch => /\s/.test(ch) ? ch : ch + '̲').join(''); }
+  // Reverse fancy alphanumerics back to ASCII and strip combining marks.
+  function strip(s) {
+    return [...s].map(ch => { const c = ch.codePointAt(0);
+      if (c >= 0x1D5D4 && c <= 0x1D5ED) return cp(A + c - 0x1D5D4);   // bold upper
+      if (c >= 0x1D5EE && c <= 0x1D607) return cp(a + c - 0x1D5EE);   // bold lower
+      if (c >= 0x1D7EC && c <= 0x1D7F5) return cp(n0 + c - 0x1D7EC);  // bold digits
+      if (c >= 0x1D608 && c <= 0x1D621) return cp(A + c - 0x1D608);   // italic upper
+      if (c >= 0x1D622 && c <= 0x1D63B) return cp(a + c - 0x1D622);   // italic lower
+      if (c >= 0x1D63C && c <= 0x1D655) return cp(A + c - 0x1D63C);   // bold-italic upper
+      if (c >= 0x1D656 && c <= 0x1D66F) return cp(a + c - 0x1D656);   // bold-italic lower
+      return ch; }).join('').replace(/[̵̶̲̳⃝⃞]/g, '');
+  }
+  const isBold = s => [...s].some(ch => { const c = ch.codePointAt(0); return (c >= 0x1D5D4 && c <= 0x1D607) || (c >= 0x1D7EC && c <= 0x1D7F5) || (c >= 0x1D63C && c <= 0x1D66F); });
+  const isItalic = s => [...s].some(ch => { const c = ch.codePointAt(0); return (c >= 0x1D608 && c <= 0x1D63B) || (c >= 0x1D63C && c <= 0x1D66F); });
+  const isUnder = s => /̲/.test(s);
+  return { toBold, toItalic, toUnder, strip, isBold, isItalic, isUnder };
+})();
+window.Fancy = Fancy;
+
+// Strip inline markdown emphasis but KEEP heading hashes / list / quote markers.
+function clearMarkdownInline(text) {
+  return text
+    .replace(/<\/?u>/gi, '')
+    .replace(/==(?:[a-z]+\|)?([\s\S]*?)==/g, '$1')          // ==color|highlight==
+    .replace(/\*\*([\s\S]*?)\*\*/g, '$1')                   // **bold**
+    .replace(/~~([\s\S]*?)~~/g, '$1')                       // ~~strike~~
+    .replace(/`([^`\n]+?)`/g, '$1')                         // `code`
+    .replace(/(^|[^*\w])\*(?!\s)([^*\n]+?)\*(?!\w)/g, '$1$2') // *italic*
+    .replace(/(^|[^_\w])__([\s\S]*?)__(?!\w)/g, '$1$2')      // __underline/bold__
+    .replace(/(^|[^_\w])_(?!\s)([^_\n]+?)_(?!\w)/g, '$1$2'); // _italic_
+}
+window.clearMarkdownInline = clearMarkdownInline;
+
+// Comprehensive Unicode "defancify": reverse the common fancy alphabet blocks
+// and strip combining marks. Shared by the Defancify-style scripts.
+function defancifyText(text) {
+  const map = {};
+  const addAlpha = (u, l) => { for (let i = 0; i < 26; i++) { map[u + i] = 0x41 + i; map[l + i] = 0x61 + i; } };
+  const addDigits = (s) => { for (let i = 0; i < 10; i++) map[s + i] = 0x30 + i; };
+  addAlpha(0x1D400, 0x1D41A); addDigits(0x1D7CE);  // bold serif
+  addAlpha(0x1D434, 0x1D44E); map[0x210E] = 0x68;  // italic serif (h = U+210E)
+  addAlpha(0x1D468, 0x1D482);                       // bold-italic serif
+  addAlpha(0x1D5A0, 0x1D5BA); addDigits(0x1D7E2);  // sans
+  addAlpha(0x1D5D4, 0x1D5EE); addDigits(0x1D7EC);  // sans bold
+  addAlpha(0x1D608, 0x1D622);                       // sans italic
+  addAlpha(0x1D63C, 0x1D656);                       // sans bold-italic
+  addAlpha(0x1D670, 0x1D68A); addDigits(0x1D7F6);  // monospace
+  addAlpha(0x1D538, 0x1D552); addDigits(0x1D7D8);  // double-struck
+  for (let i = 0; i < 26; i++) { map[0xFF21 + i] = 0x41 + i; map[0xFF41 + i] = 0x61 + i; } // fullwidth
+  for (let i = 0; i < 10; i++) map[0xFF10 + i] = 0x30 + i;
+  const combining = new Set([0x0332, 0x0333, 0x0336, 0x0335, 0x0305, 0x20E3, 0x0489, 0x20DD, 0x20DE]);
+  return [...text].map(ch => {
+    const c = ch.codePointAt(0);
+    if (combining.has(c)) return '';
+    return map[c] ? String.fromCodePoint(map[c]) : ch;
+  }).join('');
+}
+window.defancifyText = defancifyText;
+
+// The word immediately before the caret, when the caret sits at its end (no
+// selection, no trailing space/delimiter). Drives the "apply to the word I just
+// typed" toolbar behavior (item 2). Returns null when the caret follows a
+// delimiter/space or is at line start.
+function _wordRangeBeforeCursor() {
+  const sel = editor.state.selection.main;
+  if (!sel.empty) return null;
+  const pos = sel.head;
+  const line = editor.state.doc.lineAt(pos);
+  const before = line.text.slice(0, pos - line.from);
+  const wm = before.match(/[\p{L}\p{N}_'’-]+$/u);
+  if (!wm) return null;
+  return { from: pos - wm[0].length, to: pos };
+}
+
 // Mobile markdown toolbar row (#78): configurable buttons that insert markdown
 // around the selection / at the cursor.
 const MD_BTN_DEFS = {
@@ -13122,18 +13511,23 @@ const MD_BTN_DEFS = {
 window.applyHighlight = function(color) {
   closeHighlightPicker();
   const sel = editor.state.selection.main;
-  let text = editor.state.sliceDoc(sel.from, sel.to);
+  // No selection: target the word just typed if the caret is at its end,
+  // otherwise insert an empty highlight at the caret (item 2).
+  let from = sel.from, to = sel.to;
+  if (sel.empty) { const wr = _wordRangeBeforeCursor(); if (wr) { from = wr.from; to = wr.to; } }
+  let text = editor.state.sliceDoc(from, to);
   const m = /^==(?:([a-z]+)\|)?([\s\S]*?)==$/.exec(text);
   if (m) text = m[2]; // peel an existing highlight so re-applying / No color works
   if (!color) {
-    editor.dispatch({ changes: { from: sel.from, to: sel.to, insert: text }, selection: { anchor: sel.from, head: sel.from + text.length } });
+    editor.dispatch({ changes: { from, to, insert: text }, selection: { anchor: from, head: from + text.length } });
     editor.focus(); return;
   }
   const open = HL_COLORS.includes(color) ? '==' + color + '|' : '==';
   const ins = open + text + '==';
-  const anchor = sel.empty ? sel.from + open.length : sel.from;
-  const head = sel.empty ? sel.from + open.length : sel.from + ins.length;
-  editor.dispatch({ changes: { from: sel.from, to: sel.to, insert: ins }, selection: { anchor, head } });
+  const empty = from === to;
+  const anchor = empty ? from + open.length : from;
+  const head = empty ? from + open.length : from + ins.length;
+  editor.dispatch({ changes: { from, to, insert: ins }, selection: { anchor, head } });
   editor.focus();
 };
 let _hlPickerEl = null;
@@ -13175,12 +13569,38 @@ window.mdBtn = function(kind) {
     const t = editor.state.sliceDoc(sel.from, sel.to) || 'text';
     const ins = '[' + t + '](url)';
     editor.dispatch({ changes: { from: sel.from, to: sel.to, insert: ins }, selection: { anchor: sel.from + ins.length - 4, head: sel.from + ins.length - 1 } });
-  } else if (def.wrap) {
-    const t = editor.state.sliceDoc(sel.from, sel.to);
-    editor.dispatch({ changes: { from: sel.from, to: sel.to, insert: def.wrap[0] + t + def.wrap[1] }, selection: { anchor: sel.from + def.wrap[0].length, head: sel.from + def.wrap[0].length + t.length } });
-  } else if (def.prefix) {
+    editor.focus(); return;
+  }
+  if (def.prefix) {
     const line = editor.state.doc.lineAt(sel.from);
     editor.dispatch({ changes: { from: line.from, insert: def.prefix }, selection: { anchor: sel.head + def.prefix.length } });
+    editor.focus(); return;
+  }
+  if (!def.wrap) { editor.focus(); return; }
+  // wrap kinds (bold/italic/under/code): target the selection, or the word just
+  // typed when the caret is at its end, or insert empty markers at the caret.
+  let from = sel.from, to = sel.to;
+  if (sel.empty) { const wr = _wordRangeBeforeCursor(); if (wr) { from = wr.from; to = wr.to; } }
+  // When Markdown styling is OFF, bold/italic/underline emit FANCY unicode text
+  // (toggling) instead of literal markdown tags (item 1).
+  const fancyKind = kind === 'bold' || kind === 'italic' || kind === 'under';
+  const mdOn = !(typeof mdStyleEnabled !== 'undefined' && !mdStyleEnabled);
+  if (fancyKind && !mdOn) {
+    if (from === to) { editor.focus(); return; } // nothing to fancify at a bare caret
+    const src = editor.state.sliceDoc(from, to);
+    let out;
+    if (kind === 'bold') out = Fancy.isBold(src) ? Fancy.strip(src) : Fancy.toBold(src);
+    else if (kind === 'italic') out = Fancy.isItalic(src) ? Fancy.strip(src) : Fancy.toItalic(src);
+    else out = Fancy.isUnder(src) ? src.replace(/̲/g, '') : Fancy.toUnder(src);
+    editor.dispatch({ changes: { from, to, insert: out }, selection: { anchor: from, head: from + out.length } });
+    editor.focus(); return;
+  }
+  const t = editor.state.sliceDoc(from, to);
+  const insert = def.wrap[0] + t + def.wrap[1];
+  if (from === to) {
+    editor.dispatch({ changes: { from, to, insert }, selection: { anchor: from + def.wrap[0].length } });
+  } else {
+    editor.dispatch({ changes: { from, to, insert }, selection: { anchor: from + def.wrap[0].length, head: from + def.wrap[0].length + t.length } });
   }
   editor.focus();
 };
@@ -13801,21 +14221,21 @@ window.registerSetting = registerSetting;
 // Convenience for openSettings() to re-render the auto section.
 function renderSettingsSections() { Settings._render(); }
 
-// ---- Register the soft-wrap setting (Feature 23) ----
+// ---- Register the line-wrap mode setting (Feature 23 / item 3) ----
 registerSetting({
-  key: 'editor.softWrap',
-  label: 'Soft wrap long lines',
-  type: 'toggle',
-  default: true,
+  key: 'editor.wrapMode',
+  label: 'Line wrapping',
+  type: 'select',
+  default: 'soft',
   section: 'Editor',
-  hint: 'When off, long lines scroll horizontally instead of wrapping.',
-  apply(value) {
-    try {
-      editor.dispatch({ effects: wrapCompartment.reconfigure(value ? EditorView.lineWrapping : []) });
-    } catch {}
-    const lbl = document.getElementById('softwrap-label');
-    if (lbl) lbl.textContent = 'Soft Wrap: ' + (value ? 'On' : 'Off');
-  }
+  hint: 'None = horizontal scroll · Soft = visual wrap · Hard = insert real line breaks at the viewport width.',
+  options: [
+    { value: 'none', label: 'None' },
+    { value: 'soft', label: 'Soft (default)' },
+    { value: 'hard', label: 'Hard' },
+  ],
+  getState: () => _wrapMode,
+  apply(value) { try { applyWrapMode(value); } catch {} }
 });
 
 // ---- Surface existing ad-hoc prefs as toggles (backward compatible). ----
