@@ -880,7 +880,7 @@ body {
   gap: var(--space-3);
   padding: 0 var(--space-3);
   padding-bottom: env(safe-area-inset-bottom);
-  height: calc(21px + env(safe-area-inset-bottom));
+  height: calc(18px + env(safe-area-inset-bottom));
   background: var(--surface);
   border-top: 1px solid var(--border);
   font-size: var(--text-xs);
@@ -907,7 +907,7 @@ body {
 .footer-breadcrumb .bc-ws, .footer-breadcrumb .bc-room {
   display: inline-flex; align-items: center; gap: 4px; cursor: pointer;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  padding: 1px 4px; border-radius: 4px;
+  padding: 0 4px; border-radius: 4px; line-height: 1.4;
 }
 .footer-breadcrumb .bc-ws { flex-shrink: 0; max-width: 140px; }
 .footer-breadcrumb .bc-room { flex-shrink: 1; min-width: 0; max-width: 220px; }
@@ -1533,6 +1533,18 @@ body {
 .mob-sep { width: 1px; height: 14px; background: var(--border); margin: 0 2px; flex-shrink: 0; }
 .mob-md-row { border-top: 1px solid var(--border); }
 .mob-md-btn { min-width: 40px; font-weight: 600; justify-content: center; }
+.mob-fmt { min-width: 32px; justify-content: center; font-size: 14px; }
+.mob-fmt-b { font-weight: 800; }
+.mob-fmt-i { font-style: italic; font-family: serif; }
+.mob-fmt-u { text-decoration: underline; text-underline-offset: 2px; }
+/* Highlight color picker popover (anchored above the dash button). */
+.hl-picker {
+  position: fixed; z-index: 1200; display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: 6px; padding: 8px; background: var(--surface); border: 1px solid var(--border);
+  border-radius: 10px; box-shadow: 0 8px 28px rgba(0,0,0,0.28);
+}
+.hl-swatch { width: 30px; height: 30px; border-radius: 7px; border: 1px solid var(--border); cursor: pointer; padding: 0; display: flex; align-items: center; justify-content: center; }
+.hl-swatch.hl-none { background: var(--surface); color: var(--text-muted); font-size: 16px; }
 
 /* ============================================
    MOBILE
@@ -2340,21 +2352,27 @@ body.zen.zen-tw .editor-wrap .cm-content { padding-top: 38vh; padding-bottom: 38
 <div class="mobile-toolbar" id="mobile-toolbar">
   <div class="mob-toolbar-inner">
     <button class="mob-btn" onclick="mobileUndo()" title="Undo">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.51"/></svg>Undo
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.51"/></svg>U
     </button>
     <button class="mob-btn" onclick="mobileRedo()" title="Redo">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-.49-3.51"/></svg>Redo
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-.49-3.51"/></svg>R
+    </button>
+    <div class="mob-sep"></div>
+    <button class="mob-btn mob-fmt mob-fmt-b" onclick="mdBtn('bold')" title="Bold">B</button>
+    <button class="mob-btn mob-fmt mob-fmt-i" onclick="mdBtn('italic')" title="Italic">I</button>
+    <button class="mob-btn mob-fmt mob-fmt-u" onclick="mdBtn('under')" title="Underline">U</button>
+    <button class="mob-btn mob-fmt" onclick="openHighlightPicker(event)" title="Highlight color">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg>
     </button>
     <div class="mob-sep"></div>
     <button class="mob-btn" id="mob-copy-btn" onclick="mobileCopy()" title="Copy selection or all">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span>Copy</span>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span>C</span>
     </button>
     <button class="mob-btn" onclick="mobilePaste()" title="Paste">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>Paste
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>P
     </button>
-    <div class="mob-sep"></div>
     <button class="mob-btn" onclick="mobileDownload()" title="Download as Zip">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Download
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>D
     </button>
   </div>
   <div class="mob-toolbar-inner mob-md-row" id="mob-md-row" style="display:none;"></div>
@@ -12871,12 +12889,55 @@ window.installApp = function() {
 const MD_BTN_DEFS = {
   bold: { label: 'B', title: 'Bold', wrap: ['**', '**'] },
   italic: { label: 'I', title: 'Italic', wrap: ['*', '*'] },
+  under: { label: 'U', title: 'Underline', wrap: ['<u>', '</u>'] },
   code: { label: '<>', title: 'Code', wrap: ['`', '`'] },
   head: { label: 'H', title: 'Heading', prefix: '# ' },
   list: { label: '•', title: 'List', prefix: '- ' },
   todo: { label: '☐', title: 'Checkbox', prefix: '- [ ] ' },
   quote: { label: '"', title: 'Quote', prefix: '> ' },
   link: { label: '🔗', title: 'Link', special: 'link' },
+};
+// Highlight color picker (dash button): wraps the selection in the app's
+// ==color|text== sentinel, or strips an existing wrapper for "No color".
+window.applyHighlight = function(color) {
+  closeHighlightPicker();
+  const sel = editor.state.selection.main;
+  let text = editor.state.sliceDoc(sel.from, sel.to);
+  const m = /^==(?:([a-z]+)\|)?([\s\S]*?)==$/.exec(text);
+  if (m) text = m[2]; // peel an existing highlight so re-applying / No color works
+  if (!color) {
+    editor.dispatch({ changes: { from: sel.from, to: sel.to, insert: text }, selection: { anchor: sel.from, head: sel.from + text.length } });
+    editor.focus(); return;
+  }
+  const open = HL_COLORS.includes(color) ? '==' + color + '|' : '==';
+  const ins = open + text + '==';
+  const anchor = sel.empty ? sel.from + open.length : sel.from;
+  const head = sel.empty ? sel.from + open.length : sel.from + ins.length;
+  editor.dispatch({ changes: { from: sel.from, to: sel.to, insert: ins }, selection: { anchor, head } });
+  editor.focus();
+};
+let _hlPickerEl = null;
+function _hlPickerOutside(e) { if (_hlPickerEl && !_hlPickerEl.contains(e.target)) closeHighlightPicker(); }
+function closeHighlightPicker() {
+  if (_hlPickerEl) { _hlPickerEl.remove(); _hlPickerEl = null; document.removeEventListener('pointerdown', _hlPickerOutside, true); }
+}
+window.openHighlightPicker = function(ev) {
+  if (ev) ev.stopPropagation();
+  if (_hlPickerEl) { closeHighlightPicker(); return; }
+  try { if (window.haptic) haptic(8); } catch {}
+  const btn = ev && ev.currentTarget;
+  const el = document.createElement('div');
+  el.className = 'hl-picker';
+  el.innerHTML = HL_COLORS.map(c => `<button class="hl-swatch cm-hl-${c}" title="${c}" onclick="applyHighlight('${c}')"></button>`).join('') +
+    '<button class="hl-swatch hl-none" title="No color" onclick="applyHighlight(null)">⦸</button>';
+  document.body.appendChild(el);
+  if (btn) {
+    const r = btn.getBoundingClientRect();
+    el.style.left = Math.max(8, Math.min(window.innerWidth - el.offsetWidth - 8, r.left)) + 'px';
+    el.style.bottom = (window.innerHeight - r.top + 6) + 'px';
+  } else { el.style.left = '12px'; el.style.bottom = '60px'; }
+  _hlPickerEl = el;
+  setTimeout(() => document.addEventListener('pointerdown', _hlPickerOutside, true), 0);
 };
 window.mdBtn = function(kind) {
   const def = MD_BTN_DEFS[kind]; if (!def) return;
@@ -13648,8 +13709,8 @@ window.mobileCopy = function() {
     ? editor.state.doc.toString()
     : editor.state.sliceDoc(sel.from, sel.to);
   const btn = document.getElementById('mob-copy-btn');
-  const copyIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span>Copy</span>';
-  const checkIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="var(--success, #4ade80)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg><span style="color:var(--success,#4ade80)">Copied</span>';
+  const copyIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span>C</span>';
+  const checkIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="var(--success, #4ade80)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg><span style="color:var(--success,#4ade80)">✓</span>';
   navigator.clipboard.writeText(text).then(() => {
     btn.innerHTML = checkIcon;
     setTimeout(() => { btn.innerHTML = copyIcon; }, 1500);
