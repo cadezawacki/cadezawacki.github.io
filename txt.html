@@ -3344,9 +3344,69 @@ function updateThemeIcon() {
 // ============================================
 const lineNumCompartment = new Compartment();
 let showLineNums = store.get('cade-linenums') !== 'false';
-// Feature 23 — soft-wrap toggle. lineWrapping lives in a compartment so it can be
-// reconfigured at runtime by the editor.softWrap device setting (default ON).
+// Feature 23 — line wrapping. lineWrapping lives in a compartment so it can be
+// reconfigured at runtime. Modes (item 3): 'none' (horizontal scroll), 'soft'
+// (default, visual wrap), 'hard' (insert real newlines so each visual row is its
+// own line). Migrates the old boolean editor.softWrap pref.
 const wrapCompartment = new Compartment();
+let _wrapMode = (() => {
+  try {
+    const v = store.get('cade-pref:editor.wrapMode');
+    if (v === 'none' || v === 'soft' || v === 'hard') return v;
+    return store.get('cade-pref:editor.softWrap') === 'false' ? 'none' : 'soft';
+  } catch { return 'soft'; }
+})();
+function _editorMaxCols() {
+  try {
+    const cw = editor.defaultCharacterWidth || 8;
+    const w = (editor.scrollDOM ? editor.scrollDOM.clientWidth : 700) - 48; // minus gutter/padding
+    return Math.max(20, Math.floor(w / cw));
+  } catch { return 80; }
+}
+let _hardWrapBusy = false, _hardWrapTimer = null;
+function hardWrapPass() {
+  if (_wrapMode !== 'hard' || _hardWrapBusy) return;
+  const max = _editorMaxCols();
+  const doc = editor.state.doc;
+  const cap = Math.min(doc.lines, 4000);
+  const changes = [];
+  for (let i = 1; i <= cap; i++) {
+    const line = doc.line(i);
+    const text = line.text;
+    if (text.length <= max || text.indexOf('![img:') !== -1) continue; // skip short + image/data lines
+    let pos = 0;
+    while (text.length - pos > max) {
+      const seg = text.slice(pos, pos + max);
+      let br = seg.lastIndexOf(' ');
+      if (br <= 0) br = max; // no space in the window → hard cut the word
+      const cutAbs = line.from + pos + br;
+      if (text[pos + br] === ' ') changes.push({ from: cutAbs, to: cutAbs + 1, insert: '\n' });
+      else changes.push({ from: cutAbs, insert: '\n' });
+      pos = pos + br + 1;
+    }
+  }
+  if (changes.length) {
+    _hardWrapBusy = true;
+    try { editor.dispatch({ changes, userEvent: 'input.hardwrap' }); } finally { _hardWrapBusy = false; }
+  }
+}
+function scheduleHardWrap() { if (_wrapMode !== 'hard') return; clearTimeout(_hardWrapTimer); _hardWrapTimer = setTimeout(hardWrapPass, 350); }
+// Apply the current wrap mode to the live editor. Called on setting change AND
+// after every room switch (saved per-room states carry a stale compartment, so
+// the mode must be re-applied or it only sticks on the room you set it in).
+function applyWrapMode(mode) {
+  if (mode === 'none' || mode === 'soft' || mode === 'hard') {
+    _wrapMode = mode;
+    try { store.set('cade-pref:editor.wrapMode', mode); } catch {}
+  }
+  try { editor.dispatch({ effects: wrapCompartment.reconfigure(_wrapMode === 'soft' ? EditorView.lineWrapping : []) }); } catch {}
+  if (_wrapMode === 'hard') scheduleHardWrap();
+}
+window.applyWrapMode = applyWrapMode;
+// Re-break on viewport resize (narrower). Note: hard wrap only ever *adds*
+// breaks, so widening won't reflow already-broken lines.
+let _wrapResizeTimer = null;
+window.addEventListener('resize', () => { if (_wrapMode === 'hard') { clearTimeout(_wrapResizeTimer); _wrapResizeTimer = setTimeout(hardWrapPass, 400); } });
 
 const editorTheme = EditorView.theme({
   '&': { height: '100%', background: 'var(--bg)' },
@@ -4725,6 +4785,7 @@ function buildEditorExtensions() {
         __mark('editing(' + update.state.doc.length + 'ch)');
         saveContentDebounced();
         scheduleWordCount();
+        if (_wrapMode === 'hard' && !_hardWrapBusy) scheduleHardWrap();
         if (syncState.connected && !syncState.suppressUpdate) {
           syncState.lastLocalEdit = Date.now();
           broadcastText();
@@ -4734,12 +4795,9 @@ function buildEditorExtensions() {
       if (typeof _onEditorUpdate === 'function') { try { _onEditorUpdate(update); } catch {} }
     }),
     EditorView.updateListener.of(renumberListener),
-    // Respect the soft-wrap preference when rebuilding state on room switch.
-    // Use window.Settings (a plain property access, safely undefined early)
-    // rather than the `Settings` binding, which is in its temporal dead zone at
-    // initial editor creation and would throw on access. Its registration
-    // re-applies the stored value then, so defaulting to wrap-on here is safe.
-    wrapCompartment.of((window.Settings && window.Settings.get('editor.softWrap') === false) ? [] : EditorView.lineWrapping),
+    // Respect the wrap mode when rebuilding state on room switch (item 3).
+    // Only 'soft' uses lineWrapping; 'none'/'hard' scroll/insert-breaks.
+    wrapCompartment.of(_wrapMode === 'soft' ? EditorView.lineWrapping : []),
     fenceTrackerPlugin, // must precede the decorators that consult fence state
     listIndentPlugin,
     todoPlugin,
@@ -9547,6 +9605,9 @@ async function _doSwitchRoom(name, firebaseUrl, baseEncKey) {
   // setState bypasses the docChanged update path, so refresh derived UI here.
   try { updateFooter(); } catch {}
   try { scheduleWordCount(); } catch {}
+  // Restored per-room states carry a stale wrap compartment — re-apply the
+  // current wrap mode so the setting follows across rooms (item 3).
+  try { applyWrapMode(); } catch {}
   // If this room still carries legacy inline base64 images, shrink them to hash
   // refs in the background — removes the doc/heap bloat behind the GC freezes.
   try { if (typeof scheduleImageMigration === 'function') scheduleImageMigration(); } catch {}
@@ -14016,21 +14077,21 @@ window.registerSetting = registerSetting;
 // Convenience for openSettings() to re-render the auto section.
 function renderSettingsSections() { Settings._render(); }
 
-// ---- Register the soft-wrap setting (Feature 23) ----
+// ---- Register the line-wrap mode setting (Feature 23 / item 3) ----
 registerSetting({
-  key: 'editor.softWrap',
-  label: 'Soft wrap long lines',
-  type: 'toggle',
-  default: true,
+  key: 'editor.wrapMode',
+  label: 'Line wrapping',
+  type: 'select',
+  default: 'soft',
   section: 'Editor',
-  hint: 'When off, long lines scroll horizontally instead of wrapping.',
-  apply(value) {
-    try {
-      editor.dispatch({ effects: wrapCompartment.reconfigure(value ? EditorView.lineWrapping : []) });
-    } catch {}
-    const lbl = document.getElementById('softwrap-label');
-    if (lbl) lbl.textContent = 'Soft Wrap: ' + (value ? 'On' : 'Off');
-  }
+  hint: 'None = horizontal scroll · Soft = visual wrap · Hard = insert real line breaks at the viewport width.',
+  options: [
+    { value: 'none', label: 'None' },
+    { value: 'soft', label: 'Soft (default)' },
+    { value: 'hard', label: 'Hard' },
+  ],
+  getState: () => _wrapMode,
+  apply(value) { try { applyWrapMode(value); } catch {} }
 });
 
 // ---- Surface existing ad-hoc prefs as toggles (backward compatible). ----
