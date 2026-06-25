@@ -3236,10 +3236,11 @@ window.runInWorker = runInWorker;
 // notified). Inspect window.__lag for recent offenders; >500ms tasks warn.
 // ============================================
 window.__op = '(idle)';
+window.__opAt = 0;             // performance.now() when __op was last set
 window.__lag = [];
 window.__maxPhase = '';       // slowest individually-timed phase since last report
 window.__maxPhaseDur = 0;
-function __mark(op) { window.__op = op; }
+function __mark(op) { window.__op = op; window.__opAt = performance.now(); }
 // Time a named sub-phase (decoration builder, etc.); the observer reports the
 // single slowest one seen since the last long task, which pins the culprit even
 // when many phases run inside one 'editing' dispatch task.
@@ -3257,16 +3258,21 @@ function __timed(name, fn) {
     const obs = new PerformanceObserver((list) => {
       for (const e of list.getEntries()) {
         if (e.duration < 200) continue;
-        const rec = { at: new Date().toLocaleTimeString(), dur: Math.round(e.duration), op: window.__op, phase: window.__maxPhase };
+        // Age = gap between when the last op was marked and when this block began.
+        // A small age means that op caused the block; a large age (or '(idle)')
+        // means the block was OUTSIDE our marked code — a timer/async continuation
+        // we don't breadcrumb, the Firebase SDK parsing a large message, or GC.
+        const age = Math.round(e.startTime - (window.__opAt || 0));
+        const external = window.__op === '(idle)' || age > 150;
+        const rec = { at: new Date().toLocaleTimeString(), dur: Math.round(e.duration), op: window.__op, age, phase: window.__maxPhase };
         window.__lag.push(rec);
         if (window.__lag.length > 60) window.__lag.shift();
         if (e.duration >= 500) {
-          console.warn('[longtask] ' + rec.dur + 'ms main-thread block — op: ' + rec.op +
+          console.warn('[longtask] ' + rec.dur + 'ms main-thread block — ' +
+            (external ? ('OUTSIDE marked code (last op ' + age + 'ms ago: ' + rec.op + ')') : ('op: ' + rec.op)) +
             (rec.phase ? ' | slowest phase: ' + rec.phase : ''));
         }
       }
-      // Reset so a later block isn't misattributed to finished work.
-      window.__op = '(idle)';
       window.__maxPhase = ''; window.__maxPhaseDur = 0;
     });
     obs.observe({ entryTypes: ['longtask'] });
@@ -4496,6 +4502,7 @@ async function resolveImageRef(code, hash) {
   try { stored = await idbStore.get('img:' + hash); } catch {}
   if (!stored) stored = await fetchImageFromServer(hash);
   if (!stored) return null;
+  __mark('img:decode(' + stored.length + 'b)');
   const { code: c, b64 } = _imgStoredToParts(stored, code);
   const rec = { url: _b64ToBlobUrl(c, b64), b64 };
   while (_imgRefCache.size >= _IMG_CACHE_MAX) {
@@ -8301,6 +8308,7 @@ function redecorateAfterRemote() {
 
 function tryApplyPendingRemote() {
   if (syncState.pendingRemoteText == null) return;
+  __mark('sync:tryApply(' + syncState.pendingRemoteText.length + 'ch)');
   // While reconciling an offline→online reconnect, the reconcile flow owns the
   // document; don't let a queued live snapshot clobber it mid-resolution.
   if (syncState.pendingReconcile || syncState.conflictResolving) return;
@@ -9536,6 +9544,7 @@ async function _doSwitchRoom(name, firebaseUrl, baseEncKey) {
         flushIfDirty();
         return;
       }
+      __mark('sync:recv(' + encoded.length + 'b)');
       try {
         let text = await decryptText(encoded, syncState.encKey);
         // Re-check after the async decrypt — the room may have changed mid-await.
@@ -11382,6 +11391,7 @@ async function pushWorkspacesNow() {
 async function applyRemoteWorkspaceBlob(encrypted, baseKey, source) {
   if (!encrypted) return false;
   try {
+    __mark('sync:ws-blob(' + (typeof encrypted === 'string' ? encrypted.length : '?') + 'b)');
     const decrypted = await decryptText(encrypted, baseKey);
     if (!decrypted) {
       if (source === 'remote' || source === 'initial') {
