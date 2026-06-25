@@ -2159,13 +2159,25 @@ body {
 .outline-item.h4, .outline-item.h5, .outline-item.h6 { padding-left: 42px; font-size: var(--text-xs); }
 .outline-empty { padding: 12px; color: var(--text-faint); font-size: var(--text-xs); }
 
-#pomodoro-panel { top: 50px; right: 12px; width: 200px; }
-.pomo-time { font-size: 34px; font-weight: 700; text-align: center; font-variant-numeric: tabular-nums; padding: 10px 0 2px; }
-.pomo-phase { text-align: center; font-size: var(--text-xs); color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
-.pomo-count { text-align: center; font-size: var(--text-xs); color: var(--text-faint); padding: 4px 0; }
-.pomo-btns { display: flex; gap: 6px; padding: 8px 10px 10px; }
-.pomo-btns .btn { flex: 1; }
-#pomodoro-panel.break .pomo-time { color: var(--success, #10b981); }
+#timer-panel { top: 50px; right: 12px; width: 230px; }
+.timer-tabs { display: flex; flex-wrap: wrap; gap: 4px; padding: 8px 10px 2px; }
+.timer-tab { flex: 1 1 auto; padding: 4px 6px; font-size: 11px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: none; color: var(--text-faint); cursor: pointer; white-space: nowrap; }
+.timer-tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+.timer-display { padding: 8px 0 2px; }
+.timer-time { display: block; font-size: 34px; font-weight: 700; text-align: center; font-variant-numeric: tabular-nums; }
+.timer-sub { display: block; text-align: center; font-size: var(--text-xs); color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+#timer-panel.break .timer-time { color: var(--success, #10b981); }
+.timer-cfg { display: flex; gap: 8px; justify-content: center; padding: 6px 10px; }
+.timer-cfg label { display: flex; align-items: center; gap: 4px; font-size: var(--text-xs); color: var(--text-muted); }
+.timer-cfg input { width: 64px; padding: 3px 5px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface, transparent); color: var(--text); font-size: var(--text-xs); }
+.timer-cfg input[type=time] { width: 92px; }
+.timer-btns { display: flex; gap: 6px; padding: 8px 10px 10px; }
+.timer-btns .btn { flex: 1; }
+.timer-laps { max-height: 120px; overflow-y: auto; padding: 0 10px 10px; }
+.timer-lap { display: flex; justify-content: space-between; font-size: var(--text-xs); color: var(--text-muted); font-variant-numeric: tabular-nums; padding: 2px 0; border-top: 1px solid var(--border); }
+.sync-action-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+.sync-action-grid .btn { flex: 1 1 140px; }
+#sync-disconnect-btn { color: var(--danger, #ef4444); border-color: var(--danger, #ef4444); }
 
 #footer-clock { font-variant-numeric: tabular-nums; color: var(--text-muted); cursor: default; }
 #footer-clock .fc-tz { opacity: 0.7; margin-left: 8px; }
@@ -2257,57 +2269,10 @@ body.zen.zen-tw .editor-wrap .cm-content { padding-top: 38vh; padding-bottom: 38
     <input type="file" id="import-file-input" multiple style="display:none;">
   </div>
 
-  <!-- Sync Menu (desktop only; on mobile, Sync items live under View) -->
-  <div style="position:relative;" class="menu-sync-wrap">
-    <button class="menu-trigger" id="menu-sync-btn">Sync</button>
-    <div class="menu-dropdown" id="menu-sync">
-      <button class="menu-item" onclick="openSyncModal()">
-        <span>Connect</span>
-        <kbd id="kbd-sync">Ctrl+S</kbd>
-      </button>
-      <button class="menu-item" onclick="forceSyncReload()">
-        <span>Force Reload</span>
-        <kbd id="kbd-force-sync">Ctrl+Shift+S</kbd>
-      </button>
-      <button class="menu-item" onclick="rotateEncryptionKey()">
-        <span>Change Encryption Key…</span>
-        <span></span>
-      </button>
-      <button class="menu-item" id="disconnect-btn" onclick="disconnectSync()" style="display:none;">
-        <span>Disconnect</span>
-        <span></span>
-      </button>
-    </div>
-  </div>
-
   <!-- View Menu -->
   <div style="position:relative;">
     <button class="menu-trigger" id="menu-view-btn">View</button>
     <div class="menu-dropdown" id="menu-view">
-      <button class="menu-item" onclick="toggleTheme()">
-        <span id="theme-label">Dark Mode</span>
-        <span></span>
-      </button>
-      <button class="menu-item" onclick="toggleLineNumbers()">
-        <span id="linenums-label">Hide Line Numbers</span>
-        <span></span>
-      </button>
-      <button class="menu-item" onclick="toggleInjections()">
-        <span id="injections-label">Plugins: On</span>
-        <span></span>
-      </button>
-      <button class="menu-item" onclick="toggleSpellcheck()">
-        <span id="spellcheck-label">Spell Check: On</span>
-        <span></span>
-      </button>
-      <button class="menu-item" onclick="toggleMdStyle()">
-        <span id="mdstyle-label">Markdown Styling: On</span>
-        <span></span>
-      </button>
-      <button class="menu-item" onclick="toggleSoftWrap()">
-        <span id="softwrap-label">Soft Wrap: On</span>
-        <span></span>
-      </button>
       <button class="menu-item" onclick="openSnapshots()">
         <span>Snapshots / History</span>
         <span></span>
@@ -2317,8 +2282,8 @@ body.zen.zen-tw .editor-wrap .cm-content { padding-top: 38vh; padding-bottom: 38
         <span id="outline-label">Outline</span>
         <span></span>
       </button>
-      <button class="menu-item" onclick="togglePomodoro()">
-        <span id="pomodoro-label">Focus Timer</span>
+      <button class="menu-item" onclick="openTimer()">
+        <span id="timer-label">Timer</span>
         <span></span>
       </button>
       <button class="menu-item" onclick="toggleZen()">
@@ -2329,24 +2294,6 @@ body.zen.zen-tw .editor-wrap .cm-content { padding-top: 38vh; padding-bottom: 38
         <span>Today's Note</span>
         <span></span>
       </button>
-      <button class="menu-item" onclick="installApp()">
-        <span>Install App</span>
-        <span></span>
-      </button>
-      <!-- Sync items (mobile only — Sync menu is hidden) -->
-      <div class="menu-separator view-sync-only"></div>
-      <button class="menu-item view-sync-only" onclick="openSyncModal()">
-        <span>Connect</span>
-        <kbd>Ctrl+S</kbd>
-      </button>
-      <button class="menu-item view-sync-only" onclick="forceSyncReload()">
-        <span>Force Reload</span>
-        <kbd>Ctrl+Shift+S</kbd>
-      </button>
-      <button class="menu-item view-sync-only" id="view-disconnect-btn" onclick="disconnectSync()" style="display:none;">
-        <span>Disconnect</span>
-        <span></span>
-      </button>
       <div class="menu-separator"></div>
       <button class="menu-item" onclick="shareLink()">
         <span>Share Link</span>
@@ -2354,15 +2301,11 @@ body.zen.zen-tw .editor-wrap .cm-content { padding-top: 38vh; padding-bottom: 38
       </button>
       <div class="menu-separator"></div>
       <button class="menu-item" onclick="openSettings()">
-        <span>Hotkey Settings</span>
+        <span>Preferences</span>
         <span></span>
       </button>
       <button class="menu-item" onclick="openRoomManager()">
         <span>Room Manager</span>
-        <span></span>
-      </button>
-      <button class="menu-item" onclick="openExploreRooms()">
-        <span>Explore Rooms</span>
         <span></span>
       </button>
     </div>
@@ -2386,11 +2329,6 @@ body.zen.zen-tw .editor-wrap .cm-content { padding-top: 38vh; padding-bottom: 38
   <div class="menubar-spacer"></div>
 
   <div class="sync-dot menubar-sync-dot" id="sync-dot" title="Sync off" onclick="openSyncModal()"></div>
-  <button class="menubar-btn" id="copy-all-btn" title="Copy all to clipboard" onclick="copyAllToClipboard()">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-      <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
-    </svg>
-  </button>
   <button class="menubar-btn" title="Toggle theme" onclick="toggleTheme()" data-theme-toggle>
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
       <circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
@@ -2533,6 +2471,17 @@ body.zen.zen-tw .editor-wrap .cm-content { padding-top: 38vh; padding-bottom: 38
       <div class="modal-actions">
         <button class="btn" onclick="closeSyncModal()">Cancel</button>
         <button class="btn btn-primary" onclick="syncConnect()">Connect</button>
+      </div>
+    </div>
+
+    <!-- Connection actions (shown only while connected) -->
+    <div id="sync-connected-actions" style="display:none;">
+      <div class="menu-separator" style="margin:16px 0 12px;"></div>
+      <div class="form-label" style="margin-bottom:8px;">Connection</div>
+      <div class="sync-action-grid">
+        <button class="btn" onclick="forceSyncReload()">Force Reload</button>
+        <button class="btn" onclick="rotateEncryptionKey()">Change Encryption Key…</button>
+        <button class="btn" id="sync-disconnect-btn" onclick="disconnectSync()">Disconnect</button>
       </div>
     </div>
 
@@ -3296,12 +3245,12 @@ window.toggleTheme = function() {
 };
 
 function updateThemeIcon() {
-  const label = document.getElementById('theme-label');
+  const label = document.getElementById('theme-label'); // may be absent (moved to icon-only)
   if (currentTheme === 'dark') {
-    label.textContent = 'Light Mode';
+    if (label) label.textContent = 'Light Mode';
     themeToggleBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>';
   } else {
-    label.textContent = 'Dark Mode';
+    if (label) label.textContent = 'Dark Mode';
     themeToggleBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
   }
 }
@@ -5501,12 +5450,14 @@ window.toggleLineNumbers = function() {
   store.set('cade-linenums', showLineNums);
   const gutters = document.querySelector('.cm-gutters');
   if (gutters) gutters.style.display = showLineNums ? '' : 'none';
-  document.getElementById('linenums-label').textContent = showLineNums ? 'Hide Line Numbers' : 'Show Line Numbers';
+  const _lnl = document.getElementById('linenums-label');
+  if (_lnl) _lnl.textContent = showLineNums ? 'Hide Line Numbers' : 'Show Line Numbers';
   closeAllMenus();
 };
 
 // Apply initial state
-document.getElementById('linenums-label').textContent = showLineNums ? 'Hide Line Numbers' : 'Show Line Numbers';
+{ const _lnl0 = document.getElementById('linenums-label');
+  if (_lnl0) _lnl0.textContent = showLineNums ? 'Hide Line Numbers' : 'Show Line Numbers'; }
 if (!showLineNums) {
   setTimeout(() => {
     const gutters = document.querySelector('.cm-gutters');
@@ -5632,18 +5583,19 @@ window.showToast = function(message, type = 'info', duration = 3500) {
 // ============================================
 const menuPairs = [
   ['menu-scripts-btn', 'menu-scripts'],
-  ['menu-sync-btn', 'menu-sync'],
   ['menu-view-btn', 'menu-view'],
 ];
 
 menuPairs.forEach(([btnId, menuId]) => {
   const btn = document.getElementById(btnId);
   const menu = document.getElementById(menuId);
+  if (!btn || !menu) return;
   btn.addEventListener('click', (e) => {
     e.stopPropagation();
     const wasOpen = menu.classList.contains('open');
     closeAllMenus();
     if (!wasOpen) {
+      menu.scrollTop = 0; // always reopen scrolled to the top
       menu.classList.add('open');
       btn.setAttribute('aria-expanded', 'true');
     }
@@ -5652,8 +5604,8 @@ menuPairs.forEach(([btnId, menuId]) => {
 
 function closeAllMenus() {
   menuPairs.forEach(([btnId, menuId]) => {
-    document.getElementById(menuId).classList.remove('open');
-    document.getElementById(btnId).setAttribute('aria-expanded', 'false');
+    const menu = document.getElementById(menuId); if (menu) menu.classList.remove('open');
+    const btn = document.getElementById(btnId); if (btn) btn.setAttribute('aria-expanded', 'false');
   });
 }
 
@@ -7819,13 +7771,15 @@ window.importFiles = function() {
 };
 
 window.copyAllToClipboard = function() {
+  // The top-bar copy icon was removed (copy lives in the floating/mobile dash);
+  // this remains callable from hotkeys/scripts and just toasts on success.
   const text = editor.state.doc.toString();
   const btn = document.getElementById('copy-all-btn');
   const copyIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
   const checkIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="var(--success, #4ade80)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
   navigator.clipboard.writeText(text).then(() => {
-    btn.innerHTML = checkIcon;
-    setTimeout(() => { btn.innerHTML = copyIcon; }, 1500);
+    if (btn) { btn.innerHTML = checkIcon; setTimeout(() => { btn.innerHTML = copyIcon; }, 1500); }
+    else showToast('Copied all to clipboard', 'success', 1500);
   }).catch(() => {
     showToast('Failed to copy', 'error');
   });
@@ -8199,10 +8153,11 @@ function _applySyncUI(status, text) {
   if (dot) { dot.className = 'sync-dot ' + status; dot.title = text || ''; }
   const statusEl = document.getElementById('sync-status');
   if (statusEl) statusEl.textContent = text;
-  const db = document.getElementById('disconnect-btn');
-  if (db) db.style.display = syncState.connected ? 'flex' : 'none';
-  const vdb = document.getElementById('view-disconnect-btn');
-  if (vdb) vdb.style.display = syncState.connected ? 'flex' : 'none';
+  // Sync actions now live in the Sync modal (opened via the sync dot).
+  const sdb = document.getElementById('sync-disconnect-btn');
+  if (sdb) sdb.style.display = syncState.connected ? '' : 'none';
+  const sActions = document.getElementById('sync-connected-actions');
+  if (sActions) sActions.style.display = syncState.connected ? '' : 'none';
 }
 function updateSyncUI(status, text) {
   if (_connectingTimer) { clearTimeout(_connectingTimer); _connectingTimer = null; }
@@ -8810,6 +8765,9 @@ function showSyncConflictModal(roomName, localText, serverText) {
 window.openSyncModal = function() {
   closeAllMenus();
   showSyncStep('sync-step-creds');
+  // Reflect current connection state (Connect button vs the connected-actions).
+  const acts = document.getElementById('sync-connected-actions');
+  if (acts) acts.style.display = syncState.connected ? '' : 'none';
   document.getElementById('sync-overlay').classList.add('open');
   document.getElementById('sync-firebase-url').focus();
 };
@@ -12502,57 +12460,141 @@ window.toggleOutline = function() {
 };
 
 // ---- Pomodoro / focus timer (#31) ----
-const _pomo = { phase: 'work', remaining: 25 * 60, timer: null, running: false, count: 0, work: 25, brk: 5 };
-function pomoLoad() {
-  try { const s = JSON.parse(store.get('cade-pomodoro') || '{}'); _pomo.work = +s.work || 25; _pomo.brk = +s.brk || 5; } catch {}
-}
-function pomoFmt(s) { const m = Math.floor(s / 60), ss = s % 60; return m + ':' + String(ss).padStart(2, '0'); }
-function pomoRender() {
-  const p = document.getElementById('pomodoro-panel'); if (!p) return;
-  p.querySelector('.pomo-time').textContent = pomoFmt(_pomo.remaining);
-  p.querySelector('.pomo-phase').textContent = _pomo.phase === 'work' ? 'Focus' : 'Break';
-  p.querySelector('.pomo-count').textContent = 'Completed: ' + _pomo.count;
-  p.classList.toggle('break', _pomo.phase !== 'work');
-  const b = p.querySelector('.pomo-start'); if (b) b.textContent = _pomo.running ? 'Pause' : 'Start';
-}
-function pomoNotify(title, body) {
-  try { navigator.vibrate && navigator.vibrate([120, 60, 120]); } catch {}
+// ---- Generic timer (#31, reworked): pomodoro · countdown · time-of-day · stopwatch ----
+const _timer = {
+  mode: 'pomodoro',      // 'pomodoro' | 'countdown' | 'clock' | 'stopwatch'
+  running: false, timer: null,
+  // pomodoro
+  phase: 'work', remaining: 25 * 60, count: 0, work: 25, brk: 5,
+  // countdown
+  cdTotal: 5 * 60, cdRemaining: 5 * 60,
+  // time-of-day target ('HH:MM')
+  clockTarget: '',
+  // stopwatch
+  swElapsed: 0, laps: [],
+};
+function _timerLoadCfg() {
   try {
-    if (window.Notification && Notification.permission === 'granted') { new Notification(title, { body }); return; }
+    const s = JSON.parse(store.get('cade-timer-cfg') || '{}');
+    _timer.work = +s.work || 25; _timer.brk = +s.brk || 5;
+    _timer.cdTotal = +s.cdTotal || 5 * 60; _timer.clockTarget = s.clockTarget || '';
+    if (s.mode) _timer.mode = s.mode;
   } catch {}
+}
+function _timerSaveCfg() {
+  store.set('cade-timer-cfg', JSON.stringify({ work: _timer.work, brk: _timer.brk, cdTotal: _timer.cdTotal, clockTarget: _timer.clockTarget, mode: _timer.mode }));
+}
+function _timerFmt(s) {
+  s = Math.max(0, Math.floor(s));
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), ss = s % 60;
+  const mm = String(m).padStart(2, '0'), sss = String(ss).padStart(2, '0');
+  return h > 0 ? (h + ':' + mm + ':' + sss) : (m + ':' + sss);
+}
+function _clockRemaining(hhmm) {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(hhmm || ''); if (!m) return 0;
+  const now = new Date();
+  const target = new Date(now); target.setHours(+m[1], +m[2], 0, 0);
+  let diff = Math.floor((target - now) / 1000);
+  if (diff < 0) diff += 24 * 3600; // roll to tomorrow if the time already passed
+  return diff;
+}
+function _timerNotify(title, body) {
+  try { navigator.vibrate && navigator.vibrate([120, 60, 120]); } catch {}
+  try { if (window.Notification && Notification.permission === 'granted') { new Notification(title, { body }); return; } } catch {}
   showToast(body, 'success', 4000);
 }
-function pomoTick() {
-  if (_pomo.remaining > 0) { _pomo.remaining--; pomoRender(); return; }
-  if (_pomo.phase === 'work') { _pomo.count++; _pomo.phase = 'break'; _pomo.remaining = _pomo.brk * 60; pomoNotify('Break time', 'Take a ' + _pomo.brk + ' minute break.'); }
-  else { _pomo.phase = 'work'; _pomo.remaining = _pomo.work * 60; pomoNotify('Focus time', 'Back to it — ' + _pomo.work + ' minutes.'); }
-  pomoRender();
+function _timerPrime() {
+  const t = _timer;
+  if (t.mode === 'pomodoro') { t.phase = 'work'; t.remaining = t.work * 60; }
+  else if (t.mode === 'countdown') { t.cdRemaining = t.cdTotal; }
+  else if (t.mode === 'stopwatch') { t.swElapsed = 0; t.laps = []; }
 }
-window.pomoToggleRun = function() {
-  _pomo.running = !_pomo.running;
-  if (_pomo.running) {
+function _timerStop() { _timer.running = false; clearInterval(_timer.timer); }
+function _timerTick() {
+  const t = _timer;
+  if (t.mode === 'pomodoro') {
+    if (t.remaining > 0) { t.remaining--; }
+    else if (t.phase === 'work') { t.count++; t.phase = 'break'; t.remaining = t.brk * 60; _timerNotify('Break time', 'Take a ' + t.brk + ' minute break.'); }
+    else { t.phase = 'work'; t.remaining = t.work * 60; _timerNotify('Focus time', 'Back to it — ' + t.work + ' minutes.'); }
+  } else if (t.mode === 'countdown') {
+    if (t.cdRemaining > 0) t.cdRemaining--;
+    if (t.cdRemaining <= 0) { _timerStop(); _timerNotify('Timer done', 'Countdown finished.'); }
+  } else if (t.mode === 'clock') {
+    if (_clockRemaining(t.clockTarget) <= 0) { _timerStop(); _timerNotify('Time reached', (t.clockTarget || '') + ' reached.'); }
+  } else { t.swElapsed++; }
+  _timerRender();
+}
+const _TIMER_TABS = [['pomodoro', 'Pomodoro'], ['countdown', 'Countdown'], ['clock', 'Time of day'], ['stopwatch', 'Stopwatch']];
+function _timerBodyHtml() {
+  const t = _timer;
+  let html = '<div class="timer-tabs">' + _TIMER_TABS.map(([m, lbl]) =>
+    `<button class="timer-tab ${t.mode === m ? 'active' : ''}" onclick="timerSetMode('${m}')">${lbl}</button>`).join('') + '</div>';
+  html += '<div class="timer-display"><span class="timer-time"></span><span class="timer-sub"></span></div>';
+  if (t.mode === 'pomodoro') {
+    html += `<div class="timer-cfg"><label>Focus<input type="number" min="1" max="180" value="${t.work}" onchange="timerCfg('work',this.value)"></label>` +
+            `<label>Break<input type="number" min="1" max="60" value="${t.brk}" onchange="timerCfg('brk',this.value)"></label></div>`;
+  } else if (t.mode === 'countdown') {
+    html += `<div class="timer-cfg"><label>Minutes<input type="number" min="0" max="600" value="${Math.round(t.cdTotal / 60)}" onchange="timerCfg('cd',this.value)"></label></div>`;
+  } else if (t.mode === 'clock') {
+    html += `<div class="timer-cfg"><label>Target<input type="time" value="${t.clockTarget || ''}" onchange="timerCfg('clock',this.value)"></label></div>`;
+  }
+  html += '<div class="timer-btns"><button class="btn btn-primary timer-start" onclick="timerToggleRun()">Start</button>';
+  if (t.mode === 'stopwatch') html += '<button class="btn" onclick="timerLap()">Lap</button>';
+  html += '<button class="btn" onclick="timerReset()">Reset</button></div>';
+  if (t.mode === 'stopwatch') html += '<div class="timer-laps"></div>';
+  return html;
+}
+function _timerRebuild() {
+  const p = document.getElementById('timer-panel'); if (!p) return;
+  const body = p.querySelector('.cade-panel-body'); if (body) body.innerHTML = _timerBodyHtml();
+  _timerRender();
+}
+function _timerRender() {
+  const p = document.getElementById('timer-panel'); if (!p) return;
+  const t = _timer;
+  let disp = '', sub = '';
+  if (t.mode === 'pomodoro') { disp = _timerFmt(t.remaining); sub = (t.phase === 'work' ? 'Focus' : 'Break') + ' · done ' + t.count; p.classList.toggle('break', t.phase !== 'work'); }
+  else if (t.mode === 'countdown') { disp = _timerFmt(t.cdRemaining); sub = 'Countdown'; }
+  else if (t.mode === 'clock') { const r = _clockRemaining(t.clockTarget); disp = _timerFmt(r); sub = t.clockTarget ? ('until ' + t.clockTarget) : 'set a time'; }
+  else { disp = _timerFmt(t.swElapsed); sub = 'Stopwatch'; }
+  const te = p.querySelector('.timer-time'); if (te) te.textContent = disp;
+  const se = p.querySelector('.timer-sub'); if (se) se.textContent = sub;
+  const sb = p.querySelector('.timer-start'); if (sb) sb.textContent = t.running ? 'Pause' : 'Start';
+  const le = p.querySelector('.timer-laps');
+  if (le) le.innerHTML = t.laps.map((l, i) => `<div class="timer-lap"><span>Lap ${i + 1}</span><span>${_timerFmt(l)}</span></div>`).reverse().join('');
+}
+window.timerSetMode = function(m) { if (_timer.mode === m) return; _timerStop(); _timer.mode = m; _timerPrime(); _timerSaveCfg(); _timerRebuild(); };
+window.timerCfg = function(k, v) {
+  const t = _timer;
+  if (k === 'clock') { t.clockTarget = String(v || ''); _timerSaveCfg(); _timerRender(); return; }
+  v = +v || 0;
+  if (k === 'work') { t.work = Math.max(1, v); if (!t.running && t.phase === 'work') t.remaining = t.work * 60; }
+  else if (k === 'brk') { t.brk = Math.max(1, v); }
+  else if (k === 'cd') { t.cdTotal = Math.max(0, v * 60); if (!t.running) t.cdRemaining = t.cdTotal; }
+  _timerSaveCfg(); _timerRender();
+};
+window.timerToggleRun = function() {
+  const t = _timer; t.running = !t.running;
+  if (t.running) {
     try { if (window.Notification && Notification.permission === 'default') Notification.requestPermission(); } catch {}
-    clearInterval(_pomo.timer); _pomo.timer = setInterval(pomoTick, 1000);
-  } else { clearInterval(_pomo.timer); }
-  pomoRender();
+    clearInterval(t.timer); t.timer = setInterval(_timerTick, 1000);
+  } else clearInterval(t.timer);
+  _timerRender();
 };
-window.pomoReset = function() {
-  clearInterval(_pomo.timer); _pomo.running = false; _pomo.phase = 'work'; _pomo.remaining = _pomo.work * 60; pomoRender();
-};
-window.togglePomodoro = function() {
+window.timerReset = function() { _timerStop(); _timerPrime(); _timerRender(); };
+window.timerLap = function() { if (_timer.mode !== 'stopwatch') return; _timer.laps.push(_timer.swElapsed); _timerRender(); };
+window.openTimer = function() {
   closeAllMenus();
-  const existing = document.getElementById('pomodoro-panel');
-  if (existing) { existing.remove(); store.set('cade-pomo-open', '0'); return; }
-  pomoLoad();
-  if (!_pomo.running) _pomo.remaining = _pomo.work * 60;
-  const p = _mkPanel('pomodoro-panel', 'Focus Timer',
-    '<div class="pomo-time"></div><div class="pomo-phase"></div><div class="pomo-count"></div>' +
-    '<div class="pomo-btns"><button class="btn btn-primary pomo-start" onclick="pomoToggleRun()">Start</button>' +
-    '<button class="btn" onclick="pomoReset()">Reset</button></div>');
-  p._onClose = () => store.set('cade-pomo-open', '0');
-  pomoRender();
-  store.set('cade-pomo-open', '1');
+  const existing = document.getElementById('timer-panel');
+  if (existing) { existing.remove(); store.set('cade-timer-open', '0'); return; }
+  _timerLoadCfg();
+  if (!_timer.running) _timerPrime();
+  const p = _mkPanel('timer-panel', 'Timer', _timerBodyHtml());
+  p._onClose = () => store.set('cade-timer-open', '0');
+  _timerRender();
+  store.set('cade-timer-open', '1');
 };
+window.togglePomodoro = window.openTimer; // back-compat (restore hook / old callers)
 
 // ---- Zen / typewriter mode (#33) ----
 window.toggleZen = function() {
@@ -12744,7 +12786,7 @@ try {
 // Restore open widgets from last session.
 setTimeout(() => {
   try { if (store.get('cade-outline-open') === '1') window.toggleOutline(); } catch {}
-  try { if (store.get('cade-pomo-open') === '1') window.togglePomodoro(); } catch {}
+  try { if (store.get('cade-timer-open') === '1' || store.get('cade-pomo-open') === '1') window.openTimer(); } catch {}
   try { if (store.get('cade-zen') === '1') window.toggleZen(); } catch {}
 }, 400);
 
