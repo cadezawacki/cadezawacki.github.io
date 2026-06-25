@@ -1497,13 +1497,15 @@ body {
 
 /* Mobile toolbar */
 .mobile-toolbar {
-  display: none;
+  display: flex; /* shown on desktop + mobile (item 1) */
   justify-content: center;
   align-items: center;
   gap: 4px;
   padding: 5px 12px;
   flex-shrink: 0;
 }
+/* Icon-only buttons: hide any trailing text label, keep the SVG. */
+.mob-btn.icon-only > span:not(svg) { display: none; }
 .mob-toolbar-inner {
   display: flex;
   align-items: center;
@@ -2188,9 +2190,18 @@ body {
 .timer-cfg label { display: flex; align-items: center; gap: 4px; font-size: var(--text-xs); color: var(--text-muted); }
 .timer-cfg input { width: 64px; padding: 3px 5px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface, transparent); color: var(--text); font-size: var(--text-xs); }
 .timer-cfg input[type=time] { width: 92px; }
-.timer-btns { display: flex; gap: 6px; padding: 8px 10px 10px; }
-.timer-btns .btn { flex: 1; }
-.timer-laps { max-height: 120px; overflow-y: auto; padding: 0 10px 10px; }
+.timer-btns { display: flex; gap: 6px; padding: 8px 10px 0; }
+.timer-btns:last-child { padding-bottom: 10px; }
+.timer-btns .btn { flex: 1 1 0; min-width: 0; box-sizing: border-box; text-align: center; }
+.timer-min { font-size: var(--text-xs); }
+.timer-laps { max-height: 120px; overflow-y: auto; padding: 4px 10px 10px; }
+.timer-lap-d.slower { color: var(--danger, #ef4444); }
+.timer-lap-d.faster { color: var(--success, #10b981); }
+.footer-timer-chip {
+  display: inline-flex; align-items: center; cursor: pointer; flex-shrink: 0;
+  padding: 0 6px; margin-left: 6px; border-radius: 4px; font-variant-numeric: tabular-nums;
+  background: var(--surface-hover, rgba(127,127,127,0.15)); color: var(--accent);
+}
 .timer-lap { display: flex; justify-content: space-between; font-size: var(--text-xs); color: var(--text-muted); font-variant-numeric: tabular-nums; padding: 2px 0; border-top: 1px solid var(--border); }
 .sync-action-grid { display: flex; flex-wrap: wrap; gap: 8px; }
 .sync-action-grid .btn { flex: 1 1 140px; }
@@ -2210,6 +2221,16 @@ body {
 .daycal-cell.has { font-weight: 700; color: var(--accent); }
 .daycal-cell.dow { color: var(--text-faint); cursor: default; font-weight: 600; }
 .daycal-cell.empty { cursor: default; }
+.daycal-cell.sel { background: var(--accent); color: #fff; }
+.daycal-cell.sel.has { color: #fff; }
+.daycal-list-head { padding: 6px 12px 2px; font-size: var(--text-xs); color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.05em; }
+.daycal-list { max-height: 200px; overflow-y: auto; padding: 0 8px 10px; display: flex; flex-direction: column; gap: 2px; }
+.daycal-room { display: flex; align-items: center; gap: 6px; width: 100%; text-align: left; background: none; border: none; color: var(--text); cursor: pointer; padding: 6px 8px; border-radius: 6px; font-size: var(--text-sm); }
+.daycal-room:hover { background: var(--surface-hover, rgba(127,127,127,0.15)); }
+.daycal-room-n { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.daycal-room-ws { font-size: var(--text-xs); color: var(--text-faint); flex-shrink: 0; }
+.daycal-pin { font-size: 11px; }
+.daycal-empty { padding: 8px 12px; color: var(--text-faint); font-size: var(--text-xs); }
 
 body.zen .menubar, body.zen .footer, body.zen .mobile-toolbar, body.zen .mobile-scroll-btns { display: none !important; }
 body.zen .editor-wrap .cm-scroller { padding-left: max(8vw, var(--space-4)); padding-right: max(8vw, var(--space-4)); }
@@ -2290,6 +2311,10 @@ body.zen.zen-tw .editor-wrap .cm-content { padding-top: 38vh; padding-bottom: 38
   <div style="position:relative;">
     <button class="menu-trigger" id="menu-view-btn">View</button>
     <div class="menu-dropdown" id="menu-view">
+      <button class="menu-item" onclick="toggleMdStyle()">
+        <span id="mdstyle-label">Markdown Styling: On</span>
+        <span></span>
+      </button>
       <button class="menu-item" onclick="openSnapshots()">
         <span>Snapshots / History</span>
         <span></span>
@@ -2308,7 +2333,7 @@ body.zen.zen-tw .editor-wrap .cm-content { padding-top: 38vh; padding-bottom: 38
         <span></span>
       </button>
       <button class="menu-item" onclick="openDailyNote()">
-        <span>Today's Note</span>
+        <span>Rooms by Date</span>
         <span></span>
       </button>
       <div class="menu-separator"></div>
@@ -2357,10 +2382,10 @@ body.zen.zen-tw .editor-wrap .cm-content { padding-top: 38vh; padding-bottom: 38
 <div class="mobile-toolbar" id="mobile-toolbar">
   <div class="mob-toolbar-inner">
     <button class="mob-btn" onclick="mobileUndo()" title="Undo">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.51"/></svg>U
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.51"/></svg>
     </button>
     <button class="mob-btn" onclick="mobileRedo()" title="Redo">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-.49-3.51"/></svg>R
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-.49-3.51"/></svg>
     </button>
     <div class="mob-sep"></div>
     <button class="mob-btn mob-fmt mob-fmt-b" onclick="mdBtn('bold')" title="Bold">B</button>
@@ -2371,13 +2396,13 @@ body.zen.zen-tw .editor-wrap .cm-content { padding-top: 38vh; padding-bottom: 38
     </button>
     <div class="mob-sep"></div>
     <button class="mob-btn" id="mob-copy-btn" onclick="mobileCopy()" title="Copy selection or all">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span>C</span>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
     </button>
     <button class="mob-btn" onclick="mobilePaste()" title="Paste">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>P
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>
     </button>
     <button class="mob-btn" onclick="mobileDownload()" title="Download as Zip">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>D
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
     </button>
   </div>
   <div class="mob-toolbar-inner mob-md-row" id="mob-md-row" style="display:none;"></div>
@@ -2413,6 +2438,7 @@ body.zen.zen-tw .editor-wrap .cm-content { padding-top: 38vh; padding-bottom: 38
 <!-- ========== FOOTER ========== -->
 <div class="footer">
   <div class="footer-breadcrumb" id="footer-breadcrumb"></div>
+  <span id="timer-chip" class="footer-timer-chip" title="Open timer" onclick="openTimer()" style="display:none;"></span>
   <div class="footer-spacer"></div>
   <div class="footer-stats">
     <span id="footer-line">Ln 1, Col 1</span>
@@ -2739,12 +2765,12 @@ body.zen.zen-tw .editor-wrap .cm-content { padding-top: 38vh; padding-bottom: 38
       <div class="room-unlock-label">Locked Room</div>
       <div class="room-unlock-name" id="room-unlock-name">room</div>
     </div>
-    <div class="room-unlock-form">
-      <input class="form-input" id="room-unlock-input" type="password" placeholder="Room password" autocomplete="off" spellcheck="false">
+    <form class="room-unlock-form" onsubmit="submitRoomUnlock();return false;">
+      <input class="form-input" id="room-unlock-input" type="password" placeholder="Room password" autocomplete="current-password" spellcheck="false">
       <div class="room-unlock-error" id="room-unlock-error"></div>
-      <button class="btn btn-primary" style="width:100%;" onclick="submitRoomUnlock()">Unlock</button>
-      <button class="room-unlock-cancel" onclick="cancelRoomUnlock()">Cancel</button>
-    </div>
+      <button type="submit" class="btn btn-primary" style="width:100%;">Unlock</button>
+      <button type="button" class="room-unlock-cancel" onclick="cancelRoomUnlock()">Cancel</button>
+    </form>
   </div>
 </div>
 
@@ -4754,18 +4780,25 @@ window.editor = editor;
   const vv = window.visualViewport;
   if (!vv) return;
   let raf = 0;
+  let _lastH = -1;
   function apply() {
     raf = 0;
     document.body.style.height = vv.height + 'px';
     document.body.style.top = (vv.offsetTop || 0) + 'px';
-    // The keyboard (and its predictive/clipboard strip) just changed the visible
-    // height — re-scroll the caret clear of it so typing on the bottom row isn't
-    // hidden behind the accessory bar (item 4). yMargin matches the scroll buffer.
-    try {
-      if (editor.hasFocus) {
-        editor.dispatch({ effects: EditorView.scrollIntoView(editor.state.selection.main.head, { y: 'nearest', yMargin: 110 }) });
-      }
-    } catch {}
+    // Only when the visible height actually changed (keyboard show/hide) do we
+    // nudge the caret clear of the keyboard/accessory strip. Guarding on a real
+    // height change avoids dispatching on every scroll event (which could loop
+    // with the scroll the dispatch itself triggers) — that path is what makes
+    // typing janky, so keep it off the hot path.
+    const h = Math.round(vv.height);
+    if (h !== _lastH) {
+      _lastH = h;
+      try {
+        if (editor.hasFocus) {
+          editor.dispatch({ effects: EditorView.scrollIntoView(editor.state.selection.main.head, { y: 'nearest', yMargin: 110 }) });
+        }
+      } catch {}
+    }
   }
   function schedule() { if (!raf) raf = requestAnimationFrame(apply); }
   vv.addEventListener('resize', schedule);
@@ -5526,41 +5559,21 @@ function countWords(s) {
 
 let _docWordCount = 0;
 let _wordCountTimer = null;
-let _wordCountSeq = 0; // guards against out-of-order async results
-// (Feature 76) Throttle + offload. Small docs are counted synchronously on the
-// debounce; large docs (> ~100k chars) are handed to the worker so a huge
-// paste doesn't jank typing, with the main-thread countWords as the automatic
-// fallback inside runInWorker. The footer always reflects the latest doc.
-const WORD_COUNT_OFFLOAD_THRESHOLD = 100000;
-// Past this size, counting exactly (or even posting the string to the worker)
-// would jank the UI, so we show a rough estimate and stay responsive. This is a
-// safety net for pathologically large/corrupted documents.
+// countWords is a trivial O(n) scan — even a multi-MB doc counts in a few ms on
+// the main thread. Offloading it to a Web Worker was a net LOSS: postMessage
+// structured-clones the entire document string on the main thread (the ~2s
+// freeze the user hit), then the worker clones it again. So count synchronously
+// on a short debounce; only fall back to an estimate for pathological sizes.
 const WORD_COUNT_MAX = 5000000;
 function scheduleWordCount() {
   clearTimeout(_wordCountTimer);
   _wordCountTimer = setTimeout(() => {
     const text = editor.state.doc.toString();
     __mark('wordcount(' + text.length + 'ch)');
-    if (text.length > WORD_COUNT_MAX) {
-      _docWordCount = Math.round(text.length / 6); // ~chars-per-word estimate
-      updateFooter();
-      return;
-    }
-    if (text.length <= WORD_COUNT_OFFLOAD_THRESHOLD) {
-      _docWordCount = countWords(text);
-      updateFooter();
-      return;
-    }
-    const seq = ++_wordCountSeq;
-    runInWorker('countWords', { text }).then(n => {
-      if (seq !== _wordCountSeq) return; // a newer count superseded this one
-      _docWordCount = n;
-      updateFooter();
-    }).catch(() => {
-      if (seq !== _wordCountSeq) return;
-      _docWordCount = countWords(text);
-      updateFooter();
-    });
+    _docWordCount = text.length > WORD_COUNT_MAX
+      ? Math.round(text.length / 6)  // estimate for pathological/corrupted docs
+      : countWords(text);
+    updateFooter();
   }, 250);
 }
 
@@ -9026,6 +9039,16 @@ function saveRooms() {
   store.set('cade-room-cap', roomCap);
 }
 
+// Label for a room in a dropdown. A pinned room surfaces in EVERY workspace;
+// when shown in one that isn't its own, annotate it "📌 room (its workspace)".
+function _roomDropdownLabel(name) {
+  if (roomIsPinned(name) && activeWorkspace !== WS_ALL && !roomInWorkspace(name, activeWorkspace)) {
+    const ids = getRoomWorkspaceIds(name);
+    const ws = ids.length ? getWorkspace(ids[0]) : null;
+    return '📌 ' + name + ' (' + (ws ? ws.name : 'Unlabeled') + ')';
+  }
+  return name;
+}
 function renderRoomTabs() {
   renderWorkspacePill();
   // Desktop tabs
@@ -9064,7 +9087,7 @@ function renderRoomTabs() {
   let mobileHtml = '<select onchange="if(this.value===\'+\'){addRoomPrompt();this.value=activeRoom||\'\';}else{switchRoom(this.value);}">';
   visibleRooms.forEach(name => {
     const sel = (name === activeRoom && syncState.connected) ? ' selected' : '';
-    mobileHtml += `<option value="${escapeHtml(name)}"${sel}>${escapeHtml(name)}</option>`;
+    mobileHtml += `<option value="${escapeHtml(name)}"${sel}>${escapeHtml(_roomDropdownLabel(name))}</option>`;
   });
   if (rooms.length < roomCap) {
     mobileHtml += '<option value="+">+ Room</option>';
@@ -9207,7 +9230,7 @@ function renderQuickSwitchList() {
     const wsIds = getRoomWorkspaceIds(name);
     const ws = wsIds.length ? getWorkspace(wsIds[0]) : null;
     const wsLabel = ws ? ws.name + (wsIds.length > 1 ? ' +' + (wsIds.length - 1) : '') : 'Unlabeled';
-    const pin = roomIsPinned(name) ? '<span class="qs-pin" title="Pinned">╳</span>' : '';
+    const pin = roomIsPinned(name) ? '<span class="qs-pin" title="Pinned">📌</span>' : '';
     const lock = roomHasPassword(name) ? ' 🔒' : '';
     const escAttr = escapeHtml(name.replace(/\\/g, '\\\\').replace(/'/g, "\\'"));
     return `<div class="qs-item ${i === _qsIndex ? 'active' : ''}" data-idx="${i}" onclick="quickSwitchPick('${escAttr}')">
@@ -9824,7 +9847,7 @@ function renderRoomRow(name, showBadge) {
     <div style="display:flex;align-items:center;justify-content:space-between;width:100%;">
       <div style="display:flex;align-items:center;gap:6px;min-width:0;flex:1;flex-wrap:wrap;">
         <span class="room-manager-drag" title="Drag to reorder">⠿</span>
-        ${pinned ? '<span title="Pinned" style="font-size:11px;">╳</span>' : ''}
+        ${pinned ? '<span title="Pinned" style="font-size:11px;">📌</span>' : ''}
         <span class="room-manager-name" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(name)}</span>
         ${badgeHtml}
         ${isActive ? '<span class="room-manager-active">● active</span>' : ''}
@@ -10522,11 +10545,15 @@ function touchRoomCreated(name) {
   roomMeta[name] = roomMeta[name] || {};
   if (!roomMeta[name].created) { roomMeta[name].created = Date.now(); saveRoomMeta(); }
 }
+let _lastMetaSaveAt = 0;
 function touchRoomModified(name) {
   if (!name) return;
   roomMeta[name] = roomMeta[name] || {};
   roomMeta[name].modified = Date.now();
-  saveRoomMeta();
+  // Keep the value in memory always, but only flush to localStorage at most once
+  // every few seconds so continuous typing doesn't write on every persist tick.
+  const now = Date.now();
+  if (now - _lastMetaSaveAt > 4000) { _lastMetaSaveAt = now; saveRoomMeta(); }
 }
 
 function workspaceColorClassForRoom(name) {
@@ -11138,7 +11165,7 @@ window.showRoomActionMenu = function(evt, roomName) {
     <div class="rm-action-section">workspaces for "${escapeHtml(roomName)}"</div>
     ${wsItems}
     <div class="rm-action-divider"></div>
-    <div class="rm-action-item" onclick="toggleRoomPin('${er}')">${pinned ? '╳ Unpin' : '╳ Pin to top'}</div>
+    <div class="rm-action-item" onclick="toggleRoomPin('${er}')">${pinned ? '📌 Unpin' : '📌 Pin to top'}</div>
     <div class="rm-action-item" onclick="toggleRoomArchive('${er}')">${archived ? '↩ Restore from archive' : '🗄 Archive'}</div>
     <div class="rm-action-divider"></div>
     <div class="rm-action-item" onclick="closeActionMenu(); roomPasswordAction('${er}')">${hasPassword ? '🔑 Change password' : '🔒 Set password'}</div>
@@ -11165,7 +11192,7 @@ window.showRoomTabContextMenu = function(evt, roomName) {
 
   menu.innerHTML = `
     <div class="rm-action-item" onclick="closeActionMenu(); switchRoom('${er}')">↗ Switch to here</div>
-    <div class="rm-action-item" onclick="toggleRoomPin('${er}')">${pinned ? '╳ Unpin' : '╳ Pin to top'}</div>
+    <div class="rm-action-item" onclick="toggleRoomPin('${er}')">${pinned ? '📌 Unpin' : '📌 Pin to top'}</div>
     <div class="rm-action-item" onclick="toggleRoomArchive('${er}')">${archived ? '↩ Restore' : '🗄 Archive'}</div>
     <div class="rm-action-divider"></div>
     <div class="rm-action-section">workspaces</div>
@@ -12342,7 +12369,7 @@ const SNAP_MAX_CHARS = 400000;
 // bloat localStorage (a 2KB room had grown a 190KB snapshot store). Oldest
 // snapshots are pruned until under this; at least one is always kept (#14).
 const SNAP_MAX_TOTAL = 150000;
-const SNAP_AUTO_MS = 5 * 60 * 1000;
+const SNAP_AUTO_MS = 30 * 60 * 1000; // 30 min — much less frequent (manual + pre-risky-action snapshots still fire)
 
 function snapKey() { return 'cade-snap:' + (syncState.roomName || activeRoom || '__local__'); }
 function loadSnaps() {
@@ -12564,9 +12591,22 @@ const _timer = {
   cdTotal: 5 * 60, cdRemaining: 5 * 60,
   // time-of-day target ('HH:MM')
   clockTarget: '',
-  // stopwatch
-  swElapsed: 0, laps: [],
+  // stopwatch (millisecond precision via performance.now)
+  swMs: 0, swStart: 0, laps: [],
 };
+// Live stopwatch elapsed in ms (counts from swStart while running).
+function _swNow() {
+  return (_timer.running && _timer.mode === 'stopwatch') ? (performance.now() - _timer.swStart) : _timer.swMs;
+}
+// mm:ss.cs (centiseconds), with hours when needed — for the stopwatch + laps.
+function _timerFmtMs(ms) {
+  ms = Math.max(0, ms);
+  const totalCs = Math.floor(ms / 10);
+  const cs = totalCs % 100, totalSec = Math.floor(totalCs / 100);
+  const s = totalSec % 60, m = Math.floor(totalSec / 60) % 60, h = Math.floor(totalSec / 3600);
+  const pad = (n) => String(n).padStart(2, '0');
+  return (h > 0 ? (h + ':' + pad(m) + ':' + pad(s)) : (m + ':' + pad(s))) + '.' + pad(cs);
+}
 function _timerLoadCfg() {
   try {
     const s = JSON.parse(store.get('cade-timer-cfg') || '{}');
@@ -12601,7 +12641,7 @@ function _timerPrime() {
   const t = _timer;
   if (t.mode === 'pomodoro') { t.phase = 'work'; t.remaining = t.work * 60; }
   else if (t.mode === 'countdown') { t.cdRemaining = t.cdTotal; }
-  else if (t.mode === 'stopwatch') { t.swElapsed = 0; t.laps = []; }
+  else if (t.mode === 'stopwatch') { t.swMs = 0; t.swStart = 0; t.laps = []; }
 }
 function _timerStop() { _timer.running = false; clearInterval(_timer.timer); }
 function _timerTick() {
@@ -12615,8 +12655,25 @@ function _timerTick() {
     if (t.cdRemaining <= 0) { _timerStop(); _timerNotify('Timer done', 'Countdown finished.'); }
   } else if (t.mode === 'clock') {
     if (_clockRemaining(t.clockTarget) <= 0) { _timerStop(); _timerNotify('Time reached', (t.clockTarget || '') + ' reached.'); }
-  } else { t.swElapsed++; }
+  } /* stopwatch: display is computed live from swStart, nothing to increment */
   _timerRender();
+  _timerChipUpdate();
+}
+// Current display value for the active mode (used by panel + footer chip).
+function _timerCurrentDisp() {
+  const t = _timer;
+  if (t.mode === 'pomodoro') return _timerFmt(t.remaining);
+  if (t.mode === 'countdown') return _timerFmt(t.cdRemaining);
+  if (t.mode === 'clock') return _timerFmt(_clockRemaining(t.clockTarget));
+  return _timerFmtMs(_swNow());
+}
+// Footer chip — lets the timer keep running while the panel is closed (minimized).
+function _timerChipUpdate() {
+  const chip = document.getElementById('timer-chip'); if (!chip) return;
+  const panelOpen = !!document.getElementById('timer-panel');
+  const show = _timer.running && !panelOpen;
+  chip.style.display = show ? '' : 'none';
+  if (show) chip.textContent = '⏱ ' + _timerCurrentDisp();
 }
 const _TIMER_TABS = [['pomodoro', 'Pomodoro'], ['countdown', 'Countdown'], ['clock', 'Time of day'], ['stopwatch', 'Stopwatch']];
 function _timerBodyHtml() {
@@ -12635,6 +12692,7 @@ function _timerBodyHtml() {
   html += '<div class="timer-btns"><button class="btn btn-primary timer-start" onclick="timerToggleRun()">Start</button>';
   if (t.mode === 'stopwatch') html += '<button class="btn" onclick="timerLap()">Lap</button>';
   html += '<button class="btn" onclick="timerReset()">Reset</button></div>';
+  html += '<div class="timer-btns"><button class="btn timer-min" onclick="timerMinimize()">Minimize ▾</button></div>';
   if (t.mode === 'stopwatch') html += '<div class="timer-laps"></div>';
   return html;
 }
@@ -12650,13 +12708,36 @@ function _timerRender() {
   if (t.mode === 'pomodoro') { disp = _timerFmt(t.remaining); sub = (t.phase === 'work' ? 'Focus' : 'Break') + ' · done ' + t.count; p.classList.toggle('break', t.phase !== 'work'); }
   else if (t.mode === 'countdown') { disp = _timerFmt(t.cdRemaining); sub = 'Countdown'; }
   else if (t.mode === 'clock') { const r = _clockRemaining(t.clockTarget); disp = _timerFmt(r); sub = t.clockTarget ? ('until ' + t.clockTarget) : 'set a time'; }
-  else { disp = _timerFmt(t.swElapsed); sub = 'Stopwatch'; }
+  else { disp = _timerFmtMs(_swNow()); sub = 'Stopwatch'; }
   const te = p.querySelector('.timer-time'); if (te) te.textContent = disp;
   const se = p.querySelector('.timer-sub'); if (se) se.textContent = sub;
   const sb = p.querySelector('.timer-start'); if (sb) sb.textContent = t.running ? 'Pause' : 'Start';
   const le = p.querySelector('.timer-laps');
-  if (le) le.innerHTML = t.laps.map((l, i) => `<div class="timer-lap"><span>Lap ${i + 1}</span><span>${_timerFmt(l)}</span></div>`).reverse().join('');
+  if (le) {
+    // Each lap shows its split (time since the previous lap) and the delta vs the
+    // previous split: +slower / −faster (the first lap has no previous, so —).
+    const rows = [];
+    for (let i = 0; i < t.laps.length; i++) {
+      const split = t.laps[i] - (i > 0 ? t.laps[i - 1] : 0);
+      const prevSplit = i > 0 ? (t.laps[i - 1] - (i > 1 ? t.laps[i - 2] : 0)) : null;
+      let delta = '—', cls = '';
+      if (prevSplit != null) {
+        const d = split - prevSplit;
+        if (Math.abs(d) < 10) { delta = '±0.00'; }
+        else { delta = (d > 0 ? '+' : '−') + _timerFmtMs(Math.abs(d)); cls = d > 0 ? 'slower' : 'faster'; }
+      }
+      rows.push(`<div class="timer-lap"><span>Lap ${i + 1}</span><span>${_timerFmtMs(split)}</span><span class="timer-lap-d ${cls}">${delta}</span></div>`);
+    }
+    le.innerHTML = rows.reverse().join('');
+  }
+  _timerChipUpdate();
 }
+window.timerMinimize = function() {
+  const p = document.getElementById('timer-panel');
+  if (p) { p.remove(); }            // keeps _timer.timer running in the background
+  store.set('cade-timer-open', '0');
+  _timerChipUpdate();
+};
 window.timerSetMode = function(m) { if (_timer.mode === m) return; _timerStop(); _timer.mode = m; _timerPrime(); _timerSaveCfg(); _timerRebuild(); };
 window.timerCfg = function(k, v) {
   const t = _timer;
@@ -12671,21 +12752,28 @@ window.timerToggleRun = function() {
   const t = _timer; t.running = !t.running;
   if (t.running) {
     try { if (window.Notification && Notification.permission === 'default') Notification.requestPermission(); } catch {}
-    clearInterval(t.timer); t.timer = setInterval(_timerTick, 1000);
-  } else clearInterval(t.timer);
+    if (t.mode === 'stopwatch') t.swStart = performance.now() - t.swMs; // resume from accumulated ms
+    clearInterval(t.timer);
+    // Stopwatch needs sub-second updates for the ms display; others tick at 1s.
+    t.timer = setInterval(_timerTick, t.mode === 'stopwatch' ? 41 : 1000);
+  } else {
+    if (t.mode === 'stopwatch') t.swMs = performance.now() - t.swStart; // freeze accumulated ms
+    clearInterval(t.timer);
+  }
   _timerRender();
 };
 window.timerReset = function() { _timerStop(); _timerPrime(); _timerRender(); };
-window.timerLap = function() { if (_timer.mode !== 'stopwatch') return; _timer.laps.push(_timer.swElapsed); _timerRender(); };
+window.timerLap = function() { if (_timer.mode !== 'stopwatch') return; _timer.laps.push(_swNow()); _timerRender(); };
 window.openTimer = function() {
   closeAllMenus();
   const existing = document.getElementById('timer-panel');
-  if (existing) { existing.remove(); store.set('cade-timer-open', '0'); return; }
+  if (existing) { existing.remove(); store.set('cade-timer-open', '0'); _timerChipUpdate(); return; }
   _timerLoadCfg();
   if (!_timer.running) _timerPrime();
   const p = _mkPanel('timer-panel', 'Timer', _timerBodyHtml());
-  p._onClose = () => store.set('cade-timer-open', '0');
+  p._onClose = () => { store.set('cade-timer-open', '0'); _timerChipUpdate(); };
   _timerRender();
+  _timerChipUpdate();
   store.set('cade-timer-open', '1');
 };
 window.togglePomodoro = window.openTimer; // back-compat (restore hook / old callers)
@@ -12743,39 +12831,36 @@ function setClockEnabled(on) {
 }
 
 // ---- Daily notes / mini calendar (#40) ----
-const DAILY_ROOM = 'journal';
-function _dailyHeading(d) {
-  const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-  const iso = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
-  return { iso, line: '## ' + iso + ' (' + days[d.getDay()] + ')' };
+// ---- Activity calendar (#40, reworked): browse rooms by the date they were
+// last modified. No journaling, no document clobbering — clicking a date lists
+// the rooms modified that day; clicking one opens its workspace + room.
+function _localDateKey(ts) {
+  const d = new Date(ts);
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
 }
-function gotoDailyEntry(d) {
-  const h = _dailyHeading(d);
-  const ensure = () => {
-    const doc = editor.state.doc;
-    let foundLine = 0;
-    for (let i = 1; i <= doc.lines; i++) { if (doc.line(i).text.trim() === h.line) { foundLine = i; break; } }
-    if (foundLine) { outlineGoto(foundLine); }
-    else {
-      // Prepend a new dated section.
-      const insert = h.line + '\n\n\n';
-      editor.dispatch({ changes: { from: 0, insert }, selection: { anchor: h.line.length + 2 } });
-      editor.dispatch({ effects: EditorView.scrollIntoView(0, { y: 'start' }) });
-    }
-    editor.focus();
-  };
-  if (activeRoom !== DAILY_ROOM) {
-    if (!rooms.includes(DAILY_ROOM)) { rooms.push(DAILY_ROOM); saveRooms(); try { renderRoomTabs(); } catch {} }
-    Promise.resolve(switchRoom(DAILY_ROOM)).then(() => setTimeout(ensure, 120));
-  } else { ensure(); }
+function _roomActivityMap() {
+  // dateKey -> [roomNames], from each room's last-modified (fallback created).
+  const map = {};
+  for (const name of rooms) {
+    const ts = roomMeta[name] && (roomMeta[name].modified || roomMeta[name].created);
+    if (!ts) continue;
+    const k = _localDateKey(ts);
+    (map[k] = map[k] || []).push(name);
+  }
+  return map;
 }
-function dailyHasEntry(d) {
-  // Best-effort: scan the journal room's cache for the dated heading.
-  const h = _dailyHeading(d);
-  const text = (activeRoom === DAILY_ROOM) ? editor.state.doc.toString() : (store.get('cade-room-cache:' + DAILY_ROOM) || '');
-  return text.indexOf('\n' + h.line) >= 0 || text.indexOf(h.line + '\n') === 0 || text.indexOf(h.line) >= 0;
+function _openRoomFromActivity(name) {
+  // Jump into the room's own workspace (first membership) so its tab is visible.
+  const ids = (typeof getRoomWorkspaceIds === 'function') ? getRoomWorkspaceIds(name) : [];
+  const wsId = ids && ids.length ? ids[0] : WS_ALL;
+  if (!roomInWorkspace(name, activeWorkspace) && !roomIsPinned(name)) {
+    activeWorkspace = wsId; store.set('cade-active-workspace', activeWorkspace);
+  }
+  switchRoom(name);
 }
+window._openRoomFromActivity = _openRoomFromActivity;
 let _dayCalMonth = null;
+let _dayCalSel = null; // selected dateKey ('YYYY-MM-DD')
 function renderDayCal() {
   const p = document.getElementById('daycal-panel'); if (!p) return;
   const ref = _dayCalMonth || new Date();
@@ -12783,33 +12868,55 @@ function renderDayCal() {
   const first = new Date(y, mo, 1);
   const days = new Date(y, mo + 1, 0).getDate();
   const today = new Date();
+  const act = _roomActivityMap();
   const monthName = ref.toLocaleDateString([], { month: 'long', year: 'numeric' });
   let grid = ['S', 'M', 'T', 'W', 'T', 'F', 'S'].map(d => '<div class="daycal-cell dow">' + d + '</div>').join('');
   for (let i = 0; i < first.getDay(); i++) grid += '<div class="daycal-cell empty"></div>';
   for (let d = 1; d <= days; d++) {
     const date = new Date(y, mo, d);
+    const key = _localDateKey(date.getTime());
     const isToday = date.toDateString() === today.toDateString();
-    const has = dailyHasEntry(date);
-    grid += '<div class="daycal-cell' + (isToday ? ' today' : '') + (has ? ' has' : '') + '" onclick="dayCalPick(' + y + ',' + mo + ',' + d + ')">' + d + '</div>';
+    const sel = (_dayCalSel === key) ? ' sel' : '';
+    grid += '<div class="daycal-cell' + (isToday ? ' today' : '') + (act[key] ? ' has' : '') + sel + '" onclick="dayCalPick(' + y + ',' + mo + ',' + d + ')">' + d + '</div>';
+  }
+  const selKey = _dayCalSel || _localDateKey(today.getTime());
+  const selLabel = new Date(selKey + 'T00:00:00').toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
+  const roomsOn = (act[selKey] || []).slice().sort((a, b) => (_roomModified(b) - _roomModified(a)));
+  let listHtml;
+  if (roomsOn.length) {
+    listHtml = roomsOn.map(n => {
+      const ids = getRoomWorkspaceIds(n);
+      const ws = ids.length ? getWorkspace(ids[0]) : null;
+      const wsName = ws ? ws.name : 'Unlabeled';
+      const escAttr = escapeHtml(n.replace(/\\/g, '\\\\').replace(/'/g, "\\'"));
+      return '<button class="daycal-room" onclick="_openRoomFromActivity(\'' + escAttr + '\')">' +
+        (roomIsPinned(n) ? '<span class="daycal-pin">📌</span>' : '') +
+        '<span class="daycal-room-n">' + escapeHtml(n) + '</span>' +
+        '<span class="daycal-room-ws">' + escapeHtml(wsName) + '</span></button>';
+    }).join('');
+  } else {
+    listHtml = '<div class="daycal-empty">No rooms modified.</div>';
   }
   p.querySelector('.cade-panel-body').innerHTML =
     '<div class="daycal-head"><button onclick="dayCalNav(-1)">‹</button><span>' + monthName + '</span><button onclick="dayCalNav(1)">›</button></div>' +
-    '<div class="daycal-grid">' + grid + '</div>';
+    '<div class="daycal-grid">' + grid + '</div>' +
+    '<div class="daycal-list-head">' + escapeHtml(selLabel) + '</div>' +
+    '<div class="daycal-list">' + listHtml + '</div>';
 }
 window.dayCalNav = function(delta) {
   const ref = _dayCalMonth || new Date();
   _dayCalMonth = new Date(ref.getFullYear(), ref.getMonth() + delta, 1);
   renderDayCal();
 };
-window.dayCalPick = function(y, mo, d) { gotoDailyEntry(new Date(y, mo, d)); renderDayCal(); };
+window.dayCalPick = function(y, mo, d) { _dayCalSel = _localDateKey(new Date(y, mo, d).getTime()); renderDayCal(); };
 window.openDailyNote = function() {
   closeAllMenus();
   const existing = document.getElementById('daycal-panel');
   if (existing) { existing.remove(); return; }
   _dayCalMonth = new Date();
-  _mkPanel('daycal-panel', "Daily Notes", '');
+  _dayCalSel = _localDateKey(Date.now());
+  _mkPanel('daycal-panel', 'Rooms by Date', '');
   renderDayCal();
-  gotoDailyEntry(new Date());
 };
 
 // Inline math (#41/#26): typing "=" at the end of a pure-arithmetic line
@@ -13010,8 +13117,16 @@ window.openHighlightPicker = function(ev) {
   if (btn) {
     const r = btn.getBoundingClientRect();
     el.style.left = Math.max(8, Math.min(window.innerWidth - el.offsetWidth - 8, r.left)) + 'px';
-    el.style.bottom = (window.innerHeight - r.top + 6) + 'px';
-  } else { el.style.left = '12px'; el.style.bottom = '60px'; }
+    // Open DOWNWARD from the button so it can't get clipped off the top of the
+    // screen (the toolbar now sits at the top on desktop). Flip up only if it
+    // would overflow the bottom.
+    const below = r.bottom + 6;
+    if (below + el.offsetHeight > window.innerHeight - 8 && r.top - el.offsetHeight - 6 > 8) {
+      el.style.top = (r.top - el.offsetHeight - 6) + 'px';
+    } else {
+      el.style.top = below + 'px';
+    }
+  } else { el.style.left = '12px'; el.style.top = '60px'; }
   _hlPickerEl = el;
   setTimeout(() => document.addEventListener('pointerdown', _hlPickerOutside, true), 0);
 };
@@ -13240,16 +13355,15 @@ function saveHotkeys() {
 }
 
 function updateHotkeyDisplay() {
-  document.getElementById('kbd-picker').textContent = hotkeys.openPicker;
-  document.getElementById('kbd-rerun').textContent = hotkeys.rerunScript;
-  document.getElementById('kbd-clear').textContent = hotkeys.clearEditor;
-  document.getElementById('kbd-import').textContent = hotkeys.importFiles;
-  document.getElementById('kbd-sync').textContent = hotkeys.openSync;
-  document.getElementById('kbd-force-sync').textContent = hotkeys.forceSync;
-  const kf = document.getElementById('kbd-find');
-  if (kf) kf.textContent = hotkeys.findReplace;
-  const kg = document.getElementById('kbd-goto');
-  if (kg) kg.textContent = hotkeys.gotoLine;
+  const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+  set('kbd-picker', hotkeys.openPicker);
+  set('kbd-rerun', hotkeys.rerunScript);
+  set('kbd-clear', hotkeys.clearEditor);
+  set('kbd-import', hotkeys.importFiles);
+  set('kbd-sync', hotkeys.openSync);
+  set('kbd-force-sync', hotkeys.forceSync);
+  set('kbd-find', hotkeys.findReplace);
+  set('kbd-goto', hotkeys.gotoLine);
 }
 
 updateHotkeyDisplay();
@@ -13803,8 +13917,8 @@ window.mobileCopy = function() {
     ? editor.state.doc.toString()
     : editor.state.sliceDoc(sel.from, sel.to);
   const btn = document.getElementById('mob-copy-btn');
-  const copyIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span>C</span>';
-  const checkIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="var(--success, #4ade80)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg><span style="color:var(--success,#4ade80)">✓</span>';
+  const copyIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+  const checkIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="var(--success, #4ade80)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
   navigator.clipboard.writeText(text).then(() => {
     btn.innerHTML = checkIcon;
     setTimeout(() => { btn.innerHTML = copyIcon; }, 1500);
