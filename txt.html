@@ -2083,6 +2083,10 @@ body {
 .cm-callout-important, .cm-callout-danger { --co: #ef4444; }
 .cm-callout-question { --co: #8b5cf6; }
 .cm-md-footnote { color: var(--accent); font-size: 0.85em; vertical-align: super; }
+.cm-md-bold { font-weight: 700; }
+.cm-md-italic { font-style: italic; }
+.cm-md-strike { text-decoration: line-through; }
+.cm-md-underline { text-decoration: underline; text-underline-offset: 2px; }
 .cm-md-code {
   background: var(--surface-2);
   border: 1px solid var(--border);
@@ -4352,6 +4356,15 @@ const MD_QUOTE_RE = /^>\s/;
 const MD_HR_RE = /^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/;
 const MD_CODE_RE = /`([^`\n]+)`/g;
 const MD_FN_RE = /\[\^[^\]\s]+\]/g;
+// Inline emphasis (visual only — the markers stay in the text). No lookbehind
+// (older iOS Safari chokes on it); bold/italic '*' overlaps are disambiguated
+// with an adjacency check in the builder.
+const MD_BOLD_RE = /\*\*([^*\n]+?)\*\*/g;
+const MD_BOLDU_RE = /__([^_\n]+?)__/g;
+const MD_ITAL_STAR_RE = /\*([^*\n]+?)\*/g;
+const MD_ITAL_UND_RE = /_([^_\n]+?)_/g;
+const MD_STRIKE_RE = /~~([^~\n]+?)~~/g;
+const MD_UND_RE = /<u>([\s\S]*?)<\/u>/gi;
 const CALLOUT_TYPES = ['note', 'tip', 'info', 'warning', 'important', 'caution', 'danger', 'success', 'question', 'quote'];
 
 function buildMdDecorations(view) {
@@ -4413,6 +4426,26 @@ function buildMdDecorations(view) {
         const s = line.from + m.index, e = s + m[0].length;
         ranges.push(Decoration.mark({ class: 'cm-md-footnote' }).range(s, e));
       }
+      // Inline emphasis: **bold**, __bold__, *italic*, _italic_, ~~strike~~, <u>.
+      MD_BOLD_RE.lastIndex = 0;
+      while ((m = MD_BOLD_RE.exec(text)) !== null) { const s = line.from + m.index; ranges.push(Decoration.mark({ class: 'cm-md-bold' }).range(s, s + m[0].length)); }
+      MD_BOLDU_RE.lastIndex = 0;
+      while ((m = MD_BOLDU_RE.exec(text)) !== null) { const s = line.from + m.index; ranges.push(Decoration.mark({ class: 'cm-md-bold' }).range(s, s + m[0].length)); }
+      MD_ITAL_STAR_RE.lastIndex = 0;
+      while ((m = MD_ITAL_STAR_RE.exec(text)) !== null) {
+        if (text[m.index - 1] === '*' || text[m.index + m[0].length] === '*') continue; // part of **bold**
+        const s = line.from + m.index; ranges.push(Decoration.mark({ class: 'cm-md-italic' }).range(s, s + m[0].length));
+      }
+      MD_ITAL_UND_RE.lastIndex = 0;
+      while ((m = MD_ITAL_UND_RE.exec(text)) !== null) {
+        if (text[m.index - 1] === '_' || text[m.index + m[0].length] === '_') continue; // part of __bold__
+        if (/[A-Za-z0-9]/.test(text[m.index - 1] || '') || /[A-Za-z0-9]/.test(text[m.index + m[0].length] || '')) continue; // snake_case
+        const s = line.from + m.index; ranges.push(Decoration.mark({ class: 'cm-md-italic' }).range(s, s + m[0].length));
+      }
+      MD_STRIKE_RE.lastIndex = 0;
+      while ((m = MD_STRIKE_RE.exec(text)) !== null) { const s = line.from + m.index; ranges.push(Decoration.mark({ class: 'cm-md-strike' }).range(s, s + m[0].length)); }
+      MD_UND_RE.lastIndex = 0;
+      while ((m = MD_UND_RE.exec(text)) !== null) { const s = line.from + m.index; ranges.push(Decoration.mark({ class: 'cm-md-underline' }).range(s, s + m[0].length)); }
     }
     // Syntax-highlight tokens for code blocks intersecting this range.
     for (const blk of fenceBlocks) {
@@ -6181,6 +6214,37 @@ function main(ctx) {
     if (map[cp]) return String.fromCodePoint(map[cp]);
     return ch;
   }).join('');
+  if (ctx.selection) ctx.selection = result; else ctx.fullText = result;
+}`);
+
+registerScript(`/**
+  {
+    "name": "Clear Markdown",
+    "description": "Strip markdown emphasis (bold/italic/underline/strike/code/highlight) but keep # heading marks",
+    "author": "Cade",
+    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M3 7h18'/><path d='M3 12h12'/><path d='M3 17h6'/></svg>",
+    "tags": "clear,strip,markdown,plain,bold,italic,underline,remove,format"
+  }
+**/
+function main(ctx) {
+  var text = ctx.selection || ctx.fullText;
+  var result = window.clearMarkdownInline ? window.clearMarkdownInline(text) : text;
+  if (ctx.selection) ctx.selection = result; else ctx.fullText = result;
+}`);
+
+registerScript(`/**
+  {
+    "name": "Super Clear Styles",
+    "description": "Strip BOTH Unicode fancy text and markdown formatting — back to plain (keeps # headings)",
+    "author": "Cade",
+    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M3 3l18 18'/><path d='M21 3L3 21'/></svg>",
+    "tags": "clear,strip,plain,reset,defancify,markdown,super,all,format,remove"
+  }
+**/
+function main(ctx) {
+  var text = ctx.selection || ctx.fullText;
+  var result = window.defancifyText ? window.defancifyText(text) : text;
+  result = window.clearMarkdownInline ? window.clearMarkdownInline(result) : result;
   if (ctx.selection) ctx.selection = result; else ctx.fullText = result;
 }`);
 
@@ -9654,6 +9718,16 @@ async function _doSwitchRoom(name, firebaseUrl, baseEncKey) {
     // This is what handles "typed into this room while offline last session".
     syncState.pendingReconcile = true;
     attachConnListener(db);
+    // Belt-and-braces for cold page loads: the Firebase stream often isn't live
+    // yet when attachConnListener first runs, so the initial reconcile can miss
+    // its `.info/connected` -> true edge and the room shows stale local content
+    // until a manual reconnect (item 11). reconcileOnLive is idempotent (guarded
+    // by pendingReconcile + conflictResolving + isStreamLive), so these retries
+    // safely catch up once the stream comes up.
+    const _kickEpoch = epoch;
+    [800, 2500, 6000].forEach(ms => setTimeout(() => {
+      if (_kickEpoch === _switchEpoch && syncState.pendingReconcile) { try { reconcileOnLive(); } catch {} }
+    }, ms));
     clearInterval(syncState.idleCheckTimer);
     syncState.idleCheckTimer = setInterval(tryApplyPendingRemote, 500);
     // If no Firebase update arrives within 2s (room empty on server, or
@@ -13124,6 +13198,96 @@ window.installApp = function() {
   });
 })();
 
+// Fancy unicode text transforms — used when Markdown styling is OFF so the
+// bold/italic/underline buttons produce styled text instead of literal markdown
+// tags (item 1). Shared by the buttons and the "Clear Styles" scripts.
+const Fancy = (() => {
+  const A = 0x41, Z = 0x5A, a = 0x61, z = 0x7A, n0 = 0x30, n9 = 0x39;
+  const cp = String.fromCodePoint;
+  function toBold(s) { return [...s].map(ch => { const c = ch.codePointAt(0);
+    if (c >= A && c <= Z) return cp(0x1D5D4 + c - A);
+    if (c >= a && c <= z) return cp(0x1D5EE + c - a);
+    if (c >= n0 && c <= n9) return cp(0x1D7EC + c - n0);
+    return ch; }).join(''); }
+  function toItalic(s) { return [...s].map(ch => { const c = ch.codePointAt(0);
+    if (c >= A && c <= Z) return cp(0x1D608 + c - A);
+    if (c >= a && c <= z) return cp(0x1D622 + c - a);
+    return ch; }).join(''); }
+  function toUnder(s) { return [...s].map(ch => /\s/.test(ch) ? ch : ch + '̲').join(''); }
+  // Reverse fancy alphanumerics back to ASCII and strip combining marks.
+  function strip(s) {
+    return [...s].map(ch => { const c = ch.codePointAt(0);
+      if (c >= 0x1D5D4 && c <= 0x1D5ED) return cp(A + c - 0x1D5D4);   // bold upper
+      if (c >= 0x1D5EE && c <= 0x1D607) return cp(a + c - 0x1D5EE);   // bold lower
+      if (c >= 0x1D7EC && c <= 0x1D7F5) return cp(n0 + c - 0x1D7EC);  // bold digits
+      if (c >= 0x1D608 && c <= 0x1D621) return cp(A + c - 0x1D608);   // italic upper
+      if (c >= 0x1D622 && c <= 0x1D63B) return cp(a + c - 0x1D622);   // italic lower
+      if (c >= 0x1D63C && c <= 0x1D655) return cp(A + c - 0x1D63C);   // bold-italic upper
+      if (c >= 0x1D656 && c <= 0x1D66F) return cp(a + c - 0x1D656);   // bold-italic lower
+      return ch; }).join('').replace(/[̵̶̲̳⃝⃞]/g, '');
+  }
+  const isBold = s => [...s].some(ch => { const c = ch.codePointAt(0); return (c >= 0x1D5D4 && c <= 0x1D607) || (c >= 0x1D7EC && c <= 0x1D7F5) || (c >= 0x1D63C && c <= 0x1D66F); });
+  const isItalic = s => [...s].some(ch => { const c = ch.codePointAt(0); return (c >= 0x1D608 && c <= 0x1D63B) || (c >= 0x1D63C && c <= 0x1D66F); });
+  const isUnder = s => /̲/.test(s);
+  return { toBold, toItalic, toUnder, strip, isBold, isItalic, isUnder };
+})();
+window.Fancy = Fancy;
+
+// Strip inline markdown emphasis but KEEP heading hashes / list / quote markers.
+function clearMarkdownInline(text) {
+  return text
+    .replace(/<\/?u>/gi, '')
+    .replace(/==(?:[a-z]+\|)?([\s\S]*?)==/g, '$1')          // ==color|highlight==
+    .replace(/\*\*([\s\S]*?)\*\*/g, '$1')                   // **bold**
+    .replace(/~~([\s\S]*?)~~/g, '$1')                       // ~~strike~~
+    .replace(/`([^`\n]+?)`/g, '$1')                         // `code`
+    .replace(/(^|[^*\w])\*(?!\s)([^*\n]+?)\*(?!\w)/g, '$1$2') // *italic*
+    .replace(/(^|[^_\w])__([\s\S]*?)__(?!\w)/g, '$1$2')      // __underline/bold__
+    .replace(/(^|[^_\w])_(?!\s)([^_\n]+?)_(?!\w)/g, '$1$2'); // _italic_
+}
+window.clearMarkdownInline = clearMarkdownInline;
+
+// Comprehensive Unicode "defancify": reverse the common fancy alphabet blocks
+// and strip combining marks. Shared by the Defancify-style scripts.
+function defancifyText(text) {
+  const map = {};
+  const addAlpha = (u, l) => { for (let i = 0; i < 26; i++) { map[u + i] = 0x41 + i; map[l + i] = 0x61 + i; } };
+  const addDigits = (s) => { for (let i = 0; i < 10; i++) map[s + i] = 0x30 + i; };
+  addAlpha(0x1D400, 0x1D41A); addDigits(0x1D7CE);  // bold serif
+  addAlpha(0x1D434, 0x1D44E); map[0x210E] = 0x68;  // italic serif (h = U+210E)
+  addAlpha(0x1D468, 0x1D482);                       // bold-italic serif
+  addAlpha(0x1D5A0, 0x1D5BA); addDigits(0x1D7E2);  // sans
+  addAlpha(0x1D5D4, 0x1D5EE); addDigits(0x1D7EC);  // sans bold
+  addAlpha(0x1D608, 0x1D622);                       // sans italic
+  addAlpha(0x1D63C, 0x1D656);                       // sans bold-italic
+  addAlpha(0x1D670, 0x1D68A); addDigits(0x1D7F6);  // monospace
+  addAlpha(0x1D538, 0x1D552); addDigits(0x1D7D8);  // double-struck
+  for (let i = 0; i < 26; i++) { map[0xFF21 + i] = 0x41 + i; map[0xFF41 + i] = 0x61 + i; } // fullwidth
+  for (let i = 0; i < 10; i++) map[0xFF10 + i] = 0x30 + i;
+  const combining = new Set([0x0332, 0x0333, 0x0336, 0x0335, 0x0305, 0x20E3, 0x0489, 0x20DD, 0x20DE]);
+  return [...text].map(ch => {
+    const c = ch.codePointAt(0);
+    if (combining.has(c)) return '';
+    return map[c] ? String.fromCodePoint(map[c]) : ch;
+  }).join('');
+}
+window.defancifyText = defancifyText;
+
+// The word immediately before the caret, when the caret sits at its end (no
+// selection, no trailing space/delimiter). Drives the "apply to the word I just
+// typed" toolbar behavior (item 2). Returns null when the caret follows a
+// delimiter/space or is at line start.
+function _wordRangeBeforeCursor() {
+  const sel = editor.state.selection.main;
+  if (!sel.empty) return null;
+  const pos = sel.head;
+  const line = editor.state.doc.lineAt(pos);
+  const before = line.text.slice(0, pos - line.from);
+  const wm = before.match(/[\p{L}\p{N}_'’-]+$/u);
+  if (!wm) return null;
+  return { from: pos - wm[0].length, to: pos };
+}
+
 // Mobile markdown toolbar row (#78): configurable buttons that insert markdown
 // around the selection / at the cursor.
 const MD_BTN_DEFS = {
@@ -13142,18 +13306,23 @@ const MD_BTN_DEFS = {
 window.applyHighlight = function(color) {
   closeHighlightPicker();
   const sel = editor.state.selection.main;
-  let text = editor.state.sliceDoc(sel.from, sel.to);
+  // No selection: target the word just typed if the caret is at its end,
+  // otherwise insert an empty highlight at the caret (item 2).
+  let from = sel.from, to = sel.to;
+  if (sel.empty) { const wr = _wordRangeBeforeCursor(); if (wr) { from = wr.from; to = wr.to; } }
+  let text = editor.state.sliceDoc(from, to);
   const m = /^==(?:([a-z]+)\|)?([\s\S]*?)==$/.exec(text);
   if (m) text = m[2]; // peel an existing highlight so re-applying / No color works
   if (!color) {
-    editor.dispatch({ changes: { from: sel.from, to: sel.to, insert: text }, selection: { anchor: sel.from, head: sel.from + text.length } });
+    editor.dispatch({ changes: { from, to, insert: text }, selection: { anchor: from, head: from + text.length } });
     editor.focus(); return;
   }
   const open = HL_COLORS.includes(color) ? '==' + color + '|' : '==';
   const ins = open + text + '==';
-  const anchor = sel.empty ? sel.from + open.length : sel.from;
-  const head = sel.empty ? sel.from + open.length : sel.from + ins.length;
-  editor.dispatch({ changes: { from: sel.from, to: sel.to, insert: ins }, selection: { anchor, head } });
+  const empty = from === to;
+  const anchor = empty ? from + open.length : from;
+  const head = empty ? from + open.length : from + ins.length;
+  editor.dispatch({ changes: { from, to, insert: ins }, selection: { anchor, head } });
   editor.focus();
 };
 let _hlPickerEl = null;
@@ -13195,12 +13364,38 @@ window.mdBtn = function(kind) {
     const t = editor.state.sliceDoc(sel.from, sel.to) || 'text';
     const ins = '[' + t + '](url)';
     editor.dispatch({ changes: { from: sel.from, to: sel.to, insert: ins }, selection: { anchor: sel.from + ins.length - 4, head: sel.from + ins.length - 1 } });
-  } else if (def.wrap) {
-    const t = editor.state.sliceDoc(sel.from, sel.to);
-    editor.dispatch({ changes: { from: sel.from, to: sel.to, insert: def.wrap[0] + t + def.wrap[1] }, selection: { anchor: sel.from + def.wrap[0].length, head: sel.from + def.wrap[0].length + t.length } });
-  } else if (def.prefix) {
+    editor.focus(); return;
+  }
+  if (def.prefix) {
     const line = editor.state.doc.lineAt(sel.from);
     editor.dispatch({ changes: { from: line.from, insert: def.prefix }, selection: { anchor: sel.head + def.prefix.length } });
+    editor.focus(); return;
+  }
+  if (!def.wrap) { editor.focus(); return; }
+  // wrap kinds (bold/italic/under/code): target the selection, or the word just
+  // typed when the caret is at its end, or insert empty markers at the caret.
+  let from = sel.from, to = sel.to;
+  if (sel.empty) { const wr = _wordRangeBeforeCursor(); if (wr) { from = wr.from; to = wr.to; } }
+  // When Markdown styling is OFF, bold/italic/underline emit FANCY unicode text
+  // (toggling) instead of literal markdown tags (item 1).
+  const fancyKind = kind === 'bold' || kind === 'italic' || kind === 'under';
+  const mdOn = !(typeof mdStyleEnabled !== 'undefined' && !mdStyleEnabled);
+  if (fancyKind && !mdOn) {
+    if (from === to) { editor.focus(); return; } // nothing to fancify at a bare caret
+    const src = editor.state.sliceDoc(from, to);
+    let out;
+    if (kind === 'bold') out = Fancy.isBold(src) ? Fancy.strip(src) : Fancy.toBold(src);
+    else if (kind === 'italic') out = Fancy.isItalic(src) ? Fancy.strip(src) : Fancy.toItalic(src);
+    else out = Fancy.isUnder(src) ? src.replace(/̲/g, '') : Fancy.toUnder(src);
+    editor.dispatch({ changes: { from, to, insert: out }, selection: { anchor: from, head: from + out.length } });
+    editor.focus(); return;
+  }
+  const t = editor.state.sliceDoc(from, to);
+  const insert = def.wrap[0] + t + def.wrap[1];
+  if (from === to) {
+    editor.dispatch({ changes: { from, to, insert }, selection: { anchor: from + def.wrap[0].length } });
+  } else {
+    editor.dispatch({ changes: { from, to, insert }, selection: { anchor: from + def.wrap[0].length, head: from + def.wrap[0].length + t.length } });
   }
   editor.focus();
 };
