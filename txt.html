@@ -1565,8 +1565,9 @@ body {
   }
   .editor-wrap .cm-scroller {
     padding: var(--space-2) var(--space-3);
-    /* Leave room so the caret line can scroll clear of the footer/keyboard (#18). */
-    scroll-padding-bottom: 96px;
+    /* Leave room so the caret line can scroll clear of the footer + the
+       keyboard's predictive/clipboard accessory strip (#18, item 4). */
+    scroll-padding-bottom: 140px;
   }
   /* Trailing buffer so the last line is reachable above the keyboard. */
   .editor-wrap .cm-content { padding-bottom: 30vh; }
@@ -2436,6 +2437,11 @@ body.zen.zen-tw .editor-wrap .cm-content { padding-top: 38vh; padding-bottom: 38
         <span class="scb-title">📄 Public Link</span>
         <span class="scb-desc">Embeds a compressed copy of the text in the link — anyone can read it. No sync.</span>
       </button>
+    </div>
+    <div class="form-group" style="margin-top: var(--space-3);">
+      <label class="form-label" for="share-pass">Password (optional — encrypts a Public link)</label>
+      <input class="form-input" id="share-pass" type="password" placeholder="Leave blank for an unencrypted public link" spellcheck="false" autocomplete="off">
+      <div class="form-hint">If set, the Public link's text is AES-encrypted; the recipient must enter this password to read it.</div>
     </div>
     <div class="form-group" style="margin-top: var(--space-3);">
       <textarea class="form-input" id="share-link-out" readonly rows="3" spellcheck="false" style="resize:none;font-size:11px;font-family:var(--font-mono);" placeholder="Pick an option above…"></textarea>
@@ -4752,6 +4758,14 @@ window.editor = editor;
     raf = 0;
     document.body.style.height = vv.height + 'px';
     document.body.style.top = (vv.offsetTop || 0) + 'px';
+    // The keyboard (and its predictive/clipboard strip) just changed the visible
+    // height — re-scroll the caret clear of it so typing on the bottom row isn't
+    // hidden behind the accessory bar (item 4). yMargin matches the scroll buffer.
+    try {
+      if (editor.hasFocus) {
+        editor.dispatch({ effects: EditorView.scrollIntoView(editor.state.selection.main.head, { y: 'nearest', yMargin: 110 }) });
+      }
+    } catch {}
   }
   function schedule() { if (!raf) raf = requestAnimationFrame(apply); }
   vv.addEventListener('resize', schedule);
@@ -11517,6 +11531,8 @@ window.shareLink = function() {
   closeAllMenus();
   const out = document.getElementById('share-link-out');
   if (out) { out.value = ''; out.removeAttribute('data-link'); }
+  const pass = document.getElementById('share-pass');
+  if (pass) pass.value = '';
   const hint = document.getElementById('share-link-hint');
   if (hint) hint.textContent = '';
   const copyBtn = document.getElementById('share-copy-btn');
@@ -11547,11 +11563,20 @@ window.generateShareLink = async function(kind) {
       hint.textContent = 'Opens live for anyone connected to the same database. The password is never included.';
     } else {
       const text = editor.state.doc.toString();
-      const payload = JSON.stringify({ v: 1, r: roomName, t: text });
+      const pw = (document.getElementById('share-pass') || {}).value || '';
+      let payload;
+      if (pw) {
+        // Encrypt the body with the share password (AES-GCM, compressed inside
+        // encryptText). The link carries ciphertext + an `e:1` flag.
+        const enc = await encryptText(text, pw);
+        payload = JSON.stringify({ v: 1, r: roomName, e: 1, t: enc });
+      } else {
+        payload = JSON.stringify({ v: 1, r: roomName, t: text });
+      }
       const bytes = await _compress(new TextEncoder().encode(payload));
       link = base + '#p=' + _bytesToB64Url(bytes);
       const kb = (link.length / 1024).toFixed(1);
-      hint.textContent = 'Anyone with the link can read this copy — it does not sync. Link size: ' + kb + ' KB.';
+      hint.textContent = (pw ? '🔒 Password-protected. ' : '') + 'Anyone with the link' + (pw ? ' and password' : '') + ' can read this copy — it does not sync. Link size: ' + kb + ' KB.';
       if (link.length > 28000) hint.textContent += ' ⚠ Very long; some chat apps may truncate it.';
     }
     out.value = link;
@@ -11622,7 +11647,17 @@ window.shareNative = function() {
     catch (e) { showToast('Shared link is invalid or corrupted', 'error', 3500); return; }
     if (!data || typeof data.t !== 'string') { showToast('Shared link has no content', 'error', 3000); return; }
     const baseName = String(data.r || 'shared');
-    const text = data.t;
+    let text = data.t;
+    // Password-protected public link: prompt + decrypt before opening.
+    if (data.e === 1) {
+      let ok = false;
+      for (let tries = 0; tries < 3 && !ok; tries++) {
+        const pw = await textPrompt(tries === 0 ? 'This shared link is password-protected. Enter the password:' : 'Incorrect password. Try again:', '');
+        if (pw == null) { showToast('Password required — shared link not opened', 'error', 3500); return; }
+        try { const dec = await decryptText(data.t, pw); if (dec != null) { text = dec; ok = true; } } catch {}
+      }
+      if (!ok) { showToast('Could not decrypt the shared link', 'error', 3500); return; }
+    }
     // Pick a target room that won't clobber different local content.
     let target = baseName;
     if (rooms.includes(baseName)) {
