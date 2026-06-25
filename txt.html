@@ -2810,6 +2810,7 @@ body.zen.zen-tw .editor-wrap .cm-content { padding-top: 38vh; padding-bottom: 38
     <div class="modal-footer">
       <div class="modal-actions">
         <button class="btn" onclick="takeSnapshot(false)">+ Snapshot Now</button>
+        <button class="btn" onclick="manageSnapshotStorage()" title="See snapshot storage across all rooms and clear the largest">Manage storage…</button>
         <button class="btn btn-danger" onclick="clearSnapshots()">Clear All</button>
         <button class="btn btn-primary" onclick="closeSnapshots()">Done</button>
       </div>
@@ -12719,6 +12720,18 @@ function saveSnaps(snaps) {
   try { store.set(snapKey(), JSON.stringify(snaps)); } catch {}
 }
 
+// F2 — drop snapshots older than the user's retention window (always keep the
+// newest so there's a way back). Returns the (possibly trimmed) array.
+function pruneSnapsByAge(snaps) {
+  let days = 0;
+  try { days = parseInt(window.Settings && Settings.get('snapshots.maxAgeDays'), 10) || 0; } catch {}
+  if (!days || !snaps.length) return snaps;
+  const cutoff = Date.now() - days * 86400000;
+  // snaps[0] is newest; keep it plus anything newer than the cutoff.
+  const kept = snaps.filter((s, i) => i === 0 || (s.t || 0) >= cutoff);
+  return kept.length ? kept : snaps;
+}
+
 // Returns true if a new snapshot was stored. `silent` suppresses the toasts —
 // used for the background auto-capture and the pre-restore/pre-clear guards.
 window.takeSnapshot = function(silent) {
@@ -12731,6 +12744,8 @@ window.takeSnapshot = function(silent) {
   if (snaps.length && snaps[0].c === text) { if (isManual) showToast('No changes since last snapshot', 'success', 1500); return false; }
   snaps.unshift({ t: Date.now(), c: text });
   while (snaps.length > SNAP_MAX) snaps.pop();
+  // Age-based retention sweep (F2) before the byte cap below.
+  { const pruned = pruneSnapsByAge(snaps); snaps.length = 0; snaps.push(...pruned); }
   // Byte-cap: drop oldest until under the total budget (always keep newest).
   let total = snaps.reduce((n, s) => n + (s.c ? s.c.length : 0), 0);
   while (snaps.length > 1 && total > SNAP_MAX_TOTAL) {
@@ -12816,8 +12831,53 @@ window.diffSnapshot = function(i) {
 
 window.openSnapshots = function() {
   closeAllMenus();
+  // Apply the age-retention sweep to this room on open (F2).
+  try { const s = loadSnaps(); const p = pruneSnapsByAge(s); if (p.length !== s.length) saveSnaps(p); } catch {}
   renderSnapshotsList();
   document.getElementById('snapshots-overlay').classList.add('open');
+};
+
+// F2 — cross-room snapshot storage view: list every room's snapshot store by
+// size (largest first) so the user can reclaim space. Renders into the same
+// list area with a "back" link.
+window.manageSnapshotStorage = function() {
+  const list = document.getElementById('snapshots-list');
+  if (!list) return;
+  const rows = store.keys()
+    .filter(k => k.indexOf('cade-snap:') === 0)
+    .map(k => {
+      const room = k.slice('cade-snap:'.length);
+      let count = 0;
+      try { count = (JSON.parse(store.get(k) || '[]') || []).length; } catch {}
+      return { key: k, room, bytes: store.sizeOf(k), count };
+    })
+    .filter(r => r.count > 0)
+    .sort((a, b) => b.bytes - a.bytes);
+  const fmtKb = b => (b / 1024).toFixed(b < 10240 ? 1 : 0) + ' KB';
+  const total = rows.reduce((n, r) => n + r.bytes, 0);
+  let html = `<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+      <button class="btn" style="padding:2px 8px;font-size:var(--text-xs);" onclick="renderSnapshotsList()">← Back</button>
+      <span style="font-size:var(--text-xs);color:var(--text-muted);">${rows.length} room${rows.length !== 1 ? 's' : ''} · ${fmtKb(total)} total</span>
+    </div>`;
+  if (!rows.length) {
+    html += '<div style="color:var(--text-faint);font-size:var(--text-sm);padding:8px 0;">No snapshot storage in use.</div>';
+  } else {
+    html += rows.map(r => {
+      const here = r.room === (syncState.roomName || activeRoom || '__local__');
+      const label = r.room === '__local__' ? '(local / no room)' : r.room;
+      return `<div class="snap-row">
+        <span class="snap-preview" title="${escapeHtml(label)}">${escapeHtml(label)}${here ? ' · current' : ''}</span>
+        <span class="snap-meta">${r.count} snap${r.count !== 1 ? 's' : ''} · ${fmtKb(r.bytes)}</span>
+        <button class="btn btn-danger" style="padding:2px 8px;font-size:var(--text-xs);" onclick="clearSnapshotStore('${r.key.replace(/'/g, "\\'")}')">Clear</button>
+      </div>`;
+    }).join('');
+  }
+  list.innerHTML = html;
+};
+window.clearSnapshotStore = function(key) {
+  if (!confirm('Delete all snapshots for this room?')) return;
+  store.remove(key);
+  manageSnapshotStorage();
 };
 window.closeSnapshots = function() {
   document.getElementById('snapshots-overlay').classList.remove('open');
@@ -13396,6 +13456,15 @@ try {
     registerSetting({ key: 'widgets.clockTz', label: 'Extra timezones', type: 'text', default: '', section: 'Appearance', hint: 'Comma-separated IANA names, e.g. America/New_York, Europe/London', apply() { if (document.getElementById('footer-clock')) clockTick(); } });
     registerSetting({ key: 'widgets.timerFlashUntilAck', label: 'Timer flashes until acknowledged', type: 'toggle', default: true, section: 'Behavior', hint: 'When a timer fires, keep flashing the popup until you click it / press Stop / close it.' });
     registerSetting({ key: 'widgets.timerMinimizeOnClose', label: 'Minimize running timer on close', type: 'toggle', default: true, section: 'Behavior', hint: 'Closing the timer while it is running keeps it going as a footer chip instead of stopping it.' });
+    // F2 — snapshot retention. Auto-discard snapshots older than the chosen
+    // window (the newest is always kept). Storage is also capped per-room by
+    // count + bytes; this adds a time-based sweep on top.
+    registerSetting({ key: 'snapshots.maxAgeDays', label: 'Auto-delete old snapshots', type: 'select', default: '0', section: 'Behavior', hint: 'Discard a document’s snapshots older than this (the most recent is always kept). Use Snapshots → Manage storage to clear by size across all rooms.', options: [
+      { value: '0', label: 'Keep all' },
+      { value: '1', label: 'Older than 1 day' },
+      { value: '7', label: 'Older than 7 days' },
+      { value: '30', label: 'Older than 30 days' },
+    ] });
   }
 } catch {}
 
