@@ -2227,8 +2227,13 @@ body {
 .timer-time { display: block; font-size: 34px; font-weight: 700; text-align: center; font-variant-numeric: tabular-nums; }
 .timer-sub { display: block; text-align: center; font-size: var(--text-xs); color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
 #timer-panel.break .timer-time { color: var(--success, #10b981); }
-@keyframes timerFlash { 0%, 100% { box-shadow: 0 0 0 1px var(--border), 0 8px 28px rgba(0,0,0,0.28); } 50% { box-shadow: 0 0 0 3px var(--accent), 0 0 18px var(--accent); } }
-#timer-panel.timer-flash { animation: timerFlash 0.7s ease-in-out infinite; }
+/* D8: a slower, gentler attention pulse — tints the panel background rather than
+   strobing a shadow, so it's noticeable without being jarring. */
+@keyframes timerFlash {
+  0%, 100% { box-shadow: 0 0 0 1px var(--border), 0 8px 28px rgba(0,0,0,0.28); background: var(--surface); }
+  50% { box-shadow: 0 0 0 2px var(--accent), 0 0 14px var(--accent); background: color-mix(in srgb, var(--accent) 18%, var(--surface)); }
+}
+#timer-panel.timer-flash { animation: timerFlash 1.8s ease-in-out infinite; }
 #timer-panel.timer-flash .timer-time { color: var(--accent); }
 /* Long-press room picker HUD (item 10). */
 .room-hud { position: fixed; inset: 0; z-index: 5500; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; animation: overlayIn 120ms ease-out; }
@@ -12841,6 +12846,24 @@ function _mkPanel(id, title, bodyHtml) {
   return p;
 }
 
+// B6: floating panels are absolutely positioned, so a viewport resize can leave
+// them orphaned off-screen. On a real width change (ignore mobile keyboard
+// show/hide, which only changes height) auto-minimize the timer — keeping it
+// running via the footer chip — and auto-close the outline / calendar panels.
+let _panelLastW = (typeof window !== 'undefined') ? window.innerWidth : 0, _panelResizeTimer = null;
+window.addEventListener('resize', () => {
+  clearTimeout(_panelResizeTimer);
+  _panelResizeTimer = setTimeout(() => {
+    if (Math.abs(window.innerWidth - _panelLastW) < 40) return; // height-only (keyboard) → ignore
+    _panelLastW = window.innerWidth;
+    if (document.getElementById('timer-panel')) { try { window.timerMinimize(); } catch {} }
+    ['outline-panel', 'daycal-panel'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) { el.remove(); if (el._onClose) el._onClose(); }
+    });
+  }, 250);
+});
+
 // ---- Outline / TOC (#34) ----
 function buildOutline() {
   const list = document.getElementById('outline-list');
@@ -12918,6 +12941,13 @@ function _timerFmt(s) {
   const mm = String(m).padStart(2, '0'), sss = String(ss).padStart(2, '0');
   return h > 0 ? (h + ':' + mm + ':' + sss) : (m + ':' + sss);
 }
+// Format an 'HH:MM' (24hr) target as 12hr with AM/PM for display (D6).
+function _fmt12(hhmm) {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(hhmm || ''); if (!m) return hhmm || '';
+  let h = +m[1]; const ap = h >= 12 ? 'PM' : 'AM';
+  h = h % 12; if (h === 0) h = 12;
+  return h + ':' + m[2] + ' ' + ap;
+}
 function _clockRemaining(hhmm) {
   const m = /^(\d{1,2}):(\d{2})$/.exec(hhmm || ''); if (!m) return 0;
   const now = new Date();
@@ -12926,10 +12956,10 @@ function _clockRemaining(hhmm) {
   if (diff < 0) diff += 24 * 3600; // roll to tomorrow if the time already passed
   return diff;
 }
-function _timerNotify(title, body) {
+function _timerNotify(title, body, noToast) {
   try { navigator.vibrate && navigator.vibrate([120, 60, 120]); } catch {}
   try { if (window.Notification && Notification.permission === 'granted') { new Notification(title, { body }); return; } } catch {}
-  showToast(body, 'success', 4000);
+  if (!noToast) showToast(body, 'success', 4000);
 }
 function _timerPrime() {
   const t = _timer;
@@ -12946,17 +12976,25 @@ function _timerTick() {
     else { t.phase = 'work'; t.remaining = t.work * 60; _timerNotify('Focus time', 'Back to it — ' + t.work + ' minutes.'); }
   } else if (t.mode === 'countdown') {
     if (t.cdRemaining > 0) t.cdRemaining--;
-    if (t.cdRemaining <= 0) { _timerStop(); _timerFire('Timer done', 'Countdown finished.'); }
+    if (t.cdRemaining <= 0) { _timerStop(); _timerFire('Timer done', 'Countdown finished.', { title: 'COUNTDOWN DONE' }); }
   } else if (t.mode === 'clock') {
-    if (_clockRemaining(t.clockTarget) <= 0) { _timerStop(); _timerFire('Time reached', (t.clockTarget || '') + ' reached.'); }
+    if (_clockRemaining(t.clockTarget) <= 0) { _timerStop(); _timerFire('Time reached', _fmt12(t.clockTarget) + ' reached.'); }
   } /* stopwatch: display is computed live from swStart, nothing to increment */
   _timerRender();
   _timerChipUpdate();
 }
 function _timerPref(key, dflt) { try { const v = window.Settings && Settings.get('widgets.' + key); return v == null ? dflt : v; } catch { return dflt; } }
 // Timer reached zero: notify, un-minimize so it's visible, and flash for attention.
-function _timerFire(title, body) {
-  _timerNotify(title, body);
+// opts.title (D8) swaps the browser tab title (e.g. "COUNTDOWN DONE") until the
+// firing timer is acknowledged. We suppress the success toast here — the flashing
+// panel + tab title + notification are the signal (D8).
+let _timerPrevTitle = null;
+function _timerFire(title, body, opts) {
+  _timerNotify(title, body, true);
+  if (opts && opts.title) {
+    if (_timerPrevTitle == null) _timerPrevTitle = document.title;
+    try { document.title = opts.title; } catch {}
+  }
   if (!document.getElementById('timer-panel')) { _timerMinimized = false; try { window.openTimer(); } catch {} }
   _timerStartFlash();
 }
@@ -12971,6 +13009,7 @@ function _timerStartFlash() {
 function _timerStopFlash() {
   const p = document.getElementById('timer-panel'); if (p) p.classList.remove('timer-flash');
   _timerFlashing = false;
+  if (_timerPrevTitle != null) { try { document.title = _timerPrevTitle; } catch {} _timerPrevTitle = null; }
 }
 // Current display value for the active mode (used by panel + footer chip).
 function _timerCurrentDisp() {
@@ -13024,7 +13063,7 @@ function _timerRender() {
   let disp = '', sub = '';
   if (t.mode === 'pomodoro') { disp = _timerFmt(t.remaining); sub = (t.phase === 'work' ? 'Focus' : 'Break') + ' · done ' + t.count; p.classList.toggle('break', t.phase !== 'work'); }
   else if (t.mode === 'countdown') { disp = _timerFmt(t.cdRemaining); sub = 'Countdown'; }
-  else if (t.mode === 'clock') { const r = _clockRemaining(t.clockTarget); disp = _timerFmt(r); sub = t.clockTarget ? ('until ' + t.clockTarget) : 'set a time'; }
+  else if (t.mode === 'clock') { const r = _clockRemaining(t.clockTarget); disp = _timerFmt(r); sub = t.clockTarget ? ('until ' + _fmt12(t.clockTarget)) : 'set a time'; }
   else { disp = _timerFmtMs(_swNow()); sub = 'Stopwatch'; }
   const te = p.querySelector('.timer-time'); if (te) te.textContent = disp;
   const se = p.querySelector('.timer-sub'); if (se) se.textContent = sub;
