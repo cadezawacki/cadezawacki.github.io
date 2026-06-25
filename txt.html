@@ -1497,13 +1497,15 @@ body {
 
 /* Mobile toolbar */
 .mobile-toolbar {
-  display: none;
+  display: flex; /* shown on desktop + mobile (item 1) */
   justify-content: center;
   align-items: center;
   gap: 4px;
   padding: 5px 12px;
   flex-shrink: 0;
 }
+/* Icon-only buttons: hide any trailing text label, keep the SVG. */
+.mob-btn.icon-only > span:not(svg) { display: none; }
 .mob-toolbar-inner {
   display: flex;
   align-items: center;
@@ -2219,6 +2221,16 @@ body {
 .daycal-cell.has { font-weight: 700; color: var(--accent); }
 .daycal-cell.dow { color: var(--text-faint); cursor: default; font-weight: 600; }
 .daycal-cell.empty { cursor: default; }
+.daycal-cell.sel { background: var(--accent); color: #fff; }
+.daycal-cell.sel.has { color: #fff; }
+.daycal-list-head { padding: 6px 12px 2px; font-size: var(--text-xs); color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.05em; }
+.daycal-list { max-height: 200px; overflow-y: auto; padding: 0 8px 10px; display: flex; flex-direction: column; gap: 2px; }
+.daycal-room { display: flex; align-items: center; gap: 6px; width: 100%; text-align: left; background: none; border: none; color: var(--text); cursor: pointer; padding: 6px 8px; border-radius: 6px; font-size: var(--text-sm); }
+.daycal-room:hover { background: var(--surface-hover, rgba(127,127,127,0.15)); }
+.daycal-room-n { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.daycal-room-ws { font-size: var(--text-xs); color: var(--text-faint); flex-shrink: 0; }
+.daycal-pin { font-size: 11px; }
+.daycal-empty { padding: 8px 12px; color: var(--text-faint); font-size: var(--text-xs); }
 
 body.zen .menubar, body.zen .footer, body.zen .mobile-toolbar, body.zen .mobile-scroll-btns { display: none !important; }
 body.zen .editor-wrap .cm-scroller { padding-left: max(8vw, var(--space-4)); padding-right: max(8vw, var(--space-4)); }
@@ -2321,7 +2333,7 @@ body.zen.zen-tw .editor-wrap .cm-content { padding-top: 38vh; padding-bottom: 38
         <span></span>
       </button>
       <button class="menu-item" onclick="openDailyNote()">
-        <span>Today's Note</span>
+        <span>Rooms by Date</span>
         <span></span>
       </button>
       <div class="menu-separator"></div>
@@ -2370,10 +2382,10 @@ body.zen.zen-tw .editor-wrap .cm-content { padding-top: 38vh; padding-bottom: 38
 <div class="mobile-toolbar" id="mobile-toolbar">
   <div class="mob-toolbar-inner">
     <button class="mob-btn" onclick="mobileUndo()" title="Undo">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.51"/></svg>U
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.51"/></svg>
     </button>
     <button class="mob-btn" onclick="mobileRedo()" title="Redo">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-.49-3.51"/></svg>R
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-.49-3.51"/></svg>
     </button>
     <div class="mob-sep"></div>
     <button class="mob-btn mob-fmt mob-fmt-b" onclick="mdBtn('bold')" title="Bold">B</button>
@@ -2384,13 +2396,13 @@ body.zen.zen-tw .editor-wrap .cm-content { padding-top: 38vh; padding-bottom: 38
     </button>
     <div class="mob-sep"></div>
     <button class="mob-btn" id="mob-copy-btn" onclick="mobileCopy()" title="Copy selection or all">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span>C</span>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
     </button>
     <button class="mob-btn" onclick="mobilePaste()" title="Paste">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>P
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>
     </button>
     <button class="mob-btn" onclick="mobileDownload()" title="Download as Zip">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>D
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
     </button>
   </div>
   <div class="mob-toolbar-inner mob-md-row" id="mob-md-row" style="display:none;"></div>
@@ -9027,6 +9039,16 @@ function saveRooms() {
   store.set('cade-room-cap', roomCap);
 }
 
+// Label for a room in a dropdown. A pinned room surfaces in EVERY workspace;
+// when shown in one that isn't its own, annotate it "📌 room (its workspace)".
+function _roomDropdownLabel(name) {
+  if (roomIsPinned(name) && activeWorkspace !== WS_ALL && !roomInWorkspace(name, activeWorkspace)) {
+    const ids = getRoomWorkspaceIds(name);
+    const ws = ids.length ? getWorkspace(ids[0]) : null;
+    return '📌 ' + name + ' (' + (ws ? ws.name : 'Unlabeled') + ')';
+  }
+  return name;
+}
 function renderRoomTabs() {
   renderWorkspacePill();
   // Desktop tabs
@@ -9065,7 +9087,7 @@ function renderRoomTabs() {
   let mobileHtml = '<select onchange="if(this.value===\'+\'){addRoomPrompt();this.value=activeRoom||\'\';}else{switchRoom(this.value);}">';
   visibleRooms.forEach(name => {
     const sel = (name === activeRoom && syncState.connected) ? ' selected' : '';
-    mobileHtml += `<option value="${escapeHtml(name)}"${sel}>${escapeHtml(name)}</option>`;
+    mobileHtml += `<option value="${escapeHtml(name)}"${sel}>${escapeHtml(_roomDropdownLabel(name))}</option>`;
   });
   if (rooms.length < roomCap) {
     mobileHtml += '<option value="+">+ Room</option>';
@@ -9208,7 +9230,7 @@ function renderQuickSwitchList() {
     const wsIds = getRoomWorkspaceIds(name);
     const ws = wsIds.length ? getWorkspace(wsIds[0]) : null;
     const wsLabel = ws ? ws.name + (wsIds.length > 1 ? ' +' + (wsIds.length - 1) : '') : 'Unlabeled';
-    const pin = roomIsPinned(name) ? '<span class="qs-pin" title="Pinned">╳</span>' : '';
+    const pin = roomIsPinned(name) ? '<span class="qs-pin" title="Pinned">📌</span>' : '';
     const lock = roomHasPassword(name) ? ' 🔒' : '';
     const escAttr = escapeHtml(name.replace(/\\/g, '\\\\').replace(/'/g, "\\'"));
     return `<div class="qs-item ${i === _qsIndex ? 'active' : ''}" data-idx="${i}" onclick="quickSwitchPick('${escAttr}')">
@@ -9825,7 +9847,7 @@ function renderRoomRow(name, showBadge) {
     <div style="display:flex;align-items:center;justify-content:space-between;width:100%;">
       <div style="display:flex;align-items:center;gap:6px;min-width:0;flex:1;flex-wrap:wrap;">
         <span class="room-manager-drag" title="Drag to reorder">⠿</span>
-        ${pinned ? '<span title="Pinned" style="font-size:11px;">╳</span>' : ''}
+        ${pinned ? '<span title="Pinned" style="font-size:11px;">📌</span>' : ''}
         <span class="room-manager-name" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(name)}</span>
         ${badgeHtml}
         ${isActive ? '<span class="room-manager-active">● active</span>' : ''}
@@ -11143,7 +11165,7 @@ window.showRoomActionMenu = function(evt, roomName) {
     <div class="rm-action-section">workspaces for "${escapeHtml(roomName)}"</div>
     ${wsItems}
     <div class="rm-action-divider"></div>
-    <div class="rm-action-item" onclick="toggleRoomPin('${er}')">${pinned ? '╳ Unpin' : '╳ Pin to top'}</div>
+    <div class="rm-action-item" onclick="toggleRoomPin('${er}')">${pinned ? '📌 Unpin' : '📌 Pin to top'}</div>
     <div class="rm-action-item" onclick="toggleRoomArchive('${er}')">${archived ? '↩ Restore from archive' : '🗄 Archive'}</div>
     <div class="rm-action-divider"></div>
     <div class="rm-action-item" onclick="closeActionMenu(); roomPasswordAction('${er}')">${hasPassword ? '🔑 Change password' : '🔒 Set password'}</div>
@@ -11170,7 +11192,7 @@ window.showRoomTabContextMenu = function(evt, roomName) {
 
   menu.innerHTML = `
     <div class="rm-action-item" onclick="closeActionMenu(); switchRoom('${er}')">↗ Switch to here</div>
-    <div class="rm-action-item" onclick="toggleRoomPin('${er}')">${pinned ? '╳ Unpin' : '╳ Pin to top'}</div>
+    <div class="rm-action-item" onclick="toggleRoomPin('${er}')">${pinned ? '📌 Unpin' : '📌 Pin to top'}</div>
     <div class="rm-action-item" onclick="toggleRoomArchive('${er}')">${archived ? '↩ Restore' : '🗄 Archive'}</div>
     <div class="rm-action-divider"></div>
     <div class="rm-action-section">workspaces</div>
@@ -12347,7 +12369,7 @@ const SNAP_MAX_CHARS = 400000;
 // bloat localStorage (a 2KB room had grown a 190KB snapshot store). Oldest
 // snapshots are pruned until under this; at least one is always kept (#14).
 const SNAP_MAX_TOTAL = 150000;
-const SNAP_AUTO_MS = 5 * 60 * 1000;
+const SNAP_AUTO_MS = 30 * 60 * 1000; // 30 min — much less frequent (manual + pre-risky-action snapshots still fire)
 
 function snapKey() { return 'cade-snap:' + (syncState.roomName || activeRoom || '__local__'); }
 function loadSnaps() {
@@ -12569,9 +12591,22 @@ const _timer = {
   cdTotal: 5 * 60, cdRemaining: 5 * 60,
   // time-of-day target ('HH:MM')
   clockTarget: '',
-  // stopwatch
-  swElapsed: 0, laps: [],
+  // stopwatch (millisecond precision via performance.now)
+  swMs: 0, swStart: 0, laps: [],
 };
+// Live stopwatch elapsed in ms (counts from swStart while running).
+function _swNow() {
+  return (_timer.running && _timer.mode === 'stopwatch') ? (performance.now() - _timer.swStart) : _timer.swMs;
+}
+// mm:ss.cs (centiseconds), with hours when needed — for the stopwatch + laps.
+function _timerFmtMs(ms) {
+  ms = Math.max(0, ms);
+  const totalCs = Math.floor(ms / 10);
+  const cs = totalCs % 100, totalSec = Math.floor(totalCs / 100);
+  const s = totalSec % 60, m = Math.floor(totalSec / 60) % 60, h = Math.floor(totalSec / 3600);
+  const pad = (n) => String(n).padStart(2, '0');
+  return (h > 0 ? (h + ':' + pad(m) + ':' + pad(s)) : (m + ':' + pad(s))) + '.' + pad(cs);
+}
 function _timerLoadCfg() {
   try {
     const s = JSON.parse(store.get('cade-timer-cfg') || '{}');
@@ -12606,7 +12641,7 @@ function _timerPrime() {
   const t = _timer;
   if (t.mode === 'pomodoro') { t.phase = 'work'; t.remaining = t.work * 60; }
   else if (t.mode === 'countdown') { t.cdRemaining = t.cdTotal; }
-  else if (t.mode === 'stopwatch') { t.swElapsed = 0; t.laps = []; }
+  else if (t.mode === 'stopwatch') { t.swMs = 0; t.swStart = 0; t.laps = []; }
 }
 function _timerStop() { _timer.running = false; clearInterval(_timer.timer); }
 function _timerTick() {
@@ -12620,7 +12655,7 @@ function _timerTick() {
     if (t.cdRemaining <= 0) { _timerStop(); _timerNotify('Timer done', 'Countdown finished.'); }
   } else if (t.mode === 'clock') {
     if (_clockRemaining(t.clockTarget) <= 0) { _timerStop(); _timerNotify('Time reached', (t.clockTarget || '') + ' reached.'); }
-  } else { t.swElapsed++; }
+  } /* stopwatch: display is computed live from swStart, nothing to increment */
   _timerRender();
   _timerChipUpdate();
 }
@@ -12630,7 +12665,7 @@ function _timerCurrentDisp() {
   if (t.mode === 'pomodoro') return _timerFmt(t.remaining);
   if (t.mode === 'countdown') return _timerFmt(t.cdRemaining);
   if (t.mode === 'clock') return _timerFmt(_clockRemaining(t.clockTarget));
-  return _timerFmt(t.swElapsed);
+  return _timerFmtMs(_swNow());
 }
 // Footer chip — lets the timer keep running while the panel is closed (minimized).
 function _timerChipUpdate() {
@@ -12673,7 +12708,7 @@ function _timerRender() {
   if (t.mode === 'pomodoro') { disp = _timerFmt(t.remaining); sub = (t.phase === 'work' ? 'Focus' : 'Break') + ' · done ' + t.count; p.classList.toggle('break', t.phase !== 'work'); }
   else if (t.mode === 'countdown') { disp = _timerFmt(t.cdRemaining); sub = 'Countdown'; }
   else if (t.mode === 'clock') { const r = _clockRemaining(t.clockTarget); disp = _timerFmt(r); sub = t.clockTarget ? ('until ' + t.clockTarget) : 'set a time'; }
-  else { disp = _timerFmt(t.swElapsed); sub = 'Stopwatch'; }
+  else { disp = _timerFmtMs(_swNow()); sub = 'Stopwatch'; }
   const te = p.querySelector('.timer-time'); if (te) te.textContent = disp;
   const se = p.querySelector('.timer-sub'); if (se) se.textContent = sub;
   const sb = p.querySelector('.timer-start'); if (sb) sb.textContent = t.running ? 'Pause' : 'Start';
@@ -12688,10 +12723,10 @@ function _timerRender() {
       let delta = '—', cls = '';
       if (prevSplit != null) {
         const d = split - prevSplit;
-        if (d === 0) { delta = '±0:00'; }
-        else { delta = (d > 0 ? '+' : '−') + _timerFmt(Math.abs(d)); cls = d > 0 ? 'slower' : 'faster'; }
+        if (Math.abs(d) < 10) { delta = '±0.00'; }
+        else { delta = (d > 0 ? '+' : '−') + _timerFmtMs(Math.abs(d)); cls = d > 0 ? 'slower' : 'faster'; }
       }
-      rows.push(`<div class="timer-lap"><span>Lap ${i + 1}</span><span>${_timerFmt(split)}</span><span class="timer-lap-d ${cls}">${delta}</span></div>`);
+      rows.push(`<div class="timer-lap"><span>Lap ${i + 1}</span><span>${_timerFmtMs(split)}</span><span class="timer-lap-d ${cls}">${delta}</span></div>`);
     }
     le.innerHTML = rows.reverse().join('');
   }
@@ -12717,12 +12752,18 @@ window.timerToggleRun = function() {
   const t = _timer; t.running = !t.running;
   if (t.running) {
     try { if (window.Notification && Notification.permission === 'default') Notification.requestPermission(); } catch {}
-    clearInterval(t.timer); t.timer = setInterval(_timerTick, 1000);
-  } else clearInterval(t.timer);
+    if (t.mode === 'stopwatch') t.swStart = performance.now() - t.swMs; // resume from accumulated ms
+    clearInterval(t.timer);
+    // Stopwatch needs sub-second updates for the ms display; others tick at 1s.
+    t.timer = setInterval(_timerTick, t.mode === 'stopwatch' ? 41 : 1000);
+  } else {
+    if (t.mode === 'stopwatch') t.swMs = performance.now() - t.swStart; // freeze accumulated ms
+    clearInterval(t.timer);
+  }
   _timerRender();
 };
 window.timerReset = function() { _timerStop(); _timerPrime(); _timerRender(); };
-window.timerLap = function() { if (_timer.mode !== 'stopwatch') return; _timer.laps.push(_timer.swElapsed); _timerRender(); };
+window.timerLap = function() { if (_timer.mode !== 'stopwatch') return; _timer.laps.push(_swNow()); _timerRender(); };
 window.openTimer = function() {
   closeAllMenus();
   const existing = document.getElementById('timer-panel');
@@ -12790,39 +12831,36 @@ function setClockEnabled(on) {
 }
 
 // ---- Daily notes / mini calendar (#40) ----
-const DAILY_ROOM = 'journal';
-function _dailyHeading(d) {
-  const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-  const iso = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
-  return { iso, line: '## ' + iso + ' (' + days[d.getDay()] + ')' };
+// ---- Activity calendar (#40, reworked): browse rooms by the date they were
+// last modified. No journaling, no document clobbering — clicking a date lists
+// the rooms modified that day; clicking one opens its workspace + room.
+function _localDateKey(ts) {
+  const d = new Date(ts);
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
 }
-function gotoDailyEntry(d) {
-  const h = _dailyHeading(d);
-  const ensure = () => {
-    const doc = editor.state.doc;
-    let foundLine = 0;
-    for (let i = 1; i <= doc.lines; i++) { if (doc.line(i).text.trim() === h.line) { foundLine = i; break; } }
-    if (foundLine) { outlineGoto(foundLine); }
-    else {
-      // Prepend a new dated section.
-      const insert = h.line + '\n\n\n';
-      editor.dispatch({ changes: { from: 0, insert }, selection: { anchor: h.line.length + 2 } });
-      editor.dispatch({ effects: EditorView.scrollIntoView(0, { y: 'start' }) });
-    }
-    editor.focus();
-  };
-  if (activeRoom !== DAILY_ROOM) {
-    if (!rooms.includes(DAILY_ROOM)) { rooms.push(DAILY_ROOM); saveRooms(); try { renderRoomTabs(); } catch {} }
-    Promise.resolve(switchRoom(DAILY_ROOM)).then(() => setTimeout(ensure, 120));
-  } else { ensure(); }
+function _roomActivityMap() {
+  // dateKey -> [roomNames], from each room's last-modified (fallback created).
+  const map = {};
+  for (const name of rooms) {
+    const ts = roomMeta[name] && (roomMeta[name].modified || roomMeta[name].created);
+    if (!ts) continue;
+    const k = _localDateKey(ts);
+    (map[k] = map[k] || []).push(name);
+  }
+  return map;
 }
-function dailyHasEntry(d) {
-  // Best-effort: scan the journal room's cache for the dated heading.
-  const h = _dailyHeading(d);
-  const text = (activeRoom === DAILY_ROOM) ? editor.state.doc.toString() : (store.get('cade-room-cache:' + DAILY_ROOM) || '');
-  return text.indexOf('\n' + h.line) >= 0 || text.indexOf(h.line + '\n') === 0 || text.indexOf(h.line) >= 0;
+function _openRoomFromActivity(name) {
+  // Jump into the room's own workspace (first membership) so its tab is visible.
+  const ids = (typeof getRoomWorkspaceIds === 'function') ? getRoomWorkspaceIds(name) : [];
+  const wsId = ids && ids.length ? ids[0] : WS_ALL;
+  if (!roomInWorkspace(name, activeWorkspace) && !roomIsPinned(name)) {
+    activeWorkspace = wsId; store.set('cade-active-workspace', activeWorkspace);
+  }
+  switchRoom(name);
 }
+window._openRoomFromActivity = _openRoomFromActivity;
 let _dayCalMonth = null;
+let _dayCalSel = null; // selected dateKey ('YYYY-MM-DD')
 function renderDayCal() {
   const p = document.getElementById('daycal-panel'); if (!p) return;
   const ref = _dayCalMonth || new Date();
@@ -12830,33 +12868,55 @@ function renderDayCal() {
   const first = new Date(y, mo, 1);
   const days = new Date(y, mo + 1, 0).getDate();
   const today = new Date();
+  const act = _roomActivityMap();
   const monthName = ref.toLocaleDateString([], { month: 'long', year: 'numeric' });
   let grid = ['S', 'M', 'T', 'W', 'T', 'F', 'S'].map(d => '<div class="daycal-cell dow">' + d + '</div>').join('');
   for (let i = 0; i < first.getDay(); i++) grid += '<div class="daycal-cell empty"></div>';
   for (let d = 1; d <= days; d++) {
     const date = new Date(y, mo, d);
+    const key = _localDateKey(date.getTime());
     const isToday = date.toDateString() === today.toDateString();
-    const has = dailyHasEntry(date);
-    grid += '<div class="daycal-cell' + (isToday ? ' today' : '') + (has ? ' has' : '') + '" onclick="dayCalPick(' + y + ',' + mo + ',' + d + ')">' + d + '</div>';
+    const sel = (_dayCalSel === key) ? ' sel' : '';
+    grid += '<div class="daycal-cell' + (isToday ? ' today' : '') + (act[key] ? ' has' : '') + sel + '" onclick="dayCalPick(' + y + ',' + mo + ',' + d + ')">' + d + '</div>';
+  }
+  const selKey = _dayCalSel || _localDateKey(today.getTime());
+  const selLabel = new Date(selKey + 'T00:00:00').toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
+  const roomsOn = (act[selKey] || []).slice().sort((a, b) => (_roomModified(b) - _roomModified(a)));
+  let listHtml;
+  if (roomsOn.length) {
+    listHtml = roomsOn.map(n => {
+      const ids = getRoomWorkspaceIds(n);
+      const ws = ids.length ? getWorkspace(ids[0]) : null;
+      const wsName = ws ? ws.name : 'Unlabeled';
+      const escAttr = escapeHtml(n.replace(/\\/g, '\\\\').replace(/'/g, "\\'"));
+      return '<button class="daycal-room" onclick="_openRoomFromActivity(\'' + escAttr + '\')">' +
+        (roomIsPinned(n) ? '<span class="daycal-pin">📌</span>' : '') +
+        '<span class="daycal-room-n">' + escapeHtml(n) + '</span>' +
+        '<span class="daycal-room-ws">' + escapeHtml(wsName) + '</span></button>';
+    }).join('');
+  } else {
+    listHtml = '<div class="daycal-empty">No rooms modified.</div>';
   }
   p.querySelector('.cade-panel-body').innerHTML =
     '<div class="daycal-head"><button onclick="dayCalNav(-1)">‹</button><span>' + monthName + '</span><button onclick="dayCalNav(1)">›</button></div>' +
-    '<div class="daycal-grid">' + grid + '</div>';
+    '<div class="daycal-grid">' + grid + '</div>' +
+    '<div class="daycal-list-head">' + escapeHtml(selLabel) + '</div>' +
+    '<div class="daycal-list">' + listHtml + '</div>';
 }
 window.dayCalNav = function(delta) {
   const ref = _dayCalMonth || new Date();
   _dayCalMonth = new Date(ref.getFullYear(), ref.getMonth() + delta, 1);
   renderDayCal();
 };
-window.dayCalPick = function(y, mo, d) { gotoDailyEntry(new Date(y, mo, d)); renderDayCal(); };
+window.dayCalPick = function(y, mo, d) { _dayCalSel = _localDateKey(new Date(y, mo, d).getTime()); renderDayCal(); };
 window.openDailyNote = function() {
   closeAllMenus();
   const existing = document.getElementById('daycal-panel');
   if (existing) { existing.remove(); return; }
   _dayCalMonth = new Date();
-  _mkPanel('daycal-panel', "Daily Notes", '');
+  _dayCalSel = _localDateKey(Date.now());
+  _mkPanel('daycal-panel', 'Rooms by Date', '');
   renderDayCal();
-  gotoDailyEntry(new Date());
 };
 
 // Inline math (#41/#26): typing "=" at the end of a pure-arithmetic line
@@ -13057,8 +13117,16 @@ window.openHighlightPicker = function(ev) {
   if (btn) {
     const r = btn.getBoundingClientRect();
     el.style.left = Math.max(8, Math.min(window.innerWidth - el.offsetWidth - 8, r.left)) + 'px';
-    el.style.bottom = (window.innerHeight - r.top + 6) + 'px';
-  } else { el.style.left = '12px'; el.style.bottom = '60px'; }
+    // Open DOWNWARD from the button so it can't get clipped off the top of the
+    // screen (the toolbar now sits at the top on desktop). Flip up only if it
+    // would overflow the bottom.
+    const below = r.bottom + 6;
+    if (below + el.offsetHeight > window.innerHeight - 8 && r.top - el.offsetHeight - 6 > 8) {
+      el.style.top = (r.top - el.offsetHeight - 6) + 'px';
+    } else {
+      el.style.top = below + 'px';
+    }
+  } else { el.style.left = '12px'; el.style.top = '60px'; }
   _hlPickerEl = el;
   setTimeout(() => document.addEventListener('pointerdown', _hlPickerOutside, true), 0);
 };
@@ -13849,8 +13917,8 @@ window.mobileCopy = function() {
     ? editor.state.doc.toString()
     : editor.state.sliceDoc(sel.from, sel.to);
   const btn = document.getElementById('mob-copy-btn');
-  const copyIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span>C</span>';
-  const checkIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="var(--success, #4ade80)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg><span style="color:var(--success,#4ade80)">✓</span>';
+  const copyIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+  const checkIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="var(--success, #4ade80)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
   navigator.clipboard.writeText(text).then(() => {
     btn.innerHTML = checkIcon;
     setTimeout(() => { btn.innerHTML = copyIcon; }, 1500);
