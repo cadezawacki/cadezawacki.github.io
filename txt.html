@@ -822,7 +822,20 @@ body {
 .editor-wrap .cm-scroller {
   overflow: auto;
   padding: var(--space-3) var(--space-4);
+  scrollbar-width: thin;                 /* Firefox */
+  scrollbar-color: var(--accent) transparent;
 }
+/* Main editor scrollbar: transparent track, teal accent thumb (item 8). */
+.editor-wrap .cm-scroller::-webkit-scrollbar { width: 10px; height: 10px; }
+.editor-wrap .cm-scroller::-webkit-scrollbar-track { background: transparent; }
+.editor-wrap .cm-scroller::-webkit-scrollbar-thumb {
+  background: var(--accent);
+  border-radius: 6px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+.editor-wrap .cm-scroller::-webkit-scrollbar-thumb:hover { background: var(--accent); background-clip: padding-box; }
+.editor-wrap .cm-scroller::-webkit-scrollbar-corner { background: transparent; }
 
 .editor-wrap .cm-content {
   caret-color: var(--accent);
@@ -1501,7 +1514,7 @@ body {
   justify-content: center;
   align-items: center;
   gap: 4px;
-  padding: 5px 12px;
+  padding: 3px 12px;
   flex-shrink: 0;
 }
 /* Icon-only buttons: hide any trailing text label, keep the SVG. */
@@ -1632,7 +1645,10 @@ body {
 .room-unlock-overlay {
   display: none;
   position: fixed;
-  inset: 0;
+  /* Start below the menubar so the room tabs / workspace pill stay visible and
+     usable while a room is locked (item 4). */
+  top: calc(36px + env(safe-area-inset-top));
+  left: 0; right: 0; bottom: 0;
   z-index: 600;
   background: var(--bg);
   align-items: center;
@@ -5685,6 +5701,10 @@ function closeAllMenus() {
     const menu = document.getElementById(menuId); if (menu) menu.classList.remove('open');
     const btn = document.getElementById(btnId); if (btn) btn.setAttribute('aria-expanded', 'false');
   });
+  // Also close the workspace dropdown — it's a separate popover that otherwise
+  // stays open when a header menu is opened (item 9).
+  const wsdd = document.getElementById('ws-dropdown');
+  if (wsdd) wsdd.classList.remove('open');
 }
 
 document.addEventListener('click', closeAllMenus);
@@ -10899,9 +10919,9 @@ window.forceWorkspaceSync = async function() {
 window.toggleWorkspaceDropdown = function(evt) {
   const dd = document.getElementById('ws-dropdown');
   const isOpen = dd.classList.contains('open');
-  if (isOpen) {
-    dd.classList.remove('open');
-  } else {
+  // Close any open header menu first so only one popover shows at a time (item 9).
+  try { closeAllMenus(); } catch {}
+  if (!isOpen) {
     renderWorkspaceDropdown();
     dd.classList.add('open');
   }
