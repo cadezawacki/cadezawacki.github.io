@@ -93,7 +93,8 @@
     ampmana: { id: 'ampmana', name: 'Mana Amulet',    icon: '📿', slot: 'trinket', tier: 2, price: 150, mp: 20 },
     bandpow: { id: 'bandpow', name: 'Power Band',     icon: '⭕', slot: 'trinket', tier: 3, price: 240, atk: 3 },
     wardchm: { id: 'wardchm', name: 'Warding Charm',  icon: '🔮', slot: 'trinket', tier: 3, price: 240, def: 3 },
-    greed:   { id: 'greed',   name: 'Greed Coin',     icon: '🪙', slot: 'trinket', tier: 3, price: 300, greed: 0.5 }
+    greed:   { id: 'greed',   name: 'Greed Coin',     icon: '🪙', slot: 'trinket', tier: 3, price: 300, greed: 0.5 },
+    lucky:   { id: 'lucky',   name: 'Lucky Clover',   icon: '🍀', slot: 'trinket', tier: 4, crit: 0.08, greed: 0.3 } // easter-egg only (no price)
   };
   function gear(id) { return WEAPONS[id] || ARMORS[id] || TRINKETS[id] || null; }
 
@@ -209,7 +210,15 @@
     if (!world) return;
     world.log.push({ t: text, k: kind || '' });
     if (world.log.length > 30) world.log.shift();
-    world._logDirty = true;
+    // Show it as a transient line that fades out on its own (not a sticky toast).
+    if (ui && ui.log) {
+      var line = document.createElement('div');
+      line.className = 'cr-line cr-' + (kind || '');
+      line.textContent = text;
+      ui.log.appendChild(line);
+      while (ui.log.children.length > 3) ui.log.removeChild(ui.log.firstChild);
+      setTimeout(function () { if (line.parentNode) line.parentNode.removeChild(line); }, 4200);
+    }
   }
 
   // =========================================================================
@@ -448,7 +457,7 @@
 
   function randomGearId(depth) {
     var pool = [];
-    function add(tbl) { for (var id in tbl) { var g = tbl[id]; if (g.tier > 0 && g.tier <= 1 + Math.ceil(depth / 2)) pool.push(id); } }
+    function add(tbl) { for (var id in tbl) { var g = tbl[id]; if (g.tier > 0 && g.price && g.tier <= 1 + Math.ceil(depth / 2)) pool.push(id); } }
     add(WEAPONS); add(ARMORS); add(TRINKETS);
     return pool.length ? pick(pool) : 'dagger';
   }
@@ -1078,13 +1087,12 @@
   function startTravel(tx, ty) {
     if (!playerActive()) return;
     if (!world.explored[ty] || !world.explored[ty][tx]) return;
+    // only route to a real, reachable floor tile (or a foe/feature standing on
+    // floor) — never to a wall, sealed gate, or unexplored void.
+    if (!walkable(tx, ty)) return;
     var p = world.player;
     var path = bfsPath(p.x, p.y, tx, ty);
-    if (!path || !path.length) {
-      // tapped own tile or unreachable → interact / wait
-      if (tx === p.x && ty === p.y) interact();
-      return;
-    }
+    if (!path || !path.length) return;
     world.path = path; world.pathT = 0;
   }
   function cancelTravel() { if (world) { world.path = null; } }
@@ -1104,16 +1112,21 @@
   // =========================================================================
   function camera() {
     var p = world.player;
-    var cx = clamp(p.x - (VW >> 1), 0, MW - VW);
-    var cy = clamp(p.y - (VH >> 1), 0, MH - VH);
+    var rx = p.rx == null ? p.x : p.rx, ry = p.ry == null ? p.y : p.ry;
+    // centre on the (smoothly-lerped) player position, in float tiles
+    var cx = clamp(rx - (VW - 1) / 2, 0, MW - VW);
+    var cy = clamp(ry - (VH - 1) / 2, 0, MH - VH);
     return { x: cx, y: cy };
   }
+  // Constant-speed glide toward the logical tile — crisp grid steps, no float drift.
   function lerpEnt(e, dt) {
-    var sp = 12 * dt;
-    e.rx = e.rx == null ? e.x : e.rx + (e.x - e.rx) * Math.min(1, sp);
-    e.ry = e.ry == null ? e.y : e.ry + (e.y - e.ry) * Math.min(1, sp);
-    if (Math.abs(e.rx - e.x) < 0.02) e.rx = e.x;
-    if (Math.abs(e.ry - e.y) < 0.02) e.ry = e.y;
+    if (e.rx == null) e.rx = e.x; if (e.ry == null) e.ry = e.y;
+    var step = 14 * dt;                       // tiles / second
+    var dx = e.x - e.rx, dy = e.y - e.ry;
+    // snap if a long jump (teleport/blink across the map) to avoid a slow crawl
+    if (Math.abs(dx) > 6 || Math.abs(dy) > 6) { e.rx = e.x; e.ry = e.y; return; }
+    e.rx = Math.abs(dx) <= step ? e.x : e.rx + step * (dx < 0 ? -1 : 1);
+    e.ry = Math.abs(dy) <= step ? e.y : e.ry + step * (dy < 0 ? -1 : 1);
   }
   function roundRect(ctx, x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
 
@@ -1123,6 +1136,7 @@
     var dt = lastFrame ? Math.min(0.05, (ts - lastFrame) / 1000) : 0.016; lastFrame = ts;
     var ctx = ui.ctx, w = world;
     if (!w) { return; }
+    lerpEnt(w.player, dt);            // lerp player first so the camera tracks it smoothly
     var cam = camera();
     var b = w.biome;
     // shake
@@ -1133,13 +1147,14 @@
     ctx.fillStyle = '#06070a'; ctx.fillRect(0, 0, CW, CH);
     ctx.save(); ctx.translate(sox, soy);
 
-    // tiles
-    for (var vy = 0; vy < VH; vy++) for (var vx = 0; vx < VW; vx++) {
-      var mx = cam.x + vx, my = cam.y + vy;
+    // tiles — iterate one extra ring so sub-pixel scrolling never shows a gap
+    var sx0 = Math.floor(cam.x) - 1, sy0 = Math.floor(cam.y) - 1;
+    for (var vy = 0; vy < VH + 2; vy++) for (var vx = 0; vx < VW + 2; vx++) {
+      var mx = sx0 + vx, my = sy0 + vy;
       if (mx < 0 || my < 0 || mx >= MW || my >= MH) continue;
       if (!w.explored[my][mx]) continue;
       var vis = w.visible[my][mx];
-      var px = vx * TILE, py = vy * TILE;
+      var px = (mx - cam.x) * TILE, py = (my - cam.y) * TILE;
       var t = w.map[my][mx];
       if (t === T_FLOOR) {
         ctx.fillStyle = ((mx + my) & 1) ? b.floor : b.floor2;
@@ -1164,8 +1179,8 @@
     }
     // monsters
     for (var mi = 0; mi < w.monsters.length; mi++) { var m = w.monsters[mi]; lerpEnt(m, dt); if (w.visible[m.y] && w.visible[m.y][m.x]) drawMob(ctx, m, cam); }
-    // player
-    var p = w.player; lerpEnt(p, dt); drawPlayer(ctx, p, cam);
+    // player (already lerped at the top of the frame)
+    var p = w.player; drawPlayer(ctx, p, cam);
 
     // projectiles / fx
     drawFx(ctx, cam, dt);
@@ -1257,12 +1272,21 @@
     var bo = bumpOff(p), sh = entShake(p);
     var cx = (p.rx - cam.x) * TILE + TILE / 2 + bo.x + sh, cy = (p.ry - cam.y) * TILE + TILE / 2 + bo.y;
     var r = TILE / 2 - 2;
-    // glow
-    ctx.globalAlpha = 0.25; ctx.fillStyle = '#ffe9b0'; ctx.beginPath(); ctx.arc(cx, cy, r + 4, 0, 6.3); ctx.fill(); ctx.globalAlpha = 1;
-    ctx.fillStyle = '#f4e9d6'; ctx.beginPath(); ctx.arc(cx, cy, r, 0, 6.3); ctx.fill();
-    ctx.fillStyle = '#2a2218'; ctx.beginPath(); ctx.arc(cx, cy, r - 4, 0, 6.3); ctx.fill();
-    // facing indicator
-    ctx.fillStyle = '#ffe9b0'; ctx.beginPath(); ctx.arc(cx + p.dir.x * (r - 3), cy + p.dir.y * (r - 3), 2.4, 0, 6.3); ctx.fill();
+    var fx = p.dir.x, fy = p.dir.y;
+    // warm torch glow
+    var glow = ctx.createRadialGradient(cx, cy, 2, cx, cy, r + 7);
+    glow.addColorStop(0, 'rgba(255,224,150,0.35)'); glow.addColorStop(1, 'rgba(255,224,150,0)');
+    ctx.fillStyle = glow; ctx.beginPath(); ctx.arc(cx, cy, r + 7, 0, 6.3); ctx.fill();
+    // body (solid, bright) with a dark outline so it reads as a hero, not a ring
+    ctx.fillStyle = '#5ec8e6'; ctx.beginPath(); ctx.arc(cx, cy, r, 0, 6.3); ctx.fill();
+    ctx.lineWidth = 2; ctx.strokeStyle = '#10333f'; ctx.stroke();
+    // little hood highlight
+    ctx.fillStyle = 'rgba(255,255,255,0.22)'; ctx.beginPath(); ctx.arc(cx - r * 0.3, cy - r * 0.35, r * 0.42, 0, 6.3); ctx.fill();
+    // eyes, looking the way you move
+    var px = -fy, py = fx; // perpendicular to facing
+    ctx.fillStyle = '#10333f';
+    ctx.beginPath(); ctx.arc(cx + fx * 3 + px * 3, cy + fy * 3 + py * 3, 2, 0, 6.3); ctx.fill();
+    ctx.beginPath(); ctx.arc(cx + fx * 3 - px * 3, cy + fy * 3 - py * 3, 2, 0, 6.3); ctx.fill();
   }
   function drawFx(ctx, cam, dt) {
     var w = world, t = now();
@@ -1326,11 +1350,8 @@
       '<span>🛡 ' + defOf() + '</span>' +
       '<span class="cr-gold">🪙 ' + hero.gold + '</span>';
   }
-  function refreshLog() {
-    if (!ui || !ui.log || !world) return;
-    var last = world.log.slice(-3);
-    ui.log.innerHTML = last.map(function (l) { return '<div class="cr-line cr-' + (l.k || '') + '">' + Cade.escapeHtml(l.t) + '</div>'; }).join('');
-  }
+  // Log lines are now appended + auto-faded by logMsg(); nothing to rebuild here.
+  function refreshLog() {}
   function refreshAll() { refreshBars(); refreshHud(); refreshLog(); refreshItemBar(); refreshAbilCd(); }
 
   // ---- ability bar ----------------------------------------------------------

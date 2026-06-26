@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "version": "2026.06.26-6",
+  "version": "2026.06.26-7",
   "modules": [
     {
       "id": "crawler",

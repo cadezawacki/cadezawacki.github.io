@@ -55,9 +55,15 @@
 }
 .cr-line {
   color: #d7dbe3; text-shadow: 0 1px 3px rgba(0,0,0,.9), 0 0 6px rgba(0,0,0,.7);
-  opacity: .55;
+  opacity: 0; animation: crLogFade 4.2s ease forwards;
 }
-.cr-line:last-child { opacity: 1; }
+@keyframes crLogFade {
+  0%   { opacity: 0; transform: translateY(5px); }
+  7%   { opacity: 1; transform: none; }
+  72%  { opacity: 1; }
+  100% { opacity: 0; transform: translateY(-2px); }
+}
+@media (prefers-reduced-motion: reduce) { .cr-line { transform: none !important; } }
 .cr-line.cr-up { color: #ffe28a; }
 .cr-line.cr-win { color: #9fe0a0; }
 .cr-line.cr-die { color: #ff9a9a; }
