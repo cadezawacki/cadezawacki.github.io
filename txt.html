@@ -4036,10 +4036,13 @@ function buildHighlightDecorations(view) {
   // on-screen portion stays tinted (#9). Caps the slice for huge docs.
   const HL_LOOKAROUND = 5000;
   for (const { from, to } of view.visibleRanges) {
-    // Expand to whole-line bounds (plus the lookaround) so a highlight straddling
-    // the viewport edge still resolves its open/close markers.
-    const blockFrom = doc.lineAt(Math.max(0, from - HL_LOOKAROUND)).from;
-    const blockTo = doc.lineAt(Math.min(doc.length, to + HL_LOOKAROUND)).to;
+    // Clamp the slice to a fixed char window around the visible range — NOT to
+    // whole-line bounds. Whole-line expansion would balloon to the full length of
+    // a legacy inline-image/base64 line (tens of KB on one physical line),
+    // regressing the old per-line size guard and stalling scroll. The lookaround
+    // gives enough slack for a highlight straddling the viewport edge.
+    const blockFrom = Math.max(0, from - HL_LOOKAROUND);
+    const blockTo = Math.min(doc.length, to + HL_LOOKAROUND);
     const text = doc.sliceString(blockFrom, blockTo);
     RE_HL.lastIndex = 0;
     let m;
@@ -12760,11 +12763,12 @@ window.takeSnapshot = function(silent) {
   if (!text.trim()) { if (isManual) showToast('Nothing to snapshot', 'error', 2000); return false; }
   if (text.length > SNAP_MAX_CHARS) { if (isManual) showToast('Document too large for snapshots', 'error', 2500); return false; }
   const snaps = loadSnaps();
+  // Age-based retention sweep (F2) — run BEFORE the duplicate-content early
+  // return so unchanged documents still expire old history (persist if trimmed).
+  { const pruned = pruneSnapsByAge(snaps); if (pruned.length !== snaps.length) { snaps.length = 0; snaps.push(...pruned); saveSnaps(snaps); } }
   if (snaps.length && snaps[0].c === text) { if (isManual) showToast('No changes since last snapshot', 'success', 1500); return false; }
   snaps.unshift({ t: Date.now(), c: text });
   while (snaps.length > SNAP_MAX) snaps.pop();
-  // Age-based retention sweep (F2) before the byte cap below.
-  { const pruned = pruneSnapsByAge(snaps); snaps.length = 0; snaps.push(...pruned); }
   // Byte-cap: drop oldest until under the total budget (always keep newest).
   let total = snaps.reduce((n, s) => n + (s.c ? s.c.length : 0), 0);
   while (snaps.length > 1 && total > SNAP_MAX_TOTAL) {
