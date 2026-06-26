@@ -4101,36 +4101,36 @@ const highlightPlugin = ViewPlugin.fromClass(class {
 }, { decorations: v => v.decorations });
 
 // ============================================
-// AUTO-COLOR (widget g) — tint every word a stable, deterministic colour so the
-// same word is always the same colour throughout the document (and across
-// sessions). Opt-in toggle; viewport-only so it stays fast on big docs.
+// AUTO-COLOR (widget g) — YOU pick a word + a colour, and every occurrence of
+// that word in this document is tinted that colour (and stays coloured as you
+// keep typing it). Rules are per-room {wordLower: paletteColor}. Viewport-only.
 // ============================================
 const autoColorCompartment = new Compartment();
-let _autoColorOn = false;
-try { _autoColorOn = store.get('cade-autocolor') === '1'; } catch {}
-const AUTOCOLOR_RE = /[A-Za-z][A-Za-z0-9_]{3,}/g; // words of 4+ chars (skip the/a/of…)
-// Stable hue from a word (FNV-1a). Same word → same hue, every time.
-function _wordHue(w) {
-  let h = 2166136261;
-  for (let i = 0; i < w.length; i++) { h ^= w.charCodeAt(i); h = Math.imul(h, 16777619); }
-  return (h >>> 0) % 360;
+let _autoColorRules = {}; // {wordLower: colorName} for the active room
+const AUTOCOLOR_CSS = { yellow: '#caa218', green: '#16a34a', blue: '#2f7ef0', red: '#e23b3b', pink: '#e0489b', purple: '#a45cf0', orange: '#ea7a25', gray: '#8b93a1' };
+const AC_WORD_RE = /[A-Za-z0-9_]+/g;
+function _autoColorKey() { return 'cade-autocolor:' + (syncState.roomName || activeRoom || '__local__'); }
+function loadAutoColorRules() {
+  try { _autoColorRules = JSON.parse(store.get(_autoColorKey()) || '{}') || {}; } catch { _autoColorRules = {}; }
 }
+function saveAutoColorRules() { try { store.set(_autoColorKey(), JSON.stringify(_autoColorRules)); } catch {} }
 function buildAutoColorDecorations(view) {
+  if (!_autoColorRules || !Object.keys(_autoColorRules).length) return Decoration.none;
   const ranges = [];
   const doc = view.state.doc;
-  const light = document.documentElement.getAttribute('data-theme') === 'light';
-  const L = light ? 40 : 72; // readable against the editor background
   for (const { from, to } of view.visibleRanges) {
     const startLine = doc.lineAt(from).number, endLine = doc.lineAt(to).number;
     for (let i = startLine; i <= endLine; i++) {
       const line = doc.line(i);
       if (line.length > 2000) continue; // skip data/image lines
-      AUTOCOLOR_RE.lastIndex = 0;
+      AC_WORD_RE.lastIndex = 0;
       let m;
-      while ((m = AUTOCOLOR_RE.exec(line.text)) !== null) {
-        const hue = _wordHue(m[0].toLowerCase());
-        ranges.push(Decoration.mark({ attributes: { style: 'color:hsl(' + hue + ',65%,' + L + '%)' } })
-          .range(line.from + m.index, line.from + m.index + m[0].length));
+      while ((m = AC_WORD_RE.exec(line.text)) !== null) {
+        const c = _autoColorRules[m[0].toLowerCase()];
+        if (c && AUTOCOLOR_CSS[c]) {
+          ranges.push(Decoration.mark({ attributes: { style: 'color:' + AUTOCOLOR_CSS[c] + ';font-weight:500' } })
+            .range(line.from + m.index, line.from + m.index + m[0].length));
+        }
       }
     }
   }
@@ -4142,11 +4142,64 @@ const autoColorPlugin = ViewPlugin.fromClass(class {
     if (update.docChanged || update.viewportChanged) this.decorations = buildAutoColorDecorations(update.view);
   }
 }, { decorations: v => v.decorations });
-window.toggleAutoColor = function() {
-  _autoColorOn = !_autoColorOn;
-  try { store.set('cade-autocolor', _autoColorOn ? '1' : '0'); } catch {}
-  try { editor.dispatch({ effects: autoColorCompartment.reconfigure(_autoColorOn ? autoColorPlugin : []) }); } catch {}
-  showToast('Auto-color ' + (_autoColorOn ? 'on' : 'off'), 'success', 1500);
+// No StateEffect export here, so force a rebuild by reconfiguring the compartment
+// with a fresh array (new identity) — recreates the plugin against current rules.
+function refreshAutoColor() { try { editor.dispatch({ effects: autoColorCompartment.reconfigure([autoColorPlugin]) }); } catch {} }
+window.refreshAutoColor = refreshAutoColor;
+
+// The word to target: the selection (if a single token) or the word at the caret.
+function _currentWordForAutoColor() {
+  const sel = editor.state.selection.main;
+  if (sel.from !== sel.to) {
+    const t = editor.state.sliceDoc(sel.from, sel.to).trim();
+    const mm = t.match(/[A-Za-z0-9_]+/);
+    return mm ? mm[0] : '';
+  }
+  const line = editor.state.doc.lineAt(sel.head);
+  const col = sel.head - line.from, text = line.text;
+  const isW = c => /[A-Za-z0-9_]/.test(c || '');
+  let a = col, b = col;
+  while (a > 0 && isW(text[a - 1])) a--;
+  while (b < text.length && isW(text[b])) b++;
+  return text.slice(a, b);
+}
+window.acSetWord = function(word, color) {
+  const k = (word || '').toLowerCase();
+  if (!k) return;
+  if (color) _autoColorRules[k] = color; else delete _autoColorRules[k];
+  saveAutoColorRules();
+  refreshAutoColor();
+  closeAutoColorPicker();
+  showToast(color ? ('“' + word + '” → ' + color) : ('Cleared colour for “' + word + '”'), 'success', 1800);
+  editor.focus();
+};
+let _acPickerEl = null;
+function _acPickerOutside(e) { if (_acPickerEl && !_acPickerEl.contains(e.target)) closeAutoColorPicker(); }
+function closeAutoColorPicker() {
+  if (_acPickerEl) { _acPickerEl.remove(); _acPickerEl = null; document.removeEventListener('pointerdown', _acPickerOutside, true); }
+}
+window.openAutoColorPicker = function(ev) {
+  if (ev && ev.stopPropagation) ev.stopPropagation();
+  if (_acPickerEl) { closeAutoColorPicker(); return; }
+  const word = _currentWordForAutoColor();
+  if (!word) { showToast('Put the cursor on a word first', 'error', 2200); return; }
+  const cur = _autoColorRules[word.toLowerCase()];
+  const el = document.createElement('div');
+  el.className = 'hl-picker';
+  el.innerHTML = '<div class="ac-picker-word" style="width:100%;font-size:var(--text-xs);color:var(--text-muted);padding:0 2px 4px;">Colour “' + escapeHtml(word) + '” everywhere</div>' +
+    HL_COLORS.map(c => `<button class="hl-swatch cm-hl-${c}${cur === c ? ' selected' : ''}" title="${c}" onclick="acSetWord(${JSON.stringify(word).replace(/"/g, '&quot;')}, '${c}')"></button>`).join('') +
+    `<button class="hl-swatch hl-none" title="Clear" onclick="acSetWord(${JSON.stringify(word).replace(/"/g, '&quot;')}, null)">⦸</button>`;
+  document.body.appendChild(el);
+  // Anchor below the caret.
+  let left = 12, top = 60;
+  try {
+    const co = editor.coordsAtPos(editor.state.selection.main.head);
+    if (co) { left = Math.max(8, Math.min(window.innerWidth - el.offsetWidth - 8, co.left)); top = co.bottom + 6; }
+  } catch {}
+  el.style.left = left + 'px';
+  el.style.top = top + 'px';
+  _acPickerEl = el;
+  setTimeout(() => document.addEventListener('pointerdown', _acPickerOutside, true), 0);
 };
 // (registered with the other widgets after the WIDGETS registry is declared.)
 
@@ -4951,7 +5004,7 @@ function buildEditorExtensions() {
     todoPlugin,
     linkPlugin,
     highlightPlugin,
-    autoColorCompartment.of(_autoColorOn ? autoColorPlugin : []),
+    autoColorCompartment.of([autoColorPlugin]),
     spellPlugin,
     searchPlugin,
     mdStylePlugin,
@@ -8187,7 +8240,7 @@ registerWidget({ name: 'Timer', description: 'Pomodoro · countdown · time-of-d
 registerWidget({ name: 'Zen Mode', description: 'Distraction-free typewriter focus', icon: '🧘', tags: 'zen,focus,typewriter,distraction', open: () => window.toggleZen && window.toggleZen() });
 registerWidget({ name: 'Outline', description: 'Jump between headings (table of contents)', icon: '≡', tags: 'outline,toc,headings,navigate', open: () => window.toggleOutline && window.toggleOutline() });
 registerWidget({ name: 'Daily Notes Calendar', description: 'Browse rooms by the date they changed', icon: '📅', tags: 'calendar,daily,date,journal', open: () => window.openDailyNote && window.openDailyNote() });
-registerWidget({ name: 'Auto-color words', description: 'Tint each word a consistent colour throughout the document', icon: '🎨', tags: 'color,rainbow,words,highlight', open: () => window.toggleAutoColor && window.toggleAutoColor() });
+registerWidget({ name: 'Auto-color word', description: 'Pick a word + colour; every occurrence is tinted that colour', icon: '🎨', tags: 'color,word,highlight,auto', open: () => window.openAutoColorPicker && window.openAutoColorPicker() });
 function runPickerItem(item) {
   closePicker();
   if (item && item.__widget) { try { item.__widget.open(); } catch (e) { console.error('Widget open failed:', e); } }
@@ -9803,6 +9856,7 @@ async function _doSwitchRoom(name, firebaseUrl, baseEncKey) {
   try { if (document.getElementById('snapshots-overlay').classList.contains('open')) renderSnapshotsList(); } catch {}
   _activeRoomReady = true; // local switch committed; same-room clicks now no-op
   try { _updateLocationForRoom(); } catch {} // reflect ws/room in the URL (item 5)
+  try { loadAutoColorRules(); refreshAutoColor(); } catch {} // per-room auto-color rules (widget g)
 
   // No Firebase config — local-only mode. The user can still edit and we'll
   // persist to per-room cache. As soon as creds are set + we reconnect, the
@@ -11995,6 +12049,9 @@ if (savedFirebaseUrl && savedEncKey) {
   }
 }
 renderRoomTabs();
+// Restore this room's auto-color word rules on load (widget g) — covers the
+// local-only path where no switchRoom() runs.
+try { loadAutoColorRules(); refreshAutoColor(); } catch {}
 
 // Also update room tabs when syncConnect runs
 const origSyncConnect = window.syncConnect;
