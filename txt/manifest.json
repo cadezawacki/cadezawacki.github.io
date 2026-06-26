@@ -1,7 +1,17 @@
 {
   "schema": 1,
-  "version": "2026.06.26-2",
+  "version": "2026.06.26-3",
   "modules": [
+    {
+      "id": "outline",
+      "type": "widget",
+      "name": "Outline",
+      "description": "Jump between headings (table of contents)",
+      "icon": "≡",
+      "tags": "outline,toc,headings,navigate",
+      "entry": "widgets/outline/outline.js",
+      "css": "widgets/outline/outline.css"
+    },
     {
       "id": "breakout",
       "type": "widget",
