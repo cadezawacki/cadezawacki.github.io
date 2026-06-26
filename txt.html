@@ -3155,7 +3155,12 @@ window.idbStore = idbStore;
 const runInWorker = (() => {
   // The worker body. Kept self-contained (no closure refs) so it survives
   // stringification. The same TASKS object is reused on the main thread.
-  function workerMain() {
+  // `self` is taken as a PARAMETER (shadowing the global) — critical: the
+  // main-thread fallback below runs this function too, and if it referenced the
+  // real global `self` (= window), `self.onmessage = …` would hijack
+  // window.onmessage and turn every incoming message into a self-replying
+  // postMessage storm that locks the main thread.
+  function workerMain(self) {
     async function _compress(data) {
       const cs = new CompressionStream('deflate-raw');
       const writer = cs.writable.getWriter();
@@ -3235,11 +3240,13 @@ const runInWorker = (() => {
     return TASKS; // returned for the main-thread fallback reuse
   }
 
-  // Build the main-thread TASKS table once by invoking workerMain in a sandbox
-  // where `self` is a throwaway object (so the onmessage assignment is harmless).
+  // Build the main-thread TASKS table once by invoking workerMain with a
+  // throwaway `self` (passed as an ARGUMENT, not via .call — workerMain reads the
+  // `self` binding, not `this`), so its `self.onmessage = …` lands on the
+  // throwaway and never on window.onmessage.
   const _mainTasks = (() => {
     const fakeSelf = {};
-    try { return workerMain.call(fakeSelf); }
+    try { return workerMain(fakeSelf); }
     catch { return null; }
   })();
 
@@ -3259,7 +3266,7 @@ const runInWorker = (() => {
     _workerTried = true;
     try {
       if (typeof Worker === 'undefined' || typeof URL === 'undefined' || !URL.createObjectURL) return null;
-      const src = '(' + workerMain.toString() + ')();';
+      const src = '(' + workerMain.toString() + ')(self);';
       const blob = new Blob([src], { type: 'application/javascript' });
       const url = URL.createObjectURL(blob);
       _worker = new Worker(url);
