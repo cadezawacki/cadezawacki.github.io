@@ -822,9 +822,9 @@ body {
 
 .editor-wrap .cm-scroller {
   overflow: auto;
-  /* Extra top padding so the first lines clear the floating toolbar; you can
-     still scroll the very top fully into view (D2). */
-  padding: 42px var(--space-4) var(--space-3);
+  /* Extra top padding so the first lines clear the floating toolbar band; you
+     can still scroll the very top fully into view (D2). */
+  padding: 50px var(--space-4) var(--space-3);
   scrollbar-width: auto;                 /* Firefox — normal width */
   scrollbar-color: var(--accent) transparent;
 }
@@ -1520,15 +1520,23 @@ body {
    shadow so it reads as floating. */
 .mobile-toolbar {
   display: flex;
-  justify-content: center;
+  flex-direction: column;
   align-items: center;
   gap: 4px;
-  position: fixed;
-  top: calc(var(--menubar-h) + 6px);
-  left: 50%;
-  transform: translateX(-50%);
+  /* Absolute (not fixed) + anchored to the fixed, non-scrolling <body>: iOS
+     re-anchors position:fixed to the shrinking VISUAL viewport when the keyboard
+     opens, which shoved this above the header. Absolute to the stable app shell
+     keeps it pinned just under the header no matter the keyboard. */
+  position: absolute;
+  top: var(--menubar-h);
+  left: 0;
+  right: 0;
+  /* Full-width opaque band in the editor's own colour so text scrolling up
+     disappears BEHIND the toolbar instead of peeking through the gap. */
+  background: var(--bg);
+  padding: 6px 0 8px;
   z-index: 50;
-  pointer-events: none; /* only the pill catches clicks; the gutters around it don't */
+  pointer-events: none; /* only the pill catches clicks; the band around it doesn't */
 }
 /* Icon-only buttons: hide any trailing text label, keep the SVG. */
 .mob-btn.icon-only > span:not(svg) { display: none; }
@@ -1595,8 +1603,8 @@ body {
     font-size: var(--text-xs);
   }
   .editor-wrap .cm-scroller {
-    /* Keep the top clearance for the floating toolbar (D2). */
-    padding: 42px var(--space-3) var(--space-2);
+    /* Keep the top clearance for the floating toolbar band (D2). */
+    padding: 50px var(--space-3) var(--space-2);
     /* Leave room so the caret line can scroll clear of the footer + the
        keyboard's predictive/clipboard accessory strip (#18, item 4). */
     scroll-padding-bottom: 140px;
