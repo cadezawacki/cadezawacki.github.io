@@ -2244,7 +2244,7 @@ body {
 .room-hud-item.active { background: var(--accent); color: #fff; }
 /* Transparent edge rails: catch the 2s long-press for the room HUD so the
    browser doesn't start a text selection in the editor (item 10 fix). */
-.hud-rail { position: fixed; top: var(--menubar-h); bottom: 26px; width: 18px; z-index: 40; background: transparent; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; touch-action: pan-y; }
+.hud-rail { position: fixed; top: var(--menubar-h); bottom: 26px; width: 12px; z-index: 40; background: transparent; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; touch-action: pan-y; }
 .hud-rail-left { left: 0; }
 .hud-rail-right { right: 0; }
 @media (hover: hover) { .hud-rail { display: none; } } /* pointer devices use the breadcrumb / Ctrl+P */
@@ -3460,7 +3460,11 @@ window.addEventListener('resize', () => { if (_wrapMode === 'hard') { clearTimeo
 
 const editorTheme = EditorView.theme({
   '&': { height: '100%', background: 'var(--bg)' },
-  '.cm-scroller': { overflow: 'auto', padding: '12px 16px' },
+  // Padding is owned entirely by the page CSS (.editor-wrap .cm-scroller) so the
+  // floating toolbar's top clearance (42px, D2) can't be clobbered. CM injects
+  // its theme <style> after the page stylesheet, so a `padding` here would win on
+  // equal specificity and shove the first lines under the toolbar (#7).
+  '.cm-scroller': { overflow: 'auto' },
   '.cm-content': { caretColor: 'var(--accent)', fontFamily: 'var(--font-mono)', fontSize: 'var(--text-base)' },
   '.cm-cursor, .cm-dropCursor': { borderLeftColor: 'var(--accent)' },
   '.cm-activeLine': { background: 'var(--accent-bg)' },
@@ -4027,11 +4031,15 @@ function buildHighlightDecorations(view) {
   const ranges = [];
   // Scan each visible range as one contiguous string (spanning line breaks) so a
   // highlight that wraps across newlines still matches and tints every line.
+  // Look a bounded distance beyond each visible range so a highlight whose
+  // ==opener (or trailing ==) sits just off-screen is still resolved and its
+  // on-screen portion stays tinted (#9). Caps the slice for huge docs.
+  const HL_LOOKAROUND = 5000;
   for (const { from, to } of view.visibleRanges) {
-    // Expand to whole-line bounds so a highlight straddling the viewport edge
-    // still resolves its open/close markers.
-    const blockFrom = doc.lineAt(from).from;
-    const blockTo = doc.lineAt(to).to;
+    // Expand to whole-line bounds (plus the lookaround) so a highlight straddling
+    // the viewport edge still resolves its open/close markers.
+    const blockFrom = doc.lineAt(Math.max(0, from - HL_LOOKAROUND)).from;
+    const blockTo = doc.lineAt(Math.min(doc.length, to + HL_LOOKAROUND)).to;
     const text = doc.sliceString(blockFrom, blockTo);
     RE_HL.lastIndex = 0;
     let m;
@@ -12873,17 +12881,26 @@ window.manageSnapshotStorage = function() {
   if (!rows.length) {
     html += '<div style="color:var(--text-faint);font-size:var(--text-sm);padding:8px 0;">No snapshot storage in use.</div>';
   } else {
-    html += rows.map(r => {
+    // Reference each store by INDEX in a data attribute — never inline the room
+    // name/key into markup (room names are free-form/importable, so an inlined
+    // onclick string is an HTML/JS injection vector).
+    html += rows.map((r, i) => {
       const here = r.room === (syncState.roomName || activeRoom || '__local__');
       const label = r.room === '__local__' ? '(local / no room)' : r.room;
       return `<div class="snap-row">
         <span class="snap-preview" title="${escapeHtml(label)}">${escapeHtml(label)}${here ? ' · current' : ''}</span>
         <span class="snap-meta">${r.count} snap${r.count !== 1 ? 's' : ''} · ${fmtKb(r.bytes)}</span>
-        <button class="btn btn-danger" style="padding:2px 8px;font-size:var(--text-xs);" onclick="clearSnapshotStore('${r.key.replace(/'/g, "\\'")}')">Clear</button>
+        <button class="btn btn-danger snap-store-clear" data-snap-idx="${i}" style="padding:2px 8px;font-size:var(--text-xs);">Clear</button>
       </div>`;
     }).join('');
   }
   list.innerHTML = html;
+  list.querySelectorAll('.snap-store-clear').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const r = rows[+btn.getAttribute('data-snap-idx')];
+      if (r) clearSnapshotStore(r.key);
+    });
+  });
 };
 window.clearSnapshotStore = function(key) {
   if (!confirm('Delete all snapshots for this room?')) return;
@@ -12969,7 +12986,10 @@ window.addEventListener('resize', () => {
   _panelResizeTimer = setTimeout(() => {
     if (Math.abs(window.innerWidth - _panelLastW) < 40) return; // height-only (keyboard) → ignore
     _panelLastW = window.innerWidth;
-    if (document.getElementById('timer-panel')) { try { window.timerMinimize(); } catch {} }
+    // Don't minimize a timer that's currently flashing for attention — that path
+    // calls _timerStopFlash() and would silently acknowledge (clear the flash +
+    // restore the tab title) a fired countdown the user hasn't seen yet.
+    if (document.getElementById('timer-panel') && !_timerFlashing) { try { window.timerMinimize(); } catch {} }
     ['outline-panel', 'daycal-panel'].forEach(id => {
       const el = document.getElementById(id);
       if (el) { el.remove(); if (el._onClose) el._onClose(); }
@@ -13305,7 +13325,9 @@ function setClockEnabled(on) {
   if (on) {
     if (!el) {
       el = document.createElement('span'); el.id = 'footer-clock';
-      const fr = document.querySelector('.footer-right'); if (fr) fr.insertBefore(el, fr.firstChild);
+      // The footer's right-hand group is .footer-stats (there is no .footer-right);
+      // prepend the clock so it sits just left of Ln/Col.
+      const fr = document.querySelector('.footer-stats'); if (fr) fr.insertBefore(el, fr.firstChild);
     }
     clockTick();
     clearInterval(_clockTimer); _clockTimer = setInterval(clockTick, 10000);
@@ -13512,20 +13534,32 @@ window.closeRoomHud = function() { const h = document.getElementById('room-hud')
 ['hud-rail-left', 'hud-rail-right'].forEach(id => {
   const rail = document.getElementById(id);
   if (!rail) return;
-  let timer = null, sx = 0, sy = 0;
+  let timer = null, sx = 0, sy = 0, t0 = 0, fired = false;
   rail.addEventListener('touchstart', e => {
     const t = e.touches[0]; if (!t) return;
-    sx = t.clientX; sy = t.clientY;
+    sx = t.clientX; sy = t.clientY; t0 = Date.now(); fired = false;
     clearTimeout(timer);
-    timer = setTimeout(() => { window.showRoomHud(); }, 1500);
+    timer = setTimeout(() => { fired = true; window.showRoomHud(); }, 1500);
   }, { passive: true });
   rail.addEventListener('touchmove', e => {
     const t = e.touches[0]; if (!t) return;
     if (Math.abs(t.clientX - sx) > 14 || Math.abs(t.clientY - sy) > 14) clearTimeout(timer);
   }, { passive: true });
-  const cancel = () => clearTimeout(timer);
-  rail.addEventListener('touchend', cancel, { passive: true });
-  rail.addEventListener('touchcancel', cancel, { passive: true });
+  rail.addEventListener('touchend', e => {
+    clearTimeout(timer);
+    // A quick tap on the rail should still place the caret as if it landed on the
+    // editor — the rails sit over the edge gutter, so without this a tap there is
+    // simply swallowed (#8). Only forward genuine short, still taps.
+    const ct = e.changedTouches && e.changedTouches[0];
+    if (!fired && ct && Date.now() - t0 < 400 &&
+        Math.abs(ct.clientX - sx) <= 14 && Math.abs(ct.clientY - sy) <= 14) {
+      try {
+        const pos = editor.posAtCoords({ x: ct.clientX, y: ct.clientY });
+        if (pos != null) { editor.dispatch({ selection: { anchor: pos } }); editor.focus(); }
+      } catch {}
+    }
+  }, { passive: true });
+  rail.addEventListener('touchcancel', () => clearTimeout(timer), { passive: true });
 });
 (function() {
   const el = editor.scrollDOM;
