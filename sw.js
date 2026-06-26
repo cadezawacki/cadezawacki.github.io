@@ -9,7 +9,7 @@
 //   - Firebase realtime DB: bypass (live data, needs network)
 // ============================================
 
-const CACHE_VERSION = 50;
+const CACHE_VERSION = 51;
 const CACHE_NAME = `cade-v${CACHE_VERSION}`;
 
 // Same-origin pages to precache on install.
@@ -75,9 +75,34 @@ self.addEventListener('install', (e) => {
       })
     );
 
+    // Feature modules: read ./txt/manifest.json and precache every module's
+    // entry + css + listed assets so they're available offline (stale-while-
+    // revalidate alone only caches a module AFTER it's been fetched online once).
+    // The manifest is the single source of truth — no duplicate list here.
+    await precacheModules(cache);
+
     await self.skipWaiting();
   })());
 });
+
+// Precache module files enumerated by ./txt/manifest.json (best-effort).
+async function precacheModules(cache) {
+  try {
+    const mr = await fetch('./txt/manifest.json', { cache: 'reload' });
+    if (!mr.ok) return;
+    await cache.put('./txt/manifest.json', mr.clone());
+    const manifest = await mr.json();
+    const files = [];
+    for (const m of (manifest.modules || [])) {
+      if (m.entry) files.push('./txt/' + m.entry);
+      if (m.css) files.push('./txt/' + m.css);
+      for (const f of (m.precache || [])) files.push('./txt/' + f);
+    }
+    await Promise.allSettled(files.map(async (u) => {
+      try { const r = await fetch(u, { cache: 'reload' }); if (r.ok) await cache.put(u, r); } catch {}
+    }));
+  } catch {}
+}
 
 // ---- Activate: purge old caches, claim clients ----
 self.addEventListener('activate', (e) => {
@@ -138,6 +163,8 @@ self.addEventListener('message', (e) => {
           } catch {}
         })
       );
+      // Refresh feature modules from the manifest too (reconnect without a bump).
+      await precacheModules(cache);
     });
   }
 });

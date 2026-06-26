@@ -8480,7 +8480,7 @@ registerWidget({ name: 'Zen Mode', description: 'Distraction-free typewriter foc
 registerWidget({ name: 'Outline', description: 'Jump between headings (table of contents)', icon: '≡', tags: 'outline,toc,headings,navigate', open: () => window.toggleOutline && window.toggleOutline() });
 registerWidget({ name: 'Daily Notes Calendar', description: 'Browse rooms by the date they changed', icon: '📅', tags: 'calendar,daily,date,journal', open: () => window.openDailyNote && window.openDailyNote() });
 registerWidget({ name: 'Auto-color word', description: 'Pick a word + colour; every occurrence is tinted that colour', icon: '🎨', tags: 'color,word,highlight,auto', open: () => window.openAutoColorPicker && window.openAutoColorPicker() });
-registerWidget({ name: 'Breakout', description: 'A quick retro brick-breaker break — Esc to bail', icon: '▥', tags: 'game,arcade,break,retro,brick,fun', open: () => window.openBreakout && window.openBreakout() });
+// Breakout is now an external module (./txt/widgets/breakout/), loaded on demand.
 function runPickerItem(item) {
   closePicker();
   if (item && item.__widget) { try { item.__widget.open(); } catch (e) { console.error('Widget open failed:', e); } return; }
@@ -13766,146 +13766,8 @@ window.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && document.body.classList.contains('zen')) { e.preventDefault(); window.toggleZen(); }
 });
 
-// ---- Retro Breakout (widget b) — a low-key break game in a floating panel.
-// Paddle: move the mouse / drag / arrow keys. Click or Space to launch the ball.
-// Esc bails out instantly. High score persists locally.
-const _BRK = { ROWS: 5, COLS: 8, W: 300, H: 360, BRICK_H: 14, TOP: 26, PAD_W: 56, PAD_H: 8, BALL_R: 5 };
-const _BRK_COLORS = ['#f2f4f7', '#cfd4dc', '#aab0bb', '#878d99', '#646b77']; // white → grey rows
-let _brkRAF = 0, _brk = null;
-function _brkHi() { try { return parseInt(store.get('cade-game-breakout-hi') || '0', 10) || 0; } catch { return 0; } }
-function _brkSetHi(v) { try { store.set('cade-game-breakout-hi', String(v)); } catch {} }
-function _brkInitBricks(s) {
-  s.bricks = [];
-  const gap = 3, w = (_BRK.W - gap) / _BRK.COLS;
-  for (let r = 0; r < _BRK.ROWS; r++)
-    for (let c = 0; c < _BRK.COLS; c++)
-      s.bricks.push({ x: c * w + gap, y: _BRK.TOP + r * (_BRK.BRICK_H + gap), w: w - gap, h: _BRK.BRICK_H, color: _BRK_COLORS[r % _BRK_COLORS.length], alive: true });
-}
-function _brkReset(s, full) {
-  s.ball.x = s.paddle.x + _BRK.PAD_W / 2;
-  s.ball.y = _BRK.H - 24;
-  s.ball.vx = 0; s.ball.vy = 0;
-  s.started = false;
-  if (full) { s.score = 0; s.lives = 3; s.over = false; s.win = false; _brkInitBricks(s); }
-}
-function _brkLaunch(s) {
-  if (s.over || s.win) { _brkReset(s, true); }
-  if (s.started) return;
-  s.started = true;
-  s.ball.vx = (Math.random() < 0.5 ? -1 : 1) * 2.2;
-  s.ball.vy = -3.2;
-  if (!_brkRAF) _brkRAF = requestAnimationFrame(_brkLoop);
-}
-function _brkLoop() {
-  _brkRAF = 0;
-  const s = _brk;
-  if (!s || !s.canvas || !s.canvas.isConnected) { _brk = null; return; }
-  if (s.started && !s.over && !s.win) {
-    const b = s.ball;
-    b.x += b.vx; b.y += b.vy;
-    if (b.x - b.r < 0) { b.x = b.r; b.vx = Math.abs(b.vx); }
-    if (b.x + b.r > _BRK.W) { b.x = _BRK.W - b.r; b.vx = -Math.abs(b.vx); }
-    if (b.y - b.r < 0) { b.y = b.r; b.vy = Math.abs(b.vy); }
-    // paddle
-    const py = _BRK.H - 18;
-    if (b.vy > 0 && b.y + b.r >= py && b.y + b.r <= py + _BRK.PAD_H + 6 && b.x >= s.paddle.x - b.r && b.x <= s.paddle.x + _BRK.PAD_W + b.r) {
-      b.y = py - b.r;
-      const hit = (b.x - (s.paddle.x + _BRK.PAD_W / 2)) / (_BRK.PAD_W / 2); // -1..1
-      const speed = Math.min(6, Math.hypot(b.vx, b.vy) + 0.05);
-      const ang = hit * 1.0; // radians off vertical
-      b.vx = speed * Math.sin(ang);
-      b.vy = -Math.abs(speed * Math.cos(ang));
-    }
-    // bricks
-    for (const br of s.bricks) {
-      if (!br.alive) continue;
-      if (b.x + b.r > br.x && b.x - b.r < br.x + br.w && b.y + b.r > br.y && b.y - b.r < br.y + br.h) {
-        br.alive = false; s.score += 10;
-        // bounce on the shallower axis of penetration
-        const overlapX = Math.min(b.x + b.r - br.x, br.x + br.w - (b.x - b.r));
-        const overlapY = Math.min(b.y + b.r - br.y, br.y + br.h - (b.y - b.r));
-        if (overlapX < overlapY) b.vx = -b.vx; else b.vy = -b.vy;
-        break;
-      }
-    }
-    if (s.bricks.every(br => !br.alive)) { s.win = true; }
-    // lost the ball
-    if (b.y - b.r > _BRK.H) {
-      s.lives--;
-      if (s.lives <= 0) { s.over = true; if (s.score > _brkHi()) _brkSetHi(s.score); }
-      else _brkReset(s, false);
-    }
-    if (s.win && s.score > _brkHi()) _brkSetHi(s.score);
-  } else if (!s.started) {
-    s.ball.x = s.paddle.x + _BRK.PAD_W / 2; // ball rides the paddle pre-launch
-  }
-  _brkRender(s);
-  if (s.canvas.isConnected) _brkRAF = requestAnimationFrame(_brkLoop);
-}
-function _brkRender(s) {
-  const ctx = s.ctx;
-  ctx.clearRect(0, 0, _BRK.W, _BRK.H);
-  ctx.fillStyle = '#0c0e12'; ctx.fillRect(0, 0, _BRK.W, _BRK.H);
-  for (const br of s.bricks) { if (!br.alive) continue; ctx.fillStyle = br.color; ctx.fillRect(br.x, br.y, br.w, br.h); }
-  ctx.fillStyle = '#cbd2dc'; ctx.fillRect(s.paddle.x, _BRK.H - 18, _BRK.PAD_W, _BRK.PAD_H);
-  ctx.beginPath(); ctx.arc(s.ball.x, s.ball.y, s.ball.r, 0, Math.PI * 2); ctx.fillStyle = '#fff'; ctx.fill();
-  ctx.fillStyle = 'rgba(203,210,220,0.85)'; ctx.font = '11px ui-monospace, monospace';
-  ctx.textAlign = 'left'; ctx.fillText('SCORE ' + s.score, 6, 16);
-  ctx.textAlign = 'right'; ctx.fillText('♥'.repeat(Math.max(0, s.lives)), _BRK.W - 6, 16);
-  const msg = document.getElementById('game-msg');
-  if (msg) msg.textContent = s.over ? 'Game over — Space to retry' : s.win ? 'You win! — Space to play again' : s.started ? '' : 'Click / Space to launch';
-  const hi = document.getElementById('game-hi'); if (hi) hi.textContent = 'HI ' + Math.max(_brkHi(), s.score);
-}
-function stopBreakout() {
-  if (_brkRAF) { cancelAnimationFrame(_brkRAF); _brkRAF = 0; }
-  if (_brk && _brk._key) { try { document.removeEventListener('keydown', _brk._key, true); } catch {} }
-  _brk = null;
-}
-window.closeBreakout = function() {
-  stopBreakout();
-  const p = document.getElementById('game-panel');
-  if (p) p.remove();
-  try { editor.focus(); } catch {}
-};
-window.openBreakout = function() {
-  closeAllMenus();
-  if (document.getElementById('game-panel')) { window.closeBreakout(); return; }
-  const body = '<canvas id="game-canvas" width="' + _BRK.W + '" height="' + _BRK.H + '" style="display:block;border-radius:8px;background:#0c0e12;touch-action:none;width:' + _BRK.W + 'px;max-width:78vw;"></canvas>' +
-    '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px;font-size:var(--text-xs);color:var(--text-muted);gap:8px;">' +
-    '<span id="game-msg">Click / Space to launch</span><span id="game-hi"></span></div>';
-  const p = _mkPanel('game-panel', '▥ Breakout', body);
-  p._onClose = () => stopBreakout();
-  const canvas = document.getElementById('game-canvas');
-  const ctx = canvas.getContext('2d');
-  const s = {
-    canvas, ctx,
-    paddle: { x: (_BRK.W - _BRK.PAD_W) / 2 },
-    ball: { x: _BRK.W / 2, y: _BRK.H - 24, vx: 0, vy: 0, r: _BRK.BALL_R },
-    bricks: [], score: 0, lives: 3, started: false, over: false, win: false,
-  };
-  _brkInitBricks(s);
-  _brk = s;
-  const movePaddle = (clientX) => {
-    const r = canvas.getBoundingClientRect();
-    const scale = _BRK.W / r.width;
-    s.paddle.x = Math.max(0, Math.min(_BRK.W - _BRK.PAD_W, (clientX - r.left) * scale - _BRK.PAD_W / 2));
-    if (!s.started) s.ball.x = s.paddle.x + _BRK.PAD_W / 2;
-  };
-  canvas.addEventListener('pointermove', e => { movePaddle(e.clientX); });
-  canvas.addEventListener('pointerdown', e => { e.preventDefault(); movePaddle(e.clientX); _brkLaunch(s); });
-  s._key = (e) => {
-    if (!document.getElementById('game-panel')) return;
-    if (e.key === 'Escape') { e.preventDefault(); window.closeBreakout(); return; }
-    if (e.key === ' ' || e.code === 'Space') { e.preventDefault(); _brkLaunch(s); return; }
-    if (e.key === 'ArrowLeft') { e.preventDefault(); s.paddle.x = Math.max(0, s.paddle.x - 26); if (!s.started) s.ball.x = s.paddle.x + _BRK.PAD_W / 2; }
-    else if (e.key === 'ArrowRight') { e.preventDefault(); s.paddle.x = Math.min(_BRK.W - _BRK.PAD_W, s.paddle.x + 26); if (!s.started) s.ball.x = s.paddle.x + _BRK.PAD_W / 2; }
-  };
-  document.addEventListener('keydown', s._key, true);
-  _brkRender(s);
-  // Run the loop continuously while the panel is open so paddle movement renders
-  // before launch; the loop self-stops when the canvas is detached.
-  if (!_brkRAF) _brkRAF = requestAnimationFrame(_brkLoop);
-};
+// (Breakout moved to ./txt/widgets/breakout/ — loaded on demand by the module
+// system; see bootModules + ./txt/manifest.json.)
 
 // ---- Clock / timezone strip (#42) ----
 let _clockTimer = null;

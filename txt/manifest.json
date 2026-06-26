@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "version": "2026.06.26-1",
+  "modules": [
+    {
+      "id": "breakout",
+      "type": "widget",
+      "name": "Breakout",
+      "description": "A quick retro brick-breaker break — Esc to bail",
+      "icon": "▥",
+      "tags": "game,arcade,break,retro,brick,fun",
+      "entry": "widgets/breakout/breakout.js",
+      "css": "widgets/breakout/breakout.css"
+    }
+  ]
+}
