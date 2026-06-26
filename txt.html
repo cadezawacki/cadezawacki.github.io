@@ -1786,6 +1786,10 @@ body {
     z-index: 500;
     pointer-events: none;
   }
+  /* The find panel now lives at the bottom of the editor; hide the floating
+     scroll buttons while it's open so their tap targets can't intercept the
+     Find/Replace controls. */
+  body:has(.find-panel.open) .mobile-scroll-btns { display: none !important; }
   .mobile-scroll-btn {
     width: 34px;
     height: 34px;
@@ -2895,6 +2899,48 @@ window.__CM6__.undo = Zh;
 })();
 </script>
 <script>
+
+// ============================================
+// MODULE API — window.Cade
+// --------------------------------------------------------------------------
+// Public surface that external feature modules under ./txt/{widgets,scripts,
+// plugins,configs}/ talk to. Defined first, before the core pieces it exposes,
+// using LATE-BOUND window.* lookups so handles resolve at call time (the same
+// late-binding pattern the built-in widget open() callbacks already use). If
+// ./txt/manifest.json is absent or fails to load, none of this runs and the app
+// stays fully functional from txt.html alone (hard constraint).
+// ============================================
+window.Cade = (function () {
+  let _current = null; // { id, baseURL } — set by the loader right before injecting a module
+  const api = {
+    version: 1,
+    // ---- module-context handshake (loader writes; module body reads) ----
+    _setCurrent(ctx) { _current = ctx; },
+    _ctx() { return _current; },
+    // ---- registration (delegate to core; late-bound) ----
+    registerWidget(w) { return window.registerWidget(w); },
+    registerScript(src) { return window.__registerScript(src); },
+    registerPlugin(spec) { return window.__registerPlugin(spec); },
+    registerSetting(def) { return window.registerSetting(def); },
+    // ---- core handles ----
+    get editor() { return window.editor; },
+    get CM() { return window.__CM6__; },
+    get store() { return window.__store; },
+    get idbStore() { return window.idbStore; },
+    get Settings() { return window.Settings; },
+    // ---- UI helpers ----
+    mkPanel(id, t, html) { return window.__mkPanel(id, t, html); },
+    showToast() { return window.__showToast.apply(null, arguments); },
+    haptic(ms) { return window.haptic ? window.haptic(ms) : undefined; },
+    escapeHtml(s) { return window.escapeHtml(s); },
+    closeAllMenus() { return window.closeAllMenus && window.closeAllMenus(); },
+    // ---- per-module assets (resolve against the module's own folder) ----
+    baseURL() { return _current ? _current.baseURL : './txt/'; },
+    asset(rel) { return this.baseURL() + rel; },
+    loadCSS(rel) { return window.__loadCSSOnce(this.baseURL() + rel); },
+  };
+  return api;
+})();
 
 // ============================================
 // SAFE STORAGE (persistent with in-memory fallback)
@@ -4295,11 +4341,15 @@ function buildSpellDecorations(view) {
         if (skipSpans.some(s => m.index < s.end && m.index + word.length > s.start)) continue;
         if (shouldSkipWord(word)) continue;
         const start = line.from + m.index;
-        // Defer the in-progress word (caret within it) until the caret leaves.
-        if (_caret >= start && _caret <= start + word.length) continue;
-        if (spellCheckCached(word)) continue;
-        ranges.push(Decoration.mark({ class: 'cm-misspelled' }).range(start, start + word.length));
-        spellRanges.push({ from: start, to: start + word.length, word });
+        if (spellCheckCached(word)) continue; // correctly spelled — nothing to do
+        const end = start + word.length;
+        // Always record the range for hit-testing so tapping the word still opens
+        // the suggestion popup (a tap moves the caret INTO the word first).
+        spellRanges.push({ from: start, to: end, word });
+        // But hide the visual underline while the caret is inside the word — you
+        // haven't finished typing it. It reappears once the caret leaves.
+        if (_caret >= start && _caret <= end) continue;
+        ranges.push(Decoration.mark({ class: 'cm-misspelled' }).range(start, end));
       }
     }
   }
@@ -14054,30 +14104,10 @@ window.closeRoomHud = function() { const h = document.getElementById('room-hud')
   }, { passive: true });
 })();
 
-// Keyboard-stable header. The shell is position:fixed/inset:0 (the layout
-// viewport). When the iOS keyboard animates in, the browser can shift the VISUAL
-// viewport down (visualViewport.offsetTop) and the in-flow header drifts/janks.
-// We counter it with a GPU TRANSFORM (translateY) — NOT layout properties:
-// rewriting top/height every frame reflows the whole editor during the keyboard
-// animation, which was itself the jank. A transform is compositor-only, so the
-// header tracks the visual top smoothly with no reflow. Touch devices only.
-(function() {
-  const vv = window.visualViewport;
-  if (!vv) return;
-  if (!('ontouchstart' in window) && !(navigator.maxTouchPoints > 0)) return;
-  let raf = 0;
-  const apply = () => {
-    raf = 0;
-    const ot = vv.offsetTop || 0;
-    // Only transform when actually offset, so position:fixed overlays aren't
-    // reparented to the transformed body in the common (keyboard-down) case.
-    document.body.style.transform = ot ? ('translateY(' + ot + 'px)') : '';
-  };
-  const onChange = () => { if (!raf) raf = requestAnimationFrame(apply); };
-  vv.addEventListener('resize', onChange);
-  vv.addEventListener('scroll', onChange);
-  apply();
-})();
+// (Keyboard/visual-viewport pinning is handled by the single #18 handler above
+// — body height + top. A second transform-based handler used to live here, but
+// it double-applied visualViewport.offsetTop on top of that top adjustment AND
+// reparented fixed modals; removed so there is exactly one offset source.)
 
 // PWA install prompt (#82): capture the deferred prompt; the View > Install App
 // item triggers it (or shows the iOS hint when there's no prompt to defer).
