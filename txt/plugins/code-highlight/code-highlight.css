@@ -1,0 +1,15 @@
+/* Token colours for fenced Python/JS/HTML code blocks (code-highlight plugin).
+ * Tuned to read on both the dark and light editor themes. */
+.cm-cx-kw   { color: #c678dd; font-weight: 500; }   /* keywords */
+.cm-cx-str  { color: #98c379; }                      /* strings */
+.cm-cx-com  { color: var(--text-faint, #7a818c); font-style: italic; } /* comments */
+.cm-cx-num  { color: #d19a66; }                      /* numbers */
+.cm-cx-fn   { color: #61afef; }                      /* function names */
+.cm-cx-tag  { color: #e06c75; }                      /* HTML tag names */
+.cm-cx-attr { color: #d19a66; }                      /* HTML attributes */
+
+[data-theme="light"] .cm-cx-kw   { color: #a626a4; }
+[data-theme="light"] .cm-cx-str  { color: #50a14f; }
+[data-theme="light"] .cm-cx-num  { color: #b76b01; }
+[data-theme="light"] .cm-cx-tag  { color: #e45649; }
+[data-theme="light"] .cm-cx-attr { color: #b76b01; }

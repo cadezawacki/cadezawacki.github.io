@@ -1786,6 +1786,10 @@ body {
     z-index: 500;
     pointer-events: none;
   }
+  /* The find panel now lives at the bottom of the editor; hide the floating
+     scroll buttons while it's open so their tap targets can't intercept the
+     Find/Replace controls. */
+  body:has(.find-panel.open) .mobile-scroll-btns { display: none !important; }
   .mobile-scroll-btn {
     width: 34px;
     height: 34px;
@@ -2897,6 +2901,48 @@ window.__CM6__.undo = Zh;
 <script>
 
 // ============================================
+// MODULE API — window.Cade
+// --------------------------------------------------------------------------
+// Public surface that external feature modules under ./txt/{widgets,scripts,
+// plugins,configs}/ talk to. Defined first, before the core pieces it exposes,
+// using LATE-BOUND window.* lookups so handles resolve at call time (the same
+// late-binding pattern the built-in widget open() callbacks already use). If
+// ./txt/manifest.json is absent or fails to load, none of this runs and the app
+// stays fully functional from txt.html alone (hard constraint).
+// ============================================
+window.Cade = (function () {
+  let _current = null; // { id, baseURL } — set by the loader right before injecting a module
+  const api = {
+    version: 1,
+    // ---- module-context handshake (loader writes; module body reads) ----
+    _setCurrent(ctx) { _current = ctx; },
+    _ctx() { return _current; },
+    // ---- registration (delegate to core; late-bound) ----
+    registerWidget(w) { return window.registerWidget(w); },
+    registerScript(src) { return window.__registerScript(src); },
+    registerPlugin(spec) { return window.__registerPlugin(spec); },
+    registerSetting(def) { return window.registerSetting(def); },
+    // ---- core handles ----
+    get editor() { return window.editor; },
+    get CM() { return window.__CM6__; },
+    get store() { return window.__store; },
+    get idbStore() { return window.idbStore; },
+    get Settings() { return window.Settings; },
+    // ---- UI helpers ----
+    mkPanel(id, t, html) { return window.__mkPanel(id, t, html); },
+    showToast() { return window.showToast.apply(null, arguments); },
+    haptic(ms) { return window.haptic ? window.haptic(ms) : undefined; },
+    escapeHtml(s) { return window.escapeHtml(s); },
+    closeAllMenus() { return window.closeAllMenus && window.closeAllMenus(); },
+    // ---- per-module assets (resolve against the module's own folder) ----
+    baseURL() { return _current ? _current.baseURL : './txt/'; },
+    asset(rel) { return this.baseURL() + rel; },
+    loadCSS(rel) { return window.__loadCSSOnce(this.baseURL() + rel); },
+  };
+  return api;
+})();
+
+// ============================================
 // SAFE STORAGE (persistent with in-memory fallback)
 // ============================================
 const store = (() => {
@@ -3019,6 +3065,7 @@ const store = (() => {
 
   return { get, set, remove, keys, sizeOf, ok };
 })();
+window.__store = store; // exposed for external feature modules (window.Cade.store)
 
 // ============================================
 // HYBRID IDB STORE  (Feature 73)
@@ -4295,11 +4342,15 @@ function buildSpellDecorations(view) {
         if (skipSpans.some(s => m.index < s.end && m.index + word.length > s.start)) continue;
         if (shouldSkipWord(word)) continue;
         const start = line.from + m.index;
-        // Defer the in-progress word (caret within it) until the caret leaves.
-        if (_caret >= start && _caret <= start + word.length) continue;
-        if (spellCheckCached(word)) continue;
-        ranges.push(Decoration.mark({ class: 'cm-misspelled' }).range(start, start + word.length));
-        spellRanges.push({ from: start, to: start + word.length, word });
+        if (spellCheckCached(word)) continue; // correctly spelled — nothing to do
+        const end = start + word.length;
+        // Always record the range for hit-testing so tapping the word still opens
+        // the suggestion popup (a tap moves the caret INTO the word first).
+        spellRanges.push({ from: start, to: end, word });
+        // But hide the visual underline while the caret is inside the word — you
+        // haven't finished typing it. It reappears once the caret leaves.
+        if (_caret >= start && _caret <= end) continue;
+        ranges.push(Decoration.mark({ class: 'cm-misspelled' }).range(start, end));
       }
     }
   }
@@ -5072,6 +5123,43 @@ buildSearchDecorations    = (o => v => __timed('search',    () => o(v)))(buildSe
 buildMdDecorations        = (o => v => __timed('md',        () => o(v)))(buildMdDecorations);
 buildImageDecorations     = (o => v => __timed('image',     () => o(v)))(buildImageDecorations);
 
+// ---- Runtime editor-extension registry (for plugin/injection modules) -------
+// makeEditorState() rebuilds the extension array on EVERY room switch, so a
+// ViewPlugin hot-added to one state would vanish on the next switch. Solution:
+// keep registered extensions in _pluginExtensions (the single source of truth)
+// held by pluginCompartment; buildEditorExtensions() seeds the compartment from
+// it on every rebuild, so injected plugins persist across room switches.
+const _pluginExtensions = [];                 // [{__cadeId, ext}] = currently active
+const _pluginRegistry = new Map();            // id -> ext (persists across enable/disable)
+const pluginCompartment = new Compartment();
+function _pluginExts() { return _pluginExtensions.map(e => e.ext); }
+function _pluginReconfigure() {
+  try { window.editor.dispatch({ effects: pluginCompartment.reconfigure(_pluginExts()) }); } catch (e) { console.error('plugin reconfigure failed', e); }
+}
+function __registerPlugin(spec) {
+  if (!spec || spec.ext == null) return;
+  const id = spec.id || ('p' + _pluginExtensions.length);
+  _pluginRegistry.set(id, spec.ext);          // remember even if later disabled
+  if (_pluginExtensions.some(e => e.__cadeId === id)) return; // already active — dedupe
+  _pluginExtensions.push({ __cadeId: id, ext: spec.ext });
+  _pluginReconfigure();
+}
+function __unregisterPlugin(id) {              // disable but keep it in the registry
+  const i = _pluginExtensions.findIndex(e => e.__cadeId === id);
+  if (i < 0) return;
+  _pluginExtensions.splice(i, 1);
+  _pluginReconfigure();
+}
+function __enablePlugin(id) {                  // re-activate a previously-loaded plugin
+  if (!_pluginRegistry.has(id) || _pluginExtensions.some(e => e.__cadeId === id)) return;
+  _pluginExtensions.push({ __cadeId: id, ext: _pluginRegistry.get(id) });
+  _pluginReconfigure();
+}
+window.__registerPlugin = __registerPlugin;
+window.__unregisterPlugin = __unregisterPlugin;
+window.__enablePlugin = __enablePlugin;
+window.__pluginLoaded = (id) => _pluginRegistry.has(id);
+
 function buildEditorExtensions() {
   return [
     basicSetup,
@@ -5107,6 +5195,8 @@ function buildEditorExtensions() {
     linkPlugin,
     highlightPlugin,
     autoColorCompartment.of([autoColorPlugin]),
+    pluginCompartment.of(_pluginExts()), // runtime-registered plugin/injection modules
+
     spellPlugin,
     searchPlugin,
     mdStylePlugin,
@@ -5265,6 +5355,31 @@ function loadScriptOnce(src) {
     s.onerror = () => reject(new Error('script load failed: ' + src));
     document.head.appendChild(s);
   });
+}
+
+// ---- Feature-module loader primitives (window.Cade / bootModules) -----------
+const _cssLoaded = new Set();
+function _loadCSSOnce(href) {
+  if (!href || _cssLoaded.has(href)) return;
+  _cssLoaded.add(href);
+  const l = document.createElement('link');
+  l.rel = 'stylesheet'; l.href = href;
+  document.head.appendChild(l);
+}
+window.__loadCSSOnce = _loadCSSOnce; // used by window.Cade.loadCSS
+
+// Load a manifest module's entry script exactly once. Sets the per-module
+// context (id + baseURL) synchronously RIGHT BEFORE injecting the script so the
+// module body — which runs synchronously on load — can read Cade._ctx().
+const _moduleLoads = new Map(); // id -> Promise
+function loadModule(m) {
+  if (_moduleLoads.has(m.id)) return _moduleLoads.get(m.id);
+  const entry = './txt/' + m.entry;
+  const baseURL = './txt/' + m.entry.replace(/[^/]+$/, ''); // folder of the entry file
+  window.Cade._setCurrent({ id: m.id, baseURL });
+  const p = loadScriptOnce(entry).catch(err => { _moduleLoads.delete(m.id); throw err; });
+  _moduleLoads.set(m.id, p);
+  return p;
 }
 
 // Loads typo-js + the en_US dictionary. Both come from a CDN the service worker
@@ -6103,6 +6218,7 @@ function closeAllMenus() {
 }
 
 document.addEventListener('click', closeAllMenus);
+window.closeAllMenus = closeAllMenus; // exposed for feature modules (window.Cade.closeAllMenus)
 
 // ============================================
 // SCRIPTS REGISTRY
@@ -6120,6 +6236,7 @@ function registerScript(source) {
     console.warn('Failed to parse script metadata:', e);
   }
 }
+window.__registerScript = registerScript; // exposed for external script modules
 
 // --- Built-in Scripts ---
 
@@ -8323,18 +8440,51 @@ function registerWidget(w) {
 }
 window.registerWidget = registerWidget;
 // Picker rows for widgets, shaped like script rows but flagged so selecting one
-// runs its open() instead of executeScript().
+// runs its open() instead of executeScript(). Deduped by name, preferring a
+// loaded module's real registration over its lazy stub (stubs carry __moduleId).
 function widgetPickerRows() {
-  return WIDGETS.map(w => ({
-    name: w.name,
-    description: w.description || '',
-    icon: w.icon || '⊞',
-    tags: (w.tags ? w.tags + ',' : '') + 'widget',
-    __widget: w,
-  }));
+  const seen = new Set();
+  const rows = [];
+  const ordered = WIDGETS.slice().sort((a, b) => (a.__moduleId ? 1 : 0) - (b.__moduleId ? 1 : 0));
+  for (const w of ordered) {
+    const key = (w.name || '').toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    rows.push({
+      name: w.name, description: w.description || '', icon: w.icon || '⊞',
+      tags: (w.tags ? w.tags + ',' : '') + 'widget', __widget: w,
+    });
+  }
+  return rows;
 }
-// Combined picker source: scripts first, then widgets.
-function pickerSource() { return scripts.concat(widgetPickerRows()); }
+// Combined picker source: scripts first (deduped, real over stub), then widgets.
+function pickerSource() {
+  const byName = new Map();
+  for (const s of scripts) {
+    const k = (s.name || '').toLowerCase();
+    const ex = byName.get(k);
+    if (!ex || (ex.__pendingEntry && !s.__pendingEntry)) byName.set(k, s);
+  }
+  return Array.from(byName.values()).concat(widgetPickerRows());
+}
+// ---- Lazy stubs for external manifest modules (see bootModules) ----
+const _manifestById = new Map();
+function registerWidgetStub(m) {
+  registerWidget({
+    name: m.name, description: m.description, icon: m.icon, tags: m.tags,
+    __moduleId: m.id,
+    open() {
+      loadModule(m).then(() => {
+        const real = WIDGETS.find(w => w.name === m.name && !w.__moduleId);
+        if (real) real.open();
+        else showToast('Module did not register: ' + m.name, 'error', 3000);
+      }).catch(() => showToast('Failed to load ' + m.name, 'error', 3000));
+    },
+  });
+}
+function registerScriptStub(m) {
+  scripts.push({ name: m.name, description: m.description, icon: m.icon, tags: m.tags, __moduleId: m.id, __pendingEntry: true });
+}
 
 // Register the built-in widgets. open() uses late-bound window.* so these can be
 // declared before the widget functions appear later in the file.
@@ -8343,11 +8493,21 @@ registerWidget({ name: 'Zen Mode', description: 'Distraction-free typewriter foc
 registerWidget({ name: 'Outline', description: 'Jump between headings (table of contents)', icon: '≡', tags: 'outline,toc,headings,navigate', open: () => window.toggleOutline && window.toggleOutline() });
 registerWidget({ name: 'Daily Notes Calendar', description: 'Browse rooms by the date they changed', icon: '📅', tags: 'calendar,daily,date,journal', open: () => window.openDailyNote && window.openDailyNote() });
 registerWidget({ name: 'Auto-color word', description: 'Pick a word + colour; every occurrence is tinted that colour', icon: '🎨', tags: 'color,word,highlight,auto', open: () => window.openAutoColorPicker && window.openAutoColorPicker() });
-registerWidget({ name: 'Breakout', description: 'A quick retro brick-breaker break — Esc to bail', icon: '▥', tags: 'game,arcade,break,retro,brick,fun', open: () => window.openBreakout && window.openBreakout() });
+// Breakout is now an external module (./txt/widgets/breakout/), loaded on demand.
 function runPickerItem(item) {
   closePicker();
-  if (item && item.__widget) { try { item.__widget.open(); } catch (e) { console.error('Widget open failed:', e); } }
-  else executeScript(item);
+  if (item && item.__widget) { try { item.__widget.open(); } catch (e) { console.error('Widget open failed:', e); } return; }
+  if (item && item.__pendingEntry) { // lazy script module — load then run the real entry
+    const m = _manifestById.get(item.__moduleId);
+    if (!m) return;
+    loadModule(m).then(() => {
+      const real = scripts.find(s => s.name === item.name && s.code && !s.__pendingEntry);
+      if (real) executeScript(real);
+      else showToast('Module did not register: ' + item.name, 'error', 3000);
+    }).catch(() => showToast('Failed to load ' + item.name, 'error', 3000));
+    return;
+  }
+  executeScript(item);
 }
 
 let pickerOpen = false;
@@ -10971,6 +11131,7 @@ function saveRoomMeta() {
 function escapeHtml(s) {
   return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 }
+window.escapeHtml = escapeHtml; // exposed for feature modules (window.Cade.escapeHtml)
 
 function newWorkspaceId() {
   return 'ws_' + Math.random().toString(36).slice(2, 8) + Date.now().toString(36).slice(-4);
@@ -13288,6 +13449,7 @@ function _mkPanel(id, title, bodyHtml) {
   head.addEventListener('pointerup', e => { drag = false; try { head.releasePointerCapture(e.pointerId); } catch {} });
   return p;
 }
+window.__mkPanel = _mkPanel; // exposed for feature modules (window.Cade.mkPanel)
 
 // B6: floating panels are absolutely positioned, so a viewport resize can leave
 // them orphaned off-screen. On a real width change (ignore mobile keyboard
@@ -13617,146 +13779,8 @@ window.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && document.body.classList.contains('zen')) { e.preventDefault(); window.toggleZen(); }
 });
 
-// ---- Retro Breakout (widget b) — a low-key break game in a floating panel.
-// Paddle: move the mouse / drag / arrow keys. Click or Space to launch the ball.
-// Esc bails out instantly. High score persists locally.
-const _BRK = { ROWS: 5, COLS: 8, W: 300, H: 360, BRICK_H: 14, TOP: 26, PAD_W: 56, PAD_H: 8, BALL_R: 5 };
-const _BRK_COLORS = ['#f2f4f7', '#cfd4dc', '#aab0bb', '#878d99', '#646b77']; // white → grey rows
-let _brkRAF = 0, _brk = null;
-function _brkHi() { try { return parseInt(store.get('cade-game-breakout-hi') || '0', 10) || 0; } catch { return 0; } }
-function _brkSetHi(v) { try { store.set('cade-game-breakout-hi', String(v)); } catch {} }
-function _brkInitBricks(s) {
-  s.bricks = [];
-  const gap = 3, w = (_BRK.W - gap) / _BRK.COLS;
-  for (let r = 0; r < _BRK.ROWS; r++)
-    for (let c = 0; c < _BRK.COLS; c++)
-      s.bricks.push({ x: c * w + gap, y: _BRK.TOP + r * (_BRK.BRICK_H + gap), w: w - gap, h: _BRK.BRICK_H, color: _BRK_COLORS[r % _BRK_COLORS.length], alive: true });
-}
-function _brkReset(s, full) {
-  s.ball.x = s.paddle.x + _BRK.PAD_W / 2;
-  s.ball.y = _BRK.H - 24;
-  s.ball.vx = 0; s.ball.vy = 0;
-  s.started = false;
-  if (full) { s.score = 0; s.lives = 3; s.over = false; s.win = false; _brkInitBricks(s); }
-}
-function _brkLaunch(s) {
-  if (s.over || s.win) { _brkReset(s, true); }
-  if (s.started) return;
-  s.started = true;
-  s.ball.vx = (Math.random() < 0.5 ? -1 : 1) * 2.2;
-  s.ball.vy = -3.2;
-  if (!_brkRAF) _brkRAF = requestAnimationFrame(_brkLoop);
-}
-function _brkLoop() {
-  _brkRAF = 0;
-  const s = _brk;
-  if (!s || !s.canvas || !s.canvas.isConnected) { _brk = null; return; }
-  if (s.started && !s.over && !s.win) {
-    const b = s.ball;
-    b.x += b.vx; b.y += b.vy;
-    if (b.x - b.r < 0) { b.x = b.r; b.vx = Math.abs(b.vx); }
-    if (b.x + b.r > _BRK.W) { b.x = _BRK.W - b.r; b.vx = -Math.abs(b.vx); }
-    if (b.y - b.r < 0) { b.y = b.r; b.vy = Math.abs(b.vy); }
-    // paddle
-    const py = _BRK.H - 18;
-    if (b.vy > 0 && b.y + b.r >= py && b.y + b.r <= py + _BRK.PAD_H + 6 && b.x >= s.paddle.x - b.r && b.x <= s.paddle.x + _BRK.PAD_W + b.r) {
-      b.y = py - b.r;
-      const hit = (b.x - (s.paddle.x + _BRK.PAD_W / 2)) / (_BRK.PAD_W / 2); // -1..1
-      const speed = Math.min(6, Math.hypot(b.vx, b.vy) + 0.05);
-      const ang = hit * 1.0; // radians off vertical
-      b.vx = speed * Math.sin(ang);
-      b.vy = -Math.abs(speed * Math.cos(ang));
-    }
-    // bricks
-    for (const br of s.bricks) {
-      if (!br.alive) continue;
-      if (b.x + b.r > br.x && b.x - b.r < br.x + br.w && b.y + b.r > br.y && b.y - b.r < br.y + br.h) {
-        br.alive = false; s.score += 10;
-        // bounce on the shallower axis of penetration
-        const overlapX = Math.min(b.x + b.r - br.x, br.x + br.w - (b.x - b.r));
-        const overlapY = Math.min(b.y + b.r - br.y, br.y + br.h - (b.y - b.r));
-        if (overlapX < overlapY) b.vx = -b.vx; else b.vy = -b.vy;
-        break;
-      }
-    }
-    if (s.bricks.every(br => !br.alive)) { s.win = true; }
-    // lost the ball
-    if (b.y - b.r > _BRK.H) {
-      s.lives--;
-      if (s.lives <= 0) { s.over = true; if (s.score > _brkHi()) _brkSetHi(s.score); }
-      else _brkReset(s, false);
-    }
-    if (s.win && s.score > _brkHi()) _brkSetHi(s.score);
-  } else if (!s.started) {
-    s.ball.x = s.paddle.x + _BRK.PAD_W / 2; // ball rides the paddle pre-launch
-  }
-  _brkRender(s);
-  if (s.canvas.isConnected) _brkRAF = requestAnimationFrame(_brkLoop);
-}
-function _brkRender(s) {
-  const ctx = s.ctx;
-  ctx.clearRect(0, 0, _BRK.W, _BRK.H);
-  ctx.fillStyle = '#0c0e12'; ctx.fillRect(0, 0, _BRK.W, _BRK.H);
-  for (const br of s.bricks) { if (!br.alive) continue; ctx.fillStyle = br.color; ctx.fillRect(br.x, br.y, br.w, br.h); }
-  ctx.fillStyle = '#cbd2dc'; ctx.fillRect(s.paddle.x, _BRK.H - 18, _BRK.PAD_W, _BRK.PAD_H);
-  ctx.beginPath(); ctx.arc(s.ball.x, s.ball.y, s.ball.r, 0, Math.PI * 2); ctx.fillStyle = '#fff'; ctx.fill();
-  ctx.fillStyle = 'rgba(203,210,220,0.85)'; ctx.font = '11px ui-monospace, monospace';
-  ctx.textAlign = 'left'; ctx.fillText('SCORE ' + s.score, 6, 16);
-  ctx.textAlign = 'right'; ctx.fillText('♥'.repeat(Math.max(0, s.lives)), _BRK.W - 6, 16);
-  const msg = document.getElementById('game-msg');
-  if (msg) msg.textContent = s.over ? 'Game over — Space to retry' : s.win ? 'You win! — Space to play again' : s.started ? '' : 'Click / Space to launch';
-  const hi = document.getElementById('game-hi'); if (hi) hi.textContent = 'HI ' + Math.max(_brkHi(), s.score);
-}
-function stopBreakout() {
-  if (_brkRAF) { cancelAnimationFrame(_brkRAF); _brkRAF = 0; }
-  if (_brk && _brk._key) { try { document.removeEventListener('keydown', _brk._key, true); } catch {} }
-  _brk = null;
-}
-window.closeBreakout = function() {
-  stopBreakout();
-  const p = document.getElementById('game-panel');
-  if (p) p.remove();
-  try { editor.focus(); } catch {}
-};
-window.openBreakout = function() {
-  closeAllMenus();
-  if (document.getElementById('game-panel')) { window.closeBreakout(); return; }
-  const body = '<canvas id="game-canvas" width="' + _BRK.W + '" height="' + _BRK.H + '" style="display:block;border-radius:8px;background:#0c0e12;touch-action:none;width:' + _BRK.W + 'px;max-width:78vw;"></canvas>' +
-    '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px;font-size:var(--text-xs);color:var(--text-muted);gap:8px;">' +
-    '<span id="game-msg">Click / Space to launch</span><span id="game-hi"></span></div>';
-  const p = _mkPanel('game-panel', '▥ Breakout', body);
-  p._onClose = () => stopBreakout();
-  const canvas = document.getElementById('game-canvas');
-  const ctx = canvas.getContext('2d');
-  const s = {
-    canvas, ctx,
-    paddle: { x: (_BRK.W - _BRK.PAD_W) / 2 },
-    ball: { x: _BRK.W / 2, y: _BRK.H - 24, vx: 0, vy: 0, r: _BRK.BALL_R },
-    bricks: [], score: 0, lives: 3, started: false, over: false, win: false,
-  };
-  _brkInitBricks(s);
-  _brk = s;
-  const movePaddle = (clientX) => {
-    const r = canvas.getBoundingClientRect();
-    const scale = _BRK.W / r.width;
-    s.paddle.x = Math.max(0, Math.min(_BRK.W - _BRK.PAD_W, (clientX - r.left) * scale - _BRK.PAD_W / 2));
-    if (!s.started) s.ball.x = s.paddle.x + _BRK.PAD_W / 2;
-  };
-  canvas.addEventListener('pointermove', e => { movePaddle(e.clientX); });
-  canvas.addEventListener('pointerdown', e => { e.preventDefault(); movePaddle(e.clientX); _brkLaunch(s); });
-  s._key = (e) => {
-    if (!document.getElementById('game-panel')) return;
-    if (e.key === 'Escape') { e.preventDefault(); window.closeBreakout(); return; }
-    if (e.key === ' ' || e.code === 'Space') { e.preventDefault(); _brkLaunch(s); return; }
-    if (e.key === 'ArrowLeft') { e.preventDefault(); s.paddle.x = Math.max(0, s.paddle.x - 26); if (!s.started) s.ball.x = s.paddle.x + _BRK.PAD_W / 2; }
-    else if (e.key === 'ArrowRight') { e.preventDefault(); s.paddle.x = Math.min(_BRK.W - _BRK.PAD_W, s.paddle.x + 26); if (!s.started) s.ball.x = s.paddle.x + _BRK.PAD_W / 2; }
-  };
-  document.addEventListener('keydown', s._key, true);
-  _brkRender(s);
-  // Run the loop continuously while the panel is open so paddle movement renders
-  // before launch; the loop self-stops when the canvas is detached.
-  if (!_brkRAF) _brkRAF = requestAnimationFrame(_brkLoop);
-};
+// (Breakout moved to ./txt/widgets/breakout/ — loaded on demand by the module
+// system; see bootModules + ./txt/manifest.json.)
 
 // ---- Clock / timezone strip (#42) ----
 let _clockTimer = null;
@@ -14054,30 +14078,10 @@ window.closeRoomHud = function() { const h = document.getElementById('room-hud')
   }, { passive: true });
 })();
 
-// Keyboard-stable header. The shell is position:fixed/inset:0 (the layout
-// viewport). When the iOS keyboard animates in, the browser can shift the VISUAL
-// viewport down (visualViewport.offsetTop) and the in-flow header drifts/janks.
-// We counter it with a GPU TRANSFORM (translateY) — NOT layout properties:
-// rewriting top/height every frame reflows the whole editor during the keyboard
-// animation, which was itself the jank. A transform is compositor-only, so the
-// header tracks the visual top smoothly with no reflow. Touch devices only.
-(function() {
-  const vv = window.visualViewport;
-  if (!vv) return;
-  if (!('ontouchstart' in window) && !(navigator.maxTouchPoints > 0)) return;
-  let raf = 0;
-  const apply = () => {
-    raf = 0;
-    const ot = vv.offsetTop || 0;
-    // Only transform when actually offset, so position:fixed overlays aren't
-    // reparented to the transformed body in the common (keyboard-down) case.
-    document.body.style.transform = ot ? ('translateY(' + ot + 'px)') : '';
-  };
-  const onChange = () => { if (!raf) raf = requestAnimationFrame(apply); };
-  vv.addEventListener('resize', onChange);
-  vv.addEventListener('scroll', onChange);
-  apply();
-})();
+// (Keyboard/visual-viewport pinning is handled by the single #18 handler above
+// — body height + top. A second transform-based handler used to live here, but
+// it double-applied visualViewport.offsetTop on top of that top adjustment AND
+// reparented fixed modals; removed so there is exactly one offset source.)
 
 // PWA install prompt (#82): capture the deferred prompt; the View > Install App
 // item triggers it (or shows the iOS hint when there's no prompt to defer).
@@ -15506,6 +15510,77 @@ function main(ctx) {
   ed.focus();
 }
 `);
+
+// ============================================
+// EXTERNAL FEATURE MODULES — boot loader
+// --------------------------------------------------------------------------
+// Fetch ./txt/manifest.json and register each module's METADATA eagerly (so the
+// Ctrl+K picker lists it instantly) while its CODE loads lazily on first use.
+// Plugins gated by a settingKey get an auto-registered Settings toggle and load
+// only when enabled. If the manifest is missing/broken, this no-ops and the app
+// runs entirely on its built-in (inline) features — the hard constraint that the
+// app stays launchable from txt.html alone.
+// ============================================
+async function bootModules() {
+  let manifest;
+  try {
+    const r = await fetch('./txt/manifest.json', { cache: 'no-cache' });
+    if (!r.ok) throw new Error('manifest ' + r.status);
+    manifest = await r.json();
+  } catch (e) {
+    console.info('No module manifest — running with built-in features only.');
+    return;
+  }
+  const mods = (manifest && manifest.modules) || [];
+  for (const m of mods) {
+    if (!m || !m.id || !m.entry || _manifestById.has(m.id)) continue;
+    _manifestById.set(m.id, m);
+    try {
+      if (m.type === 'widget') registerWidgetStub(m);
+      else if (m.type === 'script') registerScriptStub(m);
+      else if (m.type === 'plugin') maybeLoadPlugin(m);
+      else if (m.type === 'config') loadConfigModule(m);
+    } catch (err) { console.error('module register failed:', m.id, err); }
+  }
+  // Refresh an open picker so newly-registered metadata shows immediately.
+  try { if (typeof pickerOpen !== 'undefined' && pickerOpen) renderPickerList(); } catch {}
+}
+// Gated/optional editor plugin: register a toggle Setting; registerSetting calls
+// apply() with the stored value immediately, so an enabled plugin loads eagerly.
+function maybeLoadPlugin(m) {
+  if (m.settingKey) {
+    registerSetting({
+      key: m.settingKey, label: m.name || m.id, type: 'toggle',
+      default: !!m.default, section: m.section || 'Plugins', hint: m.description || '',
+      apply(on) {
+        if (on) {
+          // Already loaded once? Re-activate the stored extension (the module
+          // script load is deduped, so it won't re-run registerPlugin).
+          if (window.__pluginLoaded(m.id)) window.__enablePlugin(m.id);
+          else loadModule(m).catch(() => {});
+        } else {
+          window.__unregisterPlugin(m.id);
+        }
+      },
+    });
+  } else if (m.eager) {
+    loadModule(m).catch(() => {});
+  }
+}
+// Config module: a .json file is fetched into Cade._configs[id]; a .js file is
+// loaded like any module (it calls Cade.registerSetting / reads Cade.* itself).
+window.Cade._configs = window.Cade._configs || {};
+function loadConfigModule(m) {
+  if (/\.json($|\?)/.test(m.entry)) {
+    fetch('./txt/' + m.entry).then(r => r.ok ? r.json() : null).then(j => { if (j != null) window.Cade._configs[m.id] = j; }).catch(() => {});
+  } else {
+    loadModule(m).catch(() => {});
+  }
+}
+window.bootModules = bootModules;
+// Kick off after the current synchronous boot completes (editor/WIDGETS/scripts/
+// Settings all exist by now). Non-blocking — built-ins render instantly.
+setTimeout(() => { try { bootModules(); } catch (e) { console.error(e); } }, 0);
 
 
 </script>

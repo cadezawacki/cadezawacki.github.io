@@ -1,0 +1,27 @@
+{
+  "schema": 1,
+  "version": "2026.06.26-2",
+  "modules": [
+    {
+      "id": "breakout",
+      "type": "widget",
+      "name": "Breakout",
+      "description": "A quick retro brick-breaker break — Esc to bail",
+      "icon": "▥",
+      "tags": "game,arcade,break,retro,brick,fun",
+      "entry": "widgets/breakout/breakout.js",
+      "css": "widgets/breakout/breakout.css"
+    },
+    {
+      "id": "code-highlight",
+      "type": "plugin",
+      "name": "Code syntax highlighting",
+      "description": "Colourise Python / JavaScript / HTML fenced code blocks",
+      "entry": "plugins/code-highlight/code-highlight.js",
+      "css": "plugins/code-highlight/code-highlight.css",
+      "settingKey": "plugins.codeHighlight",
+      "section": "Editor",
+      "default": false
+    }
+  ]
+}
