@@ -1,0 +1,4 @@
+.crawler-canvas { display: block; border-radius: 8px; background: #0a0b0e; touch-action: none; width: 384px; max-width: 86vw; }
+.crawler-hud { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 6px; font-size: var(--text-xs); color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.crawler-log { margin-top: 3px; min-height: 1.2em; font-size: var(--text-xs); color: var(--text); }
+.crawler-help { margin-top: 4px; font-size: 10px; color: var(--text-faint); }

@@ -1,7 +1,17 @@
 {
   "schema": 1,
-  "version": "2026.06.26-4",
+  "version": "2026.06.26-5",
   "modules": [
+    {
+      "id": "crawler",
+      "type": "widget",
+      "name": "Dungeon Crawler",
+      "description": "A tiny roguelike — explore, fight, descend",
+      "icon": "⚔",
+      "tags": "game,roguelike,dungeon,crawler,rpg,adventure,train,fun",
+      "entry": "widgets/crawler/crawler.js",
+      "css": "widgets/crawler/crawler.css"
+    },
     {
       "id": "g2048",
       "type": "widget",
