@@ -2565,7 +2565,7 @@ body.zen.zen-tw .editor-wrap .cm-content { padding-top: 38vh; padding-bottom: 38
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
       </svg>
-      <input class="picker-search" id="picker-search" type="text" placeholder="Search scripts..." autocomplete="off" spellcheck="false">
+      <input class="picker-search" id="picker-search" type="text" placeholder="Search scripts & widgets..." autocomplete="off" spellcheck="false">
     </div>
     <div class="picker-list" id="picker-list"></div>
     <div class="picker-footer">
@@ -4101,6 +4101,56 @@ const highlightPlugin = ViewPlugin.fromClass(class {
 }, { decorations: v => v.decorations });
 
 // ============================================
+// AUTO-COLOR (widget g) — tint every word a stable, deterministic colour so the
+// same word is always the same colour throughout the document (and across
+// sessions). Opt-in toggle; viewport-only so it stays fast on big docs.
+// ============================================
+const autoColorCompartment = new Compartment();
+let _autoColorOn = false;
+try { _autoColorOn = store.get('cade-autocolor') === '1'; } catch {}
+const AUTOCOLOR_RE = /[A-Za-z][A-Za-z0-9_]{3,}/g; // words of 4+ chars (skip the/a/of…)
+// Stable hue from a word (FNV-1a). Same word → same hue, every time.
+function _wordHue(w) {
+  let h = 2166136261;
+  for (let i = 0; i < w.length; i++) { h ^= w.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return (h >>> 0) % 360;
+}
+function buildAutoColorDecorations(view) {
+  const ranges = [];
+  const doc = view.state.doc;
+  const light = document.documentElement.getAttribute('data-theme') === 'light';
+  const L = light ? 40 : 72; // readable against the editor background
+  for (const { from, to } of view.visibleRanges) {
+    const startLine = doc.lineAt(from).number, endLine = doc.lineAt(to).number;
+    for (let i = startLine; i <= endLine; i++) {
+      const line = doc.line(i);
+      if (line.length > 2000) continue; // skip data/image lines
+      AUTOCOLOR_RE.lastIndex = 0;
+      let m;
+      while ((m = AUTOCOLOR_RE.exec(line.text)) !== null) {
+        const hue = _wordHue(m[0].toLowerCase());
+        ranges.push(Decoration.mark({ attributes: { style: 'color:hsl(' + hue + ',65%,' + L + '%)' } })
+          .range(line.from + m.index, line.from + m.index + m[0].length));
+      }
+    }
+  }
+  return Decoration.set(ranges, true);
+}
+const autoColorPlugin = ViewPlugin.fromClass(class {
+  constructor(view) { this.decorations = buildAutoColorDecorations(view); }
+  update(update) {
+    if (update.docChanged || update.viewportChanged) this.decorations = buildAutoColorDecorations(update.view);
+  }
+}, { decorations: v => v.decorations });
+window.toggleAutoColor = function() {
+  _autoColorOn = !_autoColorOn;
+  try { store.set('cade-autocolor', _autoColorOn ? '1' : '0'); } catch {}
+  try { editor.dispatch({ effects: autoColorCompartment.reconfigure(_autoColorOn ? autoColorPlugin : []) }); } catch {}
+  showToast('Auto-color ' + (_autoColorOn ? 'on' : 'off'), 'success', 1500);
+};
+// (registered with the other widgets after the WIDGETS registry is declared.)
+
+// ============================================
 // SPELL CHECK (English, offline-capable)
 // ============================================
 // Strategy: lazily load typo-js + the en_US Hunspell dictionary from a CDN
@@ -4901,6 +4951,7 @@ function buildEditorExtensions() {
     todoPlugin,
     linkPlugin,
     highlightPlugin,
+    autoColorCompartment.of(_autoColorOn ? autoColorPlugin : []),
     spellPlugin,
     searchPlugin,
     mdStylePlugin,
@@ -8106,15 +8157,52 @@ window.copyAllToClipboard = function() {
 // ============================================
 // SCRIPT PICKER
 // ============================================
+// ---- Widget library ----------------------------------------------------
+// Widgets (timer, zen, games, etc.) register here and become launchable from the
+// same Ctrl+K picker as scripts — no extra menus to crowd. Each entry:
+//   { name, description, icon, tags, open() }
+const WIDGETS = [];
+function registerWidget(w) {
+  if (!w || !w.name || typeof w.open !== 'function') return;
+  WIDGETS.push(w);
+}
+window.registerWidget = registerWidget;
+// Picker rows for widgets, shaped like script rows but flagged so selecting one
+// runs its open() instead of executeScript().
+function widgetPickerRows() {
+  return WIDGETS.map(w => ({
+    name: w.name,
+    description: w.description || '',
+    icon: w.icon || '⊞',
+    tags: (w.tags ? w.tags + ',' : '') + 'widget',
+    __widget: w,
+  }));
+}
+// Combined picker source: scripts first, then widgets.
+function pickerSource() { return scripts.concat(widgetPickerRows()); }
+
+// Register the built-in widgets. open() uses late-bound window.* so these can be
+// declared before the widget functions appear later in the file.
+registerWidget({ name: 'Timer', description: 'Pomodoro · countdown · time-of-day · stopwatch', icon: '⏱', tags: 'timer,pomodoro,countdown,stopwatch,clock,focus', open: () => window.openTimer && window.openTimer() });
+registerWidget({ name: 'Zen Mode', description: 'Distraction-free typewriter focus', icon: '🧘', tags: 'zen,focus,typewriter,distraction', open: () => window.toggleZen && window.toggleZen() });
+registerWidget({ name: 'Outline', description: 'Jump between headings (table of contents)', icon: '≡', tags: 'outline,toc,headings,navigate', open: () => window.toggleOutline && window.toggleOutline() });
+registerWidget({ name: 'Daily Notes Calendar', description: 'Browse rooms by the date they changed', icon: '📅', tags: 'calendar,daily,date,journal', open: () => window.openDailyNote && window.openDailyNote() });
+registerWidget({ name: 'Auto-color words', description: 'Tint each word a consistent colour throughout the document', icon: '🎨', tags: 'color,rainbow,words,highlight', open: () => window.toggleAutoColor && window.toggleAutoColor() });
+function runPickerItem(item) {
+  closePicker();
+  if (item && item.__widget) { try { item.__widget.open(); } catch (e) { console.error('Widget open failed:', e); } }
+  else executeScript(item);
+}
+
 let pickerOpen = false;
 let pickerIndex = 0;
-let filteredScripts = [...scripts];
+let filteredScripts = pickerSource();
 
 window.openPicker = function() {
   closeAllMenus();
   pickerOpen = true;
   pickerIndex = 0;
-  filteredScripts = [...scripts];
+  filteredScripts = pickerSource();
   document.getElementById('picker-overlay').classList.add('open');
   const searchEl = document.getElementById('picker-search');
   searchEl.value = '';
@@ -8150,8 +8238,7 @@ function renderPickerList() {
   listEl.querySelectorAll('.picker-item').forEach(el => {
     el.addEventListener('click', () => {
       const idx = parseInt(el.dataset.index);
-      closePicker();
-      executeScript(filteredScripts[idx]);
+      runPickerItem(filteredScripts[idx]);
     });
     // Use mousemove instead of mouseenter — only fires on actual movement, not re-renders
     el.addEventListener('mousemove', () => {
@@ -8202,9 +8289,9 @@ function scoreScript(query, script) {
 document.getElementById('picker-search').addEventListener('input', (e) => {
   const q = e.target.value.trim();
   if (!q) {
-    filteredScripts = [...scripts];
+    filteredScripts = pickerSource();
   } else {
-    filteredScripts = scripts
+    filteredScripts = pickerSource()
       .map(s => ({ s, score: scoreScript(q, s) }))
       .filter(({ score }) => score > 0)
       .sort((a, b) => b.score - a.score)
@@ -8228,8 +8315,7 @@ document.getElementById('picker-search').addEventListener('keydown', (e) => {
   } else if (e.key === 'Enter') {
     e.preventDefault();
     if (filteredScripts.length > 0) {
-      closePicker();
-      executeScript(filteredScripts[pickerIndex]);
+      runPickerItem(filteredScripts[pickerIndex]);
     }
   } else if (e.key === 'Escape') {
     e.preventDefault();
