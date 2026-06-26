@@ -898,6 +898,7 @@ body {
   gap: var(--space-3);
   padding: 0 var(--space-3);
   padding-bottom: env(safe-area-inset-bottom);
+  order: 10; /* always the last in-flow row, below the find panel */
   height: calc(18px + env(safe-area-inset-bottom));
   background: var(--surface);
   border-top: 1px solid var(--border);
@@ -2024,7 +2025,10 @@ body {
   gap: 6px;
   padding: 6px 12px;
   background: var(--surface);
-  border-bottom: 1px solid var(--border);
+  /* Sits at the BOTTOM of the editor (above the footer) so the floating toolbar
+     at the top can't cover it. order > editor-wrap, < footer. */
+  order: 5;
+  border-top: 1px solid var(--border);
   flex-shrink: 0;
   flex-wrap: wrap;
 }
@@ -4261,6 +4265,11 @@ function buildSpellDecorations(view) {
   if (!spellEnabled || !spellChecker) return Decoration.none;
   const doc = view.state.doc;
   const ranges = [];
+  // Don't flag the word the caret is currently inside — you haven't finished
+  // typing it yet. Once the caret leaves the word (space/punctuation, click, or
+  // arrow away) it gets checked. Only applies with an empty selection (typing).
+  const _sel = view.state.selection.main;
+  const _caret = _sel.empty ? _sel.head : -1;
   for (const { from, to } of view.visibleRanges) {
     const startLine = doc.lineAt(from).number;
     const endLine = doc.lineAt(to).number;
@@ -4285,8 +4294,10 @@ function buildSpellDecorations(view) {
         // Skip words overlapping any link or highlight-markup span.
         if (skipSpans.some(s => m.index < s.end && m.index + word.length > s.start)) continue;
         if (shouldSkipWord(word)) continue;
-        if (spellCheckCached(word)) continue;
         const start = line.from + m.index;
+        // Defer the in-progress word (caret within it) until the caret leaves.
+        if (_caret >= start && _caret <= start + word.length) continue;
+        if (spellCheckCached(word)) continue;
         ranges.push(Decoration.mark({ class: 'cm-misspelled' }).range(start, start + word.length));
         spellRanges.push({ from: start, to: start + word.length, word });
       }
@@ -4301,7 +4312,9 @@ function buildSpellDecorations(view) {
 const spellPlugin = ViewPlugin.fromClass(class {
   constructor(view) { this.v = spellVersion; this.decorations = buildSpellDecorations(view); }
   update(update) {
-    if (update.docChanged || update.viewportChanged || this.v !== spellVersion) {
+    // selectionSet too: moving the caret out of a word should re-check it (and
+    // into a word should defer it) even without a doc change.
+    if (update.docChanged || update.viewportChanged || update.selectionSet || this.v !== spellVersion) {
       this.v = spellVersion;
       this.decorations = buildSpellDecorations(update.view);
     }
@@ -13608,7 +13621,7 @@ window.addEventListener('keydown', (e) => {
 // Paddle: move the mouse / drag / arrow keys. Click or Space to launch the ball.
 // Esc bails out instantly. High score persists locally.
 const _BRK = { ROWS: 5, COLS: 8, W: 300, H: 360, BRICK_H: 14, TOP: 26, PAD_W: 56, PAD_H: 8, BALL_R: 5 };
-const _BRK_COLORS = ['#e23b3b', '#ea7a25', '#caa218', '#16a34a', '#2f7ef0'];
+const _BRK_COLORS = ['#f2f4f7', '#cfd4dc', '#aab0bb', '#878d99', '#646b77']; // white → grey rows
 let _brkRAF = 0, _brk = null;
 function _brkHi() { try { return parseInt(store.get('cade-game-breakout-hi') || '0', 10) || 0; } catch { return 0; } }
 function _brkSetHi(v) { try { store.set('cade-game-breakout-hi', String(v)); } catch {} }
@@ -14041,12 +14054,13 @@ window.closeRoomHud = function() { const h = document.getElementById('room-hud')
   }, { passive: true });
 })();
 
-// Keyboard-stable app shell. The shell is position:fixed/inset:0 (the layout
-// viewport), but iOS scrolls/shrinks the VISUAL viewport when the soft keyboard
-// animates in — so the in-flow header visibly janks even though the editor's own
-// scroller stays smooth. Pin <body> to the visual viewport (top = its scroll
-// offset, height = its height) so the header tracks it without jitter and the
-// footer rises above the keyboard. Touch devices only; rAF-coalesced.
+// Keyboard-stable header. The shell is position:fixed/inset:0 (the layout
+// viewport). When the iOS keyboard animates in, the browser can shift the VISUAL
+// viewport down (visualViewport.offsetTop) and the in-flow header drifts/janks.
+// We counter it with a GPU TRANSFORM (translateY) — NOT layout properties:
+// rewriting top/height every frame reflows the whole editor during the keyboard
+// animation, which was itself the jank. A transform is compositor-only, so the
+// header tracks the visual top smoothly with no reflow. Touch devices only.
 (function() {
   const vv = window.visualViewport;
   if (!vv) return;
@@ -14054,10 +14068,10 @@ window.closeRoomHud = function() { const h = document.getElementById('room-hud')
   let raf = 0;
   const apply = () => {
     raf = 0;
-    const s = document.body.style;
-    s.top = vv.offsetTop + 'px';
-    s.bottom = 'auto';            // release inset:0's bottom so height takes effect
-    s.height = vv.height + 'px';
+    const ot = vv.offsetTop || 0;
+    // Only transform when actually offset, so position:fixed overlays aren't
+    // reparented to the transformed body in the common (keyboard-down) case.
+    document.body.style.transform = ot ? ('translateY(' + ot + 'px)') : '';
   };
   const onChange = () => { if (!raf) raf = requestAnimationFrame(apply); };
   vv.addEventListener('resize', onChange);
@@ -14825,7 +14839,7 @@ const Settings = (() => {
     return readStored(def);
   }
 
-  function set(name, val) {
+  function set(name, val, skipRender) {
     const def = registry.get(name);
     if (!def) return;
     if (typeof def.getState !== 'function') {
@@ -14836,7 +14850,10 @@ const Settings = (() => {
     try { if (typeof def.apply === 'function') def.apply(val); } catch (e) { console.error('Setting apply failed:', name, e); }
     const subs = listeners.get(name);
     if (subs) subs.forEach(cb => { try { cb(val); } catch (e) { console.error(e); } });
-    renderSettingsSections(); // keep UI in sync if open
+    // Re-rendering recreates every control; for a live text/number field that
+    // steals focus mid-typing (the input already holds the truth). Callers
+    // editing a field pass skipRender=true.
+    if (!skipRender) renderSettingsSections();
   }
 
   function getAll() {
@@ -14892,7 +14909,9 @@ const Settings = (() => {
         if (def.type === 'toggle') val = el.checked;
         else if (def.type === 'number') val = Number(el.value);
         else val = el.value;
-        set(key, val);
+        // 'input' = live typing in a text/number field — skip the re-render so
+        // the focused field isn't recreated under the user's cursor.
+        set(key, val, ev === 'input');
       });
     });
   }
