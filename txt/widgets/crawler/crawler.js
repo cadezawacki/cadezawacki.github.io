@@ -45,7 +45,12 @@
   // ---- persistence keys ------------------------------------------------------
   var LKEY = 'cade-dungeon-save';      // local mirror of the hero
   var CKEY = 'cade-dungeon-client';    // this device's id
-  var FB_PATH = 'rooms/_dungeon/hero'; // under rooms/ so existing FB rules apply
+  // Stored under rooms/ so existing Firebase rules apply, but with a __ prefix
+  // so it's hidden from the Explore Rooms list (txt.html filters __* keys) and
+  // can never collide with or be opened as a real room.
+  var FB_PATH = 'rooms/__cade_dungeon/hero';
+  var FB_PATH_OLD = 'rooms/_dungeon/hero'; // migrate away from the visible path
+  var migrateOld = false;
 
   // ---- live (non-persistent) state ------------------------------------------
   var world = null;   // current floor: map, objects, monsters, items, fx, …
@@ -334,21 +339,24 @@
     if (rooms.length < 2) { return genFloor(depth); } // pathological; retry
     var biome = biomeFor(depth);
     var objects = [], monsters = [], items = [];
+
+    // Spawn & stairs first, so the placement predicate can reserve them and
+    // nothing (monster/trap/chest/item) lands on the player or on the stairs.
+    var start = center(rooms[0]);
+    var stairsRoom = rooms[rooms.length - 1];
+    var st = center(stairsRoom);
+    var stairs = { x: st.x, y: st.y, up: false };
+
+    var isBoss = depth > 0 && depth % 5 === 0;
+
     var occupied = function (x, y) {
-      if (world && world.player && world.player.x === x && world.player.y === y) return true;
+      if (x === start.x && y === start.y) return true;
+      if (!isBoss && x === stairs.x && y === stairs.y) return true; // boss spawns ON the stairs deliberately
       for (var i = 0; i < monsters.length; i++) if (monsters[i].x === x && monsters[i].y === y) return true;
       for (var j = 0; j < items.length; j++) if (items[j].x === x && items[j].y === y) return true;
       for (var o = 0; o < objects.length; o++) if (objects[o].x === x && objects[o].y === y) return true;
       return false;
     };
-
-    var start = center(rooms[0]);
-    var stairsRoom = rooms[rooms.length - 1];
-    var st = center(stairsRoom);
-    // make sure stairs tile is floor & distinct from start
-    var stairs = { x: st.x, y: st.y, up: false };
-
-    var isBoss = depth > 0 && depth % 5 === 0;
 
     // ---- optional boulder vault (carves corridors; do this BEFORE the
     //      separator search so the gate is a true cut of the final topology) --
@@ -543,6 +551,7 @@
       if (w.puzzle) logMsg('', w.puzzle.kind === 'lever' ? 'The stairs are barred. Find the lever.' : 'A locked door blocks the way. Find the key.');
     }
     markDirty();
+    buildAbilityBar();   // keep the bar in sync with the hero's level (e.g. after a cross-device sync)
     refreshAll();
   }
 
@@ -561,7 +570,14 @@
   // =========================================================================
   //  field of view (LOS-limited torch)
   // =========================================================================
-  function blocksSight(x, y) { return !world.map[y] || world.map[y][x] !== T_FLOOR; }
+  function opaqueObjAt(x, y) {
+    for (var i = 0; i < world.objects.length; i++) { var o = world.objects[i]; if (o.x === x && o.y === y) {
+      if (o.type === 'gate' && !o.open) return true;
+      if (o.type === 'door' && o.locked) return true;
+    } }
+    return false;
+  }
+  function blocksSight(x, y) { return !world.map[y] || world.map[y][x] !== T_FLOOR || opaqueObjAt(x, y); }
   function losClear(x0, y0, x1, y1) {
     // Bresenham; the endpoint may be a wall (visible) but anything past a wall is blocked
     var dx = Math.abs(x1 - x0), dy = Math.abs(y1 - y0);
@@ -636,6 +652,8 @@
     } else {
       // bomber explodes on death
       if (m.boom) explodeAt(m.x, m.y, m.boom, '#5fc08e');
+      // a slain cutpurse drops whatever gold it pocketed
+      if (m._loot) world.items.push({ type: 'gold', x: m.x, y: m.y, amt: m._loot });
       if (chance(0.18)) world.items.push({ type: 'cons', id: chance(0.6) ? 'potion' : 'elixir', x: m.x, y: m.y });
       if (chance(0.5)) world.items.push({ type: 'gold', x: m.x, y: m.y, amt: (3 + ri(6)) * Math.max(1, world.depth) });
     }
@@ -1100,11 +1118,13 @@
     if (!world || !world.path || !world.path.length || !playerActive()) { if (world) world.path = null; return; }
     // stop if a visible enemy is near
     for (var i = 0; i < world.monsters.length; i++) { var m = world.monsters[i]; if (m.awake && world.visible[m.y] && world.visible[m.y][m.x] && cheb(m.x, m.y, world.player.x, world.player.y) <= LIGHT) { world.path = null; return; } }
+    var hpBefore = hero.hp;
     var nxt = world.path.shift();
     var dx = nxt[0] - world.player.x, dy = nxt[1] - world.player.y;
     var moved = tryMove(dx, dy);
-    if (!moved) world.path = null;
-    if (!world.path || !world.path.length) world.path = null;
+    if (!moved) { world.path = null; return; }
+    if (world && hero.hp < hpBefore) world.path = null;   // took damage (trap/ambush) — stop here
+    if (!world || !world.path || !world.path.length) { if (world) world.path = null; }
   }
 
   // =========================================================================
@@ -1395,11 +1415,12 @@
   //  overlay: character / inventory
   // =========================================================================
   function openCharacter() {
+    if (!hero) { Cade.showToast('Still loading your delver…', 'info', 1200); return; }
     closeOverlay();
     var ov = mkOverlay('Character');
     var body = ov.querySelector('.cr-ov-body');
     var html = '<div class="cr-sheet">';
-    html += '<div class="cr-sheet-row"><b>' + hero.name + '</b> · Level ' + hero.level + '</div>';
+    html += '<div class="cr-sheet-row"><b>' + Cade.escapeHtml(hero.name) + '</b> · Level ' + hero.level + '</div>';
     html += '<div class="cr-grid2">' +
       stat('❤ Max HP', maxHpOf()) + stat('✦ Max MP', maxMpOf()) +
       stat('⚔ Attack', atkOf()) + stat('🛡 Defense', defOf()) +
@@ -1550,6 +1571,8 @@
     if (!d || typeof d !== 'object') return null;
     var h = freshHero();
     for (var k in d) if (d[k] != null) h[k] = d[k];
+    // normalize the only free-form, remotely-settable string
+    h.name = String(h.name == null ? 'Delver' : h.name).replace(/[<>]/g, '').slice(0, 24) || 'Delver';
     // sanity defaults for older/partial saves
     h.equip = h.equip || { weapon: 'dagger', armor: 'rags', trinket: 'none' };
     h.bag = h.bag || { potion: 1 };
@@ -1581,13 +1604,23 @@
     if (!db) { hero = local || freshHero(); hero.client = clientId; done(); attachFbListener(); return; }
     var settled = false;
     var fin = function (h) { if (settled) return; settled = true; hero = h; hero.client = clientId; done(); attachFbListener(); };
+    var useRemote = function (val) {
+      var remote = deserialize(val);
+      var chosen;
+      if (remote && local) chosen = (progressScore(remote) >= progressScore(local)) ? remote : local;
+      else chosen = remote || local || freshHero();
+      fin(chosen);
+    };
     try {
       db.ref(FB_PATH).once('value').then(function (snap) {
-        var remote = deserialize(snap.val());
-        var chosen;
-        if (remote && local) chosen = (progressScore(remote) >= progressScore(local)) ? remote : local;
-        else chosen = remote || local || freshHero();
-        fin(chosen);
+        var v = snap.val();
+        if (v != null) { useRemote(v); return; }
+        // nothing at the new path — migrate a save left at the old visible path
+        db.ref(FB_PATH_OLD).once('value').then(function (s2) {
+          var ov = s2.val();
+          if (ov != null) migrateOld = true;
+          useRemote(ov);
+        }).catch(function () { useRemote(null); });
       }).catch(function () { fin(local || freshHero()); });
     } catch (e) { fin(local || freshHero()); }
     // safety timeout if Firebase hangs
@@ -1609,8 +1642,11 @@
           hero = remote; hero.client = clientId;
           enter(0); Cade.showToast('Synced character from another device', 'success');
         } else {
-          // remember that a newer remote exists; we keep our run but won't clobber blindly
+          // a newer remote exists but we're mid-run — keep playing, but advance
+          // our logical clock past it so an equal-progress tie resolves to the
+          // active device and the progressScore transaction stays coherent.
           hero._remoteAhead = remote.rev;
+          hero.rev = Math.max(hero.rev || 1, remote.rev || 1);
         }
       };
       fbRef.on('value', fbCb);
@@ -1629,14 +1665,35 @@
     hero.rev = (hero.rev || 1) + 1;
     saveLocal();
     var db = fbDb(); if (!db) return;
-    try { db.ref(FB_PATH).set(serialize()); } catch (e) {}
+    var mine = serialize(), myScore = progressScore(mine);
+    try {
+      // Conflict-safe write: keep whichever character is more progressed (same
+      // rule loadHero uses), so a second open device can't clobber a better run.
+      db.ref(FB_PATH).transaction(function (cur) {
+        if (cur && cur.client !== clientId && progressScore(cur) > myScore) return; // abort, keep remote
+        return mine;
+      }, undefined, false);
+    } catch (e) { try { db.ref(FB_PATH).set(mine); } catch (e2) {} }
+    if (migrateOld) { migrateOld = false; try { db.ref(FB_PATH_OLD).remove(); } catch (e3) {} }
   }
 
   // =========================================================================
   //  input
   // =========================================================================
+  function isTyping(e) {
+    var t = e.target; if (!t) return false;
+    var tag = t.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
+    if (t.isContentEditable) return true;
+    if (t.closest && t.closest('.cm-editor')) return true;
+    return false;
+  }
   function onKey(e) {
-    if (!document.getElementById('crawler-panel')) return;
+    var pan = document.getElementById('crawler-panel');
+    if (!pan) return;
+    // Don't hijack keys while the user is typing in the editor / an input —
+    // only act when the game itself holds focus, or focus is on nothing special.
+    if (!pan.contains(document.activeElement) && isTyping(e)) return;
     var k = e.key;
     if (k === 'Escape') { if (document.getElementById('cr-overlay')) { e.preventDefault(); closeOverlay(); return; } e.preventDefault(); close(); return; }
     if (document.getElementById('cr-overlay')) return; // overlay captures nothing else
@@ -1655,7 +1712,7 @@
 
   function bindCanvasInput(canvas) {
     var sx = 0, sy = 0, st = 0, moved = false, tracking = false;
-    canvas.addEventListener('pointerdown', function (e) { sx = e.clientX; sy = e.clientY; st = now(); moved = false; tracking = true; }, { passive: true });
+    canvas.addEventListener('pointerdown', function (e) { try { canvas.focus(); } catch (er) {} sx = e.clientX; sy = e.clientY; st = now(); moved = false; tracking = true; }, { passive: true });
     canvas.addEventListener('pointermove', function (e) { if (tracking && (Math.abs(e.clientX - sx) > 8 || Math.abs(e.clientY - sy) > 8)) moved = true; }, { passive: true });
     canvas.addEventListener('pointerup', function (e) {
       if (!tracking) return; tracking = false;
@@ -1670,14 +1727,18 @@
       var rect = canvas.getBoundingClientRect();
       var lx = (e.clientX - rect.left) / rect.width * CW;
       var ly = (e.clientY - rect.top) / rect.height * CH;
-      var cam = camera();
-      var tx = Math.floor(lx / TILE) + cam.x, ty = Math.floor(ly / TILE) + cam.y;
+      var cam = camera();                       // cam.x/y are floats now
+      var tx = Math.floor(lx / TILE + cam.x), ty = Math.floor(ly / TILE + cam.y);
       if (tx < 0 || ty < 0 || tx >= MW || ty >= MH) return;
       var p = world.player;
-      // tapping adjacent or own tile interacts; otherwise travel
       if (cheb(tx, ty, p.x, p.y) <= 1) {
         if (tx === p.x && ty === p.y) { interact(); }
-        else { cancelTravel(); tryMove(sgn(tx - p.x), sgn(ty - p.y)); }
+        else {
+          // collapse a diagonal tap to one cardinal step (movement is 4-dir)
+          var ddx = tx - p.x, ddy = ty - p.y;
+          if (ddx !== 0 && ddy !== 0) { if (Math.abs(ddx) >= Math.abs(ddy)) ddy = 0; else ddx = 0; }
+          cancelTravel(); tryMove(sgn(ddx), sgn(ddy));
+        }
       } else {
         startTravel(tx, ty);
       }
@@ -1732,7 +1793,7 @@
           '</div>' +
         '</div>' +
         '<div id="cr-hud" class="cr-hud"></div>' +
-        '<div class="cr-stage"><canvas id="crawler-canvas" class="cr-canvas"></canvas>' +
+        '<div class="cr-stage"><canvas id="crawler-canvas" class="cr-canvas" tabindex="0"></canvas>' +
           '<div id="cr-log" class="cr-log"></div></div>' +
         '<div id="cr-items" class="cr-items"></div>' +
         '<div id="cr-abil" class="cr-abil"></div>' +
@@ -1799,6 +1860,7 @@
       // resume into town (always a safe hub); if dead-state somehow, fix
       enter(0);
       refreshAll();
+      try { ui.canvas.focus(); } catch (e) {}   // so desktop keys drive the game immediately
       raf = requestAnimationFrame(render);
     });
   }
