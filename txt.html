@@ -4828,6 +4828,87 @@ async function resolveImageRef(code, hash) {
   return rec;
 }
 
+// ---- Image garbage collection ----------------------------------------------
+// When an image is deleted from the document its bytes were orphaned forever in
+// IndexedDB AND on Firebase (images/<fp>/<hash>), growing storage without bound.
+// We GC: collect every hash still referenced ANYWHERE locally (the live doc, all
+// cached room texts, and snapshot history), then delete any locally-stored image
+// not in that set — from IndexedDB, the in-memory cache, and Firebase. Scanning
+// snapshots keeps "restore an old snapshot" from resurrecting a dead image ref.
+// NOTE: images are content-addressed and shared across rooms by key fingerprint;
+// a hash only referenced by a room not cached on this device can't be seen here,
+// so GC is conservative/best-effort by design.
+function _collectReferencedImageHashes() {
+  const set = new Set();
+  const addFrom = (text) => {
+    if (!text || text.indexOf('![img:') === -1) return;
+    IMG_TOKEN_RE.lastIndex = 0; let m;
+    while ((m = IMG_TOKEN_RE.exec(text)) !== null) { if (m[2] === '#') set.add(m[3]); }
+  };
+  try { addFrom(editor.state.doc.toString()); } catch {}
+  try {
+    store.keys().forEach(k => {
+      if (k.indexOf('cade-room-cache:') === 0 || k.indexOf('cade-room-synced:') === 0) addFrom(store.get(k));
+      else if (k.indexOf('cade-snap:') === 0) {
+        try { (JSON.parse(store.get(k) || '[]') || []).forEach(s => s && addFrom(s.c)); } catch {}
+      }
+    });
+  } catch {}
+  return set;
+}
+let _imgGcTimer = null, _imgGcBusy = false;
+function scheduleImageGC() { clearTimeout(_imgGcTimer); _imgGcTimer = setTimeout(() => { gcOrphanImages().catch(() => {}); }, 4000); }
+window.scheduleImageGC = scheduleImageGC;
+async function gcOrphanImages() {
+  if (_imgGcBusy) return;
+  _imgGcBusy = true;
+  try {
+    let allKeys = [];
+    try { allKeys = await idbStore.keys(); } catch { return; }
+    const imgHashes = allKeys.filter(k => typeof k === 'string' && k.indexOf('img:') === 0).map(k => k.slice(4));
+    if (!imgHashes.length) return;
+    const referenced = _collectReferencedImageHashes();
+    const orphans = imgHashes.filter(h => !referenced.has(h));
+    if (!orphans.length) return;
+    const baseKey = store.get('cade-sync-key') || '';
+    const fbUrl = store.get('cade-firebase-url') || '';
+    let db = null, fp = null;
+    if (baseKey && fbUrl && navigator.onLine) {
+      try { db = initFirebase(fbUrl); fp = _imgKeyFp || (_imgKeyFp = await _computeKeyFingerprint(baseKey)); } catch {}
+    }
+    for (const h of orphans) {
+      try { await idbStore.remove('img:' + h); } catch {}
+      const c = _imgRefCache.get(h);
+      if (c && c.url && c.url.indexOf('blob:') === 0) { try { URL.revokeObjectURL(c.url); } catch {} }
+      _imgRefCache.delete(h);
+      if (db && fp) { try { await db.ref('images/' + fp + '/' + h).remove(); } catch {} }
+    }
+  } finally { _imgGcBusy = false; }
+}
+// Watch the live document for removed image refs; only then is a GC worth doing.
+let _imgRemovalTimer = null;
+let _lastDocImgHashes = new Set();
+function _liveDocImgHashes() {
+  const set = new Set();
+  let text = '';
+  try { text = editor.state.doc.toString(); } catch { return set; }
+  if (text.indexOf('![img:') === -1) return set;
+  IMG_TOKEN_RE.lastIndex = 0; let m;
+  while ((m = IMG_TOKEN_RE.exec(text)) !== null) { if (m[2] === '#') set.add(m[3]); }
+  return set;
+}
+function scheduleImgRemovalCheck() {
+  clearTimeout(_imgRemovalTimer);
+  _imgRemovalTimer = setTimeout(() => {
+    const now = _liveDocImgHashes();
+    let removed = false;
+    _lastDocImgHashes.forEach(h => { if (!now.has(h)) removed = true; });
+    _lastDocImgHashes = now;
+    if (removed) scheduleImageGC();
+  }, 2500);
+}
+window.scheduleImgRemovalCheck = scheduleImgRemovalCheck;
+
 class ImageWidget extends WidgetType {
   // isRef: data is a content hash to resolve out-of-band; else data is base64.
   constructor(code, data, isRef) { super(); this.code = code || 'j'; this.data = data; this.isRef = !!isRef; }
@@ -4986,6 +5067,7 @@ function buildEditorExtensions() {
         __mark('editing(' + update.state.doc.length + 'ch)');
         saveContentDebounced();
         scheduleWordCount();
+        try { scheduleImgRemovalCheck(); } catch {} // GC deleted images (widget/memory)
         if (_wrapMode === 'hard' && !_hardWrapBusy) scheduleHardWrap();
         if (syncState.connected && !syncState.suppressUpdate) {
           syncState.lastLocalEdit = Date.now();
@@ -9857,6 +9939,7 @@ async function _doSwitchRoom(name, firebaseUrl, baseEncKey) {
   _activeRoomReady = true; // local switch committed; same-room clicks now no-op
   try { _updateLocationForRoom(); } catch {} // reflect ws/room in the URL (item 5)
   try { loadAutoColorRules(); refreshAutoColor(); } catch {} // per-room auto-color rules (widget g)
+  try { _lastDocImgHashes = _liveDocImgHashes(); } catch {} // reset image-removal baseline for the new room
 
   // No Firebase config — local-only mode. The user can still edit and we'll
   // persist to per-room cache. As soon as creds are set + we reconnect, the
@@ -12052,6 +12135,10 @@ renderRoomTabs();
 // Restore this room's auto-color word rules on load (widget g) — covers the
 // local-only path where no switchRoom() runs.
 try { loadAutoColorRules(); refreshAutoColor(); } catch {}
+// Seed the image baseline and run a one-time GC sweep ~9s after load to reclaim
+// images orphaned by deletions made before this cleanup existed.
+try { _lastDocImgHashes = _liveDocImgHashes(); } catch {}
+setTimeout(() => { try { scheduleImageGC(); } catch {} }, 9000);
 
 // Also update room tabs when syncConnect runs
 const origSyncConnect = window.syncConnect;
