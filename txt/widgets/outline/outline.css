@@ -1,0 +1,11 @@
+/* Outline widget styles (loaded on demand via Cade.loadCSS). */
+#outline-panel { top: 50px; right: 12px; width: 250px; max-height: 62vh; }
+#outline-list { padding: 4px; }
+.outline-item { display: block; width: 100%; text-align: left; padding: 4px 8px; border-radius: 4px; cursor: pointer; background: none; border: none; color: var(--text-muted); font: inherit; font-size: var(--text-sm); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.outline-item:hover { background: var(--surface-hover, rgba(127,127,127,0.15)); color: var(--text); }
+.outline-item.h1 { font-weight: 600; color: var(--text); }
+.outline-item.h2 { padding-left: 18px; }
+.outline-item.h3 { padding-left: 30px; }
+.outline-item.h4, .outline-item.h5, .outline-item.h6 { padding-left: 42px; font-size: var(--text-xs); }
+.outline-empty { padding: 12px; color: var(--text-faint); font-size: var(--text-xs); }
+@media (max-width: 600px) { #outline-panel { right: 8px; left: 8px; width: auto; } }

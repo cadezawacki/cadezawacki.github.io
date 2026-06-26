@@ -2229,15 +2229,7 @@ body {
 .cade-panel-head .cade-panel-x:hover { opacity: 1; background: var(--surface-hover, rgba(127,127,127,0.15)); }
 .cade-panel-body { overflow: auto; }
 
-#outline-panel { top: 50px; right: 12px; width: 250px; max-height: 62vh; }
-#outline-list { padding: 4px; }
-.outline-item { display: block; width: 100%; text-align: left; padding: 4px 8px; border-radius: 4px; cursor: pointer; background: none; border: none; color: var(--text-muted); font: inherit; font-size: var(--text-sm); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.outline-item:hover { background: var(--surface-hover, rgba(127,127,127,0.15)); color: var(--text); }
-.outline-item.h1 { font-weight: 600; color: var(--text); }
-.outline-item.h2 { padding-left: 18px; }
-.outline-item.h3 { padding-left: 30px; }
-.outline-item.h4, .outline-item.h5, .outline-item.h6 { padding-left: 42px; font-size: var(--text-xs); }
-.outline-empty { padding: 12px; color: var(--text-faint); font-size: var(--text-xs); }
+/* Outline widget styles now live in ./txt/widgets/outline/outline.css */
 
 #timer-panel { top: 50px; right: 12px; width: 230px; }
 .timer-tabs { display: flex; flex-wrap: wrap; gap: 4px; padding: 8px 10px 2px; }
@@ -2938,9 +2930,12 @@ window.Cade = (function () {
     baseURL() { return _current ? _current.baseURL : './txt/'; },
     asset(rel) { return this.baseURL() + rel; },
     loadCSS(rel) { return window.__loadCSSOnce(this.baseURL() + rel); },
+    // ---- editor lifecycle hook (CM6 ViewUpdate) for module refreshes ----
+    onEditorUpdate(cb) { if (typeof cb === 'function') (window.__cadeUpdateHooks || (window.__cadeUpdateHooks = [])).push(cb); },
   };
   return api;
 })();
+window.__cadeUpdateHooks = window.__cadeUpdateHooks || [];
 
 // ============================================
 // SAFE STORAGE (persistent with in-memory fallback)
@@ -5184,6 +5179,9 @@ function buildEditorExtensions() {
       }
       // Widget refresh hook (outline, typewriter scroll, etc.).
       if (typeof _onEditorUpdate === 'function') { try { _onEditorUpdate(update); } catch {} }
+      // External feature modules can subscribe via Cade.onEditorUpdate.
+      var _h = window.__cadeUpdateHooks;
+      if (_h) for (var _i = 0; _i < _h.length; _i++) { try { _h[_i](update); } catch (e) {} }
     }),
     EditorView.updateListener.of(renumberListener),
     // Respect the wrap mode when rebuilding state on room switch (item 3).
@@ -8490,7 +8488,7 @@ function registerScriptStub(m) {
 // declared before the widget functions appear later in the file.
 registerWidget({ name: 'Timer', description: 'Pomodoro · countdown · time-of-day · stopwatch', icon: '⏱', tags: 'timer,pomodoro,countdown,stopwatch,clock,focus', open: () => window.openTimer && window.openTimer() });
 registerWidget({ name: 'Zen Mode', description: 'Distraction-free typewriter focus', icon: '🧘', tags: 'zen,focus,typewriter,distraction', open: () => window.toggleZen && window.toggleZen() });
-registerWidget({ name: 'Outline', description: 'Jump between headings (table of contents)', icon: '≡', tags: 'outline,toc,headings,navigate', open: () => window.toggleOutline && window.toggleOutline() });
+// Outline is now an external module (./txt/widgets/outline/), loaded on demand.
 registerWidget({ name: 'Daily Notes Calendar', description: 'Browse rooms by the date they changed', icon: '📅', tags: 'calendar,daily,date,journal', open: () => window.openDailyNote && window.openDailyNote() });
 registerWidget({ name: 'Auto-color word', description: 'Pick a word + colour; every occurrence is tinted that colour', icon: '🎨', tags: 'color,word,highlight,auto', open: () => window.openAutoColorPicker && window.openAutoColorPicker() });
 // Breakout is now an external module (./txt/widgets/breakout/), loaded on demand.
@@ -13473,36 +13471,9 @@ window.addEventListener('resize', () => {
 });
 
 // ---- Outline / TOC (#34) ----
-function buildOutline() {
-  const list = document.getElementById('outline-list');
-  if (!list) return;
-  const doc = editor.state.doc;
-  const items = [];
-  const cap = Math.min(doc.lines, 6000);
-  for (let i = 1; i <= cap; i++) {
-    const m = doc.line(i).text.match(/^(#{1,6})\s+(.*)$/);
-    if (m) items.push({ level: m[1].length, text: m[2].trim() || '(untitled)', line: i });
-  }
-  if (!items.length) { list.innerHTML = '<div class="outline-empty">No headings yet. Use "# Heading" lines to build an outline.</div>'; return; }
-  list.innerHTML = items.map(it =>
-    '<button class="outline-item h' + it.level + '" onclick="outlineGoto(' + it.line + ')">' + escapeHtml(it.text) + '</button>'
-  ).join('');
-}
-window.outlineGoto = function(lineNo) {
-  const doc = editor.state.doc;
-  const line = doc.line(Math.max(1, Math.min(lineNo, doc.lines)));
-  editor.dispatch({ selection: { anchor: line.from }, effects: EditorView.scrollIntoView(line.from, { y: 'start', yMargin: 40 }) });
-  editor.focus();
-};
-window.toggleOutline = function() {
-  closeAllMenus();
-  const existing = document.getElementById('outline-panel');
-  if (existing) { existing.remove(); store.set('cade-outline-open', '0'); return; }
-  const p = _mkPanel('outline-panel', 'Outline', '<div id="outline-list"></div>');
-  p._onClose = () => store.set('cade-outline-open', '0');
-  buildOutline();
-  store.set('cade-outline-open', '1');
-};
+// Outline moved to ./txt/widgets/outline/ (loaded on demand). Thin shim so the
+// View menu item and session restore can open it via the registered widget stub.
+window.toggleOutline = function () { const w = WIDGETS.find(x => x.name === 'Outline'); if (w) w.open(); };
 
 // ---- Pomodoro / focus timer (#31) ----
 // ---- Generic timer (#31, reworked): pomodoro · countdown · time-of-day · stopwatch ----
@@ -13948,9 +13919,8 @@ var _twScrollRaf = 0;
 var _outlineTimer = 0;
 function _onEditorUpdate(update) {
   if (update.docChanged) { try { maybeEvalMath(update); } catch {} }
-  if (update.docChanged && document.getElementById('outline-panel')) {
-    clearTimeout(_outlineTimer); _outlineTimer = setTimeout(() => { try { buildOutline(); } catch {} }, 300);
-  }
+  // (Outline rebuild-on-edit now handled by the outline module via
+  // Cade.onEditorUpdate.)
   // Typewriter scrolling: keep the caret line vertically centred.
   if (document.body.classList.contains('zen-tw') && (update.selectionSet || update.docChanged)) {
     if (!_twScrollRaf) _twScrollRaf = requestAnimationFrame(() => {
@@ -13965,12 +13935,14 @@ function _onEditorUpdate(update) {
 // can't be registered here — `registerSetting` is a const declared later, so
 // this point is in its temporal dead zone.
 
-// Restore open widgets from last session.
+// Restore open widgets from last session. Outline is now an external module, so
+// route its restore through the registered widget (its stub loads the module).
+function _restoreWidget(name) { try { const w = WIDGETS.find(x => x.name === name); if (w) w.open(); } catch {} }
 setTimeout(() => {
-  try { if (store.get('cade-outline-open') === '1') window.toggleOutline(); } catch {}
+  try { if (store.get('cade-outline-open') === '1') _restoreWidget('Outline'); } catch {}
   try { if (store.get('cade-timer-open') === '1' || store.get('cade-pomo-open') === '1') window.openTimer(); } catch {}
   try { if (store.get('cade-zen') === '1') window.toggleZen(); } catch {}
-}, 400);
+}, 600);
 // One-time pass over the initially-loaded room: migrate any legacy inline
 // base64 images out of the document (the doc/heap bloat behind the GC freezes).
 setTimeout(() => { try { scheduleImageMigration(); } catch {} }, 2500);

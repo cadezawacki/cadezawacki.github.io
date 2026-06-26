@@ -1,7 +1,57 @@
 {
   "schema": 1,
-  "version": "2026.06.26-2",
+  "version": "2026.06.26-5",
   "modules": [
+    {
+      "id": "crawler",
+      "type": "widget",
+      "name": "Dungeon Crawler",
+      "description": "A tiny roguelike — explore, fight, descend",
+      "icon": "⚔",
+      "tags": "game,roguelike,dungeon,crawler,rpg,adventure,train,fun",
+      "entry": "widgets/crawler/crawler.js",
+      "css": "widgets/crawler/crawler.css"
+    },
+    {
+      "id": "g2048",
+      "type": "widget",
+      "name": "2048",
+      "description": "Slide & merge tiles to reach 2048",
+      "icon": "🔢",
+      "tags": "game,2048,puzzle,numbers,train,fun",
+      "entry": "widgets/g2048/g2048.js",
+      "css": "widgets/g2048/g2048.css"
+    },
+    {
+      "id": "snake",
+      "type": "widget",
+      "name": "Snake",
+      "description": "Classic snake — eat, grow, survive",
+      "icon": "🐍",
+      "tags": "game,snake,arcade,train,fun",
+      "entry": "widgets/snake/snake.js",
+      "css": "widgets/snake/snake.css"
+    },
+    {
+      "id": "tetris",
+      "type": "widget",
+      "name": "Tetris",
+      "description": "Stack falling blocks, clear lines",
+      "icon": "🧱",
+      "tags": "game,tetris,blocks,puzzle,train,fun",
+      "entry": "widgets/tetris/tetris.js",
+      "css": "widgets/tetris/tetris.css"
+    },
+    {
+      "id": "outline",
+      "type": "widget",
+      "name": "Outline",
+      "description": "Jump between headings (table of contents)",
+      "icon": "≡",
+      "tags": "outline,toc,headings,navigate",
+      "entry": "widgets/outline/outline.js",
+      "css": "widgets/outline/outline.css"
+    },
     {
       "id": "breakout",
       "type": "widget",
