@@ -13632,6 +13632,30 @@ window.closeRoomHud = function() { const h = document.getElementById('room-hud')
   }, { passive: true });
 })();
 
+// Keyboard-stable app shell. The shell is position:fixed/inset:0 (the layout
+// viewport), but iOS scrolls/shrinks the VISUAL viewport when the soft keyboard
+// animates in — so the in-flow header visibly janks even though the editor's own
+// scroller stays smooth. Pin <body> to the visual viewport (top = its scroll
+// offset, height = its height) so the header tracks it without jitter and the
+// footer rises above the keyboard. Touch devices only; rAF-coalesced.
+(function() {
+  const vv = window.visualViewport;
+  if (!vv) return;
+  if (!('ontouchstart' in window) && !(navigator.maxTouchPoints > 0)) return;
+  let raf = 0;
+  const apply = () => {
+    raf = 0;
+    const s = document.body.style;
+    s.top = vv.offsetTop + 'px';
+    s.bottom = 'auto';            // release inset:0's bottom so height takes effect
+    s.height = vv.height + 'px';
+  };
+  const onChange = () => { if (!raf) raf = requestAnimationFrame(apply); };
+  vv.addEventListener('resize', onChange);
+  vv.addEventListener('scroll', onChange);
+  apply();
+})();
+
 // PWA install prompt (#82): capture the deferred prompt; the View > Install App
 // item triggers it (or shows the iOS hint when there's no prompt to defer).
 let _deferredInstall = null;
