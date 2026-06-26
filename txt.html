@@ -2930,7 +2930,7 @@ window.Cade = (function () {
     get Settings() { return window.Settings; },
     // ---- UI helpers ----
     mkPanel(id, t, html) { return window.__mkPanel(id, t, html); },
-    showToast() { return window.__showToast.apply(null, arguments); },
+    showToast() { return window.showToast.apply(null, arguments); },
     haptic(ms) { return window.haptic ? window.haptic(ms) : undefined; },
     escapeHtml(s) { return window.escapeHtml(s); },
     closeAllMenus() { return window.closeAllMenus && window.closeAllMenus(); },
@@ -3065,6 +3065,7 @@ const store = (() => {
 
   return { get, set, remove, keys, sizeOf, ok };
 })();
+window.__store = store; // exposed for external feature modules (window.Cade.store)
 
 // ============================================
 // HYBRID IDB STORE  (Feature 73)
@@ -5122,6 +5123,30 @@ buildSearchDecorations    = (o => v => __timed('search',    () => o(v)))(buildSe
 buildMdDecorations        = (o => v => __timed('md',        () => o(v)))(buildMdDecorations);
 buildImageDecorations     = (o => v => __timed('image',     () => o(v)))(buildImageDecorations);
 
+// ---- Runtime editor-extension registry (for plugin/injection modules) -------
+// makeEditorState() rebuilds the extension array on EVERY room switch, so a
+// ViewPlugin hot-added to one state would vanish on the next switch. Solution:
+// keep registered extensions in _pluginExtensions (the single source of truth)
+// held by pluginCompartment; buildEditorExtensions() seeds the compartment from
+// it on every rebuild, so injected plugins persist across room switches.
+const _pluginExtensions = [];                 // [{__cadeId, ext}] source of truth
+const pluginCompartment = new Compartment();
+function _pluginExts() { return _pluginExtensions.map(e => e.ext); }
+function __registerPlugin(spec) {
+  if (!spec || spec.ext == null) return;
+  if (spec.id && _pluginExtensions.some(e => e.__cadeId === spec.id)) return; // dedupe by id
+  _pluginExtensions.push({ __cadeId: spec.id || ('p' + _pluginExtensions.length), ext: spec.ext });
+  try { window.editor.dispatch({ effects: pluginCompartment.reconfigure(_pluginExts()) }); } catch (e) { console.error('registerPlugin failed', e); }
+}
+function __unregisterPlugin(id) {
+  const i = _pluginExtensions.findIndex(e => e.__cadeId === id);
+  if (i < 0) return;
+  _pluginExtensions.splice(i, 1);
+  try { window.editor.dispatch({ effects: pluginCompartment.reconfigure(_pluginExts()) }); } catch {}
+}
+window.__registerPlugin = __registerPlugin;
+window.__unregisterPlugin = __unregisterPlugin;
+
 function buildEditorExtensions() {
   return [
     basicSetup,
@@ -5157,6 +5182,8 @@ function buildEditorExtensions() {
     linkPlugin,
     highlightPlugin,
     autoColorCompartment.of([autoColorPlugin]),
+    pluginCompartment.of(_pluginExts()), // runtime-registered plugin/injection modules
+
     spellPlugin,
     searchPlugin,
     mdStylePlugin,
@@ -5315,6 +5342,31 @@ function loadScriptOnce(src) {
     s.onerror = () => reject(new Error('script load failed: ' + src));
     document.head.appendChild(s);
   });
+}
+
+// ---- Feature-module loader primitives (window.Cade / bootModules) -----------
+const _cssLoaded = new Set();
+function _loadCSSOnce(href) {
+  if (!href || _cssLoaded.has(href)) return;
+  _cssLoaded.add(href);
+  const l = document.createElement('link');
+  l.rel = 'stylesheet'; l.href = href;
+  document.head.appendChild(l);
+}
+window.__loadCSSOnce = _loadCSSOnce; // used by window.Cade.loadCSS
+
+// Load a manifest module's entry script exactly once. Sets the per-module
+// context (id + baseURL) synchronously RIGHT BEFORE injecting the script so the
+// module body — which runs synchronously on load — can read Cade._ctx().
+const _moduleLoads = new Map(); // id -> Promise
+function loadModule(m) {
+  if (_moduleLoads.has(m.id)) return _moduleLoads.get(m.id);
+  const entry = './txt/' + m.entry;
+  const baseURL = './txt/' + m.entry.replace(/[^/]+$/, ''); // folder of the entry file
+  window.Cade._setCurrent({ id: m.id, baseURL });
+  const p = loadScriptOnce(entry).catch(err => { _moduleLoads.delete(m.id); throw err; });
+  _moduleLoads.set(m.id, p);
+  return p;
 }
 
 // Loads typo-js + the en_US dictionary. Both come from a CDN the service worker
@@ -6153,6 +6205,7 @@ function closeAllMenus() {
 }
 
 document.addEventListener('click', closeAllMenus);
+window.closeAllMenus = closeAllMenus; // exposed for feature modules (window.Cade.closeAllMenus)
 
 // ============================================
 // SCRIPTS REGISTRY
@@ -6170,6 +6223,7 @@ function registerScript(source) {
     console.warn('Failed to parse script metadata:', e);
   }
 }
+window.__registerScript = registerScript; // exposed for external script modules
 
 // --- Built-in Scripts ---
 
@@ -8373,18 +8427,51 @@ function registerWidget(w) {
 }
 window.registerWidget = registerWidget;
 // Picker rows for widgets, shaped like script rows but flagged so selecting one
-// runs its open() instead of executeScript().
+// runs its open() instead of executeScript(). Deduped by name, preferring a
+// loaded module's real registration over its lazy stub (stubs carry __moduleId).
 function widgetPickerRows() {
-  return WIDGETS.map(w => ({
-    name: w.name,
-    description: w.description || '',
-    icon: w.icon || '⊞',
-    tags: (w.tags ? w.tags + ',' : '') + 'widget',
-    __widget: w,
-  }));
+  const seen = new Set();
+  const rows = [];
+  const ordered = WIDGETS.slice().sort((a, b) => (a.__moduleId ? 1 : 0) - (b.__moduleId ? 1 : 0));
+  for (const w of ordered) {
+    const key = (w.name || '').toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    rows.push({
+      name: w.name, description: w.description || '', icon: w.icon || '⊞',
+      tags: (w.tags ? w.tags + ',' : '') + 'widget', __widget: w,
+    });
+  }
+  return rows;
 }
-// Combined picker source: scripts first, then widgets.
-function pickerSource() { return scripts.concat(widgetPickerRows()); }
+// Combined picker source: scripts first (deduped, real over stub), then widgets.
+function pickerSource() {
+  const byName = new Map();
+  for (const s of scripts) {
+    const k = (s.name || '').toLowerCase();
+    const ex = byName.get(k);
+    if (!ex || (ex.__pendingEntry && !s.__pendingEntry)) byName.set(k, s);
+  }
+  return Array.from(byName.values()).concat(widgetPickerRows());
+}
+// ---- Lazy stubs for external manifest modules (see bootModules) ----
+const _manifestById = new Map();
+function registerWidgetStub(m) {
+  registerWidget({
+    name: m.name, description: m.description, icon: m.icon, tags: m.tags,
+    __moduleId: m.id,
+    open() {
+      loadModule(m).then(() => {
+        const real = WIDGETS.find(w => w.name === m.name && !w.__moduleId);
+        if (real) real.open();
+        else showToast('Module did not register: ' + m.name, 'error', 3000);
+      }).catch(() => showToast('Failed to load ' + m.name, 'error', 3000));
+    },
+  });
+}
+function registerScriptStub(m) {
+  scripts.push({ name: m.name, description: m.description, icon: m.icon, tags: m.tags, __moduleId: m.id, __pendingEntry: true });
+}
 
 // Register the built-in widgets. open() uses late-bound window.* so these can be
 // declared before the widget functions appear later in the file.
@@ -8396,8 +8483,18 @@ registerWidget({ name: 'Auto-color word', description: 'Pick a word + colour; ev
 registerWidget({ name: 'Breakout', description: 'A quick retro brick-breaker break — Esc to bail', icon: '▥', tags: 'game,arcade,break,retro,brick,fun', open: () => window.openBreakout && window.openBreakout() });
 function runPickerItem(item) {
   closePicker();
-  if (item && item.__widget) { try { item.__widget.open(); } catch (e) { console.error('Widget open failed:', e); } }
-  else executeScript(item);
+  if (item && item.__widget) { try { item.__widget.open(); } catch (e) { console.error('Widget open failed:', e); } return; }
+  if (item && item.__pendingEntry) { // lazy script module — load then run the real entry
+    const m = _manifestById.get(item.__moduleId);
+    if (!m) return;
+    loadModule(m).then(() => {
+      const real = scripts.find(s => s.name === item.name && s.code && !s.__pendingEntry);
+      if (real) executeScript(real);
+      else showToast('Module did not register: ' + item.name, 'error', 3000);
+    }).catch(() => showToast('Failed to load ' + item.name, 'error', 3000));
+    return;
+  }
+  executeScript(item);
 }
 
 let pickerOpen = false;
@@ -11021,6 +11118,7 @@ function saveRoomMeta() {
 function escapeHtml(s) {
   return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 }
+window.escapeHtml = escapeHtml; // exposed for feature modules (window.Cade.escapeHtml)
 
 function newWorkspaceId() {
   return 'ws_' + Math.random().toString(36).slice(2, 8) + Date.now().toString(36).slice(-4);
@@ -13338,6 +13436,7 @@ function _mkPanel(id, title, bodyHtml) {
   head.addEventListener('pointerup', e => { drag = false; try { head.releasePointerCapture(e.pointerId); } catch {} });
   return p;
 }
+window.__mkPanel = _mkPanel; // exposed for feature modules (window.Cade.mkPanel)
 
 // B6: floating panels are absolutely positioned, so a viewport resize can leave
 // them orphaned off-screen. On a real width change (ignore mobile keyboard
@@ -15536,6 +15635,71 @@ function main(ctx) {
   ed.focus();
 }
 `);
+
+// ============================================
+// EXTERNAL FEATURE MODULES — boot loader
+// --------------------------------------------------------------------------
+// Fetch ./txt/manifest.json and register each module's METADATA eagerly (so the
+// Ctrl+K picker lists it instantly) while its CODE loads lazily on first use.
+// Plugins gated by a settingKey get an auto-registered Settings toggle and load
+// only when enabled. If the manifest is missing/broken, this no-ops and the app
+// runs entirely on its built-in (inline) features — the hard constraint that the
+// app stays launchable from txt.html alone.
+// ============================================
+async function bootModules() {
+  let manifest;
+  try {
+    const r = await fetch('./txt/manifest.json', { cache: 'no-cache' });
+    if (!r.ok) throw new Error('manifest ' + r.status);
+    manifest = await r.json();
+  } catch (e) {
+    console.info('No module manifest — running with built-in features only.');
+    return;
+  }
+  const mods = (manifest && manifest.modules) || [];
+  for (const m of mods) {
+    if (!m || !m.id || !m.entry || _manifestById.has(m.id)) continue;
+    _manifestById.set(m.id, m);
+    try {
+      if (m.type === 'widget') registerWidgetStub(m);
+      else if (m.type === 'script') registerScriptStub(m);
+      else if (m.type === 'plugin') maybeLoadPlugin(m);
+      else if (m.type === 'config') loadConfigModule(m);
+    } catch (err) { console.error('module register failed:', m.id, err); }
+  }
+  // Refresh an open picker so newly-registered metadata shows immediately.
+  try { if (typeof pickerOpen !== 'undefined' && pickerOpen) renderPickerList(); } catch {}
+}
+// Gated/optional editor plugin: register a toggle Setting; registerSetting calls
+// apply() with the stored value immediately, so an enabled plugin loads eagerly.
+function maybeLoadPlugin(m) {
+  if (m.settingKey) {
+    registerSetting({
+      key: m.settingKey, label: m.name || m.id, type: 'toggle',
+      default: !!m.default, section: m.section || 'Plugins', hint: m.description || '',
+      apply(on) {
+        if (on) loadModule(m).catch(() => {});
+        else if (typeof __unregisterPlugin === 'function' && m.id) __unregisterPlugin(m.id);
+      },
+    });
+  } else if (m.eager) {
+    loadModule(m).catch(() => {});
+  }
+}
+// Config module: a .json file is fetched into Cade._configs[id]; a .js file is
+// loaded like any module (it calls Cade.registerSetting / reads Cade.* itself).
+window.Cade._configs = window.Cade._configs || {};
+function loadConfigModule(m) {
+  if (/\.json($|\?)/.test(m.entry)) {
+    fetch('./txt/' + m.entry).then(r => r.ok ? r.json() : null).then(j => { if (j != null) window.Cade._configs[m.id] = j; }).catch(() => {});
+  } else {
+    loadModule(m).catch(() => {});
+  }
+}
+window.bootModules = bootModules;
+// Kick off after the current synchronous boot completes (editor/WIDGETS/scripts/
+// Settings all exist by now). Non-blocking — built-ins render instantly.
+setTimeout(() => { try { bootModules(); } catch (e) { console.error(e); } }, 0);
 
 
 </script>
