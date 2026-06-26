@@ -10722,11 +10722,23 @@ function _roomIsGlobal(name) {
   return getRoomWorkspaceIds(name).some(id => workspaceIsGlobal(id));
 }
 
+// VISIBILITY predicate: does this room SHOW in `wsId`'s view? Global-workspace
+// rooms show everywhere (F1). Use this for filtering tab/dropdown lists.
 function roomInWorkspace(name, wsId) {
   if (wsId === WS_ALL) return true;
   if (wsId === WS_UNLABELED) return roomIsUnlabeled(name);
   // Rooms in a global workspace appear under every (real) workspace (F1).
   if (_roomIsGlobal(name)) return true;
+  return getRoomWorkspaceIds(name).includes(wsId);
+}
+
+// MEMBERSHIP predicate: is this room ACTUALLY tagged into `wsId`? Unlike
+// roomInWorkspace, a global room is NOT a member of every workspace — so the
+// membership menu's checkmarks and add/remove toggle stay correct (it can still
+// be tagged into more workspaces). Use this for membership UI, not filtering.
+function roomIsMemberOf(name, wsId) {
+  if (wsId === WS_UNLABELED) return roomIsUnlabeled(name);
+  if (wsId === WS_ALL) return false;
   return getRoomWorkspaceIds(name).includes(wsId);
 }
 
@@ -11028,7 +11040,9 @@ function moveRoomToWorkspace(roomName, wsId) {
 // Multi-membership toggle for the tag-style picker (Feature 51).
 function toggleRoomWorkspace(roomName, wsId) {
   if (!rooms.includes(roomName)) return;
-  if (roomInWorkspace(roomName, wsId)) removeRoomFromWorkspace(roomName, wsId);
+  // Toggle ACTUAL membership, not visibility — a global room can still be tagged
+  // into more workspaces even though it shows in all of them.
+  if (roomIsMemberOf(roomName, wsId)) removeRoomFromWorkspace(roomName, wsId);
   else addRoomToWorkspace(roomName, wsId);
   saveWorkspaces();
 }
@@ -11420,7 +11434,7 @@ window.closeActionMenu = function() {
 function _roomWsToggleItems(roomName, er, esc) {
   let wsItems = '';
   workspaces.slice().sort((a, b) => (a.order ?? 0) - (b.order ?? 0)).forEach(w => {
-    const on = roomInWorkspace(roomName, w.id);
+    const on = roomIsMemberOf(roomName, w.id);
     const colorClass = 'ws-color-' + (WS_COLORS.includes(w.color) ? w.color : 'neutral');
     wsItems += `<div class="rm-action-item ${colorClass} ${on ? 'current' : ''}" onclick="toggleRoomWsFromMenu('${er}', '${esc(w.id)}')">
       <span class="rm-action-dot"></span>${escapeHtml(w.name)}${on ? ' ✓' : ''}
@@ -11925,15 +11939,12 @@ window.generateShareLink = async function(kind) {
         payload = JSON.stringify({ v: 1, r: roomName, t: text });
       }
       const bytes = await _compress(new TextEncoder().encode(payload));
-      // Carry the same ws/room deep params as the synced link (B5) so a public
-      // link also lands in the right-named room context, not just /txt.html.
-      const purl = new URL(base);
-      let _pws = 'all';
-      if (activeWorkspace === WS_UNLABELED) _pws = 'unlabeled';
-      else if (activeWorkspace !== WS_ALL) { const w = getWorkspace(activeWorkspace); if (w) _pws = w.name; }
-      purl.searchParams.set('ws', _pws);
-      purl.searchParams.set('room', roomName);
-      link = purl.toString() + '#p=' + _bytesToB64Url(bytes);
+      // NOTE: public links deliberately carry NO ?ws/?room deep params. The
+      // on-load deep-link bootstrap would consume them before the #p= payload is
+      // decrypted — switching/connecting to that room (and, for a password link,
+      // doing so even if the recipient cancels the prompt). The room name travels
+      // inside the encrypted payload instead and is applied only after import.
+      link = base + '#p=' + _bytesToB64Url(bytes);
       const kb = (link.length / 1024).toFixed(1);
       hint.textContent = (pw ? '🔒 Password-protected. ' : '') + 'Anyone with the link' + (pw ? ' and password' : '') + ' can read this copy — it does not sync. Link size: ' + kb + ' KB.';
       if (link.length > 28000) hint.textContent += ' ⚠ Very long; some chat apps may truncate it.';
@@ -13449,24 +13460,10 @@ function _onEditorUpdate(update) {
   }
 }
 
-// Clock setting (toggle + extra timezones).
-try {
-  if (typeof registerSetting === 'function') {
-    registerSetting({ key: 'widgets.clock', label: 'Footer clock', type: 'toggle', default: false, section: 'Appearance', apply(v) { setClockEnabled(!!v); } });
-    registerSetting({ key: 'widgets.clockTz', label: 'Extra timezones', type: 'text', default: '', section: 'Appearance', hint: 'Comma-separated IANA names, e.g. America/New_York, Europe/London', apply() { if (document.getElementById('footer-clock')) clockTick(); } });
-    registerSetting({ key: 'widgets.timerFlashUntilAck', label: 'Timer flashes until acknowledged', type: 'toggle', default: true, section: 'Behavior', hint: 'When a timer fires, keep flashing the popup until you click it / press Stop / close it.' });
-    registerSetting({ key: 'widgets.timerMinimizeOnClose', label: 'Minimize running timer on close', type: 'toggle', default: true, section: 'Behavior', hint: 'Closing the timer while it is running keeps it going as a footer chip instead of stopping it.' });
-    // F2 — snapshot retention. Auto-discard snapshots older than the chosen
-    // window (the newest is always kept). Storage is also capped per-room by
-    // count + bytes; this adds a time-based sweep on top.
-    registerSetting({ key: 'snapshots.maxAgeDays', label: 'Auto-delete old snapshots', type: 'select', default: '0', section: 'Behavior', hint: 'Discard a document’s snapshots older than this (the most recent is always kept). Use Snapshots → Manage storage to clear by size across all rooms.', options: [
-      { value: '0', label: 'Keep all' },
-      { value: '1', label: 'Older than 1 day' },
-      { value: '7', label: 'Older than 7 days' },
-      { value: '30', label: 'Older than 30 days' },
-    ] });
-  }
-} catch {}
+// NOTE: widget/clock/timer/snapshot/mobile settings are registered AFTER the
+// Settings module is initialized (see "Deferred widget settings" below). They
+// can't be registered here — `registerSetting` is a const declared later, so
+// this point is in its temporal dead zone.
 
 // Restore open widgets from last session.
 setTimeout(() => {
@@ -13832,12 +13829,8 @@ function renderMobileMdRow() {
     .split(',').map(s => s.trim()).filter(k => MD_BTN_DEFS[k]);
   row.innerHTML = keys.map(k => '<button class="mob-btn mob-md-btn" title="' + MD_BTN_DEFS[k].title + '" onclick="mdBtn(\'' + k + '\')">' + MD_BTN_DEFS[k].label + '</button>').join('');
 }
-try {
-  if (typeof registerSetting === 'function') {
-    registerSetting({ key: 'mobile.mdRow', label: 'Mobile markdown toolbar row', type: 'toggle', default: false, section: 'Behavior', apply() { try { renderMobileMdRow(); } catch {} } });
-    registerSetting({ key: 'mobile.mdButtons', label: 'Markdown row buttons', type: 'text', default: 'bold,italic,head,list,todo,code,link', section: 'Behavior', hint: 'Comma list: bold, italic, code, head, list, todo, quote, link', apply() { try { renderMobileMdRow(); } catch {} } });
-  }
-} catch {}
+// (mobile markdown-row settings are registered in "Deferred widget settings"
+// below, after the Settings module exists — see note above.)
 
 // ============================================
 // EMBEDDED IMAGES: paste/insert, compress, garbage-collect (#28)
@@ -14439,6 +14432,27 @@ window.Settings = Settings;
 window.registerSetting = registerSetting;
 // Convenience for openSettings() to re-render the auto section.
 function renderSettingsSections() { Settings._render(); }
+
+// ---- Deferred widget settings ----
+// These were authored earlier in the file but MUST register here: registerSetting
+// is a const initialized just above, so any call before this point hits its
+// temporal dead zone and the surrounding try/catch silently drops the setting.
+try {
+  registerSetting({ key: 'widgets.clock', label: 'Footer clock', type: 'toggle', default: false, section: 'Appearance', apply(v) { setClockEnabled(!!v); } });
+  registerSetting({ key: 'widgets.clockTz', label: 'Extra timezones', type: 'text', default: '', section: 'Appearance', hint: 'Comma-separated IANA names, e.g. America/New_York, Europe/London', apply() { if (document.getElementById('footer-clock')) clockTick(); } });
+  registerSetting({ key: 'widgets.timerFlashUntilAck', label: 'Timer flashes until acknowledged', type: 'toggle', default: true, section: 'Behavior', hint: 'When a timer fires, keep flashing the popup until you click it / press Stop / close it.' });
+  registerSetting({ key: 'widgets.timerMinimizeOnClose', label: 'Minimize running timer on close', type: 'toggle', default: true, section: 'Behavior', hint: 'Closing the timer while it is running keeps it going as a footer chip instead of stopping it.' });
+  // F2 — snapshot retention. Auto-discard snapshots older than the chosen window
+  // (the newest is always kept). Storage is also capped per-room by count + bytes.
+  registerSetting({ key: 'snapshots.maxAgeDays', label: 'Auto-delete old snapshots', type: 'select', default: '0', section: 'Behavior', hint: 'Discard a document’s snapshots older than this (the most recent is always kept). Use Snapshots → Manage storage to clear by size across all rooms.', options: [
+    { value: '0', label: 'Keep all' },
+    { value: '1', label: 'Older than 1 day' },
+    { value: '7', label: 'Older than 7 days' },
+    { value: '30', label: 'Older than 30 days' },
+  ] });
+  registerSetting({ key: 'mobile.mdRow', label: 'Mobile markdown toolbar row', type: 'toggle', default: false, section: 'Behavior', apply() { try { renderMobileMdRow(); } catch {} } });
+  registerSetting({ key: 'mobile.mdButtons', label: 'Markdown row buttons', type: 'text', default: 'bold,italic,head,list,todo,code,link', section: 'Behavior', hint: 'Comma list: bold, italic, code, head, list, todo, quote, link', apply() { try { renderMobileMdRow(); } catch {} } });
+} catch (e) { console.error('widget settings register failed', e); }
 
 // ---- Register the line-wrap mode setting (Feature 23 / item 3) ----
 registerSetting({
