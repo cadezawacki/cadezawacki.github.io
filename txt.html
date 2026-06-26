@@ -5129,23 +5129,36 @@ buildImageDecorations     = (o => v => __timed('image',     () => o(v)))(buildIm
 // keep registered extensions in _pluginExtensions (the single source of truth)
 // held by pluginCompartment; buildEditorExtensions() seeds the compartment from
 // it on every rebuild, so injected plugins persist across room switches.
-const _pluginExtensions = [];                 // [{__cadeId, ext}] source of truth
+const _pluginExtensions = [];                 // [{__cadeId, ext}] = currently active
+const _pluginRegistry = new Map();            // id -> ext (persists across enable/disable)
 const pluginCompartment = new Compartment();
 function _pluginExts() { return _pluginExtensions.map(e => e.ext); }
+function _pluginReconfigure() {
+  try { window.editor.dispatch({ effects: pluginCompartment.reconfigure(_pluginExts()) }); } catch (e) { console.error('plugin reconfigure failed', e); }
+}
 function __registerPlugin(spec) {
   if (!spec || spec.ext == null) return;
-  if (spec.id && _pluginExtensions.some(e => e.__cadeId === spec.id)) return; // dedupe by id
-  _pluginExtensions.push({ __cadeId: spec.id || ('p' + _pluginExtensions.length), ext: spec.ext });
-  try { window.editor.dispatch({ effects: pluginCompartment.reconfigure(_pluginExts()) }); } catch (e) { console.error('registerPlugin failed', e); }
+  const id = spec.id || ('p' + _pluginExtensions.length);
+  _pluginRegistry.set(id, spec.ext);          // remember even if later disabled
+  if (_pluginExtensions.some(e => e.__cadeId === id)) return; // already active — dedupe
+  _pluginExtensions.push({ __cadeId: id, ext: spec.ext });
+  _pluginReconfigure();
 }
-function __unregisterPlugin(id) {
+function __unregisterPlugin(id) {              // disable but keep it in the registry
   const i = _pluginExtensions.findIndex(e => e.__cadeId === id);
   if (i < 0) return;
   _pluginExtensions.splice(i, 1);
-  try { window.editor.dispatch({ effects: pluginCompartment.reconfigure(_pluginExts()) }); } catch {}
+  _pluginReconfigure();
+}
+function __enablePlugin(id) {                  // re-activate a previously-loaded plugin
+  if (!_pluginRegistry.has(id) || _pluginExtensions.some(e => e.__cadeId === id)) return;
+  _pluginExtensions.push({ __cadeId: id, ext: _pluginRegistry.get(id) });
+  _pluginReconfigure();
 }
 window.__registerPlugin = __registerPlugin;
 window.__unregisterPlugin = __unregisterPlugin;
+window.__enablePlugin = __enablePlugin;
+window.__pluginLoaded = (id) => _pluginRegistry.has(id);
 
 function buildEditorExtensions() {
   return [
@@ -15540,8 +15553,14 @@ function maybeLoadPlugin(m) {
       key: m.settingKey, label: m.name || m.id, type: 'toggle',
       default: !!m.default, section: m.section || 'Plugins', hint: m.description || '',
       apply(on) {
-        if (on) loadModule(m).catch(() => {});
-        else if (typeof __unregisterPlugin === 'function' && m.id) __unregisterPlugin(m.id);
+        if (on) {
+          // Already loaded once? Re-activate the stored extension (the module
+          // script load is deduped, so it won't re-run registerPlugin).
+          if (window.__pluginLoaded(m.id)) window.__enablePlugin(m.id);
+          else loadModule(m).catch(() => {});
+        } else {
+          window.__unregisterPlugin(m.id);
+        }
       },
     });
   } else if (m.eager) {
