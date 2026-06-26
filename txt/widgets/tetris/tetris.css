@@ -1,0 +1,2 @@
+.tetris-canvas { display: block; border-radius: 8px; background: #0c0e12; touch-action: none; width: 140px; max-width: 50vw; }
+.tetris-status { display: flex; justify-content: space-between; align-items: center; margin-top: 6px; font-size: var(--text-xs); color: var(--text-muted); gap: 10px; }

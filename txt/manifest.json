@@ -1,7 +1,37 @@
 {
   "schema": 1,
-  "version": "2026.06.26-3",
+  "version": "2026.06.26-4",
   "modules": [
+    {
+      "id": "g2048",
+      "type": "widget",
+      "name": "2048",
+      "description": "Slide & merge tiles to reach 2048",
+      "icon": "🔢",
+      "tags": "game,2048,puzzle,numbers,train,fun",
+      "entry": "widgets/g2048/g2048.js",
+      "css": "widgets/g2048/g2048.css"
+    },
+    {
+      "id": "snake",
+      "type": "widget",
+      "name": "Snake",
+      "description": "Classic snake — eat, grow, survive",
+      "icon": "🐍",
+      "tags": "game,snake,arcade,train,fun",
+      "entry": "widgets/snake/snake.js",
+      "css": "widgets/snake/snake.css"
+    },
+    {
+      "id": "tetris",
+      "type": "widget",
+      "name": "Tetris",
+      "description": "Stack falling blocks, clear lines",
+      "icon": "🧱",
+      "tags": "game,tetris,blocks,puzzle,train,fun",
+      "entry": "widgets/tetris/tetris.js",
+      "css": "widgets/tetris/tetris.css"
+    },
     {
       "id": "outline",
       "type": "widget",
