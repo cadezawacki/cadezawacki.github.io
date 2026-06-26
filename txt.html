@@ -1530,9 +1530,13 @@ body {
   position: absolute;
   top: var(--menubar-h);
   left: 0;
-  right: 0;
-  /* Full-width opaque band in the editor's own colour so text scrolling up
-     disappears BEHIND the toolbar instead of peeking through the gap. */
+  /* Stop short of the editor scrollbar (14px, see .cm-scroller) so the band's
+     opaque background doesn't paint over / clip the scroll thumb. No prose
+     reaches that far right (the editor keeps right padding), so masking is
+     unaffected. */
+  right: 14px;
+  /* Opaque band in the editor's own colour so text scrolling up disappears
+     BEHIND the toolbar instead of peeking through the gap. */
   background: var(--bg);
   padding: 6px 0 8px;
   z-index: 50;
@@ -11665,6 +11669,13 @@ let _wsRemoteListener = null;
 let _wsAuxRef = null;          // legacy config/{fp}/workspaces — read on first load if main path empty
 let _wsLoadedFromCloud = false;
 
+// A sane ceiling for the (encrypted) workspace-config blob. Real configs are a
+// few KB; anything past this is corruption/legacy bloat. The Firebase SDK parses
+// an incoming value on the main thread and re-downloads it on every reconnect, so
+// a multi-MB blob caused multi-second blocks and eventually an out-of-memory
+// crash while idle. We refuse to write past this, and on read we skip the
+// expensive decrypt/parse and self-heal by overwriting with our compact state.
+const WS_BLOB_MAX = 256 * 1024;
 function _wsConfigPath(fp) {
   // Reserved "room name" that the UI never lets users create. Underscore prefix
   // keeps it visually distinct and Firebase rules for `rooms/*` already cover it.
@@ -11702,6 +11713,13 @@ async function pushWorkspacesNow() {
     const blob = { ts: Date.now(), workspaces, roomWorkspace };
     _wsLastWriteTs = blob.ts;
     const encrypted = await encryptText(JSON.stringify(blob), baseKey);
+    // Never publish a bloated blob — a giant value here is what spirals into the
+    // reconnect/OOM loop. Workspace config is normally a few KB.
+    if (typeof encrypted === 'string' && encrypted.length > WS_BLOB_MAX) {
+      console.warn('Workspace blob too large to sync (' + encrypted.length + 'b) — skipping push');
+      showToast('Workspace config too large to sync — not pushed', 'error', 5000);
+      return;
+    }
     await db.ref(_wsConfigPath(fp)).set(encrypted);
     store.set('cade-workspaces-ts', String(blob.ts));
   } catch (e) {
@@ -11713,6 +11731,18 @@ async function pushWorkspacesNow() {
 
 async function applyRemoteWorkspaceBlob(encrypted, baseKey, source) {
   if (!encrypted) return false;
+  // Oversized remote blob: do NOT decrypt/JSON.parse it (that's the multi-second
+  // main-thread block + memory blowup). Self-heal by overwriting it with our
+  // compact local state, but only if we actually have local data to publish — a
+  // fresh client must not wipe everyone's workspaces with an empty blob.
+  if (typeof encrypted === 'string' && encrypted.length > WS_BLOB_MAX) {
+    console.warn('Workspace blob oversized (' + encrypted.length + 'b) — ignoring to avoid OOM');
+    if (workspaces.length || Object.keys(roomWorkspace).length) {
+      store.set('cade-workspaces-ts', String(Date.now())); // ensure our heal write wins
+      schedulePushWorkspaces();
+    }
+    return false;
+  }
   try {
     __mark('sync:ws-blob(' + (typeof encrypted === 'string' ? encrypted.length : '?') + 'b)');
     const decrypted = await decryptText(encrypted, baseKey);
