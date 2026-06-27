@@ -14935,6 +14935,16 @@ try {
   // markdown buttons now that the row is merged into the main toolbar.
   registerSetting({ key: 'mobile.mdToolbar', label: 'Markdown buttons in mobile toolbar', type: 'toggle', default: true, section: 'Behavior', apply() { try { renderMobileMdRow(); } catch {} } });
   registerSetting({ key: 'mobile.mdButtons', label: 'Markdown toolbar buttons', type: 'text', default: 'bold,italic,under,head,list,todo,code,link', section: 'Behavior', hint: 'Comma list: bold, italic, under, code, head, list, todo, quote, link', apply() { try { renderMobileMdRow(); } catch {} } });
+  // One-time migration: the old default button list predates folding the
+  // hard-coded U button into the configurable set, so it lacks 'under'. Installs
+  // still on that EXACT old default get upgraded to the new default (keeping
+  // underline on mobile); any user-customised list is left untouched.
+  try {
+    if (store.get('cade-pref:mobile.mdButtons') === 'bold,italic,head,list,todo,code,link') {
+      store.set('cade-pref:mobile.mdButtons', 'bold,italic,under,head,list,todo,code,link');
+      try { renderMobileMdRow(); } catch {}
+    }
+  } catch {}
 } catch (e) { console.error('widget settings register failed', e); }
 
 // ---- Register the line-wrap mode setting (Feature 23 / item 3) ----
