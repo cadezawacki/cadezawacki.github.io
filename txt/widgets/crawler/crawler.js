@@ -856,27 +856,38 @@
       return false;
     };
 
-    // ---- optional boulder vault (carves corridors; do this BEFORE the
-    //      separator search so the gate is a true cut of the final topology) --
+    // ---- optional reward vaults (carve corridors; do this BEFORE the
+    //      separator search so the stair gate is a true cut of the final map) --
     if (!isBoss && chance(0.4)) placeBoulderVault(m, start, objects, occupied);
+    if (!isBoss && depth >= 3 && chance(0.24)) placeIceVault(m, start, objects, occupied);
+    if (!isBoss && depth >= 2 && chance(0.24)) placePortalVault(m, start, objects, occupied);
 
-    // ---- puzzle gate before the stairs (lever or key) -----------------------
+    // ---- puzzle gate before the stairs (lever / timed lever / key / runes) ---
     var puzzle = null;
     if (!isBoss && depth >= 2 && chance(0.62)) {
       var sep = findSeparator(m, start.x, start.y, stairs.x, stairs.y);
       if (sep) {
-        if (chance(0.5)) {
-          // lever gate
+        var roll = ri(4);                       // 0,1 lever  2 key  3 sequence
+        if (roll === 3 && depth < 3) roll = 0;  // runes only a little deeper
+        if (roll === 3) {
+          if (placeSequence(m, sep, stairs, objects, occupied)) puzzle = { kind: 'sequence' };
+          else roll = 0;                         // fall through to a lever if it didn't fit
+        }
+        if (roll <= 1) {
+          // lever gate — sometimes a *timed* one that slams shut behind you
           objects.push({ type: 'gate', x: sep.gx, y: sep.gy, link: 1, open: false });
           var lp = freeFloorIn(m, occupied, sep.near);
-          if (lp) { objects.push({ type: 'lever', x: lp.x, y: lp.y, link: 1, on: false });
-                    puzzle = { kind: 'lever' }; }
-        } else {
+          if (lp) {
+            var lev = { type: 'lever', x: lp.x, y: lp.y, link: 1, on: false };
+            if (depth >= 4 && chance(0.5)) { lev.timed = timedGateTurns(m, lp, stairs); puzzle = { kind: 'timed' }; }
+            else puzzle = { kind: 'lever' };
+            objects.push(lev);
+          }
+        } else if (roll === 2) {
           // locked door + key
           objects.push({ type: 'door', x: sep.gx, y: sep.gy, locked: true });
           var kp = freeFloorIn(m, occupied, sep.near);
-          if (kp) { items.push({ type: 'cons', id: 'key', x: kp.x, y: kp.y });
-                    puzzle = { kind: 'key' }; }
+          if (kp) { items.push({ type: 'cons', id: 'key', x: kp.x, y: kp.y }); puzzle = { kind: 'key' }; }
         }
       }
     }
@@ -1022,6 +1033,123 @@
       objects.push({ type: 'plate', x: x + 2, y: y + 2, link: 99, pressed: false });
       objects.push({ type: 'gate', x: x + 3, y: y, link: 99, open: false });
       objects.push({ type: 'chest', x: x + 4, y: y, opened: false, lush: true });
+      return true;
+    }
+    return false;
+  }
+
+  // ---- puzzle helpers: distance, sequence-code, ice-slide, portal vault -----
+  var SEQ_LINK = 7;
+  var SEQ_RUNES = ['🔥', '❄', '⚡', '☘', '☀', '🌙'];
+  // BFS step distance over floor tiles (objects ignored — used to size timers).
+  function mapDist(m, ax, ay, bx, by) {
+    var q = [[ax, ay, 0]], seen = {}; seen[key(ax, ay)] = 1;
+    while (q.length) { var c = q.shift(); if (c[0] === bx && c[1] === by) return c[2];
+      var nb = [[c[0] + 1, c[1]], [c[0] - 1, c[1]], [c[0], c[1] + 1], [c[0], c[1] - 1]];
+      for (var i = 0; i < 4; i++) { var nx = nb[i][0], ny = nb[i][1];
+        if (nx < 0 || ny < 0 || nx >= MW || ny >= MH || m[ny][nx] !== T_FLOOR) continue;
+        var kk = key(nx, ny); if (seen[kk]) continue; seen[kk] = 1; q.push([nx, ny, c[2] + 1]); } }
+    return -1;
+  }
+  function timedGateTurns(m, lever, stairs) {
+    var d = mapDist(m, lever.x, lever.y, stairs.x, stairs.y);
+    return Math.max(22, (d < 0 ? 30 : d) + 12);   // generous: pull, run, descend
+  }
+  // A rune-sequence lock: read the tablet, then step the plates in that order.
+  function placeSequence(m, sep, stairs, objects, occupied) {
+    var plates = [], runes = shuffle(SEQ_RUNES.slice()).slice(0, 3);
+    for (var i = 0; i < 3; i++) { var pp = freeFloorIn(m, occupied, sep.near); if (!pp) return false; plates.push(pp); }
+    var tb = freeFloorIn(m, occupied, sep.near); if (!tb) return false;
+    var ords = shuffle([0, 1, 2]);
+    objects.push({ type: 'gate', x: sep.gx, y: sep.gy, link: SEQ_LINK, open: false });
+    for (var j = 0; j < 3; j++) objects.push({ type: 'seqplate', x: plates[j].x, y: plates[j].y, rune: runes[j], ord: ords[j], lit: false, link: SEQ_LINK });
+    // tablet shows the runes in the required order
+    var order = [null, null, null]; for (var k = 0; k < 3; k++) order[ords[k]] = runes[k];
+    objects.push({ type: 'tablet', x: tb.x, y: tb.y, order: order });
+    return true;
+  }
+  // Where a slide starting at (x,y) heading (dx,dy) over ice tiles ends.
+  function slideLanding(iceSet, wallAt, x, y, dx, dy) {
+    var cx = x, cy = y;
+    while (true) {
+      var nx = cx + dx, ny = cy + dy;
+      if (wallAt(nx, ny)) break;            // wall / edge stops you
+      cx = nx; cy = ny;
+      if (!iceSet[key(cx, cy)]) break;       // slid onto solid ground — stop
+    }
+    return [cx, cy];
+  }
+  // An ice-slide vault: a frozen room where you slide until you hit a wall.
+  // Rock stoppers are randomised; we keep a layout only if a slide path lands
+  // beside the chest (verified by BFS over slide-landings).
+  function placeIceVault(m, start, objects, occupied) {
+    for (var attempt = 0; attempt < 60; attempt++) {
+      var w = 8, h = 6, x = rr(2, MW - w - 2), y = rr(2, MH - h - 2);
+      var solidOk = true;
+      for (var r = 0; r < h && solidOk; r++) for (var c = 0; c < w; c++) if (m[y + r][x + c] !== T_WALL) { solidOk = false; break; }
+      if (!solidOk) continue;
+      // interior floor cells (1..w-2, 1..h-2); border stays wall
+      var cells = [];
+      for (var iy = 1; iy < h - 1; iy++) for (var ix = 1; ix < w - 1; ix++) cells.push([x + ix, y + iy]);
+      // entry on the left edge, mid height
+      var entry = [x + 1, y + (h >> 1)];
+      // choose a handful of interior stoppers (not on the entry)
+      var stoppers = {}, sc = 2 + ri(3);
+      var pool = shuffle(cells.filter(function (c) { return !(c[0] === entry[0] && c[1] === entry[1]); }));
+      for (var s = 0; s < sc && s < pool.length; s++) stoppers[key(pool[s][0], pool[s][1])] = true;
+      // ice = interior cells that aren't stoppers
+      var iceSet = {}, iceList = [];
+      cells.forEach(function (c) { var kk = key(c[0], c[1]); if (!stoppers[kk]) { iceSet[kk] = true; iceList.push(c); } });
+      if (!iceSet[key(entry[0], entry[1])]) continue;
+      // chest on an ice cell away from entry
+      var far = shuffle(iceList.filter(function (c) { return Math.abs(c[0] - entry[0]) + Math.abs(c[1] - entry[1]) >= 4; }));
+      if (!far.length) continue;
+      var chest = far[0];
+      // a slide stops at the room border or any rock stopper (the chest sits on ice)
+      function isWall(ax, ay) { if (ax <= x || ay <= y || ax >= x + w - 1 || ay >= y + h - 1) return true; return !!stoppers[key(ax, ay)]; }
+      // BFS over slide-landings from the entry tile
+      var seen = {}, q = [[entry[0], entry[1]]]; seen[key(entry[0], entry[1])] = 1; var solved = false;
+      while (q.length) {
+        var cur = q.shift();
+        if (Math.abs(cur[0] - chest[0]) + Math.abs(cur[1] - chest[1]) === 1) { solved = true; break; }
+        var dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+        for (var di = 0; di < 4; di++) {
+          var land = slideLanding(iceSet, isWall, cur[0], cur[1], dirs[di][0], dirs[di][1]);
+          var lk = key(land[0], land[1]); if (seen[lk]) continue; seen[lk] = 1; q.push(land);
+        }
+      }
+      if (!solved) continue;
+      // commit: carve interior ice cells, connect entry to the dungeon, drop ice + chest
+      iceList.forEach(function (c) { carve(m, c[0], c[1]); });
+      carve(m, chest[0], chest[1]);
+      carve(m, entry[0] - 1, entry[1]);                       // open the west wall at the entry row
+      corridor(m, { x: entry[0] - 1, y: entry[1] }, start);   // wire it back to the dungeon
+      if (occupied(chest[0], chest[1])) continue;
+      iceList.forEach(function (c) { if (!(c[0] === chest[0] && c[1] === chest[1])) objects.push({ type: 'ice', x: c[0], y: c[1] }); });
+      objects.push({ type: 'ice', x: chest[0], y: chest[1] });
+      objects.push({ type: 'chest', x: chest[0], y: chest[1], opened: false, lush: true });
+      return true;
+    }
+    return false;
+  }
+  // A portal vault: an isolated pocket of loot reachable only via a portal pair.
+  function placePortalVault(m, start, objects, occupied) {
+    for (var attempt = 0; attempt < 50; attempt++) {
+      var w = 4, h = 3, x = rr(2, MW - w - 2), y = rr(2, MH - h - 2);
+      var solidOk = true;
+      for (var r = 0; r < h && solidOk; r++) for (var c = 0; c < w; c++) if (m[y + r][x + c] !== T_WALL) { solidOk = false; break; }
+      if (!solidOk) continue;
+      // carve the pocket (NOT connected to the dungeon — only the portal reaches it)
+      for (var iy = 0; iy < h; iy++) for (var ix = 0; ix < w; ix++) carve(m, x + ix, y + iy);
+      var pbx = x + 1, pby = y + 1, cbx = x + 2, cby = y + 1;
+      if (occupied(pbx, pby) || occupied(cbx, cby)) continue;
+      // entry portal must sit in the open map, never inside its own pocket
+      var pa = null;
+      for (var pt = 0; pt < 40; pt++) { var cand = freeFloorIn(m, occupied); if (!cand) break; if (cand.x < x || cand.x >= x + w || cand.y < y || cand.y >= y + h) { pa = cand; break; } }
+      if (!pa) continue;
+      objects.push({ type: 'tele', x: pa.x, y: pa.y, tox: pbx, toy: pby, vault: true });
+      objects.push({ type: 'tele', x: pbx, y: pby, tox: pa.x, toy: pa.y, vault: true });
+      objects.push({ type: 'chest', x: cbx, y: cby, opened: false, lush: true });
       return true;
     }
     return false;
@@ -1241,7 +1369,13 @@
       var rg = regionAt(depth);
       if (depth === regionStart(regionIndexAt(depth))) logMsg('win', rg.icon + ' ' + rg.name + ' — ' + rg.blurb);
       logMsg('', (w.isBoss ? '⚠ ' : '') + rg.name + ' · Floor ' + depth + (w.isBoss ? '. ' + rg.boss.name + ' awaits.' : '.'));
-      if (w.puzzle) logMsg('', w.puzzle.kind === 'lever' ? 'The stairs are barred. Find the lever.' : 'A locked door blocks the way. Find the key.');
+      if (w.puzzle) {
+        var pk = w.puzzle.kind;
+        logMsg('', pk === 'lever' ? 'The stairs are barred. Find the lever.'
+          : pk === 'timed' ? 'A timed gate bars the stairs — pull the lever, then run.'
+          : pk === 'sequence' ? 'Runed plates seal the stairs. Read the tablet for the order.'
+          : 'A locked door blocks the way. Find the key.');
+      }
     }
     markDirty();
     buildAbilityBar();   // keep the bar in sync with the hero's level (e.g. after a cross-device sync)
@@ -1487,6 +1621,15 @@
     }
     if (gateClosedAt(nx, ny)) { logMsg('', 'A sealed gate blocks the way.'); return false; }
     p.x = nx; p.y = ny;
+    // ice: keep sliding the same direction until something stops you
+    if (objAt(p.x, p.y, 'ice')) {
+      var guard = 0;
+      while (objAt(p.x, p.y, 'ice') && guard++ < MW + MH) {
+        var sx = p.x + dx, sy = p.y + dy;
+        if (!walkable(sx, sy) || mobAt(sx, sy) || objAt(sx, sy, 'boulder')) break;
+        p.x = sx; p.y = sy;
+      }
+    }
     afterStep();
     endTurn();
     return true;
@@ -1575,6 +1718,8 @@
     // region hazard (lava / brambles / quicksand / brine / void-fire)
     var hzo = objAt(p.x, p.y, 'hazard'), HZ = hzo && HAZARDS[hzo.kind];
     if (HZ) { hurtHero(HZ.dmg + Math.floor(world.depth / 4), 'hazard'); if (HZ.status) applyStatus(hero, HZ.status, 3); logMsg('die', 'You cross the ' + HZ.name + '!'); }
+    // rune-sequence plate — step them in the tablet's order to open the gate
+    var sq = objAt(p.x, p.y, 'seqplate'); if (sq) stepSeqPlate(sq);
     // stairs — defer the transition so the caller's endTurn doesn't run a turn
     // on the freshly-generated floor.
     if (world.mode === 'town') {
@@ -1631,6 +1776,7 @@
       var ox = spots[s][0], oy = spots[s][1];
       var npc = objAt(ox, oy, 'npc'); if (npc) { openShop(npc.role); return; }
       var lever = objAt(ox, oy, 'lever'); if (lever) { toggleLever(lever); return; }
+      var tab = objAt(ox, oy, 'tablet'); if (tab) { readTablet(tab); return; }
       var shrine = objAt(ox, oy, 'shrine'); if (shrine) { prayShrine(shrine); return; }
       var chest = objAt(ox, oy, 'chest'); if (chest && !chest.opened) { openChest(chest); return; }
       var stair = objAt(ox, oy, 'stairs'); if (stair && stair.down) { startNewRun(); return; }
@@ -1652,10 +1798,39 @@
     rest();
   }
   function toggleLever(l) {
+    if (l.timed) {
+      // a timed gate: opens now and slams shut after a countdown of moves
+      for (var t = 0; t < world.objects.length; t++) { var g = world.objects[t]; if (g.type === 'gate' && g.link === l.link) { g.open = true; g.timer = l.timed; } }
+      l.on = true;
+      logMsg('win', 'The lever drops — the gate grinds open. Run! (' + l.timed + ')');
+      fxBurst(l.x, l.y, '#ffd76a'); computeFov(); markDirty(); refreshAll(); return;
+    }
     l.on = !l.on;
     for (var i = 0; i < world.objects.length; i++) { var o = world.objects[i]; if (o.type === 'gate' && o.link === l.link && !hasPlateLink(o.link)) o.open = l.on; }
     logMsg('win', l.on ? 'The lever clunks — a gate grinds open.' : 'The lever resets.');
     fxBurst(l.x, l.y, '#c9a86b'); computeFov(); markDirty(); refreshAll();
+  }
+  function stepSeqPlate(sp) {
+    if (world._seqTotal == null) { world._seqTotal = 0; for (var i = 0; i < world.objects.length; i++) if (world.objects[i].type === 'seqplate') world._seqTotal++; }
+    if (world._seqDone) return;
+    var at = world._seqAt || 0;
+    if (sp.ord === at) {
+      sp.lit = true; world._seqAt = at + 1; fxBurst(sp.x, sp.y, '#bfe0ff');
+      if (world._seqAt >= world._seqTotal) {
+        world._seqDone = true;
+        for (var g = 0; g < world.objects.length; g++) { var o = world.objects[g]; if (o.type === 'gate' && o.link === SEQ_LINK) o.open = true; }
+        logMsg('win', 'The runes blaze in sequence — the gate opens!'); computeFov();
+      } else logMsg('win', sp.rune + ' lights up. (' + world._seqAt + '/' + world._seqTotal + ')');
+    } else {
+      world._seqAt = 0;
+      for (var k = 0; k < world.objects.length; k++) if (world.objects[k].type === 'seqplate') world.objects[k].lit = false;
+      logMsg('die', 'The runes dim — the sequence resets.'); fxBurst(sp.x, sp.y, '#7a6a8a');
+    }
+    markDirty();
+  }
+  function readTablet(tb) {
+    Cade.showToast('The tablet reads:  ' + (tb.order || []).join('  →  '), 'info', 3600);
+    logMsg('', 'Tablet: ' + (tb.order || []).join(' → '));
   }
   function openChest(c) {
     if (c.mimic) {
@@ -1948,6 +2123,10 @@
     // enemies (none in safe areas)
     if (world.mode === 'overworld') overworldTick();
     else if (world.mode !== 'town' && world.mode !== 'house') enemyTurn();
+    // timed gates count down and slam shut
+    for (var tg = 0; tg < world.objects.length; tg++) { var gt = world.objects[tg];
+      if (gt.type === 'gate' && gt.timer > 0) { gt.timer--;
+        if (gt.timer <= 0) { gt.timer = 0; if (!hasPlateLink(gt.link)) gt.open = false; logMsg('die', 'The timed gate slams shut!'); shake(4); } } }
     updatePlates();
     computeFov();
     if (hero.hp <= 0 && world.mode !== 'dead') die();
@@ -2131,6 +2310,7 @@
       case 'gate':
         if (o.open) { glyph(ctx, '╬', cx, cy, 'rgba(150,140,120,0.35)', a, 16); }
         else { ctx.globalAlpha = a; ctx.fillStyle = '#6b5a44'; for (var bx = 0; bx < 3; bx++) ctx.fillRect(px + 3 + bx * 7, py + 2, 4, TILE - 4); ctx.globalAlpha = 1; }
+        if (o.timer > 0) glyph(ctx, String(o.timer), cx, cy - TILE * 0.5, o.timer <= 5 ? '#ff6a6a' : '#ffd76a', 1, 12);
         break;
       case 'door':
         ctx.globalAlpha = a; ctx.fillStyle = o.locked ? '#8a5a3a' : '#5a4a3a'; roundRect(ctx, px + 3, py + 2, TILE - 6, TILE - 4, 3); ctx.fill();
@@ -2142,7 +2322,20 @@
         if (!o.armed) { glyph(ctx, '⚙', cx, cy, 'rgba(120,120,120,0.5)', a, 12); break; }
         if (trapHot(o)) glyph(ctx, '▲', cx, cy, '#e87a7a', a, 16); else glyph(ctx, '⬚', cx, cy, 'rgba(160,120,120,0.5)', a, 12);
         break;
-      case 'tele': glyph(ctx, '◉', cx, cy, '#a87fe0', a * (0.6 + 0.4 * Math.abs(Math.sin(now() / 400))), 18); break;
+      case 'tele': glyph(ctx, '◉', cx, cy, o.vault ? '#e0a0ff' : '#a87fe0', a * (0.6 + 0.4 * Math.abs(Math.sin(now() / 400))), 18); break;
+      case 'ice':
+        ctx.globalAlpha = a; ctx.fillStyle = '#a9d8ec'; roundRect(ctx, px + 1, py + 1, TILE - 2, TILE - 2, 4); ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,0.5)'; ctx.fillRect(px + 4, py + 4, TILE - 14, 2); ctx.fillRect(px + 8, py + 9, TILE - 18, 1.5); ctx.globalAlpha = 1; break;
+      case 'seqplate':
+        ctx.globalAlpha = a; ctx.fillStyle = o.lit ? 'rgba(120,200,255,0.35)' : 'rgba(40,48,60,0.6)';
+        roundRect(ctx, px + 3, py + 3, TILE - 6, TILE - 6, 4); ctx.fill();
+        ctx.strokeStyle = o.lit ? '#9fe0ff' : '#5a6478'; ctx.lineWidth = 2; ctx.stroke(); ctx.globalAlpha = 1;
+        glyph(ctx, o.rune, cx, cy, '#fff', a, 13); break;
+      case 'tablet':
+        ctx.globalAlpha = a; ctx.fillStyle = '#6a6052'; roundRect(ctx, px + 6, py + 3, TILE - 12, TILE - 6, 2); ctx.fill();
+        ctx.fillStyle = '#cbbfa6'; ctx.font = '8px ui-monospace, monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText('▦', cx, cy - 3); ctx.fillText('▦', cx, cy + 4); ctx.globalAlpha = 1;
+        glyph(ctx, '📜', cx, cy - TILE * 0.5, '#fff', a, 11); break;
       case 'shrine': glyph(ctx, '⛩', cx, cy, o.used ? 'rgba(150,160,180,0.45)' : '#bfe0ff', o.used ? a : a * (0.7 + 0.3 * Math.abs(Math.sin(now() / 500))), 18); break;
       case 'hazard': var HZ = HAZARDS[o.kind] || {}; ctx.globalAlpha = a * 0.45; ctx.fillStyle = HZ.col || '#888'; roundRect(ctx, px + 1, py + 1, TILE - 2, TILE - 2, 3); ctx.fill(); ctx.globalAlpha = 1; glyph(ctx, HZ.ch || '≈', cx, cy, 'rgba(0,0,0,0.5)', a, 13); break;
       case 'chest': glyph(ctx, o.opened ? '📭' : (o.lush ? '🎁' : '📦'), cx, cy, '#ffd76a', a, 16); break;
