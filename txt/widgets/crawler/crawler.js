@@ -2244,15 +2244,20 @@
     return true;
   }
   // A sweeping wave: a 3-wide lane ahead, piercing all foes for `range` tiles.
+  // Each of the three lanes advances independently and STOPS for good once it
+  // meets a wall, so the wave can't wrap a corner to hit through stone.
   function castWave(ab) {
     var p = world.player, color = spellColor(ab), perp = { x: -p.dir.y, y: p.dir.x }, healed = 0;
     var snap = world.monsters.slice();
+    var blockedL = false, blockedR = false;
     for (var i = 1; i <= ab.range; i++) {
       var bx = p.x + p.dir.x * i, by = p.y + p.dir.y * i;
-      if (bx < 0 || by < 0 || bx >= MW || by >= MH || world.map[by][bx] !== T_FLOOR) break;
+      if (bx < 0 || by < 0 || bx >= MW || by >= MH || world.map[by][bx] !== T_FLOOR) break;  // spine hits a wall — wave ends
       for (var w = -1; w <= 1; w++) {
+        if (w === -1 && blockedL) continue;
+        if (w === 1 && blockedR) continue;
         var tx = bx + perp.x * w, ty = by + perp.y * w;
-        if (tx < 0 || ty < 0 || tx >= MW || ty >= MH || world.map[ty][tx] !== T_FLOOR) continue;  // no slicing through walls
+        if (tx < 0 || ty < 0 || tx >= MW || ty >= MH || world.map[ty][tx] !== T_FLOOR) { if (w === -1) blockedL = true; else if (w === 1) blockedR = true; continue; }
         world.fx.push({ kind: 'spark', x: tx + 0.5, y: ty + 0.5, vx: 0, vy: 0, color: color, life: 1, born: now() });
         for (var k = 0; k < snap.length; k++) { var m = snap[k]; if (m.hp > 0 && m.x === tx && m.y === ty) { var dmg = spellDmg(ab.mult || 1.3), dealt = Math.min(dmg, m.hp); damageMob(m, dmg, 'spell', color); applySpellStatus(m, ab); if (ab.drain) healed += Math.floor(dealt * 0.5); } }
       }
