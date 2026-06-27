@@ -139,7 +139,8 @@
     orc:    { ch: 'o', name: 'orc',          col: '#9b7fd8', hp: 22, atk: 6,  def: 2, xp: 16, minD: 5, behavior: 'chase' },
     mage:   { ch: 'm', name: 'dark cultist', col: '#e07fb0', hp: 16, atk: 5,  def: 0, xp: 18, minD: 6, behavior: 'archer', range: 6, burn: true },
     troll:  { ch: 'T', name: 'troll',        col: '#e85d5d', hp: 36, atk: 9,  def: 3, xp: 28, minD: 7, behavior: 'chase', regen: 2 },
-    wraith: { ch: 'w', name: 'wraith',       col: '#9fd8e0', hp: 30, atk: 8,  def: 2, xp: 30, minD: 9, behavior: 'chase', erratic: 0.2 }
+    wraith: { ch: 'w', name: 'wraith',       col: '#9fd8e0', hp: 30, atk: 8,  def: 2, xp: 30, minD: 9, behavior: 'chase', erratic: 0.2 },
+    mimic:  { ch: 'M', name: 'mimic',        col: '#caa24a', hp: 26, atk: 7,  def: 2, xp: 26, minD: 99, behavior: 'chase' } // spawned only from trapped chests
   };
   var BOSSES = [
     { ch: 'K', name: 'Bone King',        col: '#f0e6c0', hp: 90,  atk: 8,  def: 3, xp: 120, behavior: 'summon', summons: 'archer' },
@@ -399,11 +400,17 @@
       }
     }
 
-    // ---- chests -------------------------------------------------------------
+    // ---- chests (some are mimics that bite back) ----------------------------
     var chestN = isBoss ? 1 : 1 + ri(2);
     for (var ch = 0; ch < chestN; ch++) {
       var cp = freeFloorIn(m, occupied);
-      if (cp) objects.push({ type: 'chest', x: cp.x, y: cp.y, opened: false });
+      if (cp) objects.push({ type: 'chest', x: cp.x, y: cp.y, opened: false, mimic: (depth >= 2 && chance(0.16)) });
+    }
+
+    // ---- shrine (one-time blessing) -----------------------------------------
+    if (!isBoss && depth >= 2 && chance(0.5)) {
+      var shp = freeFloorIn(m, occupied);
+      if (shp) objects.push({ type: 'shrine', x: shp.x, y: shp.y, used: false });
     }
 
     // ---- monsters -----------------------------------------------------------
@@ -848,6 +855,7 @@
       var ox = spots[s][0], oy = spots[s][1];
       var npc = objAt(ox, oy, 'npc'); if (npc) { openShop(npc.role); return; }
       var lever = objAt(ox, oy, 'lever'); if (lever) { toggleLever(lever); return; }
+      var shrine = objAt(ox, oy, 'shrine'); if (shrine) { prayShrine(shrine); return; }
       var chest = objAt(ox, oy, 'chest'); if (chest && !chest.opened) { openChest(chest); return; }
       var stair = objAt(ox, oy, 'stairs'); if (stair && stair.down) { startNewRun(); return; }
     }
@@ -862,6 +870,17 @@
     fxBurst(l.x, l.y, '#c9a86b'); computeFov(); markDirty(); refreshAll();
   }
   function openChest(c) {
+    if (c.mimic) {
+      c.opened = true;
+      var sx = c.x, sy = c.y;
+      if (world.player.x === sx && world.player.y === sy) { var a = adjacentFree(sx, sy); if (a) { sx = a.x; sy = a.y; } }
+      var mb = makeMob(MOBS.mimic, sx, sy, false, 1 + world.depth * 0.12, world.depth);
+      mb.awake = true;
+      world.monsters.push(mb);
+      logMsg('die', 'The chest is a MIMIC!'); shake(6); fxBurst(c.x, c.y, '#caa24a');
+      markDirty(); refreshAll();
+      return;
+    }
     c.opened = true;
     var rolls = c.lush ? 3 : 1 + ri(2);
     for (var i = 0; i < rolls; i++) {
@@ -871,6 +890,16 @@
       else { var gid = randomGearId(world.depth + (c.lush ? 3 : 1)); acquireGear(gid); var gg = gear(gid); fxText(c.x, c.y - i * 0.3, gg ? gg.icon : '?', '#fff'); }
     }
     logMsg('win', 'You open the chest!'); fxBurst(c.x, c.y, '#ffd76a'); markDirty(); refreshAll();
+  }
+  function prayShrine(s) {
+    if (s.used) { logMsg('', 'The shrine is silent now.'); return; }
+    s.used = true;
+    var r = Math.random();
+    if (r < 0.45) { hero.hp = maxHpOf(); hero.mp = maxMpOf(); logMsg('win', 'The shrine restores you fully.'); fxText(s.x, s.y, 'restored', '#9fe0a0'); }
+    else if (r < 0.72) { var g = 20 + world.depth * 10; hero.gold += g; hero.hp = maxHpOf(); logMsg('win', 'A blessing of fortune: +' + g + ' gold.'); fxText(s.x, s.y, '+' + g + 'g', '#ffd76a'); }
+    else if (r < 0.9) { hero.maxHp += 3; hero.hp = maxHpOf(); logMsg('win', 'Vitality surges — +3 max HP!'); fxText(s.x, s.y, '+3 HP', '#9fe0a0'); }
+    else { hero.atk += 1; logMsg('win', 'A gift of strength — +1 ATK!'); fxText(s.x, s.y, '+1 ATK', '#ffd2d2'); }
+    fxBurst(s.x, s.y, '#9fd8ff'); Cade.haptic(8); markDirty(); refreshAll();
   }
 
   // ---- consumables ----------------------------------------------------------
@@ -1255,6 +1284,7 @@
         if (trapHot(o)) glyph(ctx, '▲', cx, cy, '#e87a7a', a, 16); else glyph(ctx, '⬚', cx, cy, 'rgba(160,120,120,0.5)', a, 12);
         break;
       case 'tele': glyph(ctx, '◉', cx, cy, '#a87fe0', a * (0.6 + 0.4 * Math.abs(Math.sin(now() / 400))), 18); break;
+      case 'shrine': glyph(ctx, '⛩', cx, cy, o.used ? 'rgba(150,160,180,0.45)' : '#bfe0ff', o.used ? a : a * (0.7 + 0.3 * Math.abs(Math.sin(now() / 500))), 18); break;
       case 'chest': glyph(ctx, o.opened ? '📭' : (o.lush ? '🎁' : '📦'), cx, cy, '#ffd76a', a, 16); break;
       case 'npc': glyph(ctx, o.icon, cx, cy, o.col, 1, 18);
         ctx.globalAlpha = 0.8; ctx.fillStyle = o.col; ctx.font = '9px ui-monospace, monospace'; ctx.textAlign = 'center'; ctx.fillText(o.name, cx, cy + 14); ctx.globalAlpha = 1; break;
@@ -1420,7 +1450,8 @@
     var ov = mkOverlay('Character');
     var body = ov.querySelector('.cr-ov-body');
     var html = '<div class="cr-sheet">';
-    html += '<div class="cr-sheet-row"><b>' + Cade.escapeHtml(hero.name) + '</b> · Level ' + hero.level + '</div>';
+    html += '<div class="cr-sheet-row"><b>' + Cade.escapeHtml(hero.name) + '</b> · Level ' + hero.level +
+      ' <button class="cr-rename" data-rename="1">✏ rename</button></div>';
     html += '<div class="cr-grid2">' +
       stat('❤ Max HP', maxHpOf()) + stat('✦ Max MP', maxMpOf()) +
       stat('⚔ Attack', atkOf()) + stat('🛡 Defense', defOf()) +
@@ -1437,6 +1468,13 @@
     body.innerHTML = html;
     var btns = body.querySelectorAll('[data-eq]');
     for (var i = 0; i < btns.length; i++) (function (btn) { btn.addEventListener('click', function () { var id = btn.getAttribute('data-eq'); var g = gear(id); hero.equip[g.slot] = id; hero.hp = clamp(hero.hp, 0, maxHpOf()); hero.mp = clamp(hero.mp, 0, maxMpOf()); markDirty(); refreshAll(); openCharacter(); }); })(btns[i]);
+    var rn = body.querySelector('[data-rename]');
+    if (rn) rn.addEventListener('click', function () {
+      var v = window.prompt('Name your delver:', hero.name);
+      if (v == null) return;
+      v = String(v).replace(/[<>]/g, '').trim().slice(0, 24);
+      if (v) { hero.name = v; markDirty(); refreshAll(); openCharacter(); }
+    });
   }
   function stat(label, val) { return '<div class="cr-stat"><span>' + label + '</span><b>' + val + '</b></div>'; }
   function eqSlot(slot) { var g = gear(hero.equip[slot]); return '<div class="cr-eqslot"><div class="cr-eqic">' + (g ? g.icon : '·') + '</div><div class="cr-eqnm">' + (g ? g.name : '—') + '</div></div>'; }
@@ -1564,6 +1602,7 @@
       atk: hero.atk, def: hero.def, crit: hero.crit, gold: hero.gold,
       depth: hero.depth, maxDepth: hero.maxDepth, equip: hero.equip, bag: hero.bag,
       owned: hero.owned, stats: hero.stats, _wlvl: hero._wlvl || 0, _alvl: hero._alvl || 0,
+      _konami: hero._konami || false,
       createdAt: hero.createdAt, updatedAt: Date.now(), rev: hero.rev, client: clientId
     };
   }
@@ -1680,6 +1719,31 @@
   // =========================================================================
   //  input
   // =========================================================================
+  // ---- Konami easter egg ----------------------------------------------------
+  var konamiBuf = [];
+  var KONAMI = ['arrowup', 'arrowup', 'arrowdown', 'arrowdown', 'arrowleft', 'arrowright', 'arrowleft', 'arrowright', 'b', 'a'];
+  function konamiPush(k) {
+    if (!k) return;
+    konamiBuf.push(k.toLowerCase());
+    if (konamiBuf.length > KONAMI.length) konamiBuf.shift();
+    if (konamiBuf.length < KONAMI.length) return;
+    for (var i = 0; i < KONAMI.length; i++) if (konamiBuf[i] !== KONAMI[i]) return;
+    konamiBuf.length = 0; konamiReward();
+  }
+  function konamiReward() {
+    if (!hero) return;
+    if (!hero._konami) {
+      hero._konami = true; acquireGear('lucky');
+      Cade.showToast('🍀 The Delver’s Blessing — a Lucky Clover appears!', 'success', 3000);
+      logMsg('win', 'A four-leaf clover materializes in your pack!');
+    } else {
+      hero.hp = maxHpOf(); hero.mp = maxMpOf();
+      Cade.showToast('🍀 Fully restored.', 'success', 1800);
+    }
+    if (world && world.player) fxBurst(world.player.x, world.player.y, '#7fe08a');
+    markDirty(); refreshAll();
+  }
+
   function isTyping(e) {
     var t = e.target; if (!t) return false;
     var tag = t.tagName;
@@ -1695,6 +1759,7 @@
     // only act when the game itself holds focus, or focus is on nothing special.
     if (!pan.contains(document.activeElement) && isTyping(e)) return;
     var k = e.key;
+    konamiPush(k);
     if (k === 'Escape') { if (document.getElementById('cr-overlay')) { e.preventDefault(); closeOverlay(); return; } e.preventDefault(); close(); return; }
     if (document.getElementById('cr-overlay')) return; // overlay captures nothing else
     if (world && world.mode === 'dead') { if (k === ' ' || k === 'Enter') { e.preventDefault(); enter(0); } return; }
