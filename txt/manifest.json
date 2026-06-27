@@ -1,14 +1,14 @@
 {
   "schema": 1,
-  "version": "2026.06.26-5",
+  "version": "2026.06.26-9",
   "modules": [
     {
       "id": "crawler",
       "type": "widget",
       "name": "Dungeon Crawler",
-      "description": "A tiny roguelike — explore, fight, descend",
+      "description": "Deepdelve — a puzzle-action roguelite with an enduring, synced character",
       "icon": "⚔",
-      "tags": "game,roguelike,dungeon,crawler,rpg,adventure,train,fun",
+      "tags": "game,roguelike,dungeon,crawler,rpg,adventure,puzzle,action,deepdelve,train,fun",
       "entry": "widgets/crawler/crawler.js",
       "css": "widgets/crawler/crawler.css"
     },
