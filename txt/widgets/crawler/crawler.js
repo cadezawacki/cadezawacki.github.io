@@ -39,6 +39,14 @@
   var CW = VW * TILE, CH = VH * TILE;
   var LIGHT = 6;                   // torch radius
   var PRICE_MULT = 1.5;            // shops charge above base; you sell back at 0.4× base
+  var DIFFS = {
+    relaxed:   { name: 'Relaxed',   hp: 0.7, atk: 0.7, rew: 0.85, elite: 0.6 },
+    normal:    { name: 'Normal',    hp: 1.0, atk: 1.0, rew: 1.0,  elite: 1.0 },
+    hard:      { name: 'Hard',      hp: 1.45, atk: 1.35, rew: 1.35, elite: 1.5 },
+    nightmare: { name: 'Nightmare', hp: 2.0, atk: 1.7, rew: 1.8,  elite: 2.2 }
+  };
+  var DIFF_ORDER = ['relaxed', 'normal', 'hard', 'nightmare'];
+  function diff() { return DIFFS[hero && hero.difficulty] || DIFFS.normal; }
 
   // ---- tile codes ------------------------------------------------------------
   var T_WALL = 0, T_FLOOR = 1, T_CRACK = 2; // crack = bombable wall
@@ -402,6 +410,7 @@
       cosmetics: { color: 'cyan', hat: 'none', cape: 'none' },
       ownedCos: ['color:cyan', 'hat:none', 'cape:none'],
       quests: [], questsDone: 0,
+      difficulty: 'normal',
       buffs: {},
       stats: { kills: 0, deaths: 0, floors: 0, gems: 0, runs: 0 },
       createdAt: Date.now(), updatedAt: Date.now(), rev: 1, client: clientId
@@ -662,7 +671,9 @@
         if (!sp) continue;
         // bias toward tougher mobs deeper
         var idp = avail[clamp(ri(avail.length) + (chance(0.3) ? 1 : 0), 0, avail.length - 1)];
-        monsters.push(makeMob(MOBS[idp], sp.x, sp.y, false, 1 + depth * 0.05, depth));
+        var mob = makeMob(MOBS[idp], sp.x, sp.y, false, 1 + depth * 0.05, depth);
+        if (depth >= 2 && chance((0.08 + depth * 0.008) * diff().elite)) eliteify(mob);
+        monsters.push(mob);
       }
     }
 
@@ -693,15 +704,34 @@
 
   function makeMob(def, x, y, boss, scale, depth) {
     scale = scale || 1;
+    var dm = diff(), hp = Math.round(def.hp * scale * dm.hp);
     return {
       x: x, y: y, rx: x, ry: y, ch: def.ch, name: def.name, col: def.col,
-      hp: Math.round(def.hp * scale), maxHp: Math.round(def.hp * scale),
-      atk: Math.round(def.atk * (boss ? scale : Math.min(scale, 1 + depth * 0.04))), def: def.def || 0,
+      hp: hp, maxHp: hp,
+      atk: Math.max(1, Math.round(def.atk * (boss ? scale : Math.min(scale, 1 + depth * 0.04)) * dm.atk)), def: def.def || 0,
       xp: Math.round(def.xp * (boss ? 1 : scale)), behavior: def.behavior, range: def.range || 1,
       erratic: def.erratic || 0, boom: def.boom || 0, regen: def.regen || 0,
       summons: def.summons || null, burn: !!def.burn, poison: !!def.poison,
       boss: !!boss, status: {}, awake: false, hit: 0, bump: 0
     };
+  }
+  // ---- elite monsters: random affixes, tougher, better loot -----------------
+  var ELITE_AFFIX = [
+    { id: 'tough',     name: 'Tough',     fn: function (m) { m.maxHp = Math.round(m.maxHp * 1.8); m.hp = m.maxHp; } },
+    { id: 'fierce',    name: 'Fierce',    fn: function (m) { m.atk = Math.round(m.atk * 1.5); } },
+    { id: 'swift',     name: 'Swift',     fn: function (m) { m.swift = true; } },
+    { id: 'venomous',  name: 'Venomous',  fn: function (m) { m.poison = true; } },
+    { id: 'fiery',     name: 'Fiery',     fn: function (m) { m.burn = true; } },
+    { id: 'vampiric',  name: 'Vampiric',  fn: function (m) { m.vamp = true; } },
+    { id: 'explosive', name: 'Explosive', fn: function (m) { m.boom = Math.max(m.boom || 0, 10); } },
+    { id: 'warded',    name: 'Warded',    fn: function (m) { m.ward = 0.4; } }
+  ];
+  function eliteify(m) {
+    m.elite = true; m.eliteAffix = [];
+    var pool = shuffle(ELITE_AFFIX.slice()), n = 1 + (chance(0.4) ? 1 : 0);
+    for (var i = 0; i < n && i < pool.length; i++) { pool[i].fn(m); m.eliteAffix.push(pool[i].name); }
+    m.name = m.eliteAffix.join(' ') + ' ' + m.name;
+    m.xp = Math.round(m.xp * 2.2);
   }
 
   // A hand-laid, guaranteed-solvable boulder vault carved into solid rock and
@@ -878,6 +908,7 @@
     target.status[kind] = Math.max(target.status[kind] || 0, turns);
   }
   function damageMob(m, dmg, kind, color) {
+    if (m.ward) dmg = Math.max(1, Math.ceil(dmg * (1 - m.ward)));
     m.hp -= dmg; m.hit = now();
     fxText(m.x, m.y, '-' + dmg, color || '#ffd2d2');
     if (m.hp <= 0) killMob(m, kind);
@@ -887,7 +918,8 @@
     world.monsters.splice(idx, 1);
     hero.stats.kills++; questProgress('kills', 1);
     fxBurst(m.x, m.y, m.col);
-    gainXp(m.xp);
+    gainXp(Math.round(m.xp * diff().rew));
+    if (m.elite) { logMsg('win', 'Elite slain: ' + m.name + '!'); var ep = adjacentFree(m.x, m.y) || { x: m.x, y: m.y }; world.items.push({ type: 'gear', item: generateItem(null, world.depth + 2, 1.2), x: ep.x, y: ep.y }); world.items.push({ type: 'gold', x: m.x, y: m.y, amt: (6 + ri(8)) * Math.max(1, world.depth) }); }
     if (m.boss) { questProgress('boss', 1); logMsg('win', 'The ' + m.name + ' falls! The way down opens.'); shake(10);
       // boss drops: gold + guaranteed gear + gem
       world.items.push({ type: 'gold', x: m.x, y: m.y, amt: 40 + world.depth * 7 });
@@ -934,13 +966,20 @@
     var base = Math.max(1, Math.round(atkOf() * (mult || 1)) - m.def + rr(-1, 2));
     var crit = chance(critOf());
     if (crit) base = Math.round(base * 1.8);
+    // SHATTER synergy: striking a frozen/stunned foe deals +60% and breaks it
+    var st0 = m.status || {};
+    if (st0.stun > 0) { base = Math.round(base * 1.6); fxText(m.x, m.y - 0.3, 'SHATTER!', '#9fd8ff'); st0.stun = 0; }
     var dealt = Math.min(base, m.hp);
     damageMob(m, base, 'melee', crit ? '#ffec80' : '#ffd2d2');
     if (crit) fxText(m.x, m.y - 0.3, 'CRIT!', '#ffec80');
     lifestealHeal(dealt);
     var dead = m.hp <= 0;
     if (!dead && w.poison && chance(w.poison)) { applyStatus(m, 'poison', 4); fxText(m.x, m.y, 'poison', '#7fe0a0'); }
-    if (!dead && w.burn && chance(w.burn)) { applyStatus(m, 'burn', 3); fxText(m.x, m.y, 'burn', '#ffb060'); }
+    if (!dead && w.burn && chance(w.burn)) {
+      // COMBUST synergy: igniting a poisoned foe detonates the venom
+      if (m.status && m.status.poison > 0) { damageMob(m, Math.round(atkOf() * 0.9), 'combust', '#ff9050'); fxText(m.x, m.y - 0.3, 'COMBUST!', '#ff9050'); dead = m.hp <= 0; }
+      if (!dead) { applyStatus(m, 'burn', 3); fxText(m.x, m.y, 'burn', '#ffb060'); }
+    }
     var st = (w.stun || 0) + (w.freeze || 0) + (extraStun || 0);
     if (!dead && st && chance(st)) { applyStatus(m, 'stun', 2); fxText(m.x, m.y, w.freeze ? 'frozen' : 'stun', '#9fd8ff'); }
     if (w.cleave) cleaveAround(m, Math.max(1, Math.round(base * w.cleave)));
@@ -1311,6 +1350,19 @@
   }
   function hurtHeroSilent(d) { hero.hp -= d; fxText(world.player.x, world.player.y, '-' + d, '#c0ffb0'); if (hero.hp <= 0) die(); }
 
+  function actMob(m) {
+    var dist = cheb(m.x, m.y, world.player.x, world.player.y);
+    if (m.behavior === 'archer') archerAct(m, dist);
+    else if (m.behavior === 'thief') thiefAct(m, dist);
+    else if (m.behavior === 'summon') summonAct(m, dist);
+    else meleeAct(m, dist);
+  }
+  function bossPhase(m) {
+    if (m.boss && !m.enraged && m.hp <= m.maxHp * 0.5) {
+      m.enraged = true; m.atk = Math.round(m.atk * 1.35); m.swift = true;
+      logMsg('die', 'The ' + m.name + ' ENRAGES!'); shake(10); fxBurst(m.x, m.y, '#e85d5d');
+    }
+  }
   function enemyTurn() {
     var p = world.player;
     for (var i = 0; i < world.monsters.length; i++) {
@@ -1323,11 +1375,10 @@
       var sees = world.visible[m.y] && world.visible[m.y][m.x];
       if (!m.awake) { if (sees && dist <= LIGHT + 1) m.awake = true; else continue; }
       if (world.mode === 'dead') return;
-
-      if (m.behavior === 'archer') { archerAct(m, dist); }
-      else if (m.behavior === 'thief') { thiefAct(m, dist); }
-      else if (m.behavior === 'summon') { summonAct(m, dist); }
-      else { meleeAct(m, dist); }
+      bossPhase(m);
+      actMob(m);
+      if (hero.hp <= 0) return;
+      if (m.swift && m.hp > 0 && world.mode !== 'dead') actMob(m);   // swift elites/enraged bosses act twice
       if (hero.hp <= 0) return;
     }
   }
@@ -1346,6 +1397,7 @@
   }
   function mobAttack(m) { m.bump = now(); m.bumpDir = { x: sgn(world.player.x - m.x), y: sgn(world.player.y - m.y) };
     var dmg = Math.max(1, m.atk + rr(-1, 1)); hurtHero(dmg, m.name, m);
+    if (m.vamp && m.hp > 0) m.hp = Math.min(m.maxHp, m.hp + Math.ceil(dmg * 0.5));
     if (m.poison) applyStatus(hero, 'poison', 4); if (m.burn) applyStatus(hero, 'burn', 3);
   }
   function meleeAct(m, dist) {
@@ -1358,14 +1410,21 @@
   function archerAct(m, dist) {
     var p = world.player;
     if (dist <= 1) { mobAttack(m); return; }
-    var inLine = (m.x === p.x || m.y === p.y) && losClear(m.x, m.y, p.x, p.y);
-    if (inLine && dist <= (m.range || 5)) {
-      fxRay(m.x, m.y, p.x, p.y, m.burn ? '#ff80c0' : '#cdd3da');
-      var dmg = Math.max(1, m.atk + rr(0, 2)); hurtHero(dmg, m.name, m);
-      if (m.burn) applyStatus(hero, 'burn', 3); if (m.poison) applyStatus(hero, 'poison', 4);
+    if (m.aiming) {
+      // the shot it telegraphed last turn lands now — only if you're still in the lane
+      m.aiming = false;
+      var lined = (m.x === p.x || m.y === p.y) && losClear(m.x, m.y, p.x, p.y) && cheb(m.x, m.y, p.x, p.y) <= (m.range || 5);
+      fxRay(m.x, m.y, lined ? p.x : m.aimT.x, lined ? p.y : m.aimT.y, m.burn ? '#ff80c0' : '#cdd3da');
+      if (lined) { var dmg = Math.max(1, m.atk + rr(0, 2)); hurtHero(dmg, m.name, m); if (m.burn) applyStatus(hero, 'burn', 3); if (m.poison) applyStatus(hero, 'poison', 4); }
+      else fxText(m.x, m.y, 'miss', '#cdd3da');
       return;
     }
-    // reposition to line up or approach
+    var inLine = (m.x === p.x || m.y === p.y) && losClear(m.x, m.y, p.x, p.y);
+    if (inLine && dist <= (m.range || 5)) {   // wind up — gives you a turn to break the line
+      m.aiming = true; m.aimT = { x: p.x, y: p.y };
+      logMsg('', 'The ' + m.name + ' takes aim — move!');
+      return;
+    }
     stepToward(m, p);
   }
   function thiefAct(m, dist) {
@@ -1543,6 +1602,12 @@
     }
     // monsters
     for (var mi = 0; mi < w.monsters.length; mi++) { var m = w.monsters[mi]; lerpEnt(m, dt); if (w.visible[m.y] && w.visible[m.y][m.x]) drawMob(ctx, m, cam); }
+    // telegraphed shots — dashed warning lane you can step out of
+    ctx.save(); ctx.setLineDash([4, 4]); ctx.lineWidth = 2; ctx.strokeStyle = 'rgba(255,90,90,0.8)';
+    for (var ti = 0; ti < w.monsters.length; ti++) { var am = w.monsters[ti]; if (am.aiming && am.aimT && w.visible[am.y] && w.visible[am.y][am.x]) {
+      ctx.beginPath(); ctx.moveTo((am.x - cam.x) * TILE + TILE / 2, (am.y - cam.y) * TILE + TILE / 2); ctx.lineTo((am.aimT.x - cam.x) * TILE + TILE / 2, (am.aimT.y - cam.y) * TILE + TILE / 2); ctx.stroke();
+    } }
+    ctx.setLineDash([]); ctx.restore();
     // player (already lerped at the top of the frame)
     var p = w.player; drawPlayer(ctx, p, cam);
 
@@ -1622,7 +1687,9 @@
     var bo = bumpOff(m), sh = entShake(m);
     var cx = (m.rx - cam.x) * TILE + TILE / 2 + bo.x + sh, cy = (m.ry - cam.y) * TILE + TILE / 2 + bo.y;
     var r = (m.boss ? TILE / 2 + 2 : TILE / 2 - 2);
+    if (m.elite) { ctx.strokeStyle = m.enraged ? '#ff5050' : '#ffb84d'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(cx, cy, r + 2.5, 0, 6.3); ctx.stroke(); }
     ctx.fillStyle = m.col; ctx.beginPath(); ctx.arc(cx, cy, r, 0, 6.3); ctx.fill();
+    if (m.boss && m.enraged) { ctx.strokeStyle = '#ff5050'; ctx.lineWidth = 2; ctx.stroke(); }
     ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.font = '700 ' + (m.boss ? 15 : 12) + 'px ui-monospace, monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(m.ch, cx, cy + 1);
     // status pips
     if (m.status) { var sy2 = cy - r - 3; if (m.status.burn > 0) { ctx.fillStyle = '#ff8040'; ctx.fillRect(cx - 6, sy2, 3, 3); } if (m.status.poison > 0) { ctx.fillStyle = '#7fe0a0'; ctx.fillRect(cx - 1, sy2, 3, 3); } if (m.status.stun > 0) { ctx.fillStyle = '#9fd0ff'; ctx.fillRect(cx + 4, sy2, 3, 3); } }
@@ -2115,12 +2182,18 @@
     if (!hero) return;
     closeOverlay();
     var ov = mkOverlay('Options ⚙'); var body = ov.querySelector('.cr-ov-body');
+    var diffBtns = DIFF_ORDER.map(function (id) {
+      return '<button class="cr-cos' + (hero.difficulty === id ? ' cr-on' : '') + '" data-diff="' + id + '"><span>' + DIFFS[id].name + '</span><small>' + (id === 'normal' ? 'baseline' : Math.round(DIFFS[id].atk * 100) + '% dmg') + '</small></button>';
+    }).join('');
     body.innerHTML =
       '<div class="cr-hint">Your delver is saved on this device and synced to Firebase (room __cade_dungeon) when configured.</div>' +
       '<div class="cr-grid2">' + stat('Level', hero.level) + stat('Deepest', hero.maxDepth) + stat('Bounties', hero.questsDone || 0) + stat('Runs', hero.stats.runs || 0) + '</div>' +
+      '<div class="cr-sec">Difficulty</div><div class="cr-hint">Harder foes hit back — and pay out more XP & loot. Applies as you descend.</div><div class="cr-cosrow">' + diffBtns + '</div>' +
       '<div class="cr-sec">Danger zone</div>' +
       '<button class="cr-buy cr-danger" id="cr-del">🗑 Delete character & start over</button>' +
       '<div class="cr-hint" id="cr-del-hint"></div>';
+    var dbs = body.querySelectorAll('[data-diff]');
+    for (var i = 0; i < dbs.length; i++) (function (btn) { btn.addEventListener('click', function () { hero.difficulty = btn.getAttribute('data-diff'); Cade.haptic(6); markDirty(); openOptions(); }); })(dbs[i]);
     var del = document.getElementById('cr-del'), armed = false;
     del.addEventListener('click', function () {
       if (!armed) { armed = true; del.textContent = '⚠ Tap again to permanently erase'; document.getElementById('cr-del-hint').textContent = 'Wipes level, gold, gear, spells, cosmetics — everything.'; return; }
@@ -2164,7 +2237,7 @@
       depth: hero.depth, maxDepth: hero.maxDepth, equip: hero.equip, bag: hero.bag,
       owned: hero.owned, spells: hero.spells, docked: hero.docked,
       cosmetics: hero.cosmetics, ownedCos: hero.ownedCos,
-      quests: hero.quests, questsDone: hero.questsDone || 0,
+      quests: hero.quests, questsDone: hero.questsDone || 0, difficulty: hero.difficulty || 'normal',
       stats: hero.stats, _wlvl: hero._wlvl || 0, _alvl: hero._alvl || 0,
       _konami: hero._konami || false, _fled: hero._fled || 0,
       createdAt: hero.createdAt, updatedAt: Date.now(), rev: hero.rev, client: clientId
@@ -2212,6 +2285,7 @@
     if (!COSMETIC.cape[h.cosmetics.cape]) h.cosmetics.cape = 'none';
     h.ownedCos = h.ownedCos || ['color:cyan', 'hat:none', 'cape:none'];
     h.quests = Array.isArray(h.quests) ? h.quests : [];
+    if (!DIFFS[h.difficulty]) h.difficulty = 'normal';
     h.stats = h.stats || { kills: 0, deaths: 0, floors: 0, gems: 0, runs: 0 };
     h.buffs = {};
     return h;
