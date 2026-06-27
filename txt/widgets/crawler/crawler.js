@@ -152,6 +152,28 @@
     lure:     { id: 'lure',     name: 'Beast Lure',      icon: '🍖', price: 70, desc: 'Calms a wild beast — far easier to tame' }
   };
 
+  // ---- crafting materials (gathered in the wild, dropped by foes) -----------
+  var MATS = {
+    herb:    { name: 'Herb',      icon: '🌿' },
+    ember:   { name: 'Emberdust', icon: '🔥' },
+    brine:   { name: 'Brine Salt', icon: '🧂' },
+    crystal: { name: 'Crystal',   icon: '🔮' },
+    ore:     { name: 'Iron Ore',  icon: '⛏️' },
+    essence: { name: 'Essence',   icon: '✨' }
+  };
+  var MAT_ORDER = ['herb', 'ember', 'brine', 'crystal', 'ore', 'essence'];
+  // Alchemy: turn materials into consumables (some you can't simply buy).
+  var RECIPES = [
+    { out: 'potion',   mats: { herb: 1 } },
+    { out: 'hpotion',  mats: { herb: 2, crystal: 1 } },
+    { out: 'elixir',   mats: { crystal: 1 } },
+    { out: 'eelixir',  mats: { crystal: 2, essence: 1 } },
+    { out: 'antidote', mats: { herb: 1, brine: 1 } },
+    { out: 'bomb',     mats: { ember: 1, ore: 1 } },
+    { out: 'lure',     mats: { herb: 1, essence: 1 } },
+    { out: 'key',      mats: { ore: 2 } }
+  ];
+
   // Cosmetics — pure visual flair for your adventurer, bought at the Tailor.
   var COSMETIC = {
     color: {
@@ -343,6 +365,33 @@
     return Math.max(8, Math.round((b.price || 25) * mult + (it.ilvl || 1) * 4));
   }
   function itemSell(it) { return Math.max(1, Math.floor(itemPrice(it) * 0.4)); }
+  // ---- crafting: materials, reforge, salvage --------------------------------
+  var REGION_MAT = { catacombs: 'ore', wood: 'herb', caves: 'crystal', desert: 'ore', ember: 'ember', coast: 'brine', abyss: 'crystal' };
+  function regionMat(depth) { return REGION_MAT[regionAt(depth).key] || 'ore'; }
+  function addMat(id, n) { if (!MATS[id]) return; hero.mats = hero.mats || {}; hero.mats[id] = (hero.mats[id] || 0) + (n || 1); }
+  function hasMats(cost) { if (!cost) return true; var m = hero.mats || {}; for (var k in cost) if ((m[k] || 0) < cost[k]) return false; return true; }
+  function spendMats(cost) { hero.mats = hero.mats || {}; for (var k in cost) hero.mats[k] = (hero.mats[k] || 0) - cost[k]; }
+  function matStr(cost) { var out = []; for (var k in cost) out.push((MATS[k] ? MATS[k].icon : k) + cost[k]); return out.join(' '); }
+  // reroll an item's affixes in place, keeping its base / rarity / ilvl / uid
+  function reforgeItem(it) {
+    if (!it || it.legend || it.rarity === 'common') return null;
+    var fresh = makeBaseInstance(it.base, it.rarity, it.ilvl);
+    applyAffixes(fresh, RARITY[it.rarity].n, it.ilvl);
+    fresh.uid = it.uid; fresh.name = instanceName(fresh);
+    var ix = hero.owned.indexOf(it); if (ix >= 0) hero.owned[ix] = fresh;
+    return fresh;
+  }
+  function reforgeCost(it) {
+    var n = RARITY[it.rarity].n;
+    var cost = { crystal: 1 + n };
+    if (n >= 2) cost.essence = n - 1;
+    return { gold: 40 + (it.ilvl || 1) * 6 + n * 40, mats: cost };
+  }
+  function salvageYield(it) {
+    var n = RARITY[it.rarity].n, tier = it.tier || 1, y = { ore: 1 + Math.floor(tier / 2) + n };
+    if (n >= 2) y.essence = 1; if (n >= 3 || it.legend) y.essence = (y.essence || 0) + 1;
+    return y;
+  }
   function itemByUid(u) { if (!u || !hero.owned) return null; for (var i = 0; i < hero.owned.length; i++) if (hero.owned[i].uid === u) return hero.owned[i]; return null; }
   function equippedItem(slot) { return itemByUid(hero.equip[slot]); }
   function instanceStatStr(it) {
@@ -595,7 +644,7 @@
     hearth:      { name: 'Hearthhold', icon: '🏰', ox: 8,  oy: 17, full: true,
                    pal: { name: 'Hearthhold', floor: '#262a22', floor2: '#2c3027', wall: '#3a4030', wallTop: '#48503c', accent: '#8fbf6f' } },
     greenhollow: { name: 'Greenhollow', icon: '🌲', ox: 15, oy: 7, theme: 'wood',
-                   roster: ['merchant', 'healer', 'tamer'],
+                   roster: ['alchemist', 'healer', 'tamer'],
                    pal: { name: 'Greenhollow', floor: '#1f2a1a', floor2: '#243420', wall: '#2f4a2c', wallTop: '#3c5e38', accent: '#8fd06f' } },
     cinderforge: { name: 'Cinderforge', icon: '🌋', ox: 34, oy: 8, theme: 'ember',
                    roster: ['smith', 'merchant', 'arcanist'],
@@ -615,7 +664,8 @@
     arcanist: { icon: '🔮', col: '#c79bff', name: 'Arcanist', cos: { color: 'violet', eyes: 'glow', hat: 'wizard' } },
     quest:    { icon: '📜', col: '#e0c060', name: 'Bounties', cos: { color: 'ember', eyes: 'default', cape: 'red' } },
     tailor:   { icon: '🎩', col: '#9fe0c0', name: 'Tailor',   cos: { color: 'emerald', eyes: 'default', hat: 'top', belt: 'gold' } },
-    tamer:    { icon: '🐾', col: '#8fe0a0', name: 'Beast Tamer', cos: { color: 'emerald', eyes: 'cute', pet: 'pup' } }
+    tamer:    { icon: '🐾', col: '#8fe0a0', name: 'Beast Tamer', cos: { color: 'emerald', eyes: 'cute', pet: 'pup' } },
+    alchemist:{ icon: '⚗️', col: '#9fe0a0', name: 'Alchemist', cos: { color: 'emerald', eyes: 'glow', hat: 'wizard', pattern: 'rune' } }
   };
   // Dungeon delves on the overworld — one per region, at the given tile.
   var DELVES = [
@@ -682,7 +732,7 @@
       difficulty: 'normal',
       house: { furniture: [] }, furniture: {}, trophies: [], stash: [],
       story: 0, lore: [], bestiary: {},
-      ow: null, townsSeen: ['hearth'],
+      ow: null, townsSeen: ['hearth'], mats: {},
       buffs: {},
       stats: { kills: 0, deaths: 0, floors: 0, gems: 0, runs: 0 },
       createdAt: Date.now(), updatedAt: Date.now(), rev: 1, client: clientId
@@ -1384,9 +1434,21 @@
         if (!solid[lk] && !nodeAt(lx, ly) && reach[lk] && !objAtList(objects, lx, ly) && !(lx === start.x && ly === start.y)) { lp = { x: lx, y: ly }; break; } }
       if (lp) objects.push({ type: 'landmark', key: lm[li].key, icon: lm[li].icon, name: lm[li].name, lore: lm[li].lore, x: lp.x, y: lp.y });
     }
-    // roaming exotic animals (corner & tame -> pet) and wandering folk
+    // gatherable material nodes scattered near their themed regions
     var occupied = {};
     function freeWild() { for (var a = 0; a < 50; a++) { var wx = rr(2, MW - 3), wy = rr(2, MH - 3), wk = key(wx, wy); if (!solid[wk] && !occupied[wk] && reach[wk] && !townIdAt(wx, wy) && !nodeAt(wx, wy) && !objAtList(objects, wx, wy, null, true)) { occupied[wk] = true; return { x: wx, y: wy }; } } return null; }
+    var gatherSpots = [
+      { mat: 'herb', cx: TOWNS.greenhollow.ox, cy: TOWNS.greenhollow.oy }, { mat: 'herb', cx: TOWNS.greenhollow.ox, cy: TOWNS.greenhollow.oy },
+      { mat: 'ore', cx: TOWNS.cinderforge.ox, cy: TOWNS.cinderforge.oy }, { mat: 'ore', cx: 6, cy: 23 },
+      { mat: 'brine', cx: TOWNS.saltmere.ox, cy: TOWNS.saltmere.oy }, { mat: 'crystal', cx: 20, cy: 24 },
+      { mat: 'ember', cx: TOWNS.cinderforge.ox, cy: TOWNS.cinderforge.oy }, { mat: 'herb', cx: 20, cy: 10 }
+    ];
+    gatherSpots.forEach(function (g) {
+      for (var a = 0; a < 24; a++) { var gx = g.cx + rr(-4, 4), gy = g.cy + rr(-4, 4), gk = key(gx, gy);
+        if (gx <= 1 || gy <= 1 || gx >= MW - 2 || gy >= MH - 2 || solid[gk] || occupied[gk] || !reach[gk] || nodeAt(gx, gy) || objAtList(objects, gx, gy, null, true)) continue;
+        occupied[gk] = true; objects.push({ type: 'gather', mat: g.mat, x: gx, y: gy }); break; }
+    });
+    // roaming exotic animals (corner & tame -> pet) and wandering folk
     for (var w = 0; w < 6; w++) { var sp = freeWild(); if (!sp) break; var wd = WILD[w % WILD.length]; objects.push({ type: 'animal', kind: wd.kind, aname: wd.name, sense: 5, wary: 0, x: sp.x, y: sp.y, rx: sp.x, ry: sp.y, mobile: true }); }
     for (var n3 = 0; n3 < 3; n3++) { var sp2 = freeWild(); if (!sp2) break; objects.push({ type: 'wanderer', line: WANDER_LINES[(n3 + ri(WANDER_LINES.length)) % WANDER_LINES.length], x: sp2.x, y: sp2.y, rx: sp2.x, ry: sp2.y, mobile: true, cos: { color: pick(['crimson', 'slate', 'emerald', 'gold', 'rose']), eyes: 'default' } }); }
     return {
@@ -1466,6 +1528,13 @@
     markDirty(); refreshAll();
   }
   function talkWanderer(o) { Cade.showToast(o.line, 'info', 3200); }
+  function harvestNode(o) {
+    var n = 1 + ri(2), M = MATS[o.mat] || { name: o.mat, icon: '◆' };
+    addMat(o.mat, n);
+    var ix = world.objects.indexOf(o); if (ix >= 0) world.objects.splice(ix, 1);
+    fxText(o.x, o.y - 0.3, '+' + n + ' ' + M.icon, '#bfe6b0'); fxBurst(o.x, o.y, '#9fd06f');
+    logMsg('win', 'Gathered ' + n + ' ' + M.name + '.'); Cade.haptic(6); markDirty(); refreshAll();
+  }
   function readLore(o) {
     Cade.showToast((o.icon ? o.icon + ' ' : '') + (o.name || 'Inscription') + ' — ' + o.lore, 'info', 4200);
     logMsg('', (o.name || 'Inscription') + ': ' + o.lore);
@@ -1629,7 +1698,7 @@
     hero.stats.kills++; questProgress('kills', 1); recordKill(m);
     fxBurst(m.x, m.y, m.col);
     gainXp(Math.round(m.xp * diff().rew));
-    if (m.elite) { logMsg('win', 'Elite slain: ' + m.name + '!'); var ep = adjacentFree(m.x, m.y) || { x: m.x, y: m.y }; world.items.push({ type: 'gear', item: generateItem(null, world.depth + 2, 1.2), x: ep.x, y: ep.y }); world.items.push({ type: 'gold', x: m.x, y: m.y, amt: (6 + ri(8)) * Math.max(1, world.depth) }); }
+    if (m.elite) { logMsg('win', 'Elite slain: ' + m.name + '!'); var ep = adjacentFree(m.x, m.y) || { x: m.x, y: m.y }; world.items.push({ type: 'gear', item: generateItem(null, world.depth + 2, 1.2), x: ep.x, y: ep.y }); world.items.push({ type: 'gold', x: m.x, y: m.y, amt: (6 + ri(8)) * Math.max(1, world.depth) }); addMat('essence', 1); addMat(regionMat(world.depth), 1); fxText(m.x, m.y, '✨', '#ffe28a'); }
     if (m.boss) { questProgress('boss', 1); logMsg('win', 'The ' + m.name + ' falls! The way down opens.'); shake(10);
       var rk = regionAt(world.depth).key; hero.trophies = hero.trophies || []; if (hero.trophies.indexOf(rk) < 0) { hero.trophies.push(rk); hero.hp = Math.min(maxHpOf(), hero.hp + 3); logMsg('win', '🏆 Trophy earned — ' + regionAt(world.depth).name + '! (displayed at home)'); }
       // STORY: a warden has fallen — unlock the next chapter of the tale.
@@ -1639,6 +1708,7 @@
       world.items.push({ type: 'gold', x: m.x, y: m.y, amt: 40 + world.depth * 7 });
       var gp = adjacentFree(m.x, m.y); if (gp) world.items.push({ type: 'gear', item: generateItem(null, world.depth + 3, 2.5), x: gp.x, y: gp.y });
       hero.stats.gems++;
+      addMat('essence', 2); addMat('crystal', 2); addMat(regionMat(world.depth), 2); logMsg('win', 'The warden\'s remains yield rare crafting materials.');
     } else {
       // bomber explodes on death
       if (m.boom) explodeAt(m.x, m.y, m.boom, '#5fc08e');
@@ -1646,6 +1716,7 @@
       if (m._loot) world.items.push({ type: 'gold', x: m.x, y: m.y, amt: m._loot });
       if (chance(0.18)) world.items.push({ type: 'cons', id: chance(0.6) ? 'potion' : 'elixir', x: m.x, y: m.y });
       if (chance(0.35)) world.items.push({ type: 'gold', x: m.x, y: m.y, amt: (2 + ri(4)) * Math.max(1, Math.ceil(world.depth * 0.5)) });
+      if (chance(0.22)) { var rmat = regionMat(world.depth); addMat(rmat, 1); fxText(m.x, m.y, MATS[rmat].icon, '#cfe7d0'); }
     }
     markDirty();
   }
@@ -1756,8 +1827,9 @@
     // attack monster?
     var m = mobAt(nx, ny);
     if (m) { p.bump = now(); p.bumpDir = { x: dx, y: dy }; heroAttack(m, 1, 0); endTurn(); return true; }
-    // wild animal — bumping it is a taming attempt (it won't let you walk through)
-    if (world.mode === 'overworld') { var ani = objAt(nx, ny, 'animal'); if (ani) { p.bump = now(); p.bumpDir = { x: dx, y: dy }; tameAttempt(ani); endTurn(); return true; } }
+    // wild animal — bumping it is a taming attempt (it won't let you walk through).
+    // Cancel any auto-travel so the next queued node can't jump past the animal.
+    if (world.mode === 'overworld') { var ani = objAt(nx, ny, 'animal'); if (ani) { world.path = null; p.bump = now(); p.bumpDir = { x: dx, y: dy }; tameAttempt(ani); endTurn(); return true; } }
     // push boulder?
     var b = objAt(nx, ny, 'boulder');
     if (b) { if (pushBoulder(b, dx, dy)) { p.x = nx; p.y = ny; afterStep(); endTurn(); return true; } else { return false; } }
@@ -1856,6 +1928,7 @@
           hero.ow = { x: p.x, y: p.y }; world._pendingDelve = ow.region; return;
         }
         if (ow.type === 'animal') { tameAttempt(ow); return; }
+        if (ow.type === 'gather') { harvestNode(ow); return; }
         if (ow.type === 'wanderer') { talkWanderer(ow); return; }
         if (ow.type === 'landmark' || ow.type === 'noticeboard') { readLore(ow); return; }
       }
@@ -1939,6 +2012,7 @@
         var twn = objAt(ox, oy, 'town'); if (twn) { hero.ow = { x: twn.x, y: twn.y }; enter(0, twn.town); return; }
         var dlv = objAt(ox, oy, 'delve'); if (dlv) { if (!regionUnlocked(dlv.region)) { Cade.showToast('That delve is sealed — clear the region before it', 'info', 1700); return; } hero.ow = { x: dlv.x, y: dlv.y }; hero.stats.runs = (hero.stats.runs || 0) + 1; enter(regionStart(dlv.region)); return; }
         var ani = objAt(ox, oy, 'animal'); if (ani) { tameAttempt(ani); return; }
+        var gth = objAt(ox, oy, 'gather'); if (gth) { harvestNode(gth); return; }
         var wan = objAt(ox, oy, 'wanderer'); if (wan) { talkWanderer(wan); return; }
         var lmk = objAt(ox, oy, 'landmark'); if (lmk) { readLore(lmk); return; }
       }
@@ -2511,6 +2585,9 @@
       case 'landmark':
         glyph(ctx, o.icon || '🗿', cx, cy - 1, '#fff', a, 18);
         glyph(ctx, '❓', cx + TILE * 0.34, cy - TILE * 0.34, '#cdb4ff', a * 0.9, 9); break;
+      case 'gather':
+        ctx.globalAlpha = a * (0.55 + 0.25 * Math.abs(Math.sin(now() / 500))); ctx.fillStyle = '#ffe28a'; ctx.beginPath(); ctx.arc(cx, cy, TILE / 2 - 4, 0, 6.3); ctx.fill(); ctx.globalAlpha = 1;
+        glyph(ctx, (MATS[o.mat] || {}).icon || '◆', cx, cy, '#fff', a, 14); break;
       case 'noticeboard':
         ctx.globalAlpha = a; ctx.fillStyle = '#6b4a2a'; ctx.fillRect(cx - 8, cy - 7, 16, 12);
         ctx.fillStyle = '#d8c9a8'; ctx.fillRect(cx - 6, cy - 5, 12, 8);
@@ -2828,6 +2905,7 @@
       stat('🎯 Crit', Math.round(critOf() * 100) + '%') + stat('🪙 Gold', hero.gold) +
       stat('🗺 Deepest', hero.maxDepth) + stat('💀 Deaths', hero.stats.deaths) +
       stat('⚔ Kills', hero.stats.kills) + stat('💎 Gems', hero.stats.gems) + '</div>';
+    html += '<div class="cr-sec">Materials</div>' + matBar();
     html += '<div class="cr-sec">Equipment</div><div class="cr-eqrow">' +
       eqSlot('weapon') + eqSlot('armor') + eqSlot('trinket') + '</div>';
     html += '<div class="cr-sec">Inventory — tap to equip / unequip</div><div class="cr-owned">';
@@ -2897,6 +2975,7 @@
     if (role === 'quest') return openQuestBoard();
     if (role === 'oracle') return openOracle();
     if (role === 'tamer') return openTamer();
+    if (role === 'alchemist') return openAlchemist();
     var ov = mkOverlay('Merchant 🛒');
     var body = ov.querySelector('.cr-ov-body');
     var html = '<div class="cr-shopgold">🪙 ' + hero.gold + ' gold</div><div class="cr-shop">';
@@ -2997,11 +3076,33 @@
     var w = equippedItem('weapon'), a = equippedItem('armor');
     var wCost = 60 + (hero._wlvl || 0) * 80 + (w ? w.tier * 40 : 0);
     var aCost = 60 + (hero._alvl || 0) * 80 + (a ? a.tier * 40 : 0);
-    body.innerHTML = '<div class="cr-shopgold">🪙 ' + hero.gold + ' gold</div>' +
-      '<div class="cr-hint">Permanently temper your equipped gear.</div><div class="cr-shop">' +
+    var html = '<div class="cr-shopgold">🪙 ' + hero.gold + ' gold</div>' + matBar();
+    html += '<div class="cr-sec">Temper (permanent)</div><div class="cr-shop">' +
       shopRow('smith:atk', '⚔', 'Temper Weapon', '+2 base ATK (current +' + (hero._wlvl || 0) * 2 + ')', wCost, 0) +
-      shopRow('smith:def', '🛡', 'Reinforce Armor', '+1 base DEF (current +' + (hero._alvl || 0) + ')', aCost, 0) +
-      '</div>';
+      shopRow('smith:def', '🛡', 'Reinforce Armor', '+1 base DEF (current +' + (hero._alvl || 0) + ')', aCost, 0) + '</div>';
+    // reforge: reroll a magic+ piece's affixes for gold + materials
+    var reforgeable = hero.owned.filter(function (it) { return !it.legend && it.rarity !== 'common'; }).sort(function (x, y) { return itemScore(y) - itemScore(x); });
+    html += '<div class="cr-sec">Reforge — gamble new magic onto a piece</div><div class="cr-shop">';
+    if (!reforgeable.length) html += '<div class="cr-hint">Find some magic gear first.</div>';
+    reforgeable.forEach(function (it) {
+      var rc = reforgeCost(it), ok = hero.gold >= rc.gold && hasMats(rc.mats), eq = hero.equip[it.slot] === it.uid, c = rarityOf(it).color;
+      html += '<div class="cr-srow"><span class="cr-sic" style="color:' + c + '">' + it.icon + '</span>' +
+        '<span class="cr-snm"><span style="color:' + c + '">' + Cade.escapeHtml(it.name) + '</span>' + (eq ? ' ✓' : '') + '<span class="cr-sdesc">' + instanceStatStr(it) + ' · 🪙' + rc.gold + ' ' + matStr(rc.mats) + '</span></span>' +
+        '<button class="cr-buy' + (ok ? '' : ' cr-owned') + '" data-reforge="' + it.uid + '">' + (ok ? 'reforge' : '—') + '</button></div>';
+    });
+    html += '</div>';
+    // salvage: break unequipped, non-legendary gear into materials
+    var salv = hero.owned.filter(function (it) { return hero.equip[it.slot] !== it.uid && !it.legend; }).sort(function (x, y) { return itemScore(x) - itemScore(y); });
+    html += '<div class="cr-sec">Salvage — break gear into materials</div><div class="cr-shop">';
+    if (!salv.length) html += '<div class="cr-hint">Nothing spare to salvage.</div>';
+    salv.forEach(function (it) {
+      var y = salvageYield(it), c = rarityOf(it).color;
+      html += '<div class="cr-srow"><span class="cr-sic" style="color:' + c + '">' + it.icon + '</span>' +
+        '<span class="cr-snm"><span style="color:' + c + '">' + Cade.escapeHtml(it.name) + '</span><span class="cr-sdesc">' + instanceStatStr(it) + ' → ' + matStr(y) + '</span></span>' +
+        '<button class="cr-buy cr-sell" data-salvage="' + it.uid + '">salvage</button></div>';
+    });
+    html += '</div>';
+    body.innerHTML = html;
     var btns = body.querySelectorAll('[data-buy]');
     for (var i = 0; i < btns.length; i++) (function (btn) { btn.addEventListener('click', function () {
       var spec = btn.getAttribute('data-buy').split(':')[1], price = parseInt(btn.getAttribute('data-price'), 10);
@@ -3011,6 +3112,24 @@
       else { hero.def += 1; hero._alvl = (hero._alvl || 0) + 1; }
       Cade.haptic(8); Cade.showToast('Tempered!', 'success'); markDirty(); refreshAll(); openSmith();
     }); })(btns[i]);
+    var rb = body.querySelectorAll('[data-reforge]');
+    for (var j = 0; j < rb.length; j++) (function (btn) { btn.addEventListener('click', function () {
+      var it = itemByUid(btn.getAttribute('data-reforge')); if (!it) return;
+      var rc = reforgeCost(it);
+      if (hero.gold < rc.gold || !hasMats(rc.mats)) { Cade.showToast('Not enough gold or materials', 'error', 1500); return; }
+      hero.gold -= rc.gold; spendMats(rc.mats);
+      var fresh = reforgeItem(it);
+      hero.hp = clamp(hero.hp, 0, maxHpOf()); hero.mp = clamp(hero.mp, 0, maxMpOf());
+      Cade.haptic(10); Cade.showToast('Reforged → ' + (fresh ? fresh.name : 'item'), 'success', 1800); markDirty(); refreshAll(); openSmith();
+    }); })(rb[j]);
+    var sb = body.querySelectorAll('[data-salvage]');
+    for (var k = 0; k < sb.length; k++) (function (btn) { btn.addEventListener('click', function () {
+      var it = itemByUid(btn.getAttribute('data-salvage')); if (!it) return;
+      if (hero.equip[it.slot] === it.uid) { Cade.showToast('Unequip it first', 'info', 1200); return; }
+      var y = salvageYield(it), ix = hero.owned.indexOf(it); if (ix < 0) return;
+      hero.owned.splice(ix, 1); for (var mk in y) addMat(mk, y[mk]);
+      Cade.haptic(8); Cade.showToast('Salvaged → ' + matStr(y), 'success', 1500); markDirty(); refreshAll(); openSmith();
+    }); })(sb[k]);
   }
   function openArcanist() {
     var ov = mkOverlay('Arcanist 🔮');
@@ -3040,6 +3159,29 @@
     x.clearRect(0, 0, 130, 120); x.fillStyle = '#0a0b0e'; roundRect(x, 0, 0, 130, 120, 10); x.fill();
     drawCharacter(x, 60, 60, 30, { x: 0, y: 1 }, hero.cosmetics, now());
     if (hero.cosmetics.pet && hero.cosmetics.pet !== 'none') drawPetShape(x, 102, 88, 13, hero.cosmetics.pet, now());
+  }
+  function matBar() {
+    return '<div class="cr-matbar">' + MAT_ORDER.map(function (k) { return '<span class="cr-mat">' + MATS[k].icon + ' ' + ((hero.mats || {})[k] || 0) + '</span>'; }).join('') + '</div>';
+  }
+  function openAlchemist() {
+    var ov = mkOverlay('Alchemist ⚗️'); var body = ov.querySelector('.cr-ov-body');
+    var html = '<div class="cr-shopgold">🪙 ' + hero.gold + ' gold</div>' + matBar() +
+      '<div class="cr-hint">Brew supplies from materials you gather in the wild and harvest from foes.</div><div class="cr-shop">';
+    RECIPES.forEach(function (r, i) {
+      var c = CONS[r.out], ok = hasMats(r.mats);
+      html += '<div class="cr-srow"><span class="cr-sic">' + c.icon + '</span><span class="cr-snm">' + c.name +
+        '<span class="cr-sdesc">' + c.desc + ' · costs ' + matStr(r.mats) + '</span></span>' +
+        '<button class="cr-buy' + (ok ? '' : ' cr-owned') + '" data-craft="' + i + '">' + (ok ? 'brew' : '—') + '</button></div>';
+    });
+    html += '</div>';
+    body.innerHTML = html;
+    var btns = body.querySelectorAll('[data-craft]');
+    for (var i = 0; i < btns.length; i++) (function (btn) { btn.addEventListener('click', function () {
+      var r = RECIPES[parseInt(btn.getAttribute('data-craft'), 10)]; if (!r) return;
+      if (!hasMats(r.mats)) { Cade.showToast('Not enough materials', 'error', 1400); return; }
+      spendMats(r.mats); hero.bag[r.out] = (hero.bag[r.out] || 0) + 1;
+      Cade.haptic(8); Cade.showToast('Brewed ' + CONS[r.out].name + '!', 'success', 1400); markDirty(); refreshAll(); openAlchemist();
+    }); })(btns[i]);
   }
   function openTailor() {
     var ov = mkOverlay('Tailor 🎩');
@@ -3596,7 +3738,7 @@
       quests: hero.quests, questsDone: hero.questsDone || 0, difficulty: hero.difficulty || 'normal',
       house: hero.house || { furniture: [] }, furniture: hero.furniture || {}, trophies: hero.trophies || [], stash: hero.stash || [],
       story: hero.story || 0, lore: hero.lore || [], bestiary: hero.bestiary || {},
-      ow: hero.ow || null, townsSeen: hero.townsSeen || ['hearth'],
+      ow: hero.ow || null, townsSeen: hero.townsSeen || ['hearth'], mats: hero.mats || {},
       _bestRune: hero._bestRune || 0, _bestReflex: hero._bestReflex || 0, _prolog: hero._prolog || false,
       stats: hero.stats, _wlvl: hero._wlvl || 0, _alvl: hero._alvl || 0,
       _konami: hero._konami || false, _fled: hero._fled || 0,
@@ -3656,6 +3798,8 @@
     h.ow = (h.ow && typeof h.ow.x === 'number' && typeof h.ow.y === 'number') ? { x: h.ow.x, y: h.ow.y } : null;
     h.townsSeen = Array.isArray(h.townsSeen) ? h.townsSeen.filter(function (t) { return !!TOWNS[t]; }) : ['hearth'];
     if (h.townsSeen.indexOf('hearth') < 0) h.townsSeen.unshift('hearth');
+    h.mats = (h.mats && typeof h.mats === 'object' && !Array.isArray(h.mats)) ? h.mats : {};
+    for (var mk in h.mats) { if (!MATS[mk] || typeof h.mats[mk] !== 'number' || h.mats[mk] < 0) delete h.mats[mk]; }
     h.stats = h.stats || { kills: 0, deaths: 0, floors: 0, gems: 0, runs: 0 };
     h.buffs = {};
     return h;

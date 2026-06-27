@@ -222,6 +222,10 @@
 .cr-story-title { font-size: 14px; font-weight: 700; color: #cdb4ff; margin-bottom: 8px; }
 .cr-story p { margin: 0 0 10px; }
 
+/* crafting materials bar */
+.cr-matbar { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 8px; }
+.cr-mat { font-size: 12px; font-weight: 600; color: var(--text, #e7e9ee); background: var(--surface-2, #1a1d24); border: 1px solid var(--border, #2a2e38); border-radius: 8px; padding: 3px 8px; }
+
 /* world map minimap */
 .cr-mmwrap { display: flex; justify-content: center; margin-bottom: 10px; }
 #cr-mm { width: 100%; max-width: 320px; height: auto; border: 1px solid var(--border, #2a2e38); border-radius: 10px; image-rendering: pixelated; background: #1a2416; }
