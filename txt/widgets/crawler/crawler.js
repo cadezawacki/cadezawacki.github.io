@@ -45,7 +45,12 @@
   // ---- persistence keys ------------------------------------------------------
   var LKEY = 'cade-dungeon-save';      // local mirror of the hero
   var CKEY = 'cade-dungeon-client';    // this device's id
-  var FB_PATH = 'rooms/_dungeon/hero'; // under rooms/ so existing FB rules apply
+  // Stored under rooms/ so existing Firebase rules apply, but with a __ prefix
+  // so it's hidden from the Explore Rooms list (txt.html filters __* keys) and
+  // can never collide with or be opened as a real room.
+  var FB_PATH = 'rooms/__cade_dungeon/hero';
+  var FB_PATH_OLD = 'rooms/_dungeon/hero'; // migrate away from the visible path
+  var migrateOld = false;
 
   // ---- live (non-persistent) state ------------------------------------------
   var world = null;   // current floor: map, objects, monsters, items, fx, …
@@ -93,7 +98,8 @@
     ampmana: { id: 'ampmana', name: 'Mana Amulet',    icon: '📿', slot: 'trinket', tier: 2, price: 150, mp: 20 },
     bandpow: { id: 'bandpow', name: 'Power Band',     icon: '⭕', slot: 'trinket', tier: 3, price: 240, atk: 3 },
     wardchm: { id: 'wardchm', name: 'Warding Charm',  icon: '🔮', slot: 'trinket', tier: 3, price: 240, def: 3 },
-    greed:   { id: 'greed',   name: 'Greed Coin',     icon: '🪙', slot: 'trinket', tier: 3, price: 300, greed: 0.5 }
+    greed:   { id: 'greed',   name: 'Greed Coin',     icon: '🪙', slot: 'trinket', tier: 3, price: 300, greed: 0.5 },
+    lucky:   { id: 'lucky',   name: 'Lucky Clover',   icon: '🍀', slot: 'trinket', tier: 4, crit: 0.08, greed: 0.3 } // easter-egg only (no price)
   };
   function gear(id) { return WEAPONS[id] || ARMORS[id] || TRINKETS[id] || null; }
 
@@ -133,7 +139,8 @@
     orc:    { ch: 'o', name: 'orc',          col: '#9b7fd8', hp: 22, atk: 6,  def: 2, xp: 16, minD: 5, behavior: 'chase' },
     mage:   { ch: 'm', name: 'dark cultist', col: '#e07fb0', hp: 16, atk: 5,  def: 0, xp: 18, minD: 6, behavior: 'archer', range: 6, burn: true },
     troll:  { ch: 'T', name: 'troll',        col: '#e85d5d', hp: 36, atk: 9,  def: 3, xp: 28, minD: 7, behavior: 'chase', regen: 2 },
-    wraith: { ch: 'w', name: 'wraith',       col: '#9fd8e0', hp: 30, atk: 8,  def: 2, xp: 30, minD: 9, behavior: 'chase', erratic: 0.2 }
+    wraith: { ch: 'w', name: 'wraith',       col: '#9fd8e0', hp: 30, atk: 8,  def: 2, xp: 30, minD: 9, behavior: 'chase', erratic: 0.2 },
+    mimic:  { ch: 'M', name: 'mimic',        col: '#caa24a', hp: 26, atk: 7,  def: 2, xp: 26, minD: 99, behavior: 'chase' } // spawned only from trapped chests
   };
   var BOSSES = [
     { ch: 'K', name: 'Bone King',        col: '#f0e6c0', hp: 90,  atk: 8,  def: 3, xp: 120, behavior: 'summon', summons: 'archer' },
@@ -209,7 +216,15 @@
     if (!world) return;
     world.log.push({ t: text, k: kind || '' });
     if (world.log.length > 30) world.log.shift();
-    world._logDirty = true;
+    // Show it as a transient line that fades out on its own (not a sticky toast).
+    if (ui && ui.log) {
+      var line = document.createElement('div');
+      line.className = 'cr-line cr-' + (kind || '');
+      line.textContent = text;
+      ui.log.appendChild(line);
+      while (ui.log.children.length > 3) ui.log.removeChild(ui.log.firstChild);
+      setTimeout(function () { if (line.parentNode) line.parentNode.removeChild(line); }, 4200);
+    }
   }
 
   // =========================================================================
@@ -325,21 +340,24 @@
     if (rooms.length < 2) { return genFloor(depth); } // pathological; retry
     var biome = biomeFor(depth);
     var objects = [], monsters = [], items = [];
+
+    // Spawn & stairs first, so the placement predicate can reserve them and
+    // nothing (monster/trap/chest/item) lands on the player or on the stairs.
+    var start = center(rooms[0]);
+    var stairsRoom = rooms[rooms.length - 1];
+    var st = center(stairsRoom);
+    var stairs = { x: st.x, y: st.y, up: false };
+
+    var isBoss = depth > 0 && depth % 5 === 0;
+
     var occupied = function (x, y) {
-      if (world && world.player && world.player.x === x && world.player.y === y) return true;
+      if (x === start.x && y === start.y) return true;
+      if (!isBoss && x === stairs.x && y === stairs.y) return true; // boss spawns ON the stairs deliberately
       for (var i = 0; i < monsters.length; i++) if (monsters[i].x === x && monsters[i].y === y) return true;
       for (var j = 0; j < items.length; j++) if (items[j].x === x && items[j].y === y) return true;
       for (var o = 0; o < objects.length; o++) if (objects[o].x === x && objects[o].y === y) return true;
       return false;
     };
-
-    var start = center(rooms[0]);
-    var stairsRoom = rooms[rooms.length - 1];
-    var st = center(stairsRoom);
-    // make sure stairs tile is floor & distinct from start
-    var stairs = { x: st.x, y: st.y, up: false };
-
-    var isBoss = depth > 0 && depth % 5 === 0;
 
     // ---- optional boulder vault (carves corridors; do this BEFORE the
     //      separator search so the gate is a true cut of the final topology) --
@@ -382,11 +400,17 @@
       }
     }
 
-    // ---- chests -------------------------------------------------------------
+    // ---- chests (some are mimics that bite back) ----------------------------
     var chestN = isBoss ? 1 : 1 + ri(2);
     for (var ch = 0; ch < chestN; ch++) {
       var cp = freeFloorIn(m, occupied);
-      if (cp) objects.push({ type: 'chest', x: cp.x, y: cp.y, opened: false });
+      if (cp) objects.push({ type: 'chest', x: cp.x, y: cp.y, opened: false, mimic: (depth >= 2 && chance(0.16)) });
+    }
+
+    // ---- shrine (one-time blessing) -----------------------------------------
+    if (!isBoss && depth >= 2 && chance(0.5)) {
+      var shp = freeFloorIn(m, occupied);
+      if (shp) objects.push({ type: 'shrine', x: shp.x, y: shp.y, used: false });
     }
 
     // ---- monsters -----------------------------------------------------------
@@ -448,7 +472,7 @@
 
   function randomGearId(depth) {
     var pool = [];
-    function add(tbl) { for (var id in tbl) { var g = tbl[id]; if (g.tier > 0 && g.tier <= 1 + Math.ceil(depth / 2)) pool.push(id); } }
+    function add(tbl) { for (var id in tbl) { var g = tbl[id]; if (g.tier > 0 && g.price && g.tier <= 1 + Math.ceil(depth / 2)) pool.push(id); } }
     add(WEAPONS); add(ARMORS); add(TRINKETS);
     return pool.length ? pick(pool) : 'dagger';
   }
@@ -534,6 +558,7 @@
       if (w.puzzle) logMsg('', w.puzzle.kind === 'lever' ? 'The stairs are barred. Find the lever.' : 'A locked door blocks the way. Find the key.');
     }
     markDirty();
+    buildAbilityBar();   // keep the bar in sync with the hero's level (e.g. after a cross-device sync)
     refreshAll();
   }
 
@@ -552,7 +577,14 @@
   // =========================================================================
   //  field of view (LOS-limited torch)
   // =========================================================================
-  function blocksSight(x, y) { return !world.map[y] || world.map[y][x] !== T_FLOOR; }
+  function opaqueObjAt(x, y) {
+    for (var i = 0; i < world.objects.length; i++) { var o = world.objects[i]; if (o.x === x && o.y === y) {
+      if (o.type === 'gate' && !o.open) return true;
+      if (o.type === 'door' && o.locked) return true;
+    } }
+    return false;
+  }
+  function blocksSight(x, y) { return !world.map[y] || world.map[y][x] !== T_FLOOR || opaqueObjAt(x, y); }
   function losClear(x0, y0, x1, y1) {
     // Bresenham; the endpoint may be a wall (visible) but anything past a wall is blocked
     var dx = Math.abs(x1 - x0), dy = Math.abs(y1 - y0);
@@ -627,6 +659,8 @@
     } else {
       // bomber explodes on death
       if (m.boom) explodeAt(m.x, m.y, m.boom, '#5fc08e');
+      // a slain cutpurse drops whatever gold it pocketed
+      if (m._loot) world.items.push({ type: 'gold', x: m.x, y: m.y, amt: m._loot });
       if (chance(0.18)) world.items.push({ type: 'cons', id: chance(0.6) ? 'potion' : 'elixir', x: m.x, y: m.y });
       if (chance(0.5)) world.items.push({ type: 'gold', x: m.x, y: m.y, amt: (3 + ri(6)) * Math.max(1, world.depth) });
     }
@@ -821,6 +855,7 @@
       var ox = spots[s][0], oy = spots[s][1];
       var npc = objAt(ox, oy, 'npc'); if (npc) { openShop(npc.role); return; }
       var lever = objAt(ox, oy, 'lever'); if (lever) { toggleLever(lever); return; }
+      var shrine = objAt(ox, oy, 'shrine'); if (shrine) { prayShrine(shrine); return; }
       var chest = objAt(ox, oy, 'chest'); if (chest && !chest.opened) { openChest(chest); return; }
       var stair = objAt(ox, oy, 'stairs'); if (stair && stair.down) { startNewRun(); return; }
     }
@@ -835,6 +870,17 @@
     fxBurst(l.x, l.y, '#c9a86b'); computeFov(); markDirty(); refreshAll();
   }
   function openChest(c) {
+    if (c.mimic) {
+      c.opened = true;
+      var sx = c.x, sy = c.y;
+      if (world.player.x === sx && world.player.y === sy) { var a = adjacentFree(sx, sy); if (a) { sx = a.x; sy = a.y; } }
+      var mb = makeMob(MOBS.mimic, sx, sy, false, 1 + world.depth * 0.12, world.depth);
+      mb.awake = true;
+      world.monsters.push(mb);
+      logMsg('die', 'The chest is a MIMIC!'); shake(6); fxBurst(c.x, c.y, '#caa24a');
+      markDirty(); refreshAll();
+      return;
+    }
     c.opened = true;
     var rolls = c.lush ? 3 : 1 + ri(2);
     for (var i = 0; i < rolls; i++) {
@@ -844,6 +890,16 @@
       else { var gid = randomGearId(world.depth + (c.lush ? 3 : 1)); acquireGear(gid); var gg = gear(gid); fxText(c.x, c.y - i * 0.3, gg ? gg.icon : '?', '#fff'); }
     }
     logMsg('win', 'You open the chest!'); fxBurst(c.x, c.y, '#ffd76a'); markDirty(); refreshAll();
+  }
+  function prayShrine(s) {
+    if (s.used) { logMsg('', 'The shrine is silent now.'); return; }
+    s.used = true;
+    var r = Math.random();
+    if (r < 0.45) { hero.hp = maxHpOf(); hero.mp = maxMpOf(); logMsg('win', 'The shrine restores you fully.'); fxText(s.x, s.y, 'restored', '#9fe0a0'); }
+    else if (r < 0.72) { var g = 20 + world.depth * 10; hero.gold += g; hero.hp = maxHpOf(); logMsg('win', 'A blessing of fortune: +' + g + ' gold.'); fxText(s.x, s.y, '+' + g + 'g', '#ffd76a'); }
+    else if (r < 0.9) { hero.maxHp += 3; hero.hp = maxHpOf(); logMsg('win', 'Vitality surges — +3 max HP!'); fxText(s.x, s.y, '+3 HP', '#9fe0a0'); }
+    else { hero.atk += 1; logMsg('win', 'A gift of strength — +1 ATK!'); fxText(s.x, s.y, '+1 ATK', '#ffd2d2'); }
+    fxBurst(s.x, s.y, '#9fd8ff'); Cade.haptic(8); markDirty(); refreshAll();
   }
 
   // ---- consumables ----------------------------------------------------------
@@ -1078,13 +1134,12 @@
   function startTravel(tx, ty) {
     if (!playerActive()) return;
     if (!world.explored[ty] || !world.explored[ty][tx]) return;
+    // only route to a real, reachable floor tile (or a foe/feature standing on
+    // floor) — never to a wall, sealed gate, or unexplored void.
+    if (!walkable(tx, ty)) return;
     var p = world.player;
     var path = bfsPath(p.x, p.y, tx, ty);
-    if (!path || !path.length) {
-      // tapped own tile or unreachable → interact / wait
-      if (tx === p.x && ty === p.y) interact();
-      return;
-    }
+    if (!path || !path.length) return;
     world.path = path; world.pathT = 0;
   }
   function cancelTravel() { if (world) { world.path = null; } }
@@ -1092,11 +1147,13 @@
     if (!world || !world.path || !world.path.length || !playerActive()) { if (world) world.path = null; return; }
     // stop if a visible enemy is near
     for (var i = 0; i < world.monsters.length; i++) { var m = world.monsters[i]; if (m.awake && world.visible[m.y] && world.visible[m.y][m.x] && cheb(m.x, m.y, world.player.x, world.player.y) <= LIGHT) { world.path = null; return; } }
+    var hpBefore = hero.hp;
     var nxt = world.path.shift();
     var dx = nxt[0] - world.player.x, dy = nxt[1] - world.player.y;
     var moved = tryMove(dx, dy);
-    if (!moved) world.path = null;
-    if (!world.path || !world.path.length) world.path = null;
+    if (!moved) { world.path = null; return; }
+    if (world && hero.hp < hpBefore) world.path = null;   // took damage (trap/ambush) — stop here
+    if (!world || !world.path || !world.path.length) { if (world) world.path = null; }
   }
 
   // =========================================================================
@@ -1104,16 +1161,21 @@
   // =========================================================================
   function camera() {
     var p = world.player;
-    var cx = clamp(p.x - (VW >> 1), 0, MW - VW);
-    var cy = clamp(p.y - (VH >> 1), 0, MH - VH);
+    var rx = p.rx == null ? p.x : p.rx, ry = p.ry == null ? p.y : p.ry;
+    // centre on the (smoothly-lerped) player position, in float tiles
+    var cx = clamp(rx - (VW - 1) / 2, 0, MW - VW);
+    var cy = clamp(ry - (VH - 1) / 2, 0, MH - VH);
     return { x: cx, y: cy };
   }
+  // Constant-speed glide toward the logical tile — crisp grid steps, no float drift.
   function lerpEnt(e, dt) {
-    var sp = 12 * dt;
-    e.rx = e.rx == null ? e.x : e.rx + (e.x - e.rx) * Math.min(1, sp);
-    e.ry = e.ry == null ? e.y : e.ry + (e.y - e.ry) * Math.min(1, sp);
-    if (Math.abs(e.rx - e.x) < 0.02) e.rx = e.x;
-    if (Math.abs(e.ry - e.y) < 0.02) e.ry = e.y;
+    if (e.rx == null) e.rx = e.x; if (e.ry == null) e.ry = e.y;
+    var step = 14 * dt;                       // tiles / second
+    var dx = e.x - e.rx, dy = e.y - e.ry;
+    // snap if a long jump (teleport/blink across the map) to avoid a slow crawl
+    if (Math.abs(dx) > 6 || Math.abs(dy) > 6) { e.rx = e.x; e.ry = e.y; return; }
+    e.rx = Math.abs(dx) <= step ? e.x : e.rx + step * (dx < 0 ? -1 : 1);
+    e.ry = Math.abs(dy) <= step ? e.y : e.ry + step * (dy < 0 ? -1 : 1);
   }
   function roundRect(ctx, x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
 
@@ -1123,6 +1185,7 @@
     var dt = lastFrame ? Math.min(0.05, (ts - lastFrame) / 1000) : 0.016; lastFrame = ts;
     var ctx = ui.ctx, w = world;
     if (!w) { return; }
+    lerpEnt(w.player, dt);            // lerp player first so the camera tracks it smoothly
     var cam = camera();
     var b = w.biome;
     // shake
@@ -1133,13 +1196,14 @@
     ctx.fillStyle = '#06070a'; ctx.fillRect(0, 0, CW, CH);
     ctx.save(); ctx.translate(sox, soy);
 
-    // tiles
-    for (var vy = 0; vy < VH; vy++) for (var vx = 0; vx < VW; vx++) {
-      var mx = cam.x + vx, my = cam.y + vy;
+    // tiles — iterate one extra ring so sub-pixel scrolling never shows a gap
+    var sx0 = Math.floor(cam.x) - 1, sy0 = Math.floor(cam.y) - 1;
+    for (var vy = 0; vy < VH + 2; vy++) for (var vx = 0; vx < VW + 2; vx++) {
+      var mx = sx0 + vx, my = sy0 + vy;
       if (mx < 0 || my < 0 || mx >= MW || my >= MH) continue;
       if (!w.explored[my][mx]) continue;
       var vis = w.visible[my][mx];
-      var px = vx * TILE, py = vy * TILE;
+      var px = (mx - cam.x) * TILE, py = (my - cam.y) * TILE;
       var t = w.map[my][mx];
       if (t === T_FLOOR) {
         ctx.fillStyle = ((mx + my) & 1) ? b.floor : b.floor2;
@@ -1164,8 +1228,8 @@
     }
     // monsters
     for (var mi = 0; mi < w.monsters.length; mi++) { var m = w.monsters[mi]; lerpEnt(m, dt); if (w.visible[m.y] && w.visible[m.y][m.x]) drawMob(ctx, m, cam); }
-    // player
-    var p = w.player; lerpEnt(p, dt); drawPlayer(ctx, p, cam);
+    // player (already lerped at the top of the frame)
+    var p = w.player; drawPlayer(ctx, p, cam);
 
     // projectiles / fx
     drawFx(ctx, cam, dt);
@@ -1220,6 +1284,7 @@
         if (trapHot(o)) glyph(ctx, '▲', cx, cy, '#e87a7a', a, 16); else glyph(ctx, '⬚', cx, cy, 'rgba(160,120,120,0.5)', a, 12);
         break;
       case 'tele': glyph(ctx, '◉', cx, cy, '#a87fe0', a * (0.6 + 0.4 * Math.abs(Math.sin(now() / 400))), 18); break;
+      case 'shrine': glyph(ctx, '⛩', cx, cy, o.used ? 'rgba(150,160,180,0.45)' : '#bfe0ff', o.used ? a : a * (0.7 + 0.3 * Math.abs(Math.sin(now() / 500))), 18); break;
       case 'chest': glyph(ctx, o.opened ? '📭' : (o.lush ? '🎁' : '📦'), cx, cy, '#ffd76a', a, 16); break;
       case 'npc': glyph(ctx, o.icon, cx, cy, o.col, 1, 18);
         ctx.globalAlpha = 0.8; ctx.fillStyle = o.col; ctx.font = '9px ui-monospace, monospace'; ctx.textAlign = 'center'; ctx.fillText(o.name, cx, cy + 14); ctx.globalAlpha = 1; break;
@@ -1257,12 +1322,21 @@
     var bo = bumpOff(p), sh = entShake(p);
     var cx = (p.rx - cam.x) * TILE + TILE / 2 + bo.x + sh, cy = (p.ry - cam.y) * TILE + TILE / 2 + bo.y;
     var r = TILE / 2 - 2;
-    // glow
-    ctx.globalAlpha = 0.25; ctx.fillStyle = '#ffe9b0'; ctx.beginPath(); ctx.arc(cx, cy, r + 4, 0, 6.3); ctx.fill(); ctx.globalAlpha = 1;
-    ctx.fillStyle = '#f4e9d6'; ctx.beginPath(); ctx.arc(cx, cy, r, 0, 6.3); ctx.fill();
-    ctx.fillStyle = '#2a2218'; ctx.beginPath(); ctx.arc(cx, cy, r - 4, 0, 6.3); ctx.fill();
-    // facing indicator
-    ctx.fillStyle = '#ffe9b0'; ctx.beginPath(); ctx.arc(cx + p.dir.x * (r - 3), cy + p.dir.y * (r - 3), 2.4, 0, 6.3); ctx.fill();
+    var fx = p.dir.x, fy = p.dir.y;
+    // warm torch glow
+    var glow = ctx.createRadialGradient(cx, cy, 2, cx, cy, r + 7);
+    glow.addColorStop(0, 'rgba(255,224,150,0.35)'); glow.addColorStop(1, 'rgba(255,224,150,0)');
+    ctx.fillStyle = glow; ctx.beginPath(); ctx.arc(cx, cy, r + 7, 0, 6.3); ctx.fill();
+    // body (solid, bright) with a dark outline so it reads as a hero, not a ring
+    ctx.fillStyle = '#5ec8e6'; ctx.beginPath(); ctx.arc(cx, cy, r, 0, 6.3); ctx.fill();
+    ctx.lineWidth = 2; ctx.strokeStyle = '#10333f'; ctx.stroke();
+    // little hood highlight
+    ctx.fillStyle = 'rgba(255,255,255,0.22)'; ctx.beginPath(); ctx.arc(cx - r * 0.3, cy - r * 0.35, r * 0.42, 0, 6.3); ctx.fill();
+    // eyes, looking the way you move
+    var px = -fy, py = fx; // perpendicular to facing
+    ctx.fillStyle = '#10333f';
+    ctx.beginPath(); ctx.arc(cx + fx * 3 + px * 3, cy + fy * 3 + py * 3, 2, 0, 6.3); ctx.fill();
+    ctx.beginPath(); ctx.arc(cx + fx * 3 - px * 3, cy + fy * 3 - py * 3, 2, 0, 6.3); ctx.fill();
   }
   function drawFx(ctx, cam, dt) {
     var w = world, t = now();
@@ -1326,11 +1400,8 @@
       '<span>🛡 ' + defOf() + '</span>' +
       '<span class="cr-gold">🪙 ' + hero.gold + '</span>';
   }
-  function refreshLog() {
-    if (!ui || !ui.log || !world) return;
-    var last = world.log.slice(-3);
-    ui.log.innerHTML = last.map(function (l) { return '<div class="cr-line cr-' + (l.k || '') + '">' + Cade.escapeHtml(l.t) + '</div>'; }).join('');
-  }
+  // Log lines are now appended + auto-faded by logMsg(); nothing to rebuild here.
+  function refreshLog() {}
   function refreshAll() { refreshBars(); refreshHud(); refreshLog(); refreshItemBar(); refreshAbilCd(); }
 
   // ---- ability bar ----------------------------------------------------------
@@ -1374,11 +1445,13 @@
   //  overlay: character / inventory
   // =========================================================================
   function openCharacter() {
+    if (!hero) { Cade.showToast('Still loading your delver…', 'info', 1200); return; }
     closeOverlay();
     var ov = mkOverlay('Character');
     var body = ov.querySelector('.cr-ov-body');
     var html = '<div class="cr-sheet">';
-    html += '<div class="cr-sheet-row"><b>' + hero.name + '</b> · Level ' + hero.level + '</div>';
+    html += '<div class="cr-sheet-row"><b>' + Cade.escapeHtml(hero.name) + '</b> · Level ' + hero.level +
+      ' <button class="cr-rename" data-rename="1">✏ rename</button></div>';
     html += '<div class="cr-grid2">' +
       stat('❤ Max HP', maxHpOf()) + stat('✦ Max MP', maxMpOf()) +
       stat('⚔ Attack', atkOf()) + stat('🛡 Defense', defOf()) +
@@ -1395,6 +1468,13 @@
     body.innerHTML = html;
     var btns = body.querySelectorAll('[data-eq]');
     for (var i = 0; i < btns.length; i++) (function (btn) { btn.addEventListener('click', function () { var id = btn.getAttribute('data-eq'); var g = gear(id); hero.equip[g.slot] = id; hero.hp = clamp(hero.hp, 0, maxHpOf()); hero.mp = clamp(hero.mp, 0, maxMpOf()); markDirty(); refreshAll(); openCharacter(); }); })(btns[i]);
+    var rn = body.querySelector('[data-rename]');
+    if (rn) rn.addEventListener('click', function () {
+      var v = window.prompt('Name your delver:', hero.name);
+      if (v == null) return;
+      v = String(v).replace(/[<>]/g, '').trim().slice(0, 24);
+      if (v) { hero.name = v; markDirty(); refreshAll(); openCharacter(); }
+    });
   }
   function stat(label, val) { return '<div class="cr-stat"><span>' + label + '</span><b>' + val + '</b></div>'; }
   function eqSlot(slot) { var g = gear(hero.equip[slot]); return '<div class="cr-eqslot"><div class="cr-eqic">' + (g ? g.icon : '·') + '</div><div class="cr-eqnm">' + (g ? g.name : '—') + '</div></div>'; }
@@ -1522,6 +1602,7 @@
       atk: hero.atk, def: hero.def, crit: hero.crit, gold: hero.gold,
       depth: hero.depth, maxDepth: hero.maxDepth, equip: hero.equip, bag: hero.bag,
       owned: hero.owned, stats: hero.stats, _wlvl: hero._wlvl || 0, _alvl: hero._alvl || 0,
+      _konami: hero._konami || false,
       createdAt: hero.createdAt, updatedAt: Date.now(), rev: hero.rev, client: clientId
     };
   }
@@ -1529,6 +1610,8 @@
     if (!d || typeof d !== 'object') return null;
     var h = freshHero();
     for (var k in d) if (d[k] != null) h[k] = d[k];
+    // normalize the only free-form, remotely-settable string
+    h.name = String(h.name == null ? 'Delver' : h.name).replace(/[<>]/g, '').slice(0, 24) || 'Delver';
     // sanity defaults for older/partial saves
     h.equip = h.equip || { weapon: 'dagger', armor: 'rags', trinket: 'none' };
     h.bag = h.bag || { potion: 1 };
@@ -1560,13 +1643,23 @@
     if (!db) { hero = local || freshHero(); hero.client = clientId; done(); attachFbListener(); return; }
     var settled = false;
     var fin = function (h) { if (settled) return; settled = true; hero = h; hero.client = clientId; done(); attachFbListener(); };
+    var useRemote = function (val) {
+      var remote = deserialize(val);
+      var chosen;
+      if (remote && local) chosen = (progressScore(remote) >= progressScore(local)) ? remote : local;
+      else chosen = remote || local || freshHero();
+      fin(chosen);
+    };
     try {
       db.ref(FB_PATH).once('value').then(function (snap) {
-        var remote = deserialize(snap.val());
-        var chosen;
-        if (remote && local) chosen = (progressScore(remote) >= progressScore(local)) ? remote : local;
-        else chosen = remote || local || freshHero();
-        fin(chosen);
+        var v = snap.val();
+        if (v != null) { useRemote(v); return; }
+        // nothing at the new path — migrate a save left at the old visible path
+        db.ref(FB_PATH_OLD).once('value').then(function (s2) {
+          var ov = s2.val();
+          if (ov != null) migrateOld = true;
+          useRemote(ov);
+        }).catch(function () { useRemote(null); });
       }).catch(function () { fin(local || freshHero()); });
     } catch (e) { fin(local || freshHero()); }
     // safety timeout if Firebase hangs
@@ -1588,8 +1681,11 @@
           hero = remote; hero.client = clientId;
           enter(0); Cade.showToast('Synced character from another device', 'success');
         } else {
-          // remember that a newer remote exists; we keep our run but won't clobber blindly
+          // a newer remote exists but we're mid-run — keep playing, but advance
+          // our logical clock past it so an equal-progress tie resolves to the
+          // active device and the progressScore transaction stays coherent.
           hero._remoteAhead = remote.rev;
+          hero.rev = Math.max(hero.rev || 1, remote.rev || 1);
         }
       };
       fbRef.on('value', fbCb);
@@ -1608,15 +1704,62 @@
     hero.rev = (hero.rev || 1) + 1;
     saveLocal();
     var db = fbDb(); if (!db) return;
-    try { db.ref(FB_PATH).set(serialize()); } catch (e) {}
+    var mine = serialize(), myScore = progressScore(mine);
+    try {
+      // Conflict-safe write: keep whichever character is more progressed (same
+      // rule loadHero uses), so a second open device can't clobber a better run.
+      db.ref(FB_PATH).transaction(function (cur) {
+        if (cur && cur.client !== clientId && progressScore(cur) > myScore) return; // abort, keep remote
+        return mine;
+      }, undefined, false);
+    } catch (e) { try { db.ref(FB_PATH).set(mine); } catch (e2) {} }
+    if (migrateOld) { migrateOld = false; try { db.ref(FB_PATH_OLD).remove(); } catch (e3) {} }
   }
 
   // =========================================================================
   //  input
   // =========================================================================
+  // ---- Konami easter egg ----------------------------------------------------
+  var konamiBuf = [];
+  var KONAMI = ['arrowup', 'arrowup', 'arrowdown', 'arrowdown', 'arrowleft', 'arrowright', 'arrowleft', 'arrowright', 'b', 'a'];
+  function konamiPush(k) {
+    if (!k) return;
+    konamiBuf.push(k.toLowerCase());
+    if (konamiBuf.length > KONAMI.length) konamiBuf.shift();
+    if (konamiBuf.length < KONAMI.length) return;
+    for (var i = 0; i < KONAMI.length; i++) if (konamiBuf[i] !== KONAMI[i]) return;
+    konamiBuf.length = 0; konamiReward();
+  }
+  function konamiReward() {
+    if (!hero) return;
+    if (!hero._konami) {
+      hero._konami = true; acquireGear('lucky');
+      Cade.showToast('🍀 The Delver’s Blessing — a Lucky Clover appears!', 'success', 3000);
+      logMsg('win', 'A four-leaf clover materializes in your pack!');
+    } else {
+      hero.hp = maxHpOf(); hero.mp = maxMpOf();
+      Cade.showToast('🍀 Fully restored.', 'success', 1800);
+    }
+    if (world && world.player) fxBurst(world.player.x, world.player.y, '#7fe08a');
+    markDirty(); refreshAll();
+  }
+
+  function isTyping(e) {
+    var t = e.target; if (!t) return false;
+    var tag = t.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
+    if (t.isContentEditable) return true;
+    if (t.closest && t.closest('.cm-editor')) return true;
+    return false;
+  }
   function onKey(e) {
-    if (!document.getElementById('crawler-panel')) return;
+    var pan = document.getElementById('crawler-panel');
+    if (!pan) return;
+    // Don't hijack keys while the user is typing in the editor / an input —
+    // only act when the game itself holds focus, or focus is on nothing special.
+    if (!pan.contains(document.activeElement) && isTyping(e)) return;
     var k = e.key;
+    konamiPush(k);
     if (k === 'Escape') { if (document.getElementById('cr-overlay')) { e.preventDefault(); closeOverlay(); return; } e.preventDefault(); close(); return; }
     if (document.getElementById('cr-overlay')) return; // overlay captures nothing else
     if (world && world.mode === 'dead') { if (k === ' ' || k === 'Enter') { e.preventDefault(); enter(0); } return; }
@@ -1634,7 +1777,7 @@
 
   function bindCanvasInput(canvas) {
     var sx = 0, sy = 0, st = 0, moved = false, tracking = false;
-    canvas.addEventListener('pointerdown', function (e) { sx = e.clientX; sy = e.clientY; st = now(); moved = false; tracking = true; }, { passive: true });
+    canvas.addEventListener('pointerdown', function (e) { try { canvas.focus(); } catch (er) {} sx = e.clientX; sy = e.clientY; st = now(); moved = false; tracking = true; }, { passive: true });
     canvas.addEventListener('pointermove', function (e) { if (tracking && (Math.abs(e.clientX - sx) > 8 || Math.abs(e.clientY - sy) > 8)) moved = true; }, { passive: true });
     canvas.addEventListener('pointerup', function (e) {
       if (!tracking) return; tracking = false;
@@ -1649,14 +1792,18 @@
       var rect = canvas.getBoundingClientRect();
       var lx = (e.clientX - rect.left) / rect.width * CW;
       var ly = (e.clientY - rect.top) / rect.height * CH;
-      var cam = camera();
-      var tx = Math.floor(lx / TILE) + cam.x, ty = Math.floor(ly / TILE) + cam.y;
+      var cam = camera();                       // cam.x/y are floats now
+      var tx = Math.floor(lx / TILE + cam.x), ty = Math.floor(ly / TILE + cam.y);
       if (tx < 0 || ty < 0 || tx >= MW || ty >= MH) return;
       var p = world.player;
-      // tapping adjacent or own tile interacts; otherwise travel
       if (cheb(tx, ty, p.x, p.y) <= 1) {
         if (tx === p.x && ty === p.y) { interact(); }
-        else { cancelTravel(); tryMove(sgn(tx - p.x), sgn(ty - p.y)); }
+        else {
+          // collapse a diagonal tap to one cardinal step (movement is 4-dir)
+          var ddx = tx - p.x, ddy = ty - p.y;
+          if (ddx !== 0 && ddy !== 0) { if (Math.abs(ddx) >= Math.abs(ddy)) ddy = 0; else ddx = 0; }
+          cancelTravel(); tryMove(sgn(ddx), sgn(ddy));
+        }
       } else {
         startTravel(tx, ty);
       }
@@ -1711,7 +1858,7 @@
           '</div>' +
         '</div>' +
         '<div id="cr-hud" class="cr-hud"></div>' +
-        '<div class="cr-stage"><canvas id="crawler-canvas" class="cr-canvas"></canvas>' +
+        '<div class="cr-stage"><canvas id="crawler-canvas" class="cr-canvas" tabindex="0"></canvas>' +
           '<div id="cr-log" class="cr-log"></div></div>' +
         '<div id="cr-items" class="cr-items"></div>' +
         '<div id="cr-abil" class="cr-abil"></div>' +
@@ -1778,6 +1925,7 @@
       // resume into town (always a safe hub); if dead-state somehow, fix
       enter(0);
       refreshAll();
+      try { ui.canvas.focus(); } catch (e) {}   // so desktop keys drive the game immediately
       raf = requestAnimationFrame(render);
     });
   }
