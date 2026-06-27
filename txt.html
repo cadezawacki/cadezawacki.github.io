@@ -1560,7 +1560,17 @@ body {
   padding: 2px 4px;
   box-shadow: 0 4px 16px rgba(0,0,0,0.18);
   pointer-events: auto;
+  /* Never let a long (or user-customised) button set push controls off-screen
+     on narrow phones: cap the pill at the viewport and scroll horizontally
+     inside it instead. flex-start while scrolling keeps the first button
+     reachable (centering a scroll container would clip its start). */
+  flex-wrap: nowrap;
+  max-width: calc(100vw - 16px);
+  overflow-x: auto;
+  scrollbar-width: none; /* Firefox: hide the scrollbar, keep the scroll */
+  -webkit-overflow-scrolling: touch;
 }
+.mob-toolbar-inner::-webkit-scrollbar { display: none; }
 .mob-btn {
   background: none;
   border: none;
@@ -14284,7 +14294,7 @@ window.mdBtn = function(kind) {
 // defined for it in MD_BTN_DEFS; bold/italic/underline get their styled glyph.
 function renderMobileMdRow() {
   const row = document.getElementById('mob-md-inline'); if (!row) return;
-  const on = window.Settings ? Settings.get('mobile.mdRow') : true;
+  const on = window.Settings ? Settings.get('mobile.mdToolbar') : true;
   if (!on) { row.innerHTML = ''; return; }
   const keys = String(window.Settings ? Settings.get('mobile.mdButtons') : 'bold,italic,under,head,list,todo,code,link')
     .split(',').map(s => s.trim()).filter(k => MD_BTN_DEFS[k]);
@@ -14920,7 +14930,10 @@ try {
     { value: '7', label: 'Older than 7 days' },
     { value: '30', label: 'Older than 30 days' },
   ] });
-  registerSetting({ key: 'mobile.mdRow', label: 'Markdown buttons in mobile toolbar', type: 'toggle', default: true, section: 'Behavior', apply() { try { renderMobileMdRow(); } catch {} } });
+  // NB: new key (was 'mobile.mdRow', default false). Renamed so existing
+  // devices that persisted the old false default don't silently lose their
+  // markdown buttons now that the row is merged into the main toolbar.
+  registerSetting({ key: 'mobile.mdToolbar', label: 'Markdown buttons in mobile toolbar', type: 'toggle', default: true, section: 'Behavior', apply() { try { renderMobileMdRow(); } catch {} } });
   registerSetting({ key: 'mobile.mdButtons', label: 'Markdown toolbar buttons', type: 'text', default: 'bold,italic,under,head,list,todo,code,link', section: 'Behavior', hint: 'Comma list: bold, italic, under, code, head, list, todo, quote, link', apply() { try { renderMobileMdRow(); } catch {} } });
 } catch (e) { console.error('widget settings register failed', e); }
 
