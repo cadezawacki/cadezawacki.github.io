@@ -1531,17 +1531,22 @@ body {
   position: absolute;
   top: var(--menubar-h);
   left: 0;
-  /* Stop short of the editor scrollbar (14px, see .cm-scroller) so the band's
-     opaque background doesn't paint over / clip the scroll thumb. No prose
-     reaches that far right (the editor keeps right padding), so masking is
-     unaffected. */
-  right: 14px;
-  /* Opaque band in the editor's own colour so text scrolling up disappears
-     BEHIND the toolbar instead of peeking through the gap. */
-  background: var(--bg);
+  right: 0;
   padding: 6px 0 8px;
   z-index: 50;
   pointer-events: none; /* only the pill catches clicks; the band around it doesn't */
+}
+/* Opaque band in the editor's own colour so text scrolling up disappears BEHIND
+   the toolbar instead of peeking through the gap. Lives on a pseudo-element
+   inset 14px from the right so it stops short of the editor scrollbar (see
+   .cm-scroller) without pulling the pill off-centre — the toolbar itself stays
+   full-width so align-items:center lands the pill at the true viewport centre. */
+.mobile-toolbar::before {
+  content: '';
+  position: absolute;
+  inset: 0 14px 0 0;
+  background: var(--bg);
+  z-index: -1;
 }
 /* Icon-only buttons: hide any trailing text label, keep the SVG. */
 .mob-btn.icon-only > span:not(svg) { display: none; }
@@ -1574,9 +1579,12 @@ body {
 .mob-btn:hover { background: var(--surface-hover); color: var(--text); }
 .mob-btn:active { background: var(--surface-2); color: var(--text); }
 .mob-btn svg { width: 12px; height: 12px; flex-shrink: 0; }
-.mob-sep { width: 1px; height: 14px; background: var(--border); margin: 0 2px; flex-shrink: 0; }
-.mob-md-row { border-top: 1px solid var(--border); }
-.mob-md-btn { min-width: 40px; font-weight: 600; justify-content: center; }
+/* '|' group divider between toolbar sections. */
+.mob-div { color: var(--text-faint); font-size: 14px; line-height: 1; padding: 0 2px; user-select: none; -webkit-user-select: none; flex-shrink: 0; }
+/* Inline markdown-button group: lays its buttons in the same flex row as the
+   rest of the toolbar (it's a contents box, not a second pill). */
+.mob-md-inline { display: contents; }
+.mob-md-btn { min-width: 30px; font-weight: 600; justify-content: center; }
 .mob-fmt { min-width: 32px; justify-content: center; font-size: 14px; }
 .mob-fmt-b { font-weight: 800; }
 .mob-fmt-i { font-style: italic; font-family: serif; }
@@ -1782,7 +1790,10 @@ body {
     gap: 6px;
     position: fixed;
     right: 10px;
-    bottom: 36px;
+    /* Sit clear of the footer (18px + safe-area inset, see .footer) plus a
+       small gap so the buttons never overlap the clock/status row — even on
+       devices with a large bottom safe area. */
+    bottom: calc(18px + env(safe-area-inset-bottom) + 14px);
     z-index: 500;
     pointer-events: none;
   }
@@ -1790,6 +1801,9 @@ body {
      scroll buttons while it's open so their tap targets can't intercept the
      Find/Replace controls. */
   body:has(.find-panel.open) .mobile-scroll-btns { display: none !important; }
+  /* Hide the scroll buttons while any modal/settings dialog is open so their
+     tap targets can't sit on top of the modal's Done button. */
+  body:has(.modal-overlay.open) .mobile-scroll-btns { display: none !important; }
   .mobile-scroll-btn {
     width: 34px;
     height: 34px;
@@ -1808,9 +1822,14 @@ body {
     -webkit-tap-highlight-color: transparent;
     pointer-events: all;
   }
+  .mobile-scroll-btn:hover {
+    opacity: 0.85;
+    background: rgba(15, 149, 152, 0.25);
+  }
   .mobile-scroll-btn:active {
     opacity: 1;
-    background: rgba(15, 149, 152, 0.35);
+    background: rgba(15, 149, 152, 0.45);
+    transform: scale(0.92);
   }
   .mobile-scroll-btn svg {
     width: 15px;
@@ -2247,19 +2266,6 @@ body {
 }
 #timer-panel.timer-flash { animation: timerFlash 1.8s ease-in-out infinite; }
 #timer-panel.timer-flash .timer-time { color: var(--accent); }
-/* Long-press room picker HUD (item 10). */
-.room-hud { position: fixed; inset: 0; z-index: 5500; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; animation: overlayIn 120ms ease-out; }
-.room-hud-inner { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; box-shadow: 0 12px 40px rgba(0,0,0,0.4); padding: 10px; max-height: 70vh; overflow-y: auto; min-width: 220px; max-width: 86vw; display: flex; flex-direction: column; gap: 4px; }
-.room-hud-title { font-size: var(--text-xs); color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.05em; padding: 4px 8px 6px; }
-.room-hud-item { text-align: left; background: none; border: none; color: var(--text); cursor: pointer; padding: 12px 14px; border-radius: 8px; font-size: 1rem; font-family: var(--font-mono); }
-.room-hud-item:active { background: var(--surface-hover, rgba(127,127,127,0.15)); }
-.room-hud-item.active { background: var(--accent); color: #fff; }
-/* Transparent edge rails: catch the 2s long-press for the room HUD so the
-   browser doesn't start a text selection in the editor (item 10 fix). */
-.hud-rail { position: fixed; top: var(--menubar-h); bottom: 26px; width: 12px; z-index: 40; background: transparent; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; touch-action: pan-y; }
-.hud-rail-left { left: 0; }
-.hud-rail-right { right: 0; }
-@media (hover: hover) { .hud-rail { display: none; } } /* pointer devices use the breadcrumb / Ctrl+P */
 .timer-cfg { display: flex; gap: 8px; justify-content: center; padding: 6px 10px; }
 .timer-cfg label { display: flex; align-items: center; gap: 4px; font-size: var(--text-xs); color: var(--text-muted); }
 .timer-cfg input { width: 64px; padding: 3px 5px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface, transparent); color: var(--text); font-size: var(--text-xs); }
@@ -2452,7 +2458,11 @@ body.zen.zen-tw .editor-wrap .cm-content { padding-top: 38vh; padding-bottom: 38
   </button>
 </div>
 
-<!-- ========== MOBILE TOOLBAR ========== -->
+<!-- ========== MOBILE TOOLBAR ==========
+     A SINGLE floating pill: undo/redo, then the (configurable) markdown
+     formatting buttons rendered inline by renderMobileMdRow() into #mob-md-inline,
+     the highlight picker, then copy/paste/download. '|' glyphs divide the groups.
+     There is intentionally no second row — the markdown buttons live here. -->
 <div class="mobile-toolbar" id="mobile-toolbar">
   <div class="mob-toolbar-inner">
     <button class="mob-btn" onclick="mobileUndo()" title="Undo">
@@ -2461,14 +2471,13 @@ body.zen.zen-tw .editor-wrap .cm-content { padding-top: 38vh; padding-bottom: 38
     <button class="mob-btn" onclick="mobileRedo()" title="Redo">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-.49-3.51"/></svg>
     </button>
-    <div class="mob-sep"></div>
-    <button class="mob-btn mob-fmt mob-fmt-b" onclick="mdBtn('bold')" title="Bold">B</button>
-    <button class="mob-btn mob-fmt mob-fmt-i" onclick="mdBtn('italic')" title="Italic">I</button>
-    <button class="mob-btn mob-fmt mob-fmt-u" onclick="mdBtn('under')" title="Underline">U</button>
+    <span class="mob-div" aria-hidden="true">|</span>
+    <!-- Configurable markdown buttons render here (renderMobileMdRow). -->
+    <span id="mob-md-inline" class="mob-md-inline"></span>
     <button class="mob-btn mob-fmt" onclick="openHighlightPicker(event)" title="Highlight color">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r=".9" fill="currentColor" stroke="none"/><circle cx="17.5" cy="10.5" r=".9" fill="currentColor" stroke="none"/><circle cx="8.5" cy="7.5" r=".9" fill="currentColor" stroke="none"/><circle cx="6.5" cy="12.5" r=".9" fill="currentColor" stroke="none"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/></svg>
     </button>
-    <div class="mob-sep"></div>
+    <span class="mob-div" aria-hidden="true">|</span>
     <button class="mob-btn" id="mob-copy-btn" onclick="mobileCopy()" title="Copy selection or all">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
     </button>
@@ -2479,7 +2488,6 @@ body.zen.zen-tw .editor-wrap .cm-content { padding-top: 38vh; padding-bottom: 38
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
     </button>
   </div>
-  <div class="mob-toolbar-inner mob-md-row" id="mob-md-row" style="display:none;"></div>
 </div>
 
 <!-- ========== FIND & REPLACE PANEL ========== -->
@@ -2498,9 +2506,6 @@ body.zen.zen-tw .editor-wrap .cm-content { padding-top: 38vh; padding-bottom: 38
 
 <!-- ========== EDITOR ========== -->
 <div class="editor-wrap" id="editor-wrap"></div>
-<!-- Edge rails capture the long-press room-picker HUD without selecting editor text -->
-<div class="hud-rail hud-rail-left" id="hud-rail-left"></div>
-<div class="hud-rail hud-rail-right" id="hud-rail-right"></div>
 
 <!-- ========== MOBILE SCROLL BUTTONS ========== -->
 <div class="mobile-scroll-btns" aria-hidden="true">
@@ -8493,7 +8498,10 @@ registerWidget({ name: 'Daily Notes Calendar', description: 'Browse rooms by the
 registerWidget({ name: 'Auto-color word', description: 'Pick a word + colour; every occurrence is tinted that colour', icon: '🎨', tags: 'color,word,highlight,auto', open: () => window.openAutoColorPicker && window.openAutoColorPicker() });
 // Breakout is now an external module (./txt/widgets/breakout/), loaded on demand.
 function runPickerItem(item) {
-  closePicker();
+  // Opening a widget shouldn't refocus the editor — on mobile that pops the
+  // soft keyboard up over the widget the user just launched. Scripts still
+  // refocus so the cursor lands back in the document after the transform.
+  closePicker(item && item.__widget ? true : false);
   if (item && item.__widget) { try { item.__widget.open(); } catch (e) { console.error('Widget open failed:', e); } return; }
   if (item && item.__pendingEntry) { // lazy script module — load then run the real entry
     const m = _manifestById.get(item.__moduleId);
@@ -8524,10 +8532,10 @@ window.openPicker = function() {
   setTimeout(() => searchEl.focus(), 50);
 };
 
-function closePicker() {
+function closePicker(skipFocus) {
   pickerOpen = false;
   document.getElementById('picker-overlay').classList.remove('open');
-  editor.focus();
+  if (!skipFocus) editor.focus();
 }
 
 // Track whether last picker navigation was keyboard (prevents hover glitch on re-render)
@@ -13756,6 +13764,17 @@ window.addEventListener('keydown', (e) => {
 // ---- Clock / timezone strip (#42) ----
 let _clockTimer = null;
 function clockTzs() { try { return String(window.Settings ? Settings.get('widgets.clockTz') : '').split(',').map(s => s.trim()).filter(Boolean); } catch { return []; } }
+// Short, footer-friendly abbreviations for common cities (keyed by IANA tz).
+// Falls back to the city name (last path segment) when not listed.
+const TZ_ABBR = {
+  'Europe/London': 'LDN', 'Europe/Paris': 'PAR', 'Europe/Berlin': 'BER',
+  'Europe/Madrid': 'MAD', 'Europe/Rome': 'ROM', 'Europe/Moscow': 'MOW',
+  'America/New_York': 'NYC', 'America/Chicago': 'CHI', 'America/Denver': 'DEN',
+  'America/Los_Angeles': 'LA', 'America/Toronto': 'TOR', 'America/Sao_Paulo': 'SAO',
+  'Asia/Tokyo': 'TYO', 'Asia/Shanghai': 'SHA', 'Asia/Hong_Kong': 'HK',
+  'Asia/Singapore': 'SG', 'Asia/Dubai': 'DXB', 'Asia/Kolkata': 'DEL',
+  'Australia/Sydney': 'SYD', 'Pacific/Auckland': 'AKL', 'UTC': 'UTC',
+};
 function clockTick() {
   const el = document.getElementById('footer-clock'); if (!el) return;
   const now = new Date();
@@ -13763,7 +13782,7 @@ function clockTick() {
   let html = now.toLocaleTimeString([], opt);
   for (const tz of clockTzs()) {
     try {
-      const label = tz.split('/').pop().replace(/_/g, ' ');
+      const label = TZ_ABBR[tz] || tz.split('/').pop().replace(/_/g, ' ');
       html += '<span class="fc-tz">' + escapeHtml(label) + ' ' + now.toLocaleTimeString([], Object.assign({ timeZone: tz }, opt)) + '</span>';
     } catch {}
   }
@@ -13954,8 +13973,7 @@ window.haptic = function(ms) { try { if (navigator.vibrate) navigator.vibrate(ms
 
 // Swipe between rooms (#77, item 10): a deliberate horizontal flick switches to
 // the prev/next visible room — ONE room per gesture, with a cooldown so it can't
-// jump several at once, skipping locked (not-yet-unlocked) rooms. A 2s long-press
-// near a side edge opens a room-picker HUD instead.
+// jump several at once, skipping locked (not-yet-unlocked) rooms.
 function _swipeRoomList() {
   let list;
   try { list = (typeof roomsInActiveWorkspace === 'function') ? roomsInActiveWorkspace(false) : rooms.slice(); } catch { list = rooms.slice(); }
@@ -13963,54 +13981,6 @@ function _swipeRoomList() {
   return list || [];
 }
 function _roomLockedClosed(r) { try { return roomHasPassword(r) && !roomIsUnlocked(r); } catch { return false; } }
-window.showRoomHud = function() {
-  closeRoomHud();
-  const list = _swipeRoomList();
-  if (!list.length) return;
-  const hud = document.createElement('div');
-  hud.id = 'room-hud'; hud.className = 'room-hud';
-  hud.innerHTML = '<div class="room-hud-inner"><div class="room-hud-title">Switch room</div>' + list.map(r => {
-    const esc = escapeHtml(r.replace(/\\/g, '\\\\').replace(/'/g, "\\'"));
-    return '<button class="room-hud-item' + (r === activeRoom ? ' active' : '') + '" onclick="closeRoomHud(); switchRoom(\'' + esc + '\')">' +
-      escapeHtml(r) + (_roomLockedClosed(r) ? ' 🔒' : '') + '</button>';
-  }).join('') + '</div>';
-  hud.addEventListener('click', e => { if (e.target === hud) closeRoomHud(); });
-  document.body.appendChild(hud);
-  try { haptic(20); } catch {}
-};
-window.closeRoomHud = function() { const h = document.getElementById('room-hud'); if (h) h.remove(); };
-// Long-press the transparent edge rails (not the editor) → room HUD. Because
-// the rails hold no selectable text, the browser never starts a text selection.
-['hud-rail-left', 'hud-rail-right'].forEach(id => {
-  const rail = document.getElementById(id);
-  if (!rail) return;
-  let timer = null, sx = 0, sy = 0, t0 = 0, fired = false;
-  rail.addEventListener('touchstart', e => {
-    const t = e.touches[0]; if (!t) return;
-    sx = t.clientX; sy = t.clientY; t0 = Date.now(); fired = false;
-    clearTimeout(timer);
-    timer = setTimeout(() => { fired = true; window.showRoomHud(); }, 1500);
-  }, { passive: true });
-  rail.addEventListener('touchmove', e => {
-    const t = e.touches[0]; if (!t) return;
-    if (Math.abs(t.clientX - sx) > 14 || Math.abs(t.clientY - sy) > 14) clearTimeout(timer);
-  }, { passive: true });
-  rail.addEventListener('touchend', e => {
-    clearTimeout(timer);
-    // A quick tap on the rail should still place the caret as if it landed on the
-    // editor — the rails sit over the edge gutter, so without this a tap there is
-    // simply swallowed (#8). Only forward genuine short, still taps.
-    const ct = e.changedTouches && e.changedTouches[0];
-    if (!fired && ct && Date.now() - t0 < 400 &&
-        Math.abs(ct.clientX - sx) <= 14 && Math.abs(ct.clientY - sy) <= 14) {
-      try {
-        const pos = editor.posAtCoords({ x: ct.clientX, y: ct.clientY });
-        if (pos != null) { editor.dispatch({ selection: { anchor: pos } }); editor.focus(); }
-      } catch {}
-    }
-  }, { passive: true });
-  rail.addEventListener('touchcancel', () => clearTimeout(timer), { passive: true });
-});
 (function() {
   const el = editor.scrollDOM;
   if (!el) return;
@@ -14309,14 +14279,20 @@ window.mdBtn = function(kind) {
   }
   editor.focus();
 };
+// Render the configurable markdown buttons INLINE into the single floating
+// toolbar (#mob-md-inline) — not a second row. Each button uses the label/icon
+// defined for it in MD_BTN_DEFS; bold/italic/underline get their styled glyph.
 function renderMobileMdRow() {
-  const row = document.getElementById('mob-md-row'); if (!row) return;
-  const on = window.Settings ? Settings.get('mobile.mdRow') : false;
-  row.style.display = on ? '' : 'none';
+  const row = document.getElementById('mob-md-inline'); if (!row) return;
+  const on = window.Settings ? Settings.get('mobile.mdRow') : true;
   if (!on) { row.innerHTML = ''; return; }
-  const keys = String(window.Settings ? Settings.get('mobile.mdButtons') : 'bold,italic,head,list,todo,code,link')
+  const keys = String(window.Settings ? Settings.get('mobile.mdButtons') : 'bold,italic,under,head,list,todo,code,link')
     .split(',').map(s => s.trim()).filter(k => MD_BTN_DEFS[k]);
-  row.innerHTML = keys.map(k => '<button class="mob-btn mob-md-btn" title="' + MD_BTN_DEFS[k].title + '" onclick="mdBtn(\'' + k + '\')">' + MD_BTN_DEFS[k].label + '</button>').join('');
+  const fmtCls = { bold: 'mob-fmt mob-fmt-b', italic: 'mob-fmt mob-fmt-i', under: 'mob-fmt mob-fmt-u' };
+  row.innerHTML = keys.map(k => {
+    const cls = fmtCls[k] || 'mob-md-btn';
+    return '<button class="mob-btn ' + cls + '" title="' + MD_BTN_DEFS[k].title + '" onclick="mdBtn(\'' + k + '\')">' + MD_BTN_DEFS[k].label + '</button>';
+  }).join('');
 }
 // (mobile markdown-row settings are registered in "Deferred widget settings"
 // below, after the Settings module exists — see note above.)
@@ -14944,8 +14920,8 @@ try {
     { value: '7', label: 'Older than 7 days' },
     { value: '30', label: 'Older than 30 days' },
   ] });
-  registerSetting({ key: 'mobile.mdRow', label: 'Mobile markdown toolbar row', type: 'toggle', default: false, section: 'Behavior', apply() { try { renderMobileMdRow(); } catch {} } });
-  registerSetting({ key: 'mobile.mdButtons', label: 'Markdown row buttons', type: 'text', default: 'bold,italic,head,list,todo,code,link', section: 'Behavior', hint: 'Comma list: bold, italic, code, head, list, todo, quote, link', apply() { try { renderMobileMdRow(); } catch {} } });
+  registerSetting({ key: 'mobile.mdRow', label: 'Markdown buttons in mobile toolbar', type: 'toggle', default: true, section: 'Behavior', apply() { try { renderMobileMdRow(); } catch {} } });
+  registerSetting({ key: 'mobile.mdButtons', label: 'Markdown toolbar buttons', type: 'text', default: 'bold,italic,under,head,list,todo,code,link', section: 'Behavior', hint: 'Comma list: bold, italic, under, code, head, list, todo, quote, link', apply() { try { renderMobileMdRow(); } catch {} } });
 } catch (e) { console.error('widget settings register failed', e); }
 
 // ---- Register the line-wrap mode setting (Feature 23 / item 3) ----
