@@ -488,6 +488,100 @@
   function trophyBonus() { return (hero && hero.trophies ? hero.trophies.length : 0) * 3; } // +3 max HP per boss trophy
 
   // =========================================================================
+  //  STORY — the tale of the Deepdelve, told in chapters by the Oracle.
+  //  Chapter 0 is the prologue (always unlocked). Each region's boss-fall
+  //  unlocks the next chapter, so hero.story is the highest chapter reached.
+  //  Indexes 1..7 line up with REGIONS[0..6]; chapter 8 is the epilogue.
+  // =========================================================================
+  var STORY = [
+    { ch: 0, title: 'The Calling', icon: '✦', region: null,
+      lines: [
+        'Hearthhold clings to the lip of a wound in the world — the Deepdelve, a shaft that falls past root and stone into a dark that has no floor anyone has returned to name.',
+        'Once the Lightkeepers sealed something at the bottom and built a town on the lid. The seal is old now. It weeps monsters. The wells taste of iron and the children dream in a voice that is not theirs.',
+        'You came for gold, or glory, or because the dark called you by name. The Oracle only smiles. "Down, then," she says. "The Delve remembers everyone. Make sure it remembers you well."'
+      ] },
+    { ch: 1, title: 'The First Seal', icon: '💀', region: 'catacombs',
+      lines: [
+        'The Bone King wore a crown of keys — one for every door the Lightkeepers locked behind them. He has worn it a long time.',
+        'As he falls to dust the crown rolls to your feet, and you understand: the seals were never walls. They were wardens. Seven of them, set to keep the Deep One sleeping. One down.',
+        '"He was a friend of mine," the Oracle says when you return, turning the crown in her hands. "Before. They all were. Keep going. Some of them will thank you."'
+      ] },
+    { ch: 2, title: 'Roots of Memory', icon: '🌲', region: 'wood',
+      lines: [
+        'The Whispering Wood grew over the second warden until warden and wood were one. The Elder Treant did not fight you so much as remember fighting, again and again, a thousand springs of grief.',
+        'In its heartwood you find a seed of pure light — the last the Lightkeepers planted. It is warm. It is afraid.',
+        'The Oracle plants it in your house garden without asking. "It will grow as you do," is all she will say.'
+      ] },
+    { ch: 3, title: 'The Sunless Truth', icon: '🕯️', region: 'caves',
+      lines: [
+        'Deep in the caves the Venom Matriarch had spun the third seal into her web, feeding on the light it leaked. She had grown vast and patient and almost kind, in the way of things that have forgotten the sun.',
+        'Her last words are a map, etched in venom on the cave wall: the Delve is not a pit. It is a throat. And something at the bottom is finally, slowly, swallowing.',
+        '"I hoped that part wasn\'t true," the Oracle admits. For the first time, she looks afraid.'
+      ] },
+    { ch: 4, title: 'The Buried King', icon: '🏜️', region: 'desert',
+      lines: [
+        'Beneath the Scorched Desert lies a city that chose to be buried rather than face what rose. The Dune Pharaoh ruled its sand-choked halls, the fourth warden, mummified in his own duty.',
+        'He tests you and, finding you worthy, simply stops — relieved. The desert exhales. Somewhere far below, something notices the fourth seal go quiet.',
+        '"Four," the Oracle counts. "Halfway. The Deep One knows your name now, Delver. It has started saying it back."'
+      ] },
+    { ch: 5, title: 'Heart of Fire', icon: '🌋', region: 'ember',
+      lines: [
+        'The Emberforge is where the Lightkeepers forged the seals, and the Magma Tyrant is what one of them became after too long at the anvil — all purpose, no person, a fifth warden burning to ash and back forever.',
+        'You break the cycle. In the cooling slag you find the Lightkeepers\' last tool: a hammer that can mend a seal or shatter it. The choice, it seems, will be yours.',
+        'The seed in your garden has flowered. The Oracle weeps when she sees it, and won\'t say why.'
+      ] },
+    { ch: 6, title: 'The Drowned Song', icon: '🌊', region: 'coast',
+      lines: [
+        'The Tidemother sang the sixth seal to sleep beneath the Drowned Coast, and her song is so beautiful that men walk into the tide smiling. You stop your ears with the Oracle\'s wax and end the music.',
+        'In the sudden silence you hear it for the first time, rising from below: a single, vast, patient breath. In. Out. The Deep One is awake. It has been awake for a while.',
+        '"One seal left," the Oracle whispers. "And then a door. Bring the hammer. Bring everything. Bring yourself home, if you can."'
+      ] },
+    { ch: 7, title: 'The Bottom of Everything', icon: '🌀', region: 'abyss',
+      lines: [
+        'There is no floor at the bottom of the Abyss. There is only the Deep One, and it is not a monster — it is the dark the wardens were built to hold, given a shape soft enough for you to hate.',
+        'It knows your name. It says it kindly. It offers you the depths, the whole patient dark, if you will only set the hammer down.',
+        'Whatever you choose down there, you climb back into Hearthhold\'s light a different delver than the one who fell. The Oracle is waiting at the rim, and the seed-flower turns to follow you like a face. "Welcome back," she says. "Now — the Delve goes deeper than this, you know. It always does."'
+      ] }
+  ];
+  function storyForRegion(idx) { return STORY[idx + 1] || null; } // region idx -> its boss chapter
+  // Short bestiary flavour, keyed by the creature's base name.
+  var BESTIARY_LORE = {
+    'rat': 'Bred fat on what the dark discards. Where there is one, there is a nation.',
+    'cave bat': 'It does not see you. It hears your heartbeat and finds that enough.',
+    'kobold': 'Small, spiteful, and convinced the Delve belongs to it. It may be right.',
+    'skeleton archer': 'Death did not improve its aim, but it did improve its patience.',
+    'goblin': 'Cowardly alone, brave in numbers, doomed in either case.',
+    'bloat slime': 'Do not strike the swollen ones in a tight room. You will learn this once.',
+    'cutpurse': 'It wants your gold, not your life — but will take the second to get the first.',
+    'orc': 'Wardens of nothing, soldiers of no one, angry at everything.',
+    'dark cultist': 'They came down to worship the Deep One. It barely knows they exist.',
+    'troll': 'Cut it and it knits. The only wound a troll respects is a finished one.',
+    'wraith': 'A delver who set down their lantern to rest, and never picked it back up.',
+    'mimic': 'The cruelest trap is the one shaped like a reward.',
+    'dire wolf': 'The Wood remembers wolves from before it was haunted. They remember it too.',
+    'cave spider': 'Its venom is patient. So is it.',
+    'scorpion': 'The desert\'s punctuation: a small thing that ends the sentence.',
+    'sand shade': 'A thirst with the shape of a person, drawn long across the dunes.',
+    'cinder imp': 'A spark with opinions, mostly about setting you on fire.',
+    'magmite': 'It does not chase. It does not need to. It simply gets very, very close.',
+    'shell crab': 'All armour, no hurry. Outlasts most who try to outlast it.',
+    'siren': 'Her song is the brine\'s, and the brine has been lonely a long time.',
+    'The Bone King': 'First warden. Keeper of the first door. He held the line longest of all.',
+    'The Elder Treant': 'Second warden, rooted in grief, guarding a seed of light it had forgotten it carried.',
+    'The Venom Matriarch': 'Third warden, who learned the Delve\'s terrible secret and spun it into silk.',
+    'The Dune Pharaoh': 'Fourth warden, who chose burial over witness, and duty over rest.',
+    'The Magma Tyrant': 'Fifth warden, forged at the anvil until nothing of the smith remained.',
+    'The Tidemother': 'Sixth warden, whose lullaby kept a seal — and many sailors — asleep.',
+    'The Deep One': 'The dark the seven were built to hold. Not evil. Only hungry, and very old.'
+  };
+  function bestiaryKnown() { return hero && hero.bestiary ? Object.keys(hero.bestiary).length : 0; }
+  function recordKill(m) {
+    if (!hero || !m || !m.bname) return;
+    hero.bestiary = hero.bestiary || {};
+    hero.bestiary[m.bname] = (hero.bestiary[m.bname] || 0) + 1;
+  }
+
+  // =========================================================================
   //  the hero (persistent character)
   // =========================================================================
   function freshHero() {
@@ -509,6 +603,7 @@
       quests: [], questsDone: 0,
       difficulty: 'normal',
       house: { furniture: [] }, furniture: {}, trophies: [], stash: [],
+      story: 0, lore: [], bestiary: {},
       buffs: {},
       stats: { kills: 0, deaths: 0, floors: 0, gems: 0, runs: 0 },
       createdAt: Date.now(), updatedAt: Date.now(), rev: 1, client: clientId
@@ -810,7 +905,7 @@
     scale = scale || 1;
     var dm = diff(), hp = Math.round(def.hp * scale * dm.hp);
     return {
-      x: x, y: y, rx: x, ry: y, ch: def.ch, name: def.name, col: def.col,
+      x: x, y: y, rx: x, ry: y, ch: def.ch, name: def.name, bname: def.name, col: def.col,
       hp: hp, maxHp: hp,
       atk: Math.max(1, Math.round(def.atk * (boss ? scale : Math.min(scale, 1 + depth * 0.04)) * dm.atk)), def: def.def || 0,
       xp: Math.round(def.xp * (boss ? 1 : scale)), behavior: def.behavior, range: def.range || 1,
@@ -885,6 +980,7 @@
     objects.push({ type: 'npc', role: 'arcanist', x: 30, y: 12, icon: '🔮', col: '#c79bff', name: 'Arcanist', cos: { color: 'violet', eyes: 'glow', hat: 'wizard' } });
     objects.push({ type: 'npc', role: 'quest',    x: 13, y: 19, icon: '📜', col: '#e0c060', name: 'Bounties', cos: { color: 'ember', eyes: 'default', cape: 'red' } });
     objects.push({ type: 'npc', role: 'tailor',   x: 27, y: 19, icon: '🎩', col: '#9fe0c0', name: 'Tailor',   cos: { color: 'emerald', eyes: 'default', hat: 'top', belt: 'gold' } });
+    objects.push({ type: 'npc', role: 'oracle',   x: 20, y: 11, icon: '🔮', col: '#cdb4ff', name: 'Oracle',   cos: { color: 'void', eyes: 'glow', hat: 'wizard', cape: 'shadow' } });
     objects.push({ type: 'home', x: 33, y: 19 });
     objects.push({ type: 'stairs', x: 20, y: 23, down: true });
     var stairs = { x: 20, y: 23, up: false };
@@ -948,7 +1044,15 @@
       // herb planter yields a potion between trips home
       var hasPlanter = (hero.house.furniture || []).some(function (f) { return f.kind === 'planter'; });
       if (hasPlanter && hero._gardenRun !== (hero.stats.runs || 0)) { hero._gardenRun = hero.stats.runs || 0; hero.bag.potion = (hero.bag.potion || 0) + 1; logMsg('win', 'Your planter bore a Health Potion.'); }
-    } else if (depth <= 0) { logMsg('', 'Hearthhold. Rest, shop, then descend ▾.'); }
+    } else if (depth <= 0) {
+      logMsg('', 'Hearthhold. Rest, shop, then descend ▾.');
+      // The Oracle tells the tale: the prologue on a delver's first visit, and
+      // each freshly-unlocked chapter when you return from felling a warden.
+      var toTell = -1;
+      if (!hero._prolog) { hero._prolog = true; toTell = 0; markDirty(); }
+      else if (hero._storyNew && hero._storyNew <= hero.story) { toTell = hero._storyNew; }
+      if (toTell >= 0) { (function (idx) { setTimeout(function () { if (world && world.mode === 'town') openStory(idx); }, 600); })(toTell); }
+    }
     else {
       hero.stats.floors++; questDepth(depth);
       var rg = regionAt(depth);
@@ -1056,12 +1160,15 @@
   function killMob(m, kind) {
     var idx = world.monsters.indexOf(m); if (idx < 0) return;
     world.monsters.splice(idx, 1);
-    hero.stats.kills++; questProgress('kills', 1);
+    hero.stats.kills++; questProgress('kills', 1); recordKill(m);
     fxBurst(m.x, m.y, m.col);
     gainXp(Math.round(m.xp * diff().rew));
     if (m.elite) { logMsg('win', 'Elite slain: ' + m.name + '!'); var ep = adjacentFree(m.x, m.y) || { x: m.x, y: m.y }; world.items.push({ type: 'gear', item: generateItem(null, world.depth + 2, 1.2), x: ep.x, y: ep.y }); world.items.push({ type: 'gold', x: m.x, y: m.y, amt: (6 + ri(8)) * Math.max(1, world.depth) }); }
     if (m.boss) { questProgress('boss', 1); logMsg('win', 'The ' + m.name + ' falls! The way down opens.'); shake(10);
       var rk = regionAt(world.depth).key; hero.trophies = hero.trophies || []; if (hero.trophies.indexOf(rk) < 0) { hero.trophies.push(rk); hero.hp = Math.min(maxHpOf(), hero.hp + 3); logMsg('win', '🏆 Trophy earned — ' + regionAt(world.depth).name + '! (displayed at home)'); }
+      // STORY: a warden has fallen — unlock the next chapter of the tale.
+      var rIdx = regionIndexAt(world.depth), beat = rIdx + 1;
+      if (beat > (hero.story || 0) && beat < STORY.length) { hero.story = beat; hero._storyNew = beat; logMsg('win', '✦ A new chapter awaits — visit the Oracle in town.'); }
       // boss drops: gold + guaranteed gear + gem
       world.items.push({ type: 'gold', x: m.x, y: m.y, amt: 40 + world.depth * 7 });
       var gp = adjacentFree(m.x, m.y); if (gp) world.items.push({ type: 'gear', item: generateItem(null, world.depth + 3, 2.5), x: gp.x, y: gp.y });
@@ -2168,6 +2275,7 @@
     if (role === 'arcanist') return openArcanist();
     if (role === 'tailor') return openTailor();
     if (role === 'quest') return openQuestBoard();
+    if (role === 'oracle') return openOracle();
     var ov = mkOverlay('Merchant 🛒');
     var body = ov.querySelector('.cr-ov-body');
     var html = '<div class="cr-shopgold">🪙 ' + hero.gold + ' gold</div><div class="cr-shop">';
@@ -2413,6 +2521,236 @@
     if (nb) nb.addEventListener('click', function () { if (hero.quests.length < 3) { hero.quests.push(genQuest()); markDirty(); openQuestBoard(); } });
   }
 
+  // ===========================================================================
+  //  THE ORACLE — story, codex (bestiary/regions/trophies) and arcane trials
+  // ===========================================================================
+  function openOracle() {
+    if (!hero) return;
+    closeOverlay();
+    var ov = mkOverlay('The Oracle 🔮'); var body = ov.querySelector('.cr-ov-body');
+    var pending = hero._storyNew && hero._storyNew <= hero.story;
+    var totalKills = 0; for (var k in (hero.bestiary || {})) totalKills += hero.bestiary[k];
+    body.innerHTML =
+      '<div class="cr-oracle-quote">"The Delve remembers everyone, Delver. Let me show you what it remembers of you."</div>' +
+      '<div class="cr-shop">' +
+      '<div class="cr-srow"><span class="cr-sic">📖</span><span class="cr-snm">The Tale of the Deepdelve' +
+        '<span class="cr-sdesc">Chapter ' + hero.story + ' of ' + (STORY.length - 1) + ' uncovered</span></span>' +
+        '<button class="cr-buy' + (pending ? ' cr-new' : '') + '" data-or="story">' + (pending ? 'new!' : 'read') + '</button></div>' +
+      '<div class="cr-srow"><span class="cr-sic">📓</span><span class="cr-snm">Codex & Bestiary' +
+        '<span class="cr-sdesc">' + bestiaryKnown() + '/' + Object.keys(BESTIARY_LORE).length + ' creatures · ' + totalKills + ' slain</span></span>' +
+        '<button class="cr-buy" data-or="codex">open</button></div>' +
+      '<div class="cr-srow"><span class="cr-sic">✦</span><span class="cr-snm">Arcane Trials' +
+        '<span class="cr-sdesc">Test your mind & reflexes for gold</span></span>' +
+        '<button class="cr-buy" data-or="trials">enter</button></div>' +
+      '</div>';
+    var btns = body.querySelectorAll('[data-or]');
+    for (var i = 0; i < btns.length; i++) (function (btn) { btn.addEventListener('click', function () {
+      var w = btn.getAttribute('data-or');
+      if (w === 'story') openStory(hero._storyNew && hero._storyNew <= hero.story ? hero._storyNew : hero.story);
+      else if (w === 'codex') openCodex('bestiary');
+      else openTrials();
+    }); })(btns[i]);
+  }
+
+  // ---- story reader: paged chapters ----------------------------------------
+  function openStory(idx) {
+    closeOverlay();
+    idx = clamp(idx || 0, 0, hero.story);
+    if (hero._storyNew && idx >= hero._storyNew) { hero._storyNew = 0; markDirty(); }
+    var ov = mkOverlay('The Tale 📖'); var body = ov.querySelector('.cr-ov-body');
+    var ch = STORY[idx];
+    var html = '<div class="cr-chapnav">';
+    for (var c = 0; c <= hero.story; c++) html += '<button class="cr-chip' + (c === idx ? ' cr-on' : '') + '" data-ch="' + c + '">' + (STORY[c].icon || c) + '</button>';
+    html += '</div>';
+    html += '<div class="cr-story"><div class="cr-story-title">' + (ch.icon || '') + ' Chapter ' + ch.ch + ' — ' + Cade.escapeHtml(ch.title) + '</div>';
+    ch.lines.forEach(function (ln) { html += '<p>' + Cade.escapeHtml(ln) + '</p>'; });
+    if (idx < hero.story) html += '<button class="cr-buy" id="cr-storynext" style="width:100%;margin-top:6px">Next chapter →</button>';
+    else if (idx < STORY.length - 1) html += '<div class="cr-hint">Defeat the warden of ' + (storyForRegion(idx) ? regionNameOf(STORY[idx + 1].region) : 'the next region') + ' to uncover what comes next.</div>';
+    else html += '<div class="cr-hint">You have uncovered the whole tale — for now. The Delve always goes deeper.</div>';
+    html += '</div>';
+    html += '<button class="cr-buy" id="cr-storyback" style="width:100%;margin-top:6px">← Back to the Oracle</button>';
+    body.innerHTML = html;
+    var chips = body.querySelectorAll('[data-ch]');
+    for (var i = 0; i < chips.length; i++) (function (b) { b.addEventListener('click', function () { openStory(parseInt(b.getAttribute('data-ch'), 10)); }); })(chips[i]);
+    var nx = document.getElementById('cr-storynext'); if (nx) nx.addEventListener('click', function () { openStory(idx + 1); });
+    var bk = document.getElementById('cr-storyback'); if (bk) bk.addEventListener('click', openOracle);
+  }
+  function regionNameOf(key) { for (var i = 0; i < REGIONS.length; i++) if (REGIONS[i].key === key) return REGIONS[i].name; return 'the deep'; }
+
+  // ---- codex: bestiary / regions / trophies tabs ---------------------------
+  function openCodex(tab) {
+    closeOverlay();
+    tab = tab || 'bestiary';
+    var ov = mkOverlay('Codex 📓'); var body = ov.querySelector('.cr-ov-body');
+    var tabs = [['bestiary', '🐾 Bestiary'], ['regions', '🗺 Regions'], ['trophies', '🏆 Trophies']];
+    var html = '<div class="cr-chapnav">' + tabs.map(function (t) {
+      return '<button class="cr-chip cr-chip-wide' + (t[0] === tab ? ' cr-on' : '') + '" data-tab="' + t[0] + '">' + t[1] + '</button>';
+    }).join('') + '</div><div class="cr-shop">';
+    if (tab === 'bestiary') {
+      var names = Object.keys(BESTIARY_LORE);
+      names.forEach(function (nm) {
+        var n = (hero.bestiary || {})[nm] || 0, seen = n > 0;
+        html += '<div class="cr-srow"><span class="cr-sic">' + (seen ? '📖' : '❔') + '</span>' +
+          '<span class="cr-snm">' + (seen ? Cade.escapeHtml(nm) : '???') +
+          '<span class="cr-sdesc">' + (seen ? Cade.escapeHtml(BESTIARY_LORE[nm]) : 'Not yet encountered.') + '</span></span>' +
+          '<span class="cr-buy cr-owned">' + (seen ? '×' + n : '—') + '</span></div>';
+      });
+    } else if (tab === 'regions') {
+      REGIONS.forEach(function (r, idx) {
+        var unlocked = regionUnlocked(idx), cleared = (hero.trophies || []).indexOf(r.key) >= 0;
+        html += '<div class="cr-srow"><span class="cr-sic">' + (unlocked ? r.icon : '🔒') + '</span>' +
+          '<span class="cr-snm"><span style="color:' + (unlocked ? r.pal.accent : '#6b7280') + '">' + (unlocked ? r.name : '???') + '</span>' +
+          '<span class="cr-sdesc">' + (unlocked ? Cade.escapeHtml(r.blurb) : 'Undiscovered.') + '</span></span>' +
+          '<span class="cr-buy cr-owned">' + (cleared ? '✓ cleared' : unlocked ? 'open' : '🔒') + '</span></div>';
+      });
+    } else {
+      var trophies = hero.trophies || [];
+      if (!trophies.length) html += '<div class="cr-hint">No trophies yet. Each region\'s warden leaves one when it falls — they hang in your home.</div>';
+      REGIONS.forEach(function (r) {
+        if (trophies.indexOf(r.key) < 0) return;
+        html += '<div class="cr-srow"><span class="cr-sic">🏆</span><span class="cr-snm">' + r.name +
+          '<span class="cr-sdesc">' + Cade.escapeHtml((BESTIARY_LORE[r.boss.name] || 'A fallen warden.')) + '</span></span>' +
+          '<span class="cr-buy cr-owned">+3 HP</span></div>';
+      });
+      if (trophies.length) html += '<div class="cr-hint">Trophy bonus: +' + trophyBonus() + ' max HP.</div>';
+    }
+    html += '</div><button class="cr-buy" id="cr-codexback" style="width:100%;margin-top:6px">← Back to the Oracle</button>';
+    body.innerHTML = html;
+    var tb = body.querySelectorAll('[data-tab]');
+    for (var i = 0; i < tb.length; i++) (function (b) { b.addEventListener('click', function () { openCodex(b.getAttribute('data-tab')); }); })(tb[i]);
+    var bk = document.getElementById('cr-codexback'); if (bk) bk.addEventListener('click', openOracle);
+  }
+
+  // ---- arcane trials (minigames) -------------------------------------------
+  function openTrials() {
+    closeOverlay();
+    var ov = mkOverlay('Arcane Trials ✦'); var body = ov.querySelector('.cr-ov-body');
+    body.innerHTML =
+      '<div class="cr-oracle-quote">"The wardens tested mind and nerve. So shall I. Best your own record for the richer reward."</div>' +
+      '<div class="cr-shop">' +
+      '<div class="cr-srow"><span class="cr-sic">🔮</span><span class="cr-snm">Rune Memory' +
+        '<span class="cr-sdesc">Repeat the glowing sequence · best ' + (hero._bestRune || 0) + '</span></span>' +
+        '<button class="cr-buy" data-trial="rune">play</button></div>' +
+      '<div class="cr-srow"><span class="cr-sic">⚡</span><span class="cr-snm">Reflex Trial' +
+        '<span class="cr-sdesc">Strike the runes before they fade · best ' + (hero._bestReflex || 0) + '</span></span>' +
+        '<button class="cr-buy" data-trial="reflex">play</button></div>' +
+      '</div><button class="cr-buy" id="cr-trialback" style="width:100%;margin-top:6px">← Back to the Oracle</button>';
+    var tb = body.querySelectorAll('[data-trial]');
+    for (var i = 0; i < tb.length; i++) (function (b) { b.addEventListener('click', function () {
+      if (b.getAttribute('data-trial') === 'rune') playRuneMemory(); else playReflex();
+    }); })(tb[i]);
+    var bk = document.getElementById('cr-trialback'); if (bk) bk.addEventListener('click', openOracle);
+  }
+
+  // Minigame timer bookkeeping — every timer registered here is killed when the
+  // overlay closes (closeOverlay -> trialStop), so a closed game leaks nothing.
+  var trialTimers = [];
+  function trialTimer(fn, ms) { var id = setTimeout(fn, ms); trialTimers.push({ t: 'to', id: id }); return id; }
+  function trialInterval(fn, ms) { var id = setInterval(fn, ms); trialTimers.push({ t: 'iv', id: id }); return id; }
+  function trialStop() {
+    for (var i = 0; i < trialTimers.length; i++) { var x = trialTimers[i]; if (x.t === 'iv') clearInterval(x.id); else clearTimeout(x.id); }
+    trialTimers = [];
+  }
+
+  var RUNES = ['🔥', '❄', '⚡', '☘', '☀', '🌙'];
+  function playRuneMemory() {
+    closeOverlay();
+    var ov = mkOverlay('Rune Memory 🔮'); var body = ov.querySelector('.cr-ov-body');
+    body.innerHTML =
+      '<div class="cr-mini-msg" id="cr-rm-msg">Watch the runes…</div>' +
+      '<div class="cr-mini-score" id="cr-rm-score">Round 1</div>' +
+      '<div class="cr-runegrid" id="cr-rm-grid"></div>';
+    var grid = document.getElementById('cr-rm-grid');
+    var cells = [];
+    RUNES.forEach(function (r, i) {
+      var b = document.createElement('button'); b.className = 'cr-rune'; b.textContent = r; b.setAttribute('data-i', i);
+      grid.appendChild(b); cells.push(b);
+    });
+    var seq = [], inputIdx = 0, round = 0, locked = true;
+    function flash(i, ms) { var c = cells[i]; if (!c) return; c.classList.add('cr-rune-lit'); trialTimer(function () { if (c) c.classList.remove('cr-rune-lit'); }, ms || 360); }
+    function show(n) {
+      locked = true; inputIdx = 0;
+      var step = 0;
+      var iv = trialInterval(function () {
+        if (step >= seq.length) { clearInterval(iv); setMsg('Your turn — repeat it.'); locked = false; return; }
+        flash(seq[step], 420); step++;
+      }, 620);
+    }
+    function setMsg(t) { var e = document.getElementById('cr-rm-msg'); if (e) e.textContent = t; }
+    function nextRound() {
+      round++; var s = document.getElementById('cr-rm-score'); if (s) s.textContent = 'Round ' + round;
+      seq.push(ri(RUNES.length)); setMsg('Watch the runes…'); trialTimer(function () { show(); }, 700);
+    }
+    function win(r) {
+      locked = true;
+      var reward = r * 12 + (r > (hero._bestRune || 0) ? 40 : 0);
+      var best = r > (hero._bestRune || 0); if (best) hero._bestRune = r;
+      hero.gold += reward; markDirty(); refreshAll();
+      setMsg('Sequence broken at round ' + (r + 1) + '. +' + reward + ' gold' + (best ? ' · new best!' : ''));
+      var s = document.getElementById('cr-rm-score'); if (s) s.innerHTML = '<button class="cr-buy" id="cr-rm-again">Play again</button> <button class="cr-buy cr-sell" id="cr-rm-done">Done</button>';
+      var ag = document.getElementById('cr-rm-again'); if (ag) ag.addEventListener('click', playRuneMemory);
+      var dn = document.getElementById('cr-rm-done'); if (dn) dn.addEventListener('click', openTrials);
+    }
+    for (var i = 0; i < cells.length; i++) (function (c) {
+      c.addEventListener('click', function () {
+        if (locked) return;
+        var i2 = parseInt(c.getAttribute('data-i'), 10); flash(i2, 200); Cade.haptic(4);
+        if (i2 === seq[inputIdx]) { inputIdx++; if (inputIdx >= seq.length) { setMsg('Good. Next round…'); locked = true; trialTimer(nextRound, 800); } }
+        else { win(round - 1); }
+      });
+    })(cells[i]);
+    nextRound();
+  }
+
+  function playReflex() {
+    closeOverlay();
+    var ov = mkOverlay('Reflex Trial ⚡'); var body = ov.querySelector('.cr-ov-body');
+    body.innerHTML =
+      '<div class="cr-mini-msg" id="cr-rx-msg">Strike runes the instant they appear. Miss three and it ends.</div>' +
+      '<div class="cr-mini-score" id="cr-rx-score">Score 0 · ♥♥♥</div>' +
+      '<div class="cr-reflex" id="cr-rx-field"></div>';
+    var field = document.getElementById('cr-rx-field');
+    var slots = [];
+    for (var i = 0; i < 9; i++) { var b = document.createElement('button'); b.className = 'cr-rxcell'; field.appendChild(b); slots.push(b); }
+    var score = 0, lives = 3, active = -1, lifeMs = 1100, running = true;
+    function upd() { var s = document.getElementById('cr-rx-score'); if (s) s.textContent = 'Score ' + score + ' · ' + (lives > 0 ? '♥'.repeat(lives) : '—'); }
+    function clearActive() { if (active >= 0 && slots[active]) slots[active].classList.remove('cr-rx-on'); active = -1; }
+    var spawnTimer = 0;
+    function spawn() {
+      if (!running) return;
+      clearActive();
+      active = ri(slots.length); var cell = slots[active], r = RUNES[ri(RUNES.length)];
+      cell.textContent = r; cell.classList.add('cr-rx-on');
+      var thisOne = active;
+      spawnTimer = trialTimer(function () {
+        if (running && active === thisOne) { miss(); }
+      }, lifeMs);
+    }
+    function miss() {
+      clearActive(); lives--; upd(); Cade.haptic(12);
+      if (lives <= 0) { end(); return; }
+      spawn();
+    }
+    function end() {
+      running = false; clearActive();
+      var reward = score * 8 + (score > (hero._bestReflex || 0) ? 50 : 0);
+      var best = score > (hero._bestReflex || 0); if (best) hero._bestReflex = score;
+      hero.gold += reward; markDirty(); refreshAll();
+      var m = document.getElementById('cr-rx-msg'); if (m) m.textContent = 'Done — score ' + score + '. +' + reward + ' gold' + (best ? ' · new best!' : '');
+      var s = document.getElementById('cr-rx-score'); if (s) s.innerHTML = '<button class="cr-buy" id="cr-rx-again">Play again</button> <button class="cr-buy cr-sell" id="cr-rx-done">Done</button>';
+      var ag = document.getElementById('cr-rx-again'); if (ag) ag.addEventListener('click', playReflex);
+      var dn = document.getElementById('cr-rx-done'); if (dn) dn.addEventListener('click', openTrials);
+    }
+    for (var j = 0; j < slots.length; j++) (function (cell, idx) {
+      cell.addEventListener('click', function () {
+        if (!running) return;
+        if (idx === active) { score++; lifeMs = Math.max(450, lifeMs - 14); clearTimeout(spawnTimer); upd(); Cade.haptic(6); clearActive(); trialTimer(spawn, 140); }
+      });
+    })(slots[j], j);
+    upd();
+    trialTimer(spawn, 700);
+  }
+
   // ---- overlay: options (delete save / restart) -----------------------------
   function openOptions() {
     if (!hero) return;
@@ -2564,7 +2902,7 @@
     el.addEventListener('click', function (e) { if (e.target === el) closeOverlay(); });
     return el;
   }
-  function closeOverlay() { var o = document.getElementById('cr-overlay'); if (o) o.remove(); }
+  function closeOverlay() { trialStop(); var o = document.getElementById('cr-overlay'); if (o) o.remove(); }
 
   // =========================================================================
   //  persistence: local + Firebase room _dungeon
@@ -2585,6 +2923,8 @@
       cosmetics: hero.cosmetics, ownedCos: hero.ownedCos,
       quests: hero.quests, questsDone: hero.questsDone || 0, difficulty: hero.difficulty || 'normal',
       house: hero.house || { furniture: [] }, furniture: hero.furniture || {}, trophies: hero.trophies || [], stash: hero.stash || [],
+      story: hero.story || 0, lore: hero.lore || [], bestiary: hero.bestiary || {},
+      _bestRune: hero._bestRune || 0, _bestReflex: hero._bestReflex || 0, _prolog: hero._prolog || false,
       stats: hero.stats, _wlvl: hero._wlvl || 0, _alvl: hero._alvl || 0,
       _konami: hero._konami || false, _fled: hero._fled || 0,
       createdAt: hero.createdAt, updatedAt: Date.now(), rev: hero.rev, client: clientId
@@ -2637,6 +2977,9 @@
     h.furniture = (h.furniture && typeof h.furniture === 'object') ? h.furniture : {};
     h.trophies = (Array.isArray(h.trophies) ? h.trophies : []).filter(function (k) { return REGIONS.some(function (r) { return r.key === k; }); });
     h.stash = (Array.isArray(h.stash) ? h.stash : []).filter(function (it) { return it && it.uid && gear(it.base); });
+    h.story = clamp(parseInt(h.story, 10) || 0, 0, STORY.length - 1);
+    h.lore = Array.isArray(h.lore) ? h.lore : [];
+    h.bestiary = (h.bestiary && typeof h.bestiary === 'object' && !Array.isArray(h.bestiary)) ? h.bestiary : {};
     h.stats = h.stats || { kills: 0, deaths: 0, floors: 0, gems: 0, runs: 0 };
     h.buffs = {};
     return h;
