@@ -370,25 +370,70 @@
     mage:   { ch: 'm', name: 'dark cultist', col: '#e07fb0', hp: 16, atk: 5,  def: 0, xp: 18, minD: 6, behavior: 'archer', range: 6, burn: true },
     troll:  { ch: 'T', name: 'troll',        col: '#e85d5d', hp: 36, atk: 9,  def: 3, xp: 28, minD: 7, behavior: 'chase', regen: 2 },
     wraith: { ch: 'w', name: 'wraith',       col: '#9fd8e0', hp: 30, atk: 8,  def: 2, xp: 30, minD: 9, behavior: 'chase', erratic: 0.2 },
-    mimic:  { ch: 'M', name: 'mimic',        col: '#caa24a', hp: 26, atk: 7,  def: 2, xp: 26, minD: 99, behavior: 'chase' } // spawned only from trapped chests
+    mimic:  { ch: 'M', name: 'mimic',        col: '#caa24a', hp: 26, atk: 7,  def: 2, xp: 26, minD: 99, behavior: 'chase' }, // spawned only from trapped chests
+    // ---- region-themed foes ----
+    wolf:    { ch: 'f', name: 'dire wolf',   col: '#b8a890', hp: 12, atk: 4, def: 0, xp: 9,  minD: 6,  behavior: 'chase', erratic: 0.15 },
+    spider:  { ch: 'x', name: 'cave spider', col: '#a07fd0', hp: 10, atk: 3, def: 0, xp: 10, minD: 6,  behavior: 'chase', poison: true },
+    scorpion:{ ch: 'z', name: 'scorpion',    col: '#e0b060', hp: 16, atk: 4, def: 1, xp: 13, minD: 16, behavior: 'chase', poison: true },
+    sandshade:{ ch: 'h', name: 'sand shade', col: '#e8d28a', hp: 12, atk: 5, def: 0, xp: 15, minD: 16, behavior: 'archer', range: 5 },
+    imp:     { ch: 'i', name: 'cinder imp',  col: '#ff8a50', hp: 12, atk: 5, def: 0, xp: 14, minD: 21, behavior: 'chase', erratic: 0.1, burn: true },
+    magmite: { ch: 'q', name: 'magmite',     col: '#e85d3d', hp: 14, atk: 3, def: 1, xp: 13, minD: 21, behavior: 'bomber', boom: 12 },
+    crab:    { ch: 'c', name: 'shell crab',  col: '#5fd0c0', hp: 30, atk: 5, def: 5, xp: 18, minD: 26, behavior: 'chase' },
+    siren:   { ch: 'y', name: 'siren',       col: '#7fd0e0', hp: 18, atk: 6, def: 1, xp: 22, minD: 26, behavior: 'archer', range: 6 }
   };
-  var BOSSES = [
-    { ch: 'K', name: 'Bone King',        col: '#f0e6c0', hp: 90,  atk: 8,  def: 3, xp: 120, behavior: 'summon', summons: 'archer' },
-    { ch: 'H', name: 'Hollow Warden',    col: '#e0a060', hp: 160, atk: 12, def: 5, xp: 220, behavior: 'chase', boom: 0 },
-    { ch: 'V', name: 'Venom Matriarch',  col: '#7fe0a0', hp: 220, atk: 14, def: 5, xp: 340, behavior: 'archer', range: 7, poison: true },
-    { ch: 'Ω', name: 'The Deep One',     col: '#c08fe0', hp: 320, atk: 18, def: 7, xp: 500, behavior: 'summon', summons: 'wraith' }
-  ];
 
-  var BIOMES = [
-    { name: 'Catacombs', floor: '#23201c', floor2: '#2a261f', wall: '#4a4038', wallTop: '#5a4e44', accent: '#c9a86b' },
-    { name: 'Flooded Caverns', floor: '#1a2226', floor2: '#1f2a30', wall: '#33474d', wallTop: '#3f5860', accent: '#5fc0d0' },
-    { name: 'The Foundry', floor: '#241c18', floor2: '#2c211b', wall: '#4a342a', wallTop: '#5e4232', accent: '#e08040' },
-    { name: 'The Abyss', floor: '#1c182a', floor2: '#231d33', wall: '#352c50', wallTop: '#443862', accent: '#a87fe0' }
+  // =========================================================================
+  //  WORLD — ordered regions (a travel map of themed acts), each a 5-floor band
+  // =========================================================================
+  var REGIONS = [
+    { key: 'catacombs', name: 'The Catacombs', icon: '💀', blurb: 'Where the delve begins — bone and dust.',
+      pal: { floor: '#23201c', floor2: '#2a261f', wall: '#4a4038', wallTop: '#5a4e44', accent: '#c9a86b' },
+      mobs: ['rat', 'bat', 'kobold', 'goblin', 'archer', 'slime', 'thief'],
+      boss: { ch: 'K', name: 'The Bone King', col: '#f0e6c0', hp: 90, atk: 9, def: 3, xp: 120, behavior: 'summon', summons: 'archer' } },
+    { key: 'wood', name: 'The Whispering Wood', icon: '🌲', blurb: 'Roots that remember; eyes in the canopy.',
+      pal: { floor: '#1c241a', floor2: '#22301f', wall: '#2f4a2c', wallTop: '#3c5e38', accent: '#8fd06f' },
+      mobs: ['wolf', 'spider', 'goblin', 'bat', 'archer', 'thief'], hazard: 'bramble',
+      boss: { ch: 'Y', name: 'The Elder Treant', col: '#9fd060', hp: 170, atk: 12, def: 5, xp: 230, behavior: 'summon', summons: 'spider' } },
+    { key: 'caves', name: 'The Sunless Caves', icon: '🕯️', blurb: 'A cold dark that drinks your torchlight.',
+      pal: { floor: '#1a2226', floor2: '#1f2a30', wall: '#33474d', wallTop: '#3f5860', accent: '#5fc0d0' },
+      mobs: ['bat', 'spider', 'slime', 'troll', 'kobold', 'archer'],
+      boss: { ch: 'V', name: 'The Venom Matriarch', col: '#7fe0a0', hp: 240, atk: 15, def: 5, xp: 360, behavior: 'archer', range: 7, poison: true } },
+    { key: 'desert', name: 'The Scorched Desert', icon: '🏜️', blurb: 'Endless dunes over a buried, hungry city.',
+      pal: { floor: '#2c2614', floor2: '#332c18', wall: '#5a4a28', wallTop: '#6e5a30', accent: '#e0c060' },
+      mobs: ['scorpion', 'sandshade', 'kobold', 'orc', 'thief', 'mage'], hazard: 'quicksand',
+      boss: { ch: 'P', name: 'The Dune Pharaoh', col: '#e8d060', hp: 300, atk: 16, def: 6, xp: 480, behavior: 'archer', range: 7, poison: true } },
+    { key: 'ember', name: 'The Emberforge', icon: '🌋', blurb: 'Stone runs like water; the air is fire.',
+      pal: { floor: '#241410', floor2: '#2c1a14', wall: '#4a2a20', wallTop: '#5e3422', accent: '#e86040' },
+      mobs: ['imp', 'magmite', 'orc', 'troll', 'mage'], hazard: 'lava',
+      boss: { ch: 'M', name: 'The Magma Tyrant', col: '#ff7040', hp: 380, atk: 19, def: 7, xp: 640, behavior: 'chase', boom: 0 } },
+    { key: 'coast', name: 'The Drowned Coast', icon: '🌊', blurb: 'Tides that never recede; songs that pull you under.',
+      pal: { floor: '#122428', floor2: '#163036', wall: '#234a52', wallTop: '#2f5e66', accent: '#4fd0c0' },
+      mobs: ['crab', 'siren', 'slime', 'wraith', 'mage'], hazard: 'brine',
+      boss: { ch: 'T', name: 'The Tidemother', col: '#5fd0e0', hp: 440, atk: 21, def: 8, xp: 820, behavior: 'archer', range: 8, poison: true } },
+    { key: 'abyss', name: 'The Abyss', icon: '🌀', blurb: 'The bottom of everything. It looks back.',
+      pal: { floor: '#1c182a', floor2: '#231d33', wall: '#352c50', wallTop: '#443862', accent: '#a87fe0' },
+      mobs: ['wraith', 'mage', 'orc', 'troll', 'slime', 'archer'], hazard: 'voidfire',
+      boss: { ch: 'Ω', name: 'The Deep One', col: '#c08fe0', hp: 520, atk: 24, def: 9, xp: 1100, behavior: 'summon', summons: 'wraith' } }
   ];
+  var REGION_SPAN = 5;
+  function regionIndexAt(depth) { return clamp(Math.floor((depth - 1) / REGION_SPAN), 0, REGIONS.length - 1); }
+  function regionAt(depth) { return REGIONS[regionIndexAt(depth)]; }
+  function regionStart(idx) { return idx * REGION_SPAN + 1; }
+  function regionEnd(idx) { return (idx + 1) * REGION_SPAN; }
+  function regionUnlocked(idx) { return idx === 0 || (hero && hero.maxDepth >= regionStart(idx)); }
   function biomeFor(depth) {
     if (depth <= 0) return { name: 'Hearthhold (Town)', floor: '#262a22', floor2: '#2c3027', wall: '#3a4030', wallTop: '#48503c', accent: '#8fbf6f' };
-    return BIOMES[Math.floor((depth - 1) / 4) % BIOMES.length];
+    var r = regionAt(depth), p = r.pal;
+    return { name: r.name, floor: p.floor, floor2: p.floor2, wall: p.wall, wallTop: p.wallTop, accent: p.accent };
   }
+  // hazard styling per region
+  var HAZARDS = {
+    bramble:  { ch: '✶', col: '#7fae5b', dmg: 3, status: 'poison', name: 'brambles' },
+    quicksand:{ ch: '∴', col: '#cbb068', dmg: 2, status: null,     name: 'quicksand' },
+    lava:     { ch: '≈', col: '#ff6a30', dmg: 9, status: 'burn',   name: 'lava' },
+    brine:    { ch: '≈', col: '#4fd0c0', dmg: 3, status: null,     name: 'brine' },
+    voidfire: { ch: '✷', col: '#b07fe0', dmg: 7, status: 'burn',   name: 'void-fire' }
+  };
 
   // =========================================================================
   //  the hero (persistent character)
@@ -656,25 +701,31 @@
       if (shp) objects.push({ type: 'shrine', x: shp.x, y: shp.y, used: false });
     }
 
-    // ---- monsters -----------------------------------------------------------
+    // ---- monsters (roster comes from the region) ----------------------------
+    var region = regionAt(depth);
     if (isBoss) {
-      var bdef = BOSSES[Math.min(BOSSES.length - 1, Math.floor(depth / 5) - 1)];
-      var scale = 1 + (Math.floor(depth / 5) - 1) * 0.5;
-      monsters.push(makeMob(bdef, st.x, st.y, true, scale, depth));
-      // a couple of guards
-      for (var bg = 0; bg < 2; bg++) { var gp = freeFloorIn(m, occupied, null); if (gp) monsters.push(makeMob(MOBS.goblin, gp.x, gp.y, false, 1 + depth * 0.06, depth)); }
+      var ridx = regionIndexAt(depth);
+      var loops = Math.floor(depth / (REGION_SPAN * REGIONS.length)); // deeper laps scale the boss up
+      var scale = 1 + ridx * 0.18 + loops * 1.2;
+      monsters.push(makeMob(region.boss, st.x, st.y, true, scale, depth));
+      var guard = region.mobs[region.mobs.length - 1];
+      for (var bg = 0; bg < 2; bg++) { var gp = freeFloorIn(m, occupied, null); if (gp) monsters.push(makeMob(MOBS[guard], gp.x, gp.y, false, 1 + depth * 0.06, depth)); }
     } else {
-      var avail = Object.keys(MOBS).filter(function (id) { return MOBS[id].minD <= depth; });
+      var avail = region.mobs;
       var mcount = 4 + Math.floor(depth * 1.3);
       for (var mi = 0; mi < mcount; mi++) {
         var sp = freeFloorIn(m, occupied);
         if (!sp) continue;
-        // bias toward tougher mobs deeper
         var idp = avail[clamp(ri(avail.length) + (chance(0.3) ? 1 : 0), 0, avail.length - 1)];
         var mob = makeMob(MOBS[idp], sp.x, sp.y, false, 1 + depth * 0.05, depth);
         if (depth >= 2 && chance((0.08 + depth * 0.008) * diff().elite)) eliteify(mob);
         monsters.push(mob);
       }
+    }
+    // ---- region hazard patches ----------------------------------------------
+    if (!isBoss && region.hazard) {
+      var hazN = 3 + ri(5 + Math.floor(depth / 4));
+      for (var hz = 0; hz < hazN; hz++) { var hp2 = freeFloorIn(m, occupied); if (hp2) objects.push({ type: 'hazard', kind: region.hazard, x: hp2.x, y: hp2.y }); }
     }
 
     // ---- loot items ---------------------------------------------------------
@@ -814,7 +865,9 @@
     if (depth <= 0) { logMsg('', 'Hearthhold. Rest, shop, then descend ▾.'); }
     else {
       hero.stats.floors++; questDepth(depth);
-      logMsg('', (w.isBoss ? '⚠ ' : '') + w.biome.name + ' — Floor ' + depth + (w.isBoss ? '. A boss stirs.' : '.'));
+      var rg = regionAt(depth);
+      if (depth === regionStart(regionIndexAt(depth))) logMsg('win', rg.icon + ' ' + rg.name + ' — ' + rg.blurb);
+      logMsg('', (w.isBoss ? '⚠ ' : '') + rg.name + ' · Floor ' + depth + (w.isBoss ? '. ' + rg.boss.name + ' awaits.' : '.'));
       if (w.puzzle) logMsg('', w.puzzle.kind === 'lever' ? 'The stairs are barred. Find the lever.' : 'A locked door blocks the way. Find the key.');
     }
     markDirty();
@@ -1120,6 +1173,9 @@
     // trap
     var tr = objAt(p.x, p.y, 'trap');
     if (tr && tr.armed && trapHot(tr)) { var d = 4 + world.depth; hurtHero(d, 'spikes'); logMsg('die', 'Spikes! (-' + d + ')'); }
+    // region hazard (lava / brambles / quicksand / brine / void-fire)
+    var hzo = objAt(p.x, p.y, 'hazard'), HZ = hzo && HAZARDS[hzo.kind];
+    if (HZ) { hurtHero(HZ.dmg + Math.floor(world.depth / 4), 'hazard'); if (HZ.status) applyStatus(hero, HZ.status, 3); logMsg('die', 'You cross the ' + HZ.name + '!'); }
     // stairs — defer the transition so the caller's endTurn doesn't run a turn
     // on the freshly-generated floor.
     if (world.mode === 'town') {
@@ -1380,6 +1436,11 @@
       if (hero.hp <= 0) return;
       if (m.swift && m.hp > 0 && world.mode !== 'dead') actMob(m);   // swift elites/enraged bosses act twice
       if (hero.hp <= 0) return;
+    }
+    // foes standing in a hazard take its toll too — lure them into the lava
+    for (var hi = world.monsters.length - 1; hi >= 0; hi--) {
+      var hm = world.monsters[hi], ho = objAt(hm.x, hm.y, 'hazard'), HH = ho && HAZARDS[ho.kind];
+      if (HH) { damageMob(hm, HH.dmg, 'hazard', HH.col); if (HH.status && hm.hp > 0) applyStatus(hm, HH.status, 3); }
     }
   }
   function stepToward(m, p) {
@@ -1665,6 +1726,7 @@
         break;
       case 'tele': glyph(ctx, '◉', cx, cy, '#a87fe0', a * (0.6 + 0.4 * Math.abs(Math.sin(now() / 400))), 18); break;
       case 'shrine': glyph(ctx, '⛩', cx, cy, o.used ? 'rgba(150,160,180,0.45)' : '#bfe0ff', o.used ? a : a * (0.7 + 0.3 * Math.abs(Math.sin(now() / 500))), 18); break;
+      case 'hazard': var HZ = HAZARDS[o.kind] || {}; ctx.globalAlpha = a * 0.45; ctx.fillStyle = HZ.col || '#888'; roundRect(ctx, px + 1, py + 1, TILE - 2, TILE - 2, 3); ctx.fill(); ctx.globalAlpha = 1; glyph(ctx, HZ.ch || '≈', cx, cy, 'rgba(0,0,0,0.5)', a, 13); break;
       case 'chest': glyph(ctx, o.opened ? '📭' : (o.lush ? '🎁' : '📦'), cx, cy, '#ffd76a', a, 16); break;
       case 'npc': glyph(ctx, o.icon, cx, cy, o.col, 1, 18);
         ctx.globalAlpha = 0.8; ctx.fillStyle = o.col; ctx.font = '9px ui-monospace, monospace'; ctx.textAlign = 'center'; ctx.fillText(o.name, cx, cy + 14); ctx.globalAlpha = 1; break;
@@ -2209,6 +2271,36 @@
     Cade.showToast('A fresh delver begins.', 'success', 1800);
   }
 
+  // ---- overlay: world map (travel between regions) ---------------------------
+  function travel(idx) {
+    if (idx === 'town') { closeOverlay(); enter(0); return; }
+    if (!regionUnlocked(idx)) { Cade.showToast('Locked — clear the boss before it', 'info', 1600); return; }
+    closeOverlay();
+    hero.stats.runs = (hero.stats.runs || 0) + 1;
+    enter(regionStart(idx));
+  }
+  function openWorldMap() {
+    if (!hero) return;
+    closeOverlay();
+    var ov = mkOverlay('World Map 🗺'); var body = ov.querySelector('.cr-ov-body');
+    var html = '<div class="cr-hint">Travel anywhere you\'ve opened. Defeat a region\'s boss to unlock the next.</div><div class="cr-shop">';
+    html += '<div class="cr-srow"><span class="cr-sic">🏠</span><span class="cr-snm">Hearthhold<span class="cr-sdesc">Safe town — shops, bounties, home</span></span><button class="cr-buy" data-travel="town">go</button></div>';
+    REGIONS.forEach(function (r, idx) {
+      var unlocked = regionUnlocked(idx), cleared = hero.maxDepth > regionEnd(idx);
+      var status = !unlocked ? '🔒 locked' : cleared ? '✓ cleared' : 'floors ' + regionStart(idx) + '–' + regionEnd(idx);
+      var sub = unlocked ? r.blurb : 'Defeat the boss of ' + (REGIONS[idx - 1] ? REGIONS[idx - 1].name : 'the prior region');
+      html += '<div class="cr-srow"><span class="cr-sic">' + r.icon + '</span>' +
+        '<span class="cr-snm"><span style="color:' + (unlocked ? r.pal.accent : '#6b7280') + '">' + r.name + '</span><span class="cr-sdesc">' + sub + ' · ' + status + '</span></span>' +
+        (unlocked ? '<button class="cr-buy" data-travel="' + idx + '">enter</button>' : '<span class="cr-buy cr-owned">🔒</span>') + '</div>';
+    });
+    html += '</div>';
+    body.innerHTML = html;
+    var btns = body.querySelectorAll('[data-travel]');
+    for (var i = 0; i < btns.length; i++) (function (btn) {
+      btn.addEventListener('click', function () { var t = btn.getAttribute('data-travel'); travel(t === 'town' ? 'town' : parseInt(t, 10)); });
+    })(btns[i]);
+  }
+
   function mkOverlay(title) {
     closeOverlay();
     var el = document.createElement('div'); el.className = 'cr-overlay'; el.id = 'cr-overlay';
@@ -2528,6 +2620,7 @@
           '<div id="cr-bars" class="cr-bars"></div>' +
           '<div class="cr-tbtns">' +
             '<button id="cr-home" class="cr-tbtn" title="Return to town">🏠</button>' +
+            '<button id="cr-map" class="cr-tbtn" title="World map">🗺</button>' +
             '<button id="cr-char" class="cr-tbtn" title="Character (C)">🎒</button>' +
             '<button id="cr-opts" class="cr-tbtn" title="Options">⚙</button>' +
           '</div>' +
@@ -2584,6 +2677,7 @@
     bindButton(document.getElementById('cr-char'), openCharacter);
     bindButton(document.getElementById('cr-home'), recall);
     bindButton(document.getElementById('cr-opts'), openOptions);
+    bindButton(document.getElementById('cr-map'), openWorldMap);
 
     panel._onClose = function () {
       markFled(); saveNow(); state_teardown(); detachFbListener();
