@@ -38,6 +38,7 @@
   var TILE = 26;                   // logical px per tile
   var CW = VW * TILE, CH = VH * TILE;
   var LIGHT = 6;                   // torch radius
+  var PRICE_MULT = 1.5;            // shops charge above base; you sell back at 0.4× base
 
   // ---- tile codes ------------------------------------------------------------
   var T_WALL = 0, T_FLOOR = 1, T_CRACK = 2; // crack = bombable wall
@@ -522,8 +523,8 @@
     // ---- loot items ---------------------------------------------------------
     var potN = 2 + ri(2);
     for (var pi = 0; pi < potN; pi++) { var s1 = freeFloorIn(m, occupied); if (s1) items.push({ type: 'cons', id: chance(0.7) ? 'potion' : 'elixir', x: s1.x, y: s1.y }); }
-    var goldN = 3 + ri(4);
-    for (var gi = 0; gi < goldN; gi++) { var s2 = freeFloorIn(m, occupied); if (s2) items.push({ type: 'gold', x: s2.x, y: s2.y, amt: (4 + ri(8)) * Math.max(1, depth) }); }
+    var goldN = 2 + ri(3);
+    for (var gi = 0; gi < goldN; gi++) { var s2 = freeFloorIn(m, occupied); if (s2) items.push({ type: 'gold', x: s2.x, y: s2.y, amt: (3 + ri(5)) * Math.max(1, Math.ceil(depth * 0.6)) }); }
     if (chance(0.45)) { var s3 = freeFloorIn(m, occupied); if (s3) items.push({ type: 'gem', x: s3.x, y: s3.y }); }
     // occasional gear drop on the floor
     if (chance(0.35)) { var s4 = freeFloorIn(m, occupied); if (s4) items.push({ type: 'gear', id: randomGearId(depth), x: s4.x, y: s4.y }); }
@@ -749,7 +750,7 @@
     gainXp(m.xp);
     if (m.boss) { questProgress('boss', 1); logMsg('win', 'The ' + m.name + ' falls! The way down opens.'); shake(10);
       // boss drops: gold + guaranteed gear + gem
-      world.items.push({ type: 'gold', x: m.x, y: m.y, amt: 60 + world.depth * 12 });
+      world.items.push({ type: 'gold', x: m.x, y: m.y, amt: 40 + world.depth * 7 });
       var gp = adjacentFree(m.x, m.y); if (gp) world.items.push({ type: 'gear', id: randomGearId(world.depth + 3), x: gp.x, y: gp.y });
       hero.stats.gems++;
     } else {
@@ -758,7 +759,7 @@
       // a slain cutpurse drops whatever gold it pocketed
       if (m._loot) world.items.push({ type: 'gold', x: m.x, y: m.y, amt: m._loot });
       if (chance(0.18)) world.items.push({ type: 'cons', id: chance(0.6) ? 'potion' : 'elixir', x: m.x, y: m.y });
-      if (chance(0.5)) world.items.push({ type: 'gold', x: m.x, y: m.y, amt: (3 + ri(6)) * Math.max(1, world.depth) });
+      if (chance(0.35)) world.items.push({ type: 'gold', x: m.x, y: m.y, amt: (2 + ri(4)) * Math.max(1, Math.ceil(world.depth * 0.5)) });
     }
     markDirty();
   }
@@ -833,7 +834,7 @@
     computeFov();
   }
   function maybeSecretLoot(x, y) {
-    if (chance(0.5)) world.items.push({ type: 'gold', x: x, y: y, amt: (8 + ri(10)) * Math.max(1, world.depth) });
+    if (chance(0.5)) world.items.push({ type: 'gold', x: x, y: y, amt: (5 + ri(7)) * Math.max(1, Math.ceil(world.depth * 0.6)) });
     else world.items.push({ type: 'cons', id: 'potion', x: x, y: y });
   }
 
@@ -961,6 +962,7 @@
     markDirty();
   }
   function sellValue(g) { if (!g || !g.price) return 0; return Math.max(1, Math.floor(g.price * 0.4)); }
+  function buyPrice(p) { return Math.ceil((p || 0) * PRICE_MULT); }
   // Returns true if this was a brand-new acquisition; false if it was a
   // duplicate (auto-sold for its value, since gear doesn't stack).
   function acquireGear(id) {
@@ -1022,7 +1024,7 @@
     var rolls = c.lush ? 3 : 1 + ri(2);
     for (var i = 0; i < rolls; i++) {
       var roll = Math.random();
-      if (roll < 0.4) { var g = (8 + ri(14)) * Math.max(1, world.depth + 1); hero.gold += Math.round(g * greedOf()); fxText(c.x, c.y - i * 0.3, '+' + g + 'g', '#ffd76a'); }
+      if (roll < 0.4) { var g = (5 + ri(9)) * Math.max(1, Math.ceil((world.depth + 1) * 0.6)); hero.gold += Math.round(g * greedOf()); fxText(c.x, c.y - i * 0.3, '+' + g + 'g', '#ffd76a'); }
       else if (roll < 0.7) { var id = chance(0.6) ? 'potion' : (chance(0.5) ? 'elixir' : 'bomb'); hero.bag[id] = (hero.bag[id] || 0) + 1; fxText(c.x, c.y - i * 0.3, CONS[id].icon, '#fff'); }
       else { var gid = randomGearId(world.depth + (c.lush ? 3 : 1)); acquireGear(gid); var gg = gear(gid); fxText(c.x, c.y - i * 0.3, gg ? gg.icon : '?', '#fff'); }
     }
@@ -1744,11 +1746,11 @@
     var html = '<div class="cr-shopgold">🪙 ' + hero.gold + ' gold</div><div class="cr-shop">';
     // consumables
     ['potion', 'hpotion', 'elixir', 'eelixir', 'bomb', 'scroll', 'antidote', 'key'].forEach(function (id) { var c = CONS[id];
-      html += shopRow('cons:' + id, c.icon, c.name, c.desc, c.price, hero.bag[id] || 0); });
+      html += shopRow('cons:' + id, c.icon, c.name, c.desc, buyPrice(c.price), hero.bag[id] || 0); });
     // a rotating gear selection (deterministic-ish by maxDepth)
     var stock = merchantStock();
     stock.forEach(function (id) { var g = gear(id); var owned = hero.owned.indexOf(id) >= 0;
-      html += shopRow('gear:' + id, g.icon, g.name, gearStatStr(g), g.price, owned ? '✓' : 0, owned); });
+      html += shopRow('gear:' + id, g.icon, g.name, gearStatStr(g), buyPrice(g.price), owned ? '✓' : 0, owned); });
     html += '</div>';
     // Sell back unwanted gear (40%). Excludes equipped pieces and starters.
     var sellable = hero.owned.filter(function (id) { var g = gear(id); return g && g.price && hero.equip[g.slot] !== id; });
@@ -1856,7 +1858,7 @@
     ABIL_ORDER.forEach(function (id) {
       var a = ABIL[id]; if (a.learn !== 'tome') return;
       var known = knowsSpell(id);
-      html += shopRow('spell:' + id, a.icon, a.name, a.desc + ' (Lv ' + a.lvl + ', MP ' + a.mp + ')', a.price, known ? '✓' : 0, known);
+      html += shopRow('spell:' + id, a.icon, a.name, a.desc + ' (Lv ' + a.lvl + ', MP ' + a.mp + ')', buyPrice(a.price), known ? '✓' : 0, known);
     });
     html += '</div>';
     body.innerHTML = html;
@@ -1966,6 +1968,32 @@
     if (nb) nb.addEventListener('click', function () { if (hero.quests.length < 3) { hero.quests.push(genQuest()); markDirty(); openQuestBoard(); } });
   }
 
+  // ---- overlay: options (delete save / restart) -----------------------------
+  function openOptions() {
+    if (!hero) return;
+    closeOverlay();
+    var ov = mkOverlay('Options ⚙'); var body = ov.querySelector('.cr-ov-body');
+    body.innerHTML =
+      '<div class="cr-hint">Your delver is saved on this device and synced to Firebase (room __cade_dungeon) when configured.</div>' +
+      '<div class="cr-grid2">' + stat('Level', hero.level) + stat('Deepest', hero.maxDepth) + stat('Bounties', hero.questsDone || 0) + stat('Runs', hero.stats.runs || 0) + '</div>' +
+      '<div class="cr-sec">Danger zone</div>' +
+      '<button class="cr-buy cr-danger" id="cr-del">🗑 Delete character & start over</button>' +
+      '<div class="cr-hint" id="cr-del-hint"></div>';
+    var del = document.getElementById('cr-del'), armed = false;
+    del.addEventListener('click', function () {
+      if (!armed) { armed = true; del.textContent = '⚠ Tap again to permanently erase'; document.getElementById('cr-del-hint').textContent = 'Wipes level, gold, gear, spells, cosmetics — everything.'; return; }
+      wipeSave();
+    });
+  }
+  function wipeSave() {
+    try { Cade.store.remove(LKEY); } catch (e) {}
+    var db = fbDb(); if (db) { try { db.ref(FB_PATH).remove(); } catch (e) {} }
+    hero = freshHero(); hero.client = clientId; hero.rev = 1;
+    saveLocal();
+    closeOverlay(); buildAbilityBar(); enter(0); refreshAll();
+    Cade.showToast('A fresh delver begins.', 'success', 1800);
+  }
+
   function mkOverlay(title) {
     closeOverlay();
     var el = document.createElement('div'); el.className = 'cr-overlay'; el.id = 'cr-overlay';
@@ -1996,7 +2024,7 @@
       cosmetics: hero.cosmetics, ownedCos: hero.ownedCos,
       quests: hero.quests, questsDone: hero.questsDone || 0,
       stats: hero.stats, _wlvl: hero._wlvl || 0, _alvl: hero._alvl || 0,
-      _konami: hero._konami || false,
+      _konami: hero._konami || false, _fled: hero._fled || 0,
       createdAt: hero.createdAt, updatedAt: Date.now(), rev: hero.rev, client: clientId
     };
   }
@@ -2017,8 +2045,13 @@
     if (h.owned.indexOf(h.equip.armor) < 0) h.owned.push(h.equip.armor);
     h.spells = (h.spells || ['strike']).filter(function (id) { return !!ABIL[id]; });
     if (h.spells.indexOf('strike') < 0) h.spells.unshift('strike');
-    h.docked = (h.docked || h.spells.slice(0, DOCK_MAX)).filter(function (id) { return h.spells.indexOf(id) >= 0; }).slice(0, DOCK_MAX);
-    if (!h.docked.length) h.docked = h.spells.slice(0, DOCK_MAX);
+    // BUGFIX: grant every auto-learned spell the hero has already out-leveled.
+    // (Auto-spells were only granted on the exact level-up tick, so migrated or
+    // high-level characters could never get Firebolt/Blink/etc., and the
+    // Arcanist only sells the tome spells — leaving no recovery path.)
+    ABIL_ORDER.forEach(function (id) { if (ABIL[id].learn === 'auto' && h.level >= ABIL[id].lvl && h.spells.indexOf(id) < 0) h.spells.push(id); });
+    h.docked = (h.docked || []).filter(function (id) { return h.spells.indexOf(id) >= 0; }).slice(0, DOCK_MAX);
+    for (var di = 0; di < h.spells.length && h.docked.length < DOCK_MAX; di++) if (h.docked.indexOf(h.spells[di]) < 0) h.docked.push(h.spells[di]);
     h.cosmetics = h.cosmetics || { color: 'cyan', hat: 'none', cape: 'none' };
     if (!COSMETIC.color[h.cosmetics.color]) h.cosmetics.color = 'cyan';
     if (!COSMETIC.hat[h.cosmetics.hat]) h.cosmetics.hat = 'none';
@@ -2232,7 +2265,11 @@
     if (raf) { cancelAnimationFrame(raf); raf = 0; }
     lastFrame = 0;
   }
+  // If you bail out while alive in a dungeon (closing the panel rather than
+  // using the 🏠 recall), flag it so reopening costs you — no quit-to-escape.
+  function markFled() { if (hero && world && world.mode === 'dungeon') hero._fled = world.depth; }
   function close() {
+    markFled();
     saveNow();
     state_teardown();
     detachFbListener();
@@ -2264,6 +2301,7 @@
           '<div class="cr-tbtns">' +
             '<button id="cr-home" class="cr-tbtn" title="Return to town">🏠</button>' +
             '<button id="cr-char" class="cr-tbtn" title="Character (C)">🎒</button>' +
+            '<button id="cr-opts" class="cr-tbtn" title="Options">⚙</button>' +
           '</div>' +
         '</div>' +
         '<div id="cr-hud" class="cr-hud"></div>' +
@@ -2317,9 +2355,10 @@
     bindButton(document.getElementById('cr-act'), function () { if (world && world.mode === 'dead') { enter(0); return; } interact(); });
     bindButton(document.getElementById('cr-char'), openCharacter);
     bindButton(document.getElementById('cr-home'), recall);
+    bindButton(document.getElementById('cr-opts'), openOptions);
 
     panel._onClose = function () {
-      saveNow(); state_teardown(); detachFbListener();
+      markFled(); saveNow(); state_teardown(); detachFbListener();
       if (saveTimer) { clearTimeout(saveTimer); saveTimer = 0; }
       if (ui && ui.onKey) document.removeEventListener('keydown', ui.onKey, true);
       if (ui && ui.onResize) window.removeEventListener('resize', ui.onResize);
@@ -2334,6 +2373,15 @@
       buildAbilityBar();
       // resume into town (always a safe hub); if dead-state somehow, fix
       enter(0);
+      // flee penalty: if we bailed mid-dungeon last session, pay for it now
+      if (hero._fled) {
+        var fd = hero._fled; hero._fled = 0;
+        var loss = Math.floor(hero.gold * 0.1);
+        hero.gold = Math.max(0, hero.gold - loss);
+        logMsg('die', 'You abandoned floor ' + fd + ' — you stumble back to town' + (loss ? ', ' + loss + ' gold lighter.' : '.'));
+        Cade.showToast('You fled floor ' + fd + (loss ? ' — lost ' + loss + ' gold' : ''), 'error', 2800);
+        markDirty();
+      }
       refreshAll();
       try { ui.canvas.focus(); } catch (e) {}   // so desktop keys drive the game immediately
       raf = requestAnimationFrame(render);

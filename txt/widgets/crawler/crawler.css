@@ -190,6 +190,8 @@
 .cr-buy:active { transform: scale(.94); }
 .cr-buy.cr-owned { color: var(--success, #6cc06c); }
 .cr-buy.cr-sell { color: var(--success, #6cc06c); }
+.cr-buy.cr-danger { display: block; width: 100%; margin-top: 6px; padding: 10px; color: #fff; background: #9a2b2b; border-color: #c0444a; }
+.cr-buy.cr-danger:active { background: #b23333; }
 
 /* light theme tweaks */
 [data-theme="light"] .cr-line { color: #1a1d24; text-shadow: 0 1px 2px rgba(255,255,255,.8); }
