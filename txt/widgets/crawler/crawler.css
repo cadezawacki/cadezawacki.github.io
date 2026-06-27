@@ -222,6 +222,10 @@
 .cr-story-title { font-size: 14px; font-weight: 700; color: #cdb4ff; margin-bottom: 8px; }
 .cr-story p { margin: 0 0 10px; }
 
+/* world map minimap */
+.cr-mmwrap { display: flex; justify-content: center; margin-bottom: 10px; }
+#cr-mm { width: 100%; max-width: 320px; height: auto; border: 1px solid var(--border, #2a2e38); border-radius: 10px; image-rendering: pixelated; background: #1a2416; }
+
 /* minigames */
 .cr-mini-msg { font-size: 13px; color: var(--text, #e7e9ee); min-height: 20px; margin-bottom: 4px; }
 .cr-mini-score { font-size: 13px; font-weight: 600; color: #ffd76a; min-height: 32px; margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
