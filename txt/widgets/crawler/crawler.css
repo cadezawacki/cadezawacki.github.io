@@ -160,6 +160,22 @@
 .cr-gear.cr-on { border-color: var(--accent, #6a8cff); background: var(--accent-bg, rgba(106,140,255,.12)); }
 .cr-gear-st { margin-left: auto; font-size: 11px; color: var(--text-muted, #9aa2b1); }
 
+/* spellbook dock button on the action bar */
+.cr-ab-book { min-width: 44px; opacity: .9; }
+
+/* cosmetics (Tailor) */
+.cr-cosrow { display: flex; flex-wrap: wrap; gap: 6px; }
+.cr-cos {
+  display: flex; flex-direction: column; align-items: center; gap: 2px; width: 66px; padding: 6px 4px;
+  border: 1px solid var(--border, #2a2e38); border-radius: 10px;
+  background: var(--surface-2, #1a1d24); color: var(--text, #e7e9ee); font-size: 11px; text-align: center;
+}
+.cr-cos.cr-on { border-color: var(--accent, #6a8cff); background: var(--accent-bg, rgba(106,140,255,.12)); }
+.cr-cos small { color: var(--text-muted, #9aa2b1); font-size: 10px; }
+.cr-cos:active { transform: scale(.94); }
+.cr-swatch { width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 1px solid rgba(255,255,255,.25); }
+.cr-swatch-hat { background: var(--surface, #14171d); font-size: 13px; }
+
 /* shops */
 .cr-shopgold { font-size: 13px; color: #ffd76a; margin-bottom: 8px; font-weight: 600; }
 .cr-shop { display: flex; flex-direction: column; gap: 6px; }

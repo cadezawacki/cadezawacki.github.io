@@ -76,56 +76,132 @@
   // =========================================================================
   //  content tables
   // =========================================================================
+  // Effect fields: crit, stun, freeze, poison, burn (chance to apply on hit) ·
+  // cleave/chain (fraction of hit dealt to extra foes) · lifesteal (heal frac of
+  // damage) · spell (+% spell damage) · mp/hp (+max) · dodge/thorns/resist/regen/
+  // greed (defensive & utility). This is what makes each weapon *play* different.
   var WEAPONS = {
-    fist:    { id: 'fist',    name: 'Bare Fists',     atk: 0,  icon: '👊', slot: 'weapon', tier: 0 },
-    dagger:  { id: 'dagger',  name: 'Rusty Dagger',   atk: 2,  icon: '🗡️', slot: 'weapon', tier: 1, price: 30 },
-    sword:   { id: 'sword',   name: 'Iron Sword',     atk: 4,  icon: '⚔️', slot: 'weapon', tier: 2, price: 90 },
-    mace:    { id: 'mace',    name: 'Spiked Mace',    atk: 6,  icon: '🔨', slot: 'weapon', tier: 3, price: 200, stun: 0.18 },
-    axe:     { id: 'axe',     name: 'Great Axe',      atk: 9,  icon: '🪓', slot: 'weapon', tier: 4, price: 420, crit: 0.12 },
-    staff:   { id: 'staff',   name: 'Arcane Staff',   atk: 5,  icon: '🪄', slot: 'weapon', tier: 3, price: 260, mp: 10 },
-    runeblade:{id: 'runeblade',name:'Runeblade',      atk: 13, icon: '🗡️', slot: 'weapon', tier: 5, price: 900, crit: 0.18 }
+    fist:       { id: 'fist',       name: 'Bare Fists',      atk: 0,  icon: '👊', slot: 'weapon', tier: 0 },
+    dagger:     { id: 'dagger',     name: 'Rusty Dagger',    atk: 2,  icon: '🗡️', slot: 'weapon', tier: 1, price: 30 },
+    shortsword: { id: 'shortsword', name: 'Iron Sword',      atk: 4,  icon: '⚔️', slot: 'weapon', tier: 2, price: 90 },
+    rapier:     { id: 'rapier',     name: 'Rapier',          atk: 5,  icon: '🤺', slot: 'weapon', tier: 2, price: 170, crit: 0.15 },
+    mace:       { id: 'mace',       name: 'Spiked Mace',     atk: 6,  icon: '🔨', slot: 'weapon', tier: 3, price: 210, stun: 0.20 },
+    venomfang:  { id: 'venomfang',  name: 'Venom Fang',      atk: 5,  icon: '🐍', slot: 'weapon', tier: 3, price: 250, poison: 0.5 },
+    staff:      { id: 'staff',      name: 'Arcane Staff',    atk: 5,  icon: '🪄', slot: 'weapon', tier: 3, price: 270, mp: 10, spell: 0.20 },
+    battleaxe:  { id: 'battleaxe',  name: 'Great Axe',       atk: 9,  icon: '🪓', slot: 'weapon', tier: 4, price: 430, cleave: 0.5 },
+    warhammer:  { id: 'warhammer',  name: 'Warhammer',       atk: 8,  icon: '🔨', slot: 'weapon', tier: 4, price: 450, stun: 0.30 },
+    frostbrand: { id: 'frostbrand', name: 'Frostbrand',      atk: 8,  icon: '❄️', slot: 'weapon', tier: 4, price: 490, freeze: 0.30 },
+    flameberge: { id: 'flameberge', name: 'Flameberge',      atk: 9,  icon: '🔥', slot: 'weapon', tier: 4, price: 510, burn: 0.5 },
+    runeblade:  { id: 'runeblade',  name: 'Runeblade',       atk: 12, icon: '⚔️', slot: 'weapon', tier: 5, price: 900, crit: 0.18, lifesteal: 0.15 },
+    vampscythe: { id: 'vampscythe', name: 'Vampiric Scythe', atk: 11, icon: '🌑', slot: 'weapon', tier: 5, price: 960, lifesteal: 0.35 },
+    thundermaul:{ id: 'thundermaul',name: 'Thunder Maul',    atk: 13, icon: '⚡', slot: 'weapon', tier: 5, price: 1050, chain: 0.6, stun: 0.2 },
+    archstaff:  { id: 'archstaff',  name: 'Archmage Staff',  atk: 7,  icon: '🔮', slot: 'weapon', tier: 5, price: 990, mp: 25, spell: 0.5 },
+    godsbane:   { id: 'godsbane',   name: 'Godsbane',        atk: 18, icon: '🩸', slot: 'weapon', tier: 6, price: 2800, crit: 0.2, lifesteal: 0.2, cleave: 0.4 }
   };
   var ARMORS = {
-    rags:    { id: 'rags',    name: 'Tattered Rags',  def: 0,  icon: '🧥', slot: 'armor', tier: 0 },
-    leather: { id: 'leather', name: 'Leather Armor',  def: 2,  icon: '🦺', slot: 'armor', tier: 1, price: 40 },
-    chain:   { id: 'chain',   name: 'Chain Mail',     def: 4,  icon: '⛓️', slot: 'armor', tier: 2, price: 120 },
-    plate:   { id: 'plate',   name: 'Plate Armor',    def: 7,  icon: '🛡️', slot: 'armor', tier: 3, price: 300, hp: 10 },
-    aegis:   { id: 'aegis',   name: 'Aegis Plate',    def: 11, icon: '🛡️', slot: 'armor', tier: 5, price: 820, hp: 25 }
+    rags:        { id: 'rags',        name: 'Tattered Rags',  def: 0,  icon: '🧥', slot: 'armor', tier: 0 },
+    leather:     { id: 'leather',     name: 'Leather Armor',  def: 2,  icon: '🦺', slot: 'armor', tier: 1, price: 40 },
+    chain:       { id: 'chain',       name: 'Chain Mail',     def: 4,  icon: '⛓️', slot: 'armor', tier: 2, price: 120 },
+    scale:       { id: 'scale',       name: 'Scale Armor',    def: 6,  icon: '🐊', slot: 'armor', tier: 3, price: 280, dodge: 0.08 },
+    plate:       { id: 'plate',       name: 'Plate Armor',    def: 7,  icon: '🛡️', slot: 'armor', tier: 3, price: 300, hp: 10 },
+    magerobe:    { id: 'magerobe',    name: 'Mage Robe',      def: 4,  icon: '👘', slot: 'armor', tier: 3, price: 330, mp: 20, spell: 0.25 },
+    spiked:      { id: 'spiked',      name: 'Spiked Mail',    def: 8,  icon: '🦔', slot: 'armor', tier: 4, price: 490, thorns: 0.30 },
+    shadowcloak: { id: 'shadowcloak', name: 'Shadow Cloak',   def: 6,  icon: '🥷', slot: 'armor', tier: 4, price: 540, dodge: 0.20 },
+    dragonscale: { id: 'dragonscale', name: 'Dragonscale',    def: 11, icon: '🐉', slot: 'armor', tier: 5, price: 900, hp: 25, resist: 0.15 },
+    aegis:       { id: 'aegis',       name: 'Aegis Plate',    def: 12, icon: '🛡️', slot: 'armor', tier: 5, price: 960, hp: 25 },
+    titanplate:  { id: 'titanplate',  name: 'Titan Plate',    def: 16, icon: '🏰', slot: 'armor', tier: 6, price: 2400, hp: 50, thorns: 0.2 }
   };
   var TRINKETS = {
-    none:    { id: 'none',    name: '— none —',       icon: '·',  slot: 'trinket', tier: 0 },
-    ringreg: { id: 'ringreg', name: 'Ring of Regen',  icon: '💍', slot: 'trinket', tier: 2, price: 150, regen: 1 },
-    ampmana: { id: 'ampmana', name: 'Mana Amulet',    icon: '📿', slot: 'trinket', tier: 2, price: 150, mp: 20 },
-    bandpow: { id: 'bandpow', name: 'Power Band',     icon: '⭕', slot: 'trinket', tier: 3, price: 240, atk: 3 },
-    wardchm: { id: 'wardchm', name: 'Warding Charm',  icon: '🔮', slot: 'trinket', tier: 3, price: 240, def: 3 },
-    greed:   { id: 'greed',   name: 'Greed Coin',     icon: '🪙', slot: 'trinket', tier: 3, price: 300, greed: 0.5 },
-    lucky:   { id: 'lucky',   name: 'Lucky Clover',   icon: '🍀', slot: 'trinket', tier: 4, crit: 0.08, greed: 0.3 } // easter-egg only (no price)
+    none:      { id: 'none',      name: '— none —',        icon: '·',  slot: 'trinket', tier: 0 },
+    ringreg:   { id: 'ringreg',   name: 'Ring of Regen',   icon: '💍', slot: 'trinket', tier: 2, price: 150, regen: 1 },
+    ampmana:   { id: 'ampmana',   name: 'Mana Amulet',     icon: '📿', slot: 'trinket', tier: 2, price: 150, mp: 20 },
+    bandpow:   { id: 'bandpow',   name: 'Power Band',       icon: '⭕', slot: 'trinket', tier: 3, price: 240, atk: 3 },
+    wardchm:   { id: 'wardchm',   name: 'Warding Charm',    icon: '🔱', slot: 'trinket', tier: 3, price: 240, def: 3 },
+    greed:     { id: 'greed',     name: 'Greed Coin',       icon: '🪙', slot: 'trinket', tier: 3, price: 300, greed: 0.5 },
+    swiftboots:{ id: 'swiftboots',name: 'Swift Boots',      icon: '👢', slot: 'trinket', tier: 4, price: 450, dodge: 0.12 },
+    vampring:  { id: 'vampring',  name: 'Vampire Ring',     icon: '🧛', slot: 'trinket', tier: 4, price: 520, lifesteal: 0.15 },
+    archring:  { id: 'archring',  name: 'Archmage Ring',    icon: '💠', slot: 'trinket', tier: 4, price: 620, spell: 0.35, mp: 15 },
+    berserker: { id: 'berserker', name: 'Berserker Idol',   icon: '😤', slot: 'trinket', tier: 4, price: 660, atk: 6, def: -2 },
+    phoenix:   { id: 'phoenix',   name: 'Phoenix Feather',  icon: '🪶', slot: 'trinket', tier: 5, price: 900, hp: 20, regen: 2 },
+    kingscrown:{ id: 'kingscrown',name: "King's Signet",    icon: '💍', slot: 'trinket', tier: 6, price: 3000, atk: 5, def: 5, hp: 30, greed: 0.5 },
+    lucky:     { id: 'lucky',     name: 'Lucky Clover',     icon: '🍀', slot: 'trinket', tier: 4, crit: 0.08, greed: 0.3 } // easter-egg only (no price)
   };
   function gear(id) { return WEAPONS[id] || ARMORS[id] || TRINKETS[id] || null; }
 
   // consumables — kept as { id, qty } stacks in hero.bag
   var CONS = {
-    potion: { id: 'potion', name: 'Health Potion', icon: '🧪', price: 25, desc: 'Restore 45 HP' },
-    elixir: { id: 'elixir', name: 'Mana Elixir',   icon: '⚗️', price: 25, desc: 'Restore 30 MP' },
-    bomb:   { id: 'bomb',   name: 'Bomb',          icon: '💣', price: 40, desc: 'Blast 1-tile radius (dmg + cracks walls)' },
-    scroll: { id: 'scroll', name: 'Blink Scroll',  icon: '📜', price: 35, desc: 'Teleport to a random explored tile' },
-    key:    { id: 'key',    name: 'Skeleton Key',  icon: '🗝️', price: 60, desc: 'Opens one locked door' }
+    potion:   { id: 'potion',   name: 'Health Potion',   icon: '🧪', price: 25, desc: 'Restore 45 HP' },
+    hpotion:  { id: 'hpotion',  name: 'Greater Potion',  icon: '🍷', price: 70, desc: 'Restore 110 HP' },
+    elixir:   { id: 'elixir',   name: 'Mana Elixir',     icon: '⚗️', price: 25, desc: 'Restore 30 MP' },
+    eelixir:  { id: 'eelixir',  name: 'Greater Elixir',  icon: '🧉', price: 70, desc: 'Restore 70 MP' },
+    bomb:     { id: 'bomb',     name: 'Bomb',            icon: '💣', price: 40, desc: 'Blast 1-tile radius (dmg + cracks walls)' },
+    scroll:   { id: 'scroll',   name: 'Blink Scroll',    icon: '📜', price: 35, desc: 'Teleport to a random explored tile' },
+    antidote: { id: 'antidote', name: 'Antidote',        icon: '🧴', price: 30, desc: 'Cure poison & burn' },
+    key:      { id: 'key',      name: 'Skeleton Key',    icon: '🗝️', price: 60, desc: 'Opens one locked door' }
   };
 
-  // abilities — directional/self, cost MP, have cooldowns; unlock by level
-  var ABIL = {
-    strike: { id: 'strike', name: 'Power Strike', icon: '💥', lvl: 1, mp: 4, cd: 1, kind: 'melee',
-              desc: 'Heavy adjacent hit (×2.2 ATK), may stun.' },
-    bolt:   { id: 'bolt',   name: 'Firebolt',     icon: '🔥', lvl: 3, mp: 6, cd: 2, kind: 'ray', range: 6,
-              desc: 'Fires along your facing; burns the first foe hit.' },
-    mend:   { id: 'mend',   name: 'Mend',         icon: '✨', lvl: 4, mp: 8, cd: 4, kind: 'self',
-              desc: 'Heal 35% of max HP.' },
-    blink:  { id: 'blink',  name: 'Blink',        icon: '🌀', lvl: 6, mp: 5, cd: 3, kind: 'move', range: 4,
-              desc: 'Dash up to 4 tiles ahead, slipping past danger.' },
-    quake:  { id: 'quake',  name: 'Quake',        icon: '🌋', lvl: 8, mp: 12, cd: 5, kind: 'aoe', range: 2,
-              desc: 'Shake the earth — damage + stun all foes nearby.' }
+  // Cosmetics — pure visual flair for your adventurer, bought at the Tailor.
+  var COSMETIC = {
+    color: {
+      cyan:    { name: 'Azure',   body: '#5ec8e6', line: '#10333f', price: 0 },
+      gold:    { name: 'Gilded',  body: '#e6c24a', line: '#4a3a10', price: 250 },
+      crimson: { name: 'Crimson', body: '#e05d5d', line: '#3a1010', price: 250 },
+      violet:  { name: 'Violet',  body: '#b07fe0', line: '#2a1040', price: 250 },
+      emerald: { name: 'Emerald', body: '#5fd08a', line: '#103a22', price: 250 },
+      rose:    { name: 'Rose',    body: '#e88ab8', line: '#401028', price: 350 },
+      slate:   { name: 'Slate',   body: '#9aa6b4', line: '#1a2230', price: 350 },
+      ember:   { name: 'Ember',   body: '#ff8a4a', line: '#401a08', price: 500 },
+      void:    { name: 'Void',    body: '#6a5ad0', line: '#140a30', price: 800 }
+    },
+    hat: {
+      none:   { name: '(no hat)',  price: 0 },
+      wizard: { name: 'Wizard Hat', price: 300 },
+      horns:  { name: 'Horns',     price: 350 },
+      top:    { name: 'Top Hat',   price: 450 },
+      halo:   { name: 'Halo',      price: 600 },
+      crown:  { name: 'Crown',     price: 1200 }
+    },
+    cape: {
+      none:   { name: '(no cape)',  price: 0 },
+      red:    { name: 'Red Cape',   color: '#c0392b', price: 250 },
+      blue:   { name: 'Blue Cape',  color: '#2e6da4', price: 250 },
+      gold:   { name: 'Gold Cape',  color: '#d4a017', price: 400 },
+      shadow: { name: 'Shadow Cape',color: '#2a2440', price: 550 }
+    }
   };
-  var ABIL_ORDER = ['strike', 'bolt', 'mend', 'blink', 'quake'];
+  function cosKey(slot, id) { return slot + ':' + id; }
+
+  // Spells — cost MP, have cooldowns. learn:'auto' is taught on reaching its
+  // level; learn:'tome' must be bought at the Arcanist. You can DOCK up to
+  // DOCK_MAX of your known spells onto the action bar at once.
+  var DOCK_MAX = 4;
+  var ABIL = {
+    strike: { id: 'strike', name: 'Power Strike', icon: '💥', lvl: 1, mp: 4,  cd: 1, kind: 'melee', learn: 'auto', desc: 'Heavy adjacent hit (×2.2 ATK), may stun.' },
+    bolt:   { id: 'bolt',   name: 'Firebolt',     icon: '🔥', lvl: 3, mp: 6,  cd: 2, kind: 'ray',   range: 6, burn: true, learn: 'auto', desc: 'Bolt along your facing; burns the first foe hit.' },
+    mend:   { id: 'mend',   name: 'Mend',         icon: '✨', lvl: 4, mp: 8,  cd: 4, kind: 'self',  learn: 'auto', desc: 'Heal 35% of max HP.' },
+    blink:  { id: 'blink',  name: 'Blink',        icon: '🌀', lvl: 6, mp: 5,  cd: 3, kind: 'move',  range: 4, learn: 'auto', desc: 'Dash up to 4 tiles ahead, slipping past danger.' },
+    quake:  { id: 'quake',  name: 'Quake',        icon: '🌋', lvl: 8, mp: 12, cd: 5, kind: 'aoe',   range: 2, stun: true, learn: 'auto', desc: 'Damage + stun every foe around you.' },
+    // ---- tome spells (buy at the Arcanist) ----
+    frost:  { id: 'frost',  name: 'Frost Lance',  icon: '❄️', lvl: 3, mp: 7,  cd: 2, kind: 'ray',   range: 6, freeze: true, learn: 'tome', price: 220, desc: 'Pierces your facing; freezes the foe hit.' },
+    shield: { id: 'shield', name: 'Aegis',        icon: '🛡️', lvl: 4, mp: 6,  cd: 6, kind: 'buff',  buff: 'shield', turns: 6, learn: 'tome', price: 260, desc: 'Halve incoming damage for 6 turns.' },
+    drain:  { id: 'drain',  name: 'Life Drain',   icon: '🩸', lvl: 5, mp: 7,  cd: 2, kind: 'ray',   range: 5, drain: true, learn: 'tome', price: 320, desc: 'Ray that heals you for the damage dealt.' },
+    warcry: { id: 'warcry', name: 'War Cry',      icon: '📣', lvl: 5, mp: 6,  cd: 6, kind: 'buff',  buff: 'power', turns: 6, learn: 'tome', price: 300, desc: 'Greatly raise ATK for 6 turns.' },
+    venom:  { id: 'venom',  name: 'Venom Nova',   icon: '☠️', lvl: 6, mp: 10, cd: 4, kind: 'aoe',   range: 2, poison: true, learn: 'tome', price: 400, desc: 'Poison every foe around you.' },
+    chain:  { id: 'chain',  name: 'Chain Lightning', icon: '⚡', lvl: 7, mp: 10, cd: 3, kind: 'chainspell', range: 6, learn: 'tome', price: 460, desc: 'Strikes a foe, then arcs to others nearby.' },
+    meteor: { id: 'meteor', name: 'Meteor',       icon: '☄️', lvl: 9, mp: 16, cd: 6, kind: 'aoe',   range: 2, big: true, burn: true, learn: 'tome', price: 760, desc: 'A massive blast + burn around you.' }
+  };
+  var ABIL_ORDER = ['strike', 'bolt', 'frost', 'drain', 'mend', 'shield', 'warcry', 'venom', 'blink', 'chain', 'quake', 'meteor'];
+  function dockedSpells() { return (hero.docked || []).filter(function (id) { return ABIL[id] && hero.spells && hero.spells.indexOf(id) >= 0; }); }
+  function knowsSpell(id) { return hero.spells && hero.spells.indexOf(id) >= 0; }
+  function learnSpell(id) {
+    if (!ABIL[id]) return false;
+    hero.spells = hero.spells || [];
+    if (hero.spells.indexOf(id) >= 0) return false;
+    hero.spells.push(id);
+    hero.docked = hero.docked || [];
+    if (hero.docked.length < DOCK_MAX) hero.docked.push(id);
+    return true;
+  }
 
   // enemies. behavior: chase | archer | bomber | thief | summon. minD = first floor it appears.
   var MOBS = {
@@ -175,6 +251,11 @@
       equip: { weapon: 'dagger', armor: 'rags', trinket: 'none' },
       bag: { potion: 2, elixir: 1, bomb: 0, scroll: 0, key: 0 },
       owned: ['dagger', 'rags'],   // gear ids in possession (equip swaps among these)
+      spells: ['strike'], docked: ['strike'],
+      cosmetics: { color: 'cyan', hat: 'none', cape: 'none' },
+      ownedCos: ['color:cyan', 'hat:none', 'cape:none'],
+      quests: [], questsDone: 0,
+      buffs: {},
       stats: { kills: 0, deaths: 0, floors: 0, gems: 0, runs: 0 },
       createdAt: Date.now(), updatedAt: Date.now(), rev: 1, client: clientId
     };
@@ -183,14 +264,19 @@
 
   // derived stats from base + equipment
   function eqVal(slot, field) { var g = gear(hero.equip[slot]); return (g && g[field]) || 0; }
-  function atkOf() { return hero.atk + eqVal('weapon', 'atk') + eqVal('trinket', 'atk'); }
+  function powerBonus() { return 3 + Math.ceil(hero.level / 2); }
+  function atkOf() { var a = hero.atk + eqVal('weapon', 'atk') + eqVal('trinket', 'atk'); if (hero.buffs && hero.buffs.power > 0) a += powerBonus(); return a; }
   function defOf() { return hero.def + eqVal('armor', 'def') + eqVal('trinket', 'def'); }
-  function critOf() { return clamp(hero.crit + eqVal('weapon', 'crit'), 0, 0.75); }
-  function maxHpOf() { return hero.maxHp + eqVal('armor', 'hp'); }
-  function maxMpOf() { return hero.maxMp + eqVal('weapon', 'mp') + eqVal('trinket', 'mp'); }
+  function critOf() { return clamp(hero.crit + eqVal('weapon', 'crit') + eqVal('trinket', 'crit'), 0, 0.75); }
+  function maxHpOf() { return hero.maxHp + eqVal('armor', 'hp') + eqVal('trinket', 'hp'); }
+  function maxMpOf() { return hero.maxMp + eqVal('weapon', 'mp') + eqVal('armor', 'mp') + eqVal('trinket', 'mp'); }
   function regenOf() { return eqVal('trinket', 'regen'); }
   function greedOf() { return 1 + eqVal('trinket', 'greed'); }
-  function unlockedAbilities() { return ABIL_ORDER.filter(function (id) { return hero.level >= ABIL[id].lvl; }); }
+  function lifestealOf() { return eqVal('weapon', 'lifesteal') + eqVal('trinket', 'lifesteal'); }
+  function spellPowerOf() { return 1 + eqVal('weapon', 'spell') + eqVal('armor', 'spell') + eqVal('trinket', 'spell'); }
+  function dodgeOf() { return clamp(eqVal('armor', 'dodge') + eqVal('trinket', 'dodge'), 0, 0.6); }
+  function thornsOf() { return eqVal('armor', 'thorns'); }
+  function resistOf() { return clamp(eqVal('armor', 'resist'), 0, 0.6); }
 
   function gainXp(n) {
     hero.xp += n;
@@ -202,8 +288,9 @@
       if (hero.level % 4 === 0) { hero.crit = clamp(hero.crit + 0.02, 0, 0.4); }
       hero.hp = maxHpOf(); hero.mp = maxMpOf();
       logMsg('up', 'Level ' + hero.level + '! You feel stronger.');
-      var newly = ABIL_ORDER.filter(function (id) { return ABIL[id].lvl === hero.level; });
-      if (newly.length) { logMsg('up', 'Learned ' + ABIL[newly[0]].name + '!'); buildAbilityBar(); }
+      var newly = ABIL_ORDER.filter(function (id) { return ABIL[id].learn === 'auto' && ABIL[id].lvl === hero.level; });
+      newly.forEach(function (id) { if (learnSpell(id)) logMsg('up', 'Learned ' + ABIL[id].name + '!'); });
+      if (newly.length) buildAbilityBar();
       fxBurst(world && world.player ? world.player.x : 0, world && world.player ? world.player.y : 0, '#ffe28a');
     }
     markDirty();
@@ -518,13 +605,15 @@
     var room = { x: 6, y: 8, w: 30, h: 18 };
     carveRoom(m, room);
     var objects = [], monsters = [], items = [];
-    var cx = Math.floor(MW / 2), cy = Math.floor(MH / 2);
-    objects.push({ type: 'npc', role: 'healer',   x: 11, y: 12, icon: '⛑️', col: '#ff8a8a', name: 'Healer' });
-    objects.push({ type: 'npc', role: 'merchant', x: 20, y: 11, icon: '🛒', col: '#ffd76a', name: 'Merchant' });
-    objects.push({ type: 'npc', role: 'smith',    x: 29, y: 12, icon: '⚒️', col: '#a0c0ff', name: 'Smith' });
-    objects.push({ type: 'stairs', x: 20, y: 22, down: true });
-    var stairs = { x: 20, y: 22, up: false };
-    var start = { x: 20, y: 17 };
+    objects.push({ type: 'npc', role: 'healer',   x: 10, y: 12, icon: '⛑️', col: '#ff8a8a', name: 'Healer' });
+    objects.push({ type: 'npc', role: 'merchant', x: 16, y: 12, icon: '🛒', col: '#ffd76a', name: 'Merchant' });
+    objects.push({ type: 'npc', role: 'smith',    x: 24, y: 12, icon: '⚒️', col: '#a0c0ff', name: 'Smith' });
+    objects.push({ type: 'npc', role: 'arcanist', x: 30, y: 12, icon: '🔮', col: '#c79bff', name: 'Arcanist' });
+    objects.push({ type: 'npc', role: 'quest',    x: 13, y: 19, icon: '📜', col: '#e0c060', name: 'Bounties' });
+    objects.push({ type: 'npc', role: 'tailor',   x: 27, y: 19, icon: '🎩', col: '#9fe0c0', name: 'Tailor' });
+    objects.push({ type: 'stairs', x: 20, y: 23, down: true });
+    var stairs = { x: 20, y: 23, up: false };
+    var start = { x: 20, y: 16 };
     return {
       depth: 0, biome: biomeFor(0), isBoss: false, puzzle: null,
       map: m, rooms: [room], objects: objects, monsters: monsters, items: items,
@@ -544,7 +633,7 @@
     w.player = { x: spawn.x, y: spawn.y, rx: spawn.x, ry: spawn.y, dir: { x: 0, y: 1 }, hit: 0, bump: 0 };
     world = w;
     hero.depth = depth;
-    hero.status = {};                       // clear DoTs between areas
+    hero.status = {}; hero.buffs = {};      // clear DoTs & buffs between areas
     if (depth > hero.maxDepth) { hero.maxDepth = depth; }
     // wake in town with half vitals if we arrived dead
     if (depth <= 0 && hero.hp <= 0) { hero.hp = Math.ceil(maxHpOf() * 0.5); hero.mp = Math.ceil(maxMpOf() * 0.5); }
@@ -553,7 +642,7 @@
     computeFov();
     if (depth <= 0) { logMsg('', 'Hearthhold. Rest, shop, then descend ▾.'); }
     else {
-      hero.stats.floors++;
+      hero.stats.floors++; questDepth(depth);
       logMsg('', (w.isBoss ? '⚠ ' : '') + w.biome.name + ' — Floor ' + depth + (w.isBoss ? '. A boss stirs.' : '.'));
       if (w.puzzle) logMsg('', w.puzzle.kind === 'lever' ? 'The stairs are barred. Find the lever.' : 'A locked door blocks the way. Find the key.');
     }
@@ -572,6 +661,13 @@
     // dive straight to the deepest floor reached (QoL); first run starts at 1
     hero.stats.runs = (hero.stats.runs || 0) + 1;
     enter(Math.max(1, hero.maxDepth));
+  }
+  function recall() {
+    if (!hero || !world) return;
+    if (world.mode === 'town') { Cade.showToast('Already in town', 'info', 1000); return; }
+    if (world.mode === 'dead') { enter(0); return; }
+    logMsg('', 'You slip away to town.');
+    enter(0);
   }
 
   // =========================================================================
@@ -648,10 +744,10 @@
   function killMob(m, kind) {
     var idx = world.monsters.indexOf(m); if (idx < 0) return;
     world.monsters.splice(idx, 1);
-    hero.stats.kills++;
+    hero.stats.kills++; questProgress('kills', 1);
     fxBurst(m.x, m.y, m.col);
     gainXp(m.xp);
-    if (m.boss) { logMsg('win', 'The ' + m.name + ' falls! The way down opens.'); shake(10);
+    if (m.boss) { questProgress('boss', 1); logMsg('win', 'The ' + m.name + ' falls! The way down opens.'); shake(10);
       // boss drops: gold + guaranteed gear + gem
       world.items.push({ type: 'gold', x: m.x, y: m.y, amt: 60 + world.depth * 12 });
       var gp = adjacentFree(m.x, m.y); if (gp) world.items.push({ type: 'gear', id: randomGearId(world.depth + 3), x: gp.x, y: gp.y });
@@ -671,21 +767,56 @@
     for (var i = 0; i < nb.length; i++) if (walkable(nb[i][0], nb[i][1]) && !mobAt(nb[i][0], nb[i][1])) return { x: nb[i][0], y: nb[i][1] };
     return null;
   }
+  function lifestealHeal(dmg) {
+    var ls = lifestealOf(); if (!ls || dmg <= 0) return;
+    if (hero.hp >= maxHpOf()) return;
+    var h = Math.max(1, Math.floor(dmg * ls));
+    hero.hp = Math.min(maxHpOf(), hero.hp + h);
+    fxText(world.player.x, world.player.y, '+' + h, '#9fe0a0');
+  }
+  function cleaveAround(center, dmg) {
+    var snap = world.monsters.slice();
+    for (var i = 0; i < snap.length; i++) { var o = snap[i]; if (o === center || o.hp <= 0) continue; if (cheb(o.x, o.y, center.x, center.y) <= 1) damageMob(o, dmg, 'cleave', '#ffd2a0'); }
+  }
+  function chainBounce(from, dmg, hops, color) {
+    var cur = from, used = [from];
+    for (var h = 0; h < hops; h++) {
+      var best = null, bd = 99;
+      for (var i = 0; i < world.monsters.length; i++) { var m = world.monsters[i]; if (used.indexOf(m) >= 0 || m.hp <= 0) continue; var d = cheb(m.x, m.y, cur.x, cur.y); if (d <= 3 && d < bd) { bd = d; best = m; } }
+      if (!best) break;
+      fxRay(cur.x, cur.y, best.x, best.y, color || '#bfe0ff');
+      damageMob(best, dmg, 'chain', color || '#bfe0ff'); used.push(best); cur = best;
+    }
+  }
   function heroAttack(m, mult, extraStun) {
+    var w = gear(hero.equip.weapon) || {};
     var base = Math.max(1, Math.round(atkOf() * (mult || 1)) - m.def + rr(-1, 2));
     var crit = chance(critOf());
     if (crit) base = Math.round(base * 1.8);
+    var dealt = Math.min(base, m.hp);
     damageMob(m, base, 'melee', crit ? '#ffec80' : '#ffd2d2');
     if (crit) fxText(m.x, m.y - 0.3, 'CRIT!', '#ffec80');
-    var st = eqVal('weapon', 'stun') + (extraStun || 0);
-    if (st && chance(st)) { applyStatus(m, 'stun', 2); fxText(m.x, m.y, 'stun', '#9fd8ff'); }
+    lifestealHeal(dealt);
+    var dead = m.hp <= 0;
+    if (!dead && w.poison && chance(w.poison)) { applyStatus(m, 'poison', 4); fxText(m.x, m.y, 'poison', '#7fe0a0'); }
+    if (!dead && w.burn && chance(w.burn)) { applyStatus(m, 'burn', 3); fxText(m.x, m.y, 'burn', '#ffb060'); }
+    var st = (w.stun || 0) + (w.freeze || 0) + (extraStun || 0);
+    if (!dead && st && chance(st)) { applyStatus(m, 'stun', 2); fxText(m.x, m.y, w.freeze ? 'frozen' : 'stun', '#9fd8ff'); }
+    if (w.cleave) cleaveAround(m, Math.max(1, Math.round(base * w.cleave)));
+    if (w.chain) chainBounce(m, Math.max(1, Math.round(base * w.chain)), 2, '#ffe28a');
     shake(crit ? 5 : 2);
   }
-  function hurtHero(dmg, srcName) {
+  function hurtHero(dmg, srcName, srcMob) {
+    if (dodgeOf() && chance(dodgeOf())) { fxText(world.player.x, world.player.y, 'dodge', '#bfe0ff'); return; }
+    var rz = resistOf(); if (rz) dmg = Math.max(1, Math.round(dmg * (1 - rz)));
+    if (hero.buffs && hero.buffs.shield > 0) dmg = Math.max(1, Math.ceil(dmg * 0.4));
     dmg = Math.max(1, dmg - Math.floor(defOf() * 0.6));
     hero.hp -= dmg; world.player.hit = now();
     fxText(world.player.x, world.player.y, '-' + dmg, '#ff9a9a');
     shake(3);
+    if (srcMob && thornsOf() && srcMob.hp > 0 && cheb(world.player.x, world.player.y, srcMob.x, srcMob.y) <= 1) {
+      damageMob(srcMob, Math.max(1, Math.round(dmg * thornsOf())), 'thorns', '#ffd0a0');
+    }
     if (hero.hp <= 0) die();
     markDirty();
   }
@@ -823,7 +954,7 @@
 
   function pickup(it, idx) {
     if (it.type === 'gold') { var g = Math.round(it.amt * greedOf()); hero.gold += g; logMsg('', '+' + g + ' gold.'); fxText(it.x, it.y, '+' + g, '#ffd76a'); }
-    else if (it.type === 'gem') { hero.gold += 50; hero.stats.gems++; logMsg('win', 'A gleaming gem! (+50)'); fxText(it.x, it.y, '💎', '#7fe0d0'); }
+    else if (it.type === 'gem') { hero.gold += 50; hero.stats.gems++; questProgress('gems', 1); logMsg('win', 'A gleaming gem! (+50)'); fxText(it.x, it.y, '💎', '#7fe0d0'); }
     else if (it.type === 'cons') { hero.bag[it.id] = (hero.bag[it.id] || 0) + 1; logMsg('', 'Picked up ' + CONS[it.id].name + '.'); fxText(it.x, it.y, CONS[it.id].icon, '#fff'); }
     else if (it.type === 'gear') { acquireGear(it.id); var gg = gear(it.id); logMsg('win', 'Found ' + (gg ? gg.name : 'gear') + '!'); fxText(it.x, it.y, gg ? gg.icon : '?', '#fff'); }
     world.items.splice(idx, 1);
@@ -839,9 +970,7 @@
 
   function rest() {
     if (!playerActive()) return false;
-    if (hero.hp < maxHpOf() && chance(0.6)) hero.hp = Math.min(maxHpOf(), hero.hp + 1);
-    if (hero.mp < maxMpOf() && chance(0.5)) hero.mp = Math.min(maxMpOf(), hero.mp + 1);
-    endTurn();
+    endTurn();   // waiting passes a turn — no free healing (potions matter now)
     return true;
   }
 
@@ -906,13 +1035,14 @@
   function useItem(id) {
     if (!playerActive()) return;
     if (!hero.bag[id] || hero.bag[id] <= 0) { logMsg('', 'No ' + CONS[id].name + '.'); return; }
-    var used = true, p = world.player;
-    if (id === 'potion') { var h = Math.min(maxHpOf() - hero.hp, 45); if (h <= 0 && hero.hp >= maxHpOf()) { logMsg('', 'Already at full HP.'); return; } hero.hp = Math.min(maxHpOf(), hero.hp + 45); fxText(p.x, p.y, '+' + Math.max(h, 0) + 'hp', '#9fe0a0'); }
-    else if (id === 'elixir') { if (hero.mp >= maxMpOf()) { logMsg('', 'Already at full MP.'); return; } hero.mp = Math.min(maxMpOf(), hero.mp + 30); fxText(p.x, p.y, '+mp', '#9fd0ff'); }
+    var p = world.player;
+    if (id === 'potion' || id === 'hpotion') { var amt = id === 'hpotion' ? 110 : 45; if (hero.hp >= maxHpOf()) { logMsg('', 'Already at full HP.'); return; } var h = Math.min(maxHpOf() - hero.hp, amt); hero.hp = Math.min(maxHpOf(), hero.hp + amt); fxText(p.x, p.y, '+' + h + 'hp', '#9fe0a0'); }
+    else if (id === 'elixir' || id === 'eelixir') { var mamt = id === 'eelixir' ? 70 : 30; if (hero.mp >= maxMpOf()) { logMsg('', 'Already at full MP.'); return; } hero.mp = Math.min(maxMpOf(), hero.mp + mamt); fxText(p.x, p.y, '+mp', '#9fd0ff'); }
+    else if (id === 'antidote') { if (!(hero.status && (hero.status.poison > 0 || hero.status.burn > 0))) { logMsg('', 'Nothing to cure.'); return; } hero.status.poison = 0; hero.status.burn = 0; fxText(p.x, p.y, 'cured', '#9fe0a0'); logMsg('win', 'The antidote cleanses you.'); }
     else if (id === 'bomb') { var d = p.dir; var bx = p.x + d.x, by = p.y + d.y; if (!walkable(bx, by)) { bx = p.x; by = p.y; } explodeAt(bx, by, 14 + world.depth, '#ffb060'); }
     else if (id === 'scroll') { blinkToExplored(); }
     else if (id === 'key') { logMsg('', 'Keys open locked doors — walk into one.'); return; }
-    if (used) { hero.bag[id]--; markDirty(); refreshHud(); refreshBars(); if (id !== 'key') endTurn(); }
+    hero.bag[id]--; markDirty(); refreshHud(); refreshBars(); refreshItemBar(); endTurn();
   }
   function blinkToExplored() {
     var cands = [];
@@ -926,10 +1056,12 @@
   //  abilities
   // =========================================================================
   function ensureCd() { if (!hero._cd) hero._cd = {}; return hero._cd; }
+  function spellDmg(mult) { return Math.round(atkOf() * mult * spellPowerOf()) + rr(0, 3); }
   function useAbility(id) {
     if (!playerActive()) return;
     var ab = ABIL[id]; if (!ab) return;
-    if (hero.level < ab.lvl) return;
+    if (!knowsSpell(id)) { logMsg('', 'You haven\'t learned ' + ab.name + '.'); return; }
+    if (hero.level < ab.lvl) { logMsg('', ab.name + ' needs level ' + ab.lvl + '.'); return; }
     var cd = ensureCd();
     if ((cd[id] || 0) > 0) { logMsg('', ab.name + ' on cooldown (' + cd[id] + ').'); return; }
     if (hero.mp < ab.mp) { logMsg('', 'Not enough MP for ' + ab.name + '.'); return; }
@@ -938,30 +1070,50 @@
       var tx = p.x + p.dir.x, ty = p.y + p.dir.y, m = mobAt(tx, ty);
       if (!m) { logMsg('', 'Nothing in front to strike.'); return; }
       p.bump = now(); p.bumpDir = p.dir; heroAttack(m, 2.2, 0.5); fxBurst(tx, ty, '#ffd76a'); did = true;
-    } else if (ab.kind === 'ray') {
-      did = castRay(ab, '#ff8040', true);
+    } else if (ab.kind === 'ray') { did = castRay(ab);
+    } else if (ab.kind === 'chainspell') { did = castChainSpell(ab);
     } else if (ab.kind === 'self') {
       var h = Math.round(maxHpOf() * 0.35); hero.hp = Math.min(maxHpOf(), hero.hp + h); fxText(p.x, p.y, '+' + h, '#9fe0a0'); fxBurst(p.x, p.y, '#9fe0a0'); did = true;
-    } else if (ab.kind === 'move') {
-      did = doBlink(ab.range);
-    } else if (ab.kind === 'aoe') {
-      did = doQuake(ab.range);
+    } else if (ab.kind === 'buff') {
+      hero.buffs = hero.buffs || {}; hero.buffs[ab.buff] = ab.turns;
+      fxBurst(p.x, p.y, ab.buff === 'shield' ? '#9fd8ff' : '#ffb060');
+      logMsg('win', ab.name + (ab.buff === 'shield' ? ' — damage halved!' : ' — ATK surges!')); did = true;
+    } else if (ab.kind === 'move') { did = doBlink(ab.range);
+    } else if (ab.kind === 'aoe') { did = doAoe(ab);
     }
     if (!did) return;
     hero.mp -= ab.mp; cd[id] = ab.cd + 1;
     markDirty(); refreshBars();
     endTurn();
   }
-  function castRay(ab, color, burn) {
+  function castRay(ab) {
     var p = world.player, x = p.x, y = p.y, hitMob = null;
+    var color = ab.freeze ? '#9fd8ff' : ab.drain ? '#e05d8a' : '#ff8040';
     for (var i = 1; i <= ab.range; i++) {
       x += p.dir.x; y += p.dir.y;
       if (x < 0 || y < 0 || x >= MW || y >= MH || world.map[y][x] !== T_FLOOR) { x -= p.dir.x; y -= p.dir.y; break; }
       var m = mobAt(x, y); if (m) { hitMob = m; break; }
     }
     fxRay(p.x, p.y, x, y, color);
-    if (hitMob) { var dmg = Math.round(atkOf() * 1.5) + rr(0, 3); damageMob(hitMob, dmg, 'fire', '#ffb060'); if (burn) applyStatus(hitMob, 'burn', 3); }
+    if (hitMob) {
+      var dmg = spellDmg(1.5), dealt = Math.min(dmg, hitMob.hp);
+      damageMob(hitMob, dmg, 'spell', color);
+      if (ab.burn) applyStatus(hitMob, 'burn', 3);
+      if (ab.freeze) applyStatus(hitMob, 'stun', 2);
+      if (ab.drain && hero.hp < maxHpOf()) { var hl = Math.max(1, Math.floor(dealt * 0.7)); hero.hp = Math.min(maxHpOf(), hero.hp + hl); fxText(p.x, p.y, '+' + hl, '#9fe0a0'); }
+    }
     shake(3);
+    return true;
+  }
+  function castChainSpell(ab) {
+    var p = world.player, x = p.x, y = p.y, hitMob = null;
+    for (var i = 1; i <= ab.range; i++) { x += p.dir.x; y += p.dir.y; if (x < 0 || y < 0 || x >= MW || y >= MH || world.map[y][x] !== T_FLOOR) { x -= p.dir.x; y -= p.dir.y; break; } var m = mobAt(x, y); if (m) { hitMob = m; break; } }
+    fxRay(p.x, p.y, x, y, '#bfe0ff');
+    if (!hitMob) { shake(2); return true; }
+    var dmg = spellDmg(1.3);
+    damageMob(hitMob, dmg, 'spell', '#bfe0ff');
+    chainBounce(hitMob, Math.max(1, Math.round(dmg * 0.7)), 3, '#bfe0ff');
+    shake(4);
     return true;
   }
   function doBlink(range) {
@@ -976,14 +1128,21 @@
     afterStep();
     return true;
   }
-  function doQuake(range) {
-    var p = world.player, any = false;
+  function doAoe(ab) {
+    var p = world.player, range = ab.range || 2;
+    var color = ab.poison ? '#7fe0a0' : ab.big ? '#ffb060' : '#e0c080';
+    var mult = ab.big ? 2.2 : ab.poison ? 0.8 : 1.2;
     for (var i = world.monsters.length - 1; i >= 0; i--) {   // backwards: damageMob may splice
       var m = world.monsters[i];
-      if (cheb(p.x, p.y, m.x, m.y) <= range) { damageMob(m, Math.round(atkOf() * 1.2) + rr(0, 4), 'quake', '#e0c080'); applyStatus(m, 'stun', 2); any = true; }
+      if (cheb(p.x, p.y, m.x, m.y) <= range) {
+        damageMob(m, spellDmg(mult), 'spell', color);
+        if (ab.stun) applyStatus(m, 'stun', 2);
+        if (ab.poison) applyStatus(m, 'poison', 5);
+        if (ab.burn) applyStatus(m, 'burn', 3);
+      }
     }
-    shake(9); fxBurst(p.x, p.y, '#e0c080');
-    for (var r = 1; r <= range; r++) { var a = Math.random() * 6.28; world.fx.push({ kind: 'spark', x: p.x + 0.5 + Math.cos(a) * r, y: p.y + 0.5 + Math.sin(a) * r, vx: 0, vy: 0, color: '#e0c080', life: 1, born: now() }); }
+    shake(ab.big ? 12 : 9); fxBurst(p.x, p.y, color);
+    for (var r = 1; r <= range; r++) { var a = Math.random() * 6.28; world.fx.push({ kind: 'spark', x: p.x + 0.5 + Math.cos(a) * r, y: p.y + 0.5 + Math.sin(a) * r, vx: 0, vy: 0, color: color, life: 1, born: now() }); }
     return true;
   }
 
@@ -1033,7 +1192,7 @@
     return false;
   }
   function mobAttack(m) { m.bump = now(); m.bumpDir = { x: sgn(world.player.x - m.x), y: sgn(world.player.y - m.y) };
-    var dmg = Math.max(1, m.atk + rr(-1, 1)); hurtHero(dmg, m.name);
+    var dmg = Math.max(1, m.atk + rr(-1, 1)); hurtHero(dmg, m.name, m);
     if (m.poison) applyStatus(hero, 'poison', 4); if (m.burn) applyStatus(hero, 'burn', 3);
   }
   function meleeAct(m, dist) {
@@ -1049,7 +1208,7 @@
     var inLine = (m.x === p.x || m.y === p.y) && losClear(m.x, m.y, p.x, p.y);
     if (inLine && dist <= (m.range || 5)) {
       fxRay(m.x, m.y, p.x, p.y, m.burn ? '#ff80c0' : '#cdd3da');
-      var dmg = Math.max(1, m.atk + rr(0, 2)); hurtHero(dmg, m.name);
+      var dmg = Math.max(1, m.atk + rr(0, 2)); hurtHero(dmg, m.name, m);
       if (m.burn) applyStatus(hero, 'burn', 3); if (m.poison) applyStatus(hero, 'poison', 4);
       return;
     }
@@ -1089,11 +1248,14 @@
     // hero status (DoT)
     tickStatus(hero, true);
     if (hero.hp <= 0) { refreshAll(); return; }
-    // passive regen
-    if (world.steps % 5 === 0 && hero.hp < maxHpOf()) hero.hp = Math.min(maxHpOf(), hero.hp + 1 + regenOf());
-    if (world.steps % 7 === 0 && hero.mp < maxMpOf()) hero.mp = Math.min(maxMpOf(), hero.mp + 1);
-    // cooldowns
+    // regen: HP only from a Regen trinket (slow); MP trickles slowly. No free
+    // healing just for walking/waiting — that's what potions & elixirs are for.
+    var rg = regenOf();
+    if (rg && world.steps % 4 === 0 && hero.hp < maxHpOf()) hero.hp = Math.min(maxHpOf(), hero.hp + rg);
+    if (world.steps % 12 === 0 && hero.mp < maxMpOf()) hero.mp = Math.min(maxMpOf(), hero.mp + 1);
+    // cooldowns + buffs
     var cd = ensureCd(); for (var k in cd) if (cd[k] > 0) cd[k]--;
+    if (hero.buffs) { if (hero.buffs.shield > 0) hero.buffs.shield--; if (hero.buffs.power > 0) hero.buffs.power--; }
     // enemies
     if (world.mode !== 'town') enemyTurn();
     updatePlates();
@@ -1323,20 +1485,54 @@
     var cx = (p.rx - cam.x) * TILE + TILE / 2 + bo.x + sh, cy = (p.ry - cam.y) * TILE + TILE / 2 + bo.y;
     var r = TILE / 2 - 2;
     var fx = p.dir.x, fy = p.dir.y;
+    var cos = hero.cosmetics || {};
+    var col = COSMETIC.color[cos.color] || COSMETIC.color.cyan;
+    // cape — trailing behind the facing direction
+    var cape = cos.cape && COSMETIC.cape[cos.cape] && COSMETIC.cape[cos.cape].color ? COSMETIC.cape[cos.cape] : null;
+    if (cape) {
+      var bx = -fx, by = -fy, ppx = -by, ppy = bx;
+      ctx.fillStyle = cape.color; ctx.globalAlpha = 0.95;
+      ctx.beginPath();
+      ctx.moveTo(cx + ppx * r * 0.75, cy + ppy * r * 0.75);
+      ctx.lineTo(cx - ppx * r * 0.75, cy - ppy * r * 0.75);
+      ctx.lineTo(cx + bx * r * 1.7, cy + by * r * 1.7);
+      ctx.closePath(); ctx.fill(); ctx.globalAlpha = 1;
+    }
     // warm torch glow
     var glow = ctx.createRadialGradient(cx, cy, 2, cx, cy, r + 7);
     glow.addColorStop(0, 'rgba(255,224,150,0.35)'); glow.addColorStop(1, 'rgba(255,224,150,0)');
     ctx.fillStyle = glow; ctx.beginPath(); ctx.arc(cx, cy, r + 7, 0, 6.3); ctx.fill();
-    // body (solid, bright) with a dark outline so it reads as a hero, not a ring
-    ctx.fillStyle = '#5ec8e6'; ctx.beginPath(); ctx.arc(cx, cy, r, 0, 6.3); ctx.fill();
-    ctx.lineWidth = 2; ctx.strokeStyle = '#10333f'; ctx.stroke();
-    // little hood highlight
+    // body
+    ctx.fillStyle = col.body; ctx.beginPath(); ctx.arc(cx, cy, r, 0, 6.3); ctx.fill();
+    ctx.lineWidth = 2; ctx.strokeStyle = col.line; ctx.stroke();
     ctx.fillStyle = 'rgba(255,255,255,0.22)'; ctx.beginPath(); ctx.arc(cx - r * 0.3, cy - r * 0.35, r * 0.42, 0, 6.3); ctx.fill();
     // eyes, looking the way you move
-    var px = -fy, py = fx; // perpendicular to facing
-    ctx.fillStyle = '#10333f';
+    var px = -fy, py = fx;
+    ctx.fillStyle = col.line;
     ctx.beginPath(); ctx.arc(cx + fx * 3 + px * 3, cy + fy * 3 + py * 3, 2, 0, 6.3); ctx.fill();
     ctx.beginPath(); ctx.arc(cx + fx * 3 - px * 3, cy + fy * 3 - py * 3, 2, 0, 6.3); ctx.fill();
+    // hat — sits on top of the head (screen-up)
+    drawHat(ctx, cos.hat, cx, cy - r * 0.6, r);
+  }
+  function drawHat(ctx, hat, hx, hy, r) {
+    if (!hat || hat === 'none') return;
+    if (hat === 'wizard') {
+      ctx.fillStyle = '#5b3fa0'; ctx.beginPath(); ctx.moveTo(hx, hy - r * 1.3); ctx.lineTo(hx - r * 0.7, hy + r * 0.2); ctx.lineTo(hx + r * 0.7, hy + r * 0.2); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#ffd76a'; ctx.beginPath(); ctx.arc(hx + r * 0.18, hy - r * 0.5, 1.6, 0, 6.3); ctx.fill();
+    } else if (hat === 'horns') {
+      ctx.fillStyle = '#e9e4d8';
+      ctx.beginPath(); ctx.moveTo(hx - r * 0.5, hy); ctx.lineTo(hx - r * 0.8, hy - r * 0.8); ctx.lineTo(hx - r * 0.2, hy - r * 0.15); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(hx + r * 0.5, hy); ctx.lineTo(hx + r * 0.8, hy - r * 0.8); ctx.lineTo(hx + r * 0.2, hy - r * 0.15); ctx.closePath(); ctx.fill();
+    } else if (hat === 'top') {
+      ctx.fillStyle = '#1c1c22'; ctx.fillRect(hx - r * 0.75, hy + r * 0.05, r * 1.5, 2.5);
+      ctx.fillRect(hx - r * 0.45, hy - r * 0.9, r * 0.9, r * 0.95);
+    } else if (hat === 'halo') {
+      ctx.strokeStyle = '#ffe28a'; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.ellipse(hx, hy - r * 0.7, r * 0.6, r * 0.22, 0, 0, 6.3); ctx.stroke();
+    } else if (hat === 'crown') {
+      ctx.fillStyle = '#ffd23a';
+      ctx.beginPath(); ctx.moveTo(hx - r * 0.6, hy + r * 0.1); ctx.lineTo(hx - r * 0.6, hy - r * 0.4); ctx.lineTo(hx - r * 0.3, hy - r * 0.1);
+      ctx.lineTo(hx, hy - r * 0.6); ctx.lineTo(hx + r * 0.3, hy - r * 0.1); ctx.lineTo(hx + r * 0.6, hy - r * 0.4); ctx.lineTo(hx + r * 0.6, hy + r * 0.1); ctx.closePath(); ctx.fill();
+    }
   }
   function drawFx(ctx, cam, dt) {
     var w = world, t = now();
@@ -1407,18 +1603,20 @@
   // ---- ability bar ----------------------------------------------------------
   function buildAbilityBar() {
     if (!ui || !ui.abil) return;
-    var ids = unlockedAbilities();
-    ui.abil.innerHTML = ids.map(function (id, i) {
+    var ids = dockedSpells();
+    var html = ids.map(function (id, i) {
       var a = ABIL[id];
       return '<button class="cr-ab" data-ab="' + id + '" title="' + a.name + ' — ' + a.desc + ' (MP ' + a.mp + ')">' +
         '<span class="cr-ab-ic">' + a.icon + '</span><span class="cr-ab-cd" data-cd="' + id + '"></span>' +
         '<span class="cr-ab-key">' + (i + 1) + '</span></button>';
-    }).join('') || '<span class="cr-hint">Level up to learn abilities</span>';
-    // bind
-    var btns = ui.abil.querySelectorAll('.cr-ab');
+    }).join('');
+    html += '<button class="cr-ab cr-ab-book" id="cr-book" title="Spellbook — choose which spells to dock">📖</button>';
+    ui.abil.innerHTML = html;
+    var btns = ui.abil.querySelectorAll('.cr-ab[data-ab]');
     for (var i = 0; i < btns.length; i++) (function (btn) {
       btn.addEventListener('click', function (e) { e.preventDefault(); useAbility(btn.getAttribute('data-ab')); });
     })(btns[i]);
+    var bk = document.getElementById('cr-book'); if (bk) bk.addEventListener('click', function (e) { e.preventDefault(); openSpellbook(); });
     refreshAbilCd();
   }
   function refreshAbilCd() {
@@ -1431,8 +1629,10 @@
   // ---- quick item bar -------------------------------------------------------
   function refreshItemBar() {
     if (!ui || !ui.items) return;
-    var order = ['potion', 'elixir', 'bomb', 'scroll'];
-    ui.items.innerHTML = order.map(function (id) {
+    // potion + elixir always show; the rest only when owned. Cap to keep it tidy.
+    var order = ['potion', 'hpotion', 'elixir', 'eelixir', 'bomb', 'scroll', 'antidote'];
+    var show = order.filter(function (id) { return id === 'potion' || id === 'elixir' || (hero.bag[id] || 0) > 0; }).slice(0, 7);
+    ui.items.innerHTML = show.map(function (id) {
       var n = hero.bag[id] || 0;
       return '<button class="cr-it' + (n ? '' : ' cr-it-empty') + '" data-it="' + id + '" title="' + CONS[id].name + ' — ' + CONS[id].desc + '">' +
         '<span>' + CONS[id].icon + '</span><span class="cr-it-n">' + n + '</span></button>';
@@ -1478,7 +1678,48 @@
   }
   function stat(label, val) { return '<div class="cr-stat"><span>' + label + '</span><b>' + val + '</b></div>'; }
   function eqSlot(slot) { var g = gear(hero.equip[slot]); return '<div class="cr-eqslot"><div class="cr-eqic">' + (g ? g.icon : '·') + '</div><div class="cr-eqnm">' + (g ? g.name : '—') + '</div></div>'; }
-  function gearStatStr(g) { var s = []; if (g.atk) s.push('+' + g.atk + ' atk'); if (g.def) s.push('+' + g.def + ' def'); if (g.hp) s.push('+' + g.hp + ' hp'); if (g.mp) s.push('+' + g.mp + ' mp'); if (g.crit) s.push('+' + Math.round(g.crit * 100) + '% crit'); if (g.regen) s.push('regen'); if (g.greed) s.push('+gold'); if (g.stun) s.push('stun'); return s.join(' '); }
+
+  // ---- overlay: spellbook (choose which known spells to dock) ----------------
+  function openSpellbook() {
+    if (!hero) return;
+    closeOverlay();
+    var ov = mkOverlay('Spellbook 📖');
+    var body = ov.querySelector('.cr-ov-body');
+    hero.docked = hero.docked || [];
+    var html = '<div class="cr-hint">Dock up to ' + DOCK_MAX + ' known spells onto your action bar. Learn more from the Arcanist in town.</div>';
+    html += '<div class="cr-sec">Known spells (' + dockedSpells().length + '/' + DOCK_MAX + ' docked)</div><div class="cr-owned">';
+    var known = ABIL_ORDER.filter(knowsSpell);
+    known.forEach(function (id) {
+      var a = ABIL[id], on = hero.docked.indexOf(id) >= 0, locked = hero.level < a.lvl;
+      html += '<button class="cr-gear' + (on ? ' cr-on' : '') + '" data-dock="' + id + '"><span>' + a.icon + '</span> ' + a.name +
+        '<span class="cr-gear-st">' + (locked ? 'needs Lv ' + a.lvl : 'MP ' + a.mp + ' · cd ' + a.cd) + (on ? ' · docked' : '') + '</span></button>';
+    });
+    html += '</div>';
+    var unknown = ABIL_ORDER.filter(function (id) { return !knowsSpell(id); });
+    if (unknown.length) html += '<div class="cr-sec">Not yet learned</div><div class="cr-hint">' + unknown.map(function (id) { return ABIL[id].icon + ' ' + ABIL[id].name; }).join(' · ') + '<br>Learn these from the Arcanist in town.</div>';
+    body.innerHTML = html;
+    var btns = body.querySelectorAll('[data-dock]');
+    for (var i = 0; i < btns.length; i++) (function (btn) {
+      btn.addEventListener('click', function () {
+        var id = btn.getAttribute('data-dock'), ix = hero.docked.indexOf(id);
+        if (ix >= 0) hero.docked.splice(ix, 1);
+        else { if (hero.docked.length >= DOCK_MAX) { Cade.showToast('Action bar full — undock one first', 'info', 1600); return; } hero.docked.push(id); }
+        markDirty(); buildAbilityBar(); openSpellbook();
+      });
+    })(btns[i]);
+  }
+  function gearStatStr(g) {
+    var s = [];
+    if (g.atk) s.push((g.atk > 0 ? '+' : '') + g.atk + ' atk'); if (g.def) s.push((g.def > 0 ? '+' : '') + g.def + ' def');
+    if (g.hp) s.push('+' + g.hp + ' hp'); if (g.mp) s.push('+' + g.mp + ' mp');
+    if (g.crit) s.push('+' + Math.round(g.crit * 100) + '% crit');
+    if (g.lifesteal) s.push(Math.round(g.lifesteal * 100) + '% lifesteal');
+    if (g.cleave) s.push('cleave'); if (g.chain) s.push('chain'); if (g.spell) s.push('+' + Math.round(g.spell * 100) + '% spell');
+    if (g.stun) s.push('stun'); if (g.freeze) s.push('freeze'); if (g.poison) s.push('poison'); if (g.burn) s.push('burn');
+    if (g.dodge) s.push(Math.round(g.dodge * 100) + '% dodge'); if (g.thorns) s.push('thorns'); if (g.resist) s.push(Math.round(g.resist * 100) + '% resist');
+    if (g.regen) s.push('regen'); if (g.greed) s.push('+gold');
+    return s.join(' · ');
+  }
 
   // =========================================================================
   //  overlay: shops (town NPCs)
@@ -1487,11 +1728,14 @@
     closeOverlay();
     if (role === 'healer') return openHealer();
     if (role === 'smith') return openSmith();
+    if (role === 'arcanist') return openArcanist();
+    if (role === 'tailor') return openTailor();
+    if (role === 'quest') return openQuestBoard();
     var ov = mkOverlay('Merchant 🛒');
     var body = ov.querySelector('.cr-ov-body');
     var html = '<div class="cr-shopgold">🪙 ' + hero.gold + ' gold</div><div class="cr-shop">';
     // consumables
-    ['potion', 'elixir', 'bomb', 'scroll', 'key'].forEach(function (id) { var c = CONS[id];
+    ['potion', 'hpotion', 'elixir', 'eelixir', 'bomb', 'scroll', 'antidote', 'key'].forEach(function (id) { var c = CONS[id];
       html += shopRow('cons:' + id, c.icon, c.name, c.desc, c.price, hero.bag[id] || 0); });
     // a rotating gear selection (deterministic-ish by maxDepth)
     var stock = merchantStock();
@@ -1523,10 +1767,12 @@
       btn.addEventListener('click', function () {
         var spec = btn.getAttribute('data-buy'), price = parseInt(btn.getAttribute('data-price'), 10);
         var parts = spec.split(':'), kind = parts[0], id = parts[1];
-        if (kind === 'gear' && hero.owned.indexOf(id) >= 0) { Cade.showToast('Already owned', 'info'); return; }
-        if (hero.gold < price) { Cade.showToast('Not enough gold', 'error'); return; }
+        if (kind === 'gear' && hero.owned.indexOf(id) >= 0) { Cade.showToast('Already owned', 'info', 1200); return; }
+        if (kind === 'spell' && knowsSpell(id)) { Cade.showToast('Already learned', 'info', 1200); return; }
+        if (hero.gold < price) { Cade.showToast('Not enough gold', 'error', 1400); return; }
         hero.gold -= price;
         if (kind === 'cons') { hero.bag[id] = (hero.bag[id] || 0) + 1; }
+        else if (kind === 'spell') { learnSpell(id); logMsg('win', 'Learned ' + ABIL[id].name + '!'); buildAbilityBar(); }
         else { acquireGear(id); }
         Cade.haptic(8); markDirty(); refreshAll(); reopen();
       });
@@ -1542,7 +1788,7 @@
       shopRow('heal:hp', '❤', 'Restore HP', 'Full heal HP', hpCost || 0, 0) +
       shopRow('heal:mp', '✦', 'Restore MP', 'Full restore MP', mpCost || 0, 0) +
       shopRow('heal:all', '✨', 'Full Rest', 'HP + MP to full', full, 0) +
-      '</div><div class="cr-hint">Healing is also free over time as you walk.</div>';
+      '</div><div class="cr-hint">Out in the dungeon, only potions, elixirs and a Ring of Regen restore you.</div>';
     var btns = body.querySelectorAll('[data-buy]');
     for (var i = 0; i < btns.length; i++) (function (btn) { btn.addEventListener('click', function () {
       var spec = btn.getAttribute('data-buy').split(':')[1], price = parseInt(btn.getAttribute('data-price'), 10);
@@ -1574,6 +1820,123 @@
       Cade.haptic(8); Cade.showToast('Tempered!', 'success'); markDirty(); refreshAll(); openSmith();
     }); })(btns[i]);
   }
+  function openArcanist() {
+    var ov = mkOverlay('Arcanist 🔮');
+    var body = ov.querySelector('.cr-ov-body');
+    var html = '<div class="cr-shopgold">🪙 ' + hero.gold + ' gold</div>' +
+      '<div class="cr-hint">Learn spells here, then choose up to ' + DOCK_MAX + ' to dock in the 📖 Spellbook.</div><div class="cr-shop">';
+    ABIL_ORDER.forEach(function (id) {
+      var a = ABIL[id]; if (a.learn !== 'tome') return;
+      var known = knowsSpell(id);
+      html += shopRow('spell:' + id, a.icon, a.name, a.desc + ' (Lv ' + a.lvl + ', MP ' + a.mp + ')', a.price, known ? '✓' : 0, known);
+    });
+    html += '</div>';
+    body.innerHTML = html;
+    bindShop(body, function () { openArcanist(); });
+  }
+  function hasCos(slot, id) { return (COSMETIC[slot][id] && COSMETIC[slot][id].price === 0) || (hero.ownedCos || []).indexOf(cosKey(slot, id)) >= 0; }
+  function cosSwatch(slot, id, c) {
+    if (slot === 'color') return '<span class="cr-swatch" style="background:' + c.body + '"></span>';
+    if (slot === 'cape') return '<span class="cr-swatch" style="background:' + (c.color || 'transparent') + '"></span>';
+    return '<span class="cr-swatch cr-swatch-hat">' + (id === 'none' ? '∅' : '🎩') + '</span>';
+  }
+  function openTailor() {
+    var ov = mkOverlay('Tailor 🎩');
+    var body = ov.querySelector('.cr-ov-body');
+    var html = '<div class="cr-shopgold">🪙 ' + hero.gold + ' gold</div><div class="cr-hint">Buy a look, then tap an owned one to wear it.</div>';
+    var slots = [['color', 'Color'], ['hat', 'Hat'], ['cape', 'Cape']];
+    slots.forEach(function (sl) {
+      var slot = sl[0];
+      html += '<div class="cr-sec">' + sl[1] + '</div><div class="cr-cosrow">';
+      for (var id in COSMETIC[slot]) {
+        var c = COSMETIC[slot][id], owned = hasCos(slot, id), worn = hero.cosmetics[slot] === id;
+        var label = owned ? (worn ? 'worn' : 'wear') : ('🪙' + c.price);
+        html += '<button class="cr-cos' + (worn ? ' cr-on' : '') + '" data-cos="' + slot + ':' + id + '" data-price="' + c.price + '" data-owned="' + (owned ? 1 : 0) + '">' +
+          cosSwatch(slot, id, c) + '<span>' + c.name + '</span><small>' + label + '</small></button>';
+      }
+      html += '</div>';
+    });
+    body.innerHTML = html;
+    var btns = body.querySelectorAll('[data-cos]');
+    for (var i = 0; i < btns.length; i++) (function (btn) {
+      btn.addEventListener('click', function () {
+        var parts = btn.getAttribute('data-cos').split(':'), slot = parts[0], id = parts[1];
+        var owned = btn.getAttribute('data-owned') === '1', price = parseInt(btn.getAttribute('data-price'), 10);
+        if (!owned) {
+          if (hero.gold < price) { Cade.showToast('Not enough gold', 'error', 1400); return; }
+          hero.gold -= price; hero.ownedCos = hero.ownedCos || []; hero.ownedCos.push(cosKey(slot, id));
+          Cade.showToast('Unlocked ' + COSMETIC[slot][id].name + '!', 'success', 1400);
+        }
+        hero.cosmetics[slot] = id;
+        Cade.haptic(8); markDirty(); refreshAll(); openTailor();
+      });
+    })(btns[i]);
+  }
+
+  // ---- quests ---------------------------------------------------------------
+  function questDesc(q) {
+    if (q.type === 'kills') return 'Slay ' + q.goal + ' monsters';
+    if (q.type === 'gems') return 'Collect ' + q.goal + ' gems';
+    if (q.type === 'depth') return 'Reach floor ' + q.goal;
+    if (q.type === 'boss') return 'Defeat a boss';
+    return 'Bounty';
+  }
+  function genQuest() {
+    var d = Math.max(1, hero.maxDepth), roll = ri(4), q = { prog: 0, done: false };
+    if (roll === 0) q.type = 'kills', q.goal = 8 + ri(10) + d;
+    else if (roll === 1) q.type = 'gems', q.goal = 2 + ri(3);
+    else if (roll === 2) q.type = 'depth', q.goal = Math.max(2, d + 1 + ri(3));
+    else q.type = 'boss', q.goal = 1;
+    q.id = 'q' + Date.now().toString(36) + ri(99999).toString(36);
+    q.reward = Math.round((40 + d * 18) * (q.type === 'boss' ? 4 : q.type === 'depth' ? 2 : 1) + ri(50));
+    q.desc = questDesc(q);
+    if (q.type === 'depth') q.prog = Math.min(q.goal, hero.maxDepth);
+    return q;
+  }
+  function questProgress(type, n) {
+    if (!hero.quests) return; var changed = false;
+    for (var i = 0; i < hero.quests.length; i++) { var q = hero.quests[i];
+      if (q.type === type && !q.done) { q.prog = (q.prog || 0) + n; if (q.prog >= q.goal) { q.prog = q.goal; q.done = true; changed = true; logMsg('win', 'Bounty ready to claim: ' + q.desc); } }
+    }
+    if (changed) markDirty();
+  }
+  function questDepth(depth) {
+    if (!hero.quests) return;
+    for (var i = 0; i < hero.quests.length; i++) { var q = hero.quests[i];
+      if (q.type === 'depth' && !q.done) { if (depth >= q.goal) { q.prog = q.goal; q.done = true; logMsg('win', 'Bounty ready to claim: ' + q.desc); } else q.prog = Math.max(q.prog || 0, depth); }
+    }
+  }
+  function openQuestBoard() {
+    var ov = mkOverlay('Quest Board 📜');
+    var body = ov.querySelector('.cr-ov-body');
+    hero.quests = hero.quests || [];
+    var html = '<div class="cr-shopgold">🪙 ' + hero.gold + ' · bounties done: ' + (hero.questsDone || 0) + '</div><div class="cr-shop">';
+    if (!hero.quests.length) html += '<div class="cr-hint">No active bounties — take one below.</div>';
+    hero.quests.forEach(function (q) {
+      html += '<div class="cr-srow"><span class="cr-sic">' + (q.done ? '✅' : '📜') + '</span>' +
+        '<span class="cr-snm">' + q.desc + '<span class="cr-sdesc">' + (q.done ? 'Complete!' : (q.prog || 0) + ' / ' + q.goal) + ' · reward 🪙' + q.reward + '</span></span>' +
+        (q.done ? '<button class="cr-buy" data-claim="' + q.id + '">claim</button>' : '<button class="cr-buy" data-abandon="' + q.id + '">drop</button>') + '</div>';
+    });
+    if (hero.quests.length < 3) html += '<div class="cr-srow"><span class="cr-sic">➕</span><span class="cr-snm">New bounty<span class="cr-sdesc">Take a fresh contract</span></span><button class="cr-buy" data-newquest="1">take</button></div>';
+    html += '</div>';
+    body.innerHTML = html;
+    function findQ(id) { for (var i = 0; i < hero.quests.length; i++) if (hero.quests[i].id === id) return i; return -1; }
+    var cb = body.querySelectorAll('[data-claim]');
+    for (var i = 0; i < cb.length; i++) (function (btn) { btn.addEventListener('click', function () {
+      var ix = findQ(btn.getAttribute('data-claim')); if (ix < 0) return;
+      var q = hero.quests[ix]; hero.gold += Math.round(q.reward * greedOf()); hero.questsDone = (hero.questsDone || 0) + 1;
+      if (chance(0.5)) { var gid = randomGearId(hero.maxDepth + 2); acquireGear(gid); }
+      hero.quests.splice(ix, 1);
+      Cade.haptic(10); Cade.showToast('Bounty complete! +' + q.reward + ' gold', 'success', 1800); markDirty(); refreshAll(); openQuestBoard();
+    }); })(cb[i]);
+    var ab = body.querySelectorAll('[data-abandon]');
+    for (var j = 0; j < ab.length; j++) (function (btn) { btn.addEventListener('click', function () {
+      var ix = findQ(btn.getAttribute('data-abandon')); if (ix >= 0) hero.quests.splice(ix, 1);
+      markDirty(); openQuestBoard();
+    }); })(ab[j]);
+    var nb = body.querySelector('[data-newquest]');
+    if (nb) nb.addEventListener('click', function () { if (hero.quests.length < 3) { hero.quests.push(genQuest()); markDirty(); openQuestBoard(); } });
+  }
 
   function mkOverlay(title) {
     closeOverlay();
@@ -1597,11 +1960,14 @@
   }
   function serialize() {
     return {
-      v: 2, name: hero.name, level: hero.level, xp: hero.xp,
+      v: 3, name: hero.name, level: hero.level, xp: hero.xp,
       maxHp: hero.maxHp, hp: hero.hp, maxMp: hero.maxMp, mp: hero.mp,
       atk: hero.atk, def: hero.def, crit: hero.crit, gold: hero.gold,
       depth: hero.depth, maxDepth: hero.maxDepth, equip: hero.equip, bag: hero.bag,
-      owned: hero.owned, stats: hero.stats, _wlvl: hero._wlvl || 0, _alvl: hero._alvl || 0,
+      owned: hero.owned, spells: hero.spells, docked: hero.docked,
+      cosmetics: hero.cosmetics, ownedCos: hero.ownedCos,
+      quests: hero.quests, questsDone: hero.questsDone || 0,
+      stats: hero.stats, _wlvl: hero._wlvl || 0, _alvl: hero._alvl || 0,
       _konami: hero._konami || false,
       createdAt: hero.createdAt, updatedAt: Date.now(), rev: hero.rev, client: clientId
     };
@@ -1614,11 +1980,25 @@
     h.name = String(h.name == null ? 'Delver' : h.name).replace(/[<>]/g, '').slice(0, 24) || 'Delver';
     // sanity defaults for older/partial saves
     h.equip = h.equip || { weapon: 'dagger', armor: 'rags', trinket: 'none' };
+    if (!WEAPONS[h.equip.weapon]) h.equip.weapon = 'dagger';   // drop ids from older catalogs
+    if (!ARMORS[h.equip.armor]) h.equip.armor = 'rags';
+    if (!TRINKETS[h.equip.trinket]) h.equip.trinket = 'none';
     h.bag = h.bag || { potion: 1 };
-    h.owned = h.owned || ['dagger', 'rags'];
-    h.stats = h.stats || { kills: 0, deaths: 0, floors: 0, gems: 0, runs: 0 };
+    h.owned = (h.owned || ['dagger', 'rags']).filter(function (id) { return !!gear(id); });
     if (h.owned.indexOf(h.equip.weapon) < 0) h.owned.push(h.equip.weapon);
     if (h.owned.indexOf(h.equip.armor) < 0) h.owned.push(h.equip.armor);
+    h.spells = (h.spells || ['strike']).filter(function (id) { return !!ABIL[id]; });
+    if (h.spells.indexOf('strike') < 0) h.spells.unshift('strike');
+    h.docked = (h.docked || h.spells.slice(0, DOCK_MAX)).filter(function (id) { return h.spells.indexOf(id) >= 0; }).slice(0, DOCK_MAX);
+    if (!h.docked.length) h.docked = h.spells.slice(0, DOCK_MAX);
+    h.cosmetics = h.cosmetics || { color: 'cyan', hat: 'none', cape: 'none' };
+    if (!COSMETIC.color[h.cosmetics.color]) h.cosmetics.color = 'cyan';
+    if (!COSMETIC.hat[h.cosmetics.hat]) h.cosmetics.hat = 'none';
+    if (!COSMETIC.cape[h.cosmetics.cape]) h.cosmetics.cape = 'none';
+    h.ownedCos = h.ownedCos || ['color:cyan', 'hat:none', 'cape:none'];
+    h.quests = Array.isArray(h.quests) ? h.quests : [];
+    h.stats = h.stats || { kills: 0, deaths: 0, floors: 0, gems: 0, runs: 0 };
+    h.buffs = {};
     return h;
   }
   function loadLocal() { try { var s = Cade.store.get(LKEY); return s ? deserialize(JSON.parse(s)) : null; } catch (e) { return null; } }
@@ -1771,7 +2151,7 @@
     else if (k === ' ') { e.preventDefault(); rest(); }
     else if (k === 'e' || k === 'E' || k === 'Enter') { e.preventDefault(); interact(); }
     else if (k === 'c' || k === 'C') { e.preventDefault(); openCharacter(); }
-    else if (k >= '1' && k <= '5') { e.preventDefault(); var ids = unlockedAbilities(); var idx = parseInt(k, 10) - 1; if (ids[idx]) useAbility(ids[idx]); }
+    else if (k >= '1' && k <= '4') { e.preventDefault(); var ids = dockedSpells(); var idx = parseInt(k, 10) - 1; if (ids[idx]) useAbility(ids[idx]); }
     else if (k === 'q' || k === 'Q') { e.preventDefault(); useItem('potion'); }
   }
 
@@ -1854,6 +2234,7 @@
         '<div class="cr-topbar">' +
           '<div id="cr-bars" class="cr-bars"></div>' +
           '<div class="cr-tbtns">' +
+            '<button id="cr-home" class="cr-tbtn" title="Return to town">🏠</button>' +
             '<button id="cr-char" class="cr-tbtn" title="Character (C)">🎒</button>' +
           '</div>' +
         '</div>' +
@@ -1907,6 +2288,7 @@
     })(dpad[i]);
     bindButton(document.getElementById('cr-act'), function () { if (world && world.mode === 'dead') { enter(0); return; } interact(); });
     bindButton(document.getElementById('cr-char'), openCharacter);
+    bindButton(document.getElementById('cr-home'), recall);
 
     panel._onClose = function () {
       saveNow(); state_teardown(); detachFbListener();
