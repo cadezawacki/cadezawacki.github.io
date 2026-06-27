@@ -69,6 +69,7 @@
   var saveTimer = 0, fbDirty = false;
   var fbRef = null, fbCb = null, clientId = '';
   var merchStock = null;           // merchant's rolled wares for the current town visit
+  var houseSel = null;             // currently-selected furniture piece in the furnish editor
 
   // =========================================================================
   //  small utilities
@@ -176,9 +177,41 @@
       red:    { name: 'Red Cape',   color: '#c0392b', price: 250 },
       blue:   { name: 'Blue Cape',  color: '#2e6da4', price: 250 },
       gold:   { name: 'Gold Cape',  color: '#d4a017', price: 400 },
-      shadow: { name: 'Shadow Cape',color: '#2a2440', price: 550 }
+      emerald:{ name: 'Emerald Cape', color: '#2f9e6a', price: 400 },
+      shadow: { name: 'Shadow Cape',color: '#2a2440', price: 550 },
+      royal:  { name: 'Royal Cape', color: '#6a3fb0', price: 700 }
+    },
+    eyes: {
+      default: { name: 'Eyes',    price: 0 },
+      cute:    { name: 'Cute',    price: 150 },
+      angry:   { name: 'Fierce',  price: 150 },
+      sleepy:  { name: 'Sleepy',  price: 150 },
+      glow:    { name: 'Glowing', price: 400 },
+      visor:   { name: 'Visor',   price: 500 }
+    },
+    pattern: {
+      none:  { name: '(plain)',  price: 0 },
+      belly: { name: 'Belly',    price: 150 },
+      spots: { name: 'Spots',    price: 200 },
+      stripe:{ name: 'Stripes',  price: 200 },
+      rune:  { name: 'Runes',    price: 450 }
+    },
+    belt: {
+      none:  { name: '(no belt)', price: 0 },
+      brown: { name: 'Belt',      color: '#6b4a2a', price: 120 },
+      gold:  { name: 'Gold Belt', color: '#d4a017', price: 280 },
+      sash:  { name: 'Red Sash',  color: '#b03030', price: 280 }
+    },
+    pet: {
+      none:  { name: '(no pet)',   price: 0 },
+      cat:   { name: 'Cat',        price: 400, col: '#d0a060' },
+      pup:   { name: 'Pup',        price: 400, col: '#b8956a' },
+      slime: { name: 'Slimeling',  price: 500, col: '#6fd09a' },
+      wisp:  { name: 'Wisp',       price: 700, col: '#bfe0ff' },
+      drake: { name: 'Drakeling',  price: 1200, col: '#7fae5b' }
     }
   };
+  var COS_SLOTS = ['color', 'eyes', 'pattern', 'belt', 'hat', 'cape', 'pet'];
   function cosKey(slot, id) { return slot + ':' + id; }
 
   // =========================================================================
@@ -436,6 +469,25 @@
   };
 
   // =========================================================================
+  //  THE HOUSE — a portable home you furnish; trophies from bosses live here
+  // =========================================================================
+  var HW = 11, HH = 7;             // interior size in tiles
+  var HOUSE_PAL = { name: 'Home', floor: '#2a241c', floor2: '#322a20', wall: '#4a3a2a', wallTop: '#5e4a34', accent: '#e0b060' };
+  var FURNITURE = {
+    bed:       { name: 'Bed',          icon: '🛏️', price: 300,  desc: 'Sleep to fully restore HP & MP.', effect: 'rest' },
+    stash:     { name: 'Stash Chest',  icon: '🧰', price: 400,  desc: 'Store gear beyond your pack.', effect: 'stash' },
+    planter:   { name: 'Herb Planter', icon: '🪴', price: 350,  desc: 'Grows a potion between visits home.', effect: 'garden' },
+    rug:       { name: 'Rug',          icon: '🟥', price: 80,   desc: 'Cosy underfoot.' },
+    plant:     { name: 'Potted Fern',  icon: '🌿', price: 90,   desc: 'A touch of green.' },
+    torch:     { name: 'Wall Torch',   icon: '🔥', price: 110,  desc: 'Warm light.' },
+    bookshelf: { name: 'Bookshelf',    icon: '📚', price: 220,  desc: 'Looks scholarly.' },
+    banner:    { name: 'Banner',       icon: '🚩', price: 160,  desc: 'Fly your colours.' },
+    statue:    { name: 'Statue',       icon: '🗿', price: 600,  desc: 'Imposing.' },
+    throne:    { name: 'Throne',       icon: '🪑', price: 1800, desc: 'Sit as the delver-monarch you are.' }
+  };
+  function trophyBonus() { return (hero && hero.trophies ? hero.trophies.length : 0) * 3; } // +3 max HP per boss trophy
+
+  // =========================================================================
   //  the hero (persistent character)
   // =========================================================================
   function freshHero() {
@@ -452,10 +504,11 @@
       bag: { potion: 2, elixir: 1, bomb: 0, scroll: 0, key: 0 },
       owned: [d, r],               // item instances; equip references their uids
       spells: ['strike'], docked: ['strike'],
-      cosmetics: { color: 'cyan', hat: 'none', cape: 'none' },
-      ownedCos: ['color:cyan', 'hat:none', 'cape:none'],
+      cosmetics: { color: 'cyan', eyes: 'default', pattern: 'none', belt: 'none', hat: 'none', cape: 'none', pet: 'none' },
+      ownedCos: [],
       quests: [], questsDone: 0,
       difficulty: 'normal',
+      house: { furniture: [] }, furniture: {}, trophies: [], stash: [],
       buffs: {},
       stats: { kills: 0, deaths: 0, floors: 0, gems: 0, runs: 0 },
       createdAt: Date.now(), updatedAt: Date.now(), rev: 1, client: clientId
@@ -469,7 +522,7 @@
   function atkOf() { var a = hero.atk + eqVal('weapon', 'atk') + eqVal('trinket', 'atk'); if (hero.buffs && hero.buffs.power > 0) a += powerBonus(); return a; }
   function defOf() { return hero.def + eqVal('armor', 'def') + eqVal('trinket', 'def'); }
   function critOf() { return clamp(hero.crit + eqVal('weapon', 'crit') + eqVal('trinket', 'crit'), 0, 0.75); }
-  function maxHpOf() { return hero.maxHp + eqVal('armor', 'hp') + eqVal('trinket', 'hp'); }
+  function maxHpOf() { return hero.maxHp + eqVal('armor', 'hp') + eqVal('trinket', 'hp') + trophyBonus(); }
   function maxMpOf() { return hero.maxMp + eqVal('weapon', 'mp') + eqVal('armor', 'mp') + eqVal('trinket', 'mp'); }
   function regenOf() { return eqVal('trinket', 'regen'); }
   function greedOf() { return 1 + eqVal('trinket', 'greed'); }
@@ -826,12 +879,13 @@
     var room = { x: 6, y: 8, w: 30, h: 18 };
     carveRoom(m, room);
     var objects = [], monsters = [], items = [];
-    objects.push({ type: 'npc', role: 'healer',   x: 10, y: 12, icon: '⛑️', col: '#ff8a8a', name: 'Healer' });
-    objects.push({ type: 'npc', role: 'merchant', x: 16, y: 12, icon: '🛒', col: '#ffd76a', name: 'Merchant' });
-    objects.push({ type: 'npc', role: 'smith',    x: 24, y: 12, icon: '⚒️', col: '#a0c0ff', name: 'Smith' });
-    objects.push({ type: 'npc', role: 'arcanist', x: 30, y: 12, icon: '🔮', col: '#c79bff', name: 'Arcanist' });
-    objects.push({ type: 'npc', role: 'quest',    x: 13, y: 19, icon: '📜', col: '#e0c060', name: 'Bounties' });
-    objects.push({ type: 'npc', role: 'tailor',   x: 27, y: 19, icon: '🎩', col: '#9fe0c0', name: 'Tailor' });
+    objects.push({ type: 'npc', role: 'healer',   x: 10, y: 12, icon: '⛑️', col: '#ff8a8a', name: 'Healer',   cos: { color: 'rose', eyes: 'cute', belt: 'brown' } });
+    objects.push({ type: 'npc', role: 'merchant', x: 16, y: 12, icon: '🛒', col: '#ffd76a', name: 'Merchant', cos: { color: 'gold', eyes: 'default', hat: 'top' } });
+    objects.push({ type: 'npc', role: 'smith',    x: 24, y: 12, icon: '⚒️', col: '#a0c0ff', name: 'Smith',    cos: { color: 'slate', eyes: 'angry', belt: 'brown', pattern: 'belly' } });
+    objects.push({ type: 'npc', role: 'arcanist', x: 30, y: 12, icon: '🔮', col: '#c79bff', name: 'Arcanist', cos: { color: 'violet', eyes: 'glow', hat: 'wizard' } });
+    objects.push({ type: 'npc', role: 'quest',    x: 13, y: 19, icon: '📜', col: '#e0c060', name: 'Bounties', cos: { color: 'ember', eyes: 'default', cape: 'red' } });
+    objects.push({ type: 'npc', role: 'tailor',   x: 27, y: 19, icon: '🎩', col: '#9fe0c0', name: 'Tailor',   cos: { color: 'emerald', eyes: 'default', hat: 'top', belt: 'gold' } });
+    objects.push({ type: 'home', x: 33, y: 19 });
     objects.push({ type: 'stairs', x: 20, y: 23, down: true });
     var stairs = { x: 20, y: 23, up: false };
     var start = { x: 20, y: 16 };
@@ -845,11 +899,38 @@
     };
   }
 
+  function genHouse() {
+    var m = blankMap();
+    var ROX = Math.floor((MW - HW) / 2), ROY = Math.floor((MH - HH) / 2);
+    carveRoom(m, { x: ROX, y: ROY, w: HW, h: HH });
+    var objects = [];
+    var ex = ROX + (HW >> 1), ey = ROY + HH - 1;
+    objects.push({ type: 'exit', x: ex, y: ey });
+    objects.push({ type: 'workbench', x: ROX + 1, y: ROY + 1 });
+    (hero.trophies || []).forEach(function (tk, i) { if (i < HW - 2) objects.push({ type: 'trophyicon', key: tk, x: ROX + 1 + i, y: ROY }); });
+    (hero.house && hero.house.furniture || []).forEach(function (f) { objects.push({ type: 'furn', kind: f.kind, x: ROX + f.x, y: ROY + f.y }); });
+    return {
+      depth: -1, biome: HOUSE_PAL, isBoss: false, puzzle: null,
+      map: m, rooms: [{ x: ROX, y: ROY, w: HW, h: HH }], objects: objects, monsters: [], items: [],
+      stairs: { x: ex, y: ey, up: true }, start: { x: ex, y: ey - 1 }, ROX: ROX, ROY: ROY,
+      explored: mkBoolGrid(), visible: mkBoolGrid(),
+      fx: [], proj: [], log: [], shake: 0, steps: 0, mode: 'house',
+      player: null, path: null, pathT: 0, _logDirty: true
+    };
+  }
+  // rebuild the live house's furniture/trophy objects from hero data (after edits)
+  function syncHouseFurniture() {
+    if (!world || world.mode !== 'house') return;
+    world.objects = world.objects.filter(function (o) { return o.type !== 'furn' && o.type !== 'trophyicon'; });
+    (hero.trophies || []).forEach(function (tk, i) { if (i < HW - 2) world.objects.push({ type: 'trophyicon', key: tk, x: world.ROX + 1 + i, y: world.ROY }); });
+    (hero.house.furniture || []).forEach(function (f) { world.objects.push({ type: 'furn', kind: f.kind, x: world.ROX + f.x, y: world.ROY + f.y }); });
+  }
+
   // =========================================================================
   //  enter a floor / town
   // =========================================================================
   function enter(depth) {
-    var w = depth <= 0 ? genTown() : genFloor(depth);
+    var w = depth === -1 ? genHouse() : depth <= 0 ? genTown() : genFloor(depth);
     var spawn = w.start;
     w.player = { x: spawn.x, y: spawn.y, rx: spawn.x, ry: spawn.y, dir: { x: 0, y: 1 }, hit: 0, bump: 0 };
     world = w;
@@ -862,7 +943,12 @@
     // ensure hp/mp within caps
     hero.hp = clamp(hero.hp, 0, maxHpOf()); hero.mp = clamp(hero.mp, 0, maxMpOf());
     computeFov();
-    if (depth <= 0) { logMsg('', 'Hearthhold. Rest, shop, then descend ▾.'); }
+    if (depth === -1) {
+      logMsg('', 'Home. ✋ the workbench (🛠) to furnish; rest in your bed; 🚪 to leave.');
+      // herb planter yields a potion between trips home
+      var hasPlanter = (hero.house.furniture || []).some(function (f) { return f.kind === 'planter'; });
+      if (hasPlanter && hero._gardenRun !== (hero.stats.runs || 0)) { hero._gardenRun = hero.stats.runs || 0; hero.bag.potion = (hero.bag.potion || 0) + 1; logMsg('win', 'Your planter bore a Health Potion.'); }
+    } else if (depth <= 0) { logMsg('', 'Hearthhold. Rest, shop, then descend ▾.'); }
     else {
       hero.stats.floors++; questDepth(depth);
       var rg = regionAt(depth);
@@ -921,12 +1007,13 @@
   function computeFov() {
     var p = world.player, vis = world.visible, exp = world.explored;
     for (var y = 0; y < MH; y++) for (var x = 0; x < MW; x++) vis[y][x] = false;
-    var R = world.mode === 'town' ? 99 : LIGHT;
+    var lit = world.mode === 'town' || world.mode === 'house';
+    var R = lit ? 99 : LIGHT;
     var x0 = Math.max(0, p.x - R), x1 = Math.min(MW - 1, p.x + R);
     var y0 = Math.max(0, p.y - R), y1 = Math.min(MH - 1, p.y + R);
     for (var yy = y0; yy <= y1; yy++) for (var xx = x0; xx <= x1; xx++) {
       if (cheb(p.x, p.y, xx, yy) > R) continue;
-      if (world.mode === 'town' || losClear(p.x, p.y, xx, yy)) { vis[yy][xx] = true; exp[yy][xx] = true; }
+      if (lit || losClear(p.x, p.y, xx, yy)) { vis[yy][xx] = true; exp[yy][xx] = true; }
     }
   }
 
@@ -974,6 +1061,7 @@
     gainXp(Math.round(m.xp * diff().rew));
     if (m.elite) { logMsg('win', 'Elite slain: ' + m.name + '!'); var ep = adjacentFree(m.x, m.y) || { x: m.x, y: m.y }; world.items.push({ type: 'gear', item: generateItem(null, world.depth + 2, 1.2), x: ep.x, y: ep.y }); world.items.push({ type: 'gold', x: m.x, y: m.y, amt: (6 + ri(8)) * Math.max(1, world.depth) }); }
     if (m.boss) { questProgress('boss', 1); logMsg('win', 'The ' + m.name + ' falls! The way down opens.'); shake(10);
+      var rk = regionAt(world.depth).key; hero.trophies = hero.trophies || []; if (hero.trophies.indexOf(rk) < 0) { hero.trophies.push(rk); hero.hp = Math.min(maxHpOf(), hero.hp + 3); logMsg('win', '🏆 Trophy earned — ' + regionAt(world.depth).name + '! (displayed at home)'); }
       // boss drops: gold + guaranteed gear + gem
       world.items.push({ type: 'gold', x: m.x, y: m.y, amt: 40 + world.depth * 7 });
       var gp = adjacentFree(m.x, m.y); if (gp) world.items.push({ type: 'gear', item: generateItem(null, world.depth + 3, 2.5), x: gp.x, y: gp.y });
@@ -1165,8 +1253,13 @@
       var it = world.items[i];
       if (it.x === p.x && it.y === p.y) pickup(it, i);
     }
-    // town NPC — step on to shop
-    if (world.mode === 'town') { var npcHere = objAt(p.x, p.y, 'npc'); if (npcHere) { openShop(npcHere.role); return; } }
+    // town NPC — step on to shop; step on the door to go home
+    if (world.mode === 'town') {
+      var npcHere = objAt(p.x, p.y, 'npc'); if (npcHere) { openShop(npcHere.role); return; }
+      if (objAt(p.x, p.y, 'home')) { world._pendingHouse = true; return; }
+    }
+    // house — step on the exit to return to town
+    if (world.mode === 'house' && objAt(p.x, p.y, 'exit')) { world._pendingTown = true; return; }
     // teleporter
     var tp = objAt(p.x, p.y, 'tele');
     if (tp) { p.x = tp.tox; p.y = tp.toy; p.rx = p.x; p.ry = p.y; fxBurst(p.x, p.y, '#a87fe0'); logMsg('', 'Whoosh — teleported.'); }
@@ -1235,6 +1328,11 @@
       var shrine = objAt(ox, oy, 'shrine'); if (shrine) { prayShrine(shrine); return; }
       var chest = objAt(ox, oy, 'chest'); if (chest && !chest.opened) { openChest(chest); return; }
       var stair = objAt(ox, oy, 'stairs'); if (stair && stair.down) { startNewRun(); return; }
+      if (objAt(ox, oy, 'home')) { enter(-1); return; }
+      if (objAt(ox, oy, 'workbench')) { openFurnish(); return; }
+      if (objAt(ox, oy, 'exit')) { enter(0); return; }
+      var fn = objAt(ox, oy, 'furn');
+      if (fn) { if (fn.kind === 'bed') { hero.hp = maxHpOf(); hero.mp = maxMpOf(); logMsg('win', 'You rest. Fully restored.'); fxBurst(p.x, p.y, '#9fe0a0'); markDirty(); refreshAll(); } else if (fn.kind === 'stash') { openStash(); } else { Cade.showToast(FURNITURE[fn.kind].name, 'info', 1000); } return; }
     }
     // on town stairs tile?
     if (world.mode === 'town' && p.x === world.stairs.x && p.y === world.stairs.y) { startNewRun(); return; }
@@ -1514,9 +1612,11 @@
   // =========================================================================
   function endTurn() {
     if (world.mode === 'dead') { refreshAll(); return; }
-    // consume any deferred level transition before spending a turn
+    // consume any deferred area transition before spending a turn
     if (world._pendingDescend) { world._pendingDescend = false; descend(); return; }
     if (world._pendingDive) { world._pendingDive = false; startNewRun(); return; }
+    if (world._pendingTown) { world._pendingTown = false; enter(0); return; }
+    if (world._pendingHouse) { world._pendingHouse = false; enter(-1); return; }
     world.steps++;
     // hero status (DoT)
     tickStatus(hero, true);
@@ -1529,8 +1629,8 @@
     // cooldowns + buffs
     var cd = ensureCd(); for (var k in cd) if (cd[k] > 0) cd[k]--;
     if (hero.buffs) { if (hero.buffs.shield > 0) hero.buffs.shield--; if (hero.buffs.power > 0) hero.buffs.power--; }
-    // enemies
-    if (world.mode !== 'town') enemyTurn();
+    // enemies (none in safe areas)
+    if (world.mode !== 'town' && world.mode !== 'house') enemyTurn();
     updatePlates();
     computeFov();
     if (hero.hp <= 0 && world.mode !== 'dead') die();
@@ -1669,8 +1769,8 @@
       ctx.beginPath(); ctx.moveTo((am.x - cam.x) * TILE + TILE / 2, (am.y - cam.y) * TILE + TILE / 2); ctx.lineTo((am.aimT.x - cam.x) * TILE + TILE / 2, (am.aimT.y - cam.y) * TILE + TILE / 2); ctx.stroke();
     } }
     ctx.setLineDash([]); ctx.restore();
-    // player (already lerped at the top of the frame)
-    var p = w.player; drawPlayer(ctx, p, cam);
+    // player (already lerped at the top of the frame) + companion pet
+    var p = w.player; drawPet(ctx, p, cam, dt); drawPlayer(ctx, p, cam);
 
     // projectiles / fx
     drawFx(ctx, cam, dt);
@@ -1728,10 +1828,19 @@
       case 'shrine': glyph(ctx, '⛩', cx, cy, o.used ? 'rgba(150,160,180,0.45)' : '#bfe0ff', o.used ? a : a * (0.7 + 0.3 * Math.abs(Math.sin(now() / 500))), 18); break;
       case 'hazard': var HZ = HAZARDS[o.kind] || {}; ctx.globalAlpha = a * 0.45; ctx.fillStyle = HZ.col || '#888'; roundRect(ctx, px + 1, py + 1, TILE - 2, TILE - 2, 3); ctx.fill(); ctx.globalAlpha = 1; glyph(ctx, HZ.ch || '≈', cx, cy, 'rgba(0,0,0,0.5)', a, 13); break;
       case 'chest': glyph(ctx, o.opened ? '📭' : (o.lush ? '🎁' : '📦'), cx, cy, '#ffd76a', a, 16); break;
-      case 'npc': glyph(ctx, o.icon, cx, cy, o.col, 1, 18);
-        ctx.globalAlpha = 0.8; ctx.fillStyle = o.col; ctx.font = '9px ui-monospace, monospace'; ctx.textAlign = 'center'; ctx.fillText(o.name, cx, cy + 14); ctx.globalAlpha = 1; break;
+      case 'npc':
+        drawCharacter(ctx, cx, cy - 1, TILE / 2 - 3, { x: 0, y: 1 }, o.cos || {}, now() + o.x * 130);
+        glyph(ctx, o.icon, cx + TILE * 0.42, cy - TILE * 0.34, '#fff', 1, 12);  // profession token
+        ctx.globalAlpha = 0.9; ctx.fillStyle = o.col || '#fff'; ctx.font = '9px ui-monospace, monospace'; ctx.textAlign = 'center'; ctx.fillText(o.name, cx, cy + 14); ctx.globalAlpha = 1; break;
       case 'stairs': glyph(ctx, '▾', cx, cy, '#9fe08a', 1, 20);
         ctx.globalAlpha = 0.8; ctx.fillStyle = '#9fe08a'; ctx.font = '9px ui-monospace, monospace'; ctx.textAlign = 'center'; ctx.fillText('descend', cx, cy + 14); ctx.globalAlpha = 1; break;
+      case 'home': glyph(ctx, '🏠', cx, cy, '#fff', 1, 18);
+        ctx.globalAlpha = 0.85; ctx.fillStyle = '#e0b060'; ctx.font = '9px ui-monospace, monospace'; ctx.textAlign = 'center'; ctx.fillText('Home', cx, cy + 14); ctx.globalAlpha = 1; break;
+      case 'exit': glyph(ctx, '🚪', cx, cy, '#fff', 1, 18);
+        ctx.globalAlpha = 0.85; ctx.fillStyle = '#e0b060'; ctx.font = '9px ui-monospace, monospace'; ctx.textAlign = 'center'; ctx.fillText('leave', cx, cy + 14); ctx.globalAlpha = 1; break;
+      case 'workbench': glyph(ctx, '🛠', cx, cy, '#fff', 1, 18); break;
+      case 'furn': glyph(ctx, (FURNITURE[o.kind] || {}).icon || '▫', cx, cy, '#fff', 1, 18); break;
+      case 'trophyicon': glyph(ctx, '🏆', cx, cy, '#ffd76a', 1, 16); break;
     }
   }
   function drawItem(ctx, it, cam) {
@@ -1762,39 +1871,91 @@
       ctx.fillStyle = m.boss ? '#e85d5d' : '#d07a7a'; ctx.fillRect(cx - bw / 2, cy + r + 2, bw * Math.max(0, m.hp / m.maxHp), 3);
     }
   }
+  // ---- unified paper-doll renderer (player + NPCs + tailor preview) ----------
+  function drawCharacter(ctx, cx, cy, r, dir, cos, t) {
+    cos = cos || {};
+    var col = COSMETIC.color[cos.color] || COSMETIC.color.cyan;
+    var fx = dir ? dir.x : 0, fy = dir ? dir.y : 1;
+    // flowing bezier cape behind the facing direction
+    var capeDef = cos.cape && COSMETIC.cape[cos.cape] && COSMETIC.cape[cos.cape].color ? COSMETIC.cape[cos.cape] : null;
+    if (capeDef) {
+      var bx = -fx, by = -fy, ppx = -by, ppy = bx, sway = Math.sin((t || 0) / 280) * 0.10;
+      var sLx = cx + ppx * r * 0.72, sLy = cy + ppy * r * 0.72, sRx = cx - ppx * r * 0.72, sRy = cy - ppy * r * 0.72;
+      var tipx = cx + bx * r * 1.95 + ppx * r * sway * 3, tipy = cy + by * r * 1.95 + ppy * r * sway * 3;
+      ctx.fillStyle = capeDef.color;
+      ctx.beginPath(); ctx.moveTo(sLx, sLy);
+      ctx.quadraticCurveTo(cx + bx * r + ppx * r * 1.05, cy + by * r + ppy * r * 1.05, tipx, tipy);
+      ctx.quadraticCurveTo(cx + bx * r - ppx * r * 1.05, cy + by * r - ppy * r * 1.05, sRx, sRy);
+      ctx.closePath(); ctx.fill();
+      ctx.fillStyle = 'rgba(0,0,0,0.16)'; ctx.beginPath(); ctx.moveTo((sLx + sRx) / 2, (sLy + sRy) / 2); ctx.quadraticCurveTo(cx + bx * r, cy + by * r, tipx, tipy); ctx.lineTo(sRx, sRy); ctx.closePath(); ctx.fill();
+    }
+    // body
+    ctx.fillStyle = col.body; ctx.beginPath(); ctx.arc(cx, cy, r, 0, 6.3); ctx.fill();
+    if (cos.pattern && cos.pattern !== 'none') { ctx.save(); ctx.beginPath(); ctx.arc(cx, cy, r, 0, 6.3); ctx.clip(); drawPattern(ctx, cos.pattern, cx, cy, r, col); ctx.restore(); }
+    ctx.lineWidth = 2; ctx.strokeStyle = col.line; ctx.beginPath(); ctx.arc(cx, cy, r, 0, 6.3); ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,0.20)'; ctx.beginPath(); ctx.arc(cx - r * 0.3, cy - r * 0.35, r * 0.4, 0, 6.3); ctx.fill();
+    var beltDef = cos.belt && COSMETIC.belt[cos.belt] && COSMETIC.belt[cos.belt].color ? COSMETIC.belt[cos.belt] : null;
+    if (beltDef) { ctx.save(); ctx.beginPath(); ctx.arc(cx, cy, r, 0, 6.3); ctx.clip(); ctx.fillStyle = beltDef.color; ctx.fillRect(cx - r, cy + r * 0.22, r * 2, r * 0.34); ctx.fillStyle = 'rgba(255,235,150,0.5)'; ctx.fillRect(cx - r * 0.13, cy + r * 0.25, r * 0.26, r * 0.28); ctx.restore(); }
+    drawEyes(ctx, cos.eyes || 'default', cx, cy, r, fx, fy, col);
+    drawHat(ctx, cos.hat, cx, cy - r * 0.55, r);
+  }
+  function drawPattern(ctx, pat, cx, cy, r, col) {
+    if (pat === 'belly') { ctx.fillStyle = 'rgba(255,255,255,0.30)'; ctx.beginPath(); ctx.ellipse(cx, cy + r * 0.25, r * 0.55, r * 0.6, 0, 0, 6.3); ctx.fill(); }
+    else if (pat === 'spots') { ctx.fillStyle = 'rgba(0,0,0,0.20)';[[-0.4, -0.2], [0.32, 0.1], [-0.1, 0.42], [0.45, -0.3]].forEach(function (s) { ctx.beginPath(); ctx.arc(cx + s[0] * r, cy + s[1] * r, r * 0.17, 0, 6.3); ctx.fill(); }); }
+    else if (pat === 'stripe') { ctx.strokeStyle = 'rgba(0,0,0,0.20)'; ctx.lineWidth = r * 0.22; for (var i = -2; i <= 2; i++) { ctx.beginPath(); ctx.moveTo(cx - r + i * r * 0.5, cy - r); ctx.lineTo(cx + r + i * r * 0.5, cy + r); ctx.stroke(); } }
+    else if (pat === 'rune') { ctx.fillStyle = 'rgba(255,255,255,0.55)'; ctx.font = '700 ' + Math.round(r * 0.95) + 'px ui-monospace, monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('ᛟ', cx, cy + 1); }
+  }
+  function drawEyes(ctx, style, cx, cy, r, fx, fy, col) {
+    if (style === 'none') return;
+    var px = -fy, py = fx, exC = cx + fx * 3, eyC = cy + fy * 3;
+    var e1x = exC + px * 3, e1y = eyC + py * 3, e2x = exC - px * 3, e2y = eyC - py * 3;
+    if (style === 'visor') { ctx.save(); ctx.beginPath(); ctx.arc(cx, cy, r, 0, 6.3); ctx.clip(); ctx.fillStyle = '#10333f'; ctx.fillRect(exC - r * 0.72, eyC - 3, r * 1.44, 5); ctx.fillStyle = '#7fe0ff'; ctx.fillRect(exC - r * 0.4, eyC - 1.5, r * 0.8, 2); ctx.restore(); return; }
+    if (style === 'sleepy') { ctx.strokeStyle = col.line; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.moveTo(e1x - 2, e1y); ctx.lineTo(e1x + 2, e1y); ctx.moveTo(e2x - 2, e2y); ctx.lineTo(e2x + 2, e2y); ctx.stroke(); return; }
+    var rad = style === 'cute' ? 2.7 : 2, ecol = style === 'glow' ? '#7fe0ff' : col.line;
+    if (style === 'glow') { ctx.shadowColor = '#7fe0ff'; ctx.shadowBlur = 6; }
+    ctx.fillStyle = ecol;
+    ctx.beginPath(); ctx.arc(e1x, e1y, rad, 0, 6.3); ctx.fill();
+    ctx.beginPath(); ctx.arc(e2x, e2y, rad, 0, 6.3); ctx.fill();
+    ctx.shadowBlur = 0;
+    if (style === 'cute') { ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(e1x - 0.8, e1y - 0.8, 0.9, 0, 6.3); ctx.fill(); ctx.beginPath(); ctx.arc(e2x - 0.8, e2y - 0.8, 0.9, 0, 6.3); ctx.fill(); }
+    if (style === 'angry') { ctx.strokeStyle = col.line; ctx.lineWidth = 1.4; ctx.beginPath(); ctx.moveTo(e1x - 3, e1y - 3); ctx.lineTo(e1x + 1, e1y - 1); ctx.moveTo(e2x + 3, e2y - 3); ctx.lineTo(e2x - 1, e2y - 1); ctx.stroke(); }
+  }
+  function drawPetShape(ctx, cx, cy, r, kind, t) {
+    var d = COSMETIC.pet[kind]; if (!d || !d.col) return;
+    var bob = Math.sin((t || 0) / 250) * (r * 0.12);
+    cy += bob;
+    if (kind === 'wisp') {
+      ctx.globalAlpha = 0.5; ctx.fillStyle = d.col; ctx.beginPath(); ctx.arc(cx, cy, r * 1.4, 0, 6.3); ctx.fill(); ctx.globalAlpha = 1;
+      ctx.fillStyle = '#eaf6ff'; ctx.beginPath(); ctx.arc(cx, cy, r * 0.7, 0, 6.3); ctx.fill(); return;
+    }
+    if (kind === 'slime') {
+      ctx.fillStyle = d.col; ctx.beginPath(); ctx.moveTo(cx - r, cy + r * 0.6); ctx.quadraticCurveTo(cx - r, cy - r, cx, cy - r); ctx.quadraticCurveTo(cx + r, cy - r, cx + r, cy + r * 0.6); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#10333f'; ctx.beginPath(); ctx.arc(cx - r * 0.3, cy, 1.3, 0, 6.3); ctx.fill(); ctx.beginPath(); ctx.arc(cx + r * 0.3, cy, 1.3, 0, 6.3); ctx.fill(); return;
+    }
+    // cat / pup / drake — body + ears + eyes (+ wings for drake)
+    if (kind === 'drake') { ctx.fillStyle = 'rgba(120,180,90,0.85)'; ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx - r * 1.4, cy - r * 0.6); ctx.lineTo(cx - r * 0.6, cy + r * 0.3); ctx.closePath(); ctx.fill(); ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + r * 1.4, cy - r * 0.6); ctx.lineTo(cx + r * 0.6, cy + r * 0.3); ctx.closePath(); ctx.fill(); }
+    ctx.fillStyle = d.col; ctx.beginPath(); ctx.arc(cx, cy, r, 0, 6.3); ctx.fill();
+    ctx.fillStyle = d.col; // ears
+    ctx.beginPath(); ctx.moveTo(cx - r * 0.7, cy - r * 0.4); ctx.lineTo(cx - r * 0.9, cy - r * 1.1); ctx.lineTo(cx - r * 0.2, cy - r * 0.7); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(cx + r * 0.7, cy - r * 0.4); ctx.lineTo(cx + r * 0.9, cy - r * 1.1); ctx.lineTo(cx + r * 0.2, cy - r * 0.7); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#10333f'; ctx.beginPath(); ctx.arc(cx - r * 0.32, cy - r * 0.05, 1.4, 0, 6.3); ctx.fill(); ctx.beginPath(); ctx.arc(cx + r * 0.32, cy - r * 0.05, 1.4, 0, 6.3); ctx.fill();
+  }
+  function drawPet(ctx, p, cam, dt) {
+    var kind = hero.cosmetics && hero.cosmetics.pet; if (!kind || kind === 'none' || !COSMETIC.pet[kind] || !COSMETIC.pet[kind].col) return;
+    if (!world.pet) world.pet = { rx: p.rx, ry: p.ry };
+    var tx = p.x - p.dir.x * 0.85, ty = p.y - p.dir.y * 0.85, sp = Math.min(1, 8 * dt);
+    world.pet.rx += (tx - world.pet.rx) * sp; world.pet.ry += (ty - world.pet.ry) * sp;
+    var cx = (world.pet.rx - cam.x) * TILE + TILE / 2, cy = (world.pet.ry - cam.y) * TILE + TILE / 2;
+    drawPetShape(ctx, cx, cy, TILE * 0.26, kind, now());
+  }
   function drawPlayer(ctx, p, cam) {
     var bo = bumpOff(p), sh = entShake(p);
     var cx = (p.rx - cam.x) * TILE + TILE / 2 + bo.x + sh, cy = (p.ry - cam.y) * TILE + TILE / 2 + bo.y;
     var r = TILE / 2 - 2;
-    var fx = p.dir.x, fy = p.dir.y;
-    var cos = hero.cosmetics || {};
-    var col = COSMETIC.color[cos.color] || COSMETIC.color.cyan;
-    // cape — trailing behind the facing direction
-    var cape = cos.cape && COSMETIC.cape[cos.cape] && COSMETIC.cape[cos.cape].color ? COSMETIC.cape[cos.cape] : null;
-    if (cape) {
-      var bx = -fx, by = -fy, ppx = -by, ppy = bx;
-      ctx.fillStyle = cape.color; ctx.globalAlpha = 0.95;
-      ctx.beginPath();
-      ctx.moveTo(cx + ppx * r * 0.75, cy + ppy * r * 0.75);
-      ctx.lineTo(cx - ppx * r * 0.75, cy - ppy * r * 0.75);
-      ctx.lineTo(cx + bx * r * 1.7, cy + by * r * 1.7);
-      ctx.closePath(); ctx.fill(); ctx.globalAlpha = 1;
-    }
-    // warm torch glow
-    var glow = ctx.createRadialGradient(cx, cy, 2, cx, cy, r + 7);
-    glow.addColorStop(0, 'rgba(255,224,150,0.35)'); glow.addColorStop(1, 'rgba(255,224,150,0)');
-    ctx.fillStyle = glow; ctx.beginPath(); ctx.arc(cx, cy, r + 7, 0, 6.3); ctx.fill();
-    // body
-    ctx.fillStyle = col.body; ctx.beginPath(); ctx.arc(cx, cy, r, 0, 6.3); ctx.fill();
-    ctx.lineWidth = 2; ctx.strokeStyle = col.line; ctx.stroke();
-    ctx.fillStyle = 'rgba(255,255,255,0.22)'; ctx.beginPath(); ctx.arc(cx - r * 0.3, cy - r * 0.35, r * 0.42, 0, 6.3); ctx.fill();
-    // eyes, looking the way you move
-    var px = -fy, py = fx;
-    ctx.fillStyle = col.line;
-    ctx.beginPath(); ctx.arc(cx + fx * 3 + px * 3, cy + fy * 3 + py * 3, 2, 0, 6.3); ctx.fill();
-    ctx.beginPath(); ctx.arc(cx + fx * 3 - px * 3, cy + fy * 3 - py * 3, 2, 0, 6.3); ctx.fill();
-    // hat — sits on top of the head (screen-up)
-    drawHat(ctx, cos.hat, cx, cy - r * 0.6, r);
+    var glow = ctx.createRadialGradient(cx, cy, 2, cx, cy, r + 8);
+    glow.addColorStop(0, 'rgba(255,224,150,0.32)'); glow.addColorStop(1, 'rgba(255,224,150,0)');
+    ctx.fillStyle = glow; ctx.beginPath(); ctx.arc(cx, cy, r + 8, 0, 6.3); ctx.fill();
+    drawCharacter(ctx, cx, cy, r, p.dir, hero.cosmetics || {}, now());
   }
   function drawHat(ctx, hat, hx, hy, r) {
     if (!hat || hat === 'none') return;
@@ -2074,6 +2235,7 @@
         hero.gold -= price;
         if (kind === 'cons') { hero.bag[id] = (hero.bag[id] || 0) + 1; }
         else if (kind === 'spell') { learnSpell(id); logMsg('win', 'Learned ' + ABIL[id].name + '!'); buildAbilityBar(); }
+        else if (kind === 'furn') { hero.furniture = hero.furniture || {}; hero.furniture[id] = (hero.furniture[id] || 0) + 1; }
         else { acquireGear(id); }
         Cade.haptic(8); markDirty(); refreshAll(); reopen();
       });
@@ -2138,14 +2300,25 @@
   function hasCos(slot, id) { return (COSMETIC[slot][id] && COSMETIC[slot][id].price === 0) || (hero.ownedCos || []).indexOf(cosKey(slot, id)) >= 0; }
   function cosSwatch(slot, id, c) {
     if (slot === 'color') return '<span class="cr-swatch" style="background:' + c.body + '"></span>';
-    if (slot === 'cape') return '<span class="cr-swatch" style="background:' + (c.color || 'transparent') + '"></span>';
-    return '<span class="cr-swatch cr-swatch-hat">' + (id === 'none' ? '∅' : '🎩') + '</span>';
+    if (slot === 'cape' || slot === 'belt') return '<span class="cr-swatch" style="background:' + (c.color || 'transparent') + '"></span>';
+    if (slot === 'pet') return '<span class="cr-swatch" style="background:' + (c.col || 'transparent') + '"></span>';
+    var ic = slot === 'eyes' ? '👁' : slot === 'pattern' ? '▧' : '🎩';
+    return '<span class="cr-swatch cr-swatch-hat">' + (id === 'none' ? '∅' : ic) + '</span>';
+  }
+  function renderTailorPreview() {
+    var c = document.getElementById('cr-prev'); if (!c) return;
+    var x = c.getContext('2d');
+    x.clearRect(0, 0, 130, 120); x.fillStyle = '#0a0b0e'; roundRect(x, 0, 0, 130, 120, 10); x.fill();
+    drawCharacter(x, 60, 60, 30, { x: 0, y: 1 }, hero.cosmetics, now());
+    if (hero.cosmetics.pet && hero.cosmetics.pet !== 'none') drawPetShape(x, 102, 88, 13, hero.cosmetics.pet, now());
   }
   function openTailor() {
     var ov = mkOverlay('Tailor 🎩');
     var body = ov.querySelector('.cr-ov-body');
-    var html = '<div class="cr-shopgold">🪙 ' + hero.gold + ' gold</div><div class="cr-hint">Buy a look, then tap an owned one to wear it.</div>';
-    var slots = [['color', 'Color'], ['hat', 'Hat'], ['cape', 'Cape']];
+    var html = '<div class="cr-shopgold">🪙 ' + hero.gold + ' gold</div>' +
+      '<div class="cr-tailor-prev"><canvas id="cr-prev" width="130" height="120"></canvas></div>' +
+      '<div class="cr-hint">Buy a look, then tap an owned one to wear it.</div>';
+    var slots = [['color', 'Body'], ['eyes', 'Eyes'], ['pattern', 'Pattern'], ['belt', 'Belt'], ['hat', 'Hat'], ['cape', 'Cape'], ['pet', 'Pet']];
     slots.forEach(function (sl) {
       var slot = sl[0];
       html += '<div class="cr-sec">' + sl[1] + '</div><div class="cr-cosrow">';
@@ -2158,6 +2331,7 @@
       html += '</div>';
     });
     body.innerHTML = html;
+    renderTailorPreview();
     var btns = body.querySelectorAll('[data-cos]');
     for (var i = 0; i < btns.length; i++) (function (btn) {
       btn.addEventListener('click', function () {
@@ -2301,6 +2475,86 @@
     })(btns[i]);
   }
 
+  // ---- overlay: furnish the house (grid editor) -----------------------------
+  function openFurnish() {
+    if (!hero) return;
+    closeOverlay();
+    hero.house = hero.house || { furniture: [] }; hero.furniture = hero.furniture || {};
+    var ov = mkOverlay('Furnish 🛠'); var body = ov.querySelector('.cr-ov-body');
+    function placedCount(k) { return hero.house.furniture.filter(function (f) { return f.kind === k; }).length; }
+    function unplaced(k) { return (hero.furniture[k] || 0) - placedCount(k); }
+    var occ = {}; hero.house.furniture.forEach(function (f) { occ[f.y * HW + f.x] = f.kind; });
+    var html = '<div class="cr-hint">Tap a floor tile to place the selected piece; tap a placed piece to remove it.</div>';
+    html += '<div class="cr-hgrid" style="grid-template-columns:repeat(' + HW + ',1fr)">';
+    for (var y = 0; y < HH; y++) for (var x = 0; x < HW; x++) {
+      var edge = (x === 0 || y === 0 || x === HW - 1 || y === HH - 1), wb = (x === 1 && y === 1);
+      var k = occ[y * HW + x];
+      html += '<button class="cr-hcell' + (edge ? ' cr-hwall' : '') + '" data-cell="' + x + ',' + y + '">' + (edge ? '' : wb ? '🛠' : (k ? FURNITURE[k].icon : '')) + '</button>';
+    }
+    html += '</div>';
+    html += '<div class="cr-sec">Your furniture</div><div class="cr-cosrow" id="cr-furnpal"></div>';
+    html += '<button class="cr-buy" id="cr-furnbuy" style="margin-top:8px;width:100%">＋ Buy furniture (Carpenter)</button>';
+    body.innerHTML = html;
+    var pal = document.getElementById('cr-furnpal'), any = false;
+    Object.keys(FURNITURE).forEach(function (kind) {
+      var n = unplaced(kind); if (n <= 0) return; any = true;
+      var b = document.createElement('button'); b.className = 'cr-cos' + (houseSel === kind ? ' cr-on' : '');
+      b.innerHTML = '<span class="cr-swatch cr-swatch-hat">' + FURNITURE[kind].icon + '</span><span>' + FURNITURE[kind].name + '</span><small>×' + n + '</small>';
+      b.addEventListener('click', function () { houseSel = (houseSel === kind ? null : kind); openFurnish(); });
+      pal.appendChild(b);
+    });
+    if (!any) pal.innerHTML = '<span class="cr-hint">No spare furniture — buy some below.</span>';
+    var cells = body.querySelectorAll('[data-cell]');
+    for (var i = 0; i < cells.length; i++) (function (btn) {
+      btn.addEventListener('click', function () {
+        var pr = btn.getAttribute('data-cell').split(','), cx = parseInt(pr[0], 10), cy = parseInt(pr[1], 10);
+        if (cx === 0 || cy === 0 || cx === HW - 1 || cy === HH - 1) return;
+        if (cx === 1 && cy === 1) { Cade.showToast('The workbench sits here', 'info', 1000); return; }
+        var ix = -1; for (var j = 0; j < hero.house.furniture.length; j++) { var f = hero.house.furniture[j]; if (f.x === cx && f.y === cy) { ix = j; break; } }
+        if (ix >= 0) { hero.house.furniture.splice(ix, 1); }
+        else { if (!houseSel || unplaced(houseSel) <= 0) { Cade.showToast('Pick a piece first', 'info', 1000); return; } hero.house.furniture.push({ kind: houseSel, x: cx, y: cy }); }
+        syncHouseFurniture(); Cade.haptic(6); markDirty(); openFurnish();
+      });
+    })(cells[i]);
+    var bb = document.getElementById('cr-furnbuy'); if (bb) bb.addEventListener('click', openFurnitureShop);
+  }
+  function openFurnitureShop() {
+    closeOverlay();
+    var ov = mkOverlay('Carpenter 🪚'); var body = ov.querySelector('.cr-ov-body');
+    var html = '<div class="cr-shopgold">🪙 ' + hero.gold + ' gold</div><div class="cr-shop">';
+    Object.keys(FURNITURE).forEach(function (kind) { var f = FURNITURE[kind]; html += shopRow('furn:' + kind, f.icon, f.name, f.desc, buyPrice(f.price), hero.furniture[kind] || 0); });
+    html += '</div><button class="cr-buy" id="cr-furnback" style="margin-top:8px;width:100%">← Back to furnishing</button>';
+    body.innerHTML = html;
+    bindShop(body, openFurnitureShop);
+    var bk = document.getElementById('cr-furnback'); if (bk) bk.addEventListener('click', openFurnish);
+  }
+  function openStash() {
+    closeOverlay();
+    hero.stash = hero.stash || [];
+    var ov = mkOverlay('Stash 🧰'); var body = ov.querySelector('.cr-ov-body');
+    var html = '<div class="cr-hint">Store gear to free your pack (' + hero.owned.length + '/60). In stash: ' + hero.stash.length + '.</div>';
+    html += '<div class="cr-sec">Pack — tap to store</div><div class="cr-owned">';
+    var pack = hero.owned.filter(function (it) { return hero.equip[it.slot] !== it.uid; });
+    pack.forEach(function (it) { html += '<button class="cr-gear" data-store="' + it.uid + '"><span>' + it.icon + '</span> <span style="color:' + rarityOf(it).color + '">' + Cade.escapeHtml(it.name) + '</span><span class="cr-gear-st">' + instanceStatStr(it) + '</span></button>'; });
+    if (!pack.length) html += '<span class="cr-hint">Nothing spare to store.</span>';
+    html += '</div><div class="cr-sec">Stash — tap to take</div><div class="cr-owned">';
+    hero.stash.forEach(function (it) { html += '<button class="cr-gear" data-take="' + it.uid + '"><span>' + it.icon + '</span> <span style="color:' + rarityOf(it).color + '">' + Cade.escapeHtml(it.name) + '</span><span class="cr-gear-st">' + instanceStatStr(it) + '</span></button>'; });
+    if (!hero.stash.length) html += '<span class="cr-hint">Empty.</span>';
+    html += '</div>';
+    body.innerHTML = html;
+    var st = body.querySelectorAll('[data-store]');
+    for (var i = 0; i < st.length; i++) (function (btn) { btn.addEventListener('click', function () {
+      var it = itemByUid(btn.getAttribute('data-store')); if (!it) return; var ix = hero.owned.indexOf(it); if (ix < 0) return;
+      hero.owned.splice(ix, 1); hero.stash.push(it); markDirty(); refreshAll(); openStash();
+    }); })(st[i]);
+    var tk = body.querySelectorAll('[data-take]');
+    for (var j = 0; j < tk.length; j++) (function (btn) { btn.addEventListener('click', function () {
+      if (hero.owned.length >= 60) { Cade.showToast('Pack is full', 'error', 1200); return; }
+      var uid2 = btn.getAttribute('data-take'), ix = -1; for (var q = 0; q < hero.stash.length; q++) if (hero.stash[q].uid === uid2) { ix = q; break; }
+      if (ix < 0) return; hero.owned.push(hero.stash[ix]); hero.stash.splice(ix, 1); markDirty(); refreshAll(); openStash();
+    }); })(tk[j]);
+  }
+
   function mkOverlay(title) {
     closeOverlay();
     var el = document.createElement('div'); el.className = 'cr-overlay'; el.id = 'cr-overlay';
@@ -2330,6 +2584,7 @@
       owned: hero.owned, spells: hero.spells, docked: hero.docked,
       cosmetics: hero.cosmetics, ownedCos: hero.ownedCos,
       quests: hero.quests, questsDone: hero.questsDone || 0, difficulty: hero.difficulty || 'normal',
+      house: hero.house || { furniture: [] }, furniture: hero.furniture || {}, trophies: hero.trophies || [], stash: hero.stash || [],
       stats: hero.stats, _wlvl: hero._wlvl || 0, _alvl: hero._alvl || 0,
       _konami: hero._konami || false, _fled: hero._fled || 0,
       createdAt: hero.createdAt, updatedAt: Date.now(), rev: hero.rev, client: clientId
@@ -2371,13 +2626,17 @@
     ABIL_ORDER.forEach(function (id) { if (ABIL[id].learn === 'auto' && h.level >= ABIL[id].lvl && h.spells.indexOf(id) < 0) h.spells.push(id); });
     h.docked = (h.docked || []).filter(function (id) { return h.spells.indexOf(id) >= 0; }).slice(0, DOCK_MAX);
     for (var di = 0; di < h.spells.length && h.docked.length < DOCK_MAX; di++) if (h.docked.indexOf(h.spells[di]) < 0) h.docked.push(h.spells[di]);
-    h.cosmetics = h.cosmetics || { color: 'cyan', hat: 'none', cape: 'none' };
-    if (!COSMETIC.color[h.cosmetics.color]) h.cosmetics.color = 'cyan';
-    if (!COSMETIC.hat[h.cosmetics.hat]) h.cosmetics.hat = 'none';
-    if (!COSMETIC.cape[h.cosmetics.cape]) h.cosmetics.cape = 'none';
-    h.ownedCos = h.ownedCos || ['color:cyan', 'hat:none', 'cape:none'];
+    h.cosmetics = h.cosmetics || {};
+    var COSDEF = { color: 'cyan', eyes: 'default', pattern: 'none', belt: 'none', hat: 'none', cape: 'none', pet: 'none' };
+    COS_SLOTS.forEach(function (sl) { if (!COSMETIC[sl] || !COSMETIC[sl][h.cosmetics[sl]]) h.cosmetics[sl] = COSDEF[sl]; });
+    h.ownedCos = Array.isArray(h.ownedCos) ? h.ownedCos : [];
     h.quests = Array.isArray(h.quests) ? h.quests : [];
     if (!DIFFS[h.difficulty]) h.difficulty = 'normal';
+    h.house = (h.house && Array.isArray(h.house.furniture)) ? h.house : { furniture: [] };
+    h.house.furniture = h.house.furniture.filter(function (f) { return f && FURNITURE[f.kind]; });
+    h.furniture = (h.furniture && typeof h.furniture === 'object') ? h.furniture : {};
+    h.trophies = (Array.isArray(h.trophies) ? h.trophies : []).filter(function (k) { return REGIONS.some(function (r) { return r.key === k; }); });
+    h.stash = (Array.isArray(h.stash) ? h.stash : []).filter(function (it) { return it && it.uid && gear(it.base); });
     h.stats = h.stats || { kills: 0, deaths: 0, floors: 0, gems: 0, runs: 0 };
     h.buffs = {};
     return h;
