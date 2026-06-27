@@ -956,16 +956,24 @@
     if (it.type === 'gold') { var g = Math.round(it.amt * greedOf()); hero.gold += g; logMsg('', '+' + g + ' gold.'); fxText(it.x, it.y, '+' + g, '#ffd76a'); }
     else if (it.type === 'gem') { hero.gold += 50; hero.stats.gems++; questProgress('gems', 1); logMsg('win', 'A gleaming gem! (+50)'); fxText(it.x, it.y, '💎', '#7fe0d0'); }
     else if (it.type === 'cons') { hero.bag[it.id] = (hero.bag[it.id] || 0) + 1; logMsg('', 'Picked up ' + CONS[it.id].name + '.'); fxText(it.x, it.y, CONS[it.id].icon, '#fff'); }
-    else if (it.type === 'gear') { acquireGear(it.id); var gg = gear(it.id); logMsg('win', 'Found ' + (gg ? gg.name : 'gear') + '!'); fxText(it.x, it.y, gg ? gg.icon : '?', '#fff'); }
+    else if (it.type === 'gear') { var gg = gear(it.id); var isNew = acquireGear(it.id); if (isNew) logMsg('win', 'Found ' + (gg ? gg.name : 'gear') + '!'); fxText(it.x, it.y, gg ? gg.icon : '?', '#fff'); }
     world.items.splice(idx, 1);
     markDirty();
   }
+  function sellValue(g) { if (!g || !g.price) return 0; return Math.max(1, Math.floor(g.price * 0.4)); }
+  // Returns true if this was a brand-new acquisition; false if it was a
+  // duplicate (auto-sold for its value, since gear doesn't stack).
   function acquireGear(id) {
-    if (hero.owned.indexOf(id) < 0) hero.owned.push(id);
-    // auto-equip if strictly better tier in that slot
-    var g = gear(id); if (!g) return;
+    var g = gear(id); if (!g) return false;
+    if (hero.owned.indexOf(id) >= 0) {
+      var v = sellValue(g);
+      if (v > 0) { hero.gold += v; logMsg('', g.name + ' (duplicate) — sold for ' + v + 'g.'); }
+      return false;
+    }
+    hero.owned.push(id);
     var cur = gear(hero.equip[g.slot]);
     if (!cur || g.tier > cur.tier) { hero.equip[g.slot] = id; logMsg('win', 'Equipped ' + g.name + '.'); }
+    return true;
   }
 
   function rest() {
@@ -1742,8 +1750,28 @@
     stock.forEach(function (id) { var g = gear(id); var owned = hero.owned.indexOf(id) >= 0;
       html += shopRow('gear:' + id, g.icon, g.name, gearStatStr(g), g.price, owned ? '✓' : 0, owned); });
     html += '</div>';
+    // Sell back unwanted gear (40%). Excludes equipped pieces and starters.
+    var sellable = hero.owned.filter(function (id) { var g = gear(id); return g && g.price && hero.equip[g.slot] !== id; });
+    if (sellable.length) {
+      html += '<div class="cr-sec">Sell gear (40% back)</div><div class="cr-shop">';
+      sellable.forEach(function (id) { var g = gear(id);
+        html += '<div class="cr-srow"><span class="cr-sic">' + g.icon + '</span>' +
+          '<span class="cr-snm">' + g.name + '<span class="cr-sdesc">' + gearStatStr(g) + '</span></span>' +
+          '<button class="cr-buy cr-sell" data-sell="' + id + '">🪙 ' + sellValue(g) + '</button></div>'; });
+      html += '</div>';
+    }
     body.innerHTML = html;
     bindShop(body, function () { openShop('merchant'); });
+    var sb = body.querySelectorAll('[data-sell]');
+    for (var si = 0; si < sb.length; si++) (function (btn) {
+      btn.addEventListener('click', function () {
+        var id = btn.getAttribute('data-sell'), g = gear(id); if (!g) return;
+        var ix = hero.owned.indexOf(id); if (ix < 0) return;
+        if (hero.equip[g.slot] === id) { Cade.showToast('Unequip it first', 'info', 1200); return; }
+        hero.owned.splice(ix, 1); hero.gold += sellValue(g);
+        Cade.haptic(8); markDirty(); refreshAll(); openShop('merchant');
+      });
+    })(sb[si]);
   }
   function merchantStock() {
     var pool = [];

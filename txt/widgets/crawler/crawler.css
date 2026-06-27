@@ -189,6 +189,7 @@
 }
 .cr-buy:active { transform: scale(.94); }
 .cr-buy.cr-owned { color: var(--success, #6cc06c); }
+.cr-buy.cr-sell { color: var(--success, #6cc06c); }
 
 /* light theme tweaks */
 [data-theme="light"] .cr-line { color: #1a1d24; text-shadow: 0 1px 2px rgba(255,255,255,.8); }
