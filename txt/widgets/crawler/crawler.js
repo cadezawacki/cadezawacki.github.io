@@ -69,6 +69,7 @@
   var saveTimer = 0, fbDirty = false;
   var fbRef = null, fbCb = null, clientId = '';
   var merchStock = null;           // merchant's rolled wares for the current town visit
+  var houseSel = null;             // currently-selected furniture piece in the furnish editor
 
   // =========================================================================
   //  small utilities
@@ -468,6 +469,25 @@
   };
 
   // =========================================================================
+  //  THE HOUSE — a portable home you furnish; trophies from bosses live here
+  // =========================================================================
+  var HW = 11, HH = 7;             // interior size in tiles
+  var HOUSE_PAL = { name: 'Home', floor: '#2a241c', floor2: '#322a20', wall: '#4a3a2a', wallTop: '#5e4a34', accent: '#e0b060' };
+  var FURNITURE = {
+    bed:       { name: 'Bed',          icon: '🛏️', price: 300,  desc: 'Sleep to fully restore HP & MP.', effect: 'rest' },
+    stash:     { name: 'Stash Chest',  icon: '🧰', price: 400,  desc: 'Store gear beyond your pack.', effect: 'stash' },
+    planter:   { name: 'Herb Planter', icon: '🪴', price: 350,  desc: 'Grows a potion between visits home.', effect: 'garden' },
+    rug:       { name: 'Rug',          icon: '🟥', price: 80,   desc: 'Cosy underfoot.' },
+    plant:     { name: 'Potted Fern',  icon: '🌿', price: 90,   desc: 'A touch of green.' },
+    torch:     { name: 'Wall Torch',   icon: '🔥', price: 110,  desc: 'Warm light.' },
+    bookshelf: { name: 'Bookshelf',    icon: '📚', price: 220,  desc: 'Looks scholarly.' },
+    banner:    { name: 'Banner',       icon: '🚩', price: 160,  desc: 'Fly your colours.' },
+    statue:    { name: 'Statue',       icon: '🗿', price: 600,  desc: 'Imposing.' },
+    throne:    { name: 'Throne',       icon: '🪑', price: 1800, desc: 'Sit as the delver-monarch you are.' }
+  };
+  function trophyBonus() { return (hero && hero.trophies ? hero.trophies.length : 0) * 3; } // +3 max HP per boss trophy
+
+  // =========================================================================
   //  the hero (persistent character)
   // =========================================================================
   function freshHero() {
@@ -488,6 +508,7 @@
       ownedCos: [],
       quests: [], questsDone: 0,
       difficulty: 'normal',
+      house: { furniture: [] }, furniture: {}, trophies: [], stash: [],
       buffs: {},
       stats: { kills: 0, deaths: 0, floors: 0, gems: 0, runs: 0 },
       createdAt: Date.now(), updatedAt: Date.now(), rev: 1, client: clientId
@@ -501,7 +522,7 @@
   function atkOf() { var a = hero.atk + eqVal('weapon', 'atk') + eqVal('trinket', 'atk'); if (hero.buffs && hero.buffs.power > 0) a += powerBonus(); return a; }
   function defOf() { return hero.def + eqVal('armor', 'def') + eqVal('trinket', 'def'); }
   function critOf() { return clamp(hero.crit + eqVal('weapon', 'crit') + eqVal('trinket', 'crit'), 0, 0.75); }
-  function maxHpOf() { return hero.maxHp + eqVal('armor', 'hp') + eqVal('trinket', 'hp'); }
+  function maxHpOf() { return hero.maxHp + eqVal('armor', 'hp') + eqVal('trinket', 'hp') + trophyBonus(); }
   function maxMpOf() { return hero.maxMp + eqVal('weapon', 'mp') + eqVal('armor', 'mp') + eqVal('trinket', 'mp'); }
   function regenOf() { return eqVal('trinket', 'regen'); }
   function greedOf() { return 1 + eqVal('trinket', 'greed'); }
@@ -864,6 +885,7 @@
     objects.push({ type: 'npc', role: 'arcanist', x: 30, y: 12, icon: '🔮', col: '#c79bff', name: 'Arcanist', cos: { color: 'violet', eyes: 'glow', hat: 'wizard' } });
     objects.push({ type: 'npc', role: 'quest',    x: 13, y: 19, icon: '📜', col: '#e0c060', name: 'Bounties', cos: { color: 'ember', eyes: 'default', cape: 'red' } });
     objects.push({ type: 'npc', role: 'tailor',   x: 27, y: 19, icon: '🎩', col: '#9fe0c0', name: 'Tailor',   cos: { color: 'emerald', eyes: 'default', hat: 'top', belt: 'gold' } });
+    objects.push({ type: 'home', x: 33, y: 19 });
     objects.push({ type: 'stairs', x: 20, y: 23, down: true });
     var stairs = { x: 20, y: 23, up: false };
     var start = { x: 20, y: 16 };
@@ -877,11 +899,38 @@
     };
   }
 
+  function genHouse() {
+    var m = blankMap();
+    var ROX = Math.floor((MW - HW) / 2), ROY = Math.floor((MH - HH) / 2);
+    carveRoom(m, { x: ROX, y: ROY, w: HW, h: HH });
+    var objects = [];
+    var ex = ROX + (HW >> 1), ey = ROY + HH - 1;
+    objects.push({ type: 'exit', x: ex, y: ey });
+    objects.push({ type: 'workbench', x: ROX + 1, y: ROY + 1 });
+    (hero.trophies || []).forEach(function (tk, i) { if (i < HW - 2) objects.push({ type: 'trophyicon', key: tk, x: ROX + 1 + i, y: ROY }); });
+    (hero.house && hero.house.furniture || []).forEach(function (f) { objects.push({ type: 'furn', kind: f.kind, x: ROX + f.x, y: ROY + f.y }); });
+    return {
+      depth: -1, biome: HOUSE_PAL, isBoss: false, puzzle: null,
+      map: m, rooms: [{ x: ROX, y: ROY, w: HW, h: HH }], objects: objects, monsters: [], items: [],
+      stairs: { x: ex, y: ey, up: true }, start: { x: ex, y: ey - 1 }, ROX: ROX, ROY: ROY,
+      explored: mkBoolGrid(), visible: mkBoolGrid(),
+      fx: [], proj: [], log: [], shake: 0, steps: 0, mode: 'house',
+      player: null, path: null, pathT: 0, _logDirty: true
+    };
+  }
+  // rebuild the live house's furniture/trophy objects from hero data (after edits)
+  function syncHouseFurniture() {
+    if (!world || world.mode !== 'house') return;
+    world.objects = world.objects.filter(function (o) { return o.type !== 'furn' && o.type !== 'trophyicon'; });
+    (hero.trophies || []).forEach(function (tk, i) { if (i < HW - 2) world.objects.push({ type: 'trophyicon', key: tk, x: world.ROX + 1 + i, y: world.ROY }); });
+    (hero.house.furniture || []).forEach(function (f) { world.objects.push({ type: 'furn', kind: f.kind, x: world.ROX + f.x, y: world.ROY + f.y }); });
+  }
+
   // =========================================================================
   //  enter a floor / town
   // =========================================================================
   function enter(depth) {
-    var w = depth <= 0 ? genTown() : genFloor(depth);
+    var w = depth === -1 ? genHouse() : depth <= 0 ? genTown() : genFloor(depth);
     var spawn = w.start;
     w.player = { x: spawn.x, y: spawn.y, rx: spawn.x, ry: spawn.y, dir: { x: 0, y: 1 }, hit: 0, bump: 0 };
     world = w;
@@ -894,7 +943,12 @@
     // ensure hp/mp within caps
     hero.hp = clamp(hero.hp, 0, maxHpOf()); hero.mp = clamp(hero.mp, 0, maxMpOf());
     computeFov();
-    if (depth <= 0) { logMsg('', 'Hearthhold. Rest, shop, then descend ▾.'); }
+    if (depth === -1) {
+      logMsg('', 'Home. ✋ the workbench (🛠) to furnish; rest in your bed; 🚪 to leave.');
+      // herb planter yields a potion between trips home
+      var hasPlanter = (hero.house.furniture || []).some(function (f) { return f.kind === 'planter'; });
+      if (hasPlanter && hero._gardenRun !== (hero.stats.runs || 0)) { hero._gardenRun = hero.stats.runs || 0; hero.bag.potion = (hero.bag.potion || 0) + 1; logMsg('win', 'Your planter bore a Health Potion.'); }
+    } else if (depth <= 0) { logMsg('', 'Hearthhold. Rest, shop, then descend ▾.'); }
     else {
       hero.stats.floors++; questDepth(depth);
       var rg = regionAt(depth);
@@ -953,12 +1007,13 @@
   function computeFov() {
     var p = world.player, vis = world.visible, exp = world.explored;
     for (var y = 0; y < MH; y++) for (var x = 0; x < MW; x++) vis[y][x] = false;
-    var R = world.mode === 'town' ? 99 : LIGHT;
+    var lit = world.mode === 'town' || world.mode === 'house';
+    var R = lit ? 99 : LIGHT;
     var x0 = Math.max(0, p.x - R), x1 = Math.min(MW - 1, p.x + R);
     var y0 = Math.max(0, p.y - R), y1 = Math.min(MH - 1, p.y + R);
     for (var yy = y0; yy <= y1; yy++) for (var xx = x0; xx <= x1; xx++) {
       if (cheb(p.x, p.y, xx, yy) > R) continue;
-      if (world.mode === 'town' || losClear(p.x, p.y, xx, yy)) { vis[yy][xx] = true; exp[yy][xx] = true; }
+      if (lit || losClear(p.x, p.y, xx, yy)) { vis[yy][xx] = true; exp[yy][xx] = true; }
     }
   }
 
@@ -1006,6 +1061,7 @@
     gainXp(Math.round(m.xp * diff().rew));
     if (m.elite) { logMsg('win', 'Elite slain: ' + m.name + '!'); var ep = adjacentFree(m.x, m.y) || { x: m.x, y: m.y }; world.items.push({ type: 'gear', item: generateItem(null, world.depth + 2, 1.2), x: ep.x, y: ep.y }); world.items.push({ type: 'gold', x: m.x, y: m.y, amt: (6 + ri(8)) * Math.max(1, world.depth) }); }
     if (m.boss) { questProgress('boss', 1); logMsg('win', 'The ' + m.name + ' falls! The way down opens.'); shake(10);
+      var rk = regionAt(world.depth).key; hero.trophies = hero.trophies || []; if (hero.trophies.indexOf(rk) < 0) { hero.trophies.push(rk); hero.hp = Math.min(maxHpOf(), hero.hp + 3); logMsg('win', '🏆 Trophy earned — ' + regionAt(world.depth).name + '! (displayed at home)'); }
       // boss drops: gold + guaranteed gear + gem
       world.items.push({ type: 'gold', x: m.x, y: m.y, amt: 40 + world.depth * 7 });
       var gp = adjacentFree(m.x, m.y); if (gp) world.items.push({ type: 'gear', item: generateItem(null, world.depth + 3, 2.5), x: gp.x, y: gp.y });
@@ -1197,8 +1253,13 @@
       var it = world.items[i];
       if (it.x === p.x && it.y === p.y) pickup(it, i);
     }
-    // town NPC — step on to shop
-    if (world.mode === 'town') { var npcHere = objAt(p.x, p.y, 'npc'); if (npcHere) { openShop(npcHere.role); return; } }
+    // town NPC — step on to shop; step on the door to go home
+    if (world.mode === 'town') {
+      var npcHere = objAt(p.x, p.y, 'npc'); if (npcHere) { openShop(npcHere.role); return; }
+      if (objAt(p.x, p.y, 'home')) { world._pendingHouse = true; return; }
+    }
+    // house — step on the exit to return to town
+    if (world.mode === 'house' && objAt(p.x, p.y, 'exit')) { world._pendingTown = true; return; }
     // teleporter
     var tp = objAt(p.x, p.y, 'tele');
     if (tp) { p.x = tp.tox; p.y = tp.toy; p.rx = p.x; p.ry = p.y; fxBurst(p.x, p.y, '#a87fe0'); logMsg('', 'Whoosh — teleported.'); }
@@ -1267,6 +1328,11 @@
       var shrine = objAt(ox, oy, 'shrine'); if (shrine) { prayShrine(shrine); return; }
       var chest = objAt(ox, oy, 'chest'); if (chest && !chest.opened) { openChest(chest); return; }
       var stair = objAt(ox, oy, 'stairs'); if (stair && stair.down) { startNewRun(); return; }
+      if (objAt(ox, oy, 'home')) { enter(-1); return; }
+      if (objAt(ox, oy, 'workbench')) { openFurnish(); return; }
+      if (objAt(ox, oy, 'exit')) { enter(0); return; }
+      var fn = objAt(ox, oy, 'furn');
+      if (fn) { if (fn.kind === 'bed') { hero.hp = maxHpOf(); hero.mp = maxMpOf(); logMsg('win', 'You rest. Fully restored.'); fxBurst(p.x, p.y, '#9fe0a0'); markDirty(); refreshAll(); } else if (fn.kind === 'stash') { openStash(); } else { Cade.showToast(FURNITURE[fn.kind].name, 'info', 1000); } return; }
     }
     // on town stairs tile?
     if (world.mode === 'town' && p.x === world.stairs.x && p.y === world.stairs.y) { startNewRun(); return; }
@@ -1546,9 +1612,11 @@
   // =========================================================================
   function endTurn() {
     if (world.mode === 'dead') { refreshAll(); return; }
-    // consume any deferred level transition before spending a turn
+    // consume any deferred area transition before spending a turn
     if (world._pendingDescend) { world._pendingDescend = false; descend(); return; }
     if (world._pendingDive) { world._pendingDive = false; startNewRun(); return; }
+    if (world._pendingTown) { world._pendingTown = false; enter(0); return; }
+    if (world._pendingHouse) { world._pendingHouse = false; enter(-1); return; }
     world.steps++;
     // hero status (DoT)
     tickStatus(hero, true);
@@ -1561,8 +1629,8 @@
     // cooldowns + buffs
     var cd = ensureCd(); for (var k in cd) if (cd[k] > 0) cd[k]--;
     if (hero.buffs) { if (hero.buffs.shield > 0) hero.buffs.shield--; if (hero.buffs.power > 0) hero.buffs.power--; }
-    // enemies
-    if (world.mode !== 'town') enemyTurn();
+    // enemies (none in safe areas)
+    if (world.mode !== 'town' && world.mode !== 'house') enemyTurn();
     updatePlates();
     computeFov();
     if (hero.hp <= 0 && world.mode !== 'dead') die();
@@ -1766,6 +1834,13 @@
         ctx.globalAlpha = 0.9; ctx.fillStyle = o.col || '#fff'; ctx.font = '9px ui-monospace, monospace'; ctx.textAlign = 'center'; ctx.fillText(o.name, cx, cy + 14); ctx.globalAlpha = 1; break;
       case 'stairs': glyph(ctx, '▾', cx, cy, '#9fe08a', 1, 20);
         ctx.globalAlpha = 0.8; ctx.fillStyle = '#9fe08a'; ctx.font = '9px ui-monospace, monospace'; ctx.textAlign = 'center'; ctx.fillText('descend', cx, cy + 14); ctx.globalAlpha = 1; break;
+      case 'home': glyph(ctx, '🏠', cx, cy, '#fff', 1, 18);
+        ctx.globalAlpha = 0.85; ctx.fillStyle = '#e0b060'; ctx.font = '9px ui-monospace, monospace'; ctx.textAlign = 'center'; ctx.fillText('Home', cx, cy + 14); ctx.globalAlpha = 1; break;
+      case 'exit': glyph(ctx, '🚪', cx, cy, '#fff', 1, 18);
+        ctx.globalAlpha = 0.85; ctx.fillStyle = '#e0b060'; ctx.font = '9px ui-monospace, monospace'; ctx.textAlign = 'center'; ctx.fillText('leave', cx, cy + 14); ctx.globalAlpha = 1; break;
+      case 'workbench': glyph(ctx, '🛠', cx, cy, '#fff', 1, 18); break;
+      case 'furn': glyph(ctx, (FURNITURE[o.kind] || {}).icon || '▫', cx, cy, '#fff', 1, 18); break;
+      case 'trophyicon': glyph(ctx, '🏆', cx, cy, '#ffd76a', 1, 16); break;
     }
   }
   function drawItem(ctx, it, cam) {
@@ -2160,6 +2235,7 @@
         hero.gold -= price;
         if (kind === 'cons') { hero.bag[id] = (hero.bag[id] || 0) + 1; }
         else if (kind === 'spell') { learnSpell(id); logMsg('win', 'Learned ' + ABIL[id].name + '!'); buildAbilityBar(); }
+        else if (kind === 'furn') { hero.furniture = hero.furniture || {}; hero.furniture[id] = (hero.furniture[id] || 0) + 1; }
         else { acquireGear(id); }
         Cade.haptic(8); markDirty(); refreshAll(); reopen();
       });
@@ -2399,6 +2475,86 @@
     })(btns[i]);
   }
 
+  // ---- overlay: furnish the house (grid editor) -----------------------------
+  function openFurnish() {
+    if (!hero) return;
+    closeOverlay();
+    hero.house = hero.house || { furniture: [] }; hero.furniture = hero.furniture || {};
+    var ov = mkOverlay('Furnish 🛠'); var body = ov.querySelector('.cr-ov-body');
+    function placedCount(k) { return hero.house.furniture.filter(function (f) { return f.kind === k; }).length; }
+    function unplaced(k) { return (hero.furniture[k] || 0) - placedCount(k); }
+    var occ = {}; hero.house.furniture.forEach(function (f) { occ[f.y * HW + f.x] = f.kind; });
+    var html = '<div class="cr-hint">Tap a floor tile to place the selected piece; tap a placed piece to remove it.</div>';
+    html += '<div class="cr-hgrid" style="grid-template-columns:repeat(' + HW + ',1fr)">';
+    for (var y = 0; y < HH; y++) for (var x = 0; x < HW; x++) {
+      var edge = (x === 0 || y === 0 || x === HW - 1 || y === HH - 1), wb = (x === 1 && y === 1);
+      var k = occ[y * HW + x];
+      html += '<button class="cr-hcell' + (edge ? ' cr-hwall' : '') + '" data-cell="' + x + ',' + y + '">' + (edge ? '' : wb ? '🛠' : (k ? FURNITURE[k].icon : '')) + '</button>';
+    }
+    html += '</div>';
+    html += '<div class="cr-sec">Your furniture</div><div class="cr-cosrow" id="cr-furnpal"></div>';
+    html += '<button class="cr-buy" id="cr-furnbuy" style="margin-top:8px;width:100%">＋ Buy furniture (Carpenter)</button>';
+    body.innerHTML = html;
+    var pal = document.getElementById('cr-furnpal'), any = false;
+    Object.keys(FURNITURE).forEach(function (kind) {
+      var n = unplaced(kind); if (n <= 0) return; any = true;
+      var b = document.createElement('button'); b.className = 'cr-cos' + (houseSel === kind ? ' cr-on' : '');
+      b.innerHTML = '<span class="cr-swatch cr-swatch-hat">' + FURNITURE[kind].icon + '</span><span>' + FURNITURE[kind].name + '</span><small>×' + n + '</small>';
+      b.addEventListener('click', function () { houseSel = (houseSel === kind ? null : kind); openFurnish(); });
+      pal.appendChild(b);
+    });
+    if (!any) pal.innerHTML = '<span class="cr-hint">No spare furniture — buy some below.</span>';
+    var cells = body.querySelectorAll('[data-cell]');
+    for (var i = 0; i < cells.length; i++) (function (btn) {
+      btn.addEventListener('click', function () {
+        var pr = btn.getAttribute('data-cell').split(','), cx = parseInt(pr[0], 10), cy = parseInt(pr[1], 10);
+        if (cx === 0 || cy === 0 || cx === HW - 1 || cy === HH - 1) return;
+        if (cx === 1 && cy === 1) { Cade.showToast('The workbench sits here', 'info', 1000); return; }
+        var ix = -1; for (var j = 0; j < hero.house.furniture.length; j++) { var f = hero.house.furniture[j]; if (f.x === cx && f.y === cy) { ix = j; break; } }
+        if (ix >= 0) { hero.house.furniture.splice(ix, 1); }
+        else { if (!houseSel || unplaced(houseSel) <= 0) { Cade.showToast('Pick a piece first', 'info', 1000); return; } hero.house.furniture.push({ kind: houseSel, x: cx, y: cy }); }
+        syncHouseFurniture(); Cade.haptic(6); markDirty(); openFurnish();
+      });
+    })(cells[i]);
+    var bb = document.getElementById('cr-furnbuy'); if (bb) bb.addEventListener('click', openFurnitureShop);
+  }
+  function openFurnitureShop() {
+    closeOverlay();
+    var ov = mkOverlay('Carpenter 🪚'); var body = ov.querySelector('.cr-ov-body');
+    var html = '<div class="cr-shopgold">🪙 ' + hero.gold + ' gold</div><div class="cr-shop">';
+    Object.keys(FURNITURE).forEach(function (kind) { var f = FURNITURE[kind]; html += shopRow('furn:' + kind, f.icon, f.name, f.desc, buyPrice(f.price), hero.furniture[kind] || 0); });
+    html += '</div><button class="cr-buy" id="cr-furnback" style="margin-top:8px;width:100%">← Back to furnishing</button>';
+    body.innerHTML = html;
+    bindShop(body, openFurnitureShop);
+    var bk = document.getElementById('cr-furnback'); if (bk) bk.addEventListener('click', openFurnish);
+  }
+  function openStash() {
+    closeOverlay();
+    hero.stash = hero.stash || [];
+    var ov = mkOverlay('Stash 🧰'); var body = ov.querySelector('.cr-ov-body');
+    var html = '<div class="cr-hint">Store gear to free your pack (' + hero.owned.length + '/60). In stash: ' + hero.stash.length + '.</div>';
+    html += '<div class="cr-sec">Pack — tap to store</div><div class="cr-owned">';
+    var pack = hero.owned.filter(function (it) { return hero.equip[it.slot] !== it.uid; });
+    pack.forEach(function (it) { html += '<button class="cr-gear" data-store="' + it.uid + '"><span>' + it.icon + '</span> <span style="color:' + rarityOf(it).color + '">' + Cade.escapeHtml(it.name) + '</span><span class="cr-gear-st">' + instanceStatStr(it) + '</span></button>'; });
+    if (!pack.length) html += '<span class="cr-hint">Nothing spare to store.</span>';
+    html += '</div><div class="cr-sec">Stash — tap to take</div><div class="cr-owned">';
+    hero.stash.forEach(function (it) { html += '<button class="cr-gear" data-take="' + it.uid + '"><span>' + it.icon + '</span> <span style="color:' + rarityOf(it).color + '">' + Cade.escapeHtml(it.name) + '</span><span class="cr-gear-st">' + instanceStatStr(it) + '</span></button>'; });
+    if (!hero.stash.length) html += '<span class="cr-hint">Empty.</span>';
+    html += '</div>';
+    body.innerHTML = html;
+    var st = body.querySelectorAll('[data-store]');
+    for (var i = 0; i < st.length; i++) (function (btn) { btn.addEventListener('click', function () {
+      var it = itemByUid(btn.getAttribute('data-store')); if (!it) return; var ix = hero.owned.indexOf(it); if (ix < 0) return;
+      hero.owned.splice(ix, 1); hero.stash.push(it); markDirty(); refreshAll(); openStash();
+    }); })(st[i]);
+    var tk = body.querySelectorAll('[data-take]');
+    for (var j = 0; j < tk.length; j++) (function (btn) { btn.addEventListener('click', function () {
+      if (hero.owned.length >= 60) { Cade.showToast('Pack is full', 'error', 1200); return; }
+      var uid2 = btn.getAttribute('data-take'), ix = -1; for (var q = 0; q < hero.stash.length; q++) if (hero.stash[q].uid === uid2) { ix = q; break; }
+      if (ix < 0) return; hero.owned.push(hero.stash[ix]); hero.stash.splice(ix, 1); markDirty(); refreshAll(); openStash();
+    }); })(tk[j]);
+  }
+
   function mkOverlay(title) {
     closeOverlay();
     var el = document.createElement('div'); el.className = 'cr-overlay'; el.id = 'cr-overlay';
@@ -2428,6 +2584,7 @@
       owned: hero.owned, spells: hero.spells, docked: hero.docked,
       cosmetics: hero.cosmetics, ownedCos: hero.ownedCos,
       quests: hero.quests, questsDone: hero.questsDone || 0, difficulty: hero.difficulty || 'normal',
+      house: hero.house || { furniture: [] }, furniture: hero.furniture || {}, trophies: hero.trophies || [], stash: hero.stash || [],
       stats: hero.stats, _wlvl: hero._wlvl || 0, _alvl: hero._alvl || 0,
       _konami: hero._konami || false, _fled: hero._fled || 0,
       createdAt: hero.createdAt, updatedAt: Date.now(), rev: hero.rev, client: clientId
@@ -2475,6 +2632,11 @@
     h.ownedCos = Array.isArray(h.ownedCos) ? h.ownedCos : [];
     h.quests = Array.isArray(h.quests) ? h.quests : [];
     if (!DIFFS[h.difficulty]) h.difficulty = 'normal';
+    h.house = (h.house && Array.isArray(h.house.furniture)) ? h.house : { furniture: [] };
+    h.house.furniture = h.house.furniture.filter(function (f) { return f && FURNITURE[f.kind]; });
+    h.furniture = (h.furniture && typeof h.furniture === 'object') ? h.furniture : {};
+    h.trophies = (Array.isArray(h.trophies) ? h.trophies : []).filter(function (k) { return REGIONS.some(function (r) { return r.key === k; }); });
+    h.stash = (Array.isArray(h.stash) ? h.stash : []).filter(function (it) { return it && it.uid && gear(it.base); });
     h.stats = h.stats || { kills: 0, deaths: 0, floors: 0, gems: 0, runs: 0 };
     h.buffs = {};
     return h;
