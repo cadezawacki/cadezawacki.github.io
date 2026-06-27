@@ -354,6 +354,23 @@
     inst.name = instanceName(inst);
     return inst;
   }
+  // per-town wares: which slots/affixes a themed merchant favours, plus the
+  // consumables it stocks. (Greenhollow has an Alchemist instead of a merchant.)
+  var WARE_THEME = {
+    ember:  { slots: ['weapon', 'weapon', 'trinket'], stat: ['burn', 'atk', 'crit'], cons: ['bomb', 'hpotion', 'potion', 'scroll'], luck: 0 },
+    desert: { slots: ['trinket', 'trinket', 'weapon'], stat: ['greed', 'crit', 'spell'], cons: ['lure', 'scroll', 'antidote', 'potion'], luck: 0.6 },
+    coast:  { slots: ['armor', 'armor', 'trinket'], stat: ['resist', 'dodge', 'freeze'], cons: ['antidote', 'eelixir', 'elixir', 'potion'], luck: 0 },
+    wood:   { slots: ['trinket', 'armor', 'weapon'], stat: ['poison', 'regen', 'lifesteal'], cons: ['antidote', 'potion', 'elixir', 'lure'], luck: 0 }
+  };
+  // generate an item biased toward a theme's signature affixes
+  function generateThemed(slot, ilvl, wantStats, luck) {
+    if (!wantStats || !wantStats.length) return generateItem(slot, ilvl, luck);
+    for (var t = 0; t < 6; t++) {
+      var it = generateItem(slot, ilvl, luck);
+      for (var w = 0; w < wantStats.length; w++) if (it.stats[wantStats[w]]) return it;
+    }
+    return generateItem(slot, ilvl, luck);
+  }
   function itemScore(it) {
     if (!it) return -1; var s = it.stats;
     return (s.atk || 0) * 3 + (s.def || 0) * 3 + (s.hp || 0) * 0.4 + (s.mp || 0) * 0.3 + (s.crit || 0) * 40 +
@@ -409,25 +426,67 @@
   function rarityTag(it) { var c = rarityOf(it); return '<span style="color:' + c.color + '">' + (it.rarity === 'common' ? '' : c.name + ' ') + '</span>'; }
 
   // Spells — cost MP, have cooldowns. learn:'auto' is taught on reaching its
-  // level; learn:'tome' must be bought at the Arcanist. You can DOCK up to
-  // DOCK_MAX of your known spells onto the action bar at once.
+  // level; learn:'tome' is bought from a town's spell-teacher, who only deals
+  // in that town's SCHOOL. You can DOCK up to DOCK_MAX onto the action bar.
   var DOCK_MAX = 4;
-  var ABIL = {
-    strike: { id: 'strike', name: 'Power Strike', icon: '💥', lvl: 1, mp: 4,  cd: 1, kind: 'melee', learn: 'auto', desc: 'Heavy adjacent hit (×2.2 ATK), may stun.' },
-    bolt:   { id: 'bolt',   name: 'Firebolt',     icon: '🔥', lvl: 3, mp: 6,  cd: 2, kind: 'ray',   range: 6, burn: true, learn: 'auto', desc: 'Bolt along your facing; burns the first foe hit.' },
-    mend:   { id: 'mend',   name: 'Mend',         icon: '✨', lvl: 4, mp: 8,  cd: 4, kind: 'self',  learn: 'auto', desc: 'Heal 35% of max HP.' },
-    blink:  { id: 'blink',  name: 'Blink',        icon: '🌀', lvl: 6, mp: 5,  cd: 3, kind: 'move',  range: 4, learn: 'auto', desc: 'Dash up to 4 tiles ahead, slipping past danger.' },
-    quake:  { id: 'quake',  name: 'Quake',        icon: '🌋', lvl: 8, mp: 12, cd: 5, kind: 'aoe',   range: 2, stun: true, learn: 'auto', desc: 'Damage + stun every foe around you.' },
-    // ---- tome spells (buy at the Arcanist) ----
-    frost:  { id: 'frost',  name: 'Frost Lance',  icon: '❄️', lvl: 3, mp: 7,  cd: 2, kind: 'ray',   range: 6, freeze: true, learn: 'tome', price: 220, desc: 'Pierces your facing; freezes the foe hit.' },
-    shield: { id: 'shield', name: 'Aegis',        icon: '🛡️', lvl: 4, mp: 6,  cd: 6, kind: 'buff',  buff: 'shield', turns: 6, learn: 'tome', price: 260, desc: 'Halve incoming damage for 6 turns.' },
-    drain:  { id: 'drain',  name: 'Life Drain',   icon: '🩸', lvl: 5, mp: 7,  cd: 2, kind: 'ray',   range: 5, drain: true, learn: 'tome', price: 320, desc: 'Ray that heals you for the damage dealt.' },
-    warcry: { id: 'warcry', name: 'War Cry',      icon: '📣', lvl: 5, mp: 6,  cd: 6, kind: 'buff',  buff: 'power', turns: 6, learn: 'tome', price: 300, desc: 'Greatly raise ATK for 6 turns.' },
-    venom:  { id: 'venom',  name: 'Venom Nova',   icon: '☠️', lvl: 6, mp: 10, cd: 4, kind: 'aoe',   range: 2, poison: true, learn: 'tome', price: 400, desc: 'Poison every foe around you.' },
-    chain:  { id: 'chain',  name: 'Chain Lightning', icon: '⚡', lvl: 7, mp: 10, cd: 3, kind: 'chainspell', range: 6, learn: 'tome', price: 460, desc: 'Strikes a foe, then arcs to others nearby.' },
-    meteor: { id: 'meteor', name: 'Meteor',       icon: '☄️', lvl: 9, mp: 16, cd: 6, kind: 'aoe',   range: 2, big: true, burn: true, learn: 'tome', price: 760, desc: 'A massive blast + burn around you.' }
+  var SCHOOLS = {
+    arcane: { name: 'Arcane',  teacher: 'Arcanist',   icon: '🔮', col: '#c79bff', cos: { color: 'violet', eyes: 'glow', hat: 'wizard' } },
+    fire:   { name: 'Pyromancy', teacher: 'Pyromancer', icon: '🔥', col: '#ff8a4a', cos: { color: 'ember', eyes: 'glow', hat: 'wizard', cape: 'red' } },
+    frost:  { name: 'Hydromancy', teacher: 'Tidecaller', icon: '❄️', col: '#5fd0e0', cos: { color: 'cyan', eyes: 'glow', hat: 'wizard', cape: 'blue' } },
+    nature: { name: 'Druidry',  teacher: 'Druid',      icon: '🌿', col: '#8fd06f', cos: { color: 'emerald', eyes: 'glow', hat: 'wizard', cape: 'emerald' } },
+    mystic: { name: 'Sandlore', teacher: 'Sandseer',   icon: '🌙', col: '#e0c060', cos: { color: 'gold', eyes: 'glow', hat: 'wizard', cape: 'gold' } }
   };
-  var ABIL_ORDER = ['strike', 'bolt', 'frost', 'drain', 'mend', 'shield', 'warcry', 'venom', 'blink', 'chain', 'quake', 'meteor'];
+  var ABIL = {
+    // ---- universal basics (auto-learned on level) ----
+    strike: { id: 'strike', name: 'Power Strike', icon: '💥', lvl: 1, mp: 4,  cd: 1, kind: 'melee', learn: 'auto', school: 'arcane', desc: 'Heavy adjacent hit (×2.2 ATK), may stun.' },
+    bolt:   { id: 'bolt',   name: 'Firebolt',     icon: '🔥', lvl: 3, mp: 6,  cd: 2, kind: 'ray',   range: 6, mult: 1.5, burn: true, learn: 'auto', school: 'fire', desc: 'Bolt along your facing; burns the first foe hit.' },
+    mend:   { id: 'mend',   name: 'Mend',         icon: '✨', lvl: 4, mp: 8,  cd: 4, kind: 'self',  heal: 0.35, learn: 'auto', school: 'nature', desc: 'Heal 35% of max HP.' },
+    blink:  { id: 'blink',  name: 'Blink',        icon: '🌀', lvl: 6, mp: 5,  cd: 3, kind: 'move',  range: 4, learn: 'auto', school: 'arcane', desc: 'Dash up to 4 tiles ahead, slipping past danger.' },
+    quake:  { id: 'quake',  name: 'Quake',        icon: '🌋', lvl: 8, mp: 12, cd: 5, kind: 'aoe',   range: 2, mult: 1.2, stun: true, learn: 'auto', school: 'arcane', desc: 'Damage + stun every foe around you.' },
+
+    // ---- FIRE — Pyromancer (Cinderforge) ----
+    fireball: { id: 'fireball', name: 'Fireball', icon: '🔴', lvl: 5, mp: 9,  cd: 3, kind: 'aoe', range: 1, mult: 1.7, burn: true, learn: 'tome', school: 'fire', price: 260, desc: 'Burst of flame around you; sets foes alight.' },
+    flamewave:{ id: 'flamewave', name: 'Flame Wave', icon: '🌊', lvl: 6, mp: 10, cd: 3, kind: 'wave', range: 4, mult: 1.4, burn: true, learn: 'tome', school: 'fire', price: 380, desc: 'A sweeping wall of fire surges ahead, burning all it touches.' },
+    scorch:   { id: 'scorch', name: 'Scorch',     icon: '☀️', lvl: 7, mp: 9,  cd: 2, kind: 'ray', range: 6, mult: 2.2, burn: true, learn: 'tome', school: 'fire', price: 440, desc: 'A searing lance — huge single-target fire damage.' },
+    meteor:   { id: 'meteor', name: 'Meteor',     icon: '☄️', lvl: 9, mp: 16, cd: 6, kind: 'aoe', range: 2, big: true, mult: 2.2, burn: true, learn: 'tome', school: 'fire', price: 760, desc: 'A massive blast + burn around you.' },
+    inferno:  { id: 'inferno', name: 'Inferno',   icon: '🔥', lvl: 12, mp: 20, cd: 7, kind: 'aoe', range: 3, mult: 2.0, burn: true, learn: 'tome', school: 'fire', price: 1100, desc: 'Engulf a wide ring in roaring flame.' },
+
+    // ---- FROST — Tidecaller (Saltmere) ----
+    frost:    { id: 'frost', name: 'Frost Lance', icon: '❄️', lvl: 3, mp: 7,  cd: 2, kind: 'ray', range: 6, mult: 1.5, freeze: true, learn: 'tome', school: 'frost', price: 220, desc: 'Pierces your facing; freezes the foe hit.' },
+    icearmor: { id: 'icearmor', name: 'Ice Armor', icon: '🧊', lvl: 5, mp: 6, cd: 6, kind: 'buff', buff: 'ward', turns: 6, learn: 'tome', school: 'frost', price: 300, desc: 'A rime of ice cuts incoming damage by 40% for 6 turns.' },
+    blizzard: { id: 'blizzard', name: 'Blizzard', icon: '🌨️', lvl: 7, mp: 12, cd: 4, kind: 'aoe', range: 2, mult: 1.2, freeze: true, learn: 'tome', school: 'frost', price: 460, desc: 'Freezing storm — damages & freezes everything near.' },
+    tide:     { id: 'tide', name: 'Riptide',      icon: '🌊', lvl: 8, mp: 12, cd: 4, kind: 'wave', range: 5, mult: 1.3, freeze: true, learn: 'tome', school: 'frost', price: 560, desc: 'A long crashing wave that freezes the foes it sweeps.' },
+    absolute: { id: 'absolute', name: 'Absolute Zero', icon: '💠', lvl: 12, mp: 20, cd: 7, kind: 'aoe', range: 3, mult: 1.7, freeze: true, learn: 'tome', school: 'frost', price: 1100, desc: 'Flash-freeze a wide ring solid.' },
+
+    // ---- NATURE — Druid (Greenhollow) ----
+    regrowth: { id: 'regrowth', name: 'Regrowth', icon: '🍃', lvl: 4, mp: 7, cd: 6, kind: 'buff', buff: 'regen', turns: 8, learn: 'tome', school: 'nature', price: 240, desc: 'Heal a little each turn for 8 turns.' },
+    thornskin:{ id: 'thornskin', name: 'Thornskin', icon: '🌵', lvl: 5, mp: 6, cd: 6, kind: 'buff', buff: 'thorns', turns: 6, learn: 'tome', school: 'nature', price: 300, desc: 'Attackers take damage back for 6 turns.' },
+    entangle: { id: 'entangle', name: 'Entangle', icon: '🌱', lvl: 5, mp: 6, cd: 3, kind: 'ray', range: 6, mult: 1.0, stun: true, learn: 'tome', school: 'nature', price: 280, desc: 'Vines snare the first foe ahead, rooting it.' },
+    venom:    { id: 'venom', name: 'Venom Nova',  icon: '☠️', lvl: 6, mp: 10, cd: 4, kind: 'aoe', range: 2, mult: 0.9, poison: true, learn: 'tome', school: 'nature', price: 400, desc: 'Poison every foe around you.' },
+    wildgrow: { id: 'wildgrow', name: 'Wild Growth', icon: '🌳', lvl: 8, mp: 12, cd: 6, kind: 'self', heal: 0.55, cure: true, learn: 'tome', school: 'nature', price: 520, desc: 'Heal 55% of max HP and cure poison & burn.' },
+    swarm:    { id: 'swarm', name: 'Locust Swarm', icon: '🦗', lvl: 9, mp: 12, cd: 4, kind: 'aoe', range: 2, mult: 1.2, poison: true, learn: 'tome', school: 'nature', price: 600, desc: 'A devouring swarm poisons all around you.' },
+
+    // ---- ARCANE — Arcanist (Hearthhold) ----
+    shield:   { id: 'shield', name: 'Aegis',      icon: '🛡️', lvl: 4, mp: 6, cd: 6, kind: 'buff', buff: 'shield', turns: 6, learn: 'tome', school: 'arcane', price: 260, desc: 'Halve incoming damage for 6 turns.' },
+    arcbolt:  { id: 'arcbolt', name: 'Arcane Bolt', icon: '🔷', lvl: 5, mp: 7, cd: 2, kind: 'ray', range: 6, mult: 1.9, learn: 'tome', school: 'arcane', price: 300, desc: 'Pure arcane force — heavy, statusless damage.' },
+    warcry:   { id: 'warcry', name: 'War Cry',    icon: '📣', lvl: 5, mp: 6, cd: 6, kind: 'buff', buff: 'power', turns: 6, learn: 'tome', school: 'arcane', price: 300, desc: 'Greatly raise ATK for 6 turns.' },
+    farstep:  { id: 'farstep', name: 'Translocate', icon: '🌀', lvl: 6, mp: 7, cd: 4, kind: 'move', range: 7, learn: 'tome', school: 'arcane', price: 340, desc: 'Blink a long 7 tiles ahead.' },
+    chain:    { id: 'chain', name: 'Chain Lightning', icon: '⚡', lvl: 7, mp: 10, cd: 3, kind: 'chainspell', range: 6, learn: 'tome', school: 'arcane', price: 460, desc: 'Strikes a foe, then arcs to others nearby.' },
+    singular: { id: 'singular', name: 'Singularity', icon: '🌑', lvl: 12, mp: 20, cd: 7, kind: 'aoe', range: 2, mult: 2.0, stun: true, learn: 'tome', school: 'arcane', price: 1100, desc: 'Collapse space around you — heavy damage + stun.' },
+
+    // ---- MYSTIC — Sandseer (Dustmarket) ----
+    drain:    { id: 'drain', name: 'Life Drain', icon: '🩸', lvl: 5, mp: 7, cd: 2, kind: 'ray', range: 5, mult: 1.5, drain: true, learn: 'tome', school: 'mystic', price: 320, desc: 'Ray that heals you for the damage dealt.' },
+    curse:    { id: 'curse', name: 'Curse',      icon: '👁️', lvl: 5, mp: 6, cd: 3, kind: 'ray', range: 6, mult: 1.2, weaken: true, learn: 'tome', school: 'mystic', price: 300, desc: 'Hex the first foe ahead, sapping its strength.' },
+    hex:      { id: 'hex', name: 'Withering Hex', icon: '🟣', lvl: 6, mp: 8, cd: 3, kind: 'ray', range: 6, mult: 1.4, poison: true, learn: 'tome', school: 'mystic', price: 380, desc: 'A rotting bolt that poisons what it strikes.' },
+    sandstorm:{ id: 'sandstorm', name: 'Sandstorm', icon: '🟤', lvl: 7, mp: 11, cd: 4, kind: 'aoe', range: 2, mult: 1.0, stun: true, learn: 'tome', school: 'mystic', price: 460, desc: 'Blinding sand stuns all around you.' },
+    soulrend: { id: 'soulrend', name: 'Soul Rend', icon: '💜', lvl: 10, mp: 14, cd: 5, kind: 'aoe', range: 2, mult: 1.5, drain: true, learn: 'tome', school: 'mystic', price: 700, desc: 'Tear life from every foe near and drink it in.' }
+  };
+  var ABIL_ORDER = ['strike', 'bolt', 'mend', 'blink', 'quake',
+    'fireball', 'flamewave', 'scorch', 'meteor', 'inferno',
+    'frost', 'icearmor', 'blizzard', 'tide', 'absolute',
+    'regrowth', 'thornskin', 'entangle', 'venom', 'wildgrow', 'swarm',
+    'shield', 'arcbolt', 'warcry', 'farstep', 'chain', 'singular',
+    'drain', 'curse', 'hex', 'sandstorm', 'soulrend'];
   function dockedSpells() { return (hero.docked || []).filter(function (id) { return ABIL[id] && hero.spells && hero.spells.indexOf(id) >= 0; }); }
   function knowsSpell(id) { return hero.spells && hero.spells.indexOf(id) >= 0; }
   function learnSpell(id) {
@@ -641,19 +700,19 @@
   // Towns dotted across the realm. `hearth` is the original full hub; the rest
   // are themed and host a thematic mix of folk. `ox/oy` is their overworld tile.
   var TOWNS = {
-    hearth:      { name: 'Hearthhold', icon: '🏰', ox: 8,  oy: 17, full: true,
+    hearth:      { name: 'Hearthhold', icon: '🏰', ox: 8,  oy: 17, full: true, school: 'arcane',
                    pal: { name: 'Hearthhold', floor: '#262a22', floor2: '#2c3027', wall: '#3a4030', wallTop: '#48503c', accent: '#8fbf6f' } },
-    greenhollow: { name: 'Greenhollow', icon: '🌲', ox: 15, oy: 7, theme: 'wood',
-                   roster: ['alchemist', 'healer', 'tamer'],
+    greenhollow: { name: 'Greenhollow', icon: '🌲', ox: 15, oy: 7, theme: 'wood', school: 'nature',
+                   roster: ['alchemist', 'arcanist', 'tamer'],
                    pal: { name: 'Greenhollow', floor: '#1f2a1a', floor2: '#243420', wall: '#2f4a2c', wallTop: '#3c5e38', accent: '#8fd06f' } },
-    cinderforge: { name: 'Cinderforge', icon: '🌋', ox: 34, oy: 8, theme: 'ember',
-                   roster: ['smith', 'merchant', 'arcanist'],
+    cinderforge: { name: 'Cinderforge', icon: '🌋', ox: 34, oy: 8, theme: 'ember', school: 'fire',
+                   roster: ['smith', 'arcanist', 'merchant'],
                    pal: { name: 'Cinderforge', floor: '#2a1812', floor2: '#321c14', wall: '#4a2a20', wallTop: '#5e3422', accent: '#e86040' } },
-    dustmarket:  { name: 'Dustmarket', icon: '🏜️', ox: 35, oy: 25, theme: 'desert',
-                   roster: ['merchant', 'tailor', 'quest'],
+    dustmarket:  { name: 'Dustmarket', icon: '🏜️', ox: 35, oy: 25, theme: 'desert', school: 'mystic',
+                   roster: ['merchant', 'arcanist', 'tailor'],
                    pal: { name: 'Dustmarket', floor: '#2c2614', floor2: '#332c18', wall: '#5a4a28', wallTop: '#6e5a30', accent: '#e0c060' } },
-    saltmere:    { name: 'Saltmere', icon: '⚓', ox: 9, oy: 27, theme: 'coast',
-                   roster: ['tamer', 'healer', 'merchant'],
+    saltmere:    { name: 'Saltmere', icon: '⚓', ox: 9, oy: 27, theme: 'coast', school: 'frost',
+                   roster: ['tamer', 'arcanist', 'healer'],
                    pal: { name: 'Saltmere', floor: '#142428', floor2: '#173036', wall: '#234a52', wallTop: '#2f5e66', accent: '#4fd0c0' } }
   };
   // NPC presets (icon/colour/outfit) reused when laying out a themed town.
@@ -1312,7 +1371,11 @@
     var objs = [], roster = T.roster || ['merchant'];
     var cy = room2.y + (room2.h >> 1) - 1;
     var startX = room2.x + 3, gap = Math.max(3, Math.floor((room2.w - 6) / Math.max(1, roster.length)));
-    roster.forEach(function (role, i) { objs.push(npcObj(role, startX + i * gap, cy)); });
+    roster.forEach(function (role, i) {
+      var o = npcObj(role, startX + i * gap, cy);
+      if (role === 'arcanist' && T.school && SCHOOLS[T.school]) { var S = SCHOOLS[T.school]; o.name = S.teacher; o.icon = S.icon; o.col = S.col; o.cos = S.cos; o.school = T.school; }
+      objs.push(o);
+    });
     objs.push({ type: 'owgate', x: room2.x, y: cy + 2 });
     decorateTown(objs, room2, { x: room2.x + 1, y: cy + 2 }, townId);
     return {
@@ -1775,12 +1838,15 @@
     if (dodgeOf() && chance(dodgeOf())) { fxText(world.player.x, world.player.y, 'dodge', '#bfe0ff'); return; }
     var rz = resistOf(); if (rz) dmg = Math.max(1, Math.round(dmg * (1 - rz)));
     if (hero.buffs && hero.buffs.shield > 0) dmg = Math.max(1, Math.ceil(dmg * 0.4));
+    if (hero.buffs && hero.buffs.ward > 0) dmg = Math.max(1, Math.ceil(dmg * 0.6));   // Ice Armor
     dmg = Math.max(1, dmg - Math.floor(defOf() * 0.6));
     hero.hp -= dmg; world.player.hit = now();
     fxText(world.player.x, world.player.y, '-' + dmg, '#ff9a9a');
     shake(3);
-    if (srcMob && thornsOf() && srcMob.hp > 0 && cheb(world.player.x, world.player.y, srcMob.x, srcMob.y) <= 1) {
-      damageMob(srcMob, Math.max(1, Math.round(dmg * thornsOf())), 'thorns', '#ffd0a0');
+    // thorns — from gear and/or the Thornskin buff
+    var thorn = thornsOf() + (hero.buffs && hero.buffs.thorns > 0 ? 0.5 : 0);
+    if (srcMob && thorn && srcMob.hp > 0 && cheb(world.player.x, world.player.y, srcMob.x, srcMob.y) <= 1) {
+      damageMob(srcMob, Math.max(1, Math.round(dmg * thorn)), 'thorns', '#ffd0a0');
     }
     if (hero.hp <= 0) die();
     markDirty();
@@ -2132,13 +2198,18 @@
       if (!m) { logMsg('', 'Nothing in front to strike.'); return; }
       p.bump = now(); p.bumpDir = p.dir; heroAttack(m, 2.2, 0.5); fxBurst(tx, ty, '#ffd76a'); did = true;
     } else if (ab.kind === 'ray') { did = castRay(ab);
+    } else if (ab.kind === 'wave') { did = castWave(ab);
     } else if (ab.kind === 'chainspell') { did = castChainSpell(ab);
     } else if (ab.kind === 'self') {
-      var h = Math.round(maxHpOf() * 0.35); hero.hp = Math.min(maxHpOf(), hero.hp + h); fxText(p.x, p.y, '+' + h, '#9fe0a0'); fxBurst(p.x, p.y, '#9fe0a0'); did = true;
+      var h = Math.round(maxHpOf() * (ab.heal || 0.35)); hero.hp = Math.min(maxHpOf(), hero.hp + h); fxText(p.x, p.y, '+' + h, '#9fe0a0'); fxBurst(p.x, p.y, '#9fe0a0');
+      if (ab.cure && hero.status) { hero.status.poison = 0; hero.status.burn = 0; logMsg('win', 'Cleansed of poison & burn.'); }
+      did = true;
     } else if (ab.kind === 'buff') {
       hero.buffs = hero.buffs || {}; hero.buffs[ab.buff] = ab.turns;
-      fxBurst(p.x, p.y, ab.buff === 'shield' ? '#9fd8ff' : '#ffb060');
-      logMsg('win', ab.name + (ab.buff === 'shield' ? ' — damage halved!' : ' — ATK surges!')); did = true;
+      var BUFFMSG = { shield: ' — damage halved!', power: ' — ATK surges!', ward: ' — armoured in ice!', regen: ' — life flows back!', thorns: ' — clad in thorns!' };
+      var BUFFCOL = { shield: '#9fd8ff', power: '#ffb060', ward: '#9fd8ff', regen: '#9fe0a0', thorns: '#8fd06f' };
+      fxBurst(p.x, p.y, BUFFCOL[ab.buff] || '#bfe0ff');
+      logMsg('win', ab.name + (BUFFMSG[ab.buff] || ' active!')); did = true;
     } else if (ab.kind === 'move') { did = doBlink(ab.range);
     } else if (ab.kind === 'aoe') { did = doAoe(ab);
     }
@@ -2147,9 +2218,16 @@
     markDirty(); refreshBars();
     endTurn();
   }
+  function spellColor(ab) { return ab.freeze ? '#9fd8ff' : ab.drain ? '#e05d8a' : ab.poison ? '#7fe0a0' : ab.weaken ? '#c79bff' : ab.stun && !ab.burn ? '#8fd06f' : ab.burn ? '#ff8040' : '#bfe0ff'; }
+  function applySpellStatus(m, ab) {
+    if (ab.burn) applyStatus(m, 'burn', 3);
+    if (ab.freeze) applyStatus(m, 'stun', 2);
+    if (ab.stun) applyStatus(m, 'stun', 2);
+    if (ab.poison) applyStatus(m, 'poison', 5);
+    if (ab.weaken) applyStatus(m, 'weaken', 5);
+  }
   function castRay(ab) {
-    var p = world.player, x = p.x, y = p.y, hitMob = null;
-    var color = ab.freeze ? '#9fd8ff' : ab.drain ? '#e05d8a' : '#ff8040';
+    var p = world.player, x = p.x, y = p.y, hitMob = null, color = spellColor(ab);
     for (var i = 1; i <= ab.range; i++) {
       x += p.dir.x; y += p.dir.y;
       if (x < 0 || y < 0 || x >= MW || y >= MH || world.map[y][x] !== T_FLOOR) { x -= p.dir.x; y -= p.dir.y; break; }
@@ -2157,13 +2235,29 @@
     }
     fxRay(p.x, p.y, x, y, color);
     if (hitMob) {
-      var dmg = spellDmg(1.5), dealt = Math.min(dmg, hitMob.hp);
+      var dmg = spellDmg(ab.mult || 1.5), dealt = Math.min(dmg, hitMob.hp);
       damageMob(hitMob, dmg, 'spell', color);
-      if (ab.burn) applyStatus(hitMob, 'burn', 3);
-      if (ab.freeze) applyStatus(hitMob, 'stun', 2);
+      applySpellStatus(hitMob, ab);
       if (ab.drain && hero.hp < maxHpOf()) { var hl = Math.max(1, Math.floor(dealt * 0.7)); hero.hp = Math.min(maxHpOf(), hero.hp + hl); fxText(p.x, p.y, '+' + hl, '#9fe0a0'); }
     }
     shake(3);
+    return true;
+  }
+  // A sweeping wave: a 3-wide lane ahead, piercing all foes for `range` tiles.
+  function castWave(ab) {
+    var p = world.player, color = spellColor(ab), perp = { x: -p.dir.y, y: p.dir.x }, healed = 0;
+    var snap = world.monsters.slice();
+    for (var i = 1; i <= ab.range; i++) {
+      var bx = p.x + p.dir.x * i, by = p.y + p.dir.y * i;
+      if (bx < 0 || by < 0 || bx >= MW || by >= MH || world.map[by][bx] !== T_FLOOR) break;
+      for (var w = -1; w <= 1; w++) {
+        var tx = bx + perp.x * w, ty = by + perp.y * w;
+        world.fx.push({ kind: 'spark', x: tx + 0.5, y: ty + 0.5, vx: 0, vy: 0, color: color, life: 1, born: now() });
+        for (var k = 0; k < snap.length; k++) { var m = snap[k]; if (m.hp > 0 && m.x === tx && m.y === ty) { var dmg = spellDmg(ab.mult || 1.3), dealt = Math.min(dmg, m.hp); damageMob(m, dmg, 'spell', color); applySpellStatus(m, ab); if (ab.drain) healed += Math.floor(dealt * 0.5); } }
+      }
+    }
+    if (ab.drain && healed > 0 && hero.hp < maxHpOf()) { healed = Math.min(healed, maxHpOf() - hero.hp); hero.hp += healed; fxText(p.x, p.y, '+' + healed, '#9fe0a0'); }
+    shake(6);
     return true;
   }
   function castChainSpell(ab) {
@@ -2191,17 +2285,17 @@
   }
   function doAoe(ab) {
     var p = world.player, range = ab.range || 2;
-    var color = ab.poison ? '#7fe0a0' : ab.big ? '#ffb060' : '#e0c080';
-    var mult = ab.big ? 2.2 : ab.poison ? 0.8 : 1.2;
+    var color = spellColor(ab), mult = ab.mult || (ab.big ? 2.2 : ab.poison ? 0.8 : 1.2), healed = 0;
     for (var i = world.monsters.length - 1; i >= 0; i--) {   // backwards: damageMob may splice
       var m = world.monsters[i];
       if (cheb(p.x, p.y, m.x, m.y) <= range) {
+        var dealt = Math.min(spellDmg(mult), m.hp);
         damageMob(m, spellDmg(mult), 'spell', color);
-        if (ab.stun) applyStatus(m, 'stun', 2);
-        if (ab.poison) applyStatus(m, 'poison', 5);
-        if (ab.burn) applyStatus(m, 'burn', 3);
+        applySpellStatus(m, ab);
+        if (ab.drain) healed += Math.floor(dealt * 0.5);
       }
     }
+    if (ab.drain && healed > 0 && hero.hp < maxHpOf()) { healed = Math.min(healed, maxHpOf() - hero.hp); hero.hp += healed; fxText(p.x, p.y, '+' + healed, '#9fe0a0'); }
     shake(ab.big ? 12 : 9); fxBurst(p.x, p.y, color);
     for (var r = 1; r <= range; r++) { var a = Math.random() * 6.28; world.fx.push({ kind: 'spark', x: p.x + 0.5 + Math.cos(a) * r, y: p.y + 0.5 + Math.sin(a) * r, vx: 0, vy: 0, color: color, life: 1, born: now() }); }
     return true;
@@ -2214,6 +2308,7 @@
     e.status = e.status || {};
     if (e.status.poison > 0) { var pd = 2; if (isHero) hurtHeroSilent(pd); else { e.hp -= pd; fxText(e.x, e.y, '-' + pd, '#9fe0a0'); if (e.hp <= 0) { killMob(e); return false; } } e.status.poison--; }
     if (e.status.burn > 0) { var bd = 3; if (isHero) hurtHeroSilent(bd); else { e.hp -= bd; fxText(e.x, e.y, '-' + bd, '#ffb060'); if (e.hp <= 0) { killMob(e); return false; } } e.status.burn--; }
+    if (e.status.weaken > 0) e.status.weaken--;
     if (e.status.stun > 0) { e.status.stun--; return 'stunned'; }
     return true;
   }
@@ -2269,8 +2364,9 @@
     }
     return false;
   }
+  function mobAtkVal(m) { return (m.status && m.status.weaken > 0) ? Math.max(1, Math.round(m.atk * 0.55)) : m.atk; }
   function mobAttack(m) { m.bump = now(); m.bumpDir = { x: sgn(world.player.x - m.x), y: sgn(world.player.y - m.y) };
-    var dmg = Math.max(1, m.atk + rr(-1, 1)); hurtHero(dmg, m.name, m);
+    var dmg = Math.max(1, mobAtkVal(m) + rr(-1, 1)); hurtHero(dmg, m.name, m);
     if (m.vamp && m.hp > 0) m.hp = Math.min(m.maxHp, m.hp + Math.ceil(dmg * 0.5));
     if (m.poison) applyStatus(hero, 'poison', 4); if (m.burn) applyStatus(hero, 'burn', 3);
   }
@@ -2289,7 +2385,7 @@
       m.aiming = false;
       var lined = (m.x === p.x || m.y === p.y) && losClear(m.x, m.y, p.x, p.y) && cheb(m.x, m.y, p.x, p.y) <= (m.range || 5);
       fxRay(m.x, m.y, lined ? p.x : m.aimT.x, lined ? p.y : m.aimT.y, m.burn ? '#ff80c0' : '#cdd3da');
-      if (lined) { var dmg = Math.max(1, m.atk + rr(0, 2)); hurtHero(dmg, m.name, m); if (m.burn) applyStatus(hero, 'burn', 3); if (m.poison) applyStatus(hero, 'poison', 4); }
+      if (lined) { var dmg = Math.max(1, mobAtkVal(m) + rr(0, 2)); hurtHero(dmg, m.name, m); if (m.burn) applyStatus(hero, 'burn', 3); if (m.poison) applyStatus(hero, 'poison', 4); }
       else fxText(m.x, m.y, 'miss', '#cdd3da');
       return;
     }
@@ -2346,7 +2442,13 @@
     if (world.steps % 12 === 0 && hero.mp < maxMpOf()) hero.mp = Math.min(maxMpOf(), hero.mp + 1);
     // cooldowns + buffs
     var cd = ensureCd(); for (var k in cd) if (cd[k] > 0) cd[k]--;
-    if (hero.buffs) { if (hero.buffs.shield > 0) hero.buffs.shield--; if (hero.buffs.power > 0) hero.buffs.power--; }
+    if (hero.buffs) {
+      if (hero.buffs.regen > 0) { var rh = Math.max(1, Math.ceil(maxHpOf() * 0.06)); if (hero.hp < maxHpOf()) { hero.hp = Math.min(maxHpOf(), hero.hp + rh); fxText(world.player.x, world.player.y, '+' + rh, '#9fe0a0'); } hero.buffs.regen--; }
+      if (hero.buffs.shield > 0) hero.buffs.shield--;
+      if (hero.buffs.power > 0) hero.buffs.power--;
+      if (hero.buffs.ward > 0) hero.buffs.ward--;
+      if (hero.buffs.thorns > 0) hero.buffs.thorns--;
+    }
     // enemies (none in safe areas)
     if (world.mode === 'overworld') overworldTick();
     else if (world.mode !== 'town' && world.mode !== 'house') enemyTurn();
@@ -2950,7 +3052,7 @@
     });
     html += '</div>';
     var unknown = ABIL_ORDER.filter(function (id) { return !knowsSpell(id); });
-    if (unknown.length) html += '<div class="cr-sec">Not yet learned</div><div class="cr-hint">' + unknown.map(function (id) { return ABIL[id].icon + ' ' + ABIL[id].name; }).join(' · ') + '<br>Learn these from the Arcanist in town.</div>';
+    if (unknown.length) html += '<div class="cr-sec">Not yet learned</div><div class="cr-hint">' + unknown.map(function (id) { return ABIL[id].icon + ' ' + ABIL[id].name; }).join(' · ') + '<br>Each town teaches a different school — visit the Arcanist (arcane), Pyromancer (Cinderforge), Tidecaller (Saltmere), Druid (Greenhollow) and Sandseer (Dustmarket).</div>';
     body.innerHTML = html;
     var btns = body.querySelectorAll('[data-dock]');
     for (var i = 0; i < btns.length; i++) (function (btn) {
@@ -2976,14 +3078,23 @@
     if (role === 'oracle') return openOracle();
     if (role === 'tamer') return openTamer();
     if (role === 'alchemist') return openAlchemist();
-    var ov = mkOverlay('Merchant 🛒');
+    var WT = (world && world.theme && WARE_THEME[world.theme]) || null;
+    var tname = (TOWNS[world && world.townId] || {}).name;
+    var ov = mkOverlay((tname && WT ? tname + ' ' : '') + 'Merchant 🛒');
     var body = ov.querySelector('.cr-ov-body');
-    var html = '<div class="cr-shopgold">🪙 ' + hero.gold + ' gold</div><div class="cr-shop">';
-    // consumables
-    ['potion', 'hpotion', 'elixir', 'eelixir', 'bomb', 'scroll', 'antidote', 'key'].forEach(function (id) { var c = CONS[id];
+    var html = '<div class="cr-shopgold">🪙 ' + hero.gold + ' gold</div>';
+    if (WT) html += '<div class="cr-hint">Local goods — stock leans to this region\'s craft.</div>';
+    html += '<div class="cr-shop">';
+    // consumables (themed towns stock a thematic subset)
+    var consList = WT ? WT.cons : ['potion', 'hpotion', 'elixir', 'eelixir', 'bomb', 'scroll', 'antidote', 'key'];
+    consList.forEach(function (id) { var c = CONS[id]; if (!c) return;
       html += shopRow('cons:' + id, c.icon, c.name, c.desc, buyPrice(c.price), hero.bag[id] || 0); });
     // rotating rolled-item stock (regenerated each town visit; persists while open)
-    if (!merchStock) { merchStock = []; var ms = ['weapon', 'armor', 'trinket']; for (var mi = 0; mi < 6; mi++) merchStock.push(generateItem(ms[mi % 3], Math.max(2, hero.maxDepth + 1), mi === 5 ? 0.5 : 0)); }
+    if (!merchStock) {
+      merchStock = []; var ilvl = Math.max(2, hero.maxDepth + 1), slots = WT ? WT.slots : ['weapon', 'armor', 'trinket'];
+      for (var mi = 0; mi < 6; mi++) { var slot = slots[mi % slots.length];
+        merchStock.push(WT ? generateThemed(slot, ilvl, WT.stat, (mi === 5 ? 0.5 : 0) + (WT.luck || 0)) : generateItem(slot, ilvl, mi === 5 ? 0.5 : 0)); }
+    }
     html += '<div class="cr-sec">Wares</div><div class="cr-shop">';
     merchStock.forEach(function (it, idx) {
       var price = buyPrice(itemPrice(it)), c = rarityOf(it).color;
@@ -3132,15 +3243,19 @@
     }); })(sb[k]);
   }
   function openArcanist() {
-    var ov = mkOverlay('Arcanist 🔮');
+    var school = (world && TOWNS[world.townId] && TOWNS[world.townId].school) || 'arcane';
+    var S = SCHOOLS[school] || SCHOOLS.arcane;
+    var ov = mkOverlay(S.teacher + ' ' + S.icon);
     var body = ov.querySelector('.cr-ov-body');
     var html = '<div class="cr-shopgold">🪙 ' + hero.gold + ' gold</div>' +
-      '<div class="cr-hint">Learn spells here, then choose up to ' + DOCK_MAX + ' to dock in the 📖 Spellbook.</div><div class="cr-shop">';
+      '<div class="cr-hint">School of <b style="color:' + S.col + '">' + S.name + '</b>. Other schools are taught in other towns. Learn here, then dock up to ' + DOCK_MAX + ' in the 📖 Spellbook.</div><div class="cr-shop">';
+    var any = false;
     ABIL_ORDER.forEach(function (id) {
-      var a = ABIL[id]; if (a.learn !== 'tome') return;
-      var known = knowsSpell(id);
+      var a = ABIL[id]; if (a.learn !== 'tome' || a.school !== school) return;
+      any = true; var known = knowsSpell(id);
       html += shopRow('spell:' + id, a.icon, a.name, a.desc + ' (Lv ' + a.lvl + ', MP ' + a.mp + ')', buyPrice(a.price), known ? '✓' : 0, known);
     });
+    if (!any) html += '<div class="cr-hint">No spells to teach here.</div>';
     html += '</div>';
     body.innerHTML = html;
     bindShop(body, function () { openArcanist(); });
