@@ -712,7 +712,7 @@
                    roster: ['merchant', 'arcanist', 'tailor'],
                    pal: { name: 'Dustmarket', floor: '#2c2614', floor2: '#332c18', wall: '#5a4a28', wallTop: '#6e5a30', accent: '#e0c060' } },
     saltmere:    { name: 'Saltmere', icon: '⚓', ox: 9, oy: 27, theme: 'coast', school: 'frost',
-                   roster: ['tamer', 'arcanist', 'healer'],
+                   roster: ['tamer', 'arcanist', 'healer', 'merchant'],
                    pal: { name: 'Saltmere', floor: '#142428', floor2: '#173036', wall: '#234a52', wallTop: '#2f5e66', accent: '#4fd0c0' } }
   };
   // NPC presets (icon/colour/outfit) reused when laying out a themed town.
@@ -2252,6 +2252,7 @@
       if (bx < 0 || by < 0 || bx >= MW || by >= MH || world.map[by][bx] !== T_FLOOR) break;
       for (var w = -1; w <= 1; w++) {
         var tx = bx + perp.x * w, ty = by + perp.y * w;
+        if (tx < 0 || ty < 0 || tx >= MW || ty >= MH || world.map[ty][tx] !== T_FLOOR) continue;  // no slicing through walls
         world.fx.push({ kind: 'spark', x: tx + 0.5, y: ty + 0.5, vx: 0, vy: 0, color: color, life: 1, born: now() });
         for (var k = 0; k < snap.length; k++) { var m = snap[k]; if (m.hp > 0 && m.x === tx && m.y === ty) { var dmg = spellDmg(ab.mult || 1.3), dealt = Math.min(dmg, m.hp); damageMob(m, dmg, 'spell', color); applySpellStatus(m, ab); if (ab.drain) healed += Math.floor(dealt * 0.5); } }
       }
