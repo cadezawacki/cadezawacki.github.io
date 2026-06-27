@@ -60,6 +60,7 @@
   var raf = 0;
   var saveTimer = 0, fbDirty = false;
   var fbRef = null, fbCb = null, clientId = '';
+  var merchStock = null;           // merchant's rolled wares for the current town visit
 
   // =========================================================================
   //  small utilities
@@ -172,6 +173,150 @@
   };
   function cosKey(slot, id) { return slot + ':' + id; }
 
+  // =========================================================================
+  //  ITEM INSTANCES — base type + rarity + rolled affixes (multi-dimensional)
+  // =========================================================================
+  // Every dropped/bought piece is a unique instance with its own rolled stats,
+  // so variety is effectively endless. The curated bases above supply the
+  // "interesting" innate effects; affixes layer extra dimensions on top.
+  var STAT_FIELDS = ['atk', 'def', 'hp', 'mp', 'crit', 'lifesteal', 'cleave', 'chain', 'spell', 'stun', 'freeze', 'poison', 'burn', 'dodge', 'thorns', 'resist', 'regen', 'greed'];
+  var RARITY = {
+    common:    { name: 'Common',    color: '#c8cdd6', n: 0 },
+    magic:     { name: 'Magic',     color: '#6fb6ff', n: 1 },
+    rare:      { name: 'Rare',      color: '#ffd24a', n: 2 },
+    epic:      { name: 'Epic',      color: '#c77dff', n: 3 },
+    legendary: { name: 'Legendary', color: '#ff8a3d', n: 0 }
+  };
+  var AFFIX_PRE = [
+    { id: 'sharp',   name: 'Sharp',    field: 'atk',       flat: [1, 3] },
+    { id: 'cruel',   name: 'Cruel',    field: 'atk',       flat: [3, 7] },
+    { id: 'vicious', name: 'Vicious',  field: 'crit',      pct: [0.04, 0.10] },
+    { id: 'vamp',    name: 'Vampiric', field: 'lifesteal', pct: [0.05, 0.12] },
+    { id: 'arcane',  name: 'Arcane',   field: 'spell',     pct: [0.08, 0.20] },
+    { id: 'flaming', name: 'Flaming',  field: 'burn',      pct: [0.20, 0.45] },
+    { id: 'toxic',   name: 'Venomous', field: 'poison',    pct: [0.20, 0.45] },
+    { id: 'glacial', name: 'Glacial',  field: 'freeze',    pct: [0.15, 0.30] },
+    { id: 'brutal',  name: 'Brutal',   field: 'stun',      pct: [0.12, 0.28] }
+  ];
+  var AFFIX_SUF = [
+    { id: 'bear',   name: 'of the Bear',   field: 'hp',     flat: [8, 20] },
+    { id: 'owl',    name: 'of the Owl',    field: 'mp',     flat: [8, 20] },
+    { id: 'turtle', name: 'of the Turtle', field: 'def',    flat: [1, 4] },
+    { id: 'cat',    name: 'of the Cat',    field: 'dodge',  pct: [0.04, 0.10] },
+    { id: 'troll',  name: 'of the Troll',  field: 'regen',  flat: [1, 2] },
+    { id: 'magpie', name: 'of Greed',      field: 'greed',  pct: [0.10, 0.30] },
+    { id: 'golem',  name: 'of Warding',    field: 'resist', pct: [0.05, 0.12] },
+    { id: 'giant',  name: 'of the Giant',  field: 'atk',    flat: [2, 5] }
+  ];
+  var LEGENDARY = {
+    gravewhisper:  { base: 'runeblade',  name: 'Gravewhisper, the Last Lament', lore: 'It remembers every life it has taken.', stats: { atk: 16, crit: 0.20, lifesteal: 0.25 } },
+    sunderbrand:   { base: 'battleaxe',  name: 'Sunderbrand',                   lore: 'No shield has ever turned it.',         stats: { atk: 20, cleave: 0.6, stun: 0.25 } },
+    stormcaller:   { base: 'thundermaul',name: 'Stormcaller',                   lore: 'The sky answers when it swings.',       stats: { atk: 17, chain: 0.8, stun: 0.30 } },
+    emberheart:    { base: 'archstaff',  name: 'Emberheart',                    lore: 'A caged sun, furious to be free.',      stats: { atk: 10, spell: 0.70, burn: 0.6, mp: 30 } },
+    lastdawn:      { base: 'aegis',      name: 'Aegis of the Last Dawn',        lore: 'It outlasted the kingdom that forged it.', stats: { def: 16, hp: 40, resist: 0.20 } },
+    whisperstep:   { base: 'shadowcloak',name: 'Whisperstep',                   lore: 'You will not hear them coming.',        stats: { def: 8, dodge: 0.30, crit: 0.10 } },
+    mountainheart: { base: 'kingscrown', name: 'Heart of the Mountain',         lore: 'Patient. Immovable. Eternal.',          stats: { hp: 40, def: 8, thorns: 0.30 } },
+    covetous:      { base: 'greed',      name: 'The Covetous Eye',              lore: 'It wants. It always wants more.',       stats: { greed: 0.80, crit: 0.12, lifesteal: 0.12, def: -3 } }
+  };
+
+  var _uidc = 0;
+  function uid() { return 'i' + Date.now().toString(36) + (_uidc++).toString(36); }
+  function shuffle(a) { for (var i = a.length - 1; i > 0; i--) { var j = ri(i + 1), t = a[i]; a[i] = a[j]; a[j] = t; } return a; }
+  function rarityOf(it) { return RARITY[it && it.rarity] || RARITY.common; }
+  function makeBaseInstance(baseId, rarity, ilvl) {
+    var b = gear(baseId); if (!b) return null;
+    var inst = { uid: uid(), base: baseId, slot: b.slot, icon: b.icon, tier: b.tier, rarity: rarity || 'common', ilvl: ilvl || 1, stats: {} };
+    for (var i = 0; i < STAT_FIELDS.length; i++) { var f = STAT_FIELDS[i]; if (b[f]) inst.stats[f] = b[f]; }
+    inst.name = instanceName(inst);
+    return inst;
+  }
+  function rollAffix(a, ilvl) {
+    if (a.flat) return { field: a.field, name: a.name, val: rr(a.flat[0], a.flat[1]) + Math.floor((ilvl || 1) / 4) };
+    var v = a.pct[0] + Math.random() * (a.pct[1] - a.pct[0]);
+    return { field: a.field, name: a.name, val: Math.round(v * 100) / 100 };
+  }
+  function applyAffixes(inst, n, ilvl) {
+    inst.affixes = [];
+    var pres = shuffle(AFFIX_PRE.slice()), sufs = shuffle(AFFIX_SUF.slice()), pi = 0, si = 0;
+    for (var k = 0; k < n; k++) {
+      var usePre = (k % 2 === 0), a = usePre ? pres[pi++] : sufs[si++];
+      if (!a) { a = pres[pi++] || sufs[si++]; usePre = true; }
+      if (!a) break;
+      var r = rollAffix(a, ilvl);
+      inst.stats[r.field] = Math.round(((inst.stats[r.field] || 0) + r.val) * 100) / 100;
+      inst.affixes.push(r);
+      if (usePre && !inst.pre) inst.pre = a.name; else if (!usePre && !inst.suf) inst.suf = a.name;
+    }
+  }
+  function instanceName(inst) {
+    if (inst.legend) return inst.name;
+    var bn = (gear(inst.base) || {}).name || 'Relic';
+    if (inst.rarity === 'common') return bn;
+    return (inst.pre ? inst.pre + ' ' : '') + bn + (inst.suf ? ' ' + inst.suf : '');
+  }
+  function makeLegendary(legId, ilvl) {
+    var L = LEGENDARY[legId]; if (!L) return null;
+    var b = gear(L.base) || {};
+    var inst = { uid: uid(), base: L.base, slot: b.slot, icon: b.icon, tier: 6, rarity: 'legendary', ilvl: ilvl || 10, legend: legId, name: L.name, lore: L.lore, stats: {} };
+    for (var f in L.stats) inst.stats[f] = L.stats[f];
+    return inst;
+  }
+  function rollRarity(luck) {
+    var r = Math.random() * 100;
+    var leg = 0.6 + (luck || 0);          // legendary % (boss drops pass extra luck)
+    var epic = 5 + (luck || 0) * 2, rare = 16, magic = 34;
+    if (r < leg) return 'legendary';
+    if (r < leg + epic) return 'epic';
+    if (r < leg + epic + rare) return 'rare';
+    if (r < leg + epic + rare + magic) return 'magic';
+    return 'common';
+  }
+  function baseForSlot(slot, ilvl) {
+    var tbl = slot === 'weapon' ? WEAPONS : slot === 'armor' ? ARMORS : TRINKETS;
+    var maxTier = 1 + Math.ceil(ilvl / 2), pool = [];
+    for (var id in tbl) { var g = tbl[id]; if (g.tier > 0 && g.price && g.tier <= maxTier) pool.push(id); }
+    return pool.length ? pick(pool) : (slot === 'weapon' ? 'dagger' : slot === 'armor' ? 'leather' : 'ringreg');
+  }
+  function generateItem(slot, ilvl, luck) {
+    slot = slot || pick(['weapon', 'armor', 'trinket']);
+    var rarity = rollRarity(luck);
+    if (rarity === 'legendary') {
+      var legs = []; for (var k in LEGENDARY) if ((gear(LEGENDARY[k].base) || {}).slot === slot) legs.push(k);
+      if (legs.length) return makeLegendary(pick(legs), ilvl);
+      rarity = 'epic';
+    }
+    var inst = makeBaseInstance(baseForSlot(slot, ilvl), rarity, ilvl);
+    applyAffixes(inst, RARITY[rarity].n, ilvl);
+    inst.name = instanceName(inst);
+    return inst;
+  }
+  function itemScore(it) {
+    if (!it) return -1; var s = it.stats;
+    return (s.atk || 0) * 3 + (s.def || 0) * 3 + (s.hp || 0) * 0.4 + (s.mp || 0) * 0.3 + (s.crit || 0) * 40 +
+      (s.lifesteal || 0) * 40 + (s.spell || 0) * 25 + (s.dodge || 0) * 45 + (s.resist || 0) * 35 + (s.thorns || 0) * 20 +
+      (s.regen || 0) * 5 + (s.greed || 0) * 8 + (s.cleave || 0) * 12 + (s.chain || 0) * 12 + (it.rarity === 'legendary' ? 25 : 0);
+  }
+  function itemPrice(it) {
+    var b = gear(it.base) || {}, mult = { common: 1, magic: 1.9, rare: 3.2, epic: 5.5, legendary: 12 }[it.rarity] || 1;
+    return Math.max(8, Math.round((b.price || 25) * mult + (it.ilvl || 1) * 4));
+  }
+  function itemSell(it) { return Math.max(1, Math.floor(itemPrice(it) * 0.4)); }
+  function itemByUid(u) { if (!u || !hero.owned) return null; for (var i = 0; i < hero.owned.length; i++) if (hero.owned[i].uid === u) return hero.owned[i]; return null; }
+  function equippedItem(slot) { return itemByUid(hero.equip[slot]); }
+  function instanceStatStr(it) {
+    var s = it.stats, out = [];
+    function add(f, label, pct) { if (s[f]) out.push((s[f] > 0 && f !== 'def' && f !== 'atk' ? '+' : (s[f] > 0 ? '+' : '')) + (pct ? Math.round(s[f] * 100) + '%' : s[f]) + ' ' + label); }
+    add('atk', 'atk'); add('def', 'def'); add('hp', 'hp'); add('mp', 'mp');
+    add('crit', 'crit', 1); add('lifesteal', 'lifesteal', 1); add('spell', 'spell', 1);
+    if (s.cleave) out.push('cleave'); if (s.chain) out.push('chain');
+    if (s.stun) out.push('stun ' + Math.round(s.stun * 100) + '%'); if (s.freeze) out.push('freeze ' + Math.round(s.freeze * 100) + '%');
+    if (s.poison) out.push('poison'); if (s.burn) out.push('burn');
+    add('dodge', 'dodge', 1); if (s.thorns) out.push('thorns ' + Math.round(s.thorns * 100) + '%'); add('resist', 'resist', 1);
+    if (s.regen) out.push('regen ' + s.regen); add('greed', 'gold', 1);
+    return out.join(' · ');
+  }
+  function rarityTag(it) { var c = rarityOf(it); return '<span style="color:' + c.color + '">' + (it.rarity === 'common' ? '' : c.name + ' ') + '</span>'; }
+
   // Spells — cost MP, have cooldowns. learn:'auto' is taught on reaching its
   // level; learn:'tome' must be bought at the Arcanist. You can DOCK up to
   // DOCK_MAX of your known spells onto the action bar at once.
@@ -241,17 +386,18 @@
   //  the hero (persistent character)
   // =========================================================================
   function freshHero() {
+    var d = makeBaseInstance('dagger', 'common', 2), r = makeBaseInstance('rags', 'common', 1);
     return {
-      v: 2,
+      v: 4,
       name: 'Delver',
       level: 1, xp: 0,
       maxHp: 30, hp: 30, maxMp: 12, mp: 12,
       atk: 4, def: 0, crit: 0.05,
       gold: 0,
       depth: 0, maxDepth: 0,        // current location depth (0 = town), and deepest reached
-      equip: { weapon: 'dagger', armor: 'rags', trinket: 'none' },
+      equip: { weapon: d.uid, armor: r.uid, trinket: null },
       bag: { potion: 2, elixir: 1, bomb: 0, scroll: 0, key: 0 },
-      owned: ['dagger', 'rags'],   // gear ids in possession (equip swaps among these)
+      owned: [d, r],               // item instances; equip references their uids
       spells: ['strike'], docked: ['strike'],
       cosmetics: { color: 'cyan', hat: 'none', cape: 'none' },
       ownedCos: ['color:cyan', 'hat:none', 'cape:none'],
@@ -264,7 +410,7 @@
   function xpForLevel(l) { return 16 + (l - 1) * (l - 1) * 9 + (l - 1) * 14; }
 
   // derived stats from base + equipment
-  function eqVal(slot, field) { var g = gear(hero.equip[slot]); return (g && g[field]) || 0; }
+  function eqVal(slot, field) { var it = equippedItem(slot); return it ? (it.stats[field] || 0) : 0; }
   function powerBonus() { return 3 + Math.ceil(hero.level / 2); }
   function atkOf() { var a = hero.atk + eqVal('weapon', 'atk') + eqVal('trinket', 'atk'); if (hero.buffs && hero.buffs.power > 0) a += powerBonus(); return a; }
   function defOf() { return hero.def + eqVal('armor', 'def') + eqVal('trinket', 'def'); }
@@ -527,7 +673,7 @@
     for (var gi = 0; gi < goldN; gi++) { var s2 = freeFloorIn(m, occupied); if (s2) items.push({ type: 'gold', x: s2.x, y: s2.y, amt: (3 + ri(5)) * Math.max(1, Math.ceil(depth * 0.6)) }); }
     if (chance(0.45)) { var s3 = freeFloorIn(m, occupied); if (s3) items.push({ type: 'gem', x: s3.x, y: s3.y }); }
     // occasional gear drop on the floor
-    if (chance(0.35)) { var s4 = freeFloorIn(m, occupied); if (s4) items.push({ type: 'gear', id: randomGearId(depth), x: s4.x, y: s4.y }); }
+    if (chance(0.35)) { var s4 = freeFloorIn(m, occupied); if (s4) items.push({ type: 'gear', item: generateItem(null, depth), x: s4.x, y: s4.y }); }
 
     // a few cracked walls (bombable → secret loot pockets)
     var crackN = ri(4);
@@ -556,13 +702,6 @@
       summons: def.summons || null, burn: !!def.burn, poison: !!def.poison,
       boss: !!boss, status: {}, awake: false, hit: 0, bump: 0
     };
-  }
-
-  function randomGearId(depth) {
-    var pool = [];
-    function add(tbl) { for (var id in tbl) { var g = tbl[id]; if (g.tier > 0 && g.price && g.tier <= 1 + Math.ceil(depth / 2)) pool.push(id); } }
-    add(WEAPONS); add(ARMORS); add(TRINKETS);
-    return pool.length ? pick(pool) : 'dagger';
   }
 
   // A hand-laid, guaranteed-solvable boulder vault carved into solid rock and
@@ -635,6 +774,7 @@
     world = w;
     hero.depth = depth;
     hero.status = {}; hero.buffs = {};      // clear DoTs & buffs between areas
+    if (depth <= 0) merchStock = null;      // merchant restocks each town visit
     if (depth > hero.maxDepth) { hero.maxDepth = depth; }
     // wake in town with half vitals if we arrived dead
     if (depth <= 0 && hero.hp <= 0) { hero.hp = Math.ceil(maxHpOf() * 0.5); hero.mp = Math.ceil(maxMpOf() * 0.5); }
@@ -751,7 +891,7 @@
     if (m.boss) { questProgress('boss', 1); logMsg('win', 'The ' + m.name + ' falls! The way down opens.'); shake(10);
       // boss drops: gold + guaranteed gear + gem
       world.items.push({ type: 'gold', x: m.x, y: m.y, amt: 40 + world.depth * 7 });
-      var gp = adjacentFree(m.x, m.y); if (gp) world.items.push({ type: 'gear', id: randomGearId(world.depth + 3), x: gp.x, y: gp.y });
+      var gp = adjacentFree(m.x, m.y); if (gp) world.items.push({ type: 'gear', item: generateItem(null, world.depth + 3, 2.5), x: gp.x, y: gp.y });
       hero.stats.gems++;
     } else {
       // bomber explodes on death
@@ -790,7 +930,7 @@
     }
   }
   function heroAttack(m, mult, extraStun) {
-    var w = gear(hero.equip.weapon) || {};
+    var w = (equippedItem('weapon') || { stats: {} }).stats;   // on-hit effects from the rolled weapon
     var base = Math.max(1, Math.round(atkOf() * (mult || 1)) - m.def + rr(-1, 2));
     var crit = chance(critOf());
     if (crit) base = Math.round(base * 1.8);
@@ -957,25 +1097,28 @@
     if (it.type === 'gold') { var g = Math.round(it.amt * greedOf()); hero.gold += g; logMsg('', '+' + g + ' gold.'); fxText(it.x, it.y, '+' + g, '#ffd76a'); }
     else if (it.type === 'gem') { hero.gold += 50; hero.stats.gems++; questProgress('gems', 1); logMsg('win', 'A gleaming gem! (+50)'); fxText(it.x, it.y, '💎', '#7fe0d0'); }
     else if (it.type === 'cons') { hero.bag[it.id] = (hero.bag[it.id] || 0) + 1; logMsg('', 'Picked up ' + CONS[it.id].name + '.'); fxText(it.x, it.y, CONS[it.id].icon, '#fff'); }
-    else if (it.type === 'gear') { var gg = gear(it.id); var isNew = acquireGear(it.id); if (isNew) logMsg('win', 'Found ' + (gg ? gg.name : 'gear') + '!'); fxText(it.x, it.y, gg ? gg.icon : '?', '#fff'); }
+    else if (it.type === 'gear') { var inst = it.item || generateItem(null, world.depth); acquireGear(inst); logMsg('win', 'Found ' + inst.name + (inst.rarity !== 'common' ? ' (' + rarityOf(inst).name + ')' : '') + '!'); fxText(it.x, it.y, inst.icon, rarityOf(inst).color); }
     world.items.splice(idx, 1);
     markDirty();
   }
-  function sellValue(g) { if (!g || !g.price) return 0; return Math.max(1, Math.floor(g.price * 0.4)); }
   function buyPrice(p) { return Math.ceil((p || 0) * PRICE_MULT); }
-  // Returns true if this was a brand-new acquisition; false if it was a
-  // duplicate (auto-sold for its value, since gear doesn't stack).
-  function acquireGear(id) {
-    var g = gear(id); if (!g) return false;
-    if (hero.owned.indexOf(id) >= 0) {
-      var v = sellValue(g);
-      if (v > 0) { hero.gold += v; logMsg('', g.name + ' (duplicate) — sold for ' + v + 'g.'); }
-      return false;
-    }
-    hero.owned.push(id);
-    var cur = gear(hero.equip[g.slot]);
-    if (!cur || g.tier > cur.tier) { hero.equip[g.slot] = id; logMsg('win', 'Equipped ' + g.name + '.'); }
-    return true;
+  function capOwned() {
+    var CAP = 60; if (!hero.owned || hero.owned.length <= CAP) return;
+    var lowIx = -1, lowS = Infinity;
+    for (var i = 0; i < hero.owned.length; i++) { var o = hero.owned[i];
+      if (o.uid === hero.equip.weapon || o.uid === hero.equip.armor || o.uid === hero.equip.trinket) continue;
+      var sc = itemScore(o); if (sc < lowS) { lowS = sc; lowIx = i; } }
+    if (lowIx >= 0) hero.owned.splice(lowIx, 1);
+  }
+  // Add an item instance to the pack; auto-equip if it scores higher than the
+  // current piece in that slot. Returns 'equipped' | 'kept'.
+  function acquireGear(it) {
+    if (!it) return false;
+    hero.owned = hero.owned || [];
+    hero.owned.push(it); capOwned();
+    var cur = equippedItem(it.slot);
+    if (!cur || itemScore(it) > itemScore(cur)) { hero.equip[it.slot] = it.uid; logMsg('win', 'Equipped ' + it.name + '.'); return 'equipped'; }
+    return 'kept';
   }
 
   function rest() {
@@ -1026,7 +1169,7 @@
       var roll = Math.random();
       if (roll < 0.4) { var g = (5 + ri(9)) * Math.max(1, Math.ceil((world.depth + 1) * 0.6)); hero.gold += Math.round(g * greedOf()); fxText(c.x, c.y - i * 0.3, '+' + g + 'g', '#ffd76a'); }
       else if (roll < 0.7) { var id = chance(0.6) ? 'potion' : (chance(0.5) ? 'elixir' : 'bomb'); hero.bag[id] = (hero.bag[id] || 0) + 1; fxText(c.x, c.y - i * 0.3, CONS[id].icon, '#fff'); }
-      else { var gid = randomGearId(world.depth + (c.lush ? 3 : 1)); acquireGear(gid); var gg = gear(gid); fxText(c.x, c.y - i * 0.3, gg ? gg.icon : '?', '#fff'); }
+      else { var inst = generateItem(null, world.depth + (c.lush ? 3 : 1), c.lush ? 1.5 : 0); acquireGear(inst); fxText(c.x, c.y - i * 0.3, inst.icon, rarityOf(inst).color); if (inst.rarity === 'legendary' || inst.rarity === 'epic') logMsg('win', 'A ' + rarityOf(inst).name + ' drop: ' + inst.name + '!'); }
     }
     logMsg('win', 'You open the chest!'); fxBurst(c.x, c.y, '#ffd76a'); markDirty(); refreshAll();
   }
@@ -1471,7 +1614,7 @@
     if (it.type === 'gold') { ctx.fillStyle = '#ffd76a'; ctx.beginPath(); ctx.arc(cx, cy + bob, 4, 0, 6.3); ctx.fill(); }
     else if (it.type === 'gem') glyph(ctx, '💎', cx, cy + bob, '#7fe0d0', 1, 14);
     else if (it.type === 'cons') glyph(ctx, CONS[it.id].icon, cx, cy + bob, '#fff', 1, 14);
-    else if (it.type === 'gear') { var g = gear(it.id); glyph(ctx, g ? g.icon : '?', cx, cy + bob, '#fff', 1, 14); }
+    else if (it.type === 'gear') { glyph(ctx, it.item ? it.item.icon : '?', cx, cy + bob, it.item ? rarityOf(it.item).color : '#fff', 1, 14); }
   }
   function entShake(e) { var t = now() - (e.hit || 0); if (t < 160) { var k = (160 - t) / 160; return (Math.random() - 0.5) * 5 * k; } return 0; }
   function bumpOff(e) { var t = now() - (e.bump || 0); if (t < 140 && e.bumpDir) { var k = Math.sin((1 - t / 140) * Math.PI) * 6; return { x: e.bumpDir.x * k, y: e.bumpDir.y * k }; } return { x: 0, y: 0 }; }
@@ -1670,14 +1813,20 @@
       stat('⚔ Kills', hero.stats.kills) + stat('💎 Gems', hero.stats.gems) + '</div>';
     html += '<div class="cr-sec">Equipment</div><div class="cr-eqrow">' +
       eqSlot('weapon') + eqSlot('armor') + eqSlot('trinket') + '</div>';
-    html += '<div class="cr-sec">Owned gear (tap to equip)</div><div class="cr-owned">';
-    hero.owned.forEach(function (id) { var g = gear(id); if (!g) return; var on = hero.equip[g.slot] === id;
-      html += '<button class="cr-gear' + (on ? ' cr-on' : '') + '" data-eq="' + id + '"><span>' + g.icon + '</span> ' + g.name +
-        '<span class="cr-gear-st">' + gearStatStr(g) + '</span></button>'; });
+    html += '<div class="cr-sec">Inventory — tap to equip / unequip</div><div class="cr-owned">';
+    hero.owned.slice().sort(function (a, b) { return a.slot === b.slot ? itemScore(b) - itemScore(a) : (a.slot < b.slot ? -1 : 1); }).forEach(function (it) {
+      var on = hero.equip[it.slot] === it.uid, c = rarityOf(it).color;
+      html += '<button class="cr-gear' + (on ? ' cr-on' : '') + '" data-eq="' + it.uid + '"><span>' + it.icon + '</span> <span style="color:' + c + '">' + Cade.escapeHtml(it.name) + '</span>' + (on ? ' ✓' : '') +
+        '<span class="cr-gear-st">' + instanceStatStr(it) + (it.lore ? ' — <i>' + Cade.escapeHtml(it.lore) + '</i>' : '') + '</span></button>'; });
     html += '</div></div>';
     body.innerHTML = html;
     var btns = body.querySelectorAll('[data-eq]');
-    for (var i = 0; i < btns.length; i++) (function (btn) { btn.addEventListener('click', function () { var id = btn.getAttribute('data-eq'); var g = gear(id); hero.equip[g.slot] = id; hero.hp = clamp(hero.hp, 0, maxHpOf()); hero.mp = clamp(hero.mp, 0, maxMpOf()); markDirty(); refreshAll(); openCharacter(); }); })(btns[i]);
+    for (var i = 0; i < btns.length; i++) (function (btn) { btn.addEventListener('click', function () {
+      var it = itemByUid(btn.getAttribute('data-eq')); if (!it) return;
+      hero.equip[it.slot] = (hero.equip[it.slot] === it.uid) ? null : it.uid;
+      hero.hp = clamp(hero.hp, 0, maxHpOf()); hero.mp = clamp(hero.mp, 0, maxMpOf());
+      markDirty(); refreshAll(); openCharacter();
+    }); })(btns[i]);
     var rn = body.querySelector('[data-rename]');
     if (rn) rn.addEventListener('click', function () {
       var v = window.prompt('Name your delver:', hero.name);
@@ -1687,7 +1836,7 @@
     });
   }
   function stat(label, val) { return '<div class="cr-stat"><span>' + label + '</span><b>' + val + '</b></div>'; }
-  function eqSlot(slot) { var g = gear(hero.equip[slot]); return '<div class="cr-eqslot"><div class="cr-eqic">' + (g ? g.icon : '·') + '</div><div class="cr-eqnm">' + (g ? g.name : '—') + '</div></div>'; }
+  function eqSlot(slot) { var it = equippedItem(slot); return '<div class="cr-eqslot"><div class="cr-eqic">' + (it ? it.icon : '·') + '</div><div class="cr-eqnm" style="' + (it ? 'color:' + rarityOf(it).color : '') + '">' + (it ? Cade.escapeHtml(it.name) : '—') + '</div></div>'; }
 
   // ---- overlay: spellbook (choose which known spells to dock) ----------------
   function openSpellbook() {
@@ -1718,18 +1867,6 @@
       });
     })(btns[i]);
   }
-  function gearStatStr(g) {
-    var s = [];
-    if (g.atk) s.push((g.atk > 0 ? '+' : '') + g.atk + ' atk'); if (g.def) s.push((g.def > 0 ? '+' : '') + g.def + ' def');
-    if (g.hp) s.push('+' + g.hp + ' hp'); if (g.mp) s.push('+' + g.mp + ' mp');
-    if (g.crit) s.push('+' + Math.round(g.crit * 100) + '% crit');
-    if (g.lifesteal) s.push(Math.round(g.lifesteal * 100) + '% lifesteal');
-    if (g.cleave) s.push('cleave'); if (g.chain) s.push('chain'); if (g.spell) s.push('+' + Math.round(g.spell * 100) + '% spell');
-    if (g.stun) s.push('stun'); if (g.freeze) s.push('freeze'); if (g.poison) s.push('poison'); if (g.burn) s.push('burn');
-    if (g.dodge) s.push(Math.round(g.dodge * 100) + '% dodge'); if (g.thorns) s.push('thorns'); if (g.resist) s.push(Math.round(g.resist * 100) + '% resist');
-    if (g.regen) s.push('regen'); if (g.greed) s.push('+gold');
-    return s.join(' · ');
-  }
 
   // =========================================================================
   //  overlay: shops (town NPCs)
@@ -1747,43 +1884,48 @@
     // consumables
     ['potion', 'hpotion', 'elixir', 'eelixir', 'bomb', 'scroll', 'antidote', 'key'].forEach(function (id) { var c = CONS[id];
       html += shopRow('cons:' + id, c.icon, c.name, c.desc, buyPrice(c.price), hero.bag[id] || 0); });
-    // a rotating gear selection (deterministic-ish by maxDepth)
-    var stock = merchantStock();
-    stock.forEach(function (id) { var g = gear(id); var owned = hero.owned.indexOf(id) >= 0;
-      html += shopRow('gear:' + id, g.icon, g.name, gearStatStr(g), buyPrice(g.price), owned ? '✓' : 0, owned); });
+    // rotating rolled-item stock (regenerated each town visit; persists while open)
+    if (!merchStock) { merchStock = []; var ms = ['weapon', 'armor', 'trinket']; for (var mi = 0; mi < 6; mi++) merchStock.push(generateItem(ms[mi % 3], Math.max(2, hero.maxDepth + 1), mi === 5 ? 0.5 : 0)); }
+    html += '<div class="cr-sec">Wares</div><div class="cr-shop">';
+    merchStock.forEach(function (it, idx) {
+      var price = buyPrice(itemPrice(it)), c = rarityOf(it).color;
+      html += '<div class="cr-srow"><span class="cr-sic" style="color:' + c + '">' + it.icon + '</span>' +
+        '<span class="cr-snm"><span style="color:' + c + '">' + Cade.escapeHtml(it.name) + '</span><span class="cr-sdesc">' + instanceStatStr(it) + '</span></span>' +
+        '<button class="cr-buy" data-gearbuy="' + idx + '" data-price="' + price + '">🪙 ' + price + '</button></div>';
+    });
     html += '</div>';
-    // Sell back unwanted gear (40%). Excludes equipped pieces and starters.
-    var sellable = hero.owned.filter(function (id) { var g = gear(id); return g && g.price && hero.equip[g.slot] !== id; });
+    // Sell back unwanted gear (40%). Excludes equipped pieces and legendaries.
+    var sellable = hero.owned.filter(function (it) { return hero.equip[it.slot] !== it.uid && !it.legend; });
     if (sellable.length) {
       html += '<div class="cr-sec">Sell gear (40% back)</div><div class="cr-shop">';
-      sellable.forEach(function (id) { var g = gear(id);
-        html += '<div class="cr-srow"><span class="cr-sic">' + g.icon + '</span>' +
-          '<span class="cr-snm">' + g.name + '<span class="cr-sdesc">' + gearStatStr(g) + '</span></span>' +
-          '<button class="cr-buy cr-sell" data-sell="' + id + '">🪙 ' + sellValue(g) + '</button></div>'; });
+      sellable.sort(function (a, b) { return itemScore(a) - itemScore(b); }).forEach(function (it) {
+        html += '<div class="cr-srow"><span class="cr-sic" style="color:' + rarityOf(it).color + '">' + it.icon + '</span>' +
+          '<span class="cr-snm"><span style="color:' + rarityOf(it).color + '">' + Cade.escapeHtml(it.name) + '</span><span class="cr-sdesc">' + instanceStatStr(it) + '</span></span>' +
+          '<button class="cr-buy cr-sell" data-sell="' + it.uid + '">🪙 ' + itemSell(it) + '</button></div>'; });
       html += '</div>';
     }
     body.innerHTML = html;
     bindShop(body, function () { openShop('merchant'); });
+    var gb = body.querySelectorAll('[data-gearbuy]');
+    for (var gi = 0; gi < gb.length; gi++) (function (btn) {
+      btn.addEventListener('click', function () {
+        var idx = parseInt(btn.getAttribute('data-gearbuy'), 10), price = parseInt(btn.getAttribute('data-price'), 10), it = merchStock[idx];
+        if (!it) return;
+        if (hero.gold < price) { Cade.showToast('Not enough gold', 'error', 1400); return; }
+        hero.gold -= price; merchStock.splice(idx, 1); acquireGear(it);
+        Cade.haptic(8); markDirty(); refreshAll(); openShop('merchant');
+      });
+    })(gb[gi]);
     var sb = body.querySelectorAll('[data-sell]');
     for (var si = 0; si < sb.length; si++) (function (btn) {
       btn.addEventListener('click', function () {
-        var id = btn.getAttribute('data-sell'), g = gear(id); if (!g) return;
-        var ix = hero.owned.indexOf(id); if (ix < 0) return;
-        if (hero.equip[g.slot] === id) { Cade.showToast('Unequip it first', 'info', 1200); return; }
-        hero.owned.splice(ix, 1); hero.gold += sellValue(g);
+        var it = itemByUid(btn.getAttribute('data-sell')); if (!it) return;
+        if (hero.equip[it.slot] === it.uid) { Cade.showToast('Unequip it first', 'info', 1200); return; }
+        var ix = hero.owned.indexOf(it); if (ix < 0) return;
+        hero.owned.splice(ix, 1); hero.gold += itemSell(it);
         Cade.haptic(8); markDirty(); refreshAll(); openShop('merchant');
       });
     })(sb[si]);
-  }
-  function merchantStock() {
-    var pool = [];
-    function add(tbl) { for (var id in tbl) { var g = tbl[id]; if (g.tier > 0 && g.price && g.tier <= 2 + Math.ceil(hero.maxDepth / 3)) pool.push(id); } }
-    add(WEAPONS); add(ARMORS); add(TRINKETS);
-    // stable-ish rotation: pick up to 5 by a hash of maxDepth + runs
-    pool.sort(); var out = []; var seed = (hero.maxDepth * 7 + hero.stats.runs * 3) % Math.max(1, pool.length);
-    for (var i = 0; i < pool.length && out.length < 5; i++) out.push(pool[(seed + i) % pool.length]);
-    // dedupe
-    return out.filter(function (v, i) { return out.indexOf(v) === i; });
   }
   function shopRow(buyId, icon, name, desc, price, qty, owned) {
     return '<div class="cr-srow"><span class="cr-sic">' + icon + '</span>' +
@@ -1832,7 +1974,7 @@
   function openSmith() {
     var ov = mkOverlay('Smith ⚒️');
     var body = ov.querySelector('.cr-ov-body');
-    var w = gear(hero.equip.weapon), a = gear(hero.equip.armor);
+    var w = equippedItem('weapon'), a = equippedItem('armor');
     var wCost = 60 + (hero._wlvl || 0) * 80 + (w ? w.tier * 40 : 0);
     var aCost = 60 + (hero._alvl || 0) * 80 + (a ? a.tier * 40 : 0);
     body.innerHTML = '<div class="cr-shopgold">🪙 ' + hero.gold + ' gold</div>' +
@@ -1955,7 +2097,7 @@
     for (var i = 0; i < cb.length; i++) (function (btn) { btn.addEventListener('click', function () {
       var ix = findQ(btn.getAttribute('data-claim')); if (ix < 0) return;
       var q = hero.quests[ix]; hero.gold += Math.round(q.reward * greedOf()); hero.questsDone = (hero.questsDone || 0) + 1;
-      if (chance(0.5)) { var gid = randomGearId(hero.maxDepth + 2); acquireGear(gid); }
+      if (chance(0.5)) acquireGear(generateItem(null, hero.maxDepth + 2, 0.5));
       hero.quests.splice(ix, 1);
       Cade.haptic(10); Cade.showToast('Bounty complete! +' + q.reward + ' gold', 'success', 1800); markDirty(); refreshAll(); openQuestBoard();
     }); })(cb[i]);
@@ -2016,7 +2158,7 @@
   }
   function serialize() {
     return {
-      v: 3, name: hero.name, level: hero.level, xp: hero.xp,
+      v: 4, name: hero.name, level: hero.level, xp: hero.xp,
       maxHp: hero.maxHp, hp: hero.hp, maxMp: hero.maxMp, mp: hero.mp,
       atk: hero.atk, def: hero.def, crit: hero.crit, gold: hero.gold,
       depth: hero.depth, maxDepth: hero.maxDepth, equip: hero.equip, bag: hero.bag,
@@ -2034,15 +2176,27 @@
     for (var k in d) if (d[k] != null) h[k] = d[k];
     // normalize the only free-form, remotely-settable string
     h.name = String(h.name == null ? 'Delver' : h.name).replace(/[<>]/g, '').slice(0, 24) || 'Delver';
-    // sanity defaults for older/partial saves
-    h.equip = h.equip || { weapon: 'dagger', armor: 'rags', trinket: 'none' };
-    if (!WEAPONS[h.equip.weapon]) h.equip.weapon = 'dagger';   // drop ids from older catalogs
-    if (!ARMORS[h.equip.armor]) h.equip.armor = 'rags';
-    if (!TRINKETS[h.equip.trinket]) h.equip.trinket = 'none';
     h.bag = h.bag || { potion: 1 };
-    h.owned = (h.owned || ['dagger', 'rags']).filter(function (id) { return !!gear(id); });
-    if (h.owned.indexOf(h.equip.weapon) < 0) h.owned.push(h.equip.weapon);
-    if (h.owned.indexOf(h.equip.armor) < 0) h.owned.push(h.equip.armor);
+    // ---- gear model migration: old saves stored base-id strings; new saves
+    //      store rolled item instances. Convert and re-point equipment. --------
+    var oldEquip = h.equip || {};
+    if (!Array.isArray(h.owned)) h.owned = [];
+    if (h.owned.length && typeof h.owned[0] === 'string') {
+      var map = {}, inst = [];
+      h.owned.forEach(function (id) { var b = gear(id); if (b) { var it = makeBaseInstance(id, 'common', Math.max(1, (b.tier || 1) * 2)); map[id] = it.uid; inst.push(it); } });
+      h.owned = inst;
+      h.equip = {
+        weapon: (oldEquip.weapon && map[oldEquip.weapon]) || null,
+        armor: (oldEquip.armor && map[oldEquip.armor]) || null,
+        trinket: (oldEquip.trinket && oldEquip.trinket !== 'none' && map[oldEquip.trinket]) || null
+      };
+    } else {
+      h.owned = h.owned.filter(function (it) { return it && it.uid && gear(it.base); });
+      h.equip = h.equip || {};
+      ['weapon', 'armor', 'trinket'].forEach(function (sl) { var u = h.equip[sl]; if (u && !h.owned.some(function (it) { return it.uid === u; })) h.equip[sl] = null; });
+    }
+    if (!h.owned.length) { var d0 = makeBaseInstance('dagger', 'common', 2), r0 = makeBaseInstance('rags', 'common', 1); h.owned = [d0, r0]; h.equip = { weapon: d0.uid, armor: r0.uid, trinket: null }; }
+    ['weapon', 'armor'].forEach(function (sl) { if (!h.equip[sl]) { for (var i = 0; i < h.owned.length; i++) if (h.owned[i].slot === sl) { h.equip[sl] = h.owned[i].uid; break; } } });
     h.spells = (h.spells || ['strike']).filter(function (id) { return !!ABIL[id]; });
     if (h.spells.indexOf('strike') < 0) h.spells.unshift('strike');
     // BUGFIX: grant every auto-learned spell the hero has already out-leveled.
