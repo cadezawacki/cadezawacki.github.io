@@ -377,8 +377,22 @@
     }
     return generateItem(slot, ilvl, luck);
   }
+  // Heal an item instance that arrived malformed (e.g. synced from an older
+  // build): ensure it has the fields the UI/combat read, derived from its base.
+  function repairItem(it) {
+    if (!it) return it;
+    var b = gear(it.base) || {};
+    if (it.slot == null) it.slot = b.slot;
+    if (it.icon == null) it.icon = b.icon;
+    if (it.tier == null) it.tier = b.tier || 1;
+    if (it.rarity == null || !RARITY[it.rarity]) it.rarity = 'common';
+    if (it.ilvl == null) it.ilvl = Math.max(1, (b.tier || 1) * 2);
+    if (!it.stats || typeof it.stats !== 'object') { it.stats = {}; for (var i = 0; i < STAT_FIELDS.length; i++) { var f = STAT_FIELDS[i]; if (b[f]) it.stats[f] = b[f]; } }
+    if (it.name == null) it.name = instanceName(it);
+    return it;
+  }
   function itemScore(it) {
-    if (!it) return -1; var s = it.stats;
+    if (!it) return -1; var s = it.stats || {};
     return (s.atk || 0) * 3 + (s.def || 0) * 3 + (s.hp || 0) * 0.4 + (s.mp || 0) * 0.3 + (s.crit || 0) * 40 +
       (s.lifesteal || 0) * 40 + (s.spell || 0) * 25 + (s.dodge || 0) * 45 + (s.resist || 0) * 35 + (s.thorns || 0) * 20 +
       (s.regen || 0) * 5 + (s.greed || 0) * 8 + (s.cleave || 0) * 12 + (s.chain || 0) * 12 + (it.rarity === 'legendary' ? 25 : 0);
@@ -418,7 +432,7 @@
   function itemByUid(u) { if (!u || !hero.owned) return null; for (var i = 0; i < hero.owned.length; i++) if (hero.owned[i].uid === u) return hero.owned[i]; return null; }
   function equippedItem(slot) { return itemByUid(hero.equip[slot]); }
   function instanceStatStr(it) {
-    var s = it.stats, out = [];
+    var s = (it && it.stats) || {}, out = [];
     function add(f, label, pct) { if (s[f]) out.push((s[f] > 0 && f !== 'def' && f !== 'atk' ? '+' : (s[f] > 0 ? '+' : '')) + (pct ? Math.round(s[f] * 100) + '%' : s[f]) + ' ' + label); }
     add('atk', 'atk'); add('def', 'def'); add('hp', 'hp'); add('mp', 'mp');
     add('crit', 'crit', 1); add('lifesteal', 'lifesteal', 1); add('spell', 'spell', 1);
@@ -568,7 +582,9 @@
   function regionAt(depth) { return REGIONS[regionIndexAt(depth)]; }
   function regionStart(idx) { return idx * REGION_SPAN + 1; }
   function regionEnd(idx) { return (idx + 1) * REGION_SPAN; }
-  function regionUnlocked(idx) { return idx === 0 || (hero && hero.maxDepth >= regionStart(idx)); }
+  // Each delve is its own self-contained dungeon; you unlock the next by
+  // defeating the previous region's boss (a trophy), not by raw depth.
+  function regionUnlocked(idx) { return idx === 0 || (hero && hero.trophies && hero.trophies.indexOf(REGIONS[idx - 1].key) >= 0); }
   function biomeFor(depth) {
     if (depth <= 0) return { name: 'Hearthhold (Town)', floor: '#262a22', floor2: '#2c3027', wall: '#3a4030', wallTop: '#48503c', accent: '#8fbf6f' };
     var r = regionAt(depth), p = r.pal;
@@ -1649,6 +1665,7 @@
       if (hasPlanter && hero._gardenRun !== (hero.stats.runs || 0)) { hero._gardenRun = hero.stats.runs || 0; hero.bag.potion = (hero.bag.potion || 0) + 1; logMsg('win', 'Your planter bore a Health Potion.'); }
     } else if (depth <= 0) {
       var TT = TOWNS[w.townId] || TOWNS.hearth;
+      hero._lastTown = w.townId;   // remember where we are, to return here after a delve
       hero.townsSeen = hero.townsSeen || ['hearth']; if (hero.townsSeen.indexOf(w.townId) < 0) hero.townsSeen.push(w.townId);
       if (w.townId === 'hearth') {
         logMsg('', 'Hearthhold. Rest, shop, then descend ▾ — or 🚪 west to the Overworld.');
@@ -1681,15 +1698,23 @@
   }
 
   function descend() {
+    // a delve is one region: clearing its boss takes you HOME, not deeper
+    if (world && world.isBoss) {
+      var town = (hero._delveTown && TOWNS[hero._delveTown]) ? hero._delveTown : 'hearth';
+      logMsg('win', 'Region cleared! You climb back to ' + (TOWNS[town] || TOWNS.hearth).name + ' with your spoils.');
+      enter(0, town); return;
+    }
     var d = hero.depth + 1;
     logMsg('', 'You descend…');
     enter(d);
   }
 
   function startNewRun() {
-    // dive straight to the deepest floor reached (QoL); first run starts at 1
+    // quick-dive from Hearthhold into the deepest region you've unlocked
     hero.stats.runs = (hero.stats.runs || 0) + 1;
-    enter(Math.max(1, hero.maxDepth));
+    hero._delveTown = 'hearth';
+    var idx = 0; for (var i = 0; i < REGIONS.length; i++) if (regionUnlocked(i)) idx = i;
+    enter(regionStart(idx));
   }
   function recall() {
     if (!hero || !world) return;
@@ -2098,7 +2123,7 @@
       if (objAt(ox, oy, 'owgate')) { enter(OW); return; }
       if (world.mode === 'overworld') {
         var twn = objAt(ox, oy, 'town'); if (twn) { if (!townUnlocked(twn.town)) { Cade.showToast('🔒 ' + townReqText(twn.town), 'info', 2400); return; } hero.ow = { x: twn.x, y: twn.y }; enter(0, twn.town); return; }
-        var dlv = objAt(ox, oy, 'delve'); if (dlv) { if (!regionUnlocked(dlv.region)) { Cade.showToast('That delve is sealed — clear the region before it', 'info', 1700); return; } hero.ow = { x: dlv.x, y: dlv.y }; hero.stats.runs = (hero.stats.runs || 0) + 1; enter(regionStart(dlv.region)); return; }
+        var dlv = objAt(ox, oy, 'delve'); if (dlv) { if (!regionUnlocked(dlv.region)) { Cade.showToast('That delve is sealed — clear the region before it', 'info', 1700); return; } hero.ow = { x: dlv.x, y: dlv.y }; hero._delveTown = hero._lastTown || 'hearth'; hero.stats.runs = (hero.stats.runs || 0) + 1; enter(regionStart(dlv.region)); return; }
         var slk = objAt(ox, oy, 'seal'); if (slk && slk.locked) { Cade.showToast('🔒 ' + townReqText(slk.town), 'info', 2400); return; }
         var ani = objAt(ox, oy, 'animal'); if (ani) { tameAttempt(ani); return; }
         var gth = objAt(ox, oy, 'gather'); if (gth) { harvestNode(gth); return; }
@@ -2459,7 +2484,7 @@
     if (world._pendingHouse) { world._pendingHouse = false; enter(-1); return; }
     if (world._pendingOverworld) { world._pendingOverworld = false; enter(OW); return; }
     if (world._pendingTownId) { var ptid = world._pendingTownId; world._pendingTownId = 0; enter(0, ptid); return; }
-    if (world._pendingDelve != null) { var pr = world._pendingDelve; world._pendingDelve = null; hero.stats.runs = (hero.stats.runs || 0) + 1; enter(regionStart(pr)); return; }
+    if (world._pendingDelve != null) { var pr = world._pendingDelve; world._pendingDelve = null; hero._delveTown = hero._lastTown || 'hearth'; hero.stats.runs = (hero.stats.runs || 0) + 1; enter(regionStart(pr)); return; }
     world.steps++;
     // hero status (DoT)
     tickStatus(hero, true);
@@ -3778,7 +3803,7 @@
     var db = body.querySelectorAll('[data-delve]');
     for (var j = 0; j < db.length; j++) (function (btn) { btn.addEventListener('click', function () {
       var idx = parseInt(btn.getAttribute('data-delve'), 10); if (!regionUnlocked(idx)) { Cade.showToast('Sealed — clear the region before it', 'info', 1600); return; }
-      closeOverlay(); hero.ow = pos['delve:' + idx] || null; hero.stats.runs = (hero.stats.runs || 0) + 1; enter(regionStart(idx));
+      closeOverlay(); hero.ow = pos['delve:' + idx] || null; hero._delveTown = hero._lastTown || 'hearth'; hero.stats.runs = (hero.stats.runs || 0) + 1; enter(regionStart(idx));
     }); })(db[j]);
   }
 
@@ -3921,7 +3946,7 @@
         trinket: (oldEquip.trinket && oldEquip.trinket !== 'none' && map[oldEquip.trinket]) || null
       };
     } else {
-      h.owned = h.owned.filter(function (it) { return it && it.uid && gear(it.base); });
+      h.owned = h.owned.filter(function (it) { return it && it.uid && gear(it.base); }).map(repairItem);
       h.equip = h.equip || {};
       ['weapon', 'armor', 'trinket'].forEach(function (sl) { var u = h.equip[sl]; if (u && !h.owned.some(function (it) { return it.uid === u; })) h.equip[sl] = null; });
     }
@@ -3946,7 +3971,7 @@
     h.house.furniture = h.house.furniture.filter(function (f) { return f && FURNITURE[f.kind]; });
     h.furniture = (h.furniture && typeof h.furniture === 'object') ? h.furniture : {};
     h.trophies = (Array.isArray(h.trophies) ? h.trophies : []).filter(function (k) { return REGIONS.some(function (r) { return r.key === k; }); });
-    h.stash = (Array.isArray(h.stash) ? h.stash : []).filter(function (it) { return it && it.uid && gear(it.base); });
+    h.stash = (Array.isArray(h.stash) ? h.stash : []).filter(function (it) { return it && it.uid && gear(it.base); }).map(repairItem);
     h.story = clamp(parseInt(h.story, 10) || 0, 0, STORY.length - 1);
     h.lore = Array.isArray(h.lore) ? h.lore : [];
     h.bestiary = (h.bestiary && typeof h.bestiary === 'object' && !Array.isArray(h.bestiary)) ? h.bestiary : {};
