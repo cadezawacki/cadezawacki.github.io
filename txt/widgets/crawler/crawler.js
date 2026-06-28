@@ -286,6 +286,8 @@
   var _uidc = 0;
   function uid() { return 'i' + Date.now().toString(36) + (_uidc++).toString(36); }
   function shuffle(a) { for (var i = a.length - 1; i > 0; i--) { var j = ri(i + 1), t = a[i]; a[i] = a[j]; a[j] = t; } return a; }
+  // seeded PRNG (mulberry32) — used to generate a STABLE overworld per character
+  function mulberry32(a) { return function () { a |= 0; a = (a + 0x6D2B79F5) | 0; var t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
   function rarityOf(it) { return RARITY[it && it.rarity] || RARITY.common; }
   function makeBaseInstance(baseId, rarity, ilvl) {
     var b = gear(baseId); if (!b) return null;
@@ -325,10 +327,14 @@
     for (var f in L.stats) inst.stats[f] = L.stats[f];
     return inst;
   }
-  function rollRarity(luck) {
+  function rollRarity(luck, ilvl) {
+    luck = luck || 0;
     var r = Math.random() * 100;
-    var leg = 0.6 + (luck || 0);          // legendary % (boss drops pass extra luck)
-    var epic = 5 + (luck || 0) * 2, rare = 16, magic = 34;
+    // Legendaries are EARNED: only "lucky" sources (bosses, vault chests pass
+    // luck >= 1) can roll them, and only once you're deep enough. Even then the
+    // odds are slim, so a legendary is a genuine event.
+    var leg = (luck >= 1 && (ilvl || 1) >= 7) ? (0.4 + luck * 0.35) : 0;
+    var epic = 2 + luck * 1.3, rare = 12, magic = 30;
     if (r < leg) return 'legendary';
     if (r < leg + epic) return 'epic';
     if (r < leg + epic + rare) return 'rare';
@@ -343,7 +349,7 @@
   }
   function generateItem(slot, ilvl, luck) {
     slot = slot || pick(['weapon', 'armor', 'trinket']);
-    var rarity = rollRarity(luck);
+    var rarity = rollRarity(luck, ilvl);
     if (rarity === 'legendary') {
       var legs = []; for (var k in LEGENDARY) if ((gear(LEGENDARY[k].base) || {}).slot === slot) legs.push(k);
       if (legs.length) return makeLegendary(pick(legs), ilvl);
@@ -696,22 +702,22 @@
   //  vertical floor-by-floor descent still lives inside each delve.
   // =========================================================================
   var OW = -2;                       // sentinel "depth" for the overworld
-  var OW_PAL = { name: 'The Overworld', floor: '#27331f', floor2: '#2c3a22', wall: '#3a4a4f', wallTop: '#46585e', accent: '#9fd06f' };
+  var OW_PAL = { name: 'The Overworld', floor: '#2c3d24', floor2: '#33472a', wall: '#234a26', wallTop: '#2f6232', accent: '#9fd06f', hedge: true };
   // Towns dotted across the realm. `hearth` is the original full hub; the rest
   // are themed and host a thematic mix of folk. `ox/oy` is their overworld tile.
   var TOWNS = {
     hearth:      { name: 'Hearthhold', icon: '🏰', ox: 8,  oy: 17, full: true, school: 'arcane',
                    pal: { name: 'Hearthhold', floor: '#262a22', floor2: '#2c3027', wall: '#3a4030', wallTop: '#48503c', accent: '#8fbf6f' } },
-    greenhollow: { name: 'Greenhollow', icon: '🌲', ox: 15, oy: 7, theme: 'wood', school: 'nature',
+    greenhollow: { name: 'Greenhollow', icon: '🌲', ox: 15, oy: 7, theme: 'wood', school: 'nature', req: 'catacombs',
                    roster: ['alchemist', 'arcanist', 'tamer'],
                    pal: { name: 'Greenhollow', floor: '#1f2a1a', floor2: '#243420', wall: '#2f4a2c', wallTop: '#3c5e38', accent: '#8fd06f' } },
-    cinderforge: { name: 'Cinderforge', icon: '🌋', ox: 34, oy: 8, theme: 'ember', school: 'fire',
+    cinderforge: { name: 'Cinderforge', icon: '🌋', ox: 34, oy: 8, theme: 'ember', school: 'fire', req: 'wood',
                    roster: ['smith', 'arcanist', 'merchant'],
                    pal: { name: 'Cinderforge', floor: '#2a1812', floor2: '#321c14', wall: '#4a2a20', wallTop: '#5e3422', accent: '#e86040' } },
-    dustmarket:  { name: 'Dustmarket', icon: '🏜️', ox: 35, oy: 25, theme: 'desert', school: 'mystic',
+    dustmarket:  { name: 'Dustmarket', icon: '🏜️', ox: 35, oy: 25, theme: 'desert', school: 'mystic', req: 'caves',
                    roster: ['merchant', 'arcanist', 'tailor'],
                    pal: { name: 'Dustmarket', floor: '#2c2614', floor2: '#332c18', wall: '#5a4a28', wallTop: '#6e5a30', accent: '#e0c060' } },
-    saltmere:    { name: 'Saltmere', icon: '⚓', ox: 9, oy: 27, theme: 'coast', school: 'frost',
+    saltmere:    { name: 'Saltmere', icon: '⚓', ox: 9, oy: 27, theme: 'coast', school: 'frost', req: 'desert',
                    roster: ['tamer', 'arcanist', 'healer', 'merchant'],
                    pal: { name: 'Saltmere', floor: '#142428', floor2: '#173036', wall: '#234a52', wallTop: '#2f5e66', accent: '#4fd0c0' } }
   };
@@ -750,6 +756,9 @@
     'A farmer: "Greenhollow\'s herbs can mend most anything. Most."'
   ];
   function townIdAt(x, y) { for (var k in TOWNS) if (TOWNS[k].ox === x && TOWNS[k].oy === y) return k; return null; }
+  function regionByKey(rk) { for (var i = 0; i < REGIONS.length; i++) if (REGIONS[i].key === rk) return REGIONS[i]; return null; }
+  function townUnlocked(tk) { var T = TOWNS[tk]; if (!T || !T.req) return true; return (hero && hero.trophies && hero.trophies.indexOf(T.req) >= 0); }
+  function townReqText(tk) { var T = TOWNS[tk]; if (!T || !T.req) return ''; var r = regionByKey(T.req); return r ? ('defeat ' + r.boss.name + ' in ' + r.name) : 'progress deeper'; }
   // Flavour for each town's notice board.
   var TOWN_LORE = {
     hearth:      'Notice Board: "By order of the Council — descend at your own risk. The Oracle keeps the tally of those who don\'t return. Mind the wells."',
@@ -1415,105 +1424,115 @@
     (hero.house.furniture || []).forEach(function (f) { world.objects.push({ type: 'furn', kind: f.kind, x: world.ROX + f.x, y: world.ROY + f.y }); });
   }
 
-  // ---- the overworld --------------------------------------------------------
+  // ---- the overworld: a STABLE (seeded) maze you learn to navigate ----------
+  //  Towns sit at the ends of isolated dead-end pockets, sealed shut until you
+  //  beat the boss they require — so new towns must be earned, and reaching
+  //  even an open one is a journey through winding corridors.
   function genOverworld() {
-    var m = blankMap();
-    // carve the whole landmass, leaving a 1-tile border of impassable edge
-    for (var y = 1; y < MH - 1; y++) for (var x = 1; x < MW - 1; x++) carve(m, x, y);
-    var objects = [];
-    var solid = {};                                 // key -> true: impassable terrain
-    function block(x0, y0, x1, y1, kind) { for (var yy = y0; yy <= y1; yy++) for (var xx = x0; xx <= x1; xx++) { objects.push({ type: 'deco', kind: kind, x: xx, y: yy, solid: true }); solid[key(xx, yy)] = true; } }
-    block(18, 23, 22, 26, 'water');                 // a central lake
-    block(26, 4, 30, 6, 'mountain');                // northern ridge
-    block(5, 22, 7, 24, 'mountain');                // western crags
-    // towns
-    var nodes = [];
-    for (var tk in TOWNS) { var T = TOWNS[tk]; objects.push({ type: 'town', town: tk, x: T.ox, y: T.oy }); nodes.push([T.ox, T.oy]); delete solid[key(T.ox, T.oy)]; }
-    // dungeon delves
-    DELVES.forEach(function (d) { objects.push({ type: 'delve', region: d.region, x: d.ox, y: d.oy }); nodes.push([d.ox, d.oy]); delete solid[key(d.ox, d.oy)]; });
-    // start position: where we left off, else just east of Hearthhold
-    var start = (hero.ow && walkOW(hero.ow.x, hero.ow.y, solid)) ? { x: hero.ow.x, y: hero.ow.y } : { x: TOWNS.hearth.ox + 2, y: TOWNS.hearth.oy };
-    // protect nodes (+ their surrounds) and the start so corridors stay open there
-    var protect = {};
-    function protectTile(x, y) { protect[key(x, y)] = true; }
-    nodes.forEach(function (n) { protectTile(n[0], n[1]); [[1, 0], [-1, 0], [0, 1], [0, -1]].forEach(function (d) { protectTile(n[0] + d[0], n[1] + d[1]); }); });
-    protectTile(start.x, start.y); [[1, 0], [-1, 0], [0, 1], [0, -1]].forEach(function (d) { protectTile(start.x + d[0], start.y + d[1]); });
-    // solid clusters that carve the open plain into forests, copses and crags —
-    // wandering between them gives the world its corridors.
-    function stampCluster(cx, cy, rad, kind, density) {
-      for (var yy = cy - rad; yy <= cy + rad; yy++) for (var xx = cx - rad; xx <= cx + rad; xx++) {
-        if (xx <= 1 || yy <= 1 || xx >= MW - 2 || yy >= MH - 2) continue;
-        var kk = key(xx, yy); if (protect[kk] || solid[kk] || nodeAt(xx, yy)) continue;
-        if ((xx - cx) * (xx - cx) + (yy - cy) * (yy - cy) > rad * rad) continue;
-        if (!chance(density)) continue;
-        solid[kk] = true; objects.push({ type: 'deco', kind: kind, x: xx, y: yy, solid: true });
+    var m = blankMap();                                   // all walls to start
+    var R = mulberry32(((hero && hero.createdAt) || 1) >>> 0 || 1);
+    function rri(n) { return (R() * n) | 0; }
+    function rpick(a) { return a[(R() * a.length) | 0]; }
+    function rchance(p) { return R() < p; }
+    function rshuf(a) { for (var i = a.length - 1; i > 0; i--) { var j = (R() * (i + 1)) | 0, t = a[i]; a[i] = a[j]; a[j] = t; } return a; }
+    function K(x, y) { return x + ',' + y; }
+    function inI(x, y) { return x > 0 && y > 0 && x < MW - 1 && y < MH - 1; }
+    function floorAt(x, y) { return inI(x, y) && m[y][x] === T_FLOOR; }
+
+    // ---- recursive-backtracker maze over the odd-cell lattice ----
+    var visited = {}, stackm = [[1, 1]]; visited['1,1'] = 1; carve(m, 1, 1);
+    while (stackm.length) {
+      var cur = stackm[stackm.length - 1], nbs = [];
+      [[2, 0], [-2, 0], [0, 2], [0, -2]].forEach(function (d) { var nx = cur[0] + d[0], ny = cur[1] + d[1]; if (nx >= 1 && ny >= 1 && nx <= MW - 2 && ny <= MH - 2 && !visited[K(nx, ny)]) nbs.push(d); });
+      if (nbs.length) { var d2 = rpick(nbs); carve(m, cur[0] + d2[0] / 2, cur[1] + d2[1] / 2); carve(m, cur[0] + d2[0], cur[1] + d2[1]); visited[K(cur[0] + d2[0], cur[1] + d2[1])] = 1; stackm.push([cur[0] + d2[0], cur[1] + d2[1]]); }
+      else stackm.pop();
+    }
+    // light braiding — open ~12% of walls beside corridors to add loops/shortcuts
+    for (var by = 1; by <= MH - 2; by += 2) for (var bx = 1; bx <= MW - 2; bx += 2) {
+      if (!rchance(0.12)) continue;
+      var opts = []; [[2, 0], [-2, 0], [0, 2], [0, -2]].forEach(function (d) { var wx = bx + d[0] / 2, wy = by + d[1] / 2, nx = bx + d[0], ny = by + d[1]; if (nx >= 1 && ny >= 1 && nx <= MW - 2 && ny <= MH - 2 && m[wy][wx] !== T_FLOOR && m[ny][nx] === T_FLOOR) opts.push([wx, wy]); });
+      if (opts.length) { var o = rpick(opts); carve(m, o[0], o[1]); }
+    }
+
+    var objects = [], solid = {}; hero._owPos = {};
+    var used = {};
+    function claim(x, y) { used[K(x, y)] = true; }
+    function carveChamber(cx, cy) { carve(m, cx, cy); [[1, 0], [-1, 0], [0, 1], [0, -1]].forEach(function (d) { if (inI(cx + d[0], cy + d[1])) carve(m, cx + d[0], cy + d[1]); }); }
+
+    // distance from the start cell over carved floor
+    var dist = {}; (function () { var q = [[1, 1, 0]]; dist['1,1'] = 0; while (q.length) { var c = q.shift(); [[1, 0], [-1, 0], [0, 1], [0, -1]].forEach(function (d) { var nx = c[0] + d[0], ny = c[1] + d[1], k = K(nx, ny); if (dist[k] === undefined && floorAt(nx, ny)) { dist[k] = c[2] + 1; q.push([nx, ny, c[2] + 1]); } }); } })();
+    var cells = []; for (var k in dist) { var p = k.split(','); cells.push([+p[0], +p[1], dist[k]]); }
+    cells.sort(function (a, b) { return a[2] - b[2]; });
+    var maxD = cells.length ? cells[cells.length - 1][2] : 1;
+    function cellFree(c) { return !used[K(c[0], c[1])]; }
+    function pickByDist(frac, sep) {
+      var target = maxD * frac, best = null, bestErr = 1e9;
+      for (var i = 0; i < cells.length; i++) { var c = cells[i]; if (!cellFree(c)) continue;
+        if (sep) { var bad = false; for (var u in used) { var up = u.split(','); if (Math.abs(c[0] - up[0]) + Math.abs(c[1] - up[1]) < sep) { bad = true; break; } } if (bad) continue; }
+        var err = Math.abs(c[2] - target); if (err < bestErr) { bestErr = err; best = c; } }
+      return best;
+    }
+
+    // ---- Hearthhold at the start (always open) ----
+    carveChamber(1, 1);
+    objects.push({ type: 'town', town: 'hearth', x: 1, y: 1 }); claim(1, 1); hero._owPos['town:hearth'] = { x: 1, y: 1 };
+    var hstart = null; [[1, 0], [0, 1], [-1, 0], [0, -1]].forEach(function (d) { if (!hstart && floorAt(1 + d[0], 1 + d[1])) hstart = { x: 1 + d[0], y: 1 + d[1] }; });
+    if (!hstart) hstart = { x: 1, y: 1 };
+    // resume where we left off, but only if it still connects to Hearthhold
+    var start = (hero.ow && floorAt(hero.ow.x, hero.ow.y)) ? { x: hero.ow.x, y: hero.ow.y } : hstart;
+
+    // ---- delves spread by distance (region 0 nearest … region 6 farthest) ----
+    DELVES.forEach(function (d, idx) {
+      var frac = 0.25 + (idx / Math.max(1, DELVES.length - 1)) * 0.7;
+      var c = pickByDist(frac, 4) || pickByDist(frac, 0); if (!c) return;
+      carveChamber(c[0], c[1]); claim(c[0], c[1]);
+      objects.push({ type: 'delve', region: d.region, x: c[0], y: c[1] }); hero._owPos['delve:' + d.region] = { x: c[0], y: c[1] };
+    });
+
+    // ---- towns: dead-end tips, each sealed at its single junction ----
+    // A dead-end corridor cell D connects to the maze through exactly one gap
+    // tile g (itself degree-2). Sealing g isolates D entirely — so the town at
+    // D is unreachable until you've beaten the boss that opens the seal.
+    function gapNeighbors(cx, cy) { var g = []; [[1, 0], [-1, 0], [0, 1], [0, -1]].forEach(function (d) { var nx = cx + d[0], ny = cy + d[1]; if (inI(nx, ny) && m[ny][nx] === T_FLOOR) g.push([nx, ny]); }); return g; }
+    var tips = [];
+    cells.forEach(function (c) { if (!cellFree(c)) return; var gs = gapNeighbors(c[0], c[1]); if (gs.length !== 1) return; var g = gs[0]; if (used[K(g[0], g[1])]) return; if (gapNeighbors(g[0], g[1]).length !== 2) return; tips.push({ x: c[0], y: c[1], gx: g[0], gy: g[1], dist: c[2] }); });
+    Object.keys(TOWNS).filter(function (t) { return t !== 'hearth'; }).forEach(function (tk, ti) {
+      var frac = 0.4 + ti * 0.15, avail = tips.filter(function (t) { return !used[K(t.x, t.y)] && !used[K(t.gx, t.gy)]; });
+      avail.sort(function (a, b) { return Math.abs(a.dist - maxD * frac) - Math.abs(b.dist - maxD * frac); });
+      var t = avail[0];
+      if (t) {
+        claim(t.x, t.y); claim(t.gx, t.gy);
+        var locked = !townUnlocked(tk);
+        objects.push({ type: 'seal', town: tk, req: TOWNS[tk].req, locked: locked, solid: locked, x: t.gx, y: t.gy });
+        if (locked) solid[K(t.gx, t.gy)] = true;
+        objects.push({ type: 'town', town: tk, x: t.x, y: t.y }); hero._owPos['town:' + tk] = { x: t.x, y: t.y };
+      } else {
+        var c = pickByDist(frac, 3) || pickByDist(frac, 0); if (c) { claim(c[0], c[1]); objects.push({ type: 'town', town: tk, x: c[0], y: c[1] }); hero._owPos['town:' + tk] = { x: c[0], y: c[1] }; }
       }
-    }
-    for (var fc = 0; fc < 6; fc++) stampCluster(rr(3, MW - 4), rr(3, MH - 4), 1 + ri(2), chance(0.5) ? 'tree' : 'pine', 0.8);
-    for (var rc = 0; rc < 3; rc++) stampCluster(rr(3, MW - 4), rr(3, MH - 4), 1 + ri(2), 'rock', 0.7);
-    // strip any solid terrain that ended up on a node tile, then guarantee
-    // every node is reachable from the start (carve a corridor if walled off)
-    objects = objects.filter(function (o) { return !(o.type === 'deco' && o.solid && !solid[key(o.x, o.y)]); });
-    nodes.forEach(function (n) { delete solid[key(n[0], n[1])]; });
-    objects = objects.filter(function (o) { return !(o.type === 'deco' && o.solid && nodeAt(o.x, o.y)); });
-    var reach = floodOW(start.x, start.y, solid);
-    nodes.forEach(function (n) { if (!reach[key(n[0], n[1])]) carveCorridorOW(start.x, start.y, n[0], n[1], solid, objects); });
-    reach = floodOW(start.x, start.y, solid);   // refresh after any corridor carving
-    // roads: tan paths linking Hearthhold to every other place
-    var hub = [TOWNS.hearth.ox, TOWNS.hearth.oy];
-    function stampRoad(ax, ay, bx, by) {
-      var x = ax, y = ay;
-      function put() { var kk = key(x, y); if (!solid[kk] && !nodeAt(x, y) && !objAtList(objects, x, y, 'road')) objects.push({ type: 'deco', kind: 'road', x: x, y: y }); }
-      put(); while (x !== bx) { x += x < bx ? 1 : -1; put(); } while (y !== by) { y += y < by ? 1 : -1; put(); }
-    }
-    nodes.forEach(function (n) { stampRoad(hub[0], hub[1], n[0], n[1]); });
-    // themed greenery clustered around each town & delve so places have a region
-    function ringDeco(cx, cy, kinds) {
-      for (var t = 0; t < 7; t++) { var ax = cx + rr(-3, 3), ay = cy + rr(-3, 3), kk = key(ax, ay);
-        if (ax <= 1 || ay <= 1 || ax >= MW - 2 || ay >= MH - 2 || solid[kk] || nodeAt(ax, ay) || objAtList(objects, ax, ay)) continue;
-        objects.push({ type: 'deco', kind: pick(kinds), x: ax, y: ay }); }
-    }
-    ringDeco(TOWNS.greenhollow.ox, TOWNS.greenhollow.oy, ['tree', 'pine', 'flower', 'bush']);
-    ringDeco(TOWNS.dustmarket.ox, TOWNS.dustmarket.oy, ['cactus', 'rock', 'grass']);
-    ringDeco(TOWNS.saltmere.ox, TOWNS.saltmere.oy, ['reed', 'reed', 'flower']);
-    ringDeco(TOWNS.cinderforge.ox, TOWNS.cinderforge.oy, ['rock', 'deadtree', 'rock']);
-    if (DELVES[6]) ringDeco(DELVES[6].ox, DELVES[6].oy, ['deadtree', 'gravestone', 'rock']);
-    // general flora, lightly clustered, so the land feels lived-in
-    var flora = ['tree', 'pine', 'flower', 'grass', 'grass', 'bush', 'rock'];
-    for (var f = 0; f < 24; f++) {
-      var cx2 = rr(2, MW - 3), cy2 = rr(2, MH - 3), clump = 1 + ri(4);
-      for (var c2 = 0; c2 < clump; c2++) {
-        var fx2 = cx2 + rr(-1, 1), fy2 = cy2 + rr(-1, 1), kk2 = key(fx2, fy2);
-        if (fx2 <= 1 || fy2 <= 1 || fx2 >= MW - 2 || fy2 >= MH - 2) continue;
-        if (solid[kk2] || nodeAt(fx2, fy2) || (fx2 === start.x && fy2 === start.y) || objAtList(objects, fx2, fy2)) continue;
-        objects.push({ type: 'deco', kind: pick(flora), x: fx2, y: fy2 });
-      }
+    });
+
+    // reachable floor (locked seals block) — everything below spawns only here
+    function reachFrom(sx, sy) { var seen = {}, q = [[sx, sy]]; seen[K(sx, sy)] = true; while (q.length) { var c = q.shift(); [[1, 0], [-1, 0], [0, 1], [0, -1]].forEach(function (d) { var nx = c[0] + d[0], ny = c[1] + d[1], kk = K(nx, ny); if (!seen[kk] && floorAt(nx, ny) && !solid[kk]) { seen[kk] = true; q.push([nx, ny]); } }); } return seen; }
+    var reach = reachFrom(start.x, start.y);
+    // never strand the player in a sealed pocket — fall back to Hearthhold
+    if (!reach[K(hstart.x, hstart.y)]) { start = hstart; reach = reachFrom(start.x, start.y); }
+    function freeReach(avoidNode) {
+      for (var a = 0; a < 80; a++) { var rx = rri(MW - 2) + 1, ry = rri(MH - 2) + 1, rk = K(rx, ry);
+        if (reach[rk] && !used[rk] && !objAtList(objects, rx, ry, null, true) && !(rx === start.x && ry === start.y)) { used[rk] = true; return { x: rx, y: ry }; } }
+      return null;
     }
     // discoverable lore landmarks
-    var lm = shuffle(LANDMARKS.slice());
-    for (var li = 0; li < lm.length && li < 6; li++) {
-      var lp = null;
-      for (var a2 = 0; a2 < 40; a2++) { var lx = rr(2, MW - 3), ly = rr(2, MH - 3), lk = key(lx, ly);
-        if (!solid[lk] && !nodeAt(lx, ly) && reach[lk] && !objAtList(objects, lx, ly) && !(lx === start.x && ly === start.y)) { lp = { x: lx, y: ly }; break; } }
-      if (lp) objects.push({ type: 'landmark', key: lm[li].key, icon: lm[li].icon, name: lm[li].name, lore: lm[li].lore, x: lp.x, y: lp.y });
-    }
-    // gatherable material nodes scattered near their themed regions
-    var occupied = {};
-    function freeWild() { for (var a = 0; a < 50; a++) { var wx = rr(2, MW - 3), wy = rr(2, MH - 3), wk = key(wx, wy); if (!solid[wk] && !occupied[wk] && reach[wk] && !townIdAt(wx, wy) && !nodeAt(wx, wy) && !objAtList(objects, wx, wy, null, true)) { occupied[wk] = true; return { x: wx, y: wy }; } } return null; }
-    var gatherSpots = [
-      { mat: 'herb', cx: TOWNS.greenhollow.ox, cy: TOWNS.greenhollow.oy }, { mat: 'herb', cx: TOWNS.greenhollow.ox, cy: TOWNS.greenhollow.oy },
-      { mat: 'ore', cx: TOWNS.cinderforge.ox, cy: TOWNS.cinderforge.oy }, { mat: 'ore', cx: 6, cy: 23 },
-      { mat: 'brine', cx: TOWNS.saltmere.ox, cy: TOWNS.saltmere.oy }, { mat: 'crystal', cx: 20, cy: 24 },
-      { mat: 'ember', cx: TOWNS.cinderforge.ox, cy: TOWNS.cinderforge.oy }, { mat: 'herb', cx: 20, cy: 10 }
-    ];
-    gatherSpots.forEach(function (g) {
-      for (var a = 0; a < 24; a++) { var gx = g.cx + rr(-4, 4), gy = g.cy + rr(-4, 4), gk = key(gx, gy);
-        if (gx <= 1 || gy <= 1 || gx >= MW - 2 || gy >= MH - 2 || solid[gk] || occupied[gk] || !reach[gk] || nodeAt(gx, gy) || objAtList(objects, gx, gy, null, true)) continue;
-        occupied[gk] = true; objects.push({ type: 'gather', mat: g.mat, x: gx, y: gy }); break; }
-    });
+    var lm = rshuf(LANDMARKS.slice());
+    for (var li = 0; li < lm.length && li < 6; li++) { var lp = freeReach(); if (lp) objects.push({ type: 'landmark', key: lm[li].key, icon: lm[li].icon, name: lm[li].name, lore: lm[li].lore, x: lp.x, y: lp.y }); }
+    // gatherable material nodes
+    var gmats = ['herb', 'ore', 'crystal', 'brine', 'ember', 'herb', 'ore', 'crystal'];
+    for (var gi = 0; gi < gmats.length; gi++) { var gp = freeReach(); if (gp) objects.push({ type: 'gather', mat: gmats[gi], x: gp.x, y: gp.y }); }
+    // sparse flora for flavour (non-blocking — corridors stay 1 wide)
+    var flora = ['tree', 'pine', 'flower', 'grass', 'bush', 'rock'];
+    for (var f = 0; f < 26; f++) { var fp = freeReach(); if (fp) objects.push({ type: 'deco', kind: rpick(flora), x: fp.x, y: fp.y }); }
     // roaming exotic animals (corner & tame -> pet) and wandering folk
-    for (var w = 0; w < 6; w++) { var sp = freeWild(); if (!sp) break; var wd = WILD[w % WILD.length]; objects.push({ type: 'animal', kind: wd.kind, aname: wd.name, sense: 5, wary: 0, x: sp.x, y: sp.y, rx: sp.x, ry: sp.y, mobile: true }); }
-    for (var n3 = 0; n3 < 3; n3++) { var sp2 = freeWild(); if (!sp2) break; objects.push({ type: 'wanderer', line: WANDER_LINES[(n3 + ri(WANDER_LINES.length)) % WANDER_LINES.length], x: sp2.x, y: sp2.y, rx: sp2.x, ry: sp2.y, mobile: true, cos: { color: pick(['crimson', 'slate', 'emerald', 'gold', 'rose']), eyes: 'default' } }); }
+    for (var w = 0; w < 6; w++) { var ap = freeReach(); if (!ap) break; var wd = WILD[w % WILD.length]; objects.push({ type: 'animal', kind: wd.kind, aname: wd.name, sense: 5, wary: 0, x: ap.x, y: ap.y, rx: ap.x, ry: ap.y, mobile: true }); }
+    for (var n3 = 0; n3 < 3; n3++) { var wp = freeReach(); if (!wp) break; objects.push({ type: 'wanderer', line: WANDER_LINES[(n3 + rri(WANDER_LINES.length)) % WANDER_LINES.length], x: wp.x, y: wp.y, rx: wp.x, ry: wp.y, mobile: true, cos: { color: rpick(['crimson', 'slate', 'emerald', 'gold', 'rose']), eyes: 'default' } }); }
     return {
       depth: OW, biome: OW_PAL, isBoss: false, puzzle: null, owSolid: solid,
       map: m, rooms: [], objects: objects, monsters: [], items: [],
@@ -1896,6 +1915,8 @@
     // wild animal — bumping it is a taming attempt (it won't let you walk through).
     // Cancel any auto-travel so the next queued node can't jump past the animal.
     if (world.mode === 'overworld') { var ani = objAt(nx, ny, 'animal'); if (ani) { world.path = null; p.bump = now(); p.bumpDir = { x: dx, y: dy }; tameAttempt(ani); endTurn(); return true; } }
+    // boss-seal blocking the way to a town
+    if (world.mode === 'overworld') { var sl = objAt(nx, ny, 'seal'); if (sl && sl.locked) { world.path = null; Cade.showToast('🔒 Sealed — ' + townReqText(sl.town) + ' to open the way to ' + (TOWNS[sl.town] || {}).name + '.', 'info', 2600); return false; } }
     // push boulder?
     var b = objAt(nx, ny, 'boulder');
     if (b) { if (pushBoulder(b, dx, dy)) { p.x = nx; p.y = ny; afterStep(); endTurn(); return true; } else { return false; } }
@@ -1988,7 +2009,7 @@
     if (world.mode === 'overworld') {
       var ow = objAt(p.x, p.y);
       if (ow) {
-        if (ow.type === 'town') { hero.ow = { x: p.x, y: p.y }; world._pendingTownId = ow.town; return; }
+        if (ow.type === 'town') { if (!townUnlocked(ow.town)) { Cade.showToast('🔒 ' + townReqText(ow.town), 'info', 2400); return; } hero.ow = { x: p.x, y: p.y }; world._pendingTownId = ow.town; return; }
         if (ow.type === 'delve') {
           if (!regionUnlocked(ow.region)) { Cade.showToast('That delve is sealed — clear the region before it', 'info', 1700); return; }
           hero.ow = { x: p.x, y: p.y }; world._pendingDelve = ow.region; return;
@@ -1997,6 +2018,7 @@
         if (ow.type === 'gather') { harvestNode(ow); return; }
         if (ow.type === 'wanderer') { talkWanderer(ow); return; }
         if (ow.type === 'landmark' || ow.type === 'noticeboard') { readLore(ow); return; }
+        if (ow.type === 'seal' && ow.locked) { Cade.showToast('🔒 ' + townReqText(ow.town), 'info', 2400); return; }
       }
     }
     // teleporter
@@ -2075,8 +2097,9 @@
       if (objAt(ox, oy, 'exit')) { enter(0); return; }
       if (objAt(ox, oy, 'owgate')) { enter(OW); return; }
       if (world.mode === 'overworld') {
-        var twn = objAt(ox, oy, 'town'); if (twn) { hero.ow = { x: twn.x, y: twn.y }; enter(0, twn.town); return; }
+        var twn = objAt(ox, oy, 'town'); if (twn) { if (!townUnlocked(twn.town)) { Cade.showToast('🔒 ' + townReqText(twn.town), 'info', 2400); return; } hero.ow = { x: twn.x, y: twn.y }; enter(0, twn.town); return; }
         var dlv = objAt(ox, oy, 'delve'); if (dlv) { if (!regionUnlocked(dlv.region)) { Cade.showToast('That delve is sealed — clear the region before it', 'info', 1700); return; } hero.ow = { x: dlv.x, y: dlv.y }; hero.stats.runs = (hero.stats.runs || 0) + 1; enter(regionStart(dlv.region)); return; }
+        var slk = objAt(ox, oy, 'seal'); if (slk && slk.locked) { Cade.showToast('🔒 ' + townReqText(slk.town), 'info', 2400); return; }
         var ani = objAt(ox, oy, 'animal'); if (ani) { tameAttempt(ani); return; }
         var gth = objAt(ox, oy, 'gather'); if (gth) { harvestNode(gth); return; }
         var wan = objAt(ox, oy, 'wanderer'); if (wan) { talkWanderer(wan); return; }
@@ -2574,6 +2597,10 @@
       if (t === T_FLOOR) {
         ctx.fillStyle = ((mx + my) & 1) ? b.floor : b.floor2;
         ctx.fillRect(px, py, TILE, TILE);
+      } else if (b.hedge) {
+        // overworld maze wall — a leafy hedge
+        ctx.fillStyle = b.wall; ctx.fillRect(px, py, TILE, TILE);
+        ctx.fillStyle = b.wallTop; for (var hh = 0; hh < 5; hh++) { var hx = px + 3 + ((mx * 7 + my * 13 + hh * 5) % (TILE - 6)), hy = py + 3 + ((my * 11 + mx * 5 + hh * 7) % (TILE - 6)); ctx.beginPath(); ctx.arc(hx, hy, 2.4, 0, 6.3); ctx.fill(); }
       } else {
         // wall
         ctx.fillStyle = b.wall; ctx.fillRect(px, py, TILE, TILE);
@@ -2702,9 +2729,15 @@
         ctx.fillStyle = '#6b4a2a'; ctx.fillRect(cx - 1.5, cy + 5, 3, 4);
         ctx.strokeStyle = '#9a8a6a'; ctx.lineWidth = 0.7; ctx.beginPath(); ctx.moveTo(cx - 4, cy - 3); ctx.lineTo(cx + 4, cy - 3); ctx.moveTo(cx - 4, cy); ctx.lineTo(cx + 4, cy); ctx.moveTo(cx - 4, cy + 3); ctx.lineTo(cx + 2, cy + 3); ctx.stroke(); ctx.globalAlpha = 1; break;
       case 'town': {
-        var T = TOWNS[o.town] || {};
-        glyph(ctx, T.icon || '🏘', cx, cy - 2, '#fff', 1, 20);
-        ctx.globalAlpha = 0.95; ctx.fillStyle = (T.pal && T.pal.accent) || '#ffd76a'; ctx.font = '700 9px ui-monospace, monospace'; ctx.textAlign = 'center'; ctx.fillText(T.name || o.town, cx, cy + 13); ctx.globalAlpha = 1; break;
+        var T = TOWNS[o.town] || {}, tlock = !townUnlocked(o.town);
+        glyph(ctx, T.icon || '🏘', cx, cy - 2, '#fff', tlock ? 0.5 : 1, 20);
+        if (tlock) glyph(ctx, '🔒', cx + TILE * 0.34, cy - TILE * 0.32, '#fff', 0.95, 11);
+        ctx.globalAlpha = tlock ? 0.55 : 0.95; ctx.fillStyle = (T.pal && T.pal.accent) || '#ffd76a'; ctx.font = '700 9px ui-monospace, monospace'; ctx.textAlign = 'center'; ctx.fillText(T.name || o.town, cx, cy + 13); ctx.globalAlpha = 1; break;
+      }
+      case 'seal': {
+        if (o.locked) { ctx.globalAlpha = a; ctx.fillStyle = '#7a3a6a'; for (var sb = 0; sb < 3; sb++) ctx.fillRect(px + 3 + sb * 7, py + 2, 4, TILE - 4); ctx.globalAlpha = 1; glyph(ctx, '🔒', cx, cy, '#fff', 1, 11); }
+        else glyph(ctx, '⛓', cx, cy, 'rgba(180,160,200,0.35)', a, 14);
+        break;
       }
       case 'delve': {
         var rg = REGIONS[o.region] || {}, unlocked = regionUnlocked(o.region);
@@ -3700,21 +3733,20 @@
   // ---- overlay: world map (minimap + fast travel) ---------------------------
   function renderMinimap() {
     var c = document.getElementById('cr-mm'); if (!c) return;
-    var x = c.getContext('2d'), W = c.width, H = c.height;
-    var sx = W / MW, sy = H / MH;
-    x.fillStyle = '#1a2416'; x.fillRect(0, 0, W, H);
-    x.fillStyle = '#27331f'; x.fillRect(sx, sy, W - sx * 2, H - sy * 2);   // land
-    // fixed terrain (mirror genOverworld blocks) for orientation
-    function rect(x0, y0, x1, y1, col) { x.fillStyle = col; x.fillRect(x0 * sx, y0 * sy, (x1 - x0 + 1) * sx, (y1 - y0 + 1) * sy); }
-    rect(18, 23, 22, 26, '#2a6a8a'); rect(26, 4, 30, 6, '#5a5e66'); rect(5, 22, 7, 24, '#5a5e66');
-    // delves
-    DELVES.forEach(function (d) { var un = regionUnlocked(d.region); x.fillStyle = un ? ((REGIONS[d.region].pal && REGIONS[d.region].pal.accent) || '#a87fe0') : '#55555f'; x.beginPath(); x.arc(d.ox * sx + sx / 2, d.oy * sy + sy / 2, 3.2, 0, 6.3); x.fill(); });
-    // towns
-    for (var tk in TOWNS) { var T = TOWNS[tk], seen = (hero.townsSeen || []).indexOf(tk) >= 0; x.fillStyle = seen ? ((T.pal && T.pal.accent) || '#ffd76a') : '#6b7280'; x.fillRect(T.ox * sx - 2, T.oy * sy - 2, 5, 5); }
-    // player
-    var pp = world && world.mode === 'overworld' ? { x: world.player.x, y: world.player.y } : (hero.ow || { x: TOWNS.hearth.ox + 2, y: TOWNS.hearth.oy });
-    x.fillStyle = '#fff'; x.beginPath(); x.arc(pp.x * sx + sx / 2, pp.y * sy + sy / 2, 3.5, 0, 6.3); x.fill();
-    x.strokeStyle = '#5ec8e6'; x.lineWidth = 2; x.stroke();
+    var x = c.getContext('2d'), W = c.width, H = c.height, sx = W / MW, sy = H / MH;
+    x.fillStyle = '#10140e'; x.fillRect(0, 0, W, H);
+    // draw the actual maze when we're standing in it
+    if (world && world.mode === 'overworld' && world.map) {
+      for (var yy = 0; yy < MH; yy++) for (var xx = 0; xx < MW; xx++) {
+        x.fillStyle = world.map[yy][xx] === T_FLOOR ? '#2c3d24' : '#161c14';
+        x.fillRect(xx * sx, yy * sy, sx + 0.7, sy + 0.7);
+      }
+    } else { x.fillStyle = '#1a221a'; x.fillRect(sx, sy, W - 2 * sx, H - 2 * sy); }
+    var pos = (hero && hero._owPos) || {};
+    DELVES.forEach(function (d) { var p = pos['delve:' + d.region]; if (!p) return; var un = regionUnlocked(d.region); x.fillStyle = un ? ((REGIONS[d.region].pal && REGIONS[d.region].pal.accent) || '#a87fe0') : '#55555f'; x.beginPath(); x.arc(p.x * sx + sx / 2, p.y * sy + sy / 2, 2.8, 0, 6.3); x.fill(); });
+    for (var tk in TOWNS) { var p2 = pos['town:' + tk]; if (!p2) continue; var un2 = townUnlocked(tk); x.fillStyle = un2 ? ((TOWNS[tk].pal && TOWNS[tk].pal.accent) || '#ffd76a') : '#6b7280'; x.fillRect(p2.x * sx - 1.5, p2.y * sy - 1.5, 4, 4); }
+    var pp = world && world.mode === 'overworld' ? { x: world.player.x, y: world.player.y } : (hero.ow || pos['town:hearth']);
+    if (pp) { x.fillStyle = '#fff'; x.beginPath(); x.arc(pp.x * sx + sx / 2, pp.y * sy + sy / 2, 3, 0, 6.3); x.fill(); x.strokeStyle = '#5ec8e6'; x.lineWidth = 2; x.stroke(); }
   }
   function openWorldMap() {
     if (!hero) return;
@@ -3725,9 +3757,10 @@
     if (!world || world.mode !== 'overworld')
       html += '<div class="cr-srow"><span class="cr-sic">🗺</span><span class="cr-snm">The Overworld<span class="cr-sdesc">Roam the realm on foot</span></span><button class="cr-buy" data-go="ow">walk</button></div>';
     html += '<div class="cr-sec">Towns</div>';
-    for (var tk in TOWNS) { var T = TOWNS[tk], seen = (hero.townsSeen || []).indexOf(tk) >= 0;
-      html += '<div class="cr-srow"><span class="cr-sic">' + T.icon + '</span><span class="cr-snm"><span style="color:' + ((T.pal && T.pal.accent) || '#ffd76a') + '">' + T.name + '</span><span class="cr-sdesc">' + (seen ? (T.full ? 'Your home hub' : 'Visited') : 'Not yet discovered') + '</span></span>' +
-        (seen ? '<button class="cr-buy" data-town="' + tk + '">go</button>' : '<span class="cr-buy cr-owned">🔒</span>') + '</div>'; }
+    for (var tk in TOWNS) { var T = TOWNS[tk], unlocked = townUnlocked(tk), seen = (hero.townsSeen || []).indexOf(tk) >= 0;
+      var sub = !unlocked ? ('🔒 ' + townReqText(tk)) : T.full ? 'Your home hub' : seen ? 'Visited' : 'Reach it on foot to discover';
+      html += '<div class="cr-srow"><span class="cr-sic">' + (unlocked ? T.icon : '🔒') + '</span><span class="cr-snm"><span style="color:' + (unlocked ? ((T.pal && T.pal.accent) || '#ffd76a') : '#6b7280') + '">' + T.name + '</span><span class="cr-sdesc">' + sub + '</span></span>' +
+        ((unlocked && seen) ? '<button class="cr-buy" data-town="' + tk + '">go</button>' : '<span class="cr-buy cr-owned">' + (unlocked ? '·' : '🔒') + '</span>') + '</div>'; }
     html += '<div class="cr-sec">Delves</div>';
     REGIONS.forEach(function (r, idx) {
       var unlocked = regionUnlocked(idx), cleared = hero.maxDepth > regionEnd(idx);
@@ -3739,12 +3772,13 @@
     body.innerHTML = html;
     renderMinimap();
     var go = body.querySelector('[data-go="ow"]'); if (go) go.addEventListener('click', function () { closeOverlay(); enter(OW); });
+    var pos = (hero && hero._owPos) || {};
     var tb = body.querySelectorAll('[data-town]');
-    for (var i = 0; i < tb.length; i++) (function (btn) { btn.addEventListener('click', function () { var id = btn.getAttribute('data-town'); closeOverlay(); if (TOWNS[id]) hero.ow = { x: TOWNS[id].ox, y: TOWNS[id].oy }; enter(0, id); }); })(tb[i]);
+    for (var i = 0; i < tb.length; i++) (function (btn) { btn.addEventListener('click', function () { var id = btn.getAttribute('data-town'); if (!townUnlocked(id)) { Cade.showToast('🔒 ' + townReqText(id), 'info', 2400); return; } closeOverlay(); hero.ow = pos['town:' + id] || null; enter(0, id); }); })(tb[i]);
     var db = body.querySelectorAll('[data-delve]');
     for (var j = 0; j < db.length; j++) (function (btn) { btn.addEventListener('click', function () {
       var idx = parseInt(btn.getAttribute('data-delve'), 10); if (!regionUnlocked(idx)) { Cade.showToast('Sealed — clear the region before it', 'info', 1600); return; }
-      closeOverlay(); if (DELVES[idx]) hero.ow = { x: DELVES[idx].ox, y: DELVES[idx].oy }; hero.stats.runs = (hero.stats.runs || 0) + 1; enter(regionStart(idx));
+      closeOverlay(); hero.ow = pos['delve:' + idx] || null; hero.stats.runs = (hero.stats.runs || 0) + 1; enter(regionStart(idx));
     }); })(db[j]);
   }
 
