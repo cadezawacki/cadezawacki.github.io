@@ -1,0 +1,2980 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+<title>GIF Studio — Offline GIF Editor</title>
+<meta name="description" content="Offline, device-local GIF editor & builder. Layers, text, transforms, erase, background removal — all in one file." />
+<meta name="color-scheme" content="light dark" />
+<link rel="icon" href="favicon.ico" />
+<link rel="manifest" href="manifest.webmanifest" />
+
+<!-- IBM Plex Sans to match the rest of the site -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,100..700;1,100..700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+<style>
+  :root{
+    --radius: 14px;
+    --radius-sm: 10px;
+    --shadow: 0 1px 1px rgba(0,0,0,.03), 0 10px 30px rgba(0,0,0,.07);
+    --shadow-sm: 0 1px 2px rgba(0,0,0,.06);
+
+    /* Brand */
+    --teal:#5a9996;
+    --teal-ink:#3f7d7a;
+    --indigo:#6f5d73;
+
+    /* Light theme */
+    --bg:#f7f7f5;
+    --bg-elev:#ffffff;
+    --panel:#ffffff;
+    --ink:#191a19;
+    --muted:#6c6f6e;
+    --faint:#9a9d9c;
+    --border:rgba(20,22,21,.10);
+    --border-strong:rgba(20,22,21,.18);
+    --accent:var(--teal);
+    --accent-2:var(--indigo);
+    --accent-soft:color-mix(in srgb, var(--teal) 14%, white);
+    --danger:#c0564f;
+    --stage:#eceeed;
+    --checker-a:#ffffff;
+    --checker-b:#e7eae9;
+  }
+  [data-theme="dark"]{
+    --bg:#0e0f0f;
+    --bg-elev:#161817;
+    --panel:#141615;
+    --ink:#f1f3f2;
+    --muted:#a4a8a6;
+    --faint:#6f7372;
+    --border:rgba(240,243,242,.10);
+    --border-strong:rgba(240,243,242,.18);
+    --accent:#6fb0ac;
+    --accent-2:#9a86a0;
+    --accent-soft:color-mix(in srgb, #6fb0ac 22%, #161817);
+    --stage:#0a0b0b;
+    --checker-a:#1b1d1c;
+    --checker-b:#141615;
+    --shadow: 0 1px 1px rgba(0,0,0,.3), 0 10px 30px rgba(0,0,0,.5);
+  }
+
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  html{-webkit-text-size-adjust:100%}
+  body{
+    margin:0;
+    font:14px/1.45 "IBM Plex Sans", ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial;
+    color:var(--ink);
+    background:var(--bg);
+    overflow:hidden;
+    -webkit-tap-highlight-color:transparent;
+  }
+  .mono{font-family:"IBM Plex Mono", ui-monospace, monospace}
+  button{font-family:inherit}
+  ::selection{background:color-mix(in srgb, var(--teal) 35%, white); color:#06302e}
+
+  /* ---------- App shell ---------- */
+  .app{
+    display:flex; flex-direction:column;
+    height:100dvh; height:100vh;
+  }
+  .topbar{
+    display:flex; align-items:center; gap:.6rem;
+    padding:.55rem clamp(.6rem,2vw,1rem);
+    background:var(--bg-elev);
+    border-bottom:1px solid var(--border);
+    position:relative; z-index:30;
+    flex:0 0 auto;
+  }
+  .brand{display:flex; align-items:center; gap:.55rem; min-width:0}
+  .brand .logo{
+    width:30px;height:30px;border-radius:9px;flex:0 0 auto;
+    background:linear-gradient(135deg,var(--teal),var(--indigo));
+    display:grid;place-items:center;color:#fff;font-weight:700;font-size:15px;
+    box-shadow:var(--shadow-sm);
+  }
+  .brand h1{font-size:15px;margin:0;font-weight:700;letter-spacing:.2px;white-space:nowrap}
+  .brand .tag{font-size:11px;color:var(--muted);margin-left:.1rem;white-space:nowrap}
+  .grow{flex:1 1 auto}
+
+  /* Mode switch */
+  .modeswitch{
+    display:inline-flex; background:var(--bg); border:1px solid var(--border);
+    border-radius:999px; padding:3px; gap:2px; flex:0 0 auto;
+  }
+  .modeswitch button{
+    border:0; background:transparent; color:var(--muted); cursor:pointer;
+    padding:.32rem .7rem; border-radius:999px; font-size:12px; font-weight:600;
+    display:flex; align-items:center; gap:.35rem; transition:.15s;
+  }
+  .modeswitch button .dot{width:7px;height:7px;border-radius:50%;background:currentColor;opacity:.5}
+  .modeswitch button.active{background:var(--accent); color:#fff}
+  .modeswitch button.active .dot{opacity:1; background:#fff}
+  .modeswitch button.global.active{background:var(--accent-2)}
+
+  .iconbtn{
+    width:34px;height:34px;border-radius:10px;border:1px solid var(--border);
+    background:var(--bg-elev);color:var(--ink);cursor:pointer;display:grid;place-items:center;
+    transition:.15s; flex:0 0 auto;
+  }
+  .iconbtn:hover{border-color:var(--border-strong); transform:translateY(-1px)}
+  .iconbtn svg{width:18px;height:18px}
+  .iconbtn.active{background:var(--accent-soft);border-color:color-mix(in srgb,var(--accent) 40%,var(--border))}
+
+  /* ---------- Main ---------- */
+  .main{flex:1 1 auto; display:flex; min-height:0}
+  .stagewrap{
+    flex:1 1 auto; min-width:0; position:relative;
+    display:flex; flex-direction:column; background:var(--stage);
+  }
+  .stage{
+    flex:1 1 auto; position:relative; min-height:0;
+    display:grid; place-items:center; overflow:hidden;
+    padding:clamp(.5rem,2vw,1.5rem);
+    touch-action:none;
+  }
+  .canvasbox{
+    position:relative; box-shadow:var(--shadow); border-radius:6px; overflow:hidden;
+    background-image:
+      linear-gradient(45deg,var(--checker-b) 25%,transparent 25%),
+      linear-gradient(-45deg,var(--checker-b) 25%,transparent 25%),
+      linear-gradient(45deg,transparent 75%,var(--checker-b) 75%),
+      linear-gradient(-45deg,transparent 75%,var(--checker-b) 75%);
+    background-size:18px 18px;
+    background-position:0 0,0 9px,9px -9px,-9px 0;
+    background-color:var(--checker-a);
+    max-width:100%; max-height:100%;
+  }
+  #view{display:block; max-width:100%; max-height:100%; touch-action:none}
+  #overlay{position:absolute; inset:0; width:100%; height:100%; pointer-events:none}
+
+  .emptystate{
+    position:absolute; inset:0; display:flex; flex-direction:column; gap:1rem;
+    align-items:center; justify-content:center; text-align:center; padding:2rem;
+  }
+  .emptystate h2{margin:0;font-size:18px;font-weight:700}
+  .emptystate p{margin:0;color:var(--muted);max-width:340px}
+  .dropzone{
+    border:1.5px dashed var(--border-strong); border-radius:var(--radius);
+    padding:1.6rem 2rem; background:var(--bg-elev); cursor:pointer; transition:.18s;
+    display:flex; flex-direction:column; gap:.5rem; align-items:center;
+  }
+  .dropzone.drag{border-color:var(--accent); background:var(--accent-soft)}
+
+  /* ---------- Timeline ---------- */
+  .timeline{
+    flex:0 0 auto; background:var(--bg-elev); border-top:1px solid var(--border);
+    padding:.5rem .6rem; display:flex; flex-direction:column; gap:.5rem;
+  }
+  .transport{display:flex; align-items:center; gap:.5rem; flex-wrap:wrap}
+  .transport .spacer{flex:1 1 auto}
+  .minictrl{display:flex; align-items:center; gap:.35rem; font-size:12px; color:var(--muted)}
+  .minictrl input[type=number]{width:58px}
+  .frames{
+    display:flex; gap:.4rem; overflow-x:auto; padding:.15rem .1rem .35rem;
+    scrollbar-width:thin;
+  }
+  .frames::-webkit-scrollbar{height:8px}
+  .frames::-webkit-scrollbar-thumb{background:var(--border-strong);border-radius:99px}
+  .fthumb{
+    position:relative; flex:0 0 auto; width:64px; height:64px; border-radius:8px;
+    border:2px solid transparent; background:var(--stage); cursor:pointer; overflow:hidden;
+    box-shadow:var(--shadow-sm);
+    background-image:
+      linear-gradient(45deg,var(--checker-b) 25%,transparent 25%),
+      linear-gradient(-45deg,var(--checker-b) 25%,transparent 25%),
+      linear-gradient(45deg,transparent 75%,var(--checker-b) 75%),
+      linear-gradient(-45deg,transparent 75%,var(--checker-b) 75%);
+    background-size:12px 12px; background-position:0 0,0 6px,6px -6px,-6px 0; background-color:var(--checker-a);
+  }
+  .fthumb canvas{width:100%;height:100%;object-fit:contain;display:block}
+  .fthumb.active{border-color:var(--accent)}
+  .fthumb .idx{
+    position:absolute; left:3px; top:2px; font-size:9px; padding:0 4px; border-radius:6px;
+    background:rgba(0,0,0,.55); color:#fff; font-weight:600;
+  }
+  .fthumb .delms{
+    position:absolute; right:3px; bottom:2px; font-size:8px; padding:0 3px; border-radius:5px;
+    background:rgba(0,0,0,.5); color:#fff;
+  }
+
+  /* ---------- Side panel ---------- */
+  .panel{
+    flex:0 0 320px; width:320px; background:var(--panel); border-left:1px solid var(--border);
+    display:flex; flex-direction:column; min-height:0;
+  }
+  .paneltabs{display:flex; border-bottom:1px solid var(--border); flex:0 0 auto}
+  .paneltabs button{
+    flex:1 1 0; border:0; background:transparent; color:var(--muted); cursor:pointer;
+    padding:.6rem .2rem; font-size:11px; font-weight:600; display:flex; flex-direction:column;
+    align-items:center; gap:.22rem; transition:.15s; border-bottom:2px solid transparent;
+  }
+  .paneltabs button svg{width:18px;height:18px}
+  .paneltabs button.active{color:var(--accent); border-bottom-color:var(--accent)}
+  .panelbody{flex:1 1 auto; overflow-y:auto; padding:.85rem; scrollbar-width:thin}
+  .tabpane{display:none; flex-direction:column; gap:.85rem}
+  .tabpane.active{display:flex}
+
+  .section{border:1px solid var(--border); border-radius:var(--radius-sm); background:var(--bg-elev)}
+  .section>h3{
+    margin:0; font-size:12px; font-weight:700; letter-spacing:.3px; text-transform:uppercase;
+    color:var(--muted); padding:.6rem .7rem .4rem;
+  }
+  .section .body{padding:0 .7rem .7rem; display:flex; flex-direction:column; gap:.6rem}
+
+  .field{display:flex; flex-direction:column; gap:.3rem}
+  .field label{font-size:11px; color:var(--muted); font-weight:600; display:flex; justify-content:space-between; gap:.5rem}
+  .field label .val{color:var(--ink); font-weight:500}
+  .row{display:flex; gap:.5rem; align-items:center}
+  .row.wrap{flex-wrap:wrap}
+  .row>*{min-width:0}
+
+  input[type=range]{
+    -webkit-appearance:none; appearance:none; width:100%; height:4px; border-radius:99px;
+    background:var(--border-strong); outline:none; margin:.35rem 0;
+  }
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none; width:16px;height:16px;border-radius:50%;background:var(--accent);
+    cursor:pointer; box-shadow:0 1px 4px rgba(0,0,0,.25); border:2px solid var(--bg-elev);
+  }
+  input[type=range]::-moz-range-thumb{width:16px;height:16px;border-radius:50%;background:var(--accent);cursor:pointer;border:2px solid var(--bg-elev)}
+  input[type=number],input[type=text],select,textarea{
+    width:100%; padding:.42rem .55rem; border:1px solid var(--border); border-radius:9px;
+    background:var(--bg); color:var(--ink); font:inherit; font-size:13px; outline:none;
+  }
+  input:focus,select:focus,textarea:focus{border-color:var(--accent)}
+  input[type=color]{padding:0; width:34px; height:32px; border-radius:8px; border:1px solid var(--border); background:none; cursor:pointer; flex:0 0 auto}
+  textarea{resize:vertical; min-height:60px; font-family:"IBM Plex Mono",monospace}
+
+  .btn{
+    border:1px solid var(--border); background:var(--bg-elev); color:var(--ink); cursor:pointer;
+    padding:.5rem .7rem; border-radius:10px; font-size:13px; font-weight:600; display:inline-flex;
+    align-items:center; justify-content:center; gap:.4rem; transition:.15s; white-space:nowrap;
+  }
+  .btn:hover{border-color:var(--border-strong); transform:translateY(-1px)}
+  .btn:active{transform:translateY(0)}
+  .btn svg{width:16px;height:16px}
+  .btn.block{width:100%}
+  .btn.primary{background:var(--accent); border-color:var(--accent); color:#fff}
+  .btn.primary:hover{filter:brightness(1.05)}
+  .btn.indigo{background:var(--accent-2); border-color:var(--accent-2); color:#fff}
+  .btn.danger{color:var(--danger); border-color:color-mix(in srgb,var(--danger) 40%,var(--border))}
+  .btn.danger:hover{background:color-mix(in srgb,var(--danger) 12%,var(--bg-elev))}
+  .btn.ghost{background:transparent}
+  .btn.sm{padding:.32rem .5rem; font-size:12px; border-radius:8px}
+  .btn[disabled]{opacity:.45; cursor:not-allowed; transform:none}
+  .btngrid{display:grid; grid-template-columns:1fr 1fr; gap:.5rem}
+
+  /* Tool grid */
+  .toolgrid{display:grid; grid-template-columns:repeat(3,1fr); gap:.5rem}
+  .tool{
+    border:1px solid var(--border); background:var(--bg-elev); border-radius:10px; cursor:pointer;
+    padding:.6rem .3rem; display:flex; flex-direction:column; align-items:center; gap:.3rem;
+    font-size:11px; color:var(--ink); font-weight:600; transition:.15s;
+  }
+  .tool svg{width:20px;height:20px; color:var(--muted)}
+  .tool:hover{border-color:var(--border-strong)}
+  .tool.active{background:var(--accent-soft); border-color:color-mix(in srgb,var(--accent) 45%,var(--border))}
+  .tool.active svg{color:var(--accent)}
+
+  /* Layers list */
+  .layerlist{display:flex; flex-direction:column; gap:.4rem}
+  .layer{
+    display:flex; align-items:center; gap:.5rem; padding:.45rem .5rem; border-radius:10px;
+    border:1px solid var(--border); background:var(--bg-elev); cursor:pointer; transition:.12s;
+  }
+  .layer.sel{border-color:var(--accent); background:var(--accent-soft)}
+  .layer.bg{opacity:.95}
+  .layer .thumb{
+    width:38px;height:38px;border-radius:7px;flex:0 0 auto;overflow:hidden;background:var(--stage);
+    background-image:
+      linear-gradient(45deg,var(--checker-b) 25%,transparent 25%),
+      linear-gradient(-45deg,var(--checker-b) 25%,transparent 25%),
+      linear-gradient(45deg,transparent 75%,var(--checker-b) 75%),
+      linear-gradient(-45deg,transparent 75%,var(--checker-b) 75%);
+    background-size:10px 10px; background-position:0 0,0 5px,5px -5px,-5px 0; background-color:var(--checker-a);
+  }
+  .layer .thumb canvas{width:100%;height:100%;object-fit:contain;display:block}
+  .layer .lmeta{flex:1 1 auto; min-width:0}
+  .layer .lname{font-size:12px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .layer .lsub{font-size:10px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .layer .vis{
+    width:26px;height:26px;border-radius:7px;border:1px solid var(--border);background:var(--bg);
+    display:grid;place-items:center;cursor:pointer;flex:0 0 auto;color:var(--muted)
+  }
+  .layer .vis svg{width:15px;height:15px}
+  .layer.hidden-layer .thumb,.layer.hidden-layer .lname{opacity:.4}
+
+  .pill{
+    display:inline-flex; align-items:center; gap:.3rem; font-size:10px; font-weight:600;
+    padding:.12rem .45rem; border-radius:99px; background:var(--accent-soft);
+    color:var(--accent); border:1px solid color-mix(in srgb,var(--accent) 30%,transparent)
+  }
+  .pill.indigo{background:color-mix(in srgb,var(--accent-2) 16%,transparent); color:var(--accent-2); border-color:color-mix(in srgb,var(--accent-2) 30%,transparent)}
+  .hint{font-size:11px; color:var(--faint); line-height:1.4}
+  .divider{height:1px; background:var(--border); margin:.2rem 0}
+
+  /* Mobile bottom-sheet panel */
+  .sheetgrip{display:none}
+  @media (max-width:860px){
+    .main{flex-direction:column}
+    .panel{
+      flex:0 0 auto; width:100%; max-width:100%; border-left:0; border-top:1px solid var(--border);
+      height:46dvh; max-height:46dvh; transition:height .2s ease;
+    }
+    .panel.collapsed{height:46px; overflow:hidden}
+    .sheetgrip{
+      display:flex; align-items:center; justify-content:center; gap:.5rem; height:24px;
+      cursor:pointer; color:var(--muted); flex:0 0 auto; font-size:11px; font-weight:600;
+    }
+    .sheetgrip::before{content:""; width:34px; height:4px; border-radius:99px; background:var(--border-strong)}
+    .brand .tag{display:none}
+    .timeline{padding:.4rem .5rem}
+  }
+  @media (max-width:520px){
+    .brand h1{font-size:14px}
+    .modeswitch button{padding:.3rem .55rem; font-size:11px}
+  }
+
+  /* Toast */
+  .toast{
+    position:fixed; left:50%; bottom:18px; transform:translateX(-50%) translateY(20px);
+    background:var(--ink); color:var(--bg); padding:.55rem .95rem; border-radius:11px; font-size:13px;
+    font-weight:500; box-shadow:var(--shadow); opacity:0; pointer-events:none; transition:.25s; z-index:200;
+    max-width:90vw; text-align:center;
+  }
+  .toast.show{opacity:1; transform:translateX(-50%) translateY(0)}
+
+  /* Modal */
+  .modal{
+    position:fixed; inset:0; background:rgba(0,0,0,.5); display:none; place-items:center; z-index:300;
+    padding:1rem; backdrop-filter:blur(2px);
+  }
+  .modal.show{display:grid}
+  .modalcard{
+    background:var(--bg-elev); border:1px solid var(--border); border-radius:var(--radius);
+    padding:1.3rem; max-width:380px; width:100%; box-shadow:var(--shadow); display:flex; flex-direction:column; gap:.9rem;
+  }
+  .modalcard h3{margin:0; font-size:16px}
+  .modalcard p{margin:0; color:var(--muted); font-size:13px; line-height:1.5}
+
+  /* Progress */
+  .progress{position:fixed; inset:0; background:rgba(0,0,0,.55); display:none; place-items:center; z-index:310; backdrop-filter:blur(2px)}
+  .progress.show{display:grid}
+  .progresscard{background:var(--bg-elev); border-radius:var(--radius); padding:1.4rem 1.6rem; box-shadow:var(--shadow); text-align:center; min-width:240px}
+  .bar{height:8px; border-radius:99px; background:var(--border-strong); overflow:hidden; margin-top:.8rem}
+  .bar>i{display:block; height:100%; width:0; background:linear-gradient(90deg,var(--teal),var(--indigo)); transition:width .12s}
+
+  .visually-hidden{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+</style>
+</head>
+<body>
+<!-- omggif (Dean McNamee, MIT) is inlined here as plain text and bootstrapped at runtime.
+     Kept verbatim so the GIF encode/decode path is fully offline & dependency-free. -->
+<script type="text/plain" id="omggif-src">
+// (c) Dean McNamee <dean@gmail.com>, 2013.
+//
+// https://github.com/deanm/omggif
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to
+// deal in the Software without restriction, including without limitation the
+// rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
+// sell copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+// IN THE SOFTWARE.
+//
+// omggif is a JavaScript implementation of a GIF 89a encoder and decoder,
+// including animation and compression.  It does not rely on any specific
+// underlying system, so should run in the browser, Node, or Plask.
+
+"use strict";
+
+function GifWriter(buf, width, height, gopts) {
+  var p = 0;
+
+  var gopts = gopts === undefined ? { } : gopts;
+  var loop_count = gopts.loop === undefined ? null : gopts.loop;
+  var global_palette = gopts.palette === undefined ? null : gopts.palette;
+
+  if (width <= 0 || height <= 0 || width > 65535 || height > 65535)
+    throw new Error("Width/Height invalid.");
+
+  function check_palette_and_num_colors(palette) {
+    var num_colors = palette.length;
+    if (num_colors < 2 || num_colors > 256 ||  num_colors & (num_colors-1)) {
+      throw new Error(
+          "Invalid code/color length, must be power of 2 and 2 .. 256.");
+    }
+    return num_colors;
+  }
+
+  // - Header.
+  buf[p++] = 0x47; buf[p++] = 0x49; buf[p++] = 0x46;  // GIF
+  buf[p++] = 0x38; buf[p++] = 0x39; buf[p++] = 0x61;  // 89a
+
+  // Handling of Global Color Table (palette) and background index.
+  var gp_num_colors_pow2 = 0;
+  var background = 0;
+  if (global_palette !== null) {
+    var gp_num_colors = check_palette_and_num_colors(global_palette);
+    while (gp_num_colors >>= 1) ++gp_num_colors_pow2;
+    gp_num_colors = 1 << gp_num_colors_pow2;
+    --gp_num_colors_pow2;
+    if (gopts.background !== undefined) {
+      background = gopts.background;
+      if (background >= gp_num_colors)
+        throw new Error("Background index out of range.");
+      // The GIF spec states that a background index of 0 should be ignored, so
+      // this is probably a mistake and you really want to set it to another
+      // slot in the palette.  But actually in the end most browsers, etc end
+      // up ignoring this almost completely (including for dispose background).
+      if (background === 0)
+        throw new Error("Background index explicitly passed as 0.");
+    }
+  }
+
+  // - Logical Screen Descriptor.
+  // NOTE(deanm): w/h apparently ignored by implementations, but set anyway.
+  buf[p++] = width & 0xff; buf[p++] = width >> 8 & 0xff;
+  buf[p++] = height & 0xff; buf[p++] = height >> 8 & 0xff;
+  // NOTE: Indicates 0-bpp original color resolution (unused?).
+  buf[p++] = (global_palette !== null ? 0x80 : 0) |  // Global Color Table Flag.
+             gp_num_colors_pow2;  // NOTE: No sort flag (unused?).
+  buf[p++] = background;  // Background Color Index.
+  buf[p++] = 0;  // Pixel aspect ratio (unused?).
+
+  // - Global Color Table
+  if (global_palette !== null) {
+    for (var i = 0, il = global_palette.length; i < il; ++i) {
+      var rgb = global_palette[i];
+      buf[p++] = rgb >> 16 & 0xff;
+      buf[p++] = rgb >> 8 & 0xff;
+      buf[p++] = rgb & 0xff;
+    }
+  }
+
+  if (loop_count !== null) {  // Netscape block for looping.
+    if (loop_count < 0 || loop_count > 65535)
+      throw new Error("Loop count invalid.")
+    // Extension code, label, and length.
+    buf[p++] = 0x21; buf[p++] = 0xff; buf[p++] = 0x0b;
+    // NETSCAPE2.0
+    buf[p++] = 0x4e; buf[p++] = 0x45; buf[p++] = 0x54; buf[p++] = 0x53;
+    buf[p++] = 0x43; buf[p++] = 0x41; buf[p++] = 0x50; buf[p++] = 0x45;
+    buf[p++] = 0x32; buf[p++] = 0x2e; buf[p++] = 0x30;
+    // Sub-block
+    buf[p++] = 0x03; buf[p++] = 0x01;
+    buf[p++] = loop_count & 0xff; buf[p++] = loop_count >> 8 & 0xff;
+    buf[p++] = 0x00;  // Terminator.
+  }
+
+
+  var ended = false;
+
+  this.addFrame = function(x, y, w, h, indexed_pixels, opts) {
+    if (ended === true) { --p; ended = false; }  // Un-end.
+
+    opts = opts === undefined ? { } : opts;
+
+    // TODO(deanm): Bounds check x, y.  Do they need to be within the virtual
+    // canvas width/height, I imagine?
+    if (x < 0 || y < 0 || x > 65535 || y > 65535)
+      throw new Error("x/y invalid.")
+
+    if (w <= 0 || h <= 0 || w > 65535 || h > 65535)
+      throw new Error("Width/Height invalid.")
+
+    if (indexed_pixels.length < w * h)
+      throw new Error("Not enough pixels for the frame size.");
+
+    var using_local_palette = true;
+    var palette = opts.palette;
+    if (palette === undefined || palette === null) {
+      using_local_palette = false;
+      palette = global_palette;
+    }
+
+    if (palette === undefined || palette === null)
+      throw new Error("Must supply either a local or global palette.");
+
+    var num_colors = check_palette_and_num_colors(palette);
+
+    // Compute the min_code_size (power of 2), destroying num_colors.
+    var min_code_size = 0;
+    while (num_colors >>= 1) ++min_code_size;
+    num_colors = 1 << min_code_size;  // Now we can easily get it back.
+
+    var delay = opts.delay === undefined ? 0 : opts.delay;
+
+    // From the spec:
+    //     0 -   No disposal specified. The decoder is
+    //           not required to take any action.
+    //     1 -   Do not dispose. The graphic is to be left
+    //           in place.
+    //     2 -   Restore to background color. The area used by the
+    //           graphic must be restored to the background color.
+    //     3 -   Restore to previous. The decoder is required to
+    //           restore the area overwritten by the graphic with
+    //           what was there prior to rendering the graphic.
+    //  4-7 -    To be defined.
+    // NOTE(deanm): Dispose background doesn't really work, apparently most
+    // browsers ignore the background palette index and clear to transparency.
+    var disposal = opts.disposal === undefined ? 0 : opts.disposal;
+    if (disposal < 0 || disposal > 3)  // 4-7 is reserved.
+      throw new Error("Disposal out of range.");
+
+    var use_transparency = false;
+    var transparent_index = 0;
+    if (opts.transparent !== undefined && opts.transparent !== null) {
+      use_transparency = true;
+      transparent_index = opts.transparent;
+      if (transparent_index < 0 || transparent_index >= num_colors)
+        throw new Error("Transparent color index.");
+    }
+
+    if (disposal !== 0 || use_transparency || delay !== 0) {
+      // - Graphics Control Extension
+      buf[p++] = 0x21; buf[p++] = 0xf9;  // Extension / Label.
+      buf[p++] = 4;  // Byte size.
+
+      buf[p++] = disposal << 2 | (use_transparency === true ? 1 : 0);
+      buf[p++] = delay & 0xff; buf[p++] = delay >> 8 & 0xff;
+      buf[p++] = transparent_index;  // Transparent color index.
+      buf[p++] = 0;  // Block Terminator.
+    }
+
+    // - Image Descriptor
+    buf[p++] = 0x2c;  // Image Seperator.
+    buf[p++] = x & 0xff; buf[p++] = x >> 8 & 0xff;  // Left.
+    buf[p++] = y & 0xff; buf[p++] = y >> 8 & 0xff;  // Top.
+    buf[p++] = w & 0xff; buf[p++] = w >> 8 & 0xff;
+    buf[p++] = h & 0xff; buf[p++] = h >> 8 & 0xff;
+    // NOTE: No sort flag (unused?).
+    // TODO(deanm): Support interlace.
+    buf[p++] = using_local_palette === true ? (0x80 | (min_code_size-1)) : 0;
+
+    // - Local Color Table
+    if (using_local_palette === true) {
+      for (var i = 0, il = palette.length; i < il; ++i) {
+        var rgb = palette[i];
+        buf[p++] = rgb >> 16 & 0xff;
+        buf[p++] = rgb >> 8 & 0xff;
+        buf[p++] = rgb & 0xff;
+      }
+    }
+
+    p = GifWriterOutputLZWCodeStream(
+            buf, p, min_code_size < 2 ? 2 : min_code_size, indexed_pixels);
+
+    return p;
+  };
+
+  this.end = function() {
+    if (ended === false) {
+      buf[p++] = 0x3b;  // Trailer.
+      ended = true;
+    }
+    return p;
+  };
+
+  this.getOutputBuffer = function() { return buf; };
+  this.setOutputBuffer = function(v) { buf = v; };
+  this.getOutputBufferPosition = function() { return p; };
+  this.setOutputBufferPosition = function(v) { p = v; };
+}
+
+// Main compression routine, palette indexes -> LZW code stream.
+// |index_stream| must have at least one entry.
+function GifWriterOutputLZWCodeStream(buf, p, min_code_size, index_stream) {
+  buf[p++] = min_code_size;
+  var cur_subblock = p++;  // Pointing at the length field.
+
+  var clear_code = 1 << min_code_size;
+  var code_mask = clear_code - 1;
+  var eoi_code = clear_code + 1;
+  var next_code = eoi_code + 1;
+
+  var cur_code_size = min_code_size + 1;  // Number of bits per code.
+  var cur_shift = 0;
+  // We have at most 12-bit codes, so we should have to hold a max of 19
+  // bits here (and then we would write out).
+  var cur = 0;
+
+  function emit_bytes_to_buffer(bit_block_size) {
+    while (cur_shift >= bit_block_size) {
+      buf[p++] = cur & 0xff;
+      cur >>= 8; cur_shift -= 8;
+      if (p === cur_subblock + 256) {  // Finished a subblock.
+        buf[cur_subblock] = 255;
+        cur_subblock = p++;
+      }
+    }
+  }
+
+  function emit_code(c) {
+    cur |= c << cur_shift;
+    cur_shift += cur_code_size;
+    emit_bytes_to_buffer(8);
+  }
+
+  // I am not an expert on the topic, and I don't want to write a thesis.
+  // However, it is good to outline here the basic algorithm and the few data
+  // structures and optimizations here that make this implementation fast.
+  // The basic idea behind LZW is to build a table of previously seen runs
+  // addressed by a short id (herein called output code).  All data is
+  // referenced by a code, which represents one or more values from the
+  // original input stream.  All input bytes can be referenced as the same
+  // value as an output code.  So if you didn't want any compression, you
+  // could more or less just output the original bytes as codes (there are
+  // some details to this, but it is the idea).  In order to achieve
+  // compression, values greater then the input range (codes can be up to
+  // 12-bit while input only 8-bit) represent a sequence of previously seen
+  // inputs.  The decompressor is able to build the same mapping while
+  // decoding, so there is always a shared common knowledge between the
+  // encoding and decoder, which is also important for "timing" aspects like
+  // how to handle variable bit width code encoding.
+  //
+  // One obvious but very important consequence of the table system is there
+  // is always a unique id (at most 12-bits) to map the runs.  'A' might be
+  // 4, then 'AA' might be 10, 'AAA' 11, 'AAAA' 12, etc.  This relationship
+  // can be used for an effecient lookup strategy for the code mapping.  We
+  // need to know if a run has been seen before, and be able to map that run
+  // to the output code.  Since we start with known unique ids (input bytes),
+  // and then from those build more unique ids (table entries), we can
+  // continue this chain (almost like a linked list) to always have small
+  // integer values that represent the current byte chains in the encoder.
+  // This means instead of tracking the input bytes (AAAABCD) to know our
+  // current state, we can track the table entry for AAAABC (it is guaranteed
+  // to exist by the nature of the algorithm) and the next character D.
+  // Therefor the tuple of (table_entry, byte) is guaranteed to also be
+  // unique.  This allows us to create a simple lookup key for mapping input
+  // sequences to codes (table indices) without having to store or search
+  // any of the code sequences.  So if 'AAAA' has a table entry of 12, the
+  // tuple of ('AAAA', K) for any input byte K will be unique, and can be our
+  // key.  This leads to a integer value at most 20-bits, which can always
+  // fit in an SMI value and be used as a fast sparse array / object key.
+
+  // Output code for the current contents of the index buffer.
+  var ib_code = index_stream[0] & code_mask;  // Load first input index.
+  var code_table = { };  // Key'd on our 20-bit "tuple".
+
+  emit_code(clear_code);  // Spec says first code should be a clear code.
+
+  // First index already loaded, process the rest of the stream.
+  for (var i = 1, il = index_stream.length; i < il; ++i) {
+    var k = index_stream[i] & code_mask;
+    var cur_key = ib_code << 8 | k;  // (prev, k) unique tuple.
+    var cur_code = code_table[cur_key];  // buffer + k.
+
+    // Check if we have to create a new code table entry.
+    if (cur_code === undefined) {  // We don't have buffer + k.
+      // Emit index buffer (without k).
+      // This is an inline version of emit_code, because this is the core
+      // writing routine of the compressor (and V8 cannot inline emit_code
+      // because it is a closure here in a different context).  Additionally
+      // we can call emit_byte_to_buffer less often, because we can have
+      // 30-bits (from our 31-bit signed SMI), and we know our codes will only
+      // be 12-bits, so can safely have 18-bits there without overflow.
+      // emit_code(ib_code);
+      cur |= ib_code << cur_shift;
+      cur_shift += cur_code_size;
+      while (cur_shift >= 8) {
+        buf[p++] = cur & 0xff;
+        cur >>= 8; cur_shift -= 8;
+        if (p === cur_subblock + 256) {  // Finished a subblock.
+          buf[cur_subblock] = 255;
+          cur_subblock = p++;
+        }
+      }
+
+      if (next_code === 4096) {  // Table full, need a clear.
+        emit_code(clear_code);
+        next_code = eoi_code + 1;
+        cur_code_size = min_code_size + 1;
+        code_table = { };
+      } else {  // Table not full, insert a new entry.
+        // Increase our variable bit code sizes if necessary.  This is a bit
+        // tricky as it is based on "timing" between the encoding and
+        // decoder.  From the encoders perspective this should happen after
+        // we've already emitted the index buffer and are about to create the
+        // first table entry that would overflow our current code bit size.
+        if (next_code >= (1 << cur_code_size)) ++cur_code_size;
+        code_table[cur_key] = next_code++;  // Insert into code table.
+      }
+
+      ib_code = k;  // Index buffer to single input k.
+    } else {
+      ib_code = cur_code;  // Index buffer to sequence in code table.
+    }
+  }
+
+  emit_code(ib_code);  // There will still be something in the index buffer.
+  emit_code(eoi_code);  // End Of Information.
+
+  // Flush / finalize the sub-blocks stream to the buffer.
+  emit_bytes_to_buffer(1);
+
+  // Finish the sub-blocks, writing out any unfinished lengths and
+  // terminating with a sub-block of length 0.  If we have already started
+  // but not yet used a sub-block it can just become the terminator.
+  if (cur_subblock + 1 === p) {  // Started but unused.
+    buf[cur_subblock] = 0;
+  } else {  // Started and used, write length and additional terminator block.
+    buf[cur_subblock] = p - cur_subblock - 1;
+    buf[p++] = 0;
+  }
+  return p;
+}
+
+function GifReader(buf) {
+  var p = 0;
+
+  // - Header (GIF87a or GIF89a).
+  if (buf[p++] !== 0x47 ||            buf[p++] !== 0x49 || buf[p++] !== 0x46 ||
+      buf[p++] !== 0x38 || (buf[p++]+1 & 0xfd) !== 0x38 || buf[p++] !== 0x61) {
+    throw new Error("Invalid GIF 87a/89a header.");
+  }
+
+  // - Logical Screen Descriptor.
+  var width = buf[p++] | buf[p++] << 8;
+  var height = buf[p++] | buf[p++] << 8;
+  var pf0 = buf[p++];  // <Packed Fields>.
+  var global_palette_flag = pf0 >> 7;
+  var num_global_colors_pow2 = pf0 & 0x7;
+  var num_global_colors = 1 << (num_global_colors_pow2 + 1);
+  var background = buf[p++];
+  buf[p++];  // Pixel aspect ratio (unused?).
+
+  var global_palette_offset = null;
+  var global_palette_size   = null;
+
+  if (global_palette_flag) {
+    global_palette_offset = p;
+    global_palette_size = num_global_colors;
+    p += num_global_colors * 3;  // Seek past palette.
+  }
+
+  var no_eof = true;
+
+  var frames = [ ];
+
+  var delay = 0;
+  var transparent_index = null;
+  var disposal = 0;  // 0 - No disposal specified.
+  var loop_count = null;
+
+  this.width = width;
+  this.height = height;
+
+  while (no_eof && p < buf.length) {
+    switch (buf[p++]) {
+      case 0x21:  // Graphics Control Extension Block
+        switch (buf[p++]) {
+          case 0xff:  // Application specific block
+            // Try if it's a Netscape block (with animation loop counter).
+            if (buf[p   ] !== 0x0b ||  // 21 FF already read, check block size.
+                // NETSCAPE2.0
+                buf[p+1 ] == 0x4e && buf[p+2 ] == 0x45 && buf[p+3 ] == 0x54 &&
+                buf[p+4 ] == 0x53 && buf[p+5 ] == 0x43 && buf[p+6 ] == 0x41 &&
+                buf[p+7 ] == 0x50 && buf[p+8 ] == 0x45 && buf[p+9 ] == 0x32 &&
+                buf[p+10] == 0x2e && buf[p+11] == 0x30 &&
+                // Sub-block
+                buf[p+12] == 0x03 && buf[p+13] == 0x01 && buf[p+16] == 0) {
+              p += 14;
+              loop_count = buf[p++] | buf[p++] << 8;
+              p++;  // Skip terminator.
+            } else {  // We don't know what it is, just try to get past it.
+              p += 12;
+              while (true) {  // Seek through subblocks.
+                var block_size = buf[p++];
+                // Bad block size (ex: undefined from an out of bounds read).
+                if (!(block_size >= 0)) throw Error("Invalid block size");
+                if (block_size === 0) break;  // 0 size is terminator
+                p += block_size;
+              }
+            }
+            break;
+
+          case 0xf9:  // Graphics Control Extension
+            if (buf[p++] !== 0x4 || buf[p+4] !== 0)
+              throw new Error("Invalid graphics extension block.");
+            var pf1 = buf[p++];
+            delay = buf[p++] | buf[p++] << 8;
+            transparent_index = buf[p++];
+            if ((pf1 & 1) === 0) transparent_index = null;
+            disposal = pf1 >> 2 & 0x7;
+            p++;  // Skip terminator.
+            break;
+
+          case 0xfe:  // Comment Extension.
+            while (true) {  // Seek through subblocks.
+              var block_size = buf[p++];
+              // Bad block size (ex: undefined from an out of bounds read).
+              if (!(block_size >= 0)) throw Error("Invalid block size");
+              if (block_size === 0) break;  // 0 size is terminator
+              // console.log(buf.slice(p, p+block_size).toString('ascii'));
+              p += block_size;
+            }
+            break;
+
+          default:
+            throw new Error(
+                "Unknown graphic control label: 0x" + buf[p-1].toString(16));
+        }
+        break;
+
+      case 0x2c:  // Image Descriptor.
+        var x = buf[p++] | buf[p++] << 8;
+        var y = buf[p++] | buf[p++] << 8;
+        var w = buf[p++] | buf[p++] << 8;
+        var h = buf[p++] | buf[p++] << 8;
+        var pf2 = buf[p++];
+        var local_palette_flag = pf2 >> 7;
+        var interlace_flag = pf2 >> 6 & 1;
+        var num_local_colors_pow2 = pf2 & 0x7;
+        var num_local_colors = 1 << (num_local_colors_pow2 + 1);
+        var palette_offset = global_palette_offset;
+        var palette_size = global_palette_size;
+        var has_local_palette = false;
+        if (local_palette_flag) {
+          var has_local_palette = true;
+          palette_offset = p;  // Override with local palette.
+          palette_size = num_local_colors;
+          p += num_local_colors * 3;  // Seek past palette.
+        }
+
+        var data_offset = p;
+
+        p++;  // codesize
+        while (true) {
+          var block_size = buf[p++];
+          // Bad block size (ex: undefined from an out of bounds read).
+          if (!(block_size >= 0)) throw Error("Invalid block size");
+          if (block_size === 0) break;  // 0 size is terminator
+          p += block_size;
+        }
+
+        frames.push({x: x, y: y, width: w, height: h,
+                     has_local_palette: has_local_palette,
+                     palette_offset: palette_offset,
+                     palette_size: palette_size,
+                     data_offset: data_offset,
+                     data_length: p - data_offset,
+                     transparent_index: transparent_index,
+                     interlaced: !!interlace_flag,
+                     delay: delay,
+                     disposal: disposal});
+        break;
+
+      case 0x3b:  // Trailer Marker (end of file).
+        no_eof = false;
+        break;
+
+      default:
+        throw new Error("Unknown gif block: 0x" + buf[p-1].toString(16));
+        break;
+    }
+  }
+
+  this.numFrames = function() {
+    return frames.length;
+  };
+
+  this.loopCount = function() {
+    return loop_count;
+  };
+
+  this.frameInfo = function(frame_num) {
+    if (frame_num < 0 || frame_num >= frames.length)
+      throw new Error("Frame index out of range.");
+    return frames[frame_num];
+  }
+
+  this.decodeAndBlitFrameBGRA = function(frame_num, pixels) {
+    var frame = this.frameInfo(frame_num);
+    var num_pixels = frame.width * frame.height;
+    var index_stream = new Uint8Array(num_pixels);  // At most 8-bit indices.
+    GifReaderLZWOutputIndexStream(
+        buf, frame.data_offset, index_stream, num_pixels);
+    var palette_offset = frame.palette_offset;
+
+    // NOTE(deanm): It seems to be much faster to compare index to 256 than
+    // to === null.  Not sure why, but CompareStub_EQ_STRICT shows up high in
+    // the profile, not sure if it's related to using a Uint8Array.
+    var trans = frame.transparent_index;
+    if (trans === null) trans = 256;
+
+    // We are possibly just blitting to a portion of the entire frame.
+    // That is a subrect within the framerect, so the additional pixels
+    // must be skipped over after we finished a scanline.
+    var framewidth  = frame.width;
+    var framestride = width - framewidth;
+    var xleft       = framewidth;  // Number of subrect pixels left in scanline.
+
+    // Output indicies of the top left and bottom right corners of the subrect.
+    var opbeg = ((frame.y * width) + frame.x) * 4;
+    var opend = ((frame.y + frame.height) * width + frame.x) * 4;
+    var op    = opbeg;
+
+    var scanstride = framestride * 4;
+
+    // Use scanstride to skip past the rows when interlacing.  This is skipping
+    // 7 rows for the first two passes, then 3 then 1.
+    if (frame.interlaced === true) {
+      scanstride += width * 4 * 7;  // Pass 1.
+    }
+
+    var interlaceskip = 8;  // Tracking the row interval in the current pass.
+
+    for (var i = 0, il = index_stream.length; i < il; ++i) {
+      var index = index_stream[i];
+
+      if (xleft === 0) {  // Beginning of new scan line
+        op += scanstride;
+        xleft = framewidth;
+        if (op >= opend) { // Catch the wrap to switch passes when interlacing.
+          scanstride = framestride * 4 + width * 4 * (interlaceskip-1);
+          // interlaceskip / 2 * 4 is interlaceskip << 1.
+          op = opbeg + (framewidth + framestride) * (interlaceskip << 1);
+          interlaceskip >>= 1;
+        }
+      }
+
+      if (index === trans) {
+        op += 4;
+      } else {
+        var r = buf[palette_offset + index * 3];
+        var g = buf[palette_offset + index * 3 + 1];
+        var b = buf[palette_offset + index * 3 + 2];
+        pixels[op++] = b;
+        pixels[op++] = g;
+        pixels[op++] = r;
+        pixels[op++] = 255;
+      }
+      --xleft;
+    }
+  };
+
+  // I will go to copy and paste hell one day...
+  this.decodeAndBlitFrameRGBA = function(frame_num, pixels) {
+    var frame = this.frameInfo(frame_num);
+    var num_pixels = frame.width * frame.height;
+    var index_stream = new Uint8Array(num_pixels);  // At most 8-bit indices.
+    GifReaderLZWOutputIndexStream(
+        buf, frame.data_offset, index_stream, num_pixels);
+    var palette_offset = frame.palette_offset;
+
+    // NOTE(deanm): It seems to be much faster to compare index to 256 than
+    // to === null.  Not sure why, but CompareStub_EQ_STRICT shows up high in
+    // the profile, not sure if it's related to using a Uint8Array.
+    var trans = frame.transparent_index;
+    if (trans === null) trans = 256;
+
+    // We are possibly just blitting to a portion of the entire frame.
+    // That is a subrect within the framerect, so the additional pixels
+    // must be skipped over after we finished a scanline.
+    var framewidth  = frame.width;
+    var framestride = width - framewidth;
+    var xleft       = framewidth;  // Number of subrect pixels left in scanline.
+
+    // Output indicies of the top left and bottom right corners of the subrect.
+    var opbeg = ((frame.y * width) + frame.x) * 4;
+    var opend = ((frame.y + frame.height) * width + frame.x) * 4;
+    var op    = opbeg;
+
+    var scanstride = framestride * 4;
+
+    // Use scanstride to skip past the rows when interlacing.  This is skipping
+    // 7 rows for the first two passes, then 3 then 1.
+    if (frame.interlaced === true) {
+      scanstride += width * 4 * 7;  // Pass 1.
+    }
+
+    var interlaceskip = 8;  // Tracking the row interval in the current pass.
+
+    for (var i = 0, il = index_stream.length; i < il; ++i) {
+      var index = index_stream[i];
+
+      if (xleft === 0) {  // Beginning of new scan line
+        op += scanstride;
+        xleft = framewidth;
+        if (op >= opend) { // Catch the wrap to switch passes when interlacing.
+          scanstride = framestride * 4 + width * 4 * (interlaceskip-1);
+          // interlaceskip / 2 * 4 is interlaceskip << 1.
+          op = opbeg + (framewidth + framestride) * (interlaceskip << 1);
+          interlaceskip >>= 1;
+        }
+      }
+
+      if (index === trans) {
+        op += 4;
+      } else {
+        var r = buf[palette_offset + index * 3];
+        var g = buf[palette_offset + index * 3 + 1];
+        var b = buf[palette_offset + index * 3 + 2];
+        pixels[op++] = r;
+        pixels[op++] = g;
+        pixels[op++] = b;
+        pixels[op++] = 255;
+      }
+      --xleft;
+    }
+  };
+}
+
+function GifReaderLZWOutputIndexStream(code_stream, p, output, output_length) {
+  var min_code_size = code_stream[p++];
+
+  var clear_code = 1 << min_code_size;
+  var eoi_code = clear_code + 1;
+  var next_code = eoi_code + 1;
+
+  var cur_code_size = min_code_size + 1;  // Number of bits per code.
+  // NOTE: This shares the same name as the encoder, but has a different
+  // meaning here.  Here this masks each code coming from the code stream.
+  var code_mask = (1 << cur_code_size) - 1;
+  var cur_shift = 0;
+  var cur = 0;
+
+  var op = 0;  // Output pointer.
+
+  var subblock_size = code_stream[p++];
+
+  // TODO(deanm): Would using a TypedArray be any faster?  At least it would
+  // solve the fast mode / backing store uncertainty.
+  // var code_table = Array(4096);
+  var code_table = new Int32Array(4096);  // Can be signed, we only use 20 bits.
+
+  var prev_code = null;  // Track code-1.
+
+  while (true) {
+    // Read up to two bytes, making sure we always 12-bits for max sized code.
+    while (cur_shift < 16) {
+      if (subblock_size === 0) break;  // No more data to be read.
+
+      cur |= code_stream[p++] << cur_shift;
+      cur_shift += 8;
+
+      if (subblock_size === 1) {  // Never let it get to 0 to hold logic above.
+        subblock_size = code_stream[p++];  // Next subblock.
+      } else {
+        --subblock_size;
+      }
+    }
+
+    // TODO(deanm): We should never really get here, we should have received
+    // and EOI.
+    if (cur_shift < cur_code_size)
+      break;
+
+    var code = cur & code_mask;
+    cur >>= cur_code_size;
+    cur_shift -= cur_code_size;
+
+    // TODO(deanm): Maybe should check that the first code was a clear code,
+    // at least this is what you're supposed to do.  But actually our encoder
+    // now doesn't emit a clear code first anyway.
+    if (code === clear_code) {
+      // We don't actually have to clear the table.  This could be a good idea
+      // for greater error checking, but we don't really do any anyway.  We
+      // will just track it with next_code and overwrite old entries.
+
+      next_code = eoi_code + 1;
+      cur_code_size = min_code_size + 1;
+      code_mask = (1 << cur_code_size) - 1;
+
+      // Don't update prev_code ?
+      prev_code = null;
+      continue;
+    } else if (code === eoi_code) {
+      break;
+    }
+
+    // We have a similar situation as the decoder, where we want to store
+    // variable length entries (code table entries), but we want to do in a
+    // faster manner than an array of arrays.  The code below stores sort of a
+    // linked list within the code table, and then "chases" through it to
+    // construct the dictionary entries.  When a new entry is created, just the
+    // last byte is stored, and the rest (prefix) of the entry is only
+    // referenced by its table entry.  Then the code chases through the
+    // prefixes until it reaches a single byte code.  We have to chase twice,
+    // first to compute the length, and then to actually copy the data to the
+    // output (backwards, since we know the length).  The alternative would be
+    // storing something in an intermediate stack, but that doesn't make any
+    // more sense.  I implemented an approach where it also stored the length
+    // in the code table, although it's a bit tricky because you run out of
+    // bits (12 + 12 + 8), but I didn't measure much improvements (the table
+    // entries are generally not the long).  Even when I created benchmarks for
+    // very long table entries the complexity did not seem worth it.
+    // The code table stores the prefix entry in 12 bits and then the suffix
+    // byte in 8 bits, so each entry is 20 bits.
+
+    var chase_code = code < next_code ? code : prev_code;
+
+    // Chase what we will output, either {CODE} or {CODE-1}.
+    var chase_length = 0;
+    var chase = chase_code;
+    while (chase > clear_code) {
+      chase = code_table[chase] >> 8;
+      ++chase_length;
+    }
+
+    var k = chase;
+
+    var op_end = op + chase_length + (chase_code !== code ? 1 : 0);
+    if (op_end > output_length) {
+      console.log("Warning, gif stream longer than expected.");
+      return;
+    }
+
+    // Already have the first byte from the chase, might as well write it fast.
+    output[op++] = k;
+
+    op += chase_length;
+    var b = op;  // Track pointer, writing backwards.
+
+    if (chase_code !== code)  // The case of emitting {CODE-1} + k.
+      output[op++] = k;
+
+    chase = chase_code;
+    while (chase_length--) {
+      chase = code_table[chase];
+      output[--b] = chase & 0xff;  // Write backwards.
+      chase >>= 8;  // Pull down to the prefix code.
+    }
+
+    if (prev_code !== null && next_code < 4096) {
+      code_table[next_code++] = prev_code << 8 | k;
+      // TODO(deanm): Figure out this clearing vs code growth logic better.  I
+      // have an feeling that it should just happen somewhere else, for now it
+      // is awkward between when we grow past the max and then hit a clear code.
+      // For now just check if we hit the max 12-bits (then a clear code should
+      // follow, also of course encoded in 12-bits).
+      if (next_code >= code_mask+1 && cur_code_size < 12) {
+        ++cur_code_size;
+        code_mask = code_mask << 1 | 1;
+      }
+    }
+
+    prev_code = code;
+  }
+
+  if (op !== output_length) {
+    console.log("Warning, gif stream shorter than expected.");
+  }
+
+  return output;
+}
+
+// CommonJS.
+
+
+</script>
+
+<div class="app">
+  <!-- ===== Top bar ===== -->
+  <div class="topbar">
+    <div class="brand">
+      <div class="logo">G</div>
+      <div>
+        <h1>GIF Studio</h1>
+      </div>
+      <span class="tag">offline editor</span>
+    </div>
+    <div class="grow"></div>
+
+    <div class="modeswitch" id="modeSwitch" title="Edit scope: FRAME affects only the current frame, GLOBAL replicates across every frame">
+      <button class="frame active" data-mode="frame"><span class="dot"></span>FRAME</button>
+      <button class="global" data-mode="global"><span class="dot"></span>GLOBAL</button>
+    </div>
+
+    <button class="iconbtn" id="themeBtn" title="Toggle theme" aria-label="Toggle theme"></button>
+    <a class="iconbtn" href="index.html" title="Back to tools" aria-label="Back to tools">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9.5 12 3l9 6.5"/><path d="M5 9v11h14V9"/></svg>
+    </a>
+  </div>
+
+  <!-- ===== Main ===== -->
+  <div class="main">
+    <div class="stagewrap">
+      <div class="stage" id="stage">
+        <div class="canvasbox" id="canvasbox" style="display:none">
+          <canvas id="view"></canvas>
+          <canvas id="overlay"></canvas>
+        </div>
+        <div class="emptystate" id="emptystate">
+          <h2>Drop a GIF or images to begin</h2>
+          <p>Everything runs on your device. Edit an animated GIF or build one from a sequence of stills.</p>
+          <label class="dropzone" id="dropzone">
+            <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent)"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M5 20h14"/></svg>
+            <strong>Choose files</strong>
+            <span class="hint">GIF, PNG, JPG, WebP · tap or drop</span>
+            <input id="fileInput" type="file" accept="image/*,.gif" multiple class="visually-hidden">
+          </label>
+        </div>
+      </div>
+
+      <!-- Timeline -->
+      <div class="timeline" id="timeline" style="display:none">
+        <div class="transport">
+          <button class="iconbtn" id="firstBtn" title="First frame"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 5h2v14H6zM20 5 9 12l11 7z"/></svg></button>
+          <button class="iconbtn" id="prevBtn" title="Previous frame"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M15 5 6 12l9 7zM17 5h2v14h-2z"/></svg></button>
+          <button class="iconbtn" id="playBtn" title="Play / pause"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></button>
+          <button class="iconbtn" id="nextBtn" title="Next frame"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 5l9 7-9 7zM5 5h2v14H5z"/></svg></button>
+          <div class="minictrl"><span id="frameLabel" class="mono">1 / 1</span></div>
+          <div class="spacer"></div>
+          <div class="minictrl" title="Playback / export frame rate">
+            <span>FPS</span>
+            <input type="number" id="fpsInput" min="1" max="50" step="1" value="12">
+          </div>
+          <div class="minictrl" title="Delay of the current frame (ms)">
+            <span>This frame</span>
+            <input type="number" id="frameDelay" min="10" max="10000" step="10" value="83"><span>ms</span>
+          </div>
+        </div>
+        <div class="frames" id="framesStrip"></div>
+      </div>
+    </div>
+
+    <!-- ===== Side panel ===== -->
+    <aside class="panel" id="panel">
+      <div class="sheetgrip" id="sheetGrip">Tools</div>
+      <div class="paneltabs">
+        <button data-tab="layers" class="active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 2 9 5-9 5-9-5 9-5z"/><path d="m3 12 9 5 9-5"/><path d="m3 17 9 5 9-5"/></svg>Layers</button>
+        <button data-tab="adjust"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16"/><path d="M4 12h16"/><path d="M4 18h16"/><circle cx="9" cy="6" r="2" fill="currentColor"/><circle cx="15" cy="12" r="2" fill="currentColor"/><circle cx="8" cy="18" r="2" fill="currentColor"/></svg>Edit</button>
+        <button data-tab="text"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7V5h16v2"/><path d="M9 19h6"/><path d="M12 5v14"/></svg>Text</button>
+        <button data-tab="gif"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9v6"/><path d="M12 9v6"/><path d="M17 9v6"/></svg>GIF</button>
+      </div>
+
+      <div class="panelbody">
+
+        <!-- LAYERS TAB -->
+        <div class="tabpane active" data-pane="layers">
+          <div class="btngrid">
+            <button class="btn" id="addImageBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-5-5L5 21"/></svg>Image</button>
+            <button class="btn" id="addTextBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7V5h16v2"/><path d="M12 5v14"/><path d="M9 19h6"/></svg>Text</button>
+          </div>
+          <input id="addImageInput" type="file" accept="image/*" class="visually-hidden" multiple>
+
+          <div class="section">
+            <h3>Stack <span class="hint" style="text-transform:none;font-weight:500">top = front</span></h3>
+            <div class="body">
+              <div class="layerlist" id="layerList"></div>
+            </div>
+          </div>
+
+          <div class="section" id="layerOps">
+            <h3>Selected layer</h3>
+            <div class="body">
+              <div class="field">
+                <label>Name</label>
+                <input type="text" id="layerName" placeholder="Layer name">
+              </div>
+              <div class="row wrap">
+                <button class="btn sm" id="layerUp" title="Move up">▲ Up</button>
+                <button class="btn sm" id="layerDown" title="Move down">▼ Down</button>
+                <button class="btn sm" id="layerDup" title="Duplicate">⧉ Dup</button>
+                <button class="btn sm" id="layerMerge" title="Merge into the layer below">⤵ Merge</button>
+              </div>
+              <button class="btn danger sm block" id="layerDelete">Delete layer</button>
+              <p class="hint">Add / remove / reorder / hide / merge always apply across <em>every</em> frame.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- EDIT TAB (transform + tools) -->
+        <div class="tabpane" data-pane="adjust">
+          <div class="section">
+            <h3>Tool</h3>
+            <div class="body">
+              <div class="toolgrid" id="toolGrid">
+                <div class="tool active" data-tool="move" title="Move / select"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 9 2 12l3 3"/><path d="m9 5 3-3 3 3"/><path d="m15 19-3 3-3-3"/><path d="m19 9 3 3-3 3"/><path d="M2 12h20"/><path d="M12 2v20"/></svg>Move</div>
+                <div class="tool" data-tool="transform" title="Free transform"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="1"/><circle cx="4" cy="4" r="2" fill="currentColor"/><circle cx="20" cy="4" r="2" fill="currentColor"/><circle cx="4" cy="20" r="2" fill="currentColor"/><circle cx="20" cy="20" r="2" fill="currentColor"/></svg>Transform</div>
+                <div class="tool" data-tool="crop" title="Crop layer"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2v14a2 2 0 0 0 2 2h14"/><path d="M2 6h14a2 2 0 0 1 2 2v14"/></svg>Crop</div>
+                <div class="tool" data-tool="erase" title="Free erase"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7 21-4-4a2 2 0 0 1 0-3L14 3a2 2 0 0 1 3 0l4 4a2 2 0 0 1 0 3L10 21z"/><path d="M11 7 17 13"/><path d="M7 21h14"/></svg>Erase</div>
+                <div class="tool" data-tool="removebg" title="Remove background"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h18v18H3z" stroke-dasharray="3 3"/><circle cx="12" cy="11" r="3"/><path d="M7 20a5 5 0 0 1 10 0"/></svg>Cut BG</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Transform sliders -->
+          <div class="section" id="transformSection">
+            <h3>Transform <span class="pill" id="scopePill">frame</span></h3>
+            <div class="body">
+              <div class="field">
+                <label>Position X <span class="val" id="posXVal">0</span></label>
+                <input type="range" id="posX" min="-200" max="200" step="0.5" value="0">
+              </div>
+              <div class="field">
+                <label>Position Y <span class="val" id="posYVal">0</span></label>
+                <input type="range" id="posY" min="-200" max="200" step="0.5" value="0">
+              </div>
+              <div class="field">
+                <label>Scale <span class="val" id="scaleVal">100%</span></label>
+                <input type="range" id="scale" min="1" max="400" step="1" value="100">
+              </div>
+              <div class="field">
+                <label>Rotation <span class="val" id="rotVal">0°</span></label>
+                <input type="range" id="rot" min="-180" max="180" step="1" value="0">
+              </div>
+              <div class="field">
+                <label>Opacity <span class="val" id="opVal">100%</span></label>
+                <input type="range" id="op" min="0" max="100" step="1" value="100">
+              </div>
+              <div class="btngrid">
+                <button class="btn sm" id="flipH">Flip H</button>
+                <button class="btn sm" id="flipV">Flip V</button>
+              </div>
+              <button class="btn sm block" id="resetTransform">Reset transform</button>
+              <p class="hint" id="scopeHint"></p>
+            </div>
+          </div>
+
+          <!-- Tool options (erase/crop/removebg) -->
+          <div class="section" id="brushSection" style="display:none">
+            <h3>Brush</h3>
+            <div class="body">
+              <div class="field">
+                <label>Size <span class="val" id="brushSizeVal">40</span></label>
+                <input type="range" id="brushSize" min="2" max="200" step="1" value="40">
+              </div>
+              <div class="field">
+                <label>Feather (soft edge) <span class="val" id="brushFeatherVal">50%</span></label>
+                <input type="range" id="brushFeather" min="0" max="100" step="1" value="50">
+              </div>
+              <div class="row">
+                <label style="font-size:12px;display:flex;gap:.4rem;align-items:center;cursor:pointer">
+                  <input type="checkbox" id="brushRestore" style="width:auto"> Restore mode
+                </label>
+              </div>
+              <p class="hint">Paint on the canvas to erase. Turn on <em>Restore</em> to paint pixels back.</p>
+            </div>
+          </div>
+
+          <div class="section" id="cropSection" style="display:none">
+            <h3>Crop</h3>
+            <div class="body">
+              <p class="hint">Drag a rectangle on the canvas, then apply. Crop hides everything outside the box.</p>
+              <div class="btngrid">
+                <button class="btn primary sm" id="cropApply">Apply crop</button>
+                <button class="btn sm" id="cropCancel">Clear</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="section" id="bgSection" style="display:none">
+            <h3>Background removal</h3>
+            <div class="body">
+              <div class="field">
+                <label>Tolerance <span class="val" id="bgTolVal">32</span></label>
+                <input type="range" id="bgTol" min="2" max="120" step="1" value="32">
+              </div>
+              <div class="field">
+                <label>Edge feather <span class="val" id="bgFeatherVal">2</span></label>
+                <input type="range" id="bgFeather" min="0" max="12" step="1" value="2">
+              </div>
+              <button class="btn indigo block" id="bgRun"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3v4"/><path d="M19 17v4"/><path d="M3 5h4"/><path d="M17 19h4"/><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4"/></svg>Detect &amp; remove</button>
+              <p class="hint">Detects the dominant edge colour and makes it transparent, with a feathered edge. Runs in a worker — the UI stays responsive.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- TEXT TAB -->
+        <div class="tabpane" data-pane="text">
+          <div id="noTextSel" class="section"><div class="body"><p class="hint">Select a text layer, or add one from the Layers tab, to edit its content and styling.</p></div></div>
+          <div id="textControls" style="display:none; flex-direction:column; gap:.85rem">
+            <div class="section">
+              <h3>Content</h3>
+              <div class="body">
+                <textarea id="txtContent" placeholder="Type here…"></textarea>
+              </div>
+            </div>
+            <div class="section">
+              <h3>Font</h3>
+              <div class="body">
+                <div class="field">
+                  <label>Family</label>
+                  <select id="txtFont">
+                    <option value="'IBM Plex Sans', sans-serif">IBM Plex Sans</option>
+                    <option value="'IBM Plex Mono', monospace">IBM Plex Mono</option>
+                    <option value="Impact, Haettenschweiler, sans-serif">Impact</option>
+                    <option value="Georgia, serif">Georgia</option>
+                    <option value="'Times New Roman', serif">Times</option>
+                    <option value="Arial, Helvetica, sans-serif">Arial</option>
+                    <option value="'Courier New', monospace">Courier</option>
+                    <option value="'Comic Sans MS', cursive">Comic Sans</option>
+                    <option value="Verdana, sans-serif">Verdana</option>
+                    <option value="'Trebuchet MS', sans-serif">Trebuchet</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label>Size <span class="val" id="txtSizeVal">48</span></label>
+                  <input type="range" id="txtSize" min="8" max="240" step="1" value="48">
+                </div>
+                <div class="row wrap">
+                  <button class="btn sm" id="txtBold" title="Bold"><b>B</b></button>
+                  <button class="btn sm" id="txtItalic" title="Italic"><i>I</i></button>
+                  <button class="btn sm" id="txtAlignL" title="Align left">⯇</button>
+                  <button class="btn sm" id="txtAlignC" title="Align center">≡</button>
+                  <button class="btn sm" id="txtAlignR" title="Align right">⯈</button>
+                </div>
+                <div class="row">
+                  <div class="field" style="flex:1">
+                    <label>Fill</label>
+                    <div class="row"><input type="color" id="txtColor" value="#ffffff"><input type="text" id="txtColorHex" class="mono" value="#ffffff"></div>
+                  </div>
+                </div>
+                <div class="field">
+                  <label>Outline width <span class="val" id="txtStrokeVal">2</span></label>
+                  <input type="range" id="txtStroke" min="0" max="20" step="1" value="2">
+                </div>
+                <div class="row">
+                  <div class="field" style="flex:1">
+                    <label>Outline colour</label>
+                    <div class="row"><input type="color" id="txtStrokeColor" value="#000000"><input type="text" id="txtStrokeHex" class="mono" value="#000000"></div>
+                  </div>
+                </div>
+                <div class="field">
+                  <label>Line height <span class="val" id="txtLineVal">1.1</span></label>
+                  <input type="range" id="txtLine" min="0.8" max="2" step="0.05" value="1.1">
+                </div>
+              </div>
+            </div>
+            <p class="hint">Position, scale &amp; rotate the text box from the <strong>Edit</strong> tab — it respects FRAME / GLOBAL scope like any layer.</p>
+          </div>
+        </div>
+
+        <!-- GIF TAB -->
+        <div class="tabpane" data-pane="gif">
+          <div class="section">
+            <h3>Canvas size</h3>
+            <div class="body">
+              <div class="row">
+                <div class="field" style="flex:1"><label>Width</label><input type="number" id="canvasW" min="1" max="2000" step="1"></div>
+                <div class="field" style="flex:1"><label>Height</label><input type="number" id="canvasH" min="1" max="2000" step="1"></div>
+              </div>
+              <label style="font-size:12px;display:flex;gap:.4rem;align-items:center;cursor:pointer">
+                <input type="checkbox" id="lockAspect" checked style="width:auto"> Lock aspect ratio
+              </label>
+              <div class="btngrid">
+                <button class="btn sm" id="sizeApply">Resize</button>
+                <button class="btn sm" id="sizeHalf">½ size</button>
+              </div>
+              <p class="hint">Resizing scales the whole composition (frames + layers).</p>
+            </div>
+          </div>
+
+          <div class="section">
+            <h3>Playback</h3>
+            <div class="body">
+              <div class="field">
+                <label>Frame rate <span class="val" id="fpsVal2">12 fps</span></label>
+                <input type="range" id="fpsRange" min="1" max="50" step="1" value="12">
+              </div>
+              <div class="field">
+                <label>Loop</label>
+                <select id="loopSel">
+                  <option value="0">Loop forever</option>
+                  <option value="1">Play once</option>
+                  <option value="3">3 times</option>
+                  <option value="5">5 times</option>
+                </select>
+              </div>
+              <button class="btn sm block" id="applyFpsAll">Apply FPS to all frames</button>
+            </div>
+          </div>
+
+          <div class="section">
+            <h3>Frames</h3>
+            <div class="body">
+              <div class="btngrid">
+                <button class="btn sm" id="dupFrame">Duplicate frame</button>
+                <button class="btn sm" id="delFrame">Delete frame</button>
+                <button class="btn sm" id="addBlankFrame">Add blank</button>
+                <button class="btn sm" id="reverseFrames">Reverse all</button>
+              </div>
+              <button class="btn sm block" id="importMore">Import more frames…</button>
+            </div>
+          </div>
+
+          <div class="section">
+            <h3>Export</h3>
+            <div class="body">
+              <div class="field">
+                <label>Quality <span class="val" id="qualityVal">balanced</span></label>
+                <input type="range" id="quality" min="1" max="3" step="1" value="2">
+              </div>
+              <button class="btn primary block" id="downloadBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Download GIF</button>
+              <button class="btn block" id="copyBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>Copy to clipboard</button>
+            </div>
+          </div>
+
+          <div class="section">
+            <h3>Danger zone</h3>
+            <div class="body">
+              <button class="btn danger block" id="resetBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>Reset to original</button>
+              <p class="hint">Discards every edit and restores the file you first uploaded.</p>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </aside>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<div class="modal" id="confirmModal">
+  <div class="modalcard">
+    <h3 id="confirmTitle">Are you sure?</h3>
+    <p id="confirmMsg"></p>
+    <div class="btngrid">
+      <button class="btn" id="confirmCancel">Cancel</button>
+      <button class="btn danger" id="confirmOk">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<div class="progress" id="progress">
+  <div class="progresscard">
+    <div id="progressLabel" style="font-weight:600">Encoding GIF…</div>
+    <div class="bar"><i id="progressBar"></i></div>
+  </div>
+</div>
+
+<script>
+/* =====================================================================
+   GIF Studio — offline, device-local GIF editor.
+   Single file. No server. omggif (inlined above) handles GIF bytes.
+   ===================================================================== */
+'use strict';
+
+/* ---------- Bootstrap the inlined omggif codec ---------- */
+const OMGGIF_SRC = document.getElementById('omggif-src').textContent;
+const { GifReader, GifWriter } = (new Function(
+  OMGGIF_SRC + '\n;return { GifReader: GifReader, GifWriter: GifWriter };'
+))();
+
+/* ---------- Tiny helpers ---------- */
+const $  = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const uid = (() => { let n = 1; return () => 'L' + (n++); })();
+function mkCanvas(w, h) { const c = document.createElement('canvas'); c.width = Math.max(1, w | 0); c.height = Math.max(1, h | 0); return c; }
+function cloneCanvas(src) { const c = mkCanvas(src.width, src.height); c.getContext('2d').drawImage(src, 0, 0); return c; }
+function debounce(fn, ms) { let t; const d = (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; d.flush = (...a) => { clearTimeout(t); fn(...a); }; return d; }
+
+let toastT;
+function toast(msg, ms = 1900) {
+  const el = $('#toast'); el.textContent = msg; el.classList.add('show');
+  clearTimeout(toastT); toastT = setTimeout(() => el.classList.remove('show'), ms);
+}
+
+function confirmDialog(title, msg) {
+  return new Promise((resolve) => {
+    $('#confirmTitle').textContent = title;
+    $('#confirmMsg').textContent = msg;
+    const modal = $('#confirmModal'); modal.classList.add('show');
+    const ok = $('#confirmOk'), cancel = $('#confirmCancel');
+    const done = (v) => { modal.classList.remove('show'); ok.removeEventListener('click', y); cancel.removeEventListener('click', n); resolve(v); };
+    const y = () => done(true), n = () => done(false);
+    ok.addEventListener('click', y); cancel.addEventListener('click', n);
+  });
+}
+
+/* =====================================================================
+   Document model
+   ---------------------------------------------------------------------
+   App.frames : [{ base:<canvas WxH>, delay:<ms> }]   the per-frame imagery
+   App.layers : [Layer]  overlays drawn above the base, index 0 = bottom
+   Each layer stores a *base* transform applied to all frames plus optional
+   per-frame transform / mask overrides. FRAME edits write the override for
+   the current frame; GLOBAL edits write the base and clear overrides.
+   ===================================================================== */
+const App = {
+  W: 0, H: 0,
+  fps: 12,
+  loop: 0,
+  frames: [],
+  layers: [],
+  cur: 0,
+  mode: 'frame',          // 'frame' | 'global'
+  tool: 'move',           // move | transform | crop | erase | removebg
+  sel: null,              // selected layer id, or 'bg' for the background, or null
+  playing: false,
+  original: null,         // snapshot for reset {W,H,fps,loop,frames:[{dataURL,delay}]}
+};
+
+function newLayer(type) {
+  return {
+    id: uid(), type, name: type === 'text' ? 'Text' : 'Image',
+    visible: true,
+    src: null, natW: 0, natH: 0,
+    maskBase: null, perFrameMask: {},        // alpha masks (white = keep)
+    base: { x: App.W / 2, y: App.H / 2, scale: 1, rot: 0, opacity: 1, flipH: false, flipV: false },
+    perFrame: {},
+    text: type === 'text' ? {
+      content: 'Double-tap to edit', font: "'IBM Plex Sans', sans-serif", size: 48,
+      bold: true, italic: false, align: 'center', color: '#ffffff',
+      stroke: 2, strokeColor: '#000000', line: 1.1
+    } : null,
+    _compCacheKey: '', _comp: null, _maskVer: 0, _srcVer: 0,
+  };
+}
+
+const layerById = (id) => App.layers.find(l => l.id === id);
+const selLayer = () => (App.sel && App.sel !== 'bg') ? layerById(App.sel) : null;
+const getT = (l, i) => l.perFrame[i] || l.base;
+const getMask = (l, i) => l.perFrameMask[i] || l.maskBase;
+
+/* =====================================================================
+   GIF decoding (omggif) with full disposal handling
+   ===================================================================== */
+function decodeGif(uint8) {
+  const reader = new GifReader(uint8);
+  const W = reader.width, H = reader.height;
+  const n = reader.numFrames();
+  const frames = [];
+  let prev = new Uint8ClampedArray(W * H * 4); // running composite
+  let savedForRestore = null;
+
+  for (let i = 0; i < n; i++) {
+    const info = reader.frameInfo(i);
+    // disposal 3 → remember pixels before drawing this frame
+    if (info.disposal === 3) savedForRestore = prev.slice(0);
+
+    const buf = prev.slice(0); // omggif blits only non-transparent pixels onto buf
+    reader.decodeAndBlitFrameRGBA(i, buf);
+
+    const cv = mkCanvas(W, H);
+    cv.getContext('2d').putImageData(new ImageData(buf, W, H), 0, 0);
+    frames.push({ base: cv, delay: Math.max(20, (info.delay || 0) * 10) || 100 });
+
+    // prepare composite for the next frame depending on disposal
+    if (info.disposal === 2) { // restore to background (transparent) within the frame rect
+      prev = buf.slice(0);
+      const { x, y, width, height } = info;
+      for (let yy = 0; yy < height; yy++) {
+        for (let xx = 0; xx < width; xx++) {
+          const o = ((y + yy) * W + (x + xx)) * 4;
+          prev[o] = prev[o + 1] = prev[o + 2] = prev[o + 3] = 0;
+        }
+      }
+    } else if (info.disposal === 3 && savedForRestore) {
+      prev = savedForRestore;
+    } else {
+      prev = buf;
+    }
+  }
+  return { W, H, frames };
+}
+
+/* =====================================================================
+   Importing images as frames
+   ===================================================================== */
+function loadImageFile(file) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => { URL.revokeObjectURL(url); resolve(img); };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('bad image')); };
+    img.src = url;
+  });
+}
+
+async function importFiles(fileList, { asNewDoc }) {
+  const files = Array.from(fileList);
+  if (!files.length) return;
+  const gifFile = files.find(f => /gif$/i.test(f.type) || /\.gif$/i.test(f.name));
+
+  if (gifFile && asNewDoc && files.length === 1) {
+    const buf = new Uint8Array(await gifFile.arrayBuffer());
+    let dec;
+    try { dec = decodeGif(buf); }
+    catch (e) { toast('Could not decode that GIF.'); return; }
+    App.W = dec.W; App.H = dec.H;
+    App.frames = dec.frames;
+    App.layers = [];
+    finishImport();
+    toast(`Loaded ${dec.frames.length} frame${dec.frames.length > 1 ? 's' : ''}`);
+    return;
+  }
+
+  // Otherwise treat each image as a frame (sequence builder).
+  const imgs = [];
+  for (const f of files) {
+    if (/gif$/i.test(f.type) || /\.gif$/i.test(f.name)) {
+      // decode gif and spread its frames into the sequence
+      try {
+        const dec = decodeGif(new Uint8Array(await f.arrayBuffer()));
+        for (const fr of dec.frames) imgs.push({ canvas: fr.base, delay: fr.delay });
+      } catch (e) {/* skip */}
+    } else {
+      try { const im = await loadImageFile(f); imgs.push({ img: im }); } catch (e) {/* skip */}
+    }
+  }
+  if (!imgs.length) { toast('No usable images.'); return; }
+
+  if (asNewDoc) {
+    // canvas size = largest image
+    let W = 0, H = 0;
+    for (const it of imgs) {
+      const w = it.canvas ? it.canvas.width : it.img.naturalWidth;
+      const h = it.canvas ? it.canvas.height : it.img.naturalHeight;
+      W = Math.max(W, w); H = Math.max(H, h);
+    }
+    App.W = clamp(W, 1, 2000); App.H = clamp(H, 1, 2000);
+    App.frames = [];
+    App.layers = [];
+  }
+
+  const defDelay = Math.round(1000 / App.fps);
+  for (const it of imgs) {
+    const cv = mkCanvas(App.W, App.H);
+    const ctx = cv.getContext('2d');
+    const sw = it.canvas ? it.canvas.width : it.img.naturalWidth;
+    const sh = it.canvas ? it.canvas.height : it.img.naturalHeight;
+    const s = Math.min(App.W / sw, App.H / sh); // contain
+    const dw = sw * s, dh = sh * s;
+    ctx.drawImage(it.canvas || it.img, (App.W - dw) / 2, (App.H - dh) / 2, dw, dh);
+    App.frames.push({ base: cv, delay: it.delay || defDelay });
+  }
+  finishImport();
+  toast(`${asNewDoc ? 'Built' : 'Added'} ${imgs.length} frame${imgs.length > 1 ? 's' : ''}`);
+}
+
+function finishImport() {
+  App.cur = clamp(App.cur, 0, App.frames.length - 1);
+  if (App.cur < 0) App.cur = 0;
+  snapshotOriginal();
+  $('#emptystate').style.display = 'none';
+  $('#canvasbox').style.display = '';
+  $('#timeline').style.display = '';
+  setupCanvas();
+  syncGifControls();
+  rebuildLayerList();
+  rebuildFrameStrip();
+  selectLayer('bg');
+  requestRender();
+}
+
+function snapshotOriginal() {
+  App.original = {
+    W: App.W, H: App.H, fps: App.fps, loop: App.loop,
+    frames: App.frames.map(f => ({ url: f.base.toDataURL('image/png'), delay: f.delay }))
+  };
+}
+
+/* =====================================================================
+   Canvas / rendering
+   ===================================================================== */
+const view = $('#view'), vctx = view.getContext('2d');
+const overlay = $('#overlay'), octx = overlay.getContext('2d');
+
+function setupCanvas() {
+  view.width = App.W; view.height = App.H;
+  overlay.width = App.W; overlay.height = App.H;
+  fitCanvas();
+}
+function fitCanvas() {
+  const box = $('#canvasbox');
+  const stage = $('#stage');
+  const pad = 2;
+  const availW = stage.clientWidth - pad * 2;
+  const availH = stage.clientHeight - pad * 2;
+  if (availW <= 0 || availH <= 0) return;
+  const s = Math.min(availW / App.W, availH / App.H, 4);
+  const w = Math.max(1, Math.round(App.W * s));
+  const h = Math.max(1, Math.round(App.H * s));
+  box.style.width = w + 'px';
+  box.style.height = h + 'px';
+}
+
+/* Composite a layer's src + mask into a cached canvas (natW x natH). */
+function layerComposite(l) {
+  const mask = getMask(l, App.cur);
+  const key = l.id + ':' + l._srcVer + ':' + (mask ? (mask === l.maskBase ? 'b' + l._maskVer : 'f' + App.cur + ':' + (mask._ver || 0)) : 'none');
+  if (l._compCacheKey === key && l._comp) return l._comp;
+  const c = mkCanvas(l.natW, l.natH);
+  const cx = c.getContext('2d');
+  cx.drawImage(l.src, 0, 0);
+  if (mask) { cx.globalCompositeOperation = 'destination-in'; cx.drawImage(mask, 0, 0); cx.globalCompositeOperation = 'source-over'; }
+  l._comp = c; l._compCacheKey = key;
+  return c;
+}
+
+function renderFrameTo(ctx, i) {
+  ctx.clearRect(0, 0, App.W, App.H);
+  const fr = App.frames[i];
+  if (fr && fr.base) ctx.drawImage(fr.base, 0, 0);
+  for (const l of App.layers) {
+    if (!l.visible || !l.src) continue;
+    const t = getT(l, i);
+    const comp = layerComposite(l);
+    ctx.save();
+    ctx.globalAlpha = clamp(t.opacity, 0, 1);
+    ctx.translate(t.x, t.y);
+    ctx.rotate(t.rot * Math.PI / 180);
+    ctx.scale(t.scale * (t.flipH ? -1 : 1), t.scale * (t.flipV ? -1 : 1));
+    ctx.drawImage(comp, -l.natW / 2, -l.natH / 2);
+    ctx.restore();
+  }
+}
+
+let renderPending = false;
+function requestRender() {
+  if (renderPending) return;
+  renderPending = true;
+  requestAnimationFrame(() => {
+    renderPending = false;
+    renderFrameTo(vctx, App.cur);
+    drawOverlay();
+  });
+}
+
+/* =====================================================================
+   Overlay (selection box / handles / crop / brush cursor)
+   ===================================================================== */
+let cropRect = null;     // {x,y,w,h} in canvas coords
+let brushCursor = null;  // {x,y} canvas coords
+
+function layerCorners(l) {
+  const t = getT(l, App.cur);
+  const hw = l.natW / 2, hh = l.natH / 2;
+  const sx = t.scale * (t.flipH ? -1 : 1), sy = t.scale * (t.flipV ? -1 : 1);
+  const cos = Math.cos(t.rot * Math.PI / 180), sin = Math.sin(t.rot * Math.PI / 180);
+  const pts = [[-hw, -hh], [hw, -hh], [hw, hh], [-hw, hh]];
+  return pts.map(([px, py]) => {
+    const x = px * sx, y = py * sy;
+    return { x: t.x + x * cos - y * sin, y: t.y + x * sin + y * cos };
+  });
+}
+
+function drawOverlay() {
+  octx.clearRect(0, 0, App.W, App.H);
+  const scl = App.W / Math.max(1, view.clientWidth); // canvas px per screen px
+  const l = selLayer();
+
+  if (l && (App.tool === 'move' || App.tool === 'transform')) {
+    const c = layerCorners(l);
+    octx.save();
+    octx.lineWidth = 1.4 * scl;
+    octx.strokeStyle = '#5a9996';
+    octx.setLineDash([6 * scl, 4 * scl]);
+    octx.beginPath();
+    octx.moveTo(c[0].x, c[0].y);
+    for (let i = 1; i < 4; i++) octx.lineTo(c[i].x, c[i].y);
+    octx.closePath(); octx.stroke();
+    octx.setLineDash([]);
+    if (App.tool === 'transform') {
+      const r = 6 * scl;
+      octx.fillStyle = '#fff'; octx.strokeStyle = '#5a9996'; octx.lineWidth = 2 * scl;
+      for (const p of c) { octx.beginPath(); octx.arc(p.x, p.y, r, 0, 7); octx.fill(); octx.stroke(); }
+      // rotation handle above the top edge midpoint
+      const mid = { x: (c[0].x + c[1].x) / 2, y: (c[0].y + c[1].y) / 2 };
+      const dirx = mid.x - (c[2].x + c[3].x) / 2, diry = mid.y - (c[2].y + c[3].y) / 2;
+      const len = Math.hypot(dirx, diry) || 1;
+      const rh = { x: mid.x + dirx / len * 26 * scl, y: mid.y + diry / len * 26 * scl };
+      octx.beginPath(); octx.moveTo(mid.x, mid.y); octx.lineTo(rh.x, rh.y); octx.stroke();
+      octx.fillStyle = '#6f5d73'; octx.beginPath(); octx.arc(rh.x, rh.y, r, 0, 7); octx.fill(); octx.stroke();
+      l._rotHandle = rh; l._corners = c;
+    }
+    octx.restore();
+  }
+
+  if (App.tool === 'crop' && cropRect) {
+    octx.save();
+    octx.fillStyle = 'rgba(0,0,0,.45)';
+    octx.beginPath();
+    octx.rect(0, 0, App.W, App.H);
+    octx.rect(cropRect.x, cropRect.y, cropRect.w, cropRect.h);
+    octx.fill('evenodd');
+    octx.strokeStyle = '#5a9996'; octx.lineWidth = 1.6 * scl; octx.setLineDash([6 * scl, 4 * scl]);
+    octx.strokeRect(cropRect.x, cropRect.y, cropRect.w, cropRect.h);
+    octx.restore();
+  }
+
+  if ((App.tool === 'erase') && brushCursor) {
+    const r = (+$('#brushSize').value) / 2;
+    octx.save();
+    octx.strokeStyle = $('#brushRestore').checked ? '#6f5d73' : '#c0564f';
+    octx.lineWidth = 1.5 * scl; octx.beginPath();
+    octx.arc(brushCursor.x, brushCursor.y, r, 0, 7); octx.stroke();
+    octx.restore();
+  }
+}
+
+/* =====================================================================
+   Pointer interaction on the stage
+   ===================================================================== */
+function evToCanvas(e) {
+  const r = view.getBoundingClientRect();
+  const cx = (e.touches ? e.touches[0].clientX : e.clientX) - r.left;
+  const cy = (e.touches ? e.touches[0].clientY : e.clientY) - r.top;
+  return { x: cx / r.width * App.W, y: cy / r.height * App.H, scl: App.W / r.width };
+}
+// canvas point -> layer-local pixel coords
+function canvasToLocal(l, px, py) {
+  const t = getT(l, App.cur);
+  const dx = px - t.x, dy = py - t.y;
+  const cos = Math.cos(-t.rot * Math.PI / 180), sin = Math.sin(-t.rot * Math.PI / 180);
+  let rx = dx * cos - dy * sin, ry = dx * sin + dy * cos;
+  rx /= (t.scale * (t.flipH ? -1 : 1)); ry /= (t.scale * (t.flipV ? -1 : 1));
+  return { x: rx + l.natW / 2, y: ry + l.natH / 2 };
+}
+function pointInLayer(l, px, py) {
+  const p = canvasToLocal(l, px, py);
+  return p.x >= 0 && p.x <= l.natW && p.y >= 0 && p.y <= l.natH;
+}
+
+let drag = null;
+
+function onPointerDown(e) {
+  if (!App.frames.length) return;
+  const p = evToCanvas(e);
+  const l = selLayer();
+
+  // --- transform handles ---
+  if (l && App.tool === 'transform' && l._corners) {
+    const hitR = 14 * p.scl;
+    for (let i = 0; i < 4; i++) {
+      if (Math.hypot(l._corners[i].x - p.x, l._corners[i].y - p.y) < hitR) {
+        const t = ensureEditTarget(l);
+        drag = { kind: 'scale', l, start: p, t0: { ...t }, c0: { x: t.x, y: t.y } };
+        e.preventDefault(); return;
+      }
+    }
+    if (l._rotHandle && Math.hypot(l._rotHandle.x - p.x, l._rotHandle.y - p.y) < hitR) {
+      const t = ensureEditTarget(l);
+      drag = { kind: 'rotate', l, t0: { ...t }, a0: Math.atan2(p.y - t.y, p.x - t.x) };
+      e.preventDefault(); return;
+    }
+  }
+
+  // --- erase ---
+  if (App.tool === 'erase' && l) {
+    drag = { kind: 'erase', l };
+    paintErase(l, p.x, p.y);
+    e.preventDefault(); return;
+  }
+
+  // --- crop ---
+  if (App.tool === 'crop') {
+    drag = { kind: 'crop', start: p };
+    cropRect = { x: p.x, y: p.y, w: 0, h: 0 };
+    e.preventDefault(); return;
+  }
+
+  // --- move / select ---
+  // pick the top-most layer under the pointer if current isn't hit
+  let target = (l && pointInLayer(l, p.x, p.y)) ? l : null;
+  if (!target) {
+    for (let i = App.layers.length - 1; i >= 0; i--) {
+      const li = App.layers[i];
+      if (li.visible && li.src && pointInLayer(li, p.x, p.y)) { target = li; break; }
+    }
+  }
+  if (target) {
+    if (target.id !== App.sel) selectLayer(target.id);
+    const t = ensureEditTarget(target);
+    drag = { kind: 'move', l: target, start: p, t0: { ...t } };
+    e.preventDefault();
+  }
+}
+
+function onPointerMove(e) {
+  const p = evToCanvas(e);
+  if (App.tool === 'erase') { brushCursor = { x: p.x, y: p.y }; if (!drag) requestRender(); }
+  if (!drag) return;
+  e.preventDefault();
+  const l = drag.l;
+
+  if (drag.kind === 'move') {
+    const t = ensureEditTarget(l);
+    t.x = drag.t0.x + (p.x - drag.start.x);
+    t.y = drag.t0.y + (p.y - drag.start.y);
+    syncTransformInputs(); requestRender(); scheduleThumb();
+  } else if (drag.kind === 'scale') {
+    const t = ensureEditTarget(l);
+    const d0 = Math.hypot(drag.start.x - drag.c0.x, drag.start.y - drag.c0.y) || 1;
+    const d1 = Math.hypot(p.x - drag.c0.x, p.y - drag.c0.y);
+    t.scale = clamp(drag.t0.scale * (d1 / d0), 0.02, 20);
+    syncTransformInputs(); requestRender(); scheduleThumb();
+  } else if (drag.kind === 'rotate') {
+    const t = ensureEditTarget(l);
+    const a1 = Math.atan2(p.y - t.y, p.x - t.x);
+    t.rot = drag.t0.rot + (a1 - drag.a0) * 180 / Math.PI;
+    while (t.rot > 180) t.rot -= 360; while (t.rot < -180) t.rot += 360;
+    syncTransformInputs(); requestRender(); scheduleThumb();
+  } else if (drag.kind === 'erase') {
+    paintErase(l, p.x, p.y);
+  } else if (drag.kind === 'crop') {
+    cropRect = {
+      x: Math.min(drag.start.x, p.x), y: Math.min(drag.start.y, p.y),
+      w: Math.abs(p.x - drag.start.x), h: Math.abs(p.y - drag.start.y)
+    };
+    drawOverlay();
+  }
+}
+
+function onPointerUp() {
+  if (drag && (drag.kind === 'move' || drag.kind === 'scale' || drag.kind === 'rotate')) {
+    if (App.mode === 'global') commitGlobalTransform(drag.l);
+  }
+  if (drag && drag.kind === 'erase') { scheduleThumb(); if (App.mode === 'global') commitGlobalMask(drag.l); }
+  drag = null;
+}
+
+view.addEventListener('mousedown', onPointerDown);
+window.addEventListener('mousemove', onPointerMove);
+window.addEventListener('mouseup', onPointerUp);
+view.addEventListener('touchstart', onPointerDown, { passive: false });
+window.addEventListener('touchmove', onPointerMove, { passive: false });
+window.addEventListener('touchend', onPointerUp);
+view.addEventListener('mouseleave', () => { if (App.tool === 'erase') { brushCursor = null; requestRender(); } });
+// double click/tap a text layer to focus its editor
+view.addEventListener('dblclick', () => { const l = selLayer(); if (l && l.type === 'text') { switchTab('text'); $('#txtContent').focus(); } });
+
+/* =====================================================================
+   Edit-scope handling (FRAME vs GLOBAL)
+   ===================================================================== */
+// Returns the transform object that edits should write to, honouring mode.
+function ensureEditTarget(l) {
+  if (App.mode === 'frame') {
+    if (!l.perFrame[App.cur]) l.perFrame[App.cur] = { ...l.base };
+    return l.perFrame[App.cur];
+  }
+  return l.base;
+}
+// After a global transform edit, replicate to every frame by clearing overrides.
+const commitGlobalTransform = debounce((l) => {
+  l.perFrame = {};
+  rebuildFrameStrip();
+}, 120);
+
+function ensureMaskTarget(l) {
+  if (!l.maskBase) { l.maskBase = mkCanvas(l.natW, l.natH); const c = l.maskBase.getContext('2d'); c.fillStyle = '#fff'; c.fillRect(0, 0, l.natW, l.natH); }
+  if (App.mode === 'frame') {
+    if (!l.perFrameMask[App.cur]) { l.perFrameMask[App.cur] = cloneCanvas(l.maskBase); }
+    return l.perFrameMask[App.cur];
+  }
+  return l.maskBase;
+}
+const commitGlobalMask = debounce((l) => {
+  // Global erase: bake current edits into base and drop per-frame overrides.
+  l.perFrameMask = {};
+  l._maskVer++; rebuildFrameStrip();
+}, 150);
+
+/* =====================================================================
+   Free erase
+   ===================================================================== */
+function paintErase(l, px, py) {
+  const mask = ensureMaskTarget(l);
+  const loc = canvasToLocal(l, px, py);
+  const t = getT(l, App.cur);
+  const screenR = (+$('#brushSize').value) / 2;
+  const r = screenR / Math.max(0.001, t.scale); // local-space radius
+  const feather = (+$('#brushFeather').value) / 100;
+  const restore = $('#brushRestore').checked;
+  const ctx = mask.getContext('2d');
+  ctx.save();
+  if (feather > 0) {
+    const inner = Math.max(0, 1 - feather);
+    const g = ctx.createRadialGradient(loc.x, loc.y, r * inner, loc.x, loc.y, r);
+    g.addColorStop(0, 'rgba(255,255,255,1)');
+    g.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = g;
+  } else {
+    ctx.fillStyle = '#fff';
+  }
+  ctx.globalCompositeOperation = restore ? 'source-over' : 'destination-out';
+  ctx.beginPath(); ctx.arc(loc.x, loc.y, r, 0, 7); ctx.fill();
+  ctx.restore();
+  mask._ver = (mask._ver || 0) + 1;
+  if (mask === l.maskBase) l._maskVer++;
+  l._compCacheKey = '';
+  requestRender();
+}
+
+/* =====================================================================
+   Crop (non-destructive, applied as a rectangular mask)
+   ===================================================================== */
+function applyCrop() {
+  const l = selLayer();
+  if (!l) { toast('Select a layer to crop.'); return; }
+  if (!cropRect || cropRect.w < 2 || cropRect.h < 2) { toast('Drag a crop box first.'); return; }
+  const mask = ensureMaskTarget(l);
+  // figure out the rectangle in layer-local space (use 4 corners → bbox)
+  const corners = [
+    canvasToLocal(l, cropRect.x, cropRect.y),
+    canvasToLocal(l, cropRect.x + cropRect.w, cropRect.y),
+    canvasToLocal(l, cropRect.x + cropRect.w, cropRect.y + cropRect.h),
+    canvasToLocal(l, cropRect.x, cropRect.y + cropRect.h),
+  ];
+  const ctx = mask.getContext('2d');
+  ctx.save();
+  ctx.globalCompositeOperation = 'destination-in';
+  ctx.fillStyle = '#fff';
+  ctx.beginPath();
+  ctx.moveTo(corners[0].x, corners[0].y);
+  for (let i = 1; i < 4; i++) ctx.lineTo(corners[i].x, corners[i].y);
+  ctx.closePath(); ctx.fill();
+  ctx.restore();
+  mask._ver = (mask._ver || 0) + 1; if (mask === l.maskBase) l._maskVer++;
+  l._compCacheKey = '';
+  cropRect = null;
+  if (App.mode === 'global') commitGlobalMask.flush(l);
+  requestRender(); scheduleThumb();
+  toast('Cropped');
+}
+
+/* =====================================================================
+   Background removal (runs in a Web Worker — fully offline)
+   ===================================================================== */
+const bgWorker = (() => {
+  const code = `
+  self.onmessage = (e) => {
+    const { data, w, h, tol, feather } = e.data;
+    const px = new Uint8ClampedArray(data);
+    const n = w*h;
+    let alpha = new Float32Array(n); // 1 = keep
+    for (let i=0;i<n;i++) alpha[i] = 1;
+    // Sample background colour from the border pixels (median-ish via averaging buckets).
+    let br=0,bg=0,bb=0,cnt=0;
+    const sample=(x,y)=>{ const o=(y*w+x)*4; if(px[o+3]>8){br+=px[o];bg+=px[o+1];bb+=px[o+2];cnt++;} };
+    for(let x=0;x<w;x++){ sample(x,0); sample(x,h-1); }
+    for(let y=0;y<h;y++){ sample(0,y); sample(w-1,y); }
+    if(cnt===0){ self.postMessage({alpha:alpha.buffer},[alpha.buffer]); return; }
+    br/=cnt; bg/=cnt; bb/=cnt;
+    const tol2 = tol*tol;
+    // Flood fill from the borders so only background CONNECTED to the edge is removed.
+    const visited = new Uint8Array(n);
+    const stack = [];
+    const near=(o)=>{ const dr=px[o]-br,dg=px[o+1]-bg,db=px[o+2]-bb; return (dr*dr+dg*dg+db*db) <= tol2*3; };
+    const pushIf=(x,y)=>{ if(x<0||y<0||x>=w||y>=h) return; const idx=y*w+x; if(visited[idx]) return; visited[idx]=1; const o=idx*4; if(px[o+3]<=8 || near(o)){ stack.push(idx); } };
+    for(let x=0;x<w;x++){ pushIf(x,0); pushIf(x,h-1); }
+    for(let y=0;y<h;y++){ pushIf(0,y); pushIf(w-1,y); }
+    while(stack.length){
+      const idx = stack.pop();
+      alpha[idx] = 0;
+      const x = idx % w, y = (idx/w)|0;
+      pushIf(x+1,y); pushIf(x-1,y); pushIf(x,y+1); pushIf(x,y-1);
+    }
+    // Feather the edge: blur the alpha mask 'feather' times (box blur).
+    if(feather>0){
+      let a = alpha, b = new Float32Array(n);
+      for(let p=0;p<feather;p++){
+        for(let y=0;y<h;y++) for(let x=0;x<w;x++){
+          let s=0,c=0;
+          for(let dy=-1;dy<=1;dy++) for(let dx=-1;dx<=1;dx++){
+            const nx=x+dx, ny=y+dy; if(nx<0||ny<0||nx>=w||ny>=h) continue;
+            s+=a[ny*w+nx]; c++;
+          }
+          b[y*w+x]=s/c;
+        }
+        const t=a; a=b; b=t;
+      }
+      alpha = a;
+    }
+    self.postMessage({alpha: alpha.buffer}, [alpha.buffer]);
+  };`;
+  const url = URL.createObjectURL(new Blob([code], { type: 'application/javascript' }));
+  const w = new Worker(url);
+  w.onerror = () => { hideProgress(); toast('Background removal failed.'); };
+  return w;
+})();
+
+function removeBackground() {
+  const l = selLayer();
+  if (!l) { toast('Select an image/text layer first.'); return; }
+  const w = l.natW, h = l.natH;
+  const tmp = mkCanvas(w, h); const tx = tmp.getContext('2d');
+  tx.drawImage(l.src, 0, 0);
+  const id = tx.getImageData(0, 0, w, h);
+  showProgress('Detecting background…', 0.4);
+  const tol = +$('#bgTol').value, feather = +$('#bgFeather').value;
+  const buf = id.data.buffer.slice(0);
+  const onMsg = (e) => {
+    bgWorker.removeEventListener('message', onMsg);
+    const alpha = new Float32Array(e.data.alpha);
+    const mask = ensureMaskTarget(l);
+    const mctx = mask.getContext('2d');
+    const mid = mctx.getImageData(0, 0, w, h);
+    const md = mid.data;
+    for (let i = 0; i < w * h; i++) {
+      const a = clamp(alpha[i], 0, 1);
+      md[i * 4 + 3] = Math.round(md[i * 4 + 3] * a); // intersect with existing mask
+    }
+    mctx.putImageData(mid, 0, 0);
+    mask._ver = (mask._ver || 0) + 1; if (mask === l.maskBase) l._maskVer++;
+    l._compCacheKey = '';
+    if (App.mode === 'global') commitGlobalMask.flush(l);
+    hideProgress(); requestRender(); scheduleThumb();
+    toast('Background removed');
+  };
+  bgWorker.addEventListener('message', onMsg);
+  bgWorker.postMessage({ data: buf, w, h, tol, feather }, [buf]);
+}
+
+/* =====================================================================
+   Text rendering → layer.src
+   ===================================================================== */
+function renderTextLayer(l) {
+  const t = l.text;
+  const lines = (t.content || ' ').split('\n');
+  const fontStr = `${t.italic ? 'italic ' : ''}${t.bold ? '700 ' : '400 '}${t.size}px ${t.font}`;
+  const meas = mkCanvas(8, 8).getContext('2d');
+  meas.font = fontStr;
+  let maxW = 1;
+  for (const ln of lines) maxW = Math.max(maxW, meas.measureText(ln || ' ').width);
+  const lh = t.size * t.line;
+  const pad = Math.ceil(t.size * 0.35 + t.stroke + 4);
+  const W = Math.ceil(maxW) + pad * 2;
+  const H = Math.ceil(lh * lines.length) + pad * 2;
+  const c = mkCanvas(W, H);
+  const cx = c.getContext('2d');
+  cx.font = fontStr;
+  cx.textBaseline = 'middle';
+  cx.textAlign = t.align;
+  cx.lineJoin = 'round';
+  const tx = t.align === 'left' ? pad : t.align === 'right' ? W - pad : W / 2;
+  for (let i = 0; i < lines.length; i++) {
+    const y = pad + lh * (i + 0.5);
+    if (t.stroke > 0) { cx.lineWidth = t.stroke * 2; cx.strokeStyle = t.strokeColor; cx.strokeText(lines[i], tx, y); }
+    cx.fillStyle = t.color; cx.fillText(lines[i], tx, y);
+  }
+  // preserve center: adjust transform.x/y if natural size changed
+  l.src = c; l.natW = W; l.natH = H; l._srcVer++; l._compCacheKey = '';
+  // text masks become invalid on resize
+  l.maskBase = null; l.perFrameMask = {};
+}
+
+/* =====================================================================
+   Layer operations
+   ===================================================================== */
+function addImageLayers(fileList) {
+  const files = Array.from(fileList);
+  let added = 0;
+  const work = files.map(f => loadImageFile(f).then(img => {
+    const l = newLayer('image');
+    const c = mkCanvas(img.naturalWidth, img.naturalHeight);
+    c.getContext('2d').drawImage(img, 0, 0);
+    l.src = c; l.natW = c.width; l.natH = c.height; l._srcVer++;
+    l.name = f.name.replace(/\.[^.]+$/, '').slice(0, 24) || 'Image';
+    // fit nicely: scale so it's at most 70% of canvas
+    const s = Math.min(1, (App.W * 0.7) / l.natW, (App.H * 0.7) / l.natH);
+    l.base = { x: App.W / 2, y: App.H / 2, scale: s, rot: 0, opacity: 1, flipH: false, flipV: false };
+    App.layers.push(l); added++;
+    return l;
+  }).catch(() => null));
+  Promise.all(work).then((ls) => {
+    rebuildLayerList(); rebuildFrameStrip();
+    const last = ls.filter(Boolean).pop();
+    if (last) selectLayer(last.id);
+    requestRender();
+    if (added) toast(`Added ${added} image layer${added > 1 ? 's' : ''}`);
+  });
+}
+
+function addTextLayer() {
+  const l = newLayer('text');
+  renderTextLayer(l);
+  l.base = { x: App.W / 2, y: App.H / 2, scale: 1, rot: 0, opacity: 1, flipH: false, flipV: false };
+  App.layers.push(l);
+  rebuildLayerList(); rebuildFrameStrip();
+  selectLayer(l.id);
+  switchTab('text');
+  requestRender();
+}
+
+function deleteLayer(id) {
+  const i = App.layers.findIndex(l => l.id === id);
+  if (i < 0) return;
+  App.layers.splice(i, 1);
+  if (App.sel === id) App.sel = App.layers.length ? App.layers[Math.max(0, i - 1)].id : 'bg';
+  rebuildLayerList(); rebuildFrameStrip(); refreshSelUI(); requestRender();
+}
+
+function moveLayer(id, dir) {
+  const i = App.layers.findIndex(l => l.id === id);
+  const j = i + dir;
+  if (i < 0 || j < 0 || j >= App.layers.length) return;
+  const [l] = App.layers.splice(i, 1);
+  App.layers.splice(j, 0, l);
+  rebuildLayerList(); requestRender();
+}
+
+function duplicateLayer(id) {
+  const l = layerById(id); if (!l) return;
+  const c = JSON.parse(JSON.stringify({ base: l.base, perFrame: l.perFrame, name: l.name, visible: l.visible, type: l.type, text: l.text }));
+  const nl = newLayer(l.type);
+  Object.assign(nl, { base: { ...c.base }, perFrame: JSON.parse(JSON.stringify(c.perFrame)), name: c.name + ' copy', visible: c.visible, text: c.text ? { ...c.text } : null });
+  nl.src = cloneCanvas(l.src); nl.natW = l.natW; nl.natH = l.natH; nl._srcVer++;
+  if (l.maskBase) nl.maskBase = cloneCanvas(l.maskBase);
+  for (const k in l.perFrameMask) nl.perFrameMask[k] = cloneCanvas(l.perFrameMask[k]);
+  const i = App.layers.findIndex(x => x.id === id);
+  App.layers.splice(i + 1, 0, nl);
+  rebuildLayerList(); rebuildFrameStrip(); selectLayer(nl.id); requestRender();
+}
+
+function mergeDown(id) {
+  const i = App.layers.findIndex(l => l.id === id);
+  if (i <= 0) { toast('Nothing below to merge into.'); return; }
+  const top = App.layers[i], bottom = App.layers[i - 1];
+  // Bake both into a new full-canvas image layer (uses current frame transforms).
+  const c = mkCanvas(App.W, App.H);
+  const cx = c.getContext('2d');
+  for (const l of [bottom, top]) {
+    const t = getT(l, App.cur);
+    const comp = layerComposite(l);
+    cx.save();
+    cx.globalAlpha = clamp(t.opacity, 0, 1);
+    cx.translate(t.x, t.y); cx.rotate(t.rot * Math.PI / 180);
+    cx.scale(t.scale * (t.flipH ? -1 : 1), t.scale * (t.flipV ? -1 : 1));
+    cx.drawImage(comp, -l.natW / 2, -l.natH / 2);
+    cx.restore();
+  }
+  const nl = newLayer('image');
+  nl.src = c; nl.natW = App.W; nl.natH = App.H; nl._srcVer++;
+  nl.name = bottom.name + ' + ' + top.name;
+  nl.base = { x: App.W / 2, y: App.H / 2, scale: 1, rot: 0, opacity: 1, flipH: false, flipV: false };
+  App.layers.splice(i - 1, 2, nl);
+  rebuildLayerList(); rebuildFrameStrip(); selectLayer(nl.id); requestRender();
+  toast('Merged');
+}
+
+/* =====================================================================
+   Selection + UI sync
+   ===================================================================== */
+function selectLayer(id) {
+  App.sel = id;
+  rebuildLayerList();
+  refreshSelUI();
+  requestRender();
+}
+
+function refreshSelUI() {
+  const l = selLayer();
+  // transform section
+  $('#transformSection').style.display = (App.sel && App.sel !== 'bg') ? '' : 'none';
+  $('#layerOps').style.display = (App.sel && App.sel !== 'bg') ? '' : 'none';
+  if (l) { $('#layerName').value = l.name; syncTransformInputs(); }
+  // text controls
+  const isText = l && l.type === 'text';
+  $('#textControls').style.display = isText ? 'flex' : 'none';
+  $('#noTextSel').style.display = isText ? 'none' : '';
+  if (isText) syncTextInputs(l);
+  updateScopePill();
+}
+
+function updateScopePill() {
+  const pill = $('#scopePill');
+  pill.textContent = App.mode;
+  pill.classList.toggle('indigo', App.mode === 'global');
+  $('#scopeHint').textContent = App.mode === 'frame'
+    ? 'Editing this frame only. Switch to GLOBAL to apply across every frame.'
+    : 'Editing all frames at once.';
+}
+
+function syncTransformInputs() {
+  const l = selLayer(); if (!l) return;
+  const t = getT(l, App.cur);
+  $('#posX').value = (t.x - App.W / 2).toFixed(1); $('#posXVal').textContent = Math.round(t.x - App.W / 2);
+  $('#posY').value = (t.y - App.H / 2).toFixed(1); $('#posYVal').textContent = Math.round(t.y - App.H / 2);
+  $('#posX').min = -App.W; $('#posX').max = App.W; $('#posY').min = -App.H; $('#posY').max = App.H;
+  $('#scale').value = Math.round(t.scale * 100); $('#scaleVal').textContent = Math.round(t.scale * 100) + '%';
+  $('#rot').value = Math.round(t.rot); $('#rotVal').textContent = Math.round(t.rot) + '°';
+  $('#op').value = Math.round(t.opacity * 100); $('#opVal').textContent = Math.round(t.opacity * 100) + '%';
+}
+
+function syncTextInputs(l) {
+  const t = l.text;
+  $('#txtContent').value = t.content;
+  $('#txtFont').value = t.font;
+  $('#txtSize').value = t.size; $('#txtSizeVal').textContent = t.size;
+  $('#txtColor').value = t.color; $('#txtColorHex').value = t.color;
+  $('#txtStroke').value = t.stroke; $('#txtStrokeVal').textContent = t.stroke;
+  $('#txtStrokeColor').value = t.strokeColor; $('#txtStrokeHex').value = t.strokeColor;
+  $('#txtLine').value = t.line; $('#txtLineVal').textContent = t.line;
+  $('#txtBold').classList.toggle('active', t.bold);
+  $('#txtItalic').classList.toggle('active', t.italic);
+  $('#txtAlignL').classList.toggle('active', t.align === 'left');
+  $('#txtAlignC').classList.toggle('active', t.align === 'center');
+  $('#txtAlignR').classList.toggle('active', t.align === 'right');
+}
+
+/* ---- layer list ---- */
+function smallThumb(drawFn, w, h, tw = 40, th = 40) {
+  const c = mkCanvas(tw, th);
+  const cx = c.getContext('2d');
+  const s = Math.min(tw / w, th / h);
+  cx.save(); cx.translate((tw - w * s) / 2, (th - h * s) / 2); cx.scale(s, s);
+  drawFn(cx); cx.restore();
+  return c;
+}
+
+function rebuildLayerList() {
+  const list = $('#layerList'); list.innerHTML = '';
+  // overlays top → bottom
+  for (let i = App.layers.length - 1; i >= 0; i--) {
+    const l = App.layers[i];
+    const row = document.createElement('div');
+    row.className = 'layer' + (App.sel === l.id ? ' sel' : '') + (l.visible ? '' : ' hidden-layer');
+    const thumb = smallThumb((cx) => { if (l.src) cx.drawImage(layerComposite(l), 0, 0); }, l.natW || 1, l.natH || 1);
+    const tdiv = document.createElement('div'); tdiv.className = 'thumb'; tdiv.appendChild(thumb);
+    const meta = document.createElement('div'); meta.className = 'lmeta';
+    const overrides = Object.keys(l.perFrame).length + Object.keys(l.perFrameMask).length;
+    meta.innerHTML = `<div class="lname">${escapeHtml(l.name)}</div><div class="lsub">${l.type}${overrides ? ' · ' + overrides + ' frame edits' : ''}</div>`;
+    const vis = document.createElement('button'); vis.className = 'vis'; vis.title = 'Show / hide';
+    vis.innerHTML = l.visible
+      ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>'
+      : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3l18 18"/><path d="M10.6 10.6a3 3 0 0 0 4.2 4.2"/><path d="M9.9 4.2A10 10 0 0 1 22 12a18 18 0 0 1-2.2 3M6.6 6.6A18 18 0 0 0 2 12s4 7 10 7a10 10 0 0 0 3.4-.6"/></svg>';
+    vis.addEventListener('click', (e) => { e.stopPropagation(); l.visible = !l.visible; rebuildLayerList(); rebuildFrameStrip(); requestRender(); });
+    row.appendChild(tdiv); row.appendChild(meta); row.appendChild(vis);
+    row.addEventListener('click', () => selectLayer(l.id));
+    list.appendChild(row);
+  }
+  // background row
+  const bg = document.createElement('div');
+  bg.className = 'layer bg' + (App.sel === 'bg' ? ' sel' : '');
+  const bthumb = smallThumb((cx) => { const f = App.frames[App.cur]; if (f) cx.drawImage(f.base, 0, 0); }, App.W || 1, App.H || 1);
+  const btd = document.createElement('div'); btd.className = 'thumb'; btd.appendChild(bthumb);
+  const bm = document.createElement('div'); bm.className = 'lmeta';
+  bm.innerHTML = `<div class="lname">Background</div><div class="lsub">frames · ${App.frames.length}</div>`;
+  bg.appendChild(btd); bg.appendChild(bm);
+  bg.addEventListener('click', () => selectLayer('bg'));
+  list.appendChild(bg);
+}
+
+function escapeHtml(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+
+/* ---- frame strip ---- */
+let stripThumbs = [];
+function rebuildFrameStrip() {
+  const strip = $('#framesStrip'); strip.innerHTML = ''; stripThumbs = [];
+  App.frames.forEach((f, i) => {
+    const d = document.createElement('div');
+    d.className = 'fthumb' + (i === App.cur ? ' active' : '');
+    const c = mkCanvas(64, 64);
+    renderThumb(c, i);
+    d.appendChild(c);
+    const idx = document.createElement('span'); idx.className = 'idx'; idx.textContent = i + 1; d.appendChild(idx);
+    const dm = document.createElement('span'); dm.className = 'delms'; dm.textContent = f.delay + 'ms'; d.appendChild(dm);
+    d.addEventListener('click', () => gotoFrame(i));
+    strip.appendChild(d);
+    stripThumbs[i] = c;
+  });
+  const active = strip.children[App.cur];
+  if (active) active.scrollIntoView({ inline: 'nearest', block: 'nearest' });
+  $('#frameLabel').textContent = `${App.cur + 1} / ${App.frames.length}`;
+}
+
+function renderThumb(c, i) {
+  const cx = c.getContext('2d');
+  cx.clearRect(0, 0, c.width, c.height);
+  const s = Math.min(c.width / App.W, c.height / App.H);
+  cx.save();
+  cx.translate((c.width - App.W * s) / 2, (c.height - App.H * s) / 2); cx.scale(s, s);
+  // reuse the renderer onto a scratch full-size buffer then draw scaled — simpler: render directly
+  const tmp = mkCanvas(App.W, App.H);
+  renderFrameTo(tmp.getContext('2d'), i);
+  cx.drawImage(tmp, 0, 0);
+  cx.restore();
+}
+
+const scheduleThumb = debounce(() => {
+  if (stripThumbs[App.cur]) renderThumb(stripThumbs[App.cur], App.cur);
+  rebuildLayerList();
+}, 120);
+
+/* =====================================================================
+   Frame navigation & playback
+   ===================================================================== */
+function gotoFrame(i) {
+  App.cur = clamp(i, 0, App.frames.length - 1);
+  $$('.fthumb').forEach((el, k) => el.classList.toggle('active', k === App.cur));
+  $('#frameLabel').textContent = `${App.cur + 1} / ${App.frames.length}`;
+  $('#frameDelay').value = App.frames[App.cur].delay;
+  refreshSelUI();
+  rebuildLayerList();
+  requestRender();
+  const active = $('#framesStrip').children[App.cur];
+  if (active) active.scrollIntoView({ inline: 'nearest', block: 'nearest' });
+}
+
+let playTimer = null;
+function play() {
+  if (App.frames.length < 2) return;
+  App.playing = true;
+  $('#playBtn').innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg>';
+  const step = () => {
+    if (!App.playing) return;
+    const delay = App.frames[App.cur].delay || 100;
+    playTimer = setTimeout(() => {
+      App.cur = (App.cur + 1) % App.frames.length;
+      $$('.fthumb').forEach((el, k) => el.classList.toggle('active', k === App.cur));
+      $('#frameLabel').textContent = `${App.cur + 1} / ${App.frames.length}`;
+      renderFrameTo(vctx, App.cur); drawOverlay();
+      step();
+    }, delay);
+  };
+  step();
+}
+function stop() {
+  App.playing = false; clearTimeout(playTimer);
+  $('#playBtn').innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>';
+  gotoFrame(App.cur);
+}
+function togglePlay() { App.playing ? stop() : play(); }
+
+/* =====================================================================
+   GIF settings: size, fps, frames
+   ===================================================================== */
+function syncGifControls() {
+  $('#canvasW').value = App.W; $('#canvasH').value = App.H;
+  $('#fpsInput').value = App.fps; $('#fpsRange').value = App.fps; $('#fpsVal2').textContent = App.fps + ' fps';
+  $('#loopSel').value = String(App.loop);
+  $('#frameDelay').value = App.frames.length ? App.frames[App.cur].delay : 100;
+}
+
+function resizeCanvas(nw, nh) {
+  nw = clamp(Math.round(nw), 1, 2000); nh = clamp(Math.round(nh), 1, 2000);
+  const sx = nw / App.W, sy = nh / App.H;
+  // scale frames
+  for (const f of App.frames) {
+    const c = mkCanvas(nw, nh);
+    c.getContext('2d').drawImage(f.base, 0, 0, nw, nh);
+    f.base = c;
+  }
+  // scale layer transforms (position scales; layer scale multiplies by avg)
+  const sAvg = (sx + sy) / 2;
+  for (const l of App.layers) {
+    const scaleT = (t) => { t.x *= sx; t.y *= sy; t.scale *= sAvg; };
+    scaleT(l.base);
+    for (const k in l.perFrame) scaleT(l.perFrame[k]);
+  }
+  App.W = nw; App.H = nh;
+  setupCanvas(); syncGifControls(); rebuildFrameStrip(); rebuildLayerList(); requestRender();
+  toast(`Resized to ${nw}×${nh}`);
+}
+
+function setAllFps(fps) {
+  App.fps = clamp(fps, 1, 50);
+  const d = Math.round(1000 / App.fps);
+  for (const f of App.frames) f.delay = d;
+  syncGifControls(); rebuildFrameStrip();
+}
+
+/* =====================================================================
+   Export (encode GIF in a worker) + clipboard
+   ===================================================================== */
+const encWorker = (() => {
+  const code = OMGGIF_SRC + '\n' + `
+  /* ---- Median-cut quantizer with transparency, per-frame palette ---- */
+  function quantizeFrame(rgba, w, h, maxColors, transThreshold){
+    const n = w*h;
+    // collect opaque pixels
+    const px = rgba;
+    // Build color boxes via median cut
+    const pts = []; // indices of opaque pixels' packed rgb
+    const idxMap = new Int32Array(n); // -1 transparent
+    for(let i=0;i<n;i++){
+      if(px[i*4+3] < transThreshold){ idxMap[i] = -1; }
+      else { idxMap[i] = 0; pts.push(i); }
+    }
+    function box(list){
+      let rmin=255,rmax=0,gmin=255,gmax=0,bmin=255,bmax=0;
+      for(const i of list){ const o=i*4; const r=px[o],g=px[o+1],b=px[o+2];
+        if(r<rmin)rmin=r; if(r>rmax)rmax=r; if(g<gmin)gmin=g; if(g>gmax)gmax=g; if(b<bmin)bmin=b; if(b>bmax)bmax=b; }
+      return {list,rmin,rmax,gmin,gmax,bmin,bmax};
+    }
+    let boxes = pts.length ? [box(pts)] : [];
+    const reserved = 1; // index 0 reserved for transparency
+    const target = Math.max(2, maxColors) - reserved;
+    while(boxes.length < target && boxes.length){
+      // pick box with largest range
+      let bi=-1, best=-1;
+      for(let i=0;i<boxes.length;i++){ const bx=boxes[i]; const rng=Math.max(bx.rmax-bx.rmin,bx.gmax-bx.gmin,bx.bmax-bx.bmin); if(bx.list.length>1 && rng>best){best=rng;bi=i;} }
+      if(bi<0) break;
+      const bx=boxes[bi];
+      const rr=bx.rmax-bx.rmin, gr=bx.gmax-bx.gmin, br=bx.bmax-bx.bmin;
+      const ch = rr>=gr&&rr>=br?0:(gr>=br?1:2);
+      bx.list.sort((a,b)=>px[a*4+ch]-px[b*4+ch]);
+      const mid = bx.list.length>>1;
+      const l1 = bx.list.slice(0,mid), l2 = bx.list.slice(mid);
+      boxes.splice(bi,1,box(l1),box(l2));
+    }
+    // palette: index 0 = transparent placeholder, rest = box averages
+    const palette = [0x000000];
+    const boxColors = [];
+    for(const bx of boxes){
+      let r=0,g=0,b=0; for(const i of bx.list){const o=i*4;r+=px[o];g+=px[o+1];b+=px[o+2];}
+      const c=bx.list.length||1; r=(r/c)|0; g=(g/c)|0; b=(b/c)|0;
+      boxColors.push([r,g,b]); palette.push((r<<16)|(g<<8)|b);
+    }
+    // pad palette to power of 2
+    let size=2; while(size<palette.length) size<<=1;
+    while(palette.length<size) palette.push(0);
+    // map each pixel to nearest box color (index+1)
+    const out = new Uint8Array(n);
+    for(let i=0;i<n;i++){
+      if(idxMap[i]===-1){ out[i]=0; continue; }
+      const o=i*4, r=px[o],g=px[o+1],b=px[o+2];
+      let best=0,bd=1e9;
+      for(let k=0;k<boxColors.length;k++){ const c=boxColors[k]; const dr=r-c[0],dg=g-c[1],db=b-c[2]; const d=dr*dr+dg*dg+db*db; if(d<bd){bd=d;best=k;} }
+      out[i]=best+1;
+    }
+    return { indices: out, palette };
+  }
+
+  self.onmessage = (e) => {
+    const { frames, w, h, loop, maxColors } = e.data; // frames: [{data, delay}]
+    const est = w*h*frames.length + 4096*frames.length + 1024;
+    const buf = new Uint8Array(est);
+    const gw = new GifWriter(buf, w, h, { loop: loop });
+    for(let f=0; f<frames.length; f++){
+      const fr = frames[f];
+      const rgba = new Uint8ClampedArray(fr.data);
+      const { indices, palette } = quantizeFrame(rgba, w, h, maxColors, 8);
+      gw.addFrame(0,0,w,h, indices, { palette: palette, delay: Math.round(fr.delay/10), transparent: 0, disposal: 2 });
+      self.postMessage({ progress: (f+1)/frames.length });
+    }
+    const len = gw.end();
+    const out = buf.slice(0, len);
+    self.postMessage({ done: true, buffer: out.buffer }, [out.buffer]);
+  };`;
+  const url = URL.createObjectURL(new Blob([code], { type: 'application/javascript' }));
+  const w = new Worker(url);
+  w.onerror = () => { hideProgress(); toast('GIF encoding failed.'); };
+  return w;
+})();
+
+function buildGifBlob() {
+  return new Promise((resolve, reject) => {
+    if (!App.frames.length) { reject(new Error('no frames')); return; }
+    const q = +$('#quality').value; // 1 fast/low,2,3 best
+    const maxColors = q === 1 ? 64 : q === 2 ? 128 : 256;
+    const frames = [];
+    const transfer = [];
+    for (let i = 0; i < App.frames.length; i++) {
+      const tmp = mkCanvas(App.W, App.H);
+      renderFrameTo(tmp.getContext('2d'), i);
+      const id = tmp.getContext('2d').getImageData(0, 0, App.W, App.H);
+      const ab = id.data.buffer;
+      frames.push({ data: ab, delay: App.frames[i].delay });
+      transfer.push(ab);
+    }
+    showProgress('Encoding GIF…', 0);
+    const onMsg = (e) => {
+      if (e.data.progress != null) { setProgress(e.data.progress); return; }
+      if (e.data.done) {
+        encWorker.removeEventListener('message', onMsg);
+        hideProgress();
+        resolve(new Blob([e.data.buffer], { type: 'image/gif' }));
+      }
+    };
+    encWorker.addEventListener('message', onMsg);
+    encWorker.postMessage({ frames, w: App.W, h: App.H, loop: App.loop, maxColors }, transfer);
+  });
+}
+
+async function downloadGif() {
+  try {
+    const blob = await buildGifBlob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'gif-studio-' + Date.now() + '.gif';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+    toast('Downloaded (' + Math.round(blob.size / 1024) + ' KB)');
+  } catch (e) { hideProgress(); toast('Export failed.'); }
+}
+
+async function copyGif() {
+  try {
+    const blob = await buildGifBlob();
+    if (navigator.clipboard && window.ClipboardItem) {
+      try {
+        await navigator.clipboard.write([new ClipboardItem({ 'image/gif': blob })]);
+        toast('GIF copied to clipboard'); return;
+      } catch (err) {
+        // Fallback: copy a PNG of the current frame (broad clipboard support)
+        const tmp = mkCanvas(App.W, App.H); renderFrameTo(tmp.getContext('2d'), App.cur);
+        const png = await new Promise(r => tmp.toBlob(r, 'image/png'));
+        try { await navigator.clipboard.write([new ClipboardItem({ 'image/png': png })]); toast('GIF not supported by clipboard — copied current frame as PNG'); return; }
+        catch (e2) {/* fall through */ }
+      }
+    }
+    toast('Clipboard unavailable — use Download instead');
+  } catch (e) { hideProgress(); toast('Copy failed.'); }
+}
+
+/* ---- progress ---- */
+function showProgress(label, p) { $('#progressLabel').textContent = label; $('#progressBar').style.width = (p * 100) + '%'; $('#progress').classList.add('show'); }
+function setProgress(p) { $('#progressBar').style.width = (p * 100) + '%'; }
+function hideProgress() { $('#progress').classList.remove('show'); }
+
+/* =====================================================================
+   Reset
+   ===================================================================== */
+async function resetAll() {
+  if (!App.original) return;
+  const ok = await confirmDialog('Reset everything?', 'This discards all layers, text and edits and restores the GIF you first uploaded. This cannot be undone.');
+  if (!ok) return;
+  const o = App.original;
+  App.W = o.W; App.H = o.H; App.fps = o.fps; App.loop = o.loop;
+  App.layers = []; App.cur = 0; App.mode = 'frame'; App.tool = 'move';
+  // restore frames from data URLs
+  const loaded = await Promise.all(o.frames.map(fr => new Promise(res => {
+    const img = new Image(); img.onload = () => { const c = mkCanvas(o.W, o.H); c.getContext('2d').drawImage(img, 0, 0); res({ base: c, delay: fr.delay }); }; img.src = fr.url;
+  })));
+  App.frames = loaded;
+  setMode('frame'); setTool('move');
+  setupCanvas(); syncGifControls(); rebuildLayerList(); rebuildFrameStrip(); selectLayer('bg'); requestRender();
+  toast('Reset to original');
+}
+
+/* =====================================================================
+   Mode / tool / tab wiring
+   ===================================================================== */
+function setMode(m) {
+  App.mode = m;
+  $$('#modeSwitch button').forEach(b => b.classList.toggle('active', b.dataset.mode === m));
+  updateScopePill();
+}
+function setTool(t) {
+  App.tool = t;
+  $$('#toolGrid .tool').forEach(el => el.classList.toggle('active', el.dataset.tool === t));
+  $('#brushSection').style.display = t === 'erase' ? '' : 'none';
+  $('#cropSection').style.display = t === 'crop' ? '' : 'none';
+  $('#bgSection').style.display = t === 'removebg' ? '' : 'none';
+  if (t !== 'crop') cropRect = null;
+  view.style.cursor = (t === 'erase') ? 'crosshair' : (t === 'move' ? 'move' : 'default');
+  requestRender();
+}
+function switchTab(name) {
+  $$('.paneltabs button').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
+  $$('.tabpane').forEach(p => p.classList.toggle('active', p.dataset.pane === name));
+  if (window.matchMedia('(max-width:860px)').matches) $('#panel').classList.remove('collapsed');
+}
+
+/* =====================================================================
+   Event wiring
+   ===================================================================== */
+function wire() {
+  // Theme
+  const THEME_KEY = 'gifstudio-theme';
+  const setTheme = (t) => {
+    document.documentElement.setAttribute('data-theme', t);
+    localStorage.setItem(THEME_KEY, t);
+    $('#themeBtn').innerHTML = t === 'dark'
+      ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5 19 19M19 5l-1.5 1.5M6.5 17.5 5 19"/></svg>'
+      : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8z"/></svg>';
+  };
+  setTheme(localStorage.getItem(THEME_KEY) === 'dark' ? 'dark' : (matchMedia('(prefers-color-scheme:dark)').matches ? 'dark' : 'light'));
+  $('#themeBtn').addEventListener('click', () => setTheme(document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark'));
+
+  // File import (initial)
+  const fileInput = $('#fileInput');
+  $('#dropzone').addEventListener('click', (e) => { if (e.target.tagName !== 'INPUT') fileInput.click(); });
+  fileInput.addEventListener('change', () => { if (fileInput.files.length) importFiles(fileInput.files, { asNewDoc: true }); fileInput.value = ''; });
+  // drag & drop onto stage
+  const stage = $('#stage');
+  ['dragenter', 'dragover'].forEach(ev => stage.addEventListener(ev, e => { e.preventDefault(); $('#dropzone').classList.add('drag'); }));
+  ['dragleave', 'drop'].forEach(ev => stage.addEventListener(ev, e => { e.preventDefault(); $('#dropzone').classList.remove('drag'); }));
+  stage.addEventListener('drop', e => { const f = e.dataTransfer.files; if (f && f.length) importFiles(f, { asNewDoc: !App.frames.length }); });
+
+  // Mode switch
+  $$('#modeSwitch button').forEach(b => b.addEventListener('click', () => setMode(b.dataset.mode)));
+
+  // Panel tabs
+  $$('.paneltabs button').forEach(b => b.addEventListener('click', () => switchTab(b.dataset.tab)));
+  // mobile sheet grip
+  $('#sheetGrip').addEventListener('click', () => $('#panel').classList.toggle('collapsed'));
+
+  // Tools
+  $$('#toolGrid .tool').forEach(el => el.addEventListener('click', () => setTool(el.dataset.tool)));
+
+  // Layer add
+  $('#addImageBtn').addEventListener('click', () => $('#addImageInput').click());
+  $('#addImageInput').addEventListener('change', () => { if ($('#addImageInput').files.length) addImageLayers($('#addImageInput').files); $('#addImageInput').value = ''; });
+  $('#addTextBtn').addEventListener('click', addTextLayer);
+
+  // Layer ops
+  $('#layerName').addEventListener('input', () => { const l = selLayer(); if (l) { l.name = $('#layerName').value; rebuildLayerList(); } });
+  $('#layerUp').addEventListener('click', () => { const l = selLayer(); if (l) moveLayer(l.id, 1); });
+  $('#layerDown').addEventListener('click', () => { const l = selLayer(); if (l) moveLayer(l.id, -1); });
+  $('#layerDup').addEventListener('click', () => { const l = selLayer(); if (l) duplicateLayer(l.id); });
+  $('#layerMerge').addEventListener('click', () => { const l = selLayer(); if (l) mergeDown(l.id); });
+  $('#layerDelete').addEventListener('click', () => { const l = selLayer(); if (l) deleteLayer(l.id); });
+
+  // Transform sliders
+  const onT = (prop, fn) => {
+    const l = selLayer(); if (!l) return;
+    const t = ensureEditTarget(l);
+    fn(t);
+    if (App.mode === 'global') commitGlobalTransform(l);
+    syncTransformInputs(); requestRender(); scheduleThumb();
+  };
+  $('#posX').addEventListener('input', e => onT('x', t => { t.x = App.W / 2 + (+e.target.value); $('#posXVal').textContent = Math.round(+e.target.value); }));
+  $('#posY').addEventListener('input', e => onT('y', t => { t.y = App.H / 2 + (+e.target.value); $('#posYVal').textContent = Math.round(+e.target.value); }));
+  $('#scale').addEventListener('input', e => onT('scale', t => { t.scale = (+e.target.value) / 100; $('#scaleVal').textContent = e.target.value + '%'; }));
+  $('#rot').addEventListener('input', e => onT('rot', t => { t.rot = +e.target.value; $('#rotVal').textContent = e.target.value + '°'; }));
+  $('#op').addEventListener('input', e => onT('op', t => { t.opacity = (+e.target.value) / 100; $('#opVal').textContent = e.target.value + '%'; }));
+  $('#flipH').addEventListener('click', () => onT('flipH', t => { t.flipH = !t.flipH; }));
+  $('#flipV').addEventListener('click', () => onT('flipV', t => { t.flipV = !t.flipV; }));
+  $('#resetTransform').addEventListener('click', () => {
+    const l = selLayer(); if (!l) return;
+    const t = ensureEditTarget(l);
+    Object.assign(t, { x: App.W / 2, y: App.H / 2, scale: 1, rot: 0, opacity: 1, flipH: false, flipV: false });
+    if (App.mode === 'global') commitGlobalTransform(l);
+    syncTransformInputs(); requestRender(); scheduleThumb();
+  });
+
+  // Brush
+  $('#brushSize').addEventListener('input', e => { $('#brushSizeVal').textContent = e.target.value; drawOverlay(); });
+  $('#brushFeather').addEventListener('input', e => { $('#brushFeatherVal').textContent = e.target.value + '%'; });
+
+  // Crop
+  $('#cropApply').addEventListener('click', applyCrop);
+  $('#cropCancel').addEventListener('click', () => { cropRect = null; requestRender(); });
+
+  // Background removal
+  $('#bgTol').addEventListener('input', e => $('#bgTolVal').textContent = e.target.value);
+  $('#bgFeather').addEventListener('input', e => $('#bgFeatherVal').textContent = e.target.value);
+  $('#bgRun').addEventListener('click', removeBackground);
+
+  // Text controls
+  const onText = (fn) => { const l = selLayer(); if (!l || l.type !== 'text') return; fn(l.text); renderTextLayer(l); rebuildLayerList(); requestRender(); scheduleThumb(); };
+  $('#txtContent').addEventListener('input', e => onText(t => t.content = e.target.value));
+  $('#txtFont').addEventListener('change', e => onText(t => t.font = e.target.value));
+  $('#txtSize').addEventListener('input', e => { $('#txtSizeVal').textContent = e.target.value; onText(t => t.size = +e.target.value); });
+  $('#txtColor').addEventListener('input', e => { $('#txtColorHex').value = e.target.value; onText(t => t.color = e.target.value); });
+  $('#txtColorHex').addEventListener('change', e => { $('#txtColor').value = e.target.value; onText(t => t.color = e.target.value); });
+  $('#txtStroke').addEventListener('input', e => { $('#txtStrokeVal').textContent = e.target.value; onText(t => t.stroke = +e.target.value); });
+  $('#txtStrokeColor').addEventListener('input', e => { $('#txtStrokeHex').value = e.target.value; onText(t => t.strokeColor = e.target.value); });
+  $('#txtStrokeHex').addEventListener('change', e => { $('#txtStrokeColor').value = e.target.value; onText(t => t.strokeColor = e.target.value); });
+  $('#txtLine').addEventListener('input', e => { $('#txtLineVal').textContent = e.target.value; onText(t => t.line = +e.target.value); });
+  $('#txtBold').addEventListener('click', () => onText(t => t.bold = !t.bold));
+  $('#txtItalic').addEventListener('click', () => onText(t => t.italic = !t.italic));
+  $('#txtAlignL').addEventListener('click', () => onText(t => t.align = 'left'));
+  $('#txtAlignC').addEventListener('click', () => onText(t => t.align = 'center'));
+  $('#txtAlignR').addEventListener('click', () => onText(t => t.align = 'right'));
+
+  // Transport
+  $('#playBtn').addEventListener('click', togglePlay);
+  $('#prevBtn').addEventListener('click', () => { stop(); gotoFrame((App.cur - 1 + App.frames.length) % App.frames.length); });
+  $('#nextBtn').addEventListener('click', () => { stop(); gotoFrame((App.cur + 1) % App.frames.length); });
+  $('#firstBtn').addEventListener('click', () => { stop(); gotoFrame(0); });
+  $('#fpsInput').addEventListener('change', e => setAllFps(+e.target.value));
+  $('#frameDelay').addEventListener('change', e => { if (App.frames[App.cur]) { App.frames[App.cur].delay = clamp(+e.target.value, 10, 60000); rebuildFrameStrip(); } });
+
+  // GIF settings
+  $('#canvasW').addEventListener('input', e => { if ($('#lockAspect').checked) { const r = App.H / App.W; $('#canvasH').value = Math.round(+e.target.value * r); } });
+  $('#canvasH').addEventListener('input', e => { if ($('#lockAspect').checked) { const r = App.W / App.H; $('#canvasW').value = Math.round(+e.target.value * r); } });
+  $('#sizeApply').addEventListener('click', () => resizeCanvas(+$('#canvasW').value, +$('#canvasH').value));
+  $('#sizeHalf').addEventListener('click', () => resizeCanvas(App.W / 2, App.H / 2));
+  $('#fpsRange').addEventListener('input', e => { $('#fpsVal2').textContent = e.target.value + ' fps'; });
+  $('#fpsRange').addEventListener('change', e => setAllFps(+e.target.value));
+  $('#applyFpsAll').addEventListener('click', () => setAllFps(App.fps));
+  $('#loopSel').addEventListener('change', e => App.loop = +e.target.value);
+
+  // Frame ops
+  $('#dupFrame').addEventListener('click', () => {
+    const f = App.frames[App.cur]; if (!f) return;
+    App.frames.splice(App.cur + 1, 0, { base: cloneCanvas(f.base), delay: f.delay });
+    // shift per-frame overrides for layers above current
+    for (const l of App.layers) { l.perFrame = shiftKeys(l.perFrame, App.cur); l.perFrameMask = shiftKeys(l.perFrameMask, App.cur); }
+    rebuildFrameStrip(); gotoFrame(App.cur + 1);
+  });
+  $('#delFrame').addEventListener('click', () => {
+    if (App.frames.length <= 1) { toast('Need at least one frame.'); return; }
+    App.frames.splice(App.cur, 1);
+    for (const l of App.layers) { delete l.perFrame[App.cur]; delete l.perFrameMask[App.cur]; l.perFrame = unshiftKeys(l.perFrame, App.cur); l.perFrameMask = unshiftKeys(l.perFrameMask, App.cur); }
+    App.cur = clamp(App.cur, 0, App.frames.length - 1);
+    rebuildFrameStrip(); gotoFrame(App.cur);
+  });
+  $('#addBlankFrame').addEventListener('click', () => {
+    App.frames.splice(App.cur + 1, 0, { base: mkCanvas(App.W, App.H), delay: Math.round(1000 / App.fps) });
+    rebuildFrameStrip(); gotoFrame(App.cur + 1);
+  });
+  $('#reverseFrames').addEventListener('click', () => {
+    App.frames.reverse();
+    const N = App.frames.length - 1;
+    for (const l of App.layers) { l.perFrame = remapKeys(l.perFrame, k => N - k); l.perFrameMask = remapKeys(l.perFrameMask, k => N - k); }
+    rebuildFrameStrip(); gotoFrame(N - App.cur); toast('Reversed');
+  });
+  $('#importMore').addEventListener('click', () => importMoreInput.click());
+
+  // hidden input for importing more frames
+  importMoreInput.addEventListener('change', () => { if (importMoreInput.files.length) importFiles(importMoreInput.files, { asNewDoc: false }); importMoreInput.value = ''; });
+
+  // Export & reset
+  $('#downloadBtn').addEventListener('click', downloadGif);
+  $('#copyBtn').addEventListener('click', copyGif);
+  $('#quality').addEventListener('input', e => { $('#qualityVal').textContent = ['', 'fast', 'balanced', 'best'][+e.target.value]; });
+  $('#resetBtn').addEventListener('click', resetAll);
+
+  // Keyboard
+  window.addEventListener('keydown', (e) => {
+    if (/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) return;
+    if (e.key === ' ') { e.preventDefault(); togglePlay(); }
+    else if (e.key === 'ArrowRight') { stop(); gotoFrame((App.cur + 1) % App.frames.length); }
+    else if (e.key === 'ArrowLeft') { stop(); gotoFrame((App.cur - 1 + App.frames.length) % App.frames.length); }
+    else if (e.key === 'g') setMode(App.mode === 'frame' ? 'global' : 'frame');
+    else if (e.key === 'v') setTool('move');
+    else if (e.key === 't') setTool('transform');
+    else if (e.key === 'e') setTool('erase');
+    else if ((e.key === 'Delete' || e.key === 'Backspace') && selLayer()) deleteLayer(App.sel);
+  });
+
+  window.addEventListener('resize', () => { if (App.frames.length) { fitCanvas(); drawOverlay(); } });
+}
+
+// key-shift helpers for per-frame override maps when inserting/removing frames
+function shiftKeys(map, from) { const out = {}; for (const k in map) { const i = +k; out[i > from ? i + 1 : i] = map[k]; } return out; }
+function unshiftKeys(map, removed) { const out = {}; for (const k in map) { const i = +k; if (i === removed) continue; out[i > removed ? i - 1 : i] = map[k]; } return out; }
+function remapKeys(map, fn) { const out = {}; for (const k in map) out[fn(+k)] = map[k]; return out; }
+
+// build a hidden input element for "import more"
+const importMoreInput = document.createElement('input');
+importMoreInput.type = 'file'; importMoreInput.accept = 'image/*,.gif'; importMoreInput.multiple = true;
+importMoreInput.className = 'visually-hidden'; document.body.appendChild(importMoreInput);
+
+/* =====================================================================
+   Boot
+   ===================================================================== */
+wire();
+setMode('frame'); setTool('move');
+
+// Service worker (caches the page + CDN font for offline use after first load)
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('./sw.js').then(reg => {
+    if (reg.waiting) reg.waiting.postMessage('SKIP_WAITING');
+    reg.addEventListener('updatefound', () => {
+      const nw = reg.installing; if (!nw) return;
+      nw.addEventListener('statechange', () => { if (nw.state === 'installed' && navigator.serviceWorker.controller) nw.postMessage('SKIP_WAITING'); });
+    });
+  }).catch(() => {});
+  window.addEventListener('online', () => { if (navigator.serviceWorker.controller) navigator.serviceWorker.controller.postMessage('REFRESH_CACHE'); });
+}
+
+</script>
+</body>
+</html>

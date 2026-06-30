@@ -9,13 +9,14 @@
 //   - Firebase realtime DB: bypass (live data, needs network)
 // ============================================
 
-const CACHE_VERSION = 79;
+const CACHE_VERSION = 80;
 const CACHE_NAME = `cade-v${CACHE_VERSION}`;
 
 // Same-origin pages to precache on install.
 // Note: we use absolute paths so the cache keys match navigation requests.
 const PRECACHE = [
   './txt.html',
+  './gif.html',
   './manifest.webmanifest',
 ];
 
@@ -24,6 +25,10 @@ const PRECACHE = [
 // stall / render unstyled when offline on iOS.
 const PRECACHE_CROSS_ORIGIN = [
   'https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600&f[]=jetbrains-mono@400,500&display=swap',
+  // IBM Plex (Google Fonts) — used by gif.html / index.html. Caching the CSS
+  // lets the font load offline; the referenced gstatic font files get cached
+  // on first use via the stale-while-revalidate fetch handler below.
+  'https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,100..700;1,100..700&family=IBM+Plex+Mono:wght@400;500&display=swap',
   'https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js',
   'https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js',
   'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js',
@@ -127,7 +132,8 @@ self.addEventListener('fetch', (e) => {
 
   // Firebase realtime DB needs live network; never intercept.
   if (url.hostname.includes('firebaseio.com')) return;
-  if (url.hostname.includes('googleapis.com')) return;
+  // Bypass Google APIs (Firebase, etc.) for live data — but DO cache Google Fonts.
+  if (url.hostname.includes('googleapis.com') && !url.hostname.startsWith('fonts.')) return;
 
   // Navigation (the HTML page itself): stale-while-revalidate with offline fallback.
   if (request.mode === 'navigate') {
