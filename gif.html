@@ -2790,9 +2790,10 @@ function wire() {
   setTheme(localStorage.getItem(THEME_KEY) === 'dark' ? 'dark' : (matchMedia('(prefers-color-scheme:dark)').matches ? 'dark' : 'light'));
   $('#themeBtn').addEventListener('click', () => setTheme(document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark'));
 
-  // File import (initial)
+  // File import (initial). The dropzone is a <label> wrapping #fileInput, so a
+  // tap/click opens the picker natively — do NOT also call fileInput.click()
+  // here or the dialog opens twice and the selection gets dropped (esp. mobile).
   const fileInput = $('#fileInput');
-  $('#dropzone').addEventListener('click', (e) => { if (e.target.tagName !== 'INPUT') fileInput.click(); });
   fileInput.addEventListener('change', () => { if (fileInput.files.length) importFiles(fileInput.files, { asNewDoc: true }); fileInput.value = ''; });
   // drag & drop onto stage
   const stage = $('#stage');
