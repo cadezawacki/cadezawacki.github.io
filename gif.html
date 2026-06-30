@@ -158,11 +158,19 @@
   .emptystate h2{margin:0;font-size:18px;font-weight:700}
   .emptystate p{margin:0;color:var(--muted);max-width:340px}
   .dropzone{
+    position:relative;
     border:1.5px dashed var(--border-strong); border-radius:var(--radius);
     padding:1.6rem 2rem; background:var(--bg-elev); cursor:pointer; transition:.18s;
     display:flex; flex-direction:column; gap:.5rem; align-items:center;
   }
   .dropzone.drag{border-color:var(--accent); background:var(--accent-soft)}
+  /* The file input fills the dropzone and is transparent, so taps hit it
+     directly — the most reliable way to open the picker on mobile/iOS. */
+  #fileInput{
+    position:absolute; inset:0; width:100%; height:100%; margin:0; padding:0;
+    opacity:0; cursor:pointer; font-size:0;
+  }
+  #fileInput::-webkit-file-upload-button{cursor:pointer}
 
   /* ---------- Timeline ---------- */
   .timeline{
@@ -1223,7 +1231,10 @@ function GifReaderLZWOutputIndexStream(code_stream, p, output, output_length) {
             <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent)"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M5 20h14"/></svg>
             <strong>Choose files</strong>
             <span class="hint">GIF, PNG, JPG, WebP · tap or drop</span>
-            <input id="fileInput" type="file" accept="image/*,.gif" multiple class="visually-hidden">
+            <!-- The input itself overlays the whole dropzone (transparent) so a
+                 tap lands directly on it. This is the only reliable way to open
+                 the file picker on iOS Safari / mobile browsers. -->
+            <input id="fileInput" type="file" accept="image/*,.gif" multiple>
           </label>
         </div>
       </div>
@@ -2790,9 +2801,10 @@ function wire() {
   setTheme(localStorage.getItem(THEME_KEY) === 'dark' ? 'dark' : (matchMedia('(prefers-color-scheme:dark)').matches ? 'dark' : 'light'));
   $('#themeBtn').addEventListener('click', () => setTheme(document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark'));
 
-  // File import (initial)
+  // File import (initial). The dropzone is a <label> wrapping #fileInput, so a
+  // tap/click opens the picker natively — do NOT also call fileInput.click()
+  // here or the dialog opens twice and the selection gets dropped (esp. mobile).
   const fileInput = $('#fileInput');
-  $('#dropzone').addEventListener('click', (e) => { if (e.target.tagName !== 'INPUT') fileInput.click(); });
   fileInput.addEventListener('change', () => { if (fileInput.files.length) importFiles(fileInput.files, { asNewDoc: true }); fileInput.value = ''; });
   // drag & drop onto stage
   const stage = $('#stage');
