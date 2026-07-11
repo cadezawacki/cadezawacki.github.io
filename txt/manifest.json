@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "version": "2026.07.11-5",
+  "version": "2026.07.11-6",
   "modules": [
     {
       "id": "crawler",
@@ -82,16 +82,6 @@
       "tags": "timer,pomodoro,countdown,stopwatch,clock,focus",
       "entry": "widgets/timer/timer.js",
       "css": "widgets/timer/timer.css"
-    },
-    {
-      "id": "daycal",
-      "type": "widget",
-      "name": "Daily Notes Calendar",
-      "description": "Browse rooms by the date they changed",
-      "icon": "📅",
-      "tags": "calendar,daily,date,journal,activity,rooms",
-      "entry": "widgets/daycal/daycal.js",
-      "css": "widgets/daycal/daycal.css"
     },
     {
       "id": "pack-case",

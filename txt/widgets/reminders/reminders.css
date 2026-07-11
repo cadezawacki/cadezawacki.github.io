@@ -18,6 +18,9 @@
 .rem-recur { color: var(--text-faint); font-size: var(--text-xs); white-space: nowrap; }
 .rem-x { border: none; background: none; color: var(--text-faint); cursor: pointer; font-size: 12px; padding: 0 4px; }
 .rem-x:hover { color: var(--danger, #ef4444); }
+.rem-row.rem-past { opacity: 0.75; }
+.rem-row.rem-past .rem-at { color: var(--text-muted); }
+.rem-src { color: var(--text-faint); font-size: var(--text-xs); border: 1px solid var(--border); border-radius: 999px; padding: 1px 8px; max-width: 90px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rem-form { display: flex; flex-direction: column; gap: 6px; padding: 6px 0 10px; border-bottom: 1px solid var(--border); margin-bottom: 4px; }
 .rem-form-row { display: flex; gap: 6px; align-items: center; }
 .rem-in { font-size: var(--text-xs); padding: 5px 8px; flex: 1; min-width: 0; }

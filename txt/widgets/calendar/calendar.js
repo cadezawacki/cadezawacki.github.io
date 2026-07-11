@@ -18,8 +18,20 @@
        cats:   { <name>: <color> }   (category -> palette color)
      }
    Everything is normalized defensively on read (fields/arrays may be missing
-   or malformed after a partial sync). This widget is separate from the
-   daycal (Rooms by Date) widget — all ids/classes are cal-*.
+   or malformed after a partial sync). All ids/classes are cal-*.
+
+   Rooms by date (absorbed from the retired daycal widget). The room system is
+   reached through Cade.roomsApi — read at call time and null-guarded, so the
+   calendar still works when that surface is absent:
+   - A DAILY-NOTE room is simply a room named with the day's local date key
+     'YYYY-MM-DD' (daycal's key scheme), so existing rooms named that way stay
+     reachable. Day cells that have one get a small corner mark, and the
+     selected day offers "Open daily note" (exists) or "＋ Daily note" (create
+     — via roomsApi.ensureRoom when the core provides it, else plain
+     switchRoom, which the core registers on the next boot via the room URL).
+   - The selected day also lists every room whose last modification (fallback:
+     creation) fell on that day — the old Rooms-by-Date activity view — and
+     opening one first jumps into its own workspace, exactly as daycal did.
 
    window.__calAgenda(dateKey) returns that day's events (copies), exposed for
    a future reminders integration. */
@@ -139,6 +151,46 @@
     return el ? String(el.value == null ? '' : el.value).trim() : '';
   }
 
+  // ---- rooms by date (merged from the retired daycal widget) ---------------
+  // A daily-note room is one NAMED with the local date key 'YYYY-MM-DD' —
+  // the key scheme daycal used — so any room named that way is recognized,
+  // however it was created.
+  var DAY_ROOM_RE = /^\d{4}-\d{2}-\d{2}$/;
+  function noteRoomSet() {
+    var out = {};
+    var ra = Cade.roomsApi;
+    if (!ra) return out;
+    var names = ra.list();
+    for (var i = 0; i < names.length; i++) {
+      if (DAY_ROOM_RE.test(names[i])) out[names[i]] = 1;
+    }
+    return out;
+  }
+  // Rooms whose last modification (fallback: creation) fell on `key`, newest
+  // first — daycal's activity list for a day.
+  function activityRooms(key) {
+    var ra = Cade.roomsApi;
+    if (!ra) return [];
+    var names = ra.list(), out = [];
+    for (var i = 0; i < names.length; i++) {
+      var m = ra.meta(names[i]) || {};
+      var ts = m.modified || m.created;
+      if (ts && dateKey(new Date(ts)) === key) out.push(names[i]);
+    }
+    out.sort(function (a, b) { return ra.modifiedAt(b) - ra.modifiedAt(a); });
+    return out;
+  }
+  // daycal's open logic: jump into the room's own workspace (first membership)
+  // so its tab is visible, unless it's already visible here or pinned.
+  function openDayRoom(ra, name) {
+    var ids = ra.workspaceIds(name) || [];
+    var wsId = ids.length ? ids[0] : ra.WS_ALL;
+    if (!ra.inWorkspace(name, ra.activeWorkspace()) && !ra.isPinned(name)) {
+      ra.setActiveWorkspace(wsId);
+    }
+    ra.switchRoom(name);
+  }
+
   // ---- rendering ----------------------------------------------------------
   // Preserve typed form values across re-renders (day picks, remote syncs).
   function captureDraft() {
@@ -159,6 +211,7 @@
     var monthName = ref.toLocaleDateString([], { month: 'long', year: 'numeric' });
     var byDay = {};
     for (var i = 0; i < state.events.length; i++) byDay[state.events[i].date] = 1;
+    var noteRooms = noteRoomSet();
     var dow = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
     var grid = '';
     for (var w = 0; w < 7; w++) grid += '<div class="cal-cell cal-dow">' + dow[w] + '</div>';
@@ -168,7 +221,8 @@
       var cls = 'cal-cell cal-day' +
         (key === todayK ? ' today' : '') +
         (key === sel ? ' sel' : '') +
-        (byDay[key] ? ' has' : '');
+        (byDay[key] ? ' has' : '') +
+        (noteRooms[key] ? ' cal-note' : '');
       grid += '<div class="' + cls + '" onclick="__calPick(' + y + ',' + mo + ',' + d + ')"><span class="cal-n">' + d + '</span></div>';
     }
     return '<div class="cal-left">' +
@@ -189,6 +243,36 @@
         (ev.cat ? '<span class="cal-ev-cat">' + esc(ev.cat) + '</span>' : '') +
         '<span class="cal-ev-title">' + esc(ev.title) + (ev.notify != null ? ' <span class="cal-ev-bell" title="Reminder set">🔔</span>' : '') + '</span>' +
       '</span></button>';
+  }
+
+  // Daily-note action + the day's room-activity list (merged daycal UI).
+  // Empty string when the room surface isn't available (e.g. tests).
+  function dayLinksHtml(selK) {
+    var ra = Cade.roomsApi;
+    if (!ra) return '';
+    var exists = ra.list().indexOf(selK) !== -1;
+    var html = '<div class="cal-day-links">' +
+      '<button class="cal-note-btn" onclick="__calDayNote()" title="' +
+        (exists ? 'Open room ' : 'Create room ') + esc(selK) + '">' +
+        (exists ? 'Open daily note' : '＋ Daily note') + '</button>';
+    var act = activityRooms(selK);
+    if (act.length) {
+      html += '<div class="cal-act-head">Rooms active</div><div class="cal-act-list">';
+      for (var i = 0; i < act.length; i++) {
+        var n = act[i];
+        var ids = ra.workspaceIds(n) || [];
+        var ws = ids.length ? ra.workspaceById(ids[0]) : null;
+        // Room names come from the shared database — escape both the JS-string
+        // quotes and the HTML special chars (same pattern as daycal/core tabs).
+        var escAttr = esc(n.replace(/\\/g, '\\\\').replace(/'/g, "\\'"));
+        html += '<button class="cal-act-room" onclick="__calOpenRoom(\'' + escAttr + '\')">' +
+          (ra.isPinned(n) ? '<span class="cal-act-pin">📌</span>' : '') +
+          '<span class="cal-act-n">' + esc(n) + '</span>' +
+          '<span class="cal-act-ws">' + esc(ws ? ws.name : 'Unlabeled') + '</span></button>';
+      }
+      html += '</div>';
+    }
+    return html + '</div>';
   }
 
   function formHtml(draft) {
@@ -267,6 +351,7 @@
       '<div class="cal-right">' +
         '<div class="cal-day-head">' + esc(head) + '</div>' +
         '<div class="cal-list">' + rows + '</div>' +
+        dayLinksHtml(selK) +
         (form ? formHtml(draft)
               : '<button class="cal-add" onclick="__calAdd()">＋ Add event</button>') +
       '</div></div>';
@@ -373,6 +458,25 @@
       out.push({ id: e.id, date: e.date, start: e.start, end: e.end, title: e.title, cat: e.cat, color: e.color });
     }
     return out;
+  };
+  // Open (or create, then open) the selected day's daily-note room.
+  window.__calDayNote = function () {
+    var ra = Cade.roomsApi;
+    if (!ra) return;
+    var key = sel || dateKey(new Date());
+    if (ra.list().indexOf(key) === -1 && typeof ra.ensureRoom === 'function') {
+      ra.ensureRoom(key); // register in the room list before the workspace jump
+    }
+    openDayRoom(ra, key);
+    render(); // the room may now exist — flip the button + corner mark
+  };
+  // Open a room from the day's activity list.
+  window.__calOpenRoom = function (name) {
+    var ra = Cade.roomsApi;
+    if (!ra) return;
+    name = String(name == null ? '' : name);
+    if (ra.list().indexOf(name) === -1) return; // stale row (renamed/removed)
+    openDayRoom(ra, name);
   };
 
   // ---- open / register ----------------------------------------------------

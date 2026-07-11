@@ -72,7 +72,7 @@ in subfolders. Single-file modules are allowed but a folder is the convention.
 
 Real, working examples to read and copy from:
 - Widget: `txt/widgets/breakout/breakout.js`, `txt/widgets/snake/snake.js`
-- Widget using the room system (`Cade.roomsApi`): `txt/widgets/daycal/daycal.js`
+- Widget using the room system (`Cade.roomsApi`) + a synced blob: `txt/widgets/calendar/calendar.js`
 - Widget with core shims + module-registered settings: `txt/widgets/timer/timer.js`
 - Script pack (many scripts, one file): `txt/scripts/pack-lines/pack-lines.js`
 - Plugin: `txt/plugins/code-highlight/code-highlight.js`

@@ -35,7 +35,7 @@
   var ITEMS_PER_FEED = 100;  // in-memory cap per feed
   var ITEMS_SHOWN = 120;     // merged-list display cap
   var AUTO_FETCH_MS = 10 * 60 * 1000; // auto-refresh on open if cache older
-  var CORS_HINT = "Feeds are fetched directly; ones that block cross-origin reads (like news.ycombinator.com/rss) automatically retry through a public CORS relay (allorigins.win / corsproxy.io — only the feed URL is shared with it).";
+  var CORS_HINT = "Feeds are fetched through the corsproxy.io relay by default (only the feed URL is shared with it), with direct fetch and allorigins.win as fallbacks — so CORS-less feeds like news.ycombinator.com/rss just work.";
 
   function mkId() { return 'f' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
 
@@ -86,6 +86,8 @@
   var fetchingCount = 0;   // in-flight fetches (for the status line)
   var currentView = 'items';
   var renderedItems = [];  // items as last rendered (indexed by inline onclick)
+  var feedFilter = 'all';  // 'all' | feedId — Items view scope (session)
+  var unreadOnly = false;  // Items view: hide read items (session)
 
   // ---- feed text sanitizing (feed content is UNTRUSTED) ----
   function decodeEntities(s) {
@@ -236,14 +238,18 @@
   function hostOf(url) {
     try { return new URL(url).hostname.replace(/^www\./, ''); } catch (e) { return url; }
   }
-  // Most feeds (Hacker News' /rss included) send no CORS headers, so a direct
-  // browser fetch is blocked. Fall back to public CORS relays — the feed URL
-  // (never your data or keys) is sent to the relay, which returns the XML
-  // with permissive headers. Direct fetch is always tried first.
-  var PROXIES = [
-    function (u) { return 'https://api.allorigins.win/raw?url=' + encodeURIComponent(u); },
-    function (u) { return 'https://corsproxy.io/?url=' + encodeURIComponent(u); },
-  ];
+  // Most feeds (Hacker News' /rss included) send no CORS headers, so
+  // corsproxy.io is the DEFAULT transport for every fetch — it returns the
+  // XML with permissive headers and only ever sees the feed URL, never your
+  // data or keys. If the relay is down we fall back to a direct fetch
+  // (works for CORS-friendly feeds) and then to allorigins.win.
+  function _targetsFor(u) {
+    return [
+      'https://corsproxy.io/?url=' + encodeURIComponent(u),
+      u,
+      'https://api.allorigins.win/raw?url=' + encodeURIComponent(u),
+    ];
+  }
   function _fetchText(url) {
     return fetch(url).then(function (res) {
       if (!res.ok) throw new Error('HTTP ' + res.status);
@@ -251,20 +257,24 @@
     });
   }
   function fetchFeed(url) {
+    var targets = _targetsFor(url);
     var attempt = function (idx) {
-      var target = idx < 0 ? url : PROXIES[idx](url);
-      return _fetchText(target).then(function (text) {
+      return _fetchText(targets[idx]).then(function (text) {
         var parsed = parseFeedText(text);
         if (!parsed || !parsed.items) throw new Error('not a recognizable RSS/Atom feed');
         return parsed;
       }).catch(function (e) {
-        if (idx + 1 < PROXIES.length) return attempt(idx + 1);
+        if (idx + 1 < targets.length) return attempt(idx + 1);
         throw e;
       });
     };
-    return attempt(-1);
+    return attempt(0);
   }
   function refreshAll() {
+    // No polling while the widget is closed (for now): every fetch must be
+    // user-visible. open() and the ↻ button are the only callers, but this
+    // guard keeps future callers honest too.
+    if (!document.getElementById(PANEL_ID)) return Promise.resolve();
     if (!state.feeds.length) { render(); return Promise.resolve(); }
     lastFetchAt = Date.now();
     var jobs = state.feeds.map(function (f) {
@@ -345,15 +355,35 @@
   }
   function itemsViewHtml() {
     renderedItems = [];
+    if (feedFilter !== 'all' && !state.feeds.some(function (f) { return f.id === feedFilter; })) feedFilter = 'all';
     var merged = [];
+    var unreadByFeed = {};
+    var unreadTotal = 0;
     state.feeds.forEach(function (f) {
       var c = cache[f.id];
       if (!c) return;
       c.items.forEach(function (it) {
-        merged.push({ feedId: f.id, feedTitle: f.title, title: it.title, link: it.link, ts: it.ts, key: itemKey(f, it) });
+        var row = { feedId: f.id, feedTitle: f.title, title: it.title, link: it.link, ts: it.ts, key: itemKey(f, it) };
+        if (!state.read[row.key]) {
+          unreadByFeed[f.id] = (unreadByFeed[f.id] || 0) + 1;
+          unreadTotal++;
+        }
+        if (feedFilter !== 'all' && row.feedId !== feedFilter) return;
+        if (unreadOnly && state.read[row.key]) return;
+        merged.push(row);
       });
     });
     merged.sort(function (a, b) { return (b.ts || 0) - (a.ts || 0); });
+    // Auto-dedupe (round-5): the same story syndicated by several feeds (or
+    // re-posted within one) shows once — the newest copy wins. Title-keyed.
+    var seenTitles = {};
+    merged = merged.filter(function (row) {
+      var k = String(row.title || '').replace(/\s+/g, ' ').trim().toLowerCase();
+      if (!k) return true;
+      if (seenTitles[k]) return false;
+      seenTitles[k] = 1;
+      return true;
+    });
     merged = merged.slice(0, ITEMS_SHOWN);
 
     var status = fetchingCount > 0 ? 'fetching…'
@@ -361,7 +391,19 @@
       : '';
     var html = '<div class="rss-toolbar">' +
       '<button class="rss-btn" onclick="window.__rssRefresh()">↻ Refresh</button>' +
+      '<button class="rss-btn rss-unread-toggle' + (unreadOnly ? ' on' : '') + '" title="Show unread items only" onclick="window.__rssToggleUnread()">● Unread' + (unreadTotal ? ' (' + unreadTotal + ')' : '') + '</button>' +
       '<span class="rss-status">' + esc(status) + '</span></div>';
+
+    // Per-feed scope chips (ALL + one per subscription) — session-only view state.
+    if (state.feeds.length > 1) {
+      html += '<div class="rss-feedtabs">' +
+        '<button class="rss-ftab' + (feedFilter === 'all' ? ' on' : '') + '" onclick="window.__rssFilterFeed(\'all\')">ALL</button>' +
+        state.feeds.map(function (f) {
+          var n = unreadByFeed[f.id] || 0;
+          return '<button class="rss-ftab' + (feedFilter === f.id ? ' on' : '') + '" onclick="window.__rssFilterFeed(\'' + esc(String(f.id).replace(/[^A-Za-z0-9_-]/g, '')) + '\')">' + esc(f.title) + (n ? '<span class="rss-ftab-n">' + n + '</span>' : '') + '</button>';
+        }).join('') +
+        '</div>';
+    }
 
     // Inline per-feed fetch errors (do not break the rest of the list).
     state.feeds.forEach(function (f) {
@@ -372,7 +414,9 @@
     if (!state.feeds.length) {
       html += '<div class="rss-empty">No subscriptions yet — add a feed URL in the <b>Feeds</b> tab.</div>';
     } else if (!merged.length && !fetchingCount) {
-      html += '<div class="rss-empty">No items. Hit ↻ Refresh.</div>';
+      html += unreadOnly
+        ? '<div class="rss-empty">No unread items' + (feedFilter !== 'all' ? ' in this feed' : '') + ' — all caught up.</div>'
+        : '<div class="rss-empty">No items' + (feedFilter !== 'all' ? ' in this feed yet' : '') + '. Hit ↻ Refresh.</div>';
     }
 
     merged.forEach(function (row) {
@@ -459,6 +503,11 @@
     render();
   };
   window.__rssRefresh = function () { refreshAll(); };
+  window.__rssFilterFeed = function (id) {
+    feedFilter = (id === 'all' || state.feeds.some(function (f) { return f.id === id; })) ? id : 'all';
+    render();
+  };
+  window.__rssToggleUnread = function () { unreadOnly = !unreadOnly; render(); };
   window.__rssAdd = function () {
     var inp = document.getElementById('rss-add-url');
     var url = inp ? inp.value : '';
@@ -472,6 +521,7 @@
   window.__rssRemoveFeed = function (id) {
     state.feeds = state.feeds.filter(function (f) { return f.id !== id; });
     delete cache[id];
+    if (feedFilter === id) feedFilter = 'all';
     // Drop read-marks belonging to the removed feed (memory care).
     Object.keys(state.read).forEach(function (k) {
       if (k.indexOf(id + '|') === 0) delete state.read[k];
@@ -540,6 +590,11 @@
       normalize: normalize,
       getState: function () { return state; },
       getCache: function () { return cache; },
+      targetsFor: _targetsFor,
+      fetchFeed: fetchFeed,
+      itemsViewHtml: itemsViewHtml,
+      setState: function (s) { state = s; },
+      getView: function () { return { feedFilter: feedFilter, unreadOnly: unreadOnly }; },
     },
   });
 })();

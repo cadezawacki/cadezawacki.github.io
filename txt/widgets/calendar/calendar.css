@@ -1,5 +1,6 @@
-/* Calendar Events widget — month grid + selected-day agenda.
-   Separate from the daycal widget: everything here is cal-*. */
+/* Calendar Events widget — month grid + selected-day agenda, plus the
+   rooms-by-date view merged from the retired daycal widget (daily-note rooms
+   named 'YYYY-MM-DD' + per-day room activity). Everything here is cal-*. */
 #cal-panel { top: 50px; right: 12px; width: 560px; max-width: calc(100vw - 24px); }
 
 .cal-wrap { display: grid; grid-template-columns: 248px minmax(0, 1fr); }
@@ -38,6 +39,13 @@
   content: ''; position: absolute; bottom: 1px; left: 50%; transform: translateX(-50%);
   width: 4px; height: 4px; border-radius: 50%; background: var(--accent);
 }
+/* days with a daily-note room ('YYYY-MM-DD'): a faint square page-mark in the
+   top-right corner — deliberately distinct from the accent event dot below */
+.cal-cell.cal-note::before {
+  content: ''; position: absolute; top: 3px; right: 5px;
+  width: 4px; height: 4px; border-radius: 1px; background: var(--text-faint);
+}
+.cal-cell.cal-note:hover::before { background: var(--text-muted); }
 
 /* ---- right column: day header + agenda ---- */
 .cal-day-head { font-weight: 600; font-size: var(--text-sm); padding: 4px 0 8px; }
@@ -73,6 +81,29 @@
 .cal-c-purple { background: var(--hl-purple, #a855f7); }
 .cal-c-orange { background: var(--hl-orange, #f97316); }
 .cal-c-gray   { background: var(--hl-gray,   #94a3b8); }
+
+/* ---- daily note + day activity (merged from the daycal widget) ---- */
+.cal-day-links { display: flex; flex-direction: column; gap: 2px; margin-top: 8px; }
+.cal-note-btn {
+  width: 100%; padding: 5px 10px;
+  background: none; border: 1px solid var(--border); border-radius: 8px;
+  color: var(--text-muted); font-size: var(--text-xs); font-family: inherit; cursor: pointer;
+}
+.cal-note-btn:hover { color: var(--accent); border-color: var(--accent); }
+.cal-act-head {
+  padding: 6px 2px 2px; font-size: var(--text-xs); color: var(--text-faint);
+  text-transform: uppercase; letter-spacing: 0.05em;
+}
+.cal-act-list { max-height: 132px; overflow-y: auto; display: flex; flex-direction: column; gap: 1px; }
+.cal-act-room {
+  display: flex; align-items: center; gap: 6px; width: 100%; text-align: left;
+  background: none; border: none; color: var(--text); cursor: pointer;
+  padding: 4px 6px; border-radius: 6px; font-size: var(--text-xs); font-family: inherit;
+}
+.cal-act-room:hover { background: var(--surface-hover, rgba(127,127,127,0.15)); }
+.cal-act-pin { font-size: 11px; flex-shrink: 0; }
+.cal-act-n { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cal-act-ws { color: var(--text-faint); flex-shrink: 0; }
 
 /* ---- add button ---- */
 .cal-add {
