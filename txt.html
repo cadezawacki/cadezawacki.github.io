@@ -600,7 +600,6 @@ body {
   color: var(--ws-fg);
   border: 1px solid var(--ws-bd);
   margin-left: 6px;
-  text-transform: lowercase;
 }
 .ws-badge .ws-badge-dot {
   width: 6px; height: 6px;
@@ -823,8 +822,9 @@ body {
 .editor-wrap .cm-scroller {
   overflow: auto;
   /* Extra top padding so the first lines clear the floating toolbar band; you
-     can still scroll the very top fully into view (D2). */
-  padding: 50px var(--space-4) var(--space-3);
+     can still scroll the very top fully into view (D2). Horizontal padding is
+     user-configurable (Preferences → Appearance → Document side padding). */
+  padding: 50px var(--editor-hpad, var(--space-4)) var(--space-3);
   scrollbar-width: auto;                 /* Firefox — normal width */
   scrollbar-color: var(--accent) transparent;
   /* Pan + pinch stay native; double-tap zoom off (it fought text selection). */
@@ -863,6 +863,8 @@ body.sel-mode .editor-wrap .cm-content { -webkit-touch-callout: none; }
   color: var(--text-faint);
   font-size: var(--text-xs);
   padding-right: var(--space-2);
+  user-select: none;            /* line numbers must never join a copy (item 34) */
+  -webkit-user-select: none;
 }
 
 .editor-wrap .cm-activeLineGutter { color: var(--text-muted); }
@@ -871,7 +873,8 @@ body.sel-mode .editor-wrap .cm-content { -webkit-touch-callout: none; }
 .editor-wrap .cm-selectionBackground,
 .editor-wrap .cm-editor .cm-selectionBackground,
 .editor-wrap .cm-editor.cm-focused .cm-selectionBackground {
-  background: rgba(14, 165, 233, 0.15) !important;
+  /* was 0.15 — too faint to spot in light mode (item 34) */
+  background: rgba(14, 165, 233, 0.30) !important;
 }
 /* Dark mode: the selection was too faint — use a brighter teal (#12). */
 [data-theme="dark"] .editor-wrap .cm-selectionBackground,
@@ -1008,8 +1011,9 @@ body.sel-mode .editor-wrap .cm-content { -webkit-touch-callout: none; }
   font-size: var(--text-xs, 11px); cursor: pointer; border: 1px solid var(--border, #333);
   opacity: 0.65;
 }
-.rm-tag-chip.on { opacity: 1; border-color: currentColor; background: var(--surface-hover, rgba(127,127,127,0.12)); }
-.rm-tag-chip .ws-badge-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ws-dot, currentColor); }
+.rm-tag-chip { color: var(--ws-fg, var(--text)); }
+.rm-tag-chip.on { opacity: 1; border-color: var(--ws-bd, currentColor); background: var(--ws-bg, var(--surface-hover, rgba(127,127,127,0.12))); }
+.rm-tag-chip .ws-badge-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ws-fg, currentColor); }
 .ws-mgr-parent-row { display: flex; align-items: center; gap: 6px; }
 .ws-mgr-parent-select { font-size: var(--text-xs, 11px); padding: 2px 6px; }
 
@@ -1033,7 +1037,7 @@ body.sel-mode .editor-wrap .cm-content { -webkit-touch-callout: none; }
   transition: background var(--transition);
   flex-shrink: 0;
   margin-right: 2px;
-  cursor: default;
+  cursor: pointer; /* it opens the Sync modal (item 34) */
 }
 
 .sync-dot.connected { background: var(--success); }
@@ -1198,6 +1202,13 @@ body.sel-mode .editor-wrap .cm-content { -webkit-touch-callout: none; }
 /* ============================================
    SYNC MODAL
    ============================================ */
+/* COMMON MODAL SYSTEM — every modal is .modal-overlay > .modal-dialog.
+   The base dialog is height-capped and scrolls its own content, so no modal
+   can ever clip off the top/bottom of the viewport, and the cap sits at
+   ~84vh so tall modals (Preferences, Room Manager, Manage Storage) keep
+   breathing room above and below instead of filling the screen edge-to-edge.
+   Long structured modals should prefer .modal-dialog-scroll (sticky
+   header/footer + scrolling body). */
 .modal-overlay {
   display: none;
   position: fixed;
@@ -1206,6 +1217,7 @@ body.sel-mode .editor-wrap .cm-content { -webkit-touch-callout: none; }
   z-index: 300;
   align-items: center;
   justify-content: center;
+  padding: 28px 16px; /* visual breathing room even for max-height dialogs */
 }
 
 .modal-overlay.open { display: flex; }
@@ -1213,6 +1225,9 @@ body.sel-mode .editor-wrap .cm-content { -webkit-touch-callout: none; }
 .modal-dialog {
   width: 400px;
   max-width: calc(100vw - 40px);
+  max-height: min(84vh, calc(100dvh - 56px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
@@ -1227,7 +1242,7 @@ body.sel-mode .editor-wrap .cm-content { -webkit-touch-callout: none; }
 .modal-dialog.modal-dialog-scroll {
   display: flex;
   flex-direction: column;
-  max-height: calc(100vh - 40px);
+  max-height: min(84vh, calc(100dvh - 56px));
   padding: 0;
   overflow: hidden;
 }
@@ -1531,6 +1546,8 @@ body.sel-mode .editor-wrap .cm-content { -webkit-touch-callout: none; }
   flex-direction: column;
   align-items: center;
   gap: 4px;
+  user-select: none;            /* toolbar chrome must never join a text drag (item 34) */
+  -webkit-user-select: none;
   /* Absolute (not fixed) + anchored to the fixed, non-scrolling <body>: iOS
      re-anchors position:fixed to the shrinking VISUAL viewport when the keyboard
      opens, which shoved this above the header. Absolute to the stable app shell
@@ -2287,7 +2304,7 @@ body.sel-mode .editor-wrap .cm-content { -webkit-touch-callout: none; }
 .sync-action-grid .btn { flex: 1 1 140px; }
 #sync-disconnect-btn { color: var(--danger, #ef4444); border-color: var(--danger, #ef4444); }
 
-#footer-clock { font-variant-numeric: tabular-nums; color: var(--text-muted); cursor: default; }
+#footer-clock { font-variant-numeric: tabular-nums; color: var(--text-muted); cursor: pointer; }
 #footer-clock .fc-tz { opacity: 0.7; margin-left: 8px; }
 
 /* Rooms-by-Date widget styles now live in ./txt/widgets/daycal/daycal.css */
@@ -2412,6 +2429,10 @@ body.zen.zen-tw .editor-wrap .cm-content { padding-top: 38vh; padding-bottom: 38
       </button>
       <button class="menu-item" onclick="closeAllMenus(); __promptStorageCleanup(true)">
         <span>Manage Storage</span>
+        <span></span>
+      </button>
+      <button class="menu-item" onclick="forceSyncReload()" title="Re-download the app and refresh caches">
+        <span>Refresh App &amp; Cache</span>
         <span></span>
       </button>
     </div>
@@ -2714,22 +2735,6 @@ body.zen.zen-tw .editor-wrap .cm-content { padding-top: 38vh; padding-bottom: 38
     </div>
 
     <div class="modal-footer">
-      <div class="room-cap-row" id="rm-footer-cap" style="margin-bottom:0;">
-        <label>Room cap:</label>
-        <select id="room-cap-select" onchange="updateRoomCap(this.value)">
-          <option value="1">1</option>
-          <option value="2">2</option>
-          <option value="3" selected>3</option>
-          <option value="4">4</option>
-          <option value="5">5</option>
-          <option value="6">6</option>
-          <option value="7">7</option>
-          <option value="8">8</option>
-          <option value="9">9</option>
-          <option value="10">10</option>
-          <option value="99">99</option>
-        </select>
-      </div>
       <div class="modal-actions">
         <button class="btn" onclick="openExploreRooms()">Explore Rooms…</button>
         <button class="btn btn-primary" onclick="closeRoomManager()">Done</button>
@@ -2932,6 +2937,8 @@ window.Cade = (function () {
     onEditorUpdate(cb) { if (typeof cb === 'function') (window.__cadeUpdateHooks || (window.__cadeUpdateHooks = [])).push(cb); },
     // ---- room system surface (read-mostly; see window.__roomsApi in core) ----
     get roomsApi() { return window.__roomsApi; },
+    // ---- small per-account synced JSON store (encrypted; offline-first) ----
+    syncedBlob(id, opts) { return window.__cadeSyncedBlob(id, opts); },
   };
   return api;
 })();
@@ -5377,6 +5384,19 @@ function buildEditorExtensions() {
         if (changes.length) view.dispatch({ changes, userEvent: 'input.dedent' });
         return true;
       }},
+      // Item 30: Ctrl+Home must land at the absolute document start (0,0) AND
+      // scroll the very top into view. The default binding put the caret at
+      // the start of the first *visual* line, which on a soft-wrapped first
+      // line left the caret mid-paragraph with the top still off-screen.
+      { key: 'Mod-Home', run: (view) => {
+        view.dispatch({ selection: { anchor: 0 }, effects: EditorView.scrollIntoView(0, { y: 'start' }) });
+        return true;
+      }},
+      { key: 'Mod-End', run: (view) => {
+        const end = view.state.doc.length;
+        view.dispatch({ selection: { anchor: end }, effects: EditorView.scrollIntoView(end, { y: 'end' }) });
+        return true;
+      }},
     ]),
   ];
 }
@@ -5656,7 +5676,13 @@ editor.dom.addEventListener('click', (e) => {
   if (coarse) {
     // Mobile: a tap on a highlight or link opens its menu; misspelling opens
     // suggestions; anything else just moves the cursor.
+    // A misspelled word INSIDE a highlight gets the spell popup (item 20) —
+    // the highlight menu used to swallow the tap, making the spelling fix
+    // unreachable. Recoloring stays available on any correctly-spelled part
+    // of the highlight (and via the toolbar picker).
+    const spellHit = hitSpell(pos);
     const hl = hitHighlight(pos);
+    if (spellHit && hl) { e.preventDefault(); openSpellPopup(spellHit); return; }
     if (hl) { e.preventDefault(); openHighlightMenu(hl, e.clientX, e.clientY); return; }
     const link = hitLink(pos);
     if (link) {
@@ -5665,8 +5691,7 @@ editor.dom.addEventListener('click', (e) => {
       else openLinkMenu(link, e.clientX, e.clientY);
       return;
     }
-    const hit = hitSpell(pos);
-    if (hit) { openSpellPopup(hit); return; }
+    if (spellHit) { openSpellPopup(spellHit); return; }
     closeSpellPopup(); closeCtxMenu();
     return;
   }
@@ -5688,12 +5713,14 @@ editor.dom.addEventListener('click', (e) => {
 editor.dom.addEventListener('contextmenu', (e) => {
   const pos = editor.posAtCoords({ x: e.clientX, y: e.clientY });
   if (pos == null) return;
+  // Same precedence as tap: a misspelling inside a highlight wins (item 20).
+  const spellHit = hitSpell(pos);
   const hl = hitHighlight(pos);
+  if (spellHit && hl) { e.preventDefault(); openSpellPopup(spellHit); return; }
   if (hl) { e.preventDefault(); openHighlightMenu(hl, e.clientX, e.clientY); return; }
   const link = hitLink(pos);
   if (link && link.kind !== 'nav') { e.preventDefault(); openLinkMenu(link, e.clientX, e.clientY); return; }
-  const hit = hitSpell(pos);
-  if (hit) { e.preventDefault(); openSpellPopup(hit); return; }
+  if (spellHit) { e.preventDefault(); openSpellPopup(spellHit); return; }
 });
 
 // The popup is position:fixed and anchored to the word — close it if the
@@ -8354,7 +8381,8 @@ function getRoomEncKey(name, baseKey) {
 // ============================================
 // ROOM SYSTEM
 // ============================================
-let roomCap = parseInt(store.get('cade-room-cap')) || 3;
+// Item 8: the room cap is retired — rooms are only limited by device storage.
+let roomCap = Infinity;
 let rooms = [];
 try { rooms = JSON.parse(store.get('cade-rooms')) || []; } catch {}
 let activeRoom = store.get('cade-active-room') || '';
@@ -8362,7 +8390,6 @@ let activeRoom = store.get('cade-active-room') || '';
 function saveRooms() {
   store.set('cade-rooms', JSON.stringify(rooms));
   store.set('cade-active-room', activeRoom);
-  store.set('cade-room-cap', roomCap);
   try { tabSync.postRooms(); } catch {}
   // The room list is part of the synced workspace blob — propagate adds,
   // removals and reorders to the account's other devices (debounced; no-op
@@ -8987,10 +9014,6 @@ async function _doSwitchRoom(name, firebaseUrl, baseEncKey) {
 window.addRoomPrompt = function() {
   // Rooms are created locally first (works offline); Firebase sync attaches as
   // soon as URL+key are configured and the network is reachable.
-  if (rooms.length >= roomCap) {
-    showToast('Room cap reached (' + roomCap + '). Remove a room or increase the cap in View → Room Manager.', 'error');
-    return;
-  }
   showAddRoomModal();
 };
 
@@ -9002,7 +9025,6 @@ window.openRoomManager = function(tab) {
   renderManagerTabs();
   renderRoomManagerList();
   renderWorkspaceManagerList();
-  document.getElementById('room-cap-select').value = roomCap;
   document.getElementById('room-manager-overlay').classList.add('open');
   if (_rmActiveTab === 'rooms') {
     document.getElementById('room-add-input').focus();
@@ -9069,12 +9091,22 @@ function renderRoomManagerList() {
     return;
   }
 
+  // The room you're IN always renders first (above pins/groups) so managing
+  // it never requires hunting through the list (item 15).
+  let html = '';
+  let listRooms = activeRooms;
+  const currentRoom = (activeRoom && activeRooms.includes(activeRoom)) ? activeRoom : null;
+  if (currentRoom) {
+    listRooms = activeRooms.filter(r => r !== currentRoom);
+    html += `<div class="ws-dd-section rm-current-section" style="padding:2px 0 4px;">● Current room</div>`;
+    html += renderRoomRow(currentRoom, showAll);
+    if (listRooms.length) html += `<div class="ws-dd-section" style="padding:12px 0 4px;">All rooms</div>`;
+  }
   // In "All Rooms" view, group by workspace for visual clarity
-  let html;
   if (showAll) {
-    html = renderGroupedRoomList(activeRooms);
+    html += renderGroupedRoomList(listRooms);
   } else {
-    html = activeRooms.map(name => renderRoomRow(name, false)).join('');
+    html += listRooms.map(name => renderRoomRow(name, false)).join('');
   }
   // Archived section (Feature 52) — always at the bottom, with a Restore action.
   if (archivedRooms.length) {
@@ -9160,12 +9192,12 @@ function renderRoomRow(name, showBadge) {
   let badgeHtml = '';
   if (showBadge) {
     if (wsIds.length === 0) {
-      badgeHtml = `<span class="ws-badge ws-color-neutral"><span class="ws-badge-dot"></span>unlabeled</span>`;
+      badgeHtml = `<span class="ws-badge ws-color-neutral"><span class="ws-badge-dot"></span>Unlabeled</span>`;
     } else {
       badgeHtml = wsIds.map(id => {
         const ws = getWorkspace(id);
         const cc = 'ws-color-' + (ws && WS_COLORS.includes(ws.color) ? ws.color : 'neutral');
-        return `<span class="ws-badge ${cc}"><span class="ws-badge-dot"></span>${escapeHtml(ws ? ws.name : 'unlabeled')}</span>`;
+        return `<span class="ws-badge ${cc}"><span class="ws-badge-dot"></span>${escapeHtml(ws ? ws.name : 'Unlabeled')}</span>`;
       }).join('');
     }
   }
@@ -9393,7 +9425,6 @@ window.addRoomFromManager = function() {
   const name = input.value.trim().toLowerCase();
   if (!name) return;
   if (rooms.includes(name)) { showToast('Room already exists', 'error'); return; }
-  if (rooms.length >= roomCap) { showToast('Room cap reached (' + roomCap + ')', 'error'); return; }
   rooms.push(name);
   touchRoomCreated(name);
   // Determine workspace target
@@ -9420,18 +9451,42 @@ window.addRoomFromManager = function() {
 // cached/synced text, snapshots, passwords, per-room editor state. Shared by
 // the non-destructive "Remove from list" and the destructive server delete.
 function purgeLocalRoom(name) {
+  const wasActive = activeRoom === name;
   rooms = rooms.filter(r => r !== name);
   delete roomWorkspace[name];
   delete roomMeta[name];
   _purgeRoomStorageKeys(name);
-  if (activeRoom === name && syncState.connected) {
-    window.disconnectSync();
+  if (wasActive) {
+    // Always detach the room identity — even in local-only mode (the old code
+    // only did this while connected, leaving activeRoom pointing at a ghost).
+    if (syncState.connected) { try { window.disconnectSync(); } catch {} }
     activeRoom = '';
+    syncState.roomName = '';
     store.set('cade-active-room', '');
+    store.set('cade-room-name', '');
   }
   saveRooms();
   saveWorkspaces();
   saveRoomMeta();
+  // CRITICAL (item 17): if the deleted room was on screen, its text must leave
+  // the editor NOW. Leaving it visible while the tab bar moves on means the
+  // next keystroke persists the dead room's content into whatever context the
+  // user *thinks* they're in. Switch to the next visible room, or clear.
+  if (wasActive) {
+    const vis = (typeof roomsInActiveWorkspace === 'function') ? roomsInActiveWorkspace() : rooms.slice();
+    if (vis.length) {
+      try { switchRoom(vis[0]); } catch {}
+    } else {
+      try {
+        syncState.suppressUpdate = true;
+        editor.setState(makeEditorState(''));
+        syncState.suppressUpdate = false;
+        store.set('cade-content', '');
+        updateFooter();
+        scheduleWordCount();
+      } catch {}
+    }
+  }
 }
 
 // Remove the room from the ACCOUNT's synced tab list (a tombstone propagates
@@ -9463,9 +9518,9 @@ window.deleteRoomFromServer = async function(name) {
     showToast('You appear offline — reconnect before deleting server data.', 'error', 4500);
     return;
   }
-  const typed = await textPrompt(`Permanently DELETE "${name}" from the server?\nThis erases its content for everyone. Type the room name to confirm:`, '');
+  const typed = await textPrompt(`Permanently DELETE "${name}" from the server?\nThis erases its content for everyone. Type "delete" to confirm:`, '');
   if (typed == null) return;
-  if (typed.trim() !== name) { showToast('Name did not match — nothing deleted.', 'error', 3500); return; }
+  if (typed.trim().toLowerCase() !== 'delete') { showToast('You must type "delete" — nothing deleted.', 'error', 3500); return; }
 
   let db;
   try { db = initFirebase(fbUrl); }
@@ -9513,20 +9568,7 @@ window.toggleRoomArchive = function(name) {
   showToast(nowArchived ? 'Archived: ' + name : 'Restored: ' + name, 'success', 1800);
 };
 
-window.updateRoomCap = function(val) {
-  roomCap = parseInt(val) || 3;
-  store.set('cade-room-cap', roomCap);
-  // Never auto-evict rooms to satisfy a lowered cap — silently dropping a room
-  // orphans its cached/offline data (the exact data-loss bug the room system
-  // is designed to avoid). The cap only gates ADDING rooms; over-cap lists
-  // simply can't grow until the user removes rooms themselves.
-  if (rooms.length > roomCap) {
-    showToast(`Cap set to ${roomCap}, but you have ${rooms.length} rooms — existing rooms are kept. Remove rooms manually to get under the cap.`, 'success', 4500);
-  }
-  saveRooms();
-  renderRoomManagerList();
-  renderRoomTabs();
-};
+window.updateRoomCap = function() { /* room cap retired (item 8) */ };
 
 // ============================================
 // EXPLORE ROOMS — browse & subscribe to existing rooms in the database
@@ -9570,10 +9612,6 @@ function renderExploreRoomsList() {
 
 window.exploreAddRoom = function(name, selId) {
   if (rooms.includes(name)) return;
-  if (rooms.length >= roomCap) {
-    showToast('Room cap reached (' + roomCap + '). Raise it in Room Manager.', 'error', 2800);
-    return;
-  }
   rooms.push(name);
   touchRoomCreated(name);
   const sel = document.getElementById(selId);
@@ -10574,7 +10612,7 @@ function renderWorkspaceManagerList() {
       html += `<div class="ws-mgr-row is-unlabeled">
         <span class="ws-mgr-drag">⠿</span>
         <div class="ws-mgr-name-cell">
-          <span class="ws-badge ws-color-neutral"><span class="ws-badge-dot"></span>unlabeled</span>
+          <span class="ws-badge ws-color-neutral"><span class="ws-badge-dot"></span>Unlabeled</span>
           <span class="ws-mgr-count">${unlabeledCount} room${unlabeledCount !== 1 ? 's' : ''} · auto</span>
         </div>
         <div class="ws-mgr-actions"><button class="btn" style="padding:2px 8px;font-size:var(--text-xs);opacity:0.4;" disabled title="System-managed; can't rename or delete">—</button></div>
@@ -11187,6 +11225,166 @@ const _origSyncConnectForWs = window.syncConnect;
 // END WORKSPACES
 // ============================================
 
+// ============================================
+// GENERIC SYNCED BLOBS (Cade.syncedBlob) — small encrypted per-account stores
+// --------------------------------------------------------------------------
+// The workspace blob pattern, generalized so feature modules (reminders,
+// calendar, RSS, …) can keep a small JSON document synced across the
+// account's devices without touching Firebase themselves. Each blob lives at
+// rooms/__cade_blob_<id>_<keyFp>/blob (under rooms/* so existing security
+// rules cover it — no rules change needed), encrypted with the sync key.
+// Whole-blob last-write-wins by timestamp, echo-suppressed, 256KB-capped,
+// with a fresh-client pull-before-push. Works fully offline (localStorage);
+// pushes catch up when sync creds + network exist.
+// ============================================
+const _syncedBlobs = new Map(); // id -> {data, ts, onChange, ref, listener, pushTimer, lastWriteTs, attached}
+
+function _sbLocalKey(id) { return 'cade-blob:' + id; }
+function _sbPath(id, fp) { return `rooms/__cade_blob_${id}_${fp}/blob`; }
+
+function _sbLoadLocal(id) {
+  try {
+    const raw = JSON.parse(store.get(_sbLocalKey(id)) || 'null');
+    if (raw && typeof raw === 'object' && 'data' in raw) return { data: raw.data, ts: raw.ts || 0 };
+  } catch {}
+  return { data: null, ts: 0 };
+}
+
+function _sbSaveLocal(id, data, ts) {
+  try { store.set(_sbLocalKey(id), JSON.stringify({ ts, data })); } catch {}
+}
+
+async function _sbPushNow(id) {
+  const b = _syncedBlobs.get(id);
+  if (!b) return;
+  b.pushTimer = null;
+  const baseKey = store.get('cade-sync-key') || '';
+  const fbUrl = store.get('cade-firebase-url') || '';
+  if (!baseKey || !fbUrl) return; // local-only mode
+  try {
+    const db = initFirebase(fbUrl);
+    const fp = await _computeKeyFingerprint(baseKey);
+    // Fresh client for this blob: pull + merge before the first push so a new
+    // device can't clobber the account's data with its empty state.
+    if (!b.ts && !b.pulledOnce) {
+      b.pulledOnce = true;
+      try {
+        const snap = await db.ref(_sbPath(id, fp)).once('value');
+        if (snap.val()) await _sbApplyRemote(id, snap.val(), baseKey, 'initial');
+      } catch {}
+    }
+    const payload = { ts: Date.now(), data: b.data };
+    b.lastWriteTs = payload.ts;
+    const encrypted = await encryptText(JSON.stringify(payload), baseKey);
+    if (typeof encrypted === 'string' && encrypted.length > WS_BLOB_MAX) {
+      console.warn('synced blob "' + id + '" too large (' + encrypted.length + 'b) — not pushed');
+      showToast('"' + id + '" data too large to sync — not pushed', 'error', 4000);
+      return;
+    }
+    await db.ref(_sbPath(id, fp)).set(encrypted);
+    b.ts = payload.ts;
+    _sbSaveLocal(id, b.data, b.ts);
+  } catch (e) {
+    console.warn('synced blob push failed (' + id + '):', e && (e.message || e.code) || e);
+  }
+}
+
+async function _sbApplyRemote(id, encrypted, baseKey, source) {
+  const b = _syncedBlobs.get(id);
+  if (!b || !encrypted) return false;
+  if (typeof encrypted === 'string' && encrypted.length > WS_BLOB_MAX) return false; // never decrypt oversized
+  try {
+    const decrypted = await decryptText(encrypted, baseKey);
+    if (!decrypted) return false;
+    const payload = JSON.parse(decrypted);
+    if (!payload || typeof payload !== 'object') return false;
+    const remoteTs = payload.ts || 0;
+    if (Math.abs(remoteTs - (b.lastWriteTs || 0)) < 250) return false; // own echo
+    if (remoteTs <= b.ts) return false;                                // stale
+    b.data = payload.data;
+    b.ts = remoteTs;
+    _sbSaveLocal(id, b.data, b.ts);
+    try { b.onChange && b.onChange(b.data, source || 'remote'); } catch (e) { console.warn(e); }
+    return true;
+  } catch (e) {
+    console.warn('synced blob apply failed (' + id + '):', e);
+    return false;
+  }
+}
+
+async function _sbAttach(id) {
+  const b = _syncedBlobs.get(id);
+  if (!b || b.attached) return;
+  const baseKey = store.get('cade-sync-key') || '';
+  const fbUrl = store.get('cade-firebase-url') || '';
+  if (!baseKey || !fbUrl) return;
+  try {
+    const db = initFirebase(fbUrl);
+    const fp = await _computeKeyFingerprint(baseKey);
+    const ref = db.ref(_sbPath(id, fp));
+    b.attached = true;
+    // Initial pull, then live subscription.
+    try {
+      const snap = await ref.once('value');
+      const val = snap.val();
+      if (val) {
+        const applied = await _sbApplyRemote(id, val, baseKey, 'initial');
+        if (!applied && b.data != null && b.ts) _sbSchedulePush(id); // local is newer
+      } else if (b.data != null) {
+        _sbSchedulePush(id); // nothing remote yet — publish local
+      }
+    } catch (e) { console.warn('synced blob read failed (' + id + '):', e); }
+    if (b.ref && b.listener) { try { b.ref.off('value', b.listener); } catch {} }
+    b.ref = ref;
+    b.listener = ref.on('value', (s) => {
+      const v = s.val();
+      if (v) _sbApplyRemote(id, v, baseKey, 'remote');
+    });
+  } catch (e) {
+    b.attached = false;
+    console.warn('synced blob attach failed (' + id + '):', e);
+  }
+}
+
+function _sbSchedulePush(id) {
+  const b = _syncedBlobs.get(id);
+  if (!b) return;
+  if (b.pushTimer) clearTimeout(b.pushTimer);
+  b.pushTimer = setTimeout(() => { _sbPushNow(id); }, 800);
+}
+
+// Attach every registered blob (called at boot and whenever sync creds change).
+function ensureSyncedBlobs() {
+  for (const id of _syncedBlobs.keys()) _sbAttach(id);
+}
+
+// Public API (exposed as Cade.syncedBlob). `id` must be a short [a-z0-9-]+
+// slug; `onChange(data, source)` fires when a newer remote copy is adopted
+// ('initial' on first cloud load, 'remote' after). Returns {get, set}:
+// get() → the current data (or null); set(data) persists locally at once and
+// syncs (debounced) when possible.
+window.__cadeSyncedBlob = function (id, opts) {
+  id = String(id || '').toLowerCase().replace(/[^a-z0-9-]/g, '');
+  if (!id) throw new Error('syncedBlob: bad id');
+  let b = _syncedBlobs.get(id);
+  if (!b) {
+    const local = _sbLoadLocal(id);
+    b = { data: local.data, ts: local.ts, onChange: null, ref: null, listener: null, pushTimer: null, lastWriteTs: 0, attached: false, pulledOnce: false };
+    _syncedBlobs.set(id, b);
+  }
+  if (opts && typeof opts.onChange === 'function') b.onChange = opts.onChange;
+  _sbAttach(id); // no-op without creds; re-run via ensureSyncedBlobs on connect
+  return {
+    get() { return b.data; },
+    set(data) {
+      b.data = data;
+      b.ts = Date.now();
+      _sbSaveLocal(id, b.data, b.ts);
+      _sbSchedulePush(id);
+    },
+  };
+};
+
 // Initial pill render (before any rooms-related rendering)
 renderWorkspacePill();
 
@@ -11229,6 +11427,7 @@ try {
 if (savedFirebaseUrl && savedEncKey) {
   // Kick off workspace sync independently (so workspaces appear even if no room is active)
   ensureWorkspaceSync();
+  try { ensureSyncedBlobs(); } catch {}
   // If rooms exist, connect to active room
   if (rooms.length > 0 && activeRoom && rooms.includes(activeRoom)) {
     switchRoom(activeRoom);
@@ -11264,14 +11463,12 @@ window.syncConnect = async function() {
   if (roomName && !rooms.includes(roomName)) {
     rooms.push(roomName);
     try { touchRoomCreated(roomName); } catch {}
-    if (rooms.length > roomCap) {
-      showToast('Over room cap (' + rooms.length + '/' + roomCap + ') — manage rooms in View → Room Manager', 'success', 4000);
-    }
   }
   activeRoom = roomName;
   saveRooms();
   // Now that Firebase URL + key are set, start syncing workspaces too
   ensureWorkspaceSync();
+  try { ensureSyncedBlobs(); } catch {}
   renderRoomTabs();
   updateSyncUI('connected', roomName);
 };
@@ -12461,7 +12658,9 @@ const TZ_ABBR = {
 function clockTick() {
   const el = document.getElementById('footer-clock'); if (!el) return;
   const now = new Date();
-  const opt = { hour: '2-digit', minute: '2-digit' };
+  // Click the clock to flip 12/24-hour display (item 21).
+  const h24 = store.get('cade-clock-24') === '1';
+  const opt = { hour: '2-digit', minute: '2-digit', hour12: !h24 };
   let html = now.toLocaleTimeString([], opt);
   for (const tz of clockTzs()) {
     try {
@@ -12476,6 +12675,11 @@ function setClockEnabled(on) {
   if (on) {
     if (!el) {
       el = document.createElement('span'); el.id = 'footer-clock';
+      el.title = 'Click to switch 12/24-hour';
+      el.addEventListener('click', () => {
+        store.set('cade-clock-24', store.get('cade-clock-24') === '1' ? '0' : '1');
+        clockTick();
+      });
       // The footer's right-hand group is .footer-stats (there is no .footer-right);
       // prepend the clock so it sits just left of Ln/Col.
       const fr = document.querySelector('.footer-stats'); if (fr) fr.insertBefore(el, fr.firstChild);
@@ -13619,6 +13823,16 @@ try {
   // are registered by the timer module itself when it loads.)
   // F2 — snapshot retention. Auto-discard snapshots older than the chosen window
   // (the newest is always kept). Storage is also capped per-room by count + bytes.
+  // Editor horizontal padding (item 19) — drives the --editor-hpad CSS var.
+  registerSetting({ key: 'appearance.editorHPad', label: 'Document side padding', type: 'select', default: 'normal', section: 'Appearance', hint: 'Horizontal breathing room around the document text.', options: [
+    { value: 'compact', label: 'Compact' },
+    { value: 'normal', label: 'Normal' },
+    { value: 'roomy', label: 'Roomy' },
+    { value: 'wide', label: 'Wide margins (centered)' },
+  ], apply(v) {
+    const map = { compact: '6px', normal: 'var(--space-4)', roomy: '6%', wide: 'max(12%, 48px)' };
+    document.documentElement.style.setProperty('--editor-hpad', map[v] || map.normal);
+  } });
   registerSetting({ key: 'snapshots.maxAgeDays', label: 'Auto-delete old snapshots', type: 'select', default: '0', section: 'Behavior', hint: 'Discard a document’s snapshots older than this (the most recent is always kept). Use Snapshots → Manage storage to clear by size across all rooms.', options: [
     { value: '0', label: 'Keep all' },
     { value: '1', label: 'Older than 1 day' },

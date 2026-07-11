@@ -1,0 +1,116 @@
+/* Calendar Events widget — month grid + selected-day agenda.
+   Separate from the daycal widget: everything here is cal-*. */
+#cal-panel { top: 50px; right: 12px; width: 560px; max-width: calc(100vw - 24px); }
+
+.cal-wrap { display: grid; grid-template-columns: 248px minmax(0, 1fr); }
+.cal-left { padding: 10px 12px 12px; border-right: 1px solid var(--border); }
+.cal-right { padding: 10px 14px 12px; display: flex; flex-direction: column; min-height: 280px; }
+@media (max-width: 640px) {
+  #cal-panel { width: calc(100vw - 24px); }
+  .cal-wrap { grid-template-columns: 1fr; }
+  .cal-left { border-right: none; border-bottom: 1px solid var(--border); }
+}
+
+/* ---- month header + grid ---- */
+.cal-head { display: flex; align-items: center; justify-content: space-between; padding: 2px 2px 6px; }
+.cal-month { font-weight: 600; font-size: var(--text-sm); }
+.cal-nav {
+  background: none; border: none; color: var(--text-muted); cursor: pointer;
+  font-size: 18px; line-height: 1; padding: 2px 9px; border-radius: 6px;
+}
+.cal-nav:hover { background: var(--surface-hover, rgba(127,127,127,0.15)); color: var(--text); }
+
+.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 1px 0; }
+.cal-cell { position: relative; display: flex; align-items: center; justify-content: center; height: 30px; }
+.cal-cell.cal-day { cursor: pointer; }
+.cal-cell.cal-dow { color: var(--text-faint); font-size: var(--text-xs); font-weight: 600; }
+.cal-n {
+  width: 24px; height: 24px; line-height: 24px; text-align: center;
+  border-radius: 50%; font-size: var(--text-xs); color: var(--text);
+}
+.cal-cell.cal-day:hover .cal-n { background: var(--surface-hover, rgba(127,127,127,0.15)); }
+/* today: filled accent circle */
+.cal-cell.today .cal-n { background: var(--accent); color: #fff; font-weight: 600; }
+/* selected (non-today): outlined circle */
+.cal-cell.sel .cal-n { box-shadow: 0 0 0 1.5px var(--accent); }
+/* days with events: a dot under the number */
+.cal-cell.has::after {
+  content: ''; position: absolute; bottom: 1px; left: 50%; transform: translateX(-50%);
+  width: 4px; height: 4px; border-radius: 50%; background: var(--accent);
+}
+
+/* ---- right column: day header + agenda ---- */
+.cal-day-head { font-weight: 600; font-size: var(--text-sm); padding: 4px 0 8px; }
+.cal-list { display: flex; flex-direction: column; gap: 1px; overflow-y: auto; max-height: 280px; }
+.cal-none { color: var(--text-faint); font-size: var(--text-xs); padding: 6px 2px; }
+
+.cal-ev {
+  display: flex; align-items: stretch; gap: 10px; width: 100%; text-align: left;
+  background: none; border: none; color: var(--text); cursor: pointer;
+  padding: 5px 6px; border-radius: 8px; font-family: inherit;
+}
+.cal-ev:hover { background: var(--surface-hover, rgba(127,127,127,0.15)); }
+.cal-ev-times {
+  display: flex; flex-direction: column; justify-content: center;
+  width: 62px; flex-shrink: 0; font-size: var(--text-xs);
+  color: var(--text-muted); line-height: 1.5; white-space: nowrap;
+}
+.cal-ev-end { color: var(--text-faint); }
+.cal-ev-bar { width: 3px; border-radius: 2px; flex-shrink: 0; min-height: 28px; }
+.cal-ev-main { display: flex; flex-direction: column; justify-content: center; min-width: 0; }
+.cal-ev-cat { font-size: var(--text-xs); color: var(--text-muted); }
+.cal-ev-title {
+  font-size: var(--text-sm); font-weight: 500;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* category colors — the app-wide --hl-* highlight palette (fallback hexes) */
+.cal-c-yellow { background: var(--hl-yellow, #eab308); }
+.cal-c-green  { background: var(--hl-green,  #22c55e); }
+.cal-c-blue   { background: var(--hl-blue,   #3b82f6); }
+.cal-c-red    { background: var(--hl-red,    #ef4444); }
+.cal-c-pink   { background: var(--hl-pink,   #ec4899); }
+.cal-c-purple { background: var(--hl-purple, #a855f7); }
+.cal-c-orange { background: var(--hl-orange, #f97316); }
+.cal-c-gray   { background: var(--hl-gray,   #94a3b8); }
+
+/* ---- add button ---- */
+.cal-add {
+  margin-top: auto; width: 100%; padding: 6px 10px;
+  background: none; border: 1px dashed var(--border); border-radius: 8px;
+  color: var(--text-muted); font-size: var(--text-sm); font-family: inherit; cursor: pointer;
+}
+.cal-add:hover { color: var(--accent); border-color: var(--accent); }
+
+/* ---- inline add/edit form ---- */
+.cal-form {
+  margin-top: 8px; padding: 10px; border: 1px solid var(--border);
+  border-radius: 10px; background: var(--surface-2, var(--surface));
+  display: flex; flex-direction: column; gap: 6px;
+}
+.cal-f-row { display: flex; align-items: center; gap: 6px; }
+.cal-form input, .cal-form select {
+  width: 100%; min-width: 0; box-sizing: border-box;
+  background: var(--surface); border: 1px solid var(--border); color: var(--text);
+  border-radius: 6px; padding: 4px 7px; font-size: var(--text-sm); font-family: inherit;
+}
+.cal-form input:focus, .cal-form select:focus { outline: 1px solid var(--accent); border-color: var(--accent); }
+.cal-f-dash { color: var(--text-faint); flex-shrink: 0; }
+.cal-f-newcat { display: flex; flex-direction: column; gap: 6px; }
+.cal-f-swatches { display: flex; gap: 6px; flex-wrap: wrap; padding: 1px; }
+.cal-sw {
+  width: 18px; height: 18px; border-radius: 50%; cursor: pointer;
+  border: 1px solid var(--border); padding: 0; flex-shrink: 0;
+}
+.cal-sw.on { box-shadow: 0 0 0 2px var(--accent); border-color: transparent; }
+.cal-f-actions { display: flex; align-items: center; gap: 6px; margin-top: 2px; }
+.cal-f-spacer { flex: 1; }
+.cal-btn {
+  background: none; border: 1px solid var(--border); color: var(--text);
+  border-radius: 6px; padding: 4px 11px; font-size: var(--text-xs); font-family: inherit; cursor: pointer;
+}
+.cal-btn:hover { background: var(--surface-hover, rgba(127,127,127,0.15)); }
+.cal-btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+.cal-btn-primary:hover { background: var(--accent); opacity: 0.9; }
+.cal-btn-danger { color: #ef4444; border-color: rgba(239, 68, 68, 0.45); }
+.cal-btn-danger:hover { background: rgba(239, 68, 68, 0.12); }
