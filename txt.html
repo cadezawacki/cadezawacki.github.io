@@ -930,6 +930,46 @@ body.sel-mode .editor-wrap .cm-content { -webkit-touch-callout: none; }
 #footer-lines { min-width: 52px; }
 .footer-spacer { flex: 1; }
 
+/* Desktop sidebar (item 26): fixed left rail, wide screens only. */
+#side-nav { display: none; }
+@media (min-width: 900px) {
+  #side-nav {
+    display: block;
+    position: fixed; left: 0; top: var(--menubar-h, 44px); bottom: 28px;
+    width: 216px; overflow-y: auto; z-index: 90;
+    background: var(--bg); border-right: 1px solid var(--border);
+    padding: 8px 8px 12px; font-size: var(--text-sm);
+    user-select: none; -webkit-user-select: none;
+  }
+  body.sidebar-on .editor-wrap .cm-scroller { padding-left: calc(216px + var(--editor-hpad, var(--space-4))); }
+  body.sidebar-on .find-panel { padding-left: 228px; }
+  #side-nav .sn-head {
+    font-weight: 600; padding: 6px 8px; border-radius: var(--radius-sm); cursor: pointer;
+    display: flex; align-items: center; gap: 6px;
+  }
+  #side-nav .sn-ws {
+    display: flex; align-items: center; gap: 6px; margin-top: 8px;
+    padding: 4px 8px; border-radius: var(--radius-sm); cursor: pointer;
+    color: var(--ws-fg, var(--text-muted)); font-size: var(--text-xs);
+    text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600;
+  }
+  #side-nav .sn-ws .ws-badge-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ws-fg, currentColor); }
+  #side-nav .sn-ws.active, #side-nav .sn-head.active { background: var(--surface-hover, rgba(127,127,127,0.12)); }
+  #side-nav .sn-room {
+    padding: 4px 8px 4px 22px; border-radius: var(--radius-sm); cursor: pointer;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text);
+  }
+  #side-nav .sn-room:hover { background: var(--surface-hover, rgba(127,127,127,0.12)); }
+  #side-nav .sn-room.active { background: var(--accent-bg); color: var(--accent); }
+  #side-nav .sn-count { margin-left: auto; color: var(--text-faint); font-size: var(--text-xs); font-weight: 400; }
+  #side-nav .sn-add {
+    margin-top: 12px; width: 100%; padding: 5px 8px; font-size: var(--text-xs);
+    background: none; border: 1px dashed var(--border); border-radius: var(--radius-sm);
+    color: var(--text-muted); cursor: pointer;
+  }
+  #side-nav .sn-add:hover { color: var(--accent); border-color: var(--accent); }
+}
+
 /* Breadcrumb (Feature 94) — hard left. */
 .footer-breadcrumb { display: flex; align-items: center; gap: 5px; min-width: 0; overflow: hidden; flex-shrink: 1; }
 .footer-breadcrumb:empty { display: none; }
@@ -969,7 +1009,10 @@ body.sel-mode .editor-wrap .cm-content { -webkit-touch-callout: none; }
 }
 .qs-item.active { background: var(--accent-soft, rgba(120,150,255,0.18)); }
 .qs-item:hover { background: var(--surface-hover, rgba(127,127,127,0.12)); }
-.qs-item .qs-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ws-dot, #888); flex-shrink: 0; }
+.qs-item .qs-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ws-fg, #888); flex-shrink: 0; }
+.qs-item .qs-ws-badges { display: inline-flex; gap: 4px; flex-shrink: 1; min-width: 0; overflow: hidden; }
+.qs-item .qs-snip { color: var(--text-faint, #888); font-size: var(--text-xs, 11px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 55%; }
+.qs-item .qs-snip b { color: var(--accent); font-weight: 600; }
 .qs-item .qs-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .qs-item .qs-meta { color: var(--text-faint, #888); font-size: var(--text-xs, 11px); }
 .qs-item .qs-pin { font-size: 11px; color: var(--accent, #6c9); font-weight: 700; }
@@ -2427,6 +2470,10 @@ body.readonly .editor-wrap .cm-content { caret-color: transparent; }
         <span id="readonly-label">Read-Only Mode: Off</span>
         <span></span>
       </button>
+      <button class="menu-item" onclick="toggleSidebar()" title="Workspace/room rail on wide screens">
+        <span id="sidebar-label">Sidebar: Off</span>
+        <span></span>
+      </button>
       <button class="menu-item" onclick="openSnapshots()">
         <span>Snapshots / History</span>
         <span></span>
@@ -2747,6 +2794,7 @@ body.readonly .editor-wrap .cm-content { caret-color: transparent; }
       <div class="rm-tabs">
         <button class="rm-tab active" id="rm-tab-rooms" type="button" onclick="switchManagerTab('rooms')">Rooms</button>
         <button class="rm-tab" id="rm-tab-workspaces" type="button" onclick="switchManagerTab('workspaces')">Workspaces</button>
+        <button class="rm-tab" id="rm-tab-archive" type="button" onclick="switchManagerTab('archive')">Archive</button>
       </div>
 
       <!-- Rooms tab header -->
@@ -2780,11 +2828,16 @@ body.readonly .editor-wrap .cm-content { caret-color: transparent; }
       <div id="rm-body-workspaces" style="display:none;">
         <div class="room-manager-list" id="workspace-manager-list" style="margin-bottom:0;"></div>
       </div>
+      <div id="rm-body-archive" style="display:none;">
+        <div class="modal-desc" style="margin-bottom:var(--space-3);">Archived rooms stay synced but are hidden from tabs. Restore to bring one back.</div>
+        <div class="room-manager-list" id="archive-manager-list" style="margin-bottom:0;"></div>
+      </div>
     </div>
 
     <div class="modal-footer">
       <div class="modal-actions">
-        <button class="btn" onclick="openExploreRooms()">Explore Rooms…</button>
+        <button class="btn" onclick="scanEmptyRooms()" title="Find rooms with no content and offer to remove them">Find Empty…</button>
+        <button class="btn" onclick="openExploreRooms()" title="List every room on the server — recover one that isn't in your tab list">Recover from Server…</button>
         <button class="btn btn-primary" onclick="closeRoomManager()">Done</button>
       </div>
     </div>
@@ -2795,8 +2848,8 @@ body.readonly .editor-wrap .cm-content { caret-color: transparent; }
 <div class="modal-overlay" id="explore-rooms-overlay">
   <div class="modal-dialog modal-dialog-scroll" style="max-width: 460px;">
     <div class="modal-header">
-      <div class="modal-title">Explore Rooms</div>
-      <div class="modal-desc" style="margin-bottom:0;">Rooms in the connected database. Pick a workspace and add to subscribe — the list stays open so you can add several.</div>
+      <div class="modal-title">Recover from Server</div>
+      <div class="modal-desc" style="margin-bottom:0;">Every room on the connected database — including ones removed from your tab list (their server content is kept). Your live tabs sync automatically; this is for recovery and for pre-sync legacy rooms.</div>
     </div>
     <div class="modal-body">
       <div id="explore-rooms-list"></div>
@@ -2816,8 +2869,9 @@ body.readonly .editor-wrap .cm-content { caret-color: transparent; }
     <div class="modal-desc">Select rooms to clear from offline storage (cache, sync base and snapshots together). Synced content reloads from the server when you next open the room.</div>
     <div style="color:var(--text-faint);font-size:var(--text-xs);margin:-4px 0 8px;" id="storage-cleanup-usage"></div>
     <div class="room-manager-list" id="storage-cleanup-list"></div>
-    <div style="margin-top:8px;">
+    <div style="margin-top:8px;display:flex;flex-direction:column;gap:6px;">
       <button class="btn" style="width:100%;" onclick="storageCleanupPurgeImages()">🧹 Purge unused images (IndexedDB + server)</button>
+      <button class="btn btn-danger" style="width:100%;" onclick="purgeLocalDevice()" title="Wipe everything stored on this device and reload — server data untouched">⚠ Reset this device (server data kept)</button>
     </div>
     <div class="modal-actions">
       <button class="btn" onclick="closeStorageCleanup()">Cancel</button>
@@ -8607,8 +8661,62 @@ function _roomDropdownLabel(name) {
   }
   return name;
 }
+// ---------- Desktop sidebar (item 26): workspace → room tree ----------
+// Optional collapsible left rail replacing the tab-strip workflow on wide
+// screens. Pure alternative view — the tab bar keeps working. Renders from
+// the same data on every renderRoomTabs pass; hidden below 900px via CSS.
+let _sidebarOn = store.get('cade-sidebar') === '1';
+window.toggleSidebar = function() {
+  closeAllMenus();
+  _sidebarOn = !_sidebarOn;
+  store.set('cade-sidebar', _sidebarOn ? '1' : '0');
+  renderSidebar();
+  const lbl = document.getElementById('sidebar-label');
+  if (lbl) lbl.textContent = _sidebarOn ? 'Sidebar: On' : 'Sidebar: Off';
+  try { editor.requestMeasure(); } catch {}
+};
+setTimeout(() => { const l = document.getElementById('sidebar-label'); if (l && _sidebarOn) l.textContent = 'Sidebar: On'; }, 100);
+function _sidebarRoomRow(name) {
+  const escAttr = escapeHtml(name.replace(/\\/g, '\\\\').replace(/'/g, "\\'"));
+  const active = name === activeRoom;
+  const pin = roomPinnedHere(name) ? '📌 ' : '';
+  return `<div class="sn-room${active ? ' active' : ''}" onclick="quickSwitchPick('${escAttr}')">${pin}${escapeHtml(name)}</div>`;
+}
+function renderSidebar() {
+  document.body.classList.toggle('sidebar-on', _sidebarOn);
+  let el = document.getElementById('side-nav');
+  if (!_sidebarOn) { if (el) el.remove(); return; }
+  if (!el) {
+    el = document.createElement('nav');
+    el.id = 'side-nav';
+    document.body.appendChild(el);
+  }
+  const wsRows = [];
+  const wsSection = (label, colorClass, wsId, roomList) => {
+    const escId = escapeHtml(String(wsId).replace(/'/g, "\\'"));
+    wsRows.push(`<div class="sn-ws ${colorClass}${activeWorkspace === wsId ? ' active' : ''}" onclick="sidebarPickWs('${escId}')"><span class="ws-badge-dot"></span>${escapeHtml(label)}<span class="sn-count">${roomList.length}</span></div>`);
+    wsRows.push(...roomList.map(_sidebarRoomRow));
+  };
+  const live = rooms.filter(r => !roomIsArchived(r));
+  workspaces.slice().sort((a, b) => (a.order ?? 0) - (b.order ?? 0)).forEach(w => {
+    const inWs = orderRooms(live.filter(r => roomInWorkspace(r, w.id)));
+    wsSection(w.name, 'ws-color-' + (WS_COLORS.includes(w.color) ? w.color : 'neutral'), w.id, inWs);
+  });
+  const unlabeled = orderRooms(live.filter(r => roomIsUnlabeled(r)));
+  if (unlabeled.length) wsSection('Unlabeled', 'ws-color-neutral', WS_UNLABELED, unlabeled);
+  el.innerHTML = `<div class="sn-head" onclick="sidebarPickWs('${WS_ALL}')">All Rooms<span class="sn-count">${live.length}</span></div>` + wsRows.join('') +
+    `<button class="sn-add" onclick="addRoomPrompt()">＋ New room</button>`;
+}
+window.sidebarPickWs = function(wsId) {
+  activeWorkspace = wsId;
+  store.set('cade-active-workspace', wsId);
+  try { renderWorkspacePill(); } catch {}
+  renderRoomTabs();
+};
+
 function renderRoomTabs() {
   renderWorkspacePill();
+  try { renderSidebar(); } catch {}
   // Desktop tabs
   const container = document.getElementById('room-tabs');
   const mobileContainer = document.getElementById('room-mobile-select');
@@ -8623,7 +8731,7 @@ function renderRoomTabs() {
   let html = visibleRooms.map(name => {
     const isActive = name === activeRoom && syncState.connected;
     const hasLock = roomHasPassword(name);
-    const pinned = roomIsPinned(name);
+    const pinned = roomPinnedHere(name);
     const colorClass = workspaceColorClassForRoom(name);
     const dotHtml = showDots ? `<span class="ws-tab-dot ${colorClass}"></span>` : '';
     // Pinned rooms are conveyed by the cross-stitch texture + accent color (CSS
@@ -8786,15 +8894,30 @@ function renderQuickSwitchList() {
     const name = res.name;
     const colorClass = workspaceColorClassForRoom(name);
     const wsIds = getRoomWorkspaceIds(name);
-    const ws = wsIds.length ? getWorkspace(wsIds[0]) : null;
-    const wsLabel = ws ? ws.name + (wsIds.length > 1 ? ' +' + (wsIds.length - 1) : '') : 'Unlabeled';
-    const pin = roomIsPinned(name) ? '<span class="qs-pin" title="Pinned">📌</span>' : '';
+    const pin = roomPinnedHere(name) ? '<span class="qs-pin" title="Pinned">📌</span>' : '';
     const lock = roomHasPassword(name) ? ' 🔒' : '';
     const escAttr = escapeHtml(name.replace(/\\/g, '\\\\').replace(/'/g, "\\'"));
+    // Item 22: every workspace the room belongs to, as colour-coded badges
+    // (up to 3 before overflowing to +N).
+    let meta;
+    if (res.content) {
+      meta = `<span class="qs-snip" title="content match">📄 ${res.snippet}</span>`;
+    } else if (wsIds.length) {
+      const shown = wsIds.slice(0, 3).map(id => {
+        const w = getWorkspace(id);
+        if (!w) return '';
+        const cc = 'ws-color-' + (WS_COLORS.includes(w.color) ? w.color : 'neutral');
+        return `<span class="ws-badge ${cc}" style="margin-left:0;"><span class="ws-badge-dot"></span>${escapeHtml(w.name)}</span>`;
+      }).join('');
+      const more = wsIds.length > 3 ? `<span class="qs-meta">+${wsIds.length - 3}</span>` : '';
+      meta = `<span class="qs-ws-badges">${shown}${more}</span>`;
+    } else {
+      meta = '<span class="qs-meta">Unlabeled</span>';
+    }
     return `<div class="qs-item ${i === _qsIndex ? 'active' : ''}" data-idx="${i}" onclick="quickSwitchPick('${escAttr}')">
       ${pin}<span class="qs-dot ${colorClass}"></span>
       <span class="qs-name">${escapeHtml(name)}${lock}</span>
-      <span class="qs-meta">${escapeHtml(wsLabel)}</span>
+      ${meta}
     </div>`;
   }).join('');
   const active = listEl.querySelector('.qs-item.active');
@@ -8808,6 +8931,8 @@ window.openQuickSwitcher = function() {
   if (!overlay || !input) return;
   input.value = '';
   _qsIndex = 0;
+  _qsScanToken++;       // cancel any in-flight content scan
+  _qsTextCache.clear(); // fresh text snapshot per open (memory care)
   _qsResults = quickSwitchResults('');
   renderQuickSwitchList();
   overlay.classList.add('open');
@@ -8817,20 +8942,76 @@ window.openQuickSwitcher = function() {
 window.closeQuickSwitcher = function() {
   const overlay = document.getElementById('qs-overlay');
   if (overlay) overlay.classList.remove('open');
+  _qsScanToken++;       // stop any running content scan
+  _qsTextCache.clear(); // release the text snapshots (memory care)
   try { editor.focus(); } catch {}
 };
 
 window.quickSwitchPick = function(name) {
   closeQuickSwitcher();
   if (!name || name === activeRoom) return;
-  // If the room is hidden by the active workspace filter, drop to All Rooms so
-  // the switch is visible in the tab bar.
-  if (!roomInWorkspace(name, activeWorkspace) || roomIsArchived(name)) {
+  // Item 22: follow the room into ITS OWN workspace (first membership) rather
+  // than dumping to All Rooms — the tab bar then shows its real context.
+  // Archived rooms still land in All Rooms (they're hidden everywhere else).
+  if (roomIsArchived(name)) {
     activeWorkspace = WS_ALL;
     store.set('cade-active-workspace', WS_ALL);
+  } else if (!roomInWorkspace(name, activeWorkspace) && !roomIsPinned(name)) {
+    const ids = getRoomWorkspaceIds(name);
+    activeWorkspace = ids.length ? ids[0] : WS_UNLABELED;
+    store.set('cade-active-workspace', activeWorkspace);
   }
+  try { renderWorkspacePill(); } catch {}
   switchRoom(name);
 };
+
+// Item 29: content search across the workspace's rooms (all rooms in the All
+// view) — async, time-budgeted chunks, capped results, per-open text cache so
+// keystrokes don't re-read localStorage. Only kicks in from 3 chars.
+let _qsScanToken = 0;
+const _qsTextCache = new Map(); // room -> lowercased text ('' = known empty)
+function _qsRoomTextLower(r) {
+  if (_qsTextCache.has(r)) return _qsTextCache.get(r);
+  let t = '';
+  try {
+    t = (r === activeRoom ? editor.state.doc.toString() : (store.get('cade-room-cache:' + r) || '')).toLowerCase();
+  } catch {}
+  _qsTextCache.set(r, t);
+  return t;
+}
+function quickSwitchContentSearch(query) {
+  const token = ++_qsScanToken;
+  const q = query.trim().toLowerCase();
+  if (q.length < 3) return;
+  const scope = (activeWorkspace === WS_ALL)
+    ? rooms.filter(r => !roomIsArchived(r))
+    : roomsInActiveWorkspace(false);
+  let i = 0;
+  const found = [];
+  const step = () => {
+    if (token !== _qsScanToken) return; // a newer keystroke superseded us
+    const deadline = Date.now() + 8;    // ≤8ms of work per chunk
+    while (i < scope.length && Date.now() < deadline && found.length < 8) {
+      const r = scope[i++];
+      const text = _qsRoomTextLower(r);
+      if (!text) continue;
+      const at = text.indexOf(q);
+      if (at === -1) continue;
+      const s = Math.max(0, at - 24);
+      const raw = (s > 0 ? '…' : '') + text.slice(s, at + q.length + 44).replace(/\s+/g, ' ') + '…';
+      found.push({ name: r, score: 1, content: true, snippet: escapeHtml(raw) });
+    }
+    if (i < scope.length && found.length < 8) { setTimeout(step, 0); return; }
+    if (token !== _qsScanToken) return;
+    const have = new Set(_qsResults.map(x => x.name));
+    const extra = found.filter(f => !have.has(f.name));
+    if (extra.length) {
+      _qsResults = _qsResults.concat(extra);
+      renderQuickSwitchList();
+    }
+  };
+  setTimeout(step, 0);
+}
 
 (function() {
   const input = document.getElementById('qs-input');
@@ -8840,6 +9021,7 @@ window.quickSwitchPick = function(name) {
     _qsResults = quickSwitchResults(input.value);
     _qsIndex = 0;
     renderQuickSwitchList();
+    quickSwitchContentSearch(input.value); // item 29 — appends 📄 content hits
   });
   input.addEventListener('keydown', (e) => {
     if (e.key === 'ArrowDown') { e.preventDefault(); _qsIndex++; renderQuickSwitchList(); }
@@ -9221,14 +9403,15 @@ window.addRoomPrompt = function() {
 let _rmActiveTab = 'rooms';
 window.openRoomManager = function(tab) {
   closeAllMenus();
-  _rmActiveTab = tab === 'workspaces' ? 'workspaces' : 'rooms';
+  _rmActiveTab = (tab === 'workspaces' || tab === 'archive') ? tab : 'rooms';
   renderManagerTabs();
   renderRoomManagerList();
   renderWorkspaceManagerList();
+  renderArchiveList();
   document.getElementById('room-manager-overlay').classList.add('open');
   if (_rmActiveTab === 'rooms') {
     document.getElementById('room-add-input').focus();
-  } else {
+  } else if (_rmActiveTab === 'workspaces') {
     document.getElementById('ws-add-input').focus();
   }
 };
@@ -9240,34 +9423,75 @@ window.closeRoomManager = function() {
 };
 
 window.switchManagerTab = function(tab) {
-  _rmActiveTab = tab;
+  _rmActiveTab = (tab === 'workspaces' || tab === 'archive') ? tab : 'rooms';
   renderManagerTabs();
-  if (tab === 'rooms') {
+  if (_rmActiveTab === 'rooms') {
     renderRoomManagerList();
     setTimeout(() => document.getElementById('room-add-input').focus(), 10);
-  } else {
+  } else if (_rmActiveTab === 'workspaces') {
     renderWorkspaceManagerList();
     setTimeout(() => document.getElementById('ws-add-input').focus(), 10);
+  } else {
+    renderArchiveList();
   }
 };
 
 function renderManagerTabs() {
-  const tabRooms = document.getElementById('rm-tab-rooms');
-  const tabWs = document.getElementById('rm-tab-workspaces');
-  const headRooms = document.getElementById('rm-header-rooms');
-  const headWs = document.getElementById('rm-header-workspaces');
-  const bodyRooms = document.getElementById('rm-body-rooms');
-  const bodyWs = document.getElementById('rm-body-workspaces');
-  const footerCap = document.getElementById('rm-footer-cap');
   const isRooms = _rmActiveTab === 'rooms';
-  tabRooms.classList.toggle('active', isRooms);
-  tabWs.classList.toggle('active', !isRooms);
-  headRooms.style.display = isRooms ? '' : 'none';
-  headWs.style.display = isRooms ? 'none' : '';
-  bodyRooms.style.display = isRooms ? '' : 'none';
-  bodyWs.style.display = isRooms ? 'none' : '';
-  footerCap.style.display = isRooms ? '' : 'none';
+  const isWs = _rmActiveTab === 'workspaces';
+  const isArch = _rmActiveTab === 'archive';
+  document.getElementById('rm-tab-rooms').classList.toggle('active', isRooms);
+  document.getElementById('rm-tab-workspaces').classList.toggle('active', isWs);
+  document.getElementById('rm-tab-archive').classList.toggle('active', isArch);
+  document.getElementById('rm-header-rooms').style.display = isRooms ? '' : 'none';
+  document.getElementById('rm-header-workspaces').style.display = isWs ? '' : 'none';
+  document.getElementById('rm-body-rooms').style.display = isRooms ? '' : 'none';
+  document.getElementById('rm-body-workspaces').style.display = isWs ? '' : 'none';
+  document.getElementById('rm-body-archive').style.display = isArch ? '' : 'none';
 }
+
+// Archive tab (item 9): ALL archived rooms across every workspace.
+function renderArchiveList() {
+  const list = document.getElementById('archive-manager-list');
+  if (!list) return;
+  const archived = orderRooms(rooms.filter(r => roomIsArchived(r)));
+  list.innerHTML = archived.length
+    ? archived.map(name => renderRoomRow(name, true)).join('')
+    : '<div style="color:var(--text-faint);font-size:var(--text-sm);padding:8px 0;">Nothing archived. Use a room’s ⚙ menu → Archive to tuck it away.</div>';
+}
+
+// Item 16: find rooms with no content and offer an account-wide remove.
+// Never-opened rooms (no local record at all) may hold server content we
+// can't see — they're reported separately and NOT removed.
+window.scanEmptyRooms = async function() {
+  const empty = [];
+  const unknown = [];
+  for (const r of rooms) {
+    if (r === activeRoom) {
+      if (editor.state.doc.toString().trim() === '') empty.push(r);
+      continue;
+    }
+    const cache = store.get('cade-room-cache:' + r);
+    const synced = store.get('cade-room-synced:' + r);
+    if (cache == null && synced == null) { unknown.push(r); continue; }
+    if (String(cache || '').trim() === '' && String(synced || '').trim() === '') empty.push(r);
+  }
+  if (!empty.length) {
+    showToast('No empty rooms found' + (unknown.length ? ' (' + unknown.length + ' never opened here — skipped)' : ''), 'success', 3000);
+    return;
+  }
+  const typed = await textPrompt(
+    'Empty room' + (empty.length > 1 ? 's' : '') + ': ' + empty.join(', ') +
+    (unknown.length ? '\n(skipped ' + unknown.length + ' never opened on this device)' : '') +
+    '\n\nType "remove" to drop them from your synced tab list (server data kept):', '');
+  if (typed == null || typed.trim().toLowerCase() !== 'remove') return;
+  empty.forEach(r => { tombstoneRoom(r); purgeLocalRoom(r); });
+  renderRoomManagerList();
+  renderArchiveList();
+  renderRoomTabs();
+  try { renderWorkspaceManagerList(); } catch {}
+  showToast('Removed ' + empty.length + ' empty room' + (empty.length > 1 ? 's' : ''), 'success', 2500);
+};
 
 function renderRoomManagerList() {
   // Update context bar (which workspace we're filtering by)
@@ -9308,10 +9532,9 @@ function renderRoomManagerList() {
   } else {
     html += listRooms.map(name => renderRoomRow(name, false)).join('');
   }
-  // Archived section (Feature 52) — always at the bottom, with a Restore action.
+  // Archived rooms live in their own tab now (item 9) — just hint when some exist.
   if (archivedRooms.length) {
-    html += `<div class="ws-dd-section rm-archived-section" style="padding:14px 0 4px;">🗄 Archived · ${archivedRooms.length}</div>`;
-    html += archivedRooms.map(name => renderRoomRow(name, showAll)).join('');
+    html += `<div class="ws-dd-section" style="padding:14px 0 4px;color:var(--text-faint);cursor:pointer;" onclick="switchManagerTab('archive')">🗄 ${archivedRooms.length} archived — see the Archive tab</div>`;
   }
   list.innerHTML = html;
 }
@@ -9385,7 +9608,7 @@ function renderRoomRow(name, showBadge) {
   // Escape for inline-handler context: JS-string quoting AND html entities,
   // since room names can come from the shared database.
   const esc = s => escapeHtml(s.replace(/\\/g, '\\\\').replace(/'/g, "\\'"));
-  const pinned = roomIsPinned(name);
+  const pinned = roomPinnedHere(name);
   const archived = roomIsArchived(name);
   // Show ALL workspace memberships as chips (Feature 51), each colour-coded.
   const wsIds = getRoomWorkspaceIds(name);
@@ -9509,12 +9732,7 @@ window.toggleRoomWsTag = function(name, wsId) {
     e.preventDefault();
     const target = e.target.closest('.room-manager-item[data-room]');
     if (!target || !dragRoom) return;
-    const from = rooms.indexOf(dragRoom);
-    const to = rooms.indexOf(target.dataset.room);
-    if (from === -1 || to === -1 || from === to) return;
-    rooms.splice(from, 1);
-    rooms.splice(to, 0, dragRoom);
-    saveRooms();
+    if (!_reorderRoom(dragRoom, target.dataset.room)) return;
     renderRoomManagerList();
     renderRoomTabs();
   });
@@ -9595,12 +9813,7 @@ window.toggleRoomWsTag = function(name, wsId) {
 
     // Perform the reorder if we have a valid target
     if (touchMoved && touchOverItem && touchOverItem.dataset.room !== touchDragRoom) {
-      const from = rooms.indexOf(touchDragRoom);
-      const to = rooms.indexOf(touchOverItem.dataset.room);
-      if (from !== -1 && to !== -1 && from !== to) {
-        rooms.splice(from, 1);
-        rooms.splice(to, 0, touchDragRoom);
-        saveRooms();
+      if (_reorderRoom(touchDragRoom, touchOverItem.dataset.room)) {
         renderRoomManagerList();
         renderRoomTabs();
       }
@@ -9799,11 +10012,22 @@ setInterval(sweepTempRooms, 30 * 60 * 1000);
 
 // Pin / archive toggles surfaced by Room Manager + context menus.
 window.toggleRoomPin = function(name) {
-  setRoomPinned(name, !roomIsPinned(name));
+  // Inside a workspace, pin/unpin applies to THAT workspace only (item 11);
+  // in All Rooms / Unlabeled it toggles the global everywhere-pin.
+  const ws = _activeWsObj();
+  if (ws) {
+    ws.pins = Array.isArray(ws.pins) ? ws.pins : [];
+    const i = ws.pins.indexOf(name);
+    if (i === -1) ws.pins.push(name); else ws.pins.splice(i, 1);
+    saveWorkspaces();
+    showToast((i === -1 ? '📌 Pinned in ' : 'Unpinned in ') + ws.name + ': ' + name, 'success', 2000);
+  } else {
+    setRoomPinned(name, !roomIsPinned(name));
+    showToast(roomIsPinned(name) ? '📌 Pinned everywhere: ' + name : 'Unpinned: ' + name, 'success', 2000);
+  }
   closeActionMenu();
   renderRoomManagerList();
   renderRoomTabs();
-  showToast(roomIsPinned(name) ? 'Pinned: ' + name : 'Unpinned: ' + name, 'success', 1800);
 };
 
 window.toggleRoomArchive = function(name) {
@@ -10089,6 +10313,34 @@ window.confirmStorageCleanup = function() {
   persistContent();
 };
 
+// Item 13: wipe EVERYTHING local (localStorage, IndexedDB, SW caches) and
+// reload — a clean device setup. The server is never touched; reconnecting
+// with the same sync key + URL restores the account's rooms and config.
+window.purgeLocalDevice = async function() {
+  const typed = await textPrompt(
+    'Reset THIS DEVICE?\nClears every locally stored doc cache, setting and image on this device only. Nothing is deleted from the server — reconnect with your sync key to restore.\n\nType "purge" to continue:', '');
+  if (typed == null || typed.trim().toLowerCase() !== 'purge') return;
+  // Stop everything that could write during teardown.
+  try { syncState.suppressUpdate = true; } catch {}
+  try { cleanupFirebase(); } catch {}
+  try { clearInterval(syncState.idleCheckTimer); } catch {}
+  try { clearTimeout(saveTimer); saveTimer = null; } catch {}
+  try { window.removeEventListener('pagehide', _flushPendingPersist); } catch {}
+  try { document.removeEventListener('visibilitychange', _flushPendingPersist); } catch {}
+  try { localStorage.clear(); } catch {}
+  try {
+    const keys = await idbStore.keys();
+    for (const k of keys) { try { await idbStore.remove(k); } catch {} }
+  } catch {}
+  try {
+    if (window.caches && caches.keys) {
+      const names = await caches.keys();
+      await Promise.all(names.map(n => caches.delete(n)));
+    }
+  } catch {}
+  location.reload();
+};
+
 // "Purge unused images" — runs the orphan-image GC (IndexedDB + in-memory
 // cache + server copies) and reports how many blobs went away.
 window.storageCleanupPurgeImages = async function() {
@@ -10299,6 +10551,17 @@ function removeRoomFromWorkspace(name, wsId) {
 // ---------- Pin / Archive flags (Features 51/52) ----------
 function roomIsPinned(name) { return !!(roomMeta[name] && roomMeta[name].pinned); }
 function roomIsArchived(name) { return !!(roomMeta[name] && roomMeta[name].archived); }
+// Item 11: pins + custom order can be PER WORKSPACE. A global pin (roomMeta)
+// still surfaces the room in every workspace; a workspace pin (ws.pins) only
+// floats it within that workspace. Both live in the synced blob.
+function _activeWsObj() {
+  return (activeWorkspace !== WS_ALL && activeWorkspace !== WS_UNLABELED) ? getWorkspace(activeWorkspace) : null;
+}
+function roomPinnedHere(name) {
+  const ws = _activeWsObj();
+  if (ws && Array.isArray(ws.pins) && ws.pins.includes(name)) return true;
+  return roomIsPinned(name);
+}
 // Drop a room's meta only when it carries no flags AND no sort timestamps —
 // otherwise unpinning/unarchiving would wipe created/modified used by sorting.
 function _maybeDropRoomMeta(name) {
@@ -10330,15 +10593,57 @@ function _roomCreated(n) { return (roomMeta[n] && roomMeta[n].created) || 0; }
 function _roomModified(n) { return (roomMeta[n] && roomMeta[n].modified) || _roomCreated(n) || 0; }
 function orderRooms(list) {
   const mode = _roomSortMode();
-  const idx = (n) => rooms.indexOf(n);
+  // Custom order is per-workspace when one is active (item 11): the
+  // workspace's own roomOrder wins; unknown rooms sink below it in global
+  // order. Outside a workspace, the global rooms array is the order.
+  const ws = _activeWsObj();
+  const wsOrder = (ws && Array.isArray(ws.roomOrder)) ? ws.roomOrder : null;
+  const idx = (n) => {
+    if (wsOrder) {
+      const i = wsOrder.indexOf(n);
+      if (i !== -1) return i;
+      return 100000 + rooms.indexOf(n);
+    }
+    return rooms.indexOf(n);
+  };
   return list.slice().sort((a, b) => {
-    const pa = roomIsPinned(a) ? 0 : 1, pb = roomIsPinned(b) ? 0 : 1;
+    const pa = roomPinnedHere(a) ? 0 : 1, pb = roomPinnedHere(b) ? 0 : 1;
     if (pa !== pb) return pa - pb;
     if (mode === 'alpha') return a.localeCompare(b, undefined, { sensitivity: 'base' }) || (idx(a) - idx(b));
     if (mode === 'created') return (_roomCreated(b) - _roomCreated(a)) || (idx(a) - idx(b));
     if (mode === 'custom') return idx(a) - idx(b);
     return (_roomModified(b) - _roomModified(a)) || (idx(a) - idx(b)); // 'modified' (default)
   });
+}
+
+// Move dragName next to targetName — into the workspace's own order when a
+// workspace is active, else the global list. Flips the sort mode to 'custom'
+// so the new order is actually visible (item 11).
+function _reorderRoom(dragName, targetName) {
+  const ws = _activeWsObj();
+  if (ws) {
+    let order = Array.isArray(ws.roomOrder) ? ws.roomOrder.slice() : [];
+    roomsInActiveWorkspace(true).forEach(r => { if (!order.includes(r)) order.push(r); });
+    const fi = order.indexOf(dragName), ti = order.indexOf(targetName);
+    if (fi === -1 || ti === -1 || fi === ti) return false;
+    order.splice(fi, 1);
+    order.splice(ti, 0, dragName);
+    ws.roomOrder = order;
+    saveWorkspaces();
+  } else {
+    const from = rooms.indexOf(dragName), to = rooms.indexOf(targetName);
+    if (from === -1 || to === -1 || from === to) return false;
+    rooms.splice(from, 1);
+    rooms.splice(to, 0, dragName);
+    saveRooms();
+  }
+  try {
+    if (window.Settings && Settings.get('behavior.roomSort') !== 'custom') {
+      Settings.set('behavior.roomSort', 'custom');
+      showToast('Room sort switched to Custom so your order sticks', 'success', 2500);
+    }
+  } catch {}
+  return true;
 }
 // Stamp creation / modification times used by the sort (device-local; kept in
 // roomMeta). created is set once; modified bumps on edits (debounced via persist).
