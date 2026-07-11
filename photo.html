@@ -1,13 +1,14 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="light">
+<html lang="en" data-theme="dark">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-<meta name="theme-color" content="#fafaf7">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#090b10">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="mobile-web-app-capable" content="yes">
-<title>Studio · Photo Editor</title>
+<meta name="description" content="Luma is a private, offline-first photo studio with layers, masks, filters, drawing, text, shapes, smart cutout, and local project recovery.">
+<title>Luma · Private Photo Studio</title>
 
 <!-- IBM Plex Sans (UI) + curated text fonts for Text tool -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -1771,6 +1772,337 @@ a{color:var(--primary);}
   body.desktop-layout.layers-pinned::after{content:"";grid-area:pinned;border-left:1px solid var(--border);background:color-mix(in srgb,var(--bg-2) 92%,transparent);}
 }
 
+/* ==================================================================
+   LUMA PRO SHELL · offline-first workspace
+   The editing engine below remains intentionally independent from this
+   product shell, so local projects can be restored without a server.
+   ================================================================== */
+:root{
+  --primary:#7c5cff;
+  --accent:#35c8ff;
+  --highlight:#a892ff;
+  --danger:#ff5d72;
+  --success:#36d399;
+  --bg:#f4f5f8;
+  --bg-2:#ebeef3;
+  --surface:#ffffff;
+  --surface-2:#f4f5f8;
+  --elevated:#ffffff;
+  --border:rgba(18,24,38,.10);
+  --border-strong:rgba(18,24,38,.18);
+  --text:#171923;
+  --text-2:#5e6472;
+  --text-3:#9299a8;
+  --canvas-bg:#252833;
+  --checker-a:#d8dae2;
+  --checker-b:#f2f3f6;
+  --shadow:0 1px 2px rgba(10,14,25,.06),0 12px 34px rgba(10,14,25,.09);
+  --shadow-lg:0 30px 90px rgba(8,12,22,.22);
+  --topbar-h:56px;
+  --bottombar-h:68px;
+  --radius-sm:8px;
+  --radius:12px;
+  --radius-lg:20px;
+}
+[data-theme="dark"]{
+  --bg:#090b10;
+  --bg-2:#0d1017;
+  --surface:#121620;
+  --surface-2:#181d28;
+  --elevated:#1d2330;
+  --border:rgba(231,235,246,.09);
+  --border-strong:rgba(231,235,246,.17);
+  --text:#f2f4fa;
+  --text-2:#a7aebb;
+  --text-3:#687182;
+  --modal-bg:rgba(3,5,9,.74);
+  --canvas-bg:#05070b;
+  --checker-a:#151923;
+  --checker-b:#1b202c;
+  --shadow:0 1px 2px rgba(0,0,0,.28),0 18px 42px rgba(0,0,0,.34);
+  --shadow-lg:0 34px 100px rgba(0,0,0,.65);
+}
+html,body{
+  font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  letter-spacing:-.01em;
+}
+button,input,select,textarea{letter-spacing:inherit;}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,[tabindex]:focus-visible{
+  outline:2px solid var(--accent);outline-offset:2px;
+}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;scroll-behavior:auto!important;}
+}
+
+/* Home */
+.welcome{
+  align-items:stretch;justify-content:center;overflow:auto;
+  padding:calc(var(--safe-t) + 26px) max(18px,var(--safe-r)) calc(var(--safe-b) + 26px);
+  background:
+    radial-gradient(circle at 15% 15%,color-mix(in srgb,var(--primary) 22%,transparent),transparent 34%),
+    radial-gradient(circle at 88% 82%,color-mix(in srgb,var(--accent) 13%,transparent),transparent 32%),
+    var(--bg);
+}
+.welcome::before{
+  content:"";position:absolute;inset:0;pointer-events:none;opacity:.28;
+  background-image:linear-gradient(var(--border) 1px,transparent 1px),linear-gradient(90deg,var(--border) 1px,transparent 1px);
+  background-size:44px 44px;
+  mask-image:linear-gradient(to bottom,black,transparent 82%);
+}
+.welcome-shell{
+  position:relative;z-index:1;width:min(1040px,100%);margin:auto;
+  display:grid;grid-template-columns:minmax(0,1.05fr) minmax(320px,.95fr);gap:clamp(30px,6vw,86px);align-items:center;
+}
+.welcome-hero{min-width:0;}
+.welcome-brand{display:flex;align-items:center;gap:14px;margin-bottom:34px;}
+.welcome-logo{
+  width:48px;height:48px;border-radius:15px;margin:0;
+  background:linear-gradient(145deg,var(--accent),var(--primary) 58%,#d55cff);
+  box-shadow:0 14px 34px color-mix(in srgb,var(--primary) 35%,transparent);
+  animation:slideUp .45s both cubic-bezier(.2,.8,.2,1);
+}
+.welcome-logo svg{width:27px;height:27px;}
+.welcome-wordmark{font-size:18px;font-weight:820;letter-spacing:-.04em;}
+.welcome-version{font-size:10px;font-weight:800;letter-spacing:.08em;color:var(--text-3);text-transform:uppercase;}
+.welcome-kicker{
+  display:inline-flex;align-items:center;gap:8px;margin-bottom:18px;padding:7px 10px;border:1px solid var(--border);
+  border-radius:999px;background:color-mix(in srgb,var(--surface) 72%,transparent);color:var(--text-2);
+  font-size:11px;font-weight:750;letter-spacing:.02em;
+}
+.welcome-kicker::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--success);box-shadow:0 0 0 4px color-mix(in srgb,var(--success) 14%,transparent);}
+.welcome-title{
+  margin:0;max-width:670px;color:var(--text);text-transform:none;font-variant:normal;
+  font-size:clamp(44px,7vw,78px);line-height:.94;letter-spacing:-.065em;font-weight:850;
+  animation:slideUp .5s .05s both cubic-bezier(.2,.8,.2,1);
+}
+.welcome-title .gradient-text{
+  background:linear-gradient(110deg,var(--accent),var(--primary) 52%,#db62ff);
+  -webkit-background-clip:text;background-clip:text;color:transparent;
+}
+.welcome-sub{
+  margin:22px 0 0;max-width:590px;text-align:left;font-size:16px;line-height:1.65;color:var(--text-2);
+  animation:slideUp .5s .12s both cubic-bezier(.2,.8,.2,1);
+}
+.home-trust{display:flex;flex-wrap:wrap;gap:8px;margin-top:24px;animation:slideUp .5s .18s both ease;}
+.trust-chip{display:inline-flex;align-items:center;gap:7px;padding:7px 10px;border-radius:9px;background:color-mix(in srgb,var(--surface) 76%,transparent);border:1px solid var(--border);font-size:11px;color:var(--text-2);font-weight:650;}
+.trust-chip svg{width:14px;height:14px;color:var(--success);}
+.welcome-launcher{
+  border:1px solid var(--border);border-radius:28px;padding:16px;
+  background:color-mix(in srgb,var(--surface) 88%,transparent);
+  box-shadow:var(--shadow-lg);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
+  animation:slideUp .55s .16s both cubic-bezier(.2,.8,.2,1);
+}
+.welcome-launcher-head{display:flex;align-items:center;justify-content:space-between;padding:5px 6px 15px;}
+.welcome-launcher-title{font-size:13px;font-weight:760;}
+.local-only{font-size:10px;color:var(--text-3);font-weight:700;text-transform:uppercase;letter-spacing:.06em;}
+.welcome-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px;max-width:none;width:100%;animation:none;}
+.welcome-btn{
+  min-height:74px;padding:14px;border-radius:16px;gap:11px;background:var(--surface-2);
+  border:1px solid var(--border);font-size:13px;box-shadow:none;
+}
+.welcome-btn:hover{transform:translateY(-1px);background:var(--elevated);border-color:var(--border-strong);}
+.welcome-btn:active{transform:scale(.98);}
+.welcome-btn.primary{
+  grid-column:1/-1;min-height:82px;background:linear-gradient(120deg,var(--primary),#965cff 68%,#b85cff);
+  border-color:transparent;box-shadow:0 14px 34px color-mix(in srgb,var(--primary) 32%,transparent);
+}
+.welcome-btn-icon{width:38px;height:38px;border-radius:11px;background:color-mix(in srgb,var(--surface) 78%,transparent);}
+.welcome-btn.primary .welcome-btn-icon{background:rgba(255,255,255,.16);}
+.welcome-btn-sub{letter-spacing:0;text-transform:none;font-weight:500;font-size:10px;}
+.welcome-recent{display:none;margin-top:12px;padding-top:12px;border-top:1px solid var(--border);}
+.welcome-recent.show{display:block;}
+.recent-project-btn{
+  width:100%;display:grid;grid-template-columns:50px 1fr auto;gap:11px;align-items:center;padding:9px;
+  border-radius:14px;text-align:left;transition:background .15s;
+}
+.recent-project-btn:hover{background:var(--surface-2);}
+.recent-thumb{width:50px;height:42px;border-radius:9px;background:var(--canvas-bg);object-fit:cover;border:1px solid var(--border);}
+.recent-name{display:block;font-size:12px;font-weight:760;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.recent-meta{display:block;margin-top:2px;font-size:10px;color:var(--text-3);}
+.recent-arrow{font-size:18px;color:var(--text-3);}
+.welcome-theme-btn{top:calc(var(--safe-t) + 12px);right:14px;background:color-mix(in srgb,var(--surface) 82%,transparent);backdrop-filter:blur(14px);}
+.welcome-footer{position:static;margin-top:14px;text-align:center;font-size:10px;color:var(--text-3);}
+.welcome-samples{display:none;}
+
+/* Workspace command bar */
+.topbar{
+  height:calc(var(--topbar-h) + var(--safe-t));padding:var(--safe-t) 10px 0;
+  background:color-mix(in srgb,var(--bg) 91%,transparent);gap:4px;
+}
+.tb-btn{width:38px;height:38px;border-radius:10px;}
+.tb-btn.export{background:linear-gradient(120deg,var(--primary),#965cff);box-shadow:0 8px 18px color-mix(in srgb,var(--primary) 24%,transparent);}
+.tb-title{display:flex;align-items:center;justify-content:center;min-width:0;padding:0 8px;}
+.project-title-wrap{min-width:0;display:flex;flex-direction:column;align-items:center;line-height:1.1;}
+.project-title-btn{max-width:min(34vw,300px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;font-weight:760;}
+.save-status{display:flex;align-items:center;gap:5px;margin-top:3px;color:var(--text-3);font-size:9px;font-weight:650;letter-spacing:.01em;}
+.save-status::before{content:"";width:5px;height:5px;border-radius:50%;background:currentColor;}
+.save-status.saving{color:var(--accent);}
+.save-status.dirty{color:#ffb84d;}
+.save-status.error{color:var(--danger);}
+.command-btn{width:auto;min-width:38px;padding:0 9px;gap:7px;}
+.command-btn kbd{font:700 10px/1 ui-monospace,SFMono-Regular,Consolas,monospace;color:var(--text-3);padding:3px 5px;border-radius:5px;border:1px solid var(--border);background:var(--surface-2);}
+.connection-dot{position:absolute;right:4px;top:4px;width:7px;height:7px;border-radius:50%;background:var(--success);border:2px solid var(--bg);}
+.connection-dot.offline{background:#ffb84d;}
+
+.smart-guides{position:absolute;inset:0;pointer-events:none;z-index:28;overflow:visible;}
+.smart-guide{position:absolute;display:none;background:linear-gradient(90deg,var(--accent),#ef5dff);box-shadow:0 0 0 1px rgba(0,0,0,.18);}
+.smart-guides.show-x .smart-guide.vertical{display:block;top:-100vh;bottom:-100vh;left:50%;width:1px;}
+.smart-guides.show-y .smart-guide.horizontal{display:block;left:-100vw;right:-100vw;top:50%;height:1px;}
+.smart-guides::after{content:"CENTER";display:none;position:absolute;left:50%;top:50%;transform:translate(7px,7px) scale(var(--guide-inverse,1));transform-origin:top left;padding:3px 5px;border-radius:5px;background:var(--primary);color:#fff;font:800 8px/1 system-ui;letter-spacing:.06em;box-shadow:0 2px 8px rgba(0,0,0,.25);}
+.smart-guides.show-x.show-y::after{display:block;}/* Canvas HUD + status */
+.canvas-wrap::after{
+  content:"";position:absolute;inset:0;pointer-events:none;
+  box-shadow:inset 0 0 90px rgba(0,0,0,.16);
+}
+.canvas-hud{z-index:12;}
+.zoom-select,.fit-btn,.zoom-indicator{backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);}
+.workspace-status{
+  position:absolute;z-index:15;left:12px;right:12px;bottom:10px;display:flex;justify-content:space-between;align-items:center;
+  pointer-events:none;color:#c7ccd7;font-size:10px;font-weight:650;text-shadow:0 1px 3px #000;
+}
+.workspace-status-group{display:flex;align-items:center;gap:10px;padding:6px 9px;border-radius:9px;background:rgba(7,9,14,.72);border:1px solid rgba(255,255,255,.08);backdrop-filter:blur(12px);}
+.workspace-status .status-accent{color:#9f8cff;}
+.privacy-badge{display:flex;align-items:center;gap:6px;}
+.privacy-badge svg{width:12px;height:12px;color:var(--success);}
+
+/* Pro panel polish */
+.control-panel{background:color-mix(in srgb,var(--bg) 96%,transparent);}
+.control-panel-header{border-bottom:1px solid var(--border);margin-bottom:4px;}
+.cp-title{letter-spacing:-.02em;}
+.tool-tab{position:relative;}
+.tool-tab.active::after{content:"";position:absolute;background:var(--accent);border-radius:999px;}
+.histogram-card{margin:2px 0 12px;padding:10px;border:1px solid var(--border);border-radius:13px;background:var(--surface-2);}
+.histogram-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:7px;color:var(--text-2);font-size:10px;font-weight:760;text-transform:uppercase;letter-spacing:.06em;}
+.histogram-head span:last-child{font-size:9px;color:var(--text-3);font-weight:600;text-transform:none;letter-spacing:0;}
+.histogram-canvas{display:block;width:100%;height:70px;border-radius:7px;background:linear-gradient(180deg,rgba(255,255,255,.035),transparent);}
+
+.modal{z-index:240;}
+/* New document */
+.new-doc-card{width:min(720px,100%);}
+.new-presets{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;}
+.new-preset{
+  display:flex;flex-direction:column;align-items:flex-start;min-height:86px;padding:12px;border:1px solid var(--border);
+  border-radius:14px;background:var(--surface-2);text-align:left;transition:.15s;
+}
+.new-preset:hover,.new-preset.active{border-color:var(--primary);background:color-mix(in srgb,var(--primary) 9%,var(--surface));}
+.new-preset strong{font-size:12px;}
+.new-preset span{margin-top:auto;font-size:10px;color:var(--text-3);}
+.new-custom-grid{display:grid;grid-template-columns:1fr auto 1fr;align-items:end;gap:9px;}
+.new-custom-grid label{display:flex;flex-direction:column;gap:6px;color:var(--text-2);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;}
+.new-custom-grid input[type=number]{width:100%;height:42px;padding:0 11px;border:1px solid var(--border);border-radius:10px;background:var(--surface-2);}
+.new-swap{height:42px;width:42px;border-radius:10px;border:1px solid var(--border);background:var(--surface-2);}
+.new-backgrounds{display:flex;flex-wrap:wrap;gap:8px;}
+.new-bg{
+  min-height:40px;padding:0 12px;display:flex;align-items:center;gap:8px;border:1px solid var(--border);border-radius:10px;background:var(--surface-2);font-size:11px;font-weight:700;
+}
+.new-bg.active{border-color:var(--primary);box-shadow:inset 0 0 0 1px var(--primary);}
+.checker-dot{width:18px;height:18px;border-radius:5px;background-color:#fff;background-image:linear-gradient(45deg,#c9ccd3 25%,transparent 25%),linear-gradient(-45deg,#c9ccd3 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#c9ccd3 75%),linear-gradient(-45deg,transparent 75%,#c9ccd3 75%);background-size:8px 8px;background-position:0 0,0 4px,4px -4px,-4px 0;}
+.bg-color-wrap{display:flex;align-items:center;gap:8px;margin-top:10px;color:var(--text-2);font-size:11px;}
+.bg-color-wrap input{width:38px;height:30px;border:0;background:none;}
+
+/* Command palette */
+.command-palette{align-items:flex-start;padding-top:max(calc(var(--safe-t) + 8vh),34px);}
+.command-card{width:min(620px,100%);max-height:min(720px,82dvh);overflow:hidden;border-radius:22px;}
+.command-search-wrap{display:flex;align-items:center;gap:10px;padding:13px 15px;border-bottom:1px solid var(--border);}
+.command-search-wrap svg{width:20px;height:20px;color:var(--text-3);flex:none;}
+.command-search{width:100%;height:38px;border:0;outline:0;background:transparent;font-size:16px;font-weight:580;}
+.command-esc{padding:5px 7px;border-radius:7px;border:1px solid var(--border);background:var(--surface-2);font:700 9px ui-monospace,monospace;color:var(--text-3);}
+.command-results{overflow:auto;max-height:60dvh;padding:8px;}
+.command-group-label{padding:10px 9px 6px;color:var(--text-3);font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;}
+.command-item{width:100%;min-height:46px;display:flex;align-items:center;gap:11px;padding:8px 10px;border-radius:11px;text-align:left;}
+.command-item:hover,.command-item.active{background:color-mix(in srgb,var(--primary) 10%,var(--surface-2));}
+.command-item-icon{width:30px;height:30px;border-radius:8px;background:var(--surface-2);display:grid;place-items:center;color:var(--primary);font-size:14px;font-weight:800;}
+.command-item-copy{flex:1;min-width:0;}
+.command-item-label{display:block;font-size:12px;font-weight:700;}
+.command-item-hint{display:block;margin-top:2px;color:var(--text-3);font-size:10px;}
+.command-item kbd{font:700 9px ui-monospace,monospace;color:var(--text-3);}
+.command-empty{padding:38px 12px;text-align:center;color:var(--text-3);font-size:12px;}
+
+/* Project naming */
+.project-name-popover{position:fixed;z-index:160;width:min(320px,calc(100vw - 24px));padding:12px;border:1px solid var(--border);border-radius:14px;background:var(--elevated);box-shadow:var(--shadow-lg);}
+.project-name-popover label{display:block;margin-bottom:7px;color:var(--text-3);font-size:9px;text-transform:uppercase;font-weight:800;letter-spacing:.07em;}
+.project-name-popover-row{display:flex;gap:7px;}
+.project-name-popover input{min-width:0;flex:1;height:38px;padding:0 10px;border:1px solid var(--border);border-radius:9px;background:var(--surface-2);}
+.project-name-popover button{padding:0 12px;border-radius:9px;background:var(--primary);color:#fff;font-weight:750;}
+.sr-live{position:fixed;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;}
+
+@media (min-width:900px){
+  body.desktop-layout .topbar{padding-left:8px;padding-right:12px;}
+  body.desktop-layout .tool-bar{padding:10px 7px;gap:4px;background:var(--bg-2);}
+  body.desktop-layout .tool-tab{width:48px;height:48px;border-radius:12px;}
+  body.desktop-layout .tool-tab.active::after{left:0;top:12px;bottom:12px;width:3px;}
+  body.desktop-layout .control-panel{border-left:1px solid var(--border);box-shadow:-16px 0 40px rgba(0,0,0,.06);}
+  body.desktop-layout .control-panel-header{padding-top:16px;}
+  body.desktop-layout .workspace-status{bottom:8px;}
+}
+@media (max-width:899px){
+  .welcome-shell{grid-template-columns:1fr;max-width:560px;gap:30px;}
+  .welcome-title{font-size:clamp(42px,13vw,66px);}
+  .welcome-sub{font-size:14px;}
+  .home-trust{margin-top:18px;}
+}
+@media (max-width:719px){
+  :root{--topbar-h:50px;--bottombar-h:64px;}
+  .welcome{justify-content:flex-start;padding:calc(var(--safe-t) + 18px) 14px calc(var(--safe-b) + 18px);}
+  .welcome-shell{display:block;margin:auto 0;}
+  .welcome-brand{margin-bottom:24px;}
+  .welcome-title{font-size:46px;}
+  .welcome-sub{margin-top:15px;line-height:1.5;}
+  .home-trust{display:none;}
+  .welcome-launcher{margin-top:27px;padding:12px;border-radius:23px;}
+  .welcome-actions{gap:8px;}
+  .welcome-btn{min-height:66px;padding:11px;}
+  .welcome-btn.primary{min-height:72px;}
+  .welcome-footer{display:none;}
+  .welcome-theme-btn{width:36px;height:36px;}
+  .topbar{padding-left:4px;padding-right:4px;}
+  .topbar .command-btn{display:none;}
+  .topbar #themeBtn{display:none;}
+  .tb-title{padding:0 2px;}
+  .project-title-btn{max-width:34vw;font-size:12px;}
+  .save-status{font-size:8px;}
+  .control-panel{--cp-h:40dvh;min-height:22dvh;max-height:82dvh;border-radius:20px 20px 0 0;box-shadow:0 -12px 34px rgba(0,0,0,.18);}
+  .control-panel-header{padding:7px 12px 5px;}
+  .tool-bar{padding:5px max(5px,var(--safe-r)) calc(var(--safe-b) + 5px) max(5px,var(--safe-l));gap:2px;background:color-mix(in srgb,var(--bg) 94%,transparent);backdrop-filter:blur(18px);}
+  .tool-tab{min-width:60px;height:54px;border-radius:12px;}
+  .tool-tab.active::after{left:20px;right:20px;bottom:1px;height:3px;}
+  .tool-tab span{font-size:9px;}
+  .workspace-status{left:8px;right:8px;bottom:7px;}
+  .workspace-status-group{padding:5px 7px;}
+  .workspace-status .desktop-status{display:none;}
+  .histogram-canvas{height:56px;}
+  .new-presets{grid-template-columns:repeat(2,1fr);}
+  .new-custom-grid{grid-template-columns:1fr auto 1fr;}
+  .new-doc-card{max-height:92dvh;}
+  .command-palette{padding:calc(var(--safe-t) + 8px) 8px 8px;align-items:flex-start;}
+  .command-card{max-height:calc(100dvh - var(--safe-t) - 16px);border-radius:18px;}
+}
+.mobile-more-tab{display:none;}
+.save-status{cursor:pointer;}
+@media (max-width:719px){
+  .tool-bar .tool-tab[data-tool="effect"],
+  .tool-bar .tool-tab[data-tool="crop"],
+  .tool-bar .tool-tab[data-tool="shape"],
+  .tool-bar .tool-tab[data-tool="text"],
+  .tool-bar .tool-tab[data-tool="frame"]{display:none;}
+  .tool-bar .tool-tab[data-tool="adjust"],
+  .tool-bar .tool-tab[data-tool="filter"],
+  .tool-bar .tool-tab[data-tool="draw"],
+  .tool-bar .tool-tab[data-tool="layers"],
+  .tool-bar .mobile-more-tab{display:flex;flex:1 1 20%;min-width:0;}
+  .tool-bar .tool-tab[data-tool="layers"] span,
+  .tool-bar .tool-tab[data-tool="draw"] span,
+  .tool-bar .tool-tab[data-tool="filter"] span{font-size:0;}
+  .tool-bar .tool-tab[data-tool="layers"] span::after{content:"Move";font-size:9px;}
+  .tool-bar .tool-tab[data-tool="draw"] span::after{content:"Create";font-size:9px;}
+  .tool-bar .tool-tab[data-tool="filter"] span::after{content:"Looks";font-size:9px;}
+}@media (max-width:390px){
+  .welcome-title{font-size:40px;}
+  .welcome-sub{font-size:13px;}
+  .welcome-btn-icon{width:34px;height:34px;}
+  .welcome-btn{font-size:12px;}
+}
+
 </style>
 </head>
 <body>
@@ -1778,49 +2110,59 @@ a{color:var(--primary);}
 <!-- ========== WELCOME SCREEN ========== -->
 <div class="welcome" id="welcome">
   <button class="welcome-theme-btn" id="welcomeThemeBtn" aria-label="Toggle theme"></button>
-  <div class="welcome-logo">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-      <rect x="3" y="3" width="18" height="18" rx="3"/>
-      <circle cx="9" cy="9" r="2"/>
-      <path d="m21 15-5-5L5 21"/>
-    </svg>
-  </div>
-  <h1 class="welcome-title">Studio</h1>
-  <p class="welcome-sub">A complete photo editor with layers, adjustments, filters, and effects — all in your browser.</p>
-  <div class="welcome-actions">
-    <button class="welcome-btn primary" id="welcomeOpenBtn">
-      <div class="welcome-btn-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></div>
-      <div class="welcome-btn-text">
-        <span>Open Photo</span>
-        <span class="welcome-btn-sub">Choose from library</span>
+  <div class="welcome-shell">
+    <section class="welcome-hero" aria-labelledby="welcomeTitle">
+      <div class="welcome-brand">
+        <div class="welcome-logo" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3h10l4 4v14H5z"/><path d="M15 3v5h5"/><circle cx="11.5" cy="14" r="3.5"/><path d="m14 11 2-2"/></svg>
+        </div>
+        <div><div class="welcome-wordmark">Luma</div><div class="welcome-version">Private photo studio</div></div>
       </div>
-    </button>
-    <button class="welcome-btn" id="welcomeCameraBtn">
-      <div class="welcome-btn-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg></div>
-      <div class="welcome-btn-text">
-        <span>Take Photo</span>
-        <span class="welcome-btn-sub">Use camera</span>
+      <div class="welcome-kicker">Offline-ready creative workspace</div>
+      <h1 class="welcome-title" id="welcomeTitle">Your photos.<br><span class="gradient-text">Your device.</span></h1>
+      <p class="welcome-sub">Layers, masks, typography, filters, retouching, smart cutout, and pro exports — with local autosave and no account, uploads, or server.</p>
+      <div class="home-trust" aria-label="Privacy and capability">
+        <span class="trust-chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10"/><path d="m9 12 2 2 4-4"/></svg>No uploads</span>
+        <span class="trust-chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12.5 10 17l9-10"/><path d="M21 12a9 9 0 1 1-4.3-7.7"/></svg>Autosaves locally</span>
+        <span class="trust-chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20"/></svg>Works offline</span>
       </div>
-    </button>
-    <button class="welcome-btn" id="welcomePasteBtn">
-      <div class="welcome-btn-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg></div>
-      <div class="welcome-btn-text">
-        <span>Paste from Clipboard</span>
-        <span class="welcome-btn-sub">Use copied image</span>
+    </section>
+    <section class="welcome-launcher" aria-label="Start editing">
+      <div class="welcome-launcher-head"><span class="welcome-launcher-title">Create something</span><span class="local-only">Stored on this device</span></div>
+      <div class="welcome-actions">
+        <button class="welcome-btn primary" id="welcomeNewBtn">
+          <div class="welcome-btn-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></div>
+          <div class="welcome-btn-text"><span>New canvas</span><span class="welcome-btn-sub">Social, print, screen, or custom</span></div>
+        </button>
+        <button class="welcome-btn" id="welcomeOpenBtn">
+          <div class="welcome-btn-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h6l2 2h10v10H3z"/><path d="m8 15 2-2 2 2 2-3 3 4"/></svg></div>
+          <div class="welcome-btn-text"><span>Open photo</span><span class="welcome-btn-sub">JPG, PNG, WebP</span></div>
+        </button>
+        <button class="welcome-btn" id="welcomePasteBtn">
+          <div class="welcome-btn-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/></svg></div>
+          <div class="welcome-btn-text"><span>Paste</span><span class="welcome-btn-sub">From clipboard</span></div>
+        </button>
+        <button class="welcome-btn" id="welcomeCameraBtn">
+          <div class="welcome-btn-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h3l2-3h6l2 3h3v13H4z"/><circle cx="12" cy="13" r="4"/></svg></div>
+          <div class="welcome-btn-text"><span>Camera</span><span class="welcome-btn-sub">Capture a photo</span></div>
+        </button>
+        <button class="welcome-btn" id="welcomeProjectBtn">
+          <div class="welcome-btn-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h12l4 4v12H4z"/><path d="M8 4v6h8V4M8 20v-6h8v6"/></svg></div>
+          <div class="welcome-btn-text"><span>Open project</span><span class="welcome-btn-sub">Editable .luma file</span></div>
+        </button>
       </div>
-    </button>
+      <div class="welcome-recent" id="welcomeRecent"></div>
+      <div class="welcome-samples"><div class="sample-grid" id="sampleGrid"></div></div>
+      <div class="welcome-footer">Drop images anywhere · every edit stays local</div>
+    </section>
   </div>
-  <div class="welcome-samples">
-    <div class="welcome-samples-label">Or try a sample</div>
-    <div class="sample-grid" id="sampleGrid"></div>
-  </div>
-  <div class="welcome-footer">drop an image anywhere · v2.0</div>
 </div>
 
 <!-- ========== TOP BAR ========== -->
 <header class="topbar" id="topbar">
   <button class="tb-btn" id="menuBtn" aria-label="Menu">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+    <span class="connection-dot" id="connectionDot" aria-hidden="true"></span>
   </button>
   <button class="tb-btn" id="undoBtn" aria-label="Undo" disabled>
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6.7 2.9L3 13"/></svg>
@@ -1829,9 +2171,14 @@ a{color:var(--primary);}
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 7v6h-6"/><path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6.7 2.9L21 13"/></svg>
   </button>
   <div class="tb-title">
-    <span class="tb-title-dot"></span>
-    <span id="appTitle">Studio</span>
+    <div class="project-title-wrap">
+      <button class="project-title-btn" id="appTitle" type="button" title="Rename project">Untitled</button>
+      <span class="save-status" id="saveStatus" role="status">Ready locally</span>
+    </div>
   </div>
+  <button class="tb-btn command-btn" id="commandBtn" aria-label="Search commands" title="Search commands">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg><kbd>⌘K</kbd>
+  </button>
   <button class="tb-btn" id="themeBtn" aria-label="Toggle theme"></button>
   <button class="tb-btn" id="compareBtn" aria-label="Compare">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="12" y1="3" x2="12" y2="21"/></svg>
@@ -1856,6 +2203,10 @@ a{color:var(--primary);}
   <div class="canvas-stage" id="canvasStage">
     <canvas id="mainCanvas"></canvas>
     <canvas id="interactCanvas"></canvas>
+    <div class="smart-guides" id="smartGuides" aria-hidden="true">
+      <span class="smart-guide vertical"></span>
+      <span class="smart-guide horizontal"></span>
+    </div>
     <div id="cropOverlay">
       <!-- Hint outline: a dashed rectangle showing the original image boundary
            when the crop frame has been pulled beyond the canvas. Sits in the
@@ -1936,6 +2287,17 @@ a{color:var(--primary);}
   </div>
   <!-- Brush cursor (screen-space, not inside stage) -->
   <div class="brush-cursor" id="brushCursor"></div>
+  <div class="workspace-status" id="workspaceStatus" aria-hidden="true">
+    <div class="workspace-status-group">
+      <span id="statusDimensions">No document</span>
+      <span class="desktop-status" id="statusLayers">0 layers</span>
+      <span class="status-accent" id="statusZoom">100%</span>
+    </div>
+    <div class="workspace-status-group privacy-badge desktop-status">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10"/><path d="m9 12 2 2 4-4"/></svg>
+      Local only
+    </div>
+  </div>
 </main>
 
 <!-- ========== CONTROL PANEL ========== -->
@@ -1992,9 +2354,21 @@ a{color:var(--primary);}
 <div class="sheet" id="menuSheet">
   <div class="sheet-card">
     <div class="sheet-handle"></div>
+    <button class="sheet-item" data-action="newCanvas">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+      New Canvas
+    </button>
     <button class="sheet-item" data-action="openFile">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
       Open Photo
+    </button>
+    <button class="sheet-item" data-action="openProject">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h12l4 4v12H4z"/><path d="M8 4v6h8V4M8 20v-6h8v6"/></svg>
+      Open Editable Project
+    </button>
+    <button class="sheet-item" data-action="saveProject">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3h12l4 4v14H5z"/><path d="M9 3v6h8V3M9 21v-7h8v7"/></svg>
+      Download Editable Project
     </button>
     <button class="sheet-item" data-action="paste">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>
@@ -2021,15 +2395,15 @@ a{color:var(--primary);}
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
       Share
     </button>
-    <div class="sheet-divider"></div>
-    <button class="sheet-item" data-action="clearPhotoCache">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg>
-      Clear Photo Editor Cache
+    <button class="sheet-item" data-action="commands">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
+      Search Commands <span style="margin-left:auto;color:var(--text-3);font-size:10px;">Ctrl K</span>
     </button>
+    <div class="sheet-divider"></div>
     <div class="sheet-divider"></div>
     <button class="sheet-item danger" data-action="discard">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/></svg>
-      Discard Photo
+      Close Project
     </button>
   </div>
 </div>
@@ -2083,8 +2457,8 @@ a{color:var(--primary);}
       <div class="exp-section" id="exportResolutionRow">
         <div class="exp-label">Resolution <span class="exp-res-info" id="exportResInfo"></span></div>
         <div class="exp-resolution" id="exportResolution">
-          <button class="exp-res-chip active" data-res="orig">Original</button>
-          <button class="exp-res-chip" data-res="work">Workspace</button>
+          <button class="exp-res-chip" data-res="orig">Source size</button>
+          <button class="exp-res-chip active" data-res="work">Workspace</button>
           <button class="exp-res-chip" data-res="50">50%</button>
           <button class="exp-res-chip" data-res="75">75%</button>
           <button class="exp-res-chip" data-res="100">100%</button>
@@ -2150,7 +2524,7 @@ a{color:var(--primary);}
         <div class="cs-inputs">
           <label class="cs-input-row">
             <span>W</span>
-            <input type="number" id="csWidth" min="32" max="8000" step="1">
+            <input type="number" id="csWidth" min="32" max="6000" step="1">
             <span class="cs-suffix">px</span>
           </label>
           <button class="cs-lock" id="csLock" aria-pressed="true" title="Lock aspect">
@@ -2159,7 +2533,7 @@ a{color:var(--primary);}
           </button>
           <label class="cs-input-row">
             <span>H</span>
-            <input type="number" id="csHeight" min="32" max="8000" step="1">
+            <input type="number" id="csHeight" min="32" max="6000" step="1">
             <span class="cs-suffix">px</span>
           </label>
         </div>
@@ -2208,8 +2582,73 @@ a{color:var(--primary);}
   </div>
 </div>
 
+<!-- ========== NEW CANVAS ========== -->
+<div class="modal" id="newCanvasModal" role="dialog" aria-modal="true" aria-labelledby="newCanvasTitle">
+  <div class="modal-card new-doc-card">
+    <div class="modal-header">
+      <div class="modal-title" id="newCanvasTitle">New canvas</div>
+      <div class="modal-sub">Start transparent or choose a background</div>
+      <button class="modal-close" id="newCanvasClose" aria-label="Close new canvas">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="m6 6 12 12M18 6 6 18"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div class="cs-section">
+        <div class="cs-label">Document name</div>
+        <label class="cs-input-row"><input type="text" id="newCanvasName" value="Untitled artwork" maxlength="60" autocomplete="off" style="width:100%;"></label>
+      </div>
+      <div class="cs-section">
+        <div class="cs-label">Popular sizes</div>
+        <div class="new-presets" id="newCanvasPresets">
+          <button class="new-preset active" data-w="1080" data-h="1080"><strong>Square post</strong><span>1080 × 1080</span></button>
+          <button class="new-preset" data-w="1080" data-h="1920"><strong>Story / Reel</strong><span>1080 × 1920</span></button>
+          <button class="new-preset" data-w="1920" data-h="1080"><strong>Full HD</strong><span>1920 × 1080</span></button>
+          <button class="new-preset" data-w="1600" data-h="900"><strong>Presentation</strong><span>1600 × 900</span></button>
+          <button class="new-preset" data-w="1200" data-h="628"><strong>Social card</strong><span>1200 × 628</span></button>
+          <button class="new-preset" data-w="2048" data-h="2048"><strong>Large square</strong><span>2048 × 2048</span></button>
+        </div>
+      </div>
+      <div class="cs-section">
+        <div class="cs-label">Custom dimensions</div>
+        <div class="new-custom-grid">
+          <label>Width<input type="number" id="newCanvasWidth" min="16" max="6000" value="1080" inputmode="numeric"></label>
+          <button class="new-swap" id="newCanvasSwap" aria-label="Swap width and height" title="Swap width and height">↔</button>
+          <label>Height<input type="number" id="newCanvasHeight" min="16" max="6000" value="1080" inputmode="numeric"></label>
+        </div>
+      </div>
+      <div class="cs-section">
+        <div class="cs-label">Background</div>
+        <div class="new-backgrounds" id="newBackgrounds">
+          <button class="new-bg active" data-bg="transparent"><span class="checker-dot"></span>Transparent</button>
+          <button class="new-bg" data-bg="#ffffff"><span style="width:18px;height:18px;border-radius:5px;background:#fff;border:1px solid #bbb;"></span>White</button>
+          <button class="new-bg" data-bg="#11131a"><span style="width:18px;height:18px;border-radius:5px;background:#11131a;"></span>Graphite</button>
+          <button class="new-bg" data-bg="custom"><span style="width:18px;height:18px;border-radius:5px;background:linear-gradient(135deg,#35c8ff,#7c5cff,#e55cff);"></span>Custom</button>
+        </div>
+        <label class="bg-color-wrap" id="newBgColorWrap" hidden>Background color <input type="color" id="newBgColor" value="#7c5cff"><span id="newBgHex">#7C5CFF</span></label>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="modal-action" id="newCanvasCancel">Cancel</button>
+      <button class="modal-action primary" id="newCanvasCreate">Create canvas</button>
+    </div>
+  </div>
+</div>
+
+<!-- ========== COMMAND PALETTE ========== -->
+<div class="modal command-palette" id="commandPalette" role="dialog" aria-modal="true" aria-label="Search commands">
+  <div class="modal-card command-card">
+    <div class="command-search-wrap">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
+      <input class="command-search" id="commandSearch" type="search" placeholder="Type a command or tool…" autocomplete="off" spellcheck="false">
+      <span class="command-esc">ESC</span>
+    </div>
+    <div class="command-results" id="commandResults"></div>
+  </div>
+</div>
+
 <!-- ========== TOAST CONTAINER ========== -->
-<div class="toast-wrap" id="toastWrap"></div>
+<div class="toast-wrap" id="toastWrap" role="status" aria-live="polite"></div>
+<div class="sr-live" id="ariaLive" aria-live="polite"></div>
 
 <!-- ========== LOADING OVERLAY ========== -->
 <div class="loading-overlay" id="loadingOverlay">
@@ -2222,7 +2661,8 @@ a{color:var(--primary);}
 
 <input type="file" class="hidden-input" id="fileInput" accept="image/*">
 <input type="file" class="hidden-input" id="cameraInput" accept="image/*" capture="environment">
-<input type="file" class="hidden-input" id="layerImageInput" accept="image/*">
+<input type="file" class="hidden-input" id="layerImageInput" accept="image/*" multiple>
+<input type="file" class="hidden-input" id="projectFileInput" accept=".luma,application/json">
 
 <script>
 'use strict';
@@ -2241,7 +2681,7 @@ const LIGHT_SVG = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="m14.712
 
 function applyTheme(theme) {
   document.documentElement.setAttribute('data-theme', theme);
-  localStorage.setItem(THEME_KEY, theme);
+  try { localStorage.setItem(THEME_KEY, theme); } catch (_) {}
   const icon = theme === 'dark' ? LIGHT_SVG : DARK_SVG;
   const btn = document.getElementById('themeBtn');
   const wBtn = document.getElementById('welcomeThemeBtn');
@@ -2249,11 +2689,13 @@ function applyTheme(theme) {
   if (wBtn) wBtn.innerHTML = icon;
   // Update meta theme-color
   const m = document.querySelector('meta[name="theme-color"]');
-  if (m) m.setAttribute('content', theme === 'dark' ? '#0f0f0e' : '#fafaf7');
+  if (m) m.setAttribute('content', theme === 'dark' ? '#090b10' : '#f4f5f8');
 }
 (function initTheme() {
-  const stored = localStorage.getItem(THEME_KEY);
-  applyTheme(stored === 'dark' ? 'dark' : 'light');
+  let stored = null;
+  try { stored = localStorage.getItem(THEME_KEY); } catch (_) {}
+  const preferred = matchMedia?.('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+  applyTheme(stored === 'dark' || stored === 'light' ? stored : preferred);
 })();
 
 /* ================================================================
@@ -2370,6 +2812,7 @@ const App = {
     h: 0,
     edge: 0,               // -100..+100; -negative erodes, +positive dilates
     feather: 0,            // 0..100; Gaussian-blur radius proportional
+    sensitivity: 46,       // offline border segmentation tolerance
     layerId: null,
   },
 
@@ -2392,6 +2835,10 @@ const App = {
   activeEffect: 'blur',
   effectScope: 'layer', // layer | global
   comparing: false,
+  project: {
+    id: null, name: 'Untitled', createdAt: 0, updatedAt: 0,
+    dirty: false, saving: false, saveError: '', revision: 0,
+  },
 
   // ----- Sliders -----
   sliderTapTimes: new Map(),  // last touchend per slider for double-tap detect
@@ -2405,6 +2852,7 @@ const App = {
 function createDefaultAdjustments() {
   return {
     exposure: 0, brightness: 0, contrast: 0,
+    blackPoint: 0, gamma: 100, whitePoint: 255,
     highlights: 0, shadows: 0, whites: 0, blacks: 0,
     saturation: 0, vibrance: 0, hue: 0,
     temperature: 0, tint: 0,
@@ -2551,18 +2999,30 @@ function mergeLayerDown(id) {
   const top = App.layers[idx];
   const below = App.layers[idx - 1];
   if (!top || !below || below.locked) return false;
-  const c = below.canvas.getContext('2d');
-  c.save();
-  c.globalAlpha = top.opacity;
-  c.globalCompositeOperation = top.blendMode || 'source-over';
-  c.drawImage(top.canvas, 0, 0, App.workW, App.workH);
-  c.restore();
-  below.name = below.name + ' + ' + top.name;
-  removeLayer(top.id);
-  setActiveLayer(below.id);
+
+  const mergedCanvas = createBlankLayerCanvas();
+  const mergedCtx = mergedCanvas.getContext('2d');
+  const savedEffects = App.effects;
+  try {
+    App.effects = createDefaultEffects();
+    drawLayer(mergedCanvas, mergedCtx, below, App.workW, App.workH, 1);
+    drawLayer(mergedCanvas, mergedCtx, top, App.workW, App.workH, 1);
+  } finally {
+    App.effects = savedEffects;
+  }
+
+  const merged = makeLayer({
+    name: below.name + ' + ' + top.name,
+    type: 'drawing',
+    canvas: mergedCanvas,
+    visible: true,
+    opacity: 1,
+    blendMode: 'source-over',
+  });
+  App.layers.splice(idx - 1, 2, merged);
+  setActiveLayer(merged.id);
   return true;
-}
-function reorderLayer(id, newIndex) {
+}function reorderLayer(id, newIndex) {
   const idx = indexOfLayer(id);
   if (idx < 0) return;
   const layer = App.layers.splice(idx, 1)[0];
@@ -2595,10 +3055,16 @@ const els = {
   welcomeOpenBtn:    $('welcomeOpenBtn'),
   welcomeCameraBtn:  $('welcomeCameraBtn'),
   welcomePasteBtn:   $('welcomePasteBtn'),
+  welcomeNewBtn:     $('welcomeNewBtn'),
+  welcomeProjectBtn: $('welcomeProjectBtn'),
+  welcomeRecent:     $('welcomeRecent'),
   welcomeThemeBtn:   $('welcomeThemeBtn'),
   sampleGrid:        $('sampleGrid'),
   topbar:            $('topbar'),
   appTitle:          $('appTitle'),
+  saveStatus:        $('saveStatus'),
+  connectionDot:     $('connectionDot'),
+  commandBtn:        $('commandBtn'),
   menuBtn:           $('menuBtn'),
   menuSheet:         $('menuSheet'),
   undoBtn:           $('undoBtn'),
@@ -2616,6 +3082,9 @@ const els = {
   zoomIndicator:     $('zoomIndicator'),
   zoomSelect:        $('zoomSelect'),
   fitBtn:            $('fitBtn'),
+  statusDimensions:  $('statusDimensions'),
+  statusLayers:      $('statusLayers'),
+  statusZoom:        $('statusZoom'),
   controlPanel:      $('controlPanel'),
   cpHeader:          $('cpHeader'),
   cpTitle:           $('cpTitle'),
@@ -2667,12 +3136,30 @@ const els = {
   csLock:            $('csLock'),
   eyedropperHint:    $('eyedropperHint'),
   toastWrap:         $('toastWrap'),
+  ariaLive:          $('ariaLive'),
+  newCanvasModal:    $('newCanvasModal'),
+  newCanvasClose:    $('newCanvasClose'),
+  newCanvasCancel:   $('newCanvasCancel'),
+  newCanvasCreate:   $('newCanvasCreate'),
+  newCanvasName:     $('newCanvasName'),
+  newCanvasWidth:    $('newCanvasWidth'),
+  newCanvasHeight:   $('newCanvasHeight'),
+  newCanvasSwap:     $('newCanvasSwap'),
+  newCanvasPresets:  $('newCanvasPresets'),
+  newBackgrounds:    $('newBackgrounds'),
+  newBgColorWrap:    $('newBgColorWrap'),
+  newBgColor:        $('newBgColor'),
+  newBgHex:          $('newBgHex'),
+  commandPalette:    $('commandPalette'),
+  commandSearch:     $('commandSearch'),
+  commandResults:    $('commandResults'),
   loadingOverlay:    $('loadingOverlay'),
   loadingText:       $('loadingText'),
   loadingSubText:    $('loadingSubText'),
   fileInput:         $('fileInput'),
   cameraInput:       $('cameraInput'),
   layerImageInput:   $('layerImageInput'),
+  projectFileInput:  $('projectFileInput'),
 };
 
 App.canvas = els.mainCanvas;
@@ -2761,6 +3248,7 @@ function initFromImage(img) {
   // Reset everything
   App.adjustments = createDefaultAdjustments();
   App.effects = createDefaultEffects();
+  App.colorOverlay = { color: '#7c5cff', strength: 0, blendMode: 'overlay' };
   App.activeFilter = 'none';
   App.filterStrength = 100;
   App.rotation = 0;
@@ -2783,6 +3271,8 @@ function initFromImage(img) {
     App.colorReplace.previewLayerId = null;
   }
   App.nextLayerId = 1;
+
+  startNewProject(consumeProjectName() || 'Untitled photo');
 
   // Create background layer
   const bgCanvas = createBlankLayerCanvas();
@@ -2809,9 +3299,11 @@ if (els.zoomSelect && !els.zoomSelect.dataset.bound) {
   els.zoomSelect.dataset.bound = '1';
   els.zoomSelect.addEventListener('change', () => {
     if (els.zoomSelect.value === 'fit') { fitCanvasToView(); return; }
-    App.zoom = clamp(parseFloat(els.zoomSelect.value) || 1, 0.4, 8);
-    applyCanvasTransform();
-    if (els.zoomIndicator) els.zoomIndicator.textContent = Math.round(App.zoom * 100) + '%';
+    const desiredScale = parseFloat(els.zoomSelect.value) || 1;
+    App.zoom = clamp(desiredScale / Math.max(App.fitScale, 0.001), 0.4, 8);
+    applyStageTransform();
+    if (els.zoomIndicator) els.zoomIndicator.textContent = Math.round(App.fitScale * App.zoom * 100) + '%';
+    updateWorkspaceStatus();
   });
 }
   toast('Image loaded', 'success');
@@ -2851,31 +3343,79 @@ function openFilePicker() { els.fileInput.click(); }
 function openCamera() { els.cameraInput.click(); }
 function openLayerImagePicker() { els.layerImageInput.click(); }
 
-els.fileInput.addEventListener('change', (e) => {
-  const f = e.target.files[0];
-  if (!f) return;
-  const reader = new FileReader();
-  reader.onload = (e) => loadImageFromSource(e.target.result, false);
-  reader.readAsDataURL(f);
-  e.target.value = '';
-});
-els.cameraInput.addEventListener('change', (e) => {
-  const f = e.target.files[0];
-  if (!f) return;
-  const reader = new FileReader();
-  reader.onload = (e) => loadImageFromSource(e.target.result, false);
-  reader.readAsDataURL(f);
-  e.target.value = '';
-});
-els.layerImageInput.addEventListener('change', (e) => {
-  const f = e.target.files[0];
-  if (!f) return;
-  const reader = new FileReader();
-  reader.onload = (e) => loadImageFromSource(e.target.result, true);
-  reader.readAsDataURL(f);
-  e.target.value = '';
-});
+function loadLocalImageFile(file, asLayer) {
+  return new Promise((resolve, reject) => {
+    if (!file || !(file.type || '').startsWith('image/')) {
+      reject(new Error('Choose a supported image file'));
+      return;
+    }
+    if (file.size > 100 * 1024 * 1024) {
+      reject(new Error('Keep image files under 100 MB'));
+      return;
+    }
+    const url = URL.createObjectURL(file);
+    const image = new Image();
+    image.onload = () => {
+      try {
+        if (asLayer) {
+          addImageAsLayer(image);
+          const layer = activeLayer();
+          if (layer) layer.name = projectNameFromFilename(file.name);
+        } else {
+          initFromImage(image);
+        }
+        resolve();
+      } catch (error) {
+        reject(error);
+      } finally {
+        URL.revokeObjectURL(url);
+      }
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error('This image format could not be decoded'));
+    };
+    image.src = url;
+  });
+}
 
+async function loadLocalImageFiles(files, mode) {
+  const list = Array.from(files || []).filter(file => (file.type || '').startsWith('image/'));
+  if (!list.length) return;
+  loading(true, mode === 'layers' ? 'Adding layers…' : 'Opening image…', list.length > 1 ? list.length + ' images' : list[0].name);
+  try {
+    if (mode === 'document') {
+      if (App.layers.length && App.project.dirty) await saveCurrentProject({ silent: true });
+      queueProjectName(list[0].name);
+      await loadLocalImageFile(list[0], false);
+      for (let index = 1; index < list.length; index++) await loadLocalImageFile(list[index], true);
+    } else {
+      for (const file of list) await loadLocalImageFile(file, true);
+    }
+    loading(false);
+  } catch (error) {
+    loading(false);
+    toast(error && error.message ? error.message : 'Could not open image', 'error', 3800);
+  }
+}
+
+els.fileInput.addEventListener('change', async event => {
+  const files = event.target.files;
+  event.target.value = '';
+  await loadLocalImageFiles(files, 'document');
+});
+els.cameraInput.addEventListener('change', async event => {
+  const file = event.target.files[0];
+  event.target.value = '';
+  if (!file) return;
+  queueProjectName('Camera ' + new Date().toLocaleDateString());
+  await loadLocalImageFiles([file], 'document');
+});
+els.layerImageInput.addEventListener('change', async event => {
+  const files = event.target.files;
+  event.target.value = '';
+  await loadLocalImageFiles(files, 'layers');
+});
 async function pasteFromClipboard() {
   try {
     if (!navigator.clipboard?.read) {
@@ -2888,7 +3428,7 @@ async function pasteFromClipboard() {
         if (type.startsWith('image/')) {
           const blob = await item.getType(type);
           const reader = new FileReader();
-          reader.onload = e => loadImageFromSource(e.target.result, false);
+          reader.onload = e => loadImageFromSource(e.target.result, !!App.layers.length);
           reader.readAsDataURL(blob);
           return;
         }
@@ -2901,23 +3441,19 @@ async function pasteFromClipboard() {
 }
 
 window.addEventListener('dragover', e => { e.preventDefault(); });
-window.addEventListener('drop', e => {
-  e.preventDefault();
-  const f = e.dataTransfer.files[0];
-  if (f && f.type.startsWith('image/')) {
-    const reader = new FileReader();
-    reader.onload = e => loadImageFromSource(e.target.result, false);
-    reader.readAsDataURL(f);
-  }
-});
-window.addEventListener('paste', e => {
+window.addEventListener('drop', async event => {
+  event.preventDefault();
+  const files = Array.from(event.dataTransfer.files || []).filter(file => (file.type || '').startsWith('image/'));
+  if (!files.length) return;
+  await loadLocalImageFiles(files, App.layers.length ? 'layers' : 'document');
+});window.addEventListener('paste', e => {
   const items = e.clipboardData?.items;
   if (!items) return;
   for (const it of items) {
     if (it.type.startsWith('image/')) {
       const blob = it.getAsFile();
       const reader = new FileReader();
-      reader.onload = e => loadImageFromSource(e.target.result, false);
+      reader.onload = e => loadImageFromSource(e.target.result, !!App.layers.length);
       reader.readAsDataURL(blob);
       return;
     }
@@ -2963,6 +3499,9 @@ const ADJUSTMENTS = [
   { id:'exposure',    name:'Exposure',    min:-100, max:100, bipolar:true,  icon:'sun' },
   { id:'brightness',  name:'Brightness',  min:-100, max:100, bipolar:true,  icon:'brightness' },
   { id:'contrast',    name:'Contrast',    min:-100, max:100, bipolar:true,  icon:'contrast' },
+  { id:'blackPoint',  name:'Black Point', min:0,    max:128, bipolar:false, icon:'blacks', defaultValue:0 },
+  { id:'gamma',       name:'Gamma',       min:20,   max:300, bipolar:false, icon:'contrast', defaultValue:100 },
+  { id:'whitePoint',  name:'White Point', min:128,  max:255, bipolar:false, icon:'whites', defaultValue:255 },
   { id:'highlights',  name:'Highlights',  min:-100, max:100, bipolar:true,  icon:'highlights' },
   { id:'shadows',     name:'Shadows',     min:-100, max:100, bipolar:true,  icon:'shadows' },
   { id:'whites',      name:'Whites',      min:-100, max:100, bipolar:true,  icon:'whites' },
@@ -3062,6 +3601,12 @@ function applyAdjustmentsToImageData(imgData, adjustments, opts={}) {
   const blK    = a.blacks / 100;
   const clK    = a.clarity / 100;
   const fadeK  = a.fade / 100;
+  const levelBlack = clamp(a.blackPoint == null ? 0 : a.blackPoint, 0, 254);
+  const levelWhite = clamp(a.whitePoint == null ? 255 : a.whitePoint, levelBlack + 1, 255);
+  const levelGamma = clamp((a.gamma == null ? 100 : a.gamma) / 100, .2, 3);
+  const levelsActive = levelBlack !== 0 || levelWhite !== 255 || Math.abs(levelGamma - 1) > .001;
+  const levelRange = levelWhite - levelBlack;
+  const levelExponent = 1 / levelGamma;
 
   // Hue rotation matrix (YIQ approximation)
   const cosH = Math.cos(hueR), sinH = Math.sin(hueR);
@@ -3106,6 +3651,13 @@ function applyAdjustmentsToImageData(imgData, adjustments, opts={}) {
       r = (r - 128) * c + 128;
       g = (g - 128) * c + 128;
       b = (b - 128) * c + 128;
+    }
+
+    // Input Levels: remap black/white points, then apply midtone gamma.
+    if (levelsActive) {
+      r = Math.pow(clamp((r - levelBlack) / levelRange, 0, 1), levelExponent) * 255;
+      g = Math.pow(clamp((g - levelBlack) / levelRange, 0, 1), levelExponent) * 255;
+      b = Math.pow(clamp((b - levelBlack) / levelRange, 0, 1), levelExponent) * 255;
     }
 
     // Hue rotation (after RGB adjustments)
@@ -3511,6 +4063,8 @@ function renderFull() {
   if (typeof updateTextSelection === 'function') updateTextSelection();
   if (typeof updateShapeSelection === 'function') updateShapeSelection();
   if (typeof updateLayerSelection === 'function') updateLayerSelection();
+  updateWorkspaceStatus();
+  if (typeof scheduleHistogramUpdate === 'function') scheduleHistogramUpdate();
 }
 
 function renderPreview() {
@@ -3761,12 +4315,14 @@ function applyStageTransform() {
   els.canvasStage.style.transform = t;
   els.canvasStage.style.width = App.workW + 'px';
   els.canvasStage.style.height = App.workH + 'px';
+  els.canvasStage.style.setProperty('--guide-inverse', 1 / Math.max(.05, finalScale));
   // Selection overlays need to refresh handle counter-scaling.
   if (typeof updateTextSelection === 'function') updateTextSelection();
   if (typeof updateShapeSelection === 'function') updateShapeSelection();
   if (typeof updateLayerSelection === 'function') updateLayerSelection();
   if (typeof updateCropOverlay === 'function') updateCropOverlay();
   if (typeof updateBrushCursorSize === 'function') updateBrushCursorSize();
+  updateWorkspaceStatus();
 }
 
 /** Clamp pan so at least 20% of image dims stays on screen. */
@@ -3860,7 +4416,7 @@ fixViewport();
       App.zoom = z;
       clampPan();
       applyStageTransform();
-      els.zoomIndicator.textContent = Math.round(App.zoom * 100) + '%';
+      els.zoomIndicator.textContent = Math.round(App.fitScale * App.zoom * 100) + '%';
       showZoom();
     } else if (activePointers.size === 1 && panStart) {
       App.pan.x = panStart.px + (e.clientX - panStart.x);
@@ -3894,7 +4450,7 @@ fixViewport();
     App.zoom = next;
     clampPan();
     applyStageTransform();
-    els.zoomIndicator.textContent = Math.round(App.zoom * 100) + '%';
+    els.zoomIndicator.textContent = Math.round(App.fitScale * App.zoom * 100) + '%';
     showZoom();
   }, { passive: false });
 
@@ -3961,6 +4517,7 @@ els.resetBtn.addEventListener('click', () => {
   if (!App.layers.length) return;
   App.adjustments = createDefaultAdjustments();
   App.effects = createDefaultEffects();
+  App.colorOverlay = { color: '#7c5cff', strength: 0, blendMode: 'overlay' };
   App.activeFilter = 'none';
   App.filterStrength = 100;
   App.rotation = 0;
@@ -4018,6 +4575,12 @@ function snapshotLayers() {
 }
 
 function pushHistory() {
+  const pixelLayerCount = Math.max(1, App.layers.filter(layer => layer.type !== 'text' && layer.type !== 'shape' && layer.type !== 'frame').length);
+  const historyPressure = App.workW * App.workH * pixelLayerCount;
+  const lowMemoryDevice = (Number(navigator.deviceMemory) || 4) <= 4;
+  App.maxHistory = lowMemoryDevice
+    ? (historyPressure > 8000000 ? 4 : historyPressure > 4000000 ? 6 : historyPressure > 2000000 ? 10 : 16)
+    : (historyPressure > 28000000 ? 6 : historyPressure > 12000000 ? 10 : historyPressure > 6000000 ? 16 : 30);
   const snap = {
     adjustments: { ...App.adjustments },
     effects: { ...App.effects },
@@ -4042,9 +4605,14 @@ function pushHistory() {
   if (App.history.length > App.maxHistory) App.history.shift();
   App.historyIndex = App.history.length - 1;
   updateHistoryButtons();
+  markProjectDirty();
+  updateWorkspaceStatus();
 }
 
+let _historyRestoreToken = 0;
+
 function restoreFromSnap(snap) {
+  const restoreToken = ++_historyRestoreToken;
   App.adjustments = { ...snap.adjustments };
   App.effects = { ...snap.effects };
   App.activeFilter = snap.filter;
@@ -4141,6 +4709,7 @@ function restoreFromSnap(snap) {
     img.src = ls.canvasData;
   }));
   Promise.all(promises).then(() => {
+    if (restoreToken !== _historyRestoreToken) return;
     App.layers = newLayers;
     App.activeLayerId = snap.activeLayerId;
     // ensure next id is unique
@@ -4188,6 +4757,8 @@ function setTool(tool) {
   document.querySelectorAll('.tool-tab').forEach(t => {
     t.classList.toggle('active', t.dataset.tool === tool);
   });
+  const mobileMore = document.getElementById('mobileMoreBtn');
+  if (mobileMore) mobileMore.classList.toggle('active', ['effect','crop','shape','text','frame'].includes(tool));
   els.cropOverlay.classList.toggle('active', tool === 'crop');
   els.interactCanvas.classList.toggle('active', tool === 'draw' || tool === 'shape');
   if (tool === 'text') {
@@ -4734,6 +5305,8 @@ function setupSlider(row, meta, opts) {
 function buildAdjustPanel(body, actions) {
   els.cpTitle.innerHTML = 'Adjustments';
 
+  body.appendChild(buildHistogramCard());
+
   const adjId = App.activeAdjust;
   const meta = ADJUSTMENTS.find(ad => ad.id === adjId) || ADJUSTMENTS[0];
   const val = App.adjustments[meta.id];
@@ -4751,7 +5324,7 @@ function buildAdjustPanel(body, actions) {
     <div class="slider-value">${formatValue(val, meta.bipolar)}</div>
   `;
   body.appendChild(sliderRow);
-  setupSlider(sliderRow, { ...meta, defaultValue: meta.bipolar ? 0 : meta.min }, {
+  setupSlider(sliderRow, { ...meta, defaultValue: meta.defaultValue != null ? meta.defaultValue : (meta.bipolar ? 0 : meta.min) }, {
     onInput: (v) => {
       App.adjustments[meta.id] = v;
       requestRender();
@@ -4775,7 +5348,7 @@ function buildAdjustPanel(body, actions) {
     tile.innerHTML = `
       <div class="adjust-tile-icon">${ADJUST_ICONS[adj.icon] || ''}</div>
       <span>${adj.name}</span>
-      ${cur !== 0 ? '<div class="adjust-tile-badge">' + (cur > 0 ? '+' : '') + cur + '</div>' : ''}
+      ${cur !== (adj.defaultValue != null ? adj.defaultValue : 0) ? '<div class="adjust-tile-badge">' + (cur > 0 ? '+' : '') + cur + '</div>' : ''}
     `;
     tile.addEventListener('click', () => {
       App.activeAdjust = adj.id;
@@ -4799,9 +5372,11 @@ function updateAdjustTiles() {
   document.querySelectorAll('.adjust-tile').forEach(t => {
     const id = t.dataset.id;
     const v = App.adjustments[id];
+    const def = ADJUSTMENTS.find(adj => adj.id === id);
+    const neutral = def && def.defaultValue != null ? def.defaultValue : 0;
     const oldBadge = t.querySelector('.adjust-tile-badge');
     if (oldBadge) oldBadge.remove();
-    if (v !== 0) {
+    if (v !== neutral) {
       const b = document.createElement('div');
       b.className = 'adjust-tile-badge';
       b.textContent = (v > 0 ? '+' : '') + v;
@@ -5323,6 +5898,12 @@ function applyCrop() {
   setTimeout(() => {
     const newW = Math.round(r.w);
     const newH = Math.round(r.h);
+    const cropPixelLimit = (Number(navigator.deviceMemory) || 4) <= 4 ? 12000000 : 20000000;
+    if (newW < 1 || newH < 1 || newW > 6000 || newH > 6000 || newW * newH > cropPixelLimit) {
+      loading(false);
+      toast('That crop would create a canvas too large for reliable editing on this device', 'error', 4200);
+      return;
+    }
 
     if (!expandsCanvas) {
       // Simple crop: shrink the image into a new bitmap and rebuild.
@@ -5509,6 +6090,7 @@ function rebuildFromImageCanvas(canvas, keepHistory=false) {
 
   App.adjustments = createDefaultAdjustments();
   App.effects = createDefaultEffects();
+  App.colorOverlay = { color: '#7c5cff', strength: 0, blendMode: 'overlay' };
   App.activeFilter = 'none';
   App.filterStrength = 100;
   App.rotation = 0;
@@ -7121,7 +7703,24 @@ els.textCancel.addEventListener('click', () => {
   els.textInputWrap.classList.remove('active');
   App.textEditingId = null;
 });
-els.textApply.addEventListener('click', () => {
+async function ensureTextFontReady(meta) {
+  if (!document.fonts || !meta) return true;
+  try {
+    const font = buildCanvasFont(meta);
+    const loaded = await Promise.race([
+      document.fonts.load(font, 'Luma type preview').then(result => result.length > 0),
+      new Promise(resolve => setTimeout(() => resolve(false), 900)),
+    ]);
+    if (!loaded && navigator.onLine === false) {
+      toast('That font is not cached offline yet; using a system fallback', '', 3200);
+    }
+    return loaded;
+  } catch (_) {
+    return false;
+  }
+}
+
+els.textApply.addEventListener('click', async () => {
   const text = els.textInput.value;
   const trimmed = text.trim();
   // If editing an existing layer
@@ -7149,6 +7748,7 @@ els.textApply.addEventListener('click', () => {
     if (sz && Number.isFinite(sz)) layer.meta.size = clamp(sz, 8, 600);
     // Update layer name
     layer.name = trimmed.length > 20 ? trimmed.slice(0,20) + '…' : trimmed;
+    await ensureTextFontReady(layer.meta);
     renderTextLayer(layer);
     renderFull();
     pushHistory();
@@ -7182,6 +7782,7 @@ els.textApply.addEventListener('click', () => {
     canvas: document.createElement('canvas'),
     meta,
   });
+  await ensureTextFontReady(layer.meta);
   renderTextLayer(layer);
   addLayer(layer);
   App.textSelectionId = layer.id;
@@ -7697,8 +8298,10 @@ function showLayerOptionsMenu(anchor, layer) {
   document.querySelectorAll('.layer-options-menu').forEach(m => m.remove());
   const menu = document.createElement('div');
   menu.className = 'layer-options-menu';
+  const mergeIndex = indexOfLayer(layer.id);
+  const canMergeDown = mergeIndex > 0 && !App.layers[mergeIndex - 1].locked;
   menu.innerHTML = `
-    <button class="layer-option" data-act="mergeDown"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Merge Down</button>
+    ${canMergeDown ? '<button class="layer-option" data-act="mergeDown"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Merge Down</button>' : ''}
     <button class="layer-option" data-act="duplicate">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
       Duplicate
@@ -7742,8 +8345,11 @@ function showLayerOptionsMenu(anchor, layer) {
       const act = b.dataset.act;
       close();
       if (act === 'mergeDown') {
-        mergeLayerDown(layer.id);
-        renderFull(); pushHistory(); updateToolPanel(); toast('Layer merged');
+        if (mergeLayerDown(layer.id)) {
+          renderFull(); pushHistory(); updateToolPanel(); toast('Layer merged', 'success');
+        } else {
+          toast('That layer cannot be merged down', 'error');
+        }
       } else if (act === 'duplicate') {
         duplicateLayer(layer.id);
         renderFull();
@@ -7882,6 +8488,28 @@ function updateLayerSelection() {
   applyWarpBoxGeometry(box, layer, { locked, uniformOnly });
 }
 
+function setSmartGuideState(showX, showY) {
+  const guides = document.getElementById('smartGuides');
+  if (!guides) return;
+  guides.classList.toggle('show-x', !!showX);
+  guides.classList.toggle('show-y', !!showY);
+}
+
+function snapLayerPosition(x, y, disableSnap) {
+  if (disableSnap) {
+    setSmartGuideState(false, false);
+    return { x, y };
+  }
+  const threshold = 8 / Math.max(.05, App.fitScale * App.zoom);
+  const snapX = Math.abs(x) <= threshold;
+  const snapY = Math.abs(y) <= threshold;
+  setSmartGuideState(snapX, snapY);
+  if ((snapX || snapY) && navigator.vibrate && !snapLayerPosition.didVibrate) {
+    navigator.vibrate(7);
+    snapLayerPosition.didVibrate = true;
+  }
+  return { x: snapX ? 0 : x, y: snapY ? 0 : y };
+}
 /* ================================================================
    LAYER MOVE / SCALE / ROTATE ON CANVAS (image / drawing layers)
    Gestures route through the unified warp box (#layerSelBox) plus
@@ -7937,7 +8565,20 @@ function updateLayerSelection() {
       const sc = l.scale || 1;
       const halfW = bw * sc / 2;
       const halfH = bh * sc / 2;
-      if (Math.abs(lx) <= halfW && Math.abs(ly) <= halfH) return l;
+      if (Math.abs(lx) > halfW || Math.abs(ly) > halfH) continue;
+      if (l.type === 'adjustment') continue;
+      if (l.canvas && l.canvas.width && l.canvas.height) {
+        const localX = lx / sc + bw / 2;
+        const localY = ly / sc + bh / 2;
+        const sampleX = Math.floor(localX / bw * l.canvas.width);
+        const sampleY = Math.floor(localY / bh * l.canvas.height);
+        if (sampleX < 0 || sampleY < 0 || sampleX >= l.canvas.width || sampleY >= l.canvas.height) continue;
+        try {
+          const alpha = l.canvas.getContext('2d', { willReadFrequently: true }).getImageData(sampleX, sampleY, 1, 1).data[3];
+          if (alpha <= 8 && !l.locked) continue;
+        } catch (_) {}
+      }
+      return l;
     }
     return null;
   }
@@ -8002,8 +8643,11 @@ function updateLayerSelection() {
     e.preventDefault();
     const pt = getPt(e);
     if (warpMode === 'move') {
-      warpLayer.x = warpState.x + (pt.x - warpState.pointer.x);
-      warpLayer.y = warpState.y + (pt.y - warpState.pointer.y);
+      const desiredX = warpState.x + (pt.x - warpState.pointer.x);
+      const desiredY = warpState.y + (pt.y - warpState.pointer.y);
+      const snapped = snapLayerPosition(desiredX, desiredY, e.altKey);
+      warpLayer.x = snapped.x;
+      warpLayer.y = snapped.y;
       requestRender();
       updateLayerSelection();
       return;
@@ -8054,6 +8698,8 @@ function updateLayerSelection() {
     if (warpMode) {
       pushHistory();
     }
+    setSmartGuideState(false, false);
+    snapLayerPosition.didVibrate = false;
     warpMode = null; warpHandle = null; warpState = null; warpLayer = null;
   }
   wrap.addEventListener('pointerdown', onSelDown, true);
@@ -8121,8 +8767,11 @@ function updateLayerSelection() {
       updateLayerSelection();
     } else if (pointers.size === 1 && dragStart) {
       const pt = pointers.get(e.pointerId);
-      l.x = layerStart.x + (pt.x - dragStart.x);
-      l.y = layerStart.y + (pt.y - dragStart.y);
+      const desiredX = layerStart.x + (pt.x - dragStart.x);
+      const desiredY = layerStart.y + (pt.y - dragStart.y);
+      const snapped = snapLayerPosition(desiredX, desiredY, e.altKey);
+      l.x = snapped.x;
+      l.y = snapped.y;
       bodyMoved = true;
       requestRender();
       updateLayerSelection();
@@ -8134,6 +8783,8 @@ function updateLayerSelection() {
     pointers.delete(e.pointerId);
     if (pointers.size === 0) {
       if (bodyMoved) pushHistory();
+      setSmartGuideState(false, false);
+      snapLayerPosition.didVibrate = false;
       dragStart = null;
       pinchStart = null;
       bodyMoved = false;
@@ -8163,6 +8814,7 @@ document.querySelectorAll('.sheet [data-action]').forEach(b => {
     else if (a === 'share') doShare();
     else if (a === 'clearPhotoCache') clearPhotoEditorCache();
     else if (a === 'discard') {
+      if (App.project && App.project.dirty) saveCurrentProject({ silent: true });
       App.layers = [];
       App.activeLayerId = null;
       App.textSelectionId = null;
@@ -8178,6 +8830,11 @@ document.querySelectorAll('.sheet [data-action]').forEach(b => {
       App.history = [];
       App.historyIndex = -1;
       els.welcome.classList.remove('hidden');
+      App.project = { id: null, name: 'Luma', createdAt: 0, updatedAt: 0, dirty: false, saving: false, saveError: '', revision: 0 };
+      if (els.appTitle) els.appTitle.textContent = 'Luma';
+      setSaveStatus('', 'Ready locally');
+      updateWorkspaceStatus();
+      refreshRecentProjects();
       updateTextSelection();
       updateShapeSelection();
       updateLayerSelection();
@@ -8272,7 +8929,7 @@ els.welcomePasteBtn.addEventListener('click', pasteFromClipboard);
    ================================================================ */
 let exportFormat = 'png';        // 'png' | 'jpeg' | 'webp' | 'ico'
 let exportQuality = 0.95;
-let exportResolution = 'orig';   // 'orig' | 'work' | '50' | '75' | '100' | '150' | '200'
+let exportResolution = 'work';   // 'orig' | 'work' | '50' | '75' | '100' | '150' | '200'
 let exportIcoSizes = [16, 32, 48, 64];  // active ICO sizes
 let exportFilenameDirty = false; // true if user has typed a custom name
 
@@ -8280,7 +8937,8 @@ function defaultExportFilename() {
   const d = new Date();
   const p = n => String(n).padStart(2, '0');
   const stamp = d.getFullYear() + p(d.getMonth()+1) + p(d.getDate()) + '-' + p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds());
-  return 'studio-' + stamp;
+  const projectName = App.project && App.project.name ? safeProjectName(App.project.name).replace(/\\s+/g, '-') : 'luma';
+  return projectName.toLowerCase() + '-' + stamp;
 }
 
 /* Strip characters that aren't safe in filenames on Windows/macOS/Linux.
@@ -8307,31 +8965,47 @@ function extensionFor(format) {
 
 /* Compute the export target dimensions in workspace coords (PNG/JPG/WebP).
  * Returns { w, h, label }. */
+function capExportDims(width, height, label) {
+  let w = Math.max(1, Math.round(width));
+  let h = Math.max(1, Math.round(height));
+  const memory = Number(navigator.deviceMemory) || 8;
+  const maxPixels = memory <= 4 ? 16000000 : 32000000;
+  const scale = Math.min(1, 8192 / Math.max(w, h), Math.sqrt(maxPixels / (w * h)));
+  const capped = scale < .999;
+  if (capped) {
+    w = Math.max(1, Math.floor(w * scale));
+    h = Math.max(1, Math.floor(h * scale));
+  }
+  return { w, h, label: label + (capped ? ' · device-safe' : ''), capped };
+}
+
 function getExportDims() {
-  const w0 = App.workW, h0 = App.workH;
+  const w0 = App.workW;
+  const h0 = App.workH;
   const bg = backgroundLayer();
   const origImg = bg && bg.meta ? bg.meta.originalImage : null;
   const origW = origImg ? origImg.naturalWidth || w0 : (App.imgW || w0);
   const origH = origImg ? origImg.naturalHeight || h0 : (App.imgH || h0);
+  let width = w0;
+  let height = h0;
+  let label = 'Workspace';
   switch (exportResolution) {
     case 'orig': {
-      // "Original" = at least the original source resolution. If the workspace
-      // is bigger (e.g. user upsized via Adjust Image Size), keep that.
-      const k = origW > 0 && w0 > 0 ? Math.max(1, origW / w0) : 1;
-      const W = Math.max(w0, Math.round(w0 * k));
-      const H = Math.max(h0, Math.round(h0 * k));
-      return { w: W, h: H, label: 'Original' };
+      const scale = origW > 0 && w0 > 0 ? Math.max(1, origW / w0) : 1;
+      width = Math.max(w0, Math.round(w0 * scale));
+      height = Math.max(h0, Math.round(h0 * scale));
+      label = 'Source size';
+      break;
     }
-    case 'work': return { w: w0, h: h0, label: 'Workspace' };
-    case '50':   return { w: Math.max(1, Math.round(w0 * 0.5)), h: Math.max(1, Math.round(h0 * 0.5)), label: '50%' };
-    case '75':   return { w: Math.max(1, Math.round(w0 * 0.75)), h: Math.max(1, Math.round(h0 * 0.75)), label: '75%' };
-    case '100':  return { w: w0, h: h0, label: '100%' };
-    case '150':  return { w: Math.max(1, Math.round(w0 * 1.5)), h: Math.max(1, Math.round(h0 * 1.5)), label: '150%' };
-    case '200':  return { w: Math.max(1, Math.round(w0 * 2)), h: Math.max(1, Math.round(h0 * 2)), label: '200%' };
+    case '50': width = w0 * .5; height = h0 * .5; label = '50%'; break;
+    case '75': width = w0 * .75; height = h0 * .75; label = '75%'; break;
+    case '100':
+    case 'work': width = w0; height = h0; label = 'Workspace'; break;
+    case '150': width = w0 * 1.5; height = h0 * 1.5; label = '150%'; break;
+    case '200': width = w0 * 2; height = h0 * 2; label = '200%'; break;
   }
-  return { w: w0, h: h0, label: 'Workspace' };
+  return capExportDims(width, height, label);
 }
-
 /* Compose all visible layers onto a fresh canvas at the given target size.
  * For PNG/JPG/WebP path. Sets App.isExporting so full-quality adjustments run
  * even when target < workspace dims. */
@@ -8352,18 +9026,36 @@ async function composeFullForExport(targetW, targetH) {
 }
 
 async function buildExportBlob() {
-  if (exportFormat === 'ico') {
-    return buildIcoBlob();
-  }
-  const { w: tw, h: th } = getExportDims();
-  const out = await composeFullForExport(tw, th);
+  if (exportFormat === 'ico') return buildIcoBlob();
+  const dims = getExportDims();
+  let out = await composeFullForExport(dims.w, dims.h);
   const mimeMap = { png: 'image/png', jpeg: 'image/jpeg', webp: 'image/webp' };
   const mime = mimeMap[exportFormat] || 'image/png';
-  return new Promise(resolve => {
-    out.toBlob(blob => resolve({ blob, mime }), mime, exportFormat === 'png' ? undefined : exportQuality);
-  });
-}
 
+  // JPEG has no alpha channel. Composite over a predictable white matte
+  // instead of relying on browser-specific transparent-pixel behavior.
+  if (exportFormat === 'jpeg') {
+    const matte = document.createElement('canvas');
+    matte.width = out.width;
+    matte.height = out.height;
+    const ctx = matte.getContext('2d');
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, matte.width, matte.height);
+    ctx.drawImage(out, 0, 0);
+    out = matte;
+  }
+
+  const blob = await new Promise((resolve, reject) => {
+    out.toBlob(value => value ? resolve(value) : reject(new Error('The browser could not encode this image')), mime, exportFormat === 'png' ? undefined : exportQuality);
+  });
+  if (exportFormat === 'webp' && blob.type !== 'image/webp') {
+    throw new Error('WebP export is not supported here. Choose PNG instead.');
+  }
+  if (exportFormat === 'jpeg' && blob.type && blob.type !== 'image/jpeg') {
+    throw new Error('JPG export is not supported here. Choose PNG instead.');
+  }
+  return { blob, mime: blob.type || mime, dims };
+}
 /* ICO encoder
  * --------------------------------------------------------------------
  * Render each requested size into a square canvas (letterboxed to keep
@@ -8586,7 +9278,7 @@ function _downloadBlob(blob, filenameWithExt) {
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
-  setTimeout(() => URL.revokeObjectURL(url), 1500);
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
 }
 
 els.exportDownload.addEventListener('click', async () => {
@@ -8604,7 +9296,7 @@ els.exportDownload.addEventListener('click', async () => {
     toast('Saved as ' + fname, 'success');
   } catch (e) {
     loading(false);
-    toast('Export failed', 'error');
+    toast(e && e.message ? e.message : 'Export failed', 'error', 4200);
     console.error(e);
   }
 });
@@ -8666,7 +9358,7 @@ els.exportShare.addEventListener('click', async () => {
     if (navigator.canShare({ files: [file] })) {
       loading(false);
       els.exportModal.classList.remove('active');
-      await navigator.share({ files: [file], title: 'Studio Export' });
+      await navigator.share({ files: [file], title: 'Luma Export' });
     } else {
       loading(false);
       toast('Cannot share this file', 'error');
@@ -8708,7 +9400,7 @@ async function doShare() {
     const file = new File([blob], _getExportFilename() + '.jpg', { type: 'image/jpeg' });
     loading(false);
     if (navigator.canShare?.({ files: [file] })) {
-      await navigator.share({ files: [file], title: 'Studio Export' });
+      await navigator.share({ files: [file], title: 'Luma Export' });
     } else {
       toast('Cannot share file', 'error');
     }
@@ -8769,7 +9461,7 @@ function _zoomBy(factor) {
   App.zoom = next;
   if (typeof clampPan === 'function') clampPan();
   applyStageTransform();
-  els.zoomIndicator.textContent = Math.round(App.zoom * 100) + '%';
+  els.zoomIndicator.textContent = Math.round(App.fitScale * App.zoom * 100) + '%';
   els.zoomIndicator.classList.add('show');
   clearTimeout(_zoomBy._t);
   _zoomBy._t = setTimeout(() => els.zoomIndicator.classList.remove('show'), 800);
@@ -10240,100 +10932,190 @@ function hslToRgb(h, s, l) {
   return [Math.round(r*255), Math.round(g*255), Math.round(b*255)];
 }
 
-/* Background Removal: lazy-load @imgly/background-removal. */
-let _bgRemovalLib = null;
-let _bgRemovalLoading = null;
-async function loadBgRemovalLib() {
-  if (_bgRemovalLib) return _bgRemovalLib;
-  if (_bgRemovalLoading) return _bgRemovalLoading;
-  _bgRemovalLoading = (async () => {
-    try {
-      const mod = await import('https://cdn.jsdelivr.net/npm/@imgly/background-removal@1.7.0/+esm');
-      _bgRemovalLib = mod;
-      return mod;
-    } catch (e) {
-      console.error('Background removal failed to load', e);
-      throw e;
-    } finally {
-      _bgRemovalLoading = null;
+/* Offline Smart Cutout.
+ * This finds dominant colors around the canvas perimeter, then flood-fills
+ * only connected pixels that match those background families. Large images
+ * are analyzed on a smaller mask and smoothly upsampled before the existing
+ * Edge / Feather tuning pass. No model, upload, or network request is used. */
+function smartColorDistanceSq(data, index, color) {
+  const dr = data[index] - color[0];
+  const dg = data[index + 1] - color[1];
+  const db = data[index + 2] - color[2];
+  return dr * dr * .82 + dg * dg + db * db * .72;
+}
+
+async function buildOfflineCutoutMask(sourceCanvas, sensitivity) {
+  const sourceW = sourceCanvas.width;
+  const sourceH = sourceCanvas.height;
+  const analysisScale = Math.min(1, 1200 / Math.max(sourceW, sourceH));
+  const w = Math.max(1, Math.round(sourceW * analysisScale));
+  const h = Math.max(1, Math.round(sourceH * analysisScale));
+  const analysis = document.createElement('canvas');
+  analysis.width = w;
+  analysis.height = h;
+  const actx = analysis.getContext('2d', { willReadFrequently: true });
+  actx.imageSmoothingEnabled = true;
+  actx.imageSmoothingQuality = 'high';
+  actx.drawImage(sourceCanvas, 0, 0, w, h);
+  const pixels = actx.getImageData(0, 0, w, h);
+  const data = pixels.data;
+  const clusters = new Map();
+  const stride = Math.max(1, Math.floor((w + h) / 360));
+
+  const addBorderSample = (x, y) => {
+    const index = (y * w + x) * 4;
+    if (data[index + 3] < 12) return;
+    const key = ((data[index] >> 5) << 6) | ((data[index + 1] >> 5) << 3) | (data[index + 2] >> 5);
+    const entry = clusters.get(key) || [0, 0, 0, 0];
+    entry[0]++;
+    entry[1] += data[index];
+    entry[2] += data[index + 1];
+    entry[3] += data[index + 2];
+    clusters.set(key, entry);
+  };
+  for (let x = 0; x < w; x += stride) {
+    addBorderSample(x, 0);
+    addBorderSample(x, h - 1);
+  }
+  for (let y = 0; y < h; y += stride) {
+    addBorderSample(0, y);
+    addBorderSample(w - 1, y);
+  }
+
+  const ranked = Array.from(clusters.values()).sort((a, b) => b[0] - a[0]);
+  const totalSamples = ranked.reduce((sum, entry) => sum + entry[0], 0) || 1;
+  const palette = [];
+  let covered = 0;
+  for (const entry of ranked) {
+    if (palette.length >= 5) break;
+    if (palette.length > 0 && entry[0] / totalSamples < .035) break;
+    palette.push([entry[1] / entry[0], entry[2] / entry[0], entry[3] / entry[0]]);
+    covered += entry[0];
+    if (palette.length >= 2 && covered / totalSamples > .88) break;
+  }
+  if (!palette.length) palette.push([data[0], data[1], data[2]]);
+
+  const threshold = 20 + clamp(Number(sensitivity) || 46, 0, 100) * .9;
+  const globalLimit = threshold * threshold;
+  const localLimit = Math.pow(Math.max(18, threshold * .82), 2);
+  const visited = new Uint8Array(w * h);
+  const queue = new Int32Array(w * h);
+  let head = 0;
+  let tail = 0;
+
+  const paletteDistance = pixelIndex => {
+    let best = Infinity;
+    for (const color of palette) best = Math.min(best, smartColorDistanceSq(data, pixelIndex * 4, color));
+    return best;
+  };
+  const enqueueSeed = pixelIndex => {
+    if (visited[pixelIndex]) return;
+    const alpha = data[pixelIndex * 4 + 3];
+    if (alpha < 12 || paletteDistance(pixelIndex) <= globalLimit) {
+      visited[pixelIndex] = 1;
+      queue[tail++] = pixelIndex;
     }
-  })();
-  return _bgRemovalLoading;
+  };
+  for (let x = 0; x < w; x++) {
+    enqueueSeed(x);
+    enqueueSeed((h - 1) * w + x);
+  }
+  for (let y = 1; y < h - 1; y++) {
+    enqueueSeed(y * w);
+    enqueueSeed(y * w + w - 1);
+  }
+
+  const canGrow = (from, to) => {
+    if (visited[to]) return false;
+    const toOffset = to * 4;
+    if (data[toOffset + 3] < 12) return true;
+    if (paletteDistance(to) > globalLimit * 1.4) return false;
+    const fromOffset = from * 4;
+    const dr = data[toOffset] - data[fromOffset];
+    const dg = data[toOffset + 1] - data[fromOffset + 1];
+    const db = data[toOffset + 2] - data[fromOffset + 2];
+    return dr * dr * .82 + dg * dg + db * db * .72 <= localLimit;
+  };
+
+  while (head < tail) {
+    const current = queue[head++];
+    const x = current % w;
+    const y = (current / w) | 0;
+    if (x > 0 && canGrow(current, current - 1)) { visited[current - 1] = 1; queue[tail++] = current - 1; }
+    if (x + 1 < w && canGrow(current, current + 1)) { visited[current + 1] = 1; queue[tail++] = current + 1; }
+    if (y > 0 && canGrow(current, current - w)) { visited[current - w] = 1; queue[tail++] = current - w; }
+    if (y + 1 < h && canGrow(current, current + w)) { visited[current + w] = 1; queue[tail++] = current + w; }
+  }
+
+  const smallMask = document.createElement('canvas');
+  smallMask.width = w;
+  smallMask.height = h;
+  const mctx = smallMask.getContext('2d', { willReadFrequently: true });
+  const maskImage = mctx.createImageData(w, h);
+  let removed = 0;
+  for (let index = 0, offset = 0; index < visited.length; index++, offset += 4) {
+    const alpha = visited[index] ? 0 : data[offset + 3];
+    if (!alpha) removed++;
+    maskImage.data[offset] = 255;
+    maskImage.data[offset + 1] = 255;
+    maskImage.data[offset + 2] = 255;
+    maskImage.data[offset + 3] = alpha;
+  }
+  mctx.putImageData(maskImage, 0, 0);
+
+  const fullMaskCanvas = document.createElement('canvas');
+  fullMaskCanvas.width = sourceW;
+  fullMaskCanvas.height = sourceH;
+  const fctx = fullMaskCanvas.getContext('2d', { willReadFrequently: true });
+  fctx.imageSmoothingEnabled = true;
+  fctx.imageSmoothingQuality = 'high';
+  fctx.drawImage(smallMask, 0, 0, sourceW, sourceH);
+  const fullPixels = fctx.getImageData(0, 0, sourceW, sourceH).data;
+  const mask = new Uint8Array(sourceW * sourceH);
+  for (let index = 0, offset = 3; index < mask.length; index++, offset += 4) mask[index] = fullPixels[offset];
+  return { mask, w: sourceW, h: sourceH, removedRatio: removed / visited.length };
 }
 
 async function removeBackground() {
   const bg = backgroundLayer();
   if (!bg) { toast('No image', 'error'); return; }
-  loading(true, 'Loading model…', 'Downloading background removal model');
-  let lib;
+  loading(true, 'Smart cutout…', 'Analyzing the background locally');
   try {
-    lib = await loadBgRemovalLib();
-  } catch (e) {
-    loading(false);
-    toast("Couldn't load background removal model", 'error');
-    return;
-  }
-  loading(true, 'Removing background…', 'Processing image…');
-  try {
-    // Convert layer canvas to a blob
-    const sourceBlob = await new Promise((resolve, reject) => {
-      bg.canvas.toBlob(b => b ? resolve(b) : reject(new Error('Encode failed')), 'image/png');
-    });
-    const removeFn = lib.removeBackground || lib.default;
-    if (!removeFn) throw new Error('Background removal API missing');
-    const outBlob = await removeFn(sourceBlob, {
-      progress: (key, current, total) => {
-        try {
-          const pct = total ? Math.round((current / total) * 100) : 0;
-          loadingProgress('Removing background…', `${key} ${pct}%`);
-        } catch (e) {}
-      },
-    });
-    // Decode the result so we can grab its alpha channel as our mask.
-    const img = await new Promise((resolve, reject) => {
-      const i = new Image();
-      i.onload = () => resolve(i);
-      i.onerror = reject;
-      i.src = URL.createObjectURL(outBlob);
-    });
-    const w = bg.canvas.width, h = bg.canvas.height;
-    // 1) Cache the PRE-removal RGBA so Cancel can restore exactly.
-    const baseCtx = bg.canvas.getContext('2d');
-    const beforeImg = baseCtx.getImageData(0, 0, w, h);
-    const originPixels = new Uint8ClampedArray(beforeImg.data);
-    // 2) Read the model output into an offscreen canvas; extract alpha as mask.
-    const off = document.createElement('canvas');
-    off.width = w; off.height = h;
-    const offCtx = off.getContext('2d');
-    offCtx.clearRect(0, 0, w, h);
-    offCtx.drawImage(img, 0, 0, w, h);
-    const outImg = offCtx.getImageData(0, 0, w, h);
-    const mask = new Uint8Array(w * h);
-    for (let i = 0, p = 0; i < mask.length; i++, p += 4) mask[i] = outImg.data[p + 3];
-    // 3) Stash everything in the cache.
+    await new Promise(resolve => setTimeout(resolve, 30));
+    const w = bg.canvas.width;
+    const h = bg.canvas.height;
+    const baseCtx = bg.canvas.getContext('2d', { willReadFrequently: true });
+    const before = baseCtx.getImageData(0, 0, w, h);
+    const result = await buildOfflineCutoutMask(bg.canvas, App.bgRemove.sensitivity);
+    if (result.removedRatio < .003) {
+      loading(false);
+      toast('No connected background found. Increase Sensitivity and try again.', 'error', 4200);
+      return;
+    }
+    if (result.removedRatio > .96) {
+      loading(false);
+      toast('Cutout would remove almost everything. Lower Sensitivity and try again.', 'error', 4200);
+      return;
+    }
     App.bgRemove.active = true;
-    App.bgRemove.originPixels = originPixels;
-    App.bgRemove.mask = mask;
+    App.bgRemove.originPixels = new Uint8ClampedArray(before.data);
+    App.bgRemove.mask = result.mask;
     App.bgRemove.w = w;
     App.bgRemove.h = h;
     App.bgRemove.edge = 0;
-    App.bgRemove.feather = 0;
+    App.bgRemove.feather = 2;
     App.bgRemove.layerId = bg.id;
-    // 4) Apply the unmodified mask as initial preview so the canvas reflects
-    //    the model output (transparent background visible).
-    if (els.canvasStage) els.canvasStage.classList.add('has-trans');
+    els.canvasStage.classList.add('has-trans');
     applyBgRemovePreview();
     loading(false);
-    toast('Tune edge & feather, then Apply', 'success');
-    // Rebuild the Effects panel so the bgRemove sub-panel shows tune sliders.
+    toast('Offline cutout ready · tune the edge, then Apply', 'success', 3200);
     updateToolPanel();
-  } catch (e) {
-    console.error(e);
+  } catch (error) {
+    console.error(error);
     loading(false);
-    toast('Background removal failed', 'error');
+    toast('Smart cutout could not analyze this image', 'error');
   }
 }
-
 /* ------------- Background removal LIVE-TUNE ----------------
  * The mask is a single-channel Uint8Array (one byte per pixel = alpha).
  * Edge slider: morphological erode/dilate via a separable distance-from-edge
@@ -10591,7 +11373,7 @@ function buildEffectExtras(body) {
     </button>
     <button class="tool-extra-tile ${extra==='bgRemove'?'active':''}" data-extra="bgRemove">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 16l5-5 4 4 5-5 4 4"/><circle cx="8" cy="8" r="1.5"/></svg>
-      <span>Remove BG</span>
+      <span>Smart Cutout</span>
     </button>
   `;
   section.appendChild(tiles);
@@ -10814,13 +11596,23 @@ function buildBgRemoveControls() {
   if (!App.bgRemove.active) {
     const desc = document.createElement('div');
     desc.style.cssText = 'font-size:12px;color:var(--text-3);line-height:1.4;padding:6px 0 10px;';
-    desc.textContent = 'Removes the background of the base image using AI. The model downloads on first use (~30 MB). After it runs, tweak Edge and Feather to refine the cutout.';
+    desc.textContent = 'Finds connected background colors entirely on this device. Best for portraits, products, logos, and solid or gently graded backgrounds.';
     wrap.appendChild(desc);
+
+    const sensitivityRow = document.createElement('div');
+    sensitivityRow.className = 'slider-row';
+    const sensitivity = App.bgRemove.sensitivity == null ? 46 : App.bgRemove.sensitivity;
+    sensitivityRow.innerHTML = '<div class="slider-label">Sensitivity</div><div class="slider-track"><div class="slider-fill" style="width:' + sensitivity + '%"></div><input type="range" min="0" max="100" value="' + sensitivity + '"></div><div class="slider-value">' + sensitivity + '</div>';
+    wrap.appendChild(sensitivityRow);
+    setupSlider(sensitivityRow, { bipolar: false, min: 0, max: 100, defaultValue: 46 }, {
+      onInput: value => { App.bgRemove.sensitivity = value; },
+      skipHistory: true,
+    });
 
     const btn = document.createElement('button');
     btn.className = 'cp-action primary';
     btn.style.cssText = 'width:100%;padding:12px;font-size:13px;';
-    btn.textContent = 'Remove Background';
+    btn.textContent = 'Run Offline Smart Cutout';
     btn.addEventListener('click', () => { removeBackground(); });
     wrap.appendChild(btn);
     return wrap;
@@ -11003,6 +11795,13 @@ function openCanvasSizeModal() {
 })();
 
 function applyCanvasResize(newW, newH, resample) {
+  newW = Math.round(Number(newW));
+  newH = Math.round(Number(newH));
+  const resizePixelLimit = (Number(navigator.deviceMemory) || 4) <= 4 ? 12000000 : 20000000;
+  if (!Number.isFinite(newW) || !Number.isFinite(newH) || newW < 16 || newH < 16 || newW > 6000 || newH > 6000 || newW * newH > resizePixelLimit) {
+    toast('Choose dimensions under the device-safe megapixel limit', 'error', 4200);
+    return;
+  }
   const oldW = App.workW, oldH = App.workH;
   const sx = newW / oldW;
   const sy = newH / oldH;
@@ -11101,6 +11900,1061 @@ function applyCanvasResize(newW, newH, resample) {
   }, 30);
 }
 
+/* ================================================================
+   LUMA LOCAL PROJECTS
+   Structured-clone records live in IndexedDB. Project bitmaps are PNG
+   blobs, so reload recovery is exact and independent of the network.
+   ================================================================ */
+const LUMA_DB_NAME = 'luma-photo-studio';
+const LUMA_DB_VERSION = 1;
+const LUMA_PROJECT_STORE = 'projects';
+const LUMA_PROJECT_SCHEMA = 4;
+let _lumaDBPromise = null;
+let _lumaSaveTimer = 0;
+let _lumaProjectHydrating = false;
+let _lumaPendingProjectName = '';
+let _lumaRecentUrls = [];
+
+function lumaUuid() {
+  if (crypto && typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+  return 'p-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
+}
+
+function safeProjectName(name) {
+  return String(name || 'Untitled')
+    .replace(/[<>:"/\\|?*\u0000-\u001f]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 60) || 'Untitled';
+}
+
+function projectNameFromFilename(name) {
+  return safeProjectName(String(name || '').replace(/\.[^.]+$/, '') || 'Untitled photo');
+}
+
+function queueProjectName(name) {
+  _lumaPendingProjectName = projectNameFromFilename(name);
+}
+
+function consumeProjectName() {
+  const value = _lumaPendingProjectName;
+  _lumaPendingProjectName = '';
+  return value;
+}
+
+function openLumaDB() {
+  if (_lumaDBPromise) return _lumaDBPromise;
+  if (!('indexedDB' in window)) return Promise.reject(new Error('Local project storage is unavailable'));
+  _lumaDBPromise = new Promise((resolve, reject) => {
+    const req = indexedDB.open(LUMA_DB_NAME, LUMA_DB_VERSION);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains(LUMA_PROJECT_STORE)) {
+        const store = db.createObjectStore(LUMA_PROJECT_STORE, { keyPath: 'id' });
+        store.createIndex('updatedAt', 'updatedAt');
+      }
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error || new Error('Could not open local project storage'));
+    req.onblocked = () => reject(new Error('Project storage is blocked by another tab'));
+  });
+  return _lumaDBPromise;
+}
+
+function idbRequest(req) {
+  return new Promise((resolve, reject) => {
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error || new Error('Local storage request failed'));
+  });
+}
+
+async function getAllLumaProjects() {
+  const db = await openLumaDB();
+  const tx = db.transaction(LUMA_PROJECT_STORE, 'readonly');
+  return idbRequest(tx.objectStore(LUMA_PROJECT_STORE).getAll());
+}
+
+async function putLumaProject(record) {
+  const db = await openLumaDB();
+  const tx = db.transaction(LUMA_PROJECT_STORE, 'readwrite');
+  tx.objectStore(LUMA_PROJECT_STORE).put(record);
+  await new Promise((resolve, reject) => {
+    tx.oncomplete = resolve;
+    tx.onerror = () => reject(tx.error || new Error('Local project save failed'));
+    tx.onabort = () => reject(tx.error || new Error('Local project save was interrupted'));
+  });
+}
+
+async function pruneLumaProjects(limit) {
+  const projects = (await getAllLumaProjects()).sort((a, b) => Number(b.updatedAt) - Number(a.updatedAt));
+  const stale = projects.slice(limit || 12);
+  if (!stale.length) return;
+  const db = await openLumaDB();
+  const tx = db.transaction(LUMA_PROJECT_STORE, 'readwrite');
+  stale.forEach(project => tx.objectStore(LUMA_PROJECT_STORE).delete(project.id));
+  await new Promise(resolve => { tx.oncomplete = resolve; tx.onabort = resolve; tx.onerror = resolve; });
+}
+function lumaCanvasBlob(canvas, type, quality) {
+  return new Promise((resolve, reject) => {
+    try {
+      canvas.toBlob(blob => {
+        if (blob) resolve(blob);
+        else reject(new Error('Canvas encoding returned no data'));
+      }, type || 'image/png', quality);
+    } catch (error) {
+      reject(error);
+    }
+  });
+}
+
+function lumaSafeMeta(meta) {
+  const safe = {};
+  Object.keys(meta || {}).forEach(key => {
+    if (key === 'originalImage') return;
+    const value = meta[key];
+    if (value == null || ['number', 'string', 'boolean'].includes(typeof value)) {
+      safe[key] = value;
+      return;
+    }
+    try { safe[key] = JSON.parse(JSON.stringify(value)); } catch (_) {}
+  });
+  return safe;
+}
+
+async function lumaThumbnailBlob() {
+  const thumb = document.createElement('canvas');
+  const maxW = 360;
+  const maxH = 240;
+  const scale = Math.min(maxW / App.workW, maxH / App.workH, 1);
+  thumb.width = Math.max(1, Math.round(App.workW * scale));
+  thumb.height = Math.max(1, Math.round(App.workH * scale));
+  const ctx = thumb.getContext('2d');
+  ctx.fillStyle = '#151822';
+  ctx.fillRect(0, 0, thumb.width, thumb.height);
+  ctx.drawImage(App.canvas, 0, 0, thumb.width, thumb.height);
+  try {
+    return await lumaCanvasBlob(thumb, 'image/webp', .78);
+  } catch (_) {
+    return lumaCanvasBlob(thumb, 'image/png');
+  }
+}
+
+async function serializeCurrentProject() {
+  if (!App.layers.length) throw new Error('There is no open project');
+  const layers = [];
+  for (const layer of App.layers) {
+    let bitmap = null;
+    let maskBitmap = null;
+    try { bitmap = await lumaCanvasBlob(layer.canvas, 'image/png'); } catch (_) {}
+    if (layer.mask) {
+      try { maskBitmap = await lumaCanvasBlob(layer.mask, 'image/png'); } catch (_) {}
+    }
+    layers.push({
+      id: layer.id,
+      name: layer.name,
+      type: layer.type,
+      visible: layer.visible,
+      opacity: layer.opacity,
+      blendMode: layer.blendMode,
+      x: layer.x,
+      y: layer.y,
+      scale: layer.scale,
+      rotation: layer.rotation,
+      locked: layer.locked,
+      maskInverted: layer.maskInverted,
+      meta: lumaSafeMeta(layer.meta),
+      canvasW: layer.canvas.width,
+      canvasH: layer.canvas.height,
+      bitmap,
+      maskBitmap,
+    });
+  }
+  const now = Date.now();
+  const project = App.project || {};
+  return {
+    schemaVersion: LUMA_PROJECT_SCHEMA,
+    id: project.id || lumaUuid(),
+    name: safeProjectName(project.name),
+    createdAt: project.createdAt || now,
+    updatedAt: now,
+    workW: App.workW,
+    workH: App.workH,
+    imgW: App.imgW || App.workW,
+    imgH: App.imgH || App.workH,
+    activeLayerId: App.activeLayerId,
+    nextLayerId: App.nextLayerId,
+    globals: {
+      adjustments: { ...App.adjustments },
+      effects: { ...App.effects },
+      activeFilter: App.activeFilter,
+      filterStrength: App.filterStrength,
+      rotation: App.rotation,
+      flipH: App.flipH,
+      flipV: App.flipV,
+      colorOverlay: { ...App.colorOverlay },
+      framePreset: App.framePreset,
+      frameWidthPct: App.frameWidthPct,
+      frameColor: App.frameColor,
+    },
+    layerCount: layers.length,
+    thumbnail: await lumaThumbnailBlob(),
+    layers,
+  };
+}
+
+function setSaveStatus(kind, label) {
+  if (!els.saveStatus) return;
+  els.saveStatus.className = 'save-status' + (kind ? ' ' + kind : '');
+  els.saveStatus.textContent = label;
+  if (els.ariaLive) els.ariaLive.textContent = label;
+}
+
+function updateProjectChrome() {
+  if (els.appTitle) els.appTitle.textContent = safeProjectName(App.project && App.project.name);
+  updateWorkspaceStatus();
+}
+
+function startNewProject(name) {
+  const now = Date.now();
+  App.project = {
+    id: lumaUuid(),
+    name: safeProjectName(name || 'Untitled'),
+    createdAt: now,
+    updatedAt: now,
+    dirty: false,
+    saving: false,
+    saveError: '',
+    revision: 0,
+  };
+  updateProjectChrome();
+  setSaveStatus('', 'Ready locally');
+}
+
+async function saveCurrentProject(options) {
+  const opts = options || {};
+  if (!App.layers.length || _lumaProjectHydrating) return false;
+  if (App.project.saving) return false;
+  App.project.saving = true;
+  App.project.saveError = '';
+  const saveRevision = App.project.revision || 0;
+  if (!opts.silent) setSaveStatus('saving', 'Saving locally…');
+  try {
+    const record = await serializeCurrentProject();
+    await putLumaProject(record);
+    pruneLumaProjects(12).catch(() => {});
+    App.project.id = record.id;
+    App.project.name = record.name;
+    App.project.createdAt = record.createdAt;
+    App.project.updatedAt = record.updatedAt;
+    const changedDuringSave = (App.project.revision || 0) !== saveRevision;
+    App.project.dirty = changedDuringSave;
+    App.project.saving = false;
+    setSaveStatus(changedDuringSave ? 'dirty' : '', changedDuringSave ? 'Finishing latest changes…' : 'Saved on this device');
+    if (changedDuringSave) { clearTimeout(_lumaSaveTimer); _lumaSaveTimer = setTimeout(() => saveCurrentProject(), 240); }
+    updateProjectChrome();
+    refreshRecentProjects();
+    return true;
+  } catch (error) {
+    App.project.saving = false;
+    App.project.saveError = error && error.message ? error.message : 'Save failed';
+    setSaveStatus('error', 'Local save failed · retry');
+    if (!opts.silent) toast('Could not autosave. Export a .luma project to keep a copy.', 'error', 4200);
+    return false;
+  }
+}
+
+function markProjectDirty() {
+  if (_lumaProjectHydrating || !App.layers.length) return;
+  if (!App.project || !App.project.id) startNewProject('Untitled');
+  App.project.dirty = true;
+  App.project.revision = (App.project.revision || 0) + 1;
+  setSaveStatus('dirty', 'Unsaved changes');
+  clearTimeout(_lumaSaveTimer);
+  _lumaSaveTimer = setTimeout(() => saveCurrentProject(), 1200);
+  updateWorkspaceStatus();
+}
+
+async function requestPersistentStorage() {
+  try {
+    if (navigator.storage && navigator.storage.persist) await navigator.storage.persist();
+  } catch (_) {}
+}
+
+async function drawBlobToCanvas(blob, canvas) {
+  if (!blob) return;
+  if ('createImageBitmap' in window) {
+    try {
+      const bitmap = await createImageBitmap(blob);
+      canvas.getContext('2d').drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+      if (bitmap.close) bitmap.close();
+      return;
+    } catch (_) {}
+  }
+  await new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(blob);
+    const image = new Image();
+    image.onload = () => {
+      try { canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height); }
+      finally { URL.revokeObjectURL(url); resolve(); }
+    };
+    image.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Could not decode a project layer')); };
+    image.src = url;
+  });
+}
+
+function validateLumaRecord(record) {
+  if (!record || typeof record !== 'object') throw new Error('Invalid Luma project');
+  const w = Number(record.workW);
+  const h = Number(record.workH);
+  if (!Number.isFinite(w) || !Number.isFinite(h) || w < 1 || h < 1 || w > 6000 || h > 6000 || w * h > 20000000) {
+    throw new Error('Project dimensions are not supported on this device');
+  }
+  if (!Array.isArray(record.layers) || record.layers.length < 1 || record.layers.length > 100) {
+    throw new Error('Project layer data is missing or too large');
+  }
+}
+
+async function restoreLumaProject(record) {
+  validateLumaRecord(record);
+  loading(true, 'Opening project…', 'Restoring layers and masks');
+  _lumaProjectHydrating = true;
+  try {
+    App.workW = Math.round(record.workW);
+    App.workH = Math.round(record.workH);
+    App.imgW = Math.round(record.imgW || record.workW);
+    App.imgH = Math.round(record.imgH || record.workH);
+    App.canvas.width = App.workW;
+    App.canvas.height = App.workH;
+    App.composite.width = App.workW;
+    App.composite.height = App.workH;
+    els.interactCanvas.width = App.workW;
+    els.interactCanvas.height = App.workH;
+    setupPreview();
+
+    const globals = record.globals || {};
+    App.adjustments = { ...createDefaultAdjustments(), ...(globals.adjustments || {}) };
+    App.effects = { ...createDefaultEffects(), ...(globals.effects || {}) };
+    App.activeFilter = globals.activeFilter || 'none';
+    App.filterStrength = globals.filterStrength == null ? 100 : globals.filterStrength;
+    App.rotation = globals.rotation || 0;
+    App.flipH = !!globals.flipH;
+    App.flipV = !!globals.flipV;
+    App.colorOverlay = { color: '#7c5cff', strength: 0, blendMode: 'overlay', ...(globals.colorOverlay || {}) };
+    App.framePreset = globals.framePreset || 'none';
+    App.frameWidthPct = globals.frameWidthPct || 5;
+    App.frameColor = globals.frameColor || '#ffffff';
+    App.layers = [];
+
+    for (const stored of record.layers) {
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Number(stored.canvasW) || App.workW);
+      canvas.height = Math.max(1, Number(stored.canvasH) || App.workH);
+      await drawBlobToCanvas(stored.bitmap, canvas);
+      let mask = null;
+      if (stored.maskBitmap) {
+        mask = createBlankLayerCanvas();
+        await drawBlobToCanvas(stored.maskBitmap, mask);
+      }
+      App.layers.push({
+        id: Number(stored.id),
+        name: String(stored.name || 'Layer'),
+        type: String(stored.type || 'drawing'),
+        canvas,
+        visible: stored.visible !== false,
+        opacity: stored.opacity == null ? 1 : Number(stored.opacity),
+        blendMode: stored.blendMode || 'source-over',
+        x: Number(stored.x) || 0,
+        y: Number(stored.y) || 0,
+        scale: stored.scale == null ? 1 : Number(stored.scale),
+        rotation: Number(stored.rotation) || 0,
+        locked: !!stored.locked,
+        mask,
+        maskInverted: !!stored.maskInverted,
+        meta: stored.meta || {},
+      });
+    }
+
+    App.activeLayerId = record.activeLayerId;
+    App.nextLayerId = Math.max(Number(record.nextLayerId) || 1, ...App.layers.map(layer => layer.id + 1));
+    const frame = App.layers.find(layer => layer.type === 'frame');
+    App.frameLayerId = frame ? frame.id : null;
+    App.textSelectionId = null;
+    App.shapeSelectionId = null;
+    App.layerSelectionId = null;
+    App.history = [];
+    App.historyIndex = -1;
+    App.project = {
+      id: record.id || lumaUuid(),
+      name: safeProjectName(record.name),
+      createdAt: Number(record.createdAt) || Date.now(),
+      updatedAt: Number(record.updatedAt) || Date.now(),
+      dirty: false,
+      saving: false,
+      saveError: '',
+      revision: 0,
+    };
+    els.welcome.classList.add('hidden');
+    els.canvasStage.classList.toggle('has-trans', true);
+    fitCanvasToView();
+    renderFull();
+    updateToolPanel();
+    pushHistory();
+    App.project.dirty = false;
+    setSaveStatus('', 'Recovered from this device');
+    updateProjectChrome();
+    loading(false);
+    toast('Project restored with ' + App.layers.length + ' layers', 'success');
+  } catch (error) {
+    loading(false);
+    toast(error && error.message ? error.message : 'Could not open project', 'error', 4000);
+    throw error;
+  } finally {
+    _lumaProjectHydrating = false;
+  }
+}
+
+function formatRecentTime(time) {
+  const delta = Date.now() - Number(time || 0);
+  if (delta < 60000) return 'just now';
+  if (delta < 3600000) return Math.round(delta / 60000) + ' min ago';
+  if (delta < 86400000) return Math.round(delta / 3600000) + ' hr ago';
+  return new Date(time).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
+async function refreshRecentProjects() {
+  if (!els.welcomeRecent) return;
+  try {
+    const projects = (await getAllLumaProjects()).sort((a, b) => Number(b.updatedAt) - Number(a.updatedAt)).slice(0, 4);
+    _lumaRecentUrls.forEach(url => URL.revokeObjectURL(url));
+    _lumaRecentUrls = [];
+    els.welcomeRecent.replaceChildren();
+    if (!projects.length) {
+      els.welcomeRecent.classList.remove('show');
+      return;
+    }
+    const label = document.createElement('div');
+    label.className = 'welcome-launcher-head';
+    label.style.padding = '2px 4px 5px';
+    const title = document.createElement('span');
+    title.className = 'welcome-launcher-title';
+    title.textContent = 'Continue editing';
+    const count = document.createElement('span');
+    count.className = 'local-only';
+    count.textContent = projects.length + (projects.length === 1 ? ' project' : ' projects');
+    label.append(title, count);
+    els.welcomeRecent.appendChild(label);
+    projects.forEach(project => {
+      const button = document.createElement('button');
+      button.className = 'recent-project-btn';
+      const image = document.createElement('img');
+      image.className = 'recent-thumb';
+      image.alt = '';
+      if (project.thumbnail) {
+        const url = URL.createObjectURL(project.thumbnail);
+        _lumaRecentUrls.push(url);
+        image.src = url;
+      }
+      const copy = document.createElement('span');
+      const name = document.createElement('span');
+      name.className = 'recent-name';
+      name.textContent = safeProjectName(project.name);
+      const meta = document.createElement('span');
+      meta.className = 'recent-meta';
+      meta.textContent = project.workW + ' × ' + project.workH + ' · ' + (project.layerCount || project.layers.length) + ' layers · ' + formatRecentTime(project.updatedAt);
+      copy.append(name, meta);
+      const arrow = document.createElement('span');
+      arrow.className = 'recent-arrow';
+      arrow.textContent = '›';
+      button.append(image, copy, arrow);
+      button.addEventListener('click', () => restoreLumaProject(project));
+      els.welcomeRecent.appendChild(button);
+    });
+    els.welcomeRecent.classList.add('show');
+  } catch (_) {
+    els.welcomeRecent.classList.remove('show');
+  }
+}
+
+function blobToDataURL(blob) {
+  if (!blob) return Promise.resolve(null);
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(reader.error || new Error('Could not encode project data'));
+    reader.readAsDataURL(blob);
+  });
+}
+
+function dataURLToBlob(value) {
+  if (!value) return null;
+  const parts = String(value).split(',');
+  if (parts.length !== 2 || !/^data:[^;]+;base64$/i.test(parts[0])) throw new Error('Invalid project bitmap');
+  const mime = parts[0].slice(5, parts[0].indexOf(';')) || 'application/octet-stream';
+  const raw = atob(parts[1]);
+  const bytes = new Uint8Array(raw.length);
+  for (let index = 0; index < raw.length; index++) bytes[index] = raw.charCodeAt(index);
+  return new Blob([bytes], { type: mime });
+}
+
+async function exportEditableProject() {
+  if (!App.layers.length) return;
+  loading(true, 'Packing editable project…', 'Preserving layers and masks');
+  try {
+    const record = await serializeCurrentProject();
+    const portable = {
+      format: 'luma-project',
+      schemaVersion: record.schemaVersion,
+      id: record.id,
+      name: record.name,
+      createdAt: record.createdAt,
+      updatedAt: record.updatedAt,
+      workW: record.workW,
+      workH: record.workH,
+      imgW: record.imgW,
+      imgH: record.imgH,
+      activeLayerId: record.activeLayerId,
+      nextLayerId: record.nextLayerId,
+      globals: record.globals,
+      layers: [],
+    };
+    for (const layer of record.layers) {
+      portable.layers.push({ ...layer, bitmap: await blobToDataURL(layer.bitmap), maskBitmap: await blobToDataURL(layer.maskBitmap) });
+    }
+    const blob = new Blob([JSON.stringify(portable)], { type: 'application/x-luma-project+json' });
+    _downloadBlob(blob, safeProjectName(record.name).replace(/\s+/g, '-') + '.luma');
+    loading(false);
+    toast('Editable project downloaded', 'success');
+  } catch (error) {
+    loading(false);
+    toast('Could not export editable project', 'error');
+  }
+}
+
+async function importEditableProject(file) {
+  if (!file) return;
+  if (file.size > 180 * 1024 * 1024) {
+    toast('That project is too large for this browser', 'error');
+    return;
+  }
+  loading(true, 'Reading project…', 'Validating local file');
+  try {
+    const portable = JSON.parse(await file.text());
+    if (portable.format !== 'luma-project' || !Array.isArray(portable.layers)) throw new Error('This is not a Luma project');
+    for (const layer of portable.layers) {
+      layer.bitmap = dataURLToBlob(layer.bitmap);
+      layer.maskBitmap = dataURLToBlob(layer.maskBitmap);
+    }
+    portable.id = lumaUuid();
+    portable.name = safeProjectName(portable.name || projectNameFromFilename(file.name));
+    portable.createdAt = Date.now();
+    portable.updatedAt = Date.now();
+    portable.layerCount = portable.layers.length;
+    portable.thumbnail = null;
+    await restoreLumaProject(portable);
+    markProjectDirty();
+    await saveCurrentProject();
+  } catch (error) {
+    loading(false);
+    toast(error && error.message ? error.message : 'Could not import project', 'error', 4200);
+  }
+}
+
+function openProjectNameEditor() {
+  if (!App.layers.length || !els.appTitle) return;
+  document.querySelectorAll('.project-name-popover').forEach(node => node.remove());
+  const popover = document.createElement('div');
+  popover.className = 'project-name-popover';
+  const label = document.createElement('label');
+  label.textContent = 'Project name';
+  const row = document.createElement('div');
+  row.className = 'project-name-popover-row';
+  const input = document.createElement('input');
+  input.value = App.project.name;
+  input.maxLength = 60;
+  const save = document.createElement('button');
+  save.textContent = 'Save';
+  row.append(input, save);
+  popover.append(label, row);
+  document.body.appendChild(popover);
+  const rect = els.appTitle.getBoundingClientRect();
+  popover.style.left = Math.max(12, Math.min(innerWidth - 332, rect.left + rect.width / 2 - 160)) + 'px';
+  popover.style.top = (rect.bottom + 8) + 'px';
+  const commit = () => {
+    App.project.name = safeProjectName(input.value);
+    updateProjectChrome();
+    markProjectDirty();
+    popover.remove();
+  };
+  save.addEventListener('click', commit);
+  input.addEventListener('keydown', event => {
+    if (event.key === 'Enter') commit();
+    if (event.key === 'Escape') popover.remove();
+  });
+  setTimeout(() => {
+    input.focus();
+    input.select();
+    document.addEventListener('pointerdown', function close(event) {
+      if (!popover.contains(event.target) && event.target !== els.appTitle) {
+        popover.remove();
+        document.removeEventListener('pointerdown', close, true);
+      }
+    }, true);
+  }, 0);
+}
+
+function updateWorkspaceStatus() {
+  if (els.statusDimensions) els.statusDimensions.textContent = App.layers.length ? App.workW + ' × ' + App.workH + ' px' : 'No document';
+  if (els.statusLayers) els.statusLayers.textContent = App.layers.length + (App.layers.length === 1 ? ' layer' : ' layers');
+  const actual = App.layers.length ? Math.round((App.fitScale || 1) * (App.zoom || 1) * 100) : 100;
+  if (els.statusZoom) els.statusZoom.textContent = actual + '%';
+}
+
+function openNewCanvasDialog() {
+  if (!els.newCanvasModal) return;
+  els.newCanvasModal.classList.add('active');
+  requestAnimationFrame(() => {
+    els.newCanvasName.focus();
+    els.newCanvasName.select();
+  });
+}
+
+function closeNewCanvasDialog() {
+  if (els.newCanvasModal) els.newCanvasModal.classList.remove('active');
+}
+
+let _lumaNewBackground = 'transparent';
+
+function resetForNewCanvas(width, height, background, name) {
+  const w = clamp(Math.round(width), 16, 6000);
+  const h = clamp(Math.round(height), 16, 6000);
+  if (w * h > 20000000) {
+    toast('Keep the canvas under 20 megapixels for reliable mobile editing', 'error', 4200);
+    return false;
+  }
+  App.imgW = App.workW = w;
+  App.imgH = App.workH = h;
+  App.canvas.width = w;
+  App.canvas.height = h;
+  App.composite.width = w;
+  App.composite.height = h;
+  els.interactCanvas.width = w;
+  els.interactCanvas.height = h;
+  setupPreview();
+  App.adjustments = createDefaultAdjustments();
+  App.effects = createDefaultEffects();
+  App.colorOverlay = { color: '#7c5cff', strength: 0, blendMode: 'overlay' };
+  App.activeFilter = 'none';
+  App.filterStrength = 100;
+  App.rotation = 0;
+  App.flipH = false;
+  App.flipV = false;
+  App.cropRect = null;
+  App.history = [];
+  App.historyIndex = -1;
+  App.layers = [];
+  App.activeLayerId = null;
+  App.textSelectionId = null;
+  App.shapeSelectionId = null;
+  App.layerSelectionId = null;
+  App.frameLayerId = null;
+  App.framePreset = 'none';
+  App.colorOverlay = { color: '#7c5cff', strength: 0, blendMode: 'overlay' };
+  App.activeEffectExtra = null;
+  App.nextLayerId = 1;
+
+  const canvas = createBlankLayerCanvas();
+  if (background && background !== 'transparent') {
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = background;
+    ctx.fillRect(0, 0, w, h);
+  }
+  const layer = makeLayer({
+    name: 'Background',
+    type: 'image',
+    canvas,
+    locked: true,
+    meta: { isBase: true, backgroundColor: background || 'transparent' },
+  });
+  App.layers.push(layer);
+  App.activeLayerId = layer.id;
+  startNewProject(name || 'Untitled artwork');
+  els.welcome.classList.add('hidden');
+  els.canvasStage.classList.toggle('has-trans', !background || background === 'transparent');
+  closeNewCanvasDialog();
+  fitCanvasToView();
+  renderFull();
+  updateToolPanel();
+  pushHistory();
+  toast('New ' + w + ' × ' + h + ' canvas created', 'success');
+  return true;
+}
+
+function bindNewCanvasUI() {
+  if (!els.newCanvasModal) return;
+  const close = () => closeNewCanvasDialog();
+  els.newCanvasClose.addEventListener('click', close);
+  els.newCanvasCancel.addEventListener('click', close);
+  els.newCanvasModal.addEventListener('click', event => { if (event.target === els.newCanvasModal) close(); });
+  els.newCanvasPresets.querySelectorAll('.new-preset').forEach(button => {
+    button.addEventListener('click', () => {
+      els.newCanvasPresets.querySelectorAll('.new-preset').forEach(item => item.classList.remove('active'));
+      button.classList.add('active');
+      els.newCanvasWidth.value = button.dataset.w;
+      els.newCanvasHeight.value = button.dataset.h;
+    });
+  });
+  [els.newCanvasWidth, els.newCanvasHeight].forEach(input => input.addEventListener('input', () => {
+    els.newCanvasPresets.querySelectorAll('.new-preset').forEach(item => item.classList.remove('active'));
+  }));
+  els.newCanvasSwap.addEventListener('click', () => {
+    const value = els.newCanvasWidth.value;
+    els.newCanvasWidth.value = els.newCanvasHeight.value;
+    els.newCanvasHeight.value = value;
+  });
+  els.newBackgrounds.querySelectorAll('.new-bg').forEach(button => {
+    button.addEventListener('click', () => {
+      els.newBackgrounds.querySelectorAll('.new-bg').forEach(item => item.classList.remove('active'));
+      button.classList.add('active');
+      _lumaNewBackground = button.dataset.bg;
+      els.newBgColorWrap.hidden = _lumaNewBackground !== 'custom';
+    });
+  });
+  els.newBgColor.addEventListener('input', () => { els.newBgHex.textContent = els.newBgColor.value.toUpperCase(); });
+  els.newCanvasCreate.addEventListener('click', () => {
+    requestPersistentStorage();
+    const background = _lumaNewBackground === 'custom' ? els.newBgColor.value : _lumaNewBackground;
+    resetForNewCanvas(+els.newCanvasWidth.value, +els.newCanvasHeight.value, background, els.newCanvasName.value);
+  });
+}
+/* ================================================================
+   COMMAND SEARCH, LIVE HISTOGRAM, AND RESPONSIVE SHELL
+   ================================================================ */
+let _lumaCommandIndex = 0;
+let _lumaVisibleCommands = [];
+let _lumaHistogramRAF = 0;
+const _lumaHistogramSample = document.createElement('canvas');
+_lumaHistogramSample.width = 256;
+_lumaHistogramSample.height = 128;
+
+const LUMA_COMMANDS = [
+  { id: 'new', group: 'Project', label: 'New canvas', hint: 'Create a blank document', shortcut: 'Ctrl N', keywords: 'blank document size', run: openNewCanvasDialog },
+  { id: 'open', group: 'Project', label: 'Open photo', hint: 'Start a project from an image', shortcut: 'Ctrl O', keywords: 'import image jpg png webp', run: openFilePicker },
+  { id: 'open-project', group: 'Project', label: 'Open editable project', hint: 'Restore a .luma file', keywords: 'import recovery local', run: () => els.projectFileInput.click() },
+  { id: 'save-project', group: 'Project', label: 'Download editable project', hint: 'Keep layers, masks, and settings', shortcut: 'Shift Ctrl S', keywords: 'luma backup source', enabled: () => App.layers.length > 0, run: exportEditableProject },
+  { id: 'export', group: 'Project', label: 'Export image', hint: 'PNG, JPG, WebP, or ICO', shortcut: 'Ctrl S', keywords: 'download save share', enabled: () => App.layers.length > 0, run: () => els.exportBtn.click() },
+  { id: 'undo', group: 'Edit', label: 'Undo', hint: 'Step backward in history', shortcut: 'Ctrl Z', enabled: () => App.historyIndex > 0, run: undo },
+  { id: 'redo', group: 'Edit', label: 'Redo', hint: 'Step forward in history', shortcut: 'Shift Ctrl Z', enabled: () => App.historyIndex < App.history.length - 1, run: redo },
+  { id: 'duplicate', group: 'Edit', label: 'Duplicate active layer', hint: 'Create an editable copy', shortcut: 'Ctrl D', enabled: () => !!activeLayer(), run: () => {
+    const layer = activeLayer();
+    if (!layer) return;
+    duplicateLayer(layer.id);
+    renderFull();
+    updateToolPanel();
+    pushHistory();
+  }},
+  { id: 'auto', group: 'Edit', label: 'Auto enhance', hint: 'Balanced tone, color, and detail', keywords: 'quick improve', enabled: () => App.layers.length > 0, run: autoEnhance },
+  { id: 'fit', group: 'View', label: 'Fit canvas to view', hint: 'Show the entire document', shortcut: '0', enabled: () => App.layers.length > 0, run: fitCanvasToView },
+  { id: 'actual', group: 'View', label: 'Zoom to 100%', hint: 'One image pixel per screen pixel', shortcut: '1', enabled: () => App.layers.length > 0, run: () => {
+    App.zoom = clamp(1 / Math.max(App.fitScale, .001), .4, 8);
+    App.pan = { x: 0, y: 0 };
+    applyStageTransform();
+  }},
+  { id: 'theme', group: 'View', label: 'Toggle light / dark theme', hint: 'Switch workspace appearance', run: () => els.themeBtn.click() },
+  { id: 'adjust', group: 'Tools', label: 'Adjust', hint: 'Tone, color, detail, and histogram', shortcut: 'A', keywords: 'exposure contrast levels color', enabled: () => App.layers.length > 0, run: () => setTool('adjust') },
+  { id: 'filter', group: 'Tools', label: 'Filters', hint: '22 one-tap creative looks', shortcut: 'F', keywords: 'preset look grade', enabled: () => App.layers.length > 0, run: () => setTool('filter') },
+  { id: 'effect', group: 'Tools', label: 'Effects', hint: 'Blur, pixelate, tint, replace, cutout', shortcut: 'X', keywords: 'background remove smart cutout', enabled: () => App.layers.length > 0, run: () => setTool('effect') },
+  { id: 'crop', group: 'Tools', label: 'Crop and transform', hint: 'Crop, rotate, flip, and expand', shortcut: 'C', enabled: () => App.layers.length > 0, run: () => setTool('crop') },
+  { id: 'draw', group: 'Tools', label: 'Draw and mask', hint: 'Brush, eraser, fill, and masks', shortcut: 'B', keywords: 'paint retouch', enabled: () => App.layers.length > 0, run: () => setTool('draw') },
+  { id: 'text', group: 'Tools', label: 'Text', hint: 'Rich editable typography', shortcut: 'T', keywords: 'type font title', enabled: () => App.layers.length > 0, run: () => setTool('text') },
+  { id: 'shape', group: 'Tools', label: 'Shapes', hint: 'Arrows, stars, polygons, and more', shortcut: 'U', enabled: () => App.layers.length > 0, run: () => setTool('shape') },
+  { id: 'frame', group: 'Tools', label: 'Frames', hint: 'Borders and finishing treatments', enabled: () => App.layers.length > 0, run: () => setTool('frame') },
+  { id: 'layers', group: 'Tools', label: 'Move and layers', hint: 'Select, transform, blend, and reorder', shortcut: 'V', keywords: 'move select opacity blend', enabled: () => App.layers.length > 0, run: () => setTool('layers') },
+  { id: 'resize', group: 'Document', label: 'Resize image', hint: 'Change pixel dimensions', keywords: 'canvas image size', enabled: () => App.layers.length > 0, run: openCanvasSizeModal },
+  { id: 'flatten', group: 'Document', label: 'Bake / flatten layers', hint: 'Merge the visible result', keywords: 'merge all', enabled: () => App.layers.length > 1, run: doBake },
+];
+
+function commandEnabled(command) {
+  try { return !command.enabled || command.enabled(); } catch (_) { return false; }
+}
+
+function commandMatches(command, query) {
+  if (!query) return true;
+  const haystack = [command.label, command.hint, command.group, command.keywords || ''].join(' ').toLowerCase();
+  const words = query.toLowerCase().trim().split(/\s+/).filter(Boolean);
+  return words.every(word => haystack.includes(word));
+}
+
+function renderCommandResults() {
+  if (!els.commandResults) return;
+  const query = els.commandSearch.value || '';
+  _lumaVisibleCommands = LUMA_COMMANDS.filter(command => commandMatches(command, query) && commandEnabled(command));
+  _lumaCommandIndex = clamp(_lumaCommandIndex, 0, Math.max(0, _lumaVisibleCommands.length - 1));
+  els.commandResults.replaceChildren();
+  if (!_lumaVisibleCommands.length) {
+    const empty = document.createElement('div');
+    empty.className = 'command-empty';
+    empty.textContent = 'No matching command';
+    els.commandResults.appendChild(empty);
+    return;
+  }
+  let lastGroup = '';
+  _lumaVisibleCommands.forEach((command, index) => {
+    if (command.group !== lastGroup) {
+      const group = document.createElement('div');
+      group.className = 'command-group-label';
+      group.textContent = command.group;
+      els.commandResults.appendChild(group);
+      lastGroup = command.group;
+    }
+    const button = document.createElement('button');
+    button.className = 'command-item' + (index === _lumaCommandIndex ? ' active' : '');
+    button.dataset.commandIndex = index;
+    const icon = document.createElement('span');
+    icon.className = 'command-item-icon';
+    icon.textContent = command.label.charAt(0);
+    const copy = document.createElement('span');
+    copy.className = 'command-item-copy';
+    const label = document.createElement('span');
+    label.className = 'command-item-label';
+    label.textContent = command.label;
+    const hint = document.createElement('span');
+    hint.className = 'command-item-hint';
+    hint.textContent = command.hint || '';
+    copy.append(label, hint);
+    button.append(icon, copy);
+    if (command.shortcut) {
+      const key = document.createElement('kbd');
+      key.textContent = command.shortcut;
+      button.appendChild(key);
+    }
+    button.addEventListener('pointermove', () => {
+      _lumaCommandIndex = index;
+      els.commandResults.querySelectorAll('.command-item').forEach(item => item.classList.toggle('active', +item.dataset.commandIndex === index));
+    });
+    button.addEventListener('click', () => runLumaCommand(command));
+    els.commandResults.appendChild(button);
+  });
+}
+
+function runLumaCommand(command) {
+  closeCommandPalette();
+  requestAnimationFrame(() => command.run());
+}
+
+function openCommandPalette(initialQuery) {
+  if (!els.commandPalette) return;
+  els.commandPalette.classList.add('active');
+  els.commandSearch.value = initialQuery || '';
+  _lumaCommandIndex = 0;
+  renderCommandResults();
+  requestAnimationFrame(() => els.commandSearch.focus());
+}
+
+function closeCommandPalette() {
+  if (els.commandPalette) els.commandPalette.classList.remove('active');
+}
+
+function bindCommandPalette() {
+  if (!els.commandPalette) return;
+  els.commandSearch.addEventListener('input', () => {
+    _lumaCommandIndex = 0;
+    renderCommandResults();
+  });
+  els.commandPalette.addEventListener('click', event => {
+    if (event.target === els.commandPalette) closeCommandPalette();
+  });
+  els.commandBtn.addEventListener('click', () => openCommandPalette());
+  document.addEventListener('keydown', event => {
+    const textEntry = _isTextInputFocused(event.target);
+    const modifier = event.ctrlKey || event.metaKey;
+    if (modifier && (event.key === 'k' || event.key === 'K')) {
+      event.preventDefault();
+      openCommandPalette();
+      return;
+    }
+    if (!textEntry && !modifier && event.key === '?') {
+      event.preventDefault();
+      openCommandPalette('tool');
+      return;
+    }
+    if (!els.commandPalette.classList.contains('active')) {
+      if (!textEntry && !modifier) {
+        const map = { a: 'adjust', f: 'filter', x: 'effect', c: 'crop', b: 'draw', t: 'text', u: 'shape', v: 'layers' };
+        const id = map[String(event.key).toLowerCase()];
+        if (id && App.layers.length) {
+          event.preventDefault();
+          setTool(id);
+        }
+        if (event.key === '1' && App.layers.length) {
+          event.preventDefault();
+          const command = LUMA_COMMANDS.find(item => item.id === 'actual');
+          command.run();
+        }
+      }
+      return;
+    }
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      closeCommandPalette();
+      return;
+    }
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      if (!_lumaVisibleCommands.length) return;
+      const direction = event.key === 'ArrowDown' ? 1 : -1;
+      _lumaCommandIndex = (_lumaCommandIndex + direction + _lumaVisibleCommands.length) % _lumaVisibleCommands.length;
+      renderCommandResults();
+      const active = els.commandResults.querySelector('.command-item.active');
+      if (active) active.scrollIntoView({ block: 'nearest' });
+      return;
+    }
+    if (event.key === 'Enter' && _lumaVisibleCommands[_lumaCommandIndex]) {
+      event.preventDefault();
+      runLumaCommand(_lumaVisibleCommands[_lumaCommandIndex]);
+    }
+  }, true);
+}
+
+function updateConnectionState() {
+  if (!els.connectionDot) return;
+  const offline = navigator.onLine === false;
+  els.connectionDot.classList.toggle('offline', offline);
+  els.connectionDot.parentElement.title = offline ? 'Offline · core editor and local projects available' : 'Online · all editing still stays on this device';
+}
+
+function drawHistogram(canvas) {
+  if (!canvas || !App.layers.length || !App.canvas.width || !App.canvas.height) return;
+  const sample = _lumaHistogramSample;
+  const sctx = sample.getContext('2d', { willReadFrequently: true });
+  sctx.clearRect(0, 0, sample.width, sample.height);
+  sctx.drawImage(App.canvas, 0, 0, sample.width, sample.height);
+  let data;
+  try { data = sctx.getImageData(0, 0, sample.width, sample.height).data; } catch (_) { return; }
+  const red = new Uint32Array(256);
+  const green = new Uint32Array(256);
+  const blue = new Uint32Array(256);
+  const luma = new Uint32Array(256);
+  for (let index = 0; index < data.length; index += 4) {
+    if (data[index + 3] < 8) continue;
+    const r = data[index];
+    const g = data[index + 1];
+    const b = data[index + 2];
+    red[r]++;
+    green[g]++;
+    blue[b]++;
+    luma[Math.round(.2126 * r + .7152 * g + .0722 * b)]++;
+  }
+  const sorted = Array.from(luma).sort((a, b) => a - b);
+  const cap = Math.max(1, sorted[Math.floor(sorted.length * .97)]);
+  const dpr = Math.min(devicePixelRatio || 1, 2);
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = Math.max(256, Math.round(rect.width * dpr));
+  canvas.height = Math.max(70, Math.round(rect.height * dpr));
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width;
+  const h = canvas.height;
+  ctx.clearRect(0, 0, w, h);
+  ctx.strokeStyle = 'rgba(145,151,170,.16)';
+  ctx.lineWidth = 1;
+  for (let index = 1; index < 4; index++) {
+    const x = Math.round(w * index / 4) + .5;
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, h);
+    ctx.stroke();
+  }
+  const plot = (bins, color, fill) => {
+    ctx.beginPath();
+    ctx.moveTo(0, h);
+    for (let index = 0; index < 256; index++) {
+      const x = index / 255 * w;
+      const y = h - Math.min(1, bins[index] / cap) * (h - 3);
+      ctx.lineTo(x, y);
+    }
+    ctx.lineTo(w, h);
+    if (fill) {
+      ctx.fillStyle = fill;
+      ctx.fill();
+    }
+    ctx.strokeStyle = color;
+    ctx.lineWidth = Math.max(1, dpr);
+    ctx.stroke();
+  };
+  plot(luma, 'rgba(220,224,236,.75)', 'rgba(150,157,180,.10)');
+  ctx.globalCompositeOperation = 'screen';
+  plot(red, 'rgba(255,91,113,.68)');
+  plot(green, 'rgba(54,211,153,.62)');
+  plot(blue, 'rgba(53,200,255,.68)');
+  ctx.globalCompositeOperation = 'source-over';
+}
+
+function scheduleHistogramUpdate() {
+  if (_lumaHistogramRAF) return;
+  _lumaHistogramRAF = requestAnimationFrame(() => {
+    _lumaHistogramRAF = 0;
+    document.querySelectorAll('.histogram-canvas').forEach(drawHistogram);
+  });
+}
+
+function buildHistogramCard() {
+  const card = document.createElement('div');
+  card.className = 'histogram-card';
+  const head = document.createElement('div');
+  head.className = 'histogram-head';
+  const title = document.createElement('span');
+  title.textContent = 'Live histogram';
+  const legend = document.createElement('span');
+  legend.textContent = 'Luma · RGB';
+  head.append(title, legend);
+  const canvas = document.createElement('canvas');
+  canvas.className = 'histogram-canvas';
+  canvas.setAttribute('aria-label', 'Live image histogram');
+  card.append(head, canvas);
+  requestAnimationFrame(() => drawHistogram(canvas));
+  return card;
+}
+
+function addMobileMoreTool() {
+  if (!els.toolBar || document.getElementById('mobileMoreBtn')) return;
+  const button = document.createElement('button');
+  button.className = 'tool-tab mobile-more-tab';
+  button.id = 'mobileMoreBtn';
+  button.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg><span>More</span>';
+  button.addEventListener('click', () => openCommandPalette());
+  els.toolBar.appendChild(button);
+}
+
+function bindLumaShell() {
+  bindNewCanvasUI();
+  bindCommandPalette();
+  addMobileMoreTool();
+  if (els.welcomeNewBtn) els.welcomeNewBtn.addEventListener('click', () => {
+    requestPersistentStorage();
+    openNewCanvasDialog();
+  });
+  if (els.welcomeProjectBtn) els.welcomeProjectBtn.addEventListener('click', () => els.projectFileInput.click());
+  if (els.projectFileInput) els.projectFileInput.addEventListener('change', async event => {
+    const file = event.target.files[0];
+    event.target.value = '';
+    await importEditableProject(file);
+  });
+  if (els.appTitle) els.appTitle.addEventListener('click', openProjectNameEditor);
+  if (els.saveStatus) els.saveStatus.addEventListener('click', () => {
+    if (App.project && App.project.saveError) saveCurrentProject();
+  });
+  document.querySelectorAll('[data-action="newCanvas"]').forEach(button => button.addEventListener('click', openNewCanvasDialog));
+  document.querySelectorAll('[data-action="openProject"]').forEach(button => button.addEventListener('click', () => els.projectFileInput.click()));
+  document.querySelectorAll('[data-action="saveProject"]').forEach(button => button.addEventListener('click', exportEditableProject));
+  document.querySelectorAll('[data-action="commands"]').forEach(button => button.addEventListener('click', () => openCommandPalette()));
+  window.addEventListener('online', updateConnectionState);
+  window.addEventListener('offline', updateConnectionState);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden' && App.project && App.project.dirty) saveCurrentProject({ silent: true });
+  });
+  updateConnectionState();
+  updateWorkspaceStatus();
+  refreshRecentProjects();
+}
 function clearPhotoEditorCache() {
   const done = () => toast('Photo editor cache cleared', 'success');
   if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
@@ -11148,6 +13002,7 @@ function clearPhotoEditorCache() {
   observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
 })();
 
+bindLumaShell();
 updateToolPanel();
 
 </script>
