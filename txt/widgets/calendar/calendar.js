@@ -88,6 +88,8 @@
       if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
       var id = String(e.id || '');
       if (!/^[A-Za-z0-9_-]{1,40}$/.test(id)) id = genId(); // also keeps inline onclick attrs injection-safe
+      var notify = null; // minutes before start; 0 = at start; null = no reminder
+      if (e.notify != null && isFinite(+e.notify) && +e.notify >= 0 && +e.notify <= 1440) notify = Math.round(+e.notify);
       out.events.push({
         id: id,
         date: date,
@@ -96,6 +98,7 @@
         title: String(e.title == null ? '' : e.title).slice(0, 200) || '(untitled)',
         cat: String(e.cat == null ? '' : e.cat).slice(0, 40),
         color: normColor(e.color),
+        notify: notify,
       });
     }
     out.events.sort(byDateStart);
@@ -143,6 +146,7 @@
     return {
       date: gv('cal-f-date'), start: gv('cal-f-start'), end: gv('cal-f-end'),
       title: gv('cal-f-title'), cat: gv('cal-f-cat'), newname: gv('cal-f-newname'),
+      notify: gv('cal-f-notify'),
     };
   }
 
@@ -183,7 +187,7 @@
       '<span class="cal-ev-bar cal-c-' + ev.color + '"></span>' +
       '<span class="cal-ev-main">' +
         (ev.cat ? '<span class="cal-ev-cat">' + esc(ev.cat) + '</span>' : '') +
-        '<span class="cal-ev-title">' + esc(ev.title) + '</span>' +
+        '<span class="cal-ev-title">' + esc(ev.title) + (ev.notify != null ? ' <span class="cal-ev-bell" title="Reminder set">🔔</span>' : '') + '</span>' +
       '</span></button>';
   }
 
@@ -201,6 +205,7 @@
       title: editing ? editing.title : '',
       cat: defCat,
       newname: (editing && !editing.cat) ? '' : (editing ? editing.cat : ''),
+      notify: (editing && editing.notify != null) ? String(editing.notify) : '',
     };
     if (draft && !draft.cat) f.cat = defCat;
     var opts = '';
@@ -224,6 +229,12 @@
       '</div>' +
       '<div class="cal-f-row"><input type="text" id="cal-f-title" placeholder="Event title" maxlength="200" value="' + esc(f.title) + '"></div>' +
       '<div class="cal-f-row"><select id="cal-f-cat" onchange="__calCatChange()">' + opts + '</select></div>' +
+      '<div class="cal-f-row"><select id="cal-f-notify" title="Remind me">' +
+        ['', '0', '10', '30', '60'].map(function (v) {
+          var lbl = v === '' ? '🔕 No reminder' : v === '0' ? '🔔 Remind at start' : '🔔 Remind ' + v + ' min before';
+          return '<option value="' + v + '"' + (String(f.notify) === v ? ' selected' : '') + '>' + lbl + '</option>';
+        }).join('') +
+      '</select></div>' +
       '<div id="cal-f-newcat" class="cal-f-newcat"' + (f.cat === 'new' ? '' : ' style="display:none"') + '>' +
         '<input type="text" id="cal-f-newname" placeholder="Category name" maxlength="40" value="' + esc(f.newname) + '">' +
         '<div class="cal-f-swatches" id="cal-f-swatches">' + sw + '</div>' +
@@ -325,12 +336,14 @@
       color = formColor;
       if (cat) state.cats[cat] = color;
     }
+    var notifyRaw = gv('cal-f-notify');
+    var notify = notifyRaw === '' ? null : Math.max(0, Math.min(1440, Math.round(+notifyRaw) || 0));
     var ev = form.id ? findEvent(form.id) : null;
     if (ev) {
       ev.date = date; ev.start = start; ev.end = end;
-      ev.title = title; ev.cat = cat; ev.color = color;
+      ev.title = title; ev.cat = cat; ev.color = color; ev.notify = notify;
     } else {
-      state.events.push({ id: genId(), date: date, start: start, end: end, title: title, cat: cat, color: color });
+      state.events.push({ id: genId(), date: date, start: start, end: end, title: title, cat: cat, color: color, notify: notify });
     }
     state = normalize(state); // re-sort + enforce the event cap
     persist();

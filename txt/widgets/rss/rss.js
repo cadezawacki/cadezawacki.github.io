@@ -35,7 +35,7 @@
   var ITEMS_PER_FEED = 100;  // in-memory cap per feed
   var ITEMS_SHOWN = 120;     // merged-list display cap
   var AUTO_FETCH_MS = 10 * 60 * 1000; // auto-refresh on open if cache older
-  var CORS_HINT = "Some feeds block cross-origin reads (CORS): feeds that send Access-Control-Allow-Origin work (many do), others can't be fetched from a static app.";
+  var CORS_HINT = "Feeds are fetched directly; ones that block cross-origin reads (like news.ycombinator.com/rss) automatically retry through a public CORS relay (allorigins.win / corsproxy.io — only the feed URL is shared with it).";
 
   function mkId() { return 'f' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
 
@@ -236,15 +236,33 @@
   function hostOf(url) {
     try { return new URL(url).hostname.replace(/^www\./, ''); } catch (e) { return url; }
   }
-  function fetchFeed(url) {
+  // Most feeds (Hacker News' /rss included) send no CORS headers, so a direct
+  // browser fetch is blocked. Fall back to public CORS relays — the feed URL
+  // (never your data or keys) is sent to the relay, which returns the XML
+  // with permissive headers. Direct fetch is always tried first.
+  var PROXIES = [
+    function (u) { return 'https://api.allorigins.win/raw?url=' + encodeURIComponent(u); },
+    function (u) { return 'https://corsproxy.io/?url=' + encodeURIComponent(u); },
+  ];
+  function _fetchText(url) {
     return fetch(url).then(function (res) {
       if (!res.ok) throw new Error('HTTP ' + res.status);
       return res.text();
-    }).then(function (text) {
-      var parsed = parseFeedText(text);
-      if (!parsed || !parsed.items) throw new Error('not a recognizable RSS/Atom feed');
-      return parsed;
     });
+  }
+  function fetchFeed(url) {
+    var attempt = function (idx) {
+      var target = idx < 0 ? url : PROXIES[idx](url);
+      return _fetchText(target).then(function (text) {
+        var parsed = parseFeedText(text);
+        if (!parsed || !parsed.items) throw new Error('not a recognizable RSS/Atom feed');
+        return parsed;
+      }).catch(function (e) {
+        if (idx + 1 < PROXIES.length) return attempt(idx + 1);
+        throw e;
+      });
+    };
+    return attempt(-1);
   }
   function refreshAll() {
     if (!state.feeds.length) { render(); return Promise.resolve(); }

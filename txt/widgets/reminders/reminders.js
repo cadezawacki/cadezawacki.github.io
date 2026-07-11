@@ -73,6 +73,32 @@
   var blobStore = Cade.syncedBlob('reminders', {
     onChange: function (data) { managed = normalizeManaged(data); renderIfOpen(); },
   });
+  // Calendar events with a 🔔 (round-4 item 5) become reminders too. Read-only
+  // accessor — passing no onChange leaves the calendar module's handler alone.
+  var calBlob = Cade.syncedBlob('calendar');
+  function calNotifications(now) {
+    // → [{key, at, msg}] for events with notify != null (minutes before start)
+    var out = [];
+    try {
+      var data = calBlob.get();
+      var evs = data && Array.isArray(data.events) ? data.events : [];
+      for (var i = 0; i < evs.length; i++) {
+        var e = evs[i];
+        if (!e || e.notify == null || !e.date || !e.start) continue;
+        var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(e.date));
+        var t = /^(\d{1,2}):(\d{2})$/.exec(String(e.start));
+        if (!m || !t) continue;
+        var startTs = new Date(+m[1], +m[2] - 1, +m[3], +t[1], +t[2]).getTime();
+        var at = startTs - (Math.max(0, +e.notify) * 60 * 1000);
+        out.push({
+          key: 'cal:' + e.id,
+          at: at,
+          msg: '🗓 ' + String(e.title || 'Event') + ' at ' + String(e.start) + (+e.notify > 0 ? ' (in ' + (+e.notify) + ' min)' : ''),
+        });
+      }
+    } catch (err) {}
+    return out;
+  }
   managed = normalizeManaged(blobStore.get());
   function saveManaged() { blobStore.set(managed); renderIfOpen(); }
   function newId() { return 'r' + Math.random().toString(36).slice(2, 8) + Date.now().toString(36).slice(-4); }
@@ -206,6 +232,11 @@
         due.push({ src: it, key: 'm:' + it.id, at: it.at, managed: true });
       }
     });
+    calNotifications(now).forEach(function (c) {
+      if (c.at <= now && c.at > now - GRACE_MS && !fired[c.key]) {
+        due.push({ src: { msg: c.msg }, key: c.key, at: c.at, managed: true });
+      }
+    });
     return { due: due, fired: fired };
   }
   function checkDue() {
@@ -268,6 +299,9 @@
       } else if (!it.done && it.at && it.at > now) {
         rows.push({ at: it.at, msg: it.msg, managed: true, id: it.id });
       }
+    });
+    calNotifications(now).forEach(function (c) {
+      if (c.at > now && !fired[c.key]) rows.push({ at: c.at, msg: c.msg, cal: true });
     });
     rows.sort(function (a, b) { return a.at - b.at; });
     return rows.slice(0, 40);
