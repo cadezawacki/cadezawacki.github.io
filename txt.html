@@ -1411,6 +1411,21 @@ body.sel-mode .editor-wrap .cm-content { -webkit-touch-callout: none; }
   line-height: 1.35;
 }
 .sync-conflict-btn:hover { border-color: var(--accent); }
+/* Item 10: inline diff — local-only lines red, server-only green. */
+.sync-conflict-diff {
+  max-height: 200px; overflow: auto; margin: 0 0 var(--space-4);
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  font-family: var(--font-mono); font-size: var(--text-xs); line-height: 1.5;
+  background: var(--bg);
+}
+.sync-conflict-diff:empty { display: none; }
+.scd-line { padding: 0 8px; white-space: pre-wrap; word-break: break-word; }
+.scd-line.del { background: rgba(229, 72, 77, 0.12); color: #e5484d; }
+.scd-line.add { background: rgba(34, 197, 94, 0.12); color: #16a34a; }
+.scd-line.ctx { color: var(--text-faint); }
+.scd-line.gap { color: var(--text-faint); text-align: center; user-select: none; }
+.scd-head { padding: 3px 8px; font-family: var(--font-body); color: var(--text-muted); border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--surface); }
+.scd-head b.local { color: #e5484d; } .scd-head b.server { color: #16a34a; }
 .sync-conflict-btn .scb-title { font-weight: 600; }
 .sync-conflict-btn .scb-desc { display: block; font-size: var(--text-xs); color: var(--text-muted); margin-top: 2px; }
 
@@ -2495,6 +2510,10 @@ body.readonly .editor-wrap .cm-content { caret-color: transparent; }
         <span>Rooms by Date</span>
         <span></span>
       </button>
+      <button class="menu-item" onclick="openReminders()">
+        <span>Reminders</span>
+        <span></span>
+      </button>
       <div class="menu-separator"></div>
       <button class="menu-item" onclick="shareLink()">
         <span>Share Link</span>
@@ -2623,7 +2642,7 @@ body.readonly .editor-wrap .cm-content { caret-color: transparent; }
 <!-- ========== FOOTER ========== -->
 <div class="footer">
   <div class="footer-breadcrumb" id="footer-breadcrumb"></div>
-  <span id="timer-chip" class="footer-timer-chip" title="Open timer" onclick="openTimer()" style="display:none;"></span>
+  <span id="timer-chip" class="footer-timer-chip" title="Open timer" onclick="openTimer()" style="display:none;"></span><span id="reminders-chip" class="footer-timer-chip" title="Reminders" onclick="openReminders()">⏰</span>
   <div class="footer-spacer"></div>
   <div class="footer-stats">
     <span id="footer-line">Ln 1, Col 1</span>
@@ -2736,6 +2755,7 @@ body.readonly .editor-wrap .cm-content { caret-color: transparent; }
       latest synced version. Choose how to resolve. Closing this dialog keeps both
       copies by saving the server version as a new document.
     </div>
+    <div class="sync-conflict-diff" id="sync-conflict-diff"></div>
     <div class="sync-conflict-actions">
       <button class="btn sync-conflict-btn" data-choice="local">
         <span class="scb-title">Local</span>
@@ -8360,6 +8380,72 @@ async function applyResolvedNew(roomName, localText, serverText) {
   showToast('Conflict saved as new doc: ' + conflictName, 'success', 4000);
 }
 
+// --- Conflict diff (item 10) --------------------------------------------------
+// Bounded line diff: strip the common prefix/suffix, then LCS over what's left
+// (≤400×400 lines — beyond that, show the two changed blocks side by side
+// without pairing). Renders with 2 context lines around each change.
+function _lineDiffOps(aText, bText) {
+  const a = aText.split('\n'), b = bText.split('\n');
+  let pre = 0;
+  while (pre < a.length && pre < b.length && a[pre] === b[pre]) pre++;
+  let sufA = a.length, sufB = b.length;
+  while (sufA > pre && sufB > pre && a[sufA - 1] === b[sufB - 1]) { sufA--; sufB--; }
+  const midA = a.slice(pre, sufA), midB = b.slice(pre, sufB);
+  const ops = [];
+  a.slice(0, pre).forEach(s => ops.push({ t: '=', s }));
+  if (midA.length * midB.length > 160000) {
+    // Too big to pair line-by-line — dump the blocks.
+    midA.forEach(s => ops.push({ t: '-', s }));
+    midB.forEach(s => ops.push({ t: '+', s }));
+  } else if (midA.length || midB.length) {
+    const n = midA.length, m = midB.length;
+    const dp = Array.from({ length: n + 1 }, () => new Uint16Array(m + 1));
+    for (let i = n - 1; i >= 0; i--) {
+      for (let j = m - 1; j >= 0; j--) {
+        dp[i][j] = midA[i] === midB[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+      }
+    }
+    let i = 0, j = 0;
+    while (i < n && j < m) {
+      if (midA[i] === midB[j]) { ops.push({ t: '=', s: midA[i] }); i++; j++; }
+      else if (dp[i + 1][j] >= dp[i][j + 1]) { ops.push({ t: '-', s: midA[i] }); i++; }
+      else { ops.push({ t: '+', s: midB[j] }); j++; }
+    }
+    while (i < n) { ops.push({ t: '-', s: midA[i++] }); }
+    while (j < m) { ops.push({ t: '+', s: midB[j++] }); }
+  }
+  a.slice(sufA).forEach(s => ops.push({ t: '=', s }));
+  return ops;
+}
+function _renderConflictDiff(localText, serverText) {
+  const el = document.getElementById('sync-conflict-diff');
+  if (!el) return;
+  let ops;
+  try { ops = _lineDiffOps(localText, serverText); } catch { el.innerHTML = ''; return; }
+  const changed = ops.filter(o => o.t !== '=').length;
+  if (!changed) { el.innerHTML = ''; return; }
+  // Keep 2 context lines around changes; collapse the rest.
+  const keep = new Array(ops.length).fill(false);
+  ops.forEach((o, i) => {
+    if (o.t === '=') return;
+    for (let k = Math.max(0, i - 2); k <= Math.min(ops.length - 1, i + 2); k++) keep[k] = true;
+  });
+  const rows = [`<div class="scd-head"><b class="local">− local</b> · <b class="server">+ server</b> · ${changed} changed line${changed === 1 ? '' : 's'}</div>`];
+  let gap = false, shown = 0;
+  for (let i = 0; i < ops.length && shown < 300; i++) {
+    if (!keep[i]) { gap = true; continue; }
+    if (gap) { rows.push('<div class="scd-line gap">···</div>'); gap = false; }
+    const o = ops[i];
+    const cls = o.t === '-' ? 'del' : o.t === '+' ? 'add' : 'ctx';
+    const sign = o.t === '=' ? ' ' : o.t;
+    rows.push(`<div class="scd-line ${cls}">${sign} ${escapeHtml(o.s.length > 300 ? o.s.slice(0, 300) + '…' : o.s)}</div>`);
+    shown++;
+  }
+  if (shown >= 300) rows.push('<div class="scd-line gap">··· (diff truncated)</div>');
+  el.innerHTML = rows.join('');
+  el.scrollTop = 0;
+}
+
 // --- Sync Conflict modal ------------------------------------------------------
 // Returns a promise that resolves once the conflict is handled. Abandoning the
 // modal (Escape / backdrop click) defaults to option 5 ("New") so a conflict is
@@ -8369,6 +8455,7 @@ function showSyncConflictModal(roomName, localText, serverText) {
     const overlay = document.getElementById('sync-conflict-overlay');
     const roomSpan = document.getElementById('sync-conflict-room');
     if (roomSpan) roomSpan.textContent = roomName;
+    try { _renderConflictDiff(localText, serverText); } catch {}
     const btns = Array.from(overlay.querySelectorAll('.sync-conflict-btn'));
     let settled = false;
 
@@ -13349,6 +13436,13 @@ function setClockEnabled(on) {
 
 // ---- Rooms by Date (#40) — now an external module (./txt/widgets/daycal/) ----
 window.openDailyNote = function () { const w = WIDGETS.find(x => x.name === 'Daily Notes Calendar'); if (w) w.open(); };
+// ---- Reminders (items 5/24) — external module; footer chip + View menu ----
+window.openReminders = function () {
+  closeAllMenus();
+  if (window.__remindersOpen) return window.__remindersOpen();
+  const w = WIDGETS.find(x => x.name === 'Reminders');
+  if (w) w.open();
+};
 
 // Inline math (#41/#26): typing "=" at the end of a pure-arithmetic line
 // appends the result; "sum=" / "total=" sums the numbers in the block above.
