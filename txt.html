@@ -827,7 +827,14 @@ body {
   padding: 50px var(--space-4) var(--space-3);
   scrollbar-width: auto;                 /* Firefox — normal width */
   scrollbar-color: var(--accent) transparent;
+  /* Pan + pinch stay native; double-tap zoom off (it fought text selection). */
+  touch-action: manipulation;
 }
+/* Select mode (mobile): the app owns the gesture — a drag extends the
+   selection instead of panning; edge auto-scroll is done in JS at a sane rate. */
+body.sel-mode .editor-wrap .cm-scroller { touch-action: none; }
+body.sel-mode .editor-wrap .cm-content { -webkit-touch-callout: none; }
+.mob-btn.active { color: var(--accent); background: var(--accent-bg, rgba(20,184,166,0.15)); border-radius: 8px; }
 /* Main editor scrollbar: transparent track, big teal accent thumb, no arrows. */
 .editor-wrap .cm-scroller::-webkit-scrollbar { width: 14px; height: 14px; }
 .editor-wrap .cm-scroller::-webkit-scrollbar-track { background: transparent; }
@@ -2502,6 +2509,9 @@ body.zen.zen-tw .editor-wrap .cm-content { padding-top: 38vh; padding-bottom: 38
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r=".9" fill="currentColor" stroke="none"/><circle cx="17.5" cy="10.5" r=".9" fill="currentColor" stroke="none"/><circle cx="8.5" cy="7.5" r=".9" fill="currentColor" stroke="none"/><circle cx="6.5" cy="12.5" r=".9" fill="currentColor" stroke="none"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/></svg>
     </button>
     <span class="mob-div" aria-hidden="true">|</span>
+    <button class="mob-btn" id="mob-select-btn" onclick="toggleSelectMode()" title="Select mode — drag to select without scrolling">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7V5a1 1 0 0 1 1-1h2M17 4h2a1 1 0 0 1 1 1v2M20 17v2a1 1 0 0 1-1 1h-2M7 20H5a1 1 0 0 1-1-1v-2"/><path d="M9 12h6"/></svg>
+    </button>
     <button class="mob-btn" id="mob-copy-btn" onclick="mobileCopy()" title="Copy selection or all">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
     </button>
@@ -5455,7 +5465,11 @@ window.editor = editor;
     if (h !== _lastH) {
       _lastH = h;
       try {
-        if (editor.hasFocus) {
+        // Only nudge for a bare caret. While a selection drag is in progress
+        // (selection handles on mobile), iOS toggles the callout/accessory bar,
+        // which changes vv.height — nudging then compounds with the browser's
+        // own selection auto-scroll into the runaway-scroll bug (#task5).
+        if (editor.hasFocus && editor.state.selection.main.empty) {
           editor.dispatch({ effects: EditorView.scrollIntoView(editor.state.selection.main.head, { y: 'nearest', yMargin: 110 }) });
         }
       } catch {}
@@ -14674,6 +14688,73 @@ function _roomLockedClosed(r) { try { return roomHasPassword(r) && !roomIsUnlock
 // — body height + top. A second transform-based handler used to live here, but
 // it double-applied visualViewport.offsetTop on top of that top adjustment AND
 // reparented fixed modals; removed so there is exactly one offset source.)
+
+// ---- Select mode (task 5): mobile text selection without the scroll fight ----
+// Native touch selection drags compete with the browser pan + CM6 auto-scroll,
+// which reads as "selecting scrolls super rapidly". Select mode takes over:
+// while active, a plain one-finger drag EXTENDS THE SELECTION instead of
+// scrolling, with a slow, controlled auto-scroll only near the top/bottom edge.
+let _selModeOn = false;
+let _selModeAnchor = null;
+let _selModeEdgeDy = 0;
+let _selModeRAF = 0;
+function _selModePosFromTouch(t) {
+  try { return editor.posAtCoords({ x: t.clientX, y: t.clientY }); } catch { return null; }
+}
+function _selModeStart(e) {
+  if (e.touches.length !== 1) { _selModeAnchor = null; return; }
+  const pos = _selModePosFromTouch(e.touches[0]);
+  if (pos == null) return;
+  e.preventDefault();
+  _selModeAnchor = pos;
+  try { editor.dispatch({ selection: { anchor: pos } }); } catch {}
+}
+function _selModeMove(e) {
+  if (_selModeAnchor == null || e.touches.length !== 1) return;
+  e.preventDefault();
+  const t = e.touches[0];
+  const pos = _selModePosFromTouch(t);
+  if (pos != null) {
+    try { editor.dispatch({ selection: { anchor: _selModeAnchor, head: pos } }); } catch {}
+  }
+  // Slow edge auto-scroll: fixed gentle rate, nothing like the native runaway.
+  const r = editor.scrollDOM.getBoundingClientRect();
+  const EDGE = 44, SPEED = 5;
+  _selModeEdgeDy = (t.clientY < r.top + EDGE) ? -SPEED : (t.clientY > r.bottom - EDGE) ? SPEED : 0;
+  if (_selModeEdgeDy && !_selModeRAF) _selModeEdgeLoop();
+}
+function _selModeEdgeLoop() {
+  _selModeRAF = 0;
+  if (!_selModeOn || !_selModeEdgeDy || _selModeAnchor == null) return;
+  try { editor.scrollDOM.scrollTop += _selModeEdgeDy; } catch {}
+  _selModeRAF = requestAnimationFrame(_selModeEdgeLoop);
+}
+function _selModeEnd() {
+  _selModeAnchor = null;
+  _selModeEdgeDy = 0;
+  if (_selModeRAF) { cancelAnimationFrame(_selModeRAF); _selModeRAF = 0; }
+}
+window.toggleSelectMode = function() {
+  _selModeOn = !_selModeOn;
+  document.body.classList.toggle('sel-mode', _selModeOn);
+  const btn = document.getElementById('mob-select-btn');
+  if (btn) btn.classList.toggle('active', _selModeOn);
+  const sd = editor.scrollDOM;
+  if (_selModeOn) {
+    sd.addEventListener('touchstart', _selModeStart, { passive: false });
+    sd.addEventListener('touchmove', _selModeMove, { passive: false });
+    sd.addEventListener('touchend', _selModeEnd);
+    sd.addEventListener('touchcancel', _selModeEnd);
+    showToast('Select mode: drag to select · edges scroll gently · tap the button again to exit', 'success', 3000);
+  } else {
+    sd.removeEventListener('touchstart', _selModeStart);
+    sd.removeEventListener('touchmove', _selModeMove);
+    sd.removeEventListener('touchend', _selModeEnd);
+    sd.removeEventListener('touchcancel', _selModeEnd);
+    _selModeEnd();
+  }
+  try { haptic(10); } catch {}
+};
 
 // PWA install prompt (#82): capture the deferred prompt; the View > Install App
 // item triggers it (or shows the iOS hint when there's no prompt to defer).
