@@ -2020,6 +2020,21 @@ body.sel-mode .editor-wrap .cm-content { -webkit-touch-callout: none; }
 .cm-hl-gray   { background: var(--hl-gray); }
 /* Text-colour-only highlight (%%/fg|…%%): no background chip. */
 .cm-hl-nobg   { background: transparent; padding: 0; border-radius: 0; }
+
+/* Collapsible sections (item 31) */
+.cm-collapse-caret {
+  display: inline-block; width: 1em; margin-left: -1.05em; margin-right: 0.05em;
+  color: var(--text-faint); cursor: pointer; user-select: none; -webkit-user-select: none;
+  font-size: 0.85em; opacity: 0.55; text-align: center;
+}
+.cm-collapse-caret:hover { color: var(--accent); opacity: 1; }
+.cm-collapse-caret.closed { color: var(--accent); opacity: 1; }
+.cm-collapse-pill {
+  display: inline-block; padding: 0 8px; margin-left: 6px; border-radius: 999px;
+  background: var(--accent-bg, rgba(20,184,166,0.15)); color: var(--accent);
+  font-size: var(--text-xs); cursor: pointer; user-select: none; -webkit-user-select: none;
+  border: 1px dashed var(--accent);
+}
 /* Picker rows: section label + text-colour swatch letters. */
 .hl-picker.hl-picker-2ch { grid-template-columns: repeat(9, 1fr); }
 .hl-picker-label { grid-column: 1 / -1; width: 100%; font-size: var(--text-xs); color: var(--text-muted); padding: 2px 2px 0; }
@@ -2100,6 +2115,12 @@ body.sel-mode .editor-wrap .cm-content { -webkit-touch-callout: none; }
   flex-wrap: wrap;
 }
 .find-panel.open { display: flex; }
+/* "Only if…" lookaround builder (item 28): a full-width second row. */
+.find-cond-row { display: none; flex-basis: 100%; align-items: center; gap: 6px; padding-top: 6px; flex-wrap: wrap; }
+.find-cond-row.open { display: flex; }
+.find-cond-label { font-size: var(--text-xs); color: var(--text-muted); }
+.find-cond-select { font-size: var(--text-xs); padding: 4px 6px; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.find-cond-hint { font-size: var(--text-xs); color: var(--text-faint); }
 .find-input {
   width: 180px;
   padding: 4px 8px;
@@ -2315,6 +2336,16 @@ body.zen.zen-tw .editor-wrap .cm-content { padding-top: 38vh; padding-bottom: 38
 .zen-exit { position: fixed; top: 10px; right: 12px; z-index: 6000; opacity: 0.25; transition: opacity 0.2s; }
 .zen-exit:hover { opacity: 1; }
 
+/* Read-only badge (item 35) — mirrors the zen-exit pattern but stays fully
+   visible: the locked state must be unmissable. */
+.readonly-badge {
+  position: fixed; bottom: 46px; left: 50%; transform: translateX(-50%);
+  z-index: 6000; font-size: var(--text-xs);
+  background: var(--accent-bg, rgba(20,184,166,0.15)); color: var(--accent);
+  border: 1px solid var(--accent);
+}
+body.readonly .editor-wrap .cm-content { caret-color: transparent; }
+
 .drop-overlay { position: fixed; inset: 0; z-index: 9000; background: rgba(0,0,0,0.45); display: flex; align-items: center; justify-content: center; color: #fff; font-size: 20px; font-weight: 600; pointer-events: none; border: 3px dashed var(--accent); }
 
 /* Embedded images (#28) */
@@ -2390,6 +2421,10 @@ body.zen.zen-tw .editor-wrap .cm-content { padding-top: 38vh; padding-bottom: 38
     <div class="menu-dropdown" id="menu-view">
       <button class="menu-item" onclick="toggleMdStyle()">
         <span id="mdstyle-label">Markdown Styling: On</span>
+        <span></span>
+      </button>
+      <button class="menu-item" onclick="toggleReadOnly()">
+        <span id="readonly-label">Read-Only Mode: Off</span>
         <span></span>
       </button>
       <button class="menu-item" onclick="openSnapshots()">
@@ -2506,10 +2541,23 @@ body.zen.zen-tw .editor-wrap .cm-content { padding-top: 38vh; padding-bottom: 38
   <button class="find-btn" id="find-next" title="Next match (Enter)">↓</button>
   <button class="find-btn find-toggle" id="find-case" title="Match case">Aa</button>
   <button class="find-btn find-toggle" id="find-regex" title="Regular expression">.*</button>
-  <input class="find-input" id="replace-input" type="text" placeholder="Replace with…" autocomplete="off" spellcheck="false">
+  <input class="find-input" id="replace-input" type="text" placeholder="Replace with… (\n \t work)" autocomplete="off" spellcheck="false">
   <button class="find-btn" id="replace-one" title="Replace current match">Replace</button>
   <button class="find-btn" id="replace-all" title="Replace all matches">All</button>
+  <button class="find-btn find-toggle" id="find-cond-btn" title="Only if… — match only when text precedes/follows (no regex knowledge needed)">if…</button>
   <button class="find-btn find-close" id="find-close" title="Close (Esc)">×</button>
+  <div class="find-cond-row" id="find-cond-row">
+    <span class="find-cond-label">match only if it</span>
+    <select class="find-cond-select" id="find-cond-type">
+      <option value="followed">is followed by</option>
+      <option value="not-followed">is NOT followed by</option>
+      <option value="preceded">is preceded by</option>
+      <option value="not-preceded">is NOT preceded by</option>
+    </select>
+    <input class="find-input" id="find-cond-text" type="text" placeholder="text (\n \t \s work)" autocomplete="off" spellcheck="false">
+    <button class="find-btn" id="find-cond-apply" title="Builds the pattern into the Find box">Apply</button>
+    <span class="find-cond-hint">wraps your Find text in a lookaround — Aa case toggle still applies</span>
+  </div>
 </div>
 
 <!-- ========== EDITOR ========== -->
@@ -3462,6 +3510,14 @@ function updateThemeIcon() {
 // ============================================
 const lineNumCompartment = new Compartment();
 let showLineNums = store.get('cade-linenums') !== 'false';
+// Read-only mode (item 35): blocks all edits and — because editable(false)
+// drops contenteditable — the mobile keyboard never opens. Persisted per
+// device; a fixed badge mirrors zen-exit so the state is always visible.
+const readOnlyCompartment = new Compartment();
+let _readOnly = store.get('cade-readonly') === '1';
+function _readOnlyExts() {
+  return _readOnly ? [EditorView.editable.of(false), EditorState.readOnly.of(true)] : [];
+}
 // Feature 23 — line wrapping. lineWrapping lives in a compartment so it can be
 // reconfigured at runtime. Modes (item 3): 'none' (horizontal scroll), 'soft'
 // (default, visual wrap), 'hard' (insert real newlines so each visual row is its
@@ -4903,6 +4959,126 @@ const mdStylePlugin = ViewPlugin.fromClass(class {
   }
 }, { decorations: v => v.decorations });
 
+// ============================================
+// COLLAPSIBLE SECTIONS (item 31)
+// --------------------------------------------------------------------------
+// Every markdown heading gets a ▾ caret; clicking it folds the section (from
+// the end of the heading line to just before the next heading of the same or
+// higher level) behind a "… N lines" pill. Purely visual — the text is
+// untouched, so sync/undo/search all see the full document. Collapsed state
+// is per-session and keyed by heading level+text+occurrence, so edits above
+// a fold don't lose it; if a heading is edited/removed its fold just opens.
+// If anything moves the caret INSIDE a hidden range (search, go-to-line),
+// that section auto-expands so the cursor can never be invisible.
+// ============================================
+let _collapsedSections = new Set(); // "level|text#occ"
+let _collapseVersion = 0;
+const COLLAPSE_HEAD_RE = /^(#{1,6})\s+(\S.*)$/;
+
+function _scanSections(doc) {
+  // → [{key, level, headLine, from(=heading line end), to(=section end)}]
+  const heads = [];
+  const occ = {};
+  const nLines = doc.lines;
+  if (nLines > 30000) return heads; // give up on absurd docs — perf guard
+  for (let i = 1; i <= nLines; i++) {
+    const line = doc.line(i);
+    if (line.length > 400 || line.length < 2) continue;
+    const m = COLLAPSE_HEAD_RE.exec(line.text);
+    if (!m) continue;
+    // Headings inside fenced code blocks aren't sections.
+    if (typeof fenceContaining === 'function' && fenceContaining(line.from)) continue;
+    const base = m[1].length + '|' + m[2].trim();
+    occ[base] = (occ[base] || 0) + 1;
+    heads.push({ key: base + '#' + occ[base], level: m[1].length, lineNo: i, lineFrom: line.from, headEnd: line.to });
+  }
+  for (let h = 0; h < heads.length; h++) {
+    let endLine = nLines;
+    for (let j = h + 1; j < heads.length; j++) {
+      if (heads[j].level <= heads[h].level) { endLine = heads[j].lineNo - 1; break; }
+    }
+    heads[h].from = heads[h].headEnd;
+    heads[h].to = doc.line(endLine).to;
+    heads[h].hiddenLines = endLine - heads[h].lineNo;
+  }
+  return heads;
+}
+
+class _CollapseCaretWidget extends WidgetType {
+  constructor(key, open) { super(); this.key = key; this.open = open; }
+  eq(o) { return o.key === this.key && o.open === this.open; }
+  toDOM() {
+    const b = document.createElement('span');
+    b.className = 'cm-collapse-caret' + (this.open ? '' : ' closed');
+    b.textContent = this.open ? '▾' : '▸';
+    b.title = this.open ? 'Collapse section' : 'Expand section';
+    const key = this.key;
+    b.addEventListener('mousedown', (e) => { e.preventDefault(); e.stopPropagation(); window.__toggleSection(key); });
+    return b;
+  }
+  ignoreEvent() { return true; }
+}
+class _CollapsedPillWidget extends WidgetType {
+  constructor(key, n) { super(); this.key = key; this.n = n; }
+  eq(o) { return o.key === this.key && o.n === this.n; }
+  toDOM() {
+    const s = document.createElement('span');
+    s.className = 'cm-collapse-pill';
+    s.textContent = ' … ' + this.n + ' line' + (this.n === 1 ? '' : 's') + ' ';
+    s.title = 'Expand section';
+    const key = this.key;
+    s.addEventListener('mousedown', (e) => { e.preventDefault(); e.stopPropagation(); window.__toggleSection(key); });
+    return s;
+  }
+  ignoreEvent() { return true; }
+}
+window.__toggleSection = function(key) {
+  if (_collapsedSections.has(key)) _collapsedSections.delete(key);
+  else _collapsedSections.add(key);
+  _collapseVersion++;
+  try { editor.dispatch({}); } catch {}
+};
+
+function buildCollapseDecorations(view) {
+  if (!mdStyleEnabled || !_collapsedSections.size) {
+    // Still show carets on visible headings so the affordance exists.
+    if (!mdStyleEnabled) return Decoration.none;
+  }
+  const doc = view.state.doc;
+  const heads = _scanSections(doc);
+  if (!heads.length) return Decoration.none;
+  const selHead = view.state.selection.main.head;
+  const ranges = [];
+  const liveKeys = new Set(heads.map(h => h.key));
+  // Drop folds whose heading no longer exists (fail-open).
+  for (const k of [..._collapsedSections]) if (!liveKeys.has(k)) _collapsedSections.delete(k);
+  for (const h of heads) {
+    let closed = _collapsedSections.has(h.key);
+    // Never hide the caret's own position — auto-expand instead.
+    if (closed && selHead > h.from && selHead <= h.to) {
+      _collapsedSections.delete(h.key);
+      closed = false;
+    }
+    ranges.push(Decoration.widget({ widget: new _CollapseCaretWidget(h.key, !closed), side: -1 }).range(h.lineFrom));
+    if (closed && h.to > h.from && h.hiddenLines > 0) {
+      ranges.push(Decoration.replace({ widget: new _CollapsedPillWidget(h.key, h.hiddenLines) }).range(h.from, h.to));
+    }
+  }
+  ranges.sort((a, b) => a.from - b.from || a.startSide - b.startSide);
+  return Decoration.set(ranges, true);
+}
+
+const collapsePlugin = ViewPlugin.fromClass(class {
+  constructor(view) { this.v = _collapseVersion; this.mv = mdVersion; this.decorations = buildCollapseDecorations(view); }
+  update(update) {
+    if (update.docChanged || update.viewportChanged || update.selectionSet || this.v !== _collapseVersion || this.mv !== mdVersion) {
+      this.v = _collapseVersion;
+      this.mv = mdVersion;
+      this.decorations = buildCollapseDecorations(update.view);
+    }
+  }
+}, { decorations: v => v.decorations });
+
 // ===== Embedded images (#28) =====
 // Two on-document representations, both rendered as <img>:
 //   • OUT-OF-DOCUMENT (preferred):  "![img:<code>#<hash>]"  — the document holds
@@ -5267,6 +5443,7 @@ function buildEditorExtensions() {
     basicSetup,
     editorTheme,
     lineNumCompartment.of(showLineNums ? lineNumbers() : []),
+    readOnlyCompartment.of(_readOnlyExts()),
     history(),
     EditorView.updateListener.of(update => {
       if (update.docChanged || update.selectionSet) {
@@ -5310,6 +5487,7 @@ function buildEditorExtensions() {
     spellPlugin,
     searchPlugin,
     mdStylePlugin,
+    collapsePlugin,
     imagePlugin,
     // Treat embedded-image tokens as atomic units for the caret/selection so a
     // partial delete can't shred one into raw base64 (where available).
@@ -5721,6 +5899,28 @@ editor.dom.addEventListener('contextmenu', (e) => {
   const link = hitLink(pos);
   if (link && link.kind !== 'nav') { e.preventDefault(); openLinkMenu(link, e.clientX, e.clientY); return; }
   if (spellHit) { e.preventDefault(); openSpellPopup(spellHit); return; }
+  // Item 23: right-clicking INSIDE a selection opens an editing menu.
+  // (Right-click outside any selection still gives the browser's native menu,
+  // which is also where Inspect lives — pages can't open devtools themselves.)
+  const selm = editor.state.selection.main;
+  if (!selm.empty && pos >= selm.from && pos <= selm.to) {
+    e.preventDefault();
+    const selText = editor.state.sliceDoc(selm.from, selm.to);
+    openMenu([
+      { label: 'Cut', run: () => {
+          ctxCopy(selText);
+          editor.dispatch({ changes: { from: selm.from, to: selm.to, insert: '' } });
+          editor.focus();
+        } },
+      { label: 'Copy', run: () => ctxCopy(selText) },
+      { label: 'Paste', run: () => ctxPaste() },
+      { sep: true },
+      { label: 'Run script…', run: () => window.openPicker() },
+      { sep: true },
+      { label: 'Search Google', run: () => openLink('https://www.google.com/search?q=' + encodeURIComponent(selText.slice(0, 500))) },
+    ], e.clientX, e.clientY);
+    return;
+  }
 });
 
 // The popup is position:fixed and anchored to the word — close it if the
@@ -9544,6 +9744,59 @@ window.deleteRoomFromServer = async function(name) {
   showToast('Deleted "' + name + '" from the server and all synced devices', 'success', 3200);
 };
 
+// ---- Temp rooms (item 33): Ctrl+Shift+N creates temp_<stamp>; a sweep
+// deletes expired ones (server + all devices) after the configured TTL. ----
+function _tempStamp() {
+  const d = new Date(), p = n => String(n).padStart(2, '0');
+  return d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + '-' + p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds());
+}
+window.createTempRoom = function() {
+  const name = 'temp_' + _tempStamp();
+  if (rooms.includes(name)) return; // same-second double-tap
+  rooms.push(name);
+  touchRoomCreated(name);
+  roomMeta[name].temp = true; // rides the synced meta → expires account-wide
+  saveRooms();
+  saveRoomMeta();
+  renderRoomTabs();
+  switchRoom(name);
+  const ttl = (window.Settings && Settings.get('behavior.tempRoomTtl')) || '24';
+  showToast('Temp room created' + (ttl === 'never' ? '' : ' — self-deletes after ' + ttl + 'h'), 'success', 3000);
+};
+
+// Silent full deletion (no prompts): server node + tombstone + local purge.
+// Used by the temp-room sweep; deleteRoomFromServer stays the interactive path.
+async function _hardDeleteRoom(name) {
+  try {
+    const fbUrl = store.get('cade-firebase-url');
+    const baseKey = store.get('cade-sync-key');
+    if (fbUrl && baseKey && navigator.onLine) {
+      try { await initFirebase(fbUrl).ref('rooms/' + name).remove(); } catch {}
+    }
+  } catch {}
+  tombstoneRoom(name);
+  purgeLocalRoom(name);
+}
+
+function sweepTempRooms() {
+  let ttlPref = '24';
+  try { ttlPref = String((window.Settings && Settings.get('behavior.tempRoomTtl')) || '24'); } catch {}
+  if (ttlPref === 'never') return;
+  const ttlMs = (parseFloat(ttlPref) || 24) * 3600 * 1000;
+  const now = Date.now();
+  const expired = rooms.filter(r => {
+    const m = roomMeta[r];
+    return m && m.temp && m.created && (now - m.created > ttlMs);
+  });
+  if (!expired.length) return;
+  expired.forEach(r => { _hardDeleteRoom(r).catch(() => {}); });
+  showToast('Deleted expired temp room' + (expired.length > 1 ? 's' : '') + ': ' + expired.join(', '), 'success', 3500);
+  renderRoomTabs();
+  try { renderRoomManagerList(); } catch {}
+}
+setTimeout(sweepTempRooms, 12000);
+setInterval(sweepTempRooms, 30 * 60 * 1000);
+
 // Pin / archive toggles surfaced by Room Manager + context menus.
 window.toggleRoomPin = function(name) {
   setRoomPinned(name, !roomIsPinned(name));
@@ -12081,14 +12334,42 @@ const MAX_SEARCH_MATCHES = 5000;
 // MAX_SEARCH_MATCHES so navigation + decoration stay cheap on huge docs) and by
 // Replace All (called with an unbounded cap so it never silently skips matches
 // past the display cap — the replace-all correctness guarantee).
+// Item 27: plain (non-regex) searches understand a few escape tokens —
+//   \n newline · \t tab · \w a single space · \s any whitespace char · \\ backslash
+// A plain query containing one of them is compiled into a literal-safe regex.
+const FIND_ESCAPE_RE = /\\[ntws\\]/;
+function _literalQueryToRegex(q) {
+  let out = '';
+  for (let i = 0; i < q.length; i++) {
+    const c = q[i];
+    if (c === '\\' && i + 1 < q.length) {
+      const n = q[i + 1];
+      if (n === 'n') { out += '\\n'; i++; continue; }
+      if (n === 't') { out += '\\t'; i++; continue; }
+      if (n === 'w') { out += ' '; i++; continue; }
+      if (n === 's') { out += '[\\s]'; i++; continue; }
+      if (n === '\\') { out += '\\\\'; i++; continue; }
+    }
+    out += c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+  return out;
+}
+// The same tokens work in the REPLACE field (both modes): \w and \s emit a space.
+function _expandReplaceEscapes(r) {
+  return String(r).replace(/\\([ntws\\])/g, (m, c) =>
+    c === 'n' ? '\n' : c === 't' ? '\t' : c === '\\' ? '\\' : ' ');
+}
+
 function scanMatches(cap) {
   const out = [];
   const q = searchState.query;
   if (!q) return out;
   const text = editor.state.doc.toString();
-  if (searchState.regex) {
+  const useRegex = searchState.regex || FIND_ESCAPE_RE.test(q);
+  if (useRegex) {
     let re;
-    try { re = new RegExp(q, searchState.caseSensitive ? 'g' : 'gi'); }
+    const pattern = searchState.regex ? q : _literalQueryToRegex(q);
+    try { re = new RegExp(pattern, searchState.caseSensitive ? 'g' : 'gi'); }
     catch { return null; }
     let m;
     while ((m = re.exec(text)) !== null && out.length < cap) {
@@ -12168,13 +12449,18 @@ function findStep(delta) {
 // matched substring so $1/$& group references work; (?:) wrapping is not
 // needed since we anchor implicitly by matching the same text.
 function replacementFor(matchText) {
-  if (!searchState.regex) return document.getElementById('replace-input').value;
+  const raw = _expandReplaceEscapes(document.getElementById('replace-input').value);
+  if (!searchState.regex) {
+    // A plain query with escape tokens matched via regex — group refs don't
+    // apply, but the escape expansion above does (item 27).
+    return raw;
+  }
   try {
     return matchText.replace(
       new RegExp(searchState.query, searchState.caseSensitive ? '' : 'i'),
-      document.getElementById('replace-input').value
+      raw
     );
-  } catch { return document.getElementById('replace-input').value; }
+  } catch { return raw; }
 }
 
 window.findReplaceCurrent = function() {
@@ -12271,6 +12557,41 @@ window.closeFindPanel = function() {
     caseBtn.classList.toggle('active', searchState.caseSensitive);
     searchRecomputeAndRefresh(true);
   });
+  // Item 28: "only if…" builder — wraps the plain Find text in a lookaround so
+  // conditional replaces don't require knowing regex. Escape tokens (item 27)
+  // work in both fields via _literalQueryToRegex.
+  const condBtn = document.getElementById('find-cond-btn');
+  const condRow = document.getElementById('find-cond-row');
+  condBtn.addEventListener('click', () => {
+    const open = condRow.classList.toggle('open');
+    condBtn.classList.toggle('active', open);
+    if (open) document.getElementById('find-cond-text').focus();
+  });
+  function applyCondition() {
+    const base = _literalQueryToRegex(input.value);
+    const cond = _literalQueryToRegex(document.getElementById('find-cond-text').value);
+    if (!input.value || !cond) { showToast('Fill both the Find text and the condition text', 'error', 2200); return; }
+    const type = document.getElementById('find-cond-type').value;
+    let pattern;
+    if (type === 'followed') pattern = base + '(?=' + cond + ')';
+    else if (type === 'not-followed') pattern = base + '(?!' + cond + ')';
+    else if (type === 'preceded') pattern = '(?<=' + cond + ')' + base;
+    else pattern = '(?<!' + cond + ')' + base;
+    input.value = pattern;
+    searchState.query = pattern;
+    if (!searchState.regex) { searchState.regex = true; regexBtn.classList.add('active'); }
+    condRow.classList.remove('open');
+    condBtn.classList.remove('active');
+    searchState.current = -1;
+    searchRecomputeAndRefresh(true);
+    input.focus();
+  }
+  document.getElementById('find-cond-apply').addEventListener('click', applyCondition);
+  document.getElementById('find-cond-text').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); applyCondition(); }
+    if (e.key === 'Escape') { e.preventDefault(); condRow.classList.remove('open'); condBtn.classList.remove('active'); }
+  });
+
   regexBtn.addEventListener('click', () => {
     searchState.regex = !searchState.regex;
     regexBtn.classList.toggle('active', searchState.regex);
@@ -12314,6 +12635,36 @@ window.toggleMdStyle = function() {
   updateMdStyleLabel();
   showToast('Markdown styling ' + (mdStyleEnabled ? 'on' : 'off'), 'success', 1500);
 };
+
+// Read-only mode (item 35): no edits, no mobile keyboard, clearly badged.
+function _applyReadOnlyUI() {
+  document.body.classList.toggle('readonly', _readOnly);
+  let badge = document.getElementById('readonly-badge');
+  if (_readOnly) {
+    if (!badge) {
+      badge = document.createElement('button');
+      badge.id = 'readonly-badge';
+      badge.className = 'btn readonly-badge';
+      badge.textContent = '🔒 Read-only — click to unlock';
+      badge.onclick = () => window.toggleReadOnly();
+      document.body.appendChild(badge);
+    }
+  } else if (badge) badge.remove();
+  const lbl = document.getElementById('readonly-label');
+  if (lbl) lbl.textContent = _readOnly ? 'Read-Only Mode: On' : 'Read-Only Mode: Off';
+}
+window.toggleReadOnly = function() {
+  closeAllMenus();
+  _readOnly = !_readOnly;
+  store.set('cade-readonly', _readOnly ? '1' : '0');
+  try { editor.dispatch({ effects: readOnlyCompartment.reconfigure(_readOnlyExts()) }); } catch {}
+  _applyReadOnlyUI();
+  showToast(_readOnly ? 'Read-only mode on — editing locked' : 'Editing unlocked', 'success', 1800);
+  if (!_readOnly) { try { editor.focus(); } catch {} }
+};
+// Restore persisted state on boot (the compartment already reflects it via
+// buildEditorExtensions; this just paints the badge/label).
+setTimeout(_applyReadOnlyUI, 50);
 
 // ============================================
 // SNAPSHOTS — local version history per document
@@ -13163,11 +13514,13 @@ window.mdBtn = function(kind) {
   // typed when the caret is at its end, or insert empty markers at the caret.
   let from = sel.from, to = sel.to;
   if (sel.empty) { const wr = _wordRangeBeforeCursor(); if (wr) { from = wr.from; to = wr.to; } }
-  // When Markdown styling is OFF, bold/italic/underline emit FANCY unicode text
-  // (toggling) instead of literal markdown tags (item 1).
+  // Style flavor (item 2): a preference now picks between markdown tags and
+  // fancy Unicode for bold/italic/underline. Fancy is also used when Markdown
+  // styling is OFF (raw ** tags would just be noise then).
   const fancyKind = kind === 'bold' || kind === 'italic' || kind === 'under';
   const mdOn = !(typeof mdStyleEnabled !== 'undefined' && !mdStyleEnabled);
-  if (fancyKind && !mdOn) {
+  const flavor = (window.Settings && Settings.get('editor.styleFlavor')) || 'markdown';
+  if (fancyKind && (!mdOn || flavor === 'fancy')) {
     if (from === to) { editor.focus(); return; } // nothing to fancify at a bare caret
     const src = editor.state.sliceDoc(from, to);
     let out;
@@ -13177,12 +13530,42 @@ window.mdBtn = function(kind) {
     editor.dispatch({ changes: { from, to, insert: out }, selection: { anchor: from, head: from + out.length } });
     editor.focus(); return;
   }
-  const t = editor.state.sliceDoc(from, to);
-  const insert = def.wrap[0] + t + def.wrap[1];
+  const doc = editor.state.doc;
+  const [open, close] = def.wrap;
+  let t = editor.state.sliceDoc(from, to);
+  // TOGGLE OFF (item 2): pressing bold on an already-bold target unwraps it
+  // instead of stacking more markers. Two shapes count as "already wrapped":
+  //   a) the target itself includes the markers  → **word**
+  //   b) the markers sit just outside the target →  **|word|**
+  // (For italic, a single * must not confuse itself with bold's **.)
+  const selfWrapped = t.length >= open.length + close.length &&
+    t.startsWith(open) && t.endsWith(close) &&
+    !(kind === 'italic' && (t.startsWith('**') || t.endsWith('**') !== t.endsWith('*')));
+  if (selfWrapped && !(kind === 'italic' && t.startsWith('**'))) {
+    const inner = t.slice(open.length, t.length - close.length);
+    editor.dispatch({ changes: { from, to, insert: inner }, selection: { anchor: from, head: from + inner.length } });
+    editor.focus(); return;
+  }
+  const beforeOk = from >= open.length && doc.sliceString(from - open.length, from) === open;
+  const afterOk = to + close.length <= doc.length && doc.sliceString(to, to + close.length) === close;
+  const italicIsReallyBold = kind === 'italic' &&
+    from >= 2 && doc.sliceString(from - 2, from) === '**' &&
+    doc.sliceString(to, to + 2) === '**';
+  if (beforeOk && afterOk && !italicIsReallyBold) {
+    editor.dispatch({
+      changes: [
+        { from: from - open.length, to: from, insert: '' },
+        { from: to, to: to + close.length, insert: '' },
+      ],
+      selection: { anchor: from - open.length, head: to - open.length },
+    });
+    editor.focus(); return;
+  }
+  const insert = open + t + close;
   if (from === to) {
-    editor.dispatch({ changes: { from, to, insert }, selection: { anchor: from + def.wrap[0].length } });
+    editor.dispatch({ changes: { from, to, insert }, selection: { anchor: from + open.length } });
   } else {
-    editor.dispatch({ changes: { from, to, insert }, selection: { anchor: from + def.wrap[0].length, head: from + def.wrap[0].length + t.length } });
+    editor.dispatch({ changes: { from, to, insert }, selection: { anchor: from + open.length, head: from + open.length + t.length } });
   }
   editor.focus();
 };
@@ -13612,16 +13995,27 @@ document.addEventListener('keydown', (e) => {
     return;
   }
 
-  // Bold / Italic / Underline on the selection (Ctrl/Cmd+B/I/U) via the
-  // matching transform scripts (#13). Capture phase so CM6/contenteditable
-  // never see the key first.
+  // Bold / Italic / Underline (Ctrl/Cmd+B/I/U) — routed through mdBtn so the
+  // hotkeys, toolbar buttons and the editor.styleFlavor preference all agree
+  // (markdown tags with toggle-off, or fancy Unicode with toggle-off; item 2).
   if (modKey && !e.shiftKey && !e.altKey && !isInputField) {
     const k = (e.key || '').toLowerCase();
-    const prefix = k === 'b' ? 'Bold (' : k === 'i' ? 'Italic (' : k === 'u' ? 'Underline (' : null;
-    if (prefix) {
-      const sc = scripts.find(s => s.name.startsWith(prefix));
-      if (sc) { e.preventDefault(); e.stopPropagation(); executeScript(sc); return; }
+    const kind = k === 'b' ? 'bold' : k === 'i' ? 'italic' : k === 'u' ? 'under' : null;
+    if (kind) {
+      e.preventDefault(); e.stopPropagation();
+      try { window.mdBtn(kind); } catch {}
+      return;
     }
+  }
+
+  // Ctrl+N → new room prompt · Ctrl+Shift+N → self-deleting temp room
+  // (items 32/33). NOTE: some browsers reserve these outside installed-PWA
+  // windows; where the browser eats the key, use the + tab button instead.
+  if (modKey && !e.altKey && (e.key || '').toLowerCase() === 'n' && !isInputField) {
+    e.preventDefault(); e.stopPropagation();
+    if (e.shiftKey) window.createTempRoom();
+    else window.addRoomPrompt();
+    return;
   }
 
   if (modKey && e.key === 'Tab' && rooms.length > 0 && !isInputField) {
@@ -13823,6 +14217,20 @@ try {
   // are registered by the timer module itself when it loads.)
   // F2 — snapshot retention. Auto-discard snapshots older than the chosen window
   // (the newest is always kept). Storage is also capped per-room by count + bytes.
+  // Temp-room lifetime (item 33): Ctrl+Shift+N rooms self-delete after this.
+  registerSetting({ key: 'behavior.tempRoomTtl', label: 'Temp room lifetime', type: 'select', default: '24', section: 'Behavior', hint: 'Ctrl+Shift+N creates a temp_<stamp> room that deletes itself (server + all devices) after this long.', options: [
+    { value: '1', label: '1 hour' },
+    { value: '3', label: '3 hours' },
+    { value: '6', label: '6 hours' },
+    { value: '24', label: '24 hours' },
+    { value: '48', label: '48 hours' },
+    { value: 'never', label: 'Never (keep)' },
+  ] });
+  // Bold/italic/underline flavor (item 2): markdown tags vs fancy Unicode.
+  registerSetting({ key: 'editor.styleFlavor', label: 'Bold/italic/underline style', type: 'select', default: 'markdown', section: 'Editor', hint: 'What the B/I/U buttons and Ctrl+B/I/U produce. Fancy Unicode survives copy-paste anywhere; markdown tags render in-app. (Fancy is always used while Markdown Styling is off.)', options: [
+    { value: 'markdown', label: 'Markdown (**bold**)' },
+    { value: 'fancy', label: 'Fancy Unicode (𝗯𝗼𝗹𝗱)' },
+  ] });
   // Editor horizontal padding (item 19) — drives the --editor-hpad CSS var.
   registerSetting({ key: 'appearance.editorHPad', label: 'Document side padding', type: 'select', default: 'normal', section: 'Appearance', hint: 'Horizontal breathing room around the document text.', options: [
     { value: 'compact', label: 'Compact' },
