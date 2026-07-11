@@ -5928,6 +5928,9 @@ const PLUGIN_DEFS = [
   { name: 'uuid',    insert: '@uuid',    kind: 'inline', desc: 'Random UUID' },
   { name: 'week',    insert: '@week',    kind: 'inline', desc: 'ISO week number' },
   { name: 'copy',    insert: '@copy',    kind: 'action', desc: 'Copy block below' },
+  // Not an injection — the token stays in the doc; the Reminders widget scans
+  // for it and fires a notification at the given time.
+  { name: 'remind',  insert: '@remind!', kind: 'text',   desc: 'Reminder: @remind!2026-01-31 09:00!message' },
 ];
 
 let acEl = null;        // dropdown element
@@ -14194,7 +14197,12 @@ async function bootModules() {
     if (!m || !m.id || !m.entry || _manifestById.has(m.id)) continue;
     _manifestById.set(m.id, m);
     try {
-      if (m.type === 'widget') registerWidgetStub(m);
+      if (m.type === 'widget') {
+        registerWidgetStub(m);
+        // Eager widgets (e.g. reminders) run background logic from boot, not
+        // just when first opened. Rare — costs a fetch on every load.
+        if (m.eager) loadModule(m).catch(() => {});
+      }
       else if (m.type === 'script') registerScriptStub(m);
       else if (m.type === 'script-pack') {
         // One module file registering MANY scripts: the manifest entry carries

@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "version": "2026.07.11-1",
+  "version": "2026.07.11-3",
   "modules": [
     {
       "id": "crawler",
@@ -554,6 +554,138 @@
           "tags": "diary,clean,empty,date"
         }
       ]
+    },
+    {
+      "id": "pack-clean",
+      "type": "script-pack",
+      "name": "Clean & Restructure Pack",
+      "description": "Whitespace, list, table and code cleanup transforms",
+      "entry": "scripts/pack-clean/pack-clean.js",
+      "scripts": [
+        {
+          "name": "Strip Trailing Whitespace",
+          "description": "Remove spaces and tabs from the end of every line",
+          "icon": "🧹",
+          "tags": "clean,trailing,whitespace,trim,lines,code"
+        },
+        {
+          "name": "Collapse Blank Lines",
+          "description": "Squeeze runs of blank lines down to a single blank line",
+          "icon": "🗜",
+          "tags": "clean,blank,empty,lines,collapse,squeeze"
+        },
+        {
+          "name": "Tabs → Spaces",
+          "description": "Replace every tab with spaces (asks for width, default 4)",
+          "icon": "⇥",
+          "tags": "tabs,spaces,indent,convert,code"
+        },
+        {
+          "name": "Spaces → Tabs",
+          "description": "Convert leading space indentation to tabs (asks for width, default 4)",
+          "icon": "⇤",
+          "tags": "tabs,spaces,indent,convert,code"
+        },
+        {
+          "name": "Straighten Quotes",
+          "description": "Replace smart/curly quotes and dashes with plain ASCII ones",
+          "icon": "❝",
+          "tags": "quotes,smart,curly,straighten,ascii,clean,code"
+        },
+        {
+          "name": "Sentence case",
+          "description": "Lowercase everything, then capitalize the start of each sentence",
+          "icon": "🔡",
+          "tags": "case,sentence,capitalize,clean"
+        },
+        {
+          "name": "Dedupe Lines (Ignore Case)",
+          "description": "Remove duplicate lines, treating different cases as the same line",
+          "icon": "🚿",
+          "tags": "dedupe,unique,duplicate,lines,case,clean,list"
+        },
+        {
+          "name": "Sort by Column",
+          "description": "Sort lines by the Nth column (asks for delimiter and column number)",
+          "icon": "🧮",
+          "tags": "sort,column,csv,table,list,restructure"
+        },
+        {
+          "name": "Renumber Lists",
+          "description": "Fix numbered lists so each run counts 1. 2. 3. again (indent-aware)",
+          "icon": "🔢",
+          "tags": "renumber,list,numbered,markdown,restructure,fix"
+        },
+        {
+          "name": "Fix Checkboxes",
+          "description": "Normalize todo checkboxes: [] [ x ] [X] → [ ] and [x]",
+          "icon": "☑",
+          "tags": "todo,checkbox,fix,normalize,list,clean"
+        },
+        {
+          "name": "Normalize Unicode",
+          "description": "NFC-normalize and strip zero-width/invisible characters",
+          "icon": "🧼",
+          "tags": "unicode,normalize,nfc,zero-width,invisible,clean"
+        },
+        {
+          "name": "Remove ANSI Codes",
+          "description": "Strip terminal color/escape sequences from pasted console output",
+          "icon": "🖥",
+          "tags": "ansi,escape,terminal,console,clean,code,log"
+        },
+        {
+          "name": "CSV → Markdown Table",
+          "description": "Turn comma-separated lines into a markdown table (first row = header)",
+          "icon": "🧾",
+          "tags": "csv,markdown,table,convert,restructure"
+        },
+        {
+          "name": "Markdown Table → CSV",
+          "description": "Turn a markdown table back into comma-separated lines",
+          "icon": "📤",
+          "tags": "markdown,table,csv,convert,restructure"
+        },
+        {
+          "name": "Sort JSON Keys",
+          "description": "Pretty-print JSON with all object keys sorted alphabetically (recursive)",
+          "icon": "🗂",
+          "tags": "json,sort,keys,format,code,clean"
+        },
+        {
+          "name": "Align Colons",
+          "description": "Align the values after 'key:' across consecutive lines (config/YAML style)",
+          "icon": "📐",
+          "tags": "align,colon,yaml,config,format,code"
+        },
+        {
+          "name": "Prefix Lines…",
+          "description": "Add a prefix to every line — or remove it if every line already has it",
+          "icon": "▶",
+          "tags": "prefix,comment,quote,lines,toggle,restructure,code"
+        }
+      ]
+    },
+    {
+      "id": "reminders",
+      "type": "widget",
+      "name": "Reminders",
+      "description": "Fire alerts from @remind!datetime!message tokens in your docs",
+      "icon": "⏰",
+      "tags": "remind,reminder,alarm,alert,notification,time,schedule",
+      "entry": "widgets/reminders/reminders.js",
+      "css": "widgets/reminders/reminders.css",
+      "eager": true
+    },
+    {
+      "id": "stats",
+      "type": "widget",
+      "name": "Text Stats",
+      "description": "Live word / character / reading-time stats with top words",
+      "icon": "📊",
+      "tags": "stats,words,count,characters,reading,time,frequency,analyze",
+      "entry": "widgets/stats/stats.js",
+      "css": "widgets/stats/stats.css"
     }
   ]
 }
