@@ -1979,9 +1979,11 @@ body {
   padding: 0;
 }
 .cm-ctx-swatch.current { outline: 2px solid var(--accent); outline-offset: 1px; }
+.cm-ctx-swatch.fg { background: var(--surface); font-weight: 700; font-size: 13px; line-height: 1; }
+.cm-ctx-swatches-label { padding: 5px 10px 0; font-size: var(--text-xs); color: var(--text-muted); }
 
 /* ============================================
-   TEXT HIGHLIGHTS (==color|text== sentinel)
+   TEXT HIGHLIGHTS (%%bg/fg|text%% sentinel; legacy ==color|text==)
    ============================================ */
 .cm-hl { border-radius: 2px; box-decoration-break: clone; -webkit-box-decoration-break: clone; padding: 0.05em 0; }
 .cm-hl-yellow { background: var(--hl-yellow); }
@@ -1992,6 +1994,14 @@ body {
 .cm-hl-purple { background: var(--hl-purple); }
 .cm-hl-orange { background: var(--hl-orange); }
 .cm-hl-gray   { background: var(--hl-gray); }
+/* Text-colour-only highlight (%%/fg|…%%): no background chip. */
+.cm-hl-nobg   { background: transparent; padding: 0; border-radius: 0; }
+/* Picker rows: section label + text-colour swatch letters. */
+.hl-picker.hl-picker-2ch { grid-template-columns: repeat(9, 1fr); }
+.hl-picker-label { grid-column: 1 / -1; width: 100%; font-size: var(--text-xs); color: var(--text-muted); padding: 2px 2px 0; }
+.hl-swatch.hl-fg { background: var(--surface); border: 1px solid var(--border); font-weight: 700; font-size: 14px; line-height: 1; display: inline-flex; align-items: center; justify-content: center; }
+.hl-swatch.hl-wide { grid-column: 1 / -1; width: 100%; font-size: var(--text-xs); color: var(--text-muted); }
+.hl-swatch.selected { outline: 2px solid var(--accent); outline-offset: 1px; }
 
 /* ============================================
    PLUGIN AUTOCOMPLETE
@@ -4074,47 +4084,132 @@ const linkPlugin = ViewPlugin.fromClass(class {
 }, { decorations: v => v.decorations });
 
 // ============================================
-// TEXT HIGHLIGHTS  ==color|text==  (color optional → default yellow)
+// TEXT HIGHLIGHTS v2  %%bg|text%%  ·  %%bg/fg|text%%  ·  %%/fg|text%%
 // ============================================
-// The sentinel markup is hidden; only the inner text shows, tinted with a
-// theme-adaptive translucent background. Tap (mobile) / right-click (desktop)
-// opens a menu to recolor or remove. Stored as plain text so it survives sync.
+// The sentinel markup is hidden; only the inner text shows — tinted with a
+// theme-adaptive translucent background (bg) and/or a text colour (fg). Tap
+// (mobile) / right-click (desktop) opens a menu to recolor or remove. Stored
+// as plain text so it survives sync.
+//
+// WHY A NEW SENTINEL: the old `==text==` form (colour optional → yellow)
+// matched any two `==` on nearby lines — `a == b == c`, code, math — and
+// coloured text nobody asked it to. v2 rules kill the false positives:
+//   1. The spec + `|` is REQUIRED: `%%yellow|note%%`, `%%yellow/red|warm%%`,
+//      `%%/blue|blue text, no background%%`, `%%#ff8800|hex works too%%`.
+//   2. The spec must parse to known colour names or #hex — otherwise the
+//      match is rejected and nothing renders.
+//   3. Nothing inside fenced ``` code blocks or inline `code` ever colours.
+//   4. Legacy `==color|text==` (with a RECOGNISED colour) still renders for
+//      old documents; bare `==text==` no longer colours anything. The
+//      "Migrate Highlights" script rewrites v1 → v2.
+//   5. Highlights follow the Markdown Styling toggle: styling off ("no
+//      syntax" mode) shows the raw sentinels, uncoloured.
 const HL_COLORS = ['yellow', 'green', 'blue', 'red', 'pink', 'purple', 'orange', 'gray'];
 const HL_DEFAULT = 'yellow';
-const RE_HL = /==([^=]+?)==/g;
+// v2: %%spec|text%% — spec chars are limited (no %, |, newline) and short.
+const RE_HL2 = /%%([^|%\n]{1,32})\|([\s\S]+?)%%/g;
+// v1 (legacy, strict): ==color|text== with a to-be-validated colour word.
+const RE_HL1 = /==([a-zA-Z]{3,10})\|([\s\S]+?)==/g;
 
-// Split a sentinel's inner text into {color, text, openLen} where openLen is the
-// number of leading chars ("==" plus an optional "color|") before the text.
-function parseHighlight(inner) {
-  // Allow empty text after the color (the @color injection produces "color|"
-  // momentarily) — buildHighlightDecorations skips zero-length highlights.
-  const m = inner.match(/^([a-zA-Z]+)\|([\s\S]*)$/);
-  if (m && HL_COLORS.includes(m[1].toLowerCase())) {
-    return { color: m[1].toLowerCase(), text: m[2], openLen: 2 + m[1].length + 1 };
+const HL_HEX_RE = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
+function _hlColorToken(tok) {
+  if (!tok) return null;
+  const t = String(tok).trim();
+  if (HL_COLORS.includes(t.toLowerCase())) return t.toLowerCase();
+  if (HL_HEX_RE.test(t)) return t.toLowerCase();
+  return null;
+}
+// Parse a v2 spec → {bg, fg} (either may be null, never both) or null if the
+// spec is malformed (= this %%…%% is NOT a highlight).
+function parseHighlightSpec(spec) {
+  const parts = String(spec).split('/');
+  if (parts.length > 2) return null;
+  const bgTok = parts[0].trim();
+  const fgTok = parts.length > 1 ? parts[1].trim() : '';
+  const bg = bgTok ? _hlColorToken(bgTok) : null;
+  const fg = fgTok ? _hlColorToken(fgTok) : null;
+  if (bgTok && !bg) return null;
+  if (fgTok && !fg) return null;
+  if (!bg && !fg) return null;
+  return { bg, fg };
+}
+// Compose the canonical spec string for {bg, fg}.
+function hlSpecString(bg, fg) {
+  return (bg || '') + (fg ? '/' + fg : '');
+}
+// Decoration attrs for a highlight: named bg → theme class; hex bg → inline
+// translucent background; fg → inline colour (named fg uses the readable
+// auto-color palette hex).
+function _hlMarkSpec(bg, fg) {
+  let cls = 'cm-hl';
+  let style = '';
+  if (bg) {
+    if (HL_COLORS.includes(bg)) cls += ' cm-hl-' + bg;
+    else style += 'background:' + bg + '40;';
+  } else {
+    cls += ' cm-hl-nobg';
   }
-  return { color: HL_DEFAULT, text: inner, openLen: 2 };
+  if (fg) style += 'color:' + (AUTOCOLOR_CSS[fg] || fg) + ';';
+  return style ? { class: cls, attributes: { style } } : { class: cls };
 }
 
-// Line-relative spans of the sentinel markup ("==color|" and trailing "==") so
-// spell check can skip the color token without skipping the highlighted prose.
+// Shared scanner: walk BOTH sentinel forms in `text`, validate, and call
+// cb(start, end, openLen, bg, fg) for each real highlight (offsets relative
+// to `text`). v2 matches win over any v1 match that overlaps them.
+function _scanHighlights(text, cb) {
+  const taken = [];
+  const overlaps = (a, b) => taken.some(([x, y]) => a < y && b > x);
+  RE_HL2.lastIndex = 0;
+  let m;
+  while ((m = RE_HL2.exec(text)) !== null) {
+    if (m[0].length > 4000) continue; // oversized span — data, not prose
+    const spec = parseHighlightSpec(m[1]);
+    if (!spec) continue;
+    const start = m.index, end = start + m[0].length;
+    taken.push([start, end]);
+    cb(start, end, 2 + m[1].length + 1, spec.bg, spec.fg);
+  }
+  RE_HL1.lastIndex = 0;
+  while ((m = RE_HL1.exec(text)) !== null) {
+    if (m[0].length > 4000) continue;
+    const c = m[1].toLowerCase();
+    if (!HL_COLORS.includes(c)) continue;
+    const start = m.index, end = start + m[0].length;
+    if (overlaps(start, end)) continue;
+    cb(start, end, 2 + m[1].length + 1, c, null);
+  }
+}
+
+// Line-relative spans of the sentinel markup (opening "%%spec|"/"==color|" and
+// the trailing delimiter) so spell check can skip the colour token without
+// skipping the highlighted prose.
 function highlightMarkupSpans(text) {
   const spans = [];
-  RE_HL.lastIndex = 0;
-  let m;
-  while ((m = RE_HL.exec(text)) !== null) {
-    const start = m.index, end = start + m[0].length;
-    const { openLen } = parseHighlight(m[1]);
-    if (end - 2 <= start + openLen) continue;
+  _scanHighlights(text, (start, end, openLen) => {
+    if (end - 2 <= start + openLen) return;
     spans.push({ start, end: start + openLen });
     spans.push({ start: end - 2, end });
-  }
+  });
   return spans;
 }
 
-let highlightRanges = []; // viewport spans: {from,to,color,textFrom,textTo}
+// Is `pos` inside inline `code` on its line? (Odd backtick count before it.)
+function _inInlineCode(doc, pos) {
+  const line = doc.lineAt(pos);
+  if (line.length > 2000) return false;
+  const upto = doc.sliceString(line.from, pos);
+  let n = 0;
+  for (let i = 0; i < upto.length; i++) if (upto.charCodeAt(i) === 96) n++;
+  return (n & 1) === 1;
+}
+
+let highlightRanges = []; // viewport spans: {from,to,bg,fg,textFrom,textTo}
 
 function buildHighlightDecorations(view) {
   highlightRanges = [];
+  // "No syntax" mode: markdown styling off also disables all colouring — the
+  // raw sentinels show as plain text.
+  if (!mdStyleEnabled) return Decoration.none;
   const doc = view.state.doc;
   const ranges = [];
   const HL_LOOK_LINES = 60;  // bounded line lookaround for straddling highlights
@@ -4123,32 +4218,33 @@ function buildHighlightDecorations(view) {
   // Scan one line-aligned RUN (a span of consecutive in-size lines) as a single
   // contiguous string so a highlight that wraps across newlines still matches and
   // tints every line. Runs always start/end on line boundaries, so the regex
-  // never begins mid-token (which could mis-pair an oversized span's trailing ==
-  // with the next delimiter).
+  // never begins mid-token (which could mis-pair an oversized span's trailing
+  // delimiter with the next one).
   const scanRun = (fromPos, toPos) => {
     if (toPos <= fromPos) return;
     const text = doc.sliceString(fromPos, toPos);
-    RE_HL.lastIndex = 0;
-    let m;
-    while ((m = RE_HL.exec(text)) !== null) {
-      if (m[0].length > 4000) continue; // skip oversized spans (e.g. data blobs)
-      const start = fromPos + m.index;
-      const end = start + m[0].length;
-      const { color, openLen } = parseHighlight(m[1]);
+    _scanHighlights(text, (s, e, openLen, bg, fg) => {
+      const start = fromPos + s;
+      const end = fromPos + e;
+      // Code is never a highlight: skip anything touching a fenced block or
+      // sitting in inline `code` — the big false-positive surface of v1.
+      if (fenceContaining(start) || fenceContaining(end - 1)) return;
+      if (_inInlineCode(doc, start)) return;
       const textFrom = start + openLen;
       const textTo = end - 2;
-      if (textTo <= textFrom) continue; // empty highlight — leave markup visible
-      // Hide the opening markup, tint the text (across any line breaks), hide "==".
+      if (textTo <= textFrom) return; // empty highlight — leave markup visible
+      // Hide the opening markup, tint the text (across line breaks), hide the close.
       ranges.push(Decoration.replace({}).range(start, textFrom));
-      ranges.push(Decoration.mark({ class: 'cm-hl cm-hl-' + color }).range(textFrom, textTo));
+      ranges.push(Decoration.mark(_hlMarkSpec(bg, fg)).range(textFrom, textTo));
       ranges.push(Decoration.replace({}).range(textTo, end));
-      highlightRanges.push({ from: start, to: end, color, textFrom, textTo });
-    }
+      highlightRanges.push({ from: start, to: end, bg, fg, textFrom, textTo });
+    });
   };
 
   for (const { from, to } of view.visibleRanges) {
-    // Bounded line lookaround so a highlight whose ==opener (or trailing ==) sits
-    // just off-screen is still resolved and its on-screen portion stays tinted (#9).
+    // Bounded line lookaround so a highlight whose opener (or closing marker)
+    // sits just off-screen is still resolved and its on-screen portion stays
+    // tinted (#9).
     const lo = Math.max(1, doc.lineAt(from).number - HL_LOOK_LINES);
     const hi = Math.min(doc.lines, doc.lineAt(to).number + HL_LOOK_LINES);
     let runFrom = -1, runTo = -1;
@@ -4166,13 +4262,17 @@ function buildHighlightDecorations(view) {
     if (runFrom >= 0) scanRun(runFrom, runTo);
   }
   ranges.sort((a, b) => a.from - b.from || a.startSide - b.startSide);
+  highlightRanges.sort((a, b) => a.from - b.from);
   return Decoration.set(ranges, true);
 }
 
 const highlightPlugin = ViewPlugin.fromClass(class {
-  constructor(view) { this.decorations = buildHighlightDecorations(view); }
+  constructor(view) { this.v = mdVersion; this.decorations = buildHighlightDecorations(view); }
   update(update) {
-    if (update.docChanged || update.viewportChanged) this.decorations = buildHighlightDecorations(update.view);
+    if (update.docChanged || update.viewportChanged || this.v !== mdVersion) {
+      this.v = mdVersion;
+      this.decorations = buildHighlightDecorations(update.view);
+    }
   }
 }, { decorations: v => v.decorations });
 
@@ -4191,6 +4291,8 @@ function loadAutoColorRules() {
 }
 function saveAutoColorRules() { try { store.set(_autoColorKey(), JSON.stringify(_autoColorRules)); } catch {} }
 function buildAutoColorDecorations(view) {
+  // "No syntax" mode: markdown styling off disables word colouring too.
+  if (!mdStyleEnabled) return Decoration.none;
   if (!_autoColorRules || !Object.keys(_autoColorRules).length) return Decoration.none;
   const ranges = [];
   const doc = view.state.doc;
@@ -4213,9 +4315,12 @@ function buildAutoColorDecorations(view) {
   return Decoration.set(ranges, true);
 }
 const autoColorPlugin = ViewPlugin.fromClass(class {
-  constructor(view) { this.decorations = buildAutoColorDecorations(view); }
+  constructor(view) { this.v = mdVersion; this.decorations = buildAutoColorDecorations(view); }
   update(update) {
-    if (update.docChanged || update.viewportChanged) this.decorations = buildAutoColorDecorations(update.view);
+    if (update.docChanged || update.viewportChanged || this.v !== mdVersion) {
+      this.v = mdVersion;
+      this.decorations = buildAutoColorDecorations(update.view);
+    }
   }
 }, { decorations: v => v.decorations });
 // No StateEffect export here, so force a rebuild by reconfiguring the compartment
@@ -5664,10 +5769,23 @@ function openMenu(items, x, y) {
     if (it.swatches) {
       const row = document.createElement('div');
       row.className = 'cm-ctx-swatches';
+      if (it.label) {
+        const lab = document.createElement('div');
+        lab.className = 'cm-ctx-swatches-label';
+        lab.textContent = it.label;
+        menu.appendChild(lab);
+      }
       it.swatches.forEach(c => {
         const sw = document.createElement('button');
-        sw.className = 'cm-ctx-swatch cm-hl-' + c + (c === it.current ? ' current' : '');
-        sw.title = c;
+        if (it.kind === 'fg') {
+          // Text-colour row: letter swatches instead of background chips.
+          sw.className = 'cm-ctx-swatch fg' + (c === it.current ? ' current' : '');
+          sw.style.color = AUTOCOLOR_CSS[c] || c;
+          sw.textContent = 'A';
+        } else {
+          sw.className = 'cm-ctx-swatch cm-hl-' + c + (c === it.current ? ' current' : '');
+        }
+        sw.title = (it.kind === 'fg' ? 'text ' : '') + c;
         sw.addEventListener('click', () => { closeCtxMenu(); it.onPick(c); });
         row.appendChild(sw);
       });
@@ -5724,21 +5842,28 @@ function openLinkMenu(link, x, y) {
   openMenu(items, x, y);
 }
 
-// Build the menu for a highlight: recolor swatches, remove, copy, paste.
+// Build the menu for a highlight: background + text-colour swatch rows,
+// remove, copy, paste.
 function openHighlightMenu(hl, x, y) {
   const innerText = editor.state.doc.sliceString(hl.textFrom, hl.textTo);
   openMenu([
-    { swatches: HL_COLORS, current: hl.color, onPick: (c) => changeHighlightColor(hl, c) },
-    { label: 'Remove highlight', danger: true, run: () => removeHighlight(hl) },
+    { swatches: HL_COLORS, label: 'Highlight', current: hl.bg, onPick: (c) => changeHighlightChannel(hl, 'bg', c) },
+    { swatches: HL_COLORS, label: 'Text colour', kind: 'fg', current: hl.fg, onPick: (c) => changeHighlightChannel(hl, 'fg', c) },
+    { label: 'Remove coloring', danger: true, run: () => removeHighlight(hl) },
     { sep: true },
     { label: 'Copy', run: () => ctxCopy(innerText) },
     { label: 'Paste', run: () => ctxPaste() },
   ], x, y);
 }
 
-function changeHighlightColor(hl, color) {
+// Rewrite one channel (bg or fg) of an existing highlight, preserving the
+// other. Always emits the v2 sentinel — recoloring a legacy ==…== upgrades it.
+function changeHighlightChannel(hl, channel, color) {
   const innerText = editor.state.doc.sliceString(hl.textFrom, hl.textTo);
-  editor.dispatch({ changes: { from: hl.from, to: hl.to, insert: '==' + color + '|' + innerText + '==' } });
+  let bg = hl.bg, fg = hl.fg;
+  if (channel === 'bg') bg = color; else fg = color;
+  const insert = (!bg && !fg) ? innerText : '%%' + hlSpecString(bg, fg) + '|' + innerText + '%%';
+  editor.dispatch({ changes: { from: hl.from, to: hl.to, insert } });
   editor.focus();
 }
 
@@ -6348,29 +6473,55 @@ function main(ctx) {
   else { ctx.fullText = ctx.fullText.toUpperCase(); }
 }`);
 
-// ---- Highlight colors (wrap selection in the ==color|text== sentinel) ----
+// ---- Highlight colors (wrap selection in the %%spec|text%% sentinel) ----
 registerScript(`/**
   {
     "name": "Add Color",
-    "description": "Highlight the selected text in a color you choose",
+    "description": "Highlight and/or colour the selected text (bg, bg/fg or /fg)",
     "author": "Cade",
     "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M9 11l-6 6v3h3l6-6'/><path d='M14 6l4 4'/><path d='M3 21h18'/></svg>",
-    "tags": "color,highlight,mark,marker"
+    "tags": "color,highlight,mark,marker,text color"
   }
 **/
 function main(ctx) {
   if (!ctx.selection) { showToast('Select text to highlight', 'error', 2000); return; }
   var palette = ['yellow','green','blue','red','pink','purple','orange','gray'];
-  var color = (prompt('Highlight color (' + palette.join(', ') + '):', 'yellow') || '').trim().toLowerCase();
-  if (!color) return;
-  if (palette.indexOf(color) === -1) { showToast('Unknown color: ' + color, 'error', 2500); return; }
-  ctx.selection = '==' + color + '|' + ctx.selection + '==';
+  var spec = (prompt('Colour spec — highlight, highlight/text or /text.\\nColours: ' + palette.join(', ') + ' or #hex.\\nExamples: yellow · yellow/red · /blue', 'yellow') || '').trim().toLowerCase();
+  if (!spec) return;
+  var parts = spec.split('/');
+  var okTok = function(t) { return !t || palette.indexOf(t) !== -1 || /^#([0-9a-f]{3}|[0-9a-f]{6})$/.test(t); };
+  if (parts.length > 2 || !okTok(parts[0]) || !okTok(parts[1] || '') || (!parts[0] && !(parts[1] || ''))) {
+    showToast('Bad spec: ' + spec, 'error', 2500); return;
+  }
+  ctx.selection = '%%' + spec + '|' + ctx.selection + '%%';
 }`);
 
 ['Yellow','Green','Blue','Red','Pink','Purple','Orange','Gray'].forEach(function(C) {
   var c = C.toLowerCase();
-  registerScript('/**\n  {\n    "name": "Add Color (' + C + ')",\n    "description": "Highlight the selection ' + c + '",\n    "author": "Cade",\n    "icon": "<svg viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'currentColor\' stroke-width=\'2\' stroke-linecap=\'round\' stroke-linejoin=\'round\'><path d=\'M9 11l-6 6v3h3l6-6\'/><path d=\'M14 6l4 4\'/><path d=\'M3 21h18\'/></svg>",\n    "tags": "color,highlight,mark,' + c + '"\n  }\n**/\nfunction main(ctx) {\n  if (!ctx.selection) { showToast(\'Select text to highlight\', \'error\', 2000); return; }\n  ctx.selection = \'==' + c + '|\' + ctx.selection + \'==\';\n}');
+  registerScript('/**\n  {\n    "name": "Add Color (' + C + ')",\n    "description": "Highlight the selection ' + c + '",\n    "author": "Cade",\n    "icon": "<svg viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'currentColor\' stroke-width=\'2\' stroke-linecap=\'round\' stroke-linejoin=\'round\'><path d=\'M9 11l-6 6v3h3l6-6\'/><path d=\'M14 6l4 4\'/><path d=\'M3 21h18\'/></svg>",\n    "tags": "color,highlight,mark,' + c + '"\n  }\n**/\nfunction main(ctx) {\n  if (!ctx.selection) { showToast(\'Select text to highlight\', \'error\', 2000); return; }\n  ctx.selection = \'%%' + c + '|\' + ctx.selection + \'%%\';\n}');
 });
+
+registerScript(`/**
+  {
+    "name": "Migrate Highlights (v1 → v2)",
+    "description": "Rewrite old ==color|text== highlights to the new %%color|text%% form",
+    "author": "Cade",
+    "icon": "🎨",
+    "tags": "color,highlight,migrate,convert,sentinel"
+  }
+**/
+function main(ctx) {
+  var palette = ['yellow','green','blue','red','pink','purple','orange','gray'];
+  var t = ctx.selection || ctx.fullText;
+  var n = 0;
+  var out = t.replace(/==([a-zA-Z]{3,10})\\|([\\s\\S]+?)==/g, function(all, c, inner) {
+    if (palette.indexOf(c.toLowerCase()) === -1) return all;
+    n++;
+    return '%%' + c.toLowerCase() + '|' + inner + '%%';
+  });
+  if (ctx.selection) ctx.selection = out; else ctx.fullText = out;
+  showToast(n ? ('Migrated ' + n + ' highlight' + (n === 1 ? '' : 's')) : 'No v1 highlights found', n ? 'success' : 'info', 2200);
+}`);
 
 registerScript(`/**
   {
@@ -13155,12 +13306,13 @@ function tryInjectAtCursor() {
   const tokenStart = cursor - token.length;
 
   // @color / @color:name — inject an empty highlight sentinel and drop the
-  // cursor inside it, ready to type the text. Unknown color → default (no name).
+  // cursor inside it, ready to type the text. Unknown color → default yellow
+  // (v2 sentinels always carry an explicit spec).
   const colorM = m[1].match(/^color(?::([a-zA-Z]+))?$/);
   if (colorM) {
     const name = (colorM[1] || '').toLowerCase();
-    const open = HL_COLORS.includes(name) ? '==' + name + '|' : '==';
-    const insert = open + '==';
+    const open = '%%' + (HL_COLORS.includes(name) ? name : HL_DEFAULT) + '|';
+    const insert = open + '%%';
     editor.dispatch({
       changes: { from: tokenStart, to: cursor, insert },
       selection: { anchor: tokenStart + open.length },
@@ -14667,41 +14819,62 @@ const MD_BTN_DEFS = {
   quote: { label: '"', title: 'Quote', prefix: '> ' },
   link: { label: '🔗', title: 'Link', special: 'link' },
 };
-// Highlight color picker (dash button): wraps the selection in the app's
-// ==color|text== sentinel, or strips an existing wrapper for "No color".
-// Return the {from,to} bounds of the ==color|text== token enclosing the caret /
-// selection, or null. Uses the viewport highlight spans so "No color" and
-// recolor work when the caret is merely inside a highlight (its == markers are
-// hidden, so the word-range probe can't see them).
+// Highlight picker (dash button): wraps the selection in the %%spec|text%%
+// sentinel with independent background + text-colour channels, or strips the
+// wrapper. Return the full highlight record enclosing the caret / selection,
+// or null. Uses the viewport highlight spans so recolor works when the caret
+// is merely inside a highlight (its markers are hidden, so the word-range
+// probe can't see them).
 function _findEnclosingHighlight(a, b) {
   for (const r of highlightRanges) {
-    if (a >= r.from && b <= r.to) return { from: r.from, to: r.to };
+    if (a >= r.from && b <= r.to) return r;
   }
   return null;
 }
-window.applyHighlight = function(color) {
+// channel: 'bg' | 'fg' (set that channel to `color`, null clears it) or
+// 'clear' (strip the whole wrapper).
+window.applyHighlightSpec = function(channel, color) {
   closeHighlightPicker();
   const sel = editor.state.selection.main;
   // No selection: target the word just typed if the caret is at its end,
   // otherwise insert an empty highlight at the caret (item 2).
   let from = sel.from, to = sel.to;
+  let bg = null, fg = null, text;
   const encl = _findEnclosingHighlight(sel.from, sel.to);
-  if (encl) { from = encl.from; to = encl.to; }
-  else if (sel.empty) { const wr = _wordRangeBeforeCursor(); if (wr) { from = wr.from; to = wr.to; } }
-  let text = editor.state.sliceDoc(from, to);
-  const m = /^==(?:([a-z]+)\|)?([\s\S]*?)==$/.exec(text);
-  if (m) text = m[2]; // peel an existing highlight so re-applying / No color works
-  if (!color) {
+  if (encl) {
+    from = encl.from; to = encl.to;
+    bg = encl.bg; fg = encl.fg;
+    text = editor.state.sliceDoc(encl.textFrom, encl.textTo);
+  } else {
+    if (sel.empty) { const wr = _wordRangeBeforeCursor(); if (wr) { from = wr.from; to = wr.to; } }
+    text = editor.state.sliceDoc(from, to);
+    // Peel a raw (not-yet-rendered) sentinel so re-applying doesn't nest.
+    let m = /^%%([^|%\n]{1,32})\|([\s\S]*?)%%$/.exec(text);
+    if (m) {
+      const s = parseHighlightSpec(m[1]);
+      if (s) { bg = s.bg; fg = s.fg; text = m[2]; }
+    } else if ((m = /^==([a-zA-Z]{3,10})\|([\s\S]*?)==$/.exec(text)) && HL_COLORS.includes(m[1].toLowerCase())) {
+      bg = m[1].toLowerCase(); text = m[2];
+    }
+  }
+  if (channel === 'bg') bg = color;
+  else if (channel === 'fg') fg = color;
+  else { bg = null; fg = null; }
+  if (!bg && !fg) {
     editor.dispatch({ changes: { from, to, insert: text }, selection: { anchor: from, head: from + text.length } });
     editor.focus(); return;
   }
-  const open = HL_COLORS.includes(color) ? '==' + color + '|' : '==';
-  const ins = open + text + '==';
-  const empty = from === to;
+  const open = '%%' + hlSpecString(bg, fg) + '|';
+  const ins = open + text + '%%';
+  const empty = text.length === 0;
   const anchor = empty ? from + open.length : from;
   const head = empty ? from + open.length : from + ins.length;
   editor.dispatch({ changes: { from, to, insert: ins }, selection: { anchor, head } });
   editor.focus();
+};
+// Back-compat single-channel entry point (older callers / hotkeys).
+window.applyHighlight = function(color) {
+  window.applyHighlightSpec(color ? 'bg' : 'clear', color || null);
 };
 let _hlPickerEl = null;
 function _hlPickerOutside(e) { if (_hlPickerEl && !_hlPickerEl.contains(e.target)) closeHighlightPicker(); }
@@ -14714,9 +14887,19 @@ window.openHighlightPicker = function(ev) {
   try { if (window.haptic) haptic(8); } catch {}
   const btn = ev && ev.currentTarget;
   const el = document.createElement('div');
-  el.className = 'hl-picker';
-  el.innerHTML = HL_COLORS.map(c => `<button class="hl-swatch cm-hl-${c}" title="${c}" onclick="applyHighlight('${c}')"></button>`).join('') +
-    '<button class="hl-swatch hl-none" title="No color" onclick="applyHighlight(null)">⦸</button>';
+  el.className = 'hl-picker hl-picker-2ch';
+  // Preselect from the highlight enclosing the caret so the picker reads as
+  // an editor for the current state, not just an inserter.
+  const sel = editor.state.selection.main;
+  const cur = _findEnclosingHighlight(sel.from, sel.to) || { bg: null, fg: null };
+  el.innerHTML =
+    '<div class="hl-picker-label">Highlight</div>' +
+    HL_COLORS.map(c => `<button class="hl-swatch cm-hl-${c}${cur.bg === c ? ' selected' : ''}" title="highlight ${c}" onclick="applyHighlightSpec('bg','${c}')"></button>`).join('') +
+    '<button class="hl-swatch hl-none" title="No highlight" onclick="applyHighlightSpec(\'bg\', null)">⦸</button>' +
+    '<div class="hl-picker-label">Text colour</div>' +
+    HL_COLORS.map(c => `<button class="hl-swatch hl-fg${cur.fg === c ? ' selected' : ''}" style="color:${AUTOCOLOR_CSS[c]}" title="text ${c}" onclick="applyHighlightSpec('fg','${c}')">A</button>`).join('') +
+    '<button class="hl-swatch hl-none" title="No text colour" onclick="applyHighlightSpec(\'fg\', null)">⦸</button>' +
+    '<button class="hl-swatch hl-none hl-wide" title="Strip the wrapper entirely" onclick="applyHighlightSpec(\'clear\', null)">Remove coloring</button>';
   document.body.appendChild(el);
   if (btn) {
     const r = btn.getBoundingClientRect();
