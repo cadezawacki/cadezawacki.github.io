@@ -5187,6 +5187,11 @@ function buildEditorExtensions() {
         scheduleWordCount();
         try { scheduleImgRemovalCheck(); } catch {} // GC deleted images (widget/memory)
         if (_wrapMode === 'hard' && !_hardWrapBusy) scheduleHardWrap();
+        if (!syncState.suppressUpdate) {
+          // Wall-clock of the user's last real typing in THIS tab — used by the
+          // cross-tab channel even when Firebase sync isn't connected.
+          syncState.lastLocalTouch = Date.now();
+        }
         if (syncState.connected && !syncState.suppressUpdate) {
           syncState.lastLocalEdit = Date.now();
           broadcastText();
@@ -6036,6 +6041,8 @@ function persistContent() {
   // next natural render, so this never reorders tabs mid-keystroke).
   const _rm = activeRoom || syncState.roomName;
   if (_rm) { try { touchRoomModified(_rm); } catch {} }
+  // Mirror to any sibling tabs on this device (no-op if none are open).
+  try { tabSync.postDoc(_rm, text); } catch {}
 }
 function saveContentDebounced() {
   clearTimeout(saveTimer);
@@ -8853,10 +8860,25 @@ function unpackRoomText(val) {
   return null;
 }
 
+let _fbAppSeq = 0;
 function initFirebase(databaseURL) {
+  // Re-configuring with a DIFFERENT database URL must not silently keep using
+  // the old connection (that read as "sync just stopped working" after editing
+  // the URL). Tear the old app down and connect to the new database.
+  if (syncState.firebaseApp && syncState.firebaseUrl !== databaseURL) {
+    try { cleanupFirebase(); } catch {}
+    const oldApp = syncState.firebaseApp;
+    syncState.firebaseApp = null;
+    syncState.firebaseDb = null;
+    try { oldApp.delete().catch(() => {}); } catch {}
+  }
   if (syncState.firebaseApp) return syncState.firebaseDb;
-  const app = firebase.initializeApp({ databaseURL }, 'cade-sync');
+  // App names must be unique per initializeApp call; suffix a counter so a
+  // URL change (delete + re-init) can never race the old app's teardown.
+  const appName = 'cade-sync-' + (++_fbAppSeq);
+  const app = firebase.initializeApp({ databaseURL }, appName);
   syncState.firebaseApp = app;
+  syncState.firebaseUrl = databaseURL;
   syncState.firebaseDb = firebase.database(app);
   return syncState.firebaseDb;
 }
@@ -8946,6 +8968,14 @@ function safeApplyRemote(text, roomName) {
     // window would push back — an infinite broadcast war that jams the main
     // thread (the unusable-lag bug). The user's next actual edit (updateListener
     // -> broadcastText) and reconnect's flushIfDirty already push local up.
+    //
+    // BUT don't just drop the remote update on the floor forever: if local and
+    // server stay divergent while the user is idle, neither side ever converges
+    // (the "sometimes not syncing at all" bug — e.g. a stale synced base from
+    // another window). Escalate to the version-aware reconcile, which pushes
+    // local if the server didn't advance, adopts the server if it strictly
+    // extended local, or asks via the conflict modal on genuine divergence.
+    scheduleDivergenceRepair(roomName);
     return false;
   }
 
@@ -9102,30 +9132,42 @@ window.syncCancel = function() {
 // Encrypt `text` for `roomName` (prepending the lock sentinel if the room is
 // password-locked this session) and write it to Firebase. `encKey` overrides
 // the active room key — used when mirroring a conflict into a *different* room.
+// A Firebase `.set()` on a wedged connection can stay pending forever (the SDK
+// queues it until the socket recovers). Bound every push so the broadcast retry
+// loop keeps breathing instead of dead-locking sync until reload.
+const PUSH_TIMEOUT_MS = 15000;
+function _withPushTimeout(promise) {
+  return Promise.race([
+    promise,
+    new Promise((_, rej) => setTimeout(() => rej(new Error('push-timeout')), PUSH_TIMEOUT_MS)),
+  ]);
+}
 async function pushTextToServer(roomName, text, encKey) {
   const key = encKey || syncState.encKey;
   const isLocked = !!sessionRoomPasswords[roomName];
   const textToSend = isLocked ? ROOM_LOCK_SENTINEL + text : text;
   const encrypted = await encryptText(textToSend, key);
-  syncState.suppressUpdate = true;
-  try {
-    await syncState.firebaseDb.ref(`rooms/${roomName}/text`).set(packRoomText(encrypted));
-    // Bump the room's version counter so reconnecting peers can tell the server
-    // advanced (#3). Fire-and-forget so it never extends the suppress window or
-    // blocks the caller; a failure here is harmless (reconcile falls back to the
-    // text-based heuristics when the version is unknown).
-    syncState.firebaseDb.ref(`rooms/${roomName}/v`).transaction(cur => (cur || 0) + 1)
-      .then(res => {
-        const v = res && res.snapshot ? res.snapshot.val() : null;
-        if (v != null) {
-          saveRoomVersion(roomName, v);
-          if (roomName === syncState.roomName) syncState.serverVersion = v;
-        }
-      })
-      .catch(() => {});
-  } finally {
-    syncState.suppressUpdate = false;
-  }
+  // NOTE: deliberately no `suppressUpdate` here. The old code held that global
+  // flag across this network await; while a write was in flight (or wedged,
+  // offline) EVERY editor update skipped broadcast scheduling and EVERY remote
+  // snapshot was ignored — the "sync silently stops" bug. The value listener is
+  // already echo-safe: our own write decrypts to text identical to the editor
+  // (→ just records the synced base) and anything else goes through the
+  // base-guarded safeApplyRemote path.
+  await _withPushTimeout(syncState.firebaseDb.ref(`rooms/${roomName}/text`).set(packRoomText(encrypted)));
+  // Bump the room's version counter so reconnecting peers can tell the server
+  // advanced (#3). Fire-and-forget so it never blocks the caller; a failure
+  // here is harmless (reconcile falls back to the text-based heuristics when
+  // the version is unknown).
+  syncState.firebaseDb.ref(`rooms/${roomName}/v`).transaction(cur => (cur || 0) + 1)
+    .then(res => {
+      const v = res && res.snapshot ? res.snapshot.val() : null;
+      if (v != null) {
+        saveRoomVersion(roomName, v);
+        if (roomName === syncState.roomName) syncState.serverVersion = v;
+      }
+    })
+    .catch(() => {});
 }
 
 // Encrypt + write `text` for `roomName` WITHOUT touching the global
@@ -9139,7 +9181,7 @@ async function pushRoomTextQuiet(roomName, text, encKey) {
   const isLocked = !!sessionRoomPasswords[roomName];
   const textToSend = isLocked ? ROOM_LOCK_SENTINEL + text : text;
   const encrypted = await encryptText(textToSend, key);
-  await syncState.firebaseDb.ref(`rooms/${roomName}/text`).set(packRoomText(encrypted));
+  await _withPushTimeout(syncState.firebaseDb.ref(`rooms/${roomName}/text`).set(packRoomText(encrypted)));
   saveRoomSynced(roomName, text); // confirmed on the server
   try {
     const res = await syncState.firebaseDb.ref(`rooms/${roomName}/v`).transaction(cur => (cur || 0) + 1);
@@ -9151,7 +9193,15 @@ async function pushRoomTextQuiet(roomName, text, encKey) {
 let broadcastTimer = null;
 let _broadcastEpoch = -1; // _switchEpoch captured when the broadcast was queued
 async function _doBroadcast() {
-  if (!syncState.connected || syncState.suppressUpdate) return;
+  if (!syncState.connected) return;
+  // A suppress window (a remote snapshot being dispatched) is transient; a
+  // broadcast that lands inside it must retry, not silently drop — dropping
+  // left the doc dirty-but-unpushed until the user's next keystroke.
+  if (syncState.suppressUpdate) {
+    clearTimeout(broadcastTimer);
+    broadcastTimer = setTimeout(_doBroadcast, 250);
+    return;
+  }
   // A room switch happened after this broadcast was queued — the editor now
   // holds a different room's text. Abandon so we never push the wrong room's
   // content (#5). _doSwitchRoom also clears the timer; this is belt-and-braces.
@@ -9178,7 +9228,6 @@ async function _doBroadcast() {
       broadcastTimer = setTimeout(_doBroadcast, 500);
     }
   } catch (e) {
-    syncState.suppressUpdate = false;
     console.warn('Sync broadcast failed (will retry):', e && (e.message || e.code) || e);
     // Retry: the local text is unsynced; re-attempt after a delay. Subsequent
     // edits will reset the debounce; otherwise this keeps trying until success.
@@ -9203,6 +9252,127 @@ function flushIfDirty() {
     window.broadcastText();
   }
 }
+
+// ============================================
+// CROSS-TAB LINKAGE (BroadcastChannel)
+// ------------------------------------------------------------------
+// Multiple tabs/windows of the app on one device share localStorage but used
+// to run completely unaware of each other: each fought over the shared
+// per-room keys (cache + synced base) and only converged via a slow Firebase
+// round-trip — or not at all when offline. This channel links same-device
+// instances directly:
+//   • doc edits propagate tab→tab instantly (works offline, no Firebase)
+//   • room / workspace list changes re-render everywhere
+// Receivers adopt peer text through a guarded path that never clobbers text
+// the user is actively typing in the receiving tab, and adopted text is never
+// re-broadcast (the originating tab owns the Firebase exchange).
+// ============================================
+const tabSync = (() => {
+  let ch = null;
+  try { ch = new BroadcastChannel('cade-txt-tabs'); } catch {}
+  if (!ch) return { postDoc() {}, postRooms() {}, enabled: false };
+  const TAB_ID = Math.random().toString(36).slice(2, 10) + '-' + Date.now().toString(36);
+  let _lastPeerDoc = null;       // last doc adopted FROM a peer (echo guard)
+  let _pendingPeerDoc = null;    // newest peer doc queued while user types here
+  let _peerRetryTimer = null;
+  let _roomsRefreshTimer = null;
+  let _postRoomsTimer = null;
+
+  function currentDocKey() { return activeRoom || syncState.roomName || '__local__'; }
+
+  function postDoc(room, text) {
+    const key = room || '__local__';
+    // Don't echo a doc we just adopted from a peer straight back at them.
+    if (_lastPeerDoc && _lastPeerDoc.room === key && _lastPeerDoc.text === text) return;
+    try { ch.postMessage({ t: 'doc', room: key, text, ts: Date.now(), tab: TAB_ID }); } catch {}
+  }
+
+  function postRooms() {
+    clearTimeout(_postRoomsTimer);
+    _postRoomsTimer = setTimeout(() => {
+      try { ch.postMessage({ t: 'rooms', ts: Date.now(), tab: TAB_ID }); } catch {}
+    }, 150);
+  }
+
+  function applyPeerDoc(msg) {
+    if (msg.room !== currentDocKey()) return;
+    // While a reconcile/conflict resolution owns the document, stay out.
+    if (syncState.pendingReconcile || syncState.conflictResolving) { queuePeerDoc(msg); return; }
+    const cur = editor.state.doc.toString();
+    if (msg.text === cur) { _lastPeerDoc = { room: msg.room, text: msg.text }; return; }
+    // The user typed here more recently than the peer's edit — keep ours; our
+    // own persist→postDoc wins the exchange on the other side.
+    if ((syncState.lastLocalTouch || 0) > msg.ts) return;
+    // Never yank the doc out from under active typing; queue the newest.
+    if (Date.now() - (syncState.lastLocalTouch || 0) < 1200) { queuePeerDoc(msg); return; }
+    const sel = editor.state.selection.main;
+    const anchor = Math.min(sel.anchor, msg.text.length);
+    const head = Math.min(sel.head, msg.text.length);
+    syncState.suppressUpdate = true;
+    editor.dispatch({
+      changes: { from: 0, to: cur.length, insert: msg.text },
+      selection: { anchor, head },
+    });
+    syncState.suppressUpdate = false;
+    _lastPeerDoc = { room: msg.room, text: msg.text };
+    // Keep the shared cache in step. Do NOT touch the synced base and do NOT
+    // broadcast: the tab where the edit originated owns the server exchange.
+    try {
+      if (msg.room !== '__local__') store.set('cade-room-cache:' + msg.room, msg.text);
+      else store.set('cade-content', msg.text);
+    } catch {}
+    try { redecorateAfterRemote(); } catch {}
+  }
+
+  function queuePeerDoc(msg) {
+    if (!_pendingPeerDoc || msg.ts >= _pendingPeerDoc.ts) _pendingPeerDoc = msg;
+    if (!_peerRetryTimer) _peerRetryTimer = setInterval(() => {
+      const m = _pendingPeerDoc;
+      if (!m) { clearInterval(_peerRetryTimer); _peerRetryTimer = null; return; }
+      if (m.room !== currentDocKey()) { _pendingPeerDoc = null; clearInterval(_peerRetryTimer); _peerRetryTimer = null; return; }
+      if (Date.now() - (syncState.lastLocalTouch || 0) < 1200) return; // still typing
+      _pendingPeerDoc = null;
+      clearInterval(_peerRetryTimer); _peerRetryTimer = null;
+      applyPeerDoc(m);
+    }, 600);
+  }
+
+  // Another tab changed the room/workspace lists (all stored in shared
+  // localStorage) — re-read them and re-render. Debounced: bursts arrive when
+  // a remote workspace blob lands.
+  function refreshRoomsFromStore() {
+    clearTimeout(_roomsRefreshTimer);
+    _roomsRefreshTimer = setTimeout(() => {
+      try { rooms = JSON.parse(store.get('cade-rooms')) || []; } catch {}
+      try { workspaces = JSON.parse(store.get('cade-workspaces')) || []; } catch {}
+      try { roomWorkspace = normalizeRoomWorkspace(JSON.parse(store.get('cade-room-workspace')) || {}); } catch {}
+      try { roomMeta = JSON.parse(store.get('cade-room-meta')) || {}; } catch {}
+      try { renderRoomTabs(); } catch {}
+      try {
+        if (document.getElementById('room-manager-overlay').classList.contains('open')) {
+          renderRoomManagerList();
+          renderWorkspaceManagerList();
+        }
+      } catch {}
+      // The room we're sitting in was removed by another tab: follow along.
+      try {
+        if (activeRoom && !rooms.includes(activeRoom)) {
+          const vis = roomsInActiveWorkspace();
+          if (vis.length) switchRoom(vis[0]);
+        }
+      } catch {}
+    }, 200);
+  }
+
+  ch.onmessage = (e) => {
+    const msg = e && e.data;
+    if (!msg || msg.tab === TAB_ID) return;
+    if (msg.t === 'doc') applyPeerDoc(msg);
+    else if (msg.t === 'rooms') refreshRoomsFromStore();
+  };
+
+  return { postDoc, postRooms, enabled: true };
+})();
 
 // ============================================
 // OFFLINE → ONLINE RECONCILIATION
@@ -9257,6 +9427,39 @@ function attachConnListener(db) {
       updateSyncUI('connecting', 'Offline');
     }
   });
+}
+
+// --- Divergence repair -------------------------------------------------------
+// safeApplyRemote refuses remote snapshots while local holds unsynced edits
+// (correct: never clobber the user). But if nothing ever pushes local up, the
+// two sides sit divergent forever and sync looks dead. This waits for the user
+// to go idle, then runs the normal version-aware reconcile. Rate-limited so a
+// chatty remote peer can't spam reconciles (or the conflict modal).
+let _divergenceTimer = null;
+let _lastDivergenceRepair = 0;
+const DIVERGENCE_IDLE_MS = 6000;      // require this much local idle first
+const DIVERGENCE_REPAIR_MIN_GAP = 30000; // at most one repair per 30s
+function scheduleDivergenceRepair(roomName) {
+  if (!syncState.connected || roomName !== syncState.roomName) return;
+  if (syncState.pendingReconcile || syncState.conflictResolving) return;
+  if (_divergenceTimer) return; // one pending repair at a time
+  const attempt = () => {
+    _divergenceTimer = null;
+    if (!syncState.connected || roomName !== syncState.roomName) return;
+    if (syncState.pendingReconcile || syncState.conflictResolving) return;
+    const idle = Date.now() - (syncState.lastLocalEdit || 0);
+    if (idle < DIVERGENCE_IDLE_MS) { _divergenceTimer = setTimeout(attempt, DIVERGENCE_IDLE_MS - idle + 250); return; }
+    // Still divergent? (The user's own edit may have pushed local up meanwhile.)
+    if (!localHasUnsyncedEdits(roomName)) return;
+    if (Date.now() - _lastDivergenceRepair < DIVERGENCE_REPAIR_MIN_GAP) {
+      _divergenceTimer = setTimeout(attempt, DIVERGENCE_REPAIR_MIN_GAP - (Date.now() - _lastDivergenceRepair) + 250);
+      return;
+    }
+    _lastDivergenceRepair = Date.now();
+    syncState.pendingReconcile = true;
+    reconcileOnLive();
+  };
+  _divergenceTimer = setTimeout(attempt, DIVERGENCE_IDLE_MS);
 }
 
 // Run reconciliation once the stream is live and a reconcile is pending. Guarded
@@ -9556,6 +9759,20 @@ window.addEventListener('online', () => {
   }
 });
 
+// Flush pending debounced persistence the moment the tab is hidden or closed —
+// a fast type-then-close used to lose up to 300ms of keystrokes (and up to 4s
+// of room-modified stamps) because the debounce timers died with the page.
+function _flushPendingPersist() {
+  try {
+    if (saveTimer != null) { clearTimeout(saveTimer); saveTimer = null; persistContent(); }
+  } catch {}
+  try { saveRoomMeta(); } catch {}
+}
+window.addEventListener('pagehide', _flushPendingPersist);
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') _flushPendingPersist();
+});
+
 window.forceSyncReload = async function() {
   closeAllMenus();
   showToast('Refreshing app & sync…', 'success', 2000);
@@ -9724,6 +9941,7 @@ function saveRooms() {
   store.set('cade-rooms', JSON.stringify(rooms));
   store.set('cade-active-room', activeRoom);
   store.set('cade-room-cap', roomCap);
+  try { tabSync.postRooms(); } catch {}
 }
 
 // Label for a room in a dropdown. A pinned room surfaces in EVERY workspace;
@@ -11142,6 +11360,7 @@ if (!store.get('cade-ws-m2m-migrated')) {
 
 function saveRoomMeta() {
   store.set('cade-room-meta', JSON.stringify(roomMeta));
+  try { tabSync.postRooms(); } catch {}
 }
 
 function escapeHtml(s) {
@@ -11407,6 +11626,7 @@ function saveWorkspaces(skipSync) {
   store.set('cade-room-workspace', JSON.stringify(roomWorkspace));
   store.set('cade-active-workspace', activeWorkspace);
   if (!skipSync) schedulePushWorkspaces();
+  try { tabSync.postRooms(); } catch {}
 }
 
 // ---------- Workspace CRUD ----------
