@@ -962,10 +962,16 @@ body.sel-mode .editor-wrap .cm-content { -webkit-touch-callout: none; }
      a slim rail; hovering the rail reveals the full sidebar and SHIFTS the
      document right with it (a push, not a floating overlay). Drag the
      divider back out — or hit the 📌 pin — to dock it again. */
-  body.sidebar-slim #side-nav { transition: width 0.12s ease; }
+  body.sidebar-slim #side-nav { transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
   body.sidebar-slim #side-nav.resizing { transition: none; }
   body.sidebar-slim #side-nav:not(:hover):not(.resizing) { width: 16px; cursor: e-resize; }
-  body.sidebar-slim #side-nav:not(:hover):not(.resizing) .sn-scroll { display: none; }
+  /* Content fades in slightly after the rail starts widening (and fades out
+     before it closes) instead of popping — visibility gates interaction. */
+  body.sidebar-slim #side-nav .sn-scroll { transition: opacity 0.2s ease 0.1s; }
+  body.sidebar-slim #side-nav:not(:hover):not(.resizing) .sn-scroll {
+    visibility: hidden; opacity: 0;
+    transition: opacity 0.15s ease, visibility 0s linear 0.15s;
+  }
   #side-nav .sn-peek {
     display: none; position: absolute; top: 50%; left: 0; right: 0;
     transform: translateY(-50%); text-align: center; pointer-events: none;
@@ -997,8 +1003,12 @@ body.sel-mode .editor-wrap .cm-content { -webkit-touch-callout: none; }
   body.sidebar-slim.sidebar-on:has(#side-nav.resizing) .mobile-toolbar {
     left: var(--sidebar-w, 216px);
   }
-  body.sidebar-slim .editor-wrap .cm-scroller { transition: padding-left 0.12s ease; }
-  body.sidebar-slim:has(#side-nav.resizing) .editor-wrap .cm-scroller { transition: none; }
+  body.sidebar-slim .editor-wrap .cm-scroller { transition: padding-left 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+  body.sidebar-slim .find-panel { transition: padding-left 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+  body.sidebar-slim .mobile-toolbar { transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+  body.sidebar-slim:has(#side-nav.resizing) .editor-wrap .cm-scroller,
+  body.sidebar-slim:has(#side-nav.resizing) .find-panel,
+  body.sidebar-slim:has(#side-nav.resizing) .mobile-toolbar { transition: none; }
   /* Release-to-collapse cue while the drag is past the left threshold. */
   #side-nav.sn-will-collapse { opacity: 0.35; }
   /* Item 4: zen mode is distraction-free — the sidebar folds away with the
@@ -2580,8 +2590,8 @@ body.readonly .editor-wrap .cm-content { caret-color: transparent; }
         <span></span>
       </button>
       <div class="menu-separator"></div>
-      <button class="menu-item" onclick="toggleOutline()">
-        <span id="outline-label">Outline</span>
+      <button class="menu-item" onclick="openWhiteboard()">
+        <span>Whiteboard</span>
         <span></span>
       </button>
       <button class="menu-item" onclick="openTimer()">
@@ -2674,7 +2684,7 @@ body.readonly .editor-wrap .cm-content { caret-color: transparent; }
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r=".9" fill="currentColor" stroke="none"/><circle cx="17.5" cy="10.5" r=".9" fill="currentColor" stroke="none"/><circle cx="8.5" cy="7.5" r=".9" fill="currentColor" stroke="none"/><circle cx="6.5" cy="12.5" r=".9" fill="currentColor" stroke="none"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/></svg>
     </button>
     <span class="mob-div" aria-hidden="true">|</span>
-    <button class="mob-btn" id="mob-select-btn" onclick="toggleSelectMode()" title="Select mode — drag to select without scrolling">
+    <button class="mob-btn" id="mob-select-btn" onclick="toggleSelectMode()" onpointerdown="event.preventDefault()" title="Select mode — drag to select without scrolling">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7V5a1 1 0 0 1 1-1h2M17 4h2a1 1 0 0 1 1 1v2M20 17v2a1 1 0 0 1-1 1h-2M7 20H5a1 1 0 0 1-1-1v-2"/><path d="M9 12h6"/></svg>
     </button>
     <button class="mob-btn" id="mob-copy-btn" onclick="mobileCopy()" title="Copy selection or all">
@@ -2683,7 +2693,7 @@ body.readonly .editor-wrap .cm-content { caret-color: transparent; }
     <button class="mob-btn" onclick="mobilePaste()" title="Paste">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>
     </button>
-    <button class="mob-btn" onclick="shareDocument()" title="Share to another app">
+    <button class="mob-btn" id="mob-share-btn" onclick="shareDocument()" title="Share to another app">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
     </button>
     <button class="mob-btn" onclick="mobileDownload()" title="Download…">
@@ -13840,6 +13850,9 @@ window.addEventListener('resize', () => {
 // Outline moved to ./txt/widgets/outline/ (loaded on demand). Thin shim so the
 // View menu item and session restore can open it via the registered widget stub.
 window.toggleOutline = function () { const w = WIDGETS.find(x => x.name === 'Outline'); if (w) w.open(); };
+// View menu (round-6): Whiteboard replaces Outline there — Outline stays
+// reachable from the Ctrl+P picker.
+window.openWhiteboard = function () { const w = WIDGETS.find(x => x.name === 'Whiteboard'); if (w) w.open(); };
 
 // ---- Timer (#31) — now an external module (./txt/widgets/timer/) ----
 // Thin shims: the View menu, footer chip, hotkeys and session restore call
@@ -13889,7 +13902,7 @@ const TZ_ABBR = {
 };
 // Click the clock to cycle display modes (item 21, extended round-5):
 // 12 → 24 → 12+seconds → 24+seconds. Migrates the old 12/24 boolean key.
-const CLOCK_MODES = ['12', '24', '12s', '24s'];
+const CLOCK_MODES = ['12', '12s', '24', '24s'];
 function clockMode() {
   const m = store.get('cade-clock-mode');
   if (CLOCK_MODES.includes(m)) return m;
@@ -14144,6 +14157,23 @@ function _selModeEnd() {
   _selModeEdgeDy = 0;
   if (_selModeRAF) { cancelAnimationFrame(_selModeRAF); _selModeRAF = 0; }
 }
+// Round-6: LOCK THE KEYBOARD OPEN while select mode is on. The selection
+// touches preventDefault (so they never blur), and the toggle button keeps
+// focus via pointerdown-preventDefault — but stray blurs (toolbar taps, iOS
+// focus drops) would still dismiss the keyboard mid-selection. Refocus the
+// editor whenever focus falls into the void; if it moved to a REAL control
+// (menu, input, dialog button), let it go — those interactions stay usable.
+function _selModeKeepFocus(e) {
+  if (!_selModeOn) return;
+  const to = e.relatedTarget;
+  if (to && to !== document.body) return;
+  setTimeout(() => {
+    if (!_selModeOn) return;
+    const ae = document.activeElement;
+    if (ae && ae !== document.body && ae !== document.documentElement) return;
+    try { editor.contentDOM.focus({ preventScroll: true }); } catch {}
+  }, 0);
+}
 window.toggleSelectMode = function() {
   _selModeOn = !_selModeOn;
   document.body.classList.toggle('sel-mode', _selModeOn);
@@ -14155,12 +14185,17 @@ window.toggleSelectMode = function() {
     sd.addEventListener('touchmove', _selModeMove, { passive: false });
     sd.addEventListener('touchend', _selModeEnd);
     sd.addEventListener('touchcancel', _selModeEnd);
+    editor.contentDOM.addEventListener('focusout', _selModeKeepFocus);
+    // Entering select mode implies "I'm working with this text": bring the
+    // keyboard up now and keep it up (the toggle tap is the user gesture).
+    try { editor.contentDOM.focus({ preventScroll: true }); } catch {}
     showToast('Select mode: drag to select · edges scroll gently · tap the button again to exit', 'success', 3000);
   } else {
     sd.removeEventListener('touchstart', _selModeStart);
     sd.removeEventListener('touchmove', _selModeMove);
     sd.removeEventListener('touchend', _selModeEnd);
     sd.removeEventListener('touchcancel', _selModeEnd);
+    editor.contentDOM.removeEventListener('focusout', _selModeKeepFocus);
     _selModeEnd();
   }
   try { haptic(10); } catch {}
@@ -15167,6 +15202,7 @@ try {
   // devices that persisted the old false default don't silently lose their
   // markdown buttons now that the row is merged into the main toolbar.
   registerSetting({ key: 'mobile.mdToolbar', label: 'Markdown buttons in mobile toolbar', type: 'toggle', default: true, section: 'Behavior', apply() { try { renderMobileMdRow(); } catch {} } });
+  registerSetting({ key: 'mobile.shareBtn', label: 'Share button in floating toolbar', type: 'toggle', default: true, section: 'Behavior', apply(v) { const b = document.getElementById('mob-share-btn'); if (b) b.style.display = v ? '' : 'none'; } });
   registerSetting({ key: 'mobile.mdButtons', label: 'Markdown toolbar buttons', type: 'text', default: 'bold,italic,under,head,list,todo,code,link', section: 'Behavior', hint: 'Comma list: bold, italic, under, code, head, list, todo, quote, link', apply() { try { renderMobileMdRow(); } catch {} } });
   // One-time migration: the old default button list predates folding the
   // hard-coded U button into the configurable set, so it lacks 'under'. Installs
