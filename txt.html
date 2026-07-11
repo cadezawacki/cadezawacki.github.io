@@ -936,13 +936,30 @@ body.sel-mode .editor-wrap .cm-content { -webkit-touch-callout: none; }
   #side-nav {
     display: block;
     position: fixed; left: 0; top: var(--menubar-h, 44px); bottom: 28px;
-    width: 216px; overflow-y: auto; z-index: 90;
+    width: var(--sidebar-w, 216px); overflow-y: auto; z-index: 90;
     background: var(--bg); border-right: 1px solid var(--border);
     padding: 8px 8px 12px; font-size: var(--text-sm);
     user-select: none; -webkit-user-select: none;
   }
-  body.sidebar-on .editor-wrap .cm-scroller { padding-left: calc(216px + var(--editor-hpad, var(--space-4))); }
-  body.sidebar-on .find-panel { padding-left: 228px; }
+  /* Drag the divider to resize (item 10) — the handle is a slim grab strip. */
+  #side-nav .sn-resize {
+    position: absolute; top: 0; right: -3px; width: 7px; height: 100%;
+    cursor: col-resize; z-index: 5;
+  }
+  #side-nav .sn-resize:hover, #side-nav.resizing .sn-resize { background: var(--accent-bg, rgba(20,184,166,0.2)); }
+  body.sidebar-on .editor-wrap .cm-scroller { padding-left: calc(var(--sidebar-w, 216px) + var(--editor-hpad, var(--space-4))); }
+  body.sidebar-on .find-panel { padding-left: calc(var(--sidebar-w, 216px) + 12px); }
+  /* Item 1: the floating toolbar spans left:0/right:0 and centers its pill in
+     that box — with the sidebar open it must center over the TEXT region. */
+  body.sidebar-on .mobile-toolbar { left: var(--sidebar-w, 216px); }
+  /* Item 4: zen mode is distraction-free — the sidebar folds away with the
+     rest of the chrome and every offset it imposed resets. */
+  body.zen #side-nav { display: none; }
+  body.zen.sidebar-on .mobile-toolbar { left: 0; }
+  body.zen.sidebar-on .editor-wrap .cm-scroller {
+    padding-left: max(8vw, var(--space-4));
+    padding-right: max(8vw, var(--space-4));
+  }
   #side-nav .sn-head {
     font-weight: 600; padding: 6px 8px; border-radius: var(--radius-sm); cursor: pointer;
     display: flex; align-items: center; gap: 6px;
@@ -954,6 +971,8 @@ body.sel-mode .editor-wrap .cm-content { -webkit-touch-callout: none; }
     text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600;
   }
   #side-nav .sn-ws .ws-badge-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ws-fg, currentColor); }
+  #side-nav .sn-fold { width: 14px; text-align: center; cursor: pointer; color: var(--text-faint); flex-shrink: 0; margin-left: -4px; }
+  #side-nav .sn-fold:hover { color: var(--accent); }
   #side-nav .sn-ws.active, #side-nav .sn-head.active { background: var(--surface-hover, rgba(127,127,127,0.12)); }
   #side-nav .sn-room {
     padding: 4px 8px 4px 22px; border-radius: var(--radius-sm); cursor: pointer;
@@ -2385,6 +2404,8 @@ body.sel-mode .editor-wrap .cm-content { -webkit-touch-callout: none; }
 #sync-disconnect-btn { color: var(--danger, #ef4444); border-color: var(--danger, #ef4444); }
 
 #footer-clock { font-variant-numeric: tabular-nums; color: var(--text-muted); cursor: pointer; }
+.footer-stat-btn { cursor: pointer; }
+.footer-stat-btn:hover { color: var(--accent); }
 #footer-clock .fc-tz { opacity: 0.7; margin-left: 8px; }
 
 /* Rooms-by-Date widget styles now live in ./txt/widgets/daycal/daycal.css */
@@ -2654,9 +2675,9 @@ body.readonly .editor-wrap .cm-content { caret-color: transparent; }
   <div class="footer-spacer"></div>
   <div class="footer-stats">
     <span id="footer-line">Ln 1, Col 1</span>
-    <span id="footer-chars">0 chars</span>
-    <span id="footer-words">0 words</span>
-    <span id="footer-lines">0 lines</span>
+    <span id="footer-chars" class="footer-stat-btn" onclick="openTextStats()" title="Open Text Stats">0 chars</span>
+    <span id="footer-words" class="footer-stat-btn" onclick="openTextStats()" title="Open Text Stats">0 words</span>
+    <span id="footer-lines" class="footer-stat-btn" onclick="openTextStats()" title="Open Text Stats">0 lines</span>
   </div>
   <span id="sync-status" style="display:none;"></span>
 </div>
@@ -3060,7 +3081,21 @@ window.Cade = (function () {
     escapeHtml(s) { return window.escapeHtml(s); },
     closeAllMenus() { return window.closeAllMenus && window.closeAllMenus(); },
     // ---- per-module assets (resolve against the module's own folder) ----
-    baseURL() { return _current ? _current.baseURL : './txt/'; },
+    // document.currentScript is the EXECUTING module file, which is immune to
+    // the load-order race: module scripts load async, so two loadModule calls
+    // could overwrite the shared _current context before the first script ran
+    // — that's how code-highlight.css once resolved into the reminders folder
+    // (404). The _current context remains as a fallback for callers outside
+    // synchronous module evaluation.
+    baseURL() {
+      try {
+        const cs = document.currentScript;
+        if (cs && cs.src && cs.src.indexOf('/txt/') !== -1) {
+          return cs.src.slice(0, cs.src.lastIndexOf('/') + 1);
+        }
+      } catch {}
+      return _current ? _current.baseURL : './txt/';
+    },
     asset(rel) { return this.baseURL() + rel; },
     loadCSS(rel) { return window.__loadCSSOnce(this.baseURL() + rel); },
     // ---- editor lifecycle hook (CM6 ViewUpdate) for module refreshes ----
@@ -8783,6 +8818,15 @@ function _roomDropdownLabel(name) {
 // screens. Pure alternative view — the tab bar keeps working. Renders from
 // the same data on every renderRoomTabs pass; hidden below 900px via CSS.
 let _sidebarOn = store.get('cade-sidebar') === '1';
+// Per-workspace fold state (round-4 item 2), device-local.
+let _snCollapsed = new Set();
+try { _snCollapsed = new Set(JSON.parse(store.get('cade-sidebar-collapsed')) || []); } catch {}
+function _snSaveCollapsed() { store.set('cade-sidebar-collapsed', JSON.stringify([..._snCollapsed])); }
+// Adjustable width (round-4 item 10), device-local.
+(function () {
+  const w = parseInt(store.get('cade-sidebar-w'), 10);
+  if (w >= 160 && w <= 420) document.documentElement.style.setProperty('--sidebar-w', w + 'px');
+})();
 window.toggleSidebar = function() {
   closeAllMenus();
   _sidebarOn = !_sidebarOn;
@@ -8797,8 +8841,15 @@ function _sidebarRoomRow(name) {
   const escAttr = escapeHtml(name.replace(/\\/g, '\\\\').replace(/'/g, "\\'"));
   const active = name === activeRoom;
   const pin = roomPinnedHere(name) ? '📌 ' : '';
-  return `<div class="sn-room${active ? ' active' : ''}" onclick="quickSwitchPick('${escAttr}')">${pin}${escapeHtml(name)}</div>`;
+  return `<div class="sn-room${active ? ' active' : ''}" onclick="quickSwitchPick('${escAttr}')" oncontextmenu="sidebarRoomMenu(event, '${escAttr}')">${pin}${escapeHtml(name)}</div>`;
 }
+window.sidebarToggleWs = function(evt, wsId) {
+  if (evt) { evt.preventDefault(); evt.stopPropagation(); }
+  if (_snCollapsed.has(wsId)) _snCollapsed.delete(wsId);
+  else _snCollapsed.add(wsId);
+  _snSaveCollapsed();
+  renderSidebar();
+};
 function renderSidebar() {
   document.body.classList.toggle('sidebar-on', _sidebarOn);
   let el = document.getElementById('side-nav');
@@ -8807,12 +8858,18 @@ function renderSidebar() {
     el = document.createElement('nav');
     el.id = 'side-nav';
     document.body.appendChild(el);
+    _snAttachResize(el);
   }
   const wsRows = [];
   const wsSection = (label, colorClass, wsId, roomList) => {
     const escId = escapeHtml(String(wsId).replace(/'/g, "\\'"));
-    wsRows.push(`<div class="sn-ws ${colorClass}${activeWorkspace === wsId ? ' active' : ''}" onclick="sidebarPickWs('${escId}')"><span class="ws-badge-dot"></span>${escapeHtml(label)}<span class="sn-count">${roomList.length}</span></div>`);
-    wsRows.push(...roomList.map(_sidebarRoomRow));
+    const folded = _snCollapsed.has(wsId);
+    wsRows.push(
+      `<div class="sn-ws ${colorClass}${activeWorkspace === wsId ? ' active' : ''}" onclick="sidebarPickWs('${escId}')">` +
+      `<span class="sn-fold" onclick="sidebarToggleWs(event, '${escId}')" title="${folded ? 'Expand' : 'Collapse'}">${folded ? '▸' : '▾'}</span>` +
+      `<span class="ws-badge-dot"></span>${escapeHtml(label)}<span class="sn-count">${roomList.length}</span></div>`
+    );
+    if (!folded) wsRows.push(...roomList.map(_sidebarRoomRow));
   };
   const live = rooms.filter(r => !roomIsArchived(r));
   workspaces.slice().sort((a, b) => (a.order ?? 0) - (b.order ?? 0)).forEach(w => {
@@ -8821,14 +8878,110 @@ function renderSidebar() {
   });
   const unlabeled = orderRooms(live.filter(r => roomIsUnlabeled(r)));
   if (unlabeled.length) wsSection('Unlabeled', 'ws-color-neutral', WS_UNLABELED, unlabeled);
-  el.innerHTML = `<div class="sn-head" onclick="sidebarPickWs('${WS_ALL}')">All Rooms<span class="sn-count">${live.length}</span></div>` + wsRows.join('') +
+  el.innerHTML = `<div class="sn-resize" title="Drag to resize"></div>` +
+    `<div class="sn-head" onclick="sidebarPickWs('${WS_ALL}')">All Rooms<span class="sn-count">${live.length}</span></div>` + wsRows.join('') +
     `<button class="sn-add" onclick="addRoomPrompt()">＋ New room</button>`;
+  _snAttachResize(el);
 }
 window.sidebarPickWs = function(wsId) {
   activeWorkspace = wsId;
   store.set('cade-active-workspace', wsId);
   try { renderWorkspacePill(); } catch {}
   renderRoomTabs();
+};
+// Right-click a sidebar room (round-4 item 9): rename / pin / archive / remove.
+window.sidebarRoomMenu = function(evt, name) {
+  evt.preventDefault();
+  evt.stopPropagation();
+  const pinned = roomPinnedHere(name);
+  const archived = roomIsArchived(name);
+  openMenu([
+    { label: '↗ Switch to here', run: () => quickSwitchPick(name) },
+    { label: '✏️ Rename…', run: () => renameRoom(name) },
+    { label: pinned ? '📌 Unpin' : '📌 Pin to top', run: () => toggleRoomPin(name) },
+    { label: archived ? '↩ Restore' : '🗄 Archive', run: () => toggleRoomArchive(name) },
+    { sep: true },
+    { label: 'Remove from tab list', danger: true, run: () => removeRoom(name) },
+    { label: 'Delete from server…', danger: true, run: () => deleteRoomFromServer(name) },
+  ], evt.clientX, evt.clientY);
+};
+// Drag the divider to resize (round-4 item 10). Pointer events so it works
+// with touch on hybrid laptops too; width persists per device.
+function _snAttachResize(el) {
+  const handle = el.querySelector('.sn-resize');
+  if (!handle || handle._wired) return;
+  handle._wired = true;
+  handle.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    el.classList.add('resizing');
+    try { handle.setPointerCapture(e.pointerId); } catch {}
+    const move = (ev) => {
+      const w = Math.max(160, Math.min(420, Math.round(ev.clientX)));
+      document.documentElement.style.setProperty('--sidebar-w', w + 'px');
+    };
+    const up = (ev) => {
+      el.classList.remove('resizing');
+      handle.removeEventListener('pointermove', move);
+      handle.removeEventListener('pointerup', up);
+      handle.removeEventListener('pointercancel', up);
+      const w = Math.max(160, Math.min(420, Math.round(ev.clientX)));
+      store.set('cade-sidebar-w', String(w));
+      try { editor.requestMeasure(); } catch {}
+    };
+    handle.addEventListener('pointermove', move);
+    handle.addEventListener('pointerup', up);
+    handle.addEventListener('pointercancel', up);
+  });
+}
+// Rename a room everywhere (round-4 item 9): local keys, list position,
+// memberships, pins, per-ws order, server copy + old-node removal, and an
+// account-wide tombstone so other devices drop the old name.
+window.renameRoom = async function(oldName) {
+  closeCtxMenu();
+  const typed = await textPrompt('Rename room "' + oldName + '" to:', oldName);
+  if (typed == null) return;
+  const name = typed.trim().toLowerCase();
+  if (!name || name === oldName) return;
+  if (name.startsWith('__') || name.length > 100) { showToast('Invalid room name', 'error', 2500); return; }
+  if (rooms.includes(name)) { showToast('A room with that name already exists', 'error', 3000); return; }
+  const wasActive = activeRoom === oldName;
+  // Copy every local per-room key to the new name (old ones purge below).
+  ['cade-room-cache:', 'cade-room-synced:', 'cade-room-ver:', 'cade-snap:', 'cade-autocolor:', 'cade-room-pw-hash:', 'cade-room-pw-remote:'].forEach(p => {
+    const v = store.get(p + oldName);
+    if (v != null) store.set(p + name, v);
+  });
+  const idx = rooms.indexOf(oldName);
+  if (idx !== -1) rooms.splice(idx, 0, name); else rooms.push(name);
+  if (roomWorkspace[oldName]) roomWorkspace[name] = roomWorkspace[oldName];
+  roomMeta[name] = Object.assign({}, roomMeta[oldName] || {}, { created: Date.now() });
+  workspaces.forEach(w => {
+    if (Array.isArray(w.pins)) { const i = w.pins.indexOf(oldName); if (i !== -1) w.pins[i] = name; }
+    if (Array.isArray(w.roomOrder)) { const i = w.roomOrder.indexOf(oldName); if (i !== -1) w.roomOrder[i] = name; }
+  });
+  saveRooms();
+  saveWorkspaces();
+  saveRoomMeta();
+  // Server: write the text under the new name, then drop the old node.
+  const fbUrl = store.get('cade-firebase-url');
+  const baseKey = store.get('cade-sync-key');
+  if (fbUrl && baseKey && navigator.onLine) {
+    try {
+      const db = initFirebase(fbUrl);
+      const text = wasActive ? editor.state.doc.toString() : (store.get('cade-room-cache:' + name) || store.get('cade-room-synced:' + name) || '');
+      if (text) await pushRoomTextQuiet(name, text, getRoomEncKey(name, baseKey));
+      await db.ref('rooms/' + oldName).remove();
+    } catch (e) {
+      showToast('Renamed locally; server move incomplete: ' + (e && e.message || e), 'error', 4500);
+    }
+  }
+  // Follow into the new room BEFORE purging the old identity, so the purge's
+  // active-room handling never fires.
+  if (wasActive) { try { await switchRoom(name); } catch {} }
+  tombstoneRoom(oldName);
+  purgeLocalRoom(oldName);
+  renderRoomTabs();
+  try { renderRoomManagerList(); } catch {}
+  showToast('Renamed to "' + name + '"', 'success', 2500);
 };
 
 function renderRoomTabs() {
@@ -9064,9 +9217,18 @@ window.closeQuickSwitcher = function() {
   try { editor.focus(); } catch {}
 };
 
-window.quickSwitchPick = function(name) {
+window.quickSwitchPick = async function(name) {
+  // Content matches earn their keep: picking one jumps to the first hit in
+  // the opened document (retry once — a live sync snapshot can land late).
+  let seekQ = null;
+  try {
+    const input = document.getElementById('qs-input');
+    const res = _qsResults.find(r => r.name === name);
+    if (res && res.content && input && input.value.trim().length >= 2) seekQ = input.value.trim().toLowerCase();
+  } catch {}
   closeQuickSwitcher();
-  if (!name || name === activeRoom) return;
+  if (!name) return;
+  if (name === activeRoom) { if (seekQ) _qsSeek(seekQ); return; }
   // Item 22: follow the room into ITS OWN workspace (first membership) rather
   // than dumping to All Rooms — the tab bar then shows its real context.
   // Archived rooms still land in All Rooms (they're hidden everywhere else).
@@ -9079,19 +9241,38 @@ window.quickSwitchPick = function(name) {
     store.set('cade-active-workspace', activeWorkspace);
   }
   try { renderWorkspacePill(); } catch {}
-  switchRoom(name);
+  await switchRoom(name);
+  if (seekQ && !_qsSeek(seekQ)) setTimeout(() => _qsSeek(seekQ), 900);
 };
+
+// Select + center the first occurrence of `q` in the open document.
+function _qsSeek(q) {
+  try {
+    const doc = editor.state.doc.toString().toLowerCase();
+    const at = doc.indexOf(q);
+    if (at === -1) return false;
+    editor.dispatch({
+      selection: { anchor: at, head: at + q.length },
+      effects: EditorView.scrollIntoView(at, { y: 'center' }),
+    });
+    return true;
+  } catch { return false; }
+}
 
 // Item 29: content search across the workspace's rooms (all rooms in the All
 // view) — async, time-budgeted chunks, capped results, per-open text cache so
-// keystrokes don't re-read localStorage. Only kicks in from 3 chars.
+// keystrokes don't re-read localStorage. Kicks in from 2 chars.
 let _qsScanToken = 0;
 const _qsTextCache = new Map(); // room -> lowercased text ('' = known empty)
 function _qsRoomTextLower(r) {
   if (_qsTextCache.has(r)) return _qsTextCache.get(r);
   let t = '';
   try {
-    t = (r === activeRoom ? editor.state.doc.toString() : (store.get('cade-room-cache:' + r) || '')).toLowerCase();
+    // Cache first; fall back to the last-synced base for rooms whose cache
+    // hasn't been written on this device yet.
+    t = (r === activeRoom
+      ? editor.state.doc.toString()
+      : (store.get('cade-room-cache:' + r) || store.get('cade-room-synced:' + r) || '')).toLowerCase();
   } catch {}
   _qsTextCache.set(r, t);
   return t;
@@ -9099,7 +9280,7 @@ function _qsRoomTextLower(r) {
 function quickSwitchContentSearch(query) {
   const token = ++_qsScanToken;
   const q = query.trim().toLowerCase();
-  if (q.length < 3) return;
+  if (q.length < 2) return;
   const scope = (activeWorkspace === WS_ALL)
     ? rooms.filter(r => !roomIsArchived(r))
     : roomsInActiveWorkspace(false);
@@ -9108,7 +9289,7 @@ function quickSwitchContentSearch(query) {
   const step = () => {
     if (token !== _qsScanToken) return; // a newer keystroke superseded us
     const deadline = Date.now() + 8;    // ≤8ms of work per chunk
-    while (i < scope.length && Date.now() < deadline && found.length < 8) {
+    while (i < scope.length && Date.now() < deadline && found.length < 12) {
       const r = scope[i++];
       const text = _qsRoomTextLower(r);
       if (!text) continue;
@@ -9118,14 +9299,20 @@ function quickSwitchContentSearch(query) {
       const raw = (s > 0 ? '…' : '') + text.slice(s, at + q.length + 44).replace(/\s+/g, ' ') + '…';
       found.push({ name: r, score: 1, content: true, snippet: escapeHtml(raw) });
     }
-    if (i < scope.length && found.length < 8) { setTimeout(step, 0); return; }
+    if (i < scope.length && found.length < 12) { setTimeout(step, 0); return; }
     if (token !== _qsScanToken) return;
-    const have = new Set(_qsResults.map(x => x.name));
-    const extra = found.filter(f => !have.has(f.name));
-    if (extra.length) {
-      _qsResults = _qsResults.concat(extra);
-      renderQuickSwitchList();
-    }
+    // Rooms already listed as NAME matches get their snippet attached in
+    // place (so a weak fuzzy name-match can't hide a strong content hit);
+    // the rest append as 📄 rows.
+    const byName = new Map(found.map(f => [f.name, f]));
+    let changed = false;
+    _qsResults.forEach(res => {
+      const f = byName.get(res.name);
+      if (f && !res.content) { res.content = true; res.snippet = f.snippet; byName.delete(res.name); changed = true; }
+    });
+    const extra = [...byName.values()];
+    if (extra.length) { _qsResults = _qsResults.concat(extra); changed = true; }
+    if (changed) renderQuickSwitchList();
   };
   setTimeout(step, 0);
 }
@@ -10086,6 +10273,11 @@ window.createTempRoom = function() {
   rooms.push(name);
   touchRoomCreated(name);
   roomMeta[name].temp = true; // rides the synced meta → expires account-wide
+  // Item 8: born into the workspace you're standing in (like submitAddRoom).
+  if (activeWorkspace !== WS_ALL && activeWorkspace !== WS_UNLABELED && getWorkspace(activeWorkspace)) {
+    addRoomToWorkspace(name, activeWorkspace);
+    saveWorkspaces();
+  }
   saveRooms();
   saveRoomMeta();
   renderRoomTabs();
@@ -10129,18 +10321,29 @@ setInterval(sweepTempRooms, 30 * 60 * 1000);
 
 // Pin / archive toggles surfaced by Room Manager + context menus.
 window.toggleRoomPin = function(name) {
-  // Inside a workspace, pin/unpin applies to THAT workspace only (item 11);
-  // in All Rooms / Unlabeled it toggles the global everywhere-pin.
+  // PINNED → unpin from EVERY scope that makes it pinned here (the round-3
+  // version only toggled the workspace pin, so a globally-pinned room could
+  // never be unpinned from inside a workspace — it looked like unpin was
+  // broken). NOT pinned → pin in the current scope: the active workspace, or
+  // globally from All Rooms / Unlabeled.
   const ws = _activeWsObj();
-  if (ws) {
+  if (roomPinnedHere(name)) {
+    let changedWs = false;
+    if (ws && Array.isArray(ws.pins)) {
+      const i = ws.pins.indexOf(name);
+      if (i !== -1) { ws.pins.splice(i, 1); changedWs = true; }
+    }
+    if (roomIsPinned(name)) setRoomPinned(name, false);
+    if (changedWs) saveWorkspaces();
+    showToast('Unpinned: ' + name, 'success', 2000);
+  } else if (ws) {
     ws.pins = Array.isArray(ws.pins) ? ws.pins : [];
-    const i = ws.pins.indexOf(name);
-    if (i === -1) ws.pins.push(name); else ws.pins.splice(i, 1);
+    ws.pins.push(name);
     saveWorkspaces();
-    showToast((i === -1 ? '📌 Pinned in ' : 'Unpinned in ') + ws.name + ': ' + name, 'success', 2000);
+    showToast('📌 Pinned in ' + ws.name + ': ' + name, 'success', 2000);
   } else {
-    setRoomPinned(name, !roomIsPinned(name));
-    showToast(roomIsPinned(name) ? '📌 Pinned everywhere: ' + name : 'Unpinned: ' + name, 'success', 2000);
+    setRoomPinned(name, true);
+    showToast('📌 Pinned everywhere: ' + name, 'success', 2000);
   }
   closeActionMenu();
   renderRoomManagerList();
@@ -11432,7 +11635,7 @@ window.showRoomActionMenu = function(evt, roomName) {
   const menu = document.getElementById('rm-action-menu');
   if (!menu) return;
   const hasPassword = roomHasPassword(roomName);
-  const pinned = roomIsPinned(roomName);
+  const pinned = roomPinnedHere(roomName);
   const archived = roomIsArchived(roomName);
   const esc = s => escapeHtml(s.replace(/\\/g, '\\\\').replace(/'/g, "\\'"));
   const er = esc(roomName);
@@ -11461,7 +11664,7 @@ window.showRoomTabContextMenu = function(evt, roomName) {
   _actionMenuKind = 'tab';
   const menu = document.getElementById('rm-action-menu');
   if (!menu) return;
-  const pinned = roomIsPinned(roomName);
+  const pinned = roomPinnedHere(roomName);
   const archived = roomIsArchived(roomName);
   const esc = s => escapeHtml(s.replace(/\\/g, '\\\\').replace(/'/g, "\\'"));
   const er = esc(roomName);
@@ -13477,6 +13680,11 @@ window.openReminders = function () {
   closeAllMenus();
   if (window.__remindersOpen) return window.__remindersOpen();
   const w = WIDGETS.find(x => x.name === 'Reminders');
+  if (w) w.open();
+};
+// Clicking the footer counters opens the Text Stats widget (round-4 item 6).
+window.openTextStats = function () {
+  const w = WIDGETS.find(x => x.name === 'Text Stats');
   if (w) w.open();
 };
 
