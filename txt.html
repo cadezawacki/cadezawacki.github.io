@@ -2277,39 +2277,12 @@ body.sel-mode .editor-wrap .cm-content { -webkit-touch-callout: none; }
 
 /* Outline widget styles now live in ./txt/widgets/outline/outline.css */
 
-#timer-panel { top: 50px; right: 12px; width: 230px; }
-.timer-tabs { display: flex; flex-wrap: wrap; gap: 4px; padding: 8px 10px 2px; }
-.timer-tab { flex: 1 1 auto; padding: 4px 6px; font-size: 11px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: none; color: var(--text-faint); cursor: pointer; white-space: nowrap; }
-.timer-tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
-.timer-display { padding: 8px 0 2px; }
-.timer-time { display: block; font-size: 34px; font-weight: 700; text-align: center; font-variant-numeric: tabular-nums; }
-.timer-sub { display: block; text-align: center; font-size: var(--text-xs); color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
-#timer-panel.break .timer-time { color: var(--success, #10b981); }
-/* D8: a slower, gentler attention pulse — tints the panel background rather than
-   strobing a shadow, so it's noticeable without being jarring. */
-@keyframes timerFlash {
-  0%, 100% { box-shadow: 0 0 0 1px var(--border), 0 8px 28px rgba(0,0,0,0.28); background: var(--surface); }
-  50% { box-shadow: 0 0 0 2px var(--accent), 0 0 14px var(--accent); background: color-mix(in srgb, var(--accent) 18%, var(--surface)); }
-}
-#timer-panel.timer-flash { animation: timerFlash 1.8s ease-in-out infinite; }
-#timer-panel.timer-flash .timer-time { color: var(--accent); }
-.timer-cfg { display: flex; gap: 8px; justify-content: center; padding: 6px 10px; }
-.timer-cfg label { display: flex; align-items: center; gap: 4px; font-size: var(--text-xs); color: var(--text-muted); }
-.timer-cfg input { width: 64px; padding: 3px 5px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface, transparent); color: var(--text); font-size: var(--text-xs); }
-.timer-cfg input[type=time] { width: 92px; }
-.timer-btns { display: flex; gap: 6px; padding: 8px 10px 0; }
-.timer-btns:last-child { padding-bottom: 10px; }
-.timer-btns .btn { flex: 1 1 0; min-width: 0; box-sizing: border-box; text-align: center; }
-.timer-min { font-size: var(--text-xs); }
-.timer-laps { max-height: 120px; overflow-y: auto; padding: 4px 10px 10px; }
-.timer-lap-d.slower { color: var(--danger, #ef4444); }
-.timer-lap-d.faster { color: var(--success, #10b981); }
+/* Timer widget styles now live in ./txt/widgets/timer/timer.css */
 .footer-timer-chip {
   display: inline-flex; align-items: center; cursor: pointer; flex-shrink: 0;
   padding: 0 6px; margin-left: 6px; border-radius: 4px; font-variant-numeric: tabular-nums;
   background: var(--surface-hover, rgba(127,127,127,0.15)); color: var(--accent);
 }
-.timer-lap { display: flex; justify-content: space-between; font-size: var(--text-xs); color: var(--text-muted); font-variant-numeric: tabular-nums; padding: 2px 0; border-top: 1px solid var(--border); }
 .sync-action-grid { display: flex; flex-wrap: wrap; gap: 8px; }
 .sync-action-grid .btn { flex: 1 1 140px; }
 #sync-disconnect-btn { color: var(--danger, #ef4444); border-color: var(--danger, #ef4444); }
@@ -2317,27 +2290,7 @@ body.sel-mode .editor-wrap .cm-content { -webkit-touch-callout: none; }
 #footer-clock { font-variant-numeric: tabular-nums; color: var(--text-muted); cursor: default; }
 #footer-clock .fc-tz { opacity: 0.7; margin-left: 8px; }
 
-#daycal-panel { top: 50px; right: 12px; width: 244px; }
-.daycal-head { display: flex; align-items: center; justify-content: space-between; padding: 8px 10px 2px; font-weight: 600; }
-.daycal-head button { background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 18px; line-height: 1; padding: 0 8px; border-radius: 4px; }
-.daycal-head button:hover { background: var(--surface-hover, rgba(127,127,127,0.15)); }
-.daycal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; padding: 8px; }
-.daycal-cell { text-align: center; padding: 6px 0; border-radius: 4px; cursor: pointer; font-size: var(--text-xs); }
-.daycal-cell:hover { background: var(--surface-hover, rgba(127,127,127,0.15)); }
-.daycal-cell.today { outline: 1px solid var(--accent); }
-.daycal-cell.has { font-weight: 700; color: var(--accent); }
-.daycal-cell.dow { color: var(--text-faint); cursor: default; font-weight: 600; }
-.daycal-cell.empty { cursor: default; }
-.daycal-cell.sel { background: var(--accent); color: #fff; }
-.daycal-cell.sel.has { color: #fff; }
-.daycal-list-head { padding: 6px 12px 2px; font-size: var(--text-xs); color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.05em; }
-.daycal-list { max-height: 200px; overflow-y: auto; padding: 0 8px 10px; display: flex; flex-direction: column; gap: 2px; }
-.daycal-room { display: flex; align-items: center; gap: 6px; width: 100%; text-align: left; background: none; border: none; color: var(--text); cursor: pointer; padding: 6px 8px; border-radius: 6px; font-size: var(--text-sm); }
-.daycal-room:hover { background: var(--surface-hover, rgba(127,127,127,0.15)); }
-.daycal-room-n { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.daycal-room-ws { font-size: var(--text-xs); color: var(--text-faint); flex-shrink: 0; }
-.daycal-pin { font-size: 11px; }
-.daycal-empty { padding: 8px 12px; color: var(--text-faint); font-size: var(--text-xs); }
+/* Rooms-by-Date widget styles now live in ./txt/widgets/daycal/daycal.css */
 
 body.zen .menubar, body.zen .footer, body.zen .mobile-toolbar, body.zen .mobile-scroll-btns { display: none !important; }
 body.zen .editor-wrap .cm-scroller { padding-left: max(8vw, var(--space-4)); padding-right: max(8vw, var(--space-4)); }
@@ -2977,6 +2930,8 @@ window.Cade = (function () {
     loadCSS(rel) { return window.__loadCSSOnce(this.baseURL() + rel); },
     // ---- editor lifecycle hook (CM6 ViewUpdate) for module refreshes ----
     onEditorUpdate(cb) { if (typeof cb === 'function') (window.__cadeUpdateHooks || (window.__cadeUpdateHooks = [])).push(cb); },
+    // ---- room system surface (read-mostly; see window.__roomsApi in core) ----
+    get roomsApi() { return window.__roomsApi; },
   };
   return api;
 })();
@@ -6414,80 +6369,8 @@ window.__registerScript = registerScript; // exposed for external script modules
 
 // --- Built-in Scripts ---
 
-registerScript(`/**
-  {
-    "name": "Sort List",
-    "description": "Sort lines or comma-separated items alphabetically with smart number handling",
-    "author": "Cade",
-    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><line x1='12' y1='5' x2='12' y2='19'/><polyline points='19 12 12 19 5 12'/><line x1='4' y1='2' x2='4' y2='2.01'/><line x1='4' y1='5' x2='4' y2='5.01'/></svg>",
-    "tags": "sort,list,alphabetical,order,asc"
-  }
-**/
-function main(ctx) {
-  const text = ctx.selection || ctx.fullText;
-  const hasCommas = text.includes(',') && text.split('\\n').length <= 2;
-  if (hasCommas) {
-    const parts = text.split(',').map(s => s.trim()).filter(Boolean);
-    parts.sort((a, b) => smartCompare(a, b));
-    const result = parts.join(', ');
-    if (ctx.selection) ctx.selection = result; else ctx.fullText = result;
-  } else {
-    const lines = text.split('\\n');
-    lines.sort((a, b) => smartCompare(a.trim(), b.trim()));
-    const result = lines.join('\\n');
-    if (ctx.selection) ctx.selection = result; else ctx.fullText = result;
-  }
-}
 
-function smartCompare(a, b) {
-  // Blank lines always sort to end
-  if (a.trim() === '' && b.trim() === '') return 0;
-  if (a.trim() === '') return 1;
-  if (b.trim() === '') return -1;
-  const stripQuotes = s => s.replace(/^["']|["']$/g, '');
-  a = stripQuotes(a);
-  b = stripQuotes(b);
-  return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
-}`);
 
-registerScript(`/**
-  {
-    "name": "Reverse List",
-    "description": "Reverse lines or comma-separated items",
-    "author": "Cade",
-    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><line x1='12' y1='19' x2='12' y2='5'/><polyline points='5 12 12 5 19 12'/></svg>",
-    "tags": "reverse,list,flip,invert"
-  }
-**/
-function main(ctx) {
-  const text = ctx.selection || ctx.fullText;
-  const hasCommas = text.includes(',') && text.split('\\n').length <= 2;
-  if (hasCommas) {
-    const parts = text.split(',').map(s => s.trim()).filter(Boolean);
-    parts.reverse();
-    const result = parts.join(', ');
-    if (ctx.selection) ctx.selection = result; else ctx.fullText = result;
-  } else {
-    const lines = text.split('\\n');
-    lines.reverse();
-    const result = lines.join('\\n');
-    if (ctx.selection) ctx.selection = result; else ctx.fullText = result;
-  }
-}`);
-
-registerScript(`/**
-  {
-    "name": "Upper Case",
-    "description": "Convert text to UPPER CASE",
-    "author": "Cade",
-    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M3 20h4l10-14h4'/><path d='M7 20L17 6'/></svg>",
-    "tags": "upper,case,uppercase,caps"
-  }
-**/
-function main(ctx) {
-  if (ctx.selection) { ctx.selection = ctx.selection.toUpperCase(); }
-  else { ctx.fullText = ctx.fullText.toUpperCase(); }
-}`);
 
 // ---- Highlight colors (wrap selection in the %%spec|text%% sentinel) ----
 registerScript(`/**
@@ -6539,40 +6422,7 @@ function main(ctx) {
   showToast(n ? ('Migrated ' + n + ' highlight' + (n === 1 ? '' : 's')) : 'No v1 highlights found', n ? 'success' : 'info', 2200);
 }`);
 
-registerScript(`/**
-  {
-    "name": "Lower Case",
-    "description": "Convert text to lower case",
-    "author": "Cade",
-    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M3 20h4l10-14h4'/><path d='M17 20L7 6'/></svg>",
-    "tags": "lower,case,lowercase"
-  }
-**/
-function main(ctx) {
-  if (ctx.selection) { ctx.selection = ctx.selection.toLowerCase(); }
-  else { ctx.fullText = ctx.fullText.toLowerCase(); }
-}`);
 
-registerScript(`/**
-  {
-    "name": "Title Case",
-    "description": "Convert text to Title Case",
-    "author": "Cade",
-    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='4 7 4 4 20 4 20 7'/><line x1='9' y1='20' x2='15' y2='20'/><line x1='12' y1='4' x2='12' y2='20'/></svg>",
-    "tags": "title,case,capitalize"
-  }
-**/
-function main(ctx) {
-  const minor = new Set(['a','an','the','and','but','or','for','nor','on','at','to','by','in','of','up','as','is','if','it','so','no']);
-  function titleCase(str) {
-    return str.replace(/\\S+/g, (word, idx) => {
-      if (idx > 0 && minor.has(word.toLowerCase())) return word.toLowerCase();
-      return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
-    });
-  }
-  if (ctx.selection) { ctx.selection = titleCase(ctx.selection); }
-  else { ctx.fullText = titleCase(ctx.fullText); }
-}`);
 
 // ============================================
 // UNICODE FANCY TEXT SCRIPTS
@@ -6682,78 +6532,7 @@ function main(ctx) {
   if (ctx.selection) ctx.selection = result; else ctx.fullText = result;
 }`);
 
-registerScript(`/**
-  {
-    "name": "Double-Struck (𝔻𝕠𝕦𝕓𝕝𝕖)",
-    "description": "Convert to Unicode double-struck (blackboard bold) — toggles off",
-    "author": "Cade",
-    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='3' y='3' width='18' height='18' rx='2'/><text x='12' y='16' font-size='12' font-weight='bold' text-anchor='middle' fill='currentColor' stroke='none'>𝔻</text></svg>",
-    "tags": "doublestruck,blackboard,fancy,unicode,text,format,math"
-  }
-**/
-function main(ctx) {
-  const text = ctx.selection || ctx.fullText;
-  // Special uppercase chars not in the sequential block
-  const dsSpecial = {C:0x2102,H:0x210D,N:0x2115,P:0x2119,Q:0x211A,R:0x211D,Z:0x2124};
-  // Build reverse map for specials
-  const dsSpecialRev = {};
-  for (const [k,v] of Object.entries(dsSpecial)) dsSpecialRev[v] = k;
-  // Sequential block skips the special letters, so we need offset mapping
-  const dsUpperSeq = 'ABDEFGIJKLMOSTUVWXY';
-  function toDS(ch) {
-    const c = ch.codePointAt(0);
-    if (c >= 0x61 && c <= 0x7A) return String.fromCodePoint(0x1D552 + c - 0x61);
-    if (c >= 0x30 && c <= 0x39) return String.fromCodePoint(0x1D7D8 + c - 0x30);
-    const upper = String.fromCharCode(c);
-    if (dsSpecial[upper]) return String.fromCodePoint(dsSpecial[upper]);
-    if (c >= 0x41 && c <= 0x5A) return String.fromCodePoint(0x1D538 + c - 0x41);
-    return null;
-  }
-  function fromDS(cp) {
-    if (cp >= 0x1D552 && cp <= 0x1D56B) return String.fromCodePoint(0x61 + cp - 0x1D552);
-    if (cp >= 0x1D7D8 && cp <= 0x1D7E1) return String.fromCodePoint(0x30 + cp - 0x1D7D8);
-    if (dsSpecialRev[cp]) return dsSpecialRev[cp];
-    if (cp >= 0x1D538 && cp <= 0x1D551) return String.fromCodePoint(0x41 + cp - 0x1D538);
-    return null;
-  }
-  const cps = [...text];
-  const isDS = cps.some(ch => fromDS(ch.codePointAt(0)));
-  const result = cps.map(ch => {
-    const cp = ch.codePointAt(0);
-    if (isDS) return fromDS(cp) || ch;
-    return toDS(ch) || ch;
-  }).join('');
-  if (ctx.selection) ctx.selection = result; else ctx.fullText = result;
-}`);
 
-registerScript(`/**
-  {
-    "name": "Small Caps (ꜱᴍᴀʟʟ)",
-    "description": "Convert to Unicode small capitals — toggles off",
-    "author": "Cade",
-    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><text x='5' y='18' font-size='18' font-weight='bold' fill='currentColor' stroke='none'>A</text><text x='15' y='18' font-size='12' fill='currentColor' stroke='none'>ᴀ</text></svg>",
-    "tags": "smallcaps,small,capitals,fancy,unicode,text,format"
-  }
-**/
-function main(ctx) {
-  const text = ctx.selection || ctx.fullText;
-  const scMap = {a:0x1D00,b:0x0299,c:0x1D04,d:0x1D05,e:0x1D07,f:0xA730,g:0x0262,h:0x029C,i:0x026A,j:0x1D0A,k:0x1D0B,l:0x029F,m:0x1D0D,n:0x0274,o:0x1D0F,p:0x1D18,r:0x0280,s:0xA731,t:0x1D1B,u:0x1D1C,v:0x1D20,w:0x1D21,y:0x028F,z:0x1D22};
-  const scRev = {};
-  for (const [k,v] of Object.entries(scMap)) scRev[v] = k;
-  function toSC(ch) {
-    const lower = ch.toLowerCase();
-    if (scMap[lower]) return String.fromCodePoint(scMap[lower]);
-    return null;
-  }
-  const cps = [...text];
-  const isSC = cps.some(ch => scRev[ch.codePointAt(0)]);
-  const result = cps.map(ch => {
-    const cp = ch.codePointAt(0);
-    if (isSC) return scRev[cp] || ch;
-    return toSC(ch) || ch;
-  }).join('');
-  if (ctx.selection) ctx.selection = result; else ctx.fullText = result;
-}`);
 
 registerScript(`/**
   {
@@ -6776,1608 +6555,67 @@ function main(ctx) {
   }
 }`);
 
-registerScript(`/**
-  {
-    "name": "Double Underline (U̳n̳d̳e̳r̳)",
-    "description": "Add/remove Unicode combining double underline on each character",
-    "author": "Cade",
-    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M6 3v7a6 6 0 0 0 6 6 6 6 0 0 0 6-6V3'/><line x1='4' y1='19' x2='20' y2='19'/><line x1='4' y1='22' x2='20' y2='22'/></svg>",
-    "tags": "double,underline,under,fancy,unicode,text,format"
-  }
-**/
-function main(ctx) {
-  const text = ctx.selection || ctx.fullText;
-  const COMBINING = '\\u0333';
-  if (text.includes(COMBINING)) {
-    const result = text.split(COMBINING).join('');
-    if (ctx.selection) ctx.selection = result; else ctx.fullText = result;
-  } else {
-    const result = [...text].map(ch => ch === '\\n' || ch === '\\r' ? ch : ch + COMBINING).join('');
-    if (ctx.selection) ctx.selection = result; else ctx.fullText = result;
-  }
-}`);
 
-registerScript(`/**
-  {
-    "name": "Strikethrough (S̶t̶r̶i̶k̶e̶)",
-    "description": "Add/remove Unicode combining strikethrough on each character",
-    "author": "Cade",
-    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><line x1='4' y1='12' x2='20' y2='12'/><path d='M17.5 7.5C17.5 5 15.3 3 12 3 9 3 6.5 4.7 6.5 7c0 1.5.8 2.8 2.5 3.5'/><path d='M8.5 16.5C8.5 19 10.7 21 14 21c2.5 0 4.5-1.3 5-3.5'/></svg>",
-    "tags": "strikethrough,strike,cross,fancy,unicode,text,format"
-  }
-**/
-function main(ctx) {
-  const text = ctx.selection || ctx.fullText;
-  const COMBINING = '\\u0336';
-  if (text.includes(COMBINING)) {
-    const result = text.split(COMBINING).join('');
-    if (ctx.selection) ctx.selection = result; else ctx.fullText = result;
-  } else {
-    const result = [...text].map(ch => ch === '\\n' || ch === '\\r' ? ch : ch + COMBINING).join('');
-    if (ctx.selection) ctx.selection = result; else ctx.fullText = result;
-  }
-}`);
 
-registerScript(`/**
-  {
-    "name": "Defancify",
-    "description": "Strip all Unicode fancy formatting — bold, italic, double-struck, small caps, combining marks",
-    "author": "Cade",
-    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><line x1='4' y1='4' x2='20' y2='20'/><line x1='4' y1='20' x2='20' y2='4'/></svg>",
-    "tags": "defancify,strip,clean,plain,unicode,remove,format,reset"
-  }
-**/
-function main(ctx) {
-  const text = ctx.selection || ctx.fullText;
-  const map = {};
-  // Helper: map a 26-letter upper + lower block (and optionally digits)
-  function addAlpha(upperStart, lowerStart) {
-    for (let i = 0; i < 26; i++) {
-      map[upperStart + i] = 0x41 + i;
-      map[lowerStart + i] = 0x61 + i;
-    }
-  }
-  function addDigits(start) {
-    for (let i = 0; i < 10; i++) map[start + i] = 0x30 + i;
-  }
-  // Mathematical bold (serif)
-  addAlpha(0x1D400, 0x1D41A); addDigits(0x1D7CE);
-  // Mathematical italic (serif) — note: h is U+210E
-  addAlpha(0x1D434, 0x1D44E); map[0x210E] = 0x68;
-  // Mathematical bold italic (serif)
-  addAlpha(0x1D468, 0x1D482);
-  // Mathematical script
-  addAlpha(0x1D49C, 0x1D4B6);
-  // Script specials: B E F H I L M R
-  map[0x212C]=0x42; map[0x2130]=0x45; map[0x2131]=0x46; map[0x210B]=0x48;
-  map[0x2110]=0x49; map[0x2112]=0x4C; map[0x2133]=0x4D; map[0x211B]=0x52;
-  // Script lowercase specials: e g o
-  map[0x212F]=0x65; map[0x210A]=0x67; map[0x2134]=0x6F;
-  // Mathematical bold script
-  addAlpha(0x1D4D0, 0x1D4EA);
-  // Mathematical fraktur
-  addAlpha(0x1D504, 0x1D51E);
-  // Fraktur specials: C H I R Z
-  map[0x212D]=0x43; map[0x210C]=0x48; map[0x2111]=0x49; map[0x211C]=0x52; map[0x2128]=0x5A;
-  // Mathematical bold fraktur
-  addAlpha(0x1D56C, 0x1D586);
-  // Mathematical sans-serif
-  addAlpha(0x1D5A0, 0x1D5BA); addDigits(0x1D7E2);
-  // Mathematical sans-serif bold
-  addAlpha(0x1D5D4, 0x1D5EE); addDigits(0x1D7EC);
-  // Mathematical sans-serif italic
-  addAlpha(0x1D608, 0x1D622);
-  // Mathematical sans-serif bold italic
-  addAlpha(0x1D63C, 0x1D656);
-  // Mathematical monospace
-  addAlpha(0x1D670, 0x1D68A); addDigits(0x1D7F6);
-  // Double-struck
-  addAlpha(0x1D538, 0x1D552); addDigits(0x1D7D8);
-  // Double-struck specials
-  var ds = {0x2102:0x43,0x210D:0x48,0x2115:0x4E,0x2119:0x50,0x211A:0x51,0x211D:0x52,0x2124:0x5A};
-  for (var k in ds) map[parseInt(k)] = ds[k];
-  // Small caps
-  var sc = {0x1D00:0x61,0x0299:0x62,0x1D04:0x63,0x1D05:0x64,0x1D07:0x65,0xA730:0x66,0x0262:0x67,0x029C:0x68,0x026A:0x69,0x1D0A:0x6A,0x1D0B:0x6B,0x029F:0x6C,0x1D0D:0x6D,0x0274:0x6E,0x1D0F:0x6F,0x1D18:0x70,0x0280:0x72,0xA731:0x73,0x1D1B:0x74,0x1D1C:0x75,0x1D20:0x76,0x1D21:0x77,0x028F:0x79,0x1D22:0x7A};
-  for (var k in sc) map[parseInt(k)] = sc[k];
-  // Circled letters (Ⓐ-Ⓩ, ⓐ-ⓩ, ⓪-⑨)
-  for (let i = 0; i < 26; i++) { map[0x24B6 + i] = 0x41 + i; map[0x24D0 + i] = 0x61 + i; }
-  map[0x24EA] = 0x30; for (let i = 1; i <= 9; i++) map[0x2460 + i - 1] = 0x30 + i;
-  // Fullwidth ASCII (Ａ-Ｚ, ａ-ｚ, ０-９)
-  for (let i = 0; i < 26; i++) { map[0xFF21 + i] = 0x41 + i; map[0xFF41 + i] = 0x61 + i; }
-  for (let i = 0; i < 10; i++) map[0xFF10 + i] = 0x30 + i;
-  // Strip combining marks: underline, double underline, strikethrough, enclosing marks
-  var combining = new Set([0x0332, 0x0333, 0x0336, 0x0305, 0x20E3, 0x0489, 0xFE0F]);
-  var result = [...text].map(function(ch) {
-    var cp = ch.codePointAt(0);
-    if (combining.has(cp)) return '';
-    if (map[cp]) return String.fromCodePoint(map[cp]);
-    return ch;
-  }).join('');
-  if (ctx.selection) ctx.selection = result; else ctx.fullText = result;
-}`);
 
-registerScript(`/**
-  {
-    "name": "Clear Markdown",
-    "description": "Strip markdown emphasis (bold/italic/underline/strike/code/highlight) but keep # heading marks",
-    "author": "Cade",
-    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M3 7h18'/><path d='M3 12h12'/><path d='M3 17h6'/></svg>",
-    "tags": "clear,strip,markdown,plain,bold,italic,underline,remove,format"
-  }
-**/
-function main(ctx) {
-  var text = ctx.selection || ctx.fullText;
-  var result = window.clearMarkdownInline ? window.clearMarkdownInline(text) : text;
-  if (ctx.selection) ctx.selection = result; else ctx.fullText = result;
-}`);
 
-registerScript(`/**
-  {
-    "name": "Super Clear Styles",
-    "description": "Strip BOTH Unicode fancy text and markdown formatting — back to plain (keeps # headings)",
-    "author": "Cade",
-    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M3 3l18 18'/><path d='M21 3L3 21'/></svg>",
-    "tags": "clear,strip,plain,reset,defancify,markdown,super,all,format,remove"
-  }
-**/
-function main(ctx) {
-  var text = ctx.selection || ctx.fullText;
-  var result = window.defancifyText ? window.defancifyText(text) : text;
-  result = window.clearMarkdownInline ? window.clearMarkdownInline(result) : result;
-  if (ctx.selection) ctx.selection = result; else ctx.fullText = result;
-}`);
 
-registerScript(`/**
-  {
-    "name": "Sum",
-    "description": "Sum numbers: 1,2,3 or 1 2 3 or one per line (handles trailing commas)",
-    "author": "Cade",
-    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><line x1='12' y1='5' x2='12' y2='19'/><line x1='5' y1='12' x2='19' y2='12'/></svg>",
-    "tags": "sum,add,total,math,numbers,calculator"
-  }
-**/
-function main(ctx) {
-  const text = ctx.selection || ctx.fullText;
-  const lines = text.split('\\n').map(l => l.trim()).filter(Boolean);
-  let numbers = [];
-  if (lines.length === 1) {
-    // Single line: try comma-separated first, then space-separated
-    const line = lines[0].replace(/,\\s*$/,''); // strip trailing comma
-    if (line.includes(',')) {
-      numbers = line.split(',').map(s => s.trim()).filter(Boolean).map(s => parseFloat(s.replace(/[^\\d.\\-]/g, '')));
-    } else if (line.includes(' ')) {
-      numbers = line.split(/\\s+/).map(s => parseFloat(s.replace(/[^\\d.\\-]/g, '')));
-    } else {
-      numbers = [parseFloat(line.replace(/[^\\d.\\-]/g, ''))];
-    }
-  } else {
-    // Multi-line: one number per line (strip trailing commas)
-    numbers = lines.map(l => l.replace(/,\\s*$/, '')).map(s => parseFloat(s.replace(/[^\\d.\\-]/g, '')));
-  }
-  numbers = numbers.filter(n => !isNaN(n));
-  if (numbers.length === 0) { showToast('No numbers found', 'error'); return; }
-  const sum = numbers.reduce((a, b) => a + b, 0);
-  const result = text + '\\n\\n= ' + sum.toLocaleString('en-US', { maximumFractionDigits: 10 });
-  if (ctx.selection) { ctx.selection = result; }
-  else { ctx.fullText = result; }
-}`);
 
-registerScript(`/**
-  {
-    "name": "UTC → Local Time",
-    "description": "Convert UTC times to local (supports 10:01, 14:01:00Z, ISO dates, epoch)",
-    "author": "Cade",
-    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='12' r='10'/><polyline points='12 6 12 12 16 14'/></svg>",
-    "tags": "utc,local,time,timezone,convert,date"
-  }
-**/
-function main(ctx) {
-  const text = ctx.selection || ctx.fullText;
-  function expandTime(t) {
-    let clean = t.replace(/\\s*(AM|PM)/i, (_, ap) => ' ' + ap.toUpperCase()).trim();
-    const ampm = clean.match(/(AM|PM)$/i);
-    clean = clean.replace(/\\s*(AM|PM)$/i, '').trim();
-    const parts = clean.split(':');
-    let h = parseInt(parts[0]);
-    if (ampm) {
-      if (ampm[1].toUpperCase() === 'PM' && h < 12) h += 12;
-      if (ampm[1].toUpperCase() === 'AM' && h === 12) h = 0;
-    }
-    return String(h).padStart(2, '0') + ':' + (parts[1] || '00') + ':' + (parts[2] || '00');
-  }
-  const today = new Date().toISOString().split('T')[0];
-  let result = text;
-  let changed = false;
 
-  // ISO 8601 with date: 2024-01-15T10:01:00Z
-  if (!changed) { const r = result.replace(/\\d{4}-\\d{2}-\\d{2}[T ]\\d{1,2}:\\d{2}(:\\d{2})?(\\.\\d+)?(Z|[+-]\\d{2}:?\\d{2})?/g, m => {
-    const d = new Date(m.includes('Z') || /[+-]\\d{2}/.test(m) ? m : m + 'Z');
-    return isNaN(d) ? m : d.toLocaleString();
-  }); if (r !== result) { result = r; changed = true; } }
 
-  // Unix epoch
-  if (!changed) { const r = result.replace(/\\b(1\\d{9,12})\\b/g, m => {
-    const n = parseInt(m); const d = new Date(n > 9999999999 ? n : n * 1000);
-    return isNaN(d) ? m : d.toLocaleString();
-  }); if (r !== result) { result = r; changed = true; } }
 
-  // Bare time with Z suffix: 14:01:00Z or 14:01Z
-  if (!changed) { const r = result.replace(/(\\d{1,2}:\\d{2}(:\\d{2})?)Z/g, (m, time) => {
-    const d = new Date(today + 'T' + expandTime(time) + 'Z');
-    return isNaN(d) ? m : d.toLocaleTimeString();
-  }); if (r !== result) { result = r; changed = true; } }
 
-  // Bare time without Z: 10:01, 3:05 PM — assume UTC
-  if (!changed) { const r = result.replace(/(?:^|(?<=\\s))(\\d{1,2}:\\d{2}(:\\d{2})?\\s*(AM|PM)?)(?=\\s|$)/gi, (m, t) => {
-    const d = new Date(today + 'T' + expandTime(t.trim()) + 'Z');
-    return isNaN(d) ? m : d.toLocaleTimeString();
-  }); if (r !== result) { result = r; changed = true; } }
 
-  if (ctx.selection) ctx.selection = result; else ctx.fullText = result;
-}`);
 
-registerScript(`/**
-  {
-    "name": "Local Time → UTC",
-    "description": "Convert local times to UTC (supports 10:01, dates, etc.)",
-    "author": "Cade",
-    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='12' r='10'/><polyline points='12 6 12 12 8 14'/><path d='M2 12h2M20 12h2'/></svg>",
-    "tags": "local,utc,time,timezone,convert,date"
-  }
-**/
-function main(ctx) {
-  const text = ctx.selection || ctx.fullText;
-  function expandTime(t) {
-    let clean = t.replace(/\\s*(AM|PM)/i, (_, ap) => ' ' + ap.toUpperCase()).trim();
-    const ampm = clean.match(/(AM|PM)$/i);
-    clean = clean.replace(/\\s*(AM|PM)$/i, '').trim();
-    const parts = clean.split(':');
-    let h = parseInt(parts[0]);
-    if (ampm) {
-      if (ampm[1].toUpperCase() === 'PM' && h < 12) h += 12;
-      if (ampm[1].toUpperCase() === 'AM' && h === 12) h = 0;
-    }
-    return String(h).padStart(2, '0') + ':' + (parts[1] || '00') + ':' + (parts[2] || '00');
-  }
-  function toUTCTime(d) {
-    return String(d.getUTCHours()).padStart(2,'0') + ':' + String(d.getUTCMinutes()).padStart(2,'0') + ':' + String(d.getUTCSeconds()).padStart(2,'0') + 'Z';
-  }
-  const today = new Date().toISOString().split('T')[0];
-  let result = text;
-  let changed = false;
 
-  // ISO-ish local (no Z or offset): 2024-01-15T10:01:00
-  if (!changed) { const r = result.replace(/\\d{4}-\\d{2}-\\d{2}[T ]\\d{1,2}:\\d{2}(:\\d{2})?(\\.\\d+)?(?!Z)(?![+-]\\d{2})/g, m => {
-    const d = new Date(m); return isNaN(d) ? m : d.toISOString().replace('.000', '');
-  }); if (r !== result) { result = r; changed = true; } }
 
-  // Bare time (no Z): 10:01, 3:05 PM — treat as local, output HH:MM:SSZ
-  if (!changed) { const r = result.replace(/(?:^|(?<=\\s))(\\d{1,2}:\\d{2}(:\\d{2})?\\s*(AM|PM)?)(?=\\s|$)/gi, (m, t) => {
-    const d = new Date(today + 'T' + expandTime(t.trim()));
-    return isNaN(d) ? m : toUTCTime(d);
-  }); if (r !== result) { result = r; changed = true; } }
 
-  if (ctx.selection) ctx.selection = result; else ctx.fullText = result;
-}`);
 
-registerScript(`/**
-  {
-    "name": "Unique Lines",
-    "description": "Remove duplicate lines, preserving order",
-    "author": "Cade",
-    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='3' y='3' width='7' height='7'/><rect x='14' y='3' width='7' height='7' opacity='0.4'/><rect x='3' y='14' width='7' height='7'/><rect x='14' y='14' width='7' height='7'/></svg>",
-    "tags": "unique,deduplicate,duplicate,lines,distinct,remove"
-  }
-**/
-function main(ctx) {
-  const text = ctx.selection || ctx.fullText;
-  const seen = new Set();
-  const lines = text.split('\\n').filter(line => {
-    const key = line.trim();
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-  const result = lines.join('\\n');
-  if (ctx.selection) ctx.selection = result; else ctx.fullText = result;
-}`);
 
-registerScript(`/**
-  {
-    "name": "Copy All to Clipboard",
-    "description": "Copy the entire editor content to clipboard",
-    "author": "Cade",
-    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='9' y='9' width='13' height='13' rx='2' ry='2'/><path d='M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1'/></svg>",
-    "tags": "copy,clipboard,all"
-  }
-**/
-function main(ctx) {
-  navigator.clipboard.writeText(ctx.fullText).then(() => {
-    window.showToast('Copied to clipboard', 'success');
-  }).catch(() => {
-    window.showToast('Failed to copy', 'error');
-  });
-}`);
 
-registerScript(`/**
-  {
-    "name": "Encode Base64",
-    "description": "Encode text to Base64",
-    "author": "Cade",
-    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='16 18 22 12 16 6'/><polyline points='8 6 2 12 8 18'/></svg>",
-    "tags": "encode,base64,btoa"
-  }
-**/
-function main(ctx) {
-  try {
-    const text = ctx.selection || ctx.fullText;
-    const encoded = btoa(unescape(encodeURIComponent(text)));
-    if (ctx.selection) ctx.selection = encoded; else ctx.fullText = encoded;
-  } catch (e) { throw new Error('Base64 encode failed: ' + e.message); }
-}`);
 
-registerScript(`/**
-  {
-    "name": "Decode Base64",
-    "description": "Decode Base64 back to text",
-    "author": "Cade",
-    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='8 18 2 12 8 6'/><polyline points='16 6 22 12 16 18'/></svg>",
-    "tags": "decode,base64,atob"
-  }
-**/
-function main(ctx) {
-  try {
-    const text = ctx.selection || ctx.fullText;
-    const decoded = decodeURIComponent(escape(atob(text.trim())));
-    if (ctx.selection) ctx.selection = decoded; else ctx.fullText = decoded;
-  } catch (e) { throw new Error('Base64 decode failed: ' + e.message); }
-}`);
 
-registerScript(`/**
-  {
-    "name": "Trim / Clean",
-    "description": "Trim whitespace, remove blank lines, normalize spaces",
-    "author": "Cade",
-    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M9 7H5a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-4'/><path d='M9 7V3h6v4'/></svg>",
-    "tags": "trim,clean,whitespace,strip,normalize"
-  }
-**/
-function main(ctx) {
-  const text = ctx.selection || ctx.fullText;
-  const cleaned = text
-    .split('\\n')
-    .map(line => line.trim())
-    .filter((line, i, arr) => !(line === '' && arr[i-1] === ''))
-    .join('\\n')
-    .trim();
-  if (ctx.selection) ctx.selection = cleaned; else ctx.fullText = cleaned;
-}`);
-
-registerScript(`/**
-  {
-    "name": "Encode URL",
-    "description": "URL-encode the text (percent encoding)",
-    "author": "Cade",
-    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71'/><path d='M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71'/></svg>",
-    "tags": "url,encode,percent,uri,escape"
-  }
-**/
-function main(ctx) {
-  const text = ctx.selection || ctx.fullText;
-  const encoded = encodeURIComponent(text);
-  if (ctx.selection) ctx.selection = encoded; else ctx.fullText = encoded;
-}`);
-
-registerScript(`/**
-  {
-    "name": "Decode URL",
-    "description": "Decode URL-encoded text (percent decoding)",
-    "author": "Cade",
-    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71'/><path d='M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71'/></svg>",
-    "tags": "url,decode,percent,uri,unescape"
-  }
-**/
-function main(ctx) {
-  try {
-    const text = ctx.selection || ctx.fullText;
-    const decoded = decodeURIComponent(text);
-    if (ctx.selection) ctx.selection = decoded; else ctx.fullText = decoded;
-  } catch (e) { throw new Error('URL decode failed: ' + e.message); }
-}`);
-
-registerScript(`/**
-  {
-    "name": "Count Words",
-    "description": "Count words, characters, sentences, and paragraphs",
-    "author": "Cade",
-    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M4 9h16'/><path d='M4 15h16'/><path d='M10 3 8 21'/><path d='M16 3 14 21'/></svg>",
-    "tags": "count,words,characters,sentences,statistics,wc"
-  }
-**/
-function main(ctx) {
-  const text = ctx.selection || ctx.fullText;
-  const words = text.trim() ? text.trim().split(/\\s+/).length : 0;
-  const chars = text.length;
-  const charsNoSpace = text.replace(/\\s/g, '').length;
-  const sentences = (text.match(/[.!?]+/g) || []).length;
-  const paragraphs = text.split(/\\n\\s*\\n/).filter(p => p.trim()).length;
-  const lines = text.split('\\n').length;
-  const report = [
-    '--- Word Count ---',
-    'Words: ' + words.toLocaleString(),
-    'Characters: ' + chars.toLocaleString(),
-    'Characters (no spaces): ' + charsNoSpace.toLocaleString(),
-    'Sentences: ' + sentences.toLocaleString(),
-    'Paragraphs: ' + paragraphs.toLocaleString(),
-    'Lines: ' + lines.toLocaleString(),
-  ].join('\\n');
-  ctx.fullText = ctx.fullText + '\\n\\n' + report;
-}`);
-
-registerScript(`/**
-  {
-    "name": "JSON Format",
-    "description": "Pretty-print JSON with 2-space indentation",
-    "author": "Cade",
-    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M8 3H7a2 2 0 0 0-2 2v5a2 2 0 0 1-2 2 2 2 0 0 1 2 2v5c0 1.1.9 2 2 2h1'/><path d='M16 21h1a2 2 0 0 0 2-2v-5c0-1.1.9-2 2-2a2 2 0 0 1-2-2V5a2 2 0 0 0-2-2h-1'/></svg>",
-    "tags": "json,format,pretty,print,beautify"
-  }
-**/
-function main(ctx) {
-  try {
-    const text = ctx.selection || ctx.fullText;
-    const formatted = JSON.stringify(JSON.parse(text), null, 2);
-    if (ctx.selection) ctx.selection = formatted; else ctx.fullText = formatted;
-  } catch (e) { throw new Error('Invalid JSON: ' + e.message); }
-}`);
-
-registerScript(`/**
-  {
-    "name": "JSON Minify",
-    "description": "Minify JSON by removing whitespace",
-    "author": "Cade",
-    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M8 3H7a2 2 0 0 0-2 2v5a2 2 0 0 1-2 2 2 2 0 0 1 2 2v5c0 1.1.9 2 2 2h1'/><path d='M16 21h1a2 2 0 0 0 2-2v-5c0-1.1.9-2 2-2a2 2 0 0 1-2-2V5a2 2 0 0 0-2-2h-1'/><line x1='8' y1='12' x2='16' y2='12'/></svg>",
-    "tags": "json,minify,compact,compress"
-  }
-**/
-function main(ctx) {
-  try {
-    const text = ctx.selection || ctx.fullText;
-    const minified = JSON.stringify(JSON.parse(text));
-    if (ctx.selection) ctx.selection = minified; else ctx.fullText = minified;
-  } catch (e) { throw new Error('Invalid JSON: ' + e.message); }
-}`);
-
-registerScript(`/**
-  {
-    "name": "Remove Empty Lines",
-    "description": "Remove all blank/empty lines",
-    "author": "Cade",
-    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><line x1='5' y1='12' x2='19' y2='12'/><line x1='12' y1='5' x2='12' y2='5.01'/><line x1='12' y1='19' x2='12' y2='19.01'/></svg>",
-    "tags": "remove,empty,blank,lines"
-  }
-**/
-function main(ctx) {
-  const text = ctx.selection || ctx.fullText;
-  const result = text.split('\\n').filter(l => l.trim() !== '').join('\\n');
-  if (ctx.selection) ctx.selection = result; else ctx.fullText = result;
-}`);
-
-registerScript(`/**
-  {
-    "name": "Number Lines",
-    "description": "Prefix each line with its line number",
-    "author": "Cade",
-    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><line x1='10' y1='6' x2='21' y2='6'/><line x1='10' y1='12' x2='21' y2='12'/><line x1='10' y1='18' x2='21' y2='18'/><path d='M4 6h1v4'/><path d='M4 10h2'/><path d='M6 18H4c0-1 2-2 2-3s-1-1.5-2-1'/></svg>",
-    "tags": "number,lines,prefix,enumerate"
-  }
-**/
-function main(ctx) {
-  const text = ctx.selection || ctx.fullText;
-  const lines = text.split('\\n');
-  const pad = String(lines.length).length;
-  const result = lines.map((l, i) => String(i + 1) + '.'.padStart(pad, ' ') + '  ' + l).join('\\n');
-  if (ctx.selection) ctx.selection = result; else ctx.fullText = result;
-}`);
-
-registerScript(`/**
-  {
-    "name": "Markdown to Plain",
-    "description": "Strip Markdown formatting to plain text",
-    "author": "Cade",
-    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='2' y='4' width='20' height='16' rx='2'/><path d='M7 15V9l2.5 3L12 9v6'/><path d='M17 9l-2 6h4'/></svg>",
-    "tags": "markdown,plain,text,strip,remove,formatting"
-  }
-**/
-function main(ctx) {
-  const text = ctx.selection || ctx.fullText;
-  let result = text
-    .replace(/^#{1,6}\\s+/gm, '')
-    .replace(/\\*\\*(.+?)\\*\\*/g, '$1')
-    .replace(/\\*(.+?)\\*/g, '$1')
-    .replace(/__(.+?)__/g, '$1')
-    .replace(/_(.+?)_/g, '$1')
-    .replace(/~~(.+?)~~/g, '$1')
-    .replace(/\`(.+?)\`/g, '$1')
-    .replace(/\\[([^\\]]+)\\]\\([^)]+\\)/g, '$1')
-    .replace(/^[\\s]*[-*+]\\s+/gm, '')
-    .replace(/^[\\s]*\\d+\\.\\s+/gm, '')
-    .replace(/^>\\s+/gm, '')
-    .replace(/^---+$/gm, '');
-  if (ctx.selection) ctx.selection = result; else ctx.fullText = result;
-}`);
 
 // --- Additional Scripts ---
 
-registerScript(`/**
-  {
-    "name": "Quoter",
-    "description": "Wrap items in quotes (comma or newline delimited, toggles off)",
-    "author": "Cade",
-    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M10 11c-1.5 0-3-1-3-3s1-3 3-3c1 0 2 .5 2 2'/><path d='M20 11c-1.5 0-3-1-3-3s1-3 3-3c1 0 2 .5 2 2'/></svg>",
-    "tags": "quote,quoter,wrap,comma,list,string"
-  }
-**/
-function main(ctx) {
-  const text = ctx.selection || ctx.fullText;
-  const isComma = text.includes(',') && text.split('\\n').length <= 2;
-  const delim = isComma ? ',' : '\\n';
-  const items = text.split(delim).map(s => s.trim()).filter(Boolean);
-  // Check if already quoted — toggle off
-  const allQuoted = items.every(s => /^["'].*["']$/.test(s));
-  let result;
-  if (allQuoted) {
-    const unquoted = items.map(s => s.replace(/^["']|["']$/g, ''));
-    result = isComma ? unquoted.join(', ') : unquoted.join('\\n');
-  } else {
-    const quoted = items.map(s => '"' + s.replace(/^["']|["']$/g, '') + '"');
-    result = isComma ? quoted.join(', ') : quoted.join('\\n');
-  }
-  if (ctx.selection) ctx.selection = result; else ctx.fullText = result;
-}`);
 
-registerScript(`/**
-  {
-    "name": "Bullet List",
-    "description": "Toggle bullet points on lines (add or remove)",
-    "author": "Cade",
-    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><line x1='8' y1='6' x2='21' y2='6'/><line x1='8' y1='12' x2='21' y2='12'/><line x1='8' y1='18' x2='21' y2='18'/><line x1='3' y1='6' x2='3.01' y2='6'/><line x1='3' y1='12' x2='3.01' y2='12'/><line x1='3' y1='18' x2='3.01' y2='18'/></svg>",
-    "tags": "bullet,list,toggle,unordered,dash,point"
-  }
-**/
-function main(ctx) {
-  const text = ctx.selection || ctx.fullText;
-  const lines = text.split('\\n');
-  const nonEmpty = lines.filter(l => l.trim());
-  const allBulleted = nonEmpty.length > 0 && nonEmpty.every(l => /^\\s*[-•*]\\s/.test(l));
-  let result;
-  if (allBulleted) {
-    // Remove bullets
-    result = lines.map(l => l.replace(/^(\\s*)[-•*]\\s+/, '$1')).join('\\n');
-  } else {
-    // Add bullets
-    result = lines.map(l => {
-      if (l.trim() === '') return l;
-      const indent = l.match(/^(\\s*)/)[1];
-      const content = l.trim().replace(/^[-•*]\\s+/, '');
-      return indent + '- ' + content;
-    }).join('\\n');
-  }
-  if (ctx.selection) ctx.selection = result; else ctx.fullText = result;
-}`);
 
-registerScript(`/**
-  {
-    "name": "Toggle Todo",
-    "description": "Toggle [ ]/[x] checkboxes on current or selected lines",
-    "author": "Cade",
-    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='3' y='3' width='18' height='18' rx='2'/><path d='M9 12l2 2 4-4'/></svg>",
-    "tags": "todo,check,checkbox,toggle,done,task,list"
-  }
-**/
-function main(ctx) {
-  const text = ctx.selection || ctx.fullText;
-  const full = ctx.fullText;
-  const lines = text.split('\\n');
-  const todoRe = /^(\\s*(?:[-•*]\\s+)?)\\[([ xX])\\](\\s.*)?$/;
-  const hasTodos = lines.some(l => todoRe.test(l));
 
-  // If checkboxes found but page missing @type: todo, prompt to add it
-  if (hasTodos) {
-    const firstLine = full.split('\\n')[0].trim().toLowerCase();
-    const hasTypeDirective = firstLine.startsWith('@type:');
-    const hasTodoType = hasTypeDirective && firstLine.split(':')[1].split(',').map(t => t.trim()).includes('todo');
-    if (!hasTodoType) {
-      if (confirm('This page is not marked as @type: todo. Add it?')) {
-        if (hasTypeDirective) {
-          // Append todo to existing @type line
-          const origFirst = full.split('\\n')[0];
-          ctx.fullText = full.replace(origFirst, origFirst + ', todo');
-        } else {
-          ctx.fullText = '@type: todo\\n' + full;
-        }
-      }
-    }
-  }
 
-  let result;
-  if (hasTodos) {
-    // Toggle existing checkboxes + apply/remove strikethrough
-    result = lines.map(l => {
-      const m = l.match(todoRe);
-      if (!m) return l;
-      const isDone = m[2] !== ' ';
-      const rest = m[3] || '';
-      if (isDone) {
-        // Unchecking: remove combining strikethrough
-        return m[1] + '[ ]' + rest.replace(/\\u0336/g, '');
-      } else {
-        // Checking: add combining strikethrough to text after checkbox (skip leading space)
-        const struck = rest.length > 0 ? rest[0] + [...rest.slice(1)].map(ch => ch + '\\u0336').join('') : '';
-        return m[1] + '[x]' + struck;
-      }
-    }).join('\\n');
-  } else {
-    // Add [ ] to lines that don't have it
-    result = lines.map(l => {
-      if (l.trim() === '') return l;
-      const indent = l.match(/^(\\s*)/)[1];
-      const content = l.trim().replace(/^[-•*]\\s+/, '');
-      return indent + '[ ] ' + content;
-    }).join('\\n');
-  }
-  if (ctx.selection) ctx.selection = result; else ctx.fullText = result;
-}`);
 
-registerScript(`/**
-  {
-    "name": "Convert Todo",
-    "description": "Convert lines to a todo list, or revert a todo list back to bullets",
-    "author": "Cade",
-    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/><path d='M14 2v6h6'/><path d='M9 15l2 2 4-4'/></svg>",
-    "tags": "todo,convert,list,checkbox,bullet"
-  }
-**/
-function main(ctx) {
-  const text = ctx.selection || ctx.fullText;
-  const lines = text.split('\\n');
-  const todoRe = /^(\\s*)(?:[-\u2022*]\\s+)?\\[([ xX])\\]\\s?(.*)/;
-  const isTodo = lines.some(l => todoRe.test(l));
 
-  let result;
-  if (isTodo) {
-    // Remove todo checkboxes -> convert to bulleted list, strip strikethrough
-    result = lines.map(l => {
-      const m = l.match(todoRe);
-      if (!m) return l;
-      const indent = m[1];
-      const content = (m[3] || '').replace(/\\u0336/g, '');
-      return indent + '- ' + content;
-    }).join('\\n');
-  } else {
-    // Convert lines to todo list - strip existing bullets/numbers/letters
-    result = lines.map(l => {
-      if (l.trim() === '') return l;
-      const indent = l.match(/^(\\s*)/)[1];
-      const content = l.trim().replace(/^[-\u2022*]\\s+/, '').replace(/^\\d{1,3}\\.\\s+/, '').replace(/^[A-Za-z]\\.\\s+/, '').replace(/^\\[\\d+\\]\\s+/, '');
-      return indent + '[ ] ' + content;
-    }).join('\\n');
-  }
-  if (ctx.selection) ctx.selection = result; else ctx.fullText = result;
-}`);
 
-registerScript(`/**
-  {
-    "name": "Listify",
-    "description": "Format text into a quoted, comma-separated list — auto-detects delimiter",
-    "author": "Cade",
-    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M8 6h13'/><path d='M8 12h13'/><path d='M8 18h13'/><circle cx='3' cy='6' r='1' fill='currentColor'/><circle cx='3' cy='12' r='1' fill='currentColor'/><circle cx='3' cy='18' r='1' fill='currentColor'/></svg>",
-    "tags": "list,listify,format,comma,quote,array,csv,items"
-  }
-**/
-function main(ctx) {
-  const text = ctx.selection || ctx.fullText;
-  // Determine the delimiter: prefer structured delimiters, fall back to space
-  let items;
-  const hasNewlines = text.includes('\\n');
-  const hasTabs = text.includes('\\t');
-  const hasCommas = text.includes(',');
-  if (hasNewlines) {
-    items = text.split('\\n');
-  } else if (hasTabs) {
-    items = text.split('\\t');
-  } else if (hasCommas) {
-    items = text.split(',');
-  } else {
-    items = text.split(/\\s+/);
-  }
-  // Clean up each item: trim whitespace, strip existing quotes, drop empties
-  items = items
-    .map(s => s.trim())
-    .filter(Boolean)
-    .map(s => s.replace(/^["'\`\\u201c\\u201d]+|["'\`\\u201c\\u201d]+$/g, '').trim())
-    .filter(Boolean);
-  const result = items.map(s => '"' + s + '"').join(', ');
-  if (ctx.selection) ctx.selection = result; else ctx.fullText = result;
-}`);
 
-registerScript(`/**
-  {
-    "name": "Shuffle Lines",
-    "description": "Randomly shuffle the order of lines",
-    "author": "Cade",
-    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='16 3 21 3 21 8'/><line x1='4' y1='20' x2='21' y2='3'/><polyline points='21 16 21 21 16 21'/><line x1='15' y1='15' x2='21' y2='21'/><line x1='4' y1='4' x2='9' y2='9'/></svg>",
-    "tags": "shuffle,random,randomize,lines,reorder"
-  }
-**/
-function main(ctx) {
-  const text = ctx.selection || ctx.fullText;
-  const lines = text.split('\\n');
-  for (let i = lines.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [lines[i], lines[j]] = [lines[j], lines[i]];
-  }
-  const result = lines.join('\\n');
-  if (ctx.selection) ctx.selection = result; else ctx.fullText = result;
-}`);
 
-registerScript(`/**
-  {
-    "name": "Sort Lines by Length",
-    "description": "Sort lines from shortest to longest",
-    "author": "Cade",
-    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><line x1='3' y1='6' x2='10' y2='6'/><line x1='3' y1='12' x2='15' y2='12'/><line x1='3' y1='18' x2='21' y2='18'/></svg>",
-    "tags": "sort,length,lines,shortest,longest"
-  }
-**/
-function main(ctx) {
-  const text = ctx.selection || ctx.fullText;
-  const lines = text.split('\\n');
-  lines.sort((a, b) => a.length - b.length);
-  const result = lines.join('\\n');
-  if (ctx.selection) ctx.selection = result; else ctx.fullText = result;
-}`);
 
-registerScript(`/**
-  {
-    "name": "camelCase",
-    "description": "Convert text to camelCase",
-    "author": "Cade",
-    "icon": "<svg viewBox='0 0 24 24'><path fill='none' stroke='currentColor' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M12 13.72c-.69-.41-1-.894-1-1.22m1 1.22V20H8.5l1.5-2l-1-4.5C6 13.5 4.5 10 4.5 8H3a1 1 0 0 1-1-1a2 2 0 0 1 2-2h1.5l.268-.402a1.248 1.248 0 0 1 2.077 1.384L7.5 6.5c-.167.667-.2 2.1 1 2.5c.667.167 2.1 0 2.5-2c.5-1.5 1.5-4 3.5-4c1.616 0 1.926 2.284 3.83 3.953c.904.79 1.67 1.825 1.67 3.025V20h-3l1-2l-.5-3.771c-1.707.526-3.957.41-5.5-.508M19.299 8S22 8.5 22 12'/></svg>",
-    "tags": "camel,case,camelCase,convert,variable"
-  }
-**/
-function main(ctx) {
-  const text = ctx.selection || ctx.fullText;
-  const result = text.replace(/[-_ ]+(.)/g, (_, c) => c.toUpperCase()).replace(/^[A-Z]/, c => c.toLowerCase());
-  if (ctx.selection) ctx.selection = result; else ctx.fullText = result;
-}`);
 
-registerScript(`/**
-  {
-    "name": "snake_case",
-    "description": "Convert text to snake_case",
-    "author": "Cade",
-    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><line x1='3' y1='18' x2='21' y2='18'/><path d='M3 12h4l2-4 4 8 2-4h6'/></svg>",
-    "tags": "snake,case,snake_case,convert,variable,underscore"
-  }
-**/
-function main(ctx) {
-  const text = ctx.selection || ctx.fullText;
-  const result = text
-    .replace(/([a-z])([A-Z])/g, '$1_$2')
-    .replace(/[-\\s]+/g, '_')
-    .toLowerCase();
-  if (ctx.selection) ctx.selection = result; else ctx.fullText = result;
-}`);
 
-registerScript(`/**
-  {
-    "name": "kebab-case",
-    "description": "Convert text to kebab-case",
-    "author": "Cade",
-    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><line x1='3' y1='12' x2='21' y2='12'/><circle cx='7' cy='12' r='1'/><circle cx='12' cy='12' r='1'/><circle cx='17' cy='12' r='1'/></svg>",
-    "tags": "kebab,case,kebab-case,convert,variable,dash,slug"
-  }
-**/
-function main(ctx) {
-  const text = ctx.selection || ctx.fullText;
-  const result = text
-    .replace(/([a-z])([A-Z])/g, '$1-$2')
-    .replace(/[_\\s]+/g, '-')
-    .toLowerCase();
-  if (ctx.selection) ctx.selection = result; else ctx.fullText = result;
-}`);
 
-registerScript(`/**
-  {
-    "name": "CONSTANT_CASE",
-    "description": "Convert text to CONSTANT_CASE (screaming snake)",
-    "author": "Cade",
-    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M4 7V4h16v3'/><path d='M9 20h6'/><path d='M12 4v16'/></svg>",
-    "tags": "constant,case,screaming,snake,upper,variable,env"
-  }
-**/
-function main(ctx) {
-  const text = ctx.selection || ctx.fullText;
-  const result = text
-    .replace(/([a-z])([A-Z])/g, '$1_$2')
-    .replace(/[-\\s]+/g, '_')
-    .toUpperCase();
-  if (ctx.selection) ctx.selection = result; else ctx.fullText = result;
-}`);
 
-registerScript(`/**
-  {
-    "name": "Wrap Lines",
-    "description": "Wrap each line with a prefix and suffix (prompts)",
-    "author": "Cade",
-    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M3 6h18'/><path d='M3 12h15a3 3 0 1 1 0 6h-4'/><polyline points='13 16 11 18 13 20'/></svg>",
-    "tags": "wrap,lines,prefix,suffix,surround,quote"
-  }
-**/
-function main(ctx) {
-  const prefix = prompt('Prefix for each line:', '"') || '';
-  const suffix = prompt('Suffix for each line:', '"') || '';
-  const text = ctx.selection || ctx.fullText;
-  const result = text.split('\\n').map(l => prefix + l + suffix).join('\\n');
-  if (ctx.selection) ctx.selection = result; else ctx.fullText = result;
-}`);
 
-registerScript(`/**
-  {
-    "name": "Join Lines",
-    "description": "Join all lines into one with a separator",
-    "author": "Cade",
-    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M8 6h13'/><path d='M8 12h13'/><path d='M8 18h13'/><path d='M3 6h.01'/><path d='M3 12h.01'/><path d='M3 18h.01'/></svg>",
-    "tags": "join,lines,merge,combine,separator,comma"
-  }
-**/
-function main(ctx) {
-  const sep = prompt('Separator:', ', ');
-  if (sep === null) return;
-  const text = ctx.selection || ctx.fullText;
-  const result = text.split('\\n').filter(l => l.trim()).join(sep);
-  if (ctx.selection) ctx.selection = result; else ctx.fullText = result;
-}`);
 
-registerScript(`/**
-  {
-    "name": "Split by Comma",
-    "description": "Split comma-separated text into separate lines",
-    "author": "Cade",
-    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><line x1='12' y1='2' x2='12' y2='22'/><line x1='4' y1='12' x2='20' y2='12'/></svg>",
-    "tags": "split,comma,lines,csv,separate"
-  }
-**/
-function main(ctx) {
-  const text = ctx.selection || ctx.fullText;
-  const result = text.split(',').map(s => s.trim()).filter(Boolean).join('\\n');
-  if (ctx.selection) ctx.selection = result; else ctx.fullText = result;
-}`);
 
-registerScript(`/**
-  {
-    "name": "Split by Delimiter",
-    "description": "Split text by a custom delimiter into separate lines",
-    "author": "Cade",
-    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><line x1='12' y1='2' x2='12' y2='22'/><path d='M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6'/></svg>",
-    "tags": "split,lines,delimiter,separate,explode"
-  }
-**/
-function main(ctx) {
-  const delim = prompt('Delimiter to split on:', ',');
-  if (delim === null) return;
-  const text = ctx.selection || ctx.fullText;
-  const result = text.split(delim).map(s => s.trim()).join('\\n');
-  if (ctx.selection) ctx.selection = result; else ctx.fullText = result;
-}`);
 
-registerScript(`/**
-  {
-    "name": "Split (Keep Delimiter)",
-    "description": "One entry per line, split on a delimiter but KEEP the delimiter in the text",
-    "author": "Cade",
-    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><line x1='12' y1='2' x2='12' y2='22'/><path d='M5 9h14'/></svg>",
-    "tags": "split,keep,delimiter,lines,separate,unflatten,explode"
-  }
-**/
-function main(ctx) {
-  const delim = prompt('Delimiter to split on (kept in text):', ',');
-  if (delim === null || delim === '') return;
-  const text = ctx.selection || ctx.fullText;
-  const parts = text.split(delim);
-  const result = parts
-    .map((p, i) => i < parts.length - 1 ? p + delim : p)
-    .map(s => s.trim())
-    .filter(s => s.length)
-    .join('\\n');
-  if (ctx.selection) ctx.selection = result; else ctx.fullText = result;
-}`);
 
-registerScript(`/**
-  {
-    "name": "Listify (One Per Row)",
-    "description": "Quote each item on its own row, with a comma after each except the last",
-    "author": "Cade",
-    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M8 6h13'/><path d='M8 12h13'/><path d='M8 18h13'/><circle cx='3' cy='6' r='1' fill='currentColor'/><circle cx='3' cy='12' r='1' fill='currentColor'/><circle cx='3' cy='18' r='1' fill='currentColor'/></svg>",
-    "tags": "list,listify,rows,quote,column,array,one per line,csv"
-  }
-**/
-function main(ctx) {
-  const text = ctx.selection || ctx.fullText;
-  let items;
-  if (text.includes('\\n')) items = text.split('\\n');
-  else if (text.includes('\\t')) items = text.split('\\t');
-  else if (text.includes(',')) items = text.split(',');
-  else items = text.split(/\\s+/);
-  items = items.map(s => s.trim()).filter(Boolean);
-  const result = items.map((s, i) => '"' + s + '"' + (i < items.length - 1 ? ',' : '')).join('\\n');
-  if (ctx.selection) ctx.selection = result; else ctx.fullText = result;
-}`);
 
-registerScript(`/**
-  {
-    "name": "Format Table",
-    "description": "Align Markdown pipe-table columns (respects :--- alignment)",
-    "author": "Cade",
-    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='3' y='3' width='18' height='18' rx='2'/><line x1='3' y1='9' x2='21' y2='9'/><line x1='3' y1='15' x2='21' y2='15'/><line x1='12' y1='3' x2='12' y2='21'/></svg>",
-    "tags": "table,align,markdown,format,pipe,columns"
-  }
-**/
-function main(ctx) {
-  const usingSel = !!ctx.selection;
-  const text = usingSel ? ctx.selection : ctx.fullText;
-  const lines = text.split('\\n');
-  const isRow = l => l.indexOf('|') !== -1;
-  const isSep = l => /^\\s*\\|?\\s*:?-{2,}:?\\s*(\\|\\s*:?-{2,}:?\\s*)*\\|?\\s*$/.test(l);
-  const parseCells = l => {
-    let s = l.trim();
-    if (s.startsWith('|')) s = s.slice(1);
-    if (s.endsWith('|')) s = s.slice(0, -1);
-    return s.split('|').map(c => c.trim());
-  };
-  const pad = (s, w, a) => {
-    s = s || '';
-    const d = w - s.length;
-    if (d <= 0) return s;
-    if (a === 'r') return ' '.repeat(d) + s;
-    if (a === 'c') { const l = Math.floor(d / 2); return ' '.repeat(l) + s + ' '.repeat(d - l); }
-    return s + ' '.repeat(d);
-  };
-  const out = [];
-  let i = 0;
-  while (i < lines.length) {
-    if (isRow(lines[i]) && i + 1 < lines.length && isSep(lines[i + 1])) {
-      let j = i; const block = [];
-      while (j < lines.length && isRow(lines[j])) { block.push(lines[j]); j++; }
-      const rows = block.map(parseCells);
-      const aligns = parseCells(block[1]).map(c => {
-        const L = c.startsWith(':'), R = c.endsWith(':');
-        return L && R ? 'c' : R ? 'r' : L ? 'l2' : 'l';
-      });
-      const ncol = Math.max.apply(null, rows.map(r => r.length));
-      const widths = [];
-      for (let c = 0; c < ncol; c++) {
-        let w = 3;
-        for (let r = 0; r < rows.length; r++) { if (r === 1) continue; const cell = (rows[r][c] || ''); if (cell.length > w) w = cell.length; }
-        widths[c] = w;
-      }
-      for (let r = 0; r < rows.length; r++) {
-        if (r === 1) {
-          const seps = [];
-          for (let c = 0; c < ncol; c++) {
-            const a = aligns[c] || 'l', w = widths[c];
-            if (a === 'c') seps.push(':' + '-'.repeat(Math.max(1, w - 2)) + ':');
-            else if (a === 'r') seps.push('-'.repeat(Math.max(2, w - 1)) + ':');
-            else if (a === 'l2') seps.push(':' + '-'.repeat(Math.max(2, w - 1)));
-            else seps.push('-'.repeat(Math.max(3, w)));
-          }
-          out.push('| ' + seps.join(' | ') + ' |');
-        } else {
-          const cells = [];
-          for (let c = 0; c < ncol; c++) cells.push(pad(rows[r][c], widths[c], aligns[c]));
-          out.push('| ' + cells.join(' | ') + ' |');
-        }
-      }
-      i = j;
-    } else { out.push(lines[i]); i++; }
-  }
-  const joined = out.join('\\n');
-  if (usingSel) ctx.selection = joined; else ctx.fullText = joined;
-}`);
 
-registerScript(`/**
-  {
-    "name": "Find & Replace",
-    "description": "Find and replace text (supports regex)",
-    "author": "Cade",
-    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='11' cy='11' r='8'/><line x1='21' y1='21' x2='16.65' y2='16.65'/><line x1='8' y1='11' x2='14' y2='11'/></svg>",
-    "tags": "find,replace,search,regex,substitute"
-  }
-**/
-function main(ctx) {
-  const find = prompt('Find (regex supported):');
-  if (!find) return;
-  const replace = prompt('Replace with:', '') || '';
-  const text = ctx.selection || ctx.fullText;
-  try {
-    const regex = new RegExp(find, 'g');
-    const result = text.replace(regex, replace);
-    const count = (text.match(regex) || []).length;
-    if (ctx.selection) ctx.selection = result; else ctx.fullText = result;
-    showToast(count + ' replacement' + (count !== 1 ? 's' : '') + ' made', 'success', 2500);
-  } catch (e) {
-    throw new Error('Invalid regex: ' + e.message);
-  }
-}`);
 
-registerScript(`/**
-  {
-    "name": "Remove Duplicates (CSV)",
-    "description": "Remove duplicate values in comma-separated text",
-    "author": "Cade",
-    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2'/><circle cx='9' cy='7' r='4'/><line x1='17' y1='11' x2='23' y2='11'/></svg>",
-    "tags": "remove,duplicates,csv,comma,unique,dedup"
-  }
-**/
-function main(ctx) {
-  const text = ctx.selection || ctx.fullText;
-  const items = text.split(',').map(s => s.trim());
-  const unique = [...new Set(items)];
-  const removed = items.length - unique.length;
-  const result = unique.join(', ');
-  if (ctx.selection) ctx.selection = result; else ctx.fullText = result;
-  showToast('Removed ' + removed + ' duplicate' + (removed !== 1 ? 's' : ''), 'success', 2500);
-}`);
 
-registerScript(`/**
-  {
-    "name": "Extract Emails",
-    "description": "Extract all email addresses from text",
-    "author": "Cade",
-    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z'/><polyline points='22,6 12,13 2,6'/></svg>",
-    "tags": "extract,email,emails,address,parse"
-  }
-**/
-function main(ctx) {
-  const text = ctx.selection || ctx.fullText;
-  const emails = text.match(/[a-zA-Z0-9._%+\\-]+@[a-zA-Z0-9.\\-]+\\.[a-zA-Z]{2,}/g) || [];
-  const unique = [...new Set(emails)];
-  if (unique.length === 0) { showToast('No emails found', 'info', 2500); return; }
-  ctx.fullText = ctx.fullText + '\\n\\n--- Emails Found (' + unique.length + ') ---\\n' + unique.join('\\n');
-}`);
 
-registerScript(`/**
-  {
-    "name": "Extract URLs",
-    "description": "Extract all URLs from text",
-    "author": "Cade",
-    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71'/><path d='M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71'/></svg>",
-    "tags": "extract,url,urls,links,http,parse"
-  }
-**/
-function main(ctx) {
-  const text = ctx.selection || ctx.fullText;
-  const urls = text.match(/https?:\\/\\/[^\\s<>"'\\)\\]]+/g) || [];
-  const unique = [...new Set(urls)];
-  if (unique.length === 0) { showToast('No URLs found', 'info', 2500); return; }
-  ctx.fullText = ctx.fullText + '\\n\\n--- URLs Found (' + unique.length + ') ---\\n' + unique.join('\\n');
-}`);
 
-registerScript(`/**
-  {
-    "name": "Extract Numbers",
-    "description": "Extract all numbers from text",
-    "author": "Cade",
-    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M4 9h16'/><path d='M4 15h16'/><path d='M10 3 8 21'/><path d='M16 3 14 21'/></svg>",
-    "tags": "extract,numbers,digits,parse,numeric"
-  }
-**/
-function main(ctx) {
-  const text = ctx.selection || ctx.fullText;
-  const numbers = text.match(/-?[\\d,]+(\\.[\\d]+)?/g) || [];
-  if (numbers.length === 0) { showToast('No numbers found', 'info', 2500); return; }
-  ctx.fullText = ctx.fullText + '\\n\\n--- Numbers Found (' + numbers.length + ') ---\\n' + numbers.join('\\n');
-}`);
 
-registerScript(`/**
-  {
-    "name": "Timestamp",
-    "description": "Insert current date and time",
-    "author": "Cade",
-    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='3' y='4' width='18' height='18' rx='2' ry='2'/><line x1='16' y1='2' x2='16' y2='6'/><line x1='8' y1='2' x2='8' y2='6'/><line x1='3' y1='10' x2='21' y2='10'/></svg>",
-    "tags": "timestamp,date,time,now,insert,today"
-  }
-**/
-function main(ctx) {
-  const now = new Date();
-  const stamp = now.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) + ' ' + now.toLocaleTimeString();
-  ctx.fullText = ctx.fullText ? ctx.fullText + '\\n\\n' + stamp : stamp;
-}`);
 
-registerScript(`/**
-  {
-    "name": "Markdown Table",
-    "description": "Convert tab or comma separated data to a Markdown table",
-    "author": "Cade",
-    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='3' y='3' width='18' height='18' rx='2'/><line x1='3' y1='9' x2='21' y2='9'/><line x1='3' y1='15' x2='21' y2='15'/><line x1='9' y1='3' x2='9' y2='21'/><line x1='15' y1='3' x2='15' y2='21'/></svg>",
-    "tags": "markdown,table,csv,tsv,convert,format"
-  }
-**/
-function main(ctx) {
-  const text = ctx.selection || ctx.fullText;
-  const lines = text.split('\\n').filter(l => l.trim());
-  if (lines.length < 1) { showToast('Need at least one row', 'error'); return; }
-  const delim = lines[0].includes('\\t') ? '\\t' : ',';
-  const rows = lines.map(l => l.split(delim).map(c => c.trim()));
-  const cols = Math.max(...rows.map(r => r.length));
-  const padded = rows.map(r => { while (r.length < cols) r.push(''); return r; });
-  const widths = Array.from({length: cols}, (_, i) => Math.max(...padded.map(r => r[i].length), 3));
-  const header = '| ' + padded[0].map((c, i) => c.padEnd(widths[i])).join(' | ') + ' |';
-  const sep = '| ' + widths.map(w => '-'.repeat(w)).join(' | ') + ' |';
-  const body = padded.slice(1).map(r => '| ' + r.map((c, i) => c.padEnd(widths[i])).join(' | ') + ' |').join('\\n');
-  const result = header + '\\n' + sep + (body ? '\\n' + body : '');
-  if (ctx.selection) ctx.selection = result; else ctx.fullText = result;
-}`);
 
-registerScript(`/**
-  {
-    "name": "Hex ↔ RGB",
-    "description": "Convert hex colors to RGB and vice versa",
-    "author": "Cade",
-    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='13.5' cy='6.5' r='4'/><circle cx='17.5' cy='14.5' r='4'/><circle cx='8.5' cy='14.5' r='4'/></svg>",
-    "tags": "hex,rgb,color,colour,convert,css"
-  }
-**/
-function main(ctx) {
-  const text = ctx.selection || ctx.fullText;
-  const hasHex = /#([0-9a-fA-F]{3}){1,2}\\b/.test(text);
-  let result;
-  if (hasHex) {
-    result = text
-      .replace(/#([0-9a-fA-F]{6})\\b/gi, (_, h) => {
-        const r = parseInt(h.substr(0,2),16), g = parseInt(h.substr(2,2),16), b = parseInt(h.substr(4,2),16);
-        return 'rgb(' + r + ', ' + g + ', ' + b + ')';
-      })
-      .replace(/#([0-9a-fA-F]{3})\\b/gi, (_, h) => {
-        const r = parseInt(h[0]+h[0],16), g = parseInt(h[1]+h[1],16), b = parseInt(h[2]+h[2],16);
-        return 'rgb(' + r + ', ' + g + ', ' + b + ')';
-      });
-  } else {
-    result = text.replace(/rgb\\(\\s*(\\d+)\\s*,\\s*(\\d+)\\s*,\\s*(\\d+)\\s*\\)/gi, (_, r, g, b) => {
-      return '#' + [r,g,b].map(n => parseInt(n).toString(16).padStart(2,'0')).join('');
-    });
-  }
-  if (ctx.selection) ctx.selection = result; else ctx.fullText = result;
-}`); 
 
-registerScript(`/**
-  {
-    "name": "Escape HTML",
-    "description": "Escape HTML special characters (&, <, >, quotes)",
-    "author": "Cade",
-    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='16 18 22 12 16 6'/><polyline points='8 6 2 12 8 18'/><line x1='14' y1='4' x2='10' y2='20'/></svg>",
-    "tags": "escape,html,encode,entities,xss,sanitize"
-  }
-**/
-function main(ctx) {
-  const text = ctx.selection || ctx.fullText;
-  const result = text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-  if (ctx.selection) ctx.selection = result; else ctx.fullText = result;
-}`);
 
-registerScript(`/**
-  {
-    "name": "Unescape HTML",
-    "description": "Unescape HTML entities back to characters",
-    "author": "Cade",
-    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='8 18 2 12 8 6'/><polyline points='16 6 22 12 16 18'/><line x1='10' y1='20' x2='14' y2='4'/></svg>",
-    "tags": "unescape,html,decode,entities"
-  }
-**/
-function main(ctx) {
-  const text = ctx.selection || ctx.fullText;
-  const result = text
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)))
-    .replace(/&#(\\d+);/g, (_, dec) => String.fromCharCode(parseInt(dec)));
-  if (ctx.selection) ctx.selection = result; else ctx.fullText = result;
-}`);
 
-registerScript(`/**
-  {
-    "name": "Strip HTML Tags",
-    "description": "Remove all HTML tags, keeping text content",
-    "author": "Cade",
-    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='16 18 22 12 16 6'/><polyline points='8 6 2 12 8 18'/><line x1='4' y1='4' x2='20' y2='20'/></svg>",
-    "tags": "strip,html,tags,remove,clean,text"
-  }
-**/
-function main(ctx) {
-  const text = ctx.selection || ctx.fullText;
-  const result = text.replace(/<[^>]*>/g, '').replace(/\\s+/g, ' ').trim();
-  if (ctx.selection) ctx.selection = result; else ctx.fullText = result;
-}`);
 
-registerScript(`/**
-  {
-    "name": "JSON to CSV",
-    "description": "Convert JSON array of objects to CSV",
-    "author": "Cade",
-    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z'/><polyline points='14 2 14 8 20 8'/><line x1='8' y1='13' x2='16' y2='13'/><line x1='8' y1='17' x2='16' y2='17'/></svg>",
-    "tags": "json,csv,convert,export,data,table"
-  }
-**/
-function main(ctx) {
-  try {
-    const text = ctx.selection || ctx.fullText;
-    const data = JSON.parse(text);
-    if (!Array.isArray(data) || data.length === 0) throw new Error('Expected a non-empty JSON array');
-    const headers = [...new Set(data.flatMap(Object.keys))];
-    const escape = v => { const s = String(v ?? ''); return s.includes(',') || s.includes('"') || s.includes('\\n') ? '"' + s.replace(/"/g, '""') + '"' : s; };
-    const csv = [headers.join(','), ...data.map(row => headers.map(h => escape(row[h])).join(','))].join('\\n');
-    if (ctx.selection) ctx.selection = csv; else ctx.fullText = csv;
-  } catch (e) { throw new Error('JSON→CSV failed: ' + e.message); }
-}`);
 
-registerScript(`/**
-  {
-    "name": "Indent / Dedent",
-    "description": "Add or remove indentation (2 spaces)",
-    "author": "Cade",
-    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><line x1='21' y1='6' x2='3' y2='6'/><line x1='21' y1='12' x2='9' y2='12'/><line x1='21' y1='18' x2='7' y2='18'/><polyline points='3 12 7 16 3 20'/></svg>",
-    "tags": "indent,dedent,tab,space,whitespace,shift"
-  }
-**/
-function main(ctx) {
-  const choice = prompt('Type "in" to indent or "out" to dedent:', 'in');
-  if (!choice) return;
-  const text = ctx.selection || ctx.fullText;
-  let result;
-  if (choice.toLowerCase().startsWith('o')) {
-    result = text.split('\\n').map(l => l.startsWith('  ') ? l.slice(2) : l).join('\\n');
-  } else {
-    result = text.split('\\n').map(l => '  ' + l).join('\\n');
-  }
-  if (ctx.selection) ctx.selection = result; else ctx.fullText = result;
-}`);
 
-registerScript(`/**
-  {
-    "name": "ROT13",
-    "description": "Apply ROT13 cipher (rotate letters by 13)",
-    "author": "Cade",
-    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='3' y='11' width='18' height='11' rx='2' ry='2'/><path d='M7 11V7a5 5 0 0 1 10 0v4'/></svg>",
-    "tags": "rot13,cipher,encode,decode,crypto,fun"
-  }
-**/
-function main(ctx) {
-  const text = ctx.selection || ctx.fullText;
-  const result = text.replace(/[a-zA-Z]/g, c => {
-    const base = c <= 'Z' ? 65 : 97;
-    return String.fromCharCode(((c.charCodeAt(0) - base + 13) % 26) + base);
-  });
-  if (ctx.selection) ctx.selection = result; else ctx.fullText = result;
-}`);
 
-registerScript(`/**
-  {
-    "name": "Clean Quotes",
-    "description": "Convert curly/typographic quotes to straight standard quotes",
-    "author": "Cade",
-    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M10 8c-2 0-3 1-3 3v1h2v-1c0-1 0-1 1-1'/><path d='M18 8c-2 0-3 1-3 3v1h2v-1c0-1 0-1 1-1'/></svg>",
-    "tags": "clean,quotes,straight,curly,typographic,fix,normalize"
-  }
-**/
-function main(ctx) {
-  const text = ctx.selection || ctx.fullText;
-  const result = text
-    .replace(/[\\u201c\\u201d\\u201e\\u201f\\u2033\\u2036\\u301d\\u301e\\uFF02]/g, '"')
-    .replace(/[\\u2018\\u2019\\u201a\\u201b\\u2032\\u2035\\u0060\\u00b4\\uFF07]/g, "'")
-    .replace(/[\\u2013\\u2014]/g, '-')
-    .replace(/\\u2026/g, '...');
-  if (ctx.selection) ctx.selection = result; else ctx.fullText = result;
-}`);
 
-registerScript(`/**
-  {
-    "name": "Align Comments",
-    "description": "Pad inline comments so they line up across consecutive lines. Auto-detects Python (#) and JS (//) syntax.",
-    "author": "Cade",
-    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><line x1='3' y1='6' x2='21' y2='6'/><line x1='3' y1='12' x2='15' y2='12'/><line x1='3' y1='18' x2='18' y2='18'/></svg>",
-    "tags": "align,comments,padding,format,python,javascript"
-  }
-**/
-function main(ctx) {
-  const text = ctx.selection || ctx.fullText;
-  const lines = text.split('\\n');
 
-  // Auto-detect language by scoring keywords
-  const pyScore = (text.match(/\\bdef \\b|\\bimport \\b|\\bclass \\b|\\bself\\b/g) || []).length;
-  const jsScore = (text.match(/\\bfunction\\b|\\bconst\\b|\\blet\\b|\\bvar\\b|=>/g) || []).length;
-  const marker = pyScore >= jsScore ? '#' : '//';
 
-  // Return the character index of the inline comment marker, or null if none / full-line comment
-  function findInlineComment(line) {
-    let inSingle = false, inDouble = false, inTemplate = false;
-    for (let i = 0; i < line.length; i++) {
-      const ch = line[i];
-      if (ch === '\\\\' && (inSingle || inDouble || inTemplate)) { i++; continue; }
-      if (ch === '\`' && !inSingle && !inDouble) { inTemplate = !inTemplate; continue; }
-      if (ch === "'" && !inDouble && !inTemplate) { inSingle = !inSingle; continue; }
-      if (ch === '"' && !inSingle && !inTemplate) { inDouble = !inDouble; continue; }
-      if (!inSingle && !inDouble && !inTemplate) {
-        if (marker === '#' && ch === '#') {
-          if (line.slice(0, i).trim() === '') return null; // full-line comment
-          return i;
-        }
-        if (marker === '//' && ch === '/' && line[i + 1] === '/') {
-          if (line.slice(0, i).trim() === '') return null; // full-line comment
-          return i;
-        }
-      }
-    }
-    return null;
-  }
-
-  const result = [];
-  let i = 0;
-
-  while (i < lines.length) {
-    const groupStart = i;
-    const group = [];
-
-    // Collect consecutive lines that each have an inline comment
-    while (i < lines.length) {
-      const commentIdx = findInlineComment(lines[i]);
-      if (commentIdx !== null) {
-        const codePart = lines[i].slice(0, commentIdx).trimEnd();
-        const commentPart = lines[i].slice(commentIdx);
-        group.push({ line: lines[i], codePart, commentPart });
-        i++;
-      } else {
-        break;
-      }
-    }
-
-    if (group.length >= 2) {
-      const maxLen = Math.max(...group.map(g => g.codePart.length));
-      for (const g of group) {
-        result.push(g.codePart + ' '.repeat(maxLen - g.codePart.length + 2) + g.commentPart);
-      }
-    } else if (group.length === 1) {
-      result.push(group[0].line); // single line — nothing to align
-    }
-
-    if (i === groupStart) {
-      result.push(lines[i]); // line with no comment, pass through
-      i++;
-    }
-  }
-
-  const output = result.join('\\n');
-  if (ctx.selection) ctx.selection = output; else ctx.fullText = output;
-}`);
-
-registerScript(`/**
-  {
-    "name": "Flatten",
-    "description": "Collapse multiple lines into a single line, with a single space between each, skipping blank lines",
-    "author": "Cade",
-    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><line x1='3' y1='8' x2='21' y2='8'/><line x1='3' y1='12' x2='21' y2='12'/><line x1='3' y1='16' x2='21' y2='16'/><polyline points='8 5 12 1 16 5'/><polyline points='8 19 12 23 16 19'/></svg>",
-    "tags": "flatten,join,single line,collapse,condense,unwrap"
-  }
-**/
-function main(ctx) {
-  const text = ctx.selection || ctx.fullText;
-  const result = text
-    .split('\\n')
-    .map(l => l.trim())
-    .filter(l => l.length > 0)
-    .join(' ');
-  if (ctx.selection) ctx.selection = result; else ctx.fullText = result;
-}`);
-
-registerScript(`/**
-  {
-    "name": "Toggle Commas",
-    "description": "Add or remove thousands-place commas from numbers (1234567 ↔ 1,234,567)",
-    "author": "Cade",
-    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><line x1='12' y1='20' x2='12' y2='10'/><line x1='18' y1='20' x2='18' y2='4'/><line x1='6' y1='20' x2='6' y2='16'/></svg>",
-    "tags": "comma,commas,thousands,number,format,1000"
-  }
-**/
-function main(ctx) {
-  const text = ctx.selection || ctx.fullText;
-  const hasCommaNumbers = /\d{1,3}(,\d{3})+/.test(text);
-  let result;
-  if (hasCommaNumbers) {
-    // Remove commas from numbers
-    result = text.replace(/(\d{1,3})(,\d{3})+/g, m => m.replace(/,/g, ''));
-  } else {
-    // Add commas to numbers
-    result = text.replace(/\b(\d+)(\.\d+)?\b/g, (_, int, dec) => {
-      const withCommas = int.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-      return dec ? withCommas + dec : withCommas;
-    });
-  }
-  if (ctx.selection) ctx.selection = result; else ctx.fullText = result;
-}`);
-
-registerScript(`/**
-  {
-    "name": "Round To",
-    "description": "Round all decimal numbers to a specified number of decimal places",
-    "author": "Cade",
-    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='12' r='10'/><line x1='12' y1='8' x2='12' y2='12'/><line x1='12' y1='16' x2='12.01' y2='16'/></svg>",
-    "tags": "round,decimal,places,precision,number,format"
-  }
-**/
-function main(ctx) {
-  const decimals = parseInt(prompt('Decimal places (0–10):', '2'), 10);
-  if (isNaN(decimals) || decimals < 0 || decimals > 10) return;
-  const text = ctx.selection || ctx.fullText;
-  const result = text.replace(/\b\d+\.\d+\b/g, m => parseFloat(m).toFixed(decimals));
-  if (ctx.selection) ctx.selection = result; else ctx.fullText = result;
-}`);
-
-registerScript(`/**
-  {
-    "name": "Copy Block",
-    "description": "Copy the current contiguous block (to next blank line or end of doc) to clipboard",
-    "author": "Cade",
-    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='9' y='9' width='13' height='13' rx='2' ry='2'/><path d='M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1'/></svg>",
-    "tags": "copy,clipboard,block,paragraph"
-  }
-**/
-function main(ctx) {
-  // Uses the contiguous block via ctx.selection (new block-aware behaviour)
-  const text = ctx.selection || ctx.fullText;
-  if (!text.trim()) { showToast('Nothing to copy', 'error', 2000); return; }
-  navigator.clipboard.writeText(text).then(() => {
-    showToast('Copied ' + text.split('\n').length + ' lines to clipboard', 'success', 2000);
-  }).catch(() => {
-    showToast('Copy failed', 'error', 2000);
-  });
-}`);
-
-registerScript(`/**
-  {
-    "name": "Convert",
-    "description": "Unit conversions: °F↔°C, in↔cm, ft↔m, mi↔km, lb↔kg, oz↔g, KB↔MB↔GB, and more",
-    "author": "Cade",
-    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M8 3L4 7l4 4'/><path d='M4 7h16'/><path d='M16 21l4-4-4-4'/><path d='M20 17H4'/></svg>",
-    "tags": "convert,unit,temperature,length,weight,data,fahrenheit,celsius,inches,centimeters,feet,meters,miles,kilometers,pounds,kilograms,kilobyte,megabyte,gigabyte"
-  }
-**/
-function main(ctx) {
-  const CONVERSIONS = {
-    // Temperature
-    'f>c':   { label: '°F → °C',   fn: v => (v - 32) * 5/9,    fmt: v => v.toFixed(2) + ' °C' },
-    'c>f':   { label: '°C → °F',   fn: v => v * 9/5 + 32,      fmt: v => v.toFixed(2) + ' °F' },
-    // Length
-    'in>cm': { label: 'in → cm',   fn: v => v * 2.54,           fmt: v => v.toFixed(4) + ' cm' },
-    'cm>in': { label: 'cm → in',   fn: v => v / 2.54,           fmt: v => v.toFixed(4) + ' in' },
-    'ft>m':  { label: 'ft → m',    fn: v => v * 0.3048,         fmt: v => v.toFixed(4) + ' m' },
-    'm>ft':  { label: 'm → ft',    fn: v => v / 0.3048,         fmt: v => v.toFixed(4) + ' ft' },
-    'mi>km': { label: 'mi → km',   fn: v => v * 1.60934,        fmt: v => v.toFixed(4) + ' km' },
-    'km>mi': { label: 'km → mi',   fn: v => v / 1.60934,        fmt: v => v.toFixed(4) + ' mi' },
-    'yd>m':  { label: 'yd → m',    fn: v => v * 0.9144,         fmt: v => v.toFixed(4) + ' m' },
-    'm>yd':  { label: 'm → yd',    fn: v => v / 0.9144,         fmt: v => v.toFixed(4) + ' yd' },
-    // Weight
-    'lb>kg': { label: 'lb → kg',   fn: v => v * 0.453592,       fmt: v => v.toFixed(4) + ' kg' },
-    'kg>lb': { label: 'kg → lb',   fn: v => v / 0.453592,       fmt: v => v.toFixed(4) + ' lb' },
-    'oz>g':  { label: 'oz → g',    fn: v => v * 28.3495,        fmt: v => v.toFixed(4) + ' g' },
-    'g>oz':  { label: 'g → oz',    fn: v => v / 28.3495,        fmt: v => v.toFixed(4) + ' oz' },
-    // Data
-    'kb>mb': { label: 'KB → MB',   fn: v => v / 1024,           fmt: v => v.toFixed(4) + ' MB' },
-    'mb>kb': { label: 'MB → KB',   fn: v => v * 1024,           fmt: v => v.toFixed(0) + ' KB' },
-    'mb>gb': { label: 'MB → GB',   fn: v => v / 1024,           fmt: v => v.toFixed(4) + ' GB' },
-    'gb>mb': { label: 'GB → MB',   fn: v => v * 1024,           fmt: v => v.toFixed(0) + ' MB' },
-    'kb>gb': { label: 'KB → GB',   fn: v => v / 1048576,        fmt: v => v.toFixed(6) + ' GB' },
-    'gb>kb': { label: 'GB → KB',   fn: v => v * 1048576,        fmt: v => v.toFixed(0) + ' KB' },
-    'gb>tb': { label: 'GB → TB',   fn: v => v / 1024,           fmt: v => v.toFixed(4) + ' TB' },
-    'tb>gb': { label: 'TB → GB',   fn: v => v * 1024,           fmt: v => v.toFixed(0) + ' GB' },
-    // Speed
-    'mph>kph': { label: 'mph → km/h', fn: v => v * 1.60934,     fmt: v => v.toFixed(2) + ' km/h' },
-    'kph>mph': { label: 'km/h → mph', fn: v => v / 1.60934,     fmt: v => v.toFixed(2) + ' mph' },
-    // Area
-    'sqft>sqm': { label: 'ft² → m²', fn: v => v * 0.092903,    fmt: v => v.toFixed(4) + ' m²' },
-    'sqm>sqft': { label: 'm² → ft²', fn: v => v / 0.092903,    fmt: v => v.toFixed(4) + ' ft²' },
-    // Volume
-    'l>gal':  { label: 'L → gal',  fn: v => v * 0.264172,       fmt: v => v.toFixed(4) + ' gal' },
-    'gal>l':  { label: 'gal → L',  fn: v => v / 0.264172,       fmt: v => v.toFixed(4) + ' L' },
-    // Pressure
-    'psi>bar':  { label: 'psi → bar', fn: v => v * 0.0689476,   fmt: v => v.toFixed(4) + ' bar' },
-    'bar>psi':  { label: 'bar → psi', fn: v => v / 0.0689476,   fmt: v => v.toFixed(2) + ' psi' },
-  };
-
-  const MENU = [
-    '── Temperature ──────────────────',
-    '  f>c   °F → °C',
-    '  c>f   °C → °F',
-    '── Length ───────────────────────',
-    '  in>cm  inches → centimeters',
-    '  cm>in  centimeters → inches',
-    '  ft>m   feet → meters',
-    '  m>ft   meters → feet',
-    '  mi>km  miles → kilometers',
-    '  km>mi  kilometers → miles',
-    '  yd>m   yards → meters',
-    '  m>yd   meters → yards',
-    '── Weight ───────────────────────',
-    '  lb>kg  pounds → kilograms',
-    '  kg>lb  kilograms → pounds',
-    '  oz>g   ounces → grams',
-    '  g>oz   grams → ounces',
-    '── Data Storage ─────────────────',
-    '  kb>mb  KB → MB',
-    '  mb>kb  MB → KB',
-    '  mb>gb  MB → GB',
-    '  gb>mb  GB → MB',
-    '  kb>gb  KB → GB',
-    '  gb>kb  GB → KB',
-    '  gb>tb  GB → TB',
-    '  tb>gb  TB → GB',
-    '── Speed ────────────────────────',
-    '  mph>kph  mph → km/h',
-    '  kph>mph  km/h → mph',
-    '── Area ─────────────────────────',
-    '  sqft>sqm  ft² → m²',
-    '  sqm>sqft  m² → ft²',
-    '── Volume ───────────────────────',
-    '  l>gal  litres → gallons',
-    '  gal>l  gallons → litres',
-    '── Pressure ─────────────────────',
-    '  psi>bar  psi → bar',
-    '  bar>psi  bar → psi',
-  ].join('\\n');
-
-  const text = (ctx.selection || ctx.fullText).trim();
-  // Try to auto-detect: "42.5 f>c" or just a number when a code is in selection hint
-  const autoMatch = text.match(/^([\\d.\\-]+)\\s+([a-z>]+)$/i);
-  let code, value;
-
-  if (autoMatch) {
-    value = parseFloat(autoMatch[1]);
-    code = autoMatch[2].toLowerCase();
-  } else {
-    const raw = prompt('Convert: Enter code and value (e.g. "98.6 f>c") or just a code to see options:\\n\\n' + MENU);
-    if (!raw) return;
-    const parts = raw.trim().split(/\\s+/);
-    // Support "98.6 f>c" or "f>c 98.6"
-    if (parts.length === 2) {
-      if (!isNaN(parts[0])) { value = parseFloat(parts[0]); code = parts[1].toLowerCase(); }
-      else { code = parts[0].toLowerCase(); value = parseFloat(parts[1]); }
-    } else if (parts.length === 1) {
-      code = parts[0].toLowerCase();
-      const numStr = prompt('Enter the value to convert:');
-      if (numStr === null) return;
-      value = parseFloat(numStr);
-    } else {
-      showToast('Invalid input. Try "98.6 f>c"', 'error');
-      return;
-    }
-  }
-
-  const conv = CONVERSIONS[code];
-  if (!conv) { showToast('Unknown conversion: ' + code, 'error'); return; }
-  if (isNaN(value)) { showToast('Invalid number', 'error'); return; }
-
-  const result = conv.fmt(conv.fn(value));
-  if (ctx.selection) ctx.selection = result; else ctx.fullText += (ctx.fullText ? '\\n' : '') + result;
-  showToast(value + ' ' + conv.label.split(' → ')[0].replace('°','°') + ' = ' + result, 'success', 3000);
-}`);
 
 // ============================================
 // SCRIPT EXECUTION ENGINE
@@ -8688,10 +6926,10 @@ function registerScriptStub(m) {
 
 // Register the built-in widgets. open() uses late-bound window.* so these can be
 // declared before the widget functions appear later in the file.
-registerWidget({ name: 'Timer', description: 'Pomodoro · countdown · time-of-day · stopwatch', icon: '⏱', tags: 'timer,pomodoro,countdown,stopwatch,clock,focus', open: () => window.openTimer && window.openTimer() });
+// Timer is now an external module (./txt/widgets/timer/), loaded on demand.
 registerWidget({ name: 'Zen Mode', description: 'Distraction-free typewriter focus', icon: '🧘', tags: 'zen,focus,typewriter,distraction', open: () => window.toggleZen && window.toggleZen() });
 // Outline is now an external module (./txt/widgets/outline/), loaded on demand.
-registerWidget({ name: 'Daily Notes Calendar', description: 'Browse rooms by the date they changed', icon: '📅', tags: 'calendar,daily,date,journal', open: () => window.openDailyNote && window.openDailyNote() });
+// Rooms-by-Date calendar is now an external module (./txt/widgets/daycal/).
 registerWidget({ name: 'Auto-color word', description: 'Pick a word + colour; every occurrence is tinted that colour', icon: '🎨', tags: 'color,word,highlight,auto', open: () => window.openAutoColorPicker && window.openAutoColorPicker() });
 // Breakout is now an external module (./txt/widgets/breakout/), loaded on demand.
 function runPickerItem(item) {
@@ -11846,6 +10084,27 @@ function roomsInActiveWorkspace(includeArchived) {
   return orderRooms(base);
 }
 
+// Read-mostly room-system surface for external feature modules (Cade.roomsApi).
+// Everything here is late-bound over the live module-scoped state, so modules
+// never hold stale copies.
+window.__roomsApi = {
+  list: () => rooms.slice(),
+  meta: (n) => roomMeta[n] || {},
+  workspaceIds: (n) => getRoomWorkspaceIds(n),
+  workspaceById: (id) => getWorkspace(id),
+  inWorkspace: (n, wsId) => roomInWorkspace(n, wsId),
+  isPinned: (n) => roomIsPinned(n),
+  isArchived: (n) => roomIsArchived(n),
+  modifiedAt: (n) => _roomModified(n),
+  createdAt: (n) => _roomCreated(n),
+  orderRooms: (l) => orderRooms(l),
+  activeRoom: () => activeRoom,
+  activeWorkspace: () => activeWorkspace,
+  setActiveWorkspace: (id) => { activeWorkspace = id; store.set('cade-active-workspace', id); },
+  switchRoom: (n) => window.switchRoom(n),
+  WS_ALL, WS_UNLABELED,
+};
+
 // ---------- Workspace tree helpers (Feature 54) ----------
 function workspaceChildren(parentId) {
   return workspaces
@@ -14136,7 +12395,8 @@ window.addEventListener('resize', () => {
     // Don't minimize a timer that's currently flashing for attention — that path
     // calls _timerStopFlash() and would silently acknowledge (clear the flash +
     // restore the tab title) a fired countdown the user hasn't seen yet.
-    if (document.getElementById('timer-panel') && !_timerFlashing) { try { window.timerMinimize(); } catch {} }
+    // Timer module (if loaded) minimizes its own panel — unless it's flashing.
+    try { if (window.__timerAutoMin) window.__timerAutoMin(); } catch {}
     ['outline-panel', 'daycal-panel'].forEach(id => {
       const el = document.getElementById(id);
       if (el) { el.remove(); if (el._onClose) el._onClose(); }
@@ -14149,258 +12409,12 @@ window.addEventListener('resize', () => {
 // View menu item and session restore can open it via the registered widget stub.
 window.toggleOutline = function () { const w = WIDGETS.find(x => x.name === 'Outline'); if (w) w.open(); };
 
-// ---- Pomodoro / focus timer (#31) ----
-// ---- Generic timer (#31, reworked): pomodoro · countdown · time-of-day · stopwatch ----
-let _timerMinimized = false, _timerFlashing = false;
-const _timer = {
-  mode: 'pomodoro',      // 'pomodoro' | 'countdown' | 'clock' | 'stopwatch'
-  running: false, timer: null,
-  // pomodoro
-  phase: 'work', remaining: 25 * 60, count: 0, work: 25, brk: 5,
-  // countdown
-  cdTotal: 5 * 60, cdRemaining: 5 * 60,
-  // time-of-day target ('HH:MM')
-  clockTarget: '',
-  // stopwatch (millisecond precision via performance.now)
-  swMs: 0, swStart: 0, laps: [],
-};
-// Live stopwatch elapsed in ms (counts from swStart while running).
-function _swNow() {
-  return (_timer.running && _timer.mode === 'stopwatch') ? (performance.now() - _timer.swStart) : _timer.swMs;
-}
-// mm:ss.cs (centiseconds), with hours when needed — for the stopwatch + laps.
-function _timerFmtMs(ms) {
-  ms = Math.max(0, ms);
-  const totalCs = Math.floor(ms / 10);
-  const cs = totalCs % 100, totalSec = Math.floor(totalCs / 100);
-  const s = totalSec % 60, m = Math.floor(totalSec / 60) % 60, h = Math.floor(totalSec / 3600);
-  const pad = (n) => String(n).padStart(2, '0');
-  return (h > 0 ? (h + ':' + pad(m) + ':' + pad(s)) : (m + ':' + pad(s))) + '.' + pad(cs);
-}
-function _timerLoadCfg() {
-  try {
-    const s = JSON.parse(store.get('cade-timer-cfg') || '{}');
-    _timer.work = +s.work || 25; _timer.brk = +s.brk || 5;
-    _timer.cdTotal = +s.cdTotal || 5 * 60; _timer.clockTarget = s.clockTarget || '';
-    if (s.mode) _timer.mode = s.mode;
-  } catch {}
-}
-function _timerSaveCfg() {
-  store.set('cade-timer-cfg', JSON.stringify({ work: _timer.work, brk: _timer.brk, cdTotal: _timer.cdTotal, clockTarget: _timer.clockTarget, mode: _timer.mode }));
-}
-function _timerFmt(s) {
-  s = Math.max(0, Math.floor(s));
-  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), ss = s % 60;
-  const mm = String(m).padStart(2, '0'), sss = String(ss).padStart(2, '0');
-  return h > 0 ? (h + ':' + mm + ':' + sss) : (m + ':' + sss);
-}
-// Format an 'HH:MM' (24hr) target as 12hr with AM/PM for display (D6).
-function _fmt12(hhmm) {
-  const m = /^(\d{1,2}):(\d{2})$/.exec(hhmm || ''); if (!m) return hhmm || '';
-  let h = +m[1]; const ap = h >= 12 ? 'PM' : 'AM';
-  h = h % 12; if (h === 0) h = 12;
-  return h + ':' + m[2] + ' ' + ap;
-}
-function _clockRemaining(hhmm) {
-  const m = /^(\d{1,2}):(\d{2})$/.exec(hhmm || ''); if (!m) return 0;
-  const now = new Date();
-  const target = new Date(now); target.setHours(+m[1], +m[2], 0, 0);
-  let diff = Math.floor((target - now) / 1000);
-  if (diff < 0) diff += 24 * 3600; // roll to tomorrow if the time already passed
-  return diff;
-}
-function _timerNotify(title, body, noToast) {
-  try { navigator.vibrate && navigator.vibrate([120, 60, 120]); } catch {}
-  try { if (window.Notification && Notification.permission === 'granted') { new Notification(title, { body }); return; } } catch {}
-  if (!noToast) showToast(body, 'success', 4000);
-}
-function _timerPrime() {
-  const t = _timer;
-  if (t.mode === 'pomodoro') { t.phase = 'work'; t.remaining = t.work * 60; }
-  else if (t.mode === 'countdown') { t.cdRemaining = t.cdTotal; }
-  else if (t.mode === 'stopwatch') { t.swMs = 0; t.swStart = 0; t.laps = []; }
-}
-function _timerStop() { _timer.running = false; clearInterval(_timer.timer); }
-function _timerTick() {
-  const t = _timer;
-  if (t.mode === 'pomodoro') {
-    if (t.remaining > 0) { t.remaining--; }
-    else if (t.phase === 'work') { t.count++; t.phase = 'break'; t.remaining = t.brk * 60; _timerNotify('Break time', 'Take a ' + t.brk + ' minute break.'); }
-    else { t.phase = 'work'; t.remaining = t.work * 60; _timerNotify('Focus time', 'Back to it — ' + t.work + ' minutes.'); }
-  } else if (t.mode === 'countdown') {
-    if (t.cdRemaining > 0) t.cdRemaining--;
-    if (t.cdRemaining <= 0) { _timerStop(); _timerFire('Timer done', 'Countdown finished.', { title: 'COUNTDOWN DONE' }); }
-  } else if (t.mode === 'clock') {
-    if (_clockRemaining(t.clockTarget) <= 0) { _timerStop(); _timerFire('Time reached', _fmt12(t.clockTarget) + ' reached.'); }
-  } /* stopwatch: display is computed live from swStart, nothing to increment */
-  _timerRender();
-  _timerChipUpdate();
-}
-function _timerPref(key, dflt) { try { const v = window.Settings && Settings.get('widgets.' + key); return v == null ? dflt : v; } catch { return dflt; } }
-// Timer reached zero: notify, un-minimize so it's visible, and flash for attention.
-// opts.title (D8) swaps the browser tab title (e.g. "COUNTDOWN DONE") until the
-// firing timer is acknowledged. We suppress the success toast here — the flashing
-// panel + tab title + notification are the signal (D8).
-let _timerPrevTitle = null;
-function _timerFire(title, body, opts) {
-  _timerNotify(title, body, true);
-  if (opts && opts.title) {
-    if (_timerPrevTitle == null) _timerPrevTitle = document.title;
-    try { document.title = opts.title; } catch {}
-  }
-  if (!document.getElementById('timer-panel')) { _timerMinimized = false; try { window.openTimer(); } catch {} }
-  _timerStartFlash();
-}
-function _timerStartFlash() {
-  const p = document.getElementById('timer-panel'); if (!p) return;
-  p.classList.add('timer-flash');
-  _timerFlashing = true;
-  if (!_timerPref('timerFlashUntilAck', true)) {
-    setTimeout(() => { if (_timerFlashing) _timerStopFlash(); }, 4000); // a few flashes then stop
-  }
-}
-function _timerStopFlash() {
-  const p = document.getElementById('timer-panel'); if (p) p.classList.remove('timer-flash');
-  _timerFlashing = false;
-  if (_timerPrevTitle != null) { try { document.title = _timerPrevTitle; } catch {} _timerPrevTitle = null; }
-}
-// Current display value for the active mode (used by panel + footer chip).
-function _timerCurrentDisp() {
-  const t = _timer;
-  if (t.mode === 'pomodoro') return _timerFmt(t.remaining);
-  if (t.mode === 'countdown') return _timerFmt(t.cdRemaining);
-  if (t.mode === 'clock') return _timerFmt(_clockRemaining(t.clockTarget));
-  return _timerFmtMs(_swNow());
-}
-// Footer chip — lets the timer keep running while the panel is closed (minimized).
-function _timerChipUpdate() {
-  const chip = document.getElementById('timer-chip'); if (!chip) return;
-  const panelOpen = !!document.getElementById('timer-panel');
-  // Show while minimized whether running OR paused (a paused timer can be
-  // minimized too). Running timers also show even if not explicitly minimized.
-  const show = !panelOpen && (_timerMinimized || _timer.running);
-  chip.style.display = show ? '' : 'none';
-  if (show) chip.textContent = (_timer.running ? '⏱ ' : '⏸ ') + _timerCurrentDisp();
-}
-const _TIMER_TABS = [['pomodoro', 'Pomodoro'], ['countdown', 'Countdown'], ['clock', 'Time of day'], ['stopwatch', 'Stopwatch']];
-function _timerBodyHtml() {
-  const t = _timer;
-  let html = '<div class="timer-tabs">' + _TIMER_TABS.map(([m, lbl]) =>
-    `<button class="timer-tab ${t.mode === m ? 'active' : ''}" onclick="timerSetMode('${m}')">${lbl}</button>`).join('') + '</div>';
-  html += '<div class="timer-display"><span class="timer-time"></span><span class="timer-sub"></span></div>';
-  if (t.mode === 'pomodoro') {
-    html += `<div class="timer-cfg"><label>Focus<input type="number" min="1" max="180" value="${t.work}" onchange="timerCfg('work',this.value)"></label>` +
-            `<label>Break<input type="number" min="1" max="60" value="${t.brk}" onchange="timerCfg('brk',this.value)"></label></div>`;
-  } else if (t.mode === 'countdown') {
-    // Sub-minute allowed (e.g. 0.5 = 30s). Trim trailing zeros for display.
-    const mins = +(t.cdTotal / 60).toFixed(3);
-    html += `<div class="timer-cfg"><label>Minutes<input type="number" min="0" max="600" step="any" value="${mins}" onchange="timerCfg('cd',this.value)"></label></div>`;
-  } else if (t.mode === 'clock') {
-    html += `<div class="timer-cfg"><label>Target<input type="time" value="${t.clockTarget || ''}" onchange="timerCfg('clock',this.value)"></label></div>`;
-  }
-  html += '<div class="timer-btns"><button class="btn btn-primary timer-start" onclick="timerToggleRun()">Start</button>';
-  if (t.mode === 'stopwatch') html += '<button class="btn" onclick="timerLap()">Lap</button>';
-  html += '<button class="btn" onclick="timerReset()">Reset</button></div>';
-  html += '<div class="timer-btns"><button class="btn timer-min" onclick="timerMinimize()">Minimize ▾</button></div>';
-  if (t.mode === 'stopwatch') html += '<div class="timer-laps"></div>';
-  return html;
-}
-function _timerRebuild() {
-  const p = document.getElementById('timer-panel'); if (!p) return;
-  const body = p.querySelector('.cade-panel-body'); if (body) body.innerHTML = _timerBodyHtml();
-  _timerRender();
-}
-function _timerRender() {
-  const p = document.getElementById('timer-panel'); if (!p) return;
-  const t = _timer;
-  let disp = '', sub = '';
-  if (t.mode === 'pomodoro') { disp = _timerFmt(t.remaining); sub = (t.phase === 'work' ? 'Focus' : 'Break') + ' · done ' + t.count; p.classList.toggle('break', t.phase !== 'work'); }
-  else if (t.mode === 'countdown') { disp = _timerFmt(t.cdRemaining); sub = 'Countdown'; }
-  else if (t.mode === 'clock') { const r = _clockRemaining(t.clockTarget); disp = _timerFmt(r); sub = t.clockTarget ? ('until ' + _fmt12(t.clockTarget)) : 'set a time'; }
-  else { disp = _timerFmtMs(_swNow()); sub = 'Stopwatch'; }
-  const te = p.querySelector('.timer-time'); if (te) te.textContent = disp;
-  const se = p.querySelector('.timer-sub'); if (se) se.textContent = sub;
-  const sb = p.querySelector('.timer-start'); if (sb) sb.textContent = t.running ? 'Pause' : 'Start';
-  const le = p.querySelector('.timer-laps');
-  if (le) {
-    // Each lap shows its split (time since the previous lap) and the delta vs the
-    // previous split: +slower / −faster (the first lap has no previous, so —).
-    const rows = [];
-    for (let i = 0; i < t.laps.length; i++) {
-      const split = t.laps[i] - (i > 0 ? t.laps[i - 1] : 0);
-      const prevSplit = i > 0 ? (t.laps[i - 1] - (i > 1 ? t.laps[i - 2] : 0)) : null;
-      let delta = '—', cls = '';
-      if (prevSplit != null) {
-        const d = split - prevSplit;
-        if (Math.abs(d) < 10) { delta = '±0.00'; }
-        else { delta = (d > 0 ? '+' : '−') + _timerFmtMs(Math.abs(d)); cls = d > 0 ? 'slower' : 'faster'; }
-      }
-      rows.push(`<div class="timer-lap"><span>Lap ${i + 1}</span><span>${_timerFmtMs(split)}</span><span class="timer-lap-d ${cls}">${delta}</span></div>`);
-    }
-    le.innerHTML = rows.reverse().join('');
-  }
-  _timerChipUpdate();
-}
-window.timerMinimize = function() {
-  _timerStopFlash();
-  _timerMinimized = true;           // chip stays even when paused
-  const p = document.getElementById('timer-panel');
-  if (p) { p.remove(); }            // keeps _timer.timer running in the background
-  store.set('cade-timer-open', '0');
-  _timerChipUpdate();
-};
-window.timerSetMode = function(m) { if (_timer.mode === m) return; _timerStop(); _timer.mode = m; _timerPrime(); _timerSaveCfg(); _timerRebuild(); };
-window.timerCfg = function(k, v) {
-  const t = _timer;
-  if (k === 'clock') { t.clockTarget = String(v || ''); _timerSaveCfg(); _timerRender(); return; }
-  v = +v || 0;
-  if (k === 'work') { t.work = Math.max(1, v); if (!t.running && t.phase === 'work') t.remaining = t.work * 60; }
-  else if (k === 'brk') { t.brk = Math.max(1, v); }
-  else if (k === 'cd') { t.cdTotal = Math.max(0, v * 60); if (!t.running) t.cdRemaining = t.cdTotal; }
-  _timerSaveCfg(); _timerRender();
-};
-window.timerToggleRun = function() {
-  _timerStopFlash(); // any control press acknowledges a firing timer
-  const t = _timer; t.running = !t.running;
-  if (t.running) {
-    try { if (window.Notification && Notification.permission === 'default') Notification.requestPermission(); } catch {}
-    if (t.mode === 'stopwatch') t.swStart = performance.now() - t.swMs; // resume from accumulated ms
-    clearInterval(t.timer);
-    // Stopwatch needs sub-second updates for the ms display; others tick at 1s.
-    t.timer = setInterval(_timerTick, t.mode === 'stopwatch' ? 41 : 1000);
-  } else {
-    if (t.mode === 'stopwatch') t.swMs = performance.now() - t.swStart; // freeze accumulated ms
-    clearInterval(t.timer);
-  }
-  _timerRender();
-};
-window.timerReset = function() { _timerStopFlash(); _timerStop(); _timerPrime(); _timerRender(); };
-window.timerLap = function() { if (_timer.mode !== 'stopwatch') return; _timer.laps.push(_swNow()); _timerRender(); };
-window.openTimer = function() {
-  closeAllMenus();
-  const existing = document.getElementById('timer-panel');
-  // Toggling from the menu while open = minimize (don't lose a running timer).
-  if (existing) { window.timerMinimize(); return; }
-  _timerLoadCfg();
-  _timerMinimized = false;
-  if (!_timer.running) _timerPrime();
-  const p = _mkPanel('timer-panel', 'Timer', _timerBodyHtml());
-  // The X (close): if a timer is live and the "minimize on close" pref is on,
-  // keep it running with the footer chip; otherwise stop + dismiss fully.
-  p._onClose = () => {
-    _timerStopFlash();
-    if (_timer.running && _timerPref('timerMinimizeOnClose', true)) { _timerMinimized = true; }
-    else { _timerStop(); _timerMinimized = false; }
-    store.set('cade-timer-open', '0');
-    _timerChipUpdate();
-  };
-  // Clicking anywhere in the panel acknowledges a firing timer.
-  p.addEventListener('pointerdown', () => { if (_timerFlashing) _timerStopFlash(); });
-  _timerRender();
-  _timerChipUpdate();
-  store.set('cade-timer-open', '1');
-};
-window.togglePomodoro = window.openTimer; // back-compat (restore hook / old callers)
+// ---- Timer (#31) — now an external module (./txt/widgets/timer/) ----
+// Thin shims: the View menu, footer chip, hotkeys and session restore call
+// window.openTimer, which routes through the widget stub (loads the module on
+// first use; the module then overwrites these with the real implementations).
+window.openTimer = function () { const w = WIDGETS.find(x => x.name === 'Timer'); if (w) w.open(); };
+window.togglePomodoro = function () { window.openTimer(); };
 
 // ---- Zen / typewriter mode (#33) ----
 window.toggleZen = function() {
@@ -14470,94 +12484,8 @@ function setClockEnabled(on) {
   }
 }
 
-// ---- Daily notes / mini calendar (#40) ----
-// ---- Activity calendar (#40, reworked): browse rooms by the date they were
-// last modified. No journaling, no document clobbering — clicking a date lists
-// the rooms modified that day; clicking one opens its workspace + room.
-function _localDateKey(ts) {
-  const d = new Date(ts);
-  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
-}
-function _roomActivityMap() {
-  // dateKey -> [roomNames], from each room's last-modified (fallback created).
-  const map = {};
-  for (const name of rooms) {
-    const ts = roomMeta[name] && (roomMeta[name].modified || roomMeta[name].created);
-    if (!ts) continue;
-    const k = _localDateKey(ts);
-    (map[k] = map[k] || []).push(name);
-  }
-  return map;
-}
-function _openRoomFromActivity(name) {
-  // Jump into the room's own workspace (first membership) so its tab is visible.
-  const ids = (typeof getRoomWorkspaceIds === 'function') ? getRoomWorkspaceIds(name) : [];
-  const wsId = ids && ids.length ? ids[0] : WS_ALL;
-  if (!roomInWorkspace(name, activeWorkspace) && !roomIsPinned(name)) {
-    activeWorkspace = wsId; store.set('cade-active-workspace', activeWorkspace);
-  }
-  switchRoom(name);
-}
-window._openRoomFromActivity = _openRoomFromActivity;
-let _dayCalMonth = null;
-let _dayCalSel = null; // selected dateKey ('YYYY-MM-DD')
-function renderDayCal() {
-  const p = document.getElementById('daycal-panel'); if (!p) return;
-  const ref = _dayCalMonth || new Date();
-  const y = ref.getFullYear(), mo = ref.getMonth();
-  const first = new Date(y, mo, 1);
-  const days = new Date(y, mo + 1, 0).getDate();
-  const today = new Date();
-  const act = _roomActivityMap();
-  const monthName = ref.toLocaleDateString([], { month: 'long', year: 'numeric' });
-  let grid = ['S', 'M', 'T', 'W', 'T', 'F', 'S'].map(d => '<div class="daycal-cell dow">' + d + '</div>').join('');
-  for (let i = 0; i < first.getDay(); i++) grid += '<div class="daycal-cell empty"></div>';
-  for (let d = 1; d <= days; d++) {
-    const date = new Date(y, mo, d);
-    const key = _localDateKey(date.getTime());
-    const isToday = date.toDateString() === today.toDateString();
-    const sel = (_dayCalSel === key) ? ' sel' : '';
-    grid += '<div class="daycal-cell' + (isToday ? ' today' : '') + (act[key] ? ' has' : '') + sel + '" onclick="dayCalPick(' + y + ',' + mo + ',' + d + ')">' + d + '</div>';
-  }
-  const selKey = _dayCalSel || _localDateKey(today.getTime());
-  const selLabel = new Date(selKey + 'T00:00:00').toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
-  const roomsOn = (act[selKey] || []).slice().sort((a, b) => (_roomModified(b) - _roomModified(a)));
-  let listHtml;
-  if (roomsOn.length) {
-    listHtml = roomsOn.map(n => {
-      const ids = getRoomWorkspaceIds(n);
-      const ws = ids.length ? getWorkspace(ids[0]) : null;
-      const wsName = ws ? ws.name : 'Unlabeled';
-      const escAttr = escapeHtml(n.replace(/\\/g, '\\\\').replace(/'/g, "\\'"));
-      return '<button class="daycal-room" onclick="_openRoomFromActivity(\'' + escAttr + '\')">' +
-        (roomIsPinned(n) ? '<span class="daycal-pin">📌</span>' : '') +
-        '<span class="daycal-room-n">' + escapeHtml(n) + '</span>' +
-        '<span class="daycal-room-ws">' + escapeHtml(wsName) + '</span></button>';
-    }).join('');
-  } else {
-    listHtml = '<div class="daycal-empty">No rooms modified.</div>';
-  }
-  p.querySelector('.cade-panel-body').innerHTML =
-    '<div class="daycal-head"><button onclick="dayCalNav(-1)">‹</button><span>' + monthName + '</span><button onclick="dayCalNav(1)">›</button></div>' +
-    '<div class="daycal-grid">' + grid + '</div>' +
-    '<div class="daycal-list-head">' + escapeHtml(selLabel) + '</div>' +
-    '<div class="daycal-list">' + listHtml + '</div>';
-}
-window.dayCalNav = function(delta) {
-  const ref = _dayCalMonth || new Date();
-  _dayCalMonth = new Date(ref.getFullYear(), ref.getMonth() + delta, 1);
-  renderDayCal();
-};
-window.dayCalPick = function(y, mo, d) { _dayCalSel = _localDateKey(new Date(y, mo, d).getTime()); renderDayCal(); };
-window.openDailyNote = function() {
-  closeAllMenus();
-  const existing = document.getElementById('daycal-panel');
-  if (existing) { existing.remove(); return; }
-  _dayCalMonth = new Date();
-  _dayCalSel = _localDateKey(Date.now());
-  _mkPanel('daycal-panel', 'Rooms by Date', '');
-  renderDayCal();
-};
+// ---- Rooms by Date (#40) — now an external module (./txt/widgets/daycal/) ----
+window.openDailyNote = function () { const w = WIDGETS.find(x => x.name === 'Daily Notes Calendar'); if (w) w.open(); };
 
 // Inline math (#41/#26): typing "=" at the end of a pure-arithmetic line
 // appends the result; "sum=" / "total=" sums the numbers in the block above.
@@ -14622,10 +12550,18 @@ function _onEditorUpdate(update) {
 
 // Restore open widgets from last session. Outline is now an external module, so
 // route its restore through the registered widget (its stub loads the module).
-function _restoreWidget(name) { try { const w = WIDGETS.find(x => x.name === name); if (w) w.open(); } catch {} }
+// Retries a few times because external-module stubs only exist once the
+// manifest fetch lands — on a cold/slow load that can be after the first tick.
+function _restoreWidget(name, attempt) {
+  try {
+    const w = WIDGETS.find(x => x.name === name);
+    if (w) { w.open(); return; }
+    if ((attempt || 0) < 3) setTimeout(() => _restoreWidget(name, (attempt || 0) + 1), 1200);
+  } catch {}
+}
 setTimeout(() => {
   try { if (store.get('cade-outline-open') === '1') _restoreWidget('Outline'); } catch {}
-  try { if (store.get('cade-timer-open') === '1' || store.get('cade-pomo-open') === '1') window.openTimer(); } catch {}
+  try { if (store.get('cade-timer-open') === '1' || store.get('cade-pomo-open') === '1') _restoreWidget('Timer'); } catch {}
   try { if (store.get('cade-zen') === '1') window.toggleZen(); } catch {}
 }, 600);
 // One-time pass over the initially-loaded room: migrate any legacy inline
@@ -15676,8 +13612,8 @@ function renderSettingsSections() { Settings._render(); }
 try {
   registerSetting({ key: 'widgets.clock', label: 'Footer clock', type: 'toggle', default: false, section: 'Appearance', apply(v) { setClockEnabled(!!v); } });
   registerSetting({ key: 'widgets.clockTz', label: 'Extra timezones', type: 'text', default: '', section: 'Appearance', hint: 'Comma-separated IANA names, e.g. America/New_York, Europe/London', apply() { if (document.getElementById('footer-clock')) clockTick(); } });
-  registerSetting({ key: 'widgets.timerFlashUntilAck', label: 'Timer flashes until acknowledged', type: 'toggle', default: true, section: 'Behavior', hint: 'When a timer fires, keep flashing the popup until you click it / press Stop / close it.' });
-  registerSetting({ key: 'widgets.timerMinimizeOnClose', label: 'Minimize running timer on close', type: 'toggle', default: true, section: 'Behavior', hint: 'Closing the timer while it is running keeps it going as a footer chip instead of stopping it.' });
+  // (Timer settings — widgets.timerFlashUntilAck / widgets.timerMinimizeOnClose —
+  // are registered by the timer module itself when it loads.)
   // F2 — snapshot retention. Auto-discard snapshots older than the chosen window
   // (the newest is always kept). Storage is also capped per-room by count + bytes.
   registerSetting({ key: 'snapshots.maxAgeDays', label: 'Auto-delete old snapshots', type: 'select', default: '0', section: 'Behavior', hint: 'Discard a document’s snapshots older than this (the most recent is always kept). Use Snapshots → Manage storage to clear by size across all rooms.', options: [
@@ -16202,38 +14138,6 @@ async function main(ctx) {
 }
 `);
 
-registerScript(`/**
-  {
-    "name": "Clean Diary",
-    "description": "Remove empty date entries from a @type: diary document",
-    "author": "Cade",
-    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='3 6 5 6 21 6'/><path d='M19 6l-1 14H6L5 6'/><path d='M10 11v6M14 11v6'/><path d='M9 6V4h6v2'/></svg>",
-    "tags": "diary,clean,empty,date"
-  }
-**/
-function main(ctx) {
-  const lines = ctx.fullText.split('\\n');
-  const HEADER = /^(January|February|March|April|May|June|July|August|September|October|November|December) \\d+(?:st|nd|rd|th), \\d{4} -$/;
-  const out = [];
-  let i = 0;
-  while (i < lines.length) {
-    if (HEADER.test(lines[i])) {
-      const header = lines[i];
-      let j = i + 1;
-      while (j < lines.length && !HEADER.test(lines[j])) j++;
-      const block = lines.slice(i + 1, j);
-      const hasContent = block.some(l => l.trim() !== '');
-      if (hasContent) { out.push(header); out.push(...block); }
-      i = j;
-    } else {
-      out.push(lines[i]);
-      i++;
-    }
-  }
-  while (out.length > 1 && out[out.length - 1].trim() === '') out.pop();
-  ctx.fullText = out.join('\\n');
-}
-`);
 
 registerScript(`/**
   {
@@ -16292,6 +14196,14 @@ async function bootModules() {
     try {
       if (m.type === 'widget') registerWidgetStub(m);
       else if (m.type === 'script') registerScriptStub(m);
+      else if (m.type === 'script-pack') {
+        // One module file registering MANY scripts: the manifest entry carries
+        // a `scripts` array of palette metadata; every row lazy-loads the same
+        // entry file, which registers all the real scripts in one go.
+        (Array.isArray(m.scripts) ? m.scripts : []).forEach(s => {
+          if (s && s.name) registerScriptStub({ id: m.id, name: s.name, description: s.description, icon: s.icon, tags: s.tags });
+        });
+      }
       else if (m.type === 'plugin') maybeLoadPlugin(m);
       else if (m.type === 'config') loadConfigModule(m);
     } catch (err) { console.error('module register failed:', m.id, err); }

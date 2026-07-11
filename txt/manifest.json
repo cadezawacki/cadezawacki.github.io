@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "version": "2026.06.27-18",
+  "version": "2026.07.11-1",
   "modules": [
     {
       "id": "crawler",
@@ -72,6 +72,488 @@
       "settingKey": "plugins.codeHighlight",
       "section": "Editor",
       "default": false
+    },
+    {
+      "id": "timer",
+      "type": "widget",
+      "name": "Timer",
+      "description": "Pomodoro · countdown · time-of-day · stopwatch",
+      "icon": "⏱",
+      "tags": "timer,pomodoro,countdown,stopwatch,clock,focus",
+      "entry": "widgets/timer/timer.js",
+      "css": "widgets/timer/timer.css"
+    },
+    {
+      "id": "daycal",
+      "type": "widget",
+      "name": "Daily Notes Calendar",
+      "description": "Browse rooms by the date they changed",
+      "icon": "📅",
+      "tags": "calendar,daily,date,journal,activity,rooms",
+      "entry": "widgets/daycal/daycal.js",
+      "css": "widgets/daycal/daycal.css"
+    },
+    {
+      "id": "pack-case",
+      "type": "script-pack",
+      "name": "Case Pack",
+      "description": "Text case transforms",
+      "entry": "scripts/pack-case/pack-case.js",
+      "scripts": [
+        {
+          "name": "Upper Case",
+          "description": "Convert text to UPPER CASE",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M3 20h4l10-14h4'/><path d='M7 20L17 6'/></svg>",
+          "tags": "upper,case,uppercase,caps"
+        },
+        {
+          "name": "Lower Case",
+          "description": "Convert text to lower case",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M3 20h4l10-14h4'/><path d='M17 20L7 6'/></svg>",
+          "tags": "lower,case,lowercase"
+        },
+        {
+          "name": "Title Case",
+          "description": "Convert text to Title Case",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='4 7 4 4 20 4 20 7'/><line x1='9' y1='20' x2='15' y2='20'/><line x1='12' y1='4' x2='12' y2='20'/></svg>",
+          "tags": "title,case,capitalize"
+        },
+        {
+          "name": "camelCase",
+          "description": "Convert text to camelCase",
+          "icon": "<svg viewBox='0 0 24 24'><path fill='none' stroke='currentColor' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M12 13.72c-.69-.41-1-.894-1-1.22m1 1.22V20H8.5l1.5-2l-1-4.5C6 13.5 4.5 10 4.5 8H3a1 1 0 0 1-1-1a2 2 0 0 1 2-2h1.5l.268-.402a1.248 1.248 0 0 1 2.077 1.384L7.5 6.5c-.167.667-.2 2.1 1 2.5c.667.167 2.1 0 2.5-2c.5-1.5 1.5-4 3.5-4c1.616 0 1.926 2.284 3.83 3.953c.904.79 1.67 1.825 1.67 3.025V20h-3l1-2l-.5-3.771c-1.707.526-3.957.41-5.5-.508M19.299 8S22 8.5 22 12'/></svg>",
+          "tags": "camel,case,camelCase,convert,variable"
+        },
+        {
+          "name": "snake_case",
+          "description": "Convert text to snake_case",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><line x1='3' y1='18' x2='21' y2='18'/><path d='M3 12h4l2-4 4 8 2-4h6'/></svg>",
+          "tags": "snake,case,snake_case,convert,variable,underscore"
+        },
+        {
+          "name": "kebab-case",
+          "description": "Convert text to kebab-case",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><line x1='3' y1='12' x2='21' y2='12'/><circle cx='7' cy='12' r='1'/><circle cx='12' cy='12' r='1'/><circle cx='17' cy='12' r='1'/></svg>",
+          "tags": "kebab,case,kebab-case,convert,variable,dash,slug"
+        },
+        {
+          "name": "CONSTANT_CASE",
+          "description": "Convert text to CONSTANT_CASE (screaming snake)",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M4 7V4h16v3'/><path d='M9 20h6'/><path d='M12 4v16'/></svg>",
+          "tags": "constant,case,screaming,snake,upper,variable,env"
+        }
+      ]
+    },
+    {
+      "id": "pack-lines",
+      "type": "script-pack",
+      "name": "Lines Pack",
+      "description": "Sort, dedupe, number, reshape lists and lines",
+      "entry": "scripts/pack-lines/pack-lines.js",
+      "scripts": [
+        {
+          "name": "Sort List",
+          "description": "Sort lines or comma-separated items alphabetically with smart number handling",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><line x1='12' y1='5' x2='12' y2='19'/><polyline points='19 12 12 19 5 12'/><line x1='4' y1='2' x2='4' y2='2.01'/><line x1='4' y1='5' x2='4' y2='5.01'/></svg>",
+          "tags": "sort,list,alphabetical,order,asc"
+        },
+        {
+          "name": "Reverse List",
+          "description": "Reverse lines or comma-separated items",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><line x1='12' y1='19' x2='12' y2='5'/><polyline points='5 12 12 5 19 12'/></svg>",
+          "tags": "reverse,list,flip,invert"
+        },
+        {
+          "name": "Unique Lines",
+          "description": "Remove duplicate lines, preserving order",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='3' y='3' width='7' height='7'/><rect x='14' y='3' width='7' height='7' opacity='0.4'/><rect x='3' y='14' width='7' height='7'/><rect x='14' y='14' width='7' height='7'/></svg>",
+          "tags": "unique,deduplicate,duplicate,lines,distinct,remove"
+        },
+        {
+          "name": "Remove Empty Lines",
+          "description": "Remove all blank/empty lines",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><line x1='5' y1='12' x2='19' y2='12'/><line x1='12' y1='5' x2='12' y2='5.01'/><line x1='12' y1='19' x2='12' y2='19.01'/></svg>",
+          "tags": "remove,empty,blank,lines"
+        },
+        {
+          "name": "Number Lines",
+          "description": "Prefix each line with its line number",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><line x1='10' y1='6' x2='21' y2='6'/><line x1='10' y1='12' x2='21' y2='12'/><line x1='10' y1='18' x2='21' y2='18'/><path d='M4 6h1v4'/><path d='M4 10h2'/><path d='M6 18H4c0-1 2-2 2-3s-1-1.5-2-1'/></svg>",
+          "tags": "number,lines,prefix,enumerate"
+        },
+        {
+          "name": "Bullet List",
+          "description": "Toggle bullet points on lines (add or remove)",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><line x1='8' y1='6' x2='21' y2='6'/><line x1='8' y1='12' x2='21' y2='12'/><line x1='8' y1='18' x2='21' y2='18'/><line x1='3' y1='6' x2='3.01' y2='6'/><line x1='3' y1='12' x2='3.01' y2='12'/><line x1='3' y1='18' x2='3.01' y2='18'/></svg>",
+          "tags": "bullet,list,toggle,unordered,dash,point"
+        },
+        {
+          "name": "Listify",
+          "description": "Format text into a quoted, comma-separated list — auto-detects delimiter",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M8 6h13'/><path d='M8 12h13'/><path d='M8 18h13'/><circle cx='3' cy='6' r='1' fill='currentColor'/><circle cx='3' cy='12' r='1' fill='currentColor'/><circle cx='3' cy='18' r='1' fill='currentColor'/></svg>",
+          "tags": "list,listify,format,comma,quote,array,csv,items"
+        },
+        {
+          "name": "Shuffle Lines",
+          "description": "Randomly shuffle the order of lines",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='16 3 21 3 21 8'/><line x1='4' y1='20' x2='21' y2='3'/><polyline points='21 16 21 21 16 21'/><line x1='15' y1='15' x2='21' y2='21'/><line x1='4' y1='4' x2='9' y2='9'/></svg>",
+          "tags": "shuffle,random,randomize,lines,reorder"
+        },
+        {
+          "name": "Sort Lines by Length",
+          "description": "Sort lines from shortest to longest",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><line x1='3' y1='6' x2='10' y2='6'/><line x1='3' y1='12' x2='15' y2='12'/><line x1='3' y1='18' x2='21' y2='18'/></svg>",
+          "tags": "sort,length,lines,shortest,longest"
+        },
+        {
+          "name": "Wrap Lines",
+          "description": "Wrap each line with a prefix and suffix (prompts)",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M3 6h18'/><path d='M3 12h15a3 3 0 1 1 0 6h-4'/><polyline points='13 16 11 18 13 20'/></svg>",
+          "tags": "wrap,lines,prefix,suffix,surround,quote"
+        },
+        {
+          "name": "Join Lines",
+          "description": "Join all lines into one with a separator",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M8 6h13'/><path d='M8 12h13'/><path d='M8 18h13'/><path d='M3 6h.01'/><path d='M3 12h.01'/><path d='M3 18h.01'/></svg>",
+          "tags": "join,lines,merge,combine,separator,comma"
+        },
+        {
+          "name": "Listify (One Per Row)",
+          "description": "Quote each item on its own row, with a comma after each except the last",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M8 6h13'/><path d='M8 12h13'/><path d='M8 18h13'/><circle cx='3' cy='6' r='1' fill='currentColor'/><circle cx='3' cy='12' r='1' fill='currentColor'/><circle cx='3' cy='18' r='1' fill='currentColor'/></svg>",
+          "tags": "list,listify,rows,quote,column,array,one per line,csv"
+        },
+        {
+          "name": "Remove Duplicates (CSV)",
+          "description": "Remove duplicate values in comma-separated text",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2'/><circle cx='9' cy='7' r='4'/><line x1='17' y1='11' x2='23' y2='11'/></svg>",
+          "tags": "remove,duplicates,csv,comma,unique,dedup"
+        },
+        {
+          "name": "Indent / Dedent",
+          "description": "Add or remove indentation (2 spaces)",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><line x1='21' y1='6' x2='3' y2='6'/><line x1='21' y1='12' x2='9' y2='12'/><line x1='21' y1='18' x2='7' y2='18'/><polyline points='3 12 7 16 3 20'/></svg>",
+          "tags": "indent,dedent,tab,space,whitespace,shift"
+        },
+        {
+          "name": "Flatten",
+          "description": "Collapse multiple lines into a single line, with a single space between each, skipping blank lines",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><line x1='3' y1='8' x2='21' y2='8'/><line x1='3' y1='12' x2='21' y2='12'/><line x1='3' y1='16' x2='21' y2='16'/><polyline points='8 5 12 1 16 5'/><polyline points='8 19 12 23 16 19'/></svg>",
+          "tags": "flatten,join,single line,collapse,condense,unwrap"
+        },
+        {
+          "name": "Toggle Commas",
+          "description": "Add or remove thousands-place commas from numbers (1234567 ↔ 1,234,567)",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><line x1='12' y1='20' x2='12' y2='10'/><line x1='18' y1='20' x2='18' y2='4'/><line x1='6' y1='20' x2='6' y2='16'/></svg>",
+          "tags": "comma,commas,thousands,number,format,1000"
+        }
+      ]
+    },
+    {
+      "id": "pack-fancy",
+      "type": "script-pack",
+      "name": "Fancy Text Pack",
+      "description": "Unicode fancy text styles",
+      "entry": "scripts/pack-fancy/pack-fancy.js",
+      "scripts": [
+        {
+          "name": "Double-Struck (𝔻𝕠𝕦𝕓𝕝𝕖)",
+          "description": "Convert to Unicode double-struck (blackboard bold) — toggles off",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='3' y='3' width='18' height='18' rx='2'/><text x='12' y='16' font-size='12' font-weight='bold' text-anchor='middle' fill='currentColor' stroke='none'>𝔻</text></svg>",
+          "tags": "doublestruck,blackboard,fancy,unicode,text,format,math"
+        },
+        {
+          "name": "Small Caps (ꜱᴍᴀʟʟ)",
+          "description": "Convert to Unicode small capitals — toggles off",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><text x='5' y='18' font-size='18' font-weight='bold' fill='currentColor' stroke='none'>A</text><text x='15' y='18' font-size='12' fill='currentColor' stroke='none'>ᴀ</text></svg>",
+          "tags": "smallcaps,small,capitals,fancy,unicode,text,format"
+        },
+        {
+          "name": "Double Underline (U̳n̳d̳e̳r̳)",
+          "description": "Add/remove Unicode combining double underline on each character",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M6 3v7a6 6 0 0 0 6 6 6 6 0 0 0 6-6V3'/><line x1='4' y1='19' x2='20' y2='19'/><line x1='4' y1='22' x2='20' y2='22'/></svg>",
+          "tags": "double,underline,under,fancy,unicode,text,format"
+        },
+        {
+          "name": "Strikethrough (S̶t̶r̶i̶k̶e̶)",
+          "description": "Add/remove Unicode combining strikethrough on each character",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><line x1='4' y1='12' x2='20' y2='12'/><path d='M17.5 7.5C17.5 5 15.3 3 12 3 9 3 6.5 4.7 6.5 7c0 1.5.8 2.8 2.5 3.5'/><path d='M8.5 16.5C8.5 19 10.7 21 14 21c2.5 0 4.5-1.3 5-3.5'/></svg>",
+          "tags": "strikethrough,strike,cross,fancy,unicode,text,format"
+        },
+        {
+          "name": "Defancify",
+          "description": "Strip all Unicode fancy formatting — bold, italic, double-struck, small caps, combining marks",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><line x1='4' y1='4' x2='20' y2='20'/><line x1='4' y1='20' x2='20' y2='4'/></svg>",
+          "tags": "defancify,strip,clean,plain,unicode,remove,format,reset"
+        }
+      ]
+    },
+    {
+      "id": "pack-convert",
+      "type": "script-pack",
+      "name": "Convert Pack",
+      "description": "Encode/decode and format conversions",
+      "entry": "scripts/pack-convert/pack-convert.js",
+      "scripts": [
+        {
+          "name": "Clear Markdown",
+          "description": "Strip markdown emphasis (bold/italic/underline/strike/code/highlight) but keep # heading marks",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M3 7h18'/><path d='M3 12h12'/><path d='M3 17h6'/></svg>",
+          "tags": "clear,strip,markdown,plain,bold,italic,underline,remove,format"
+        },
+        {
+          "name": "Super Clear Styles",
+          "description": "Strip BOTH Unicode fancy text and markdown formatting — back to plain (keeps # headings)",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M3 3l18 18'/><path d='M21 3L3 21'/></svg>",
+          "tags": "clear,strip,plain,reset,defancify,markdown,super,all,format,remove"
+        },
+        {
+          "name": "Encode Base64",
+          "description": "Encode text to Base64",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='16 18 22 12 16 6'/><polyline points='8 6 2 12 8 18'/></svg>",
+          "tags": "encode,base64,btoa"
+        },
+        {
+          "name": "Decode Base64",
+          "description": "Decode Base64 back to text",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='8 18 2 12 8 6'/><polyline points='16 6 22 12 16 18'/></svg>",
+          "tags": "decode,base64,atob"
+        },
+        {
+          "name": "Encode URL",
+          "description": "URL-encode the text (percent encoding)",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71'/><path d='M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71'/></svg>",
+          "tags": "url,encode,percent,uri,escape"
+        },
+        {
+          "name": "Decode URL",
+          "description": "Decode URL-encoded text (percent decoding)",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71'/><path d='M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71'/></svg>",
+          "tags": "url,decode,percent,uri,unescape"
+        },
+        {
+          "name": "Markdown to Plain",
+          "description": "Strip Markdown formatting to plain text",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='2' y='4' width='20' height='16' rx='2'/><path d='M7 15V9l2.5 3L12 9v6'/><path d='M17 9l-2 6h4'/></svg>",
+          "tags": "markdown,plain,text,strip,remove,formatting"
+        },
+        {
+          "name": "Hex ↔ RGB",
+          "description": "Convert hex colors to RGB and vice versa",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='13.5' cy='6.5' r='4'/><circle cx='17.5' cy='14.5' r='4'/><circle cx='8.5' cy='14.5' r='4'/></svg>",
+          "tags": "hex,rgb,color,colour,convert,css"
+        },
+        {
+          "name": "Escape HTML",
+          "description": "Escape HTML special characters (&, <, >, quotes)",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='16 18 22 12 16 6'/><polyline points='8 6 2 12 8 18'/><line x1='14' y1='4' x2='10' y2='20'/></svg>",
+          "tags": "escape,html,encode,entities,xss,sanitize"
+        },
+        {
+          "name": "Unescape HTML",
+          "description": "Unescape HTML entities back to characters",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='8 18 2 12 8 6'/><polyline points='16 6 22 12 16 18'/><line x1='10' y1='20' x2='14' y2='4'/></svg>",
+          "tags": "unescape,html,decode,entities"
+        },
+        {
+          "name": "Strip HTML Tags",
+          "description": "Remove all HTML tags, keeping text content",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='16 18 22 12 16 6'/><polyline points='8 6 2 12 8 18'/><line x1='4' y1='4' x2='20' y2='20'/></svg>",
+          "tags": "strip,html,tags,remove,clean,text"
+        },
+        {
+          "name": "JSON to CSV",
+          "description": "Convert JSON array of objects to CSV",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z'/><polyline points='14 2 14 8 20 8'/><line x1='8' y1='13' x2='16' y2='13'/><line x1='8' y1='17' x2='16' y2='17'/></svg>",
+          "tags": "json,csv,convert,export,data,table"
+        },
+        {
+          "name": "ROT13",
+          "description": "Apply ROT13 cipher (rotate letters by 13)",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='3' y='11' width='18' height='11' rx='2' ry='2'/><path d='M7 11V7a5 5 0 0 1 10 0v4'/></svg>",
+          "tags": "rot13,cipher,encode,decode,crypto,fun"
+        }
+      ]
+    },
+    {
+      "id": "pack-data",
+      "type": "script-pack",
+      "name": "Data Pack",
+      "description": "JSON, tables, extraction and splitting",
+      "entry": "scripts/pack-data/pack-data.js",
+      "scripts": [
+        {
+          "name": "Sum",
+          "description": "Sum numbers: 1,2,3 or 1 2 3 or one per line (handles trailing commas)",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><line x1='12' y1='5' x2='12' y2='19'/><line x1='5' y1='12' x2='19' y2='12'/></svg>",
+          "tags": "sum,add,total,math,numbers,calculator"
+        },
+        {
+          "name": "JSON Format",
+          "description": "Pretty-print JSON with 2-space indentation",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M8 3H7a2 2 0 0 0-2 2v5a2 2 0 0 1-2 2 2 2 0 0 1 2 2v5c0 1.1.9 2 2 2h1'/><path d='M16 21h1a2 2 0 0 0 2-2v-5c0-1.1.9-2 2-2a2 2 0 0 1-2-2V5a2 2 0 0 0-2-2h-1'/></svg>",
+          "tags": "json,format,pretty,print,beautify"
+        },
+        {
+          "name": "JSON Minify",
+          "description": "Minify JSON by removing whitespace",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M8 3H7a2 2 0 0 0-2 2v5a2 2 0 0 1-2 2 2 2 0 0 1 2 2v5c0 1.1.9 2 2 2h1'/><path d='M16 21h1a2 2 0 0 0 2-2v-5c0-1.1.9-2 2-2a2 2 0 0 1-2-2V5a2 2 0 0 0-2-2h-1'/><line x1='8' y1='12' x2='16' y2='12'/></svg>",
+          "tags": "json,minify,compact,compress"
+        },
+        {
+          "name": "Split by Comma",
+          "description": "Split comma-separated text into separate lines",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><line x1='12' y1='2' x2='12' y2='22'/><line x1='4' y1='12' x2='20' y2='12'/></svg>",
+          "tags": "split,comma,lines,csv,separate"
+        },
+        {
+          "name": "Split by Delimiter",
+          "description": "Split text by a custom delimiter into separate lines",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><line x1='12' y1='2' x2='12' y2='22'/><path d='M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6'/></svg>",
+          "tags": "split,lines,delimiter,separate,explode"
+        },
+        {
+          "name": "Split (Keep Delimiter)",
+          "description": "One entry per line, split on a delimiter but KEEP the delimiter in the text",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><line x1='12' y1='2' x2='12' y2='22'/><path d='M5 9h14'/></svg>",
+          "tags": "split,keep,delimiter,lines,separate,unflatten,explode"
+        },
+        {
+          "name": "Format Table",
+          "description": "Align Markdown pipe-table columns (respects :--- alignment)",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='3' y='3' width='18' height='18' rx='2'/><line x1='3' y1='9' x2='21' y2='9'/><line x1='3' y1='15' x2='21' y2='15'/><line x1='12' y1='3' x2='12' y2='21'/></svg>",
+          "tags": "table,align,markdown,format,pipe,columns"
+        },
+        {
+          "name": "Find & Replace",
+          "description": "Find and replace text (supports regex)",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='11' cy='11' r='8'/><line x1='21' y1='21' x2='16.65' y2='16.65'/><line x1='8' y1='11' x2='14' y2='11'/></svg>",
+          "tags": "find,replace,search,regex,substitute"
+        },
+        {
+          "name": "Extract Emails",
+          "description": "Extract all email addresses from text",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z'/><polyline points='22,6 12,13 2,6'/></svg>",
+          "tags": "extract,email,emails,address,parse"
+        },
+        {
+          "name": "Extract URLs",
+          "description": "Extract all URLs from text",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71'/><path d='M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71'/></svg>",
+          "tags": "extract,url,urls,links,http,parse"
+        },
+        {
+          "name": "Extract Numbers",
+          "description": "Extract all numbers from text",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M4 9h16'/><path d='M4 15h16'/><path d='M10 3 8 21'/><path d='M16 3 14 21'/></svg>",
+          "tags": "extract,numbers,digits,parse,numeric"
+        },
+        {
+          "name": "Markdown Table",
+          "description": "Convert tab or comma separated data to a Markdown table",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='3' y='3' width='18' height='18' rx='2'/><line x1='3' y1='9' x2='21' y2='9'/><line x1='3' y1='15' x2='21' y2='15'/><line x1='9' y1='3' x2='9' y2='21'/><line x1='15' y1='3' x2='15' y2='21'/></svg>",
+          "tags": "markdown,table,csv,tsv,convert,format"
+        }
+      ]
+    },
+    {
+      "id": "pack-tools",
+      "type": "script-pack",
+      "name": "Tools Pack",
+      "description": "Editor utilities: todos, time, quotes, counting",
+      "entry": "scripts/pack-tools/pack-tools.js",
+      "scripts": [
+        {
+          "name": "UTC → Local Time",
+          "description": "Convert UTC times to local (supports 10:01, 14:01:00Z, ISO dates, epoch)",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='12' r='10'/><polyline points='12 6 12 12 16 14'/></svg>",
+          "tags": "utc,local,time,timezone,convert,date"
+        },
+        {
+          "name": "Local Time → UTC",
+          "description": "Convert local times to UTC (supports 10:01, dates, etc.)",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='12' r='10'/><polyline points='12 6 12 12 8 14'/><path d='M2 12h2M20 12h2'/></svg>",
+          "tags": "local,utc,time,timezone,convert,date"
+        },
+        {
+          "name": "Copy All to Clipboard",
+          "description": "Copy the entire editor content to clipboard",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='9' y='9' width='13' height='13' rx='2' ry='2'/><path d='M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1'/></svg>",
+          "tags": "copy,clipboard,all"
+        },
+        {
+          "name": "Trim / Clean",
+          "description": "Trim whitespace, remove blank lines, normalize spaces",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M9 7H5a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-4'/><path d='M9 7V3h6v4'/></svg>",
+          "tags": "trim,clean,whitespace,strip,normalize"
+        },
+        {
+          "name": "Count Words",
+          "description": "Count words, characters, sentences, and paragraphs",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M4 9h16'/><path d='M4 15h16'/><path d='M10 3 8 21'/><path d='M16 3 14 21'/></svg>",
+          "tags": "count,words,characters,sentences,statistics,wc"
+        },
+        {
+          "name": "Quoter",
+          "description": "Wrap items in quotes (comma or newline delimited, toggles off)",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M10 11c-1.5 0-3-1-3-3s1-3 3-3c1 0 2 .5 2 2'/><path d='M20 11c-1.5 0-3-1-3-3s1-3 3-3c1 0 2 .5 2 2'/></svg>",
+          "tags": "quote,quoter,wrap,comma,list,string"
+        },
+        {
+          "name": "Toggle Todo",
+          "description": "Toggle [ ]/[x] checkboxes on current or selected lines",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='3' y='3' width='18' height='18' rx='2'/><path d='M9 12l2 2 4-4'/></svg>",
+          "tags": "todo,check,checkbox,toggle,done,task,list"
+        },
+        {
+          "name": "Convert Todo",
+          "description": "Convert lines to a todo list, or revert a todo list back to bullets",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/><path d='M14 2v6h6'/><path d='M9 15l2 2 4-4'/></svg>",
+          "tags": "todo,convert,list,checkbox,bullet"
+        },
+        {
+          "name": "Timestamp",
+          "description": "Insert current date and time",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='3' y='4' width='18' height='18' rx='2' ry='2'/><line x1='16' y1='2' x2='16' y2='6'/><line x1='8' y1='2' x2='8' y2='6'/><line x1='3' y1='10' x2='21' y2='10'/></svg>",
+          "tags": "timestamp,date,time,now,insert,today"
+        },
+        {
+          "name": "Clean Quotes",
+          "description": "Convert curly/typographic quotes to straight standard quotes",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M10 8c-2 0-3 1-3 3v1h2v-1c0-1 0-1 1-1'/><path d='M18 8c-2 0-3 1-3 3v1h2v-1c0-1 0-1 1-1'/></svg>",
+          "tags": "clean,quotes,straight,curly,typographic,fix,normalize"
+        },
+        {
+          "name": "Align Comments",
+          "description": "Pad inline comments so they line up across consecutive lines. Auto-detects Python (#) and JS (//) syntax.",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><line x1='3' y1='6' x2='21' y2='6'/><line x1='3' y1='12' x2='15' y2='12'/><line x1='3' y1='18' x2='18' y2='18'/></svg>",
+          "tags": "align,comments,padding,format,python,javascript"
+        },
+        {
+          "name": "Round To",
+          "description": "Round all decimal numbers to a specified number of decimal places",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='12' r='10'/><line x1='12' y1='8' x2='12' y2='12'/><line x1='12' y1='16' x2='12.01' y2='16'/></svg>",
+          "tags": "round,decimal,places,precision,number,format"
+        },
+        {
+          "name": "Copy Block",
+          "description": "Copy the current contiguous block (to next blank line or end of doc) to clipboard",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='9' y='9' width='13' height='13' rx='2' ry='2'/><path d='M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1'/></svg>",
+          "tags": "copy,clipboard,block,paragraph"
+        },
+        {
+          "name": "Convert",
+          "description": "Unit conversions: °F↔°C, in↔cm, ft↔m, mi↔km, lb↔kg, oz↔g, KB↔MB↔GB, and more",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M8 3L4 7l4 4'/><path d='M4 7h16'/><path d='M16 21l4-4-4-4'/><path d='M20 17H4'/></svg>",
+          "tags": "convert,unit,temperature,length,weight,data,fahrenheit,celsius,inches,centimeters,feet,meters,miles,kilometers,pounds,kilograms,kilobyte,megabyte,gigabyte"
+        },
+        {
+          "name": "Clean Diary",
+          "description": "Remove empty date entries from a @type: diary document",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='3 6 5 6 21 6'/><path d='M19 6l-1 14H6L5 6'/><path d='M10 11v6M14 11v6'/><path d='M9 6V4h6v2'/></svg>",
+          "tags": "diary,clean,empty,date"
+        }
+      ]
     }
   ]
 }
