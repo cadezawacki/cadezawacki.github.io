@@ -1724,6 +1724,54 @@ a{color:var(--primary);}
 @media (min-width:1400px){
   body.desktop-layout{grid-template-columns:auto 1fr var(--cp-w,400px);}
 }
+
+
+/* ---------- 2026 usability pass: responsive panels, wrapping grids, touch menus ---------- */
+.h-scroll.adjust-row,.h-scroll.filter-row{flex-wrap:wrap;overflow-x:hidden;overflow-y:visible;align-content:flex-start;}
+.h-scroll.adjust-row>*{flex:0 0 66px;}
+.h-scroll.filter-row>*{flex:0 0 66px;}
+.zoom-select{pointer-events:auto;background:color-mix(in srgb,var(--surface) 94%,transparent);border:1px solid var(--border-strong);border-radius:18px;padding:6px 28px 6px 10px;font-size:12px;font-weight:700;color:var(--text);box-shadow:0 2px 8px rgba(0,0,0,.08);}
+.scope-toggle{display:flex;gap:3px;background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:3px;}
+.scope-toggle button{padding:6px 10px;border-radius:7px;font-size:11px;font-weight:700;color:var(--text-2);}
+.scope-toggle button.active{background:var(--primary);color:#fff;}
+.layer-options-menu{position:fixed;max-width:calc(100vw - 16px);max-height:calc(100dvh - 24px);overflow:auto;}
+.layer-option{min-height:40px;}
+.draw-row,.shape-row,.tool-row{flex-wrap:wrap;}
+.color-row.eraser-hidden{display:none;}
+@media (max-width:719px){
+  :root{--topbar-h:48px;--bottombar-h:58px;}
+  .topbar{gap:0;padding-left:4px;padding-right:4px;}
+  .tb-btn{width:34px;height:34px;border-radius:9px;}
+  .tb-btn.export{padding:0 10px;font-size:0;}
+  .tb-btn.export svg{width:18px;height:18px;}
+  .tb-title{font-size:12px;justify-content:flex-start;padding-left:4px;}
+  .control-panel{--cp-h:34dvh;min-height:24dvh;max-height:72dvh;}
+  .control-body{padding:6px 10px 12px;}
+  .control-panel-header{padding:4px 10px;}
+  .slider-row{display:grid;grid-template-columns:72px 1fr 44px;gap:8px;}
+  .effect-grid,.tool-extra-grid,.frame-grid,.shape-grid{grid-template-columns:repeat(2,minmax(0,1fr));}
+  .layers-actions{grid-template-columns:1fr;}
+  .layer-row{padding:10px 8px;gap:6px;}
+  .layer-thumb{width:32px;height:32px;}
+  .layer-actions,.layer-eye{width:34px;height:34px;}
+  .layer-grip{display:none;}
+  .tp-row{flex-wrap:wrap;}
+  .tp-label{min-width:64px;}
+  .tp-color-swatches{flex-wrap:wrap;overflow:visible;}
+  .text-input-wrap{align-items:stretch;padding:calc(var(--safe-t) + 8px) 8px calc(var(--safe-b) + 8px);}
+  .text-input-card{max-height:calc(100dvh - var(--safe-t) - var(--safe-b) - 16px);overflow:auto;border-radius:16px;}
+  .modal{padding:10px;align-items:flex-end;}
+  .modal-card{max-height:calc(100dvh - 20px);overflow:auto;border-radius:18px;}
+  .modal-actions,.modal-actions.three{grid-template-columns:1fr;}
+  .sheet-card{max-height:calc(100dvh - var(--safe-t) - 12px);overflow:auto;}
+  .toast-wrap{left:8px;right:8px;transform:none;}
+  .toast{max-width:none;}
+}
+@media (min-width:900px){
+  body.desktop-layout.layers-pinned{grid-template-columns:auto 1fr var(--cp-w,360px) 320px;grid-template-areas:"topbar topbar topbar topbar" "rail canvas panel pinned";}
+  body.desktop-layout.layers-pinned::after{content:"";grid-area:pinned;border-left:1px solid var(--border);background:color-mix(in srgb,var(--bg-2) 92%,transparent);}
+}
+
 </style>
 </head>
 <body>
@@ -1801,7 +1849,7 @@ a{color:var(--primary);}
 <!-- ========== CANVAS AREA ========== -->
 <main class="canvas-wrap" id="canvasWrap">
   <div class="canvas-hud">
-    <div class="zoom-indicator" id="zoomIndicator">100%</div>
+    <select class="zoom-select" id="zoomSelect" aria-label="Zoom"><option value="fit">Fit</option><option value="0.5">50%</option><option value="1">100%</option><option value="1.5">150%</option><option value="2">200%</option><option value="3">300%</option><option value="4">400%</option></select><div class="zoom-indicator" id="zoomIndicator">100%</div>
     <button class="fit-btn" id="fitBtn" aria-label="Fit to view" title="Fit to view">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 14 4 20 10 20"/><polyline points="20 10 20 4 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
     </button>
@@ -1975,6 +2023,11 @@ a{color:var(--primary);}
       Share
     </button>
     <div class="sheet-divider"></div>
+    <button class="sheet-item" data-action="clearPhotoCache">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg>
+      Clear Photo Editor Cache
+    </button>
+    <div class="sheet-divider"></div>
     <button class="sheet-item danger" data-action="discard">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/></svg>
       Discard Photo
@@ -2146,7 +2199,7 @@ a{color:var(--primary);}
       </div>
       <div class="text-opt-group">
         <span class="text-opt-label">Size</span>
-        <input type="number" class="size-input" id="textSize" value="96" min="8" max="600" style="width:72px;">
+        <input type="number" class="size-input" id="textSize" value="48" min="8" max="600" style="width:72px;">
       </div>
     </div>
     <div class="text-actions">
@@ -2257,6 +2310,7 @@ const App = {
   brushColor: '#0f766e',
   brushOpacity: 1,         // 0..1, applies during stroke
   brushHardness: 1,        // 0..1; 1=hard edge, <1 = soft stamp
+  brushPreset: 'round',     // round | soft | square | calligraphy
   paintMaskMode: false,    // true => paint on layer.mask instead of canvas
   eraserInvertMask: false, // future: invert mask interpretation
   fillTolerance: 32,       // 0..255; flood-fill match threshold
@@ -2337,6 +2391,7 @@ const App = {
   activeTool: 'adjust',
   activeAdjust: 'exposure',
   activeEffect: 'blur',
+  effectScope: 'layer', // layer | global
   comparing: false,
 
   // ----- Sliders -----
@@ -2359,7 +2414,7 @@ function createDefaultAdjustments() {
   };
 }
 function createDefaultEffects() {
-  return { blur: 0, pixelate: 0, vignette: 0, posterize: 0, edge: 0, emboss: 0, glitch: 0, duotone: 0 };
+  return { blur: 0, pixelate: 0, vignette: 0, posterize: 0, edge: 0, emboss: 0, glitch: 0, duotone: 0, sepia: 0, invert: 0, mirror: 0 };
 }
 
 /* ================================================================
@@ -2491,6 +2546,23 @@ function duplicateLayer(id) {
   setActiveLayer(copy.id);
   return copy;
 }
+function mergeLayerDown(id) {
+  const idx = indexOfLayer(id);
+  if (idx <= 0) return false;
+  const top = App.layers[idx];
+  const below = App.layers[idx - 1];
+  if (!top || !below || below.locked) return false;
+  const c = below.canvas.getContext('2d');
+  c.save();
+  c.globalAlpha = top.opacity;
+  c.globalCompositeOperation = top.blendMode || 'source-over';
+  c.drawImage(top.canvas, 0, 0, App.workW, App.workH);
+  c.restore();
+  below.name = below.name + ' + ' + top.name;
+  removeLayer(top.id);
+  setActiveLayer(below.id);
+  return true;
+}
 function reorderLayer(id, newIndex) {
   const idx = indexOfLayer(id);
   if (idx < 0) return;
@@ -2543,6 +2615,7 @@ const els = {
   cropOverlay:       $('cropOverlay'),
   cropFrame:         $('cropFrame'),
   zoomIndicator:     $('zoomIndicator'),
+  zoomSelect:        $('zoomSelect'),
   fitBtn:            $('fitBtn'),
   controlPanel:      $('controlPanel'),
   cpHeader:          $('cpHeader'),
@@ -2732,6 +2805,16 @@ function initFromImage(img) {
   renderFull();
   pushHistory();
   updateToolPanel();
+
+if (els.zoomSelect && !els.zoomSelect.dataset.bound) {
+  els.zoomSelect.dataset.bound = '1';
+  els.zoomSelect.addEventListener('change', () => {
+    if (els.zoomSelect.value === 'fit') { fitCanvasToView(); return; }
+    App.zoom = clamp(parseFloat(els.zoomSelect.value) || 1, 0.4, 8);
+    applyCanvasTransform();
+    if (els.zoomIndicator) els.zoomIndicator.textContent = Math.round(App.zoom * 100) + '%';
+  });
+}
   toast('Image loaded', 'success');
 }
 
@@ -2929,6 +3012,9 @@ const EFFECT_META = [
   { id:'emboss',    name:'Emboss',     icon:'emboss',  max:100 },
   { id:'glitch',    name:'Glitch',     icon:'glitch',  max:100 },
   { id:'duotone',   name:'Duotone',    icon:'duo',     max:100 },
+  { id:'sepia',     name:'Sepia',      icon:'duo',     max:100 },
+  { id:'invert',    name:'Invert',     icon:'contrast', max:100 },
+  { id:'mirror',    name:'Mirror',     icon:'glitch',  max:100 },
 ];
 
 const EFFECT_ICONS = {
@@ -3097,6 +3183,32 @@ function applyEffectsToImageData(imgData, effects, adjustments, opts={}) {
   const d = imgData.data;
   const e = effects;
   const a = adjustments;
+
+  if (e.sepia > 0 || e.invert > 0) {
+    const sk=(e.sepia||0)/100, ik=(e.invert||0)/100;
+    for (let i=0;i<d.length;i+=4){
+      let r=d[i],g=d[i+1],b=d[i+2];
+      if(sk){ const sr=r*.393+g*.769+b*.189, sg=r*.349+g*.686+b*.168, sb=r*.272+g*.534+b*.131; r=r+(sr-r)*sk; g=g+(sg-g)*sk; b=b+(sb-b)*sk; }
+      if(ik){ r=r+(255-r-r)*ik; g=g+(255-g-g)*ik; b=b+(255-b-b)*ik; }
+      d[i]=clamp(r,0,255); d[i+1]=clamp(g,0,255); d[i+2]=clamp(b,0,255);
+    }
+  }
+
+  if (e.mirror > 0) {
+    const k = (e.mirror || 0) / 100;
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < Math.floor(W / 2); x++) {
+        const a0 = (y * W + x) * 4;
+        const b0 = (y * W + (W - 1 - x)) * 4;
+        for (let c = 0; c < 4; c++) {
+          const av = d[a0 + c], bv = d[b0 + c];
+          d[a0 + c] = av + (bv - av) * k;
+          d[b0 + c] = bv + (av - bv) * k;
+        }
+      }
+    }
+  }
+
 
   // Vignette (combined: adjustment + effect)
   const vig = clamp((a.vignette + (e.vignette || 0)) / 100, -2, 2);
@@ -3500,7 +3612,7 @@ function drawBaseLayer(target, tctx, layer, W, H, scale) {
   if (filt.tone && App.filterStrength > 0) {
     applyToneShiftToImageData(imgData, filt.tone, App.filterStrength);
   }
-  applyEffectsToImageData(imgData, App.effects, App.adjustments, { skipExpensive: previewMode });
+  if (App.effectScope === 'global' || layer.id === App.activeLayerId) applyEffectsToImageData(imgData, App.effects, App.adjustments, { skipExpensive: previewMode });
   tx.putImageData(imgData, 0, 0);
 
   // 3b) Color overlay (tint) — applied via blend mode on top of the base pixels.
@@ -3583,6 +3695,13 @@ function drawLayer(target, tctx, layer, W, H, scale) {
   }
   tx.restore();
 
+  // Optional layer-scoped effects. The base/background path handles its own pass.
+  if (((App.effectScope === 'layer' && layer.id === App.activeLayerId) || App.effectScope === 'global') && !layer.locked && hasActiveEffects()) {
+    const imgData = tx.getImageData(0, 0, W, H);
+    applyEffectsToImageData(imgData, App.effects, createDefaultAdjustments(), { skipExpensive: App.isPreviewActive || scale < 1 });
+    tx.putImageData(imgData, 0, 0);
+  }
+
   // mask
   applyMaskTo(tmp, layer);
 
@@ -3615,6 +3734,8 @@ function applyMaskTo(canvas, layer) {
   }
   ctx.restore();
 }
+
+function hasActiveEffects() { return Object.values(App.effects || {}).some(v => Number(v) !== 0); }
 
 /* ================================================================
    FIT / PAN / ZOOM
@@ -4769,6 +4890,11 @@ function drawFilterThumb(canvas, filter) {
    ================================================================ */
 function buildEffectPanel(body, actions) {
   els.cpTitle.innerHTML = 'Effects';
+  const scope = document.createElement('div');
+  scope.className = 'scope-toggle';
+  scope.innerHTML = `<button data-scope="layer" class="${App.effectScope==='layer'?'active':''}">Layer</button><button data-scope="global" class="${App.effectScope==='global'?'active':''}">Global</button>`;
+  actions.appendChild(scope);
+  scope.querySelectorAll('button').forEach(btn => btn.addEventListener('click', () => { App.effectScope = btn.dataset.scope; updateToolPanel(); requestRender(); }));
 
   let activeId = App.activeEffect;
   if (!EFFECT_META.find(e => e.id === activeId)) activeId = EFFECT_META[0].id;
@@ -4814,7 +4940,7 @@ function buildEffectPanel(body, actions) {
   // Extra tools (Tint, Color Replace, Background Removal)
   buildEffectExtras(body);
 
-  actions.innerHTML = '<button class="cp-action" id="effClear">Clear</button>';
+  const clearBtn = document.createElement('button'); clearBtn.className='cp-action'; clearBtn.id='effClear'; clearBtn.textContent='Clear'; actions.appendChild(clearBtn);
   $('effClear').addEventListener('click', () => {
     App.effects = createDefaultEffects();
     App.colorOverlay = { color: '#14b8a6', strength: 0, blendMode: 'overlay' };
@@ -5486,6 +5612,18 @@ function buildDrawPanel(body, actions) {
     },
   });
 
+  if (!isFill) {
+    const presetRow = document.createElement('div');
+    presetRow.className = 'shape-row';
+    presetRow.innerHTML = '<label>Preset</label>' + ['round','soft','square','calligraphy'].map(p => `<button class="shape-toggle ${App.brushPreset===p?'on':''}" data-preset="${p}">${p}</button>`).join('');
+    body.appendChild(presetRow);
+    presetRow.querySelectorAll('[data-preset]').forEach(b => b.addEventListener('click', () => {
+      App.brushPreset = b.dataset.preset;
+      if (App.brushPreset === 'soft') App.brushHardness = Math.min(App.brushHardness, .35);
+      invalidateBrushStamp(); updateToolPanel();
+    }));
+  }
+
   // Opacity slider (always visible — Fill respects it too).
   const opacityRow = document.createElement('div');
   opacityRow.className = 'slider-row';
@@ -5573,7 +5711,7 @@ function buildDrawPanel(body, actions) {
 
   // Color row
   const colorRow = document.createElement('div');
-  colorRow.className = 'color-row';
+  colorRow.className = 'color-row' + (App.drawTool === 'eraser' ? ' eraser-hidden' : '');
   BRUSH_COLORS.forEach(c => {
     const sw = document.createElement('button');
     sw.className = 'color-swatch' + (c === App.brushColor ? ' active' : '');
@@ -5622,9 +5760,9 @@ function getBrushStamp() {
   const ctx = c.getContext('2d');
   if (hardness >= 1) {
     ctx.fillStyle = color;
-    ctx.beginPath();
-    ctx.arc(cx, cy, r, 0, Math.PI*2);
-    ctx.fill();
+    if (App.brushPreset === 'square') { ctx.fillRect(cx-r, cy-r, r*2, r*2); }
+    else if (App.brushPreset === 'calligraphy') { ctx.save(); ctx.translate(cx,cy); ctx.rotate(-Math.PI/5); ctx.scale(1.9,.55); ctx.beginPath(); ctx.arc(0,0,r,0,Math.PI*2); ctx.fill(); ctx.restore(); }
+    else { ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI*2); ctx.fill(); }
   } else {
     const grad = ctx.createRadialGradient(cx, cy, r * hardness * 0.95, cx, cy, r);
     grad.addColorStop(0, color);
@@ -5632,9 +5770,9 @@ function getBrushStamp() {
     const rgba = hexToRgba(color, 0);
     grad.addColorStop(1, rgba);
     ctx.fillStyle = grad;
-    ctx.beginPath();
-    ctx.arc(cx, cy, r, 0, Math.PI*2);
-    ctx.fill();
+    if (App.brushPreset === 'square') { ctx.fillRect(cx-r, cy-r, r*2, r*2); }
+    else if (App.brushPreset === 'calligraphy') { ctx.save(); ctx.translate(cx,cy); ctx.rotate(-Math.PI/5); ctx.scale(1.9,.55); ctx.beginPath(); ctx.arc(0,0,r,0,Math.PI*2); ctx.fill(); ctx.restore(); }
+    else { ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI*2); ctx.fill(); }
   }
   _brushStamp = c;
   _brushStampKey = key;
@@ -7561,6 +7699,7 @@ function showLayerOptionsMenu(anchor, layer) {
   const menu = document.createElement('div');
   menu.className = 'layer-options-menu';
   menu.innerHTML = `
+    <button class="layer-option" data-act="mergeDown"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Merge Down</button>
     <button class="layer-option" data-act="duplicate">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
       Duplicate
@@ -7603,7 +7742,10 @@ function showLayerOptionsMenu(anchor, layer) {
     b.addEventListener('click', () => {
       const act = b.dataset.act;
       close();
-      if (act === 'duplicate') {
+      if (act === 'mergeDown') {
+        mergeLayerDown(layer.id);
+        renderFull(); pushHistory(); updateToolPanel(); toast('Layer merged');
+      } else if (act === 'duplicate') {
         duplicateLayer(layer.id);
         renderFull();
         pushHistory();
@@ -8020,6 +8162,7 @@ document.querySelectorAll('.sheet [data-action]').forEach(b => {
     else if (a === 'canvasSize') openCanvasSizeModal();
     else if (a === 'copyToClipboard') doCopyClipboard();
     else if (a === 'share') doShare();
+    else if (a === 'clearPhotoCache') clearPhotoEditorCache();
     else if (a === 'discard') {
       App.layers = [];
       App.activeLayerId = null;
@@ -10958,6 +11101,22 @@ function applyCanvasResize(newW, newH, resample) {
     toast('Image resized', 'success');
   }, 30);
 }
+
+function clearPhotoEditorCache() {
+  const done = () => toast('Photo editor cache cleared', 'success');
+  if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+    navigator.serviceWorker.controller.postMessage({ type: 'CLEAR_PHOTO_CACHE' });
+    setTimeout(done, 250);
+  } else if ('caches' in window) {
+    caches.keys().then(keys => Promise.all(keys.filter(k => k.includes('photo')).map(k => caches.delete(k)))).then(done).catch(() => toast('Could not clear cache', 'error'));
+  } else { toast('Cache API unavailable', 'error'); }
+}
+
+(function registerPhotoServiceWorker(){
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(()=>{}));
+  }
+})();
 
 /* ================================================================
    INIT

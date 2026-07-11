@@ -9,7 +9,7 @@
 //   - Firebase realtime DB: bypass (live data, needs network)
 // ============================================
 
-const CACHE_VERSION = 84;
+const CACHE_VERSION = 85;
 const CACHE_NAME = `cade-v${CACHE_VERSION}`;
 
 // Same-origin pages to precache on install.
@@ -17,6 +17,7 @@ const CACHE_NAME = `cade-v${CACHE_VERSION}`;
 const PRECACHE = [
   './txt.html',
   './gif.html',
+  './photo.html',
   './manifest.webmanifest',
 ];
 
@@ -29,6 +30,8 @@ const PRECACHE_CROSS_ORIGIN = [
   // lets the font load offline; the referenced gstatic font files get cached
   // on first use via the stale-while-revalidate fetch handler below.
   'https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,100..700;1,100..700&family=IBM+Plex+Mono:wght@400;500&display=swap',
+  'https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,100..700;1,100..700&display=swap',
+  'https://fonts.googleapis.com/css2?family=Anton&family=Archivo+Black&family=Bebas+Neue&family=Caveat:wght@400;700&family=Cormorant+Garamond:ital,wght@0,400;0,700;1,400&family=Dancing+Script:wght@400;700&family=DM+Sans:ital,wght@0,400;0,700;1,400&family=DM+Serif+Display:ital@0;1&family=Fira+Code:wght@400;700&family=Great+Vibes&family=Inter:wght@100;300;400;500;700;900&family=JetBrains+Mono:ital,wght@0,400;0,700;1,400&family=Lato:ital,wght@0,400;0,700;0,900;1,400&family=Lobster&family=Lora:ital,wght@0,400;0,700;1,400&family=Merriweather:ital,wght@0,400;0,700;1,400&family=Montserrat:ital,wght@0,400;0,700;0,900;1,400&family=Nunito:ital,wght@0,400;0,700;0,900;1,400&family=Open+Sans:ital,wght@0,400;0,700;1,400&family=Oswald:wght@400;700&family=Pacifico&family=Permanent+Marker&family=Playfair+Display:ital,wght@0,400;0,700;0,900;1,400&family=Poppins:ital,wght@0,400;0,700;0,900;1,400&family=Roboto:ital,wght@0,400;0,700;0,900;1,400&family=Shadows+Into+Light&family=Work+Sans:ital,wght@0,400;0,700;1,400&display=swap',
   'https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js',
   'https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js',
   'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js',
@@ -148,6 +151,16 @@ self.addEventListener('fetch', (e) => {
 // ---- Message channel ----
 self.addEventListener('message', (e) => {
   if (e.data === 'SKIP_WAITING') self.skipWaiting();
+  if (e.data && e.data.type === 'CLEAR_PHOTO_CACHE') {
+    caches.open(CACHE_NAME).then(async (cache) => {
+      const keys = await cache.keys();
+      await Promise.all(keys.map((req) => {
+        const u = new URL(req.url);
+        const isPhoto = /(^|\/)photo\.html$/.test(u.pathname) || u.hostname.includes('fonts.googleapis.com') || u.hostname.includes('fonts.gstatic.com') || u.hostname.includes('huggingface.co') || u.hostname.includes('cdn.jsdelivr.net') || u.hostname.includes('unpkg.com');
+        return isPhoto ? cache.delete(req) : Promise.resolve(false);
+      }));
+    });
+  }
   if (e.data === 'REFRESH_CACHE') {
     caches.open(CACHE_NAME).then(async (cache) => {
       await Promise.allSettled(
