@@ -939,7 +939,7 @@ body.sel-mode .editor-wrap .cm-content { -webkit-touch-callout: none; }
     width: var(--sidebar-w, 216px); overflow-y: auto; z-index: 90;
     background: var(--bg); border-right: 1px solid var(--border);
     padding: 8px 8px 12px; font-size: var(--text-sm);
-    user-select: none; -webkit-user-select: none;
+    user-select: none; -webkit-user-select: none; overflow-x:clip;
   }
   /* Drag the divider to resize (item 10) — the handle is a slim grab strip. */
   #side-nav .sn-resize {
