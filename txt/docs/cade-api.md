@@ -115,6 +115,28 @@ Common usage:
 | `Cade.baseURL()` | the current module's folder URL, e.g. `./txt/widgets/snake/` |
 | `Cade.asset(rel)` | `baseURL() + rel` — URL for an image/font/etc. in your folder |
 
+## Per-account synced JSON — `Cade.syncedBlob(id, {onChange})`
+
+A small offline-first store that syncs across the account's devices when sync
+is configured — the engine behind managed reminders, Calendar Events and RSS
+subscriptions. Each blob is encrypted with the sync key and stored at
+`rooms/__cade_blob_<id>_<keyFp>/blob` (under `rooms/*`, so **no Firebase
+rules change is ever needed**). Whole-blob last-write-wins by timestamp,
+echo-suppressed, 256 KB cap, fresh clients pull-before-push.
+
+```js
+var blobStore = Cade.syncedBlob('myfeature', {
+  onChange(data, source) { /* a newer copy arrived from another device */ },
+});
+var data = blobStore.get();     // last known data (null if none yet)
+blobStore.set({ ... });          // persists locally now, syncs debounced
+```
+
+Rules: `id` is a short `[a-z0-9-]` slug (unique per feature); keep the data
+SMALL (encrypt+push runs on every set, debounced 800ms) and normalize
+defensively in `onChange` — another device may run older code. Works fully
+offline; catches up when creds + network appear.
+
 ## Room system — `Cade.roomsApi`
 
 Read-mostly, late-bound surface over the live room/workspace state (never hold

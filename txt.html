@@ -2093,6 +2093,7 @@ body.sel-mode .editor-wrap .cm-content { -webkit-touch-callout: none; }
   font-size: var(--text-xs); cursor: pointer; user-select: none; -webkit-user-select: none;
   border: 1px dashed var(--accent);
 }
+.cm-line.cm-collapsed-hidden { display: none; }
 /* Picker rows: section label + text-colour swatch letters. */
 .hl-picker.hl-picker-2ch { grid-template-columns: repeat(9, 1fr); }
 .hl-picker-label { grid-column: 1 / -1; width: 100%; font-size: var(--text-xs); color: var(--text-muted); padding: 2px 2px 0; }
@@ -2519,6 +2520,10 @@ body.readonly .editor-wrap .cm-content { caret-color: transparent; }
         <span>Share Link</span>
         <span></span>
       </button>
+      <button class="menu-item" onclick="shareDocument()" title="Send the document text to another app">
+        <span>Share Text…</span>
+        <span></span>
+      </button>
       <div class="menu-separator"></div>
       <button class="menu-item" onclick="openSettings()">
         <span>Preferences</span>
@@ -2592,6 +2597,9 @@ body.readonly .editor-wrap .cm-content { caret-color: transparent; }
     </button>
     <button class="mob-btn" onclick="mobilePaste()" title="Paste">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>
+    </button>
+    <button class="mob-btn" onclick="shareDocument()" title="Share to another app">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
     </button>
     <button class="mob-btn" onclick="mobileDownload()" title="Download…">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
@@ -5134,24 +5142,30 @@ function buildCollapseDecorations(view) {
       closed = false;
     }
     ranges.push(Decoration.widget({ widget: new _CollapseCaretWidget(h.key, !closed), side: -1 }).range(h.lineFrom));
-    if (closed && h.to > h.from && h.hiddenLines > 0) {
-      ranges.push(Decoration.replace({ widget: new _CollapsedPillWidget(h.key, h.hiddenLines) }).range(h.from, h.to));
+    if (closed && h.hiddenLines > 0) {
+      // CM6 forbids replace decorations that swallow line breaks from any
+      // dynamic provider (plugin or facet function) — only StateFields may,
+      // and the local bundle doesn't export them. So each hidden line gets a
+      // line decoration that CSS display:none's instead, plus a "… N lines"
+      // pill after the heading. Same visual result, doc untouched.
+      ranges.push(Decoration.widget({ widget: new _CollapsedPillWidget(h.key, h.hiddenLines), side: 1 }).range(h.headEnd));
+      const lastLine = Math.min(h.lineNo + h.hiddenLines, doc.lines);
+      for (let ln = h.lineNo + 1; ln <= lastLine; ln++) {
+        ranges.push(Decoration.line({ class: 'cm-collapsed-hidden' }).range(doc.line(ln).from));
+      }
     }
   }
   ranges.sort((a, b) => a.from - b.from || a.startSide - b.startSide);
   return Decoration.set(ranges, true);
 }
 
-const collapsePlugin = ViewPlugin.fromClass(class {
-  constructor(view) { this.v = _collapseVersion; this.mv = mdVersion; this.decorations = buildCollapseDecorations(view); }
-  update(update) {
-    if (update.docChanged || update.viewportChanged || update.selectionSet || this.v !== _collapseVersion || this.mv !== mdVersion) {
-      this.v = _collapseVersion;
-      this.mv = mdVersion;
-      this.decorations = buildCollapseDecorations(update.view);
-    }
-  }
-}, { decorations: v => v.decorations });
+// NOTE: these decorations REPLACE LINE BREAKS, which CM6 forbids from view
+// plugins ("Decorations that replace line breaks may not be specified via
+// plugins"). The function-facet form is evaluated outside the plugin path
+// and is the sanctioned way to fold content without a StateField (which the
+// local bundle doesn't export). The function reads the live globals
+// (_collapsedSections / mdStyleEnabled) on every view update.
+const collapseExtension = EditorView.decorations.of(buildCollapseDecorations);
 
 // ===== Embedded images (#28) =====
 // Two on-document representations, both rendered as <img>:
@@ -5237,6 +5251,8 @@ function _imgRefCachePut(hash, rec) {
   }
   _imgRefCache.set(hash, rec);
 }
+// Exposed for the Whiteboard module (draw-over-image background layer).
+window.resolveImageRef = (code, hash) => resolveImageRef(code, hash);
 async function resolveImageRef(code, hash) {
   let hit = _imgRefCache.get(hash);
   if (hit) { _imgRefCache.delete(hash); _imgRefCache.set(hash, hit); return hit; }
@@ -5343,9 +5359,10 @@ class ImageWidget extends WidgetType {
     img.alt = 'embedded image';
     const mime = IMG_MIME[this.code] || 'image/jpeg';
     const code = this.code;
+    const menuHash = this.isRef ? this.data : null; // for "Edit drawing" (whiteboard)
     const attachMenu = (b64) => wrap.addEventListener('contextmenu', (e) => {
       e.preventDefault(); e.stopPropagation();
-      showImageMenu(e.clientX, e.clientY, mime, b64);
+      showImageMenu(e.clientX, e.clientY, mime, b64, menuHash);
     });
     img.onerror = () => { wrap.classList.add('missing'); wrap.textContent = '⚠ broken image'; };
     wrap.appendChild(img);
@@ -5384,12 +5401,25 @@ class ImageWidget extends WidgetType {
   }
   ignoreEvent() { return true; }
 }
-// Right-click an embedded image → copy (as PNG, universally clipboard-safe) or
-// download.
-function showImageMenu(x, y, mime, b64) {
+// Right-click an embedded image → copy (as PNG, universally clipboard-safe),
+// download, or — when the Whiteboard widget saved stroke data for this hash —
+// edit the drawing (loads the draw module on demand).
+function showImageMenu(x, y, mime, b64, hash) {
   const dataUrl = 'data:' + mime + ';base64,' + b64;
   const ext = (mime.split('/')[1] || 'jpg').replace('jpeg', 'jpg');
+  const editItem = hash ? [{ label: '✏️ Open in Whiteboard…', run: () => {
+    // Editable strokes when the drawing was made here; otherwise the widget
+    // loads the image as a locked background layer to draw over.
+    const go = () => { if (window.__drawEditByHash) window.__drawEditByHash(hash); };
+    if (window.__drawEditByHash) go();
+    else {
+      const stub = (typeof WIDGETS !== 'undefined') ? WIDGETS.find(x => x.name === 'Whiteboard') : null;
+      if (stub) { try { stub.open(); } catch {} setTimeout(go, 900); }
+      else showToast('Whiteboard module not available', 'error', 2500);
+    }
+  } }] : [];
   openMenu([
+    ...editItem,
     { label: 'Copy image', run: () => {
         try {
           const im = new Image();
@@ -5561,7 +5591,7 @@ function buildEditorExtensions() {
     spellPlugin,
     searchPlugin,
     mdStylePlugin,
-    collapsePlugin,
+    collapseExtension,
     imagePlugin,
     // Treat embedded-image tokens as atomic units for the caret/selection so a
     // partial delete can't shred one into raw base64 (where available).
@@ -15013,6 +15043,24 @@ window.mobilePaste = function() {
     editor.dispatch({ changes: { from: sel.from, to: sel.to, insert: text }, userEvent: 'input.paste' });
     editor.focus();
   }).catch(() => showToast('Clipboard read denied', 'error'));
+};
+
+// Item 37: hand the doc (or selection) to the OS share sheet; clipboard
+// fallback where the Web Share API is unavailable (mostly desktop).
+window.shareDocument = function() {
+  closeAllMenus();
+  const sel = editor.state.selection.main;
+  const text = sel.empty ? editor.state.doc.toString() : editor.state.sliceDoc(sel.from, sel.to);
+  if (!text.trim()) { showToast('Nothing to share', 'error', 2000); return; }
+  const title = activeRoom || 'cade.txt document';
+  if (navigator.share) {
+    navigator.share({ title, text }).catch((e) => {
+      if (e && e.name === 'AbortError') return; // user closed the sheet
+      try { navigator.clipboard.writeText(text).then(() => showToast('Share failed — copied instead', 'success', 2500)); } catch {}
+    });
+  } else {
+    try { navigator.clipboard.writeText(text).then(() => showToast('No share sheet here — copied to clipboard', 'success', 2500)); } catch {}
+  }
 };
 
 // ============================================
