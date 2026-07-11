@@ -5485,17 +5485,22 @@ class ImageWidget extends WidgetType {
 function showImageMenu(x, y, mime, b64, hash) {
   const dataUrl = 'data:' + mime + ';base64,' + b64;
   const ext = (mime.split('/')[1] || 'jpg').replace('jpeg', 'jpg');
-  const editItem = hash ? [{ label: '✏️ Open in Whiteboard…', run: () => {
-    // Editable strokes when the drawing was made here; otherwise the widget
-    // loads the image as a locked background layer to draw over.
-    const go = () => { if (window.__drawEditByHash) window.__drawEditByHash(hash); };
-    if (window.__drawEditByHash) go();
+  // Whiteboard entries lazy-load the draw module on first use.
+  const withDraw = (fnName, run) => {
+    const go = () => { if (window[fnName]) run(); };
+    if (window[fnName]) go();
     else {
       const stub = (typeof WIDGETS !== 'undefined') ? WIDGETS.find(x => x.name === 'Whiteboard') : null;
       if (stub) { try { stub.open(); } catch {} setTimeout(go, 900); }
       else showToast('Whiteboard module not available', 'error', 2500);
     }
-  } }] : [];
+  };
+  // Ref images: editable strokes when the drawing was made here; otherwise the
+  // widget loads the image as a locked background layer to draw over. Inline
+  // (legacy) images import as a background layer via __drawImportImage.
+  const editItem = hash
+    ? [{ label: '✏️ Open in Whiteboard…', run: () => withDraw('__drawEditByHash', () => window.__drawEditByHash(hash)) }]
+    : [{ label: '✏️ Draw on this image…', run: () => withDraw('__drawImportImage', () => window.__drawImportImage(mime, b64)) }];
   openMenu([
     ...editItem,
     { label: 'Copy image', run: () => {
@@ -8890,12 +8895,24 @@ window.toggleSidebar = function() {
   try { editor.requestMeasure(); } catch {}
 };
 setTimeout(() => { const l = document.getElementById('sidebar-label'); if (l && _sidebarOn) l.textContent = 'Sidebar: On'; }, 100);
-function _sidebarRoomRow(name) {
+function _sidebarRoomRow(name, wsId) {
   const escAttr = escapeHtml(name.replace(/\\/g, '\\\\').replace(/'/g, "\\'"));
+  const escWs = escapeHtml(String(wsId ?? '').replace(/'/g, "\\'"));
   const active = name === activeRoom;
   const pin = roomPinnedHere(name) ? '📌 ' : '';
-  return `<div class="sn-room${active ? ' active' : ''}" onclick="quickSwitchPick('${escAttr}')" oncontextmenu="sidebarRoomMenu(event, '${escAttr}')">${pin}${escapeHtml(name)}</div>`;
+  return `<div class="sn-room${active ? ' active' : ''}" onclick="sidebarPickRoom('${escWs}', '${escAttr}')" oncontextmenu="sidebarRoomMenu(event, '${escAttr}')">${pin}${escapeHtml(name)}</div>`;
 }
+// Clicking a room under a workspace section adopts THAT section as the active
+// workspace (the navbar pill follows) — even for pinned rooms, which appear in
+// several sections; the section you clicked is the context you meant.
+window.sidebarPickRoom = function(wsId, name) {
+  if (wsId && wsId !== activeWorkspace && (wsId === WS_UNLABELED || getWorkspace(wsId))) {
+    activeWorkspace = wsId;
+    store.set('cade-active-workspace', wsId);
+    try { renderWorkspacePill(); } catch {}
+  }
+  quickSwitchPick(name);
+};
 window.sidebarToggleWs = function(evt, wsId) {
   if (evt) { evt.preventDefault(); evt.stopPropagation(); }
   if (_snCollapsed.has(wsId)) _snCollapsed.delete(wsId);
@@ -8923,7 +8940,7 @@ function renderSidebar() {
       `<span class="sn-fold" onclick="sidebarToggleWs(event, '${escId}')" title="${folded ? 'Expand' : 'Collapse'}">${folded ? '▸' : '▾'}</span>` +
       `<span class="ws-badge-dot"></span>${escapeHtml(label)}<span class="sn-count">${roomList.length}</span></div>`
     );
-    if (!folded) wsRows.push(...roomList.map(_sidebarRoomRow));
+    if (!folded) wsRows.push(...roomList.map(n => _sidebarRoomRow(n, wsId)));
   };
   const live = rooms.filter(r => !roomIsArchived(r));
   workspaces.slice().sort((a, b) => (a.order ?? 0) - (b.order ?? 0)).forEach(w => {
@@ -9236,6 +9253,13 @@ function recordRoomVisit(name) {
 }
 // Rooms ordered by recency, then pinned-first, then list order, for the empty
 // (no-query) quick-switcher view. Excludes archived rooms.
+// Ctrl+P spans EVERY workspace (round-5) — the active workspace only breaks
+// ties, it never limits what can be found.
+function _qsInActiveWs(name) {
+  if (activeWorkspace === WS_ALL) return false;
+  if (activeWorkspace === WS_UNLABELED) return roomIsUnlabeled(name);
+  return roomInWorkspace(name, activeWorkspace);
+}
 function quickSwitchBaseOrder() {
   const live = rooms.filter(r => !roomIsArchived(r));
   const recencyRank = new Map();
@@ -9243,6 +9267,8 @@ function quickSwitchBaseOrder() {
   return live.slice().sort((a, b) => {
     const pa = roomIsPinned(a) ? 0 : 1, pb = roomIsPinned(b) ? 0 : 1;
     if (pa !== pb) return pa - pb;
+    const wa = _qsInActiveWs(a) ? 0 : 1, wb = _qsInActiveWs(b) ? 0 : 1;
+    if (wa !== wb) return wa - wb;
     const ra = recencyRank.has(a) ? recencyRank.get(a) : Infinity;
     const rb = recencyRank.has(b) ? recencyRank.get(b) : Infinity;
     if (ra !== rb) return ra - rb;
@@ -9274,6 +9300,9 @@ function quickSwitchResults(query) {
     .filter(x => x.score > 0)
     .sort((a, b) => {
       if (b.score !== a.score) return b.score - a.score;
+      // Equal match quality → the active workspace's room outranks (round-5).
+      const wa = _qsInActiveWs(a.name) ? 0 : 1, wb = _qsInActiveWs(b.name) ? 0 : 1;
+      if (wa !== wb) return wa - wb;
       const ra = recencyRank.has(a.name) ? recencyRank.get(a.name) : Infinity;
       const rb = recencyRank.has(b.name) ? recencyRank.get(b.name) : Infinity;
       return ra - rb;
@@ -9410,9 +9439,12 @@ function quickSwitchContentSearch(query) {
   const token = ++_qsScanToken;
   const q = query.trim().toLowerCase();
   if (q.length < 2) return;
+  // Round-5: content search spans EVERY workspace; the active workspace's
+  // rooms just scan first, so with plentiful hits they surface first.
+  const live = rooms.filter(r => !roomIsArchived(r));
   const scope = (activeWorkspace === WS_ALL)
-    ? rooms.filter(r => !roomIsArchived(r))
-    : roomsInActiveWorkspace(false);
+    ? live
+    : live.slice().sort((a, b) => (_qsInActiveWs(a) ? 0 : 1) - (_qsInActiveWs(b) ? 0 : 1));
   let i = 0;
   const found = [];
   const step = () => {
@@ -11017,21 +11049,29 @@ function roomPinnedHere(name) {
   if (ws && Array.isArray(ws.pins) && ws.pins.includes(name)) return true;
   return roomIsPinned(name);
 }
-// Drop a room's meta only when it carries no flags AND no sort timestamps —
-// otherwise unpinning/unarchiving would wipe created/modified used by sorting.
+// Drop a room's meta only when it carries no flags, no sort timestamps AND no
+// flag-change stamp — an entry whose only content is flagsTs still encodes
+// "the user unpinned this at T", which must survive to win the sync merge.
 function _maybeDropRoomMeta(name) {
   const m = roomMeta[name];
-  if (m && !m.pinned && !m.archived && !m.created && !m.modified) delete roomMeta[name];
+  if (m && !m.pinned && !m.archived && !m.created && !m.modified && !m.flagsTs) delete roomMeta[name];
 }
+// Pin/archive changes carry their own timestamp (flagsTs). The blob merge
+// picks a room's meta entry by max(modified, created) — stamps that typing
+// bumps — so without a dedicated stamp, a stale pinned:true entry from a
+// device still typing in the room (or a same-stamp tie, which goes to the
+// remote side) would resurrect a pin the user just removed.
 function setRoomPinned(name, on) {
   roomMeta[name] = roomMeta[name] || {};
   roomMeta[name].pinned = !!on;
+  roomMeta[name].flagsTs = Date.now();
   _maybeDropRoomMeta(name);
   saveRoomMeta();
 }
 function setRoomArchived(name, on) {
   roomMeta[name] = roomMeta[name] || {};
   roomMeta[name].archived = !!on;
+  roomMeta[name].flagsTs = Date.now();
   _maybeDropRoomMeta(name);
   saveRoomMeta();
 }
@@ -12085,12 +12125,33 @@ async function applyRemoteWorkspaceBlob(encrypted, baseKey, source) {
       if (typeof ts === 'number' && ts > (mergedTomb[r] || 0)) mergedTomb[r] = ts;
     }
 
-    // Meta: per-room, the fresher entry (by modified/created) wins.
+    // Meta: per-room, the fresher entry (by modified/created) wins — EXCEPT
+    // the pinned/archived flags, which are resolved by their own change stamp
+    // (flagsTs). Typing bumps modified, so if flags rode along with the entry
+    // winner, a stale pinned:true from a device still typing in that room (or
+    // a same-stamp tie, which goes to remote) would resurrect a removed pin.
+    let flagsChangedBeyondRemote = false;
     const mergedMeta = {};
     const stampOf = m => m ? Math.max(m.modified || 0, m.created || 0) : 0;
+    const flagsTsOf = m => (m && m.flagsTs) || 0;
     for (const n of new Set([...Object.keys(roomMeta), ...Object.keys(remoteMeta)])) {
       const L = roomMeta[n], R = remoteMeta[n];
-      mergedMeta[n] = !L ? R : (!R ? L : (stampOf(R) >= stampOf(L) ? R : L));
+      const winner = !L ? R : (!R ? L : (stampOf(R) >= stampOf(L) ? R : L));
+      const entry = { ...winner };
+      if (L && R && flagsTsOf(L) !== flagsTsOf(R)) {
+        const flagSrc = flagsTsOf(L) > flagsTsOf(R) ? L : R;
+        if (flagSrc !== winner) {
+          if (flagSrc.pinned) entry.pinned = true; else delete entry.pinned;
+          if (flagSrc.archived) entry.archived = true; else delete entry.archived;
+          entry.flagsTs = flagSrc.flagsTs;
+        }
+      }
+      // Effective flags differ from what the remote copy says → push back so
+      // every device converges on the surviving unpin/pin.
+      if (!!entry.pinned !== !!(R && R.pinned) || !!entry.archived !== !!(R && R.archived)) {
+        flagsChangedBeyondRemote = true;
+      }
+      mergedMeta[n] = entry;
     }
 
     // A room is dead while its tombstone is >= its (re)creation stamp. Only
@@ -12170,7 +12231,7 @@ async function applyRemoteWorkspaceBlob(encrypted, baseKey, source) {
       renderRoomTabs();
     }
 
-    if (roomsChangedBeyondRemote || tombChangedBeyondRemote) schedulePushWorkspaces();
+    if (roomsChangedBeyondRemote || tombChangedBeyondRemote || flagsChangedBeyondRemote) schedulePushWorkspaces();
 
     if (remoteNewer) {
       if (source === 'initial' && !_wsLoadedFromCloud) {
@@ -13798,11 +13859,19 @@ function clockTick() {
   const mode = clockMode();
   const opt = { hour: '2-digit', minute: '2-digit', hour12: mode.startsWith('12') };
   if (mode.endsWith('s')) opt.second = '2-digit';
-  let html = now.toLocaleTimeString([], opt);
+  // AM/PM shows in EVERY mode — 24h formats drop the locale marker, so it's
+  // appended from the (zone-local) hour instead.
+  const ampm = (d, tz) => {
+    let h = d.getHours();
+    if (tz) { try { h = parseInt(new Intl.DateTimeFormat('en-US', { timeZone: tz, hour: 'numeric', hourCycle: 'h23' }).format(d), 10); } catch {} }
+    return h < 12 ? 'AM' : 'PM';
+  };
+  const h24 = !opt.hour12;
+  let html = now.toLocaleTimeString([], opt) + (h24 ? ' ' + ampm(now) : '');
   for (const tz of clockTzs()) {
     try {
       const label = TZ_ABBR[tz] || tz.split('/').pop().replace(/_/g, ' ');
-      html += '<span class="fc-tz">' + escapeHtml(label) + ' ' + now.toLocaleTimeString([], Object.assign({ timeZone: tz }, opt)) + '</span>';
+      html += '<span class="fc-tz">' + escapeHtml(label) + ' ' + now.toLocaleTimeString([], Object.assign({ timeZone: tz }, opt)) + (h24 ? ' ' + ampm(now, tz) : '') + '</span>';
     } catch {}
   }
   el.innerHTML = html;
@@ -14749,10 +14818,11 @@ document.addEventListener('keydown', (e) => {
     return;
   }
   // Find & Replace works everywhere — including from inside the find panel's
-  // own inputs (it just refocuses the query box instead of opening browser find).
+  // own inputs. Already open → Ctrl+F closes it (toggle, round-5).
   if (eventMatchesHotkey(e, hotkeys.findReplace)) {
     e.preventDefault(); e.stopPropagation();
-    window.openFindPanel();
+    if (searchState.open) window.closeFindPanel();
+    else window.openFindPanel();
     return;
   }
   if (eventMatchesHotkey(e, hotkeys.gotoLine) && !isInputField) {
