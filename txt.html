@@ -2440,6 +2440,10 @@ body.zen.zen-tw .editor-wrap .cm-content { padding-top: 38vh; padding-bottom: 38
         <span>Room Manager</span>
         <span></span>
       </button>
+      <button class="menu-item" onclick="closeAllMenus(); __promptStorageCleanup(true)">
+        <span>Manage Storage</span>
+        <span></span>
+      </button>
     </div>
   </div>
 
@@ -2782,9 +2786,13 @@ body.zen.zen-tw .editor-wrap .cm-content { padding-top: 38vh; padding-bottom: 38
 <!-- ========== STORAGE CLEANUP MODAL ========== -->
 <div class="modal-overlay" id="storage-cleanup-overlay">
   <div class="modal-dialog" style="max-width: 440px;">
-    <div class="modal-title">Storage Full</div>
-    <div class="modal-desc">Browser storage is out of space. Select rooms to clear from offline storage and free up room. Their content stays synced and reloads when you open them.</div>
+    <div class="modal-title">Manage Storage</div>
+    <div class="modal-desc">Select rooms to clear from offline storage (cache, sync base and snapshots together). Synced content reloads from the server when you next open the room.</div>
+    <div style="color:var(--text-faint);font-size:var(--text-xs);margin:-4px 0 8px;" id="storage-cleanup-usage"></div>
     <div class="room-manager-list" id="storage-cleanup-list"></div>
+    <div style="margin-top:8px;">
+      <button class="btn" style="width:100%;" onclick="storageCleanupPurgeImages()">🧹 Purge unused images (IndexedDB + server)</button>
+    </div>
     <div class="modal-actions">
       <button class="btn" onclick="closeStorageCleanup()">Cancel</button>
       <button class="btn btn-danger" onclick="confirmStorageCleanup()">Free Selected</button>
@@ -4889,6 +4897,17 @@ async function fetchImageFromServer(hash) {
     return dec;
   } catch { return null; }
 }
+// Single bounded entry point into _imgRefCache — every insertion MUST come
+// through here so the LRU cap (and blob-URL revocation) can't be bypassed.
+function _imgRefCachePut(hash, rec) {
+  while (_imgRefCache.size >= _IMG_CACHE_MAX) {
+    const k = _imgRefCache.keys().next().value;
+    const old = _imgRefCache.get(k);
+    if (old && old.url.indexOf('blob:') === 0) { try { URL.revokeObjectURL(old.url); } catch {} }
+    _imgRefCache.delete(k);
+  }
+  _imgRefCache.set(hash, rec);
+}
 async function resolveImageRef(code, hash) {
   let hit = _imgRefCache.get(hash);
   if (hit) { _imgRefCache.delete(hash); _imgRefCache.set(hash, hit); return hit; }
@@ -4899,13 +4918,7 @@ async function resolveImageRef(code, hash) {
   __mark('img:decode(' + stored.length + 'b)');
   const { code: c, b64 } = _imgStoredToParts(stored, code);
   const rec = { url: _b64ToBlobUrl(c, b64), b64 };
-  while (_imgRefCache.size >= _IMG_CACHE_MAX) {
-    const k = _imgRefCache.keys().next().value;
-    const old = _imgRefCache.get(k);
-    if (old && old.url.indexOf('blob:') === 0) { try { URL.revokeObjectURL(old.url); } catch {} }
-    _imgRefCache.delete(k);
-  }
-  _imgRefCache.set(hash, rec);
+  _imgRefCachePut(hash, rec);
   return rec;
 }
 
@@ -10253,8 +10266,24 @@ let _activeRoomReady = false;
 // rooms saves the outgoing room's state here and restores the incoming room's,
 // so every room keeps its own undo/redo stack instead of sharing one global
 // history. Cleared for a room when it is removed (see removeRoom).
+//
+// LRU-BOUNDED: each retained EditorState pins the room's full document PLUS
+// its entire undo history in RAM for the rest of the session. Unbounded, a
+// long session that visits many rooms grew until the tab hit browser memory
+// limits (and none of it was visible to the storage-cleanup dialog, which
+// only frees localStorage). We keep the few most recently used states — undo
+// history in rooms beyond that is a fair trade for not crashing.
 const roomStates = new Map();
+const ROOM_STATES_MAX = 4;
 function roomStateKey(name) { return name || '__local__'; }
+function rememberRoomState(key, state) {
+  roomStates.delete(key);          // re-insert = most recently used
+  roomStates.set(key, state);
+  while (roomStates.size > ROOM_STATES_MAX) {
+    const oldest = roomStates.keys().next().value;
+    roomStates.delete(oldest);
+  }
+}
 
 // Switch to room `name`. Always commits the local switch (load cache into the
 // editor, set activeRoom) before attempting Firebase; if Firebase is missing
@@ -10308,7 +10337,7 @@ async function _doSwitchRoom(name, firebaseUrl, baseEncKey) {
   // with its undo stack isolated from every other room.
   const _prevStateKey = roomStateKey(activeRoom);
   const _newStateKey = roomStateKey(name);
-  if (_prevStateKey !== _newStateKey) roomStates.set(_prevStateKey, editor.state);
+  if (_prevStateKey !== _newStateKey) rememberRoomState(_prevStateKey, editor.state);
 
   activeRoom = name;
   syncState.roomName = name;
@@ -11210,16 +11239,25 @@ document.getElementById('room-manager-overlay').addEventListener('keydown', (e) 
 // These hooks are invoked by store.set() when localStorage runs out of space.
 // ============================================
 
+// Every per-room storage prefix the cleanup flows know about. Clearing a room
+// clears ALL of these — the old dialog only offered `cade-room-cache:` and
+// left snapshots/synced-bases behind, so "clear" often freed almost nothing
+// and the quota popup came right back.
+const ROOM_STORAGE_PREFIXES = [
+  'cade-room-cache:', 'cade-room-synced:', 'cade-snap:',
+  'cade-room-ver:', 'cade-autocolor:',
+];
+
 // Step 1 (automatic): drop offline caches for rooms no longer in view —
 // i.e. rooms that are not in the tab list and not the active room.
 window.__evictStaleRoomCaches = function() {
   if (!store.ok) return;
-  const prefixes = ['cade-room-cache:', 'cade-room-synced:', 'cade-snap:'];
   const keep = new Set(rooms);
+  keep.add('__local__'); // pseudo-room for no-room snapshots/autocolor rules
   if (activeRoom) keep.add(activeRoom);
   if (syncState.roomName) keep.add(syncState.roomName);
   store.keys().forEach(k => {
-    for (const prefix of prefixes) {
+    for (const prefix of ROOM_STORAGE_PREFIXES) {
       if (k.startsWith(prefix) && !keep.has(k.slice(prefix.length))) {
         store.remove(k);
         return;
@@ -11228,38 +11266,86 @@ window.__evictStaleRoomCaches = function() {
   });
 };
 
-// Step 2 (interactive): still full after eviction — ask which in-view rooms
-// to clear. Snoozed briefly after a dismissal so saves don't re-spam it.
+// All reclaimable storage grouped per room: cache + synced base + snapshots +
+// small per-room keys, summed. The active room is offered too, but only its
+// snapshots (its live cache would immediately be rewritten by persistContent).
+// Rooms no longer in the tab list are flagged as orphaned and pre-checked.
+function _storageCleanupItems() {
+  const current = activeRoom || syncState.roomName || '';
+  const roomSet = new Set(rooms);
+  roomSet.add('__local__'); // pseudo-room for no-room snapshots/autocolor rules
+  if (current) roomSet.add(current);
+  const groups = new Map();
+  store.keys().forEach(k => {
+    for (const prefix of ROOM_STORAGE_PREFIXES) {
+      if (!k.startsWith(prefix)) continue;
+      const room = k.slice(prefix.length);
+      if (!room) return;
+      // The active room's live cache/base stay — clearing them mid-edit is
+      // pointless (rewritten within 300ms) or dangerous (base guards edits).
+      if (room === current && prefix !== 'cade-snap:') return;
+      let g = groups.get(room);
+      if (!g) {
+        g = { room, bytes: 0, keys: [], orphan: !roomSet.has(room), isCurrent: room === current };
+        groups.set(room, g);
+      }
+      g.bytes += store.sizeOf(k);
+      g.keys.push(k);
+      return;
+    }
+  });
+  return [...groups.values()].sort((a, b) => (a.orphan === b.orphan ? b.bytes - a.bytes : (a.orphan ? -1 : 1)));
+}
+
+// Fill the usage line ("x MB of y MB used") asynchronously — best-effort.
+function _fillStorageUsage() {
+  const el = document.getElementById('storage-cleanup-usage');
+  if (!el) return;
+  el.textContent = '';
+  try {
+    if (navigator.storage && navigator.storage.estimate) {
+      navigator.storage.estimate().then(est => {
+        if (!est || !est.quota) return;
+        const mb = n => (n / (1024 * 1024)).toFixed(1);
+        el.textContent = `Browser storage: ${mb(est.usage || 0)} MB of ${mb(est.quota)} MB in use (all types).`;
+      }).catch(() => {});
+    }
+  } catch {}
+}
+
+// Step 2 (interactive): still full after eviction — ask what to clear.
+// Snoozed briefly after a dismissal so saves don't re-spam it. Pass
+// force=true (the "Manage Storage" menu item) to open it proactively even
+// when nothing is critically full.
 let _storageCleanupOpen = false;
 let _storageCleanupSnoozeUntil = 0;
 
-window.__promptStorageCleanup = function() {
-  if (_storageCleanupOpen || Date.now() < _storageCleanupSnoozeUntil) return;
-  const prefix = 'cade-room-cache:';
-  const current = activeRoom || syncState.roomName || '';
-  const items = store.keys()
-    .filter(k => k.startsWith(prefix) && k.slice(prefix.length) && k.slice(prefix.length) !== current)
-    .map(k => ({ key: k, room: k.slice(prefix.length), bytes: store.sizeOf(k) }))
-    .sort((a, b) => b.bytes - a.bytes);
+window.__promptStorageCleanup = function(force) {
+  if (_storageCleanupOpen) return;
+  if (!force && Date.now() < _storageCleanupSnoozeUntil) return;
+  const items = _storageCleanupItems();
 
-  if (items.length === 0) {
-    showToast('Storage full — recent changes are kept in memory only', 'error', 6000);
+  if (items.length === 0 && !force) {
+    showToast('Storage full — recent changes are kept in memory only. Try "Purge unused images" in View → Manage Storage.', 'error', 6000);
     _storageCleanupSnoozeUntil = Date.now() + 60000;
     return;
   }
 
   const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-  document.getElementById('storage-cleanup-list').innerHTML = items.map(it => `
+  document.getElementById('storage-cleanup-list').innerHTML = items.length ? items.map((it, i) => `
     <label class="room-manager-item" style="cursor:pointer;gap:8px;">
-      <input type="checkbox" value="${esc(it.key)}">
-      <span class="room-manager-name" style="flex:1;">${esc(it.room)}</span>
+      <input type="checkbox" data-idx="${i}" ${it.orphan ? 'checked' : ''}>
+      <span class="room-manager-name" style="flex:1;">${esc(it.room)}${it.isCurrent ? ' <span style="color:var(--text-faint)">(snapshots only)</span>' : ''}${it.orphan ? ' <span style="color:var(--text-faint)">(orphaned)</span>' : ''}</span>
       <span style="color:var(--text-faint);font-size:var(--text-xs);">${Math.max(1, Math.round(it.bytes / 1024))} KB</span>
     </label>
-  `).join('');
+  `).join('') : '<div style="color:var(--text-muted);font-size:var(--text-sm);padding:8px 2px;">No reclaimable room data. Use "Purge unused images" below to free image storage.</div>';
+  _storageCleanupItemsCache = items;
+  _fillStorageUsage();
 
   _storageCleanupOpen = true;
   document.getElementById('storage-cleanup-overlay').classList.add('open');
 };
+let _storageCleanupItemsCache = [];
 
 function closeStorageCleanupModal() {
   document.getElementById('storage-cleanup-overlay').classList.remove('open');
@@ -11278,10 +11364,30 @@ window.confirmStorageCleanup = function() {
     _storageCleanupSnoozeUntil = Date.now() + 60000;
     return;
   }
-  checked.forEach(cb => store.remove(cb.value));
-  showToast(`Cleared ${checked.length} room cache${checked.length > 1 ? 's' : ''}`, 'success', 2500);
+  let freed = 0, count = 0;
+  checked.forEach(cb => {
+    const g = _storageCleanupItemsCache[parseInt(cb.dataset.idx, 10)];
+    if (!g) return;
+    count++;
+    freed += g.bytes;
+    g.keys.forEach(k => store.remove(k));
+  });
+  showToast(`Cleared ${count} room${count === 1 ? '' : 's'} (~${Math.max(1, Math.round(freed / 1024))} KB)`, 'success', 2500);
   // Retry persisting the current document into the space we just freed.
   persistContent();
+};
+
+// "Purge unused images" — runs the orphan-image GC (IndexedDB + in-memory
+// cache + server copies) and reports how many blobs went away.
+window.storageCleanupPurgeImages = async function() {
+  let before = 0, after = 0;
+  try { before = (await idbStore.keys()).filter(k => typeof k === 'string' && k.indexOf('img:') === 0).length; } catch {}
+  showToast('Scanning for unused images…', 'info', 1500);
+  try { await gcOrphanImages(); } catch {}
+  try { after = (await idbStore.keys()).filter(k => typeof k === 'string' && k.indexOf('img:') === 0).length; } catch {}
+  const n = Math.max(0, before - after);
+  showToast(n ? `Purged ${n} unused image${n === 1 ? '' : 's'}` : 'No unused images found', 'success', 2500);
+  _fillStorageUsage();
 };
 
 document.getElementById('storage-cleanup-overlay').addEventListener('click', (e) => {
@@ -11290,6 +11396,12 @@ document.getElementById('storage-cleanup-overlay').addEventListener('click', (e)
 document.getElementById('storage-cleanup-overlay').addEventListener('keydown', (e) => {
   if (e.key === 'Escape') closeStorageCleanup();
 });
+
+// Boot-time sweep: quietly drop per-room storage for rooms that are no longer
+// in the tab list (orphans from removals on other tabs, renames, legacy bugs).
+// Delayed so it never competes with first paint; waiting for quota pressure to
+// do this meant orphans sat around bloating storage for months.
+setTimeout(() => { try { window.__evictStaleRoomCaches(); } catch {} }, 8000);
 
 // ============================================
 // WORKSPACES — organize rooms into projects
@@ -14710,7 +14822,9 @@ async function insertImageFile(file) {
   if (hash) {
     try { await idbStore.set('img:' + hash, payload); } catch {}
     // Prime the render cache so it shows instantly without a round-trip.
-    _imgRefCache.set(hash, { url: _b64ToBlobUrl(res.code, res.b64), b64: res.b64 });
+    // Must go through the bounded putter — a raw .set() here bypassed the LRU
+    // cap, so paste-heavy sessions grew this cache (and its blob URLs) forever.
+    _imgRefCachePut(hash, { url: _b64ToBlobUrl(res.code, res.b64), b64: res.b64 });
     uploadImage(hash, payload); // fire-and-forget (queues if offline)
     token = '![img:' + res.code + '#' + hash + ']';
   } else {
