@@ -19,7 +19,23 @@
   font-size: var(--text-xs); padding: 3px 9px; border-radius: 6px; cursor: pointer; white-space: nowrap;
 }
 .rss-btn:hover { background: var(--surface-hover, rgba(127,127,127,0.15)); }
+.rss-btn.rss-unread-toggle.on { background: var(--accent-bg, var(--surface-hover)); border-color: var(--accent); color: var(--accent); font-weight: 600; }
 .rss-status { font-size: var(--text-xs); color: var(--text-faint); }
+
+/* Per-feed filter chips (Items view): ALL + one chip per feed, wraps. */
+.rss-feedtabs { display: flex; flex-wrap: wrap; gap: 5px; padding: 0 0 8px; }
+.rss-ftab {
+  display: inline-flex; align-items: center; gap: 5px; max-width: 160px;
+  border: 1px solid var(--border); background: var(--surface); color: var(--text-muted);
+  font-size: var(--text-xs); padding: 2px 9px; border-radius: 999px; cursor: pointer; line-height: 1.5;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.rss-ftab:hover { background: var(--surface-hover, rgba(127,127,127,0.15)); color: var(--text); }
+.rss-ftab.on { background: var(--accent-bg, var(--surface-hover)); border-color: var(--accent); color: var(--accent); font-weight: 600; }
+.rss-ftab-n {
+  font-size: 10px; font-weight: 600; line-height: 1; padding: 2px 5px;
+  border-radius: 999px; background: var(--accent); color: var(--bg, #fff);
+}
 
 /* Item rows (Items + Bookmarks views) — compact */
 .rss-item { display: flex; align-items: center; gap: 7px; padding: 4px 0; border-bottom: 1px dashed var(--border); }

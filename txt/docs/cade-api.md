@@ -141,7 +141,7 @@ offline; catches up when creds + network appear.
 
 Read-mostly, late-bound surface over the live room/workspace state (never hold
 stale copies; call again when you need fresh values). Used by e.g. the
-`daycal` widget.
+`calendar` widget (daily-note rooms + per-day room activity).
 
 | Call | Does |
 | --- | --- |
@@ -156,6 +156,7 @@ stale copies; call again when you need fresh values). Used by e.g. the
 | `roomsApi.activeRoom()` / `activeWorkspace()` | current context |
 | `roomsApi.setActiveWorkspace(id)` | switch workspace context (persists) |
 | `roomsApi.switchRoom(name)` | switch to a room (async, may prompt for lock) |
+| `roomsApi.ensureRoom(name)` | add a room to the tab list without switching (no-op if it exists / invalid; joins the active workspace) |
 | `roomsApi.WS_ALL` / `roomsApi.WS_UNLABELED` | sentinel workspace ids |
 
 ## Internal (loader-only — don't call from modules)

@@ -23,7 +23,10 @@
    reminders missed while the app was closed fire up to 12 hours late on next
    launch, marked "missed"; recurring ones fire only on their day.
 
-   Fired keys live in `cade-reminders-fired` (pruned 30 days / 500 entries). */
+   Fired keys live in `cade-reminders-fired` (pruned 30 days / 500 entries).
+   The panel also shows a PAST 24H log — every occurrence (fired or missed)
+   from any source, each with a ✕ that hides just that occurrence on this
+   device via `cade-reminders-dismissed` (pruned 25 h / 200 entries). */
 (function () {
   'use strict';
   if (typeof window.Cade === 'undefined') return;
@@ -35,7 +38,9 @@
 
   var TOKEN_RE = /@remind!([^!\n]{3,40})(?:!([^\n]*))?/g;
   var FIRED_KEY = 'cade-reminders-fired';
+  var DISMISSED_KEY = 'cade-reminders-dismissed';
   var GRACE_MS = 12 * 3600 * 1000;
+  var DAY_MS = 24 * 3600 * 1000;
   var CHECK_MS = 20 * 1000;
   var DOW = { sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6 };
   var DOW_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -153,6 +158,17 @@
     }
     return null;
   }
+  // Occurrences of a recurrence that landed within the last 24 h — today's
+  // and/or yesterday's slot (at most two can ever fit in a 24 h window).
+  function recentOccurrences(rec, now) {
+    var out = [];
+    for (var i = -1; i <= 0; i++) {
+      var day = new Date(now.getFullYear(), now.getMonth(), now.getDate() + i);
+      var occ = occurrenceToday(rec, day);
+      if (occ != null && occ <= now.getTime() && occ > now.getTime() - DAY_MS) out.push(occ);
+    }
+    return out;
+  }
   function recurLabel(rec) {
     var t = String(rec.hh).padStart(2, '0') + ':' + String(rec.mm).padStart(2, '0');
     if (rec.kind === 'daily') return 'daily ' + t;
@@ -206,6 +222,18 @@
     var out = {};
     keys.forEach(function (k) { out[k] = f[k]; });
     store.set(FIRED_KEY, JSON.stringify(out));
+  }
+  // Past-24h rows the user ✕-dismissed. Device-local (occurrence-key → ts);
+  // anything past the 24 h window drops out of the list on its own, so the
+  // store only needs to outlive the window (pruned 25 h / 200 entries).
+  function loadDismissed() { try { return JSON.parse(store.get(DISMISSED_KEY) || '{}') || {}; } catch (e) { return {}; } }
+  function saveDismissed(d) {
+    var cutoff = Date.now() - 25 * 3600 * 1000;
+    var keys = Object.keys(d).filter(function (k) { return d[k] >= cutoff; })
+      .sort(function (a, b) { return d[b] - d[a]; }).slice(0, 200);
+    var out = {};
+    keys.forEach(function (k) { out[k] = d[k]; });
+    store.set(DISMISSED_KEY, JSON.stringify(out));
   }
 
   // ---- the alarm engine ----
@@ -306,6 +334,37 @@
     rows.sort(function (a, b) { return a.at - b.at; });
     return rows.slice(0, 40);
   }
+  function pastRows() {
+    // Every occurrence that landed in the last 24 h, newest first — fired or
+    // missed alike, it's a log — minus the ones ✕-dismissed on this device.
+    // Keys reuse the fired-keys format so each occurrence has one identity:
+    // doc `room|spec|msg`, managed `m:<id>`, calendar `cal:<id>`, recurring
+    // ones with `@YYYY-MM-DD` (the occurrence date) appended.
+    var now = Date.now();
+    var dismissed = loadDismissed();
+    var rows = [];
+    function add(key, at, msg, room) {
+      if (at == null || at > now || at <= now - DAY_MS || dismissed[key]) return;
+      rows.push({ key: key, at: at, msg: msg, room: room || null });
+    }
+    collectDoc().forEach(function (r) {
+      if (r.recur) {
+        recentOccurrences(r.recur, new Date(now)).forEach(function (occ) {
+          add(r.key + '@' + _dateKey(new Date(occ)), occ, r.msg, r.room);
+        });
+      } else add(r.key, r.at, r.msg, r.room);
+    });
+    managed.items.forEach(function (it) {
+      if (it.recur) {
+        recentOccurrences(it.recur, new Date(now)).forEach(function (occ) {
+          add('m:' + it.id + '@' + _dateKey(new Date(occ)), occ, it.msg);
+        });
+      } else add('m:' + it.id, it.at, it.msg);
+    });
+    calNotifications(now).forEach(function (c) { add(c.key, c.at, c.msg); });
+    rows.sort(function (a, b) { return b.at - a.at; });
+    return rows.slice(0, 40);
+  }
   function renderPanel() {
     var p = document.getElementById(PANEL_ID);
     if (!p) return;
@@ -352,9 +411,21 @@
         '<span class="rem-msg">' + esc(r.msg) + ' ' + recur + '</span>' + src + '</div>';
     }).join('') : '<div class="rem-empty">None. Add one below, or write <code>@remind!18:30! message</code> in any doc.</div>';
 
+    var past = pastRows();
+    if (past.length) {
+      html += '<div class="rem-sec">Past 24h</div>';
+      html += past.map(function (r) {
+        var keyAttr = esc(r.key.replace(/\\/g, '\\\\').replace(/'/g, "\\'"));
+        var hint = r.room && r.room !== '(local)' ? '<span class="rem-src" title="From doc">' + esc(r.room) + '</span>' : '';
+        return '<div class="rem-row rem-past"><span class="rem-at">' + esc(fmtAt(r.at)) + '</span>' +
+          '<span class="rem-msg">' + esc(r.msg) + '</span>' + hint +
+          '<button class="rem-x" title="Dismiss" onclick="window.__remindersDismiss(\'' + keyAttr + '\')">✕</button></div>';
+      }).join('');
+    }
+
     html += '<div class="rem-btns">' +
       (_formOpen ? '' : '<button class="btn btn-primary" onclick="window.__remindersFormToggle()">＋ Add reminder</button>') +
-      '<button class="btn" onclick="window.__remindersInsert()">Insert token in doc</button>' +
+      '<button class="btn" onclick="window.__remindersInsert()">Insert Reminder</button>' +
       '</div>';
     html += '<div class="rem-hint">Fires while the app is open · recurring: daily / weekdays / every &lt;day&gt; · one-shots missed while closed fire up to 12h late.</div>';
     p.querySelector('.cade-panel-body').innerHTML = html;
@@ -407,6 +478,12 @@
     managed.items = managed.items.filter(function (it) { return it.id !== id; });
     saveManaged();
   };
+  window.__remindersDismiss = function (key) {
+    var d = loadDismissed();
+    d[key] = Date.now();
+    saveDismissed(d);
+    renderIfOpen();
+  };
   window.__remindersInsert = function () {
     try {
       var d = new Date(Date.now() + 30 * 60 * 1000);
@@ -438,5 +515,14 @@
     icon: '⏰',
     tags: 'remind,reminder,alarm,alert,notification,time,schedule,recurring',
     open: function () { openPanel(); },
+    // Internal hooks for the Node smoke test (harmless in production).
+    _test: {
+      parseSpec: parseSpec,
+      dueNow: dueNow,
+      upcomingRows: upcomingRows,
+      pastRows: pastRows,
+      recentOccurrences: recentOccurrences,
+      loadDismissed: loadDismissed,
+    },
   });
 })();
