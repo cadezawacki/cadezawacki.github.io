@@ -5330,7 +5330,12 @@ function _imgRefCachePut(hash, rec) {
   _imgRefCache.set(hash, rec);
 }
 // Exposed for the Whiteboard module (draw-over-image background layer).
-window.resolveImageRef = (code, hash) => resolveImageRef(code, hash);
+// NOTE: this top-level declaration IS window.resolveImageRef (classic-script
+// function declarations bind to window) — do NOT add a wrapper assignment
+// like `window.resolveImageRef = (c, h) => resolveImageRef(c, h)`. The
+// declaration hoists first, so the wrapper replaces the only binding and the
+// bare name inside it resolves to the wrapper itself: infinite recursion on
+// every ref-image render (round-3 regression, broke all pasted/drawn images).
 async function resolveImageRef(code, hash) {
   let hit = _imgRefCache.get(hash);
   if (hit) { _imgRefCache.delete(hash); _imgRefCache.set(hash, hit); return hit; }

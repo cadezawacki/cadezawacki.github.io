@@ -14,6 +14,21 @@
   ('the,a,an,and,or,but,of,to,in,on,for,at,by,with,from,as,is,are,was,were,be,been,being,it,its,this,that,these,those,i,you,he,she,we,they,them,his,her,my,your,our,their,me,him,us,not,no,so,if,then,than,too,very,can,will,just,do,does,did,have,has,had,about,into,over,after,before,between,out,up,down,off,again,there,here,when,where,why,how,all,any,both,each,few,more,most,other,some,such,only,own,same,s,t,dont,im,ive')
     .split(',').forEach(function (w) { STOPWORDS[w] = 1; });
 
+  // Words = whitespace-delimited tokens — the SAME scan the footer counter
+  // uses, so the two figures always agree. (The regex token list below is
+  // kept ONLY for frequency analysis, where letter-words are what you want;
+  // counting with it made "Words" disagree with the footer on markdown
+  // syntax, image tokens, punctuation runs and non-Latin text.)
+  function countWordsWs(text) {
+    var n = 0, inWord = false;
+    for (var i = 0; i < text.length; i++) {
+      var c = text.charCodeAt(i);
+      var ws = c === 32 || c === 10 || c === 9 || c === 13 || c === 12;
+      if (ws) inWord = false;
+      else if (!inWord) { n++; inWord = true; }
+    }
+    return n;
+  }
   function computeStats(text) {
     var s = {};
     s.chars = text.length;
@@ -21,7 +36,7 @@
     s.lines = text.length ? text.split('\n').length : 0;
     s.paragraphs = text.split(/\n[ \t]*\n+/).filter(function (p) { return p.trim() !== ''; }).length;
     var words = text.toLowerCase().match(/[a-z0-9'’_-]+/gi) || [];
-    s.words = words.length;
+    s.words = countWordsWs(text);
     s.sentences = (text.match(/[.!?]+(?=\s|$)/g) || []).length;
     var freq = {};
     for (var i = 0; i < words.length; i++) {

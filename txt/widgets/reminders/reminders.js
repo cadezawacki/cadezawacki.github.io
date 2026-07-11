@@ -26,7 +26,18 @@
    Fired keys live in `cade-reminders-fired` (pruned 30 days / 500 entries).
    The panel also shows a PAST 24H log — every occurrence (fired or missed)
    from any source, each with a ✕ that hides just that occurrence on this
-   device via `cade-reminders-dismissed` (pruned 25 h / 200 entries). */
+   device via `cade-reminders-dismissed` (pruned 25 h / 200 entries).
+
+   CROSS-DEVICE DEDUPE: the synced blob also carries a `fired` map
+   (occurrence-key → ts, pruned 48 h / 300 entries) so a reminder shown once
+   is not re-shown on every open device. The device the user is ON (tab
+   visible + window focused) fires immediately and publishes the key; a
+   background device holds a due reminder for HOLDOFF_MS first — if the key
+   turns up in the synced map meanwhile it is absorbed silently, otherwise
+   it fires anyway (dedupe must never eat a reminder when no device is
+   active). The blob is whole-blob last-writer-wins, so every write sends
+   the UNION of all fired maps this device has seen, and incoming maps are
+   absorbed into the local fired store the moment they arrive. */
 (function () {
   'use strict';
   if (typeof window.Cade === 'undefined') return;
@@ -42,6 +53,8 @@
   var GRACE_MS = 12 * 3600 * 1000;
   var DAY_MS = 24 * 3600 * 1000;
   var CHECK_MS = 20 * 1000;
+  var HOLDOFF_MS = 2 * 60 * 1000;
+  var SYNC_FIRED_MS = 48 * 3600 * 1000;
   var DOW = { sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6 };
   var DOW_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -75,8 +88,50 @@
     }).slice(0, 500);
     return out;
   }
+  // ---- cross-device fired sync ----
+  // In-memory union of every `fired` map this device has seen (its own fires
+  // + every blob that arrived). This is what gets written back, so a stale
+  // last-writer-wins overwrite can only lose what the prune rule would drop.
+  var syncedFired = {};
+  // Due-but-unshown occurrences on a non-active device: key → {d, heldAt}.
+  var holds = {};
+  function normalizeFiredMap(data) {
+    var out = {};
+    if (data && data.fired && typeof data.fired === 'object' && !Array.isArray(data.fired)) {
+      Object.keys(data.fired).forEach(function (k) {
+        var ts = +data.fired[k];
+        if (isFinite(ts) && ts > 0) out[k] = ts;
+      });
+    }
+    return out;
+  }
+  function pruneSyncedFired(f) {
+    var cutoff = Date.now() - SYNC_FIRED_MS;
+    var keys = Object.keys(f).filter(function (k) { return f[k] >= cutoff; })
+      .sort(function (a, b) { return f[b] - f[a]; }).slice(0, 300);
+    var out = {};
+    keys.forEach(function (k) { out[k] = f[k]; });
+    return out;
+  }
+  // Absorb a blob's fired map the moment it is seen, BEFORE any write could
+  // clobber it: union into the in-memory map, seed the local fired store so
+  // these keys can never fire here, and release any matching holds silently.
+  function absorbSyncedFired(data) {
+    var inc = normalizeFiredMap(data);
+    var keys = Object.keys(inc);
+    if (!keys.length) return;
+    var local = loadFired();
+    var changedLocal = false;
+    keys.forEach(function (k) {
+      if (!syncedFired[k] || syncedFired[k] < inc[k]) syncedFired[k] = inc[k];
+      if (!local[k]) { local[k] = inc[k]; changedLocal = true; }
+      delete holds[k]; // already shown to the user elsewhere — never show here
+    });
+    if (changedLocal) saveFired(local);
+    syncedFired = pruneSyncedFired(syncedFired);
+  }
   var blobStore = Cade.syncedBlob('reminders', {
-    onChange: function (data) { managed = normalizeManaged(data); renderIfOpen(); },
+    onChange: function (data) { managed = normalizeManaged(data); absorbSyncedFired(data); renderIfOpen(); },
   });
   // Calendar events with a 🔔 (round-4 item 5) become reminders too. Read-only
   // accessor — passing no onChange leaves the calendar module's handler alone.
@@ -105,7 +160,23 @@
     return out;
   }
   managed = normalizeManaged(blobStore.get());
-  function saveManaged() { blobStore.set(managed); renderIfOpen(); }
+  absorbSyncedFired(blobStore.get());
+  (function () {
+    // Recent local fires re-enter the union at boot, so a stale writer
+    // elsewhere can't permanently erase claims this device already made.
+    var local = loadFired();
+    var cutoff = Date.now() - SYNC_FIRED_MS;
+    Object.keys(local).forEach(function (k) { if (local[k] >= cutoff && !syncedFired[k]) syncedFired[k] = local[k]; });
+  })();
+  function saveManaged() {
+    // Whole-blob last-writer-wins: every write carries items + the freshest
+    // union of all fired maps seen, so near-simultaneous writers can only
+    // lose entries the prune rule would drop anyway.
+    absorbSyncedFired(blobStore.get());
+    syncedFired = pruneSyncedFired(syncedFired);
+    blobStore.set({ items: managed.items, fired: syncedFired });
+    renderIfOpen();
+  }
   function newId() { return 'r' + Math.random().toString(36).slice(2, 8) + Date.now().toString(36).slice(-4); }
 
   // ---- spec parsing ----
@@ -267,18 +338,60 @@
     });
     return { due: due, fired: fired };
   }
+  // ACTIVE = the device the user is on right now (tab visible AND window
+  // focused). Environments without these APIs (tests, ancient engines) count
+  // as active so behavior degrades to firing immediately, like before.
+  function deviceActive() {
+    try {
+      var vs = document.visibilityState;
+      if (vs && vs !== 'visible') return false;
+      if (typeof document.hasFocus === 'function') return !!document.hasFocus();
+      return true;
+    } catch (e) { return true; }
+  }
   function checkDue() {
     var r = dueNow();
-    if (!r.due.length) return;
+    if (!r.due.length && !Object.keys(holds).length) return;
     var now = Date.now();
-    var changedManaged = false;
+    var active = deviceActive();
+    var changedLocalFired = false;
+    var toFire = [];
+    var dueKeys = {};
     r.due.forEach(function (d) {
-      r.fired[d.key] = now;
-      if (d.managed && !d.src.recur) { d.src.done = true; changedManaged = true; }
+      dueKeys[d.key] = 1;
+      if (syncedFired[d.key]) {
+        // Already shown to the user on another device — absorb, never re-show.
+        r.fired[d.key] = syncedFired[d.key];
+        changedLocalFired = true;
+        delete holds[d.key];
+      } else if (active) {
+        toFire.push(d);
+        delete holds[d.key];
+      } else if (!holds[d.key]) {
+        // Not the device the user is on: hold, giving an active device
+        // HOLDOFF_MS to claim it first. Becoming active or seeing the key
+        // claimed releases the hold; expiry fires it here anyway — dedupe
+        // must never eat a reminder outright.
+        holds[d.key] = { d: d, heldAt: now };
+      }
     });
-    saveFired(r.fired);
-    if (changedManaged) saveManaged();
-    notify(r.due);
+    Object.keys(holds).forEach(function (k) {
+      if (!dueKeys[k]) { delete holds[k]; return; } // source edited away / no longer due
+      if (now - holds[k].heldAt >= HOLDOFF_MS) { toFire.push(holds[k].d); delete holds[k]; }
+    });
+    if (toFire.length) {
+      toFire.forEach(function (d) {
+        r.fired[d.key] = now;
+        syncedFired[d.key] = now;
+        if (d.managed && !d.src.recur) d.src.done = true;
+      });
+      changedLocalFired = true;
+    }
+    if (changedLocalFired) saveFired(r.fired);
+    if (toFire.length) {
+      saveManaged(); // also publishes the fired union to the synced blob
+      notify(toFire);
+    }
   }
   function notify(due) {
     try { navigator.vibrate && navigator.vibrate([150, 80, 150]); } catch (e) {}
@@ -501,6 +614,10 @@
   // ---- background engine (module is eager-loaded at boot) ----
   setInterval(checkDue, CHECK_MS);
   setTimeout(checkDue, 3000);
+  // Becoming the active device releases any held reminders immediately
+  // instead of waiting out the poll interval.
+  try { document.addEventListener('visibilitychange', function () { checkDue(); }); } catch (e) {}
+  try { window.addEventListener('focus', function () { checkDue(); }); } catch (e) {}
   var _rerenderT = null;
   Cade.onEditorUpdate(function (u) {
     if (!u.docChanged) return;
@@ -523,6 +640,10 @@
       pastRows: pastRows,
       recentOccurrences: recentOccurrences,
       loadDismissed: loadDismissed,
+      checkDue: checkDue,
+      deviceActive: deviceActive,
+      getHolds: function () { return holds; },
+      getSyncedFired: function () { return syncedFired; },
     },
   });
 })();
