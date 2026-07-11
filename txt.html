@@ -10187,8 +10187,15 @@ function renderExploreRoomsList() {
   const list = document.getElementById('explore-rooms-list');
   if (!list) return;
   if (!exploreRoomList || !exploreRoomList.length) { renderExploreMessage('No rooms found in this database.'); return; }
-  list.innerHTML = exploreRoomList.map((name, idx) => {
-    const added = rooms.includes(name);
+  // Only rooms you DON'T already have — listing subscribed rooms here was
+  // pure noise. A footer notes how many were hidden.
+  const notAdded = exploreRoomList.filter(name => !rooms.includes(name));
+  const hidden = exploreRoomList.length - notAdded.length;
+  if (!notAdded.length) {
+    renderExploreMessage('Every server room is already in your tabs (' + hidden + ' total) — nothing to recover.');
+    return;
+  }
+  list.innerHTML = notAdded.map((name, idx) => {
     const selId = 'explore-ws-' + idx;
     const esc = escapeHtml(name);
     // JS-string escape, then HTML-escape: the name lands inside a double-quoted
@@ -10196,12 +10203,11 @@ function renderExploreRoomsList() {
     const jsName = escapeHtml(String(name).replace(/\\/g, '\\\\').replace(/'/g, "\\'"));
     return '<div class="explore-room-row">' +
       '<span class="explore-room-name" title="' + esc + '">' + esc + '</span>' +
-      '<select id="' + selId + '" class="form-input explore-ws-select"' + (added ? ' disabled' : '') + '>' + exploreWsOptions() + '</select>' +
-      (added
-        ? '<button class="btn" disabled>Added</button>'
-        : '<button class="btn btn-primary" onclick="exploreAddRoom(\'' + jsName + '\',\'' + selId + '\')">Add</button>') +
+      '<select id="' + selId + '" class="form-input explore-ws-select">' + exploreWsOptions() + '</select>' +
+      '<button class="btn btn-primary" onclick="exploreAddRoom(\'' + jsName + '\',\'' + selId + '\')">Add</button>' +
       '</div>';
-  }).join('');
+  }).join('') +
+  (hidden ? '<div style="color:var(--text-faint);font-size:var(--text-xs);padding:8px 2px 0;">' + hidden + ' room' + (hidden === 1 ? '' : 's') + ' already in your tabs — hidden.</div>' : '');
 }
 
 window.exploreAddRoom = function(name, selId) {
