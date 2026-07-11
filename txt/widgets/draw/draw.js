@@ -1,10 +1,15 @@
 /* Whiteboard — free-draw sketch widget for Cade.txt.
  *
- * Draw with pen / highlighter / eraser over a TRANSPARENT background by
- * default (a checkerboard shows on screen; the exported PNG keeps real alpha),
- * or pick a solid white/black background from the toolbar — the choice is
- * remembered per device (Cade.store "cade-draw-bg"). Insert routes through the
- * core's embedded-image pipeline: window.insertImageFile(file) compresses,
+ * Draw with pen / highlighter / eraser / ARROW / TEXT over a TRANSPARENT
+ * background by default (a checkerboard shows on screen; the exported PNG
+ * keeps real alpha), or pick a solid white/black background from the toolbar —
+ * the choice is remembered per device (Cade.store "cade-draw-bg"). Ink color
+ * comes from the fixed swatches, a free <input type=color>, or the eyedropper
+ * (samples the composited canvas pixel — no EyeDropper API dependency), and
+ * the opacity slider stores a per-item alpha. CROP drags a rectangle
+ * (Enter/✓ applies, Esc/✕ cancels) and rebases strokes, text and the locked
+ * background image into the rect. Insert routes through the core's
+ * embedded-image pipeline: window.insertImageFile(file) compresses,
  * content-addresses with a hash, uploads for sync, and drops a
  * "![img:<code>#<hash>]" token at the cursor (see txt.html: insertImageFile /
  * compressImage / _imgHash). AVIF/WebP re-encoding preserves the alpha
@@ -12,20 +17,28 @@
  * white (JPEG has no alpha — see alphaExportOK).
  *
  * Images can be imported as a LOCKED BACKGROUND LAYER to draw over — via the
- * toolbar's Import button (file picker) or window.__drawImportImage(mime, b64)
- * (wired to the doc's right-click image menu). The layer is scaled to fit the
- * canvas and centered; strokes render on their own layer above it, and the
- * eraser is a true eraser (destination-out) that cuts stroke pixels only —
- * never the background image or fill.
+ * toolbar's Import button (file picker), window.__drawImportImage(mime, b64)
+ * (wired to the doc's right-click image menu), or by OPENING THE WIDGET WHILE
+ * AN IMAGE TOKEN IS SELECTED in the editor (the mobile path: select the image
+ * line, run Whiteboard from the palette — ref tokens reuse the
+ * __drawEditByHash flow, inline tokens decode straight to a background; with
+ * the panel already open this imports instead of toggle-closing). The layer
+ * sits at an explicit rect (fit + centered on import, adjustable with the
+ * − / + buttons, translated by crop); strokes render on their own layer above
+ * it, and the eraser is a true eraser (destination-out) that cuts stroke and
+ * text pixels only — never the background image or fill. Clear drops both the
+ * items AND the imported layer (the background COLOR preference stays).
  *
- * Every stroke is recorded as vector data — {tool, color, w, pts:[[x,y],...]}
- * in canvas-logical coordinates — and the canvas is always redrawn in full
- * from that array. That single model powers undo (pop), clear (empty array),
- * re-editing, AND lossless panel resize (the bottom-right grip resizes the
- * canvas bitmap and repaints from the model; size persists per device under
- * Cade.store "cade-draw-size"). On insert, the strokes JSON (plus the
- * background mode and a snapshot of the locked layer) is saved to Cade.idbStore
- * under "drawstrokes:<hash>" (the content hash the core just minted),
+ * Every mark is recorded as vector data in canvas-logical coordinates —
+ * freehand {tool,color,w,pts,alpha?}, arrows {tool:'arrow',color,w,pts:[a,b],
+ * alpha?}, text {tool:'text',x,y,text,color,size,alpha?} — in ONE ordered
+ * array, and the canvas is always redrawn in full from that array. That
+ * single model powers undo (pop), clear (empty array), re-editing, crop
+ * (translate + repaint) AND lossless panel resize (the bottom-right grip
+ * resizes the canvas bitmap and repaints; size persists per device under
+ * Cade.store "cade-draw-size"). On insert, the items JSON (plus background
+ * mode, a snapshot of the locked layer and its rect) is saved to Cade.idbStore
+ * under "drawstrokes:<hash>" as a v3 record (v2/v1 records still load),
  * indexed by "drawstrokes:__index" (pruned to the 100 most recent).
  * window.__drawEditByHash(hash) reopens a saved drawing for further editing;
  * saving from an edit session replaces the old image token in the document.
@@ -65,10 +78,12 @@
   // and the checkerboard, plus a black/white pair for either extreme.
   var COLORS = ['#e03131', '#e8590c', '#f5a623', '#2f9e44', '#1971c2', '#9c36b5', '#111111', '#ffffff'];
   var WIDTHS = [2, 5, 10];                    // logical px (pen); hl/eraser are scaled up
+  var TEXT_SIZES = [14, 20, 28];              // text px, indexed like WIDTHS
   var HL_ALPHA = 0.35;                        // highlighter translucency
   var HL_SCALE = 2.2;                         // highlighter width multiplier
   var ERASER_SCALE = 2.6;                     // eraser width multiplier
   var MIN_W = 160, MIN_H = 120;               // resize floor (logical px)
+  var MIN_CROP = 10;                          // smallest confirmable crop rect
   var BG_MODES = [                            // exported-background choices
     { id: 'transparent', label: 'Transparent background (inserted image keeps alpha)' },
     { id: 'white', label: 'White background' },
@@ -76,8 +91,10 @@
   ];
 
   // Live session state; null when the panel is closed.
-  // { panel, canvas, ctx, buf, W, H, dpr, fit, strokes, cur, drawingId, tool,
-  //   color, width, editingHash, bg, bgMode, rs (grip drag), ui:{...}, _key }
+  // { panel, canvas, ctx, buf, W, H, dpr, fit, strokes (ordered items:
+  //   freehand/arrow/text), cur, drawingId, tool, color, width, alpha,
+  //   pipette, dragText, dragOff, cropUI, cropRect, editingHash, bg, bgRect,
+  //   bgMode, rs (grip drag), ui:{...}, _key }
   var S = null;
 
   // ------------------------------------------- core image-pipeline guard (#A)
@@ -149,8 +166,18 @@
     // Round to 0.1px — keeps the saved JSON compact without visible loss.
     return [Math.round(x * 10) / 10, Math.round(y * 10) / 10];
   }
+  function r1(v) { return Math.round(v * 10) / 10; }
 
-  // Paint one recorded stroke onto a 2D context (logical coordinates).
+  // Effective alpha for an item: explicit per-item value, else the legacy
+  // defaults (hl was always translucent; everything else opaque). The eraser
+  // always erases at full strength.
+  function itemAlpha(st) {
+    if (st.tool === 'eraser') return 1;
+    if (st.alpha != null) return st.alpha;
+    return (st.tool === 'hl') ? HL_ALPHA : 1;
+  }
+
+  // Paint one recorded freehand stroke onto a 2D context (logical coords).
   // The eraser is destination-out: it cuts pixels from the STROKE LAYER only
   // (see paintScene), so transparent exports get real holes — never white
   // paint — and the locked background image underneath is never touched.
@@ -160,7 +187,7 @@
     ctx2.save();
     ctx2.lineCap = 'round';
     ctx2.lineJoin = 'round';
-    if (st.tool === 'hl') ctx2.globalAlpha = HL_ALPHA;
+    ctx2.globalAlpha = itemAlpha(st);
     if (st.tool === 'eraser') {
       ctx2.globalCompositeOperation = 'destination-out';
       ctx2.strokeStyle = '#000000'; // any opaque color — only alpha matters
@@ -176,12 +203,88 @@
     ctx2.restore();
   }
 
+  // Straight arrow from pts[0] to pts[last]: shaft + filled triangular head.
+  function drawArrowItem(ctx2, st) {
+    var pts = st.pts;
+    if (!pts || pts.length < 2) return;
+    var ax = pts[0][0], ay = pts[0][1];
+    var bx = pts[pts.length - 1][0], by = pts[pts.length - 1][1];
+    var dx = bx - ax, dy = by - ay;
+    var len = Math.sqrt(dx * dx + dy * dy);
+    if (len < 1) return;
+    var ang = Math.atan2(dy, dx);
+    var head = Math.max(9, st.w * 2.8);
+    ctx2.save();
+    ctx2.globalAlpha = itemAlpha(st);
+    ctx2.strokeStyle = st.color;
+    ctx2.fillStyle = st.color;
+    ctx2.lineWidth = st.w;
+    ctx2.lineCap = 'round';
+    ctx2.lineJoin = 'round';
+    // Shaft stops short of the tip so the head stays sharp.
+    var ex = bx - Math.cos(ang) * head * 0.6, ey = by - Math.sin(ang) * head * 0.6;
+    ctx2.beginPath();
+    ctx2.moveTo(ax, ay);
+    ctx2.lineTo(ex, ey);
+    ctx2.stroke();
+    ctx2.beginPath();
+    ctx2.moveTo(bx, by);
+    ctx2.lineTo(bx - Math.cos(ang - 0.45) * head, by - Math.sin(ang - 0.45) * head);
+    ctx2.lineTo(bx - Math.cos(ang + 0.45) * head, by - Math.sin(ang + 0.45) * head);
+    ctx2.closePath();
+    ctx2.fill();
+    ctx2.restore();
+  }
+
+  function drawTextItem(ctx2, st) {
+    if (!st.text) return;
+    ctx2.save();
+    ctx2.globalAlpha = itemAlpha(st);
+    ctx2.fillStyle = st.color || '#111111';
+    ctx2.font = (st.size || 20) + 'px system-ui, sans-serif';
+    ctx2.textBaseline = 'alphabetic';
+    ctx2.fillText(st.text, st.x, st.y);
+    ctx2.restore();
+  }
+
+  function drawItem(ctx2, st) {
+    if (st.tool === 'text') drawTextItem(ctx2, st);
+    else if (st.tool === 'arrow') drawArrowItem(ctx2, st);
+    else drawStroke(ctx2, st);
+  }
+
   function renderStrokes(ctx2, sess) {
-    for (var i = 0; i < sess.strokes.length; i++) drawStroke(ctx2, sess.strokes[i]);
-    if (sess.cur) drawStroke(ctx2, sess.cur);
+    for (var i = 0; i < sess.strokes.length; i++) drawItem(ctx2, sess.strokes[i]);
+    if (sess.cur) drawItem(ctx2, sess.cur);
+  }
+
+  // Text hit-testing (for drag-to-reposition while the text tool is active).
+  var _measureCtx = null;
+  function textHitBox(st) {
+    var size = st.size || 20;
+    var w = size * 0.6 * (st.text ? st.text.length : 1); // fallback estimate
+    if (!_measureCtx) { try { _measureCtx = document.createElement('canvas').getContext('2d'); } catch (e) {} }
+    if (_measureCtx) {
+      try {
+        _measureCtx.font = size + 'px system-ui, sans-serif';
+        w = _measureCtx.measureText(st.text || '').width;
+      } catch (e) {}
+    }
+    return { x: st.x - 4, y: st.y - size - 4, w: w + 8, h: size * 1.35 + 8 };
+  }
+  function hitText(p) {
+    for (var i = S.strokes.length - 1; i >= 0; i--) { // topmost first
+      var st = S.strokes[i];
+      if (st.tool !== 'text') continue;
+      var b = textHitBox(st);
+      if (p[0] >= b.x && p[0] <= b.x + b.w && p[1] >= b.y && p[1] <= b.y + b.h) return st;
+    }
+    return null;
   }
 
   // Fit the locked background image inside the canvas, centered, aspect kept.
+  // Only the DEFAULT placement — the session carries an explicit bgRect that
+  // the − / + buttons scale and crop translates.
   function bgFitRect(sess) {
     var iw = sess.bg.naturalWidth || sess.bg.width || sess.W;
     var ih = sess.bg.naturalHeight || sess.bg.height || sess.H;
@@ -218,7 +321,7 @@
   }
 
   // Full scene paint in logical coordinates: background (transparent / solid)
-  // → locked bg image (fit + centered) → stroke layer. On screen a transparent
+  // → locked bg image at its rect → stroke/text layer. On screen a transparent
   // background shows draw.css's checkerboard THROUGH the canvas; the exported
   // PNG keeps real alpha there. opts: { scale (backing-store multiplier for
   // the stroke layer), forExport (fresh 1× layer + JPEG-fallback whitening) }.
@@ -249,68 +352,231 @@
       ctx2.fillRect(0, 0, sess.W, sess.H);
     }
     if (sess.bg) {
-      var r = bgFitRect(sess);
+      var r = sess.bgRect || (sess.bgRect = bgFitRect(sess));
       try { ctx2.drawImage(sess.bg, r.x, r.y, r.w, r.h); } catch (e) {}
     }
     try { ctx2.drawImage(buf, 0, 0, sess.W, sess.H); } catch (e) {}
     ctx2.restore();
   }
 
+  // Normalize a crop drag into a clamped {x,y,w,h}; null when too small.
+  function normCrop(sess, u, relaxed) {
+    var min = relaxed ? 1 : MIN_CROP;
+    var x = Math.max(0, Math.min(u.ax, u.bx));
+    var y = Math.max(0, Math.min(u.ay, u.by));
+    var x2 = Math.min(sess.W, Math.max(u.ax, u.bx));
+    var y2 = Math.min(sess.H, Math.max(u.ay, u.by));
+    var r = { x: x, y: y, w: x2 - x, h: y2 - y };
+    return (r.w >= min && r.h >= min) ? r : null;
+  }
+
+  // Screen-only crop overlay: dim outside the rect + a two-tone dashed border
+  // (visible on any background). Never part of exports.
+  function drawCropOverlay(ctx2, sess) {
+    var r = sess.cropRect || (sess.cropUI && normCrop(sess, sess.cropUI, true));
+    if (!r) return;
+    ctx2.save();
+    ctx2.fillStyle = 'rgba(0,0,0,0.35)';
+    ctx2.fillRect(0, 0, sess.W, r.y);
+    ctx2.fillRect(0, r.y, r.x, r.h);
+    ctx2.fillRect(r.x + r.w, r.y, sess.W - r.x - r.w, r.h);
+    ctx2.fillRect(0, r.y + r.h, sess.W, sess.H - r.y - r.h);
+    ctx2.lineWidth = 1;
+    ctx2.strokeStyle = 'rgba(255,255,255,0.9)';
+    ctx2.strokeRect(r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1);
+    try { ctx2.setLineDash([5, 4]); } catch (e) {}
+    ctx2.strokeStyle = '#1971c2';
+    ctx2.strokeRect(r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1);
+    ctx2.restore();
+  }
+
   function redraw() {
     if (!S || !S.ctx) return;
     paintScene(S.ctx, S, { scale: S.dpr || 1 });
+    drawCropOverlay(S.ctx, S);
   }
 
   // --------------------------------------------------------- pointer handlers
   // pointerdown/move/up + setPointerCapture cover mouse, touch and stylus with
   // one code path. preventDefault (plus touch-action:none in draw.css) keeps
-  // the page from scrolling while sketching on mobile.
+  // the page from scrolling while sketching on mobile. The active tool decides
+  // what a drag means: freehand stroke, arrow, crop marquee, or text drag.
   function onDown(e) {
     if (!S) return;
     if (e.pointerType === 'mouse' && e.button !== 0) return;
     e.preventDefault();
+    var p = toLogical(e);
+    if (S.pipette) { samplePixel(p); return; } // armed eyedropper eats the tap
+    if (S.tool === 'text') {
+      var hit = hitText(p);
+      if (!hit) {
+        // Place new text. prompt() blocks — no drag state is held across it.
+        var txt = null;
+        try { txt = window.prompt('Text:', ''); } catch (err) { txt = null; }
+        txt = (txt == null) ? '' : String(txt).trim();
+        if (txt) {
+          var item = { tool: 'text', x: p[0], y: p[1], text: txt, color: S.color, size: TEXT_SIZES[WIDTHS.indexOf(S.width)] || 20 };
+          if (S.alpha < 1) item.alpha = S.alpha;
+          S.strokes.push(item);
+          redraw();
+        }
+        return;
+      }
+      try { S.canvas.setPointerCapture(e.pointerId); } catch (err) {}
+      S.drawingId = e.pointerId;
+      S.dragText = hit;
+      S.dragOff = [p[0] - hit.x, p[1] - hit.y];
+      return;
+    }
     try { S.canvas.setPointerCapture(e.pointerId); } catch (err) {}
     S.drawingId = e.pointerId;
+    if (S.tool === 'crop') {
+      S.cropRect = null;
+      hideCropBar();
+      S.cropUI = { ax: p[0], ay: p[1], bx: p[0], by: p[1] };
+      redraw();
+      return;
+    }
+    if (S.tool === 'arrow') {
+      S.cur = { tool: 'arrow', color: S.color, w: S.width, pts: [p, [p[0], p[1]]] };
+      if (S.alpha < 1) S.cur.alpha = S.alpha;
+      redraw();
+      return;
+    }
     var w = S.width * (S.tool === 'hl' ? HL_SCALE : S.tool === 'eraser' ? ERASER_SCALE : 1);
-    S.cur = { tool: S.tool, color: S.color, w: w, pts: [toLogical(e)] };
+    S.cur = { tool: S.tool, color: S.color, w: w, pts: [p] };
+    if (S.tool === 'hl') S.cur.alpha = Math.round(HL_ALPHA * S.alpha * 100) / 100;
+    else if (S.tool !== 'eraser' && S.alpha < 1) S.cur.alpha = S.alpha;
     redraw();
   }
   function onMove(e) {
-    if (!S || !S.cur || e.pointerId !== S.drawingId) return;
+    if (!S || S.drawingId == null || e.pointerId !== S.drawingId) return;
     e.preventDefault();
     var p = toLogical(e);
+    if (S.dragText) {
+      S.dragText.x = r1(p[0] - S.dragOff[0]);
+      S.dragText.y = r1(p[1] - S.dragOff[1]);
+      redraw();
+      return;
+    }
+    if (S.tool === 'crop' && S.cropUI) {
+      S.cropUI.bx = p[0];
+      S.cropUI.by = p[1];
+      redraw();
+      return;
+    }
+    if (!S.cur) return;
+    if (S.cur.tool === 'arrow') {
+      S.cur.pts[1] = p;
+      redraw();
+      return;
+    }
     var last = S.cur.pts[S.cur.pts.length - 1];
     if (Math.abs(p[0] - last[0]) + Math.abs(p[1] - last[1]) < 0.6) return; // thin dense input
     S.cur.pts.push(p);
     redraw();
   }
   function onUp(e) {
-    if (!S || !S.cur || e.pointerId !== S.drawingId) return;
+    if (!S || S.drawingId == null || e.pointerId !== S.drawingId) return;
     e.preventDefault();
     try { S.canvas.releasePointerCapture(e.pointerId); } catch (err) {}
-    S.strokes.push(S.cur);
-    S.cur = null;
     S.drawingId = null;
+    if (S.dragText) {
+      S.dragText = null;
+      S.dragOff = null;
+      redraw();
+      return;
+    }
+    if (S.tool === 'crop' && S.cropUI) {
+      S.cropRect = normCrop(S, S.cropUI);
+      S.cropUI = null;
+      if (S.cropRect) showCropBar(); else hideCropBar();
+      redraw();
+      return;
+    }
+    if (!S.cur) return;
+    if (S.cur.tool === 'arrow') {
+      var a = S.cur.pts[0], b = S.cur.pts[1];
+      if (Math.abs(b[0] - a[0]) + Math.abs(b[1] - a[1]) >= 3) S.strokes.push(S.cur);
+    } else {
+      S.strokes.push(S.cur);
+    }
+    S.cur = null;
     redraw();
   }
 
   function undoStroke() {
     if (!S) return;
-    S.strokes.pop();
+    S.strokes.pop(); // freehand, arrow and text items share one history
     redraw();
   }
+  // Clear wipes the drawn items AND the imported/locked background layer (#4).
+  // The background COLOR preference (bgMode) is kept. Not undoable — undo is
+  // an item-pop, and neither the layer drop nor crop enters that history.
   function clearAll() {
     if (!S) return;
     S.strokes = [];
     S.cur = null;
+    S.bg = null;
+    S.bgRect = null;
+    S.cropUI = null;
+    S.cropRect = null;
+    S.dragText = null;
+    hideCropBar();
     redraw();
+  }
+
+  // --------------------------------------------------------------- crop (#7c)
+  function showCropBar() {
+    if (S && S.ui.cropbar) S.ui.cropbar.style.display = '';
+  }
+  function hideCropBar() {
+    if (S && S.ui.cropbar) S.ui.cropbar.style.display = 'none';
+  }
+  function cancelCrop() {
+    if (!S) return;
+    S.cropUI = null;
+    S.cropRect = null;
+    hideCropBar();
+    redraw();
+  }
+  // Apply the pending crop: translate every item and the background rect into
+  // the crop origin, then resize the canvas to the rect (applySize repaints
+  // from the model, so nothing is lost). Like Clear, not undoable.
+  function applyCrop() {
+    if (!S || !S.cropRect) return;
+    var rx = Math.round(S.cropRect.x), ry = Math.round(S.cropRect.y);
+    var rw = Math.max(MIN_CROP, Math.round(S.cropRect.w));
+    var rh = Math.max(MIN_CROP, Math.round(S.cropRect.h));
+    for (var i = 0; i < S.strokes.length; i++) {
+      var st = S.strokes[i];
+      if (st.pts) {
+        for (var j = 0; j < st.pts.length; j++) {
+          st.pts[j][0] = r1(st.pts[j][0] - rx);
+          st.pts[j][1] = r1(st.pts[j][1] - ry);
+        }
+      }
+      if (st.tool === 'text') {
+        st.x = r1(st.x - rx);
+        st.y = r1(st.y - ry);
+      }
+    }
+    if (S.bg) {
+      var br = S.bgRect || bgFitRect(S);
+      S.bgRect = { x: br.x - rx, y: br.y - ry, w: br.w, h: br.h };
+    }
+    S.cropRect = null;
+    S.cropUI = null;
+    hideCropBar();
+    applySize(rw, rh);
+    Cade.showToast('Cropped to ' + rw + '×' + rh, 'success', 1600);
   }
 
   // -------------------------------------------------------- panel resize (#D)
   // Bottom-right grip: drag resizes the LOGICAL canvas (and with it the
   // panel). Deltas are divided by the session's CSS fit factor so an edit
   // session opened scaled-down resizes smoothly with no jump. The drawing
-  // survives because strokes are vector data — applySize just repaints.
+  // survives because items are vector data — applySize just repaints.
   function onGripDown(e) {
     if (!S) return;
     if (e.pointerType === 'mouse' && e.button !== 0) return;
@@ -339,8 +605,8 @@
     try { Cade.store.set(SIZE_KEY, JSON.stringify({ w: S.W, h: S.H })); } catch (err) {}
   }
   // Resize the canvas bitmap to the session's new logical size and repaint
-  // from the stroke model (resizing a canvas wipes its bitmap; the model is
-  // the source of truth, so nothing is lost).
+  // from the model (resizing a canvas wipes its bitmap; the model is the
+  // source of truth, so nothing is lost). Shared by the grip and applyCrop.
   function applySize(w, h) {
     if (!S) return;
     S.W = w;
@@ -365,18 +631,21 @@
     }).catch(function () { return null; });
   }
 
-  // Save strokes under "drawstrokes:<hash>" and maintain the pruned index —
-  // when the index exceeds MAX_SAVED, the evicted entries' stroke records are
-  // deleted too so IndexedDB doesn't grow without bound. v2 records also carry
-  // the background mode and a data-URL snapshot of the locked bg layer so a
-  // re-edit restores the exact scene (v1 records predate both: they were drawn
-  // on an always-white canvas, so they reopen with bgMode "white").
+  // Save the items under "drawstrokes:<hash>" and maintain the pruned index —
+  // when the index exceeds MAX_SAVED, the evicted entries' records are deleted
+  // too so IndexedDB doesn't grow without bound. v3 records carry the
+  // background mode, a data-URL snapshot of the locked bg layer AND its rect
+  // (v2 lacked the rect → refit on load; v1 predates both: drawn on an
+  // always-white canvas, so it reopens with bgMode "white" — the strokes array
+  // of every version loads unchanged, older items simply have no alpha/arrow/
+  // text entries).
   async function saveStrokes(hash, strokes, dims, extra) {
     try {
       await Cade.idbStore.set(KEY_PREFIX + hash, JSON.stringify({
-        v: 2, w: dims.w, h: dims.h, strokes: strokes,
+        v: 3, w: dims.w, h: dims.h, strokes: strokes,
         bgMode: (extra && extra.bgMode) || 'white',
         bg: (extra && extra.bg) || null,
+        bgRect: (extra && extra.bg && extra.bgRect) || null,
       }));
       var idx = [];
       try { idx = JSON.parse((await Cade.idbStore.get(IDX_KEY)) || '[]') || []; } catch (e) { idx = []; }
@@ -494,9 +763,9 @@
   }
 
   // ------------------------------------------------------------ insert / save
-  // Render the scene (bg mode → locked layer → strokes) to a PNG blob at
-  // logical size. PNG carries the alpha; the core's compressImage re-encodes
-  // to AVIF/WebP which keep it (JPEG-only browsers were already whitened in
+  // Render the scene (bg mode → locked layer → items) to a PNG blob at logical
+  // size. PNG carries the alpha; the core's compressImage re-encodes to
+  // AVIF/WebP which keep it (JPEG-only browsers were already whitened in
   // paintScene via alphaExportOK).
   function exportBlob(sess) {
     return new Promise(function (resolve) {
@@ -524,7 +793,11 @@
     var file = new File([blob], 'drawing.png', { type: 'image/png' });
     var strokes = sess.strokes.slice();
     var dims = { w: sess.W, h: sess.H };
-    var extra = { bgMode: sess.bgMode, bg: bgSnapshot(sess.bg) };
+    var extra = { bgMode: sess.bgMode, bg: bgSnapshot(sess.bg), bgRect: null };
+    if (sess.bg) {
+      var br = sess.bgRect || bgFitRect(sess);
+      extra.bgRect = { x: r1(br.x), y: r1(br.y), w: r1(br.w), h: r1(br.h) };
+    }
 
     var hash = null;
     try {
@@ -542,8 +815,8 @@
       Cade.showToast('Insert failed: ' + ((e && e.message) || e), 'error', 3000);
       return; // keep the panel (and the drawing) so nothing is lost
     }
-    // Persist the vector strokes under the NEW content hash so this exact
-    // image can be re-edited later (device-local — see header LIMITATION).
+    // Persist the vector items under the NEW content hash so this exact image
+    // can be re-edited later (device-local — see header LIMITATION).
     // hash is null when the core fell back to a legacy inline token; the image
     // is still in the doc, it just can't be re-edited.
     if (hash) {
@@ -581,12 +854,25 @@
     });
   }
 
-  // Install an Image as the session's locked background layer.
+  // Install an Image as the session's locked background layer (fit + centered
+  // at the CURRENT canvas size; the − / + buttons rescale it afterwards).
   function setBackground(img) {
     if (!S || !img) return;
     S.bg = img;
+    S.bgRect = bgFitRect(S);
     redraw();
     Cade.showToast('Image set as locked background — draw over it', 'success', 2200);
+  }
+
+  // Scale the locked layer about its center (#7e). Bounded so it can neither
+  // vanish nor blow up the compositor.
+  function scaleBg(f) {
+    if (!S || !S.bg) { Cade.showToast('Import an image first', 'info', 1800); return; }
+    var r = S.bgRect || (S.bgRect = bgFitRect(S));
+    var nw = r.w * f, nh = r.h * f;
+    if (Math.min(nw, nh) < 16 || nw > S.W * 8 || nh > S.H * 8) return;
+    S.bgRect = { x: r.x + (r.w - nw) / 2, y: r.y + (r.h - nh) / 2, w: nw, h: nh };
+    redraw();
   }
 
   function pickImportFile() {
@@ -605,6 +891,48 @@
       });
     });
     inp.click();
+  }
+
+  // ------------------------------------------------------ color helpers (#7d)
+  // Single entry point for color changes (swatch, free input, eyedropper):
+  // keeps the input + swatch highlight in sync and hops off the eraser.
+  function setColor(hex) {
+    if (!S) return;
+    S.color = hex;
+    if (S.ui.colorInput) { try { S.ui.colorInput.value = hex; } catch (e) {} }
+    var match = null;
+    var sw = S.ui.swatchBtns || [];
+    for (var i = 0; i < sw.length; i++) {
+      if (sw[i].getAttribute('data-color') === hex) match = sw[i];
+    }
+    setActive(sw, match); // no swatch highlighted for custom colors
+    if (S.tool === 'eraser') { S.tool = 'pen'; setActive(S.ui.toolBtns, S.ui.toolBtns[0]); }
+  }
+  function setPipette(on) {
+    if (!S) return;
+    S.pipette = !!on;
+    var b = S.ui.eyedropBtn;
+    if (b) b.className = b._baseClass + (S.pipette ? ' draw-active' : '');
+    if (S.canvas) S.canvas.style.cursor = S.pipette ? 'copy' : '';
+  }
+  // Eyedropper: sample the COMPOSITED scene pixel under the tap straight off
+  // the visible canvas bitmap (its 2D context was created with
+  // willReadFrequently for exactly this). Works everywhere — no EyeDropper API.
+  function samplePixel(p) {
+    var d = null;
+    try {
+      var dpr = S.dpr || 1;
+      var x = Math.max(0, Math.min(S.canvas.width - 1, Math.round(p[0] * dpr)));
+      var y = Math.max(0, Math.min(S.canvas.height - 1, Math.round(p[1] * dpr)));
+      d = S.ctx.getImageData(x, y, 1, 1).data;
+    } catch (e) { d = null; }
+    setPipette(false);
+    if (!d) { Cade.showToast('Could not sample that pixel', 'error', 2000); return; }
+    if (d[3] === 0) { Cade.showToast('Transparent pixel — nothing to sample there', 'info', 2000); return; }
+    var hex = '#';
+    for (var i = 0; i < 3; i++) hex += ('0' + d[i].toString(16)).slice(-2);
+    setColor(hex);
+    Cade.showToast('Color picked: ' + hex, 'success', 1500);
   }
 
   // ---------------------------------------------------------------- panel UI
@@ -633,7 +961,7 @@
 
   // Build (or rebuild) the whiteboard panel.
   // opts: { strokes?, w?, h?, editingHash?, bg? (locked background Image),
-  //         bgMode? ('transparent'|'white'|'black') }
+  //         bgRect? ({x,y,w,h} placement of bg), bgMode? }
   function openSession(opts) {
     opts = opts || {};
     Cade.closeAllMenus();
@@ -653,17 +981,23 @@
       strokes: Array.isArray(opts.strokes) ? opts.strokes : [],
       cur: null, drawingId: null, rs: null,
       tool: 'pen', color: COLORS[6] /* black */, width: WIDTHS[1],
+      alpha: 1, pipette: false,
+      dragText: null, dragOff: null,
+      cropUI: null, cropRect: null,
       editingHash: opts.editingHash || null,
       bg: opts.bg || null,
+      bgRect: (opts.bg && opts.bgRect && opts.bgRect.w > 0 && opts.bgRect.h > 0)
+        ? { x: +opts.bgRect.x || 0, y: +opts.bgRect.y || 0, w: +opts.bgRect.w, h: +opts.bgRect.h }
+        : null,
       bgMode: bgMode,
       ui: {},
     };
 
     // Canvas geometry. Defaults to ~min(82vw, 520) × min(55vh, 420) but a
     // grip-resized size persists per device (SIZE_KEY) and a re-edited drawing
-    // keeps its ORIGINAL logical size (so saved stroke coordinates stay
-    // valid). Oversized canvases are CSS-scaled down to fit the viewport —
-    // pointer coords are mapped through getBoundingClientRect either way.
+    // keeps its ORIGINAL logical size (so saved item coordinates stay valid).
+    // Oversized canvases are CSS-scaled down to fit the viewport — pointer
+    // coords are mapped through getBoundingClientRect either way.
     var defW = Math.max(160, Math.min(Math.round(window.innerWidth * 0.82), 520));
     var defH = Math.max(120, Math.min(Math.round(window.innerHeight * 0.55), 420));
     var storedSize = null;
@@ -678,17 +1012,26 @@
     var fitH = Math.max(MIN_H, Math.round(window.innerHeight * 0.72));
     var fit = Math.min(1, fitW / sess.W, fitH / sess.H);
 
-    // --- toolbar row 1: tools + colors
+    // --- toolbar row 1: tools + widths
     var row1 = el('div', 'draw-toolbar');
-    var toolDefs = [['pen', '✏️', 'Pen'], ['hl', '🖍️', 'Highlighter'], ['eraser', '🧽', 'Eraser']];
+    var toolDefs = [
+      ['pen', '✏️', 'Pen'],
+      ['hl', '🖍️', 'Highlighter'],
+      ['eraser', '🧽', 'Eraser (strokes & text only — never the background image)'],
+      ['arrow', '↗', 'Arrow — drag from tail to tip'],
+      ['text', 'T', 'Text — tap to place, drag existing text to move'],
+      ['crop', '⛶', 'Crop — drag a rectangle, Enter/✓ applies, Esc cancels'],
+    ];
     var toolBtns = [];
     toolDefs.forEach(function (t) {
-      var b = el('button', 'draw-btn draw-tool', t[1]);
-      b._baseClass = 'draw-btn draw-tool';
+      var b = el('button', 'draw-btn draw-tool' + (t[0] === 'text' ? ' draw-tool-text' : ''), t[1]);
+      b._baseClass = b.className;
       b.title = t[2];
       b.setAttribute('data-tool', t[0]);
       b.addEventListener('click', function () {
         if (!S) return;
+        if (S.tool === 'crop' && t[0] !== 'crop') cancelCrop(); // leaving crop drops the marquee
+        setPipette(false);
         S.tool = t[0];
         setActive(toolBtns, b);
       });
@@ -696,31 +1039,11 @@
       row1.appendChild(b);
     });
     row1.appendChild(el('span', 'draw-sep'));
-    var swatchBtns = [];
-    COLORS.forEach(function (hex, i) {
-      var b = el('button', 'draw-swatch');
-      b._baseClass = 'draw-swatch';
-      b.title = hex;
-      b.setAttribute('data-color', hex);
-      b.style.background = hex;
-      b.addEventListener('click', function () {
-        if (!S) return;
-        S.color = hex;
-        setActive(swatchBtns, b);
-        // Picking a color implies inking, not erasing.
-        if (S.tool === 'eraser') { S.tool = 'pen'; setActive(toolBtns, toolBtns[0]); }
-      });
-      swatchBtns.push(b);
-      row1.appendChild(b);
-    });
-
-    // --- toolbar row 2: widths + background selector + import
-    var row2 = el('div', 'draw-toolbar');
     var widthBtns = [];
     WIDTHS.forEach(function (w, i) {
       var b = el('button', 'draw-btn draw-width');
       b._baseClass = 'draw-btn draw-width';
-      b.title = 'Stroke width ' + w + 'px';
+      b.title = 'Stroke width ' + w + 'px · text ' + TEXT_SIZES[i] + 'px';
       b.setAttribute('data-width', String(w));
       var dot = el('span', 'draw-dot');
       var d = 4 + i * 4;
@@ -733,10 +1056,53 @@
         setActive(widthBtns, b);
       });
       widthBtns.push(b);
+      row1.appendChild(b);
+    });
+
+    // --- toolbar row 2: color (swatches + free picker + eyedropper + opacity)
+    var row2 = el('div', 'draw-toolbar');
+    var swatchBtns = [];
+    COLORS.forEach(function (hex) {
+      var b = el('button', 'draw-swatch');
+      b._baseClass = 'draw-swatch';
+      b.title = hex;
+      b.setAttribute('data-color', hex);
+      b.style.background = hex;
+      b.addEventListener('click', function () { if (S) setColor(hex); });
+      swatchBtns.push(b);
       row2.appendChild(b);
     });
+    var colorInput = el('input', 'draw-colorinput');
+    colorInput.type = 'color';
+    colorInput.value = COLORS[6];
+    colorInput.title = 'Custom color';
+    colorInput.addEventListener('input', function () { if (S) setColor(colorInput.value); });
+    row2.appendChild(colorInput);
+    var eyedropBtn = el('button', 'draw-btn', '💧');
+    eyedropBtn._baseClass = 'draw-btn';
+    eyedropBtn.title = 'Eyedropper — tap the canvas to pick that color';
+    eyedropBtn.setAttribute('data-act', 'eyedrop');
+    eyedropBtn.addEventListener('click', function () { if (S) setPipette(!S.pipette); });
+    row2.appendChild(eyedropBtn);
     row2.appendChild(el('span', 'draw-sep'));
-    // Background selector — what the INSERTED image gets behind the strokes.
+    var opacity = el('input', 'draw-opacity');
+    opacity.type = 'range';
+    opacity.min = '10';
+    opacity.max = '100';
+    opacity.step = '5';
+    opacity.value = '100';
+    opacity.title = 'Stroke opacity';
+    opacity.setAttribute('data-act', 'opacity');
+    opacity.addEventListener('input', function () {
+      if (!S) return;
+      var v = parseInt(opacity.value, 10);
+      S.alpha = Math.max(0.1, Math.min(1, (isNaN(v) ? 100 : v) / 100));
+    });
+    row2.appendChild(opacity);
+
+    // --- toolbar row 3: background mode + import + bg scale
+    var row3 = el('div', 'draw-toolbar');
+    // Background selector — what the INSERTED image gets behind the items.
     // Transparent is the default; the on-screen checkerboard is CSS-only.
     var bgBtns = [];
     BG_MODES.forEach(function (m) {
@@ -753,37 +1119,49 @@
         redraw();
       });
       bgBtns.push(b);
-      row2.appendChild(b);
+      row3.appendChild(b);
     });
-    row2.appendChild(el('span', 'draw-sep'));
+    row3.appendChild(el('span', 'draw-sep'));
     var importBtn = el('button', 'draw-btn', '🖼 Import');
     importBtn._baseClass = 'draw-btn';
     importBtn.title = 'Import an image as a locked background layer to draw over';
     importBtn.setAttribute('data-act', 'import');
     importBtn.addEventListener('click', pickImportFile);
-    row2.appendChild(importBtn);
+    row3.appendChild(importBtn);
+    var bgMinus = el('button', 'draw-btn', '−');
+    bgMinus._baseClass = 'draw-btn';
+    bgMinus.title = 'Shrink the background image';
+    bgMinus.setAttribute('data-act', 'bgminus');
+    bgMinus.addEventListener('click', function () { scaleBg(1 / 1.15); });
+    row3.appendChild(bgMinus);
+    var bgPlus = el('button', 'draw-btn', '+');
+    bgPlus._baseClass = 'draw-btn';
+    bgPlus.title = 'Enlarge the background image';
+    bgPlus.setAttribute('data-act', 'bgplus');
+    bgPlus.addEventListener('click', function () { scaleBg(1.15); });
+    row3.appendChild(bgPlus);
 
-    // --- toolbar row 3: undo/clear + save/insert
-    var row3 = el('div', 'draw-toolbar');
+    // --- toolbar row 4: undo/clear + save/insert
+    var row4 = el('div', 'draw-toolbar');
     var undoBtn = el('button', 'draw-btn', '↩ Undo');
     undoBtn._baseClass = 'draw-btn';
-    undoBtn.title = 'Undo last stroke';
+    undoBtn.title = 'Undo the last stroke / arrow / text';
     undoBtn.setAttribute('data-act', 'undo');
     undoBtn.addEventListener('click', undoStroke);
-    row3.appendChild(undoBtn);
+    row4.appendChild(undoBtn);
     var clearBtn = el('button', 'draw-btn', '✕ Clear');
     clearBtn._baseClass = 'draw-btn';
-    clearBtn.title = 'Clear the canvas (keeps a background image)';
+    clearBtn.title = 'Clear everything, including an imported background image';
     clearBtn.setAttribute('data-act', 'clear');
     clearBtn.addEventListener('click', clearAll);
-    row3.appendChild(clearBtn);
-    row3.appendChild(el('span', 'draw-spacer'));
+    row4.appendChild(clearBtn);
+    row4.appendChild(el('span', 'draw-spacer'));
     var saveBtn = el('button', 'draw-btn', '⬇ PNG');
     saveBtn._baseClass = 'draw-btn';
     saveBtn.title = 'Download as PNG';
     saveBtn.setAttribute('data-act', 'save');
     saveBtn.addEventListener('click', doSavePng);
-    row3.appendChild(saveBtn);
+    row4.appendChild(saveBtn);
     var insertBtn = el('button', 'draw-btn draw-primary', sess.editingHash ? 'Update' : 'Insert');
     insertBtn._baseClass = 'draw-btn draw-primary';
     insertBtn.title = sess.editingHash
@@ -791,11 +1169,28 @@
       : 'Insert into the document as an embedded image';
     insertBtn.setAttribute('data-act', 'insert');
     insertBtn.addEventListener('click', function () { doInsert(); });
-    row3.appendChild(insertBtn);
+    row4.appendChild(insertBtn);
+
+    // --- crop confirm bar (hidden until a crop rect is pending)
+    var cropbar = el('div', 'draw-cropbar');
+    var cropOk = el('button', 'draw-btn draw-primary', '✓ Apply crop');
+    cropOk._baseClass = 'draw-btn draw-primary';
+    cropOk.setAttribute('data-act', 'cropok');
+    cropOk.addEventListener('click', applyCrop);
+    cropbar.appendChild(cropOk);
+    var cropNo = el('button', 'draw-btn', '✕ Cancel');
+    cropNo._baseClass = 'draw-btn';
+    cropNo.setAttribute('data-act', 'cropcancel');
+    cropNo.addEventListener('click', cancelCrop);
+    cropbar.appendChild(cropNo);
+    cropbar.appendChild(el('span', 'draw-croptip', 'Enter applies · Esc cancels'));
+    cropbar.style.display = 'none';
 
     body.appendChild(row1);
     body.appendChild(row2);
     body.appendChild(row3);
+    body.appendChild(row4);
+    body.appendChild(cropbar);
 
     // --- edit-mode hint
     if (sess.editingHash) {
@@ -807,7 +1202,8 @@
       sess.ui.hint = hint;
     }
 
-    // --- canvas (devicePixelRatio backing store for crispness)
+    // --- canvas (devicePixelRatio backing store for crispness; the context
+    // is read back by the eyedropper, hence willReadFrequently)
     var canvas = el('canvas', 'draw-canvas draw-cv-' + sess.bgMode);
     var dpr = Math.max(1, window.devicePixelRatio || 1);
     sess.dpr = dpr;
@@ -818,7 +1214,7 @@
     canvas.style.height = Math.round(sess.H * fit) + 'px';
     body.appendChild(canvas);
     sess.canvas = canvas;
-    sess.ctx = canvas.getContext('2d');
+    sess.ctx = canvas.getContext('2d', { willReadFrequently: true });
     try { sess.ctx.setTransform(dpr, 0, 0, dpr, 0, 0); } catch (e) {}
 
     // Pointer events (non-passive so preventDefault sticks on touch).
@@ -837,10 +1233,19 @@
     panel.appendChild(grip);
     sess.ui.grip = grip;
 
-    // Escape closes (capture so the editor doesn't swallow it); removed in
-    // closePanel / _onClose.
+    // Keys (capture so the editor doesn't swallow them; removed in closePanel
+    // / _onClose): Escape cancels a pending crop first, then closes the panel;
+    // Enter applies a pending crop.
     sess._key = function (e) {
-      if (e.key === 'Escape' && document.getElementById(PANEL_ID)) { e.preventDefault(); closePanel(); }
+      if (!document.getElementById(PANEL_ID)) return;
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        if (S && (S.cropRect || S.cropUI)) { cancelCrop(); return; }
+        closePanel();
+      } else if (e.key === 'Enter' && S && S.cropRect) {
+        e.preventDefault();
+        applyCrop();
+      }
     };
     document.addEventListener('keydown', sess._key, true);
     panel._onClose = function () {
@@ -857,6 +1262,10 @@
     sess.ui.widthBtns = widthBtns;
     sess.ui.bgBtns = bgBtns;
     sess.ui.insertBtn = insertBtn;
+    sess.ui.colorInput = colorInput;
+    sess.ui.eyedropBtn = eyedropBtn;
+    sess.ui.opacity = opacity;
+    sess.ui.cropbar = cropbar;
     setActive(toolBtns, toolBtns[0]);       // pen
     setActive(swatchBtns, swatchBtns[6]);   // black
     setActive(widthBtns, widthBtns[1]);     // medium
@@ -867,14 +1276,62 @@
     return sess;
   }
 
-  // Palette entry point — toggles like the other widgets.
+  // --------------------------------------------------- selection import (#5)
+  // Mobile has no right-click menu on doc images, so opening the widget WHILE
+  // AN IMAGE TOKEN IS SELECTED imports that image instead of plain-opening
+  // (or toggle-closing). First token in the selection wins; an empty
+  // selection changes nothing.
+  function selectedImageToken() {
+    try {
+      var st = Cade.editor.state;
+      var sel = st.selection.main;
+      if (!sel || sel.empty) return null;
+      var text = st.sliceDoc(sel.from, sel.to);
+      if (!text || text.indexOf('![img:') === -1) return null;
+      // The core's combined matcher (IMG_TOKEN_RE): code? + ('#' ref | ':' /
+      // bare inline base64). Inline needs a real payload (≥24 chars), same
+      // guard the core uses against accidental matches.
+      var re = /!\[img:(?:([jwa])([:#]))?([A-Za-z0-9+/=]+)\]/g;
+      var m;
+      while ((m = re.exec(text)) !== null) {
+        if (m[2] === '#') {
+          if (/^[a-f0-9]{8,}$/.test(m[3])) return { ref: true, code: m[1] || 'w', data: m[3] };
+        } else if (m[3].length >= 24) {
+          return { ref: false, code: m[1] || 'j', data: m[3] };
+        }
+      }
+    } catch (e) {}
+    return null;
+  }
+  function openWithToken(tok) {
+    if (tok.ref) {
+      // Saved whiteboard strokes reopen editable; otherwise the flattened
+      // image loads as a locked background layer (same __drawEditByHash flow
+      // as the desktop right-click menu). If neither works, still open plain.
+      window.__drawEditByHash(tok.data).then(function (ok) {
+        if (!ok && !document.getElementById(PANEL_ID)) openSession({});
+      });
+      return;
+    }
+    loadImageEl('data:' + (REF_MIME[tok.code] || 'image/jpeg') + ';base64,' + tok.data).then(function (img) {
+      if (!document.getElementById(PANEL_ID)) openSession({});
+      if (img) setBackground(img);
+      else Cade.showToast('Could not load the selected image', 'error', 2500);
+    });
+  }
+
+  // Palette entry point — toggles like the other widgets, EXCEPT when the
+  // editor selection holds an image token: then it imports that image (into
+  // the already-open panel too, instead of just closing it).
   function open() {
+    var tok = selectedImageToken();
+    if (tok) { openWithToken(tok); return; }
     if (document.getElementById(PANEL_ID)) { closePanel(); return; }
     openSession({});
   }
 
-  // Global opener: ensures the panel is OPEN (no toggle). Used by core hooks
-  // and tests; also handy from the console.
+  // Global opener: ensures the panel is OPEN — no toggle, no selection import
+  // (deterministic for core hooks and tests). Also handy from the console.
   window.__drawOpen = function () {
     if (!document.getElementById(PANEL_ID)) openSession({});
     return true;
@@ -900,14 +1357,16 @@
     hash = String(hash || '').toLowerCase().replace(/[^a-f0-9]/g, '');
     if (!hash) { Cade.showToast('Bad image hash', 'error', 2000); return false; }
 
-    // 1) Preferred: this device still has the vector strokes (v2 records also
-    // restore the background mode + locked layer snapshot).
+    // 1) Preferred: this device still has the vector items (v3 records also
+    // restore the background mode, locked layer snapshot and its rect; v2
+    // lacked the rect and refits; v1 reopens on white).
     var rec = await getStrokesRecord(hash);
     if (rec) {
       var bgImg = rec.bg ? await loadImageEl(rec.bg) : null;
       openSession({
         strokes: rec.strokes, w: rec.w, h: rec.h, editingHash: hash,
         bgMode: rec.bgMode || 'white', bg: bgImg,
+        bgRect: (bgImg && rec.bgRect) ? rec.bgRect : null,
       });
       return true;
     }
@@ -938,7 +1397,7 @@
     name: 'Whiteboard',
     description: 'Free-draw sketches; insert into the doc as an image',
     icon: '✏️',
-    tags: 'draw,whiteboard,sketch,doodle,pen,drawing,canvas',
+    tags: 'draw,whiteboard,sketch,doodle,pen,drawing,canvas,annotate,arrow,text,crop',
     open: open,
   });
 
@@ -952,6 +1411,10 @@
       down: onDown, move: onMove, up: onUp,
       undo: undoStroke, clearAll: clearAll, redraw: redraw,
       applySize: applySize,
+      applyCrop: applyCrop,
+      cancelCrop: cancelCrop,
+      selectedImageToken: selectedImageToken,
+      setColor: setColor,
       findInsertedHashNearCursor: findInsertedHashNearCursor,
       saveStrokes: saveStrokes,
       replaceEditedToken: replaceEditedToken,
