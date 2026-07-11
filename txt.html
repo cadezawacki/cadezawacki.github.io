@@ -2518,7 +2518,7 @@ body.zen.zen-tw .editor-wrap .cm-content { padding-top: 38vh; padding-bottom: 38
     <button class="mob-btn" onclick="mobilePaste()" title="Paste">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>
     </button>
-    <button class="mob-btn" onclick="mobileDownload()" title="Download as Zip">
+    <button class="mob-btn" onclick="mobileDownload()" title="Download…">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
     </button>
   </div>
@@ -2841,7 +2841,9 @@ body.zen.zen-tw .editor-wrap .cm-content { padding-top: 38vh; padding-bottom: 38
       <button class="dl-pick" onclick="dlPick('.md')">.md</button>
       <button class="dl-pick" onclick="dlPick('.py')">.py</button>
       <button class="dl-pick" onclick="dlPick('.js')">.js</button>
+      <button class="dl-pick" onclick="dlPick('.zip')" title="Split fenced blocks into their own files">.zip (split)</button>
     </div>
+    <div style="color:var(--text-faint);font-size:var(--text-xs);margin:-4px 0 10px;" id="dl-split-hint"></div>
     <div class="form-group" style="margin-bottom:0">
       <input class="form-input" id="dl-filename" placeholder="filename.txt" autocomplete="off" spellcheck="false">
     </div>
@@ -15946,9 +15948,10 @@ window.mobileCopy = function() {
     showToast('Failed to copy', 'error');
   });
 };
-window.triggerDownload = function() {
+// Detect the multi-doc format: fenced ``` blocks each preceded by a file-path
+// line. Returns [{path, content}, ...] (empty when the doc isn't multi-doc).
+function _detectMultiDocFiles() {
   const content = editor.state.doc.toString().trim();
-  if (!content) { showToast('Nothing to download', 'error'); return; }
   const files = [];
   const parts = content.split('```');
   for (let i = 0; i < parts.length - 1; i += 2) {
@@ -15961,28 +15964,35 @@ window.triggerDownload = function() {
       files.push({ path: filePath, content: code });
     }
   }
-  if (files.length === 0) {
-    openDownloadModal();
-    return;
-  }
-  const zip = new JSZip();
-  files.forEach(f => zip.file(f.path.replace(/\\/g, '/'), f.content));
-  zip.generateAsync({ type: 'blob' }).then(blob => {
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'files-' + Date.now() + '.zip';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    showToast('Downloaded ' + files.length + ' file(s) as zip', 'success', 2000);
-  }).catch(err => showToast('Zip error: ' + err.message, 'error'));
+  return files;
+}
+
+// Download ALWAYS goes through the same prompt modal — the multi-doc format
+// no longer auto-saves a .zip behind your back; it just DEFAULTS the format
+// to "split .zip" (item 8). Choosing any other extension downloads the whole
+// document as that single file.
+let _dlDetectedFiles = [];
+window.triggerDownload = function() {
+  const content = editor.state.doc.toString().trim();
+  if (!content) { showToast('Nothing to download', 'error'); return; }
+  openDownloadModal();
 };
 window.mobileDownload = window.triggerDownload;
 
+function _dlStamp() {
+  const d = new Date(), p = n => String(n).padStart(2, '0');
+  return d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + '-' + p(d.getHours()) + p(d.getMinutes());
+}
 window.openDownloadModal = function() {
-  document.getElementById('dl-filename').value = 'document.txt';
+  _dlDetectedFiles = _detectMultiDocFiles();
+  const hint = document.getElementById('dl-split-hint');
+  if (_dlDetectedFiles.length) {
+    document.getElementById('dl-filename').value = 'files-' + _dlStamp() + '.zip';
+    if (hint) hint.textContent = 'Multi-doc detected: .zip splits into ' + _dlDetectedFiles.length + ' file' + (_dlDetectedFiles.length === 1 ? '' : 's') + ' (' + _dlDetectedFiles.slice(0, 3).map(f => f.path).join(', ') + (_dlDetectedFiles.length > 3 ? ', …' : '') + '). Any other extension saves the whole doc as one file.';
+  } else {
+    document.getElementById('dl-filename').value = 'document.txt';
+    if (hint) hint.textContent = '';
+  }
   document.getElementById('download-overlay').classList.add('open');
   setTimeout(() => document.getElementById('dl-filename').select(), 50);
 };
@@ -15996,10 +16006,7 @@ window.dlPick = function(ext) {
   input.value = base + ext;
   input.focus();
 };
-window.confirmDownload = function() {
-  const filename = document.getElementById('dl-filename').value.trim() || 'document.txt';
-  const content = editor.state.doc.toString();
-  const blob = new Blob([content], { type: 'text/plain' });
+function _dlSaveBlob(blob, filename) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -16008,6 +16015,28 @@ window.confirmDownload = function() {
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
+}
+window.confirmDownload = function() {
+  const filename = document.getElementById('dl-filename').value.trim() || 'document.txt';
+  const content = editor.state.doc.toString();
+  if (/\.zip$/i.test(filename)) {
+    if (typeof JSZip === 'undefined') { showToast('Zip library not loaded (offline?) — pick another format', 'error', 3500); return; }
+    const zip = new JSZip();
+    const files = _dlDetectedFiles.length ? _dlDetectedFiles : _detectMultiDocFiles();
+    if (files.length) {
+      files.forEach(f => zip.file(f.path.replace(/\\/g, '/'), f.content));
+    } else {
+      // No multi-doc structure — zip the whole document as a single file.
+      zip.file('document.txt', content);
+    }
+    zip.generateAsync({ type: 'blob' }).then(blob => {
+      _dlSaveBlob(blob, filename);
+      closeDownloadModal();
+      showToast(files.length ? ('Downloaded ' + files.length + ' file(s) in ' + filename) : ('Downloaded ' + filename), 'success', 2200);
+    }).catch(err => showToast('Zip error: ' + err.message, 'error'));
+    return;
+  }
+  _dlSaveBlob(new Blob([content], { type: 'text/plain' }), filename);
   closeDownloadModal();
   showToast('Downloaded ' + filename, 'success', 2000);
 };
