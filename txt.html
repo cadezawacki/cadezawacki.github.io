@@ -9647,6 +9647,7 @@ async function applyResolvedNew(roomName, localText, serverText) {
   // Register the new room (bypasses the room cap on purpose — preserving the
   // conflicting copy matters more than the soft limit), mirroring the workspace.
   if (!rooms.includes(conflictName)) rooms.push(conflictName);
+  try { touchRoomCreated(conflictName); } catch {}
   // Mirror the source room's full workspace membership onto the conflict copy.
   const wsIds = getRoomWorkspaceIds(roomName);
   if (wsIds.length) roomWorkspace[conflictName] = wsIds.slice();
@@ -9955,6 +9956,10 @@ function saveRooms() {
   store.set('cade-active-room', activeRoom);
   store.set('cade-room-cap', roomCap);
   try { tabSync.postRooms(); } catch {}
+  // The room list is part of the synced workspace blob — propagate adds,
+  // removals and reorders to the account's other devices (debounced; no-op
+  // when sync isn't configured).
+  try { if (typeof schedulePushWorkspaces === 'function') schedulePushWorkspaces(); } catch {}
 }
 
 // Label for a room in a dropdown. A pinned room surfaces in EVERY workspace;
@@ -11010,15 +11015,7 @@ function purgeLocalRoom(name) {
   rooms = rooms.filter(r => r !== name);
   delete roomWorkspace[name];
   delete roomMeta[name];
-  store.remove('cade-room-cache:' + name);
-  store.remove('cade-room-synced:' + name);
-  store.remove('cade-room-ver:' + name);
-  store.remove('cade-snap:' + name);
-  store.remove('cade-room-pw-hash:' + name);
-  store.remove('cade-room-pw-remote:' + name);
-  try { delete sessionRoomPasswords[name]; } catch {}
-  // Per-room editor state cache (roomStates feature from items 1–10).
-  try { if (typeof roomStates !== 'undefined') roomStates.delete(typeof roomStateKey === 'function' ? roomStateKey(name) : name); } catch {}
+  _purgeRoomStorageKeys(name);
   if (activeRoom === name && syncState.connected) {
     window.disconnectSync();
     activeRoom = '';
@@ -11029,15 +11026,18 @@ function purgeLocalRoom(name) {
   saveRoomMeta();
 }
 
-// Non-destructive: drop the room from THIS device's list. Server data is left
-// untouched — the room can be re-subscribed via Explore Rooms.
+// Remove the room from the ACCOUNT's synced tab list (a tombstone propagates
+// through the workspace blob, so every device drops it). Server content is
+// left untouched — the room can be re-subscribed via Explore Rooms or by
+// simply adding a room with the same name again.
 window.removeRoom = function(name) {
+  tombstoneRoom(name);
   purgeLocalRoom(name);
   renderRoomManagerList();
   renderWorkspaceManagerList();
   renderRoomTabs();
   try { renderBreadcrumb(); } catch {}
-  showToast('Removed from list: ' + name, 'success', 2000);
+  showToast('Removed from your synced tab list: ' + name + ' (server content kept)', 'success', 2600);
 };
 
 // Destructive: wipe the room's Firebase data (text/locked/verify/v) AND all
@@ -11070,13 +11070,15 @@ window.deleteRoomFromServer = async function(name) {
     showToast('Server delete failed: ' + (e.message || e) + ' — local data kept.', 'error', 6000);
     return;
   }
-  // Server gone — now purge locally and tear down listeners.
+  // Server gone — tombstone it (so every synced device purges it and a stale
+  // tab can't lazily resurrect it), then purge locally and tear down listeners.
+  tombstoneRoom(name);
   purgeLocalRoom(name);
   renderRoomManagerList();
   renderWorkspaceManagerList();
   renderRoomTabs();
   try { renderBreadcrumb(); } catch {}
-  showToast('Deleted "' + name + '" from server and this device', 'success', 3000);
+  showToast('Deleted "' + name + '" from the server and all synced devices', 'success', 3200);
 };
 
 // Pin / archive toggles surfaced by Room Manager + context menus.
@@ -11248,6 +11250,17 @@ const ROOM_STORAGE_PREFIXES = [
   'cade-room-ver:', 'cade-autocolor:',
 ];
 
+// Drop every device-local storage trace of a room (keys, session password,
+// cached editor state). Shared by purgeLocalRoom and the remote-tombstone
+// merge so a deletion actually frees the room's memory footprint everywhere.
+function _purgeRoomStorageKeys(name) {
+  ROOM_STORAGE_PREFIXES.forEach(p => store.remove(p + name));
+  store.remove('cade-room-pw-hash:' + name);
+  store.remove('cade-room-pw-remote:' + name);
+  try { delete sessionRoomPasswords[name]; } catch {}
+  try { if (typeof roomStates !== 'undefined') roomStates.delete(typeof roomStateKey === 'function' ? roomStateKey(name) : name); } catch {}
+}
+
 // Step 1 (automatic): drop offline caches for rooms no longer in view —
 // i.e. rooms that are not in the tab list and not the active room.
 window.__evictStaleRoomCaches = function() {
@@ -11418,16 +11431,43 @@ const WS_COLORS = ['neutral', 'teal', 'blue', 'green', 'amber', 'orange', 'pink'
 // roomWorkspace: { roomName: [workspaceId, ...] } — MANY-TO-MANY (Feature 51).
 //   A room may live in several workspaces at once. An absent key or empty
 //   array means "Unlabeled". Reads tolerate the legacy string form.
-// roomMeta: { roomName: {pinned, archived} } — per-room device-local flags
-//   (Features 51/52). Persisted to local store only (never synced).
+// roomMeta: { roomName: {pinned, archived, created, modified} } — per-room
+//   flags + sort stamps. Carried in the synced blob so pins/ordering and the
+//   created-vs-tombstone comparison work across devices.
+// roomTombstones: { roomName: deletedAtMs } — account-wide deletion markers.
+//   A room is dead while its tombstone is >= its (re)creation stamp; re-adding
+//   a room stamps a fresh `created`, which resurrects it everywhere. Entries
+//   are pruned (age + count capped) at push time — memory care.
 let workspaces = [];
 let roomWorkspace = {};
 let roomMeta = {};
+let roomTombstones = {};
 let activeWorkspace = store.get('cade-active-workspace') || WS_ALL;
 
 try { workspaces = JSON.parse(store.get('cade-workspaces')) || []; } catch {}
 try { roomWorkspace = JSON.parse(store.get('cade-room-workspace')) || {}; } catch {}
 try { roomMeta = JSON.parse(store.get('cade-room-meta')) || {}; } catch {}
+try { roomTombstones = JSON.parse(store.get('cade-room-tomb')) || {}; } catch {}
+
+function saveRoomTombstones() { store.set('cade-room-tomb', JSON.stringify(roomTombstones)); }
+// Mark a room deleted account-wide. The next workspace-blob push carries the
+// tombstone to every device, whose merge purges the room locally.
+function tombstoneRoom(name) {
+  if (!name) return;
+  roomTombstones[name] = Date.now();
+  saveRoomTombstones();
+  try { schedulePushWorkspaces(); } catch {}
+}
+const TOMB_MAX_AGE_MS = 90 * 24 * 3600 * 1000; // forget deletions after 90 days
+const TOMB_MAX_COUNT = 300;                    // and keep at most 300 markers
+function _pruneTombstones() {
+  const cutoff = Date.now() - TOMB_MAX_AGE_MS;
+  const entries = Object.entries(roomTombstones)
+    .filter(([, ts]) => typeof ts === 'number' && ts >= cutoff)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, TOMB_MAX_COUNT);
+  roomTombstones = Object.fromEntries(entries);
+}
 
 // One-time migration + normalization: coerce every roomWorkspace value into an
 // array of valid (known) workspace ids. Tolerates the legacy single-string
@@ -12463,7 +12503,29 @@ async function pushWorkspacesNow() {
     const db = initFirebase(fbUrl);
     const fp = _wsKeyFp || await _computeKeyFingerprint(baseKey);
     _wsKeyFp = fp;
-    const blob = { ts: Date.now(), workspaces, roomWorkspace };
+    // Fresh-client guard: a device that has never seen the cloud blob must not
+    // blind-push its (nearly empty) state over everyone's config — pull and
+    // merge first, then publish the merged result.
+    if (!store.get('cade-workspaces-ts')) {
+      try {
+        const snap = await db.ref(_wsConfigPath(fp)).once('value');
+        const val = snap.val();
+        if (val) await applyRemoteWorkspaceBlob(val, baseKey, 'initial');
+      } catch (_) {}
+    }
+    // The blob now carries the ROOM LIST + meta + deletion tombstones, so tabs
+    // created/moved/pinned/deleted on one device propagate to all of them.
+    _pruneTombstones();
+    // Every alive room needs a creation stamp — the tombstone comparison
+    // (dead while tombstone >= created) depends on it. Some legacy add paths
+    // never stamped one.
+    let stamped = false;
+    rooms.forEach(r => {
+      const m = roomMeta[r] = roomMeta[r] || {};
+      if (!m.created) { m.created = Date.now(); stamped = true; }
+    });
+    if (stamped) { try { store.set('cade-room-meta', JSON.stringify(roomMeta)); } catch {} }
+    const blob = { ts: Date.now(), workspaces, roomWorkspace, rooms, roomMeta, tomb: roomTombstones };
     _wsLastWriteTs = blob.ts;
     const encrypted = await encryptText(JSON.stringify(blob), baseKey);
     // Never publish a bloated blob — a giant value here is what spirals into the
@@ -12511,30 +12573,120 @@ async function applyRemoteWorkspaceBlob(encrypted, baseKey, source) {
     // Skip echoes of our own writes
     if (Math.abs(remoteTs - _wsLastWriteTs) < 250) return false;
     const localTs = parseInt(store.get('cade-workspaces-ts') || '0', 10);
-    if (remoteTs <= localTs) return false;
-    workspaces = Array.isArray(blob.workspaces) ? blob.workspaces : [];
-    // Tolerate both the legacy single-string and the new array shape on read.
-    roomWorkspace = normalizeRoomWorkspace((blob.roomWorkspace && typeof blob.roomWorkspace === 'object') ? blob.roomWorkspace : {});
+    const remoteNewer = remoteTs > localTs;
+
+    // ---- Monotonic merge (runs for ANY remote blob, even stale ones) --------
+    // Room existence, meta stamps and tombstones merge as unions so a stale
+    // blob can never resurrect a deleted room or drop a newly created one;
+    // workspace definitions / membership stay whole-blob last-write-wins.
+    const remoteTomb = (blob.tomb && typeof blob.tomb === 'object') ? blob.tomb : {};
+    const remoteMeta = (blob.roomMeta && typeof blob.roomMeta === 'object') ? blob.roomMeta : {};
+    const remoteRooms = Array.isArray(blob.rooms)
+      ? blob.rooms.filter(r => typeof r === 'string' && r)
+      : null; // null = legacy blob predating room-list sync
+
+    // Tombstones: union, newest deletion wins per room.
+    const mergedTomb = { ...roomTombstones };
+    for (const [r, ts] of Object.entries(remoteTomb)) {
+      if (typeof ts === 'number' && ts > (mergedTomb[r] || 0)) mergedTomb[r] = ts;
+    }
+
+    // Meta: per-room, the fresher entry (by modified/created) wins.
+    const mergedMeta = {};
+    const stampOf = m => m ? Math.max(m.modified || 0, m.created || 0) : 0;
+    for (const n of new Set([...Object.keys(roomMeta), ...Object.keys(remoteMeta)])) {
+      const L = roomMeta[n], R = remoteMeta[n];
+      mergedMeta[n] = !L ? R : (!R ? L : (stampOf(R) >= stampOf(L) ? R : L));
+    }
+
+    // A room is dead while its tombstone is >= its (re)creation stamp. Only
+    // the deliberate `created` stamp resurrects — NOT `modified`, otherwise a
+    // device still typing in a room would silently undo its deletion.
+    const bornAt = n => (mergedMeta[n] && mergedMeta[n].created) || 0;
+    const dead = n => { const ts = mergedTomb[n]; return !!ts && ts >= bornAt(n); };
+
+    // Room list: union of both sides minus dead rooms; the newer side's order
+    // is authoritative, the other side's extras append.
+    let mergedRooms;
+    if (remoteRooms == null) {
+      mergedRooms = rooms.filter(n => !dead(n));
+    } else {
+      const primary = remoteNewer ? remoteRooms : rooms;
+      const secondary = remoteNewer ? rooms : remoteRooms;
+      mergedRooms = primary.filter(n => !dead(n));
+      for (const n of secondary) if (!dead(n) && !mergedRooms.includes(n)) mergedRooms.push(n);
+    }
+
+    // Rooms that just died here: free their local storage (memory care) and
+    // note them for the active-room check below.
+    const removedLocally = rooms.filter(n => !mergedRooms.includes(n));
+    removedLocally.forEach(n => { try { _purgeRoomStorageKeys(n); } catch {} });
+
+    // Did our merge produce information the remote blob doesn't have? Then we
+    // must push back so every device converges. (Meta stamp drift is excluded —
+    // pushing on every `modified` bump would be a write storm.)
+    const tombSig = o => JSON.stringify(Object.entries(o).sort((a, b) => (a[0] < b[0] ? -1 : 1)));
+    const roomsChangedBeyondRemote = remoteRooms == null
+      ? mergedRooms.length > 0
+      : (mergedRooms.length !== remoteRooms.length || mergedRooms.some((r, i) => remoteRooms[i] !== r));
+    const tombChangedBeyondRemote = tombSig(mergedTomb) !== tombSig(remoteTomb);
+
+    // ---- Adopt ---------------------------------------------------------------
+    rooms = mergedRooms;
+    roomMeta = {};
+    for (const n of Object.keys(mergedMeta)) { if (!dead(n) && mergedMeta[n]) roomMeta[n] = mergedMeta[n]; }
+    roomTombstones = mergedTomb;
+    _pruneTombstones();
+
+    if (remoteNewer) {
+      workspaces = Array.isArray(blob.workspaces) ? blob.workspaces : [];
+      // Tolerate both the legacy single-string and the new array shape on read.
+      roomWorkspace = normalizeRoomWorkspace((blob.roomWorkspace && typeof blob.roomWorkspace === 'object') ? blob.roomWorkspace : {});
+    }
+    removedLocally.forEach(n => { delete roomWorkspace[n]; });
     // If activeWorkspace points to something deleted remotely, drop back to all
     if (activeWorkspace !== WS_ALL && activeWorkspace !== WS_UNLABELED && !getWorkspace(activeWorkspace)) {
       activeWorkspace = WS_ALL;
     }
+
+    store.set('cade-rooms', JSON.stringify(rooms));
+    store.set('cade-room-meta', JSON.stringify(roomMeta));
+    saveRoomTombstones();
     store.set('cade-workspaces', JSON.stringify(workspaces));
     store.set('cade-room-workspace', JSON.stringify(roomWorkspace));
     store.set('cade-active-workspace', activeWorkspace);
-    store.set('cade-workspaces-ts', String(remoteTs));
+    if (remoteNewer) store.set('cade-workspaces-ts', String(remoteTs));
+
     renderRoomTabs();
     if (document.getElementById('room-manager-overlay').classList.contains('open')) {
       renderRoomManagerList();
       renderWorkspaceManagerList();
     }
-    if (source === 'initial' && !_wsLoadedFromCloud) {
-      _wsLoadedFromCloud = true;
-      showToast(`Workspaces loaded from cloud (${workspaces.length})`, 'success', 2000);
-    } else if (source === 'remote') {
-      showToast('Workspaces synced', 'success', 1500);
+    try { tabSync.postRooms(); } catch {}
+
+    // The room we're sitting in was deleted on another device: follow along.
+    if (activeRoom && removedLocally.includes(activeRoom)) {
+      const goneRoom = activeRoom;
+      if (syncState.connected) { try { window.disconnectSync(); } catch {} }
+      activeRoom = '';
+      store.set('cade-active-room', '');
+      const vis = roomsInActiveWorkspace();
+      if (vis.length) { try { switchRoom(vis[0]); } catch {} }
+      showToast(`Room "${goneRoom}" was deleted on another device`, 'error', 4000);
+      renderRoomTabs();
     }
-    return true;
+
+    if (roomsChangedBeyondRemote || tombChangedBeyondRemote) schedulePushWorkspaces();
+
+    if (remoteNewer) {
+      if (source === 'initial' && !_wsLoadedFromCloud) {
+        _wsLoadedFromCloud = true;
+        showToast(`Workspaces loaded from cloud (${workspaces.length})`, 'success', 2000);
+      } else if (source === 'remote') {
+        showToast('Workspaces synced', 'success', 1500);
+      }
+    }
+    return remoteNewer;
   } catch (e) {
     console.warn('Workspace sync apply failed:', e);
     return false;
@@ -12639,7 +12791,7 @@ try {
     store.set('cade-active-workspace', activeWorkspace);
   }
   if (_dlRoom && !_dl.get('fb')) {
-    if (!rooms.includes(_dlRoom)) { rooms.push(_dlRoom); saveRooms(); }
+    if (!rooms.includes(_dlRoom)) { rooms.push(_dlRoom); try { touchRoomCreated(_dlRoom); } catch {} saveRooms(); }
     activeRoom = _dlRoom; store.set('cade-active-room', _dlRoom);
   }
 } catch {}
@@ -12655,6 +12807,7 @@ if (savedFirebaseUrl && savedEncKey) {
     // Legacy: single room mode
     if (!rooms.includes(savedRoomName)) {
       rooms.push(savedRoomName);
+      try { touchRoomCreated(savedRoomName); } catch {}
       activeRoom = savedRoomName;
       saveRooms();
     }
@@ -12681,6 +12834,7 @@ window.syncConnect = async function() {
   const roomName = syncState.roomName;
   if (roomName && !rooms.includes(roomName)) {
     rooms.push(roomName);
+    try { touchRoomCreated(roomName); } catch {}
     if (rooms.length > roomCap) {
       showToast('Over room cap (' + rooms.length + '/' + roomCap + ') — manage rooms in View → Room Manager', 'success', 4000);
     }
@@ -12822,6 +12976,7 @@ window.shareNative = function() {
       // make space — the user's local data for that room would be orphaned.
       if (!rooms.includes(roomParam)) {
         rooms.push(roomParam);
+        try { touchRoomCreated(roomParam); } catch {}
         if (!activeRoom) activeRoom = roomParam;
         saveRooms();
         renderRoomTabs();
@@ -12869,7 +13024,7 @@ window.shareNative = function() {
       if (existing && existing !== text) target = baseName + '_shared_' + Date.now().toString(36);
     }
     store.set('cade-room-cache:' + target, text);
-    if (!rooms.includes(target)) { rooms.push(target); saveRooms(); }
+    if (!rooms.includes(target)) { rooms.push(target); try { touchRoomCreated(target); } catch {} saveRooms(); }
     try { renderRoomTabs(); } catch {}
     // Drop any cached editor state for this room so the shared text is shown,
     // then load via _doSwitchRoom directly (bypasses switchRoom's same-room
@@ -13162,6 +13317,7 @@ window.submitAddRoom = function() {
   window.hideAddRoomModal();
   if (rooms.includes(name)) { switchRoom(name); return; }
   rooms.push(name);
+  touchRoomCreated(name); // fresh created stamp beats any deletion tombstone
   // Assign to active workspace (Unlabeled if in All Rooms view)
   if (activeWorkspace !== WS_ALL && activeWorkspace !== WS_UNLABELED && getWorkspace(activeWorkspace)) {
     addRoomToWorkspace(name, activeWorkspace);
