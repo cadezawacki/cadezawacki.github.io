@@ -28,16 +28,22 @@
    from any source, each with a ✕ that hides just that occurrence on this
    device via `cade-reminders-dismissed` (pruned 25 h / 200 entries).
 
-   CROSS-DEVICE DEDUPE: the synced blob also carries a `fired` map
-   (occurrence-key → ts, pruned 48 h / 300 entries) so a reminder shown once
-   is not re-shown on every open device. The device the user is ON (tab
-   visible + window focused) fires immediately and publishes the key; a
-   background device holds a due reminder for HOLDOFF_MS first — if the key
-   turns up in the synced map meanwhile it is absorbed silently, otherwise
-   it fires anyway (dedupe must never eat a reminder when no device is
-   active). The blob is whole-blob last-writer-wins, so every write sends
-   the UNION of all fired maps this device has seen, and incoming maps are
-   absorbed into the local fired store the moment they arrive. */
+   CROSS-DEVICE DEDUPE: a second synced blob `reminders-fired` carries a
+   `fired` map (occurrence-key → ts, pruned 48 h / 300 entries) so a reminder
+   shown once is not re-shown on every open device. It is a SEPARATE blob
+   because blobs are whole-blob last-writer-wins: if claim publishes carried
+   `items` too, firing on a tab holding a stale item list would silently
+   drop a reminder another device just added. The device the user is ON
+   (tab visible + window focused) fires immediately and publishes the key;
+   a background device holds a due reminder for HOLDOFF_MS first — if the
+   key turns up in the synced map meanwhile it is absorbed silently,
+   otherwise it fires anyway (dedupe must never eat a reminder when no
+   device is active). Every fired write sends the UNION of all fired maps
+   this device has seen, and incoming maps are absorbed into the local
+   fired store the moment they arrive. BACK-COMPAT: pre-split clients
+   published `fired` on the `reminders` blob; we still absorb it from there
+   but never write it — that absorb path can be dropped in a future
+   cleanup. */
 (function () {
   'use strict';
   if (typeof window.Cade === 'undefined') return;
@@ -130,7 +136,16 @@
     if (changedLocal) saveFired(local);
     syncedFired = pruneSyncedFired(syncedFired);
   }
+  // The fired map lives in its OWN blob: a claim publish must never carry
+  // the items array, or firing on a tab holding a stale item list would
+  // clobber a reminder another device just added (whole-blob LWW).
+  var firedBlob = Cade.syncedBlob('reminders-fired', {
+    onChange: function (data) { absorbSyncedFired(data); renderIfOpen(); },
+  });
   var blobStore = Cade.syncedBlob('reminders', {
+    // absorbSyncedFired here is BACK-COMPAT only: pre-split clients kept a
+    // `fired` map on this blob. Keep absorbing for a release window (never
+    // write it back); drop in a future cleanup.
     onChange: function (data) { managed = normalizeManaged(data); absorbSyncedFired(data); renderIfOpen(); },
   });
   // Calendar events with a 🔔 (round-4 item 5) become reminders too. Read-only
@@ -160,7 +175,8 @@
     return out;
   }
   managed = normalizeManaged(blobStore.get());
-  absorbSyncedFired(blobStore.get());
+  absorbSyncedFired(firedBlob.get());
+  absorbSyncedFired(blobStore.get()); // back-compat: pre-split `fired` field
   (function () {
     // Recent local fires re-enter the union at boot, so a stale writer
     // elsewhere can't permanently erase claims this device already made.
@@ -168,14 +184,17 @@
     var cutoff = Date.now() - SYNC_FIRED_MS;
     Object.keys(local).forEach(function (k) { if (local[k] >= cutoff && !syncedFired[k]) syncedFired[k] = local[k]; });
   })();
-  function saveManaged() {
-    // Whole-blob last-writer-wins: every write carries items + the freshest
-    // union of all fired maps seen, so near-simultaneous writers can only
-    // lose entries the prune rule would drop anyway.
+  // Items blob: written ONLY on genuine item mutations (add/edit/delete/done).
+  function saveManaged() { blobStore.set({ items: managed.items }); renderIfOpen(); }
+  // Fired blob: whole-blob last-writer-wins, so absorb the freshest copies
+  // first (including any legacy `fired` still arriving on the items blob),
+  // then publish the union — near-simultaneous writers can only lose
+  // entries the prune rule would drop anyway.
+  function saveSyncedFired() {
+    absorbSyncedFired(firedBlob.get());
     absorbSyncedFired(blobStore.get());
     syncedFired = pruneSyncedFired(syncedFired);
-    blobStore.set({ items: managed.items, fired: syncedFired });
-    renderIfOpen();
+    firedBlob.set({ fired: syncedFired });
   }
   function newId() { return 'r' + Math.random().toString(36).slice(2, 8) + Date.now().toString(36).slice(-4); }
 
@@ -379,17 +398,21 @@
       if (!dueKeys[k]) { delete holds[k]; return; } // source edited away / no longer due
       if (now - holds[k].heldAt >= HOLDOFF_MS) { toFire.push(holds[k].d); delete holds[k]; }
     });
+    var changedManaged = false;
     if (toFire.length) {
       toFire.forEach(function (d) {
         r.fired[d.key] = now;
         syncedFired[d.key] = now;
-        if (d.managed && !d.src.recur) d.src.done = true;
+        // Only true managed items (key m:…) get a done flag — calendar
+        // entries also ride with managed:true but own no item to mutate.
+        if (d.managed && !d.src.recur && d.key.indexOf('m:') === 0) { d.src.done = true; changedManaged = true; }
       });
       changedLocalFired = true;
     }
     if (changedLocalFired) saveFired(r.fired);
     if (toFire.length) {
-      saveManaged(); // also publishes the fired union to the synced blob
+      saveSyncedFired(); // publish the claim — never carries items
+      if (changedManaged) saveManaged(); // done flags ARE item mutations
       notify(toFire);
     }
   }

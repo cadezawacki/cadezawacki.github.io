@@ -959,12 +959,10 @@ body.sel-mode .editor-wrap .cm-content { -webkit-touch-callout: none; }
      that box — with the sidebar open it must center over the TEXT region. */
   body.sidebar-on .mobile-toolbar { left: var(--sidebar-w, 216px); }
   /* Round-5: drag the divider all the way left and the sidebar collapses to
-     a slim rail; hovering the rail peeks the full sidebar as an overlay (the
-     text region does not reflow). Drag the divider back out to dock it. */
-  body.sidebar-slim #side-nav { transition: width 0.12s ease, box-shadow 0.12s ease; }
-  body.sidebar-slim #side-nav:hover, body.sidebar-slim #side-nav.resizing {
-    box-shadow: 6px 0 24px rgba(0, 0, 0, 0.28); z-index: 95;
-  }
+     a slim rail; hovering the rail reveals the full sidebar and SHIFTS the
+     document right with it (a push, not a floating overlay). Drag the
+     divider back out — or hit the 📌 pin — to dock it again. */
+  body.sidebar-slim #side-nav { transition: width 0.12s ease; }
   body.sidebar-slim #side-nav.resizing { transition: none; }
   body.sidebar-slim #side-nav:not(:hover):not(.resizing) { width: 16px; cursor: e-resize; }
   body.sidebar-slim #side-nav:not(:hover):not(.resizing) .sn-scroll { display: none; }
@@ -974,10 +972,33 @@ body.sel-mode .editor-wrap .cm-content { -webkit-touch-callout: none; }
     color: var(--text-faint); font-size: 12px;
   }
   body.sidebar-slim #side-nav:not(:hover):not(.resizing) .sn-peek { display: block; }
-  /* Collapsed: the text region only cedes the slim rail's width. */
+  /* Pin appears only while slim — clicking it docks the sidebar back open. */
+  #side-nav .sn-pin { display: none; }
+  body.sidebar-slim #side-nav .sn-pin {
+    display: inline-flex; align-items: center; justify-content: center;
+    margin-left: 4px; padding: 0 4px; border: none; background: none;
+    cursor: pointer; font-size: 11px; opacity: 0.6; border-radius: var(--radius-sm);
+  }
+  body.sidebar-slim #side-nav .sn-pin:hover { opacity: 1; background: var(--surface-hover, rgba(127,127,127,0.15)); }
+  /* Collapsed: the text region only cedes the slim rail's width… */
   body.sidebar-slim.sidebar-on .editor-wrap .cm-scroller { padding-left: calc(16px + var(--editor-hpad, var(--space-4))); }
   body.sidebar-slim.sidebar-on .find-panel { padding-left: 28px; }
   body.sidebar-slim.sidebar-on .mobile-toolbar { left: 16px; }
+  /* …and while hovered (or mid-drag) the document shifts right with the rail. */
+  body.sidebar-slim.sidebar-on:has(#side-nav:hover) .editor-wrap .cm-scroller,
+  body.sidebar-slim.sidebar-on:has(#side-nav.resizing) .editor-wrap .cm-scroller {
+    padding-left: calc(var(--sidebar-w, 216px) + var(--editor-hpad, var(--space-4)));
+  }
+  body.sidebar-slim.sidebar-on:has(#side-nav:hover) .find-panel,
+  body.sidebar-slim.sidebar-on:has(#side-nav.resizing) .find-panel {
+    padding-left: calc(var(--sidebar-w, 216px) + 12px);
+  }
+  body.sidebar-slim.sidebar-on:has(#side-nav:hover) .mobile-toolbar,
+  body.sidebar-slim.sidebar-on:has(#side-nav.resizing) .mobile-toolbar {
+    left: var(--sidebar-w, 216px);
+  }
+  body.sidebar-slim .editor-wrap .cm-scroller { transition: padding-left 0.12s ease; }
+  body.sidebar-slim:has(#side-nav.resizing) .editor-wrap .cm-scroller { transition: none; }
   /* Release-to-collapse cue while the drag is past the left threshold. */
   #side-nav.sn-will-collapse { opacity: 0.35; }
   /* Item 4: zen mode is distraction-free — the sidebar folds away with the
@@ -8914,7 +8935,10 @@ window.sidebarPickRoom = function(wsId, name) {
   if (wsId && wsId !== activeWorkspace && (wsId === WS_UNLABELED || getWorkspace(wsId))) {
     activeWorkspace = wsId;
     store.set('cade-active-workspace', wsId);
-    try { renderWorkspacePill(); } catch {}
+    // Full re-render (pill + tab strip + sidebar): quickSwitchPick returns
+    // early when the clicked room is already active, so the workspace switch
+    // must not depend on it to repaint anything.
+    renderRoomTabs();
   }
   quickSwitchPick(name);
 };
@@ -8955,10 +8979,16 @@ function renderSidebar() {
   const unlabeled = orderRooms(live.filter(r => roomIsUnlabeled(r)));
   if (unlabeled.length) wsSection('Unlabeled', 'ws-color-neutral', WS_UNLABELED, unlabeled);
   el.innerHTML = `<div class="sn-resize" title="Drag to resize"></div><div class="sn-peek">›</div><div class="sn-scroll">` +
-    `<div class="sn-head" onclick="sidebarPickWs('${WS_ALL}')">All Rooms<span class="sn-count">${live.length}</span></div>` + wsRows.join('') +
+    `<div class="sn-head" onclick="sidebarPickWs('${WS_ALL}')">All Rooms<span class="sn-count">${live.length}</span>` +
+    `<button class="sn-pin" title="Pin the sidebar open" onclick="event.stopPropagation(); sidebarPinOpen()">📌</button></div>` + wsRows.join('') +
     `<button class="sn-add" onclick="addRoomPrompt()">＋ New room</button>` + _snEventsHtml() + `</div>`;
   _snAttachResize(el);
 }
+// Pin (visible only while slim): dock the sidebar back open at its saved width.
+window.sidebarPinOpen = function() {
+  _snSetSlim(false);
+  try { editor.requestMeasure(); } catch {}
+};
 // Round-5: upcoming calendar events at the foot of the sidebar — optional
 // (Preferences → Appearance) and collapsible. Reads the calendar widget's
 // synced blob WITHOUT registering onChange (that slot belongs to the widget),
@@ -11055,28 +11085,30 @@ function roomPinnedHere(name) {
   return roomIsPinned(name);
 }
 // Drop a room's meta only when it carries no flags, no sort timestamps AND no
-// flag-change stamp — an entry whose only content is flagsTs still encodes
-// "the user unpinned this at T", which must survive to win the sync merge.
+// flag-change stamp — an entry whose only content is a stamp still encodes
+// "the user unpinned/unarchived this at T", which must survive the sync merge.
 function _maybeDropRoomMeta(name) {
   const m = roomMeta[name];
-  if (m && !m.pinned && !m.archived && !m.created && !m.modified && !m.flagsTs) delete roomMeta[name];
+  if (m && !m.pinned && !m.archived && !m.created && !m.modified && !m.pinTs && !m.archTs && !m.flagsTs) delete roomMeta[name];
 }
-// Pin/archive changes carry their own timestamp (flagsTs). The blob merge
-// picks a room's meta entry by max(modified, created) — stamps that typing
-// bumps — so without a dedicated stamp, a stale pinned:true entry from a
-// device still typing in the room (or a same-stamp tie, which goes to the
-// remote side) would resurrect a pin the user just removed.
+// Pin and archive changes each carry their OWN timestamp (pinTs / archTs).
+// The blob merge picks a room's meta entry by max(modified, created) — stamps
+// that typing bumps — so without dedicated stamps a stale entry from a device
+// still typing in the room (or a same-stamp tie, which goes to the remote
+// side) would resurrect a pin the user just removed. The stamps are separate
+// per flag because a stale device pinning must not erase a newer archive (and
+// vice versa). Legacy flagsTs (round-5 interim) is read as either stamp.
 function setRoomPinned(name, on) {
   roomMeta[name] = roomMeta[name] || {};
   roomMeta[name].pinned = !!on;
-  roomMeta[name].flagsTs = Date.now();
+  roomMeta[name].pinTs = Date.now();
   _maybeDropRoomMeta(name);
   saveRoomMeta();
 }
 function setRoomArchived(name, on) {
   roomMeta[name] = roomMeta[name] || {};
   roomMeta[name].archived = !!on;
-  roomMeta[name].flagsTs = Date.now();
+  roomMeta[name].archTs = Date.now();
   _maybeDropRoomMeta(name);
   saveRoomMeta();
 }
@@ -12131,28 +12163,37 @@ async function applyRemoteWorkspaceBlob(encrypted, baseKey, source) {
     }
 
     // Meta: per-room, the fresher entry (by modified/created) wins — EXCEPT
-    // the pinned/archived flags, which are resolved by their own change stamp
-    // (flagsTs). Typing bumps modified, so if flags rode along with the entry
+    // the pinned/archived flags, each resolved INDEPENDENTLY by its own
+    // change stamp (pinTs / archTs; the interim round-5 flagsTs reads as
+    // both). Typing bumps modified, so if flags rode along with the entry
     // winner, a stale pinned:true from a device still typing in that room (or
-    // a same-stamp tie, which goes to remote) would resurrect a removed pin.
+    // a same-stamp tie, which goes to remote) would resurrect a removed pin —
+    // and per-flag stamps stop a stale pin from erasing a newer archive.
     let flagsChangedBeyondRemote = false;
     const mergedMeta = {};
     const stampOf = m => m ? Math.max(m.modified || 0, m.created || 0) : 0;
-    const flagsTsOf = m => (m && m.flagsTs) || 0;
+    const pinTsOf = m => (m && (m.pinTs || m.flagsTs)) || 0;
+    const archTsOf = m => (m && (m.archTs || m.flagsTs)) || 0;
     for (const n of new Set([...Object.keys(roomMeta), ...Object.keys(remoteMeta)])) {
       const L = roomMeta[n], R = remoteMeta[n];
       const winner = !L ? R : (!R ? L : (stampOf(R) >= stampOf(L) ? R : L));
       const entry = { ...winner };
-      if (L && R && flagsTsOf(L) !== flagsTsOf(R)) {
-        const flagSrc = flagsTsOf(L) > flagsTsOf(R) ? L : R;
-        if (flagSrc !== winner) {
-          if (flagSrc.pinned) entry.pinned = true; else delete entry.pinned;
-          if (flagSrc.archived) entry.archived = true; else delete entry.archived;
-          entry.flagsTs = flagSrc.flagsTs;
-        }
+      delete entry.flagsTs; // superseded by the per-flag stamps below
+      if (L && R) {
+        const pinSrc = pinTsOf(L) === pinTsOf(R) ? winner : (pinTsOf(L) > pinTsOf(R) ? L : R);
+        const archSrc = archTsOf(L) === archTsOf(R) ? winner : (archTsOf(L) > archTsOf(R) ? L : R);
+        if (pinSrc.pinned) entry.pinned = true; else delete entry.pinned;
+        if (pinTsOf(pinSrc)) entry.pinTs = pinTsOf(pinSrc); else delete entry.pinTs;
+        if (archSrc.archived) entry.archived = true; else delete entry.archived;
+        if (archTsOf(archSrc)) entry.archTs = archTsOf(archSrc); else delete entry.archTs;
+      } else {
+        // Single-sided entry: normalize its legacy stamp onto the new fields
+        // (read from the original — entry's own flagsTs was just deleted).
+        if (pinTsOf(winner)) entry.pinTs = pinTsOf(winner);
+        if (archTsOf(winner)) entry.archTs = archTsOf(winner);
       }
       // Effective flags differ from what the remote copy says → push back so
-      // every device converges on the surviving unpin/pin.
+      // every device converges on the surviving pin/archive state.
       if (!!entry.pinned !== !!(R && R.pinned) || !!entry.archived !== !!(R && R.archived)) {
         flagsChangedBeyondRemote = true;
       }
