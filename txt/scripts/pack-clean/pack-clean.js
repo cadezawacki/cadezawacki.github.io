@@ -162,10 +162,10 @@ function main(ctx) {
 registerScript(`/**
   {
     "name": "Renumber Lists",
-    "description": "Fix numbered lists so each run counts 1. 2. 3. again (indent-aware)",
+    "description": "Fix numbered lists so each run counts 1. 2. 3. again — supports 1. 1) and [1] (indent-aware)",
     "author": "Cade",
     "icon": "🔢",
-    "tags": "renumber,list,numbered,markdown,restructure,fix"
+    "tags": "renumber,list,numbered,bracket,markdown,restructure,fix"
   }
 **/
 function main(ctx) {
@@ -173,17 +173,25 @@ function main(ctx) {
   var lines = t.split('\\n');
   var counters = {}; // indent -> current number
   for (var i = 0; i < lines.length; i++) {
-    var m = lines[i].match(/^(\\s*)(\\d+)([.)])(\\s+)(.*)$/);
+    // Matches "1. x", "1) x" and "[1] x" — each line keeps its own style.
+    var m = lines[i].match(/^(\\s*)(?:(\\d+)([.)])|\\[(\\d+)\\])(\\s+)(.*)$/);
     if (!m) {
       // A non-list, non-blank line ends every run; blank lines keep them alive
       if (lines[i].trim() !== '') counters = {};
       continue;
     }
     var indent = m[1];
+    var bracketed = m[4] != null;
+    var style = bracketed ? '[]' : m[3];
     // Deeper indent starts its own sequence; shallower resets deeper ones.
     for (var k in counters) { if (k.length > indent.length) delete counters[k]; }
-    counters[indent] = (counters[indent] || 0) + 1;
-    lines[i] = indent + counters[indent] + m[3] + m[4] + m[5];
+    // A marker-style change (1. → [1] etc.) starts a fresh sequence too.
+    var c = counters[indent];
+    if (!c || c.style !== style) c = { n: 0, style: style };
+    c.n++;
+    counters[indent] = c;
+    var marker = bracketed ? ('[' + c.n + ']') : (c.n + m[3]);
+    lines[i] = indent + marker + m[5] + m[6];
   }
   var out = lines.join('\\n');
   if (ctx.selection) ctx.selection = out; else ctx.fullText = out;

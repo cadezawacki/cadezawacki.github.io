@@ -1,0 +1,86 @@
+/* Whiteboard widget — panel body styling.
+ * The canvas is ALWAYS white (hard-coded, not themed) so drawings read
+ * identically in light + dark themes and match the exported/inserted PNG.
+ * Everything else uses the app's theme variables. */
+
+#draw-panel {
+  top: 56px;
+  left: max(8px, calc(50vw - 290px));
+  max-width: calc(100vw - 16px);
+}
+#draw-panel .cade-panel-body { padding: 8px; }
+
+.draw-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+
+.draw-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  cursor: pointer;
+  user-select: none;
+}
+.draw-btn:hover { background: var(--surface-hover); }
+.draw-btn.draw-active {
+  border-color: var(--accent);
+  background: var(--accent-bg);
+  color: var(--accent);
+}
+.draw-btn.draw-primary { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+.draw-btn.draw-primary:hover { background: var(--accent-bg); }
+
+/* Color swatches — fixed ink hexes (they draw on a white canvas, so they look
+ * the same in both themes); the border keeps the white swatch visible. */
+.draw-swatch {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  cursor: pointer;
+  flex: none;
+}
+.draw-swatch.draw-active { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* Stroke-width preview dot inside the width buttons. */
+.draw-width { min-width: 30px; }
+.draw-dot {
+  display: inline-block;
+  border-radius: 50%;
+  background: currentColor;
+  flex: none;
+}
+
+.draw-sep { width: 1px; height: 18px; background: var(--border); margin: 0 4px; flex: none; }
+.draw-spacer { flex: 1; }
+
+.draw-hint {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  margin: 0 0 6px;
+  max-width: 520px;
+}
+
+.draw-canvas {
+  display: block;
+  background: #ffffff; /* always white — never themed */
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: crosshair;
+  touch-action: none;         /* pointer events own the gesture — no page scroll */
+  -webkit-user-select: none;
+  user-select: none;
+}

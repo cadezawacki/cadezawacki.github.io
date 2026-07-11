@@ -1,0 +1,69 @@
+/* RSS Feeds widget styles. Panel chrome comes from Cade.mkPanel; theme vars
+   (--surface, --text, --accent, …) come from the app. */
+#rss-panel { top: 56px; right: 12px; width: 380px; max-width: calc(100vw - 24px); }
+#rss-panel .cade-panel-body { max-height: 65vh; overflow-y: auto; padding: 8px 10px 10px; }
+
+/* Tab row — small pills */
+.rss-tabs { display: flex; gap: 6px; padding: 2px 0 8px; position: sticky; top: 0; background: var(--surface); z-index: 1; }
+.rss-tab {
+  border: 1px solid var(--border); background: var(--surface); color: var(--text-muted);
+  font-size: var(--text-xs); padding: 3px 10px; border-radius: 999px; cursor: pointer; line-height: 1.4;
+}
+.rss-tab:hover { background: var(--surface-hover, rgba(127,127,127,0.15)); color: var(--text); }
+.rss-tab.active { background: var(--accent-bg, var(--surface-hover)); border-color: var(--accent); color: var(--accent); font-weight: 600; }
+
+/* Toolbar (Items view) */
+.rss-toolbar { display: flex; align-items: center; gap: 8px; padding: 0 0 6px; }
+.rss-btn {
+  border: 1px solid var(--border); background: var(--surface); color: var(--text);
+  font-size: var(--text-xs); padding: 3px 9px; border-radius: 6px; cursor: pointer; white-space: nowrap;
+}
+.rss-btn:hover { background: var(--surface-hover, rgba(127,127,127,0.15)); }
+.rss-status { font-size: var(--text-xs); color: var(--text-faint); }
+
+/* Item rows (Items + Bookmarks views) — compact */
+.rss-item { display: flex; align-items: center; gap: 7px; padding: 4px 0; border-bottom: 1px dashed var(--border); }
+.rss-item:last-child { border-bottom: none; }
+.rss-dot {
+  flex: 0 0 7px; width: 7px; height: 7px; border-radius: 50%;
+  background: transparent; border: 1px solid transparent; cursor: pointer;
+}
+.rss-item.unread .rss-dot { background: var(--accent); }
+.rss-item:not(.unread) .rss-dot { border-color: var(--border); cursor: default; }
+.rss-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.rss-feedlabel { font-size: var(--text-xs); color: var(--text-faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rss-title {
+  font-size: var(--text-sm); color: var(--text); text-decoration: none; cursor: pointer;
+  overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+}
+.rss-title:hover { color: var(--accent); text-decoration: underline; }
+.rss-item:not(.unread) .rss-title { color: var(--text-muted); }
+.rss-time { flex: 0 0 auto; font-size: var(--text-xs); color: var(--text-faint); font-variant-numeric: tabular-nums; }
+.rss-star {
+  flex: 0 0 auto; border: none; background: none; cursor: pointer;
+  font-size: 14px; line-height: 1; padding: 2px 4px; color: var(--text-faint); border-radius: 4px;
+}
+.rss-star:hover { background: var(--surface-hover, rgba(127,127,127,0.15)); color: var(--text); }
+.rss-star.on { color: var(--accent); }
+
+/* Feeds view */
+.rss-addrow { display: flex; gap: 6px; padding: 0 0 6px; }
+.rss-addrow input {
+  flex: 1; min-width: 0; font-size: var(--text-sm); color: var(--text);
+  background: var(--surface-2, var(--surface)); border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px;
+}
+.rss-addrow input:focus { outline: none; border-color: var(--accent); }
+.rss-feed { display: flex; align-items: center; gap: 7px; padding: 5px 0; border-bottom: 1px dashed var(--border); }
+.rss-feed:last-child { border-bottom: none; }
+.rss-feedtitle { font-size: var(--text-sm); color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rss-feedurl { font-size: var(--text-xs); color: var(--text-faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rss-x {
+  flex: 0 0 auto; border: none; background: none; cursor: pointer;
+  color: var(--text-faint); font-size: var(--text-xs); padding: 3px 6px; border-radius: 4px;
+}
+.rss-x:hover { background: var(--surface-hover, rgba(127,127,127,0.15)); color: var(--text); }
+
+/* Errors / hints / empty states */
+.rss-err { font-size: var(--text-xs); color: var(--text-muted); padding: 2px 0; }
+.rss-hint { font-size: var(--text-xs); color: var(--text-faint); padding: 0 0 8px; line-height: 1.45; }
+.rss-empty { font-size: var(--text-sm); color: var(--text-muted); padding: 12px 2px; text-align: center; }

@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "version": "2026.07.11-3",
+  "version": "2026.07.11-4",
   "modules": [
     {
       "id": "crawler",
@@ -686,6 +686,46 @@
       "tags": "stats,words,count,characters,reading,time,frequency,analyze",
       "entry": "widgets/stats/stats.js",
       "css": "widgets/stats/stats.css"
+    },
+    {
+      "id": "dict",
+      "type": "widget",
+      "name": "Dictionary",
+      "description": "Definitions, synonyms & antonyms (caches words for offline)",
+      "icon": "📖",
+      "tags": "dictionary,thesaurus,define,definition,synonym,antonym,word,lookup",
+      "entry": "widgets/dict/dict.js",
+      "css": "widgets/dict/dict.css"
+    },
+    {
+      "id": "draw",
+      "type": "widget",
+      "name": "Whiteboard",
+      "description": "Free-draw sketches; insert into the doc as an image",
+      "icon": "✏️",
+      "tags": "draw,whiteboard,sketch,doodle,pen,drawing,canvas",
+      "entry": "widgets/draw/draw.js",
+      "css": "widgets/draw/draw.css"
+    },
+    {
+      "id": "calendar",
+      "type": "widget",
+      "name": "Calendar Events",
+      "description": "Personal schedule: events synced across your devices",
+      "icon": "🗓",
+      "tags": "calendar,events,schedule,agenda,planner,appointments",
+      "entry": "widgets/calendar/calendar.js",
+      "css": "widgets/calendar/calendar.css"
+    },
+    {
+      "id": "rss",
+      "type": "widget",
+      "name": "RSS Feeds",
+      "description": "Follow RSS/Atom feeds; subscriptions & bookmarks sync across devices",
+      "icon": "📰",
+      "tags": "rss,atom,feed,news,reader,bookmarks,subscribe",
+      "entry": "widgets/rss/rss.js",
+      "css": "widgets/rss/rss.css"
     }
   ]
 }

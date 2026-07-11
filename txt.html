@@ -600,7 +600,6 @@ body {
   color: var(--ws-fg);
   border: 1px solid var(--ws-bd);
   margin-left: 6px;
-  text-transform: lowercase;
 }
 .ws-badge .ws-badge-dot {
   width: 6px; height: 6px;
@@ -823,8 +822,9 @@ body {
 .editor-wrap .cm-scroller {
   overflow: auto;
   /* Extra top padding so the first lines clear the floating toolbar band; you
-     can still scroll the very top fully into view (D2). */
-  padding: 50px var(--space-4) var(--space-3);
+     can still scroll the very top fully into view (D2). Horizontal padding is
+     user-configurable (Preferences → Appearance → Document side padding). */
+  padding: 50px var(--editor-hpad, var(--space-4)) var(--space-3);
   scrollbar-width: auto;                 /* Firefox — normal width */
   scrollbar-color: var(--accent) transparent;
   /* Pan + pinch stay native; double-tap zoom off (it fought text selection). */
@@ -863,6 +863,8 @@ body.sel-mode .editor-wrap .cm-content { -webkit-touch-callout: none; }
   color: var(--text-faint);
   font-size: var(--text-xs);
   padding-right: var(--space-2);
+  user-select: none;            /* line numbers must never join a copy (item 34) */
+  -webkit-user-select: none;
 }
 
 .editor-wrap .cm-activeLineGutter { color: var(--text-muted); }
@@ -871,7 +873,8 @@ body.sel-mode .editor-wrap .cm-content { -webkit-touch-callout: none; }
 .editor-wrap .cm-selectionBackground,
 .editor-wrap .cm-editor .cm-selectionBackground,
 .editor-wrap .cm-editor.cm-focused .cm-selectionBackground {
-  background: rgba(14, 165, 233, 0.15) !important;
+  /* was 0.15 — too faint to spot in light mode (item 34) */
+  background: rgba(14, 165, 233, 0.30) !important;
 }
 /* Dark mode: the selection was too faint — use a brighter teal (#12). */
 [data-theme="dark"] .editor-wrap .cm-selectionBackground,
@@ -927,6 +930,46 @@ body.sel-mode .editor-wrap .cm-content { -webkit-touch-callout: none; }
 #footer-lines { min-width: 52px; }
 .footer-spacer { flex: 1; }
 
+/* Desktop sidebar (item 26): fixed left rail, wide screens only. */
+#side-nav { display: none; }
+@media (min-width: 900px) {
+  #side-nav {
+    display: block;
+    position: fixed; left: 0; top: var(--menubar-h, 44px); bottom: 28px;
+    width: 216px; overflow-y: auto; z-index: 90;
+    background: var(--bg); border-right: 1px solid var(--border);
+    padding: 8px 8px 12px; font-size: var(--text-sm);
+    user-select: none; -webkit-user-select: none;
+  }
+  body.sidebar-on .editor-wrap .cm-scroller { padding-left: calc(216px + var(--editor-hpad, var(--space-4))); }
+  body.sidebar-on .find-panel { padding-left: 228px; }
+  #side-nav .sn-head {
+    font-weight: 600; padding: 6px 8px; border-radius: var(--radius-sm); cursor: pointer;
+    display: flex; align-items: center; gap: 6px;
+  }
+  #side-nav .sn-ws {
+    display: flex; align-items: center; gap: 6px; margin-top: 8px;
+    padding: 4px 8px; border-radius: var(--radius-sm); cursor: pointer;
+    color: var(--ws-fg, var(--text-muted)); font-size: var(--text-xs);
+    text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600;
+  }
+  #side-nav .sn-ws .ws-badge-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ws-fg, currentColor); }
+  #side-nav .sn-ws.active, #side-nav .sn-head.active { background: var(--surface-hover, rgba(127,127,127,0.12)); }
+  #side-nav .sn-room {
+    padding: 4px 8px 4px 22px; border-radius: var(--radius-sm); cursor: pointer;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text);
+  }
+  #side-nav .sn-room:hover { background: var(--surface-hover, rgba(127,127,127,0.12)); }
+  #side-nav .sn-room.active { background: var(--accent-bg); color: var(--accent); }
+  #side-nav .sn-count { margin-left: auto; color: var(--text-faint); font-size: var(--text-xs); font-weight: 400; }
+  #side-nav .sn-add {
+    margin-top: 12px; width: 100%; padding: 5px 8px; font-size: var(--text-xs);
+    background: none; border: 1px dashed var(--border); border-radius: var(--radius-sm);
+    color: var(--text-muted); cursor: pointer;
+  }
+  #side-nav .sn-add:hover { color: var(--accent); border-color: var(--accent); }
+}
+
 /* Breadcrumb (Feature 94) — hard left. */
 .footer-breadcrumb { display: flex; align-items: center; gap: 5px; min-width: 0; overflow: hidden; flex-shrink: 1; }
 .footer-breadcrumb:empty { display: none; }
@@ -966,7 +1009,10 @@ body.sel-mode .editor-wrap .cm-content { -webkit-touch-callout: none; }
 }
 .qs-item.active { background: var(--accent-soft, rgba(120,150,255,0.18)); }
 .qs-item:hover { background: var(--surface-hover, rgba(127,127,127,0.12)); }
-.qs-item .qs-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ws-dot, #888); flex-shrink: 0; }
+.qs-item .qs-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ws-fg, #888); flex-shrink: 0; }
+.qs-item .qs-ws-badges { display: inline-flex; gap: 4px; flex-shrink: 1; min-width: 0; overflow: hidden; }
+.qs-item .qs-snip { color: var(--text-faint, #888); font-size: var(--text-xs, 11px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 55%; }
+.qs-item .qs-snip b { color: var(--accent); font-weight: 600; }
 .qs-item .qs-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .qs-item .qs-meta { color: var(--text-faint, #888); font-size: var(--text-xs, 11px); }
 .qs-item .qs-pin { font-size: 11px; color: var(--accent, #6c9); font-weight: 700; }
@@ -1008,8 +1054,9 @@ body.sel-mode .editor-wrap .cm-content { -webkit-touch-callout: none; }
   font-size: var(--text-xs, 11px); cursor: pointer; border: 1px solid var(--border, #333);
   opacity: 0.65;
 }
-.rm-tag-chip.on { opacity: 1; border-color: currentColor; background: var(--surface-hover, rgba(127,127,127,0.12)); }
-.rm-tag-chip .ws-badge-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ws-dot, currentColor); }
+.rm-tag-chip { color: var(--ws-fg, var(--text)); }
+.rm-tag-chip.on { opacity: 1; border-color: var(--ws-bd, currentColor); background: var(--ws-bg, var(--surface-hover, rgba(127,127,127,0.12))); }
+.rm-tag-chip .ws-badge-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ws-fg, currentColor); }
 .ws-mgr-parent-row { display: flex; align-items: center; gap: 6px; }
 .ws-mgr-parent-select { font-size: var(--text-xs, 11px); padding: 2px 6px; }
 
@@ -1033,7 +1080,7 @@ body.sel-mode .editor-wrap .cm-content { -webkit-touch-callout: none; }
   transition: background var(--transition);
   flex-shrink: 0;
   margin-right: 2px;
-  cursor: default;
+  cursor: pointer; /* it opens the Sync modal (item 34) */
 }
 
 .sync-dot.connected { background: var(--success); }
@@ -1198,6 +1245,13 @@ body.sel-mode .editor-wrap .cm-content { -webkit-touch-callout: none; }
 /* ============================================
    SYNC MODAL
    ============================================ */
+/* COMMON MODAL SYSTEM — every modal is .modal-overlay > .modal-dialog.
+   The base dialog is height-capped and scrolls its own content, so no modal
+   can ever clip off the top/bottom of the viewport, and the cap sits at
+   ~84vh so tall modals (Preferences, Room Manager, Manage Storage) keep
+   breathing room above and below instead of filling the screen edge-to-edge.
+   Long structured modals should prefer .modal-dialog-scroll (sticky
+   header/footer + scrolling body). */
 .modal-overlay {
   display: none;
   position: fixed;
@@ -1206,6 +1260,7 @@ body.sel-mode .editor-wrap .cm-content { -webkit-touch-callout: none; }
   z-index: 300;
   align-items: center;
   justify-content: center;
+  padding: 28px 16px; /* visual breathing room even for max-height dialogs */
 }
 
 .modal-overlay.open { display: flex; }
@@ -1213,6 +1268,9 @@ body.sel-mode .editor-wrap .cm-content { -webkit-touch-callout: none; }
 .modal-dialog {
   width: 400px;
   max-width: calc(100vw - 40px);
+  max-height: min(84vh, calc(100dvh - 56px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
@@ -1227,7 +1285,7 @@ body.sel-mode .editor-wrap .cm-content { -webkit-touch-callout: none; }
 .modal-dialog.modal-dialog-scroll {
   display: flex;
   flex-direction: column;
-  max-height: calc(100vh - 40px);
+  max-height: min(84vh, calc(100dvh - 56px));
   padding: 0;
   overflow: hidden;
 }
@@ -1353,6 +1411,21 @@ body.sel-mode .editor-wrap .cm-content { -webkit-touch-callout: none; }
   line-height: 1.35;
 }
 .sync-conflict-btn:hover { border-color: var(--accent); }
+/* Item 10: inline diff — local-only lines red, server-only green. */
+.sync-conflict-diff {
+  max-height: 200px; overflow: auto; margin: 0 0 var(--space-4);
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  font-family: var(--font-mono); font-size: var(--text-xs); line-height: 1.5;
+  background: var(--bg);
+}
+.sync-conflict-diff:empty { display: none; }
+.scd-line { padding: 0 8px; white-space: pre-wrap; word-break: break-word; }
+.scd-line.del { background: rgba(229, 72, 77, 0.12); color: #e5484d; }
+.scd-line.add { background: rgba(34, 197, 94, 0.12); color: #16a34a; }
+.scd-line.ctx { color: var(--text-faint); }
+.scd-line.gap { color: var(--text-faint); text-align: center; user-select: none; }
+.scd-head { padding: 3px 8px; font-family: var(--font-body); color: var(--text-muted); border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--surface); }
+.scd-head b.local { color: #e5484d; } .scd-head b.server { color: #16a34a; }
 .sync-conflict-btn .scb-title { font-weight: 600; }
 .sync-conflict-btn .scb-desc { display: block; font-size: var(--text-xs); color: var(--text-muted); margin-top: 2px; }
 
@@ -1531,6 +1604,8 @@ body.sel-mode .editor-wrap .cm-content { -webkit-touch-callout: none; }
   flex-direction: column;
   align-items: center;
   gap: 4px;
+  user-select: none;            /* toolbar chrome must never join a text drag (item 34) */
+  -webkit-user-select: none;
   /* Absolute (not fixed) + anchored to the fixed, non-scrolling <body>: iOS
      re-anchors position:fixed to the shrinking VISUAL viewport when the keyboard
      opens, which shoved this above the header. Absolute to the stable app shell
@@ -2003,6 +2078,22 @@ body.sel-mode .editor-wrap .cm-content { -webkit-touch-callout: none; }
 .cm-hl-gray   { background: var(--hl-gray); }
 /* Text-colour-only highlight (%%/fg|…%%): no background chip. */
 .cm-hl-nobg   { background: transparent; padding: 0; border-radius: 0; }
+
+/* Collapsible sections (item 31) */
+.cm-collapse-caret {
+  display: inline-block; width: 1em; margin-left: -1.05em; margin-right: 0.05em;
+  color: var(--text-faint); cursor: pointer; user-select: none; -webkit-user-select: none;
+  font-size: 0.85em; opacity: 0.55; text-align: center;
+}
+.cm-collapse-caret:hover { color: var(--accent); opacity: 1; }
+.cm-collapse-caret.closed { color: var(--accent); opacity: 1; }
+.cm-collapse-pill {
+  display: inline-block; padding: 0 8px; margin-left: 6px; border-radius: 999px;
+  background: var(--accent-bg, rgba(20,184,166,0.15)); color: var(--accent);
+  font-size: var(--text-xs); cursor: pointer; user-select: none; -webkit-user-select: none;
+  border: 1px dashed var(--accent);
+}
+.cm-line.cm-collapsed-hidden { display: none; }
 /* Picker rows: section label + text-colour swatch letters. */
 .hl-picker.hl-picker-2ch { grid-template-columns: repeat(9, 1fr); }
 .hl-picker-label { grid-column: 1 / -1; width: 100%; font-size: var(--text-xs); color: var(--text-muted); padding: 2px 2px 0; }
@@ -2083,6 +2174,12 @@ body.sel-mode .editor-wrap .cm-content { -webkit-touch-callout: none; }
   flex-wrap: wrap;
 }
 .find-panel.open { display: flex; }
+/* "Only if…" lookaround builder (item 28): a full-width second row. */
+.find-cond-row { display: none; flex-basis: 100%; align-items: center; gap: 6px; padding-top: 6px; flex-wrap: wrap; }
+.find-cond-row.open { display: flex; }
+.find-cond-label { font-size: var(--text-xs); color: var(--text-muted); }
+.find-cond-select { font-size: var(--text-xs); padding: 4px 6px; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.find-cond-hint { font-size: var(--text-xs); color: var(--text-faint); }
 .find-input {
   width: 180px;
   padding: 4px 8px;
@@ -2287,7 +2384,7 @@ body.sel-mode .editor-wrap .cm-content { -webkit-touch-callout: none; }
 .sync-action-grid .btn { flex: 1 1 140px; }
 #sync-disconnect-btn { color: var(--danger, #ef4444); border-color: var(--danger, #ef4444); }
 
-#footer-clock { font-variant-numeric: tabular-nums; color: var(--text-muted); cursor: default; }
+#footer-clock { font-variant-numeric: tabular-nums; color: var(--text-muted); cursor: pointer; }
 #footer-clock .fc-tz { opacity: 0.7; margin-left: 8px; }
 
 /* Rooms-by-Date widget styles now live in ./txt/widgets/daycal/daycal.css */
@@ -2297,6 +2394,16 @@ body.zen .editor-wrap .cm-scroller { padding-left: max(8vw, var(--space-4)); pad
 body.zen.zen-tw .editor-wrap .cm-content { padding-top: 38vh; padding-bottom: 38vh; }
 .zen-exit { position: fixed; top: 10px; right: 12px; z-index: 6000; opacity: 0.25; transition: opacity 0.2s; }
 .zen-exit:hover { opacity: 1; }
+
+/* Read-only badge (item 35) — mirrors the zen-exit pattern but stays fully
+   visible: the locked state must be unmissable. */
+.readonly-badge {
+  position: fixed; bottom: 46px; left: 50%; transform: translateX(-50%);
+  z-index: 6000; font-size: var(--text-xs);
+  background: var(--accent-bg, rgba(20,184,166,0.15)); color: var(--accent);
+  border: 1px solid var(--accent);
+}
+body.readonly .editor-wrap .cm-content { caret-color: transparent; }
 
 .drop-overlay { position: fixed; inset: 0; z-index: 9000; background: rgba(0,0,0,0.45); display: flex; align-items: center; justify-content: center; color: #fff; font-size: 20px; font-weight: 600; pointer-events: none; border: 3px dashed var(--accent); }
 
@@ -2375,6 +2482,14 @@ body.zen.zen-tw .editor-wrap .cm-content { padding-top: 38vh; padding-bottom: 38
         <span id="mdstyle-label">Markdown Styling: On</span>
         <span></span>
       </button>
+      <button class="menu-item" onclick="toggleReadOnly()">
+        <span id="readonly-label">Read-Only Mode: Off</span>
+        <span></span>
+      </button>
+      <button class="menu-item" onclick="toggleSidebar()" title="Workspace/room rail on wide screens">
+        <span id="sidebar-label">Sidebar: Off</span>
+        <span></span>
+      </button>
       <button class="menu-item" onclick="openSnapshots()">
         <span>Snapshots / History</span>
         <span></span>
@@ -2396,9 +2511,17 @@ body.zen.zen-tw .editor-wrap .cm-content { padding-top: 38vh; padding-bottom: 38
         <span>Rooms by Date</span>
         <span></span>
       </button>
+      <button class="menu-item" onclick="openReminders()">
+        <span>Reminders</span>
+        <span></span>
+      </button>
       <div class="menu-separator"></div>
       <button class="menu-item" onclick="shareLink()">
         <span>Share Link</span>
+        <span></span>
+      </button>
+      <button class="menu-item" onclick="shareDocument()" title="Send the document text to another app">
+        <span>Share Text…</span>
         <span></span>
       </button>
       <div class="menu-separator"></div>
@@ -2412,6 +2535,10 @@ body.zen.zen-tw .editor-wrap .cm-content { padding-top: 38vh; padding-bottom: 38
       </button>
       <button class="menu-item" onclick="closeAllMenus(); __promptStorageCleanup(true)">
         <span>Manage Storage</span>
+        <span></span>
+      </button>
+      <button class="menu-item" onclick="forceSyncReload()" title="Re-download the app and refresh caches">
+        <span>Refresh App &amp; Cache</span>
         <span></span>
       </button>
     </div>
@@ -2471,6 +2598,9 @@ body.zen.zen-tw .editor-wrap .cm-content { padding-top: 38vh; padding-bottom: 38
     <button class="mob-btn" onclick="mobilePaste()" title="Paste">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>
     </button>
+    <button class="mob-btn" onclick="shareDocument()" title="Share to another app">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+    </button>
     <button class="mob-btn" onclick="mobileDownload()" title="Download…">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
     </button>
@@ -2485,10 +2615,23 @@ body.zen.zen-tw .editor-wrap .cm-content { padding-top: 38vh; padding-bottom: 38
   <button class="find-btn" id="find-next" title="Next match (Enter)">↓</button>
   <button class="find-btn find-toggle" id="find-case" title="Match case">Aa</button>
   <button class="find-btn find-toggle" id="find-regex" title="Regular expression">.*</button>
-  <input class="find-input" id="replace-input" type="text" placeholder="Replace with…" autocomplete="off" spellcheck="false">
+  <input class="find-input" id="replace-input" type="text" placeholder="Replace with… (\n \t work)" autocomplete="off" spellcheck="false">
   <button class="find-btn" id="replace-one" title="Replace current match">Replace</button>
   <button class="find-btn" id="replace-all" title="Replace all matches">All</button>
+  <button class="find-btn find-toggle" id="find-cond-btn" title="Only if… — match only when text precedes/follows (no regex knowledge needed)">if…</button>
   <button class="find-btn find-close" id="find-close" title="Close (Esc)">×</button>
+  <div class="find-cond-row" id="find-cond-row">
+    <span class="find-cond-label">match only if it</span>
+    <select class="find-cond-select" id="find-cond-type">
+      <option value="followed">is followed by</option>
+      <option value="not-followed">is NOT followed by</option>
+      <option value="preceded">is preceded by</option>
+      <option value="not-preceded">is NOT preceded by</option>
+    </select>
+    <input class="find-input" id="find-cond-text" type="text" placeholder="text (\n \t \s work)" autocomplete="off" spellcheck="false">
+    <button class="find-btn" id="find-cond-apply" title="Builds the pattern into the Find box">Apply</button>
+    <span class="find-cond-hint">wraps your Find text in a lookaround — Aa case toggle still applies</span>
+  </div>
 </div>
 
 <!-- ========== EDITOR ========== -->
@@ -2507,7 +2650,7 @@ body.zen.zen-tw .editor-wrap .cm-content { padding-top: 38vh; padding-bottom: 38
 <!-- ========== FOOTER ========== -->
 <div class="footer">
   <div class="footer-breadcrumb" id="footer-breadcrumb"></div>
-  <span id="timer-chip" class="footer-timer-chip" title="Open timer" onclick="openTimer()" style="display:none;"></span>
+  <span id="timer-chip" class="footer-timer-chip" title="Open timer" onclick="openTimer()" style="display:none;"></span><span id="reminders-chip" class="footer-timer-chip" title="Reminders" onclick="openReminders()">⏰</span>
   <div class="footer-spacer"></div>
   <div class="footer-stats">
     <span id="footer-line">Ln 1, Col 1</span>
@@ -2620,6 +2763,7 @@ body.zen.zen-tw .editor-wrap .cm-content { padding-top: 38vh; padding-bottom: 38
       latest synced version. Choose how to resolve. Closing this dialog keeps both
       copies by saving the server version as a new document.
     </div>
+    <div class="sync-conflict-diff" id="sync-conflict-diff"></div>
     <div class="sync-conflict-actions">
       <button class="btn sync-conflict-btn" data-choice="local">
         <span class="scb-title">Local</span>
@@ -2678,6 +2822,7 @@ body.zen.zen-tw .editor-wrap .cm-content { padding-top: 38vh; padding-bottom: 38
       <div class="rm-tabs">
         <button class="rm-tab active" id="rm-tab-rooms" type="button" onclick="switchManagerTab('rooms')">Rooms</button>
         <button class="rm-tab" id="rm-tab-workspaces" type="button" onclick="switchManagerTab('workspaces')">Workspaces</button>
+        <button class="rm-tab" id="rm-tab-archive" type="button" onclick="switchManagerTab('archive')">Archive</button>
       </div>
 
       <!-- Rooms tab header -->
@@ -2711,27 +2856,16 @@ body.zen.zen-tw .editor-wrap .cm-content { padding-top: 38vh; padding-bottom: 38
       <div id="rm-body-workspaces" style="display:none;">
         <div class="room-manager-list" id="workspace-manager-list" style="margin-bottom:0;"></div>
       </div>
+      <div id="rm-body-archive" style="display:none;">
+        <div class="modal-desc" style="margin-bottom:var(--space-3);">Archived rooms stay synced but are hidden from tabs. Restore to bring one back.</div>
+        <div class="room-manager-list" id="archive-manager-list" style="margin-bottom:0;"></div>
+      </div>
     </div>
 
     <div class="modal-footer">
-      <div class="room-cap-row" id="rm-footer-cap" style="margin-bottom:0;">
-        <label>Room cap:</label>
-        <select id="room-cap-select" onchange="updateRoomCap(this.value)">
-          <option value="1">1</option>
-          <option value="2">2</option>
-          <option value="3" selected>3</option>
-          <option value="4">4</option>
-          <option value="5">5</option>
-          <option value="6">6</option>
-          <option value="7">7</option>
-          <option value="8">8</option>
-          <option value="9">9</option>
-          <option value="10">10</option>
-          <option value="99">99</option>
-        </select>
-      </div>
       <div class="modal-actions">
-        <button class="btn" onclick="openExploreRooms()">Explore Rooms…</button>
+        <button class="btn" onclick="scanEmptyRooms()" title="Find rooms with no content and offer to remove them">Find Empty…</button>
+        <button class="btn" onclick="openExploreRooms()" title="List every room on the server — recover one that isn't in your tab list">Recover from Server…</button>
         <button class="btn btn-primary" onclick="closeRoomManager()">Done</button>
       </div>
     </div>
@@ -2742,8 +2876,8 @@ body.zen.zen-tw .editor-wrap .cm-content { padding-top: 38vh; padding-bottom: 38
 <div class="modal-overlay" id="explore-rooms-overlay">
   <div class="modal-dialog modal-dialog-scroll" style="max-width: 460px;">
     <div class="modal-header">
-      <div class="modal-title">Explore Rooms</div>
-      <div class="modal-desc" style="margin-bottom:0;">Rooms in the connected database. Pick a workspace and add to subscribe — the list stays open so you can add several.</div>
+      <div class="modal-title">Recover from Server</div>
+      <div class="modal-desc" style="margin-bottom:0;">Every room on the connected database — including ones removed from your tab list (their server content is kept). Your live tabs sync automatically; this is for recovery and for pre-sync legacy rooms.</div>
     </div>
     <div class="modal-body">
       <div id="explore-rooms-list"></div>
@@ -2763,8 +2897,9 @@ body.zen.zen-tw .editor-wrap .cm-content { padding-top: 38vh; padding-bottom: 38
     <div class="modal-desc">Select rooms to clear from offline storage (cache, sync base and snapshots together). Synced content reloads from the server when you next open the room.</div>
     <div style="color:var(--text-faint);font-size:var(--text-xs);margin:-4px 0 8px;" id="storage-cleanup-usage"></div>
     <div class="room-manager-list" id="storage-cleanup-list"></div>
-    <div style="margin-top:8px;">
+    <div style="margin-top:8px;display:flex;flex-direction:column;gap:6px;">
       <button class="btn" style="width:100%;" onclick="storageCleanupPurgeImages()">🧹 Purge unused images (IndexedDB + server)</button>
+      <button class="btn btn-danger" style="width:100%;" onclick="purgeLocalDevice()" title="Wipe everything stored on this device and reload — server data untouched">⚠ Reset this device (server data kept)</button>
     </div>
     <div class="modal-actions">
       <button class="btn" onclick="closeStorageCleanup()">Cancel</button>
@@ -2932,6 +3067,8 @@ window.Cade = (function () {
     onEditorUpdate(cb) { if (typeof cb === 'function') (window.__cadeUpdateHooks || (window.__cadeUpdateHooks = [])).push(cb); },
     // ---- room system surface (read-mostly; see window.__roomsApi in core) ----
     get roomsApi() { return window.__roomsApi; },
+    // ---- small per-account synced JSON store (encrypted; offline-first) ----
+    syncedBlob(id, opts) { return window.__cadeSyncedBlob(id, opts); },
   };
   return api;
 })();
@@ -3455,6 +3592,14 @@ function updateThemeIcon() {
 // ============================================
 const lineNumCompartment = new Compartment();
 let showLineNums = store.get('cade-linenums') !== 'false';
+// Read-only mode (item 35): blocks all edits and — because editable(false)
+// drops contenteditable — the mobile keyboard never opens. Persisted per
+// device; a fixed badge mirrors zen-exit so the state is always visible.
+const readOnlyCompartment = new Compartment();
+let _readOnly = store.get('cade-readonly') === '1';
+function _readOnlyExts() {
+  return _readOnly ? [EditorView.editable.of(false), EditorState.readOnly.of(true)] : [];
+}
 // Feature 23 — line wrapping. lineWrapping lives in a compartment so it can be
 // reconfigured at runtime. Modes (item 3): 'none' (horizontal scroll), 'soft'
 // (default, visual wrap), 'hard' (insert real newlines so each visual row is its
@@ -4896,6 +5041,132 @@ const mdStylePlugin = ViewPlugin.fromClass(class {
   }
 }, { decorations: v => v.decorations });
 
+// ============================================
+// COLLAPSIBLE SECTIONS (item 31)
+// --------------------------------------------------------------------------
+// Every markdown heading gets a ▾ caret; clicking it folds the section (from
+// the end of the heading line to just before the next heading of the same or
+// higher level) behind a "… N lines" pill. Purely visual — the text is
+// untouched, so sync/undo/search all see the full document. Collapsed state
+// is per-session and keyed by heading level+text+occurrence, so edits above
+// a fold don't lose it; if a heading is edited/removed its fold just opens.
+// If anything moves the caret INSIDE a hidden range (search, go-to-line),
+// that section auto-expands so the cursor can never be invisible.
+// ============================================
+let _collapsedSections = new Set(); // "level|text#occ"
+let _collapseVersion = 0;
+const COLLAPSE_HEAD_RE = /^(#{1,6})\s+(\S.*)$/;
+
+function _scanSections(doc) {
+  // → [{key, level, headLine, from(=heading line end), to(=section end)}]
+  const heads = [];
+  const occ = {};
+  const nLines = doc.lines;
+  if (nLines > 30000) return heads; // give up on absurd docs — perf guard
+  for (let i = 1; i <= nLines; i++) {
+    const line = doc.line(i);
+    if (line.length > 400 || line.length < 2) continue;
+    const m = COLLAPSE_HEAD_RE.exec(line.text);
+    if (!m) continue;
+    // Headings inside fenced code blocks aren't sections.
+    if (typeof fenceContaining === 'function' && fenceContaining(line.from)) continue;
+    const base = m[1].length + '|' + m[2].trim();
+    occ[base] = (occ[base] || 0) + 1;
+    heads.push({ key: base + '#' + occ[base], level: m[1].length, lineNo: i, lineFrom: line.from, headEnd: line.to });
+  }
+  for (let h = 0; h < heads.length; h++) {
+    let endLine = nLines;
+    for (let j = h + 1; j < heads.length; j++) {
+      if (heads[j].level <= heads[h].level) { endLine = heads[j].lineNo - 1; break; }
+    }
+    heads[h].from = heads[h].headEnd;
+    heads[h].to = doc.line(endLine).to;
+    heads[h].hiddenLines = endLine - heads[h].lineNo;
+  }
+  return heads;
+}
+
+class _CollapseCaretWidget extends WidgetType {
+  constructor(key, open) { super(); this.key = key; this.open = open; }
+  eq(o) { return o.key === this.key && o.open === this.open; }
+  toDOM() {
+    const b = document.createElement('span');
+    b.className = 'cm-collapse-caret' + (this.open ? '' : ' closed');
+    b.textContent = this.open ? '▾' : '▸';
+    b.title = this.open ? 'Collapse section' : 'Expand section';
+    const key = this.key;
+    b.addEventListener('mousedown', (e) => { e.preventDefault(); e.stopPropagation(); window.__toggleSection(key); });
+    return b;
+  }
+  ignoreEvent() { return true; }
+}
+class _CollapsedPillWidget extends WidgetType {
+  constructor(key, n) { super(); this.key = key; this.n = n; }
+  eq(o) { return o.key === this.key && o.n === this.n; }
+  toDOM() {
+    const s = document.createElement('span');
+    s.className = 'cm-collapse-pill';
+    s.textContent = ' … ' + this.n + ' line' + (this.n === 1 ? '' : 's') + ' ';
+    s.title = 'Expand section';
+    const key = this.key;
+    s.addEventListener('mousedown', (e) => { e.preventDefault(); e.stopPropagation(); window.__toggleSection(key); });
+    return s;
+  }
+  ignoreEvent() { return true; }
+}
+window.__toggleSection = function(key) {
+  if (_collapsedSections.has(key)) _collapsedSections.delete(key);
+  else _collapsedSections.add(key);
+  _collapseVersion++;
+  try { editor.dispatch({}); } catch {}
+};
+
+function buildCollapseDecorations(view) {
+  if (!mdStyleEnabled || !_collapsedSections.size) {
+    // Still show carets on visible headings so the affordance exists.
+    if (!mdStyleEnabled) return Decoration.none;
+  }
+  const doc = view.state.doc;
+  const heads = _scanSections(doc);
+  if (!heads.length) return Decoration.none;
+  const selHead = view.state.selection.main.head;
+  const ranges = [];
+  const liveKeys = new Set(heads.map(h => h.key));
+  // Drop folds whose heading no longer exists (fail-open).
+  for (const k of [..._collapsedSections]) if (!liveKeys.has(k)) _collapsedSections.delete(k);
+  for (const h of heads) {
+    let closed = _collapsedSections.has(h.key);
+    // Never hide the caret's own position — auto-expand instead.
+    if (closed && selHead > h.from && selHead <= h.to) {
+      _collapsedSections.delete(h.key);
+      closed = false;
+    }
+    ranges.push(Decoration.widget({ widget: new _CollapseCaretWidget(h.key, !closed), side: -1 }).range(h.lineFrom));
+    if (closed && h.hiddenLines > 0) {
+      // CM6 forbids replace decorations that swallow line breaks from any
+      // dynamic provider (plugin or facet function) — only StateFields may,
+      // and the local bundle doesn't export them. So each hidden line gets a
+      // line decoration that CSS display:none's instead, plus a "… N lines"
+      // pill after the heading. Same visual result, doc untouched.
+      ranges.push(Decoration.widget({ widget: new _CollapsedPillWidget(h.key, h.hiddenLines), side: 1 }).range(h.headEnd));
+      const lastLine = Math.min(h.lineNo + h.hiddenLines, doc.lines);
+      for (let ln = h.lineNo + 1; ln <= lastLine; ln++) {
+        ranges.push(Decoration.line({ class: 'cm-collapsed-hidden' }).range(doc.line(ln).from));
+      }
+    }
+  }
+  ranges.sort((a, b) => a.from - b.from || a.startSide - b.startSide);
+  return Decoration.set(ranges, true);
+}
+
+// NOTE: these decorations REPLACE LINE BREAKS, which CM6 forbids from view
+// plugins ("Decorations that replace line breaks may not be specified via
+// plugins"). The function-facet form is evaluated outside the plugin path
+// and is the sanctioned way to fold content without a StateField (which the
+// local bundle doesn't export). The function reads the live globals
+// (_collapsedSections / mdStyleEnabled) on every view update.
+const collapseExtension = EditorView.decorations.of(buildCollapseDecorations);
+
 // ===== Embedded images (#28) =====
 // Two on-document representations, both rendered as <img>:
 //   • OUT-OF-DOCUMENT (preferred):  "![img:<code>#<hash>]"  — the document holds
@@ -4980,6 +5251,8 @@ function _imgRefCachePut(hash, rec) {
   }
   _imgRefCache.set(hash, rec);
 }
+// Exposed for the Whiteboard module (draw-over-image background layer).
+window.resolveImageRef = (code, hash) => resolveImageRef(code, hash);
 async function resolveImageRef(code, hash) {
   let hit = _imgRefCache.get(hash);
   if (hit) { _imgRefCache.delete(hash); _imgRefCache.set(hash, hit); return hit; }
@@ -5086,9 +5359,10 @@ class ImageWidget extends WidgetType {
     img.alt = 'embedded image';
     const mime = IMG_MIME[this.code] || 'image/jpeg';
     const code = this.code;
+    const menuHash = this.isRef ? this.data : null; // for "Edit drawing" (whiteboard)
     const attachMenu = (b64) => wrap.addEventListener('contextmenu', (e) => {
       e.preventDefault(); e.stopPropagation();
-      showImageMenu(e.clientX, e.clientY, mime, b64);
+      showImageMenu(e.clientX, e.clientY, mime, b64, menuHash);
     });
     img.onerror = () => { wrap.classList.add('missing'); wrap.textContent = '⚠ broken image'; };
     wrap.appendChild(img);
@@ -5127,12 +5401,25 @@ class ImageWidget extends WidgetType {
   }
   ignoreEvent() { return true; }
 }
-// Right-click an embedded image → copy (as PNG, universally clipboard-safe) or
-// download.
-function showImageMenu(x, y, mime, b64) {
+// Right-click an embedded image → copy (as PNG, universally clipboard-safe),
+// download, or — when the Whiteboard widget saved stroke data for this hash —
+// edit the drawing (loads the draw module on demand).
+function showImageMenu(x, y, mime, b64, hash) {
   const dataUrl = 'data:' + mime + ';base64,' + b64;
   const ext = (mime.split('/')[1] || 'jpg').replace('jpeg', 'jpg');
+  const editItem = hash ? [{ label: '✏️ Open in Whiteboard…', run: () => {
+    // Editable strokes when the drawing was made here; otherwise the widget
+    // loads the image as a locked background layer to draw over.
+    const go = () => { if (window.__drawEditByHash) window.__drawEditByHash(hash); };
+    if (window.__drawEditByHash) go();
+    else {
+      const stub = (typeof WIDGETS !== 'undefined') ? WIDGETS.find(x => x.name === 'Whiteboard') : null;
+      if (stub) { try { stub.open(); } catch {} setTimeout(go, 900); }
+      else showToast('Whiteboard module not available', 'error', 2500);
+    }
+  } }] : [];
   openMenu([
+    ...editItem,
     { label: 'Copy image', run: () => {
         try {
           const im = new Image();
@@ -5260,6 +5547,7 @@ function buildEditorExtensions() {
     basicSetup,
     editorTheme,
     lineNumCompartment.of(showLineNums ? lineNumbers() : []),
+    readOnlyCompartment.of(_readOnlyExts()),
     history(),
     EditorView.updateListener.of(update => {
       if (update.docChanged || update.selectionSet) {
@@ -5303,6 +5591,7 @@ function buildEditorExtensions() {
     spellPlugin,
     searchPlugin,
     mdStylePlugin,
+    collapseExtension,
     imagePlugin,
     // Treat embedded-image tokens as atomic units for the caret/selection so a
     // partial delete can't shred one into raw base64 (where available).
@@ -5375,6 +5664,19 @@ function buildEditorExtensions() {
           if (spaces) changes.push({ from: line.from, to: line.from + spaces[0].length, insert: '' });
         }
         if (changes.length) view.dispatch({ changes, userEvent: 'input.dedent' });
+        return true;
+      }},
+      // Item 30: Ctrl+Home must land at the absolute document start (0,0) AND
+      // scroll the very top into view. The default binding put the caret at
+      // the start of the first *visual* line, which on a soft-wrapped first
+      // line left the caret mid-paragraph with the top still off-screen.
+      { key: 'Mod-Home', run: (view) => {
+        view.dispatch({ selection: { anchor: 0 }, effects: EditorView.scrollIntoView(0, { y: 'start' }) });
+        return true;
+      }},
+      { key: 'Mod-End', run: (view) => {
+        const end = view.state.doc.length;
+        view.dispatch({ selection: { anchor: end }, effects: EditorView.scrollIntoView(end, { y: 'end' }) });
         return true;
       }},
     ]),
@@ -5656,7 +5958,13 @@ editor.dom.addEventListener('click', (e) => {
   if (coarse) {
     // Mobile: a tap on a highlight or link opens its menu; misspelling opens
     // suggestions; anything else just moves the cursor.
+    // A misspelled word INSIDE a highlight gets the spell popup (item 20) —
+    // the highlight menu used to swallow the tap, making the spelling fix
+    // unreachable. Recoloring stays available on any correctly-spelled part
+    // of the highlight (and via the toolbar picker).
+    const spellHit = hitSpell(pos);
     const hl = hitHighlight(pos);
+    if (spellHit && hl) { e.preventDefault(); openSpellPopup(spellHit); return; }
     if (hl) { e.preventDefault(); openHighlightMenu(hl, e.clientX, e.clientY); return; }
     const link = hitLink(pos);
     if (link) {
@@ -5665,8 +5973,7 @@ editor.dom.addEventListener('click', (e) => {
       else openLinkMenu(link, e.clientX, e.clientY);
       return;
     }
-    const hit = hitSpell(pos);
-    if (hit) { openSpellPopup(hit); return; }
+    if (spellHit) { openSpellPopup(spellHit); return; }
     closeSpellPopup(); closeCtxMenu();
     return;
   }
@@ -5688,12 +5995,36 @@ editor.dom.addEventListener('click', (e) => {
 editor.dom.addEventListener('contextmenu', (e) => {
   const pos = editor.posAtCoords({ x: e.clientX, y: e.clientY });
   if (pos == null) return;
+  // Same precedence as tap: a misspelling inside a highlight wins (item 20).
+  const spellHit = hitSpell(pos);
   const hl = hitHighlight(pos);
+  if (spellHit && hl) { e.preventDefault(); openSpellPopup(spellHit); return; }
   if (hl) { e.preventDefault(); openHighlightMenu(hl, e.clientX, e.clientY); return; }
   const link = hitLink(pos);
   if (link && link.kind !== 'nav') { e.preventDefault(); openLinkMenu(link, e.clientX, e.clientY); return; }
-  const hit = hitSpell(pos);
-  if (hit) { e.preventDefault(); openSpellPopup(hit); return; }
+  if (spellHit) { e.preventDefault(); openSpellPopup(spellHit); return; }
+  // Item 23: right-clicking INSIDE a selection opens an editing menu.
+  // (Right-click outside any selection still gives the browser's native menu,
+  // which is also where Inspect lives — pages can't open devtools themselves.)
+  const selm = editor.state.selection.main;
+  if (!selm.empty && pos >= selm.from && pos <= selm.to) {
+    e.preventDefault();
+    const selText = editor.state.sliceDoc(selm.from, selm.to);
+    openMenu([
+      { label: 'Cut', run: () => {
+          ctxCopy(selText);
+          editor.dispatch({ changes: { from: selm.from, to: selm.to, insert: '' } });
+          editor.focus();
+        } },
+      { label: 'Copy', run: () => ctxCopy(selText) },
+      { label: 'Paste', run: () => ctxPaste() },
+      { sep: true },
+      { label: 'Run script…', run: () => window.openPicker() },
+      { sep: true },
+      { label: 'Search Google', run: () => openLink('https://www.google.com/search?q=' + encodeURIComponent(selText.slice(0, 500))) },
+    ], e.clientX, e.clientY);
+    return;
+  }
 });
 
 // The popup is position:fixed and anchored to the word — close it if the
@@ -8079,6 +8410,72 @@ async function applyResolvedNew(roomName, localText, serverText) {
   showToast('Conflict saved as new doc: ' + conflictName, 'success', 4000);
 }
 
+// --- Conflict diff (item 10) --------------------------------------------------
+// Bounded line diff: strip the common prefix/suffix, then LCS over what's left
+// (≤400×400 lines — beyond that, show the two changed blocks side by side
+// without pairing). Renders with 2 context lines around each change.
+function _lineDiffOps(aText, bText) {
+  const a = aText.split('\n'), b = bText.split('\n');
+  let pre = 0;
+  while (pre < a.length && pre < b.length && a[pre] === b[pre]) pre++;
+  let sufA = a.length, sufB = b.length;
+  while (sufA > pre && sufB > pre && a[sufA - 1] === b[sufB - 1]) { sufA--; sufB--; }
+  const midA = a.slice(pre, sufA), midB = b.slice(pre, sufB);
+  const ops = [];
+  a.slice(0, pre).forEach(s => ops.push({ t: '=', s }));
+  if (midA.length * midB.length > 160000) {
+    // Too big to pair line-by-line — dump the blocks.
+    midA.forEach(s => ops.push({ t: '-', s }));
+    midB.forEach(s => ops.push({ t: '+', s }));
+  } else if (midA.length || midB.length) {
+    const n = midA.length, m = midB.length;
+    const dp = Array.from({ length: n + 1 }, () => new Uint16Array(m + 1));
+    for (let i = n - 1; i >= 0; i--) {
+      for (let j = m - 1; j >= 0; j--) {
+        dp[i][j] = midA[i] === midB[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+      }
+    }
+    let i = 0, j = 0;
+    while (i < n && j < m) {
+      if (midA[i] === midB[j]) { ops.push({ t: '=', s: midA[i] }); i++; j++; }
+      else if (dp[i + 1][j] >= dp[i][j + 1]) { ops.push({ t: '-', s: midA[i] }); i++; }
+      else { ops.push({ t: '+', s: midB[j] }); j++; }
+    }
+    while (i < n) { ops.push({ t: '-', s: midA[i++] }); }
+    while (j < m) { ops.push({ t: '+', s: midB[j++] }); }
+  }
+  a.slice(sufA).forEach(s => ops.push({ t: '=', s }));
+  return ops;
+}
+function _renderConflictDiff(localText, serverText) {
+  const el = document.getElementById('sync-conflict-diff');
+  if (!el) return;
+  let ops;
+  try { ops = _lineDiffOps(localText, serverText); } catch { el.innerHTML = ''; return; }
+  const changed = ops.filter(o => o.t !== '=').length;
+  if (!changed) { el.innerHTML = ''; return; }
+  // Keep 2 context lines around changes; collapse the rest.
+  const keep = new Array(ops.length).fill(false);
+  ops.forEach((o, i) => {
+    if (o.t === '=') return;
+    for (let k = Math.max(0, i - 2); k <= Math.min(ops.length - 1, i + 2); k++) keep[k] = true;
+  });
+  const rows = [`<div class="scd-head"><b class="local">− local</b> · <b class="server">+ server</b> · ${changed} changed line${changed === 1 ? '' : 's'}</div>`];
+  let gap = false, shown = 0;
+  for (let i = 0; i < ops.length && shown < 300; i++) {
+    if (!keep[i]) { gap = true; continue; }
+    if (gap) { rows.push('<div class="scd-line gap">···</div>'); gap = false; }
+    const o = ops[i];
+    const cls = o.t === '-' ? 'del' : o.t === '+' ? 'add' : 'ctx';
+    const sign = o.t === '=' ? ' ' : o.t;
+    rows.push(`<div class="scd-line ${cls}">${sign} ${escapeHtml(o.s.length > 300 ? o.s.slice(0, 300) + '…' : o.s)}</div>`);
+    shown++;
+  }
+  if (shown >= 300) rows.push('<div class="scd-line gap">··· (diff truncated)</div>');
+  el.innerHTML = rows.join('');
+  el.scrollTop = 0;
+}
+
 // --- Sync Conflict modal ------------------------------------------------------
 // Returns a promise that resolves once the conflict is handled. Abandoning the
 // modal (Escape / backdrop click) defaults to option 5 ("New") so a conflict is
@@ -8088,6 +8485,7 @@ function showSyncConflictModal(roomName, localText, serverText) {
     const overlay = document.getElementById('sync-conflict-overlay');
     const roomSpan = document.getElementById('sync-conflict-room');
     if (roomSpan) roomSpan.textContent = roomName;
+    try { _renderConflictDiff(localText, serverText); } catch {}
     const btns = Array.from(overlay.querySelectorAll('.sync-conflict-btn'));
     let settled = false;
 
@@ -8354,7 +8752,8 @@ function getRoomEncKey(name, baseKey) {
 // ============================================
 // ROOM SYSTEM
 // ============================================
-let roomCap = parseInt(store.get('cade-room-cap')) || 3;
+// Item 8: the room cap is retired — rooms are only limited by device storage.
+let roomCap = Infinity;
 let rooms = [];
 try { rooms = JSON.parse(store.get('cade-rooms')) || []; } catch {}
 let activeRoom = store.get('cade-active-room') || '';
@@ -8362,7 +8761,6 @@ let activeRoom = store.get('cade-active-room') || '';
 function saveRooms() {
   store.set('cade-rooms', JSON.stringify(rooms));
   store.set('cade-active-room', activeRoom);
-  store.set('cade-room-cap', roomCap);
   try { tabSync.postRooms(); } catch {}
   // The room list is part of the synced workspace blob — propagate adds,
   // removals and reorders to the account's other devices (debounced; no-op
@@ -8380,8 +8778,62 @@ function _roomDropdownLabel(name) {
   }
   return name;
 }
+// ---------- Desktop sidebar (item 26): workspace → room tree ----------
+// Optional collapsible left rail replacing the tab-strip workflow on wide
+// screens. Pure alternative view — the tab bar keeps working. Renders from
+// the same data on every renderRoomTabs pass; hidden below 900px via CSS.
+let _sidebarOn = store.get('cade-sidebar') === '1';
+window.toggleSidebar = function() {
+  closeAllMenus();
+  _sidebarOn = !_sidebarOn;
+  store.set('cade-sidebar', _sidebarOn ? '1' : '0');
+  renderSidebar();
+  const lbl = document.getElementById('sidebar-label');
+  if (lbl) lbl.textContent = _sidebarOn ? 'Sidebar: On' : 'Sidebar: Off';
+  try { editor.requestMeasure(); } catch {}
+};
+setTimeout(() => { const l = document.getElementById('sidebar-label'); if (l && _sidebarOn) l.textContent = 'Sidebar: On'; }, 100);
+function _sidebarRoomRow(name) {
+  const escAttr = escapeHtml(name.replace(/\\/g, '\\\\').replace(/'/g, "\\'"));
+  const active = name === activeRoom;
+  const pin = roomPinnedHere(name) ? '📌 ' : '';
+  return `<div class="sn-room${active ? ' active' : ''}" onclick="quickSwitchPick('${escAttr}')">${pin}${escapeHtml(name)}</div>`;
+}
+function renderSidebar() {
+  document.body.classList.toggle('sidebar-on', _sidebarOn);
+  let el = document.getElementById('side-nav');
+  if (!_sidebarOn) { if (el) el.remove(); return; }
+  if (!el) {
+    el = document.createElement('nav');
+    el.id = 'side-nav';
+    document.body.appendChild(el);
+  }
+  const wsRows = [];
+  const wsSection = (label, colorClass, wsId, roomList) => {
+    const escId = escapeHtml(String(wsId).replace(/'/g, "\\'"));
+    wsRows.push(`<div class="sn-ws ${colorClass}${activeWorkspace === wsId ? ' active' : ''}" onclick="sidebarPickWs('${escId}')"><span class="ws-badge-dot"></span>${escapeHtml(label)}<span class="sn-count">${roomList.length}</span></div>`);
+    wsRows.push(...roomList.map(_sidebarRoomRow));
+  };
+  const live = rooms.filter(r => !roomIsArchived(r));
+  workspaces.slice().sort((a, b) => (a.order ?? 0) - (b.order ?? 0)).forEach(w => {
+    const inWs = orderRooms(live.filter(r => roomInWorkspace(r, w.id)));
+    wsSection(w.name, 'ws-color-' + (WS_COLORS.includes(w.color) ? w.color : 'neutral'), w.id, inWs);
+  });
+  const unlabeled = orderRooms(live.filter(r => roomIsUnlabeled(r)));
+  if (unlabeled.length) wsSection('Unlabeled', 'ws-color-neutral', WS_UNLABELED, unlabeled);
+  el.innerHTML = `<div class="sn-head" onclick="sidebarPickWs('${WS_ALL}')">All Rooms<span class="sn-count">${live.length}</span></div>` + wsRows.join('') +
+    `<button class="sn-add" onclick="addRoomPrompt()">＋ New room</button>`;
+}
+window.sidebarPickWs = function(wsId) {
+  activeWorkspace = wsId;
+  store.set('cade-active-workspace', wsId);
+  try { renderWorkspacePill(); } catch {}
+  renderRoomTabs();
+};
+
 function renderRoomTabs() {
   renderWorkspacePill();
+  try { renderSidebar(); } catch {}
   // Desktop tabs
   const container = document.getElementById('room-tabs');
   const mobileContainer = document.getElementById('room-mobile-select');
@@ -8396,7 +8848,7 @@ function renderRoomTabs() {
   let html = visibleRooms.map(name => {
     const isActive = name === activeRoom && syncState.connected;
     const hasLock = roomHasPassword(name);
-    const pinned = roomIsPinned(name);
+    const pinned = roomPinnedHere(name);
     const colorClass = workspaceColorClassForRoom(name);
     const dotHtml = showDots ? `<span class="ws-tab-dot ${colorClass}"></span>` : '';
     // Pinned rooms are conveyed by the cross-stitch texture + accent color (CSS
@@ -8559,15 +9011,30 @@ function renderQuickSwitchList() {
     const name = res.name;
     const colorClass = workspaceColorClassForRoom(name);
     const wsIds = getRoomWorkspaceIds(name);
-    const ws = wsIds.length ? getWorkspace(wsIds[0]) : null;
-    const wsLabel = ws ? ws.name + (wsIds.length > 1 ? ' +' + (wsIds.length - 1) : '') : 'Unlabeled';
-    const pin = roomIsPinned(name) ? '<span class="qs-pin" title="Pinned">📌</span>' : '';
+    const pin = roomPinnedHere(name) ? '<span class="qs-pin" title="Pinned">📌</span>' : '';
     const lock = roomHasPassword(name) ? ' 🔒' : '';
     const escAttr = escapeHtml(name.replace(/\\/g, '\\\\').replace(/'/g, "\\'"));
+    // Item 22: every workspace the room belongs to, as colour-coded badges
+    // (up to 3 before overflowing to +N).
+    let meta;
+    if (res.content) {
+      meta = `<span class="qs-snip" title="content match">📄 ${res.snippet}</span>`;
+    } else if (wsIds.length) {
+      const shown = wsIds.slice(0, 3).map(id => {
+        const w = getWorkspace(id);
+        if (!w) return '';
+        const cc = 'ws-color-' + (WS_COLORS.includes(w.color) ? w.color : 'neutral');
+        return `<span class="ws-badge ${cc}" style="margin-left:0;"><span class="ws-badge-dot"></span>${escapeHtml(w.name)}</span>`;
+      }).join('');
+      const more = wsIds.length > 3 ? `<span class="qs-meta">+${wsIds.length - 3}</span>` : '';
+      meta = `<span class="qs-ws-badges">${shown}${more}</span>`;
+    } else {
+      meta = '<span class="qs-meta">Unlabeled</span>';
+    }
     return `<div class="qs-item ${i === _qsIndex ? 'active' : ''}" data-idx="${i}" onclick="quickSwitchPick('${escAttr}')">
       ${pin}<span class="qs-dot ${colorClass}"></span>
       <span class="qs-name">${escapeHtml(name)}${lock}</span>
-      <span class="qs-meta">${escapeHtml(wsLabel)}</span>
+      ${meta}
     </div>`;
   }).join('');
   const active = listEl.querySelector('.qs-item.active');
@@ -8581,6 +9048,8 @@ window.openQuickSwitcher = function() {
   if (!overlay || !input) return;
   input.value = '';
   _qsIndex = 0;
+  _qsScanToken++;       // cancel any in-flight content scan
+  _qsTextCache.clear(); // fresh text snapshot per open (memory care)
   _qsResults = quickSwitchResults('');
   renderQuickSwitchList();
   overlay.classList.add('open');
@@ -8590,20 +9059,76 @@ window.openQuickSwitcher = function() {
 window.closeQuickSwitcher = function() {
   const overlay = document.getElementById('qs-overlay');
   if (overlay) overlay.classList.remove('open');
+  _qsScanToken++;       // stop any running content scan
+  _qsTextCache.clear(); // release the text snapshots (memory care)
   try { editor.focus(); } catch {}
 };
 
 window.quickSwitchPick = function(name) {
   closeQuickSwitcher();
   if (!name || name === activeRoom) return;
-  // If the room is hidden by the active workspace filter, drop to All Rooms so
-  // the switch is visible in the tab bar.
-  if (!roomInWorkspace(name, activeWorkspace) || roomIsArchived(name)) {
+  // Item 22: follow the room into ITS OWN workspace (first membership) rather
+  // than dumping to All Rooms — the tab bar then shows its real context.
+  // Archived rooms still land in All Rooms (they're hidden everywhere else).
+  if (roomIsArchived(name)) {
     activeWorkspace = WS_ALL;
     store.set('cade-active-workspace', WS_ALL);
+  } else if (!roomInWorkspace(name, activeWorkspace) && !roomIsPinned(name)) {
+    const ids = getRoomWorkspaceIds(name);
+    activeWorkspace = ids.length ? ids[0] : WS_UNLABELED;
+    store.set('cade-active-workspace', activeWorkspace);
   }
+  try { renderWorkspacePill(); } catch {}
   switchRoom(name);
 };
+
+// Item 29: content search across the workspace's rooms (all rooms in the All
+// view) — async, time-budgeted chunks, capped results, per-open text cache so
+// keystrokes don't re-read localStorage. Only kicks in from 3 chars.
+let _qsScanToken = 0;
+const _qsTextCache = new Map(); // room -> lowercased text ('' = known empty)
+function _qsRoomTextLower(r) {
+  if (_qsTextCache.has(r)) return _qsTextCache.get(r);
+  let t = '';
+  try {
+    t = (r === activeRoom ? editor.state.doc.toString() : (store.get('cade-room-cache:' + r) || '')).toLowerCase();
+  } catch {}
+  _qsTextCache.set(r, t);
+  return t;
+}
+function quickSwitchContentSearch(query) {
+  const token = ++_qsScanToken;
+  const q = query.trim().toLowerCase();
+  if (q.length < 3) return;
+  const scope = (activeWorkspace === WS_ALL)
+    ? rooms.filter(r => !roomIsArchived(r))
+    : roomsInActiveWorkspace(false);
+  let i = 0;
+  const found = [];
+  const step = () => {
+    if (token !== _qsScanToken) return; // a newer keystroke superseded us
+    const deadline = Date.now() + 8;    // ≤8ms of work per chunk
+    while (i < scope.length && Date.now() < deadline && found.length < 8) {
+      const r = scope[i++];
+      const text = _qsRoomTextLower(r);
+      if (!text) continue;
+      const at = text.indexOf(q);
+      if (at === -1) continue;
+      const s = Math.max(0, at - 24);
+      const raw = (s > 0 ? '…' : '') + text.slice(s, at + q.length + 44).replace(/\s+/g, ' ') + '…';
+      found.push({ name: r, score: 1, content: true, snippet: escapeHtml(raw) });
+    }
+    if (i < scope.length && found.length < 8) { setTimeout(step, 0); return; }
+    if (token !== _qsScanToken) return;
+    const have = new Set(_qsResults.map(x => x.name));
+    const extra = found.filter(f => !have.has(f.name));
+    if (extra.length) {
+      _qsResults = _qsResults.concat(extra);
+      renderQuickSwitchList();
+    }
+  };
+  setTimeout(step, 0);
+}
 
 (function() {
   const input = document.getElementById('qs-input');
@@ -8613,6 +9138,7 @@ window.quickSwitchPick = function(name) {
     _qsResults = quickSwitchResults(input.value);
     _qsIndex = 0;
     renderQuickSwitchList();
+    quickSwitchContentSearch(input.value); // item 29 — appends 📄 content hits
   });
   input.addEventListener('keydown', (e) => {
     if (e.key === 'ArrowDown') { e.preventDefault(); _qsIndex++; renderQuickSwitchList(); }
@@ -8987,10 +9513,6 @@ async function _doSwitchRoom(name, firebaseUrl, baseEncKey) {
 window.addRoomPrompt = function() {
   // Rooms are created locally first (works offline); Firebase sync attaches as
   // soon as URL+key are configured and the network is reachable.
-  if (rooms.length >= roomCap) {
-    showToast('Room cap reached (' + roomCap + '). Remove a room or increase the cap in View → Room Manager.', 'error');
-    return;
-  }
   showAddRoomModal();
 };
 
@@ -8998,15 +9520,15 @@ window.addRoomPrompt = function() {
 let _rmActiveTab = 'rooms';
 window.openRoomManager = function(tab) {
   closeAllMenus();
-  _rmActiveTab = tab === 'workspaces' ? 'workspaces' : 'rooms';
+  _rmActiveTab = (tab === 'workspaces' || tab === 'archive') ? tab : 'rooms';
   renderManagerTabs();
   renderRoomManagerList();
   renderWorkspaceManagerList();
-  document.getElementById('room-cap-select').value = roomCap;
+  renderArchiveList();
   document.getElementById('room-manager-overlay').classList.add('open');
   if (_rmActiveTab === 'rooms') {
     document.getElementById('room-add-input').focus();
-  } else {
+  } else if (_rmActiveTab === 'workspaces') {
     document.getElementById('ws-add-input').focus();
   }
 };
@@ -9018,34 +9540,75 @@ window.closeRoomManager = function() {
 };
 
 window.switchManagerTab = function(tab) {
-  _rmActiveTab = tab;
+  _rmActiveTab = (tab === 'workspaces' || tab === 'archive') ? tab : 'rooms';
   renderManagerTabs();
-  if (tab === 'rooms') {
+  if (_rmActiveTab === 'rooms') {
     renderRoomManagerList();
     setTimeout(() => document.getElementById('room-add-input').focus(), 10);
-  } else {
+  } else if (_rmActiveTab === 'workspaces') {
     renderWorkspaceManagerList();
     setTimeout(() => document.getElementById('ws-add-input').focus(), 10);
+  } else {
+    renderArchiveList();
   }
 };
 
 function renderManagerTabs() {
-  const tabRooms = document.getElementById('rm-tab-rooms');
-  const tabWs = document.getElementById('rm-tab-workspaces');
-  const headRooms = document.getElementById('rm-header-rooms');
-  const headWs = document.getElementById('rm-header-workspaces');
-  const bodyRooms = document.getElementById('rm-body-rooms');
-  const bodyWs = document.getElementById('rm-body-workspaces');
-  const footerCap = document.getElementById('rm-footer-cap');
   const isRooms = _rmActiveTab === 'rooms';
-  tabRooms.classList.toggle('active', isRooms);
-  tabWs.classList.toggle('active', !isRooms);
-  headRooms.style.display = isRooms ? '' : 'none';
-  headWs.style.display = isRooms ? 'none' : '';
-  bodyRooms.style.display = isRooms ? '' : 'none';
-  bodyWs.style.display = isRooms ? 'none' : '';
-  footerCap.style.display = isRooms ? '' : 'none';
+  const isWs = _rmActiveTab === 'workspaces';
+  const isArch = _rmActiveTab === 'archive';
+  document.getElementById('rm-tab-rooms').classList.toggle('active', isRooms);
+  document.getElementById('rm-tab-workspaces').classList.toggle('active', isWs);
+  document.getElementById('rm-tab-archive').classList.toggle('active', isArch);
+  document.getElementById('rm-header-rooms').style.display = isRooms ? '' : 'none';
+  document.getElementById('rm-header-workspaces').style.display = isWs ? '' : 'none';
+  document.getElementById('rm-body-rooms').style.display = isRooms ? '' : 'none';
+  document.getElementById('rm-body-workspaces').style.display = isWs ? '' : 'none';
+  document.getElementById('rm-body-archive').style.display = isArch ? '' : 'none';
 }
+
+// Archive tab (item 9): ALL archived rooms across every workspace.
+function renderArchiveList() {
+  const list = document.getElementById('archive-manager-list');
+  if (!list) return;
+  const archived = orderRooms(rooms.filter(r => roomIsArchived(r)));
+  list.innerHTML = archived.length
+    ? archived.map(name => renderRoomRow(name, true)).join('')
+    : '<div style="color:var(--text-faint);font-size:var(--text-sm);padding:8px 0;">Nothing archived. Use a room’s ⚙ menu → Archive to tuck it away.</div>';
+}
+
+// Item 16: find rooms with no content and offer an account-wide remove.
+// Never-opened rooms (no local record at all) may hold server content we
+// can't see — they're reported separately and NOT removed.
+window.scanEmptyRooms = async function() {
+  const empty = [];
+  const unknown = [];
+  for (const r of rooms) {
+    if (r === activeRoom) {
+      if (editor.state.doc.toString().trim() === '') empty.push(r);
+      continue;
+    }
+    const cache = store.get('cade-room-cache:' + r);
+    const synced = store.get('cade-room-synced:' + r);
+    if (cache == null && synced == null) { unknown.push(r); continue; }
+    if (String(cache || '').trim() === '' && String(synced || '').trim() === '') empty.push(r);
+  }
+  if (!empty.length) {
+    showToast('No empty rooms found' + (unknown.length ? ' (' + unknown.length + ' never opened here — skipped)' : ''), 'success', 3000);
+    return;
+  }
+  const typed = await textPrompt(
+    'Empty room' + (empty.length > 1 ? 's' : '') + ': ' + empty.join(', ') +
+    (unknown.length ? '\n(skipped ' + unknown.length + ' never opened on this device)' : '') +
+    '\n\nType "remove" to drop them from your synced tab list (server data kept):', '');
+  if (typed == null || typed.trim().toLowerCase() !== 'remove') return;
+  empty.forEach(r => { tombstoneRoom(r); purgeLocalRoom(r); });
+  renderRoomManagerList();
+  renderArchiveList();
+  renderRoomTabs();
+  try { renderWorkspaceManagerList(); } catch {}
+  showToast('Removed ' + empty.length + ' empty room' + (empty.length > 1 ? 's' : ''), 'success', 2500);
+};
 
 function renderRoomManagerList() {
   // Update context bar (which workspace we're filtering by)
@@ -9069,17 +9632,26 @@ function renderRoomManagerList() {
     return;
   }
 
-  // In "All Rooms" view, group by workspace for visual clarity
-  let html;
-  if (showAll) {
-    html = renderGroupedRoomList(activeRooms);
-  } else {
-    html = activeRooms.map(name => renderRoomRow(name, false)).join('');
+  // The room you're IN always renders first (above pins/groups) so managing
+  // it never requires hunting through the list (item 15).
+  let html = '';
+  let listRooms = activeRooms;
+  const currentRoom = (activeRoom && activeRooms.includes(activeRoom)) ? activeRoom : null;
+  if (currentRoom) {
+    listRooms = activeRooms.filter(r => r !== currentRoom);
+    html += `<div class="ws-dd-section rm-current-section" style="padding:2px 0 4px;">● Current room</div>`;
+    html += renderRoomRow(currentRoom, showAll);
+    if (listRooms.length) html += `<div class="ws-dd-section" style="padding:12px 0 4px;">All rooms</div>`;
   }
-  // Archived section (Feature 52) — always at the bottom, with a Restore action.
+  // In "All Rooms" view, group by workspace for visual clarity
+  if (showAll) {
+    html += renderGroupedRoomList(listRooms);
+  } else {
+    html += listRooms.map(name => renderRoomRow(name, false)).join('');
+  }
+  // Archived rooms live in their own tab now (item 9) — just hint when some exist.
   if (archivedRooms.length) {
-    html += `<div class="ws-dd-section rm-archived-section" style="padding:14px 0 4px;">🗄 Archived · ${archivedRooms.length}</div>`;
-    html += archivedRooms.map(name => renderRoomRow(name, showAll)).join('');
+    html += `<div class="ws-dd-section" style="padding:14px 0 4px;color:var(--text-faint);cursor:pointer;" onclick="switchManagerTab('archive')">🗄 ${archivedRooms.length} archived — see the Archive tab</div>`;
   }
   list.innerHTML = html;
 }
@@ -9153,19 +9725,19 @@ function renderRoomRow(name, showBadge) {
   // Escape for inline-handler context: JS-string quoting AND html entities,
   // since room names can come from the shared database.
   const esc = s => escapeHtml(s.replace(/\\/g, '\\\\').replace(/'/g, "\\'"));
-  const pinned = roomIsPinned(name);
+  const pinned = roomPinnedHere(name);
   const archived = roomIsArchived(name);
   // Show ALL workspace memberships as chips (Feature 51), each colour-coded.
   const wsIds = getRoomWorkspaceIds(name);
   let badgeHtml = '';
   if (showBadge) {
     if (wsIds.length === 0) {
-      badgeHtml = `<span class="ws-badge ws-color-neutral"><span class="ws-badge-dot"></span>unlabeled</span>`;
+      badgeHtml = `<span class="ws-badge ws-color-neutral"><span class="ws-badge-dot"></span>Unlabeled</span>`;
     } else {
       badgeHtml = wsIds.map(id => {
         const ws = getWorkspace(id);
         const cc = 'ws-color-' + (ws && WS_COLORS.includes(ws.color) ? ws.color : 'neutral');
-        return `<span class="ws-badge ${cc}"><span class="ws-badge-dot"></span>${escapeHtml(ws ? ws.name : 'unlabeled')}</span>`;
+        return `<span class="ws-badge ${cc}"><span class="ws-badge-dot"></span>${escapeHtml(ws ? ws.name : 'Unlabeled')}</span>`;
       }).join('');
     }
   }
@@ -9277,12 +9849,7 @@ window.toggleRoomWsTag = function(name, wsId) {
     e.preventDefault();
     const target = e.target.closest('.room-manager-item[data-room]');
     if (!target || !dragRoom) return;
-    const from = rooms.indexOf(dragRoom);
-    const to = rooms.indexOf(target.dataset.room);
-    if (from === -1 || to === -1 || from === to) return;
-    rooms.splice(from, 1);
-    rooms.splice(to, 0, dragRoom);
-    saveRooms();
+    if (!_reorderRoom(dragRoom, target.dataset.room)) return;
     renderRoomManagerList();
     renderRoomTabs();
   });
@@ -9363,12 +9930,7 @@ window.toggleRoomWsTag = function(name, wsId) {
 
     // Perform the reorder if we have a valid target
     if (touchMoved && touchOverItem && touchOverItem.dataset.room !== touchDragRoom) {
-      const from = rooms.indexOf(touchDragRoom);
-      const to = rooms.indexOf(touchOverItem.dataset.room);
-      if (from !== -1 && to !== -1 && from !== to) {
-        rooms.splice(from, 1);
-        rooms.splice(to, 0, touchDragRoom);
-        saveRooms();
+      if (_reorderRoom(touchDragRoom, touchOverItem.dataset.room)) {
         renderRoomManagerList();
         renderRoomTabs();
       }
@@ -9393,7 +9955,6 @@ window.addRoomFromManager = function() {
   const name = input.value.trim().toLowerCase();
   if (!name) return;
   if (rooms.includes(name)) { showToast('Room already exists', 'error'); return; }
-  if (rooms.length >= roomCap) { showToast('Room cap reached (' + roomCap + ')', 'error'); return; }
   rooms.push(name);
   touchRoomCreated(name);
   // Determine workspace target
@@ -9420,18 +9981,42 @@ window.addRoomFromManager = function() {
 // cached/synced text, snapshots, passwords, per-room editor state. Shared by
 // the non-destructive "Remove from list" and the destructive server delete.
 function purgeLocalRoom(name) {
+  const wasActive = activeRoom === name;
   rooms = rooms.filter(r => r !== name);
   delete roomWorkspace[name];
   delete roomMeta[name];
   _purgeRoomStorageKeys(name);
-  if (activeRoom === name && syncState.connected) {
-    window.disconnectSync();
+  if (wasActive) {
+    // Always detach the room identity — even in local-only mode (the old code
+    // only did this while connected, leaving activeRoom pointing at a ghost).
+    if (syncState.connected) { try { window.disconnectSync(); } catch {} }
     activeRoom = '';
+    syncState.roomName = '';
     store.set('cade-active-room', '');
+    store.set('cade-room-name', '');
   }
   saveRooms();
   saveWorkspaces();
   saveRoomMeta();
+  // CRITICAL (item 17): if the deleted room was on screen, its text must leave
+  // the editor NOW. Leaving it visible while the tab bar moves on means the
+  // next keystroke persists the dead room's content into whatever context the
+  // user *thinks* they're in. Switch to the next visible room, or clear.
+  if (wasActive) {
+    const vis = (typeof roomsInActiveWorkspace === 'function') ? roomsInActiveWorkspace() : rooms.slice();
+    if (vis.length) {
+      try { switchRoom(vis[0]); } catch {}
+    } else {
+      try {
+        syncState.suppressUpdate = true;
+        editor.setState(makeEditorState(''));
+        syncState.suppressUpdate = false;
+        store.set('cade-content', '');
+        updateFooter();
+        scheduleWordCount();
+      } catch {}
+    }
+  }
 }
 
 // Remove the room from the ACCOUNT's synced tab list (a tombstone propagates
@@ -9463,9 +10048,9 @@ window.deleteRoomFromServer = async function(name) {
     showToast('You appear offline — reconnect before deleting server data.', 'error', 4500);
     return;
   }
-  const typed = await textPrompt(`Permanently DELETE "${name}" from the server?\nThis erases its content for everyone. Type the room name to confirm:`, '');
+  const typed = await textPrompt(`Permanently DELETE "${name}" from the server?\nThis erases its content for everyone. Type "delete" to confirm:`, '');
   if (typed == null) return;
-  if (typed.trim() !== name) { showToast('Name did not match — nothing deleted.', 'error', 3500); return; }
+  if (typed.trim().toLowerCase() !== 'delete') { showToast('You must type "delete" — nothing deleted.', 'error', 3500); return; }
 
   let db;
   try { db = initFirebase(fbUrl); }
@@ -9489,13 +10074,77 @@ window.deleteRoomFromServer = async function(name) {
   showToast('Deleted "' + name + '" from the server and all synced devices', 'success', 3200);
 };
 
+// ---- Temp rooms (item 33): Ctrl+Shift+N creates temp_<stamp>; a sweep
+// deletes expired ones (server + all devices) after the configured TTL. ----
+function _tempStamp() {
+  const d = new Date(), p = n => String(n).padStart(2, '0');
+  return d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + '-' + p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds());
+}
+window.createTempRoom = function() {
+  const name = 'temp_' + _tempStamp();
+  if (rooms.includes(name)) return; // same-second double-tap
+  rooms.push(name);
+  touchRoomCreated(name);
+  roomMeta[name].temp = true; // rides the synced meta → expires account-wide
+  saveRooms();
+  saveRoomMeta();
+  renderRoomTabs();
+  switchRoom(name);
+  const ttl = (window.Settings && Settings.get('behavior.tempRoomTtl')) || '24';
+  showToast('Temp room created' + (ttl === 'never' ? '' : ' — self-deletes after ' + ttl + 'h'), 'success', 3000);
+};
+
+// Silent full deletion (no prompts): server node + tombstone + local purge.
+// Used by the temp-room sweep; deleteRoomFromServer stays the interactive path.
+async function _hardDeleteRoom(name) {
+  try {
+    const fbUrl = store.get('cade-firebase-url');
+    const baseKey = store.get('cade-sync-key');
+    if (fbUrl && baseKey && navigator.onLine) {
+      try { await initFirebase(fbUrl).ref('rooms/' + name).remove(); } catch {}
+    }
+  } catch {}
+  tombstoneRoom(name);
+  purgeLocalRoom(name);
+}
+
+function sweepTempRooms() {
+  let ttlPref = '24';
+  try { ttlPref = String((window.Settings && Settings.get('behavior.tempRoomTtl')) || '24'); } catch {}
+  if (ttlPref === 'never') return;
+  const ttlMs = (parseFloat(ttlPref) || 24) * 3600 * 1000;
+  const now = Date.now();
+  const expired = rooms.filter(r => {
+    const m = roomMeta[r];
+    return m && m.temp && m.created && (now - m.created > ttlMs);
+  });
+  if (!expired.length) return;
+  expired.forEach(r => { _hardDeleteRoom(r).catch(() => {}); });
+  showToast('Deleted expired temp room' + (expired.length > 1 ? 's' : '') + ': ' + expired.join(', '), 'success', 3500);
+  renderRoomTabs();
+  try { renderRoomManagerList(); } catch {}
+}
+setTimeout(sweepTempRooms, 12000);
+setInterval(sweepTempRooms, 30 * 60 * 1000);
+
 // Pin / archive toggles surfaced by Room Manager + context menus.
 window.toggleRoomPin = function(name) {
-  setRoomPinned(name, !roomIsPinned(name));
+  // Inside a workspace, pin/unpin applies to THAT workspace only (item 11);
+  // in All Rooms / Unlabeled it toggles the global everywhere-pin.
+  const ws = _activeWsObj();
+  if (ws) {
+    ws.pins = Array.isArray(ws.pins) ? ws.pins : [];
+    const i = ws.pins.indexOf(name);
+    if (i === -1) ws.pins.push(name); else ws.pins.splice(i, 1);
+    saveWorkspaces();
+    showToast((i === -1 ? '📌 Pinned in ' : 'Unpinned in ') + ws.name + ': ' + name, 'success', 2000);
+  } else {
+    setRoomPinned(name, !roomIsPinned(name));
+    showToast(roomIsPinned(name) ? '📌 Pinned everywhere: ' + name : 'Unpinned: ' + name, 'success', 2000);
+  }
   closeActionMenu();
   renderRoomManagerList();
   renderRoomTabs();
-  showToast(roomIsPinned(name) ? 'Pinned: ' + name : 'Unpinned: ' + name, 'success', 1800);
 };
 
 window.toggleRoomArchive = function(name) {
@@ -9513,20 +10162,7 @@ window.toggleRoomArchive = function(name) {
   showToast(nowArchived ? 'Archived: ' + name : 'Restored: ' + name, 'success', 1800);
 };
 
-window.updateRoomCap = function(val) {
-  roomCap = parseInt(val) || 3;
-  store.set('cade-room-cap', roomCap);
-  // Never auto-evict rooms to satisfy a lowered cap — silently dropping a room
-  // orphans its cached/offline data (the exact data-loss bug the room system
-  // is designed to avoid). The cap only gates ADDING rooms; over-cap lists
-  // simply can't grow until the user removes rooms themselves.
-  if (rooms.length > roomCap) {
-    showToast(`Cap set to ${roomCap}, but you have ${rooms.length} rooms — existing rooms are kept. Remove rooms manually to get under the cap.`, 'success', 4500);
-  }
-  saveRooms();
-  renderRoomManagerList();
-  renderRoomTabs();
-};
+window.updateRoomCap = function() { /* room cap retired (item 8) */ };
 
 // ============================================
 // EXPLORE ROOMS — browse & subscribe to existing rooms in the database
@@ -9551,8 +10187,15 @@ function renderExploreRoomsList() {
   const list = document.getElementById('explore-rooms-list');
   if (!list) return;
   if (!exploreRoomList || !exploreRoomList.length) { renderExploreMessage('No rooms found in this database.'); return; }
-  list.innerHTML = exploreRoomList.map((name, idx) => {
-    const added = rooms.includes(name);
+  // Only rooms you DON'T already have — listing subscribed rooms here was
+  // pure noise. A footer notes how many were hidden.
+  const notAdded = exploreRoomList.filter(name => !rooms.includes(name));
+  const hidden = exploreRoomList.length - notAdded.length;
+  if (!notAdded.length) {
+    renderExploreMessage('Every server room is already in your tabs (' + hidden + ' total) — nothing to recover.');
+    return;
+  }
+  list.innerHTML = notAdded.map((name, idx) => {
     const selId = 'explore-ws-' + idx;
     const esc = escapeHtml(name);
     // JS-string escape, then HTML-escape: the name lands inside a double-quoted
@@ -9560,20 +10203,15 @@ function renderExploreRoomsList() {
     const jsName = escapeHtml(String(name).replace(/\\/g, '\\\\').replace(/'/g, "\\'"));
     return '<div class="explore-room-row">' +
       '<span class="explore-room-name" title="' + esc + '">' + esc + '</span>' +
-      '<select id="' + selId + '" class="form-input explore-ws-select"' + (added ? ' disabled' : '') + '>' + exploreWsOptions() + '</select>' +
-      (added
-        ? '<button class="btn" disabled>Added</button>'
-        : '<button class="btn btn-primary" onclick="exploreAddRoom(\'' + jsName + '\',\'' + selId + '\')">Add</button>') +
+      '<select id="' + selId + '" class="form-input explore-ws-select">' + exploreWsOptions() + '</select>' +
+      '<button class="btn btn-primary" onclick="exploreAddRoom(\'' + jsName + '\',\'' + selId + '\')">Add</button>' +
       '</div>';
-  }).join('');
+  }).join('') +
+  (hidden ? '<div style="color:var(--text-faint);font-size:var(--text-xs);padding:8px 2px 0;">' + hidden + ' room' + (hidden === 1 ? '' : 's') + ' already in your tabs — hidden.</div>' : '');
 }
 
 window.exploreAddRoom = function(name, selId) {
   if (rooms.includes(name)) return;
-  if (rooms.length >= roomCap) {
-    showToast('Room cap reached (' + roomCap + '). Raise it in Room Manager.', 'error', 2800);
-    return;
-  }
   rooms.push(name);
   touchRoomCreated(name);
   const sel = document.getElementById(selId);
@@ -9798,6 +10436,34 @@ window.confirmStorageCleanup = function() {
   persistContent();
 };
 
+// Item 13: wipe EVERYTHING local (localStorage, IndexedDB, SW caches) and
+// reload — a clean device setup. The server is never touched; reconnecting
+// with the same sync key + URL restores the account's rooms and config.
+window.purgeLocalDevice = async function() {
+  const typed = await textPrompt(
+    'Reset THIS DEVICE?\nClears every locally stored doc cache, setting and image on this device only. Nothing is deleted from the server — reconnect with your sync key to restore.\n\nType "purge" to continue:', '');
+  if (typed == null || typed.trim().toLowerCase() !== 'purge') return;
+  // Stop everything that could write during teardown.
+  try { syncState.suppressUpdate = true; } catch {}
+  try { cleanupFirebase(); } catch {}
+  try { clearInterval(syncState.idleCheckTimer); } catch {}
+  try { clearTimeout(saveTimer); saveTimer = null; } catch {}
+  try { window.removeEventListener('pagehide', _flushPendingPersist); } catch {}
+  try { document.removeEventListener('visibilitychange', _flushPendingPersist); } catch {}
+  try { localStorage.clear(); } catch {}
+  try {
+    const keys = await idbStore.keys();
+    for (const k of keys) { try { await idbStore.remove(k); } catch {} }
+  } catch {}
+  try {
+    if (window.caches && caches.keys) {
+      const names = await caches.keys();
+      await Promise.all(names.map(n => caches.delete(n)));
+    }
+  } catch {}
+  location.reload();
+};
+
 // "Purge unused images" — runs the orphan-image GC (IndexedDB + in-memory
 // cache + server copies) and reports how many blobs went away.
 window.storageCleanupPurgeImages = async function() {
@@ -10008,6 +10674,17 @@ function removeRoomFromWorkspace(name, wsId) {
 // ---------- Pin / Archive flags (Features 51/52) ----------
 function roomIsPinned(name) { return !!(roomMeta[name] && roomMeta[name].pinned); }
 function roomIsArchived(name) { return !!(roomMeta[name] && roomMeta[name].archived); }
+// Item 11: pins + custom order can be PER WORKSPACE. A global pin (roomMeta)
+// still surfaces the room in every workspace; a workspace pin (ws.pins) only
+// floats it within that workspace. Both live in the synced blob.
+function _activeWsObj() {
+  return (activeWorkspace !== WS_ALL && activeWorkspace !== WS_UNLABELED) ? getWorkspace(activeWorkspace) : null;
+}
+function roomPinnedHere(name) {
+  const ws = _activeWsObj();
+  if (ws && Array.isArray(ws.pins) && ws.pins.includes(name)) return true;
+  return roomIsPinned(name);
+}
 // Drop a room's meta only when it carries no flags AND no sort timestamps —
 // otherwise unpinning/unarchiving would wipe created/modified used by sorting.
 function _maybeDropRoomMeta(name) {
@@ -10039,15 +10716,57 @@ function _roomCreated(n) { return (roomMeta[n] && roomMeta[n].created) || 0; }
 function _roomModified(n) { return (roomMeta[n] && roomMeta[n].modified) || _roomCreated(n) || 0; }
 function orderRooms(list) {
   const mode = _roomSortMode();
-  const idx = (n) => rooms.indexOf(n);
+  // Custom order is per-workspace when one is active (item 11): the
+  // workspace's own roomOrder wins; unknown rooms sink below it in global
+  // order. Outside a workspace, the global rooms array is the order.
+  const ws = _activeWsObj();
+  const wsOrder = (ws && Array.isArray(ws.roomOrder)) ? ws.roomOrder : null;
+  const idx = (n) => {
+    if (wsOrder) {
+      const i = wsOrder.indexOf(n);
+      if (i !== -1) return i;
+      return 100000 + rooms.indexOf(n);
+    }
+    return rooms.indexOf(n);
+  };
   return list.slice().sort((a, b) => {
-    const pa = roomIsPinned(a) ? 0 : 1, pb = roomIsPinned(b) ? 0 : 1;
+    const pa = roomPinnedHere(a) ? 0 : 1, pb = roomPinnedHere(b) ? 0 : 1;
     if (pa !== pb) return pa - pb;
     if (mode === 'alpha') return a.localeCompare(b, undefined, { sensitivity: 'base' }) || (idx(a) - idx(b));
     if (mode === 'created') return (_roomCreated(b) - _roomCreated(a)) || (idx(a) - idx(b));
     if (mode === 'custom') return idx(a) - idx(b);
     return (_roomModified(b) - _roomModified(a)) || (idx(a) - idx(b)); // 'modified' (default)
   });
+}
+
+// Move dragName next to targetName — into the workspace's own order when a
+// workspace is active, else the global list. Flips the sort mode to 'custom'
+// so the new order is actually visible (item 11).
+function _reorderRoom(dragName, targetName) {
+  const ws = _activeWsObj();
+  if (ws) {
+    let order = Array.isArray(ws.roomOrder) ? ws.roomOrder.slice() : [];
+    roomsInActiveWorkspace(true).forEach(r => { if (!order.includes(r)) order.push(r); });
+    const fi = order.indexOf(dragName), ti = order.indexOf(targetName);
+    if (fi === -1 || ti === -1 || fi === ti) return false;
+    order.splice(fi, 1);
+    order.splice(ti, 0, dragName);
+    ws.roomOrder = order;
+    saveWorkspaces();
+  } else {
+    const from = rooms.indexOf(dragName), to = rooms.indexOf(targetName);
+    if (from === -1 || to === -1 || from === to) return false;
+    rooms.splice(from, 1);
+    rooms.splice(to, 0, dragName);
+    saveRooms();
+  }
+  try {
+    if (window.Settings && Settings.get('behavior.roomSort') !== 'custom') {
+      Settings.set('behavior.roomSort', 'custom');
+      showToast('Room sort switched to Custom so your order sticks', 'success', 2500);
+    }
+  } catch {}
+  return true;
 }
 // Stamp creation / modification times used by the sort (device-local; kept in
 // roomMeta). created is set once; modified bumps on edits (debounced via persist).
@@ -10574,7 +11293,7 @@ function renderWorkspaceManagerList() {
       html += `<div class="ws-mgr-row is-unlabeled">
         <span class="ws-mgr-drag">⠿</span>
         <div class="ws-mgr-name-cell">
-          <span class="ws-badge ws-color-neutral"><span class="ws-badge-dot"></span>unlabeled</span>
+          <span class="ws-badge ws-color-neutral"><span class="ws-badge-dot"></span>Unlabeled</span>
           <span class="ws-mgr-count">${unlabeledCount} room${unlabeledCount !== 1 ? 's' : ''} · auto</span>
         </div>
         <div class="ws-mgr-actions"><button class="btn" style="padding:2px 8px;font-size:var(--text-xs);opacity:0.4;" disabled title="System-managed; can't rename or delete">—</button></div>
@@ -11187,6 +11906,166 @@ const _origSyncConnectForWs = window.syncConnect;
 // END WORKSPACES
 // ============================================
 
+// ============================================
+// GENERIC SYNCED BLOBS (Cade.syncedBlob) — small encrypted per-account stores
+// --------------------------------------------------------------------------
+// The workspace blob pattern, generalized so feature modules (reminders,
+// calendar, RSS, …) can keep a small JSON document synced across the
+// account's devices without touching Firebase themselves. Each blob lives at
+// rooms/__cade_blob_<id>_<keyFp>/blob (under rooms/* so existing security
+// rules cover it — no rules change needed), encrypted with the sync key.
+// Whole-blob last-write-wins by timestamp, echo-suppressed, 256KB-capped,
+// with a fresh-client pull-before-push. Works fully offline (localStorage);
+// pushes catch up when sync creds + network exist.
+// ============================================
+const _syncedBlobs = new Map(); // id -> {data, ts, onChange, ref, listener, pushTimer, lastWriteTs, attached}
+
+function _sbLocalKey(id) { return 'cade-blob:' + id; }
+function _sbPath(id, fp) { return `rooms/__cade_blob_${id}_${fp}/blob`; }
+
+function _sbLoadLocal(id) {
+  try {
+    const raw = JSON.parse(store.get(_sbLocalKey(id)) || 'null');
+    if (raw && typeof raw === 'object' && 'data' in raw) return { data: raw.data, ts: raw.ts || 0 };
+  } catch {}
+  return { data: null, ts: 0 };
+}
+
+function _sbSaveLocal(id, data, ts) {
+  try { store.set(_sbLocalKey(id), JSON.stringify({ ts, data })); } catch {}
+}
+
+async function _sbPushNow(id) {
+  const b = _syncedBlobs.get(id);
+  if (!b) return;
+  b.pushTimer = null;
+  const baseKey = store.get('cade-sync-key') || '';
+  const fbUrl = store.get('cade-firebase-url') || '';
+  if (!baseKey || !fbUrl) return; // local-only mode
+  try {
+    const db = initFirebase(fbUrl);
+    const fp = await _computeKeyFingerprint(baseKey);
+    // Fresh client for this blob: pull + merge before the first push so a new
+    // device can't clobber the account's data with its empty state.
+    if (!b.ts && !b.pulledOnce) {
+      b.pulledOnce = true;
+      try {
+        const snap = await db.ref(_sbPath(id, fp)).once('value');
+        if (snap.val()) await _sbApplyRemote(id, snap.val(), baseKey, 'initial');
+      } catch {}
+    }
+    const payload = { ts: Date.now(), data: b.data };
+    b.lastWriteTs = payload.ts;
+    const encrypted = await encryptText(JSON.stringify(payload), baseKey);
+    if (typeof encrypted === 'string' && encrypted.length > WS_BLOB_MAX) {
+      console.warn('synced blob "' + id + '" too large (' + encrypted.length + 'b) — not pushed');
+      showToast('"' + id + '" data too large to sync — not pushed', 'error', 4000);
+      return;
+    }
+    await db.ref(_sbPath(id, fp)).set(encrypted);
+    b.ts = payload.ts;
+    _sbSaveLocal(id, b.data, b.ts);
+  } catch (e) {
+    console.warn('synced blob push failed (' + id + '):', e && (e.message || e.code) || e);
+  }
+}
+
+async function _sbApplyRemote(id, encrypted, baseKey, source) {
+  const b = _syncedBlobs.get(id);
+  if (!b || !encrypted) return false;
+  if (typeof encrypted === 'string' && encrypted.length > WS_BLOB_MAX) return false; // never decrypt oversized
+  try {
+    const decrypted = await decryptText(encrypted, baseKey);
+    if (!decrypted) return false;
+    const payload = JSON.parse(decrypted);
+    if (!payload || typeof payload !== 'object') return false;
+    const remoteTs = payload.ts || 0;
+    if (Math.abs(remoteTs - (b.lastWriteTs || 0)) < 250) return false; // own echo
+    if (remoteTs <= b.ts) return false;                                // stale
+    b.data = payload.data;
+    b.ts = remoteTs;
+    _sbSaveLocal(id, b.data, b.ts);
+    try { b.onChange && b.onChange(b.data, source || 'remote'); } catch (e) { console.warn(e); }
+    return true;
+  } catch (e) {
+    console.warn('synced blob apply failed (' + id + '):', e);
+    return false;
+  }
+}
+
+async function _sbAttach(id) {
+  const b = _syncedBlobs.get(id);
+  if (!b || b.attached) return;
+  const baseKey = store.get('cade-sync-key') || '';
+  const fbUrl = store.get('cade-firebase-url') || '';
+  if (!baseKey || !fbUrl) return;
+  try {
+    const db = initFirebase(fbUrl);
+    const fp = await _computeKeyFingerprint(baseKey);
+    const ref = db.ref(_sbPath(id, fp));
+    b.attached = true;
+    // Initial pull, then live subscription.
+    try {
+      const snap = await ref.once('value');
+      const val = snap.val();
+      if (val) {
+        const applied = await _sbApplyRemote(id, val, baseKey, 'initial');
+        if (!applied && b.data != null && b.ts) _sbSchedulePush(id); // local is newer
+      } else if (b.data != null) {
+        _sbSchedulePush(id); // nothing remote yet — publish local
+      }
+    } catch (e) { console.warn('synced blob read failed (' + id + '):', e); }
+    if (b.ref && b.listener) { try { b.ref.off('value', b.listener); } catch {} }
+    b.ref = ref;
+    b.listener = ref.on('value', (s) => {
+      const v = s.val();
+      if (v) _sbApplyRemote(id, v, baseKey, 'remote');
+    });
+  } catch (e) {
+    b.attached = false;
+    console.warn('synced blob attach failed (' + id + '):', e);
+  }
+}
+
+function _sbSchedulePush(id) {
+  const b = _syncedBlobs.get(id);
+  if (!b) return;
+  if (b.pushTimer) clearTimeout(b.pushTimer);
+  b.pushTimer = setTimeout(() => { _sbPushNow(id); }, 800);
+}
+
+// Attach every registered blob (called at boot and whenever sync creds change).
+function ensureSyncedBlobs() {
+  for (const id of _syncedBlobs.keys()) _sbAttach(id);
+}
+
+// Public API (exposed as Cade.syncedBlob). `id` must be a short [a-z0-9-]+
+// slug; `onChange(data, source)` fires when a newer remote copy is adopted
+// ('initial' on first cloud load, 'remote' after). Returns {get, set}:
+// get() → the current data (or null); set(data) persists locally at once and
+// syncs (debounced) when possible.
+window.__cadeSyncedBlob = function (id, opts) {
+  id = String(id || '').toLowerCase().replace(/[^a-z0-9-]/g, '');
+  if (!id) throw new Error('syncedBlob: bad id');
+  let b = _syncedBlobs.get(id);
+  if (!b) {
+    const local = _sbLoadLocal(id);
+    b = { data: local.data, ts: local.ts, onChange: null, ref: null, listener: null, pushTimer: null, lastWriteTs: 0, attached: false, pulledOnce: false };
+    _syncedBlobs.set(id, b);
+  }
+  if (opts && typeof opts.onChange === 'function') b.onChange = opts.onChange;
+  _sbAttach(id); // no-op without creds; re-run via ensureSyncedBlobs on connect
+  return {
+    get() { return b.data; },
+    set(data) {
+      b.data = data;
+      b.ts = Date.now();
+      _sbSaveLocal(id, b.data, b.ts);
+      _sbSchedulePush(id);
+    },
+  };
+};
+
 // Initial pill render (before any rooms-related rendering)
 renderWorkspacePill();
 
@@ -11229,6 +12108,7 @@ try {
 if (savedFirebaseUrl && savedEncKey) {
   // Kick off workspace sync independently (so workspaces appear even if no room is active)
   ensureWorkspaceSync();
+  try { ensureSyncedBlobs(); } catch {}
   // If rooms exist, connect to active room
   if (rooms.length > 0 && activeRoom && rooms.includes(activeRoom)) {
     switchRoom(activeRoom);
@@ -11264,14 +12144,12 @@ window.syncConnect = async function() {
   if (roomName && !rooms.includes(roomName)) {
     rooms.push(roomName);
     try { touchRoomCreated(roomName); } catch {}
-    if (rooms.length > roomCap) {
-      showToast('Over room cap (' + rooms.length + '/' + roomCap + ') — manage rooms in View → Room Manager', 'success', 4000);
-    }
   }
   activeRoom = roomName;
   saveRooms();
   // Now that Firebase URL + key are set, start syncing workspaces too
   ensureWorkspaceSync();
+  try { ensureSyncedBlobs(); } catch {}
   renderRoomTabs();
   updateSyncUI('connected', roomName);
 };
@@ -11884,14 +12762,42 @@ const MAX_SEARCH_MATCHES = 5000;
 // MAX_SEARCH_MATCHES so navigation + decoration stay cheap on huge docs) and by
 // Replace All (called with an unbounded cap so it never silently skips matches
 // past the display cap — the replace-all correctness guarantee).
+// Item 27: plain (non-regex) searches understand a few escape tokens —
+//   \n newline · \t tab · \w a single space · \s any whitespace char · \\ backslash
+// A plain query containing one of them is compiled into a literal-safe regex.
+const FIND_ESCAPE_RE = /\\[ntws\\]/;
+function _literalQueryToRegex(q) {
+  let out = '';
+  for (let i = 0; i < q.length; i++) {
+    const c = q[i];
+    if (c === '\\' && i + 1 < q.length) {
+      const n = q[i + 1];
+      if (n === 'n') { out += '\\n'; i++; continue; }
+      if (n === 't') { out += '\\t'; i++; continue; }
+      if (n === 'w') { out += ' '; i++; continue; }
+      if (n === 's') { out += '[\\s]'; i++; continue; }
+      if (n === '\\') { out += '\\\\'; i++; continue; }
+    }
+    out += c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+  return out;
+}
+// The same tokens work in the REPLACE field (both modes): \w and \s emit a space.
+function _expandReplaceEscapes(r) {
+  return String(r).replace(/\\([ntws\\])/g, (m, c) =>
+    c === 'n' ? '\n' : c === 't' ? '\t' : c === '\\' ? '\\' : ' ');
+}
+
 function scanMatches(cap) {
   const out = [];
   const q = searchState.query;
   if (!q) return out;
   const text = editor.state.doc.toString();
-  if (searchState.regex) {
+  const useRegex = searchState.regex || FIND_ESCAPE_RE.test(q);
+  if (useRegex) {
     let re;
-    try { re = new RegExp(q, searchState.caseSensitive ? 'g' : 'gi'); }
+    const pattern = searchState.regex ? q : _literalQueryToRegex(q);
+    try { re = new RegExp(pattern, searchState.caseSensitive ? 'g' : 'gi'); }
     catch { return null; }
     let m;
     while ((m = re.exec(text)) !== null && out.length < cap) {
@@ -11971,13 +12877,18 @@ function findStep(delta) {
 // matched substring so $1/$& group references work; (?:) wrapping is not
 // needed since we anchor implicitly by matching the same text.
 function replacementFor(matchText) {
-  if (!searchState.regex) return document.getElementById('replace-input').value;
+  const raw = _expandReplaceEscapes(document.getElementById('replace-input').value);
+  if (!searchState.regex) {
+    // A plain query with escape tokens matched via regex — group refs don't
+    // apply, but the escape expansion above does (item 27).
+    return raw;
+  }
   try {
     return matchText.replace(
       new RegExp(searchState.query, searchState.caseSensitive ? '' : 'i'),
-      document.getElementById('replace-input').value
+      raw
     );
-  } catch { return document.getElementById('replace-input').value; }
+  } catch { return raw; }
 }
 
 window.findReplaceCurrent = function() {
@@ -12074,6 +12985,41 @@ window.closeFindPanel = function() {
     caseBtn.classList.toggle('active', searchState.caseSensitive);
     searchRecomputeAndRefresh(true);
   });
+  // Item 28: "only if…" builder — wraps the plain Find text in a lookaround so
+  // conditional replaces don't require knowing regex. Escape tokens (item 27)
+  // work in both fields via _literalQueryToRegex.
+  const condBtn = document.getElementById('find-cond-btn');
+  const condRow = document.getElementById('find-cond-row');
+  condBtn.addEventListener('click', () => {
+    const open = condRow.classList.toggle('open');
+    condBtn.classList.toggle('active', open);
+    if (open) document.getElementById('find-cond-text').focus();
+  });
+  function applyCondition() {
+    const base = _literalQueryToRegex(input.value);
+    const cond = _literalQueryToRegex(document.getElementById('find-cond-text').value);
+    if (!input.value || !cond) { showToast('Fill both the Find text and the condition text', 'error', 2200); return; }
+    const type = document.getElementById('find-cond-type').value;
+    let pattern;
+    if (type === 'followed') pattern = base + '(?=' + cond + ')';
+    else if (type === 'not-followed') pattern = base + '(?!' + cond + ')';
+    else if (type === 'preceded') pattern = '(?<=' + cond + ')' + base;
+    else pattern = '(?<!' + cond + ')' + base;
+    input.value = pattern;
+    searchState.query = pattern;
+    if (!searchState.regex) { searchState.regex = true; regexBtn.classList.add('active'); }
+    condRow.classList.remove('open');
+    condBtn.classList.remove('active');
+    searchState.current = -1;
+    searchRecomputeAndRefresh(true);
+    input.focus();
+  }
+  document.getElementById('find-cond-apply').addEventListener('click', applyCondition);
+  document.getElementById('find-cond-text').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); applyCondition(); }
+    if (e.key === 'Escape') { e.preventDefault(); condRow.classList.remove('open'); condBtn.classList.remove('active'); }
+  });
+
   regexBtn.addEventListener('click', () => {
     searchState.regex = !searchState.regex;
     regexBtn.classList.toggle('active', searchState.regex);
@@ -12117,6 +13063,36 @@ window.toggleMdStyle = function() {
   updateMdStyleLabel();
   showToast('Markdown styling ' + (mdStyleEnabled ? 'on' : 'off'), 'success', 1500);
 };
+
+// Read-only mode (item 35): no edits, no mobile keyboard, clearly badged.
+function _applyReadOnlyUI() {
+  document.body.classList.toggle('readonly', _readOnly);
+  let badge = document.getElementById('readonly-badge');
+  if (_readOnly) {
+    if (!badge) {
+      badge = document.createElement('button');
+      badge.id = 'readonly-badge';
+      badge.className = 'btn readonly-badge';
+      badge.textContent = '🔒 Read-only — click to unlock';
+      badge.onclick = () => window.toggleReadOnly();
+      document.body.appendChild(badge);
+    }
+  } else if (badge) badge.remove();
+  const lbl = document.getElementById('readonly-label');
+  if (lbl) lbl.textContent = _readOnly ? 'Read-Only Mode: On' : 'Read-Only Mode: Off';
+}
+window.toggleReadOnly = function() {
+  closeAllMenus();
+  _readOnly = !_readOnly;
+  store.set('cade-readonly', _readOnly ? '1' : '0');
+  try { editor.dispatch({ effects: readOnlyCompartment.reconfigure(_readOnlyExts()) }); } catch {}
+  _applyReadOnlyUI();
+  showToast(_readOnly ? 'Read-only mode on — editing locked' : 'Editing unlocked', 'success', 1800);
+  if (!_readOnly) { try { editor.focus(); } catch {} }
+};
+// Restore persisted state on boot (the compartment already reflects it via
+// buildEditorExtensions; this just paints the badge/label).
+setTimeout(_applyReadOnlyUI, 50);
 
 // ============================================
 // SNAPSHOTS — local version history per document
@@ -12461,7 +13437,9 @@ const TZ_ABBR = {
 function clockTick() {
   const el = document.getElementById('footer-clock'); if (!el) return;
   const now = new Date();
-  const opt = { hour: '2-digit', minute: '2-digit' };
+  // Click the clock to flip 12/24-hour display (item 21).
+  const h24 = store.get('cade-clock-24') === '1';
+  const opt = { hour: '2-digit', minute: '2-digit', hour12: !h24 };
   let html = now.toLocaleTimeString([], opt);
   for (const tz of clockTzs()) {
     try {
@@ -12476,6 +13454,11 @@ function setClockEnabled(on) {
   if (on) {
     if (!el) {
       el = document.createElement('span'); el.id = 'footer-clock';
+      el.title = 'Click to switch 12/24-hour';
+      el.addEventListener('click', () => {
+        store.set('cade-clock-24', store.get('cade-clock-24') === '1' ? '0' : '1');
+        clockTick();
+      });
       // The footer's right-hand group is .footer-stats (there is no .footer-right);
       // prepend the clock so it sits just left of Ln/Col.
       const fr = document.querySelector('.footer-stats'); if (fr) fr.insertBefore(el, fr.firstChild);
@@ -12489,6 +13472,13 @@ function setClockEnabled(on) {
 
 // ---- Rooms by Date (#40) — now an external module (./txt/widgets/daycal/) ----
 window.openDailyNote = function () { const w = WIDGETS.find(x => x.name === 'Daily Notes Calendar'); if (w) w.open(); };
+// ---- Reminders (items 5/24) — external module; footer chip + View menu ----
+window.openReminders = function () {
+  closeAllMenus();
+  if (window.__remindersOpen) return window.__remindersOpen();
+  const w = WIDGETS.find(x => x.name === 'Reminders');
+  if (w) w.open();
+};
 
 // Inline math (#41/#26): typing "=" at the end of a pure-arithmetic line
 // appends the result; "sum=" / "total=" sums the numbers in the block above.
@@ -12959,11 +13949,13 @@ window.mdBtn = function(kind) {
   // typed when the caret is at its end, or insert empty markers at the caret.
   let from = sel.from, to = sel.to;
   if (sel.empty) { const wr = _wordRangeBeforeCursor(); if (wr) { from = wr.from; to = wr.to; } }
-  // When Markdown styling is OFF, bold/italic/underline emit FANCY unicode text
-  // (toggling) instead of literal markdown tags (item 1).
+  // Style flavor (item 2): a preference now picks between markdown tags and
+  // fancy Unicode for bold/italic/underline. Fancy is also used when Markdown
+  // styling is OFF (raw ** tags would just be noise then).
   const fancyKind = kind === 'bold' || kind === 'italic' || kind === 'under';
   const mdOn = !(typeof mdStyleEnabled !== 'undefined' && !mdStyleEnabled);
-  if (fancyKind && !mdOn) {
+  const flavor = (window.Settings && Settings.get('editor.styleFlavor')) || 'markdown';
+  if (fancyKind && (!mdOn || flavor === 'fancy')) {
     if (from === to) { editor.focus(); return; } // nothing to fancify at a bare caret
     const src = editor.state.sliceDoc(from, to);
     let out;
@@ -12973,12 +13965,42 @@ window.mdBtn = function(kind) {
     editor.dispatch({ changes: { from, to, insert: out }, selection: { anchor: from, head: from + out.length } });
     editor.focus(); return;
   }
-  const t = editor.state.sliceDoc(from, to);
-  const insert = def.wrap[0] + t + def.wrap[1];
+  const doc = editor.state.doc;
+  const [open, close] = def.wrap;
+  let t = editor.state.sliceDoc(from, to);
+  // TOGGLE OFF (item 2): pressing bold on an already-bold target unwraps it
+  // instead of stacking more markers. Two shapes count as "already wrapped":
+  //   a) the target itself includes the markers  → **word**
+  //   b) the markers sit just outside the target →  **|word|**
+  // (For italic, a single * must not confuse itself with bold's **.)
+  const selfWrapped = t.length >= open.length + close.length &&
+    t.startsWith(open) && t.endsWith(close) &&
+    !(kind === 'italic' && (t.startsWith('**') || t.endsWith('**') !== t.endsWith('*')));
+  if (selfWrapped && !(kind === 'italic' && t.startsWith('**'))) {
+    const inner = t.slice(open.length, t.length - close.length);
+    editor.dispatch({ changes: { from, to, insert: inner }, selection: { anchor: from, head: from + inner.length } });
+    editor.focus(); return;
+  }
+  const beforeOk = from >= open.length && doc.sliceString(from - open.length, from) === open;
+  const afterOk = to + close.length <= doc.length && doc.sliceString(to, to + close.length) === close;
+  const italicIsReallyBold = kind === 'italic' &&
+    from >= 2 && doc.sliceString(from - 2, from) === '**' &&
+    doc.sliceString(to, to + 2) === '**';
+  if (beforeOk && afterOk && !italicIsReallyBold) {
+    editor.dispatch({
+      changes: [
+        { from: from - open.length, to: from, insert: '' },
+        { from: to, to: to + close.length, insert: '' },
+      ],
+      selection: { anchor: from - open.length, head: to - open.length },
+    });
+    editor.focus(); return;
+  }
+  const insert = open + t + close;
   if (from === to) {
-    editor.dispatch({ changes: { from, to, insert }, selection: { anchor: from + def.wrap[0].length } });
+    editor.dispatch({ changes: { from, to, insert }, selection: { anchor: from + open.length } });
   } else {
-    editor.dispatch({ changes: { from, to, insert }, selection: { anchor: from + def.wrap[0].length, head: from + def.wrap[0].length + t.length } });
+    editor.dispatch({ changes: { from, to, insert }, selection: { anchor: from + open.length, head: from + open.length + t.length } });
   }
   editor.focus();
 };
@@ -13408,16 +14430,27 @@ document.addEventListener('keydown', (e) => {
     return;
   }
 
-  // Bold / Italic / Underline on the selection (Ctrl/Cmd+B/I/U) via the
-  // matching transform scripts (#13). Capture phase so CM6/contenteditable
-  // never see the key first.
+  // Bold / Italic / Underline (Ctrl/Cmd+B/I/U) — routed through mdBtn so the
+  // hotkeys, toolbar buttons and the editor.styleFlavor preference all agree
+  // (markdown tags with toggle-off, or fancy Unicode with toggle-off; item 2).
   if (modKey && !e.shiftKey && !e.altKey && !isInputField) {
     const k = (e.key || '').toLowerCase();
-    const prefix = k === 'b' ? 'Bold (' : k === 'i' ? 'Italic (' : k === 'u' ? 'Underline (' : null;
-    if (prefix) {
-      const sc = scripts.find(s => s.name.startsWith(prefix));
-      if (sc) { e.preventDefault(); e.stopPropagation(); executeScript(sc); return; }
+    const kind = k === 'b' ? 'bold' : k === 'i' ? 'italic' : k === 'u' ? 'under' : null;
+    if (kind) {
+      e.preventDefault(); e.stopPropagation();
+      try { window.mdBtn(kind); } catch {}
+      return;
     }
+  }
+
+  // Ctrl+N → new room prompt · Ctrl+Shift+N → self-deleting temp room
+  // (items 32/33). NOTE: some browsers reserve these outside installed-PWA
+  // windows; where the browser eats the key, use the + tab button instead.
+  if (modKey && !e.altKey && (e.key || '').toLowerCase() === 'n' && !isInputField) {
+    e.preventDefault(); e.stopPropagation();
+    if (e.shiftKey) window.createTempRoom();
+    else window.addRoomPrompt();
+    return;
   }
 
   if (modKey && e.key === 'Tab' && rooms.length > 0 && !isInputField) {
@@ -13619,6 +14652,30 @@ try {
   // are registered by the timer module itself when it loads.)
   // F2 — snapshot retention. Auto-discard snapshots older than the chosen window
   // (the newest is always kept). Storage is also capped per-room by count + bytes.
+  // Temp-room lifetime (item 33): Ctrl+Shift+N rooms self-delete after this.
+  registerSetting({ key: 'behavior.tempRoomTtl', label: 'Temp room lifetime', type: 'select', default: '24', section: 'Behavior', hint: 'Ctrl+Shift+N creates a temp_<stamp> room that deletes itself (server + all devices) after this long.', options: [
+    { value: '1', label: '1 hour' },
+    { value: '3', label: '3 hours' },
+    { value: '6', label: '6 hours' },
+    { value: '24', label: '24 hours' },
+    { value: '48', label: '48 hours' },
+    { value: 'never', label: 'Never (keep)' },
+  ] });
+  // Bold/italic/underline flavor (item 2): markdown tags vs fancy Unicode.
+  registerSetting({ key: 'editor.styleFlavor', label: 'Bold/italic/underline style', type: 'select', default: 'markdown', section: 'Editor', hint: 'What the B/I/U buttons and Ctrl+B/I/U produce. Fancy Unicode survives copy-paste anywhere; markdown tags render in-app. (Fancy is always used while Markdown Styling is off.)', options: [
+    { value: 'markdown', label: 'Markdown (**bold**)' },
+    { value: 'fancy', label: 'Fancy Unicode (𝗯𝗼𝗹𝗱)' },
+  ] });
+  // Editor horizontal padding (item 19) — drives the --editor-hpad CSS var.
+  registerSetting({ key: 'appearance.editorHPad', label: 'Document side padding', type: 'select', default: 'normal', section: 'Appearance', hint: 'Horizontal breathing room around the document text.', options: [
+    { value: 'compact', label: 'Compact' },
+    { value: 'normal', label: 'Normal' },
+    { value: 'roomy', label: 'Roomy' },
+    { value: 'wide', label: 'Wide margins (centered)' },
+  ], apply(v) {
+    const map = { compact: '6px', normal: 'var(--space-4)', roomy: '6%', wide: 'max(12%, 48px)' };
+    document.documentElement.style.setProperty('--editor-hpad', map[v] || map.normal);
+  } });
   registerSetting({ key: 'snapshots.maxAgeDays', label: 'Auto-delete old snapshots', type: 'select', default: '0', section: 'Behavior', hint: 'Discard a document’s snapshots older than this (the most recent is always kept). Use Snapshots → Manage storage to clear by size across all rooms.', options: [
     { value: '0', label: 'Keep all' },
     { value: '1', label: 'Older than 1 day' },
@@ -13992,6 +15049,24 @@ window.mobilePaste = function() {
     editor.dispatch({ changes: { from: sel.from, to: sel.to, insert: text }, userEvent: 'input.paste' });
     editor.focus();
   }).catch(() => showToast('Clipboard read denied', 'error'));
+};
+
+// Item 37: hand the doc (or selection) to the OS share sheet; clipboard
+// fallback where the Web Share API is unavailable (mostly desktop).
+window.shareDocument = function() {
+  closeAllMenus();
+  const sel = editor.state.selection.main;
+  const text = sel.empty ? editor.state.doc.toString() : editor.state.sliceDoc(sel.from, sel.to);
+  if (!text.trim()) { showToast('Nothing to share', 'error', 2000); return; }
+  const title = activeRoom || 'cade.txt document';
+  if (navigator.share) {
+    navigator.share({ title, text }).catch((e) => {
+      if (e && e.name === 'AbortError') return; // user closed the sheet
+      try { navigator.clipboard.writeText(text).then(() => showToast('Share failed — copied instead', 'success', 2500)); } catch {}
+    });
+  } else {
+    try { navigator.clipboard.writeText(text).then(() => showToast('No share sheet here — copied to clipboard', 'success', 2500)); } catch {}
+  }
 };
 
 // ============================================
