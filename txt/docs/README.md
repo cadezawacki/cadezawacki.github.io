@@ -25,12 +25,13 @@ under `txt/` and are loaded at runtime. The app discovers them through a single
 index file, **`txt/manifest.json`**, and exposes a small global API,
 **`window.Cade`**, that modules use to register themselves and talk to the core.
 
-Three kinds of feature module, plus a data/config kind:
+Four kinds of feature module, plus a data/config kind:
 
 | Kind | Lives in | Appears as | Loads |
 | --- | --- | --- | --- |
 | **widget** | `txt/widgets/<id>/` | a row in the **Ctrl+K** command palette | lazily, on first open |
 | **script** | `txt/scripts/<id>/` | a row in the **Ctrl+K** palette (text transforms) | lazily, on first run |
+| **script-pack** | `txt/scripts/<id>/` | MANY rows in the **Ctrl+K** palette from ONE file | lazily, when any of its rows first runs |
 | **plugin** | `txt/plugins/<id>/` | a toggle in **Settings** | lazily, when enabled |
 | **config** | `txt/configs/<id>/` | data / settings only (no palette row) | at boot (json) or on demand (js) |
 
@@ -71,6 +72,9 @@ in subfolders. Single-file modules are allowed but a folder is the convention.
 
 Real, working examples to read and copy from:
 - Widget: `txt/widgets/breakout/breakout.js`, `txt/widgets/snake/snake.js`
+- Widget using the room system (`Cade.roomsApi`): `txt/widgets/daycal/daycal.js`
+- Widget with core shims + module-registered settings: `txt/widgets/timer/timer.js`
+- Script pack (many scripts, one file): `txt/scripts/pack-lines/pack-lines.js`
 - Plugin: `txt/plugins/code-highlight/code-highlight.js`
 - Game with HUD/log: `txt/widgets/crawler/crawler.js`
 
@@ -274,6 +278,55 @@ If you declare it as `async function main(ctx)`, you additionally get
 
 Then bump versions + validate as usual.
 
+### 6.4 SCRIPT PACKS — many scripts in one module
+
+When you have a family of related transforms, don't create one folder per
+script. A **script-pack** is a single module file that calls
+`Cade.registerScript(...)` once per script, with ONE manifest entry that lists
+each script's palette metadata (the palette shows all rows before the code
+loads; selecting any row loads the pack once and every script becomes live).
+
+`txt/scripts/mypack/mypack.js`:
+```js
+(function () {
+  'use strict';
+  if (typeof window.Cade === 'undefined') return;
+  var registerScript = function (src) { window.Cade.registerScript(src); };
+
+  registerScript(`/** {"name": "One", "description": "…", "icon": "1️⃣", "tags": "a,b"} **/
+  function main(ctx) { /* … */ }`);
+
+  registerScript(`/** {"name": "Two", "description": "…", "icon": "2️⃣", "tags": "c,d"} **/
+  function main(ctx) { /* … */ }`);
+})();
+```
+
+Manifest entry — `type: "script-pack"` plus a `scripts` array whose
+`name/description/icon/tags` **must match** each registered script:
+```json
+{
+  "id": "mypack",
+  "type": "script-pack",
+  "name": "My Pack",
+  "description": "What the pack groups together",
+  "entry": "scripts/mypack/mypack.js",
+  "scripts": [
+    { "name": "One", "description": "…", "icon": "1️⃣", "tags": "a,b" },
+    { "name": "Two", "description": "…", "icon": "2️⃣", "tags": "c,d" }
+  ]
+}
+```
+
+Real examples: `txt/scripts/pack-lines/`, `pack-case/`, `pack-convert/`,
+`pack-data/`, `pack-tools/`, `pack-fancy/`, `pack-clean/` — the bulk of the
+built-in transform catalogue lives in these packs.
+
+> Scripts that must stay INSIDE `txt.html` (do not move them into packs):
+> `Bold (…)` / `Italic (…)` / `Underline (…)` (bound to Ctrl+B/I/U in core),
+> the `Add Color` family + `Migrate Highlights` (core highlight sentinel),
+> `Insert Image`, `Encode (AES)` / `Decode (AES)`, `Download`, `Select All`
+> (each is welded to a core subsystem).
+
 ---
 
 ## 7. How to build a PLUGIN (editor injection, step by step)
@@ -444,7 +497,7 @@ Full reference in `txt/docs/cade-api.md`. The essentials:
   "modules": [
     {
       "id": "snake",                 // REQUIRED, unique. = folder name + cache/dedupe key
-      "type": "widget",              // REQUIRED: widget | script | plugin | config
+      "type": "widget",              // REQUIRED: widget | script | script-pack | plugin | config
       "name": "Snake",               // widget/script: REQUIRED (palette label + dedupe)
       "description": "…",            // palette description
       "icon": "🐍",                  // emoji or inline <svg> string
@@ -455,7 +508,10 @@ Full reference in `txt/docs/cade-api.md`. The essentials:
       "settingKey": "plugins.foo",   // plugin only: gates load behind a toggle
       "section": "Editor",           // plugin only: Settings section for the toggle
       "default": false,              // plugin only: initial toggle value
-      "eager": false                 // plugin/other: load at boot (rare)
+      "eager": false,                // plugin/other: load at boot (rare)
+      "scripts": [                   // script-pack only: one palette row per entry;
+        { "name": "…", "description": "…", "icon": "…", "tags": "…" }
+      ]
     }
   ]
 }

@@ -115,6 +115,27 @@ Common usage:
 | `Cade.baseURL()` | the current module's folder URL, e.g. `./txt/widgets/snake/` |
 | `Cade.asset(rel)` | `baseURL() + rel` — URL for an image/font/etc. in your folder |
 
+## Room system — `Cade.roomsApi`
+
+Read-mostly, late-bound surface over the live room/workspace state (never hold
+stale copies; call again when you need fresh values). Used by e.g. the
+`daycal` widget.
+
+| Call | Does |
+| --- | --- |
+| `roomsApi.list()` | array of room names (the tab list, copy) |
+| `roomsApi.meta(name)` | `{pinned, archived, created, modified}` (may be `{}`) |
+| `roomsApi.workspaceIds(name)` | workspace ids the room belongs to (array) |
+| `roomsApi.workspaceById(id)` | workspace object `{id, name, color, …}` or `null` |
+| `roomsApi.inWorkspace(name, wsId)` | membership test |
+| `roomsApi.isPinned(name)` / `isArchived(name)` | flag tests |
+| `roomsApi.modifiedAt(name)` / `createdAt(name)` | sort timestamps (ms, 0 if unknown) |
+| `roomsApi.orderRooms(list)` | apply the user's room-sort preference to a list |
+| `roomsApi.activeRoom()` / `activeWorkspace()` | current context |
+| `roomsApi.setActiveWorkspace(id)` | switch workspace context (persists) |
+| `roomsApi.switchRoom(name)` | switch to a room (async, may prompt for lock) |
+| `roomsApi.WS_ALL` / `roomsApi.WS_UNLABELED` | sentinel workspace ids |
+
 ## Internal (loader-only — don't call from modules)
 `Cade._setCurrent(ctx)`, `Cade._ctx()`, `Cade._configs`. The loader sets the
 per-module context right before injecting your script; that's why `loadCSS` /
