@@ -72,8 +72,11 @@
   var SIZE_KEY = 'cade-draw-size';            // Cade.store: persisted logical canvas size
   // Hash-ref image tokens only (the core's legacy inline form uses ':').
   // Matches the core's format "![img:<code>#<hash>]" where code ∈ j/w/a and
-  // hash is 32 lowercase hex chars (see IMG_TOKEN_RE + _imgHash in txt.html).
-  var TOKEN_RE_SRC = '!\\[img:([a-z0-9]+)#([a-f0-9]+)\\]';
+  // hash is 32 lowercase hex chars, tolerating the optional display-width
+  // suffix "|w<px>" written by the core's image drag-resize grip (see
+  // IMG_TOKEN_RE + _imgHash in txt.html). Groups: 1=code, 2=hash — the
+  // suffix is deliberately not captured here.
+  var TOKEN_RE_SRC = '!\\[img:([a-z0-9]+)#([a-f0-9]+)(?:\\|w\\d{2,4})?\\]';
   // Fixed ink hexes — mid-dark and saturated so they read on light backgrounds
   // and the checkerboard, plus a black/white pair for either extreme.
   var COLORS = ['#e03131', '#e8590c', '#f5a623', '#2f9e44', '#1971c2', '#9c36b5', '#111111', '#ffffff'];
@@ -711,13 +714,15 @@
   //       the new token fuses into the old token's exact spot.
   // Returns the new hash, or null if nothing was inserted (old token is then
   // left untouched). If the old hash appears more than once, the first
-  // occurrence is the one replaced.
+  // occurrence is the one replaced. An old token's "|w<px>" display-width
+  // suffix is re-applied to the replacement token, so the user's chosen
+  // width survives editing the drawing.
   async function replaceEditedToken(file, oldHash) {
     var ed = Cade.editor;
     var m = null, docText = '';
     if (/^[a-f0-9]{8,}$/.test(oldHash || '')) {
       docText = ed.state.doc.toString();
-      m = new RegExp('!\\[img:[a-z0-9]+#' + oldHash + '\\]').exec(docText);
+      m = new RegExp('!\\[img:[a-z0-9]+#' + oldHash + '(\\|w\\d{2,4})?\\]').exec(docText);
     }
     if (!m) {
       // Old token no longer in the doc (user deleted it) — plain insert at the
@@ -726,6 +731,7 @@
       return findInsertedHashNearCursor();
     }
     var oldFrom = m.index, oldTo = m.index + m[0].length, oldTok = m[0];
+    var widthSfx = m[1] || ''; // "|w<px>" to re-apply to the new token
 
     // (1) + (2): cursor just after the old token, then run the core pipeline.
     ed.dispatch({ selection: { anchor: oldTo, head: oldTo } });
@@ -751,6 +757,12 @@
     // risk corrupting unrelated text.
     if (newText.slice(oldFrom, oldTo) === oldTok) {
       var changes = [{ from: oldFrom, to: newTokStart, insert: '' }];
+      // Preserve the user's display width: splice the old token's "|w<px>"
+      // suffix into the fresh token (the core inserts suffix-less) just
+      // before its closing "]".
+      if (widthSfx && m2[0].indexOf('|') === -1) {
+        changes.push({ from: newTokEnd - 1, to: newTokEnd - 1, insert: widthSfx });
+      }
       // The core also appended a trailing "\n" after the new token; collapse
       // it when the old token already had its own newline (avoids growing a
       // blank line on every re-edit).
@@ -1289,9 +1301,10 @@
       var text = st.sliceDoc(sel.from, sel.to);
       if (!text || text.indexOf('![img:') === -1) return null;
       // The core's combined matcher (IMG_TOKEN_RE): code? + ('#' ref | ':' /
-      // bare inline base64). Inline needs a real payload (≥24 chars), same
-      // guard the core uses against accidental matches.
-      var re = /!\[img:(?:([jwa])([:#]))?([A-Za-z0-9+/=]+)\]/g;
+      // bare inline base64) + optional "|w<px>" display-width suffix. Inline
+      // needs a real payload (≥24 chars), same guard the core uses against
+      // accidental matches.
+      var re = /!\[img:(?:([jwa])([:#]))?([A-Za-z0-9+/=]+)(?:\|w(\d{2,4}))?\]/g;
       var m;
       while ((m = re.exec(text)) !== null) {
         if (m[2] === '#') {
