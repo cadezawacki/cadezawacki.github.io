@@ -335,6 +335,35 @@
     return html + '</div>';
   }
 
+  // The workspace <option> list with `cur` selected ('' = None). Split out of
+  // formHtml so __calWsRefresh can rebuild it in place from a fresh wsList().
+  function wsOptionsHtml(cur) {
+    var list = wsList();
+    var opts = '', matched = !cur;
+    if (list.length) {
+      opts += '<option value=""' + (cur ? '' : ' selected') + '>— None —</option>';
+      for (var i = 0; i < list.length; i++) {
+        var w = list[i] || {};
+        var id = String(w.id == null ? '' : w.id);
+        if (!id) continue;
+        if (id === cur) matched = true;
+        opts += '<option value="' + esc(id) + '"' + (cur === id ? ' selected' : '') + '>' +
+          esc(String(w.name == null ? '' : w.name) || 'Untitled') + '</option>';
+      }
+    } else {
+      // No workspace surface (older core / none defined): a plain General
+      // option, which stores an empty cat.
+      opts += '<option value=""' + (cur ? '' : ' selected') + '>General</option>';
+    }
+    if (cur && !matched) {
+      // A cat that is a deleted workspace or a legacy free-text category:
+      // keep it selectable so an unrelated edit (time, title) doesn't
+      // silently wipe it. Picking None/a workspace migrates it.
+      opts = '<option value="' + esc(cur) + '" selected>' + esc(cur) + ' (legacy)</option>' + opts;
+    }
+    return opts;
+  }
+
   function formHtml(draft) {
     var editing = form.id ? findEvent(form.id) : null;
     var f = draft || {
@@ -345,30 +374,9 @@
       cat: editing ? editing.cat : '',
       notify: (editing && editing.notify != null) ? String(editing.notify) : '',
     };
-    // Category select = the user's workspaces (value = workspace id).
-    var list = wsList();
-    var opts = '', matched = !f.cat;
-    if (list.length) {
-      opts += '<option value=""' + (f.cat ? '' : ' selected') + '>— None —</option>';
-      for (var i = 0; i < list.length; i++) {
-        var w = list[i] || {};
-        var id = String(w.id == null ? '' : w.id);
-        if (!id) continue;
-        if (id === f.cat) matched = true;
-        opts += '<option value="' + esc(id) + '"' + (f.cat === id ? ' selected' : '') + '>' +
-          esc(String(w.name == null ? '' : w.name) || 'Untitled') + '</option>';
-      }
-    } else {
-      // No workspace surface (older core / none defined): a plain General
-      // option, which stores an empty cat.
-      opts += '<option value=""' + (f.cat ? '' : ' selected') + '>General</option>';
-    }
-    if (f.cat && !matched) {
-      // Editing an event whose cat is a deleted workspace or a legacy
-      // free-text category: keep it selectable so an unrelated edit (time,
-      // title) doesn't silently wipe it. Picking None/a workspace migrates it.
-      opts = '<option value="' + esc(f.cat) + '" selected>' + esc(f.cat) + ' (legacy)</option>' + opts;
-    }
+    // Category select = the user's workspaces (value = workspace id), rebuilt
+    // fresh on every render AND again on interaction (see __calWsRefresh).
+    var opts = wsOptionsHtml(f.cat);
     return '<div class="cal-form">' +
       '<div class="cal-f-row"><input type="date" id="cal-f-date" value="' + esc(f.date) + '"></div>' +
       '<div class="cal-f-row cal-f-times">' +
@@ -377,7 +385,8 @@
         '<input type="time" id="cal-f-end" title="End (optional)" value="' + esc(f.end) + '">' +
       '</div>' +
       '<div class="cal-f-row"><input type="text" id="cal-f-title" placeholder="Event title" maxlength="200" value="' + esc(f.title) + '"></div>' +
-      '<div class="cal-f-row"><select id="cal-f-cat" title="Workspace">' + opts + '</select></div>' +
+      '<div class="cal-f-row"><select id="cal-f-cat" title="Workspace"' +
+        ' onpointerdown="__calWsRefresh()" onfocus="__calWsRefresh()" onkeydown="__calWsRefresh()">' + opts + '</select></div>' +
       '<div class="cal-f-row"><select id="cal-f-notify" title="Remind me">' +
         ['', '0', '10', '30', '60'].map(function (v) {
           var lbl = v === '' ? '🔕 No reminder' : v === '0' ? '🔔 Remind at start' : '🔔 Remind ' + v + ' min before';
@@ -445,6 +454,17 @@
     render();
   };
   window.__calCancel = function () { form = null; render(); };
+  // Workspaces can appear/rename AFTER the form rendered (fresh-device sync
+  // delivering the workspace blob, a workspace created while the form is
+  // open) and core has no "workspaces changed" event — so the category select
+  // rebuilds its options from a fresh wsList() right before each interaction
+  // (pointerdown/focus, keydown for keyboard users), keeping the current
+  // selection via its `selected` attribute (incl. the "(legacy)" option).
+  window.__calWsRefresh = function () {
+    var el = document.getElementById('cal-f-cat');
+    if (!el) return;
+    el.innerHTML = wsOptionsHtml(String(el.value == null ? '' : el.value));
+  };
   window.__calSave = function () {
     if (!form) return;
     var date = gv('cal-f-date');
@@ -455,14 +475,23 @@
     var title = gv('cal-f-title').slice(0, 200);
     if (!title) { toast('Give the event a title'); return; }
     // cat = the selected workspace id ('' = none; may be a preserved legacy
-    // value — see formHtml). The stored color field is a best-effort mapping
-    // of the workspace's color for OLDER devices; this code ignores it.
+    // value — see wsOptionsHtml). The stored color field is a best-effort
+    // mapping of the workspace's color for OLDER devices; this code ignores it.
     var cat = gv('cal-f-cat').slice(0, 40);
     var ws = wsForCat(cat);
-    var color = ws ? WS_TO_HL[wsColorName(ws)] : 'gray';
+    var ev = form.id ? findEvent(form.id) : null;
+    var color;
+    if (ws) {
+      color = WS_TO_HL[wsColorName(ws)];
+    } else if (ev && cat === ev.cat) {
+      // Unresolvable cat kept via the "(legacy)" option: an unrelated edit
+      // (title/time) must not strip the color older clients still render.
+      color = ev.color;
+    } else {
+      color = 'gray'; // none, or a new unresolvable value (not reachable via the UI)
+    }
     var notifyRaw = gv('cal-f-notify');
     var notify = notifyRaw === '' ? null : Math.max(0, Math.min(1440, Math.round(+notifyRaw) || 0));
-    var ev = form.id ? findEvent(form.id) : null;
     if (ev) {
       ev.date = date; ev.start = start; ev.end = end;
       ev.title = title; ev.cat = cat; ev.color = color; ev.notify = notify;
