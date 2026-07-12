@@ -2505,8 +2505,21 @@ body.readonly .editor-wrap .cm-content { caret-color: transparent; }
 .drop-overlay { position: fixed; inset: 0; z-index: 9000; background: rgba(0,0,0,0.45); display: flex; align-items: center; justify-content: center; color: #fff; font-size: 20px; font-weight: 600; pointer-events: none; border: 3px dashed var(--accent); }
 
 /* Embedded images (#28) */
-.cm-img-embed { display: inline-block; vertical-align: bottom; max-width: 100%; }
+.cm-img-embed { display: inline-block; vertical-align: bottom; max-width: 100%; position: relative; }
 .cm-img-embed img { max-width: min(100%, 460px); max-height: 340px; border-radius: 6px; border: 1px solid var(--border); display: block; }
+/* A user-sized image (token carries |w): width rules, height follows aspect. */
+.cm-img-embed.sized img { max-width: 100%; max-height: none; }
+/* Corner drag grip (round-8): resize by dragging; double-click resets. */
+.cm-img-grip {
+  position: absolute; right: -3px; bottom: -3px; width: 16px; height: 16px;
+  cursor: nwse-resize; border-radius: 4px; opacity: 0; touch-action: none; z-index: 3;
+  background: linear-gradient(135deg, transparent 46%, var(--accent) 46%);
+}
+.cm-img-embed:hover .cm-img-grip, .cm-img-grip:active { opacity: 0.9; }
+body.readonly .cm-img-grip { display: none; }
+/* Line alignment sentinels (round-8): %%center%% / %%right%% line prefixes. */
+.cm-align-center { text-align: center; }
+.cm-align-right { text-align: right; }
 .cm-img-embed.missing { color: var(--text-faint); font-size: var(--text-xs); border: 1px dashed var(--border); padding: 4px 8px; border-radius: 6px; }
 /* Out-of-document image still resolving from IndexedDB / Firebase. */
 .cm-img-embed.loading img { min-width: 64px; min-height: 40px; background: repeating-linear-gradient(45deg, var(--surface-hover, rgba(127,127,127,0.12)) 0 6px, transparent 6px 12px); border-style: dashed; }
@@ -4500,6 +4513,73 @@ const highlightPlugin = ViewPlugin.fromClass(class {
 }, { decorations: v => v.decorations });
 
 // ============================================
+// LINE ALIGNMENT (round-8) — `%%center%%` / `%%right%%` at the START of a line
+// aligns that line (text, images, anything). Plain-text sentinel like the
+// highlight markers, so it syncs as document text; the marker hides while
+// rendered and reveals when the cursor touches it (so it stays editable).
+// Styling-off shows the raw sentinel, same rule as every other decoration.
+// ============================================
+const ALIGN_RE = /^%%(center|right)%%[ ]?/;
+function buildAlignDecorations(view) {
+  if (!mdStyleEnabled) return Decoration.none;
+  const ranges = [];
+  const doc = view.state.doc;
+  const sel = view.state.selection.main;
+  const seen = new Set();
+  for (const { from, to } of view.visibleRanges) {
+    const lineFrom = doc.lineAt(from).number, lineTo = doc.lineAt(to).number;
+    for (let i = lineFrom; i <= lineTo; i++) {
+      if (seen.has(i)) continue; seen.add(i);
+      const line = doc.line(i);
+      if (line.text.charCodeAt(0) !== 37) continue; // fast path: not '%'
+      const m = ALIGN_RE.exec(line.text);
+      if (!m) continue;
+      ranges.push(Decoration.line({ class: 'cm-align-' + m[1] }).range(line.from));
+      const mFrom = line.from, mTo = line.from + m[0].length;
+      if (!(sel.from <= mTo && sel.to >= mFrom)) {
+        ranges.push(Decoration.replace({}).range(mFrom, mTo));
+      }
+    }
+  }
+  ranges.sort((a, b) => a.from - b.from || a.startSide - b.startSide);
+  return Decoration.set(ranges, true);
+}
+const alignPlugin = ViewPlugin.fromClass(class {
+  constructor(view) { this.v = mdVersion; this.decorations = buildAlignDecorations(view); }
+  update(update) {
+    if (update.docChanged || update.viewportChanged || update.selectionSet || this.v !== mdVersion) {
+      this.v = mdVersion;
+      this.decorations = buildAlignDecorations(update.view);
+    }
+  }
+}, { decorations: v => v.decorations });
+// Apply/clear alignment on every line the selection touches (or the line at
+// `pos` when given — the image menu passes the image's position). kind: null
+// clears back to the default left alignment.
+window.setLineAlignment = function setLineAlignment(kind, pos) {
+  // Read-only blocks user typing via editable(false), but programmatic
+  // dispatches still apply — so a locked document must be guarded here too.
+  if (_readOnly) { showToast('Read-only mode — alignment is locked', 'error', 2000); return; }
+  const doc = editor.state.doc;
+  let fromLine, toLine;
+  if (pos != null) { fromLine = toLine = doc.lineAt(Math.min(pos, doc.length)).number; }
+  else {
+    const sel = editor.state.selection.main;
+    fromLine = doc.lineAt(sel.from).number;
+    toLine = doc.lineAt(sel.to).number;
+  }
+  const changes = [];
+  for (let i = fromLine; i <= toLine; i++) {
+    const line = doc.line(i);
+    const m = ALIGN_RE.exec(line.text);
+    if (m) changes.push({ from: line.from, to: line.from + m[0].length, insert: '' });
+    if (kind) changes.push({ from: line.from, insert: '%%' + kind + '%% ' });
+  }
+  if (changes.length) editor.dispatch({ changes });
+  try { editor.focus(); } catch {}
+};
+
+// ============================================
 // AUTO-COLOR (widget g) — YOU pick a word + a colour, and every occurrence of
 // that word in this document is tinted that colour (and stays coloured as you
 // keep typing it). Rules are per-room {wordLower: paletteColor}. Viewport-only.
@@ -5288,7 +5368,10 @@ const collapseExtension = EditorView.decorations.of(buildCollapseDecorations);
 //   • LEGACY INLINE: "![img:<code>:<base64>]" or "![img:<base64>]" — the codec
 //     bytes ride inline in the text. Still rendered for backward compatibility.
 // Combined matcher: m[1]=code(optional), m[2]=separator(':'inline|'#'ref), m[3]=data.
-const IMG_TOKEN_RE = /!\[img:(?:([jwa])([:#]))?([A-Za-z0-9+/=]+)\]/g;
+// Optional `|w<px>` suffix (round-8): a user-chosen display width, written by
+// the drag-resize grip. Groups 1-3 (code, sep, payload) are stable for all
+// existing consumers; group 4 is the width. Tokens without it render natural.
+const IMG_TOKEN_RE = /!\[img:(?:([jwa])([:#]))?([A-Za-z0-9+/=]+)(?:\|w(\d{2,4}))?\]/g;
 const IMG_MIME = { j: 'image/jpeg', w: 'image/webp', a: 'image/avif' };
 
 // base64 (codec bytes) → a Blob object URL. Decode happens once; browsers cache
@@ -5466,20 +5549,24 @@ window.scheduleImgRemovalCheck = scheduleImgRemovalCheck;
 
 class ImageWidget extends WidgetType {
   // isRef: data is a content hash to resolve out-of-band; else data is base64.
-  constructor(code, data, isRef) { super(); this.code = code || 'j'; this.data = data; this.isRef = !!isRef; }
-  eq(o) { return o.data === this.data && o.code === this.code && o.isRef === this.isRef; }
-  toDOM() {
+  // w: user-chosen display width in px (the token's |w suffix), null = natural.
+  constructor(code, data, isRef, w) { super(); this.code = code || 'j'; this.data = data; this.isRef = !!isRef; this.w = w || null; }
+  eq(o) { return o.data === this.data && o.code === this.code && o.isRef === this.isRef && o.w === this.w; }
+  toDOM(view) {
     const wrap = document.createElement('span');
     wrap.className = 'cm-img-embed';
     const img = document.createElement('img');
     img.alt = 'embedded image';
+    if (this.w) { wrap.classList.add('sized'); img.style.width = this.w + 'px'; }
     const mime = IMG_MIME[this.code] || 'image/jpeg';
     const code = this.code;
     const menuHash = this.isRef ? this.data : null; // for "Edit drawing" (whiteboard)
+    const posOf = () => { try { return view.posAtDOM(wrap); } catch { return null; } };
     const attachMenu = (b64) => wrap.addEventListener('contextmenu', (e) => {
       e.preventDefault(); e.stopPropagation();
-      showImageMenu(e.clientX, e.clientY, mime, b64, menuHash);
+      showImageMenu(e.clientX, e.clientY, mime, b64, menuHash, posOf);
     });
+    _attachImageResize(view, wrap, img, this.data);
     img.onerror = () => { wrap.classList.add('missing'); wrap.textContent = '⚠ broken image'; };
     wrap.appendChild(img);
     if (!this.isRef) {
@@ -5517,12 +5604,78 @@ class ImageWidget extends WidgetType {
   }
   ignoreEvent() { return true; }
 }
+// Drag the corner grip to resize an image (round-8). The chosen width is
+// written INTO the token as `|w<px>` so it syncs with the document; the token
+// is re-located at commit time (by payload match on the widget's line), so
+// concurrent edits can't make the rewrite land on stale offsets.
+function _attachImageResize(view, wrap, img, data) {
+  const grip = document.createElement('span');
+  grip.className = 'cm-img-grip';
+  grip.title = 'Drag to resize · double-click for natural size';
+  wrap.appendChild(grip);
+  grip.addEventListener('dblclick', (e) => {
+    e.preventDefault(); e.stopPropagation();
+    img.style.width = ''; wrap.classList.remove('sized');
+    _commitImageWidth(view, wrap, data, null);
+  });
+  grip.addEventListener('pointerdown', (e) => {
+    if (view.contentDOM.contentEditable === 'false') return; // read-only mode
+    e.preventDefault(); e.stopPropagation();
+    try { grip.setPointerCapture(e.pointerId); } catch {}
+    const startX = e.clientX;
+    const startW = img.getBoundingClientRect().width || 200;
+    let w = Math.round(startW);
+    let moved = false;
+    const move = (ev) => {
+      moved = true;
+      w = Math.max(48, Math.min(1600, Math.round(startW + (ev.clientX - startX))));
+      wrap.classList.add('sized');
+      img.style.width = w + 'px';
+    };
+    const up = () => {
+      grip.removeEventListener('pointermove', move);
+      grip.removeEventListener('pointerup', up);
+      grip.removeEventListener('pointercancel', up);
+      if (moved) _commitImageWidth(view, wrap, data, w);
+    };
+    grip.addEventListener('pointermove', move);
+    grip.addEventListener('pointerup', up);
+    grip.addEventListener('pointercancel', up);
+  });
+}
+function _commitImageWidth(view, wrap, data, w) {
+  let pos = null;
+  try { pos = view.posAtDOM(wrap); } catch {}
+  if (pos == null) return;
+  let line;
+  try { line = view.state.doc.lineAt(pos); } catch { return; }
+  // The same payload can appear more than once on a line — pick the matching
+  // token nearest the dragged widget's position, not just the first match.
+  IMG_TOKEN_RE.lastIndex = 0;
+  let m, best = null;
+  while ((m = IMG_TOKEN_RE.exec(line.text)) !== null) {
+    if (m[3] !== data) continue;
+    const s = line.from + m.index, e = s + m[0].length;
+    const d = (pos >= s && pos <= e) ? 0 : Math.min(Math.abs(pos - s), Math.abs(pos - e));
+    if (!best || d < best.d) best = { s, e, d, tok: m[0] };
+  }
+  if (!best) return;
+  const core = best.tok.slice(0, -1).replace(/\|w\d+$/, '');
+  const token = core + (w ? '|w' + w : '') + ']';
+  if (token !== best.tok) view.dispatch({ changes: { from: best.s, to: best.e, insert: token } });
+}
 // Right-click an embedded image → copy (as PNG, universally clipboard-safe),
 // download, or — when the Whiteboard widget saved stroke data for this hash —
 // edit the drawing (loads the draw module on demand).
-function showImageMenu(x, y, mime, b64, hash) {
+function showImageMenu(x, y, mime, b64, hash, posOf) {
   const dataUrl = 'data:' + mime + ';base64,' + b64;
   const ext = (mime.split('/')[1] || 'jpg').replace('jpeg', 'jpg');
+  // Align the image's LINE (round-8) — alignment is a line property, and the
+  // token position is resolved fresh so edits since render can't misplace it.
+  const alignItems = posOf ? [{ label: '⇤ Align left', run: () => { const p = posOf(); if (p != null) setLineAlignment(null, p); } },
+    { label: '⇹ Align center', run: () => { const p = posOf(); if (p != null) setLineAlignment('center', p); } },
+    { label: '⇥ Align right', run: () => { const p = posOf(); if (p != null) setLineAlignment('right', p); } },
+    { sep: true }] : [];
   // Whiteboard entries lazy-load the draw module on first use.
   const withDraw = (fnName, run) => {
     const go = () => { if (window[fnName]) run(); };
@@ -5541,6 +5694,7 @@ function showImageMenu(x, y, mime, b64, hash) {
     : [{ label: '✏️ Draw on this image…', run: () => withDraw('__drawImportImage', () => window.__drawImportImage(mime, b64)) }];
   openMenu([
     ...editItem,
+    ...alignItems,
     { label: 'Copy image', run: () => {
         try {
           const im = new Image();
@@ -5601,7 +5755,7 @@ function buildImageDecorations(view) {
         const isRef = m[2] === '#';
         if (!isRef && m[3].length < 24) continue;
         const s = line.from + m.index, e = s + m[0].length;
-        ranges.push(Decoration.replace({ widget: new ImageWidget(m[1], m[3], isRef) }).range(s, e));
+        ranges.push(Decoration.replace({ widget: new ImageWidget(m[1], m[3], isRef, m[4] ? parseInt(m[4], 10) : null) }).range(s, e));
       }
     }
   }
@@ -5706,6 +5860,7 @@ function buildEditorExtensions() {
     todoPlugin,
     linkPlugin,
     highlightPlugin,
+    alignPlugin,
     autoColorCompartment.of([autoColorPlugin]),
     pluginCompartment.of(_pluginExts()), // runtime-registered plugin/injection modules
 
@@ -6140,8 +6295,24 @@ editor.dom.addEventListener('contextmenu', (e) => {
       { label: 'Copy', run: () => ctxCopy(selText) },
       { label: 'Paste', run: () => ctxPaste() },
       { sep: true },
+      { label: '⇤ Align left', run: () => setLineAlignment(null) },
+      { label: '⇹ Align center', run: () => setLineAlignment('center') },
+      { label: '⇥ Align right', run: () => setLineAlignment('right') },
+      { sep: true },
       { label: 'Run script…', run: () => window.openPicker() },
       { sep: true },
+      { label: '📖 Define', run: () => {
+          // First word of the selection, letters/apostrophes/hyphens only.
+          const word = (selText.trim().split(/\s+/)[0] || '').replace(/[^A-Za-z'’-]/g, '').slice(0, 40);
+          if (!word) { showToast('Select a word to define', 'error', 2000); return; }
+          const go = () => { if (window.__dictLookup) window.__dictLookup(word); };
+          if (document.getElementById('dict-panel') && window.__dictLookup) go();
+          else {
+            const stub = WIDGETS.find(x => x.name === 'Dictionary');
+            if (stub) { try { stub.open(); } catch {} setTimeout(go, 900); }
+            else showToast('Dictionary module not available', 'error', 2500);
+          }
+        } },
       { label: 'Search Google', run: () => openLink('https://www.google.com/search?q=' + encodeURIComponent(selText.slice(0, 500))) },
     ], e.clientX, e.clientY);
     return;
@@ -7274,7 +7445,11 @@ async function appendFilesToEditor(fileList) {
     else if (tail.endsWith('\n')) prefix = '\n';
     else prefix = '\n\n';
   }
-  const insertText = prefix + chunks.join('');
+  // CM normalizes \r\n and bare \r to \n on insert, so the text that lands in
+  // the doc can be SHORTER than what was measured here — a CRLF file made the
+  // selection anchor point past the end of the document (RangeError).
+  // Normalize first so the arithmetic is exact.
+  const insertText = (prefix + chunks.join('')).replace(/\r\n?/g, '\n');
 
   editor.dispatch({
     changes: { from: docLen, insert: insertText },
@@ -14672,7 +14847,7 @@ async function migrateInlineImages() {
     const toks = [];
     while ((m = IMG_TOKEN_RE.exec(text)) !== null) {
       if (m[2] === '#' || m[3].length < 24) continue; // skip existing refs / non-images
-      toks.push({ from: m.index, to: m.index + m[0].length, code: m[1] || 'j', b64: m[3] });
+      toks.push({ from: m.index, to: m.index + m[0].length, code: m[1] || 'j', b64: m[3], w: m[4] || null });
     }
     if (!toks.length) return;
     const changes = [];
@@ -14699,7 +14874,7 @@ async function migrateInlineImages() {
         // lazily through resolveImageRef instead.
         uploadImage(hash, payload);
       }
-      changes.push({ from: t.from, to: t.to, insert: '![img:' + t.code + '#' + hash + ']' });
+      changes.push({ from: t.from, to: t.to, insert: '![img:' + t.code + '#' + hash + (t.w ? '|w' + t.w : '') + ']' });
       savedBytes += t.b64.length;
     }
     // Apply only if the document is still exactly what we hashed against, so the
