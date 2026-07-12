@@ -1055,6 +1055,8 @@ body.sel-mode .editor-wrap .cm-content { -webkit-touch-callout: none; }
   #side-nav .sn-event:hover { background: var(--surface-hover, rgba(127,127,127,0.12)); }
   #side-nav .sn-ev-when { flex: 0 0 auto; color: var(--text-faint); font-size: var(--text-xs); font-variant-numeric: tabular-nums; }
   #side-nav .sn-ev-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--text-muted); font-size: var(--text-xs); }
+  #side-nav .sn-event .ws-badge-dot { flex: 0 0 6px; width: 6px; height: 6px; border-radius: 50%; align-self: center; background: var(--ws-fg, var(--text-faint)); }
+  #side-nav .sn-ev-empty .sn-ev-title { color: var(--text-faint); font-style: italic; }
 }
 
 /* Breadcrumb (Feature 94) — hard left. */
@@ -9012,21 +9014,22 @@ function _snEventsHtml() {
     if (window.Settings && Settings.get('sidebar.events') === false) return '';
     const data = window.__cadeSyncedBlob ? window.__cadeSyncedBlob('calendar').get() : null;
     const events = (data && Array.isArray(data.events)) ? data.events : [];
-    if (!events.length) return '';
     const now = new Date();
     const pad = n => String(n).padStart(2, '0');
     const dayKey = d => d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
     const todayKey = dayKey(now);
     const tomorrowKey = dayKey(new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1));
-    const horizon = new Set();
-    for (let i = 0; i < 7; i++) horizon.add(dayKey(new Date(now.getFullYear(), now.getMonth(), now.getDate() + i)));
+    const weekKeys = new Set();
+    for (let i = 0; i < 7; i++) weekKeys.add(dayKey(new Date(now.getFullYear(), now.getMonth(), now.getDate() + i)));
     const nowHm = pad(now.getHours()) + ':' + pad(now.getMinutes());
+    // ANY future event qualifies (round-7: a quiet week used to hide the whole
+    // section, which read as "the feature is gone"). The section renders
+    // whenever the preference is on; only the pref hides it.
     const upcoming = events
-      .filter(e => e && e.date && horizon.has(e.date) && e.title)
-      .filter(e => e.date !== todayKey || !e.start || e.start >= nowHm)
+      .filter(e => e && e.date && e.title)
+      .filter(e => e.date > todayKey || (e.date === todayKey && (!e.start || e.start >= nowHm)))
       .sort((a, b) => ((a.date + (a.start || '')) < (b.date + (b.start || '')) ? -1 : 1))
       .slice(0, 8);
-    if (!upcoming.length) return '';
     const folded = _snCollapsed.has('__events');
     let html = `<div class="sn-ws sn-events" onclick="openEventsCalendar()" title="Open Calendar Events">` +
       `<span class="sn-fold" onclick="sidebarToggleWs(event, '__events')" title="${folded ? 'Expand' : 'Collapse'}">${folded ? '▸' : '▾'}</span>` +
@@ -9036,13 +9039,25 @@ function _snEventsHtml() {
         if (ds === todayKey) return 'Today';
         if (ds === tomorrowKey) return 'Tmrw';
         const [y, m, d] = ds.split('-').map(Number);
-        return new Date(y, m - 1, d).toLocaleDateString([], { weekday: 'short', day: 'numeric' });
+        const dt = new Date(y, m - 1, d);
+        return dt.toLocaleDateString([], weekKeys.has(ds) ? { weekday: 'short', day: 'numeric' } : { month: 'short', day: 'numeric' });
+      };
+      // Categories are workspaces (round-7): a resolvable cat gets its
+      // workspace's color dot; legacy/free-text cats just get no dot.
+      const wsDot = e => {
+        const w = e.cat && getWorkspace(e.cat);
+        if (!w) return '';
+        return `<span class="ws-badge-dot ws-color-${WS_COLORS.includes(w.color) ? w.color : 'neutral'}"></span>`;
       };
       html += upcoming.map(e =>
         `<div class="sn-event" onclick="openEventsCalendar()" title="${escapeHtml((e.date || '') + (e.start ? ' ' + e.start : '') + ' — ' + (e.title || ''))}">` +
+        wsDot(e) +
         `<span class="sn-ev-when">${escapeHtml(dayLabel(e.date))}${e.start ? ' ' + escapeHtml(e.start) : ''}</span>` +
         `<span class="sn-ev-title">${escapeHtml(e.title)}</span></div>`
       ).join('');
+      if (!upcoming.length) {
+        html += `<div class="sn-event sn-ev-empty" onclick="openEventsCalendar()"><span class="sn-ev-title">No upcoming events</span></div>`;
+      }
     }
     return html;
   } catch { return ''; }
@@ -11233,6 +11248,7 @@ window.__roomsApi = {
   meta: (n) => roomMeta[n] || {},
   workspaceIds: (n) => getRoomWorkspaceIds(n),
   workspaceById: (id) => getWorkspace(id),
+  workspaces: () => workspaces.map(w => ({ id: w.id, name: w.name, color: w.color })),
   inWorkspace: (n, wsId) => roomInWorkspace(n, wsId),
   isPinned: (n) => roomIsPinned(n),
   isArchived: (n) => roomIsArchived(n),
@@ -14837,6 +14853,10 @@ function parseHotkey(str) {
 }
 
 function eventMatchesHotkey(e, hotkeyStr) {
+  // Synthetic keydowns (password managers, autofill, some IMEs) arrive with
+  // no e.key — and a missing hotkey entry must mean "no match", not a crash
+  // that kills every hotkey after it in the handler.
+  if (!hotkeyStr || typeof e.key !== 'string') return false;
   const hk = parseHotkey(hotkeyStr);
   const evtKey = e.key.toLowerCase();
   const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;

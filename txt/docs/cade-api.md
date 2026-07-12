@@ -149,6 +149,7 @@ stale copies; call again when you need fresh values). Used by e.g. the
 | `roomsApi.meta(name)` | `{pinned, archived, created, modified}` (may be `{}`) |
 | `roomsApi.workspaceIds(name)` | workspace ids the room belongs to (array) |
 | `roomsApi.workspaceById(id)` | workspace object `{id, name, color, …}` or `null` |
+| `roomsApi.workspaces()` | all workspaces as `[{id, name, color}]` (copy) |
 | `roomsApi.inWorkspace(name, wsId)` | membership test |
 | `roomsApi.isPinned(name)` / `isArchived(name)` | flag tests |
 | `roomsApi.modifiedAt(name)` / `createdAt(name)` | sort timestamps (ms, 0 if unknown) |

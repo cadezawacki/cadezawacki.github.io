@@ -1,6 +1,8 @@
 /* Calendar Events widget — month grid + selected-day agenda, plus the
    rooms-by-date view merged from the retired daycal widget (daily-note rooms
-   named 'YYYY-MM-DD' + per-day room activity). Everything here is cal-*. */
+   named 'YYYY-MM-DD' + per-day room activity). Everything here is cal-*.
+   Event colors come from the WORKSPACE via the core ws-color-<name> classes:
+   they set --ws-fg, which bars/dots use (falling back to a neutral faint). */
 #cal-panel { top: 50px; right: 12px; width: 560px; max-width: calc(100vw - 24px); }
 
 .cal-wrap { display: grid; grid-template-columns: 248px minmax(0, 1fr); }
@@ -34,10 +36,15 @@
 .cal-cell.today .cal-n { background: var(--accent); color: #fff; font-weight: 600; }
 /* selected (non-today): outlined circle */
 .cal-cell.sel .cal-n { box-shadow: 0 0 0 1.5px var(--accent); }
-/* days with events: a dot under the number */
-.cal-cell.has::after {
-  content: ''; position: absolute; bottom: 1px; left: 50%; transform: translateX(-50%);
-  width: 4px; height: 4px; border-radius: 50%; background: var(--accent);
+/* days with events: workspace-colored dots under the number (one per distinct
+   workspace color that day, max 3; neutral = events without a workspace) */
+.cal-dots {
+  position: absolute; bottom: 1px; left: 50%; transform: translateX(-50%);
+  display: flex; gap: 2px;
+}
+.cal-dot {
+  width: 4px; height: 4px; border-radius: 50%;
+  background: var(--ws-fg, var(--text-faint));
 }
 /* days with a daily-note room ('YYYY-MM-DD'): a faint square page-mark in the
    top-right corner — deliberately distinct from the accent event dot below */
@@ -64,23 +71,18 @@
   color: var(--text-muted); line-height: 1.5; white-space: nowrap;
 }
 .cal-ev-end { color: var(--text-faint); }
-.cal-ev-bar { width: 3px; border-radius: 2px; flex-shrink: 0; min-height: 28px; }
+/* the bar takes the event's workspace color (a ws-color-* class sets --ws-fg);
+   no / legacy / deleted workspace stays neutral */
+.cal-ev-bar {
+  width: 3px; border-radius: 2px; flex-shrink: 0; min-height: 28px;
+  background: var(--ws-fg, var(--text-faint));
+}
 .cal-ev-main { display: flex; flex-direction: column; justify-content: center; min-width: 0; }
 .cal-ev-cat { font-size: var(--text-xs); color: var(--text-muted); }
 .cal-ev-title {
   font-size: var(--text-sm); font-weight: 500;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-
-/* category colors — the app-wide --hl-* highlight palette (fallback hexes) */
-.cal-c-yellow { background: var(--hl-yellow, #eab308); }
-.cal-c-green  { background: var(--hl-green,  #22c55e); }
-.cal-c-blue   { background: var(--hl-blue,   #3b82f6); }
-.cal-c-red    { background: var(--hl-red,    #ef4444); }
-.cal-c-pink   { background: var(--hl-pink,   #ec4899); }
-.cal-c-purple { background: var(--hl-purple, #a855f7); }
-.cal-c-orange { background: var(--hl-orange, #f97316); }
-.cal-c-gray   { background: var(--hl-gray,   #94a3b8); }
 
 /* ---- daily note + day activity (merged from the daycal widget) ---- */
 .cal-day-links { display: flex; flex-direction: column; gap: 2px; margin-top: 8px; }
@@ -127,13 +129,6 @@
 }
 .cal-form input:focus, .cal-form select:focus { outline: 1px solid var(--accent); border-color: var(--accent); }
 .cal-f-dash { color: var(--text-faint); flex-shrink: 0; }
-.cal-f-newcat { display: flex; flex-direction: column; gap: 6px; }
-.cal-f-swatches { display: flex; gap: 6px; flex-wrap: wrap; padding: 1px; }
-.cal-sw {
-  width: 18px; height: 18px; border-radius: 50%; cursor: pointer;
-  border: 1px solid var(--border); padding: 0; flex-shrink: 0;
-}
-.cal-sw.on { box-shadow: 0 0 0 2px var(--accent); border-color: transparent; }
 .cal-f-actions { display: flex; align-items: center; gap: 6px; margin-top: 2px; }
 .cal-f-spacer { flex: 1; }
 .cal-btn {
