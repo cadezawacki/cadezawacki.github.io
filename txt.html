@@ -4557,6 +4557,9 @@ const alignPlugin = ViewPlugin.fromClass(class {
 // `pos` when given — the image menu passes the image's position). kind: null
 // clears back to the default left alignment.
 window.setLineAlignment = function setLineAlignment(kind, pos) {
+  // Read-only blocks user typing via editable(false), but programmatic
+  // dispatches still apply — so a locked document must be guarded here too.
+  if (_readOnly) { showToast('Read-only mode — alignment is locked', 'error', 2000); return; }
   const doc = editor.state.doc;
   let fromLine, toLine;
   if (pos != null) { fromLine = toLine = doc.lineAt(Math.min(pos, doc.length)).number; }
@@ -5646,16 +5649,20 @@ function _commitImageWidth(view, wrap, data, w) {
   if (pos == null) return;
   let line;
   try { line = view.state.doc.lineAt(pos); } catch { return; }
+  // The same payload can appear more than once on a line — pick the matching
+  // token nearest the dragged widget's position, not just the first match.
   IMG_TOKEN_RE.lastIndex = 0;
-  let m;
+  let m, best = null;
   while ((m = IMG_TOKEN_RE.exec(line.text)) !== null) {
     if (m[3] !== data) continue;
     const s = line.from + m.index, e = s + m[0].length;
-    const core = m[0].slice(0, -1).replace(/\|w\d+$/, '');
-    const token = core + (w ? '|w' + w : '') + ']';
-    if (token !== m[0]) view.dispatch({ changes: { from: s, to: e, insert: token } });
-    return;
+    const d = (pos >= s && pos <= e) ? 0 : Math.min(Math.abs(pos - s), Math.abs(pos - e));
+    if (!best || d < best.d) best = { s, e, d, tok: m[0] };
   }
+  if (!best) return;
+  const core = best.tok.slice(0, -1).replace(/\|w\d+$/, '');
+  const token = core + (w ? '|w' + w : '') + ']';
+  if (token !== best.tok) view.dispatch({ changes: { from: best.s, to: best.e, insert: token } });
 }
 // Right-click an embedded image → copy (as PNG, universally clipboard-safe),
 // download, or — when the Whiteboard widget saved stroke data for this hash —
