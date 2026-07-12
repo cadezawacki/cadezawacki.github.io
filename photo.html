@@ -365,6 +365,12 @@ a{color:var(--primary);}
   display:flex;align-items:center;justify-content:space-between;
   padding:2px 14px 4px;gap:8px;
 }
+.cp-pinned-controls{
+  flex:0 0 auto;padding:2px 14px 6px;background:color-mix(in srgb,var(--bg) 97%,transparent);
+  border-bottom:1px solid var(--border);
+}
+.cp-pinned-controls[hidden],.cp-pinned-controls:empty{display:none;}
+.cp-pinned-controls .slider-row{margin:0;}
 .cp-title{
   font-size:12px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;
   color:var(--text-2);
@@ -1676,8 +1682,7 @@ a{color:var(--primary);}
   }
   /* Control panel becomes a fixed-width sidebar on the right */
   body.desktop-layout .control-panel{
-    --cp-w:360px;
-    width:var(--cp-w);
+    width:var(--cp-w,360px);min-width:0;
     height:auto;min-height:0;max-height:none;
     border-top:none;border-left:1px solid var(--border);
     transition:none;
@@ -2065,6 +2070,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
   .control-panel-header{padding:7px 12px 5px;}
   .tool-bar{padding:5px max(5px,var(--safe-r)) calc(var(--safe-b) + 5px) max(5px,var(--safe-l));gap:2px;background:color-mix(in srgb,var(--bg) 94%,transparent);backdrop-filter:blur(18px);}
   .tool-tab{min-width:60px;height:54px;border-radius:12px;}
+  .tool-tab.active::before{display:none;}
   .tool-tab.active::after{left:20px;right:20px;bottom:1px;height:3px;}
   .tool-tab span{font-size:9px;}
   .workspace-status{left:8px;right:8px;bottom:7px;}
@@ -2078,25 +2084,29 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
   .command-card{max-height:calc(100dvh - var(--safe-t) - 16px);border-radius:18px;}
 }
 .mobile-more-tab{display:none;}
+.mobile-tool-tray .sheet-card{padding-bottom:calc(var(--safe-b) + 14px);}
+.mobile-tool-tray-title{padding:0 16px 10px;color:var(--text-2);font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.07em;}
+.mobile-tool-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;padding:0 12px;}
+.mobile-tool-choice{min-height:68px;padding:11px;border:1px solid var(--border);border-radius:14px;background:var(--surface-2);display:flex;align-items:center;gap:11px;text-align:left;color:var(--text);font-size:12px;font-weight:750;}
+.mobile-tool-choice svg{width:24px;height:24px;flex:none;color:var(--text-2);}
+.mobile-tool-choice.active{border-color:var(--primary);background:color-mix(in srgb,var(--primary) 12%,var(--surface));}
 .save-status{cursor:pointer;}
-@media (max-width:719px){
-  .tool-bar .tool-tab[data-tool="effect"],
-  .tool-bar .tool-tab[data-tool="crop"],
-  .tool-bar .tool-tab[data-tool="shape"],
-  .tool-bar .tool-tab[data-tool="text"],
-  .tool-bar .tool-tab[data-tool="frame"]{display:none;}
-  .tool-bar .tool-tab[data-tool="adjust"],
-  .tool-bar .tool-tab[data-tool="filter"],
-  .tool-bar .tool-tab[data-tool="draw"],
-  .tool-bar .tool-tab[data-tool="layers"],
-  .tool-bar .mobile-more-tab{display:flex;flex:1 1 20%;min-width:0;}
-  .tool-bar .tool-tab[data-tool="layers"] span,
-  .tool-bar .tool-tab[data-tool="draw"] span,
-  .tool-bar .tool-tab[data-tool="filter"] span{font-size:0;}
-  .tool-bar .tool-tab[data-tool="layers"] span::after{content:"Move";font-size:9px;}
-  .tool-bar .tool-tab[data-tool="draw"] span::after{content:"Create";font-size:9px;}
-  .tool-bar .tool-tab[data-tool="filter"] span::after{content:"Looks";font-size:9px;}
-}@media (max-width:390px){
+@media (max-width:899px){
+  .tool-bar{overflow:hidden;}
+  .tool-bar>.tool-tab[data-tool]{display:none;}
+  .tool-bar>.tool-tab[data-tool="layers"],
+  .tool-bar>.tool-tab[data-tool="adjust"],
+  .tool-bar>.tool-tab[data-tool="filter"],
+  .tool-bar>.tool-tab[data-tool="effect"],
+  .tool-bar>.mobile-more-tab{display:flex;flex:1 1 20%;min-width:0!important;}
+  .tool-bar>.tool-tab[data-tool="layers"]{order:1;}
+  .tool-bar>.tool-tab[data-tool="adjust"]{order:2;}
+  .tool-bar>.tool-tab[data-tool="filter"]{order:3;}
+  .tool-bar>.tool-tab[data-tool="effect"]{order:4;}
+  .tool-bar>.mobile-more-tab{order:5;}
+}
+@media (min-width:900px){.mobile-tool-tray{display:none!important;}}
+@media (max-width:390px){
   .welcome-title{font-size:40px;}
   .welcome-sub{font-size:13px;}
   .welcome-btn-icon{width:34px;height:34px;}
@@ -2200,15 +2210,33 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .effect-tile.applied:not(.active){border-color:color-mix(in srgb,var(--primary) 48%,var(--border));}
 .effect-value-badge{position:absolute;top:5px;right:5px;min-width:18px;height:18px;padding:0 4px;border-radius:999px;display:flex;align-items:center;justify-content:center;background:var(--primary);color:#fff;font-size:8px;font-weight:800;line-height:1;}.frame-thumb{aspect-ratio:5/4;background:#40536a;}
 .frame-thumb canvas{width:100%;height:100%;image-rendering:auto;}
-.frame-tile>span{line-height:1.15;text-align:center;}@media(max-width:719px){
-  .effect-strength-sticky,.filter-strength-sticky{
-    position:sticky;top:-6px;z-index:24;margin:0 -4px 8px;padding:10px 4px;
-    background:color-mix(in srgb,var(--bg) 94%,transparent);
-    border-bottom:1px solid var(--border);box-shadow:0 8px 18px rgba(0,0,0,.12);
-    backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
-  }
+.frame-tile>span{line-height:1.15;text-align:center;}@media(max-width:899px){
+  .cp-pinned-controls{padding:4px 12px 7px;background:color-mix(in srgb,var(--bg) 96%,transparent);box-shadow:0 8px 18px rgba(0,0,0,.1);}
 }
-</style>
+/* Pro color controls */
+.adjust-section-tabs,.curve-channel-tabs{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;padding:3px;border:1px solid var(--border);border-radius:11px;background:var(--surface-2);}
+.adjust-section-tabs{position:sticky;top:-6px;z-index:8;margin:0 0 10px;background:color-mix(in srgb,var(--bg) 94%,transparent);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);}
+.curve-channel-tabs{grid-template-columns:repeat(4,1fr);margin-bottom:8px;}
+.adjust-section-tabs button,.curve-channel-tabs button{min-height:36px;padding:6px;border-radius:8px;color:var(--text-2);font-size:11px;font-weight:750;}
+.adjust-section-tabs button.active,.curve-channel-tabs button.active{background:var(--primary);color:#fff;}
+.curve-editor{position:relative;width:100%;aspect-ratio:4/3;min-height:190px;overflow:hidden;border:1px solid var(--border);border-radius:13px;background:var(--surface-2);}
+.curve-editor-canvas{display:block;width:100%;height:100%;touch-action:none;cursor:crosshair;outline:none;}
+.curve-editor-canvas:focus-visible{box-shadow:inset 0 0 0 2px var(--accent);}
+.curve-toolbar{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:42px;color:var(--text-3);font-size:10px;}
+.curve-toolbar-actions{display:flex;gap:6px;}
+.curve-toolbar button,.curve-preset{min-height:36px;padding:0 10px;border:1px solid var(--border);border-radius:9px;background:var(--surface);color:var(--text-2);font-size:10px;font-weight:700;}
+.curve-toolbar button:disabled{opacity:.35;}
+.curve-presets{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:2px;}
+.curve-preset{padding:7px 4px;}
+.color-mix-bands{display:flex;gap:6px;padding:2px 0 10px;overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:none;}
+.color-mix-bands::-webkit-scrollbar{display:none;}
+.color-mix-band{position:relative;flex:0 0 46px;min-height:48px;display:grid;place-items:center;border:1px solid var(--border);border-radius:11px;background:var(--surface);}
+.color-mix-band.active{border-color:var(--primary);box-shadow:0 0 0 2px color-mix(in srgb,var(--primary) 18%,transparent);}
+.color-mix-dot{width:20px;height:20px;border-radius:50%;background:var(--band-color);box-shadow:inset 0 0 0 1px rgba(255,255,255,.24);}
+.color-mix-band.applied::after{content:"";position:absolute;right:4px;top:4px;width:6px;height:6px;border-radius:50%;background:var(--primary);}
+.color-mix-controls{display:grid;gap:3px;}
+.color-mix-note{margin:2px 0 8px;color:var(--text-3);font-size:10px;line-height:1.45;}
+@media(max-width:899px){.curve-editor{min-height:200px;max-height:34dvh}.curve-toolbar{align-items:flex-start}.curve-presets{grid-template-columns:repeat(3,1fr)}}</style>
 </head>
 <body>
 
@@ -2394,6 +2422,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
     <div class="cp-title" id="cpTitle">Adjustments</div>
     <div class="cp-actions" id="cpActions"></div>
   </div>
+  <div class="cp-pinned-controls" id="cpPinnedControls" hidden></div>
   <div class="control-body" id="controlBody"></div>
 </section>
 
@@ -2793,6 +2822,22 @@ function applyTheme(theme) {
 /* ================================================================
    APP STATE
    ================================================================ */
+const CURVE_CHANNELS = [
+  { id:'rgb', label:'RGB', color:'#dfe3ee' },
+  { id:'r', label:'R', color:'#ff6478' },
+  { id:'g', label:'G', color:'#39d98a' },
+  { id:'b', label:'B', color:'#4ea1ff' },
+];
+const COLOR_MIX_BANDS = [
+  { id:'red', label:'Red', center:0, color:'#ef4444' },
+  { id:'orange', label:'Orange', center:30, color:'#f97316' },
+  { id:'yellow', label:'Yellow', center:60, color:'#eab308' },
+  { id:'green', label:'Green', center:120, color:'#22c55e' },
+  { id:'aqua', label:'Aqua', center:180, color:'#06b6d4' },
+  { id:'blue', label:'Blue', center:240, color:'#3b82f6' },
+  { id:'purple', label:'Purple', center:275, color:'#a855f7' },
+  { id:'magenta', label:'Magenta', center:320, color:'#ec4899' },
+];
 const App = {
   // ----- Layer system -----
   layers: [],              // array of layer objects (bottom -> top)
@@ -2816,8 +2861,10 @@ const App = {
   previewCanvas: null,
   previewCtx: null,
 
-  // ----- Adjustments (apply to base image layer) -----
+  // ----- Adjustments and global finishing color -----
   adjustments: createDefaultAdjustments(),
+  curves: createDefaultCurves(),
+  colorMix: createDefaultColorMix(),
 
   // ----- Active filter -----
   activeFilter: 'none',
@@ -2923,6 +2970,10 @@ const App = {
   // ----- UI -----
   activeTool: 'adjust',
   activeAdjust: 'exposure',
+  adjustSection: 'basic',
+  curveChannel: 'rgb',
+  curvePointIndex: null,
+  colorMixBand: 'orange',
   activeEffect: 'blur',
   effectScope: 'layer', // layer | global
   comparing: false,
@@ -2951,12 +3002,114 @@ function createDefaultAdjustments() {
     fade: 0, vignette: 0, grain: 0,
   };
 }
+function createDefaultCurves() {
+  const identity=()=>[[0,0],[255,255]];
+  return {rgb:identity(),r:identity(),g:identity(),b:identity()};
+}
+function createDefaultColorMix() {
+  const result={};
+  for(const band of COLOR_MIX_BANDS)result[band.id]={h:0,s:0,l:0};
+  return result;
+}
 function createDefaultEffects() {
   return {
     denoise:0, sepia:0, invert:0, splitTone:0, mirror:0, vignette:0,
     posterize:0, pixelate:0, edge:0, emboss:0, glitch:0, fringe:0,
     structure:0, tiltShift:0, blur:0, bloom:0, halation:0, duotone:0,
   };
+}
+function createDefaultColorOverlay() {
+  return { color:'#14b8a6', strength:0, blendMode:'overlay' };
+}
+function sanitizeEffects(raw) {
+  const clean = createDefaultEffects();
+  if (!raw || typeof raw !== 'object') return clean;
+  for (const key of Object.keys(clean)) {
+    const value = Number(raw[key]);
+    if (Number.isFinite(value)) clean[key] = clamp(Math.round(value), 0, 100);
+  }
+  return clean;
+}
+function sanitizeColorOverlay(raw) {
+  const clean = createDefaultColorOverlay();
+  if (!raw || typeof raw !== 'object') return clean;
+  if (/^#[0-9a-f]{6}$/i.test(String(raw.color || ''))) clean.color = String(raw.color);
+  const strength = Number(raw.strength);
+  if (Number.isFinite(strength)) clean.strength = clamp(Math.round(strength), 0, 100);
+  if (['color','multiply','screen','overlay','soft-light'].includes(raw.blendMode)) clean.blendMode = raw.blendMode;
+  return clean;
+}
+function sanitizeAdjustments(raw) {
+  const clean = createDefaultAdjustments();
+  if (!raw || typeof raw !== 'object') return clean;
+  for (const meta of ADJUSTMENTS) {
+    const value = Number(raw[meta.id]);
+    if (Number.isFinite(value)) clean[meta.id] = clamp(value, meta.min, meta.max);
+  }
+  return clean;
+}
+function sanitizeCurvePoints(raw) {
+  const points=[];
+  if(Array.isArray(raw))for(const point of raw){
+    if(!Array.isArray(point)||point.length<2)continue;
+    const x=Number(point[0]),y=Number(point[1]);
+    if(!Number.isFinite(x)||!Number.isFinite(y))continue;
+    points.push([clamp(Math.round(x),0,255),clamp(Math.round(y),0,255)]);
+  }
+  points.sort((a,b)=>a[0]-b[0]);
+  const unique=[];
+  for(const point of points){
+    if(unique.length&&unique[unique.length-1][0]===point[0])unique[unique.length-1]=point;
+    else unique.push(point);
+  }
+  if(!unique.length||unique[0][0]!==0)unique.unshift([0,0]);
+  if(unique[unique.length-1][0]!==255)unique.push([255,255]);
+  unique[0][0]=0;unique[unique.length-1][0]=255;
+  return unique.slice(0,10);
+}
+function sanitizeCurves(raw) {
+  const clean=createDefaultCurves();
+  for(const channel of CURVE_CHANNELS)clean[channel.id]=sanitizeCurvePoints(raw&&raw[channel.id]);
+  return clean;
+}
+function sanitizeColorMix(raw) {
+  const clean=createDefaultColorMix();
+  for(const band of COLOR_MIX_BANDS){
+    const value=raw&&raw[band.id];
+    if(!value||typeof value!=='object')continue;
+    clean[band.id]={
+      h:clamp(Math.round(Number(value.h)||0),-100,100),
+      s:clamp(Math.round(Number(value.s)||0),-100,100),
+      l:clamp(Math.round(Number(value.l)||0),-100,100),
+    };
+  }
+  return clean;
+}
+function resetProColorState() {
+  App.curves=createDefaultCurves();
+  App.colorMix=createDefaultColorMix();
+  invalidateProColorCache();
+}
+function syncSanitizedObject(target, clean) {
+  if (!target || typeof target !== 'object' || Array.isArray(target)) return { ...clean };
+  for (const key of Object.keys(target)) if (!(key in clean)) delete target[key];
+  for (const [key, value] of Object.entries(clean)) target[key] = value;
+  return target;
+}
+function ensureLayerEffectState(layer) {
+  if (!layer) return null;
+  layer.effects = syncSanitizedObject(layer.effects, sanitizeEffects(layer.effects));
+  layer.colorOverlay = syncSanitizedObject(layer.colorOverlay, sanitizeColorOverlay(layer.colorOverlay));
+  return layer;
+}
+function scopedEffectState() {
+  if (App.effectScope === 'global') {
+    App.effects = syncSanitizedObject(App.effects, sanitizeEffects(App.effects));
+    App.colorOverlay = syncSanitizedObject(App.colorOverlay, sanitizeColorOverlay(App.colorOverlay));
+    return { effects:App.effects, colorOverlay:App.colorOverlay, layer:null };
+  }
+  const layer = ensureLayerEffectState(activeLayer());
+  return layer ? { effects:layer.effects, colorOverlay:layer.colorOverlay, layer } : null;
 }
 
 /* ================================================================
@@ -3003,6 +3156,8 @@ function makeLayer(opts) {
     mask: opts.mask || null,
     maskInverted: !!opts.maskInverted,
     locked: !!opts.locked,
+    effects: sanitizeEffects(opts.effects),
+    colorOverlay: sanitizeColorOverlay(opts.colorOverlay),
     meta: opts.meta || {},
   };
   return layer;
@@ -3039,9 +3194,15 @@ function addLayer(layer, opts={}) {
 
 function removeLayer(id) {
   const idx = indexOfLayer(id);
-  if (idx < 0) return;
-  if (App.layers[idx].locked) return;
+  if (idx < 0) return false;
+  const removed = App.layers[idx];
+  if (removed.locked) return false;
   App.layers.splice(idx, 1);
+  if (removed.type === 'frame') {
+    const remainingFrame = [...App.layers].reverse().find(layer => layer.type === 'frame') || null;
+    App.frameLayerId = remainingFrame ? remainingFrame.id : null;
+    App.framePreset = remainingFrame ? (remainingFrame.meta.preset || 'none') : 'none';
+  }
   if (App.activeLayerId === id) {
     setActiveLayer(App.layers[App.layers.length - 1]?.id || null);
   } else {
@@ -3049,10 +3210,11 @@ function removeLayer(id) {
     if (App.shapeSelectionId === id) App.shapeSelectionId = null;
     if (App.layerSelectionId === id) App.layerSelectionId = null;
   }
+  return true;
 }
 function duplicateLayer(id) {
   const src = findLayer(id);
-  if (!src) return null;
+  if (!src || src.type === 'frame' || src.locked) return null;
   let nc;
   if (src.type === 'text') {
     nc = document.createElement('canvas');
@@ -3070,7 +3232,7 @@ function duplicateLayer(id) {
   }
   const copy = makeLayer({
     name: src.name + ' copy',
-    type: src.type === 'image' && src.locked ? 'image' : src.type,
+    type: src.type,
     canvas: nc,
     visible: src.visible,
     opacity: src.opacity,
@@ -3080,12 +3242,12 @@ function duplicateLayer(id) {
     scale: src.scale, rotation: src.rotation,
     mask: nm, maskInverted: src.maskInverted,
     locked: false,
+    effects: src.effects,
+    colorOverlay: src.colorOverlay,
     meta: JSON.parse(JSON.stringify(src.meta)),
   });
   const idx = indexOfLayer(id);
   App.layers.splice(idx + 1, 0, copy);
-  // Use setActiveLayer so the per-type selection slot
-  // (text/shape/layerSelectionId) is mirrored consistently.
   setActiveLayer(copy.id);
   return copy;
 }
@@ -3094,18 +3256,12 @@ function mergeLayerDown(id) {
   if (idx <= 0) return false;
   const top = App.layers[idx];
   const below = App.layers[idx - 1];
-  if (!top || !below || below.locked) return false;
+  if (!top || !below || below.locked || top.type === 'frame' || below.type === 'frame') return false;
 
   const mergedCanvas = createBlankLayerCanvas();
   const mergedCtx = mergedCanvas.getContext('2d');
-  const savedEffects = App.effects;
-  try {
-    App.effects = createDefaultEffects();
-    drawLayer(mergedCanvas, mergedCtx, below, App.workW, App.workH, 1);
-    drawLayer(mergedCanvas, mergedCtx, top, App.workW, App.workH, 1);
-  } finally {
-    App.effects = savedEffects;
-  }
+  drawLayer(mergedCanvas, mergedCtx, below, App.workW, App.workH, 1);
+  drawLayer(mergedCanvas, mergedCtx, top, App.workW, App.workH, 1);
 
   const merged = makeLayer({
     name: below.name + ' + ' + top.name,
@@ -3118,12 +3274,19 @@ function mergeLayerDown(id) {
   App.layers.splice(idx - 1, 2, merged);
   setActiveLayer(merged.id);
   return true;
-}function reorderLayer(id, newIndex) {
+}
+function reorderLayer(id, newIndex) {
   const idx = indexOfLayer(id);
-  if (idx < 0) return;
-  const layer = App.layers.splice(idx, 1)[0];
-  newIndex = clamp(newIndex, 0, App.layers.length);
+  if (idx < 0) return false;
+  const layer = App.layers[idx];
+  if (layer.locked || layer.type === 'frame') return false;
+  App.layers.splice(idx, 1);
+  const minIndex = App.layers[0]?.locked ? 1 : 0;
+  const frameIndex = App.layers.findIndex(item => item.type === 'frame');
+  const maxIndex = frameIndex >= 0 ? frameIndex : App.layers.length;
+  newIndex = clamp(newIndex, minIndex, maxIndex);
   App.layers.splice(newIndex, 0, layer);
+  return true;
 }
 function setActiveLayer(id) {
   const layer = findLayer(id);
@@ -3135,6 +3298,7 @@ function setActiveLayer(id) {
   App.layerSelectionId = layer && isGenericLayerType(layer.type) ? layer.id : null;
   if (typeof syncLayerRowSelection === 'function') syncLayerRowSelection();
   if (typeof scheduleLayersDockRender === 'function') scheduleLayersDockRender();
+  if (App.activeTool === 'effect' && typeof updateToolPanel === 'function') updateToolPanel();
 }
 
 /* ================================================================
@@ -3180,6 +3344,7 @@ const els = {
   cpHeader:          $('cpHeader'),
   cpTitle:           $('cpTitle'),
   cpActions:         $('cpActions'),
+  cpPinnedControls:  $('cpPinnedControls'),
   controlBody:       $('controlBody'),
   layersDock:        $('layersDock'),
   layersDockBody:    $('layersDockBody'),
@@ -3341,6 +3506,7 @@ function initFromImage(img) {
 
   // Reset everything
   App.adjustments = createDefaultAdjustments();
+  resetProColorState();
   App.effects = createDefaultEffects();
   App.colorOverlay = { color: '#7c5cff', strength: 0, blendMode: 'overlay' };
   App.activeFilter = 'none';
@@ -3853,8 +4019,8 @@ function applyAdjustmentsToImageData(imgData, adjustments, opts={}) {
   }
 
   // Sharpness — convolution (skipped in preview-only mode for perf)
-  if (a.sharpness > 0 && !opts.skipExpensive) {
-    applySharpen(imgData, a.sharpness / 100);
+  if (a.sharpness > 0) {
+    applySharpen(imgData, a.sharpness / 100, opts.resolutionScale);
   }
 }
 
@@ -3862,47 +4028,56 @@ function smoothstep(a, b, x) {
   const t = clamp((x - a) / Math.max(.0001, b - a), 0, 1);
   return t * t * (3 - 2 * t);
 }
+function makeStraightAlphaBlurredCopy(source, W, H, radius, passes) {
+  const blurred = new Uint8ClampedArray(source);
+  for (let i=0;i<blurred.length;i+=4) {
+    const alpha=blurred[i+3]/255;
+    blurred[i]*=alpha;blurred[i+1]*=alpha;blurred[i+2]*=alpha;
+  }
+  boxBlurInPlace({data:blurred,width:W,height:H},radius,passes);
+  for (let i=0;i<blurred.length;i+=4) {
+    const alpha=blurred[i+3];
+    if(alpha>0){const inv=255/alpha;blurred[i]=clamp(blurred[i]*inv,0,255);blurred[i+1]=clamp(blurred[i+1]*inv,0,255);blurred[i+2]=clamp(blurred[i+2]*inv,0,255);}
+    else blurred[i]=blurred[i+1]=blurred[i+2]=0;
+  }
+  return blurred;
+}
 function applyEffectsToImageData(imgData, effects, adjustments, opts={}) {
   const W = imgData.width, H = imgData.height;
   const d = imgData.data;
   const e = effects || createDefaultEffects();
   const a = adjustments || createDefaultAdjustments();
+  const resolutionScale = clamp(Number(opts.resolutionScale) || 1, .05, 8);
+  const maxRadius = Math.max(1, Math.floor(Math.min(W, H) / 2));
+  const scaledRadius = value => clamp(Math.max(1, Math.round(value * resolutionScale)), 1, maxRadius);
+  const sampleStep = Math.max(1, Math.round(resolutionScale));
+  const noiseSeed = Number(opts.noiseSeed) || 0;
 
-  // Edge-aware denoise: a fast two-pass bilateral approximation.
+  // Edge-aware denoise with a luminance-difference lookup table.
   if (e.denoise > 0) {
-    const k = e.denoise / 100;
-    const original = new Uint8ClampedArray(d);
-    const horizontal = new Uint8ClampedArray(d.length);
-    const filtered = opts.skipExpensive ? horizontal : new Uint8ClampedArray(d.length);
-    const sigma = 10 + 30 * k;
-    const sigma2 = 2 * sigma * sigma;
-    const lum = (arr, i) => arr[i] * .2126 + arr[i+1] * .7152 + arr[i+2] * .0722;
-    for (let y=0;y<H;y++) for (let x=0;x<W;x++) {
-      const i=(y*W+x)*4, li=(y*W+Math.max(0,x-1))*4, ri=(y*W+Math.min(W-1,x+1))*4;
-      const center=lum(original,i);
-      const wl=.7*Math.exp(-Math.pow(lum(original,li)-center,2)/sigma2);
-      const wr=.7*Math.exp(-Math.pow(lum(original,ri)-center,2)/sigma2);
-      const sum=1+wl+wr;
-      for(let c=0;c<3;c++) horizontal[i+c]=(original[i+c]+wl*original[li+c]+wr*original[ri+c])/sum;
+    const k=e.denoise/100,original=new Uint8ClampedArray(d),horizontal=new Uint8ClampedArray(d.length);
+    const filtered=opts.skipExpensive?horizontal:new Uint8ClampedArray(d.length);
+    const sigma=10+30*k,sigma2=2*sigma*sigma,weights=new Float32Array(256);
+    for(let diff=0;diff<256;diff++)weights[diff]=.7*Math.exp(-(diff*diff)/sigma2);
+    const lum=(arr,i)=>arr[i]*.2126+arr[i+1]*.7152+arr[i+2]*.0722;
+    const weight=(a,b)=>weights[Math.min(255,Math.round(Math.abs(a-b)))];
+    for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+      const i=(y*W+x)*4,li=(y*W+Math.max(0,x-sampleStep))*4,ri=(y*W+Math.min(W-1,x+sampleStep))*4;
+      const center=lum(original,i),wl=weight(lum(original,li),center),wr=weight(lum(original,ri),center),sum=1+wl+wr;
+      for(let c=0;c<3;c++)horizontal[i+c]=(original[i+c]+wl*original[li+c]+wr*original[ri+c])/sum;
       horizontal[i+3]=original[i+3];
     }
-    if (!opts.skipExpensive) {
-      for (let y=0;y<H;y++) for (let x=0;x<W;x++) {
-        const i=(y*W+x)*4, ti=(Math.max(0,y-1)*W+x)*4, bi=(Math.min(H-1,y+1)*W+x)*4;
-        const center=lum(horizontal,i);
-        const wt=.7*Math.exp(-Math.pow(lum(horizontal,ti)-center,2)/sigma2);
-        const wb=.7*Math.exp(-Math.pow(lum(horizontal,bi)-center,2)/sigma2);
-        const sum=1+wt+wb;
-        for(let c=0;c<3;c++) filtered[i+c]=(horizontal[i+c]+wt*horizontal[ti+c]+wb*horizontal[bi+c])/sum;
+    if(!opts.skipExpensive){
+      for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+        const i=(y*W+x)*4,ti=(Math.max(0,y-sampleStep)*W+x)*4,bi=(Math.min(H-1,y+sampleStep)*W+x)*4;
+        const center=lum(horizontal,i),wt=weight(lum(horizontal,ti),center),wb=weight(lum(horizontal,bi),center),sum=1+wt+wb;
+        for(let c=0;c<3;c++)filtered[i+c]=(horizontal[i+c]+wt*horizontal[ti+c]+wb*horizontal[bi+c])/sum;
         filtered[i+3]=original[i+3];
       }
     }
     const mix=.85*k;
     for(let i=0;i<d.length;i+=4){
-      d[i]=original[i]+(filtered[i]-original[i])*mix;
-      d[i+1]=original[i+1]+(filtered[i+1]-original[i+1])*mix;
-      d[i+2]=original[i+2]+(filtered[i+2]-original[i+2])*mix;
-      d[i+3]=original[i+3];
+      d[i]=original[i]+(filtered[i]-original[i])*mix;d[i+1]=original[i+1]+(filtered[i+1]-original[i+1])*mix;d[i+2]=original[i+2]+(filtered[i+2]-original[i+2])*mix;d[i+3]=original[i+3];
     }
   }
 
@@ -3983,18 +4158,19 @@ function applyEffectsToImageData(imgData, effects, adjustments, opts={}) {
 
   // Pixelate (block averaging)
   if (e.pixelate > 0) {
-    const size = Math.max(2, Math.round(e.pixelate / 100 * 40));
+    const size = Math.max(2, scaledRadius(e.pixelate / 100 * 40));
     for (let y = 0; y < H; y += size) {
       for (let x = 0; x < W; x += size) {
-        // average block
-        let r=0,g=0,b=0,n=0;
+        // Average in premultiplied alpha so transparent pixels do not add black.
+        let r=0,g=0,b=0,alphaWeight=0;
         for (let yy = 0; yy < size && y+yy < H; yy++) {
           for (let xx = 0; xx < size && x+xx < W; xx++) {
             const idx = ((y+yy)*W + (x+xx)) * 4;
-            r += d[idx]; g += d[idx+1]; b += d[idx+2]; n++;
+            const alpha=d[idx+3]/255;
+            r += d[idx]*alpha; g += d[idx+1]*alpha; b += d[idx+2]*alpha; alphaWeight+=alpha;
           }
         }
-        r/=n; g/=n; b/=n;
+        if(alphaWeight>0){r/=alphaWeight;g/=alphaWeight;b/=alphaWeight;}else r=g=b=0;
         for (let yy = 0; yy < size && y+yy < H; yy++) {
           for (let xx = 0; xx < size && x+xx < W; xx++) {
             const idx = ((y+yy)*W + (x+xx)) * 4;
@@ -4006,16 +4182,16 @@ function applyEffectsToImageData(imgData, effects, adjustments, opts={}) {
   }
 
   // Edge detect (Sobel)
-  if (e.edge > 0 && !opts.skipExpensive) {
+  if (e.edge > 0) {
     const src = new Uint8ClampedArray(d);
     const k = e.edge / 100;
-    for (let y = 1; y < H-1; y++) {
-      for (let x = 1; x < W-1; x++) {
+    for (let y = sampleStep; y < H-sampleStep; y++) {
+      for (let x = sampleStep; x < W-sampleStep; x++) {
         const i = (y*W + x) * 4;
         let gx = 0, gy = 0;
         for (let dy = -1; dy <= 1; dy++) {
           for (let dx = -1; dx <= 1; dx++) {
-            const idx = ((y+dy)*W + (x+dx)) * 4;
+            const idx = ((y+dy*sampleStep)*W + (x+dx*sampleStep)) * 4;
             const v = src[idx]*0.299 + src[idx+1]*0.587 + src[idx+2]*0.114;
             const kx = dx * (dy === 0 ? 2 : 1);
             const ky = dy * (dx === 0 ? 2 : 1);
@@ -4032,14 +4208,14 @@ function applyEffectsToImageData(imgData, effects, adjustments, opts={}) {
   }
 
   // Emboss
-  if (e.emboss > 0 && !opts.skipExpensive) {
+  if (e.emboss > 0) {
     const src = new Uint8ClampedArray(d);
     const k = e.emboss / 100;
-    for (let y = 1; y < H-1; y++) {
-      for (let x = 1; x < W-1; x++) {
+    for (let y = sampleStep; y < H-sampleStep; y++) {
+      for (let x = sampleStep; x < W-sampleStep; x++) {
         const i = (y*W + x) * 4;
-        const idx2 = ((y-1)*W + (x-1)) * 4;
-        const idx1 = ((y+1)*W + (x+1)) * 4;
+        const idx2 = ((y-sampleStep)*W + (x-sampleStep)) * 4;
+        const idx1 = ((y+sampleStep)*W + (x+sampleStep)) * 4;
         for (let c = 0; c < 3; c++) {
           const v = 128 + src[idx2+c] - src[idx1+c];
           d[i+c] = src[i+c]*(1-k) + v*k;
@@ -4051,7 +4227,7 @@ function applyEffectsToImageData(imgData, effects, adjustments, opts={}) {
   // Glitch (RGB channel shift)
   if (e.glitch > 0) {
     const src = new Uint8ClampedArray(d);
-    const off = Math.round(e.glitch / 100 * 20);
+    const off = scaledRadius(e.glitch / 100 * 20);
     for (let y = 0; y < H; y++) {
       for (let x = 0; x < W; x++) {
         const i = (y*W + x) * 4;
@@ -4066,7 +4242,7 @@ function applyEffectsToImageData(imgData, effects, adjustments, opts={}) {
   // Radial chromatic aberration, sampled outward for red and inward for blue.
   if (e.fringe > 0) {
     const k=e.fringe/100, src=new Uint8ClampedArray(d);
-    const shift=1+Math.round(6*k), cx=(W-1)/2, cy=(H-1)/2;
+    const shift=scaledRadius(1+6*k), cx=(W-1)/2, cy=(H-1)/2;
     for(let y=0;y<H;y++) for(let x=0;x<W;x++){
       const i=(y*W+x)*4;
       const dx=((x-cx)/Math.max(cx,1))*shift, dy=((y-cy)/Math.max(cy,1))*shift;
@@ -4097,8 +4273,8 @@ function applyEffectsToImageData(imgData, effects, adjustments, opts={}) {
 
   // Local contrast/detail.
   if (e.structure > 0) {
-    const k=e.structure/100, src=new Uint8ClampedArray(d), blurred=new Uint8ClampedArray(d);
-    boxBlurInPlace({data:blurred,width:W,height:H},3+Math.round(10*k),1);
+    const k=e.structure/100, src=new Uint8ClampedArray(d);
+    const blurred=makeStraightAlphaBlurredCopy(src,W,H,scaledRadius(3+10*k),1);
     for(let i=0;i<d.length;i+=4){
       d[i]=clamp(src[i]+(src[i]-blurred[i])*1.35*k,0,255);
       d[i+1]=clamp(src[i+1]+(src[i+1]-blurred[i+1])*1.35*k,0,255);
@@ -4109,8 +4285,8 @@ function applyEffectsToImageData(imgData, effects, adjustments, opts={}) {
 
   // Central focus band with progressively blurred edges.
   if (e.tiltShift > 0) {
-    const k=e.tiltShift/100, src=new Uint8ClampedArray(d), blurred=new Uint8ClampedArray(d);
-    boxBlurInPlace({data:blurred,width:W,height:H},2+Math.round(20*k),opts.skipExpensive?1:2);
+    const k=e.tiltShift/100, src=new Uint8ClampedArray(d);
+    const blurred=makeStraightAlphaBlurredCopy(src,W,H,scaledRadius(2+20*k),opts.skipExpensive?1:2);
     for(let y=0;y<H;y++){
       const mix=smoothstep(.12,.43,Math.abs((y+.5)/H-.5))*k;
       for(let x=0;x<W;x++){
@@ -4123,13 +4299,17 @@ function applyEffectsToImageData(imgData, effects, adjustments, opts={}) {
     }
   }
 
-  // Blur (separable box-blur, multi-pass approximates gaussian)
+  // Premultiplied-alpha blur softens both pixels and transparent edges cleanly.
   if (e.blur > 0) {
-    const srcAlpha=new Uint8ClampedArray(Math.ceil(d.length/4));
-    for(let i=0,p=0;i<d.length;i+=4,p++) srcAlpha[p]=d[i+3];
-    const radius=Math.max(1,Math.round(e.blur/100*30));
-    boxBlurInPlace(imgData,radius,opts.skipExpensive?1:2);
-    for(let i=3,p=0;i<d.length;i+=4,p++) d[i]=srcAlpha[p];
+    for(let i=0;i<d.length;i+=4){
+      const alpha=d[i+3]/255;d[i]*=alpha;d[i+1]*=alpha;d[i+2]*=alpha;
+    }
+    boxBlurInPlace(imgData,scaledRadius(e.blur/100*30),opts.skipExpensive?1:2);
+    for(let i=0;i<d.length;i+=4){
+      const alpha=d[i+3];
+      if(alpha>0){const inv=255/alpha;d[i]=clamp(d[i]*inv,0,255);d[i+1]=clamp(d[i+1]*inv,0,255);d[i+2]=clamp(d[i+2]*inv,0,255);}
+      else d[i]=d[i+1]=d[i+2]=0;
+    }
   }
 
   // Highlight bloom using a blurred luminance-isolated screen pass.
@@ -4138,9 +4318,9 @@ function applyEffectsToImageData(imgData, effects, adjustments, opts={}) {
     for(let i=0;i<d.length;i+=4){
       const L=src[i]*.2126+src[i+1]*.7152+src[i+2]*.0722;
       const m=smoothstep(150,235,L)*(src[i+3]/255);
-      glow[i]=src[i]*m; glow[i+1]=src[i+1]*m; glow[i+2]=src[i+2]*m; glow[i+3]=255;
+      glow[i]=src[i]*m; glow[i+1]=src[i+1]*m; glow[i+2]=src[i+2]*m; glow[i+3]=Math.round(255*m);
     }
-    boxBlurInPlace({data:glow,width:W,height:H},2+Math.round(18*k),opts.skipExpensive?1:2);
+    boxBlurInPlace({data:glow,width:W,height:H},scaledRadius(2+18*k),opts.skipExpensive?1:2);
     const mix=.7*k;
     for(let i=0;i<d.length;i+=4){
       for(let c=0;c<3;c++){const screen=255-(255-src[i+c])*(255-glow[i+c])/255;d[i+c]=src[i+c]+(screen-src[i+c])*mix;}
@@ -4154,9 +4334,9 @@ function applyEffectsToImageData(imgData, effects, adjustments, opts={}) {
     for(let i=0,p=0;i<d.length;i+=4,p++){
       const L=src[i]*.2126+src[i+1]*.7152+src[i+2]*.0722;
       const m=smoothstep(175,245,L)*(src[i+3]/255);
-      core[p]=Math.round(255*m); glow[i]=glow[i+1]=glow[i+2]=core[p]; glow[i+3]=255;
+      core[p]=Math.round(255*m); glow[i]=glow[i+1]=glow[i+2]=core[p]; glow[i+3]=core[p];
     }
-    boxBlurInPlace({data:glow,width:W,height:H},3+Math.round(15*k),opts.skipExpensive?1:2);
+    boxBlurInPlace({data:glow,width:W,height:H},scaledRadius(3+15*k),opts.skipExpensive?1:2);
     const mix=.55*k;
     for(let i=0,p=0;i<d.length;i+=4,p++){
       const h=clamp(glow[i]/255-.35*(core[p]/255),0,1);
@@ -4169,15 +4349,16 @@ function applyEffectsToImageData(imgData, effects, adjustments, opts={}) {
     }
   }
 
-  // Grain (last; lives in adjustments only)
-  const grainAmt = (a.grain || 0) / 100;
-  if (grainAmt > 0) {
-    const intensity = grainAmt * 40;
-    for (let i = 0; i < d.length; i += 4) {
-      const n = (Math.random() - 0.5) * intensity;
-      d[i]   = clamp(d[i]   + n, 0, 255);
-      d[i+1] = clamp(d[i+1] + n, 0, 255);
-      d[i+2] = clamp(d[i+2] + n, 0, 255);
+  // Deterministic workspace-coordinate grain: stable across rerenders and previews.
+  const grainAmt=(a.grain||0)/100;
+  if(grainAmt>0){
+    const intensity=grainAmt*40;
+    for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+      const wx=Math.floor((x+.5)/resolutionScale),wy=Math.floor((y+.5)/resolutionScale);
+      let hash=Math.imul((wx+noiseSeed)|0,374761393)^Math.imul((wy-noiseSeed)|0,668265263);
+      hash=Math.imul(hash^(hash>>>13),1274126177);hash=(hash^(hash>>>16))>>>0;
+      const n=(hash/4294967295-.5)*intensity,i=(y*W+x)*4;
+      d[i]=clamp(d[i]+n,0,255);d[i+1]=clamp(d[i+1]+n,0,255);d[i+2]=clamp(d[i+2]+n,0,255);
     }
   }
 }
@@ -4195,21 +4376,22 @@ function applyToneShiftToImageData(imgData, tone, strength) {
 }
 
 /* Sharpen via 3x3 unsharp mask */
-function applySharpen(imgData, amount) {
+function applySharpen(imgData, amount, resolutionScale=1) {
   const W = imgData.width, H = imgData.height;
   const d = imgData.data;
   const src = new Uint8ClampedArray(d);
   const k = amount; // 0..1
-  // 3x3 sharpen kernel weight w; center weighted by (1 + 4w)
-  for (let y = 1; y < H-1; y++) {
-    for (let x = 1; x < W-1; x++) {
+  const step=Math.max(1,Math.round(Number(resolutionScale)||1));
+  // Scale the sampling footprint so preview and high-resolution export match.
+  for (let y = step; y < H-step; y++) {
+    for (let x = step; x < W-step; x++) {
       const i = (y*W + x) * 4;
       for (let c = 0; c < 3; c++) {
         const center = src[i+c];
-        const n = src[((y-1)*W + x)*4 + c];
-        const s = src[((y+1)*W + x)*4 + c];
-        const e2 = src[(y*W + (x+1))*4 + c];
-        const w2 = src[(y*W + (x-1))*4 + c];
+        const n = src[((y-step)*W + x)*4 + c];
+        const s = src[((y+step)*W + x)*4 + c];
+        const e2 = src[(y*W + (x+step))*4 + c];
+        const w2 = src[(y*W + (x-step))*4 + c];
         const lap = center*4 - n - s - e2 - w2;
         d[i+c] = clamp(center + lap * k * 0.5, 0, 255);
       }
@@ -4352,6 +4534,93 @@ function renderPreview() {
   App.ctx.drawImage(App.previewCanvas, 0, 0, App.workW, App.workH);
 }
 
+let _proColorCacheKey='';
+let _proColorCache=null;
+function buildCurveLUT(points){
+  const lut=new Uint8ClampedArray(256);
+  for(let segment=0;segment<points.length-1;segment++){
+    const [x0,y0]=points[segment],[x1,y1]=points[segment+1],span=Math.max(1,x1-x0);
+    for(let x=x0;x<=x1;x++)lut[x]=Math.round(y0+(y1-y0)*(x-x0)/span);
+  }
+  return lut;
+}
+function buildCombinedCurveLUTs(curves){
+  const master=buildCurveLUT(curves.rgb),red=buildCurveLUT(curves.r),green=buildCurveLUT(curves.g),blue=buildCurveLUT(curves.b);
+  const result={r:new Uint8ClampedArray(256),g:new Uint8ClampedArray(256),b:new Uint8ClampedArray(256),active:false};
+  for(let value=0;value<256;value++){
+    result.r[value]=red[master[value]];result.g[value]=green[master[value]];result.b[value]=blue[master[value]];
+    if(result.r[value]!==value||result.g[value]!==value||result.b[value]!==value)result.active=true;
+  }
+  return result;
+}
+function buildColorMixTables(mix){
+  const hue=new Float32Array(360),saturation=new Float32Array(360),luminance=new Float32Array(360);
+  const active=COLOR_MIX_BANDS.some(band=>{const value=mix[band.id];return value.h||value.s||value.l;});
+  if(!active)return {hue,saturation,luminance,active:false};
+  for(let degree=0;degree<360;degree++){
+    let leftIndex=COLOR_MIX_BANDS.length-1;
+    for(let index=0;index<COLOR_MIX_BANDS.length;index++){if(COLOR_MIX_BANDS[index].center<=degree)leftIndex=index;else break;}
+    const leftBand=COLOR_MIX_BANDS[leftIndex],rightBand=COLOR_MIX_BANDS[(leftIndex+1)%COLOR_MIX_BANDS.length];
+    const rightCenter=rightBand.center+(rightBand.center<=leftBand.center?360:0);
+    const sampleDegree=degree<leftBand.center?degree+360:degree;
+    const raw=(sampleDegree-leftBand.center)/Math.max(1,rightCenter-leftBand.center),t=raw*raw*(3-2*raw);
+    const left=mix[leftBand.id],right=mix[rightBand.id];
+    hue[degree]=left.h+(right.h-left.h)*t;
+    saturation[degree]=left.s+(right.s-left.s)*t;
+    luminance[degree]=left.l+(right.l-left.l)*t;
+  }
+  return {hue,saturation,luminance,active:true};
+}
+function proColorStateKey(){
+  const curves=CURVE_CHANNELS.map(channel=>App.curves[channel.id].flat().join(',')).join('|');
+  const mix=COLOR_MIX_BANDS.map(band=>{const value=App.colorMix[band.id];return `${value.h},${value.s},${value.l}`;}).join('|');
+  return curves+'//'+mix;
+}
+function getProColorCache(){
+  const key=proColorStateKey();
+  if(_proColorCache&&key===_proColorCacheKey)return _proColorCache;
+  _proColorCacheKey=key;
+  return _proColorCache={curves:buildCombinedCurveLUTs(App.curves),mix:buildColorMixTables(App.colorMix)};
+}
+function invalidateProColorCache(){_proColorCacheKey='';_proColorCache=null;}
+function hueToRgb(p,q,t){
+  if(t<0)t+=1;if(t>1)t-=1;
+  if(t<1/6)return p+(q-p)*6*t;
+  if(t<1/2)return q;
+  if(t<2/3)return p+(q-p)*(2/3-t)*6;
+  return p;
+}
+function applyGlobalColorTools(ctx,W,H){
+  const cache=getProColorCache();
+  if(!cache.curves.active&&!cache.mix.active)return;
+  const image=ctx.getImageData(0,0,W,H),data=image.data,curves=cache.curves,mix=cache.mix;
+  for(let i=0;i<data.length;i+=4){
+    if(data[i+3]===0)continue;
+    let r=curves.r[data[i]],g=curves.g[data[i+1]],b=curves.b[data[i+2]];
+    if(mix.active){
+      let rn=r/255,gn=g/255,bn=b/255;
+      const max=Math.max(rn,gn,bn),min=Math.min(rn,gn,bn),delta=max-min;
+      if(delta>.0001){
+        let h=max===rn?((gn-bn)/delta)%6:max===gn?(bn-rn)/delta+2:(rn-gn)/delta+4;
+        h=(h*60+360)%360;
+        let l=(max+min)/2,s=delta/(1-Math.abs(2*l-1));
+        const index=Math.round(h)%360;
+        h=(h+mix.hue[index]*.3+360)%360;
+        const sat=mix.saturation[index]/100,lum=mix.luminance[index]/100;
+        s=sat>=0?s+(1-s)*sat:s*(1+sat);
+        l=lum>=0?l+(1-l)*lum*.65:l+l*lum*.65;
+        s=clamp(s,0,1);l=clamp(l,0,1);
+        if(s===0){rn=gn=bn=l;}else{
+          const q=l<.5?l*(1+s):l+s-l*s,p=2*l-q,hue=h/360;
+          rn=hueToRgb(p,q,hue+1/3);gn=hueToRgb(p,q,hue);bn=hueToRgb(p,q,hue-1/3);
+        }
+        r=rn*255;g=gn*255;b=bn*255;
+      }
+    }
+    data[i]=r;data[i+1]=g;data[i+2]=b;
+  }
+  ctx.putImageData(image,0,0);
+}
 /* Reusable temp canvases (per-compose-call). Avoids GC churn. */
 const _composeTmp = document.createElement('canvas');
 const _composeTmpCtx = _composeTmp.getContext('2d', { willReadFrequently: true });
@@ -4365,170 +4634,135 @@ function getComposeTmp(W, H) {
  * Compose all visible layers onto target ctx.
  * For the base "image" locked layer, we apply adjustments/filter/effects/base-transform.
  */
-function composeLayers(target, tctx, W, H, scale=1) {
-  tctx.clearRect(0, 0, W, H);
-
-  const bg = backgroundLayer();
-  const bgIdx = bg ? indexOfLayer(bg.id) : -1;
-
-  for (let i = 0; i < App.layers.length; i++) {
-    const layer = App.layers[i];
-    if (!layer.visible) continue;
-    if (layer.opacity <= 0) continue;
-
-    if (i === bgIdx) {
-      drawBaseLayer(target, tctx, layer, W, H, scale);
-    } else {
-      drawLayer(target, tctx, layer, W, H, scale);
-    }
+const _colorOverlayTmp = document.createElement('canvas');
+const _colorOverlayTmpCtx = _colorOverlayTmp.getContext('2d', { willReadFrequently:true });
+function applyColorOverlayToCanvas(ctx, W, H, overlay) {
+  const co = sanitizeColorOverlay(overlay);
+  if (co.strength <= 0) return;
+  if (_colorOverlayTmp.width !== W) _colorOverlayTmp.width = W;
+  if (_colorOverlayTmp.height !== H) _colorOverlayTmp.height = H;
+  const source = ctx.getImageData(0, 0, W, H);
+  const opaque = _colorOverlayTmpCtx.createImageData(W, H);
+  const src=source.data,out=opaque.data;
+  for(let i=0;i<src.length;i+=4){
+    if(src[i+3]>0){out[i]=src[i];out[i+1]=src[i+1];out[i+2]=src[i+2];out[i+3]=255;}
   }
+  _colorOverlayTmpCtx.clearRect(0,0,W,H);
+  _colorOverlayTmpCtx.putImageData(opaque,0,0);
+  _colorOverlayTmpCtx.save();
+  _colorOverlayTmpCtx.globalAlpha=clamp(co.strength/100,0,1);
+  _colorOverlayTmpCtx.globalCompositeOperation=co.blendMode;
+  _colorOverlayTmpCtx.fillStyle=co.color;
+  _colorOverlayTmpCtx.fillRect(0,0,W,H);
+  _colorOverlayTmpCtx.restore();
+  const tinted=_colorOverlayTmpCtx.getImageData(0,0,W,H);
+  const pixels=tinted.data;
+  for(let i=0;i<pixels.length;i+=4){
+    const alpha=src[i+3];
+    if(alpha===0){pixels[i]=pixels[i+1]=pixels[i+2]=pixels[i+3]=0;}
+    else pixels[i+3]=alpha;
+  }
+  ctx.putImageData(tinted,0,0);
+}
+function applyGlobalEffectStack(ctx,W,H,scale) {
+  const effects=sanitizeEffects(App.effects);
+  const overlay=sanitizeColorOverlay(App.colorOverlay);
+  if (!hasActiveEffects(effects) && overlay.strength<=0) return;
+  const previewMode=!App.isExporting&&(App.isPreviewActive||scale<1);
+  if (hasActiveEffects(effects)) {
+    const data=ctx.getImageData(0,0,W,H);
+    applyEffectsToImageData(data,effects,createDefaultAdjustments(),{skipExpensive:previewMode,resolutionScale:scale,noiseSeed:5308766});
+    ctx.putImageData(data,0,0);
+  }
+  applyColorOverlayToCanvas(ctx,W,H,overlay);
 }
 
-/**
- * Draw the base (background) layer with adjustments + filter + effects + base transform.
- */
-function drawBaseLayer(target, tctx, layer, W, H, scale) {
-  // 1) Render layer canvas with base transform into a temp canvas
-  const tmp = getComposeTmp(W, H);
-  const tx = _composeTmpCtx;
-  tx.clearRect(0, 0, W, H);
-
-  // For export at supra-workspace resolutions, draw the original image directly
-  // so we don't upsample an already-rasterized lo-res base. Falls back to the
-  // working layer canvas otherwise.
-  const useOriginal = App.isExporting && scale > 1
-    && layer.meta && layer.meta.originalImage
-    && layer.meta.originalImage.complete !== false;
-
-  // apply base transform (rotation/flip)
-  tx.save();
-  tx.translate(W/2, H/2);
-  if (App.rotation) tx.rotate(App.rotation * Math.PI / 180);
-  tx.scale(App.flipH ? -1 : 1, App.flipV ? -1 : 1);
-  if (useOriginal) {
-    tx.imageSmoothingEnabled = true;
-    tx.imageSmoothingQuality = 'high';
-    tx.drawImage(layer.meta.originalImage, -W/2, -H/2, W, H);
-  } else {
-    tx.drawImage(layer.canvas, -W/2, -H/2, W, H);
+function composeLayers(target,tctx,W,H,scale=1) {
+  tctx.clearRect(0,0,W,H);
+  const bg=backgroundLayer();
+  const bgIdx=bg?indexOfLayer(bg.id):-1;
+  for(let i=0;i<App.layers.length;i++){
+    const layer=App.layers[i];
+    if(!layer.visible||layer.opacity<=0)continue;
+    if(i===bgIdx)drawBaseLayer(target,tctx,layer,W,H,scale);
+    else drawLayer(target,tctx,layer,W,H,scale);
   }
+  applyGlobalColorTools(tctx,W,H);
+  applyGlobalEffectStack(tctx,W,H,scale);
+}
+
+function drawBaseLayer(target,tctx,layer,W,H,scale) {
+  ensureLayerEffectState(layer);
+  const tmp=getComposeTmp(W,H),tx=_composeTmpCtx;
+  tx.clearRect(0,0,W,H);
+  const useOriginal=App.isExporting&&scale>1&&layer.meta&&layer.meta.originalImage&&layer.meta.originalImage.complete!==false;
+  tx.save();
+  tx.translate(W/2,H/2);
+  if(App.rotation)tx.rotate(App.rotation*Math.PI/180);
+  tx.scale(App.flipH?-1:1,App.flipV?-1:1);
+  if(useOriginal){
+    tx.imageSmoothingEnabled=true;tx.imageSmoothingQuality='high';
+    tx.drawImage(layer.meta.originalImage,-W/2,-H/2,W,H);
+  }else tx.drawImage(layer.canvas,-W/2,-H/2,W,H);
   tx.restore();
 
-  // 2) Apply filter preset (as additional adjustment values)
-  const filt = getFilter(App.activeFilter);
-  let merged = { ...App.adjustments };
-  if (filt.adj && App.filterStrength > 0) {
-    const f = App.filterStrength / 100;
-    for (const [k, v] of Object.entries(filt.adj)) {
-      if (merged[k] != null) merged[k] = clamp(merged[k] + v * f, -300, 300);
+  const filter=getFilter(App.activeFilter);
+  const merged={...App.adjustments};
+  if(filter.adj&&App.filterStrength>0){
+    const strength=App.filterStrength/100;
+    for(const [key,value] of Object.entries(filter.adj)){
+      if(merged[key]!=null)merged[key]=clamp(merged[key]+value*strength,-300,300);
     }
   }
+  const previewMode=!App.isExporting&&(App.isPreviewActive||scale<1);
+  const data=tx.getImageData(0,0,W,H);
+  applyAdjustmentsToImageData(data,merged,{skipExpensive:previewMode,resolutionScale:scale});
+  if(filter.tone&&App.filterStrength>0)applyToneShiftToImageData(data,filter.tone,App.filterStrength);
+  applyEffectsToImageData(data,layer.effects,merged,{skipExpensive:previewMode,resolutionScale:scale,noiseSeed:layer.id});
+  tx.putImageData(data,0,0);
+  applyColorOverlayToCanvas(tx,W,H,layer.colorOverlay);
+  applyMaskTo(tmp,layer);
 
-  // 3) Pixel pass — apply adjustments + tone shift + effects
-  // For export we always run full-quality regardless of render scale.
-  const previewMode = !App.isExporting && (App.isPreviewActive || scale < 1);
-  const imgData = tx.getImageData(0, 0, W, H);
-  applyAdjustmentsToImageData(imgData, merged, { skipExpensive: previewMode });
-  if (filt.tone && App.filterStrength > 0) {
-    applyToneShiftToImageData(imgData, filt.tone, App.filterStrength);
-  }
-  if (App.effectScope === 'global' || layer.id === App.activeLayerId) applyEffectsToImageData(imgData, App.effects, merged, { skipExpensive: previewMode });
-  tx.putImageData(imgData, 0, 0);
-
-  // 3b) Color overlay (tint) — applied via blend mode on top of the base pixels.
-  // Crucially: must respect base alpha so fully-transparent pixels stay transparent
-  // (e.g., after Background Removal). fillRect with a blend mode paints into every
-  // pixel including alpha=0 regions, so we snapshot the pre-tint alpha and restore
-  // it after the fill. We also blend the tint contribution toward 0 in proportion
-  // to the source alpha for semi-transparent pixels, which gives a natural fade.
-  const co = App.colorOverlay;
-  if (co && co.strength > 0) {
-    // Snapshot alpha + RGB before tint so we can restore on transparent pixels.
-    const preTint = tx.getImageData(0, 0, W, H);
-    tx.save();
-    tx.globalAlpha = clamp(co.strength / 100, 0, 1);
-    tx.globalCompositeOperation = co.blendMode || 'overlay';
-    tx.fillStyle = co.color || '#ffffff';
-    tx.fillRect(0, 0, W, H);
-    tx.restore();
-    const postTint = tx.getImageData(0, 0, W, H);
-    const preD = preTint.data, postD = postTint.data;
-    for (let i = 0; i < preD.length; i += 4) {
-      const srcA = preD[i + 3];
-      if (srcA === 0) {
-        // Fully transparent: erase any tint that bled in.
-        postD[i] = 0; postD[i + 1] = 0; postD[i + 2] = 0; postD[i + 3] = 0;
-      } else if (srcA < 255) {
-        // Semi-transparent: scale the tint contribution by alpha (smooth edges
-        // get a proportionally lighter tint), and restore the original alpha.
-        const a = srcA / 255;
-        postD[i]     = Math.round(preD[i]     * (1 - a) + postD[i]     * a);
-        postD[i + 1] = Math.round(preD[i + 1] * (1 - a) + postD[i + 1] * a);
-        postD[i + 2] = Math.round(preD[i + 2] * (1 - a) + postD[i + 2] * a);
-        postD[i + 3] = srcA;
-      } else {
-        // Fully opaque: alpha is unchanged (already 255 in postD as well).
-        postD[i + 3] = 255;
-      }
-    }
-    tx.putImageData(postTint, 0, 0);
-  }
-
-  // 4) Apply mask if any
-  applyMaskTo(tmp, layer);
-
-  // 5) Draw to target with layer's opacity/blend/position
   tctx.save();
-  tctx.globalAlpha = layer.opacity;
-  tctx.globalCompositeOperation = layer.blendMode || 'source-over';
-  tctx.drawImage(tmp, 0, 0);
+  tctx.globalAlpha=layer.opacity;
+  tctx.globalCompositeOperation=layer.blendMode||'source-over';
+  tctx.drawImage(tmp,0,0);
   tctx.restore();
 }
 
-/**
- * Draw a non-base layer.
- * For 'text' layers, the layer.canvas can be smaller than the workspace —
- * we draw it centered on (layer.x, layer.y) at native pixel dims (× layer.scale).
- * For other layers, the canvas is assumed to be the workspace size and
- * stretched into render-target W x H.
- */
-function drawLayer(target, tctx, layer, W, H, scale) {
-  // Build effective canvas with transform + mask in a temp canvas
-  const tmp = getComposeTmp(W, H);
-  const tx = _composeTmpCtx;
-  tx.clearRect(0, 0, W, H);
-
-  tx.save();
-  // apply layer transform: translation (scaled to render size), rotation, scale
-  const cx = W/2 + layer.x * scale;
-  const cy = H/2 + layer.y * scale;
-  tx.translate(cx, cy);
-  if (layer.rotation) tx.rotate(layer.rotation * Math.PI / 180);
-  if (layer.scale !== 1) tx.scale(layer.scale, layer.scale);
-  if (layer.type === 'text' || layer.type === 'shape') {
-    // Text / shape layer: draw native canvas centered, scaled by the *workspace -> render* scale
-    const cw = layer.canvas.width;
-    const ch = layer.canvas.height;
-    tx.drawImage(layer.canvas, -cw/2 * scale, -ch/2 * scale, cw * scale, ch * scale);
-  } else {
-    tx.drawImage(layer.canvas, -W/2, -H/2, W, H);
-  }
-  tx.restore();
-
-  // Optional layer-scoped effects. The base/background path handles its own pass.
-  if (((App.effectScope === 'layer' && layer.id === App.activeLayerId) || App.effectScope === 'global') && !layer.locked && hasActiveEffects()) {
-    const imgData = tx.getImageData(0, 0, W, H);
-    applyEffectsToImageData(imgData, App.effects, createDefaultAdjustments(), { skipExpensive: App.isPreviewActive || scale < 1 });
-    tx.putImageData(imgData, 0, 0);
+function drawLayer(target,tctx,layer,W,H,scale) {
+  ensureLayerEffectState(layer);
+  const tmp=getComposeTmp(W,H),tx=_composeTmpCtx;
+  tx.clearRect(0,0,W,H);
+  if(layer.type==='frame'){
+    const pct=clamp(layer.meta.widthPct==null?5:layer.meta.widthPct,0,FRAME_MAX_PCT);
+    const fw=Math.max(2,Math.round(Math.min(W,H)*pct/100));
+    drawFrame(tx,W,H,fw,layer.meta.color||'#ffffff',layer.meta.preset||'none');
+  }else{
+    tx.save();
+    const cx=W/2+layer.x*scale,cy=H/2+layer.y*scale;
+    tx.translate(cx,cy);
+    if(layer.rotation)tx.rotate(layer.rotation*Math.PI/180);
+    if(layer.scale!==1)tx.scale(layer.scale,layer.scale);
+    if(layer.type==='text'||layer.type==='shape'){
+      const cw=layer.canvas.width,ch=layer.canvas.height;
+      tx.drawImage(layer.canvas,-cw/2*scale,-ch/2*scale,cw*scale,ch*scale);
+    }else tx.drawImage(layer.canvas,-W/2,-H/2,W,H);
+    tx.restore();
   }
 
-  // mask
-  applyMaskTo(tmp, layer);
-
+  const previewMode=!App.isExporting&&(App.isPreviewActive||scale<1);
+  if(hasActiveEffects(layer.effects)){
+    const data=tx.getImageData(0,0,W,H);
+    applyEffectsToImageData(data,layer.effects,createDefaultAdjustments(),{skipExpensive:previewMode,resolutionScale:scale,noiseSeed:layer.id});
+    tx.putImageData(data,0,0);
+  }
+  applyColorOverlayToCanvas(tx,W,H,layer.colorOverlay);
+  applyMaskTo(tmp,layer);
   tctx.save();
-  tctx.globalAlpha = layer.opacity;
-  tctx.globalCompositeOperation = layer.blendMode || 'source-over';
-  tctx.drawImage(tmp, 0, 0);
+  tctx.globalAlpha=layer.opacity;
+  tctx.globalCompositeOperation=layer.blendMode||'source-over';
+  tctx.drawImage(tmp,0,0);
   tctx.restore();
 }
 
@@ -4555,7 +4789,15 @@ function applyMaskTo(canvas, layer) {
   ctx.restore();
 }
 
-function hasActiveEffects() { return Object.values(App.effects || {}).some(v => Number(v) !== 0); }
+function hasActiveEffects(effects=App.effects) { return Object.values(effects || {}).some(value => Number(value) !== 0); }
+function hasMemoryHeavyEffects() {
+  const keys=['denoise','structure','tiltShift','blur','bloom','halation'];
+  const stacks=[App.effects,...App.layers.map(layer=>layer.effects)];
+  return stacks.some(stack=>keys.some(key=>Number(stack&&stack[key])>0));
+}
+function hasAnyPixelEffects() {
+  return hasActiveEffects(App.effects)||App.layers.some(layer=>hasActiveEffects(layer.effects));
+}
 
 /* ================================================================
    FIT / PAN / ZOOM
@@ -4783,7 +5025,9 @@ els.welcomeThemeBtn.addEventListener('click', () => {
 els.resetBtn.addEventListener('click', () => {
   if (!App.layers.length) return;
   App.adjustments = createDefaultAdjustments();
+  resetProColorState();
   App.effects = createDefaultEffects();
+  App.layers.forEach(layer => { layer.effects = createDefaultEffects(); layer.colorOverlay = createDefaultColorOverlay(); });
   App.colorOverlay = { color: '#7c5cff', strength: 0, blendMode: 'overlay' };
   App.activeFilter = 'none';
   App.filterStrength = 100;
@@ -4804,9 +5048,8 @@ function snapshotLayers() {
     let canvasData = null;
     let maskData = null;
     try {
-      // Skip storing bitmap for text layers — they re-render from meta.
-      // Shape/frame layers also re-render from meta, but we store the bitmap for cheap restore.
-      if (l.type !== 'text') {
+      // Text and procedural frames re-render from metadata.
+      if (l.type !== 'text' && l.type !== 'frame') {
         canvasData = l.canvas.toDataURL('image/png');
       }
       if (l.mask) maskData = l.mask.toDataURL('image/png');
@@ -4834,6 +5077,8 @@ function snapshotLayers() {
       rotation: l.rotation,
       maskInverted: l.maskInverted,
       locked: l.locked,
+      effects: { ...sanitizeEffects(l.effects) },
+      colorOverlay: { ...sanitizeColorOverlay(l.colorOverlay) },
       meta: safeMeta,
       canvasData,
       maskData,
@@ -4842,6 +5087,7 @@ function snapshotLayers() {
 }
 
 function pushHistory() {
+  if (typeof _historyTimer !== 'undefined' && _historyTimer) { clearTimeout(_historyTimer); _historyTimer = null; }
   const pixelLayerCount = Math.max(1, App.layers.filter(layer => layer.type !== 'text' && layer.type !== 'shape' && layer.type !== 'frame').length);
   const historyPressure = App.workW * App.workH * pixelLayerCount;
   const lowMemoryDevice = (Number(navigator.deviceMemory) || 4) <= 4;
@@ -4850,7 +5096,10 @@ function pushHistory() {
     : (historyPressure > 28000000 ? 6 : historyPressure > 12000000 ? 10 : historyPressure > 6000000 ? 16 : 30);
   const snap = {
     adjustments: { ...App.adjustments },
-    effects: { ...App.effects },
+    effects: { ...sanitizeEffects(App.effects) },
+    curves: sanitizeCurves(App.curves),
+    colorMix: sanitizeColorMix(App.colorMix),
+    effectScope: App.effectScope === 'global' ? 'global' : 'layer',
     filter: App.activeFilter,
     filterStrength: App.filterStrength,
     rotation: App.rotation,
@@ -4860,6 +5109,8 @@ function pushHistory() {
     layers: snapshotLayers(),
     workW: App.workW,
     workH: App.workH,
+    imgW: App.imgW,
+    imgH: App.imgH,
     colorOverlay: { ...App.colorOverlay },
     framePreset: App.framePreset,
     frameWidthPct: App.frameWidthPct,
@@ -4881,16 +5132,22 @@ let _historyRestoreToken = 0;
 
 function restoreFromSnap(snap) {
   const restoreToken = ++_historyRestoreToken;
-  App.adjustments = { ...snap.adjustments };
-  App.effects = { ...createDefaultEffects(), ...(snap.effects || {}) };
-  App.activeFilter = snap.filter;
-  App.filterStrength = snap.filterStrength;
+  App.adjustments = sanitizeAdjustments(snap.adjustments);
+  App.effects = sanitizeEffects(snap.effects);
+  App.curves = sanitizeCurves(snap.curves);
+  App.colorMix = sanitizeColorMix(snap.colorMix);
+  invalidateProColorCache();
+  App.effectScope = snap.effectScope === 'global' ? 'global' : 'layer';
+  App.activeFilter = getFilter(snap.filter).id;
+  App.filterStrength = clamp(Number(snap.filterStrength) || 0, 0, 100);
   App.rotation = snap.rotation;
   App.flipH = snap.flipH;
   App.flipV = snap.flipV;
   App.workW = snap.workW;
   App.workH = snap.workH;
-  if (snap.colorOverlay) App.colorOverlay = { ...snap.colorOverlay };
+  App.imgW = Number.isFinite(Number(snap.imgW)) ? Number(snap.imgW) : App.workW;
+  App.imgH = Number.isFinite(Number(snap.imgH)) ? Number(snap.imgH) : App.workH;
+  App.colorOverlay = sanitizeColorOverlay(snap.colorOverlay);
   if (snap.framePreset != null) App.framePreset = snap.framePreset;
   if (snap.frameWidthPct != null) App.frameWidthPct = snap.frameWidthPct;
   if (snap.frameColor != null) App.frameColor = snap.frameColor;
@@ -4912,71 +5169,77 @@ function restoreFromSnap(snap) {
   els.interactCanvas.height = App.workH;
   setupPreview();
 
-  // Reconstruct layers (async due to image decoding)
+  // Reconstruct layers (async due to image decoding). Canvas and mask restore
+  // share one completion path so masks survive on text, shape, frame, and raster layers.
   const newLayers = [];
-  const promises = snap.layers.map((ls, idx) => new Promise(res => {
+  const promises = snap.layers.map((ls, idx) => new Promise(resolve => {
     const layer = {
       id: ls.id, name: ls.name, type: ls.type,
       canvas: (ls.type === 'text' || ls.type === 'shape') ? document.createElement('canvas') : createBlankLayerCanvas(),
       visible: ls.visible, opacity: ls.opacity, blendMode: ls.blendMode,
       x: ls.x, y: ls.y, scale: ls.scale, rotation: ls.rotation,
       mask: null, maskInverted: ls.maskInverted,
-      locked: ls.locked, meta: { ...ls.meta },
+      locked: ls.locked,
+      effects: sanitizeEffects(ls.effects),
+      colorOverlay: sanitizeColorOverlay(ls.colorOverlay),
+      meta: { ...ls.meta },
     };
     newLayers[idx] = layer;
-    // For text layers we re-render rather than restoring the bitmap, so the canvas
-    // dims are always in sync with the current meta.
+
+    const finishWithMask = () => {
+      if (!ls.maskData) { resolve(); return; }
+      const image = new Image();
+      image.onload = () => {
+        const mask = createBlankLayerCanvas();
+        mask.getContext('2d').drawImage(image, 0, 0, App.workW, App.workH);
+        layer.mask = mask;
+        resolve();
+      };
+      image.onerror = resolve;
+      image.src = ls.maskData;
+    };
+
     if (ls.type === 'text') {
       renderTextLayer(layer);
-      return res();
-    }
-    // Shape layers: prefer to restore from canvasData (cheap) but fallback to re-render.
-    if (ls.type === 'shape') {
-      if (ls.canvasData) {
-        const img = new Image();
-        img.onload = () => {
-          layer.canvas.width = img.width;
-          layer.canvas.height = img.height;
-          layer.canvas.getContext('2d').drawImage(img, 0, 0);
-          res();
-        };
-        img.onerror = () => { renderShapeLayer(layer); res(); };
-        img.src = ls.canvasData;
-      } else {
-        renderShapeLayer(layer);
-        res();
-      }
+      finishWithMask();
       return;
     }
-    // Frame layers: re-render from meta+workspace dims (cheap and stays in sync with workW/H)
+    if (ls.type === 'shape') {
+      if (!ls.canvasData) {
+        renderShapeLayer(layer);
+        finishWithMask();
+        return;
+      }
+      const image = new Image();
+      image.onload = () => {
+        layer.canvas.width = image.width;
+        layer.canvas.height = image.height;
+        layer.canvas.getContext('2d').drawImage(image, 0, 0);
+        finishWithMask();
+      };
+      image.onerror = () => { renderShapeLayer(layer); finishWithMask(); };
+      image.src = ls.canvasData;
+      return;
+    }
     if (ls.type === 'frame') {
       renderFrameLayer(layer);
-      return res();
+      finishWithMask();
+      return;
     }
-    if (!ls.canvasData) return res();
-    const img = new Image();
-    img.onload = () => {
+    if (!ls.canvasData) {
+      finishWithMask();
+      return;
+    }
+    const image = new Image();
+    image.onload = () => {
       const ctx = layer.canvas.getContext('2d');
       ctx.clearRect(0, 0, App.workW, App.workH);
-      ctx.drawImage(img, 0, 0);
-      if (ls.maskData) {
-        const m = createBlankLayerCanvas();
-        const mi = new Image();
-        mi.onload = () => {
-          m.getContext('2d').drawImage(mi, 0, 0);
-          layer.mask = m;
-          res();
-        };
-        mi.onerror = res;
-        mi.src = ls.maskData;
-      } else {
-        res();
-      }
+      ctx.drawImage(image, 0, 0, App.workW, App.workH);
+      finishWithMask();
     };
-    img.onerror = res;
-    img.src = ls.canvasData;
-  }));
-  Promise.all(promises).then(() => {
+    image.onerror = finishWithMask;
+    image.src = ls.canvasData;
+  }));  Promise.all(promises).then(() => {
     if (restoreToken !== _historyRestoreToken) return;
     App.layers = newLayers;
     setActiveLayer(snap.activeLayerId);
@@ -5012,6 +5275,13 @@ els.redoBtn.addEventListener('click', redo);
 
 // Debounced history for slider drags
 let _historyTimer = null;
+function flushPendingHistory() {
+  if (!_historyTimer) return false;
+  clearTimeout(_historyTimer);
+  _historyTimer = null;
+  pushHistory();
+  return true;
+}
 function pushHistoryDebounced(delay=600) {
   clearTimeout(_historyTimer);
   _historyTimer = setTimeout(pushHistory, delay);
@@ -5026,7 +5296,8 @@ function setTool(tool) {
     t.classList.toggle('active', t.dataset.tool === tool);
   });
   const mobileMore = document.getElementById('mobileMoreBtn');
-  if (mobileMore) mobileMore.classList.toggle('active', ['effect','crop','shape','text','frame'].includes(tool));
+  if (mobileMore) mobileMore.classList.toggle('active', ['crop','draw','shape','text','frame'].includes(tool));
+  document.querySelectorAll('.mobile-tool-choice').forEach(choice => choice.classList.toggle('active', choice.dataset.mobileTool === tool));
   els.cropOverlay.classList.toggle('active', tool === 'crop');
   els.interactCanvas.classList.toggle('active', tool === 'draw' || tool === 'shape');
   if (tool === 'text') {
@@ -5055,17 +5326,11 @@ function setTool(tool) {
   } else {
     App.shapeSelectionId = null;
   }
-  // Layers tool: pick the topmost generic layer (or use current active layer
-  // if it's a generic layer) as the warp-box subject. Other tools: clear.
+  // Opening Layers must never silently change the selected layer. Generic
+  // layers get a transform box; text/shape stay selected in the list.
   if (tool === 'layers') {
     const cur = activeLayer();
-    if (cur && isGenericLayerType(cur.type)) {
-      App.layerSelectionId = cur.id;
-    } else {
-      const lastGen = [...App.layers].reverse().find(l => isGenericLayerType(l.type));
-      App.layerSelectionId = lastGen ? lastGen.id : null;
-      if (lastGen) setActiveLayer(lastGen.id);
-    }
+    App.layerSelectionId = cur && isGenericLayerType(cur.type) ? cur.id : null;
   } else {
     App.layerSelectionId = null;
   }
@@ -5161,6 +5426,15 @@ function preserveScrollX(selector, rebuild) {
   }
 }
 
+function mountPinnedPanelControl(row, body) {
+  if (!isDesktopLayout() && els.cpPinnedControls) {
+    els.cpPinnedControls.hidden = false;
+    els.cpPinnedControls.appendChild(row);
+  } else {
+    body.appendChild(row);
+  }
+}
+
 let _toolPanelLastTool = null;
 function updateToolPanel() {
   const body = els.controlBody;
@@ -5170,6 +5444,10 @@ function updateToolPanel() {
   const scrollSnap = sameTool ? captureScrollPositions() : null;
   body.innerHTML = '';
   actions.innerHTML = '';
+  if (els.cpPinnedControls) {
+    els.cpPinnedControls.replaceChildren();
+    els.cpPinnedControls.hidden = true;
+  }
 
   switch (App.activeTool) {
     case 'adjust':   buildAdjustPanel(body, actions); break;
@@ -5332,6 +5610,7 @@ function syncDesktopLayoutClass() {
     document.body.classList.remove('desktop-layout', 'layers-pinned');
   }
   if (want !== has) {
+    if (want && typeof closeMobileToolTray === 'function') closeMobileToolTray(true);
     updateToolPanel();
     if (App.layers && App.layers.length) requestAnimationFrame(() => fitCanvasToView());
   }
@@ -5576,72 +5855,122 @@ function setupSlider(row, meta, opts) {
 /* ================================================================
    ADJUST PANEL
    ================================================================ */
-function buildAdjustPanel(body, actions) {
-  els.cpTitle.innerHTML = 'Adjustments';
-
-  body.appendChild(buildHistogramCard());
-
-  const adjId = App.activeAdjust;
-  const meta = ADJUSTMENTS.find(ad => ad.id === adjId) || ADJUSTMENTS[0];
-  const val = App.adjustments[meta.id];
-
-  // Active slider
-  const sliderRow = document.createElement('div');
-  sliderRow.className = 'slider-row';
-  sliderRow.innerHTML = `
-    <div class="slider-label">${meta.name}</div>
-    <div class="slider-track">
-      ${meta.bipolar ? '<div class="mid-mark"></div>' : ''}
-      <div class="slider-fill ${meta.bipolar ? 'bipolar' : ''}"></div>
-      <input type="range" min="${meta.min}" max="${meta.max}" step="1" value="${val}">
-    </div>
-    <div class="slider-value">${formatValue(val, meta.bipolar)}</div>
-  `;
-  body.appendChild(sliderRow);
-  setupSlider(sliderRow, { ...meta, defaultValue: meta.defaultValue != null ? meta.defaultValue : (meta.bipolar ? 0 : meta.min) }, {
-    onInput: (v) => {
-      App.adjustments[meta.id] = v;
-      requestRender();
-      updateAdjustTiles();
-    },
-    onCommit: (v) => {
-      App.adjustments[meta.id] = v;
-      requestRender();
-      updateAdjustTiles();
-    },
+function buildAdjustSectionTabs() {
+  const tabs=document.createElement('div');
+  tabs.className='adjust-section-tabs';tabs.setAttribute('role','tablist');tabs.setAttribute('aria-label','Adjustment sections');
+  [['basic','Basic'],['curves','Curves'],['mix','Color Mix']].forEach(([id,label])=>{
+    const button=document.createElement('button');button.type='button';button.textContent=label;button.dataset.section=id;
+    button.classList.toggle('active',App.adjustSection===id);button.setAttribute('role','tab');button.setAttribute('aria-selected',String(App.adjustSection===id));
+    button.addEventListener('click',()=>{App.adjustSection=id;App.curvePointIndex=null;updateToolPanel();});
+    tabs.appendChild(button);
   });
-
-  // Tiles
-  const grid = document.createElement('div');
-  grid.className = 'h-scroll adjust-row';
-  ADJUSTMENTS.forEach(adj => {
-    const tile = document.createElement('button');
-    tile.className = 'adjust-tile' + (adj.id === App.activeAdjust ? ' active' : '');
-    tile.dataset.id = adj.id;
-    const cur = App.adjustments[adj.id];
-    tile.innerHTML = `
-      <div class="adjust-tile-icon">${ADJUST_ICONS[adj.icon] || ''}</div>
-      <span>${adj.name}</span>
-      ${cur !== (adj.defaultValue != null ? adj.defaultValue : 0) ? '<div class="adjust-tile-badge">' + (cur > 0 ? '+' : '') + cur + '</div>' : ''}
-    `;
-    tile.addEventListener('click', () => {
-      App.activeAdjust = adj.id;
-      updateToolPanel();
-    });
-    grid.appendChild(tile);
-  });
-  body.appendChild(grid);
-
-  actions.innerHTML = '<button class="cp-action" id="resetAdjust">Reset</button>';
-  $('resetAdjust').addEventListener('click', () => {
-    App.adjustments = createDefaultAdjustments();
-    renderFull();
-    updateToolPanel();
-    pushHistory();
-    toast('Adjustments reset');
-  });
+  return tabs;
 }
 
+function buildAdjustPanel(body, actions) {
+  els.cpTitle.textContent='Adjustments';
+  if(!['basic','curves','mix'].includes(App.adjustSection))App.adjustSection='basic';
+  body.appendChild(buildAdjustSectionTabs());
+  if(App.adjustSection==='curves')buildCurvesPanel(body,actions);
+  else if(App.adjustSection==='mix')buildColorMixPanel(body,actions);
+  else buildBasicAdjustPanel(body,actions);
+}
+
+function buildBasicAdjustPanel(body, actions) {
+  body.appendChild(buildHistogramCard());
+  const adjId=App.activeAdjust;
+  const meta=ADJUSTMENTS.find(ad=>ad.id===adjId)||ADJUSTMENTS[0];
+  const val=App.adjustments[meta.id];
+  const sliderRow=document.createElement('div');
+  sliderRow.className='slider-row';
+  sliderRow.innerHTML=`
+    <div class="slider-label">${meta.name}</div>
+    <div class="slider-track">${meta.bipolar?'<div class="mid-mark"></div>':''}<div class="slider-fill ${meta.bipolar?'bipolar':''}"></div><input type="range" min="${meta.min}" max="${meta.max}" step="1" value="${val}" aria-label="${meta.name}"></div>
+    <div class="slider-value">${formatValue(val,meta.bipolar)}</div>`;
+  body.appendChild(sliderRow);
+  setupSlider(sliderRow,{...meta,defaultValue:meta.defaultValue!=null?meta.defaultValue:(meta.bipolar?0:meta.min)},{
+    onInput:value=>{App.adjustments[meta.id]=value;requestRender();updateAdjustTiles();},
+    onCommit:value=>{App.adjustments[meta.id]=value;requestRender();updateAdjustTiles();},
+  });
+  const grid=document.createElement('div');grid.className='h-scroll adjust-row';
+  ADJUSTMENTS.forEach(adj=>{
+    const tile=document.createElement('button');
+    tile.className='adjust-tile'+(adj.id===App.activeAdjust?' active':'');tile.dataset.id=adj.id;
+    const cur=App.adjustments[adj.id],neutral=adj.defaultValue!=null?adj.defaultValue:0;
+    tile.innerHTML=`<div class="adjust-tile-icon">${ADJUST_ICONS[adj.icon]||''}</div><span>${adj.name}</span>${cur!==neutral?'<div class="adjust-tile-badge">'+(cur>0?'+':'')+cur+'</div>':''}`;
+    tile.addEventListener('click',()=>{App.activeAdjust=adj.id;updateToolPanel();});grid.appendChild(tile);
+  });
+  body.appendChild(grid);
+  actions.innerHTML='<button class="cp-action" id="resetAdjust">Reset</button>';
+  $('resetAdjust').addEventListener('click',()=>{App.adjustments=createDefaultAdjustments();renderFull();updateToolPanel();pushHistory();toast('Basic adjustments reset');});
+}
+
+function drawCurveEditor(canvas) {
+  const ctx=canvas.getContext('2d'),W=canvas.width,H=canvas.height;
+  const styles=getComputedStyle(document.documentElement);
+  const surface=styles.getPropertyValue('--surface-2').trim()||'#151821';
+  const grid=styles.getPropertyValue('--border').trim()||'rgba(255,255,255,.12)';
+  const muted=styles.getPropertyValue('--text-3').trim()||'#777';
+  const channel=CURVE_CHANNELS.find(item=>item.id===App.curveChannel)||CURVE_CHANNELS[0];
+  const points=App.curves[channel.id],lut=buildCurveLUT(points);
+  ctx.clearRect(0,0,W,H);ctx.fillStyle=surface;ctx.fillRect(0,0,W,H);
+  ctx.strokeStyle=grid;ctx.lineWidth=1;
+  for(let step=1;step<4;step++){const x=W*step/4,y=H*step/4;ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
+  ctx.save();ctx.setLineDash([7,7]);ctx.strokeStyle=muted;ctx.globalAlpha=.5;ctx.beginPath();ctx.moveTo(0,H);ctx.lineTo(W,0);ctx.stroke();ctx.restore();
+  ctx.strokeStyle=channel.color;ctx.lineWidth=4;ctx.lineJoin='round';ctx.lineCap='round';ctx.beginPath();
+  for(let x=0;x<256;x++){const px=x/255*W,py=(1-lut[x]/255)*H;if(x===0)ctx.moveTo(px,py);else ctx.lineTo(px,py);}ctx.stroke();
+  points.forEach((point,index)=>{const px=point[0]/255*W,py=(1-point[1]/255)*H;ctx.beginPath();ctx.arc(px,py,index===App.curvePointIndex?9:7,0,Math.PI*2);ctx.fillStyle=index===App.curvePointIndex?'#fff':channel.color;ctx.fill();ctx.lineWidth=3;ctx.strokeStyle=surface;ctx.stroke();});
+}
+
+function mutateCurvePoint(channelId,index,x,y) {
+  const points=App.curves[channelId].map(point=>[...point]);
+  if(index<0||index>=points.length)return false;
+  if(index===0)x=0;else if(index===points.length-1)x=255;else x=clamp(x,points[index-1][0]+1,points[index+1][0]-1);
+  points[index]=[clamp(Math.round(x),0,255),clamp(Math.round(y),0,255)];
+  App.curves[channelId]=points;invalidateProColorCache();return true;
+}
+
+function buildCurvesPanel(body, actions) {
+  App.curves=sanitizeCurves(App.curves);
+  if(!CURVE_CHANNELS.some(channel=>channel.id===App.curveChannel))App.curveChannel='rgb';
+  const channels=document.createElement('div');channels.className='curve-channel-tabs';channels.setAttribute('role','tablist');
+  CURVE_CHANNELS.forEach(channel=>{const button=document.createElement('button');button.type='button';button.textContent=channel.label;button.style.color=App.curveChannel===channel.id?'#fff':channel.color;button.classList.toggle('active',App.curveChannel===channel.id);button.addEventListener('click',()=>{App.curveChannel=channel.id;App.curvePointIndex=null;updateToolPanel();});channels.appendChild(button);});
+  body.appendChild(channels);
+  const editor=document.createElement('div');editor.className='curve-editor';
+  const canvas=document.createElement('canvas');canvas.className='curve-editor-canvas';canvas.width=640;canvas.height=480;canvas.tabIndex=0;canvas.setAttribute('role','application');canvas.setAttribute('aria-label','Tone curve editor. Tap to add and drag points.');editor.appendChild(canvas);body.appendChild(editor);
+  const toolbar=document.createElement('div');toolbar.className='curve-toolbar';toolbar.innerHTML='<span>Tap to add · drag to shape</span><div class="curve-toolbar-actions"><button type="button" data-curve-remove>Remove</button><button type="button" data-curve-reset>Reset</button></div>';body.appendChild(toolbar);
+  const presets=document.createElement('div');presets.className='curve-presets';
+  const curvePresets={Contrast:[[0,0],[56,38],[128,128],[200,220],[255,255]],Matte:[[0,20],[52,50],[128,132],[208,220],[255,244]],Soft:[[0,8],[64,72],[128,130],[192,190],[255,248]]};
+  Object.entries(curvePresets).forEach(([label,points])=>{const button=document.createElement('button');button.type='button';button.className='curve-preset';button.textContent=label;button.addEventListener('click',()=>{App.curves[App.curveChannel]=points.map(point=>[...point]);App.curvePointIndex=null;invalidateProColorCache();drawCurveEditor(canvas);renderFull();pushHistory();});presets.appendChild(button);});body.appendChild(presets);
+  const remove=toolbar.querySelector('[data-curve-remove]'),reset=toolbar.querySelector('[data-curve-reset]');
+  const updateRemove=()=>{const points=App.curves[App.curveChannel],index=App.curvePointIndex;remove.disabled=index==null||index<=0||index>=points.length-1;};
+  remove.addEventListener('click',()=>{const points=App.curves[App.curveChannel],index=App.curvePointIndex;if(index==null||index<=0||index>=points.length-1)return;App.curves[App.curveChannel]=points.filter((_,i)=>i!==index);App.curvePointIndex=null;invalidateProColorCache();drawCurveEditor(canvas);renderFull();pushHistory();updateRemove();});
+  reset.addEventListener('click',()=>{App.curves[App.curveChannel]=[[0,0],[255,255]];App.curvePointIndex=null;invalidateProColorCache();drawCurveEditor(canvas);renderFull();pushHistory();updateRemove();});
+  let pointerId=null,dirty=false;
+  const coords=event=>{const rect=canvas.getBoundingClientRect();return {x:clamp(Math.round((event.clientX-rect.left)/Math.max(1,rect.width)*255),0,255),y:clamp(Math.round((1-(event.clientY-rect.top)/Math.max(1,rect.height))*255),0,255),rect};};
+  canvas.addEventListener('pointerdown',event=>{event.preventDefault();const pos=coords(event),points=App.curves[App.curveChannel];let index=-1,best=Infinity;points.forEach((point,i)=>{const px=point[0]/255*pos.rect.width,py=(1-point[1]/255)*pos.rect.height,dist=Math.hypot(px-(event.clientX-pos.rect.left),py-(event.clientY-pos.rect.top));if(dist<best&&dist<=22){best=dist;index=i;}});if(index<0&&points.length<10){const next=[clamp(pos.x,1,254),pos.y];const updated=[...points,next].sort((a,b)=>a[0]-b[0]);App.curves[App.curveChannel]=updated;index=updated.indexOf(next);invalidateProColorCache();dirty=true;}App.curvePointIndex=index>=0?index:null;pointerId=event.pointerId;canvas.setPointerCapture(pointerId);App.isPreviewActive=true;drawCurveEditor(canvas);updateRemove();});
+  canvas.addEventListener('pointermove',event=>{if(pointerId!==event.pointerId||App.curvePointIndex==null)return;const pos=coords(event);if(mutateCurvePoint(App.curveChannel,App.curvePointIndex,pos.x,pos.y)){dirty=true;drawCurveEditor(canvas);requestRender();}});
+  const endPointer=event=>{if(pointerId!==event.pointerId)return;try{canvas.releasePointerCapture(pointerId);}catch(_){}pointerId=null;App.isPreviewActive=false;if(dirty){dirty=false;renderFull();pushHistory();}updateRemove();};canvas.addEventListener('pointerup',endPointer);canvas.addEventListener('pointercancel',endPointer);
+  canvas.addEventListener('keydown',event=>{const points=App.curves[App.curveChannel],index=App.curvePointIndex;if(index==null)return;if((event.key==='Delete'||event.key==='Backspace')&&index>0&&index<points.length-1){event.preventDefault();remove.click();return;}if(!['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(event.key))return;event.preventDefault();const step=event.shiftKey?10:1,[x,y]=points[index];const dx=event.key==='ArrowLeft'?-step:event.key==='ArrowRight'?step:0,dy=event.key==='ArrowDown'?-step:event.key==='ArrowUp'?step:0;if(mutateCurvePoint(App.curveChannel,index,x+dx,y+dy)){drawCurveEditor(canvas);requestRender();pushHistoryDebounced(250);}});
+  drawCurveEditor(canvas);updateRemove();
+  actions.innerHTML='<button class="cp-action" id="resetAllCurves">Reset all</button>';
+  $('resetAllCurves').addEventListener('click',()=>{App.curves=createDefaultCurves();App.curvePointIndex=null;invalidateProColorCache();renderFull();updateToolPanel();pushHistory();toast('Curves reset');});
+}
+
+function buildColorMixPanel(body, actions) {
+  App.colorMix=sanitizeColorMix(App.colorMix);
+  if(!COLOR_MIX_BANDS.some(band=>band.id===App.colorMixBand))App.colorMixBand='orange';
+  const bands=document.createElement('div');bands.className='color-mix-bands';bands.setAttribute('role','tablist');bands.setAttribute('aria-label','Color ranges');
+  COLOR_MIX_BANDS.forEach(band=>{const value=App.colorMix[band.id],applied=value.h||value.s||value.l;const button=document.createElement('button');button.type='button';button.className='color-mix-band'+(band.id===App.colorMixBand?' active':'')+(applied?' applied':'');button.style.setProperty('--band-color',band.color);button.title=band.label;button.setAttribute('aria-label',band.label);button.innerHTML='<span class="color-mix-dot"></span>';button.addEventListener('click',()=>{App.colorMixBand=band.id;updateToolPanel();});bands.appendChild(button);});body.appendChild(bands);
+  const currentBand=COLOR_MIX_BANDS.find(band=>band.id===App.colorMixBand),value=App.colorMix[currentBand.id];
+  const note=document.createElement('div');note.className='color-mix-note';note.textContent=`Editing ${currentBand.label} · changes blend smoothly into neighboring hues.`;body.appendChild(note);
+  const controls=document.createElement('div');controls.className='color-mix-controls';
+  [{id:'h',label:'Hue'},{id:'s',label:'Saturation'},{id:'l',label:'Luminance'}].forEach(control=>{const row=document.createElement('div');row.className='slider-row';row.innerHTML=`<div class="slider-label">${control.label}</div><div class="slider-track"><div class="mid-mark"></div><div class="slider-fill bipolar"></div><input type="range" min="-100" max="100" value="${value[control.id]}" aria-label="${currentBand.label} ${control.label}"></div><div class="slider-value">${formatValue(value[control.id],true)}</div>`;controls.appendChild(row);setupSlider(row,{bipolar:true,min:-100,max:100,defaultValue:0},{onInput:next=>{App.colorMix[currentBand.id][control.id]=next;invalidateProColorCache();requestRender();},onCommit:next=>{App.colorMix[currentBand.id][control.id]=next;invalidateProColorCache();requestRender();}});});body.appendChild(controls);
+  actions.innerHTML='<button class="cp-action" id="resetMixBand">Band</button><button class="cp-action" id="resetAllMix">All</button>';
+  $('resetMixBand').title='Reset selected color range';$('resetAllMix').title='Reset all color ranges';
+  $('resetMixBand').addEventListener('click',()=>{App.colorMix[currentBand.id]={h:0,s:0,l:0};invalidateProColorCache();renderFull();updateToolPanel();pushHistory();toast(currentBand.label+' mix reset');});
+  $('resetAllMix').addEventListener('click',()=>{App.colorMix=createDefaultColorMix();invalidateProColorCache();renderFull();updateToolPanel();pushHistory();toast('Color Mix reset');});
+}
 function updateAdjustTiles() {
   document.querySelectorAll('.adjust-tile').forEach(t => {
     const id = t.dataset.id;
@@ -5673,11 +6002,11 @@ function buildFilterPanel(body, actions) {
       <div class="slider-label">Strength</div>
       <div class="slider-track">
         <div class="slider-fill" style="width:${App.filterStrength}%"></div>
-        <input type="range" min="0" max="100" value="${App.filterStrength}">
+        <input type="range" min="0" max="100" value="${App.filterStrength}" aria-label="Filter strength">
       </div>
       <div class="slider-value">${App.filterStrength}</div>
     `;
-    body.appendChild(row);
+    mountPinnedPanelControl(row, body);
     setupSlider(row, { bipolar:false, min:0, max:100, defaultValue:100 }, {
       onInput: value => {
         App.filterStrength=value; requestRender();
@@ -5738,43 +6067,51 @@ function drawFilterThumb(canvas, filter) {
 /* ================================================================
    EFFECT PANEL
    ================================================================ */
-function buildEffectPanel(body, actions) {
-  els.cpTitle.innerHTML = 'Effects';
+function buildEffectPanel(body,actions){
+  const scoped=scopedEffectState();
+  const stack=scoped?scoped.effects:createDefaultEffects();
+  const scopeLabel=App.effectScope==='global'?'Composite':'Selected';
+  els.cpTitle.innerHTML=`Effects <span class="cp-title-val">${scopeLabel}</span>`;
   const scope=document.createElement('div');
   scope.className='scope-toggle';
-  scope.innerHTML=`<button data-scope="layer" class="${App.effectScope==='layer'?'active':''}">Layer</button><button data-scope="global" class="${App.effectScope==='global'?'active':''}">Global</button>`;
+  scope.innerHTML=`<button data-scope="layer" class="${App.effectScope==='layer'?'active':''}">Selected</button><button data-scope="global" class="${App.effectScope==='global'?'active':''}">Composite</button>`;
   actions.appendChild(scope);
-  scope.querySelectorAll('button').forEach(button=>button.addEventListener('click',()=>{App.effectScope=button.dataset.scope;updateToolPanel();requestRender();}));
+  scope.querySelectorAll('button').forEach(button=>button.addEventListener('click',()=>{
+    const next=button.dataset.scope;
+    if(next===App.effectScope)return;
+    App.effectScope=next;
+    updateToolPanel();requestRender();pushHistory();
+  }));
 
   let activeId=App.activeEffect;
-  if(!EFFECT_META.find(effect=>effect.id===activeId)) activeId=EFFECT_META[0].id;
+  if(!EFFECT_META.find(effect=>effect.id===activeId))activeId=EFFECT_META[0].id;
   App.activeEffect=activeId;
-  const meta=EFFECT_META.find(effect=>effect.id===activeId);
-  const current=App.effects[meta.id]||0;
-  const sliderRow=document.createElement('div');
-  sliderRow.className='slider-row effect-strength-sticky';
-  sliderRow.innerHTML=`
-    <div class="slider-label">${meta.name}</div>
-    <div class="slider-track"><div class="slider-fill" style="width:${current}%"></div><input type="range" min="0" max="${meta.max}" value="${current}"></div>
-    <div class="slider-value">${current}</div>
-  `;
-  body.appendChild(sliderRow);
-  function updateBadge(value){
-    const tile=body.querySelector(`[data-effect="${meta.id}"]`);
-    if(!tile)return;
-    let badge=tile.querySelector('.effect-value-badge');
-    if(value>0&&!badge){badge=document.createElement('span');badge.className='effect-value-badge';tile.appendChild(badge);}
-    if(badge){badge.textContent=value;badge.hidden=value<=0;}
+  if(!App.activeEffectExtra){
+    const meta=EFFECT_META.find(effect=>effect.id===activeId);
+    const current=stack[meta.id]||0;
+    const sliderRow=document.createElement('div');
+    sliderRow.className='slider-row effect-strength-sticky';
+    sliderRow.innerHTML=`
+      <div class="slider-label">${meta.name}</div>
+      <div class="slider-track"><div class="slider-fill" style="width:${current}%"></div><input type="range" min="0" max="${meta.max}" value="${current}" aria-label="${meta.name} strength"></div>
+      <div class="slider-value">${current}</div>
+    `;
+    mountPinnedPanelControl(sliderRow,body);
+    function updateBadge(value){
+      const tile=body.querySelector(`[data-effect="${meta.id}"]`);
+      if(!tile)return;
+      let badge=tile.querySelector('.effect-value-badge');
+      if(value>0&&!badge){badge=document.createElement('span');badge.className='effect-value-badge';tile.appendChild(badge);}
+      if(badge){badge.textContent=value;badge.hidden=value<=0;}
+    }
+    setupSlider(sliderRow,{bipolar:false,min:0,max:meta.max,defaultValue:0},{
+      onInput:value=>{stack[meta.id]=value;updateBadge(value);requestRender();},
+      onCommit:value=>{stack[meta.id]=value;updateBadge(value);requestRender();},
+    });
   }
-  setupSlider(sliderRow,{bipolar:false,min:0,max:meta.max,defaultValue:0},{
-    onInput:value=>{App.effects[meta.id]=value;updateBadge(value);requestRender();},
-    onCommit:value=>{App.effects[meta.id]=value;updateBadge(value);requestRender();},
-  });
-
-  const grid=document.createElement('div');
-  grid.className='effect-grid';
+  const grid=document.createElement('div');grid.className='effect-grid';
   EFFECT_META.forEach(effect=>{
-    const value=App.effects[effect.id]||0;
+    const value=stack[effect.id]||0;
     const tile=document.createElement('button');
     tile.dataset.effect=effect.id;
     tile.className='effect-tile'+(effect.id===activeId?' active':'')+(value>0?' applied':'');
@@ -5783,14 +6120,17 @@ function buildEffectPanel(body, actions) {
     grid.appendChild(tile);
   });
   body.appendChild(grid);
-
   buildEffectExtras(body);
+
   const clear=document.createElement('button');
   clear.className='cp-action';clear.textContent='Clear';actions.appendChild(clear);
   clear.addEventListener('click',()=>{
-    App.effects=createDefaultEffects();
-    App.colorOverlay={color:'#14b8a6',strength:0,blendMode:'overlay'};
-    renderFull();updateToolPanel();pushHistory();toast('Effects cleared');
+    if(App.effectScope==='global'){
+      App.effects=createDefaultEffects();App.colorOverlay=createDefaultColorOverlay();
+    }else if(scoped&&scoped.layer){
+      scoped.layer.effects=createDefaultEffects();scoped.layer.colorOverlay=createDefaultColorOverlay();
+    }
+    renderFull();updateToolPanel();pushHistory();toast(scopeLabel+' effects cleared');
   });
 }
 
@@ -5903,11 +6243,11 @@ function buildCropPanel(body, actions) {
     </button>
     <button class="tx-btn" data-tx="flipH">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
-      <span>Flip H</span>
+      <span>Photo H</span>
     </button>
     <button class="tx-btn" data-tx="flipV">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="transform:rotate(90deg);"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
-      <span>Flip V</span>
+      <span>Photo V</span>
     </button>
   `;
   body.appendChild(tx);
@@ -6132,216 +6472,246 @@ function updateCropOverlay() {
   });
 })();
 
+function makeSizedCanvas(width, height) {
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(width));
+  canvas.height = Math.max(1, Math.round(height));
+  return canvas;
+}
+
+function rasterizeBaseGeometry(layer, W, H) {
+  const out = makeSizedCanvas(W, H);
+  const ctx = out.getContext('2d');
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.translate(W / 2, H / 2);
+  if (App.rotation) ctx.rotate(App.rotation * Math.PI / 180);
+  ctx.scale(App.flipH ? -1 : 1, App.flipV ? -1 : 1);
+  ctx.drawImage(layer.canvas, 0, 0, layer.canvas.width, layer.canvas.height, -W / 2, -H / 2, W, H);
+  return out;
+}
+
+function rasterizeLayerGeometry(layer, W, H) {
+  const out = makeSizedCanvas(W, H);
+  const ctx = out.getContext('2d');
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.translate(W / 2 + (layer.x || 0), H / 2 + (layer.y || 0));
+  if (layer.rotation) ctx.rotate(layer.rotation * Math.PI / 180);
+  const scale = Number.isFinite(layer.scale) ? layer.scale : 1;
+  ctx.scale(scale, scale);
+  ctx.drawImage(layer.canvas, 0, 0, layer.canvas.width, layer.canvas.height, -W / 2, -H / 2, W, H);
+  return out;
+}
+
+function cropWorkspaceCanvas(source, rect, newW, newH, oldW, oldH) {
+  const out = makeSizedCanvas(newW, newH);
+  const ctx = out.getContext('2d');
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(source, 0, 0, source.width, source.height, -rect.x, -rect.y, oldW, oldH);
+  return out;
+}
+
+function rotateWorkspaceCanvas(source, degrees, oldW, oldH) {
+  const turn = ((degrees % 360) + 360) % 360;
+  const quarter = turn === 90 || turn === 270;
+  const newW = quarter ? oldH : oldW;
+  const newH = quarter ? oldW : oldH;
+  const out = makeSizedCanvas(newW, newH);
+  const ctx = out.getContext('2d');
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.translate(newW / 2, newH / 2);
+  ctx.rotate(degrees * Math.PI / 180);
+  ctx.drawImage(source, 0, 0, source.width, source.height, -oldW / 2, -oldH / 2, oldW, oldH);
+  return out;
+}
+
+function rotateLayerOffset(x, y, degrees) {
+  const turn = ((degrees % 360) + 360) % 360;
+  if (turn === 90) return { x:-y, y:x };
+  if (turn === 180) return { x:-x, y:-y };
+  if (turn === 270) return { x:y, y:-x };
+  return { x, y };
+}
+
+function normalizeLayerAngle(value) {
+  return ((value + 180) % 360 + 360) % 360 - 180;
+}
+
+function commitWorkspaceDimensions(width, height) {
+  const W = Math.max(1, Math.round(width));
+  const H = Math.max(1, Math.round(height));
+  App.imgW = App.workW = W;
+  App.imgH = App.workH = H;
+  App.canvas.width = W;
+  App.canvas.height = H;
+  App.composite.width = W;
+  App.composite.height = H;
+  els.interactCanvas.width = W;
+  els.interactCanvas.height = H;
+  setupPreview();
+}
+
+function cancelGeometrySensitivePreviews() {
+  App.isPreviewActive = false;
+  if (App.colorReplace && App.colorReplace.previewOrigin) exitColorReplaceMode();
+  if (App.bgRemove && App.bgRemove.active) exitBgRemoveMode();
+  App.activeEffectExtra = null;
+}
+
+function renderFrameCanvasAtDimensions(layer, W, H) {
+  const canvas=makeSizedCanvas(W,H);
+  const preset=layer.meta?.preset||'none';
+  if(preset==='none')return canvas;
+  const widthPct=clamp(layer.meta?.widthPct==null?5:layer.meta.widthPct,0,FRAME_MAX_PCT);
+  const width=Math.max(2,Math.round(Math.min(W,H)*widthPct/100));
+  drawFrame(canvas.getContext('2d'),W,H,width,layer.meta?.color||'#ffffff',preset);
+  return canvas;
+}
+
+function rasterizeOriginalBaseGeometry(layer) {
+  const source=layer?.meta?.originalImage;
+  const W=Math.round(Number(source?.naturalWidth||source?.videoWidth||source?.width)||0);
+  const H=Math.round(Number(source?.naturalHeight||source?.videoHeight||source?.height)||0);
+  const maxPixels=(Number(navigator.deviceMemory)||4)<=4?16000000:28000000;
+  if(!source||W<1||H<1||W*H>maxPixels)return null;
+  try{
+    const canvas=makeSizedCanvas(W,H),ctx=canvas.getContext('2d');
+    ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';
+    ctx.translate(W/2,H/2);
+    if(App.rotation)ctx.rotate(App.rotation*Math.PI/180);
+    ctx.scale(App.flipH?-1:1,App.flipV?-1:1);
+    ctx.drawImage(source,-W/2,-H/2,W,H);
+    return canvas;
+  }catch(_){return null;}
+}
+
+function stageOriginalQuarterTurn(layer, degrees) {
+  const source=rasterizeOriginalBaseGeometry(layer);
+  if(!source)return null;
+  try{return rotateWorkspaceCanvas(source,degrees,source.width,source.height);}catch(_){return null;}
+}
+
+function stageOriginalCrop(layer, rect, oldW, oldH, newW, newH) {
+  const source=rasterizeOriginalBaseGeometry(layer);
+  if(!source)return null;
+  try{
+    const sx=source.width/oldW,sy=source.height/oldH;
+    const sourceRect={x:rect.x*sx,y:rect.y*sy};
+    return cropWorkspaceCanvas(source,sourceRect,Math.max(1,Math.round(newW*sx)),Math.max(1,Math.round(newH*sy)),source.width,source.height);
+  }catch(_){return null;}
+}
+
 function bakeQuarterTurn(degrees) {
   if (!App.layers.length) return;
-  loading(true, 'Rotating…');
-  setTimeout(() => {
-    // Composite the current rendered state, then rotate the whole thing
-    const flat = document.createElement('canvas');
-    flat.width = App.workW;
-    flat.height = App.workH;
-    flat.getContext('2d').drawImage(App.canvas, 0, 0);
+  const turn=((Math.round(degrees/90)*90)%360+360)%360;
+  if(!turn)return;
+  const signedTurn=turn===270?-90:turn;
+  const W=App.workW,H=App.workH;
+  const newW=turn===90||turn===270?H:W;
+  const newH=turn===90||turn===270?W:H;
+  const bg=backgroundLayer();
 
-    const out = document.createElement('canvas');
-    const isQuarter = Math.abs(degrees % 180) === 90;
-    out.width = isQuarter ? App.workH : App.workW;
-    out.height = isQuarter ? App.workW : App.workH;
-    const ox = out.getContext('2d');
-    ox.translate(out.width/2, out.height/2);
-    ox.rotate(degrees * Math.PI / 180);
-    ox.drawImage(flat, -App.workW/2, -App.workH/2);
+  loading(true,'Rotating layers…');
+  setTimeout(()=>{
+    try{
+      cancelGeometrySensitivePreviews();
+      flushPendingHistory();
+      const staged=App.layers.map(layer=>{
+        let canvas=layer.canvas;
+        let x=layer.x||0,y=layer.y||0,scale=layer.scale,rotation=layer.rotation||0;
+        if(layer.type==='frame'){
+          canvas=renderFrameCanvasAtDimensions(layer,newW,newH);
+        }else if(bg&&layer.id===bg.id){
+          canvas=rotateWorkspaceCanvas(rasterizeBaseGeometry(layer,W,H),signedTurn,W,H);
+          x=0;y=0;scale=1;rotation=0;
+        }else if(layer.type==='text'||layer.type==='shape'){
+          const offset=rotateLayerOffset(x,y,signedTurn);
+          x=offset.x;y=offset.y;rotation=normalizeLayerAngle(rotation+signedTurn);
+        }else{
+          canvas=rotateWorkspaceCanvas(layer.canvas,signedTurn,W,H);
+          const offset=rotateLayerOffset(x,y,signedTurn);
+          x=offset.x;y=offset.y;
+        }
+        const mask=layer.mask?rotateWorkspaceCanvas(layer.mask,signedTurn,W,H):null;
+        return {layer,canvas,mask,x,y,scale,rotation};
+      });
+      const original=bg?stageOriginalQuarterTurn(bg,signedTurn):null;
 
-    // Replace base, flatten layers; keep history so undo reverts.
-    rebuildFromImageCanvas(out, /*keepHistory*/ true);
-    loading(false);
-    toast('Rotated', 'success');
-  }, 30);
+      commitWorkspaceDimensions(newW,newH);
+      for(const state of staged){
+        state.layer.canvas=state.canvas;state.layer.mask=state.mask;
+        state.layer.x=state.x;state.layer.y=state.y;state.layer.scale=state.scale;state.layer.rotation=state.rotation;
+      }
+      App.rotation=0;App.flipH=false;App.flipV=false;App.cropRect=null;
+      if(bg&&bg.meta)bg.meta.originalImage=original;
+      fitCanvasToView();renderFull();pushHistory();updateToolPanel();
+      toast('Layers rotated','success');
+    }catch(error){
+      console.error(error);toast('Could not rotate this document','error');
+    }finally{loading(false);}
+  },30);
 }
 
 function applyCrop() {
-  if (!App.cropRect) return;
-  const r = App.cropRect;
-  const W = App.workW, H = App.workH;
-  const expandsCanvas = (r.x < 0) || (r.y < 0) || (r.x + r.w > W) || (r.y + r.h > H);
-  loading(true, expandsCanvas ? 'Expanding canvas…' : 'Applying crop…');
-  setTimeout(() => {
-    const newW = Math.round(r.w);
-    const newH = Math.round(r.h);
-    const cropPixelLimit = (Number(navigator.deviceMemory) || 4) <= 4 ? 12000000 : 20000000;
-    if (newW < 1 || newH < 1 || newW > 6000 || newH > 6000 || newW * newH > cropPixelLimit) {
-      loading(false);
-      toast('That crop would create a canvas too large for reliable editing on this device', 'error', 4200);
-      return;
-    }
-
-    if (!expandsCanvas) {
-      // Simple crop: shrink the image into a new bitmap and rebuild.
-      const flat = document.createElement('canvas');
-      flat.width = W; flat.height = H;
-      flat.getContext('2d').drawImage(App.canvas, 0, 0);
-      const cropC = document.createElement('canvas');
-      cropC.width = newW;
-      cropC.height = newH;
-      cropC.getContext('2d').drawImage(flat, r.x, r.y, r.w, r.h, 0, 0, r.w, r.h);
-      rebuildFromImageCanvas(cropC, /*keepHistory*/ true);
-      setTool('adjust');
-      loading(false);
-      toast('Cropped', 'success');
-      return;
-    }
-
-    // EXPANSION PATH:
-    // The crop rect extends beyond the image. Resize the workspace canvas to
-    // the rect dimensions, redraw each layer's content at a SHIFTED offset
-    // so it remains in the same visual position relative to the image.
-    // The original image becomes a smaller patch within the new (larger) canvas.
-    //
-    // Offset = -rect.origin. e.g. if rect.x = -100, the image shifts +100 px
-    // to keep its visual position. Other layers' (x,y) — which are stored as
-    // offsets from canvas center — also need shifting (in workspace units).
-    //
-    // For a layer with x/y stored as an offset from the canvas CENTER, the
-    // visual coordinate of the layer's center inside the OLD canvas was
-    //   oldCx = W/2 + layer.x
-    // After resize, the new canvas center is at newW/2 (in new-canvas coords),
-    // and the new canvas's (0,0) maps to OLD coord (r.x, r.y). So the layer's
-    // old visual center maps to NEW coord = (oldCx - r.x, oldCy - r.y).
-    // We want layer.x' such that newW/2 + layer.x' = oldCx - r.x.
-    //   => layer.x' = (oldCx - r.x) - newW/2
-    //              = (W/2 + layer.x - r.x) - newW/2
-    //              = layer.x + (W - newW)/2 - r.x
-    //
-    // For the locked BACKGROUND image (whose canvas is workspace-sized, no
-    // x/y offset by convention), we resize the canvas to (newW, newH) and
-    // draw the old bitmap at (-r.x, -r.y) — that places the original pixels
-    // at their original visual coords inside the new bigger canvas.
-    //
-    // Drawing layers also have workspace-sized canvases. We resize their
-    // canvas to (newW, newH) and draw the old bitmap at (-r.x, -r.y) too.
-    // (Their x/y is typically 0,0 since they pan via their canvas content.)
-    //
-    // Text / shape layers have native-size canvases; we adjust layer.x/y
-    // via the formula above.
-    //
-    // Frame layers re-render to the new workspace dims.
-    //
-    // History: push a single snapshot AFTER the change so undo reverts.
-
-    const dxShift = (W - newW) / 2 - r.x;
-    const dyShift = (H - newH) / 2 - r.y;
-
-    for (let i = 0; i < App.layers.length; i++) {
-      const layer = App.layers[i];
-      if (layer.type === 'image' && layer.locked) {
-        // Background: bake the base layer's adjustments/filter/effects/base
-        // transform into a fresh bitmap (NOT the live composite — that has
-        // all layers in it, which would double-draw drawings/text/shapes).
-        // Run the full base-layer pipeline into a temp canvas the same size
-        // as the old workspace, then re-anchor at (-r.x, -r.y) in the new.
-        const baked = document.createElement('canvas');
-        baked.width = W; baked.height = H;
-        const bakedCtx = baked.getContext('2d');
-        // Snapshot + neutralize layer opacity/blend so drawBaseLayer paints
-        // the bg pixels into `baked` at full strength. We restore the user's
-        // values after; the bg layer remains opacity=1/normal in practice.
-        const _bgOpacity = layer.opacity, _bgBlend = layer.blendMode;
-        layer.opacity = 1;
-        layer.blendMode = 'source-over';
-        // drawBaseLayer takes the same params used during compose; the bg
-        // layer's mask is applied inside, which is exactly what we want.
-        drawBaseLayer(baked, bakedCtx, layer, W, H, 1);
-        layer.opacity = _bgOpacity;
-        layer.blendMode = _bgBlend;
-        const nc = document.createElement('canvas');
-        nc.width = newW; nc.height = newH;
-        nc.getContext('2d').drawImage(baked, -r.x, -r.y);
-        layer.canvas = nc;
-        // Reset base transforms since they're now baked in.
-        App.adjustments = createDefaultAdjustments();
-        App.effects = createDefaultEffects();
-        App.activeFilter = 'none';
-        App.filterStrength = 100;
-        App.rotation = 0;
-        App.flipH = false; App.flipV = false;
-        App.colorOverlay = { color: '#14b8a6', strength: 0, blendMode: 'overlay' };
-        // Mask was already baked into the canvas by drawBaseLayer — clear it
-        // so we don't double-apply.
-        layer.mask = null;
-        if (layer.meta) layer.meta.originalImage = null;
-        continue;
-      }
-      if (layer.type === 'drawing') {
-        // Workspace-sized layer: resize canvas to the new dims and redraw
-        // its content at (-r.x, -r.y) so brush strokes stay anchored.
-        //
-        // Why we DON'T also shift layer.x/y: the canvas content shift already
-        // moves the pixels to their correct visual position. A drawing
-        // pixel at OLD canvas coord (px, py) was at workspace (px + layer.x).
-        // After we copy it into NEW canvas at (px - r.x, py - r.y), and
-        // because the new layer (still untranslated x,y) renders the new
-        // canvas with no offset, that pixel ends up at new workspace
-        // ((px - r.x) + layer.x). Old visual workspace = px + layer.x.
-        // New target workspace (after canvas expansion) = (px + layer.x) - r.x.
-        // ✓ matches. So layer.x/y stay unchanged.
-        const nc = document.createElement('canvas');
-        nc.width = newW; nc.height = newH;
-        nc.getContext('2d').drawImage(layer.canvas, -r.x, -r.y);
-        layer.canvas = nc;
-        if (layer.mask) {
-          const nm = document.createElement('canvas');
-          nm.width = newW; nm.height = newH;
-          nm.getContext('2d').drawImage(layer.mask, -r.x, -r.y);
-          layer.mask = nm;
-        }
-        continue;
-      }
-      if (layer.type === 'text' || layer.type === 'shape') {
-        // Native-size canvas; just shift the offset.
-        layer.x = (layer.x || 0) + dxShift;
-        layer.y = (layer.y || 0) + dyShift;
-        continue;
-      }
-      if (layer.type === 'frame') {
-        // Frame is workspace-sized — re-render to new dims after we update workW/H.
-        // We'll handle below.
-        continue;
-      }
-      // Adjustment / other: shift offset for safety.
-      layer.x = (layer.x || 0) + dxShift;
-      layer.y = (layer.y || 0) + dyShift;
-    }
-
-    // Update workspace dims
-    App.imgW = newW;
-    App.imgH = newH;
-    App.workW = newW;
-    App.workH = newH;
-    App.canvas.width = newW;
-    App.canvas.height = newH;
-    App.composite.width = newW;
-    App.composite.height = newH;
-    els.interactCanvas.width = newW;
-    els.interactCanvas.height = newH;
-    setupPreview();
-
-    // Re-render any frame layers now that workW/H are updated
-    for (const layer of App.layers) {
-      if (layer.type === 'frame') {
-        renderFrameLayer(layer);
-      }
-    }
-
-    App.cropRect = null;
-    fitCanvasToView();
-    renderFull();
-    pushHistory();
+  if(!App.cropRect)return;
+  const rect={...App.cropRect};
+  const W=App.workW,H=App.workH;
+  const newW=Math.round(rect.w),newH=Math.round(rect.h);
+  const expandsCanvas=rect.x<0||rect.y<0||rect.x+rect.w>W||rect.y+rect.h>H;
+  const cropPixelLimit=(Number(navigator.deviceMemory)||4)<=4?12000000:20000000;
+  if(newW<1||newH<1||newW>6000||newH>6000||newW*newH>cropPixelLimit){
+    toast('That canvas is too large for reliable editing on this device','error',4200);return;
+  }
+  const fullRect=Math.abs(rect.x)<.01&&Math.abs(rect.y)<.01&&Math.abs(rect.w-W)<.01&&Math.abs(rect.h-H)<.01;
+  if(fullRect){
+    App.cropRect=null;
+    flushPendingHistory();
     setTool('adjust');
-    loading(false);
-    toast('Canvas expanded', 'success');
-  }, 50);
-}
+    toast('Transform kept — no crop needed');
+    return;
+  }
 
-/** Replace whole document with a single flattened image as new background.
+  loading(true,expandsCanvas?'Expanding layers…':'Cropping layers…');
+  setTimeout(()=>{
+    try{
+      cancelGeometrySensitivePreviews();
+      flushPendingHistory();
+      const bg=backgroundLayer();
+      const dx=(W-newW)/2-rect.x,dy=(H-newH)/2-rect.y;
+      const staged=App.layers.map(layer=>{
+        let canvas=layer.canvas;
+        let x=layer.x||0,y=layer.y||0,scale=layer.scale,rotation=layer.rotation||0;
+        if(layer.type==='frame'){
+          canvas=renderFrameCanvasAtDimensions(layer,newW,newH);
+        }else if(layer.type==='text'||layer.type==='shape'){
+          x+=dx;y+=dy;
+        }else{
+          const geometry=bg&&layer.id===bg.id?rasterizeBaseGeometry(layer,W,H):rasterizeLayerGeometry(layer,W,H);
+          canvas=cropWorkspaceCanvas(geometry,rect,newW,newH,W,H);
+          x=0;y=0;scale=1;rotation=0;
+        }
+        const mask=layer.mask?cropWorkspaceCanvas(layer.mask,rect,newW,newH,W,H):null;
+        return {layer,canvas,mask,x,y,scale,rotation};
+      });
+      const original=bg?stageOriginalCrop(bg,rect,W,H,newW,newH):null;
+
+      commitWorkspaceDimensions(newW,newH);
+      for(const state of staged){
+        state.layer.canvas=state.canvas;state.layer.mask=state.mask;
+        state.layer.x=state.x;state.layer.y=state.y;state.layer.scale=state.scale;state.layer.rotation=state.rotation;
+      }
+      App.rotation=0;App.flipH=false;App.flipV=false;App.cropRect=null;
+      if(bg&&bg.meta)bg.meta.originalImage=original;
+      fitCanvasToView();renderFull();pushHistory();setTool('adjust');
+      toast(expandsCanvas?'Canvas expanded — layers preserved':'Cropped — layers preserved','success');
+    }catch(error){
+      console.error(error);toast('Could not crop this document','error');
+    }finally{loading(false);}
+  },30);
+}/** Replace whole document with a single flattened image as new background.
  *  If keepHistory=true, preserve history and add the result as one undoable step.
  *  This is used by crop/rotate-quarter-turn so undo can revert. */
 function rebuildFromImageCanvas(canvas, keepHistory=false) {
@@ -6358,6 +6728,7 @@ function rebuildFromImageCanvas(canvas, keepHistory=false) {
   setupPreview();
 
   App.adjustments = createDefaultAdjustments();
+  resetProColorState();
   App.effects = createDefaultEffects();
   App.colorOverlay = { color: '#7c5cff', strength: 0, blendMode: 'overlay' };
   App.activeFilter = 'none';
@@ -8564,15 +8935,17 @@ function buildSelectedLayerPanel(body, actions) {
   quick.className = 'layer-inspector-actions';
   quick.innerHTML = `
     <button data-layer-action="visibility">${layer.visible ? 'Hide' : 'Show'}</button>
-    <button data-layer-action="duplicate">Duplicate</button>
+    ${layer.type === 'frame' || layer.locked ? '' : '<button data-layer-action="duplicate">Duplicate</button>'}
     ${layer.locked ? '' : '<button data-layer-action="delete" class="danger">Delete</button>'}
   `;
   quick.querySelector('[data-layer-action="visibility"]').addEventListener('click', () => {
     layer.visible = !layer.visible;
     renderFull(); pushHistory(); updateToolPanel();
   });
-  quick.querySelector('[data-layer-action="duplicate"]').addEventListener('click', () => {
-    duplicateLayer(layer.id); renderFull(); pushHistory(); updateToolPanel();
+  const duplicateButton = quick.querySelector('[data-layer-action="duplicate"]');
+  if (duplicateButton) duplicateButton.addEventListener('click', () => {
+    if (!duplicateLayer(layer.id)) return;
+    renderFull(); pushHistory(); updateToolPanel();
   });
   const deleteButton = quick.querySelector('[data-layer-action="delete"]');
   if (deleteButton) deleteButton.addEventListener('click', () => {
@@ -8638,7 +9011,9 @@ function buildLayerRow(layer) {
     setActiveLayer(layer.id);
     showLayerOptionsMenu(event.currentTarget, layer);
   });
-  setupLayerDragReorder(row, layer);
+  const grip = row.querySelector('.layer-grip');
+  if (layer.locked || layer.type === 'frame') grip.remove();
+  else setupLayerDragReorder(row, layer);
   return row;
 }
 
@@ -8647,7 +9022,11 @@ function showLayerOptionsMenu(anchor, layer) {
   const menu = document.createElement('div');
   menu.className = 'layer-options-menu';
   const mergeIndex = indexOfLayer(layer.id);
-  const canMergeDown = mergeIndex > 0 && !App.layers[mergeIndex - 1].locked;
+  const frameIndex = App.layers.findIndex(item => item.type === 'frame');
+  const maxMovableIndex = frameIndex >= 0 ? frameIndex - 1 : App.layers.length - 1;
+  const canMoveDown = !layer.locked && layer.type !== 'frame' && mergeIndex > 1;
+  const canMoveUp = !layer.locked && layer.type !== 'frame' && mergeIndex < maxMovableIndex;
+  const canMergeDown = layer.type !== 'frame' && mergeIndex > 0 && !App.layers[mergeIndex - 1].locked && App.layers[mergeIndex - 1].type !== 'frame';
   menu.innerHTML = `
     <label class="layer-menu-field"><span>Name</span><input type="text" data-layer-name maxlength="80"></label>
     <label class="layer-menu-field"><span>Opacity <output>${Math.round(layer.opacity*100)}%</output></span><input type="range" data-layer-opacity min="0" max="100" value="${Math.round(layer.opacity*100)}"></label>
@@ -8656,10 +9035,10 @@ function showLayerOptionsMenu(anchor, layer) {
     <button class="layer-option" data-act="visibility">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3.8-6 10-6 10 6 10 6-3.8 6-10 6S2 12 2 12z"/><circle cx="12" cy="12" r="2.5"/></svg>${layer.visible ? 'Hide layer' : 'Show layer'}
     </button>
+    ${canMoveUp ? '<button class="layer-option" data-act="moveUp"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 15 6-6 6 6"/></svg>Move forward</button>' : ''}
+    ${canMoveDown ? '<button class="layer-option" data-act="moveDown"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>Move backward</button>' : ''}
     ${canMergeDown ? '<button class="layer-option" data-act="mergeDown"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Merge Down</button>' : ''}
-    <button class="layer-option" data-act="duplicate">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>Duplicate
-    </button>
+    ${layer.type === 'frame' || layer.locked ? '' : '<button class="layer-option" data-act="duplicate"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>Duplicate</button>'}
     ${layer.locked ? '' : '<button class="layer-option danger" data-act="delete"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M6 6l1 15h10l1-15"/></svg>Delete</button>'}
   `;
   const nameInput = menu.querySelector('[data-layer-name]');
@@ -8726,12 +9105,17 @@ function showLayerOptionsMenu(anchor, layer) {
       if (action === 'visibility') {
         layer.visible = !layer.visible;
         renderFull(); pushHistory(); updateToolPanel();
+      } else if (action === 'moveUp' || action === 'moveDown') {
+        const index = indexOfLayer(layer.id);
+        if (reorderLayer(layer.id, index + (action === 'moveUp' ? 1 : -1))) {
+          renderFull(); pushHistory(); updateToolPanel();
+        }
       } else if (action === 'mergeDown') {
         if (mergeLayerDown(layer.id)) {
           renderFull(); pushHistory(); updateToolPanel(); toast('Layer merged', 'success');
         } else toast('That layer cannot be merged down', 'error');
       } else if (action === 'duplicate') {
-        duplicateLayer(layer.id); renderFull(); pushHistory(); updateToolPanel(); toast('Layer duplicated');
+        if (duplicateLayer(layer.id)) { renderFull(); pushHistory(); updateToolPanel(); toast('Layer duplicated'); }
       } else if (action === 'delete') {
         removeLayer(layer.id); renderFull(); pushHistory(); updateToolPanel(); toast('Layer deleted');
       }
@@ -9335,7 +9719,11 @@ function capExportDims(width, height, label) {
   let w = Math.max(1, Math.round(width));
   let h = Math.max(1, Math.round(height));
   const memory = Number(navigator.deviceMemory) || 8;
-  const maxPixels = memory <= 4 ? 16000000 : 32000000;
+  const maxPixels = hasMemoryHeavyEffects()
+    ? (memory <= 4 ? 6000000 : 10000000)
+    : hasAnyPixelEffects()
+      ? (memory <= 4 ? 10000000 : 18000000)
+      : (memory <= 4 ? 16000000 : 32000000);
   const scale = Math.min(1, 8192 / Math.max(w, h), Math.sqrt(maxPixels / (w * h)));
   const capped = scale < .999;
   if (capped) {
@@ -9834,6 +10222,10 @@ function _zoomBy(factor) {
 }
 
 document.addEventListener('keydown', e => {
+  if (typeof isMobileToolTrayOpen === 'function' && isMobileToolTrayOpen()) {
+    if (e.key === 'Escape') { e.preventDefault(); closeMobileToolTray(true); }
+    return;
+  }
   // Skip when a real text-entry field has focus; sliders/buttons no longer block.
   if (_isTextInputFocused(e.target)) return;
   // Skip when the textInput modal is showing (its textarea catches keys).
@@ -9855,7 +10247,7 @@ document.addEventListener('keydown', e => {
   if (mod && (key === 'd' || key === 'D')) {
     e.preventDefault();
     const a = activeLayer();
-    if (a && !(a.type === 'image' && a.locked)) {
+    if (a && !a.locked && a.type !== 'frame') {
       duplicateLayer(a.id);
       renderFull();
       updateToolPanel();
@@ -10935,11 +11327,9 @@ function drawFrame(ctx,W,H,fw,color,preset){
 
 /** Apply / replace the frame layer. */
 function applyFrame(preset) {
-  // Remove existing frame layer (if any)
-  if (App.frameLayerId != null) {
-    removeLayer(App.frameLayerId);
-    App.frameLayerId = null;
-  }
+  // Enforce a single editable frame, including cleanup of legacy duplicates.
+  [...App.layers].filter(layer => layer.type === 'frame').forEach(layer => removeLayer(layer.id));
+  App.frameLayerId = null;
   App.framePreset = preset;
   const presetMeta = FRAME_PRESETS.find(item => item.id === preset);
   if (presetMeta && presetMeta.group && presetMeta.group !== 'Legacy') App.frameGroup = presetMeta.group;
@@ -11716,118 +12106,88 @@ function exitBgRemoveMode(opts) {
    EXTEND EFFECTS PANEL — Tint / Color Replace / Remove BG tiles
    ---------------------------------------------------------------- */
 function buildEffectExtras(body) {
-  const extra = App.activeEffectExtra;
+  const bg=backgroundLayer();
+  const selected=activeLayer();
+  const canEditBase=App.effectScope==='layer'&&!!bg&&selected?.id===bg.id;
+  let extra=App.activeEffectExtra;
+  if(!canEditBase&&(extra==='colorReplace'||extra==='bgRemove')){
+    if(extra==='colorReplace')exitColorReplaceMode();
+    if(extra==='bgRemove'&&App.bgRemove.active)exitBgRemoveMode();
+    App.activeEffectExtra=null;extra=null;
+  }
   const section = document.createElement('div');
   section.style.cssText = 'margin-top:8px;';
   const sectionLabel = document.createElement('div');
   sectionLabel.style.cssText = 'font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--text-2);padding:8px 0 6px;';
-  sectionLabel.textContent = 'More tools';
+  sectionLabel.textContent = canEditBase ? 'Layer tools' : 'More effects';
   section.appendChild(sectionLabel);
 
   const tiles = document.createElement('div');
   tiles.className = 'tool-extra-grid';
-  tiles.innerHTML = `
-    <button class="tool-extra-tile ${extra==='tint'?'active':''}" data-extra="tint">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20"/><path d="M5 8a7 7 0 0 0 14 0"/><circle cx="12" cy="12" r="9"/></svg>
-      <span>Tint</span>
-    </button>
-    <button class="tool-extra-tile ${extra==='colorReplace'?'active':''}" data-extra="colorReplace">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="10.5" r="2.5"/><circle cx="8.5" cy="7.5" r="2.5"/><circle cx="6.5" cy="12.5" r="2.5"/><path d="M12 22a10 10 0 0 1-9.94-9c.01 1.18.97 1.5 1.94 1.5h2a2 2 0 0 1 2 2v.06A1.94 1.94 0 0 0 11 19v0a1.94 1.94 0 0 0 1.94-1.94c0-.42-.13-.83-.39-1.16L11 14"/></svg>
-      <span>Color Replace</span>
-    </button>
-    <button class="tool-extra-tile ${extra==='bgRemove'?'active':''}" data-extra="bgRemove">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 16l5-5 4 4 5-5 4 4"/><circle cx="8" cy="8" r="1.5"/></svg>
-      <span>Smart Cutout</span>
-    </button>
-  `;
+  const tintTile=`<button class="tool-extra-tile ${extra==='tint'?'active':''}" data-extra="tint"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20"/><path d="M5 8a7 7 0 0 0 14 0"/><circle cx="12" cy="12" r="9"/></svg><span>Tint</span></button>`;
+  const baseTiles=canEditBase?`
+    <button class="tool-extra-tile ${extra==='colorReplace'?'active':''}" data-extra="colorReplace"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="10.5" r="2.5"/><circle cx="8.5" cy="7.5" r="2.5"/><circle cx="6.5" cy="12.5" r="2.5"/><path d="M12 22a10 10 0 0 1-9.94-9c.01 1.18.97 1.5 1.94 1.5h2a2 2 0 0 1 2 2v.06A1.94 1.94 0 0 0 11 19v0a1.94 1.94 0 0 0 1.94-1.94c0-.42-.13-.83-.39-1.16L11 14"/></svg><span>Color Replace</span></button>
+    <button class="tool-extra-tile ${extra==='bgRemove'?'active':''}" data-extra="bgRemove"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 16l5-5 4 4 5-5 4 4"/><circle cx="8" cy="8" r="1.5"/></svg><span>Smart Cutout</span></button>`:'';
+  tiles.innerHTML=tintTile+baseTiles;
   section.appendChild(tiles);
   tiles.querySelectorAll('[data-extra]').forEach(t => {
     t.addEventListener('click', () => {
       const k = t.dataset.extra;
-      const nextExtra = (App.activeEffectExtra === k) ? null : k;
-      // Leaving colorReplace without an explicit Apply -> revert preview.
-      if (App.activeEffectExtra === 'colorReplace' && nextExtra !== 'colorReplace') {
-        exitColorReplaceMode();
-      }
-      // Leaving bgRemove without an explicit Apply -> revert removal.
-      if (App.activeEffectExtra === 'bgRemove' && nextExtra !== 'bgRemove' && App.bgRemove.active) {
-        exitBgRemoveMode();
-      }
+      const nextExtra = App.activeEffectExtra === k ? null : k;
+      if (App.activeEffectExtra === 'colorReplace' && nextExtra !== 'colorReplace') exitColorReplaceMode();
+      if (App.activeEffectExtra === 'bgRemove' && nextExtra !== 'bgRemove' && App.bgRemove.active) exitBgRemoveMode();
       App.activeEffectExtra = nextExtra;
       updateToolPanel();
     });
   });
 
-  // Sub-panel for the active extra
-  if (extra === 'tint') {
-    section.appendChild(buildTintControls());
-  } else if (extra === 'colorReplace') {
-    section.appendChild(buildColorReplaceControls());
-  } else if (extra === 'bgRemove') {
-    section.appendChild(buildBgRemoveControls());
+  let extraPanel=null;
+  if (extra === 'tint') extraPanel=buildTintControls();
+  else if (extra === 'colorReplace' && canEditBase) extraPanel=buildColorReplaceControls();
+  else if (extra === 'bgRemove' && canEditBase) extraPanel=buildBgRemoveControls();
+  if(extraPanel){
+    section.appendChild(extraPanel);
+    const labels={tint:'Tint',colorReplace:'Color Replace',bgRemove:'Smart Cutout'};
+    const target=App.effectScope==='global'?'Composite':'Selected';
+    els.cpTitle.innerHTML=`${labels[extra]} <span class="cp-title-val">${target}</span>`;
+    if(!isDesktopLayout()&&els.cpPinnedControls){
+      const primary=extraPanel.querySelector('.slider-row');
+      if(primary){primary.classList.add('effect-strength-sticky');els.cpPinnedControls.hidden=false;els.cpPinnedControls.appendChild(primary);}
+    }
   }
-
   body.appendChild(section);
 }
-
-function buildTintControls() {
-  const wrap = document.createElement('div');
-  wrap.style.cssText = 'padding:6px 0;';
-
-  // Color picker
-  const cRow = document.createElement('div');
-  cRow.className = 'shape-row';
-  cRow.innerHTML = `<label>Color</label>`;
-  const cs = document.createElement('label');
-  cs.className = 'inline-color';
-  cs.innerHTML = `<span class="inline-color-swatch" style="background:${App.colorOverlay.color}"><input type="color" value="${App.colorOverlay.color}"></span><span class="inline-color-hex">${App.colorOverlay.color.toUpperCase()}</span>`;
-  cs.querySelector('input').addEventListener('input', e => {
-    const v = e.target.value;
-    cs.querySelector('.inline-color-swatch').style.background = v;
-    cs.querySelector('.inline-color-hex').textContent = v.toUpperCase();
-    App.colorOverlay.color = v;
-    requestRender();
-    pushHistoryDebounced(400);
+function buildTintControls(){
+  const scoped=scopedEffectState();
+  const overlay=scoped?scoped.colorOverlay:createDefaultColorOverlay();
+  const wrap=document.createElement('div');
+  wrap.style.cssText='padding:6px 0;';
+  const colorRow=document.createElement('div');colorRow.className='shape-row';colorRow.innerHTML='<label>Color</label>';
+  const picker=document.createElement('label');picker.className='inline-color';
+  picker.innerHTML=`<span class="inline-color-swatch" style="background:${overlay.color}"><input type="color" value="${overlay.color}"></span><span class="inline-color-hex">${overlay.color.toUpperCase()}</span>`;
+  picker.querySelector('input').addEventListener('input',event=>{
+    overlay.color=event.target.value;
+    picker.querySelector('.inline-color-swatch').style.background=overlay.color;
+    picker.querySelector('.inline-color-hex').textContent=overlay.color.toUpperCase();
+    requestRender();pushHistoryDebounced(400);
   });
-  cRow.appendChild(cs);
-  wrap.appendChild(cRow);
+  colorRow.appendChild(picker);wrap.appendChild(colorRow);
 
-  // Strength
-  const sRow = document.createElement('div');
-  sRow.className = 'slider-row';
-  const v0 = App.colorOverlay.strength;
-  sRow.innerHTML = `
-    <div class="slider-label">Strength</div>
-    <div class="slider-track"><div class="slider-fill" style="width:${v0}%"></div><input type="range" min="0" max="100" value="${v0}"></div>
-    <div class="slider-value">${v0}%</div>
-  `;
-  wrap.appendChild(sRow);
-  setupSlider(sRow, { bipolar:false, min:0, max:100, defaultValue:0 }, {
-    onInput: v => { App.colorOverlay.strength = v; requestRender(); },
-    onCommit: () => pushHistoryDebounced(300),
+  const strengthRow=document.createElement('div');strengthRow.className='slider-row';
+  strengthRow.innerHTML=`<div class="slider-label">Strength</div><div class="slider-track"><div class="slider-fill" style="width:${overlay.strength}%"></div><input type="range" min="0" max="100" value="${overlay.strength}"></div><div class="slider-value">${overlay.strength}%</div>`;
+  wrap.appendChild(strengthRow);
+  setupSlider(strengthRow,{bipolar:false,min:0,max:100,defaultValue:0},{
+    onInput:value=>{overlay.strength=value;requestRender();},
+    onCommit:()=>requestRender(),
   });
 
-  // Blend mode
-  const bRow = document.createElement('div');
-  bRow.className = 'tool-row';
-  bRow.innerHTML = `<label>Blend</label>`;
-  const sel = document.createElement('select');
-  const TINT_BLENDS = ['color','multiply','screen','overlay','soft-light'];
-  TINT_BLENDS.forEach(b => {
-    const o = document.createElement('option');
-    o.value = b;
-    o.textContent = BLEND_LABELS[b] || b;
-    if (b === App.colorOverlay.blendMode) o.selected = true;
-    sel.appendChild(o);
+  const blendRow=document.createElement('div');blendRow.className='tool-row';blendRow.innerHTML='<label>Blend</label>';
+  const select=document.createElement('select');
+  ['color','multiply','screen','overlay','soft-light'].forEach(mode=>{
+    const option=document.createElement('option');option.value=mode;option.textContent=BLEND_LABELS[mode]||mode;option.selected=mode===overlay.blendMode;select.appendChild(option);
   });
-  sel.addEventListener('change', () => {
-    App.colorOverlay.blendMode = sel.value;
-    requestRender();
-    pushHistory();
-  });
-  bRow.appendChild(sel);
-  wrap.appendChild(bRow);
-
+  select.addEventListener('change',()=>{overlay.blendMode=select.value;requestRender();pushHistory();});
+  blendRow.appendChild(select);wrap.appendChild(blendRow);
   return wrap;
 }
 
@@ -12181,8 +12541,18 @@ function applyCanvasResize(newW, newH, resample) {
     els.interactCanvas.height = newH;
     setupPreview();
 
-    // Resize each layer's canvas/mask + scale positions
+    // Resize every document-space mask before type-specific layer work.
     for (const layer of App.layers) {
+      if (layer.mask) {
+        const oldMask=layer.mask;
+        const resizedMask=document.createElement('canvas');
+        resizedMask.width=newW;resizedMask.height=newH;
+        const maskCtx=resizedMask.getContext('2d');
+        maskCtx.imageSmoothingEnabled=resample!=='pixelated';
+        maskCtx.imageSmoothingQuality='high';
+        maskCtx.drawImage(oldMask,0,0,newW,newH);
+        layer.mask=resizedMask;
+      }
       if (layer.type === 'image' && layer.locked) {
         // base layer: rescale its bitmap to new workspace dims
         const old = layer.canvas;
@@ -12193,15 +12563,8 @@ function applyCanvasResize(newW, newH, resample) {
         nctx.imageSmoothingQuality = 'high';
         nctx.drawImage(old, 0, 0, newW, newH);
         layer.canvas = nc;
-        if (layer.mask) {
-          const nm = document.createElement('canvas');
-          nm.width = newW; nm.height = newH;
-          const mctx = nm.getContext('2d');
-          mctx.imageSmoothingEnabled = resample !== 'pixelated';
-          mctx.drawImage(layer.mask, 0, 0, newW, newH);
-          layer.mask = nm;
-        }
         continue;
+
       }
       if (layer.type === 'drawing') {
         // Resize layer canvas to new dims (preserves the content scaled).
@@ -12212,14 +12575,8 @@ function applyCanvasResize(newW, newH, resample) {
         nctx.imageSmoothingEnabled = resample !== 'pixelated';
         nctx.drawImage(old, 0, 0, newW, newH);
         layer.canvas = nc;
-        if (layer.mask) {
-          const om = layer.mask;
-          const nm = document.createElement('canvas');
-          nm.width = newW; nm.height = newH;
-          nm.getContext('2d').drawImage(om, 0, 0, newW, newH);
-          layer.mask = nm;
-        }
         continue;
+
       }
       if (layer.type === 'text') {
         // Scale position & size meta
@@ -12272,7 +12629,7 @@ function applyCanvasResize(newW, newH, resample) {
 const LUMA_DB_NAME = 'luma-photo-studio';
 const LUMA_DB_VERSION = 1;
 const LUMA_PROJECT_STORE = 'projects';
-const LUMA_PROJECT_SCHEMA = 4;
+const LUMA_PROJECT_SCHEMA = 6;
 let _lumaDBPromise = null;
 let _lumaSaveTimer = 0;
 let _lumaProjectHydrating = false;
@@ -12426,6 +12783,8 @@ async function serializeCurrentProject() {
       rotation: layer.rotation,
       locked: layer.locked,
       maskInverted: layer.maskInverted,
+      effects: { ...sanitizeEffects(layer.effects) },
+      colorOverlay: { ...sanitizeColorOverlay(layer.colorOverlay) },
       meta: lumaSafeMeta(layer.meta),
       canvasW: layer.canvas.width,
       canvasH: layer.canvas.height,
@@ -12449,7 +12808,10 @@ async function serializeCurrentProject() {
     nextLayerId: App.nextLayerId,
     globals: {
       adjustments: { ...App.adjustments },
-      effects: { ...App.effects },
+      effects: { ...sanitizeEffects(App.effects) },
+      curves: sanitizeCurves(App.curves),
+      colorMix: sanitizeColorMix(App.colorMix),
+      effectScope: App.effectScope === 'global' ? 'global' : 'layer',
       activeFilter: App.activeFilter,
       filterStrength: App.filterStrength,
       rotation: App.rotation,
@@ -12566,8 +12928,14 @@ async function drawBlobToCanvas(blob, canvas) {
   });
 }
 
+function finiteProjectNumber(value,fallback,min,max) {
+  const number=Number(value);
+  return Number.isFinite(number)?clamp(number,min,max):fallback;
+}
 function validateLumaRecord(record) {
   if (!record || typeof record !== 'object') throw new Error('Invalid photo project');
+  const version = Number(record.schemaVersion || 4);
+  if (!Number.isFinite(version) || version > LUMA_PROJECT_SCHEMA) throw new Error('This project was created by a newer editor');
   const w = Number(record.workW);
   const h = Number(record.workH);
   if (!Number.isFinite(w) || !Number.isFinite(h) || w < 1 || h < 1 || w > 6000 || h > 6000 || w * h > 20000000) {
@@ -12585,8 +12953,8 @@ async function restoreLumaProject(record) {
   try {
     App.workW = Math.round(record.workW);
     App.workH = Math.round(record.workH);
-    App.imgW = Math.round(record.imgW || record.workW);
-    App.imgH = Math.round(record.imgH || record.workH);
+    App.imgW = Math.round(finiteProjectNumber(record.imgW,App.workW,1,32768));
+    App.imgH = Math.round(finiteProjectNumber(record.imgH,App.workH,1,32768));
     App.canvas.width = App.workW;
     App.canvas.height = App.workH;
     App.composite.width = App.workW;
@@ -12596,55 +12964,79 @@ async function restoreLumaProject(record) {
     setupPreview();
 
     const globals = record.globals || {};
-    App.adjustments = { ...createDefaultAdjustments(), ...(globals.adjustments || {}) };
-    App.effects = { ...createDefaultEffects(), ...(globals.effects || {}) };
-    App.activeFilter = globals.activeFilter || 'none';
-    App.filterStrength = globals.filterStrength == null ? 100 : globals.filterStrength;
-    App.rotation = globals.rotation || 0;
+    const legacyEffects = Number(record.schemaVersion || 4) < 5;
+    App.adjustments = sanitizeAdjustments(globals.adjustments);
+    App.effects = legacyEffects ? createDefaultEffects() : sanitizeEffects(globals.effects);
+    App.curves = sanitizeCurves(globals.curves);
+    App.colorMix = sanitizeColorMix(globals.colorMix);
+    invalidateProColorCache();
+    App.effectScope = globals.effectScope === 'global' ? 'global' : 'layer';
+    App.activeFilter = getFilter(globals.activeFilter).id;
+    App.filterStrength = clamp(globals.filterStrength == null ? 100 : Number(globals.filterStrength), 0, 100);
+    App.rotation = clamp(Number(globals.rotation) || 0, -3600, 3600);
     App.flipH = !!globals.flipH;
     App.flipV = !!globals.flipV;
-    App.colorOverlay = { color: '#7c5cff', strength: 0, blendMode: 'overlay', ...(globals.colorOverlay || {}) };
-    App.framePreset = globals.framePreset || 'none';
-    App.frameWidthPct = globals.frameWidthPct || 5;
-    App.frameColor = globals.frameColor || '#ffffff';
+    App.colorOverlay = legacyEffects ? createDefaultColorOverlay() : sanitizeColorOverlay(globals.colorOverlay);
+    App.framePreset = FRAME_PRESETS.some(item => item.id === globals.framePreset) ? globals.framePreset : 'none';
+    App.frameWidthPct = clamp(Number(globals.frameWidthPct) || 5, 1, FRAME_MAX_PCT);
+    App.frameColor = /^#[0-9a-f]{6}$/i.test(String(globals.frameColor || '')) ? globals.frameColor : '#ffffff';
     App.layers = [];
 
+    const usedLayerIds=new Set();
+    const allowedLayerTypes=new Set(['image','drawing','text','shape','adjustment','frame']);
+    let repairedLayerId=1;
     for (const stored of record.layers) {
-      const canvas = document.createElement('canvas');
-      canvas.width = Math.max(1, Number(stored.canvasW) || App.workW);
-      canvas.height = Math.max(1, Number(stored.canvasH) || App.workH);
-      await drawBlobToCanvas(stored.bitmap, canvas);
-      let mask = null;
-      if (stored.maskBitmap) {
-        mask = createBlankLayerCanvas();
-        await drawBlobToCanvas(stored.maskBitmap, mask);
-      }
+      const rawWidth=Math.round(Number(stored.canvasW));
+      const rawHeight=Math.round(Number(stored.canvasH));
+      const canvasW=Number.isFinite(rawWidth)&&rawWidth>=1?rawWidth:App.workW;
+      const canvasH=Number.isFinite(rawHeight)&&rawHeight>=1?rawHeight:App.workH;
+      if(canvasW>8192||canvasH>8192||canvasW*canvasH>20000000)throw new Error('A project layer is too large for reliable editing');
+      const canvas=document.createElement('canvas');canvas.width=canvasW;canvas.height=canvasH;
+      await drawBlobToCanvas(stored.bitmap,canvas);
+      let mask=null;
+      if(stored.maskBitmap){mask=createBlankLayerCanvas();await drawBlobToCanvas(stored.maskBitmap,mask);}
+      let id=Math.trunc(Number(stored.id));
+      if(!Number.isFinite(id)||id<1||usedLayerIds.has(id)){while(usedLayerIds.has(repairedLayerId))repairedLayerId++;id=repairedLayerId++;}
+      usedLayerIds.add(id);repairedLayerId=Math.max(repairedLayerId,id+1);
+      const opacity=finiteProjectNumber(stored.opacity,1,0,1);
+      const scale=finiteProjectNumber(stored.scale,1,.05,12);
+      const type=allowedLayerTypes.has(stored.type)?stored.type:'drawing';
+      const meta=stored.meta&&typeof stored.meta==='object'&&!Array.isArray(stored.meta)?stored.meta:{};
       App.layers.push({
-        id: Number(stored.id),
-        name: String(stored.name || 'Layer'),
-        type: String(stored.type || 'drawing'),
+        id,
+        name:String(stored.name||'Layer').slice(0,100),
+        type,
         canvas,
-        visible: stored.visible !== false,
-        opacity: stored.opacity == null ? 1 : Number(stored.opacity),
-        blendMode: stored.blendMode || 'source-over',
-        x: Number(stored.x) || 0,
-        y: Number(stored.y) || 0,
-        scale: stored.scale == null ? 1 : Number(stored.scale),
-        rotation: Number(stored.rotation) || 0,
-        locked: !!stored.locked,
+        visible:stored.visible!==false,
+        opacity,
+        blendMode:BLEND_MODES.includes(stored.blendMode)?stored.blendMode:'source-over',
+        x:finiteProjectNumber(stored.x,0,-100000,100000),
+        y:finiteProjectNumber(stored.y,0,-100000,100000),
+        scale,
+        rotation:finiteProjectNumber(stored.rotation,0,-3600,3600),
+        locked:!!stored.locked,
         mask,
-        maskInverted: !!stored.maskInverted,
-        meta: stored.meta || {},
+        maskInverted:!!stored.maskInverted,
+        effects:sanitizeEffects(stored.effects),
+        colorOverlay:sanitizeColorOverlay(stored.colorOverlay),
+        meta,
       });
     }
 
-    App.nextLayerId = Math.max(Number(record.nextLayerId) || 1, ...App.layers.map(layer => layer.id + 1));
-    const frame = App.layers.find(layer => layer.type === 'frame');
+    const highestLayerId=App.layers.reduce((max,layer)=>Math.max(max,layer.id),0);
+    App.nextLayerId=Math.max(highestLayerId+1,Math.trunc(finiteProjectNumber(record.nextLayerId,1,1,Number.MAX_SAFE_INTEGER)));    const frame = App.layers.find(layer => layer.type === 'frame');
     App.frameLayerId = frame ? frame.id : null;
     App.textSelectionId = null;
     App.shapeSelectionId = null;
     App.layerSelectionId = null;
-    setActiveLayer(record.activeLayerId);
+    const requestedActiveId=Math.trunc(Number(record.activeLayerId));
+    setActiveLayer(App.layers.some(layer=>layer.id===requestedActiveId)?requestedActiveId:App.layers[0]?.id);
+    if (legacyEffects) {
+      const legacyTarget = activeLayer() || backgroundLayer();
+      if (legacyTarget) legacyTarget.effects = sanitizeEffects(globals.effects);
+      const legacyBackground = backgroundLayer();
+      if (legacyBackground) legacyBackground.colorOverlay = sanitizeColorOverlay(globals.colorOverlay);
+    }
     App.history = [];
     App.historyIndex = -1;
     App.project = {
@@ -12905,6 +13297,7 @@ function resetForNewCanvas(width, height, background, name) {
   els.interactCanvas.height = h;
   setupPreview();
   App.adjustments = createDefaultAdjustments();
+  resetProColorState();
   App.effects = createDefaultEffects();
   App.colorOverlay = { color: '#7c5cff', strength: 0, blendMode: 'overlay' };
   App.activeFilter = 'none';
@@ -13008,7 +13401,7 @@ const LUMA_COMMANDS = [
   { id: 'export', group: 'Project', label: 'Export image', hint: 'PNG, JPG, WebP, or ICO', shortcut: 'Ctrl S', keywords: 'download save share', enabled: () => App.layers.length > 0, run: () => els.exportBtn.click() },
   { id: 'undo', group: 'Edit', label: 'Undo', hint: 'Step backward in history', shortcut: 'Ctrl Z', enabled: () => App.historyIndex > 0, run: undo },
   { id: 'redo', group: 'Edit', label: 'Redo', hint: 'Step forward in history', shortcut: 'Shift Ctrl Z', enabled: () => App.historyIndex < App.history.length - 1, run: redo },
-  { id: 'duplicate', group: 'Edit', label: 'Duplicate active layer', hint: 'Create an editable copy', shortcut: 'Ctrl D', enabled: () => !!activeLayer(), run: () => {
+  { id: 'duplicate', group: 'Edit', label: 'Duplicate active layer', hint: 'Create an editable copy', shortcut: 'Ctrl D', enabled: () => !!activeLayer() && !activeLayer().locked && activeLayer().type !== 'frame', run: () => {
     const layer = activeLayer();
     if (!layer) return;
     duplicateLayer(layer.id);
@@ -13129,6 +13522,7 @@ function bindCommandPalette() {
   });
   els.commandBtn.addEventListener('click', () => openCommandPalette());
   document.addEventListener('keydown', event => {
+    if (typeof isMobileToolTrayOpen === 'function' && isMobileToolTrayOpen()) return;
     const textEntry = _isTextInputFocused(event.target);
     const modifier = event.ctrlKey || event.metaKey;
     if (modifier && (event.key === 'k' || event.key === 'K')) {
@@ -13278,14 +13672,106 @@ function buildHistogramCard() {
   return card;
 }
 
+function isMobileToolTrayOpen() {
+  return !!document.getElementById('mobileToolTray')?.classList.contains('active');
+}
+function setMobileTrayBackgroundInert(tray, inert) {
+  for (const child of document.body.children) {
+    if (child === tray) continue;
+    if (inert) {
+      child.dataset.trayWasInert=child.hasAttribute('inert')?'1':'0';
+      child.dataset.trayWasAriaHidden=child.hasAttribute('aria-hidden')?child.getAttribute('aria-hidden'):'__none__';
+      child.setAttribute('inert','');
+      child.setAttribute('aria-hidden','true');
+    } else if ('trayWasInert' in child.dataset) {
+      if(child.dataset.trayWasInert==='0')child.removeAttribute('inert');
+      if(child.dataset.trayWasAriaHidden==='__none__')child.removeAttribute('aria-hidden');
+      else child.setAttribute('aria-hidden',child.dataset.trayWasAriaHidden);
+      delete child.dataset.trayWasInert;
+      delete child.dataset.trayWasAriaHidden;
+    }
+  }
+}
+function closeMobileToolTray(restoreFocus=false) {
+  const tray = document.getElementById('mobileToolTray');
+  const button = document.getElementById('mobileMoreBtn');
+  if (!tray) return;
+  tray.classList.remove('active');
+  tray.setAttribute('aria-hidden', 'true');
+  setMobileTrayBackgroundInert(tray, false);
+  if (button) button.setAttribute('aria-expanded', 'false');
+  if (restoreFocus) {
+    const target = isDesktopLayout()
+      ? document.querySelector(`.tool-tab[data-tool="${App.activeTool}"]`) || document.querySelector('.tool-tab[data-tool="layers"]')
+      : button;
+    requestAnimationFrame(() => target?.focus({ preventScroll:true }));
+  }
+}
+function openMobileToolTray() {
+  const tray = document.getElementById('mobileToolTray');
+  const button = document.getElementById('mobileMoreBtn');
+  if (!tray || isDesktopLayout()) return;
+  if (els.menuSheet) els.menuSheet.classList.remove('active');
+  closeCommandPalette();
+  tray.querySelectorAll('.mobile-tool-choice').forEach(choice => choice.classList.toggle('active', choice.dataset.mobileTool === App.activeTool));
+  tray.classList.add('active');
+  tray.setAttribute('aria-hidden', 'false');
+  setMobileTrayBackgroundInert(tray, true);
+  if (button) button.setAttribute('aria-expanded', 'true');
+  const target = tray.querySelector('.mobile-tool-choice.active') || tray.querySelector('.mobile-tool-choice');
+  requestAnimationFrame(() => target?.focus({ preventScroll:true }));
+}
 function addMobileMoreTool() {
   if (!els.toolBar || document.getElementById('mobileMoreBtn')) return;
   const button = document.createElement('button');
+  button.type = 'button';
   button.className = 'tool-tab mobile-more-tab';
   button.id = 'mobileMoreBtn';
+  button.setAttribute('aria-haspopup', 'dialog');
+  button.setAttribute('aria-controls', 'mobileToolTray');
+  button.setAttribute('aria-expanded', 'false');
   button.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg><span>More</span>';
-  button.addEventListener('click', () => openCommandPalette());
+  button.addEventListener('click', openMobileToolTray);
   els.toolBar.appendChild(button);
+
+  const tray = document.createElement('div');
+  tray.className = 'sheet mobile-tool-tray';
+  tray.id = 'mobileToolTray';
+  tray.setAttribute('role', 'dialog');
+  tray.setAttribute('aria-modal', 'true');
+  tray.setAttribute('aria-label', 'More editing tools');
+  tray.setAttribute('aria-hidden', 'true');
+  const tools = ['crop','draw','shape','text','frame'];
+  const choices = tools.map(tool => {
+    const source = els.toolBar.querySelector(`.tool-tab[data-tool="${tool}"]`);
+    const fallback = tool === 'text'
+      ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 4h14M12 4v16M8 20h8"/></svg><span>Text</span>'
+      : `<span>${tool}</span>`;
+    return `<button type="button" class="mobile-tool-choice" data-mobile-tool="${tool}">${source ? source.innerHTML : fallback}</button>`;
+  }).join('');
+  tray.innerHTML = `<div class="sheet-card"><div class="sheet-handle"></div><div class="mobile-tool-tray-title">More tools</div><div class="mobile-tool-grid">${choices}</div></div>`;
+  tray.addEventListener('click', event => { if (event.target === tray) closeMobileToolTray(true); });
+  tray.querySelectorAll('.mobile-tool-choice').forEach(choice => choice.addEventListener('click', () => {
+    const tool = choice.dataset.mobileTool;
+    closeMobileToolTray(true);
+    setTool(tool);
+  }));
+  document.body.appendChild(tray);
+  document.addEventListener('keydown', event => {
+    if (!tray.classList.contains('active')) return;
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      closeMobileToolTray(true);
+      return;
+    }
+    if (event.key === 'Tab') {
+      const focusable=[...tray.querySelectorAll('button:not([disabled])')];
+      if(!focusable.length)return;
+      const first=focusable[0],last=focusable[focusable.length-1];
+      if(event.shiftKey&&document.activeElement===first){event.preventDefault();last.focus();}
+      else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first.focus();}
+    }
+  });
 }
 
 function bindLumaShell() {
@@ -13372,5 +13858,3 @@ updateToolPanel();
 </script>
 </body>
 </html>
-
-
