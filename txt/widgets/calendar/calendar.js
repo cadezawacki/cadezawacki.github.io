@@ -1,7 +1,7 @@
 /* Calendar Events — personal schedule manager. A month grid (Mon-first) on
    the left, the selected day's agenda on the right: each event shows its
-   start/end times stacked in a muted column, a colored category bar, the
-   category label and the event title. Events are added/edited through an
+   start/end times stacked in a muted column, a bar + label colored by the
+   event's WORKSPACE, and the event title. Events are added/edited through an
    inline form in the right column (no browser prompts).
 
    Data lives in a core synced blob (Cade.syncedBlob('calendar')): stored
@@ -13,12 +13,27 @@
                    start:   'HH:MM'   (24h),
                    end:     'HH:MM'   (24h, optional — '' when absent),
                    title:   string,
-                   cat:     string    (category name, '' = none),
-                   color:   string    (one of the 8 palette names) } ],
-       cats:   { <name>: <color> }   (category -> palette color)
+                   cat:     string    ('' = none; a WORKSPACE ID since round 7,
+                                       though legacy free-text names may still
+                                       appear in synced data),
+                   color:   string    (one of the 8 legacy palette names; kept
+                                       in the schema so older devices render
+                                       something — THIS code colors by the
+                                       workspace instead) } ],
+       cats:   { <name>: <color> }   (legacy category→color map; preserved
+                                      untouched for older devices)
      }
    Everything is normalized defensively on read (fields/arrays may be missing
    or malformed after a partial sync). All ids/classes are cal-*.
+
+   Categories ARE workspaces (round 7). The form's category select is the
+   workspace list from Cade.roomsApi.workspaces() — "— None —" plus one option
+   per workspace (label = workspace name), degrading to a plain "General"
+   option when the workspace surface is absent — and the stored `cat` is the
+   WORKSPACE ID. Bars/dots take the workspace's color by reusing the core
+   ws-color-<name> classes (they set --ws-fg). A cat that doesn't resolve
+   (deleted workspace, legacy free-text) renders neutral and never crashes;
+   managing workspaces IS managing categories, so there is no category UI.
 
    Rooms by date (absorbed from the retired daycal widget). The room system is
    reached through Cade.roomsApi — read at call time and null-guarded, so the
@@ -42,8 +57,13 @@
   Cade.loadCSS('calendar.css');
   var esc = Cade.escapeHtml;
 
-  // The 8 app-wide highlight palette names (rendered via --hl-* CSS vars).
+  // The 8 legacy highlight palette names — kept ONLY to normalize the stored
+  // event `color` field (older devices still read it; see header).
   var PALETTE = ['yellow', 'green', 'blue', 'red', 'pink', 'purple', 'orange', 'gray'];
+  // Core workspace palette (txt.html WS_COLORS) + a best-effort mapping onto
+  // the legacy palette for the stored `color` field.
+  var WS_COLORS = ['neutral', 'teal', 'blue', 'green', 'amber', 'orange', 'pink', 'purple'];
+  var WS_TO_HL = { neutral: 'gray', teal: 'green', blue: 'blue', green: 'green', amber: 'yellow', orange: 'orange', pink: 'pink', purple: 'purple' };
   var MAX_EVENTS = 1000;
 
   // ---- module state -------------------------------------------------------
@@ -51,7 +71,6 @@
   var month = null;        // Date pinned to the 1st of the displayed month
   var sel = null;          // selected dateKey 'YYYY-MM-DD'
   var form = null;         // null | { id: string|null } (null id = adding)
-  var formColor = 'blue';  // swatch-picked color for a new category
   var formFresh = false;   // skip draft capture on the render right after open
 
   var blobStore = Cade.syncedBlob('calendar', {
@@ -191,13 +210,37 @@
     ra.switchRoom(name);
   }
 
+  // ---- workspaces as categories (round 7) ----------------------------------
+  // The user's workspaces [{id, name, color}] — [] when the surface is absent
+  // (older core, tests), which degrades the form to a plain "General" option.
+  function wsList() {
+    var ra = Cade.roomsApi;
+    if (!ra || typeof ra.workspaces !== 'function') return [];
+    var l = ra.workspaces();
+    return Array.isArray(l) ? l : [];
+  }
+  // Resolve an event's cat (a workspace id) to its workspace, else null —
+  // null for '' cats, legacy free-text cats and deleted-workspace ids.
+  function wsForCat(cat) {
+    var ra = Cade.roomsApi;
+    if (!cat || !ra || typeof ra.workspaceById !== 'function') return null;
+    var ws = ra.workspaceById(cat);
+    return (ws && ws.id) ? ws : null;
+  }
+  // Sanitize a workspace's color to a known core palette name (the value
+  // comes from synced data and lands in a class attribute) — like core does.
+  function wsColorName(ws) {
+    var c = ws && ws.color != null ? String(ws.color) : 'neutral';
+    return WS_COLORS.indexOf(c) !== -1 ? c : 'neutral';
+  }
+
   // ---- rendering ----------------------------------------------------------
   // Preserve typed form values across re-renders (day picks, remote syncs).
   function captureDraft() {
     if (!form || !document.getElementById('cal-f-title')) return null;
     return {
       date: gv('cal-f-date'), start: gv('cal-f-start'), end: gv('cal-f-end'),
-      title: gv('cal-f-title'), cat: gv('cal-f-cat'), newname: gv('cal-f-newname'),
+      title: gv('cal-f-title'), cat: gv('cal-f-cat'),
       notify: gv('cal-f-notify'),
     };
   }
@@ -209,8 +252,18 @@
     var off = (new Date(y, mo, 1).getDay() + 6) % 7; // Mon-first
     var todayK = dateKey(new Date());
     var monthName = ref.toLocaleDateString([], { month: 'long', year: 'numeric' });
+    // Per-day workspace dots: one dot per distinct workspace color that day
+    // (max 3). Events whose cat doesn't resolve share a single neutral dot.
     var byDay = {};
-    for (var i = 0; i < state.events.length; i++) byDay[state.events[i].date] = 1;
+    for (var i = 0; i < state.events.length; i++) {
+      var e = state.events[i];
+      var day = byDay[e.date] || (byDay[e.date] = { seen: {}, dots: [] });
+      var ws = wsForCat(e.cat);
+      var g = ws ? wsColorName(ws) : ''; // '' = the neutral (no-workspace) group
+      if (day.seen[g]) continue;
+      day.seen[g] = 1;
+      if (day.dots.length < 3) day.dots.push('<span class="cal-dot' + (g ? ' ws-color-' + g : '') + '"></span>');
+    }
     var noteRooms = noteRoomSet();
     var dow = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
     var grid = '';
@@ -223,7 +276,8 @@
         (key === sel ? ' sel' : '') +
         (byDay[key] ? ' has' : '') +
         (noteRooms[key] ? ' cal-note' : '');
-      grid += '<div class="' + cls + '" onclick="__calPick(' + y + ',' + mo + ',' + d + ')"><span class="cal-n">' + d + '</span></div>';
+      grid += '<div class="' + cls + '" onclick="__calPick(' + y + ',' + mo + ',' + d + ')"><span class="cal-n">' + d + '</span>' +
+        (byDay[key] ? '<span class="cal-dots">' + byDay[key].dots.join('') + '</span>' : '') + '</div>';
     }
     return '<div class="cal-left">' +
       '<div class="cal-head">' +
@@ -235,12 +289,18 @@
   }
 
   function rowHtml(ev) {
+    // Color + label come from the event's workspace. Unresolvable cats render
+    // a neutral bar; legacy free-text cats keep their text as the label, but
+    // a dangling workspace id (ws_…) is noise, not a name — show nothing.
+    var ws = wsForCat(ev.cat);
+    var label = ws ? String(ws.name == null ? '' : ws.name)
+                   : (ev.cat && ev.cat.indexOf('ws_') !== 0 ? ev.cat : '');
     return '<button class="cal-ev" onclick="__calEdit(\'' + ev.id + '\')">' +
       '<span class="cal-ev-times"><span class="cal-ev-start">' + esc(fmtTime(ev.start)) + '</span>' +
         (ev.end ? '<span class="cal-ev-end">' + esc(fmtTime(ev.end)) + '</span>' : '') + '</span>' +
-      '<span class="cal-ev-bar cal-c-' + ev.color + '"></span>' +
+      '<span class="cal-ev-bar' + (ws ? ' ws-color-' + wsColorName(ws) : '') + '"></span>' +
       '<span class="cal-ev-main">' +
-        (ev.cat ? '<span class="cal-ev-cat">' + esc(ev.cat) + '</span>' : '') +
+        (label ? '<span class="cal-ev-cat">' + esc(label) + '</span>' : '') +
         '<span class="cal-ev-title">' + esc(ev.title) + (ev.notify != null ? ' <span class="cal-ev-bell" title="Reminder set">🔔</span>' : '') + '</span>' +
       '</span></button>';
   }
@@ -275,35 +335,48 @@
     return html + '</div>';
   }
 
+  // The workspace <option> list with `cur` selected ('' = None). Split out of
+  // formHtml so __calWsRefresh can rebuild it in place from a fresh wsList().
+  function wsOptionsHtml(cur) {
+    var list = wsList();
+    var opts = '', matched = !cur;
+    if (list.length) {
+      opts += '<option value=""' + (cur ? '' : ' selected') + '>— None —</option>';
+      for (var i = 0; i < list.length; i++) {
+        var w = list[i] || {};
+        var id = String(w.id == null ? '' : w.id);
+        if (!id) continue;
+        if (id === cur) matched = true;
+        opts += '<option value="' + esc(id) + '"' + (cur === id ? ' selected' : '') + '>' +
+          esc(String(w.name == null ? '' : w.name) || 'Untitled') + '</option>';
+      }
+    } else {
+      // No workspace surface (older core / none defined): a plain General
+      // option, which stores an empty cat.
+      opts += '<option value=""' + (cur ? '' : ' selected') + '>General</option>';
+    }
+    if (cur && !matched) {
+      // A cat that is a deleted workspace or a legacy free-text category:
+      // keep it selectable so an unrelated edit (time, title) doesn't
+      // silently wipe it. Picking None/a workspace migrates it.
+      opts = '<option value="' + esc(cur) + '" selected>' + esc(cur) + ' (legacy)</option>' + opts;
+    }
+    return opts;
+  }
+
   function formHtml(draft) {
     var editing = form.id ? findEvent(form.id) : null;
-    var catNames = [];
-    for (var k in state.cats) if (Object.prototype.hasOwnProperty.call(state.cats, k)) catNames.push(k);
-    var defCat = editing
-      ? (editing.cat && state.cats[editing.cat] ? 'c:' + editing.cat : 'new')
-      : (catNames.length ? 'c:' + catNames[0] : 'new');
     var f = draft || {
       date: editing ? editing.date : (sel || dateKey(new Date())),
       start: editing ? editing.start : '',
       end: editing ? editing.end : '',
       title: editing ? editing.title : '',
-      cat: defCat,
-      newname: (editing && !editing.cat) ? '' : (editing ? editing.cat : ''),
+      cat: editing ? editing.cat : '',
       notify: (editing && editing.notify != null) ? String(editing.notify) : '',
     };
-    if (draft && !draft.cat) f.cat = defCat;
-    var opts = '';
-    for (var i = 0; i < catNames.length; i++) {
-      var n = catNames[i];
-      opts += '<option value="c:' + esc(n) + '"' + (f.cat === 'c:' + n ? ' selected' : '') + '>' + esc(n) + '</option>';
-    }
-    opts += '<option value="new"' + (f.cat === 'new' ? ' selected' : '') + '>New…</option>';
-    var sw = '';
-    for (var c = 0; c < PALETTE.length; c++) {
-      var col = PALETTE[c];
-      sw += '<button type="button" class="cal-sw cal-c-' + col + (formColor === col ? ' on' : '') + '"' +
-        ' title="' + col + '" onclick="__calPickColor(\'' + col + '\')"></button>';
-    }
+    // Category select = the user's workspaces (value = workspace id), rebuilt
+    // fresh on every render AND again on interaction (see __calWsRefresh).
+    var opts = wsOptionsHtml(f.cat);
     return '<div class="cal-form">' +
       '<div class="cal-f-row"><input type="date" id="cal-f-date" value="' + esc(f.date) + '"></div>' +
       '<div class="cal-f-row cal-f-times">' +
@@ -312,17 +385,14 @@
         '<input type="time" id="cal-f-end" title="End (optional)" value="' + esc(f.end) + '">' +
       '</div>' +
       '<div class="cal-f-row"><input type="text" id="cal-f-title" placeholder="Event title" maxlength="200" value="' + esc(f.title) + '"></div>' +
-      '<div class="cal-f-row"><select id="cal-f-cat" onchange="__calCatChange()">' + opts + '</select></div>' +
+      '<div class="cal-f-row"><select id="cal-f-cat" title="Workspace"' +
+        ' onpointerdown="__calWsRefresh()" onfocus="__calWsRefresh()" onkeydown="__calWsRefresh()">' + opts + '</select></div>' +
       '<div class="cal-f-row"><select id="cal-f-notify" title="Remind me">' +
         ['', '0', '10', '30', '60'].map(function (v) {
           var lbl = v === '' ? '🔕 No reminder' : v === '0' ? '🔔 Remind at start' : '🔔 Remind ' + v + ' min before';
           return '<option value="' + v + '"' + (String(f.notify) === v ? ' selected' : '') + '>' + lbl + '</option>';
         }).join('') +
       '</select></div>' +
-      '<div id="cal-f-newcat" class="cal-f-newcat"' + (f.cat === 'new' ? '' : ' style="display:none"') + '>' +
-        '<input type="text" id="cal-f-newname" placeholder="Category name" maxlength="40" value="' + esc(f.newname) + '">' +
-        '<div class="cal-f-swatches" id="cal-f-swatches">' + sw + '</div>' +
-      '</div>' +
       '<div class="cal-f-actions">' +
         (editing ? '<button class="cal-btn cal-btn-danger" onclick="__calDelete()">Delete</button>' : '') +
         '<span class="cal-f-spacer"></span>' +
@@ -373,7 +443,6 @@
   };
   window.__calAdd = function () {
     form = { id: null };
-    formColor = 'blue';
     formFresh = true;
     render();
   };
@@ -381,26 +450,20 @@
     var ev = findEvent(String(id || ''));
     if (!ev) return;
     form = { id: ev.id };
-    formColor = ev.color;
     formFresh = true;
     render();
   };
   window.__calCancel = function () { form = null; render(); };
-  window.__calCatChange = function () {
-    var s = document.getElementById('cal-f-cat');
-    var nc = document.getElementById('cal-f-newcat');
-    if (s && nc && nc.style) nc.style.display = (s.value === 'new') ? '' : 'none';
-  };
-  window.__calPickColor = function (c) {
-    if (PALETTE.indexOf(c) === -1) return;
-    formColor = c;
-    var box = document.getElementById('cal-f-swatches');
-    if (box && box.querySelectorAll) {
-      var sws = box.querySelectorAll('.cal-sw');
-      for (var i = 0; i < sws.length; i++) {
-        sws[i].classList.toggle('on', sws[i].classList.contains('cal-c-' + c));
-      }
-    }
+  // Workspaces can appear/rename AFTER the form rendered (fresh-device sync
+  // delivering the workspace blob, a workspace created while the form is
+  // open) and core has no "workspaces changed" event — so the category select
+  // rebuilds its options from a fresh wsList() right before each interaction
+  // (pointerdown/focus, keydown for keyboard users), keeping the current
+  // selection via its `selected` attribute (incl. the "(legacy)" option).
+  window.__calWsRefresh = function () {
+    var el = document.getElementById('cal-f-cat');
+    if (!el) return;
+    el.innerHTML = wsOptionsHtml(String(el.value == null ? '' : el.value));
   };
   window.__calSave = function () {
     if (!form) return;
@@ -411,19 +474,24 @@
     var end = normTime(gv('cal-f-end')); // optional
     var title = gv('cal-f-title').slice(0, 200);
     if (!title) { toast('Give the event a title'); return; }
-    var catSel = gv('cal-f-cat');
-    var cat = '', color = 'blue';
-    if (catSel.indexOf('c:') === 0 && state.cats[catSel.slice(2)]) {
-      cat = catSel.slice(2);
-      color = state.cats[cat];
-    } else { // 'New…' (an empty name = no category, colored as picked)
-      cat = gv('cal-f-newname').slice(0, 40);
-      color = formColor;
-      if (cat) state.cats[cat] = color;
+    // cat = the selected workspace id ('' = none; may be a preserved legacy
+    // value — see wsOptionsHtml). The stored color field is a best-effort
+    // mapping of the workspace's color for OLDER devices; this code ignores it.
+    var cat = gv('cal-f-cat').slice(0, 40);
+    var ws = wsForCat(cat);
+    var ev = form.id ? findEvent(form.id) : null;
+    var color;
+    if (ws) {
+      color = WS_TO_HL[wsColorName(ws)];
+    } else if (ev && cat === ev.cat) {
+      // Unresolvable cat kept via the "(legacy)" option: an unrelated edit
+      // (title/time) must not strip the color older clients still render.
+      color = ev.color;
+    } else {
+      color = 'gray'; // none, or a new unresolvable value (not reachable via the UI)
     }
     var notifyRaw = gv('cal-f-notify');
     var notify = notifyRaw === '' ? null : Math.max(0, Math.min(1440, Math.round(+notifyRaw) || 0));
-    var ev = form.id ? findEvent(form.id) : null;
     if (ev) {
       ev.date = date; ev.start = start; ev.end = end;
       ev.title = title; ev.cat = cat; ev.color = color; ev.notify = notify;
