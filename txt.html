@@ -7909,6 +7909,25 @@ function unpackRoomText(val) {
 }
 
 let _fbAppSeq = 0;
+// The two firebase compat scripts load synchronously in <head>, but on a
+// fresh device a flaky network can drop one (classically: app-compat lands,
+// database-compat doesn't). Re-inject whatever is missing — async=false keeps
+// execution order — and let the user's next attempt succeed without a reload.
+let _fbScriptRetryAt = 0;
+function _fbEnsureScripts() {
+  const now = Date.now();
+  if (now - _fbScriptRetryAt < 5000) return;
+  _fbScriptRetryAt = now;
+  const need = [];
+  if (typeof firebase === 'undefined') need.push('https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js');
+  if (typeof firebase === 'undefined' || typeof firebase.database !== 'function') need.push('https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js');
+  for (const src of need) {
+    const s = document.createElement('script');
+    s.src = src;
+    s.async = false;
+    document.head.appendChild(s);
+  }
+}
 function initFirebase(databaseURL) {
   // Re-configuring with a DIFFERENT database URL must not silently keep using
   // the old connection (that read as "sync just stopped working" after editing
@@ -7920,15 +7939,37 @@ function initFirebase(databaseURL) {
     syncState.firebaseDb = null;
     try { oldApp.delete().catch(() => {}); } catch {}
   }
-  if (syncState.firebaseApp) return syncState.firebaseDb;
+  if (syncState.firebaseApp && syncState.firebaseDb) return syncState.firebaseDb;
+  // A half-initialized app (database() threw mid-init — e.g. its script had
+  // not loaded when the first attempt ran) must not poison every later call
+  // into returning null ("null is not an object (evaluating 'db.ref')"):
+  // tear the carcass down and start clean.
+  if (syncState.firebaseApp && !syncState.firebaseDb) {
+    const oldApp = syncState.firebaseApp;
+    syncState.firebaseApp = null;
+    syncState.firebaseUrl = null;
+    try { oldApp.delete().catch(() => {}); } catch {}
+  }
+  if (typeof firebase === 'undefined' || typeof firebase.initializeApp !== 'function' || typeof firebase.database !== 'function') {
+    _fbEnsureScripts();
+    throw new Error('sync library not loaded yet (poor connection?) — it is reloading, try again in a few seconds');
+  }
   // App names must be unique per initializeApp call; suffix a counter so a
   // URL change (delete + re-init) can never race the old app's teardown.
   const appName = 'cade-sync-' + (++_fbAppSeq);
   const app = firebase.initializeApp({ databaseURL }, appName);
+  let db;
+  try {
+    db = firebase.database(app);
+  } catch (e) {
+    // Commit NOTHING on failure — a clean retry must be possible.
+    try { app.delete().catch(() => {}); } catch {}
+    throw e;
+  }
   syncState.firebaseApp = app;
   syncState.firebaseUrl = databaseURL;
-  syncState.firebaseDb = firebase.database(app);
-  return syncState.firebaseDb;
+  syncState.firebaseDb = db;
+  return db;
 }
 
 function cleanupFirebase() {
