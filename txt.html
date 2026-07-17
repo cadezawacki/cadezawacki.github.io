@@ -7727,6 +7727,7 @@ const syncState = {
   firebaseListener: null,
   lastLocalEdit: 0,
   pendingRemoteText: null,
+  pendingRemoteAt: 0,   // when the queued remote snapshot ARRIVED (not when re-queued)
   idleCheckTimer: null,
   offlineBase: null,    // snapshot of text when we went offline
   wasOffline: false,    // true if we detected offline while connected
@@ -8022,6 +8023,75 @@ function showSyncStep(stepId) {
   document.getElementById('sync-step-creds').style.display = stepId === 'sync-step-creds' ? 'block' : 'none';
 }
 
+// --- Self-echo detection -----------------------------------------------------
+// Firebase raises `value` events locally (and synchronously) for this client's
+// own `.set()` writes, so every broadcast loops straight back into our own room
+// listener. When the user kept typing while the push was in flight, that echo
+// decrypts to STALE text — missing the newest keystrokes — and queueing it as
+// pendingRemoteText armed a trap: once the user went idle and the follow-up
+// push had marked the room clean, the idle gate adopted the stale snapshot,
+// deleting the last few typed words and yanking the scroll. Every payload we
+// write carries a fresh random IV, so its encoded form uniquely fingerprints
+// OUR write (a peer writing identical text still produces different bytes);
+// remember the last few and drop matching listener events before they're even
+// decrypted. The signature keeps only length + head + tail (the head covers the
+// IV), so entries are tiny, and the ring rotates so an unacked push can't grow it.
+const _RECENT_PUSH_MAX = 8;
+const _recentPushSigs = [];
+function _pushSig(payload) {
+  return payload.length + ':' + payload.slice(0, 64) + payload.slice(-64);
+}
+function _notePushedPayload(payload) {
+  _recentPushSigs.push(_pushSig(payload));
+  if (_recentPushSigs.length > _RECENT_PUSH_MAX) _recentPushSigs.shift();
+}
+function _isSelfEcho(encoded) {
+  return _recentPushSigs.includes(_pushSig(encoded));
+}
+
+// Replace the editor document with `newText` via the smallest single change
+// (common prefix/suffix trimmed). A wholesale `{from: 0, to: len}` replace
+// destroys position mapping — CodeMirror can't relate the old viewport or
+// selection to the new document, so the scroll jumps and the caret teleports
+// to a clamped absolute offset. With a minimal span, everything outside the
+// changed region maps 1:1: the scroll position holds and the selection glides
+// through the edit like any other.
+function _minimalRemoteChange(cur, newText) {
+  const oldLen = cur.length, newLen = newText.length;
+  const maxPre = Math.min(oldLen, newLen);
+  let pre = 0;
+  while (pre < maxPre && cur.charCodeAt(pre) === newText.charCodeAt(pre)) pre++;
+  // Back off rather than split a surrogate pair at either boundary.
+  if (pre > 0) {
+    const c = cur.charCodeAt(pre - 1);
+    if (c >= 0xD800 && c <= 0xDBFF) pre--;
+  }
+  let suf = 0;
+  const maxSuf = maxPre - pre;
+  while (suf < maxSuf && cur.charCodeAt(oldLen - 1 - suf) === newText.charCodeAt(newLen - 1 - suf)) suf++;
+  if (suf > 0) {
+    const c = cur.charCodeAt(oldLen - suf);
+    if (c >= 0xDC00 && c <= 0xDFFF) suf--;
+  }
+  return { from: pre, to: oldLen - suf, insert: newText.slice(pre, newLen - suf) };
+}
+
+// Dispatch `newText` into the editor as a remote-origin change: suppressed from
+// the broadcast path, selection left to CodeMirror's change-mapping (text
+// inserted above the caret shifts it with the content instead of stranding it
+// at an absolute offset).
+function dispatchRemoteDoc(newText) {
+  const cur = editor.state.doc.toString();
+  if (newText === cur) return;
+  const change = _minimalRemoteChange(cur, newText);
+  syncState.suppressUpdate = true;
+  try {
+    editor.dispatch({ changes: change });
+  } finally {
+    syncState.suppressUpdate = false;
+  }
+}
+
 // Safely accept a remote text update for `roomName`, preserving any unsynced
 // local edits. Returns true if the editor was updated to `text`, false if we
 // kept local content (in which case a re-broadcast is scheduled).
@@ -8042,6 +8112,8 @@ function safeApplyRemote(text, roomName) {
   // Never replace the editor within a few seconds of a local edit, even if the
   // local copy looks "clean" — a stale snapshot from another window must not
   // clobber what the user just typed (#4). Re-queue; the idle check retries.
+  // pendingRemoteAt is deliberately NOT restamped: re-queueing must not make an
+  // old snapshot look fresher than a broadcast that started after it arrived.
   if (Date.now() - (syncState.lastLocalEdit || 0) < 4000) {
     syncState.pendingRemoteText = text;
     return false;
@@ -8069,15 +8141,7 @@ function safeApplyRemote(text, roomName) {
   }
 
   // No local divergence — safe to adopt remote.
-  const cursor = editor.state.selection.main;
-  const cursorOffset = Math.min(cursor.anchor, text.length);
-  const cursorHead = Math.min(cursor.head, text.length);
-  syncState.suppressUpdate = true;
-  editor.dispatch({
-    changes: { from: 0, to: currentText.length, insert: text },
-    selection: { anchor: cursorOffset, head: cursorHead },
-  });
-  syncState.suppressUpdate = false;
+  dispatchRemoteDoc(text);
   saveRoomSynced(roomName, text);
   // Refresh our cached version so a later reconcile doesn't mistake this
   // already-adopted live update for a fresh server advance (#3). Best-effort.
@@ -8161,6 +8225,9 @@ window.syncConnect = async function() {
       if (syncState.pendingReconcile || syncState.conflictResolving) return;
       const encoded = unpackRoomText(snap.val());
       if (!encoded) return;
+      // Our own write looping back — nothing to adopt. Queueing it would arm
+      // the stale-echo trap when the user typed during the in-flight push.
+      if (_isSelfEcho(encoded)) return;
       try {
         __mark('sync:recv-decrypt(' + encoded.length + 'b)');
         let text = await decryptText(encoded, syncState.encKey);
@@ -8170,6 +8237,7 @@ window.syncConnect = async function() {
         const currentText = editor.state.doc.toString();
         if (text !== currentText) {
           syncState.pendingRemoteText = text;
+          syncState.pendingRemoteAt = Date.now();
           tryApplyPendingRemote();
         }
       } catch (e) {
@@ -8243,6 +8311,9 @@ async function pushTextToServer(roomName, text, encKey) {
   // already echo-safe: our own write decrypts to text identical to the editor
   // (→ just records the synced base) and anything else goes through the
   // base-guarded safeApplyRemote path.
+  // Fingerprint BEFORE the write: the local echo event fires synchronously
+  // inside `.set()`, so recording after would miss it.
+  _notePushedPayload(encrypted);
   await _withPushTimeout(syncState.firebaseDb.ref(`rooms/${roomName}/text`).set(packRoomText(encrypted)));
   // Bump the room's version counter so reconnecting peers can tell the server
   // advanced (#3). Fire-and-forget so it never blocks the caller; a failure
@@ -8270,6 +8341,7 @@ async function pushRoomTextQuiet(roomName, text, encKey) {
   const isLocked = !!sessionRoomPasswords[roomName];
   const textToSend = isLocked ? ROOM_LOCK_SENTINEL + text : text;
   const encrypted = await encryptText(textToSend, key);
+  _notePushedPayload(encrypted); // before .set() — its local echo is synchronous
   await _withPushTimeout(syncState.firebaseDb.ref(`rooms/${roomName}/text`).set(packRoomText(encrypted)));
   saveRoomSynced(roomName, text); // confirmed on the server
   try {
@@ -8304,12 +8376,21 @@ async function _doBroadcast() {
   try {
     raw = editor.state.doc.toString();
     __mark('sync:broadcast(' + raw.length + 'ch)');
+    const pushStartedAt = Date.now();
     await pushTextToServer(roomName, raw, syncState.encKey);
     // If the editor hasn't moved on, mark this text as synced. If it has
     // (user kept typing during the in-flight broadcast — those edits couldn't
     // schedule their own broadcast because suppressUpdate was true), schedule
     // a follow-up pass so the latest content reaches the server.
     if (syncState.roomName !== roomName) return;
+    // The server now holds `raw`. Any remote snapshot that arrived BEFORE this
+    // push began is superseded — the server state it captured was overwritten
+    // by our write — so drop it before the idle gate can "restore" stale text
+    // over what the user typed. Snapshots that arrived DURING the flight may
+    // reflect a write that landed after ours; those stay queued.
+    if (syncState.pendingRemoteText != null && (syncState.pendingRemoteAt || 0) <= pushStartedAt) {
+      syncState.pendingRemoteText = null;
+    }
     if (editor.state.doc.toString() === raw) {
       saveRoomSynced(roomName, raw);
     } else {
@@ -8394,15 +8475,7 @@ const tabSync = (() => {
     if ((syncState.lastLocalTouch || 0) > msg.ts) return;
     // Never yank the doc out from under active typing; queue the newest.
     if (Date.now() - (syncState.lastLocalTouch || 0) < 1200) { queuePeerDoc(msg); return; }
-    const sel = editor.state.selection.main;
-    const anchor = Math.min(sel.anchor, msg.text.length);
-    const head = Math.min(sel.head, msg.text.length);
-    syncState.suppressUpdate = true;
-    editor.dispatch({
-      changes: { from: 0, to: cur.length, insert: msg.text },
-      selection: { anchor, head },
-    });
-    syncState.suppressUpdate = false;
+    dispatchRemoteDoc(msg.text);
     _lastPeerDoc = { room: msg.room, text: msg.text };
     // Keep the shared cache in step. Do NOT touch the synced base and do NOT
     // broadcast: the tab where the edit originated owns the server exchange.
@@ -8667,16 +8740,7 @@ function applyResolvedServer(roomName, serverText, serverVer) {
     store.set('cade-room-cache:' + roomName, serverText);
     return;
   }
-  const cur = editor.state.doc.toString();
-  const sel = editor.state.selection.main;
-  const anchor = Math.min(sel.anchor, serverText.length);
-  const head = Math.min(sel.head, serverText.length);
-  syncState.suppressUpdate = true;
-  editor.dispatch({
-    changes: { from: 0, to: cur.length, insert: serverText },
-    selection: { anchor, head },
-  });
-  syncState.suppressUpdate = false;
+  dispatchRemoteDoc(serverText);
   saveRoomSynced(roomName, serverText);
   if (serverVer != null) { saveRoomVersion(roomName, serverVer); syncState.serverVersion = serverVer; }
   persistContent();
@@ -8695,10 +8759,7 @@ async function applyResolvedAppend(roomName, localText, serverText, where) {
     store.set('cade-room-cache:' + roomName, merged);
     return;
   }
-  const cur = editor.state.doc.toString();
-  syncState.suppressUpdate = true;
-  editor.dispatch({ changes: { from: 0, to: cur.length, insert: merged } });
-  syncState.suppressUpdate = false;
+  dispatchRemoteDoc(merged);
   saveRoomSynced(roomName, merged);
   persistContent();
   redecorateAfterRemote();
@@ -10042,6 +10103,9 @@ async function _doSwitchRoom(name, firebaseUrl, baseEncKey) {
         flushIfDirty();
         return;
       }
+      // Our own write looping back — nothing to adopt. Queueing it would arm
+      // the stale-echo trap when the user typed during the in-flight push.
+      if (_isSelfEcho(encoded)) return;
       __mark('sync:recv(' + encoded.length + 'b)');
       try {
         let text = await decryptText(encoded, syncState.encKey);
@@ -10062,6 +10126,7 @@ async function _doSwitchRoom(name, firebaseUrl, baseEncKey) {
         // active typing. For the first snapshot in a session (no local edits
         // recorded against this base), apply immediately via safeApplyRemote.
         syncState.pendingRemoteText = text;
+        syncState.pendingRemoteAt = Date.now();
         tryApplyPendingRemote();
       } catch (e) {
         console.error('Sync decrypt error:', e);
