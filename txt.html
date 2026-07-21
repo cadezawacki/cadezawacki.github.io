@@ -2378,6 +2378,82 @@ body.sel-mode .editor-wrap .cm-content { -webkit-touch-callout: none; }
 }
 
 /* ============================================
+   MARKDOWN TABLES (auto-rendered pipe tables)
+   ============================================ */
+/* While a table renders, source lines beyond the first are hidden (same
+   trick as collapsed sections — the widget itself lives on line 1). */
+.cm-line.cm-table-hidden { display: none; }
+/* Hidden lines keep 0-height gutter entries; without clipping, their line
+   numbers all paint stacked at one spot as a dark blob (also visible on
+   collapsed sections). Normal entries are exactly line-height tall, so
+   clipping changes nothing for them. */
+.cm-gutter.cm-lineNumbers .cm-gutterElement { overflow: hidden; }
+/* Raw source while the selection is inside the block (editing). */
+.cm-table-src { background: var(--surface-2); font-family: var(--font-mono); font-size: 0.88em; }
+.cm-table-meta { color: var(--text-faint); }
+.cm-mdtable-wrap {
+  display: block;
+  /* The table's intrinsic width must NOT propagate up: .cm-content is a flex
+     item, and without containment a wide table balloons the whole editor line
+     past the viewport instead of scrolling inside this wrap. */
+  contain: inline-size;
+  max-height: 70vh;
+  overflow: auto;
+  margin: 3px 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain; /* horizontal pan must not trigger browser back-nav */
+}
+.cm-mdtable {
+  border-collapse: separate; /* collapse breaks position:sticky on cells */
+  border-spacing: 0;
+  width: max-content;
+  min-width: 100%;
+  font-size: 0.92em;
+  line-height: 1.45;
+}
+.cm-mdtable th, .cm-mdtable td {
+  padding: 5px 10px;
+  background: var(--surface); /* opaque — sticky cells slide over neighbours */
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+.cm-mdtable .cm-t-c { max-width: min(60vw, 30em); white-space: pre-wrap; overflow-wrap: break-word; }
+.cm-mdtable thead th { background: var(--surface-2); font-weight: 600; border-bottom-width: 2px; }
+.cm-mdtable tbody tr:last-child td { border-bottom-width: 0; }
+.cm-mdtable tbody tr:nth-child(even) td { background: color-mix(in srgb, var(--surface-2) 50%, var(--surface)); }
+@media (hover: hover) {
+  .cm-mdtable tbody tr:hover td { background: color-mix(in srgb, var(--accent) 8%, var(--surface)); }
+}
+.cm-mdtable tr.cm-t-sep th, .cm-mdtable tr.cm-t-sep td { border-bottom-width: 2px; }
+/* Frozen columns/rows. Offsets past the first row/column are measured in JS. */
+.cm-mdtable .cm-t-sc { position: sticky; left: 0; z-index: 1; }
+.cm-mdtable .cm-t-sr { position: sticky; top: 0; z-index: 2; }
+.cm-mdtable .cm-t-sr.cm-t-sc { z-index: 3; }
+.cm-mdtable .cm-t-sce { border-right: 1px solid var(--border); }
+.cm-mdtable tfoot td {
+  position: sticky; bottom: 0; z-index: 2;
+  background: var(--surface-2); font-weight: 600;
+  border-top: 2px solid var(--border); border-bottom-width: 0;
+}
+.cm-mdtable tfoot td.cm-t-sc { z-index: 3; }
+/* Frozen-edge shadows once the wrap has actually scrolled. */
+.cm-mdtable-wrap.sx .cm-t-sce { box-shadow: 6px 0 8px -6px rgba(0, 0, 0, 0.4); clip-path: inset(0 -14px 0 0); }
+.cm-mdtable-wrap.sy .cm-t-sre { box-shadow: 0 6px 8px -6px rgba(0, 0, 0, 0.4); clip-path: inset(0 0 -14px 0); }
+.cm-t-code {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 0 2px;
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+}
+.cm-t-link { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+
+/* ============================================
    CODE BLOCKS (``` fences) + SYNTAX TOKENS
    ============================================ */
 :root {
@@ -5767,6 +5843,385 @@ const imagePlugin = ViewPlugin.fromClass(class {
   update(update) { if (update.docChanged || update.viewportChanged) this.decorations = buildImageDecorations(update.view); }
 }, { decorations: v => v.decorations });
 
+// ============================================
+// MARKDOWN TABLES — auto-rendered pipe tables
+// ============================================
+// A contiguous run of `| … |` lines whose second line is a `|---|---:|`
+// delimiter renders as a real <table> while Markdown Styling is on: a
+// horizontally scrollable container when the columns overflow the screen,
+// sticky header row + sticky first column (the defaults), per-column
+// alignment from the delimiter row, and inline markdown (bold/italic/
+// `code`/links) inside cells. Purely visual — the raw text is untouched, so
+// sync/export/search all see plain markdown. Click a cell (or arrow into
+// the block) to edit: while the selection touches the block the widget
+// swaps for the raw source lines.
+//
+// A `{table …}` directive on the line directly above the first row
+// overrides the defaults, e.g. {table sticky-cols=2 sticky-rows=1 total=on}
+//   sticky-cols=N   pin the first N columns while scrolling right (default 1)
+//   sticky-rows=N   pin the first N rows while scrolling down (default: 1
+//                   when a header row exists, else 0)
+//   header=on|off   treat the first row as a header (default: on exactly
+//                   when the delimiter row follows it)
+//   total=on|off    the last row is a grand-total row — pinned to the
+//                   bottom and styled like the header (default off)
+// With a directive the delimiter row is optional (header=off tables).
+//
+// CM6 note: the local bundle exports no StateField, and block/multi-line
+// replace decorations are forbidden from plugins and facet functions — so,
+// exactly like collapsed sections above, the widget replaces only the FIRST
+// line's text (a same-line replace) and every other source line is hidden
+// with a display:none line class.
+const TABLE_ROW_RE = /^\s{0,3}\|.*\|\s*$/;
+const TABLE_DIRECTIVE_RE = /^\s{0,3}\{table\b([^{}]*)\}\s*$/i;
+const TABLE_MAX_ROWS = 400; // beyond this a table stays raw text (perf guard)
+let mdTablesEnabled = store.get('cade-mdtables') !== 'false'; // default on
+
+function isTableRowLine(text) {
+  return text.length <= 2000 && text.indexOf('|') !== -1 && TABLE_ROW_RE.test(text);
+}
+function isTableishLine(text) {
+  return isTableRowLine(text) || (text.length <= 300 && TABLE_DIRECTIVE_RE.test(text));
+}
+
+// Split a `| a | b |` line into cells (\| escapes a literal pipe). Each cell
+// carries line-relative start/end offsets of its trimmed content — the caret
+// targets for click-to-edit. Returns null unless two unescaped pipes exist.
+function splitTableRow(text) {
+  const bounds = [];
+  for (let i = 0; i < text.length; i++) {
+    const ch = text.charCodeAt(i);
+    if (ch === 92) { i++; continue; } // backslash — skip the escaped char
+    if (ch === 124) bounds.push(i);   // '|'
+  }
+  if (bounds.length < 2) return null;
+  const cells = [];
+  for (let b = 0; b + 1 < bounds.length; b++) {
+    const a = bounds[b] + 1, z = bounds[b + 1];
+    const raw = text.slice(a, z);
+    const trimmed = raw.trim();
+    // Empty cell → caret goes right before the closing pipe.
+    const start = trimmed ? a + /^\s*/.exec(raw)[0].length : z;
+    cells.push({ text: trimmed.replace(/\\\|/g, '|'), start, end: start + trimmed.length });
+  }
+  return cells;
+}
+
+// `|---|:---:|` delimiter row → per-column alignment array, or null.
+function parseDelimRow(text) {
+  if (text.indexOf('-') === -1 || !isTableRowLine(text)) return null;
+  const cells = splitTableRow(text);
+  if (!cells) return null;
+  const aligns = [];
+  for (const c of cells) {
+    const m = /^(:?)-+(:?)$/.exec(c.text);
+    if (!m) return null;
+    aligns.push(m[1] && m[2] ? 'center' : m[2] ? 'right' : m[1] ? 'left' : null);
+  }
+  return aligns;
+}
+
+// `{table sticky-cols=2 header=off …}` body → overrides (null field = auto).
+function parseTableDirective(body) {
+  const cfg = { stickyCols: null, stickyRows: null, header: null, total: null };
+  const re = /([a-z-]+)\s*[=:]\s*([a-z0-9]+)/gi;
+  let m;
+  while ((m = re.exec(body || '')) !== null) {
+    const k = m[1].toLowerCase().replace(/-/g, '');
+    const v = m[2].toLowerCase();
+    const num = /^\d+$/.test(v) ? Math.min(parseInt(v, 10), 30) : null;
+    const bool = (v === 'on' || v === 'yes' || v === 'true' || v === '1') ? true
+      : (v === 'off' || v === 'no' || v === 'false' || v === '0') ? false : null;
+    if (num !== null && (k === 'stickycols' || k === 'cols' || k === 'freezecols')) cfg.stickyCols = num;
+    else if (num !== null && (k === 'stickyrows' || k === 'rows' || k === 'freezerows')) cfg.stickyRows = num;
+    else if (bool !== null && k === 'header') cfg.header = bool;
+    else if (bool !== null && k === 'total') cfg.total = bool;
+  }
+  return cfg;
+}
+
+// Minimal inline markdown → DOM for cell content. Built with createElement/
+// textContent only — cell text can come from synced peers, so nothing is
+// ever parsed as HTML.
+function renderTableCellInline(text) {
+  const frag = document.createDocumentFragment();
+  if (!text) return frag;
+  const spans = [];
+  const taken = [];
+  const free = (s, e) => { for (const t of taken) { if (s < t[1] && e > t[0]) return false; } return true; };
+  const el = (tag, cls, str) => { const n = document.createElement(tag); if (cls) n.className = cls; n.textContent = str; return n; };
+  const link = (title, url) => {
+    const a = el('a', 'cm-t-link', title);
+    a.href = url; a.rel = 'noopener noreferrer'; a.target = '_blank';
+    a.addEventListener('click', (ev) => { ev.preventDefault(); ev.stopPropagation(); openLink(url); });
+    return a;
+  };
+  // make(m) returns an element, {node, len} to claim fewer chars than the
+  // match, or null to skip. First claim wins (code > links > emphasis).
+  const scan = (re, make) => {
+    re.lastIndex = 0;
+    let m;
+    while ((m = re.exec(text)) !== null) {
+      if (!m[0].length) { re.lastIndex++; continue; }
+      const s = m.index;
+      const made = free(s, s + m[0].length) ? make(m) : null;
+      if (!made) continue;
+      const e = s + (made.len || m[0].length);
+      taken.push([s, e]);
+      spans.push({ s, e, node: made.node || made });
+    }
+  };
+  scan(MD_CODE_RE, m => el('code', 'cm-t-code', m[1]));
+  scan(RE_MD, m => link(m[1], normalizeUrl(m[2])));
+  scan(RE_URL, m => {
+    const raw = trimTrailingPunct(m[0]);
+    return raw ? { node: link(raw, normalizeUrl(raw)), len: raw.length } : null;
+  });
+  scan(MD_BOLD_RE, m => el('strong', null, m[1]));
+  scan(MD_BOLDU_RE, m => el('strong', null, m[1]));
+  scan(MD_STRIKE_RE, m => el('s', null, m[1]));
+  scan(MD_UND_RE, m => el('u', null, m[1]));
+  scan(MD_ITAL_STAR_RE, m =>
+    (text[m.index - 1] === '*' || text[m.index + m[0].length] === '*') ? null : el('em', null, m[1]));
+  scan(MD_ITAL_UND_RE, m => {
+    if (text[m.index - 1] === '_' || text[m.index + m[0].length] === '_') return null;
+    if (/[A-Za-z0-9]/.test(text[m.index - 1] || '') || /[A-Za-z0-9]/.test(text[m.index + m[0].length] || '')) return null;
+    return el('em', null, m[1]);
+  });
+  spans.sort((a, b) => a.s - b.s);
+  let at = 0;
+  for (const sp of spans) {
+    if (sp.s > at) frag.appendChild(document.createTextNode(text.slice(at, sp.s)));
+    frag.appendChild(sp.node);
+    at = sp.e;
+  }
+  if (at < text.length) frag.appendChild(document.createTextNode(text.slice(at)));
+  return frag;
+}
+
+// Sticky offsets past the first row/column depend on rendered sizes, so they
+// are measured (rows[0] widths → column lefts, row heights → row tops) and
+// re-applied via ResizeObserver when content/fonts change.
+function applyTableStickyOffsets(table, stickyCols, stickyRows) {
+  const rows = table.rows;
+  if (!rows.length) return;
+  if (stickyCols > 1) {
+    const lefts = [0];
+    let acc = 0;
+    for (let c = 0; c + 1 < stickyCols && c < rows[0].cells.length; c++) {
+      acc += rows[0].cells[c].getBoundingClientRect().width;
+      lefts.push(acc);
+    }
+    for (let r = 0; r < rows.length; r++) {
+      const cells = rows[r].cells;
+      for (let c = 1; c < stickyCols && c < cells.length; c++) cells[c].style.left = lefts[c] + 'px';
+    }
+  }
+  if (stickyRows > 1) {
+    let acc = 0;
+    for (let r = 0; r < stickyRows && r < rows.length; r++) {
+      if (r > 0) for (const cell of rows[r].cells) cell.style.top = acc + 'px';
+      acc += rows[r].getBoundingClientRect().height;
+    }
+  }
+}
+
+class TableWidget extends WidgetType {
+  // src = the block's full source (directive line included when present).
+  constructor(src, dirCfg) {
+    super();
+    this.src = src;
+    this.dirCfg = dirCfg;
+    this.key = (dirCfg ? JSON.stringify(dirCfg) : '') + '\u0001' + src;
+    const rows = Math.min((src.match(/\n/g) || []).length + 1, 40);
+    this._est = Math.min(rows * 30 + 12, Math.round((window.innerHeight || 800) * 0.72));
+  }
+  eq(o) { return o.key === this.key; }
+  get estimatedHeight() { return this._est; }
+  ignoreEvent() { return true; }
+  destroy(dom) { try { if (dom.__ro) { dom.__ro.disconnect(); dom.__ro = null; } } catch {} }
+  toDOM(view) {
+    const lines = this.src.split('\n');
+    const lineOff = [];
+    { let o = 0; for (const l of lines) { lineOff.push(o); o += l.length + 1; } }
+    let li = 0;
+    if (this.dirCfg && lines.length && TABLE_DIRECTIVE_RE.test(lines[0])) li = 1;
+    // Delimiter rows are structure, not data: the one right after the first
+    // row marks a header + carries alignment; later ones render as a heavier
+    // border on the row above (people use them as visual separators).
+    const rows = [];
+    let aligns = null, headerAuto = false;
+    for (; li < lines.length; li++) {
+      const delim = parseDelimRow(lines[li]);
+      if (delim) {
+        if (rows.length === 1 && !headerAuto) { aligns = delim; headerAuto = true; }
+        else if (rows.length) rows[rows.length - 1].sep = true;
+        continue;
+      }
+      const cells = splitTableRow(lines[li]);
+      if (cells) rows.push({ cells, off: lineOff[li], sep: false });
+    }
+    const nCols = rows.reduce((m, r) => Math.max(m, r.cells.length), 0);
+    const cfg = this.dirCfg;
+    const headerOn = (cfg && cfg.header !== null) ? (cfg.header && rows.length > 0) : headerAuto;
+    const totalOn = !!(cfg && cfg.total) && rows.length > (headerOn ? 1 : 0);
+    const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+    const stickyCols = clamp(cfg && cfg.stickyCols !== null ? cfg.stickyCols : 1, 0, Math.max(0, nCols - 1));
+    const stickyRows = clamp(cfg && cfg.stickyRows !== null ? cfg.stickyRows : (headerOn ? 1 : 0), 0, rows.length - (totalOn ? 1 : 0));
+
+    const wrap = document.createElement('div');
+    wrap.className = 'cm-mdtable-wrap';
+    const table = document.createElement('table');
+    table.className = 'cm-mdtable';
+    wrap.appendChild(table);
+    const thead = headerOn ? document.createElement('thead') : null;
+    if (thead) table.appendChild(thead);
+    const tbody = document.createElement('tbody');
+    table.appendChild(tbody);
+    const tfoot = totalOn ? document.createElement('tfoot') : null;
+    if (tfoot) table.appendChild(tfoot);
+
+    rows.forEach((row, r) => {
+      const isHead = headerOn && r === 0;
+      const isTotal = totalOn && r === rows.length - 1;
+      const tr = document.createElement('tr');
+      (isHead ? thead : isTotal ? tfoot : tbody).appendChild(tr);
+      if (row.sep) tr.className = 'cm-t-sep';
+      const fallbackP = row.cells.length ? row.cells[row.cells.length - 1].end : 0;
+      for (let c = 0; c < nCols; c++) {
+        const cell = document.createElement(isHead ? 'th' : 'td');
+        const info = row.cells[c];
+        cell.dataset.p = String(row.off + (info ? info.end : fallbackP));
+        const al = aligns && aligns[c];
+        if (al) cell.style.textAlign = al;
+        let cls = '';
+        if (c < stickyCols) { cls = 'cm-t-sc'; if (c === stickyCols - 1) cls += ' cm-t-sce'; }
+        if (r < stickyRows) { cls += (cls ? ' ' : '') + 'cm-t-sr'; if (r === stickyRows - 1) cls += ' cm-t-sre'; }
+        if (cls) cell.className = cls;
+        const inner = document.createElement('div');
+        inner.className = 'cm-t-c';
+        if (info && info.text) inner.appendChild(renderTableCellInline(info.text));
+        cell.appendChild(inner);
+        tr.appendChild(cell);
+      }
+    });
+
+    // Click a cell → caret at the end of that cell's source text; the widget
+    // then swaps for the raw lines (selection touches the block). The block
+    // position is resolved fresh via posAtDOM so edits above can't stale it.
+    table.addEventListener('click', (e) => {
+      const cell = e.target && e.target.closest ? e.target.closest('th,td') : null;
+      if (!cell || cell.dataset.p == null) return;
+      const s = window.getSelection ? window.getSelection() : null;
+      if (s && !s.isCollapsed && wrap.contains(s.anchorNode)) return; // copying, not editing
+      let base = null;
+      try { base = view.posAtDOM(wrap); } catch {}
+      if (base == null || base < 0) return;
+      const pos = Math.min(base + Number(cell.dataset.p), view.state.doc.length);
+      view.dispatch({ selection: { anchor: pos }, scrollIntoView: true });
+      view.focus();
+    });
+
+    // Frozen-edge shadows only once the wrap has actually scrolled.
+    wrap.addEventListener('scroll', () => {
+      wrap.classList.toggle('sx', wrap.scrollLeft > 1);
+      wrap.classList.toggle('sy', wrap.scrollTop > 1);
+    }, { passive: true });
+
+    if (stickyCols > 1 || stickyRows > 1) {
+      const apply = () => { if (wrap.isConnected) applyTableStickyOffsets(table, stickyCols, stickyRows); };
+      requestAnimationFrame(apply);
+      if (typeof ResizeObserver !== 'undefined') {
+        const ro = new ResizeObserver(apply);
+        ro.observe(table);
+        wrap.__ro = ro;
+      }
+    }
+    return wrap;
+  }
+}
+
+// Viewport-driven like every other decorator, extended outward over adjacent
+// table-ish lines (bounded) so a block straddling the viewport edge is always
+// parsed whole.
+function buildTableDecorations(view) {
+  if (!mdStyleEnabled || !mdTablesEnabled) return Decoration.none;
+  const doc = view.state.doc;
+  const sel = view.state.selection.ranges;
+  const ranges = [];
+  const seen = new Set();
+  for (const { from, to } of view.visibleRanges) {
+    let startLine = doc.lineAt(from).number;
+    let endLine = doc.lineAt(to).number;
+    let guard = 0;
+    while (startLine > 1 && guard++ < TABLE_MAX_ROWS + 2 && isTableishLine(doc.line(startLine - 1).text)) startLine--;
+    guard = 0;
+    while (endLine < doc.lines && guard++ < TABLE_MAX_ROWS + 2 && isTableishLine(doc.line(endLine + 1).text)) endLine++;
+    for (let i = startLine; i <= endLine; i++) {
+      const line = doc.line(i);
+      const text = line.text;
+      if (text.indexOf('|') === -1 && text.indexOf('{') === -1) continue;
+      if (fenceContaining(line.from)) continue;
+      let dirCfg = null, dirLine = -1, rowStart = i;
+      if (text.length <= 300 && text.indexOf('{') !== -1) {
+        const dm = TABLE_DIRECTIVE_RE.exec(text);
+        if (dm) {
+          if (i >= doc.lines || !isTableRowLine(doc.line(i + 1).text)) continue;
+          dirCfg = parseTableDirective(dm[1]);
+          dirLine = i;
+          rowStart = i + 1;
+        }
+      }
+      if (dirLine === -1 && !isTableRowLine(text)) continue;
+      let last = rowStart;
+      while (last < doc.lines && isTableRowLine(doc.line(last + 1).text)) last++;
+      // Without a directive the table anchors at the first row followed by a
+      // valid ≥2-column delimiter row (GFM); earlier pipe lines stay plain.
+      let first = rowStart;
+      if (!dirCfg) {
+        let anchor = -1;
+        for (let h = rowStart; h < last; h++) {
+          const al = parseDelimRow(doc.line(h + 1).text);
+          if (al && al.length >= 2) { anchor = h; break; }
+        }
+        if (anchor === -1) { i = last; continue; }
+        first = anchor;
+      }
+      i = last; // resume scanning after the run either way
+      if (last - first + 1 > TABLE_MAX_ROWS) continue;
+      const blockFrom = dirCfg ? doc.line(dirLine).from : doc.line(first).from;
+      const blockTo = doc.line(last).to;
+      if (seen.has(blockFrom)) continue; // extended ranges can overlap
+      seen.add(blockFrom);
+      let touched = false;
+      for (const r of sel) { if (r.from <= blockTo && r.to >= blockFrom) { touched = true; break; } }
+      if (touched) {
+        // Editing: raw source, monospaced + tinted so the block's extent is
+        // visible; structural lines (directive/delimiters) dimmed.
+        if (dirCfg) ranges.push(Decoration.line({ class: 'cm-table-src cm-table-meta' }).range(doc.line(dirLine).from));
+        for (let j = first; j <= last; j++) {
+          const l = doc.line(j);
+          ranges.push(Decoration.line({ class: parseDelimRow(l.text) ? 'cm-table-src cm-table-meta' : 'cm-table-src' }).range(l.from));
+        }
+        continue;
+      }
+      const firstLine = doc.line(dirCfg ? dirLine : first);
+      ranges.push(Decoration.replace({ widget: new TableWidget(doc.sliceString(blockFrom, blockTo), dirCfg) })
+        .range(firstLine.from, firstLine.to));
+      for (let j = firstLine.number + 1; j <= last; j++) {
+        ranges.push(Decoration.line({ class: 'cm-table-hidden' }).range(doc.line(j).from));
+      }
+    }
+  }
+  ranges.sort((a, b) => a.from - b.from || a.startSide - b.startSide);
+  return Decoration.set(ranges, true);
+}
+
+// Facet-function form (not a ViewPlugin): re-evaluated on every update, so
+// the widget↔raw swap follows the selection. Late-bound by name so the DIAG
+// timing wrapper below applies.
+const tableExtension = EditorView.decorations.of((view) => buildTableDecorations(view));
+
 // DIAG: time each decoration builder so the long-task observer can name the
 // slowest one. These are mutable function-declaration bindings, and the plugins
 // resolve them by name at call time (the editor is created later), so wrapping
@@ -5779,6 +6234,7 @@ buildSpellDecorations     = (o => v => __timed('spell',     () => o(v)))(buildSp
 buildSearchDecorations    = (o => v => __timed('search',    () => o(v)))(buildSearchDecorations);
 buildMdDecorations        = (o => v => __timed('md',        () => o(v)))(buildMdDecorations);
 buildImageDecorations     = (o => v => __timed('image',     () => o(v)))(buildImageDecorations);
+buildTableDecorations     = (o => v => __timed('table',     () => o(v)))(buildTableDecorations);
 
 // ---- Runtime editor-extension registry (for plugin/injection modules) -------
 // makeEditorState() rebuilds the extension array on EVERY room switch, so a
@@ -5868,6 +6324,7 @@ function buildEditorExtensions() {
     searchPlugin,
     mdStylePlugin,
     collapseExtension,
+    tableExtension,
     imagePlugin,
     // Treat embedded-image tokens as atomic units for the caret/selection so a
     // partial delete can't shred one into raw base64 (where available).
@@ -6621,6 +7078,7 @@ const SLASH_CODES = {
 // the caret lands. Values are functions so date/time are evaluated on accept.
 const SLASH_SNIPPETS = {
   table: () => '| Column 1 | Column 2 |\n| --- | --- |\n| \u0000 |  |',
+  tablecfg: () => '{table sticky-cols=1 sticky-rows=1 total=on}\n| Column 1 | Column 2 | Total |\n| --- | ---: | ---: |\n| \u0000 |  |  |',
   todo: () => '- [ ] \u0000',
   hr: () => '\n---\n\u0000',
   code: () => '```\n\u0000\n```',
@@ -13824,6 +14282,16 @@ window.toggleMdStyle = function() {
   showToast('Markdown styling ' + (mdStyleEnabled ? 'on' : 'off'), 'success', 1500);
 };
 
+// Table rendering rides the Markdown Styling toggle; this narrower toggle
+// (Settings → Editor) turns just the table widgets off while keeping the
+// rest of the styling.
+window.toggleMdTables = function() {
+  mdTablesEnabled = !mdTablesEnabled;
+  store.set('cade-mdtables', mdTablesEnabled);
+  try { editor.dispatch({}); } catch {}
+  showToast('Table rendering ' + (mdTablesEnabled ? 'on' : 'off'), 'success', 1500);
+};
+
 // Read-only mode (item 35): no edits, no mobile keyboard, clearly badged.
 function _applyReadOnlyUI() {
   document.body.classList.toggle('readonly', _readOnly);
@@ -15580,6 +16048,18 @@ registerSetting({
   getState: () => (typeof mdStyleEnabled !== 'undefined' ? !!mdStyleEnabled : true),
   apply(value) {
     if (typeof mdStyleEnabled !== 'undefined' && !!value !== !!mdStyleEnabled) window.toggleMdStyle();
+  }
+});
+registerSetting({
+  key: 'editor.mdTables',
+  label: 'Render tables',
+  type: 'toggle',
+  default: true,
+  section: 'Editor',
+  hint: 'Show markdown pipe tables as real tables (sticky header + first column, horizontal scroll) while Markdown styling is on. Click a cell to edit its text. Configure per-table with {table sticky-cols=2 sticky-rows=1 header=on total=on} on the line above.',
+  getState: () => (typeof mdTablesEnabled !== 'undefined' ? !!mdTablesEnabled : true),
+  apply(value) {
+    if (typeof mdTablesEnabled !== 'undefined' && !!value !== !!mdTablesEnabled) window.toggleMdTables();
   }
 });
 registerSetting({
