@@ -2189,6 +2189,55 @@ body.sel-mode .editor-wrap .cm-content { -webkit-touch-callout: none; }
   border: 1px dashed var(--accent);
 }
 .cm-line.cm-collapsed-hidden { display: none; }
+
+/* Markdown tables (#83) — pipe tables render as real <table> elements while
+   Markdown Styling is on. The whole block collapses into a widget on the
+   header line (the other source lines are display:none'd, never modified);
+   clicking a cell reveals the raw markdown with the cursor in that cell. */
+.cm-line.cm-tbl-hidden { display: none; }
+.cm-line.cm-tbl-src { font-family: var(--font-mono); font-size: 0.9em; background: var(--surface-2); }
+.cm-line.cm-tbl-src-dir { color: var(--text-faint); }
+.cm-tbl-embed { display: block; max-width: 100%; padding: 3px 0; line-height: 1.45; }
+.cm-tbl-scroll {
+  overflow: auto; width: fit-content; max-width: 100%; max-height: min(72vh, 620px);
+  overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
+  border: 1px solid var(--border); border-radius: 8px; background: var(--surface);
+}
+.cm-tbl {
+  border-collapse: separate; border-spacing: 0; font-size: 0.95em;
+  /* Natural content width — when it exceeds the editor width the wrapper
+     scrolls horizontally instead of the columns squeezing to fit. */
+  width: max-content;
+  /* Sticky cells must be OPAQUE (other cells scroll beneath them), so every
+     cell gets an explicit background from these theme-derived solids. */
+  --tbl-bg: var(--surface);
+  --tbl-bg-alt: color-mix(in srgb, var(--text) 4%, var(--surface));
+  --tbl-bg-head: color-mix(in srgb, var(--text) 9%, var(--surface));
+}
+.cm-tbl th, .cm-tbl td {
+  padding: 5px 12px; text-align: left; vertical-align: top; cursor: text;
+  border-bottom: 1px solid var(--border); background: var(--tbl-bg);
+  max-width: 340px; overflow-wrap: break-word;
+}
+.cm-tbl th { font-weight: 650; background: var(--tbl-bg-head); border-bottom-width: 2px; }
+.cm-tbl tbody tr:nth-child(even) td { background: var(--tbl-bg-alt); }
+.cm-tbl tbody tr:hover td { background: color-mix(in srgb, var(--accent) 8%, var(--surface)); }
+.cm-tbl tbody tr:last-child td { border-bottom: none; }
+.cm-tbl .tc-r { text-align: right; }
+.cm-tbl .tc-c { text-align: center; }
+/* Sticky regions: the first pinned row/column sits at 0; deeper ones get
+   measured cumulative left/top offsets applied inline by the widget. */
+.cm-tbl .tc-scol { position: sticky; z-index: 1; }
+.cm-tbl .tc-scol-last { border-right: 2px solid var(--border); }
+.cm-tbl .tc-srow { position: sticky; z-index: 2; }
+.cm-tbl .tc-srow.tc-scol { z-index: 3; }
+.cm-tbl tfoot td {
+  position: sticky; bottom: 0; z-index: 2; background: var(--tbl-bg-head);
+  font-weight: 650; border-top: 2px solid var(--border); border-bottom: none;
+}
+.cm-tbl tfoot td.tc-scol { z-index: 3; }
+.cm-tbl-link { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+
 /* Picker rows: section label + text-colour swatch letters. */
 .hl-picker.hl-picker-2ch { grid-template-columns: repeat(9, 1fr); }
 .hl-picker-label { grid-column: 1 / -1; width: 100%; font-size: var(--text-xs); color: var(--text-muted); padding: 2px 2px 0; }
@@ -5358,6 +5407,378 @@ function buildCollapseDecorations(view) {
 // (_collapsedSections / mdStyleEnabled) on every view update.
 const collapseExtension = EditorView.decorations.of(buildCollapseDecorations);
 
+// ============================================
+// MARKDOWN TABLES (#83) — pipe tables render as real <table> elements
+// --------------------------------------------------------------------------
+// GFM-style pipe tables (header row, |---|:---:| separator, body rows) are
+// auto-detected while Markdown Styling is on and drawn as a real <table>
+// inside a scroll container: horizontal scroll when the columns overflow the
+// editor width (the mobile case), vertical past ~70vh for very tall tables.
+// The header row and the first column are sticky by default. Purely visual
+// like every decorator here — the raw text is untouched, so sync, export and
+// copy still see plain markdown. Clicking a cell reveals the source with the
+// cursor placed in that cell; while the selection is anywhere inside the
+// block the source stays visible (monospace + tinted) for editing, and it
+// re-renders as soon as the cursor leaves.
+//
+// Optional per-table config on a directive line directly ABOVE the header:
+//   [table: sticky-cols=2 sticky-rows=1 header=off total=on]
+//   • sticky-cols=N   columns pinned while scrolling right (default 1)
+//   • sticky-rows=N   rows pinned while scrolling down, header included
+//                     (default: 1 when there is a header row, else 0)
+//   • header=on|off   first row is a header row (default on)
+//   • total=on|off    last row is a grand-total row — pinned to the bottom
+//                     edge and styled like the header (default off)
+// Bare flags work ([table: total no-header]); cols=/rows= are aliases. The
+// directive line is hidden while the table is rendered.
+//
+// Same CM6 constraint as the collapse feature above: block/line-break
+// replaces are only legal from StateFields (which the local bundle doesn't
+// export), so the widget is an IN-LINE replace of the header line's text and
+// the remaining block lines are display:none'd — the table collapses to the
+// widget's height, and the widget is always in the viewport when the table is.
+// ============================================
+const TBL_SEP_RE = /^\s*\|?\s*:?-+:?\s*(?:\|\s*:?-+:?\s*)*\|?\s*$/;
+const TBL_DIR_RE = /^\s*\[table(?::([^\]]*))?\]\s*$/i;
+const TBL_MAX_ROWS = 400;  // bigger tables stay as styled source — DOM cost
+const TBL_MAX_LINE = 4000; // like the md builder's guard, skips data lines
+
+// Split a table row into cells, keeping each cell's source offset (c0) so a
+// click on the rendered cell can land the cursor there. Handles optional
+// leading/trailing pipes and \| escapes.
+function _tblSplitRow(text) {
+  const cells = [];
+  let i = 0;
+  const n = text.length;
+  while (i < n && (text[i] === ' ' || text[i] === '\t')) i++;
+  if (text[i] === '|') i++;
+  let end = n;
+  while (end > i && (text[end - 1] === ' ' || text[end - 1] === '\t')) end--;
+  if (end > i && text[end - 1] === '|' && text[end - 2] !== '\\') end--;
+  let raw = '', start = i;
+  for (; i <= end; i++) {
+    const ch = i < end ? text[i] : '|'; // sentinel closes the last cell
+    if (ch === '\\' && text[i + 1] === '|') { raw += '\\|'; i++; continue; }
+    if (ch === '|') {
+      const lead = raw.match(/^\s*/)[0].length;
+      cells.push({ t: raw.trim(), c0: start + lead });
+      raw = ''; start = i + 1;
+      continue;
+    }
+    raw += ch;
+  }
+  return cells;
+}
+
+function _tblAligns(sepCells) {
+  return sepCells.map(c => {
+    const t = c.t;
+    const l = t[0] === ':', r = t[t.length - 1] === ':';
+    return l && r ? 'c' : r ? 'r' : l ? 'l' : '';
+  });
+}
+
+function _tblParseCfg(str) {
+  const cfg = { header: true, total: false, cols: 1, rows: -1 }; // rows -1 = auto
+  if (!str) return cfg;
+  for (const tok of String(str).toLowerCase().split(/[\s,;]+/)) {
+    const m = /^([a-z-]+)(?:[=:](\S*))?$/.exec(tok);
+    if (!m) continue;
+    const key = m[1].replace(/-/g, ''), val = m[2];
+    const on = val == null || !/^(0|no|off|false)$/.test(val);
+    const num = parseInt(val, 10);
+    if (key === 'stickycols' || key === 'cols' || key === 'freezecols') { if (num >= 0) cfg.cols = Math.min(num, 20); }
+    else if (key === 'stickyrows' || key === 'rows' || key === 'freezerows') { if (num >= 0) cfg.rows = Math.min(num, 20); }
+    else if (key === 'header') cfg.header = on;
+    else if (key === 'noheader') cfg.header = false;
+    else if (key === 'total') cfg.total = on;
+    else if (key === 'nototal') cfg.total = false;
+  }
+  return cfg;
+}
+
+// Whole-doc table scan, cached by doc identity (the doc is immutable, so a
+// reference match means nothing changed — selection-only updates reuse it).
+let _tblScanCache = { doc: null, blocks: [] };
+function _scanTables(doc) {
+  if (_tblScanCache.doc === doc) return _tblScanCache.blocks;
+  const blocks = [];
+  const nLines = doc.lines;
+  if (nLines <= 30000) { // same absurd-doc guard as _scanSections
+    let prevEnd = 0;
+    let i = 1;
+    while (i < nLines) {
+      const head = doc.line(i);
+      const ht = head.text;
+      if (ht.length < 2 || ht.length > TBL_MAX_LINE || ht.indexOf('|') === -1) { i++; continue; }
+      const sep = doc.line(i + 1).text;
+      if (sep.indexOf('|') === -1 || sep.length > TBL_MAX_LINE || !TBL_SEP_RE.test(sep)) { i++; continue; }
+      if (fenceContaining(head.from)) { i++; continue; } // a table in a ``` fence is code
+      const headCells = _tblSplitRow(ht);
+      const sepCells = _tblSplitRow(sep);
+      if (!headCells.length || headCells.length !== sepCells.length) { i++; continue; }
+      // Directive line directly above (unless it belongs to the previous block).
+      let startLine = i, cfgStr = null;
+      if (i > 1 && i - 1 > prevEnd) {
+        const dm = TBL_DIR_RE.exec(doc.line(i - 1).text);
+        if (dm) { startLine = i - 1; cfgStr = dm[1] || ''; }
+      }
+      // Body: every following line containing a pipe (blank/plain lines end it).
+      let endLine = i + 1;
+      while (endLine < nLines) {
+        const t = doc.line(endLine + 1).text;
+        if (t.indexOf('|') === -1 || t.length > TBL_MAX_LINE || !t.trim()) break;
+        endLine++;
+      }
+      const cfg = _tblParseCfg(cfgStr);
+      if (cfg.rows < 0) cfg.rows = cfg.header ? 1 : 0;
+      const rows = [{ lineOff: 0, cells: headCells }];
+      for (let ln = i + 2; ln <= endLine; ln++) rows.push({ lineOff: ln - i, cells: _tblSplitRow(doc.line(ln).text) });
+      const tooBig = rows.length > TBL_MAX_ROWS;
+      blocks.push({
+        startLine, headLine: i, endLine, cfg, rows, tooBig,
+        aligns: _tblAligns(sepCells), ncols: headCells.length,
+        // Widget identity: same source + config → CM reuses the built DOM.
+        sig: tooBig ? '' : (cfgStr == null ? '' : '[' + cfgStr + ']\n') + doc.sliceString(head.from, doc.line(endLine).to),
+      });
+      prevEnd = endLine;
+      i = endLine + 1;
+    }
+  }
+  _tblScanCache = { doc, blocks };
+  return blocks;
+}
+
+// Minimal inline-markdown → DOM for cell content (bold/italic/strike/
+// underline/`code`/[links](url)). Mirrors the MD_* patterns above, including
+// the *-adjacency and snake_case guards; `code` stays literal; styles nest.
+const TBL_INLINE = [
+  { re: /`([^`\n]+)`/g, cls: 'cm-md-code', lit: true },
+  { re: /\[([^\]\n]+)\]\(((?:https?:\/\/|mailto:)[^\s)]+)\)/g, link: true },
+  { re: /\*\*([^*\n]+?)\*\*/g, cls: 'cm-md-bold' },
+  { re: /__([^_\n]+?)__/g, cls: 'cm-md-bold' },
+  { re: /~~([^~\n]+?)~~/g, cls: 'cm-md-strike' },
+  { re: /<u>([\s\S]*?)<\/u>/gi, cls: 'cm-md-underline' },
+  { re: /\*([^*\n]+?)\*/g, cls: 'cm-md-italic', star: true },
+  { re: /_([^_\n]+?)_/g, cls: 'cm-md-italic', und: true },
+];
+function _tblInlineInto(out, text, depth) {
+  if (depth > 3) { out.appendChild(document.createTextNode(text)); return; }
+  let i = 0;
+  while (i < text.length) {
+    let best = null;
+    for (const p of TBL_INLINE) {
+      p.re.lastIndex = i;
+      let m;
+      while ((m = p.re.exec(text)) !== null) {
+        if (p.star && (text[m.index - 1] === '*' || text[m.index + m[0].length] === '*')) { p.re.lastIndex = m.index + 1; continue; }
+        if (p.und && (/[A-Za-z0-9]/.test(text[m.index - 1] || '') || /[A-Za-z0-9]/.test(text[m.index + m[0].length] || ''))) { p.re.lastIndex = m.index + 1; continue; }
+        break;
+      }
+      if (m && (!best || m.index < best.m.index)) best = { p, m };
+    }
+    if (!best) { out.appendChild(document.createTextNode(text.slice(i))); return; }
+    if (best.m.index > i) out.appendChild(document.createTextNode(text.slice(i, best.m.index)));
+    const p = best.p, m = best.m;
+    if (p.link) {
+      const a = document.createElement('a');
+      a.href = m[2]; a.target = '_blank'; a.rel = 'noopener noreferrer';
+      a.className = 'cm-tbl-link';
+      a.textContent = m[1];
+      out.appendChild(a);
+    } else {
+      const el = document.createElement('span');
+      el.className = p.cls;
+      if (p.lit) el.textContent = m[1];
+      else _tblInlineInto(el, m[1], depth + 1);
+      out.appendChild(el);
+    }
+    i = m.index + m[0].length;
+  }
+}
+function _tblInline(text) {
+  const frag = document.createDocumentFragment();
+  _tblInlineInto(frag, text.replace(/\\\|/g, '|'), 0);
+  return frag;
+}
+
+// Cumulative sticky offsets: column N sticks at the summed width of columns
+// 0..N-1 (same for rows). Only needed past the first pinned row/column, and
+// widths are content-driven, so they're measured from the live DOM.
+function _tblApplySticky(tbl, stickyCols, stickyRows) {
+  const trs = tbl.querySelectorAll('tr');
+  if (!trs.length) return;
+  if (stickyCols > 1) {
+    let left = 0;
+    const first = trs[0].children;
+    for (let c = 0; c < stickyCols && c < first.length; c++) {
+      if (c > 0) for (const tr of trs) { const cell = tr.children[c]; if (cell) cell.style.left = left + 'px'; }
+      left += first[c].getBoundingClientRect().width;
+    }
+  }
+  if (stickyRows > 1) {
+    let top = 0;
+    for (let r = 0; r < stickyRows && r < trs.length; r++) {
+      if (r > 0) for (const cell of trs[r].children) { if (!cell.classList.contains('tc-sbot')) cell.style.top = top + 'px'; }
+      top += trs[r].getBoundingClientRect().height;
+    }
+  }
+}
+// Cap the widget at the editor's VISIBLE width. CSS can't do this alone: with
+// wrap off the cm-content is max-content-sized, so a block widget's line grows
+// to the table's natural width (the whole editor scrolls) instead of the
+// wrapper scrolling. The measured cap keeps the horizontal scrollbar on the
+// wrapper itself in every wrap mode.
+function _tblFit(view, embed) {
+  const sr = view.scrollDOM.getBoundingClientRect();
+  if (!sr.width) return;
+  const er = embed.getBoundingClientRect();
+  const inset = (er.left - sr.left) + view.scrollDOM.scrollLeft; // gutters + padding, hscroll-proof
+  const w = Math.floor(view.scrollDOM.clientWidth - inset - 10);
+  if (w > 80) embed.style.maxWidth = w + 'px';
+}
+function _tblMount(view, embed, tbl, stickyCols, stickyRows) {
+  let raf = 0;
+  const apply = () => {
+    raf = 0;
+    if (!embed.isConnected) return;
+    _tblFit(view, embed);
+    if (stickyCols > 1 || stickyRows > 1) _tblApplySticky(tbl, stickyCols, stickyRows);
+  };
+  const queue = () => { if (!raf) raf = requestAnimationFrame(apply); };
+  let tries = 0;
+  const arm = () => {
+    // toDOM runs before CM attaches the widget — wait for it to connect.
+    if (!embed.isConnected) { if (++tries < 20) setTimeout(arm, 60); return; }
+    apply();
+    if (typeof ResizeObserver !== 'undefined') {
+      embed.__tblRO = new ResizeObserver(queue); // re-measure on font/size changes
+      embed.__tblRO.observe(tbl);
+      embed.__tblRO.observe(view.scrollDOM);
+    }
+  };
+  requestAnimationFrame(arm);
+}
+
+class TableWidget extends WidgetType {
+  constructor(b) { super(); this.b = b; }
+  eq(o) { return o.b.sig === this.b.sig; }
+  get estimatedHeight() { return Math.min(620, 38 + this.b.rows.length * 30); }
+  ignoreEvent() { return true; }
+  toDOM(view) {
+    const b = this.b, cfg = b.cfg;
+    const embed = document.createElement('span');
+    embed.className = 'cm-tbl-embed';
+    const scroll = document.createElement('div');
+    scroll.className = 'cm-tbl-scroll';
+    embed.appendChild(scroll);
+    const tbl = document.createElement('table');
+    tbl.className = 'cm-tbl';
+    scroll.appendChild(tbl);
+    const stickyCols = Math.min(cfg.cols, b.ncols);
+    const stickyRows = Math.min(cfg.rows, b.rows.length);
+    const hasTotal = cfg.total && b.rows.length - (cfg.header ? 1 : 0) >= 1;
+    let thead = null, tfoot = null;
+    const tbody = document.createElement('tbody');
+    if (cfg.header) { thead = document.createElement('thead'); tbl.appendChild(thead); }
+    tbl.appendChild(tbody);
+    if (hasTotal) { tfoot = document.createElement('tfoot'); tbl.appendChild(tfoot); }
+    b.rows.forEach((row, ri) => {
+      const isHead = cfg.header && ri === 0;
+      const isTotal = hasTotal && !isHead && ri === b.rows.length - 1;
+      const tr = document.createElement('tr');
+      (isHead ? thead : isTotal ? tfoot : tbody).appendChild(tr);
+      for (let c = 0; c < b.ncols; c++) {
+        const cell = row.cells[c]; // rows shorter than the header pad out empty
+        const el = document.createElement(isHead ? 'th' : 'td');
+        const al = b.aligns[c];
+        if (al === 'r') el.classList.add('tc-r');
+        else if (al === 'c') el.classList.add('tc-c');
+        if (c < stickyCols) {
+          el.classList.add('tc-scol');
+          if (c === stickyCols - 1) el.classList.add('tc-scol-last');
+          if (c === 0) el.style.left = '0px';
+        }
+        if (isTotal) el.classList.add('tc-sbot');
+        else if (ri < stickyRows) {
+          el.classList.add('tc-srow');
+          if (ri === 0) el.style.top = '0px';
+        }
+        el.dataset.l = row.lineOff;
+        el.dataset.c = cell ? cell.c0 : TBL_MAX_LINE; // clamped to line length on click
+        if (cell && cell.t) el.appendChild(_tblInline(cell.t));
+        tr.appendChild(el);
+      }
+    });
+    // Click a cell → cursor into that cell's source; the block then reveals
+    // as raw markdown for editing. Links keep their default navigation.
+    scroll.addEventListener('click', (e) => {
+      const t = e.target;
+      if (!t || !t.closest || t.closest('a')) return;
+      const cell = t.closest('td,th');
+      let pos;
+      try { pos = view.posAtDOM(embed); } catch { return; }
+      const doc = view.state.doc;
+      let line = doc.lineAt(pos); // = the header line (the replace target)
+      if (cell) {
+        line = doc.line(Math.min(line.number + (parseInt(cell.dataset.l, 10) || 0), doc.lines));
+        pos = line.from + Math.min(parseInt(cell.dataset.c, 10) || 0, line.length);
+      }
+      view.dispatch({ selection: { anchor: pos } });
+      view.focus();
+    });
+    _tblMount(view, embed, tbl, stickyCols, stickyRows);
+    return embed;
+  }
+  destroy(dom) { try { if (dom.__tblRO) dom.__tblRO.disconnect(); } catch {} }
+}
+
+// Decoration set cache: rebuilt only when the doc changes or a selection
+// change opens/closes a block — plain cursor movement and scrolling reuse it
+// (the facet function is re-evaluated on every view update).
+let _tblDecoCache = { doc: null, key: '', deco: null };
+function buildTableDecorations(view) {
+  if (!mdStyleEnabled) return Decoration.none;
+  const doc = view.state.doc;
+  const blocks = _scanTables(doc);
+  if (!blocks.length) return Decoration.none;
+  const sel = view.state.selection.ranges;
+  const open = [];
+  let key = '';
+  for (let bi = 0; bi < blocks.length; bi++) {
+    const b = blocks[bi];
+    const from = doc.line(b.startLine).from, to = doc.line(b.endLine).to;
+    let o = b.tooBig;
+    if (!o) for (const r of sel) { if (r.to >= from && r.from <= to) { o = true; break; } }
+    open.push(o);
+    if (o) key += bi + ',';
+  }
+  if (_tblDecoCache.doc === doc && _tblDecoCache.key === key && _tblDecoCache.deco) return _tblDecoCache.deco;
+  const ranges = [];
+  for (let bi = 0; bi < blocks.length; bi++) {
+    const b = blocks[bi];
+    if (open[bi]) {
+      // Source view: monospace + tint so the columns stay lined up while
+      // editing; the directive line is dimmed.
+      for (let ln = b.startLine; ln <= b.endLine; ln++) {
+        const dir = ln === b.startLine && b.startLine !== b.headLine;
+        ranges.push(Decoration.line({ class: dir ? 'cm-tbl-src cm-tbl-src-dir' : 'cm-tbl-src' }).range(doc.line(ln).from));
+      }
+      continue;
+    }
+    const headLine = doc.line(b.headLine);
+    if (b.startLine !== b.headLine) ranges.push(Decoration.line({ class: 'cm-tbl-hidden' }).range(doc.line(b.startLine).from));
+    ranges.push(Decoration.replace({ widget: new TableWidget(b) }).range(headLine.from, headLine.to));
+    for (let ln = b.headLine + 1; ln <= b.endLine; ln++) ranges.push(Decoration.line({ class: 'cm-tbl-hidden' }).range(doc.line(ln).from));
+  }
+  ranges.sort((a, b2) => a.from - b2.from || a.startSide - b2.startSide);
+  const deco = Decoration.set(ranges, true);
+  _tblDecoCache = { doc, key, deco };
+  return deco;
+}
+// Late-bound call so the __timed diagnostics wrapper below applies.
+const tableExtension = EditorView.decorations.of(v => buildTableDecorations(v));
+
 // ===== Embedded images (#28) =====
 // Two on-document representations, both rendered as <img>:
 //   • OUT-OF-DOCUMENT (preferred):  "![img:<code>#<hash>]"  — the document holds
@@ -5778,6 +6199,7 @@ buildHighlightDecorations = (o => v => __timed('highlight', () => o(v)))(buildHi
 buildSpellDecorations     = (o => v => __timed('spell',     () => o(v)))(buildSpellDecorations);
 buildSearchDecorations    = (o => v => __timed('search',    () => o(v)))(buildSearchDecorations);
 buildMdDecorations        = (o => v => __timed('md',        () => o(v)))(buildMdDecorations);
+buildTableDecorations     = (o => v => __timed('table',     () => o(v)))(buildTableDecorations);
 buildImageDecorations     = (o => v => __timed('image',     () => o(v)))(buildImageDecorations);
 
 // ---- Runtime editor-extension registry (for plugin/injection modules) -------
@@ -5868,6 +6290,7 @@ function buildEditorExtensions() {
     searchPlugin,
     mdStylePlugin,
     collapseExtension,
+    tableExtension,
     imagePlugin,
     // Treat embedded-image tokens as atomic units for the caret/selection so a
     // partial delete can't shred one into raw base64 (where available).
