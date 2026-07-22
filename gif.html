@@ -1748,7 +1748,7 @@ function refreshAll() {
   App.cur = clamp(App.cur, 0, Math.max(0, App.frames.length - 1));
   if (App.sel && App.sel !== 'bg' && !layerById(App.sel)) App.sel = 'bg';
   if (view.width !== App.W || view.height !== App.H) setupCanvas(); else fitCanvas();
-  syncGifControls(); rebuildLayerList(); rebuildFrameStrip(); refreshSelUI(); requestRender();
+  syncGifControls(); rebuildLayerList(); rebuildFrameStrip(); refreshSelUI(); syncTrackUI(); requestRender();
 }
 
 /* ---- capture / restore helpers (scoped to what an op touches) ---- */
@@ -1764,8 +1764,13 @@ function restoreMask(l, s) {
   l._maskVer++; l._compCacheKey = '';
 }
 
-function captureText(l) { return { text: { ...l.text }, base: { ...l.base } }; }
-function restoreText(l, s) { if (!App.layers.includes(l)) return; l.text = { ...s.text }; l.base = { ...s.base }; renderTextLayer(l); }
+function captureText(l) { return { text: { ...l.text }, base: { ...l.base }, mask: captureMask(l) }; }
+function restoreText(l, s) {
+  if (!App.layers.includes(l)) return;
+  l.text = { ...s.text }; l.base = { ...s.base };
+  renderTextLayer(l);     // clears maskBase / perFrameMask as a side effect…
+  restoreMask(l, s.mask); // …so bring the captured mask state back
+}
 
 function captureLayers() { return { layers: App.layers.slice(), sel: App.sel }; }
 function restoreLayers(s) { App.layers = s.layers.slice(); App.sel = s.sel; }
@@ -1776,6 +1781,9 @@ function captureDoc() {
   return {
     W: App.W, H: App.H, fps: App.fps, cur: App.cur,
     frames: App.frames.map(f => ({ base: f.base, delay: f.delay })),
+    // tracked points are indexed by frame (and in canvas coords), so they
+    // ride along with any frame-level snapshot
+    track: App.trackData ? { ref: App.trackData.ref, points: App.trackData.points.map(p => p ? { ...p } : null) } : null,
     perLayer: App.layers.map(l => ({
       l, base: { ...l.base },
       pf: JSON.parse(JSON.stringify(l.perFrame)),
@@ -1788,6 +1796,7 @@ function restoreDoc(s) {
   App.W = s.W; App.H = s.H; App.fps = s.fps;
   App.frames = s.frames.map(f => ({ base: f.base, delay: f.delay }));
   App.cur = clamp(s.cur, 0, App.frames.length - 1);
+  App.trackData = s.track ? { ref: s.track.ref, points: s.track.points.map(p => p ? { ...p } : null) } : null;
   for (const e of s.perLayer) {
     if (!App.layers.includes(e.l)) continue;
     e.l.base = { ...e.base };
@@ -2014,7 +2023,7 @@ function importVideoDialog(file) {
   return new Promise((resolve) => {
     const url = URL.createObjectURL(file);
     const v = $('#vidPreview');
-    vidState = { file, url, resolve, canPlay: false, done: false };
+    vidState = { file, url, resolve, canPlay: false, loadFailed: false, done: false };
     $('#vidName').textContent = `${file.name} · ${(file.size / 1048576).toFixed(1)} MB`;
     // sensible defaults before metadata arrives (or if it never does)
     $('#vidStart').value = '0'; $('#vidEnd').value = '6';
@@ -2028,6 +2037,7 @@ function importVideoDialog(file) {
     }, { once: true });
     v.addEventListener('error', () => {
       if (!vidState || vidState.file !== file || vidState.canPlay) return;
+      vidState.loadFailed = true;
       $('#vidEstimate').textContent = 'Preview unavailable in this browser — will try direct (WebCodecs) decode.';
     }, { once: true });
     v.src = url;
@@ -2078,9 +2088,15 @@ async function vidImportGo() {
     try { frames = await extractWebCodecs(st.file, o); }
     catch (err) { frames = null; }
   }
-  if ((!frames || !frames.length) && st.canPlay) {
-    try { v.pause(); frames = await extractVideoElement(v, o); }
-    catch (err) { frames = null; }
+  if ((!frames || !frames.length) && !st.loadFailed) {
+    // Import is clickable before loadedmetadata fires, so canPlay:false may
+    // just mean "still loading" — wait for the element rather than skipping
+    // the fallback decoder on a stale flag.
+    if (!st.canPlay) st.canPlay = await waitVideoReady(v, 6000);
+    if (st.canPlay) {
+      try { v.pause(); frames = await extractVideoElement(v, o); }
+      catch (err) { frames = null; }
+    }
   }
   hideProgress();
   if (!frames || !frames.length) {
@@ -2089,6 +2105,21 @@ async function vidImportGo() {
     return;
   }
   closeVideoModal(frames);
+}
+
+/* Resolve true once the <video> has metadata (or already does), false on
+   error or timeout. */
+function waitVideoReady(v, ms) {
+  return new Promise((resolve) => {
+    if (v.readyState >= 1) return resolve(true);
+    v.preload = 'auto';
+    const to = setTimeout(() => { cleanup(); resolve(v.readyState >= 1); }, ms);
+    const ok = () => { cleanup(); resolve(true); };
+    const bad = () => { cleanup(); resolve(false); };
+    const cleanup = () => { clearTimeout(to); v.removeEventListener('loadedmetadata', ok); v.removeEventListener('error', bad); };
+    v.addEventListener('loadedmetadata', ok);
+    v.addEventListener('error', bad);
+  });
 }
 
 /* Draw one decoded sample (VideoFrame or <video>) into a scaled canvas,
@@ -2150,11 +2181,15 @@ function extractWebCodecs(file, o) {
         output: (frame) => {
           const t = frame.timestamp / 1e6;
           if (ti < targets.length && t >= targets[ti] - 1e-4) {
-            out.push({
-              canvas: drawVideoSample(frame, frame.displayWidth || cw, frame.displayHeight || ch, rot, o.width),
-              delay,
-            });
-            ti++;
+            // When the requested fps exceeds the source fps, one decoded
+            // frame covers several targets — emit it once per target so the
+            // frame count (and therefore playback speed) stays correct.
+            // Sharing the canvas is safe: importFiles copies it per frame.
+            const canvas = drawVideoSample(frame, frame.displayWidth || cw, frame.displayHeight || ch, rot, o.width);
+            while (ti < targets.length && t >= targets[ti] - 1e-4) {
+              out.push({ canvas, delay });
+              ti++;
+            }
             setProgress(ti / targets.length);
           }
           frame.close();
@@ -2225,12 +2260,25 @@ async function extractVideoElement(video, o) {
   if (!targets.length) targets.push(o.start);
   const delay = Math.round(1000 / o.fps);
   for (let i = 0; i < targets.length; i++) {
+    const target = Math.min(targets[i], Math.max(0, (video.duration || targets[i]) - 0.001));
     await new Promise((res, rej) => {
-      const to = setTimeout(() => { cleanup(); rej(new Error('seek timeout')); }, 8000);
-      const on = () => { cleanup(); res(); };
-      const cleanup = () => { clearTimeout(to); video.removeEventListener('seeked', on); };
+      let done = false;
+      const finish = (err) => {
+        if (done) return; done = true;
+        clearTimeout(to); clearInterval(poll);
+        video.removeEventListener('seeked', on);
+        err ? rej(err) : res();
+      };
+      const to = setTimeout(() => finish(new Error('seek timeout')), 8000);
+      const on = () => finish();
+      // Safety net: assigning a currentTime the element is already at (the
+      // usual case for the first sample at t=0) may never dispatch 'seeked',
+      // so also poll for "at the target with decodable data".
+      const poll = setInterval(() => {
+        if (!video.seeking && video.readyState >= 2 && Math.abs(video.currentTime - target) < 0.05) finish();
+      }, 100);
       video.addEventListener('seeked', on);
-      video.currentTime = Math.min(targets[i], Math.max(0, (video.duration || targets[i]) - 0.001));
+      video.currentTime = target;
     });
     out.push({ canvas: drawVideoSample(video, video.videoWidth, video.videoHeight, 0, o.width), delay });
     setProgress((i + 1) / targets.length);
@@ -2888,8 +2936,7 @@ async function runTracking() {
 
   const pts = res.positions.map(p => p ? { x: (p.x + box.w / 2) / sx, y: (p.y + box.h / 2) / sy, score: p.score } : null);
   App.trackData = { points: pts, ref: App.cur };
-  $('#trackAttach').disabled = false;
-  $('#trackClear').disabled = false;
+  syncTrackUI();
   const low = pts.filter(p => p && p.score < 0.3).length;
   $('#trackStatus').textContent = `Tracked ${pts.filter(Boolean).length} frames` + (low ? ` · ${low} low-confidence` : '');
   requestRender();
@@ -2903,10 +2950,14 @@ function attachTrackedLayer() {
   if (!l) { toast('Select the layer to attach (not the background).'); return; }
   pushUndo('attach to track', () => captureXf(l), (s) => restoreXf(l, s));
   const ref = td.points[td.ref] || td.points.find(Boolean);
+  // Anchor on the reference frame's CURRENT transform — the user may have
+  // positioned the layer on the tracked object there (a FRAME-mode override).
+  // That frame keeps its transform; every other frame offsets from it.
+  const anchor = { ...getT(l, td.ref) };
   for (let i = 0; i < App.frames.length; i++) {
-    if (i === td.ref) { delete l.perFrame[i]; continue; }
+    if (i === td.ref) continue;
     const p = td.points[i]; if (!p) continue;
-    l.perFrame[i] = { ...l.base, x: l.base.x + (p.x - ref.x), y: l.base.y + (p.y - ref.y) };
+    l.perFrame[i] = { ...anchor, x: anchor.x + (p.x - ref.x), y: anchor.y + (p.y - ref.y) };
   }
   rebuildFrameStrip(); rebuildLayerList(); requestRender();
   toast(`“${l.name}” now follows the tracked object`);
@@ -2914,10 +2965,15 @@ function attachTrackedLayer() {
 
 function clearTrack() {
   App.trackData = null; trackRect = null;
-  $('#trackAttach').disabled = true;
-  $('#trackClear').disabled = true;
-  $('#trackStatus').textContent = '';
+  syncTrackUI();
   requestRender();
+}
+
+function syncTrackUI() {
+  const td = App.trackData;
+  $('#trackAttach').disabled = !td;
+  $('#trackClear').disabled = !td;
+  if (!td) $('#trackStatus').textContent = '';
 }
 
 /* =====================================================================
@@ -3407,6 +3463,7 @@ function resizeCanvas(nw, nh) {
     scaleT(l.base);
     for (const k in l.perFrame) scaleT(l.perFrame[k]);
   }
+  if (App.trackData) for (const p of App.trackData.points) { if (p) { p.x *= sx; p.y *= sy; } }
   App.W = nw; App.H = nh;
   setupCanvas(); syncGifControls(); rebuildFrameStrip(); rebuildLayerList(); requestRender();
   toast(`Resized to ${nw}×${nh}`);
@@ -3440,6 +3497,7 @@ function cropCanvasToRect() {
     shift(l.base);
     for (const k in l.perFrame) shift(l.perFrame[k]);
   }
+  if (App.trackData) for (const p of App.trackData.points) { if (p) { p.x -= x0; p.y -= y0; } }
   App.W = nw; App.H = nh;
   cropRect = null;
   setupCanvas(); syncGifControls(); rebuildFrameStrip(); rebuildLayerList(); requestRender();
@@ -3458,6 +3516,11 @@ function moveFrame(dir) {
     l.perFrame = remapKeys(l.perFrame, swap);
     l.perFrameMask = remapKeys(l.perFrameMask, swap);
   }
+  if (App.trackData) {
+    const td = App.trackData;
+    const t = td.points[i]; td.points[i] = td.points[j]; td.points[j] = t;
+    td.ref = swap(td.ref);
+  }
   rebuildFrameStrip(); gotoFrame(j);
 }
 
@@ -3475,6 +3538,7 @@ function boomerang() {
       if (l.perFrame[i]) l.perFrame[j] = { ...l.perFrame[i] };
       if (l.perFrameMask[i]) l.perFrameMask[j] = cloneCanvas(l.perFrameMask[i]);
     }
+    if (App.trackData) App.trackData.points.push(App.trackData.points[i] ? { ...App.trackData.points[i] } : null);
   }
   rebuildFrameStrip(); rebuildLayerList(); requestRender();
   toast(`Boomerang — now ${App.frames.length} frames`);
@@ -3832,6 +3896,11 @@ function wire() {
     App.frames.splice(App.cur + 1, 0, { base: cloneCanvas(f.base), delay: f.delay });
     // shift per-frame overrides for layers above current
     for (const l of App.layers) { l.perFrame = shiftKeys(l.perFrame, App.cur); l.perFrameMask = shiftKeys(l.perFrameMask, App.cur); }
+    if (App.trackData) {
+      const td = App.trackData;
+      td.points.splice(App.cur + 1, 0, td.points[App.cur] ? { ...td.points[App.cur] } : null);
+      if (td.ref > App.cur) td.ref++;
+    }
     rebuildFrameStrip(); gotoFrame(App.cur + 1);
   });
   $('#delFrame').addEventListener('click', () => {
@@ -3839,12 +3908,22 @@ function wire() {
     pushUndo('delete frame', captureDoc, restoreDoc);
     App.frames.splice(App.cur, 1);
     for (const l of App.layers) { delete l.perFrame[App.cur]; delete l.perFrameMask[App.cur]; l.perFrame = unshiftKeys(l.perFrame, App.cur); l.perFrameMask = unshiftKeys(l.perFrameMask, App.cur); }
+    if (App.trackData) {
+      const td = App.trackData;
+      if (td.ref === App.cur) clearTrack(); // the track's anchor frame is gone
+      else { td.points.splice(App.cur, 1); if (td.ref > App.cur) td.ref--; }
+    }
     App.cur = clamp(App.cur, 0, App.frames.length - 1);
     rebuildFrameStrip(); gotoFrame(App.cur);
   });
   $('#addBlankFrame').addEventListener('click', () => {
     pushUndo('add blank frame', captureDoc, restoreDoc);
     App.frames.splice(App.cur + 1, 0, { base: mkCanvas(App.W, App.H), delay: Math.round(1000 / App.fps) });
+    if (App.trackData) {
+      const td = App.trackData;
+      td.points.splice(App.cur + 1, 0, null);
+      if (td.ref > App.cur) td.ref++;
+    }
     rebuildFrameStrip(); gotoFrame(App.cur + 1);
   });
   $('#reverseFrames').addEventListener('click', () => {
@@ -3852,6 +3931,7 @@ function wire() {
     App.frames.reverse();
     const N = App.frames.length - 1;
     for (const l of App.layers) { l.perFrame = remapKeys(l.perFrame, k => N - k); l.perFrameMask = remapKeys(l.perFrameMask, k => N - k); }
+    if (App.trackData) { App.trackData.points.reverse(); App.trackData.ref = N - App.trackData.ref; }
     rebuildFrameStrip(); gotoFrame(N - App.cur); toast('Reversed');
   });
   $('#moveFrameL').addEventListener('click', () => moveFrame(-1));
