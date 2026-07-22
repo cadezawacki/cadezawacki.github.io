@@ -2200,7 +2200,7 @@ body.sel-mode .editor-wrap .cm-content { -webkit-touch-callout: none; }
 .cm-tbl-embed { display: block; max-width: 100%; padding: 3px 0; line-height: 1.45; }
 .cm-tbl-scroll {
   overflow: auto; width: fit-content; max-width: 100%; max-height: min(72vh, 620px);
-  overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain; touch-action: pan-x pan-y;
   border: 1px solid var(--border); border-radius: 8px; background: var(--surface);
 }
 .cm-tbl {
@@ -2225,14 +2225,23 @@ body.sel-mode .editor-wrap .cm-content { -webkit-touch-callout: none; }
 .cm-tbl tbody tr:last-child td { border-bottom: none; }
 .cm-tbl .tc-r { text-align: right; }
 .cm-tbl .tc-c { text-align: center; }
+/* Headers and aligned (numeric-by-convention) columns never wrap — a squeezed
+   fallback layout must widen the table into the scrollbar, not shred digits. */
+.cm-tbl th, .cm-tbl td.tc-r, .cm-tbl td.tc-c { white-space: nowrap; max-width: none; }
 /* Sticky regions: the first pinned row/column sits at 0; deeper ones get
-   measured cumulative left/top offsets applied inline by the widget. */
-.cm-tbl .tc-scol { position: sticky; z-index: 1; }
+   measured cumulative left/top offsets applied inline by the widget.
+   translateZ pins each sticky cell to its own compositing layer — without it
+   iOS momentum scrolling smears stale paints of the pinned column/row across
+   the viewport. */
+.cm-tbl .tc-scol { position: sticky; z-index: 1; transform: translateZ(0); }
+/* A pinned column may never eat the screen: cap it well under the viewport
+   width and let its content wrap instead. */
+.cm-tbl th.tc-scol, .cm-tbl td.tc-scol { max-width: min(45vw, 340px); white-space: normal; overflow-wrap: break-word; }
 .cm-tbl .tc-scol-last { border-right: 2px solid var(--border); }
-.cm-tbl .tc-srow { position: sticky; z-index: 2; }
+.cm-tbl .tc-srow { position: sticky; z-index: 2; transform: translateZ(0); }
 .cm-tbl .tc-srow.tc-scol { z-index: 3; }
 .cm-tbl tfoot td {
-  position: sticky; bottom: 0; z-index: 2; background: var(--tbl-bg-head);
+  position: sticky; bottom: 0; z-index: 2; background: var(--tbl-bg-head); transform: translateZ(0);
   font-weight: 650; border-top: 2px solid var(--border); border-bottom: none;
 }
 .cm-tbl tfoot td.tc-scol { z-index: 3; }
@@ -14774,58 +14783,14 @@ setTimeout(() => {
 setTimeout(() => { try { scheduleImageMigration(); } catch {} }, 2500);
 
 // ============================================
-// MOBILE ENHANCEMENTS: swipe, haptics, install prompt (Round 2)
+// MOBILE ENHANCEMENTS: haptics, install prompt (Round 2)
 // ============================================
 window.haptic = function(ms) { try { if (navigator.vibrate) navigator.vibrate(ms || 12); } catch {} };
 
-// Swipe between rooms (#77, item 10): a deliberate horizontal flick switches to
-// the prev/next visible room — ONE room per gesture, with a cooldown so it can't
-// jump several at once, skipping locked (not-yet-unlocked) rooms.
-function _swipeRoomList() {
-  let list;
-  try { list = (typeof roomsInActiveWorkspace === 'function') ? roomsInActiveWorkspace(false) : rooms.slice(); } catch { list = rooms.slice(); }
-  try { if (typeof orderRooms === 'function') list = orderRooms(list); } catch {}
-  return list || [];
-}
-function _roomLockedClosed(r) { try { return roomHasPassword(r) && !roomIsUnlocked(r); } catch { return false; } }
-(function() {
-  const el = editor.scrollDOM;
-  if (!el) return;
-  let x0 = 0, y0 = 0, t0 = 0, tracking = false, moved = false, lastSwitch = 0;
-  el.addEventListener('touchstart', e => {
-    if (e.touches.length !== 1) { tracking = false; return; }
-    x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; t0 = Date.now(); tracking = true; moved = false;
-  }, { passive: true });
-  el.addEventListener('touchmove', e => {
-    const t = e.touches[0]; if (!t) return;
-    if (Math.abs(t.clientX - x0) > 12 || Math.abs(t.clientY - y0) > 12) { moved = true; }
-  }, { passive: true });
-  el.addEventListener('touchend', e => {
-    if (!tracking) return; tracking = false;
-    const t = e.changedTouches[0];
-    const dx = t.clientX - x0, dy = t.clientY - y0, dt = Date.now() - t0;
-    if (dt > 450) return;                                    // must be a quick flick
-    if (Math.abs(dx) < 110 || Math.abs(dy) > 40) return;      // longer + flatter than before
-    if (Math.abs(dx) < Math.abs(dy) * 2.5) return;           // clearly horizontal
-    if (!editor.state.selection.main.empty) return;          // user is selecting
-    if (Date.now() - lastSwitch < 700) return;               // cooldown: one room per gesture window
-    const list = _swipeRoomList();
-    if (list.length < 2) return;
-    const idx = list.indexOf(activeRoom);
-    if (idx < 0) return;
-    const dir = dx < 0 ? 1 : -1, n = list.length;
-    let next = -1;
-    for (let step = 1; step <= n; step++) {                   // skip locked rooms
-      const j = ((idx + dir * step) % n + n) % n;
-      if (j === idx) break;
-      if (!_roomLockedClosed(list[j])) { next = j; break; }
-    }
-    if (next < 0) return;
-    lastSwitch = Date.now();
-    haptic(12);
-    switchRoom(list[next]);
-  }, { passive: true });
-})();
+// (Swipe-between-rooms (#77) used to live here. Removed with the rendered
+// markdown tables (#83): their horizontal scroll gesture kept triggering the
+// room switch, and the flick heuristics can't reliably tell the two apart.
+// Rooms are still reachable via the room manager / tabs / keyboard.)
 
 // (Keyboard/visual-viewport pinning is handled by the single #18 handler above
 // — body height + top. A second transform-based handler used to live here, but
