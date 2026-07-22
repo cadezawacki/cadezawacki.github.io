@@ -4,7 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
 <title>GIF Studio — Offline GIF Editor</title>
-<meta name="description" content="Offline, device-local GIF editor & builder. Layers, text, transforms, erase, background removal — all in one file." />
+<meta name="description" content="Offline, device-local GIF editor & builder. Video (MP4/MOV) to GIF, layers, text, transforms, erase, background removal, filters, object tracking — all in one file." />
 <meta name="color-scheme" content="light dark" />
 <link rel="icon" href="favicon.ico" />
 <link rel="manifest" href="manifest.webmanifest" />
@@ -13,6 +13,11 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,100..700;1,100..700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+<!-- mp4box.js: MP4/MOV demuxer for the video → GIF import (WebCodecs path).
+     Cached by sw.js so video import keeps working offline. If it fails to load
+     the importer falls back to <video>-element frame capture. -->
+<script src="https://cdn.jsdelivr.net/npm/mp4box@0.5.2/dist/mp4box.all.min.js" defer></script>
 
 <style>
   :root{
@@ -123,6 +128,7 @@
   .iconbtn:hover{border-color:var(--border-strong); transform:translateY(-1px)}
   .iconbtn svg{width:18px;height:18px}
   .iconbtn.active{background:var(--accent-soft);border-color:color-mix(in srgb,var(--accent) 40%,var(--border))}
+  .iconbtn[disabled]{opacity:.35;cursor:default;transform:none}
 
   /* ---------- Main ---------- */
   .main{flex:1 1 auto; display:flex; min-height:0}
@@ -148,7 +154,10 @@
     background-color:var(--checker-a);
     max-width:100%; max-height:100%;
   }
-  #view{display:block; max-width:100%; max-height:100%; touch-action:none}
+  /* Fill the canvasbox (fitCanvas keeps the box at the canvas aspect ratio).
+     max-width alone never scaled UP, leaving the overlay misaligned whenever
+     the composition was smaller than the stage. */
+  #view{display:block; width:100%; height:100%; touch-action:none}
   #overlay{position:absolute; inset:0; width:100%; height:100%; pointer-events:none}
 
   .emptystate{
@@ -1210,6 +1219,8 @@ function GifReaderLZWOutputIndexStream(code_stream, p, output, output_length) {
       <button class="global" data-mode="global"><span class="dot"></span>GLOBAL</button>
     </div>
 
+    <button class="iconbtn" id="undoBtn" title="Undo (Ctrl+Z)" aria-label="Undo" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></svg></button>
+    <button class="iconbtn" id="redoBtn" title="Redo (Ctrl+Shift+Z)" aria-label="Redo" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 14 5-5-5-5"/><path d="M20 9H10a6 6 0 0 0 0 12h-3"/></svg></button>
     <button class="iconbtn" id="themeBtn" title="Toggle theme" aria-label="Toggle theme"></button>
     <a class="iconbtn" href="index.html" title="Back to tools" aria-label="Back to tools">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9.5 12 3l9 6.5"/><path d="M5 9v11h14V9"/></svg>
@@ -1225,16 +1236,16 @@ function GifReaderLZWOutputIndexStream(code_stream, p, output, output_length) {
           <canvas id="overlay"></canvas>
         </div>
         <div class="emptystate" id="emptystate">
-          <h2>Drop a GIF or images to begin</h2>
-          <p>Everything runs on your device. Edit an animated GIF or build one from a sequence of stills.</p>
+          <h2>Drop a GIF, video, or images to begin</h2>
+          <p>Everything runs on your device. Edit an animated GIF, convert an MP4/MOV clip, or build an animation from stills.</p>
           <label class="dropzone" id="dropzone">
             <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent)"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M5 20h14"/></svg>
             <strong>Choose files</strong>
-            <span class="hint">GIF, PNG, JPG, WebP · tap or drop</span>
+            <span class="hint">GIF, MP4, MOV, WebM, PNG, JPG · tap or drop</span>
             <!-- The input itself overlays the whole dropzone (transparent) so a
                  tap lands directly on it. This is the only reliable way to open
                  the file picker on iOS Safari / mobile browsers. -->
-            <input id="fileInput" type="file" accept="image/*,.gif" multiple>
+            <input id="fileInput" type="file" accept="image/*,video/*,.gif,.mp4,.mov,.m4v,.webm" multiple>
           </label>
         </div>
       </div>
@@ -1246,6 +1257,7 @@ function GifReaderLZWOutputIndexStream(code_stream, p, output, output_length) {
           <button class="iconbtn" id="prevBtn" title="Previous frame"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M15 5 6 12l9 7zM17 5h2v14h-2z"/></svg></button>
           <button class="iconbtn" id="playBtn" title="Play / pause"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></button>
           <button class="iconbtn" id="nextBtn" title="Next frame"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 5l9 7-9 7zM5 5h2v14H5z"/></svg></button>
+          <button class="iconbtn" id="onionBtn" title="Onion skin — ghost the previous frame over this one"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="13" height="13" rx="2" opacity=".45"/><rect x="8" y="8" width="13" height="13" rx="2"/></svg></button>
           <div class="minictrl"><span id="frameLabel" class="mono">1 / 1</span></div>
           <div class="spacer"></div>
           <div class="minictrl" title="Playback / export frame rate">
@@ -1318,6 +1330,8 @@ function GifReaderLZWOutputIndexStream(code_stream, p, output, output_length) {
                 <div class="tool" data-tool="crop" title="Crop layer"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2v14a2 2 0 0 0 2 2h14"/><path d="M2 6h14a2 2 0 0 1 2 2v14"/></svg>Crop</div>
                 <div class="tool" data-tool="erase" title="Free erase"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7 21-4-4a2 2 0 0 1 0-3L14 3a2 2 0 0 1 3 0l4 4a2 2 0 0 1 0 3L10 21z"/><path d="M11 7 17 13"/><path d="M7 21h14"/></svg>Erase</div>
                 <div class="tool" data-tool="removebg" title="Remove background"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h18v18H3z" stroke-dasharray="3 3"/><circle cx="12" cy="11" r="3"/><path d="M7 20a5 5 0 0 1 10 0"/></svg>Cut BG</div>
+                <div class="tool" data-tool="track" title="Track an object across frames"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>Track</div>
+                <div class="tool" data-tool="filter" title="Colour filters &amp; adjustments"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 3v18"/><path d="M12 3a9 9 0 0 1 0 18" fill="currentColor" stroke="none" opacity=".35"/></svg>Adjust</div>
               </div>
             </div>
           </div>
@@ -1379,11 +1393,12 @@ function GifReaderLZWOutputIndexStream(code_stream, p, output, output_length) {
           <div class="section" id="cropSection" style="display:none">
             <h3>Crop</h3>
             <div class="body">
-              <p class="hint">Drag a rectangle on the canvas, then apply. Crop hides everything outside the box.</p>
+              <p class="hint">Drag a rectangle on the canvas, then apply. Layer crop hides everything outside the box; canvas crop trims the whole GIF to it.</p>
               <div class="btngrid">
-                <button class="btn primary sm" id="cropApply">Apply crop</button>
+                <button class="btn primary sm" id="cropApply">Crop layer</button>
                 <button class="btn sm" id="cropCancel">Clear</button>
               </div>
+              <button class="btn indigo sm block" id="cropCanvasBtn">Crop canvas to box</button>
             </div>
           </div>
 
@@ -1400,6 +1415,51 @@ function GifReaderLZWOutputIndexStream(code_stream, p, output, output_length) {
               </div>
               <button class="btn indigo block" id="bgRun"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3v4"/><path d="M19 17v4"/><path d="M3 5h4"/><path d="M17 19h4"/><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4"/></svg>Detect &amp; remove</button>
               <p class="hint">Detects the dominant edge colour and makes it transparent, with a feathered edge. Runs in a worker — the UI stays responsive.</p>
+            </div>
+          </div>
+
+          <div class="section" id="trackSection" style="display:none">
+            <h3>Object tracking</h3>
+            <div class="body">
+              <p class="hint">Drag a box around an object in the <em>background</em> on this frame, then track it through every frame. Attach a layer and it follows the motion (per-frame position overrides).</p>
+              <button class="btn indigo block" id="trackRun"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="7"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>Track object</button>
+              <div class="btngrid">
+                <button class="btn sm" id="trackAttach" disabled>Attach layer</button>
+                <button class="btn sm" id="trackClear" disabled>Clear track</button>
+              </div>
+              <p class="hint" id="trackStatus"></p>
+            </div>
+          </div>
+
+          <div class="section" id="filterSection" style="display:none">
+            <h3>Colour filters <span class="pill" id="filterScopePill">frame</span></h3>
+            <div class="body">
+              <div class="field">
+                <label>Brightness <span class="val" id="fBrightVal">100%</span></label>
+                <input type="range" id="fBright" min="0" max="200" step="1" value="100">
+              </div>
+              <div class="field">
+                <label>Contrast <span class="val" id="fContrastVal">100%</span></label>
+                <input type="range" id="fContrast" min="0" max="200" step="1" value="100">
+              </div>
+              <div class="field">
+                <label>Saturation <span class="val" id="fSatVal">100%</span></label>
+                <input type="range" id="fSat" min="0" max="200" step="1" value="100">
+              </div>
+              <div class="field">
+                <label>Hue <span class="val" id="fHueVal">0°</span></label>
+                <input type="range" id="fHue" min="-180" max="180" step="1" value="0">
+              </div>
+              <div class="row wrap">
+                <label style="font-size:12px;display:flex;gap:.35rem;align-items:center;cursor:pointer"><input type="checkbox" id="fGray" style="width:auto"> Greyscale</label>
+                <label style="font-size:12px;display:flex;gap:.35rem;align-items:center;cursor:pointer"><input type="checkbox" id="fSepia" style="width:auto"> Sepia</label>
+                <label style="font-size:12px;display:flex;gap:.35rem;align-items:center;cursor:pointer"><input type="checkbox" id="fInvert" style="width:auto"> Invert</label>
+              </div>
+              <div class="btngrid">
+                <button class="btn primary sm" id="filterApply">Apply</button>
+                <button class="btn sm" id="filterReset">Reset</button>
+              </div>
+              <p class="hint" id="filterHint">Bakes into the background frames — FRAME applies to this frame, GLOBAL to all. Layers are unaffected.</p>
             </div>
           </div>
         </div>
@@ -1517,7 +1577,10 @@ function GifReaderLZWOutputIndexStream(code_stream, p, output, output_length) {
                 <button class="btn sm" id="delFrame">Delete frame</button>
                 <button class="btn sm" id="addBlankFrame">Add blank</button>
                 <button class="btn sm" id="reverseFrames">Reverse all</button>
+                <button class="btn sm" id="moveFrameL" title="Move this frame one step earlier">◀ Move</button>
+                <button class="btn sm" id="moveFrameR" title="Move this frame one step later">Move ▶</button>
               </div>
+              <button class="btn sm block" id="boomerangBtn" title="Append the frames in reverse for a seamless back-and-forth loop">Boomerang (ping-pong loop)</button>
               <button class="btn sm block" id="importMore">Import more frames…</button>
             </div>
           </div>
@@ -1531,6 +1594,7 @@ function GifReaderLZWOutputIndexStream(code_stream, p, output, output_length) {
               </div>
               <button class="btn primary block" id="downloadBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Download GIF</button>
               <button class="btn block" id="copyBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>Copy to clipboard</button>
+              <button class="btn block" id="framePngBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-5-5L5 21"/></svg>Current frame → PNG</button>
             </div>
           </div>
 
@@ -1557,6 +1621,27 @@ function GifReaderLZWOutputIndexStream(code_stream, p, output, output_length) {
     <div class="btngrid">
       <button class="btn" id="confirmCancel">Cancel</button>
       <button class="btn danger" id="confirmOk">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="videoModal">
+  <div class="modalcard" style="max-width:430px">
+    <h3>Import video as frames</h3>
+    <p class="mono" id="vidName" style="font-size:11px;color:var(--muted)"></p>
+    <video id="vidPreview" controls muted playsinline style="width:100%;max-height:240px;border-radius:10px;background:#000"></video>
+    <div class="row">
+      <div class="field" style="flex:1"><label>Start (s)</label><input type="number" id="vidStart" min="0" step="0.1" value="0"></div>
+      <div class="field" style="flex:1"><label>End (s)</label><input type="number" id="vidEnd" min="0" step="0.1" value="6"></div>
+    </div>
+    <div class="row">
+      <div class="field" style="flex:1"><label>Frames / sec</label><input type="number" id="vidFps" min="1" max="30" step="1" value="10"></div>
+      <div class="field" style="flex:1"><label>Width (px)</label><input type="number" id="vidWidth" min="16" max="2000" step="2" value="480"></div>
+    </div>
+    <p class="hint" id="vidEstimate"></p>
+    <div class="btngrid">
+      <button class="btn" id="vidCancel">Cancel</button>
+      <button class="btn primary" id="vidImport">Import</button>
     </div>
   </div>
 </div>
@@ -1609,6 +1694,114 @@ function confirmDialog(title, msg) {
 }
 
 /* =====================================================================
+   Undo / redo
+   ---------------------------------------------------------------------
+   Snapshot-based, but each entry captures ONLY the state its operation
+   touches (a mask, a transform map, the frames array, …), so entries stay
+   small. capture() runs when the entry is pushed (before the mutation);
+   undoing captures the current state for redo, then restores the snapshot.
+   Invariant that makes shallow frame snapshots safe: frame base canvases
+   are never mutated in place — every op that changes pixels REPLACES the
+   canvas. Mask canvases ARE painted in place, so they are deep-cloned.
+   ===================================================================== */
+const undoStack = [], redoStack = [], UNDO_MAX = 30;
+const strokeKeys = new Set(); // dedupes slider/typing bursts into one entry
+
+function pushUndo(label, capture, restore) {
+  undoStack.push({ label, capture, restore, snap: capture() });
+  if (undoStack.length > UNDO_MAX) undoStack.shift();
+  redoStack.length = 0;
+  updateUndoUI();
+}
+// One undo entry per continuous interaction (slider drag, typing burst).
+// The key is cleared by the control's 'change' event (fires on release/blur).
+function strokeUndo(key, label, capture, restore) {
+  key += ':' + App.sel + ':' + (App.mode === 'frame' ? App.cur : 'g');
+  if (strokeKeys.has(key)) return;
+  strokeKeys.add(key);
+  pushUndo(label, capture, restore);
+}
+function popApply(from, to) {
+  const e = from.pop(); if (!e) return;
+  const now = e.capture();
+  e.restore(e.snap);
+  to.push({ label: e.label, capture: e.capture, restore: e.restore, snap: now });
+  strokeKeys.clear();
+  refreshAll();
+  updateUndoUI();
+}
+const doUndo = () => popApply(undoStack, redoStack);
+const doRedo = () => popApply(redoStack, undoStack);
+function clearHistory() {
+  undoStack.length = 0; redoStack.length = 0; strokeKeys.clear();
+  updateUndoUI();
+}
+function updateUndoUI() {
+  const u = $('#undoBtn'), r = $('#redoBtn');
+  u.disabled = !undoStack.length;
+  r.disabled = !redoStack.length;
+  u.title = undoStack.length ? `Undo ${undoStack[undoStack.length - 1].label} (Ctrl+Z)` : 'Undo (Ctrl+Z)';
+  r.title = redoStack.length ? `Redo ${redoStack[redoStack.length - 1].label} (Ctrl+Shift+Z)` : 'Redo (Ctrl+Shift+Z)';
+}
+// Bring every piece of UI back in sync after a snapshot restore.
+function refreshAll() {
+  App.cur = clamp(App.cur, 0, Math.max(0, App.frames.length - 1));
+  if (App.sel && App.sel !== 'bg' && !layerById(App.sel)) App.sel = 'bg';
+  if (view.width !== App.W || view.height !== App.H) setupCanvas(); else fitCanvas();
+  syncGifControls(); rebuildLayerList(); rebuildFrameStrip(); refreshSelUI(); requestRender();
+}
+
+/* ---- capture / restore helpers (scoped to what an op touches) ---- */
+function captureXf(l) { return { base: { ...l.base }, pf: JSON.parse(JSON.stringify(l.perFrame)) }; }
+function restoreXf(l, s) { if (!App.layers.includes(l)) return; l.base = { ...s.base }; l.perFrame = JSON.parse(JSON.stringify(s.pf)); }
+
+function cloneMaskMap(m) { const o = {}; for (const k in m) o[k] = cloneCanvas(m[k]); return o; }
+function captureMask(l) { return { maskBase: l.maskBase ? cloneCanvas(l.maskBase) : null, pfm: cloneMaskMap(l.perFrameMask) }; }
+function restoreMask(l, s) {
+  if (!App.layers.includes(l)) return;
+  l.maskBase = s.maskBase ? cloneCanvas(s.maskBase) : null;
+  l.perFrameMask = cloneMaskMap(s.pfm);
+  l._maskVer++; l._compCacheKey = '';
+}
+
+function captureText(l) { return { text: { ...l.text }, base: { ...l.base } }; }
+function restoreText(l, s) { if (!App.layers.includes(l)) return; l.text = { ...s.text }; l.base = { ...s.base }; renderTextLayer(l); }
+
+function captureLayers() { return { layers: App.layers.slice(), sel: App.sel }; }
+function restoreLayers(s) { App.layers = s.layers.slice(); App.sel = s.sel; }
+
+// Whole-document snapshot for frame-level ops (reorder, resize, crop, filters,
+// imports). Frame canvases are shared by reference (immutable), masks cloned.
+function captureDoc() {
+  return {
+    W: App.W, H: App.H, fps: App.fps, cur: App.cur,
+    frames: App.frames.map(f => ({ base: f.base, delay: f.delay })),
+    perLayer: App.layers.map(l => ({
+      l, base: { ...l.base },
+      pf: JSON.parse(JSON.stringify(l.perFrame)),
+      pfm: cloneMaskMap(l.perFrameMask),
+      maskBase: l.maskBase ? cloneCanvas(l.maskBase) : null,
+    })),
+  };
+}
+function restoreDoc(s) {
+  App.W = s.W; App.H = s.H; App.fps = s.fps;
+  App.frames = s.frames.map(f => ({ base: f.base, delay: f.delay }));
+  App.cur = clamp(s.cur, 0, App.frames.length - 1);
+  for (const e of s.perLayer) {
+    if (!App.layers.includes(e.l)) continue;
+    e.l.base = { ...e.base };
+    e.l.perFrame = JSON.parse(JSON.stringify(e.pf));
+    e.l.perFrameMask = cloneMaskMap(e.pfm);
+    e.l.maskBase = e.maskBase ? cloneCanvas(e.maskBase) : null;
+    e.l._maskVer++; e.l._compCacheKey = '';
+  }
+}
+
+function captureTiming() { return { fps: App.fps, frames: App.frames.slice(), delays: App.frames.map(f => f.delay) }; }
+function restoreTiming(s) { App.fps = s.fps; s.frames.forEach((f, i) => { f.delay = s.delays[i]; }); }
+
+/* =====================================================================
    Document model
    ---------------------------------------------------------------------
    App.frames : [{ base:<canvas WxH>, delay:<ms> }]   the per-frame imagery
@@ -1629,6 +1822,9 @@ const App = {
   sel: null,              // selected layer id, or 'bg' for the background, or null
   playing: false,
   original: null,         // snapshot for reset {W,H,fps,loop,frames:[{dataURL,delay}]}
+  trackData: null,        // {points:[{x,y,score}|null], ref:frameIndex} from the object tracker
+  filterPreview: null,    // CSS filter string previewed on the background while the Adjust tool is active
+  onion: false,           // ghost the previous frame over the current one
 };
 
 function newLayer(type) {
@@ -1708,6 +1904,8 @@ function loadImageFile(file) {
   });
 }
 
+const isVideoFile = (f) => /^video\//i.test(f.type || '') || /\.(mp4|mov|m4v|webm)$/i.test(f.name || '');
+
 async function importFiles(fileList, { asNewDoc }) {
   const files = Array.from(fileList);
   if (!files.length) return;
@@ -1722,6 +1920,7 @@ async function importFiles(fileList, { asNewDoc }) {
     App.frames = dec.frames;
     App.layers = [];
     finishImport();
+    clearHistory();
     toast(`Loaded ${dec.frames.length} frame${dec.frames.length > 1 ? 's' : ''}`);
     return;
   }
@@ -1735,11 +1934,16 @@ async function importFiles(fileList, { asNewDoc }) {
         const dec = decodeGif(new Uint8Array(await f.arrayBuffer()));
         for (const fr of dec.frames) imgs.push({ canvas: fr.base, delay: fr.delay });
       } catch (e) {/* skip */}
+    } else if (isVideoFile(f)) {
+      // decode video (mp4/mov/webm) into sampled frames via the import dialog
+      const vf = await importVideoDialog(f);
+      if (vf) for (const it of vf) imgs.push(it);
     } else {
       try { const im = await loadImageFile(f); imgs.push({ img: im }); } catch (e) {/* skip */}
     }
   }
   if (!imgs.length) { toast('No usable images.'); return; }
+  if (!asNewDoc && App.frames.length) pushUndo('import frames', captureDoc, restoreDoc);
 
   if (asNewDoc) {
     // canvas size = largest image
@@ -1766,6 +1970,7 @@ async function importFiles(fileList, { asNewDoc }) {
     App.frames.push({ base: cv, delay: it.delay || defDelay });
   }
   finishImport();
+  if (asNewDoc) clearHistory();
   toast(`${asNewDoc ? 'Built' : 'Added'} ${imgs.length} frame${imgs.length > 1 ? 's' : ''}`);
 }
 
@@ -1789,6 +1994,248 @@ function snapshotOriginal() {
     W: App.W, H: App.H, fps: App.fps, loop: App.loop,
     frames: App.frames.map(f => ({ url: f.base.toDataURL('image/png'), delay: f.delay }))
   };
+}
+
+/* =====================================================================
+   Video (MP4 / MOV / WebM) → frames
+   ---------------------------------------------------------------------
+   Two decoders, both offline-capable:
+   1. WebCodecs + mp4box.js (demuxer, cached by the service worker):
+      fast, frame-accurate, and works even for files the <video> element
+      refuses to play. Handles iPhone MOV rotation metadata.
+   2. Fallback: seek-and-capture on a <video> element — no dependencies,
+      uses the browser's built-in codecs, works everywhere incl. WebM.
+   ===================================================================== */
+const MAX_VIDEO_FRAMES = 600;
+
+let vidState = null; // {file, url, resolve, canPlay, done}
+
+function importVideoDialog(file) {
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(file);
+    const v = $('#vidPreview');
+    vidState = { file, url, resolve, canPlay: false, done: false };
+    $('#vidName').textContent = `${file.name} · ${(file.size / 1048576).toFixed(1)} MB`;
+    // sensible defaults before metadata arrives (or if it never does)
+    $('#vidStart').value = '0'; $('#vidEnd').value = '6';
+    $('#vidFps').value = '10'; $('#vidWidth').value = '480';
+    v.addEventListener('loadedmetadata', () => {
+      if (!vidState || vidState.file !== file) return;
+      vidState.canPlay = true;
+      $('#vidEnd').value = Math.min(v.duration || 6, 8).toFixed(1);
+      if (v.videoWidth) $('#vidWidth').value = Math.min(v.videoWidth, 480);
+      vidEstimate();
+    }, { once: true });
+    v.addEventListener('error', () => {
+      if (!vidState || vidState.file !== file || vidState.canPlay) return;
+      $('#vidEstimate').textContent = 'Preview unavailable in this browser — will try direct (WebCodecs) decode.';
+    }, { once: true });
+    v.src = url;
+    vidEstimate();
+    $('#videoModal').classList.add('show');
+  });
+}
+
+function vidEstimate() {
+  const start = Math.max(0, +$('#vidStart').value || 0);
+  const end = +$('#vidEnd').value || 0;
+  const fps = clamp(+$('#vidFps').value || 10, 1, 30);
+  const n = Math.max(0, Math.ceil((end - start) * fps));
+  const capped = Math.min(n, MAX_VIDEO_FRAMES);
+  $('#vidEstimate').textContent = n
+    ? `≈ ${capped} frame${capped !== 1 ? 's' : ''} at ${fps} fps${n > MAX_VIDEO_FRAMES ? ` (capped at ${MAX_VIDEO_FRAMES})` : ''}`
+    : 'Pick a time range to sample.';
+}
+
+function closeVideoModal(frames) {
+  const st = vidState; if (!st || st.done) return;
+  st.done = true;
+  $('#videoModal').classList.remove('show');
+  const v = $('#vidPreview');
+  v.pause(); v.removeAttribute('src'); v.load();
+  URL.revokeObjectURL(st.url);
+  vidState = null;
+  st.resolve(frames);
+}
+
+async function vidImportGo() {
+  const st = vidState; if (!st || st.done) return;
+  const v = $('#vidPreview');
+  let start = Math.max(0, +$('#vidStart').value || 0);
+  let end = Math.max(start, +$('#vidEnd').value || start);
+  const fps = clamp(+$('#vidFps').value || 10, 1, 30);
+  const width = clamp(Math.round(+$('#vidWidth').value || 480), 16, 2000);
+  if (st.canPlay && v.duration) end = Math.min(end, v.duration);
+  if (end - start <= 0) { toast('End must be after start.'); return; }
+  if ((end - start) * fps > MAX_VIDEO_FRAMES) end = start + MAX_VIDEO_FRAMES / fps;
+  const o = { start, end, fps, width };
+
+  $('#videoModal').classList.remove('show');
+  showProgress('Extracting frames…', 0);
+  let frames = null;
+  const mp4ish = /^video\/(mp4|quicktime)/i.test(st.file.type) || /\.(mp4|mov|m4v)$/i.test(st.file.name);
+  if (window.MP4Box && window.VideoDecoder && mp4ish) {
+    try { frames = await extractWebCodecs(st.file, o); }
+    catch (err) { frames = null; }
+  }
+  if ((!frames || !frames.length) && st.canPlay) {
+    try { v.pause(); frames = await extractVideoElement(v, o); }
+    catch (err) { frames = null; }
+  }
+  hideProgress();
+  if (!frames || !frames.length) {
+    toast('Could not decode this video in your browser.');
+    closeVideoModal(null);
+    return;
+  }
+  closeVideoModal(frames);
+}
+
+/* Draw one decoded sample (VideoFrame or <video>) into a scaled canvas,
+   applying MOV/MP4 rotation metadata (0/90/180/270). */
+function drawVideoSample(source, sw, sh, rot, outW) {
+  const rotated = rot === 90 || rot === 270;
+  const dispW = rotated ? sh : sw, dispH = rotated ? sw : sh;
+  const s = Math.min(1, outW / dispW);
+  const W = Math.max(1, Math.round(dispW * s)), H = Math.max(1, Math.round(dispH * s));
+  const c = mkCanvas(W, H);
+  const cx = c.getContext('2d');
+  cx.save();
+  if (rot === 90) { cx.translate(W, 0); cx.rotate(Math.PI / 2); }
+  else if (rot === 180) { cx.translate(W, H); cx.rotate(Math.PI); }
+  else if (rot === 270) { cx.translate(0, H); cx.rotate(-Math.PI / 2); }
+  cx.drawImage(source, 0, 0, sw, sh, 0, 0, rotated ? H : W, rotated ? W : H);
+  cx.restore();
+  return c;
+}
+
+/* WebCodecs path: mp4box demuxes, VideoDecoder decodes, we keep the frames
+   nearest each sample time. */
+function extractWebCodecs(file, o) {
+  return new Promise(async (resolve, reject) => {
+    let settled = false;
+    const fail = (e) => { if (!settled) { settled = true; reject(e); } };
+    const succeed = (v) => { if (!settled) { settled = true; resolve(v); } };
+    const timer = setTimeout(() => fail(new Error('video decode timeout')), 90000);
+
+    let buffer;
+    try { buffer = await file.arrayBuffer(); } catch (e) { clearTimeout(timer); return fail(e); }
+
+    const mp4 = MP4Box.createFile();
+    const out = [];
+    const targets = [];
+    for (let t = o.start; t < o.end - 1e-6; t += 1 / o.fps) targets.push(t);
+    if (!targets.length) targets.push(o.start);
+    let ti = 0;
+    let decoder = null;
+    const delay = Math.round(1000 / o.fps);
+
+    mp4.onError = (e) => fail(new Error('demux failed: ' + e));
+    mp4.onReady = (info) => {
+      const track = info.videoTracks && info.videoTracks[0];
+      if (!track) return fail(new Error('no video track'));
+
+      // Rotation from the track header matrix (iPhone MOV etc.)
+      let rot = 0;
+      try {
+        const m = mp4.getTrackById(track.id).tkhd.matrix;
+        const ang = Math.round(Math.atan2(m[1] / 65536, m[0] / 65536) * 180 / Math.PI);
+        rot = ((Math.round(ang / 90) * 90) % 360 + 360) % 360;
+      } catch (e) {/* no matrix → 0 */}
+
+      const cw = (track.video && track.video.width) || track.track_width;
+      const ch = (track.video && track.video.height) || track.track_height;
+
+      decoder = new VideoDecoder({
+        output: (frame) => {
+          const t = frame.timestamp / 1e6;
+          if (ti < targets.length && t >= targets[ti] - 1e-4) {
+            out.push({
+              canvas: drawVideoSample(frame, frame.displayWidth || cw, frame.displayHeight || ch, rot, o.width),
+              delay,
+            });
+            ti++;
+            setProgress(ti / targets.length);
+          }
+          frame.close();
+        },
+        error: (e) => fail(e),
+      });
+
+      const cfg = { codec: track.codec, codedWidth: cw, codedHeight: ch };
+      const desc = mp4Description(mp4, track.id);
+      if (desc) cfg.description = desc;
+
+      VideoDecoder.isConfigSupported(cfg).then(async (s) => {
+        if (!s.supported) return fail(new Error('codec not supported: ' + cfg.codec));
+        decoder.configure(cfg);
+        mp4.setExtractionOptions(track.id, null, { nbSamples: 2000 });
+        mp4.start(); // delivers every buffered sample synchronously
+        try { await decoder.flush(); } catch (e) {/* flush after close is fine */}
+        clearTimeout(timer);
+        succeed(out);
+      }).catch(fail);
+    };
+    mp4.onSamples = (id, user, samples) => {
+      if (!decoder || decoder.state !== 'configured') return;
+      for (const smp of samples) {
+        const t = smp.cts / smp.timescale;
+        if (ti >= targets.length || t > o.end + 0.6) continue; // past the range
+        decoder.decode(new EncodedVideoChunk({
+          type: smp.is_sync ? 'key' : 'delta',
+          timestamp: smp.cts * 1e6 / smp.timescale,
+          duration: smp.duration * 1e6 / smp.timescale,
+          data: smp.data,
+        }));
+      }
+    };
+
+    try {
+      buffer.fileStart = 0;
+      mp4.appendBuffer(buffer);
+      mp4.flush();
+    } catch (e) { fail(e); }
+  });
+}
+
+/* Pull the avcC/hvcC/vpcC/av1C decoder config out of the sample description
+   (required by VideoDecoder for h264/h265). */
+function mp4Description(mp4, trackId) {
+  try {
+    const trak = mp4.getTrackById(trackId);
+    for (const entry of trak.mdia.minf.stbl.stsd.entries) {
+      const box = entry.avcC || entry.hvcC || entry.vpcC || entry.av1C;
+      if (box) {
+        const DS = window.DataStream;
+        const stream = new DS(undefined, 0, DS.BIG_ENDIAN);
+        box.write(stream);
+        return new Uint8Array(stream.buffer, 8); // strip the 8-byte box header
+      }
+    }
+  } catch (e) {/* fall through */}
+  return null;
+}
+
+/* Fallback path: seek the <video> element to each sample time and capture. */
+async function extractVideoElement(video, o) {
+  const out = [];
+  const end = Math.min(o.end, video.duration || o.end);
+  const targets = [];
+  for (let t = o.start; t < end - 1e-6; t += 1 / o.fps) targets.push(t);
+  if (!targets.length) targets.push(o.start);
+  const delay = Math.round(1000 / o.fps);
+  for (let i = 0; i < targets.length; i++) {
+    await new Promise((res, rej) => {
+      const to = setTimeout(() => { cleanup(); rej(new Error('seek timeout')); }, 8000);
+      const on = () => { cleanup(); res(); };
+      const cleanup = () => { clearTimeout(to); video.removeEventListener('seeked', on); };
+      video.addEventListener('seeked', on);
+      video.currentTime = Math.min(targets[i], Math.max(0, (video.duration || targets[i]) - 0.001));
+    });
+    out.push({ canvas: drawVideoSample(video, video.videoWidth, video.videoHeight, 0, o.width), delay });
+    setProgress((i + 1) / targets.length);
+  }
+  return out;
 }
 
 /* =====================================================================
@@ -1816,10 +2263,12 @@ function fitCanvas() {
   box.style.height = h + 'px';
 }
 
-/* Composite a layer's src + mask into a cached canvas (natW x natH). */
-function layerComposite(l) {
-  const mask = getMask(l, App.cur);
-  const key = l.id + ':' + l._srcVer + ':' + (mask ? (mask === l.maskBase ? 'b' + l._maskVer : 'f' + App.cur + ':' + (mask._ver || 0)) : 'none');
+/* Composite a layer's src + mask into a cached canvas (natW x natH).
+   Frame-aware: per-frame masks resolve against the frame being drawn, not
+   just the frame on screen — thumbnails and export stay correct. */
+function layerComposite(l, fi = App.cur) {
+  const mask = getMask(l, fi);
+  const key = l.id + ':' + l._srcVer + ':' + (mask ? (mask === l.maskBase ? 'b' + l._maskVer : 'f' + fi + ':' + (mask._ver || 0)) : 'none');
   if (l._compCacheKey === key && l._comp) return l._comp;
   const c = mkCanvas(l.natW, l.natH);
   const cx = c.getContext('2d');
@@ -1829,14 +2278,24 @@ function layerComposite(l) {
   return c;
 }
 
+const CTX_FILTER_OK = 'filter' in CanvasRenderingContext2D.prototype;
+
 function renderFrameTo(ctx, i) {
   ctx.clearRect(0, 0, App.W, App.H);
   const fr = App.frames[i];
-  if (fr && fr.base) ctx.drawImage(fr.base, 0, 0);
+  if (fr && fr.base) {
+    // Live colour-filter preview: only on the on-screen canvas, never baked
+    // into thumbnails or export (Apply does the baking, in a worker).
+    if (ctx === vctx && App.filterPreview && CTX_FILTER_OK) {
+      ctx.save(); ctx.filter = App.filterPreview; ctx.drawImage(fr.base, 0, 0); ctx.restore();
+    } else {
+      ctx.drawImage(fr.base, 0, 0);
+    }
+  }
   for (const l of App.layers) {
     if (!l.visible || !l.src) continue;
     const t = getT(l, i);
-    const comp = layerComposite(l);
+    const comp = layerComposite(l, i);
     ctx.save();
     ctx.globalAlpha = clamp(t.opacity, 0, 1);
     ctx.translate(t.x, t.y);
@@ -1854,14 +2313,25 @@ function requestRender() {
   requestAnimationFrame(() => {
     renderPending = false;
     renderFrameTo(vctx, App.cur);
+    drawOnion();
     drawOverlay();
   });
+}
+
+/* Onion skin: ghost the previous frame over the current one while paused. */
+function drawOnion() {
+  if (!App.onion || App.playing || App.frames.length < 2) return;
+  const prev = (App.cur - 1 + App.frames.length) % App.frames.length;
+  const c = mkCanvas(App.W, App.H);
+  renderFrameTo(c.getContext('2d'), prev);
+  vctx.save(); vctx.globalAlpha = 0.35; vctx.drawImage(c, 0, 0); vctx.restore();
 }
 
 /* =====================================================================
    Overlay (selection box / handles / crop / brush cursor)
    ===================================================================== */
 let cropRect = null;     // {x,y,w,h} in canvas coords
+let trackRect = null;    // {x,y,w,h} box around the object to track
 let brushCursor = null;  // {x,y} canvas coords
 
 function layerCorners(l) {
@@ -1917,6 +2387,31 @@ function drawOverlay() {
     octx.fill('evenodd');
     octx.strokeStyle = '#5a9996'; octx.lineWidth = 1.6 * scl; octx.setLineDash([6 * scl, 4 * scl]);
     octx.strokeRect(cropRect.x, cropRect.y, cropRect.w, cropRect.h);
+    octx.restore();
+  }
+
+  if (App.tool === 'track') {
+    octx.save();
+    if (trackRect) {
+      octx.strokeStyle = '#6f5d73'; octx.lineWidth = 1.6 * scl; octx.setLineDash([6 * scl, 4 * scl]);
+      octx.strokeRect(trackRect.x, trackRect.y, trackRect.w, trackRect.h);
+      octx.setLineDash([]);
+    }
+    const td = App.trackData;
+    if (td) {
+      octx.strokeStyle = '#6f5d73'; octx.fillStyle = '#6f5d73';
+      octx.globalAlpha = 0.5; octx.lineWidth = 1.2 * scl;
+      octx.beginPath();
+      let started = false;
+      for (const p of td.points) {
+        if (!p) continue;
+        if (!started) { octx.moveTo(p.x, p.y); started = true; }
+        else octx.lineTo(p.x, p.y);
+      }
+      octx.stroke();
+      const cp = td.points[App.cur];
+      if (cp) { octx.globalAlpha = 1; octx.beginPath(); octx.arc(cp.x, cp.y, 4 * scl, 0, 7); octx.fill(); }
+    }
     octx.restore();
   }
 
@@ -1979,6 +2474,7 @@ function onPointerDown(e) {
 
   // --- erase ---
   if (App.tool === 'erase' && l) {
+    pushUndo('erase stroke', () => captureMask(l), (s) => restoreMask(l, s));
     drag = { kind: 'erase', l };
     paintErase(l, p.x, p.y);
     e.preventDefault(); return;
@@ -1988,6 +2484,13 @@ function onPointerDown(e) {
   if (App.tool === 'crop') {
     drag = { kind: 'crop', start: p };
     cropRect = { x: p.x, y: p.y, w: 0, h: 0 };
+    e.preventDefault(); return;
+  }
+
+  // --- track box ---
+  if (App.tool === 'track') {
+    drag = { kind: 'trackbox', start: p };
+    trackRect = { x: p.x, y: p.y, w: 0, h: 0 };
     e.preventDefault(); return;
   }
 
@@ -2015,6 +2518,12 @@ function onPointerMove(e) {
   e.preventDefault();
   const l = drag.l;
 
+  // First movement of a move/scale/rotate drag: capture pre-drag state once.
+  if (!drag.pushed && (drag.kind === 'move' || drag.kind === 'scale' || drag.kind === 'rotate')) {
+    drag.pushed = true;
+    pushUndo(drag.kind, () => captureXf(l), (s) => restoreXf(l, s));
+  }
+
   if (drag.kind === 'move') {
     const t = ensureEditTarget(l);
     t.x = drag.t0.x + (p.x - drag.start.x);
@@ -2036,6 +2545,12 @@ function onPointerMove(e) {
     paintErase(l, p.x, p.y);
   } else if (drag.kind === 'crop') {
     cropRect = {
+      x: Math.min(drag.start.x, p.x), y: Math.min(drag.start.y, p.y),
+      w: Math.abs(p.x - drag.start.x), h: Math.abs(p.y - drag.start.y)
+    };
+    drawOverlay();
+  } else if (drag.kind === 'trackbox') {
+    trackRect = {
       x: Math.min(drag.start.x, p.x), y: Math.min(drag.start.y, p.y),
       w: Math.abs(p.x - drag.start.x), h: Math.abs(p.y - drag.start.y)
     };
@@ -2130,6 +2645,7 @@ function applyCrop() {
   const l = selLayer();
   if (!l) { toast('Select a layer to crop.'); return; }
   if (!cropRect || cropRect.w < 2 || cropRect.h < 2) { toast('Drag a crop box first.'); return; }
+  pushUndo('layer crop', () => captureMask(l), (s) => restoreMask(l, s));
   const mask = ensureMaskTarget(l);
   // figure out the rectangle in layer-local space (use 4 corners → bbox)
   const corners = [
@@ -2224,6 +2740,7 @@ function removeBackground() {
   const onMsg = (e) => {
     bgWorker.removeEventListener('message', onMsg);
     const alpha = new Float32Array(e.data.alpha);
+    pushUndo('background removal', () => captureMask(l), (s) => restoreMask(l, s));
     const mask = ensureMaskTarget(l);
     const mctx = mask.getContext('2d');
     const mid = mctx.getImageData(0, 0, w, h);
@@ -2241,6 +2758,301 @@ function removeBackground() {
   };
   bgWorker.addEventListener('message', onMsg);
   bgWorker.postMessage({ data: buf, w, h, tol, feather }, [buf]);
+}
+
+/* =====================================================================
+   Object tracking (NCC template matching in a Web Worker)
+   ---------------------------------------------------------------------
+   Dependency-free and offline by construction: normalized cross-correlation
+   over downscaled grayscale frames, with a slowly-adapting template. Tracks
+   from the current frame forward AND backward so the whole timeline is
+   covered, then a layer can be attached to follow the motion.
+   ===================================================================== */
+const trackWorker = (() => {
+  const code = `
+  self.onmessage = (e) => {
+    const { frames, fw, fh, box, startIdx, radius } = e.data;
+    const n = frames.length;
+    const tw = box.w, th = box.h, N = tw * th;
+    const positions = new Array(n).fill(null);
+    positions[startIdx] = { x: box.x, y: box.y, score: 1 };
+    const patch = new Float32Array(N);
+
+    function grab(img, x0, y0, dst) {
+      for (let y = 0; y < th; y++) {
+        let sy = y0 + y; if (sy < 0) sy = 0; else if (sy >= fh) sy = fh - 1;
+        for (let x = 0; x < tw; x++) {
+          let sx = x0 + x; if (sx < 0) sx = 0; else if (sx >= fw) sx = fw - 1;
+          dst[y * tw + x] = img[sy * fw + sx];
+        }
+      }
+    }
+    function stats(t) {
+      let m = 0; for (let i = 0; i < N; i++) m += t[i]; m /= N;
+      let v = 0; for (let i = 0; i < N; i++) { const d = t[i] - m; v += d * d; }
+      return { m, sd: Math.sqrt(v) || 1 };
+    }
+
+    const total = n - 1;
+    let processed = 0;
+
+    function track(order) {
+      const tmpl = new Float32Array(N);
+      grab(frames[startIdx], box.x, box.y, tmpl);
+      let ts = stats(tmpl);
+      let cx = box.x, cy = box.y;
+      for (const i of order) {
+        const img = frames[i];
+        let best = -2, bx = cx, by = cy;
+        for (let dy = -radius; dy <= radius; dy++) {
+          for (let dx = -radius; dx <= radius; dx++) {
+            const x0 = cx + dx, y0 = cy + dy;
+            let s = 0, ss = 0, cr = 0;
+            for (let y = 0; y < th; y++) {
+              let sy = y0 + y; if (sy < 0) sy = 0; else if (sy >= fh) sy = fh - 1;
+              const row = sy * fw;
+              for (let x = 0; x < tw; x++) {
+                let sx = x0 + x; if (sx < 0) sx = 0; else if (sx >= fw) sx = fw - 1;
+                const v = img[row + sx];
+                s += v; ss += v * v; cr += v * tmpl[y * tw + x];
+              }
+            }
+            const pm = s / N;
+            const pv = ss - N * pm * pm;
+            const psd = Math.sqrt(pv > 0 ? pv : 0) || 1;
+            const ncc = (cr - N * pm * ts.m) / (psd * ts.sd);
+            if (ncc > best) { best = ncc; bx = x0; by = y0; }
+          }
+        }
+        cx = bx; cy = by;
+        positions[i] = { x: bx, y: by, score: best };
+        if (best > 0.35) { // adapt the template to slow appearance change
+          grab(img, bx, by, patch);
+          for (let k = 0; k < N; k++) tmpl[k] = tmpl[k] * 0.85 + patch[k] * 0.15;
+          ts = stats(tmpl);
+        }
+        processed++;
+        self.postMessage({ progress: processed / (total || 1) });
+      }
+    }
+
+    const fwd = []; for (let i = startIdx + 1; i < n; i++) fwd.push(i);
+    const bwd = []; for (let i = startIdx - 1; i >= 0; i--) bwd.push(i);
+    track(fwd); track(bwd);
+    self.postMessage({ done: true, positions });
+  };`;
+  const url = URL.createObjectURL(new Blob([code], { type: 'application/javascript' }));
+  const w = new Worker(url);
+  w.onerror = () => { hideProgress(); toast('Tracking failed.'); };
+  return w;
+})();
+
+async function runTracking() {
+  if (App.frames.length < 2) { toast('Need at least two frames to track.'); return; }
+  if (!trackRect || trackRect.w < 6 || trackRect.h < 6) { toast('Draw a box around the object first.'); return; }
+  const rect = { x: trackRect.x, y: trackRect.y, w: trackRect.w, h: trackRect.h };
+  // Tracking resolution: template ≤ 40px on its long side, frames ≤ 380px.
+  const s = Math.min(1, 40 / Math.max(rect.w, rect.h), 380 / Math.max(App.W, App.H));
+  const fw = Math.max(8, Math.round(App.W * s)), fh = Math.max(8, Math.round(App.H * s));
+  const sx = fw / App.W, sy = fh / App.H;
+
+  showProgress('Tracking object…', 0);
+  // Grayscale every frame's BACKGROUND at tracking resolution (layers excluded
+  // so the attached layer never tracks itself).
+  const grays = [], transfer = [];
+  for (let i = 0; i < App.frames.length; i++) {
+    const c = mkCanvas(fw, fh);
+    const cx = c.getContext('2d');
+    cx.drawImage(App.frames[i].base, 0, 0, fw, fh);
+    const d = cx.getImageData(0, 0, fw, fh).data;
+    const g = new Uint8Array(fw * fh);
+    for (let j = 0; j < fw * fh; j++) g[j] = (d[j * 4] * 77 + d[j * 4 + 1] * 150 + d[j * 4 + 2] * 29) >> 8;
+    grays.push(g); transfer.push(g.buffer);
+  }
+  const box = {
+    x: Math.round(rect.x * sx), y: Math.round(rect.y * sy),
+    w: Math.max(3, Math.round(rect.w * sx)), h: Math.max(3, Math.round(rect.h * sy)),
+  };
+  const radius = clamp(Math.round(Math.max(box.w, box.h) * 0.8), 6, 48);
+
+  const res = await new Promise((resolve) => {
+    const onMsg = (e) => {
+      if (e.data.progress != null) { setProgress(e.data.progress); return; }
+      trackWorker.removeEventListener('message', onMsg);
+      resolve(e.data);
+    };
+    trackWorker.addEventListener('message', onMsg);
+    trackWorker.postMessage({ frames: grays, fw, fh, box, startIdx: App.cur, radius }, transfer);
+  });
+  hideProgress();
+
+  const pts = res.positions.map(p => p ? { x: (p.x + box.w / 2) / sx, y: (p.y + box.h / 2) / sy, score: p.score } : null);
+  App.trackData = { points: pts, ref: App.cur };
+  $('#trackAttach').disabled = false;
+  $('#trackClear').disabled = false;
+  const low = pts.filter(p => p && p.score < 0.3).length;
+  $('#trackStatus').textContent = `Tracked ${pts.filter(Boolean).length} frames` + (low ? ` · ${low} low-confidence` : '');
+  requestRender();
+  toast('Tracking done — step through the frames to check it');
+}
+
+function attachTrackedLayer() {
+  const td = App.trackData;
+  if (!td) { toast('Track an object first.'); return; }
+  const l = selLayer();
+  if (!l) { toast('Select the layer to attach (not the background).'); return; }
+  pushUndo('attach to track', () => captureXf(l), (s) => restoreXf(l, s));
+  const ref = td.points[td.ref] || td.points.find(Boolean);
+  for (let i = 0; i < App.frames.length; i++) {
+    if (i === td.ref) { delete l.perFrame[i]; continue; }
+    const p = td.points[i]; if (!p) continue;
+    l.perFrame[i] = { ...l.base, x: l.base.x + (p.x - ref.x), y: l.base.y + (p.y - ref.y) };
+  }
+  rebuildFrameStrip(); rebuildLayerList(); requestRender();
+  toast(`“${l.name}” now follows the tracked object`);
+}
+
+function clearTrack() {
+  App.trackData = null; trackRect = null;
+  $('#trackAttach').disabled = true;
+  $('#trackClear').disabled = true;
+  $('#trackStatus').textContent = '';
+  requestRender();
+}
+
+/* =====================================================================
+   Colour filters (brightness / contrast / saturation / hue / toggles)
+   ---------------------------------------------------------------------
+   Live preview via ctx.filter on the view canvas; Apply bakes the same
+   adjustment into the background frames through a colour-matrix worker,
+   so results are identical across browsers (and work where ctx.filter
+   isn't supported). Frame canvases are REPLACED, never mutated — that
+   keeps undo snapshots valid.
+   ===================================================================== */
+const FilterState = { bright: 100, contrast: 100, sat: 100, hue: 0, gray: false, sepia: false, invert: false };
+
+function filterCss() {
+  const F = FilterState, parts = [];
+  if (F.bright !== 100) parts.push(`brightness(${F.bright / 100})`);
+  if (F.contrast !== 100) parts.push(`contrast(${F.contrast / 100})`);
+  if (F.sat !== 100) parts.push(`saturate(${F.sat / 100})`);
+  if (F.hue) parts.push(`hue-rotate(${F.hue}deg)`);
+  if (F.gray) parts.push('grayscale(1)');
+  if (F.sepia) parts.push('sepia(1)');
+  if (F.invert) parts.push('invert(1)');
+  return parts.join(' ');
+}
+
+// 4x5 colour matrix equivalent to the CSS filter chain (offsets in 0..1).
+function filterMatrix() {
+  const I = [1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0];
+  const mul = (A, B) => { // apply B first, then A
+    const r = new Array(20);
+    for (let i = 0; i < 4; i++) for (let j = 0; j < 5; j++) {
+      let v = A[i * 5] * B[j] + A[i * 5 + 1] * B[5 + j] + A[i * 5 + 2] * B[10 + j] + A[i * 5 + 3] * B[15 + j];
+      if (j === 4) v += A[i * 5 + 4];
+      r[i * 5 + j] = v;
+    }
+    return r;
+  };
+  const F = FilterState;
+  let M = I;
+  const b = F.bright / 100;
+  if (b !== 1) M = mul([b, 0, 0, 0, 0, 0, b, 0, 0, 0, 0, 0, b, 0, 0, 0, 0, 0, 1, 0], M);
+  const c = F.contrast / 100;
+  if (c !== 1) { const o = 0.5 - 0.5 * c; M = mul([c, 0, 0, 0, o, 0, c, 0, 0, o, 0, 0, c, 0, o, 0, 0, 0, 1, 0], M); }
+  const s = F.sat / 100;
+  if (s !== 1) M = mul([
+    0.213 + 0.787 * s, 0.715 - 0.715 * s, 0.072 - 0.072 * s, 0, 0,
+    0.213 - 0.213 * s, 0.715 + 0.285 * s, 0.072 - 0.072 * s, 0, 0,
+    0.213 - 0.213 * s, 0.715 - 0.715 * s, 0.072 + 0.928 * s, 0, 0,
+    0, 0, 0, 1, 0], M);
+  if (F.hue) {
+    const a = F.hue * Math.PI / 180, co = Math.cos(a), si = Math.sin(a);
+    M = mul([
+      0.213 + co * 0.787 - si * 0.213, 0.715 - co * 0.715 - si * 0.715, 0.072 - co * 0.072 + si * 0.928, 0, 0,
+      0.213 - co * 0.213 + si * 0.143, 0.715 + co * 0.285 + si * 0.140, 0.072 - co * 0.072 - si * 0.283, 0, 0,
+      0.213 - co * 0.213 - si * 0.787, 0.715 - co * 0.715 + si * 0.715, 0.072 + co * 0.928 + si * 0.072, 0, 0,
+      0, 0, 0, 1, 0], M);
+  }
+  if (F.gray) M = mul([0.2126, 0.7152, 0.0722, 0, 0, 0.2126, 0.7152, 0.0722, 0, 0, 0.2126, 0.7152, 0.0722, 0, 0, 0, 0, 0, 1, 0], M);
+  if (F.sepia) M = mul([0.393, 0.769, 0.189, 0, 0, 0.349, 0.686, 0.168, 0, 0, 0.272, 0.534, 0.131, 0, 0, 0, 0, 0, 1, 0], M);
+  if (F.invert) M = mul([-1, 0, 0, 0, 1, 0, -1, 0, 0, 1, 0, 0, -1, 0, 1, 0, 0, 0, 1, 0], M);
+  return M;
+}
+
+const filterWorker = (() => {
+  const code = `
+  self.onmessage = (e) => {
+    const { data, w, h, m } = e.data;
+    const px = new Uint8ClampedArray(data);
+    const n = w * h;
+    for (let i = 0; i < n; i++) {
+      const o = i * 4, r = px[o], g = px[o + 1], b = px[o + 2], a = px[o + 3];
+      px[o]     = m[0]  * r + m[1]  * g + m[2]  * b + m[3]  * a + m[4]  * 255;
+      px[o + 1] = m[5]  * r + m[6]  * g + m[7]  * b + m[8]  * a + m[9]  * 255;
+      px[o + 2] = m[10] * r + m[11] * g + m[12] * b + m[13] * a + m[14] * 255;
+      px[o + 3] = m[15] * r + m[16] * g + m[17] * b + m[18] * a + m[19] * 255;
+    }
+    self.postMessage({ data: px.buffer }, [px.buffer]);
+  };`;
+  const url = URL.createObjectURL(new Blob([code], { type: 'application/javascript' }));
+  const w = new Worker(url);
+  w.onerror = () => { hideProgress(); toast('Filter failed.'); };
+  return w;
+})();
+
+function filterFrame(frame, M) {
+  return new Promise((resolve) => {
+    const w = App.W, h = App.H;
+    const c = mkCanvas(w, h);
+    const cx = c.getContext('2d');
+    cx.drawImage(frame.base, 0, 0);
+    const id = cx.getImageData(0, 0, w, h);
+    const onMsg = (e) => {
+      filterWorker.removeEventListener('message', onMsg);
+      const nc = mkCanvas(w, h);
+      nc.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(e.data.data), w, h), 0, 0);
+      frame.base = nc; // replace, never mutate (undo relies on it)
+      resolve();
+    };
+    filterWorker.addEventListener('message', onMsg);
+    const buf = id.data.buffer;
+    filterWorker.postMessage({ data: buf, w, h, m: M }, [buf]);
+  });
+}
+
+async function applyFilters() {
+  if (!App.frames.length) return;
+  if (!filterCss()) { toast('All filters are neutral.'); return; }
+  const idxs = App.mode === 'global' ? App.frames.map((_, i) => i) : [App.cur];
+  pushUndo('filters', captureDoc, restoreDoc);
+  const M = filterMatrix();
+  showProgress('Applying filters…', 0);
+  for (let k = 0; k < idxs.length; k++) {
+    await filterFrame(App.frames[idxs[k]], M);
+    setProgress((k + 1) / idxs.length);
+  }
+  hideProgress();
+  resetFilterState();
+  rebuildFrameStrip(); rebuildLayerList(); requestRender();
+  toast(App.mode === 'global' ? 'Filters applied to all frames' : 'Filters applied to this frame');
+}
+
+function resetFilterState() {
+  Object.assign(FilterState, { bright: 100, contrast: 100, sat: 100, hue: 0, gray: false, sepia: false, invert: false });
+  syncFilterInputs();
+  App.filterPreview = null;
+  requestRender();
+}
+
+function syncFilterInputs() {
+  const F = FilterState;
+  $('#fBright').value = F.bright; $('#fBrightVal').textContent = F.bright + '%';
+  $('#fContrast').value = F.contrast; $('#fContrastVal').textContent = F.contrast + '%';
+  $('#fSat').value = F.sat; $('#fSatVal').textContent = F.sat + '%';
+  $('#fHue').value = F.hue; $('#fHueVal').textContent = F.hue + '°';
+  $('#fGray').checked = F.gray; $('#fSepia').checked = F.sepia; $('#fInvert').checked = F.invert;
 }
 
 /* =====================================================================
@@ -2281,6 +3093,7 @@ function renderTextLayer(l) {
    ===================================================================== */
 function addImageLayers(fileList) {
   const files = Array.from(fileList);
+  pushUndo('add image layer', captureLayers, restoreLayers);
   let added = 0;
   const work = files.map(f => loadImageFile(f).then(img => {
     const l = newLayer('image');
@@ -2304,6 +3117,7 @@ function addImageLayers(fileList) {
 }
 
 function addTextLayer() {
+  pushUndo('add text layer', captureLayers, restoreLayers);
   const l = newLayer('text');
   renderTextLayer(l);
   l.base = { x: App.W / 2, y: App.H / 2, scale: 1, rot: 0, opacity: 1, flipH: false, flipV: false };
@@ -2317,6 +3131,7 @@ function addTextLayer() {
 function deleteLayer(id) {
   const i = App.layers.findIndex(l => l.id === id);
   if (i < 0) return;
+  pushUndo('delete layer', captureLayers, restoreLayers);
   App.layers.splice(i, 1);
   if (App.sel === id) App.sel = App.layers.length ? App.layers[Math.max(0, i - 1)].id : 'bg';
   rebuildLayerList(); rebuildFrameStrip(); refreshSelUI(); requestRender();
@@ -2326,6 +3141,7 @@ function moveLayer(id, dir) {
   const i = App.layers.findIndex(l => l.id === id);
   const j = i + dir;
   if (i < 0 || j < 0 || j >= App.layers.length) return;
+  pushUndo('reorder layer', captureLayers, restoreLayers);
   const [l] = App.layers.splice(i, 1);
   App.layers.splice(j, 0, l);
   rebuildLayerList(); requestRender();
@@ -2333,6 +3149,7 @@ function moveLayer(id, dir) {
 
 function duplicateLayer(id) {
   const l = layerById(id); if (!l) return;
+  pushUndo('duplicate layer', captureLayers, restoreLayers);
   const c = JSON.parse(JSON.stringify({ base: l.base, perFrame: l.perFrame, name: l.name, visible: l.visible, type: l.type, text: l.text }));
   const nl = newLayer(l.type);
   Object.assign(nl, { base: { ...c.base }, perFrame: JSON.parse(JSON.stringify(c.perFrame)), name: c.name + ' copy', visible: c.visible, text: c.text ? { ...c.text } : null });
@@ -2347,6 +3164,7 @@ function duplicateLayer(id) {
 function mergeDown(id) {
   const i = App.layers.findIndex(l => l.id === id);
   if (i <= 0) { toast('Nothing below to merge into.'); return; }
+  pushUndo('merge layers', captureLayers, restoreLayers);
   const top = App.layers[i], bottom = App.layers[i - 1];
   // Bake both into a new full-canvas image layer (uses current frame transforms).
   const c = mkCanvas(App.W, App.H);
@@ -2398,6 +3216,9 @@ function updateScopePill() {
   const pill = $('#scopePill');
   pill.textContent = App.mode;
   pill.classList.toggle('indigo', App.mode === 'global');
+  const fpill = $('#filterScopePill');
+  fpill.textContent = App.mode;
+  fpill.classList.toggle('indigo', App.mode === 'global');
   $('#scopeHint').textContent = App.mode === 'frame'
     ? 'Editing this frame only. Switch to GLOBAL to apply across every frame.'
     : 'Editing all frames at once.';
@@ -2456,7 +3277,11 @@ function rebuildLayerList() {
     vis.innerHTML = l.visible
       ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>'
       : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3l18 18"/><path d="M10.6 10.6a3 3 0 0 0 4.2 4.2"/><path d="M9.9 4.2A10 10 0 0 1 22 12a18 18 0 0 1-2.2 3M6.6 6.6A18 18 0 0 0 2 12s4 7 10 7a10 10 0 0 0 3.4-.6"/></svg>';
-    vis.addEventListener('click', (e) => { e.stopPropagation(); l.visible = !l.visible; rebuildLayerList(); rebuildFrameStrip(); requestRender(); });
+    vis.addEventListener('click', (e) => {
+      e.stopPropagation();
+      pushUndo('toggle visibility', () => ({ v: l.visible }), (s) => { l.visible = s.v; });
+      l.visible = !l.visible; rebuildLayerList(); rebuildFrameStrip(); requestRender();
+    });
     row.appendChild(tdiv); row.appendChild(meta); row.appendChild(vis);
     row.addEventListener('click', () => selectLayer(l.id));
     list.appendChild(row);
@@ -2566,6 +3391,8 @@ function syncGifControls() {
 
 function resizeCanvas(nw, nh) {
   nw = clamp(Math.round(nw), 1, 2000); nh = clamp(Math.round(nh), 1, 2000);
+  if (nw === App.W && nh === App.H) return;
+  pushUndo('resize', captureDoc, restoreDoc);
   const sx = nw / App.W, sy = nh / App.H;
   // scale frames
   for (const f of App.frames) {
@@ -2586,10 +3413,71 @@ function resizeCanvas(nw, nh) {
 }
 
 function setAllFps(fps) {
+  pushUndo('frame rate', captureTiming, restoreTiming);
   App.fps = clamp(fps, 1, 50);
   const d = Math.round(1000 / App.fps);
   for (const f of App.frames) f.delay = d;
   syncGifControls(); rebuildFrameStrip();
+}
+
+/* Crop the whole composition (every frame + layer positions) to cropRect. */
+function cropCanvasToRect() {
+  if (!App.frames.length) return;
+  if (!cropRect || cropRect.w < 4 || cropRect.h < 4) { toast('Drag a crop box first.'); return; }
+  const x0 = clamp(Math.round(cropRect.x), 0, App.W - 1);
+  const y0 = clamp(Math.round(cropRect.y), 0, App.H - 1);
+  const nw = clamp(Math.round(cropRect.w), 1, App.W - x0);
+  const nh = clamp(Math.round(cropRect.h), 1, App.H - y0);
+  if (nw === App.W && nh === App.H) { cropRect = null; requestRender(); return; }
+  pushUndo('crop canvas', captureDoc, restoreDoc);
+  for (const f of App.frames) {
+    const c = mkCanvas(nw, nh);
+    c.getContext('2d').drawImage(f.base, -x0, -y0);
+    f.base = c;
+  }
+  for (const l of App.layers) {
+    const shift = (t) => { t.x -= x0; t.y -= y0; };
+    shift(l.base);
+    for (const k in l.perFrame) shift(l.perFrame[k]);
+  }
+  App.W = nw; App.H = nh;
+  cropRect = null;
+  setupCanvas(); syncGifControls(); rebuildFrameStrip(); rebuildLayerList(); requestRender();
+  toast(`Canvas cropped to ${nw}×${nh}`);
+}
+
+/* Move the current frame one step earlier / later in the sequence. */
+function moveFrame(dir) {
+  const i = App.cur, j = i + dir;
+  if (j < 0 || j >= App.frames.length) return;
+  pushUndo('move frame', captureDoc, restoreDoc);
+  const [f] = App.frames.splice(i, 1);
+  App.frames.splice(j, 0, f);
+  const swap = (k) => (k === i ? j : (k === j ? i : k));
+  for (const l of App.layers) {
+    l.perFrame = remapKeys(l.perFrame, swap);
+    l.perFrameMask = remapKeys(l.perFrameMask, swap);
+  }
+  rebuildFrameStrip(); gotoFrame(j);
+}
+
+/* Append the sequence reversed (minus the endpoints) for a seamless loop. */
+function boomerang() {
+  if (App.frames.length < 3) { toast('Need at least three frames.'); return; }
+  if (App.frames.length * 2 - 2 > 1200) { toast('Too many frames for a boomerang.'); return; }
+  pushUndo('boomerang', captureDoc, restoreDoc);
+  const n = App.frames.length;
+  for (let i = n - 2; i >= 1; i--) {
+    // frame bases are immutable, so sharing the canvas is safe
+    App.frames.push({ base: App.frames[i].base, delay: App.frames[i].delay });
+    const j = App.frames.length - 1;
+    for (const l of App.layers) {
+      if (l.perFrame[i]) l.perFrame[j] = { ...l.perFrame[i] };
+      if (l.perFrameMask[i]) l.perFrameMask[j] = cloneCanvas(l.perFrameMask[i]);
+    }
+  }
+  rebuildFrameStrip(); rebuildLayerList(); requestRender();
+  toast(`Boomerang — now ${App.frames.length} frames`);
 }
 
 /* =====================================================================
@@ -2717,6 +3605,20 @@ async function downloadGif() {
   } catch (e) { hideProgress(); toast('Export failed.'); }
 }
 
+async function exportFramePng() {
+  if (!App.frames.length) return;
+  const tmp = mkCanvas(App.W, App.H);
+  renderFrameTo(tmp.getContext('2d'), App.cur);
+  const blob = await new Promise(r => tmp.toBlob(r, 'image/png'));
+  if (!blob) { toast('PNG export failed.'); return; }
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'gif-studio-frame-' + (App.cur + 1) + '.png';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+  toast('Frame saved as PNG');
+}
+
 async function copyGif() {
   try {
     const blob = await buildGifBlob();
@@ -2757,6 +3659,7 @@ async function resetAll() {
   })));
   App.frames = loaded;
   setMode('frame'); setTool('move');
+  clearHistory(); clearTrack(); resetFilterState();
   setupCanvas(); syncGifControls(); rebuildLayerList(); rebuildFrameStrip(); selectLayer('bg'); requestRender();
   toast('Reset to original');
 }
@@ -2775,8 +3678,13 @@ function setTool(t) {
   $('#brushSection').style.display = t === 'erase' ? '' : 'none';
   $('#cropSection').style.display = t === 'crop' ? '' : 'none';
   $('#bgSection').style.display = t === 'removebg' ? '' : 'none';
+  $('#trackSection').style.display = t === 'track' ? '' : 'none';
+  $('#filterSection').style.display = t === 'filter' ? '' : 'none';
   if (t !== 'crop') cropRect = null;
-  view.style.cursor = (t === 'erase') ? 'crosshair' : (t === 'move' ? 'move' : 'default');
+  if (t !== 'track') trackRect = null;
+  // filter preview only while the Adjust tool is active
+  App.filterPreview = (t === 'filter' && filterCss()) ? filterCss() : null;
+  view.style.cursor = (t === 'erase' || t === 'track') ? 'crosshair' : (t === 'move' ? 'move' : 'default');
   requestRender();
 }
 function switchTab(name) {
@@ -2839,20 +3747,24 @@ function wire() {
   // Transform sliders
   const onT = (prop, fn) => {
     const l = selLayer(); if (!l) return;
+    strokeUndo('xf', 'transform', () => captureXf(l), (s) => restoreXf(l, s));
     const t = ensureEditTarget(l);
     fn(t);
     if (App.mode === 'global') commitGlobalTransform(l);
     syncTransformInputs(); requestRender(); scheduleThumb();
   };
+  // one undo entry per slider drag / typing burst: the key is released on 'change'
+  ['posX', 'posY', 'scale', 'rot', 'op'].forEach(id => $('#' + id).addEventListener('change', () => strokeKeys.clear()));
   $('#posX').addEventListener('input', e => onT('x', t => { t.x = App.W / 2 + (+e.target.value); $('#posXVal').textContent = Math.round(+e.target.value); }));
   $('#posY').addEventListener('input', e => onT('y', t => { t.y = App.H / 2 + (+e.target.value); $('#posYVal').textContent = Math.round(+e.target.value); }));
   $('#scale').addEventListener('input', e => onT('scale', t => { t.scale = (+e.target.value) / 100; $('#scaleVal').textContent = e.target.value + '%'; }));
   $('#rot').addEventListener('input', e => onT('rot', t => { t.rot = +e.target.value; $('#rotVal').textContent = e.target.value + '°'; }));
   $('#op').addEventListener('input', e => onT('op', t => { t.opacity = (+e.target.value) / 100; $('#opVal').textContent = e.target.value + '%'; }));
-  $('#flipH').addEventListener('click', () => onT('flipH', t => { t.flipH = !t.flipH; }));
-  $('#flipV').addEventListener('click', () => onT('flipV', t => { t.flipV = !t.flipV; }));
+  $('#flipH').addEventListener('click', () => { onT('flipH', t => { t.flipH = !t.flipH; }); strokeKeys.clear(); });
+  $('#flipV').addEventListener('click', () => { onT('flipV', t => { t.flipV = !t.flipV; }); strokeKeys.clear(); });
   $('#resetTransform').addEventListener('click', () => {
     const l = selLayer(); if (!l) return;
+    pushUndo('reset transform', () => captureXf(l), (s) => restoreXf(l, s));
     const t = ensureEditTarget(l);
     Object.assign(t, { x: App.W / 2, y: App.H / 2, scale: 1, rot: 0, opacity: 1, flipH: false, flipV: false });
     if (App.mode === 'global') commitGlobalTransform(l);
@@ -2873,7 +3785,12 @@ function wire() {
   $('#bgRun').addEventListener('click', removeBackground);
 
   // Text controls
-  const onText = (fn) => { const l = selLayer(); if (!l || l.type !== 'text') return; fn(l.text); renderTextLayer(l); rebuildLayerList(); requestRender(); scheduleThumb(); };
+  const onText = (fn) => {
+    const l = selLayer(); if (!l || l.type !== 'text') return;
+    strokeUndo('txt', 'text edit', () => captureText(l), (s) => restoreText(l, s));
+    fn(l.text); renderTextLayer(l); rebuildLayerList(); requestRender(); scheduleThumb();
+  };
+  ['txtContent', 'txtSize', 'txtStroke', 'txtLine'].forEach(id => $('#' + id).addEventListener('change', () => strokeKeys.clear()));
   $('#txtContent').addEventListener('input', e => onText(t => t.content = e.target.value));
   $('#txtFont').addEventListener('change', e => onText(t => t.font = e.target.value));
   $('#txtSize').addEventListener('input', e => { $('#txtSizeVal').textContent = e.target.value; onText(t => t.size = +e.target.value); });
@@ -2883,11 +3800,12 @@ function wire() {
   $('#txtStrokeColor').addEventListener('input', e => { $('#txtStrokeHex').value = e.target.value; onText(t => t.strokeColor = e.target.value); });
   $('#txtStrokeHex').addEventListener('change', e => { $('#txtStrokeColor').value = e.target.value; onText(t => t.strokeColor = e.target.value); });
   $('#txtLine').addEventListener('input', e => { $('#txtLineVal').textContent = e.target.value; onText(t => t.line = +e.target.value); });
-  $('#txtBold').addEventListener('click', () => onText(t => t.bold = !t.bold));
-  $('#txtItalic').addEventListener('click', () => onText(t => t.italic = !t.italic));
-  $('#txtAlignL').addEventListener('click', () => onText(t => t.align = 'left'));
-  $('#txtAlignC').addEventListener('click', () => onText(t => t.align = 'center'));
-  $('#txtAlignR').addEventListener('click', () => onText(t => t.align = 'right'));
+  const textResync = () => { strokeKeys.clear(); const l = selLayer(); if (l && l.type === 'text') syncTextInputs(l); };
+  $('#txtBold').addEventListener('click', () => { onText(t => t.bold = !t.bold); textResync(); });
+  $('#txtItalic').addEventListener('click', () => { onText(t => t.italic = !t.italic); textResync(); });
+  $('#txtAlignL').addEventListener('click', () => { onText(t => t.align = 'left'); textResync(); });
+  $('#txtAlignC').addEventListener('click', () => { onText(t => t.align = 'center'); textResync(); });
+  $('#txtAlignR').addEventListener('click', () => { onText(t => t.align = 'right'); textResync(); });
 
   // Transport
   $('#playBtn').addEventListener('click', togglePlay);
@@ -2895,7 +3813,7 @@ function wire() {
   $('#nextBtn').addEventListener('click', () => { stop(); gotoFrame((App.cur + 1) % App.frames.length); });
   $('#firstBtn').addEventListener('click', () => { stop(); gotoFrame(0); });
   $('#fpsInput').addEventListener('change', e => setAllFps(+e.target.value));
-  $('#frameDelay').addEventListener('change', e => { if (App.frames[App.cur]) { App.frames[App.cur].delay = clamp(+e.target.value, 10, 60000); rebuildFrameStrip(); } });
+  $('#frameDelay').addEventListener('change', e => { if (App.frames[App.cur]) { pushUndo('frame delay', captureTiming, restoreTiming); App.frames[App.cur].delay = clamp(+e.target.value, 10, 60000); rebuildFrameStrip(); } });
 
   // GIF settings
   $('#canvasW').addEventListener('input', e => { if ($('#lockAspect').checked) { const r = App.H / App.W; $('#canvasH').value = Math.round(+e.target.value * r); } });
@@ -2910,6 +3828,7 @@ function wire() {
   // Frame ops
   $('#dupFrame').addEventListener('click', () => {
     const f = App.frames[App.cur]; if (!f) return;
+    pushUndo('duplicate frame', captureDoc, restoreDoc);
     App.frames.splice(App.cur + 1, 0, { base: cloneCanvas(f.base), delay: f.delay });
     // shift per-frame overrides for layers above current
     for (const l of App.layers) { l.perFrame = shiftKeys(l.perFrame, App.cur); l.perFrameMask = shiftKeys(l.perFrameMask, App.cur); }
@@ -2917,22 +3836,68 @@ function wire() {
   });
   $('#delFrame').addEventListener('click', () => {
     if (App.frames.length <= 1) { toast('Need at least one frame.'); return; }
+    pushUndo('delete frame', captureDoc, restoreDoc);
     App.frames.splice(App.cur, 1);
     for (const l of App.layers) { delete l.perFrame[App.cur]; delete l.perFrameMask[App.cur]; l.perFrame = unshiftKeys(l.perFrame, App.cur); l.perFrameMask = unshiftKeys(l.perFrameMask, App.cur); }
     App.cur = clamp(App.cur, 0, App.frames.length - 1);
     rebuildFrameStrip(); gotoFrame(App.cur);
   });
   $('#addBlankFrame').addEventListener('click', () => {
+    pushUndo('add blank frame', captureDoc, restoreDoc);
     App.frames.splice(App.cur + 1, 0, { base: mkCanvas(App.W, App.H), delay: Math.round(1000 / App.fps) });
     rebuildFrameStrip(); gotoFrame(App.cur + 1);
   });
   $('#reverseFrames').addEventListener('click', () => {
+    pushUndo('reverse frames', captureDoc, restoreDoc);
     App.frames.reverse();
     const N = App.frames.length - 1;
     for (const l of App.layers) { l.perFrame = remapKeys(l.perFrame, k => N - k); l.perFrameMask = remapKeys(l.perFrameMask, k => N - k); }
     rebuildFrameStrip(); gotoFrame(N - App.cur); toast('Reversed');
   });
+  $('#moveFrameL').addEventListener('click', () => moveFrame(-1));
+  $('#moveFrameR').addEventListener('click', () => moveFrame(1));
+  $('#boomerangBtn').addEventListener('click', boomerang);
   $('#importMore').addEventListener('click', () => importMoreInput.click());
+
+  // Undo / redo / onion skin
+  $('#undoBtn').addEventListener('click', doUndo);
+  $('#redoBtn').addEventListener('click', doRedo);
+  $('#onionBtn').addEventListener('click', () => {
+    App.onion = !App.onion;
+    $('#onionBtn').classList.toggle('active', App.onion);
+    requestRender();
+  });
+
+  // Canvas crop
+  $('#cropCanvasBtn').addEventListener('click', cropCanvasToRect);
+
+  // Object tracking
+  $('#trackRun').addEventListener('click', runTracking);
+  $('#trackAttach').addEventListener('click', attachTrackedLayer);
+  $('#trackClear').addEventListener('click', clearTrack);
+
+  // Colour filters
+  const onFilter = () => {
+    FilterState.bright = +$('#fBright').value; $('#fBrightVal').textContent = FilterState.bright + '%';
+    FilterState.contrast = +$('#fContrast').value; $('#fContrastVal').textContent = FilterState.contrast + '%';
+    FilterState.sat = +$('#fSat').value; $('#fSatVal').textContent = FilterState.sat + '%';
+    FilterState.hue = +$('#fHue').value; $('#fHueVal').textContent = FilterState.hue + '°';
+    FilterState.gray = $('#fGray').checked;
+    FilterState.sepia = $('#fSepia').checked;
+    FilterState.invert = $('#fInvert').checked;
+    App.filterPreview = filterCss() || null;
+    requestRender();
+  };
+  ['fBright', 'fContrast', 'fSat', 'fHue'].forEach(id => $('#' + id).addEventListener('input', onFilter));
+  ['fGray', 'fSepia', 'fInvert'].forEach(id => $('#' + id).addEventListener('change', onFilter));
+  $('#filterApply').addEventListener('click', applyFilters);
+  $('#filterReset').addEventListener('click', resetFilterState);
+  if (!CTX_FILTER_OK) $('#filterHint').textContent += ' Live preview is not supported in this browser — Apply still works.';
+
+  // Video import modal
+  ['vidStart', 'vidEnd', 'vidFps'].forEach(id => $('#' + id).addEventListener('input', vidEstimate));
+  $('#vidImport').addEventListener('click', vidImportGo);
+  $('#vidCancel').addEventListener('click', () => closeVideoModal(null));
 
   // hidden input for importing more frames
   importMoreInput.addEventListener('change', () => { if (importMoreInput.files.length) importFiles(importMoreInput.files, { asNewDoc: false }); importMoreInput.value = ''; });
@@ -2940,19 +3905,25 @@ function wire() {
   // Export & reset
   $('#downloadBtn').addEventListener('click', downloadGif);
   $('#copyBtn').addEventListener('click', copyGif);
+  $('#framePngBtn').addEventListener('click', exportFramePng);
   $('#quality').addEventListener('input', e => { $('#qualityVal').textContent = ['', 'fast', 'balanced', 'best'][+e.target.value]; });
   $('#resetBtn').addEventListener('click', resetAll);
 
   // Keyboard
   window.addEventListener('keydown', (e) => {
-    if (/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) return;
-    if (e.key === ' ') { e.preventDefault(); togglePlay(); }
+    if (/INPUT|TEXTAREA|SELECT|VIDEO/.test(document.activeElement.tagName)) return;
+    const mod = e.ctrlKey || e.metaKey;
+    if (mod && !e.shiftKey && e.key.toLowerCase() === 'z') { e.preventDefault(); doUndo(); }
+    else if (mod && (e.key.toLowerCase() === 'y' || (e.shiftKey && e.key.toLowerCase() === 'z'))) { e.preventDefault(); doRedo(); }
+    else if (mod) { /* leave other browser shortcuts alone */ }
+    else if (e.key === ' ') { e.preventDefault(); togglePlay(); }
     else if (e.key === 'ArrowRight') { stop(); gotoFrame((App.cur + 1) % App.frames.length); }
     else if (e.key === 'ArrowLeft') { stop(); gotoFrame((App.cur - 1 + App.frames.length) % App.frames.length); }
     else if (e.key === 'g') setMode(App.mode === 'frame' ? 'global' : 'frame');
     else if (e.key === 'v') setTool('move');
     else if (e.key === 't') setTool('transform');
     else if (e.key === 'e') setTool('erase');
+    else if (e.key === 'o') { App.onion = !App.onion; $('#onionBtn').classList.toggle('active', App.onion); requestRender(); }
     else if ((e.key === 'Delete' || e.key === 'Backspace') && selLayer()) deleteLayer(App.sel);
   });
 
@@ -2966,7 +3937,7 @@ function remapKeys(map, fn) { const out = {}; for (const k in map) out[fn(+k)] =
 
 // build a hidden input element for "import more"
 const importMoreInput = document.createElement('input');
-importMoreInput.type = 'file'; importMoreInput.accept = 'image/*,.gif'; importMoreInput.multiple = true;
+importMoreInput.type = 'file'; importMoreInput.accept = 'image/*,video/*,.gif,.mp4,.mov,.m4v,.webm'; importMoreInput.multiple = true;
 importMoreInput.className = 'visually-hidden'; document.body.appendChild(importMoreInput);
 
 /* =====================================================================

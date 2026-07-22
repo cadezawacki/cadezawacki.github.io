@@ -3,13 +3,15 @@
 // Strategy:
 //   - HTML + manifest: stale-while-revalidate (instant offline, updates in bg)
 //   - Fontshare CSS + font files: stale-while-revalidate
-//   - CDN scripts (firebase, jszip, typo.js): stale-while-revalidate (opaque OK)
+//   - CDN scripts (firebase, jszip, typo.js, mp4box): stale-while-revalidate (opaque OK)
+//   - mp4box.js is the MP4/MOV demuxer gif.html uses for video → GIF import;
+//     precaching it keeps video import working offline
 //   - Spell-check dictionary (.aff/.dic): precached CORS-readable so the
 //     page can read them with fetch().text() while offline
 //   - Firebase realtime DB: bypass (live data, needs network)
 // ============================================
 
-const CACHE_VERSION = 93;
+const CACHE_VERSION = 94;
 const CACHE_NAME = `cade-v${CACHE_VERSION}`;
 
 // Same-origin pages to precache on install.
@@ -37,6 +39,9 @@ const PRECACHE_CROSS_ORIGIN = [
   'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js',
   // Spell-checker library — loaded via <script>, so an opaque cache entry is fine.
   'https://cdn.jsdelivr.net/npm/typo-js@1.2.5/typo.js',
+  // MP4/MOV demuxer used by gif.html's video-to-GIF import (WebCodecs path).
+  // Loaded via <script>, so an opaque cache entry is fine.
+  'https://cdn.jsdelivr.net/npm/mp4box@0.5.2/dist/mp4box.all.min.js',
 ];
 
 // Cross-origin assets the PAGE reads as text via fetch().text(). These must be
