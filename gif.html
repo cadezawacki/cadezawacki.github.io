@@ -67,7 +67,9 @@
   }
 
   *{box-sizing:border-box}
-  html,body{height:100%}
+  /* The app must never scroll as a document — on iOS an overflowing page
+     lets the browser scroll/rubber-band the toolbar and timeline off-screen. */
+  html,body{height:100%; overflow:hidden; overscroll-behavior:none}
   html{-webkit-text-size-adjust:100%}
   body{
     margin:0;
@@ -84,7 +86,13 @@
   /* ---------- App shell ---------- */
   .app{
     display:flex; flex-direction:column;
-    height:100dvh; height:100vh;
+    /* dvh LAST so it wins where supported: 100vh on iOS is the large viewport
+       (chrome collapsed), which overflows the visible area and clipped the
+       top bar and timeline on phones. 100vh stays as the legacy fallback. */
+    height:100vh;
+    height:100dvh;
+    /* keep controls clear of the notch / home indicator (PWA + landscape) */
+    padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
   }
   .topbar{
     display:flex; align-items:center; gap:.6rem;
@@ -133,7 +141,10 @@
   /* ---------- Main ---------- */
   .main{flex:1 1 auto; display:flex; min-height:0}
   .stagewrap{
-    flex:1 1 auto; min-width:0; position:relative;
+    /* min-height:0 matters in the mobile column layout: without it the
+       wrapper refuses to shrink below the canvas height, the whole app
+       overflows the viewport, and the toolbar/timeline get pushed off. */
+    flex:1 1 auto; min-width:0; min-height:0; position:relative;
     display:flex; flex-direction:column; background:var(--stage);
   }
   .stage{
@@ -340,19 +351,22 @@
     .main{flex-direction:column}
     .panel{
       flex:0 0 auto; width:100%; max-width:100%; border-left:0; border-top:1px solid var(--border);
-      height:46dvh; max-height:46dvh; transition:height .2s ease;
+      height:46dvh; max-height:85dvh; transition:height .2s ease;
     }
+    .panel.dragging{transition:none}
     .panel.collapsed{height:46px; overflow:hidden}
     .sheetgrip{
-      display:flex; align-items:center; justify-content:center; gap:.5rem; height:24px;
-      cursor:pointer; color:var(--muted); flex:0 0 auto; font-size:11px; font-weight:600;
+      display:flex; align-items:center; justify-content:center; gap:.5rem; height:30px;
+      cursor:grab; color:var(--muted); flex:0 0 auto; font-size:11px; font-weight:600;
+      touch-action:none; /* the grip drags the sheet, never scrolls the page */
     }
     .sheetgrip::before{content:""; width:34px; height:4px; border-radius:99px; background:var(--border-strong)}
     .brand .tag{display:none}
     .timeline{padding:.4rem .5rem}
   }
   @media (max-width:520px){
-    .brand h1{font-size:14px}
+    /* not enough room for the wordmark next to the controls — logo only */
+    .brand h1{display:none}
     .modeswitch button{padding:.3rem .55rem; font-size:11px}
   }
 
@@ -2300,9 +2314,11 @@ function setupCanvas() {
 function fitCanvas() {
   const box = $('#canvasbox');
   const stage = $('#stage');
-  const pad = 2;
-  const availW = stage.clientWidth - pad * 2;
-  const availH = stage.clientHeight - pad * 2;
+  // clientWidth/Height include the stage's CSS padding — subtract the real
+  // values or the centered canvas overflows the padded area by a few px.
+  const cs = getComputedStyle(stage);
+  const availW = stage.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+  const availH = stage.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
   if (availW <= 0 || availH <= 0) return;
   const s = Math.min(availW / App.W, availH / App.H, 4);
   const w = Math.max(1, Math.round(App.W * s));
@@ -3789,8 +3805,56 @@ function wire() {
 
   // Panel tabs
   $$('.paneltabs button').forEach(b => b.addEventListener('click', () => switchTab(b.dataset.tab)));
-  // mobile sheet grip
-  $('#sheetGrip').addEventListener('click', () => $('#panel').classList.toggle('collapsed'));
+  // Mobile bottom sheet: drag the grip to resize the panel, tap to
+  // collapse / expand. Inline height wins over the 46dvh default while
+  // dragging; collapsing clears it so the CSS heights apply again.
+  {
+    const grip = $('#sheetGrip'), panelEl = $('#panel');
+    const sheetMax = () => window.innerHeight * 0.85;
+    let sd = null;
+    const yOf = (e) => (e.touches ? e.touches[0].clientY : e.clientY);
+    const refit = () => { if (App.frames.length) { fitCanvas(); requestRender(); } };
+    const onDown = (e) => {
+      if (!window.matchMedia('(max-width:860px)').matches) return;
+      sd = { y0: yOf(e), h0: panelEl.getBoundingClientRect().height, moved: false };
+      panelEl.classList.add('dragging');
+      e.preventDefault();
+    };
+    const onMove = (e) => {
+      if (!sd) return;
+      const dy = sd.y0 - yOf(e); // up = taller
+      if (Math.abs(dy) > 6) sd.moved = true;
+      const h = clamp(sd.h0 + dy, 46, sheetMax());
+      panelEl.classList.toggle('collapsed', h <= 60);
+      panelEl.style.height = h + 'px';
+      refit();
+      e.preventDefault();
+    };
+    const onUp = () => {
+      if (!sd) return;
+      panelEl.classList.remove('dragging');
+      if (!sd.moved) { // tap: toggle collapse, back on CSS-driven heights
+        panelEl.classList.toggle('collapsed');
+        panelEl.style.height = '';
+      } else if (panelEl.getBoundingClientRect().height <= 60) {
+        panelEl.classList.add('collapsed');
+        panelEl.style.height = '';
+      }
+      sd = null;
+      refit();
+    };
+    grip.addEventListener('touchstart', onDown, { passive: false });
+    grip.addEventListener('mousedown', onDown);
+    window.addEventListener('touchmove', onMove, { passive: false });
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('touchend', onUp);
+    window.addEventListener('mouseup', onUp);
+    // keep a dragged height sane across rotation / viewport changes
+    window.addEventListener('resize', () => {
+      const h = parseFloat(panelEl.style.height);
+      if (h && h > sheetMax()) { panelEl.style.height = sheetMax() + 'px'; refit(); }
+    });
+  }
 
   // Tools
   $$('#toolGrid .tool').forEach(el => el.addEventListener('click', () => setTool(el.dataset.tool)));
@@ -4025,6 +4089,35 @@ importMoreInput.className = 'visually-hidden'; document.body.appendChild(importM
    ===================================================================== */
 wire();
 setMode('frame'); setTool('move');
+
+// The document must never scroll: input focus, scrollIntoView on the frame
+// strip, or iOS rubber-banding can shift a nominally overflow-hidden page
+// (html/body can still be scrolled programmatically) and strand the toolbar
+// off-screen — snap straight back. Capturing listener so element-targeted
+// scroll events are seen too; inner scrollers (frame strip, panel) are
+// deliberately left alone.
+document.addEventListener('scroll', (e) => {
+  const t = e.target;
+  if (t !== document && t !== document.body && t !== document.documentElement) return;
+  if (window.scrollY || window.scrollX) window.scrollTo(0, 0);
+  if (document.body.scrollTop || document.body.scrollLeft) { document.body.scrollTop = 0; document.body.scrollLeft = 0; }
+  if (document.documentElement.scrollTop || document.documentElement.scrollLeft) { document.documentElement.scrollTop = 0; document.documentElement.scrollLeft = 0; }
+}, true);
+// Mobile browser chrome expanding/collapsing resizes the *visual* viewport
+// without always firing a window resize — refit the stage when it changes.
+if (window.visualViewport) {
+  window.visualViewport.addEventListener('resize', () => {
+    if (App.frames.length) { fitCanvas(); requestRender(); }
+  });
+}
+// Refit whenever the stage itself changes size — the frame strip filling in,
+// the bottom sheet resizing/animating, rotation. Catches every reflow the
+// one-shot fitCanvas calls run too early for.
+if (window.ResizeObserver) {
+  new ResizeObserver(() => {
+    if (App.frames.length) { fitCanvas(); requestRender(); }
+  }).observe($('#stage'));
+}
 
 // Service worker (caches the page + CDN font for offline use after first load)
 if ('serviceWorker' in navigator) {
