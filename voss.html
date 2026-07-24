@@ -145,22 +145,58 @@ main{display:flex;flex:1;min-height:0}
 
 /* ---- newspaper ---- */
 .np{padding:10mm 12mm}
-.np .mast{font-family:'UnifrakturMaguntia',Georgia,serif;text-align:center;margin:0;font-weight:400}
+.np .earsrow{display:flex;align-items:stretch;gap:4mm}
+.np .ear{flex:0 0 32mm;border:1px solid #2e2617;padding:1.4mm 2mm;font-family:'Old Standard TT',serif;
+  text-align:center;display:flex;flex-direction:column;justify-content:center;line-height:1.25}
+.np .mastwrap{flex:1;min-width:0}
+.np .mast{text-align:center;margin:0;font-weight:400}
+.np .tagline{font-family:'Old Standard TT',serif;font-style:italic;text-align:center;margin:.4mm 0 0}
 .np .dateline{display:flex;justify-content:space-between;font-family:'Old Standard TT',serif;
-  border-top:1.6px solid #2e2617;border-bottom:1.6px solid #2e2617;padding:1mm;margin:2mm 0 4mm;gap:4mm}
-.np .head{font-family:'Old Standard TT',serif;font-weight:700;text-align:center;line-height:1.06;margin:2mm 0}
-.np .deck{font-family:'Old Standard TT',serif;font-style:italic;text-align:center;margin:1mm 0 4mm}
-.np .cols{font-family:'Old Standard TT',serif;text-align:justify;column-fill:balance}
-.np .cols p{margin:0 0 2.4mm;text-indent:4mm}
-.np .subhead{font-weight:700;text-align:center;margin:2mm 0 1mm;text-indent:0;break-after:avoid}
+  border-top:1.6px solid #2e2617;border-bottom:1.6px solid #2e2617;padding:1mm;margin:2mm 0 3mm;gap:4mm}
+.np .kicker{display:flex;align-items:center;gap:3mm;justify-content:center;font-family:'Old Standard TT',serif;
+  letter-spacing:.34em;margin:0 0 1mm}
+.np .kicker::before,.np .kicker::after{content:'';flex:0 0 20mm;border-top:1px solid #2e2617}
+.np .head{text-align:center;line-height:1.06;margin:1mm 0;font-weight:700}
+.np .deck{font-family:'Old Standard TT',serif;font-style:italic;text-align:center;margin:1mm 0 1.6mm}
+.np .mainbyl{text-align:center;font-family:'Old Standard TT',serif;letter-spacing:.16em;margin:0 0 2.6mm}
+.np .cols{column-fill:balance}
+.np .cols p{margin:0 0 1.2mm}
+.np .cols.al-j p{text-align:justify}
+.np .cols.al-l p{text-align:left}
+.np .cols.hyph{hyphens:auto;-webkit-hyphens:auto}
+.np .cols.pindent p{text-indent:4mm}
+.np .cols.pblock p{text-indent:0;margin:0 0 2.4mm}
+.np .subhead{font-weight:700;text-align:center;margin:2mm 0 1mm;text-indent:0 !important;break-after:avoid}
+.np .abyl{text-align:center;letter-spacing:.12em;margin:0 0 1.4mm;text-indent:0 !important;break-after:avoid}
+.np .atail{text-align:right;font-style:italic;text-indent:0 !important}
+.np .asep{text-align:center;margin:1.4mm 0 2mm;break-inside:avoid;text-indent:0 !important}
+.np .asep .sepline{display:inline-block;width:24mm;border-top:1px solid #2e2617;vertical-align:middle}
+.np .asep.orn{letter-spacing:.5em}
 .np .dropcap::first-letter{float:left;font-size:300%;line-height:.8;padding:0 1.4mm 0 0;font-weight:700}
-.np figure{margin:0 0 2.6mm;break-inside:avoid}
-.np figure.spanall{column-span:all;margin:2mm 0 3mm}
-.np figure img{width:100%;display:block}
+.np figure{margin:0 0 2.4mm;break-inside:avoid}
+.np figure.fl{float:left;margin:0 2.6mm 1.4mm 0}
+.np figure.fr{float:right;margin:0 0 1.4mm 2.6mm}
+.np figure.spanall{column-span:all;margin:2mm auto 3mm}
 .np figure.bordered img{border:1px solid #2e2617;padding:.8mm;background:rgba(255,252,242,.5)}
-.np figcaption{font-style:italic;font-size:82%;text-align:center;margin-top:1mm}
-.np .adbox{border:1.4px solid #2e2617;padding:2.4mm 3mm;margin:0 0 2.6mm;break-inside:avoid;text-align:center;text-indent:0}
-.np .adbox p{text-indent:0}
+.np figure img{width:100%;display:block}
+.np .iw{position:relative;display:block}
+.np .ht img{filter:grayscale(1) contrast(1.12) brightness(1.03)}
+.np .ht .iw::after{content:'';position:absolute;inset:.8mm;pointer-events:none;mix-blend-mode:multiply;
+  background-image:radial-gradient(circle,rgba(30,25,15,.5) 26%,transparent 33%);background-size:.65mm .65mm}
+.np figcaption{font-style:italic;text-align:center;margin-top:1mm;text-indent:0 !important}
+.np .credit{display:block;text-align:right;font-style:italic;font-size:78%;margin-top:.3mm}
+.np .adbox{border:1.4px solid #2e2617;padding:2.4mm 3mm;margin:0 0 2.6mm;break-inside:avoid;text-align:center}
+.np .adbox p{text-indent:0 !important;text-align:center !important}
+.np .pq{break-inside:avoid;text-align:center;margin:2mm .6mm 2.6mm;padding:1.8mm .6mm;
+  border-top:1px solid #2e2617;border-bottom:1px solid #2e2617;text-indent:0 !important}
+.np .pq .pqtext{font-family:'Old Standard TT',serif;font-style:italic;line-height:1.3}
+.np .pq .pqcite{font-family:'IM Fell English SC',Georgia,serif;letter-spacing:.16em;margin-top:1.2mm}
+.np table.ntab{width:100%;border-collapse:collapse;break-inside:avoid;margin:0 0 2.6mm}
+.np .ntab caption{caption-side:top;font-family:'Old Standard TT',serif;font-weight:700;letter-spacing:.1em;
+  text-align:center;margin-bottom:.8mm}
+.np .ntab th,.np .ntab td{border:.5px solid #5c4b33;padding:.7mm 1.3mm;font-family:'Old Standard TT',serif;
+  text-align:left;vertical-align:top}
+.np .ntab th{font-weight:700;border-bottom:1.2px solid #2e2617}
 .img-sepia{filter:sepia(.75) contrast(.92) brightness(.98)}
 .img-gray{filter:grayscale(1) contrast(.95)}
 
@@ -182,6 +218,9 @@ main{display:flex;flex:1;min-height:0}
 .f-voss{font-family:'Homemade Apple',cursive;color:#332714}
 .f-hand{font-family:'Caveat',cursive;color:#33291a}
 .f-gar{font-family:'EB Garamond','IM Fell English',Georgia,serif}
+.f-news{font-family:'Old Standard TT','Times New Roman',serif}
+.f-sc{font-family:'IM Fell English SC',Georgia,serif;letter-spacing:.06em}
+.f-black{font-family:'UnifrakturMaguntia',Georgia,serif}
 .f-fell{font-family:'IM Fell English',Georgia,serif}
 .f-type{font-family:'Special Elite','Courier New',monospace}
 
@@ -335,7 +374,7 @@ main{display:flex;flex:1;min-height:0}
 <div id="fontModal">
   <div id="fmBox">
     <h3>THE TYPE DRAWER</h3>
-    <p class="hint" style="margin:2px 0 10px">Registered faces cache in this browser (IndexedDB), work offline after first load, embed into PNG exports, and appear in every face menu. Variable fonts expose their axes as sliders under each tab\u2019s Typography section.</p>
+    <p class="hint" style="margin:2px 0 10px">Registered faces cache in this browser (IndexedDB), work offline after first load, embed into PNG exports, and appear in every face menu. Removing a face also resets every document field that was using it back to the period defaults. Variable fonts expose their axes as sliders under each tab\u2019s Typography section.</p>
     <div id="fmList"></div>
     <label>Add from a URL <span class="hint">\u2014 a font file (.ttf .otf .woff .woff2) or a Google-Fonts css2 link</span></label>
     <div class="row"><input id="fmUrl" placeholder="https://\u2026" style="flex:2"><input id="fmFam" placeholder="family name (font files only)" style="flex:1"></div>
@@ -354,7 +393,7 @@ const $  = s => document.querySelector(s);
 const esc = t => String(t??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 /* markdown-lite: **bold** *italic* newline→br  (escaped first, so export serializes cleanly) */
 const md = t => esc(t).replace(/\*\*(.+?)\*\*/gs,'<b>$1</b>').replace(/\*(.+?)\*/gs,'<i>$1</i>').replace(/\n/g,'<br>');
-const paras = (t,cls='') => esc(t).split(/\n\s*\n/).map(p=>`<p class="${cls}">${p.replace(/\*\*(.+?)\*\*/gs,'<b>$1</b>').replace(/\*(.+?)\*/gs,'<i>$1</i>').replace(/\n/g,'<br>')}</p>`).join('');
+const paras = (t,firstCls='') => esc(t).split(/\n\s*\n/).map((p,i)=>`<p class="${i===0?firstCls:''}">${p.replace(/\*\*(.+?)\*\*/gs,'<b>$1</b>').replace(/\*(.+?)\*/gs,'<i>$1</i>').replace(/\n/g,'<br>')}</p>`).join('');
 
 const TY0 = () => ({fam:'', wght:400, trk:0, axes:{}});
 const withTy = o => { for(const k in o) if(k!=='tab' && o[k] && typeof o[k]==='object') o[k].ty = o[k].ty || TY0(); return o; };
@@ -409,15 +448,23 @@ const CANON = () => withTy({
        red:'Blackens silver and brass to a deep green on contact, permanently.'},
     ]},
   news:{
-    pageW:260, pageH:360, cols:3, font:100, paper:'aged', noise:true,
-    mast:'The Harbor Chronicle', mastSize:44,
+    pageW:260, pageH:360, cols:3, colGap:6, colRule:'hair', font:100, paper:'aged', noise:true,
+    mast:'The Harbor Chronicle', mastSize:44, mastFace:'black', mastTrack:0,
+    tagline:'\u201cWhat the harbour knows, the city reads.\u201d \u2014 founded 1861',
+    earsOn:true,
+    earL:'THE WEATHER\nFair; wind moderating;\nthe glass rising.',
+    earR:'ONE CENT\ncity edition\nfour o\u2019clock',
     dlLeft:'VOL. XLVII \u2014 No. 213', dlMid:'MORNING EDITION \u2014 ONE CENT', dlRight:'FAIR; WIND MODERATING',
-    head:'HERO CAPTAIN SAVES ALL 21', headSize:34,
+    kicker:'THE WRECK OF THE AURORA',
+    head:'HERO CAPTAIN SAVES ALL 21', headSize:34, headFace:'news',
     deck:'The AURORA Lost With Her Cargo in Thursday\u2019s Gale \u2014 Every Soul Brought Ashore \u2014\nCapt. Octavian Bell Last Man Into the Boats \u2014 City Prepares Its Thanks',
+    byline:'By DAPHNE QUILL \u2014 Staff Correspondent',
+    bodyFace:'news', bodySize:9.8, leading:1.42, alignMode:'justify', hyph:true, wordSp:0, paraStyle:'indent',
     blocks:[
-      {type:'article', subhead:'', dropcap:true, body:'The steamship *Aurora*, of the Voss Consolidated fleet, foundered early Thursday in the worst blow this coast has taken in a decade, and every man of her company stands this morning on dry land to say so. Twenty-one souls put out; twenty-one came back; and if the sea keeps the ship, the city keeps the crew, which all parties account the better bargain.\n\nThe vessel took a sudden flooding of the hold at ten minutes past two and settled fast. Witnesses among the crew describe a master who did not raise his voice once. \u201cHe counted us into the boats like a man counting his own change,\u201d said one rating, who asked that his name be spared the fuss. \u201cHe was the last off her, and he stood in the sternsheets counting us again.\u201d\n\nMr. Elias Voss, owner, received the news at his offices and is reported to have said only that ships may be replaced and men may not, a sentiment this newspaper commends to owners generally.'},
-      {type:'article', subhead:'THE COUNT CONFIRMED', dropcap:false, body:'The company\u2019s manifest and the return register agree: twenty-one names mustered aboard, twenty-one names landed. The underwriters\u2019 men were on the pier by noon and pronounced themselves satisfied with the documents, which were in unusual good order for a vessel so lately drowned.\n\nCapt. Bell, pressed by this correspondent for a statement, said: \u201cThe sea took the ship. It was not permitted to take anything else.\u201d He then declined further conversation and walked home alone, which the crowd on the pier accounted very fine behaviour in a hero.'},
-      {type:'article', subhead:'A DECORATION PROPOSED', dropcap:false, body:'It is understood that a testimonial is already subscribed among the commercial houses, and that a suitable instrument \u2014 a compass of the finest make has been mentioned \u2014 will be presented to Capt. Bell in recognition of a steady hand in poor weather. The presentation is expected within the fortnight.\n\nThe *Aurora* was insured through the usual channels. Her cargo, declared general freight with one sealed consignment of wine, is a total loss. The Blackwood interest, whose consignment travelled under private seal, could not be reached for comment last evening.\n\nDivine service of thanksgiving will be read at the Seamen\u2019s Chapel on Sunday. The public is invited. The bell will be rung twenty-one times.'},
+      {type:'article', subhead:'', byline:'', dropcap:true, sep:'', tail:'', body:'The steamship *Aurora*, of the Voss Consolidated fleet, foundered early Thursday in the worst blow this coast has taken in a decade, and every man of her company stands this morning on dry land to say so. Twenty-one souls put out; twenty-one came back; and if the sea keeps the ship, the city keeps the crew, which all parties account the better bargain.\n\nThe vessel took a sudden flooding of the hold at ten minutes past two and settled fast. Witnesses among the crew describe a master who did not raise his voice once. \u201cHe was the last off her, and he stood in the sternsheets counting us again.\u201d\n\nMr. Elias Voss, owner, received the news at his offices and is reported to have said only that ships may be replaced and men may not, a sentiment this newspaper commends to owners generally.'},
+      {type:'pull', text:'He counted us into the boats like a man counting his own change.', cite:'A RATING OF THE AURORA'},
+      {type:'article', subhead:'THE COUNT CONFIRMED', byline:'', dropcap:false, sep:'stars', tail:'', body:'The company\u2019s manifest and the return register agree: twenty-one names mustered aboard, twenty-one names landed. The underwriters\u2019 men were on the pier by noon and pronounced themselves satisfied with the documents, which were in unusual good order for a vessel so lately drowned.\n\nCapt. Bell, pressed by this correspondent for a statement, said: \u201cThe sea took the ship. It was not permitted to take anything else.\u201d He then declined further conversation and walked home alone, which the crowd on the pier accounted very fine behaviour in a hero.'},
+      {type:'article', subhead:'A DECORATION PROPOSED', byline:'', dropcap:false, sep:'', tail:'Divine service of thanksgiving, Seamen\u2019s Chapel, Sunday. The bell will be rung twenty-one times.', body:'It is understood that a testimonial is already subscribed among the commercial houses, and that a suitable instrument \u2014 a compass of the finest make has been mentioned \u2014 will be presented to Capt. Bell in recognition of a steady hand in poor weather. The presentation is expected within the fortnight.\n\nThe *Aurora* was insured through the usual channels. Her cargo, declared general freight with one sealed consignment of wine, is a total loss. The Blackwood interest, whose consignment travelled under private seal, could not be reached for comment last evening.'},
     ]},
   carbon:{
     pageW:200, pageH:280, font:100, paper:'carbon', noise:true, ghost:2,
@@ -582,6 +629,8 @@ const CANON = () => withTy({
 });
 
 const FILLERS = [
+ {name:'Shipping table', tableTitle:'SHIPPING INTELLIGENCE', tableHead:true,
+  tableRows:'VESSEL|MASTER|FROM|CARGO\nPelican, schr.|Ash|coastwise|in ballast\nMary Alden, brig|Keene|the Banks|salt\nCorinthia, stmr.|Voss Cons.|cleared|general\nOsprey, bark|Rourke|for the southward|deals'},
  {name:'Shipping intelligence', subhead:'SHIPPING INTELLIGENCE', body:'ARRIVED \u2014 schr. *Pelican*, coastwise, in ballast; brig *Mary Alden*, with salt. CLEARED \u2014 stmr. *Corinthia*, general cargo; bark *Osprey*, for the southward. The pilot boats report a heavy swell outside and nothing in the offing.'},
  {name:'The weather glass', subhead:'THE WEATHER GLASS', body:'The barometer at the Exchange stood last evening at 29.41 and falling, which the harbourmen read as a promise already kept. Masters are advised to look to their ground tackle and their tempers alike.'},
  {name:'Notice to mariners', subhead:'NOTICE TO MARINERS', body:'The bell buoy off the Middle Ground has dragged in the late gale and now lies a cable\u2019s length south of its charted station. Mariners will govern themselves accordingly until the tender can attend to it.'},
@@ -645,28 +694,62 @@ function renderHerb(o){
 }
 
 function renderNews(o){
-  const f = o.font/100;
+  const f=o.font/100, bs=(o.bodySize||9.8)*f;
+  const bC=faceCls(o.bodyFace||'news'), bS=faceSty(o.bodyFace||'news');
+  const mC=faceCls(o.mastFace||'black'), mS=faceSty(o.mastFace||'black');
+  const hC=faceCls(o.headFace||'news'), hS=faceSty(o.headFace||'news');
+  const sepHTML = s =>
+    s==='rule'    ? `<div class="asep"><span class="sepline"></span></div>` :
+    s==='stars'   ? `<div class="asep orn" style="font-size:${bs}pt">*&#8194;*&#8194;*</div>` :
+    s==='diamond' ? `<div class="asep orn" style="font-size:${bs*1.1}pt">&#10070;</div>` : '';
   const blocks = o.blocks.map(b=>{
     if(b.type==='image'){
-      const flt = b.filter==='sepia'?'img-sepia':b.filter==='gray'?'img-gray':'';
-      const src = b.src || `data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='400' height='260'><rect width='400' height='260' fill='%23cbbfa2'/><text x='200' y='135' font-family='Georgia' font-size='20' fill='%23695f47' text-anchor='middle'>choose an image\u2026</text></svg>`;
-      return `<figure class="${b.span?'spanall ':''}${b.border?'bordered':''}" style="width:${b.span?100:(b.width||100)}%;">
-        <img class="${flt}" src="${src}" alt="">
-        ${b.caption?`<figcaption style="font-size:${9.8*f*0.82}pt">${md(b.caption)}</figcaption>`:''}</figure>`;
+      const flt=b.filter==='sepia'?'img-sepia':b.filter==='gray'?'img-gray':'';
+      const ht=b.filter==='halftone'?' ht':'';
+      const pos=b.span?'spanall':(b.align==='fl'?'fl':b.align==='fr'?'fr':'');
+      const src=b.src || `data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='400' height='260'><rect width='400' height='260' fill='%23cbbfa2'/><text x='200' y='135' font-family='Georgia' font-size='20' fill='%23695f47' text-anchor='middle'>choose an image\u2026</text></svg>`;
+      const asp=(b.aspect&&b.aspect!=='auto')?`aspect-ratio:${b.aspect};object-fit:cover;`:'';
+      const cap=b.caption?`${md(b.caption)}`:'';
+      const cred=b.credit?`<span class="credit">\u2014 ${md(b.credit)}</span>`:'';
+      return `<figure class="${pos} ${b.border?'bordered':''}${ht}" style="width:${b.span?100:(b.width||100)}%;">
+        <span class="iw"><img class="${flt}" src="${src}" style="${asp}" alt=""></span>
+        ${(cap||cred)?`<figcaption style="font-size:${bs*0.84}pt">${cap}${cred}</figcaption>`:''}</figure>`;
     }
-    if(b.type==='ad'){
-      return `<div class="adbox" style="font-size:${9.8*f}pt">${paras(b.body)}</div>`;
+    if(b.type==='pull'){
+      return `<div class="pq"><div class="pqtext" style="font-size:${bs*1.55}pt">\u201c${md(b.text||'')}\u201d</div>
+        ${b.cite?`<div class="pqcite" style="font-size:${bs*0.8}pt">\u2014 ${esc(b.cite)}</div>`:''}</div>`;
     }
-    const sh = b.subhead?`<p class="subhead" style="font-size:${11*f}pt">${esc(b.subhead)}</p>`:'';
-    return sh + paras(b.body, b.dropcap?'dropcap':'');
+    if(b.type==='table'){
+      const rows=(b.rows||'').split(/\n/).filter(r=>r.trim());
+      const trs=rows.map((r,i)=>{
+        const tag=(b.head&&i===0)?'th':'td';
+        return `<tr>${r.split('|').map(c=>`<${tag} style="font-size:${bs*0.92}pt">${md(c.trim())}</${tag}>`).join('')}</tr>`;
+      }).join('');
+      return `<table class="ntab">${b.title?`<caption style="font-size:${bs}pt">${esc(b.title)}</caption>`:''}${trs}</table>`;
+    }
+    if(b.type==='orn'){ return sepHTML(b.style||'stars'); }
+    if(b.type==='ad'){ return `<div class="adbox" style="font-size:${bs}pt">${paras(b.body)}</div>`; }
+    const sh=b.subhead?`<p class="subhead" style="font-size:${bs*1.12}pt">${esc(b.subhead)}</p>`:'';
+    const byl=b.byline?`<p class="abyl" style="font-size:${bs*0.86}pt">${esc(b.byline)}</p>`:'';
+    const tail=b.tail?`<p class="atail" style="font-size:${bs*0.92}pt">${md(b.tail)}</p>`:'';
+    return sh + byl + paras(b.body, b.dropcap?'dropcap':'') + tail + sepHTML(b.sep);
   }).join('');
+  const mastEl=`<div class="mastwrap"><h1 class="mast ${mC}" style="${mS}font-size:${o.mastSize*f}pt;letter-spacing:${(o.mastTrack||0)/1000}em">${esc(o.mast)}</h1>
+    ${o.tagline?`<div class="tagline" style="font-size:${bs*0.9}pt">${esc(o.tagline)}</div>`:''}</div>`;
+  const mastRow=o.earsOn
+    ? `<div class="earsrow"><div class="ear" style="font-size:${bs*0.78}pt">${md(o.earL||'')}</div>${mastEl}<div class="ear" style="font-size:${bs*0.78}pt">${md(o.earR||'')}</div></div>`
+    : mastEl;
+  const rule=o.colRule==='none'?'none':o.colRule==='double'?`3px double #5c4b33`:`1px solid #5c4b33`;
   stage.innerHTML = `<div class="doc ${paperCls(o.paper,o.noise)} np" style="width:${o.pageW*MM}px;min-height:${o.pageH*MM}px">
-    <h1 class="mast" style="font-size:${o.mastSize*f}pt">${esc(o.mast)}</h1>
-    <div class="dateline" style="font-size:${9.5*f}pt"><span>${esc(o.dlLeft)}</span><span>${esc(o.dlMid)}</span><span>${esc(o.dlRight)}</span></div>
-    <div class="head" style="font-size:${o.headSize*f}pt">${esc(o.head)}</div>
+    ${mastRow}
+    <div class="dateline" style="font-size:${bs*0.95}pt"><span>${esc(o.dlLeft)}</span><span>${esc(o.dlMid)}</span><span>${esc(o.dlRight)}</span></div>
+    ${o.kicker?`<div class="kicker" style="font-size:${bs*0.86}pt">${esc(o.kicker)}</div>`:''}
+    <div class="head ${hC}" style="${hS}font-size:${o.headSize*f}pt">${esc(o.head)}</div>
     <div class="deck" style="font-size:${13*f}pt">${md(o.deck)}</div>
+    ${o.byline?`<div class="mainbyl" style="font-size:${bs*0.9}pt">${esc(o.byline)}</div>`:''}
     <hr class="rule2" style="margin-bottom:3mm">
-    <div class="cols" style="column-count:${o.cols};column-gap:6mm;column-rule:1px solid #5c4b33;font-size:${9.8*f}pt;line-height:1.42">${blocks}</div></div>`;
+    <div class="cols ${bC} al-${o.alignMode==='left'?'l':'j'} p${o.paraStyle==='block'?'block':'indent'}${o.hyph?' hyph':''}" lang="en"
+      style="${bS}column-count:${o.cols};column-gap:${o.colGap||6}mm;column-rule:${rule};font-size:${bs}pt;line-height:${o.leading||1.42};word-spacing:${(o.wordSp||0)/100}em">${blocks}</div></div>`;
 }
 
 function renderCarbon(o){
@@ -1019,33 +1102,73 @@ function panelNews(o){
       <label>Image block</label>
       <input type="file" accept="image/*" data-img="${i}">
       ${fld('Caption', inp(`blocks.${i}.caption`, b.caption||''))}
+      ${fld('Credit line (blank = none)', inp(`blocks.${i}.credit`, b.credit||''))}
       <div class="row"><div>${fld('Width % of column', num(`blocks.${i}.width`, b.width||100,'min="20" max="100"'))}</div>
-      <div>${fld('Tone', `<select data-b="blocks.${i}.filter"><option value=""${!b.filter?' selected':''}>As uploaded</option><option value="sepia"${b.filter==='sepia'?' selected':''}>Sepia plate</option><option value="gray"${b.filter==='gray'?' selected':''}>Grey halftone</option></select>`)}</div></div>
+      <div>${fld('Tone', `<select data-b="blocks.${i}.filter"><option value=""${!b.filter?' selected':''}>As uploaded</option><option value="sepia"${b.filter==='sepia'?' selected':''}>Sepia plate</option><option value="gray"${b.filter==='gray'?' selected':''}>Grey plate</option><option value="halftone"${b.filter==='halftone'?' selected':''}>Halftone screen</option></select>`)}</div></div>
+      <div class="row"><div>${fld('Crop', `<select data-b="blocks.${i}.aspect"><option value="auto"${!b.aspect||b.aspect==='auto'?' selected':''}>As uploaded</option><option value="1 / 1"${b.aspect==='1 / 1'?' selected':''}>Square</option><option value="4 / 3"${b.aspect==='4 / 3'?' selected':''}>4:3</option><option value="3 / 2"${b.aspect==='3 / 2'?' selected':''}>3:2</option><option value="16 / 9"${b.aspect==='16 / 9'?' selected':''}>16:9 wide</option><option value="3 / 4"${b.aspect==='3 / 4'?' selected':''}>Portrait 3:4</option></select>`)}</div>
+      <div>${fld('Placement', `<select data-b="blocks.${i}.align"><option value=""${!b.align?' selected':''}>In the column flow</option><option value="fl"${b.align==='fl'?' selected':''}>Float left, text wraps</option><option value="fr"${b.align==='fr'?' selected':''}>Float right, text wraps</option></select>`)}</div></div>
       ${chk(`blocks.${i}.span`, b.span, 'Span all columns')}
       ${chk(`blocks.${i}.border`, b.border, 'Plate border')}</div>`;
+    if(b.type==='pull') return `<div class="item">${tools('blocks',i)}
+      <label>Pull quote</label>${ta(`blocks.${i}.text`, b.text||'', 2)}
+      ${fld('Attribution (blank = none)', inp(`blocks.${i}.cite`, b.cite||''))}</div>`;
+    if(b.type==='table') return `<div class="item">${tools('blocks',i)}
+      <label>Table</label>
+      ${fld('Title (blank = none)', inp(`blocks.${i}.title`, b.title||''))}
+      ${fld('Rows \u2014 one per line, cells split on |', ta(`blocks.${i}.rows`, b.rows||'', 4))}
+      ${chk(`blocks.${i}.head`, b.head, 'First row is a header')}</div>`;
+    if(b.type==='orn') return `<div class="item">${tools('blocks',i)}
+      <label>Ornament</label>
+      ${fld('Style', `<select data-b="blocks.${i}.style"><option value="stars"${b.style==='stars'?' selected':''}>* * *</option><option value="rule"${b.style==='rule'?' selected':''}>Short rule</option><option value="diamond"${b.style==='diamond'?' selected':''}>\u2756 Diamond</option></select>`)}</div>`;
     if(b.type==='ad') return `<div class="item">${tools('blocks',i)}
       <label>Boxed advertisement</label>${ta(`blocks.${i}.body`, b.body, 4)}</div>`;
     return `<div class="item">${tools('blocks',i)}
       ${fld('Subhead (blank = none)', inp(`blocks.${i}.subhead`, b.subhead))}
+      ${fld('Byline (blank = none)', inp(`blocks.${i}.byline`, b.byline||''))}
       ${fld('Body \u2014 blank line = new paragraph', ta(`blocks.${i}.body`, b.body, 6))}
+      ${fld('Tail line \u2014 italic, right (blank = none)', inp(`blocks.${i}.tail`, b.tail||''))}
+      ${fld('Closing ornament', `<select data-b="blocks.${i}.sep"><option value=""${!b.sep?' selected':''}>None</option><option value="stars"${b.sep==='stars'?' selected':''}>* * *</option><option value="rule"${b.sep==='rule'?' selected':''}>Short rule</option><option value="diamond"${b.sep==='diamond'?' selected':''}>\u2756</option></select>`)}
       ${chk(`blocks.${i}.dropcap`, b.dropcap, 'Drop capital on first paragraph')}</div>`;
   }).join('');
   const fillOpts = FILLERS.map((f,i)=>`<option value="${i}">${esc(f.name)}</option>`).join('');
   return `
-  <h2>Page</h2>
+  <h2>Page &amp; columns</h2>
   <div class="row"><div>${fld('Width (mm)', num('news.pageW',o.pageW))}</div><div>${fld('Height (mm)', num('news.pageH',o.pageH))}</div>
-  <div>${fld('Columns', num('news.cols',o.cols,'min="1" max="5"'))}</div></div>
-  <div class="row"><div>${fld('Paper', paperSel('news.paper',o.paper))}</div><div>${fld('Type size %', num('news.font',o.font,'min="60" max="160"'))}</div></div>
+  <div>${fld('Columns', num('news.cols',o.cols,'min="1" max="6"'))}</div></div>
+  <div class="row"><div>${fld('Column gap (mm)', num('news.colGap',o.colGap??6,'min="2" max="14" step="0.5"'))}</div>
+  <div>${fld('Column rule', `<select data-b="news.colRule"><option value="hair"${o.colRule!=='none'&&o.colRule!=='double'?' selected':''}>Hairline</option><option value="double"${o.colRule==='double'?' selected':''}>Double</option><option value="none"${o.colRule==='none'?' selected':''}>None</option></select>`)}</div></div>
+  <div class="row"><div>${fld('Paper', paperSel('news.paper',o.paper))}</div><div>${fld('Scale %', num('news.font',o.font,'min="60" max="160"'))}</div></div>
   ${chk('news.noise',o.noise,'Grain texture')}
   <h2>Masthead</h2>
-  <div class="row"><textarea rows="1" data-b="news.mast" style="flex:1">${esc(o.mast)}</textarea>${num('news.mastSize',o.mastSize,'min="18" max="80" title="pt"')}</div>
-  <div class="row" style="margin-top:6px">${inp('news.dlLeft',o.dlLeft)}${inp('news.dlMid',o.dlMid)}${inp('news.dlRight',o.dlRight)}</div>
-  ${fld('Headline', `<div class="row"><textarea rows="1" data-b="news.head" style="flex:1">${esc(o.head)}</textarea>${num('news.headSize',o.headSize,'min="14" max="72" title="pt"')}</div>`)}
+  <div class="row"><textarea rows="1" data-b="news.mast" style="flex:1">${esc(o.mast)}</textarea>${num('news.mastSize',o.mastSize,'min="18" max="90" title="pt"')}</div>
+  <div class="row" style="margin-top:6px"><div>${fld('Masthead face', fontSel('news.mastFace',o.mastFace||'black'))}</div>
+  <div>${fld('Tracking \u2030em', num('news.mastTrack',o.mastTrack||0,'min="-40" max="300" step="5"'))}</div></div>
+  ${fld('Tagline under the masthead (blank = none)', inp('news.tagline',o.tagline||''))}
+  ${chk('news.earsOn',o.earsOn,'Ears \u2014 the little boxes beside the masthead')}
+  ${o.earsOn?`<div class="row">${ta('news.earL',o.earL||'',3)}${ta('news.earR',o.earR||'',3)}</div>`:''}
+  <label>Dateline bar \u2014 left \u00b7 centre \u00b7 right</label>
+  <div class="row">${inp('news.dlLeft',o.dlLeft)}${inp('news.dlMid',o.dlMid)}${inp('news.dlRight',o.dlRight)}</div>
+  <h2>Headline block</h2>
+  ${fld('Kicker \u2014 small line above (blank = none)', inp('news.kicker',o.kicker||''))}
+  ${fld('Headline', `<div class="row"><textarea rows="1" data-b="news.head" style="flex:1">${esc(o.head)}</textarea>${num('news.headSize',o.headSize,'min="14" max="80" title="pt"')}</div>`)}
+  ${fld('Headline face', fontSel('news.headFace',o.headFace||'news'))}
   ${fld('Deck (italic, under headline)', ta('news.deck',o.deck,2))}
+  ${fld('Byline (blank = none)', inp('news.byline',o.byline||''))}
+  <h2>Body type</h2>
+  <div class="row"><div>${fld('Face', fontSel('news.bodyFace',o.bodyFace||'news'))}</div>
+  <div>${fld('Size (pt)', num('news.bodySize',o.bodySize||9.8,'min="6" max="16" step="0.2"'))}</div>
+  <div>${fld('Leading', num('news.leading',o.leading||1.42,'min="1" max="2.2" step="0.02"'))}</div></div>
+  <div class="row"><div>${fld('Setting', `<select data-b="news.alignMode"><option value="justify"${o.alignMode!=='left'?' selected':''}>Justified \u2014 newspaper</option><option value="left"${o.alignMode==='left'?' selected':''}>Ragged right</option></select>`)}</div>
+  <div>${fld('Paragraphs', `<select data-b="news.paraStyle"><option value="indent"${o.paraStyle!=='block'?' selected':''}>Indented, close-set</option><option value="block"${o.paraStyle==='block'?' selected':''}>Block, spaced</option></select>`)}</div></div>
+  ${chk('news.hyph',o.hyph,'Hyphenate \u2014 tighter justification, fewer rivers')}
+  ${fld('Word spacing \u2014 hundredths of an em', `<div class="row"><input type="range" data-b="news.wordSp" min="-6" max="12" step="1" value="${o.wordSp||0}"><span class="num-ro">${o.wordSp||0}</span></div>`)}
   <h2>Content blocks</h2>
   ${blocks}
   <button class="addbtn" data-add="article">+ Add article</button>
   <button class="addbtn" data-add="image">+ Add image\u2026</button>
+  <div class="row"><button class="addbtn" style="margin:0" data-add="pull">+ Pull quote</button>
+  <button class="addbtn" style="margin:0" data-add="ntable">+ Table</button>
+  <button class="addbtn" style="margin:0" data-add="orn">+ Ornament</button></div>
   <label>Padding pieces</label>
   <div class="row"><select id="fillSel">${fillOpts}</select><button class="addbtn" style="margin:0;flex:0 0 110px" data-add="filler">+ Add filler</button></div>`;
 }
@@ -1119,9 +1242,10 @@ function panelExh(o){
   <button class="addbtn" data-del="curcard" style="color:#ff9b8a">\u00d7 Delete this card</button>`;
 }
 
-const FONT_OPTS = [['gar','EB Garamond \u2014 estate stationery'],['fell','IM Fell \u2014 period letterpress'],['type','Special Elite \u2014 typewriter'],['voss','Voss\u2019s hand'],['mira','Mira\u2019s hand'],['hand','Working hand \u2014 Bell / Vale']];
+const FONT_OPTS = [['gar','EB Garamond \u2014 estate stationery'],['fell','IM Fell \u2014 period letterpress'],['news','Old Standard \u2014 newspaper'],['sc','Fell small caps'],['black','Blackletter \u2014 masthead'],['type','Special Elite \u2014 typewriter'],['voss','Voss\u2019s hand'],['mira','Mira\u2019s hand'],['hand','Working hand \u2014 Bell / Vale']];
 function fontSel(path,val){
-  const opts=FONT_OPTS.concat(FR.list.map(f=>['@'+f.family, f.family+' \u2014 registered']));
+  const opts=FONT_OPTS.filter(([k])=>!HiddenFams.has(k)||k===val)
+    .concat(FR.list.map(f=>['@'+f.family, f.family+' \u2014 registered']));
   return `<select data-b="${path}">${opts.map(([v,l])=>`<option value="${v}"${val===v?' selected':''}>${l}</option>`).join('')}</select>`; }
 
 function panelStat(o){
@@ -1357,7 +1481,7 @@ $('#panel').addEventListener('input', e=>{
   if(e.target.type==='number' || e.target.type==='range' || key==='ghost' || key==='sel') v = +v;
   if(e.target.type==='range' && e.target.nextElementSibling && e.target.nextElementSibling.classList.contains('num-ro')) e.target.nextElementSibling.textContent = v;
   obj[key] = v;
-  if(['sel','mode','absent','style','styleMode','face','kind','fam'].includes(key)){ drawPanel(); }
+  if(['sel','mode','absent','style','styleMode','face','kind','fam','earsOn'].includes(key)){ drawPanel(); }
   queue();
 });
 $('#panel').addEventListener('change', e=>{
@@ -1400,9 +1524,14 @@ $('#panel').addEventListener('click', e=>{
     }
     if(add==='dupcard' && hasCards()){ S[S.tab].cards.push(JSON.parse(JSON.stringify(S[S.tab].cards[S[S.tab].sel]))); S[S.tab].sel = S[S.tab].cards.length-1; }
     if(add==='article')  S.news.blocks.push({type:'article', subhead:'NEW ARTICLE', dropcap:false, body:'Body of the article. Leave a blank line to start a new paragraph.'});
-    if(add==='image')    S.news.blocks.push({type:'image', src:'', caption:'', width:100, span:false, border:true, filter:'sepia'});
+    if(add==='image')    S.news.blocks.push({type:'image', src:'', caption:'', credit:'', width:100, span:false, border:true, filter:'sepia', aspect:'auto', align:''});
+    if(add==='pull')     S.news.blocks.push({type:'pull', text:'Set the quotation here.', cite:''});
+    if(add==='ntable')   S.news.blocks.push({type:'table', title:'', head:true, rows:'HEADING|HEADING\nentry|entry'});
+    if(add==='orn')      S.news.blocks.push({type:'orn', style:'stars'});
     if(add==='filler'){  const f = FILLERS[+$('#fillSel').value];
-                         S.news.blocks.push(f.ad ? {type:'ad', body:f.body} : {type:'article', subhead:f.subhead, dropcap:false, body:f.body}); }
+                         S.news.blocks.push(f.tableRows ? {type:'table', title:f.tableTitle, head:!!f.tableHead, rows:f.tableRows}
+                           : f.ad ? {type:'ad', body:f.body}
+                           : {type:'article', subhead:f.subhead, dropcap:false, sep:'', tail:'', byline:'', body:f.body}); }
     drawPanel(); queue(); return;
   }
   if(del){
@@ -1422,6 +1551,37 @@ const FR = { list: [] };                       /* {id,family,fmt,variable:[{tag,
 const fontBins = new Map();                    /* id -> ArrayBuffer */
 const fontFaces = new Map();                   /* id -> FontFace */
 const FR_KEY = 'vossFonts_meta';
+let HiddenFams = new Set();
+try{ HiddenFams = new Set(JSON.parse(localStorage.getItem('vossFonts_hidden')||'[]')); }catch(e){}
+const hiddenSave = () => { try{ localStorage.setItem('vossFonts_hidden', JSON.stringify([...HiddenFams])); }catch(e){} };
+const FACE_FIELDS = ['bodyFont','sigFont','face','mastFace','headFace','bodyFace'];
+const FACE_DEFAULTS = {bodyFont:'gar', sigFont:'voss', face:'hand', mastFace:'black', headFace:'news', bodyFace:'news'};
+function usesOfFamily(family){
+  let n=0; const at='@'+family;
+  for(const k of Object.keys(S)){ if(k==='tab') continue; const t=S[k]; if(!t||typeof t!=='object') continue;
+    if(t.ty && t.ty.fam===family) n++;
+    for(const f of FACE_FIELDS) if(t[f]===at) n++;
+    if(Array.isArray(t.cards)) for(const c of t.cards) if(c.hand===at) n++;
+  }
+  return n;
+}
+function sweepFamily(family){                     /* reset every reference to a removed face */
+  const at='@'+family;
+  for(const k of Object.keys(S)){ if(k==='tab') continue; const t=S[k]; if(!t||typeof t!=='object') continue;
+    if(t.ty && t.ty.fam===family){ t.ty.fam=''; t.ty.axes={}; }
+    for(const f of FACE_FIELDS) if(t[f]===at) t[f]=FACE_DEFAULTS[f];
+    if(Array.isArray(t.cards)) for(const c of t.cards) if(c.hand===at) c.hand='mira';
+  }
+}
+async function frRemove(id){
+  const f=FR.list.find(x=>x.id===id); if(!f) return;
+  FR.list=FR.list.filter(x=>x.id!==id);
+  fontBins.delete(id);
+  try{ if(fontFaces.has(id)) document.fonts.delete(fontFaces.get(id)); }catch(e){}
+  fontFaces.delete(id);
+  sweepFamily(f.family);
+  frSaveMeta(); idbDel(id); persist();
+}
 const b64FromBuf = buf => { let s=''; const b=new Uint8Array(buf);
   for(let i=0;i<b.length;i+=0x8000) s+=String.fromCharCode.apply(null,b.subarray(i,i+0x8000)); return btoa(s); };
 const bufFromB64 = s => { const bin=atob(s), b=new Uint8Array(bin.length);
@@ -1549,7 +1709,7 @@ const BUILTIN_FAMS={gar:'EB Garamond',fell:'IM Fell English',sc:'IM Fell English
 function typoPanel(){
   const o=S[S.tab].ty || (S[S.tab].ty=TY0());
   const fams=[['','Document default \u2014 period mix'],
-    ...Object.values(BUILTIN_FAMS).map(f=>[f,f]),
+    ...Object.entries(BUILTIN_FAMS).filter(([k,f])=>!HiddenFams.has(k)||f===o.fam).map(([,f])=>[f,f]),
     ...FR.list.map(f=>[f.family, f.family+' \u2014 registered'+(f.variable.length?' \u00b7 variable':'')])];
   const famOpts=fams.map(([v,l])=>`<option value="${esc(v)}"${o.fam===v?' selected':''}>${esc(l)}</option>`).join('');
   const reg=FR.list.find(f=>f.family===o.fam);
@@ -1599,26 +1759,53 @@ async function nodeToPNG(node, name){
   const w = node.offsetWidth, h = node.offsetHeight, scale = +$('#pxScale').value;
   const clone = node.cloneNode(true);
   clone.style.width = w+'px'; clone.style.height = h+'px'; clone.style.margin='0';
+  /* taint-proofing: every image source inside the proof becomes a data URI */
+  for(const im of clone.querySelectorAll('img')){
+    const s = im.getAttribute('src')||'';
+    if(!s.startsWith('data:')){
+      try{
+        const bl = await (await fetch(s)).blob();
+        const du = await new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(r.result); r.onerror=()=>rej(new Error('read')); r.readAsDataURL(bl); });
+        im.setAttribute('src', du);
+      }catch(e){ im.remove(); }
+    }
+    im.removeAttribute('crossorigin');
+  }
   const wrap = document.createElement('div');
   const st = document.createElement('style');
   st.textContent = fonts + '\n' + $('#docCss').textContent;
   wrap.appendChild(st); wrap.appendChild(clone);
   const xhtml = new XMLSerializer().serializeToString(wrap);
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}"><foreignObject width="100%" height="100%">${xhtml}</foreignObject></svg>`;
-  const url = URL.createObjectURL(new Blob([svg],{type:'image/svg+xml;charset=utf-8'}));
+  /* a data URI (not a blob URL) keeps the drawn image same-origin even in sandboxed frames with a null origin */
   const img = new Image();
-  await new Promise((res,rej)=>{ img.onload=res; img.onerror=()=>rej(new Error('The browser refused the proof \u2014 an image on the page may be from another site. Re-add images via the file picker.')); img.src=url; });
+  img.decoding = 'sync';
+  const svgURL = 'data:image/svg+xml;charset=utf-8;base64,' + b64utf8(svg);
+  await new Promise((res,rej)=>{ img.onload=res; img.onerror=()=>rej(new Error('the proof would not render \u2014 try once more, or use Print / PDF')); img.src=svgURL; });
   await new Promise(r=>setTimeout(r,60));
   const cv = document.createElement('canvas'); cv.width=Math.round(w*scale); cv.height=Math.round(h*scale);
   const cx = cv.getContext('2d'); cx.scale(scale,scale); cx.drawImage(img,0,0);
-  URL.revokeObjectURL(url);
-  await new Promise(res=>cv.toBlob(bl=>{
-    const a=document.createElement('a'); a.href=URL.createObjectURL(bl); a.download=name; a.click();
-    setTimeout(()=>URL.revokeObjectURL(a.href),4000); res();
-  },'image/png'));
+  let blob = null;
+  try{ blob = await new Promise(res=>cv.toBlob(res,'image/png')); }
+  catch(err){ blob = null; }                    /* SecurityError: tainted \u2014 sandboxed host */
+  if(!blob){
+    downloadText(svg, 'image/svg+xml', name.replace(/\.png$/,'.svg'));
+    setStatus('this window\u2019s sandbox refused a PNG, so the proof was saved as '
+      + name.replace(/\.png$/,'.svg')
+      + ' \u2014 identical output; open it in any browser tab. For one-click PNGs, download this HTML file and open it directly.');
+    return;
+  }
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),4000);
   setStatus(`saved ${name} \u2014 ${cv.width}\u00d7${cv.height}px`);
 }
-const slug = t => String(t||'').toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'').slice(0,40) || 'doc';
+const b64utf8 = s => btoa(unescape(encodeURIComponent(s)));
+function downloadText(t, mime, name){
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([t],{type:mime}));
+  a.download=name; a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),4000);
+}
 $('#exportBtn').addEventListener('click', async ()=>{
   const o = S[S.tab];
   const names = {
@@ -1693,23 +1880,45 @@ drawPanel(); render();
 const fmStatus = t => { const el=$('#fmStatus'); if(el) el.textContent=t; };
 function fmDraw(){
   const el=$('#fmList'); if(!el) return;
-  el.innerHTML = FR.list.length ? FR.list.map(f=>`<div class="fm-item">
-    <b>${esc(f.family)}</b>
-    <span class="meta">${esc(f.fmt)}${f.variable.length?` \u00b7 <span class="ax">variable: ${f.variable.map(a=>a.tag).join(' ')}</span>`:''}</span>
-    <button class="mini del" data-fdel="${f.id}" title="Remove">\u00d7</button></div>`).join('')
-    : '<p class="hint">Nothing registered yet.</p>';
+  const reg = FR.list.length ? FR.list.map(f=>{
+    const b=fontBins.get(f.id), kb=b?Math.round(b.byteLength/1024)+' KB':'\u2014';
+    const used=usesOfFamily(f.family);
+    return `<div class="fm-item">
+      <b style="font-family:'${esc(f.family)}'">${esc(f.family)}</b>
+      <span class="meta">${esc(f.fmt)} \u00b7 ${kb}${f.variable.length?` \u00b7 <span class="ax">variable: ${f.variable.map(a=>a.tag).join(' ')}</span>`:''}${used?` \u00b7 used in ${used} place${used>1?'s':''}`:''}</span>
+      <button class="ghostbtn" data-fdel="${f.id}">Remove</button></div>`;
+  }).join('') + `<button class="addbtn" data-fdelall style="color:#ff9b8a">\u00d7 Remove every registered face</button>`
+  : '<p class="hint">Nothing registered yet.</p>';
+  const builtins = Object.entries(BUILTIN_FAMS).map(([k,fam])=>{
+    const hid=HiddenFams.has(k);
+    return `<div class="fm-item"${hid?' style="opacity:.55"':''}>
+      <b style="font-family:'${fam}'">${fam}</b>
+      <span class="meta">built-in${hid?' \u00b7 hidden from menus':''}</span>
+      <button class="ghostbtn" data-fhide="${k}">${hid?'Show in menus':'Hide from menus'}</button></div>`;
+  }).join('');
+  el.innerHTML = `<label>Registered faces</label>${reg}
+    <label style="margin-top:14px">Built-in faces <span class="hint">\u2014 ship with the studio; hide to declutter the menus</span></label>${builtins}`;
 }
 $('#fontsBtn').addEventListener('click', ()=>{ fmDraw(); $('#fontModal').classList.add('open'); });
 $('#fmClose').addEventListener('click', ()=>$('#fontModal').classList.remove('open'));
 $('#fontModal').addEventListener('click', e=>{ if(e.target.id==='fontModal') $('#fontModal').classList.remove('open'); });
 $('#fmList').addEventListener('click', async e=>{
-  const b=e.target.closest('[data-fdel]'); if(!b) return;
-  const id=b.dataset.fdel, f=FR.list.find(x=>x.id===id);
-  FR.list=FR.list.filter(x=>x.id!==id); fontBins.delete(id);
-  try{ if(fontFaces.has(id)) document.fonts.delete(fontFaces.get(id)); }catch(err){}
-  fontFaces.delete(id); frSaveMeta(); idbDel(id);
-  if(f && S[S.tab].ty.fam===f.family) S[S.tab].ty.fam='';
-  fmDraw(); drawPanel(); render();
+  const del=e.target.closest('[data-fdel]');
+  if(del){
+    await frRemove(del.dataset.fdel);
+    fmDraw(); drawPanel(); render(); return;
+  }
+  if(e.target.closest('[data-fdelall]')){
+    if(!confirm('Remove every registered face? Documents using them return to the period defaults.')) return;
+    for(const f of [...FR.list]) await frRemove(f.id);
+    fmDraw(); drawPanel(); render(); return;
+  }
+  const hide=e.target.closest('[data-fhide]');
+  if(hide){
+    const k=hide.dataset.fhide;
+    HiddenFams.has(k) ? HiddenFams.delete(k) : HiddenFams.add(k);
+    hiddenSave(); fmDraw(); drawPanel(); return;
+  }
 });
 $('#fmAddUrl').addEventListener('click', async ()=>{
   const url=$('#fmUrl').value.trim(); if(!url){ fmStatus('paste a URL first'); return; }
@@ -1734,7 +1943,7 @@ $('#fmFiles').addEventListener('change', async e=>{
   e.target.value=''; fmDraw(); drawPanel(); render();
 });
 frInit();
-window.__voss = { FR, frAddBuf, parseAxes, applyTypo, S:()=>S };   /* debug/test handle */
+window.__voss = { FR, frAddBuf, frRemove, usesOfFamily, parseAxes, applyTypo, S:()=>S };   /* debug/test handle */
 
 try{ document.fonts.ready.then(()=>{ render(); setStatus('period faces loaded'); setTimeout(()=>setStatus(''),2500); }); }catch(e){}
 </script>
