@@ -273,6 +273,7 @@ The quick brown fox jumps over the lazy dog. 1234567890!</textarea>
             <option value="grid">Grid</option>
             <option value="legal">Legal pad</option>
             <option value="aged">Aged paper</option>
+            <option value="transparent">Transparent (ink only)</option>
           </select>
         </label>
         <div class="field" id="toneField"><span style="font-size:13px">Tone</span>
@@ -618,6 +619,7 @@ function hexMix(a, b, t){
 }
 
 function drawPaper(ctx, cfg, lay, texRng){
+  if (cfg.paper === 'transparent') return;   // ink only — PNG keeps the alpha channel
   const W = cfg.pw, H = lay.ph;
   // base sheet
   if (cfg.paper === 'legal'){
@@ -745,6 +747,10 @@ function render(){
   const ctx = cv.getContext('2d');
   paint(ctx, cfg, lay, RS);
 
+  cv.style.background = cfg.paper === 'transparent'
+    ? 'repeating-conic-gradient(#c7cad0 0% 25%, #e8eaee 0% 50%) 0 0 / 20px 20px'
+    : '#fff';
+
   $('stDims').textContent = `${cfg.pw} × ${lay.ph} px · seed ${cfg.seed}`;
   $('stWarn').textContent = lay.hidden
     ? `Text overflows the page — ${lay.hidden} line${lay.hidden>1?'s':''} hidden. Switch to “Fit to text” to show everything.`
@@ -811,7 +817,7 @@ for (const id of ['inPen','inPaper','inPage','inSeed','inMarginLine','inTexture'
   $(id).addEventListener('change', () => {
     if (id === 'inPen'){ setInk(PEN_INK[$('inPen').value]); }
     if (id === 'inPaper'){ $('toneField').style.display =
-      ['legal','aged'].includes($('inPaper').value) ? 'none' : ''; }
+      ['legal','aged','transparent'].includes($('inPaper').value) ? 'none' : ''; }
     scheduleRender();
   });
 }
