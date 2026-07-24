@@ -77,6 +77,18 @@ main{display:flex;flex:1;min-height:0}
 .export:hover{filter:brightness(1.1)}
 .export.oxb{background:linear-gradient(#a03030,#7a1414);border-color:#c05050}
 #status{color:var(--tx2);font-style:italic;font-family:var(--fell)}
+.num-ro{min-width:34px;text-align:right;color:var(--tx);font-variant-numeric:tabular-nums;flex:0 0 auto}
+/* fonts modal */
+#fontModal{position:fixed;inset:0;background:rgba(14,13,10,.7);display:none;place-items:center;z-index:50}
+#fontModal.open{display:grid}
+#fmBox{width:min(560px,92vw);max-height:84vh;overflow:auto;background:var(--iron2);border:1px solid var(--brass);
+  border-radius:4px;padding:18px 20px;box-shadow:0 20px 60px #000a}
+#fmBox h3{margin:0 0 4px;font-family:var(--sc);font-weight:400;letter-spacing:.18em;color:var(--brass)}
+#fmBox .fm-item{display:flex;align-items:center;gap:8px;background:var(--iron3);border:1px solid var(--line);
+  border-radius:3px;padding:6px 9px;margin:6px 0}
+#fmBox .fm-item b{font-weight:600;color:var(--tx)}
+#fmBox .fm-item .ax{color:var(--verdi);font-size:11px}
+#fmBox .fm-item .meta{color:var(--tx2);font-size:11px;flex:1}
 #scroller{flex:1;overflow:auto;display:grid;place-items:center;padding:40px;
   background:
     radial-gradient(1200px 600px at 50% -10%, #9a968c, transparent 70%),
@@ -240,15 +252,28 @@ main{display:flex;flex:1;min-height:0}
 .tline .lbl{font-family:'IM Fell English SC',Georgia,serif;font-size:70%;color:#5c4b33;white-space:nowrap}
 .tline .fill{flex:1;border-bottom:.8px solid #5c4b33;min-height:4.4mm}
 
-/* ---- estate shares (table money) ---- */
-.bill{position:relative;border:1.1mm double currentColor;outline:.4mm solid currentColor;outline-offset:.9mm;
-  padding:3.4mm 5mm;background:
+/* ---- typography overrides (per-tab Typography section) ---- */
+.fovr, .fovr *{font-family:var(--ovfam) !important}
+.wovr, .wovr *{font-weight:var(--ovwght) !important}
+.tovr, .tovr *{letter-spacing:var(--ovtrk) !important}
+.aovr, .aovr *{font-variation-settings:var(--ovfvs) !important}
+
+/* ---- estate shares (table money) — flex rows, nothing absolute, nothing overlaps ---- */
+.bill{display:flex;flex-direction:column;justify-content:space-between;
+  border:1.1mm double currentColor;outline:.4mm solid currentColor;outline-offset:.9mm;
+  padding:2.2mm 4mm;background:
     radial-gradient(90% 200% at 50% 50%, rgba(255,252,240,.55), rgba(255,252,240,0) 70%),
     repeating-radial-gradient(circle at 50% 50%, transparent 0 2.6mm, rgba(60,45,20,.06) 2.6mm 2.9mm)}
-.bill .cnr{position:absolute;font-family:'Old Standard TT',serif;font-weight:700}
-.bill .owl{position:absolute;left:7mm;top:50%;transform:translateY(-50%);width:13mm;height:13mm;opacity:.8;
+.bill .brow,.bill .bbot{display:flex;justify-content:space-between;align-items:center;gap:3mm}
+.bill .bbot{align-items:flex-end}
+.bill .bmid{flex:1;display:flex;align-items:center;gap:3mm;min-height:0;margin:.6mm 0}
+.bill .bcenter{flex:1;text-align:center;min-width:0}
+.bill .bside{flex:0 0 auto;display:flex;align-items:center;justify-content:center}
+.bill .cnrN{font-family:'Old Standard TT',serif;font-weight:700;white-space:nowrap;flex:0 0 auto}
+.bill .bIssuer{flex:1;text-align:center;min-width:0}
+.bill .bserial{font-family:'Special Elite','Courier New',monospace;color:#8c1f1f;white-space:nowrap}
+.owlDefault{display:inline-block;
   background:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'><g fill='none' stroke='%233a2f1d' stroke-width='2'><circle cx='20' cy='21' r='13'/><circle cx='15' cy='18' r='4'/><circle cx='25' cy='18' r='4'/><circle cx='15' cy='18' r='1.2' fill='%233a2f1d'/><circle cx='25' cy='18' r='1.2' fill='%233a2f1d'/><path d='M17 25 L20 28 L23 25'/><path d='M9 10 L14 7 M31 10 L26 7'/></g></svg>") no-repeat center/contain}
-.bill .serial{position:absolute;left:7mm;bottom:2.6mm;font-family:'Special Elite','Courier New',monospace;color:#8c1f1f}
 .billwrap{display:grid;gap:4mm;align-content:start}
 
 /* ---- questionnaire ---- */
@@ -282,6 +307,7 @@ main{display:flex;flex:1;min-height:0}
   </nav>
   <div class="hspace"></div>
   <div class="hdrbtns">
+    <button class="ghostbtn" id="fontsBtn" title="Register extra typefaces by URL or file; they cache in this browser and embed into PNG exports">Fonts\u2026</button>
     <button class="ghostbtn" id="saveJson" title="Download all settings as a JSON file">Save setup</button>
     <button class="ghostbtn" id="loadJson">Load setup</button>
     <button class="ghostbtn" id="resetBtn">Reset to canon</button>
@@ -306,6 +332,21 @@ main{display:flex;flex:1;min-height:0}
   </section>
 </main>
 
+<div id="fontModal">
+  <div id="fmBox">
+    <h3>THE TYPE DRAWER</h3>
+    <p class="hint" style="margin:2px 0 10px">Registered faces cache in this browser (IndexedDB), work offline after first load, embed into PNG exports, and appear in every face menu. Variable fonts expose their axes as sliders under each tab\u2019s Typography section.</p>
+    <div id="fmList"></div>
+    <label>Add from a URL <span class="hint">\u2014 a font file (.ttf .otf .woff .woff2) or a Google-Fonts css2 link</span></label>
+    <div class="row"><input id="fmUrl" placeholder="https://\u2026" style="flex:2"><input id="fmFam" placeholder="family name (font files only)" style="flex:1"></div>
+    <button class="addbtn" id="fmAddUrl">+ Fetch &amp; register</button>
+    <label>Or upload font files</label>
+    <input type="file" id="fmFiles" accept=".ttf,.otf,.woff,.woff2,font/*" multiple>
+    <div class="hint" id="fmStatus" style="margin-top:8px"></div>
+    <div style="text-align:right;margin-top:12px"><button class="ghostbtn" id="fmClose">Close</button></div>
+  </div>
+</div>
+
 <script>
 /* =================================================================== state */
 const MM = 96/25.4;                               // css px per mm
@@ -315,7 +356,9 @@ const esc = t => String(t??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replac
 const md = t => esc(t).replace(/\*\*(.+?)\*\*/gs,'<b>$1</b>').replace(/\*(.+?)\*/gs,'<i>$1</i>').replace(/\n/g,'<br>');
 const paras = (t,cls='') => esc(t).split(/\n\s*\n/).map(p=>`<p class="${cls}">${p.replace(/\*\*(.+?)\*\*/gs,'<b>$1</b>').replace(/\*(.+?)\*/gs,'<i>$1</i>').replace(/\n/g,'<br>')}</p>`).join('');
 
-const CANON = () => ({
+const TY0 = () => ({fam:'', wght:400, trk:0, axes:{}});
+const withTy = o => { for(const k in o) if(k!=='tab' && o[k] && typeof o[k]==='object') o[k].ty = o[k].ty || TY0(); return o; };
+const CANON = () => withTy({
   tab:'herb',
   herb:{
     mode:'single', sel:0, cardW:88, cardH:0, font:100, paper:'aged', noise:true,
@@ -451,7 +494,7 @@ const CANON = () => ({
     ]},
   ransom:{
     pageW:170, pageH:0, font:100, paper:'aged', noise:true,
-    styleMode:'scrawl', seed:7, sizePt:15, rot:7, sizeVar:22,
+    styleMode:'cut', pal:'color', wordPct:25, seed:7, sizePt:16, rot:9, sizeVar:40,
     body:'you counted wrong captian. the harbour recieved twenty two and gave back twenty one. i was there. say his name in the open or the papers will say yours. no judgement waits longer than mine. i do not want money. i want the count corrected.',
     sig:''},
   receipt:{
@@ -504,6 +547,7 @@ const CANON = () => ({
     issuer:'THE ESTATE OF ELIAS VOSS \u00b7 PROMISSORY NOTE OF THE TABLE',
     motto:'\u201cSpend it the way I earned it, and it will find its way back to me.\u201d',
     series:'V\u00b7A', serialStart:4821, ink:'#3a2f1d',
+    owlSrc:'', owlMM:12, owlOp:80, owlBoth:false,
     sig:'for the estate \u2014 A. Vale'},
   quest:{
     pageW:210, pageH:297, font:100, paper:'aged', noise:true,
@@ -547,7 +591,19 @@ const FILLERS = [
 ];
 
 let S = CANON();
-try{ const saved = localStorage.getItem('vossStudio'); if(saved) S = Object.assign(CANON(), JSON.parse(saved)); }catch(e){}
+try{
+  const saved = JSON.parse(localStorage.getItem('vossStudio')||'null');
+  if(saved){
+    if(saved.tab) S.tab = saved.tab;
+    for(const k of Object.keys(S)){
+      if(k==='tab') continue;
+      if(saved[k] && typeof saved[k]==='object'){
+        const ty = Object.assign(TY0(), S[k].ty, saved[k].ty||{});
+        S[k] = Object.assign({}, S[k], saved[k]); S[k].ty = ty;
+      }
+    }
+  }
+}catch(e){}
 const persist = () => { try{ localStorage.setItem('vossStudio', JSON.stringify(S)); }catch(e){} };
 
 /* =============================================================== rendering */
@@ -627,12 +683,12 @@ function renderCarbon(o){
 
 function recCardHTML(c, o){
   const f = o.font/100;
-  const tf = 'f-'+(c.hand||'mira');
-  const tsz = c.hand==='mira'?15:12, bsz = c.hand==='mira'?13:10.6;
+  const hv=c.hand||'mira', tf=faceCls(hv), tfs=faceSty(hv);
+  const tsz = hv==='mira'?15:12, bsz = hv==='mira'?13:10.6;
   return `<div class="rcard">
     ${c.mark?`<span class="mark" style="font-size:${10.5*f}pt">${esc(c.mark)}</span>`:''}
-    <div class="${tf}" style="font-size:${tsz*f}pt">${esc(c.title)}</div>
-    <div class="${tf}" style="font-size:${bsz*f}pt;line-height:1.8;margin-top:1.5mm">${md(c.body)}</div></div>`;
+    <div class="${tf}" style="${tfs}font-size:${tsz*f}pt">${esc(c.title)}</div>
+    <div class="${tf}" style="${tfs}font-size:${bsz*f}pt;line-height:1.8;margin-top:1.5mm">${md(c.body)}</div></div>`;
 }
 function renderRec(o){
   if(o.mode==='single'){
@@ -672,49 +728,66 @@ function renderStat(o){
   const f = o.font/100;
   const sigBlock = (o.sig||o.seal) ? `<div style="margin-top:10mm;display:flex;justify-content:space-between;align-items:flex-end">
       <span>${o.seal?'<span class="wax"></span>':''}</span>
-      <span class="f-${o.sigFont}" style="font-size:${o.sigSize*f}pt">${esc(o.sig)}</span></div>` : '';
+      <span class="${faceCls(o.sigFont)}" style="${faceSty(o.sigFont)}font-size:${o.sigSize*f}pt">${esc(o.sig)}</span></div>` : '';
   const foot = o.foot ? `<hr class="rule" style="margin-top:10mm">
       <div class="f-gar" style="font-size:${11.5*f}pt;margin-top:4mm">${md(o.foot)}</div>` : '';
   stage.innerHTML = `<div class="doc ${paperCls(o.paper,o.noise)} stat" style="width:${o.pageW*MM}px;min-height:${o.pageH*MM}px">
     <div class="cen fsc" style="font-size:${13*f}pt;letter-spacing:.2em">${esc(o.title)}</div>
     ${o.sub?`<div class="cen fell" style="font-style:italic;font-size:${9.6*f}pt;color:#5c4b33">${esc(o.sub)}</div>`:''}
     <hr class="rule2" style="margin:4mm 0 6mm">
-    <div class="body f-${o.bodyFont} al-${o.align}" style="font-size:${o.bodySize*f}pt">${paras(o.body)}</div>
+    <div class="body ${faceCls(o.bodyFont)} al-${o.align}" style="${faceSty(o.bodyFont)}font-size:${o.bodySize*f}pt">${paras(o.body)}</div>
     ${sigBlock}${foot}</div>`;
 }
 
 /* ---------- letters ---------- */
 function renderLett(o){
   const c = o.cards[o.sel] || o.cards[0], f = o.font/100;
-  const hf = 'f-'+(c.hand||'mira'), bsz = c.hand==='mira'?15.5:(c.hand==='voss'?12.5:14);
-  const sig = c.sig?`<div class="${hf}" style="font-size:${(bsz+1)*f}pt;text-align:right;margin-top:5mm">${esc(c.sig)}</div>`:'';
+  const hv=c.hand||'mira', hf=faceCls(hv), hs=faceSty(hv), bsz = hv==='mira'?15.5:(hv==='voss'?12.5:14);
+  const sig = c.sig?`<div class="${hf}" style="${hs}font-size:${(bsz+1)*f}pt;text-align:right;margin-top:5mm">${esc(c.sig)}</div>`:'';
   stage.innerHTML = `<div class="doc ${paperCls(o.paper,o.noise)} lett ${c.torn?'tornBR':''}" style="width:${o.cardW*MM}px;${o.cardH>0?`height:${o.cardH*MM}px;`:''}">
     <div class="fell" style="font-style:italic;font-size:${9.4*f}pt;color:#5c4b33;text-align:right">${esc(c.date)}</div>
-    <div class="lbody ${hf}" style="font-size:${bsz*f}pt;margin-top:4mm">${paras(c.body)}</div>
+    <div class="lbody ${hf}" style="${hs}font-size:${bsz*f}pt;margin-top:4mm">${paras(c.body)}</div>
     <div style="display:flex;justify-content:space-between;align-items:flex-end">
       <span>${c.seal?'<span class="wax"></span>':''}</span><span style="flex:1">${sig}</span></div></div>`;
 }
 
 /* ---------- anonymous / ransom ---------- */
 function mul32(a){return function(){a|=0;a=a+0x6D2B79F5|0;var t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
-const CLIP_FONTS=[["'IM Fell English',Georgia,serif",''],["'IM Fell English',Georgia,serif",'font-style:italic;'],
+/* magazine clippings: sans-heavy faces, loud color chips; newsprint: period faces on paper tints */
+const MAG_FONTS=[["'Arial Black','Arial Bold',Arial,sans-serif",''],["Arial,Helvetica,sans-serif",'font-weight:700;'],
+ ["Verdana,Geneva,sans-serif",'font-weight:700;'],["'Trebuchet MS',sans-serif",'font-weight:700;font-style:italic;'],
+ ["Georgia,serif",'font-weight:700;'],["'Old Standard TT',serif",'font-weight:700;'],
+ ["'Courier New',monospace",'font-weight:700;'],["Impact,'Arial Black',sans-serif",''],
+ ["'Times New Roman',serif",'font-weight:700;font-style:italic;'],["'UnifrakturMaguntia',serif",'']];
+const MAG_CHIPS=[['#c8102e','#ffffff'],['#ffd400','#111111'],['#0057b8','#ffffff'],['#111111','#ffffff'],
+ ['#ffffff','#111111'],['#e87511','#111111'],['#1c7c3c','#ffffff'],['#7a1fa2','#ffffff'],
+ ['#ff8fa3','#5a0016'],['#8fd3ff','#0b2a44'],['#f3ead2','#2e2617'],['#2e2617','#f3ead2']];
+const NEWS_FONTS=[["'IM Fell English',Georgia,serif",''],["'IM Fell English',Georgia,serif",'font-style:italic;'],
  ["'Old Standard TT',serif",'font-weight:700;'],["'Old Standard TT',serif",''],["'Special Elite',monospace",''],
  ["'EB Garamond',serif",'font-weight:700;'],["'IM Fell English SC',serif",''],["'UnifrakturMaguntia',serif",'']];
-const CLIP_BGS=['#f3ead2','#e8e0c8','#dcd2b8','#efe6cf','#e6dbc0','#f6f1e2','#d8cdb0'];
+const NEWS_CHIPS=[['#f3ead2','#2e2617'],['#e8e0c8','#2e2617'],['#dcd2b8','#2e2617'],['#efe6cf','#2e2617'],
+ ['#e6dbc0','#2e2617'],['#f6f1e2','#2e2617'],['#d8cdb0','#2e2617'],['#2e2617','#f3ead2']];
 function renderRansom(o){
   const f=o.font/100;
   let inner;
   if(o.styleMode==='cut'){
-    const rng=mul32(o.seed|0); let out='';
-    for(const ch of o.body){
-      if(ch==='\n'){ out+='<br>'; continue; }
-      if(/\s/.test(ch)){ out+='<span class="rgap"></span>'; continue; }
-      const [fam,fx]=CLIP_FONTS[Math.floor(rng()*CLIP_FONTS.length)];
-      const bg=CLIP_BGS[Math.floor(rng()*CLIP_BGS.length)];
-      const rot=((rng()*2-1)*o.rot).toFixed(1);
+    const rng=mul32(o.seed|0);
+    const FONTS=o.pal==='color'?MAG_FONTS:NEWS_FONTS, CHIPS=o.pal==='color'?MAG_CHIPS:NEWS_CHIPS;
+    const chip=(txt,up)=>{
+      const [fam,fx]=FONTS[Math.floor(rng()*FONTS.length)];
+      const [bg,fg]=CHIPS[Math.floor(rng()*CHIPS.length)];
+      const rot=((rng()*2-1)*o.rot).toFixed(1), skew=((rng()*2-1)*3).toFixed(1), dy=((rng()*2-1)*2.4).toFixed(1);
       const sz=(o.sizePt*(1+(rng()*2-1)*o.sizeVar/100)*f).toFixed(1);
-      const up=rng()<0.62;
-      out+=`<span class="ch" style="font-family:${fam};${fx}background:${bg};font-size:${sz}pt;transform:rotate(${rot}deg)">${esc(up?ch.toUpperCase():ch)}</span>`;
+      const px=(0.1+rng()*0.22).toFixed(2), py=(0.02+rng()*0.12).toFixed(2);
+      return `<span class="ch" style="font-family:${fam};${fx}background:${bg};color:${fg};font-size:${sz}pt;`+
+             `padding:${py}em ${px}em;transform:translateY(${dy}px) rotate(${rot}deg) skewX(${skew}deg)">${esc(up?txt.toUpperCase():txt)}</span>`;
+    };
+    let out='';
+    for(const tok of o.body.split(/(\s+)/)){
+      if(!tok) continue;
+      if(/\s/.test(tok)){ out+=tok.includes('\n')?'<br>':'<span class="rgap"></span>'; continue; }
+      if(rng()*100 < o.wordPct){ out+=chip(tok, rng()<0.55); continue; }        /* whole word cut as one strip */
+      for(const ch of tok) out+=chip(ch, rng()<0.62);
     }
     inner=`<div>${out}</div>`;
   }else{
@@ -729,17 +802,17 @@ function bellTells(t){
 
 /* ---------- receipts ---------- */
 function renderReceipt(o){
-  const f=o.font/100, face='f-'+o.face, isHand=['hand','voss','mira'].includes(o.face);
+  const f=o.font/100, face=faceCls(o.face), fsty=faceSty(o.face), isHand=['hand','voss','mira'].includes(o.face);
   const lsz=(isHand?12.5:10.4)*f;
-  const lines=o.lines.map(l=>`<div class="ln ${face}" style="font-size:${lsz}pt">
+  const lines=o.lines.map(l=>`<div class="ln ${face}" style="${fsty}font-size:${lsz}pt">
       <span class="it">${md(l.it)}</span><span class="dots"></span><span>${esc(o.cur)}${esc(l.pr)}</span></div>`).join('');
   stage.innerHTML = `<div class="doc ${paperCls(o.paper,o.noise)} rcpt" style="width:${o.pageW*MM}px;${o.pageH>0?`height:${o.pageH*MM}px;`:''}">
     <div class="cen fsc" style="font-size:${12*f}pt;letter-spacing:.14em">${esc(o.vendor)}</div>
     <div class="cen fell" style="font-style:italic;font-size:${8.6*f}pt;color:#5c4b33">${esc(o.sub)}</div>
     <hr class="rule" style="margin:2.4mm 0">
-    <div class="${face}" style="font-size:${(isHand?12:9.6)*f}pt">${md(o.recd)}</div>
+    <div class="${face}" style="${fsty}font-size:${(isHand?12:9.6)*f}pt">${md(o.recd)}</div>
     <div style="margin-top:1.6mm">${lines}</div>
-    <div class="tot ${face}" style="font-size:${(lsz+1)}pt;display:flex;justify-content:space-between">
+    <div class="tot ${face}" style="${fsty}font-size:${(lsz+1)}pt;display:flex;justify-content:space-between">
       <span>${o.stamp?`<span class="stampbox" style="font-size:${11*f}pt">${esc(o.stamp)}</span>`:''}</span>
       <span>${esc(o.cur)}${esc(o.total)}</span></div>
     ${o.foot?`<div class="fell" style="font-style:italic;font-size:${8.4*f}pt;color:#5c4b33;margin-top:2.6mm">${md(o.foot)}</div>`:''}</div>`;
@@ -826,16 +899,25 @@ function renderTags(o){
 /* ---------- estate shares ---------- */
 function billHTML(o, i){
   const f=o.font/100, serial=`${o.series} ${String(o.serialStart+i).padStart(6,'0')}`;
-  const cn=(pos)=>`<span class="cnr" style="${pos};font-size:${10.5*f}pt">${esc(o.denom)}</span>`;
+  const op=(o.owlOp??80)/100, mm=o.owlMM||12;
+  const owl = o.owlSrc
+    ? `<img src="${o.owlSrc}" style="width:${mm}mm;height:${mm}mm;object-fit:contain;opacity:${op}" alt="">`
+    : `<span class="owlDefault" style="width:${mm}mm;height:${mm}mm;opacity:${op}"></span>`;
+  const owlR = o.owlBoth ? owl : `<span style="display:inline-block;width:${mm}mm"></span>`;
+  const cn=`<span class="cnrN" style="font-size:${10.5*f}pt">${esc(o.denom)}</span>`;
   return `<div class="bill" style="width:${o.billW*MM}px;height:${o.billH*MM}px;color:${o.ink}">
-    ${cn('left:3mm;top:1.6mm')}${cn('right:3mm;top:1.6mm')}${cn('left:3mm;bottom:1.6mm')}${cn('right:3mm;bottom:1.6mm')}
-    <div class="owl"></div>
-    <div class="cen fsc" style="font-size:${8.6*f}pt;letter-spacing:.24em;margin-top:.6mm">${esc(o.issuer)}</div>
-    <div class="cen news" style="font-weight:700;font-size:${21*f}pt;letter-spacing:.06em;margin-top:1mm">${esc(o.denom)}</div>
-    <div class="cen fsc" style="font-size:${7.6*f}pt;letter-spacing:.2em">${esc(o.denomWord)}</div>
-    <div class="cen fell" style="font-style:italic;font-size:${7.4*f}pt;margin-top:1.2mm;color:inherit;opacity:.85">${esc(o.motto)}</div>
-    <span class="serial" style="font-size:${8.6*f}pt">${serial}</span>
-    <span class="f-hand" style="position:absolute;right:7mm;bottom:2mm;font-size:${10.5*f}pt">${esc(o.sig)}</span></div>`;
+    <div class="brow">${cn}<span class="fsc bIssuer" style="font-size:${8.6*f}pt;letter-spacing:.24em">${esc(o.issuer)}</span>${cn}</div>
+    <div class="bmid">
+      <span class="bside">${owl}</span>
+      <span class="bcenter">
+        <span class="news" style="display:block;font-weight:700;font-size:${20*f}pt;letter-spacing:.06em;line-height:1.05">${esc(o.denom)}</span>
+        <span class="fsc" style="display:block;font-size:${7.4*f}pt;letter-spacing:.2em">${esc(o.denomWord)}</span>
+        <span class="fell" style="display:block;font-style:italic;font-size:${7.2*f}pt;opacity:.85;margin-top:.8mm">${esc(o.motto)}</span>
+      </span>
+      <span class="bside">${owlR}</span></div>
+    <div class="bbot">
+      <span style="display:flex;align-items:flex-end;gap:2.6mm">${cn}<span class="bserial" style="font-size:${8.6*f}pt">${serial}</span></span>
+      <span style="display:flex;align-items:flex-end;gap:2.6mm"><span class="f-hand" style="font-size:${10*f}pt;white-space:nowrap">${esc(o.sig)}</span>${cn}</span></div></div>`;
 }
 function renderShares(o){
   if(o.mode==='single'){
@@ -869,6 +951,7 @@ function render(){
   ({herb:renderHerb, rec:renderRec, news:renderNews, carbon:renderCarbon, exh:renderExh, stat:renderStat,
     lett:renderLett, ransom:renderRansom, receipt:renderReceipt, tele:renderTele,
     place:renderPlace, tags:renderTags, shares:renderShares, quest:renderQuest})[S.tab](S[S.tab]);
+  applyTypo();
   $('#exportAllBtn').hidden = !hasCards();
   applyZoom();
 }
@@ -1037,7 +1120,9 @@ function panelExh(o){
 }
 
 const FONT_OPTS = [['gar','EB Garamond \u2014 estate stationery'],['fell','IM Fell \u2014 period letterpress'],['type','Special Elite \u2014 typewriter'],['voss','Voss\u2019s hand'],['mira','Mira\u2019s hand'],['hand','Working hand \u2014 Bell / Vale']];
-function fontSel(path,val){ return `<select data-b="${path}">${FONT_OPTS.map(([v,l])=>`<option value="${v}"${val===v?' selected':''}>${l}</option>`).join('')}</select>`; }
+function fontSel(path,val){
+  const opts=FONT_OPTS.concat(FR.list.map(f=>['@'+f.family, f.family+' \u2014 registered']));
+  return `<select data-b="${path}">${opts.map(([v,l])=>`<option value="${v}"${val===v?' selected':''}>${l}</option>`).join('')}</select>`; }
 
 function panelStat(o){
   return `
@@ -1097,6 +1182,8 @@ function panelRansom(o){
   <div class="row"><div>${fld('Glyph size (pt)', num('ransom.sizePt',o.sizePt,'min="9" max="30"'))}</div>
   <div>${fld('Max tilt (\u00b0)', num('ransom.rot',o.rot,'min="0" max="20"'))}</div>
   <div>${fld('Size scatter %', num('ransom.sizeVar',o.sizeVar,'min="0" max="60"'))}</div></div>
+  ${fld('Clipping palette', `<select data-b="ransom.pal"><option value="color"${o.pal==='color'?' selected':''}>Magazine \u2014 full colour</option><option value="news"${o.pal!=='color'?' selected':''}>Newsprint \u2014 aged tints</option></select>`)}
+  ${fld('Whole-word clippings %', `<div class="row"><input type="range" data-b="ransom.wordPct" min="0" max="100" step="5" value="${o.wordPct}"><span class="num-ro">${o.wordPct}</span></div>`)}
   <button class="addbtn" data-add="shuffle">\u21bb Reshuffle the clippings</button>
   <h2>Text</h2>
   ${fld('The letter', ta('ransom.body',o.body,8))}
@@ -1204,6 +1291,13 @@ function panelShares(o){
   <div class="row"><div>${fld('Series', inp('shares.series',o.series))}</div>
   <div>${fld('First serial', num('shares.serialStart',o.serialStart,'min="0" max="999999"'))}</div></div>
   ${fld('Countersignature', inp('shares.sig',o.sig))}
+  <h2>The medallion</h2>
+  <div class="hint" style="margin:2px 0 6px">Upload any SVG (or PNG) to replace the owl. It scales to the size below and embeds into exports.</div>
+  <input type="file" accept=".svg,image/svg+xml,image/*" data-owl>
+  <div class="row"><div>${fld('Size (mm)', num('shares.owlMM',o.owlMM,'min="4" max="40"'))}</div>
+  <div>${fld('Opacity %', num('shares.owlOp',o.owlOp,'min="10" max="100"'))}</div></div>
+  ${chk('shares.owlBoth',o.owlBoth,'Show on both sides')}
+  <button class="addbtn" data-add="owlreset">Restore the estate owl</button>
   <p class="hint">Print several sheets with a different \u201cFirst serial\u201d each \u2014 the table money stays unique. Colette\u2019s task wants $300,000 of it in her clutch by dawn.</p>`;
 }
 
@@ -1237,7 +1331,7 @@ function panelQuest(o){
 function drawPanel(){
   $('#panel').innerHTML = ({herb:panelHerb, rec:panelRec, news:panelNews, carbon:panelCarbon, exh:panelExh, stat:panelStat,
     lett:panelLett, ransom:panelRansom, receipt:panelReceipt, tele:panelTele,
-    place:panelPlace, tags:panelTags, shares:panelShares, quest:panelQuest})[S.tab](S[S.tab]);
+    place:panelPlace, tags:panelTags, shares:panelShares, quest:panelQuest})[S.tab](S[S.tab]) + typoPanel();
 }
 
 /* ------- data binding: data-b paths resolve into S; 'card.'/'rows.' shortcuts per tab ------- */
@@ -1251,6 +1345,7 @@ function resolve(path){
   else if(parts[0]==='blocks'){ obj = S.news; }
   else if(parts[0]==='lines'){ obj = S.receipt; }
   else if(parts[0]==='qs'){ obj = S.quest; }
+  else if(parts[0]==='ty'){ obj = S[S.tab]; }
   else { obj = S; }
   for(let i=0;i<parts.length-1;i++) obj = obj[parts[i]];
   return [obj, parts[parts.length-1]];
@@ -1259,15 +1354,21 @@ $('#panel').addEventListener('input', e=>{
   const p = e.target.dataset.b; if(!p) return;
   const [obj,key] = resolve(p);
   let v = e.target.type==='checkbox' ? e.target.checked : e.target.value;
-  if(e.target.type==='number' || key==='ghost' || key==='sel') v = +v;
+  if(e.target.type==='number' || e.target.type==='range' || key==='ghost' || key==='sel') v = +v;
+  if(e.target.type==='range' && e.target.nextElementSibling && e.target.nextElementSibling.classList.contains('num-ro')) e.target.nextElementSibling.textContent = v;
   obj[key] = v;
-  if(['sel','mode','absent','style','styleMode','face','kind'].includes(key)){ drawPanel(); }
+  if(['sel','mode','absent','style','styleMode','face','kind','fam'].includes(key)){ drawPanel(); }
   queue();
 });
 $('#panel').addEventListener('change', e=>{
   if(e.target.dataset.img!==undefined && e.target.files && e.target.files[0]){
     const i = +e.target.dataset.img, rd = new FileReader();
     rd.onload = ()=>{ S.news.blocks[i].src = rd.result; queue(); };
+    rd.readAsDataURL(e.target.files[0]);
+  }
+  if(e.target.dataset.owl!==undefined && e.target.files && e.target.files[0]){
+    const rd = new FileReader();
+    rd.onload = ()=>{ S.shares.owlSrc = rd.result; queue(); };
     rd.readAsDataURL(e.target.files[0]);
   }
 });
@@ -1286,6 +1387,8 @@ $('#panel').addEventListener('click', e=>{
     if(add==='stops')    S.tele.body = S.tele.body.toUpperCase().replace(/\.\s*/g,' STOP ').replace(/\s+/g,' ').trim().replace(/STOP$/,'STOP');
     if(add==='shuffle')  S.ransom.seed = Math.floor(Math.random()*1e6);
     if(add==='tells')    S.ransom.body = bellTells(S.ransom.body);
+    if(add==='tyreset')  S[S.tab].ty = TY0();
+    if(add==='owlreset'){ S.shares.owlSrc=''; }
     if(add==='card' && hasCards()){
       const blank = { herb:{no:'XII', latin:'New specimen', common:'', absent:false, inSheet:true, rows:[{k:'HABIT',v:''}], ev:'', red:''},
                       rec:{title:'New card', hand:'mira', mark:'', inSheet:true, body:''},
@@ -1313,11 +1416,168 @@ $('#panel').addEventListener('click', e=>{
   }
 });
 
+
+/* =========================================================== font registry */
+const FR = { list: [] };                       /* {id,family,fmt,variable:[{tag,min,def,max}]} */
+const fontBins = new Map();                    /* id -> ArrayBuffer */
+const fontFaces = new Map();                   /* id -> FontFace */
+const FR_KEY = 'vossFonts_meta';
+const b64FromBuf = buf => { let s=''; const b=new Uint8Array(buf);
+  for(let i=0;i<b.length;i+=0x8000) s+=String.fromCharCode.apply(null,b.subarray(i,i+0x8000)); return btoa(s); };
+const bufFromB64 = s => { const bin=atob(s), b=new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++) b[i]=bin.charCodeAt(i); return b.buffer; };
+function idbOpen(){ return new Promise(res=>{ try{
+  const rq=indexedDB.open('vossStudioFonts',1);
+  rq.onupgradeneeded=()=>rq.result.createObjectStore('fonts');
+  rq.onsuccess=()=>res(rq.result); rq.onerror=()=>res(null);
+}catch(e){res(null)} }); }
+async function idbPut(id,b64){ const db=await idbOpen(); if(!db) return;
+  try{ db.transaction('fonts','readwrite').objectStore('fonts').put(b64,id); }catch(e){} }
+async function idbGet(id){ const db=await idbOpen(); if(!db) return null;
+  return new Promise(res=>{ try{ const rq=db.transaction('fonts').objectStore('fonts').get(id);
+    rq.onsuccess=()=>res(rq.result||null); rq.onerror=()=>res(null); }catch(e){ res(null); } }); }
+async function idbDel(id){ const db=await idbOpen(); if(!db) return;
+  try{ db.transaction('fonts','readwrite').objectStore('fonts').delete(id); }catch(e){} }
+const frSaveMeta = () => { try{ localStorage.setItem(FR_KEY,
+  JSON.stringify(FR.list.map(({id,family,fmt,variable})=>({id,family,fmt,variable})))); }catch(e){} };
+const str4=(dv,o)=>String.fromCharCode(dv.getUint8(o),dv.getUint8(o+1),dv.getUint8(o+2),dv.getUint8(o+3));
+async function inflateAB(ab){ const ds=new DecompressionStream('deflate');
+  return await new Response(new Blob([ab]).stream().pipeThrough(ds)).arrayBuffer(); }
+async function parseAxes(buf){
+  try{
+    const dv=new DataView(buf), sig=dv.getUint32(0);
+    let dv2=null, off=0;
+    if(sig===0x774F4632) return [];                                    /* wOF2: brotli, skip */
+    if(sig===0x774F4646){                                              /* wOFF */
+      const n=dv.getUint16(12);
+      for(let i=0;i<n;i++){ const e=44+i*20;
+        if(str4(dv,e)==='fvar'){
+          const tOff=dv.getUint32(e+4), comp=dv.getUint32(e+8), orig=dv.getUint32(e+12);
+          let tb=buf.slice(tOff,tOff+comp);
+          if(comp<orig) tb=await inflateAB(tb);
+          dv2=new DataView(tb); off=0; break; } }
+    } else {                                                           /* sfnt ttf/otf */
+      const n=dv.getUint16(4);
+      for(let i=0;i<n;i++){ const e=12+i*16;
+        if(str4(dv,e)==='fvar'){ dv2=dv; off=dv.getUint32(e+8); break; } }
+    }
+    if(!dv2) return [];
+    const axOff=dv2.getUint16(off+4), axN=dv2.getUint16(off+8), axSz=dv2.getUint16(off+10);
+    const out=[];
+    for(let i=0;i<axN && i<12;i++){ const a=off+axOff+i*axSz;
+      out.push({tag:str4(dv2,a), min:Math.round(dv2.getInt32(a+4)/65536),
+                def:Math.round(dv2.getInt32(a+8)/65536), max:Math.round(dv2.getInt32(a+12)/65536)}); }
+    return out.filter(a=>a.max>a.min);
+  }catch(e){ return []; }
+}
+async function frRegisterFace(id, family, buf){
+  if(typeof FontFace==='undefined') return;
+  try{ const ff=new FontFace(family, buf); await ff.load(); document.fonts.add(ff); fontFaces.set(id,ff); }catch(e){}
+}
+async function frAddBuf(family, buf, fmt, persistBin=true){
+  family=(family||'Unnamed').trim();
+  const axes=await parseAxes(buf);
+  const id='f'+Date.now().toString(36)+Math.floor(Math.random()*1e4);
+  FR.list=FR.list.filter(x=>x.family!==family);           /* re-register replaces */
+  FR.list.push({id, family, fmt, variable:axes});
+  fontBins.set(id, buf);
+  await frRegisterFace(id, family, buf);
+  frSaveMeta();
+  if(persistBin) idbPut(id, b64FromBuf(buf));
+  return {id, family, axes};
+}
+async function frAddURL(url, famHint){
+  const r=await fetch(url); if(!r.ok) throw new Error('fetch failed: '+r.status);
+  const ct=(r.headers.get('content-type')||'').toLowerCase();
+  if(/\.css(\?|$)/.test(url) || ct.includes('text/css')){
+    const css=await r.text(); const added=[];
+    const blocks=[...css.matchAll(/@font-face\s*{([^}]+)}/g)].map(m=>m[1]);
+    const seen=new Set();
+    for(const b of blocks){
+      const fam=(b.match(/font-family:\s*['"]?([^;'"]+)/)||[])[1];
+      const u=(b.match(/url\((['"]?)(https:[^)'"]+)\1\)/)||[])[2];
+      if(!fam||!u||seen.has(fam)) continue; seen.add(fam);
+      const fb=await (await fetch(u)).arrayBuffer();
+      const fmt=(u.match(/\.(woff2|woff|otf|ttf)/)||[,'woff2'])[1];
+      added.push(await frAddBuf(fam, fb, fmt));
+    }
+    if(!added.length) throw new Error('no @font-face blocks found in that css');
+    return added;
+  }
+  const buf=await r.arrayBuffer();
+  const fmt=(url.match(/\.(woff2|woff|otf|ttf)/)||[,'ttf'])[1];
+  const fam=famHint || decodeURIComponent(url.split('/').pop()||'font').replace(/\.[a-z0-9]+$/i,'').replace(/[-_]+/g,' ');
+  return [await frAddBuf(fam, buf, fmt)];
+}
+async function frInit(){
+  let meta=[]; try{ meta=JSON.parse(localStorage.getItem(FR_KEY)||'[]'); }catch(e){}
+  for(const m of meta){
+    const b64=await idbGet(m.id);
+    if(!b64) continue;
+    const buf=bufFromB64(b64);
+    fontBins.set(m.id, buf); FR.list.push(m);
+    await frRegisterFace(m.id, m.family, buf);
+  }
+  if(FR.list.length){ drawPanel(); render(); }
+}
+function registeredFontCSS(){
+  return FR.list.map(f=>{
+    const b=fontBins.get(f.id); if(!b) return '';
+    const fmt=({ttf:'truetype',otf:'opentype',woff:'woff',woff2:'woff2'})[f.fmt]||'truetype';
+    const wr=f.variable.find(a=>a.tag==='wght');
+    return `@font-face{font-family:'${f.family}';src:url(data:font/${f.fmt};base64,${b64FromBuf(b)}) format('${fmt}');`+
+           (wr?`font-weight:${wr.min} ${wr.max};`:'')+`}`;
+  }).join('\n');
+}
+/* ---------- typography override applied to the rendered doc root ---------- */
+function applyTypo(){
+  const el=stage.firstElementChild; if(!el) return;
+  const o=(S[S.tab]&&S[S.tab].ty)||TY0();
+  el.classList.toggle('fovr', !!o.fam);
+  if(o.fam) el.style.setProperty('--ovfam', `'${o.fam}'`);
+  el.classList.toggle('wovr', (o.wght|0)!==400);
+  el.style.setProperty('--ovwght', String(o.wght|0||400));
+  el.classList.toggle('tovr', (o.trk|0)!==0);
+  el.style.setProperty('--ovtrk', ((o.trk|0)/1000)+'em');
+  const fvs=Object.entries(o.axes||{}).filter(([,v])=>v!==''&&v!=null)
+    .map(([t,v])=>`'${t}' ${v}`).join(',');
+  el.classList.toggle('aovr', !!fvs);
+  if(fvs) el.style.setProperty('--ovfvs', fvs);
+}
+const BUILTIN_FAMS={gar:'EB Garamond',fell:'IM Fell English',sc:'IM Fell English SC',type:'Special Elite',
+  voss:'Homemade Apple',mira:'Pinyon Script',hand:'Caveat',news:'Old Standard TT',black:'UnifrakturMaguntia'};
+function typoPanel(){
+  const o=S[S.tab].ty || (S[S.tab].ty=TY0());
+  const fams=[['','Document default \u2014 period mix'],
+    ...Object.values(BUILTIN_FAMS).map(f=>[f,f]),
+    ...FR.list.map(f=>[f.family, f.family+' \u2014 registered'+(f.variable.length?' \u00b7 variable':'')])];
+  const famOpts=fams.map(([v,l])=>`<option value="${esc(v)}"${o.fam===v?' selected':''}>${esc(l)}</option>`).join('');
+  const reg=FR.list.find(f=>f.family===o.fam);
+  const wr=reg&&reg.variable.find(a=>a.tag==='wght');
+  const axSliders=(reg?reg.variable:[]).filter(a=>a.tag!=='wght').map(a=>{
+    const val=o.axes[a.tag]??a.def;
+    return `<label>${esc(a.tag)} axis <span class="hint">${a.min}\u2013${a.max}</span></label>
+    <div class="row"><input type="range" data-b="ty.axes.${a.tag}" min="${a.min}" max="${a.max}" step="1" value="${val}">
+    <span class="num-ro">${val}</span></div>`; }).join('');
+  return `<h2>Typography</h2>
+  ${fld('Face \u2014 overrides the whole document', `<select data-b="ty.fam">${famOpts}</select>`)}
+  ${fld('Weight'+(wr?` <span class="hint">variable ${wr.min}\u2013${wr.max}</span>`:''),
+    `<div class="row"><input type="range" data-b="ty.wght" min="${wr?wr.min:100}" max="${wr?wr.max:900}" step="10" value="${o.wght}"><span class="num-ro">${o.wght}</span></div>`)}
+  ${fld('Tracking \u2014 letter-spacing, \u2030em',
+    `<div class="row"><input type="range" data-b="ty.trk" min="-40" max="300" step="5" value="${o.trk}"><span class="num-ro">${o.trk}</span></div>`)}
+  ${axSliders}
+  <button class="addbtn" data-add="tyreset">Reset typography</button>
+  <p class="hint">Size is each tab\u2019s \u201cScale %\u201d. Register more faces with the Fonts\u2026 button in the header.</p>`;
+}
+/* face helpers: builtin keys keep their f- classes; '@Family' values are registered faces */
+const faceCls = v => (v && v[0]==='@') ? '' : ('f-'+v);
+const faceSty = v => (v && v[0]==='@') ? `font-family:'${v.slice(1).replace(/'/g,'')}';` : '';
+
 /* =============================================================== PNG export */
 const setStatus = t => $('#status').textContent = t;
-let fontCssCache = null;
+let gfCssCache = null;
 async function fontFaceCSS(){
-  if(fontCssCache!==null) return fontCssCache;
+  if(gfCssCache!==null) return gfCssCache + '\n' + registeredFontCSS();
   try{
     const cssUrl = $('#gf').href;
     let css = await (await fetch(cssUrl)).text();
@@ -1328,9 +1588,9 @@ async function fontFaceCSS(){
       for(let i=0;i<bytes.length;i+=0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i,i+0x8000));
       css = css.split(u).join('data:font/woff2;base64,'+btoa(bin));
     }
-    fontCssCache = css;
-  }catch(e){ fontCssCache = ''; }           /* offline: fall back to system faces */
-  return fontCssCache;
+    gfCssCache = css;
+  }catch(e){ gfCssCache = ''; }             /* offline: fall back to system faces */
+  return gfCssCache + '\n' + registeredFontCSS();
 }
 async function nodeToPNG(node, name){
   setStatus('inking the proof\u2026');
@@ -1428,6 +1688,54 @@ $('#loadFile').addEventListener('change', e=>{
 
 document.querySelectorAll('.ticket').forEach(t=>t.classList.toggle('on', t.dataset.tab===S.tab));
 drawPanel(); render();
+
+/* --------------------------- fonts modal wiring --------------------------- */
+const fmStatus = t => { const el=$('#fmStatus'); if(el) el.textContent=t; };
+function fmDraw(){
+  const el=$('#fmList'); if(!el) return;
+  el.innerHTML = FR.list.length ? FR.list.map(f=>`<div class="fm-item">
+    <b>${esc(f.family)}</b>
+    <span class="meta">${esc(f.fmt)}${f.variable.length?` \u00b7 <span class="ax">variable: ${f.variable.map(a=>a.tag).join(' ')}</span>`:''}</span>
+    <button class="mini del" data-fdel="${f.id}" title="Remove">\u00d7</button></div>`).join('')
+    : '<p class="hint">Nothing registered yet.</p>';
+}
+$('#fontsBtn').addEventListener('click', ()=>{ fmDraw(); $('#fontModal').classList.add('open'); });
+$('#fmClose').addEventListener('click', ()=>$('#fontModal').classList.remove('open'));
+$('#fontModal').addEventListener('click', e=>{ if(e.target.id==='fontModal') $('#fontModal').classList.remove('open'); });
+$('#fmList').addEventListener('click', async e=>{
+  const b=e.target.closest('[data-fdel]'); if(!b) return;
+  const id=b.dataset.fdel, f=FR.list.find(x=>x.id===id);
+  FR.list=FR.list.filter(x=>x.id!==id); fontBins.delete(id);
+  try{ if(fontFaces.has(id)) document.fonts.delete(fontFaces.get(id)); }catch(err){}
+  fontFaces.delete(id); frSaveMeta(); idbDel(id);
+  if(f && S[S.tab].ty.fam===f.family) S[S.tab].ty.fam='';
+  fmDraw(); drawPanel(); render();
+});
+$('#fmAddUrl').addEventListener('click', async ()=>{
+  const url=$('#fmUrl').value.trim(); if(!url){ fmStatus('paste a URL first'); return; }
+  fmStatus('fetching\u2026');
+  try{
+    const added=await frAddURL(url, $('#fmFam').value.trim());
+    fmStatus(`registered: ${added.map(a=>a.family+(a.axes.length?' (variable: '+a.axes.map(x=>x.tag).join(' ')+')':'')).join(', ')}`);
+    $('#fmUrl').value=''; fmDraw(); drawPanel(); render();
+  }catch(err){ fmStatus('could not register \u2014 '+err.message+' (the host must allow cross-origin fetches)'); }
+});
+$('#fmFiles').addEventListener('change', async e=>{
+  for(const file of e.target.files){
+    fmStatus('reading '+file.name+'\u2026');
+    try{
+      const buf=await file.arrayBuffer();
+      const fmt=(file.name.match(/\.(woff2|woff|otf|ttf)$/i)||[,'ttf'])[1].toLowerCase();
+      const fam=file.name.replace(/\.[a-z0-9]+$/i,'').replace(/[-_]+/g,' ');
+      const a=await frAddBuf(fam, buf, fmt);
+      fmStatus(`registered: ${a.family}${a.axes.length?' (variable: '+a.axes.map(x=>x.tag).join(' ')+')':''}`);
+    }catch(err){ fmStatus('failed on '+file.name+' \u2014 '+err.message); }
+  }
+  e.target.value=''; fmDraw(); drawPanel(); render();
+});
+frInit();
+window.__voss = { FR, frAddBuf, parseAxes, applyTypo, S:()=>S };   /* debug/test handle */
+
 try{ document.fonts.ready.then(()=>{ render(); setStatus('period faces loaded'); setTimeout(()=>setStatus(''),2500); }); }catch(e){}
 </script>
 </body>
