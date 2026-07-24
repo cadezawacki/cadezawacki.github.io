@@ -20,7 +20,7 @@
 }
 *{box-sizing:border-box}
 html,body{height:100%}
-body{margin:0;background:var(--felt);font:13px/1.45 ui-sans-serif,system-ui,'Segoe UI',sans-serif;color:var(--tx)}
+body{margin:0;background:var(--felt);font:13px/1.45 ui-sans-serif,system-ui,'Segoe UI',sans-serif;color:var(--tx);display:flex;flex-direction:column}
 button{font:inherit;cursor:pointer}
 input,select,textarea{font:inherit;color:#1f1c15;background:var(--paper-ui);border:1px solid #b7ac92;border-radius:2px;padding:4px 6px}
 input:focus,select:focus,textarea:focus,button:focus-visible{outline:2px solid var(--brass);outline-offset:1px}
@@ -35,12 +35,12 @@ header{display:flex;align-items:stretch;gap:0;background:var(--iron);border-bott
 .brand h1{margin:0;font-family:var(--sc);font-weight:400;font-size:19px;letter-spacing:.18em;color:var(--paper-ui)}
 .brand small{display:block;color:var(--tx2);font-family:var(--fell);font-style:italic;letter-spacing:.03em}
 /* signature element: brass job-ticket tabs */
-.tickets{display:flex;align-items:flex-end;gap:10px;padding:10px 16px 0}
+.tickets{display:flex;flex-wrap:wrap;align-items:flex-end;gap:8px;row-gap:6px;padding:10px 16px 0}
 .ticket{position:relative;background:linear-gradient(#3a352b,#2e2a22);color:var(--tx2);
-  font-family:var(--sc);font-size:13px;letter-spacing:.14em;padding:9px 20px 11px 30px;
+  font-family:var(--sc);font-size:12px;letter-spacing:.12em;padding:7px 14px 9px 26px;
   border:1px solid #4c463a;border-bottom:0;border-radius:5px 5px 0 0}
-.ticket::before{content:'';position:absolute;left:11px;top:50%;transform:translateY(-50%);
-  width:8px;height:8px;border-radius:50%;background:var(--felt);box-shadow:inset 0 1px 2px #0008,0 0 0 2px #191712}
+.ticket::before{content:'';position:absolute;left:9px;top:50%;transform:translateY(-50%);
+  width:7px;height:7px;border-radius:50%;background:var(--felt);box-shadow:inset 0 1px 2px #0008,0 0 0 2px #191712}
 .ticket.on{background:linear-gradient(#c8a24f,#a8842f);color:#241d0a;border-color:#e0c37a}
 .ticket.on::before{box-shadow:inset 0 1px 2px #0009,0 0 0 2px #6b5320}
 .hspace{flex:1}
@@ -49,7 +49,7 @@ header{display:flex;align-items:stretch;gap:0;background:var(--iron);border-bott
 .ghostbtn:hover{color:var(--tx);border-color:var(--tx2)}
 
 /* main split */
-main{display:flex;height:calc(100vh - 58px)}
+main{display:flex;flex:1;min-height:0}
 #panel{width:378px;flex:0 0 378px;background:var(--iron2);border-right:1px solid #141310;overflow-y:auto;padding:14px 16px 40px}
 #panel h2{font-family:var(--sc);font-weight:400;font-size:13px;letter-spacing:.2em;color:var(--brass);
   margin:20px 0 6px;padding-bottom:4px;border-bottom:1px solid var(--line)}
@@ -189,6 +189,75 @@ main{display:flex;height:calc(100vh - 58px)}
 .wax{display:inline-block;width:11mm;height:11mm;border-radius:50%;
   background:radial-gradient(circle at 36% 34%,#a03030 0 28%,#6d1414 62%,#4c0d0d 100%);
   box-shadow:0 0 0 1.4mm rgba(90,16,16,.35)}
+
+/* ---- letter bundle ---- */
+.lett{padding:12mm 15mm}
+.lett .lbody{line-height:2.0}
+.lett .lbody p{margin:0 0 3mm}
+.tornBR{clip-path:polygon(0 0,100% 0,100% 72%,86% 74%,93% 80%,80% 83%,90% 89%,76% 92%,84% 100%,0 100%)}
+
+/* ---- ransom / anonymous ---- */
+.ransom{padding:12mm 14mm;line-height:2.3}
+.ransom .ch{display:inline-block;padding:.04em .14em;margin:.05em .06em;border:.6px solid rgba(60,45,20,.55);
+  box-shadow:.4px .6px 0 rgba(60,45,20,.28)}
+.ransom .rgap{display:inline-block;width:.7em}
+.scrawl{line-height:1.9}
+.scrawl p{margin:0 0 3mm}
+
+/* ---- receipts ---- */
+.rcpt{padding:8mm 9mm}
+.rcpt .ln{display:flex;align-items:baseline;gap:2mm;margin:1.6mm 0}
+.rcpt .ln .it{flex:0 1 auto}
+.rcpt .ln .dots{flex:1;border-bottom:1.6px dotted #5c4b33;transform:translateY(-.4em)}
+.rcpt .tot{border-top:1.2px solid #2e2617;margin-top:2.4mm;padding-top:1.6mm}
+.stampbox{display:inline-block;border:2.6px solid #8c1f1f;color:#8c1f1f;
+  font-family:'IM Fell English SC',Georgia,serif;letter-spacing:.22em;padding:.4mm 2.6mm;transform:rotate(-7deg);opacity:.85}
+
+/* ---- telegram ---- */
+.telg{padding:0}
+.telg .thead{background:rgba(46,38,23,.85);color:#efe7d0;padding:3.4mm 6mm;text-align:center}
+.telg .tform{display:flex;justify-content:space-between;gap:4mm;padding:2.6mm 6mm;border-bottom:1.2px solid #5c4b33}
+.telg .tbody{margin:4mm 6mm 3mm;padding:1mm 0;
+  background-image:repeating-linear-gradient(180deg,transparent 0 8.2mm,rgba(92,75,51,.4) 8.2mm 8.35mm)}
+.telg .tfoot{padding:0 6mm 4mm;display:flex;justify-content:space-between}
+
+/* ---- place cards / invitations ---- */
+.pcard{position:relative;display:flex;flex-direction:column;background:rgba(255,252,242,.4)}
+.pcard .half{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:2mm}
+.pcard .flip{transform:rotate(180deg)}
+.pcard .fold{border-top:1px dashed rgba(92,75,51,.6)}
+.invite{border:1.4px solid #2e2617;outline:.5px solid #5c4b33;outline-offset:1.4mm;
+  padding:6mm 7mm;text-align:center;background:rgba(255,252,242,.45)}
+
+/* ---- tags ---- */
+.tagE{border:1.2px solid #5c4b33;border-radius:2mm;background:rgba(255,252,242,.5);
+  padding:3mm 4mm 3mm 11mm;position:relative;min-height:26mm}
+.tagE::before{content:'';position:absolute;left:3.2mm;top:50%;transform:translateY(-50%);
+  width:4.6mm;height:4.6mm;border-radius:50%;border:1.4px solid #5c4b33;background:transparent}
+.tagL{border:1.6px solid #2e2617;background:rgba(255,252,242,.5);padding:3mm 4mm;text-align:center}
+.tagS{border:1.4px dashed #5c4b33;background:rgba(255,252,242,.5);padding:3.4mm 4.6mm}
+.tline{display:flex;align-items:baseline;gap:2mm;margin-top:2mm}
+.tline .lbl{font-family:'IM Fell English SC',Georgia,serif;font-size:70%;color:#5c4b33;white-space:nowrap}
+.tline .fill{flex:1;border-bottom:.8px solid #5c4b33;min-height:4.4mm}
+
+/* ---- estate shares (table money) ---- */
+.bill{position:relative;border:1.1mm double currentColor;outline:.4mm solid currentColor;outline-offset:.9mm;
+  padding:3.4mm 5mm;background:
+    radial-gradient(90% 200% at 50% 50%, rgba(255,252,240,.55), rgba(255,252,240,0) 70%),
+    repeating-radial-gradient(circle at 50% 50%, transparent 0 2.6mm, rgba(60,45,20,.06) 2.6mm 2.9mm)}
+.bill .cnr{position:absolute;font-family:'Old Standard TT',serif;font-weight:700}
+.bill .owl{position:absolute;left:7mm;top:50%;transform:translateY(-50%);width:13mm;height:13mm;opacity:.8;
+  background:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'><g fill='none' stroke='%233a2f1d' stroke-width='2'><circle cx='20' cy='21' r='13'/><circle cx='15' cy='18' r='4'/><circle cx='25' cy='18' r='4'/><circle cx='15' cy='18' r='1.2' fill='%233a2f1d'/><circle cx='25' cy='18' r='1.2' fill='%233a2f1d'/><path d='M17 25 L20 28 L23 25'/><path d='M9 10 L14 7 M31 10 L26 7'/></g></svg>") no-repeat center/contain}
+.bill .serial{position:absolute;left:7mm;bottom:2.6mm;font-family:'Special Elite','Courier New',monospace;color:#8c1f1f}
+.billwrap{display:grid;gap:4mm;align-content:start}
+
+/* ---- questionnaire ---- */
+.qsh{padding:12mm 15mm}
+.qsh .parthead{font-family:'IM Fell English SC',Georgia,serif;letter-spacing:.12em;margin:4mm 0 1.6mm}
+.qsh .qq{margin:0 0 2mm;line-height:1.5}
+.qsh .qq .qn{display:inline-block;min-width:6mm}
+.ansline{display:block;border-bottom:.7px solid #5c4b33;height:5.6mm}
+.qsh .noteb{font-style:italic;color:#4a3c28;margin:2mm 0}
 </style>
 </head>
 <body>
@@ -202,6 +271,14 @@ main{display:flex;height:calc(100vh - 58px)}
     <button class="ticket" data-tab="carbon">REGISTER</button>
     <button class="ticket" data-tab="exh">EXHIBITS</button>
     <button class="ticket" data-tab="stat">STATIONERY</button>
+    <button class="ticket" data-tab="lett">LETTERS</button>
+    <button class="ticket" data-tab="ransom">ANONYMOUS</button>
+    <button class="ticket" data-tab="receipt">RECEIPTS</button>
+    <button class="ticket" data-tab="tele">TELEGRAM</button>
+    <button class="ticket" data-tab="place">PLACE CARDS</button>
+    <button class="ticket" data-tab="tags">TAGS</button>
+    <button class="ticket" data-tab="shares">SHARES</button>
+    <button class="ticket" data-tab="quest">QUESTIONS</button>
   </nav>
   <div class="hspace"></div>
   <div class="hdrbtns">
@@ -355,7 +432,109 @@ const CANON = () => ({
     bodyFont:'gar', bodySize:12, align:'j',
     body:'To whichever of my guests can say what happened aboard my ship, I leave the whole of it. I am aware this will be decided by the least scrupulous person in the room. I have made my peace with that; it has been decided that way every other time.\n\nI did not lose the *Aurora*. I spent her. It took three hands. One steered, one carried, and one lit the match. Two of them were paid and one of them was nineteen. I am not going to pretend I have thought about him often.\n\nSomebody in this house has been making me ill and selling me the cure. I have known for some months. I kept the appointments because I wanted to see how long she would go on.\n\nMy wife saw what I was before any of you were invited to profit from it. Everything I hid, I hid the way she taught me: in songs, in shelves, in things that remember. My estate passes, in shares, to those who leave tonight carrying the most truth. The rest of you were bidding on my furniture.',
     sig:'Elias Voss', sigFont:'voss', sigSize:17, seal:false,
-    foot:'Beneficiary, in shares, entered in ink before the room:\u2002______________________________'}
+    foot:'Beneficiary, in shares, entered in ink before the room:\u2002______________________________'},
+  lett:{
+    mode:'single', sel:4, cardW:180, cardH:0, font:100, paper:'aged', noise:true,
+    cards:[
+      {date:'12 October \u2014 the first year', hand:'mira', torn:false, seal:false,
+       body:'Mr. Voss \u2014\n\nAmong the effects raised with the wreck of the *Aurora* was a case bearing my family\u2019s seal. I am advised it passed into your keeping. I write to request its return, and I write politely, because I am told that is how these things begin.\n\nI will not write politely twice.', sig:'V. Blackwood'},
+      {date:'3 March \u2014 the second year', hand:'mira', torn:false, seal:false,
+       body:'Counsel is retained. The item is catalogued, insured, and described to the ounce in my grandfather\u2019s hand. You are invited to produce it, or to produce the paper that says the sea kept it.\n\nYou will find you own neither.', sig:'V. Blackwood'},
+      {date:'the anniversary \u2014 the third year', hand:'mira', torn:false, seal:false,
+       body:'Five years ago tonight you dined ashore while my family\u2019s property went down with twenty-two men. I no longer count the days. I count the years, and I count the men, and my count does not agree with the Chronicle\u2019s.\n\nDo you never wonder who else counts?', sig:'unsigned \u2014 the wax is signature enough'},
+      {date:'the fourth year', hand:'mira', torn:false, seal:true,
+       body:'The harbour keeps its own paper, Mr. Voss. Orders issued; orders withdrawn; a clerk\u2019s hand recording who asked for the withdrawing. I have seen a page of it. I can arrange for the step of your house to hear it read aloud until a crowd forms.\n\nReturn what is mine, or buy a thicker door.', sig:'V.B.'},
+      {date:'the newest letter \u2014 corner torn away', hand:'mira', torn:true, seal:true,
+       body:'Voss.\n\nFive years, and the city still applauds you on my family\u2019s grave. I have written politely. I have written legally. This is neither.\n\nReturn what came up with my name inside it, or I will bring the harbour\u2019s own paper to your door and read it on the step until a crowd forms.\n\nYou know which paper. You watched it withdrawn, and you sailed on the withdrawing.\n\nThe last sentence of this letter I have cut away myself, because even I thought it went too far. Its edge will fit nothing in this world but the page it left \u2014', sig:''},
+      {date:'his one reply, years ago', hand:'voss', torn:false, seal:false,
+       body:'Your letters hang where I keep what the city believes.', sig:'E.V.'},
+    ]},
+  ransom:{
+    pageW:170, pageH:0, font:100, paper:'aged', noise:true,
+    styleMode:'scrawl', seed:7, sizePt:15, rot:7, sizeVar:22,
+    body:'you counted wrong captian. the harbour recieved twenty two and gave back twenty one. i was there. say his name in the open or the papers will say yours. no judgement waits longer than mine. i do not want money. i want the count corrected.',
+    sig:''},
+  receipt:{
+    pageW:100, pageH:0, font:100, paper:'aged', noise:true, face:'hand',
+    vendor:'PIER 6 MARINE CHANDLERY', sub:'ship\u2019s stores \u00b7 cordage \u00b7 sundries \u2014 est\u2019d before you were born',
+    recd:'rec\u2019d of BEARER \u2014 no name given', cur:'$',
+    lines:[{it:'twelve (12) ft safety fuse', pr:'2.40'},{it:'two (2) detonators, cased', pr:'6.00'},{it:'carriage \u2014 none; carried away by hand', pr:'\u2014'}],
+    total:'8.40  CASH', stamp:'PAID', foot:'no delivery \u00b7 no questions kept on file'},
+  tele:{
+    pageW:160, pageH:0, font:100, paper:'plain', noise:true,
+    office:'ATLANTIC & COASTAL TELEGRAPH COMPANY', form:'FORM 7 \u2014 DAY MESSAGE \u00b7 subject to the terms on the reverse',
+    to:'BLACKWOOD, V. \u2014 BLACKWOOD HOUSE', from:'SALVAGE MASTER \u2014 STANDING OFF THE BAR', dateline:'RECEIVED 09:41',
+    body:'DIVERS DOWN AT FIRST LIGHT STOP HOLD BREACHED AFT OF FRAME FORTY STOP ONE CASE BLACK WAX NOT AMONG CARGO STOP REPEAT NOT AMONG CARGO STOP AWAIT INSTRUCTION STOP',
+    foot:'chargeable words counted by the clerk \u00b7 answer prepaid'},
+  place:{
+    mode:'sheet', sel:0, cardW:98, cardH:60, font:100, paper:'plain', noise:true,
+    sheetW:210, sheetH:297, sheetCols:2, title:'SEATING \u2014 THE VOSS AUCTION', sub:'corkboard set; tent-fold on the dashed line',
+    style:'tent',
+    inv1:'THE ESTATE OF ELIAS VOSS', inv2:'requests the presence of', inv3:'at the disposition of the collection',
+    inv4:'seven o\u2019clock \u00b7 evening dress \u00b7 this card admits one',
+    cards:[
+      {name:'Countess Vera Blackwood', line:'', inSheet:true},
+      {name:'Capt. Octavian Bell', line:'', inSheet:true},
+      {name:'Amber Thorne', line:'', inSheet:true},
+      {name:'Daphne Quill', line:'', inSheet:true},
+      {name:'Mayor Polly Tishen', line:'', inSheet:true},
+      {name:'Sebastian Voss', line:'', inSheet:true},
+      {name:'Colette Claret', line:'', inSheet:true},
+      {name:'Adrian Vale', line:'for the estate', inSheet:true},
+    ]},
+  tags:{
+    mode:'sheet', sel:0, cardW:90, cardH:0, font:100, paper:'aged', noise:true,
+    sheetW:210, sheetH:297, sheetCols:2, title:'LOT TAGS & EVIDENCE TAGS', sub:'cut out; string through the punched hole',
+    cards:[
+      {style:'lot', a:'LOT 0', b:'The Compass and the Aurora Log', c:'', inSheet:true},
+      {style:'lot', a:'LOT I', b:'The Music Box and Lady Mira\u2019s Lullaby', c:'', inSheet:true},
+      {style:'lot', a:'LOT II', b:'The Annotated Count of Monte Cristo', c:'', inSheet:true},
+      {style:'lot', a:'LOT III', b:'The Armillary Sphere and the Helios Specification', c:'', inSheet:true},
+      {style:'lot', a:'LOT IV', b:'The Black-Wax Bordeaux', c:'', inSheet:true},
+      {style:'lot', a:'LOT V', b:'The Cigarette Case, the Herbarium, and the Vials', c:'', inSheet:true},
+      {style:'lot', a:'LOT VI', b:'The Owl Chest', c:'', inSheet:true},
+      {style:'lot', a:'LOT VII', b:'The Vesper Egg', c:'', inSheet:true},
+      {style:'spec', a:'Ex. A \u2014 removed from her case, 12 June.', b:'Tolerance confirmed. Her services are no longer required.', c:'', inSheet:true},
+      {style:'evidence', a:'EXHIBIT', b:'', c:'', inSheet:true},
+    ]},
+  shares:{
+    mode:'sheet', font:100, paper:'plain', noise:true,
+    billW:156, billH:66, sheetW:210, sheetH:297, sheetCols:1, count:4,
+    denom:'10,000', denomWord:'TEN THOUSAND SHARES OF THE RESIDUE',
+    issuer:'THE ESTATE OF ELIAS VOSS \u00b7 PROMISSORY NOTE OF THE TABLE',
+    motto:'\u201cSpend it the way I earned it, and it will find its way back to me.\u201d',
+    series:'V\u00b7A', serialStart:4821, ink:'#3a2f1d',
+    sig:'for the estate \u2014 A. Vale'},
+  quest:{
+    pageW:210, pageH:297, font:100, paper:'aged', noise:true,
+    title:'THE QUESTIONNAIRE OF THE ESTATE \u2014 46 SHARES',
+    sub:'completed in silence before the case opens; the Steward is sole judge and cites evidence when ruling',
+    name:'GUEST: ______________________',
+    qs:[
+      {kind:'part', text:'PART I \u2014 THE DEATHS  (20 shares)'},
+      {kind:'q', text:'Who killed Elias Voss?', shares:'2', lines:1},
+      {kind:'q', text:'With what object \u2014 and where has that object been all night?', shares:'2', lines:1},
+      {kind:'q', text:'Within what quarter-hour did he die, and what single word set it off?', shares:'2', lines:1},
+      {kind:'q', text:'Who killed Adrian Vale, and by exactly what means? Name the substance and the object that carried it.', shares:'3', lines:2},
+      {kind:'q', text:'Prove opportunity for each killer: what places Bell in this apartment before the guests, and what excludes him from the table during the blackout? *(2)* What places Polly\u2019s hands on Vale in the dark? *(1)*', shares:'3', lines:3},
+      {kind:'q', text:'Prove cause for Vale: why could neither the wine nor the leaf have done it, and what two physical traces name the true agent?', shares:'2', lines:2},
+      {kind:'q', text:'The leaf in the gold-rimmed glass: what plant, who put it there, and to help or to harm?', shares:'3', lines:2},
+      {kind:'q', text:'Why is the \u25bd vial eight grammes light \u2014 who emptied it, and roughly when?', shares:'2', lines:2},
+      {kind:'q', text:'What is physically wrong with the killer\u2019s effects, and why can it not be polished out?', shares:'1', lines:2},
+      {kind:'part', text:'PART II \u2014 THE ESTATE\u2019S TRUTHS  (12 shares)'},
+      {kind:'q', text:'How many souls put out aboard the *Aurora*, how many came back, and what is the missing man\u2019s name and berth?', shares:'3', lines:2},
+      {kind:'q', text:'What did Thomas Reyes agree to do, and what physical evidence proves he knew the loss was planned?', shares:'2', lines:2},
+      {kind:'q', text:'Who suppressed the harbor order; who removed cargo before sailing; who certified the hold as full; and why was there no cargo master\u2019s counter-signature?', shares:'4', lines:3},
+      {kind:'q', text:'What did the independent feasibility review conclude, and whose office signed for its receipt?', shares:'2', lines:2},
+      {kind:'q', text:'**The archive question:** name one fact the estate\u2019s sanctioned records assert that you can *disprove*, and cite the two independent traces that disprove it.', shares:'1', lines:3},
+      {kind:'part', text:'PART III \u2014 THE ROOM  (4 shares)'},
+      {kind:'q', text:'Who drank the spirit at the House Measure?', shares:'1', lines:1},
+      {kind:'q', text:'Who lifted the ledger from Vale\u2019s body in the dark \u2014 and who found the pocket already empty?', shares:'2', lines:2},
+      {kind:'q', text:'Name one secret task you watched another guest attempt, and name the guest.', shares:'1', lines:2},
+      {kind:'part', text:'PART IV \u2014 YOUR OBJECTIVES  (10 shares, host-verified)'},
+      {kind:'note', text:'Your tasks score on the stealth ladder: **+2** completed clean (no other questionnaire names it) \u00b7 **+1** completed but named by exactly one guest \u00b7 **0** completed but named by two or more, or not completed. Capped at 10. Killer evasion: each killer scores +4 if fewer than half the questionnaires name them, and +1 per questionnaire that fails to (cap +6). The killers are fully eligible to win. Voss would have insisted.'},
+      {kind:'note', text:'*Tie-breakers, in order: more Part I shares \u00b7 higher stealth-ladder total \u00b7 the codicil\u2019s own rule \u2014 the tie goes to whoever ends the night holding more of the table\u2019s money.*'},
+    ]}
 });
 
 const FILLERS = [
@@ -504,9 +683,193 @@ function renderStat(o){
     ${sigBlock}${foot}</div>`;
 }
 
+/* ---------- letters ---------- */
+function renderLett(o){
+  const c = o.cards[o.sel] || o.cards[0], f = o.font/100;
+  const hf = 'f-'+(c.hand||'mira'), bsz = c.hand==='mira'?15.5:(c.hand==='voss'?12.5:14);
+  const sig = c.sig?`<div class="${hf}" style="font-size:${(bsz+1)*f}pt;text-align:right;margin-top:5mm">${esc(c.sig)}</div>`:'';
+  stage.innerHTML = `<div class="doc ${paperCls(o.paper,o.noise)} lett ${c.torn?'tornBR':''}" style="width:${o.cardW*MM}px;${o.cardH>0?`height:${o.cardH*MM}px;`:''}">
+    <div class="fell" style="font-style:italic;font-size:${9.4*f}pt;color:#5c4b33;text-align:right">${esc(c.date)}</div>
+    <div class="lbody ${hf}" style="font-size:${bsz*f}pt;margin-top:4mm">${paras(c.body)}</div>
+    <div style="display:flex;justify-content:space-between;align-items:flex-end">
+      <span>${c.seal?'<span class="wax"></span>':''}</span><span style="flex:1">${sig}</span></div></div>`;
+}
+
+/* ---------- anonymous / ransom ---------- */
+function mul32(a){return function(){a|=0;a=a+0x6D2B79F5|0;var t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+const CLIP_FONTS=[["'IM Fell English',Georgia,serif",''],["'IM Fell English',Georgia,serif",'font-style:italic;'],
+ ["'Old Standard TT',serif",'font-weight:700;'],["'Old Standard TT',serif",''],["'Special Elite',monospace",''],
+ ["'EB Garamond',serif",'font-weight:700;'],["'IM Fell English SC',serif",''],["'UnifrakturMaguntia',serif",'']];
+const CLIP_BGS=['#f3ead2','#e8e0c8','#dcd2b8','#efe6cf','#e6dbc0','#f6f1e2','#d8cdb0'];
+function renderRansom(o){
+  const f=o.font/100;
+  let inner;
+  if(o.styleMode==='cut'){
+    const rng=mul32(o.seed|0); let out='';
+    for(const ch of o.body){
+      if(ch==='\n'){ out+='<br>'; continue; }
+      if(/\s/.test(ch)){ out+='<span class="rgap"></span>'; continue; }
+      const [fam,fx]=CLIP_FONTS[Math.floor(rng()*CLIP_FONTS.length)];
+      const bg=CLIP_BGS[Math.floor(rng()*CLIP_BGS.length)];
+      const rot=((rng()*2-1)*o.rot).toFixed(1);
+      const sz=(o.sizePt*(1+(rng()*2-1)*o.sizeVar/100)*f).toFixed(1);
+      const up=rng()<0.62;
+      out+=`<span class="ch" style="font-family:${fam};${fx}background:${bg};font-size:${sz}pt;transform:rotate(${rot}deg)">${esc(up?ch.toUpperCase():ch)}</span>`;
+    }
+    inner=`<div>${out}</div>`;
+  }else{
+    inner=`<div class="scrawl f-hand" style="font-size:${(o.sizePt+3)*f}pt;transform:rotate(-.6deg)">${paras(o.body)}</div>`;
+  }
+  stage.innerHTML = `<div class="doc ${paperCls(o.paper,o.noise)} ransom" style="width:${o.pageW*MM}px;${o.pageH>0?`height:${o.pageH*MM}px;`:''}">${inner}</div>`;
+}
+function bellTells(t){
+  return t.replace(/captain/gi,'captian').replace(/receiv/gi,'reciev')
+          .replace(/judgment/gi,'judgement').replace(/separat/gi,'seperat').replace(/barometer/gi,'barometre');
+}
+
+/* ---------- receipts ---------- */
+function renderReceipt(o){
+  const f=o.font/100, face='f-'+o.face, isHand=['hand','voss','mira'].includes(o.face);
+  const lsz=(isHand?12.5:10.4)*f;
+  const lines=o.lines.map(l=>`<div class="ln ${face}" style="font-size:${lsz}pt">
+      <span class="it">${md(l.it)}</span><span class="dots"></span><span>${esc(o.cur)}${esc(l.pr)}</span></div>`).join('');
+  stage.innerHTML = `<div class="doc ${paperCls(o.paper,o.noise)} rcpt" style="width:${o.pageW*MM}px;${o.pageH>0?`height:${o.pageH*MM}px;`:''}">
+    <div class="cen fsc" style="font-size:${12*f}pt;letter-spacing:.14em">${esc(o.vendor)}</div>
+    <div class="cen fell" style="font-style:italic;font-size:${8.6*f}pt;color:#5c4b33">${esc(o.sub)}</div>
+    <hr class="rule" style="margin:2.4mm 0">
+    <div class="${face}" style="font-size:${(isHand?12:9.6)*f}pt">${md(o.recd)}</div>
+    <div style="margin-top:1.6mm">${lines}</div>
+    <div class="tot ${face}" style="font-size:${(lsz+1)}pt;display:flex;justify-content:space-between">
+      <span>${o.stamp?`<span class="stampbox" style="font-size:${11*f}pt">${esc(o.stamp)}</span>`:''}</span>
+      <span>${esc(o.cur)}${esc(o.total)}</span></div>
+    ${o.foot?`<div class="fell" style="font-style:italic;font-size:${8.4*f}pt;color:#5c4b33;margin-top:2.6mm">${md(o.foot)}</div>`:''}</div>`;
+}
+
+/* ---------- telegram ---------- */
+function renderTele(o){
+  const f=o.font/100;
+  stage.innerHTML = `<div class="doc ${paperCls(o.paper,o.noise)} telg" style="width:${o.pageW*MM}px;${o.pageH>0?`height:${o.pageH*MM}px;`:''}">
+    <div class="thead"><div class="fsc" style="font-size:${12.5*f}pt;letter-spacing:.2em;color:#efe7d0">${esc(o.office)}</div>
+      <div class="fell" style="font-style:italic;font-size:${8*f}pt;opacity:.85">${esc(o.form)}</div></div>
+    <div class="tform type" style="font-size:${8.8*f}pt"><span>TO: ${esc(o.to)}</span><span>${esc(o.dateline)}</span></div>
+    <div class="tform type" style="font-size:${8.8*f}pt;border-bottom:0;padding-top:0"><span>FROM: ${esc(o.from)}</span></div>
+    <div class="tbody type" style="font-size:${11.5*f}pt;line-height:${8.2/ (11.5*0.3528)}">${esc(o.body)}</div>
+    <div class="tfoot fell" style="font-style:italic;font-size:${7.8*f}pt;color:#5c4b33"><span>${esc(o.foot)}</span>
+      <span>words: ${o.body.trim().split(/\s+/).filter(Boolean).length}</span></div></div>`;
+}
+
+/* ---------- place cards / invitations ---------- */
+function placeCardHTML(c,o){
+  const f=o.font/100;
+  if(o.style==='invite'){
+    return `<div class="invite">
+      <div class="fsc" style="font-size:${11.5*f}pt;letter-spacing:.22em">${esc(o.inv1)}</div>
+      <div class="fell" style="font-style:italic;font-size:${9.6*f}pt;color:#5c4b33;margin-top:1.6mm">${esc(o.inv2)}</div>
+      <div class="f-mira" style="font-size:${19*f}pt;margin:1.6mm 0">${esc(c.name)}</div>
+      <div class="fell" style="font-style:italic;font-size:${9.6*f}pt;color:#5c4b33">${esc(o.inv3)}</div>
+      <hr class="rule" style="margin:2.4mm 8mm">
+      <div class="fsc" style="font-size:${8.2*f}pt;letter-spacing:.14em">${esc(o.inv4)}</div></div>`;
+  }
+  const face=`<div class="f-mira" style="font-size:${17*f}pt">${esc(c.name)}</div>
+    ${c.line?`<div class="fsc" style="font-size:${7.8*f}pt;color:#5c4b33;letter-spacing:.18em">${esc(c.line)}</div>`:''}`;
+  if(o.style==='tent'){
+    return `<div class="pcard" style="height:${o.cardH*MM}px;border:1px solid #5c4b33">
+      <div class="half flip">${face}</div><div class="half fold">${face}</div></div>`;
+  }
+  return `<div class="pcard" style="height:${o.cardH*MM/2}px;border:1px solid #5c4b33"><div class="half">${face}</div></div>`;
+}
+function renderPlace(o){
+  if(o.mode==='single'){
+    const c=o.cards[o.sel]||o.cards[0];
+    stage.innerHTML=`<div class="doc ${paperCls(o.paper,o.noise)}" style="width:${(o.cardW+12)*MM}px;padding:6mm">
+      <div style="width:${o.cardW*MM}px">${placeCardHTML(c,o)}</div></div>`;
+  }else{
+    const cards=o.cards.filter(c=>c.inSheet).map(c=>placeCardHTML(c,o)).join('');
+    stage.innerHTML=`<div class="doc ${paperCls(o.paper,o.noise)}" style="width:${o.sheetW*MM}px;min-height:${o.sheetH*MM}px;padding:10mm 12mm">
+      <div class="cen fsc" style="font-size:${12*o.font/100}pt">${esc(o.title)}</div>
+      <div class="cen fell" style="font-style:italic;font-size:${9.2*o.font/100}pt;color:#5c4b33;margin-bottom:3.4mm">${esc(o.sub)}</div>
+      <div class="hsheet" style="grid-template-columns:repeat(${o.sheetCols},1fr)">${cards}</div></div>`;
+  }
+}
+
+/* ---------- tags ---------- */
+function tagHTML(c,o){
+  const f=o.font/100;
+  if(c.style==='lot') return `<div class="tagL">
+    <div class="fsc" style="font-size:${20*f}pt;letter-spacing:.2em">${esc(c.a)}</div>
+    ${c.b?`<div class="fell" style="font-style:italic;font-size:${9.6*f}pt;margin-top:1mm">${esc(c.b)}</div>`:''}
+    ${c.c?`<div class="fsc" style="font-size:${7.8*f}pt;color:#5c4b33;margin-top:1mm">${esc(c.c)}</div>`:''}</div>`;
+  if(c.style==='spec') return `<div class="tagS">
+    <div class="f-voss" style="font-size:${13*f}pt">${md(c.a)}</div>
+    ${c.b?`<div class="f-voss" style="font-size:${11.5*f}pt;margin-top:1.6mm">${md(c.b)}</div>`:''}</div>`;
+  return `<div class="tagE">
+    <div class="fsc" style="font-size:${9*f}pt;letter-spacing:.16em">THE ESTATE OF ELIAS VOSS \u2014 ${esc(c.a||'EXHIBIT')}</div>
+    <div class="tline"><span class="lbl fsc">No.</span><span class="fill" style="min-width:14mm;flex:0 0 14mm"></span>
+      <span class="lbl fsc">DESCRIPTION</span><span class="fill">${c.b?`<span class="f-hand" style="font-size:${11*f}pt">${esc(c.b)}</span>`:''}</span></div>
+    <div class="tline"><span class="lbl fsc">WHERE FOUND</span><span class="fill"></span></div>
+    <div class="tline"><span class="lbl fsc">RECEIVED BY</span><span class="fill">${c.c?`<span class="f-hand" style="font-size:${11*f}pt">${esc(c.c)}</span>`:''}</span>
+      <span class="lbl fsc">HOUR</span><span class="fill" style="flex:0 0 16mm"></span></div></div>`;
+}
+function renderTags(o){
+  if(o.mode==='single'){
+    const c=o.cards[o.sel]||o.cards[0];
+    stage.innerHTML=`<div class="doc ${paperCls(o.paper,o.noise)}" style="width:${o.cardW*MM}px;padding:6mm">${tagHTML(c,o)}</div>`;
+  }else{
+    const cards=o.cards.filter(c=>c.inSheet).map(c=>tagHTML(c,o)).join('');
+    stage.innerHTML=`<div class="doc ${paperCls(o.paper,o.noise)}" style="width:${o.sheetW*MM}px;min-height:${o.sheetH*MM}px;padding:10mm 12mm">
+      <div class="cen fsc" style="font-size:${12*o.font/100}pt">${esc(o.title)}</div>
+      <div class="cen fell" style="font-style:italic;font-size:${9.2*o.font/100}pt;color:#5c4b33;margin-bottom:3.4mm">${esc(o.sub)}</div>
+      <div class="hsheet" style="grid-template-columns:repeat(${o.sheetCols},1fr)">${cards}</div></div>`;
+  }
+}
+
+/* ---------- estate shares ---------- */
+function billHTML(o, i){
+  const f=o.font/100, serial=`${o.series} ${String(o.serialStart+i).padStart(6,'0')}`;
+  const cn=(pos)=>`<span class="cnr" style="${pos};font-size:${10.5*f}pt">${esc(o.denom)}</span>`;
+  return `<div class="bill" style="width:${o.billW*MM}px;height:${o.billH*MM}px;color:${o.ink}">
+    ${cn('left:3mm;top:1.6mm')}${cn('right:3mm;top:1.6mm')}${cn('left:3mm;bottom:1.6mm')}${cn('right:3mm;bottom:1.6mm')}
+    <div class="owl"></div>
+    <div class="cen fsc" style="font-size:${8.6*f}pt;letter-spacing:.24em;margin-top:.6mm">${esc(o.issuer)}</div>
+    <div class="cen news" style="font-weight:700;font-size:${21*f}pt;letter-spacing:.06em;margin-top:1mm">${esc(o.denom)}</div>
+    <div class="cen fsc" style="font-size:${7.6*f}pt;letter-spacing:.2em">${esc(o.denomWord)}</div>
+    <div class="cen fell" style="font-style:italic;font-size:${7.4*f}pt;margin-top:1.2mm;color:inherit;opacity:.85">${esc(o.motto)}</div>
+    <span class="serial" style="font-size:${8.6*f}pt">${serial}</span>
+    <span class="f-hand" style="position:absolute;right:7mm;bottom:2mm;font-size:${10.5*f}pt">${esc(o.sig)}</span></div>`;
+}
+function renderShares(o){
+  if(o.mode==='single'){
+    stage.innerHTML=`<div class="doc ${paperCls(o.paper,o.noise)}" style="width:${(o.billW+14)*MM}px;padding:7mm">${billHTML(o,0)}</div>`;
+  }else{
+    const bills=Array.from({length:Math.max(1,Math.min(40,o.count|0))},(_,i)=>billHTML(o,i)).join('');
+    stage.innerHTML=`<div class="doc ${paperCls(o.paper,o.noise)}" style="width:${o.sheetW*MM}px;min-height:${o.sheetH*MM}px;padding:10mm 12mm">
+      <div class="billwrap" style="grid-template-columns:repeat(${o.sheetCols},max-content);justify-content:center">${bills}</div></div>`;
+  }
+}
+
+/* ---------- questionnaire ---------- */
+function renderQuest(o){
+  const f=o.font/100; let n=0;
+  const items=o.qs.map(q=>{
+    if(q.kind==='part') return `<div class="parthead" style="font-size:${11*f}pt">${esc(q.text)}</div>`;
+    if(q.kind==='note') return `<div class="noteb f-gar" style="font-size:${9.6*f}pt">${md(q.text)}</div>`;
+    n++;
+    const lines='<span class="ansline"></span>'.repeat(Math.max(0,q.lines|0));
+    return `<div class="qq f-gar" style="font-size:${10.3*f}pt"><span class="qn">${n}.</span>${md(q.text)} <i>(${esc(q.shares)})</i>${lines}</div>`;
+  }).join('');
+  stage.innerHTML=`<div class="doc ${paperCls(o.paper,o.noise)} qsh" style="width:${o.pageW*MM}px;min-height:${o.pageH*MM}px">
+    <div class="cen fsc" style="font-size:${13*f}pt;letter-spacing:.2em">${esc(o.title)}</div>
+    <div class="cen fell" style="font-style:italic;font-size:${9.4*f}pt;color:#5c4b33">${esc(o.sub)}</div>
+    <hr class="rule2" style="margin:3mm 0">
+    <div class="f-gar" style="font-size:${10.3*f}pt">${esc(o.name)}</div>
+    ${items}</div>`;
+}
+
 function render(){
-  ({herb:renderHerb, rec:renderRec, news:renderNews, carbon:renderCarbon, exh:renderExh, stat:renderStat})[S.tab](S[S.tab]);
-  $('#exportAllBtn').hidden = !['herb','rec','exh'].includes(S.tab);
+  ({herb:renderHerb, rec:renderRec, news:renderNews, carbon:renderCarbon, exh:renderExh, stat:renderStat,
+    lett:renderLett, ransom:renderRansom, receipt:renderReceipt, tele:renderTele,
+    place:renderPlace, tags:renderTags, shares:renderShares, quest:renderQuest})[S.tab](S[S.tab]);
+  $('#exportAllBtn').hidden = !hasCards();
   applyZoom();
 }
 function applyZoom(){
@@ -699,12 +1062,186 @@ function panelStat(o){
   <p class="hint">This tab covers the letters, the codicil, the s\u00e9ance card, the killer statements \u2014 any one-page paper in the house. Save a setup per document.</p>`;
 }
 
+function panelLett(o){
+  const cardOpts=o.cards.map((c,i)=>`<option value="${i}"${i===o.sel?' selected':''}>${i+1} \u00b7 ${esc(c.date)}</option>`).join('');
+  const c=o.cards[o.sel]||o.cards[0];
+  return `
+  <h2>Page</h2>
+  <div class="row"><div>${fld('Width (mm)', num('lett.cardW',o.cardW,'min="80" max="240"'))}</div>
+  <div>${fld('Height (0 = auto)', num('lett.cardH',o.cardH,'min="0" max="320"'))}</div></div>
+  <div class="row"><div>${fld('Paper', paperSel('lett.paper',o.paper))}</div><div>${fld('Scale %', num('lett.font',o.font,'min="60" max="180"'))}</div></div>
+  ${chk('lett.noise',o.noise,'Grain texture')}
+  <h2>Letter</h2>
+  ${fld('Editing', `<select data-b="lett.sel">${cardOpts}</select>`)}
+  ${fld('Dateline (top right)', inp('card.date',c.date))}
+  ${fld('Hand', fontSel('card.hand',c.hand))}
+  ${fld('Text \u2014 blank line = new paragraph', ta('card.body',c.body,9))}
+  ${fld('Signature (blank = none)', inp('card.sig',c.sig))}
+  ${chk('card.torn',c.torn,'Corner torn away (bottom right)')}
+  ${chk('card.seal',c.seal,'Black wax seal')}
+  <button class="addbtn" data-add="card">+ New letter</button>
+  <button class="addbtn" data-add="dupcard">+ Duplicate this letter</button>
+  <button class="addbtn" data-del="curcard" style="color:#ff9b8a">\u00d7 Delete this letter</button>
+  <p class="hint">Preloaded: Vera\u2019s five-year escalation \u2014 the newest with its corner cut \u2014 and Voss\u2019s one reply. \u201cDownload every card\u201d exports the whole bundle.</p>`;
+}
+
+function panelRansom(o){
+  return `
+  <h2>Page</h2>
+  <div class="row"><div>${fld('Width (mm)', num('ransom.pageW',o.pageW,'min="90" max="240"'))}</div>
+  <div>${fld('Height (0 = auto)', num('ransom.pageH',o.pageH,'min="0" max="320"'))}</div></div>
+  <div class="row"><div>${fld('Paper', paperSel('ransom.paper',o.paper))}</div><div>${fld('Scale %', num('ransom.font',o.font,'min="60" max="180"'))}</div></div>
+  ${chk('ransom.noise',o.noise,'Grain texture')}
+  <h2>Style</h2>
+  ${fld('Manner', `<select data-b="ransom.styleMode"><option value="scrawl"${o.styleMode==='scrawl'?' selected':''}>Drunk hand \u2014 canon; the spelling is the tell</option><option value="cut"${o.styleMode==='cut'?' selected':''}>Cut-out clippings \u2014 ransom style</option></select>`)}
+  <div class="row"><div>${fld('Glyph size (pt)', num('ransom.sizePt',o.sizePt,'min="9" max="30"'))}</div>
+  <div>${fld('Max tilt (\u00b0)', num('ransom.rot',o.rot,'min="0" max="20"'))}</div>
+  <div>${fld('Size scatter %', num('ransom.sizeVar',o.sizeVar,'min="0" max="60"'))}</div></div>
+  <button class="addbtn" data-add="shuffle">\u21bb Reshuffle the clippings</button>
+  <h2>Text</h2>
+  ${fld('The letter', ta('ransom.body',o.body,8))}
+  <button class="addbtn" data-add="tells">Apply Bell\u2019s tells \u2014 captian \u00b7 recieve \u00b7 judgement \u00b7 seperate \u00b7 barometre</button>
+  <p class="hint">Canon: the anonymous letters are handwritten and misspelled the same way every time \u2014 that is the authorship puzzle. The clippings manner is offered for table flavor; it hides the handwriting but keeps the spelling.</p>`;
+}
+
+function panelReceipt(o){
+  const lines=o.lines.map((l,i)=>`<div class="item">${tools('lines',i)}
+    <div class="row"><textarea rows="1" data-b="lines.${i}.it">${esc(l.it)}</textarea>
+    <input class="num" data-b="lines.${i}.pr" value="${esc(l.pr)}" style="flex:0 0 70px"></div></div>`).join('');
+  return `
+  <h2>Slip</h2>
+  <div class="row"><div>${fld('Width (mm)', num('receipt.pageW',o.pageW,'min="60" max="210"'))}</div>
+  <div>${fld('Height (0 = auto)', num('receipt.pageH',o.pageH,'min="0" max="300"'))}</div></div>
+  <div class="row"><div>${fld('Paper', paperSel('receipt.paper',o.paper))}</div><div>${fld('Scale %', num('receipt.font',o.font,'min="60" max="180"'))}</div></div>
+  ${chk('receipt.noise',o.noise,'Grain texture')}
+  ${fld('Entries written in', fontSel('receipt.face',o.face))}
+  <h2>Header</h2>
+  ${fld('Vendor', inp('receipt.vendor',o.vendor))}
+  ${fld('Vendor line', inp('receipt.sub',o.sub))}
+  ${fld('Received-of line', inp('receipt.recd',o.recd))}
+  <h2>Entries <span class="hint">item \u00b7 price</span></h2>
+  ${lines}
+  <button class="addbtn" data-add="rline">+ Add entry</button>
+  <div class="row"><div>${fld('Currency mark', inp('receipt.cur',o.cur))}</div><div>${fld('Total line', inp('receipt.total',o.total))}</div></div>
+  ${fld('Stamp (blank = none)', inp('receipt.stamp',o.stamp))}
+  ${fld('Footer (blank = none)', inp('receipt.foot',o.foot))}`;
+}
+
+function panelTele(o){
+  return `
+  <h2>Form</h2>
+  <div class="row"><div>${fld('Width (mm)', num('tele.pageW',o.pageW,'min="100" max="220"'))}</div>
+  <div>${fld('Height (0 = auto)', num('tele.pageH',o.pageH,'min="0" max="300"'))}</div></div>
+  <div class="row"><div>${fld('Paper', paperSel('tele.paper',o.paper))}</div><div>${fld('Scale %', num('tele.font',o.font,'min="60" max="180"'))}</div></div>
+  ${chk('tele.noise',o.noise,'Grain texture')}
+  ${fld('Company', inp('tele.office',o.office))}
+  ${fld('Form line', inp('tele.form',o.form))}
+  <div class="row"><div>${fld('To', inp('tele.to',o.to))}</div></div>
+  <div class="row"><div>${fld('From', inp('tele.from',o.from))}</div><div>${fld('Received', inp('tele.dateline',o.dateline))}</div></div>
+  <h2>Message</h2>
+  ${fld('Text', ta('tele.body',o.body,5))}
+  <button class="addbtn" data-add="stops">Set as sent \u2014 UPPERCASE, full stops \u2192 STOP</button>
+  ${fld('Footer', inp('tele.foot',o.foot))}`;
+}
+
+function panelPlace(o){
+  const cardOpts=o.cards.map((c,i)=>`<option value="${i}"${i===o.sel?' selected':''}>${esc(c.name)}</option>`).join('');
+  const c=o.cards[o.sel]||o.cards[0];
+  const inviteFlds = o.style!=='invite' ? '' : `
+  <h2>Invitation wording</h2>
+  ${fld('Line 1 \u2014 house', inp('place.inv1',o.inv1))}
+  ${fld('Line 2', inp('place.inv2',o.inv2))}
+  ${fld('Line 3', inp('place.inv3',o.inv3))}
+  ${fld('Line 4 \u2014 particulars', inp('place.inv4',o.inv4))}`;
+  return `${cardModePage(o,'place')}
+  ${fld('Card style', `<select data-b="place.style"><option value="tent"${o.style==='tent'?' selected':''}>Tent place card \u2014 fold on the dash</option><option value="flat"${o.style==='flat'?' selected':''}>Flat place card</option><option value="invite"${o.style==='invite'?' selected':''}>Invitation \u2014 this card admits one</option></select>`)}
+  ${o.mode==='single'?`<div class="row"><div>${fld('Card W (mm)', num('place.cardW',o.cardW,'min="60" max="180"'))}</div>
+  <div>${fld('Card H (mm)', num('place.cardH',o.cardH,'min="30" max="160"'))}</div></div>`:''}
+  ${inviteFlds}
+  <h2>Guest</h2>
+  ${fld('Editing', `<select data-b="place.sel">${cardOpts}</select>`)}
+  ${fld('Name', inp('card.name',c.name))}
+  ${fld('Line beneath (blank = none)', inp('card.line',c.line))}
+  ${chk('card.inSheet',c.inSheet,'On sheet')}
+  <button class="addbtn" data-add="card">+ New guest</button>
+  <button class="addbtn" data-add="dupcard">+ Duplicate</button>
+  <button class="addbtn" data-del="curcard" style="color:#ff9b8a">\u00d7 Delete</button>`;
+}
+
+function panelTags(o){
+  const cardOpts=o.cards.map((c,i)=>`<option value="${i}"${i===o.sel?' selected':''}>${esc(c.style)} \u00b7 ${esc(c.a)}</option>`).join('');
+  const c=o.cards[o.sel]||o.cards[0];
+  return `${cardModePage(o,'tags')}
+  <h2>Tag</h2>
+  ${fld('Editing', `<select data-b="tags.sel">${cardOpts}</select>`)}
+  ${fld('Kind', `<select data-b="card.style"><option value="lot"${c.style==='lot'?' selected':''}>Lot tag</option><option value="evidence"${c.style==='evidence'?' selected':''}>Evidence tag \u2014 string tie</option><option value="spec"${c.style==='spec'?' selected':''}>Specimen label \u2014 Voss\u2019s hand</option></select>`)}
+  ${fld(c.style==='evidence'?'Heading word':'Main line', inp('card.a',c.a))}
+  ${fld(c.style==='evidence'?'Description (pre-filled; blank = write-in)':'Second line', ta('card.b',c.b,2))}
+  ${fld(c.style==='evidence'?'Received by (blank = write-in)':'Third line', inp('card.c',c.c))}
+  ${chk('card.inSheet',c.inSheet,'On sheet')}
+  <button class="addbtn" data-add="card">+ New tag</button>
+  <button class="addbtn" data-add="dupcard">+ Duplicate</button>
+  <button class="addbtn" data-del="curcard" style="color:#ff9b8a">\u00d7 Delete</button>`;
+}
+
+function panelShares(o){
+  return `
+  <h2>Layout</h2>
+  ${fld('Mode', `<select data-b="shares.mode"><option value="single"${o.mode==='single'?' selected':''}>One note</option><option value="sheet"${o.mode==='sheet'?' selected':''}>Sheet of notes</option></select>`)}
+  <div class="row"><div>${fld('Note W (mm)', num('shares.billW',o.billW,'min="90" max="200"'))}</div>
+  <div>${fld('Note H (mm)', num('shares.billH',o.billH,'min="40" max="120"'))}</div></div>
+  ${o.mode==='sheet'?`<div class="row"><div>${fld('Sheet W (mm)', num('shares.sheetW',o.sheetW))}</div><div>${fld('Sheet H (mm)', num('shares.sheetH',o.sheetH))}</div>
+  <div>${fld('Columns', num('shares.sheetCols',o.sheetCols,'min="1" max="3"'))}</div></div>
+  ${fld('Notes on sheet (serials run on)', num('shares.count',o.count,'min="1" max="40"'))}`:''}
+  <div class="row"><div>${fld('Paper', paperSel('shares.paper',o.paper))}</div><div>${fld('Scale %', num('shares.font',o.font,'min="60" max="180"'))}</div></div>
+  ${chk('shares.noise',o.noise,'Grain texture')}
+  <h2>The note</h2>
+  ${fld('Issuer line', inp('shares.issuer',o.issuer))}
+  <div class="row"><div>${fld('Denomination', inp('shares.denom',o.denom))}</div>
+  <div>${fld('Ink', `<select data-b="shares.ink"><option value="#3a2f1d"${o.ink==='#3a2f1d'?' selected':''}>Sepia</option><option value="#7a1414"${o.ink==='#7a1414'?' selected':''}>Oxblood</option><option value="#3d6049"${o.ink==='#3d6049'?' selected':''}>Verdigris</option><option value="#2b3a55"${o.ink==='#2b3a55'?' selected':''}>Indigo</option></select>`)}</div></div>
+  ${fld('Denomination in words', inp('shares.denomWord',o.denomWord))}
+  ${fld('Motto', inp('shares.motto',o.motto))}
+  <div class="row"><div>${fld('Series', inp('shares.series',o.series))}</div>
+  <div>${fld('First serial', num('shares.serialStart',o.serialStart,'min="0" max="999999"'))}</div></div>
+  ${fld('Countersignature', inp('shares.sig',o.sig))}
+  <p class="hint">Print several sheets with a different \u201cFirst serial\u201d each \u2014 the table money stays unique. Colette\u2019s task wants $300,000 of it in her clutch by dawn.</p>`;
+}
+
+function panelQuest(o){
+  const items=o.qs.map((q,i)=>{
+    if(q.kind==='part') return `<div class="item">${tools('qs',i)}
+      <label>Part heading</label><input data-b="qs.${i}.text" value="${esc(q.text)}">${''}</div>`;
+    if(q.kind==='note') return `<div class="item">${tools('qs',i)}
+      <label>Note block</label><textarea rows="3" data-b="qs.${i}.text">${esc(q.text)}</textarea></div>`;
+    return `<div class="item">${tools('qs',i)}
+      <label>Question</label><textarea rows="2" data-b="qs.${i}.text">${esc(q.text)}</textarea>
+      <div class="row"><div>${fld('Shares', inp(`qs.${i}.shares`,q.shares))}</div>
+      <div>${fld('Answer lines', num(`qs.${i}.lines`,q.lines,'min="0" max="8"'))}</div></div></div>`;
+  }).join('');
+  return `
+  <h2>Sheet</h2>
+  <div class="row"><div>${fld('Width (mm)', num('quest.pageW',o.pageW))}</div><div>${fld('Min height (mm)', num('quest.pageH',o.pageH))}</div></div>
+  <div class="row"><div>${fld('Paper', paperSel('quest.paper',o.paper))}</div><div>${fld('Scale %', num('quest.font',o.font,'min="60" max="160"'))}</div></div>
+  ${chk('quest.noise',o.noise,'Grain texture')}
+  ${fld('Title', inp('quest.title',o.title))}
+  ${fld('Subtitle', inp('quest.sub',o.sub))}
+  ${fld('Name line', inp('quest.name',o.name))}
+  <h2>Questions <span class="hint">numbering runs on across parts</span></h2>
+  ${items}
+  <button class="addbtn" data-add="qq">+ Add question</button>
+  <button class="addbtn" data-add="qpart">+ Add part heading</button>
+  <button class="addbtn" data-add="qnote">+ Add note block</button>
+  <p class="hint">The sheet grows past its minimum height as questions are added; Print / PDF paginates it, PNG exports one tall image.</p>`;
+}
+
 function drawPanel(){
-  $('#panel').innerHTML = ({herb:panelHerb, rec:panelRec, news:panelNews, carbon:panelCarbon, exh:panelExh, stat:panelStat})[S.tab](S[S.tab]);
+  $('#panel').innerHTML = ({herb:panelHerb, rec:panelRec, news:panelNews, carbon:panelCarbon, exh:panelExh, stat:panelStat,
+    lett:panelLett, ransom:panelRansom, receipt:panelReceipt, tele:panelTele,
+    place:panelPlace, tags:panelTags, shares:panelShares, quest:panelQuest})[S.tab](S[S.tab]);
 }
 
 /* ------- data binding: data-b paths resolve into S; 'card.'/'rows.' shortcuts per tab ------- */
-const hasCards = () => ['herb','rec','exh'].includes(S.tab);
+const hasCards = () => ['herb','rec','exh','lett','place','tags'].includes(S.tab);
 function resolve(path){
   let parts = path.split('.');
   let obj;
@@ -712,6 +1249,8 @@ function resolve(path){
   else if(parts[0]==='rows' && S.tab==='herb'){ obj = S.herb.cards[S.herb.sel]; }           /* herb desc rows via card.rows */
   else if(parts[0]==='rows'){ obj = S.carbon; }
   else if(parts[0]==='blocks'){ obj = S.news; }
+  else if(parts[0]==='lines'){ obj = S.receipt; }
+  else if(parts[0]==='qs'){ obj = S.quest; }
   else { obj = S; }
   for(let i=0;i<parts.length-1;i++) obj = obj[parts[i]];
   return [obj, parts[parts.length-1]];
@@ -722,7 +1261,7 @@ $('#panel').addEventListener('input', e=>{
   let v = e.target.type==='checkbox' ? e.target.checked : e.target.value;
   if(e.target.type==='number' || key==='ghost' || key==='sel') v = +v;
   obj[key] = v;
-  if(key==='sel' || key==='mode' || key==='absent'){ drawPanel(); }
+  if(['sel','mode','absent','style','styleMode','face','kind'].includes(key)){ drawPanel(); }
   queue();
 });
 $('#panel').addEventListener('change', e=>{
@@ -735,14 +1274,25 @@ $('#panel').addEventListener('change', e=>{
 $('#panel').addEventListener('click', e=>{
   const b = e.target.closest('button'); if(!b) return;
   const add = b.dataset.add, del = b.dataset.del, mv = b.dataset.mv;
-  const lists = { rows: S.tab==='herb' ? S.herb.cards[S.herb.sel].rows : S.carbon.rows, blocks: S.news.blocks };
+  const lists = { rows: S.tab==='herb' ? S.herb.cards[S.herb.sel].rows : S.carbon.rows,
+                  blocks: S.news.blocks, lines: S.receipt.lines, qs: S.quest.qs };
   if(add){
     if(add==='row')      S.herb.cards[S.herb.sel].rows.push({k:'NOTE', v:''});
     if(add==='crow')     S.carbon.rows.push({t:'19:50', n:'NAME', note:''});
+    if(add==='rline')    S.receipt.lines.push({it:'', pr:''});
+    if(add==='qq')       S.quest.qs.push({kind:'q', text:'New question', shares:'1', lines:1});
+    if(add==='qpart')    S.quest.qs.push({kind:'part', text:'PART \u2014 NEW SECTION'});
+    if(add==='qnote')    S.quest.qs.push({kind:'note', text:'Note text.'});
+    if(add==='stops')    S.tele.body = S.tele.body.toUpperCase().replace(/\.\s*/g,' STOP ').replace(/\s+/g,' ').trim().replace(/STOP$/,'STOP');
+    if(add==='shuffle')  S.ransom.seed = Math.floor(Math.random()*1e6);
+    if(add==='tells')    S.ransom.body = bellTells(S.ransom.body);
     if(add==='card' && hasCards()){
       const blank = { herb:{no:'XII', latin:'New specimen', common:'', absent:false, inSheet:true, rows:[{k:'HABIT',v:''}], ev:'', red:''},
                       rec:{title:'New card', hand:'mira', mark:'', inSheet:true, body:''},
-                      exh:{who:'GUEST', title:'NEW EXHIBIT', inSheet:true, body:''} }[S.tab];
+                      exh:{who:'GUEST', title:'NEW EXHIBIT', inSheet:true, body:''},
+                      lett:{date:'a new letter', hand:'mira', torn:false, seal:false, body:'', sig:''},
+                      place:{name:'New Guest', line:'', inSheet:true},
+                      tags:{style:'evidence', a:'EXHIBIT', b:'', c:'', inSheet:true} }[S.tab];
       S[S.tab].cards.push(blank); S[S.tab].sel = S[S.tab].cards.length-1;
     }
     if(add==='dupcard' && hasCards()){ S[S.tab].cards.push(JSON.parse(JSON.stringify(S[S.tab].cards[S[S.tab].sel]))); S[S.tab].sel = S[S.tab].cards.length-1; }
@@ -815,6 +1365,12 @@ $('#exportBtn').addEventListener('click', async ()=>{
     herb: o.mode==='sheet' ? 'herbarium_sheet.png' : `herbarium_${(o.cards?.[o.sel]?.no||'card').replace(/\W+/g,'')}.png`,
     rec:  o.mode==='sheet' ? 'recipe_sheet.png'    : `recipe_${String(o.sel+1).padStart(2,'0')}_${slug(o.cards?.[o.sel]?.title)}.png`,
     exh:  o.mode==='sheet' ? 'red_exhibits_sheet.png' : `exhibit_${slug(o.cards?.[o.sel]?.who)}.png`,
+    lett: `letter_${String((o.sel|0)+1).padStart(2,'0')}_${slug(o.cards?.[o.sel]?.date)}.png`,
+    place: o.mode==='sheet' ? 'place_cards_sheet.png' : `${o.style==='invite'?'invitation':'place_card'}_${slug(o.cards?.[o.sel]?.name)}.png`,
+    tags: o.mode==='sheet' ? 'tags_sheet.png' : `tag_${slug(o.cards?.[o.sel]?.a)}.png`,
+    shares: o.mode==='sheet' ? 'estate_shares_sheet.png' : 'estate_share.png',
+    ransom:'anonymous_letter.png', receipt:`receipt_${slug(S.receipt.vendor)}.png`,
+    tele:'telegram.png', quest:'questionnaire.png',
     news:'harbor_chronicle.png', carbon:'entrance_register.png', stat:`${slug(S.stat.title)}.png`};
   try{ await nodeToPNG(stage.firstElementChild, names[S.tab]); }catch(err){ setStatus(err.message); }
 });
@@ -825,7 +1381,10 @@ $('#exportAllBtn').addEventListener('click', async ()=>{
   const nameFor = i => ({
     herb:`herbarium_${String(i+1).padStart(2,'0')}_${(o.cards[i].no||'').replace(/\W+/g,'')}.png`,
     rec:`recipe_${String(i+1).padStart(2,'0')}_${slug(o.cards[i].title)}.png`,
-    exh:`exhibit_${String(i+1).padStart(2,'0')}_${slug(o.cards[i].who)}.png`})[S.tab];
+    exh:`exhibit_${String(i+1).padStart(2,'0')}_${slug(o.cards[i].who)}.png`,
+    lett:`letter_${String(i+1).padStart(2,'0')}_${slug(o.cards[i].date)}.png`,
+    place:`${S.place.style==='invite'?'invitation':'place_card'}_${String(i+1).padStart(2,'0')}_${slug(o.cards[i].name)}.png`,
+    tags:`tag_${String(i+1).padStart(2,'0')}_${slug(o.cards[i].a)}.png`})[S.tab];
   for(let i=0;i<o.cards.length;i++){
     o.sel=i; render();
     await new Promise(r=>setTimeout(r,120));
