@@ -115,6 +115,7 @@ main{display:flex;flex:1;min-height:0}
     radial-gradient(60% 40% at 12% 88%, rgba(140,110,60,.10), transparent 70%),
     radial-gradient(50% 35% at 88% 10%, rgba(140,110,60,.09), transparent 70%);}
 .p-plain{background:#faf7ef}
+.p-none{background:none}
 .p-carbon{background-color:#dde1e7;color:#2b3444;
   background-image:radial-gradient(130% 120% at 50% 42%, rgba(250,252,255,.5) 0%, rgba(250,252,255,0) 55%, rgba(90,105,135,.22) 100%);}
 .p-noise{background-blend-mode:normal}
@@ -249,8 +250,7 @@ main{display:flex;flex:1;min-height:0}
 
 /* ---- ransom / anonymous ---- */
 .ransom{padding:12mm 14mm;line-height:2.3}
-.ransom .ch{display:inline-block;padding:.04em .14em;margin:.05em .06em;border:.6px solid rgba(60,45,20,.55);
-  box-shadow:.4px .6px 0 rgba(60,45,20,.28)}
+.ransom .ch{display:inline-block;border:.6px solid rgba(60,45,20,.45)}
 .ransom .rgap{display:inline-block;width:.7em}
 .scrawl{line-height:1.9}
 .scrawl p{margin:0 0 3mm}
@@ -395,6 +395,20 @@ const esc = t => String(t??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replac
 const md = t => esc(t).replace(/\*\*(.+?)\*\*/gs,'<b>$1</b>').replace(/\*(.+?)\*/gs,'<i>$1</i>').replace(/\n/g,'<br>');
 const paras = (t,firstCls='') => esc(t).split(/\n\s*\n/).map((p,i)=>`<p class="${i===0?firstCls:''}">${p.replace(/\*\*(.+?)\*\*/gs,'<b>$1</b>').replace(/\*(.+?)\*/gs,'<i>$1</i>').replace(/\n/g,'<br>')}</p>`).join('');
 
+/* magazine clippings: sans-heavy faces, loud color chips; newsprint: period faces on paper tints */
+const MAG_FONTS=[["'Arial Black','Arial Bold',Arial,sans-serif",''],["Arial,Helvetica,sans-serif",'font-weight:700;'],
+ ["Verdana,Geneva,sans-serif",'font-weight:700;'],["'Trebuchet MS',sans-serif",'font-weight:700;font-style:italic;'],
+ ["Georgia,serif",'font-weight:700;'],["'Old Standard TT',serif",'font-weight:700;'],
+ ["'Courier New',monospace",'font-weight:700;'],["Impact,'Arial Black',sans-serif",''],
+ ["'Times New Roman',serif",'font-weight:700;font-style:italic;'],["'UnifrakturMaguntia',serif",'']];
+const MAG_CHIPS=[['#c8102e','#ffffff'],['#ffd400','#111111'],['#0057b8','#ffffff'],['#111111','#ffffff'],
+ ['#ffffff','#111111'],['#e87511','#111111'],['#1c7c3c','#ffffff'],['#7a1fa2','#ffffff'],
+ ['#ff8fa3','#5a0016'],['#8fd3ff','#0b2a44'],['#f3ead2','#2e2617'],['#2e2617','#f3ead2']];
+const NEWS_FONTS=[["'IM Fell English',Georgia,serif",''],["'IM Fell English',Georgia,serif",'font-style:italic;'],
+ ["'Old Standard TT',serif",'font-weight:700;'],["'Old Standard TT',serif",''],["'Special Elite',monospace",''],
+ ["'EB Garamond',serif",'font-weight:700;'],["'IM Fell English SC',serif",''],["'UnifrakturMaguntia',serif",'']];
+const NEWS_CHIPS=[['#f3ead2','#2e2617'],['#e8e0c8','#2e2617'],['#dcd2b8','#2e2617'],['#efe6cf','#2e2617'],
+ ['#e6dbc0','#2e2617'],['#f6f1e2','#2e2617'],['#d8cdb0','#2e2617'],['#2e2617','#f3ead2']];
 const TY0 = () => ({fam:'', wght:400, trk:0, axes:{}});
 const withTy = o => { for(const k in o) if(k!=='tab' && o[k] && typeof o[k]==='object') o[k].ty = o[k].ty || TY0(); return o; };
 const CANON = () => withTy({
@@ -542,6 +556,9 @@ const CANON = () => withTy({
   ransom:{
     pageW:170, pageH:0, font:100, paper:'aged', noise:true,
     styleMode:'cut', pal:'color', wordPct:25, seed:7, sizePt:16, rot:9, sizeVar:40,
+    padX:16, padY:6, gapX:6, wordGap:70, lineH:230, caseUp:60,
+    emboss:35, lift:45, ragged:40, misalign:45,
+    palette: MAG_CHIPS.map(p=>[p[0],p[1]]),
     body:'you counted wrong captian. the harbour recieved twenty two and gave back twenty one. i was there. say his name in the open or the papers will say yours. no judgement waits longer than mine. i do not want money. i want the count corrected.',
     sig:''},
   receipt:{
@@ -659,7 +676,7 @@ const persist = () => { try{ localStorage.setItem('vossStudio', JSON.stringify(S
 const stage = $('#stage');
 let rT; const queue = () => { clearTimeout(rT); rT = setTimeout(()=>{render(); persist();}, 120); };
 
-function paperCls(p, noise){ return `p-${p}${noise?' p-noise':''}`; }
+function paperCls(p, noise){ return `p-${p}${noise&&p!=='none'?' p-noise':''}`; }
 
 function herbCardHTML(c, o){
   const f = o.font/100;
@@ -836,48 +853,50 @@ function renderLett(o){
 
 /* ---------- anonymous / ransom ---------- */
 function mul32(a){return function(){a|=0;a=a+0x6D2B79F5|0;var t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
-/* magazine clippings: sans-heavy faces, loud color chips; newsprint: period faces on paper tints */
-const MAG_FONTS=[["'Arial Black','Arial Bold',Arial,sans-serif",''],["Arial,Helvetica,sans-serif",'font-weight:700;'],
- ["Verdana,Geneva,sans-serif",'font-weight:700;'],["'Trebuchet MS',sans-serif",'font-weight:700;font-style:italic;'],
- ["Georgia,serif",'font-weight:700;'],["'Old Standard TT',serif",'font-weight:700;'],
- ["'Courier New',monospace",'font-weight:700;'],["Impact,'Arial Black',sans-serif",''],
- ["'Times New Roman',serif",'font-weight:700;font-style:italic;'],["'UnifrakturMaguntia',serif",'']];
-const MAG_CHIPS=[['#c8102e','#ffffff'],['#ffd400','#111111'],['#0057b8','#ffffff'],['#111111','#ffffff'],
- ['#ffffff','#111111'],['#e87511','#111111'],['#1c7c3c','#ffffff'],['#7a1fa2','#ffffff'],
- ['#ff8fa3','#5a0016'],['#8fd3ff','#0b2a44'],['#f3ead2','#2e2617'],['#2e2617','#f3ead2']];
-const NEWS_FONTS=[["'IM Fell English',Georgia,serif",''],["'IM Fell English',Georgia,serif",'font-style:italic;'],
- ["'Old Standard TT',serif",'font-weight:700;'],["'Old Standard TT',serif",''],["'Special Elite',monospace",''],
- ["'EB Garamond',serif",'font-weight:700;'],["'IM Fell English SC',serif",''],["'UnifrakturMaguntia',serif",'']];
-const NEWS_CHIPS=[['#f3ead2','#2e2617'],['#e8e0c8','#2e2617'],['#dcd2b8','#2e2617'],['#efe6cf','#2e2617'],
- ['#e6dbc0','#2e2617'],['#f6f1e2','#2e2617'],['#d8cdb0','#2e2617'],['#2e2617','#f3ead2']];
 function renderRansom(o){
   const f=o.font/100;
   let inner;
   if(o.styleMode==='cut'){
     const rng=mul32(o.seed|0);
-    const FONTS=o.pal==='color'?MAG_FONTS:NEWS_FONTS, CHIPS=o.pal==='color'?MAG_CHIPS:NEWS_CHIPS;
+    const FONTS=o.pal==='news'?NEWS_FONTS:MAG_FONTS;
+    const P=(o.palette&&o.palette.length)?o.palette:(o.pal==='news'?NEWS_CHIPS:MAG_CHIPS);
+    const padX=(o.padX??16)/100, padY=(o.padY??6)/100, gapX=(o.gapX??6)/100;
+    const em=(o.emboss??0)/100, li=(o.lift??0)/100, rg=(o.ragged??0)/100, ms=(o.misalign??45)/100;
     const chip=(txt,up)=>{
       const [fam,fx]=FONTS[Math.floor(rng()*FONTS.length)];
-      const [bg,fg]=CHIPS[Math.floor(rng()*CHIPS.length)];
-      const rot=((rng()*2-1)*o.rot).toFixed(1), skew=((rng()*2-1)*3).toFixed(1), dy=((rng()*2-1)*2.4).toFixed(1);
+      const pr=P[Math.floor(rng()*P.length)]||['#f3ead2','#2e2617'];
+      const bg=pr[0], fg=pr[1];
+      const rot=((rng()*2-1)*o.rot).toFixed(1), skew=((rng()*2-1)*3).toFixed(1);
+      const dy=((rng()*2-1)*ms*4).toFixed(1);
       const sz=(o.sizePt*(1+(rng()*2-1)*o.sizeVar/100)*f).toFixed(1);
-      const px=(0.1+rng()*0.22).toFixed(2), py=(0.02+rng()*0.12).toFixed(2);
+      const px=(padX*(0.6+rng()*0.8)).toFixed(2), py=(padY*(0.6+rng()*0.8)).toFixed(2);
+      const mg=`margin:${(0.03+rng()*0.03).toFixed(2)}em ${(gapX*(0.5+rng())).toFixed(2)}em;`;
+      let clip='';
+      if(rg>0){
+        const jj=()=>(rng()*13*rg).toFixed(1), mid=()=> (50+(rng()*12-6)*rg).toFixed(1);
+        clip=`clip-path:polygon(${jj()}% ${jj()}%, ${mid()}% ${jj()}%, ${(100-+jj())}% ${jj()}%, ${(100-+jj())}% ${mid()}%, ${(100-+jj())}% ${(100-+jj())}%, ${mid()}% ${(100-+jj())}%, ${jj()}% ${(100-+jj())}%, ${jj()}% ${mid()}%);`;
+      }
+      const shadow=li>0?`filter:drop-shadow(${(.3+rng()*.5).toFixed(1)}px ${(.5+rng()*.7).toFixed(1)}px ${(li*2).toFixed(1)}px rgba(25,18,8,${(.16+li*.3).toFixed(2)}));`:'';
+      const boss=em>0?`text-shadow:0 ${(0.7*em).toFixed(2)}px 0 rgba(255,255,255,${(0.5*em).toFixed(2)}), 0 -${(0.5*em).toFixed(2)}px ${(0.6*em).toFixed(2)}px rgba(0,0,0,${(0.35*em).toFixed(2)});`:'';
       return `<span class="ch" style="font-family:${fam};${fx}background:${bg};color:${fg};font-size:${sz}pt;`+
-             `padding:${py}em ${px}em;transform:translateY(${dy}px) rotate(${rot}deg) skewX(${skew}deg)">${esc(up?txt.toUpperCase():txt)}</span>`;
+        `padding:${py}em ${px}em;${mg}${clip}${shadow}${boss}`+
+        `transform:translateY(${dy}px) rotate(${rot}deg) skewX(${skew}deg)">${esc(up?txt.toUpperCase():txt)}</span>`;
     };
+    const upP=(o.caseUp??60)/100;
     let out='';
     for(const tok of o.body.split(/(\s+)/)){
       if(!tok) continue;
-      if(/\s/.test(tok)){ out+=tok.includes('\n')?'<br>':'<span class="rgap"></span>'; continue; }
-      if(rng()*100 < o.wordPct){ out+=chip(tok, rng()<0.55); continue; }        /* whole word cut as one strip */
-      for(const ch of tok) out+=chip(ch, rng()<0.62);
+      if(/\s/.test(tok)){ out+=tok.includes('\n')?'<br>':`<span class="rgap" style="width:${((o.wordGap??70)/100).toFixed(2)}em"></span>`; continue; }
+      if(rng()*100 < o.wordPct){ out+=chip(tok, rng()<upP); continue; }
+      for(const ch of tok) out+=chip(ch, rng()<upP);
     }
-    inner=`<div>${out}</div>`;
+    inner=`<div style="line-height:${((o.lineH??230)/100).toFixed(2)}">${out}</div>`;
   }else{
     inner=`<div class="scrawl f-hand" style="font-size:${(o.sizePt+3)*f}pt;transform:rotate(-.6deg)">${paras(o.body)}</div>`;
   }
   stage.innerHTML = `<div class="doc ${paperCls(o.paper,o.noise)} ransom" style="width:${o.pageW*MM}px;${o.pageH>0?`height:${o.pageH*MM}px;`:''}">${inner}</div>`;
 }
+
 function bellTells(t){
   return t.replace(/captain/gi,'captian').replace(/receiv/gi,'reciev')
           .replace(/judgment/gi,'judgement').replace(/separat/gi,'seperat').replace(/barometer/gi,'barometre');
@@ -1052,7 +1071,7 @@ function inp(path, val, attrs=''){ return `<input data-b="${path}" value="${esc(
 function num(path, val, attrs=''){ return `<input class="num" type="number" data-b="${path}" value="${val}" ${attrs}>`; }
 function ta(path, val, rows=3){ return `<textarea rows="${rows}" data-b="${path}">${esc(val)}</textarea>`; }
 function chk(path, val, label, extra=''){ return `<div class="check"><input type="checkbox" data-b="${path}" ${val?'checked':''} ${extra} id="c${path.replace(/\W/g,'')}"><label for="c${path.replace(/\W/g,'')}">${label}</label></div>`; }
-function paperSel(path, val){ return `<select data-b="${path}"><option value="aged"${val==='aged'?' selected':''}>Aged cream</option><option value="plain"${val==='plain'?' selected':''}>Plain white</option><option value="carbon"${val==='carbon'?' selected':''}>Carbon blue</option></select>`; }
+function paperSel(path, val){ return `<select data-b="${path}"><option value="aged"${val==='aged'?' selected':''}>Aged cream</option><option value="plain"${val==='plain'?' selected':''}>Plain white</option><option value="carbon"${val==='carbon'?' selected':''}>Carbon blue</option><option value="none"${val==='none'?' selected':''}>Transparent \u2014 cutout PNG</option></select>`; }
 const tools = (list,i,extra='') => `<div class="tools">
   <button class="mini" data-mv="${list}|${i}|-1" title="Move up">\u2191</button>
   <button class="mini" data-mv="${list}|${i}|1" title="Move down">\u2193</button>${extra}
@@ -1295,6 +1314,14 @@ function panelLett(o){
 }
 
 function panelRansom(o){
+  const sld=(path,val,min,max,step=1)=>`<div class="row"><input type="range" data-b="${path}" min="${min}" max="${max}" step="${step}" value="${val}"><span class="num-ro">${val}</span></div>`;
+  const P=(o.palette&&o.palette.length)?o.palette:[];
+  const pal=P.map((pr,i)=>`<div class="item" style="padding:6px">${tools('palette',i)}
+    <div class="row" style="align-items:center">
+      <label style="margin:0">paper</label><input type="color" data-b="palette.${i}.0" value="${esc(pr[0])}" style="flex:0 0 44px;padding:1px;height:26px">
+      <label style="margin:0">ink</label><input type="color" data-b="palette.${i}.1" value="${esc(pr[1])}" style="flex:0 0 44px;padding:1px;height:26px">
+      <span style="flex:1;border:1px solid #0006;border-radius:2px;background:${esc(pr[0])};color:${esc(pr[1])};text-align:center;font-weight:700;padding:2px">Aa</span>
+    </div></div>`).join('');
   return `
   <h2>Page</h2>
   <div class="row"><div>${fld('Width (mm)', num('ransom.pageW',o.pageW,'min="90" max="240"'))}</div>
@@ -1302,17 +1329,36 @@ function panelRansom(o){
   <div class="row"><div>${fld('Paper', paperSel('ransom.paper',o.paper))}</div><div>${fld('Scale %', num('ransom.font',o.font,'min="60" max="180"'))}</div></div>
   ${chk('ransom.noise',o.noise,'Grain texture')}
   <h2>Style</h2>
-  ${fld('Manner', `<select data-b="ransom.styleMode"><option value="scrawl"${o.styleMode==='scrawl'?' selected':''}>Drunk hand \u2014 canon; the spelling is the tell</option><option value="cut"${o.styleMode==='cut'?' selected':''}>Cut-out clippings \u2014 ransom style</option></select>`)}
-  <div class="row"><div>${fld('Glyph size (pt)', num('ransom.sizePt',o.sizePt,'min="9" max="30"'))}</div>
-  <div>${fld('Max tilt (\u00b0)', num('ransom.rot',o.rot,'min="0" max="20"'))}</div>
-  <div>${fld('Size scatter %', num('ransom.sizeVar',o.sizeVar,'min="0" max="60"'))}</div></div>
-  ${fld('Clipping palette', `<select data-b="ransom.pal"><option value="color"${o.pal==='color'?' selected':''}>Magazine \u2014 full colour</option><option value="news"${o.pal!=='color'?' selected':''}>Newsprint \u2014 aged tints</option></select>`)}
-  ${fld('Whole-word clippings %', `<div class="row"><input type="range" data-b="ransom.wordPct" min="0" max="100" step="5" value="${o.wordPct}"><span class="num-ro">${o.wordPct}</span></div>`)}
+  ${fld('Manner', `<select data-b="ransom.styleMode"><option value="cut"${o.styleMode==='cut'?' selected':''}>Cut-out clippings</option><option value="scrawl"${o.styleMode==='scrawl'?' selected':''}>Drunk hand \u2014 the spelling is the tell</option></select>`)}
+  ${fld('Clipping stock (typefaces)', `<select data-b="ransom.pal"><option value="color"${o.pal!=='news'?' selected':''}>Magazine \u2014 modern faces</option><option value="news"${o.pal==='news'?' selected':''}>Newsprint \u2014 period faces</option></select>`)}
+  <h2>The scissors</h2>
+  ${fld('Glyph size (pt)', sld('ransom.sizePt',o.sizePt,9,30))}
+  ${fld('Size scatter %', sld('ransom.sizeVar',o.sizeVar,0,60))}
+  ${fld('Max tilt (\u00b0)', sld('ransom.rot',o.rot,0,20))}
+  ${fld('Ragged cut \u2014 scissor-bitten edges', sld('ransom.ragged',o.ragged??40,0,100,5))}
+  ${fld('Misalignment \u2014 baseline wander', sld('ransom.misalign',o.misalign??45,0,100,5))}
+  ${fld('Whole-word clippings %', sld('ransom.wordPct',o.wordPct,0,100,5))}
+  ${fld('UPPERCASE mix %', sld('ransom.caseUp',o.caseUp??60,0,100,5))}
+  <h2>The paste-up</h2>
+  ${fld('Chip padding \u2014 horizontal', sld('ransom.padX',o.padX??16,2,45))}
+  ${fld('Chip padding \u2014 vertical', sld('ransom.padY',o.padY??6,0,30))}
+  ${fld('Gap between clippings', sld('ransom.gapX',o.gapX??6,0,30))}
+  ${fld('Word gap', sld('ransom.wordGap',o.wordGap??70,20,200,5))}
+  ${fld('Line spacing %', sld('ransom.lineH',o.lineH??230,140,400,5))}
+  <h2>The finish</h2>
+  ${fld('Embossed press \u2014 letterpress bruise', sld('ransom.emboss',o.emboss??35,0,100,5))}
+  ${fld('Paper lift \u2014 cast shadow under each chip', sld('ransom.lift',o.lift??45,0,100,5))}
+  <h2>Clipping colours</h2>
+  <p class="hint" style="margin:2px 0 6px">Each clipping draws a paper/ink pair from this drawer at random.</p>
+  ${pal}
+  <button class="addbtn" data-add="palAdd">+ Add a colour pair</button>
+  <div class="row"><button class="addbtn" style="margin:0" data-add="palMag">Magazine palette</button>
+  <button class="addbtn" style="margin:0" data-add="palNews">Newsprint palette</button></div>
   <button class="addbtn" data-add="shuffle">\u21bb Reshuffle the clippings</button>
   <h2>Text</h2>
   ${fld('The letter', ta('ransom.body',o.body,8))}
   <button class="addbtn" data-add="tells">Apply Bell\u2019s tells \u2014 captian \u00b7 recieve \u00b7 judgement \u00b7 seperate \u00b7 barometre</button>
-  <p class="hint">Canon: the anonymous letters are handwritten and misspelled the same way every time \u2014 that is the authorship puzzle. The clippings manner is offered for table flavor; it hides the handwriting but keeps the spelling.</p>`;
+  <p class="hint">Canon: the letters in Daphne\u2019s file are handwritten, and the spelling is the authorship puzzle \u2014 the clippings keep the spelling either way. Transparent paper exports a true cutout PNG for compositing.</p>`;
 }
 
 function panelReceipt(o){
@@ -1469,6 +1515,7 @@ function resolve(path){
   else if(parts[0]==='blocks'){ obj = S.news; }
   else if(parts[0]==='lines'){ obj = S.receipt; }
   else if(parts[0]==='qs'){ obj = S.quest; }
+  else if(parts[0]==='palette'){ obj = S.ransom; }
   else if(parts[0]==='ty'){ obj = S[S.tab]; }
   else { obj = S; }
   for(let i=0;i<parts.length-1;i++) obj = obj[parts[i]];
@@ -1500,7 +1547,7 @@ $('#panel').addEventListener('click', e=>{
   const b = e.target.closest('button'); if(!b) return;
   const add = b.dataset.add, del = b.dataset.del, mv = b.dataset.mv;
   const lists = { rows: S.tab==='herb' ? S.herb.cards[S.herb.sel].rows : S.carbon.rows,
-                  blocks: S.news.blocks, lines: S.receipt.lines, qs: S.quest.qs };
+                  blocks: S.news.blocks, lines: S.receipt.lines, qs: S.quest.qs, palette: S.ransom.palette };
   if(add){
     if(add==='row')      S.herb.cards[S.herb.sel].rows.push({k:'NOTE', v:''});
     if(add==='crow')     S.carbon.rows.push({t:'19:50', n:'NAME', note:''});
@@ -1510,6 +1557,9 @@ $('#panel').addEventListener('click', e=>{
     if(add==='qnote')    S.quest.qs.push({kind:'note', text:'Note text.'});
     if(add==='stops')    S.tele.body = S.tele.body.toUpperCase().replace(/\.\s*/g,' STOP ').replace(/\s+/g,' ').trim().replace(/STOP$/,'STOP');
     if(add==='shuffle')  S.ransom.seed = Math.floor(Math.random()*1e6);
+    if(add==='palAdd')   (S.ransom.palette=S.ransom.palette||[]).push(['#ffffff','#111111']);
+    if(add==='palMag'){  S.ransom.palette = MAG_CHIPS.map(p=>[p[0],p[1]]); S.ransom.pal='color'; }
+    if(add==='palNews'){ S.ransom.palette = NEWS_CHIPS.map(p=>[p[0],p[1]]); S.ransom.pal='news'; }
     if(add==='tells')    S.ransom.body = bellTells(S.ransom.body);
     if(add==='tyreset')  S[S.tab].ty = TY0();
     if(add==='owlreset'){ S.shares.owlSrc=''; }
