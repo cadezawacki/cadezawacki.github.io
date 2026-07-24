@@ -1,0 +1,894 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Longhand — handwriting synthesizer</title>
+
+<!-- 23 free handwriting faces from the Google Fonts CDN.
+     The engine blends them per-letter with seeded jitter. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Allura&family=Caveat:wght@400..700&family=Cedarville+Cursive&family=Coming+Soon&family=Dancing+Script:wght@400..700&family=Dawning+of+a+New+Day&family=Delius&family=Gochi+Hand&family=Great+Vibes&family=Handlee&family=Homemade+Apple&family=Indie+Flower&family=Just+Me+Again+Down+Here&family=Kalam:wght@300;400;700&family=La+Belle+Aurore&family=Neucha&family=Nothing+You+Could+Do&family=Patrick+Hand&family=Reenie+Beanie&family=Sacramento&family=Schoolbell&family=Shadows+Into+Light+Two&family=Zeyada&display=swap">
+
+<style>
+:root{
+  --bg:#131417; --panel:#1b1d22; --sunken:#15171b; --line:#2a2d34;
+  --text:#e8e6de; --muted:#8f8e86; --accent:#4c6ef5; --accent-deep:#3b5bdb;
+  --red:#c9564a; --ok:#63a67a;
+}
+*{box-sizing:border-box; margin:0; padding:0;}
+html,body{height:100%;}
+body{
+  background:var(--bg); color:var(--text);
+  font:14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  display:flex; flex-direction:column; height:100vh; overflow:hidden;
+}
+
+/* ---------- header ---------- */
+header{
+  display:flex; align-items:center; gap:16px;
+  padding:10px 18px; border-bottom:1px solid var(--line); background:var(--panel);
+  flex:0 0 auto;
+}
+.wordmark{display:flex; align-items:baseline; gap:10px;}
+.wordmark .name{
+  font-family:'Caveat', cursive; font-weight:600; font-size:30px; line-height:1;
+  transform:rotate(-2deg); color:var(--text); position:relative; top:2px;
+}
+.wordmark .name svg{position:absolute; left:2px; bottom:-7px; width:96%;}
+.wordmark .tag{color:var(--muted); font-size:12px;}
+header .spacer{flex:1;}
+.btn{
+  border:1px solid var(--line); background:var(--sunken); color:var(--text);
+  padding:8px 14px; border-radius:7px; cursor:pointer; font:600 13px system-ui;
+  transition:border-color .12s, background .12s;
+}
+.btn:hover{border-color:var(--accent);}
+.btn.primary{background:var(--accent-deep); border-color:var(--accent-deep);}
+.btn.primary:hover{background:var(--accent);}
+.btn:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, summary:focus-visible{
+  outline:2px solid var(--accent); outline-offset:2px;
+}
+
+/* ---------- layout ---------- */
+main{flex:1; display:flex; min-height:0;}
+#panel{
+  flex:0 0 330px; overflow-y:auto; background:var(--panel);
+  border-right:1px solid var(--line); padding:14px 16px 32px;
+}
+#stage{
+  flex:1; overflow:auto; position:relative;
+  background:radial-gradient(120% 120% at 50% 30%, #1a1c21 0%, #0f1013 80%);
+  display:flex; flex-direction:column;
+}
+#paperWrap{flex:1; display:flex; align-items:flex-start; justify-content:center; padding:34px 28px 20px;}
+#paper{
+  background:#fff; box-shadow:0 22px 60px rgba(0,0,0,.55), 0 3px 10px rgba(0,0,0,.4);
+  border-radius:2px; max-width:100%; height:auto;
+}
+#statusbar{
+  flex:0 0 auto; display:flex; gap:18px; align-items:center;
+  padding:7px 18px; font-size:12px; color:var(--muted);
+  border-top:1px solid var(--line); background:var(--panel);
+}
+#statusbar .warn{color:var(--red);}
+#cdnNote{
+  display:none; margin:12px auto 0; max-width:640px; padding:10px 14px;
+  background:#3a2320; border:1px solid var(--red); border-radius:8px;
+  color:#f0c9c2; font-size:13px;
+}
+
+/* ---------- panel controls ---------- */
+h2{
+  font-size:11px; letter-spacing:.14em; text-transform:uppercase;
+  color:var(--muted); font-weight:700;
+}
+details{border-top:1px solid var(--line); padding:10px 0;}
+details:first-of-type{border-top:none;}
+summary{cursor:pointer; list-style:none; display:flex; align-items:center; gap:8px; padding:4px 0;}
+summary::before{content:""; width:7px; height:7px; border-right:1.6px solid var(--muted);
+  border-bottom:1.6px solid var(--muted); transform:rotate(-45deg); transition:transform .12s;}
+details[open] summary::before{transform:rotate(45deg);}
+.group-body{padding:10px 2px 4px; display:flex; flex-direction:column; gap:12px;}
+
+label.field{display:flex; flex-direction:column; gap:5px; font-size:13px; color:var(--text);}
+.row{display:flex; gap:10px; align-items:center;}
+.row > *{flex:1;}
+.lbl{display:flex; justify-content:space-between; align-items:baseline; font-size:13px;}
+.lbl output{color:var(--muted); font-size:12px; font-variant-numeric:tabular-nums;}
+
+textarea{
+  width:100%; min-height:120px; resize:vertical;
+  background:var(--sunken); border:1px solid var(--line); border-radius:8px;
+  color:var(--text); padding:10px; font:13px/1.5 ui-monospace, Menlo, Consolas, monospace;
+}
+select, input[type=number]{
+  width:100%; background:var(--sunken); border:1px solid var(--line);
+  color:var(--text); border-radius:7px; padding:7px 8px; font-size:13px;
+}
+input[type=range]{
+  -webkit-appearance:none; appearance:none; width:100%; height:22px; background:transparent; cursor:pointer;
+}
+input[type=range]::-webkit-slider-runnable-track{height:4px; border-radius:2px; background:var(--line);}
+input[type=range]::-webkit-slider-thumb{
+  -webkit-appearance:none; width:15px; height:15px; border-radius:50%;
+  background:var(--accent); margin-top:-5.5px; border:2px solid var(--panel);
+}
+input[type=range]::-moz-range-track{height:4px; border-radius:2px; background:var(--line);}
+input[type=range]::-moz-range-thumb{width:13px; height:13px; border-radius:50%; background:var(--accent); border:2px solid var(--panel);}
+
+.swatches{display:flex; gap:7px; flex-wrap:wrap; align-items:center;}
+.swatch{
+  width:24px; height:24px; border-radius:50%; cursor:pointer;
+  border:2px solid transparent; padding:0; outline-offset:2px;
+}
+.swatch[aria-pressed="true"]{border-color:var(--accent);}
+input[type=color]{
+  width:34px; height:26px; padding:0 2px; background:var(--sunken);
+  border:1px solid var(--line); border-radius:6px; cursor:pointer;
+}
+.check{display:flex; gap:8px; align-items:center; font-size:13px; cursor:pointer;}
+.check input{accent-color:var(--accent); width:15px; height:15px;}
+.mini{color:var(--muted); font-size:11.5px; line-height:1.4;}
+.seedrow{display:flex; gap:8px;}
+.seedrow input{flex:1;}
+.seedrow .btn{flex:0 0 auto; padding:7px 11px;}
+
+@media (max-width: 860px){
+  body{overflow:auto; height:auto;}
+  main{flex-direction:column;}
+  #panel{flex:none; width:100%; border-right:none; border-bottom:1px solid var(--line); max-height:none;}
+  #stage{min-height:70vh;}
+}
+@media (prefers-reduced-motion: reduce){
+  *{transition:none !important;}
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wordmark">
+    <span class="name">Longhand
+      <svg viewBox="0 0 120 8" fill="none" aria-hidden="true">
+        <path d="M2 5 C 22 1, 38 7, 58 4 S 100 2, 118 5" stroke="#4c6ef5" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+    </span>
+    <span class="tag">handwriting synthesizer · structured chaos on paper</span>
+  </div>
+  <div class="spacer"></div>
+  <button class="btn" id="btnCopy" title="Copy the rendered page to the clipboard">Copy image</button>
+  <button class="btn primary" id="btnSave">Download PNG</button>
+</header>
+
+<main>
+  <aside id="panel">
+
+    <details open>
+      <summary><h2>Text</h2></summary>
+      <div class="group-body">
+        <textarea id="inText" spellcheck="false">Dear reader,
+
+No two letters ever land the same way twice. Every stroke leans, drifts and wobbles a little differently — that is what makes writing look human.
+
+The quick brown fox jumps over the lazy dog. 1234567890!</textarea>
+      </div>
+    </details>
+
+    <details open>
+      <summary><h2>Style</h2></summary>
+      <div class="group-body">
+        <label class="field">Penmanship
+          <select id="inPreset">
+            <option value="neat">Neat print</option>
+            <option value="everyday" selected>Everyday print</option>
+            <option value="scrawl">Hurried scrawl</option>
+            <option value="curCasual">Casual cursive</option>
+            <option value="curElegant">Elegant cursive</option>
+            <option value="chaos">Chaotic mix</option>
+          </select>
+        </label>
+        <div>
+          <div class="lbl"><span>Messiness</span><output id="oMess"></output></div>
+          <input type="range" id="inMess" min="0" max="200" value="100">
+        </div>
+        <div>
+          <div class="lbl"><span>Font blend</span><output id="oBlend"></output></div>
+          <input type="range" id="inBlend" min="0" max="100" value="45">
+          <div class="mini">0 = one hand throughout · 100 = letters borrowed freely from every face in the set</div>
+        </div>
+      </div>
+    </details>
+
+    <details open>
+      <summary><h2>Pen &amp; ink</h2></summary>
+      <div class="group-body">
+        <label class="field">Pen
+          <select id="inPen">
+            <option value="ball" selected>Ballpoint</option>
+            <option value="fine">Fineliner</option>
+            <option value="gel">Gel pen</option>
+            <option value="fountain">Fountain pen</option>
+            <option value="marker">Felt marker</option>
+            <option value="pencil">Pencil</option>
+          </select>
+        </label>
+        <div class="field"><span style="font-size:13px">Ink</span>
+          <div class="swatches" id="inkSwatches">
+            <button class="swatch" data-c="#23242a" style="background:#23242a" aria-label="Black ink"></button>
+            <button class="swatch" data-c="#1c3fa8" style="background:#1c3fa8" aria-pressed="true" aria-label="Blue ink"></button>
+            <button class="swatch" data-c="#232f55" style="background:#232f55" aria-label="Blue-black ink"></button>
+            <button class="swatch" data-c="#a33131" style="background:#a33131" aria-label="Red ink"></button>
+            <button class="swatch" data-c="#2c6b46" style="background:#2c6b46" aria-label="Green ink"></button>
+            <input type="color" id="inInk" value="#1c3fa8" aria-label="Custom ink color">
+          </div>
+        </div>
+        <div>
+          <div class="lbl"><span>Writing size</span><output id="oSize"></output></div>
+          <input type="range" id="inSize" min="18" max="72" value="34">
+        </div>
+        <div>
+          <div class="lbl"><span>Ink flow variance</span><output id="oFlow"></output></div>
+          <input type="range" id="inFlow" min="0" max="100" value="40">
+          <div class="mini">Uneven pressure and the occasional ballpoint skip.</div>
+        </div>
+      </div>
+    </details>
+
+    <details>
+      <summary><h2>Rhythm &amp; chaos</h2></summary>
+      <div class="group-body">
+        <div><div class="lbl"><span>Letter size jitter</span><output id="oSizeJ"></output></div>
+          <input type="range" id="inSizeJ" min="0" max="15" value="5" step="0.5"></div>
+        <div><div class="lbl"><span>Baseline wobble</span><output id="oWobble"></output></div>
+          <input type="range" id="inWobble" min="0" max="10" value="3.2" step="0.2"></div>
+        <div><div class="lbl"><span>Letter tilt</span><output id="oTilt"></output></div>
+          <input type="range" id="inTilt" min="0" max="10" value="2.6" step="0.2"></div>
+        <div><div class="lbl"><span>Slant</span><output id="oSlant"></output></div>
+          <input type="range" id="inSlant" min="-15" max="15" value="-1" step="0.5"></div>
+        <div><div class="lbl"><span>Slant variance</span><output id="oSlantV"></output></div>
+          <input type="range" id="inSlantV" min="0" max="8" value="2.5" step="0.25"></div>
+        <div><div class="lbl"><span>Letter spacing</span><output id="oLsp"></output></div>
+          <input type="range" id="inLsp" min="-6" max="10" value="1.5" step="0.25"></div>
+        <div><div class="lbl"><span>Word spacing</span><output id="oWsp"></output></div>
+          <input type="range" id="inWsp" min="60" max="200" value="105"></div>
+        <div><div class="lbl"><span>Line height</span><output id="oLh"></output></div>
+          <input type="range" id="inLh" min="1.2" max="2.6" value="1.75" step="0.05"></div>
+        <div><div class="lbl"><span>Line height variance</span><output id="oLhV"></output></div>
+          <input type="range" id="inLhV" min="0" max="15" value="5" step="0.5"></div>
+        <div><div class="lbl"><span>Baseline drift</span><output id="oDrift"></output></div>
+          <input type="range" id="inDrift" min="0" max="12" value="3.5" step="0.25">
+          <div class="mini">Slow wander of the whole line — nobody writes perfectly level.</div></div>
+      </div>
+    </details>
+
+    <details open>
+      <summary><h2>Paper</h2></summary>
+      <div class="group-body">
+        <label class="field">Sheet
+          <select id="inPaper">
+            <option value="blank">Blank</option>
+            <option value="ruled" selected>Ruled</option>
+            <option value="grid">Grid</option>
+            <option value="legal">Legal pad</option>
+            <option value="aged">Aged paper</option>
+          </select>
+        </label>
+        <div class="field" id="toneField"><span style="font-size:13px">Tone</span>
+          <div class="swatches" id="toneSwatches">
+            <button class="swatch" data-c="#fdfdfb" style="background:#fdfdfb" aria-pressed="true" aria-label="White paper"></button>
+            <button class="swatch" data-c="#f8f3e6" style="background:#f8f3e6" aria-label="Cream paper"></button>
+            <button class="swatch" data-c="#eef0f2" style="background:#eef0f2" aria-label="Gray paper"></button>
+            <button class="swatch" data-c="#f0f5fa" style="background:#f0f5fa" aria-label="Blue-tinted paper"></button>
+          </div>
+        </div>
+        <label class="check"><input type="checkbox" id="inMarginLine" checked> Red margin line</label>
+        <label class="check"><input type="checkbox" id="inTexture" checked> Paper fiber texture</label>
+      </div>
+    </details>
+
+    <details open>
+      <summary><h2>Page &amp; output</h2></summary>
+      <div class="group-body">
+        <label class="field">Page size
+          <select id="inPage">
+            <option value="fit" selected>Fit to text (1000 px wide)</option>
+            <option value="a4">A4 portrait (1000 × 1414)</option>
+            <option value="square">Square (1080 × 1080)</option>
+            <option value="wide">Wide (1600 × 900)</option>
+          </select>
+        </label>
+        <label class="field">Export resolution
+          <select id="inScale">
+            <option value="1">1× (page size)</option>
+            <option value="2" selected>2×</option>
+            <option value="3">3×</option>
+          </select>
+        </label>
+        <div class="field"><span style="font-size:13px">Seed</span>
+          <div class="seedrow">
+            <input type="number" id="inSeed" value="424242" min="1" step="1" aria-label="Random seed">
+            <button class="btn" id="btnDice" title="Re-roll the randomness">🎲 Re-roll</button>
+          </div>
+          <div class="mini">The same seed always reproduces the exact same page.</div>
+        </div>
+      </div>
+    </details>
+
+  </aside>
+
+  <section id="stage">
+    <div id="cdnNote">The font CDN appears to be blocked in this preview, so the page is rendering with a fallback face.
+      Download the HTML file and open it directly in a browser to load all 23 handwriting fonts.</div>
+    <div id="paperWrap"><canvas id="paper" role="img" aria-label="Rendered handwriting preview"></canvas></div>
+    <div id="statusbar">
+      <span id="stFonts">Loading handwriting fonts…</span>
+      <span id="stDims"></span>
+      <span id="stWarn" class="warn"></span>
+    </div>
+  </section>
+</main>
+
+<script>
+/* =========================================================================
+   Longhand — a handwriting synthesis engine built on layered randomness.
+
+   Realism model (all seeded, all reproducible):
+     1. Letter identity — each character is assigned a "home" font, size and
+        tilt bias per seed, so every "e" resembles the other "e"s without
+        ever being identical. The Font blend slider controls how many
+        letters take their home from an alternate face.
+     2. Instance jitter — per-glyph size, rotation, baseline, spacing,
+        weight (on variable fonts) and ink-flow deviation from the home.
+     3. Word level — word-spacing jitter; in cursive mode fonts switch per
+        word (not per letter) so joins stay believable.
+     4. Line level — smooth sinusoidal baseline drift, per-line slope,
+        indent wobble and line-height variance.
+     5. Ink level — pen models (ballpoint skips, fountain double-strike
+        bleed, pencil graphite, marker weight) and pressure variance.
+   ========================================================================= */
+
+'use strict';
+
+/* ---------- font registry ---------- */
+const FONTS = [
+  {fam:'Patrick Hand',            w:[400],             pools:['neat']},
+  {fam:'Handlee',                 w:[400],             pools:['neat']},
+  {fam:'Delius',                  w:[400],             pools:['neat']},
+  {fam:'Kalam',                   w:[300,400,700],     pools:['neat','casual']},
+  {fam:'Shadows Into Light Two',  w:[400],             pools:['neat','casual']},
+  {fam:'Indie Flower',            w:[400],             pools:['casual']},
+  {fam:'Gochi Hand',              w:[400],             pools:['casual']},
+  {fam:'Schoolbell',              w:[400],             pools:['casual']},
+  {fam:'Coming Soon',             w:[400],             pools:['casual']},
+  {fam:'Neucha',                  w:[400],             pools:['casual','scrawl']},
+  {fam:'Reenie Beanie',           w:[400],             pools:['scrawl']},
+  {fam:'Zeyada',                  w:[400],             pools:['scrawl']},
+  {fam:'Nothing You Could Do',    w:[400],             pools:['scrawl']},
+  {fam:'La Belle Aurore',         w:[400],             pools:['scrawl']},
+  {fam:'Just Me Again Down Here', w:[400],             pools:['scrawl']},
+  {fam:'Caveat',                  w:[400,500,600,700], pools:['curC'], cursive:true},
+  {fam:'Homemade Apple',          w:[400],             pools:['curC'], cursive:true},
+  {fam:'Cedarville Cursive',      w:[400],             pools:['curC'], cursive:true},
+  {fam:'Dawning of a New Day',    w:[400],             pools:['curC'], cursive:true},
+  {fam:'Dancing Script',          w:[400,500,600,700], pools:['curE'], cursive:true},
+  {fam:'Great Vibes',             w:[400],             pools:['curE'], cursive:true},
+  {fam:'Allura',                  w:[400],             pools:['curE'], cursive:true},
+  {fam:'Sacramento',              w:[400],             pools:['curE'], cursive:true},
+];
+const FALLBACK_FONT = {fam:'cursive', w:[400], pools:[], norm:1, ok:true};
+
+/* ---------- presets: pools + default control values ---------- */
+const PRESETS = {
+  neat:      {pools:['neat'],                       cursive:false, blend:20, mess:80,  sizeJ:3,   wobble:2.2, tilt:1.6, slant:1,  slantV:1.5, lsp:1,    wsp:100, lh:1.7,  lhV:3,  drift:2.5, flow:25},
+  everyday:  {pools:['neat','casual'],              cursive:false, blend:45, mess:100, sizeJ:5,   wobble:3.2, tilt:2.6, slant:-1, slantV:2.5, lsp:1.5,  wsp:105, lh:1.75, lhV:5,  drift:3.5, flow:40},
+  scrawl:    {pools:['casual','scrawl'],            cursive:false, blend:55, mess:135, sizeJ:7,   wobble:4.6, tilt:4,   slant:-5, slantV:3.5, lsp:2.5,  wsp:118, lh:1.65, lhV:8,  drift:5,   flow:55},
+  curCasual: {pools:['curC'],                       cursive:true,  blend:30, mess:95,  sizeJ:4,   wobble:2.4, tilt:1.2, slant:4,  slantV:1.5, lsp:-2,   wsp:96,  lh:1.85, lhV:4,  drift:3,   flow:35},
+  curElegant:{pools:['curE'],                       cursive:true,  blend:12, mess:70,  sizeJ:2.5, wobble:1.6, tilt:0.8, slant:7,  slantV:1,   lsp:-1.5, wsp:100, lh:1.95, lhV:3,  drift:2,   flow:25},
+  chaos:     {pools:['neat','casual','scrawl','curC'],cursive:false,blend:85, mess:170, sizeJ:9,   wobble:6,   tilt:5.5, slant:-2, slantV:5,   lsp:3,    wsp:112, lh:1.7,  lhV:10, drift:6,   flow:65},
+};
+const PEN_INK = {ball:'#1c3fa8', fine:'#23242a', gel:'#191a1e', fountain:'#232f55', marker:'#23242a', pencil:'#565a63'};
+
+/* ---------- seeded randomness ---------- */
+function mulberry32(a){
+  return function(){
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+function gauss(r){ return (r() + r() + r() - 1.5) / 1.5; } // ~normal, [-1,1]
+
+/* ---------- DOM helpers ---------- */
+const $ = id => document.getElementById(id);
+const measCanvas = document.createElement('canvas');
+const meas = measCanvas.getContext('2d');
+
+const state = {
+  pools: PRESETS.everyday.pools.slice(),
+  cursive: false,
+  fontsReady: false,
+};
+
+/* ---------- read the whole configuration from the panel ---------- */
+function readCfg(){
+  const page = $('inPage').value;
+  const dims = {fit:[1000,0], a4:[1000,1414], square:[1080,1080], wide:[1600,900]}[page];
+  return {
+    text:  $('inText').value,
+    seed:  Math.max(1, ($('inSeed').value|0) || 1),
+    pools: state.pools, cursive: state.cursive,
+    blend: +$('inBlend').value, mess: +$('inMess').value,
+    pen:   $('inPen').value, ink: $('inInk').value,
+    size:  +$('inSize').value, flow: +$('inFlow').value,
+    sizeJ: +$('inSizeJ').value, wobble: +$('inWobble').value, tilt: +$('inTilt').value,
+    slant: +$('inSlant').value, slantV: +$('inSlantV').value,
+    lsp:   +$('inLsp').value, wsp: +$('inWsp').value,
+    lh:    +$('inLh').value, lhV: +$('inLhV').value, drift: +$('inDrift').value,
+    paper: $('inPaper').value, tone: state.tone || '#fdfdfb',
+    marginLine: $('inMarginLine').checked, texture: $('inTexture').checked,
+    pw: dims[0], ph: dims[1], fixed: dims[1] > 0,
+    mL: 96, mR: 70, mT: 84, mB: 84,
+  };
+}
+
+function activePool(cfg){
+  let pool = FONTS.filter(f => f.ok && f.pools.some(p => cfg.pools.includes(p)));
+  if (!pool.length) pool = FONTS.filter(f => f.ok);
+  if (!pool.length) pool = [FALLBACK_FONT];
+  return pool;
+}
+
+/* =========================================================================
+   SYNTHESIS — text -> fully resolved glyph tokens (all randomness spent
+   here, in one deterministic pass, so wrapping never changes the look)
+   ========================================================================= */
+function synthesize(cfg){
+  const rng  = mulberry32(cfg.seed);
+  const pool = activePool(cfg);
+  const jm   = cfg.mess / 100;                 // master chaos multiplier
+  const primary = pool[Math.floor(rng() * pool.length)];
+
+  // per-letter identities: structured part of the chaos
+  const ids = new Map();
+  function identity(ch){
+    let id = ids.get(ch);
+    if (!id){
+      let font = primary;
+      if (pool.length > 1 && rng() < (cfg.blend/100) * 0.85){
+        font = pool[Math.floor(rng() * pool.length)];
+      }
+      id = {
+        font,
+        sizeB: 1 + 0.05 * gauss(rng) * jm,
+        rotB:  2.2 * gauss(rng) * jm * Math.PI/180,
+        dyB:   0.028 * gauss(rng) * jm,
+      };
+      ids.set(ch, id);
+    }
+    return id;
+  }
+
+  function pickWeight(font){
+    if (font.w.length === 1) return font.w[0];
+    if (rng() < 0.55) return 400;
+    return font.w[Math.floor(rng() * font.w.length)];
+  }
+
+  function inkAlpha(){
+    const base = {ball:.9, fine:.95, gel:.97, fountain:.92, marker:.9, pencil:.8}[cfg.pen];
+    let a = base - (cfg.flow/100) * 0.3 * rng();
+    if (cfg.pen === 'ball' && rng() < (cfg.flow/100) * 0.08) a *= 0.55;  // ink skip
+    return Math.min(1, Math.max(0.3, a));
+  }
+
+  // primary-font space width at base size
+  meas.font = `400 ${(cfg.size * (primary.norm || 1)).toFixed(2)}px "${primary.fam}", cursive`;
+  const spaceW = meas.measureText(' ').width || cfg.size * 0.32;
+
+  const tokens = [];
+  let word = null, wordFont = primary, wordPressure = 1;
+
+  function endWord(){ if (word && word.glyphs.length) tokens.push(word); word = null; }
+
+  const chars = Array.from(cfg.text);
+  for (const ch of chars){
+    if (ch === '\n'){ endWord(); tokens.push({t:'br'}); continue; }
+    if (ch === ' ' || ch === '\t'){
+      endWord();
+      const mult = ch === '\t' ? 3 : 1;
+      const adv = spaceW * mult * (cfg.wsp/100) * (1 + 0.12 * gauss(rng) * jm) * (cfg.cursive ? 0.92 : 1);
+      tokens.push({t:'sp', adv});
+      continue;
+    }
+    if (!word){
+      word = {t:'w', glyphs:[], width:0};
+      wordPressure = 1 - 0.1 * rng() * (cfg.flow/100);
+      wordFont = primary;
+      if (cfg.cursive && pool.length > 1 && rng() < (cfg.blend/100) * 0.6){
+        wordFont = pool[Math.floor(rng() * pool.length)];
+      }
+    }
+
+    const id = identity(ch);
+    let font = cfg.cursive ? wordFont : id.font;
+    if (!cfg.cursive && pool.length > 1 && rng() < (cfg.blend/100) * 0.22){
+      font = pool[Math.floor(rng() * pool.length)];       // per-instance deviation
+    }
+
+    const weight = pickWeight(font);
+    const size = cfg.size * (font.norm || 1) * id.sizeB *
+                 (1 + (cfg.sizeJ/100) * gauss(rng) * jm);
+    const fstr = `${weight} ${size.toFixed(2)}px "${font.fam}", cursive`;
+    meas.font = fstr;
+    const cw = meas.measureText(ch).width;
+
+    const rotScale = cfg.cursive ? 0.35 : 1;
+    const dyScale  = cfg.cursive ? 0.6  : 1;
+    const g = {
+      ch, fstr, cw,
+      adv: cw + cfg.size * (cfg.lsp/100) + cfg.size * 0.015 * gauss(rng) * jm,
+      rot: id.rotB * rotScale + (cfg.tilt * Math.PI/180) * gauss(rng) * jm * rotScale,
+      dy:  cfg.size * (id.dyB + (cfg.wobble/100) * gauss(rng) * jm * dyScale),
+      slantJ: cfg.slantV * gauss(rng) * jm,
+      alpha: inkAlpha() * wordPressure,
+    };
+    word.glyphs.push(g);
+    word.width += g.adv;
+  }
+  endWord();
+  return {tokens, rng, jm};
+}
+
+/* =========================================================================
+   LAYOUT — greedy wrap of tokens into positioned lines
+   ========================================================================= */
+function layout(cfg, syn){
+  const {tokens, rng, jm} = syn;
+  const usableW = cfg.pw - cfg.mL - cfg.mR;
+  const lines = [];
+
+  function newLine(){
+    return {
+      items: [], w: 0,
+      indent: Math.max(-6, cfg.size * 0.22 * gauss(rng) * jm),
+      p1: rng() * 6.283, p2: rng() * 6.283,
+      slope: 0.004 * gauss(rng) * jm,
+      lhJ: gauss(rng),
+    };
+  }
+  let cur = newLine();
+  const push = () => { lines.push(cur); cur = newLine(); };
+
+  for (const tok of tokens){
+    if (tok.t === 'br'){ push(); continue; }
+    if (tok.t === 'sp'){ if (cur.w > 0){ cur.items.push({adv: tok.adv}); cur.w += tok.adv; } continue; }
+    // word
+    if (cur.w > 0 && cur.w + tok.width > usableW - cur.indent) push();
+    if (tok.width <= usableW - cur.indent || cur.w > 0){
+      cur.items.push(...tok.glyphs); cur.w += tok.width;
+    } else {
+      // hard-break a word longer than the line
+      for (const g of tok.glyphs){
+        if (cur.w + g.adv > usableW - cur.indent && cur.w > 0) push();
+        cur.items.push(g); cur.w += g.adv;
+      }
+    }
+  }
+  lines.push(cur);
+  while (lines.length > 1 && lines[lines.length-1].items.length === 0) lines.pop();
+
+  // vertical placement
+  const pitch = cfg.size * cfg.lh;
+  const ruled = (cfg.paper === 'ruled' || cfg.paper === 'legal');
+  let y = cfg.mT + pitch;
+  for (const ln of lines){
+    if (ruled){
+      ln.y = y - cfg.size * 0.08 + cfg.size * 0.02 * ln.lhJ * jm;   // sit on the rule, imperfectly
+      y += pitch;
+    } else {
+      ln.y = y;
+      y += pitch * (1 + (cfg.lhV/100) * ln.lhJ * jm);
+    }
+  }
+  const contentBottom = (lines.length ? lines[lines.length-1].y : cfg.mT) + cfg.size * 0.9;
+
+  let ph = cfg.fixed ? cfg.ph : Math.max(520, Math.round(contentBottom + cfg.mB));
+  let hidden = 0;
+  if (cfg.fixed){
+    const keep = [];
+    for (const ln of lines){
+      if (ln.y > ph - cfg.mB * 0.6) hidden++;
+      else keep.push(ln);
+    }
+    lines.length = 0; lines.push(...keep);
+  }
+  return {lines, ph, pitch, hidden};
+}
+
+/* =========================================================================
+   PAINT
+   ========================================================================= */
+function hexMix(a, b, t){
+  const pa = [1,3,5].map(i => parseInt(a.slice(i, i+2), 16));
+  const pb = [1,3,5].map(i => parseInt(b.slice(i, i+2), 16));
+  return '#' + pa.map((v,i) => Math.round(v + (pb[i]-v)*t).toString(16).padStart(2,'0')).join('');
+}
+
+function drawPaper(ctx, cfg, lay, texRng){
+  const W = cfg.pw, H = lay.ph;
+  // base sheet
+  if (cfg.paper === 'legal'){
+    ctx.fillStyle = '#f6ecb0';
+  } else if (cfg.paper === 'aged'){
+    const gr = ctx.createRadialGradient(W/2, H/2, Math.min(W,H)*0.2, W/2, H/2, Math.max(W,H)*0.75);
+    gr.addColorStop(0, '#f0e4c6'); gr.addColorStop(1, '#dcc79c');
+    ctx.fillStyle = gr;
+  } else {
+    ctx.fillStyle = cfg.tone;
+  }
+  ctx.fillRect(0, 0, W, H);
+
+  if (cfg.paper === 'aged'){
+    for (let i = 0; i < 140; i++){
+      ctx.fillStyle = `rgba(120,90,40,${0.03 + texRng()*0.05})`;
+      const r = 0.5 + texRng()*1.8;
+      ctx.beginPath();
+      ctx.arc(texRng()*W, texRng()*H, r, 0, 6.283);
+      ctx.fill();
+    }
+  }
+
+  // rules / grid
+  if (cfg.paper === 'ruled' || cfg.paper === 'legal'){
+    ctx.strokeStyle = cfg.paper === 'legal' ? 'rgba(70,110,170,0.5)' : 'rgba(110,140,190,0.38)';
+    ctx.lineWidth = 1;
+    for (let ry = cfg.mT + lay.pitch; ry < H - 24; ry += lay.pitch){
+      ctx.beginPath(); ctx.moveTo(0, ry + 3); ctx.lineTo(W, ry + 3); ctx.stroke();
+    }
+  } else if (cfg.paper === 'grid'){
+    ctx.strokeStyle = 'rgba(120,150,200,0.22)';
+    ctx.lineWidth = 1;
+    const gap = Math.max(14, cfg.size * 0.55);
+    for (let gx = gap; gx < W; gx += gap){ ctx.beginPath(); ctx.moveTo(gx, 0); ctx.lineTo(gx, H); ctx.stroke(); }
+    for (let gy = gap; gy < H; gy += gap){ ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(W, gy); ctx.stroke(); }
+  }
+
+  if (cfg.marginLine && cfg.paper !== 'grid'){
+    ctx.strokeStyle = 'rgba(201,86,74,0.55)';
+    ctx.lineWidth = 1.4;
+    ctx.beginPath(); ctx.moveTo(cfg.mL - 20, 0); ctx.lineTo(cfg.mL - 20, H); ctx.stroke();
+  }
+
+  // fiber texture: tiled seeded noise
+  if (cfg.texture){
+    const t = document.createElement('canvas'); t.width = t.height = 128;
+    const tc = t.getContext('2d');
+    const img = tc.createImageData(128, 128);
+    for (let i = 0; i < img.data.length; i += 4){
+      const v = 90 + texRng()*80;
+      img.data[i] = img.data[i+1] = img.data[i+2] = v;
+      img.data[i+3] = texRng() < 0.5 ? 0 : 8 + texRng()*9;
+    }
+    tc.putImageData(img, 0, 0);
+    ctx.save();
+    ctx.globalAlpha = cfg.paper === 'aged' ? 0.8 : 0.55;
+    ctx.fillStyle = ctx.createPattern(t, 'repeat');
+    ctx.fillRect(0, 0, W, H);
+    ctx.restore();
+  }
+}
+
+function drawText(ctx, cfg, lay){
+  const pen = cfg.pen;
+  let ink = cfg.ink;
+  if (pen === 'pencil') ink = hexMix(ink, '#6b6f78', 0.45);
+
+  ctx.fillStyle = ink;
+  ctx.textBaseline = 'alphabetic';
+  if (pen === 'gel')    { ctx.shadowColor = ink; ctx.shadowBlur = 0.4; }
+  if (pen === 'marker') { ctx.shadowColor = ink; ctx.shadowBlur = 0.9; }
+  if (pen === 'pencil') { ctx.shadowColor = ink; ctx.shadowBlur = 0.3; }
+  if (pen === 'fountain'){ ctx.shadowColor = ink; ctx.shadowBlur = 0.2; }
+
+  const driftAmp = (cfg.drift/100) * cfg.size * (cfg.mess/100);
+
+  for (const ln of lay.lines){
+    let x = cfg.mL + ln.indent;
+    for (const it of ln.items){
+      if (!it.ch){ x += it.adv; continue; }
+      const xRel = x - cfg.mL;
+      const ddy = driftAmp * (Math.sin(xRel*0.012 + ln.p1) + 0.6*Math.sin(xRel*0.03 + ln.p2)) / 1.6
+                + xRel * ln.slope;
+      ctx.save();
+      ctx.translate(x + it.cw/2, ln.y + it.dy + ddy);
+      ctx.rotate(it.rot);
+      const k = Math.tan((cfg.slant + it.slantJ) * Math.PI/180);
+      ctx.transform(1, 0, -k, 1, 0, 0);
+      ctx.font = it.fstr;
+      ctx.globalAlpha = it.alpha;
+      ctx.fillText(it.ch, -it.cw/2, 0);
+      if (pen === 'fountain'){                    // ink bleed: faint second strike
+        ctx.globalAlpha = it.alpha * 0.28;
+        ctx.fillText(it.ch, -it.cw/2 + 0.6, 0.4);
+      }
+      ctx.restore();
+      x += it.adv;
+    }
+  }
+}
+
+/* full render into any context at a given scale (pure: same seed = same page) */
+function paint(ctx, cfg, lay, scale){
+  ctx.save();
+  ctx.scale(scale, scale);
+  const texRng = mulberry32(cfg.seed ^ 0x9e3779b9);
+  drawPaper(ctx, cfg, lay, texRng);
+  drawText(ctx, cfg, lay);
+  ctx.restore();
+}
+
+/* ---------- display render ---------- */
+let lastLayout = null, lastCfg = null;
+function render(){
+  const cfg = readCfg();
+  const syn = synthesize(cfg);
+  const lay = layout(cfg, syn);
+  lastLayout = lay; lastCfg = cfg;
+
+  const cv = $('paper');
+  const RS = 2;                                  // crisp on-screen supersampling
+  cv.width = cfg.pw * RS; cv.height = lay.ph * RS;
+  cv.style.width  = Math.min(cfg.pw, 1100) + 'px';
+  const ctx = cv.getContext('2d');
+  paint(ctx, cfg, lay, RS);
+
+  $('stDims').textContent = `${cfg.pw} × ${lay.ph} px · seed ${cfg.seed}`;
+  $('stWarn').textContent = lay.hidden
+    ? `Text overflows the page — ${lay.hidden} line${lay.hidden>1?'s':''} hidden. Switch to “Fit to text” to show everything.`
+    : '';
+}
+
+let renderQueued = false;
+function scheduleRender(){
+  if (renderQueued) return;
+  renderQueued = true;
+  requestAnimationFrame(() => { renderQueued = false; render(); });
+}
+
+/* ---------- export ---------- */
+function renderExport(){
+  const s = +$('inScale').value;
+  const cv = document.createElement('canvas');
+  cv.width = lastCfg.pw * s; cv.height = lastLayout.ph * s;
+  paint(cv.getContext('2d'), lastCfg, lastLayout, s);
+  return cv;
+}
+$('btnSave').addEventListener('click', () => {
+  if (!lastCfg) return;
+  renderExport().toBlob(blob => {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `longhand-seed-${lastCfg.seed}.png`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  }, 'image/png');
+});
+$('btnCopy').addEventListener('click', async () => {
+  if (!lastCfg) return;
+  const btn = $('btnCopy'), old = btn.textContent;
+  try{
+    const blob = await new Promise(res => renderExport().toBlob(res, 'image/png'));
+    await navigator.clipboard.write([new ClipboardItem({'image/png': blob})]);
+    btn.textContent = 'Copied ✓';
+  }catch(e){
+    btn.textContent = 'Copy blocked — use Download';
+  }
+  setTimeout(() => btn.textContent = old, 1800);
+});
+
+/* ---------- controls wiring ---------- */
+const SLIDER_OUT = {
+  inMess:['oMess', v=>v+'%'],   inBlend:['oBlend', v=>v+'%'],  inSize:['oSize', v=>v+' px'],
+  inFlow:['oFlow', v=>v+'%'],   inSizeJ:['oSizeJ', v=>'±'+v+'%'], inWobble:['oWobble', v=>'±'+v+'%'],
+  inTilt:['oTilt', v=>'±'+v+'°'], inSlant:['oSlant', v=>v+'°'], inSlantV:['oSlantV', v=>'±'+v+'°'],
+  inLsp:['oLsp', v=>v+'%'],     inWsp:['oWsp', v=>v+'%'],      inLh:['oLh', v=>'×'+v],
+  inLhV:['oLhV', v=>'±'+v+'%'], inDrift:['oDrift', v=>v+'%'],
+};
+function syncOutputs(){
+  for (const [id,[out,fmt]] of Object.entries(SLIDER_OUT)) $(out).textContent = fmt($(id).value);
+}
+for (const id of Object.keys(SLIDER_OUT)){
+  $(id).addEventListener('input', () => { syncOutputs(); scheduleRender(); });
+}
+let textTimer = null;
+$('inText').addEventListener('input', () => {
+  clearTimeout(textTimer); textTimer = setTimeout(render, 160);
+});
+for (const id of ['inPen','inPaper','inPage','inSeed','inMarginLine','inTexture','inScale']){
+  $(id).addEventListener('change', () => {
+    if (id === 'inPen'){ setInk(PEN_INK[$('inPen').value]); }
+    if (id === 'inPaper'){ $('toneField').style.display =
+      ['legal','aged'].includes($('inPaper').value) ? 'none' : ''; }
+    scheduleRender();
+  });
+}
+$('inInk').addEventListener('input', () => { setInk($('inInk').value, true); scheduleRender(); });
+
+function setInk(c, custom){
+  $('inInk').value = c;
+  document.querySelectorAll('#inkSwatches .swatch').forEach(b =>
+    b.setAttribute('aria-pressed', String(!custom && b.dataset.c === c)));
+}
+document.querySelectorAll('#inkSwatches .swatch').forEach(b =>
+  b.addEventListener('click', () => { setInk(b.dataset.c); scheduleRender(); }));
+
+state.tone = '#fdfdfb';
+document.querySelectorAll('#toneSwatches .swatch').forEach(b =>
+  b.addEventListener('click', () => {
+    state.tone = b.dataset.c;
+    document.querySelectorAll('#toneSwatches .swatch').forEach(x =>
+      x.setAttribute('aria-pressed', String(x === b)));
+    scheduleRender();
+  }));
+
+$('inPreset').addEventListener('change', () => {
+  const p = PRESETS[$('inPreset').value];
+  state.pools = p.pools.slice(); state.cursive = p.cursive;
+  const map = {inBlend:'blend', inMess:'mess', inSizeJ:'sizeJ', inWobble:'wobble', inTilt:'tilt',
+               inSlant:'slant', inSlantV:'slantV', inLsp:'lsp', inWsp:'wsp',
+               inLh:'lh', inLhV:'lhV', inDrift:'drift', inFlow:'flow'};
+  for (const [id,k] of Object.entries(map)) $(id).value = p[k];
+  syncOutputs();
+  render();
+});
+
+$('btnDice').addEventListener('click', () => {
+  $('inSeed').value = 1 + Math.floor(Math.random() * 999999);
+  render();
+});
+
+/* ---------- font loading + x-height normalization ---------- */
+function normalizeFont(f){
+  try{
+    meas.font = `400 100px "${f.fam}"`;
+    const m = meas.measureText('x');
+    const xh = m.actualBoundingBoxAscent || 50;
+    f.norm = Math.min(1.6, Math.max(0.65, 50 / xh));
+  }catch(e){ f.norm = 1; }
+}
+
+async function loadFonts(){
+  $('stFonts').textContent = `Loading ${FONTS.length} handwriting fonts…`;
+  const jobs = [];
+  for (const f of FONTS)
+    for (const w of f.w)
+      jobs.push(document.fonts.load(`${w} 32px "${f.fam}"`, 'Handgloves fjord 0123').catch(()=>{}));
+  await Promise.allSettled(jobs);
+  try{ await document.fonts.ready; }catch(e){}
+
+  let ok = 0;
+  for (const f of FONTS){
+    f.ok = document.fonts.check(`400 32px "${f.fam}"`);
+    if (f.ok){ normalizeFont(f); ok++; } else { f.norm = 1; }
+  }
+  state.fontsReady = true;
+  if (ok === 0){
+    $('cdnNote').style.display = 'block';
+    $('stFonts').textContent = 'Font CDN blocked — rendering with fallback face';
+  } else {
+    $('stFonts').textContent = `${ok}/${FONTS.length} handwriting fonts ready`;
+    if (ok < FONTS.length) $('stFonts').textContent += ' (rest skipped)';
+  }
+  render();
+}
+
+/* ---------- boot ---------- */
+syncOutputs();
+render();          // immediate first paint (fallback metrics), replaced once fonts land
+loadFonts();
+</script>
+</body>
+</html>
