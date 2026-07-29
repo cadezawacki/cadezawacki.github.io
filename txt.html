@@ -9419,9 +9419,50 @@ function _flushPendingPersist() {
   try { saveRoomMeta(); } catch {}
 }
 window.addEventListener('pagehide', _flushPendingPersist);
+
+// Resume-from-hidden resync. While the page is hidden (mobile screen off, app
+// minimized, device asleep) the OS suspends timers and can silently kill the
+// Firebase WebSocket — and the SDK may keep trusting the dead socket for
+// minutes, so `.info/connected` never fires false, pendingReconcile never gets
+// set, and an edit made on another device while this one slept never arrives
+// until the NEXT remote edit after the connection heals on its own. On resume
+// we always run the version-aware reconcile (it fetches the latest server text
+// and can never clobber unsynced local edits), and if we were hidden long
+// enough that the socket is suspect we cycle goOffline/goOnline first: that
+// kills a zombie socket and reconnects immediately instead of waiting for the
+// SDK's keepalive to notice, and the `.info/connected` false→true edge it
+// produces drives reconcileOnLive through the normal path.
+let _hiddenAt = 0;
+const RESUME_CYCLE_MS = 10000; // hidden longer than this → assume socket is suspect
+function _resumeSyncAfterHidden() {
+  if (!syncState.connected || !syncState.firebaseDb) return;
+  const hiddenFor = _hiddenAt ? (Date.now() - _hiddenAt) : Infinity;
+  syncState.pendingReconcile = true;
+  if (hiddenFor >= RESUME_CYCLE_MS) {
+    updateSyncUI('connecting', 'Reconnecting…');
+    try { syncState.firebaseDb.goOffline(); } catch {}
+    try { syncState.firebaseDb.goOnline(); } catch {}
+  } else {
+    reconcileOnLive();
+  }
+  // Belt-and-braces: catch a missed `.info/connected` edge after the cycle.
+  // reconcileOnLive is idempotent (guarded by pendingReconcile +
+  // conflictResolving + isStreamLive), so stale kicks are no-ops.
+  [1500, 5000, 12000].forEach(ms => setTimeout(() => {
+    if (syncState.pendingReconcile) { try { reconcileOnLive(); } catch {} }
+  }, ms));
+}
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'hidden') _flushPendingPersist();
+  if (document.visibilityState === 'hidden') {
+    _hiddenAt = Date.now();
+    _flushPendingPersist();
+  } else if (document.visibilityState === 'visible') {
+    _resumeSyncAfterHidden();
+  }
 });
+// A bfcache restore resumes the page with whatever socket state it froze with —
+// treat it exactly like a long-hidden resume.
+window.addEventListener('pageshow', (e) => { if (e.persisted) _resumeSyncAfterHidden(); });
 
 window.forceSyncReload = async function() {
   closeAllMenus();
