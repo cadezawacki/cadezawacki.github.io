@@ -309,7 +309,7 @@ main{display:flex;flex:1;min-height:0}
 .bill .bcenter{flex:1;text-align:center;min-width:0}
 .bill .bside{flex:0 0 auto;display:flex;align-items:center;justify-content:center}
 .bill .cnrN{font-family:'Old Standard TT',serif;font-weight:700;white-space:nowrap;flex:0 0 auto}
-.bill .bIssuer{flex:1;text-align:center;min-width:0}
+.bill .bIssuer{flex:1;text-align:center;min-width:0;max-width:200px;}
 .bill .bserial{font-family:'Special Elite','Courier New',monospace;color:#8c1f1f;white-space:nowrap}
 .owlDefault{display:inline-block;
   background:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'><g fill='none' stroke='%233a2f1d' stroke-width='2'><circle cx='20' cy='21' r='13'/><circle cx='15' cy='18' r='4'/><circle cx='25' cy='18' r='4'/><circle cx='15' cy='18' r='1.2' fill='%233a2f1d'/><circle cx='25' cy='18' r='1.2' fill='%233a2f1d'/><path d='M17 25 L20 28 L23 25'/><path d='M9 10 L14 7 M31 10 L26 7'/></g></svg>") no-repeat center/contain}
@@ -608,11 +608,11 @@ const CANON = () => withTy({
     mode:'sheet', font:100, paper:'plain', noise:true,
     billW:156, billH:66, sheetW:210, sheetH:297, sheetCols:1, count:4,
     denom:'10,000', denomWord:'TEN THOUSAND SHARES OF THE RESIDUE',
-    issuer:'THE ESTATE OF ELIAS VOSS \u00b7 PROMISSORY NOTE OF THE TABLE',
-    motto:'\u201cSpend it the way I earned it, and it will find its way back to me.\u201d',
+    issuer:'THE VOSS ESTATE PROMISSORY NOTE',
+    motto:'',
     series:'V\u00b7A', serialStart:4821, ink:'#3a2f1d',
     owlSrc:'', owlMM:12, owlOp:80, owlBoth:false,
-    sig:'for the estate \u2014 A. Vale'},
+    sig:''},
   quest:{
     pageW:210, pageH:297, font:100, paper:'aged', noise:true,
     title:'THE QUESTIONNAIRE OF THE ESTATE \u2014 46 SHARES',
