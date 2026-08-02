@@ -399,6 +399,44 @@ header#crest{
 }
 .rubric.quiet::after{background:rgba(42,32,24,.1)}
 
+
+/* ---- settings ---- */
+#nav button.icon{flex:0 0 50px;padding:14px 2px 13px}
+#nav button.icon svg{width:18px;height:18px;display:block;margin:0 auto}
+#nav button.icon.on::after{left:34%;right:34%}
+.setrow{display:flex;align-items:center;gap:14px;padding:11px 0;border-bottom:1px dotted rgba(42,32,24,.26)}
+.setrow.col{flex-direction:column;align-items:stretch;gap:6px}
+.setrow .sl{flex:1;min-width:0}
+.setrow .sn{font-family:var(--display);font-size:16.5px;line-height:1.25}
+.setrow .sd{font-size:13px;color:var(--ink-faint);line-height:1.42;margin-top:3px}
+.tgl{flex:0 0 auto;width:52px;height:30px;border-radius:15px;border:1px solid rgba(42,32,24,.4);
+  background:rgba(42,32,24,.12);position:relative;cursor:pointer;transition:background .18s ease}
+.tgl span{position:absolute;top:2px;left:2px;width:24px;height:24px;border-radius:50%;
+  background:var(--vellum-lit);border:1px solid rgba(42,32,24,.35);transition:left .18s ease}
+.tgl.on{background:var(--verdigris);border-color:var(--verdigris)}
+.tgl.on span{left:26px}
+.tgl:focus-visible{outline:2px solid var(--lapis);outline-offset:2px}
+.segs{display:flex;flex:0 0 auto}
+.segs .sg{font-family:var(--display);font-size:12.5px;letter-spacing:.08em;padding:9px 12px;min-height:40px;
+  background:rgba(255,252,240,.4);border:1px solid rgba(42,32,24,.3);border-left-width:0;cursor:pointer;color:var(--ink-soft)}
+.segs .sg:first-child{border-left-width:1px;border-radius:2px 0 0 2px}
+.segs .sg:last-child{border-radius:0 2px 2px 0}
+.segs .sg.on{background:var(--ink);color:var(--vellum-lit);border-color:var(--ink)}
+.rng{width:100%;accent-color:#a9791f;height:28px}
+
+/* ---- reader preferences ---- */
+#leaf[data-text="sm"] .prose p,#leaf[data-text="sm"] .choice{font-size:15px}
+#leaf[data-text="sm"] .scene-title{font-size:24px}
+#leaf[data-text="sm"] .entry p{font-size:14px}
+#leaf[data-text="lg"] .prose p,#leaf[data-text="lg"] .choice{font-size:19.5px;line-height:1.66}
+#leaf[data-text="lg"] .scene-title{font-size:32px}
+#leaf[data-text="lg"] .entry p,#leaf[data-text="lg"] .kv,#leaf[data-text="lg"] .setrow .sn{font-size:17.5px}
+#leaf[data-text="lg"] .prose p:first-of-type::first-letter{font-size:62px}
+#leaf[data-tex="off"]::before,#leaf[data-tex="off"]::after{display:none}
+#leaf[data-tex="off"]{background:var(--vellum-lit)}
+#leaf[data-motion="off"] *,#leaf[data-motion="off"] *::before,#leaf[data-motion="off"] *::after{
+  animation:none!important;transition:none!important}
+
 </style>
 </head>
 <body>
@@ -422,6 +460,7 @@ header#crest{
   <button data-tab="house">House</button>
   <button data-tab="chronicle">Chronicle</button>
   <button data-tab="realm">Realm</button>
+  <button data-tab="settings" class="icon" aria-label="Settings" title="Settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="3.4"/><circle cx="12" cy="12" r="8.2" stroke-dasharray="2.6 3.1"/></svg></button>
 </div></nav>
 <script>
 "use strict";
@@ -725,7 +764,7 @@ const G={
   untrait(t){const i=S.c.traits.indexOf(t);if(i>=0){S.c.traits.splice(i,1);d("Lost: "+t,"note");}},
   peril(v){S.c.peril+=v; if(v>0)d("The body remembers","note");},
   chron(t,cls){S.chron.push({y:S.w.year,g:S.c?S.c.gen:1,t:t,c:cls||""});},
-  legend(t){const g=S.c?S.c.gen:1;S.chron.push({y:S.w.year,g,t:t,c:"legend"});S.h.legends.push({g,t:t});},
+  legend(t){const g=S.c?S.c.gen:1;S.chron.push({y:S.w.year,g,t:t,c:"legend"});S.h.legends.push({g,t:t});try{SND.chime();}catch(e){}},
   deed(t){S.c.deeds.push(t);},
   land(n){for(let i=0;i<n;i++){const free=S.w.regions.filter(r=>!r.holder);
       const tgt=free.length?pick(free):pick(S.w.regions.filter(r=>r.holder!=="you"));
@@ -844,6 +883,7 @@ function beginLife(gen,nameIn,parent){
   } else {
     S.c.kin.push({name:gname(chance(.5)?"m":"f"),rel:"steward",bond:ri(40,70),alive:true,g:chance(.5)?"m":"f"});
   }
+  try{SND.setMood(gen,S.h.standing<22);}catch(e){}
   buildQueue();
 }
 
@@ -896,6 +936,7 @@ function fracWord(p){
 /* roll() records the die so the outcome can show its working */
 function roll(p,label){
   const die=ri(1,6), need=Math.max(1,Math.round(p*6));
+  try{SND.die();}catch(e){}
   const win=die<=need;
   if(S.pending)S.pending.roll={die,need,win,label:label||""};
   return win;
@@ -1113,6 +1154,7 @@ G.contest=startContest;
 function contestAct(k){
   const c=S.pending&&S.pending.contest;
   if(!c||c.finished)return;
+  try{c.kind==="battle"?SND.thud():SND.quill();}catch(e){}
   if(c.kind==="battle")battleRound(c,k); else haggleRound(c,k);
   if(!c.finished&&c.round>c.maxR)finishContest(c,"time");
   save();render();
@@ -2535,6 +2577,7 @@ function checkYearn(){
 }
 function archiveLife(){
   const c=S.c;
+  try{SND.toll();}catch(e){}
   if(c.gen>=3&&!S.w.flags["threat_"+S.w.threat.id]){
     const s=crisisScore();
     const band=s>=4?"triumph":(s>=2?"endure":"broken");
@@ -3106,6 +3149,308 @@ LEGACY.blackmail={eyebrow:"The Secret",title:sd=>`${sd.who} knows`,
     return P(`You spend four months and a great deal of money chasing a boy, a market, and a description of a man in a brown coat.`);}},
  ]};
 /* ================================================================
+   PREFERENCES — kept apart from the save, so a reset does not lose them
+   ================================================================ */
+const CFG_KEY="heirloom.cfg.v1";
+const CFG={sound:true,music:true,musicVol:0.30,sfxVol:0.55,
+           motion:true,texture:true,odds:true,deltas:true,text:"md"};
+function loadCfg(){
+  try{const r=localStorage.getItem(CFG_KEY);if(!r)return;
+    const o=JSON.parse(r);for(const k in CFG)if(k in o)CFG[k]=o[k];}catch(e){}
+}
+function saveCfg(){try{localStorage.setItem(CFG_KEY,JSON.stringify(CFG));}catch(e){}}
+function applyCfg(){
+  const L=el("leaf");if(!L||!L.setAttribute)return;
+  L.setAttribute("data-text",CFG.text);
+  L.setAttribute("data-tex",CFG.texture?"on":"off");
+  L.setAttribute("data-motion",CFG.motion?"on":"off");
+}
+
+/* ================================================================
+   SOUND — synthesised on the fly. No files, nothing to download,
+   works with the machine in a hole in the ground.
+   ================================================================ */
+const SND=(function(){
+  let ac=null, master=null, musicGain=null, sfxGain=null, noise=null;
+  let drone=[], timer=null, nextT=0, step=0, mIdx=0, phrase=0, playing=false;
+  const MODES={
+    dorian:[0,2,3,5,7,9,10],
+    aeolian:[0,2,3,5,7,8,10],
+    mixolydian:[0,2,4,5,7,9,10],
+    lydian:[0,2,4,6,7,9,11],
+  };
+  let scale=MODES.dorian, root=146.83; // D3
+  const BEAT=0.62;
+
+  function ok(){return ac&&CFG.sound;}
+  function mkNoise(){
+    const n=ac.sampleRate*1.2, b=ac.createBuffer(1,n,ac.sampleRate), d=b.getChannelData(0);
+    for(let i=0;i<n;i++)d[i]=Math.random()*2-1;
+    return b;
+  }
+  function init(){
+    if(ac)return true;
+    try{
+      const AC=window.AudioContext||window.webkitAudioContext;
+      if(!AC)return false;
+      ac=new AC();
+      master=ac.createGain(); master.gain.value=1; master.connect(ac.destination);
+      musicGain=ac.createGain(); musicGain.gain.value=CFG.music?CFG.musicVol:0; musicGain.connect(master);
+      sfxGain=ac.createGain(); sfxGain.gain.value=CFG.sfxVol; sfxGain.connect(master);
+      noise=mkNoise();
+      return true;
+    }catch(e){ac=null;return false;}
+  }
+  function resume(){try{if(ac&&ac.state==="suspended")ac.resume();}catch(e){}}
+  function wake(){ if(!init())return false; resume(); if(CFG.sound&&CFG.music&&!playing)startMusic(); return true; }
+
+  /* ---- the drone: an open fifth, the way every medieval instrument cheats ---- */
+  function startDrone(){
+    stopDrone();
+    [1,1.5].forEach((mult,i)=>{
+      const o=ac.createOscillator(), g=ac.createGain();
+      const lp=ac.createBiquadFilter(); lp.type="lowpass"; lp.frequency.value=520; lp.Q.value=2;
+      o.type="sawtooth"; o.frequency.value=root*mult*0.5;
+      g.gain.value=0; g.gain.setTargetAtTime(i?0.045:0.06,ac.currentTime,1.4);
+      const lfo=ac.createOscillator(), lg=ac.createGain();
+      lfo.frequency.value=0.045+i*0.02; lg.gain.value=120;
+      lfo.connect(lg); lg.connect(lp.frequency); lfo.start();
+      o.connect(lp); lp.connect(g); g.connect(musicGain); o.start();
+      drone.push({o,g,lfo});
+    });
+  }
+  function stopDrone(){
+    drone.forEach(d=>{try{d.g.gain.setTargetAtTime(0,ac.currentTime,0.3);
+      d.o.stop(ac.currentTime+1.2);d.lfo.stop(ac.currentTime+1.2);}catch(e){}});
+    drone=[];
+  }
+  /* ---- a plucked note, psaltery-ish ---- */
+  function pluck(freq,t,vel){
+    const g=ac.createGain(), lp=ac.createBiquadFilter();
+    lp.type="lowpass"; lp.frequency.setValueAtTime(2600,t); lp.frequency.exponentialRampToValueAtTime(700,t+0.9);
+    g.gain.setValueAtTime(0.0001,t);
+    g.gain.exponentialRampToValueAtTime(vel,t+0.008);
+    g.gain.exponentialRampToValueAtTime(0.0001,t+1.05);
+    [0,7].forEach((cents,i)=>{
+      const o=ac.createOscillator();
+      o.type=i?"sine":"triangle";
+      o.frequency.value=freq*(i?2.004:1);
+      o.detune.value=cents;
+      const og=ac.createGain(); og.gain.value=i?0.28:1;
+      o.connect(og); og.connect(lp); o.start(t); o.stop(t+1.15);
+    });
+    lp.connect(g); g.connect(musicGain);
+  }
+  function noteAt(i){const oct=Math.floor(i/scale.length), d=((i%scale.length)+scale.length)%scale.length;
+    return root*2*Math.pow(2,(scale[d]+12*oct)/12);}
+
+  function schedule(){
+    if(!ac)return;
+    while(nextT < ac.currentTime+1.3){
+      const inPhrase=step%8;
+      if(inPhrase===0){phrase++; mIdx=(phrase%3===0)?0:mIdx;}
+      const rest=Math.random()< (inPhrase===7?0.5:0.24);
+      if(!rest){
+        const jump=Math.random();
+        mIdx += jump<0.52?(Math.random()<0.5?1:-1) : (jump<0.78?(Math.random()<0.5?2:-2):0);
+        if(inPhrase===7||inPhrase===0)mIdx=[0,2,4][Math.floor(Math.random()*3)];
+        if(mIdx>9)mIdx=9; if(mIdx<-2)mIdx=-2;
+        const vel=0.11+(inPhrase===0?0.05:0)+Math.random()*0.04;
+        pluck(noteAt(mIdx),nextT,vel);
+        if(inPhrase===0&&Math.random()<0.5)pluck(noteAt(mIdx-4),nextT+0.02,vel*0.5);
+      }
+      nextT+=BEAT*(inPhrase===7?1.6:1);
+      step++;
+    }
+  }
+  function startMusic(){
+    if(!init())return; resume();
+    if(playing)return;
+    playing=true;
+    startDrone();
+    nextT=ac.currentTime+0.15; step=0;
+    schedule();
+    timer=setInterval(schedule,300);
+  }
+  function stopMusic(){
+    playing=false;
+    if(timer){clearInterval(timer);timer=null;}
+    if(ac)stopDrone();
+  }
+  /* pick a mode and key when the hand changes — each generation sounds different */
+  function setMood(gen,dark){
+    const keys=[130.81,138.59,146.83,155.56,164.81,174.61];
+    root=keys[(gen*2+(dark?1:0))%keys.length];
+    const names=dark?["aeolian","dorian"]:["dorian","mixolydian","lydian"];
+    scale=MODES[names[gen%names.length]];
+    if(playing&&ac){stopDrone();startDrone();}
+  }
+
+  /* ---- effects ---- */
+  function burst(dur,type,f0,f1,vol,q){
+    if(!ok())return;
+    const s=ac.createBufferSource(); s.buffer=noise;
+    const bp=ac.createBiquadFilter(); bp.type=type||"bandpass"; bp.Q.value=q||1.1;
+    const t=ac.currentTime;
+    bp.frequency.setValueAtTime(f0,t);
+    bp.frequency.exponentialRampToValueAtTime(Math.max(60,f1),t+dur);
+    const g=ac.createGain();
+    g.gain.setValueAtTime(0.0001,t);
+    g.gain.exponentialRampToValueAtTime(vol,t+0.012);
+    g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+    s.connect(bp); bp.connect(g); g.connect(sfxGain);
+    s.start(t); s.stop(t+dur+0.05);
+  }
+  function tone(f,dur,vol,type,slideTo){
+    if(!ok())return;
+    const o=ac.createOscillator(), g=ac.createGain(), t=ac.currentTime;
+    o.type=type||"sine"; o.frequency.setValueAtTime(f,t);
+    if(slideTo)o.frequency.exponentialRampToValueAtTime(slideTo,t+dur);
+    g.gain.setValueAtTime(0.0001,t);
+    g.gain.exponentialRampToValueAtTime(vol,t+0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+    o.connect(g); g.connect(sfxGain); o.start(t); o.stop(t+dur+0.05);
+  }
+  function bellAt(f,dur,vol){
+    if(!ok())return;
+    [[1,1],[2.76,0.42],[5.4,0.18],[8.9,0.08]].forEach(([m,a])=>{
+      const o=ac.createOscillator(), g=ac.createGain(), t=ac.currentTime;
+      o.type="sine"; o.frequency.value=f*m;
+      g.gain.setValueAtTime(0.0001,t);
+      g.gain.exponentialRampToValueAtTime(vol*a,t+0.006);
+      g.gain.exponentialRampToValueAtTime(0.0001,t+dur*(1-0.13*Math.log2(m+1)));
+      o.connect(g); g.connect(sfxGain); o.start(t); o.stop(t+dur+0.1);
+    });
+  }
+  const API={
+    init, wake, resume,
+    page(){ if(!ok())return; burst(0.20,"bandpass",1100,2600,0.16,0.8);
+            setTimeout(()=>burst(0.13,"highpass",1800,900,0.09,0.7),85); },
+    click(){ if(!ok())return; burst(0.05,"bandpass",2100,1500,0.10,2.2); },
+    quill(){ if(!ok())return; burst(0.09,"highpass",2600,1400,0.07,1); },
+    die(){ if(!ok())return;
+      [0,90,165].forEach((d,i)=>setTimeout(()=>burst(0.05,"bandpass",700+i*260,420,0.13,3),d)); },
+    thud(){ if(!ok())return; tone(96,0.20,0.30,"sine",46); burst(0.10,"lowpass",380,140,0.12,1); },
+    toll(){ if(!ok())return; bellAt(174.61,3.4,0.26); },
+    chime(){ if(!ok())return; bellAt(783.99,1.5,0.14); },
+    music(on){ if(on){startMusic();}else{stopMusic();} },
+    setMood,
+    apply(){
+      if(!ac)return;
+      try{
+        musicGain.gain.setTargetAtTime(CFG.sound&&CFG.music?CFG.musicVol:0,ac.currentTime,0.15);
+        sfxGain.gain.setTargetAtTime(CFG.sound?CFG.sfxVol:0,ac.currentTime,0.05);
+      }catch(e){}
+      if(CFG.sound&&CFG.music&&!playing)startMusic();
+      if((!CFG.sound||!CFG.music)&&playing)stopMusic();
+    },
+    playing(){return playing;},
+    ready(){return !!ac;},
+  };
+  return API;
+})();
+/* every method must be harmless where there is no audio at all */
+["page","click","quill","die","thud","toll","chime"].forEach(k=>{
+  const f=SND[k];
+  SND[k]=function(){try{return f.apply(SND,arguments);}catch(e){}};
+});
+
+/* ================================================================
+   THE SETTINGS LEAF
+   ================================================================ */
+let CONFIRM="";
+function tog(key,label,note){
+  return `<div class="setrow"><div class="sl"><div class="sn">${label}</div>${note?`<div class="sd">${note}</div>`:""}</div>
+    <button class="tgl ${CFG[key]?"on":""}" data-tog="${key}" role="switch" aria-checked="${!!CFG[key]}"><span></span></button></div>`;
+}
+function seg(key,label,opts){
+  return `<div class="setrow"><div class="sl"><div class="sn">${label}</div></div>
+    <div class="segs">${opts.map(o=>`<button class="sg ${CFG[key]===o[0]?"on":""}" data-seg="${key}" data-val="${o[0]}">${o[1]}</button>`).join("")}</div></div>`;
+}
+function sld(key,label){
+  return `<div class="setrow col"><div class="sl"><div class="sn">${label}</div></div>
+    <input type="range" class="rng" min="0" max="100" value="${Math.round(CFG[key]*100)}" data-rng="${key}"></div>`;
+}
+function panelSettings(){
+  let x=`<div class="panel"><h2>Sound</h2>`;
+  if(!SND.ready())x+=`<p class="small">Nothing is played until you touch one of these — browsers require it. There are no sound files; it is all made up on the spot, so it works with no connection at all.</p>`;
+  x+=tog("sound","Sound","Everything below depends on this.")
+    +tog("music","Music","A drone and a wandering tune. It changes key with each generation.")
+    +sld("musicVol","Music volume")
+    +sld("sfxVol","Page and effects volume")
+    +`<h2 style="margin-top:26px">The page</h2>`
+    +seg("text","Text size",[["sm","Small"],["md","Normal"],["lg","Large"]])
+    +tog("texture","Vellum and stains","The fibre, the foxing, the torn corner.")
+    +tog("motion","Movement","Page fades and the candle flame.")
+    +`<h2 style="margin-top:26px">What is shown</h2>`
+    +tog("odds","Odds on risky choices","Turn off if you would rather not know.")
+    +tog("deltas","Ledger changes","The small chips after a choice.")
+    +`<h2 style="margin-top:26px">This house</h2>`;
+  if(S&&S.started){
+    x+=`<div class="kv"><span class="k">Seed</span><span class="v" style="font-size:12px;word-break:break-all">${S.seed}</span></div>
+      <div class="kv"><span class="k">Hand</span><span class="v">${ROMAN[S.c?S.c.gen:S.anc.length]} of IV</span></div>
+      <button class="turn ghost" id="setCopySeed" style="margin-top:12px">Copy the seed</button>
+      <button class="turn ghost" id="setSameSeed" style="margin-top:10px">${CONFIRM==="same"?"Tap again to restart this same world":"Restart this world from the beginning"}</button>
+      <button class="turn warn" id="setAbandon" style="margin-top:10px">${CONFIRM==="abandon"?"Tap again to abandon this house":"Abandon this house and begin another"}</button>`;
+  } else {
+    x+=`<p class="small">No house in progress.</p>`;
+  }
+  x+=`<h2 style="margin-top:26px">Saved data</h2>
+    <p class="small">Everything lives in this browser only. Nothing is sent anywhere.</p>
+    <button class="turn ghost" id="setExport" style="margin-top:8px">Copy this save to the clipboard</button>
+    <div class="field" style="margin-top:12px"><label>Paste a save to restore it</label>
+      <input id="setImport" placeholder="paste here" style="font-size:13px"></div>
+    <button class="turn ghost" id="setImportGo">Restore that save</button>
+    <button class="turn warn" id="setWipe" style="margin-top:16px">${CONFIRM==="wipe"?"Tap again to erase everything":"Erase everything, including the library"}</button>
+    <div class="toast" id="setToast">${TOAST}</div>
+    <div class="hr"></div>
+    <p class="small center">Heirloom &middot; a chronicle in four hands<br>One file, no server, no network, no accounts.</p>
+    </div>`;
+  return x;
+}
+function bindSettings(){
+  const re=()=>{saveCfg();applyCfg();SND.apply();render();};
+  document.querySelectorAll("[data-tog]").forEach(b=>b.onclick=()=>{
+    const k=b.dataset.tog; CFG[k]=!CFG[k];
+    if(CFG[k]&&(k==="sound"||k==="music"))SND.wake();
+    SND.click(); CONFIRM=""; re();
+  });
+  document.querySelectorAll("[data-seg]").forEach(b=>b.onclick=()=>{
+    CFG[b.dataset.seg]=b.dataset.val; SND.click(); CONFIRM=""; re();
+  });
+  document.querySelectorAll("[data-rng]").forEach(r=>{
+    r.oninput=()=>{CFG[r.dataset.rng]=(+r.value)/100;saveCfg();SND.apply();};
+    r.onchange=()=>{SND.wake();SND.click();saveCfg();SND.apply();};
+  });
+  const cs=el("setCopySeed");if(cs)cs.onclick=()=>{TOAST=copyText(S.seed)==="copied"?"Seed copied.":"Could not copy.";render();};
+  const ss=el("setSameSeed");if(ss)ss.onclick=()=>{
+    if(CONFIRM!=="same"){CONFIRM="same";render();return;}
+    const seed=S.seed,nm=S.h.name;CONFIRM="";TOAST="";
+    newWorld(seed,nm,null);MODE="play";S.tab="story";save();render();window.scrollTo(0,0);
+  };
+  const ab=el("setAbandon");if(ab)ab.onclick=()=>{
+    if(CONFIRM!=="abandon"){CONFIRM="abandon";render();return;}
+    CONFIRM="";TOAST="";wipe();S=null;MODE="title";render();window.scrollTo(0,0);
+  };
+  const ex=el("setExport");if(ex)ex.onclick=()=>{
+    TOAST=copyText(JSON.stringify({S,MODE}))==="copied"?"Save copied. Keep it somewhere safe.":"Could not copy.";render();};
+  const ig=el("setImportGo");if(ig)ig.onclick=()=>{
+    const v=el("setImport").value.trim();
+    try{
+      const o=JSON.parse(v);
+      if(!o||!o.S||!o.S.w||!o.S.h)throw 0;
+      S=o.S;MODE=o.MODE||"play";RND=mulberry(hashSeed(S.seed+"|"+S.w.year));
+      S.tab="story";save();TOAST="";render();window.scrollTo(0,0);
+    }catch(e){TOAST="That does not look like a Heirloom save.";render();}
+  };
+  const wp=el("setWipe");if(wp)wp.onclick=()=>{
+    if(CONFIRM!=="wipe"){CONFIRM="wipe";render();return;}
+    CONFIRM="";TOAST="";
+    try{localStorage.removeItem(SAVE_KEY);localStorage.removeItem(LIB_KEY);}catch(e){}
+    S=null;MODE="title";render();window.scrollTo(0,0);
+  };
+}
+/* ================================================================
    INTERSTITIALS — the page does not always ask you a question
    ================================================================ */
 function buildInter(G){
@@ -3222,6 +3567,7 @@ function visibleChoices(sc){
 function choose(i){
   const sc=currentScene();if(!sc||!S.pending||S.pending.outcome!=null)return;
   const ch=visibleChoices(sc)[i];if(!ch)return;
+  SND.wake();SND.click();
   DELTAS=[];
   const out=safe(()=>ch.do(G,S.pending.seed),"");
   S.pending.deltas=DELTAS.slice();
@@ -3234,6 +3580,7 @@ function choose(i){
 }
 function submitForm(){
   const f=S.pending&&S.pending.form;if(!f||f.done)return;
+  SND.wake();SND.quill();
   const vals={};
   f.fields.forEach(fl=>{const n=el("f_"+fl.k);vals[fl.k]=n?n.value:"";});
   f.done=true;
@@ -3245,6 +3592,7 @@ function submitForm(){
 }
 function settleContest(){
   const c=S.pending&&S.pending.contest;if(!c||!c.finished)return;
+  SND.page();
   DELTAS=S.pending.deltas||[];
   const out=safe(()=>RESOLVERS[c.resolveId](G,c),"");
   S.pending.deltas=DELTAS.slice();
@@ -3253,6 +3601,7 @@ function settleContest(){
   save();render();window.scrollTo({top:0,behavior:"smooth"});
 }
 function advance(){
+  SND.page();
   const c=S.c,p=S.pending;
   const scId=p?p.sceneId:"";
   const wasDeath=(scId==="death");
@@ -3287,6 +3636,7 @@ function render(){
   el("nav").hidden=(MODE==="title");
   el("rail").style.display=MODE==="title"?"none":"flex";
   document.querySelector("main").style.paddingLeft=MODE==="title"?"var(--pad)":"calc(var(--rail) + 14px)";
+  applyCfg();
   el("leaf").setAttribute("data-age",String(S?Math.min(4,(S.c?S.c.gen:S.anc.length||1)):1));
   if(MODE!=="title"){drawCrest();drawLedger();drawRail();}
   const t=S&&S.tab||"story";
@@ -3351,6 +3701,7 @@ function bindTitle(){
   const c=el("btnCont");if(c)c.onclick=()=>{if(load()){render();}};
   el("btnNew").onclick=()=>{
     const hn=el("inHouse").value.trim(), nm=el("inName").value.trim();
+    SND.wake();
     newWorld(String(Date.now())+Math.random(),hn||null,nm||null);
     MODE="play";S.tab="story";save();render();
   };
@@ -3386,7 +3737,7 @@ function storyScreen(){
     h+=`<div class="prose">${txt(sc.text,G,p.seed)}</div>`;
     h+=sc.kind==="inter"?`<div class="rubric quiet"></div>`:`<div class="rubric">What you do</div>`;
     visibleChoices(sc).forEach((c,i)=>{
-      const o=oddsOf(c);
+      const o=CFG.odds?oddsOf(c):null;
       h+=`<button class="choice ${c.cls||""}" data-i="${i}">
         <span class="kx">${i+1}</span>${txt(c.t,G,p.seed)}
         ${o?`<span class="odds">${fracWord(o.p)}</span>`:""}
@@ -3407,7 +3758,7 @@ function outcomeBlock(p){
       <span>Needed ${p.roll.need} or under on six${p.roll.label?" — "+p.roll.label:""}. Rolled ${p.roll.die}. <strong>${p.roll.win?"It holds.":"It does not."}</strong></span></div>`;
   }
   h+=`<div class="outcome-mark">And so</div><div class="prose">${p.outcome||"<p>It is done.</p>"}</div>`;
-  if(p.deltas&&p.deltas.length)
+  if(CFG.deltas&&p.deltas&&p.deltas.length)
     h+=`<div class="deltas">${p.deltas.map(d=>`<span class="dl ${d.k}">${d.t}</span>`).join("")}</div>`;
   h+=`<button class="turn" id="btnNext">Turn the page</button></div>`;
   return h;
@@ -3538,6 +3889,7 @@ function bindEnding(){
 function panel(t){
   if(t==="house")return panelHouse();
   if(t==="chronicle")return panelChron();
+  if(t==="settings")return panelSettings();
   return panelRealm();
 }
 function panelHouse(){
@@ -3644,11 +3996,12 @@ function panelRealm(){
 function rivalWord(a){
   if(a<=-60)return "at open enmity";if(a<0)return "cold";if(a<30)return "correct";if(a<60)return "friendly";return "kin by marriage";
 }
-function bindPanel(){}
+function bindPanel(){if(S&&S.tab==="settings")bindSettings();}
 
 /* ---- nav + keys ---- */
 document.querySelectorAll("#nav button").forEach(b=>{
-  b.onclick=()=>{if(!S)return;S.tab=b.dataset.tab;save();render();window.scrollTo({top:0,behavior:"smooth"});};
+  b.onclick=()=>{if(!S)return;SND.wake();SND.click();CONFIRM="";TOAST="";
+    S.tab=b.dataset.tab;save();render();window.scrollTo({top:0,behavior:"smooth"});};
 });
 document.addEventListener("keydown",e=>{
   if(MODE==="title")return;
@@ -3661,8 +4014,13 @@ document.addEventListener("keydown",e=>{
   }
 });
 
+try{document.addEventListener("visibilitychange",()=>{
+  if(document.hidden){SND.music(false);}else if(CFG.sound&&CFG.music){SND.music(true);}
+});}catch(e){}
+
 /* ---- boot ---- */
 (function boot(){
+  loadCfg();
   if(load()&&S&&S.started){
     if(!S.finished&&MODE!=="succession"&&MODE!=="ending")MODE="play";
     render();
