@@ -307,6 +307,98 @@ header#crest{
 @media (prefers-reduced-motion:reduce){
   *{animation:none!important;transition:none!important}
 }
+
+/* ---- life clock: a candle in the margin ---- */
+.candle{position:relative;width:11px;height:74px;margin:4px 0 8px}
+.candle .wax{position:absolute;bottom:0;left:0;width:11px;background:linear-gradient(180deg,#f4ecd6,#cdbb95);
+  border:1px solid rgba(42,32,24,.35);border-radius:2px}
+.candle .flame{position:absolute;left:2px;width:7px;height:11px;
+  border-radius:50% 50% 50% 50%/62% 62% 38% 38%;
+  background:radial-gradient(circle at 50% 70%,#ffeaa9,#d9a83c 60%,rgba(168,52,32,.9));
+  box-shadow:0 0 9px rgba(217,168,60,.7);animation:flick 1.7s infinite ease-in-out}
+@keyframes flick{0%,100%{transform:scaleY(1)}50%{transform:scaleY(1.16) translateX(.6px)}}
+.candle.guttering .flame{animation-duration:.45s;opacity:.7}
+
+/* ---- odds, stated before you pay ---- */
+.choice .odds{display:inline-block;margin-left:8px;font-family:var(--display);font-size:11.5px;letter-spacing:.08em;
+  color:var(--lapis);border:1px solid rgba(31,58,102,.42);border-radius:2px;padding:1px 6px;
+  vertical-align:2px;background:rgba(31,58,102,.07)}
+.choice .hint.why{font-style:normal;font-size:12.5px;color:var(--lapis);opacity:.85;margin-top:3px}
+
+/* ---- the die ---- */
+.dieline{display:flex;align-items:center;gap:11px;padding:11px 12px;margin:0 0 16px;
+  border:1px solid rgba(42,32,24,.3);background:rgba(255,252,240,.5);border-radius:2px;font-size:14.5px;line-height:1.4}
+.dieline .die{flex:0 0 auto;width:34px;height:34px;display:flex;align-items:center;justify-content:center;
+  font-family:var(--display);font-size:19px;border:2px solid var(--ink);border-radius:4px;background:var(--vellum-lit)}
+.dieline.good .die{border-color:var(--verdigris);color:var(--verdigris)}
+.dieline.bad .die{border-color:var(--minium);color:var(--minium)}
+
+/* ---- contests ---- */
+.contest{margin:6px 0 4px}
+.crow{display:flex;align-items:center;gap:9px;margin-bottom:7px}
+.crow .cn{flex:0 0 34%;font-family:var(--display);font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.crow .cv{font-family:var(--display);font-size:15px;width:26px;text-align:right}
+.cbar{flex:1;height:9px;background:rgba(42,32,24,.14);border:1px solid rgba(42,32,24,.25);border-radius:2px;overflow:hidden}
+.cbar i{display:block;height:100%;background:var(--gold);transition:width .3s ease}
+.cbar.them i{background:var(--minium)}
+.tell{font-style:italic;color:var(--lapis);font-size:14.5px;margin:10px 0 8px}
+.clog{border-left:2px solid rgba(42,32,24,.2);padding-left:11px;margin:10px 0;font-size:14.5px;line-height:1.5;color:var(--ink-soft)}
+.clog div{margin-bottom:5px}
+.cround{font-family:var(--display);font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--minium);margin:12px 0 10px}
+
+/* ---- the heirloom and the things with names ---- */
+.relic{border:1px solid rgba(169,121,31,.5);background:rgba(169,121,31,.07);padding:12px;border-radius:2px}
+.relic .rn{font-family:var(--display);font-size:19px}
+.relic .rd{font-size:14.5px;color:var(--ink-soft);margin-top:3px;line-height:1.45}
+.relic .rs{font-family:var(--display);font-size:11px;letter-spacing:.18em;text-transform:uppercase;margin-top:7px}
+.relic .rs.ok{color:var(--verdigris)} .relic .rs.bad{color:var(--minium)}
+.kv.dead{opacity:.5}
+
+/* ---- what this house does not say ---- */
+.secret{border-left:3px solid var(--ink-faint);padding:8px 0 8px 11px;margin-bottom:11px}
+.secret.out{border-left-color:var(--minium)}
+.secret .st{font-size:15px;line-height:1.45}
+.secret .sk{font-family:var(--display);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-faint);margin-top:4px}
+.secret.out .sk{color:var(--minium)}
+
+/* ---- later hands in the margin ---- */
+.marg{margin:7px 0 0 6px;padding-left:10px;border-left:1px dotted rgba(31,58,102,.5);
+  font-family:var(--display);font-style:italic;font-size:13.5px;line-height:1.45;color:var(--lapis);opacity:.92}
+.marg .mh{font-style:normal;letter-spacing:.1em;font-size:10.5px;text-transform:uppercase;opacity:.75}
+
+/* ---- share ---- */
+.sharebox{white-space:pre-wrap;font-family:var(--display);font-size:13px;line-height:1.55;
+  background:rgba(255,252,240,.55);border:1px solid rgba(42,32,24,.28);padding:12px;border-radius:2px;
+  overflow-x:auto;margin:0 0 12px;color:var(--ink)}
+.toast{font-family:var(--display);font-size:12px;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--verdigris);text-align:center;margin-top:10px;min-height:14px}
+
+/* ---- the leaf ages as the hands pass ---- */
+#leaf[data-age="2"]::after,#leaf[data-age="3"]::after,#leaf[data-age="4"]::after{
+  content:"";position:absolute;inset:0;pointer-events:none;mix-blend-mode:multiply;
+  background:
+    radial-gradient(circle at 8% 14%, rgba(120,88,44,.15), transparent 11%),
+    radial-gradient(circle at 92% 61%, rgba(120,88,44,.13), transparent 10%),
+    radial-gradient(circle at 67% 23%, rgba(120,88,44,.10), transparent 8%);
+}
+#leaf[data-age="3"]::after{
+  background:
+    radial-gradient(circle at 8% 14%, rgba(120,88,44,.2), transparent 12%),
+    radial-gradient(circle at 92% 61%, rgba(120,88,44,.17), transparent 11%),
+    radial-gradient(circle at 67% 23%, rgba(120,88,44,.14), transparent 10%),
+    radial-gradient(circle at 22% 82%, rgba(120,88,44,.13), transparent 10%);
+}
+#leaf[data-age="4"]::after{
+  background:
+    radial-gradient(circle at 8% 14%, rgba(120,88,44,.24), transparent 13%),
+    radial-gradient(circle at 92% 61%, rgba(120,88,44,.21), transparent 12%),
+    radial-gradient(circle at 67% 23%, rgba(120,88,44,.17), transparent 11%),
+    radial-gradient(circle at 22% 82%, rgba(120,88,44,.17), transparent 11%),
+    radial-gradient(circle at 46% 48%, rgba(120,88,44,.10), transparent 9%),
+    linear-gradient(135deg, rgba(88,64,32,.28) 0 16px, transparent 16px) top right/36px 36px no-repeat;
+}
+.rubric.quiet::after{background:rgba(42,32,24,.1)}
+
 </style>
 </head>
 <body>
@@ -504,11 +596,11 @@ function armsSVG(a,opts){
    REALM MAP — a schematic, the way a clerk would draw it
    ================================================================ */
 function buildRegions(n){
-  const R=[],W=300,H=200;
+  const R=[],W=300,H=212;
   for(let i=0;i<n;i++){
     let x,y,ok=false,tries=0;
     while(!ok&&tries<60){
-      x=ri(28,W-28);y=ri(26,H-26);ok=R.every(r=>Math.hypot(r.x-x,r.y-y)>44);tries++;
+      x=ri(28,W-28);y=ri(26,H-26);ok=R.every(r=>Math.hypot(r.x-x,r.y-y)>37);tries++;
     }
     R.push({id:i,name:placeName(),x,y,holder:null,
       type:pick(["farmland","woods","hills","fen","coast","moor","river-mouth","vineyard","quarry","pasture"])});
@@ -522,30 +614,34 @@ function buildRegions(n){
 }
 function mapSVG(W){
   const w=W.regions;
-  let roads="",seen=new Set();
-  w.forEach(r=>r.roads.forEach(j=>{
-    const k=[Math.min(r.id,j),Math.max(r.id,j)].join("-");
-    if(seen.has(k))return;seen.add(k);
+  let roads="",seen={};
+  w.forEach(r=>(r.roads||[]).forEach(j=>{
+    const k=Math.min(r.id,j)+"-"+Math.max(r.id,j);
+    if(seen[k])return;seen[k]=1;
     const o=w[j];
-    roads+=`<line x1="${r.x}" y1="${r.y}" x2="${o.x}" y2="${o.y}" stroke="#2a2018" stroke-opacity=".26" stroke-width="1" stroke-dasharray="3 3"/>`;
+    roads+=`<line x1="${r.x}" y1="${r.y}" x2="${o.x}" y2="${o.y}" stroke="#2a2018" stroke-opacity=".22" stroke-width="1" stroke-dasharray="3 3"/>`;
   }));
+  const col=h=>h==="you"?"#a9791f":(h==="crown"?"#1f3a66":(h?"#a83420":"#b3a versus"));
+  const colour=h=>h==="you"?"#a9791f":(h==="crown"?"#1f3a66":(h?"#a83420":"rgba(42,32,24,.24)"));
+  const label=h=>h==="you"?"yours":(h==="crown"?"the Crown":(h||"unheld"));
+  const labcol=h=>h==="you"?"#8a6318":(h==="crown"?"#1f3a66":(h?"#8e2c1b":"#8a7a5e"));
   let nodes="";
   w.forEach(r=>{
-    const mine=r.holder==="you", rival=r.holder&&r.holder!=="you"&&r.holder!=="crown";
-    const fill=mine?"#a9791f":(r.holder==="crown"?"#1f3a66":(rival?"#a83420":"rgba(42,32,24,.25)"));
-    const rad=mine?6:4.5;
-    nodes+=`<g><circle cx="${r.x}" cy="${r.y}" r="${rad}" fill="${fill}" stroke="#2a2018" stroke-width="1"/>`;
-    if(mine)nodes+=`<circle cx="${r.x}" cy="${r.y}" r="10" fill="none" stroke="#a9791f" stroke-width="1" stroke-opacity=".65"/>`;
-    nodes+=`<text x="${r.x}" y="${r.y-11}" text-anchor="middle" font-family="Palatino,Georgia,serif" font-size="8.5" fill="#2a2018" fill-opacity=".8">${r.name}</text></g>`;
+    const mine=r.holder==="you";
+    const rad=4+Math.min(3,r.dev||0)+(mine?2:0);
+    nodes+=`<g><circle cx="${r.x}" cy="${r.y}" r="${rad}" fill="${colour(r.holder)}" stroke="#2a2018" stroke-width="1"/>`;
+    if(mine)nodes+=`<circle cx="${r.x}" cy="${r.y}" r="${rad+5}" fill="none" stroke="#a9791f" stroke-width="1" stroke-opacity=".6"/>`;
+    if(r.raided)nodes+=`<path d="M${r.x-6} ${r.y-6} L${r.x+6} ${r.y+6} M${r.x+6} ${r.y-6} L${r.x-6} ${r.y+6}" stroke="#a83420" stroke-width="1.5"/>`;
+    nodes+=`<text x="${r.x}" y="${r.y-rad-4}" text-anchor="middle" font-family="Palatino,Georgia,serif" font-size="8.6" fill="#2a2018" fill-opacity=".88">${r.name}</text>`;
+    nodes+=`<text x="${r.x}" y="${r.y+rad+9}" text-anchor="middle" font-family="Palatino,Georgia,serif" font-size="6.9" fill="${labcol(r.holder)}">${label(r.holder)}</text></g>`;
   });
-  const coast=`<path d="M6 24 C40 12, 70 30, 104 20 S170 8, 214 22 S276 14, 294 30 L294 176 C260 190, 220 178, 180 190 S96 194, 52 182 S12 178, 6 168 Z"
+  const coast=`<path d="M6 24 C40 12, 70 30, 104 20 S170 8, 214 22 S276 14, 294 30 L294 188 C260 202, 220 190, 180 202 S96 206, 52 194 S12 190, 6 180 Z"
      fill="none" stroke="#2a2018" stroke-opacity=".3" stroke-width="1.4"/>`;
-  return `<svg id="map" viewBox="0 0 300 200" xmlns="http://www.w3.org/2000/svg">${coast}${roads}${nodes}</svg>`;
-}
-/* ================================================================
+  return `<svg id="map" viewBox="0 0 300 214" xmlns="http://www.w3.org/2000/svg">${coast}${roads}${nodes}</svg>`;
+}/* ================================================================
    STATE
    ================================================================ */
-const SAVE_KEY="heirloom.save.v1", LIB_KEY="heirloom.library.v1";
+const SAVE_KEY="heirloom.save.v2", LIB_KEY="heirloom.library.v1";
 let S=null, DELTAS=[], PEOPLE_ID=0;
 
 const TITLES=["of the Manor","Baron","Baroness","Count","Countess","Duke","Duchess","Prince","Princess"];
@@ -635,7 +731,10 @@ const G={
       const tgt=free.length?pick(free):pick(S.w.regions.filter(r=>r.holder!=="you"));
       if(!tgt)break; tgt.holder="you"; S.h.holdings.push(tgt.id); d("Gained "+tgt.name,"up");}},
   loseLand(n){for(let i=0;i<n;i++){ if(S.h.holdings.length<=1)break;
-      const id=S.h.holdings.pop(); const r=S.w.regions[id]; r.holder=pick(["crown","rival"]);
+      const id=S.h.holdings.pop(); const r=S.w.regions[id];
+      const live=(S.w.houses||[]).filter(h=>!h.dead);
+      const taker=live.length&&chance(.7)?pick(live):null;
+      if(taker){r.holder=taker.name;taker.holdings.push(r.id);}else{r.holder="crown";}
       d("Lost "+r.name,"dn");}},
   rank(v){S.h.rank=clamp(S.h.rank+v,0,4); d(v>0?"Raised to "+RANKWORD[S.h.rank]:"Reduced to "+RANKWORD[S.h.rank],v>0?"up":"dn");},
   bond(who,v){const p=person(who); if(!p)return;
@@ -666,31 +765,39 @@ function person(who){
 function newWorld(seedStr,houseNameIn,charName){
   RND=mulberry(hashSeed(seedStr));
   const faith=pick(FAITHS), threat=pick(THREATS);
-  const regions=buildRegions(12);
-  const kingHouse=houseName();
-  const rivals=[];
-  for(let i=0;i<3;i++)rivals.push({name:houseName(),seat:placeName(),arms:newArms(),att:i===0?-30:ri(-10,30)});
+  const regions=buildRegions(14);
   const hn=houseNameIn||houseName();
-  const seat=placeName();
+  const houses=[];
+  for(let i=0;i<3;i++){
+    let nm=houseName(),guard=0;
+    while((nm===hn||houses.some(h=>h.name===nm))&&guard++<40)nm=houseName();
+    houses.push({name:nm,seat:nm,arms:newArms(),att:i===0?ri(-45,-20):ri(-10,30),
+      holdings:[],strength:ri(2,4),coffers:ri(3,6),standing:ri(15,35),dead:false});
+  }
+  regions.forEach(r=>{r.income=ri(1,3);r.dev=0;r.raided=false;});
+  // a house and its seat share a name, so the map can be read at a glance
+  regions[0].name=hn; regions[0].holder="you";
+  houses.forEach((h,i)=>{const r=regions[i+1];r.name=h.name;r.holder=h.name;h.holdings.push(r.id);});
+  houses.forEach(h=>{
+    const near=(regions[h.holdings[0]].roads||[]).map(i=>regions[i]).filter(r=>!r.holder);
+    if(near.length){near[0].holder=h.name;h.holdings.push(near[0].id);}
+  });
+  regions.filter(r=>!r.holder).slice(0,2).forEach(r=>{r.holder="crown";});
   const w={
     realm:"the "+pick(["Kingdom","Realm","Crown-lands","Marches"])+" of "+placeName(),
-    king:gname("m"), kingHouse, faith, threat,
-    year:ri(880,1130), regions, rivals, flags:{}, era:1,
+    king:gname("m"), kingHouse:houseName(), faith, threat,
+    year:ri(880,1130), regions, houses, rival:houses[0], flags:{}, era:1, events:[],
   };
-  // holdings: you start with one, crown/rivals hold some, rest empty
-  regions[0].holder="you";
-  regions[1].holder="crown"; regions[2].holder="crown";
-  regions[3].holder="rival"; regions[4].holder="rival";
-  regions[5].holder="rival";
   const h={
     name:hn, seat:regions[0].name, motto:pick(MOTTOS), arms:newArms(),
     standing:18, coffers:5, strength:3, piety:40, rank:0,
     holdings:[0], flags:{}, legends:[],
+    heirloom:newHeirloom(), things:[], secrets:[],
   };
-  S={v:1,seed:seedStr,started:true,finished:false,w,h,chron:[],anc:[],seeds:[],
-     used:{},tab:"story",c:null,pending:null,ending:null};
-  S.w.rival=rivals[0];
-  G.chron(`In the ${ordinal(1)} year of ${w.king}, ${h.name} of ${h.seat} was ${pick(["granted","confirmed in","left"])} the manor and its fields. The grant was written small.`,"");
+  S={v:2,seed:seedStr,started:true,finished:false,w,h,chron:[],anc:[],seeds:[],marg:[],
+     used:{},tab:"story",c:null,pending:null,ending:null,lastIncome:0};
+  G.chron(`In the ${ordinal(1)} year of ${w.king}, ${h.name} was ${pick(["granted","confirmed in","left"])} the manor at ${h.seat} and its fields. The grant was written small.`,"");
+  worldTick(2);
   beginLife(1,charName,null);
   return S;
 }
@@ -756,6 +863,8 @@ function buildQueue(){
   legacy.forEach((sd,i)=>slots.splice(Math.min(slots.length,2+i*2),0,{k:"legacy",seed:sd}));
   if(gen>=2)slots.splice(Math.min(slots.length,3),0,{k:"anchor",id:"children"});
   else slots.splice(Math.min(slots.length,3),0,{k:"anchor",id:"children"});
+  slots.splice(clamp(ri(1,slots.length-1),0,slots.length),0,{k:"anchor",id:"travel"});
+  for(let i=0;i<2;i++)slots.splice(ri(0,slots.length),0,{k:"inter"});
   if(gen===3)slots.splice(Math.min(slots.length,3),0,{k:"anchor",id:"crisis"});
   if(gen===2)slots.splice(Math.min(slots.length,4),0,{k:"anchor",id:"omen"});
   if(gen===4)slots.splice(Math.min(slots.length,4),0,{k:"anchor",id:"reckoning"});
@@ -766,6 +875,327 @@ function buildQueue(){
 }
 function readySeeds(){
   return S.seeds.filter(s=>!s.used&&s.gen<S.c.gen&&LEGACY[s.type]).sort((a,b)=>a.gen-b.gen);
+}
+/* ================================================================
+   SYSTEMS LAYER — the things that make it a game and not a book
+   ================================================================ */
+
+/* ---------------- ODDS ---------------- */
+/* Every uncertain choice states its price before you pay it. */
+function oddsOf(ch){
+  if(!ch.odds)return null;
+  const o=safe(()=>ch.odds(G),null);
+  if(o==null)return null;
+  const p=clamp(typeof o==="number"?o:o.p,0.02,0.98);
+  return {p,why:(typeof o==="object"&&o.why)||""};
+}
+function fracWord(p){
+  const n=Math.max(1,Math.round(p*6));
+  return n+" in 6";
+}
+/* roll() records the die so the outcome can show its working */
+function roll(p,label){
+  const die=ri(1,6), need=Math.max(1,Math.round(p*6));
+  const win=die<=need;
+  if(S.pending)S.pending.roll={die,need,win,label:label||""};
+  return win;
+}
+G.roll=roll;
+G.odds=oddsOf;
+
+/* ---------------- THE HEIRLOOM ---------------- */
+const RELICS=[
+ {kind:"ring",  a:"a heavy gold ring, too large for most hands, with a stone the colour of old wine"},
+ {kind:"sword", a:"a plain sword with a worn grip and a notch nobody will grind out"},
+ {kind:"book",  a:"a book of accounts and complaints kept since the grant, in eleven hands"},
+ {kind:"box",   a:"a lead box the size of a fist, sealed, said to hold a saint's tooth"},
+ {kind:"horn",  a:"a hunting horn banded in silver, audible across two valleys"},
+ {kind:"seal",  a:"a bronze seal-matrix that makes this family's mark legal"},
+ {kind:"cup",   a:"a green glass cup that should have broken four generations ago"},
+];
+function newHeirloom(){
+  const r=pick(RELICS);
+  return {kind:r.kind,about:r.a,name:"",state:"held",where:"",story:[],by:null};
+}
+function hl(){return S.h.heirloom;}
+function hlName(){const h=hl();return h.name||("the "+h.kind);}
+function hlNote(t){hl().story.push({y:S.w.year,g:S.c?S.c.gen:1,t});}
+G.hlSet=function(state,where,t){const h=hl();h.state=state;h.where=where||"";hlNote(t);
+  d(hlName()+": "+state,state==="held"?"up":"dn");};
+G.hl=hl; G.hlName=hlName; G.hlNote=hlNote;
+
+/* ---------------- NAMED THINGS ---------------- */
+/* horses, hounds, swords. They can be named, and they can be lost. */
+function addThing(kind,name,note){
+  S.h.things.push({kind,name,note:note||"",gen:S.c?S.c.gen:1,alive:true,y:S.w.year});
+  d("Named: "+name,"up");
+}
+G.thing=addThing;
+G.thingsAlive=k=>S.h.things.filter(t=>t.alive&&(!k||t.kind===k));
+G.loseThing=function(t,how){t.alive=false;t.lost=how||"";d(t.name+" is gone","dn");
+  G.chron(`${t.name}${t.kind==="horse"||t.kind==="hound"?"":", the "+t.kind} `+(how||"was lost")+".","grim");};
+
+/* ---------------- SECRETS ---------------- */
+const SECRET_SRC=[
+ {id:"murder",  f:h=>h.flags.secret_murder,  t:"An inconvenient cousin was removed in a disputed succession, and your great-grandparent signed for it."},
+ {id:"deed",    f:h=>h.flags.landStolen&&!h.flags.returnedLand, t:"The two best fields in this holding are held on a deed made out to another family."},
+ {id:"tithe",   f:h=>h.flags.shortedTithe,   t:"This house has been shorting the temple's render for years, and the temple writes things down."},
+ {id:"heresy",  f:h=>h.flags.heresyPatron,   t:"This house takes money from people the temple would like to burn."},
+ {id:"outlaw",  f:h=>h.flags.outlawPact&&!h.flags.legalised, t:"Men under sentence of death draw wages from this house."},
+ {id:"hoard",   f:h=>h.flags.buriedHoard&&!h.flags.hoardFound, t:"There is money buried under the undercroft that appears in no ledger."},
+ {id:"bastard", f:h=>h.flags.bastardLine||h.flags.bastardIn, t:"There is a branch of this blood that was written out of the book."},
+ {id:"burned",  f:h=>h.flags.burnedDeed,     t:"A deed was burned in this hall to keep land that was never granted."},
+];
+function syncSecrets(){
+  if(!S.h.secrets)S.h.secrets=[];
+  SECRET_SRC.forEach(s=>{
+    if(safe(()=>s.f(S.h),false)&&!S.h.secrets.some(x=>x.id===s.id))
+      S.h.secrets.push({id:s.id,t:s.t,known:false,by:null,gen:S.c?S.c.gen:1});
+  });
+}
+/* between generations, somebody may find one out */
+function secretsLeak(){
+  syncSecrets();
+  const hidden=S.h.secrets.filter(s=>!s.known);
+  if(!hidden.length)return;
+  const guard=(S.c&&S.c.stats.cunning>=6)?0.16:0.36;
+  hidden.forEach(s=>{
+    if(rnd()<guard){
+      s.known=true;
+      const who=pick(S.w.houses.filter(h=>!h.dead)).name;
+      s.by=who;
+      S.seeds.push({type:"blackmail",who,secret:s.id,gen:S.c?S.c.gen:1,used:false});
+      S.chron.push({y:S.w.year,g:S.c?S.c.gen:1,c:"grim",
+        t:`Something this house had kept quiet stopped being quiet. It is not yet clear who knows.`});
+    }
+  });
+}
+
+/* ---------------- REGION ECONOMY ---------------- */
+function regionIncome(r){return Math.max(0,(r.income||1)+(r.dev||0)-(r.raided?2:0));}
+function houseIncome(){return S.h.holdings.reduce((a,i)=>a+regionIncome(S.w.regions[i]),0);}
+G.income=houseIncome;
+G.develop=function(id){const r=S.w.regions[id];if(!r)return;r.dev=(r.dev||0)+1;
+  d(r.name+" improved","up");G.chron(`Work was put into ${r.name}; it yields more than it did.`);};
+
+/* ---------------- HOUSES THAT PLAY ---------------- */
+function houseOf(name){return S.w.houses.find(h=>h.name===name);}
+function powerOf(h){return h.holdings.length*2+h.strength+Math.floor(h.standing/12);}
+function yourPower(){return S.h.holdings.length*2+S.h.strength+Math.floor(S.h.standing/12);}
+function freeRegions(){return S.w.regions.filter(r=>!r.holder);}
+function adjacentTo(h){
+  const ids=new Set();
+  h.holdings.forEach(i=>{(S.w.regions[i].roads||[]).forEach(j=>ids.add(j));});
+  return [...ids].map(i=>S.w.regions[i]);
+}
+/* one turn per house, between generations. The map is not a picture. */
+function rivalTurn(){
+  const ev=[];
+  S.w.houses.forEach(h=>{
+    if(h.dead)return;
+    h.coffers+=h.holdings.length+ri(0,2);
+    const near=adjacentTo(h);
+    const open=near.filter(r=>!r.holder);
+    const mine=near.filter(r=>r.holder==="you");
+    const weak=near.filter(r=>r.holder&&r.holder!=="you"&&r.holder!=="crown"&&r.holder!==h.name
+      &&houseOf(r.holder)&&powerOf(houseOf(r.holder))<powerOf(h)-2);
+    const r=rnd();
+    if(open.length&&r<0.42&&h.coffers>=3){
+      const t=pick(open);t.holder=h.name;h.holdings.push(t.id);h.coffers-=3;h.standing+=3;
+      ev.push(`${h.name} took ${t.name}, which had been standing empty since the last plague.`);
+    } else if(mine.length&&h.att<-25&&powerOf(h)>yourPower()-2&&r<0.62){
+      const t=pick(mine);t.raided=true;
+      ev.push(`Riders out of ${h.seat} burned ricks in ${t.name}. Nobody was killed. That was the message.`);
+      S.h.coffers=Math.max(0,S.h.coffers-1);
+    } else if(weak.length&&r<0.72){
+      const t=pick(weak);const victim=houseOf(t.holder);
+      t.holder=h.name;h.holdings.push(t.id);h.strength=Math.max(1,h.strength-1);
+      if(victim){victim.holdings=victim.holdings.filter(i=>i!==t.id);
+        if(!victim.holdings.length){victim.dead=true;ev.push(`${victim.name} of ${victim.seat} holds nothing at all now. The name will be gone in a generation.`);}}
+      ev.push(`${h.name} took ${t.name} from ${victim?victim.name:"its holder"} by law, debt and one short afternoon of violence.`);
+    } else if(r<0.86){
+      h.strength+=1;h.standing+=2;h.coffers=Math.max(0,h.coffers-2);
+      ev.push(`${h.name} spent the year arming and marrying, and is stronger for it than anyone likes.`);
+    } else {
+      h.att=clamp(h.att+ri(5,20),-100,100);
+      ev.push(`${h.name} sent word to ${S.h.name}. The tone was warmer than it has been.`);
+    }
+  });
+  // your own tenants pay, and raids stop hurting after a season
+  S.w.regions.forEach(r=>{if(r.raided&&chance(.6))r.raided=false;});
+  const inc=houseIncome();
+  S.h.coffers+=inc;
+  S.lastIncome=inc;
+  pickN(ev,Math.min(2,ev.length)).forEach(t=>S.w.events.push({y:S.w.year,t,kind:"house"}));
+  return ev;
+}
+
+/* ---------------- THE WIDER WORLD ---------------- */
+/* Things happen that are not about you. Some of them reach you anyway. */
+const WORLD_EV=[
+ {t:G=>`A comet stood over the realm for nine nights. Every ${G.w.faith.cleric} in the country has explained it differently.`,fx:()=>{}},
+ {t:G=>`Wool out of the northern ports has doubled in price. Nobody can say why and everybody has an opinion.`,fx:()=>{S.w.flags.woolBoom=true;}},
+ {t:G=>`The wool price collapsed. Three merchant houses at the coast have simply stopped existing.`,fx:()=>{S.w.flags.woolBoom=false;S.h.coffers=Math.max(0,S.h.coffers-1);}},
+ {t:G=>`War in the south, over a river nobody here has seen. It will be paid for by everybody.`,fx:()=>{S.w.flags.southWar=true;}},
+ {t:G=>`The southern war ended in a treaty that gave nobody anything. The taxes raised for it were not repealed.`,fx:()=>{S.w.flags.southWar=false;}},
+ {t:G=>`A new road was cut through the eastern hills. The old road, which passes your gate, is now the slow one.`,fx:()=>{S.w.flags.badRoad=true;}},
+ {t:G=>`${cap(G.w.faith.name)} has canonised a saint who died in a ditch four counties away. Pilgrims are already walking.`,fx:()=>{S.w.flags.pilgrimage=true;}},
+ {t:G=>`King ${G.w.king} is ill, then well, then ill. The court has learned to say nothing with great fluency.`,fx:()=>{}},
+ {t:G=>`A great house in the west was attainted entire — lands, titles, name. It took eleven days.`,fx:()=>{}},
+ {t:G=>`Silver was found in the hills beyond the frontier and half the landless men in the county have gone to look for it.`,fx:()=>{S.h.strength=Math.max(0,S.h.strength-1);}},
+ {t:G=>`A hard winter closed the passes. Prices in every market doubled and stayed up.`,fx:()=>{S.h.coffers=Math.max(0,S.h.coffers-1);}},
+ {t:G=>`The Crown has begun writing down who holds what, everywhere, in a single book. Clerks are on every road.`,fx:()=>{S.w.flags.survey=true;}},
+];
+function worldTick(n){
+  const out=[];
+  for(let i=0;i<(n||2);i++){
+    const e=pick(WORLD_EV);
+    const t=safe(()=>e.t(G),"");
+    if(!t||S.w.events.some(x=>x.t===t))continue;
+    safe(()=>e.fx(),null);
+    S.w.events.push({y:S.w.year,t,kind:"world"});
+    out.push(t);
+  }
+  if(S.w.events.length>40)S.w.events=S.w.events.slice(-40);
+  return out;
+}
+
+/* ---------------- MARGINALIA ---------------- */
+/* later hands write in the margins of earlier ones */
+const MARG_LEGEND=["This is the version we tell.","My father told it shorter.","I have seen the field. It is smaller than the story.",
+  "They still sing this. It is mostly true.","The part about the weather is invented."];
+const MARG_GRIM=["Nobody in this house will say this aloud.","I was told it was necessary. I was not told by whom.",
+  "This is why they will not sell to us.","We are still paying for this.","There is another account of this. It is worse."];
+const MARG_PLAIN=["A good year. There were not many.","This was the year the roof was done.","I do not remember this at all.",
+  "My mother's hand, this line.","Ink faded here — read it as best I can."];
+function addMarginalia(){
+  if(!S.marg)S.marg=[];
+  const gen=S.c?S.c.gen:1;
+  const older=S.chron.map((e,i)=>({e,i})).filter(x=>x.e.g<gen&&!S.marg.some(m=>m.on===x.i));
+  if(!older.length)return;
+  pickN(older,Math.min(2,older.length)).forEach(x=>{
+    const pool=x.e.c==="legend"?MARG_LEGEND:(x.e.c==="grim"?MARG_GRIM:MARG_PLAIN);
+    S.marg.push({on:x.i,gen,t:pick(pool)});
+  });
+}
+
+/* ---------------- CONTESTS: several rounds, not one ---------------- */
+const TACTICS={
+ battle:[
+  {k:"press", t:"Press the centre",  beats:"hold",   stat:"iron"},
+  {k:"flank", t:"Go round the flank",beats:"press",  stat:"cunning"},
+  {k:"hold",  t:"Hold and let them come",beats:"flank",stat:"iron"},
+ ],
+ haggle:[
+  {k:"push",   t:"Push them on the price"},
+  {k:"sweeten",t:"Sweeten the terms"},
+  {k:"wait",   t:"Say nothing and wait"},
+ ],
+};
+const TELLS={
+ press:["Their centre is thickening.","Horns on their line — they are massing to come straight at you."],
+ flank:["Dust on your right, well beyond the line.","Their light horse has drifted wide and stopped pretending otherwise."],
+ hold:["They have stopped moving. They have chosen their ground.","Stakes going in along their front."],
+};
+function startContest(cfg){
+  S.pending.contest=Object.assign({
+    kind:"battle",round:1,maxR:4,log:[],finished:false,result:null,
+    you:{name:S.c.name,force:10,morale:10},
+    them:{name:"the enemy",force:10,morale:10},
+    theirNext:null,
+  },cfg);
+  const c=S.pending.contest;
+  if(c.kind==="battle")c.theirNext=pick(TACTICS.battle).k;
+  return "";
+}
+G.contest=startContest;
+
+function contestAct(k){
+  const c=S.pending&&S.pending.contest;
+  if(!c||c.finished)return;
+  if(c.kind==="battle")battleRound(c,k); else haggleRound(c,k);
+  if(!c.finished&&c.round>c.maxR)finishContest(c,"time");
+  save();render();
+}
+function battleRound(c,k){
+  if(k==="parley"){finishContest(c,"parley");return;}
+  const mine=TACTICS.battle.find(t=>t.k===k), theirs=c.theirNext;
+  const bonus=Math.floor((S.c.stats[mine.stat]||0)/3);
+  let line;
+  if(mine.beats===theirs){
+    const dmg=2+bonus+ri(0,2);
+    c.them.force-=dmg;c.them.morale-=2;
+    line=`Round ${c.round}: you ${mine.t.toLowerCase()}; they ${theirs}. It works — they give ground. (−${dmg} to them)`;
+  } else if(TACTICS.battle.find(t=>t.k===theirs).beats===k){
+    const dmg=2+ri(0,2)+Math.max(0,2-bonus);
+    c.you.force-=dmg;c.you.morale-=2;
+    line=`Round ${c.round}: you ${mine.t.toLowerCase()}; they ${theirs}. They read you. (−${dmg} to you)`;
+  } else {
+    c.you.force-=1;c.them.force-=1;
+    line=`Round ${c.round}: you ${mine.t.toLowerCase()}; they ${theirs}. Nothing moves but the casualties.`;
+  }
+  c.log.push(line);
+  c.round++;
+  c.theirNext=pick(TACTICS.battle).k;
+  if(c.them.force<=0)finishContest(c,"win");
+  else if(c.you.force<=0)finishContest(c,"lose");
+}
+function haggleRound(c,k){
+  if(k==="close"){finishContest(c,c.price>=c.reserve?"deal":"deal");return;}
+  if(k==="walk"){
+    if(c.price>=c.reserve-1&&chance(.55)){c.price=Math.max(c.price,c.reserve);c.log.push(`You get as far as the door. They call you back and meet you at ${c.price}.`);finishContest(c,"deal");}
+    else{c.log.push(`You walk. Nobody calls after you.`);finishContest(c,"nodeal");}
+    return;
+  }
+  const skill=Math.floor((S.c.stats.coin+S.c.stats.cunning)/4);
+  if(k==="push"){
+    if(chance(0.42+skill*0.06)){c.price+=ri(1,2);c.log.push(`Round ${c.round}: you push. They move to ${c.price}.`);}
+    else{c.patience-=2;c.log.push(`Round ${c.round}: you push. They do not move, and they look at the door.`);}
+    c.patience-=1;
+  } else if(k==="sweeten"){
+    c.price+=1;c.patience+=1;c.gave=(c.gave||0)+1;
+    c.log.push(`Round ${c.round}: you give ground on the terms. They come up to ${c.price}, warmly.`);
+  } else {
+    if(chance(0.45)){c.price+=1;c.log.push(`Round ${c.round}: you say nothing. They fill the silence with ${c.price}.`);}
+    else{c.patience-=1;c.log.push(`Round ${c.round}: you say nothing. So do they. It is a long minute.`);}
+  }
+  c.round++;
+  if(c.patience<=0){c.log.push(`They stand up. The matter is closed.`);finishContest(c,"nodeal");}
+}
+function finishContest(c,result){c.finished=true;c.result=result;}
+
+/* ---------------- SHARE ---------------- */
+function shareText(){
+  const e=S.ending||{title:"unfinished",year:S.w.year};
+  const L=[];
+  L.push(`HEIRLOOM — House ${S.h.name} of ${S.h.seat}`);
+  L.push(`${S.anc.length?S.anc[0].born:S.w.year}–${e.year||S.w.year} · ${S.w.realm}`);
+  L.push("");
+  S.anc.forEach(a=>{
+    L.push(`${ROMAN[a.gen]}. ${a.name} ${a.epithet} (${a.age}) ${a.met?"— got what they wanted":""}`.trim());
+    L.push(`   ${a.epi}`);
+  });
+  L.push("");
+  const thr=S.w.flags["threat_"+S.w.threat.id];
+  L.push(`${cap(S.w.threat.name)}: ${thr==="triumph"?"held, and was raised for it":thr==="endure"?"endured":thr==="broken"?"broke this house":"never came"}`);
+  if(S.h.heirloom)L.push(`${cap(hlName())}: ${hl().state}`);
+  L.push(`Ending: ${e.title}`);
+  L.push(`Seed: ${S.seed}`);
+  return L.join("\n");
+}
+function doShare(){
+  const t=shareText();
+  if(typeof navigator!=="undefined"&&navigator.share){navigator.share({title:"Heirloom — House "+S.h.name,text:t}).catch(()=>{});return "shared";}
+  return copyText(t);
+}
+function copyText(t){
+  try{
+    if(typeof navigator!=="undefined"&&navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(t);return "copied";}
+  }catch(e){}
+  try{
+    const ta=document.createElement("textarea");ta.value=t;document.body.appendChild(ta);
+    ta.select();document.execCommand("copy");document.body.removeChild(ta);return "copied";
+  }catch(e){return "failed";}
 }
 /* ================================================================
    SCENE POOL
@@ -1285,7 +1715,11 @@ const POOL=[
  text:G=>P(`${G.v.r?G.v.r.name:"A neighbouring holding"} has come free — the last of its line died in the winter and the Crown will take a fine and pass it to whoever pays it.`)
  +P(`It is ${G.v.r?G.v.r.type:"marginal"} ground, four hours' ride, and it would cost you very nearly everything in the chest.`),
  choices:[
-  {t:"Buy it.",when:G=>!!G.v.r,
+  {t:"Haggle the Crown's clerk down.",when:G=>!!G.v.r,
+   odds:G=>({p:clamp(0.4+(G.c.stats.coin+G.c.stats.cunning)*0.04,.15,.9),why:"your Coin and your Guile against a bored official"}),
+   do:G=>G.contest({kind:"haggle",resolveId:"landbuy",maxR:5,price:4,reserve:7,patience:5,
+     them:{name:"the Crown's clerk"}})},
+  {t:"Pay the asking price and be done.",when:G=>!!G.v.r,
    do:G=>{G.hs("coffers",-5);G.land(1);G.hs("standing",4);
     return P(`It is done in a room in the county town with a clerk and a wax seal, and it takes eleven minutes to buy something your family will hold for two hundred years.`);}},
   {t:"Buy it with borrowed money. Buy two.",when:G=>!!G.v.r,cls:"risky",
@@ -1428,11 +1862,18 @@ open:{id:"open",kind:"illum",
  title:G=>`${G.c.title} ${G.c.name} of ${G.h.name}`,
  text:G=>{
   const par=G.c.parentName?`child of ${G.c.parentName}`:`first of the name to hold anything at all`;
-  return P(`Born in ${G.c.born}, ${par}. You are ${G.c.age} years old and this is where the chronicle picks you up.`)
+  const relic=G.c.gen===1?P(`There is one thing in this house older than the grant: ${hl().about}. Nobody has ever given it a name.`):"";
+  return P(`Born in ${G.c.born}, ${par}. You are ${G.c.age} years old and this is where the chronicle picks you up.`)+relic
    +(G.c.traits.length?P(`They say of you already: ${G.c.traits.map(t=>`<em>${t.toLowerCase()}</em>`).join(", ")}.`):"")
    +`<div class="yearn"><span class="lbl">What you want, and will not say aloud</span>${YEARN_TEXT[G.c.yearn]}</div>`;
  },
- choices:[{t:"Take up the name.",do:G=>""}]},
+ choices:[
+  {t:"Take up the name.",when:G=>G.c.gen>1,do:G=>""},
+  {t:G=>`Take up the name, and the ${hl().kind}.`,when:G=>G.c.gen===1,
+   do:G=>G.form({title:"What is it called?",
+     fields:[{k:"name",label:"This family's one inherited thing",ph:pick(["The Grant","Old Faith","Sixpence","Grandmother's Ring","The Notch","Quietly"])}],
+     applyId:"heirloom"})},
+ ]},
 
 ascend:{id:"ascend",
  eyebrow:G=>"Succession",
@@ -1524,24 +1965,24 @@ children:{id:"children",
   {t:"Raise them hard. The world is harder.",when:G=>G.v.n>0,
    do:G=>{regKids(G);G.c.kids.forEach(k=>{k.bond=clamp(k.bond-15,0,100);if(!k.traits.includes("Guarded"))k.traits.push("Guarded");});
     G.c.childTraits=["Guarded"];
-    return P(`Cold rooms, early rising, no favouritism shown even where it is felt. They are competent by twelve and unreachable by sixteen.`)
-    +P(`It is how you were raised. You have told yourself it worked.`);}},
+    return nameKidsForm(G,P(`Cold rooms, early rising, no favouritism shown even where it is felt. They are competent by twelve and unreachable by sixteen.`)
+    +P(`It is how you were raised. You have told yourself it worked.`));}},
   {t:"Raise them close. Let them know you.",when:G=>G.v.n>0,cls:"tender",
    do:G=>{regKids(G);G.c.kids.forEach(k=>{k.bond=clamp(k.bond+22,0,100);});
     G.c.childTraits=["Content"];G.hs("standing",-1);
-    return P(`They come to the accounts room. They come to the hall. They are in the way constantly and they know the names of every tenant by the time they are nine.`)
-    +P(`Other houses find it undignified. Your children will be, whatever else, entirely certain that they were wanted.`);}},
+    return nameKidsForm(G,P(`They come to the accounts room. They come to the hall. They are in the way constantly and they know the names of every tenant by the time they are nine.`)
+    +P(`Other houses find it undignified. Your children will be, whatever else, entirely certain that they were wanted.`));}},
   {t:"Raise the heir. The others as they come.",when:G=>G.v.n>1,
    do:G=>{regKids(G);G.c.kids[0].bond=clamp(G.c.kids[0].bond+18,0,100);
     for(let i=1;i<G.c.kids.length;i++){G.c.kids[i].bond=clamp(G.c.kids[i].bond-22,0,100);G.c.kids[i].traits.push("Ambitious");}
     G.seed({type:"bitter_sibling",who:G.c.kids[1].name});
-    return P(`The eldest gets the tutor, the horse, and the hours. The others get the household, which is not nothing, and get told they are lucky, which is worse.`)
-    +P(`The eldest will be well-prepared. The others will be watching, and they will be very good at it.`);}},
+    return nameKidsForm(G,P(`The eldest gets the tutor, the horse, and the hours. The others get the household, which is not nothing, and get told they are lucky, which is worse.`)
+    +P(`The eldest will be well-prepared. The others will be watching, and they will be very good at it.`));}},
   {t:G=>`Send the second child to the ${G.w.faith.temple}.`,when:G=>G.v.n>1,
    do:G=>{regKids(G);G.hs("piety",14);G.c.kids[1].bond=clamp(G.c.kids[1].bond-10,0,100);G.c.kids[1].churched=true;
     G.seed({type:"church_kin",who:G.c.kids[1].name});
-    return P(`It is the ordinary arrangement and it costs a donation and a great many tears at the gate.`)
-    +P(`Twenty years on, that child will be somebody in the ${G.w.faith.name} — which is to say, a door into an institution that outlives kings.`);}},
+    return nameKidsForm(G,P(`It is the ordinary arrangement and it costs a donation and a great many tears at the gate.`)
+    +P(`Twenty years on, that child will be somebody in the ${G.w.faith.name} — which is to say, a door into an institution that outlives kings.`));}},
   {t:"There is nothing to decide.",when:G=>G.v.n===0,
    do:G=>{G.hflag("noIssue");return P(`You put the question away in the drawer where you keep the things that cannot be solved by being good at your work.`);}},
  ]},
@@ -1753,8 +2194,15 @@ function wed(G,i){
     +P(`There is no dowry and no alliance and no advantage of any kind. You will get forty years of somebody who chose you back.`);
 }
 function regKids(G){
+  const base=S.c.kids.length;
   S.c.kids=S.c.kids.concat(G.v.kids);
-  G.v.kids.forEach(k=>G.chron(`${k.name} was born to ${S.c.name} of ${S.h.name}.`));
+  S.pending.newKidIdx=G.v.kids.map((k,i)=>base+i);
+}
+function nameKidsForm(G,pre){
+  S.pending.pre=pre;
+  const f=(S.pending.newKidIdx||[]).map((idx,i)=>({k:"k"+i,label:"The "+["first","second","third","fourth"][i]+" is called",ph:S.c.kids[idx].name}));
+  if(!f.length)return pre;
+  return G.form({title:"Names",fields:f,applyId:"children"});
 }
 
 /* ================================================================
@@ -2112,6 +2560,11 @@ function heirCandidates(){
   return [];
 }
 function succeed(kid){
+  // between the hands, the world moves without you
+  secretsLeak();
+  addMarginalia();
+  worldTick(ri(1,3));
+  rivalTurn();
   const parent={name:S.c.name,traits:S.c.traits,stats:S.c.stats,bond:kid?kid.bond:20,
     childTraits:kid?kid.traits:["Guarded"],siblings:[]};
   const gen=S.c.gen+1;
@@ -2123,14 +2576,17 @@ function succeed(kid){
     S.w.year=S.anc[S.anc.length-1].died+ri(0,2);
     beginLife(gen,kid.name,parent);
     S.c.traits=[...new Set(S.c.traits.concat(kid.traits||[]))].slice(0,4);
-    S.c.age=clamp(S.w.year-(kid.born||(S.w.year-20)),16,46);
+    S.c.age=clamp(S.w.year-(kid.born||(S.w.year-20)),16,32);
     S.c.born=S.w.year-S.c.age;
     S.c.g=kid.g||S.c.g;
+    if(S.h.heirloom&&hl().state==="held")
+      hlNote(`Passed to ${S.c.name}, the ${["first","second","third","fourth"][gen-1]} of the name to hold it.`);
   } else {
-    // cadet branch: a cousin. The line survives; the accumulated goodwill does not.
     S.h.standing=Math.max(6,Math.floor(S.h.standing*0.6));
     S.h.flags.cadet=true;
     S.w.year+=ri(1,4);
+    if(S.h.heirloom&&hl().state==="held"&&chance(.45))
+      G.hlSet("lost","the old household",`Not found when the household changed hands. Nobody was ever accused.`);
     beginLife(gen,null,null);
     S.c.flags.cadet=true;
     S.chron.push({y:S.w.year,g:gen,t:`With no heir of the body, ${S.h.name} passed to a cousin, and half of what the last hand had built went with the change of household.`,c:"grim"});
@@ -2138,9 +2594,16 @@ function succeed(kid){
   S.w.era=gen;
   S.pending=null;
 }
+function lineEnds(reason){
+  S.endReason=reason;
+  computeEnding(true);
+  MODE="ending";
+  save();
+}
 
 /* ---- ENDING ---- */
-function computeEnding(){
+/* ---- ENDING ---- */
+function computeEnding(dead){
   const h=S.h,w=S.w,f=h.flags;
   const thr=w.flags["threat_"+w.threat.id]||"untested";
   let path="root",title="",body="";
@@ -2152,6 +2615,7 @@ function computeEnding(){
   else if(f.path_crown)path="thwarted";
   else path="root";
   if(h.holdings.length===0||h.standing<8)path="extinct";
+  if(dead)path="extinct";
 
   const T={
    crown:["A House of the Blood","Four generations from a grant written small to a seat among the great houses. The name is spoken at court now without anyone needing to ask where it is from."],
@@ -2177,12 +2641,22 @@ function computeEnding(){
   if(f.newFaith)bits.push(`The valley keeps the new faith openly, and remembers which house turned first.`);
   if(f.purged)bits.push(`Nobody in the valley preaches in the beech woods any more, and nobody explains to their children why not.`);
   if(f.buriedHoard&&!f.hoardFound)bits.push(`There is a mark on a beam in the undercroft that no living person can now read.`);
+  if(S.h.heirloom){
+    const o=hl(), n=cap(hlName());
+    if(o.state==="held")bits.push(`${n} is still in the chest. Four hands have held it and none of them sold it, which given the state of the accounts in at least two of those generations is the most surprising fact in this book.`);
+    else if(o.state==="pawned")bits.push(`${n} is still at the port. The ticket is in the chest where the thing used to be, and the interest has long since exceeded what it was worth.`);
+    else if(o.state==="stolen")bits.push(`${n} hangs in another house's hall. They know exactly what it is. That is the point of hanging it there.`);
+    else if(o.state==="buried")bits.push(`${n} is under the undercroft, where the last person who knew the mark put it.`);
+    else if(o.state==="lost")bits.push(`Nobody now living has seen ${n}. It is described in the book, in detail, by someone who had.`);
+  }
   if(f.trueChronicle)bits.push(`And there is a chronicle in this house written by someone who did not flatter it — which is why any of this is known at all.`);
 
+  if(dead)bits.push(`It ends here, in the ${["first","second","third","fourth"][Math.max(0,S.anc.length-1)]} hand, without an heir and without anyone willing to take it on.`);
   const met=S.anc.filter(a=>a.met).length;
-  const soul=met===0?`Not one of the four got the thing they privately wanted. That is not unusual. It is only unusual to have it written down.`
-    :met===4?`All four got the thing they privately wanted, which in four generations of one family is close to unheard of.`
-    :`${["None","One","Two","Three","All four"][met]} of the four got the thing they privately wanted. The rest are in the ground with it.`;
+  const N=S.anc.length;
+  const soul=met===0?`Not one of them got the thing they privately wanted. That is not unusual. It is only unusual to have it written down.`
+    :met===N?`Every one of them got the thing they privately wanted, which in ${N} generations of one family is close to unheard of.`
+    :`${["None","One","Two","Three","Four"][met]||met} of the ${N} got the thing they privately wanted. The rest are in the ground with it.`;
 
   S.ending={title,body,bits,soul,path,threat:thr,year:w.year};
   S.finished=true;
@@ -2278,11 +2752,421 @@ POOL.push(
 );
 
 /* ================================================================
+   NAMING — you name what you keep
+   ================================================================ */
+G.years=function(n){S.c.age+=n;S.w.year+=n;if(n)d(n+" years gone","note");};
+G.form=function(cfg){S.pending.form=Object.assign({done:false},cfg);return "";};
+
+const FORMS={
+ heirloom:(G,v)=>{
+  const h=hl();h.name=(v.name||"").trim()||("the "+h.kind);
+  hlNote(`Named by ${S.c.name}, the first of the line to hold it.`);
+  G.chron(`The ${h.kind} was given a name: ${h.name}. It has been called that ever since.`);
+  return P(`You call it <em>${h.name}</em>, out loud, in front of the steward, which is how a thing stops being an object and starts being an obligation.`)
+   +P(`It is ${h.about}. It is worth less than one good field. Four generations from now somebody will refuse a great deal of money for it and be unable to say why.`);
+ },
+ children:(G,v)=>{
+  const idx=S.pending.newKidIdx||[];
+  idx.forEach((ki,i)=>{const val=(v["k"+i]||"").trim();if(val)S.c.kids[ki].name=val;});
+  idx.forEach(ki=>G.chron(`${S.c.kids[ki].name} was born to ${S.c.name} of ${S.h.name}.`));
+  const names=idx.map(ki=>`<em>${S.c.kids[ki].name}</em>`).join(", ");
+  return (S.pending.pre||"")
+   +P(`They are written into the book on the day they are named: ${names}.`)
+   +P(`The names are yours to give and will outlast almost everything else you decide.`);
+ },
+ thing:(G,v)=>{
+  const nm=(v.name||"").trim()||"the grey";
+  addThing(S.pending.thingKind,nm,S.pending.thingNote);
+  G.chron(`${S.c.name} named ${S.pending.thingKind==="sword"?"a sword":"a "+S.pending.thingKind} ${nm}.`);
+  return P(`<em>${nm}</em>, then. Said once, and it sticks, the way these things do.`)
+   +P(S.pending.thingKind==="sword"
+     ?`It will be carried by people you will never meet, and at least one of them will be told a version of how you got it that is not true.`
+     :`You will have perhaps twelve years of this, and you will remember all of them.`);
+ },
+};
+
+/* ================================================================
+   CONTESTS — resolved over rounds, with the odds showing
+   ================================================================ */
+const RESOLVERS={
+ siege:(G,c)=>{
+  if(c.result==="win"){
+   G.hs("standing",10);G.hs("strength",-1);G.w.rival.strength=Math.max(1,G.w.rival.strength-3);G.w.rival.att-=15;
+   G.legend(`${S.c.name} broke the siege of ${S.h.seat} and sent ${c.them.name} home down their own road.`);
+   return P(`They break at the third assault and they do not re-form. You stand on your own wall and watch a column of men walk away from you, which is the rarest sight in this county.`);
+  }
+  if(c.result==="parley"){
+   G.hs("coffers",-3);G.hs("standing",-2);G.w.rival.att+=20;
+   return P(`You go out under a white cloth and buy them off, and it costs three years of rents and a public afternoon of being seen to do it.`)
+    +P(`Everyone inside the walls lives. That is the entire argument for it, and it is a good one.`);
+  }
+  if(c.result==="lose"){
+   G.hs("standing",-12);G.loseLand(1);G.hs("strength",-3);G.peril(2);
+   if(hl().state==="held"&&chance(.5))G.hlSet("stolen",c.them.name,`Taken out of ${S.h.seat} when the wall was carried.`);
+   G.chron(`${c.them.name} carried the wall at ${S.h.seat}. What could be taken was taken.`,"grim");
+   return P(`The gate goes at dawn on the fourth day and after that it is not a battle, it is a household trying to get down a back stair.`);
+  }
+  G.hs("standing",2);G.hs("coffers",-2);G.hs("strength",-2);
+  return P(`They sit outside for six weeks, eat everything within four miles, and leave when the weather turns. Nobody won. Everybody paid.`);
+ },
+ duel:(G,c)=>{
+  if(c.result==="win"){
+   G.hs("standing",8);G.trait("Feared");G.flag("spilledBlood");
+   G.seed({type:"blood_debt",who:c.them.name,house:c.themHouse||G.w.rival.name});
+   G.legend(`${S.c.name} met ${c.them.name} on foot before both households and walked off the ground alone.`);
+   return P(`It takes less time than the arrangements did. Afterwards your hands will not stop and you keep them behind your back until you are indoors.`);
+  }
+  if(c.result==="parley"){
+   G.hs("standing",-3);G.trait("Peacemaker");
+   return P(`You put up your hands and say the thing that ends it, and half the field thinks better of you and half thinks a great deal worse.`);
+  }
+  if(c.result==="lose"){
+   G.peril(3);G.trait("Scarred");G.hs("standing",-6);
+   return P(`He is faster and you have known it since you were nineteen. You are on your back looking at the sky with a great deal of noise happening somewhere else.`)
+    +P(`He lets you live. That is worse than the wound and both of you know it.`);
+  }
+  G.hs("standing",1);G.peril(1);
+  return P(`Both households pull you apart at the fourth exchange, which is what households are for.`);
+ },
+ wool:(G,c)=>{
+  if(c.result==="nodeal"){G.hs("coffers",-1);G.hs("standing",-1);
+   return P(`The clip goes unsold and sits in the barn until it is worth less. You have made a point at your own expense, which is a thing your family does.`);}
+  const gain=Math.max(1,c.price-3+(G.wf("woolBoom")?2:0));
+  G.hs("coffers",gain);G.stat("coin",1);
+  if(c.gave>=2)G.hs("standing",-1);
+  return P(`Closed at ${c.price}. The factor writes it down without looking up, which is how you know it was a good number.`)
+   +P(c.price>=8?`It is the best price anyone in this valley has had in a decade and it will be mentioned at every market for two years.`
+     :`It is a fair price. Fair is what most of a life is made of.`);
+ },
+ landbuy:(G,c)=>{
+  if(c.result==="nodeal"){G.hs("standing",-1);
+   return P(`No deal. The land goes to somebody with a faster clerk and you learn the name of a new neighbour.`);}
+  const cost=Math.max(2,12-c.price);
+  G.hs("coffers",-cost);G.land(1);G.hs("standing",3);
+  return P(`Signed at a price that took four hours and a great deal of pretending to be about to leave.`)
+   +P(`It is done in a room with a clerk and a wax seal, and it takes eleven minutes to buy something your family will hold for two hundred years.`);
+ },
+};
+
+/* ================================================================
+   TRAVEL — you are allowed to leave
+   ================================================================ */
+const DESTS=[
+ {id:"port",name:"The port at the coast",cost:2,
+  when:G=>true,
+  hint:"Four days each way. The factor, the ships, and the sea.",
+  go:G=>{
+   G.years(1);G.flag("sawSea");G.stat("coin",1);
+   if(!G.f("sawSeaBefore")){G.flag("sawSeaBefore");
+    return P(`You get down to the strand alone before dawn on the last morning and stand in it to the ankles. It is colder and larger and noisier than anything anyone told you.`)
+     +P(`You are ${S.c.age} and you laugh out loud like a child, and there is nobody there to see it, which is the best part.`);}
+   G.hs("coffers",2);
+   return P(`Business, this time. Warehouses, a factor who now knows your face, and a better price than a letter would have got.`);
+  }},
+ {id:"capital",name:"The King's court",cost:3,
+  when:G=>G.h.standing>=20,
+  hint:"Expensive, cold, and where the decisions are actually made.",
+  go:G=>{
+   G.years(1);G.hs("coffers",-3);
+   if(roll(0.5+S.c.stats.cunning*0.05)){G.hs("standing",8);G.hflag("courtFavour");
+    return P(`Fourteen months of standing in cold rooms being pleasant to people you despise. It works, which is the infuriating part.`);}
+   G.hs("standing",-2);
+   return P(`You are received, noted, and forgotten inside a fortnight. The road home is long and you have a great deal of time to think about it.`);
+  }},
+ {id:"shrine",name:`The great ${'#'}shrine`,cost:2,
+  when:G=>true,
+  hint:"A hard walk, and everyone who matters will hear that you made it.",
+  go:G=>{
+   G.years(1);G.stat("faith",2);G.hs("piety",14);G.hs("standing",3);
+   if(G.wf("pilgrimage")){G.hs("coffers",1);}
+   return P(`Nine days on foot with your boots in your hand for the last mile, in a line of people who have no idea who you are and would not care.`)
+    +P(`Something happens at the shrine or nothing does. You will decline, for the rest of your life, to say which.`);
+  }},
+ {id:"rival",name:"Ride to your rival's hall",cost:1,
+  when:G=>true,
+  hint:"Unarmed, unannounced, and entirely in their power for one night.",
+  go:G=>{
+   if(roll(0.55+(G.w.rival.att+100)/400,"their patience")){
+    G.w.rival.att=clamp(G.w.rival.att+35,-100,100);G.hs("standing",4);G.flag("forgiven");
+    G.chron(`${S.c.name} rode to ${G.w.rival.seat} alone and unarmed and ate at ${G.w.rival.name}'s table.`);
+    return P(`You go with two servants and no sword and you are given the guest chamber, which under the old law means they cannot touch you and both of you know exactly how thin the old law is.`)
+     +P(`You talk for six hours. Nothing is signed. Everything is different.`);
+   }
+   G.hs("standing",-3);G.peril(1);G.w.rival.att-=10;
+   return P(`They keep you standing in the hall for two hours and then send a steward to say the lord is indisposed.`)
+    +P(`You ride home in the dark having handed them a story they will tell for thirty years.`);
+  }},
+ {id:"frontier",name:"The frontier country",cost:2,
+  when:G=>G.c.stats.iron>=3,
+  hint:"Bad roads, cheap land, and men who left somewhere for a reason.",
+  go:G=>{
+   G.years(1);G.peril(1);
+   if(roll(0.5+S.c.stats.iron*0.05,"the country")){
+    G.land(1);G.hs("strength",1);
+    return P(`Nobody is using it and the man who says he owns it cannot produce anything with a seal on it. You come home with a deed and four men who wanted to leave.`);}
+   G.hs("coffers",-2);G.trait("Scarred");
+   return P(`It goes badly at a ford and you spend eleven days getting back to a road you recognise.`);
+  }},
+ {id:"branch",name:"Go and find the other branch",cost:2,
+  when:G=>G.hf("bastardLine")||G.hf("lettersLeft"),
+  hint:"Forty miles, and a family using a different surname.",
+  go:G=>{
+   G.years(1);G.flag("foundTruth");G.hs("strength",1);G.hs("coffers",1);
+   G.chron(`${S.c.name} rode forty miles to find the branch of this blood that was written out, and came home with their name in the book again.`);
+   return P(`They farm well. They know exactly who you are. The eldest has your family's jaw and a copy of the acknowledgement in a box under the bed.`)
+    +P(`You put them back in the book. It costs nothing at all and buys you forty fighting men and a grievance that dissolves the instant it is answered.`);
+  }},
+ {id:"stay",name:"Stay. There is too much here.",cost:0,
+  when:G=>true,hint:"The lower field, the roof, the accounts.",
+  go:G=>{G.hs("coffers",2);G.trait("Content");
+   return P(`You do not go. The ditching gets done a month early and the accounts balance for the first time in four years.`)
+    +P(`It is the right decision. It stays on the list of things you will do next year until the list stops mattering.`);}},
+];
+
+ANCHORS.travel={id:"travel",
+ eyebrow:G=>"The Road",title:G=>"You could go",
+ setup:G=>({d:DESTS.filter(x=>safe(()=>x.when(G),false)).slice(0,7)}),
+ text:G=>P(`The horses are sound, the year is turning, and for the first time since you took this on there is nobody who actually needs you here for a season.`)
+  +P(`Your steward can hold it. Whether you can bear to let him is a separate question, and it is the one being asked.`),
+ choices:DESTS.map((dest,i)=>({
+   t:G=>dest.name.replace("#shrine",G.w.faith.temple+" at "+placeNameStable(dest.id)),
+   hint:G=>dest.hint+(dest.cost?` · ${dest.cost} season${dest.cost>1?"s":""} away`:""),
+   cls:dest.id==="rival"?"risky":(dest.id==="stay"?"":"tender"),
+   when:G=>safe(()=>dest.when(G),false),
+   do:G=>dest.go(G),
+ })),
+};
+const _pn={};
+function placeNameStable(k){if(!_pn[k])_pn[k]=placeName();return _pn[k];}
+
+/* ================================================================
+   NEW SCENES — contests, the heirloom, naming
+   ================================================================ */
+POOL.push(
+{id:"p_siege",phase:["prime"],w:3,when:G=>G.w.rival.att<-20&&G.h.holdings.length>=1,
+ setup:G=>({r:G.w.rival}),
+ eyebrow:G=>"The Wall",title:G=>`${G.v.r.name} is at the gate`,
+ text:G=>P(`They came up the valley in the night with more men than anyone thought they could pay for, and by first light there are stakes going in across your road.`)
+  +P(`Your wall is ${G.hf("walls")?"stone and it is finished":"a bank, a ditch, and a great deal of optimism"}. You have ${G.h.strength} companies inside it. This will be decided over days, not minutes.`),
+ choices:[
+  {t:"Fight it out.",cls:"risky",
+   odds:G=>({p:clamp(0.35+G.h.strength*0.05+(G.hf("walls")?0.15:0)+G.c.stats.iron*0.03,.1,.9),why:"your wall, your levies and your nerve"}),
+   do:G=>G.contest({kind:"battle",resolveId:"siege",maxR:4,
+     you:{name:S.c.name,force:8+S.h.strength+(S.h.flags.walls?4:0),morale:10},
+     them:{name:G.v.r?G.v.r.name:G.w.rival.name,force:9+S.w.rival.strength,morale:10}})},
+  {t:"Open the gate and talk.",
+   do:G=>{G.hs("coffers",-3);G.hs("standing",-4);G.w.rival.att+=25;
+    return P(`You go out with your hands empty and buy them off in your own gateway where everyone can see the price being agreed.`)
+     +P(`Nobody dies. It will be thirty years before anyone in this valley says the word <em>gate</em> in front of you without thinking about it.`);}},
+  {t:"Send to the Crown and hold out.",when:G=>G.hf("courtFavour")||G.h.standing>=45,
+   odds:G=>({p:0.62,why:"whether the Crown thinks you are worth the ride"}),
+   do:G=>{if(roll(0.62,"the Crown's interest")){G.hs("standing",6);G.w.rival.att-=30;G.hs("coffers",-1);
+     G.chron(`The Crown's men came to ${G.h.seat} while ${G.w.rival.name} sat outside it, and ${G.w.rival.name} went home.`);
+     return P(`Eleven days of eating the winter stores, and then a column of the King's men on the ridge, and then nothing at all where an army had been.`);}
+    G.hs("standing",-6);G.loseLand(1);G.hs("strength",-2);
+    return P(`Nobody comes. You find out, over eleven days, exactly what your name is worth at a distance, and the answer is written on the empty ridge.`);}},
+ ]},
+
+{id:"p_wool",phase:["prime"],w:6,
+ setup:G=>({f:G.npc("m").name}),
+ eyebrow:G=>"The Market",title:G=>"Selling the clip",
+ text:G=>P(`The year's wool is in the barn and ${G.v.f}, who buys for a consortium at the coast, is sitting in your hall drinking your beer and looking at the ceiling.`)
+  +P(`He has opened at four. It is worth six. He knows that you know, and neither of you has any intention of saying so.${G.wf("woolBoom")?" Prices are running hot this year and you have both heard.":""}`),
+ choices:[
+  {t:"Haggle him.",
+   odds:G=>({p:clamp(0.4+(G.c.stats.coin+G.c.stats.cunning)*0.04,.15,.9),why:"your Coin and your Guile against his patience"}),
+   do:G=>G.contest({kind:"haggle",resolveId:"wool",maxR:5,price:4,reserve:7,patience:5,
+     them:{name:G.v.f||"the factor"}})},
+  {t:"Take four and be done.",
+   do:G=>{G.hs("coffers",3);G.trait("Content");
+    return P(`Signed inside ten minutes. He is so surprised he stays for dinner.`)
+     +P(`It is under the price. It is also certain, today, in a year when three houses in this county sold to men who then failed.`);}},
+  {t:"Hold the clip. Sell in spring.",cls:"risky",
+   odds:G=>({p:G.wf("woolBoom")?0.66:0.45,why:"whether the price holds until spring"}),
+   do:G=>{if(roll(G.wf("woolBoom")?0.66:0.45,"the spring price")){G.hs("coffers",6);G.stat("coin",2);
+     return P(`You sit on it through the winter with the barn full and the steward openly unhappy, and in March the price is nine.`);}
+    G.hs("coffers",1);G.stat("coin",1);
+    return P(`Moth, damp, and a market that fell in February. You get less than he offered and you get it four months later.`);}},
+ ]},
+
+{id:"p_duel",phase:["prime"],w:3,when:G=>G.c.stats.iron>=3&&!G.f("duelled"),
+ setup:G=>({m:G.npc("m").name,h:G.w.rival.name}),
+ eyebrow:G=>"The Insult",title:G=>`${G.v.m} says it in the market`,
+ text:G=>P(`He says it loudly, twice, in front of forty people who buy their salt at that stall: that this house's title is worth what its word is, and that both were bought.`)
+  +P(`He is a household knight of ${G.v.h} and he has been sent to say it. Everyone standing there knows he has been sent. That is not the point and never was.`),
+ choices:[
+  {t:"Meet him.",cls:"risky",
+   odds:G=>({p:clamp(0.32+G.c.stats.iron*0.07,.15,.85),why:"your Iron against a man who does this for a living"}),
+   do:G=>{G.flag("duelled");
+    return G.contest({kind:"battle",resolveId:"duel",maxR:3,
+     you:{name:S.c.name,force:6+S.c.stats.iron,morale:8},
+     them:{name:G.v.m,force:9,morale:8},themHouse:G.v.h});}},
+  {t:"Have him beaten by servants.",
+   do:G=>{G.trait("Cruel");G.hs("standing",-4);G.w.rival.att-=15;
+    G.seed({type:"blood_debt",who:G.v.m,house:G.v.h});
+    return P(`Four men, a lane, and a sack. It is done that night and it is understood by everyone in the county within a week.`)
+     +P(`You have answered an insult to your honour by demonstrating that you do not have any. It is effective. It is not free.`);}},
+  {t:"Answer it in the court, not the street.",cls:"tender",
+   odds:G=>({p:clamp(0.45+G.c.stats.cunning*0.06,.2,.9),why:"whether the law is faster than the story"}),
+   do:G=>{if(roll(clamp(0.45+G.c.stats.cunning*0.06,.2,.9),"the suit")){G.hs("standing",6);G.stat("cunning",1);G.w.rival.att-=8;
+     return P(`A suit for defamation, pursued slowly, publicly, and with receipts. He is fined and made to say the retraction aloud at the same stall.`)
+      +P(`It takes two years. It is comprehensive. It is also, everyone agrees, an extremely irritating way to win.`);}
+    G.hs("standing",-4);
+    return P(`The suit fails on a technicality about jurisdiction and the story has four extra years to travel.`);}},
+  {t:"Laugh, and buy salt.",
+   do:G=>{G.trait("Guarded");G.hs("standing",-2);G.stat("cunning",1);
+    return P(`You buy your salt, ask after his mother by name, and leave. The stall is very quiet.`)
+     +P(`Half the market decides you are a coward. The other half, the older half, decides something else entirely and does not say it.`);}},
+ ]},
+
+{id:"p_relic",phase:["prime"],w:2,when:G=>hl().state==="held"&&G.h.coffers<=3,
+ eyebrow:G=>"The Chest",title:G=>`What ${hlName()} is worth`,
+ text:G=>P(`The chest is nearly empty, the render is due, and there is one thing in this house that a lender at the port would take today, at a price, without asking a single question.`)
+  +P(`It is ${hl().about}. It has been in this family since the grant. It is worth about four months.`),
+ choices:[
+  {t:G=>`Pawn ${hlName()}.`,
+   do:G=>{G.hs("coffers",5);G.hlSet("pawned","the port","Pledged against a loan in a hard year.");
+    G.chron(`${cap(hlName())} was pledged at the port to meet the render. The ticket was put in the chest where the thing had been.`,"grim");
+    return P(`It takes an afternoon and a receipt. The lender wraps it in cloth without looking at it, which is somehow the worst part.`)
+     +P(`You keep the ticket in the chest, in the exact place where the thing used to be, and you look at it more often than you would admit.`);}},
+  {t:"Sell a field instead.",
+   do:G=>{G.loseLand(1);G.hs("coffers",4);
+    return P(`Land can be bought again. That is the argument, and it is true, and you have never once heard anyone make it about the other thing.`);}},
+  {t:"Go to the tenants. Ask.",cls:"tender",
+   odds:G=>({p:clamp(0.3+G.h.standing*0.008+(G.c.traits.includes("Beloved")?0.25:0),.1,.92),why:"what this house has spent forty years earning"}),
+   do:G=>{const p=clamp(0.3+G.h.standing*0.008+(G.c.traits.includes("Beloved")?0.25:0),.1,.92);
+    if(roll(p,"the valley's goodwill")){G.hs("coffers",4);G.hs("standing",4);G.trait("Beloved");
+     G.legend(`In a bad year ${S.c.name} asked the valley for help rather than sell, and the valley gave it, in small amounts, from forty households.`);
+     return P(`It is humiliating for about ninety seconds and then it is not. They bring it in coins and kind over three weeks, in amounts that are obviously difficult for them.`)
+      +P(`You will never be able to refuse these people anything again. That is the interest on this particular loan and it is worth every penny.`);}
+    G.hs("standing",-6);G.hs("coffers",1);
+    return P(`They look at their boots. A little comes in. Not enough, and what comes costs you something that does not appear in any ledger.`);}},
+ ]},
+
+{id:"p_horse",phase:["prime","youth"],w:2,when:G=>!G.thingsAlive("horse").length,
+ eyebrow:G=>"The Stable",title:G=>"Something to name",
+ text:G=>P(`The mare foaled in the night and it is standing already, which the groom says is a good sign and the groom says that about everything.`)
+  +P(`It is yours if you want it. Things in this house that get names get remembered.`),
+ choices:[
+  {t:"Name it.",cls:"tender",
+   do:G=>{S.pending.thingKind="horse";S.pending.thingNote="foaled at "+S.h.seat;
+    return G.form({title:"A name",fields:[{k:"name",label:"You call it",ph:pick(["Ash","Sixpence","The Grey","Marrow","Hollow","Nettle","Bishop"])}],applyId:"thing"});}},
+  {t:"Leave it to the groom. It is a horse.",
+   do:G=>{G.hs("coffers",1);G.trait("Guarded");
+    return P(`It is broken, sold at three, and you could not now pick it out of a field.`);}},
+ ]},
+
+{id:"p_sword",phase:["prime"],w:2,when:G=>G.c.stats.iron>=4&&!G.thingsAlive("sword").length,
+ eyebrow:G=>"The Forge",title:G=>"A blade worth a name",
+ text:G=>P(`The smith at the port has made you something better than you asked for and is refusing to explain why, beyond that he had the steel and the week.`)
+  +P(`It is plain, heavy in the wrong place until you have carried it a month, and then perfect. Swords like this get names and keep them for two hundred years.`),
+ choices:[
+  {t:"Name it.",
+   do:G=>{S.pending.thingKind="sword";S.pending.thingNote="made at the port";
+    return G.form({title:"A name",fields:[{k:"name",label:"The blade is called",ph:pick(["Winter","Old Argument","Tithe","Grandmother","The Short Answer","Quietly"])}],applyId:"thing"});}},
+  {t:"Give it to your captain.",
+   do:G=>{G.hs("strength",2);G.bond("kin:1",10);
+    return P(`He is speechless, which for him takes some doing, and he carries it for nineteen years.`);}},
+ ]}
+);
+
+/* ---- new legacy: what they know about you ---- */
+LEGACY.blackmail={eyebrow:"The Secret",title:sd=>`${sd.who} knows`,
+ text:(G,sd)=>{
+  const s=(S.h.secrets||[]).find(x=>x.id===sd.secret)||{t:"something this house did and did not write down"};
+  return P(`A letter, unsigned, delivered by a boy who was paid in the market and cannot describe the man who paid him.`)
+   +P(`It sets out, accurately and without emotion, the following: <em>${s.t}</em>`)
+   +P(`It does not ask for anything. That comes next. This one is only to establish that they can.`);
+ },
+ choices:[
+  {t:"Pay. Quietly. Whatever it takes.",
+   do:(G,sd)=>{G.hs("coffers",-4);G.hflag("paying");
+    G.seed({type:"blackmail",who:sd.who,secret:sd.secret});
+    return P(`It is not called payment. It is called a lease, at a rate no one would agree to, on land nobody wants.`)
+     +P(`It will be renewed. That is the nature of the arrangement and you understood it before you signed.`);}},
+  {t:"Confess it publicly. Take the ground away from them.",cls:"risky",
+   odds:(G,sd)=>({p:clamp(0.35+G.h.standing*0.006+(G.c.traits.includes("Just")?0.2:0),.12,.9),why:"whether this house has enough credit to survive the truth"}),
+   do:(G,sd)=>{
+    const p=clamp(0.35+S.h.standing*0.006+(S.c.traits.includes("Just")?0.2:0),.12,.9);
+    const s=(S.h.secrets||[]).find(x=>x.id===sd.secret);if(s){s.known=true;s.open=true;}
+    if(roll(p,"the county's judgement")){G.hs("standing",5);G.trait("Just");G.flag("forgiven");
+     G.legend(`${S.c.name} stood up in the county court and said aloud the thing this family had spent three generations not saying.`);
+     return P(`You say it first, in full, in the one place where saying it cannot be turned into a rumour: on the record, under oath, with a clerk writing.`)
+      +P(`The letter-writer has nothing. Worse than nothing — they now look like a person who tried to sell what was freely given.`);}
+    G.hs("standing",-12);G.hs("piety",-8);
+    return P(`You say it, and the county does not admire your candour. The county remembers the crime.`);}},
+  {t:"Find the writer.",cls:"risky",
+   odds:(G,sd)=>({p:clamp(0.3+G.c.stats.cunning*0.08,.12,.85),why:"your Guile against a careful person"}),
+   do:(G,sd)=>{
+    if(roll(clamp(0.3+S.c.stats.cunning*0.08,.12,.85),"the search")){
+     G.hs("standing",3);G.stat("cunning",1);const h=houseOf(sd.who);if(h)h.att-=20;
+     G.chron(`The letters stopped after ${S.c.name} sent a reply to an address nobody had given ${S.c.g==="f"?"her":"him"}.`);
+     return P(`Four months, two bribed servants, and one clerk who drinks. You do not confront them. You send one line to the correct house, addressed to the correct person, and the letters stop that week.`);}
+    G.hs("coffers",-2);G.peril(1);
+    return P(`You spend four months and a great deal of money chasing a boy, a market, and a description of a man in a brown coat.`);}},
+ ]};
+/* ================================================================
+   INTERSTITIALS — the page does not always ask you a question
+   ================================================================ */
+function buildInter(G){
+  const opts=[];
+  if(S.w.events.length)opts.push("world","world");
+  opts.push("accounts","rumour");
+  if(S.c.kids.length||S.c.spouse||S.anc.length)opts.push("letter");
+  if((S.h.secrets||[]).some(s=>s.known))opts.push("whisper");
+  const k=pick(opts);
+  if(k==="world"){
+    const e=pick(S.w.events.slice(-8));
+    return {eyebrow:"Word from elsewhere",title:e.kind==="house"?"News from the county":"News from the realm",
+      body:P(e.t)+P(`<em>None of it is about you. Some of it will be, eventually.</em>`),btn:"Read on"};
+  }
+  if(k==="accounts"){
+    const inc=houseIncome();
+    const rows=S.h.holdings.map(i=>{const r=S.w.regions[i];
+      return `${r.name} — ${r.type}${r.dev?", improved":""}${r.raided?", <em>burned this year</em>":""} … ${regionIncome(r)}`;}).join("<br>");
+    return {eyebrow:"The Accounts",title:"What the land made",
+      body:P(`Your steward reads it out in the flat voice he keeps for numbers.`)
+        +`<p class="small" style="line-height:1.9">${rows||"nothing at all"}</p>`
+        +P(`Total for the season: <strong>${Math.ceil(inc/2)}</strong>. It is not a fortune. It is the reason any of this continues.`),
+      btn:"Take the rents",gain:Math.ceil(inc/2)};
+  }
+  if(k==="whisper"){
+    return {eyebrow:"A Whisper",title:"Someone has been asking",
+      body:P(`A man was in the village for three days asking careful questions about this family's history, and paying for beer, and writing nothing down where anyone could see.`)
+        +P(`He is gone now. Your steward reports it in the tone of a person who would like to be told it does not matter.`),btn:"Say nothing"};
+  }
+  if(k==="letter"){
+    const who=S.c.kids.filter(k2=>k2.alive)[0]||S.c.spouse||S.c.kin[0];
+    const nm=who?who.name:"an old friend";
+    const body=pick([
+      `<p>${nm} writes. Two thirds of it is about the weather and the roads. The last four lines are the reason for the letter and are almost impossible to read.</p>`,
+      `<p>A letter from ${nm}, in a hand that has got worse. It asks after the mill, the horses, and you, in that order, which is either a joke or is not.</p>`,
+      `<p>${nm} has written to say nothing in particular, at length, which is what people do when they cannot say the thing.</p>`,
+    ]);
+    return {eyebrow:"A Letter",title:`From ${nm}`,body:body+P(`<em>You put it in the chest with the others.</em>`),btn:"Fold it away"};
+  }
+  const h=pick(S.w.houses.filter(x=>!x.dead))||S.w.rival;
+  return {eyebrow:"A Rumour",title:"What they say at market",
+    body:P(`They say ${h.name} of ${h.seat} ${pick([
+      "has borrowed from the port and not told their own steward",
+      "buried their eldest in the spring and have not said what of",
+      "have been buying horses in numbers that do not match their land",
+      "will not be at the county court this year, which has never happened",
+      "sent a man to the capital in winter, which nobody does for a small reason"])}.`)
+      +P(`<em>Market talk is wrong about half the time. It is the other half that gets houses killed.</em>`),btn:"Note it"};
+}
+ANCHORS.inter={id:"inter",kind:"inter",
+ setup:G=>buildInter(G),
+ eyebrow:G=>G.v.eyebrow,title:G=>G.v.title,text:G=>G.v.body,
+ choices:[{t:G=>G.v.btn||"Read on",do:G=>{if(G.v.gain)G.hs("coffers",G.v.gain);return "";}}]};
+
+/* ================================================================
    ENGINE
    ================================================================ */
 const el=id=>document.getElementById(id);
 const view=()=>el("view");
 let MODE="title";
+let TOAST="";
 
 function save(){try{localStorage.setItem(SAVE_KEY,JSON.stringify({S,MODE}));}catch(e){}}
 function load(){
@@ -2291,8 +3175,8 @@ function load(){
     RND=mulberry(hashSeed(S.seed+"|"+S.w.year+"|"+S.anc.length));return true;}catch(e){return false;}
 }
 function wipe(){try{localStorage.removeItem(SAVE_KEY);}catch(e){}}
-
 function txt(v,a,b){return typeof v==="function"?v(a===undefined?G:a,b):v;}
+function safe(fn,d){try{return fn();}catch(e){return d;}}
 
 function pickPool(phase){
   const c=POOL.filter(s=>s.phase.indexOf(phase)>=0
@@ -2303,14 +3187,13 @@ function pickPool(phase){
   c.forEach(s=>{let w=(s.w||1)*(S.used[s.id]?0.3:1);for(let i=0;i<Math.max(1,Math.round(w*10));i++)weighted.push(s);});
   return pick(weighted);
 }
-function safe(fn,d){try{return fn();}catch(e){return d;}}
-
 function openScene(){
   const c=S.c;
   if(c.qi>=c.queue.length){toSuccession();return;}
   const item=c.queue[c.qi];
   let scene=null,seed=null,kind="scene";
   if(item.k==="pool"){scene=pickPool(item.phase);kind="pool";}
+  else if(item.k==="inter"){scene=ANCHORS.inter;kind="anchor";}
   else if(item.k==="anchor"){scene=ANCHORS[item.id];kind="anchor";}
   else if(item.k==="open"){scene=ANCHORS.open;kind="anchor";}
   else if(item.k==="legacy"){
@@ -2319,43 +3202,69 @@ function openScene(){
     sd.used=true;scene=tpl;seed=sd;kind="legacy";
   }
   if(!scene){c.qi++;openScene();return;}
-  S.pending={kind,sceneId:scene.id||item.id||item.k,legacyType:seed?seed.type:null,seed:seed,
-    vars:scene.setup?safe(()=>scene.setup(G),{}):{},outcome:null,phase:item.phase||null};
-  S.used[(scene.id||item.id)]=(S.used[scene.id||item.id]||0)+1;
-  S.used[(scene.id||item.id)+"@"+S.c.gen]=1;
+  const sid=scene.id||item.id||item.k;
+  S.pending={kind,sceneId:sid,legacyType:seed?seed.type:null,seed:seed,
+    vars:{},outcome:null,phase:item.phase||null,roll:null,contest:null,form:null};
+  S.pending.vars=scene.setup?safe(()=>scene.setup(G),{}):{};
+  S.used[sid]=(S.used[sid]||0)+1;
+  if(sid!=="inter")S.used[sid+"@"+S.c.gen]=1;
   save();
 }
 function currentScene(){
   const p=S.pending;if(!p)return null;
   if(p.kind==="legacy")return LEGACY[p.legacyType];
-  if(p.kind==="anchor")return ANCHORS[p.sceneId]||ANCHORS[p.sceneId];
+  if(p.kind==="anchor")return ANCHORS[p.sceneId];
   return POOL.find(s=>s.id===p.sceneId)||ANCHORS[p.sceneId];
-}
-function choose(i){
-  const sc=currentScene();if(!sc||S.pending.outcome!=null)return;
-  const ch=visibleChoices(sc)[i];if(!ch)return;
-  DELTAS=[];
-  const out=safe(()=>ch.do(G,S.pending.seed),"");
-  S.pending.outcome=out||"";
-  S.pending.deltas=DELTAS.slice();
-  save();render();window.scrollTo({top:0,behavior:"smooth"});
 }
 function visibleChoices(sc){
   return sc.choices.filter(c=>!c.when||safe(()=>c.when(G,S.pending&&S.pending.seed),false));
+}
+function choose(i){
+  const sc=currentScene();if(!sc||!S.pending||S.pending.outcome!=null)return;
+  const ch=visibleChoices(sc)[i];if(!ch)return;
+  DELTAS=[];
+  const out=safe(()=>ch.do(G,S.pending.seed),"");
+  S.pending.deltas=DELTAS.slice();
+  if(S.pending.contest&&!S.pending.contest.finished){save();render();return;}
+  if(S.pending.form&&!S.pending.form.done){save();render();return;}
+  S.pending.outcome=out||"";
+  syncSecrets();
+  if(sc.kind==="inter"){advance();return;}
+  save();render();window.scrollTo({top:0,behavior:"smooth"});
+}
+function submitForm(){
+  const f=S.pending&&S.pending.form;if(!f||f.done)return;
+  const vals={};
+  f.fields.forEach(fl=>{const n=el("f_"+fl.k);vals[fl.k]=n?n.value:"";});
+  f.done=true;
+  DELTAS=S.pending.deltas||[];
+  const out=safe(()=>FORMS[f.applyId](G,vals),"");
+  S.pending.deltas=DELTAS.slice();
+  S.pending.outcome=out||"";
+  save();render();window.scrollTo({top:0,behavior:"smooth"});
+}
+function settleContest(){
+  const c=S.pending&&S.pending.contest;if(!c||!c.finished)return;
+  DELTAS=S.pending.deltas||[];
+  const out=safe(()=>RESOLVERS[c.resolveId](G,c),"");
+  S.pending.deltas=DELTAS.slice();
+  S.pending.outcome=out||"";
+  syncSecrets();
+  save();render();window.scrollTo({top:0,behavior:"smooth"});
 }
 function advance(){
   const c=S.c,p=S.pending;
   const scId=p?p.sceneId:"";
   const wasDeath=(scId==="death");
   const phase=p&&p.phase;
+  const wasInter=(scId==="inter");
   S.pending=null;
   if(wasDeath){archiveLife();MODE="succession";save();render();return;}
-  // time passes
-  let yrs=phase==="youth"?ri(2,3):phase==="twilight"?ri(3,4):ri(3,5);
+  let yrs=wasInter?0:(phase==="youth"?ri(2,3):phase==="twilight"?ri(3,4):ri(3,5));
   if(c.queue[c.qi]&&c.queue[c.qi].k==="open")yrs=0;
   c.qi++;
   c.age+=yrs;S.w.year+=yrs;
-  // early death by peril or violence
+  if(c.qi===Math.floor(c.queue.length/2))secretsLeak();
   if(!wasDeath&&c.qi<c.queue.length-1){
     const risk=(c.peril*0.045)+(c.age>62?0.10:0)+(c.age>70?0.16:0)+(c.traits.includes("Sickly")?.03:0);
     if(rnd()<risk){
@@ -2378,6 +3287,7 @@ function render(){
   el("nav").hidden=(MODE==="title");
   el("rail").style.display=MODE==="title"?"none":"flex";
   document.querySelector("main").style.paddingLeft=MODE==="title"?"var(--pad)":"calc(var(--rail) + 14px)";
+  el("leaf").setAttribute("data-age",String(S?Math.min(4,(S.c?S.c.gen:S.anc.length||1)):1));
   if(MODE!=="title"){drawCrest();drawLedger();drawRail();}
   const t=S&&S.tab||"story";
   document.querySelectorAll("#nav button").forEach(b=>b.classList.toggle("on",b.dataset.tab===t));
@@ -2402,9 +3312,16 @@ function drawLedger(){
 }
 function drawRail(){
   el("railNum").textContent=ROMAN[S.c?S.c.gen:1];
-  const n=S.chron.filter(e=>e.g===(S.c?S.c.gen:1));
-  el("railMarks").innerHTML=n.slice(-18).map(e=>
-    `<div class="mk ${e.c==="legend"?"g":(e.c==="grim"?"b":"")}"></div>`).join("");
+  const c=S.c;
+  const left=c?clamp(1-(c.qi/Math.max(1,c.queue.length-1)),0,1):1;
+  const px=Math.round(6+left*58);
+  const gutter=c&&c.peril>=4?" guttering":"";
+  const n=S.chron.filter(e=>e.g===(c?c.gen:1));
+  el("railMarks").innerHTML=
+    `<div class="candle${gutter}" title="About ${Math.max(1,c?c.queue.length-c.qi:1)} scenes left in this life">
+       <span class="flame" style="bottom:${px+1}px"></span>
+       <span class="wax" style="height:${px}px"></span></div>`
+    +n.slice(-10).map(e=>`<div class="mk ${e.c==="legend"?"g":(e.c==="grim"?"b":"")}"></div>`).join("");
 }
 
 /* ---- title ---- */
@@ -2418,8 +3335,8 @@ function titleScreen(){
    <div class="tag">a chronicle in four hands</div>
    <div class="blurb prose">
     <p>You will live four lives, one after another, in the same family. Each is about twenty minutes long and ends the way lives end.</p>
-    <p>What you do in the first becomes what the second inherits: the debts, the feuds, the reputation, the shape of the children. Nothing resets. The chronicle keeps everything.</p>
-    <p class="note">Every world is generated fresh — the realm, the faith, the rival house, the disaster that is coming and does not know it yet.</p>
+    <p>What you do in the first becomes what the second inherits: the debts, the feuds, the reputation, the shape of the children. Nothing resets. The chronicle keeps everything, and later hands write in its margins.</p>
+    <p class="note">Every world is generated fresh — the realm, the faith, the rival houses that take land while you are not looking, and the disaster that is coming and does not know it yet.</p>
    </div>
    ${has?`<button class="turn" id="btnCont">Continue the line</button><div class="hr"></div>`:""}
    <div class="field"><label>Your house will be called</label><input id="inHouse" placeholder="${houseName()}" maxlength="22"></div>
@@ -2431,7 +3348,7 @@ function titleScreen(){
   </div>`;
 }
 function bindTitle(){
-  const c=el("btnCont");if(c)c.onclick=()=>{if(load()){MODE=MODE==="title"?"play":MODE;render();}};
+  const c=el("btnCont");if(c)c.onclick=()=>{if(load()){render();}};
   el("btnNew").onclick=()=>{
     const hn=el("inHouse").value.trim(), nm=el("inName").value.trim();
     newWorld(String(Date.now())+Math.random(),hn||null,nm||null);
@@ -2444,37 +3361,86 @@ function storyScreen(){
   const sc=currentScene();
   if(!sc)return `<div id="page"><p class="small">The chronicle has lost its place. <button class="turn ghost" onclick="location.reload()">Reopen it</button></p></div>`;
   const p=S.pending;
-  const isIllum=sc.kind==="illum";
   let h="";
-  if(isIllum){
-    h+=`<div class="illum">${armsSVG(S.h.arms)}<div class="motto">&ldquo;${S.h.motto}&rdquo;</div></div>`;
-  }
+  if(sc.kind==="illum")h+=`<div class="illum">${armsSVG(S.h.arms)}<div class="motto">&ldquo;${S.h.motto}&rdquo;</div></div>`;
   h+=`<div id="page">
     <div class="scene-eyebrow">${txt(sc.eyebrow,G,p.seed)}</div>
-    <h2 class="scene-title">${txt(sc.title,p.seed!==undefined&&p.kind==="legacy"?p.seed:G,p.seed)}</h2>`;
+    <h2 class="scene-title">${txt(sc.title,p.kind==="legacy"?p.seed:G,p.seed)}</h2>`;
+
+  if(p.form&&!p.form.done){
+    h+=`<div class="prose">${txt(sc.text,G,p.seed)}</div><div class="rubric">${p.form.title||"A name"}</div>`;
+    p.form.fields.forEach(f=>{
+      h+=`<div class="field"><label>${f.label}</label><input id="f_${f.k}" maxlength="26" placeholder="${f.ph||""}" value="${f.val||""}"></div>`;
+    });
+    h+=`<button class="turn" id="btnForm">Set it down</button><p class="small center" style="margin-top:10px">Leave blank and the household will choose for you.</p></div>`;
+    return h;
+  }
+  if(p.contest){
+    h+=contestBlock(p.contest);
+    if(p.contest.finished&&p.outcome==null)h+=`<button class="turn" id="btnSettle">See what it cost</button>`;
+    if(p.outcome!=null)h+=outcomeBlock(p);
+    h+=`</div>`;
+    return h;
+  }
   if(p.outcome==null){
-    h+=`<div class="prose">${txt(sc.text,G,p.seed)}</div>
-      <div class="rubric">What you do</div>`;
+    h+=`<div class="prose">${txt(sc.text,G,p.seed)}</div>`;
+    h+=sc.kind==="inter"?`<div class="rubric quiet"></div>`:`<div class="rubric">What you do</div>`;
     visibleChoices(sc).forEach((c,i)=>{
+      const o=oddsOf(c);
       h+=`<button class="choice ${c.cls||""}" data-i="${i}">
         <span class="kx">${i+1}</span>${txt(c.t,G,p.seed)}
-        ${c.hint?`<span class="hint">${txt(c.hint,G,p.seed)}</span>`:""}</button>`;
+        ${o?`<span class="odds">${fracWord(o.p)}</span>`:""}
+        ${c.hint?`<span class="hint">${txt(c.hint,G,p.seed)}</span>`:""}
+        ${o&&o.why?`<span class="hint why">Turns on ${o.why}.</span>`:""}</button>`;
     });
   } else {
-    h+=`<div id="outcome"><div class="outcome-mark">And so</div><div class="prose">${p.outcome||"<p>It is done.</p>"}</div>`;
-    if(p.deltas&&p.deltas.length)
-      h+=`<div class="deltas">${p.deltas.map(d=>`<span class="dl ${d.k}">${d.t}</span>`).join("")}</div>`;
-    h+=`<button class="turn" id="btnNext">Turn the page</button></div>`;
+    h+=outcomeBlock(p);
+  }
+  h+=`</div>`;
+  return h;
+}
+function outcomeBlock(p){
+  let h=`<div id="outcome">`;
+  if(p.roll){
+    h+=`<div class="dieline ${p.roll.win?"good":"bad"}">
+      <span class="die">${p.roll.die}</span>
+      <span>Needed ${p.roll.need} or under on six${p.roll.label?" — "+p.roll.label:""}. Rolled ${p.roll.die}. <strong>${p.roll.win?"It holds.":"It does not."}</strong></span></div>`;
+  }
+  h+=`<div class="outcome-mark">And so</div><div class="prose">${p.outcome||"<p>It is done.</p>"}</div>`;
+  if(p.deltas&&p.deltas.length)
+    h+=`<div class="deltas">${p.deltas.map(d=>`<span class="dl ${d.k}">${d.t}</span>`).join("")}</div>`;
+  h+=`<button class="turn" id="btnNext">Turn the page</button></div>`;
+  return h;
+}
+function contestBlock(c){
+  let h=`<div class="contest">`;
+  if(c.kind==="battle"){
+    const yw=clamp(c.you.force*7,4,100), tw=clamp(c.them.force*7,4,100);
+    h+=`<div class="crow"><span class="cn">${c.you.name}</span><div class="cbar"><i style="width:${yw}%"></i></div><span class="cv">${Math.max(0,c.you.force)}</span></div>
+        <div class="crow"><span class="cn">${c.them.name}</span><div class="cbar them"><i style="width:${tw}%"></i></div><span class="cv">${Math.max(0,c.them.force)}</span></div>`;
+    if(!c.finished)h+=`<div class="tell">${pick(TELLS[c.theirNext]||["They are doing something you cannot see."])}</div>`;
+  } else {
+    h+=`<div class="crow"><span class="cn">Their offer</span><div class="cbar"><i style="width:${clamp(c.price*10,6,100)}%"></i></div><span class="cv">${c.price}</span></div>
+        <div class="crow"><span class="cn">Their patience</span><div class="cbar ${c.patience<=2?"them":""}"><i style="width:${clamp(c.patience*18,4,100)}%"></i></div><span class="cv">${Math.max(0,c.patience)}</span></div>`;
+    if(!c.finished)h+=`<div class="tell">${c.patience<=2?"He has looked at the door twice.":"He is comfortable. He has all afternoon."}</div>`;
+  }
+  h+=`<div class="clog">${c.log.slice(-4).map(l=>`<div>${l}</div>`).join("")||"<div><em>Not yet begun.</em></div>"}</div>`;
+  h+=`<div class="cround">${c.finished?"Finished":"Round "+c.round+" of "+c.maxR}</div>`;
+  if(!c.finished){
+    const acts=c.kind==="battle"
+      ?TACTICS.battle.map(t=>({k:t.k,t:t.t})).concat([{k:"parley",t:"Call a parley",cls:"tender"}])
+      :TACTICS.haggle.map(t=>({k:t.k,t:t.t})).concat([{k:"close",t:"Close at "+c.price,cls:"tender"},{k:"walk",t:"Walk away",cls:"risky"}]);
+    acts.forEach((a,i)=>{h+=`<button class="choice ${a.cls||""}" data-act="${a.k}"><span class="kx">${i+1}</span>${a.t}</button>`;});
   }
   h+=`</div>`;
   return h;
 }
 function bindStory(){
-  document.querySelectorAll(".choice").forEach(b=>{
-    if(b.classList.contains("locked"))return;
-    b.onclick=()=>choose(+b.dataset.i);
-  });
+  document.querySelectorAll(".choice[data-i]").forEach(b=>{b.onclick=()=>choose(+b.dataset.i);});
+  document.querySelectorAll(".choice[data-act]").forEach(b=>{b.onclick=()=>contestAct(b.dataset.act);});
   const n=el("btnNext");if(n)n.onclick=()=>advance();
+  const f=el("btnForm");if(f)f.onclick=()=>submitForm();
+  const s=el("btnSettle");if(s)s.onclick=()=>settleContest();
 }
 
 /* ---- succession ---- */
@@ -2482,17 +3448,30 @@ function successionScreen(){
   const a=S.anc[S.anc.length-1];
   const kids=heirCandidates();
   const gen=S.c.gen;
+  const canCadet=S.h.standing>=12&&!S.h.flags.cadetUsed&&S.h.holdings.length>0;
   let h=`<div id="page"><div class="scene-eyebrow">The ${["First","Second","Third","Fourth"][gen-1]} Hand closes</div>
    <h2 class="scene-title">${a.name} ${a.epithet}</h2>
    <div class="epitaph">${a.epi}<br><span style="font-size:14px;letter-spacing:.14em;text-transform:uppercase;font-style:normal;color:var(--minium)">${a.born} &ndash; ${a.died}, aged ${a.age}</span></div>
    <div class="yearn ${a.met?"met":"failed"}"><span class="lbl">${a.met?"What they wanted, they got":"What they wanted, they never got"}</span>${YEARN_TEXT[a.yearn]}</div>`;
+  if(S.h.heirloom){
+    const st=hl().state;
+    h+=`<p class="small center" style="margin:-6px 0 16px">${cap(hlName())} is ${st==="held"?"in the chest, where it has always been":st==="pawned"?"still at the port, against a loan":st==="buried"?"under the undercroft, where only this family knows":st==="stolen"?"in another house's hall":"gone"}.</p>`;
+  }
+  if(typeof S.lastIncome==="number")
+    h+=`<p class="small center" style="margin:0 0 16px">The land paid <strong>${S.lastIncome}</strong> into the chest between the hands.</p>`;
   if(gen>=4){
     h+=`<div class="prose"><p>Four hands. The chronicle is closed and the ending of it can now be read.</p></div>
       <button class="turn" id="btnEnd">Read the ending</button></div>`;
     return h;
   }
   if(!kids.length){
-    h+=`<div class="prose"><p>There is no heir of the body. The name does not end &mdash; names rarely do &mdash; but it passes sideways, to a cousin who was raised elsewhere and owes this valley nothing.</p>
+    if(!canCadet){
+      h+=`<div class="prose"><p>There is no heir of the body, no cousin willing to take it on, and not enough left of this house to make the offer attractive to anyone.</p>
+        <p>The holdings will go to creditors and the Crown. The name goes onto a slab and then goes out.</p></div>
+        <button class="turn warn" id="btnDie">The house ends here</button></div>`;
+      return h;
+    }
+    h+=`<div class="prose"><p>There is no heir of the body. The name does not end &mdash; names rarely do &mdash; but it passes sideways, to a cousin raised elsewhere who owes this valley nothing.</p>
       <p>Half of what was built goes with the change of household. That is what an heir actually is: not blood, but the person who already knows where everything is.</p></div>
       <button class="turn warn" id="btnCadet">Pass to the cadet branch</button></div>`;
     return h;
@@ -2500,7 +3479,6 @@ function successionScreen(){
   h+=`<div class="rubric">Who takes it up</div>
    <p class="small" style="margin-top:-4px;margin-bottom:14px">You are choosing your next twenty minutes. What they feel about you comes with them, and so do their traits.</p>`;
   kids.forEach((k,i)=>{
-    const cls=k.bond>=65?"":(k.bond<=35?"bad":"cold");
     h+=`<button class="choice ${k.bond>=65?"tender":""}" data-heir="${i}">
       <span class="kx">${i+1}</span><strong>${k.name}</strong>${k.bastard?" <em>(natural child)</em>":""}
       <span class="hint">Born ${k.born}. ${(k.traits||[]).join(", ")||"Nothing remarkable yet."}
@@ -2515,10 +3493,11 @@ function bondWord(b){
 }
 function bindSuccession(){
   document.querySelectorAll("[data-heir]").forEach(b=>b.onclick=()=>{
-    const k=heirCandidates()[+b.dataset.heir];MODE="play";succeed(k);save();render();
+    const k=heirCandidates()[+b.dataset.heir];MODE="play";succeed(k);save();render();window.scrollTo(0,0);
   });
-  const c=el("btnCadet");if(c)c.onclick=()=>{MODE="play";succeed(null);save();render();};
-  const e=el("btnEnd");if(e)e.onclick=()=>{computeEnding();MODE="ending";save();render();};
+  const c=el("btnCadet");if(c)c.onclick=()=>{MODE="play";S.h.flags.cadetUsed=true;succeed(null);save();render();window.scrollTo(0,0);};
+  const dd=el("btnDie");if(dd)dd.onclick=()=>{lineEnds("no heir");render();window.scrollTo(0,0);};
+  const e=el("btnEnd");if(e)e.onclick=()=>{computeEnding();MODE="ending";save();render();window.scrollTo(0,0);};
 }
 
 /* ---- ending ---- */
@@ -2526,23 +3505,33 @@ function endingScreen(){
   const e=S.ending;
   return `<div id="page">
    <div class="illum">${armsSVG(S.h.arms)}<div class="motto">&ldquo;${S.h.motto}&rdquo;</div></div>
-   <div class="scene-eyebrow" style="text-align:center">${S.h.name} of ${S.h.seat} &middot; ${S.anc[0].born}&ndash;${e.year}</div>
+   <div class="scene-eyebrow" style="text-align:center">${S.h.name} of ${S.h.seat} &middot; ${S.anc.length?S.anc[0].born:""}&ndash;${e.year}</div>
    <h2 class="scene-title" style="text-align:center">${e.title}</h2>
    <div class="prose"><p>${e.body}</p>${e.bits.map(b=>`<p>${b}</p>`).join("")}</div>
    <div class="epitaph">${e.soul}</div>
-   <div class="rubric">The four hands</div>
+   <div class="rubric">${["One hand","Two hands","Three hands","Four hands"][Math.min(3,Math.max(0,S.anc.length-1))]}</div>
    ${S.anc.map(a=>`<div class="gencard"><div class="sig">${armsSVG(a.arms)}</div>
      <div class="bd"><div class="nm">${a.name} ${a.epithet}</div>
      <div class="ep">${a.epi}</div>
      <div class="dt">${a.born}&ndash;${a.died} &middot; ${a.met?"got what they wanted":"did not"}</div></div></div>`).join("")}
+   <div class="hr"></div>
+   <div class="rubric">Show someone</div>
+   <pre class="sharebox">${shareText().replace(/</g,"&lt;")}</pre>
+   <div class="row">
+     <button class="turn" id="btnShare" style="flex:1">${(typeof navigator!=="undefined"&&navigator.share)?"Share it":"Copy it"}</button>
+     <button class="turn ghost" id="btnCopy" style="flex:1">Copy text</button>
+   </div>
+   ${TOAST?`<div class="toast">${TOAST}</div>`:""}
    <div class="hr"></div>
    <button class="turn" id="btnNewLine">Begin another house</button>
    <button class="turn ghost" id="btnReadChron" style="margin-top:10px">Read the whole chronicle</button>
   </div>`;
 }
 function bindEnding(){
-  el("btnNewLine").onclick=()=>{wipe();S=null;MODE="title";render();window.scrollTo(0,0);};
+  el("btnNewLine").onclick=()=>{wipe();S=null;MODE="title";TOAST="";render();window.scrollTo(0,0);};
   el("btnReadChron").onclick=()=>{S.tab="chronicle";save();render();window.scrollTo(0,0);};
+  const sh=el("btnShare");if(sh)sh.onclick=()=>{const r=doShare();TOAST=r==="copied"?"Copied to the clipboard.":r==="failed"?"Could not copy — select the text above.":"";render();};
+  const cp=el("btnCopy");if(cp)cp.onclick=()=>{const r=copyText(shareText());TOAST=r==="copied"?"Copied to the clipboard.":"Could not copy — select the text above.";render();};
 }
 
 /* ---- panels ---- */
@@ -2555,14 +3544,34 @@ function panelHouse(){
   const c=S.c,h=S.h;
   let x=`<div class="panel"><h2>The Arms</h2>
    <div class="illum">${armsSVG(h.arms)}<div class="motto">&ldquo;${h.motto}&rdquo;</div></div>
-   <p class="small center">${armsBlazon(h.arms)}</p>
-   <h2 style="margin-top:24px">The Estate</h2>
+   <p class="small center">${armsBlazon(h.arms)}</p>`;
+  if(h.heirloom){
+    const o=hl();
+    x+=`<h2 style="margin-top:24px">The Heirloom</h2>
+     <div class="relic"><div class="rn">${cap(hlName())}</div>
+     <div class="rd">${cap(o.about)}.</div>
+     <div class="rs ${o.state==="held"?"ok":"bad"}">${o.state}${o.where?" · "+o.where:""}</div></div>`;
+    if(o.story.length)x+=`<p class="small">${o.story.map(s=>`${s.y} — ${s.t}`).join("<br>")}</p>`;
+  }
+  if(h.things&&h.things.length){
+    x+=`<h2 style="margin-top:22px">Named things</h2>`;
+    h.things.forEach(t=>{x+=`<div class="kv ${t.alive?"":"dead"}"><span class="k">${t.kind}</span><span class="v">${t.name}${t.alive?"":" &dagger;"}</span></div>`;});
+  }
+  x+=`<h2 style="margin-top:24px">The Estate</h2>
    <div class="kv"><span class="k">Standing</span><span class="v">${RANKWORD[h.rank]}${h.flags.cadet?" (cadet branch)":""}</span></div>
    <div class="kv"><span class="k">Holdings</span><span class="v">${h.holdings.map(i=>S.w.regions[i].name).join(", ")||"none"}</span></div>
+   <div class="kv"><span class="k">Rents each generation</span><span class="v">${houseIncome()}</span></div>
    <div class="kv"><span class="k">Renown</span><span class="v">${h.standing}</span></div>
    <div class="kv"><span class="k">Coffers</span><span class="v">${h.coffers}${h.flags.indebted?" <em style='color:var(--minium)'>· in debt</em>":""}</span></div>
    <div class="kv"><span class="k">Levies</span><span class="v">${h.strength}</span></div>
    <div class="kv"><span class="k">Standing with ${S.w.faith.name}</span><span class="v">${h.piety}</span></div>`;
+  if(h.secrets&&h.secrets.length){
+    x+=`<h2 style="margin-top:22px">What this house does not say</h2>`;
+    h.secrets.forEach(s=>{
+      x+=`<div class="secret ${s.known?"out":""}"><div class="st">${s.t}</div>
+        <div class="sk">${s.open?"Said aloud, on the record":s.known?"Somebody outside this house knows this":"Kept, so far as anyone can tell"}</div></div>`;
+    });
+  }
   if(!c)return x+"</div>";
   x+=`<h3>${c.name}</h3>
    <div class="yearn"><span class="lbl">What ${c.g==="f"?"she":"he"} wants, and will not say</span>${YEARN_TEXT[c.yearn]}</div>
@@ -2591,11 +3600,14 @@ function panelHouse(){
 }
 function panelChron(){
   let x=`<div class="panel"><h2>The Chronicle of ${S.h.name}</h2>
-   <p class="small">Kept at ${S.h.seat} in ${S.w.realm}, under ${S.w.faith.name}. Every line was earned.</p><div class="hr"></div>`;
+   <p class="small">Kept at ${S.h.seat} in ${S.w.realm}, under ${S.w.faith.name}. Later hands have written in the margins.</p><div class="hr"></div>`;
   let lastGen=0;
-  S.chron.forEach(e=>{
+  S.chron.forEach((e,i)=>{
     if(e.g!==lastGen){lastGen=e.g;x+=`<h3>${["First","Second","Third","Fourth","Fifth"][e.g-1]} Hand</h3>`;}
-    x+=`<div class="entry ${e.c}"><div class="yr">${e.y}</div><p>${e.t}</p></div>`;
+    const notes=(S.marg||[]).filter(m=>m.on===i);
+    x+=`<div class="entry ${e.c}"><div class="yr">${e.y}</div><p>${e.t}</p>`;
+    notes.forEach(m=>{x+=`<div class="marg">${m.t} <span class="mh">&mdash; hand ${ROMAN[m.gen]}</span></div>`;});
+    x+=`</div>`;
   });
   if(!S.chron.length)x+=`<p class="small">Nothing yet. The first line is being written.</p>`;
   return x+"</div>";
@@ -2605,18 +3617,28 @@ function panelRealm(){
   const thr=w.flags["threat_"+w.threat.id];
   let x=`<div class="panel"><h2>${w.realm}</h2>
    ${mapSVG(w)}
-   <div class="legendrow"><span><i style="background:#a9791f"></i>yours</span><span><i style="background:#1f3a66"></i>the Crown</span>
+   <div class="legendrow"><span><i style="background:#a9791f"></i>${S.h.name} (yours)</span><span><i style="background:#1f3a66"></i>the Crown</span>
    <span><i style="background:#a83420"></i>other houses</span><span><i style="background:rgba(42,32,24,.25)"></i>unheld</span></div>
    <div class="hr"></div>
+   <h3>The houses</h3>
+   <div class="kv"><span class="k">${S.h.name} <em>(yours)</em></span><span class="v">${S.h.holdings.length} holdings &middot; ${yourPower()} power</span></div>`;
+  (w.houses||[]).forEach(h=>{
+    x+=`<div class="kv ${h.dead?"dead":""}"><span class="k">${h.name} of ${h.seat} <em style="color:${h.att<0?"var(--minium)":"var(--verdigris)"}">${rivalWord(h.att)}</em></span>
+      <span class="v">${h.dead?"gone":h.holdings.length+" holdings &middot; "+powerOf(h)+" power"}</span></div>`;
+  });
+  x+=`<div class="hr"></div>
    <div class="kv"><span class="k">The Crown</span><span class="v">King ${w.king} of ${w.kingHouse}</span></div>
    <div class="kv"><span class="k">The faith</span><span class="v">${cap(w.faith.name)}</span></div>
-   <div class="kv"><span class="k">Your rival</span><span class="v">${w.rival.name} of ${w.rival.seat} <em style="color:${w.rival.att<0?"var(--minium)":"var(--verdigris)"}">${rivalWord(w.rival.att)}</em></span></div>
    <div class="kv"><span class="k">The year</span><span class="v">${w.year}</span></div>
    <h3>What is coming</h3>
    <p class="small">${thr?({triumph:"It came. This house held, and was raised for it.",endure:"It came. This house endured it, and paid.",broken:"It came, and broke over this house."})[thr]:(S.c&&S.c.gen>=2?w.threat.omen:"Nothing yet. There is always something.")}</p>
-   <h3>Holdings</h3>`;
+   <h3>The wider world</h3>`;
+  const ev=(w.events||[]).slice(-8).reverse();
+  if(!ev.length)x+=`<p class="small">No news has reached this valley yet.</p>`;
+  ev.forEach(e=>{x+=`<div class="entry ${e.kind==="house"?"":"legend"}"><div class="yr">${e.y}</div><p>${e.t}</p></div>`;});
+  x+=`<h3>Your holdings</h3>`;
   S.h.holdings.forEach(i=>{const r=w.regions[i];
-    x+=`<div class="kv"><span class="k">${r.name}</span><span class="v">${r.type}</span></div>`;});
+    x+=`<div class="kv"><span class="k">${r.name}${r.raided?" <em style='color:var(--minium)'>&middot; burned</em>":""}</span><span class="v">${r.type} &middot; yields ${regionIncome(r)}</span></div>`;});
   return x+"</div>";
 }
 function rivalWord(a){
@@ -2635,7 +3657,7 @@ document.addEventListener("keydown",e=>{
     const b=document.querySelectorAll("#page .choice")[i];if(b){b.click();e.preventDefault();}
   }
   if(e.key==="Enter"||e.key===" "){
-    const n=el("btnNext");if(n){n.click();e.preventDefault();}
+    const n=el("btnNext")||el("btnSettle")||el("btnForm");if(n){n.click();e.preventDefault();}
   }
 });
 
