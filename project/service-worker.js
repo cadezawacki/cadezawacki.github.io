@@ -3,8 +3,8 @@
    Caches CDN libraries and app shell for full offline use
    ═══════════════════════════════════════════════════════════════ */
 
-const CACHE_NAME = 'cade-project-v1';
-const CDN_CACHE = 'cade-cdn-v1';
+const CACHE_NAME = 'cade-project-v2';
+const CDN_CACHE = 'cade-cdn-v2';
 
 // App shell — local files
 const APP_SHELL = [
@@ -37,8 +37,11 @@ self.addEventListener('install', (event) => {
       caches.open(CDN_CACHE).then(cache =>
         Promise.allSettled(
           CDN_RESOURCES.map(url =>
-            fetch(url).then(res => {
-              if (res.ok) cache.put(url, res.clone());
+            // no-cors: fontshare/google CSS don't send a wildcard
+            // Access-Control-Allow-Origin, so a cors-mode fetch is blocked.
+            // Opaque responses still serve <link>/<script> loads offline.
+            fetch(url, { mode: 'no-cors' }).then(res => {
+              if (res.ok || res.type === 'opaque') cache.put(url, res.clone());
             }).catch(() => {})
           )
         )
@@ -89,7 +92,7 @@ self.addEventListener('fetch', (event) => {
         if (cached) return cached;
         try {
           const res = await fetch(event.request);
-          if (res.ok) cache.put(event.request, res.clone());
+          if (res.ok || res.type === 'opaque') cache.put(event.request, res.clone());
           return res;
         } catch (e) {
           return cached || new Response('', { status: 408 });

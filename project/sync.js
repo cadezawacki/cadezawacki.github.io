@@ -201,15 +201,12 @@ const Sync = (() => {
       const raw = State.getRawData();
       const encrypted = await encrypt(raw);
 
-      // Atomic version increment + write
-      const versionRef = db.ref(versionPath());
-      await db.ref().runTransaction(async (currentData) => {
-        const currentVersion = (currentData && currentData[versionPath().split('/').pop()]) || 0;
-        const newVersion = currentVersion + 1;
-        return {
-          [dataPath()]: encrypted,
-          [versionPath()]: newVersion,
-        };
+      // Multi-path update scoped to this fingerprint's subtree. The version
+      // counter uses a server-side atomic increment; a root-level transaction
+      // would require root read/write permission and reject slash-keys.
+      await db.ref().update({
+        [dataPath()]: encrypted,
+        [versionPath()]: firebase.database.ServerValue.increment(1),
       });
 
       lastSyncedSnapshot = structuredClone(raw);

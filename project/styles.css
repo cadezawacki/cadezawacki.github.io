@@ -302,7 +302,10 @@ table { border-collapse: collapse; width: 100%; }
 .tabbar {
   position: fixed;
   bottom: 0; left: 0; right: 0;
-  height: 56px;
+  /* Safe-area padding must ADD to the bar height — with border-box sizing a
+     fixed 56px would swallow the inset and push the icons above the top
+     border (divider). */
+  height: calc(56px + env(safe-area-inset-bottom, 0px));
   background: var(--surface);
   border-top: 1px solid var(--border);
   display: flex;
@@ -386,7 +389,7 @@ table { border-collapse: collapse; width: 100%; }
    ═══════════════════════════════════════════════════════════════ */
 .main-content {
   padding-top: calc(var(--menubar-height) + var(--space-4));
-  padding-bottom: calc(56px + var(--space-6));
+  padding-bottom: calc(56px + var(--space-6) + env(safe-area-inset-bottom, 0px));
   padding-left: var(--space-4);
   padding-right: var(--space-4);
   max-width: 1200px;
@@ -583,16 +586,20 @@ table { border-collapse: collapse; width: 100%; }
   border-radius: var(--radius-md);
   transition: all var(--transition);
   position: relative;
+  cursor: pointer;         /* whole card toggles completion */
+  user-select: none;
+  -webkit-user-select: none;
 }
 .entry-card:hover {
   border-color: var(--text-faint);
   background: var(--surface-hover);
 }
 .entry-card.completed {
-  opacity: 0.5;
+  opacity: 0.55;
 }
 .entry-card.completed .entry-title {
   text-decoration: line-through;
+  color: var(--text-muted);
 }
 
 /* Checkbox / completion toggle */
@@ -647,7 +654,17 @@ table { border-collapse: collapse; width: 100%; }
   opacity: 0;
   transition: opacity var(--transition);
 }
-.entry-card:hover .entry-actions { opacity: 1; }
+/* Actions appear on hover (desktop) and STAY visible once selected */
+.entry-card:hover .entry-actions,
+.entry-card.completed .entry-actions { opacity: 1; }
+/* Touch devices have no hover — keep actions visible */
+@media (hover: none) {
+  .entry-actions { opacity: 1; }
+}
+.entry-actions .icon-btn {
+  width: 28px;
+  height: 28px;
+}
 
 /* ═══════════════════════════════════════════════════════════════
    MODAL SYSTEM
@@ -1293,7 +1310,7 @@ table { border-collapse: collapse; width: 100%; }
 /* Toast notifications */
 .toast {
   position: fixed;
-  bottom: calc(56px + var(--space-6));
+  bottom: calc(56px + var(--space-6) + env(safe-area-inset-bottom, 0px));
   left: 50%;
   transform: translateX(-50%) translateY(100px);
   background: var(--text-primary);
@@ -1502,4 +1519,425 @@ table { border-collapse: collapse; width: 100%; }
 .streak-day.today {
   border-color: var(--text-primary);
   border-width: 2px;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   DAY PLANNER v2 — hour grid with positioned blocks
+   ═══════════════════════════════════════════════════════════════ */
+.planner-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+  flex-wrap: wrap;
+}
+.planner-nav {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+.planner-date-label {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--text-primary);
+  min-width: 120px;
+  text-align: center;
+}
+.planner-view-toggle {
+  display: flex;
+  gap: 2px;
+  background: var(--surface-2);
+  border-radius: var(--radius-sm);
+  padding: 2px;
+}
+.planner-view-btn {
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.planner-view-btn.active {
+  background: var(--surface);
+  color: var(--accent-text);
+  box-shadow: var(--shadow-sm);
+}
+
+.planner-multi {
+  display: grid;
+  gap: var(--space-2);
+}
+.planner-multi.days-3 { grid-template-columns: repeat(3, 1fr); }
+.planner-col-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  text-align: center;
+  padding: var(--space-1) 0;
+  border-bottom: 1px solid var(--border-subtle);
+  margin-bottom: 2px;
+}
+.planner-col-label.is-today { color: var(--accent-text); }
+
+.planner-grid {
+  position: relative;
+  --hour-h: 44px;
+  --gutter: 44px;
+}
+.planner-hour {
+  display: flex;
+  height: var(--hour-h);
+  border-bottom: 1px solid var(--border-subtle);
+  cursor: pointer;
+}
+.planner-hour:hover { background: var(--accent-tint); }
+.planner-hour-label {
+  width: var(--gutter);
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--text-faint);
+  text-align: right;
+  padding-right: var(--space-2);
+  padding-top: 2px;
+}
+.planner-multi.days-3 .planner-grid { --gutter: 30px; }
+.planner-multi.days-3 .planner-hour-label { font-size: 8px; }
+
+.planner-block {
+  position: absolute;
+  left: calc(var(--gutter) + 4px);
+  right: 4px;
+  border-radius: var(--radius-sm);
+  padding: 2px var(--space-2);
+  font-size: var(--text-xs);
+  overflow: hidden;
+  cursor: pointer;
+  border-left: 3px solid var(--accent);
+  background: var(--accent-tint);
+  z-index: 2;
+  min-height: 14px;
+  transition: filter var(--transition);
+}
+.planner-block:hover { filter: brightness(1.1); }
+.planner-block .pb-title {
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.3;
+}
+.planner-block .pb-time {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.planner-block.tracked { border-left-style: double; border-left-width: 5px; }
+.planner-block.overdue {
+  border-left-color: var(--error);
+  background: var(--error-tint);
+}
+.planner-block.done .pb-title { text-decoration: line-through; color: var(--text-muted); }
+
+.planner-now {
+  position: absolute;
+  left: var(--gutter);
+  right: 0;
+  height: 0;
+  border-top: 1.5px solid var(--error);
+  z-index: 3;
+  pointer-events: none;
+}
+.planner-now::before {
+  content: '';
+  position: absolute;
+  left: -4px; top: -4px;
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--error);
+}
+
+/* Tap-anywhere popover */
+.planner-popover {
+  position: fixed;
+  z-index: 250;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  padding: var(--space-2);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 180px;
+}
+.planner-popover button {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+  text-align: left;
+  width: 100%;
+}
+.planner-popover button:hover { background: var(--surface-hover); }
+.planner-popover button svg { width: 15px; height: 15px; color: var(--accent-text); }
+.planner-popover .pp-time {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-muted);
+  padding: 0 var(--space-3) var(--space-1);
+  border-bottom: 1px solid var(--border-subtle);
+  margin-bottom: 2px;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   QUADRANT v2 — color-coded, draggable pills
+   ═══════════════════════════════════════════════════════════════ */
+.quadrant-box { position: relative; transition: box-shadow var(--transition), border-color var(--transition); }
+.quadrant-box.q1 { border-top: 2px solid var(--hl-red);    background: linear-gradient(var(--hl-red-bg), transparent 40%) , var(--surface); }
+.quadrant-box.q2 { border-top: 2px solid var(--hl-orange); background: linear-gradient(var(--hl-orange-bg), transparent 40%), var(--surface); }
+.quadrant-box.q3 { border-top: 2px solid var(--hl-green);  background: linear-gradient(var(--hl-green-bg), transparent 40%), var(--surface); }
+.quadrant-box.q4 { border-top: 2px solid var(--hl-blue);   background: linear-gradient(var(--hl-blue-bg), transparent 40%), var(--surface); }
+.quadrant-box.q1 .quadrant-label { color: var(--hl-red); }
+.quadrant-box.q2 .quadrant-label { color: var(--hl-orange); }
+.quadrant-box.q3 .quadrant-label { color: var(--hl-green); }
+.quadrant-box.q4 .quadrant-label { color: var(--hl-blue); }
+.quadrant-box.drag-over {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-tint-strong);
+}
+
+.q-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-xs);
+  color: var(--text-primary);
+  padding: var(--space-1) var(--space-2);
+  background: var(--surface-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  cursor: grab;
+  transition: background var(--transition), opacity var(--transition);
+  user-select: none;
+  -webkit-user-select: none;
+  position: relative;
+}
+.q-item:hover { background: var(--surface-hover); }
+.q-item:active { cursor: grabbing; }
+.q-item.dragging { opacity: 0.4; }
+.q-item.completed { opacity: 0.5; }
+.q-item.completed .q-title { text-decoration: line-through; }
+.q-handle {
+  color: var(--text-faint);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: -1px;
+  flex-shrink: 0;
+  line-height: 1;
+}
+.q-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.q-est {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--text-faint);
+  flex-shrink: 0;
+  margin-left: auto;
+}
+.q-actions {
+  display: none;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+.q-item:hover .q-actions, .q-item.completed .q-actions { display: flex; }
+@media (hover: none) { .q-actions { display: flex; } }
+.q-actions .icon-btn { width: 20px; height: 20px; }
+.q-actions .icon-btn svg { width: 12px; height: 12px; }
+
+/* ═══════════════════════════════════════════════════════════════
+   HISTORY — day evolution timeline
+   ═══════════════════════════════════════════════════════════════ */
+.timeline-wrap {
+  position: relative;
+  height: 96px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+.timeline-hours {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  pointer-events: none;
+}
+.timeline-hours span {
+  flex: 1;
+  border-left: 1px solid var(--border-subtle);
+  font-family: var(--font-mono);
+  font-size: 8px;
+  color: var(--text-faint);
+  padding-left: 2px;
+  padding-top: 2px;
+}
+.timeline-block {
+  position: absolute;
+  top: 26px;
+  height: 34px;
+  border-radius: 3px;
+  opacity: 0.9;
+  cursor: pointer;
+  min-width: 3px;
+}
+.timeline-block:hover { opacity: 1; box-shadow: var(--shadow-sm); }
+.timeline-marker {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 0;
+  border-left: 1.5px dashed var(--text-faint);
+  cursor: default;
+}
+.timeline-marker .tm-emoji {
+  position: absolute;
+  bottom: 2px;
+  left: -7px;
+  font-size: 12px;
+  line-height: 1;
+}
+.timeline-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-top: var(--space-2);
+}
+.timeline-legend .tl-item {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+/* Completed-item rows in History */
+.done-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: var(--text-sm);
+}
+.done-row:last-child { border-bottom: none; }
+.done-row .done-time {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-faint);
+  width: 44px;
+  flex-shrink: 0;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   QUICK LOG v2 — shortcuts, check-in, wake/sleep
+   ═══════════════════════════════════════════════════════════════ */
+.shortcut-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.shortcut-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: var(--text-xs);
+  color: var(--text-primary);
+  background: var(--surface);
+  transition: all var(--transition);
+}
+.shortcut-chip:hover { border-color: var(--accent); background: var(--accent-tint); }
+.shortcut-chip .sc-cal {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--text-faint);
+}
+.shortcut-chip.just-logged {
+  border-color: var(--success);
+  background: var(--success-tint);
+}
+
+.energy-selector {
+  display: flex;
+  gap: var(--space-1);
+}
+.energy-btn {
+  flex: 1;
+  padding: var(--space-2) 0;
+  border: 1.5px solid transparent;
+  border-radius: var(--radius-md);
+  transition: all var(--transition);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  filter: grayscale(1);
+  opacity: 0.4;
+}
+.energy-btn:hover { background: var(--surface-hover); opacity: 0.7; }
+.energy-btn.selected {
+  border-color: var(--accent);
+  background: var(--accent-tint);
+  filter: none;
+  opacity: 1;
+}
+
+.wake-sleep-row {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+}
+.wake-sleep-row input[type="time"] { flex: 1; }
+
+/* Inline "logged" confirmation inside Quick Log */
+.loglist {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  max-height: 140px;
+  overflow-y: auto;
+}
+.loglist .log-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  padding: 2px 0;
+}
+.loglist .log-row .lr-time {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--text-faint);
+  width: 38px;
+  flex-shrink: 0;
 }

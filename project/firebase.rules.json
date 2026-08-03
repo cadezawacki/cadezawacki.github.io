@@ -1,0 +1,41 @@
+// Firebase Realtime Database security rules for Cade.project sync.
+// Paste into: Firebase Console → Realtime Database → Rules (comments are allowed there).
+//
+// How the app uses the database (see sync.js):
+//   cade/<fingerprint>/data     — one AES-256-GCM-encrypted base64 string (the whole dataset)
+//   cade/<fingerprint>/version  — integer bumped via ServerValue.increment on every push
+//   .info/connected             — built-in, always readable, no rule needed
+//
+// The app has NO Firebase Auth — devices are trusted because (a) the 16-hex-char
+// fingerprint path is derived from your passphrase and unguessable in practice,
+// and (b) the payload is end-to-end encrypted, so even a reader learns nothing.
+// These rules therefore:
+//   • deny everything outside /cade
+//   • allow read/write only on well-formed fingerprint subtrees
+//   • validate the exact shape the app writes (string data, number version)
+//     so nobody can dump arbitrary data into your database
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "cade": {
+      "$fingerprint": {
+        // fingerprint = 16 lowercase hex chars (8 bytes of SHA-256)
+        ".read": "$fingerprint.matches(/^[0-9a-f]{16}$/)",
+        ".write": "$fingerprint.matches(/^[0-9a-f]{16}$/)",
+        "data": {
+          // encrypted blob; cap size to keep abuse bounded (10 MB)
+          ".validate": "newData.isString() && newData.val().length < 10485760"
+        },
+        "version": {
+          ".validate": "newData.isNumber()"
+        },
+        "meta": {
+          ".validate": "newData.isString() && newData.val().length < 4096"
+        },
+        // reject any other children under a fingerprint
+        "$other": { ".validate": false }
+      }
+    }
+  }
+}
