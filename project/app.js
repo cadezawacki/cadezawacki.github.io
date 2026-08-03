@@ -204,7 +204,8 @@ const App = (() => {
     // Next best task (highest priority + lowest effort, open only) —
     // scoped to the project you're currently working in, if one is set.
     const workingProject = State.getSettings().workingProject || null;
-    const nextPool = workingProject ? openToday.filter(t => t.projectId === workingProject) : openToday;
+    const wpSubtree = workingProject ? State.getProjectSubtreeIds(workingProject) : null;
+    const nextPool = wpSubtree ? openToday.filter(t => State.entryProjectIds(t).some(pid => wpSubtree.includes(pid))) : openToday;
     const nextTask = [...nextPool].sort((a, b) => {
       const effOrder = { trivial: 0, small: 1, medium: 2, large: 3, xl: 4 };
       const pa = (priOrder[a.priority] || 2) * 10 + (effOrder[a.effort] || 2);
@@ -801,9 +802,13 @@ const App = (() => {
     const canTrack = entry.type === 'task' && !entry.completed;
 
     let metaHtml = '';
-    if (proj) {
-      metaHtml += `<span class="proj-dot" style="background:${proj.color}"></span>`;
-    }
+    // Multi-project entries show a dot per membership (up to 3)
+    const pids = State.entryProjectIds(entry);
+    pids.slice(0, 3).forEach(pid => {
+      const pr = State.getProject(pid);
+      if (pr) metaHtml += `<span class="proj-dot" style="background:${pr.color}" title="${pr.name}"></span>`;
+    });
+    if (pids.length > 3) metaHtml += `<span class="text-xs text-faint">+${pids.length - 3}</span>`;
     if (entry.priority && entry.priority !== 'low') {
       metaHtml += `<span class="pill pill-${priorityColor(entry.priority)}">${entry.priority}</span>`;
     }
@@ -815,7 +820,9 @@ const App = (() => {
     }
     if (entry.dueDate) {
       const cls = isOverdueFlag ? 'pill-red' : 'pill-accent';
-      metaHtml += `<span class="pill ${cls}">${formatDueDate(entry.dueDate)}</span>`;
+      metaHtml += `<span class="pill ${cls}">${formatDueDate(entry.dueDate)}${entry.type === 'reminder' && entry.remindTime ? ` · ${entry.remindTime}` : ''}</span>`;
+    } else if (entry.type === 'reminder' && entry.remindTime) {
+      metaHtml += `<span class="pill pill-accent">${entry.remindTime}</span>`;
     }
     if (entry.tags && entry.tags.length > 0) {
       entry.tags.forEach(tag => {
@@ -912,15 +919,18 @@ const App = (() => {
     const tagMatch = (e) => !tagFilter || (e.tags || []).includes(tagFilter);
 
     if (projectFilter) {
-      // Project-specific task view
+      // Project-specific view — a parent project rolls up everything in
+      // its sub-projects, and multi-project entries match through any
       const proj = projectFilter === 'none' ? null : State.getProject(projectFilter);
-      const entries = State.getEntries().filter(e =>
-        projectFilter === 'none' ? !e.projectId : e.projectId === projectFilter
+      const hasChildren = proj ? State.getProjectSubtreeIds(proj.id).length > 1 : false;
+      const entries = (projectFilter === 'none'
+        ? State.getEntries().filter(e => State.entryProjectIds(e).length === 0)
+        : State.getEntries({ projectId: projectFilter })
       ).filter(tagMatch);
 
       html += `<div class="section">
         <div class="section-header">
-          <span class="section-title">${proj ? `${icon(proj.icon, 13)} ${proj.name}` : 'Unassigned'}${tagFilter ? ` · #${tagFilter}` : ''}</span>
+          <span class="section-title">${proj ? `${icon(proj.icon, 13)} ${proj.name}` : 'Unassigned'}${hasChildren ? ' <span class="text-faint">incl. sub-projects</span>' : ''}${tagFilter ? ` · #${tagFilter}` : ''}</span>
           <span style="display:inline-flex;align-items:center;gap:var(--space-2);">
             <span class="stat-label">${entries.length} items</span>
             ${proj ? `<button class="btn btn-ghost btn-sm" onclick="App.openProjectModal('${proj.id}')">${icon('pencil', 12)}Edit</button>` : ''}
@@ -968,23 +978,42 @@ const App = (() => {
 
       html += `</div>`;
     } else {
-      // Project cards grid
+      // Project cards grid — one card per TOP-LEVEL project; sub-projects
+      // list vertically inside their parent's card, indented. Parent stats
+      // aggregate the whole subtree (getEntries rolls up).
+      const renderSubRows = (parentId, depth) =>
+        State.getProjects().filter(sp => sp.parentId === parentId).map(sp => {
+          const spEntries = State.getEntries({ projectId: sp.id });
+          const spDone = spEntries.filter(e => e.completed).length;
+          return `
+            <div class="subproj-row" style="padding-left:${depth * 14}px" onclick="event.stopPropagation();App.setProjectFilter('${sp.id}')">
+              <span class="proj-dot" style="background:${sp.color}"></span>
+              <span class="truncate" style="flex:1;">${sp.name}</span>
+              <span class="project-stat">${spEntries.length - spDone} open</span>
+              <button class="icon-btn" onclick="event.stopPropagation();App.openProjectModal('${sp.id}')" aria-label="Edit sub-project">${icon('pencil', 12)}</button>
+            </div>
+            ${renderSubRows(sp.id, depth + 1)}`;
+        }).join('');
+
       html += `<div class="grid-3 section">`;
-      projects.forEach(p => {
+      projects.filter(p => p.depth === 0).forEach(p => {
+        // Aggregated over the subtree — the parent card speaks for the family
         const entries = State.getEntries({ projectId: p.id });
         const completed = entries.filter(e => e.completed).length;
         const pending = entries.length - completed;
+        const subRows = renderSubRows(p.id, 0);
         html += `
-          <div class="card card-interactive project-card" onclick="App.setProjectFilter('${p.id}')" style="cursor:pointer;${p.depth ? `margin-left:${p.depth * 12}px;` : ''}">
+          <div class="card card-interactive project-card" onclick="App.setProjectFilter('${p.id}')" style="cursor:pointer;">
             <div class="project-header">
               <div class="project-icon" style="background:${p.color}20;color:${p.color}">
                 <i data-lucide="${p.icon}"></i>
               </div>
               <div style="flex:1">
-                <div class="project-name">${p.depth ? '└ ' : ''}${p.name}</div>
+                <div class="project-name">${p.name}</div>
                 <div class="project-stats">
                   <span class="project-stat">${pending} pending</span>
                   <span class="project-stat">${completed} done</span>
+                  ${subRows ? `<span class="project-stat">incl. subs</span>` : ''}
                 </div>
               </div>
               <button class="icon-btn" onclick="event.stopPropagation();App.openProjectModal('${p.id}')" aria-label="Edit project">${icon('pencil', 14)}</button>
@@ -992,6 +1021,7 @@ const App = (() => {
             <div class="progress-bar">
               <div class="progress-fill" style="width:${entries.length > 0 ? completed / entries.length * 100 : 0}%;background:${p.color};"></div>
             </div>
+            ${subRows ? `<div class="subproj-list">${subRows}</div>` : ''}
           </div>
         `;
       });
@@ -1193,8 +1223,9 @@ const App = (() => {
 
   function renderInsights() {
     const projects = State.getProjects();
+    const subtree = insightsProject ? State.getProjectSubtreeIds(insightsProject) : null;
     const inFilter = e => {
-      if (insightsProject && e.projectId !== insightsProject) return false;
+      if (subtree && !State.entryProjectIds(e).some(pid => subtree.includes(pid))) return false;
       if (insightsEntry && e.id !== insightsEntry) return false;
       return true;
     };
@@ -1215,7 +1246,7 @@ const App = (() => {
     // Filter bar: project chips + item select (every entry type of the
     // project — a project may hold only habits/reminders, not tasks)
     const filterableEntries = State.getEntries()
-      .filter(e => !insightsProject || e.projectId === insightsProject);
+      .filter(e => !subtree || State.entryProjectIds(e).some(pid => subtree.includes(pid)));
     html += `<div class="filter-chips" style="align-items:center;">
       <button class="filter-chip ${!insightsProject ? 'active' : ''}" onclick="App.setInsightsProject(null)">All Projects</button>
       ${projects.map(p => `
@@ -1378,8 +1409,7 @@ const App = (() => {
   }
 
   function renderQuadrant(projectId) {
-    const tasks = State.getEntries({ type: 'task', completed: false })
-      .filter(t => !projectId || t.projectId === projectId);
+    const tasks = State.getEntries({ type: 'task', completed: false, projectId: projectId || undefined });
     const effOrder = { trivial: 0, small: 1, medium: 2, large: 3, xl: 4 };
     const priOrder = { urgent: 0, high: 1, medium: 2, low: 3 };
     const multiProject = !projectId; // show project dots in all-projects view
@@ -1587,8 +1617,8 @@ const App = (() => {
       <div class="card">
         <div class="wake-sleep-row">
           <input type="time" class="form-input" id="wakeSleepTimeHealth">
-          <button class="btn btn-secondary" onclick="App.logWake('wakeSleepTimeHealth')">☀️ Wake</button>
-          <button class="btn btn-secondary" onclick="App.logSleep('wakeSleepTimeHealth')">🌙 Sleep</button>
+          <button class="btn btn-secondary" onclick="App.logWake('wakeSleepTimeHealth')">${icon('sunrise', 15)}Wake</button>
+          <button class="btn btn-secondary" onclick="App.logSleep('wakeSleepTimeHealth')">${icon('moon', 15)}Sleep</button>
         </div>
         <div id="wakeSleepCurrent" style="margin-top:var(--space-2);">${renderWakeSleepCurrent()}</div>
         <p class="text-xs text-faint" style="margin-top:var(--space-1);">Enter a time first — nothing defaults to "now". One of each per day; logging again updates it.</p>
@@ -1598,8 +1628,8 @@ const App = (() => {
       </div>
     </div>`;
 
-    // Log food form
-    const shortcuts = (State.getSettings().quickShortcuts || []).filter(s => s.calories);
+    // Log food form — ALL shortcuts show here (water counts as health too)
+    const shortcuts = State.getSettings().quickShortcuts || [];
     html += `<div class="section">
       <div class="section-header"><span class="section-title">Log Food</span></div>
       <div class="card">
@@ -1861,8 +1891,8 @@ const App = (() => {
       case 'checkin':
         return `Check-in ${l.emotion ? moodIc(l.emotion) : ''}${l.energy ? ` energy ${l.energy}/5` : ''}${l.notes ? ` · ${l.notes}` : ''}`;
       case 'emotion': return `${moodIc(l.emotion)} Day mood: ${l.emotion}`;
-      case 'wake': return `☀️ Woke up`;
-      case 'sleep': return `🌙 Bedtime`;
+      case 'wake': return `${icon('sunrise', 13)} Woke up`;
+      case 'sleep': return `${icon('moon', 13)} Bedtime`;
       default: return l.type;
     }
   }
@@ -2033,6 +2063,29 @@ const App = (() => {
       </div>
     </div>`;
 
+    // Hotkeys (single keys, active when not typing in a field)
+    const hotkeyRows = [
+      ['timer', 'Toggle timer window'],
+      ['newTask', 'New task'],
+      ['quickLog', 'Open Quick Log'],
+      ['search', 'Search'],
+      ['stopTimers', 'Stop all timers'],
+    ];
+    html += `<div class="section">
+      <div class="section-header"><span class="section-title">Hotkeys</span>
+        <span class="text-xs text-faint">single keys · never fire while typing</span>
+      </div>
+      <div class="card">
+        ${hotkeyRows.map(([key, label]) => `
+          <div class="setting-row">
+            <div><div class="setting-label">${label}</div></div>
+            <input type="text" class="form-input hotkey-input" maxlength="1" value="${settings.hotkeys?.[key] || ''}"
+              onchange="App.setHotkey('${key}', this.value)" placeholder="—" aria-label="Hotkey for ${label}">
+          </div>`).join('')}
+        <p class="text-xs text-faint" style="margin-top:var(--space-2);">Cmd/Ctrl+N (new task) and Cmd/Ctrl+K (search) also work everywhere.</p>
+      </div>
+    </div>`;
+
     // Data management
     html += `<div class="section">
       <div class="section-header"><span class="section-title">Data</span></div>
@@ -2083,7 +2136,10 @@ const App = (() => {
     currentTags = [];
     currentEffort = 'medium';
     currentWeekdays = [];
-    showModal('New Entry', renderEntryForm(type), [
+    // Creating from inside a project folder → that project is the default
+    const contextProject = (currentTab === 'projects' && projectFilter && projectFilter !== 'none') ? projectFilter : null;
+    currentProjects = contextProject ? [contextProject] : [];
+    showModal('New Entry', renderEntryForm(type, contextProject ? { projectId: contextProject } : {}), [
       `<button class="btn btn-secondary" onclick="App.closeModal()">Cancel</button>`,
       `<button class="btn btn-primary" onclick="App.saveEntry()">Create</button>`,
     ]);
@@ -2097,6 +2153,7 @@ const App = (() => {
     currentTags = [...(entry.tags || [])];
     currentEffort = entry.effort || 'medium';
     currentWeekdays = [...(entry.recurrence?.daysOfWeek || [])];
+    currentProjects = [...State.entryProjectIds(entry)];
     showModal('Edit Entry', renderEntryForm(entry.type, entry), [
       `<button class="btn btn-danger" onclick="App.deleteEntry('${id}')">Delete</button>`,
       `<div style="flex:1"></div>`,
@@ -2105,79 +2162,69 @@ const App = (() => {
     ]);
   }
 
+  // Each entry type gets its own form — a reminder needs a time, a habit
+  // needs recurrence, and none of them need task-style effort/estimate.
   function renderEntryForm(type, entry = {}) {
     const projects = State.getProjects();
     const tags = State.getAllTags(); // full list, for pill colors
-    // Suggestions respect tag scoping: global tags + the entry's project's tags
-    const suggestTags = State.getAllTags(entry.projectId || null);
-    const isGoal = type === 'goal';
-    const isHabit = type === 'habit';
+    // Suggestions respect tag scoping: global + the primary project's tags
+    const suggestTags = State.getAllTags(currentProjects[0] || null);
 
     const typeIcons = { goal: 'target', task: 'list-checks', habit: 'repeat', reminder: 'clock', checkin: 'brain' };
     const types = ['goal', 'task', 'habit', 'reminder', 'checkin'];
+    const placeholders = {
+      task: 'What needs to be done?', goal: 'What are you aiming for?',
+      habit: 'What do you want to repeat?', reminder: 'What should I remind you of?',
+      checkin: 'What do you want to check in on?',
+    };
 
-    return `
+    // Color-coded multi-select project chips (an entry can live in several)
+    const projectChips = `
       <div class="form-group">
-        <label class="form-label">Entry Type</label>
-        <div class="type-selector">
-          ${types.map(t => `
-            <div class="type-card ${t === type ? 'selected' : ''}" onclick="App.changeEntryType('${t}')">
-              <i data-lucide="${typeIcons[t]}"></i>
-              <span>${t}</span>
-            </div>
-          `).join('')}
+        <label class="form-label">Projects ${currentProjects.length > 1 ? `<span class="text-faint">(${currentProjects.length} selected)</span>` : ''}</label>
+        <div class="project-chips" id="entryProjectChips">
+          ${projects.length === 0 ? '<span class="text-xs text-faint">No projects yet.</span>' : projects.map(p => `
+            <button class="filter-chip project-choice ${currentProjects.includes(p.id) ? 'active' : ''}" id="pc-${p.id}"
+              style="--chip-color:${p.color};${p.depth ? `margin-left:${p.depth * 10}px;` : ''}"
+              onclick="App.toggleFormProject('${p.id}')">
+              <span class="proj-dot" style="background:${p.color}"></span>${p.name}
+            </button>`).join('')}
         </div>
-      </div>
+      </div>`;
 
-      <div class="form-group">
-        <label class="form-label">Title</label>
-        <input type="text" class="form-input" id="entryTitle" value="${entry.title || ''}" placeholder="What needs to be done?" autocomplete="off">
-      </div>
-
-      <div class="form-group">
-        <label class="form-label">Description</label>
-        <textarea class="form-textarea" id="entryDescription" placeholder="Add details...">${entry.description || ''}</textarea>
-      </div>
-
-      <div class="grid-2">
-        <div class="form-group">
-          <label class="form-label">Project</label>
-          <select class="form-select" id="entryProject">
-            <option value="">None</option>
-            ${projects.map(p => `<option value="${p.id}" ${entry.projectId === p.id ? 'selected' : ''}>${p.name}</option>`).join('')}
-          </select>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Due Date</label>
-          <input type="date" class="form-input" id="entryDueDate" value="${entry.dueDate || ''}">
-        </div>
-      </div>
-
-      <div class="grid-2">
-        <div class="form-group">
-          <label class="form-label">Effort</label>
-          <div class="effort-selector">
-            ${['trivial', 'small', 'medium', 'large', 'xl'].map(e => `
-              <button class="effort-btn ${(entry.effort || 'medium') === e ? 'selected' : ''}" onclick="App.selectEffort('${e}')" id="effort-${e}">${effortLabel(e)}</button>
-            `).join('')}
+    let typeFields = '';
+    if (type === 'task') {
+      typeFields = `
+        <div class="grid-2">
+          <div class="form-group">
+            <label class="form-label">Due Date</label>
+            <input type="date" class="form-input" id="entryDueDate" value="${entry.dueDate || ''}">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Estimate (minutes)</label>
+            <input type="number" class="form-input" id="entryEstimate" value="${entry.estimateMinutes || ''}" placeholder="e.g. 45" min="0" step="5">
           </div>
         </div>
-        <div class="form-group">
-          <label class="form-label">Priority</label>
-          <select class="form-select" id="entryPriority">
-            ${['low', 'medium', 'high', 'urgent'].map(p => `
-              <option value="${p}" ${(entry.priority || 'medium') === p ? 'selected' : ''}>${p.charAt(0).toUpperCase() + p.slice(1)}</option>
-            `).join('')}
-          </select>
-        </div>
-      </div>
-
-      <div class="form-group">
-        <label class="form-label">Estimate (minutes)</label>
-        <input type="number" class="form-input" id="entryEstimate" value="${entry.estimateMinutes || ''}" placeholder="e.g. 45" min="0" step="5">
-      </div>
-
-      ${isGoal ? `
+        <div class="grid-2">
+          <div class="form-group">
+            <label class="form-label">Effort</label>
+            <div class="effort-selector">
+              ${['trivial', 'small', 'medium', 'large', 'xl'].map(e => `
+                <button class="effort-btn ${(entry.effort || 'medium') === e ? 'selected' : ''}" onclick="App.selectEffort('${e}')" id="effort-${e}">${effortLabel(e)}</button>
+              `).join('')}
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Priority</label>
+            <select class="form-select" id="entryPriority">
+              ${['low', 'medium', 'high', 'urgent'].map(p => `
+                <option value="${p}" ${(entry.priority || 'medium') === p ? 'selected' : ''}>${p.charAt(0).toUpperCase() + p.slice(1)}</option>
+              `).join('')}
+            </select>
+          </div>
+        </div>`;
+    } else if (type === 'goal') {
+      typeFields = `
         <div class="grid-2">
           <div class="form-group">
             <label class="form-label">Target Value</label>
@@ -2188,13 +2235,18 @@ const App = (() => {
             <input type="number" class="form-input" id="entryCurrent" value="${entry.currentValue || ''}" placeholder="e.g. 5">
           </div>
         </div>
-        <div class="form-group">
-          <label class="form-label">Unit</label>
-          <input type="text" class="form-input" id="entryUnit" value="${entry.unit || ''}" placeholder="books, km, hours...">
-        </div>
-      ` : ''}
-
-      ${isHabit ? `
+        <div class="grid-2">
+          <div class="form-group">
+            <label class="form-label">Unit</label>
+            <input type="text" class="form-input" id="entryUnit" value="${entry.unit || ''}" placeholder="books, km, hours...">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Target Date</label>
+            <input type="date" class="form-input" id="entryDueDate" value="${entry.dueDate || ''}">
+          </div>
+        </div>`;
+    } else if (type === 'habit') {
+      typeFields = `
         <div class="form-group">
           <label class="form-label">Recurrence</label>
           <select class="form-select" id="entryRecurrence" onchange="App.onRecurrenceChange(this.value)">
@@ -2212,8 +2264,57 @@ const App = (() => {
             `).join('')}
           </div>
           <p class="text-xs text-faint" style="margin-top:var(--space-2);">Other days don't count against the streak — they show dimmed in the grid.</p>
+        </div>`;
+    } else if (type === 'reminder') {
+      typeFields = `
+        <div class="grid-2">
+          <div class="form-group">
+            <label class="form-label">Date</label>
+            <input type="date" class="form-input" id="entryDueDate" value="${entry.dueDate || ''}">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Time</label>
+            <input type="time" class="form-input" id="entryRemindTime" value="${entry.remindTime || ''}">
+          </div>
         </div>
-      ` : ''}
+        <div class="form-group">
+          <label class="form-label">Repeats</label>
+          <select class="form-select" id="entryRecurrence">
+            <option value="none" ${!entry.recurrence ? 'selected' : ''}>Never</option>
+            <option value="daily" ${entry.recurrence?.type === 'daily' ? 'selected' : ''}>Daily</option>
+            <option value="weekly" ${entry.recurrence?.type === 'weekly' ? 'selected' : ''}>Weekly</option>
+            <option value="monthly" ${entry.recurrence?.type === 'monthly' ? 'selected' : ''}>Monthly</option>
+          </select>
+        </div>`;
+    }
+    // checkin: just title/description/projects/tags — nothing extra
+
+    return `
+      <div class="form-group">
+        <label class="form-label">Entry Type</label>
+        <div class="type-selector">
+          ${types.map(t => `
+            <div class="type-card ${t === type ? 'selected' : ''}" onclick="App.changeEntryType('${t}')">
+              <i data-lucide="${typeIcons[t]}"></i>
+              <span>${t}</span>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Title</label>
+        <input type="text" class="form-input" id="entryTitle" value="${entry.title || ''}" placeholder="${placeholders[type]}" autocomplete="off">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Description</label>
+        <textarea class="form-textarea" id="entryDescription" placeholder="Add details...">${entry.description || ''}</textarea>
+      </div>
+
+      ${projectChips}
+
+      ${typeFields}
 
       <div class="form-group">
         <label class="form-label">Tags</label>
@@ -2235,6 +2336,14 @@ const App = (() => {
   let currentTags = [];
   let currentEffort = 'medium';
   let currentWeekdays = [];
+  let currentProjects = [];
+
+  function toggleFormProject(id) {
+    currentProjects = currentProjects.includes(id)
+      ? currentProjects.filter(p => p !== id)
+      : [...currentProjects, id];
+    document.getElementById(`pc-${id}`)?.classList.toggle('active', currentProjects.includes(id));
+  }
 
   function onRecurrenceChange(value) {
     const row = document.getElementById('weekdayRow');
@@ -2302,18 +2411,23 @@ const App = (() => {
       type: entryTypeDraft,
       title,
       description: document.getElementById('entryDescription')?.value || '',
-      projectId: document.getElementById('entryProject')?.value || null,
-      dueDate: document.getElementById('entryDueDate')?.value || null,
-      effort: currentEffort,
-      priority: document.getElementById('entryPriority')?.value || 'medium',
-      estimateMinutes: parseInt(document.getElementById('entryEstimate')?.value) || null,
+      projectIds: [...currentProjects],
+      projectId: currentProjects[0] || null, // primary — legacy readers
       tags: [...currentTags],
     };
+
+    if (entryTypeDraft === 'task') {
+      data.dueDate = document.getElementById('entryDueDate')?.value || null;
+      data.effort = currentEffort;
+      data.priority = document.getElementById('entryPriority')?.value || 'medium';
+      data.estimateMinutes = parseInt(document.getElementById('entryEstimate')?.value) || null;
+    }
 
     if (entryTypeDraft === 'goal') {
       data.targetValue = parseFloat(document.getElementById('entryTarget')?.value) || null;
       data.currentValue = parseFloat(document.getElementById('entryCurrent')?.value) || 0;
       data.unit = document.getElementById('entryUnit')?.value || null;
+      data.dueDate = document.getElementById('entryDueDate')?.value || null;
     }
 
     if (entryTypeDraft === 'habit') {
@@ -2323,6 +2437,13 @@ const App = (() => {
         // Empty selection means "any day" — same as daily for scheduling
         data.recurrence.daysOfWeek = currentWeekdays.length > 0 ? [...currentWeekdays] : null;
       }
+    }
+
+    if (entryTypeDraft === 'reminder') {
+      data.dueDate = document.getElementById('entryDueDate')?.value || null;
+      data.remindTime = document.getElementById('entryRemindTime')?.value || null;
+      const recType = document.getElementById('entryRecurrence')?.value;
+      data.recurrence = recType && recType !== 'none' ? { type: recType, interval: 1 } : null;
     }
 
     if (editingEntryId) {
@@ -2335,6 +2456,7 @@ const App = (() => {
 
     currentTags = [];
     currentEffort = 'medium';
+    currentProjects = [];
     closeModal();
     render();
   }
@@ -2547,82 +2669,115 @@ const App = (() => {
   // ═══════════════════════════════════════════════════════════
   let quickEmotion = null;
   let quickEnergy = null;
+  let quickLogTab = 'log'; // 'log' | 'sleep' | 'health' | 'task'
 
-  function openQuickLog() {
+  function openQuickLog(tab) {
     quickEmotion = null;
     quickEnergy = null;
+    if (tab) quickLogTab = tab;
     showModal('Quick Log', renderQuickLogBody(), [
       `<button class="btn btn-secondary" onclick="App.closeModal()">Done</button>`,
     ]);
   }
 
+  function setQuickLogTab(t) {
+    quickLogTab = t;
+    const body = document.getElementById('modalBody');
+    if (body) { body.innerHTML = renderQuickLogBody(); refreshIcons(); }
+  }
+
   function renderQuickLogBody() {
     const shortcuts = State.getSettings().quickShortcuts || [];
+    const tabs = [
+      { id: 'log', icon: 'smile', label: 'Log' },
+      { id: 'sleep', icon: 'moon', label: 'Sleep' },
+      { id: 'health', icon: 'apple', label: 'Health' },
+      { id: 'task', icon: 'list-plus', label: 'Task' },
+    ];
+
+    let body = '';
+    if (quickLogTab === 'log') {
+      body = `
+        <div class="form-group">
+          <label class="form-label">How do you feel right now?</label>
+          <div class="emotion-selector" id="quickEmotionSel">
+            ${['bad', 'low', 'okay', 'good', 'great'].map(e => `
+              <button class="emotion-btn ${quickEmotion === e ? 'selected' : ''}" id="qe-${e}" onclick="App.setQuickEmotion('${e}')">
+                ${icon(MOOD_ICONS[e], 22)}
+                <span class="emotion-label">${e}</span>
+              </button>`).join('')}
+          </div>
+          <label class="form-label" style="margin-top:var(--space-3);">Energy</label>
+          <div class="energy-selector" id="quickEnergySel">
+            ${[1, 2, 3, 4, 5].map(n => `<button class="energy-btn ${quickEnergy != null && n <= quickEnergy ? 'selected' : ''}" id="qen-${n}" onclick="App.setQuickEnergy(${n})" aria-label="Energy ${n}">⚡</button>`).join('')}
+          </div>
+          <label class="form-label" style="margin-top:var(--space-3);">Journal</label>
+          <textarea class="form-textarea" id="checkinNote" placeholder="What's on your mind? Free-form — saved with the check-in." style="min-height:80px;"></textarea>
+          <button class="btn btn-primary w-full" style="margin-top:var(--space-2);" onclick="App.logCheckinFromModal()">${icon('pen-line', 14)}Log check-in</button>
+          <p class="text-xs text-faint" style="margin-top:var(--space-2);">Check-ins are timestamped sub-logs. The single Day Mood lives on the Today page.</p>
+        </div>`;
+    } else if (quickLogTab === 'sleep') {
+      body = `
+        <div class="form-group">
+          <label class="form-label">Wake / Sleep</label>
+          <div class="wake-sleep-row">
+            <input type="time" class="form-input" id="wakeSleepTime">
+            <button class="btn btn-secondary" onclick="App.logWake('wakeSleepTime')">${icon('sunrise', 15)}Wake</button>
+            <button class="btn btn-secondary" onclick="App.logSleep('wakeSleepTime')">${icon('moon', 15)}Sleep</button>
+          </div>
+          <div id="wakeSleepCurrent" style="margin-top:var(--space-2);">${renderWakeSleepCurrent()}</div>
+          <p class="text-xs text-faint" style="margin-top:var(--space-1);">Nothing is logged until you enter a time and press a button. Trends live on the Health tab.</p>
+        </div>`;
+    } else if (quickLogTab === 'health') {
+      body = `
+        <div class="form-group">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--space-2);">
+            <label class="form-label" style="margin-bottom:0;">Shortcuts</label>
+            <button class="btn btn-ghost btn-sm" onclick="App.openManageShortcuts()">${icon('settings-2', 12)}Manage</button>
+          </div>
+          <div class="shortcut-chips" id="shortcutChips">
+            ${shortcuts.map(s => `
+              <button class="shortcut-chip" id="sc-${s.id}" onclick="App.useShortcut('${s.id}')">
+                <span>${s.emoji}</span><span>${s.label}</span>
+                ${s.calories ? `<span class="sc-cal">${s.calories} cal</span>` : ''}
+              </button>`).join('')}
+            ${shortcuts.length === 0 ? '<p class="text-xs text-faint">No shortcuts yet — add coffee, water, or saved meals via Manage.</p>' : ''}
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Log Calories</label>
+          <div style="display:flex;gap:var(--space-2);">
+            <input type="number" class="form-input" id="calorieInput" placeholder="Calories" style="flex:1">
+            <select class="form-select" id="mealSelect" style="width:auto;">
+              <option value="breakfast">Breakfast</option>
+              <option value="lunch">Lunch</option>
+              <option value="dinner">Dinner</option>
+              <option value="snack" selected>Snack</option>
+            </select>
+            <button class="btn btn-primary" onclick="App.logCaloriesFromModal()">Add</button>
+          </div>
+          <p class="text-xs text-faint" style="margin-top:var(--space-2);">Macros and charts live on the Health tab.</p>
+        </div>`;
+    } else if (quickLogTab === 'task') {
+      body = `
+        <div class="form-group">
+          <label class="form-label">Quick Add Task</label>
+          <input type="text" class="form-input" id="quickTaskInput" placeholder="Task title — Enter to add" onkeydown="if(event.key==='Enter'){App.quickAddTask(this.value);this.value='';}">
+          <p class="text-xs text-faint" style="margin-top:var(--space-2);">Lands in Today unscheduled. Use + for the full form (projects, dates, effort).</p>
+        </div>`;
+    }
+
     return `
       <div class="form-group">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--space-2);">
-          <label class="form-label" style="margin-bottom:0;">Shortcuts</label>
-          <button class="btn btn-ghost btn-sm" onclick="App.openManageShortcuts()">${icon('settings-2', 12)}Manage</button>
-        </div>
-        <div class="shortcut-chips" id="shortcutChips">
-          ${shortcuts.map(s => `
-            <button class="shortcut-chip" id="sc-${s.id}" onclick="App.useShortcut('${s.id}')">
-              <span>${s.emoji}</span><span>${s.label}</span>
-              ${s.calories ? `<span class="sc-cal">${s.calories} cal</span>` : ''}
-            </button>`).join('')}
-          ${shortcuts.length === 0 ? '<p class="text-xs text-faint">No shortcuts yet — add coffee, water, or saved meals via Manage.</p>' : ''}
+        <div class="type-selector" style="grid-template-columns:repeat(4,1fr);">
+          ${tabs.map(t => `
+            <div class="type-card ${quickLogTab === t.id ? 'selected' : ''}" onclick="App.setQuickLogTab('${t.id}')">
+              <i data-lucide="${t.icon}"></i>
+              <span>${t.label}</span>
+            </div>`).join('')}
         </div>
       </div>
-      <div class="divider"></div>
-      <div class="form-group">
-        <label class="form-label">Check-in — how do you feel right now?</label>
-        <div class="emotion-selector" id="quickEmotionSel">
-          ${['bad', 'low', 'okay', 'good', 'great'].map(e => `
-            <button class="emotion-btn" id="qe-${e}" onclick="App.setQuickEmotion('${e}')">
-              ${icon(MOOD_ICONS[e], 22)}
-              <span class="emotion-label">${e}</span>
-            </button>`).join('')}
-        </div>
-        <label class="form-label" style="margin-top:var(--space-3);">Energy</label>
-        <div class="energy-selector" id="quickEnergySel">
-          ${[1, 2, 3, 4, 5].map(n => `<button class="energy-btn" id="qen-${n}" onclick="App.setQuickEnergy(${n})" aria-label="Energy ${n}">⚡</button>`).join('')}
-        </div>
-        <div style="display:flex;gap:var(--space-2);margin-top:var(--space-3);">
-          <input type="text" class="form-input" id="checkinNote" placeholder="Optional note…" style="flex:1;">
-          <button class="btn btn-primary" onclick="App.logCheckinFromModal()">Log</button>
-        </div>
-        <p class="text-xs text-faint" style="margin-top:var(--space-2);">Check-ins are timestamped sub-logs. The single Day Mood lives on the Today page.</p>
-      </div>
-      <div class="divider"></div>
-      <div class="form-group">
-        <label class="form-label">Wake / Sleep</label>
-        <div class="wake-sleep-row">
-          <input type="time" class="form-input" id="wakeSleepTime">
-          <button class="btn btn-secondary" onclick="App.logWake('wakeSleepTime')">☀️ Wake</button>
-          <button class="btn btn-secondary" onclick="App.logSleep('wakeSleepTime')">🌙 Sleep</button>
-        </div>
-        <div id="wakeSleepCurrent" style="margin-top:var(--space-2);">${renderWakeSleepCurrent()}</div>
-        <p class="text-xs text-faint" style="margin-top:var(--space-1);">Nothing is logged until you enter a time and press a button.</p>
-      </div>
-      <div class="divider"></div>
-      <div class="form-group">
-        <label class="form-label">Log Calories</label>
-        <div style="display:flex;gap:var(--space-2);">
-          <input type="number" class="form-input" id="calorieInput" placeholder="Calories" style="flex:1">
-          <select class="form-select" id="mealSelect" style="width:auto;">
-            <option value="breakfast">Breakfast</option>
-            <option value="lunch">Lunch</option>
-            <option value="dinner">Dinner</option>
-            <option value="snack" selected>Snack</option>
-          </select>
-          <button class="btn btn-primary" onclick="App.logCaloriesFromModal()">Add</button>
-        </div>
-      </div>
-      <div class="divider"></div>
-      <div class="form-group">
-        <label class="form-label">Quick Add Task</label>
-        <input type="text" class="form-input" id="quickTaskInput" placeholder="Task title..." onkeydown="if(event.key==='Enter'){App.quickAddTask(this.value);this.value='';}">
-      </div>
+      ${body}
       <div class="divider"></div>
       <div class="form-group">
         <label class="form-label">Today so far</label>
@@ -2699,9 +2854,9 @@ const App = (() => {
     const sleep = State.getLogs({ type: 'sleep', date: today })[0];
     if (!wake && !sleep) return `<span class="text-xs text-faint">Not logged today.</span>`;
     let out = '';
-    if (wake) out += `<span class="pill" style="margin-right:var(--space-2);">☀️ ${wake.time}
+    if (wake) out += `<span class="pill" style="margin-right:var(--space-2);">${icon('sunrise', 12)} ${wake.time}
       <button onclick="App.removeWakeSleep('wake')" style="margin-left:4px;background:none;border:none;color:inherit;cursor:pointer;line-height:1;" aria-label="Remove wake time">×</button></span>`;
-    if (sleep) out += `<span class="pill">🌙 ${sleep.time}
+    if (sleep) out += `<span class="pill">${icon('moon', 12)} ${sleep.time}
       <button onclick="App.removeWakeSleep('sleep')" style="margin-left:4px;background:none;border:none;color:inherit;cursor:pointer;line-height:1;" aria-label="Remove sleep time">×</button></span>`;
     return out;
   }
@@ -3026,13 +3181,20 @@ const App = (() => {
     document.getElementById('modalOverlay').classList.remove('active');
     editingEntryId = null;
     editingBlockId = null;
+    // Focus lingering on a hidden modal input silently disables single-key
+    // hotkeys (the handler thinks you're still typing) — release it.
+    if (document.activeElement && document.activeElement !== document.body) {
+      document.activeElement.blur();
+    }
   }
 
   function closePanel() {
-    document.getElementById('panelOverlay').classList.remove('active');
-    // Slide panel carries its own .active transform (see Timers.openPanel)
+    // Floating window — just retract it (no overlay involved)
     document.getElementById('slidePanel').classList.remove('active');
-    // Timers keep running — surface the floating mini widget
+    if (document.activeElement && document.activeElement !== document.body) {
+      document.activeElement.blur();
+    }
+    // Timers keep running — surface the header indicator
     if (typeof Timers !== 'undefined') Timers.updateMini();
   }
 
@@ -3091,6 +3253,15 @@ const App = (() => {
   function setWorkingProject(id) {
     State.updateSettings({ workingProject: id || null });
     render();
+  }
+
+  function setHotkey(action, value) {
+    const v = (value || '').trim().toLowerCase().slice(0, 1);
+    const hotkeys = { ...(State.getSettings().hotkeys || {}) };
+    const clash = Object.entries(hotkeys).find(([a, k]) => a !== action && k === v && v);
+    if (clash) { toast(`"${v}" is already bound — pick another key`); render(); return; }
+    hotkeys[action] = v || null;
+    State.updateSettings({ hotkeys });
   }
 
   function exportData() {
@@ -3178,20 +3349,50 @@ const App = (() => {
     // Panel close + minimize (timers keep running either way)
     document.getElementById('panelClose').addEventListener('click', closePanel);
     document.getElementById('panelMinimize')?.addEventListener('click', closePanel);
-    document.getElementById('panelOverlay').addEventListener('click', (e) => {
-      if (e.target.id === 'panelOverlay') closePanel();
-    });
 
     // Sidebar collapse (desktop)
     if (State.getSettings().sidebarCollapsed) document.body.classList.add('sidebar-collapsed');
     document.getElementById('sidebarToggle')?.addEventListener('click', toggleSidebar);
 
-    // Keyboard shortcuts
+    // Keyboard shortcuts — Cmd/Ctrl combos plus configurable single-key
+    // hotkeys (Gmail-style: only fire when not typing in a field)
     document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') { closeModal(); closePanel(); closePopover(); }
-      if ((e.metaKey || e.ctrlKey) && e.key === 'n') { e.preventDefault(); openNewEntry('task'); }
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); openSearch(); }
+      if (e.key === 'Escape') { closeModal(); closePanel(); closePopover(); return; }
+      if ((e.metaKey || e.ctrlKey) && e.key === 'n') { e.preventDefault(); openNewEntry('task'); return; }
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); openSearch(); return; }
+      const t = e.target;
+      const typing = ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName) || t.isContentEditable;
+      if (typing || e.metaKey || e.ctrlKey || e.altKey) return;
+      const hk = State.getSettings().hotkeys || {};
+      const k = e.key.toLowerCase();
+      if (k === hk.timer) { e.preventDefault(); Timers.toggleWindow(); }
+      else if (k === hk.newTask) { e.preventDefault(); openNewEntry('task'); }
+      else if (k === hk.quickLog) { e.preventDefault(); openQuickLog(); }
+      else if (k === hk.search) { e.preventDefault(); openSearch(); }
+      else if (k === hk.stopTimers) { e.preventDefault(); Timers.stopAll(); toast('All timers stopped'); }
     });
+
+    // Timer window dragging (desktop) — grab the header, park it anywhere
+    const panel = document.getElementById('slidePanel');
+    const panelHeader = panel?.querySelector('.slide-panel-header');
+    let panelDrag = null;
+    if (panelHeader) {
+      panelHeader.addEventListener('pointerdown', (e) => {
+        if (window.innerWidth < 768 || e.target.closest('button')) return;
+        const rect = panel.getBoundingClientRect();
+        panelDrag = { dx: e.clientX - rect.left, dy: e.clientY - rect.top };
+        try { panelHeader.setPointerCapture(e.pointerId); } catch (err) {}
+      });
+      panelHeader.addEventListener('pointermove', (e) => {
+        if (!panelDrag) return;
+        panel.style.left = `${Math.min(Math.max(e.clientX - panelDrag.dx, 8), window.innerWidth - 120)}px`;
+        panel.style.top = `${Math.min(Math.max(e.clientY - panelDrag.dy, 8), window.innerHeight - 80)}px`;
+        panel.style.right = 'auto';
+        panel.style.bottom = 'auto';
+      });
+      panelHeader.addEventListener('pointerup', () => { panelDrag = null; });
+      panelHeader.addEventListener('pointercancel', () => { panelDrag = null; });
+    }
 
     // Auto-connect sync
     Sync.autoConnect();
@@ -3214,9 +3415,9 @@ const App = (() => {
     openNewProject, openProjectModal, openManageProjects, selectColor, selectIcon, saveProject,
     archiveProjectAction, unarchiveProjectAction, deleteProjectAction,
     openSyncConfig, connectSync, disconnectSync,
-    openQuickLog, openCalorieLog, logCaloriesFromModal, quickAddTask, logEmotion,
+    openQuickLog, setQuickLogTab, openCalorieLog, logCaloriesFromModal, quickAddTask, logEmotion,
     useShortcut, setQuickEmotion, setQuickEnergy, logCheckinFromModal, logWake, logSleep,
-    removeWakeSleep, deleteQuickLogRow,
+    removeWakeSleep, deleteQuickLogRow, toggleFormProject, setHotkey,
     openManageShortcuts, addShortcut, deleteShortcut,
     openManageTags, cycleTagColor, renameTag, setTagProject, deleteTagPrompt, createTagFromManager,
     openSearch, runSearch, searchGo,

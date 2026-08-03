@@ -2314,3 +2314,127 @@ button, .btn, .pill, .tab-item, .filter-chip, .stat-label, .stat-value,
   background: var(--accent-tint);
   color: var(--accent-text);
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   ROUND 5 — floating timer window, header indicator, dark picker
+   icons, project chips, nested project rows
+   ═══════════════════════════════════════════════════════════════ */
+
+/* [4] native date/time picker indicator is black — invert in dark mode */
+[data-theme="dark"] input[type="time"]::-webkit-calendar-picker-indicator,
+[data-theme="dark"] input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(0.75);
+}
+input[type="time"]::-webkit-calendar-picker-indicator,
+input[type="date"]::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+}
+
+/* [5] timer becomes a floating window — the app stays usable behind it */
+.slide-panel {
+  top: auto;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100%;
+  max-width: none;
+  height: 80dvh;
+  border: 1px solid var(--border);
+  border-bottom: none;
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  transform: translateY(105%);
+}
+.slide-panel.active { transform: translateY(0); }
+@media (min-width: 768px) {
+  .slide-panel {
+    left: auto;
+    right: var(--space-6);
+    bottom: var(--space-6);
+    width: 400px;
+    height: min(72dvh, 640px);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    transform: translateY(calc(100% + var(--space-8)));
+  }
+  .slide-panel.active { transform: translateY(0); }
+  .slide-panel-header {
+    cursor: grab;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: none;
+  }
+  .slide-panel-header:active { cursor: grabbing; }
+}
+
+/* [5] header-nav running-timers indicator */
+.timer-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 3px var(--space-2);
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  background: var(--accent-tint);
+  color: var(--accent-text);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.timer-indicator:hover { background: var(--accent-tint-strong); }
+.timer-indicator .ti-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-faint);
+  flex-shrink: 0;
+}
+.timer-indicator .ti-dot.running {
+  background: var(--accent);
+  animation: pulse 1.2s infinite;
+}
+
+/* [3] color-coded multi-select project chips in the entry form */
+.project-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.project-choice.active {
+  background: color-mix(in srgb, var(--chip-color, var(--accent)) 15%, transparent);
+  border-color: var(--chip-color, var(--accent));
+  color: var(--text-primary);
+}
+
+/* [2] sub-projects listed inside their parent's card */
+.subproj-list {
+  margin-top: var(--space-2);
+  border-top: 1px solid var(--border-subtle);
+  padding-top: var(--space-1);
+  display: flex;
+  flex-direction: column;
+}
+.subproj-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-1);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: background var(--transition);
+}
+.subproj-row:hover { background: var(--surface-hover); }
+.subproj-row .icon-btn { width: 22px; height: 22px; opacity: 0; }
+.subproj-row:hover .icon-btn { opacity: 1; }
+@media (hover: none) { .subproj-row .icon-btn { opacity: 1; } }
+
+/* Hotkey inputs */
+.hotkey-input {
+  width: 52px !important;
+  text-align: center;
+  font-family: var(--font-mono);
+  text-transform: lowercase;
+}

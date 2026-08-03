@@ -26,6 +26,7 @@
     </a>
     <div class="menubar-spacer"></div>
     <div class="menubar-actions">
+      <button class="timer-indicator" id="timerIndicator" style="display:none;" onclick="Timers.openPanel()" aria-label="Timers running — open timer window" title="Timers running — click to open"></button>
       <button class="icon-btn" id="searchBtn" aria-label="Search"><i data-lucide="search" style="width:18px;height:18px"></i></button>
       <button class="icon-btn" id="themeToggle" aria-label="Toggle theme"></button>
       <div id="syncStatus" class="sync-dot offline" style="display:none;" title="Sync: disconnected" aria-label="Sync status"></div>
@@ -96,22 +97,17 @@
     </div>
   </div>
 
-  <!-- ═══ SLIDE PANEL (for timers, quick logs) ═══ -->
-  <div class="modal-overlay" id="panelOverlay" style="background: rgba(0,0,0,0.3);">
-    <div class="slide-panel" id="slidePanel">
-      <div class="slide-panel-header">
-        <h2 class="modal-title" id="panelTitle">Timer</h2>
-        <div style="display:flex;gap:4px;">
-          <button class="icon-btn" id="panelMinimize" aria-label="Minimize" title="Minimize — timers keep running"><i data-lucide="minus" style="width:18px;height:18px"></i></button>
-          <button class="icon-btn" id="panelClose" aria-label="Close"><i data-lucide="x" style="width:18px;height:18px"></i></button>
-        </div>
+  <!-- ═══ FLOATING TIMER WINDOW (no overlay — app stays usable) ═══ -->
+  <div class="slide-panel" id="slidePanel">
+    <div class="slide-panel-header">
+      <h2 class="modal-title" id="panelTitle">Timer</h2>
+      <div style="display:flex;gap:4px;">
+        <button class="icon-btn" id="panelMinimize" aria-label="Minimize" title="Minimize — timers keep running"><i data-lucide="minus" style="width:18px;height:18px"></i></button>
+        <button class="icon-btn" id="panelClose" aria-label="Close"><i data-lucide="x" style="width:18px;height:18px"></i></button>
       </div>
-      <div class="slide-panel-body" id="panelBody"></div>
     </div>
+    <div class="slide-panel-body" id="panelBody"></div>
   </div>
-
-  <!-- ═══ FLOATING TIMER MINI WIDGET ═══ -->
-  <button class="timer-mini" id="timerMini" style="display:none;" onclick="Timers.openPanel()" aria-label="Open timer"></button>
 
   <!-- ═══ TOAST ═══ -->
   <div class="toast" id="toast"></div>
