@@ -1109,6 +1109,7 @@ const App = (() => {
           <p class="page-subtitle">${projects.length} projects · ${State.getEntries().length} total entries</p>
         </div>
         <div style="display:flex;gap:var(--space-2);">
+          <button class="btn btn-secondary" onclick="App.exportForLLM()" title="Copy the currently filtered entries as LLM-friendly JSON">${icon('clipboard-copy', 14)}Copy for LLM</button>
           <button class="btn btn-secondary" onclick="App.openManageProjects()">${icon('settings-2', 14)}Manage</button>
           <button class="btn btn-primary" onclick="App.openProjectModal()">${icon('plus', 14)}New Project</button>
         </div>
@@ -1291,6 +1292,114 @@ const App = (() => {
   function setTagFilter(name) {
     tagFilter = tagFilter === name ? null : name;
     render();
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // LLM EXPORT — the currently filtered entries as clean JSON on
+  // the clipboard: filter for #bugs, copy, paste into a chat.
+  // ═══════════════════════════════════════════════════════════
+  function currentProjectViewEntries() {
+    // Mirrors exactly what the Projects view shows under current filters
+    let entries;
+    if (projectFilter === 'none') {
+      entries = State.getEntries().filter(e => State.entryProjectIds(e).length === 0);
+    } else if (projectFilter) {
+      entries = State.getEntries({ projectId: projectFilter });
+    } else {
+      entries = State.getEntries();
+    }
+    return entries.filter(e => !tagFilter || (e.tags || []).includes(tagFilter));
+  }
+
+  function buildLLMExport(entries) {
+    const projName = (id) => State.getProject(id)?.name;
+    const items = entries.map(e => {
+      // Sparse objects: omit empty fields — fewer tokens, less noise
+      const o = { title: e.title, type: e.type, status: e.archived ? 'archived' : e.completed ? 'completed' : 'open' };
+      const projs = State.entryProjectIds(e).map(projName).filter(Boolean);
+      if (projs.length) o.projects = projs;
+      if (e.tags?.length) o.tags = e.tags;
+      if (e.description) o.description = e.description;
+      if (e.type === 'task') {
+        if (e.priority) o.priority = e.priority;
+        if (e.effort) o.effort = e.effort;
+      }
+      if (e.dueDate) o.due_date = e.dueDate;
+      if (e.remindTime) o.remind_time = e.remindTime;
+      if (e.estimateMinutes) o.estimate_minutes = e.estimateMinutes;
+      const actual = State.actualMinutesFor(e);
+      if (actual) o.actual_minutes = actual;
+      if (e.type === 'goal' && e.targetValue) {
+        o.progress = `${e.currentValue || 0}/${e.targetValue}${e.unit ? ' ' + e.unit : ''}`;
+      }
+      if (e.type === 'habit') {
+        const s = State.calculateStreak(e.id);
+        if (s.current) o.streak_days = s.current;
+        const dow = e.recurrence?.daysOfWeek;
+        if (dow?.length) o.scheduled_days = dow.map(d => ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d]);
+      }
+      if (e.createdAt) o.created = e.createdAt.slice(0, 10);
+      if (e.completedAt) o.completed_on = e.completedAt.slice(0, 10);
+      // Journal posts carry the working context an LLM actually needs
+      const posts = State.getLogs({ type: 'post', entryId: e.id })
+        .sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''))
+        .slice(-10);
+      if (posts.length) {
+        o.journal = posts.map(p => ({ at: (p.createdAt || '').slice(0, 16).replace('T', ' '), text: p.notes }));
+      }
+      return o;
+    });
+
+    const filterDesc = {};
+    if (projectFilter && projectFilter !== 'none') {
+      const proj = State.getProject(projectFilter);
+      filterDesc.project = proj ? `${proj.name}${State.getProjectSubtreeIds(proj.id).length > 1 ? ' (incl. sub-projects)' : ''}` : projectFilter;
+    } else if (projectFilter === 'none') {
+      filterDesc.project = 'unassigned only';
+    }
+    if (tagFilter) filterDesc.tag = `#${tagFilter}`;
+
+    return {
+      source: 'Cade.project task tracker export',
+      exported_at: new Date().toISOString().slice(0, 16).replace('T', ' '),
+      filters: Object.keys(filterDesc).length ? filterDesc : 'none — everything',
+      entry_count: items.length,
+      entries: items,
+    };
+  }
+
+  async function exportForLLM() {
+    const entries = currentProjectViewEntries();
+    if (entries.length === 0) { toast('Nothing matches the current filters'); return; }
+    const json = JSON.stringify(buildLLMExport(entries), null, 2);
+    let copied = false;
+    try {
+      await navigator.clipboard.writeText(json);
+      copied = true;
+    } catch (e) {
+      // Clipboard API can be denied — fall back to execCommand
+      try {
+        const ta = document.createElement('textarea');
+        ta.value = json;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        copied = document.execCommand('copy');
+        ta.remove();
+      } catch (e2) { copied = false; }
+    }
+    if (copied) {
+      const scope = [tagFilter ? `#${tagFilter}` : null, projectFilter && projectFilter !== 'none' ? State.getProject(projectFilter)?.name : null]
+        .filter(Boolean).join(' in ') || 'all entries';
+      toast(`Copied ${entries.length} entr${entries.length === 1 ? 'y' : 'ies'} as JSON — ${scope}`);
+    } else {
+      // Last resort: show the JSON for manual copy
+      showModal('LLM Export', `
+        <p class="text-xs text-muted" style="margin-bottom:var(--space-2);">Clipboard access was blocked — select all and copy manually:</p>
+        <textarea class="form-textarea" style="min-height:300px;font-family:var(--font-mono);font-size:var(--text-xs);" onclick="this.select()">${json.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</textarea>
+      `, [`<button class="btn btn-secondary" onclick="App.closeModal()">Done</button>`]);
+    }
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -3765,7 +3874,7 @@ const App = (() => {
     toggleEntry, deleteEntry, archiveEntry, unarchiveEntry, startTimerForTask,
     selectEntryCard, setWorkingProject, toggleSidebar,
     viewArchive, deleteHistoryLog, editMoodLog, setEditLogEmotion, setEditLogEnergy, saveMoodLog,
-    setProjectFilter, setTagFilter, selectHabit, toggleHabitCell, cycleHabitCell,
+    setProjectFilter, setTagFilter, selectHabit, toggleHabitCell, cycleHabitCell, exportForLLM,
     onRecurrenceChange, toggleWeekday,
     setInsightsProject, setInsightsEntry, setFocusProject,
     qDragStart, qDragEnd, qDragOver, qDragLeave, qDrop, qItemClick,
