@@ -2225,3 +2225,92 @@ button, .btn, .pill, .tab-item, .filter-chip, .stat-label, .stat-value,
   body.sidebar-collapsed .main-content { padding-left: 84px; }
   body.sidebar-collapsed .sidebar-toggle svg { transform: rotate(180deg); }
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   ROUND 4 — theme now-line, dimmed FAB, inline log icons,
+   habit skip/off-day states, weekday picker
+   ═══════════════════════════════════════════════════════════════ */
+
+/* [5] "right now" line matches the teal theme */
+.planner-now { border-top-color: var(--accent); }
+.planner-now::before { background: var(--accent); }
+
+/* [6] FAB: smaller + dimmed until hovered on desktop */
+@media (min-width: 768px) {
+  .fab {
+    width: 40px;
+    height: 40px;
+    opacity: 0.55;
+  }
+  .fab svg { width: 18px; height: 18px; }
+  .fab:hover { opacity: 1; transform: scale(1.08); }
+}
+
+/* [9] inline icons inside log/done rows must not wrap to their own line
+   (global svg{display:block} strikes again) */
+.log-row svg, .done-row svg, .lr-desc svg {
+  display: inline-block;
+  vertical-align: -3px;
+  width: 13px;
+  height: 13px;
+}
+.log-row { align-items: center; }
+.log-row .lr-desc { flex: 1; min-width: 0; }
+.log-row .lr-actions {
+  display: inline-flex;
+  gap: 2px;
+  flex-shrink: 0;
+  margin-left: auto;
+  opacity: 0;
+  transition: opacity var(--transition);
+}
+.log-row:hover .lr-actions { opacity: 1; }
+@media (hover: none) { .log-row .lr-actions { opacity: 1; } }
+.log-row .lr-actions .icon-btn { width: 22px; height: 22px; }
+
+/* [15] habit day states: skipped = accepted miss, offday = not scheduled */
+.habit-cell.skipped {
+  background: transparent;
+  border: 1px dashed var(--accent);
+  position: relative;
+}
+.habit-cell.skipped::after {
+  content: '';
+  position: absolute;
+  inset: 3px;
+  border-radius: 1px;
+  background: repeating-linear-gradient(45deg, var(--accent-tint-strong) 0 2px, transparent 2px 4px);
+}
+.habit-cell.offday {
+  opacity: 0.3;
+}
+.streak-day.skipped {
+  border: 1px dashed var(--accent);
+  color: var(--accent-text);
+  background: var(--accent-tint);
+}
+.streak-day.offday { opacity: 0.35; }
+
+/* [16] weekday picker */
+.weekday-selector {
+  display: flex;
+  gap: var(--space-1);
+}
+.weekday-btn {
+  flex: 1;
+  padding: var(--space-2) 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  transition: all var(--transition);
+  text-align: center;
+}
+.weekday-btn:hover { border-color: var(--text-faint); }
+.weekday-btn.selected {
+  border-color: var(--accent);
+  background: var(--accent-tint);
+  color: var(--accent-text);
+}

@@ -221,7 +221,7 @@ const App = (() => {
       <div class="page-header">
         <div>
           <h1 class="page-title">${new Date().toLocaleDateString('en', { weekday: 'long', month: 'long', day: 'numeric' })}</h1>
-          <p class="page-subtitle">${openToday.length + overdueTasks.length} tasks today · ${habits.filter(h => !State.isHabitDoneToday(h.id)).length} habits pending</p>
+          <p class="page-subtitle">${openToday.length + overdueTasks.length} tasks today · ${habits.filter(h => State.isHabitScheduledOn(h.id, today) && !State.habitStatusOn(h.id, today)).length} habits pending</p>
         </div>
         <div style="display:flex;gap:var(--space-2);">
           <button class="btn btn-secondary" onclick="Timers.openPanel()">${icon('timer', 16)}Timer</button>
@@ -238,7 +238,7 @@ const App = (() => {
       </div>
       <div class="card stat-card">
         <span class="stat-label">Habits Today</span>
-        <span class="stat-value">${habits.filter(h => State.isHabitDoneToday(h.id)).length} / ${habits.length}</span>
+        <span class="stat-value">${habits.filter(h => State.isHabitDoneToday(h.id)).length} / ${habits.filter(h => State.isHabitScheduledOn(h.id, today)).length}</span>
       </div>
       <div class="card stat-card">
         <span class="stat-label">Focus Time</span>
@@ -397,7 +397,7 @@ const App = (() => {
     const { hs, he } = gridHours(blocks);
     const totalH = (he - hs) * HOUR_PX;
 
-    let html = `<div class="planner-grid" data-hs="${hs}" style="height:${totalH}px">`;
+    let html = `<div class="planner-grid" data-hs="${hs}" data-date="${dateStr}" style="height:${totalH}px">`;
     for (let hour = hs; hour < he; hour++) {
       html += `<div class="planner-hour" onclick="App.plannerTap(event,'${dateStr}',${hour})">
         <div class="planner-hour-label">${String(hour).padStart(2, '0')}:00</div>
@@ -451,16 +451,26 @@ const App = (() => {
     if (!block) return;
     const el = e.currentTarget;
     const grid = el.closest('.planner-grid');
+    // All visible day columns — in the 3-day view a horizontal drag can
+    // move the block to a different date.
+    const columns = [...document.querySelectorAll('.planner-grid')].map(g => ({
+      date: g.dataset.date,
+      rect: g.getBoundingClientRect(),
+    }));
     blockDrag = {
       id,
       el,
       mode: e.target.classList.contains('pb-resize') ? 'resize' : 'move',
       startY: e.clientY,
+      startX: e.clientX,
       s: timeToMin(block.start),
       en: timeToMin(block.end),
       hs: parseInt(grid?.dataset.hs || HOUR_START, 10),
+      date: block.date,
       newS: timeToMin(block.start),
       newE: timeToMin(block.end),
+      newDate: block.date,
+      columns,
       moved: false,
     };
     try { el.setPointerCapture(e.pointerId); } catch (err) {}
@@ -472,7 +482,8 @@ const App = (() => {
   function blockPointerMove(e) {
     if (!blockDrag) return;
     const dy = e.clientY - blockDrag.startY;
-    if (Math.abs(dy) > 4) blockDrag.moved = true;
+    const dx = e.clientX - blockDrag.startX;
+    if (Math.abs(dy) > 4 || Math.abs(dx) > 8) blockDrag.moved = true;
     if (!blockDrag.moved) return;
     const deltaMin = Math.round(dy / HOUR_PX * 60 / 15) * 15;
     const dur = blockDrag.en - blockDrag.s;
@@ -480,6 +491,19 @@ const App = (() => {
       blockDrag.newS = Math.min(Math.max(blockDrag.s + deltaMin, 0), 24 * 60 - dur);
       blockDrag.newE = blockDrag.newS + dur;
       blockDrag.el.style.top = `${(blockDrag.newS - blockDrag.hs * 60) / 60 * HOUR_PX}px`;
+      // Horizontal: which day column is the pointer over? (3-day view)
+      if (blockDrag.columns.length > 1) {
+        const col = blockDrag.columns.find(c => e.clientX >= c.rect.left && e.clientX <= c.rect.right);
+        if (col && col.date !== blockDrag.newDate) {
+          blockDrag.newDate = col.date;
+        }
+        // Preview: shift the block toward the hovered column
+        const home = blockDrag.columns.find(c => c.date === blockDrag.date);
+        const target = blockDrag.columns.find(c => c.date === blockDrag.newDate);
+        if (home && target) {
+          blockDrag.el.style.transform = `translateX(${target.rect.left - home.rect.left}px)`;
+        }
+      }
     } else {
       blockDrag.newE = Math.min(Math.max(blockDrag.en + deltaMin, blockDrag.s + 15), 24 * 60);
       blockDrag.el.style.height = `${Math.max((blockDrag.newE - blockDrag.s) / 60 * HOUR_PX - 2, 16)}px`;
@@ -497,6 +521,7 @@ const App = (() => {
     d.el.removeEventListener('pointercancel', blockPointerUp);
     if (d.moved) {
       State.updatePlannerBlock(d.id, {
+        date: d.newDate,
         start: minToTime(d.mode === 'move' ? d.newS : d.s),
         end: minToTime(d.newE),
       });
@@ -802,6 +827,13 @@ const App = (() => {
     if (entry.type === 'habit' && streakInfo) {
       metaHtml += `<span class="streak-display"><i data-lucide="flame"></i>${streakInfo.current}</span>`;
     }
+    if (entry.type === 'habit') {
+      if (!State.isHabitScheduledOn(entry.id, State.todayStr())) {
+        metaHtml += `<span class="pill">off today</span>`;
+      } else if (State.habitStatusOn(entry.id, State.todayStr()) === 'skipped') {
+        metaHtml += `<span class="pill pill-yellow">skipped</span>`;
+      }
+    }
     if (entry.type === 'goal' && entry.targetValue) {
       const pct = Math.round((entry.currentValue || 0) / entry.targetValue * 100);
       metaHtml += `<span class="pill pill-accent">${pct}%</span>`;
@@ -836,42 +868,63 @@ const App = (() => {
   // PROJECTS VIEW
   // ═══════════════════════════════════════════════════════════
   let projectFilter = null;
+  let tagFilter = null;
 
   function renderProjects() {
     const projects = State.getProjects();
+    const allTags = State.getAllTags();
     let html = `
       <div class="page-header">
         <div>
           <h1 class="page-title">Projects</h1>
           <p class="page-subtitle">${projects.length} projects · ${State.getEntries().length} total entries</p>
         </div>
-        <button class="btn btn-primary" onclick="App.openNewProject()">${icon('plus', 14)}New Project</button>
+        <div style="display:flex;gap:var(--space-2);">
+          <button class="btn btn-secondary" onclick="App.openManageProjects()">${icon('settings-2', 14)}Manage</button>
+          <button class="btn btn-primary" onclick="App.openProjectModal()">${icon('plus', 14)}New Project</button>
+        </div>
       </div>
     `;
 
-    // Filter chips
+    // Project filter chips (nested projects indented)
     html += `<div class="filter-chips">
       <button class="filter-chip ${!projectFilter ? 'active' : ''}" onclick="App.setProjectFilter(null)">All</button>
     `;
     projects.forEach(p => {
-      html += `<button class="filter-chip ${projectFilter === p.id ? 'active' : ''}" onclick="App.setProjectFilter('${p.id}')">
+      html += `<button class="filter-chip ${projectFilter === p.id ? 'active' : ''}" onclick="App.setProjectFilter('${p.id}')" ${p.depth ? `style="margin-left:${p.depth * 10}px"` : ''}>
         <span class="proj-dot" style="background:${p.color}"></span>${p.name}
       </button>`;
     });
     html += `<button class="filter-chip ${projectFilter === 'none' ? 'active' : ''}" onclick="App.setProjectFilter('none')">No Project</button>`;
     html += `</div>`;
 
+    // Tag filter chips
+    if (allTags.length > 0) {
+      html += `<div class="filter-chips" style="margin-top:calc(var(--space-2) * -1);">
+        <span class="stat-label" style="align-self:center;">${icon('tag', 11)}</span>
+        <button class="filter-chip ${!tagFilter ? 'active' : ''}" onclick="App.setTagFilter(null)">Any tag</button>
+        ${allTags.map(t => `
+          <button class="filter-chip pill-${t.color} ${tagFilter === t.name ? 'active' : ''}" onclick="App.setTagFilter('${t.name}')">#${t.name}</button>
+        `).join('')}
+      </div>`;
+    }
+
+    const tagMatch = (e) => !tagFilter || (e.tags || []).includes(tagFilter);
+
     if (projectFilter) {
       // Project-specific task view
       const proj = projectFilter === 'none' ? null : State.getProject(projectFilter);
       const entries = State.getEntries().filter(e =>
         projectFilter === 'none' ? !e.projectId : e.projectId === projectFilter
-      );
+      ).filter(tagMatch);
 
       html += `<div class="section">
         <div class="section-header">
-          <span class="section-title">${proj ? proj.name : 'Unassigned'}</span>
-          <span class="stat-label">${entries.length} items</span>
+          <span class="section-title">${proj ? `${icon(proj.icon, 13)} ${proj.name}` : 'Unassigned'}${tagFilter ? ` · #${tagFilter}` : ''}</span>
+          <span style="display:inline-flex;align-items:center;gap:var(--space-2);">
+            <span class="stat-label">${entries.length} items</span>
+            ${proj ? `<button class="btn btn-ghost btn-sm" onclick="App.openProjectModal('${proj.id}')">${icon('pencil', 12)}Edit</button>` : ''}
+          </span>
         </div>`;
 
       // Group by type
@@ -922,26 +975,41 @@ const App = (() => {
         const completed = entries.filter(e => e.completed).length;
         const pending = entries.length - completed;
         html += `
-          <div class="card card-interactive project-card" onclick="App.setProjectFilter('${p.id}')" style="cursor:pointer;">
+          <div class="card card-interactive project-card" onclick="App.setProjectFilter('${p.id}')" style="cursor:pointer;${p.depth ? `margin-left:${p.depth * 12}px;` : ''}">
             <div class="project-header">
               <div class="project-icon" style="background:${p.color}20;color:${p.color}">
                 <i data-lucide="${p.icon}"></i>
               </div>
               <div style="flex:1">
-                <div class="project-name">${p.name}</div>
+                <div class="project-name">${p.depth ? '└ ' : ''}${p.name}</div>
                 <div class="project-stats">
                   <span class="project-stat">${pending} pending</span>
                   <span class="project-stat">${completed} done</span>
                 </div>
               </div>
+              <button class="icon-btn" onclick="event.stopPropagation();App.openProjectModal('${p.id}')" aria-label="Edit project">${icon('pencil', 14)}</button>
             </div>
             <div class="progress-bar">
-              <div class="progress-fill" style="width:${entries.length > 0 ? completed / entries.length * 100 : 0}%"></div>
+              <div class="progress-fill" style="width:${entries.length > 0 ? completed / entries.length * 100 : 0}%;background:${p.color};"></div>
             </div>
           </div>
         `;
       });
       html += `</div>`;
+
+      // Tag-filtered flat list across all projects
+      if (tagFilter) {
+        const tagged = State.getEntries().filter(tagMatch);
+        html += `<div class="section">
+          <div class="section-header"><span class="section-title">#${tagFilter} — everywhere</span>
+            <span class="stat-label">${tagged.length} items</span>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:var(--space-2);">
+            ${tagged.length === 0 ? '<div class="empty-state"><p class="empty-state-text">Nothing carries this tag yet.</p></div>' :
+              tagged.map(e => renderEntryCard(e)).join('')}
+          </div>
+        </div>`;
+      }
     }
 
     return html;
@@ -949,6 +1017,11 @@ const App = (() => {
 
   function setProjectFilter(id) {
     projectFilter = id;
+    render();
+  }
+
+  function setTagFilter(name) {
+    tagFilter = tagFilter === name ? null : name;
     render();
   }
 
@@ -973,23 +1046,25 @@ const App = (() => {
       return html + `<div class="empty-state"><i data-lucide="repeat"></i><p class="empty-state-text">No habits yet. Create your first one.</p></div>`;
     }
 
-    // Habit grid overview — cells are tappable to toggle past days
+    // Habit grid overview — cells cycle: empty → done → skipped → empty.
+    // Skipped = accepted miss (bridges the streak). Off-days are dimmed.
     html += `<div class="section">
       <div class="section-header"><span class="section-title">Completion Grid — Last 14 Days</span>
-        <span class="text-xs text-faint">tap a cell to toggle that day</span>
+        <span class="text-xs text-faint">tap to cycle: done → skipped → empty</span>
       </div>
       <div class="card">
     `;
 
     habits.forEach(h => {
-      const completions = new Set(State.getHabitCompletions(h.id));
       const today = new Date();
       const proj = h.projectId ? State.getProject(h.projectId) : null;
+      const dow = h.recurrence?.daysOfWeek;
 
       html += `<div style="display:flex;align-items:center;gap:var(--space-3);margin-bottom:var(--space-3);">
         <div style="width:120px;flex-shrink:0;cursor:pointer;" onclick="App.selectHabit('${h.id}')">
           <div class="text-sm" style="font-weight:500;color:${selectedHabit === h.id ? 'var(--accent-text)' : 'inherit'};">${h.title}</div>
           ${proj ? `<div class="text-xs" style="color:${proj.color}">${proj.name}</div>` : ''}
+          ${dow?.length ? `<div class="text-xs text-faint">${dow.map(d => 'SMTWTFS'[d]).join('·')}</div>` : ''}
         </div>
         <div class="habit-grid">`;
 
@@ -997,11 +1072,13 @@ const App = (() => {
         const d = new Date(today);
         d.setDate(d.getDate() - i);
         const dateStr = State.dateStr(d);
-        const isCompleted = completions.has(dateStr);
+        const status = State.habitStatusOn(h.id, dateStr);
+        const offday = !State.isHabitScheduledOn(h.id, dateStr);
         const isTodayCell = i === 0;
-        const cellColor = isCompleted && proj?.color ? `style="background:${proj.color};border-color:${proj.color};"` : '';
-        html += `<div class="habit-cell ${isCompleted ? 'completed' : ''} ${isTodayCell ? 'today' : ''}" ${cellColor}
-          title="${dateStr} — tap to toggle" onclick="App.toggleHabitCell('${h.id}','${dateStr}')"></div>`;
+        const cellColor = status === 'done' && proj?.color ? `style="background:${proj.color};border-color:${proj.color};"` : '';
+        const hint = status === 'done' ? 'done' : status === 'skipped' ? 'skipped' : offday ? 'not scheduled' : 'missed';
+        html += `<div class="habit-cell ${status === 'done' ? 'completed' : ''} ${status === 'skipped' ? 'skipped' : ''} ${offday ? 'offday' : ''} ${isTodayCell ? 'today' : ''}" ${cellColor}
+          title="${dateStr} — ${hint} · tap to cycle" onclick="App.cycleHabitCell('${h.id}','${dateStr}')"></div>`;
       }
 
       const s = State.calculateStreak(h.id);
@@ -1099,6 +1176,11 @@ const App = (() => {
     render();
   }
 
+  function cycleHabitCell(habitId, dateStr) {
+    State.cycleHabitOnDate(habitId, dateStr);
+    render();
+  }
+
   // ═══════════════════════════════════════════════════════════
   // INSIGHTS VIEW
   // ═══════════════════════════════════════════════════════════
@@ -1175,15 +1257,27 @@ const App = (() => {
       </div>
     </div>`;
 
-    // Sleep chart
-    html += `<div class="section">
-      <div class="card">
-        <div class="section-header" style="margin-bottom:var(--space-3)"><span class="section-title">Wake / Sleep — 14 Days</span>
-          <span class="text-xs text-faint">log times via Quick Log or the Health tab</span>
+    // Habit ↔ mood correlation
+    const correlations = habitMoodCorrelations();
+    if (correlations.length > 0) {
+      html += `<div class="section">
+        <div class="section-header"><span class="section-title">Habits ↔ Mood</span>
+          <span class="text-xs text-faint">avg mood on days done vs not (last 60 days)</span>
         </div>
-        <div class="chart-container"><canvas id="sleepChart"></canvas></div>
-      </div>
-    </div>`;
+        <div class="card">
+          ${correlations.map(c => `
+            <div class="done-row">
+              <span class="proj-dot" style="background:${c.color}"></span>
+              <span class="truncate" style="flex:1;">${c.title}</span>
+              <span class="font-mono text-xs" style="color:${c.delta >= 0 ? 'var(--success)' : 'var(--error)'};">
+                ${c.delta >= 0 ? '+' : ''}${c.delta.toFixed(1)} mood
+              </span>
+              <span class="text-xs text-faint" style="flex-shrink:0;">${c.doneDays}d done / ${c.notDays}d not</span>
+            </div>`).join('')}
+          <p class="text-xs text-faint" style="margin-top:var(--space-2);">Mood scale: Bad=1 … Great=5, averaged per day from your day mood + check-ins. Correlation ≠ causation, but patterns are worth noticing.</p>
+        </div>
+      </div>`;
+    }
 
     // Habit radar + Effort distribution
     html += `<div class="grid-2 section">
@@ -1381,6 +1475,41 @@ const App = (() => {
     toggleEntry(id);
   }
 
+  // Per-habit mood delta: average day-mood on completed vs non-completed
+  // days over the last 60 days (only days that have mood data at all).
+  function habitMoodCorrelations() {
+    const emotionMap = { great: 5, good: 4, okay: 3, low: 2, bad: 1 };
+    const moodByDate = {};
+    State.getLogs().forEach(l => {
+      if ((l.type === 'emotion' || l.type === 'checkin') && l.emotion) {
+        (moodByDate[l.date] = moodByDate[l.date] || []).push(emotionMap[l.emotion] || 3);
+      }
+    });
+    const cutoff = offsetDateStr(-60);
+    const moodDates = Object.keys(moodByDate).filter(d => d >= cutoff);
+    if (moodDates.length < 6) return [];
+    const avg = (arr) => arr.reduce((a, b) => a + b, 0) / arr.length;
+
+    const out = [];
+    State.getEntries({ type: 'habit' }).forEach(h => {
+      const done = new Set(State.getHabitCompletions(h.id));
+      const doneMoods = [], notMoods = [];
+      moodDates.forEach(d => {
+        (done.has(d) ? doneMoods : notMoods).push(avg(moodByDate[d]));
+      });
+      if (doneMoods.length < 3 || notMoods.length < 3) return; // too little signal
+      const proj = h.projectId ? State.getProject(h.projectId) : null;
+      out.push({
+        title: h.title,
+        color: proj?.color || 'var(--accent)',
+        delta: avg(doneMoods) - avg(notMoods),
+        doneDays: doneMoods.length,
+        notDays: notMoods.length,
+      });
+    });
+    return out.sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta)).slice(0, 5);
+  }
+
   function renderInsightCharts() {
     const f = insightsFilterObj();
     const heatmap = document.getElementById('heatmapContainer');
@@ -1391,9 +1520,6 @@ const App = (() => {
 
     const emotionChart = document.getElementById('emotionTrendChart');
     if (emotionChart) Charts.renderMoodEnergy('emotionTrendChart', 14);
-
-    const sleepChart = document.getElementById('sleepChart');
-    if (sleepChart) Charts.renderSleepChart('sleepChart', 14);
 
     const radarChart = document.getElementById('habitRadarChart');
     if (radarChart) Charts.renderHabitRadar('habitRadarChart', f);
@@ -1454,20 +1580,21 @@ const App = (() => {
       <div class="card stat-card"><span class="stat-label">Fat</span><span class="stat-value">${totalF}g</span></div>
     </div>`;
 
-    // Wake / Sleep logging (also available in Quick Log)
-    const wakeLog = State.getLogs({ type: 'wake', date: today })[0];
-    const sleepLog = State.getLogs({ type: 'sleep', date: today })[0];
+    // Wake / Sleep logging + trend chart (lives here, not Insights —
+    // sleep isn't task analytics)
     html += `<div class="section">
-      <div class="section-header"><span class="section-title">Wake / Sleep</span>
-        <span class="text-xs text-faint">${wakeLog ? `☀️ ${wakeLog.time}` : ''} ${sleepLog ? `· 🌙 ${sleepLog.time}` : ''}</span>
-      </div>
+      <div class="section-header"><span class="section-title">Wake / Sleep</span></div>
       <div class="card">
         <div class="wake-sleep-row">
-          <input type="time" class="form-input" id="wakeSleepTimeHealth" value="${nowTime()}">
-          <button class="btn btn-secondary" onclick="App.logWakeHealth()">☀️ Wake</button>
-          <button class="btn btn-secondary" onclick="App.logSleepHealth()">🌙 Sleep</button>
+          <input type="time" class="form-input" id="wakeSleepTimeHealth">
+          <button class="btn btn-secondary" onclick="App.logWake('wakeSleepTimeHealth')">☀️ Wake</button>
+          <button class="btn btn-secondary" onclick="App.logSleep('wakeSleepTimeHealth')">🌙 Sleep</button>
         </div>
-        <p class="text-xs text-faint" style="margin-top:var(--space-2);">One of each per day — logging again updates the time. Trends chart lives in Insights.</p>
+        <div id="wakeSleepCurrent" style="margin-top:var(--space-2);">${renderWakeSleepCurrent()}</div>
+        <p class="text-xs text-faint" style="margin-top:var(--space-1);">Enter a time first — nothing defaults to "now". One of each per day; logging again updates it.</p>
+        <div class="divider"></div>
+        <div class="section-header" style="margin-bottom:var(--space-3)"><span class="section-title">Wake / Sleep — 14 Days</span></div>
+        <div class="chart-container"><canvas id="sleepChart"></canvas></div>
       </div>
     </div>`;
 
@@ -1561,6 +1688,8 @@ const App = (() => {
   function renderHealthCharts() {
     const week = document.getElementById('calorieWeekChart');
     if (week) Charts.renderCalorieWeek('calorieWeekChart', 7);
+    const sleep = document.getElementById('sleepChart');
+    if (sleep) Charts.renderSleepChart('sleepChart', 14);
     const macro = document.getElementById('macroChart');
     if (macro) {
       const today = State.todayStr();
@@ -1597,17 +1726,6 @@ const App = (() => {
     render();
   }
 
-  function logWakeHealth() {
-    const time = document.getElementById('wakeSleepTimeHealth')?.value || nowTime();
-    State.logWakeSleep('wake', time);
-    render();
-  }
-
-  function logSleepHealth() {
-    const time = document.getElementById('wakeSleepTimeHealth')?.value || nowTime();
-    State.logWakeSleep('sleep', time);
-    render();
-  }
 
   // ═══════════════════════════════════════════════════════════
   // HISTORY VIEW — completions, day evolution, archive
@@ -1653,7 +1771,9 @@ const App = (() => {
     const timeSessions = State.getLogs({ type: 'time_session', date: dateStr })
       .map(l => {
         const en = l.entryId ? State.getEntry(l.entryId) : null;
-        return { time: logTimeOf(l), kind: 'time', title: `${Timers.formatTime(l.value || 0)} on ${en?.title || 'Unknown'}`, entry: en };
+        // entryTitle snapshot keeps history meaningful after deletion
+        const title = en?.title || l.entryTitle || 'deleted task';
+        return { time: logTimeOf(l), kind: 'time', title: `${Timers.formatTime(l.value || 0)} on ${title}`, entry: en, logId: l.id };
       });
     const doneRows = [...completedTasks, ...habitDone, ...timeSessions].sort((a, b) => a.time.localeCompare(b.time));
 
@@ -1674,6 +1794,7 @@ const App = (() => {
           <span class="proj-dot" style="background:${proj?.color || 'var(--text-faint)'}"></span>
           <span class="truncate" style="flex:1">${r.title}</span>
           ${r.kind === 'task' ? `<button class="icon-btn" onclick="App.toggleEntry('${r.entry.id}')" aria-label="Un-complete" title="Mark as not done">${icon('undo-2', 14)}</button>` : ''}
+          ${r.kind === 'time' ? `<button class="icon-btn" onclick="App.deleteHistoryLog('${r.logId}')" aria-label="Delete" title="Delete this time log">${icon('trash-2', 14)}</button>` : ''}
         </div>`;
       });
     }
@@ -1685,10 +1806,20 @@ const App = (() => {
       .sort((a, b) => logTimeOf(a).localeCompare(logTimeOf(b)));
     if (dayLogs.length > 0) {
       html += `<div class="section">
-        <div class="section-header"><span class="section-title">Logs</span></div>
+        <div class="section-header"><span class="section-title">Logs</span>
+          <span class="text-xs text-faint">mood entries are editable</span>
+        </div>
         <div class="card loglist">`;
       dayLogs.forEach(l => {
-        html += `<div class="log-row"><span class="lr-time">${logTimeOf(l)}</span><span>${describeLog(l)}</span></div>`;
+        const editable = l.type === 'emotion' || l.type === 'checkin';
+        html += `<div class="log-row">
+          <span class="lr-time">${logTimeOf(l)}</span>
+          <span class="lr-desc">${describeLog(l)}</span>
+          <span class="lr-actions">
+            ${editable ? `<button class="icon-btn" onclick="App.editMoodLog('${l.id}')" aria-label="Edit">${icon('pencil', 13)}</button>` : ''}
+            <button class="icon-btn" onclick="App.deleteHistoryLog('${l.id}')" aria-label="Delete">${icon('trash-2', 13)}</button>
+          </span>
+        </div>`;
       });
       html += `</div></div>`;
     }
@@ -1746,6 +1877,78 @@ const App = (() => {
   function viewArchive() {
     switchTab('history');
     setTimeout(() => document.getElementById('archiveSection')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
+  }
+
+  function deleteHistoryLog(id) {
+    State.deleteLog(id);
+    render();
+  }
+
+  // Edit a historic mood (day mood or check-in): emotion, energy, note
+  let editingLogId = null;
+  let editLogEmotion = null;
+  let editLogEnergy = null;
+
+  function editMoodLog(id) {
+    const log = State.getLogs().find(l => l.id === id);
+    if (!log) return;
+    editingLogId = id;
+    editLogEmotion = log.emotion || null;
+    editLogEnergy = log.energy || null;
+    const isCheckin = log.type === 'checkin';
+    showModal(isCheckin ? 'Edit Check-in' : 'Edit Day Mood', `
+      <div class="form-group">
+        <label class="form-label">Mood — ${log.date}</label>
+        <div class="emotion-selector" id="editEmotionSel">
+          ${['bad', 'low', 'okay', 'good', 'great'].map(e => `
+            <button class="emotion-btn ${editLogEmotion === e ? 'selected' : ''}" id="ee-${e}" onclick="App.setEditLogEmotion('${e}')">
+              ${icon(MOOD_ICONS[e], 22)}
+              <span class="emotion-label">${e}</span>
+            </button>`).join('')}
+        </div>
+      </div>
+      ${isCheckin ? `
+        <div class="form-group">
+          <label class="form-label">Energy</label>
+          <div class="energy-selector" id="editEnergySel">
+            ${[1, 2, 3, 4, 5].map(n => `<button class="energy-btn ${editLogEnergy != null && n <= editLogEnergy ? 'selected' : ''}" id="een-${n}" onclick="App.setEditLogEnergy(${n})" aria-label="Energy ${n}">⚡</button>`).join('')}
+          </div>
+        </div>` : ''}
+      <div class="form-group">
+        <label class="form-label">Note</label>
+        <input type="text" class="form-input" id="editLogNote" value="${log.notes || ''}" placeholder="Optional note">
+      </div>
+    `, [
+      `<button class="btn btn-danger" onclick="App.deleteHistoryLog('${id}');App.closeModal()">Delete</button>`,
+      `<div style="flex:1"></div>`,
+      `<button class="btn btn-secondary" onclick="App.closeModal()">Cancel</button>`,
+      `<button class="btn btn-primary" onclick="App.saveMoodLog()">Save</button>`,
+    ]);
+  }
+
+  function setEditLogEmotion(e) {
+    editLogEmotion = e;
+    document.querySelectorAll('#editEmotionSel .emotion-btn').forEach(b => b.classList.remove('selected'));
+    document.getElementById(`ee-${e}`)?.classList.add('selected');
+  }
+
+  function setEditLogEnergy(n) {
+    editLogEnergy = editLogEnergy === n ? null : n;
+    document.querySelectorAll('#editEnergySel .energy-btn').forEach((b, i) => {
+      b.classList.toggle('selected', editLogEnergy != null && i < editLogEnergy);
+    });
+  }
+
+  function saveMoodLog() {
+    if (!editingLogId) return;
+    State.updateLog(editingLogId, {
+      emotion: editLogEmotion,
+      energy: editLogEnergy,
+      notes: document.getElementById('editLogNote')?.value || '',
+    });
+    editingLogId = null;
+    closeModal();
+    render();
   }
 
   function renderHistoryCharts() {
@@ -1879,6 +2082,7 @@ const App = (() => {
     entryTypeDraft = type;
     currentTags = [];
     currentEffort = 'medium';
+    currentWeekdays = [];
     showModal('New Entry', renderEntryForm(type), [
       `<button class="btn btn-secondary" onclick="App.closeModal()">Cancel</button>`,
       `<button class="btn btn-primary" onclick="App.saveEntry()">Create</button>`,
@@ -1892,6 +2096,7 @@ const App = (() => {
     entryTypeDraft = entry.type;
     currentTags = [...(entry.tags || [])];
     currentEffort = entry.effort || 'medium';
+    currentWeekdays = [...(entry.recurrence?.daysOfWeek || [])];
     showModal('Edit Entry', renderEntryForm(entry.type, entry), [
       `<button class="btn btn-danger" onclick="App.deleteEntry('${id}')">Delete</button>`,
       `<div style="flex:1"></div>`,
@@ -1992,12 +2197,21 @@ const App = (() => {
       ${isHabit ? `
         <div class="form-group">
           <label class="form-label">Recurrence</label>
-          <select class="form-select" id="entryRecurrence">
+          <select class="form-select" id="entryRecurrence" onchange="App.onRecurrenceChange(this.value)">
             <option value="daily" ${entry.recurrence?.type === 'daily' ? 'selected' : ''}>Daily</option>
-            <option value="weekly" ${entry.recurrence?.type === 'weekly' ? 'selected' : ''}>Weekly</option>
+            <option value="weekly" ${entry.recurrence?.type === 'weekly' ? 'selected' : ''}>Specific days of the week</option>
             <option value="monthly" ${entry.recurrence?.type === 'monthly' ? 'selected' : ''}>Monthly</option>
             <option value="none" ${!entry.recurrence ? 'selected' : ''}>None</option>
           </select>
+        </div>
+        <div class="form-group" id="weekdayRow" style="display:${entry.recurrence?.type === 'weekly' ? 'block' : 'none'};">
+          <label class="form-label">On these days</label>
+          <div class="weekday-selector">
+            ${['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d, i) => `
+              <button class="weekday-btn ${currentWeekdays.includes(i) ? 'selected' : ''}" id="wd-${i}" onclick="App.toggleWeekday(${i})">${d}</button>
+            `).join('')}
+          </div>
+          <p class="text-xs text-faint" style="margin-top:var(--space-2);">Other days don't count against the streak — they show dimmed in the grid.</p>
         </div>
       ` : ''}
 
@@ -2020,6 +2234,19 @@ const App = (() => {
 
   let currentTags = [];
   let currentEffort = 'medium';
+  let currentWeekdays = [];
+
+  function onRecurrenceChange(value) {
+    const row = document.getElementById('weekdayRow');
+    if (row) row.style.display = value === 'weekly' ? 'block' : 'none';
+  }
+
+  function toggleWeekday(i) {
+    currentWeekdays = currentWeekdays.includes(i)
+      ? currentWeekdays.filter(d => d !== i)
+      : [...currentWeekdays, i].sort();
+    document.getElementById(`wd-${i}`)?.classList.toggle('selected', currentWeekdays.includes(i));
+  }
 
   function changeEntryType(type) {
     saveFormData();
@@ -2092,6 +2319,10 @@ const App = (() => {
     if (entryTypeDraft === 'habit') {
       const recType = document.getElementById('entryRecurrence')?.value;
       data.recurrence = recType && recType !== 'none' ? { type: recType, interval: 1 } : null;
+      if (data.recurrence && recType === 'weekly') {
+        // Empty selection means "any day" — same as daily for scheduling
+        data.recurrence.daysOfWeek = currentWeekdays.length > 0 ? [...currentWeekdays] : null;
+      }
     }
 
     if (editingEntryId) {
@@ -2109,34 +2340,62 @@ const App = (() => {
   }
 
   // ═══════════════════════════════════════════════════════════
-  // NEW PROJECT MODAL
+  // PROJECT MODAL — create AND manage (rename, color, icon,
+  // parent/nesting, archive, delete)
   // ═══════════════════════════════════════════════════════════
-  function openNewProject() {
-    showModal('New Project', `
+  let selectedColor = null;
+  let selectedIcon = null;
+  let editingProjectId = null;
+
+  function projectLabel(p) {
+    return `${'– '.repeat(p.depth || 0)}${p.name}`;
+  }
+
+  function openProjectModal(id = null) {
+    editingProjectId = id;
+    const proj = id ? State.getProject(id) : null;
+    // Reset selection state on EVERY open — stale values from a previous
+    // visit made the highlighted swatch and the saved color disagree.
+    selectedColor = proj?.color || State.PROJECT_COLORS[0];
+    selectedIcon = proj?.icon || State.PROJECT_ICONS[0];
+    const parentOptions = State.getProjects().filter(p =>
+      p.id !== id && !State.wouldCycleProject(id, p.id));
+
+    showModal(id ? 'Edit Project' : 'New Project', `
       <div class="form-group">
         <label class="form-label">Name</label>
-        <input type="text" class="form-input" id="projectName" placeholder="e.g. Work, Home, Health" autocomplete="off">
+        <input type="text" class="form-input" id="projectName" value="${proj?.name || ''}" placeholder="e.g. Work, Home, Health" autocomplete="off">
       </div>
       <div class="form-group">
         <label class="form-label">Color</label>
         <div class="color-grid" id="projectColorGrid">
-          ${State.PROJECT_COLORS.map((c, i) => `<div class="color-swatch ${i === 0 ? 'selected' : ''}" style="background:${c}" data-color="${c}" onclick="App.selectColor(this)"></div>`).join('')}
+          ${State.PROJECT_COLORS.map(c => `<div class="color-swatch ${c === selectedColor ? 'selected' : ''}" style="background:${c}" data-color="${c}" onclick="App.selectColor(this)"></div>`).join('')}
         </div>
       </div>
       <div class="form-group">
         <label class="form-label">Icon</label>
         <div class="icon-grid" id="projectIconGrid">
-          ${State.PROJECT_ICONS.map((ic, i) => `<div class="icon-option ${i === 0 ? 'selected' : ''}" data-icon="${ic}" onclick="App.selectIcon(this)"><i data-lucide="${ic}"></i></div>`).join('')}
+          ${State.PROJECT_ICONS.map(ic => `<div class="icon-option ${ic === selectedIcon ? 'selected' : ''}" data-icon="${ic}" onclick="App.selectIcon(this)"><i data-lucide="${ic}"></i></div>`).join('')}
         </div>
       </div>
+      <div class="form-group">
+        <label class="form-label">Nest under (parent project)</label>
+        <select class="form-select" id="projectParent">
+          <option value="">None — top level</option>
+          ${parentOptions.map(p => `<option value="${p.id}" ${proj?.parentId === p.id ? 'selected' : ''}>${projectLabel(p)}</option>`).join('')}
+        </select>
+      </div>
     `, [
+      id ? `<button class="btn btn-danger" onclick="App.deleteProjectAction('${id}')">Delete</button>
+            <button class="btn btn-secondary" onclick="App.archiveProjectAction('${id}')">${icon('archive', 14)}Archive</button>
+            <div style="flex:1"></div>` : '',
       `<button class="btn btn-secondary" onclick="App.closeModal()">Cancel</button>`,
-      `<button class="btn btn-primary" onclick="App.saveProject()">Create</button>`,
+      `<button class="btn btn-primary" onclick="App.saveProject()">${id ? 'Save' : 'Create'}</button>`,
     ]);
   }
 
-  let selectedColor = null;
-  let selectedIcon = null;
+  // Back-compat entry point
+  function openNewProject() { openProjectModal(null); }
 
   function selectColor(el) {
     document.querySelectorAll('#projectColorGrid .color-swatch').forEach(s => s.classList.remove('selected'));
@@ -2153,12 +2412,81 @@ const App = (() => {
   function saveProject() {
     const name = document.getElementById('projectName')?.value?.trim();
     if (!name) { toast('Name is required'); return; }
-    const color = selectedColor || State.PROJECT_COLORS[0];
-    const icon = selectedIcon || State.PROJECT_ICONS[0];
-    State.createProject({ name, color, icon });
-    toast('Project created');
+    // Duplicate names cause endless confusion in filters and selects
+    const dupe = State.getProjects({ includeArchived: true })
+      .some(p => p.name.toLowerCase() === name.toLowerCase() && p.id !== editingProjectId);
+    if (dupe) { toast('A project with this name already exists'); return; }
+    const parentId = document.getElementById('projectParent')?.value || null;
+    const payload = { name, color: selectedColor, icon: selectedIcon, parentId };
+    if (editingProjectId) {
+      State.updateProject(editingProjectId, payload);
+      toast('Project updated');
+    } else {
+      State.createProject(payload);
+      toast('Project created');
+    }
+    editingProjectId = null;
     closeModal();
     render();
+  }
+
+  function archiveProjectAction(id) {
+    State.archiveProject(id);
+    if (projectFilter === id) projectFilter = null;
+    toast('Project archived — restore from Settings');
+    closeModal();
+    render();
+  }
+
+  function unarchiveProjectAction(id) {
+    State.unarchiveProject(id);
+    render();
+    openManageProjects();
+  }
+
+  function deleteProjectAction(id) {
+    const count = State.getEntries({ includeArchived: true }).filter(e => e.projectId === id).length;
+    if (!confirm(`Delete this project?${count > 0 ? ` ${count} entr${count === 1 ? 'y' : 'ies'} will be unassigned (not deleted).` : ''}`)) return;
+    State.deleteProject(id);
+    if (projectFilter === id) projectFilter = null;
+    toast('Project deleted');
+    closeModal();
+    render();
+  }
+
+  // Settings-side list: archived projects live here for restore
+  function openManageProjects() {
+    const active = State.getProjects();
+    const archived = State.getProjects({ includeArchived: true }).filter(p => p.archived);
+    showModal('Manage Projects', `
+      <div style="display:flex;flex-direction:column;gap:var(--space-2);">
+        ${active.length === 0 ? '<p class="text-xs text-faint">No projects yet.</p>' : active.map(p => `
+          <div class="chain-link" style="justify-content:space-between;cursor:pointer;" onclick="App.openProjectModal('${p.id}')">
+            <span style="display:inline-flex;align-items:center;gap:var(--space-2);">
+              <span class="proj-dot" style="background:${p.color}"></span>${projectLabel(p)}
+            </span>
+            <span class="text-xs text-faint">edit ›</span>
+          </div>`).join('')}
+      </div>
+      ${archived.length > 0 ? `
+        <div class="divider"></div>
+        <label class="form-label">Archived</label>
+        <div style="display:flex;flex-direction:column;gap:var(--space-2);">
+          ${archived.map(p => `
+            <div class="chain-link" style="justify-content:space-between;opacity:0.7;">
+              <span style="display:inline-flex;align-items:center;gap:var(--space-2);">
+                <span class="proj-dot" style="background:${p.color}"></span>${p.name}
+              </span>
+              <span>
+                <button class="icon-btn" onclick="App.unarchiveProjectAction('${p.id}')" aria-label="Restore" title="Restore">${icon('archive-restore', 15)}</button>
+                <button class="icon-btn" onclick="App.deleteProjectAction('${p.id}')" aria-label="Delete" title="Delete">${icon('trash-2', 15)}</button>
+              </span>
+            </div>`).join('')}
+        </div>` : ''}
+    `, [
+      `<button class="btn btn-secondary" onclick="App.closeModal()">Done</button>`,
+      `<button class="btn btn-primary" onclick="App.openProjectModal()">${icon('plus', 14)}New Project</button>`,
+    ]);
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -2269,10 +2597,12 @@ const App = (() => {
       <div class="form-group">
         <label class="form-label">Wake / Sleep</label>
         <div class="wake-sleep-row">
-          <input type="time" class="form-input" id="wakeSleepTime" value="${nowTime()}">
-          <button class="btn btn-secondary" onclick="App.logWake()">☀️ Wake</button>
-          <button class="btn btn-secondary" onclick="App.logSleep()">🌙 Sleep</button>
+          <input type="time" class="form-input" id="wakeSleepTime">
+          <button class="btn btn-secondary" onclick="App.logWake('wakeSleepTime')">☀️ Wake</button>
+          <button class="btn btn-secondary" onclick="App.logSleep('wakeSleepTime')">🌙 Sleep</button>
         </div>
+        <div id="wakeSleepCurrent" style="margin-top:var(--space-2);">${renderWakeSleepCurrent()}</div>
+        <p class="text-xs text-faint" style="margin-top:var(--space-1);">Nothing is logged until you enter a time and press a button.</p>
       </div>
       <div class="divider"></div>
       <div class="form-group">
@@ -2308,8 +2638,18 @@ const App = (() => {
       .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
     if (logs.length === 0) return '<p class="text-xs text-faint">Nothing logged yet today.</p>';
     return logs.slice(0, 12).map(l =>
-      `<div class="log-row"><span class="lr-time">${logTimeOf(l)}</span><span>${describeLog(l)}</span></div>`
+      `<div class="log-row">
+        <span class="lr-time">${logTimeOf(l)}</span>
+        <span class="lr-desc">${describeLog(l)}</span>
+        <span class="lr-actions"><button class="icon-btn" onclick="App.deleteQuickLogRow('${l.id}')" aria-label="Remove">${icon('x', 12)}</button></span>
+      </div>`
     ).join('');
+  }
+
+  function deleteQuickLogRow(id) {
+    State.deleteLog(id);
+    refreshQuickLogList();
+    refreshWakeSleepCurrent();
   }
 
   function refreshQuickLogList() {
@@ -2352,16 +2692,49 @@ const App = (() => {
     refreshQuickLogList();
   }
 
-  function logWake() {
-    const time = document.getElementById('wakeSleepTime')?.value || nowTime();
-    State.logWakeSleep('wake', time);
-    refreshQuickLogList();
+  // Today's logged wake/sleep with inline remove — shared by Quick Log & Health
+  function renderWakeSleepCurrent() {
+    const today = State.todayStr();
+    const wake = State.getLogs({ type: 'wake', date: today })[0];
+    const sleep = State.getLogs({ type: 'sleep', date: today })[0];
+    if (!wake && !sleep) return `<span class="text-xs text-faint">Not logged today.</span>`;
+    let out = '';
+    if (wake) out += `<span class="pill" style="margin-right:var(--space-2);">☀️ ${wake.time}
+      <button onclick="App.removeWakeSleep('wake')" style="margin-left:4px;background:none;border:none;color:inherit;cursor:pointer;line-height:1;" aria-label="Remove wake time">×</button></span>`;
+    if (sleep) out += `<span class="pill">🌙 ${sleep.time}
+      <button onclick="App.removeWakeSleep('sleep')" style="margin-left:4px;background:none;border:none;color:inherit;cursor:pointer;line-height:1;" aria-label="Remove sleep time">×</button></span>`;
+    return out;
   }
 
-  function logSleep() {
-    const time = document.getElementById('wakeSleepTime')?.value || nowTime();
-    State.logWakeSleep('sleep', time);
+  function refreshWakeSleepCurrent() {
+    const el = document.getElementById('wakeSleepCurrent');
+    if (el) el.innerHTML = renderWakeSleepCurrent();
+  }
+
+  function logWake(inputId = 'wakeSleepTime') {
+    const time = document.getElementById(inputId)?.value;
+    if (!time) { toast('Enter a time first'); return; }
+    State.logWakeSleep('wake', time);
+    refreshWakeSleepCurrent();
     refreshQuickLogList();
+    if (currentTab === 'health') render();
+  }
+
+  function logSleep(inputId = 'wakeSleepTime') {
+    const time = document.getElementById(inputId)?.value;
+    if (!time) { toast('Enter a time first'); return; }
+    State.logWakeSleep('sleep', time);
+    refreshWakeSleepCurrent();
+    refreshQuickLogList();
+    if (currentTab === 'health') render();
+  }
+
+  function removeWakeSleep(kind) {
+    const log = State.getLogs({ type: kind, date: State.todayStr() })[0];
+    if (log) State.deleteLog(log.id);
+    refreshWakeSleepCurrent();
+    refreshQuickLogList();
+    if (currentTab === 'health' || currentTab === 'history') render();
   }
 
   function logCaloriesFromModal() {
@@ -2770,7 +3143,9 @@ const App = (() => {
         Sync.disconnect();
       }
     }
-    try { (globalThis['loc'+'alSt'+'orage']).removeItem('cade.project.v1'); } catch(e) {}
+    // Write a clean empty dataset (onboarded=true) so the sample-data seed
+    // does NOT repopulate on reload.
+    State.resetData();
     location.reload();
   }
 
@@ -2836,18 +3211,21 @@ const App = (() => {
     init, render, switchTab, toggleTheme,
     openNewEntry, editEntry, saveEntry, changeEntryType, selectEffort,
     addTag, removeTag,
-    openNewProject, selectColor, selectIcon, saveProject,
+    openNewProject, openProjectModal, openManageProjects, selectColor, selectIcon, saveProject,
+    archiveProjectAction, unarchiveProjectAction, deleteProjectAction,
     openSyncConfig, connectSync, disconnectSync,
     openQuickLog, openCalorieLog, logCaloriesFromModal, quickAddTask, logEmotion,
     useShortcut, setQuickEmotion, setQuickEnergy, logCheckinFromModal, logWake, logSleep,
+    removeWakeSleep, deleteQuickLogRow,
     openManageShortcuts, addShortcut, deleteShortcut,
     openManageTags, cycleTagColor, renameTag, setTagProject, deleteTagPrompt, createTagFromManager,
     openSearch, runSearch, searchGo,
     logFood, deleteFoodLog, useShortcutHealth,
     toggleEntry, deleteEntry, archiveEntry, unarchiveEntry, startTimerForTask,
     selectEntryCard, setWorkingProject, toggleSidebar,
-    logWakeHealth, logSleepHealth, viewArchive,
-    setProjectFilter, selectHabit, toggleHabitCell,
+    viewArchive, deleteHistoryLog, editMoodLog, setEditLogEmotion, setEditLogEnergy, saveMoodLog,
+    setProjectFilter, setTagFilter, selectHabit, toggleHabitCell, cycleHabitCell,
+    onRecurrenceChange, toggleWeekday,
     setInsightsProject, setInsightsEntry, setFocusProject,
     qDragStart, qDragEnd, qDragOver, qDragLeave, qDrop, qItemClick,
     plannerNav, plannerToday, setPlannerView, plannerTap, blockPointerDown,

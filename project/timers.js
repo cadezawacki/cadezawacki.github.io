@@ -538,7 +538,7 @@ const Timers = (() => {
         const entry = l.entryId ? State.getEntry(l.entryId) : null;
         return `<div class="chain-link" style="font-size:var(--text-xs);">
           <span class="font-mono" style="color:var(--accent-text);">${formatTime(l.value || 0)}</span>
-          <span class="text-muted truncate">${entry?.title || 'Unknown'}</span>
+          <span class="text-muted truncate">${entry?.title || l.entryTitle || 'deleted task'}</span>
         </div>`;
       }).join('');
     }

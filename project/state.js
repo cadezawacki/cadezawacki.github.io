@@ -81,7 +81,18 @@ const State = (() => {
     (d.tags || []).forEach(t => {
       if (t.projectId === undefined) t.projectId = null; // null = global tag
     });
+    (d.projects || []).forEach(p => {
+      if (p.parentId === undefined) p.parentId = null;
+      if (p.archived === undefined) p.archived = false;
+    });
     return d;
+  }
+
+  // ── Full reset to a CLEAN slate (no sample data re-seed) ────
+  function resetData() {
+    data = structuredClone(defaultData);
+    data.settings.onboarded = true; // blocks seed() from repopulating samples
+    save();
   }
 
   // ── Save to storage ────────────────────────────────────────
@@ -174,11 +185,21 @@ const State = (() => {
   }
 
   function deleteEntry(id) {
+    const entry = getEntry(id);
     data.entries = data.entries.filter(e => e.id !== id);
     // Remove from blockedBy/blocks references
     data.entries.forEach(e => {
       if (e.blockedBy) e.blockedBy = e.blockedBy.filter(b => b !== id);
       if (e.blocks) e.blocks = e.blocks.filter(b => b !== id);
+    });
+    // Habit completions/skips of a deleted habit would otherwise keep
+    // painting the heatmap forever; time sessions stay but get a title
+    // snapshot so history never reads "Unknown".
+    data.logs = data.logs.filter(l => !(l.entryId === id && (l.type === 'habit_completion' || l.type === 'habit_skip')));
+    data.logs.forEach(l => {
+      if (l.entryId === id && l.type === 'time_session' && !l.entryTitle) {
+        l.entryTitle = entry?.title || null;
+      }
     });
     emit();
   }
@@ -251,6 +272,8 @@ const State = (() => {
       color: PROJECT_COLORS[data.projects.length % PROJECT_COLORS.length],
       icon: PROJECT_ICONS[data.projects.length % PROJECT_ICONS.length],
       order: data.projects.length,
+      parentId: null,
+      archived: false,
       ...partial,
     };
     data.projects.push(project);
@@ -268,13 +291,48 @@ const State = (() => {
 
   function deleteProject(id) {
     data.projects = data.projects.filter(p => p.id !== id);
-    // Unassign entries from deleted project
+    // Unassign entries and re-root any child projects
     data.entries.forEach(e => { if (e.projectId === id) e.projectId = null; });
+    data.projects.forEach(p => { if (p.parentId === id) p.parentId = null; });
     emit();
   }
 
   function getProject(id) { return data.projects.find(p => p.id === id); }
-  function getProjects() { return [...data.projects].sort((a, b) => a.order - b.order); }
+
+  // Hierarchical order: parents first, children directly beneath (depth on
+  // each returned copy for indented display). Archived hidden by default.
+  function getProjects(opts = {}) {
+    const list = data.projects.filter(p => opts.includeArchived || !p.archived);
+    const ids = new Set(list.map(p => p.id));
+    const byParent = {};
+    list.forEach(p => {
+      const key = p.parentId && ids.has(p.parentId) ? p.parentId : '';
+      (byParent[key] = byParent[key] || []).push(p);
+    });
+    const out = [];
+    const walk = (pid, depth) => {
+      (byParent[pid] || []).sort((a, b) => (a.order || 0) - (b.order || 0)).forEach(p => {
+        out.push({ ...p, depth });
+        walk(p.id, depth + 1);
+      });
+    };
+    walk('', 0);
+    return out;
+  }
+
+  function archiveProject(id) { return updateProject(id, { archived: true }); }
+  function unarchiveProject(id) { return updateProject(id, { archived: false }); }
+
+  // Would setting `parentId` on `id` create a cycle?
+  function wouldCycleProject(id, parentId) {
+    let cur = parentId;
+    let guard = 0;
+    while (cur && guard++ < 100) {
+      if (cur === id) return true;
+      cur = getProject(cur)?.parentId || null;
+    }
+    return false;
+  }
 
   // ═══════════════════════════════════════════════════════════
   // DAY PLANNER BLOCKS
@@ -407,6 +465,14 @@ const State = (() => {
     emit();
   }
 
+  function updateLog(id, updates) {
+    const log = data.logs.find(l => l.id === id);
+    if (!log) return null;
+    Object.assign(log, updates);
+    emit();
+    return log;
+  }
+
   function getLogs(filter = {}) {
     return data.logs.filter(l => {
       if (filter.type && l.type !== filter.type) return false;
@@ -418,43 +484,65 @@ const State = (() => {
     });
   }
 
-  // Toggle a habit's completion for ANY past day (the 14-day grid cells).
-  function toggleHabitOnDate(entryId, date) {
+  // Habit day status: 'done' | 'skipped' | null (miss/empty)
+  function habitStatusOn(entryId, date) {
+    if (data.logs.some(l => l.entryId === entryId && l.type === 'habit_completion' && l.date === date)) return 'done';
+    if (data.logs.some(l => l.entryId === entryId && l.type === 'habit_skip' && l.date === date)) return 'skipped';
+    return null;
+  }
+
+  // Is the habit scheduled on this date? (weekday-scheduled habits are only
+  // "due" on their configured days; everything else is daily)
+  function isHabitScheduledOn(entryId, date) {
+    const entry = getEntry(entryId);
+    const dow = entry?.recurrence?.daysOfWeek;
+    if (!dow || dow.length === 0) return true;
+    return dow.includes(new Date(date + 'T00:00').getDay());
+  }
+
+  function recalcHabit(entryId) {
+    const entry = getEntry(entryId);
+    if (!entry) { emit(); return; }
+    const s = calculateStreak(entryId);
+    updateEntry(entryId, {
+      streak: s.current,
+      bestStreak: Math.max(entry.bestStreak || 0, s.best),
+      completed: isHabitDoneToday(entryId),
+    });
+  }
+
+  // Cycle a habit day: empty → done → skipped → empty.
+  // Skipped = accepted miss: doesn't add to the streak, doesn't break it.
+  function cycleHabitOnDate(entryId, date) {
     if (date > todayStr()) return; // no future completions
-    const existing = data.logs.find(l => l.entryId === entryId && l.type === 'habit_completion' && l.date === date);
-    if (existing) {
-      data.logs = data.logs.filter(l => l !== existing);
-    } else {
+    const status = habitStatusOn(entryId, date);
+    data.logs = data.logs.filter(l => !(l.entryId === entryId && (l.type === 'habit_completion' || l.type === 'habit_skip') && l.date === date));
+    if (status === null) {
+      data.logs.push({ id: uid(), type: 'habit_completion', entryId, date, value: 1, notes: '', createdAt: new Date().toISOString() });
+    } else if (status === 'done') {
+      data.logs.push({ id: uid(), type: 'habit_skip', entryId, date, value: 0, notes: '', createdAt: new Date().toISOString() });
+    } // 'skipped' → cleared to empty
+    recalcHabit(entryId);
+  }
+
+  // Back-compat: plain toggle between done and empty (card checkbox)
+  function toggleHabitOnDate(entryId, date) {
+    if (date > todayStr()) return;
+    const status = habitStatusOn(entryId, date);
+    data.logs = data.logs.filter(l => !(l.entryId === entryId && (l.type === 'habit_completion' || l.type === 'habit_skip') && l.date === date));
+    if (status !== 'done') {
       data.logs.push({ id: uid(), type: 'habit_completion', entryId, date, value: 1, notes: '', createdAt: new Date().toISOString() });
     }
-    const entry = getEntry(entryId);
-    if (entry) {
-      const s = calculateStreak(entryId);
-      updateEntry(entryId, {
-        streak: s.current,
-        bestStreak: Math.max(entry.bestStreak || 0, s.best),
-        completed: isHabitDoneToday(entryId),
-      });
-    } else {
-      emit();
-    }
+    recalcHabit(entryId);
   }
 
   function logHabitCompletion(entryId) {
     const today = todayStr();
-    // Check if already logged
-    const existing = data.logs.find(l => l.entryId === entryId && l.type === 'habit_completion' && l.date === today);
-    if (!existing) {
-      createLog({ type: 'habit_completion', entryId, date: today, value: 1, notes: '' });
-      // Update streak
-      const entry = getEntry(entryId);
-      if (entry) {
-        const yesterday = yesterdayStr();
-        const yLog = data.logs.find(l => l.entryId === entryId && l.type === 'habit_completion' && l.date === yesterday);
-        const newStreak = yLog ? entry.streak + 1 : 1;
-        updateEntry(entryId, { streak: newStreak, bestStreak: Math.max(entry.bestStreak, newStreak), completed: true });
-      }
-    }
+    if (habitStatusOn(entryId, today) === 'done') return;
+    // Marking done supersedes a skip on the same day
+    data.logs = data.logs.filter(l => !(l.entryId === entryId && l.type === 'habit_skip' && l.date === today));
+    createLog({ type: 'habit_completion', entryId, date: today, value: 1, notes: '' });
+    recalcHabit(entryId);
   }
 
   // Day mood: exactly ONE per day — repeat taps update it in place.
@@ -519,7 +607,9 @@ const State = (() => {
   }
 
   function logTimeSession(entryId, duration, notes = '') {
-    createLog({ type: 'time_session', entryId, date: todayStr(), value: duration, notes });
+    // Title snapshot survives entry deletion — history never shows "Unknown"
+    const entry = getEntry(entryId);
+    createLog({ type: 'time_session', entryId, entryTitle: entry?.title || null, date: todayStr(), value: duration, notes });
   }
 
   function getTodayCalories() {
@@ -554,49 +644,61 @@ const State = (() => {
       .sort();
   }
 
+  function getHabitSkips(entryId) {
+    return data.logs
+      .filter(l => l.entryId === entryId && l.type === 'habit_skip')
+      .map(l => l.date)
+      .sort();
+  }
+
+  // Streak semantics:
+  //  done          → +1
+  //  skipped       → bridges (no +1, no break)
+  //  not scheduled → bridges (weekday-scheduled habits)
+  //  scheduled+missed → breaks
   function calculateStreak(entryId) {
     const completions = getHabitCompletions(entryId);
     if (completions.length === 0) return { current: 0, best: 0, retention30: 0 };
+    const done = new Set(completions);
+    const skipped = new Set(getHabitSkips(entryId));
+    const scheduled = (ds) => isHabitScheduledOn(entryId, ds);
 
-    const completionSet = new Set(completions);
+    // Current: walk back from today (an unresolved today doesn't break yet)
     let current = 0;
-    const today = new Date();
-    let checkDate = new Date(today);
-
-    // If today not completed, start from yesterday
-    if (!completionSet.has(todayStr())) {
-      checkDate.setDate(checkDate.getDate() - 1);
+    const walker = new Date();
+    if (!done.has(todayStr())) walker.setDate(walker.getDate() - 1);
+    for (let guard = 0; guard < 400; guard++) {
+      const ds = dateStr(walker);
+      if (done.has(ds)) current++;
+      else if (skipped.has(ds) || !scheduled(ds)) { /* bridge */ }
+      else break;
+      walker.setDate(walker.getDate() - 1);
     }
 
-    while (completionSet.has(dateStr(checkDate))) {
-      current++;
-      checkDate.setDate(checkDate.getDate() - 1);
+    // Best: scan chronologically from the first completion to today
+    let best = 0, temp = 0;
+    const cur = new Date(completions[0] + 'T00:00');
+    const end = new Date();
+    for (let guard = 0; cur <= end && guard < 3700; guard++) {
+      const ds = dateStr(cur);
+      if (done.has(ds)) { temp++; best = Math.max(best, temp); }
+      else if (skipped.has(ds) || !scheduled(ds)) { /* bridge */ }
+      else temp = 0;
+      cur.setDate(cur.getDate() + 1);
     }
 
-    // Best streak
-    let best = 0, tempStreak = 0;
-    let prevDate = null;
-    completions.forEach(d => {
-      if (prevDate) {
-        const diff = daysBetween(prevDate, d);
-        if (diff === 1) tempStreak++;
-        else tempStreak = 1;
-      } else {
-        tempStreak = 1;
-      }
-      best = Math.max(best, tempStreak);
-      prevDate = d;
-    });
-
-    // 30-day retention
-    let completed30 = 0;
+    // 30-day retention over days that actually counted (scheduled, not skipped)
+    let schedCount = 0, done30 = 0;
     for (let i = 0; i < 30; i++) {
-      const d = new Date(today);
+      const d = new Date();
       d.setDate(d.getDate() - i);
-      if (completionSet.has(dateStr(d))) completed30++;
+      const ds = dateStr(d);
+      if (!scheduled(ds) || skipped.has(ds)) continue;
+      schedCount++;
+      if (done.has(ds)) done30++;
     }
 
-    return { current, best, retention30: Math.round((completed30 / 30) * 100) };
+    return { current, best, retention30: schedCount > 0 ? Math.round((done30 / schedCount) * 100) : 0 };
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -643,6 +745,8 @@ const State = (() => {
   // SEED DATA (demo content for first run)
   // ═══════════════════════════════════════════════════════════
   function seed() {
+    // onboarded=true after a reset means "stay empty" — never re-seed samples
+    if (data.settings.onboarded) return;
     if (data.entries.length > 0 || data.projects.length > 0) return;
 
     // Projects
@@ -792,14 +896,16 @@ const State = (() => {
   return {
     subscribe, emit, save,
     createEntry, updateEntry, deleteEntry, getEntry, getEntries, toggleComplete, isHabitDoneToday,
-    archiveEntry, unarchiveEntry, toggleHabitOnDate,
+    archiveEntry, unarchiveEntry, toggleHabitOnDate, cycleHabitOnDate,
+    habitStatusOn, isHabitScheduledOn, resetData,
     createProject, updateProject, deleteProject, getProject, getProjects,
+    archiveProject, unarchiveProject, wouldCycleProject,
     getOrCreateTag, getAllTags, updateTag, deleteTag, tagUsageCount,
     createPlannerBlock, updatePlannerBlock, deletePlannerBlock, getPlannerBlock, getPlannerBlocks,
-    createLog, deleteLog, getLogs, logHabitCompletion, logEmotion, logCheckin, logWakeSleep,
+    createLog, deleteLog, updateLog, getLogs, logHabitCompletion, logEmotion, logCheckin, logWakeSleep,
     logCalories, logQuickShortcut, addQuickShortcut, deleteQuickShortcut, logTimeSession,
     getTodayCalories, getTodayEmotion,
-    getHabitCompletions, calculateStreak, getHabitRetention: (id) => calculateStreak(id),
+    getHabitCompletions, getHabitSkips, calculateStreak, getHabitRetention: (id) => calculateStreak(id),
     getSettings, updateSettings,
     exportData, importData, getRawData, setRawData,
     todayStr, yesterdayStr, dateStr, daysBetween,
