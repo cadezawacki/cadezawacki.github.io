@@ -354,7 +354,7 @@ const Sync = (() => {
   // CONFLICT RESOLUTION UI
   // ═══════════════════════════════════════════════════════════
   function showConflictModal(localData, serverData) {
-    if (window.App) App.showConflictModal(localData, serverData);
+    if (typeof App !== 'undefined') App.showConflictModal(localData, serverData);
   }
 
   async function resolveConflict(resolution, serverData) {

@@ -159,6 +159,7 @@ const App = (() => {
       case 'projects': main.innerHTML = renderProjects(); break;
       case 'habits': main.innerHTML = renderHabits(); break;
       case 'focus': main.innerHTML = renderFocus(); break;
+      case 'planner': main.innerHTML = renderPlannerTab(); break;
       case 'health': main.innerHTML = renderHealth(); break;
       case 'insights': main.innerHTML = renderInsights(); break;
       case 'history': main.innerHTML = renderHistory(); break;
@@ -200,13 +201,17 @@ const App = (() => {
 
     const openToday = todayTasks.filter(t => !t.completed);
 
-    // Next best task (highest priority + lowest effort, open only)
-    const nextTask = [...openToday].sort((a, b) => {
+    // Next best task (highest priority + lowest effort, open only) —
+    // scoped to the project you're currently working in, if one is set.
+    const workingProject = State.getSettings().workingProject || null;
+    const nextPool = workingProject ? openToday.filter(t => t.projectId === workingProject) : openToday;
+    const nextTask = [...nextPool].sort((a, b) => {
       const effOrder = { trivial: 0, small: 1, medium: 2, large: 3, xl: 4 };
       const pa = (priOrder[a.priority] || 2) * 10 + (effOrder[a.effort] || 2);
       const pb = (priOrder[b.priority] || 2) * 10 + (effOrder[b.effort] || 2);
       return pa - pb;
     })[0];
+    const projects = State.getProjects();
 
     const todayEmotion = State.getTodayEmotion();
     const focusSeconds = State.getLogs({ type: 'time_session', date: today })
@@ -241,29 +246,20 @@ const App = (() => {
       </div>
     </div>`;
 
-    // Next best task
-    if (nextTask) {
-      const proj = nextTask.projectId ? State.getProject(nextTask.projectId) : null;
-      html += `
-        <div class="section">
-          <div class="section-header"><span class="section-title">Next Best Task</span></div>
-          <div class="card card-interactive" style="display:flex;align-items:center;gap:var(--space-3);border-color:var(--accent);background:var(--accent-tint);cursor:pointer;" onclick="App.toggleEntry('${nextTask.id}')">
-            <div class="check-toggle ${nextTask.completed ? 'checked' : ''}"><i data-lucide="check"></i></div>
-            <div style="flex:1">
-              <div class="entry-title" style="font-weight:600;">${nextTask.title}</div>
-              <div class="entry-meta">
-                ${proj ? `<span class="proj-dot" style="background:${proj.color}"></span><span class="text-xs text-muted">${proj.name}</span>` : ''}
-                <span class="pill pill-${priorityColor(nextTask.priority)}">${nextTask.priority}</span>
-                <span class="pill">${effortLabel(nextTask.effort)}</span>
-                ${nextTask.estimateMinutes ? `<span class="pill">~${estimateLabel(nextTask.estimateMinutes)}</span>` : ''}
-                ${nextTask.dueDate ? `<span class="pill pill-accent">${formatDueDate(nextTask.dueDate)}</span>` : ''}
-              </div>
-            </div>
-            <button class="icon-btn" onclick="event.stopPropagation();App.startTimerForTask('${nextTask.id}')" aria-label="Start timer">${icon('play', 18)}</button>
-          </div>
+    // Next best task — with a "working on" project scope selector
+    html += `
+      <div class="section">
+        <div class="section-header"><span class="section-title">Next Best Task</span>
+          <select class="form-select" style="width:auto;padding:var(--space-1) var(--space-2);font-size:var(--text-xs);" onchange="App.setWorkingProject(this.value || null)" title="Which project are you working in right now?">
+            <option value="">Working on: anything</option>
+            ${projects.map(p => `<option value="${p.id}" ${workingProject === p.id ? 'selected' : ''}>Working on: ${p.name}</option>`).join('')}
+          </select>
         </div>
-      `;
-    }
+        ${nextTask
+          ? renderEntryCard(nextTask, nextTask.projectId ? State.getProject(nextTask.projectId) : null, null, { highlight: true })
+          : `<div class="card"><p class="text-xs text-faint">No open tasks${workingProject ? ` in ${State.getProject(workingProject)?.name || 'this project'}` : ''} right now.</p></div>`}
+      </div>
+    `;
 
     // Habits today
     if (habits.length > 0) {
@@ -313,11 +309,11 @@ const App = (() => {
       <div class="card">
         <div class="section-header" style="margin-bottom:var(--space-3)"><span class="section-title">Day Mood</span></div>
         <div class="emotion-selector">
-          ${renderEmotionButton('great', 'Great', todayEmotion?.emotion)}
-          ${renderEmotionButton('good', 'Good', todayEmotion?.emotion)}
-          ${renderEmotionButton('okay', 'Okay', todayEmotion?.emotion)}
-          ${renderEmotionButton('low', 'Low', todayEmotion?.emotion)}
           ${renderEmotionButton('bad', 'Bad', todayEmotion?.emotion)}
+          ${renderEmotionButton('low', 'Low', todayEmotion?.emotion)}
+          ${renderEmotionButton('okay', 'Okay', todayEmotion?.emotion)}
+          ${renderEmotionButton('good', 'Good', todayEmotion?.emotion)}
+          ${renderEmotionButton('great', 'Great', todayEmotion?.emotion)}
         </div>
         <p class="text-xs text-faint" style="text-align:center;margin-top:var(--space-2);">One mood per day — tap to change. Use Quick Log for timestamped check-ins.</p>
       </div>
@@ -382,13 +378,27 @@ const App = (() => {
     return html;
   }
 
+  // Visible hour window expands to fit any block outside the 6–22 default —
+  // late-night tracked sessions were silently clipped out before.
+  function gridHours(blocks) {
+    let start = HOUR_START, end = HOUR_END;
+    blocks.forEach(b => {
+      const s = Math.floor(timeToMin(b.start) / 60);
+      const e = Math.ceil(timeToMin(b.end) / 60);
+      if (s < start) start = s;
+      if (e > end) end = e;
+    });
+    return { hs: Math.max(0, start), he: Math.min(24, Math.max(end, start + 1)) };
+  }
+
   function renderPlannerGrid(dateStr) {
     const today = State.todayStr();
     const blocks = State.getPlannerBlocks({ date: dateStr });
-    const totalH = (HOUR_END - HOUR_START) * HOUR_PX;
+    const { hs, he } = gridHours(blocks);
+    const totalH = (he - hs) * HOUR_PX;
 
-    let html = `<div class="planner-grid" style="height:${totalH}px">`;
-    for (let hour = HOUR_START; hour < HOUR_END; hour++) {
+    let html = `<div class="planner-grid" data-hs="${hs}" style="height:${totalH}px">`;
+    for (let hour = hs; hour < he; hour++) {
       html += `<div class="planner-hour" onclick="App.plannerTap(event,'${dateStr}',${hour})">
         <div class="planner-hour-label">${String(hour).padStart(2, '0')}:00</div>
       </div>`;
@@ -396,7 +406,7 @@ const App = (() => {
 
     // Positioned blocks (lane layout for overlaps)
     html += `<div style="position:absolute;inset:0;pointer-events:none;">`;
-    layoutBlocks(blocks).forEach(({ b, top, height, leftPct, widthPct }) => {
+    layoutBlocks(blocks, hs, he).forEach(({ b, top, height, leftPct, widthPct }) => {
       const entry = b.entryId ? State.getEntry(b.entryId) : null;
       const proj = b.projectId ? State.getProject(b.projectId) : null;
       const color = b.color || proj?.color || 'var(--accent)';
@@ -405,11 +415,13 @@ const App = (() => {
       const done = entry && entry.completed;
       const dur = timeToMin(b.end) - timeToMin(b.start);
       html += `<div class="planner-block ${b.kind === 'tracked' ? 'tracked' : ''} ${overdue ? 'overdue' : ''} ${done ? 'done' : ''}"
+        data-block-id="${b.id}"
         style="top:${top}px;height:${Math.max(height, 16)}px;left:calc(var(--gutter) + 4px + ${leftPct}% - ${leftPct / 100} * (var(--gutter) + 8px));right:auto;width:calc(${widthPct}% - ${widthPct / 100} * (var(--gutter) + 8px) - 2px);border-left-color:${color};background:color-mix(in srgb, ${color} 12%, var(--surface));pointer-events:auto;"
-        onclick="event.stopPropagation();App.editPlannerBlock('${b.id}')"
-        title="${b.title} · ${b.start}–${b.end}">
+        onpointerdown="App.blockPointerDown(event,'${b.id}')"
+        title="${b.title} · ${b.start}–${b.end} — tap to edit, drag to move, pull the bottom edge to resize">
         <div class="pb-title">${overdue ? '⚠ ' : ''}${b.title}</div>
         ${height >= 30 ? `<div class="pb-time">${b.start}–${b.end} · ${estimateLabel(dur)}</div>` : ''}
+        <div class="pb-resize" aria-hidden="true"></div>
       </div>`;
     });
     html += `</div>`;
@@ -418,8 +430,8 @@ const App = (() => {
     if (dateStr === today) {
       const now = new Date();
       const nowMin = now.getHours() * 60 + now.getMinutes();
-      if (nowMin >= HOUR_START * 60 && nowMin <= HOUR_END * 60) {
-        const top = (nowMin - HOUR_START * 60) / 60 * HOUR_PX;
+      if (nowMin >= hs * 60 && nowMin <= he * 60) {
+        const top = (nowMin - hs * 60) / 60 * HOUR_PX;
         html += `<div class="planner-now" style="top:${top}px"></div>`;
       }
     }
@@ -428,13 +440,81 @@ const App = (() => {
     return html;
   }
 
+  // ── Drag to move / resize planner blocks (15-min snapping) ──
+  let blockDrag = null;
+
+  function blockPointerDown(e, id) {
+    if (e.button !== undefined && e.button !== 0) return;
+    e.stopPropagation();
+    e.preventDefault();
+    const block = State.getPlannerBlock(id);
+    if (!block) return;
+    const el = e.currentTarget;
+    const grid = el.closest('.planner-grid');
+    blockDrag = {
+      id,
+      el,
+      mode: e.target.classList.contains('pb-resize') ? 'resize' : 'move',
+      startY: e.clientY,
+      s: timeToMin(block.start),
+      en: timeToMin(block.end),
+      hs: parseInt(grid?.dataset.hs || HOUR_START, 10),
+      newS: timeToMin(block.start),
+      newE: timeToMin(block.end),
+      moved: false,
+    };
+    try { el.setPointerCapture(e.pointerId); } catch (err) {}
+    el.addEventListener('pointermove', blockPointerMove);
+    el.addEventListener('pointerup', blockPointerUp);
+    el.addEventListener('pointercancel', blockPointerUp);
+  }
+
+  function blockPointerMove(e) {
+    if (!blockDrag) return;
+    const dy = e.clientY - blockDrag.startY;
+    if (Math.abs(dy) > 4) blockDrag.moved = true;
+    if (!blockDrag.moved) return;
+    const deltaMin = Math.round(dy / HOUR_PX * 60 / 15) * 15;
+    const dur = blockDrag.en - blockDrag.s;
+    if (blockDrag.mode === 'move') {
+      blockDrag.newS = Math.min(Math.max(blockDrag.s + deltaMin, 0), 24 * 60 - dur);
+      blockDrag.newE = blockDrag.newS + dur;
+      blockDrag.el.style.top = `${(blockDrag.newS - blockDrag.hs * 60) / 60 * HOUR_PX}px`;
+    } else {
+      blockDrag.newE = Math.min(Math.max(blockDrag.en + deltaMin, blockDrag.s + 15), 24 * 60);
+      blockDrag.el.style.height = `${Math.max((blockDrag.newE - blockDrag.s) / 60 * HOUR_PX - 2, 16)}px`;
+    }
+    const timeEl = blockDrag.el.querySelector('.pb-time');
+    if (timeEl) timeEl.textContent = `${minToTime(blockDrag.newS)}–${minToTime(blockDrag.newE)} · ${estimateLabel(blockDrag.newE - blockDrag.newS)}`;
+  }
+
+  function blockPointerUp(e) {
+    if (!blockDrag) return;
+    const d = blockDrag;
+    blockDrag = null;
+    d.el.removeEventListener('pointermove', blockPointerMove);
+    d.el.removeEventListener('pointerup', blockPointerUp);
+    d.el.removeEventListener('pointercancel', blockPointerUp);
+    if (d.moved) {
+      State.updatePlannerBlock(d.id, {
+        start: minToTime(d.mode === 'move' ? d.newS : d.s),
+        end: minToTime(d.newE),
+      });
+      render();
+    } else {
+      // No movement — treat as a tap: open the edit modal (works for
+      // tracked blocks too, so times can be adjusted or deleted)
+      editPlannerBlock(d.id);
+    }
+  }
+
   // Assign overlapping blocks to side-by-side lanes.
-  function layoutBlocks(blocks) {
+  function layoutBlocks(blocks, hs = HOUR_START, he = HOUR_END) {
     const evs = blocks.map(b => ({
       b,
-      s: Math.max(timeToMin(b.start), HOUR_START * 60),
-      e: Math.min(Math.max(timeToMin(b.end), timeToMin(b.start) + 15), HOUR_END * 60),
-    })).filter(ev => ev.e > HOUR_START * 60 && ev.s < HOUR_END * 60)
+      s: Math.max(timeToMin(b.start), hs * 60),
+      e: Math.min(Math.max(timeToMin(b.end), timeToMin(b.start) + 15), he * 60),
+    })).filter(ev => ev.e > hs * 60 && ev.s < he * 60)
       .sort((a, b) => a.s - b.s || a.e - b.e);
 
     // Cluster events that transitively overlap
@@ -460,7 +540,7 @@ const App = (() => {
       cluster.forEach(ev => {
         out.push({
           b: ev.b,
-          top: (ev.s - HOUR_START * 60) / 60 * HOUR_PX,
+          top: (ev.s - hs * 60) / 60 * HOUR_PX,
           height: (ev.e - ev.s) / 60 * HOUR_PX - 2,
           leftPct: ev.lane / lanes * 100,
           widthPct: 100 / lanes,
@@ -606,12 +686,94 @@ const App = (() => {
   }
 
   // ═══════════════════════════════════════════════════════════
-  // ENTRY CARD RENDERER — whole card is the toggle hitbox
+  // PLANNER TAB — dedicated page: planner + schedule insights
   // ═══════════════════════════════════════════════════════════
-  function renderEntryCard(entry, project, streakInfo) {
+  function renderPlannerTab() {
+    const viewDate = offsetDateStr(plannerOffset);
+    const dayBlocks = State.getPlannerBlocks({ date: viewDate });
+    const sumMin = (list) => list.reduce((s, b) => s + Math.max(0, timeToMin(b.end) - timeToMin(b.start)), 0);
+    const agendaMin = sumMin(dayBlocks.filter(b => b.kind === 'agenda'));
+    const trackedMin = sumMin(dayBlocks.filter(b => b.kind === 'tracked'));
+
+    // Last 7 days tracked total
+    const weekFrom = offsetDateStr(-6);
+    const weekTracked = sumMin(State.getPlannerBlocks({ dateFrom: weekFrom, dateTo: State.todayStr(), kind: 'tracked' }));
+
+    // Planned vs tracked ratio for the viewed day
+    const coverage = agendaMin > 0 ? Math.round(trackedMin / agendaMin * 100) : null;
+
+    let html = `
+      <div class="page-header">
+        <div>
+          <h1 class="page-title">Planner</h1>
+          <p class="page-subtitle">Schedule, tracked time, agenda</p>
+        </div>
+        <button class="btn btn-primary" onclick="App.openAgendaModal({ date: '${viewDate}' })">${icon('plus', 14)}Agenda Item</button>
+      </div>
+    `;
+
+    html += `<div class="grid-3 section">
+      <div class="card stat-card">
+        <span class="stat-label">Scheduled ${friendlyDate(viewDate)}</span>
+        <span class="stat-value">${agendaMin > 0 ? estimateLabel(agendaMin) : '—'}</span>
+      </div>
+      <div class="card stat-card">
+        <span class="stat-label">Tracked ${friendlyDate(viewDate)}</span>
+        <span class="stat-value">${trackedMin > 0 ? estimateLabel(trackedMin) : '—'}${coverage != null ? ` <span style="font-size:var(--text-xs);color:var(--text-muted)">(${coverage}% of plan)</span>` : ''}</span>
+      </div>
+      <div class="card stat-card">
+        <span class="stat-label">Tracked — Last 7 Days</span>
+        <span class="stat-value">${weekTracked > 0 ? estimateLabel(weekTracked) : '—'}</span>
+      </div>
+    </div>`;
+
+    html += renderPlannerSection();
+
+    // Upcoming agenda (next 7 days)
+    const upcoming = State.getPlannerBlocks({ dateFrom: offsetDateStr(1), dateTo: offsetDateStr(7), kind: 'agenda' });
+    html += `<div class="section">
+      <div class="section-header"><span class="section-title">Upcoming — Next 7 Days</span></div>
+      <div class="card">`;
+    if (upcoming.length === 0) {
+      html += `<p class="text-xs text-faint">Nothing scheduled ahead. Tap a planner slot or use the Agenda Item button.</p>`;
+    } else {
+      upcoming.forEach(b => {
+        const proj = b.projectId ? State.getProject(b.projectId) : null;
+        html += `<div class="done-row" style="cursor:pointer;" onclick="App.editPlannerBlock('${b.id}')">
+          <span class="done-time" style="width:76px;">${friendlyDate(b.date)}</span>
+          <span class="font-mono text-xs text-muted" style="flex-shrink:0;">${b.start}–${b.end}</span>
+          <span class="proj-dot" style="background:${b.color || proj?.color || 'var(--text-faint)'}"></span>
+          <span class="truncate" style="flex:1;">${b.title}</span>
+        </div>`;
+      });
+    }
+    html += `</div></div>`;
+
+    return html;
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // ENTRY CARD RENDERER
+  // Card click SELECTS (teal outline + sticky actions); only the
+  // checkbox toggles completion. Play arms the tracker; a live
+  // tick badge shows while the task is being tracked.
+  // ═══════════════════════════════════════════════════════════
+  let selectedEntryId = null;
+
+  function selectEntryCard(id) {
+    selectedEntryId = selectedEntryId === id ? null : id;
+    document.querySelectorAll('.entry-card').forEach(el => {
+      el.classList.toggle('selected', el.dataset.id === selectedEntryId);
+    });
+  }
+
+  function renderEntryCard(entry, project, streakInfo, opts = {}) {
     const proj = project || (entry.projectId ? State.getProject(entry.projectId) : null);
     const isOverdueFlag = entry.dueDate && isOverdue(entry.dueDate) && !entry.completed;
     const isDone = entry.type === 'habit' ? State.isHabitDoneToday(entry.id) : entry.completed;
+    const isSelected = selectedEntryId === entry.id;
+    const tracking = typeof Timers !== 'undefined' ? Timers.getTracking(entry.id) : null;
+    const canTrack = entry.type === 'task' && !entry.completed;
 
     let metaHtml = '';
     if (proj) {
@@ -646,8 +808,8 @@ const App = (() => {
     }
 
     return `
-      <div class="entry-card ${isDone ? 'completed' : ''}" data-id="${entry.id}" onclick="App.toggleEntry('${entry.id}')">
-        <div class="check-toggle ${isDone ? 'checked' : ''}">
+      <div class="entry-card ${isDone ? 'completed' : ''} ${isSelected ? 'selected' : ''} ${opts.highlight ? 'highlight' : ''}" data-id="${entry.id}" onclick="App.selectEntryCard('${entry.id}')">
+        <div class="check-toggle ${isDone ? 'checked' : ''}" onclick="event.stopPropagation();App.toggleEntry('${entry.id}')" title="Mark ${isDone ? 'not done' : 'done'}">
           <i data-lucide="check"></i>
         </div>
         <div class="entry-body">
@@ -658,7 +820,10 @@ const App = (() => {
               <div class="progress-fill" style="width:${Math.min((entry.currentValue || 0) / entry.targetValue * 100, 100)}%"></div>
             </div>` : ''}
         </div>
+        ${tracking ? `<span class="track-tick ${tracking.state === 'paused' ? 'paused' : ''}" data-tick-entry="${entry.id}"
+          onclick="event.stopPropagation();Timers.openPanel()" title="Open timer">${Timers.formatTime(tracking.elapsed)}</span>` : ''}
         <div class="entry-actions">
+          ${canTrack && !tracking ? `<button class="icon-btn" onclick="event.stopPropagation();Timers.armTracking('${entry.id}')" aria-label="Start timer" title="Track time">${icon('play', 15)}</button>` : ''}
           <button class="icon-btn" onclick="event.stopPropagation();App.editEntry('${entry.id}')" aria-label="Edit">${icon('pencil', 15)}</button>
           <button class="icon-btn" onclick="event.stopPropagation();App.archiveEntry('${entry.id}')" aria-label="Archive">${icon('archive', 15)}</button>
           <button class="icon-btn" onclick="event.stopPropagation();App.deleteEntry('${entry.id}')" aria-label="Delete">${icon('trash-2', 15)}</button>
@@ -965,8 +1130,10 @@ const App = (() => {
       </div>
     `;
 
-    // Filter bar: project chips + task select
-    const filterableTasks = State.getEntries({ type: 'task' }).filter(t => !insightsProject || t.projectId === insightsProject);
+    // Filter bar: project chips + item select (every entry type of the
+    // project — a project may hold only habits/reminders, not tasks)
+    const filterableEntries = State.getEntries()
+      .filter(e => !insightsProject || e.projectId === insightsProject);
     html += `<div class="filter-chips" style="align-items:center;">
       <button class="filter-chip ${!insightsProject ? 'active' : ''}" onclick="App.setInsightsProject(null)">All Projects</button>
       ${projects.map(p => `
@@ -974,8 +1141,8 @@ const App = (() => {
           <span class="proj-dot" style="background:${p.color}"></span>${p.name}
         </button>`).join('')}
       <select class="form-select" style="width:auto;max-width:220px;padding:var(--space-1) var(--space-2);font-size:var(--text-xs);" onchange="App.setInsightsEntry(this.value || null)">
-        <option value="">All tasks</option>
-        ${filterableTasks.map(t => `<option value="${t.id}" ${insightsEntry === t.id ? 'selected' : ''}>${t.title}</option>`).join('')}
+        <option value="">All items</option>
+        ${filterableEntries.map(t => `<option value="${t.id}" ${insightsEntry === t.id ? 'selected' : ''}>[${t.type}] ${t.title}</option>`).join('')}
       </select>
     </div>`;
 
@@ -1011,7 +1178,9 @@ const App = (() => {
     // Sleep chart
     html += `<div class="section">
       <div class="card">
-        <div class="section-header" style="margin-bottom:var(--space-3)"><span class="section-title">Wake / Sleep — 14 Days</span></div>
+        <div class="section-header" style="margin-bottom:var(--space-3)"><span class="section-title">Wake / Sleep — 14 Days</span>
+          <span class="text-xs text-faint">log times via Quick Log or the Health tab</span>
+        </div>
         <div class="chart-container"><canvas id="sleepChart"></canvas></div>
       </div>
     </div>`;
@@ -1102,7 +1271,7 @@ const App = (() => {
           <span class="text-xs text-faint">drag between boxes to reprioritize · click to complete</span>
         </div>
         <div class="card">
-          <div class="quadrant" id="quadrantView">${renderQuadrant(focusProject)}</div>
+          <div class="quadrant quadrant-xl" id="quadrantView">${renderQuadrant(focusProject)}</div>
         </div>
       </div>
     `;
@@ -1285,6 +1454,23 @@ const App = (() => {
       <div class="card stat-card"><span class="stat-label">Fat</span><span class="stat-value">${totalF}g</span></div>
     </div>`;
 
+    // Wake / Sleep logging (also available in Quick Log)
+    const wakeLog = State.getLogs({ type: 'wake', date: today })[0];
+    const sleepLog = State.getLogs({ type: 'sleep', date: today })[0];
+    html += `<div class="section">
+      <div class="section-header"><span class="section-title">Wake / Sleep</span>
+        <span class="text-xs text-faint">${wakeLog ? `☀️ ${wakeLog.time}` : ''} ${sleepLog ? `· 🌙 ${sleepLog.time}` : ''}</span>
+      </div>
+      <div class="card">
+        <div class="wake-sleep-row">
+          <input type="time" class="form-input" id="wakeSleepTimeHealth" value="${nowTime()}">
+          <button class="btn btn-secondary" onclick="App.logWakeHealth()">☀️ Wake</button>
+          <button class="btn btn-secondary" onclick="App.logSleepHealth()">🌙 Sleep</button>
+        </div>
+        <p class="text-xs text-faint" style="margin-top:var(--space-2);">One of each per day — logging again updates the time. Trends chart lives in Insights.</p>
+      </div>
+    </div>`;
+
     // Log food form
     const shortcuts = (State.getSettings().quickShortcuts || []).filter(s => s.calories);
     html += `<div class="section">
@@ -1411,6 +1597,18 @@ const App = (() => {
     render();
   }
 
+  function logWakeHealth() {
+    const time = document.getElementById('wakeSleepTimeHealth')?.value || nowTime();
+    State.logWakeSleep('wake', time);
+    render();
+  }
+
+  function logSleepHealth() {
+    const time = document.getElementById('wakeSleepTimeHealth')?.value || nowTime();
+    State.logWakeSleep('sleep', time);
+    render();
+  }
+
   // ═══════════════════════════════════════════════════════════
   // HISTORY VIEW — completions, day evolution, archive
   // ═══════════════════════════════════════════════════════════
@@ -1497,7 +1695,7 @@ const App = (() => {
 
     // Archive
     const archived = State.getEntries({ archived: true });
-    html += `<div class="section">
+    html += `<div class="section" id="archiveSection">
       <div class="section-header"><span class="section-title">Archive</span>
         <span class="stat-label">${archived.length} items</span>
       </div>
@@ -1544,6 +1742,11 @@ const App = (() => {
   }
 
   function historyToday() { historyOffset = 0; render(); }
+
+  function viewArchive() {
+    switchTab('history');
+    setTimeout(() => document.getElementById('archiveSection')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
+  }
 
   function renderHistoryCharts() {
     const container = document.getElementById('dayTimelineContainer');
@@ -1638,6 +1841,10 @@ const App = (() => {
         <div class="setting-row">
           <div><div class="setting-label">Import Data</div><div class="setting-desc">Restore from JSON backup</div></div>
           <button class="btn btn-secondary btn-sm" onclick="App.importData()">${icon('upload', 14)}Import</button>
+        </div>
+        <div class="setting-row">
+          <div><div class="setting-label">Archive</div><div class="setting-desc">${State.getEntries({ archived: true }).length} archived items — view, restore, or delete</div></div>
+          <button class="btn btn-secondary btn-sm" onclick="App.viewArchive()">${icon('archive', 14)}View</button>
         </div>
         <div class="setting-row">
           <div><div class="setting-label" style="color:var(--error)">Reset All Data</div><div class="setting-desc">Delete everything and start fresh</div></div>
@@ -2042,7 +2249,7 @@ const App = (() => {
       <div class="form-group">
         <label class="form-label">Check-in — how do you feel right now?</label>
         <div class="emotion-selector" id="quickEmotionSel">
-          ${['great', 'good', 'okay', 'low', 'bad'].map(e => `
+          ${['bad', 'low', 'okay', 'good', 'great'].map(e => `
             <button class="emotion-btn" id="qe-${e}" onclick="App.setQuickEmotion('${e}')">
               ${icon(MOOD_ICONS[e], 22)}
               <span class="emotion-label">${e}</span>
@@ -2452,6 +2659,13 @@ const App = (() => {
     document.getElementById('panelOverlay').classList.remove('active');
     // Slide panel carries its own .active transform (see Timers.openPanel)
     document.getElementById('slidePanel').classList.remove('active');
+    // Timers keep running — surface the floating mini widget
+    if (typeof Timers !== 'undefined') Timers.updateMini();
+  }
+
+  function toggleSidebar() {
+    const collapsed = document.body.classList.toggle('sidebar-collapsed');
+    State.updateSettings({ sidebarCollapsed: collapsed });
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -2483,8 +2697,8 @@ const App = (() => {
   }
 
   function startTimerForTask(id) {
-    Timers.openPanel();
-    setTimeout(() => Timers.startTracking(id), 300);
+    // Arms the tracker for the task — the user presses Start to begin
+    Timers.armTracking(id);
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -2499,6 +2713,11 @@ const App = (() => {
 
   function updateCalorieGoal(value) {
     State.updateSettings({ calorieGoal: parseInt(value) || 2000 });
+  }
+
+  function setWorkingProject(id) {
+    State.updateSettings({ workingProject: id || null });
+    render();
   }
 
   function exportData() {
@@ -2581,11 +2800,16 @@ const App = (() => {
       if (e.target.id === 'modalOverlay') closeModal();
     });
 
-    // Panel close
+    // Panel close + minimize (timers keep running either way)
     document.getElementById('panelClose').addEventListener('click', closePanel);
+    document.getElementById('panelMinimize')?.addEventListener('click', closePanel);
     document.getElementById('panelOverlay').addEventListener('click', (e) => {
       if (e.target.id === 'panelOverlay') closePanel();
     });
+
+    // Sidebar collapse (desktop)
+    if (State.getSettings().sidebarCollapsed) document.body.classList.add('sidebar-collapsed');
+    document.getElementById('sidebarToggle')?.addEventListener('click', toggleSidebar);
 
     // Keyboard shortcuts
     document.addEventListener('keydown', (e) => {
@@ -2621,10 +2845,12 @@ const App = (() => {
     openSearch, runSearch, searchGo,
     logFood, deleteFoodLog, useShortcutHealth,
     toggleEntry, deleteEntry, archiveEntry, unarchiveEntry, startTimerForTask,
+    selectEntryCard, setWorkingProject, toggleSidebar,
+    logWakeHealth, logSleepHealth, viewArchive,
     setProjectFilter, selectHabit, toggleHabitCell,
     setInsightsProject, setInsightsEntry, setFocusProject,
     qDragStart, qDragEnd, qDragOver, qDragLeave, qDrop, qItemClick,
-    plannerNav, plannerToday, setPlannerView, plannerTap,
+    plannerNav, plannerToday, setPlannerView, plannerTap, blockPointerDown,
     popoverAgenda, popoverTask, popoverTimer,
     openAgendaModal, saveAgendaBlock, deleteAgendaBlock, editPlannerBlock,
     historyNav, historyToday,
