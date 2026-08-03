@@ -35,6 +35,7 @@ const State = (() => {
         search: '/',
         stopTimers: 's',
       },
+      maxNavTimers: 2,         // live timers shown in the header nav
       quickShortcuts: [
         { id: 'qs-coffee', label: 'Cup of coffee', emoji: '☕', calories: 5, meal: 'snack' },
         { id: 'qs-water', label: 'Glass of water', emoji: '💧', calories: null, meal: null },
@@ -85,6 +86,7 @@ const State = (() => {
       if (e.archived === undefined) e.archived = false;
       if (e.estimateMinutes === undefined) e.estimateMinutes = null;
       if (e.remindTime === undefined) e.remindTime = null;
+      if (e.actualMinutes === undefined) e.actualMinutes = null;
       if (!Array.isArray(e.projectIds)) e.projectIds = e.projectId ? [e.projectId] : [];
     });
     (d.tags || []).forEach(t => {
@@ -172,6 +174,7 @@ const State = (() => {
     estimateMinutes: null,
     projectIds: [],    // multi-project membership; projectId stays = primary
     remindTime: null,  // HH:MM for reminders
+    actualMinutes: null, // manual override of tracked time (estimate-vs-actual)
   };
 
   function createEntry(partial) {
@@ -644,6 +647,16 @@ const State = (() => {
     createLog({ type: 'time_session', entryId, entryTitle: entry?.title || null, date: todayStr(), value: duration, notes });
   }
 
+  // Actual time spent on an entry, in minutes: manual override wins,
+  // otherwise the sum of tracked sessions.
+  function actualMinutesFor(entry) {
+    if (entry.actualMinutes != null) return entry.actualMinutes;
+    const secs = data.logs
+      .filter(l => l.type === 'time_session' && l.entryId === entry.id)
+      .reduce((s, l) => s + (l.value || 0), 0);
+    return secs >= 60 ? Math.round(secs / 60) : null;
+  }
+
   function getTodayCalories() {
     return data.logs
       .filter(l => l.type === 'calorie' && l.date === todayStr())
@@ -937,7 +950,7 @@ const State = (() => {
     createPlannerBlock, updatePlannerBlock, deletePlannerBlock, getPlannerBlock, getPlannerBlocks,
     createLog, deleteLog, updateLog, getLogs, logHabitCompletion, logEmotion, logCheckin, logWakeSleep,
     logCalories, logQuickShortcut, addQuickShortcut, deleteQuickShortcut, logTimeSession,
-    getTodayCalories, getTodayEmotion,
+    getTodayCalories, getTodayEmotion, actualMinutesFor,
     getHabitCompletions, getHabitSkips, calculateStreak, getHabitRetention: (id) => calculateStreak(id),
     getSettings, updateSettings,
     exportData, importData, getRawData, setRawData,
