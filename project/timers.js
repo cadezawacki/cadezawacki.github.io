@@ -1,23 +1,37 @@
 /* ═══════════════════════════════════════════════════════════════
-   TIMERS — Pomodoro, Stopwatch, Time Tracking
-   Tracking sessions record segments; explicit Pause closes a
-   segment (a break in the day planner). Pomodoro's automatic
-   break phases do NOT split segments. On finish, each segment
-   is inserted into the day planner as a color-coded block.
+   TIMERS v3
+   Two independent parts:
+   • CLOCK — one pomodoro/stopwatch/countdown engine, optionally
+     linked to a task. Switching view tabs never disturbs it.
+   • SESSIONS — any number of simultaneous task-tracking sessions,
+     wall-clock based, each with pause/resume (pauses become gaps
+     in the day planner; pomodoro phases never split sessions).
+   A floating mini widget shows live values while the panel is
+   closed; task cards show a live tick for their own session.
    ═══════════════════════════════════════════════════════════════ */
 
 const Timers = (() => {
-  let mode = 'pomodoro'; // pomodoro | stopwatch | countdown | track
-  let timerState = 'idle'; // idle | running | paused | done
-  let remaining = 0; // seconds
-  let elapsed = 0; // seconds (for stopwatch)
-  let intervalId = null;
-  let pomodoroPhase = 'work'; // work | break | longBreak
-  let pomodoroCount = 0;
-  let trackedTaskId = null;
+  let viewMode = 'track'; // which tab of the panel is visible
 
-  // Active tracking session: { entryId, segments: [{start:Date, end?:Date}] }
-  let session = null;
+  // ── Clock engine ────────────────────────────────────────────
+  const clock = {
+    mode: null,            // 'pomodoro' | 'stopwatch' | 'countdown' | null (idle)
+    state: 'idle',         // 'idle' | 'running' | 'paused'
+    remaining: 0,          // pomodoro/countdown seconds
+    elapsed: 0,            // stopwatch seconds
+    phase: 'work',
+    count: 0,
+    countdownTotal: 0,
+    linkedTaskId: null,    // optional task the clock logs to
+    startedAt: null,       // Date when current run began (for planner block)
+  };
+
+  // ── Tracking sessions ───────────────────────────────────────
+  // { entryId, segments: [{start:Date, end?:Date}], state:'running'|'paused' }
+  let sessions = [];
+  let pendingTaskId = null; // armed from a card's play button; starts on demand
+
+  let ticker = null;
 
   const PHASE_LABELS = { work: 'Focus', break: 'Short Break', longBreak: 'Long Break' };
 
@@ -26,6 +40,7 @@ const Timers = (() => {
   }
 
   function formatTime(seconds) {
+    seconds = Math.max(0, Math.round(seconds));
     const h = Math.floor(seconds / 3600);
     const m = Math.floor((seconds % 3600) / 60);
     const s = Math.floor(seconds % 60);
@@ -37,328 +52,474 @@ const Timers = (() => {
     return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
   }
 
+  function phaseSeconds(phase = clock.phase) {
+    const s = getSettings();
+    return (phase === 'work' ? s.pomodoroWork : phase === 'break' ? s.pomodoroBreak : s.pomodoroLongBreak) * 60;
+  }
+
+  // ── Ticker lifecycle ────────────────────────────────────────
+  function anythingRunning() {
+    return clock.state === 'running' || sessions.some(s => s.state === 'running');
+  }
+
+  function ensureTicker() {
+    if (!ticker && anythingRunning()) ticker = setInterval(tick, 1000);
+  }
+
+  function maybeStopTicker() {
+    if (ticker && !anythingRunning()) { clearInterval(ticker); ticker = null; }
+    updateMini();
+  }
+
+  function tick() {
+    if (clock.state === 'running') {
+      if (clock.mode === 'stopwatch') {
+        clock.elapsed++;
+      } else if (clock.mode === 'pomodoro' || clock.mode === 'countdown') {
+        clock.remaining--;
+        if (clock.remaining <= 0) onClockComplete();
+      }
+    }
+    updateDisplays();
+  }
+
+  // Per-second updates patch text in place — a full render() would tear down
+  // the link-task <select> or a button mid-interaction every tick.
+  function updateDisplays() {
+    if (isPanelOpen()) {
+      const disp = document.querySelector('#panelBody .timer-display');
+      if (disp && viewMode !== 'track') {
+        const v = viewMode === 'pomodoro' ? (clock.mode === 'pomodoro' ? clock.remaining : phaseSeconds('work'))
+          : viewMode === 'stopwatch' ? (clock.mode === 'stopwatch' ? clock.elapsed : 0)
+          : (clock.mode === 'countdown' ? clock.remaining : 0);
+        disp.textContent = formatTime(v);
+      }
+      const fill = document.querySelector('#panelBody .progress-fill');
+      if (fill) fill.style.width = getProgress() + '%';
+    }
+    updateMini();
+    updateCardTickers();
+  }
+
+  function isPanelOpen() {
+    const p = document.getElementById('slidePanel');
+    return !!p && p.classList.contains('active');
+  }
+
   // ── Session helpers ─────────────────────────────────────────
-  function sessionOpenSegment() {
-    return session && session.segments.length > 0 && !session.segments[session.segments.length - 1].end
-      ? session.segments[session.segments.length - 1] : null;
+  function getSession(entryId) {
+    return sessions.find(s => s.entryId === entryId) || null;
   }
 
-  function sessionPause() {
-    const seg = sessionOpenSegment();
-    if (seg) seg.end = new Date();
+  function sessionElapsed(s) {
+    return s.segments.reduce((sum, seg) => sum + (((seg.end || new Date()) - seg.start) / 1000), 0);
   }
 
-  function sessionResume() {
-    if (session && !sessionOpenSegment()) session.segments.push({ start: new Date() });
+  // Card badges ask for this: null when not tracked.
+  function getTracking(entryId) {
+    const s = getSession(entryId);
+    if (!s) return null;
+    return { elapsed: sessionElapsed(s), state: s.state };
   }
 
-  // Insert planner blocks for every segment >= 1 minute.
-  function finalizeSession() {
-    if (!session) return;
-    sessionPause();
-    const entry = State.getEntry(session.entryId);
+  function trackedCount() { return sessions.length; }
+
+  // Arm from a task card's play button: nothing runs until Start is pressed.
+  function armTracking(entryId) {
+    if (getSession(entryId)) { viewMode = 'track'; openPanel(); return; }
+    pendingTaskId = entryId;
+    viewMode = 'track';
+    openPanel();
+  }
+
+  function startPending() {
+    if (pendingTaskId) startSession(pendingTaskId);
+    pendingTaskId = null;
+  }
+
+  function startSession(entryId) {
+    const existing = getSession(entryId);
+    if (existing) { resumeSession(entryId); return; }
+    sessions.push({ entryId, segments: [{ start: new Date() }], state: 'running' });
+    if (pendingTaskId === entryId) pendingTaskId = null;
+    ensureTicker();
+    render();
+    if (typeof App !== 'undefined') App.render();
+  }
+
+  function pauseSession(entryId) {
+    const s = getSession(entryId);
+    if (!s || s.state !== 'running') return;
+    const seg = s.segments[s.segments.length - 1];
+    if (seg && !seg.end) seg.end = new Date();
+    s.state = 'paused';
+    maybeStopTicker();
+    render();
+    updateCardTickers();
+  }
+
+  function resumeSession(entryId) {
+    const s = getSession(entryId);
+    if (!s || s.state === 'running') return;
+    s.segments.push({ start: new Date() });
+    s.state = 'running';
+    ensureTicker();
+    render();
+  }
+
+  function stopSession(entryId) {
+    const s = getSession(entryId);
+    if (!s) return;
+    const seg = s.segments[s.segments.length - 1];
+    if (seg && !seg.end) seg.end = new Date();
+    const total = Math.round(sessionElapsed(s));
+
+    if (total >= 60) {
+      State.logTimeSession(entryId, total, 'Tracked');
+      insertPlannerBlocks(entryId, s.segments);
+      showToast('Logged to planner');
+    } else {
+      showToast('Under a minute — not logged');
+    }
+
+    sessions = sessions.filter(x => x !== s);
+    maybeStopTicker();
+    render();
+    if (typeof App !== 'undefined') App.render();
+  }
+
+  function insertPlannerBlocks(entryId, segments) {
+    const entry = State.getEntry(entryId);
     const proj = entry?.projectId ? State.getProject(entry.projectId) : null;
-    session.segments.forEach(seg => {
-      if (!seg.end || (seg.end - seg.start) < 60000) return;
+    segments.forEach(seg => {
+      if (!seg.end || (seg.end - seg.start) < 60000) return; // skip sub-minute segments
       State.createPlannerBlock({
         date: State.dateStr(seg.start),
         start: hhmm(seg.start),
         end: hhmm(seg.end),
         title: entry?.title || 'Tracked time',
-        entryId: session.entryId,
+        entryId,
         projectId: entry?.projectId || null,
         color: proj?.color || null,
         kind: 'tracked',
       });
     });
-    session = null;
   }
 
-  function start() {
-    if (timerState === 'running') return;
-    if (mode === 'pomodoro' && timerState === 'idle') {
-      const s = getSettings();
-      remaining = (pomodoroPhase === 'work' ? s.pomodoroWork : pomodoroPhase === 'break' ? s.pomodoroBreak : s.pomodoroLongBreak) * 60;
+  // ── Clock controls ──────────────────────────────────────────
+  // Starting under a view adopts that mode; a clock already running in a
+  // different mode is reset first (there is exactly one clock).
+  function startClock() {
+    const m = viewMode === 'track' ? 'stopwatch' : viewMode;
+    if (clock.mode !== m || clock.state === 'idle') {
+      clock.mode = m;
+      clock.phase = clock.mode === 'pomodoro' ? clock.phase : 'work';
+      if (m === 'pomodoro') clock.remaining = phaseSeconds();
+      if (m === 'stopwatch') clock.elapsed = 0;
+      if (m === 'countdown' && clock.remaining <= 0) { render(); return; } // needs a preset
+      clock.startedAt = new Date();
     }
-    if (mode === 'stopwatch' && timerState === 'idle') {
-      elapsed = 0;
-    }
-    // Resuming an explicitly paused tracking session starts a new segment.
-    if (trackedTaskId && timerState === 'paused') sessionResume();
-    timerState = 'running';
-    tick();
-    intervalId = setInterval(tick, 1000);
+    clock.state = 'running';
+    ensureTicker();
     render();
   }
 
-  function pause() {
-    timerState = 'paused';
-    clearInterval(intervalId);
-    // An explicit pause is a break in the day planner (unlike pomodoro's
-    // automatic break phases, which keep the segment open).
-    if (trackedTaskId) sessionPause();
+  function pauseClock() {
+    if (clock.state !== 'running') return;
+    clock.state = 'paused';
+    maybeStopTicker();
     render();
   }
 
-  function reset() {
-    timerState = 'idle';
-    clearInterval(intervalId);
-    if (trackedTaskId) {
-      finalizeSession();
-      trackedTaskId = null;
+  function resetClock() {
+    // A linked stopwatch logs its time on reset (that's its "stop")
+    if (clock.mode === 'stopwatch' && clock.linkedTaskId && clock.elapsed >= 60) {
+      State.logTimeSession(clock.linkedTaskId, clock.elapsed, 'Stopwatch');
+      clockPlannerBlock(clock.elapsed);
+      showToast('Stopwatch logged');
     }
-    if (mode === 'pomodoro') {
-      const s = getSettings();
-      remaining = (pomodoroPhase === 'work' ? s.pomodoroWork : pomodoroPhase === 'break' ? s.pomodoroBreak : s.pomodoroLongBreak) * 60;
-    } else if (mode === 'stopwatch') {
-      elapsed = 0;
-    } else if (mode === 'countdown') {
-      remaining = 0;
-    } else if (mode === 'track') {
-      elapsed = 0;
-    }
+    clock.state = 'idle';
+    clock.mode = null;
+    clock.elapsed = 0;
+    clock.remaining = 0;
+    clock.startedAt = null;
+    maybeStopTicker();
     render();
   }
 
-  function tick() {
-    if (timerState !== 'running') return;
-    if (mode === 'pomodoro' || mode === 'countdown') {
-      remaining--;
-      if (remaining <= 0) {
-        timerState = 'done';
-        clearInterval(intervalId);
-        onComplete();
-      }
-    } else if (mode === 'stopwatch') {
-      elapsed++;
-    } else if (mode === 'track') {
-      elapsed++;
-    }
-    render();
+  function clockPlannerBlock(durationSec) {
+    if (!clock.linkedTaskId || !clock.startedAt) return;
+    const entry = State.getEntry(clock.linkedTaskId);
+    const proj = entry?.projectId ? State.getProject(entry.projectId) : null;
+    const end = new Date();
+    const start = new Date(end - durationSec * 1000);
+    State.createPlannerBlock({
+      date: State.dateStr(start),
+      start: hhmm(start),
+      end: hhmm(end),
+      title: entry?.title || 'Focus',
+      entryId: clock.linkedTaskId,
+      projectId: entry?.projectId || null,
+      color: proj?.color || null,
+      kind: 'tracked',
+    });
   }
 
-  function onComplete() {
-    if (mode === 'pomodoro') {
-      if (pomodoroPhase === 'work') {
-        pomodoroCount++;
-        // Log time if tracking a task (seconds — display expects seconds)
-        if (trackedTaskId) {
-          const s = getSettings();
-          State.logTimeSession(trackedTaskId, s.pomodoroWork * 60, `Pomodoro #${pomodoroCount}`);
+  function onClockComplete() {
+    if (clock.mode === 'pomodoro') {
+      if (clock.phase === 'work') {
+        clock.count++;
+        if (clock.linkedTaskId) {
+          State.logTimeSession(clock.linkedTaskId, phaseSeconds('work'), `Pomodoro #${clock.count}`);
+          clockPlannerBlock(phaseSeconds('work'));
         }
-        pomodoroPhase = pomodoroCount % 4 === 0 ? 'longBreak' : 'break';
-        showToast(`${PHASE_LABELS[pomodoroPhase]} time!`);
+        clock.phase = clock.count % 4 === 0 ? 'longBreak' : 'break';
+        showToast(`${PHASE_LABELS[clock.phase]} time!`);
       } else {
-        pomodoroPhase = 'work';
+        clock.phase = 'work';
         showToast('Back to focus!');
       }
-      // NOTE: the tracking session's segment intentionally stays open across
-      // pomodoro break phases — pomodoro breaks are not planner breaks.
-      const s = getSettings();
-      remaining = (pomodoroPhase === 'work' ? s.pomodoroWork : pomodoroPhase === 'break' ? s.pomodoroBreak : s.pomodoroLongBreak) * 60;
-      timerState = 'idle';
-      if (s.autoStart) start();
-    } else if (mode === 'countdown') {
+      clock.remaining = phaseSeconds();
+      clock.startedAt = new Date();
+      if (getSettings().autoStart) {
+        clock.state = 'running';
+      } else {
+        clock.state = 'paused';
+        maybeStopTicker();
+      }
+    } else if (clock.mode === 'countdown') {
+      if (clock.linkedTaskId && clock.countdownTotal >= 60) {
+        State.logTimeSession(clock.linkedTaskId, clock.countdownTotal, 'Countdown');
+        clockPlannerBlock(clock.countdownTotal);
+      }
       showToast('Countdown complete!');
-      timerState = 'idle';
+      clock.state = 'idle';
+      clock.mode = null;
+      maybeStopTicker();
     }
-    render();
+    render(); // phase/pill/labels changed — full panel refresh
+    if (typeof App !== 'undefined') App.render();
   }
 
-  function setMode(m) {
-    // Switching between pomodoro and track keeps a live session alive;
-    // leaving both finalizes it.
-    if (session && m !== 'pomodoro' && m !== 'track') {
-      finalizeSession();
-      trackedTaskId = null;
-    }
-    mode = m;
-    timerState = 'idle';
-    clearInterval(intervalId);
-    if (m === 'pomodoro') {
-      const s = getSettings();
-      remaining = s.pomodoroWork * 60;
-      pomodoroPhase = 'work';
-    } else if (m === 'stopwatch' || m === 'track') {
-      elapsed = 0;
-    } else if (m === 'countdown') {
-      remaining = 0;
-    }
+  function setViewMode(m) {
+    viewMode = m; // view only — the clock and sessions keep running
     render();
   }
 
   function setPomodoroPhase(phase) {
-    if (mode !== 'pomodoro') return;
-    pomodoroPhase = phase;
-    timerState = 'idle';
-    clearInterval(intervalId);
-    const s = getSettings();
-    remaining = (phase === 'work' ? s.pomodoroWork : phase === 'break' ? s.pomodoroBreak : s.pomodoroLongBreak) * 60;
+    clock.phase = phase;
+    if (clock.mode === 'pomodoro') {
+      clock.remaining = phaseSeconds(phase);
+      clock.state = 'paused';
+    }
     render();
   }
 
   function setCountdown(minutes) {
-    if (mode !== 'countdown') return;
-    remaining = minutes * 60;
-    timerState = 'idle';
-    clearInterval(intervalId);
+    clock.mode = 'countdown';
+    clock.countdownTotal = minutes * 60;
+    clock.remaining = minutes * 60;
+    clock.state = 'paused';
+    clock.startedAt = new Date();
     render();
   }
 
-  function startTracking(taskId) {
-    // Finalize any previous session first
-    if (session) finalizeSession();
-    trackedTaskId = taskId;
-    mode = 'track';
-    elapsed = 0;
-    session = { entryId: taskId, segments: [{ start: new Date() }] };
-    timerState = 'running';
-    clearInterval(intervalId);
-    tick();
-    intervalId = setInterval(tick, 1000);
+  function linkTask(taskId) {
+    clock.linkedTaskId = taskId || null;
     render();
   }
 
-  function stopTracking() {
-    if (trackedTaskId) {
-      // Total tracked = sum of segment durations (seconds)
-      let total = elapsed;
-      if (session) {
-        sessionPause();
-        total = Math.round(session.segments.reduce((s, seg) => s + ((seg.end || new Date()) - seg.start), 0) / 1000);
-      }
-      if (total >= 30) State.logTimeSession(trackedTaskId, total, 'Manual tracking');
-      finalizeSession();
-      trackedTaskId = null;
-      showToast('Session logged to planner');
+  // ── Card tickers & mini widget ──────────────────────────────
+  function updateCardTickers() {
+    document.querySelectorAll('[data-tick-entry]').forEach(el => {
+      const t = getTracking(el.dataset.tickEntry);
+      if (t) el.textContent = (t.state === 'paused' ? '⏸ ' : '') + formatTime(t.elapsed);
+    });
+  }
+
+  function updateMini() {
+    const el = document.getElementById('timerMini');
+    if (!el) return;
+    const active = clock.mode && clock.state !== 'idle';
+    const hasSessions = sessions.length > 0;
+    if (isPanelOpen() || (!active && !hasSessions)) {
+      el.style.display = 'none';
+      return;
     }
-    timerState = 'idle';
-    elapsed = 0;
-    clearInterval(intervalId);
-    render();
-    if (window.App) App.render();
+    let parts = [];
+    if (active) {
+      const v = clock.mode === 'stopwatch' ? clock.elapsed : clock.remaining;
+      const label = clock.mode === 'pomodoro' ? PHASE_LABELS[clock.phase] : clock.mode === 'countdown' ? 'Countdown' : 'Stopwatch';
+      parts.push(`<span class="tm-clock ${clock.state === 'paused' ? 'paused' : ''}">${label} ${formatTime(v)}</span>`);
+    }
+    if (hasSessions) {
+      const first = sessions[0];
+      const entry = State.getEntry(first.entryId);
+      parts.push(`<span class="tm-session ${first.state === 'paused' ? 'paused' : ''}">▸ ${formatTime(sessionElapsed(first))} ${entry?.title || ''}</span>`);
+      if (sessions.length > 1) parts.push(`<span class="tm-more">+${sessions.length - 1}</span>`);
+    }
+    el.innerHTML = parts.join('');
+    el.style.display = 'flex';
   }
 
   function showToast(msg) {
     const toast = document.getElementById('toast');
+    if (!toast) return;
     toast.textContent = msg;
     toast.classList.add('show');
     setTimeout(() => toast.classList.remove('show'), 2500);
   }
 
   function getProgress() {
-    if (mode === 'pomodoro') {
-      const s = getSettings();
-      const total = (pomodoroPhase === 'work' ? s.pomodoroWork : pomodoroPhase === 'break' ? s.pomodoroBreak : s.pomodoroLongBreak) * 60;
-      return total > 0 ? ((total - remaining) / total) * 100 : 0;
+    if (clock.mode === 'pomodoro') {
+      const total = phaseSeconds();
+      return total > 0 ? ((total - clock.remaining) / total) * 100 : 0;
     }
-    if (mode === 'countdown' && remaining > 0) {
-      // No total stored, return 0
-      return 0;
+    if (clock.mode === 'countdown' && clock.countdownTotal > 0) {
+      return ((clock.countdownTotal - clock.remaining) / clock.countdownTotal) * 100;
     }
     return 0;
   }
 
+  // ── Panel rendering ─────────────────────────────────────────
+  function linkTaskSelect() {
+    const tasks = State.getEntries({ type: 'task', completed: false });
+    return `
+      <div class="divider"></div>
+      <div class="section-title" style="margin-bottom:var(--space-2);">Link to task (optional)</div>
+      <select class="form-select" onchange="Timers.linkTask(this.value || null)">
+        <option value="">No task — just a timer</option>
+        ${tasks.map(t => `<option value="${t.id}" ${clock.linkedTaskId === t.id ? 'selected' : ''}>${t.title}</option>`).join('')}
+      </select>
+      ${clock.linkedTaskId ? `<p class="text-xs text-faint" style="margin-top:var(--space-2);">Completed focus time logs to this task and lands in the day planner.</p>` : ''}
+    `;
+  }
+
+  function clockControls(canStart) {
+    const running = clock.state === 'running' && clock.mode === (viewMode === 'track' ? 'stopwatch' : viewMode);
+    return `
+      <div class="timer-controls">
+        <button class="btn btn-secondary" onclick="Timers.resetClock()"><i data-lucide="rotate-ccw" style="width:16px;height:16px"></i>Reset</button>
+        ${running
+          ? `<button class="btn btn-primary" onclick="Timers.pauseClock()"><i data-lucide="pause" style="width:16px;height:16px"></i>Pause</button>`
+          : `<button class="btn btn-primary" onclick="Timers.startClock()" ${canStart === false ? 'disabled style="opacity:0.5"' : ''}><i data-lucide="play" style="width:16px;height:16px"></i>${clock.state === 'paused' && clock.mode === viewMode ? 'Resume' : 'Start'}</button>`
+        }
+      </div>
+    `;
+  }
+
   function render() {
     const body = document.getElementById('panelBody');
-    if (!body) return;
-    const s = getSettings();
-
-    let displayTime = mode === 'stopwatch' || mode === 'track' ? elapsed : remaining;
-    const isRunning = timerState === 'running';
+    if (!body || !isPanelOpen()) { updateMini(); return; }
 
     let html = `
       <div class="timer-mode">
-        <button class="timer-mode-btn ${mode === 'pomodoro' ? 'active' : ''}" onclick="Timers.setMode('pomodoro')">Pomodoro</button>
-        <button class="timer-mode-btn ${mode === 'stopwatch' ? 'active' : ''}" onclick="Timers.setMode('stopwatch')">Stopwatch</button>
-        <button class="timer-mode-btn ${mode === 'countdown' ? 'active' : ''}" onclick="Timers.setMode('countdown')">Countdown</button>
-        <button class="timer-mode-btn ${mode === 'track' ? 'active' : ''}" onclick="Timers.setMode('track')">Track</button>
+        <button class="timer-mode-btn ${viewMode === 'track' ? 'active' : ''}" onclick="Timers.setViewMode('track')">Track${sessions.length ? ` (${sessions.length})` : ''}</button>
+        <button class="timer-mode-btn ${viewMode === 'pomodoro' ? 'active' : ''}" onclick="Timers.setViewMode('pomodoro')">Pomodoro</button>
+        <button class="timer-mode-btn ${viewMode === 'stopwatch' ? 'active' : ''}" onclick="Timers.setViewMode('stopwatch')">Stopwatch</button>
+        <button class="timer-mode-btn ${viewMode === 'countdown' ? 'active' : ''}" onclick="Timers.setViewMode('countdown')">Countdown</button>
       </div>
     `;
 
-    if (mode === 'pomodoro') {
+    if (viewMode === 'pomodoro') {
+      const showLive = clock.mode === 'pomodoro';
+      const display = showLive ? clock.remaining : phaseSeconds('work');
       html += `
         <div style="text-align:center;margin-bottom:var(--space-3);">
-          <div class="pill pill-accent" style="margin-bottom:var(--space-3);">${PHASE_LABELS[pomodoroPhase]}</div>
+          <div class="pill pill-accent" style="margin-bottom:var(--space-3);">${PHASE_LABELS[showLive ? clock.phase : 'work']}</div>
         </div>
-        <div class="timer-display">${formatTime(displayTime)}</div>
+        <div class="timer-display">${formatTime(display)}</div>
         <div class="progress-bar" style="margin-top:var(--space-4);">
-          <div class="progress-fill" style="width:${getProgress()}%"></div>
+          <div class="progress-fill" style="width:${showLive ? getProgress() : 0}%"></div>
         </div>
         <div style="text-align:center;margin-top:var(--space-2);">
-          <span class="stat-label">Session ${pomodoroCount + 1} · ${pomodoroCount} completed today</span>
+          <span class="stat-label">Session ${clock.count + 1} · ${clock.count} completed today</span>
         </div>
-        <div class="timer-controls">
-          ${timerState === 'running' || timerState === 'paused'
-            ? `<button class="btn btn-secondary" onclick="Timers.reset()"><i data-lucide="rotate-ccw" style="width:16px;height:16px"></i>Reset</button>
-               ${isRunning
-                 ? `<button class="btn btn-primary" onclick="Timers.pause()"><i data-lucide="pause" style="width:16px;height:16px"></i>Pause</button>`
-                 : `<button class="btn btn-primary" onclick="Timers.start()"><i data-lucide="play" style="width:16px;height:16px"></i>Resume</button>`}`
-            : `<button class="btn btn-primary" onclick="Timers.start()"><i data-lucide="play" style="width:16px;height:16px"></i>Start</button>`
-          }
-        </div>
+        ${clockControls()}
         <div class="divider"></div>
         <div class="section-title" style="margin-bottom:var(--space-2);">Switch Phase</div>
         <div style="display:flex;gap:var(--space-2);">
-          <button class="btn btn-secondary btn-sm ${pomodoroPhase === 'work' ? 'active' : ''}" style="flex:1" onclick="Timers.setPomodoroPhase('work')">Focus</button>
-          <button class="btn btn-secondary btn-sm ${pomodoroPhase === 'break' ? 'active' : ''}" style="flex:1" onclick="Timers.setPomodoroPhase('break')">Break</button>
-          <button class="btn btn-secondary btn-sm ${pomodoroPhase === 'longBreak' ? 'active' : ''}" style="flex:1" onclick="Timers.setPomodoroPhase('longBreak')">Long</button>
+          <button class="btn btn-secondary btn-sm" style="flex:1" onclick="Timers.setPomodoroPhase('work')">Focus</button>
+          <button class="btn btn-secondary btn-sm" style="flex:1" onclick="Timers.setPomodoroPhase('break')">Break</button>
+          <button class="btn btn-secondary btn-sm" style="flex:1" onclick="Timers.setPomodoroPhase('longBreak')">Long</button>
         </div>
-        ${trackedTaskId ? `<div style="text-align:center;margin-top:var(--space-3);">
-          <span class="stat-label">Tracking: ${State.getEntry(trackedTaskId)?.title || 'Unknown'}</span>
-        </div>` : ''}
+        ${linkTaskSelect()}
       `;
-    } else if (mode === 'stopwatch') {
+    } else if (viewMode === 'stopwatch') {
+      const showLive = clock.mode === 'stopwatch';
       html += `
-        <div class="timer-display">${formatTime(displayTime)}</div>
-        <div class="timer-controls">
-          <button class="btn btn-secondary" onclick="Timers.reset()"><i data-lucide="rotate-ccw" style="width:16px;height:16px"></i>Reset</button>
-          ${isRunning
-            ? `<button class="btn btn-primary" onclick="Timers.pause()"><i data-lucide="pause" style="width:16px;height:16px"></i>Pause</button>`
-            : `<button class="btn btn-primary" onclick="Timers.start()"><i data-lucide="play" style="width:16px;height:16px"></i>${elapsed > 0 ? 'Resume' : 'Start'}</button>`
-          }
-        </div>
+        <div class="timer-display">${formatTime(showLive ? clock.elapsed : 0)}</div>
+        ${clockControls()}
+        ${linkTaskSelect()}
       `;
-    } else if (mode === 'countdown') {
+    } else if (viewMode === 'countdown') {
+      const showLive = clock.mode === 'countdown';
       const presets = [1, 5, 10, 15, 30];
       html += `
-        <div class="timer-display">${formatTime(displayTime || 0)}</div>
-        <div class="timer-controls">
-          <button class="btn btn-secondary" onclick="Timers.reset()"><i data-lucide="rotate-ccw" style="width:16px;height:16px"></i>Reset</button>
-          ${isRunning
-            ? `<button class="btn btn-primary" onclick="Timers.pause()"><i data-lucide="pause" style="width:16px;height:16px"></i>Pause</button>`
-            : `<button class="btn btn-primary" onclick="Timers.start()" ${remaining === 0 ? 'disabled style="opacity:0.5"' : ''}><i data-lucide="play" style="width:16px;height:16px"></i>Start</button>`
-          }
-        </div>
+        <div class="timer-display">${formatTime(showLive ? clock.remaining : 0)}</div>
+        ${showLive && clock.countdownTotal > 0 ? `
+        <div class="progress-bar" style="margin-top:var(--space-4);">
+          <div class="progress-fill" style="width:${getProgress()}%"></div>
+        </div>` : ''}
+        ${clockControls(showLive && clock.remaining > 0)}
         <div class="divider"></div>
         <div class="section-title" style="margin-bottom:var(--space-2);">Set Duration</div>
         <div style="display:flex;gap:var(--space-2);flex-wrap:wrap;">
           ${presets.map(m => `<button class="btn btn-secondary btn-sm" onclick="Timers.setCountdown(${m})">${m}m</button>`).join('')}
         </div>
+        ${linkTaskSelect()}
       `;
-    } else if (mode === 'track') {
+    } else if (viewMode === 'track') {
       const tasks = State.getEntries({ type: 'task', completed: false });
-      const paused = timerState === 'paused' && trackedTaskId;
+      const pending = pendingTaskId ? State.getEntry(pendingTaskId) : null;
+
+      // Armed task waiting for an explicit Start
+      if (pending) {
+        html += `
+          <div class="card" style="border-color:var(--accent);background:var(--accent-tint);margin-bottom:var(--space-3);">
+            <div class="text-sm" style="font-weight:600;margin-bottom:var(--space-2);">${pending.title}</div>
+            <div class="timer-display" style="font-size:2rem;">0:00</div>
+            <div class="timer-controls">
+              <button class="btn btn-secondary" onclick="Timers.cancelPending()">Cancel</button>
+              <button class="btn btn-primary" onclick="Timers.startPending()"><i data-lucide="play" style="width:16px;height:16px"></i>Start</button>
+            </div>
+          </div>
+        `;
+      }
+
+      // Active sessions — multiple allowed
+      if (sessions.length > 0) {
+        html += `<div class="section-title" style="margin-bottom:var(--space-2);">Tracking now</div>`;
+        sessions.forEach(s => {
+          const entry = State.getEntry(s.entryId);
+          const proj = entry?.projectId ? State.getProject(entry.projectId) : null;
+          html += `
+            <div class="session-row ${s.state === 'paused' ? 'paused' : ''}">
+              <span class="proj-dot" style="background:${proj?.color || '#888'}"></span>
+              <span class="text-sm truncate" style="flex:1">${entry?.title || 'Unknown'}</span>
+              <span class="font-mono text-sm" style="color:var(--accent-text);" data-tick-entry="${s.entryId}">${formatTime(sessionElapsed(s))}</span>
+              ${s.state === 'running'
+                ? `<button class="icon-btn" onclick="Timers.pauseSession('${s.entryId}')" aria-label="Pause"><i data-lucide="pause" style="width:15px;height:15px"></i></button>`
+                : `<button class="icon-btn" onclick="Timers.resumeSession('${s.entryId}')" aria-label="Resume"><i data-lucide="play" style="width:15px;height:15px"></i></button>`}
+              <button class="icon-btn" onclick="Timers.stopSession('${s.entryId}')" aria-label="Stop and log"><i data-lucide="square" style="width:15px;height:15px"></i></button>
+            </div>
+          `;
+        });
+        html += `<p class="text-xs text-faint" style="margin:var(--space-2) 0;">Pause inserts a gap in the planner. Stop logs the session.</p>`;
+      }
+
+      if (!pending && sessions.length === 0) {
+        html += `<p class="text-muted text-sm" style="text-align:center;margin:var(--space-4) 0;">Pick a task below — you can track several at once.</p>`;
+      }
+
+      const trackable = tasks.filter(t => !getSession(t.id) && t.id !== pendingTaskId);
       html += `
-        <div class="timer-display">${formatTime(displayTime)}</div>
-        ${trackedTaskId ? `<div style="text-align:center;margin-top:var(--space-2);">
-          <span class="stat-label">${paused ? 'Paused — break in planner' : 'Tracking'}: ${State.getEntry(trackedTaskId)?.title || 'Unknown'}</span>
-        </div>` : ''}
-        <div class="timer-controls">
-          ${trackedTaskId
-            ? `${isRunning
-                 ? `<button class="btn btn-secondary" onclick="Timers.pause()"><i data-lucide="pause" style="width:16px;height:16px"></i>Pause</button>`
-                 : `<button class="btn btn-secondary" onclick="Timers.start()"><i data-lucide="play" style="width:16px;height:16px"></i>Resume</button>`}
-               <button class="btn btn-danger" onclick="Timers.stopTracking()"><i data-lucide="square" style="width:16px;height:16px"></i>Stop & Log</button>`
-            : `<p class="text-muted text-sm" style="text-align:center;width:100%;">Pick a task below to start tracking</p>`
-          }
-        </div>
         <div class="divider"></div>
-        <div class="section-title" style="margin-bottom:var(--space-2);">Select Task to Track</div>
+        <div class="section-title" style="margin-bottom:var(--space-2);">Start tracking</div>
         <div style="display:flex;flex-direction:column;gap:var(--space-2);">
-          ${tasks.length === 0 ? '<p class="text-muted text-sm">No open tasks</p>' :
-            tasks.slice(0, 8).map(t => `
-              <button class="chain-link" style="cursor:pointer;${trackedTaskId === t.id ? 'border-color:var(--accent);background:var(--accent-tint);' : ''}" onclick="Timers.startTracking('${t.id}')">
+          ${trackable.length === 0 ? '<p class="text-muted text-sm">No other open tasks</p>' :
+            trackable.slice(0, 8).map(t => `
+              <button class="chain-link" style="cursor:pointer;" onclick="Timers.startSession('${t.id}')">
                 <span class="proj-dot" style="background:${t.projectId ? State.getProject(t.projectId)?.color || '#888' : '#888'}"></span>
                 <span class="text-sm truncate">${t.title}</span>
               </button>
@@ -386,20 +547,29 @@ const Timers = (() => {
     if (window.lucide) lucide.createIcons();
   }
 
-  function openPanel() {
-    document.getElementById('panelTitle').textContent = 'Timer';
-    document.getElementById('panelOverlay').classList.add('active');
-    // The panel has its own .active transform — without this it stays
-    // translated off-screen while the overlay blurs the page.
-    document.getElementById('slidePanel').classList.add('active');
+  function cancelPending() {
+    pendingTaskId = null;
     render();
   }
 
-  function isTracking() { return !!trackedTaskId; }
+  function openPanel() {
+    document.getElementById('panelTitle').textContent = 'Timer';
+    document.getElementById('panelOverlay').classList.add('active');
+    document.getElementById('slidePanel').classList.add('active');
+    render();
+    updateMini();
+  }
+
+  // Back-compat: card play buttons arm instead of auto-starting
+  function startTracking(taskId) { armTracking(taskId); }
 
   return {
-    start, pause, reset, setMode, setPomodoroPhase, setCountdown,
-    startTracking, stopTracking, openPanel, render, isTracking,
-    formatTime, getProgress,
+    // clock
+    startClock, pauseClock, resetClock, setViewMode, setPomodoroPhase, setCountdown, linkTask,
+    // sessions
+    armTracking, startPending, cancelPending, startSession, pauseSession, resumeSession, stopSession,
+    getTracking, trackedCount, startTracking,
+    // panel / misc
+    openPanel, render, updateMini, formatTime, getProgress,
   };
 })();

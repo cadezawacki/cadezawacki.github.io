@@ -26,6 +26,8 @@ const State = (() => {
         autoStart: false,
       },
       calorieGoal: 2000,
+      workingProject: null,    // "Next Best Task" project scope
+      sidebarCollapsed: false, // desktop sidebar state
       quickShortcuts: [
         { id: 'qs-coffee', label: 'Cup of coffee', emoji: '☕', calories: 5, meal: 'snack' },
         { id: 'qs-water', label: 'Glass of water', emoji: '💧', calories: null, meal: null },
@@ -105,7 +107,7 @@ const State = (() => {
   function emit() {
     save();
     listeners.forEach(fn => fn(data));
-    if (window.Sync) Sync.schedulePush();
+    if (typeof Sync !== 'undefined') Sync.schedulePush();
   }
 
   // ── Subscribe ───────────────────────────────────────────────

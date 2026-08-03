@@ -50,6 +50,10 @@
       <i data-lucide="crosshair"></i>
       <span>Focus</span>
     </button>
+    <button class="tab-item" data-tab="planner">
+      <i data-lucide="calendar-days"></i>
+      <span>Planner</span>
+    </button>
     <button class="tab-item" data-tab="health">
       <i data-lucide="apple"></i>
       <span>Health</span>
@@ -65,6 +69,10 @@
     <button class="tab-item" data-tab="settings">
       <i data-lucide="settings"></i>
       <span>Settings</span>
+    </button>
+    <button class="tab-item sidebar-toggle" id="sidebarToggle" aria-label="Collapse sidebar">
+      <i data-lucide="chevrons-left"></i>
+      <span>Collapse</span>
     </button>
   </nav>
 
@@ -93,11 +101,17 @@
     <div class="slide-panel" id="slidePanel">
       <div class="slide-panel-header">
         <h2 class="modal-title" id="panelTitle">Timer</h2>
-        <button class="icon-btn" id="panelClose" aria-label="Close"><i data-lucide="x" style="width:18px;height:18px"></i></button>
+        <div style="display:flex;gap:4px;">
+          <button class="icon-btn" id="panelMinimize" aria-label="Minimize" title="Minimize — timers keep running"><i data-lucide="minus" style="width:18px;height:18px"></i></button>
+          <button class="icon-btn" id="panelClose" aria-label="Close"><i data-lucide="x" style="width:18px;height:18px"></i></button>
+        </div>
       </div>
       <div class="slide-panel-body" id="panelBody"></div>
     </div>
   </div>
+
+  <!-- ═══ FLOATING TIMER MINI WIDGET ═══ -->
+  <button class="timer-mini" id="timerMini" style="display:none;" onclick="Timers.openPanel()" aria-label="Open timer"></button>
 
   <!-- ═══ TOAST ═══ -->
   <div class="toast" id="toast"></div>
