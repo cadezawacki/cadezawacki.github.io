@@ -8,72 +8,6 @@ const App = (() => {
   let entryTypeDraft = 'task';
 
   // ═══════════════════════════════════════════════════════════
-  // ICONS — Lucide icon names by category
-  // ═══════════════════════════════════════════════════════════
-  const ICONS = {
-    today: 'layout-dashboard',
-    projects: 'folder-kanban',
-    habits: 'repeat',
-    insights: 'bar-chart-3',
-    settings: 'settings',
-    add: 'plus',
-    search: 'search',
-    close: 'x',
-    check: 'check',
-    trash: 'trash-2',
-    edit: 'pencil',
-    play: 'play',
-    pause: 'pause',
-    reset: 'rotate-ccw',
-    timer: 'timer',
-    flame: 'flame',
-    target: 'target',
-    calendar: 'calendar-days',
-    tag: 'tag',
-    flag: 'flag',
-    clock: 'clock',
-    brain: 'brain',
-    zap: 'zap',
-    heart: 'heart',
-    coffee: 'coffee',
-    dumbbell: 'dumbbell',
-    book: 'book-open',
-    briefcase: 'briefcase',
-    home: 'home',
-    music: 'music',
-    rocket: 'rocket',
-    leaf: 'leaf',
-    pen: 'pen-tool',
-    star: 'star',
-    compass: 'compass',
-    palette: 'palette',
-    shopping: 'shopping-cart',
-    graduation: 'graduation-cap',
-    code: 'code-2',
-    plane: 'plane',
-    sun: 'sun',
-    moon: 'moon',
-    sunMoon: 'sun-moon',
-    download: 'download',
-    upload: 'upload',
-    sync: 'refresh-cw',
-    cloud: 'cloud',
-    cloudOff: 'cloud-off',
-    more: 'more-horizontal',
-    chevron: 'chevron-right',
-    listChecks: 'list-checks',
-    trending: 'trending-up',
-    layers: 'layers',
-    coffee2: 'coffee',
-    utensils: 'utensils',
-    smile: 'smile',
-    frown: 'frown',
-    meh: 'meh',
-    angry: 'angry',
-    laugh: 'laugh',
-  };
-
-  // ═══════════════════════════════════════════════════════════
   // UTILITIES
   // ═══════════════════════════════════════════════════════════
   function toast(msg) {
@@ -101,12 +35,21 @@ const App = (() => {
     return map[priority] || 'gray';
   }
 
+  // Minimal line icons for moods (replaces emoji)
+  const MOOD_ICONS = { great: 'laugh', good: 'smile', okay: 'meh', low: 'frown', bad: 'angry' };
+
+  function estimateLabel(min) {
+    if (!min) return '';
+    if (min < 60) return `${min}m`;
+    const h = Math.floor(min / 60), m = min % 60;
+    return m ? `${h}h${m}m` : `${h}h`;
+  }
+
   function formatDueDate(dateStr) {
     if (!dateStr) return '';
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    const d = new Date(dateStr);
-    d.setHours(0, 0, 0, 0);
+    const d = new Date(dateStr + 'T00:00');
     const diff = Math.round((d - today) / 86400000);
     if (diff === 0) return 'Today';
     if (diff === 1) return 'Tomorrow';
@@ -125,18 +68,56 @@ const App = (() => {
     return dateStr < State.todayStr();
   }
 
+  function timeToMin(t) {
+    if (!t) return 0;
+    const [h, m] = t.split(':').map(Number);
+    return h * 60 + (m || 0);
+  }
+
+  function minToTime(min) {
+    const h = Math.floor(min / 60), m = min % 60;
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+  }
+
+  function nowTime() {
+    const d = new Date();
+    return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  }
+
+  function offsetDateStr(offset) {
+    const d = new Date();
+    d.setDate(d.getDate() + offset);
+    return State.dateStr(d);
+  }
+
+  function friendlyDate(dateStr) {
+    const today = State.todayStr();
+    if (dateStr === today) return 'Today';
+    if (dateStr === State.yesterdayStr()) return 'Yesterday';
+    if (dateStr === offsetDateStr(1)) return 'Tomorrow';
+    const d = new Date(dateStr + 'T00:00');
+    return d.toLocaleDateString('en', { weekday: 'short', month: 'short', day: 'numeric' });
+  }
+
+  function logTimeOf(l) {
+    // wake/sleep carry an explicit HH:MM; everything else derives from createdAt
+    if (l.time) return l.time;
+    if (l.createdAt) {
+      const d = new Date(l.createdAt);
+      return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+    }
+    return '';
+  }
+
   // ═══════════════════════════════════════════════════════════
   // THEME
   // ═══════════════════════════════════════════════════════════
   function initTheme() {
     const saved = State.getSettings().theme;
     document.documentElement.setAttribute('data-theme', saved);
-    // Set correct theme toggle icon
     const toggleBtn = document.getElementById('themeToggle');
     if (toggleBtn) {
-      toggleBtn.innerHTML = saved === 'dark'
-        ? '<i data-lucide="sun" style="width:18px;height:18px"></i>'
-        : '<i data-lucide="moon" style="width:18px;height:18px"></i>';
+      toggleBtn.innerHTML = saved === 'dark' ? icon('sun') : icon('moon');
     }
   }
 
@@ -145,15 +126,11 @@ const App = (() => {
     const next = current === 'dark' ? 'light' : 'dark';
     document.documentElement.setAttribute('data-theme', next);
     State.updateSettings({ theme: next });
-    // Update the toggle icon
     const toggleBtn = document.getElementById('themeToggle');
     if (toggleBtn) {
-      toggleBtn.innerHTML = next === 'dark'
-        ? '<i data-lucide="sun" style="width:18px;height:18px"></i>'
-        : '<i data-lucide="moon" style="width:18px;height:18px"></i>';
+      toggleBtn.innerHTML = next === 'dark' ? icon('sun') : icon('moon');
       toggleBtn.setAttribute('aria-label', 'Switch to ' + (next === 'dark' ? 'light' : 'dark') + ' mode');
     }
-    // Re-render to update charts
     render();
     refreshIcons();
   }
@@ -175,24 +152,28 @@ const App = (() => {
   function render() {
     const main = document.getElementById('mainContent');
     Charts.destroyAll();
+    closePopover();
 
     switch (currentTab) {
       case 'today': main.innerHTML = renderToday(); break;
       case 'projects': main.innerHTML = renderProjects(); break;
       case 'habits': main.innerHTML = renderHabits(); break;
+      case 'focus': main.innerHTML = renderFocus(); break;
+      case 'health': main.innerHTML = renderHealth(); break;
       case 'insights': main.innerHTML = renderInsights(); break;
+      case 'history': main.innerHTML = renderHistory(); break;
       case 'settings': main.innerHTML = renderSettings(); break;
     }
 
     refreshIcons();
-    // Render charts after DOM is ready
     requestAnimationFrame(() => renderChartsForTab());
   }
 
   function renderChartsForTab() {
     if (currentTab === 'insights') renderInsightCharts();
     if (currentTab === 'habits') renderHabitCharts();
-    if (currentTab === 'today') renderTodayCharts();
+    if (currentTab === 'health') renderHealthCharts();
+    if (currentTab === 'history') renderHistoryCharts();
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -201,44 +182,45 @@ const App = (() => {
   function renderToday() {
     const today = State.todayStr();
     const allEntries = State.getEntries();
-    const tasks = allEntries.filter(e => e.type === 'task' && !e.completed);
+    const tasks = allEntries.filter(e => e.type === 'task');
     const habits = allEntries.filter(e => e.type === 'habit');
-    const reminders = allEntries.filter(e => e.type === 'reminder');
-    const goals = allEntries.filter(e => e.type === 'goal');
 
-    // Today's tasks (due today or scheduled today)
+    // Today's tasks (due today, scheduled today, or unscheduled) — completed
+    // ones stay visible (struck through) so a mis-tap is recoverable.
+    const priOrder = { urgent: 0, high: 1, medium: 2, low: 3 };
     const todayTasks = tasks.filter(t =>
-      t.dueDate === today || t.scheduledDate === today || (!t.dueDate && !t.scheduledDate && isToday(today))
+      t.dueDate === today || t.scheduledDate === today || (!t.dueDate && !t.scheduledDate)
     ).sort((a, b) => {
-      const priOrder = { urgent: 0, high: 1, medium: 2, low: 3 };
+      if (a.completed !== b.completed) return a.completed ? 1 : -1; // done → bottom
       return (priOrder[a.priority] || 2) - (priOrder[b.priority] || 2);
     });
 
-    // Overdue tasks
-    const overdueTasks = tasks.filter(t => t.dueDate && t.dueDate < today);
+    // Overdue tasks (never completed ones)
+    const overdueTasks = tasks.filter(t => !t.completed && t.dueDate && t.dueDate < today);
 
-    // Next best task (highest priority + lowest effort)
-    const nextTask = [...todayTasks].sort((a, b) => {
-      const priOrder = { urgent: 0, high: 1, medium: 2, low: 3 };
+    const openToday = todayTasks.filter(t => !t.completed);
+
+    // Next best task (highest priority + lowest effort, open only)
+    const nextTask = [...openToday].sort((a, b) => {
       const effOrder = { trivial: 0, small: 1, medium: 2, large: 3, xl: 4 };
       const pa = (priOrder[a.priority] || 2) * 10 + (effOrder[a.effort] || 2);
       const pb = (priOrder[b.priority] || 2) * 10 + (effOrder[b.effort] || 2);
       return pa - pb;
     })[0];
 
-    const todayCalories = State.getTodayCalories();
-    const calorieGoal = State.getSettings().calorieGoal || 2000;
     const todayEmotion = State.getTodayEmotion();
+    const focusSeconds = State.getLogs({ type: 'time_session', date: today })
+      .reduce((s, l) => s + (l.value || 0), 0);
 
     let html = `
       <div class="page-header">
         <div>
           <h1 class="page-title">${new Date().toLocaleDateString('en', { weekday: 'long', month: 'long', day: 'numeric' })}</h1>
-          <p class="page-subtitle">${todayTasks.length + overdueTasks.length} tasks today · ${habits.filter(h => !State.isHabitDoneToday(h.id)).length} habits pending</p>
+          <p class="page-subtitle">${openToday.length + overdueTasks.length} tasks today · ${habits.filter(h => !State.isHabitDoneToday(h.id)).length} habits pending</p>
         </div>
         <div style="display:flex;gap:var(--space-2);">
-          <button class="btn btn-secondary" onclick="Timers.openPanel()"><i data-lucide="timer" style="width:16px;height:16px"></i>Timer</button>
-          <button class="btn btn-secondary" onclick="App.openQuickLog()"><i data-lucide="zap" style="width:16px;height:16px"></i>Quick Log</button>
+          <button class="btn btn-secondary" onclick="Timers.openPanel()">${icon('timer', 16)}Timer</button>
+          <button class="btn btn-secondary" onclick="App.openQuickLog()">${icon('zap', 16)}Quick Log</button>
         </div>
       </div>
     `;
@@ -247,15 +229,15 @@ const App = (() => {
     html += `<div class="grid-3 section">
       <div class="card stat-card">
         <span class="stat-label">Tasks Done Today</span>
-        <span class="stat-value">${allEntries.filter(e => e.type === "task" && e.completed && e.completedAt?.startsWith(today)).length} / ${todayTasks.length + overdueTasks.length}</span>
+        <span class="stat-value">${tasks.filter(e => e.completed && e.completedAt?.startsWith(today)).length} / ${todayTasks.length + overdueTasks.length}</span>
       </div>
       <div class="card stat-card">
         <span class="stat-label">Habits Today</span>
         <span class="stat-value">${habits.filter(h => State.isHabitDoneToday(h.id)).length} / ${habits.length}</span>
       </div>
       <div class="card stat-card">
-        <span class="stat-label">Calories</span>
-        <span class="stat-value">${todayCalories} <span style="font-size:var(--text-xs);color:var(--text-muted)">/ ${calorieGoal}</span></span>
+        <span class="stat-label">Focus Time</span>
+        <span class="stat-value">${focusSeconds > 0 ? Timers.formatTime(focusSeconds) : '—'}</span>
       </div>
     </div>`;
 
@@ -265,18 +247,19 @@ const App = (() => {
       html += `
         <div class="section">
           <div class="section-header"><span class="section-title">Next Best Task</span></div>
-          <div class="card card-interactive" style="display:flex;align-items:center;gap:var(--space-3);border-color:var(--accent);background:var(--accent-tint);">
-            <div class="check-toggle ${nextTask.completed ? 'checked' : ''}" onclick="App.toggleEntry('${nextTask.id}')"><i data-lucide="check"></i></div>
+          <div class="card card-interactive" style="display:flex;align-items:center;gap:var(--space-3);border-color:var(--accent);background:var(--accent-tint);cursor:pointer;" onclick="App.toggleEntry('${nextTask.id}')">
+            <div class="check-toggle ${nextTask.completed ? 'checked' : ''}"><i data-lucide="check"></i></div>
             <div style="flex:1">
               <div class="entry-title" style="font-weight:600;">${nextTask.title}</div>
               <div class="entry-meta">
                 ${proj ? `<span class="proj-dot" style="background:${proj.color}"></span><span class="text-xs text-muted">${proj.name}</span>` : ''}
                 <span class="pill pill-${priorityColor(nextTask.priority)}">${nextTask.priority}</span>
                 <span class="pill">${effortLabel(nextTask.effort)}</span>
+                ${nextTask.estimateMinutes ? `<span class="pill">~${estimateLabel(nextTask.estimateMinutes)}</span>` : ''}
                 ${nextTask.dueDate ? `<span class="pill pill-accent">${formatDueDate(nextTask.dueDate)}</span>` : ''}
               </div>
             </div>
-            <button class="icon-btn" onclick="App.startTimerForTask('${nextTask.id}')" data-lucide="play" aria-label="Start timer"></button>
+            <button class="icon-btn" onclick="event.stopPropagation();App.startTimerForTask('${nextTask.id}')" aria-label="Start timer">${icon('play', 18)}</button>
           </div>
         </div>
       `;
@@ -287,7 +270,7 @@ const App = (() => {
       html += `<div class="section">
         <div class="section-header">
           <span class="section-title">Habits</span>
-          <button class="btn btn-ghost btn-sm" onclick="App.switchTab('habits')"><i data-lucide="chevron-right" style="width:14px;height:14px"></i>All</button>
+          <button class="btn btn-ghost btn-sm" onclick="App.switchTab('habits')">${icon('chevron-right', 14)}All</button>
         </div>
         <div style="display:flex;flex-direction:column;gap:var(--space-2);">
       `;
@@ -307,87 +290,323 @@ const App = (() => {
     if (todayTasks.length === 0 && overdueTasks.length === 0) {
       html += `<div class="empty-state"><i data-lucide="list-checks"></i><p class="empty-state-text">No tasks for today. Add one with +</p></div>`;
     } else {
-      const todayTaskIds = new Set(todayTasks.map(t => t.id));
+      const shown = new Set();
       overdueTasks.forEach(t => {
-        if (todayTaskIds.has(t.id)) return;
+        shown.add(t.id);
         const proj = t.projectId ? State.getProject(t.projectId) : null;
         html += renderEntryCard(t, proj);
       });
       todayTasks.forEach(t => {
-        if (overdueTasks.includes(t)) return;
-        if (nextTask && t.id === nextTask.id) return; // Skip Next Best Task (shown above)
+        if (shown.has(t.id)) return;
+        if (nextTask && t.id === nextTask.id) return; // shown above
         const proj = t.projectId ? State.getProject(t.projectId) : null;
         html += renderEntryCard(t, proj);
       });
     }
     html += `</div></div>`;
 
-    // Day planner timeline
-    html += `<div class="section">
-      <div class="section-header"><span class="section-title">Day Planner</span></div>
-      <div class="card">
-    `;
-    const scheduledTasks = [...todayTasks, ...overdueTasks].filter(t => t.scheduledDate || t.dueDate);
-    for (let hour = 8; hour <= 21; hour++) {
-      const timeStr = `${hour}:00`;
-      const slotTasks = scheduledTasks.filter(t => {
-        // Simple: just show tasks in morning/afternoon based on nothing real for demo
-        return false; // No real time scheduling yet
-      });
-      html += `<div class="planner-slot">
-        <div class="planner-time">${timeStr}</div>
-        <div class="planner-content">
-          ${slotTasks.length > 0
-            ? slotTasks.map(t => `<div class="quadrant-item">${t.title}</div>`).join('')
-            : '<div class="planner-empty">Free</div>'}
-        </div>
-      </div>`;
-    }
-    html += `</div></div>`;
+    // Day planner
+    html += renderPlannerSection();
 
-    // Quick widgets: calories + emotion
-    html += `<div class="grid-2 section">
+    // Day mood widget (food/calorie tracking lives on the Health tab)
+    html += `<div class="section">
       <div class="card">
-        <div class="section-header" style="margin-bottom:var(--space-3)"><span class="section-title">Calories Today</span></div>
-        <div class="calorie-display">
-          <span class="calorie-number">${todayCalories}</span>
-          <span class="calorie-goal">/ ${calorieGoal} cal</span>
-        </div>
-        <div class="progress-bar" style="margin-bottom:var(--space-3)">
-          <div class="progress-fill" style="width:${Math.min(todayCalories / calorieGoal * 100, 100)}%"></div>
-        </div>
-        <button class="btn btn-secondary btn-sm w-full" onclick="App.openCalorieLog()"><i data-lucide="plus" style="width:14px;height:14px"></i>Log Food</button>
-      </div>
-      <div class="card">
-        <div class="section-header" style="margin-bottom:var(--space-3)"><span class="section-title">Mood Today</span></div>
+        <div class="section-header" style="margin-bottom:var(--space-3)"><span class="section-title">Day Mood</span></div>
         <div class="emotion-selector">
-          ${renderEmotionButton('great', '😊', 'Great', todayEmotion?.emotion)}
-          ${renderEmotionButton('good', '🙂', 'Good', todayEmotion?.emotion)}
-          ${renderEmotionButton('okay', '😐', 'Okay', todayEmotion?.emotion)}
-          ${renderEmotionButton('low', '😕', 'Low', todayEmotion?.emotion)}
-          ${renderEmotionButton('bad', '😢', 'Bad', todayEmotion?.emotion)}
+          ${renderEmotionButton('great', 'Great', todayEmotion?.emotion)}
+          ${renderEmotionButton('good', 'Good', todayEmotion?.emotion)}
+          ${renderEmotionButton('okay', 'Okay', todayEmotion?.emotion)}
+          ${renderEmotionButton('low', 'Low', todayEmotion?.emotion)}
+          ${renderEmotionButton('bad', 'Bad', todayEmotion?.emotion)}
         </div>
+        <p class="text-xs text-faint" style="text-align:center;margin-top:var(--space-2);">One mood per day — tap to change. Use Quick Log for timestamped check-ins.</p>
       </div>
     </div>`;
 
     return html;
   }
 
-  function renderTodayCharts() {
-    // Mini heatmap
-    const container = document.getElementById('todayHeatmap');
-    if (container) Charts.renderHeatmap(container, 56);
-  }
-
-  function renderEmotionButton(emotion, emoji, label, current) {
+  function renderEmotionButton(emotion, label, current) {
     return `<button class="emotion-btn ${current === emotion ? 'selected' : ''}" onclick="App.logEmotion('${emotion}')">
-      <span class="emotion-emoji">${emoji}</span>
+      ${icon(MOOD_ICONS[emotion], 22)}
       <span class="emotion-label">${label}</span>
     </button>`;
   }
 
   // ═══════════════════════════════════════════════════════════
-  // ENTRY CARD RENDERER
+  // DAY PLANNER v2
+  // ═══════════════════════════════════════════════════════════
+  const HOUR_START = 6;
+  const HOUR_END = 22;      // exclusive of last row's end
+  const HOUR_PX = 44;       // must match --hour-h in styles.css
+
+  let plannerOffset = 0;    // days from today (negative = history)
+  let plannerView = 'day';  // 'day' | '3day'
+
+  function renderPlannerSection() {
+    const baseDate = offsetDateStr(plannerOffset);
+    const days = plannerView === '3day'
+      ? [baseDate, offsetDateStr(plannerOffset + 1), offsetDateStr(plannerOffset + 2)]
+      : [baseDate];
+
+    let label = friendlyDate(baseDate);
+    if (plannerView === '3day') label += ` — ${friendlyDate(days[2])}`;
+
+    let html = `<div class="section">
+      <div class="section-header"><span class="section-title">Day Planner</span>
+        <span class="text-xs text-faint">tap a slot to add</span>
+      </div>
+      <div class="card">
+        <div class="planner-header">
+          <div class="planner-nav">
+            <button class="icon-btn" onclick="App.plannerNav(-${plannerView === '3day' ? 3 : 1})" aria-label="Previous">${icon('chevron-left', 16)}</button>
+            <span class="planner-date-label">${label}</span>
+            <button class="icon-btn" onclick="App.plannerNav(${plannerView === '3day' ? 3 : 1})" aria-label="Next">${icon('chevron-right', 16)}</button>
+            ${plannerOffset !== 0 ? `<button class="btn btn-ghost btn-sm" onclick="App.plannerToday()">Today</button>` : ''}
+          </div>
+          <div class="planner-view-toggle">
+            <button class="planner-view-btn ${plannerView === 'day' ? 'active' : ''}" onclick="App.setPlannerView('day')">Day</button>
+            <button class="planner-view-btn ${plannerView === '3day' ? 'active' : ''}" onclick="App.setPlannerView('3day')">3 Days</button>
+          </div>
+        </div>
+        <div class="planner-multi ${plannerView === '3day' ? 'days-3' : ''}">
+          ${days.map(d => `
+            <div>
+              ${plannerView === '3day' ? `<div class="planner-col-label ${d === State.todayStr() ? 'is-today' : ''}">${friendlyDate(d)}</div>` : ''}
+              ${renderPlannerGrid(d)}
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    </div>`;
+    return html;
+  }
+
+  function renderPlannerGrid(dateStr) {
+    const today = State.todayStr();
+    const blocks = State.getPlannerBlocks({ date: dateStr });
+    const totalH = (HOUR_END - HOUR_START) * HOUR_PX;
+
+    let html = `<div class="planner-grid" style="height:${totalH}px">`;
+    for (let hour = HOUR_START; hour < HOUR_END; hour++) {
+      html += `<div class="planner-hour" onclick="App.plannerTap(event,'${dateStr}',${hour})">
+        <div class="planner-hour-label">${String(hour).padStart(2, '0')}:00</div>
+      </div>`;
+    }
+
+    // Positioned blocks (lane layout for overlaps)
+    html += `<div style="position:absolute;inset:0;pointer-events:none;">`;
+    layoutBlocks(blocks).forEach(({ b, top, height, leftPct, widthPct }) => {
+      const entry = b.entryId ? State.getEntry(b.entryId) : null;
+      const proj = b.projectId ? State.getProject(b.projectId) : null;
+      const color = b.color || proj?.color || 'var(--accent)';
+      const isPast = dateStr < today;
+      const overdue = entry && !entry.completed && isPast;
+      const done = entry && entry.completed;
+      const dur = timeToMin(b.end) - timeToMin(b.start);
+      html += `<div class="planner-block ${b.kind === 'tracked' ? 'tracked' : ''} ${overdue ? 'overdue' : ''} ${done ? 'done' : ''}"
+        style="top:${top}px;height:${Math.max(height, 16)}px;left:calc(var(--gutter) + 4px + ${leftPct}% - ${leftPct / 100} * (var(--gutter) + 8px));right:auto;width:calc(${widthPct}% - ${widthPct / 100} * (var(--gutter) + 8px) - 2px);border-left-color:${color};background:color-mix(in srgb, ${color} 12%, var(--surface));pointer-events:auto;"
+        onclick="event.stopPropagation();App.editPlannerBlock('${b.id}')"
+        title="${b.title} · ${b.start}–${b.end}">
+        <div class="pb-title">${overdue ? '⚠ ' : ''}${b.title}</div>
+        ${height >= 30 ? `<div class="pb-time">${b.start}–${b.end} · ${estimateLabel(dur)}</div>` : ''}
+      </div>`;
+    });
+    html += `</div>`;
+
+    // Now line
+    if (dateStr === today) {
+      const now = new Date();
+      const nowMin = now.getHours() * 60 + now.getMinutes();
+      if (nowMin >= HOUR_START * 60 && nowMin <= HOUR_END * 60) {
+        const top = (nowMin - HOUR_START * 60) / 60 * HOUR_PX;
+        html += `<div class="planner-now" style="top:${top}px"></div>`;
+      }
+    }
+
+    html += `</div>`;
+    return html;
+  }
+
+  // Assign overlapping blocks to side-by-side lanes.
+  function layoutBlocks(blocks) {
+    const evs = blocks.map(b => ({
+      b,
+      s: Math.max(timeToMin(b.start), HOUR_START * 60),
+      e: Math.min(Math.max(timeToMin(b.end), timeToMin(b.start) + 15), HOUR_END * 60),
+    })).filter(ev => ev.e > HOUR_START * 60 && ev.s < HOUR_END * 60)
+      .sort((a, b) => a.s - b.s || a.e - b.e);
+
+    // Cluster events that transitively overlap
+    const clusters = [];
+    let cur = [], curEnd = -1;
+    evs.forEach(ev => {
+      if (cur.length && ev.s >= curEnd) { clusters.push(cur); cur = []; curEnd = -1; }
+      cur.push(ev);
+      curEnd = Math.max(curEnd, ev.e);
+    });
+    if (cur.length) clusters.push(cur);
+
+    const out = [];
+    clusters.forEach(cluster => {
+      const laneEnds = [];
+      cluster.forEach(ev => {
+        let lane = laneEnds.findIndex(end => end <= ev.s);
+        if (lane === -1) { lane = laneEnds.length; laneEnds.push(0); }
+        laneEnds[lane] = ev.e;
+        ev.lane = lane;
+      });
+      const lanes = laneEnds.length;
+      cluster.forEach(ev => {
+        out.push({
+          b: ev.b,
+          top: (ev.s - HOUR_START * 60) / 60 * HOUR_PX,
+          height: (ev.e - ev.s) / 60 * HOUR_PX - 2,
+          leftPct: ev.lane / lanes * 100,
+          widthPct: 100 / lanes,
+        });
+      });
+    });
+    return out;
+  }
+
+  function plannerNav(delta) { plannerOffset += delta; render(); }
+  function plannerToday() { plannerOffset = 0; render(); }
+  function setPlannerView(v) { plannerView = v; render(); }
+
+  // ── Tap-a-slot popover ──────────────────────────────────────
+  let popoverEl = null;
+
+  function closePopover() {
+    if (popoverEl) { popoverEl.remove(); popoverEl = null; }
+    document.removeEventListener('click', onDocClickClosePopover, true);
+  }
+
+  function onDocClickClosePopover(e) {
+    if (popoverEl && !popoverEl.contains(e.target)) closePopover();
+  }
+
+  function plannerTap(e, dateStr, hour) {
+    e.stopPropagation();
+    closePopover();
+    const start = `${String(hour).padStart(2, '0')}:00`;
+    popoverEl = document.createElement('div');
+    popoverEl.className = 'planner-popover';
+    popoverEl.innerHTML = `
+      <div class="pp-time">${friendlyDate(dateStr)} · ${start}</div>
+      <button onclick="App.popoverAgenda('${dateStr}','${start}')">${icon('calendar-plus', 15)}New agenda item</button>
+      <button onclick="App.popoverTask('${dateStr}')">${icon('list-plus', 15)}New task (due ${friendlyDate(dateStr)})</button>
+      <button onclick="App.popoverTimer()">${icon('timer', 15)}Start time tracking</button>
+    `;
+    document.body.appendChild(popoverEl);
+    // Position near tap, clamped to viewport
+    const pw = 210, ph = 150;
+    const x = Math.min(e.clientX, window.innerWidth - pw - 8);
+    const y = Math.min(e.clientY, window.innerHeight - ph - 8);
+    popoverEl.style.left = `${Math.max(8, x)}px`;
+    popoverEl.style.top = `${Math.max(8, y)}px`;
+    refreshIcons();
+    setTimeout(() => document.addEventListener('click', onDocClickClosePopover, true), 0);
+  }
+
+  function popoverAgenda(dateStr, start) { closePopover(); openAgendaModal({ date: dateStr, start }); }
+  function popoverTask(dateStr) { closePopover(); openNewEntry('task'); setTimeout(() => { const el = document.getElementById('entryDueDate'); if (el) el.value = dateStr; }, 50); }
+  function popoverTimer() { closePopover(); Timers.openPanel(); }
+
+  // ── Agenda item modal ───────────────────────────────────────
+  let editingBlockId = null;
+
+  function openAgendaModal({ date, start = '09:00', block = null } = {}) {
+    editingBlockId = block?.id || null;
+    const projects = State.getProjects();
+    const endDefault = block?.end || minToTime(Math.min(timeToMin(start) + 60, 23 * 60 + 59));
+    const body = `
+      <div class="form-group">
+        <label class="form-label">Title</label>
+        <input type="text" class="form-input" id="agendaTitle" value="${block?.title || ''}" placeholder="What's happening?" autocomplete="off">
+      </div>
+      <div class="grid-2">
+        <div class="form-group">
+          <label class="form-label">Date</label>
+          <input type="date" class="form-input" id="agendaDate" value="${block?.date || date || State.todayStr()}">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Project (color)</label>
+          <select class="form-select" id="agendaProject">
+            <option value="">None</option>
+            ${projects.map(p => `<option value="${p.id}" ${block?.projectId === p.id ? 'selected' : ''}>${p.name}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      <div class="grid-2">
+        <div class="form-group">
+          <label class="form-label">Start</label>
+          <input type="time" class="form-input" id="agendaStart" value="${block?.start || start}">
+        </div>
+        <div class="form-group">
+          <label class="form-label">End</label>
+          <input type="time" class="form-input" id="agendaEnd" value="${endDefault}">
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Link to entry (optional)</label>
+        <select class="form-select" id="agendaEntry">
+          <option value="">None</option>
+          ${State.getEntries({ type: 'task' }).filter(t => !t.completed || t.id === block?.entryId).map(t =>
+            `<option value="${t.id}" ${block?.entryId === t.id ? 'selected' : ''}>${t.title}</option>`).join('')}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Notes</label>
+        <input type="text" class="form-input" id="agendaNotes" value="${block?.notes || ''}" placeholder="Optional note">
+      </div>
+    `;
+    const footer = [
+      editingBlockId ? `<button class="btn btn-danger" onclick="App.deleteAgendaBlock()">Delete</button><div style="flex:1"></div>` : '',
+      `<button class="btn btn-secondary" onclick="App.closeModal()">Cancel</button>`,
+      `<button class="btn btn-primary" onclick="App.saveAgendaBlock()">${editingBlockId ? 'Save' : 'Add to planner'}</button>`,
+    ];
+    showModal(editingBlockId ? 'Edit Agenda Item' : 'New Agenda Item', body, footer);
+    setTimeout(() => document.getElementById('agendaTitle')?.focus(), 100);
+  }
+
+  function saveAgendaBlock() {
+    const title = document.getElementById('agendaTitle')?.value?.trim();
+    const date = document.getElementById('agendaDate')?.value;
+    const start = document.getElementById('agendaStart')?.value;
+    const end = document.getElementById('agendaEnd')?.value;
+    const projectId = document.getElementById('agendaProject')?.value || null;
+    const entryId = document.getElementById('agendaEntry')?.value || null;
+    const notes = document.getElementById('agendaNotes')?.value || '';
+    if (!title) { toast('Title is required'); return; }
+    if (!date || !start || !end || timeToMin(end) <= timeToMin(start)) { toast('End must be after start'); return; }
+    const proj = projectId ? State.getProject(projectId) : null;
+    const payload = { title, date, start, end, projectId, entryId, notes, color: proj?.color || null };
+    if (editingBlockId) {
+      State.updatePlannerBlock(editingBlockId, payload);
+    } else {
+      State.createPlannerBlock({ ...payload, kind: 'agenda' });
+    }
+    editingBlockId = null;
+    closeModal();
+    render();
+  }
+
+  function deleteAgendaBlock() {
+    if (editingBlockId) State.deletePlannerBlock(editingBlockId);
+    editingBlockId = null;
+    closeModal();
+    render();
+  }
+
+  function editPlannerBlock(id) {
+    const block = State.getPlannerBlock(id);
+    if (!block) return;
+    openAgendaModal({ block });
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // ENTRY CARD RENDERER — whole card is the toggle hitbox
   // ═══════════════════════════════════════════════════════════
   function renderEntryCard(entry, project, streakInfo) {
     const proj = project || (entry.projectId ? State.getProject(entry.projectId) : null);
@@ -403,6 +622,9 @@ const App = (() => {
     }
     if (entry.effort) {
       metaHtml += `<span class="pill">${effortLabel(entry.effort)}</span>`;
+    }
+    if (entry.estimateMinutes) {
+      metaHtml += `<span class="pill">~${estimateLabel(entry.estimateMinutes)}</span>`;
     }
     if (entry.dueDate) {
       const cls = isOverdueFlag ? 'pill-red' : 'pill-accent';
@@ -424,8 +646,8 @@ const App = (() => {
     }
 
     return `
-      <div class="entry-card ${isDone ? 'completed' : ''}" data-id="${entry.id}">
-        <div class="check-toggle ${isDone ? 'checked' : ''}" onclick="App.toggleEntry('${entry.id}')">
+      <div class="entry-card ${isDone ? 'completed' : ''}" data-id="${entry.id}" onclick="App.toggleEntry('${entry.id}')">
+        <div class="check-toggle ${isDone ? 'checked' : ''}">
           <i data-lucide="check"></i>
         </div>
         <div class="entry-body">
@@ -437,8 +659,9 @@ const App = (() => {
             </div>` : ''}
         </div>
         <div class="entry-actions">
-          <button class="icon-btn" onclick="App.editEntry('${entry.id}')" data-lucide="pencil" aria-label="Edit"></button>
-          <button class="icon-btn" onclick="App.deleteEntry('${entry.id}')" data-lucide="trash-2" aria-label="Delete"></button>
+          <button class="icon-btn" onclick="event.stopPropagation();App.editEntry('${entry.id}')" aria-label="Edit">${icon('pencil', 15)}</button>
+          <button class="icon-btn" onclick="event.stopPropagation();App.archiveEntry('${entry.id}')" aria-label="Archive">${icon('archive', 15)}</button>
+          <button class="icon-btn" onclick="event.stopPropagation();App.deleteEntry('${entry.id}')" aria-label="Delete">${icon('trash-2', 15)}</button>
         </div>
       </div>
     `;
@@ -457,7 +680,7 @@ const App = (() => {
           <h1 class="page-title">Projects</h1>
           <p class="page-subtitle">${projects.length} projects · ${State.getEntries().length} total entries</p>
         </div>
-        <button class="btn btn-primary" onclick="App.openNewProject()"><i data-lucide="plus" style="width:14px;height:14px"></i>New Project</button>
+        <button class="btn btn-primary" onclick="App.openNewProject()">${icon('plus', 14)}New Project</button>
       </div>
     `;
 
@@ -534,7 +757,7 @@ const App = (() => {
         const completed = entries.filter(e => e.completed).length;
         const pending = entries.length - completed;
         html += `
-          <div class="card card-interactive project-card" onclick="App.setProjectFilter('${p.id}')">
+          <div class="card card-interactive project-card" onclick="App.setProjectFilter('${p.id}')" style="cursor:pointer;">
             <div class="project-header">
               <div class="project-icon" style="background:${p.color}20;color:${p.color}">
                 <i data-lucide="${p.icon}"></i>
@@ -577,7 +800,7 @@ const App = (() => {
           <h1 class="page-title">Habits</h1>
           <p class="page-subtitle">${habits.length} tracked · ${habits.filter(h => State.isHabitDoneToday(h.id)).length} done today</p>
         </div>
-        <button class="btn btn-primary" onclick="App.openNewEntry('habit')"><i data-lucide="plus" style="width:14px;height:14px"></i>New Habit</button>
+        <button class="btn btn-primary" onclick="App.openNewEntry('habit')">${icon('plus', 14)}New Habit</button>
       </div>
     `;
 
@@ -585,9 +808,11 @@ const App = (() => {
       return html + `<div class="empty-state"><i data-lucide="repeat"></i><p class="empty-state-text">No habits yet. Create your first one.</p></div>`;
     }
 
-    // Habit grid overview
+    // Habit grid overview — cells are tappable to toggle past days
     html += `<div class="section">
-      <div class="section-header"><span class="section-title">Completion Grid — Last 14 Days</span></div>
+      <div class="section-header"><span class="section-title">Completion Grid — Last 14 Days</span>
+        <span class="text-xs text-faint">tap a cell to toggle that day</span>
+      </div>
       <div class="card">
     `;
 
@@ -597,9 +822,9 @@ const App = (() => {
       const proj = h.projectId ? State.getProject(h.projectId) : null;
 
       html += `<div style="display:flex;align-items:center;gap:var(--space-3);margin-bottom:var(--space-3);">
-        <div style="width:120px;flex-shrink:0;">
-          <div class="text-sm" style="font-weight:500;cursor:pointer;" onclick="App.selectHabit('${h.id}')">${h.title}</div>
-          ${proj ? `<div class="text-xs text-muted">${proj.name}</div>` : ''}
+        <div style="width:120px;flex-shrink:0;cursor:pointer;" onclick="App.selectHabit('${h.id}')">
+          <div class="text-sm" style="font-weight:500;color:${selectedHabit === h.id ? 'var(--accent-text)' : 'inherit'};">${h.title}</div>
+          ${proj ? `<div class="text-xs" style="color:${proj.color}">${proj.name}</div>` : ''}
         </div>
         <div class="habit-grid">`;
 
@@ -609,7 +834,9 @@ const App = (() => {
         const dateStr = State.dateStr(d);
         const isCompleted = completions.has(dateStr);
         const isTodayCell = i === 0;
-        html += `<div class="habit-cell ${isCompleted ? 'completed' : ''} ${isTodayCell ? 'today' : ''}" title="${dateStr}"></div>`;
+        const cellColor = isCompleted && proj?.color ? `style="background:${proj.color};border-color:${proj.color};"` : '';
+        html += `<div class="habit-cell ${isCompleted ? 'completed' : ''} ${isTodayCell ? 'today' : ''}" ${cellColor}
+          title="${dateStr} — tap to toggle" onclick="App.toggleHabitCell('${h.id}','${dateStr}')"></div>`;
       }
 
       const s = State.calculateStreak(h.id);
@@ -620,17 +847,33 @@ const App = (() => {
 
     html += `</div></div>`;
 
+    if (!selectedHabit) {
+      // Aggregate view — all habits stacked per day, color-coded by project
+      html += `
+        <div class="section">
+          <div class="section-header"><span class="section-title">All Habits — Daily Completions (30 days)</span></div>
+          <div class="card">
+            <div class="chart-container" style="height:240px;"><canvas id="habitsAggChart"></canvas></div>
+          </div>
+        </div>
+        <div class="section">
+          <div class="card" style="text-align:center;">
+            <p class="text-xs text-muted">Tap a habit's name for its detail charts — streak trend and monthly calendar.</p>
+          </div>
+        </div>
+      `;
+    }
+
     // Selected habit detail
     if (selectedHabit) {
       const habit = State.getEntry(selectedHabit);
       if (habit && habit.type === 'habit') {
         const s = State.calculateStreak(habit.id);
-        const proj = habit.projectId ? State.getProject(habit.projectId) : null;
         html += `
           <div class="section">
             <div class="section-header">
+              <button class="btn btn-secondary btn-sm" onclick="App.selectHabit(null)">${icon('arrow-left', 14)}All Habits</button>
               <span class="section-title">${habit.title} — Detail</span>
-              <button class="btn btn-ghost btn-sm" onclick="App.selectHabit(null)"><i data-lucide="x" style="width:14px;height:14px"></i>Close</button>
             </div>
             <div class="grid-2">
               <div class="card stat-card">
@@ -675,6 +918,9 @@ const App = (() => {
         const calContainer = document.getElementById('streakCalendarContainer');
         if (calContainer) Charts.renderStreakCalendar(calContainer, selectedHabit);
       }
+    } else {
+      const agg = document.getElementById('habitsAggChart');
+      if (agg) Charts.renderHabitsAggregate('habitsAggChart', 30);
     }
   }
 
@@ -683,11 +929,29 @@ const App = (() => {
     render();
   }
 
+  function toggleHabitCell(habitId, dateStr) {
+    State.toggleHabitOnDate(habitId, dateStr);
+    render();
+  }
+
   // ═══════════════════════════════════════════════════════════
   // INSIGHTS VIEW
   // ═══════════════════════════════════════════════════════════
+  let insightsProject = null; // null = all projects
+  let insightsEntry = null;   // null = all tasks
+
+  function insightsFilterObj() {
+    return { projectId: insightsProject, entryId: insightsEntry };
+  }
+
   function renderInsights() {
-    const entries = State.getEntries();
+    const projects = State.getProjects();
+    const inFilter = e => {
+      if (insightsProject && e.projectId !== insightsProject) return false;
+      if (insightsEntry && e.id !== insightsEntry) return false;
+      return true;
+    };
+    const entries = State.getEntries().filter(inFilter);
     const habits = entries.filter(e => e.type === 'habit');
     const goals = entries.filter(e => e.type === 'goal');
     const tasks = entries.filter(e => e.type === 'task');
@@ -696,10 +960,24 @@ const App = (() => {
       <div class="page-header">
         <div>
           <h1 class="page-title">Insights</h1>
-          <p class="page-subtitle">Analytics across all your entries</p>
+          <p class="page-subtitle">Analytics${insightsProject ? ' · ' + (State.getProject(insightsProject)?.name || '') : ' across all your entries'}</p>
         </div>
       </div>
     `;
+
+    // Filter bar: project chips + task select
+    const filterableTasks = State.getEntries({ type: 'task' }).filter(t => !insightsProject || t.projectId === insightsProject);
+    html += `<div class="filter-chips" style="align-items:center;">
+      <button class="filter-chip ${!insightsProject ? 'active' : ''}" onclick="App.setInsightsProject(null)">All Projects</button>
+      ${projects.map(p => `
+        <button class="filter-chip ${insightsProject === p.id ? 'active' : ''}" onclick="App.setInsightsProject('${p.id}')">
+          <span class="proj-dot" style="background:${p.color}"></span>${p.name}
+        </button>`).join('')}
+      <select class="form-select" style="width:auto;max-width:220px;padding:var(--space-1) var(--space-2);font-size:var(--text-xs);" onchange="App.setInsightsEntry(this.value || null)">
+        <option value="">All tasks</option>
+        ${filterableTasks.map(t => `<option value="${t.id}" ${insightsEntry === t.id ? 'selected' : ''}>${t.title}</option>`).join('')}
+      </select>
+    </div>`;
 
     // KPI row
     const totalStreak = habits.reduce((sum, h) => sum + State.calculateStreak(h.id).current, 0);
@@ -718,23 +996,23 @@ const App = (() => {
       <div class="card"><div id="heatmapContainer"></div></div>
     </div>`;
 
-    // Day breakdown + Emotion trend
+    // Day breakdown + Mood & Energy
     html += `<div class="grid-2 section">
       <div class="card">
         <div class="section-header" style="margin-bottom:var(--space-3)"><span class="section-title">Tasks — Last 7 Days</span></div>
         <div class="chart-container"><canvas id="dayBreakdownChart"></canvas></div>
       </div>
       <div class="card">
-        <div class="section-header" style="margin-bottom:var(--space-3)"><span class="section-title">Emotion Trend — 14 Days</span></div>
+        <div class="section-header" style="margin-bottom:var(--space-3)"><span class="section-title">Mood & Energy — 14 Days</span></div>
         <div class="chart-container"><canvas id="emotionTrendChart"></canvas></div>
       </div>
     </div>`;
 
-    // Four quadrant view
+    // Sleep chart
     html += `<div class="section">
-      <div class="section-header"><span class="section-title">Four Quadrant — Effort vs Priority</span></div>
       <div class="card">
-        <div class="quadrant" id="quadrantView">${renderQuadrant()}</div>
+        <div class="section-header" style="margin-bottom:var(--space-3)"><span class="section-title">Wake / Sleep — 14 Days</span></div>
+        <div class="chart-container"><canvas id="sleepChart"></canvas></div>
       </div>
     </div>`;
 
@@ -761,10 +1039,10 @@ const App = (() => {
         html += `
           <div class="card">
             <div style="display:flex;align-items:center;gap:var(--space-3);">
-              <div style="width:80px;height:80px;position:relative;">
+              <div style="width:80px;height:80px;position:relative;flex-shrink:0;">
                 <canvas id="goalChart_${g.id}"></canvas>
               </div>
-              <div style="flex:1">
+              <div style="flex:1;min-width:0;">
                 <div class="text-sm" style="font-weight:600;margin-bottom:var(--space-1)">${g.title}</div>
                 <div class="text-xs text-muted">${g.currentValue || 0} / ${g.targetValue} ${g.unit || ''}</div>
                 <div class="progress-bar mt-2"><div class="progress-fill" style="width:${Math.min(pct, 100)}%"></div></div>
@@ -779,66 +1057,497 @@ const App = (() => {
     return html;
   }
 
-  function renderQuadrant() {
-    const tasks = State.getEntries({ type: 'task', completed: false });
+  function setInsightsProject(id) {
+    insightsProject = id;
+    insightsEntry = null; // task filter is scoped to the project
+    render();
+  }
+
+  function setInsightsEntry(id) {
+    insightsEntry = id;
+    render();
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // FOCUS TAB — "what should I work on next?"
+  // Four-quadrant board: color-coded, draggable, full-item hitbox
+  // ═══════════════════════════════════════════════════════════
+  let focusProject = null;
+
+  const QUADRANTS = [
+    { q: 1, label: 'Do First · High Pri / Low Effort', hiPri: true, hiEff: false },
+    { q: 2, label: 'Schedule · High Pri / High Effort', hiPri: true, hiEff: true },
+    { q: 3, label: 'Quick Wins · Low Pri / Low Effort', hiPri: false, hiEff: false },
+    { q: 4, label: 'Later · Low Pri / High Effort', hiPri: false, hiEff: true },
+  ];
+
+  function renderFocus() {
+    const projects = State.getProjects();
+    let html = `
+      <div class="page-header">
+        <div>
+          <h1 class="page-title">Focus</h1>
+          <p class="page-subtitle">Effort vs priority — figure out what to work on next</p>
+        </div>
+      </div>
+      <div class="filter-chips">
+        <button class="filter-chip ${!focusProject ? 'active' : ''}" onclick="App.setFocusProject(null)">All Projects</button>
+        ${projects.map(p => `
+          <button class="filter-chip ${focusProject === p.id ? 'active' : ''}" onclick="App.setFocusProject('${p.id}')">
+            <span class="proj-dot" style="background:${p.color}"></span>${p.name}
+          </button>`).join('')}
+      </div>
+      <div class="section">
+        <div class="section-header"><span class="section-title">Four Quadrant</span>
+          <span class="text-xs text-faint">drag between boxes to reprioritize · click to complete</span>
+        </div>
+        <div class="card">
+          <div class="quadrant" id="quadrantView">${renderQuadrant(focusProject)}</div>
+        </div>
+      </div>
+    `;
+    return html;
+  }
+
+  function setFocusProject(id) {
+    focusProject = id;
+    render();
+  }
+
+  function renderQuadrant(projectId) {
+    const tasks = State.getEntries({ type: 'task', completed: false })
+      .filter(t => !projectId || t.projectId === projectId);
     const effOrder = { trivial: 0, small: 1, medium: 2, large: 3, xl: 4 };
     const priOrder = { urgent: 0, high: 1, medium: 2, low: 3 };
+    const multiProject = !projectId; // show project dots in all-projects view
 
-    // Q1: High priority, Low effort (Do First)
-    // Q2: High priority, High effort (Schedule)
-    // Q3: Low priority, Low effort (Quick Wins)
-    // Q4: Low priority, High effort (Later)
-    const q1 = tasks.filter(t => (priOrder[t.priority] || 2) <= 1 && (effOrder[t.effort] || 2) <= 1);
-    const q2 = tasks.filter(t => (priOrder[t.priority] || 2) <= 1 && (effOrder[t.effort] || 2) > 1);
-    const q3 = tasks.filter(t => (priOrder[t.priority] || 2) > 1 && (effOrder[t.effort] || 2) <= 1);
-    const q4 = tasks.filter(t => (priOrder[t.priority] || 2) > 1 && (effOrder[t.effort] || 2) > 1);
+    function itemsFor(qd) {
+      return tasks.filter(t => {
+        const hiPri = (priOrder[t.priority] ?? 2) <= 1;
+        const hiEff = (effOrder[t.effort] ?? 2) > 1;
+        return hiPri === qd.hiPri && hiEff === qd.hiEff;
+      });
+    }
 
     function renderItems(items) {
       if (items.length === 0) return '<div class="planner-empty">No tasks</div>';
-      return items.slice(0, 5).map(t => `<div class="quadrant-item" onclick="App.editEntry('${t.id}')">${t.title}</div>`).join('');
+      const MAX = 8;
+      let out = items.slice(0, MAX).map(t => {
+        const proj = t.projectId ? State.getProject(t.projectId) : null;
+        return `<div class="q-item ${t.completed ? 'completed' : ''}" draggable="true" data-id="${t.id}"
+          ondragstart="App.qDragStart(event,'${t.id}')" ondragend="App.qDragEnd(event)"
+          onclick="App.qItemClick(event,'${t.id}')" title="${t.title}">
+          <span class="q-handle">⠿</span>
+          ${multiProject && proj ? `<span class="proj-dot" style="background:${proj.color}"></span>` : ''}
+          <span class="q-title">${t.title}</span>
+          ${t.estimateMinutes ? `<span class="q-est">${estimateLabel(t.estimateMinutes)}</span>` : ''}
+          <span class="q-actions">
+            <button class="icon-btn" onclick="event.stopPropagation();App.editEntry('${t.id}')" aria-label="Edit">${icon('pencil', 12)}</button>
+          </span>
+        </div>`;
+      }).join('');
+      if (items.length > MAX) out += `<div class="text-xs text-faint" style="padding:2px var(--space-2);">+${items.length - MAX} more</div>`;
+      return out;
     }
 
-    return `
-      <div class="quadrant-box">
-        <div class="quadrant-label">Do First · High Pri / Low Effort</div>
-        ${renderItems(q1)}
+    return QUADRANTS.map(qd => `
+      <div class="quadrant-box q${qd.q}" ondragover="App.qDragOver(event)" ondragleave="App.qDragLeave(event)" ondrop="App.qDrop(event,${qd.q})">
+        <div class="quadrant-label">${qd.label}</div>
+        ${renderItems(itemsFor(qd))}
       </div>
-      <div class="quadrant-box">
-        <div class="quadrant-label">Schedule · High Pri / High Effort</div>
-        ${renderItems(q2)}
-      </div>
-      <div class="quadrant-box">
-        <div class="quadrant-label">Quick Wins · Low Pri / Low Effort</div>
-        ${renderItems(q3)}
-      </div>
-      <div class="quadrant-box">
-        <div class="quadrant-label">Later · Low Pri / High Effort</div>
-        ${renderItems(q4)}
-      </div>
-    `;
+    `).join('');
+  }
+
+  let draggingTaskId = null;
+  let didDrag = false;
+
+  function qDragStart(e, id) {
+    draggingTaskId = id;
+    didDrag = false;
+    e.dataTransfer.effectAllowed = 'move';
+    try { e.dataTransfer.setData('text/plain', id); } catch (err) {}
+    e.target.classList.add('dragging');
+  }
+
+  function qDragEnd(e) {
+    e.target.classList.remove('dragging');
+    document.querySelectorAll('.quadrant-box.drag-over').forEach(b => b.classList.remove('drag-over'));
+  }
+
+  function qDragOver(e) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    e.currentTarget.classList.add('drag-over');
+  }
+
+  function qDragLeave(e) {
+    e.currentTarget.classList.remove('drag-over');
+  }
+
+  function qDrop(e, q) {
+    e.preventDefault();
+    e.currentTarget.classList.remove('drag-over');
+    const id = draggingTaskId || e.dataTransfer.getData('text/plain');
+    draggingTaskId = null;
+    didDrag = true;
+    const entry = State.getEntry(id);
+    if (!entry) return;
+    const qd = QUADRANTS.find(x => x.q === q);
+    const updates = {};
+    // Dropping into a quadrant rewrites the task's priority/effort meta —
+    // only nudge values that don't already satisfy the quadrant.
+    const hiPriNow = ['urgent', 'high'].includes(entry.priority);
+    const hiEffNow = ['medium', 'large', 'xl'].includes(entry.effort);
+    if (qd.hiPri && !hiPriNow) updates.priority = 'high';
+    if (!qd.hiPri && hiPriNow) updates.priority = 'medium';
+    if (qd.hiEff && !hiEffNow) updates.effort = 'large';
+    if (!qd.hiEff && hiEffNow) updates.effort = 'small';
+    if (Object.keys(updates).length > 0) State.updateEntry(id, updates);
+    render();
+  }
+
+  function qItemClick(e, id) {
+    // A completed drag also fires click — suppress the accidental toggle.
+    if (didDrag) { didDrag = false; return; }
+    toggleEntry(id);
   }
 
   function renderInsightCharts() {
+    const f = insightsFilterObj();
     const heatmap = document.getElementById('heatmapContainer');
-    if (heatmap) Charts.renderHeatmap(heatmap, 84);
+    if (heatmap) Charts.renderHeatmap(heatmap, 84, f);
 
     const dayChart = document.getElementById('dayBreakdownChart');
-    if (dayChart) Charts.renderDayBreakdown('dayBreakdownChart', 7);
+    if (dayChart) Charts.renderDayBreakdown('dayBreakdownChart', 7, f);
 
     const emotionChart = document.getElementById('emotionTrendChart');
-    if (emotionChart) Charts.renderEmotionTrend('emotionTrendChart', 14);
+    if (emotionChart) Charts.renderMoodEnergy('emotionTrendChart', 14);
+
+    const sleepChart = document.getElementById('sleepChart');
+    if (sleepChart) Charts.renderSleepChart('sleepChart', 14);
 
     const radarChart = document.getElementById('habitRadarChart');
-    if (radarChart) Charts.renderHabitRadar('habitRadarChart');
+    if (radarChart) Charts.renderHabitRadar('habitRadarChart', f);
 
     const effortChart = document.getElementById('effortDistChart');
-    if (effortChart) Charts.renderEffortDist('effortDistChart');
+    if (effortChart) Charts.renderEffortDist('effortDistChart', f);
 
     // Goal charts
-    State.getEntries({ type: 'goal' }).forEach(g => {
-      const canvas = document.getElementById(`goalChart_${g.id}`);
-      if (canvas) Charts.renderGoalProgress(`goalChart_${g.id}`, g);
-    });
+    State.getEntries({ type: 'goal' })
+      .filter(g => !insightsProject || g.projectId === insightsProject)
+      .forEach(g => {
+        const canvas = document.getElementById(`goalChart_${g.id}`);
+        if (canvas) Charts.renderGoalProgress(`goalChart_${g.id}`, g);
+      });
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // HEALTH TAB — food logging, calories, macros
+  // ═══════════════════════════════════════════════════════════
+  function renderHealth() {
+    const today = State.todayStr();
+    const goal = State.getSettings().calorieGoal || 2000;
+    const foodLogs = State.getLogs({ type: 'calorie', date: today })
+      .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+    const totalCal = foodLogs.reduce((s, l) => s + (l.value || 0), 0);
+    const totalP = foodLogs.reduce((s, l) => s + (l.protein || 0), 0);
+    const totalC = foodLogs.reduce((s, l) => s + (l.carbs || 0), 0);
+    const totalF = foodLogs.reduce((s, l) => s + (l.fat || 0), 0);
+
+    let html = `
+      <div class="page-header">
+        <div>
+          <h1 class="page-title">Health</h1>
+          <p class="page-subtitle">Food log · calories · macros</p>
+        </div>
+        <button class="btn btn-secondary" onclick="App.openQuickLog()">${icon('zap', 16)}Quick Log</button>
+      </div>
+    `;
+
+    // Calories today
+    html += `<div class="section">
+      <div class="card">
+        <div class="section-header" style="margin-bottom:var(--space-3)"><span class="section-title">Calories Today</span></div>
+        <div class="calorie-display">
+          <span class="calorie-number">${totalCal}</span>
+          <span class="calorie-goal">/ ${goal} cal</span>
+        </div>
+        <div class="progress-bar">
+          <div class="progress-fill" style="width:${Math.min(totalCal / goal * 100, 100)}%;${totalCal > goal ? 'background:var(--error);' : ''}"></div>
+        </div>
+      </div>
+    </div>`;
+
+    // Macro stat cards
+    html += `<div class="grid-3 section">
+      <div class="card stat-card"><span class="stat-label">Protein</span><span class="stat-value">${totalP}g</span></div>
+      <div class="card stat-card"><span class="stat-label">Carbs</span><span class="stat-value">${totalC}g</span></div>
+      <div class="card stat-card"><span class="stat-label">Fat</span><span class="stat-value">${totalF}g</span></div>
+    </div>`;
+
+    // Log food form
+    const shortcuts = (State.getSettings().quickShortcuts || []).filter(s => s.calories);
+    html += `<div class="section">
+      <div class="section-header"><span class="section-title">Log Food</span></div>
+      <div class="card">
+        ${shortcuts.length > 0 ? `<div class="shortcut-chips" style="margin-bottom:var(--space-3);">
+          ${shortcuts.map(s => `
+            <button class="shortcut-chip" id="sc-${s.id}" onclick="App.useShortcutHealth('${s.id}')">
+              <span>${s.emoji}</span><span>${s.label}</span><span class="sc-cal">${s.calories} cal</span>
+            </button>`).join('')}
+        </div>` : ''}
+        <div class="grid-2">
+          <div class="form-group">
+            <label class="form-label">Calories</label>
+            <input type="number" class="form-input" id="foodCal" placeholder="e.g. 450" min="0">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Meal</label>
+            <select class="form-select" id="foodMeal">
+              <option value="breakfast">Breakfast</option>
+              <option value="lunch">Lunch</option>
+              <option value="dinner">Dinner</option>
+              <option value="snack" selected>Snack</option>
+            </select>
+          </div>
+        </div>
+        <div class="grid-3" style="grid-template-columns:1fr 1fr 1fr;">
+          <div class="form-group">
+            <label class="form-label">Protein (g)</label>
+            <input type="number" class="form-input" id="foodProtein" placeholder="0" min="0">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Carbs (g)</label>
+            <input type="number" class="form-input" id="foodCarbs" placeholder="0" min="0">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Fat (g)</label>
+            <input type="number" class="form-input" id="foodFat" placeholder="0" min="0">
+          </div>
+        </div>
+        <div style="display:flex;gap:var(--space-2);">
+          <input type="text" class="form-input" id="foodNote" placeholder="What did you eat? (optional)" style="flex:1;">
+          <button class="btn btn-primary" onclick="App.logFood()">${icon('plus', 14)}Add</button>
+        </div>
+      </div>
+    </div>`;
+
+    // Charts
+    html += `<div class="grid-2 section">
+      <div class="card">
+        <div class="section-header" style="margin-bottom:var(--space-3)"><span class="section-title">Calories — Last 7 Days</span></div>
+        <div class="chart-container"><canvas id="calorieWeekChart"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="section-header" style="margin-bottom:var(--space-3)"><span class="section-title">Macro Split — Today</span></div>
+        ${totalP + totalC + totalF > 0
+          ? `<div class="chart-container"><canvas id="macroChart"></canvas></div>`
+          : `<div class="empty-state" style="padding:var(--space-6) var(--space-4);"><i data-lucide="pie-chart"></i><p class="empty-state-text">Log protein / carbs / fat with a meal to see the split.</p></div>`}
+      </div>
+    </div>`;
+
+    // Today's food list
+    html += `<div class="section">
+      <div class="section-header"><span class="section-title">Today's Food</span>
+        <span class="stat-label">${foodLogs.length} entries</span>
+      </div>
+      <div class="card">`;
+    if (foodLogs.length === 0) {
+      html += `<p class="text-xs text-faint">Nothing logged yet today.</p>`;
+    } else {
+      foodLogs.forEach(l => {
+        const macros = [l.protein ? `${l.protein}P` : '', l.carbs ? `${l.carbs}C` : '', l.fat ? `${l.fat}F` : ''].filter(Boolean).join(' · ');
+        html += `<div class="food-row">
+          <span class="done-time">${logTimeOf(l)}</span>
+          <span class="pill">${l.meal || 'snack'}</span>
+          <span class="truncate" style="flex:1;">${l.emoji ? l.emoji + ' ' : ''}${l.notes || 'Food'}</span>
+          ${macros ? `<span class="food-macros">${macros}</span>` : ''}
+          <span class="font-mono text-xs" style="color:var(--accent-text);flex-shrink:0;">${l.value} cal</span>
+          <button class="icon-btn" onclick="App.deleteFoodLog('${l.id}')" aria-label="Delete">${icon('trash-2', 14)}</button>
+        </div>`;
+      });
+    }
+    html += `</div></div>`;
+
+    return html;
+  }
+
+  function renderHealthCharts() {
+    const week = document.getElementById('calorieWeekChart');
+    if (week) Charts.renderCalorieWeek('calorieWeekChart', 7);
+    const macro = document.getElementById('macroChart');
+    if (macro) {
+      const today = State.todayStr();
+      const logs = State.getLogs({ type: 'calorie', date: today });
+      Charts.renderMacroSplit('macroChart', {
+        protein: logs.reduce((s, l) => s + (l.protein || 0), 0),
+        carbs: logs.reduce((s, l) => s + (l.carbs || 0), 0),
+        fat: logs.reduce((s, l) => s + (l.fat || 0), 0),
+      });
+    }
+  }
+
+  function logFood() {
+    const cal = parseInt(document.getElementById('foodCal')?.value);
+    if (!cal || cal <= 0) { toast('Enter valid calories'); return; }
+    const meal = document.getElementById('foodMeal')?.value || 'snack';
+    const notes = document.getElementById('foodNote')?.value?.trim() || '';
+    const macros = {
+      protein: parseInt(document.getElementById('foodProtein')?.value) || null,
+      carbs: parseInt(document.getElementById('foodCarbs')?.value) || null,
+      fat: parseInt(document.getElementById('foodFat')?.value) || null,
+    };
+    State.logCalories(cal, notes, meal, macros);
+    render();
+  }
+
+  function useShortcutHealth(id) {
+    State.logQuickShortcut(id);
+    render();
+  }
+
+  function deleteFoodLog(id) {
+    State.deleteLog(id);
+    render();
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // HISTORY VIEW — completions, day evolution, archive
+  // ═══════════════════════════════════════════════════════════
+  let historyOffset = 0;
+
+  function renderHistory() {
+    const dateStr = offsetDateStr(historyOffset);
+    const isTodayView = historyOffset === 0;
+
+    let html = `
+      <div class="page-header">
+        <div>
+          <h1 class="page-title">History</h1>
+          <p class="page-subtitle">What got done and how the day evolved</p>
+        </div>
+        <div class="planner-nav">
+          <button class="icon-btn" onclick="App.historyNav(-1)" aria-label="Previous day">${icon('chevron-left', 16)}</button>
+          <span class="planner-date-label">${friendlyDate(dateStr)}</span>
+          <button class="icon-btn" onclick="App.historyNav(1)" aria-label="Next day" ${isTodayView ? 'style="opacity:0.3;pointer-events:none;"' : ''}>${icon('chevron-right', 16)}</button>
+          ${!isTodayView ? `<button class="btn btn-ghost btn-sm" onclick="App.historyToday()">Today</button>` : ''}
+        </div>
+      </div>
+    `;
+
+    // Day evolution timeline
+    html += `<div class="section">
+      <div class="section-header"><span class="section-title">Day Evolution</span>
+        <span class="text-xs text-faint">bars = time blocks · dashed lines = quick logs</span>
+      </div>
+      <div class="card"><div id="dayTimelineContainer"></div></div>
+    </div>`;
+
+    // Completions
+    const completedTasks = State.getEntries({ includeArchived: true })
+      .filter(e => e.type !== 'habit' && e.completed && e.completedAt?.startsWith(dateStr))
+      .map(e => ({ time: logTimeOf({ createdAt: e.completedAt }), kind: 'task', title: e.title, entry: e }));
+    const habitDone = State.getLogs({ type: 'habit_completion', date: dateStr })
+      .map(l => {
+        const h = State.getEntry(l.entryId);
+        return h ? { time: logTimeOf(l), kind: 'habit', title: h.title, entry: h } : null;
+      }).filter(Boolean);
+    const timeSessions = State.getLogs({ type: 'time_session', date: dateStr })
+      .map(l => {
+        const en = l.entryId ? State.getEntry(l.entryId) : null;
+        return { time: logTimeOf(l), kind: 'time', title: `${Timers.formatTime(l.value || 0)} on ${en?.title || 'Unknown'}`, entry: en };
+      });
+    const doneRows = [...completedTasks, ...habitDone, ...timeSessions].sort((a, b) => a.time.localeCompare(b.time));
+
+    html += `<div class="section">
+      <div class="section-header"><span class="section-title">Completed ${friendlyDate(dateStr)}</span>
+        <span class="stat-label">${completedTasks.length + habitDone.length} completions</span>
+      </div>
+      <div class="card">`;
+    if (doneRows.length === 0) {
+      html += `<div class="empty-state"><i data-lucide="check-circle-2"></i><p class="empty-state-text">Nothing completed this day yet.</p></div>`;
+    } else {
+      const kindIcons = { task: 'check', habit: 'repeat', time: 'timer' };
+      doneRows.forEach(r => {
+        const proj = r.entry?.projectId ? State.getProject(r.entry.projectId) : null;
+        html += `<div class="done-row">
+          <span class="done-time">${r.time}</span>
+          ${icon(kindIcons[r.kind], 14)}
+          <span class="proj-dot" style="background:${proj?.color || 'var(--text-faint)'}"></span>
+          <span class="truncate" style="flex:1">${r.title}</span>
+          ${r.kind === 'task' ? `<button class="icon-btn" onclick="App.toggleEntry('${r.entry.id}')" aria-label="Un-complete" title="Mark as not done">${icon('undo-2', 14)}</button>` : ''}
+        </div>`;
+      });
+    }
+    html += `</div></div>`;
+
+    // Quick logs of the day
+    const dayLogs = State.getLogs({ date: dateStr })
+      .filter(l => ['calorie', 'quick', 'checkin', 'emotion', 'wake', 'sleep'].includes(l.type))
+      .sort((a, b) => logTimeOf(a).localeCompare(logTimeOf(b)));
+    if (dayLogs.length > 0) {
+      html += `<div class="section">
+        <div class="section-header"><span class="section-title">Logs</span></div>
+        <div class="card loglist">`;
+      dayLogs.forEach(l => {
+        html += `<div class="log-row"><span class="lr-time">${logTimeOf(l)}</span><span>${describeLog(l)}</span></div>`;
+      });
+      html += `</div></div>`;
+    }
+
+    // Archive
+    const archived = State.getEntries({ archived: true });
+    html += `<div class="section">
+      <div class="section-header"><span class="section-title">Archive</span>
+        <span class="stat-label">${archived.length} items</span>
+      </div>
+      <div class="card">`;
+    if (archived.length === 0) {
+      html += `<p class="text-xs text-faint">Archived items live here, hidden from every other view. Archive from a task's actions.</p>`;
+    } else {
+      archived.forEach(e => {
+        const proj = e.projectId ? State.getProject(e.projectId) : null;
+        html += `<div class="done-row">
+          <span class="proj-dot" style="background:${proj?.color || 'var(--text-faint)'}"></span>
+          <span class="truncate" style="flex:1;${e.completed ? 'text-decoration:line-through;color:var(--text-muted);' : ''}">${e.title}</span>
+          <span class="pill">${e.type}</span>
+          <button class="icon-btn" onclick="App.unarchiveEntry('${e.id}')" aria-label="Restore" title="Restore">${icon('archive-restore', 15)}</button>
+          <button class="icon-btn" onclick="App.deleteEntry('${e.id}')" aria-label="Delete forever" title="Delete forever">${icon('trash-2', 15)}</button>
+        </div>`;
+      });
+    }
+    html += `</div></div>`;
+
+    return html;
+  }
+
+  function describeLog(l) {
+    const moodIc = (e) => icon(MOOD_ICONS[e] || 'smile', 13);
+    switch (l.type) {
+      case 'calorie': {
+        const macros = [l.protein ? `${l.protein}P` : '', l.carbs ? `${l.carbs}C` : '', l.fat ? `${l.fat}F` : ''].filter(Boolean).join('/');
+        return `${l.emoji || '🍽'} ${l.notes || 'Food'} · ${l.value} cal (${l.meal || 'snack'})${macros ? ` · ${macros}` : ''}`;
+      }
+      case 'quick': return `${l.emoji || '⭐'} ${l.notes || 'Quick log'}`;
+      case 'checkin':
+        return `Check-in ${l.emotion ? moodIc(l.emotion) : ''}${l.energy ? ` energy ${l.energy}/5` : ''}${l.notes ? ` · ${l.notes}` : ''}`;
+      case 'emotion': return `${moodIc(l.emotion)} Day mood: ${l.emotion}`;
+      case 'wake': return `☀️ Woke up`;
+      case 'sleep': return `🌙 Bedtime`;
+      default: return l.type;
+    }
+  }
+
+  function historyNav(delta) {
+    historyOffset = Math.min(0, historyOffset + delta);
+    render();
+  }
+
+  function historyToday() { historyOffset = 0; render(); }
+
+  function renderHistoryCharts() {
+    const container = document.getElementById('dayTimelineContainer');
+    if (container) Charts.renderDayTimeline(container, offsetDateStr(historyOffset));
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -871,7 +1580,7 @@ const App = (() => {
             <div class="setting-label">Database URL</div>
             <div class="setting-desc">${settings.sync.databaseUrl ? '••••configured' : 'Not set'}</div>
           </div>
-          <button class="btn btn-secondary btn-sm" onclick="App.openSyncConfig()"><i data-lucide="cloud" style="width:14px;height:14px"></i>Configure</button>
+          <button class="btn btn-secondary btn-sm" onclick="App.openSyncConfig()">${icon('cloud', 14)}Configure</button>
         </div>
       </div>
     </div>`;
@@ -899,13 +1608,21 @@ const App = (() => {
       </div>
     </div>`;
 
-    // Calorie goal
+    // Health + quick log
     html += `<div class="section">
-      <div class="section-header"><span class="section-title">Health</span></div>
+      <div class="section-header"><span class="section-title">Health & Quick Log</span></div>
       <div class="card">
         <div class="setting-row">
           <div><div class="setting-label">Daily Calorie Goal</div><div class="setting-desc">Target calories per day</div></div>
           <input type="number" class="form-input" style="width:80px;" value="${settings.calorieGoal}" onchange="App.updateCalorieGoal(this.value)">
+        </div>
+        <div class="setting-row">
+          <div><div class="setting-label">Quick Log Shortcuts</div><div class="setting-desc">${(settings.quickShortcuts || []).length} configured — coffee, water, saved meals…</div></div>
+          <button class="btn btn-secondary btn-sm" onclick="App.openManageShortcuts()">${icon('zap', 14)}Manage</button>
+        </div>
+        <div class="setting-row">
+          <div><div class="setting-label">Tags</div><div class="setting-desc">${State.getAllTags().length} tags — rename, recolor, scope to a project, delete</div></div>
+          <button class="btn btn-secondary btn-sm" onclick="App.openManageTags()">${icon('tag', 14)}Manage</button>
         </div>
       </div>
     </div>`;
@@ -916,15 +1633,15 @@ const App = (() => {
       <div class="card">
         <div class="setting-row">
           <div><div class="setting-label">Export Data</div><div class="setting-desc">Download all data as JSON</div></div>
-          <button class="btn btn-secondary btn-sm" onclick="App.exportData()"><i data-lucide="download" style="width:14px;height:14px"></i>Export</button>
+          <button class="btn btn-secondary btn-sm" onclick="App.exportData()">${icon('download', 14)}Export</button>
         </div>
         <div class="setting-row">
           <div><div class="setting-label">Import Data</div><div class="setting-desc">Restore from JSON backup</div></div>
-          <button class="btn btn-secondary btn-sm" onclick="App.importData()"><i data-lucide="upload" style="width:14px;height:14px"></i>Import</button>
+          <button class="btn btn-secondary btn-sm" onclick="App.importData()">${icon('upload', 14)}Import</button>
         </div>
         <div class="setting-row">
           <div><div class="setting-label" style="color:var(--error)">Reset All Data</div><div class="setting-desc">Delete everything and start fresh</div></div>
-          <button class="btn btn-danger btn-sm" onclick="App.confirmReset()"><i data-lucide="trash-2" style="width:14px;height:14px"></i>Reset</button>
+          <button class="btn btn-danger btn-sm" onclick="App.confirmReset()">${icon('trash-2', 14)}Reset</button>
         </div>
       </div>
     </div>`;
@@ -953,7 +1670,6 @@ const App = (() => {
   function openNewEntry(type = 'task') {
     editingEntryId = null;
     entryTypeDraft = type;
-    entryTypeDraft = type;
     currentTags = [];
     currentEffort = 'medium';
     showModal('New Entry', renderEntryForm(type), [
@@ -967,7 +1683,6 @@ const App = (() => {
     if (!entry) return;
     editingEntryId = id;
     entryTypeDraft = entry.type;
-    entryTypeDraft = entry.type;
     currentTags = [...(entry.tags || [])];
     currentEffort = entry.effort || 'medium';
     showModal('Edit Entry', renderEntryForm(entry.type, entry), [
@@ -980,7 +1695,9 @@ const App = (() => {
 
   function renderEntryForm(type, entry = {}) {
     const projects = State.getProjects();
-    const tags = State.getAllTags();
+    const tags = State.getAllTags(); // full list, for pill colors
+    // Suggestions respect tag scoping: global tags + the entry's project's tags
+    const suggestTags = State.getAllTags(entry.projectId || null);
     const isGoal = type === 'goal';
     const isHabit = type === 'habit';
 
@@ -1043,6 +1760,11 @@ const App = (() => {
         </div>
       </div>
 
+      <div class="form-group">
+        <label class="form-label">Estimate (minutes)</label>
+        <input type="number" class="form-input" id="entryEstimate" value="${entry.estimateMinutes || ''}" placeholder="e.g. 45" min="0" step="5">
+      </div>
+
       ${isGoal ? `
         <div class="grid-2">
           <div class="form-group">
@@ -1082,8 +1804,8 @@ const App = (() => {
           }).join('')}
         </div>
         <input type="text" class="form-input" id="entryTagInput" placeholder="Type a tag and press Enter" onkeydown="if(event.key==='Enter'){event.preventDefault();App.addTag(this.value);this.value='';}">
-        ${tags.length > 0 ? `<div style="display:flex;flex-wrap:wrap;gap:var(--space-1);margin-top:var(--space-2);">
-          ${tags.map(t => `<button class="pill pill-${t.color}" style="cursor:pointer;" onclick="App.addTag('${t.name}')">#${t.name}</button>`).join('')}
+        ${suggestTags.length > 0 ? `<div style="display:flex;flex-wrap:wrap;gap:var(--space-1);margin-top:var(--space-2);">
+          ${suggestTags.map(t => `<button class="pill pill-${t.color}" style="cursor:pointer;" onclick="App.addTag('${t.name}')">#${t.name}</button>`).join('')}
         </div>` : ''}
       </div>
     `;
@@ -1093,11 +1815,10 @@ const App = (() => {
   let currentEffort = 'medium';
 
   function changeEntryType(type) {
-    // Save current form data
     saveFormData();
     entryTypeDraft = type;
     const body = document.getElementById('modalBody');
-    const entry = editingEntryId ? State.getEntry(editingEntryId) : {};
+    const entry = editingEntryId ? { ...State.getEntry(editingEntryId) } : {};
     entry.tags = [...currentTags];
     entry.effort = currentEffort;
     body.innerHTML = renderEntryForm(type, entry);
@@ -1107,7 +1828,6 @@ const App = (() => {
   function saveFormData() {
     const titleEl = document.getElementById('entryTitle');
     if (titleEl) {
-      // Tags are managed separately
       const effortSelected = document.querySelector('.effort-btn.selected');
       if (effortSelected) currentEffort = effortSelected.id.replace('effort-', '');
     }
@@ -1132,7 +1852,7 @@ const App = (() => {
   }
 
   function refreshTagDisplay() {
-    const entry = editingEntryId ? State.getEntry(editingEntryId) : {};
+    const entry = editingEntryId ? { ...State.getEntry(editingEntryId) } : {};
     entry.tags = [...currentTags];
     entry.effort = currentEffort;
     const body = document.getElementById('modalBody');
@@ -1152,6 +1872,7 @@ const App = (() => {
       dueDate: document.getElementById('entryDueDate')?.value || null,
       effort: currentEffort,
       priority: document.getElementById('entryPriority')?.value || 'medium',
+      estimateMinutes: parseInt(document.getElementById('entryEstimate')?.value) || null,
       tags: [...currentTags],
     };
 
@@ -1287,18 +2008,63 @@ const App = (() => {
   }
 
   // ═══════════════════════════════════════════════════════════
-  // QUICK LOG MODAL (emotions, calories, activities)
+  // QUICK LOG MODAL v2 — shortcuts, check-in, wake/sleep
   // ═══════════════════════════════════════════════════════════
+  let quickEmotion = null;
+  let quickEnergy = null;
+
   function openQuickLog() {
-    showModal('Quick Log', `
+    quickEmotion = null;
+    quickEnergy = null;
+    showModal('Quick Log', renderQuickLogBody(), [
+      `<button class="btn btn-secondary" onclick="App.closeModal()">Done</button>`,
+    ]);
+  }
+
+  function renderQuickLogBody() {
+    const shortcuts = State.getSettings().quickShortcuts || [];
+    return `
       <div class="form-group">
-        <label class="form-label">Log Emotion</label>
-        <div class="emotion-selector">
-          ${renderEmotionButton('great', '😊', 'Great', null)}
-          ${renderEmotionButton('good', '🙂', 'Good', null)}
-          ${renderEmotionButton('okay', '😐', 'Okay', null)}
-          ${renderEmotionButton('low', '😕', 'Low', null)}
-          ${renderEmotionButton('bad', '😢', 'Bad', null)}
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--space-2);">
+          <label class="form-label" style="margin-bottom:0;">Shortcuts</label>
+          <button class="btn btn-ghost btn-sm" onclick="App.openManageShortcuts()">${icon('settings-2', 12)}Manage</button>
+        </div>
+        <div class="shortcut-chips" id="shortcutChips">
+          ${shortcuts.map(s => `
+            <button class="shortcut-chip" id="sc-${s.id}" onclick="App.useShortcut('${s.id}')">
+              <span>${s.emoji}</span><span>${s.label}</span>
+              ${s.calories ? `<span class="sc-cal">${s.calories} cal</span>` : ''}
+            </button>`).join('')}
+          ${shortcuts.length === 0 ? '<p class="text-xs text-faint">No shortcuts yet — add coffee, water, or saved meals via Manage.</p>' : ''}
+        </div>
+      </div>
+      <div class="divider"></div>
+      <div class="form-group">
+        <label class="form-label">Check-in — how do you feel right now?</label>
+        <div class="emotion-selector" id="quickEmotionSel">
+          ${['great', 'good', 'okay', 'low', 'bad'].map(e => `
+            <button class="emotion-btn" id="qe-${e}" onclick="App.setQuickEmotion('${e}')">
+              ${icon(MOOD_ICONS[e], 22)}
+              <span class="emotion-label">${e}</span>
+            </button>`).join('')}
+        </div>
+        <label class="form-label" style="margin-top:var(--space-3);">Energy</label>
+        <div class="energy-selector" id="quickEnergySel">
+          ${[1, 2, 3, 4, 5].map(n => `<button class="energy-btn" id="qen-${n}" onclick="App.setQuickEnergy(${n})" aria-label="Energy ${n}">⚡</button>`).join('')}
+        </div>
+        <div style="display:flex;gap:var(--space-2);margin-top:var(--space-3);">
+          <input type="text" class="form-input" id="checkinNote" placeholder="Optional note…" style="flex:1;">
+          <button class="btn btn-primary" onclick="App.logCheckinFromModal()">Log</button>
+        </div>
+        <p class="text-xs text-faint" style="margin-top:var(--space-2);">Check-ins are timestamped sub-logs. The single Day Mood lives on the Today page.</p>
+      </div>
+      <div class="divider"></div>
+      <div class="form-group">
+        <label class="form-label">Wake / Sleep</label>
+        <div class="wake-sleep-row">
+          <input type="time" class="form-input" id="wakeSleepTime" value="${nowTime()}">
+          <button class="btn btn-secondary" onclick="App.logWake()">☀️ Wake</button>
+          <button class="btn btn-secondary" onclick="App.logSleep()">🌙 Sleep</button>
         </div>
       </div>
       <div class="divider"></div>
@@ -1320,9 +2086,75 @@ const App = (() => {
         <label class="form-label">Quick Add Task</label>
         <input type="text" class="form-input" id="quickTaskInput" placeholder="Task title..." onkeydown="if(event.key==='Enter'){App.quickAddTask(this.value);this.value='';}">
       </div>
-    `, [
-      `<button class="btn btn-secondary" onclick="App.closeModal()">Done</button>`,
-    ]);
+      <div class="divider"></div>
+      <div class="form-group">
+        <label class="form-label">Today so far</label>
+        <div class="loglist" id="quickLogList">${renderQuickLogList()}</div>
+      </div>
+    `;
+  }
+
+  function renderQuickLogList() {
+    const today = State.todayStr();
+    const logs = State.getLogs({ date: today })
+      .filter(l => ['calorie', 'quick', 'checkin', 'wake', 'sleep'].includes(l.type))
+      .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+    if (logs.length === 0) return '<p class="text-xs text-faint">Nothing logged yet today.</p>';
+    return logs.slice(0, 12).map(l =>
+      `<div class="log-row"><span class="lr-time">${logTimeOf(l)}</span><span>${describeLog(l)}</span></div>`
+    ).join('');
+  }
+
+  function refreshQuickLogList() {
+    const el = document.getElementById('quickLogList');
+    if (el) { el.innerHTML = renderQuickLogList(); refreshIcons(); }
+  }
+
+  function useShortcut(id) {
+    State.logQuickShortcut(id);
+    const chip = document.getElementById(`sc-${id}`);
+    if (chip) {
+      chip.classList.add('just-logged');
+      setTimeout(() => chip.classList.remove('just-logged'), 1200);
+    }
+    refreshQuickLogList();
+  }
+
+  function setQuickEmotion(e) {
+    quickEmotion = quickEmotion === e ? null : e;
+    document.querySelectorAll('#quickEmotionSel .emotion-btn').forEach(b => b.classList.remove('selected'));
+    if (quickEmotion) document.getElementById(`qe-${e}`)?.classList.add('selected');
+  }
+
+  function setQuickEnergy(n) {
+    quickEnergy = quickEnergy === n ? null : n;
+    document.querySelectorAll('#quickEnergySel .energy-btn').forEach((b, i) => {
+      b.classList.toggle('selected', quickEnergy != null && i < quickEnergy);
+    });
+  }
+
+  function logCheckinFromModal() {
+    const notes = document.getElementById('checkinNote')?.value?.trim() || '';
+    if (!quickEmotion && !quickEnergy && !notes) return;
+    State.logCheckin({ emotion: quickEmotion, energy: quickEnergy, notes });
+    quickEmotion = null;
+    quickEnergy = null;
+    document.querySelectorAll('#quickEmotionSel .emotion-btn, #quickEnergySel .energy-btn').forEach(b => b.classList.remove('selected'));
+    const noteEl = document.getElementById('checkinNote');
+    if (noteEl) noteEl.value = '';
+    refreshQuickLogList();
+  }
+
+  function logWake() {
+    const time = document.getElementById('wakeSleepTime')?.value || nowTime();
+    State.logWakeSleep('wake', time);
+    refreshQuickLogList();
+  }
+
+  function logSleep() {
+    const time = document.getElementById('wakeSleepTime')?.value || nowTime();
+    State.logWakeSleep('sleep', time);
+    refreshQuickLogList();
   }
 
   function logCaloriesFromModal() {
@@ -1330,13 +2162,13 @@ const App = (() => {
     const meal = document.getElementById('mealSelect')?.value || 'snack';
     if (!cal || cal <= 0) { toast('Enter valid calories'); return; }
     State.logCalories(cal, '', meal);
-    toast(`Logged ${cal} cal`);
     document.getElementById('calorieInput').value = '';
+    refreshQuickLogList();
   }
 
   function openCalorieLog() {
-    openQuickLog();
-    setTimeout(() => document.getElementById('calorieInput')?.focus(), 200);
+    switchTab('health');
+    setTimeout(() => document.getElementById('foodCal')?.focus(), 200);
   }
 
   function quickAddTask(title) {
@@ -1345,10 +2177,225 @@ const App = (() => {
     toast('Task added');
   }
 
+  // Day mood (Today page) — one per day, updated in place. No toast.
   function logEmotion(emotion) {
     State.logEmotion(emotion);
-    toast(`Logged: ${emotion}`);
     render();
+  }
+
+  // ── Manage shortcuts modal ─────────────────────────────────
+  function openManageShortcuts() {
+    const shortcuts = State.getSettings().quickShortcuts || [];
+    showModal('Quick Log Shortcuts', `
+      <div style="display:flex;flex-direction:column;gap:var(--space-2);margin-bottom:var(--space-4);" id="shortcutManageList">
+        ${shortcuts.length === 0 ? '<p class="text-xs text-faint">No shortcuts yet.</p>' : shortcuts.map(s => `
+          <div class="chain-link" style="justify-content:space-between;">
+            <span>${s.emoji} ${s.label}${s.calories ? ` <span class="text-xs text-faint">· ${s.calories} cal (${s.meal || 'snack'})</span>` : ''}</span>
+            <button class="icon-btn" onclick="App.deleteShortcut('${s.id}')" aria-label="Remove">${icon('trash-2', 14)}</button>
+          </div>`).join('')}
+      </div>
+      <div class="divider"></div>
+      <label class="form-label">Add shortcut</label>
+      <div class="grid-2">
+        <div class="form-group">
+          <input type="text" class="form-input" id="scEmoji" placeholder="Emoji (e.g. 🥗)" maxlength="4">
+        </div>
+        <div class="form-group">
+          <input type="text" class="form-input" id="scLabel" placeholder="Label (e.g. Lunch salad)">
+        </div>
+      </div>
+      <div class="grid-2">
+        <div class="form-group">
+          <input type="number" class="form-input" id="scCalories" placeholder="Calories (optional)">
+        </div>
+        <div class="form-group">
+          <select class="form-select" id="scMeal">
+            <option value="snack">Snack</option>
+            <option value="breakfast">Breakfast</option>
+            <option value="lunch">Lunch</option>
+            <option value="dinner">Dinner</option>
+          </select>
+        </div>
+      </div>
+      <button class="btn btn-primary w-full" onclick="App.addShortcut()">${icon('plus', 14)}Add Shortcut</button>
+    `, [
+      `<button class="btn btn-secondary" onclick="App.openQuickLog()">Back to Quick Log</button>`,
+    ]);
+  }
+
+  function addShortcut() {
+    const label = document.getElementById('scLabel')?.value?.trim();
+    if (!label) { toast('Label is required'); return; }
+    const emoji = document.getElementById('scEmoji')?.value?.trim() || '⭐';
+    const calories = parseInt(document.getElementById('scCalories')?.value) || null;
+    const meal = document.getElementById('scMeal')?.value || 'snack';
+    State.addQuickShortcut({ label, emoji, calories, meal });
+    openManageShortcuts();
+  }
+
+  function deleteShortcut(id) {
+    State.deleteQuickShortcut(id);
+    openManageShortcuts();
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // TAG MANAGER — rename, recolor, scope to project, delete
+  // ═══════════════════════════════════════════════════════════
+  function openManageTags() {
+    const tags = State.getAllTags();
+    const projects = State.getProjects();
+    showModal('Manage Tags', `
+      <p class="text-xs text-muted" style="margin-bottom:var(--space-3);">
+        Click a swatch to cycle colors. Scope a tag to a project and it's only suggested there. Renames and deletes apply to every entry using the tag.
+      </p>
+      <div id="tagManageList">
+        ${tags.length === 0 ? '<p class="text-xs text-faint">No tags yet — create them while editing an entry.</p>' : tags.map(t => `
+          <div class="tag-row">
+            <div class="tag-color-swatch" style="background:var(--hl-${t.color})" title="Cycle color" onclick="App.cycleTagColor('${t.id}')"></div>
+            <input type="text" class="form-input" value="${t.name}" onchange="App.renameTag('${t.id}', this.value)" aria-label="Tag name">
+            <select class="form-select" onchange="App.setTagProject('${t.id}', this.value || null)" aria-label="Tag scope">
+              <option value="">Global</option>
+              ${projects.map(p => `<option value="${p.id}" ${t.projectId === p.id ? 'selected' : ''}>${p.name}</option>`).join('')}
+            </select>
+            <span class="tag-usage" title="Entries using this tag">×${State.tagUsageCount(t.id)}</span>
+            <button class="icon-btn" onclick="App.deleteTagPrompt('${t.id}')" aria-label="Delete tag">${icon('trash-2', 14)}</button>
+          </div>`).join('')}
+      </div>
+      <div class="divider"></div>
+      <div style="display:flex;gap:var(--space-2);">
+        <input type="text" class="form-input" id="newTagName" placeholder="New tag name" style="flex:1;"
+          onkeydown="if(event.key==='Enter'){App.createTagFromManager();}">
+        <button class="btn btn-primary" onclick="App.createTagFromManager()">${icon('plus', 14)}Add</button>
+      </div>
+    `, [
+      `<button class="btn btn-secondary" onclick="App.closeModal();App.render()">Done</button>`,
+    ]);
+  }
+
+  function cycleTagColor(id) {
+    const tag = State.getAllTags().find(t => t.id === id);
+    if (!tag) return;
+    const colors = State.TAG_COLORS;
+    const next = colors[(colors.indexOf(tag.color) + 1) % colors.length];
+    State.updateTag(id, { color: next });
+    openManageTags();
+  }
+
+  function renameTag(id, name) {
+    const trimmed = (name || '').trim();
+    if (!trimmed) { openManageTags(); return; }
+    State.updateTag(id, { name: trimmed });
+  }
+
+  function setTagProject(id, projectId) {
+    State.updateTag(id, { projectId: projectId || null });
+  }
+
+  function deleteTagPrompt(id) {
+    const used = State.tagUsageCount(id);
+    const tag = State.getAllTags().find(t => t.id === id);
+    if (!tag) return;
+    if (!confirm(`Delete #${tag.name}?${used > 0 ? ` It will be removed from ${used} entr${used === 1 ? 'y' : 'ies'}.` : ''}`)) return;
+    State.deleteTag(id);
+    openManageTags();
+  }
+
+  function createTagFromManager() {
+    const el = document.getElementById('newTagName');
+    const name = el?.value?.trim();
+    if (!name) return;
+    State.getOrCreateTag(name);
+    openManageTags();
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // SEARCH — fuzzy find projects, tasks, habits, goals
+  // ═══════════════════════════════════════════════════════════
+  function openSearch() {
+    showModal('Search', `
+      <input type="search" class="form-input" id="searchInput" placeholder="Search projects, tasks, habits…"
+        autocomplete="off" oninput="App.runSearch(this.value)"
+        onkeydown="if(event.key==='Enter'){document.querySelector('.search-result')?.click();}">
+      <div class="search-results" id="searchResults"></div>
+    `, []);
+    setTimeout(() => document.getElementById('searchInput')?.focus(), 100);
+    runSearch('');
+  }
+
+  // Substring match scores highest; otherwise in-order subsequence match.
+  function fuzzyScore(q, text) {
+    const t = (text || '').toLowerCase();
+    if (!q) return 0;
+    const idx = t.indexOf(q);
+    if (idx >= 0) return 200 - idx * 2 - Math.min(t.length - q.length, 40);
+    let ti = 0, score = 0, streak = 0;
+    for (const ch of q) {
+      if (ch === ' ') continue;
+      const found = t.indexOf(ch, ti);
+      if (found === -1) return -1;
+      streak = found === ti ? streak + 1 : 1;
+      score += 4 + streak * 2 - Math.min(found - ti, 10) * 0.5;
+      ti = found + 1;
+    }
+    return score;
+  }
+
+  function runSearch(qRaw) {
+    const q = (qRaw || '').trim().toLowerCase();
+    const el = document.getElementById('searchResults');
+    if (!el) return;
+
+    // Inside a project? Its tasks get boosted to the top.
+    const ctxProject = (currentTab === 'projects' && projectFilter && projectFilter !== 'none') ? projectFilter : null;
+    const results = [];
+
+    State.getProjects().forEach(p => {
+      const s = q ? fuzzyScore(q, p.name) : 10;
+      if (s >= 0) results.push({ kind: 'project', id: p.id, title: p.name, color: p.color, score: s + 10, context: 'project' });
+    });
+
+    State.getEntries().forEach(e => {
+      const hay = e.title + ' ' + (e.tags || []).join(' ');
+      let s = q ? fuzzyScore(q, hay) : (e.type === 'task' && !e.completed ? 5 : -1);
+      if (s < 0) return;
+      if (ctxProject && e.projectId === ctxProject) s += 80; // favor current project
+      if (e.completed) s -= 20;
+      const proj = e.projectId ? State.getProject(e.projectId) : null;
+      results.push({
+        kind: 'entry', id: e.id, title: e.title, completed: e.completed,
+        color: proj?.color, score: s, context: proj ? proj.name : e.type,
+        type: e.type,
+      });
+    });
+
+    results.sort((a, b) => b.score - a.score);
+    const top = results.slice(0, 12);
+
+    if (top.length === 0) {
+      el.innerHTML = `<p class="text-xs text-faint" style="padding:var(--space-2);">No matches for "${qRaw}".</p>`;
+      return;
+    }
+
+    const typeIcons = { project: 'folder-kanban', goal: 'target', task: 'list-checks', habit: 'repeat', reminder: 'clock', checkin: 'brain' };
+    el.innerHTML = top.map(r => `
+      <button class="search-result" onclick="App.searchGo('${r.kind}','${r.id}')">
+        ${icon(typeIcons[r.kind === 'project' ? 'project' : r.type] || 'list-checks', 14)}
+        <span class="proj-dot" style="background:${r.color || 'var(--text-faint)'}"></span>
+        <span class="sr-title ${r.completed ? 'completed' : ''}">${r.title}</span>
+        <span class="sr-context">${r.context}</span>
+      </button>
+    `).join('');
+    refreshIcons();
+  }
+
+  function searchGo(kind, id) {
+    closeModal();
+    if (kind === 'project') {
+      projectFilter = id;
+      switchTab('projects');
+    } else {
+      editEntry(id);
+    }
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -1392,17 +2439,19 @@ const App = (() => {
     document.getElementById('modalFooter').innerHTML = footerHtml.join('');
     document.getElementById('modalOverlay').classList.add('active');
     refreshIcons();
-    // Focus title input
     setTimeout(() => document.getElementById('entryTitle')?.focus(), 100);
   }
 
   function closeModal() {
     document.getElementById('modalOverlay').classList.remove('active');
     editingEntryId = null;
+    editingBlockId = null;
   }
 
   function closePanel() {
     document.getElementById('panelOverlay').classList.remove('active');
+    // Slide panel carries its own .active transform (see Timers.openPanel)
+    document.getElementById('slidePanel').classList.remove('active');
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -1413,7 +2462,20 @@ const App = (() => {
     render();
   }
 
+  function archiveEntry(id) {
+    State.archiveEntry(id);
+    toast('Archived — find it under History');
+    closeModal();
+    render();
+  }
+
+  function unarchiveEntry(id) {
+    State.unarchiveEntry(id);
+    render();
+  }
+
   function deleteEntry(id) {
+    if (!confirm('Delete this entry permanently? Archive keeps it recoverable.')) return;
     State.deleteEntry(id);
     toast('Entry deleted');
     closeModal();
@@ -1472,11 +2534,25 @@ const App = (() => {
     input.click();
   }
 
-  function confirmReset() {
-    if (confirm('Delete ALL data? This cannot be undone.')) {
-      try { (globalThis['loc'+'alSt'+'orage']).removeItem('cade.project.v1'); } catch(e) {}
-      location.reload();
+  async function confirmReset() {
+    if (!confirm('Delete ALL data? This cannot be undone.')) return;
+    const settings = State.getSettings();
+    // The synced copy is a separate encrypted blob on Firebase — if it isn't
+    // erased too, reconnecting with the same passphrase restores everything.
+    if (settings.sync.databaseUrl && settings.sync.passphrase) {
+      if (confirm('Also erase the synced copy on Firebase? Recommended — otherwise reconnecting with the same passphrase will bring the old data back.')) {
+        toast('Erasing cloud copy…');
+        const result = await Sync.eraseRemote();
+        if (!result.success) {
+          if (!confirm(`Cloud erase failed (${result.error}). Reset local data anyway? The server copy will remain.`)) return;
+        }
+      } else {
+        // At minimum stop the pending debounced push from re-uploading
+        Sync.disconnect();
+      }
     }
+    try { (globalThis['loc'+'alSt'+'orage']).removeItem('cade.project.v1'); } catch(e) {}
+    location.reload();
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -1497,10 +2573,7 @@ const App = (() => {
     document.getElementById('themeToggle').addEventListener('click', toggleTheme);
 
     // Search
-    document.getElementById('searchBtn').addEventListener('click', () => {
-      // Simple: switch to projects and focus filter
-      switchTab('projects');
-    });
+    document.getElementById('searchBtn').addEventListener('click', openSearch);
 
     // Modal close
     document.getElementById('modalClose').addEventListener('click', closeModal);
@@ -1516,9 +2589,9 @@ const App = (() => {
 
     // Keyboard shortcuts
     document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') { closeModal(); closePanel(); }
+      if (e.key === 'Escape') { closeModal(); closePanel(); closePopover(); }
       if ((e.metaKey || e.ctrlKey) && e.key === 'n') { e.preventDefault(); openNewEntry('task'); }
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); switchTab('insights'); }
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); openSearch(); }
     });
 
     // Auto-connect sync
@@ -1542,8 +2615,19 @@ const App = (() => {
     openNewProject, selectColor, selectIcon, saveProject,
     openSyncConfig, connectSync, disconnectSync,
     openQuickLog, openCalorieLog, logCaloriesFromModal, quickAddTask, logEmotion,
-    toggleEntry, deleteEntry, startTimerForTask,
-    setProjectFilter, selectHabit,
+    useShortcut, setQuickEmotion, setQuickEnergy, logCheckinFromModal, logWake, logSleep,
+    openManageShortcuts, addShortcut, deleteShortcut,
+    openManageTags, cycleTagColor, renameTag, setTagProject, deleteTagPrompt, createTagFromManager,
+    openSearch, runSearch, searchGo,
+    logFood, deleteFoodLog, useShortcutHealth,
+    toggleEntry, deleteEntry, archiveEntry, unarchiveEntry, startTimerForTask,
+    setProjectFilter, selectHabit, toggleHabitCell,
+    setInsightsProject, setInsightsEntry, setFocusProject,
+    qDragStart, qDragEnd, qDragOver, qDragLeave, qDrop, qItemClick,
+    plannerNav, plannerToday, setPlannerView, plannerTap,
+    popoverAgenda, popoverTask, popoverTimer,
+    openAgendaModal, saveAgendaBlock, deleteAgendaBlock, editPlannerBlock,
+    historyNav, historyToday,
     updateTimerSetting, updateCalorieGoal,
     exportData, importData, confirmReset,
     showModal, closeModal, closePanel,

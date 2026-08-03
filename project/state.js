@@ -11,6 +11,7 @@ const State = (() => {
     logs: [],
     projects: [],
     tags: [],
+    planner: [], // day-planner blocks: agenda items, tracked time, breaks
     settings: {
       theme: 'dark',
       sync: {
@@ -25,6 +26,10 @@ const State = (() => {
         autoStart: false,
       },
       calorieGoal: 2000,
+      quickShortcuts: [
+        { id: 'qs-coffee', label: 'Cup of coffee', emoji: '☕', calories: 5, meal: 'snack' },
+        { id: 'qs-water', label: 'Glass of water', emoji: '💧', calories: null, meal: null },
+      ],
       onboarded: false,
     },
   };
@@ -58,10 +63,23 @@ const State = (() => {
       const raw = storage.getItem(STORAGE_KEY);
       if (raw) {
         const parsed = JSON.parse(raw);
-        return deepMerge(structuredClone(defaultData), parsed);
+        return migrate(deepMerge(structuredClone(defaultData), parsed));
       }
     } catch (e) { console.error('Load error:', e); }
     return structuredClone(defaultData);
+  }
+
+  // ── Migrate older stored shapes to the current schema ───────
+  function migrate(d) {
+    if (!Array.isArray(d.planner)) d.planner = [];
+    (d.entries || []).forEach(e => {
+      if (e.archived === undefined) e.archived = false;
+      if (e.estimateMinutes === undefined) e.estimateMinutes = null;
+    });
+    (d.tags || []).forEach(t => {
+      if (t.projectId === undefined) t.projectId = null; // null = global tag
+    });
+    return d;
   }
 
   // ── Save to storage ────────────────────────────────────────
@@ -128,6 +146,8 @@ const State = (() => {
     linkedEntries: [],
     color: null,
     icon: null,
+    archived: false,
+    estimateMinutes: null,
   };
 
   function createEntry(partial) {
@@ -167,6 +187,9 @@ const State = (() => {
 
   function getEntries(filter = {}) {
     return data.entries.filter(e => {
+      // Archived entries are hidden everywhere unless explicitly requested.
+      if (filter.archived === true) { if (!e.archived) return false; }
+      else if (!filter.includeArchived && e.archived) return false;
       if (filter.type && e.type !== filter.type) return false;
       if (filter.projectId && e.projectId !== filter.projectId) return false;
       if (filter.completed !== undefined && e.completed !== filter.completed) return false;
@@ -174,6 +197,9 @@ const State = (() => {
       return true;
     });
   }
+
+  function archiveEntry(id) { return updateEntry(id, { archived: true }); }
+  function unarchiveEntry(id) { return updateEntry(id, { archived: false }); }
 
   function isHabitDoneToday(entryId) {
     const today = todayStr();
@@ -249,6 +275,56 @@ const State = (() => {
   function getProjects() { return [...data.projects].sort((a, b) => a.order - b.order); }
 
   // ═══════════════════════════════════════════════════════════
+  // DAY PLANNER BLOCKS
+  // { id, date:'YYYY-MM-DD', start:'HH:MM', end:'HH:MM', title,
+  //   entryId?, projectId?, color?, kind:'agenda'|'tracked', notes }
+  // ═══════════════════════════════════════════════════════════
+  function createPlannerBlock(partial) {
+    const block = {
+      id: uid(),
+      date: todayStr(),
+      start: '09:00',
+      end: '10:00',
+      title: '',
+      entryId: null,
+      projectId: null,
+      color: null,
+      kind: 'agenda',
+      notes: '',
+      createdAt: new Date().toISOString(),
+      ...partial,
+    };
+    data.planner.push(block);
+    emit();
+    return block;
+  }
+
+  function updatePlannerBlock(id, updates) {
+    const idx = data.planner.findIndex(b => b.id === id);
+    if (idx === -1) return null;
+    data.planner[idx] = { ...data.planner[idx], ...updates };
+    emit();
+    return data.planner[idx];
+  }
+
+  function deletePlannerBlock(id) {
+    data.planner = data.planner.filter(b => b.id !== id);
+    emit();
+  }
+
+  function getPlannerBlock(id) { return data.planner.find(b => b.id === id); }
+
+  function getPlannerBlocks(filter = {}) {
+    return data.planner.filter(b => {
+      if (filter.date && b.date !== filter.date) return false;
+      if (filter.dateFrom && b.date < filter.dateFrom) return false;
+      if (filter.dateTo && b.date > filter.dateTo) return false;
+      if (filter.kind && b.kind !== filter.kind) return false;
+      return true;
+    }).sort((a, b) => (a.date + a.start).localeCompare(b.date + b.start));
+  }
+
+  // ═══════════════════════════════════════════════════════════
   // TAGS
   // ═══════════════════════════════════════════════════════════
   const TAG_COLORS = ['yellow', 'green', 'blue', 'red', 'pink', 'purple', 'orange', 'gray'];
@@ -260,6 +336,7 @@ const State = (() => {
         id: uid(),
         name,
         color: TAG_COLORS[data.tags.length % TAG_COLORS.length],
+        projectId: null, // null = usable everywhere
       };
       data.tags.push(tag);
       emit();
@@ -267,7 +344,47 @@ const State = (() => {
     return tag;
   }
 
-  function getAllTags() { return data.tags; }
+  // No arg → every tag. With a projectId → global tags + that project's tags.
+  function getAllTags(projectId) {
+    if (projectId === undefined) return data.tags;
+    return data.tags.filter(t => !t.projectId || t.projectId === projectId);
+  }
+
+  function updateTag(id, updates) {
+    const tag = data.tags.find(t => t.id === id);
+    if (!tag) return null;
+    // Renames must follow through to every entry that carries the tag,
+    // since entries reference tags by name.
+    if (updates.name && updates.name !== tag.name) {
+      const oldName = tag.name;
+      data.entries.forEach(e => {
+        if (e.tags?.includes(oldName)) {
+          e.tags = e.tags.map(n => n === oldName ? updates.name : n);
+        }
+      });
+    }
+    Object.assign(tag, updates);
+    emit();
+    return tag;
+  }
+
+  function deleteTag(id) {
+    const tag = data.tags.find(t => t.id === id);
+    if (!tag) return;
+    data.tags = data.tags.filter(t => t.id !== id);
+    data.entries.forEach(e => {
+      if (e.tags?.includes(tag.name)) {
+        e.tags = e.tags.filter(n => n !== tag.name);
+      }
+    });
+    emit();
+  }
+
+  function tagUsageCount(id) {
+    const tag = data.tags.find(t => t.id === id);
+    if (!tag) return 0;
+    return data.entries.filter(e => e.tags?.includes(tag.name)).length;
+  }
 
   // ═══════════════════════════════════════════════════════════
   // LOGS (habit completions, emotions, calories, time sessions)
@@ -299,6 +416,28 @@ const State = (() => {
     });
   }
 
+  // Toggle a habit's completion for ANY past day (the 14-day grid cells).
+  function toggleHabitOnDate(entryId, date) {
+    if (date > todayStr()) return; // no future completions
+    const existing = data.logs.find(l => l.entryId === entryId && l.type === 'habit_completion' && l.date === date);
+    if (existing) {
+      data.logs = data.logs.filter(l => l !== existing);
+    } else {
+      data.logs.push({ id: uid(), type: 'habit_completion', entryId, date, value: 1, notes: '', createdAt: new Date().toISOString() });
+    }
+    const entry = getEntry(entryId);
+    if (entry) {
+      const s = calculateStreak(entryId);
+      updateEntry(entryId, {
+        streak: s.current,
+        bestStreak: Math.max(entry.bestStreak || 0, s.best),
+        completed: isHabitDoneToday(entryId),
+      });
+    } else {
+      emit();
+    }
+  }
+
   function logHabitCompletion(entryId) {
     const today = todayStr();
     // Check if already logged
@@ -316,12 +455,65 @@ const State = (() => {
     }
   }
 
+  // Day mood: exactly ONE per day — repeat taps update it in place.
   function logEmotion(emotion, notes = '') {
-    createLog({ type: 'emotion', entryId: null, date: todayStr(), value: null, notes, emotion });
+    const today = todayStr();
+    const existing = data.logs.find(l => l.type === 'emotion' && l.date === today);
+    if (existing) {
+      existing.emotion = emotion;
+      if (notes) existing.notes = notes;
+      existing.createdAt = new Date().toISOString();
+      emit();
+      return existing;
+    }
+    return createLog({ type: 'emotion', entryId: null, date: today, value: null, notes, emotion });
   }
 
-  function logCalories(calories, notes = '', meal = 'snack') {
-    createLog({ type: 'calorie', entryId: null, date: todayStr(), value: calories, notes, meal });
+  // Check-in: a timestamped sub-log with its own emotion + energy (1-5).
+  function logCheckin({ emotion = null, energy = null, notes = '' } = {}) {
+    return createLog({ type: 'checkin', entryId: null, date: todayStr(), emotion, energy, notes });
+  }
+
+  // Wake / sleep times — one of each per day, updated in place.
+  function logWakeSleep(kind, time) {
+    const today = todayStr();
+    const existing = data.logs.find(l => l.type === kind && l.date === today);
+    if (existing) {
+      existing.time = time;
+      existing.createdAt = new Date().toISOString();
+      emit();
+      return existing;
+    }
+    return createLog({ type: kind, entryId: null, date: today, time });
+  }
+
+  function logCalories(calories, notes = '', meal = 'snack', macros = {}) {
+    createLog({
+      type: 'calorie', entryId: null, date: todayStr(), value: calories, notes, meal,
+      protein: macros.protein ?? null, carbs: macros.carbs ?? null, fat: macros.fat ?? null,
+    });
+  }
+
+  // Fire a configured quick-log shortcut (coffee, water, saved meal…).
+  function logQuickShortcut(shortcutId) {
+    const sc = (data.settings.quickShortcuts || []).find(s => s.id === shortcutId);
+    if (!sc) return null;
+    if (sc.calories != null && sc.calories > 0) {
+      return createLog({ type: 'calorie', entryId: null, date: todayStr(), value: sc.calories, notes: sc.label, meal: sc.meal || 'snack', emoji: sc.emoji });
+    }
+    return createLog({ type: 'quick', entryId: null, date: todayStr(), value: null, notes: sc.label, emoji: sc.emoji });
+  }
+
+  function addQuickShortcut({ label, emoji = '⭐', calories = null, meal = 'snack' }) {
+    const sc = { id: uid(), label, emoji, calories, meal };
+    data.settings.quickShortcuts = [...(data.settings.quickShortcuts || []), sc];
+    emit();
+    return sc;
+  }
+
+  function deleteQuickShortcut(id) {
+    data.settings.quickShortcuts = (data.settings.quickShortcuts || []).filter(s => s.id !== id);
+    emit();
   }
 
   function logTimeSession(entryId, duration, notes = '') {
@@ -436,14 +628,14 @@ const State = (() => {
   function importData(jsonStr) {
     try {
       const imported = JSON.parse(jsonStr);
-      data = deepMerge(structuredClone(defaultData), imported);
+      data = migrate(deepMerge(structuredClone(defaultData), imported));
       emit();
       return true;
     } catch (e) { return false; }
   }
 
   function getRawData() { return data; }
-  function setRawData(newData) { data = newData; emit(); }
+  function setRawData(newData) { data = migrate(deepMerge(structuredClone(defaultData), newData)); emit(); }
 
   // ═══════════════════════════════════════════════════════════
   // SEED DATA (demo content for first run)
@@ -598,9 +790,12 @@ const State = (() => {
   return {
     subscribe, emit, save,
     createEntry, updateEntry, deleteEntry, getEntry, getEntries, toggleComplete, isHabitDoneToday,
+    archiveEntry, unarchiveEntry, toggleHabitOnDate,
     createProject, updateProject, deleteProject, getProject, getProjects,
-    getOrCreateTag, getAllTags,
-    createLog, deleteLog, getLogs, logHabitCompletion, logEmotion, logCalories, logTimeSession,
+    getOrCreateTag, getAllTags, updateTag, deleteTag, tagUsageCount,
+    createPlannerBlock, updatePlannerBlock, deletePlannerBlock, getPlannerBlock, getPlannerBlocks,
+    createLog, deleteLog, getLogs, logHabitCompletion, logEmotion, logCheckin, logWakeSleep,
+    logCalories, logQuickShortcut, addQuickShortcut, deleteQuickShortcut, logTimeSession,
     getTodayCalories, getTodayEmotion,
     getHabitCompletions, calculateStreak, getHabitRetention: (id) => calculateStreak(id),
     getSettings, updateSettings,

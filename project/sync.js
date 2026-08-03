@@ -10,6 +10,7 @@ const Sync = (() => {
 
   let db = null;           // Firebase RTDB instance
   let connected = false;
+  let connecting = false;  // true while establishing / reconciling
   let pushTimer = null;
   let lastSyncedSnapshot = null;
   let lastSyncedVersion = 0;
@@ -124,14 +125,18 @@ const Sync = (() => {
   async function connect(databaseUrl, passphrase) {
     if (!databaseUrl || !passphrase) return { success: false, error: 'URL and passphrase required' };
     try {
+      connecting = true;
+      updateStatus();
+
       // Derive key
       cryptoKey = await deriveKey(passphrase);
 
       // Initialize Firebase
-      if (typeof firebase === 'undefined') return { success: false, error: 'Firebase SDK not loaded' };
+      if (typeof firebase === 'undefined') { connecting = false; updateStatus(); return { success: false, error: 'Firebase SDK not loaded' }; }
 
       // Clean up previous connection
       disconnect();
+      connecting = true;
 
       const app = firebase.initializeApp({ databaseURL: databaseUrl }, 'cade-' + Date.now());
       db = firebase.database(app);
@@ -141,6 +146,7 @@ const Sync = (() => {
         const isLive = snap.val() === true;
         if (isLive && !connected) {
           connected = true;
+          connecting = false;
           onReconnect();
         } else if (!isLive) {
           connected = false;
@@ -152,11 +158,14 @@ const Sync = (() => {
       State.updateSettings({ sync: { ...settings.sync, databaseUrl, passphrase, connected: true } });
       return { success: true };
     } catch (e) {
+      connecting = false;
+      updateStatus();
       return { success: false, error: e.message };
     }
   }
 
   function disconnect() {
+    clearTimeout(pushTimer);
     if (dataListener && db) {
       db.ref(dataPath()).off('value', dataListener);
       dataListener = null;
@@ -166,8 +175,41 @@ const Sync = (() => {
       connectionListener = null;
     }
     connected = false;
+    connecting = false;
     db = null;
     updateStatus();
+  }
+
+  // Permanently delete this dataset's node (cade/<fingerprint>) from the
+  // server. Used by Reset All Data so the encrypted blob doesn't linger and
+  // resurrect on the next connect with the same passphrase.
+  async function eraseRemote() {
+    try {
+      clearTimeout(pushTimer);
+      const settings = State.getSettings();
+      if (!settings.sync.databaseUrl || !settings.sync.passphrase) {
+        return { success: false, error: 'Sync not configured' };
+      }
+      if (!keyFingerprint) await deriveKey(settings.sync.passphrase);
+      let target = db;
+      let tempApp = null;
+      if (!target) {
+        if (typeof firebase === 'undefined') return { success: false, error: 'Firebase SDK not loaded' };
+        tempApp = firebase.initializeApp({ databaseURL: settings.sync.databaseUrl }, 'cade-erase-' + Date.now());
+        target = firebase.database(tempApp);
+      }
+      await Promise.race([
+        target.ref(`cade/${keyFingerprint}`).remove(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 10000)),
+      ]);
+      disconnect();
+      if (tempApp) tempApp.delete().catch(() => {});
+      lastSyncedSnapshot = null;
+      lastSyncedVersion = 0;
+      return { success: true };
+    } catch (e) {
+      return { success: false, error: e.message };
+    }
   }
 
   function dataPath() {
@@ -201,15 +243,12 @@ const Sync = (() => {
       const raw = State.getRawData();
       const encrypted = await encrypt(raw);
 
-      // Atomic version increment + write
-      const versionRef = db.ref(versionPath());
-      await db.ref().runTransaction(async (currentData) => {
-        const currentVersion = (currentData && currentData[versionPath().split('/').pop()]) || 0;
-        const newVersion = currentVersion + 1;
-        return {
-          [dataPath()]: encrypted,
-          [versionPath()]: newVersion,
-        };
+      // Multi-path update scoped to this fingerprint's subtree. The version
+      // counter uses a server-side atomic increment; a root-level transaction
+      // would require root read/write permission and reject slash-keys.
+      await db.ref().update({
+        [dataPath()]: encrypted,
+        [versionPath()]: firebase.database.ServerValue.increment(1),
       });
 
       lastSyncedSnapshot = structuredClone(raw);
@@ -224,6 +263,8 @@ const Sync = (() => {
   async function onReconnect() {
     if (!db) return;
     try {
+      connecting = true;
+      updateStatus();
       // One-time fetch with timeout
       const serverData = await Promise.race([
         db.ref(dataPath()).once('value'),
@@ -280,10 +321,12 @@ const Sync = (() => {
       }
 
       setupLiveListener();
+      connecting = false;
       updateStatus();
     } catch (e) {
       console.error('Reconnect error:', e);
       connected = false;
+      connecting = false;
       updateStatus();
     }
   }
@@ -338,6 +381,7 @@ const Sync = (() => {
   // ═══════════════════════════════════════════════════════════
   // STATUS
   // ═══════════════════════════════════════════════════════════
+  // Menubar dot: green = connected, yellow = reconnecting, red = disconnected.
   function updateStatus() {
     const el = document.getElementById('syncStatus');
     if (!el) return;
@@ -346,14 +390,10 @@ const Sync = (() => {
       el.style.display = 'none';
       return;
     }
-    el.style.display = 'flex';
-    if (connected) {
-      el.className = 'sync-status online';
-      el.querySelector('.label').textContent = 'Synced';
-    } else {
-      el.className = 'sync-status offline';
-      el.querySelector('.label').textContent = 'Offline';
-    }
+    el.style.display = 'block';
+    const state = connected ? 'online' : connecting ? 'syncing' : 'offline';
+    el.className = 'sync-dot ' + state;
+    el.title = 'Sync: ' + (connected ? 'connected' : connecting ? 'reconnecting…' : 'disconnected');
   }
 
   function isConnected() { return connected; }
@@ -368,7 +408,7 @@ const Sync = (() => {
 
   return {
     connect, disconnect, schedulePush, pushLocal, resolveConflict,
-    isConnected, updateStatus, autoConnect,
+    isConnected, updateStatus, autoConnect, eraseRemote,
     encrypt, decrypt, // exposed for testing
   };
 })();
