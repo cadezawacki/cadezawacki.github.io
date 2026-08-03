@@ -28,6 +28,13 @@ const State = (() => {
       calorieGoal: 2000,
       workingProject: null,    // "Next Best Task" project scope
       sidebarCollapsed: false, // desktop sidebar state
+      hotkeys: {               // single-key shortcuts (when not typing)
+        timer: 't',
+        newTask: 'n',
+        quickLog: 'q',
+        search: '/',
+        stopTimers: 's',
+      },
       quickShortcuts: [
         { id: 'qs-coffee', label: 'Cup of coffee', emoji: '☕', calories: 5, meal: 'snack' },
         { id: 'qs-water', label: 'Glass of water', emoji: '💧', calories: null, meal: null },
@@ -77,6 +84,8 @@ const State = (() => {
     (d.entries || []).forEach(e => {
       if (e.archived === undefined) e.archived = false;
       if (e.estimateMinutes === undefined) e.estimateMinutes = null;
+      if (e.remindTime === undefined) e.remindTime = null;
+      if (!Array.isArray(e.projectIds)) e.projectIds = e.projectId ? [e.projectId] : [];
     });
     (d.tags || []).forEach(t => {
       if (t.projectId === undefined) t.projectId = null; // null = global tag
@@ -161,6 +170,8 @@ const State = (() => {
     icon: null,
     archived: false,
     estimateMinutes: null,
+    projectIds: [],    // multi-project membership; projectId stays = primary
+    remindTime: null,  // HH:MM for reminders
   };
 
   function createEntry(partial) {
@@ -208,13 +219,34 @@ const State = (() => {
     return data.entries.find(e => e.id === id);
   }
 
+  // All project ids an entry belongs to (multi-project aware)
+  function entryProjectIds(e) {
+    if (Array.isArray(e.projectIds) && e.projectIds.length > 0) return e.projectIds;
+    return e.projectId ? [e.projectId] : [];
+  }
+
+  // A project id plus every descendant project id
+  function getProjectSubtreeIds(id) {
+    const out = [id];
+    const walk = (pid) => {
+      data.projects.forEach(p => {
+        if (p.parentId === pid) { out.push(p.id); walk(p.id); }
+      });
+    };
+    walk(id);
+    return out;
+  }
+
   function getEntries(filter = {}) {
+    // Project filters roll up: a parent project contains everything in its
+    // sub-projects, and multi-project entries match through any membership.
+    const subtree = filter.projectId ? getProjectSubtreeIds(filter.projectId) : null;
     return data.entries.filter(e => {
       // Archived entries are hidden everywhere unless explicitly requested.
       if (filter.archived === true) { if (!e.archived) return false; }
       else if (!filter.includeArchived && e.archived) return false;
       if (filter.type && e.type !== filter.type) return false;
-      if (filter.projectId && e.projectId !== filter.projectId) return false;
+      if (subtree && !entryProjectIds(e).some(pid => subtree.includes(pid))) return false;
       if (filter.completed !== undefined && e.completed !== filter.completed) return false;
       if (filter.tag && !(e.tags || []).includes(filter.tag)) return false;
       return true;
@@ -898,6 +930,7 @@ const State = (() => {
     createEntry, updateEntry, deleteEntry, getEntry, getEntries, toggleComplete, isHabitDoneToday,
     archiveEntry, unarchiveEntry, toggleHabitOnDate, cycleHabitOnDate,
     habitStatusOn, isHabitScheduledOn, resetData,
+    entryProjectIds, getProjectSubtreeIds,
     createProject, updateProject, deleteProject, getProject, getProjects,
     archiveProject, unarchiveProject, wouldCycleProject,
     getOrCreateTag, getAllTags, updateTag, deleteTag, tagUsageCount,

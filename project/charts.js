@@ -34,10 +34,15 @@ const Charts = (() => {
   // CALENDAR HEATMAP (GitHub-style contribution graph)
   // ═══════════════════════════════════════════════════════════
   // Optional filter: { projectId, entryId } scopes counts to a project/task.
+  // Project filters roll up sub-projects and honor multi-project entries.
   function matchesFilter(entry, filter) {
     if (!filter) return true;
     if (filter.entryId && entry?.id !== filter.entryId) return false;
-    if (filter.projectId && entry?.projectId !== filter.projectId) return false;
+    if (filter.projectId) {
+      if (!entry) return false;
+      const subtree = State.getProjectSubtreeIds(filter.projectId);
+      if (!State.entryProjectIds(entry).some(pid => subtree.includes(pid))) return false;
+    }
     return true;
   }
 
@@ -784,14 +789,17 @@ const Charts = (() => {
         title="${b.title} · ${b.start}–${b.end}${b.kind === 'tracked' ? ' (tracked)' : ''}"></div>`;
     });
 
-    const markerEmoji = { calorie: '🍽', quick: '⭐', checkin: '📝', wake: '☀️', sleep: '🌙' };
+    const markerEmoji = { calorie: '🍽', quick: '⭐', checkin: '📝' };
+    const markerIcon = { wake: 'sunrise', sleep: 'moon' };
     logs.forEach(l => {
       const m = logMin(l);
       if (m == null) return;
-      const emoji = l.emoji || markerEmoji[l.type] || '·';
+      const mark = markerIcon[l.type]
+        ? `<i data-lucide="${markerIcon[l.type]}" style="width:12px;height:12px;color:var(--text-muted);"></i>`
+        : (l.emoji || markerEmoji[l.type] || '·');
       const label = l.notes || l.type;
       html += `<div class="timeline-marker" style="left:${m / DAY * 100}%" title="${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')} — ${label}">
-        <span class="tm-emoji">${emoji}</span>
+        <span class="tm-emoji">${mark}</span>
       </div>`;
     });
 
@@ -811,6 +819,8 @@ const Charts = (() => {
     }
 
     container.innerHTML = html;
+    // This renders AFTER the page-level icon pass — convert our own markers
+    if (window.lucide) lucide.createIcons();
   }
 
   // ═══════════════════════════════════════════════════════════

@@ -337,8 +337,10 @@ const Timers = (() => {
     });
   }
 
+  // Header-nav indicator: visible from ANY page while the window is closed
+  // and something is running — click brings the timer window back.
   function updateMini() {
-    const el = document.getElementById('timerMini');
+    const el = document.getElementById('timerIndicator');
     if (!el) return;
     const active = clock.mode && clock.state !== 'idle';
     const hasSessions = sessions.length > 0;
@@ -346,20 +348,15 @@ const Timers = (() => {
       el.style.display = 'none';
       return;
     }
-    let parts = [];
-    if (active) {
-      const v = clock.mode === 'stopwatch' ? clock.elapsed : clock.remaining;
-      const label = clock.mode === 'pomodoro' ? PHASE_LABELS[clock.phase] : clock.mode === 'countdown' ? 'Countdown' : 'Stopwatch';
-      parts.push(`<span class="tm-clock ${clock.state === 'paused' ? 'paused' : ''}">${label} ${formatTime(v)}</span>`);
-    }
+    const running = clock.state === 'running' || sessions.some(s => s.state === 'running');
+    let text;
     if (hasSessions) {
-      const first = sessions[0];
-      const entry = State.getEntry(first.entryId);
-      parts.push(`<span class="tm-session ${first.state === 'paused' ? 'paused' : ''}">▸ ${formatTime(sessionElapsed(first))} ${entry?.title || ''}</span>`);
-      if (sessions.length > 1) parts.push(`<span class="tm-more">+${sessions.length - 1}</span>`);
+      text = formatTime(sessionElapsed(sessions[0])) + (sessions.length > 1 ? ` +${sessions.length - 1}` : '');
+    } else {
+      text = formatTime(clock.mode === 'stopwatch' ? clock.elapsed : clock.remaining);
     }
-    el.innerHTML = parts.join('');
-    el.style.display = 'flex';
+    el.innerHTML = `<span class="ti-dot ${running ? 'running' : ''}"></span><span>${text}</span>`;
+    el.style.display = 'inline-flex';
   }
 
   function showToast(msg) {
@@ -552,11 +549,26 @@ const Timers = (() => {
     render();
   }
 
+  // Floating window — no overlay, the app stays fully usable behind it
   function openPanel() {
     document.getElementById('panelTitle').textContent = 'Timer';
-    document.getElementById('panelOverlay').classList.add('active');
     document.getElementById('slidePanel').classList.add('active');
     render();
+    updateMini();
+  }
+
+  function toggleWindow() {
+    if (isPanelOpen()) {
+      if (typeof App !== 'undefined') App.closePanel();
+    } else {
+      openPanel();
+    }
+  }
+
+  // Stop everything: log + finalize all sessions, reset the clock
+  function stopAll() {
+    [...sessions].forEach(s => stopSession(s.entryId));
+    if (clock.mode) resetClock();
     updateMini();
   }
 
@@ -570,6 +582,6 @@ const Timers = (() => {
     armTracking, startPending, cancelPending, startSession, pauseSession, resumeSession, stopSession,
     getTracking, trackedCount, startTracking,
     // panel / misc
-    openPanel, render, updateMini, formatTime, getProgress,
+    openPanel, toggleWindow, stopAll, render, updateMini, formatTime, getProgress,
   };
 })();
