@@ -76,6 +76,9 @@ const State = (() => {
       if (e.archived === undefined) e.archived = false;
       if (e.estimateMinutes === undefined) e.estimateMinutes = null;
     });
+    (d.tags || []).forEach(t => {
+      if (t.projectId === undefined) t.projectId = null; // null = global tag
+    });
     return d;
   }
 
@@ -333,6 +336,7 @@ const State = (() => {
         id: uid(),
         name,
         color: TAG_COLORS[data.tags.length % TAG_COLORS.length],
+        projectId: null, // null = usable everywhere
       };
       data.tags.push(tag);
       emit();
@@ -340,7 +344,47 @@ const State = (() => {
     return tag;
   }
 
-  function getAllTags() { return data.tags; }
+  // No arg → every tag. With a projectId → global tags + that project's tags.
+  function getAllTags(projectId) {
+    if (projectId === undefined) return data.tags;
+    return data.tags.filter(t => !t.projectId || t.projectId === projectId);
+  }
+
+  function updateTag(id, updates) {
+    const tag = data.tags.find(t => t.id === id);
+    if (!tag) return null;
+    // Renames must follow through to every entry that carries the tag,
+    // since entries reference tags by name.
+    if (updates.name && updates.name !== tag.name) {
+      const oldName = tag.name;
+      data.entries.forEach(e => {
+        if (e.tags?.includes(oldName)) {
+          e.tags = e.tags.map(n => n === oldName ? updates.name : n);
+        }
+      });
+    }
+    Object.assign(tag, updates);
+    emit();
+    return tag;
+  }
+
+  function deleteTag(id) {
+    const tag = data.tags.find(t => t.id === id);
+    if (!tag) return;
+    data.tags = data.tags.filter(t => t.id !== id);
+    data.entries.forEach(e => {
+      if (e.tags?.includes(tag.name)) {
+        e.tags = e.tags.filter(n => n !== tag.name);
+      }
+    });
+    emit();
+  }
+
+  function tagUsageCount(id) {
+    const tag = data.tags.find(t => t.id === id);
+    if (!tag) return 0;
+    return data.entries.filter(e => e.tags?.includes(tag.name)).length;
+  }
 
   // ═══════════════════════════════════════════════════════════
   // LOGS (habit completions, emotions, calories, time sessions)
@@ -370,6 +414,28 @@ const State = (() => {
       if (filter.dateTo && l.date > filter.dateTo) return false;
       return true;
     });
+  }
+
+  // Toggle a habit's completion for ANY past day (the 14-day grid cells).
+  function toggleHabitOnDate(entryId, date) {
+    if (date > todayStr()) return; // no future completions
+    const existing = data.logs.find(l => l.entryId === entryId && l.type === 'habit_completion' && l.date === date);
+    if (existing) {
+      data.logs = data.logs.filter(l => l !== existing);
+    } else {
+      data.logs.push({ id: uid(), type: 'habit_completion', entryId, date, value: 1, notes: '', createdAt: new Date().toISOString() });
+    }
+    const entry = getEntry(entryId);
+    if (entry) {
+      const s = calculateStreak(entryId);
+      updateEntry(entryId, {
+        streak: s.current,
+        bestStreak: Math.max(entry.bestStreak || 0, s.best),
+        completed: isHabitDoneToday(entryId),
+      });
+    } else {
+      emit();
+    }
   }
 
   function logHabitCompletion(entryId) {
@@ -421,8 +487,11 @@ const State = (() => {
     return createLog({ type: kind, entryId: null, date: today, time });
   }
 
-  function logCalories(calories, notes = '', meal = 'snack') {
-    createLog({ type: 'calorie', entryId: null, date: todayStr(), value: calories, notes, meal });
+  function logCalories(calories, notes = '', meal = 'snack', macros = {}) {
+    createLog({
+      type: 'calorie', entryId: null, date: todayStr(), value: calories, notes, meal,
+      protein: macros.protein ?? null, carbs: macros.carbs ?? null, fat: macros.fat ?? null,
+    });
   }
 
   // Fire a configured quick-log shortcut (coffee, water, saved meal…).
@@ -721,9 +790,9 @@ const State = (() => {
   return {
     subscribe, emit, save,
     createEntry, updateEntry, deleteEntry, getEntry, getEntries, toggleComplete, isHabitDoneToday,
-    archiveEntry, unarchiveEntry,
+    archiveEntry, unarchiveEntry, toggleHabitOnDate,
     createProject, updateProject, deleteProject, getProject, getProjects,
-    getOrCreateTag, getAllTags,
+    getOrCreateTag, getAllTags, updateTag, deleteTag, tagUsageCount,
     createPlannerBlock, updatePlannerBlock, deletePlannerBlock, getPlannerBlock, getPlannerBlocks,
     createLog, deleteLog, getLogs, logHabitCompletion, logEmotion, logCheckin, logWakeSleep,
     logCalories, logQuickShortcut, addQuickShortcut, deleteQuickShortcut, logTimeSession,

@@ -185,6 +185,13 @@ const Charts = (() => {
   // ═══════════════════════════════════════════════════════════
   // HABIT STRENGTH (line chart — 30-day trend)
   // ═══════════════════════════════════════════════════════════
+  function hexToRgba(hex, alpha) {
+    const m = /^#?([0-9a-f]{6})$/i.exec(hex || '');
+    if (!m) return `rgba(15, 149, 152, ${alpha})`;
+    const n = parseInt(m[1], 16);
+    return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
+  }
+
   function renderHabitStrength(canvasId, entryId) {
     destroy(canvasId);
     if (typeof Chart === 'undefined') return; // CDN not loaded (first offline visit)
@@ -192,6 +199,11 @@ const Charts = (() => {
     const today = new Date();
     const labels = [];
     const data = [];
+
+    // Line takes the habit's project color so charts match the rest of the UI
+    const habit = State.getEntry(entryId);
+    const proj = habit?.projectId ? State.getProject(habit.projectId) : null;
+    const lineColor = proj?.color || colors.accent;
 
     const completions = new Set(State.getHabitCompletions(entryId));
     let runningStreak = 0;
@@ -214,23 +226,24 @@ const Charts = (() => {
 
     // Create gradient
     const gradient = ctx.getContext('2d').createLinearGradient(0, 0, 0, 200);
-    gradient.addColorStop(0, 'rgba(15, 149, 152, 0.25)');
-    gradient.addColorStop(1, 'rgba(15, 149, 152, 0.0)');
+    gradient.addColorStop(0, hexToRgba(lineColor, 0.25));
+    gradient.addColorStop(1, hexToRgba(lineColor, 0));
 
     chartInstances[canvasId] = new Chart(ctx, {
       type: 'line',
       data: {
         labels,
         datasets: [{
+          label: 'Streak',
           data,
-          borderColor: colors.accent,
+          borderColor: lineColor,
           backgroundColor: gradient,
           borderWidth: 2,
           fill: true,
           tension: 0.35,
           pointRadius: 0,
           pointHoverRadius: 4,
-          pointHoverBackgroundColor: colors.accent,
+          pointHoverBackgroundColor: lineColor,
           pointHoverBorderColor: colors.surface,
           pointHoverBorderWidth: 2,
         }],
@@ -238,10 +251,205 @@ const Charts = (() => {
       options: {
         responsive: true,
         maintainAspectRatio: false,
-        plugins: { legend: { display: false }, tooltip: { mode: 'index', intersect: false } },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            mode: 'index', intersect: false,
+            callbacks: { label: (c) => `${c.parsed.y} day${c.parsed.y === 1 ? '' : 's'} streak` },
+          },
+        },
         scales: {
-          x: { display: false },
-          y: { display: false, beginAtZero: true },
+          x: {
+            display: true,
+            grid: { display: false },
+            ticks: { color: colors.text, font: { family: 'JetBrains Mono', size: 9 }, maxTicksLimit: 6, maxRotation: 0 },
+          },
+          y: {
+            display: true,
+            beginAtZero: true,
+            title: { display: true, text: 'Consecutive days', color: colors.text, font: { family: 'JetBrains Mono', size: 9 } },
+            grid: { color: colors.grid },
+            ticks: { color: colors.text, font: { family: 'JetBrains Mono', size: 9 }, precision: 0 },
+          },
+        },
+      },
+    });
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // ALL-HABITS AGGREGATE — stacked completions per day (30 days),
+  // one color-coded series per habit
+  // ═══════════════════════════════════════════════════════════
+  function renderHabitsAggregate(canvasId, days = 30) {
+    destroy(canvasId);
+    if (typeof Chart === 'undefined') return;
+    const colors = getColors();
+    const habits = State.getEntries({ type: 'habit' });
+    if (habits.length === 0) return;
+    const today = new Date();
+    const fallback = ['#0f9598', '#e06d6d', '#6db4f0', '#6fcf97', '#f0d96a', '#a06df0', '#f0a06d'];
+
+    const labels = [];
+    const dates = [];
+    for (let i = days - 1; i >= 0; i--) {
+      const d = new Date(today);
+      d.setDate(d.getDate() - i);
+      dates.push(State.dateStr(d));
+      labels.push(d.toLocaleDateString('en', { month: 'short', day: 'numeric' }));
+    }
+
+    const datasets = habits.map((h, idx) => {
+      const done = new Set(State.getHabitCompletions(h.id));
+      const proj = h.projectId ? State.getProject(h.projectId) : null;
+      return {
+        label: h.title,
+        data: dates.map(d => done.has(d) ? 1 : 0),
+        backgroundColor: proj?.color || fallback[idx % fallback.length],
+        stack: 'habits',
+        borderRadius: 2,
+        barPercentage: 0.9,
+        categoryPercentage: 0.9,
+      };
+    });
+
+    const ctx = document.getElementById(canvasId);
+    if (!ctx) return;
+
+    chartInstances[canvasId] = new Chart(ctx, {
+      type: 'bar',
+      data: { labels, datasets },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            display: true,
+            position: 'bottom',
+            labels: { color: colors.text, font: { family: 'JetBrains Mono', size: 10 }, boxWidth: 10, boxHeight: 10 },
+          },
+          tooltip: { filter: (item) => item.parsed.y > 0 },
+        },
+        scales: {
+          x: {
+            stacked: true,
+            grid: { display: false },
+            ticks: { color: colors.text, font: { family: 'JetBrains Mono', size: 9 }, maxTicksLimit: 6, maxRotation: 0 },
+          },
+          y: {
+            stacked: true,
+            beginAtZero: true,
+            title: { display: true, text: 'Habits completed', color: colors.text, font: { family: 'JetBrains Mono', size: 9 } },
+            grid: { color: colors.grid },
+            ticks: { color: colors.text, font: { family: 'JetBrains Mono', size: 9 }, stepSize: 1 },
+          },
+        },
+      },
+    });
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // CALORIES — 7-day bars vs goal line
+  // ═══════════════════════════════════════════════════════════
+  function renderCalorieWeek(canvasId, days = 7) {
+    destroy(canvasId);
+    if (typeof Chart === 'undefined') return;
+    const colors = getColors();
+    const today = new Date();
+    const goal = State.getSettings().calorieGoal || 2000;
+    const labels = [];
+    const data = [];
+    const logs = State.getLogs({ type: 'calorie' });
+
+    for (let i = days - 1; i >= 0; i--) {
+      const d = new Date(today);
+      d.setDate(d.getDate() - i);
+      const dateStr = State.dateStr(d);
+      labels.push(d.toLocaleDateString('en', { weekday: 'short' }));
+      data.push(logs.filter(l => l.date === dateStr).reduce((s, l) => s + (l.value || 0), 0));
+    }
+
+    const ctx = document.getElementById(canvasId);
+    if (!ctx) return;
+
+    chartInstances[canvasId] = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [
+          {
+            type: 'line',
+            label: 'Goal',
+            data: labels.map(() => goal),
+            borderColor: colors.faint,
+            borderWidth: 1.5,
+            borderDash: [5, 4],
+            pointRadius: 0,
+            fill: false,
+          },
+          {
+            label: 'Calories',
+            data,
+            // over-goal days flag red, under-goal stay accent
+            backgroundColor: data.map(v => v > goal ? '#e06d6d' : colors.accent),
+            borderRadius: 3,
+            barThickness: 18,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            display: true,
+            position: 'bottom',
+            labels: { color: colors.text, font: { family: 'JetBrains Mono', size: 10 }, boxWidth: 10, boxHeight: 10 },
+          },
+        },
+        scales: {
+          x: { grid: { display: false }, ticks: { color: colors.text, font: { family: 'JetBrains Mono', size: 10 } } },
+          y: {
+            beginAtZero: true,
+            title: { display: true, text: 'kcal', color: colors.text, font: { family: 'JetBrains Mono', size: 9 } },
+            grid: { color: colors.grid },
+            ticks: { color: colors.text, font: { family: 'JetBrains Mono', size: 9 } },
+          },
+        },
+      },
+    });
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // MACRO SPLIT — protein / carbs / fat grams for a day
+  // ═══════════════════════════════════════════════════════════
+  function renderMacroSplit(canvasId, macros) {
+    destroy(canvasId);
+    if (typeof Chart === 'undefined') return;
+    const colors = getColors();
+    const ctx = document.getElementById(canvasId);
+    if (!ctx) return;
+
+    chartInstances[canvasId] = new Chart(ctx, {
+      type: 'doughnut',
+      data: {
+        labels: ['Protein', 'Carbs', 'Fat'],
+        datasets: [{
+          data: [macros.protein || 0, macros.carbs || 0, macros.fat || 0],
+          backgroundColor: ['#6db4f0', '#f0d96a', '#f0a06d'],
+          borderWidth: 0,
+          borderRadius: 3,
+        }],
+      },
+      options: {
+        cutout: '62%',
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            position: 'bottom',
+            labels: { color: colors.text, font: { family: 'JetBrains Mono', size: 10 }, boxWidth: 10, boxHeight: 10 },
+          },
+          tooltip: { callbacks: { label: (c) => `${c.label}: ${c.parsed}g` } },
         },
       },
     });
@@ -676,10 +884,11 @@ const Charts = (() => {
 
   return {
     renderHeatmap, renderStreakCalendar,
-    renderGoalProgress, renderHabitStrength,
+    renderGoalProgress, renderHabitStrength, renderHabitsAggregate,
     renderDayBreakdown, renderMoodEnergy,
     renderEmotionTrend: renderMoodEnergy, // back-compat alias
     renderSleepChart, renderDayTimeline,
+    renderCalorieWeek, renderMacroSplit,
     renderHabitRadar, renderEffortDist,
     destroy, destroyAll,
   };

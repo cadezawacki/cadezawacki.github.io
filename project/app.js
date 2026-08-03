@@ -35,6 +35,9 @@ const App = (() => {
     return map[priority] || 'gray';
   }
 
+  // Minimal line icons for moods (replaces emoji)
+  const MOOD_ICONS = { great: 'laugh', good: 'smile', okay: 'meh', low: 'frown', bad: 'angry' };
+
   function estimateLabel(min) {
     if (!min) return '';
     if (min < 60) return `${min}m`;
@@ -155,6 +158,8 @@ const App = (() => {
       case 'today': main.innerHTML = renderToday(); break;
       case 'projects': main.innerHTML = renderProjects(); break;
       case 'habits': main.innerHTML = renderHabits(); break;
+      case 'focus': main.innerHTML = renderFocus(); break;
+      case 'health': main.innerHTML = renderHealth(); break;
       case 'insights': main.innerHTML = renderInsights(); break;
       case 'history': main.innerHTML = renderHistory(); break;
       case 'settings': main.innerHTML = renderSettings(); break;
@@ -167,6 +172,7 @@ const App = (() => {
   function renderChartsForTab() {
     if (currentTab === 'insights') renderInsightCharts();
     if (currentTab === 'habits') renderHabitCharts();
+    if (currentTab === 'health') renderHealthCharts();
     if (currentTab === 'history') renderHistoryCharts();
   }
 
@@ -202,9 +208,9 @@ const App = (() => {
       return pa - pb;
     })[0];
 
-    const todayCalories = State.getTodayCalories();
-    const calorieGoal = State.getSettings().calorieGoal || 2000;
     const todayEmotion = State.getTodayEmotion();
+    const focusSeconds = State.getLogs({ type: 'time_session', date: today })
+      .reduce((s, l) => s + (l.value || 0), 0);
 
     let html = `
       <div class="page-header">
@@ -230,8 +236,8 @@ const App = (() => {
         <span class="stat-value">${habits.filter(h => State.isHabitDoneToday(h.id)).length} / ${habits.length}</span>
       </div>
       <div class="card stat-card">
-        <span class="stat-label">Calories</span>
-        <span class="stat-value">${todayCalories} <span style="font-size:var(--text-xs);color:var(--text-muted)">/ ${calorieGoal}</span></span>
+        <span class="stat-label">Focus Time</span>
+        <span class="stat-value">${focusSeconds > 0 ? Timers.formatTime(focusSeconds) : '—'}</span>
       </div>
     </div>`;
 
@@ -302,27 +308,16 @@ const App = (() => {
     // Day planner
     html += renderPlannerSection();
 
-    // Quick widgets: calories + day mood
-    html += `<div class="grid-2 section">
-      <div class="card">
-        <div class="section-header" style="margin-bottom:var(--space-3)"><span class="section-title">Calories Today</span></div>
-        <div class="calorie-display">
-          <span class="calorie-number">${todayCalories}</span>
-          <span class="calorie-goal">/ ${calorieGoal} cal</span>
-        </div>
-        <div class="progress-bar" style="margin-bottom:var(--space-3)">
-          <div class="progress-fill" style="width:${Math.min(todayCalories / calorieGoal * 100, 100)}%"></div>
-        </div>
-        <button class="btn btn-secondary btn-sm w-full" onclick="App.openCalorieLog()">${icon('plus', 14)}Log Food</button>
-      </div>
+    // Day mood widget (food/calorie tracking lives on the Health tab)
+    html += `<div class="section">
       <div class="card">
         <div class="section-header" style="margin-bottom:var(--space-3)"><span class="section-title">Day Mood</span></div>
         <div class="emotion-selector">
-          ${renderEmotionButton('great', '😊', 'Great', todayEmotion?.emotion)}
-          ${renderEmotionButton('good', '🙂', 'Good', todayEmotion?.emotion)}
-          ${renderEmotionButton('okay', '😐', 'Okay', todayEmotion?.emotion)}
-          ${renderEmotionButton('low', '😕', 'Low', todayEmotion?.emotion)}
-          ${renderEmotionButton('bad', '😢', 'Bad', todayEmotion?.emotion)}
+          ${renderEmotionButton('great', 'Great', todayEmotion?.emotion)}
+          ${renderEmotionButton('good', 'Good', todayEmotion?.emotion)}
+          ${renderEmotionButton('okay', 'Okay', todayEmotion?.emotion)}
+          ${renderEmotionButton('low', 'Low', todayEmotion?.emotion)}
+          ${renderEmotionButton('bad', 'Bad', todayEmotion?.emotion)}
         </div>
         <p class="text-xs text-faint" style="text-align:center;margin-top:var(--space-2);">One mood per day — tap to change. Use Quick Log for timestamped check-ins.</p>
       </div>
@@ -331,9 +326,9 @@ const App = (() => {
     return html;
   }
 
-  function renderEmotionButton(emotion, emoji, label, current) {
+  function renderEmotionButton(emotion, label, current) {
     return `<button class="emotion-btn ${current === emotion ? 'selected' : ''}" onclick="App.logEmotion('${emotion}')">
-      <span class="emotion-emoji">${emoji}</span>
+      ${icon(MOOD_ICONS[emotion], 22)}
       <span class="emotion-label">${label}</span>
     </button>`;
   }
@@ -813,9 +808,11 @@ const App = (() => {
       return html + `<div class="empty-state"><i data-lucide="repeat"></i><p class="empty-state-text">No habits yet. Create your first one.</p></div>`;
     }
 
-    // Habit grid overview
+    // Habit grid overview — cells are tappable to toggle past days
     html += `<div class="section">
-      <div class="section-header"><span class="section-title">Completion Grid — Last 14 Days</span></div>
+      <div class="section-header"><span class="section-title">Completion Grid — Last 14 Days</span>
+        <span class="text-xs text-faint">tap a cell to toggle that day</span>
+      </div>
       <div class="card">
     `;
 
@@ -825,9 +822,9 @@ const App = (() => {
       const proj = h.projectId ? State.getProject(h.projectId) : null;
 
       html += `<div style="display:flex;align-items:center;gap:var(--space-3);margin-bottom:var(--space-3);">
-        <div style="width:120px;flex-shrink:0;">
-          <div class="text-sm" style="font-weight:500;cursor:pointer;" onclick="App.selectHabit('${h.id}')">${h.title}</div>
-          ${proj ? `<div class="text-xs text-muted">${proj.name}</div>` : ''}
+        <div style="width:120px;flex-shrink:0;cursor:pointer;" onclick="App.selectHabit('${h.id}')">
+          <div class="text-sm" style="font-weight:500;color:${selectedHabit === h.id ? 'var(--accent-text)' : 'inherit'};">${h.title}</div>
+          ${proj ? `<div class="text-xs" style="color:${proj.color}">${proj.name}</div>` : ''}
         </div>
         <div class="habit-grid">`;
 
@@ -837,7 +834,9 @@ const App = (() => {
         const dateStr = State.dateStr(d);
         const isCompleted = completions.has(dateStr);
         const isTodayCell = i === 0;
-        html += `<div class="habit-cell ${isCompleted ? 'completed' : ''} ${isTodayCell ? 'today' : ''}" title="${dateStr}"></div>`;
+        const cellColor = isCompleted && proj?.color ? `style="background:${proj.color};border-color:${proj.color};"` : '';
+        html += `<div class="habit-cell ${isCompleted ? 'completed' : ''} ${isTodayCell ? 'today' : ''}" ${cellColor}
+          title="${dateStr} — tap to toggle" onclick="App.toggleHabitCell('${h.id}','${dateStr}')"></div>`;
       }
 
       const s = State.calculateStreak(h.id);
@@ -848,6 +847,23 @@ const App = (() => {
 
     html += `</div></div>`;
 
+    if (!selectedHabit) {
+      // Aggregate view — all habits stacked per day, color-coded by project
+      html += `
+        <div class="section">
+          <div class="section-header"><span class="section-title">All Habits — Daily Completions (30 days)</span></div>
+          <div class="card">
+            <div class="chart-container" style="height:240px;"><canvas id="habitsAggChart"></canvas></div>
+          </div>
+        </div>
+        <div class="section">
+          <div class="card" style="text-align:center;">
+            <p class="text-xs text-muted">Tap a habit's name for its detail charts — streak trend and monthly calendar.</p>
+          </div>
+        </div>
+      `;
+    }
+
     // Selected habit detail
     if (selectedHabit) {
       const habit = State.getEntry(selectedHabit);
@@ -856,8 +872,8 @@ const App = (() => {
         html += `
           <div class="section">
             <div class="section-header">
+              <button class="btn btn-secondary btn-sm" onclick="App.selectHabit(null)">${icon('arrow-left', 14)}All Habits</button>
               <span class="section-title">${habit.title} — Detail</span>
-              <button class="btn btn-ghost btn-sm" onclick="App.selectHabit(null)">${icon('x', 14)}Close</button>
             </div>
             <div class="grid-2">
               <div class="card stat-card">
@@ -902,11 +918,19 @@ const App = (() => {
         const calContainer = document.getElementById('streakCalendarContainer');
         if (calContainer) Charts.renderStreakCalendar(calContainer, selectedHabit);
       }
+    } else {
+      const agg = document.getElementById('habitsAggChart');
+      if (agg) Charts.renderHabitsAggregate('habitsAggChart', 30);
     }
   }
 
   function selectHabit(id) {
     selectedHabit = id;
+    render();
+  }
+
+  function toggleHabitCell(habitId, dateStr) {
+    State.toggleHabitOnDate(habitId, dateStr);
     render();
   }
 
@@ -992,16 +1016,6 @@ const App = (() => {
       </div>
     </div>`;
 
-    // Four quadrant view
-    html += `<div class="section">
-      <div class="section-header"><span class="section-title">Four Quadrant — Effort vs Priority</span>
-        <span class="text-xs text-faint">drag between boxes to reprioritize</span>
-      </div>
-      <div class="card">
-        <div class="quadrant" id="quadrantView">${renderQuadrant()}</div>
-      </div>
-    </div>`;
-
     // Habit radar + Effort distribution
     html += `<div class="grid-2 section">
       <div class="card">
@@ -1054,7 +1068,12 @@ const App = (() => {
     render();
   }
 
-  // ── Quadrant v2: color-coded, draggable, full-item hitbox ───
+  // ═══════════════════════════════════════════════════════════
+  // FOCUS TAB — "what should I work on next?"
+  // Four-quadrant board: color-coded, draggable, full-item hitbox
+  // ═══════════════════════════════════════════════════════════
+  let focusProject = null;
+
   const QUADRANTS = [
     { q: 1, label: 'Do First · High Pri / Low Effort', hiPri: true, hiEff: false },
     { q: 2, label: 'Schedule · High Pri / High Effort', hiPri: true, hiEff: true },
@@ -1062,12 +1081,45 @@ const App = (() => {
     { q: 4, label: 'Later · Low Pri / High Effort', hiPri: false, hiEff: true },
   ];
 
-  function renderQuadrant() {
+  function renderFocus() {
+    const projects = State.getProjects();
+    let html = `
+      <div class="page-header">
+        <div>
+          <h1 class="page-title">Focus</h1>
+          <p class="page-subtitle">Effort vs priority — figure out what to work on next</p>
+        </div>
+      </div>
+      <div class="filter-chips">
+        <button class="filter-chip ${!focusProject ? 'active' : ''}" onclick="App.setFocusProject(null)">All Projects</button>
+        ${projects.map(p => `
+          <button class="filter-chip ${focusProject === p.id ? 'active' : ''}" onclick="App.setFocusProject('${p.id}')">
+            <span class="proj-dot" style="background:${p.color}"></span>${p.name}
+          </button>`).join('')}
+      </div>
+      <div class="section">
+        <div class="section-header"><span class="section-title">Four Quadrant</span>
+          <span class="text-xs text-faint">drag between boxes to reprioritize · click to complete</span>
+        </div>
+        <div class="card">
+          <div class="quadrant" id="quadrantView">${renderQuadrant(focusProject)}</div>
+        </div>
+      </div>
+    `;
+    return html;
+  }
+
+  function setFocusProject(id) {
+    focusProject = id;
+    render();
+  }
+
+  function renderQuadrant(projectId) {
     const tasks = State.getEntries({ type: 'task', completed: false })
-      .filter(t => !insightsProject || t.projectId === insightsProject);
+      .filter(t => !projectId || t.projectId === projectId);
     const effOrder = { trivial: 0, small: 1, medium: 2, large: 3, xl: 4 };
     const priOrder = { urgent: 0, high: 1, medium: 2, low: 3 };
-    const multiProject = !insightsProject; // show project dots in all-projects view
+    const multiProject = !projectId; // show project dots in all-projects view
 
     function itemsFor(qd) {
       return tasks.filter(t => {
@@ -1082,9 +1134,7 @@ const App = (() => {
       const MAX = 8;
       let out = items.slice(0, MAX).map(t => {
         const proj = t.projectId ? State.getProject(t.projectId) : null;
-        const dimmed = insightsEntry && t.id !== insightsEntry;
         return `<div class="q-item ${t.completed ? 'completed' : ''}" draggable="true" data-id="${t.id}"
-          style="${dimmed ? 'opacity:0.35;' : ''}"
           ondragstart="App.qDragStart(event,'${t.id}')" ondragend="App.qDragEnd(event)"
           onclick="App.qItemClick(event,'${t.id}')" title="${t.title}">
           <span class="q-handle">⠿</span>
@@ -1189,6 +1239,176 @@ const App = (() => {
         const canvas = document.getElementById(`goalChart_${g.id}`);
         if (canvas) Charts.renderGoalProgress(`goalChart_${g.id}`, g);
       });
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // HEALTH TAB — food logging, calories, macros
+  // ═══════════════════════════════════════════════════════════
+  function renderHealth() {
+    const today = State.todayStr();
+    const goal = State.getSettings().calorieGoal || 2000;
+    const foodLogs = State.getLogs({ type: 'calorie', date: today })
+      .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+    const totalCal = foodLogs.reduce((s, l) => s + (l.value || 0), 0);
+    const totalP = foodLogs.reduce((s, l) => s + (l.protein || 0), 0);
+    const totalC = foodLogs.reduce((s, l) => s + (l.carbs || 0), 0);
+    const totalF = foodLogs.reduce((s, l) => s + (l.fat || 0), 0);
+
+    let html = `
+      <div class="page-header">
+        <div>
+          <h1 class="page-title">Health</h1>
+          <p class="page-subtitle">Food log · calories · macros</p>
+        </div>
+        <button class="btn btn-secondary" onclick="App.openQuickLog()">${icon('zap', 16)}Quick Log</button>
+      </div>
+    `;
+
+    // Calories today
+    html += `<div class="section">
+      <div class="card">
+        <div class="section-header" style="margin-bottom:var(--space-3)"><span class="section-title">Calories Today</span></div>
+        <div class="calorie-display">
+          <span class="calorie-number">${totalCal}</span>
+          <span class="calorie-goal">/ ${goal} cal</span>
+        </div>
+        <div class="progress-bar">
+          <div class="progress-fill" style="width:${Math.min(totalCal / goal * 100, 100)}%;${totalCal > goal ? 'background:var(--error);' : ''}"></div>
+        </div>
+      </div>
+    </div>`;
+
+    // Macro stat cards
+    html += `<div class="grid-3 section">
+      <div class="card stat-card"><span class="stat-label">Protein</span><span class="stat-value">${totalP}g</span></div>
+      <div class="card stat-card"><span class="stat-label">Carbs</span><span class="stat-value">${totalC}g</span></div>
+      <div class="card stat-card"><span class="stat-label">Fat</span><span class="stat-value">${totalF}g</span></div>
+    </div>`;
+
+    // Log food form
+    const shortcuts = (State.getSettings().quickShortcuts || []).filter(s => s.calories);
+    html += `<div class="section">
+      <div class="section-header"><span class="section-title">Log Food</span></div>
+      <div class="card">
+        ${shortcuts.length > 0 ? `<div class="shortcut-chips" style="margin-bottom:var(--space-3);">
+          ${shortcuts.map(s => `
+            <button class="shortcut-chip" id="sc-${s.id}" onclick="App.useShortcutHealth('${s.id}')">
+              <span>${s.emoji}</span><span>${s.label}</span><span class="sc-cal">${s.calories} cal</span>
+            </button>`).join('')}
+        </div>` : ''}
+        <div class="grid-2">
+          <div class="form-group">
+            <label class="form-label">Calories</label>
+            <input type="number" class="form-input" id="foodCal" placeholder="e.g. 450" min="0">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Meal</label>
+            <select class="form-select" id="foodMeal">
+              <option value="breakfast">Breakfast</option>
+              <option value="lunch">Lunch</option>
+              <option value="dinner">Dinner</option>
+              <option value="snack" selected>Snack</option>
+            </select>
+          </div>
+        </div>
+        <div class="grid-3" style="grid-template-columns:1fr 1fr 1fr;">
+          <div class="form-group">
+            <label class="form-label">Protein (g)</label>
+            <input type="number" class="form-input" id="foodProtein" placeholder="0" min="0">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Carbs (g)</label>
+            <input type="number" class="form-input" id="foodCarbs" placeholder="0" min="0">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Fat (g)</label>
+            <input type="number" class="form-input" id="foodFat" placeholder="0" min="0">
+          </div>
+        </div>
+        <div style="display:flex;gap:var(--space-2);">
+          <input type="text" class="form-input" id="foodNote" placeholder="What did you eat? (optional)" style="flex:1;">
+          <button class="btn btn-primary" onclick="App.logFood()">${icon('plus', 14)}Add</button>
+        </div>
+      </div>
+    </div>`;
+
+    // Charts
+    html += `<div class="grid-2 section">
+      <div class="card">
+        <div class="section-header" style="margin-bottom:var(--space-3)"><span class="section-title">Calories — Last 7 Days</span></div>
+        <div class="chart-container"><canvas id="calorieWeekChart"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="section-header" style="margin-bottom:var(--space-3)"><span class="section-title">Macro Split — Today</span></div>
+        ${totalP + totalC + totalF > 0
+          ? `<div class="chart-container"><canvas id="macroChart"></canvas></div>`
+          : `<div class="empty-state" style="padding:var(--space-6) var(--space-4);"><i data-lucide="pie-chart"></i><p class="empty-state-text">Log protein / carbs / fat with a meal to see the split.</p></div>`}
+      </div>
+    </div>`;
+
+    // Today's food list
+    html += `<div class="section">
+      <div class="section-header"><span class="section-title">Today's Food</span>
+        <span class="stat-label">${foodLogs.length} entries</span>
+      </div>
+      <div class="card">`;
+    if (foodLogs.length === 0) {
+      html += `<p class="text-xs text-faint">Nothing logged yet today.</p>`;
+    } else {
+      foodLogs.forEach(l => {
+        const macros = [l.protein ? `${l.protein}P` : '', l.carbs ? `${l.carbs}C` : '', l.fat ? `${l.fat}F` : ''].filter(Boolean).join(' · ');
+        html += `<div class="food-row">
+          <span class="done-time">${logTimeOf(l)}</span>
+          <span class="pill">${l.meal || 'snack'}</span>
+          <span class="truncate" style="flex:1;">${l.emoji ? l.emoji + ' ' : ''}${l.notes || 'Food'}</span>
+          ${macros ? `<span class="food-macros">${macros}</span>` : ''}
+          <span class="font-mono text-xs" style="color:var(--accent-text);flex-shrink:0;">${l.value} cal</span>
+          <button class="icon-btn" onclick="App.deleteFoodLog('${l.id}')" aria-label="Delete">${icon('trash-2', 14)}</button>
+        </div>`;
+      });
+    }
+    html += `</div></div>`;
+
+    return html;
+  }
+
+  function renderHealthCharts() {
+    const week = document.getElementById('calorieWeekChart');
+    if (week) Charts.renderCalorieWeek('calorieWeekChart', 7);
+    const macro = document.getElementById('macroChart');
+    if (macro) {
+      const today = State.todayStr();
+      const logs = State.getLogs({ type: 'calorie', date: today });
+      Charts.renderMacroSplit('macroChart', {
+        protein: logs.reduce((s, l) => s + (l.protein || 0), 0),
+        carbs: logs.reduce((s, l) => s + (l.carbs || 0), 0),
+        fat: logs.reduce((s, l) => s + (l.fat || 0), 0),
+      });
+    }
+  }
+
+  function logFood() {
+    const cal = parseInt(document.getElementById('foodCal')?.value);
+    if (!cal || cal <= 0) { toast('Enter valid calories'); return; }
+    const meal = document.getElementById('foodMeal')?.value || 'snack';
+    const notes = document.getElementById('foodNote')?.value?.trim() || '';
+    const macros = {
+      protein: parseInt(document.getElementById('foodProtein')?.value) || null,
+      carbs: parseInt(document.getElementById('foodCarbs')?.value) || null,
+      fat: parseInt(document.getElementById('foodFat')?.value) || null,
+    };
+    State.logCalories(cal, notes, meal, macros);
+    render();
+  }
+
+  function useShortcutHealth(id) {
+    State.logQuickShortcut(id);
+    render();
+  }
+
+  function deleteFoodLog(id) {
+    State.deleteLog(id);
+    render();
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -1302,14 +1522,16 @@ const App = (() => {
   }
 
   function describeLog(l) {
+    const moodIc = (e) => icon(MOOD_ICONS[e] || 'smile', 13);
     switch (l.type) {
-      case 'calorie': return `${l.emoji || '🍽'} ${l.notes || 'Food'} · ${l.value} cal (${l.meal || 'snack'})`;
-      case 'quick': return `${l.emoji || '⭐'} ${l.notes || 'Quick log'}`;
-      case 'checkin': {
-        const em = { great: '😊', good: '🙂', okay: '😐', low: '😕', bad: '😢' }[l.emotion] || '';
-        return `📝 Check-in ${em}${l.energy ? ` · energy ${l.energy}/5` : ''}${l.notes ? ` · ${l.notes}` : ''}`;
+      case 'calorie': {
+        const macros = [l.protein ? `${l.protein}P` : '', l.carbs ? `${l.carbs}C` : '', l.fat ? `${l.fat}F` : ''].filter(Boolean).join('/');
+        return `${l.emoji || '🍽'} ${l.notes || 'Food'} · ${l.value} cal (${l.meal || 'snack'})${macros ? ` · ${macros}` : ''}`;
       }
-      case 'emotion': return `${({ great: '😊', good: '🙂', okay: '😐', low: '😕', bad: '😢' })[l.emotion] || '🙂'} Day mood: ${l.emotion}`;
+      case 'quick': return `${l.emoji || '⭐'} ${l.notes || 'Quick log'}`;
+      case 'checkin':
+        return `Check-in ${l.emotion ? moodIc(l.emotion) : ''}${l.energy ? ` energy ${l.energy}/5` : ''}${l.notes ? ` · ${l.notes}` : ''}`;
+      case 'emotion': return `${moodIc(l.emotion)} Day mood: ${l.emotion}`;
       case 'wake': return `☀️ Woke up`;
       case 'sleep': return `🌙 Bedtime`;
       default: return l.type;
@@ -1398,6 +1620,10 @@ const App = (() => {
           <div><div class="setting-label">Quick Log Shortcuts</div><div class="setting-desc">${(settings.quickShortcuts || []).length} configured — coffee, water, saved meals…</div></div>
           <button class="btn btn-secondary btn-sm" onclick="App.openManageShortcuts()">${icon('zap', 14)}Manage</button>
         </div>
+        <div class="setting-row">
+          <div><div class="setting-label">Tags</div><div class="setting-desc">${State.getAllTags().length} tags — rename, recolor, scope to a project, delete</div></div>
+          <button class="btn btn-secondary btn-sm" onclick="App.openManageTags()">${icon('tag', 14)}Manage</button>
+        </div>
       </div>
     </div>`;
 
@@ -1469,7 +1695,9 @@ const App = (() => {
 
   function renderEntryForm(type, entry = {}) {
     const projects = State.getProjects();
-    const tags = State.getAllTags();
+    const tags = State.getAllTags(); // full list, for pill colors
+    // Suggestions respect tag scoping: global tags + the entry's project's tags
+    const suggestTags = State.getAllTags(entry.projectId || null);
     const isGoal = type === 'goal';
     const isHabit = type === 'habit';
 
@@ -1576,8 +1804,8 @@ const App = (() => {
           }).join('')}
         </div>
         <input type="text" class="form-input" id="entryTagInput" placeholder="Type a tag and press Enter" onkeydown="if(event.key==='Enter'){event.preventDefault();App.addTag(this.value);this.value='';}">
-        ${tags.length > 0 ? `<div style="display:flex;flex-wrap:wrap;gap:var(--space-1);margin-top:var(--space-2);">
-          ${tags.map(t => `<button class="pill pill-${t.color}" style="cursor:pointer;" onclick="App.addTag('${t.name}')">#${t.name}</button>`).join('')}
+        ${suggestTags.length > 0 ? `<div style="display:flex;flex-wrap:wrap;gap:var(--space-1);margin-top:var(--space-2);">
+          ${suggestTags.map(t => `<button class="pill pill-${t.color}" style="cursor:pointer;" onclick="App.addTag('${t.name}')">#${t.name}</button>`).join('')}
         </div>` : ''}
       </div>
     `;
@@ -1814,13 +2042,11 @@ const App = (() => {
       <div class="form-group">
         <label class="form-label">Check-in — how do you feel right now?</label>
         <div class="emotion-selector" id="quickEmotionSel">
-          ${['great', 'good', 'okay', 'low', 'bad'].map(e => {
-            const emoji = { great: '😊', good: '🙂', okay: '😐', low: '😕', bad: '😢' }[e];
-            return `<button class="emotion-btn" id="qe-${e}" onclick="App.setQuickEmotion('${e}')">
-              <span class="emotion-emoji">${emoji}</span>
+          ${['great', 'good', 'okay', 'low', 'bad'].map(e => `
+            <button class="emotion-btn" id="qe-${e}" onclick="App.setQuickEmotion('${e}')">
+              ${icon(MOOD_ICONS[e], 22)}
               <span class="emotion-label">${e}</span>
-            </button>`;
-          }).join('')}
+            </button>`).join('')}
         </div>
         <label class="form-label" style="margin-top:var(--space-3);">Energy</label>
         <div class="energy-selector" id="quickEnergySel">
@@ -1881,7 +2107,7 @@ const App = (() => {
 
   function refreshQuickLogList() {
     const el = document.getElementById('quickLogList');
-    if (el) el.innerHTML = renderQuickLogList();
+    if (el) { el.innerHTML = renderQuickLogList(); refreshIcons(); }
   }
 
   function useShortcut(id) {
@@ -1941,8 +2167,8 @@ const App = (() => {
   }
 
   function openCalorieLog() {
-    openQuickLog();
-    setTimeout(() => document.getElementById('calorieInput')?.focus(), 200);
+    switchTab('health');
+    setTimeout(() => document.getElementById('foodCal')?.focus(), 200);
   }
 
   function quickAddTask(title) {
@@ -2010,6 +2236,166 @@ const App = (() => {
   function deleteShortcut(id) {
     State.deleteQuickShortcut(id);
     openManageShortcuts();
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // TAG MANAGER — rename, recolor, scope to project, delete
+  // ═══════════════════════════════════════════════════════════
+  function openManageTags() {
+    const tags = State.getAllTags();
+    const projects = State.getProjects();
+    showModal('Manage Tags', `
+      <p class="text-xs text-muted" style="margin-bottom:var(--space-3);">
+        Click a swatch to cycle colors. Scope a tag to a project and it's only suggested there. Renames and deletes apply to every entry using the tag.
+      </p>
+      <div id="tagManageList">
+        ${tags.length === 0 ? '<p class="text-xs text-faint">No tags yet — create them while editing an entry.</p>' : tags.map(t => `
+          <div class="tag-row">
+            <div class="tag-color-swatch" style="background:var(--hl-${t.color})" title="Cycle color" onclick="App.cycleTagColor('${t.id}')"></div>
+            <input type="text" class="form-input" value="${t.name}" onchange="App.renameTag('${t.id}', this.value)" aria-label="Tag name">
+            <select class="form-select" onchange="App.setTagProject('${t.id}', this.value || null)" aria-label="Tag scope">
+              <option value="">Global</option>
+              ${projects.map(p => `<option value="${p.id}" ${t.projectId === p.id ? 'selected' : ''}>${p.name}</option>`).join('')}
+            </select>
+            <span class="tag-usage" title="Entries using this tag">×${State.tagUsageCount(t.id)}</span>
+            <button class="icon-btn" onclick="App.deleteTagPrompt('${t.id}')" aria-label="Delete tag">${icon('trash-2', 14)}</button>
+          </div>`).join('')}
+      </div>
+      <div class="divider"></div>
+      <div style="display:flex;gap:var(--space-2);">
+        <input type="text" class="form-input" id="newTagName" placeholder="New tag name" style="flex:1;"
+          onkeydown="if(event.key==='Enter'){App.createTagFromManager();}">
+        <button class="btn btn-primary" onclick="App.createTagFromManager()">${icon('plus', 14)}Add</button>
+      </div>
+    `, [
+      `<button class="btn btn-secondary" onclick="App.closeModal();App.render()">Done</button>`,
+    ]);
+  }
+
+  function cycleTagColor(id) {
+    const tag = State.getAllTags().find(t => t.id === id);
+    if (!tag) return;
+    const colors = State.TAG_COLORS;
+    const next = colors[(colors.indexOf(tag.color) + 1) % colors.length];
+    State.updateTag(id, { color: next });
+    openManageTags();
+  }
+
+  function renameTag(id, name) {
+    const trimmed = (name || '').trim();
+    if (!trimmed) { openManageTags(); return; }
+    State.updateTag(id, { name: trimmed });
+  }
+
+  function setTagProject(id, projectId) {
+    State.updateTag(id, { projectId: projectId || null });
+  }
+
+  function deleteTagPrompt(id) {
+    const used = State.tagUsageCount(id);
+    const tag = State.getAllTags().find(t => t.id === id);
+    if (!tag) return;
+    if (!confirm(`Delete #${tag.name}?${used > 0 ? ` It will be removed from ${used} entr${used === 1 ? 'y' : 'ies'}.` : ''}`)) return;
+    State.deleteTag(id);
+    openManageTags();
+  }
+
+  function createTagFromManager() {
+    const el = document.getElementById('newTagName');
+    const name = el?.value?.trim();
+    if (!name) return;
+    State.getOrCreateTag(name);
+    openManageTags();
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // SEARCH — fuzzy find projects, tasks, habits, goals
+  // ═══════════════════════════════════════════════════════════
+  function openSearch() {
+    showModal('Search', `
+      <input type="search" class="form-input" id="searchInput" placeholder="Search projects, tasks, habits…"
+        autocomplete="off" oninput="App.runSearch(this.value)"
+        onkeydown="if(event.key==='Enter'){document.querySelector('.search-result')?.click();}">
+      <div class="search-results" id="searchResults"></div>
+    `, []);
+    setTimeout(() => document.getElementById('searchInput')?.focus(), 100);
+    runSearch('');
+  }
+
+  // Substring match scores highest; otherwise in-order subsequence match.
+  function fuzzyScore(q, text) {
+    const t = (text || '').toLowerCase();
+    if (!q) return 0;
+    const idx = t.indexOf(q);
+    if (idx >= 0) return 200 - idx * 2 - Math.min(t.length - q.length, 40);
+    let ti = 0, score = 0, streak = 0;
+    for (const ch of q) {
+      if (ch === ' ') continue;
+      const found = t.indexOf(ch, ti);
+      if (found === -1) return -1;
+      streak = found === ti ? streak + 1 : 1;
+      score += 4 + streak * 2 - Math.min(found - ti, 10) * 0.5;
+      ti = found + 1;
+    }
+    return score;
+  }
+
+  function runSearch(qRaw) {
+    const q = (qRaw || '').trim().toLowerCase();
+    const el = document.getElementById('searchResults');
+    if (!el) return;
+
+    // Inside a project? Its tasks get boosted to the top.
+    const ctxProject = (currentTab === 'projects' && projectFilter && projectFilter !== 'none') ? projectFilter : null;
+    const results = [];
+
+    State.getProjects().forEach(p => {
+      const s = q ? fuzzyScore(q, p.name) : 10;
+      if (s >= 0) results.push({ kind: 'project', id: p.id, title: p.name, color: p.color, score: s + 10, context: 'project' });
+    });
+
+    State.getEntries().forEach(e => {
+      const hay = e.title + ' ' + (e.tags || []).join(' ');
+      let s = q ? fuzzyScore(q, hay) : (e.type === 'task' && !e.completed ? 5 : -1);
+      if (s < 0) return;
+      if (ctxProject && e.projectId === ctxProject) s += 80; // favor current project
+      if (e.completed) s -= 20;
+      const proj = e.projectId ? State.getProject(e.projectId) : null;
+      results.push({
+        kind: 'entry', id: e.id, title: e.title, completed: e.completed,
+        color: proj?.color, score: s, context: proj ? proj.name : e.type,
+        type: e.type,
+      });
+    });
+
+    results.sort((a, b) => b.score - a.score);
+    const top = results.slice(0, 12);
+
+    if (top.length === 0) {
+      el.innerHTML = `<p class="text-xs text-faint" style="padding:var(--space-2);">No matches for "${qRaw}".</p>`;
+      return;
+    }
+
+    const typeIcons = { project: 'folder-kanban', goal: 'target', task: 'list-checks', habit: 'repeat', reminder: 'clock', checkin: 'brain' };
+    el.innerHTML = top.map(r => `
+      <button class="search-result" onclick="App.searchGo('${r.kind}','${r.id}')">
+        ${icon(typeIcons[r.kind === 'project' ? 'project' : r.type] || 'list-checks', 14)}
+        <span class="proj-dot" style="background:${r.color || 'var(--text-faint)'}"></span>
+        <span class="sr-title ${r.completed ? 'completed' : ''}">${r.title}</span>
+        <span class="sr-context">${r.context}</span>
+      </button>
+    `).join('');
+    refreshIcons();
+  }
+
+  function searchGo(kind, id) {
+    closeModal();
+    if (kind === 'project') {
+      projectFilter = id;
+      switchTab('projects');
+    } else {
+      editEntry(id);
+    }
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -2148,11 +2534,25 @@ const App = (() => {
     input.click();
   }
 
-  function confirmReset() {
-    if (confirm('Delete ALL data? This cannot be undone.')) {
-      try { (globalThis['loc'+'alSt'+'orage']).removeItem('cade.project.v1'); } catch(e) {}
-      location.reload();
+  async function confirmReset() {
+    if (!confirm('Delete ALL data? This cannot be undone.')) return;
+    const settings = State.getSettings();
+    // The synced copy is a separate encrypted blob on Firebase — if it isn't
+    // erased too, reconnecting with the same passphrase restores everything.
+    if (settings.sync.databaseUrl && settings.sync.passphrase) {
+      if (confirm('Also erase the synced copy on Firebase? Recommended — otherwise reconnecting with the same passphrase will bring the old data back.')) {
+        toast('Erasing cloud copy…');
+        const result = await Sync.eraseRemote();
+        if (!result.success) {
+          if (!confirm(`Cloud erase failed (${result.error}). Reset local data anyway? The server copy will remain.`)) return;
+        }
+      } else {
+        // At minimum stop the pending debounced push from re-uploading
+        Sync.disconnect();
+      }
     }
+    try { (globalThis['loc'+'alSt'+'orage']).removeItem('cade.project.v1'); } catch(e) {}
+    location.reload();
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -2173,9 +2573,7 @@ const App = (() => {
     document.getElementById('themeToggle').addEventListener('click', toggleTheme);
 
     // Search
-    document.getElementById('searchBtn').addEventListener('click', () => {
-      switchTab('projects');
-    });
+    document.getElementById('searchBtn').addEventListener('click', openSearch);
 
     // Modal close
     document.getElementById('modalClose').addEventListener('click', closeModal);
@@ -2193,7 +2591,7 @@ const App = (() => {
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') { closeModal(); closePanel(); closePopover(); }
       if ((e.metaKey || e.ctrlKey) && e.key === 'n') { e.preventDefault(); openNewEntry('task'); }
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); switchTab('insights'); }
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); openSearch(); }
     });
 
     // Auto-connect sync
@@ -2219,9 +2617,12 @@ const App = (() => {
     openQuickLog, openCalorieLog, logCaloriesFromModal, quickAddTask, logEmotion,
     useShortcut, setQuickEmotion, setQuickEnergy, logCheckinFromModal, logWake, logSleep,
     openManageShortcuts, addShortcut, deleteShortcut,
+    openManageTags, cycleTagColor, renameTag, setTagProject, deleteTagPrompt, createTagFromManager,
+    openSearch, runSearch, searchGo,
+    logFood, deleteFoodLog, useShortcutHealth,
     toggleEntry, deleteEntry, archiveEntry, unarchiveEntry, startTimerForTask,
-    setProjectFilter, selectHabit,
-    setInsightsProject, setInsightsEntry,
+    setProjectFilter, selectHabit, toggleHabitCell,
+    setInsightsProject, setInsightsEntry, setFocusProject,
     qDragStart, qDragEnd, qDragOver, qDragLeave, qDrop, qItemClick,
     plannerNav, plannerToday, setPlannerView, plannerTap,
     popoverAgenda, popoverTask, popoverTimer,
