@@ -97,6 +97,7 @@ const Charts = (() => {
     const startDayOfWeek = firstDay.getDay();
 
     const completions = new Set(State.getHabitCompletions(entryId));
+    const skips = new Set(State.getHabitSkips(entryId));
     const todayStr = State.todayStr();
 
     let html = '<div class="streak-calendar">';
@@ -113,13 +114,21 @@ const Charts = (() => {
       const date = new Date(year, month, d);
       const dateStr = State.dateStr(date);
       const isCompleted = completions.has(dateStr);
+      const isSkipped = skips.has(dateStr);
+      const offday = !State.isHabitScheduledOn(entryId, dateStr);
       const isToday = dateStr === todayStr;
-      const isPast = date < today && !isCompleted;
-      const cls = isCompleted ? 'completed' : isPast ? 'missed' : '';
+      const isPast = date < today && !isCompleted && !isSkipped && !offday;
+      const cls = isCompleted ? 'completed' : isSkipped ? 'skipped' : offday ? 'offday' : isPast ? 'missed' : '';
       const todayCls = isToday ? 'today' : '';
-      html += `<div class="streak-day ${cls} ${todayCls}">${d}</div>`;
+      html += `<div class="streak-day ${cls} ${todayCls}" title="${dateStr}${isSkipped ? ' — skipped' : offday ? ' — not scheduled' : ''}">${d}</div>`;
     }
     html += '</div>';
+    html += `<div class="timeline-legend" style="margin-top:var(--space-2);">
+      <span class="tl-item"><span class="streak-day completed" style="width:12px;height:12px;aspect-ratio:auto;"></span>done</span>
+      <span class="tl-item"><span class="streak-day skipped" style="width:12px;height:12px;aspect-ratio:auto;"></span>skipped</span>
+      <span class="tl-item"><span class="streak-day missed" style="width:12px;height:12px;aspect-ratio:auto;"></span>missed</span>
+      <span class="tl-item"><span class="streak-day offday" style="width:12px;height:12px;aspect-ratio:auto;"></span>off day</span>
+    </div>`;
     container.innerHTML = html;
   }
 
@@ -601,6 +610,19 @@ const Charts = (() => {
             display: true,
             position: 'bottom',
             labels: { color: colors.text, font: { family: 'JetBrains Mono', size: 10 }, boxWidth: 10, boxHeight: 10 },
+          },
+          tooltip: {
+            callbacks: {
+              // "Mood: 4" told you nothing — spell out the day average and
+              // the nearest named mood (avg of day mood + all check-ins)
+              label: (c) => {
+                const names = ['', 'Bad', 'Low', 'Okay', 'Good', 'Great'];
+                const v = c.parsed.y;
+                if (v == null) return '';
+                if (c.dataset.label === 'Mood') return `Avg mood: ${v.toFixed(1)} ≈ ${names[Math.round(v)] || ''}`;
+                return `Avg energy: ${v.toFixed(1)} / 5`;
+              },
+            },
           },
         },
         scales: {
