@@ -68,6 +68,25 @@ const App = (() => {
     return dateStr < State.todayStr();
   }
 
+  function daysUntil(dateStr) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return Math.round((new Date(dateStr + 'T00:00') - today) / 86400000);
+  }
+
+  // "Next best" score, 0–100: priority + due-date proximity + low-effort
+  // bonus. Future-due tasks stay visible but rank below today's.
+  function taskScore(t) {
+    const priPts = { urgent: 40, high: 30, medium: 18, low: 8 }[t.priority] ?? 18;
+    let duePts = 10; // unscheduled baseline
+    if (t.dueDate) {
+      const diff = daysUntil(t.dueDate);
+      duePts = diff < 0 ? 40 : diff === 0 ? 35 : diff === 1 ? 25 : diff <= 3 ? 18 : diff <= 7 ? 10 : 5;
+    }
+    const effPts = { trivial: 20, small: 16, medium: 10, large: 5, xl: 2 }[t.effort] ?? 10;
+    return Math.min(100, priPts + duePts + effPts);
+  }
+
   function timeToMin(t) {
     if (!t) return 0;
     const [h, m] = t.split(':').map(Number);
@@ -164,6 +183,7 @@ const App = (() => {
       case 'insights': main.innerHTML = renderInsights(); break;
       case 'history': main.innerHTML = renderHistory(); break;
       case 'settings': main.innerHTML = renderSettings(); break;
+      case 'taskpage': main.innerHTML = renderTaskPage(); break;
     }
 
     refreshIcons();
@@ -201,17 +221,18 @@ const App = (() => {
 
     const openToday = todayTasks.filter(t => !t.completed);
 
-    // Next best task (highest priority + lowest effort, open only) —
-    // scoped to the project you're currently working in, if one is set.
+    // Future-due tasks stay visible on Today — just ranked below anything
+    // due now. They also feed the next-best pool so "working on: Work"
+    // never claims there's nothing to do when tasks are merely due later.
+    const upcomingTasks = tasks
+      .filter(t => !t.completed && t.dueDate && t.dueDate > today)
+      .sort((a, b) => a.dueDate.localeCompare(b.dueDate) || taskScore(b) - taskScore(a));
+
     const workingProject = State.getSettings().workingProject || null;
     const wpSubtree = workingProject ? State.getProjectSubtreeIds(workingProject) : null;
-    const nextPool = wpSubtree ? openToday.filter(t => State.entryProjectIds(t).some(pid => wpSubtree.includes(pid))) : openToday;
-    const nextTask = [...nextPool].sort((a, b) => {
-      const effOrder = { trivial: 0, small: 1, medium: 2, large: 3, xl: 4 };
-      const pa = (priOrder[a.priority] || 2) * 10 + (effOrder[a.effort] || 2);
-      const pb = (priOrder[b.priority] || 2) * 10 + (effOrder[b.effort] || 2);
-      return pa - pb;
-    })[0];
+    const inWorking = (t) => !wpSubtree || State.entryProjectIds(t).some(pid => wpSubtree.includes(pid));
+    const nextPool = [...openToday, ...upcomingTasks].filter(inWorking);
+    const nextTask = [...nextPool].sort((a, b) => taskScore(b) - taskScore(a))[0];
     const projects = State.getProjects();
 
     const todayEmotion = State.getTodayEmotion();
@@ -301,6 +322,23 @@ const App = (() => {
       });
     }
     html += `</div></div>`;
+
+    // Upcoming (due in the future) — visible, just lower priority
+    if (upcomingTasks.length > 0) {
+      const MAXUP = 8;
+      html += `<div class="section">
+        <div class="section-header"><span class="section-title">Upcoming</span>
+          <span class="text-xs text-faint">due later — ranked below today's work</span>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:var(--space-2);">
+          ${upcomingTasks.slice(0, MAXUP).map(t => {
+            if (nextTask && t.id === nextTask.id) return '';
+            return renderEntryCard(t, t.projectId ? State.getProject(t.projectId) : null);
+          }).join('')}
+          ${upcomingTasks.length > MAXUP ? `<p class="text-xs text-faint">+${upcomingTasks.length - MAXUP} more further out</p>` : ''}
+        </div>
+      </div>`;
+    }
 
     // Day planner
     html += renderPlannerSection();
@@ -847,7 +885,8 @@ const App = (() => {
     }
 
     return `
-      <div class="entry-card ${isDone ? 'completed' : ''} ${isSelected ? 'selected' : ''} ${opts.highlight ? 'highlight' : ''}" data-id="${entry.id}" onclick="App.selectEntryCard('${entry.id}')">
+      <div class="entry-card ${isDone ? 'completed' : ''} ${isSelected ? 'selected' : ''} ${opts.highlight ? 'highlight' : ''}" data-id="${entry.id}"
+        onclick="App.selectEntryCard('${entry.id}')" ${entry.type === 'task' ? `ondblclick="App.openTaskPage('${entry.id}')" title="Double-click to open task page"` : ''}>
         <div class="check-toggle ${isDone ? 'checked' : ''}" onclick="event.stopPropagation();App.toggleEntry('${entry.id}')" title="Mark ${isDone ? 'not done' : 'done'}">
           <i data-lucide="check"></i>
         </div>
@@ -862,6 +901,7 @@ const App = (() => {
         ${tracking ? `<span class="track-tick ${tracking.state === 'paused' ? 'paused' : ''}" data-tick-entry="${entry.id}"
           onclick="event.stopPropagation();Timers.openPanel()" title="Open timer">${Timers.formatTime(tracking.elapsed)}</span>` : ''}
         <div class="entry-actions">
+          ${entry.type === 'task' ? `<button class="icon-btn" onclick="event.stopPropagation();App.openTaskPage('${entry.id}')" aria-label="Open task page" title="Open task page">${icon('panel-right-open', 15)}</button>` : ''}
           ${canTrack && !tracking ? `<button class="icon-btn" onclick="event.stopPropagation();Timers.armTracking('${entry.id}')" aria-label="Start timer" title="Track time">${icon('play', 15)}</button>` : ''}
           <button class="icon-btn" onclick="event.stopPropagation();App.editEntry('${entry.id}')" aria-label="Edit">${icon('pencil', 15)}</button>
           <button class="icon-btn" onclick="event.stopPropagation();App.archiveEntry('${entry.id}')" aria-label="Archive">${icon('archive', 15)}</button>
@@ -869,6 +909,188 @@ const App = (() => {
         </div>
       </div>
     `;
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // TASK PAGE — double-click a task to open. Sticky timer, task
+  // stats, and a running journal: type, Ctrl+Enter, newest first.
+  // Posts snapshot the live tracked time, carry #tags, and can be
+  // turned into tasks.
+  // ═══════════════════════════════════════════════════════════
+  let taskPageId = null;
+  let taskPageReturnTab = 'today';
+
+  function openTaskPage(id) {
+    const entry = State.getEntry(id);
+    if (!entry) return;
+    taskPageId = id;
+    if (currentTab !== 'taskpage') taskPageReturnTab = currentTab;
+    closeModal();
+    switchTab('taskpage');
+  }
+
+  function backFromTaskPage() {
+    taskPageId = null;
+    switchTab(taskPageReturnTab || 'today');
+  }
+
+  function parsePostTags(text) {
+    return [...new Set([...text.matchAll(/#([a-z0-9_-]+)/gi)].map(m => m[1].toLowerCase()))];
+  }
+
+  function highlightPostTags(text) {
+    return text
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+      .replace(/#([a-z0-9_-]+)/gi, '<span class="post-tag">#$1</span>')
+      .replace(/\n/g, '<br>');
+  }
+
+  function renderTaskPage() {
+    const entry = State.getEntry(taskPageId);
+    if (!entry) { taskPageId = null; return renderToday(); }
+
+    const tracking = typeof Timers !== 'undefined' ? Timers.getTracking(entry.id) : null;
+    const posts = State.getLogs({ type: 'post', entryId: entry.id })
+      .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+    const sessions = State.getLogs({ type: 'time_session', entryId: entry.id });
+    const trackedSecs = sessions.reduce((s, l) => s + (l.value || 0), 0);
+    const actualMin = State.actualMinutesFor(entry);
+    const score = entry.type === 'task' && !entry.completed ? taskScore(entry) : null;
+
+    let metaHtml = '';
+    State.entryProjectIds(entry).forEach(pid => {
+      const pr = State.getProject(pid);
+      if (pr) metaHtml += `<span class="pill" style="border-color:${pr.color};color:${pr.color};background:transparent;">${pr.name}</span>`;
+    });
+    if (entry.priority) metaHtml += `<span class="pill pill-${priorityColor(entry.priority)}">${entry.priority}</span>`;
+    if (entry.dueDate) metaHtml += `<span class="pill ${isOverdue(entry.dueDate) && !entry.completed ? 'pill-red' : 'pill-accent'}">${formatDueDate(entry.dueDate)}</span>`;
+    (entry.tags || []).forEach(t => { metaHtml += `<span class="pill pill-gray">#${t}</span>`; });
+
+    let html = `
+      <div class="page-header">
+        <div style="display:flex;align-items:flex-start;gap:var(--space-3);">
+          <button class="btn btn-secondary btn-sm" onclick="App.backFromTaskPage()" style="margin-top:2px;">${icon('arrow-left', 14)}Back</button>
+          <div>
+            <h1 class="page-title" style="${entry.completed ? 'text-decoration:line-through;color:var(--text-muted);' : ''}">${entry.title}</h1>
+            <div class="entry-meta" style="margin-top:var(--space-2);">${metaHtml}</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:var(--space-2);">
+          <button class="btn btn-secondary" onclick="App.editEntry('${entry.id}')">${icon('pencil', 14)}Edit</button>
+          <button class="btn ${entry.completed ? 'btn-secondary' : 'btn-primary'}" onclick="App.toggleEntry('${entry.id}')">${icon('check', 14)}${entry.completed ? 'Reopen' : 'Complete'}</button>
+        </div>
+      </div>
+      ${entry.description ? `<p class="text-sm text-muted" style="margin-bottom:var(--space-4);max-width:70ch;">${entry.description}</p>` : ''}
+    `;
+
+    // Sticky timer strip
+    html += `<div class="taskpage-timer card">
+      <div style="display:flex;align-items:center;gap:var(--space-3);flex-wrap:wrap;">
+        ${icon('timer', 18)}
+        ${tracking
+          ? `<span class="track-tick ${tracking.state === 'paused' ? 'paused' : ''}" data-tick-entry="${entry.id}" style="font-size:var(--text-lg);padding:4px 12px;">${Timers.formatTime(tracking.elapsed)}</span>
+             ${tracking.state === 'running'
+               ? `<button class="btn btn-secondary btn-sm" onclick="Timers.pauseSession('${entry.id}');App.render()">${icon('pause', 13)}Pause</button>`
+               : `<button class="btn btn-secondary btn-sm" onclick="Timers.resumeSession('${entry.id}');App.render()">${icon('play', 13)}Resume</button>`}
+             <button class="btn btn-danger btn-sm" onclick="Timers.stopSession('${entry.id}')">${icon('square', 13)}Stop & Log</button>`
+          : `<button class="btn btn-primary btn-sm" onclick="Timers.startSession('${entry.id}');App.render()">${icon('play', 13)}Start tracking</button>`}
+        <div style="flex:1"></div>
+        <span class="stat-label">Tracked total: ${trackedSecs >= 60 ? estimateLabel(Math.round(trackedSecs / 60)) : '—'}</span>
+      </div>
+    </div>`;
+
+    // Stats row
+    html += `<div class="grid-3 section" style="margin-top:var(--space-4);">
+      <div class="card stat-card"><span class="stat-label">Estimate vs Actual</span>
+        <span class="stat-value">${entry.estimateMinutes ? estimateLabel(entry.estimateMinutes) : '—'} / ${actualMin ? estimateLabel(actualMin) : '—'}</span>
+        ${entry.estimateMinutes && actualMin ? `<span class="text-xs ${actualMin > entry.estimateMinutes ? 'text-muted' : ''}" style="color:${actualMin > entry.estimateMinutes ? 'var(--error)' : 'var(--success)'};">${Math.round(actualMin / entry.estimateMinutes * 100)}% of estimate</span>` : ''}
+      </div>
+      <div class="card stat-card"><span class="stat-label">Sessions / Posts</span><span class="stat-value">${sessions.length} / ${posts.length}</span></div>
+      <div class="card stat-card"><span class="stat-label">${score != null ? 'Next-Best Score' : 'Status'}</span><span class="stat-value">${score != null ? score : (entry.completed ? 'Done' : 'Open')}</span></div>
+    </div>`;
+
+    // Journal
+    html += `<div class="section">
+      <div class="section-header"><span class="section-title">Journal</span>
+        <span class="text-xs text-faint">Ctrl+Enter to post · #tags inline · newest first</span>
+      </div>
+      <div class="card">
+        <textarea class="form-textarea" id="postInput" placeholder="Stream of consciousness… #idea #bug tags become pills"
+          onkeydown="if((event.ctrlKey||event.metaKey)&&event.key==='Enter'){event.preventDefault();App.addPost('${entry.id}');}"></textarea>
+        <div style="display:flex;justify-content:flex-end;margin-top:var(--space-2);">
+          <button class="btn btn-primary btn-sm" onclick="App.addPost('${entry.id}')">${icon('pen-line', 13)}Post</button>
+        </div>
+      </div>
+      <div id="postStream" style="margin-top:var(--space-3);display:flex;flex-direction:column;gap:var(--space-2);">
+        ${posts.length === 0 ? '<p class="text-xs text-faint" style="text-align:center;">No posts yet — think out loud while you work.</p>' : posts.map(renderPost).join('')}
+      </div>
+    </div>`;
+
+    return html;
+  }
+
+  function renderPost(post) {
+    const d = new Date(post.createdAt);
+    const stamp = `${d.toLocaleDateString('en', { month: 'short', day: 'numeric' })} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+    return `<div class="post-card">
+      <div class="post-meta">
+        <span class="font-mono text-xs text-faint">${stamp}</span>
+        ${post.trackedElapsed != null ? `<span class="pill pill-accent" title="Timer when posted">${icon('timer', 10)} ${Timers.formatTime(post.trackedElapsed)}</span>` : ''}
+        <span style="flex:1"></span>
+        <button class="icon-btn" onclick="App.postToTask('${post.id}')" aria-label="Make into a task" title="Make this a task">${icon('list-plus', 14)}</button>
+        <button class="icon-btn" onclick="App.deletePost('${post.id}')" aria-label="Delete post">${icon('trash-2', 14)}</button>
+      </div>
+      <div class="post-body">${highlightPostTags(post.notes || '')}</div>
+    </div>`;
+  }
+
+  function addPost(entryId) {
+    const input = document.getElementById('postInput');
+    const text = input?.value?.trim();
+    if (!text) return;
+    const tracking = typeof Timers !== 'undefined' ? Timers.getTracking(entryId) : null;
+    State.createLog({
+      type: 'post',
+      entryId,
+      date: State.todayStr(),
+      notes: text,
+      tags: parsePostTags(text),
+      trackedElapsed: tracking ? Math.round(tracking.elapsed) : null,
+    });
+    input.value = '';
+    // Refresh only the stream — keep the input focused for the next thought
+    const stream = document.getElementById('postStream');
+    if (stream) {
+      const posts = State.getLogs({ type: 'post', entryId })
+        .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+      stream.innerHTML = posts.map(renderPost).join('');
+      refreshIcons();
+    }
+    input.focus();
+  }
+
+  function deletePost(id) {
+    State.deleteLog(id);
+    render();
+  }
+
+  // Turn a journal post into a task — the new-task modal opens prefilled
+  function postToTask(postId) {
+    const post = State.getLogs().find(l => l.id === postId);
+    if (!post) return;
+    const parent = post.entryId ? State.getEntry(post.entryId) : null;
+    editingEntryId = null;
+    entryTypeDraft = 'task';
+    currentTags = [...(post.tags || [])];
+    currentTags.forEach(n => State.getOrCreateTag(n));
+    currentEffort = 'medium';
+    currentWeekdays = [];
+    currentProjects = parent ? [...State.entryProjectIds(parent)] : [];
+    const title = (post.notes || '').replace(/#[a-z0-9_-]+/gi, '').replace(/\s+/g, ' ').trim().slice(0, 100);
+    showModal('New Task from Post', renderEntryForm('task', { title, description: post.notes }), [
+      `<button class="btn btn-secondary" onclick="App.closeModal()">Cancel</button>`,
+      `<button class="btn btn-primary" onclick="App.saveEntry()">Create</button>`,
+    ]);
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -893,27 +1115,43 @@ const App = (() => {
       </div>
     `;
 
-    // Project filter chips (nested projects indented)
-    html += `<div class="filter-chips">
-      <button class="filter-chip ${!projectFilter ? 'active' : ''}" onclick="App.setProjectFilter(null)">All</button>
-    `;
-    projects.forEach(p => {
-      html += `<button class="filter-chip ${projectFilter === p.id ? 'active' : ''}" onclick="App.setProjectFilter('${p.id}')" ${p.depth ? `style="margin-left:${p.depth * 10}px"` : ''}>
-        <span class="proj-dot" style="background:${p.color}"></span>${p.name}
-      </button>`;
-    });
-    html += `<button class="filter-chip ${projectFilter === 'none' ? 'active' : ''}" onclick="App.setProjectFilter('none')">No Project</button>`;
-    html += `</div>`;
+    // Project filter — chips while they fit, compact dropdown once they don't
+    if (projects.length > 8) {
+      html += `<div class="filter-chips" style="align-items:center;">
+        <select class="form-select" style="width:auto;max-width:240px;padding:var(--space-1) var(--space-2);font-size:var(--text-xs);" onchange="App.setProjectFilter(this.value || null)">
+          <option value="">All projects</option>
+          ${projects.map(p => `<option value="${p.id}" ${projectFilter === p.id ? 'selected' : ''}>${projectLabel(p)}</option>`).join('')}
+          <option value="none" ${projectFilter === 'none' ? 'selected' : ''}>No project</option>
+        </select>`;
+    } else {
+      html += `<div class="filter-chips">
+        <button class="filter-chip ${!projectFilter ? 'active' : ''}" onclick="App.setProjectFilter(null)">All</button>
+      `;
+      projects.forEach(p => {
+        html += `<button class="filter-chip ${projectFilter === p.id ? 'active' : ''}" onclick="App.setProjectFilter('${p.id}')" ${p.depth ? `style="margin-left:${p.depth * 10}px"` : ''}>
+          <span class="proj-dot" style="background:${p.color}"></span>${p.name}
+        </button>`;
+      });
+      html += `<button class="filter-chip ${projectFilter === 'none' ? 'active' : ''}" onclick="App.setProjectFilter('none')">No Project</button>`;
+    }
 
-    // Tag filter chips
-    if (allTags.length > 0) {
-      html += `<div class="filter-chips" style="margin-top:calc(var(--space-2) * -1);">
-        <span class="stat-label" style="align-self:center;">${icon('tag', 11)}</span>
-        <button class="filter-chip ${!tagFilter ? 'active' : ''}" onclick="App.setTagFilter(null)">Any tag</button>
-        ${allTags.map(t => `
-          <button class="filter-chip pill-${t.color} ${tagFilter === t.name ? 'active' : ''}" onclick="App.setTagFilter('${t.name}')">#${t.name}</button>
-        `).join('')}
-      </div>`;
+    // Tag filter — same treatment
+    if (allTags.length > 10) {
+      html += `<select class="form-select" style="width:auto;max-width:180px;padding:var(--space-1) var(--space-2);font-size:var(--text-xs);" onchange="App.setTagFilter(this.value || null)">
+        <option value="">Any tag</option>
+        ${allTags.map(t => `<option value="${t.name}" ${tagFilter === t.name ? 'selected' : ''}>#${t.name}</option>`).join('')}
+      </select></div>`;
+    } else {
+      html += `</div>`;
+      if (allTags.length > 0) {
+        html += `<div class="filter-chips" style="margin-top:calc(var(--space-2) * -1);">
+          <span class="stat-label" style="align-self:center;">${icon('tag', 11)}</span>
+          <button class="filter-chip ${!tagFilter ? 'active' : ''}" onclick="App.setTagFilter(null)">Any tag</button>
+          ${allTags.map(t => `
+            <button class="filter-chip pill-${t.color} ${tagFilter === t.name ? 'active' : ''}" onclick="App.setTagFilter('${t.name}')">#${t.name}</button>
+          `).join('')}
+        </div>`;
+      }
     }
 
     const tagMatch = (e) => !tagFilter || (e.tags || []).includes(tagFilter);
@@ -1270,6 +1508,27 @@ const App = (() => {
       <div class="card stat-card"><span class="stat-label">Task Completion Rate</span><span class="stat-value">${completionRate}%</span></div>
     </div>`;
 
+    // Estimate vs actual accuracy (completed tasks with both numbers)
+    const estimated = State.getEntries({ type: 'task', includeArchived: true })
+      .filter(inFilter)
+      .filter(t => t.completed && t.estimateMinutes > 0 && State.actualMinutesFor(t) > 0);
+    if (estimated.length > 0) {
+      const ratios = estimated.map(t => State.actualMinutesFor(t) / t.estimateMinutes);
+      const avgRatio = ratios.reduce((a, b) => a + b, 0) / ratios.length;
+      const verdict = avgRatio > 1.1 ? `you underestimate by ~${Math.round((avgRatio - 1) * 100)}%`
+        : avgRatio < 0.9 ? `you overestimate by ~${Math.round((1 - avgRatio) * 100)}%`
+        : 'your estimates are on the money';
+      html += `<div class="section">
+        <div class="card">
+          <div class="section-header" style="margin-bottom:var(--space-2);"><span class="section-title">Estimation Accuracy</span>
+            <span class="stat-label">${estimated.length} completed task${estimated.length === 1 ? '' : 's'} with estimate + actual</span>
+          </div>
+          <span class="stat-value">${avgRatio.toFixed(2)}×</span>
+          <p class="text-xs text-muted" style="margin-top:var(--space-1);">Actual ÷ estimate on average — ${verdict}. Add an actual time when editing completed tasks to sharpen this.</p>
+        </div>
+      </div>`;
+    }
+
     // Calendar heatmap
     html += `<div class="section">
       <div class="section-header"><span class="section-title">Activity Heatmap — 12 Weeks</span></div>
@@ -1367,6 +1626,24 @@ const App = (() => {
   // Four-quadrant board: color-coded, draggable, full-item hitbox
   // ═══════════════════════════════════════════════════════════
   let focusProject = null;
+  let focusDue = null; // null | 'overdue' | 'today' | 'week' | 'later' | 'none'
+
+  const FOCUS_DUE_CHIPS = [
+    [null, 'Any due'], ['overdue', 'Overdue'], ['today', 'Due today'],
+    ['week', 'This week'], ['later', 'Later'], ['none', 'No date'],
+  ];
+
+  function focusDueMatch(t) {
+    if (!focusDue) return true;
+    const today = State.todayStr();
+    if (focusDue === 'none') return !t.dueDate;
+    if (!t.dueDate) return false;
+    if (focusDue === 'overdue') return t.dueDate < today;
+    if (focusDue === 'today') return t.dueDate === today;
+    if (focusDue === 'week') return t.dueDate >= today && t.dueDate <= offsetDateStr(7);
+    if (focusDue === 'later') return t.dueDate > offsetDateStr(7);
+    return true;
+  }
 
   const QUADRANTS = [
     { q: 1, label: 'Do First · High Pri / Low Effort', hiPri: true, hiEff: false },
@@ -1391,6 +1668,12 @@ const App = (() => {
             <span class="proj-dot" style="background:${p.color}"></span>${p.name}
           </button>`).join('')}
       </div>
+      <div class="filter-chips" style="margin-top:calc(var(--space-2) * -1);">
+        <span class="stat-label" style="align-self:center;">${icon('calendar-days', 11)}</span>
+        ${FOCUS_DUE_CHIPS.map(([val, label]) => `
+          <button class="filter-chip ${focusDue === val ? 'active' : ''}" onclick="App.setFocusDue(${val === null ? 'null' : `'${val}'`})">${label}</button>
+        `).join('')}
+      </div>
       <div class="section">
         <div class="section-header"><span class="section-title">Four Quadrant</span>
           <span class="text-xs text-faint">drag between boxes to reprioritize · click to complete</span>
@@ -1408,8 +1691,14 @@ const App = (() => {
     render();
   }
 
+  function setFocusDue(v) {
+    focusDue = v;
+    render();
+  }
+
   function renderQuadrant(projectId) {
-    const tasks = State.getEntries({ type: 'task', completed: false, projectId: projectId || undefined });
+    const tasks = State.getEntries({ type: 'task', completed: false, projectId: projectId || undefined })
+      .filter(focusDueMatch);
     const effOrder = { trivial: 0, small: 1, medium: 2, large: 3, xl: 4 };
     const priOrder = { urgent: 0, high: 1, medium: 2, low: 3 };
     const multiProject = !projectId; // show project dots in all-projects view
@@ -1425,15 +1714,19 @@ const App = (() => {
     function renderItems(items) {
       if (items.length === 0) return '<div class="planner-empty">No tasks</div>';
       const MAX = 8;
-      let out = items.slice(0, MAX).map(t => {
+      // Highest next-best score first within each quadrant
+      const ranked = [...items].sort((a, b) => taskScore(b) - taskScore(a));
+      let out = ranked.slice(0, MAX).map(t => {
         const proj = t.projectId ? State.getProject(t.projectId) : null;
-        return `<div class="q-item ${t.completed ? 'completed' : ''}" draggable="true" data-id="${t.id}"
+        const score = taskScore(t);
+        return `<div class="q-item ${t.completed ? 'completed' : ''} ${t.priority === 'urgent' ? 'urgent' : ''}" draggable="true" data-id="${t.id}"
           ondragstart="App.qDragStart(event,'${t.id}')" ondragend="App.qDragEnd(event)"
-          onclick="App.qItemClick(event,'${t.id}')" title="${t.title}">
+          onclick="App.qItemClick(event,'${t.id}')" ondblclick="App.openTaskPage('${t.id}')" title="${t.title} · score ${score}">
           <span class="q-handle">⠿</span>
           ${multiProject && proj ? `<span class="proj-dot" style="background:${proj.color}"></span>` : ''}
           <span class="q-title">${t.title}</span>
           ${t.estimateMinutes ? `<span class="q-est">${estimateLabel(t.estimateMinutes)}</span>` : ''}
+          <span class="q-score" title="Next-best score">${score}</span>
           <span class="q-actions">
             <button class="icon-btn" onclick="event.stopPropagation();App.editEntry('${t.id}')" aria-label="Edit">${icon('pencil', 12)}</button>
           </span>
@@ -2041,6 +2334,10 @@ const App = (() => {
           <div><div class="setting-label">Auto-start</div><div class="setting-desc">Auto-start next phase</div></div>
           <div class="toggle-switch ${settings.timer.autoStart ? 'on' : ''}" onclick="App.updateTimerSetting('autoStart', !${settings.timer.autoStart})"></div>
         </div>
+        <div class="setting-row">
+          <div><div class="setting-label">Nav Bar Timers</div><div class="setting-desc">Max live timers shown in the header (rest collapse to …)</div></div>
+          <input type="number" class="form-input" style="width:80px;" min="1" max="6" value="${settings.maxNavTimers || 2}" onchange="App.updateMaxNavTimers(this.value)">
+        </div>
       </div>
     </div>`;
 
@@ -2178,13 +2475,17 @@ const App = (() => {
       checkin: 'What do you want to check in on?',
     };
 
-    // Color-coded multi-select project chips (an entry can live in several)
+    // Color-coded multi-select project chips (an entry can live in several).
+    // Past 8 projects the list scrolls and gains a type-to-filter box.
+    const manyProjects = projects.length > 8;
     const projectChips = `
       <div class="form-group">
         <label class="form-label">Projects ${currentProjects.length > 1 ? `<span class="text-faint">(${currentProjects.length} selected)</span>` : ''}</label>
-        <div class="project-chips" id="entryProjectChips">
+        ${manyProjects ? `<input type="text" class="form-input" placeholder="Filter projects…" style="margin-bottom:var(--space-2);" oninput="App.filterChips(this,'entryProjectChips')">` : ''}
+        <div class="project-chips ${manyProjects ? 'chip-scroll' : ''}" id="entryProjectChips">
           ${projects.length === 0 ? '<span class="text-xs text-faint">No projects yet.</span>' : projects.map(p => `
             <button class="filter-chip project-choice ${currentProjects.includes(p.id) ? 'active' : ''}" id="pc-${p.id}"
+              data-filter-text="${p.name.toLowerCase()}"
               style="--chip-color:${p.color};${p.depth ? `margin-left:${p.depth * 10}px;` : ''}"
               onclick="App.toggleFormProject('${p.id}')">
               <span class="proj-dot" style="background:${p.color}"></span>${p.name}
@@ -2205,6 +2506,12 @@ const App = (() => {
             <input type="number" class="form-input" id="entryEstimate" value="${entry.estimateMinutes || ''}" placeholder="e.g. 45" min="0" step="5">
           </div>
         </div>
+        ${entry.completed ? `
+        <div class="form-group">
+          <label class="form-label">Actual time (minutes)</label>
+          <input type="number" class="form-input" id="entryActual" value="${entry.actualMinutes ?? ''}" placeholder="${State.actualMinutesFor(entry) ? `tracked: ${State.actualMinutesFor(entry)}` : 'override tracked time'}" min="0" step="5">
+          <p class="text-xs text-faint" style="margin-top:var(--space-1);">Leave blank to use tracked time. Feeds the estimate-accuracy stats.</p>
+        </div>` : ''}
         <div class="grid-2">
           <div class="form-group">
             <label class="form-label">Effort</label>
@@ -2318,18 +2625,30 @@ const App = (() => {
 
       <div class="form-group">
         <label class="form-label">Tags</label>
-        <div style="display:flex;flex-wrap:wrap;gap:var(--space-2);margin-bottom:var(--space-2);">
-          ${(entry.tags || []).map(t => {
-            const tagObj = tags.find(tg => tg.name === t);
-            const colorCls = tagObj ? `pill-${tagObj.color}` : 'pill-gray';
-            return `<span class="pill ${colorCls}">#${t}<button onclick="App.removeTag('${t}')" style="margin-left:4px;background:none;border:none;color:inherit;cursor:pointer;font-size:14px;line-height:1;">×</button></span>`;
-          }).join('')}
-        </div>
-        <input type="text" class="form-input" id="entryTagInput" placeholder="Type a tag and press Enter" onkeydown="if(event.key==='Enter'){event.preventDefault();App.addTag(this.value);this.value='';}">
-        ${suggestTags.length > 0 ? `<div style="display:flex;flex-wrap:wrap;gap:var(--space-1);margin-top:var(--space-2);">
-          ${suggestTags.map(t => `<button class="pill pill-${t.color}" style="cursor:pointer;" onclick="App.addTag('${t.name}')">#${t.name}</button>`).join('')}
-        </div>` : ''}
+        <div id="entryTagsBlock">${renderTagsSection()}</div>
       </div>
+    `;
+  }
+
+  // Rendered separately so adding/removing a tag refreshes ONLY this block —
+  // re-rendering the whole form wiped everything the user had typed.
+  function renderTagsSection() {
+    const tags = State.getAllTags();
+    const suggestTags = State.getAllTags(currentProjects[0] || null)
+      .filter(t => !currentTags.includes(t.name));
+    const many = suggestTags.length > 10;
+    return `
+      <div style="display:flex;flex-wrap:wrap;gap:var(--space-2);margin-bottom:var(--space-2);">
+        ${currentTags.map(t => {
+          const tagObj = tags.find(tg => tg.name === t);
+          const colorCls = tagObj ? `pill-${tagObj.color}` : 'pill-gray';
+          return `<span class="pill ${colorCls}">#${t}<button onclick="App.removeTag('${t}')" style="margin-left:4px;background:none;border:none;color:inherit;cursor:pointer;font-size:14px;line-height:1;">×</button></span>`;
+        }).join('')}
+      </div>
+      <input type="text" class="form-input" id="entryTagInput" placeholder="Type a tag and press Enter" onkeydown="if(event.key==='Enter'){event.preventDefault();App.addTag(this.value);this.value='';}">
+      ${suggestTags.length > 0 ? `<div class="${many ? 'chip-scroll' : ''}" style="display:flex;flex-wrap:wrap;gap:var(--space-1);margin-top:var(--space-2);">
+        ${suggestTags.map(t => `<button class="pill pill-${t.color}" style="cursor:pointer;" onclick="App.addTag('${t.name}')">#${t.name}</button>`).join('')}
+      </div>` : ''}
     `;
   }
 
@@ -2343,6 +2662,14 @@ const App = (() => {
       ? currentProjects.filter(p => p !== id)
       : [...currentProjects, id];
     document.getElementById(`pc-${id}`)?.classList.toggle('active', currentProjects.includes(id));
+  }
+
+  // Generic type-to-filter for chip lists that outgrow the space
+  function filterChips(inputEl, containerId) {
+    const q = (inputEl.value || '').trim().toLowerCase();
+    document.querySelectorAll(`#${containerId} [data-filter-text]`).forEach(el => {
+      el.style.display = !q || el.dataset.filterText.includes(q) ? '' : 'none';
+    });
   }
 
   function onRecurrenceChange(value) {
@@ -2359,9 +2686,15 @@ const App = (() => {
 
   function changeEntryType(type) {
     saveFormData();
+    // Carry typed values across the type switch — don't wipe the user's work
+    const draft = {
+      title: document.getElementById('entryTitle')?.value ?? '',
+      description: document.getElementById('entryDescription')?.value ?? '',
+      dueDate: document.getElementById('entryDueDate')?.value || null,
+    };
     entryTypeDraft = type;
     const body = document.getElementById('modalBody');
-    const entry = editingEntryId ? { ...State.getEntry(editingEntryId) } : {};
+    const entry = { ...(editingEntryId ? State.getEntry(editingEntryId) : {}), ...draft };
     entry.tags = [...currentTags];
     entry.effort = currentEffort;
     body.innerHTML = renderEntryForm(type, entry);
@@ -2394,13 +2727,10 @@ const App = (() => {
     refreshTagDisplay();
   }
 
+  // Touch ONLY the tags block — everything else the user typed stays put
   function refreshTagDisplay() {
-    const entry = editingEntryId ? { ...State.getEntry(editingEntryId) } : {};
-    entry.tags = [...currentTags];
-    entry.effort = currentEffort;
-    const body = document.getElementById('modalBody');
-    body.innerHTML = renderEntryForm(entryTypeDraft, entry);
-    refreshIcons();
+    const block = document.getElementById('entryTagsBlock');
+    if (block) { block.innerHTML = renderTagsSection(); refreshIcons(); }
   }
 
   function saveEntry() {
@@ -2421,6 +2751,9 @@ const App = (() => {
       data.effort = currentEffort;
       data.priority = document.getElementById('entryPriority')?.value || 'medium';
       data.estimateMinutes = parseInt(document.getElementById('entryEstimate')?.value) || null;
+      // Only present when editing a completed task — don't clobber otherwise
+      const actEl = document.getElementById('entryActual');
+      if (actEl) data.actualMinutes = parseInt(actEl.value) || null;
     }
 
     if (entryTypeDraft === 'goal') {
@@ -3255,6 +3588,12 @@ const App = (() => {
     render();
   }
 
+  function updateMaxNavTimers(value) {
+    const v = Math.min(6, Math.max(1, parseInt(value) || 2));
+    State.updateSettings({ maxNavTimers: v });
+    if (typeof Timers !== 'undefined') Timers.updateMini();
+  }
+
   function setHotkey(action, value) {
     const v = (value || '').trim().toLowerCase().slice(0, 1);
     const hotkeys = { ...(State.getSettings().hotkeys || {}) };
@@ -3346,9 +3685,8 @@ const App = (() => {
       if (e.target.id === 'modalOverlay') closeModal();
     });
 
-    // Panel close + minimize (timers keep running either way)
+    // Panel close (timers keep running; the nav element brings it back)
     document.getElementById('panelClose').addEventListener('click', closePanel);
-    document.getElementById('panelMinimize')?.addEventListener('click', closePanel);
 
     // Sidebar collapse (desktop)
     if (State.getSettings().sidebarCollapsed) document.body.classList.add('sidebar-collapsed');
@@ -3418,6 +3756,8 @@ const App = (() => {
     openQuickLog, setQuickLogTab, openCalorieLog, logCaloriesFromModal, quickAddTask, logEmotion,
     useShortcut, setQuickEmotion, setQuickEnergy, logCheckinFromModal, logWake, logSleep,
     removeWakeSleep, deleteQuickLogRow, toggleFormProject, setHotkey,
+    openTaskPage, backFromTaskPage, addPost, deletePost, postToTask,
+    setFocusDue, filterChips, updateMaxNavTimers,
     openManageShortcuts, addShortcut, deleteShortcut,
     openManageTags, cycleTagColor, renameTag, setTagProject, deleteTagPrompt, createTagFromManager,
     openSearch, runSearch, searchGo,

@@ -337,25 +337,41 @@ const Timers = (() => {
     });
   }
 
-  // Header-nav indicator: visible from ANY page while the window is closed
-  // and something is running — click brings the timer window back.
+  // Header-nav timer element: ALWAYS present as a one-click way to open the
+  // window. With live timers it shows up to settings.maxNavTimers session
+  // chips (then "+N"). Structure only re-renders when the session list
+  // changes; per-second values patch text nodes — no flicker, no pulsing.
+  const TIMER_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="10" x2="14" y1="2" y2="2"/><line x1="12" x2="15" y1="14" y2="11"/><circle cx="12" cy="14" r="8"/></svg>';
+  let navSig = null;
+
   function updateMini() {
     const el = document.getElementById('timerIndicator');
     if (!el) return;
-    const active = clock.mode && clock.state !== 'idle';
-    const hasSessions = sessions.length > 0;
-    if (isPanelOpen() || (!active && !hasSessions)) {
-      el.style.display = 'none';
-      return;
+    const max = Math.max(1, State.getSettings().maxNavTimers || 2);
+    const shown = sessions.slice(0, max);
+    const clockActive = clock.mode && clock.state !== 'idle';
+    const anyActive = clockActive || sessions.length > 0;
+
+    const sig = JSON.stringify([shown.map(s => s.entryId + s.state), sessions.length, clockActive, clock.mode, max]);
+    if (sig !== navSig) {
+      navSig = sig;
+      let html = TIMER_SVG;
+      if (clockActive) {
+        html += `<span class="ti-item"><span data-tick-clock>0:00</span></span>`;
+      }
+      shown.forEach(s => {
+        const entry = State.getEntry(s.entryId);
+        const name = (entry?.title || '?').slice(0, 14);
+        html += `<span class="ti-item ${s.state === 'paused' ? 'paused' : ''}" title="${entry?.title || ''}">
+          <span class="ti-name">${name}</span> <span data-tick-entry="${s.entryId}">${formatTime(sessionElapsed(s))}</span>
+        </span>`;
+      });
+      if (sessions.length > max) html += `<span class="ti-more">+${sessions.length - max}…</span>`;
+      el.innerHTML = html;
     }
-    const running = clock.state === 'running' || sessions.some(s => s.state === 'running');
-    let text;
-    if (hasSessions) {
-      text = formatTime(sessionElapsed(sessions[0])) + (sessions.length > 1 ? ` +${sessions.length - 1}` : '');
-    } else {
-      text = formatTime(clock.mode === 'stopwatch' ? clock.elapsed : clock.remaining);
-    }
-    el.innerHTML = `<span class="ti-dot ${running ? 'running' : ''}"></span><span>${text}</span>`;
+    const ck = el.querySelector('[data-tick-clock]');
+    if (ck) ck.textContent = formatTime(clock.mode === 'stopwatch' ? clock.elapsed : clock.remaining);
+    el.classList.toggle('live', anyActive);
     el.style.display = 'inline-flex';
   }
 
