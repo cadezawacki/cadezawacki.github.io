@@ -530,6 +530,39 @@ header#crest{
 .nemesis .nd{font-size:13px;color:var(--ink-faint);line-height:1.45;margin-top:3px}
 .nemesis .nm2{font-style:italic;color:var(--minium);font-size:13.5px;margin-top:6px;line-height:1.45}
 
+
+/* ---- the herald's table ---- */
+.forgeview{text-align:center;margin:6px 0 10px}
+.forgeview svg{width:150px;height:190px;display:inline-block}
+.blazonline{text-align:center;font-family:var(--display);font-style:italic;font-size:15.5px;
+  color:var(--ink-soft);margin:0 0 8px;line-height:1.45}
+.swgrid{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:4px}
+.sw{flex:1 1 21%;min-width:70px;background:rgba(255,252,240,.35);
+  border:1px solid rgba(42,32,24,.25);border-radius:2px;padding:6px 4px;cursor:pointer;min-height:54px}
+.sw span{display:block;height:20px;border-radius:2px;border:1px solid rgba(42,32,24,.4)}
+.sw em{display:block;font-family:var(--display);font-size:10px;font-style:normal;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--ink-faint);margin-top:5px}
+.sw.on{border-color:var(--gold);border-width:2px;background:rgba(169,121,31,.12)}
+.sw.on em{color:var(--gold)}
+.chgrid{display:flex;flex-wrap:wrap;gap:7px}
+.ch{width:54px;height:54px;background:rgba(255,252,240,.4);border:1px solid rgba(42,32,24,.25);
+  border-radius:2px;cursor:pointer;padding:6px}
+.ch svg{width:100%;height:100%;display:block}
+.ch.on{border-color:var(--gold);border-width:2px;background:var(--ink)}
+.segs.wrap{flex-wrap:wrap;gap:0}
+.segs.wrap .sg{flex:1 1 30%;border-left-width:1px;border-radius:2px;margin:0 5px 5px 0}
+
+/* ---- the roll of arms ---- */
+.rollitem{display:flex;gap:10px;padding:9px 0;border-bottom:1px dotted rgba(42,32,24,.24)}
+.rollitem .ry{flex:0 0 40px;font-family:var(--display);font-size:11px;letter-spacing:.06em;
+  color:var(--minium);padding-top:4px}
+.rollitem .rb{flex:1;min-width:0}
+.rollitem .rbz{font-family:var(--display);font-size:15.5px;line-height:1.28}
+.rollitem .rwy{font-size:13px;color:var(--ink-faint);line-height:1.42;margin-top:2px}
+.rollitem.mark .rbz{color:var(--minium)}
+.rollitem.mark .ry{color:var(--ink-faint)}
+.rollitem.unborne .rbz{opacity:.62}
+
 </style>
 </head>
 <body>
@@ -714,12 +747,42 @@ function armsSVG(a,opts){
     else if(ar.div==="chief")g+=`<rect x="0" y="0" width="100" height="28" fill="${A}"/>`;
     else if(ar.div==="chevron")g+=`<path d="M50 34 L96 84 L96 100 L50 52 L4 100 L4 84z" fill="${A}"/>`;
     g+=`<g transform="translate(14,14) scale(0.72)"><path d="${CHARGES[ar.charge]}" fill="${TINCT[ar.metal]}" stroke="rgba(0,0,0,.28)" stroke-width="1.2"/></g>`;
-    (ar.augments||[]).forEach(au=>{
-      if(au.type==="bordure")g+=`<path d="${shieldPath()}" fill="none" stroke="${TINCT[au.tinct]}" stroke-width="9"/>`;
-      if(au.type==="canton")g+=`<rect x="6" y="6" width="30" height="30" fill="${TINCT[au.tinct]}" stroke="rgba(0,0,0,.3)"/><g transform="translate(9,9) scale(0.24)"><path d="${CHARGES[au.charge||"star"]}" fill="${TINCT[au.metal||"or"]}"/></g>`;
-      if(au.type==="bend")g+=`<path d="M0 10 L86 96 L74 108 L-6 24z" fill="${TINCT[au.tinct]}" opacity=".92"/>`;
-      if(au.type==="label")g+=`<path d="M14 8h72v11H72v13H62V19H52v13H42V19H28v13H18V19h-4z" fill="${TINCT[au.tinct]}"/>`;
-    });
+    const augs=(ar.augments||[]).filter(au=>au.drawn!==false);
+    const ORDER=["chief","canton","base","roundel","baton","point","label","bend","bordure"];
+    let hasChief=augs.some(au=>au.type==="chief");
+    ORDER.forEach(kind=>augs.filter(au=>au.type===kind).slice(0,1).forEach(au=>{
+      if(au.type==="label"&&hasChief)return;
+      const T=t=>TINCT[t]||TINCT.sable;
+      if(au.type==="chief"){
+        g+=`<rect x="0" y="0" width="100" height="27" fill="${T(au.tinct)}" stroke="rgba(0,0,0,.28)" stroke-width="1"/>`;
+        if(au.charge)g+=`<g transform="translate(38,2) scale(0.23)"><path d="${CHARGES[au.charge]}" fill="${T(au.metal||"or")}" stroke="rgba(0,0,0,.25)" stroke-width="1.4"/></g>`;
+      }
+      else if(au.type==="canton"){
+        g+=`<rect x="5" y="5" width="32" height="32" fill="${T(au.tinct)}" stroke="rgba(0,0,0,.32)" stroke-width="1"/>`;
+        g+=`<g transform="translate(8,8) scale(0.26)"><path d="${CHARGES[au.charge||"star"]}" fill="${T(au.metal||"or")}" stroke="rgba(0,0,0,.22)" stroke-width="1.4"/></g>`;
+      }
+      else if(au.type==="base"){
+        g+=`<g transform="translate(37,60) scale(0.25)"><path d="${CHARGES[au.charge||"rose"]}" fill="${T(au.metal||"or")}" stroke="rgba(0,0,0,.35)" stroke-width="1.6"/></g>`;
+      }
+      else if(au.type==="roundel"){
+        g+=`<circle cx="50" cy="74" r="10" fill="${T(au.metal||"or")}" stroke="rgba(0,0,0,.35)" stroke-width="1.4"/>`;
+      }
+      else if(au.type==="baton"){
+        g+=`<line x1="94" y1="10" x2="18" y2="98" stroke="${T(au.tinct)}" stroke-width="11" stroke-linecap="round" opacity=".92"/>`;
+      }
+      else if(au.type==="point"){
+        g+=`<path d="M0 106 L50 90 L100 106 L100 124 L0 124 Z" fill="${T(au.tinct)}" opacity=".95"/>`;
+      }
+      else if(au.type==="label"){
+        g+=`<path d="M14 8h72v11H72v13H62V19H52v13H42V19H28v13H18V19h-4z" fill="${T(au.tinct)}" stroke="rgba(0,0,0,.3)" stroke-width="1"/>`;
+      }
+      else if(au.type==="bend"){
+        g+=`<path d="M0 10 L86 96 L74 108 L-6 24z" fill="${T(au.tinct)}" opacity=".92"/>`;
+      }
+      else if(au.type==="bordure"){
+        g+=`<path d="${shieldPath()}" fill="none" stroke="${T(au.tinct)}" stroke-width="9"/>`;
+      }
+    }));
     return g;
   }
   let inner="";
@@ -878,6 +941,7 @@ const G={
     d(({iron:"Iron",coin:"Coin",faith:"Faith",cunning:"Guile"}[k])+" "+(v>0?"+":"")+v, v>0?"up":"dn");},
   hs(k,v){if(!v)return;const lab={standing:"Renown",coffers:"Coffers",strength:"Levies",piety:"Piety"}[k];
     if(k==="standing"||k==="piety")S.h[k]=clamp(S.h[k]+v,0,100); else S.h[k]=Math.max(0,S.h[k]+v);
+    if(k==="coffers")S.h.peakCoffers=Math.max(S.h.peakCoffers||0,S.h.coffers);
     d(lab+" "+(v>0?"+":"")+v, v>0?"up":"dn");},
   flag(k,v){S.c.flags[k]=(v===undefined?true:v);},
   hflag(k,v){S.h.flags[k]=(v===undefined?true:v);},
@@ -930,7 +994,7 @@ function person(who){
 /* ================================================================
    WORLD GENESIS
    ================================================================ */
-function newWorld(seedStr,houseNameIn,charName,charG){
+function newWorld(seedStr,houseNameIn,charName,charG,armsIn){
   RND=mulberry(hashSeed(seedStr));
   const faith=pick(FAITHS), threat=pick(THREATS);
   const regions=buildRegions(14);
@@ -961,12 +1025,14 @@ function newWorld(seedStr,houseNameIn,charName,charG){
     kin:{}, epoch:0,
   };
   const h={
-    name:hn, seat:regions[0].name, motto:pick(MOTTOS), arms:newArms(),
+    name:hn, seat:regions[0].name, motto:pick(MOTTOS), arms:armsIn||newArms(),
     standing:18, coffers:5, strength:3, piety:40, rank:0,
     holdings:regions.filter(r=>r.holder==="you").map(r=>r.id), flags:{}, legends:[],
     heirloom:newHeirloom(), things:[], secrets:[],
     retainers:[], vassals:[], debt:{amt:0,holder:"",rate:1.3},
   };
+  if(!h.arms.augments)h.arms.augments=[];
+  h.peakCoffers=h.coffers;
   S={v:2,seed:seedStr,started:true,finished:false,w,h,chron:[],anc:[],seeds:[],marg:[],
      used:{},tab:"story",c:null,pending:null,ending:null,lastIncome:0};
   G.chron(`In the ${ordinal(1)} year of ${w.king}, ${h.name} was ${pick(["granted","confirmed in","left"])} the manor at ${h.seat} and its fields. The grant was written small.`,"");
@@ -1929,7 +1995,7 @@ const POOL=[
   {t:"Go yourself, at the head of them.",cls:"risky",
    do:G=>{G.peril(2);G.flag("spilledBlood");
     const win=G.c.stats.iron+G.h.strength+G.ri(0,5)>=10;
-    if(win){G.stat("iron",2);G.hs("standing",9);G.h.arms.augments.push({type:"canton",tinct:"gules",charge:"sword",metal:"or",blazon:"a canton gules charged with a sword or"});
+    if(win){G.stat("iron",2);G.hs("standing",9);G.hflag("wonField");
      G.legend(`${G.c.name} held the line at ${G.v.front} when the flank broke, and was named in the King's own account of the day.`);
      return P(`The flank breaks at midday and you are what is left standing on it. You do not remember most of the afternoon. You remember the smell and a man saying your name.`)
      +P(`The King's account of the battle names four houses. Yours is one of them. You are permitted an augmentation to your arms, which is a way of saying: this happened, and it will keep happening on every shield your children carry.`);}
@@ -2285,6 +2351,7 @@ const POOL=[
   {t:"Take the child into the house openly.",cls:"risky",
    do:G=>{G.flag("bastardKnown");G.bond("spouse",-22);G.hs("piety",-6);G.hs("standing",-2);
     G.c.kids.push({name:G.v.ch,g:chance(.5)?"m":"f",born:G.w.year-4,bond:60,traits:["Guarded"],alive:true,bastard:true});
+    G.hflag("bastardOwned");
     G.seed({type:"bastard_grown",who:G.v.ch});
     G.chron(`${G.c.name} acknowledged a natural child, ${G.v.ch}, and raised ${G.c.g==="f"?"her":"him"} in the hall.`);
     return P(`You do it at dinner, in front of everyone, because doing it quietly would be worse.`)
@@ -2738,7 +2805,7 @@ function wed(G,i){
   if(cd.kind==="peace"){G.w.rival.att=Math.min(60,G.w.rival.att+45);G.hflag("rivalMarriage");
     return P(`Both families sit on their own side of the ${G.w.faith.temple} and nobody eats much. The old men will not look at each other.`)
     +P(`${cd.name} came here as a treaty. Whether ${cd.g==="f"?"she":"he"} becomes anything else is entirely up to the next forty years, and neither of you has any idea yet.`);}
-  G.trait("Beloved");G.flag("marriedForLove");
+  G.trait("Beloved");G.flag("marriedForLove");G.hflag("loveMatch");
   return P(`The valley is delighted. The county is appalled. Your steward asks, once, whether you have considered the standing of the house, and you say yes, and that is the end of the discussion.`)
     +P(`There is no dowry and no alliance and no advantage of any kind. You will get forty years of somebody who chose you back.`);
 }
@@ -3745,7 +3812,7 @@ function wedMarket(G,i){
     metal:cd.arms.metal,charge:cd.arms.charge,augments:[]};G.note("The arms are impaled");}
   G.chron(`${G.c.name} of ${G.h.name} married ${cd.name} of ${cd.house}.`);
   if(cd.kind==="love"){
-    G.trait("Beloved");G.flag("marriedForLove");
+    G.trait("Beloved");G.flag("marriedForLove");G.hflag("loveMatch");
     return P(`The valley is delighted. The county is appalled. Your steward asks once whether you have considered the standing of the house, and you say yes, and that ends it.`)
      +P(`No dowry, no alliance, no advantage of any kind. Forty years of somebody who chose you back.`);
   }
@@ -4722,9 +4789,7 @@ function matterField(G,side){
   const s=matterSide(side);
   if(roll(p,"the field")){
     matterPush(side,5,"fought and held");
-    G.hs("standing",12);G.crownFav(8);
-    S.h.arms.augments.push({type:"canton",tinct:"azure",charge:"star",metal:"or",
-      blazon:"a canton azure charged with a mullet or"});
+    G.hs("standing",12);G.crownFav(8);G.hflag("namedInAccount");
     G.legend(`${S.c.name} of ${S.h.name} held the left at the field, for ${s.name}, with ${G.bigWord(menCount())} men, and was named in the account of it.`);
     G.nemRemember(`${S.h.name} was named in the account of the field`,14);
     return P(`You are given the left, which is where houses like yours are put, and the left is where it is decided.`)
@@ -4801,6 +4866,226 @@ ANCHORS.elevation={id:"elevation",kind:"grand",
     return P(`You will not do it alone. The steward, the captain, the cook, and the man who keeps the ditches stand on the dais while it is read.`)
      +P(`It is a breach of every form there is. Every one of them dies in your service.`);}},
  ]};
+/* ================================================================
+   THE ROLL OF ARMS — marks earned, not given
+   Each augmentation occupies one slot on the shield. The first thing
+   you earn for a slot keeps it; everything after is recorded in the roll.
+   ================================================================ */
+const AUGS=[
+ /* --- the field, and blood --- */
+ {id:"sword",slot:"canton",name:"the canton of the sword",
+  blazon:"a canton gules charged with a sword or",
+  draw:{type:"canton",tinct:"gules",charge:"sword",metal:"or"},
+  why:"for a battle held when the line broke",
+  when:h=>h.flags.wonField},
+ {id:"mullet",slot:"canton",name:"the canton of the mullet",
+  blazon:"a canton azure charged with a mullet or",
+  draw:{type:"canton",tinct:"azure",charge:"star",metal:"or"},
+  why:"for being named in the realm's own account of the field",
+  when:h=>h.flags.namedInAccount},
+ {id:"serpent",slot:"canton",name:"the canton of the serpent",
+  blazon:"a canton sable charged with a serpent or",
+  draw:{type:"canton",tinct:"sable",charge:"serpent",metal:"or"},
+  why:"for standing when the great sickness came, and not breaking",
+  when:h=>{const t=S.w.threat;return S.w.flags["threat_"+t.id]==="triumph";}},
+ /* --- what was built --- */
+ {id:"tower",slot:"canton",name:"the canton of the tower",
+  blazon:"a canton sable charged with a tower argent",
+  draw:{type:"canton",tinct:"sable",charge:"tower",metal:"argent"},
+  why:"for walling the seat in stone",
+  when:h=>h.flags.walls},
+ {id:"key",slot:"canton",name:"the canton of the key",
+  blazon:"a canton argent charged with a key sable",
+  draw:{type:"canton",tinct:"argent",charge:"key",metal:"sable"},
+  why:"for the market charter, and the town that grew out of it",
+  when:h=>h.flags.market},
+ {id:"anchor",slot:"canton",name:"the canton of the anchor",
+  blazon:"a canton azure charged with an anchor argent",
+  draw:{type:"canton",tinct:"azure",charge:"anchor",metal:"argent"},
+  why:"for the quay, and the ships that began to stop at it",
+  when:h=>h.flags.quay},
+ {id:"wheel",slot:"canton",name:"the canton of the wheel",
+  blazon:"a canton or charged with a wheel sable",
+  draw:{type:"canton",tinct:"or",charge:"wheel",metal:"sable"},
+  why:"for the bridge and the made road",
+  when:h=>h.flags.road},
+ {id:"oak",slot:"canton",name:"the canton of the oak",
+  blazon:"a canton vert charged with an oak or",
+  draw:{type:"canton",tinct:"vert",charge:"tree",metal:"or"},
+  why:"for giving back land that was never ours",
+  when:h=>h.flags.returnedLand},
+ /* --- the chief: what the realm thinks --- */
+ {id:"crown",slot:"chief",name:"the chief of the crown",
+  blazon:"on a chief azure a crown or",
+  draw:{type:"chief",tinct:"azure",charge:"star",metal:"or"},
+  why:"for the Crown's own favour, freely given",
+  when:h=>S.w.crown&&S.w.crown.favour>=75},
+ {id:"eagle",slot:"chief",name:"the chief of the eagle",
+  blazon:"on a chief or an eagle sable",
+  draw:{type:"chief",tinct:"or",charge:"eagle",metal:"sable"},
+  why:"for a seat among the great houses",
+  when:h=>h.rank>=3},
+ {id:"flame",slot:"chief",name:"the chief of the flame",
+  blazon:"on a chief gules a flame or",
+  draw:{type:"chief",tinct:"gules",charge:"flame",metal:"or"},
+  why:"for endowing the temple in perpetuity",
+  when:h=>h.flags.endowed||h.piety>=88},
+ /* --- in base: the private things --- */
+ {id:"rose",slot:"base",name:"the rose in base",
+  blazon:"in base a rose gules",
+  draw:{type:"base",charge:"rose",metal:"gules"},
+  why:"for a marriage made for no advantage whatever",
+  when:h=>h.flags.loveMatch},
+ {id:"chalice",slot:"base",name:"the chalice in base",
+  blazon:"in base a chalice or",
+  draw:{type:"base",charge:"chalice",metal:"or"},
+  why:"for opening the granary in the hungry year",
+  when:h=>h.flags.openGate},
+ {id:"eye",slot:"base",name:"the eye in base",
+  blazon:"in base an eye sable",
+  draw:{type:"base",charge:"eye",metal:"sable"},
+  why:"for saying aloud, on the record, what this house had hidden",
+  when:h=>(h.secrets||[]).some(s=>s.open)},
+ {id:"bezant",slot:"base",name:"the bezant in base",
+  blazon:"in base a bezant or",
+  draw:{type:"roundel",metal:"or"},
+  why:"for a chest that was, once, genuinely full",
+  when:h=>(h.peakCoffers||0)>=18},
+ /* --- the bordure: the enemy --- */
+ {id:"bordure",slot:"bordure",name:"the bordure of the enemy",
+  blazon:"within a bordure sable",
+  draw:{type:"bordure",tinct:"sable"},
+  why:"for breaking the house that had been the enemy for four generations",
+  when:h=>h.flags.rivalBroken},
+ /* --- marks of difference, and of shame --- */
+ {id:"label",slot:"label",name:"the label of the cadet",
+  blazon:"a label argent for difference",
+  draw:{type:"label",tinct:"argent"},
+  why:"because the line passed sideways, to a cousin",
+  when:h=>h.flags.cadet,mark:true},
+ {id:"baton",slot:"baton",name:"the baton sinister",
+  blazon:"a baton sinister sable",
+  draw:{type:"baton",tinct:"sable"},
+  why:"for a natural child acknowledged in the hall, in front of everybody",
+  when:h=>h.flags.bastardIn||h.flags.bastardOwned,mark:true},
+ {id:"point",slot:"point",name:"the point of attainder",
+  blazon:"a point sable, in token of attainder",
+  draw:{type:"point",tinct:"sable"},
+  why:"for being on the wrong side of the realm when it was counted",
+  when:h=>h.flags.attainted||h.flags.crownSeized,mark:true},
+];
+function hasAug(id){return (S.h.arms.augments||[]).some(a=>a.id===id);}
+function slotTaken(slot){return (S.h.arms.augments||[]).some(a=>a.slot===slot&&a.drawn);}
+function earnAug(A){
+  if(hasAug(A.id))return;
+  const drawn=!slotTaken(A.slot);
+  const draw=Object.assign({},A.draw);
+  let blaz=A.blazon;
+  if(A.id==="bordure"&&S.w.rival&&S.w.rival.arms){
+    draw.tinct=S.w.rival.arms.field;
+    blaz="within a bordure "+draw.tinct+", taken from the arms of "+S.w.rival.name;
+  }
+  const rec=Object.assign({},draw,{id:A.id,slot:A.slot,name:A.name,blazon:blaz,
+    why:A.why,y:S.w.year,g:S.c?S.c.gen:1,drawn,mark:!!A.mark});
+  S.h.arms.augments.push(rec);
+  d((A.mark?"Mark: ":"Augmentation: ")+A.name,A.mark?"dn":"up");
+  S.chron.push({y:S.w.year,g:S.c?S.c.gen:1,c:A.mark?"grim":"legend",
+    t:A.mark
+      ? `The heralds added ${blaz} to the arms of ${S.h.name} — ${A.why}. It cannot be taken off again.`
+      : `The heralds granted ${S.h.name} an augmentation of honour: ${blaz}, ${A.why}. Every shield this family carries will bear it from now on.`});
+  try{SND.chime();}catch(e){}
+}
+function checkAugs(){
+  if(!S||!S.h||!S.h.arms)return;
+  if(!S.h.arms.augments)S.h.arms.augments=[];
+  AUGS.forEach(A=>{ if(!hasAug(A.id)&&safe(()=>A.when(S.h),false))earnAug(A); });
+}
+function augRoll(){return (S.h.arms.augments||[]).filter(a=>a.name);}
+
+/* ================================================================
+   THE FORGE — you draw the arms yourself, once, at the beginning
+   ================================================================ */
+const DIV_NAMES={plain:"Plain",perPale:"Per pale",perFess:"Per fess",perBend:"Per bend",
+  chief:"A chief",chevron:"A chevron"};
+const TINCT_NAMES={gules:"Gules",azure:"Azure",sable:"Sable",vert:"Vert",purpure:"Purpure",
+  tenne:"Tenné",or:"Or",argent:"Argent"};
+const ALL_TINCT=["gules","azure","sable","vert","purpure","tenne","or","argent"];
+let FORGE=null;
+function openForge(house,name,g){
+  FORGE={house,name,g,arms:newArms()};
+  FORGE.arms.augments=[];
+  MODE="forge";
+}
+function forgeRandom(){
+  const keep=FORGE.arms.augments;
+  FORGE.arms=newArms();FORGE.arms.augments=keep;
+}
+function tinctSwatch(t,sel,attr,val){
+  const metal=(t==="or"||t==="argent");
+  return `<button class="sw ${sel?"on":""}" data-${attr}="${val}" title="${TINCT_NAMES[t]}">
+    <span style="background:${TINCT[t]}${metal?";box-shadow:inset 0 0 0 1px rgba(0,0,0,.25)":""}"></span>
+    <em>${TINCT_NAMES[t]}</em></button>`;
+}
+function forgeScreen(){
+  const a=FORGE.arms;
+  const divided=a.div!=="plain";
+  let x=`<div id="page"><div class="scene-eyebrow gold" style="text-align:center">The Herald</div>
+   <h2 class="scene-title gtitle">The arms of ${FORGE.house||"this house"}</h2>
+   <div class="forgeview">${armsSVG(a)}</div>
+   <p class="blazonline">${armsBlazon(a)}</p>
+   <p class="small center" style="margin-bottom:18px">These are yours from the first year to the last. They will change &mdash; but only by what this family does.</p>`;
+
+  x+=`<div class="rubric">The field</div><div class="swgrid">`;
+  ALL_TINCT.forEach(t=>{x+=tinctSwatch(t,a.field===t,"field",t);});
+  x+=`</div>`;
+
+  x+=`<div class="rubric">The division</div><div class="segs wrap">`;
+  Object.keys(DIV_NAMES).forEach(k=>{
+    x+=`<button class="sg ${a.div===k?"on":""}" data-div="${k}">${DIV_NAMES[k]}</button>`;});
+  x+=`</div>`;
+
+  if(divided){
+    x+=`<div class="rubric">The second tincture</div><div class="swgrid">`;
+    ALL_TINCT.forEach(t=>{x+=tinctSwatch(t,a.alt===t,"alt",t);});
+    x+=`</div>`;
+  }
+
+  x+=`<div class="rubric">The charge</div><div class="chgrid">`;
+  CHARGE_NAMES.forEach(c=>{
+    x+=`<button class="ch ${a.charge===c?"on":""}" data-charge="${c}" title="${CHARGE_WORD[c]}">
+      <svg viewBox="0 0 100 100"><path d="${CHARGES[c]}" fill="${a.charge===c?TINCT.or:"#2a2018"}"
+        stroke="rgba(0,0,0,.3)" stroke-width="1"/></svg></button>`;});
+  x+=`</div>`;
+
+  x+=`<div class="rubric">The charge's tincture</div><div class="swgrid">`;
+  ALL_TINCT.forEach(t=>{x+=tinctSwatch(t,a.metal===t,"metal",t);});
+  x+=`</div>`;
+
+  if(a.metal===a.field&&a.div==="plain")
+    x+=`<p class="small" style="color:var(--minium)">The herald points out, without looking up, that a charge of the same tincture as the field cannot be seen at a distance. It is your shield.</p>`;
+
+  x+=`<button class="turn" id="forgeTake" style="margin-top:22px">Take these arms</button>
+    <button class="turn ghost" id="forgeRand" style="margin-top:10px">Let the herald choose</button>
+    <button class="turn ghost" id="forgeBack" style="margin-top:10px">Back</button>
+    </div>`;
+  return x;
+}
+function bindForge(){
+  const re=()=>{SND.click();render();window.scrollTo({top:0,behavior:"instant"});};
+  document.querySelectorAll("[data-field]").forEach(b=>b.onclick=()=>{FORGE.arms.field=b.dataset.field;re();});
+  document.querySelectorAll("[data-alt]").forEach(b=>b.onclick=()=>{FORGE.arms.alt=b.dataset.alt;re();});
+  document.querySelectorAll("[data-div]").forEach(b=>b.onclick=()=>{FORGE.arms.div=b.dataset.div;re();});
+  document.querySelectorAll("[data-charge]").forEach(b=>b.onclick=()=>{FORGE.arms.charge=b.dataset.charge;re();});
+  document.querySelectorAll("[data-metal]").forEach(b=>b.onclick=()=>{FORGE.arms.metal=b.dataset.metal;re();});
+  const r=el("forgeRand");if(r)r.onclick=()=>{forgeRandom();re();};
+  const bk=el("forgeBack");if(bk)bk.onclick=()=>{MODE="title";SND.click();render();window.scrollTo(0,0);};
+  const t=el("forgeTake");if(t)t.onclick=()=>{
+    SND.wake();SND.fanfare();
+    const arms=JSON.parse(JSON.stringify(FORGE.arms));
+    newWorld(String(Date.now())+Math.random(),FORGE.house||null,FORGE.name||null,FORGE.g,arms);
+    MODE="play";S.tab="story";FORGE=null;save();render();window.scrollTo(0,0);
+  };
+}
 /* ================================================================
    PREFERENCES — kept apart from the save, so a reset does not lose them
    ================================================================ */
@@ -5264,6 +5549,7 @@ function choose(i){
   SND.wake();SND.click();
   DELTAS=[];
   const out=safe(()=>ch.do(G,S.pending.seed),"");
+  checkAugs();
   S.pending.deltas=DELTAS.slice();
   if(S.pending.contest&&!S.pending.contest.finished){try{SND.tension(2);}catch(e){}save();render();return;}
   if(S.pending.form&&!S.pending.form.done){save();render();return;}
@@ -5289,6 +5575,7 @@ function settleContest(){
   SND.page();try{SND.tension(0);}catch(e){}
   DELTAS=S.pending.deltas||[];
   const out=safe(()=>RESOLVERS[c.resolveId](G,c),"");
+  checkAugs();
   S.pending.deltas=DELTAS.slice();
   S.pending.outcome=out||"";
   syncSecrets();
@@ -5296,6 +5583,7 @@ function settleContest(){
 }
 function advance(){
   SND.page();
+  checkAugs();
   const c=S.c,p=S.pending;
   const scId=p?p.sceneId:"";
   const wasDeath=(scId==="death");
@@ -5325,18 +5613,21 @@ function toSuccession(){MODE="succession";S.pending=null;save();}
    ================================================================ */
 function render(){
   if(S&&MODE==="play"&&S.tab==="story"&&!S.pending&&!S.finished)openScene();
-  el("crest").hidden=(MODE==="title");
-  el("ledger").hidden=(MODE==="title"||MODE==="ending");
-  if(MODE==="title"||MODE==="ending")el("owes").hidden=true;
-  el("nav").hidden=(MODE==="title");
-  el("rail").style.display=MODE==="title"?"none":"flex";
-  document.querySelector("main").style.paddingLeft=MODE==="title"?"var(--pad)":"calc(var(--rail) + 14px)";
+  if(MODE==="forge"&&!FORGE)MODE="title";
+  const bare=(MODE==="title"||MODE==="forge");
+  el("crest").hidden=bare;
+  el("ledger").hidden=(bare||MODE==="ending");
+  if(bare||MODE==="ending")el("owes").hidden=true;
+  el("nav").hidden=bare;
+  el("rail").style.display=bare?"none":"flex";
+  document.querySelector("main").style.paddingLeft=bare?"var(--pad)":"calc(var(--rail) + 14px)";
   applyCfg();
   el("leaf").setAttribute("data-age",String(S?Math.min(4,(S.c?S.c.gen:S.anc.length||1)):1));
-  if(MODE!=="title"){drawCrest();drawLedger();drawRail();}
+  if(!bare){drawCrest();drawLedger();drawRail();}
   const t=S&&S.tab||"story";
   document.querySelectorAll("#nav button").forEach(b=>b.classList.toggle("on",b.dataset.tab===t));
   if(MODE==="title"){view().innerHTML=titleScreen();bindTitle();return;}
+  if(MODE==="forge"){view().innerHTML=forgeScreen();bindForge();return;}
   if(t!=="story"){view().innerHTML=panel(t);bindPanel();return;}
   if(MODE==="ending"){view().innerHTML=endingScreen();bindEnding();return;}
   if(MODE==="succession"){view().innerHTML=successionScreen();bindSuccession();return;}
@@ -5395,7 +5686,7 @@ function titleScreen(){
      <button class="sg ${NEWG==="m"?"on":""}" data-ng="m">A man</button>
      <button class="sg ${NEWG==="any"?"on":""}" data-ng="any">Let it fall</button>
    </div></div>
-   <button class="turn" id="btnNew">Begin the first life</button>
+   <button class="turn" id="btnNew">Design the arms</button>
    <p class="small center" style="margin-top:14px">Leave either blank and the chronicle will decide. Progress saves itself in this browser.</p>
    ${lib.length?`<div class="hr"></div><h2 style="font-family:var(--display);font-size:12px;letter-spacing:.2em;text-transform:uppercase;color:var(--minium);text-align:left">Houses you have already ended</h2>
      ${lib.map(l=>`<div class="gencard"><div class="sig">${armsSVG(l.arms)}</div><div class="bd"><div class="nm">${l.house} of ${l.seat}</div><div class="ep">${l.title}</div><div class="dt">ended ${l.year}</div></div></div>`).join("")}`:""}
@@ -5406,9 +5697,9 @@ function bindTitle(){
   document.querySelectorAll("[data-ng]").forEach(b=>b.onclick=()=>{NEWG=b.dataset.ng;SND.wake();SND.click();render();});
   el("btnNew").onclick=()=>{
     const hn=el("inHouse").value.trim(), nm=el("inName").value.trim();
-    SND.wake();
-    newWorld(String(Date.now())+Math.random(),hn||null,nm||null,NEWG);
-    MODE="play";S.tab="story";save();render();
+    SND.wake();SND.click();
+    openForge(hn,nm,NEWG);
+    render();window.scrollTo(0,0);
   };
 }
 
@@ -5605,7 +5896,20 @@ function panelHouse(){
   const c=S.c,h=S.h;
   let x=`<div class="panel"><h2>The Arms</h2>
    <div class="illum">${armsSVG(h.arms)}<div class="motto">&ldquo;${h.motto}&rdquo;</div></div>
-   <p class="small center">${armsBlazon(h.arms)}</p>`;
+   <p class="blazonline">${armsBlazon(h.arms)}</p>`;
+  const roll=augRoll();
+  if(roll.length){
+    x+=`<h2 style="margin-top:22px">The Roll of Arms</h2>
+      <p class="small">What this family has added to its shield, and what it added it for.</p>`;
+    roll.forEach(a=>{
+      x+=`<div class="rollitem ${a.mark?"mark":""} ${a.drawn===false?"unborne":""}">
+        <div class="ry">${a.y}</div>
+        <div class="rb"><div class="rbz">${cap(a.blazon)}</div>
+        <div class="rwy">${cap(a.why)}${a.drawn===false?" &middot; recorded in the roll, but the shield had no room for it":""}</div></div></div>`;
+    });
+  } else {
+    x+=`<p class="small">Nothing has been added to these arms yet. That is what the next four generations are for.</p>`;
+  }
   if(h.heirloom){
     const o=hl();
     x+=`<h2 style="margin-top:24px">The Heirloom</h2>
