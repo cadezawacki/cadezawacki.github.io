@@ -118,11 +118,14 @@ async function precacheModules(cache) {
 }
 
 // ---- Activate: purge old caches, claim clients ----
+// Cache Storage is shared origin-wide: /project/ runs its own service worker
+// with its own caches (cade-project-*, cade-cdn-*), and color.html keeps a
+// small inline-SW cache. Only ever delete THIS worker's versioned caches.
 self.addEventListener('activate', (e) => {
   e.waitUntil((async () => {
     const keys = await caches.keys();
     await Promise.all(
-      keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k))
+      keys.filter(k => /^cade-v\d+$/.test(k) && k !== CACHE_NAME).map(k => caches.delete(k))
     );
     await self.clients.claim();
   })());
@@ -137,6 +140,10 @@ self.addEventListener('fetch', (e) => {
 
   // Only handle http(s)
   if (!url.protocol.startsWith('http')) return;
+
+  // /project/ (Cade.project) registers its own service worker with that
+  // scope; leave its requests alone so the two apps never share cache entries.
+  if (url.origin === self.location.origin && url.pathname.startsWith('/project/')) return;
 
   // Firebase realtime DB needs live network; never intercept.
   if (url.hostname.includes('firebaseio.com')) return;

@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#0f9598">
+  <meta name="description" content="Cade.project — habit, goal, and task tracker">
+  <title>Cade.project</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path fill='%230f9598' d='M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z'/></svg>">
+  <link rel="stylesheet" href="styles.css">
+  <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path fill='%230f9598' d='M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z'/></svg>">
+</head>
+<body>
+
+  <!-- ═══ MENUBAR ═══ -->
+  <header class="menubar">
+    <div class="menubar-logo">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="3" width="7" height="7" rx="1"/>
+        <rect x="14" y="3" width="7" height="7" rx="1"/>
+        <rect x="14" y="14" width="7" height="7" rx="1"/>
+        <rect x="3" y="14" width="7" height="7" rx="1"/>
+      </svg>
+      <span>Cade.project</span>
+    </div>
+    <div class="menubar-spacer"></div>
+    <div class="menubar-actions">
+      <div id="syncStatus" class="sync-status offline" style="display:none;">
+        <span class="dot"></span>
+        <span class="label">Offline</span>
+      </div>
+      <button class="icon-btn" id="searchBtn" aria-label="Search"><i data-lucide="search" style="width:18px;height:18px"></i></button>
+      <button class="icon-btn" id="themeToggle" aria-label="Toggle theme"></button>
+    </div>
+  </header>
+
+  <!-- ═══ TAB BAR ═══ -->
+  <nav class="tabbar">
+    <button class="tab-item active" data-tab="today">
+      <i data-lucide="layout-dashboard"></i>
+      <span>Today</span>
+    </button>
+    <button class="tab-item" data-tab="projects">
+      <i data-lucide="folder-kanban"></i>
+      <span>Projects</span>
+    </button>
+    <button class="tab-item" data-tab="habits">
+      <i data-lucide="repeat"></i>
+      <span>Habits</span>
+    </button>
+    <button class="tab-item" data-tab="insights">
+      <i data-lucide="bar-chart-3"></i>
+      <span>Insights</span>
+    </button>
+    <button class="tab-item" data-tab="settings">
+      <i data-lucide="settings"></i>
+      <span>Settings</span>
+    </button>
+  </nav>
+
+  <!-- ═══ MAIN CONTENT ═══ -->
+  <main class="main-content" id="mainContent">
+    <!-- Views rendered here by JS -->
+  </main>
+
+  <!-- ═══ FAB ═══ -->
+  <button class="fab" id="fabBtn" aria-label="Add new"><i data-lucide="plus" style="width:24px;height:24px"></i></button>
+
+  <!-- ═══ MODAL ROOT ═══ -->
+  <div class="modal-overlay" id="modalOverlay">
+    <div class="modal-dialog" id="modalDialog">
+      <div class="modal-header">
+        <h2 class="modal-title" id="modalTitle">New Entry</h2>
+        <button class="icon-btn" id="modalClose" aria-label="Close"><i data-lucide="x" style="width:18px;height:18px"></i></button>
+      </div>
+      <div class="modal-body" id="modalBody"></div>
+      <div class="modal-footer" id="modalFooter"></div>
+    </div>
+  </div>
+
+  <!-- ═══ SLIDE PANEL (for timers, quick logs) ═══ -->
+  <div class="modal-overlay" id="panelOverlay" style="background: rgba(0,0,0,0.3);">
+    <div class="slide-panel" id="slidePanel">
+      <div class="slide-panel-header">
+        <h2 class="modal-title" id="panelTitle">Timer</h2>
+        <button class="icon-btn" id="panelClose" aria-label="Close"><i data-lucide="x" style="width:18px;height:18px"></i></button>
+      </div>
+      <div class="slide-panel-body" id="panelBody"></div>
+    </div>
+  </div>
+
+  <!-- ═══ TOAST ═══ -->
+  <div class="toast" id="toast"></div>
+
+  <!-- ═══ SCRIPTS ═══ -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+  <script src="state.js"></script>
+  <script src="sync.js"></script>
+  <script src="charts.js"></script>
+  <script src="timers.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
