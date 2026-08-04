@@ -147,6 +147,25 @@ const App = (() => {
   }
 
   // ═══════════════════════════════════════════════════════════
+  // COLLAPSIBLE SECTIONS — chevron in the header, state persisted
+  // ═══════════════════════════════════════════════════════════
+  function isCollapsed(key) {
+    return !!(State.getSettings().collapsedSections || {})[key];
+  }
+
+  function sectionToggle(key) {
+    return `<button class="icon-btn collapse-btn ${isCollapsed(key) ? 'collapsed' : ''}" onclick="App.toggleSection('${key}')"
+      aria-label="${isCollapsed(key) ? 'Expand' : 'Collapse'} section">${icon('chevron-down', 14)}</button>`;
+  }
+
+  function toggleSection(key) {
+    const cs = { ...(State.getSettings().collapsedSections || {}) };
+    cs[key] = !cs[key];
+    State.updateSettings({ collapsedSections: cs });
+    render();
+  }
+
+  // ═══════════════════════════════════════════════════════════
   // CELEBRATIONS — confetti on completion, milestone streaks
   // ═══════════════════════════════════════════════════════════
   // Bursts spawn from wherever the user last touched, so the reward
@@ -277,6 +296,30 @@ const App = (() => {
     return fired;
   }
 
+  // Scheduled check-in prompts (Settings → Reminders). A prompt_seen log
+  // is written the moment one fires — it syncs, so a check-in handled (or
+  // seen) on one device never pops up again on another.
+  function checkQuickLogPrompts() {
+    const times = (State.getSettings().quickLogPromptTimes || '')
+      .split(',').map(s => s.trim()).filter(t => /^\d{1,2}:\d{2}$/.test(t));
+    if (times.length === 0) return 0;
+    const today = State.todayStr();
+    const now = nowTime();
+    for (const t of times) {
+      if (now < t) continue;
+      if (timeToMin(now) - timeToMin(t) > 45) continue; // slot expired
+      if (State.getLogs({ type: 'prompt_seen', date: today }).some(l => l.time === t)) continue;
+      // already logged a mood at/after the slot (any device) → satisfied
+      if (State.getLogs({ date: today }).some(l => (l.type === 'emotion' || l.type === 'checkin') && logTimeOf(l) >= t)) continue;
+      if (document.getElementById('modalOverlay').classList.contains('active')) return 0; // never clobber a form
+      State.createLog({ type: 'prompt_seen', date: today, time: t, notes: '' });
+      openQuickLog();
+      toast('Scheduled check-in — how are you doing?');
+      return 1;
+    }
+    return 0;
+  }
+
   function notificationStatus() {
     if (typeof Notification === 'undefined') return 'unsupported';
     return Notification.permission; // 'granted' | 'denied' | 'default'
@@ -345,6 +388,7 @@ const App = (() => {
       case 'focus': main.innerHTML = renderFocus(); break;
       case 'planner': main.innerHTML = renderPlannerTab(); break;
       case 'scratch': main.innerHTML = renderScratch(); break;
+      case 'tools': main.innerHTML = renderTools(); break;
       case 'health': main.innerHTML = renderHealth(); break;
       case 'insights': main.innerHTML = renderInsights(); break;
       case 'history': main.innerHTML = renderHistory(); break;
@@ -465,22 +509,30 @@ const App = (() => {
       html += `<div class="section">
         <div class="section-header">
           <span class="section-title">Habits</span>
-          <button class="btn btn-ghost btn-sm" onclick="App.switchTab('habits')">${icon('chevron-right', 14)}All</button>
-        </div>
-        <div style="display:flex;flex-direction:column;gap:var(--space-2);">
-      `;
-      habits.forEach(h => {
-        const proj = h.projectId ? State.getProject(h.projectId) : null;
-        const s = State.calculateStreak(h.id);
-        html += renderEntryCard(h, proj, s);
-      });
-      html += `</div></div>`;
+          <span style="display:inline-flex;align-items:center;gap:var(--space-1);">
+            <button class="btn btn-ghost btn-sm" onclick="App.switchTab('habits')">${icon('chevron-right', 14)}All</button>
+            ${sectionToggle('todayHabits')}
+          </span>
+        </div>`;
+      if (!isCollapsed('todayHabits')) {
+        html += `<div style="display:flex;flex-direction:column;gap:var(--space-2);">`;
+        habits.forEach(h => {
+          const proj = h.projectId ? State.getProject(h.projectId) : null;
+          const s = State.calculateStreak(h.id);
+          html += renderEntryCard(h, proj, s);
+        });
+        html += `</div>`;
+      }
+      html += `</div>`;
     }
 
     // Today's tasks
     html += `<div class="section">
-      <div class="section-header"><span class="section-title">Today's Tasks</span></div>
-      <div style="display:flex;flex-direction:column;gap:var(--space-2);">
+      <div class="section-header"><span class="section-title">Today's Tasks</span>${sectionToggle('todayTasks')}</div>`;
+    if (isCollapsed('todayTasks')) {
+      html += `</div>`;
+    } else {
+    html += `<div style="display:flex;flex-direction:column;gap:var(--space-2);">
     `;
     if (todayTasks.length === 0 && overdueTasks.length === 0) {
       html += `<div class="empty-state"><i data-lucide="list-checks"></i><p class="empty-state-text">No tasks for today. Add one with +</p></div>`;
@@ -499,21 +551,25 @@ const App = (() => {
       });
     }
     html += `</div></div>`;
+    }
 
     // Upcoming (due in the future) — visible, just lower priority
     if (upcomingTasks.length > 0) {
       const MAXUP = 8;
       html += `<div class="section">
         <div class="section-header"><span class="section-title">Upcoming</span>
-          <span class="text-xs text-faint">due later — ranked below today's work</span>
+          <span style="display:inline-flex;align-items:center;gap:var(--space-1);">
+            <span class="text-xs text-faint">due later — ranked below today's work</span>
+            ${sectionToggle('todayUpcoming')}
+          </span>
         </div>
-        <div style="display:flex;flex-direction:column;gap:var(--space-2);">
+        ${isCollapsed('todayUpcoming') ? '' : `<div style="display:flex;flex-direction:column;gap:var(--space-2);">
           ${upcomingTasks.slice(0, MAXUP).map(t => {
             if (nextTask && t.id === nextTask.id) return '';
             return renderEntryCard(t, t.projectId ? State.getProject(t.projectId) : null);
           }).join('')}
           ${upcomingTasks.length > MAXUP ? `<p class="text-xs text-faint">+${upcomingTasks.length - MAXUP} more further out</p>` : ''}
-        </div>
+        </div>`}
       </div>`;
     }
 
@@ -1011,6 +1067,31 @@ const App = (() => {
     });
   }
 
+  // A project id plus every ancestor up the nesting chain
+  function withAncestors(id) {
+    const out = [id];
+    let p = State.getProject(id);
+    let guard = 0;
+    while (p?.parentId && guard++ < 10) {
+      if (!out.includes(p.parentId)) out.push(p.parentId);
+      p = State.getProject(p.parentId);
+    }
+    return out;
+  }
+
+  // Open first (by priority, then due date), finished at the bottom
+  const PRI_ORDER = { urgent: 0, high: 1, medium: 2, low: 3 };
+  function sortEntriesSmart(list) {
+    return [...list].sort((a, b) => {
+      if (!!a.completed !== !!b.completed) return a.completed ? 1 : -1;
+      const pa = PRI_ORDER[a.priority] ?? 2, pb = PRI_ORDER[b.priority] ?? 2;
+      if (pa !== pb) return pa - pb;
+      const da = a.dueDate || '9999', db = b.dueDate || '9999';
+      if (da !== db) return da.localeCompare(db);
+      return (a.title || '').localeCompare(b.title || '');
+    });
+  }
+
   // First open, non-archived task this entry is waiting on (null = ready)
   function blockingEntry(entry) {
     for (const bid of entry.blockedBy || []) {
@@ -1210,16 +1291,25 @@ const App = (() => {
       <div class="card stat-card"><span class="stat-label">${score != null ? 'Next-Best Score' : 'Status'}</span><span class="stat-value">${score != null ? score : (entry.completed ? 'Done' : 'Open')}</span></div>
     </div>`;
 
-    // Journal
+    // Journal (+ sub-task tally — local to this task, no global stats)
+    const todos = posts.filter(p => p.kind === 'todo');
+    const todosDone = todos.filter(p => p.done).length;
     html += `<div class="section">
       <div class="section-header"><span class="section-title">Journal</span>
-        <span class="text-xs text-faint">Ctrl+Enter to post · #tags inline · newest first</span>
+        <span style="display:inline-flex;align-items:center;gap:var(--space-2);">
+          ${todos.length ? `<span class="pill pill-accent" id="subtaskCount">${todosDone}/${todos.length} sub-tasks</span>` : ''}
+          <span class="text-xs text-faint">Ctrl+Enter to post · #tags inline</span>
+        </span>
       </div>
       <div class="card">
-        <textarea class="form-textarea" id="postInput" placeholder="Stream of consciousness… #idea #bug tags become pills"
+        <textarea class="form-textarea" id="postInput" placeholder="${postMode === 'todo' ? 'Sub-task for this task… checkable in the stream below' : 'Stream of consciousness… #idea #bug tags become pills'}"
           onkeydown="if((event.ctrlKey||event.metaKey)&&event.key==='Enter'){event.preventDefault();App.addPost('${entry.id}');}"></textarea>
-        <div style="display:flex;justify-content:flex-end;margin-top:var(--space-2);">
-          <button class="btn btn-primary btn-sm" onclick="App.addPost('${entry.id}')">${icon('pen-line', 13)}Post</button>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:var(--space-2);">
+          <div class="post-mode-toggle" style="display:inline-flex;gap:var(--space-1);">
+            <button class="filter-chip ${postMode === 'note' ? 'active' : ''}" data-mode="note" onclick="App.setPostMode('note')">${icon('pen-line', 11)}Post</button>
+            <button class="filter-chip ${postMode === 'todo' ? 'active' : ''}" data-mode="todo" onclick="App.setPostMode('todo')">${icon('check-square', 11)}Sub-task</button>
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="App.addPost('${entry.id}')">${icon(postMode === 'todo' ? 'plus' : 'pen-line', 13)}${postMode === 'todo' ? 'Add sub-task' : 'Post'}</button>
         </div>
       </div>
       <div id="postStream" style="margin-top:var(--space-3);display:flex;flex-direction:column;gap:var(--space-2);">
@@ -1233,8 +1323,10 @@ const App = (() => {
   function renderPost(post) {
     const d = new Date(post.createdAt);
     const stamp = `${d.toLocaleDateString('en', { month: 'short', day: 'numeric' })} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-    return `<div class="post-card">
+    const isTodo = post.kind === 'todo';
+    return `<div class="post-card ${isTodo ? 'post-todo' : ''} ${isTodo && post.done ? 'done' : ''}">
       <div class="post-meta">
+        ${isTodo ? `<span class="check-toggle post-check ${post.done ? 'checked' : ''}" onclick="App.togglePostTodo('${post.id}')" title="${post.done ? 'Not done' : 'Done'}"><i data-lucide="check"></i></span>` : ''}
         <span class="font-mono text-xs text-faint">${stamp}</span>
         ${post.trackedElapsed != null ? `<span class="pill pill-accent" title="Timer when posted">${icon('timer', 10)} ${Timers.formatTime(post.trackedElapsed)}</span>` : ''}
         <span style="flex:1"></span>
@@ -1255,6 +1347,8 @@ const App = (() => {
       entryId,
       date: State.todayStr(),
       notes: text,
+      kind: postMode, // 'note' | 'todo' (checkable sub-task)
+      done: false,
       tags: parsePostTags(text),
       trackedElapsed: tracking ? Math.round(tracking.elapsed) : null,
     });
@@ -1273,6 +1367,23 @@ const App = (() => {
   function deletePost(id) {
     State.deleteLog(id);
     render();
+  }
+
+  let postMode = 'note'; // journal composer: plain post or checkable sub-task
+
+  function setPostMode(m) {
+    const typed = document.getElementById('postInput')?.value || '';
+    postMode = m;
+    render(); // placeholder + button label change with the mode
+    const input = document.getElementById('postInput');
+    if (input) { input.value = typed; input.focus(); }
+  }
+
+  function togglePostTodo(id) {
+    const log = State.getLogs().find(l => l.id === id);
+    if (!log) return;
+    State.updateLog(id, { done: !log.done });
+    render(); // stream + counter refresh (task page keeps scroll well enough)
   }
 
   // Turn a journal post into a task — the new-task modal opens prefilled
@@ -1302,7 +1413,15 @@ const App = (() => {
 
   function renderProjects() {
     const projects = State.getProjects();
-    const allTags = State.getAllTags();
+    // Tag chips only offer tags actually used inside the current project
+    // scope (the active filter chip survives even if newly empty).
+    const scopeEntries = projectFilter
+      ? (projectFilter === 'none'
+        ? State.getEntries().filter(e => State.entryProjectIds(e).length === 0)
+        : State.getEntries({ projectId: projectFilter }))
+      : State.getEntries();
+    const usedTagNames = new Set(scopeEntries.flatMap(e => e.tags || []));
+    const allTags = State.getAllTags().filter(t => usedTagNames.has(t.name) || t.name === tagFilter);
     let html = `
       <div class="page-header">
         <div>
@@ -1317,7 +1436,8 @@ const App = (() => {
             <span class="cluster-sep"></span>
             <button class="icon-btn" onclick="App.openManageProjects()" aria-label="Manage projects" title="Manage projects — rename, nest, archive">${icon('settings-2', 16)}</button>
           </div>
-          <button class="btn btn-primary" onclick="App.openProjectModal()">${icon('plus', 14)}New Project</button>
+          <button class="btn btn-primary" onclick="App.openNewEntry('task')">${icon('plus', 14)}New Task</button>
+          <button class="btn btn-secondary" onclick="App.openProjectModal()">${icon('folder-plus', 14)}New Project</button>
         </div>
       </div>
     `;
@@ -1362,6 +1482,7 @@ const App = (() => {
     }
 
     const tagMatch = (e) => !tagFilter || (e.tags || []).includes(tagFilter);
+    const showDone = State.getSettings().showCompleted !== false;
 
     if (projectFilter) {
       // Project-specific view — a parent project rolls up everything in
@@ -1378,14 +1499,16 @@ const App = (() => {
           <span class="section-title">${proj ? `${icon(proj.icon, 13)} ${proj.name}` : 'Unassigned'}${hasChildren ? ' <span class="text-faint">incl. sub-projects</span>' : ''}${tagFilter ? ` · #${tagFilter}` : ''}</span>
           <span style="display:inline-flex;align-items:center;gap:var(--space-2);">
             <span class="stat-label">${entries.length} items</span>
+            <button class="filter-chip ${showDone ? '' : 'active'}" onclick="App.updateAppSetting('showCompleted', ${showDone ? 'false' : 'true'})" title="${showDone ? 'Hide' : 'Show'} finished tasks">${showDone ? 'Hide done' : 'Done hidden'}</button>
             ${proj ? `<button class="btn btn-ghost btn-sm" onclick="App.openProjectModal('${proj.id}')">${icon('pencil', 12)}Edit</button>` : ''}
           </span>
         </div>`;
 
-      // Group by type
+      // Group by type — open items up top by priority, done at the bottom
       const types = ['goal', 'task', 'habit', 'reminder', 'checkin'];
       types.forEach(type => {
-        const typeEntries = entries.filter(e => e.type === type);
+        let typeEntries = sortEntriesSmart(entries.filter(e => e.type === type));
+        if (!showDone && type !== 'habit') typeEntries = typeEntries.filter(e => !e.completed);
         if (typeEntries.length === 0) return;
         const typeIcons = { goal: 'target', task: 'list-checks', habit: 'repeat', reminder: 'clock', checkin: 'brain' };
         html += `<div class="section">
@@ -2807,6 +2930,11 @@ const App = (() => {
           ${notifState === 'default' ? `<button class="btn btn-secondary btn-sm" onclick="App.enableNotifications()">${icon('bell', 14)}Enable</button>`
             : `<span class="pill ${notifState === 'granted' ? 'pill-green' : 'pill-gray'}">${notifState}</span>`}
         </div>
+        <div class="setting-row">
+          <div><div class="setting-label">Scheduled Check-ins</div><div class="setting-desc">Prompt the Quick Log at set times, e.g. 09:00, 20:00. Handled once across all devices.</div></div>
+          <input type="text" class="form-input" style="width:160px;" placeholder="09:00, 20:00"
+            value="${settings.quickLogPromptTimes || ''}" onchange="App.updateAppSetting('quickLogPromptTimes', this.value)">
+        </div>
         <p class="text-xs text-faint" style="margin-top:var(--space-2);">Anything with a reminder time fires on its due day while the app is open — tasks and reminders alike. Undated reminders fire daily.</p>
       </div>
     </div>`;
@@ -2957,7 +3085,7 @@ const App = (() => {
     currentWeekdays = [];
     // Creating from inside a project folder → that project is the default
     const contextProject = (currentTab === 'projects' && projectFilter && projectFilter !== 'none') ? projectFilter : null;
-    currentProjects = contextProject ? [contextProject] : [];
+    currentProjects = contextProject ? withAncestors(contextProject) : [];
     showModal('New Entry', renderEntryForm(type, contextProject ? { projectId: contextProject } : {}), [
       `<button class="btn btn-secondary" onclick="App.closeModal()">Cancel</button>`,
       `<button class="btn btn-primary" onclick="App.saveEntry()">Create</button>`,
@@ -3210,12 +3338,9 @@ const App = (() => {
     } else {
       currentProjects = [...currentProjects, id];
       // a sub-project implies its ancestors — pull the chain in with it
-      let p = State.getProject(id);
-      let guard = 0;
-      while (p?.parentId && guard++ < 10) {
-        if (!currentProjects.includes(p.parentId)) currentProjects.push(p.parentId);
-        p = State.getProject(p.parentId);
-      }
+      withAncestors(id).forEach(pid => {
+        if (!currentProjects.includes(pid)) currentProjects.push(pid);
+      });
     }
     // ancestors may have just toggled on — sync every chip, not one
     document.querySelectorAll('.project-choice').forEach(el => {
@@ -3482,9 +3607,10 @@ const App = (() => {
     showModal('Manage Projects', `
       <div style="display:flex;flex-direction:column;gap:var(--space-2);">
         ${active.length === 0 ? '<p class="text-xs text-faint">No projects yet.</p>' : active.map(p => `
-          <div class="chain-link" style="justify-content:space-between;cursor:pointer;" onclick="App.openProjectModal('${p.id}')">
+          <div class="chain-link" style="justify-content:space-between;cursor:pointer;${p.depth ? `margin-left:${p.depth * 18}px;` : ''}" onclick="App.openProjectModal('${p.id}')">
             <span style="display:inline-flex;align-items:center;gap:var(--space-2);">
-              <span class="proj-dot" style="background:${p.color}"></span>${projectLabel(p)}
+              ${p.depth ? `<span class="text-faint" style="font-family:var(--font-mono);">└</span>` : ''}
+              <span class="proj-dot" style="background:${p.color}"></span>${p.name}
             </span>
             <span class="text-xs text-faint">edit ›</span>
           </div>`).join('')}
@@ -3954,6 +4080,111 @@ const App = (() => {
   // SEARCH — fuzzy find projects, tasks, habits, goals
   // ═══════════════════════════════════════════════════════════
   // ═══════════════════════════════════════════════════════════
+  // TOOLS — small utilities & decision makers
+  // ═══════════════════════════════════════════════════════════
+  const toolResults = {};
+  let toolListText = '';
+
+  const NAME_ADJ = ['brisk', 'quantum', 'mellow', 'crimson', 'turbo', 'lunar', 'feral', 'cosmic', 'rusty', 'neon',
+    'silent', 'mighty', 'hollow', 'swift', 'amber', 'wild', 'patient', 'electric', 'foggy', 'golden',
+    'iron', 'jolly', 'keen', 'nimble', 'velvet', 'zesty'];
+  const NAME_NOUN = ['otter', 'falcon', 'badger', 'comet', 'harbor', 'thicket', 'ember', 'summit', 'walrus', 'prism',
+    'canyon', 'beacon', 'mango', 'tundra', 'zephyr', 'anchor', 'bramble', 'cinder', 'dynamo', 'fjord',
+    'gecko', 'lantern', 'meadow', 'nebula'];
+
+  function renderTools() {
+    const r = toolResults;
+    return `
+      <div class="page-header">
+        <div>
+          <h1 class="page-title">Tools</h1>
+          <p class="page-subtitle">Tiny utilities and tie-breakers</p>
+        </div>
+      </div>
+      <div class="grid-2 section" style="align-items:start;">
+        <div class="card tool-card">
+          <div class="section-header"><span class="section-title">${icon('circle-dollar-sign', 14)} Coin Flip</span></div>
+          <div class="tool-result ${r.coin ? 'live' : ''}" id="toolCoinOut">${r.coin || '—'}</div>
+          <button class="btn btn-primary" onclick="App.toolCoin()">${icon('rotate-cw', 14)}Flip</button>
+        </div>
+        <div class="card tool-card">
+          <div class="section-header"><span class="section-title">${icon('dices', 14)} Dice</span></div>
+          <div class="tool-result ${r.dice ? 'live' : ''}" id="toolDiceOut">${r.dice || '—'}</div>
+          <div style="display:flex;gap:var(--space-2);justify-content:center;">
+            ${[4, 6, 12, 20, 100].map(n => `<button class="btn btn-secondary btn-sm" onclick="App.toolDice(${n})">d${n}</button>`).join('')}
+          </div>
+        </div>
+        <div class="card tool-card">
+          <div class="section-header"><span class="section-title">${icon('list-checks', 14)} Pick From List</span></div>
+          <textarea class="form-textarea" id="toolListInput" rows="5" placeholder="One option per line…"
+            oninput="App.toolListChanged(this.value)">${escHtml(toolListText)}</textarea>
+          <div class="tool-result ${r.pick ? 'live' : ''}" id="toolPickOut">${r.pick ? escHtml(r.pick) : '—'}</div>
+          <button class="btn btn-primary" onclick="App.toolPick()">${icon('shuffle', 14)}Pick one</button>
+        </div>
+        <div class="card tool-card">
+          <div class="section-header"><span class="section-title">${icon('github', 14)} Repo Name</span></div>
+          <div class="tool-result ${r.name ? 'live' : ''}" id="toolNameOut">${r.name || '—'}</div>
+          <div style="display:flex;gap:var(--space-2);justify-content:center;">
+            <button class="btn btn-primary" onclick="App.toolName()">${icon('sparkles', 14)}Generate</button>
+            ${r.name ? `<button class="btn btn-secondary" onclick="App.toolCopy('name')">${icon('copy', 14)}Copy</button>` : ''}
+          </div>
+        </div>
+        <div class="card tool-card">
+          <div class="section-header"><span class="section-title">${icon('hash', 14)} Random Number</span></div>
+          <div class="grid-2">
+            <input type="number" class="form-input" id="toolRandMin" value="${r.randMin ?? 1}" placeholder="min">
+            <input type="number" class="form-input" id="toolRandMax" value="${r.randMax ?? 100}" placeholder="max">
+          </div>
+          <div class="tool-result ${r.rand != null ? 'live' : ''}" id="toolRandOut">${r.rand ?? '—'}</div>
+          <button class="btn btn-primary" onclick="App.toolRandom()">${icon('shuffle', 14)}Roll</button>
+        </div>
+        <div class="card tool-card">
+          <div class="section-header"><span class="section-title">${icon('fingerprint', 14)} UUID</span></div>
+          <div class="tool-result mono-sm ${r.uuid ? 'live' : ''}" id="toolUuidOut">${r.uuid || '—'}</div>
+          <div style="display:flex;gap:var(--space-2);justify-content:center;">
+            <button class="btn btn-primary" onclick="App.toolUuid()">${icon('sparkles', 14)}Generate</button>
+            ${r.uuid ? `<button class="btn btn-secondary" onclick="App.toolCopy('uuid')">${icon('copy', 14)}Copy</button>` : ''}
+          </div>
+        </div>
+      </div>`;
+  }
+
+  function toolCoin() { toolResults.coin = Math.random() < 0.5 ? 'HEADS' : 'TAILS'; render(); }
+  function toolDice(n) { toolResults.dice = `d${n} → ${1 + Math.floor(Math.random() * n)}`; render(); }
+  function toolListChanged(v) { toolListText = v; }
+  function toolPick() {
+    const lines = toolListText.split('\n').map(l => l.trim()).filter(Boolean);
+    toolResults.pick = lines.length ? lines[Math.floor(Math.random() * lines.length)] : null;
+    if (!toolResults.pick) { toast('Add some options first'); return; }
+    render();
+  }
+  function toolName() {
+    toolResults.name = `${NAME_ADJ[Math.floor(Math.random() * NAME_ADJ.length)]}-${NAME_NOUN[Math.floor(Math.random() * NAME_NOUN.length)]}`;
+    render();
+  }
+  function toolRandom() {
+    const min = parseInt(document.getElementById('toolRandMin')?.value) || 0;
+    const max = parseInt(document.getElementById('toolRandMax')?.value) || 100;
+    toolResults.randMin = min; toolResults.randMax = max;
+    toolResults.rand = min + Math.floor(Math.random() * (Math.max(max, min) - min + 1));
+    render();
+  }
+  function toolUuid() {
+    toolResults.uuid = crypto.randomUUID ? crypto.randomUUID()
+      : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+        const r = Math.random() * 16 | 0;
+        return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+      });
+    render();
+  }
+  async function toolCopy(key) {
+    const v = toolResults[key];
+    if (!v) return;
+    try { await navigator.clipboard.writeText(v); toast('Copied'); }
+    catch (e) { toast('Copy failed'); }
+  }
+
+  // ═══════════════════════════════════════════════════════════
   // SCRATCHPAD — braindump now, promote to tasks later
   // ═══════════════════════════════════════════════════════════
   function timeAgo(iso) {
@@ -3977,9 +4208,10 @@ const App = (() => {
       <div class="section">
         <div class="card scratch-input-card">
           <textarea class="form-input input-grow" id="scratchInput" rows="1" autocomplete="off"
-            placeholder="Braindump… Enter to capture, Shift+Enter for a new line. #tags and dates survive the trip to task."
-            oninput="App.autoGrow(this)"
-            onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();App.addScratchIdea();}"></textarea>
+            placeholder="Braindump… Enter captures, Shift+Enter new line. #tags, dates and /project survive the trip to task."
+            oninput="App.scratchInputChanged(this)"
+            onkeydown="App.scratchKeydown(event)"></textarea>
+          <div class="scratch-ac" id="scratchAc" style="display:none;"></div>
         </div>
       </div>`;
 
@@ -4007,6 +4239,52 @@ const App = (() => {
         </div>`).join('')}
     </div></div>`;
     return html;
+  }
+
+  // /project autocomplete — typing "/wo" offers matching projects; the
+  // chosen token routes the idea into that project when promoted to a task
+  function scratchInputChanged(el) {
+    autoGrow(el);
+    const ac = document.getElementById('scratchAc');
+    if (!ac) return;
+    const m = /(^|\s)\/([\w-]*)$/.exec(el.value);
+    if (!m) { ac.style.display = 'none'; ac.innerHTML = ''; return; }
+    const q = m[2].toLowerCase();
+    const matches = State.getProjects().filter(p => p.name.toLowerCase().includes(q)).slice(0, 6);
+    if (matches.length === 0) { ac.style.display = 'none'; ac.innerHTML = ''; return; }
+    ac.style.display = 'flex';
+    ac.innerHTML = matches.map((p, i) => `
+      <button class="scratch-ac-item ${i === 0 ? 'active' : ''}" onclick="App.scratchAcPick('${p.id}')">
+        <span class="proj-dot" style="background:${p.color}"></span>${p.name}
+      </button>`).join('');
+  }
+
+  function scratchAcPick(id) {
+    const p = State.getProject(id);
+    const el = document.getElementById('scratchInput');
+    if (!p || !el) return;
+    const token = p.name.includes(' ') ? `/"${p.name}" ` : `/${p.name} `;
+    el.value = el.value.replace(/(^|\s)\/([\w-]*)$/, `$1${token}`);
+    const ac = document.getElementById('scratchAc');
+    if (ac) { ac.style.display = 'none'; ac.innerHTML = ''; }
+    el.focus();
+    autoGrow(el);
+  }
+
+  function scratchKeydown(e) {
+    const ac = document.getElementById('scratchAc');
+    const acOpen = ac && ac.style.display !== 'none';
+    if (e.key === 'Tab' && acOpen) {
+      e.preventDefault();
+      ac.querySelector('.scratch-ac-item')?.click();
+      return;
+    }
+    if (e.key === 'Escape' && acOpen) { ac.style.display = 'none'; return; }
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      if (acOpen) { ac.querySelector('.scratch-ac-item')?.click(); return; }
+      addScratchIdea();
+    }
   }
 
   function addScratchIdea() {
@@ -4862,9 +5140,12 @@ const App = (() => {
     Sync.autoConnect();
     Sync.updateStatus();
 
-    // Reminder engine — fires remindTime entries while the app is open
-    setInterval(checkReminders, 30000);
-    setTimeout(checkReminders, 3000);
+    // Running timers survive page refreshes — resume before first paint
+    if (typeof Timers !== 'undefined' && Timers.restore) Timers.restore();
+
+    // Reminder engine + scheduled check-ins — while the app is open
+    setInterval(() => { checkReminders(); checkQuickLogPrompts(); }, 30000);
+    setTimeout(() => { checkReminders(); checkQuickLogPrompts(); }, 3000);
 
     // PWA shortcut deep links (manifest shortcuts / bookmarks)
     const action = new URLSearchParams(location.search).get('action');
@@ -4909,6 +5190,10 @@ const App = (() => {
     openPasteImport, previewPasteImport, runPasteImport,
     hardRefresh, setPixelsMode, renderAutoPlanPreview,
     addScratchIdea, scratchToTask, copyScratchIdea, deleteScratchIdea, clearScratchAll,
+    scratchInputChanged, scratchAcPick, scratchKeydown,
+    toggleSection, checkQuickLogPrompts,
+    setPostMode, togglePostTodo,
+    toolCoin, toolDice, toolPick, toolName, toolRandom, toolUuid, toolCopy, toolListChanged,
     logFood, deleteFoodLog, useShortcutHealth,
     toggleEntry, deleteEntry, archiveEntry, unarchiveEntry, startTimerForTask,
     selectEntryCard, setWorkingProject, toggleSidebar,

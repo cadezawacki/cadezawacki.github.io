@@ -56,8 +56,8 @@ const Palette = (() => {
     // #tags
     text = text.replace(/\s#([\w-]+)/g, (_, t) => { out.tags.push(t.toLowerCase()); return ' '; });
 
-    // @project — quoted for multi-word names, else single token
-    text = text.replace(/\s@(?:"([^"]+)"|([\w&-]+))/g, (m, quoted, bare) => {
+    // @project or /project — quoted for multi-word names, else single token
+    text = text.replace(/\s[@/](?:"([^"]+)"|([\w&-]+))/g, (m, quoted, bare) => {
       const q = (quoted || bare).toLowerCase();
       const projects = State.getProjects();
       let best = projects.find(p => p.name.toLowerCase() === q)
@@ -195,8 +195,8 @@ const Palette = (() => {
   // ═══════════════════════════════════════════════════════════
   const TAB_META = {
     today: 'layout-dashboard', projects: 'folder-kanban', habits: 'repeat',
-    focus: 'crosshair', planner: 'calendar-days', scratch: 'lightbulb', health: 'apple',
-    insights: 'bar-chart-3', history: 'history', settings: 'settings',
+    focus: 'crosshair', planner: 'calendar-days', scratch: 'lightbulb', tools: 'wrench',
+    health: 'apple', insights: 'bar-chart-3', history: 'history', settings: 'settings',
   };
   const TYPE_ICONS = { task: 'list-checks', habit: 'repeat', goal: 'target', note: 'sticky-note', reminder: 'clock' };
 

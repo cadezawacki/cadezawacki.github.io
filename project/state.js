@@ -40,6 +40,10 @@ const State = (() => {
         stopTimers: 's',
       },
       maxNavTimers: 2,         // live timers shown in the header nav
+      timerState: null,        // persisted clock + sessions (survive refresh)
+      showCompleted: true,     // finished tasks visible in project lists
+      collapsedSections: {},   // Today sections the user folded away
+      quickLogPromptTimes: '', // "09:00, 20:00" — scheduled check-in prompts
       quickShortcuts: [
         { id: 'qs-coffee', label: 'Cup of coffee', emoji: '☕', calories: 5, meal: 'snack' },
         { id: 'qs-water', label: 'Glass of water', emoji: '💧', calories: null, meal: null },
