@@ -3068,3 +3068,14 @@ textarea.input-grow,
   cursor: pointer;
 }
 .scratch-ac-item:hover, .scratch-ac-item.active { background: var(--accent-tint); }
+
+/* tool result slot-machine spin */
+.tool-result.spinning { color: var(--text-muted); }
+.tool-result.settled { animation: toolPop 0.28s ease; }
+@keyframes toolPop {
+  0% { transform: scale(1.14); }
+  100% { transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tool-result.settled { animation: none; }
+}

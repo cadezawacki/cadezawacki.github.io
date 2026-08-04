@@ -4149,33 +4149,86 @@ const App = (() => {
       </div>`;
   }
 
-  function toolCoin() { toolResults.coin = Math.random() < 0.5 ? 'HEADS' : 'TAILS'; render(); }
-  function toolDice(n) { toolResults.dice = `d${n} → ${1 + Math.floor(Math.random() * n)}`; render(); }
+  // Slot-machine settle: the result element rapid-cycles candidate values,
+  // decelerating until the real answer lands with a little pop. A fresh
+  // click supersedes any spin already in flight.
+  let spinToken = 0;
+  function spinResult(elId, sample, done) {
+    const el = document.getElementById(elId);
+    const skip = !el
+      || State.getSettings().celebrations === false
+      || window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    if (skip) {
+      done();
+      return;
+    }
+    const token = ++spinToken;
+    el.classList.remove('settled');
+    el.classList.add('spinning');
+    const t0 = performance.now();
+    const DURATION = 900;
+    let lastFlip = -Infinity;
+    const step = (now) => {
+      if (token !== spinToken) return; // superseded by a newer spin
+      const t = (now - t0) / DURATION;
+      if (t >= 1 || !document.getElementById(elId)) {
+        done();
+        requestAnimationFrame(() => document.getElementById(elId)?.classList.add('settled'));
+        return;
+      }
+      // flips start ~50ms apart and stretch to ~300ms — the deceleration
+      if (now - lastFlip >= 50 + 250 * t * t) {
+        lastFlip = now;
+        el.textContent = sample();
+      }
+      requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  }
+
+  function toolCoin() {
+    const final = Math.random() < 0.5 ? 'HEADS' : 'TAILS';
+    spinResult('toolCoinOut', () => (Math.random() < 0.5 ? 'HEADS' : 'TAILS'), () => {
+      toolResults.coin = final; render();
+    });
+  }
+  function toolDice(n) {
+    const final = `d${n} → ${1 + Math.floor(Math.random() * n)}`;
+    spinResult('toolDiceOut', () => `d${n} → ${1 + Math.floor(Math.random() * n)}`, () => {
+      toolResults.dice = final; render();
+    });
+  }
   function toolListChanged(v) { toolListText = v; }
   function toolPick() {
     const lines = toolListText.split('\n').map(l => l.trim()).filter(Boolean);
-    toolResults.pick = lines.length ? lines[Math.floor(Math.random() * lines.length)] : null;
-    if (!toolResults.pick) { toast('Add some options first'); return; }
-    render();
+    if (lines.length === 0) { toast('Add some options first'); return; }
+    const final = lines[Math.floor(Math.random() * lines.length)];
+    if (lines.length < 2) { toolResults.pick = final; render(); return; } // nothing to shuffle
+    spinResult('toolPickOut', () => lines[Math.floor(Math.random() * lines.length)], () => {
+      toolResults.pick = final; render();
+    });
   }
+  const randomName = () => `${NAME_ADJ[Math.floor(Math.random() * NAME_ADJ.length)]}-${NAME_NOUN[Math.floor(Math.random() * NAME_NOUN.length)]}`;
   function toolName() {
-    toolResults.name = `${NAME_ADJ[Math.floor(Math.random() * NAME_ADJ.length)]}-${NAME_NOUN[Math.floor(Math.random() * NAME_NOUN.length)]}`;
-    render();
+    const final = randomName();
+    spinResult('toolNameOut', randomName, () => { toolResults.name = final; render(); });
   }
   function toolRandom() {
     const min = parseInt(document.getElementById('toolRandMin')?.value) || 0;
-    const max = parseInt(document.getElementById('toolRandMax')?.value) || 100;
+    const max = Math.max(parseInt(document.getElementById('toolRandMax')?.value) || 100, min);
     toolResults.randMin = min; toolResults.randMax = max;
-    toolResults.rand = min + Math.floor(Math.random() * (Math.max(max, min) - min + 1));
-    render();
+    const roll = () => min + Math.floor(Math.random() * (max - min + 1));
+    const final = roll();
+    spinResult('toolRandOut', () => String(roll()), () => { toolResults.rand = final; render(); });
   }
+  const randomUuid = () => (crypto.randomUUID ? crypto.randomUUID()
+    : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+      const r = Math.random() * 16 | 0;
+      return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+    }));
   function toolUuid() {
-    toolResults.uuid = crypto.randomUUID ? crypto.randomUUID()
-      : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
-        const r = Math.random() * 16 | 0;
-        return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
-      });
-    render();
+    const final = randomUuid();
+    spinResult('toolUuidOut', randomUuid, () => { toolResults.uuid = final; render(); });
   }
   async function toolCopy(key) {
     const v = toolResults[key];
