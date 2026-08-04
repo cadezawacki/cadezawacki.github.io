@@ -179,7 +179,8 @@ const Palette = (() => {
     const type = opts.forceType || p.type;
     const partial = { type, title: p.title };
     if (p.tags.length) { p.tags.forEach(t => State.getOrCreateTag(t)); partial.tags = p.tags; }
-    if (p.projectId) { partial.projectId = p.projectId; partial.projectIds = [p.projectId]; }
+    const pid = p.projectId || opts.defaultProjectId || null;
+    if (pid) { partial.projectId = pid; partial.projectIds = [pid]; }
     if (p.priority) partial.priority = p.priority;
     if (p.estimateMinutes) partial.estimateMinutes = p.estimateMinutes;
     if (p.dueDate) partial.dueDate = p.dueDate;
@@ -209,6 +210,9 @@ const Palette = (() => {
       { icon: 'timer', title: 'Open timer window', kw: 'pomodoro stopwatch countdown clock', run: () => Timers.toggleWindow() },
       { icon: 'square', title: 'Stop all timers', kw: 'pause halt tracking', run: () => { Timers.stopAll(); App.render(); } },
       { icon: 'clipboard-copy', title: 'Copy filtered tasks for LLM', kw: 'export json clipboard ai', run: () => App.exportForLLM() },
+      { icon: 'clipboard-paste', title: 'Paste / import tasks', kw: 'bulk import list markdown llm', run: () => App.openPasteImport() },
+      { icon: 'list-todo', title: 'Daily review — triage overdue', kw: 'overdue reschedule sweep inbox', run: () => App.openDailyReview() },
+      { icon: 'wand-2', title: 'Auto-plan today', kw: 'schedule time block planner estimates', run: () => App.openAutoPlan() },
       { icon: 'sun-moon', title: 'Toggle light/dark theme', kw: 'dark light mode appearance', run: () => App.toggleTheme() },
       { icon: 'folder-cog', title: 'Manage projects', kw: 'rename nest archive project', run: () => App.openManageProjects() },
       { icon: 'tags', title: 'Manage tags', kw: 'rename color tag', run: () => App.openManageTags() },

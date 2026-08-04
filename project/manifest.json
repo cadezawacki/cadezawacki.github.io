@@ -7,6 +7,11 @@
   "background_color": "#141312",
   "theme_color": "#0f9598",
   "orientation": "portrait-primary",
+  "shortcuts": [
+    { "name": "New task", "url": "./?action=new-task" },
+    { "name": "Quick log", "url": "./?action=quick-log" },
+    { "name": "Daily review", "url": "./?action=review" }
+  ],
   "icons": [
     {
       "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><rect x='3' y='3' width='7' height='7' rx='1' fill='%230f9598'/><rect x='14' y='3' width='7' height='7' rx='1' fill='%230f9598'/><rect x='14' y='14' width='7' height='7' rx='1' fill='%230f9598'/><rect x='3' y='14' width='7' height='7' rx='1' fill='%230f9598'/></svg>",

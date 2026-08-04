@@ -88,6 +88,9 @@ const State = (() => {
       if (e.estimateMinutes === undefined) e.estimateMinutes = null;
       if (e.remindTime === undefined) e.remindTime = null;
       if (e.actualMinutes === undefined) e.actualMinutes = null;
+      if (e.lastNotified === undefined) e.lastNotified = null;
+      if (e.spawnedNextId === undefined) e.spawnedNextId = null;
+      if (!Array.isArray(e.blockedBy)) e.blockedBy = [];
       if (!Array.isArray(e.projectIds)) e.projectIds = e.projectId ? [e.projectId] : [];
     });
     (d.tags || []).forEach(t => {
@@ -176,6 +179,8 @@ const State = (() => {
     projectIds: [],    // multi-project membership; projectId stays = primary
     remindTime: null,  // HH:MM for reminders
     actualMinutes: null, // manual override of tracked time (estimate-vs-actual)
+    lastNotified: null,  // date a reminder notification last fired (once per day)
+    spawnedNextId: null, // recurring: id of the next occurrence already spawned
   };
 
   function createEntry(partial) {
@@ -265,6 +270,65 @@ const State = (() => {
     return data.logs.some(l => l.entryId === entryId && l.type === 'habit_completion' && l.date === today);
   }
 
+  // Next due date for a recurring task/reminder. Advances from the current
+  // due date but always lands strictly in the future — an overdue weekly
+  // task completed a month late doesn't backfill four stale occurrences.
+  function nextOccurrenceDate(fromDate, recurrence) {
+    if (!recurrence?.type) return null;
+    const today = todayStr();
+    const d = new Date((fromDate || today) + 'T00:00');
+    const step = () => {
+      switch (recurrence.type) {
+        case 'daily': d.setDate(d.getDate() + 1); break;
+        case 'weekdays':
+          do { d.setDate(d.getDate() + 1); } while (d.getDay() === 0 || d.getDay() === 6);
+          break;
+        case 'weekly': d.setDate(d.getDate() + 7); break;
+        case 'monthly': {
+          const day = new Date((fromDate || today) + 'T00:00').getDate();
+          d.setDate(1);
+          d.setMonth(d.getMonth() + 1);
+          const last = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+          d.setDate(Math.min(day, last)); // Jan 31 → Feb 28, not Mar 3
+          break;
+        }
+        default: return false;
+      }
+      return true;
+    };
+    if (!step()) return null;
+    let guard = 0;
+    while (dateStr(d) <= today && guard++ < 400) { if (!step()) return null; }
+    return dateStr(d);
+  }
+
+  // Completing a recurring task/reminder spawns its next occurrence as a
+  // fresh entry — history keeps the completed one, journals stay attached.
+  function spawnNextOccurrence(entry) {
+    if (!entry.recurrence || entry.type === 'habit') return null;
+    // guard: toggling done/undone/done again must not duplicate
+    if (entry.spawnedNextId && getEntry(entry.spawnedNextId)) return null;
+    const nextDue = nextOccurrenceDate(entry.dueDate, entry.recurrence);
+    if (!nextDue) return null;
+    const clone = createEntry({
+      type: entry.type,
+      title: entry.title,
+      description: entry.description,
+      projectId: entry.projectId,
+      projectIds: [...(entry.projectIds || [])],
+      tags: [...(entry.tags || [])],
+      effort: entry.effort,
+      priority: entry.priority,
+      estimateMinutes: entry.estimateMinutes,
+      remindTime: entry.remindTime,
+      recurrence: structuredClone(entry.recurrence),
+      blockedBy: [...(entry.blockedBy || [])],
+      dueDate: nextDue,
+    });
+    updateEntry(entry.id, { spawnedNextId: clone.id });
+    return clone;
+  }
+
   function toggleComplete(id) {
     const entry = getEntry(id);
     if (!entry) return;
@@ -283,6 +347,7 @@ const State = (() => {
     } else {
       const completed = !entry.completed;
       updateEntry(id, { completed, completedAt: completed ? new Date().toISOString() : null });
+      if (completed) spawnNextOccurrence(getEntry(id));
     }
   }
 
@@ -944,6 +1009,7 @@ const State = (() => {
     createEntry, updateEntry, deleteEntry, getEntry, getEntries, toggleComplete, isHabitDoneToday,
     archiveEntry, unarchiveEntry, toggleHabitOnDate, cycleHabitOnDate,
     habitStatusOn, isHabitScheduledOn, resetData,
+    nextOccurrenceDate,
     entryProjectIds, getProjectSubtreeIds,
     createProject, updateProject, deleteProject, getProject, getProjects,
     archiveProject, unarchiveProject, wouldCycleProject,

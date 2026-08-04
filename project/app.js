@@ -232,6 +232,45 @@ const App = (() => {
   }
 
   // ═══════════════════════════════════════════════════════════
+  // REMINDERS THAT FIRE — remindTime was decorative until now
+  // ═══════════════════════════════════════════════════════════
+  // Checked every 30s while the app is open: in-app toast always,
+  // system notification when permission is granted. Fires once per day
+  // per entry (lastNotified), so reopening the app doesn't re-nag.
+  function checkReminders() {
+    const today = State.todayStr();
+    const now = nowTime();
+    let fired = 0;
+    State.getEntries().forEach(e => {
+      if (e.completed || !e.remindTime) return;
+      // dated entries fire on their day; undated reminders fire every day
+      const dueToday = e.dueDate === today || (e.type === 'reminder' && !e.dueDate);
+      if (!dueToday || e.remindTime > now || e.lastNotified === today) return;
+      State.updateEntry(e.id, { lastNotified: today });
+      fired++;
+      toast(`⏰ ${e.title} — ${e.remindTime}`);
+      if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+        try {
+          new Notification('Cade.project', { body: `${e.title} — ${e.remindTime}`, tag: e.id });
+        } catch (err) { /* some platforms require SW-based notifications */ }
+      }
+    });
+    return fired;
+  }
+
+  function notificationStatus() {
+    if (typeof Notification === 'undefined') return 'unsupported';
+    return Notification.permission; // 'granted' | 'denied' | 'default'
+  }
+
+  async function enableNotifications() {
+    if (typeof Notification === 'undefined') { toast('Notifications not supported here'); return; }
+    const perm = await Notification.requestPermission();
+    toast(perm === 'granted' ? 'Notifications on — reminders will pop up' : 'Notifications blocked — in-app toasts still work');
+    render();
+  }
+
+  // ═══════════════════════════════════════════════════════════
   // THEME
   // ═══════════════════════════════════════════════════════════
   function initTheme() {
@@ -345,7 +384,8 @@ const App = (() => {
     const workingProject = State.getSettings().workingProject || null;
     const wpSubtree = workingProject ? State.getProjectSubtreeIds(workingProject) : null;
     const inWorking = (t) => !wpSubtree || State.entryProjectIds(t).some(pid => wpSubtree.includes(pid));
-    const nextPool = [...openToday, ...upcomingTasks].filter(inWorking);
+    // blocked tasks can't be the next best thing to do — they're waiting
+    const nextPool = [...openToday, ...upcomingTasks].filter(inWorking).filter(t => !isBlocked(t));
     const nextTask = [...nextPool].sort((a, b) => taskScore(b) - taskScore(a))[0];
     const projects = State.getProjects();
 
@@ -360,6 +400,7 @@ const App = (() => {
           <p class="page-subtitle">${openToday.length + overdueTasks.length} tasks today · ${habits.filter(h => State.isHabitScheduledOn(h.id, today) && !State.habitStatusOn(h.id, today)).length} habits pending</p>
         </div>
         <div style="display:flex;gap:var(--space-2);">
+          ${overdueTasks.length > 0 ? `<button class="btn btn-secondary review-btn" onclick="App.openDailyReview()" title="Triage everything overdue — one decision per item">${icon('list-todo', 16)}Review<span class="review-count">${overdueTasks.length}</span></button>` : ''}
           <button class="btn btn-secondary" onclick="Timers.openPanel()">${icon('timer', 16)}Timer</button>
           <button class="btn btn-secondary" onclick="App.openQuickLog()">${icon('zap', 16)}Quick Log</button>
         </div>
@@ -886,7 +927,10 @@ const App = (() => {
           <h1 class="page-title">Planner</h1>
           <p class="page-subtitle">Schedule, tracked time, agenda</p>
         </div>
-        <button class="btn btn-primary" onclick="App.openAgendaModal({ date: '${viewDate}' })">${icon('plus', 14)}Agenda Item</button>
+        <div style="display:flex;gap:var(--space-2);">
+          ${plannerOffset === 0 ? `<button class="btn btn-secondary" onclick="App.openAutoPlan()" title="Fill today's free slots with your top tasks, sized by their estimates">${icon('wand-2', 14)}Auto-plan</button>` : ''}
+          <button class="btn btn-primary" onclick="App.openAgendaModal({ date: '${viewDate}' })">${icon('plus', 14)}Agenda Item</button>
+        </div>
       </div>
     `;
 
@@ -945,6 +989,16 @@ const App = (() => {
     });
   }
 
+  // First open, non-archived task this entry is waiting on (null = ready)
+  function blockingEntry(entry) {
+    for (const bid of entry.blockedBy || []) {
+      const b = State.getEntry(bid);
+      if (b && !b.completed && !b.archived) return b;
+    }
+    return null;
+  }
+  function isBlocked(entry) { return !!blockingEntry(entry); }
+
   function renderEntryCard(entry, project, streakInfo, opts = {}) {
     const proj = project || (entry.projectId ? State.getProject(entry.projectId) : null);
     const isOverdueFlag = entry.dueDate && isOverdue(entry.dueDate) && !entry.completed;
@@ -972,9 +1026,16 @@ const App = (() => {
     }
     if (entry.dueDate) {
       const cls = isOverdueFlag ? 'pill-red' : 'pill-accent';
-      metaHtml += `<span class="pill ${cls}">${formatDueDate(entry.dueDate)}${entry.type === 'reminder' && entry.remindTime ? ` · ${entry.remindTime}` : ''}</span>`;
-    } else if (entry.type === 'reminder' && entry.remindTime) {
+      metaHtml += `<span class="pill ${cls}">${formatDueDate(entry.dueDate)}${entry.remindTime ? ` · ${entry.remindTime}` : ''}</span>`;
+    } else if (entry.remindTime) {
       metaHtml += `<span class="pill pill-accent">${entry.remindTime}</span>`;
+    }
+    if (entry.recurrence && entry.type !== 'habit') {
+      metaHtml += `<span class="pill pill-repeat" title="Repeats ${entry.recurrence.type} — completing spawns the next occurrence">${icon('repeat-2', 10)}${entry.recurrence.type}</span>`;
+    }
+    const blocker = blockingEntry(entry);
+    if (blocker) {
+      metaHtml += `<span class="pill pill-blocked" title="Blocked until “${blocker.title}” is done">${icon('lock', 10)}${blocker.title}</span>`;
     }
     if (entry.tags && entry.tags.length > 0) {
       entry.tags.forEach(tag => {
@@ -1224,6 +1285,7 @@ const App = (() => {
         </div>
         <div style="display:flex;gap:var(--space-2);">
           <button class="btn btn-secondary" onclick="App.exportForLLM()" title="Copy the currently filtered entries as LLM-friendly JSON">${icon('clipboard-copy', 14)}Copy for LLM</button>
+          <button class="btn btn-secondary" onclick="App.openPasteImport()" title="Paste a list (or LLM output) — every line becomes a task via the quick-add parser">${icon('clipboard-paste', 14)}Paste Tasks</button>
           <button class="btn btn-secondary" onclick="App.openManageProjects()">${icon('settings-2', 14)}Manage</button>
           <button class="btn btn-primary" onclick="App.openProjectModal()">${icon('plus', 14)}New Project</button>
         </div>
@@ -2674,6 +2736,26 @@ const App = (() => {
       </div>
     </div>`;
 
+    // Notifications
+    const notifState = notificationStatus();
+    const notifDesc = {
+      granted: 'On — reminders pop up as system notifications',
+      denied: 'Blocked in the browser — in-app toasts still fire',
+      default: 'Reminders fire as in-app toasts; enable for system notifications',
+      unsupported: 'Not supported in this browser — in-app toasts still fire',
+    }[notifState];
+    html += `<div class="section">
+      <div class="section-header"><span class="section-title">Reminders</span></div>
+      <div class="card">
+        <div class="setting-row">
+          <div><div class="setting-label">Notifications</div><div class="setting-desc">${notifDesc}</div></div>
+          ${notifState === 'default' ? `<button class="btn btn-secondary btn-sm" onclick="App.enableNotifications()">${icon('bell', 14)}Enable</button>`
+            : `<span class="pill ${notifState === 'granted' ? 'pill-green' : 'pill-gray'}">${notifState}</span>`}
+        </div>
+        <p class="text-xs text-faint" style="margin-top:var(--space-2);">Anything with a reminder time fires on its due day while the app is open — tasks and reminders alike. Undated reminders fire daily.</p>
+      </div>
+    </div>`;
+
     // Sync section
     html += `<div class="section">
       <div class="section-header"><span class="section-title">Firebase Sync</span></div>
@@ -2910,6 +2992,28 @@ const App = (() => {
               `).join('')}
             </select>
           </div>
+        </div>
+        <div class="grid-2">
+          <div class="form-group">
+            <label class="form-label">Repeat</label>
+            <select class="form-select" id="entryRepeat">
+              ${[['none', 'Never'], ['daily', 'Daily'], ['weekdays', 'Weekdays (Mon–Fri)'], ['weekly', 'Weekly'], ['monthly', 'Monthly']].map(([v, l]) => `
+                <option value="${v}" ${(entry.recurrence?.type || 'none') === v ? 'selected' : ''}>${l}</option>`).join('')}
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Reminder Time</label>
+            <input type="time" class="form-input" id="entryRemindTime" value="${entry.remindTime || ''}">
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Blocked By <span class="text-faint">(waits for another task)</span></label>
+          <select class="form-select" id="entryBlockedBy">
+            <option value="">Nothing — ready to work on</option>
+            ${State.getEntries({ type: 'task', completed: false })
+              .filter(t => t.id !== entry.id && !(t.blockedBy || []).includes(entry.id))
+              .map(t => `<option value="${t.id}" ${(entry.blockedBy || [])[0] === t.id ? 'selected' : ''}>${t.title}</option>`).join('')}
+          </select>
         </div>`;
     } else if (type === 'goal') {
       typeFields = `
@@ -3132,6 +3236,11 @@ const App = (() => {
       data.effort = currentEffort;
       data.priority = document.getElementById('entryPriority')?.value || 'medium';
       data.estimateMinutes = parseInt(document.getElementById('entryEstimate')?.value) || null;
+      data.remindTime = document.getElementById('entryRemindTime')?.value || null;
+      const rep = document.getElementById('entryRepeat')?.value;
+      data.recurrence = rep && rep !== 'none' ? { type: rep, interval: 1 } : null;
+      const blocker = document.getElementById('entryBlockedBy')?.value;
+      data.blockedBy = blocker ? [blocker] : [];
       // Only present when editing a completed task — don't clobber otherwise
       const actEl = document.getElementById('entryActual');
       if (actEl) data.actualMinutes = parseInt(actEl.value) || null;
@@ -3766,6 +3875,283 @@ const App = (() => {
   // ═══════════════════════════════════════════════════════════
   // SEARCH — fuzzy find projects, tasks, habits, goals
   // ═══════════════════════════════════════════════════════════
+  // ═══════════════════════════════════════════════════════════
+  // DAILY REVIEW — one-tap triage of everything that slipped
+  // ═══════════════════════════════════════════════════════════
+  function reviewPool() {
+    const today = State.todayStr();
+    return State.getEntries()
+      .filter(e => (e.type === 'task' || e.type === 'reminder') && !e.completed && e.dueDate && e.dueDate < today)
+      .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+  }
+
+  function openDailyReview() {
+    showModal('Daily Review', `
+      <p class="text-xs text-muted" style="margin-bottom:var(--space-3);">
+        Everything overdue, one decision each: reschedule it, park it, finish it, or let it go.
+      </p>
+      <div id="reviewList"></div>
+    `, [`<button class="btn btn-secondary" onclick="App.closeModal()">Done reviewing</button>`]);
+    renderReviewList();
+  }
+
+  function renderReviewList() {
+    const el = document.getElementById('reviewList');
+    if (!el) return;
+    const pool = reviewPool();
+    if (pool.length === 0) {
+      el.innerHTML = `<div class="empty-state">
+        <i data-lucide="party-popper"></i>
+        <p class="empty-state-text">Nothing overdue. Clean slate.</p>
+      </div>`;
+      refreshIcons();
+      return;
+    }
+    const acts = [
+      ['today', 'calendar-check', 'Do today'],
+      ['tomorrow', 'sunrise', 'Tomorrow'],
+      ['nextweek', 'calendar-plus', 'Next week'],
+      ['someday', 'circle-dashed', 'Someday (clear date)'],
+      ['done', 'check', 'Mark done'],
+      ['drop', 'trash-2', 'Drop it'],
+    ];
+    el.innerHTML = `
+      <p class="text-xs text-faint" style="margin-bottom:var(--space-2);">${pool.length} overdue item${pool.length === 1 ? '' : 's'}</p>
+      ${pool.map(e => {
+        const proj = e.projectId ? State.getProject(e.projectId) : null;
+        return `<div class="review-row" data-id="${e.id}">
+          <span class="proj-dot" style="background:${proj?.color || 'var(--text-faint)'}"></span>
+          <div class="review-main">
+            <span class="review-title">${e.title}</span>
+            <span class="text-xs" style="color:var(--error);">${formatDueDate(e.dueDate)}</span>
+          </div>
+          <div class="review-actions">
+            ${acts.map(([a, ic, label]) => `
+              <button class="icon-btn ${a === 'drop' ? 'review-drop' : ''}" onclick="App.reviewAction('${e.id}','${a}')" title="${label}" aria-label="${label}">${icon(ic, 14)}</button>`).join('')}
+          </div>
+        </div>`;
+      }).join('')}`;
+    refreshIcons();
+  }
+
+  function reviewAction(id, action) {
+    const entry = State.getEntry(id);
+    if (!entry) return;
+    switch (action) {
+      case 'today': State.updateEntry(id, { dueDate: State.todayStr() }); break;
+      case 'tomorrow': State.updateEntry(id, { dueDate: offsetDateStr(1) }); break;
+      case 'nextweek': State.updateEntry(id, { dueDate: offsetDateStr(7) }); break;
+      case 'someday': State.updateEntry(id, { dueDate: null }); break;
+      case 'done': State.toggleComplete(id); celebrate(); break;
+      case 'drop': State.deleteEntry(id); break;
+    }
+    render();
+    renderReviewList();
+    if (reviewPool().length === 0 && action !== 'drop') celebrate(40);
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // AUTO-PLAN — estimates + scores + free planner slots = a day plan
+  // ═══════════════════════════════════════════════════════════
+  let pendingPlan = [];
+
+  function computeAutoPlan() {
+    const today = State.todayStr();
+    // window: from now (next quarter hour) or wake, until sleep or 22:00
+    const wake = State.getLogs({ type: 'wake', date: today })[0];
+    const sleep = State.getLogs({ type: 'sleep', date: today })[0];
+    const winStart = Math.max(
+      wake?.time ? timeToMin(wake.time) : 8 * 60,
+      Math.ceil(timeToMin(nowTime()) / 15) * 15
+    );
+    const winEnd = sleep?.time ? timeToMin(sleep.time) : 22 * 60;
+    if (winStart >= winEnd) return [];
+
+    // free slots = window minus existing blocks (merged)
+    const busy = State.getPlannerBlocks({ date: today })
+      .map(b => [timeToMin(b.start), timeToMin(b.end)])
+      .sort((a, b) => a[0] - b[0]);
+    const free = [];
+    let cursor = winStart;
+    busy.forEach(([s, e]) => {
+      if (e <= cursor) return;
+      if (s > cursor) free.push([cursor, Math.min(s, winEnd)]);
+      cursor = Math.max(cursor, e);
+    });
+    if (cursor < winEnd) free.push([cursor, winEnd]);
+
+    // candidates: unblocked open tasks due (or overdue) today first,
+    // then undated ones — best score first, estimate-sized
+    const cands = State.getEntries({ type: 'task', completed: false })
+      .filter(t => !isBlocked(t) && (!t.dueDate || t.dueDate <= today))
+      .sort((a, b) => {
+        const aDue = a.dueDate ? 0 : 1, bDue = b.dueDate ? 0 : 1;
+        return aDue - bDue || taskScore(b) - taskScore(a);
+      });
+
+    const plan = [];
+    for (const t of cands) {
+      if (plan.length >= 8) break;
+      const dur = Math.min(Math.max(Math.ceil((t.estimateMinutes || 30) / 15) * 15, 15), 120);
+      const slot = free.find(([s, e]) => e - s >= dur);
+      if (!slot) continue;
+      plan.push({ task: t, start: slot[0], end: slot[0] + dur });
+      slot[0] += dur;
+    }
+    return plan;
+  }
+
+  function openAutoPlan() {
+    pendingPlan = computeAutoPlan();
+    if (pendingPlan.length === 0) {
+      toast('Nothing to plan — no open tasks fit today’s free slots');
+      return;
+    }
+    const total = pendingPlan.reduce((s, p) => s + (p.end - p.start), 0);
+    showModal('Auto-plan today', `
+      <p class="text-xs text-muted" style="margin-bottom:var(--space-3);">
+        Your top tasks, slotted into today's free time by score and estimate. Blocks land in the planner where you can still drag and resize them.
+      </p>
+      <div class="autoplan-list">
+        ${pendingPlan.map(p => {
+          const proj = p.task.projectId ? State.getProject(p.task.projectId) : null;
+          return `<div class="autoplan-row">
+            <span class="font-mono text-xs autoplan-time">${minToTime(p.start)}–${minToTime(p.end)}</span>
+            <span class="proj-dot" style="background:${proj?.color || 'var(--accent)'}"></span>
+            <span class="truncate" style="flex:1;">${p.task.title}</span>
+            <span class="pill">${estimateLabel(p.end - p.start)}</span>
+          </div>`;
+        }).join('')}
+      </div>
+      <p class="text-xs text-faint" style="margin-top:var(--space-2);">${pendingPlan.length} block${pendingPlan.length === 1 ? '' : 's'} · ${estimateLabel(total)} planned</p>
+    `, [
+      `<button class="btn btn-secondary" onclick="App.closeModal()">Cancel</button>`,
+      `<button class="btn btn-primary" onclick="App.confirmAutoPlan()">${icon('calendar-check', 14)}Add to planner</button>`,
+    ]);
+  }
+
+  function confirmAutoPlan() {
+    const today = State.todayStr();
+    pendingPlan.forEach(p => {
+      const proj = p.task.projectId ? State.getProject(p.task.projectId) : null;
+      State.createPlannerBlock({
+        date: today,
+        start: minToTime(p.start),
+        end: minToTime(p.end),
+        title: p.task.title,
+        entryId: p.task.id,
+        projectId: p.task.projectId || null,
+        color: proj?.color || null,
+        kind: 'agenda',
+      });
+    });
+    toast(`${pendingPlan.length} block${pendingPlan.length === 1 ? '' : 's'} added to today`);
+    pendingPlan = [];
+    closeModal();
+    switchTab('planner');
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // PASTE IMPORT — the reverse of "Copy for LLM"
+  // Paste a plan (markdown list, plain lines, or exported JSON) and
+  // every line goes through the natural-language parser.
+  // ═══════════════════════════════════════════════════════════
+  function parsePasteText(text) {
+    const trimmed = (text || '').trim();
+    if (!trimmed) return [];
+    if (/^[\[{]/.test(trimmed)) {
+      try {
+        const j = JSON.parse(trimmed);
+        const arr = Array.isArray(j) ? j : (Array.isArray(j.entries) ? j.entries : null);
+        if (arr) {
+          return arr.map(x => (typeof x === 'string' ? { raw: x } : (x && x.title ? { obj: x } : null))).filter(Boolean);
+        }
+      } catch (err) { /* not JSON — fall through to line parsing */ }
+    }
+    return trimmed.split('\n')
+      .map(l => l.replace(/^\s*(?:[-*+]\s*(?:\[[ xX]\]\s*)?|\d+[.)]\s*)/, '').trim())
+      .filter(l => l && !/^#{1,6}\s/.test(l) && !/^```/.test(l))
+      .map(raw => ({ raw }));
+  }
+
+  function pasteDefaultProject() {
+    return currentTab === 'projects' && projectFilter && projectFilter !== 'none' ? projectFilter : null;
+  }
+
+  function openPasteImport() {
+    const proj = pasteDefaultProject() ? State.getProject(pasteDefaultProject()) : null;
+    showModal('Paste Tasks', `
+      <p class="text-xs text-muted" style="margin-bottom:var(--space-2);">
+        One item per line — markdown lists and numbering are stripped. Lines speak the quick-add shorthand
+        (<span class="font-mono">tomorrow 3pm #tag @project !high ~30m</span>), and the "Copy for LLM" JSON pastes straight back in.
+        ${proj ? `New tasks land in <strong>${proj.name}</strong> unless a line says otherwise.` : ''}
+      </p>
+      <textarea class="form-input" id="pasteInput" rows="9" spellcheck="false"
+        placeholder="- [ ] Fix header overflow #bugs !high&#10;- Write release notes tomorrow ~30m&#10;- Call the vendor friday 10am"
+        oninput="App.previewPasteImport()"></textarea>
+      <div id="pastePreview" class="paste-preview"></div>
+    `, [
+      `<button class="btn btn-secondary" onclick="App.closeModal()">Cancel</button>`,
+      `<button class="btn btn-primary" id="pasteImportBtn" onclick="App.runPasteImport()">${icon('clipboard-paste', 14)}Import</button>`,
+    ]);
+    setTimeout(() => document.getElementById('pasteInput')?.focus(), 100);
+  }
+
+  function previewPasteImport() {
+    const el = document.getElementById('pastePreview');
+    if (!el) return;
+    const items = parsePasteText(document.getElementById('pasteInput')?.value);
+    if (items.length === 0) { el.innerHTML = ''; return; }
+    const rows = items.slice(0, 6).map(it => {
+      if (it.obj) return `<div class="paste-row">${icon('braces', 12)}<span class="truncate">${it.obj.title}</span></div>`;
+      const p = Palette.parse(it.raw);
+      const bits = [];
+      if (p.type !== 'task') bits.push(p.type);
+      if (p.dueDate) bits.push(formatDueDate(p.dueDate));
+      if (p.remindTime) bits.push(p.remindTime);
+      if (p.priority) bits.push(p.priority);
+      if (p.estimateMinutes) bits.push('~' + estimateLabel(p.estimateMinutes));
+      p.tags.forEach(t => bits.push('#' + t));
+      if (p.projectName) bits.push('@' + p.projectName);
+      return `<div class="paste-row">${icon('corner-down-right', 12)}<span class="truncate">${p.title || '(untitled)'}</span>
+        ${bits.length ? `<span class="text-xs text-faint paste-bits">${bits.join(' · ')}</span>` : ''}</div>`;
+    }).join('');
+    el.innerHTML = `<p class="text-xs text-faint" style="margin:var(--space-2) 0 var(--space-1);">${items.length} item${items.length === 1 ? '' : 's'} detected${items.length > 6 ? ' — showing first 6' : ''}</p>${rows}`;
+    refreshIcons();
+  }
+
+  function runPasteImport() {
+    const items = parsePasteText(document.getElementById('pasteInput')?.value);
+    if (items.length === 0) { toast('Nothing to import'); return; }
+    const defaultProjectId = pasteDefaultProject();
+    let n = 0;
+    items.forEach(it => {
+      if (it.raw) {
+        if (Palette.createFromText(it.raw, { defaultProjectId })) n++;
+      } else if (it.obj) {
+        const o = it.obj;
+        (o.tags || []).forEach(t => State.getOrCreateTag(t));
+        const pid = defaultProjectId;
+        State.createEntry({
+          type: ['task', 'habit', 'goal', 'reminder', 'note'].includes(o.type) ? o.type : 'task',
+          title: String(o.title),
+          description: o.description || '',
+          tags: Array.isArray(o.tags) ? o.tags : [],
+          priority: ['low', 'medium', 'high', 'urgent'].includes(o.priority) ? o.priority : 'medium',
+          dueDate: /^\d{4}-\d{2}-\d{2}$/.test(o.due_date || '') ? o.due_date : null,
+          remindTime: /^\d{2}:\d{2}$/.test(o.remind_time || '') ? o.remind_time : null,
+          estimateMinutes: Number(o.estimate_minutes) > 0 ? Number(o.estimate_minutes) : null,
+          projectId: pid,
+          projectIds: pid ? [pid] : [],
+        });
+        n++;
+      }
+    });
+    toast(`Imported ${n} item${n === 1 ? '' : 's'}`);
+    closeModal();
+    render();
+  }
+
   // Command palette is the primary search surface; the modal search
   // below stays as a fallback (and for anything still calling it).
   function openPalette() {
@@ -3943,6 +4329,18 @@ const App = (() => {
         if (!checkStreakMilestone(id)) celebrate();
       } else if (before.type === 'task' || before.type === 'goal') {
         celebrate();
+      }
+      // recurring: say when the next occurrence landed
+      const after = State.getEntry(id);
+      if (after?.recurrence && after.spawnedNextId) {
+        const next = State.getEntry(after.spawnedNextId);
+        if (next?.dueDate) toast(`Done — repeats ${after.recurrence.type}, next ${formatDueDate(next.dueDate)}`);
+      }
+      // dependency chain: announce what this completion freed up
+      const freed = State.getEntries({ type: 'task', completed: false })
+        .filter(t => (t.blockedBy || []).includes(id) && !isBlocked(t));
+      if (freed.length > 0) {
+        toast(`Unblocked: ${freed.map(t => t.title).join(', ')}`);
       }
     }
     render();
@@ -4140,6 +4538,21 @@ const App = (() => {
     Sync.autoConnect();
     Sync.updateStatus();
 
+    // Reminder engine — fires remindTime entries while the app is open
+    setInterval(checkReminders, 30000);
+    setTimeout(checkReminders, 3000);
+
+    // PWA shortcut deep links (manifest shortcuts / bookmarks)
+    const action = new URLSearchParams(location.search).get('action');
+    if (action) {
+      history.replaceState(null, '', location.pathname); // don't re-fire on reload
+      setTimeout(() => {
+        if (action === 'new-task') openNewEntry('task');
+        else if (action === 'quick-log') openQuickLog();
+        else if (action === 'review') openDailyReview();
+      }, 400);
+    }
+
     // Initial render
     render();
 
@@ -4166,6 +4579,10 @@ const App = (() => {
     openManageTags, cycleTagColor, renameTag, setTagProject, deleteTagPrompt, createTagFromManager,
     openSearch, runSearch, searchGo, openPalette, toast,
     setAccent, openHistoryDay, celebrate,
+    checkReminders, enableNotifications,
+    openDailyReview, reviewAction,
+    openAutoPlan, confirmAutoPlan,
+    openPasteImport, previewPasteImport, runPasteImport,
     logFood, deleteFoodLog, useShortcutHealth,
     toggleEntry, deleteEntry, archiveEntry, unarchiveEntry, startTimerForTask,
     selectEntryCard, setWorkingProject, toggleSidebar,

@@ -2777,3 +2777,105 @@ input[type="date"]::-webkit-calendar-picker-indicator {
   .main-content.view-anim > * { animation: none; }
   .cmdk { animation: none; }
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   ROUND 9 — Daily review, auto-plan, paste import, recurrence,
+   dependencies
+   ═══════════════════════════════════════════════════════════════ */
+
+/* recurrence + blocked pills */
+.pill-repeat {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--accent-text);
+  background: var(--accent-tint);
+}
+.pill-blocked {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--text-muted);
+  background: var(--surface-2);
+  border: 1px dashed var(--border);
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pill-repeat svg, .pill-blocked svg,
+.pill-repeat i[data-lucide], .pill-blocked i[data-lucide] { flex-shrink: 0; }
+
+/* review button + count badge */
+.review-btn { position: relative; }
+.review-count {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  background: var(--error);
+  color: #fff;
+  border-radius: 999px;
+  padding: 1px 6px;
+  margin-left: 2px;
+}
+
+/* daily review rows */
+.review-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border-bottom: 1px solid var(--border-subtle);
+}
+.review-row:last-child { border-bottom: none; }
+.review-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.review-title {
+  font-size: var(--text-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.review-actions { display: flex; gap: 2px; flex-shrink: 0; }
+.review-actions .icon-btn { width: 28px; height: 28px; }
+.review-actions .review-drop:hover { color: var(--error); }
+@media (max-width: 600px) {
+  .review-row { flex-wrap: wrap; }
+  .review-actions { width: 100%; justify-content: flex-end; }
+}
+
+/* auto-plan preview */
+.autoplan-list {
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+.autoplan-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: var(--text-sm);
+}
+.autoplan-row:last-child { border-bottom: none; }
+.autoplan-time { color: var(--text-muted); flex-shrink: 0; }
+
+/* paste import preview */
+.paste-preview { max-height: 180px; overflow-y: auto; }
+.paste-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 3px 0;
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+}
+.paste-row svg, .paste-row i[data-lucide] { color: var(--text-faint); flex-shrink: 0; }
+.paste-bits { flex-shrink: 0; margin-left: auto; }
+#pasteInput { resize: vertical; font-family: var(--font-mono); font-size: var(--text-xs); }
