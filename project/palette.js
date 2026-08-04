@@ -308,8 +308,8 @@ const Palette = (() => {
       <div class="cmdk" role="dialog" aria-modal="true" aria-label="Command palette">
         <div class="cmdk-input-row">
           <i data-lucide="command" style="width:16px;height:16px"></i>
-          <input type="text" id="cmdkInput" autocomplete="off" spellcheck="false"
-            placeholder="Search, run a command, or just type a task…">
+          <textarea id="cmdkInput" rows="1" autocomplete="off" spellcheck="false"
+            placeholder="Search, run a command, or just type a task…"></textarea>
           <kbd>esc</kbd>
         </div>
         <div class="cmdk-results" id="cmdkResults"></div>
@@ -331,7 +331,10 @@ const Palette = (() => {
       else if (e.key === 'ArrowUp') { e.preventDefault(); move(-1); }
       else if (e.key === 'Enter') { e.preventDefault(); execute(sel); }
     });
-    document.getElementById('cmdkInput').addEventListener('input', (e) => renderResults(e.target.value));
+    document.getElementById('cmdkInput').addEventListener('input', (e) => {
+      if (typeof App !== 'undefined') App.autoGrow(e.target); // long NL strings wrap, not scroll
+      renderResults(e.target.value);
+    });
   }
 
   function renderResults(q) {
@@ -424,6 +427,7 @@ const Palette = (() => {
     root.classList.add('active');
     const input = document.getElementById('cmdkInput');
     input.value = '';
+    input.style.height = ''; // reset any grown height from last use
     renderResults('');
     setTimeout(() => input.focus(), 30);
   }

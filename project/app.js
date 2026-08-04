@@ -21,6 +21,24 @@ const App = (() => {
     return `<i data-lucide="${name}" style="width:${size}px;height:${size}px"></i>`;
   }
 
+  function escHtml(s) {
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  // Single-line-style textareas wrap + grow instead of scrolling sideways.
+  // Modern browsers do it in CSS (field-sizing: content); this is the
+  // fallback for the rest.
+  let growNative = null;
+  function autoGrow(el) {
+    if (!el) return;
+    if (growNative === null) {
+      growNative = typeof CSS !== 'undefined' && !!CSS.supports && CSS.supports('field-sizing', 'content');
+    }
+    if (growNative) return;
+    el.style.height = 'auto';
+    el.style.height = el.scrollHeight + 'px';
+  }
+
   function refreshIcons() {
     if (window.lucide) lucide.createIcons();
   }
@@ -3138,7 +3156,9 @@ const App = (() => {
 
       <div class="form-group">
         <label class="form-label">Title</label>
-        <input type="text" class="form-input" id="entryTitle" value="${entry.title || ''}" placeholder="${placeholders[type]}" autocomplete="off">
+        <textarea class="form-input input-grow" id="entryTitle" rows="1" placeholder="${placeholders[type]}" autocomplete="off"
+          oninput="App.autoGrow(this)"
+          onkeydown="if(event.key==='Enter'){event.preventDefault();App.saveEntry();}">${escHtml(entry.title || '')}</textarea>
       </div>
 
       <div class="form-group">
@@ -3238,6 +3258,7 @@ const App = (() => {
     entry.effort = currentEffort;
     body.innerHTML = renderEntryForm(type, entry);
     refreshIcons();
+    autoGrow(document.getElementById('entryTitle'));
   }
 
   function saveFormData() {
@@ -3273,7 +3294,8 @@ const App = (() => {
   }
 
   function saveEntry() {
-    const title = document.getElementById('entryTitle')?.value?.trim();
+    // titles are one logical line — pasted newlines collapse to spaces
+    const title = document.getElementById('entryTitle')?.value?.replace(/\s*\n+\s*/g, ' ').trim();
     if (!title) { toast('Title is required'); return; }
 
     const data = {
@@ -3639,7 +3661,9 @@ const App = (() => {
       body = `
         <div class="form-group">
           <label class="form-label">Quick Add Task</label>
-          <input type="text" class="form-input" id="quickTaskInput" placeholder="Task title — Enter to add" onkeydown="if(event.key==='Enter'){App.quickAddTask(this.value);this.value='';}">
+          <textarea class="form-input input-grow" id="quickTaskInput" rows="1" placeholder="Task title — Enter to add" autocomplete="off"
+            oninput="App.autoGrow(this)"
+            onkeydown="if(event.key==='Enter'){event.preventDefault();App.quickAddTask(this.value);this.value='';App.autoGrow(this);}"></textarea>
           <p class="text-xs text-faint" style="margin-top:var(--space-2);">Lands in Today unscheduled. Use + for the full form (projects, dates, effort).</p>
         </div>`;
     }
@@ -3952,9 +3976,10 @@ const App = (() => {
       </div>
       <div class="section">
         <div class="card scratch-input-card">
-          <input type="text" class="form-input" id="scratchInput" autocomplete="off"
-            placeholder="Braindump… Enter to capture. #tags and dates survive the trip to task."
-            onkeydown="if(event.key==='Enter'){App.addScratchIdea();}">
+          <textarea class="form-input input-grow" id="scratchInput" rows="1" autocomplete="off"
+            placeholder="Braindump… Enter to capture, Shift+Enter for a new line. #tags and dates survive the trip to task."
+            oninput="App.autoGrow(this)"
+            onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();App.addScratchIdea();}"></textarea>
         </div>
       </div>`;
 
@@ -4546,7 +4571,10 @@ const App = (() => {
     document.getElementById('modalFooter').innerHTML = footerHtml.join('');
     document.getElementById('modalOverlay').classList.add('active');
     refreshIcons();
-    setTimeout(() => document.getElementById('entryTitle')?.focus(), 100);
+    setTimeout(() => {
+      const t = document.getElementById('entryTitle');
+      if (t) { t.focus(); autoGrow(t); } // pre-filled long titles size correctly
+    }, 100);
   }
 
   function closeModal() {
@@ -4874,7 +4902,7 @@ const App = (() => {
     openManageShortcuts, addShortcut, deleteShortcut,
     openManageTags, cycleTagColor, renameTag, setTagProject, deleteTagPrompt, createTagFromManager,
     openSearch, runSearch, searchGo, openPalette, toast,
-    setAccent, openHistoryDay, celebrate, updateAppSetting,
+    setAccent, openHistoryDay, celebrate, updateAppSetting, autoGrow,
     checkReminders, enableNotifications,
     openDailyReview, reviewAction,
     openAutoPlan, confirmAutoPlan,

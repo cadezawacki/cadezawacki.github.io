@@ -2961,3 +2961,28 @@ input[type="date"]::-webkit-calendar-picker-indicator {
 .scratch-row:hover .scratch-actions, .scratch-row:focus-within .scratch-actions { opacity: 1; }
 @media (hover: none) { .scratch-actions { opacity: 1; } }
 .scratch-actions .icon-btn { width: 28px; height: 28px; }
+
+/* ═══════════════════════════════════════════════════════════════
+   WRAP-AND-GROW single-line fields — titles, braindump, quick add,
+   palette. Text wraps and the box grows; nothing scrolls sideways.
+   ═══════════════════════════════════════════════════════════════ */
+textarea.input-grow,
+.cmdk-input-row textarea {
+  resize: none;
+  overflow: hidden;
+  field-sizing: content;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.45;
+}
+.cmdk-input-row textarea {
+  flex: 1;
+  border: none;
+  outline: none;
+  background: transparent;
+  font: inherit;
+  font-size: var(--text-base);
+  color: var(--text-primary);
+  padding: 0;
+}
+.cmdk-input-row textarea::placeholder { color: var(--text-faint); }
