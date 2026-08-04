@@ -195,7 +195,7 @@ const Palette = (() => {
   // ═══════════════════════════════════════════════════════════
   const TAB_META = {
     today: 'layout-dashboard', projects: 'folder-kanban', habits: 'repeat',
-    focus: 'crosshair', planner: 'calendar-days', health: 'apple',
+    focus: 'crosshair', planner: 'calendar-days', scratch: 'lightbulb', health: 'apple',
     insights: 'bar-chart-3', history: 'history', settings: 'settings',
   };
   const TYPE_ICONS = { task: 'list-checks', habit: 'repeat', goal: 'target', note: 'sticky-note', reminder: 'clock' };

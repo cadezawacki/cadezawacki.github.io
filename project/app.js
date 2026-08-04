@@ -326,6 +326,7 @@ const App = (() => {
       case 'habits': main.innerHTML = renderHabits(); break;
       case 'focus': main.innerHTML = renderFocus(); break;
       case 'planner': main.innerHTML = renderPlannerTab(); break;
+      case 'scratch': main.innerHTML = renderScratch(); break;
       case 'health': main.innerHTML = renderHealth(); break;
       case 'insights': main.innerHTML = renderInsights(); break;
       case 'history': main.innerHTML = renderHistory(); break;
@@ -1119,7 +1120,11 @@ const App = (() => {
   function highlightPostTags(text) {
     return text
       .replace(/&/g, '&amp;').replace(/</g, '&lt;')
-      .replace(/#([a-z0-9_-]+)/gi, '<span class="post-tag">#$1</span>')
+      .replace(/#([a-z0-9_-]+)/gi, (m, name) => {
+        // known tags carry their registry color inline
+        const tag = State.getAllTags().find(t => t.name === name.toLowerCase());
+        return `<span class="post-tag ${tag ? `tag-${tag.color}` : ''}">${m}</span>`;
+      })
       .replace(/\n/g, '<br>');
   }
 
@@ -1287,9 +1292,13 @@ const App = (() => {
           <p class="page-subtitle">${projects.length} projects · ${State.getEntries().length} total entries</p>
         </div>
         <div style="display:flex;gap:var(--space-2);align-items:center;">
-          <button class="icon-btn" onclick="App.exportForLLM()" aria-label="Copy for LLM" title="Copy for LLM — current filters as JSON">${icon('clipboard-copy', 16)}</button>
-          <button class="icon-btn" onclick="App.openPasteImport()" aria-label="Paste tasks" title="Paste tasks — every line becomes an entry">${icon('clipboard-paste', 16)}</button>
-          <button class="btn btn-secondary" onclick="App.openManageProjects()">${icon('settings-2', 14)}Manage</button>
+          <div class="btn-cluster" role="group" aria-label="Project tools">
+            <button class="icon-btn" onclick="App.exportForLLM()" aria-label="Copy for LLM" title="Copy for LLM — current filters as JSON">${icon('clipboard-copy', 16)}</button>
+            <span class="cluster-sep"></span>
+            <button class="icon-btn" onclick="App.openPasteImport()" aria-label="Paste tasks" title="Paste tasks — every line becomes an entry">${icon('clipboard-paste', 16)}</button>
+            <span class="cluster-sep"></span>
+            <button class="icon-btn" onclick="App.openManageProjects()" aria-label="Manage projects" title="Manage projects — rename, nest, archive">${icon('settings-2', 16)}</button>
+          </div>
           <button class="btn btn-primary" onclick="App.openProjectModal()">${icon('plus', 14)}New Project</button>
         </div>
       </div>
@@ -1743,6 +1752,12 @@ const App = (() => {
   // ═══════════════════════════════════════════════════════════
   let insightsProject = null; // null = all projects
   let insightsEntry = null;   // null = all tasks
+  let pixelsMode = 'activity'; // Year in Pixels: 'activity' | 'mood'
+
+  function setPixelsMode(mode) {
+    pixelsMode = mode;
+    render();
+  }
 
   function insightsFilterObj() {
     return { projectId: insightsProject, entryId: insightsEntry };
@@ -1945,23 +1960,23 @@ const App = (() => {
       </div>`;
     }
 
-    // Year in Pixels — every day of the last year, colored by activity
+    // Year in Pixels — every day of the last year, activity or mood
     html += `<div class="section">
       <div class="section-header"><span class="section-title">Year in Pixels</span>
-        <span class="text-xs text-faint">every day, shaded by what you did — click one to revisit it</span>
+        <span style="display:inline-flex;align-items:center;gap:var(--space-2);">
+          <span class="text-xs text-faint">click a day to revisit it</span>
+          <button class="filter-chip ${pixelsMode === 'activity' ? 'active' : ''}" onclick="App.setPixelsMode('activity')">Activity</button>
+          <button class="filter-chip ${pixelsMode === 'mood' ? 'active' : ''}" onclick="App.setPixelsMode('mood')">Mood</button>
+        </span>
       </div>
       <div class="card"><div id="heatmapContainer"></div></div>
     </div>`;
 
-    // Day breakdown + Mood & Energy
-    html += `<div class="grid-2 section">
+    // Day breakdown (mood & energy chart moved to Health)
+    html += `<div class="section">
       <div class="card">
         <div class="section-header" style="margin-bottom:var(--space-3)"><span class="section-title">Tasks — Last 7 Days</span></div>
         <div class="chart-container"><canvas id="dayBreakdownChart"></canvas></div>
-      </div>
-      <div class="card">
-        <div class="section-header" style="margin-bottom:var(--space-3)"><span class="section-title">Mood & Energy — 14 Days</span></div>
-        <div class="chart-container"><canvas id="emotionTrendChart"></canvas></div>
       </div>
     </div>`;
 
@@ -2254,13 +2269,11 @@ const App = (() => {
   function renderInsightCharts() {
     const f = insightsFilterObj();
     const heatmap = document.getElementById('heatmapContainer');
-    if (heatmap) Charts.renderHeatmap(heatmap, 364, f);
+    if (heatmap) Charts.renderHeatmap(heatmap, 364, f, pixelsMode);
 
     const dayChart = document.getElementById('dayBreakdownChart');
     if (dayChart) Charts.renderDayBreakdown('dayBreakdownChart', 7, f);
 
-    const emotionChart = document.getElementById('emotionTrendChart');
-    if (emotionChart) Charts.renderMoodEnergy('emotionTrendChart', 14);
 
     const radarChart = document.getElementById('habitRadarChart');
     if (radarChart) Charts.renderHabitRadar('habitRadarChart', f);
@@ -2339,6 +2352,14 @@ const App = (() => {
       </div>
     </div>`;
 
+    // Mood & Energy trend — body data, so it lives with Health now
+    html += `<div class="section">
+      <div class="card">
+        <div class="section-header" style="margin-bottom:var(--space-3)"><span class="section-title">Mood & Energy — 14 Days</span></div>
+        <div class="chart-container"><canvas id="emotionTrendChart"></canvas></div>
+      </div>
+    </div>`;
+
     // Log food form — ALL shortcuts show here (water counts as health too)
     const shortcuts = State.getSettings().quickShortcuts || [];
     html += `<div class="section">
@@ -2352,7 +2373,7 @@ const App = (() => {
         </div>` : ''}
         <div class="grid-2">
           <div class="form-group">
-            <label class="form-label">Calories</label>
+            <label class="form-label">Calories <span class="text-faint">(optional)</span></label>
             <input type="number" class="form-input" id="foodCal" placeholder="e.g. 450" min="0">
           </div>
           <div class="form-group">
@@ -2416,7 +2437,7 @@ const App = (() => {
           <span class="pill">${l.meal || 'snack'}</span>
           <span class="truncate" style="flex:1;">${l.emoji ? l.emoji + ' ' : ''}${l.notes || 'Food'}</span>
           ${macros ? `<span class="food-macros">${macros}</span>` : ''}
-          <span class="font-mono text-xs" style="color:var(--accent-text);flex-shrink:0;">${l.value} cal</span>
+          <span class="font-mono text-xs" style="color:var(--accent-text);flex-shrink:0;">${l.value ? `${l.value} cal` : '—'}</span>
           <button class="icon-btn" onclick="App.deleteFoodLog('${l.id}')" aria-label="Delete">${icon('trash-2', 14)}</button>
         </div>`;
       });
@@ -2431,6 +2452,8 @@ const App = (() => {
     if (week) Charts.renderCalorieWeek('calorieWeekChart', 7);
     const sleep = document.getElementById('sleepChart');
     if (sleep) Charts.renderSleepChart('sleepChart', 14);
+    const emotionChart = document.getElementById('emotionTrendChart');
+    if (emotionChart) Charts.renderMoodEnergy('emotionTrendChart', 14);
     const macro = document.getElementById('macroChart');
     if (macro) {
       const today = State.todayStr();
@@ -2444,10 +2467,11 @@ const App = (() => {
   }
 
   function logFood() {
-    const cal = parseInt(document.getElementById('foodCal')?.value);
-    if (!cal || cal <= 0) { toast('Enter valid calories'); return; }
+    const cal = parseInt(document.getElementById('foodCal')?.value) || null;
     const meal = document.getElementById('foodMeal')?.value || 'snack';
     const notes = document.getElementById('foodNote')?.value?.trim() || '';
+    // Calories are optional — logging just the item name is fine
+    if (!cal && !notes) { toast('Add a name or calories'); return; }
     const macros = {
       protein: parseInt(document.getElementById('foodProtein')?.value) || null,
       carbs: parseInt(document.getElementById('foodCarbs')?.value) || null,
@@ -2596,7 +2620,7 @@ const App = (() => {
     switch (l.type) {
       case 'calorie': {
         const macros = [l.protein ? `${l.protein}P` : '', l.carbs ? `${l.carbs}C` : '', l.fat ? `${l.fat}F` : ''].filter(Boolean).join('/');
-        return `${l.emoji || '🍽'} ${l.notes || 'Food'} · ${l.value} cal (${l.meal || 'snack'})${macros ? ` · ${macros}` : ''}`;
+        return `${l.emoji || '🍽'} ${l.notes || 'Food'}${l.value ? ` · ${l.value} cal` : ''} (${l.meal || 'snack'})${macros ? ` · ${macros}` : ''}`;
       }
       case 'quick': return `${l.emoji || '⭐'} ${l.notes || 'Quick log'}`;
       case 'checkin':
@@ -2864,6 +2888,10 @@ const App = (() => {
       <div class="section-header"><span class="section-title">Data</span></div>
       <div class="card">
         <div class="setting-row">
+          <div><div class="setting-label">Refresh App</div><div class="setting-desc">Clear cached files + service worker and reload to pick up the latest version. Your data is untouched.</div></div>
+          <button class="btn btn-secondary btn-sm" onclick="App.hardRefresh()">${icon('refresh-cw', 14)}Hard Refresh</button>
+        </div>
+        <div class="setting-row">
           <div><div class="setting-label">Export Data</div><div class="setting-desc">Download all data as JSON</div></div>
           <button class="btn btn-secondary btn-sm" onclick="App.exportData()">${icon('download', 14)}Export</button>
         </div>
@@ -2943,12 +2971,13 @@ const App = (() => {
     // Suggestions respect tag scoping: global + the primary project's tags
     const suggestTags = State.getAllTags(currentProjects[0] || null);
 
-    const typeIcons = { goal: 'target', task: 'list-checks', habit: 'repeat', reminder: 'clock', checkin: 'brain' };
-    const types = ['goal', 'task', 'habit', 'reminder', 'checkin'];
+    // 'checkin' retired from the picker — day check-ins live in Quick Log;
+    // legacy checkin entries still render everywhere else.
+    const typeIcons = { goal: 'target', task: 'list-checks', habit: 'repeat', reminder: 'clock' };
+    const types = ['goal', 'task', 'habit', 'reminder'];
     const placeholders = {
       task: 'What needs to be done?', goal: 'What are you aiming for?',
       habit: 'What do you want to repeat?', reminder: 'What should I remind you of?',
-      checkin: 'What do you want to check in on?',
     };
 
     // Color-coded multi-select project chips (an entry can live in several).
@@ -3901,6 +3930,116 @@ const App = (() => {
   // SEARCH — fuzzy find projects, tasks, habits, goals
   // ═══════════════════════════════════════════════════════════
   // ═══════════════════════════════════════════════════════════
+  // SCRATCHPAD — braindump now, promote to tasks later
+  // ═══════════════════════════════════════════════════════════
+  function timeAgo(iso) {
+    const s = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+    if (s < 60) return 'just now';
+    if (s < 3600) return `${Math.floor(s / 60)}m ago`;
+    if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
+    return `${Math.floor(s / 86400)}d ago`;
+  }
+
+  function renderScratch() {
+    const ideas = State.getScratch();
+    let html = `
+      <div class="page-header">
+        <div>
+          <h1 class="page-title">Scratchpad</h1>
+          <p class="page-subtitle">Ideas in, tasks out · Ctrl+L clears everything</p>
+        </div>
+        ${ideas.length ? `<button class="btn btn-secondary btn-sm" onclick="App.clearScratchAll()" title="Clear all ideas (Ctrl+L)">${icon('eraser', 14)}Clear all</button>` : ''}
+      </div>
+      <div class="section">
+        <div class="card scratch-input-card">
+          <input type="text" class="form-input" id="scratchInput" autocomplete="off"
+            placeholder="Braindump… Enter to capture. #tags and dates survive the trip to task."
+            onkeydown="if(event.key==='Enter'){App.addScratchIdea();}">
+        </div>
+      </div>`;
+
+    if (ideas.length === 0) {
+      html += `<div class="empty-state" style="margin-top:var(--space-6);">
+        <i data-lucide="lightbulb"></i>
+        <p class="empty-state-text">Empty pad. Type anything above — sorting it out is later-you's job.</p>
+      </div>`;
+      return html;
+    }
+
+    html += `<div class="section"><div class="card scratch-list">
+      ${ideas.map(s => `
+        <div class="scratch-row" data-id="${s.id}">
+          <span class="scratch-bullet"></span>
+          <div class="scratch-main">
+            <div class="scratch-text">${highlightPostTags(s.text)}</div>
+            <span class="text-xs text-faint">${timeAgo(s.createdAt)}</span>
+          </div>
+          <div class="scratch-actions">
+            <button class="icon-btn" onclick="App.scratchToTask('${s.id}')" title="Make it a task — parses dates, #tags, @project, !priority" aria-label="Convert to task">${icon('zap', 15)}</button>
+            <button class="icon-btn" onclick="App.copyScratchIdea('${s.id}')" title="Copy text" aria-label="Copy">${icon('copy', 15)}</button>
+            <button class="icon-btn" onclick="App.deleteScratchIdea('${s.id}')" title="Delete" aria-label="Delete">${icon('trash-2', 15)}</button>
+          </div>
+        </div>`).join('')}
+    </div></div>`;
+    return html;
+  }
+
+  function addScratchIdea() {
+    const el = document.getElementById('scratchInput');
+    const text = el?.value?.trim();
+    if (!text) return;
+    State.addScratch(text);
+    render();
+    // keep the flow going — focus straight back into the input
+    setTimeout(() => document.getElementById('scratchInput')?.focus(), 50);
+  }
+
+  function scratchToTask(id) {
+    const idea = State.getScratch().find(s => s.id === id);
+    if (!idea) return;
+    if (typeof Palette !== 'undefined') {
+      const r = Palette.createFromText(idea.text, { forceType: 'task' });
+      if (r) {
+        State.deleteScratch(id);
+        toast(`Task created${r.summary ? ' — ' + r.summary : ''}`);
+        render();
+        return;
+      }
+    }
+    State.createEntry({ type: 'task', title: idea.text });
+    State.deleteScratch(id);
+    toast('Task created');
+    render();
+  }
+
+  async function copyScratchIdea(id) {
+    const idea = State.getScratch().find(s => s.id === id);
+    if (!idea) return;
+    try {
+      await navigator.clipboard.writeText(idea.text);
+      toast('Copied');
+    } catch (err) {
+      const ta = document.createElement('textarea');
+      ta.value = idea.text;
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand('copy'); toast('Copied'); } catch (e2) { toast('Copy failed'); }
+      ta.remove();
+    }
+  }
+
+  function deleteScratchIdea(id) {
+    State.deleteScratch(id);
+    render();
+  }
+
+  function clearScratchAll() {
+    const n = State.clearScratch();
+    toast(n ? `Cleared ${n} idea${n === 1 ? '' : 's'}` : 'Scratchpad already empty');
+    render();
+  }
+
+  // ═══════════════════════════════════════════════════════════
   // DAILY REVIEW — one-tap triage of everything that slipped
   // ═══════════════════════════════════════════════════════════
   function reviewPool() {
@@ -3980,17 +4119,26 @@ const App = (() => {
   // ═══════════════════════════════════════════════════════════
   let pendingPlan = [];
 
-  function computeAutoPlan() {
+  function autoPlanDefaults() {
     const today = State.todayStr();
-    // window: from now (next quarter hour) or wake, until sleep or 22:00
     const wake = State.getLogs({ type: 'wake', date: today })[0];
     const sleep = State.getLogs({ type: 'sleep', date: today })[0];
-    const winStart = Math.max(
-      wake?.time ? timeToMin(wake.time) : 8 * 60,
-      Math.ceil(timeToMin(nowTime()) / 15) * 15
-    );
-    const winEnd = sleep?.time ? timeToMin(sleep.time) : 22 * 60;
+    return {
+      startMin: Math.max(
+        wake?.time ? timeToMin(wake.time) : 8 * 60,
+        Math.ceil(timeToMin(nowTime()) / 15) * 15
+      ),
+      endMin: sleep?.time ? timeToMin(sleep.time) : 22 * 60,
+    };
+  }
+
+  function computeAutoPlan(opts = {}) {
+    const today = State.todayStr();
+    const d = autoPlanDefaults();
+    const winStart = opts.startMin ?? d.startMin;
+    const winEnd = opts.endMin ?? d.endMin;
     if (winStart >= winEnd) return [];
+    const gap = opts.breaks ? 10 : 0; // breathing room between blocks
 
     // free slots = window minus existing blocks (merged)
     const busy = State.getPlannerBlocks({ date: today })
@@ -4006,37 +4154,70 @@ const App = (() => {
     if (cursor < winEnd) free.push([cursor, winEnd]);
 
     // candidates: unblocked open tasks due (or overdue) today first,
-    // then undated ones — best score first, estimate-sized
-    const cands = State.getEntries({ type: 'task', completed: false })
+    // then undated ones — best score first, optionally project-scoped
+    const cands = State.getEntries({ type: 'task', completed: false, projectId: opts.projectId || undefined })
       .filter(t => !isBlocked(t) && (!t.dueDate || t.dueDate <= today))
       .sort((a, b) => {
         const aDue = a.dueDate ? 0 : 1, bDue = b.dueDate ? 0 : 1;
         return aDue - bDue || taskScore(b) - taskScore(a);
       });
 
-    const plan = [];
-    for (const t of cands) {
-      if (plan.length >= 8) break;
-      const dur = Math.min(Math.max(Math.ceil((t.estimateMinutes || 30) / 15) * 15, 15), 120);
+    const sizeOf = (t) => Math.min(Math.max(Math.ceil((t.estimateMinutes || 30) / 15) * 15, 15), 120);
+    const place = (task, dur) => {
       const slot = free.find(([s, e]) => e - s >= dur);
-      if (!slot) continue;
-      plan.push({ task: t, start: slot[0], end: slot[0] + dur });
-      slot[0] += dur;
+      if (!slot) return false;
+      plan.push({ task, start: slot[0], end: slot[0] + dur });
+      slot[0] += dur + gap;
+      return true;
+    };
+
+    const plan = [];
+    if (opts.mode === 'interleave') {
+      // rotate 30-minute chunks across tasks — progress on several fronts
+      const queue = cands.slice(0, 6).map(t => ({ t, left: sizeOf(t) }));
+      let guard = 0;
+      while (queue.some(q => q.left > 0) && plan.length < 12 && guard++ < 40) {
+        let placedAny = false;
+        for (const q of queue) {
+          if (q.left <= 0 || plan.length >= 12) continue;
+          const chunk = Math.min(30, q.left);
+          if (place(q.t, chunk)) { q.left -= chunk; placedAny = true; }
+          else q.left = 0; // no slot fits — stop trying this task
+        }
+        if (!placedAny) break;
+      }
+    } else {
+      // deep focus: one uninterrupted block per task, until done
+      for (const t of cands) {
+        if (plan.length >= 8) break;
+        place(t, sizeOf(t));
+      }
     }
     return plan;
   }
 
-  function openAutoPlan() {
-    pendingPlan = computeAutoPlan();
+  function readAutoPlanOpts() {
+    return {
+      projectId: document.getElementById('apProject')?.value || null,
+      startMin: timeToMin(document.getElementById('apStart')?.value || minToTime(autoPlanDefaults().startMin)),
+      endMin: timeToMin(document.getElementById('apEnd')?.value || minToTime(autoPlanDefaults().endMin)),
+      breaks: !!document.getElementById('apBreaks')?.checked,
+      mode: document.getElementById('apMode')?.value || 'deep',
+    };
+  }
+
+  function renderAutoPlanPreview() {
+    const el = document.getElementById('autoplanPreview');
+    if (!el) return;
+    pendingPlan = computeAutoPlan(readAutoPlanOpts());
     if (pendingPlan.length === 0) {
-      toast('Nothing to plan — no open tasks fit today’s free slots');
+      el.innerHTML = `<p class="text-xs text-faint" style="padding:var(--space-3) 0;">Nothing fits — widen the window, switch project, or add estimates to open tasks.</p>`;
+      const btn = document.getElementById('apConfirm');
+      if (btn) btn.disabled = true;
       return;
     }
     const total = pendingPlan.reduce((s, p) => s + (p.end - p.start), 0);
-    showModal('Auto-plan today', `
-      <p class="text-xs text-muted" style="margin-bottom:var(--space-3);">
-        Your top tasks, slotted into today's free time by score and estimate. Blocks land in the planner where you can still drag and resize them.
-      </p>
+    el.innerHTML = `
       <div class="autoplan-list">
         ${pendingPlan.map(p => {
           const proj = p.task.projectId ? State.getProject(p.task.projectId) : null;
@@ -4048,14 +4229,57 @@ const App = (() => {
           </div>`;
         }).join('')}
       </div>
-      <p class="text-xs text-faint" style="margin-top:var(--space-2);">${pendingPlan.length} block${pendingPlan.length === 1 ? '' : 's'} · ${estimateLabel(total)} planned</p>
+      <p class="text-xs text-faint" style="margin-top:var(--space-2);">${pendingPlan.length} block${pendingPlan.length === 1 ? '' : 's'} · ${estimateLabel(total)} planned</p>`;
+    const btn = document.getElementById('apConfirm');
+    if (btn) btn.disabled = false;
+  }
+
+  function openAutoPlan() {
+    const d = autoPlanDefaults();
+    const projects = State.getProjects();
+    showModal('Auto-plan today', `
+      <p class="text-xs text-muted" style="margin-bottom:var(--space-3);">
+        Top tasks slotted into free time by score and estimate. Blocks stay draggable in the planner.
+      </p>
+      <div class="grid-2">
+        <div class="form-group">
+          <label class="form-label">Project</label>
+          <select class="form-select" id="apProject" onchange="App.renderAutoPlanPreview()">
+            <option value="">All projects</option>
+            ${projects.map(p => `<option value="${p.id}">${'– '.repeat(p.depth || 0)}${p.name}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Style</label>
+          <select class="form-select" id="apMode" onchange="App.renderAutoPlanPreview()">
+            <option value="deep">Deep focus — finish one task at a time</option>
+            <option value="interleave">Mix it up — rotate 30m chunks</option>
+          </select>
+        </div>
+      </div>
+      <div class="grid-2">
+        <div class="form-group">
+          <label class="form-label">Start</label>
+          <input type="time" class="form-input" id="apStart" value="${minToTime(d.startMin)}" onchange="App.renderAutoPlanPreview()">
+        </div>
+        <div class="form-group">
+          <label class="form-label">End</label>
+          <input type="time" class="form-input" id="apEnd" value="${minToTime(Math.max(d.endMin, d.startMin + 15))}" onchange="App.renderAutoPlanPreview()">
+        </div>
+      </div>
+      <label class="form-label" style="display:flex;align-items:center;gap:var(--space-2);cursor:pointer;margin-bottom:var(--space-2);">
+        <input type="checkbox" id="apBreaks" onchange="App.renderAutoPlanPreview()"> 10-minute breaks between blocks
+      </label>
+      <div id="autoplanPreview"></div>
     `, [
       `<button class="btn btn-secondary" onclick="App.closeModal()">Cancel</button>`,
-      `<button class="btn btn-primary" onclick="App.confirmAutoPlan()">${icon('calendar-check', 14)}Add to planner</button>`,
+      `<button class="btn btn-primary" id="apConfirm" onclick="App.confirmAutoPlan()">${icon('calendar-check', 14)}Add to planner</button>`,
     ]);
+    renderAutoPlanPreview();
   }
 
   function confirmAutoPlan() {
+    if (pendingPlan.length === 0) return;
     const today = State.todayStr();
     pendingPlan.forEach(p => {
       const proj = p.task.projectId ? State.getProject(p.task.projectId) : null;
@@ -4443,6 +4667,30 @@ const App = (() => {
     render();
   }
 
+  // Nuke cached app files + service workers, then reload — the escape
+  // hatch when a deployed update hasn't reached this device yet.
+  // localStorage (your data) is untouched.
+  async function hardRefresh() {
+    toast('Clearing caches — reloading…');
+    try {
+      if ('caches' in window) {
+        // Cache Storage is shared origin-wide with the root site's service
+        // worker — only ever touch THIS app's cache family.
+        const keys = await caches.keys();
+        await Promise.all(keys
+          .filter(k => k.startsWith('cade-project-') || k.startsWith('cade-cdn-'))
+          .map(k => caches.delete(k)));
+      }
+      if ('serviceWorker' in navigator) {
+        const regs = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(regs
+          .filter(r => r.scope.includes('/project'))
+          .map(r => r.unregister()));
+      }
+    } catch (err) { /* still reload — a plain reload is better than nothing */ }
+    setTimeout(() => location.reload(), 300);
+  }
+
   function setHotkey(action, value) {
     const v = (value || '').trim().toLowerCase().slice(0, 1);
     const hotkeys = { ...(State.getSettings().hotkeys || {}) };
@@ -4547,6 +4795,7 @@ const App = (() => {
       if (e.key === 'Escape') { closeModal(); closePanel(); closePopover(); return; }
       if ((e.metaKey || e.ctrlKey) && e.key === 'n') { e.preventDefault(); openNewEntry('task'); return; }
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); openPalette(); return; }
+      if ((e.metaKey || e.ctrlKey) && e.key === 'l' && currentTab === 'scratch') { e.preventDefault(); clearScratchAll(); return; }
       const t = e.target;
       const typing = ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName) || t.isContentEditable;
       if (typing || e.metaKey || e.ctrlKey || e.altKey) return;
@@ -4630,6 +4879,8 @@ const App = (() => {
     openDailyReview, reviewAction,
     openAutoPlan, confirmAutoPlan,
     openPasteImport, previewPasteImport, runPasteImport,
+    hardRefresh, setPixelsMode, renderAutoPlanPreview,
+    addScratchIdea, scratchToTask, copyScratchIdea, deleteScratchIdea, clearScratchAll,
     logFood, deleteFoodLog, useShortcutHealth,
     toggleEntry, deleteEntry, archiveEntry, unarchiveEntry, startTimerForTask,
     selectEntryCard, setWorkingProject, toggleSidebar,
