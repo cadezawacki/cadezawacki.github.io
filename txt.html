@@ -2518,7 +2518,15 @@ body.sel-mode .editor-wrap .cm-content { -webkit-touch-callout: none; }
   position: fixed; z-index: 5000; background: var(--surface); border: 1px solid var(--border);
   border-radius: var(--radius-lg); box-shadow: var(--shadow-lg); display: flex; flex-direction: column;
   font-size: var(--text-sm); color: var(--text); min-width: 180px;
+  /* No double-tap zoom inside panels on mobile; body scrolling still works. */
+  touch-action: manipulation;
 }
+/* A game owns the screen while its panel is open: nothing in the panel is
+   selectable (fast taps must never start a text selection or zoom), and the
+   document behind it can't be highlighted either — the game is the focus
+   until closed. Pointer input on the editor is blocked in JS (see _mkPanel). */
+.cade-game-panel, .cade-game-panel * { -webkit-user-select: none; user-select: none; }
+body.game-open .editor-wrap { -webkit-user-select: none; user-select: none; }
 .cade-panel-head { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-bottom: 1px solid var(--border); cursor: move; user-select: none; }
 .cade-panel-head .cade-panel-title { font-weight: 600; flex: 1; font-size: var(--text-sm); }
 .cade-panel-head .cade-panel-x { cursor: pointer; opacity: 0.6; padding: 0 6px; border-radius: 4px; font-size: 16px; line-height: 1; }
@@ -2783,6 +2791,7 @@ body.readonly .cm-img-grip { display: none; }
   <button class="find-btn" id="find-next" title="Next match (Enter)">↓</button>
   <button class="find-btn find-toggle" id="find-case" title="Match case">Aa</button>
   <button class="find-btn find-toggle" id="find-regex" title="Regular expression">.*</button>
+  <button class="find-btn find-toggle" id="find-invert" title="Invert (NOT) — match everything EXCEPT the Find text">≠</button>
   <input class="find-input" id="replace-input" type="text" placeholder="Replace with… (\n \t work)" autocomplete="off" spellcheck="false">
   <button class="find-btn" id="replace-one" title="Replace current match">Replace</button>
   <button class="find-btn" id="replace-all" title="Replace all matches">All</button>
@@ -4867,6 +4876,7 @@ const searchState = {
   query: '',
   caseSensitive: false,
   regex: false,
+  invert: false, // NOT mode — match the gaps BETWEEN normal matches instead
   matches: [],   // [{from,to}] sorted by from
   current: -1,   // index into matches
   invalid: false // bad regex
@@ -6262,6 +6272,9 @@ function buildEditorExtensions() {
       }
       if (update.docChanged) {
         __mark('editing(' + update.state.doc.length + 'ch)');
+        // Typing dismisses an open spell-suggestion popup — keydown alone
+        // misses mobile IMEs, which edit the doc without real key events.
+        try { if (spellPopupEl) closeSpellPopup(); } catch {}
         saveContentDebounced();
         scheduleWordCount();
         try { scheduleImgRemovalCheck(); } catch {} // GC deleted images (widget/memory)
@@ -6553,11 +6566,45 @@ function closeSpellPopup() {
   if (_spellOutsideTimer) { clearTimeout(_spellOutsideTimer); _spellOutsideTimer = null; }
   if (spellPopupEl) { spellPopupEl.remove(); spellPopupEl = null; }
   document.removeEventListener('pointerdown', onSpellOutside, true);
+  document.removeEventListener('keydown', onSpellKeydown, true);
+  try { editor.scrollDOM.removeEventListener('scroll', onSpellScroll); } catch {}
 }
 
+// Tapping the word whose popup is already showing should CLOSE it, not bounce
+// it straight back open. The dismissing tap's pointerdown closes the popup
+// here — before the same tap's click handler runs and would re-open it — so
+// remember what was just closed and let the click consume that memory.
+let _spellClosedAt = 0, _spellClosedTarget = null;
 function onSpellOutside(e) {
-  if (spellPopupEl && !spellPopupEl.contains(e.target)) closeSpellPopup();
+  if (spellPopupEl && !spellPopupEl.contains(e.target)) {
+    _spellClosedAt = Date.now();
+    _spellClosedTarget = spellPopupEl._spellTarget || null;
+    closeSpellPopup();
+  }
 }
+
+// True (once) if this tap is the one that just dismissed the popup for the
+// same word — the caller should not re-open it. Consumed on first check so an
+// intentional second tap re-opens normally.
+function consumeSpellReopenSuppression(target) {
+  const t = _spellClosedTarget;
+  _spellClosedTarget = null;
+  return !!(t && Date.now() - _spellClosedAt < 700
+    && t.from === target.from && t.to === target.to && t.word === target.word);
+}
+
+// Continuing to type (or pressing Escape) means the user doesn't want the
+// suggestion — dismiss instead of making them aim a tap somewhere neutral.
+function onSpellKeydown(e) {
+  if (!spellPopupEl) return;
+  if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeSpellPopup(); return; }
+  if (e.key === 'Shift' || e.key === 'Control' || e.key === 'Alt' || e.key === 'Meta') return;
+  closeSpellPopup();
+}
+
+// The popup is anchored to fixed viewport coords — scrolling detaches it from
+// its word, so treat a scroll as dismissal too.
+function onSpellScroll() { closeSpellPopup(); }
 
 function replaceWord(target, replacement) {
   editor.dispatch({
@@ -6615,6 +6662,7 @@ function openSpellPopup(target) {
 
   document.body.appendChild(pop);
   spellPopupEl = pop;
+  pop._spellTarget = target; // for tap-again-to-close (consumeSpellReopenSuppression)
 
   // Anchor under the word, clamped to the viewport.
   const coords = editor.coordsAtPos(target.from);
@@ -6634,6 +6682,8 @@ function openSpellPopup(target) {
     _spellOutsideTimer = null;
     document.addEventListener('pointerdown', onSpellOutside, true);
   }, 0);
+  document.addEventListener('keydown', onSpellKeydown, true);
+  try { editor.scrollDOM.addEventListener('scroll', onSpellScroll, { passive: true }); } catch {}
 }
 
 // Coarse pointer = touch device (phone/tablet). Touch opens our menus on a
@@ -6672,7 +6722,7 @@ editor.dom.addEventListener('click', (e) => {
     // of the highlight (and via the toolbar picker).
     const spellHit = hitSpell(pos);
     const hl = hitHighlight(pos);
-    if (spellHit && hl) { e.preventDefault(); openSpellPopup(spellHit); return; }
+    if (spellHit && hl) { e.preventDefault(); if (!consumeSpellReopenSuppression(spellHit)) openSpellPopup(spellHit); return; }
     if (hl) { e.preventDefault(); openHighlightMenu(hl, e.clientX, e.clientY); return; }
     const link = hitLink(pos);
     if (link) {
@@ -6681,7 +6731,7 @@ editor.dom.addEventListener('click', (e) => {
       else openLinkMenu(link, e.clientX, e.clientY);
       return;
     }
-    if (spellHit) { openSpellPopup(spellHit); return; }
+    if (spellHit) { if (!consumeSpellReopenSuppression(spellHit)) openSpellPopup(spellHit); return; }
     closeSpellPopup(); closeCtxMenu();
     return;
   }
@@ -7478,6 +7528,50 @@ function main(ctx) {
   });
   if (ctx.selection) ctx.selection = out; else ctx.fullText = out;
   showToast(n ? ('Migrated ' + n + ' highlight' + (n === 1 ? '' : 's')) : 'No v1 highlights found', n ? 'success' : 'info', 2200);
+}`);
+
+// ---- Regex Extract (item 5): keep ONLY what the pattern matches ----
+registerScript(`/**
+  {
+    "name": "Regex Extract",
+    "description": "Prompt for a regex; delete everything EXCEPT the matches (one per line)",
+    "author": "Cade",
+    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='4 7 4 4 20 4 20 7'/><line x1='9' y1='20' x2='15' y2='20'/><line x1='12' y1='4' x2='12' y2='20'/><circle cx='19' cy='17' r='3'/><line x1='21.5' y1='19.5' x2='23' y2='21'/></svg>",
+    "tags": "regex,extract,filter,grep,match,keep,only,pattern"
+  }
+**/
+function main(ctx) {
+  var input = prompt(
+    'Regex pattern \\u2014 everything EXCEPT its matches is deleted.\\n' +
+    'Plain pattern (flags gm) or /pattern/flags. Each match becomes its own line;\\n' +
+    'capture groups, if used, are kept instead of the full match (tab-separated).\\n' +
+    'Runs on the selection / current row / whole doc.', '');
+  if (input == null || !input.trim()) return;
+  input = input.trim();
+  var body = input, flags = 'gm';
+  var slashForm = input.match(/^\\/([\\s\\S]+)\\/([a-z]*)$/);
+  if (slashForm) { body = slashForm[1]; flags = slashForm[2]; }
+  if (flags.indexOf('g') === -1) flags += 'g';
+  var re;
+  try { re = new RegExp(body, flags); }
+  catch (e) { showToast('Bad regex: ' + (e.message || e), 'error', 3200); return; }
+  var t = ctx.selection || ctx.fullText;
+  var out = [];
+  var hit;
+  while ((hit = re.exec(t)) !== null) {
+    if (hit[0].length === 0) { re.lastIndex++; continue; } // zero-width guard
+    if (hit.length > 1) {
+      var groups = hit.slice(1).filter(function (g) { return g != null; });
+      out.push(groups.length ? groups.join('\\t') : hit[0]);
+    } else {
+      out.push(hit[0]);
+    }
+    if (out.length >= 200000) break; // runaway guard
+  }
+  if (!out.length) { showToast('No matches \\u2014 nothing changed', 'error', 2500); return; }
+  var result = out.join('\\n');
+  if (ctx.selection) ctx.selection = result; else ctx.fullText = result;
+  showToast('Extracted ' + out.length + ' match' + (out.length === 1 ? '' : 'es'), 'success', 2200);
 }`);
 
 
@@ -8801,12 +8895,22 @@ async function _doBroadcast() {
   if (_broadcastEpoch !== _switchEpoch) return;
   // Don't push local edits up until we've reconciled with the server — otherwise
   // unsynced offline edits would clobber the server before the user can choose.
-  if (syncState.pendingReconcile || syncState.conflictResolving) return;
+  // Retry rather than drop: edits typed DURING the reconcile still need to
+  // reach the server once it completes (dropping left them stranded until the
+  // next keystroke or divergence repair).
+  if (syncState.pendingReconcile || syncState.conflictResolving) {
+    clearTimeout(broadcastTimer);
+    broadcastTimer = setTimeout(_doBroadcast, 1000);
+    return;
+  }
   const roomName = syncState.roomName;
   if (!roomName || !syncState.firebaseDb) return;
   let raw;
   try {
     raw = editor.state.doc.toString();
+    // A rescheduled retry can fire after the reconcile already converged both
+    // sides — pushing identical text again would only churn the version counter.
+    if (raw === loadRoomSynced(roomName)) return;
     __mark('sync:broadcast(' + raw.length + 'ch)');
     const pushStartedAt = Date.now();
     await pushTextToServer(roomName, raw, syncState.encKey);
@@ -9077,6 +9181,29 @@ async function reconcileOnLive() {
   }
 }
 
+// Fetch a value under rooms/<roomName>/ straight from the SERVER via the RTDB
+// REST endpoint, bypassing the SDK entirely. This exists because the SDK's
+// `once('value')` answers from its local cache whenever a live `on('value')`
+// listener covers the same path — and after a mobile sleep the socket can be
+// dead-but-trusted for minutes, leaving that cache stale. A reconcile that
+// trusted it concluded "nothing changed", stamped the stale text as synced,
+// and the user's next edit pushed the stale doc over newer server data
+// (the unlock-phone-and-clobber bug, item 2). REST can't lie about staleness.
+async function _restFetchRoomVal(roomName, child, timeoutMs) {
+  const base = syncState.firebaseUrl || store.get('cade-firebase-url') || '';
+  if (!base || typeof fetch !== 'function') throw new Error('rest-unavailable');
+  const url = base.replace(/\/+$/, '') + '/rooms/' + encodeURIComponent(roomName) + '/' + child + '.json';
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), timeoutMs || 8000);
+  try {
+    const r = await fetch(url, { signal: ctrl.signal, cache: 'no-store' });
+    if (!r.ok) throw new Error('rest-' + r.status);
+    return await r.json();
+  } finally {
+    clearTimeout(t);
+  }
+}
+
 // Fetch the latest server text for the active room and reconcile it with local.
 async function reconcileRoom() {
   const roomName = syncState.roomName;
@@ -9084,12 +9211,23 @@ async function reconcileRoom() {
   __mark('sync:reconcile');
   syncState.pendingRemoteText = null;
 
-  // Bounded fetch of the most recent server text so we never hang on a flaky link.
-  let snapVal;
-  snapVal = await Promise.race([
-    syncState.firebaseDb.ref(`rooms/${roomName}/text`).once('value').then(s => s.val()),
-    new Promise((_, rej) => setTimeout(() => rej(new Error('reconcile-timeout')), 10000)),
-  ]);
+  // Server-truth fetch of the most recent text + version: REST first (see
+  // _restFetchRoomVal — the SDK read can be stale), SDK as the fallback so a
+  // blocked REST endpoint degrades to the old behavior. Both are bounded so
+  // we never hang on a flaky link.
+  let snapVal, serverVer = null, viaRest = false;
+  try {
+    [snapVal, serverVer] = await Promise.all([
+      _restFetchRoomVal(roomName, 'text', 8000),
+      _restFetchRoomVal(roomName, 'v', 8000).catch(() => null),
+    ]);
+    viaRest = true;
+  } catch (_) {
+    snapVal = await Promise.race([
+      syncState.firebaseDb.ref(`rooms/${roomName}/text`).once('value').then(s => s.val()),
+      new Promise((_, rej) => setTimeout(() => rej(new Error('reconcile-timeout')), 10000)),
+    ]);
+  }
   // The user may have switched rooms while we awaited — resolving against the
   // editor now would merge the wrong room's text into the wrong document.
   if (syncState.roomName !== roomName) return;
@@ -9108,12 +9246,14 @@ async function reconcileRoom() {
   }
 
   // Read the server version counter (null on legacy rooms predating versioning,
-  // in which case we fall back to the text-based heuristics below).
-  let serverVer = null;
-  try {
-    serverVer = await syncState.firebaseDb.ref(`rooms/${roomName}/v`).once('value').then(s => s.val());
-  } catch (_) { serverVer = null; }
-  if (syncState.roomName !== roomName) return;
+  // in which case we fall back to the text-based heuristics below). REST
+  // already delivered it when it worked; only the SDK fallback path fetches here.
+  if (!viaRest) {
+    try {
+      serverVer = await syncState.firebaseDb.ref(`rooms/${roomName}/v`).once('value').then(s => s.val());
+    } catch (_) { serverVer = null; }
+    if (syncState.roomName !== roomName) return;
+  }
 
   const localText = editor.state.doc.toString();
 
@@ -9463,6 +9603,10 @@ document.addEventListener('visibilitychange', () => {
 // A bfcache restore resumes the page with whatever socket state it froze with —
 // treat it exactly like a long-hidden resume.
 window.addEventListener('pageshow', (e) => { if (e.persisted) _resumeSyncAfterHidden(); });
+// Page Lifecycle API: mobile browsers can freeze a backgrounded page and thaw
+// it without a clean hidden→visible pair — `resume` is the thaw signal, and
+// the socket state it thawed with is exactly as suspect as after a long hide.
+document.addEventListener('resume', () => { try { _resumeSyncAfterHidden(); } catch {} });
 
 window.forceSyncReload = async function() {
   closeAllMenus();
@@ -14026,6 +14170,9 @@ function scanMatches(cap) {
   const q = searchState.query;
   if (!q) return out;
   const text = editor.state.doc.toString();
+  // Inverted (NOT) mode needs every normal match to build the gaps between
+  // them, so the raw scan runs uncapped there and the cap applies to the gaps.
+  const rawCap = searchState.invert ? Infinity : cap;
   const useRegex = searchState.regex || FIND_ESCAPE_RE.test(q);
   if (useRegex) {
     let re;
@@ -14033,7 +14180,7 @@ function scanMatches(cap) {
     try { re = new RegExp(pattern, searchState.caseSensitive ? 'g' : 'gi'); }
     catch { return null; }
     let m;
-    while ((m = re.exec(text)) !== null && out.length < cap) {
+    while ((m = re.exec(text)) !== null && out.length < rawCap) {
       if (m[0].length === 0) { re.lastIndex++; continue; } // zero-width guard
       out.push({ from: m.index, to: m.index + m[0].length });
     }
@@ -14041,12 +14188,24 @@ function scanMatches(cap) {
     const hay = searchState.caseSensitive ? text : text.toLowerCase();
     const needle = searchState.caseSensitive ? q : q.toLowerCase();
     let idx = 0;
-    while ((idx = hay.indexOf(needle, idx)) !== -1 && out.length < cap) {
+    while ((idx = hay.indexOf(needle, idx)) !== -1 && out.length < rawCap) {
       out.push({ from: idx, to: idx + needle.length });
       idx += needle.length;
     }
   }
-  return out;
+  if (!searchState.invert) return out;
+  // NOT/INVERSE: the result set is everything EXCEPT the matches — the spans
+  // between consecutive matches (adjacent matches yield no empty span). A
+  // query with zero matches inverts to one span covering the whole document.
+  const inv = [];
+  let pos = 0;
+  for (const m of out) {
+    if (inv.length >= cap) return inv;
+    if (m.from > pos) inv.push({ from: pos, to: m.from });
+    if (m.to > pos) pos = m.to;
+  }
+  if (pos < text.length && inv.length < cap) inv.push({ from: pos, to: text.length });
+  return inv;
 }
 
 function computeMatches() {
@@ -14111,6 +14270,9 @@ function findStep(delta) {
 // needed since we anchor implicitly by matching the same text.
 function replacementFor(matchText) {
   const raw = _expandReplaceEscapes(document.getElementById('replace-input').value);
+  // Inverted matches are the gaps BETWEEN pattern hits — the pattern doesn't
+  // describe them, so $1/$& group references can't apply.
+  if (searchState.invert) return raw;
   if (!searchState.regex) {
     // A plain query with escape tokens matched via regex — group refs don't
     // apply, but the escape expansion above does (item 27).
@@ -14256,6 +14418,13 @@ window.closeFindPanel = function() {
   regexBtn.addEventListener('click', () => {
     searchState.regex = !searchState.regex;
     regexBtn.classList.toggle('active', searchState.regex);
+    searchRecomputeAndRefresh(true);
+  });
+
+  const invertBtn = document.getElementById('find-invert');
+  invertBtn.addEventListener('click', () => {
+    searchState.invert = !searchState.invert;
+    invertBtn.classList.toggle('active', searchState.invert);
     searchRecomputeAndRefresh(true);
   });
 })();
@@ -14563,6 +14732,44 @@ setInterval(snapshotNow, SNAP_AUTO_MS);
 // ============================================
 // WIDGETS (Round 2): outline, pomodoro, zen, clock, daily note
 // ============================================
+// Game panels get focus-lock treatment (item 3): while one is open the game
+// owns the pointer — no double-tap zoom, no text selection, and taps on the
+// document behind it must not move the cursor or pop the mobile keyboard.
+// Keyed by panel id so every game module gets it without changes; cleanup
+// watches the DOM because games remove their panel directly rather than
+// through a shared close path.
+const GAME_PANEL_IDS = ['snake-panel', 'tetris-panel', 'g2048-panel', 'crawler-panel', 'game-panel'];
+// While a game is open, pointer input aimed at the editor is swallowed before
+// CodeMirror can move the cursor, start a selection, or raise the keyboard.
+// Attached only for the game's lifetime: a permanent non-passive touchstart
+// listener on document would put ALL touch scrolling on the slow path.
+function _blockEditorPointerForGame(e) {
+  const wrap = document.getElementById('editor-wrap');
+  if (wrap && wrap.contains(e.target)) e.preventDefault();
+}
+const _GAME_BLOCK_EVENTS = ['pointerdown', 'mousedown', 'touchstart'];
+let _gamePanelObserver = null;
+function _watchGamePanel(p) {
+  p.classList.add('cade-game-panel');
+  document.body.classList.add('game-open');
+  // The game is the focus — drop editor focus so the soft keyboard retracts.
+  try { editor.contentDOM.blur(); } catch {}
+  if (_gamePanelObserver) return;
+  _GAME_BLOCK_EVENTS.forEach(t =>
+    document.addEventListener(t, _blockEditorPointerForGame, { capture: true, passive: false }));
+  _gamePanelObserver = new MutationObserver(() => {
+    if (GAME_PANEL_IDS.some(gid => document.getElementById(gid))) return;
+    document.body.classList.remove('game-open');
+    _GAME_BLOCK_EVENTS.forEach(t =>
+      document.removeEventListener(t, _blockEditorPointerForGame, { capture: true }));
+    _gamePanelObserver.disconnect();
+    _gamePanelObserver = null;
+  });
+  // Panels are direct children of <body>; shallow watch so per-frame DOM
+  // updates inside the game (score text etc.) don't tick the observer.
+  _gamePanelObserver.observe(document.body, { childList: true });
+}
+
 // Shared draggable, closeable floating panel.
 function _mkPanel(id, title, bodyHtml) {
   let p = document.getElementById(id);
@@ -14574,6 +14781,7 @@ function _mkPanel(id, title, bodyHtml) {
     '<span class="cade-panel-x" title="Close">×</span></div><div class="cade-panel-body">' + bodyHtml + '</div>';
   p.querySelector('.cade-panel-title').textContent = title;
   document.body.appendChild(p);
+  if (GAME_PANEL_IDS.indexOf(id) !== -1) _watchGamePanel(p);
   p.querySelector('.cade-panel-x').addEventListener('click', () => { p.remove(); if (p._onClose) p._onClose(); });
   const head = p.querySelector('.cade-panel-head');
   let sx, sy, ox, oy, drag = false;
