@@ -39,6 +39,63 @@ const Timers = (() => {
     return State.getSettings().timer;
   }
 
+  // ── Persistence — timers survive refresh and ride the sync blob ──
+  // Written on every state CHANGE (never per tick); elapsed time derives
+  // from wall-clock timestamps, so a reload hours later stays honest.
+  function persistTimers() {
+    if (typeof State === 'undefined') return;
+    State.updateSettings({
+      timerState: {
+        clock: {
+          mode: clock.mode, state: clock.state, remaining: clock.remaining,
+          elapsed: clock.elapsed, phase: clock.phase, count: clock.count,
+          countdownTotal: clock.countdownTotal, linkedTaskId: clock.linkedTaskId,
+          startedAt: clock.startedAt ? clock.startedAt.toISOString() : null,
+          at: Date.now(), // for running clocks: how stale `remaining/elapsed` is
+        },
+        sessions: sessions.map(s => ({
+          entryId: s.entryId, state: s.state,
+          segments: s.segments.map(seg => ({
+            start: seg.start.toISOString(),
+            end: seg.end ? seg.end.toISOString() : null,
+          })),
+        })),
+      },
+    });
+  }
+
+  function restore() {
+    const ts = State.getSettings().timerState;
+    if (!ts) return;
+    (ts.sessions || []).forEach(s => {
+      if (!State.getEntry(s.entryId) || getSession(s.entryId)) return;
+      sessions.push({
+        entryId: s.entryId, state: s.state === 'paused' ? 'paused' : 'running',
+        segments: (s.segments || []).map(seg => ({
+          start: new Date(seg.start),
+          end: seg.end ? new Date(seg.end) : undefined,
+        })),
+      });
+    });
+    const c = ts.clock;
+    if (c && c.mode && c.state !== 'idle') {
+      Object.assign(clock, {
+        mode: c.mode, state: c.state, phase: c.phase || 'work', count: c.count || 0,
+        countdownTotal: c.countdownTotal || 0, linkedTaskId: c.linkedTaskId || null,
+        startedAt: c.startedAt ? new Date(c.startedAt) : null,
+        remaining: c.remaining || 0, elapsed: c.elapsed || 0,
+      });
+      if (c.state === 'running' && c.at) {
+        const gone = Math.floor((Date.now() - c.at) / 1000);
+        if (clock.mode === 'stopwatch') clock.elapsed += gone;
+        else clock.remaining = Math.max(0, clock.remaining - gone); // 0 → first tick completes it
+      }
+    }
+    ensureTicker();
+    updateMini();
+    updateCardTickers();
+  }
+
   function formatTime(seconds) {
     seconds = Math.max(0, Math.round(seconds));
     const h = Math.floor(seconds / 3600);
@@ -142,6 +199,7 @@ const Timers = (() => {
     if (existing) { resumeSession(entryId); return; }
     sessions.push({ entryId, segments: [{ start: new Date() }], state: 'running' });
     if (pendingTaskId === entryId) pendingTaskId = null;
+    persistTimers();
     ensureTicker();
     render();
     if (typeof App !== 'undefined') App.render();
@@ -153,6 +211,7 @@ const Timers = (() => {
     const seg = s.segments[s.segments.length - 1];
     if (seg && !seg.end) seg.end = new Date();
     s.state = 'paused';
+    persistTimers();
     maybeStopTicker();
     render();
     updateCardTickers();
@@ -163,6 +222,7 @@ const Timers = (() => {
     if (!s || s.state === 'running') return;
     s.segments.push({ start: new Date() });
     s.state = 'running';
+    persistTimers();
     ensureTicker();
     render();
   }
@@ -183,6 +243,7 @@ const Timers = (() => {
     }
 
     sessions = sessions.filter(x => x !== s);
+    persistTimers();
     maybeStopTicker();
     render();
     if (typeof App !== 'undefined') App.render();
@@ -220,6 +281,7 @@ const Timers = (() => {
       clock.startedAt = new Date();
     }
     clock.state = 'running';
+    persistTimers();
     ensureTicker();
     render();
   }
@@ -227,6 +289,7 @@ const Timers = (() => {
   function pauseClock() {
     if (clock.state !== 'running') return;
     clock.state = 'paused';
+    persistTimers();
     maybeStopTicker();
     render();
   }
@@ -243,6 +306,7 @@ const Timers = (() => {
     clock.elapsed = 0;
     clock.remaining = 0;
     clock.startedAt = null;
+    persistTimers();
     maybeStopTicker();
     render();
   }
@@ -297,6 +361,7 @@ const Timers = (() => {
       clock.mode = null;
       maybeStopTicker();
     }
+    persistTimers();
     render(); // phase/pill/labels changed — full panel refresh
     if (typeof App !== 'undefined') App.render();
   }
@@ -312,6 +377,7 @@ const Timers = (() => {
       clock.remaining = phaseSeconds(phase);
       clock.state = 'paused';
     }
+    persistTimers();
     render();
   }
 
@@ -321,11 +387,13 @@ const Timers = (() => {
     clock.remaining = minutes * 60;
     clock.state = 'paused';
     clock.startedAt = new Date();
+    persistTimers();
     render();
   }
 
   function linkTask(taskId) {
     clock.linkedTaskId = taskId || null;
+    persistTimers();
     render();
   }
 
@@ -483,7 +551,6 @@ const Timers = (() => {
         ${linkTaskSelect()}
       `;
     } else if (viewMode === 'track') {
-      const tasks = State.getEntries({ type: 'task', completed: false });
       const pending = pendingTaskId ? State.getEntry(pendingTaskId) : null;
 
       // Armed task waiting for an explicit Start
@@ -522,38 +589,8 @@ const Timers = (() => {
       }
 
       if (!pending && sessions.length === 0) {
-        html += `<p class="text-muted text-sm" style="text-align:center;margin:var(--space-4) 0;">Pick a task below — you can track several at once.</p>`;
+        html += `<p class="text-muted text-sm" style="text-align:center;margin:var(--space-4) 0;">Nothing tracking. Press ▶ on any task card,<br>or use Pomodoro / Stopwatch / Countdown.</p>`;
       }
-
-      const trackable = tasks.filter(t => !getSession(t.id) && t.id !== pendingTaskId);
-      html += `
-        <div class="divider"></div>
-        <div class="section-title" style="margin-bottom:var(--space-2);">Start tracking</div>
-        <div style="display:flex;flex-direction:column;gap:var(--space-2);">
-          ${trackable.length === 0 ? '<p class="text-muted text-sm">No other open tasks</p>' :
-            trackable.slice(0, 8).map(t => `
-              <button class="chain-link" style="cursor:pointer;" onclick="Timers.startSession('${t.id}')">
-                <span class="proj-dot" style="background:${t.projectId ? State.getProject(t.projectId)?.color || '#888' : '#888'}"></span>
-                <span class="text-sm truncate">${t.title}</span>
-              </button>
-            `).join('')
-          }
-        </div>
-      `;
-    }
-
-    // Recent time logs
-    const timeLogs = State.getLogs({ type: 'time_session' }).slice(-5).reverse();
-    if (timeLogs.length > 0) {
-      html += `<div class="divider"></div>`;
-      html += `<div class="section-title" style="margin-bottom:var(--space-2);">Recent Sessions</div>`;
-      html += timeLogs.map(l => {
-        const entry = l.entryId ? State.getEntry(l.entryId) : null;
-        return `<div class="chain-link" style="font-size:var(--text-xs);">
-          <span class="font-mono" style="color:var(--accent-text);">${formatTime(l.value || 0)}</span>
-          <span class="text-muted truncate">${entry?.title || l.entryTitle || 'deleted task'}</span>
-        </div>`;
-      }).join('');
     }
 
     body.innerHTML = html;
@@ -599,5 +636,6 @@ const Timers = (() => {
     getTracking, trackedCount, startTracking,
     // panel / misc
     openPanel, toggleWindow, stopAll, render, updateMini, formatTime, getProgress,
+    restore,
   };
 })();

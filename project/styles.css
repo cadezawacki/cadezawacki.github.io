@@ -665,8 +665,7 @@ table { border-collapse: collapse; width: 100%; }
   transition: opacity var(--transition);
 }
 /* Actions appear on hover (desktop) and STAY visible once selected */
-.entry-card:hover .entry-actions,
-.entry-card.completed .entry-actions { opacity: 1; }
+.entry-card:hover .entry-actions { opacity: 1; }
 /* Touch devices have no hover — keep actions visible */
 @media (hover: none) {
   .entry-actions { opacity: 1; }
@@ -2961,3 +2960,111 @@ input[type="date"]::-webkit-calendar-picker-indicator {
 .scratch-row:hover .scratch-actions, .scratch-row:focus-within .scratch-actions { opacity: 1; }
 @media (hover: none) { .scratch-actions { opacity: 1; } }
 .scratch-actions .icon-btn { width: 28px; height: 28px; }
+
+/* ═══════════════════════════════════════════════════════════════
+   WRAP-AND-GROW single-line fields — titles, braindump, quick add,
+   palette. Text wraps and the box grows; nothing scrolls sideways.
+   ═══════════════════════════════════════════════════════════════ */
+textarea.input-grow,
+.cmdk-input-row textarea {
+  resize: none;
+  overflow: hidden;
+  field-sizing: content;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.45;
+}
+.cmdk-input-row textarea {
+  flex: 1;
+  border: none;
+  outline: none;
+  background: transparent;
+  font: inherit;
+  font-size: var(--text-base);
+  color: var(--text-primary);
+  padding: 0;
+}
+.cmdk-input-row textarea::placeholder { color: var(--text-faint); }
+
+/* ═══════════════════════════════════════════════════════════════
+   ROUND 12 — timer fixes, collapsibles, tools, sub-tasks, scratch AC
+   ═══════════════════════════════════════════════════════════════ */
+
+/* closed floating timer window is GONE, not parked lower on screen —
+   dragging sets inline top/left, which broke the transform-only hide */
+.slide-panel:not(.active) { visibility: hidden; pointer-events: none; }
+
+/* task titles are copyable text */
+.entry-title { user-select: text; -webkit-user-select: text; cursor: text; }
+
+/* idle nav timer reads as a proper always-there button */
+.timer-indicator:not(.live) {
+  border-color: var(--border);
+  background: transparent;
+  color: var(--text-muted);
+}
+.timer-indicator:not(.live):hover {
+  border-color: var(--accent);
+  color: var(--accent-text);
+  background: var(--accent-tint);
+}
+
+/* collapsible section chevrons */
+.collapse-btn { width: 24px; height: 24px; transition: transform var(--transition); }
+.collapse-btn.collapsed { transform: rotate(-90deg); }
+
+/* tools */
+.tool-card { display: flex; flex-direction: column; gap: var(--space-3); }
+.tool-result {
+  font-family: var(--font-mono);
+  font-size: var(--text-lg);
+  font-weight: 600;
+  text-align: center;
+  padding: var(--space-3);
+  background: var(--surface-2);
+  border-radius: var(--radius-md);
+  color: var(--text-faint);
+  overflow-wrap: anywhere;
+}
+.tool-result.live { color: var(--accent-text); }
+.tool-result.mono-sm { font-size: var(--text-sm); font-weight: 500; }
+
+/* sub-task posts in the journal */
+.post-todo .post-check {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+.post-todo.done .post-body { text-decoration: line-through; color: var(--text-muted); }
+.post-todo { border-left: 2px solid var(--accent); }
+.post-todo.done { border-left-color: var(--border); opacity: 0.75; }
+
+/* scratch /project autocomplete */
+.scratch-input-card { position: relative; }
+.scratch-ac {
+  position: absolute;
+  left: var(--space-2);
+  right: var(--space-2);
+  top: calc(100% - 4px);
+  z-index: 150;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+}
+.scratch-ac-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: var(--text-sm);
+  text-align: left;
+  cursor: pointer;
+}
+.scratch-ac-item:hover, .scratch-ac-item.active { background: var(--accent-tint); }

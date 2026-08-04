@@ -18,6 +18,52 @@ const Sync = (() => {
   let keyFingerprint = '';
   let connectionListener = null;
   let dataListener = null;
+  let listenerChain = Promise.resolve(); // serializes async event handling
+
+  // Identifies THIS session's writes so echoes are recognized by identity,
+  // not by content — a stale echo of our own older write must never be
+  // mistaken for another device's edit and adopted.
+  const clientId = (crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2) + Date.now().toString(36));
+
+  // Key-order-independent serialization. deepMerge/migrate reorder object
+  // keys, so JSON.stringify equality lies about "same content" — that lie
+  // caused phantom dirty states and adopt/push ping-pong between devices.
+  function stableStringify(v) {
+    if (v === null || typeof v !== 'object') return JSON.stringify(v);
+    if (Array.isArray(v)) return '[' + v.map(stableStringify).join(',') + ']';
+    return '{' + Object.keys(v).sort().map(k => JSON.stringify(k) + ':' + stableStringify(v[k])).join(',') + '}';
+  }
+
+  // Field-level merge for genuinely diverged datasets (cold start with
+  // local work, or user-chosen merge). Entries/projects: newer updatedAt
+  // wins on shared ids, one-sided items are kept. Logs/planner/scratch:
+  // union by id. Settings: the device in hand wins.
+  function mergeData(local, server) {
+    const byNewer = (a = [], b = []) => {
+      const map = new Map();
+      [...a, ...b].forEach(item => {
+        if (!item || !item.id) return;
+        const prev = map.get(item.id);
+        if (!prev || (item.updatedAt || '') > (prev.updatedAt || '')) map.set(item.id, item);
+      });
+      return [...map.values()];
+    };
+    const unionById = (a = [], b = []) => {
+      const map = new Map();
+      [...a, ...b].forEach(item => { if (item && item.id && !map.has(item.id)) map.set(item.id, item); });
+      return [...map.values()];
+    };
+    return {
+      ...server,
+      entries: byNewer(server.entries, local.entries),
+      projects: byNewer(server.projects, local.projects),
+      tags: unionById(server.tags, local.tags),
+      logs: unionById(server.logs, local.logs),
+      planner: unionById(server.planner, local.planner),
+      scratch: unionById(server.scratch, local.scratch),
+      settings: local.settings || server.settings,
+    };
+  }
 
   // ═══════════════════════════════════════════════════════════
   // ENCRYPTION PIPELINE
@@ -244,27 +290,34 @@ const Sync = (() => {
   async function pushLocal() {
     if (!connected || !db) return;
     pushing = true;
+    const prevSnapshot = lastSyncedSnapshot;
     try {
       const raw = State.getRawData();
       // Nothing changed since the last sync (e.g. we just adopted a foreign
       // write, which re-triggers schedulePush) — skip the redundant write.
-      if (lastSyncedSnapshot && JSON.stringify(raw) === JSON.stringify(lastSyncedSnapshot)) {
+      if (lastSyncedSnapshot && stableStringify(raw) === stableStringify(lastSyncedSnapshot)) {
         return;
       }
       const encrypted = await encrypt(raw);
 
+      // Snapshot BEFORE the write: Firebase fires the local echo during
+      // update(), and it must compare against what we're pushing now.
+      lastSyncedSnapshot = structuredClone(raw);
+
       // Multi-path update scoped to this fingerprint's subtree. The version
       // counter uses a server-side atomic increment; a root-level transaction
       // would require root read/write permission and reject slash-keys.
+      // meta identifies the writer so every client can ignore its own echoes.
       await db.ref().update({
         [dataPath()]: encrypted,
         [versionPath()]: firebase.database.ServerValue.increment(1),
+        [metaPath()]: { clientId, at: firebase.database.ServerValue.TIMESTAMP },
       });
 
-      lastSyncedSnapshot = structuredClone(raw);
       lastSyncedVersion++;
       updateStatus();
     } catch (e) {
+      lastSyncedSnapshot = prevSnapshot; // write failed — we are NOT synced
       console.error('Push error:', e);
     } finally {
       pushing = false;
@@ -307,22 +360,35 @@ const Sync = (() => {
       } else if (serverVersion > lastSyncedVersion && lastSyncedVersion > 0) {
         // Server newer — adopt, UNLESS local also has unpushed edits
         // (offline work must never be silently clobbered on reconnect)
-        const localDirty = JSON.stringify(localData) !== JSON.stringify(lastSyncedSnapshot);
+        const localDirty = stableStringify(localData) !== stableStringify(lastSyncedSnapshot);
         if (localDirty) {
           showConflictModal(localData, serverPayload);
           return;
         }
         State.setRawData(serverPayload);
-        lastSyncedSnapshot = structuredClone(serverPayload);
+        lastSyncedSnapshot = structuredClone(State.getRawData());
         lastSyncedVersion = serverVersion;
       } else if (lastSyncedVersion === 0) {
-        // Cold start — adopt server
-        State.setRawData(serverPayload);
-        lastSyncedSnapshot = structuredClone(serverPayload);
-        lastSyncedVersion = serverVersion;
+        // Cold start (every page load lands here). Blind adoption used to
+        // VAPORIZE anything created between page load and connect finishing
+        // (Firebase init + key derivation take seconds). Adopt only when
+        // local is empty or identical; otherwise field-level merge and push.
+        const localEmpty = !((localData.entries || []).length || (localData.logs || []).length ||
+          (localData.projects || []).length || (localData.planner || []).length || (localData.scratch || []).length);
+        if (localEmpty || stableStringify(localData) === stableStringify(serverPayload)) {
+          State.setRawData(serverPayload);
+          lastSyncedSnapshot = structuredClone(State.getRawData());
+          lastSyncedVersion = serverVersion;
+        } else {
+          const merged = mergeData(localData, serverPayload);
+          State.setRawData(merged);
+          lastSyncedSnapshot = null; // force the push below to actually write
+          lastSyncedVersion = serverVersion;
+          await pushLocal();
+        }
       } else {
         // Potential divergence — check if local changed
-        const localChanged = JSON.stringify(localData) !== JSON.stringify(lastSyncedSnapshot);
+        const localChanged = stableStringify(localData) !== stableStringify(lastSyncedSnapshot);
         const serverChanged = serverVersion !== lastSyncedVersion;
 
         if (localChanged && serverChanged) {
@@ -331,7 +397,7 @@ const Sync = (() => {
           return;
         } else if (serverChanged) {
           State.setRawData(serverPayload);
-          lastSyncedSnapshot = structuredClone(serverPayload);
+          lastSyncedSnapshot = structuredClone(State.getRawData());
           lastSyncedVersion = serverVersion;
         } else if (localChanged) {
           await pushLocal();
@@ -364,35 +430,54 @@ const Sync = (() => {
     return 'conflict';
   }
 
+  async function handleIncoming(node) {
+    if (!node || !node.data) return;
+    const serverVersion = node.version || 0;
+
+    // Our own write (fresh OR stale echo) — identity check, never content.
+    // A late echo of an older push must never masquerade as foreign data.
+    if (node.meta && node.meta.clientId === clientId) {
+      lastSyncedVersion = Math.max(lastSyncedVersion, serverVersion);
+      return;
+    }
+
+    const payload = await decrypt(node.data);
+    const verdict = classifyIncoming(
+      stableStringify(payload),
+      stableStringify(lastSyncedSnapshot),
+      stableStringify(State.getRawData()),
+      !!pushTimer || pushing
+    );
+    if (verdict === 'echo') {
+      lastSyncedVersion = Math.max(lastSyncedVersion, serverVersion);
+      return;
+    }
+    // Stale foreign event — older than (or same as) what we've already
+    // synced. Adopting it would time-travel local data backwards.
+    if (serverVersion > 0 && serverVersion <= lastSyncedVersion) return;
+
+    if (verdict === 'adopt') {
+      State.setRawData(payload);
+      // store the NORMALIZED form — what getRawData now returns — so the
+      // followup schedulePush sees "nothing changed" and stays quiet
+      lastSyncedSnapshot = structuredClone(State.getRawData());
+      lastSyncedVersion = serverVersion || lastSyncedVersion;
+    } else if (verdict === 'conflict') {
+      showConflictModal(State.getRawData(), payload);
+    }
+    // 'defer': our queued push will overwrite shortly — do nothing
+  }
+
   function setupLiveListener() {
     if (!db || dataListener) return;
-    // Parent node = { data, version } in one snapshot, so version
-    // bookkeeping stays honest without a second read.
-    dataListener = db.ref(`cade/${keyFingerprint}`).on('value', async (snap) => {
+    // Parent node = { data, version, meta } in one snapshot. Events are
+    // processed strictly in arrival order — async decrypt must not let a
+    // stale event finish after (and overwrite) a newer one.
+    dataListener = db.ref(`cade/${keyFingerprint}`).on('value', (snap) => {
       const node = snap.val();
-      if (!node || !node.data) return;
-      const serverVersion = node.version || 0;
-      try {
-        const payload = await decrypt(node.data);
-        const verdict = classifyIncoming(
-          JSON.stringify(payload),
-          JSON.stringify(lastSyncedSnapshot),
-          JSON.stringify(State.getRawData()),
-          !!pushTimer || pushing
-        );
-        if (verdict === 'echo') {
-          lastSyncedVersion = Math.max(lastSyncedVersion, serverVersion);
-        } else if (verdict === 'adopt') {
-          State.setRawData(payload);
-          lastSyncedSnapshot = structuredClone(payload);
-          lastSyncedVersion = serverVersion;
-        } else if (verdict === 'conflict') {
-          showConflictModal(State.getRawData(), payload);
-        }
-        // 'defer': our queued push will overwrite shortly — do nothing
-      } catch (e) {
-        console.error('Listener decrypt error:', e);
-      }
+      listenerChain = listenerChain
+        .then(() => handleIncoming(node))
+        .catch(e => console.error('Listener error:', e));
     });
   }
 
@@ -405,20 +490,18 @@ const Sync = (() => {
 
   async function resolveConflict(resolution, serverData) {
     if (resolution === 'local') {
+      lastSyncedSnapshot = null; // guarantee the push writes
       await pushLocal();
     } else if (resolution === 'server') {
       State.setRawData(serverData);
-      lastSyncedSnapshot = structuredClone(serverData);
+      lastSyncedSnapshot = structuredClone(State.getRawData());
       State.emit();
     } else if (resolution === 'merge') {
-      // Simple merge: prefer server entries, keep local-only
-      const merged = { ...serverData };
-      const localData = State.getRawData();
-      const serverEntryIds = new Set((serverData.entries || []).map(e => e.id));
-      const localOnly = (localData.entries || []).filter(e => !serverEntryIds.has(e.id));
-      merged.entries = [...(serverData.entries || []), ...localOnly];
+      // Field-level merge: newer updatedAt wins on shared entries/projects,
+      // one-sided items survive, logs/planner/scratch union by id.
+      const merged = mergeData(State.getRawData(), serverData);
       State.setRawData(merged);
-      lastSyncedSnapshot = structuredClone(merged);
+      lastSyncedSnapshot = null; // force the merged result to push
       await pushLocal();
     }
     setupLiveListener();
@@ -455,6 +538,14 @@ const Sync = (() => {
   return {
     connect, disconnect, schedulePush, pushLocal, resolveConflict,
     isConnected, updateStatus, autoConnect, eraseRemote,
-    encrypt, decrypt, classifyIncoming, // exposed for testing
+    encrypt, decrypt, classifyIncoming, stableStringify, mergeData, // exposed for testing
+    // test-only handles: simulate the live listener without a real Firebase
+    _test: {
+      handleIncoming,
+      get clientId() { return clientId; },
+      async setKey(pass) { cryptoKey = await deriveKey(pass); },
+      setSnapshot(s, v = 0) { lastSyncedSnapshot = s ? structuredClone(s) : null; lastSyncedVersion = v; },
+      getBookkeeping() { return { lastSyncedVersion, snapshotSet: !!lastSyncedSnapshot }; },
+    },
   };
 })();
