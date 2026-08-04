@@ -3063,12 +3063,45 @@ textarea.input-grow,
 }
 .scratch-ac-item:hover, .scratch-ac-item.active { background: var(--accent-tint); }
 
-/* tool result slot-machine spin */
+/* tool result slot-machine spin — no settle pulse, the cycling IS the show */
 .tool-result.spinning { color: var(--text-muted); }
-.tool-result.settled { animation: toolPop 0.28s ease; }
-@keyframes toolPop {
-  0% { transform: scale(1.14); }
-  100% { transform: none; }
-}
 /* prefers-reduced-motion intentionally not honored — the in-app
    Celebrations toggle is the single animation switch */
+
+/* ═══════════════════════════════════════════════════════════════
+   ROUND 13 — conflict diff box, projects declutter (mobile)
+   ═══════════════════════════════════════════════════════════════ */
+
+/* breakpoint-scoped filter variants */
+@media (min-width: 768px) { .only-mobile { display: none !important; } }
+@media (max-width: 767px) {
+  .only-desktop { display: none !important; }
+  /* tag chips: one swipeable row instead of a wrapping wall */
+  .chips-scroll-x {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  .chips-scroll-x::-webkit-scrollbar { display: none; }
+  .chips-scroll-x .filter-chip { flex-shrink: 0; white-space: nowrap; }
+  .proj-detail-header .section-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+}
+
+/* sync conflict diff box */
+.diff-box {
+  background: var(--surface-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-3);
+  margin-bottom: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.diff-row { display: flex; gap: var(--space-2); font-size: var(--text-xs); flex-wrap: wrap; }
+.diff-label { font-weight: 600; flex-shrink: 0; min-width: 90px; }
+.diff-detail { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-2); }
+.diff-chip.local { color: var(--success); }
+.diff-chip.server { color: var(--hl-blue); }
+.diff-chip.changed { color: var(--hl-orange); }
