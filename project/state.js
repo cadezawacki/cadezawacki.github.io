@@ -14,6 +14,7 @@ const State = (() => {
     planner: [], // day-planner blocks: agenda items, tracked time, breaks
     settings: {
       theme: 'dark',
+      accent: 'teal',   // accent palette name (Settings → Appearance)
       sync: {
         databaseUrl: '',
         passphrase: '',

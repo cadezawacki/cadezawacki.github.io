@@ -129,11 +129,115 @@ const App = (() => {
   }
 
   // ═══════════════════════════════════════════════════════════
+  // CELEBRATIONS — confetti on completion, milestone streaks
+  // ═══════════════════════════════════════════════════════════
+  // Bursts spawn from wherever the user last touched, so the reward
+  // lands where the eye already is.
+  let lastPointer = { x: null, y: null };
+  document.addEventListener('pointerdown', (e) => {
+    lastPointer = { x: e.clientX, y: e.clientY };
+  }, { capture: true, passive: true });
+
+  function celebrate(count = 28) {
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
+    const x = lastPointer.x ?? window.innerWidth / 2;
+    const y = lastPointer.y ?? window.innerHeight / 3;
+    let cv = document.getElementById('confettiCanvas');
+    if (!cv) {
+      cv = document.createElement('canvas');
+      cv.id = 'confettiCanvas';
+      cv.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:400;';
+      document.body.appendChild(cv);
+    }
+    cv.width = window.innerWidth;
+    cv.height = window.innerHeight;
+    const ctx = cv.getContext('2d');
+    const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#0f9598';
+    const colors = [accent, '#e6a23c', '#e06d6d', '#6db4f0', '#6fcf97'];
+    const parts = [];
+    for (let i = 0; i < count; i++) {
+      const ang = -Math.PI / 2 + (Math.random() - 0.5) * 1.8;
+      const v = 4 + Math.random() * 5;
+      parts.push({
+        x, y, vx: Math.cos(ang) * v, vy: Math.sin(ang) * v,
+        w: 4 + Math.random() * 4, h: 3 + Math.random() * 3,
+        rot: Math.random() * Math.PI, vr: (Math.random() - 0.5) * 0.3,
+        color: colors[i % colors.length], life: 1,
+      });
+    }
+    const t0 = performance.now();
+    (function tick(now) {
+      const dt = Math.min((now - t0) / 900, 1);
+      ctx.clearRect(0, 0, cv.width, cv.height);
+      parts.forEach(p => {
+        p.x += p.vx; p.y += p.vy; p.vy += 0.22; p.vx *= 0.985;
+        p.rot += p.vr; p.life = 1 - dt;
+        ctx.save();
+        ctx.globalAlpha = Math.max(p.life, 0);
+        ctx.translate(p.x, p.y); ctx.rotate(p.rot);
+        ctx.fillStyle = p.color;
+        ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
+        ctx.restore();
+      });
+      if (dt < 1) requestAnimationFrame(tick);
+      else { ctx.clearRect(0, 0, cv.width, cv.height); cv.remove(); }
+    })(t0);
+  }
+
+  const STREAK_MILESTONES = [7, 14, 30, 50, 100, 365];
+  function checkStreakMilestone(habitId) {
+    const h = State.getEntry(habitId);
+    if (!h) return false;
+    const s = State.calculateStreak(habitId).current;
+    if (STREAK_MILESTONES.includes(s)) {
+      celebrate(70);
+      toast(`🔥 ${s}-day streak on “${h.title}”!`);
+      return true;
+    }
+    return false;
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // ACCENT THEMES — one variable family, applied everywhere
+  // ═══════════════════════════════════════════════════════════
+  const ACCENTS = {
+    teal:   { accent: '#0f9598', hover: '#12b3b7' },
+    indigo: { accent: '#5b67d8', hover: '#7c86e8' },
+    plum:   { accent: '#9459c9', hover: '#a97ad6' },
+    coral:  { accent: '#d95f57', hover: '#e37f78' },
+    amber:  { accent: '#bd7f1b', hover: '#d29a3a' },
+    forest: { accent: '#4a9155', hover: '#63a96e' },
+    rose:   { accent: '#c9538a', hover: '#d677a2' },
+  };
+
+  function applyAccent(name) {
+    const a = ACCENTS[name] || ACCENTS.teal;
+    const root = document.documentElement;
+    const hex = a.accent.replace('#', '');
+    const rgb = `${parseInt(hex.slice(0, 2), 16)}, ${parseInt(hex.slice(2, 4), 16)}, ${parseInt(hex.slice(4, 6), 16)}`;
+    root.style.setProperty('--accent', a.accent);
+    root.style.setProperty('--accent-hover', a.hover);
+    root.style.setProperty('--accent-tint', `rgba(${rgb}, 0.09)`);
+    root.style.setProperty('--accent-tint-strong', `rgba(${rgb}, 0.16)`);
+    // dark theme reads better with the lighter variant as text color
+    const isDark = root.getAttribute('data-theme') === 'dark';
+    root.style.setProperty('--accent-text', isDark ? a.hover : a.accent);
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', a.accent);
+  }
+
+  function setAccent(name) {
+    State.updateSettings({ accent: name });
+    applyAccent(name);
+    render();
+  }
+
+  // ═══════════════════════════════════════════════════════════
   // THEME
   // ═══════════════════════════════════════════════════════════
   function initTheme() {
     const saved = State.getSettings().theme;
     document.documentElement.setAttribute('data-theme', saved);
+    applyAccent(State.getSettings().accent || 'teal');
     const toggleBtn = document.getElementById('themeToggle');
     if (toggleBtn) {
       toggleBtn.innerHTML = saved === 'dark' ? icon('sun') : icon('moon');
@@ -145,6 +249,7 @@ const App = (() => {
     const next = current === 'dark' ? 'light' : 'dark';
     document.documentElement.setAttribute('data-theme', next);
     State.updateSettings({ theme: next });
+    applyAccent(State.getSettings().accent || 'teal'); // accent-text is theme-dependent
     const toggleBtn = document.getElementById('themeToggle');
     if (toggleBtn) {
       toggleBtn.innerHTML = next === 'dark' ? icon('sun') : icon('moon');
@@ -157,7 +262,9 @@ const App = (() => {
   // ═══════════════════════════════════════════════════════════
   // ROUTING
   // ═══════════════════════════════════════════════════════════
+  let animateNextRender = false;
   function switchTab(tab) {
+    animateNextRender = tab !== currentTab; // animate real switches, not re-renders
     currentTab = tab;
     document.querySelectorAll('.tab-item').forEach(el => {
       el.classList.toggle('active', el.dataset.tab === tab);
@@ -184,6 +291,13 @@ const App = (() => {
       case 'history': main.innerHTML = renderHistory(); break;
       case 'settings': main.innerHTML = renderSettings(); break;
       case 'taskpage': main.innerHTML = renderTaskPage(); break;
+    }
+
+    if (animateNextRender) {
+      animateNextRender = false;
+      main.classList.remove('view-anim');
+      void main.offsetWidth; // restart the animation
+      main.classList.add('view-anim');
     }
 
     refreshIcons();
@@ -1555,6 +1669,7 @@ const App = (() => {
 
   function cycleHabitCell(habitId, dateStr) {
     State.cycleHabitOnDate(habitId, dateStr);
+    if (State.habitStatusOn(habitId, dateStr) === 'done') checkStreakMilestone(habitId);
     render();
   }
 
@@ -1566,6 +1681,130 @@ const App = (() => {
 
   function insightsFilterObj() {
     return { projectId: insightsProject, entryId: insightsEntry };
+  }
+
+  // ── Weekly digest: this week vs last, at a glance ───────────
+  function fmtMin(min) {
+    min = Math.round(min);
+    if (min < 60) return `${min}m`;
+    const h = Math.floor(min / 60), m = min % 60;
+    return m ? `${h}h ${m}m` : `${h}h`;
+  }
+
+  function weekStats(dates, inFilter) {
+    const dateSet = new Set(dates);
+    const done = State.getEntries({ includeArchived: true }).filter(e =>
+      e.type !== 'habit' && e.completed && e.completedAt && dateSet.has(e.completedAt.split('T')[0]) && inFilter(e)).length;
+    const habitDone = State.getLogs({ type: 'habit_completion' })
+      .filter(l => dateSet.has(l.date) && (!l.entryId || !State.getEntry(l.entryId) || inFilter(State.getEntry(l.entryId)))).length;
+
+    let minutes = 0;
+    const byProject = {};
+    State.getLogs({ type: 'time_session' }).forEach(l => {
+      if (!dateSet.has(l.date)) return;
+      const en = l.entryId ? State.getEntry(l.entryId) : null;
+      if (en && !inFilter(en)) return;
+      const m = (l.value || 0) / 60;
+      minutes += m;
+      const pid = en?.projectId || null;
+      if (pid) byProject[pid] = (byProject[pid] || 0) + m;
+    });
+
+    let scheduled = 0, completedHabits = 0;
+    State.getEntries({ type: 'habit' }).filter(inFilter).forEach(h => {
+      dates.forEach(d => {
+        if (!State.isHabitScheduledOn(h.id, d)) return;
+        const st = State.habitStatusOn(h.id, d);
+        if (st === 'skipped') return; // skips don't count against consistency
+        scheduled++;
+        if (st === 'done') completedHabits++;
+      });
+    });
+    const habitRate = scheduled > 0 ? Math.round(completedHabits / scheduled * 100) : null;
+
+    const emotionMap = { great: 5, good: 4, okay: 3, low: 2, bad: 1 };
+    const moods = [];
+    State.getLogs().forEach(l => {
+      if ((l.type === 'emotion' || l.type === 'checkin') && l.emotion && dateSet.has(l.date)) {
+        moods.push(emotionMap[l.emotion] || 3);
+      }
+    });
+    const avgMood = moods.length ? moods.reduce((a, b) => a + b, 0) / moods.length : null;
+
+    return { done, habitDone, minutes, byProject, habitRate, avgMood };
+  }
+
+  function renderWeekDigest(inFilter) {
+    const last7 = [...Array(7)].map((_, i) => offsetDateStr(-i));
+    const prev7 = [...Array(7)].map((_, i) => offsetDateStr(-7 - i));
+    const cur = weekStats(last7, inFilter);
+    const prev = weekStats(prev7, inFilter);
+    if (cur.done + cur.habitDone === 0 && cur.minutes === 0 && cur.avgMood === null) return '';
+
+    const delta = (a, b, fmt = (v) => Math.abs(Math.round(v)), unit = '') => {
+      if (b === null || a === null) return '';
+      const d = a - b;
+      if (Math.abs(d) < 0.005) return `<span class="digest-delta flat">— even</span>`;
+      const up = d > 0;
+      return `<span class="digest-delta ${up ? 'up' : 'down'}">${up ? '▲' : '▼'} ${fmt(d)}${unit}</span>`;
+    };
+    const moodNames = ['', 'Bad', 'Low', 'Okay', 'Good', 'Great'];
+
+    // best day of the week (completions + focus time)
+    let best = null;
+    last7.forEach(d => {
+      const s = weekStats([d], inFilter);
+      const score = s.done + s.habitDone + s.minutes / 30;
+      if (score > 0 && (!best || score > best.score)) best = { date: d, score, s };
+    });
+
+    // top projects by focused time
+    const top = Object.entries(cur.byProject)
+      .map(([pid, min]) => ({ p: State.getProject(pid), min }))
+      .filter(x => x.p).sort((a, b) => b.min - a.min).slice(0, 3);
+    const maxMin = top[0]?.min || 1;
+
+    return `<div class="section">
+      <div class="card digest-card" id="weekDigest">
+        <div class="section-header" style="margin-bottom:var(--space-3);">
+          <span class="section-title">Your Week</span>
+          <span class="text-xs text-faint">last 7 days vs the 7 before</span>
+        </div>
+        <div class="digest-tiles">
+          <div class="digest-tile">
+            <span class="stat-value">${cur.done + cur.habitDone}</span>
+            <span class="stat-label">things done</span>
+            ${delta(cur.done + cur.habitDone, prev.done + prev.habitDone)}
+          </div>
+          <div class="digest-tile">
+            <span class="stat-value">${fmtMin(cur.minutes)}</span>
+            <span class="stat-label">focused</span>
+            ${delta(cur.minutes, prev.minutes, (v) => fmtMin(Math.abs(v)))}
+          </div>
+          <div class="digest-tile">
+            <span class="stat-value">${cur.habitRate === null ? '—' : cur.habitRate + '%'}</span>
+            <span class="stat-label">habit consistency</span>
+            ${cur.habitRate !== null && prev.habitRate !== null ? delta(cur.habitRate, prev.habitRate, (v) => Math.abs(Math.round(v)), 'pts') : ''}
+          </div>
+          <div class="digest-tile">
+            <span class="stat-value">${cur.avgMood === null ? '—' : moodNames[Math.round(cur.avgMood)]}</span>
+            <span class="stat-label">avg mood${cur.avgMood !== null ? ` (${cur.avgMood.toFixed(1)})` : ''}</span>
+            ${cur.avgMood !== null && prev.avgMood !== null ? delta(cur.avgMood, prev.avgMood, (v) => Math.abs(v).toFixed(1)) : ''}
+          </div>
+        </div>
+        ${top.length ? `<div class="digest-projects">
+          ${top.map(x => `<div class="digest-proj-row">
+            <span class="proj-dot" style="background:${x.p.color}"></span>
+            <span class="digest-proj-name truncate">${x.p.name}</span>
+            <div class="digest-bar-track"><div class="digest-bar" style="width:${Math.round(x.min / maxMin * 100)}%;background:${x.p.color};"></div></div>
+            <span class="text-xs font-mono text-muted">${fmtMin(x.min)}</span>
+          </div>`).join('')}
+        </div>` : ''}
+        ${best ? `<p class="text-xs text-faint" style="margin-top:var(--space-3);margin-bottom:0;">
+          Best day: <strong>${friendlyDate(best.date)}</strong> — ${best.s.done + best.s.habitDone} completion${best.s.done + best.s.habitDone === 1 ? '' : 's'}${best.s.minutes >= 1 ? ` · ${fmtMin(best.s.minutes)} focused` : ''}.
+        </p>` : ''}
+      </div>
+    </div>`;
   }
 
   function renderInsights() {
@@ -1606,6 +1845,9 @@ const App = (() => {
       </select>
     </div>`;
 
+    // ── "Your Week" digest — last 7 days vs the 7 before ──────
+    html += renderWeekDigest(inFilter);
+
     // KPI row
     const totalStreak = habits.reduce((sum, h) => sum + State.calculateStreak(h.id).current, 0);
     const avgRetention = habits.length > 0 ? Math.round(habits.reduce((sum, h) => sum + State.calculateStreak(h.id).retention30, 0) / habits.length) : 0;
@@ -1638,9 +1880,11 @@ const App = (() => {
       </div>`;
     }
 
-    // Calendar heatmap
+    // Year in Pixels — every day of the last year, colored by activity
     html += `<div class="section">
-      <div class="section-header"><span class="section-title">Activity Heatmap — 12 Weeks</span></div>
+      <div class="section-header"><span class="section-title">Year in Pixels</span>
+        <span class="text-xs text-faint">every day, shaded by what you did — click one to revisit it</span>
+      </div>
       <div class="card"><div id="heatmapContainer"></div></div>
     </div>`;
 
@@ -1945,7 +2189,7 @@ const App = (() => {
   function renderInsightCharts() {
     const f = insightsFilterObj();
     const heatmap = document.getElementById('heatmapContainer');
-    if (heatmap) Charts.renderHeatmap(heatmap, 84, f);
+    if (heatmap) Charts.renderHeatmap(heatmap, 364, f);
 
     const dayChart = document.getElementById('dayBreakdownChart');
     if (dayChart) Charts.renderDayBreakdown('dayBreakdownChart', 7, f);
@@ -2306,6 +2550,14 @@ const App = (() => {
 
   function historyToday() { historyOffset = 0; render(); }
 
+  // Jump straight to a specific past day (Year in Pixels cells land here)
+  function openHistoryDay(dateStr) {
+    const today = new Date(State.todayStr() + 'T00:00');
+    const target = new Date(dateStr + 'T00:00');
+    historyOffset = Math.min(0, Math.round((target - today) / 86400000));
+    switchTab('history');
+  }
+
   function viewArchive() {
     switchTab('history');
     setTimeout(() => document.getElementById('archiveSection')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
@@ -2402,6 +2654,26 @@ const App = (() => {
       </div>
     `;
 
+    // Appearance
+    const curAccent = settings.accent || 'teal';
+    html += `<div class="section">
+      <div class="section-header"><span class="section-title">Appearance</span></div>
+      <div class="card">
+        <div class="setting-row">
+          <div><div class="setting-label">Accent Color</div><div class="setting-desc">Recolors buttons, charts, heatmap — the whole app</div></div>
+          <div class="accent-swatches">
+            ${Object.entries(ACCENTS).map(([name, a]) => `
+              <button class="color-swatch ${curAccent === name ? 'selected' : ''}" style="background:${a.accent};"
+                title="${name}" aria-label="Accent: ${name}" onclick="App.setAccent('${name}')"></button>`).join('')}
+          </div>
+        </div>
+        <div class="setting-row">
+          <div><div class="setting-label">Theme</div><div class="setting-desc">Currently ${settings.theme} — also toggleable from the header</div></div>
+          <button class="btn btn-secondary btn-sm" onclick="App.toggleTheme()">${icon('sun-moon', 14)}Switch to ${settings.theme === 'dark' ? 'light' : 'dark'}</button>
+        </div>
+      </div>
+    </div>`;
+
     // Sync section
     html += `<div class="section">
       <div class="section-header"><span class="section-title">Firebase Sync</span></div>
@@ -2488,7 +2760,7 @@ const App = (() => {
             <input type="text" class="form-input hotkey-input" maxlength="1" value="${settings.hotkeys?.[key] || ''}"
               onchange="App.setHotkey('${key}', this.value)" placeholder="—" aria-label="Hotkey for ${label}">
           </div>`).join('')}
-        <p class="text-xs text-faint" style="margin-top:var(--space-2);">Cmd/Ctrl+N (new task) and Cmd/Ctrl+K (search) also work everywhere.</p>
+        <p class="text-xs text-faint" style="margin-top:var(--space-2);">Cmd/Ctrl+N (new task) and Cmd/Ctrl+K (command palette) also work everywhere.</p>
       </div>
     </div>`;
 
@@ -3350,6 +3622,12 @@ const App = (() => {
 
   function quickAddTask(title) {
     if (!title.trim()) return;
+    // The quick input understands the same shorthand as the palette:
+    // "Fix login tomorrow 3pm #bugs @Work !high ~30m"
+    if (typeof Palette !== 'undefined') {
+      const r = Palette.createFromText(title, { forceType: 'task' });
+      if (r) { toast(`Task added${r.summary ? ' — ' + r.summary : ''}`); return; }
+    }
     State.createEntry({ type: 'task', title: title.trim() });
     toast('Task added');
   }
@@ -3488,6 +3766,13 @@ const App = (() => {
   // ═══════════════════════════════════════════════════════════
   // SEARCH — fuzzy find projects, tasks, habits, goals
   // ═══════════════════════════════════════════════════════════
+  // Command palette is the primary search surface; the modal search
+  // below stays as a fallback (and for anything still calling it).
+  function openPalette() {
+    if (typeof Palette !== 'undefined') Palette.open();
+    else openSearch();
+  }
+
   function openSearch() {
     showModal('Search', `
       <input type="search" class="form-input" id="searchInput" placeholder="Search projects, tasks, habits…"
@@ -3649,7 +3934,17 @@ const App = (() => {
   // ENTRY ACTIONS
   // ═══════════════════════════════════════════════════════════
   function toggleEntry(id) {
+    const before = State.getEntry(id);
+    const wasDone = before?.type === 'habit' ? State.isHabitDoneToday(id) : !!before?.completed;
     State.toggleComplete(id);
+    if (before && !wasDone) {
+      // completing (not un-completing) earns the burst
+      if (before.type === 'habit') {
+        if (!checkStreakMilestone(id)) celebrate();
+      } else if (before.type === 'task' || before.type === 'goal') {
+        celebrate();
+      }
+    }
     render();
   }
 
@@ -3785,8 +4080,8 @@ const App = (() => {
     // Theme toggle
     document.getElementById('themeToggle').addEventListener('click', toggleTheme);
 
-    // Search
-    document.getElementById('searchBtn').addEventListener('click', openSearch);
+    // Search → command palette (falls back to the modal search)
+    document.getElementById('searchBtn').addEventListener('click', openPalette);
 
     // Modal close
     document.getElementById('modalClose').addEventListener('click', closeModal);
@@ -3806,7 +4101,7 @@ const App = (() => {
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') { closeModal(); closePanel(); closePopover(); return; }
       if ((e.metaKey || e.ctrlKey) && e.key === 'n') { e.preventDefault(); openNewEntry('task'); return; }
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); openSearch(); return; }
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); openPalette(); return; }
       const t = e.target;
       const typing = ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName) || t.isContentEditable;
       if (typing || e.metaKey || e.ctrlKey || e.altKey) return;
@@ -3815,7 +4110,7 @@ const App = (() => {
       if (k === hk.timer) { e.preventDefault(); Timers.toggleWindow(); }
       else if (k === hk.newTask) { e.preventDefault(); openNewEntry('task'); }
       else if (k === hk.quickLog) { e.preventDefault(); openQuickLog(); }
-      else if (k === hk.search) { e.preventDefault(); openSearch(); }
+      else if (k === hk.search) { e.preventDefault(); openPalette(); }
       else if (k === hk.stopTimers) { e.preventDefault(); Timers.stopAll(); toast('All timers stopped'); }
     });
 
@@ -3869,7 +4164,8 @@ const App = (() => {
     setFocusDue, filterChips, updateMaxNavTimers,
     openManageShortcuts, addShortcut, deleteShortcut,
     openManageTags, cycleTagColor, renameTag, setTagProject, deleteTagPrompt, createTagFromManager,
-    openSearch, runSearch, searchGo,
+    openSearch, runSearch, searchGo, openPalette, toast,
+    setAccent, openHistoryDay, celebrate,
     logFood, deleteFoodLog, useShortcutHealth,
     toggleEntry, deleteEntry, archiveEntry, unarchiveEntry, startTimerForTask,
     selectEntryCard, setWorkingProject, toggleSidebar,

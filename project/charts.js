@@ -20,11 +20,13 @@ const Charts = (() => {
 
   function getColors() {
     const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    // accent follows the user's chosen theme (Settings → Appearance)
+    const cs = getComputedStyle(document.documentElement);
     return {
       text: isDark ? '#8a8782' : '#6b6863',
       grid: isDark ? '#383735' : '#e0ddd7',
-      accent: '#0f9598',
-      accentHover: '#12b3b7',
+      accent: (cs.getPropertyValue('--accent') || '#0f9598').trim() || '#0f9598',
+      accentHover: (cs.getPropertyValue('--accent-hover') || '#12b3b7').trim() || '#12b3b7',
       surface: isDark ? '#1c1b1a' : '#ffffff',
       faint: isDark ? '#5a5854' : '#a8a59f',
     };
@@ -46,48 +48,93 @@ const Charts = (() => {
     return true;
   }
 
-  function renderHeatmap(container, days = 84, filter = null) {
-    const colors = getColors();
-    const today = new Date();
-    const habitLogs = State.getLogs({ type: 'habit_completion' });
+  // "Year in Pixels": weekday-aligned columns (GitHub-style), month labels,
+  // activity from habits + tasks + tracked time + quick logs, click → History.
+  function renderHeatmap(container, days = 364, filter = null) {
+    const todayStr = State.todayStr();
 
-    // Build completion counts per day
-    const dayCounts = {};
-    habitLogs.forEach(l => {
-      const entry = l.entryId ? State.getEntry(l.entryId) : null;
-      if (!matchesFilter(entry, filter)) return;
-      dayCounts[l.date] = (dayCounts[l.date] || 0) + 1;
+    // Activity score per day, with a per-source breakdown for the tooltip
+    const detail = {}; // date → {habits, tasks, minutes, logs}
+    const bump = (date, key, amt = 1) => {
+      (detail[date] = detail[date] || { habits: 0, tasks: 0, minutes: 0, logs: 0 })[key] += amt;
+    };
+    State.getLogs().forEach(l => {
+      if (l.type === 'habit_completion') {
+        const entry = l.entryId ? State.getEntry(l.entryId) : null;
+        if (matchesFilter(entry, filter)) bump(l.date, 'habits');
+      } else if (l.type === 'time_session') {
+        const entry = l.entryId ? State.getEntry(l.entryId) : null;
+        if (!filter || matchesFilter(entry, filter)) bump(l.date, 'minutes', (l.value || 0) / 60);
+      } else if (!filter && (l.type === 'emotion' || l.type === 'checkin' || l.type === 'calorie' || l.type === 'post')) {
+        if (l.date) bump(l.date, 'logs');
+      }
     });
-
-    // Also count task completions
     State.getEntries({ includeArchived: true }).forEach(e => {
-      if (e.completed && e.completedAt && matchesFilter(e, filter)) {
-        const d = e.completedAt.split('T')[0];
-        dayCounts[d] = (dayCounts[d] || 0) + 1;
+      if (e.type !== 'habit' && e.completed && e.completedAt && matchesFilter(e, filter)) {
+        bump(e.completedAt.split('T')[0], 'tasks');
       }
     });
+    const scoreOf = (d) => {
+      const x = detail[d];
+      return x ? x.habits + x.tasks * 1.5 + x.minutes / 30 + x.logs * 0.25 : 0;
+    };
+    const maxScore = Math.max(...Object.keys(detail).map(scoreOf), 1);
 
-    const maxCount = Math.max(...Object.values(dayCounts), 1);
-    const weeks = Math.ceil(days / 7);
+    // Column = calendar week starting Sunday, ending at today's week
+    const start = new Date();
+    start.setDate(start.getDate() - (days - 1));
+    start.setDate(start.getDate() - start.getDay()); // back to its Sunday
+    start.setHours(0, 0, 0, 0);
 
-    let html = '<div class="heatmap">';
-    for (let w = weeks - 1; w >= 0; w--) {
-      html += '<div class="heatmap-col">';
-      for (let d = 6; d >= 0; d--) {
-        const date = new Date(today);
-        date.setDate(date.getDate() - (w * 7 + d));
-        const dateStr = State.dateStr(date);
-        const count = dayCounts[dateStr] || 0;
-        const level = count === 0 ? '' : count <= maxCount * 0.25 ? 'l1' : count <= maxCount * 0.5 ? 'l2' : count <= maxCount * 0.75 ? 'l3' : 'l4';
-        const isToday = dateStr === State.todayStr();
-        html += `<div class="heatmap-cell ${level}" title="${dateStr}: ${count} completions" style="${isToday ? 'box-shadow:0 0 0 1px var(--text-faint);' : ''}"></div>`;
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    let cols = '';
+    let months = '';
+    let lastMonth = -1;
+    const cursor = new Date(start);
+    while (State.dateStr(cursor) <= todayStr) {
+      // month label above the column that contains the 1st
+      const weekEnd = new Date(cursor); weekEnd.setDate(weekEnd.getDate() + 6);
+      const m = cursor.getDate() <= 7 && cursor.getMonth() !== lastMonth ? cursor.getMonth()
+        : (weekEnd.getMonth() !== cursor.getMonth() && weekEnd.getDate() <= 7 ? weekEnd.getMonth() : -1);
+      if (m >= 0 && m !== lastMonth) { months += `<span class="heatmap-month">${monthNames[m]}</span>`; lastMonth = m; }
+      else months += '<span class="heatmap-month"></span>';
+
+      let colHtml = '';
+      for (let d = 0; d < 7; d++) {
+        const dateStr = State.dateStr(cursor);
+        if (dateStr > todayStr) {
+          colHtml += '<div class="heatmap-cell future"></div>';
+        } else {
+          const x = detail[dateStr];
+          const score = scoreOf(dateStr);
+          const level = score === 0 ? '' : score <= maxScore * 0.25 ? 'l1' : score <= maxScore * 0.5 ? 'l2' : score <= maxScore * 0.75 ? 'l3' : 'l4';
+          const bits = [];
+          if (x?.habits) bits.push(`${x.habits} habit${x.habits === 1 ? '' : 's'}`);
+          if (x?.tasks) bits.push(`${x.tasks} task${x.tasks === 1 ? '' : 's'}`);
+          if (x?.minutes >= 1) bits.push(`${Math.round(x.minutes)}m focused`);
+          if (x?.logs) bits.push(`${x.logs} log${x.logs === 1 ? '' : 's'}`);
+          const tip = `${dateStr}${bits.length ? ' — ' + bits.join(' · ') : ' — nothing logged'}`;
+          const isToday = dateStr === todayStr;
+          colHtml += `<div class="heatmap-cell ${level}" title="${tip}" onclick="App.openHistoryDay('${dateStr}')" style="${isToday ? 'box-shadow:0 0 0 1px var(--text-faint);' : ''}"></div>`;
+        }
+        cursor.setDate(cursor.getDate() + 1);
       }
-      html += '</div>';
+      cols += `<div class="heatmap-col">${colHtml}</div>`;
     }
-    html += '</div>';
-    html += '<div class="heatmap-labels"><span>12 weeks ago</span><span>Today</span></div>';
 
-    container.innerHTML = html;
+    container.innerHTML = `
+      <div class="heatmap-scroll" id="heatmapScroll">
+        <div class="heatmap-months">${months}</div>
+        <div class="heatmap">${cols}</div>
+      </div>
+      <div class="heatmap-labels">
+        <span>${Math.round(days / 30.4)} months ago</span>
+        <span class="heatmap-legend">less <i class="hm-swatch"></i><i class="hm-swatch l1"></i><i class="hm-swatch l2"></i><i class="hm-swatch l3"></i><i class="hm-swatch l4"></i> more</span>
+        <span>Today</span>
+      </div>`;
+    // land scrolled to the present, not eleven months ago
+    const scroll = container.querySelector('#heatmapScroll');
+    if (scroll) scroll.scrollLeft = scroll.scrollWidth;
   }
 
   // ═══════════════════════════════════════════════════════════
