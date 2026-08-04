@@ -166,8 +166,9 @@ const Sync = (() => {
 
   function disconnect() {
     clearTimeout(pushTimer);
+    pushTimer = null;
     if (dataListener && db) {
-      db.ref(dataPath()).off('value', dataListener);
+      db.ref(`cade/${keyFingerprint}`).off('value', dataListener);
       dataListener = null;
     }
     if (connectionListener && db) {
@@ -233,14 +234,23 @@ const Sync = (() => {
     if (!connected || !db) return;
     clearTimeout(pushTimer);
     pushTimer = setTimeout(async () => {
+      pushTimer = null;
       await pushLocal();
     }, 2000);
   }
 
+  let pushing = false;
+
   async function pushLocal() {
     if (!connected || !db) return;
+    pushing = true;
     try {
       const raw = State.getRawData();
+      // Nothing changed since the last sync (e.g. we just adopted a foreign
+      // write, which re-triggers schedulePush) — skip the redundant write.
+      if (lastSyncedSnapshot && JSON.stringify(raw) === JSON.stringify(lastSyncedSnapshot)) {
+        return;
+      }
       const encrypted = await encrypt(raw);
 
       // Multi-path update scoped to this fingerprint's subtree. The version
@@ -256,6 +266,8 @@ const Sync = (() => {
       updateStatus();
     } catch (e) {
       console.error('Push error:', e);
+    } finally {
+      pushing = false;
     }
   }
 
@@ -293,7 +305,13 @@ const Sync = (() => {
       if (serverVersion === lastSyncedVersion) {
         // Unchanged — no-op
       } else if (serverVersion > lastSyncedVersion && lastSyncedVersion > 0) {
-        // Server newer — adopt server
+        // Server newer — adopt, UNLESS local also has unpushed edits
+        // (offline work must never be silently clobbered on reconnect)
+        const localDirty = JSON.stringify(localData) !== JSON.stringify(lastSyncedSnapshot);
+        if (localDirty) {
+          showConflictModal(localData, serverPayload);
+          return;
+        }
         State.setRawData(serverPayload);
         lastSyncedSnapshot = structuredClone(serverPayload);
         lastSyncedVersion = serverVersion;
@@ -331,19 +349,47 @@ const Sync = (() => {
     }
   }
 
+  // Decide what an incoming server payload means. Pure — unit-testable.
+  //  'echo'     server matches what we last pushed/adopted → bookkeeping only.
+  //  'adopt'    foreign change, local is clean → take the server's version.
+  //  'defer'    foreign change but local has unpushed edits AND a push is
+  //             queued/in-flight → our push wins the race; never clobber
+  //             work done between a push and its echo (the "check task A,
+  //             task B unchecks itself" bug).
+  //  'conflict' foreign change, local dirty, nothing queued → ask the user.
+  function classifyIncoming(incomingJson, lastSyncedJson, localJson, pushPending) {
+    if (incomingJson === lastSyncedJson) return 'echo';
+    if (localJson === lastSyncedJson) return 'adopt';
+    if (pushPending) return 'defer';
+    return 'conflict';
+  }
+
   function setupLiveListener() {
     if (!db || dataListener) return;
-    dataListener = db.ref(dataPath()).on('value', async (snap) => {
-      const encrypted = snap.val();
-      if (!encrypted) return;
+    // Parent node = { data, version } in one snapshot, so version
+    // bookkeeping stays honest without a second read.
+    dataListener = db.ref(`cade/${keyFingerprint}`).on('value', async (snap) => {
+      const node = snap.val();
+      if (!node || !node.data) return;
+      const serverVersion = node.version || 0;
       try {
-        const payload = await decrypt(encrypted);
-        const local = State.getRawData();
-        // Diff against last synced
-        if (JSON.stringify(payload) !== JSON.stringify(local)) {
+        const payload = await decrypt(node.data);
+        const verdict = classifyIncoming(
+          JSON.stringify(payload),
+          JSON.stringify(lastSyncedSnapshot),
+          JSON.stringify(State.getRawData()),
+          !!pushTimer || pushing
+        );
+        if (verdict === 'echo') {
+          lastSyncedVersion = Math.max(lastSyncedVersion, serverVersion);
+        } else if (verdict === 'adopt') {
           State.setRawData(payload);
           lastSyncedSnapshot = structuredClone(payload);
+          lastSyncedVersion = serverVersion;
+        } else if (verdict === 'conflict') {
+          showConflictModal(State.getRawData(), payload);
         }
+        // 'defer': our queued push will overwrite shortly — do nothing
       } catch (e) {
         console.error('Listener decrypt error:', e);
       }
@@ -409,6 +455,6 @@ const Sync = (() => {
   return {
     connect, disconnect, schedulePush, pushLocal, resolveConflict,
     isConnected, updateStatus, autoConnect, eraseRemote,
-    encrypt, decrypt, // exposed for testing
+    encrypt, decrypt, classifyIncoming, // exposed for testing
   };
 })();
