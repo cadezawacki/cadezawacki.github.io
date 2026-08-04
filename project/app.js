@@ -129,11 +129,154 @@ const App = (() => {
   }
 
   // ═══════════════════════════════════════════════════════════
+  // CELEBRATIONS — confetti on completion, milestone streaks
+  // ═══════════════════════════════════════════════════════════
+  // Bursts spawn from wherever the user last touched, so the reward
+  // lands where the eye already is.
+  let lastPointer = { x: null, y: null };
+  document.addEventListener('pointerdown', (e) => {
+    lastPointer = { x: e.clientX, y: e.clientY };
+  }, { capture: true, passive: true });
+
+  function celebrate(count = 28) {
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
+    const x = lastPointer.x ?? window.innerWidth / 2;
+    const y = lastPointer.y ?? window.innerHeight / 3;
+    let cv = document.getElementById('confettiCanvas');
+    if (!cv) {
+      cv = document.createElement('canvas');
+      cv.id = 'confettiCanvas';
+      cv.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:400;';
+      document.body.appendChild(cv);
+    }
+    cv.width = window.innerWidth;
+    cv.height = window.innerHeight;
+    const ctx = cv.getContext('2d');
+    const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#0f9598';
+    const colors = [accent, '#e6a23c', '#e06d6d', '#6db4f0', '#6fcf97'];
+    const parts = [];
+    for (let i = 0; i < count; i++) {
+      const ang = -Math.PI / 2 + (Math.random() - 0.5) * 1.8;
+      const v = 4 + Math.random() * 5;
+      parts.push({
+        x, y, vx: Math.cos(ang) * v, vy: Math.sin(ang) * v,
+        w: 4 + Math.random() * 4, h: 3 + Math.random() * 3,
+        rot: Math.random() * Math.PI, vr: (Math.random() - 0.5) * 0.3,
+        color: colors[i % colors.length], life: 1,
+      });
+    }
+    const t0 = performance.now();
+    (function tick(now) {
+      const dt = Math.min((now - t0) / 900, 1);
+      ctx.clearRect(0, 0, cv.width, cv.height);
+      parts.forEach(p => {
+        p.x += p.vx; p.y += p.vy; p.vy += 0.22; p.vx *= 0.985;
+        p.rot += p.vr; p.life = 1 - dt;
+        ctx.save();
+        ctx.globalAlpha = Math.max(p.life, 0);
+        ctx.translate(p.x, p.y); ctx.rotate(p.rot);
+        ctx.fillStyle = p.color;
+        ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
+        ctx.restore();
+      });
+      if (dt < 1) requestAnimationFrame(tick);
+      else { ctx.clearRect(0, 0, cv.width, cv.height); cv.remove(); }
+    })(t0);
+  }
+
+  const STREAK_MILESTONES = [7, 14, 30, 50, 100, 365];
+  function checkStreakMilestone(habitId) {
+    const h = State.getEntry(habitId);
+    if (!h) return false;
+    const s = State.calculateStreak(habitId).current;
+    if (STREAK_MILESTONES.includes(s)) {
+      celebrate(70);
+      toast(`🔥 ${s}-day streak on “${h.title}”!`);
+      return true;
+    }
+    return false;
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // ACCENT THEMES — one variable family, applied everywhere
+  // ═══════════════════════════════════════════════════════════
+  const ACCENTS = {
+    teal:   { accent: '#0f9598', hover: '#12b3b7' },
+    indigo: { accent: '#5b67d8', hover: '#7c86e8' },
+    plum:   { accent: '#9459c9', hover: '#a97ad6' },
+    coral:  { accent: '#d95f57', hover: '#e37f78' },
+    amber:  { accent: '#bd7f1b', hover: '#d29a3a' },
+    forest: { accent: '#4a9155', hover: '#63a96e' },
+    rose:   { accent: '#c9538a', hover: '#d677a2' },
+  };
+
+  function applyAccent(name) {
+    const a = ACCENTS[name] || ACCENTS.teal;
+    const root = document.documentElement;
+    const hex = a.accent.replace('#', '');
+    const rgb = `${parseInt(hex.slice(0, 2), 16)}, ${parseInt(hex.slice(2, 4), 16)}, ${parseInt(hex.slice(4, 6), 16)}`;
+    root.style.setProperty('--accent', a.accent);
+    root.style.setProperty('--accent-hover', a.hover);
+    root.style.setProperty('--accent-tint', `rgba(${rgb}, 0.09)`);
+    root.style.setProperty('--accent-tint-strong', `rgba(${rgb}, 0.16)`);
+    // dark theme reads better with the lighter variant as text color
+    const isDark = root.getAttribute('data-theme') === 'dark';
+    root.style.setProperty('--accent-text', isDark ? a.hover : a.accent);
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', a.accent);
+  }
+
+  function setAccent(name) {
+    State.updateSettings({ accent: name });
+    applyAccent(name);
+    render();
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // REMINDERS THAT FIRE — remindTime was decorative until now
+  // ═══════════════════════════════════════════════════════════
+  // Checked every 30s while the app is open: in-app toast always,
+  // system notification when permission is granted. Fires once per day
+  // per entry (lastNotified), so reopening the app doesn't re-nag.
+  function checkReminders() {
+    const today = State.todayStr();
+    const now = nowTime();
+    let fired = 0;
+    State.getEntries().forEach(e => {
+      if (e.completed || !e.remindTime) return;
+      // dated entries fire on their day; undated reminders fire every day
+      const dueToday = e.dueDate === today || (e.type === 'reminder' && !e.dueDate);
+      if (!dueToday || e.remindTime > now || e.lastNotified === today) return;
+      State.updateEntry(e.id, { lastNotified: today });
+      fired++;
+      toast(`⏰ ${e.title} — ${e.remindTime}`);
+      if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+        try {
+          new Notification('Cade.project', { body: `${e.title} — ${e.remindTime}`, tag: e.id });
+        } catch (err) { /* some platforms require SW-based notifications */ }
+      }
+    });
+    return fired;
+  }
+
+  function notificationStatus() {
+    if (typeof Notification === 'undefined') return 'unsupported';
+    return Notification.permission; // 'granted' | 'denied' | 'default'
+  }
+
+  async function enableNotifications() {
+    if (typeof Notification === 'undefined') { toast('Notifications not supported here'); return; }
+    const perm = await Notification.requestPermission();
+    toast(perm === 'granted' ? 'Notifications on — reminders will pop up' : 'Notifications blocked — in-app toasts still work');
+    render();
+  }
+
+  // ═══════════════════════════════════════════════════════════
   // THEME
   // ═══════════════════════════════════════════════════════════
   function initTheme() {
     const saved = State.getSettings().theme;
     document.documentElement.setAttribute('data-theme', saved);
+    applyAccent(State.getSettings().accent || 'teal');
     const toggleBtn = document.getElementById('themeToggle');
     if (toggleBtn) {
       toggleBtn.innerHTML = saved === 'dark' ? icon('sun') : icon('moon');
@@ -145,6 +288,7 @@ const App = (() => {
     const next = current === 'dark' ? 'light' : 'dark';
     document.documentElement.setAttribute('data-theme', next);
     State.updateSettings({ theme: next });
+    applyAccent(State.getSettings().accent || 'teal'); // accent-text is theme-dependent
     const toggleBtn = document.getElementById('themeToggle');
     if (toggleBtn) {
       toggleBtn.innerHTML = next === 'dark' ? icon('sun') : icon('moon');
@@ -157,7 +301,9 @@ const App = (() => {
   // ═══════════════════════════════════════════════════════════
   // ROUTING
   // ═══════════════════════════════════════════════════════════
+  let animateNextRender = false;
   function switchTab(tab) {
+    animateNextRender = tab !== currentTab; // animate real switches, not re-renders
     currentTab = tab;
     document.querySelectorAll('.tab-item').forEach(el => {
       el.classList.toggle('active', el.dataset.tab === tab);
@@ -184,6 +330,13 @@ const App = (() => {
       case 'history': main.innerHTML = renderHistory(); break;
       case 'settings': main.innerHTML = renderSettings(); break;
       case 'taskpage': main.innerHTML = renderTaskPage(); break;
+    }
+
+    if (animateNextRender) {
+      animateNextRender = false;
+      main.classList.remove('view-anim');
+      void main.offsetWidth; // restart the animation
+      main.classList.add('view-anim');
     }
 
     refreshIcons();
@@ -231,7 +384,8 @@ const App = (() => {
     const workingProject = State.getSettings().workingProject || null;
     const wpSubtree = workingProject ? State.getProjectSubtreeIds(workingProject) : null;
     const inWorking = (t) => !wpSubtree || State.entryProjectIds(t).some(pid => wpSubtree.includes(pid));
-    const nextPool = [...openToday, ...upcomingTasks].filter(inWorking);
+    // blocked tasks can't be the next best thing to do — they're waiting
+    const nextPool = [...openToday, ...upcomingTasks].filter(inWorking).filter(t => !isBlocked(t));
     const nextTask = [...nextPool].sort((a, b) => taskScore(b) - taskScore(a))[0];
     const projects = State.getProjects();
 
@@ -246,6 +400,7 @@ const App = (() => {
           <p class="page-subtitle">${openToday.length + overdueTasks.length} tasks today · ${habits.filter(h => State.isHabitScheduledOn(h.id, today) && !State.habitStatusOn(h.id, today)).length} habits pending</p>
         </div>
         <div style="display:flex;gap:var(--space-2);">
+          ${overdueTasks.length > 0 ? `<button class="btn btn-secondary review-btn" onclick="App.openDailyReview()" title="Triage everything overdue — one decision per item">${icon('list-todo', 16)}Review<span class="review-count">${overdueTasks.length}</span></button>` : ''}
           <button class="btn btn-secondary" onclick="Timers.openPanel()">${icon('timer', 16)}Timer</button>
           <button class="btn btn-secondary" onclick="App.openQuickLog()">${icon('zap', 16)}Quick Log</button>
         </div>
@@ -772,7 +927,10 @@ const App = (() => {
           <h1 class="page-title">Planner</h1>
           <p class="page-subtitle">Schedule, tracked time, agenda</p>
         </div>
-        <button class="btn btn-primary" onclick="App.openAgendaModal({ date: '${viewDate}' })">${icon('plus', 14)}Agenda Item</button>
+        <div style="display:flex;gap:var(--space-2);">
+          ${plannerOffset === 0 ? `<button class="btn btn-secondary" onclick="App.openAutoPlan()" title="Fill today's free slots with your top tasks, sized by their estimates">${icon('wand-2', 14)}Auto-plan</button>` : ''}
+          <button class="btn btn-primary" onclick="App.openAgendaModal({ date: '${viewDate}' })">${icon('plus', 14)}Agenda Item</button>
+        </div>
       </div>
     `;
 
@@ -831,6 +989,16 @@ const App = (() => {
     });
   }
 
+  // First open, non-archived task this entry is waiting on (null = ready)
+  function blockingEntry(entry) {
+    for (const bid of entry.blockedBy || []) {
+      const b = State.getEntry(bid);
+      if (b && !b.completed && !b.archived) return b;
+    }
+    return null;
+  }
+  function isBlocked(entry) { return !!blockingEntry(entry); }
+
   function renderEntryCard(entry, project, streakInfo, opts = {}) {
     const proj = project || (entry.projectId ? State.getProject(entry.projectId) : null);
     const isOverdueFlag = entry.dueDate && isOverdue(entry.dueDate) && !entry.completed;
@@ -858,9 +1026,16 @@ const App = (() => {
     }
     if (entry.dueDate) {
       const cls = isOverdueFlag ? 'pill-red' : 'pill-accent';
-      metaHtml += `<span class="pill ${cls}">${formatDueDate(entry.dueDate)}${entry.type === 'reminder' && entry.remindTime ? ` · ${entry.remindTime}` : ''}</span>`;
-    } else if (entry.type === 'reminder' && entry.remindTime) {
+      metaHtml += `<span class="pill ${cls}">${formatDueDate(entry.dueDate)}${entry.remindTime ? ` · ${entry.remindTime}` : ''}</span>`;
+    } else if (entry.remindTime) {
       metaHtml += `<span class="pill pill-accent">${entry.remindTime}</span>`;
+    }
+    if (entry.recurrence && entry.type !== 'habit') {
+      metaHtml += `<span class="pill pill-repeat" title="Repeats ${entry.recurrence.type} — completing spawns the next occurrence">${icon('repeat-2', 10)}${entry.recurrence.type}</span>`;
+    }
+    const blocker = blockingEntry(entry);
+    if (blocker) {
+      metaHtml += `<span class="pill pill-blocked" title="Blocked until “${blocker.title}” is done">${icon('lock', 10)}${blocker.title}</span>`;
     }
     if (entry.tags && entry.tags.length > 0) {
       entry.tags.forEach(tag => {
@@ -1109,6 +1284,8 @@ const App = (() => {
           <p class="page-subtitle">${projects.length} projects · ${State.getEntries().length} total entries</p>
         </div>
         <div style="display:flex;gap:var(--space-2);">
+          <button class="btn btn-secondary" onclick="App.exportForLLM()" title="Copy the currently filtered entries as LLM-friendly JSON">${icon('clipboard-copy', 14)}Copy for LLM</button>
+          <button class="btn btn-secondary" onclick="App.openPasteImport()" title="Paste a list (or LLM output) — every line becomes a task via the quick-add parser">${icon('clipboard-paste', 14)}Paste Tasks</button>
           <button class="btn btn-secondary" onclick="App.openManageProjects()">${icon('settings-2', 14)}Manage</button>
           <button class="btn btn-primary" onclick="App.openProjectModal()">${icon('plus', 14)}New Project</button>
         </div>
@@ -1294,6 +1471,114 @@ const App = (() => {
   }
 
   // ═══════════════════════════════════════════════════════════
+  // LLM EXPORT — the currently filtered entries as clean JSON on
+  // the clipboard: filter for #bugs, copy, paste into a chat.
+  // ═══════════════════════════════════════════════════════════
+  function currentProjectViewEntries() {
+    // Mirrors exactly what the Projects view shows under current filters
+    let entries;
+    if (projectFilter === 'none') {
+      entries = State.getEntries().filter(e => State.entryProjectIds(e).length === 0);
+    } else if (projectFilter) {
+      entries = State.getEntries({ projectId: projectFilter });
+    } else {
+      entries = State.getEntries();
+    }
+    return entries.filter(e => !tagFilter || (e.tags || []).includes(tagFilter));
+  }
+
+  function buildLLMExport(entries) {
+    const projName = (id) => State.getProject(id)?.name;
+    const items = entries.map(e => {
+      // Sparse objects: omit empty fields — fewer tokens, less noise
+      const o = { title: e.title, type: e.type, status: e.archived ? 'archived' : e.completed ? 'completed' : 'open' };
+      const projs = State.entryProjectIds(e).map(projName).filter(Boolean);
+      if (projs.length) o.projects = projs;
+      if (e.tags?.length) o.tags = e.tags;
+      if (e.description) o.description = e.description;
+      if (e.type === 'task') {
+        if (e.priority) o.priority = e.priority;
+        if (e.effort) o.effort = e.effort;
+      }
+      if (e.dueDate) o.due_date = e.dueDate;
+      if (e.remindTime) o.remind_time = e.remindTime;
+      if (e.estimateMinutes) o.estimate_minutes = e.estimateMinutes;
+      const actual = State.actualMinutesFor(e);
+      if (actual) o.actual_minutes = actual;
+      if (e.type === 'goal' && e.targetValue) {
+        o.progress = `${e.currentValue || 0}/${e.targetValue}${e.unit ? ' ' + e.unit : ''}`;
+      }
+      if (e.type === 'habit') {
+        const s = State.calculateStreak(e.id);
+        if (s.current) o.streak_days = s.current;
+        const dow = e.recurrence?.daysOfWeek;
+        if (dow?.length) o.scheduled_days = dow.map(d => ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d]);
+      }
+      if (e.createdAt) o.created = e.createdAt.slice(0, 10);
+      if (e.completedAt) o.completed_on = e.completedAt.slice(0, 10);
+      // Journal posts carry the working context an LLM actually needs
+      const posts = State.getLogs({ type: 'post', entryId: e.id })
+        .sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''))
+        .slice(-10);
+      if (posts.length) {
+        o.journal = posts.map(p => ({ at: (p.createdAt || '').slice(0, 16).replace('T', ' '), text: p.notes }));
+      }
+      return o;
+    });
+
+    const filterDesc = {};
+    if (projectFilter && projectFilter !== 'none') {
+      const proj = State.getProject(projectFilter);
+      filterDesc.project = proj ? `${proj.name}${State.getProjectSubtreeIds(proj.id).length > 1 ? ' (incl. sub-projects)' : ''}` : projectFilter;
+    } else if (projectFilter === 'none') {
+      filterDesc.project = 'unassigned only';
+    }
+    if (tagFilter) filterDesc.tag = `#${tagFilter}`;
+
+    return {
+      source: 'Cade.project task tracker export',
+      exported_at: new Date().toISOString().slice(0, 16).replace('T', ' '),
+      filters: Object.keys(filterDesc).length ? filterDesc : 'none — everything',
+      entry_count: items.length,
+      entries: items,
+    };
+  }
+
+  async function exportForLLM() {
+    const entries = currentProjectViewEntries();
+    if (entries.length === 0) { toast('Nothing matches the current filters'); return; }
+    const json = JSON.stringify(buildLLMExport(entries), null, 2);
+    let copied = false;
+    try {
+      await navigator.clipboard.writeText(json);
+      copied = true;
+    } catch (e) {
+      // Clipboard API can be denied — fall back to execCommand
+      try {
+        const ta = document.createElement('textarea');
+        ta.value = json;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        copied = document.execCommand('copy');
+        ta.remove();
+      } catch (e2) { copied = false; }
+    }
+    if (copied) {
+      const scope = [tagFilter ? `#${tagFilter}` : null, projectFilter && projectFilter !== 'none' ? State.getProject(projectFilter)?.name : null]
+        .filter(Boolean).join(' in ') || 'all entries';
+      toast(`Copied ${entries.length} entr${entries.length === 1 ? 'y' : 'ies'} as JSON — ${scope}`);
+    } else {
+      // Last resort: show the JSON for manual copy
+      showModal('LLM Export', `
+        <p class="text-xs text-muted" style="margin-bottom:var(--space-2);">Clipboard access was blocked — select all and copy manually:</p>
+        <textarea class="form-textarea" style="min-height:300px;font-family:var(--font-mono);font-size:var(--text-xs);" onclick="this.select()">${json.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</textarea>
+      `, [`<button class="btn btn-secondary" onclick="App.closeModal()">Done</button>`]);
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════
   // HABITS VIEW
   // ═══════════════════════════════════════════════════════════
   let selectedHabit = null;
@@ -1446,6 +1731,7 @@ const App = (() => {
 
   function cycleHabitCell(habitId, dateStr) {
     State.cycleHabitOnDate(habitId, dateStr);
+    if (State.habitStatusOn(habitId, dateStr) === 'done') checkStreakMilestone(habitId);
     render();
   }
 
@@ -1457,6 +1743,130 @@ const App = (() => {
 
   function insightsFilterObj() {
     return { projectId: insightsProject, entryId: insightsEntry };
+  }
+
+  // ── Weekly digest: this week vs last, at a glance ───────────
+  function fmtMin(min) {
+    min = Math.round(min);
+    if (min < 60) return `${min}m`;
+    const h = Math.floor(min / 60), m = min % 60;
+    return m ? `${h}h ${m}m` : `${h}h`;
+  }
+
+  function weekStats(dates, inFilter) {
+    const dateSet = new Set(dates);
+    const done = State.getEntries({ includeArchived: true }).filter(e =>
+      e.type !== 'habit' && e.completed && e.completedAt && dateSet.has(e.completedAt.split('T')[0]) && inFilter(e)).length;
+    const habitDone = State.getLogs({ type: 'habit_completion' })
+      .filter(l => dateSet.has(l.date) && (!l.entryId || !State.getEntry(l.entryId) || inFilter(State.getEntry(l.entryId)))).length;
+
+    let minutes = 0;
+    const byProject = {};
+    State.getLogs({ type: 'time_session' }).forEach(l => {
+      if (!dateSet.has(l.date)) return;
+      const en = l.entryId ? State.getEntry(l.entryId) : null;
+      if (en && !inFilter(en)) return;
+      const m = (l.value || 0) / 60;
+      minutes += m;
+      const pid = en?.projectId || null;
+      if (pid) byProject[pid] = (byProject[pid] || 0) + m;
+    });
+
+    let scheduled = 0, completedHabits = 0;
+    State.getEntries({ type: 'habit' }).filter(inFilter).forEach(h => {
+      dates.forEach(d => {
+        if (!State.isHabitScheduledOn(h.id, d)) return;
+        const st = State.habitStatusOn(h.id, d);
+        if (st === 'skipped') return; // skips don't count against consistency
+        scheduled++;
+        if (st === 'done') completedHabits++;
+      });
+    });
+    const habitRate = scheduled > 0 ? Math.round(completedHabits / scheduled * 100) : null;
+
+    const emotionMap = { great: 5, good: 4, okay: 3, low: 2, bad: 1 };
+    const moods = [];
+    State.getLogs().forEach(l => {
+      if ((l.type === 'emotion' || l.type === 'checkin') && l.emotion && dateSet.has(l.date)) {
+        moods.push(emotionMap[l.emotion] || 3);
+      }
+    });
+    const avgMood = moods.length ? moods.reduce((a, b) => a + b, 0) / moods.length : null;
+
+    return { done, habitDone, minutes, byProject, habitRate, avgMood };
+  }
+
+  function renderWeekDigest(inFilter) {
+    const last7 = [...Array(7)].map((_, i) => offsetDateStr(-i));
+    const prev7 = [...Array(7)].map((_, i) => offsetDateStr(-7 - i));
+    const cur = weekStats(last7, inFilter);
+    const prev = weekStats(prev7, inFilter);
+    if (cur.done + cur.habitDone === 0 && cur.minutes === 0 && cur.avgMood === null) return '';
+
+    const delta = (a, b, fmt = (v) => Math.abs(Math.round(v)), unit = '') => {
+      if (b === null || a === null) return '';
+      const d = a - b;
+      if (Math.abs(d) < 0.005) return `<span class="digest-delta flat">— even</span>`;
+      const up = d > 0;
+      return `<span class="digest-delta ${up ? 'up' : 'down'}">${up ? '▲' : '▼'} ${fmt(d)}${unit}</span>`;
+    };
+    const moodNames = ['', 'Bad', 'Low', 'Okay', 'Good', 'Great'];
+
+    // best day of the week (completions + focus time)
+    let best = null;
+    last7.forEach(d => {
+      const s = weekStats([d], inFilter);
+      const score = s.done + s.habitDone + s.minutes / 30;
+      if (score > 0 && (!best || score > best.score)) best = { date: d, score, s };
+    });
+
+    // top projects by focused time
+    const top = Object.entries(cur.byProject)
+      .map(([pid, min]) => ({ p: State.getProject(pid), min }))
+      .filter(x => x.p).sort((a, b) => b.min - a.min).slice(0, 3);
+    const maxMin = top[0]?.min || 1;
+
+    return `<div class="section">
+      <div class="card digest-card" id="weekDigest">
+        <div class="section-header" style="margin-bottom:var(--space-3);">
+          <span class="section-title">Your Week</span>
+          <span class="text-xs text-faint">last 7 days vs the 7 before</span>
+        </div>
+        <div class="digest-tiles">
+          <div class="digest-tile">
+            <span class="stat-value">${cur.done + cur.habitDone}</span>
+            <span class="stat-label">things done</span>
+            ${delta(cur.done + cur.habitDone, prev.done + prev.habitDone)}
+          </div>
+          <div class="digest-tile">
+            <span class="stat-value">${fmtMin(cur.minutes)}</span>
+            <span class="stat-label">focused</span>
+            ${delta(cur.minutes, prev.minutes, (v) => fmtMin(Math.abs(v)))}
+          </div>
+          <div class="digest-tile">
+            <span class="stat-value">${cur.habitRate === null ? '—' : cur.habitRate + '%'}</span>
+            <span class="stat-label">habit consistency</span>
+            ${cur.habitRate !== null && prev.habitRate !== null ? delta(cur.habitRate, prev.habitRate, (v) => Math.abs(Math.round(v)), 'pts') : ''}
+          </div>
+          <div class="digest-tile">
+            <span class="stat-value">${cur.avgMood === null ? '—' : moodNames[Math.round(cur.avgMood)]}</span>
+            <span class="stat-label">avg mood${cur.avgMood !== null ? ` (${cur.avgMood.toFixed(1)})` : ''}</span>
+            ${cur.avgMood !== null && prev.avgMood !== null ? delta(cur.avgMood, prev.avgMood, (v) => Math.abs(v).toFixed(1)) : ''}
+          </div>
+        </div>
+        ${top.length ? `<div class="digest-projects">
+          ${top.map(x => `<div class="digest-proj-row">
+            <span class="proj-dot" style="background:${x.p.color}"></span>
+            <span class="digest-proj-name truncate">${x.p.name}</span>
+            <div class="digest-bar-track"><div class="digest-bar" style="width:${Math.round(x.min / maxMin * 100)}%;background:${x.p.color};"></div></div>
+            <span class="text-xs font-mono text-muted">${fmtMin(x.min)}</span>
+          </div>`).join('')}
+        </div>` : ''}
+        ${best ? `<p class="text-xs text-faint" style="margin-top:var(--space-3);margin-bottom:0;">
+          Best day: <strong>${friendlyDate(best.date)}</strong> — ${best.s.done + best.s.habitDone} completion${best.s.done + best.s.habitDone === 1 ? '' : 's'}${best.s.minutes >= 1 ? ` · ${fmtMin(best.s.minutes)} focused` : ''}.
+        </p>` : ''}
+      </div>
+    </div>`;
   }
 
   function renderInsights() {
@@ -1497,6 +1907,9 @@ const App = (() => {
       </select>
     </div>`;
 
+    // ── "Your Week" digest — last 7 days vs the 7 before ──────
+    html += renderWeekDigest(inFilter);
+
     // KPI row
     const totalStreak = habits.reduce((sum, h) => sum + State.calculateStreak(h.id).current, 0);
     const avgRetention = habits.length > 0 ? Math.round(habits.reduce((sum, h) => sum + State.calculateStreak(h.id).retention30, 0) / habits.length) : 0;
@@ -1529,9 +1942,11 @@ const App = (() => {
       </div>`;
     }
 
-    // Calendar heatmap
+    // Year in Pixels — every day of the last year, colored by activity
     html += `<div class="section">
-      <div class="section-header"><span class="section-title">Activity Heatmap — 12 Weeks</span></div>
+      <div class="section-header"><span class="section-title">Year in Pixels</span>
+        <span class="text-xs text-faint">every day, shaded by what you did — click one to revisit it</span>
+      </div>
       <div class="card"><div id="heatmapContainer"></div></div>
     </div>`;
 
@@ -1836,7 +2251,7 @@ const App = (() => {
   function renderInsightCharts() {
     const f = insightsFilterObj();
     const heatmap = document.getElementById('heatmapContainer');
-    if (heatmap) Charts.renderHeatmap(heatmap, 84, f);
+    if (heatmap) Charts.renderHeatmap(heatmap, 364, f);
 
     const dayChart = document.getElementById('dayBreakdownChart');
     if (dayChart) Charts.renderDayBreakdown('dayBreakdownChart', 7, f);
@@ -2197,6 +2612,14 @@ const App = (() => {
 
   function historyToday() { historyOffset = 0; render(); }
 
+  // Jump straight to a specific past day (Year in Pixels cells land here)
+  function openHistoryDay(dateStr) {
+    const today = new Date(State.todayStr() + 'T00:00');
+    const target = new Date(dateStr + 'T00:00');
+    historyOffset = Math.min(0, Math.round((target - today) / 86400000));
+    switchTab('history');
+  }
+
   function viewArchive() {
     switchTab('history');
     setTimeout(() => document.getElementById('archiveSection')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
@@ -2293,6 +2716,46 @@ const App = (() => {
       </div>
     `;
 
+    // Appearance
+    const curAccent = settings.accent || 'teal';
+    html += `<div class="section">
+      <div class="section-header"><span class="section-title">Appearance</span></div>
+      <div class="card">
+        <div class="setting-row">
+          <div><div class="setting-label">Accent Color</div><div class="setting-desc">Recolors buttons, charts, heatmap — the whole app</div></div>
+          <div class="accent-swatches">
+            ${Object.entries(ACCENTS).map(([name, a]) => `
+              <button class="color-swatch ${curAccent === name ? 'selected' : ''}" style="background:${a.accent};"
+                title="${name}" aria-label="Accent: ${name}" onclick="App.setAccent('${name}')"></button>`).join('')}
+          </div>
+        </div>
+        <div class="setting-row">
+          <div><div class="setting-label">Theme</div><div class="setting-desc">Currently ${settings.theme} — also toggleable from the header</div></div>
+          <button class="btn btn-secondary btn-sm" onclick="App.toggleTheme()">${icon('sun-moon', 14)}Switch to ${settings.theme === 'dark' ? 'light' : 'dark'}</button>
+        </div>
+      </div>
+    </div>`;
+
+    // Notifications
+    const notifState = notificationStatus();
+    const notifDesc = {
+      granted: 'On — reminders pop up as system notifications',
+      denied: 'Blocked in the browser — in-app toasts still fire',
+      default: 'Reminders fire as in-app toasts; enable for system notifications',
+      unsupported: 'Not supported in this browser — in-app toasts still fire',
+    }[notifState];
+    html += `<div class="section">
+      <div class="section-header"><span class="section-title">Reminders</span></div>
+      <div class="card">
+        <div class="setting-row">
+          <div><div class="setting-label">Notifications</div><div class="setting-desc">${notifDesc}</div></div>
+          ${notifState === 'default' ? `<button class="btn btn-secondary btn-sm" onclick="App.enableNotifications()">${icon('bell', 14)}Enable</button>`
+            : `<span class="pill ${notifState === 'granted' ? 'pill-green' : 'pill-gray'}">${notifState}</span>`}
+        </div>
+        <p class="text-xs text-faint" style="margin-top:var(--space-2);">Anything with a reminder time fires on its due day while the app is open — tasks and reminders alike. Undated reminders fire daily.</p>
+      </div>
+    </div>`;
+
     // Sync section
     html += `<div class="section">
       <div class="section-header"><span class="section-title">Firebase Sync</span></div>
@@ -2379,7 +2842,7 @@ const App = (() => {
             <input type="text" class="form-input hotkey-input" maxlength="1" value="${settings.hotkeys?.[key] || ''}"
               onchange="App.setHotkey('${key}', this.value)" placeholder="—" aria-label="Hotkey for ${label}">
           </div>`).join('')}
-        <p class="text-xs text-faint" style="margin-top:var(--space-2);">Cmd/Ctrl+N (new task) and Cmd/Ctrl+K (search) also work everywhere.</p>
+        <p class="text-xs text-faint" style="margin-top:var(--space-2);">Cmd/Ctrl+N (new task) and Cmd/Ctrl+K (command palette) also work everywhere.</p>
       </div>
     </div>`;
 
@@ -2529,6 +2992,28 @@ const App = (() => {
               `).join('')}
             </select>
           </div>
+        </div>
+        <div class="grid-2">
+          <div class="form-group">
+            <label class="form-label">Repeat</label>
+            <select class="form-select" id="entryRepeat">
+              ${[['none', 'Never'], ['daily', 'Daily'], ['weekdays', 'Weekdays (Mon–Fri)'], ['weekly', 'Weekly'], ['monthly', 'Monthly']].map(([v, l]) => `
+                <option value="${v}" ${(entry.recurrence?.type || 'none') === v ? 'selected' : ''}>${l}</option>`).join('')}
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Reminder Time</label>
+            <input type="time" class="form-input" id="entryRemindTime" value="${entry.remindTime || ''}">
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Blocked By <span class="text-faint">(waits for another task)</span></label>
+          <select class="form-select" id="entryBlockedBy">
+            <option value="">Nothing — ready to work on</option>
+            ${State.getEntries({ type: 'task', completed: false })
+              .filter(t => t.id !== entry.id && !(t.blockedBy || []).includes(entry.id))
+              .map(t => `<option value="${t.id}" ${(entry.blockedBy || [])[0] === t.id ? 'selected' : ''}>${t.title}</option>`).join('')}
+          </select>
         </div>`;
     } else if (type === 'goal') {
       typeFields = `
@@ -2751,6 +3236,11 @@ const App = (() => {
       data.effort = currentEffort;
       data.priority = document.getElementById('entryPriority')?.value || 'medium';
       data.estimateMinutes = parseInt(document.getElementById('entryEstimate')?.value) || null;
+      data.remindTime = document.getElementById('entryRemindTime')?.value || null;
+      const rep = document.getElementById('entryRepeat')?.value;
+      data.recurrence = rep && rep !== 'none' ? { type: rep, interval: 1 } : null;
+      const blocker = document.getElementById('entryBlockedBy')?.value;
+      data.blockedBy = blocker ? [blocker] : [];
       // Only present when editing a completed task — don't clobber otherwise
       const actEl = document.getElementById('entryActual');
       if (actEl) data.actualMinutes = parseInt(actEl.value) || null;
@@ -3241,6 +3731,12 @@ const App = (() => {
 
   function quickAddTask(title) {
     if (!title.trim()) return;
+    // The quick input understands the same shorthand as the palette:
+    // "Fix login tomorrow 3pm #bugs @Work !high ~30m"
+    if (typeof Palette !== 'undefined') {
+      const r = Palette.createFromText(title, { forceType: 'task' });
+      if (r) { toast(`Task added${r.summary ? ' — ' + r.summary : ''}`); return; }
+    }
     State.createEntry({ type: 'task', title: title.trim() });
     toast('Task added');
   }
@@ -3379,6 +3875,290 @@ const App = (() => {
   // ═══════════════════════════════════════════════════════════
   // SEARCH — fuzzy find projects, tasks, habits, goals
   // ═══════════════════════════════════════════════════════════
+  // ═══════════════════════════════════════════════════════════
+  // DAILY REVIEW — one-tap triage of everything that slipped
+  // ═══════════════════════════════════════════════════════════
+  function reviewPool() {
+    const today = State.todayStr();
+    return State.getEntries()
+      .filter(e => (e.type === 'task' || e.type === 'reminder') && !e.completed && e.dueDate && e.dueDate < today)
+      .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+  }
+
+  function openDailyReview() {
+    showModal('Daily Review', `
+      <p class="text-xs text-muted" style="margin-bottom:var(--space-3);">
+        Everything overdue, one decision each: reschedule it, park it, finish it, or let it go.
+      </p>
+      <div id="reviewList"></div>
+    `, [`<button class="btn btn-secondary" onclick="App.closeModal()">Done reviewing</button>`]);
+    renderReviewList();
+  }
+
+  function renderReviewList() {
+    const el = document.getElementById('reviewList');
+    if (!el) return;
+    const pool = reviewPool();
+    if (pool.length === 0) {
+      el.innerHTML = `<div class="empty-state">
+        <i data-lucide="party-popper"></i>
+        <p class="empty-state-text">Nothing overdue. Clean slate.</p>
+      </div>`;
+      refreshIcons();
+      return;
+    }
+    const acts = [
+      ['today', 'calendar-check', 'Do today'],
+      ['tomorrow', 'sunrise', 'Tomorrow'],
+      ['nextweek', 'calendar-plus', 'Next week'],
+      ['someday', 'circle-dashed', 'Someday (clear date)'],
+      ['done', 'check', 'Mark done'],
+      ['drop', 'trash-2', 'Drop it'],
+    ];
+    el.innerHTML = `
+      <p class="text-xs text-faint" style="margin-bottom:var(--space-2);">${pool.length} overdue item${pool.length === 1 ? '' : 's'}</p>
+      ${pool.map(e => {
+        const proj = e.projectId ? State.getProject(e.projectId) : null;
+        return `<div class="review-row" data-id="${e.id}">
+          <span class="proj-dot" style="background:${proj?.color || 'var(--text-faint)'}"></span>
+          <div class="review-main">
+            <span class="review-title">${e.title}</span>
+            <span class="text-xs" style="color:var(--error);">${formatDueDate(e.dueDate)}</span>
+          </div>
+          <div class="review-actions">
+            ${acts.map(([a, ic, label]) => `
+              <button class="icon-btn ${a === 'drop' ? 'review-drop' : ''}" onclick="App.reviewAction('${e.id}','${a}')" title="${label}" aria-label="${label}">${icon(ic, 14)}</button>`).join('')}
+          </div>
+        </div>`;
+      }).join('')}`;
+    refreshIcons();
+  }
+
+  function reviewAction(id, action) {
+    const entry = State.getEntry(id);
+    if (!entry) return;
+    switch (action) {
+      case 'today': State.updateEntry(id, { dueDate: State.todayStr() }); break;
+      case 'tomorrow': State.updateEntry(id, { dueDate: offsetDateStr(1) }); break;
+      case 'nextweek': State.updateEntry(id, { dueDate: offsetDateStr(7) }); break;
+      case 'someday': State.updateEntry(id, { dueDate: null }); break;
+      case 'done': State.toggleComplete(id); celebrate(); break;
+      case 'drop': State.deleteEntry(id); break;
+    }
+    render();
+    renderReviewList();
+    if (reviewPool().length === 0 && action !== 'drop') celebrate(40);
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // AUTO-PLAN — estimates + scores + free planner slots = a day plan
+  // ═══════════════════════════════════════════════════════════
+  let pendingPlan = [];
+
+  function computeAutoPlan() {
+    const today = State.todayStr();
+    // window: from now (next quarter hour) or wake, until sleep or 22:00
+    const wake = State.getLogs({ type: 'wake', date: today })[0];
+    const sleep = State.getLogs({ type: 'sleep', date: today })[0];
+    const winStart = Math.max(
+      wake?.time ? timeToMin(wake.time) : 8 * 60,
+      Math.ceil(timeToMin(nowTime()) / 15) * 15
+    );
+    const winEnd = sleep?.time ? timeToMin(sleep.time) : 22 * 60;
+    if (winStart >= winEnd) return [];
+
+    // free slots = window minus existing blocks (merged)
+    const busy = State.getPlannerBlocks({ date: today })
+      .map(b => [timeToMin(b.start), timeToMin(b.end)])
+      .sort((a, b) => a[0] - b[0]);
+    const free = [];
+    let cursor = winStart;
+    busy.forEach(([s, e]) => {
+      if (e <= cursor) return;
+      if (s > cursor) free.push([cursor, Math.min(s, winEnd)]);
+      cursor = Math.max(cursor, e);
+    });
+    if (cursor < winEnd) free.push([cursor, winEnd]);
+
+    // candidates: unblocked open tasks due (or overdue) today first,
+    // then undated ones — best score first, estimate-sized
+    const cands = State.getEntries({ type: 'task', completed: false })
+      .filter(t => !isBlocked(t) && (!t.dueDate || t.dueDate <= today))
+      .sort((a, b) => {
+        const aDue = a.dueDate ? 0 : 1, bDue = b.dueDate ? 0 : 1;
+        return aDue - bDue || taskScore(b) - taskScore(a);
+      });
+
+    const plan = [];
+    for (const t of cands) {
+      if (plan.length >= 8) break;
+      const dur = Math.min(Math.max(Math.ceil((t.estimateMinutes || 30) / 15) * 15, 15), 120);
+      const slot = free.find(([s, e]) => e - s >= dur);
+      if (!slot) continue;
+      plan.push({ task: t, start: slot[0], end: slot[0] + dur });
+      slot[0] += dur;
+    }
+    return plan;
+  }
+
+  function openAutoPlan() {
+    pendingPlan = computeAutoPlan();
+    if (pendingPlan.length === 0) {
+      toast('Nothing to plan — no open tasks fit today’s free slots');
+      return;
+    }
+    const total = pendingPlan.reduce((s, p) => s + (p.end - p.start), 0);
+    showModal('Auto-plan today', `
+      <p class="text-xs text-muted" style="margin-bottom:var(--space-3);">
+        Your top tasks, slotted into today's free time by score and estimate. Blocks land in the planner where you can still drag and resize them.
+      </p>
+      <div class="autoplan-list">
+        ${pendingPlan.map(p => {
+          const proj = p.task.projectId ? State.getProject(p.task.projectId) : null;
+          return `<div class="autoplan-row">
+            <span class="font-mono text-xs autoplan-time">${minToTime(p.start)}–${minToTime(p.end)}</span>
+            <span class="proj-dot" style="background:${proj?.color || 'var(--accent)'}"></span>
+            <span class="truncate" style="flex:1;">${p.task.title}</span>
+            <span class="pill">${estimateLabel(p.end - p.start)}</span>
+          </div>`;
+        }).join('')}
+      </div>
+      <p class="text-xs text-faint" style="margin-top:var(--space-2);">${pendingPlan.length} block${pendingPlan.length === 1 ? '' : 's'} · ${estimateLabel(total)} planned</p>
+    `, [
+      `<button class="btn btn-secondary" onclick="App.closeModal()">Cancel</button>`,
+      `<button class="btn btn-primary" onclick="App.confirmAutoPlan()">${icon('calendar-check', 14)}Add to planner</button>`,
+    ]);
+  }
+
+  function confirmAutoPlan() {
+    const today = State.todayStr();
+    pendingPlan.forEach(p => {
+      const proj = p.task.projectId ? State.getProject(p.task.projectId) : null;
+      State.createPlannerBlock({
+        date: today,
+        start: minToTime(p.start),
+        end: minToTime(p.end),
+        title: p.task.title,
+        entryId: p.task.id,
+        projectId: p.task.projectId || null,
+        color: proj?.color || null,
+        kind: 'agenda',
+      });
+    });
+    toast(`${pendingPlan.length} block${pendingPlan.length === 1 ? '' : 's'} added to today`);
+    pendingPlan = [];
+    closeModal();
+    switchTab('planner');
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // PASTE IMPORT — the reverse of "Copy for LLM"
+  // Paste a plan (markdown list, plain lines, or exported JSON) and
+  // every line goes through the natural-language parser.
+  // ═══════════════════════════════════════════════════════════
+  function parsePasteText(text) {
+    const trimmed = (text || '').trim();
+    if (!trimmed) return [];
+    if (/^[\[{]/.test(trimmed)) {
+      try {
+        const j = JSON.parse(trimmed);
+        const arr = Array.isArray(j) ? j : (Array.isArray(j.entries) ? j.entries : null);
+        if (arr) {
+          return arr.map(x => (typeof x === 'string' ? { raw: x } : (x && x.title ? { obj: x } : null))).filter(Boolean);
+        }
+      } catch (err) { /* not JSON — fall through to line parsing */ }
+    }
+    return trimmed.split('\n')
+      .map(l => l.replace(/^\s*(?:[-*+]\s*(?:\[[ xX]\]\s*)?|\d+[.)]\s*)/, '').trim())
+      .filter(l => l && !/^#{1,6}\s/.test(l) && !/^```/.test(l))
+      .map(raw => ({ raw }));
+  }
+
+  function pasteDefaultProject() {
+    return currentTab === 'projects' && projectFilter && projectFilter !== 'none' ? projectFilter : null;
+  }
+
+  function openPasteImport() {
+    const proj = pasteDefaultProject() ? State.getProject(pasteDefaultProject()) : null;
+    showModal('Paste Tasks', `
+      <p class="text-xs text-muted" style="margin-bottom:var(--space-2);">
+        One item per line — markdown lists and numbering are stripped. Lines speak the quick-add shorthand
+        (<span class="font-mono">tomorrow 3pm #tag @project !high ~30m</span>), and the "Copy for LLM" JSON pastes straight back in.
+        ${proj ? `New tasks land in <strong>${proj.name}</strong> unless a line says otherwise.` : ''}
+      </p>
+      <textarea class="form-input" id="pasteInput" rows="9" spellcheck="false"
+        placeholder="- [ ] Fix header overflow #bugs !high&#10;- Write release notes tomorrow ~30m&#10;- Call the vendor friday 10am"
+        oninput="App.previewPasteImport()"></textarea>
+      <div id="pastePreview" class="paste-preview"></div>
+    `, [
+      `<button class="btn btn-secondary" onclick="App.closeModal()">Cancel</button>`,
+      `<button class="btn btn-primary" id="pasteImportBtn" onclick="App.runPasteImport()">${icon('clipboard-paste', 14)}Import</button>`,
+    ]);
+    setTimeout(() => document.getElementById('pasteInput')?.focus(), 100);
+  }
+
+  function previewPasteImport() {
+    const el = document.getElementById('pastePreview');
+    if (!el) return;
+    const items = parsePasteText(document.getElementById('pasteInput')?.value);
+    if (items.length === 0) { el.innerHTML = ''; return; }
+    const rows = items.slice(0, 6).map(it => {
+      if (it.obj) return `<div class="paste-row">${icon('braces', 12)}<span class="truncate">${it.obj.title}</span></div>`;
+      const p = Palette.parse(it.raw);
+      const bits = [];
+      if (p.type !== 'task') bits.push(p.type);
+      if (p.dueDate) bits.push(formatDueDate(p.dueDate));
+      if (p.remindTime) bits.push(p.remindTime);
+      if (p.priority) bits.push(p.priority);
+      if (p.estimateMinutes) bits.push('~' + estimateLabel(p.estimateMinutes));
+      p.tags.forEach(t => bits.push('#' + t));
+      if (p.projectName) bits.push('@' + p.projectName);
+      return `<div class="paste-row">${icon('corner-down-right', 12)}<span class="truncate">${p.title || '(untitled)'}</span>
+        ${bits.length ? `<span class="text-xs text-faint paste-bits">${bits.join(' · ')}</span>` : ''}</div>`;
+    }).join('');
+    el.innerHTML = `<p class="text-xs text-faint" style="margin:var(--space-2) 0 var(--space-1);">${items.length} item${items.length === 1 ? '' : 's'} detected${items.length > 6 ? ' — showing first 6' : ''}</p>${rows}`;
+    refreshIcons();
+  }
+
+  function runPasteImport() {
+    const items = parsePasteText(document.getElementById('pasteInput')?.value);
+    if (items.length === 0) { toast('Nothing to import'); return; }
+    const defaultProjectId = pasteDefaultProject();
+    let n = 0;
+    items.forEach(it => {
+      if (it.raw) {
+        if (Palette.createFromText(it.raw, { defaultProjectId })) n++;
+      } else if (it.obj) {
+        const o = it.obj;
+        (o.tags || []).forEach(t => State.getOrCreateTag(t));
+        const pid = defaultProjectId;
+        State.createEntry({
+          type: ['task', 'habit', 'goal', 'reminder', 'note'].includes(o.type) ? o.type : 'task',
+          title: String(o.title),
+          description: o.description || '',
+          tags: Array.isArray(o.tags) ? o.tags : [],
+          priority: ['low', 'medium', 'high', 'urgent'].includes(o.priority) ? o.priority : 'medium',
+          dueDate: /^\d{4}-\d{2}-\d{2}$/.test(o.due_date || '') ? o.due_date : null,
+          remindTime: /^\d{2}:\d{2}$/.test(o.remind_time || '') ? o.remind_time : null,
+          estimateMinutes: Number(o.estimate_minutes) > 0 ? Number(o.estimate_minutes) : null,
+          projectId: pid,
+          projectIds: pid ? [pid] : [],
+        });
+        n++;
+      }
+    });
+    toast(`Imported ${n} item${n === 1 ? '' : 's'}`);
+    closeModal();
+    render();
+  }
+
+  // Command palette is the primary search surface; the modal search
+  // below stays as a fallback (and for anything still calling it).
+  function openPalette() {
+    if (typeof Palette !== 'undefined') Palette.open();
+    else openSearch();
+  }
+
   function openSearch() {
     showModal('Search', `
       <input type="search" class="form-input" id="searchInput" placeholder="Search projects, tasks, habits…"
@@ -3540,7 +4320,29 @@ const App = (() => {
   // ENTRY ACTIONS
   // ═══════════════════════════════════════════════════════════
   function toggleEntry(id) {
+    const before = State.getEntry(id);
+    const wasDone = before?.type === 'habit' ? State.isHabitDoneToday(id) : !!before?.completed;
     State.toggleComplete(id);
+    if (before && !wasDone) {
+      // completing (not un-completing) earns the burst
+      if (before.type === 'habit') {
+        if (!checkStreakMilestone(id)) celebrate();
+      } else if (before.type === 'task' || before.type === 'goal') {
+        celebrate();
+      }
+      // recurring: say when the next occurrence landed
+      const after = State.getEntry(id);
+      if (after?.recurrence && after.spawnedNextId) {
+        const next = State.getEntry(after.spawnedNextId);
+        if (next?.dueDate) toast(`Done — repeats ${after.recurrence.type}, next ${formatDueDate(next.dueDate)}`);
+      }
+      // dependency chain: announce what this completion freed up
+      const freed = State.getEntries({ type: 'task', completed: false })
+        .filter(t => (t.blockedBy || []).includes(id) && !isBlocked(t));
+      if (freed.length > 0) {
+        toast(`Unblocked: ${freed.map(t => t.title).join(', ')}`);
+      }
+    }
     render();
   }
 
@@ -3676,8 +4478,8 @@ const App = (() => {
     // Theme toggle
     document.getElementById('themeToggle').addEventListener('click', toggleTheme);
 
-    // Search
-    document.getElementById('searchBtn').addEventListener('click', openSearch);
+    // Search → command palette (falls back to the modal search)
+    document.getElementById('searchBtn').addEventListener('click', openPalette);
 
     // Modal close
     document.getElementById('modalClose').addEventListener('click', closeModal);
@@ -3697,7 +4499,7 @@ const App = (() => {
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') { closeModal(); closePanel(); closePopover(); return; }
       if ((e.metaKey || e.ctrlKey) && e.key === 'n') { e.preventDefault(); openNewEntry('task'); return; }
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); openSearch(); return; }
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); openPalette(); return; }
       const t = e.target;
       const typing = ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName) || t.isContentEditable;
       if (typing || e.metaKey || e.ctrlKey || e.altKey) return;
@@ -3706,7 +4508,7 @@ const App = (() => {
       if (k === hk.timer) { e.preventDefault(); Timers.toggleWindow(); }
       else if (k === hk.newTask) { e.preventDefault(); openNewEntry('task'); }
       else if (k === hk.quickLog) { e.preventDefault(); openQuickLog(); }
-      else if (k === hk.search) { e.preventDefault(); openSearch(); }
+      else if (k === hk.search) { e.preventDefault(); openPalette(); }
       else if (k === hk.stopTimers) { e.preventDefault(); Timers.stopAll(); toast('All timers stopped'); }
     });
 
@@ -3736,6 +4538,21 @@ const App = (() => {
     Sync.autoConnect();
     Sync.updateStatus();
 
+    // Reminder engine — fires remindTime entries while the app is open
+    setInterval(checkReminders, 30000);
+    setTimeout(checkReminders, 3000);
+
+    // PWA shortcut deep links (manifest shortcuts / bookmarks)
+    const action = new URLSearchParams(location.search).get('action');
+    if (action) {
+      history.replaceState(null, '', location.pathname); // don't re-fire on reload
+      setTimeout(() => {
+        if (action === 'new-task') openNewEntry('task');
+        else if (action === 'quick-log') openQuickLog();
+        else if (action === 'review') openDailyReview();
+      }, 400);
+    }
+
     // Initial render
     render();
 
@@ -3760,12 +4577,17 @@ const App = (() => {
     setFocusDue, filterChips, updateMaxNavTimers,
     openManageShortcuts, addShortcut, deleteShortcut,
     openManageTags, cycleTagColor, renameTag, setTagProject, deleteTagPrompt, createTagFromManager,
-    openSearch, runSearch, searchGo,
+    openSearch, runSearch, searchGo, openPalette, toast,
+    setAccent, openHistoryDay, celebrate,
+    checkReminders, enableNotifications,
+    openDailyReview, reviewAction,
+    openAutoPlan, confirmAutoPlan,
+    openPasteImport, previewPasteImport, runPasteImport,
     logFood, deleteFoodLog, useShortcutHealth,
     toggleEntry, deleteEntry, archiveEntry, unarchiveEntry, startTimerForTask,
     selectEntryCard, setWorkingProject, toggleSidebar,
     viewArchive, deleteHistoryLog, editMoodLog, setEditLogEmotion, setEditLogEnergy, saveMoodLog,
-    setProjectFilter, setTagFilter, selectHabit, toggleHabitCell, cycleHabitCell,
+    setProjectFilter, setTagFilter, selectHabit, toggleHabitCell, cycleHabitCell, exportForLLM,
     onRecurrenceChange, toggleWeekday,
     setInsightsProject, setInsightsEntry, setFocusProject,
     qDragStart, qDragEnd, qDragOver, qDragLeave, qDrop, qItemClick,
