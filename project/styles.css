@@ -2879,3 +2879,21 @@ input[type="date"]::-webkit-calendar-picker-indicator {
 .paste-row svg, .paste-row i[data-lucide] { color: var(--text-faint); flex-shrink: 0; }
 .paste-bits { flex-shrink: 0; margin-left: auto; }
 #pasteInput { resize: vertical; font-family: var(--font-mono); font-size: var(--text-xs); }
+
+/* ═══════════════════════════════════════════════════════════════
+   ROUND 10 — dogfood fixes
+   ═══════════════════════════════════════════════════════════════ */
+
+/* Quadrants: grid children must be allowed to shrink (min-width:auto
+   is what made long items push the grid past the viewport) … */
+.quadrant-box { min-width: 0; }
+.quadrant { min-width: 0; }
+/* … and on narrow screens the 2×2 stacks into a single column */
+@media (max-width: 700px) {
+  .quadrant {
+    grid-template-columns: 1fr;
+    grid-template-rows: none;
+    grid-auto-rows: minmax(110px, auto);
+    min-height: 0;
+  }
+}
