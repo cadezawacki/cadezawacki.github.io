@@ -207,12 +207,8 @@ table { border-collapse: collapse; width: 100%; }
 ::-webkit-scrollbar-thumb:hover { background: var(--text-faint); }
 
 /* Reduced motion */
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
-    animation-duration: 0.01ms !important;
-    transition-duration: 0.01ms !important;
-  }
-}
+/* prefers-reduced-motion intentionally not honored — the in-app
+   Celebrations toggle is the single animation switch */
 
 /* ═══════════════════════════════════════════════════════════════
    MENUBAR
@@ -2772,10 +2768,8 @@ input[type="date"]::-webkit-calendar-picker-indicator {
   from { opacity: 0; transform: translateY(6px); }
   to   { opacity: 1; transform: none; }
 }
-@media (prefers-reduced-motion: reduce) {
-  .main-content.view-anim > * { animation: none; }
-  .cmdk { animation: none; }
-}
+/* prefers-reduced-motion intentionally not honored — the in-app
+   Celebrations toggle is the single animation switch */
 
 /* ═══════════════════════════════════════════════════════════════
    ROUND 9 — Daily review, auto-plan, paste import, recurrence,
@@ -3076,6 +3070,5 @@ textarea.input-grow,
   0% { transform: scale(1.14); }
   100% { transform: none; }
 }
-@media (prefers-reduced-motion: reduce) {
-  .tool-result.settled { animation: none; }
-}
+/* prefers-reduced-motion intentionally not honored — the in-app
+   Celebrations toggle is the single animation switch */

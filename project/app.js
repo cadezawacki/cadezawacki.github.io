@@ -176,8 +176,9 @@ const App = (() => {
   }, { capture: true, passive: true });
 
   function celebrate(count = 28) {
+    // Animations are governed ONLY by the in-app Celebrations toggle —
+    // OS-level prefers-reduced-motion is deliberately ignored throughout.
     if (State.getSettings().celebrations === false) return;
-    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
     const x = lastPointer.x ?? window.innerWidth / 2;
     const y = lastPointer.y ?? window.innerHeight / 3;
     let cv = document.getElementById('confettiCanvas');
@@ -4155,9 +4156,7 @@ const App = (() => {
   let spinToken = 0;
   function spinResult(elId, sample, done) {
     const el = document.getElementById(elId);
-    const skip = !el
-      || State.getSettings().celebrations === false
-      || window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    const skip = !el || State.getSettings().celebrations === false;
     if (skip) {
       done();
       return;
