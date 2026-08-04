@@ -49,8 +49,9 @@ const Charts = (() => {
   }
 
   // "Year in Pixels": weekday-aligned columns (GitHub-style), month labels,
-  // activity from habits + tasks + tracked time + quick logs, click → History.
-  function renderHeatmap(container, days = 364, filter = null) {
+  // click → History. Two lenses: 'activity' (habits + tasks + tracked time
+  // + quick logs, accent intensity) and 'mood' (daily average, red → green).
+  function renderHeatmap(container, days = 364, filter = null, mode = 'activity') {
     const todayStr = State.todayStr();
 
     // Activity score per day, with a per-source breakdown for the tooltip
@@ -80,6 +81,18 @@ const Charts = (() => {
     };
     const maxScore = Math.max(...Object.keys(detail).map(scoreOf), 1);
 
+    // Mood per day (mode 'mood') — project filters don't apply to feelings
+    const EMO = { great: 5, good: 4, okay: 3, low: 2, bad: 1 };
+    const MOOD_NAMES = ['', 'Bad', 'Low', 'Okay', 'Good', 'Great'];
+    const moodByDate = {};
+    if (mode === 'mood') {
+      State.getLogs().forEach(l => {
+        if ((l.type === 'emotion' || l.type === 'checkin') && l.emotion && l.date) {
+          (moodByDate[l.date] = moodByDate[l.date] || []).push(EMO[l.emotion] || 3);
+        }
+      });
+    }
+
     // Column = calendar week starting Sunday, ending at today's week
     const start = new Date();
     start.setDate(start.getDate() - (days - 1));
@@ -105,15 +118,27 @@ const Charts = (() => {
         if (dateStr > todayStr) {
           colHtml += '<div class="heatmap-cell future"></div>';
         } else {
-          const x = detail[dateStr];
-          const score = scoreOf(dateStr);
-          const level = score === 0 ? '' : score <= maxScore * 0.25 ? 'l1' : score <= maxScore * 0.5 ? 'l2' : score <= maxScore * 0.75 ? 'l3' : 'l4';
-          const bits = [];
-          if (x?.habits) bits.push(`${x.habits} habit${x.habits === 1 ? '' : 's'}`);
-          if (x?.tasks) bits.push(`${x.tasks} task${x.tasks === 1 ? '' : 's'}`);
-          if (x?.minutes >= 1) bits.push(`${Math.round(x.minutes)}m focused`);
-          if (x?.logs) bits.push(`${x.logs} log${x.logs === 1 ? '' : 's'}`);
-          const tip = `${dateStr}${bits.length ? ' — ' + bits.join(' · ') : ' — nothing logged'}`;
+          let level = '', tip = '';
+          if (mode === 'mood') {
+            const moods = moodByDate[dateStr];
+            if (moods?.length) {
+              const avg = moods.reduce((a, b) => a + b, 0) / moods.length;
+              level = `m${Math.min(5, Math.max(1, Math.round(avg)))}`;
+              tip = `${dateStr} — ${MOOD_NAMES[Math.round(avg)]} (${avg.toFixed(1)}) · ${moods.length} log${moods.length === 1 ? '' : 's'}`;
+            } else {
+              tip = `${dateStr} — no mood logged`;
+            }
+          } else {
+            const x = detail[dateStr];
+            const score = scoreOf(dateStr);
+            level = score === 0 ? '' : score <= maxScore * 0.25 ? 'l1' : score <= maxScore * 0.5 ? 'l2' : score <= maxScore * 0.75 ? 'l3' : 'l4';
+            const bits = [];
+            if (x?.habits) bits.push(`${x.habits} habit${x.habits === 1 ? '' : 's'}`);
+            if (x?.tasks) bits.push(`${x.tasks} task${x.tasks === 1 ? '' : 's'}`);
+            if (x?.minutes >= 1) bits.push(`${Math.round(x.minutes)}m focused`);
+            if (x?.logs) bits.push(`${x.logs} log${x.logs === 1 ? '' : 's'}`);
+            tip = `${dateStr}${bits.length ? ' — ' + bits.join(' · ') : ' — nothing logged'}`;
+          }
           const isToday = dateStr === todayStr;
           colHtml += `<div class="heatmap-cell ${level}" title="${tip}" onclick="App.openHistoryDay('${dateStr}')" style="${isToday ? 'box-shadow:0 0 0 1px var(--text-faint);' : ''}"></div>`;
         }
@@ -129,7 +154,9 @@ const Charts = (() => {
       </div>
       <div class="heatmap-labels">
         <span>${Math.round(days / 30.4)} months ago</span>
-        <span class="heatmap-legend">less <i class="hm-swatch"></i><i class="hm-swatch l1"></i><i class="hm-swatch l2"></i><i class="hm-swatch l3"></i><i class="hm-swatch l4"></i> more</span>
+        ${mode === 'mood'
+          ? `<span class="heatmap-legend">bad <i class="hm-swatch m1"></i><i class="hm-swatch m2"></i><i class="hm-swatch m3"></i><i class="hm-swatch m4"></i><i class="hm-swatch m5"></i> great</span>`
+          : `<span class="heatmap-legend">less <i class="hm-swatch"></i><i class="hm-swatch l1"></i><i class="hm-swatch l2"></i><i class="hm-swatch l3"></i><i class="hm-swatch l4"></i> more</span>`}
         <span>Today</span>
       </div>`;
     // land scrolled to the present, not eleven months ago

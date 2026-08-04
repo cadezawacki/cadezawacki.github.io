@@ -12,6 +12,7 @@ const State = (() => {
     projects: [],
     tags: [],
     planner: [], // day-planner blocks: agenda items, tracked time, breaks
+    scratch: [], // scratchpad ideas — quick capture, promote to tasks later
     settings: {
       theme: 'dark',
       accent: 'teal',        // accent palette name (Settings → Appearance)
@@ -85,6 +86,7 @@ const State = (() => {
   // ── Migrate older stored shapes to the current schema ───────
   function migrate(d) {
     if (!Array.isArray(d.planner)) d.planner = [];
+    if (!Array.isArray(d.scratch)) d.scratch = [];
     (d.entries || []).forEach(e => {
       if (e.archived === undefined) e.archived = false;
       if (e.estimateMinutes === undefined) e.estimateMinutes = null;
@@ -476,6 +478,33 @@ const State = (() => {
   }
 
   function getPlannerBlock(id) { return data.planner.find(b => b.id === id); }
+
+  // ═══════════════════════════════════════════════════════════
+  // SCRATCHPAD — frictionless idea capture
+  // ═══════════════════════════════════════════════════════════
+  function addScratch(text) {
+    const idea = { id: uid(), text: String(text).trim(), createdAt: new Date().toISOString() };
+    if (!idea.text) return null;
+    data.scratch.push(idea);
+    emit();
+    return idea;
+  }
+
+  function getScratch() {
+    return [...data.scratch].sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+  }
+
+  function deleteScratch(id) {
+    data.scratch = data.scratch.filter(s => s.id !== id);
+    emit();
+  }
+
+  function clearScratch() {
+    const n = data.scratch.length;
+    data.scratch = [];
+    emit();
+    return n;
+  }
 
   function getPlannerBlocks(filter = {}) {
     return data.planner.filter(b => {
@@ -1017,6 +1046,7 @@ const State = (() => {
     archiveProject, unarchiveProject, wouldCycleProject,
     getOrCreateTag, getAllTags, updateTag, deleteTag, tagUsageCount,
     createPlannerBlock, updatePlannerBlock, deletePlannerBlock, getPlannerBlock, getPlannerBlocks,
+    addScratch, getScratch, deleteScratch, clearScratch,
     createLog, deleteLog, updateLog, getLogs, logHabitCompletion, logEmotion, logCheckin, logWakeSleep,
     logCalories, logQuickShortcut, addQuickShortcut, deleteQuickShortcut, logTimeSession,
     getTodayCalories, getTodayEmotion, actualMinutesFor,
