@@ -1443,43 +1443,42 @@ const App = (() => {
       </div>
     `;
 
-    // Project filter — chips while they fit, compact dropdown once they don't
+    // Project filter — phones always get the compact dropdown; desktop
+    // keeps chips until they outgrow the space. The 4-row chip wall on
+    // mobile was the biggest source of clutter.
+    const projSelect = `
+      <select class="form-select" style="width:auto;max-width:240px;padding:var(--space-1) var(--space-2);font-size:var(--text-xs);" onchange="App.setProjectFilter(this.value || null)">
+        <option value="">All projects</option>
+        ${projects.map(p => `<option value="${p.id}" ${projectFilter === p.id ? 'selected' : ''}>${projectLabel(p)}</option>`).join('')}
+        <option value="none" ${projectFilter === 'none' ? 'selected' : ''}>No project</option>
+      </select>`;
     if (projects.length > 8) {
-      html += `<div class="filter-chips" style="align-items:center;">
-        <select class="form-select" style="width:auto;max-width:240px;padding:var(--space-1) var(--space-2);font-size:var(--text-xs);" onchange="App.setProjectFilter(this.value || null)">
-          <option value="">All projects</option>
-          ${projects.map(p => `<option value="${p.id}" ${projectFilter === p.id ? 'selected' : ''}>${projectLabel(p)}</option>`).join('')}
-          <option value="none" ${projectFilter === 'none' ? 'selected' : ''}>No project</option>
-        </select>`;
+      html += `<div class="filter-chips" style="align-items:center;">${projSelect}</div>`;
     } else {
-      html += `<div class="filter-chips">
+      html += `<div class="filter-chips only-mobile" style="align-items:center;">${projSelect}</div>`;
+      html += `<div class="filter-chips only-desktop">
         <button class="filter-chip ${!projectFilter ? 'active' : ''}" onclick="App.setProjectFilter(null)">All</button>
-      `;
-      projects.forEach(p => {
-        html += `<button class="filter-chip ${projectFilter === p.id ? 'active' : ''}" onclick="App.setProjectFilter('${p.id}')" ${p.depth ? `style="margin-left:${p.depth * 10}px"` : ''}>
+        ${projects.map(p => `<button class="filter-chip ${projectFilter === p.id ? 'active' : ''}" onclick="App.setProjectFilter('${p.id}')" ${p.depth ? `style="margin-left:${p.depth * 10}px"` : ''}>
           <span class="proj-dot" style="background:${p.color}"></span>${p.name}
-        </button>`;
-      });
-      html += `<button class="filter-chip ${projectFilter === 'none' ? 'active' : ''}" onclick="App.setProjectFilter('none')">No Project</button>`;
+        </button>`).join('')}
+        <button class="filter-chip ${projectFilter === 'none' ? 'active' : ''}" onclick="App.setProjectFilter('none')">No Project</button>
+      </div>`;
     }
 
-    // Tag filter — same treatment
+    // Tag filter — a single swipeable row on phones instead of wrapping
     if (allTags.length > 10) {
-      html += `<select class="form-select" style="width:auto;max-width:180px;padding:var(--space-1) var(--space-2);font-size:var(--text-xs);" onchange="App.setTagFilter(this.value || null)">
+      html += `<div class="filter-chips"><select class="form-select" style="width:auto;max-width:180px;padding:var(--space-1) var(--space-2);font-size:var(--text-xs);" onchange="App.setTagFilter(this.value || null)">
         <option value="">Any tag</option>
         ${allTags.map(t => `<option value="${t.name}" ${tagFilter === t.name ? 'selected' : ''}>#${t.name}</option>`).join('')}
       </select></div>`;
-    } else {
-      html += `</div>`;
-      if (allTags.length > 0) {
-        html += `<div class="filter-chips" style="margin-top:calc(var(--space-2) * -1);">
-          <span class="stat-label" style="align-self:center;">${icon('tag', 11)}</span>
-          <button class="filter-chip ${!tagFilter ? 'active' : ''}" onclick="App.setTagFilter(null)">Any tag</button>
-          ${allTags.map(t => `
-            <button class="filter-chip pill-${t.color} ${tagFilter === t.name ? 'active' : ''}" onclick="App.setTagFilter('${t.name}')">#${t.name}</button>
-          `).join('')}
-        </div>`;
-      }
+    } else if (allTags.length > 0) {
+      html += `<div class="filter-chips chips-scroll-x">
+        <span class="stat-label" style="align-self:center;">${icon('tag', 11)}</span>
+        <button class="filter-chip ${!tagFilter ? 'active' : ''}" onclick="App.setTagFilter(null)">Any tag</button>
+        ${allTags.map(t => `
+          <button class="filter-chip pill-${t.color} ${tagFilter === t.name ? 'active' : ''}" onclick="App.setTagFilter('${t.name}')">#${t.name}</button>
+        `).join('')}
+      </div>`;
     }
 
     const tagMatch = (e) => !tagFilter || (e.tags || []).includes(tagFilter);
@@ -1496,12 +1495,14 @@ const App = (() => {
       ).filter(tagMatch);
 
       html += `<div class="section">
-        <div class="section-header">
-          <span class="section-title">${proj ? `${icon(proj.icon, 13)} ${proj.name}` : 'Unassigned'}${hasChildren ? ' <span class="text-faint">incl. sub-projects</span>' : ''}${tagFilter ? ` · #${tagFilter}` : ''}</span>
-          <span style="display:inline-flex;align-items:center;gap:var(--space-2);">
-            <span class="stat-label">${entries.length} items</span>
-            <button class="filter-chip ${showDone ? '' : 'active'}" onclick="App.updateAppSetting('showCompleted', ${showDone ? 'false' : 'true'})" title="${showDone ? 'Hide' : 'Show'} finished tasks">${showDone ? 'Hide done' : 'Done hidden'}</button>
-            ${proj ? `<button class="btn btn-ghost btn-sm" onclick="App.openProjectModal('${proj.id}')">${icon('pencil', 12)}Edit</button>` : ''}
+        <div class="section-header proj-detail-header">
+          <span class="section-title">${proj ? `${icon(proj.icon, 13)} ${proj.name}` : 'Unassigned'}${hasChildren ? ` <span class="pill" title="Includes everything in its sub-projects">+subs</span>` : ''}${tagFilter ? ` · #${tagFilter}` : ''}</span>
+          <span style="display:inline-flex;align-items:center;gap:var(--space-1);flex-shrink:0;">
+            <span class="stat-label">${entries.length}</span>
+            <button class="icon-btn" onclick="App.updateAppSetting('showCompleted', ${showDone ? 'false' : 'true'})"
+              aria-label="${showDone ? 'Hide finished tasks' : 'Show finished tasks'}"
+              title="${showDone ? 'Hide finished tasks' : 'Finished hidden — click to show'}">${icon(showDone ? 'eye' : 'eye-off', 15)}</button>
+            ${proj ? `<button class="icon-btn" onclick="App.openProjectModal('${proj.id}')" aria-label="Edit project" title="Edit project">${icon('pencil', 15)}</button>` : ''}
           </span>
         </div>`;
 
@@ -1638,7 +1639,12 @@ const App = (() => {
     } else {
       entries = State.getEntries();
     }
-    return entries.filter(e => !tagFilter || (e.tags || []).includes(tagFilter));
+    entries = entries.filter(e => !tagFilter || (e.tags || []).includes(tagFilter));
+    // "Hide done" hides them from the export too — copy what you can see
+    if (State.getSettings().showCompleted === false) {
+      entries = entries.filter(e => e.type === 'habit' || !e.completed);
+    }
+    return entries;
   }
 
   function buildLLMExport(entries) {
@@ -1688,6 +1694,7 @@ const App = (() => {
       filterDesc.project = 'unassigned only';
     }
     if (tagFilter) filterDesc.tag = `#${tagFilter}`;
+    if (State.getSettings().showCompleted === false) filterDesc.finished = 'hidden — open items only';
 
     return {
       source: 'Cade.project task tracker export',
@@ -4852,6 +4859,48 @@ const App = (() => {
   // ═══════════════════════════════════════════════════════════
   // CONFLICT MODAL
   // ═══════════════════════════════════════════════════════════
+  // What actually differs between two datasets — id-level comparison per
+  // collection, with example titles for the human-facing ones.
+  function dataDiff(local, server) {
+    const compare = (label, l = [], s = [], nameOf = null) => {
+      const lm = new Map(l.filter(x => x && x.id).map(x => [x.id, x]));
+      const sm = new Map(s.filter(x => x && x.id).map(x => [x.id, x]));
+      const localOnly = [], serverOnly = [], changed = [];
+      lm.forEach((v, id) => {
+        if (!sm.has(id)) localOnly.push(v);
+        else if (JSON.stringify(v) !== JSON.stringify(sm.get(id))) changed.push(v);
+      });
+      sm.forEach((v, id) => { if (!lm.has(id)) serverOnly.push(v); });
+      return { label, nameOf, localOnly, serverOnly, changed };
+    };
+    return [
+      compare('Entries', local.entries, server.entries, (e) => e.title),
+      compare('Projects', local.projects, server.projects, (p) => p.name),
+      compare('Scratch ideas', local.scratch, server.scratch, (s) => (s.text || '').slice(0, 30)),
+      compare('Logs', local.logs, server.logs),
+      compare('Planner blocks', local.planner, server.planner),
+    ].filter(d => d.localOnly.length || d.serverOnly.length || d.changed.length);
+  }
+
+  function diffBoxHtml(local, server) {
+    const diffs = dataDiff(local, server);
+    if (diffs.length === 0) {
+      return `<div class="diff-box"><p class="text-xs text-faint">Same content — only formatting or ordering differs. Either choice is safe.</p></div>`;
+    }
+    const names = (list, nameOf) => nameOf && list.length
+      ? ` <span class="text-faint">(${list.slice(0, 3).map(x => escHtml(nameOf(x) || '?')).join(', ')}${list.length > 3 ? ', …' : ''})</span>` : '';
+    return `<div class="diff-box">
+      ${diffs.map(d => `<div class="diff-row">
+        <span class="diff-label">${d.label}</span>
+        <span class="diff-detail">
+          ${d.localOnly.length ? `<span class="diff-chip local">+${d.localOnly.length} only here${names(d.localOnly, d.nameOf)}</span>` : ''}
+          ${d.serverOnly.length ? `<span class="diff-chip server">+${d.serverOnly.length} only on server${names(d.serverOnly, d.nameOf)}</span>` : ''}
+          ${d.changed.length ? `<span class="diff-chip changed">${d.changed.length} differ${names(d.changed, d.nameOf)}</span>` : ''}
+        </span>
+      </div>`).join('')}
+    </div>`;
+  }
+
   // A conflict must never clobber a form mid-edit — if any modal is open,
   // park the conflict and surface it right after that modal closes.
   let pendingConflict = null;
@@ -4864,9 +4913,10 @@ const App = (() => {
     }
     pendingConflict = null;
     showModal('Sync Conflict', `
-      <p class="text-sm text-muted" style="margin-bottom:var(--space-3);">
-        Your local data and the server have diverged. Choose how to resolve:
+      <p class="text-sm text-muted" style="margin-bottom:var(--space-2);">
+        Your local data and the server have diverged. Here's what differs:
       </p>
+      ${diffBoxHtml(localData, serverData)}
       <div style="display:flex;flex-direction:column;gap:var(--space-2);">
         <div class="card card-interactive" onclick="App.resolveConflict('local')">
           <div style="font-weight:600;margin-bottom:var(--space-1);">Keep Local</div>
