@@ -139,6 +139,7 @@ const App = (() => {
   }, { capture: true, passive: true });
 
   function celebrate(count = 28) {
+    if (State.getSettings().celebrations === false) return;
     if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
     const x = lastPointer.x ?? window.innerWidth / 2;
     const y = lastPointer.y ?? window.innerHeight / 3;
@@ -334,9 +335,11 @@ const App = (() => {
 
     if (animateNextRender) {
       animateNextRender = false;
-      main.classList.remove('view-anim');
-      void main.offsetWidth; // restart the animation
-      main.classList.add('view-anim');
+      main.classList.remove('view-anim'); // always clear — a stale class would replay when re-enabled
+      if (State.getSettings().viewAnimations !== false) {
+        void main.offsetWidth; // restart the animation
+        main.classList.add('view-anim');
+      }
     }
 
     refreshIcons();
@@ -1283,9 +1286,9 @@ const App = (() => {
           <h1 class="page-title">Projects</h1>
           <p class="page-subtitle">${projects.length} projects · ${State.getEntries().length} total entries</p>
         </div>
-        <div style="display:flex;gap:var(--space-2);">
-          <button class="btn btn-secondary" onclick="App.exportForLLM()" title="Copy the currently filtered entries as LLM-friendly JSON">${icon('clipboard-copy', 14)}Copy for LLM</button>
-          <button class="btn btn-secondary" onclick="App.openPasteImport()" title="Paste a list (or LLM output) — every line becomes a task via the quick-add parser">${icon('clipboard-paste', 14)}Paste Tasks</button>
+        <div style="display:flex;gap:var(--space-2);align-items:center;">
+          <button class="icon-btn" onclick="App.exportForLLM()" aria-label="Copy for LLM" title="Copy for LLM — current filters as JSON">${icon('clipboard-copy', 16)}</button>
+          <button class="icon-btn" onclick="App.openPasteImport()" aria-label="Paste tasks" title="Paste tasks — every line becomes an entry">${icon('clipboard-paste', 16)}</button>
           <button class="btn btn-secondary" onclick="App.openManageProjects()">${icon('settings-2', 14)}Manage</button>
           <button class="btn btn-primary" onclick="App.openProjectModal()">${icon('plus', 14)}New Project</button>
         </div>
@@ -2733,6 +2736,16 @@ const App = (() => {
           <div><div class="setting-label">Theme</div><div class="setting-desc">Currently ${settings.theme} — also toggleable from the header</div></div>
           <button class="btn btn-secondary btn-sm" onclick="App.toggleTheme()">${icon('sun-moon', 14)}Switch to ${settings.theme === 'dark' ? 'light' : 'dark'}</button>
         </div>
+        <div class="setting-row">
+          <div><div class="setting-label">Celebrations</div><div class="setting-desc">Confetti on completions and streak milestones</div></div>
+          <div class="toggle-switch ${settings.celebrations !== false ? 'on' : ''}" role="switch" aria-checked="${settings.celebrations !== false}"
+            onclick="App.updateAppSetting('celebrations', ${settings.celebrations === false})" aria-label="Toggle celebrations"></div>
+        </div>
+        <div class="setting-row">
+          <div><div class="setting-label">View Transitions</div><div class="setting-desc">Slide-in animation when switching tabs</div></div>
+          <div class="toggle-switch ${settings.viewAnimations !== false ? 'on' : ''}" role="switch" aria-checked="${settings.viewAnimations !== false}"
+            onclick="App.updateAppSetting('viewAnimations', ${settings.viewAnimations === false})" aria-label="Toggle view transitions"></div>
+        </div>
       </div>
     </div>`;
 
@@ -3143,10 +3156,22 @@ const App = (() => {
   let currentProjects = [];
 
   function toggleFormProject(id) {
-    currentProjects = currentProjects.includes(id)
-      ? currentProjects.filter(p => p !== id)
-      : [...currentProjects, id];
-    document.getElementById(`pc-${id}`)?.classList.toggle('active', currentProjects.includes(id));
+    if (currentProjects.includes(id)) {
+      currentProjects = currentProjects.filter(p => p !== id);
+    } else {
+      currentProjects = [...currentProjects, id];
+      // a sub-project implies its ancestors — pull the chain in with it
+      let p = State.getProject(id);
+      let guard = 0;
+      while (p?.parentId && guard++ < 10) {
+        if (!currentProjects.includes(p.parentId)) currentProjects.push(p.parentId);
+        p = State.getProject(p.parentId);
+      }
+    }
+    // ancestors may have just toggled on — sync every chip, not one
+    document.querySelectorAll('.project-choice').forEach(el => {
+      el.classList.toggle('active', currentProjects.includes(el.id.replace('pc-', '')));
+    });
   }
 
   // Generic type-to-filter for chip lists that outgrow the space
@@ -4249,7 +4274,17 @@ const App = (() => {
   // ═══════════════════════════════════════════════════════════
   // CONFLICT MODAL
   // ═══════════════════════════════════════════════════════════
+  // A conflict must never clobber a form mid-edit — if any modal is open,
+  // park the conflict and surface it right after that modal closes.
+  let pendingConflict = null;
+
   function showConflictModal(localData, serverData) {
+    if (document.getElementById('modalOverlay').classList.contains('active')) {
+      pendingConflict = [localData, serverData];
+      toast('Sync conflict detected — will ask once you finish here');
+      return;
+    }
+    pendingConflict = null;
     showModal('Sync Conflict', `
       <p class="text-sm text-muted" style="margin-bottom:var(--space-3);">
         Your local data and the server have diverged. Choose how to resolve:
@@ -4298,6 +4333,12 @@ const App = (() => {
     // hotkeys (the handler thinks you're still typing) — release it.
     if (document.activeElement && document.activeElement !== document.body) {
       document.activeElement.blur();
+    }
+    // A sync conflict that arrived mid-form was parked — surface it now
+    if (pendingConflict) {
+      const [l, s] = pendingConflict;
+      pendingConflict = null;
+      setTimeout(() => showConflictModal(l, s), 250);
     }
   }
 
@@ -4394,6 +4435,12 @@ const App = (() => {
     const v = Math.min(6, Math.max(1, parseInt(value) || 2));
     State.updateSettings({ maxNavTimers: v });
     if (typeof Timers !== 'undefined') Timers.updateMini();
+  }
+
+  // Generic boolean/scalar preference updater (Appearance toggles etc.)
+  function updateAppSetting(key, value) {
+    State.updateSettings({ [key]: value });
+    render();
   }
 
   function setHotkey(action, value) {
@@ -4578,7 +4625,7 @@ const App = (() => {
     openManageShortcuts, addShortcut, deleteShortcut,
     openManageTags, cycleTagColor, renameTag, setTagProject, deleteTagPrompt, createTagFromManager,
     openSearch, runSearch, searchGo, openPalette, toast,
-    setAccent, openHistoryDay, celebrate,
+    setAccent, openHistoryDay, celebrate, updateAppSetting,
     checkReminders, enableNotifications,
     openDailyReview, reviewAction,
     openAutoPlan, confirmAutoPlan,
