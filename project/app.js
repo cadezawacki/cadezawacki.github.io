@@ -4127,7 +4127,7 @@ const App = (() => {
           <div class="tool-result ${r.name ? 'live' : ''}" id="toolNameOut">${r.name || '—'}</div>
           <div style="display:flex;gap:var(--space-2);justify-content:center;">
             <button class="btn btn-primary" onclick="App.toolName()">${icon('sparkles', 14)}Generate</button>
-            ${r.name ? `<button class="btn btn-secondary" onclick="App.toolCopy('name')">${icon('copy', 14)}Copy</button>` : ''}
+            <button class="btn btn-secondary" onclick="App.toolCopy('name')">${icon('copy', 14)}Copy</button>
           </div>
         </div>
         <div class="card tool-card">
@@ -4144,7 +4144,7 @@ const App = (() => {
           <div class="tool-result mono-sm ${r.uuid ? 'live' : ''}" id="toolUuidOut">${r.uuid || '—'}</div>
           <div style="display:flex;gap:var(--space-2);justify-content:center;">
             <button class="btn btn-primary" onclick="App.toolUuid()">${icon('sparkles', 14)}Generate</button>
-            ${r.uuid ? `<button class="btn btn-secondary" onclick="App.toolCopy('uuid')">${icon('copy', 14)}Copy</button>` : ''}
+            <button class="btn btn-secondary" onclick="App.toolCopy('uuid')">${icon('copy', 14)}Copy</button>
           </div>
         </div>
       </div>`;
@@ -4154,13 +4154,21 @@ const App = (() => {
   // decelerating until the real answer lands with a little pop. A fresh
   // click supersedes any spin already in flight.
   let spinToken = 0;
-  function spinResult(elId, sample, done) {
+  function spinResult(elId, sample, finalText, store) {
+    // Settling patches the element IN PLACE — a full render() here made
+    // the whole page rebuild (and visibly jump) just as the answer landed.
+    const finish = () => {
+      store();
+      const node = document.getElementById(elId);
+      if (!node) return;
+      node.textContent = finalText;
+      node.classList.remove('spinning', 'settled');
+      node.classList.add('live');
+      void node.offsetWidth; // restart the pop animation
+      node.classList.add('settled');
+    };
     const el = document.getElementById(elId);
-    const skip = !el || State.getSettings().celebrations === false;
-    if (skip) {
-      done();
-      return;
-    }
+    if (!el || State.getSettings().celebrations === false) { finish(); return; }
     const token = ++spinToken;
     el.classList.remove('settled');
     el.classList.add('spinning');
@@ -4170,11 +4178,7 @@ const App = (() => {
     const step = (now) => {
       if (token !== spinToken) return; // superseded by a newer spin
       const t = (now - t0) / DURATION;
-      if (t >= 1 || !document.getElementById(elId)) {
-        done();
-        requestAnimationFrame(() => document.getElementById(elId)?.classList.add('settled'));
-        return;
-      }
+      if (t >= 1 || !document.getElementById(elId)) { finish(); return; }
       // flips start ~50ms apart and stretch to ~300ms — the deceleration
       if (now - lastFlip >= 50 + 250 * t * t) {
         lastFlip = now;
@@ -4187,30 +4191,25 @@ const App = (() => {
 
   function toolCoin() {
     const final = Math.random() < 0.5 ? 'HEADS' : 'TAILS';
-    spinResult('toolCoinOut', () => (Math.random() < 0.5 ? 'HEADS' : 'TAILS'), () => {
-      toolResults.coin = final; render();
-    });
+    spinResult('toolCoinOut', () => (Math.random() < 0.5 ? 'HEADS' : 'TAILS'), final, () => { toolResults.coin = final; });
   }
   function toolDice(n) {
     const final = `d${n} → ${1 + Math.floor(Math.random() * n)}`;
-    spinResult('toolDiceOut', () => `d${n} → ${1 + Math.floor(Math.random() * n)}`, () => {
-      toolResults.dice = final; render();
-    });
+    spinResult('toolDiceOut', () => `d${n} → ${1 + Math.floor(Math.random() * n)}`, final, () => { toolResults.dice = final; });
   }
   function toolListChanged(v) { toolListText = v; }
   function toolPick() {
     const lines = toolListText.split('\n').map(l => l.trim()).filter(Boolean);
     if (lines.length === 0) { toast('Add some options first'); return; }
     const final = lines[Math.floor(Math.random() * lines.length)];
-    if (lines.length < 2) { toolResults.pick = final; render(); return; } // nothing to shuffle
-    spinResult('toolPickOut', () => lines[Math.floor(Math.random() * lines.length)], () => {
-      toolResults.pick = final; render();
-    });
+    const sample = lines.length < 2 ? null : () => lines[Math.floor(Math.random() * lines.length)];
+    if (!sample) { spinResult('toolPickOut', () => final, final, () => { toolResults.pick = final; }); return; }
+    spinResult('toolPickOut', sample, final, () => { toolResults.pick = final; });
   }
   const randomName = () => `${NAME_ADJ[Math.floor(Math.random() * NAME_ADJ.length)]}-${NAME_NOUN[Math.floor(Math.random() * NAME_NOUN.length)]}`;
   function toolName() {
     const final = randomName();
-    spinResult('toolNameOut', randomName, () => { toolResults.name = final; render(); });
+    spinResult('toolNameOut', randomName, final, () => { toolResults.name = final; });
   }
   function toolRandom() {
     const min = parseInt(document.getElementById('toolRandMin')?.value) || 0;
@@ -4218,7 +4217,7 @@ const App = (() => {
     toolResults.randMin = min; toolResults.randMax = max;
     const roll = () => min + Math.floor(Math.random() * (max - min + 1));
     const final = roll();
-    spinResult('toolRandOut', () => String(roll()), () => { toolResults.rand = final; render(); });
+    spinResult('toolRandOut', () => String(roll()), String(final), () => { toolResults.rand = final; });
   }
   const randomUuid = () => (crypto.randomUUID ? crypto.randomUUID()
     : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
@@ -4227,7 +4226,7 @@ const App = (() => {
     }));
   function toolUuid() {
     const final = randomUuid();
-    spinResult('toolUuidOut', randomUuid, () => { toolResults.uuid = final; render(); });
+    spinResult('toolUuidOut', randomUuid, final, () => { toolResults.uuid = final; });
   }
   async function toolCopy(key) {
     const v = toolResults[key];
