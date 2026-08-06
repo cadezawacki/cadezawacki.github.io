@@ -2762,12 +2762,8 @@ input[type="date"]::-webkit-calendar-picker-indicator {
 /* ── Accent swatches (Settings → Appearance) ──────────────────── */
 .accent-swatches { display: flex; gap: var(--space-2); flex-wrap: wrap; }
 
-/* ── View transition on tab switch ────────────────────────────── */
-.main-content.view-anim > * { animation: viewIn 0.22s ease both; }
-@keyframes viewIn {
-  from { opacity: 0; transform: translateY(6px); }
-  to   { opacity: 1; transform: none; }
-}
+/* view transition removed — a stale .view-anim class made every
+   re-render (checking a task!) replay the slide-in on all content */
 /* prefers-reduced-motion intentionally not honored — the in-app
    Celebrations toggle is the single animation switch */
 

@@ -364,9 +364,7 @@ const App = (() => {
   // ═══════════════════════════════════════════════════════════
   // ROUTING
   // ═══════════════════════════════════════════════════════════
-  let animateNextRender = false;
   function switchTab(tab) {
-    animateNextRender = tab !== currentTab; // animate real switches, not re-renders
     currentTab = tab;
     document.querySelectorAll('.tab-item').forEach(el => {
       el.classList.toggle('active', el.dataset.tab === tab);
@@ -395,15 +393,6 @@ const App = (() => {
       case 'history': main.innerHTML = renderHistory(); break;
       case 'settings': main.innerHTML = renderSettings(); break;
       case 'taskpage': main.innerHTML = renderTaskPage(); break;
-    }
-
-    if (animateNextRender) {
-      animateNextRender = false;
-      main.classList.remove('view-anim'); // always clear — a stale class would replay when re-enabled
-      if (State.getSettings().viewAnimations !== false) {
-        void main.offsetWidth; // restart the animation
-        main.classList.add('view-anim');
-      }
     }
 
     refreshIcons();
@@ -2913,11 +2902,6 @@ const App = (() => {
           <div><div class="setting-label">Celebrations</div><div class="setting-desc">Confetti on completions and streak milestones</div></div>
           <div class="toggle-switch ${settings.celebrations !== false ? 'on' : ''}" role="switch" aria-checked="${settings.celebrations !== false}"
             onclick="App.updateAppSetting('celebrations', ${settings.celebrations === false})" aria-label="Toggle celebrations"></div>
-        </div>
-        <div class="setting-row">
-          <div><div class="setting-label">View Transitions</div><div class="setting-desc">Slide-in animation when switching tabs</div></div>
-          <div class="toggle-switch ${settings.viewAnimations !== false ? 'on' : ''}" role="switch" aria-checked="${settings.viewAnimations !== false}"
-            onclick="App.updateAppSetting('viewAnimations', ${settings.viewAnimations === false})" aria-label="Toggle view transitions"></div>
         </div>
       </div>
     </div>`;

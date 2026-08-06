@@ -17,7 +17,6 @@ const State = (() => {
       theme: 'dark',
       accent: 'teal',        // accent palette name (Settings → Appearance)
       celebrations: true,    // confetti on completions/milestones
-      viewAnimations: true,  // slide-in transition on tab switch
       sync: {
         databaseUrl: '',
         passphrase: '',
