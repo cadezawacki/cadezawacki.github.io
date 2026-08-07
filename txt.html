@@ -6002,10 +6002,22 @@ class ImageWidget extends WidgetType {
     const code = this.code;
     const menuHash = this.isRef ? this.data : null; // for "Edit drawing" (whiteboard)
     const posOf = () => { try { return view.posAtDOM(wrap); } catch { return null; } };
-    const attachMenu = (b64) => wrap.addEventListener('contextmenu', (e) => {
-      e.preventDefault(); e.stopPropagation();
-      showImageMenu(e.clientX, e.clientY, mime, b64, menuHash, posOf);
-    });
+    const attachMenu = (b64) => {
+      wrap.addEventListener('contextmenu', (e) => {
+        e.preventDefault(); e.stopPropagation();
+        showImageMenu(e.clientX, e.clientY, mime, b64, menuHash, posOf);
+      });
+      // Mobile has no right-click: a plain tap on the image opens the same
+      // menu (save/copy/whiteboard), matching how highlights and links open
+      // their menus on tap. Desktop left-click stays inert; the resize grip's
+      // clicks are its own (a tap there must not pop the menu).
+      wrap.addEventListener('click', (e) => {
+        if (!(isCoarsePointer() || _lastPointerWasTouch)) return;
+        if (e.target && e.target.closest && e.target.closest('.cm-img-grip')) return;
+        e.preventDefault(); e.stopPropagation();
+        showImageMenu(e.clientX, e.clientY, mime, b64, menuHash, posOf);
+      });
+    };
     _attachImageResize(view, wrap, img, this.data);
     img.onerror = () => { wrap.classList.add('missing'); wrap.textContent = '⚠ broken image'; };
     wrap.appendChild(img);
