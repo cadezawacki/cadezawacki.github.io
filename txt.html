@@ -2590,6 +2590,20 @@ body.readonly .cm-img-grip { display: none; }
 /* Out-of-document image still resolving from IndexedDB / Firebase. */
 .cm-img-embed.loading img { min-width: 64px; min-height: 40px; background: repeating-linear-gradient(45deg, var(--surface-hover, rgba(127,127,127,0.12)) 0 6px, transparent 6px 12px); border-style: dashed; }
 
+/* Attached files: the doc holds only "![file:name#hash|sN]"; the encoded bytes
+   live in IndexedDB / Firebase (files/<fp>/<hash>) like out-of-document images.
+   Rendered as a small pill: paperclip, filename, size. Click for options. */
+.cm-file-pill {
+  display: inline-flex; align-items: center; gap: 6px; max-width: min(100%, 340px);
+  padding: 2px 10px 2px 8px; border: 1px solid var(--border); border-radius: 999px;
+  background: var(--surface); cursor: pointer; vertical-align: baseline;
+  font-size: var(--text-xs); line-height: 1.6; user-select: none; -webkit-user-select: none;
+}
+.cm-file-pill:hover { border-color: var(--accent); background: var(--surface-hover); }
+.cm-file-pill svg { width: 13px; height: 13px; flex: none; color: var(--accent); }
+.cm-file-pill .cm-file-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cm-file-pill .cm-file-size { color: var(--text-faint); flex: none; }
+
 /* Snapshot diff viewer (#101) */
 .snap-diff { font-family: var(--font-mono); font-size: var(--text-xs); white-space: pre-wrap; word-break: break-word; max-height: 50vh; overflow: auto; border: 1px solid var(--border); border-radius: var(--radius); padding: 8px; margin-top: 8px; background: var(--bg); }
 .snap-diff .d-add { background: color-mix(in srgb, #10b981 22%, transparent); }
@@ -3075,7 +3089,7 @@ body.readonly .cm-img-grip { display: none; }
     <div style="color:var(--text-faint);font-size:var(--text-xs);margin:-4px 0 8px;" id="storage-cleanup-usage"></div>
     <div class="room-manager-list" id="storage-cleanup-list"></div>
     <div style="margin-top:8px;display:flex;flex-direction:column;gap:6px;">
-      <button class="btn" style="width:100%;" onclick="storageCleanupPurgeImages()">🧹 Purge unused images (IndexedDB + server)</button>
+      <button class="btn" style="width:100%;" onclick="storageCleanupPurgeImages()">🧹 Purge unused images &amp; files (IndexedDB + server)</button>
       <button class="btn btn-danger" style="width:100%;" onclick="purgeLocalDevice()" title="Wipe everything stored on this device and reload — server data untouched">⚠ Reset this device (server data kept)</button>
     </div>
     <div class="modal-actions">
@@ -5935,7 +5949,7 @@ function _collectReferencedImageHashes() {
   return set;
 }
 let _imgGcTimer = null, _imgGcBusy = false;
-function scheduleImageGC() { clearTimeout(_imgGcTimer); _imgGcTimer = setTimeout(() => { gcOrphanImages().catch(() => {}); }, 4000); }
+function scheduleImageGC() { clearTimeout(_imgGcTimer); _imgGcTimer = setTimeout(() => { gcOrphanImages().catch(() => {}); gcOrphanFiles().catch(() => {}); }, 4000); }
 window.scheduleImageGC = scheduleImageGC;
 async function gcOrphanImages() {
   if (_imgGcBusy) return;
@@ -5982,6 +5996,10 @@ function scheduleImgRemovalCheck() {
     let removed = false;
     _lastDocImgHashes.forEach(h => { if (!now.has(h)) removed = true; });
     _lastDocImgHashes = now;
+    // Attached-file pills GC on the same debounce (their tokens delete the same way).
+    const nowFiles = _liveDocFileHashes();
+    _lastDocFileHashes.forEach(h => { if (!nowFiles.has(h)) removed = true; });
+    _lastDocFileHashes = nowFiles;
     if (removed) scheduleImageGC();
   }, 2500);
 }
@@ -6219,6 +6237,378 @@ const imagePlugin = ViewPlugin.fromClass(class {
   update(update) { if (update.docChanged || update.viewportChanged) this.decorations = buildImageDecorations(update.view); }
 }, { decorations: v => v.decorations });
 
+// ===== Attached files (arbitrary-file transfer over text sync) =====
+// Same architecture as out-of-document images: the document carries only a
+// short token — "![file:<name>#<hash>|s<size>]" — so editing, the local cache
+// and the synced room text never hold the (potentially huge) file bytes. The
+// encoded payload lives in IndexedDB under file:<hash> and, when synced, under
+// files/<keyFp>/<hash> on Firebase (encrypted with the sync key, deduplicated
+// by content hash, chunked past the 10 MB value cap via packRoomText).
+//
+// Payload format (JSON string) — the browser port of encode_to_txt.py /
+// decode_from_txt.py: original name + SHA-256 checksum header, compressed body:
+//   { v:1, name, size, mime, sha256, enc:'deflate-raw'|'raw', data:<base64> }
+// `sha256` is the hex digest of the ORIGINAL bytes and is verified on download,
+// so a truncated/corrupted transfer can never silently produce a broken file.
+// Token name charset excludes ']' '#' '|' and newlines (sanitized on insert).
+const FILE_TOKEN_RE = /!\[file:([^\]\n#|]{1,120})#([a-f0-9]{16,64})(?:\|s(\d{1,12}))?\]/g;
+const FILE_MAX_BYTES = 25 * 1024 * 1024; // hard cap on the original file size
+
+function _fmtBytes(n) {
+  if (!(n >= 0)) return '';
+  if (n < 1024) return n + ' B';
+  if (n < 1024 * 1024) return (n / 1024).toFixed(n < 10240 ? 1 : 0) + ' KB';
+  return (n / (1024 * 1024)).toFixed(1) + ' MB';
+}
+function _bytesToB64(bytes) {
+  let binary = '';
+  const chunk = 8192;
+  for (let i = 0; i < bytes.length; i += chunk) binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+  return btoa(binary);
+}
+function _b64ToBytes(b64) {
+  const bin = atob(b64);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+// deflate-raw → bytes (the binary sibling of _decompress, which returns text).
+async function _inflateBytes(data) {
+  const ds = new DecompressionStream('deflate-raw');
+  const writer = ds.writable.getWriter();
+  // Corrupt input rejects these too; the reader below surfaces the error to the
+  // caller — swallow here so it can't double-fire as an unhandled rejection.
+  writer.write(data).catch(() => {});
+  writer.close().catch(() => {});
+  const chunks = [];
+  const reader = ds.readable.getReader();
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+  }
+  let len = 0; for (const c of chunks) len += c.length;
+  const out = new Uint8Array(len); let off = 0;
+  for (const c of chunks) { out.set(c, off); off += c.length; }
+  return out;
+}
+async function _sha256Hex(bytes) {
+  const buf = await crypto.subtle.digest('SHA-256', bytes);
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+// Parsed-payload cache, hash → record. Small cap: file payloads can be MBs.
+const _fileRefCache = new Map();
+const _FILE_CACHE_MAX = 12;
+function _fileRefCachePut(hash, rec) {
+  while (_fileRefCache.size >= _FILE_CACHE_MAX) _fileRefCache.delete(_fileRefCache.keys().next().value);
+  _fileRefCache.set(hash, rec);
+}
+// Pull a file payload from Firebase into IndexedDB (mirror of fetchImageFromServer).
+async function fetchFileFromServer(hash) {
+  const baseKey = store.get('cade-sync-key') || '';
+  const fbUrl = store.get('cade-firebase-url') || '';
+  if (!baseKey || !fbUrl) return null;
+  try {
+    const db = initFirebase(fbUrl);
+    const fp = _imgKeyFp || (_imgKeyFp = await _computeKeyFingerprint(baseKey));
+    const snap = await db.ref('files/' + fp + '/' + hash).once('value');
+    const enc = unpackRoomText(snap.val()); // large payloads are chunked like room text
+    if (!enc) return null;
+    const dec = await decryptText(enc, baseKey);
+    if (!dec) return null;
+    try { idbStore.set('file:' + hash, dec); } catch {}
+    return dec;
+  } catch { return null; }
+}
+async function resolveFileRef(hash) {
+  let hit = _fileRefCache.get(hash);
+  if (hit) { _fileRefCache.delete(hash); _fileRefCache.set(hash, hit); return hit; }
+  let stored = null;
+  try { stored = await idbStore.get('file:' + hash); } catch {}
+  if (!stored) stored = await fetchFileFromServer(hash);
+  if (!stored) return null;
+  let rec = null;
+  try { rec = JSON.parse(stored); } catch { return null; }
+  if (!rec || typeof rec.data !== 'string') return null;
+  _fileRefCachePut(hash, rec);
+  return rec;
+}
+window.resolveFileRef = resolveFileRef;
+
+// Pending-upload queue (mirror of cade-img-pending), flushed on (re)connect.
+function _filePendingGet() { try { return JSON.parse(store.get('cade-file-pending') || '[]') || []; } catch { return []; } }
+function _filePendingAdd(hash) { const q = _filePendingGet(); if (!q.includes(hash)) { q.push(hash); store.set('cade-file-pending', JSON.stringify(q)); } }
+function _filePendingRemove(hash) { store.set('cade-file-pending', JSON.stringify(_filePendingGet().filter(h => h !== hash))); }
+async function uploadFile(hash, payload) {
+  const baseKey = store.get('cade-sync-key') || '';
+  const fbUrl = store.get('cade-firebase-url') || '';
+  if (!baseKey || !fbUrl || !navigator.onLine) { _filePendingAdd(hash); return false; }
+  try {
+    const db = initFirebase(fbUrl);
+    const fp = _imgKeyFp || (_imgKeyFp = await _computeKeyFingerprint(baseKey));
+    const ref = db.ref('files/' + fp + '/' + hash);
+    const existing = await ref.once('value');
+    if (existing.val()) { _filePendingRemove(hash); return true; } // already there — dedupe
+    const enc = await encryptText(payload, baseKey);
+    await ref.set(packRoomText(enc));
+    _filePendingRemove(hash);
+    return true;
+  } catch { _filePendingAdd(hash); return false; }
+}
+async function flushPendingFileUploads() {
+  const q = _filePendingGet();
+  if (!q.length) return;
+  for (const hash of q) {
+    let payload = null;
+    try { payload = await idbStore.get('file:' + hash); } catch {}
+    if (payload) await uploadFile(hash, payload);
+    else _filePendingRemove(hash); // bytes no longer local — nothing to upload
+  }
+}
+window.flushPendingFileUploads = flushPendingFileUploads;
+
+// Token names must survive the token grammar: no ']' '#' '|' or control chars.
+function _sanitizeAttachmentName(name) {
+  let n = String(name || 'file').split(/[\\/]/).pop() || 'file';
+  n = n.replace(/[\[\]#|\u0000-\u001f]/g, '_').replace(/\s+/g, ' ').trim();
+  if (!n) n = 'file';
+  if (n.length > 96) {
+    const dot = n.lastIndexOf('.');
+    const ext = (dot > 0 && n.length - dot <= 12) ? n.slice(dot) : '';
+    n = n.slice(0, 96 - ext.length) + ext;
+  }
+  return n;
+}
+
+// Attach ANY file: compress + checksum + content-address, store the payload
+// out-of-document, and insert a pill token. Mirrors insertImageFile.
+async function insertAttachmentFile(file) {
+  if (!file) return;
+  if (file.size > FILE_MAX_BYTES) { showToast('File too large to attach (max 25 MB): ' + file.name, 'error', 4000); return; }
+  const name = _sanitizeAttachmentName(file.name);
+  if (file.size > 2 * 1024 * 1024) showToast('Encoding ' + name + '…', 'info', 1500);
+  let raw;
+  try { raw = new Uint8Array(await file.arrayBuffer()); } catch { showToast('Could not read ' + name, 'error', 3000); return; }
+  let sha = '';
+  try { sha = await _sha256Hex(raw); } catch {}
+  // Compress; keep raw when it doesn't help (zip/jpg/mp4 are already packed).
+  let enc = 'raw', body = raw;
+  try {
+    const c = await _compress(raw);
+    if (c && c.length < raw.length) { body = c; enc = 'deflate-raw'; }
+  } catch {}
+  const rec = { v: 1, name, size: raw.length, mime: file.type || '', sha256: sha, enc, data: _bytesToB64(body) };
+  const payload = JSON.stringify(rec);
+  let hash = null;
+  try { hash = await _imgHash(payload); } catch {}
+  if (!hash) { showToast('Attach failed (crypto unavailable in this browser)', 'error', 3500); return; }
+  try { await idbStore.set('file:' + hash, payload); } catch {}
+  _fileRefCachePut(hash, rec);
+  uploadFile(hash, payload); // fire-and-forget (queues if offline)
+  const token = '![file:' + name + '#' + hash + '|s' + raw.length + ']';
+  const sel = editor.state.selection.main;
+  const doc = editor.state.doc;
+  const pre = (sel.from > 0 && doc.sliceString(sel.from - 1, sel.from) !== '\n') ? '\n' : '';
+  editor.dispatch({ changes: { from: sel.from, to: sel.to, insert: pre + token + '\n' }, selection: { anchor: sel.from + pre.length + token.length + 1 } });
+  showToast('Attached ' + name + ' (' + _fmtBytes(raw.length) + ' → ' + _fmtBytes(rec.data.length) + ' encoded)', 'success', 2500);
+}
+window.insertAttachmentFile = insertAttachmentFile;
+
+// Decode + integrity-check + save (the browser port of decode_from_txt.py).
+async function downloadFileAttachment(hash, fallbackName) {
+  let rec = null;
+  try { rec = await resolveFileRef(hash); } catch {}
+  if (!rec) { showToast('File bytes not available yet (still uploading from the sender, or offline) — try again shortly', 'error', 4000); return; }
+  try {
+    let bytes = _b64ToBytes(rec.data);
+    if (rec.enc === 'deflate-raw') bytes = await _inflateBytes(bytes);
+    if (rec.sha256 && (await _sha256Hex(bytes)) !== rec.sha256) {
+      showToast('Checksum mismatch — the file data is corrupted', 'error', 4500);
+      return;
+    }
+    const outName = rec.name || fallbackName || 'file';
+    _dlSaveBlob(new Blob([bytes], { type: rec.mime || 'application/octet-stream' }), outName);
+    showToast('Restored ' + outName + ' (' + _fmtBytes(bytes.length) + (rec.sha256 ? ', checksum OK' : '') + ')', 'success', 2800);
+  } catch {
+    showToast('File decode failed — was the data modified or truncated?', 'error', 4000);
+  }
+}
+window.downloadFileAttachment = downloadFileAttachment;
+
+// Click/tap or right-click a file pill → download / remove.
+function showFileMenu(x, y, name, hash, posOf) {
+  // Re-locate the token fresh at removal time (edits since render can't
+  // misplace it) — same pattern as the image resize-grip rewrite.
+  const removeToken = () => {
+    const p = posOf ? posOf() : null;
+    if (p == null) return;
+    let line;
+    try { line = editor.state.doc.lineAt(p); } catch { return; }
+    FILE_TOKEN_RE.lastIndex = 0;
+    let m, best = null;
+    while ((m = FILE_TOKEN_RE.exec(line.text)) !== null) {
+      if (m[2] !== hash) continue;
+      const s = line.from + m.index, e = s + m[0].length;
+      const d = (p >= s && p <= e) ? 0 : Math.min(Math.abs(p - s), Math.abs(p - e));
+      if (!best || d < best.d) best = { s, e, d };
+    }
+    if (best) editor.dispatch({ changes: { from: best.s, to: best.e } });
+  };
+  const items = [{ label: '⬇ Download ' + name, run: () => downloadFileAttachment(hash, name) }];
+  if (!document.body.classList.contains('readonly')) {
+    items.push({ sep: true });
+    items.push({ label: '🗑 Remove from document', run: removeToken });
+  }
+  openMenu(items, x, y);
+}
+
+class FileWidget extends WidgetType {
+  constructor(name, hash, size) { super(); this.name = name; this.hash = hash; this.size = size || null; }
+  eq(o) { return o.name === this.name && o.hash === this.hash && o.size === this.size; }
+  toDOM(view) {
+    const wrap = document.createElement('span');
+    wrap.className = 'cm-file-pill';
+    wrap.title = this.name + (this.size ? ' · ' + _fmtBytes(this.size) : '') + ' — click for options';
+    wrap.innerHTML = "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48'/></svg>";
+    const nameEl = document.createElement('span');
+    nameEl.className = 'cm-file-name';
+    nameEl.textContent = this.name;
+    wrap.appendChild(nameEl);
+    if (this.size) {
+      const sizeEl = document.createElement('span');
+      sizeEl.className = 'cm-file-size';
+      sizeEl.textContent = _fmtBytes(this.size);
+      wrap.appendChild(sizeEl);
+    }
+    const posOf = () => { try { return view.posAtDOM(wrap); } catch { return null; } };
+    const open = (e) => { e.preventDefault(); e.stopPropagation(); showFileMenu(e.clientX, e.clientY, this.name, this.hash, posOf); };
+    wrap.addEventListener('click', open);
+    wrap.addEventListener('contextmenu', open);
+    return wrap;
+  }
+  ignoreEvent() { return true; }
+}
+// Backspace/Delete next to a file pill removes the WHOLE token (mirror of
+// deleteImageIfAdjacent).
+function deleteFileIfAdjacent(view, dir) {
+  const sel = view.state.selection.main;
+  if (!sel.empty) return false;
+  const pos = sel.head;
+  const line = view.state.doc.lineAt(pos);
+  if (line.text.indexOf('![file:') === -1) return false;
+  FILE_TOKEN_RE.lastIndex = 0;
+  let m;
+  while ((m = FILE_TOKEN_RE.exec(line.text)) !== null) {
+    const s = line.from + m.index, e = s + m[0].length;
+    const hit = (pos > s && pos < e) || (dir < 0 && pos === e) || (dir > 0 && pos === s);
+    if (hit) { view.dispatch({ changes: { from: s, to: e }, selection: { anchor: s } }); return true; }
+  }
+  return false;
+}
+function buildFileDecorations(view) {
+  const ranges = [];
+  const doc = view.state.doc;
+  const seen = new Set();
+  for (const { from, to } of view.visibleRanges) {
+    const lineFrom = doc.lineAt(from).number, lineTo = doc.lineAt(to).number;
+    for (let i = lineFrom; i <= lineTo; i++) {
+      if (seen.has(i)) continue; seen.add(i);
+      const line = doc.line(i);
+      if (line.text.indexOf('![file:') === -1) continue;
+      FILE_TOKEN_RE.lastIndex = 0;
+      let m;
+      while ((m = FILE_TOKEN_RE.exec(line.text)) !== null) {
+        const s = line.from + m.index, e = s + m[0].length;
+        ranges.push(Decoration.replace({ widget: new FileWidget(m[1], m[2], m[3] ? parseInt(m[3], 10) : null) }).range(s, e));
+      }
+    }
+  }
+  ranges.sort((a, b) => a.from - b.from);
+  return Decoration.set(ranges, true);
+}
+const filePlugin = ViewPlugin.fromClass(class {
+  constructor(view) { this.decorations = buildFileDecorations(view); }
+  update(update) { if (update.docChanged || update.viewportChanged) this.decorations = buildFileDecorations(update.view); }
+}, { decorations: v => v.decorations });
+
+// ---- File garbage collection (mirror of the image GC) ----
+function _collectReferencedFileHashes() {
+  const set = new Set();
+  const addFrom = (text) => {
+    if (!text || text.indexOf('![file:') === -1) return;
+    FILE_TOKEN_RE.lastIndex = 0; let m;
+    while ((m = FILE_TOKEN_RE.exec(text)) !== null) set.add(m[2]);
+  };
+  try { addFrom(editor.state.doc.toString()); } catch {}
+  try {
+    store.keys().forEach(k => {
+      if (k.indexOf('cade-room-cache:') === 0 || k.indexOf('cade-room-synced:') === 0) addFrom(store.get(k));
+      else if (k.indexOf('cade-snap:') === 0) {
+        try { (JSON.parse(store.get(k) || '[]') || []).forEach(s => s && addFrom(s.c)); } catch {}
+      }
+    });
+  } catch {}
+  return set;
+}
+let _fileGcBusy = false;
+async function gcOrphanFiles() {
+  if (_fileGcBusy) return;
+  _fileGcBusy = true;
+  try {
+    let allKeys = [];
+    try { allKeys = await idbStore.keys(); } catch { return; }
+    const fileHashes = allKeys.filter(k => typeof k === 'string' && k.indexOf('file:') === 0).map(k => k.slice(5));
+    if (!fileHashes.length) return;
+    const referenced = _collectReferencedFileHashes();
+    const orphans = fileHashes.filter(h => !referenced.has(h));
+    if (!orphans.length) return;
+    const baseKey = store.get('cade-sync-key') || '';
+    const fbUrl = store.get('cade-firebase-url') || '';
+    let db = null, fp = null;
+    if (baseKey && fbUrl && navigator.onLine) {
+      try { db = initFirebase(fbUrl); fp = _imgKeyFp || (_imgKeyFp = await _computeKeyFingerprint(baseKey)); } catch {}
+    }
+    for (const h of orphans) {
+      try { await idbStore.remove('file:' + h); } catch {}
+      _fileRefCache.delete(h);
+      if (db && fp) { try { await db.ref('files/' + fp + '/' + h).remove(); } catch {} }
+    }
+  } finally { _fileGcBusy = false; }
+}
+let _lastDocFileHashes = new Set();
+function _liveDocFileHashes() {
+  const set = new Set();
+  let text = '';
+  try { text = editor.state.doc.toString(); } catch { return set; }
+  if (text.indexOf('![file:') === -1) return set;
+  FILE_TOKEN_RE.lastIndex = 0; let m;
+  while ((m = FILE_TOKEN_RE.exec(text)) !== null) set.add(m[2]);
+  return set;
+}
+
+// Route a mixed batch of incoming files (drop / menu import) by kind:
+// images embed, text-like files import as fenced text (zips expand, as
+// before), and everything else attaches as a synced file pill.
+const _TEXTLIKE_EXT_RE = /\.(txt|md|markdown|json|csv|tsv|log|js|mjs|cjs|ts|tsx|jsx|py|rb|go|rs|java|c|h|cpp|hpp|cs|css|scss|less|html?|xml|yml|yaml|toml|ini|cfg|conf|sh|bat|ps1|sql|zip)$/i;
+function _isTextLikeFile(f) {
+  if (/^image\//.test(f.type)) return false;
+  if (/^text\//.test(f.type)) return true;
+  if (/(json|xml|javascript|ecmascript|csv|x-sh|x-python)/.test(f.type || '')) return true;
+  return _TEXTLIKE_EXT_RE.test(f.name || '');
+}
+async function routeIncomingFiles(fileList) {
+  const files = Array.from(fileList || []);
+  if (!files.length) return;
+  const imgs = files.filter(f => /^image\//.test(f.type));
+  const texts = files.filter(f => !/^image\//.test(f.type) && _isTextLikeFile(f));
+  const attach = files.filter(f => !/^image\//.test(f.type) && !_isTextLikeFile(f));
+  if (texts.length) { try { await appendFilesToEditor(texts); } catch { showToast('Import failed', 'error', 2500); } }
+  for (const im of imgs) { try { await insertImageFile(im); } catch {} }
+  for (const f of attach) { try { await insertAttachmentFile(f); } catch {} }
+}
+window.routeIncomingFiles = routeIncomingFiles;
+
 // DIAG: time each decoration builder so the long-task observer can name the
 // slowest one. These are mutable function-declaration bindings, and the plugins
 // resolve them by name at call time (the editor is created later), so wrapping
@@ -6232,6 +6622,7 @@ buildSearchDecorations    = (o => v => __timed('search',    () => o(v)))(buildSe
 buildMdDecorations        = (o => v => __timed('md',        () => o(v)))(buildMdDecorations);
 buildTableDecorations     = (o => v => __timed('table',     () => o(v)))(buildTableDecorations);
 buildImageDecorations     = (o => v => __timed('image',     () => o(v)))(buildImageDecorations);
+buildFileDecorations      = (o => v => __timed('file',      () => o(v)))(buildFileDecorations);
 
 // ---- Runtime editor-extension registry (for plugin/injection modules) -------
 // makeEditorState() rebuilds the extension array on EVERY room switch, so a
@@ -6326,15 +6717,18 @@ function buildEditorExtensions() {
     collapseExtension,
     tableExtension,
     imagePlugin,
-    // Treat embedded-image tokens as atomic units for the caret/selection so a
-    // partial delete can't shred one into raw base64 (where available).
+    filePlugin,
+    // Treat embedded-image and file-pill tokens as atomic units for the
+    // caret/selection so a partial delete can't shred one into raw text.
     ...(EditorView.atomicRanges ? [EditorView.atomicRanges.of(view => {
       const p = view.plugin(imagePlugin); return p ? p.decorations : Decoration.none;
+    }), EditorView.atomicRanges.of(view => {
+      const p = view.plugin(filePlugin); return p ? p.decorations : Decoration.none;
     })] : []),
     listEnterHandler,
     keymap.of([
-      { key: 'Backspace', run: (view) => deleteImageIfAdjacent(view, -1) },
-      { key: 'Delete', run: (view) => deleteImageIfAdjacent(view, 1) },
+      { key: 'Backspace', run: (view) => deleteImageIfAdjacent(view, -1) || deleteFileIfAdjacent(view, -1) },
+      { key: 'Delete', run: (view) => deleteImageIfAdjacent(view, 1) || deleteFileIfAdjacent(view, 1) },
       { key: 'Mod-z', run: undo },
       { key: 'Mod-Shift-z', run: redo },
       { key: 'Mod-y', run: redo },
@@ -8070,7 +8464,9 @@ window.importFiles = function() {
   // Reset value so selecting the same files twice still fires change
   input.value = '';
   input.onchange = async (e) => {
-    await appendFilesToEditor(e.target.files);
+    // Same routing as drag-and-drop: text-like files import as fenced text,
+    // images embed, everything else attaches as a synced file pill.
+    await routeIncomingFiles(e.target.files);
     input.value = '';
   };
   input.click();
@@ -9187,8 +9583,9 @@ function attachConnListener(db) {
     if (isConn) {
       updateSyncUI('connected', syncState.roomName || 'Synced');
       reconcileOnLive();
-      // Push up any images embedded while offline / before sync was configured.
+      // Push up any images/files embedded while offline / before sync was configured.
       try { flushPendingImageUploads(); } catch {}
+      try { flushPendingFileUploads(); } catch {}
     } else {
       // Stream dropped — the next time it comes back we must reconcile before
       // resuming live sync, in case the user edits in the meantime.
@@ -11778,7 +12175,7 @@ window.__promptStorageCleanup = function(force) {
   const items = _storageCleanupItems();
 
   if (items.length === 0 && !force) {
-    showToast('Storage full — recent changes are kept in memory only. Try "Purge unused images" in View → Manage Storage.', 'error', 6000);
+    showToast('Storage full — recent changes are kept in memory only. Try "Purge unused images & files" in View → Manage Storage.', 'error', 6000);
     _storageCleanupSnoozeUntil = Date.now() + 60000;
     return;
   }
@@ -11790,7 +12187,7 @@ window.__promptStorageCleanup = function(force) {
       <span class="room-manager-name" style="flex:1;">${esc(it.room)}${it.isCurrent ? ' <span style="color:var(--text-faint)">(snapshots only)</span>' : ''}${it.orphan ? ' <span style="color:var(--text-faint)">(orphaned)</span>' : ''}</span>
       <span style="color:var(--text-faint);font-size:var(--text-xs);">${Math.max(1, Math.round(it.bytes / 1024))} KB</span>
     </label>
-  `).join('') : '<div style="color:var(--text-muted);font-size:var(--text-sm);padding:8px 2px;">No reclaimable room data. Use "Purge unused images" below to free image storage.</div>';
+  `).join('') : '<div style="color:var(--text-muted);font-size:var(--text-sm);padding:8px 2px;">No reclaimable room data. Use "Purge unused images &amp; files" below to free blob storage.</div>';
   _storageCleanupItemsCache = items;
   _fillStorageUsage();
 
@@ -11857,16 +12254,20 @@ window.purgeLocalDevice = async function() {
   location.reload();
 };
 
-// "Purge unused images" — runs the orphan-image GC (IndexedDB + in-memory
-// cache + server copies) and reports how many blobs went away.
+// "Purge unused images & files" — runs the orphan GC for both blob kinds
+// (IndexedDB + in-memory cache + server copies) and reports how many went away.
 window.storageCleanupPurgeImages = async function() {
-  let before = 0, after = 0;
-  try { before = (await idbStore.keys()).filter(k => typeof k === 'string' && k.indexOf('img:') === 0).length; } catch {}
-  showToast('Scanning for unused images…', 'info', 1500);
+  const countBlobs = async () => {
+    try { return (await idbStore.keys()).filter(k => typeof k === 'string' && (k.indexOf('img:') === 0 || k.indexOf('file:') === 0)).length; }
+    catch { return 0; }
+  };
+  const before = await countBlobs();
+  showToast('Scanning for unused images & files…', 'info', 1500);
   try { await gcOrphanImages(); } catch {}
-  try { after = (await idbStore.keys()).filter(k => typeof k === 'string' && k.indexOf('img:') === 0).length; } catch {}
+  try { await gcOrphanFiles(); } catch {}
+  const after = await countBlobs();
   const n = Math.max(0, before - after);
-  showToast(n ? `Purged ${n} unused image${n === 1 ? '' : 's'}` : 'No unused images found', 'success', 2500);
+  showToast(n ? `Purged ${n} unused blob${n === 1 ? '' : 's'}` : 'No unused images or files found', 'success', 2500);
   _fillStorageUsage();
 };
 
@@ -15223,8 +15624,9 @@ window.installApp = function() {
   }
 };
 
-// Drag-and-drop file import (#103): drop .txt/.md/.zip (and images, if image
-// embedding is enabled) onto the window to import. Reuses appendFilesToEditor.
+// Drag-and-drop file import (#103): drop anything onto the window. Text-like
+// files (and .zip) import as fenced text, images embed, and every other file
+// attaches as a synced file pill (routeIncomingFiles decides per file).
 (function() {
   let depth = 0, overlay = null;
   const hasFiles = e => e.dataTransfer && Array.from(e.dataTransfer.types || []).indexOf('Files') >= 0;
@@ -15236,14 +15638,7 @@ window.installApp = function() {
   window.addEventListener('drop', async e => {
     if (!hasFiles(e)) return;
     e.preventDefault(); hide();
-    const files = Array.from(e.dataTransfer.files);
-    const imgs = files.filter(f => /^image\//.test(f.type));
-    const others = files.filter(f => !/^image\//.test(f.type));
-    if (others.length) { try { await appendFilesToEditor(others); } catch { showToast('Import failed', 'error', 2500); } }
-    for (const im of imgs) {
-      if (typeof insertImageFile === 'function') { try { await insertImageFile(im); } catch {} }
-      else { showToast('Image embedding is off for this drop', 'error', 2500); break; }
-    }
+    try { await routeIncomingFiles(e.dataTransfer.files); } catch { showToast('Import failed', 'error', 2500); }
   });
 })();
 
@@ -15740,7 +16135,7 @@ async function insertImageFile(file) {
 }
 window.insertImageFile = insertImageFile;
 
-// Paste an image from the clipboard.
+// Paste an image or file from the clipboard.
 editor.contentDOM.addEventListener('paste', (e) => {
   const items = e.clipboardData && e.clipboardData.items;
   if (!items) return;
@@ -15750,6 +16145,13 @@ editor.contentDOM.addEventListener('paste', (e) => {
       if (f) { e.preventDefault(); insertImageFile(f); return; }
     }
   }
+  // Non-image FILES on the clipboard (e.g. copied from a file manager) attach
+  // as pills. Only kind === 'file' — plain text paste is untouched.
+  const files = [];
+  for (const it of items) {
+    if (it.kind === 'file') { const f = it.getAsFile(); if (f) files.push(f); }
+  }
+  if (files.length) { e.preventDefault(); files.forEach(f => insertAttachmentFile(f)); }
 });
 
 registerScript(`/**
@@ -15765,6 +16167,25 @@ function main(ctx) {
   const inp = document.createElement('input');
   inp.type = 'file'; inp.accept = 'image/*';
   inp.onchange = () => { if (inp.files && inp.files[0] && window.insertImageFile) window.insertImageFile(inp.files[0]); };
+  inp.click();
+}`);
+
+registerScript(`/**
+  {
+    "name": "Attach File",
+    "description": "Pick any file; it is compressed, checksummed and attached as a synced file pill",
+    "author": "Cade",
+    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48'/></svg>",
+    "tags": "file,attach,upload,transfer,binary,pill,send,share,encode"
+  }
+**/
+async function main(ctx) {
+  const inp = document.createElement('input');
+  inp.type = 'file'; inp.multiple = true;
+  inp.onchange = async () => {
+    if (!inp.files || !window.insertAttachmentFile) return;
+    for (const f of Array.from(inp.files)) { try { await window.insertAttachmentFile(f); } catch (e) {} }
+  };
   inp.click();
 }`);
 
