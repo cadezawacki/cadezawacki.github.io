@@ -6486,7 +6486,33 @@ async function downloadFileAttachment(hash, fallbackName) {
 }
 window.downloadFileAttachment = downloadFileAttachment;
 
-// Click/tap or right-click a file pill → download / remove.
+// Render a payload as a self-contained ENCODED TEXT block — the clipboard
+// sibling of encode_to_txt.py's output (name + checksum header, wrapped
+// base64 body). Pasteable through any text channel; the "Decode Encoded
+// Text" script (or any tool that inflates deflate-raw) restores the file.
+// The sentinel differs from real pill tokens ("![file:") so pasting a block
+// into a document never renders as a widget.
+function _fileToEncodedText(rec) {
+  const lines = [];
+  for (let i = 0; i < rec.data.length; i += 100) lines.push(rec.data.slice(i, i + 100));
+  const meta = 'enc=' + (rec.enc || 'raw') + ' size=' + (rec.size || 0) + (rec.mime ? ' mime=' + rec.mime : '');
+  return '![file-txt:v1]\n' + (rec.name || 'file') + '\n' + (rec.sha256 || '-') + '\n' + meta + '\n' + lines.join('\n') + '\n![/file-txt]';
+}
+async function copyFileAsText(hash, fallbackName) {
+  let rec = null;
+  try { rec = await resolveFileRef(hash); } catch {}
+  if (!rec) { showToast('File bytes not available yet (still uploading from the sender, or offline) — try again shortly', 'error', 4000); return; }
+  const text = _fileToEncodedText(rec);
+  try {
+    await navigator.clipboard.writeText(text);
+    showToast('Copied ' + (rec.name || fallbackName) + ' as encoded text (' + _fmtBytes(text.length) + ') — restore it with the "Decode Encoded Text" script', 'success', 3500);
+  } catch {
+    showToast('Failed to copy to clipboard', 'error', 2500);
+  }
+}
+window.copyFileAsText = copyFileAsText;
+
+// Click/tap or right-click a file pill → download / copy as text / remove.
 function showFileMenu(x, y, name, hash, posOf) {
   // Re-locate the token fresh at removal time (edits since render can't
   // misplace it) — same pattern as the image resize-grip rewrite.
@@ -6505,7 +6531,10 @@ function showFileMenu(x, y, name, hash, posOf) {
     }
     if (best) editor.dispatch({ changes: { from: best.s, to: best.e } });
   };
-  const items = [{ label: '⬇ Download ' + name, run: () => downloadFileAttachment(hash, name) }];
+  const items = [
+    { label: '⬇ Download ' + name, run: () => downloadFileAttachment(hash, name) },
+    { label: '⎘ Copy as encoded text', run: () => copyFileAsText(hash, name) },
+  ];
   if (!document.body.classList.contains('readonly')) {
     items.push({ sep: true });
     items.push({ label: '🗑 Remove from document', run: removeToken });
@@ -16439,6 +16468,45 @@ async function main(ctx) {
     for (const f of Array.from(inp.files)) { try { await window.insertAttachmentFile(f); } catch (e) {} }
   };
   inp.click();
+}`);
+
+registerScript(`/**
+  {
+    "name": "Decode Encoded Text",
+    "description": "Restore files from ![file-txt] blocks (made by 'Copy as encoded text') in the selection or document",
+    "author": "Cade",
+    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/><path d='M14 2v6h6'/><polyline points='9 15 12 18 15 15'/><line x1='12' y1='11' x2='12' y2='18'/></svg>",
+    "tags": "file,decode,restore,encoded,text,transfer,paste"
+  }
+**/
+async function main(ctx) {
+  // Scan the whole document unless the user explicitly selected a range (the
+  // current-row convention would silently limit the scan to a single line).
+  var sel = null;
+  try { sel = window.Cade && window.Cade.editor.state.selection.main; } catch (e) {}
+  var explicit = sel && sel.from !== sel.to;
+  var t = explicit ? ctx.selection : ctx.fullText;
+  var re = /!\\[file-txt:v1\\]\\n([^\\n]+)\\n([a-f0-9]{64}|-)\\n([^\\n]*)\\n([\\s\\S]*?)!\\[\\/file-txt\\]/g;
+  var blocks = [], m;
+  while ((m = re.exec(t)) !== null) blocks.push({ name: m[1], sha: m[2], meta: m[3], body: m[4] });
+  if (!blocks.length) { showToast('No ![file-txt] blocks in the ' + (explicit ? 'selection' : 'document'), 'error', 3000); return; }
+  var ok = 0, bad = 0;
+  for (var i = 0; i < blocks.length; i++) {
+    var b = blocks[i];
+    try {
+      var enc = (/(?:^|\\s)enc=([\\w-]+)/.exec(b.meta) || [])[1] || 'raw';
+      var mime = (/(?:^|\\s)mime=(\\S+)/.exec(b.meta) || [])[1] || 'application/octet-stream';
+      var bytes = _b64ToBytes(b.body.replace(/\\s+/g, ''));
+      if (enc === 'deflate-raw') bytes = await _inflateBytes(bytes);
+      if (b.sha !== '-' && (await _sha256Hex(bytes)) !== b.sha) {
+        showToast('Checksum mismatch for ' + b.name + ' \\u2014 text was modified or truncated', 'error', 4000);
+        bad++; continue;
+      }
+      _dlSaveBlob(new Blob([bytes], { type: mime }), b.name);
+      ok++;
+    } catch (e) { showToast('Could not decode ' + b.name, 'error', 3000); bad++; }
+  }
+  if (ok) showToast('Restored ' + ok + ' file' + (ok === 1 ? '' : 's') + (bad ? ' \\u2014 ' + bad + ' failed' : '') + ' (checksum OK)', 'success', 3000);
 }`);
 
 // ============================================
