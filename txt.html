@@ -2727,6 +2727,10 @@ body.readonly .cm-img-grip { display: none; }
         <span>Manage Storage</span>
         <span></span>
       </button>
+      <button class="menu-item" onclick="closeAllMenus(); openFileManager()">
+        <span>Attached Files</span>
+        <span></span>
+      </button>
       <button class="menu-item" onclick="forceSyncReload()" title="Re-download the app and refresh caches">
         <span>Refresh App &amp; Cache</span>
         <span></span>
@@ -3095,6 +3099,23 @@ body.readonly .cm-img-grip { display: none; }
     <div class="modal-actions">
       <button class="btn" onclick="closeStorageCleanup()">Cancel</button>
       <button class="btn btn-danger" onclick="confirmStorageCleanup()">Free Selected</button>
+    </div>
+  </div>
+</div>
+
+<!-- ========== FILE MANAGER MODAL ========== -->
+<div class="modal-overlay" id="file-manager-overlay">
+  <div class="modal-dialog" style="max-width: 520px;">
+    <div class="modal-title">Attached Files</div>
+    <div class="modal-desc">Every file attachment known to this device — referenced in documents, stored locally (IndexedDB) or on the sync server. Deleting removes the stored bytes from both.</div>
+    <div style="color:var(--text-faint);font-size:var(--text-xs);margin:-4px 0 8px;" id="file-manager-totals"></div>
+    <div class="room-manager-list" id="file-manager-list"></div>
+    <div style="margin-top:8px;">
+      <button class="btn" style="width:100%;" onclick="fileManagerPurge()">🧹 Purge unreferenced files (local + server)</button>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="openFileManager()" title="Re-scan documents, local storage and the server">Refresh</button>
+      <button class="btn" onclick="closeFileManager()">Close</button>
     </div>
   </div>
 </div>
@@ -6340,6 +6361,30 @@ window.resolveFileRef = resolveFileRef;
 function _filePendingGet() { try { return JSON.parse(store.get('cade-file-pending') || '[]') || []; } catch { return []; } }
 function _filePendingAdd(hash) { const q = _filePendingGet(); if (!q.includes(hash)) { q.push(hash); store.set('cade-file-pending', JSON.stringify(q)); } }
 function _filePendingRemove(hash) { store.set('cade-file-pending', JSON.stringify(_filePendingGet().filter(h => h !== hash))); }
+// Pending SERVER-DELETE queue. GC removes the local blob immediately, so if the
+// server copy can't be deleted right then (offline / sync unconfigured / write
+// failed) no later GC pass would ever see the hash again — the server copy
+// would be orphaned forever. Queue it here and flush on (re)connect instead.
+function _fileDelPendingGet() { try { return JSON.parse(store.get('cade-file-pending-del') || '[]') || []; } catch { return []; } }
+function _fileDelPendingAdd(hash) { const q = _fileDelPendingGet(); if (!q.includes(hash)) { q.push(hash); store.set('cade-file-pending-del', JSON.stringify(q)); } }
+function _fileDelPendingRemove(hash) { store.set('cade-file-pending-del', JSON.stringify(_fileDelPendingGet().filter(h => h !== hash))); }
+async function flushPendingFileDeletes() {
+  const q = _fileDelPendingGet();
+  if (!q.length) return;
+  const baseKey = store.get('cade-sync-key') || '';
+  const fbUrl = store.get('cade-firebase-url') || '';
+  if (!baseKey || !fbUrl || !navigator.onLine) return;
+  let db, fp;
+  try { db = initFirebase(fbUrl); fp = _imgKeyFp || (_imgKeyFp = await _computeKeyFingerprint(baseKey)); } catch { return; }
+  // A hash that became referenced again since it was queued (same content
+  // re-attached) must NOT be deleted out from under the new reference.
+  const referenced = _collectReferencedFileHashes();
+  for (const h of q) {
+    if (referenced.has(h)) { _fileDelPendingRemove(h); continue; }
+    try { await db.ref('files/' + fp + '/' + h).remove(); _fileDelPendingRemove(h); } catch {}
+  }
+}
+window.flushPendingFileDeletes = flushPendingFileDeletes;
 async function uploadFile(hash, payload) {
   const baseKey = store.get('cade-sync-key') || '';
   const fbUrl = store.get('cade-firebase-url') || '';
@@ -6348,6 +6393,7 @@ async function uploadFile(hash, payload) {
     const db = initFirebase(fbUrl);
     const fp = _imgKeyFp || (_imgKeyFp = await _computeKeyFingerprint(baseKey));
     const ref = db.ref('files/' + fp + '/' + hash);
+    _fileDelPendingRemove(hash); // live again — cancel any queued server delete
     const existing = await ref.once('value');
     if (existing.val()) { _filePendingRemove(hash); return true; } // already there — dedupe
     const enc = await encryptText(payload, baseKey);
@@ -6405,12 +6451,16 @@ async function insertAttachmentFile(file) {
   if (!hash) { showToast('Attach failed (crypto unavailable in this browser)', 'error', 3500); return; }
   try { await idbStore.set('file:' + hash, payload); } catch {}
   _fileRefCachePut(hash, rec);
+  _fileDelPendingRemove(hash); // re-attached content must not be reaped by a stale queued delete
   uploadFile(hash, payload); // fire-and-forget (queues if offline)
   const token = '![file:' + name + '#' + hash + '|s' + raw.length + ']';
   const sel = editor.state.selection.main;
   const doc = editor.state.doc;
   const pre = (sel.from > 0 && doc.sliceString(sel.from - 1, sel.from) !== '\n') ? '\n' : '';
   editor.dispatch({ changes: { from: sel.from, to: sel.to, insert: pre + token + '\n' }, selection: { anchor: sel.from + pre.length + token.length + 1 } });
+  // Seed the removal-check baseline immediately: without this, attaching and
+  // deleting within one debounce window (2.5s) would never trigger the GC.
+  try { _lastDocFileHashes.add(hash); } catch {}
   showToast('Attached ' + name + ' (' + _fmtBytes(raw.length) + ' → ' + _fmtBytes(rec.data.length) + ' encoded)', 'success', 2500);
 }
 window.insertAttachmentFile = insertAttachmentFile;
@@ -6572,7 +6622,15 @@ async function gcOrphanFiles() {
     for (const h of orphans) {
       try { await idbStore.remove('file:' + h); } catch {}
       _fileRefCache.delete(h);
-      if (db && fp) { try { await db.ref('files/' + fp + '/' + h).remove(); } catch {} }
+      _filePendingRemove(h); // a deleted file must never be re-uploaded by the flush
+      if (db && fp) {
+        try { await db.ref('files/' + fp + '/' + h).remove(); _fileDelPendingRemove(h); }
+        catch { _fileDelPendingAdd(h); }
+      } else if (baseKey && fbUrl) {
+        // Sync configured but unreachable right now — queue so the server copy
+        // is cleared on reconnect (afterwards no GC pass could see this hash).
+        _fileDelPendingAdd(h);
+      }
     }
   } finally { _fileGcBusy = false; }
 }
@@ -9583,9 +9641,11 @@ function attachConnListener(db) {
     if (isConn) {
       updateSyncUI('connected', syncState.roomName || 'Synced');
       reconcileOnLive();
-      // Push up any images/files embedded while offline / before sync was configured.
+      // Push up any images/files embedded while offline / before sync was configured,
+      // and clear server copies of files deleted while unreachable.
       try { flushPendingImageUploads(); } catch {}
       try { flushPendingFileUploads(); } catch {}
+      try { flushPendingFileDeletes(); } catch {}
     } else {
       // Stream dropped — the next time it comes back we must reconcile before
       // resuming live sync, in case the user edits in the meantime.
@@ -12278,6 +12338,193 @@ document.getElementById('storage-cleanup-overlay').addEventListener('keydown', (
   if (e.key === 'Escape') closeStorageCleanup();
 });
 
+// ============================================
+// FILE MANAGER — see, download and delete file attachments
+// ============================================
+// Union view of every attachment this device can know about:
+//   • referenced — token found in the live doc, cached room texts or snapshots
+//   • local      — payload present in IndexedDB (file:<hash>)
+//   • server     — key present under files/<fp> (listed via a shallow REST
+//     query; the SDK's once('value') would download every payload just to
+//     enumerate keys). Server rows this device never downloaded are exactly
+//     the ones the automatic GC can't reach — deletable from here.
+async function _fileManagerScan() {
+  const rows = new Map();
+  const touch = (h) => {
+    let r = rows.get(h);
+    if (!r) { r = { hash: h, name: null, size: null, storedBytes: 0, local: false, server: false, rooms: [], inLiveDoc: false, refd: false }; rows.set(h, r); }
+    return r;
+  };
+  const scanText = (text, label, isLive) => {
+    if (!text || text.indexOf('![file:') === -1) return;
+    FILE_TOKEN_RE.lastIndex = 0; let m;
+    while ((m = FILE_TOKEN_RE.exec(text)) !== null) {
+      const r = touch(m[2]);
+      r.refd = true;
+      if (!r.name) r.name = m[1];
+      if (!r.size && m[3]) r.size = parseInt(m[3], 10);
+      if (isLive) r.inLiveDoc = true;
+      else if (label && !r.rooms.includes(label)) r.rooms.push(label);
+    }
+  };
+  try { scanText(editor.state.doc.toString(), null, true); } catch {}
+  try {
+    store.keys().forEach(k => {
+      if (k.indexOf('cade-room-cache:') === 0) scanText(store.get(k), k.slice('cade-room-cache:'.length), false);
+      else if (k.indexOf('cade-room-synced:') === 0) scanText(store.get(k), k.slice('cade-room-synced:'.length), false);
+      else if (k.indexOf('cade-snap:') === 0) {
+        const room = k.slice('cade-snap:'.length);
+        try { (JSON.parse(store.get(k) || '[]') || []).forEach(s => s && scanText(s.c, room + ' (snapshot)', false)); } catch {}
+      }
+    });
+  } catch {}
+  try {
+    const keys = await idbStore.keys();
+    for (const k of keys) {
+      if (typeof k !== 'string' || k.indexOf('file:') !== 0) continue;
+      const h = k.slice(5);
+      const r = touch(h);
+      r.local = true;
+      let payload = null;
+      try { payload = await idbStore.get(k); } catch {}
+      if (typeof payload === 'string') {
+        r.storedBytes = payload.length;
+        try {
+          const rec = JSON.parse(payload);
+          if (rec) { if (!r.name) r.name = rec.name; if (!r.size) r.size = rec.size; }
+        } catch {}
+      }
+    }
+  } catch {}
+  let serverChecked = false;
+  const baseKey = store.get('cade-sync-key') || '';
+  const fbUrl = store.get('cade-firebase-url') || '';
+  if (baseKey && fbUrl && navigator.onLine) {
+    try {
+      const fp = _imgKeyFp || (_imgKeyFp = await _computeKeyFingerprint(baseKey));
+      const res = await fetch(fbUrl.replace(/\/+$/, '') + '/files/' + fp + '.json?shallow=true');
+      if (res.ok) {
+        const val = await res.json();
+        serverChecked = true;
+        if (val && typeof val === 'object') Object.keys(val).forEach(h => { touch(h).server = true; });
+      }
+    } catch {}
+  }
+  return { rows: Array.from(rows.values()), serverChecked, hasSync: !!(baseKey && fbUrl) };
+}
+
+let _fileManagerRows = [];
+let _fileManagerServerChecked = false;
+function _fileManagerRender() {
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const list = document.getElementById('file-manager-list');
+  const totals = document.getElementById('file-manager-totals');
+  const rows = _fileManagerRows;
+  if (!rows.length) {
+    list.innerHTML = '<div style="color:var(--text-muted);font-size:var(--text-sm);padding:8px 2px;">No file attachments found on this device' + (_fileManagerServerChecked ? ' or on the server' : '') + '.</div>';
+    totals.textContent = '';
+    return;
+  }
+  let localBytes = 0, serverCount = 0;
+  rows.forEach(r => { localBytes += r.storedBytes; if (r.server) serverCount++; });
+  totals.textContent = rows.length + ' file' + (rows.length === 1 ? '' : 's') + ' · ' + _fmtBytes(localBytes) + ' stored locally'
+    + (_fileManagerServerChecked ? ' · ' + serverCount + ' on server' : ' · server not checked (offline or sync not configured)');
+  list.innerHTML = rows.map((r, i) => {
+    const where = [];
+    if (r.inLiveDoc) where.push('current doc');
+    if (r.rooms.length) where.push(r.rooms.slice(0, 3).join(', ') + (r.rooms.length > 3 ? ' +' + (r.rooms.length - 3) : ''));
+    const badges = [];
+    if (r.local) badges.push('local');
+    if (r.server) badges.push('server');
+    if (_fileManagerServerChecked && !r.server && r.refd) badges.push('not uploaded yet');
+    if (!r.refd) badges.push('<span style="color:var(--danger, #ef4444)">unreferenced</span>');
+    const sizeLabel = r.size ? _fmtBytes(r.size) : (r.storedBytes ? _fmtBytes(r.storedBytes) + ' enc.' : '?');
+    return `
+    <div class="room-manager-item" style="gap:8px;align-items:center;">
+      <span class="room-manager-name" style="flex:1;min-width:0;">
+        <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${esc(r.name || r.hash)}">📎 ${esc(r.name || r.hash.slice(0, 12) + '…')}</div>
+        <div style="color:var(--text-faint);font-size:var(--text-xs);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(where.join(' · ') || 'no references found')} — ${badges.join(', ')}</div>
+      </span>
+      <span style="color:var(--text-faint);font-size:var(--text-xs);flex:none;">${sizeLabel}</span>
+      <button class="btn" style="flex:none;padding:4px 8px;" title="Download" onclick="fileManagerDownload(${i})">⬇</button>
+      <button class="btn btn-danger" style="flex:none;padding:4px 8px;" title="Delete stored bytes (local + server)" onclick="fileManagerDelete(${i})">🗑</button>
+    </div>`;
+  }).join('');
+}
+window.openFileManager = async function() {
+  const overlay = document.getElementById('file-manager-overlay');
+  overlay.classList.add('open');
+  document.getElementById('file-manager-list').innerHTML = '<div style="color:var(--text-muted);font-size:var(--text-sm);padding:8px 2px;">Scanning…</div>';
+  document.getElementById('file-manager-totals').textContent = '';
+  const { rows, serverChecked } = await _fileManagerScan();
+  // Biggest first (best-known size: original, else encoded footprint).
+  rows.sort((a, b) => (b.size || b.storedBytes || 0) - (a.size || a.storedBytes || 0));
+  _fileManagerRows = rows;
+  _fileManagerServerChecked = serverChecked;
+  _fileManagerRender();
+};
+window.closeFileManager = function() {
+  document.getElementById('file-manager-overlay').classList.remove('open');
+};
+window.fileManagerDownload = function(idx) {
+  const r = _fileManagerRows[idx];
+  if (r) downloadFileAttachment(r.hash, r.name || 'file');
+};
+window.fileManagerDelete = async function(idx) {
+  const r = _fileManagerRows[idx];
+  if (!r) return;
+  const name = r.name || r.hash.slice(0, 12) + '…';
+  if (r.refd && !confirm('"' + name + '" is still referenced' + (r.inLiveDoc ? ' in the current document' : ' in a cached room') + '.\nDeleting the stored bytes leaves those file pills unable to download. Delete anyway?')) return;
+  try { await idbStore.remove('file:' + r.hash); } catch {}
+  _fileRefCache.delete(r.hash);
+  _filePendingRemove(r.hash);
+  const baseKey = store.get('cade-sync-key') || '';
+  const fbUrl = store.get('cade-firebase-url') || '';
+  let serverOk = false;
+  if (baseKey && fbUrl && navigator.onLine) {
+    try {
+      const db = initFirebase(fbUrl);
+      const fp = _imgKeyFp || (_imgKeyFp = await _computeKeyFingerprint(baseKey));
+      await db.ref('files/' + fp + '/' + r.hash).remove();
+      serverOk = true;
+      _fileDelPendingRemove(r.hash);
+    } catch {}
+  }
+  if (!serverOk && baseKey && fbUrl) _fileDelPendingAdd(r.hash); // clear the server copy when reachable
+  showToast('Deleted ' + name + (serverOk ? ' (local + server)' : (baseKey && fbUrl ? ' (local; server delete queued)' : '')), 'success', 2500);
+  openFileManager();
+};
+// Purge everything unreferenced: the local orphan GC + queued server deletes,
+// then — after confirming — server copies no locally-cached room references
+// (the cross-device leftovers the automatic GC can never see).
+window.fileManagerPurge = async function() {
+  showToast('Purging unreferenced files…', 'info', 1500);
+  try { await gcOrphanFiles(); } catch {}
+  try { await flushPendingFileDeletes(); } catch {}
+  const { rows } = await _fileManagerScan();
+  const serverOrphans = rows.filter(r => r.server && !r.refd && !r.local);
+  let serverDeleted = 0;
+  if (serverOrphans.length && confirm('Also delete ' + serverOrphans.length + ' server file' + (serverOrphans.length === 1 ? '' : 's') + ' not referenced by any room cached on this device?\nA room not cached here could still use them — only continue if you know these are orphans.')) {
+    const baseKey = store.get('cade-sync-key') || '';
+    const fbUrl = store.get('cade-firebase-url') || '';
+    try {
+      const db = initFirebase(fbUrl);
+      const fp = _imgKeyFp || (_imgKeyFp = await _computeKeyFingerprint(baseKey));
+      for (const r of serverOrphans) {
+        try { await db.ref('files/' + fp + '/' + r.hash).remove(); _fileDelPendingRemove(r.hash); serverDeleted++; } catch {}
+      }
+    } catch {}
+  }
+  showToast(serverDeleted ? 'Purged (' + serverDeleted + ' server cop' + (serverDeleted === 1 ? 'y' : 'ies') + ' removed)' : 'Purge complete', 'success', 2500);
+  openFileManager();
+};
+document.getElementById('file-manager-overlay').addEventListener('click', (e) => {
+  if (e.target.id === 'file-manager-overlay') closeFileManager();
+});
+document.getElementById('file-manager-overlay').addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closeFileManager();
+});
+
 // Boot-time sweep: quietly drop per-room storage for rooms that are no longer
 // in the tab list (orphans from removals on other tabs, renames, legacy bugs).
 // Delayed so it never competes with first paint; waiting for quota pressure to
@@ -13976,10 +14223,15 @@ renderRoomTabs();
 // Restore this room's auto-color word rules on load (widget g) — covers the
 // local-only path where no switchRoom() runs.
 try { loadAutoColorRules(); refreshAutoColor(); } catch {}
-// Seed the image baseline and run a one-time GC sweep ~9s after load to reclaim
-// images orphaned by deletions made before this cleanup existed.
+// Seed the image + file baselines and run a one-time GC sweep ~9s after load to
+// reclaim blobs orphaned by deletions made before this cleanup existed. Also
+// retry any server-side file deletes that couldn't complete last session.
 try { _lastDocImgHashes = _liveDocImgHashes(); } catch {}
-setTimeout(() => { try { scheduleImageGC(); } catch {} }, 9000);
+try { _lastDocFileHashes = _liveDocFileHashes(); } catch {}
+setTimeout(() => {
+  try { scheduleImageGC(); } catch {}
+  try { flushPendingFileDeletes(); } catch {}
+}, 9000);
 
 // Also update room tabs when syncConnect runs
 const origSyncConnect = window.syncConnect;
