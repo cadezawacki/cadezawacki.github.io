@@ -6385,6 +6385,22 @@ async function flushPendingFileDeletes() {
   }
 }
 window.flushPendingFileDeletes = flushPendingFileDeletes;
+// Firebase caps a single WRITE REQUEST at 16 MB (SDK) on top of the 10 MB
+// per-string-value cap. packRoomText solves the string cap, but setting the
+// whole chunked object at once is still ONE write — a big encrypted file
+// blows the 16 MB request limit ("too big to write"). So each ≤8 MB part is
+// written as its OWN request, with the `_chunks` count landing LAST: readers
+// go through unpackRoomText, which treats a node without `_chunks` as absent,
+// so a half-uploaded payload is never mistaken for a complete one.
+async function _fbSetLargePayload(ref, encoded) {
+  if (encoded.length <= FB_CHUNK_SIZE) { await ref.set(encoded); return; }
+  const n = Math.ceil(encoded.length / FB_CHUNK_SIZE);
+  await ref.remove(); // clear stale parts from any earlier aborted attempt
+  for (let i = 0; i < n; i++) {
+    await ref.child('parts/' + i).set(encoded.slice(i * FB_CHUNK_SIZE, (i + 1) * FB_CHUNK_SIZE));
+  }
+  await ref.child('_chunks').set(n);
+}
 async function uploadFile(hash, payload) {
   const baseKey = store.get('cade-sync-key') || '';
   const fbUrl = store.get('cade-firebase-url') || '';
@@ -6394,10 +6410,19 @@ async function uploadFile(hash, payload) {
     const fp = _imgKeyFp || (_imgKeyFp = await _computeKeyFingerprint(baseKey));
     const ref = db.ref('files/' + fp + '/' + hash);
     _fileDelPendingRemove(hash); // live again — cancel any queued server delete
-    const existing = await ref.once('value');
-    if (existing.val()) { _filePendingRemove(hash); return true; } // already there — dedupe
+    // Dedupe probe, cheapest first: a complete chunked payload has a `_chunks`
+    // marker child (tiny read — never downloads the parts themselves).
+    const marker = await ref.child('_chunks').once('value');
+    if (marker.val()) { _filePendingRemove(hash); return true; }
     const enc = await encryptText(payload, baseKey);
-    await ref.set(packRoomText(enc));
+    if (enc.length <= FB_CHUNK_SIZE) {
+      // Small payloads are stored as a plain string — a full read is small
+      // here by definition. unpackRoomText(null/partial) is null, so an
+      // aborted earlier upload is correctly treated as "not there".
+      const existing = await ref.once('value');
+      if (unpackRoomText(existing.val())) { _filePendingRemove(hash); return true; }
+    }
+    await _fbSetLargePayload(ref, enc);
     _filePendingRemove(hash);
     return true;
   } catch { _filePendingAdd(hash); return false; }
