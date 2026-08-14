@@ -14,7 +14,7 @@ const State = (() => {
 
   // Settings that describe THIS DEVICE and must never travel over sync:
   // credentials, the running-timer clock, and per-screen layout state.
-  const DEVICE_LOCAL_SETTINGS = ['sync', 'timerState', 'sidebarCollapsed'];
+  const DEVICE_LOCAL_SETTINGS = ['sync', 'timerState', 'collapsedSections'];
 
   // ── Default data schema ──────────────────────────────────────
   const defaultData = {
@@ -41,7 +41,6 @@ const State = (() => {
       },
       calorieGoal: 2000,
       workingProject: null,    // "Next Best Task" project scope
-      sidebarCollapsed: false, // desktop sidebar state
       hotkeys: {               // single-key shortcuts (when not typing)
         timer: 't',
         newTask: 'n',
@@ -51,7 +50,6 @@ const State = (() => {
       },
       maxNavTimers: 2,         // live timers shown in the header nav
       timerState: null,        // persisted clock + sessions (survive refresh)
-      showCompleted: true,     // finished tasks visible in project lists
       collapsedSections: {},   // Today sections the user folded away
       quickLogPromptTimes: '', // "09:00, 20:00" — scheduled check-in prompts
       quickShortcuts: [
@@ -474,6 +472,7 @@ const State = (() => {
       order: data.projects.length,
       parentId: null,
       archived: false,
+      createdAt: new Date().toISOString(),
       txtWorkspaceId: null, // linked Cade.txt workspace (top-level projects)
       txtRoom: null,        // linked Cade.txt room (sub-projects)
       txtHasList: false,    // that room currently holds a [ ] todo list

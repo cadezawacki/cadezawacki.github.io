@@ -626,6 +626,16 @@ const Bridge = (() => {
     existing.forEach(e => { if (e.txtKey && !byKey.has(e.txtKey)) byKey.set(e.txtKey, e); });
     const matched = new Set();
 
+    // A line that is ALREADY ticked the first time we see it was finished at
+    // some unknown point in the past — stamping it "now" would put every
+    // pre-existing checkbox in a room into today's completions and keep
+    // long-finished rooms permanently on screen. The room's last-modified
+    // stamp is the closest honest answer; with no stamp we record none,
+    // which reads as "finished, earlier".
+    const meta = getRoomMeta()[room] || {};
+    const priorCompletion = meta.modified || meta.created || null;
+    const priorIso = priorCompletion ? new Date(priorCompletion).toISOString() : null;
+
     todos.forEach(todo => {
       let entry = byKey.get(todo.key);
       if (!entry) {
@@ -638,7 +648,7 @@ const Bridge = (() => {
           txtKey: todo.key,
           txtDone: todo.done,
           completed: todo.done,
-          completedAt: todo.done ? new Date().toISOString() : null,
+          completedAt: todo.done ? priorIso : null,
         });
         byKey.set(todo.key, entry);
         out.created++;
