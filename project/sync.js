@@ -20,10 +20,26 @@ const Sync = (() => {
   let dataListener = null;
   let listenerChain = Promise.resolve(); // serializes async event handling
 
+  // Nothing may be published until the first reconcile has actually compared
+  // local against the server. Firebase flips `.info/connected` seconds before
+  // onReconnect() finishes its fetch-and-classify, and any edit landing in
+  // that window used to fire a debounced push of the *pre-reconcile* local
+  // state — which, on a device whose storage had just been cleared, meant
+  // uploading an empty dataset over everything.
+  let reconciled = false;
+
   // Identifies THIS session's writes so echoes are recognized by identity,
   // not by content — a stale echo of our own older write must never be
   // mistaken for another device's edit and adopted.
   const clientId = (crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2) + Date.now().toString(36));
+
+  // The local dataset in the exact shape we publish. Every snapshot, dirty
+  // check and conflict diff goes through here — comparing the raw dataset
+  // against a snapshot of the syncable one would report permanent divergence
+  // (the raw one carries device-local settings the server copy never has).
+  function localData() {
+    return State.getSyncableData ? State.getSyncableData() : State.getRawData();
+  }
 
   // Key-order-independent serialization. deepMerge/migrate reorder object
   // keys, so JSON.stringify equality lies about "same content" — that lie
@@ -223,6 +239,7 @@ const Sync = (() => {
     }
     connected = false;
     connecting = false;
+    reconciled = false; // the next connect must re-compare before publishing
     db = null;
     updateStatus();
   }
@@ -277,7 +294,7 @@ const Sync = (() => {
 
   // Debounced push — local edits pushed after short delay
   function schedulePush() {
-    if (!connected || !db) return;
+    if (!connected || !db || !reconciled) return;
     clearTimeout(pushTimer);
     pushTimer = setTimeout(async () => {
       pushTimer = null;
@@ -287,12 +304,26 @@ const Sync = (() => {
 
   let pushing = false;
 
-  async function pushLocal() {
-    if (!connected || !db) return;
+  // Guards every write to the server. `bootstrap` is the one caller allowed
+  // to run before reconciliation — it is the reconcile itself.
+  function canPush(bootstrap) {
+    if (!connected || !db) return false;
+    if (!bootstrap && !reconciled) return false;
+    // An unreadable local blob leaves State holding an empty placeholder.
+    // Publishing that would delete the user's data on every other device.
+    if (typeof State.isHealthy === 'function' && !State.isHealthy()) {
+      console.warn('Sync: local dataset unreadable — refusing to push');
+      return false;
+    }
+    return true;
+  }
+
+  async function pushLocal(bootstrap = false) {
+    if (!canPush(bootstrap)) return;
     pushing = true;
     const prevSnapshot = lastSyncedSnapshot;
     try {
-      const raw = State.getRawData();
+      const raw = localData();
       // Nothing changed since the last sync (e.g. we just adopted a foreign
       // write, which re-triggers schedulePush) — skip the redundant write.
       if (lastSyncedSnapshot && stableStringify(raw) === stableStringify(lastSyncedSnapshot)) {
@@ -344,15 +375,19 @@ const Sync = (() => {
       const serverVersion = versionSnap.val() || 0;
 
       if (!serverEncrypted) {
-        // Server empty — push local (fresh-device bootstrap)
-        await pushLocal();
-        // Set up live listener
+        // Server empty — bootstrap it from local. A local dataset we could
+        // not read is NOT "no data": canPush() blocks that case, leaving the
+        // server untouched rather than initialising it to nothing.
+        reconciled = true;
+        await pushLocal(true);
         setupLiveListener();
+        connecting = false;
+        updateStatus();
         return;
       }
 
       const serverPayload = await decrypt(serverEncrypted);
-      const localData = State.getRawData();
+      const local = localData();
 
       // Classify situation
       if (serverVersion === lastSyncedVersion) {
@@ -360,50 +395,53 @@ const Sync = (() => {
       } else if (serverVersion > lastSyncedVersion && lastSyncedVersion > 0) {
         // Server newer — adopt, UNLESS local also has unpushed edits
         // (offline work must never be silently clobbered on reconnect)
-        const localDirty = stableStringify(localData) !== stableStringify(lastSyncedSnapshot);
+        const localDirty = stableStringify(local) !== stableStringify(lastSyncedSnapshot);
         if (localDirty) {
-          showConflictModal(localData, serverPayload);
+          showConflictModal(local, serverPayload);
           return;
         }
         State.setRawData(serverPayload);
-        lastSyncedSnapshot = structuredClone(State.getRawData());
+        lastSyncedSnapshot = structuredClone(localData());
         lastSyncedVersion = serverVersion;
       } else if (lastSyncedVersion === 0) {
         // Cold start (every page load lands here). Blind adoption used to
         // VAPORIZE anything created between page load and connect finishing
         // (Firebase init + key derivation take seconds). Adopt only when
         // local is empty or identical; otherwise field-level merge and push.
-        const localEmpty = !((localData.entries || []).length || (localData.logs || []).length ||
-          (localData.projects || []).length || (localData.planner || []).length || (localData.scratch || []).length);
-        if (localEmpty || stableStringify(localData) === stableStringify(serverPayload)) {
+        const localEmpty = !((local.entries || []).length || (local.logs || []).length ||
+          (local.projects || []).length || (local.planner || []).length || (local.scratch || []).length);
+        if (localEmpty || stableStringify(local) === stableStringify(serverPayload)) {
           State.setRawData(serverPayload);
-          lastSyncedSnapshot = structuredClone(State.getRawData());
+          lastSyncedSnapshot = structuredClone(localData());
           lastSyncedVersion = serverVersion;
         } else {
-          const merged = mergeData(localData, serverPayload);
+          const merged = mergeData(local, serverPayload);
           State.setRawData(merged);
           lastSyncedSnapshot = null; // force the push below to actually write
           lastSyncedVersion = serverVersion;
-          await pushLocal();
+          reconciled = true;
+          await pushLocal(true);
         }
       } else {
         // Potential divergence — check if local changed
-        const localChanged = stableStringify(localData) !== stableStringify(lastSyncedSnapshot);
+        const localChanged = stableStringify(local) !== stableStringify(lastSyncedSnapshot);
         const serverChanged = serverVersion !== lastSyncedVersion;
 
         if (localChanged && serverChanged) {
           // Genuine conflict — show resolution UI
-          showConflictModal(localData, serverPayload);
+          showConflictModal(local, serverPayload);
           return;
         } else if (serverChanged) {
           State.setRawData(serverPayload);
-          lastSyncedSnapshot = structuredClone(State.getRawData());
+          lastSyncedSnapshot = structuredClone(localData());
           lastSyncedVersion = serverVersion;
         } else if (localChanged) {
-          await pushLocal();
+          reconciled = true;
+          await pushLocal(true);
         }
       }
 
+      reconciled = true;
       setupLiveListener();
       connecting = false;
       updateStatus();
@@ -445,7 +483,7 @@ const Sync = (() => {
     const verdict = classifyIncoming(
       stableStringify(payload),
       stableStringify(lastSyncedSnapshot),
-      stableStringify(State.getRawData()),
+      stableStringify(localData()),
       !!pushTimer || pushing
     );
     if (verdict === 'echo') {
@@ -460,10 +498,10 @@ const Sync = (() => {
       State.setRawData(payload);
       // store the NORMALIZED form — what getRawData now returns — so the
       // followup schedulePush sees "nothing changed" and stays quiet
-      lastSyncedSnapshot = structuredClone(State.getRawData());
+      lastSyncedSnapshot = structuredClone(localData());
       lastSyncedVersion = serverVersion || lastSyncedVersion;
     } else if (verdict === 'conflict') {
-      showConflictModal(State.getRawData(), payload);
+      showConflictModal(localData(), payload);
     }
     // 'defer': our queued push will overwrite shortly — do nothing
   }
@@ -484,25 +522,28 @@ const Sync = (() => {
   // ═══════════════════════════════════════════════════════════
   // CONFLICT RESOLUTION UI
   // ═══════════════════════════════════════════════════════════
-  function showConflictModal(localData, serverData) {
-    if (typeof App !== 'undefined') App.showConflictModal(localData, serverData);
+  function showConflictModal(localSide, serverSide) {
+    if (typeof App !== 'undefined') App.showConflictModal(localSide, serverSide);
   }
 
   async function resolveConflict(resolution, serverData) {
+    // The conflict path bails out of onReconnect before it can mark the
+    // reconcile done; answering the dialog IS the reconcile finishing.
+    reconciled = true;
     if (resolution === 'local') {
       lastSyncedSnapshot = null; // guarantee the push writes
-      await pushLocal();
+      await pushLocal(true);
     } else if (resolution === 'server') {
       State.setRawData(serverData);
-      lastSyncedSnapshot = structuredClone(State.getRawData());
+      lastSyncedSnapshot = structuredClone(localData());
       State.emit();
     } else if (resolution === 'merge') {
       // Field-level merge: newer updatedAt wins on shared entries/projects,
       // one-sided items survive, logs/planner/scratch union by id.
-      const merged = mergeData(State.getRawData(), serverData);
+      const merged = mergeData(localData(), serverData);
       State.setRawData(merged);
       lastSyncedSnapshot = null; // force the merged result to push
-      await pushLocal();
+      await pushLocal(true);
     }
     setupLiveListener();
   }
