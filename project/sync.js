@@ -28,6 +28,21 @@ const Sync = (() => {
   // uploading an empty dataset over everything.
   let reconciled = false;
 
+  // Anything that must not act on the dataset until it is the REAL dataset
+  // waits on this. The Cade.txt bridge is the main one: importing rooms into
+  // a not-yet-reconciled local copy, then merging the server's copy on top,
+  // would leave two projects and two tasks for every room.
+  function markReconciled() {
+    if (reconciled) return;
+    reconciled = true;
+    try { window.dispatchEvent(new CustomEvent('sync-reconciled')); } catch (e) {}
+  }
+  function isReconciled() { return reconciled; }
+  function isConfigured() {
+    const s = State.getSettings();
+    return !!(s.sync && s.sync.databaseUrl && s.sync.passphrase);
+  }
+
   // Identifies THIS session's writes so echoes are recognized by identity,
   // not by content — a stale echo of our own older write must never be
   // mistaken for another device's edit and adopted.
@@ -378,7 +393,7 @@ const Sync = (() => {
         // Server empty — bootstrap it from local. A local dataset we could
         // not read is NOT "no data": canPush() blocks that case, leaving the
         // server untouched rather than initialising it to nothing.
-        reconciled = true;
+        markReconciled();
         await pushLocal(true);
         setupLiveListener();
         connecting = false;
@@ -419,7 +434,7 @@ const Sync = (() => {
           State.setRawData(merged);
           lastSyncedSnapshot = null; // force the push below to actually write
           lastSyncedVersion = serverVersion;
-          reconciled = true;
+          markReconciled();
           await pushLocal(true);
         }
       } else {
@@ -436,12 +451,12 @@ const Sync = (() => {
           lastSyncedSnapshot = structuredClone(localData());
           lastSyncedVersion = serverVersion;
         } else if (localChanged) {
-          reconciled = true;
+          markReconciled();
           await pushLocal(true);
         }
       }
 
-      reconciled = true;
+      markReconciled();
       setupLiveListener();
       connecting = false;
       updateStatus();
@@ -529,7 +544,7 @@ const Sync = (() => {
   async function resolveConflict(resolution, serverData) {
     // The conflict path bails out of onReconnect before it can mark the
     // reconcile done; answering the dialog IS the reconcile finishing.
-    reconciled = true;
+    markReconciled();
     if (resolution === 'local') {
       lastSyncedSnapshot = null; // guarantee the push writes
       await pushLocal(true);
@@ -579,6 +594,7 @@ const Sync = (() => {
   return {
     connect, disconnect, schedulePush, pushLocal, resolveConflict,
     isConnected, updateStatus, autoConnect, eraseRemote,
+    isReconciled, isConfigured,
     encrypt, decrypt, classifyIncoming, stableStringify, mergeData, // exposed for testing
     // test-only handles: simulate the live listener without a real Firebase
     _test: {

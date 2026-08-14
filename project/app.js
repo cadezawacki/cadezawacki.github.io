@@ -2131,12 +2131,13 @@ const App = (() => {
   let selectedHabit = null;
 
   function renderHabits() {
-    const habits = State.getEntries({ type: 'habit' });
+    const habits = scopedEntries({ type: 'habit' });
+    const scoped = activeWorkspace !== WS_ALL || activeSubproject;
     let html = `
       <div class="page-header">
         <div>
           <h1 class="page-title">Habits</h1>
-          <p class="page-subtitle">${habits.length} tracked · ${habits.filter(h => State.isHabitDoneToday(h.id)).length} done today</p>
+          <p class="page-subtitle">${scoped ? escHtml(scopeLabel()) + ' · ' : ''}${habits.length} tracked · ${habits.filter(h => State.isHabitDoneToday(h.id)).length} done today</p>
         </div>
         <button class="btn btn-primary" onclick="App.openNewEntry('habit')">${icon('plus', 14)}New Habit</button>
       </div>
@@ -2593,7 +2594,6 @@ const App = (() => {
   // FOCUS TAB — "what should I work on next?"
   // Four-quadrant board: color-coded, draggable, full-item hitbox
   // ═══════════════════════════════════════════════════════════
-  let focusProject = null;
   let focusDue = null; // null | 'overdue' | 'today' | 'week' | 'later' | 'none'
 
   const FOCUS_DUE_CHIPS = [
@@ -2621,22 +2621,17 @@ const App = (() => {
   ];
 
   function renderFocus() {
-    const projects = State.getProjects();
+    // Project scope comes from the menubar pill, like everywhere else — the
+    // page-level chip wall that used to sit here said the same thing twice.
+    const scoped = activeWorkspace !== WS_ALL || activeSubproject;
     let html = `
       <div class="page-header">
         <div>
           <h1 class="page-title">Focus</h1>
-          <p class="page-subtitle">Effort vs priority — figure out what to work on next</p>
+          <p class="page-subtitle">Effort vs priority${scoped ? ` · ${escHtml(scopeLabel())}` : ''} — figure out what to work on next</p>
         </div>
       </div>
       <div class="filter-chips">
-        <button class="filter-chip ${!focusProject ? 'active' : ''}" onclick="App.setFocusProject(null)">All Projects</button>
-        ${projects.map(p => `
-          <button class="filter-chip ${focusProject === p.id ? 'active' : ''}" onclick="App.setFocusProject('${p.id}')">
-            <span class="proj-dot" style="background:${p.color}"></span>${p.name}
-          </button>`).join('')}
-      </div>
-      <div class="filter-chips" style="margin-top:calc(var(--space-2) * -1);">
         <span class="stat-label" style="align-self:center;">${icon('calendar-days', 11)}</span>
         ${FOCUS_DUE_CHIPS.map(([val, label]) => `
           <button class="filter-chip ${focusDue === val ? 'active' : ''}" onclick="App.setFocusDue(${val === null ? 'null' : `'${val}'`})">${label}</button>
@@ -2647,16 +2642,11 @@ const App = (() => {
           <span class="text-xs text-faint">drag between boxes to reprioritize · click to complete</span>
         </div>
         <div class="card">
-          <div class="quadrant quadrant-xl" id="quadrantView">${renderQuadrant(focusProject)}</div>
+          <div class="quadrant quadrant-xl" id="quadrantView">${renderQuadrant()}</div>
         </div>
       </div>
     `;
     return html;
-  }
-
-  function setFocusProject(id) {
-    focusProject = id;
-    render();
   }
 
   function setFocusDue(v) {
@@ -2664,12 +2654,12 @@ const App = (() => {
     render();
   }
 
-  function renderQuadrant(projectId) {
-    const tasks = State.getEntries({ type: 'task', completed: false, projectId: projectId || undefined })
-      .filter(focusDueMatch);
+  function renderQuadrant() {
+    const tasks = scopedEntries({ type: 'task', completed: false }).filter(focusDueMatch);
     const effOrder = { trivial: 0, small: 1, medium: 2, large: 3, xl: 4 };
     const priOrder = { urgent: 0, high: 1, medium: 2, low: 3 };
-    const multiProject = !projectId; // show project dots in all-projects view
+    // Project dots only earn their place when more than one project is in view
+    const multiProject = activeWorkspace === WS_ALL && !activeSubproject;
 
     function itemsFor(qd) {
       return tasks.filter(t => {
@@ -3963,12 +3953,26 @@ const App = (() => {
     if (dupe) { toast('A project with this name already exists'); return; }
     const parentId = document.getElementById('projectParent')?.value || null;
     const payload = { name, color: selectedColor, icon: selectedIcon, parentId };
+    const linkOn = typeof Bridge !== 'undefined' && Bridge.available();
+
     if (editingProjectId) {
+      const before = State.getProject(editingProjectId);
       State.updateProject(editingProjectId, payload);
       toast('Project updated');
+      // Workspaces are shared, so a rename here is a rename over there.
+      if (linkOn && before?.txtWorkspaceId && before.name !== name) {
+        Bridge.renameWorkspace(before.txtWorkspaceId, name).catch(() => {});
+      }
     } else {
-      State.createProject(payload);
+      const created = State.createProject(payload);
       toast('Project created');
+      // A new top-level project is a new Cade.txt workspace — the link runs
+      // both ways, so its rooms can be filed from either app.
+      if (linkOn && !parentId) {
+        Bridge.ensureWorkspace(name, 'teal')
+          .then(wsId => { if (wsId) { State.updateProject(created.id, { txtWorkspaceId: wsId }); render(); } })
+          .catch(() => {});
+      }
     }
     editingProjectId = null;
     closeModal();
@@ -5827,14 +5831,29 @@ const App = (() => {
 
     // Cade.txt link — rooms in, completions both ways. Silent when txt has
     // never run on this device.
+    //
+    // With sync configured the first import waits for reconciliation: this
+    // device's copy of the dataset isn't authoritative until then, and
+    // importing a room into a stale copy that the server copy is then merged
+    // on top of yields two of everything. The timeout is the backstop for a
+    // device that is offline or whose database is unreachable — the import
+    // has to happen eventually, and the bridge de-duplicates on every scan.
     if (typeof Bridge !== 'undefined') {
-      Bridge.init((stats) => {
+      const onScan = (stats) => {
         render();
         const bits = [];
         if (stats.rooms) bits.push(`${stats.rooms} room${stats.rooms > 1 ? 's' : ''}`);
         if (stats.tasks) bits.push(`${stats.tasks} task${stats.tasks > 1 ? 's' : ''}`);
         if (bits.length) toast(`Cade.txt: linked ${bits.join(', ')}`);
-      });
+      };
+      const waitForSync = Sync.isConfigured() && !Sync.isReconciled();
+      Bridge.init(onScan, { defer: waitForSync });
+      if (waitForSync) {
+        let started = false;
+        const start = () => { if (!started) { started = true; Bridge.requestScan(0); } };
+        window.addEventListener('sync-reconciled', start, { once: true });
+        setTimeout(start, 15000);
+      }
     }
 
     // Running timers survive page refreshes — resume before first paint
@@ -5903,7 +5922,7 @@ const App = (() => {
     setTagFilter, openSubproject, toggleShowCompleted, setCompletedSort,
     selectHabit, toggleHabitCell, cycleHabitCell, exportForLLM,
     onRecurrenceChange, toggleWeekday,
-    setInsightsProject, setInsightsEntry, setFocusProject,
+    setInsightsProject, setInsightsEntry,
     qDragStart, qDragEnd, qDragOver, qDragLeave, qDrop, qItemClick,
     plannerNav, plannerToday, setPlannerView, plannerTap, blockPointerDown,
     popoverAgenda, popoverTask, popoverTimer,

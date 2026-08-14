@@ -404,6 +404,17 @@ const Bridge = (() => {
     return id;
   }
 
+  async function renameWorkspace(wsId, name) {
+    const list = getWorkspaces();
+    const ws = list.find(w => w.id === wsId);
+    if (!ws || ws.name === name) return false;
+    ws.name = String(name);
+    writeRaw(WS_KEY, JSON.stringify(list));
+    notifyRooms();
+    await publishWorkspaceBlob();
+    return true;
+  }
+
   function notifyRooms() {
     writeRaw(WS_TS_KEY, String(Date.now()));
     try { if (channel) channel.postMessage({ t: 'rooms', ts: Date.now(), tab: TAB_ID }); } catch (e) {}
@@ -500,7 +511,66 @@ const Bridge = (() => {
     }
   }
 
+  // Safety net for the one case that can genuinely double things up: this
+  // device imports a room, then adopts (or field-merges) a server copy that
+  // already contained the same import from another device. The merge unions
+  // by id, and the two devices minted different ids for the same room. Fold
+  // them back together — oldest wins, everything is moved onto it.
+  function dedupeLinks() {
+    let changed = false;
+
+    const seenRoom = new Map();
+    State.getProjects({ includeArchived: true }).forEach(p => {
+      if (!p.txtRoom) return;
+      const keep = seenRoom.get(p.txtRoom);
+      if (!keep) { seenRoom.set(p.txtRoom, p); return; }
+      const [winner, loser] = (keep.createdAt || '') <= (p.createdAt || '') ? [keep, p] : [p, keep];
+      seenRoom.set(p.txtRoom, winner);
+      State.getEntries({ includeArchived: true }).forEach(e => {
+        if (State.entryProjectIds(e).includes(loser.id)) {
+          const ids = State.entryProjectIds(e).map(id => (id === loser.id ? winner.id : id));
+          State.updateEntry(e.id, {
+            projectId: e.projectId === loser.id ? winner.id : e.projectId,
+            projectIds: [...new Set(ids)],
+          });
+        }
+      });
+      State.deleteProject(loser.id);
+      changed = true;
+    });
+
+    const seenWs = new Map();
+    State.getProjects({ includeArchived: true }).forEach(p => {
+      if (!p.txtWorkspaceId) return;
+      const keep = seenWs.get(p.txtWorkspaceId);
+      if (!keep) { seenWs.set(p.txtWorkspaceId, p); return; }
+      const [winner, loser] = (keep.createdAt || '') <= (p.createdAt || '') ? [keep, p] : [p, keep];
+      seenWs.set(p.txtWorkspaceId, winner);
+      State.getProjects({ includeArchived: true }).forEach(c => {
+        if (c.parentId === loser.id) State.updateProject(c.id, { parentId: winner.id });
+      });
+      State.deleteProject(loser.id);
+      changed = true;
+    });
+
+    // Same for tasks: one checkbox, one task.
+    const seenTask = new Map();
+    State.getEntries({ includeArchived: true }).forEach(e => {
+      if (!e.txtRoom || !e.txtKey) return;
+      const k = e.txtRoom + ' ' + e.txtKey;
+      const keep = seenTask.get(k);
+      if (!keep) { seenTask.set(k, e); return; }
+      const [winner, loser] = (keep.createdAt || '') <= (e.createdAt || '') ? [keep, e] : [e, keep];
+      seenTask.set(k, winner);
+      State.deleteEntry(loser.id);
+      changed = true;
+    });
+
+    return changed;
+  }
+
   function runScan(opts) {
+    const deduped = dedupeLinks();
     const workspaces = getWorkspaces();
     const rooms = getRooms();
     const meta = getRoomMeta();
@@ -508,7 +578,7 @@ const Bridge = (() => {
     const membership = getRoomWorkspace();
     const today = State.todayStr();
 
-    const stats = { workspaces: 0, rooms: 0, tasks: 0, completed: 0, reopened: 0, retired: 0, changed: false };
+    const stats = { workspaces: 0, rooms: 0, tasks: 0, completed: 0, reopened: 0, retired: 0, changed: deduped };
 
     // ---- Workspaces → top-level projects --------------------------------
     // getProjects() rebuilds and sorts the whole tree on every call, so the
@@ -800,7 +870,10 @@ const Bridge = (() => {
     }, delay);
   }
 
-  function init(changeHandler) {
+  // `opts.defer` holds the first scan back until the caller says the local
+  // dataset is the real one (see Sync's reconcile signal). Live listeners are
+  // wired up either way — they debounce, so nothing is lost in the meantime.
+  function init(changeHandler, opts = {}) {
     onChange = changeHandler || null;
     if (!available()) return false;
 
@@ -837,7 +910,7 @@ const Bridge = (() => {
       if (!document.hidden && Date.now() - lastScanAt > 5000) requestScan(200);
     });
 
-    requestScan(0);
+    if (!opts.defer) requestScan(0);
     return true;
   }
 
@@ -845,7 +918,7 @@ const Bridge = (() => {
     init, scan, requestScan, available,
     parseTodos, hasTodoList, setTodoState, appendTodo, normalizeKey,
     roomText, writeRoomText,
-    ensureRoom, ensureWorkspace, publishWorkspaceBlob,
+    ensureRoom, ensureWorkspace, renameWorkspace, publishWorkspaceBlob,
     pushCompletion, pushNewTask, pushRename,
     getRooms, getWorkspaces, getRoomWorkspace, getRoomMeta,
     creds,
