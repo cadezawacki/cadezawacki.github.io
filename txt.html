@@ -3322,15 +3322,64 @@ const store = (() => {
     e.code === 22 || e.code === 1014
   );
 
+  // Every physical localStorage key, chunk sub-entries included. `keys()` below
+  // deliberately hides sub-entries; anything doing byte accounting or debris
+  // cleanup has to see them.
+  function rawKeys() {
+    const out = [];
+    if (!ok) return out;
+    for (let i = 0; i < _s.length; i++) { const k = _s.key(i); if (k != null) out.push(k); }
+    return out;
+  }
+
+  // Splits a physical key into {base, idx} when it is a chunk sub-entry.
+  function parseChunkKey(k) {
+    const at = k.lastIndexOf(CHUNK_SEP);
+    if (at === -1) return null;
+    const tail = k.slice(at + CHUNK_SEP.length);
+    if (!/^\d+$/.test(tail)) return null;
+    return { base: k.slice(0, at), idx: parseInt(tail, 10) };
+  }
+
+  const manifestCount = v => (v != null && v.startsWith(CHUNK_MARK)) ? (parseInt(v.slice(CHUNK_MARK.length), 10) || 0) : 0;
+
   function clearChunks(key) {
     if (!ok) return;
     const prefix = key + CHUNK_SEP;
-    const stale = [];
-    for (let i = 0; i < _s.length; i++) {
-      const k = _s.key(i);
-      if (k && k.startsWith(prefix)) stale.push(k);
-    }
-    stale.forEach(k => _s.removeItem(k));
+    rawKeys().forEach(k => { if (k.startsWith(prefix)) _s.removeItem(k); });
+  }
+
+  // Chunk sub-entries whose base key carries no manifest covering them are
+  // UNREACHABLE: get() ignores them, remove() never finds them, keys() hides
+  // them and the cleanup dialog can't offer them — yet they still occupy the
+  // quota. They pile up whenever a chunked write dies partway, which is exactly
+  // what happens under storage pressure, so a device ends up permanently full
+  // with "nothing left to clear". Returns the bytes reclaimed (or, with
+  // dryRun, the bytes that would be).
+  function sweepOrphanChunks(dryRun) {
+    if (!ok) return 0;
+    const counts = new Map(); // base key -> chunks the manifest claims
+    let freed = 0;
+    rawKeys().forEach(k => {
+      const c = parseChunkKey(k);
+      if (!c) return;
+      if (!counts.has(c.base)) counts.set(c.base, manifestCount(_s.getItem(c.base)));
+      if (c.idx < counts.get(c.base)) return; // live part of a real value
+      const v = _s.getItem(k);
+      freed += (k.length + (v ? v.length : 0)) * 2;
+      if (!dryRun) _s.removeItem(k);
+    });
+    return freed;
+  }
+
+  // Physical bytes held in localStorage (UTF-16, keys included) — the bucket
+  // that overflows, as opposed to the browser-wide figure navigator.storage
+  // .estimate() reports.
+  function rawBytes() {
+    if (!ok) return 0;
+    let total = 0;
+    rawKeys().forEach(k => { const v = _s.getItem(k); total += (k.length + (v ? v.length : 0)) * 2; });
+    return total;
   }
 
   // Writes a value, splitting it into chunks when oversized. Throws on quota.
@@ -3347,15 +3396,26 @@ const store = (() => {
       return;
     }
     const n = Math.ceil(val.length / CHUNK_SIZE);
-    for (let i = 0; i < n; i++) {
-      _s.setItem(chunkKey(key, i), val.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE));
+    try {
+      for (let i = 0; i < n; i++) {
+        _s.setItem(chunkKey(key, i), val.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE));
+      }
+      // Drop stale higher-index chunks from a previously larger chunked value.
+      if (wasChunked) {
+        for (let i = n; i < manifestCount(prev); i++) _s.removeItem(chunkKey(key, i));
+      }
+      _s.setItem(key, CHUNK_MARK + n);
+    } catch (e) {
+      // Running out of space midway leaves chunks with no manifest pointing at
+      // them: dead weight nothing can ever read or delete. Roll the whole set
+      // back before rethrowing so the caller's retry (and the quota dialog) get
+      // the space, instead of the store silently filling with debris. When the
+      // previous value was chunked its early parts are already overwritten, so
+      // it is unrecoverable either way — drop its manifest too rather than
+      // leave the key pointing at a half-updated value.
+      try { clearChunks(key); if (wasChunked) _s.removeItem(key); } catch {}
+      throw e;
     }
-    // Drop stale higher-index chunks from a previously larger chunked value.
-    if (wasChunked) {
-      const prevN = parseInt(prev.slice(CHUNK_MARK.length), 10) || 0;
-      for (let i = n; i < prevN; i++) _s.removeItem(chunkKey(key, i));
-    }
-    _s.setItem(key, CHUNK_MARK + n);
   }
 
   function get(key) {
@@ -3382,8 +3442,10 @@ const store = (() => {
     } catch (e) {
       if (!isQuotaError(e)) { mem[key] = val; return; }
     }
-    // Out of space — step 1: drop offline caches for rooms no longer in view.
+    // Out of space — step 1: reclaim unreachable chunk debris, then drop
+    // offline caches for rooms no longer in view.
     try {
+      sweepOrphanChunks();
       if (window.__evictStaleRoomCaches) window.__evictStaleRoomCaches();
       writeRaw(key, val);
       delete mem[key];
@@ -3419,9 +3481,23 @@ const store = (() => {
     return out;
   }
 
-  const sizeOf = key => { const v = get(key); return v ? v.length * 2 : 0; };
+  // Bytes a logical key occupies, chunk parts summed WITHOUT rebuilding the
+  // value — the cleanup dialog sizes every key in the store, and concatenating
+  // multi-MB caches just to measure them froze the UI on a full device.
+  const sizeOf = key => {
+    if (Object.prototype.hasOwnProperty.call(mem, key)) { const v = mem[key]; return v ? v.length * 2 : 0; }
+    if (!ok) return 0;
+    const v = _s.getItem(key);
+    if (v == null) return 0;
+    let total = (key.length + v.length) * 2;
+    for (let i = 0, n = manifestCount(v); i < n; i++) {
+      const ck = chunkKey(key, i), part = _s.getItem(ck);
+      if (part != null) total += (ck.length + part.length) * 2;
+    }
+    return total;
+  };
 
-  return { get, set, remove, keys, sizeOf, ok };
+  return { get, set, remove, keys, sizeOf, ok, rawBytes, sweepOrphanChunks };
 })();
 window.__store = store; // exposed for external feature modules (window.Cade.store)
 
@@ -12229,10 +12305,32 @@ window.__evictStaleRoomCaches = function() {
   });
 };
 
+// Image/file payloads land here when IndexedDB is unavailable (private mode,
+// disabled storage, a broken DB). Base64 blobs in a ~5 MB bucket fill it almost
+// instantly, and the dialog used to be blind to them — the rooms all looked
+// tiny and clearing them freed nothing.
+const IDB_FALLBACK_PREFIX = '\u0000idbfb\u0000'; // mirrors idbStore's FB_PREFIX
+
+// Bytes of localStorage that no room group accounts for, largest first. Shown
+// so a full store is never invisible: if the space is going somewhere the
+// checkboxes can't reach, the user gets to see exactly where.
+function _storageOtherKeys(claimed) {
+  const out = [];
+  try {
+    store.keys().forEach(k => {
+      if (claimed.has(k)) return;
+      const bytes = store.sizeOf(k);
+      if (bytes > 0) out.push({ key: k, bytes });
+    });
+  } catch {}
+  return out.sort((a, b) => b.bytes - a.bytes);
+}
+
 // All reclaimable storage grouped per room: cache + synced base + snapshots +
 // small per-room keys, summed. The active room is offered too, but only its
 // snapshots (its live cache would immediately be rewritten by persistContent).
 // Rooms no longer in the tab list are flagged as orphaned and pre-checked.
+// Locally-held image/file payloads are offered as one extra group.
 function _storageCleanupItems() {
   const current = activeRoom || syncState.roomName || '';
   const roomSet = new Set(rooms);
@@ -12257,53 +12355,139 @@ function _storageCleanupItems() {
       return;
     }
   });
-  return [...groups.values()].sort((a, b) => (a.orphan === b.orphan ? b.bytes - a.bytes : (a.orphan ? -1 : 1)));
+  const items = [...groups.values()].sort((a, b) => (a.orphan === b.orphan ? b.bytes - a.bytes : (a.orphan ? -1 : 1)));
+
+  // Image/file payloads sitting in localStorage because IndexedDB wasn't
+  // usable. Not pre-checked: anything still queued for upload only exists here.
+  const fallback = { label: 'Cached images & files', note: 'IndexedDB unavailable — stored here instead', bytes: 0, keys: [] };
+  try {
+    store.keys().forEach(k => {
+      if (!k.startsWith(IDB_FALLBACK_PREFIX)) return;
+      fallback.bytes += store.sizeOf(k);
+      fallback.keys.push(k);
+    });
+  } catch {}
+  if (fallback.keys.length) items.push(fallback);
+
+  items.forEach(it => { if (it.room != null && it.label == null) it.label = it.room; });
+  return items;
 }
 
-// Fill the usage line ("x MB of y MB used") asynchronously — best-effort.
-function _fillStorageUsage() {
+// Fill the usage lines. The browser-wide estimate alone was actively
+// misleading here: it is dominated by IndexedDB and reads something like
+// "75 MB of 10315 MB" while the bucket that actually overflowed — localStorage,
+// capped near 5 MB regardless of how much disk the origin is allowed — is
+// completely full. Documents, snapshots and settings live in that small bucket,
+// so it gets reported first and the browser-wide number second, labelled as the
+// separate thing it is.
+const LOCALSTORAGE_TYPICAL_CAP = 5 * 1024 * 1024;
+
+function _fillStorageUsage(extraNote) {
   const el = document.getElementById('storage-cleanup-usage');
   if (!el) return;
-  el.textContent = '';
+  const mb = n => (n / (1024 * 1024)).toFixed(1);
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const lines = [];
+  let localBytes = 0;
+  try { localBytes = store.rawBytes(); } catch {}
+  if (store.ok) {
+    const pct = Math.min(999, Math.round((localBytes / LOCALSTORAGE_TYPICAL_CAP) * 100));
+    lines.push(`<b>Documents, snapshots &amp; settings: ${mb(localBytes)} MB — ~${pct}% of the ~5 MB browser cap.</b> This small bucket is the one that fills up and opens this dialog.`);
+  } else {
+    lines.push('<b>Local storage is unavailable in this browser</b> — changes are kept in memory only.');
+  }
+  if (extraNote) lines.push(esc(extraNote));
+  el.innerHTML = lines.join('<br>');
   try {
     if (navigator.storage && navigator.storage.estimate) {
       navigator.storage.estimate().then(est => {
         if (!est || !est.quota) return;
-        const mb = n => (n / (1024 * 1024)).toFixed(1);
-        el.textContent = `Browser storage: ${mb(est.usage || 0)} MB of ${mb(est.quota)} MB in use (all types).`;
+        el.innerHTML = lines.concat(
+          `Images &amp; files (IndexedDB): ${mb(est.usage || 0)} MB of ${mb(est.quota)} MB — a separate, far larger bucket. Free space here does <i>not</i> help the one above.`
+        ).join('<br>');
       }).catch(() => {});
     }
   } catch {}
 }
 
 // Step 2 (interactive): still full after eviction — ask what to clear.
-// Snoozed briefly after a dismissal so saves don't re-spam it. Pass
-// force=true (the "Manage Storage" menu item) to open it proactively even
+// Pass force=true (the "Manage Storage" menu item) to open it proactively even
 // when nothing is critically full.
+//
+// Dismissing used to snooze a flat 60s, so a device that genuinely had nothing
+// left to clear got the dialog thrown at it once a minute forever. The snooze
+// now escalates (1m → 5m → 15m → 1h) with every unproductive prompt and resets
+// only when a cleanup actually frees bytes.
 let _storageCleanupOpen = false;
 let _storageCleanupSnoozeUntil = 0;
+let _storageCleanupStrikes = 0;
+const STORAGE_SNOOZE_STEPS = [60e3, 5 * 60e3, 15 * 60e3, 60 * 60e3];
+
+function _snoozeStorageCleanup() {
+  const step = STORAGE_SNOOZE_STEPS[Math.min(_storageCleanupStrikes, STORAGE_SNOOZE_STEPS.length - 1)];
+  _storageCleanupStrikes++;
+  _storageCleanupSnoozeUntil = Date.now() + step;
+}
+
+const _fmtKB = bytes => (bytes >= 1024 * 1024
+  ? (bytes / (1024 * 1024)).toFixed(1) + ' MB'
+  : Math.max(1, Math.round(bytes / 1024)) + ' KB');
 
 window.__promptStorageCleanup = function(force) {
   if (_storageCleanupOpen) return;
   if (!force && Date.now() < _storageCleanupSnoozeUntil) return;
+
+  // Free unreachable chunk fragments first — they are pure debris, so there is
+  // nothing to ask about. (On the quota path store.set() has already swept, so
+  // this normally reclaims nothing there; opening the dialog from the menu is
+  // where it earns its keep.)
+  let swept = 0;
+  try { swept = store.sweepOrphanChunks(); } catch {}
+
   const items = _storageCleanupItems();
+  const claimed = new Set();
+  items.forEach(it => it.keys.forEach(k => claimed.add(k)));
+  const others = _storageOtherKeys(claimed);
+  const reclaimable = items.reduce((n, it) => n + it.bytes, 0);
 
   if (items.length === 0 && !force) {
-    showToast('Storage full — recent changes are kept in memory only. Try "Purge unused images & files" in View → Manage Storage.', 'error', 6000);
-    _storageCleanupSnoozeUntil = Date.now() + 60000;
+    showToast(swept
+      ? `Reclaimed ${_fmtKB(swept)} of stranded storage — retrying save.`
+      : 'Storage full — recent changes are kept in memory only. Open View → Manage Storage to see what is using the space.',
+      swept ? 'success' : 'error', 6000);
+    _snoozeStorageCleanup();
+    if (swept) { _storageCleanupStrikes = 0; try { persistContent(); } catch {} }
     return;
   }
 
   const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-  document.getElementById('storage-cleanup-list').innerHTML = items.length ? items.map((it, i) => `
+  const rows = items.map((it, i) => `
     <label class="room-manager-item" style="cursor:pointer;gap:8px;">
       <input type="checkbox" data-idx="${i}" ${it.orphan ? 'checked' : ''}>
-      <span class="room-manager-name" style="flex:1;">${esc(it.room)}${it.isCurrent ? ' <span style="color:var(--text-faint)">(snapshots only)</span>' : ''}${it.orphan ? ' <span style="color:var(--text-faint)">(orphaned)</span>' : ''}</span>
-      <span style="color:var(--text-faint);font-size:var(--text-xs);">${Math.max(1, Math.round(it.bytes / 1024))} KB</span>
+      <span class="room-manager-name" style="flex:1;">${esc(it.label)}${it.isCurrent ? ' <span style="color:var(--text-faint)">(snapshots only)</span>' : ''}${it.orphan ? ' <span style="color:var(--text-faint)">(orphaned)</span>' : ''}${it.note ? ` <span style="color:var(--text-faint)">(${esc(it.note)})</span>` : ''}</span>
+      <span style="color:var(--text-faint);font-size:var(--text-xs);">${_fmtKB(it.bytes)}</span>
     </label>
-  `).join('') : '<div style="color:var(--text-muted);font-size:var(--text-sm);padding:8px 2px;">No reclaimable room data. Use "Purge unused images &amp; files" below to free blob storage.</div>';
+  `).join('');
+
+  // When the checkboxes add up to almost nothing, say so and name what IS
+  // holding the space — otherwise the dialog reads as "everything is tiny, I
+  // have nothing to clear" while the store stays full.
+  const otherTotal = others.reduce((n, o) => n + o.bytes, 0);
+  // Only the entries big enough to matter — a wall of 1 KB preference keys
+  // buries the one cache that is actually eating the bucket.
+  const breakdown = others.filter(o => o.bytes >= 16 * 1024).slice(0, 6).map(o =>
+    `<div style="display:flex;gap:8px;"><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(o.key)}</span><span>${_fmtKB(o.bytes)}</span></div>`
+  ).join('');
+  const otherBlock = others.length ? `
+    <div style="color:var(--text-muted);font-size:var(--text-xs);padding:8px 2px 2px;border-top:1px solid var(--border, rgba(128,128,128,.25));margin-top:6px;">
+      <div style="margin-bottom:4px;">Not clearable from this list — ${_fmtKB(otherTotal)} in app data (the open document, sync settings, workspaces).${reclaimable < otherTotal ? ' This is where most of your local storage is going.' : ''}</div>
+      ${breakdown}
+    </div>` : '';
+
+  document.getElementById('storage-cleanup-list').innerHTML =
+    (rows || '<div style="color:var(--text-muted);font-size:var(--text-sm);padding:8px 2px;">Nothing reclaimable here — every room cache is already minimal.</div>') + otherBlock;
   _storageCleanupItemsCache = items;
-  _fillStorageUsage();
+  _fillStorageUsage(swept ? `Reclaimed ${_fmtKB(swept)} of stranded fragments just now.` : '');
 
   _storageCleanupOpen = true;
   document.getElementById('storage-cleanup-overlay').classList.add('open');
@@ -12317,14 +12501,14 @@ function closeStorageCleanupModal() {
 
 window.closeStorageCleanup = function() {
   closeStorageCleanupModal();
-  _storageCleanupSnoozeUntil = Date.now() + 60000;
+  _snoozeStorageCleanup();
 };
 
 window.confirmStorageCleanup = function() {
   const checked = [...document.querySelectorAll('#storage-cleanup-list input[type="checkbox"]:checked')];
   closeStorageCleanupModal();
   if (checked.length === 0) {
-    _storageCleanupSnoozeUntil = Date.now() + 60000;
+    _snoozeStorageCleanup();
     return;
   }
   let freed = 0, count = 0;
@@ -12335,7 +12519,9 @@ window.confirmStorageCleanup = function() {
     freed += g.bytes;
     g.keys.forEach(k => store.remove(k));
   });
-  showToast(`Cleared ${count} room${count === 1 ? '' : 's'} (~${Math.max(1, Math.round(freed / 1024))} KB)`, 'success', 2500);
+  // A cleanup that actually recovered space earns a fresh set of strikes.
+  if (freed > 0) _storageCleanupStrikes = 0;
+  showToast(`Cleared ${count} item${count === 1 ? '' : 's'} (~${_fmtKB(freed)})`, 'success', 2500);
   // Retry persisting the current document into the space we just freed.
   persistContent();
 };
@@ -12381,6 +12567,7 @@ window.storageCleanupPurgeImages = async function() {
   try { await gcOrphanFiles(); } catch {}
   const after = await countBlobs();
   const n = Math.max(0, before - after);
+  if (n) _storageCleanupStrikes = 0;
   showToast(n ? `Purged ${n} unused blob${n === 1 ? '' : 's'}` : 'No unused images or files found', 'success', 2500);
   _fillStorageUsage();
 };
