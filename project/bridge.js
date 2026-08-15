@@ -811,6 +811,63 @@ const Bridge = (() => {
   }
 
   // ═══════════════════════════════════════════════════════════
+  // HYDRATION — fetch rooms this device has never opened
+  //
+  // Cade.txt only caches a room's text once you visit it, so a device that
+  // has ten rooms but has only ever opened two holds text for two. The scan
+  // reads local text, so without this the other eight would never be seen to
+  // contain a todo list and would silently never appear here — the link
+  // would look broken for exactly the rooms you set up on another device.
+  //
+  // A fetched document IS the server's confirmed copy, so it is recorded as
+  // both the cache and the synced base — which keeps roomCacheIsClean() true
+  // and leaves the room publishable rather than permanently deferring.
+  // ═══════════════════════════════════════════════════════════
+  const HYDRATE_PER_PASS = 25;            // a burst cap; later passes take the rest
+  const HYDRATE_RETRY_MS = 60 * 1000;     // don't re-ask for the same room constantly
+  const hydrateTried = new Map();         // room -> when we last asked
+
+  // Rooms this device holds no text for. Reported without the retry cooldown,
+  // because this is also what the Cade.txt Link panel shows the user.
+  function roomsNeedingText() {
+    const meta = getRoomMeta();
+    const tomb = getTombstones();
+    return getRooms().filter(name =>
+      roomIsLive(name, meta, tomb) &&
+      !roomIsLocked(name) &&               // encrypted with a key we lack
+      raw(CACHE_PREFIX + name) == null &&
+      raw(SYNCED_PREFIX + name) == null);
+  }
+
+  // A room with no document on the server yet is not a permanent no: another
+  // device may create it a minute from now. So the guard is a cooldown, not a
+  // blacklist — and an explicit Rescan skips it entirely.
+  async function hydrateMissingRooms({ force = false } = {}) {
+    const { key } = creds();
+    const database = db();
+    const outstanding = () => roomsNeedingText().length;
+    if (!key || !database) return { fetched: 0, pending: outstanding() };
+
+    const now = Date.now();
+    const todo = roomsNeedingText()
+      .filter(name => force || now - (hydrateTried.get(name) || 0) > HYDRATE_RETRY_MS)
+      .slice(0, HYDRATE_PER_PASS);
+
+    let fetched = 0;
+    for (const name of todo) {
+      hydrateTried.set(name, Date.now());
+      const remote = await readRemoteRoom(name, key, database);
+      if (!remote.ok) continue;            // no document, unreachable, or not ours
+      if (!writeRaw(CACHE_PREFIX + name, remote.text)) break; // out of storage
+      // Straight from the server, so it IS the confirmed base — recording it
+      // keeps the room publishable instead of looking permanently unsynced.
+      writeRaw(SYNCED_PREFIX + name, remote.text);
+      fetched++;
+    }
+    return { fetched, pending: outstanding() };
+  }
+
+  // ═══════════════════════════════════════════════════════════
   // SCAN — project txt's world into this app's data model
   // ═══════════════════════════════════════════════════════════
   // Runs on load, on focus, and whenever txt broadcasts a change. Everything
@@ -1293,9 +1350,16 @@ const Bridge = (() => {
 
   function requestScan(delay = 300) {
     clearTimeout(rescanTimer);
-    rescanTimer = setTimeout(() => {
+    rescanTimer = setTimeout(async () => {
+      // Pull down any room whose text this device has never held, then scan —
+      // otherwise those rooms look empty and never link.
+      let hydrated = { fetched: 0 };
+      try { hydrated = await hydrateMissingRooms(); } catch (e) { console.warn('Bridge: hydrate failed', e); }
       const result = scan();
+      if (result && hydrated.fetched) { result.changed = true; result.hydrated = hydrated.fetched; }
       if (result && result.changed && onChange) onChange(result);
+      // More rooms than one pass allows — come back for the rest.
+      if (hydrated.pending > 0 && hydrated.fetched > 0) requestScan(600);
     }, delay);
   }
 
@@ -1349,6 +1413,7 @@ const Bridge = (() => {
 
   return {
     init, scan, requestScan, available,
+    hydrateMissingRooms, roomsNeedingText,
     parseTodos, hasTodoList, setTodoState, appendTodo, normalizeKey,
     roomText, roomCacheIsClean, applyRoomEdit,
     opSetDone, opRename, opAppendForTask, claimedKeys,
