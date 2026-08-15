@@ -958,14 +958,16 @@ const Bridge = (() => {
   // Toggling a bridged task rewrites its checkbox immediately, matched by
   // text rather than by the line number recorded at scan time — the document
   // may well have been edited since.
+  // The link fields are stamped only once the document edit has actually
+  // landed. Stamping first and failing leaves the task claiming a line that
+  // says something else, and the next scan resolves that in the document's
+  // favour — quietly undoing what the user just did.
   async function pushCompletion(entry) {
     if (!entry || !entry.txtRoom || !entry.txtKey) return false;
-    // txtDone records what the document said; recording it before the write
-    // is what stops the next scan reading our own change as the document
-    // having moved and reconciling it back.
-    State.updateEntry(entry.id, { txtDone: entry.completed });
     const res = await applyRoomEdit(entry.txtRoom, opSetDone(entry.txtKey, entry.completed));
-    return !!res.ok;
+    if (!res.ok) return false;
+    State.updateEntry(entry.id, { txtDone: entry.completed });
+    return true;
   }
 
   // Adding a task to a bridged sub-project appends a checkbox to its room.
@@ -974,19 +976,22 @@ const Bridge = (() => {
     const proj = entry.projectId ? State.getProject(entry.projectId) : null;
     if (!proj || !proj.txtRoom) return false;
     const key = keyForNewLine(proj.txtRoom, entry.title);
-    State.updateEntry(entry.id, { txtRoom: proj.txtRoom, txtKey: key, txtDone: entry.completed });
     const res = await applyRoomEdit(proj.txtRoom, opAppend(entry.title));
-    // opAppend returns null when the line is already present — the link is
-    // recorded either way, which is the point of the call.
-    return !!res.ok || res.reason === 'not-applicable';
+    // 'not-applicable' means the line was already in the document, which is
+    // just as good a reason to record the link as having written it.
+    if (!res.ok && res.reason !== 'not-applicable') return false;
+    State.updateEntry(entry.id, { txtRoom: proj.txtRoom, txtKey: key, txtDone: entry.completed });
+    return true;
   }
 
   // Renaming a bridged task rewrites its line and re-keys the link.
   async function pushRename(entry, oldKey) {
     if (!entry || !entry.txtRoom || !oldKey) return false;
-    State.updateEntry(entry.id, { txtKey: keyForNewLine(entry.txtRoom, entry.title, oldKey) });
+    const key = keyForNewLine(entry.txtRoom, entry.title, oldKey);
     const res = await applyRoomEdit(entry.txtRoom, opRename(oldKey, entry.title));
-    return !!res.ok;
+    if (!res.ok) return false;
+    State.updateEntry(entry.id, { txtKey: key });
+    return true;
   }
 
   // The key a not-yet-written line will get once it lands in the document:
