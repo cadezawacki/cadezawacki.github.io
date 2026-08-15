@@ -592,8 +592,20 @@ body.has-subtabs .main-content { padding-top: calc(var(--menubar-height) + var(-
 @media (max-width: 620px) {
   .menu-wrap { display: none; }
   .menu-more { display: block; }
-  .ws-pill { max-width: 120px; }
-  .view-mobile-select select { max-width: 108px; }
+
+  /* Fixed widths do not fit: logo + menu + pill + view select + three status
+     controls, at their desktop sizes, come to ~430px before padding — so on
+     any real phone the right-hand controls were pushed past the edge and
+     could not be reached. The two variable-width controls now SHARE whatever
+     is left after the fixed ones, so the row fits at any width instead of
+     depending on the arithmetic working out. */
+  .menubar { padding: 0 var(--space-2); gap: var(--space-2); }
+  .menubar-spacer { display: none; }
+  .ws-pill-wrap, .view-mobile-select { flex: 1 1 0; min-width: 44px; }
+  .ws-pill { max-width: none; width: 100%; }
+  .view-mobile-select select { max-width: none; width: 100%; }
+  /* Search is one tap away in the menu sheet; the icon is a duplicate. */
+  #searchBtn { display: none; }
 }
 
 /* ═══════════════════════════════════════════════════════════════

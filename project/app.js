@@ -540,7 +540,12 @@ const App = (() => {
     const dd = document.getElementById('wsDropdown');
     if (!dd) return;
     const tops = State.getProjects().filter(p => p.depth === 0);
-    const unfiledCount = State.getEntries().filter(e => State.entryProjectIds(e).length === 0 && !e.completed).length;
+    // Two different questions: is there an Unfiled page worth offering, and
+    // how much is left to do there. Gating the entry on the OPEN count alone
+    // meant finishing the last unfiled task removed the only way back in to
+    // look at it — there is no Unfiled card in the grid either.
+    const unfiled = State.getEntries().filter(e => State.entryProjectIds(e).length === 0);
+    const unfiledCount = unfiled.filter(e => !e.completed).length;
     const openIn = (p) => State.getEntries({ projectId: p.id }).filter(e => !e.completed && e.type !== 'habit').length;
 
     let html = `<button class="ws-option ${activeWorkspace === WS_ALL ? 'active' : ''}" onclick="App.setWorkspace('${WS_ALL}')">
@@ -558,7 +563,7 @@ const App = (() => {
       </button>`;
     });
 
-    if (unfiledCount > 0 || activeWorkspace === WS_UNFILED) {
+    if (unfiled.length > 0 || activeWorkspace === WS_UNFILED) {
       html += `<button class="ws-option ${activeWorkspace === WS_UNFILED ? 'active' : ''}" onclick="App.setWorkspace('${WS_UNFILED}')">
         <span class="ws-pill-dot" style="background:var(--text-faint)"></span>
         <span>Unfiled</span><span class="ws-count">${unfiledCount}</span>

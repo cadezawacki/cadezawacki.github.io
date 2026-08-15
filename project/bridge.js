@@ -133,14 +133,19 @@ const Bridge = (() => {
     return synced != null ? synced : '';
   }
 
-  // True when this device holds room edits Cade.txt has not pushed yet —
-  // its cache has moved on from its last-synced base. Such a room must not
-  // be rebased onto the server copy: that would discard local typing.
-  function roomHasUnpushedEdits(name) {
+  // Can we PROVE this device's copy of the room matches what the server last
+  // confirmed? Only then is it safe to rebase onto the server's document.
+  //
+  // A missing synced base is not proof of cleanliness — it is the signature
+  // of a room typed into offline that has never completed a sync, which is
+  // precisely the copy that must not be thrown away. Absence of evidence is
+  // treated as divergence.
+  function roomCacheIsClean(name) {
     const cached = raw(CACHE_PREFIX + name);
+    if (cached == null) return true;   // nothing local to lose
     const synced = raw(SYNCED_PREFIX + name);
-    if (cached == null || synced == null) return false;
-    return cached !== synced;
+    if (synced == null) return false;  // unproven — assume local work
+    return cached === synced;
   }
 
   // Cade.txt prefixes documents written by a password-locked client.
@@ -150,6 +155,15 @@ const Bridge = (() => {
   }
 
   // Cade.txt splits very large room payloads into { _chunks, parts }.
+  const FB_CHUNK_SIZE = 8000000;
+  function packRoomText(encoded) {
+    if (encoded.length <= FB_CHUNK_SIZE) return encoded;
+    const n = Math.ceil(encoded.length / FB_CHUNK_SIZE);
+    const parts = {};
+    for (let i = 0; i < n; i++) parts[i] = encoded.slice(i * FB_CHUNK_SIZE, (i + 1) * FB_CHUNK_SIZE);
+    return { _chunks: n, parts };
+  }
+
   function unpackRoomText(val) {
     if (val == null) return null;
     if (typeof val === 'string') return val;
@@ -409,19 +423,28 @@ const Bridge = (() => {
 
     let base = local;
     let rebased = false;
-    if (database && key && !roomHasUnpushedEdits(name)) {
+    let deferRemote = false;
+    if (database && key) {
       const remote = await readRemoteRoom(name, key, database);
-      if (remote.ok && remote.text !== local) { base = remote.text; rebased = true; }
+      if (remote.ok && remote.text !== local) {
+        if (roomCacheIsClean(name)) {
+          base = remote.text;
+          rebased = true;
+        } else {
+          // Both sides have moved. Resolving that is a text merge, and
+          // Cade.txt already owns one — it reconciles properly the next time
+          // it opens this room. The edit still lands locally; what we refuse
+          // to do is publish a whole document over a genuinely newer one.
+          deferRemote = true;
+        }
+      }
     }
 
     let next = mutate(base);
-    // The operation didn't apply to the server's version. If it applies to
-    // ours the two have genuinely diverged — leave the document alone rather
-    // than guessing, and let the next scan re-derive the truth.
-    if (next == null) {
-      if (!rebased) return { ok: false, reason: 'not-applicable' };
-      return { ok: false, reason: 'diverged' };
-    }
+    // The operation didn't apply to the document we based on. If we rebased,
+    // the two versions have diverged past what a line-scoped edit can bridge
+    // — leave it alone and let the next scan re-derive the truth.
+    if (next == null) return { ok: false, reason: rebased ? 'diverged' : 'not-applicable' };
 
     writeRaw(CACHE_PREFIX + name, next);
     stampRoomModified(name);
@@ -431,9 +454,12 @@ const Bridge = (() => {
 
     if (locked) return { ok: true, remote: false, reason: 'locked' };
     if (!key || !database) return { ok: true, remote: false, reason: 'offline' };
+    if (deferRemote) return { ok: true, remote: false, reason: 'deferred' };
     try {
-      const encrypted = await encryptText(next, key);
-      await database.ref(`rooms/${name}/text`).set(encrypted);
+      // Chunked exactly like Cade.txt writes it — a single Firebase string
+      // has a size ceiling, and a room past it would otherwise fail to reach
+      // the server after the local copy had already changed.
+      await database.ref(`rooms/${name}/text`).set(packRoomText(await encryptText(next, key)));
       database.ref(`rooms/${name}/v`).transaction(c => (c || 0) + 1).catch(() => {});
       return { ok: true, remote: true, rebased };
     } catch (e) {
@@ -469,7 +495,11 @@ const Bridge = (() => {
     };
   }
 
-  function opRename(oldKey, title) {
+  // `out.key` reports the key of the line the operation settled on, read back
+  // from the document as written. Predicting it beforehand is wrong: the
+  // document these run against may be the server's, whose occurrence counts
+  // need not match ours.
+  function opRename(oldKey, title, out) {
     return (text) => {
       const todo = parseTodos(text).find(t => t.key === oldKey);
       if (!todo) return null;
@@ -477,15 +507,29 @@ const Bridge = (() => {
       const m = lines[todo.line].match(TODO_LINE_RE);
       if (!m) return null;
       lines[todo.line] = m[0] + title;
-      return lines.join('\n');
+      const next = lines.join('\n');
+      const at = parseTodos(next).find(t => t.line === todo.line);
+      if (out) out.key = at ? at.key : normalizeKey(title);
+      return next;
     };
   }
 
-  function opAppend(title) {
+  // Append a checkbox for a task — unless the room already holds a line with
+  // this text that no other task has claimed, in which case the task simply
+  // adopts it. A second task deliberately given an existing title DOES get
+  // its own line; refusing to write one and then linking to the first line
+  // left the new task pointing at a checkbox that was never added, and the
+  // next scan archived it as vanished.
+  function opAppendForTask(title, claimedKeys, out) {
+    const base = normalizeKey(title);
+    const mine = (t) => t.key === base || t.key.indexOf(base + DUP_SEP) === 0;
     return (text) => {
-      const key = normalizeKey(title);
-      if (parseTodos(text).some(t => t.key === key)) return null; // already there
-      return appendTodo(text, title);
+      const free = parseTodos(text).find(t => mine(t) && !claimedKeys.has(t.key));
+      if (free) { if (out) out.key = free.key; return null; } // adopt, nothing to write
+      const next = appendTodo(text, title);
+      const added = parseTodos(next).filter(mine);
+      if (out) out.key = added.length ? added[added.length - 1].key : base;
+      return next;
     };
   }
 
@@ -608,13 +652,27 @@ const Bridge = (() => {
           const stamp = x => Math.max((x && x.modified) || 0, (x && x.created) || 0);
           if (!mine || stamp(m) > stamp(mine)) meta[r] = m;
         });
+        // Workspace definitions: unknown ones are adopted; for ids we both
+        // know, the fresher blob wins. Only adding the missing ones meant a
+        // rename made elsewhere was ignored here and then republished with
+        // this device's stale name, silently reverting it.
+        const localTs = parseInt(raw(WS_TS_KEY) || '0', 10);
+        const remoteNewer = (remote.ts || 0) > localTs;
         (Array.isArray(remote.workspaces) ? remote.workspaces : []).forEach(w => {
-          if (w && w.id && !workspaces.find(x => x.id === w.id)) workspaces.push(w);
+          if (!w || !w.id) return;
+          const idx = workspaces.findIndex(x => x.id === w.id);
+          if (idx === -1) workspaces.push(w);
+          else if (remoteNewer) workspaces[idx] = w;
         });
+
+        // Membership is many-to-many, so the two sides UNION. Skipping a
+        // room because we happened to have some entry for it dropped every
+        // workspace assigned on another device — and then published that
+        // truncated map as the new truth.
         Object.entries(remote.roomWorkspace || {}).forEach(([r, ids]) => {
-          if (membership[r]) return;
           const arr = Array.isArray(ids) ? ids : (typeof ids === 'string' && ids ? [ids] : []);
-          if (arr.length) membership[r] = arr;
+          if (!arr.length) return;
+          membership[r] = [...new Set([...(membership[r] || []), ...arr])];
         });
       }
 
@@ -886,9 +944,15 @@ const Bridge = (() => {
       const patch = {};
       if (entry.archived) patch.archived = false;         // the line came back
       if (entry.title !== todo.title) patch.title = todo.title;
-      if (entry.projectId !== projectId) {
-        patch.projectId = projectId;
-        patch.projectIds = [projectId];
+      // The room's sub-project must be among the task's memberships, but the
+      // rest of them belong to this app — a task deliberately filed into two
+      // projects, with another one primary, keeps that arrangement. Only a
+      // task that has drifted out of the linked project entirely gets it
+      // back, and only as an addition.
+      const memberships = State.entryProjectIds(entry);
+      if (!memberships.includes(projectId)) {
+        patch.projectIds = [...memberships, projectId];
+        if (!entry.projectId) patch.projectId = projectId;
       }
 
       // Completion reconciliation. `txtDone` records what the document said
@@ -907,7 +971,7 @@ const Bridge = (() => {
           if (todo.done) out.completed++; else out.reopened++;
         } else if (taskMoved) {
           // Only this app moved — write it through to the document.
-          queueDocWrite(room, todo.line, entry.completed);
+          queueDocWrite(room, todo.key, entry.completed);
         }
       }
       if (entry.txtDone !== todo.done) patch.txtDone = todo.done;
@@ -975,38 +1039,32 @@ const Bridge = (() => {
     if (!entry || entry.type !== 'task') return false;
     const proj = entry.projectId ? State.getProject(entry.projectId) : null;
     if (!proj || !proj.txtRoom) return false;
-    const key = keyForNewLine(proj.txtRoom, entry.title);
-    const res = await applyRoomEdit(proj.txtRoom, opAppend(entry.title));
-    // 'not-applicable' means the line was already in the document, which is
-    // just as good a reason to record the link as having written it.
+    const out = {};
+    const res = await applyRoomEdit(proj.txtRoom,
+      opAppendForTask(entry.title, claimedKeys(proj.txtRoom, entry.id), out));
+    // 'not-applicable' means the task adopted a line already in the document,
+    // which is just as good a reason to record the link as having written it.
     if (!res.ok && res.reason !== 'not-applicable') return false;
-    State.updateEntry(entry.id, { txtRoom: proj.txtRoom, txtKey: key, txtDone: entry.completed });
+    if (!out.key) return false;
+    State.updateEntry(entry.id, { txtRoom: proj.txtRoom, txtKey: out.key, txtDone: entry.completed });
     return true;
   }
 
   // Renaming a bridged task rewrites its line and re-keys the link.
   async function pushRename(entry, oldKey) {
     if (!entry || !entry.txtRoom || !oldKey) return false;
-    const key = keyForNewLine(entry.txtRoom, entry.title, oldKey);
-    const res = await applyRoomEdit(entry.txtRoom, opRename(oldKey, entry.title));
-    if (!res.ok) return false;
-    State.updateEntry(entry.id, { txtKey: key });
+    const out = {};
+    const res = await applyRoomEdit(entry.txtRoom, opRename(oldKey, entry.title, out));
+    if (!res.ok || !out.key) return false;
+    State.updateEntry(entry.id, { txtKey: out.key });
     return true;
   }
 
-  // The key a not-yet-written line will get once it lands in the document:
-  // the plain normalized title unless the room already carries that text,
-  // in which case it takes the next occurrence slot.
-  function keyForNewLine(room, title, ignoreKey) {
-    const base = normalizeKey(title);
-    const taken = new Set(parseTodos(roomText(room)).map(t => t.key));
-    if (ignoreKey) taken.delete(ignoreKey);
-    if (!taken.has(base)) return base;
-    for (let i = 2; i < 500; i++) {
-      const candidate = base + DUP_SEP + i;
-      if (!taken.has(candidate)) return candidate;
-    }
-    return base;
+  // Keys in this room already spoken for by some other task.
+  function claimedKeys(room, exceptEntryId) {
+    return new Set(State.getEntries({ includeArchived: true })
+      .filter(e => e.txtRoom === room && e.txtKey && e.id !== exceptEntryId)
+      .map(e => e.txtKey));
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -1074,12 +1132,15 @@ const Bridge = (() => {
   return {
     init, scan, requestScan, available,
     parseTodos, hasTodoList, setTodoState, appendTodo, normalizeKey,
-    roomText, roomHasUnpushedEdits, applyRoomEdit,
-    opSetDone, opRename, opAppend,
+    roomText, roomCacheIsClean, applyRoomEdit,
+    opSetDone, opRename, opAppendForTask, claimedKeys,
     ensureRoom, ensureWorkspace, renameWorkspace, publishWorkspaceBlob,
     pushCompletion, pushNewTask, pushRename,
     getRooms, getWorkspaces, getRoomWorkspace, getRoomMeta,
     creds,
     TODO_LINE_RE,
+    // Firebase's chunked-string representation, exposed so the round trip
+    // can be checked without standing up an 8 MB document.
+    _packForTest: packRoomText, _unpackForTest: unpackRoomText,
   };
 })();
