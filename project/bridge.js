@@ -603,15 +603,23 @@ const Bridge = (() => {
   // its own line; refusing to write one and then linking to the first line
   // left the new task pointing at a checkbox that was never added, and the
   // next scan archived it as vanished.
-  function opAppendForTask(title, claimedKeys, out) {
+  function opAppendForTask(title, claimedKeys, out, done) {
     const base = normalizeKey(title);
     const mine = (t) => t.key === base || t.key.indexOf(base + DUP_SEP) === 0;
     return (text) => {
       const free = parseTodos(text).find(t => mine(t) && !claimedKeys.has(t.key));
       if (free) { if (out) out.key = free.key; return null; } // adopt, nothing to write
-      const next = appendTodo(text, title);
+      let next = appendTodo(text, title);
       const added = parseTodos(next).filter(mine);
-      if (out) out.key = added.length ? added[added.length - 1].key : base;
+      const line = added.length ? added[added.length - 1] : null;
+      if (out) out.key = line ? line.key : base;
+      // A task that is ALREADY done has to arrive ticked. Writing "[ ]" and
+      // recording the link as done makes the next scan read the document as
+      // having reopened it, and the completion is silently undone.
+      if (done && line) {
+        const ticked = setTodoState(next, line.line, true);
+        if (ticked != null) next = ticked;
+      }
       return next;
     };
   }
@@ -845,6 +853,11 @@ const Bridge = (() => {
             projectIds: [...new Set(ids)],
           });
         }
+      });
+      // Children nested under the loser have to follow it, or deleteProject
+      // re-roots them to the top level — out of the room they belong to.
+      State.getProjects({ includeArchived: true }).forEach(c => {
+        if (c.parentId === loser.id) State.updateProject(c.id, { parentId: winner.id });
       });
       State.deleteProject(loser.id);
       changed = true;
@@ -1213,7 +1226,7 @@ const Bridge = (() => {
     if (!proj) return false;
     const out = {};
     const res = await applyRoomEdit(proj.txtRoom,
-      opAppendForTask(entry.title, claimedKeys(proj.txtRoom, entry.id), out));
+      opAppendForTask(entry.title, claimedKeys(proj.txtRoom, entry.id), out, !!entry.completed));
     // 'not-applicable' means the task adopted a line already in the document,
     // which is just as good a reason to record the link as having written it.
     if (!res.ok && res.reason !== 'not-applicable') return false;

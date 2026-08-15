@@ -479,6 +479,7 @@ const App = (() => {
   function setWorkspace(id) {
     activeWorkspace = id;
     activeSubproject = null;
+    dropOutOfScopeSelections();
     saveNav();
     closeAllMenus();
     render();
@@ -486,8 +487,23 @@ const App = (() => {
 
   function setSubproject(id) {
     activeSubproject = (activeSubproject === id) ? null : id;
+    dropOutOfScopeSelections();
     saveNav();
     render();
+  }
+
+  // Selections made inside one scope are meaningless in another. A habit
+  // opened in the previous workspace would otherwise keep the Habits page on
+  // its detail view — showing a habit the newly scoped list does not contain.
+  function dropOutOfScopeSelections() {
+    if (selectedHabit) {
+      const h = State.getEntry(selectedHabit);
+      if (!h || !inScope(h)) selectedHabit = null;
+    }
+    if (selectedEntryId) {
+      const e = State.getEntry(selectedEntryId);
+      if (!e || !inScope(e)) selectedEntryId = null;
+    }
   }
 
   // ── Sub-project visibility ─────────────────────────────────────────────
@@ -801,7 +817,15 @@ const App = (() => {
     const doneToday = tasks.filter(finishedToday).length;
 
     const todayEmotion = State.getTodayEmotion();
+    // Sessions are logged against entries, so they scope the same way the
+    // counts beside them do. A session with no entry (a bare timer) has no
+    // project to judge, so it only counts when nothing is scoped.
     const focusSeconds = State.getLogs({ type: 'time_session', date: today })
+      .filter(l => {
+        if (!scoped) return true;
+        const e = l.entryId ? State.getEntry(l.entryId) : null;
+        return e ? inScope(e) : false;
+      })
       .reduce((s, l) => s + (l.value || 0), 0);
 
     let html = `
@@ -1884,7 +1908,14 @@ const App = (() => {
     const doneToday = entries.filter(finishedToday);
     const doneEarlier = entries.filter(e => e.completed && e.type !== 'habit' && !finishedToday(e));
 
-    const usedTags = [...new Set(entries.flatMap(e => e.tags || []))];
+    // Derived from the UNFILTERED set, plus the active tag: computing this
+    // from `entries` (already narrowed by that very tag) made the selector
+    // vanish the moment the filter matched nothing, stranding the page on an
+    // empty view with no way back to "Any tag".
+    const usedTags = [...new Set([
+      ...all.flatMap(e => e.tags || []),
+      ...(tagFilter ? [tagFilter] : []),
+    ])];
     const subs = proj ? workspaceSubprojects(proj.id).map(sp => ({ sp, a: subprojectActivity(sp) })) : [];
     const liveSubs = subs.filter(x => x.a.live);
     const settledSubs = subs.filter(x => !x.a.live);
@@ -5051,15 +5082,20 @@ const App = (() => {
   // ═══════════════════════════════════════════════════════════
   // DAILY REVIEW — one-tap triage of everything that slipped
   // ═══════════════════════════════════════════════════════════
+  // The Today button's badge counts overdue work IN SCOPE, so the modal it
+  // opens has to work on that same set — otherwise a badge reading "3" for
+  // one workspace opens a triage list spanning all of them.
   function reviewPool() {
     const today = State.todayStr();
-    return State.getEntries()
+    return scopedEntries()
       .filter(e => (e.type === 'task' || e.type === 'reminder') && !e.completed && e.dueDate && e.dueDate < today)
       .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
   }
 
   function openDailyReview() {
-    showModal('Daily Review', `
+    const scopeNote = (activeWorkspace !== WS_ALL || activeSubproject)
+      ? ` — ${scopeLabel()}` : '';
+    showModal('Daily Review' + scopeNote, `
       <p class="text-xs text-muted" style="margin-bottom:var(--space-3);">
         Everything overdue, one decision each: reschedule it, park it, finish it, or let it go.
       </p>
@@ -5115,7 +5151,10 @@ const App = (() => {
       case 'tomorrow': State.updateEntry(id, { dueDate: offsetDateStr(1) }); break;
       case 'nextweek': State.updateEntry(id, { dueDate: offsetDateStr(7) }); break;
       case 'someday': State.updateEntry(id, { dueDate: null }); break;
-      case 'done': State.toggleComplete(id); celebrate(); break;
+      // Through toggleEntry, not State directly: that is where the Cade.txt
+      // write-through lives, and a checkbox ticked here must reach the room
+      // like any other completion.
+      case 'done': toggleEntry(id); break;
       case 'drop': State.deleteEntry(id); break;
     }
     render();
@@ -5655,6 +5694,13 @@ const App = (() => {
       if (after?.recurrence && after.spawnedNextId) {
         const next = State.getEntry(after.spawnedNextId);
         if (next?.dueDate) toast(`Done — repeats ${after.recurrence.type}, next ${formatDueDate(next.dueDate)}`);
+        // The spawned occurrence is a brand-new entry with no link of its
+        // own. Scans find bridged tasks by their link, so without pushing it
+        // the next occurrence would exist only here — the room would show the
+        // series stopping at the one just ticked.
+        if (next && next.txtRoom == null && typeof Bridge !== 'undefined') {
+          Bridge.pushNewTask(next).catch(() => {});
+        }
       }
       // dependency chain: announce what this completion freed up
       const freed = State.getEntries({ type: 'task', completed: false })
