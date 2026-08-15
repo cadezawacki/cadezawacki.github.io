@@ -227,6 +227,13 @@ const Sync = (() => {
           onReconnect();
         } else if (!isLive) {
           connected = false;
+          // Losing the connection invalidates the reconcile: the server can
+          // move while we are away, so the next onReconnect() has to compare
+          // again before anything is published. Without this the flag stays
+          // true across the drop, and an edit made while the reconnect fetch
+          // is still in flight pushes straight over newer server data — the
+          // race the flag exists to prevent.
+          reconciled = false;
         }
         updateStatus();
       });

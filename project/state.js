@@ -2,6 +2,20 @@
    STATE — Data model, persistence, CRUD
    ═══════════════════════════════════════════════════════════════ */
 
+// Shared HTML escaper. Every module here builds markup as strings and
+// assigns it to innerHTML, so free text — titles, project names, notes —
+// has to pass through this on the way. Defined in the first script so
+// app.js, charts.js and timers.js can all reach it.
+// Quotes included: much of this text lands inside title="…" attributes.
+window.escapeHtml = function escapeHtml(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+};
+
 const State = (() => {
   const STORAGE_KEY = 'cade.project.v1';
   // Sync credentials live in their OWN tiny key, never inside the main blob.
@@ -71,9 +85,13 @@ const State = (() => {
       try { return _ls.getItem(k); }
       catch (e) { return memoryStore[k] || null; }
     },
+    // Returns whether the value reached DURABLE storage. The in-memory
+    // fallback keeps this tab working, but it dies with the tab — callers
+    // have to be able to tell the difference, or a quota failure looks
+    // exactly like a successful save right up until the next reload.
     setItem(k, v) {
-      try { _ls.setItem(k, v); }
-      catch (e) { memoryStore[k] = v; }
+      try { _ls.setItem(k, v); return true; }
+      catch (e) { memoryStore[k] = v; return false; }
     },
     removeItem(k) {
       try { _ls.removeItem(k); }
@@ -191,17 +209,18 @@ const State = (() => {
     // The blob is only replaced once we hold real data again (setRawData from
     // sync/import) or the user explicitly resets.
     if (loadFailed) return;
+    let durable = false;
     try {
-      storage.setItem(STORAGE_KEY, JSON.stringify(data));
-      saveFailed = false;
+      durable = storage.setItem(STORAGE_KEY, JSON.stringify(data));
     } catch (e) {
-      console.error('Save error:', e);
-      if (!saveFailed) {
-        saveFailed = true;
-        // Silent degradation to an in-memory store is how edits "randomly"
-        // vanished on the next reload. Say so, once per failure streak.
-        try { window.dispatchEvent(new CustomEvent('state-save-failed')); } catch (_) {}
-      }
+      console.error('Save error:', e); // e.g. a value that won't serialize
+    }
+    if (durable) { saveFailed = false; return; }
+    // Silent degradation to an in-memory store is how edits "randomly"
+    // vanished on the next reload. Say so, once per failure streak.
+    if (!saveFailed) {
+      saveFailed = true;
+      try { window.dispatchEvent(new CustomEvent('state-save-failed')); } catch (_) {}
     }
   }
 

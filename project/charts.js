@@ -860,7 +860,7 @@ const Charts = (() => {
       const color = b.color || proj?.color || '#0f9598';
       if (proj) legendProjects.set(proj.id, proj);
       html += `<div class="timeline-block" style="left:${s / DAY * 100}%;width:${(e - s) / DAY * 100}%;background:${color};${b.kind === 'agenda' ? 'opacity:0.55;' : ''}"
-        title="${b.title} · ${b.start}–${b.end}${b.kind === 'tracked' ? ' (tracked)' : ''}"></div>`;
+        title="${window.escapeHtml(b.title)} · ${b.start}–${b.end}${b.kind === 'tracked' ? ' (tracked)' : ''}"></div>`;
     });
 
     const markerEmoji = { calorie: '🍽', quick: '⭐', checkin: '📝' };
@@ -882,7 +882,7 @@ const Charts = (() => {
     // Legend
     html += '<div class="timeline-legend">';
     legendProjects.forEach(p => {
-      html += `<span class="tl-item"><span class="proj-dot" style="background:${p.color}"></span>${p.name}</span>`;
+      html += `<span class="tl-item"><span class="proj-dot" style="background:${p.color}"></span>${window.escapeHtml(p.name)}</span>`;
     });
     html += `<span class="tl-item"><span style="display:inline-block;width:14px;height:8px;border-radius:2px;background:var(--accent);"></span>tracked</span>`;
     html += `<span class="tl-item"><span style="display:inline-block;width:14px;height:8px;border-radius:2px;background:var(--accent);opacity:0.55;"></span>agenda</span>`;

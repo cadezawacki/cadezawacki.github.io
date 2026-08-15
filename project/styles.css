@@ -3320,3 +3320,7 @@ textarea.input-grow,
 .diff-chip.local { color: var(--success); }
 .diff-chip.server { color: var(--hl-blue); }
 .diff-chip.changed { color: var(--hl-orange); }
+
+/* A nested room in the strip carries its parent's name — depth can't be
+   shown by indentation in a single horizontal row. */
+.sub-tab .sub-parent { color: var(--text-faint); }

@@ -21,9 +21,16 @@ const App = (() => {
     return `<i data-lucide="${name}" style="width:${size}px;height:${size}px"></i>`;
   }
 
-  function escHtml(s) {
-    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  }
+  // Every view here builds HTML strings and assigns them to innerHTML, so
+  // any free text — titles, project names, tags, notes — has to come through
+  // this first. Quotes are escaped too: plenty of these land inside
+  // attributes (title="…"), where &lt;/&gt; alone would not save us.
+  //
+  // This matters more than it used to. Task titles now arrive from Cade.txt
+  // documents, which sync between devices — so an unescaped title is not
+  // just a user typing at themselves, it is content crossing a trust
+  // boundary into this origin, where the encryption keys live.
+  const escHtml = window.escapeHtml;
 
   // Single-line-style textareas wrap + grow instead of scrolling sideways.
   // Modern browsers do it in CSS (field-sizing: content); this is the
@@ -490,9 +497,23 @@ const App = (() => {
     return { open, doneToday, total: entries.length, live: open > 0 || doneToday > 0 || fresh };
   }
 
+  // EVERY descendant, depth-first, not just direct children — projects can
+  // still be nested arbitrarily deep from the project editor, and a
+  // grandchild that only its parent could reach would be stranded: its tasks
+  // roll up into the ancestor's totals with no way to open it.
+  // `depth` is relative to the workspace, for indenting.
   function workspaceSubprojects(wsId) {
     if (wsId === WS_ALL || wsId === WS_UNFILED) return [];
-    return State.getProjects().filter(p => p.parentId === wsId);
+    const all = State.getProjects();
+    const out = [];
+    const walk = (parentId, depth) => {
+      all.filter(p => p.parentId === parentId).forEach(p => {
+        out.push({ ...p, depth });
+        walk(p.id, depth + 1);
+      });
+    };
+    walk(wsId, 0);
+    return out;
   }
 
   // ── Rendering the chrome ───────────────────────────────────────────────
@@ -591,10 +612,13 @@ const App = (() => {
     let html = `<span class="sub-tabs-label">Rooms</span>
       <button class="sub-tab ${!activeSubproject ? 'active' : ''}" onclick="App.setSubproject(null)">All</button>`;
     visible.forEach(({ p, a }) => {
+      // Indentation is meaningless in a horizontal strip, so a nested room
+      // shows its parent's name instead of losing its place in the tree.
+      const parent = p.depth ? State.getProject(p.parentId) : null;
       html += `<button class="sub-tab ${activeSubproject === p.id ? 'active' : ''} ${a.live ? '' : 'settled'}"
         onclick="App.setSubproject('${p.id}')"
-        title="${escHtml(p.name)}${p.txtRoom ? ' — Cade.txt room' : ''}${a.live ? '' : ' — nothing left to do'}">
-        <span>${escHtml(p.name)}</span>
+        title="${escHtml(parent ? parent.name + ' / ' + p.name : p.name)}${p.txtRoom ? ' — Cade.txt room' : ''}${a.live ? '' : ' — nothing left to do'}">
+        ${parent ? `<span class="sub-parent">${escHtml(parent.name)}/</span>` : ''}<span>${escHtml(p.name)}</span>
         <span class="sub-count">${a.open || a.doneToday}</span>
       </button>`;
     });
@@ -993,7 +1017,7 @@ const App = (() => {
         style="top:${top}px;height:${Math.max(height, 16)}px;left:calc(var(--gutter) + 4px + ${leftPct}% - ${leftPct / 100} * (var(--gutter) + 8px));right:auto;width:calc(${widthPct}% - ${widthPct / 100} * (var(--gutter) + 8px) - 2px);border-left-color:${color};background:color-mix(in srgb, ${color} 12%, var(--surface));pointer-events:auto;"
         onpointerdown="App.blockPointerDown(event,'${b.id}')"
         title="${b.title} · ${b.start}–${b.end} — tap to edit, drag to move, pull the bottom edge to resize">
-        <div class="pb-title">${overdue ? '⚠ ' : ''}${b.title}</div>
+        <div class="pb-title">${overdue ? '⚠ ' : ''}${escHtml(b.title)}</div>
         ${height >= 30 ? `<div class="pb-time">${b.start}–${b.end} · ${estimateLabel(dur)}</div>` : ''}
         <div class="pb-resize" aria-hidden="true"></div>
       </div>`;
@@ -1213,7 +1237,7 @@ const App = (() => {
           <label class="form-label">Project (color)</label>
           <select class="form-select" id="agendaProject">
             <option value="">None</option>
-            ${projects.map(p => `<option value="${p.id}" ${block?.projectId === p.id ? 'selected' : ''}>${p.name}</option>`).join('')}
+            ${projects.map(p => `<option value="${p.id}" ${block?.projectId === p.id ? 'selected' : ''}>${escHtml(p.name)}</option>`).join('')}
           </select>
         </div>
       </div>
@@ -1232,7 +1256,7 @@ const App = (() => {
         <select class="form-select" id="agendaEntry">
           <option value="">None</option>
           ${State.getEntries({ type: 'task' }).filter(t => !t.completed || t.id === block?.entryId).map(t =>
-            `<option value="${t.id}" ${block?.entryId === t.id ? 'selected' : ''}>${t.title}</option>`).join('')}
+            `<option value="${t.id}" ${block?.entryId === t.id ? 'selected' : ''}>${escHtml(t.title)}</option>`).join('')}
         </select>
       </div>
       <div class="form-group">
@@ -1440,13 +1464,13 @@ const App = (() => {
     }
     const blocker = blockingEntry(entry);
     if (blocker) {
-      metaHtml += `<span class="pill pill-blocked" title="Blocked until “${blocker.title}” is done">${icon('lock', 10)}${blocker.title}</span>`;
+      metaHtml += `<span class="pill pill-blocked" title="Blocked until “${escHtml(blocker.title)}” is done">${icon('lock', 10)}${escHtml(blocker.title)}</span>`;
     }
     if (entry.tags && entry.tags.length > 0) {
       entry.tags.forEach(tag => {
         const tagObj = State.getAllTags().find(t => t.name === tag);
         const colorCls = tagObj ? `pill-${tagObj.color}` : 'pill-gray';
-        metaHtml += `<span class="pill ${colorCls}">#${tag}</span>`;
+        metaHtml += `<span class="pill ${colorCls}">#${escHtml(tag)}</span>`;
       });
     }
     if (entry.type === 'habit' && streakInfo) {
@@ -1471,7 +1495,7 @@ const App = (() => {
           <i data-lucide="check"></i>
         </div>
         <div class="entry-body">
-          <div class="entry-title">${entry.title}</div>
+          <div class="entry-title">${escHtml(entry.title)}</div>
           ${metaHtml ? `<div class="entry-meta">${metaHtml}</div>` : ''}
           ${entry.type === 'goal' && entry.targetValue ? `
             <div class="progress-bar mt-2">
@@ -1555,7 +1579,7 @@ const App = (() => {
         <div style="display:flex;align-items:flex-start;gap:var(--space-3);">
           <button class="btn btn-secondary btn-sm" onclick="App.backFromTaskPage()" style="margin-top:2px;">${icon('arrow-left', 14)}Back</button>
           <div>
-            <h1 class="page-title" style="${entry.completed ? 'text-decoration:line-through;color:var(--text-muted);' : ''}">${entry.title}</h1>
+            <h1 class="page-title" style="${entry.completed ? 'text-decoration:line-through;color:var(--text-muted);' : ''}">${escHtml(entry.title)}</h1>
             <div class="entry-meta" style="margin-top:var(--space-2);">${metaHtml}</div>
           </div>
         </div>
@@ -1564,7 +1588,7 @@ const App = (() => {
           <button class="btn ${entry.completed ? 'btn-secondary' : 'btn-primary'}" onclick="App.toggleEntry('${entry.id}')">${icon('check', 14)}${entry.completed ? 'Reopen' : 'Complete'}</button>
         </div>
       </div>
-      ${entry.description ? `<p class="text-sm text-muted" style="margin-bottom:var(--space-4);max-width:70ch;">${entry.description}</p>` : ''}
+      ${entry.description ? `<p class="text-sm text-muted" style="margin-bottom:var(--space-4);max-width:70ch;">${escHtml(entry.description)}</p>` : ''}
     `;
 
     // Sticky timer strip
@@ -1816,7 +1840,8 @@ const App = (() => {
             <div class="progress-fill" style="width:${entries.length > 0 ? done / entries.length * 100 : 0}%;background:${p.color};"></div>
           </div>
           ${liveSubs.length ? `<div class="subproj-list">${liveSubs.map(({ sp, a }) => `
-            <div class="subproj-row" onclick="event.stopPropagation();App.openSubproject('${p.id}','${sp.id}')">
+            <div class="subproj-row" style="padding-left:${(sp.depth || 0) * 14}px"
+              onclick="event.stopPropagation();App.openSubproject('${p.id}','${sp.id}')">
               <span class="proj-dot" style="background:${sp.color}"></span>
               <span class="truncate" style="flex:1;">${escHtml(sp.name)}</span>
               <span class="project-stat">${a.open ? a.open + ' open' : a.doneToday + ' done today'}</span>
@@ -1897,7 +1922,8 @@ const App = (() => {
         ${shown.length === 0
           ? `<p class="text-xs text-faint">Every sub-project here is finished.</p>`
           : `<div class="subproj-grid">${shown.map(({ sp, a }) => `
-              <button class="subproj-tile ${a.live ? '' : 'settled'}" onclick="App.setSubproject('${sp.id}')">
+              <button class="subproj-tile ${a.live ? '' : 'settled'}"
+                style="margin-left:${(sp.depth || 0) * 14}px" onclick="App.setSubproject('${sp.id}')">
                 <span class="proj-dot" style="background:${sp.color}"></span>
                 <span class="truncate">${escHtml(sp.name)}</span>
                 <span class="project-stat">${a.open ? a.open + ' open' : (a.doneToday ? a.doneToday + ' done today' : 'clear')}</span>
@@ -2163,8 +2189,8 @@ const App = (() => {
 
       html += `<div style="display:flex;align-items:center;gap:var(--space-3);margin-bottom:var(--space-3);">
         <div style="width:120px;flex-shrink:0;cursor:pointer;" onclick="App.selectHabit('${h.id}')">
-          <div class="text-sm" style="font-weight:500;color:${selectedHabit === h.id ? 'var(--accent-text)' : 'inherit'};">${h.title}</div>
-          ${proj ? `<div class="text-xs" style="color:${proj.color}">${proj.name}</div>` : ''}
+          <div class="text-sm" style="font-weight:500;color:${selectedHabit === h.id ? 'var(--accent-text)' : 'inherit'};">${escHtml(h.title)}</div>
+          ${proj ? `<div class="text-xs" style="color:${proj.color}">${escHtml(proj.name)}</div>` : ''}
           ${dow?.length ? `<div class="text-xs text-faint">${dow.map(d => 'SMTWTFS'[d]).join('·')}</div>` : ''}
         </div>
         <div class="habit-grid">`;
@@ -2411,7 +2437,7 @@ const App = (() => {
         ${top.length ? `<div class="digest-projects">
           ${top.map(x => `<div class="digest-proj-row">
             <span class="proj-dot" style="background:${x.p.color}"></span>
-            <span class="digest-proj-name truncate">${x.p.name}</span>
+            <span class="digest-proj-name truncate">${escHtml(x.p.name)}</span>
             <div class="digest-bar-track"><div class="digest-bar" style="width:${Math.round(x.min / maxMin * 100)}%;background:${x.p.color};"></div></div>
             <span class="text-xs font-mono text-muted">${fmtMin(x.min)}</span>
           </div>`).join('')}
@@ -2453,11 +2479,11 @@ const App = (() => {
       <button class="filter-chip ${!insightsProject ? 'active' : ''}" onclick="App.setInsightsProject(null)">All Projects</button>
       ${projects.map(p => `
         <button class="filter-chip ${insightsProject === p.id ? 'active' : ''}" onclick="App.setInsightsProject('${p.id}')">
-          <span class="proj-dot" style="background:${p.color}"></span>${p.name}
+          <span class="proj-dot" style="background:${p.color}"></span>${escHtml(p.name)}
         </button>`).join('')}
       <select class="form-select" style="width:auto;max-width:220px;padding:var(--space-1) var(--space-2);font-size:var(--text-xs);" onchange="App.setInsightsEntry(this.value || null)">
         <option value="">All items</option>
-        ${filterableEntries.map(t => `<option value="${t.id}" ${insightsEntry === t.id ? 'selected' : ''}>[${t.type}] ${t.title}</option>`).join('')}
+        ${filterableEntries.map(t => `<option value="${t.id}" ${insightsEntry === t.id ? 'selected' : ''}>[${t.type}] ${escHtml(t.title)}</option>`).join('')}
       </select>
     </div>`;
 
@@ -2679,10 +2705,10 @@ const App = (() => {
         const score = taskScore(t);
         return `<div class="q-item ${t.completed ? 'completed' : ''} ${t.priority === 'urgent' ? 'urgent' : ''}" draggable="true" data-id="${t.id}"
           ondragstart="App.qDragStart(event,'${t.id}')" ondragend="App.qDragEnd(event)"
-          onclick="App.qItemClick(event,'${t.id}')" ondblclick="App.openTaskPage('${t.id}')" title="${t.title} · score ${score}">
+          onclick="App.qItemClick(event,'${t.id}')" ondblclick="App.openTaskPage('${t.id}')" title="${escHtml(t.title)} · score ${score}">
           <span class="q-handle">⠿</span>
           ${multiProject && proj ? `<span class="proj-dot" style="background:${proj.color}"></span>` : ''}
-          <span class="q-title">${t.title}</span>
+          <span class="q-title">${escHtml(t.title)}</span>
           ${t.estimateMinutes ? `<span class="q-est">${estimateLabel(t.estimateMinutes)}</span>` : ''}
           <span class="q-score" title="Next-best score">${score}</span>
           <span class="q-actions">
@@ -2893,7 +2919,7 @@ const App = (() => {
         ${shortcuts.length > 0 ? `<div class="shortcut-chips" style="margin-bottom:var(--space-3);">
           ${shortcuts.map(s => `
             <button class="shortcut-chip" id="sc-${s.id}" onclick="App.useShortcutHealth('${s.id}')">
-              <span>${s.emoji}</span><span>${s.label}</span><span class="sc-cal">${s.calories} cal</span>
+              <span>${s.emoji}</span><span>${escHtml(s.label)}</span><span class="sc-cal">${s.calories} cal</span>
             </button>`).join('')}
         </div>` : ''}
         <div class="grid-2">
@@ -2960,7 +2986,7 @@ const App = (() => {
         html += `<div class="food-row">
           <span class="done-time">${logTimeOf(l)}</span>
           <span class="pill">${l.meal || 'snack'}</span>
-          <span class="truncate" style="flex:1;">${l.emoji ? l.emoji + ' ' : ''}${l.notes || 'Food'}</span>
+          <span class="truncate" style="flex:1;">${l.emoji ? l.emoji + ' ' : ''}${escHtml(l.notes || 'Food')}</span>
           ${macros ? `<span class="food-macros">${macros}</span>` : ''}
           <span class="font-mono text-xs" style="color:var(--accent-text);flex-shrink:0;">${l.value ? `${l.value} cal` : '—'}</span>
           <button class="icon-btn" onclick="App.deleteFoodLog('${l.id}')" aria-label="Delete">${icon('trash-2', 14)}</button>
@@ -3082,7 +3108,7 @@ const App = (() => {
           <span class="done-time">${r.time}</span>
           ${icon(kindIcons[r.kind], 14)}
           <span class="proj-dot" style="background:${proj?.color || 'var(--text-faint)'}"></span>
-          <span class="truncate" style="flex:1">${r.title}</span>
+          <span class="truncate" style="flex:1">${escHtml(r.title)}</span>
           ${r.kind === 'task' ? `<button class="icon-btn" onclick="App.toggleEntry('${r.entry.id}')" aria-label="Un-complete" title="Mark as not done">${icon('undo-2', 14)}</button>` : ''}
           ${r.kind === 'time' ? `<button class="icon-btn" onclick="App.deleteHistoryLog('${r.logId}')" aria-label="Delete" title="Delete this time log">${icon('trash-2', 14)}</button>` : ''}
         </div>`;
@@ -3128,7 +3154,7 @@ const App = (() => {
         const proj = e.projectId ? State.getProject(e.projectId) : null;
         html += `<div class="done-row">
           <span class="proj-dot" style="background:${proj?.color || 'var(--text-faint)'}"></span>
-          <span class="truncate" style="flex:1;${e.completed ? 'text-decoration:line-through;color:var(--text-muted);' : ''}">${e.title}</span>
+          <span class="truncate" style="flex:1;${e.completed ? 'text-decoration:line-through;color:var(--text-muted);' : ''}">${escHtml(e.title)}</span>
           <span class="pill">${e.type}</span>
           <button class="icon-btn" onclick="App.unarchiveEntry('${e.id}')" aria-label="Restore" title="Restore">${icon('archive-restore', 15)}</button>
           <button class="icon-btn" onclick="App.deleteEntry('${e.id}')" aria-label="Delete forever" title="Delete forever">${icon('trash-2', 15)}</button>
@@ -3145,15 +3171,15 @@ const App = (() => {
     switch (l.type) {
       case 'calorie': {
         const macros = [l.protein ? `${l.protein}P` : '', l.carbs ? `${l.carbs}C` : '', l.fat ? `${l.fat}F` : ''].filter(Boolean).join('/');
-        return `${l.emoji || '🍽'} ${l.notes || 'Food'}${l.value ? ` · ${l.value} cal` : ''} (${l.meal || 'snack'})${macros ? ` · ${macros}` : ''}`;
+        return `${escHtml(l.emoji || '🍽')} ${escHtml(l.notes || 'Food')}${l.value ? ` · ${l.value} cal` : ''} (${escHtml(l.meal || 'snack')})${macros ? ` · ${macros}` : ''}`;
       }
-      case 'quick': return `${l.emoji || '⭐'} ${l.notes || 'Quick log'}`;
+      case 'quick': return `${escHtml(l.emoji || '⭐')} ${escHtml(l.notes || 'Quick log')}`;
       case 'checkin':
-        return `Check-in ${l.emotion ? moodIc(l.emotion) : ''}${l.energy ? ` energy ${l.energy}/5` : ''}${l.notes ? ` · ${l.notes}` : ''}`;
-      case 'emotion': return `${moodIc(l.emotion)} Day mood: ${l.emotion}`;
+        return `Check-in ${l.emotion ? moodIc(l.emotion) : ''}${l.energy ? ` energy ${l.energy}/5` : ''}${l.notes ? ` · ${escHtml(l.notes)}` : ''}`;
+      case 'emotion': return `${moodIc(l.emotion)} Day mood: ${escHtml(l.emotion)}`;
       case 'wake': return `${icon('sunrise', 13)} Woke up`;
       case 'sleep': return `${icon('moon', 13)} Bedtime`;
-      default: return l.type;
+      default: return escHtml(l.type);
     }
   }
 
@@ -3519,7 +3545,7 @@ const App = (() => {
               data-filter-text="${p.name.toLowerCase()}"
               style="--chip-color:${p.color};${p.depth ? `margin-left:${p.depth * 10}px;` : ''}"
               onclick="App.toggleFormProject('${p.id}')">
-              <span class="proj-dot" style="background:${p.color}"></span>${p.name}
+              <span class="proj-dot" style="background:${p.color}"></span>${escHtml(p.name)}
             </button>`).join('')}
         </div>
       </div>`;
@@ -3580,7 +3606,7 @@ const App = (() => {
             <option value="">Nothing — ready to work on</option>
             ${State.getEntries({ type: 'task', completed: false })
               .filter(t => t.id !== entry.id && !(t.blockedBy || []).includes(entry.id))
-              .map(t => `<option value="${t.id}" ${(entry.blockedBy || [])[0] === t.id ? 'selected' : ''}>${t.title}</option>`).join('')}
+              .map(t => `<option value="${t.id}" ${(entry.blockedBy || [])[0] === t.id ? 'selected' : ''}>${escHtml(t.title)}</option>`).join('')}
           </select>
         </div>`;
     } else if (type === 'goal') {
@@ -3671,7 +3697,7 @@ const App = (() => {
 
       <div class="form-group">
         <label class="form-label">Description</label>
-        <textarea class="form-textarea" id="entryDescription" placeholder="Add details...">${entry.description || ''}</textarea>
+        <textarea class="form-textarea" id="entryDescription" placeholder="Add details...">${escHtml(entry.description || '')}</textarea>
       </div>
 
       ${projectChips}
@@ -3694,15 +3720,18 @@ const App = (() => {
     const many = suggestTags.length > 10;
     return `
       <div style="display:flex;flex-wrap:wrap;gap:var(--space-2);margin-bottom:var(--space-2);">
-        ${currentTags.map(t => {
+        ${currentTags.map((t, i) => {
           const tagObj = tags.find(tg => tg.name === t);
           const colorCls = tagObj ? `pill-${tagObj.color}` : 'pill-gray';
-          return `<span class="pill ${colorCls}">#${t}<button onclick="App.removeTag('${t}')" style="margin-left:4px;background:none;border:none;color:inherit;cursor:pointer;font-size:14px;line-height:1;">×</button></span>`;
+          // Position, not the tag text, goes into the handler. A name
+          // interpolated into onclick="…('NAME')" is a JS string literal a
+          // quote can break out of — HTML-escaping alone does not close that.
+          return `<span class="pill ${colorCls}">#${escHtml(t)}<button onclick="App.removeTagAt(${i})" style="margin-left:4px;background:none;border:none;color:inherit;cursor:pointer;font-size:14px;line-height:1;">×</button></span>`;
         }).join('')}
       </div>
       <input type="text" class="form-input" id="entryTagInput" placeholder="Type a tag and press Enter" onkeydown="if(event.key==='Enter'){event.preventDefault();App.addTag(this.value);this.value='';}">
       ${suggestTags.length > 0 ? `<div class="${many ? 'chip-scroll' : ''}" style="display:flex;flex-wrap:wrap;gap:var(--space-1);margin-top:var(--space-2);">
-        ${suggestTags.map(t => `<button class="pill pill-${t.color}" style="cursor:pointer;" onclick="App.addTag('${t.name}')">#${t.name}</button>`).join('')}
+        ${suggestTags.map(t => `<button class="pill pill-${t.color}" style="cursor:pointer;" onclick="App.addTagById('${t.id}')">#${escHtml(t.name)}</button>`).join('')}
       </div>` : ''}
     `;
   }
@@ -3790,6 +3819,18 @@ const App = (() => {
   function removeTag(tagName) {
     currentTags = currentTags.filter(t => t !== tagName);
     refreshTagDisplay();
+  }
+
+  // Index- and id-based entry points, so no tag text ever has to survive a
+  // trip through an inline event-handler attribute.
+  function removeTagAt(i) {
+    currentTags = currentTags.filter((_, idx) => idx !== i);
+    refreshTagDisplay();
+  }
+
+  function addTagById(id) {
+    const tag = State.getAllTags().find(t => t.id === id);
+    if (tag) addTag(tag.name);
   }
 
   // Touch ONLY the tags block — everything else the user typed stays put
@@ -3883,7 +3924,7 @@ const App = (() => {
   let editingProjectId = null;
 
   function projectLabel(p) {
-    return `${'– '.repeat(p.depth || 0)}${p.name}`;
+    return `${'– '.repeat(p.depth || 0)}${escHtml(p.name)}`;
   }
 
   function openProjectModal(id = null) {
@@ -4013,7 +4054,7 @@ const App = (() => {
           <div class="chain-link" style="justify-content:space-between;cursor:pointer;${p.depth ? `margin-left:${p.depth * 18}px;` : ''}" onclick="App.openProjectModal('${p.id}')">
             <span style="display:inline-flex;align-items:center;gap:var(--space-2);">
               ${p.depth ? `<span class="text-faint" style="font-family:var(--font-mono);">└</span>` : ''}
-              <span class="proj-dot" style="background:${p.color}"></span>${p.name}
+              <span class="proj-dot" style="background:${p.color}"></span>${escHtml(p.name)}
             </span>
             <span class="text-xs text-faint">edit ›</span>
           </div>`).join('')}
@@ -4025,7 +4066,7 @@ const App = (() => {
           ${archived.map(p => `
             <div class="chain-link" style="justify-content:space-between;opacity:0.7;">
               <span style="display:inline-flex;align-items:center;gap:var(--space-2);">
-                <span class="proj-dot" style="background:${p.color}"></span>${p.name}
+                <span class="proj-dot" style="background:${p.color}"></span>${escHtml(p.name)}
               </span>
               <span>
                 <button class="icon-btn" onclick="App.unarchiveProjectAction('${p.id}')" aria-label="Restore" title="Restore">${icon('archive-restore', 15)}</button>
@@ -4330,7 +4371,7 @@ const App = (() => {
           <div class="shortcut-chips" id="shortcutChips">
             ${shortcuts.map(s => `
               <button class="shortcut-chip" id="sc-${s.id}" onclick="App.useShortcut('${s.id}')">
-                <span>${s.emoji}</span><span>${s.label}</span>
+                <span>${s.emoji}</span><span>${escHtml(s.label)}</span>
                 ${s.calories ? `<span class="sc-cal">${s.calories} cal</span>` : ''}
               </button>`).join('')}
             ${shortcuts.length === 0 ? '<p class="text-xs text-faint">No shortcuts yet — add coffee, water, or saved meals via Manage.</p>' : ''}
@@ -4525,7 +4566,7 @@ const App = (() => {
       <div style="display:flex;flex-direction:column;gap:var(--space-2);margin-bottom:var(--space-4);" id="shortcutManageList">
         ${shortcuts.length === 0 ? '<p class="text-xs text-faint">No shortcuts yet.</p>' : shortcuts.map(s => `
           <div class="chain-link" style="justify-content:space-between;">
-            <span>${s.emoji} ${s.label}${s.calories ? ` <span class="text-xs text-faint">· ${s.calories} cal (${s.meal || 'snack'})</span>` : ''}</span>
+            <span>${s.emoji} ${escHtml(s.label)}${s.calories ? ` <span class="text-xs text-faint">· ${s.calories} cal (${s.meal || 'snack'})</span>` : ''}</span>
             <button class="icon-btn" onclick="App.deleteShortcut('${s.id}')" aria-label="Remove">${icon('trash-2', 14)}</button>
           </div>`).join('')}
       </div>
@@ -4590,7 +4631,7 @@ const App = (() => {
             <input type="text" class="form-input" value="${t.name}" onchange="App.renameTag('${t.id}', this.value)" aria-label="Tag name">
             <select class="form-select" onchange="App.setTagProject('${t.id}', this.value || null)" aria-label="Tag scope">
               <option value="">Global</option>
-              ${projects.map(p => `<option value="${p.id}" ${t.projectId === p.id ? 'selected' : ''}>${p.name}</option>`).join('')}
+              ${projects.map(p => `<option value="${p.id}" ${t.projectId === p.id ? 'selected' : ''}>${escHtml(p.name)}</option>`).join('')}
             </select>
             <span class="tag-usage" title="Entries using this tag">×${State.tagUsageCount(t.id)}</span>
             <button class="icon-btn" onclick="App.deleteTagPrompt('${t.id}')" aria-label="Delete tag">${icon('trash-2', 14)}</button>
@@ -4872,7 +4913,7 @@ const App = (() => {
     ac.style.display = 'flex';
     ac.innerHTML = matches.map((p, i) => `
       <button class="scratch-ac-item ${i === 0 ? 'active' : ''}" onclick="App.scratchAcPick('${p.id}')">
-        <span class="proj-dot" style="background:${p.color}"></span>${p.name}
+        <span class="proj-dot" style="background:${p.color}"></span>${escHtml(p.name)}
       </button>`).join('');
   }
 
@@ -5006,7 +5047,7 @@ const App = (() => {
         return `<div class="review-row" data-id="${e.id}">
           <span class="proj-dot" style="background:${proj?.color || 'var(--text-faint)'}"></span>
           <div class="review-main">
-            <span class="review-title">${e.title}</span>
+            <span class="review-title">${escHtml(e.title)}</span>
             <span class="text-xs" style="color:var(--error);">${formatDueDate(e.dueDate)}</span>
           </div>
           <div class="review-actions">
@@ -5144,7 +5185,7 @@ const App = (() => {
           return `<div class="autoplan-row">
             <span class="font-mono text-xs autoplan-time">${minToTime(p.start)}–${minToTime(p.end)}</span>
             <span class="proj-dot" style="background:${proj?.color || 'var(--accent)'}"></span>
-            <span class="truncate" style="flex:1;">${p.task.title}</span>
+            <span class="truncate" style="flex:1;">${escHtml(p.task.title)}</span>
             <span class="pill">${estimateLabel(p.end - p.start)}</span>
           </div>`;
         }).join('')}
@@ -5166,7 +5207,7 @@ const App = (() => {
           <label class="form-label">Project</label>
           <select class="form-select" id="apProject" onchange="App.renderAutoPlanPreview()">
             <option value="">All projects</option>
-            ${projects.map(p => `<option value="${p.id}">${'– '.repeat(p.depth || 0)}${p.name}</option>`).join('')}
+            ${projects.map(p => `<option value="${p.id}">${'– '.repeat(p.depth || 0)}${escHtml(p.name)}</option>`).join('')}
           </select>
         </div>
         <div class="form-group">
@@ -5254,7 +5295,7 @@ const App = (() => {
       <p class="text-xs text-muted" style="margin-bottom:var(--space-2);">
         One item per line — markdown lists and numbering are stripped. Lines speak the quick-add shorthand
         (<span class="font-mono">tomorrow 3pm #tag @project !high ~30m</span>), and the "Copy for LLM" JSON pastes straight back in.
-        ${proj ? `New tasks land in <strong>${proj.name}</strong> unless a line says otherwise.` : ''}
+        ${proj ? `New tasks land in <strong>${escHtml(proj.name)}</strong> unless a line says otherwise.` : ''}
       </p>
       <textarea class="form-input" id="pasteInput" rows="9" spellcheck="false"
         placeholder="- [ ] Fix header overflow #bugs !high&#10;- Write release notes tomorrow ~30m&#10;- Call the vendor friday 10am"
@@ -5400,8 +5441,8 @@ const App = (() => {
       <button class="search-result" onclick="App.searchGo('${r.kind}','${r.id}')">
         ${icon(typeIcons[r.kind === 'project' ? 'project' : r.type] || 'list-checks', 14)}
         <span class="proj-dot" style="background:${r.color || 'var(--text-faint)'}"></span>
-        <span class="sr-title ${r.completed ? 'completed' : ''}">${r.title}</span>
-        <span class="sr-context">${r.context}</span>
+        <span class="sr-title ${r.completed ? 'completed' : ''}">${escHtml(r.title)}</span>
+        <span class="sr-context">${escHtml(r.context)}</span>
       </button>
     `).join('');
     refreshIcons();
@@ -5848,12 +5889,12 @@ const App = (() => {
       };
       const waitForSync = Sync.isConfigured() && !Sync.isReconciled();
       Bridge.init(onScan, { defer: waitForSync });
-      if (waitForSync) {
-        let started = false;
-        const start = () => { if (!started) { started = true; Bridge.requestScan(0); } };
-        window.addEventListener('sync-reconciled', start, { once: true });
-        setTimeout(start, 15000);
-      }
+      // Every reconcile triggers a scan, not just the first. If the timeout
+      // below fired because the database was slow, the import ran against a
+      // pre-reconcile dataset — the scan after the server copy lands is what
+      // folds any duplicate links back together.
+      window.addEventListener('sync-reconciled', () => Bridge.requestScan(0));
+      if (waitForSync) setTimeout(() => Bridge.requestScan(0), 15000);
     }
 
     // Running timers survive page refreshes — resume before first paint
@@ -5887,7 +5928,7 @@ const App = (() => {
   return {
     init, render, switchTab, toggleTheme,
     openNewEntry, editEntry, saveEntry, changeEntryType, selectEffort,
-    addTag, removeTag,
+    addTag, removeTag, removeTagAt, addTagById,
     openNewProject, openProjectModal, openManageProjects, selectColor, selectIcon, saveProject,
     archiveProjectAction, unarchiveProjectAction, deleteProjectAction,
     openSyncConfig, connectSync, disconnectSync,

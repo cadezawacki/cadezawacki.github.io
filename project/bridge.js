@@ -122,8 +122,47 @@ const Bridge = (() => {
     return raw(PW_HASH_PREFIX + name) != null;
   }
 
+  // The local view of a room. An EXPLICITLY EMPTY cache is a real state —
+  // the user cleared the room — so only a missing key falls through to the
+  // last-synced copy. Coalescing the two resurrected text that had been
+  // deliberately deleted.
   function roomText(name) {
-    return raw(CACHE_PREFIX + name) || raw(SYNCED_PREFIX + name) || '';
+    const cached = raw(CACHE_PREFIX + name);
+    if (cached != null) return cached;
+    const synced = raw(SYNCED_PREFIX + name);
+    return synced != null ? synced : '';
+  }
+
+  // True when this device holds room edits Cade.txt has not pushed yet —
+  // its cache has moved on from its last-synced base. Such a room must not
+  // be rebased onto the server copy: that would discard local typing.
+  function roomHasUnpushedEdits(name) {
+    const cached = raw(CACHE_PREFIX + name);
+    const synced = raw(SYNCED_PREFIX + name);
+    if (cached == null || synced == null) return false;
+    return cached !== synced;
+  }
+
+  // Cade.txt prefixes documents written by a password-locked client.
+  const LOCK_SENTINEL = '\x00CADE_LOCK\x00';
+  function stripLockSentinel(text) {
+    return text.startsWith(LOCK_SENTINEL) ? text.slice(LOCK_SENTINEL.length) : text;
+  }
+
+  // Cade.txt splits very large room payloads into { _chunks, parts }.
+  function unpackRoomText(val) {
+    if (val == null) return null;
+    if (typeof val === 'string') return val;
+    if (typeof val === 'object' && val._chunks && val.parts) {
+      let out = '';
+      for (let i = 0; i < val._chunks; i++) {
+        const part = val.parts[i];
+        if (typeof part !== 'string') return null;
+        out += part;
+      }
+      return out;
+    }
+    return null;
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -135,6 +174,7 @@ const Bridge = (() => {
   function parseTodos(text) {
     const lines = String(text || '').split('\n');
     const out = [];
+    const seen = new Map(); // normalized title -> how many times so far
     let inFence = false;
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
@@ -144,12 +184,18 @@ const Bridge = (() => {
       if (!m) continue;
       const title = line.slice(m[0].length).trim();
       if (!title) continue; // an empty checkbox is a template, not a task
+      const base = normalizeKey(title);
+      const n = (seen.get(base) || 0) + 1;
+      seen.set(base, n);
       out.push({
         line: i,
         done: m[2] !== ' ',
         title,
         prefix: m[1],
-        key: normalizeKey(title),
+        // The first line with a given text keeps the bare key, so links
+        // recorded before duplicate handling existed still resolve.
+        key: n === 1 ? base : base + DUP_SEP + n,
+        occurrence: n,
       });
     }
     return out;
@@ -159,6 +205,12 @@ const Bridge = (() => {
   // reordering a list, or inserting above it, must not re-key everything.
   // Trailing tags and punctuation are kept — two tasks differing only by
   // "#urgent" are genuinely different lines.
+  //
+  // A room may legitimately hold the same text twice ("[ ] water plants"
+  // in a weekly list). Text alone would collapse those into one task that
+  // neither line could tick independently, so repeats carry an occurrence
+  // suffix. The separator is a control character no document will contain.
+  const DUP_SEP = '\u0000#';
   function normalizeKey(title) {
     return String(title).trim().replace(/\s+/g, ' ').toLowerCase();
   }
@@ -316,29 +368,125 @@ const Bridge = (() => {
   // ═══════════════════════════════════════════════════════════
   // WRITING BACK TO A ROOM
   // ═══════════════════════════════════════════════════════════
-  // Local cache first (instant, works offline), then the same-device tab
-  // channel so an open txt window adopts it without a network round trip,
-  // then Firebase so other devices get it. A locked room is written locally
-  // only — its server copy uses a key derived from a password we don't hold.
-  async function writeRoomText(name, text) {
-    writeRaw(CACHE_PREFIX + name, text);
+  // ── Room edits are OPERATIONS, not whole-document writes ──────────────
+  //
+  // This app's local copy of a room is only as fresh as the last time
+  // Cade.txt had that room open here — which can be days ago, or never.
+  // Encrypting that copy and setting it as the server's document would
+  // delete whatever another device has added since. So every edit is
+  // expressed as a small function over the text ("tick this line", "append
+  // this one") and applied to the CURRENT server document, fetched first.
+  //
+  // The exception is a room this device has edited but not yet pushed:
+  // rebasing onto the server there would throw away local typing, so the
+  // local copy stays the base and Cade.txt's own reconciliation owns the
+  // outcome — the same trade it already makes for its own writes.
+  // `ok` means "this is a document we can rebase onto". No node on the
+  // server is NOT an empty document — it is a room that has never been
+  // pushed, and rebasing onto nothing would erase everything the local copy
+  // holds. A room genuinely emptied elsewhere stores an encrypted empty
+  // string, which decrypts to '' and is a legitimate base.
+  async function readRemoteRoom(name, key, database) {
+    try {
+      const snap = await database.ref(`rooms/${name}/text`).once('value');
+      const encoded = unpackRoomText(snap.val());
+      if (encoded == null) return { ok: false, text: '' };
+      const plain = await decryptText(encoded, key);
+      if (plain == null) return { ok: false, text: '' }; // wrong key / corrupt
+      return { ok: true, text: stripLockSentinel(plain) };
+    } catch (e) {
+      return { ok: false, text: '' };
+    }
+  }
+
+  // `mutate(text) -> string | null`. Returning null means the operation no
+  // longer applies to this document (the line is gone) — nothing is written.
+  async function applyRoomEdit(name, mutate) {
+    const local = roomText(name);
+    const locked = roomIsLocked(name);
+    const { key } = creds();
+    const database = locked ? null : db();
+
+    let base = local;
+    let rebased = false;
+    if (database && key && !roomHasUnpushedEdits(name)) {
+      const remote = await readRemoteRoom(name, key, database);
+      if (remote.ok && remote.text !== local) { base = remote.text; rebased = true; }
+    }
+
+    let next = mutate(base);
+    // The operation didn't apply to the server's version. If it applies to
+    // ours the two have genuinely diverged — leave the document alone rather
+    // than guessing, and let the next scan re-derive the truth.
+    if (next == null) {
+      if (!rebased) return { ok: false, reason: 'not-applicable' };
+      return { ok: false, reason: 'diverged' };
+    }
+
+    writeRaw(CACHE_PREFIX + name, next);
     stampRoomModified(name);
     try {
-      if (channel) channel.postMessage({ t: 'doc', room: name, text, ts: Date.now(), tab: TAB_ID });
+      if (channel) channel.postMessage({ t: 'doc', room: name, text: next, ts: Date.now(), tab: TAB_ID });
     } catch (e) {}
-    if (roomIsLocked(name)) return { ok: true, remote: false, reason: 'locked' };
-    const { key } = creds();
-    const database = db();
+
+    if (locked) return { ok: true, remote: false, reason: 'locked' };
     if (!key || !database) return { ok: true, remote: false, reason: 'offline' };
     try {
-      const encrypted = await encryptText(text, key);
+      const encrypted = await encryptText(next, key);
       await database.ref(`rooms/${name}/text`).set(encrypted);
       database.ref(`rooms/${name}/v`).transaction(c => (c || 0) + 1).catch(() => {});
-      return { ok: true, remote: true };
+      return { ok: true, remote: true, rebased };
     } catch (e) {
       console.warn('Bridge: room push failed', e);
       return { ok: true, remote: false, reason: e.message };
     }
+  }
+
+  // ── The operations themselves ─────────────────────────────────────────
+  // Each locates its line by KEY rather than by a line number captured
+  // earlier, because the document it lands on may not be the one that was
+  // read when the edit was decided.
+  function opSetDone(key, done) {
+    return (text) => {
+      const todo = parseTodos(text).find(t => t.key === key);
+      if (!todo) return null;
+      if (todo.done === done) return text; // already agrees — no-op write
+      return setTodoState(text, todo.line, done);
+    };
+  }
+
+  function opSetManyDone(edits) {
+    return (text) => {
+      let out = text;
+      let touched = false;
+      edits.forEach(({ key, done }) => {
+        const todo = parseTodos(out).find(t => t.key === key);
+        if (!todo || todo.done === done) return;
+        const next = setTodoState(out, todo.line, done);
+        if (next != null) { out = next; touched = true; }
+      });
+      return touched ? out : null;
+    };
+  }
+
+  function opRename(oldKey, title) {
+    return (text) => {
+      const todo = parseTodos(text).find(t => t.key === oldKey);
+      if (!todo) return null;
+      const lines = text.split('\n');
+      const m = lines[todo.line].match(TODO_LINE_RE);
+      if (!m) return null;
+      lines[todo.line] = m[0] + title;
+      return lines.join('\n');
+    };
+  }
+
+  function opAppend(title) {
+    return (text) => {
+      const key = normalizeKey(title);
+      if (parseTodos(text).some(t => t.key === key)) return null; // already there
+      return appendTodo(text, title);
+    };
   }
 
   function stampRoomModified(name) {
@@ -557,7 +705,7 @@ const Bridge = (() => {
     const seenTask = new Map();
     State.getEntries({ includeArchived: true }).forEach(e => {
       if (!e.txtRoom || !e.txtKey) return;
-      const k = e.txtRoom + ' ' + e.txtKey;
+      const k = e.txtRoom + '\u0000' + e.txtKey;
       const keep = seenTask.get(k);
       if (!keep) { seenTask.set(k, e); return; }
       const [winner, loser] = (keep.createdAt || '') <= (e.createdAt || '') ? [keep, e] : [e, keep];
@@ -624,11 +772,20 @@ const Bridge = (() => {
       const linked = allProjects.find(p => p.txtRoom === name);
 
       if (!todos.length) {
-        // Not a todo list (any more). Keep the sub-project — it may still
-        // hold this app's own tasks — but stop claiming it mirrors a list.
-        if (linked && linked.txtHasList) {
-          State.updateProject(linked.id, { txtHasList: false });
-          stats.changed = true;
+        // The room has no list (any more) — it was cleared, or its
+        // checkboxes were rewritten as prose. The sub-project stays, since
+        // it may hold this app's own tasks, but the lines it was mirroring
+        // are gone and their projections have to go with them. Retiring runs
+        // through the same path a single vanished line takes, so only
+        // bridged tasks are touched; anything added here survives.
+        if (linked) {
+          const cleared = syncRoomTasks(name, linked.id, [], today);
+          stats.retired += cleared.retired;
+          if (cleared.changed) stats.changed = true;
+          if (linked.txtHasList) {
+            State.updateProject(linked.id, { txtHasList: false });
+            stats.changed = true;
+          }
         }
         return;
       }
@@ -774,13 +931,13 @@ const Bridge = (() => {
     return out;
   }
 
-  // Doc writes discovered mid-scan are batched: one read-modify-write per
+  // Doc writes discovered mid-scan are batched: one fetch-modify-write per
   // room instead of one per line.
   let pendingWrites = new Map();
   let writeTimer = null;
-  function queueDocWrite(room, line, done) {
+  function queueDocWrite(room, key, done) {
     const list = pendingWrites.get(room) || [];
-    list.push({ line, done });
+    list.push({ key, done });
     pendingWrites.set(room, list);
     clearTimeout(writeTimer);
     writeTimer = setTimeout(flushDocWrites, 200);
@@ -791,13 +948,7 @@ const Bridge = (() => {
     const batch = pendingWrites;
     pendingWrites = new Map();
     for (const [room, edits] of batch) {
-      let text = roomText(room);
-      let touched = false;
-      edits.forEach(({ line, done }) => {
-        const next = setTodoState(text, line, done);
-        if (next != null) { text = next; touched = true; }
-      });
-      if (touched) await writeRoomText(room, text);
+      await applyRoomEdit(room, opSetManyDone(edits));
     }
   }
 
@@ -809,19 +960,12 @@ const Bridge = (() => {
   // may well have been edited since.
   async function pushCompletion(entry) {
     if (!entry || !entry.txtRoom || !entry.txtKey) return false;
-    const text = roomText(entry.txtRoom);
-    const todos = parseTodos(text);
-    const todo = todos.find(t => t.key === entry.txtKey);
-    if (!todo) return false;
-    if (todo.done === entry.completed) {
-      if (entry.txtDone !== todo.done) State.updateEntry(entry.id, { txtDone: todo.done });
-      return true;
-    }
-    const next = setTodoState(text, todo.line, entry.completed);
-    if (next == null) return false;
+    // txtDone records what the document said; recording it before the write
+    // is what stops the next scan reading our own change as the document
+    // having moved and reconciling it back.
     State.updateEntry(entry.id, { txtDone: entry.completed });
-    await writeRoomText(entry.txtRoom, next);
-    return true;
+    const res = await applyRoomEdit(entry.txtRoom, opSetDone(entry.txtKey, entry.completed));
+    return !!res.ok;
   }
 
   // Adding a task to a bridged sub-project appends a checkbox to its room.
@@ -829,31 +973,35 @@ const Bridge = (() => {
     if (!entry || entry.type !== 'task') return false;
     const proj = entry.projectId ? State.getProject(entry.projectId) : null;
     if (!proj || !proj.txtRoom) return false;
-    const text = roomText(proj.txtRoom);
-    const key = normalizeKey(entry.title);
-    if (parseTodos(text).some(t => t.key === key)) {
-      State.updateEntry(entry.id, { txtRoom: proj.txtRoom, txtKey: key, txtDone: entry.completed });
-      return true;
-    }
-    const next = appendTodo(text, entry.title);
+    const key = keyForNewLine(proj.txtRoom, entry.title);
     State.updateEntry(entry.id, { txtRoom: proj.txtRoom, txtKey: key, txtDone: entry.completed });
-    await writeRoomText(proj.txtRoom, next);
-    return true;
+    const res = await applyRoomEdit(proj.txtRoom, opAppend(entry.title));
+    // opAppend returns null when the line is already present — the link is
+    // recorded either way, which is the point of the call.
+    return !!res.ok || res.reason === 'not-applicable';
   }
 
   // Renaming a bridged task rewrites its line and re-keys the link.
   async function pushRename(entry, oldKey) {
     if (!entry || !entry.txtRoom || !oldKey) return false;
-    const text = roomText(entry.txtRoom);
-    const todo = parseTodos(text).find(t => t.key === oldKey);
-    if (!todo) return false;
-    const lines = text.split('\n');
-    const m = lines[todo.line].match(TODO_LINE_RE);
-    if (!m) return false;
-    lines[todo.line] = m[0] + entry.title;
-    State.updateEntry(entry.id, { txtKey: normalizeKey(entry.title) });
-    await writeRoomText(entry.txtRoom, lines.join('\n'));
-    return true;
+    State.updateEntry(entry.id, { txtKey: keyForNewLine(entry.txtRoom, entry.title, oldKey) });
+    const res = await applyRoomEdit(entry.txtRoom, opRename(oldKey, entry.title));
+    return !!res.ok;
+  }
+
+  // The key a not-yet-written line will get once it lands in the document:
+  // the plain normalized title unless the room already carries that text,
+  // in which case it takes the next occurrence slot.
+  function keyForNewLine(room, title, ignoreKey) {
+    const base = normalizeKey(title);
+    const taken = new Set(parseTodos(roomText(room)).map(t => t.key));
+    if (ignoreKey) taken.delete(ignoreKey);
+    if (!taken.has(base)) return base;
+    for (let i = 2; i < 500; i++) {
+      const candidate = base + DUP_SEP + i;
+      if (!taken.has(candidate)) return candidate;
+    }
+    return base;
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -875,7 +1023,11 @@ const Bridge = (() => {
   // wired up either way — they debounce, so nothing is lost in the meantime.
   function init(changeHandler, opts = {}) {
     onChange = changeHandler || null;
-    if (!available()) return false;
+    // Listeners go on unconditionally. Cade.txt may not have run on this
+    // device YET — and the moment it does, in another tab, it writes the
+    // very keys these listeners watch. Bailing out here meant the first room
+    // a user ever created stayed invisible until they reloaded, which is
+    // exactly the case where a live link matters most.
 
     // txt on this device, in another tab.
     if (channel) {
@@ -910,14 +1062,15 @@ const Bridge = (() => {
       if (!document.hidden && Date.now() - lastScanAt > 5000) requestScan(200);
     });
 
-    if (!opts.defer) requestScan(0);
-    return true;
+    if (!opts.defer && available()) requestScan(0);
+    return available();
   }
 
   return {
     init, scan, requestScan, available,
     parseTodos, hasTodoList, setTodoState, appendTodo, normalizeKey,
-    roomText, writeRoomText,
+    roomText, roomHasUnpushedEdits, applyRoomEdit,
+    opSetDone, opRename, opAppend,
     ensureRoom, ensureWorkspace, renameWorkspace, publishWorkspaceBlob,
     pushCompletion, pushNewTask, pushRename,
     getRooms, getWorkspaces, getRoomWorkspace, getRoomMeta,

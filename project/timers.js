@@ -470,7 +470,7 @@ const Timers = (() => {
       <div class="section-title" style="margin-bottom:var(--space-2);">Link to task (optional)</div>
       <select class="form-select" onchange="Timers.linkTask(this.value || null)">
         <option value="">No task — just a timer</option>
-        ${tasks.map(t => `<option value="${t.id}" ${clock.linkedTaskId === t.id ? 'selected' : ''}>${t.title}</option>`).join('')}
+        ${tasks.map(t => `<option value="${t.id}" ${clock.linkedTaskId === t.id ? 'selected' : ''}>${window.escapeHtml(t.title)}</option>`).join('')}
       </select>
       ${clock.linkedTaskId ? `<p class="text-xs text-faint" style="margin-top:var(--space-2);">Completed focus time logs to this task and lands in the day planner.</p>` : ''}
     `;
@@ -557,7 +557,7 @@ const Timers = (() => {
       if (pending) {
         html += `
           <div class="card" style="border-color:var(--accent);background:var(--accent-tint);margin-bottom:var(--space-3);">
-            <div class="text-sm" style="font-weight:600;margin-bottom:var(--space-2);">${pending.title}</div>
+            <div class="text-sm" style="font-weight:600;margin-bottom:var(--space-2);">${window.escapeHtml(pending.title)}</div>
             <div class="timer-display" style="font-size:2rem;">0:00</div>
             <div class="timer-controls">
               <button class="btn btn-secondary" onclick="Timers.cancelPending()">Cancel</button>

@@ -258,7 +258,13 @@ const Palette = (() => {
             item: {
               kind: 'project', group: 'Results', icon: 'folder-kanban', color: p.color,
               title: p.name, hint: 'project',
-              run: () => { App.switchTab('projects'); App.setProjectFilter(p.id); },
+              // Open the project's own page, taking its workspace along so
+              // the room strip shows its siblings.
+              run: () => {
+                if (p.parentId) App.openSubproject(p.parentId, p.id);
+                else App.setWorkspace(p.id);
+                App.switchTab('projects');
+              },
             }, s: s + 10,
           });
         });
