@@ -258,7 +258,10 @@ const Palette = (() => {
             item: {
               kind: 'project', group: 'Results', icon: 'folder-kanban', color: p.color,
               title: p.name, hint: 'project',
-              run: () => { App.switchTab('projects'); App.setProjectFilter(p.id); },
+              // Open the project's own page, taking its WORKSPACE along — a
+              // deeply nested project's parent is another sub-project, which
+              // would scope the app to the wrong subtree.
+              run: () => { App.revealProject(p.id); App.switchTab('projects'); },
             }, s: s + 10,
           });
         });

@@ -13,7 +13,11 @@
 </head>
 <body>
 
-  <!-- ═══ MENUBAR ═══ -->
+  <!-- ═══ MENUBAR ═══
+       Mirrors Cade.txt: logo, action menus, the scope pill, the tab strip,
+       then status on the right. Actions live in menus, navigation lives in
+       tabs, and the pill says which world you are in — one row, one job per
+       region, instead of an eleven-item rail competing with in-page controls. -->
   <header class="menubar">
     <a class="menubar-logo" href="../" title="Back to Cade's Tools" aria-label="Back to Cade's Tools">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -22,68 +26,117 @@
         <rect x="14" y="14" width="7" height="7" rx="1"/>
         <rect x="3" y="14" width="7" height="7" rx="1"/>
       </svg>
-      <span>Cade.project</span>
+      <span class="menubar-logo-text">Cade.project</span>
     </a>
+
+    <!-- New -->
+    <div class="menu-wrap">
+      <button class="menu-trigger" data-menu="new">New</button>
+      <div class="menu-dropdown" id="menu-new">
+        <button class="menu-item" onclick="App.menuAction('openNewEntry','task')"><span>Task</span><kbd>Ctrl+N</kbd></button>
+        <button class="menu-item" onclick="App.menuAction('openNewEntry','goal')"><span>Goal</span><span></span></button>
+        <button class="menu-item" onclick="App.menuAction('openNewEntry','habit')"><span>Habit</span><span></span></button>
+        <button class="menu-item" onclick="App.menuAction('openNewEntry','reminder')"><span>Reminder</span><span></span></button>
+        <div class="menu-separator"></div>
+        <button class="menu-item" onclick="App.menuAction('openProjectModal')"><span>Project</span><span></span></button>
+        <button class="menu-item" onclick="App.menuAction('openNewSubproject')" title="Also creates the matching room in Cade.txt"><span>Sub-project…</span><span></span></button>
+        <div class="menu-separator"></div>
+        <button class="menu-item" onclick="App.menuAction('addScratchFromMenu')"><span>Scratch Idea…</span><span></span></button>
+        <button class="menu-item" onclick="App.menuAction('openPasteImport')"><span>Paste Tasks…</span><span></span></button>
+      </div>
+    </div>
+
+    <!-- View -->
+    <div class="menu-wrap">
+      <button class="menu-trigger" data-menu="view">View</button>
+      <div class="menu-dropdown" id="menu-view">
+        <button class="menu-item" onclick="App.menuAction('switchTab','today')"><span>Today</span><span></span></button>
+        <button class="menu-item" onclick="App.menuAction('switchTab','projects')"><span>Projects</span><span></span></button>
+        <button class="menu-item" onclick="App.menuAction('switchTab','habits')"><span>Habits</span><span></span></button>
+        <button class="menu-item" onclick="App.menuAction('switchTab','planner')"><span>Planner</span><span></span></button>
+        <button class="menu-item" onclick="App.menuAction('switchTab','insights')"><span>Insights</span><span></span></button>
+        <button class="menu-item" onclick="App.menuAction('switchTab','history')"><span>History</span><span></span></button>
+        <div class="menu-separator"></div>
+        <button class="menu-item" onclick="App.menuAction('switchTab','focus')"><span>Focus Matrix</span><span></span></button>
+        <button class="menu-item" onclick="App.menuAction('switchTab','scratch')"><span>Scratchpad</span><span></span></button>
+        <button class="menu-item" onclick="App.menuAction('switchTab','health')"><span>Health</span><span></span></button>
+        <button class="menu-item" onclick="App.menuAction('switchTab','tools')"><span>Tools</span><span></span></button>
+        <div class="menu-separator"></div>
+        <button class="menu-item" onclick="App.menuAction('openSearch')"><span>Search &amp; Commands</span><kbd>Ctrl+K</kbd></button>
+        <button class="menu-item" onclick="App.menuAction('toggleTheme')"><span id="themeMenuLabel">Theme</span><span></span></button>
+      </div>
+    </div>
+
+    <!-- Track -->
+    <div class="menu-wrap">
+      <button class="menu-trigger" data-menu="track">Track</button>
+      <div class="menu-dropdown" id="menu-track">
+        <button class="menu-item" onclick="App.menuAction('openTimer')"><span>Timer</span><span></span></button>
+        <button class="menu-item" onclick="App.menuAction('stopAllTimers')"><span>Stop All Timers</span><span></span></button>
+        <div class="menu-separator"></div>
+        <button class="menu-item" onclick="App.menuAction('openQuickLog')"><span>Quick Log</span><span></span></button>
+        <button class="menu-item" onclick="App.menuAction('openCalorieLog')"><span>Log Food…</span><span></span></button>
+        <div class="menu-separator"></div>
+        <button class="menu-item" onclick="App.menuAction('openDailyReview')"><span>Daily Review</span><span></span></button>
+        <button class="menu-item" onclick="App.menuAction('openAutoPlan')"><span>Auto-plan Day…</span><span></span></button>
+      </div>
+    </div>
+
+    <!-- Data -->
+    <div class="menu-wrap">
+      <button class="menu-trigger" data-menu="data">Data</button>
+      <div class="menu-dropdown" id="menu-data">
+        <button class="menu-item" onclick="App.menuAction('openSyncConfig')"><span>Firebase Sync…</span><span></span></button>
+        <button class="menu-item" onclick="App.menuAction('openBridgePanel')" title="Rooms and workspaces shared with Cade.txt"><span>Cade.txt Link…</span><span></span></button>
+        <div class="menu-separator"></div>
+        <button class="menu-item" onclick="App.menuAction('openManageProjects')"><span>Manage Projects…</span><span></span></button>
+        <button class="menu-item" onclick="App.menuAction('openManageTags')"><span>Manage Tags…</span><span></span></button>
+        <button class="menu-item" onclick="App.menuAction('openManageShortcuts')"><span>Quick Shortcuts…</span><span></span></button>
+        <div class="menu-separator"></div>
+        <button class="menu-item" onclick="App.menuAction('exportForLLM')"><span>Copy for LLM</span><span></span></button>
+        <button class="menu-item" onclick="App.menuAction('exportData')"><span>Export Backup</span><span></span></button>
+        <button class="menu-item" onclick="App.menuAction('importData')"><span>Import Backup…</span><span></span></button>
+        <div class="menu-separator"></div>
+        <button class="menu-item" onclick="App.menuAction('switchTab','settings')"><span>Preferences</span><span></span></button>
+        <button class="menu-item" onclick="App.menuAction('hardRefresh')"><span>Refresh App &amp; Cache</span><span></span></button>
+      </div>
+    </div>
+
+    <!-- Narrow screens: all four menus in one sheet -->
+    <button class="menu-trigger menu-more" id="menuMore" aria-label="Menu" title="Menu">⋯</button>
+
+    <!-- Workspace pill (active project scope + switcher) -->
+    <div class="ws-pill-wrap">
+      <button class="ws-pill" id="wsPill" type="button" title="Switch workspace" onclick="App.toggleWorkspaceMenu(event)">
+        <span class="ws-pill-dot"></span>
+        <span class="ws-pill-name">All Projects</span>
+        <span class="ws-pill-caret">▾</span>
+      </button>
+      <div class="ws-dropdown" id="wsDropdown"></div>
+    </div>
+
+    <!-- View tabs (desktop) / view select (mobile) -->
+    <nav class="view-tabs" id="viewTabs"></nav>
+    <div class="view-mobile-select" id="viewMobileSelect"></div>
+
     <div class="menubar-spacer"></div>
+
     <div class="menubar-actions">
       <button class="timer-indicator" id="timerIndicator" style="display:none;" onclick="Timers.openPanel()" aria-label="Timers running — open timer window" title="Timers running — click to open"></button>
-      <button class="icon-btn" id="searchBtn" aria-label="Search and commands (Ctrl+K)" title="Search & commands — Ctrl K"><i data-lucide="search" style="width:18px;height:18px"></i></button>
+      <button class="icon-btn" id="searchBtn" aria-label="Search and commands (Ctrl+K)" title="Search &amp; commands — Ctrl K"><i data-lucide="search" style="width:18px;height:18px"></i></button>
+      <div id="syncStatus" class="sync-dot offline" style="display:none;" title="Sync: disconnected" aria-label="Sync status" onclick="App.openSyncConfig()"></div>
       <button class="icon-btn" id="themeToggle" aria-label="Toggle theme"></button>
-      <div id="syncStatus" class="sync-dot offline" style="display:none;" title="Sync: disconnected" aria-label="Sync status"></div>
     </div>
   </header>
 
-  <!-- ═══ TAB BAR ═══ -->
-  <nav class="tabbar">
-    <button class="tab-item active" data-tab="today">
-      <i data-lucide="layout-dashboard"></i>
-      <span>Today</span>
-    </button>
-    <button class="tab-item" data-tab="projects">
-      <i data-lucide="folder-kanban"></i>
-      <span>Projects</span>
-    </button>
-    <button class="tab-item" data-tab="habits">
-      <i data-lucide="repeat"></i>
-      <span>Habits</span>
-    </button>
-    <button class="tab-item" data-tab="focus">
-      <i data-lucide="crosshair"></i>
-      <span>Focus</span>
-    </button>
-    <button class="tab-item" data-tab="planner">
-      <i data-lucide="calendar-days"></i>
-      <span>Planner</span>
-    </button>
-    <button class="tab-item" data-tab="scratch">
-      <i data-lucide="lightbulb"></i>
-      <span>Scratch</span>
-    </button>
-    <button class="tab-item" data-tab="tools">
-      <i data-lucide="wrench"></i>
-      <span>Tools</span>
-    </button>
-    <button class="tab-item" data-tab="health">
-      <i data-lucide="apple"></i>
-      <span>Health</span>
-    </button>
-    <button class="tab-item" data-tab="insights">
-      <i data-lucide="bar-chart-3"></i>
-      <span>Insights</span>
-    </button>
-    <button class="tab-item" data-tab="history">
-      <i data-lucide="history"></i>
-      <span>History</span>
-    </button>
-    <button class="tab-item" data-tab="settings">
-      <i data-lucide="settings"></i>
-      <span>Settings</span>
-    </button>
-    <button class="tab-item sidebar-toggle" id="sidebarToggle" aria-label="Collapse sidebar">
-      <i data-lucide="chevrons-left"></i>
-      <span>Collapse</span>
-    </button>
-  </nav>
+  <!-- ═══ MOBILE MENU SHEET (filled from the four dropdowns) ═══ -->
+  <div class="menu-sheet" id="menuSheet"></div>
+
+  <!-- ═══ SUB-PROJECT TABS ═══
+       The rooms of the active workspace, exactly as Cade.txt lists them.
+       Empty sub-projects stay hidden unless something was finished there
+       today, so the strip shows work rather than history. -->
+  <nav class="sub-tabs" id="subTabs" style="display:none;"></nav>
 
   <!-- ═══ MAIN CONTENT ═══ -->
   <main class="main-content" id="mainContent">
@@ -124,6 +177,7 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
   <script src="state.js"></script>
   <script src="sync.js"></script>
+  <script src="bridge.js"></script>
   <script src="charts.js"></script>
   <script src="timers.js"></script>
   <script src="palette.js"></script>

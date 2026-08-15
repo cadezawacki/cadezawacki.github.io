@@ -39,6 +39,7 @@
 
   /* ── Menubar Height ───────────────────────────────────────── */
   --menubar-height: 52px;
+  --subtabs-height: 34px;
 
   /* ── Accent (identical in both themes) ────────────────────── */
   --accent: #0f9598;
@@ -297,108 +298,252 @@ table { border-collapse: collapse; width: 100%; }
 @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
 
 /* ═══════════════════════════════════════════════════════════════
-   TAB BAR (bottom navigation for mobile, top for desktop)
+   MENUBAR MENUS — click to open, click-outside/Esc to close
    ═══════════════════════════════════════════════════════════════ */
-.tabbar {
-  position: fixed;
-  bottom: 0; left: 0; right: 0;
-  /* Safe-area padding must ADD to the bar height — with border-box sizing a
-     fixed 56px would swallow the inset and push the icons above the top
-     border (divider). */
-  height: calc(56px + env(safe-area-inset-bottom, 0px));
-  background: var(--surface);
-  border-top: 1px solid var(--border);
-  display: flex;
-  align-items: center;
-  justify-content: space-around;
-  z-index: 100;
-  padding-bottom: env(safe-area-inset-bottom, 0px);
-  overflow-x: auto;   /* 8 tabs on a narrow phone scroll rather than crush */
-  scrollbar-width: none;
-}
-.tabbar::-webkit-scrollbar { display: none; }
+.menu-wrap { position: relative; flex-shrink: 0; }
 
-.tab-item {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
+.menu-trigger {
   padding: var(--space-1) var(--space-2);
-  color: var(--text-faint);
-  font-family: var(--font-mono);
-  font-size: 9px;
-  font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.02em;
-  transition: color var(--transition);
-  position: relative;
-  flex-shrink: 0;
-  min-width: 0;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  line-height: 1.4;
+  white-space: nowrap;
+  transition: background var(--transition), color var(--transition);
+}
+.menu-trigger:hover { background: var(--surface-hover); color: var(--text-primary); }
+.menu-trigger.open { background: var(--accent-tint); color: var(--accent-text); }
+
+.menu-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 210px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg, 0 8px 28px rgba(0,0,0,0.28));
+  padding: var(--space-1);
+  z-index: 300;
+  display: none;
+}
+.menu-dropdown.open { display: block; }
+
+.menu-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+  text-align: left;
   white-space: nowrap;
 }
-.tab-item svg { width: 20px; height: 20px; }
-.tab-item:hover { color: var(--text-muted); }
-.tab-item.active {
-  color: var(--accent-text);
+.menu-item:hover { background: var(--accent-tint); color: var(--accent-text); }
+.menu-item kbd {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-faint);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 1px 4px;
 }
-.tab-item.active::before {
-  content: '';
+.menu-separator { height: 1px; background: var(--border); margin: var(--space-1) var(--space-2); }
+
+/* ═══════════════════════════════════════════════════════════════
+   WORKSPACE PILL — which world you are in
+   ═══════════════════════════════════════════════════════════════ */
+.ws-pill-wrap { position: relative; flex-shrink: 0; }
+
+.ws-pill {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  max-width: 190px;
+  padding: 4px var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg);
+  color: var(--text-primary);
+  font-size: var(--text-xs);
+  line-height: 1.4;
+  transition: border-color var(--transition), background var(--transition);
+}
+.ws-pill:hover { border-color: var(--accent); background: var(--surface-hover); }
+.ws-pill-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--ws-dot, var(--text-faint));
+  flex-shrink: 0;
+}
+.ws-pill-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ws-pill-caret { color: var(--text-faint); font-size: 9px; flex-shrink: 0; }
+
+.ws-dropdown {
   position: absolute;
-  top: -1px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 24px;
-  height: 2px;
-  background: var(--accent);
-  border-radius: 0 0 2px 2px;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 240px;
+  max-height: min(70vh, 460px);
+  overflow-y: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg, 0 8px 28px rgba(0,0,0,0.28));
+  padding: var(--space-1);
+  z-index: 300;
+  display: none;
+}
+.ws-dropdown.open { display: block; }
+.ws-option {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+  text-align: left;
+}
+.ws-option:hover { background: var(--accent-tint); color: var(--accent-text); }
+.ws-option.active { background: var(--accent-tint); color: var(--accent-text); font-weight: 600; }
+.ws-option .ws-count {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-faint);
+}
+.ws-option .ws-link-badge {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--accent-text);
+  border: 1px solid var(--accent);
+  border-radius: 3px;
+  padding: 0 3px;
 }
 
-@media (min-width: 768px) {
-  .tabbar {
-    top: var(--menubar-height);
-    bottom: auto;
-    left: 0;
-    right: auto;
-    width: 200px;
-    height: calc(100dvh - var(--menubar-height));
-    flex-direction: column;
-    align-items: stretch;
-    justify-content: flex-start;
-    border-top: none;
-    border-right: 1px solid var(--border);
-    padding: var(--space-3) 0;
-    gap: 2px;
-  }
-  .tab-item {
-    flex-direction: row;
-    justify-content: flex-start;
-    gap: var(--space-2);
-    padding: var(--space-2) var(--space-4);
-    margin: 0 var(--space-2);
-    border-radius: var(--radius-md);
-    font-size: var(--text-sm);
-  }
-  .tab-item svg { width: 18px; height: 18px; }
-  .tab-item.active::before {
-    top: 50%;
-    left: 0;
-    transform: translateY(-50%);
-    width: 3px;
-    height: 24px;
-    border-radius: 0 2px 2px 0;
-  }
-  .tab-item.active { background: var(--accent-tint); }
+/* ═══════════════════════════════════════════════════════════════
+   VIEW TABS — where you are looking (menubar slot)
+   ═══════════════════════════════════════════════════════════════ */
+.view-tabs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  min-width: 0;
+  flex-shrink: 1;
 }
+.view-tabs::-webkit-scrollbar { display: none; }
+
+.view-tab {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 4px var(--space-2);
+  border-radius: var(--radius-sm);
+  color: var(--text-faint);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: background var(--transition), color var(--transition);
+}
+.view-tab svg { width: 14px; height: 14px; }
+.view-tab:hover { background: var(--surface-hover); color: var(--text-primary); }
+.view-tab.active { background: var(--accent-tint); color: var(--accent-text); font-weight: 600; }
+
+.view-mobile-select { display: none; flex-shrink: 0; }
+.view-mobile-select select {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: var(--text-xs);
+  padding: 4px var(--space-2);
+  max-width: 130px;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   SUB-PROJECT TABS — the rooms inside the active workspace
+   ═══════════════════════════════════════════════════════════════ */
+.sub-tabs {
+  position: fixed;
+  top: var(--menubar-height);
+  left: 0; right: 0;
+  height: var(--subtabs-height);
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 var(--space-4);
+  overflow-x: auto;
+  scrollbar-width: none;
+  z-index: 90;
+}
+.sub-tabs::-webkit-scrollbar { display: none; }
+
+.sub-tab {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 3px var(--space-2);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: 1.6;
+  white-space: nowrap;
+  flex-shrink: 0;
+  border: 1px solid transparent;
+}
+.sub-tab:hover { background: var(--surface-hover); color: var(--text-primary); }
+.sub-tab.active {
+  background: var(--surface);
+  border-color: var(--border);
+  color: var(--text-primary);
+  font-weight: 600;
+}
+.sub-tab .sub-count {
+  font-size: 9px;
+  color: var(--text-faint);
+  background: var(--surface-hover);
+  border-radius: 999px;
+  padding: 0 5px;
+}
+.sub-tab.active .sub-count { background: var(--accent-tint); color: var(--accent-text); }
+/* A room whose only remaining work finished today — visible so you can undo
+   a mis-tap, but visibly winding down. */
+.sub-tab.settled { opacity: 0.6; }
+.sub-tab.settled .sub-count { text-decoration: line-through; }
+.sub-tab-add { color: var(--text-faint); font-size: var(--text-sm); padding: 3px var(--space-2); }
+.sub-tab-add:hover { color: var(--accent-text); background: var(--surface-hover); border-radius: var(--radius-sm); }
+.sub-tabs-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  flex-shrink: 0;
+  margin-right: var(--space-1);
+}
+
+body.has-subtabs .main-content { padding-top: calc(var(--menubar-height) + var(--subtabs-height) + var(--space-4)); }
 
 /* ═══════════════════════════════════════════════════════════════
    MAIN CONTENT AREA
    ═══════════════════════════════════════════════════════════════ */
 .main-content {
   padding-top: calc(var(--menubar-height) + var(--space-4));
-  padding-bottom: calc(56px + var(--space-6) + env(safe-area-inset-bottom, 0px));
+  padding-bottom: calc(var(--space-8) + env(safe-area-inset-bottom, 0px));
   padding-left: var(--space-4);
   padding-right: var(--space-4);
-  max-width: 1200px;
+  max-width: 1100px;
   margin: 0 auto;
 }
 
@@ -406,9 +551,61 @@ table { border-collapse: collapse; width: 100%; }
   .main-content {
     padding-top: calc(var(--menubar-height) + var(--space-6));
     padding-bottom: var(--space-8);
-    padding-left: 224px;
+    padding-left: var(--space-6);
     padding-right: var(--space-6);
   }
+  body.has-subtabs .main-content { padding-top: calc(var(--menubar-height) + var(--subtabs-height) + var(--space-5)); }
+}
+
+/* Phones: the menubar keeps logo + menus + pill + status; the view tabs
+   collapse into a select so the row never wraps. */
+@media (max-width: 900px) {
+  .view-tabs { display: none; }
+  .view-mobile-select { display: block; }
+  .menubar-logo-text { display: none; }
+}
+/* Narrow phones: the four menus fold into one "⋯" sheet rather than being
+   dropped — every action stays reachable, just one tap deeper. */
+.menu-more { display: none; }
+.menu-sheet {
+  position: fixed;
+  inset: var(--menubar-height) 0 0 0;
+  background: var(--bg);
+  z-index: 320;
+  overflow-y: auto;
+  padding: var(--space-3) var(--space-3) calc(var(--space-8) + env(safe-area-inset-bottom, 0px));
+  display: none;
+}
+.menu-sheet.open { display: block; }
+.menu-sheet-group { margin-bottom: var(--space-4); }
+.menu-sheet-title {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-faint);
+  padding: 0 var(--space-3) var(--space-1);
+}
+.menu-sheet .menu-item { padding: var(--space-3); font-size: var(--text-base); }
+.menu-sheet .menu-separator { display: none; }
+
+@media (max-width: 620px) {
+  .menu-wrap { display: none; }
+  .menu-more { display: block; }
+
+  /* Fixed widths do not fit: logo + menu + pill + view select + three status
+     controls, at their desktop sizes, come to ~430px before padding — so on
+     any real phone the right-hand controls were pushed past the edge and
+     could not be reached. The two variable-width controls now SHARE whatever
+     is left after the fixed ones, so the row fits at any width instead of
+     depending on the arithmetic working out. */
+  .menubar { padding: 0 var(--space-2); gap: var(--space-2); }
+  .menubar-spacer { display: none; }
+  .ws-pill-wrap, .view-mobile-select { flex: 1 1 0; min-width: 44px; }
+  .ws-pill { max-width: none; width: 100%; }
+  .view-mobile-select select { max-width: none; width: 100%; }
+  /* Search is one tap away in the menu sheet; the icon is a duplicate. */
+  #searchBtn { display: none; }
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -2087,7 +2284,7 @@ button, .btn, .pill, .tab-item, .filter-chip, .stat-label, .stat-value,
 
 /* ═══════════════════════════════════════════════════════════════
    ROUND 3 — selection, tracking badges, mini timer, planner drag,
-   XL quadrant, collapsible sidebar
+   XL quadrant
    ═══════════════════════════════════════════════════════════════ */
 
 /* Selected entry card: teal outline + sticky actions (no toggle) */
@@ -2201,25 +2398,8 @@ button, .btn, .pill, .tab-item, .filter-chip, .stat-label, .stat-value,
 }
 .quadrant-xl .q-item { padding: var(--space-2) var(--space-3); font-size: var(--text-sm); }
 
-/* Collapsible sidebar (desktop) */
-.sidebar-toggle { display: none; }
-@media (min-width: 768px) {
-  .sidebar-toggle {
-    display: flex;
-    margin-top: auto;   /* pin to sidebar bottom */
-    color: var(--text-faint);
-  }
-  .tabbar { transition: width var(--transition); }
-  body.sidebar-collapsed .tabbar { width: 60px; }
-  body.sidebar-collapsed .tab-item {
-    justify-content: center;
-    padding: var(--space-2);
-    margin: 0 var(--space-1);
-  }
-  body.sidebar-collapsed .tab-item span { display: none; }
-  body.sidebar-collapsed .main-content { padding-left: 84px; }
-  body.sidebar-collapsed .sidebar-toggle svg { transform: rotate(180deg); }
-}
+/* The collapsible desktop rail is gone — navigation lives in the menubar
+   now, so there is no second chrome column to fold away. */
 
 /* ═══════════════════════════════════════════════════════════════
    ROUND 4 — theme now-line, dimmed FAB, inline log icons,
@@ -2425,6 +2605,57 @@ input[type="date"]::-webkit-calendar-picker-indicator {
 .subproj-row .icon-btn { width: 22px; height: 22px; opacity: 0; }
 .subproj-row:hover .icon-btn { opacity: 1; }
 @media (hover: none) { .subproj-row .icon-btn { opacity: 1; } }
+
+/* Project page: sub-project tiles */
+.subproj-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: var(--space-2);
+}
+.subproj-tile {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+  text-align: left;
+  transition: border-color var(--transition), background var(--transition);
+}
+.subproj-tile:hover { border-color: var(--accent); background: var(--surface-hover); }
+.subproj-tile .truncate { flex: 1; min-width: 0; }
+.subproj-tile .project-stat { flex-shrink: 0; }
+.subproj-tile.settled { opacity: 0.62; }
+
+/* Project page toolbar — tag filter and the finished-work controls */
+.proj-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-4);
+}
+.proj-toolbar-spacer { flex: 1; min-width: 0; }
+.proj-toolbar-select {
+  width: auto;
+  max-width: 190px;
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--text-xs);
+}
+
+.ws-link-badge {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 500;
+  color: var(--accent-text);
+  border: 1px solid var(--accent);
+  border-radius: 3px;
+  padding: 0 3px;
+  vertical-align: middle;
+}
 
 /* Hotkey inputs */
 .hotkey-input {
@@ -3101,3 +3332,7 @@ textarea.input-grow,
 .diff-chip.local { color: var(--success); }
 .diff-chip.server { color: var(--hl-blue); }
 .diff-chip.changed { color: var(--hl-orange); }
+
+/* A nested room in the strip carries its parent's name — depth can't be
+   shown by indentation in a single horizontal row. */
+.sub-tab .sub-parent { color: var(--text-faint); }

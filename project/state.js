@@ -2,8 +2,33 @@
    STATE — Data model, persistence, CRUD
    ═══════════════════════════════════════════════════════════════ */
 
+// Shared HTML escaper. Every module here builds markup as strings and
+// assigns it to innerHTML, so free text — titles, project names, notes —
+// has to pass through this on the way. Defined in the first script so
+// app.js, charts.js and timers.js can all reach it.
+// Quotes included: much of this text lands inside title="…" attributes.
+window.escapeHtml = function escapeHtml(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+};
+
 const State = (() => {
   const STORAGE_KEY = 'cade.project.v1';
+  // Sync credentials live in their OWN tiny key, never inside the main blob.
+  // Three failure modes used to take them down with the data: adopting a
+  // remote payload (whose settings replaced ours wholesale), a corrupt main
+  // blob falling back to defaults, and a quota-exceeded write. Losing the
+  // credentials is what turned "one bad save" into "the app forgot everything
+  // and re-seeded itself".
+  const SYNC_KEY = 'cade.project.sync.v1';
+
+  // Settings that describe THIS DEVICE and must never travel over sync:
+  // credentials, the running-timer clock, and per-screen layout state.
+  const DEVICE_LOCAL_SETTINGS = ['sync', 'timerState', 'collapsedSections'];
 
   // ── Default data schema ──────────────────────────────────────
   const defaultData = {
@@ -30,7 +55,6 @@ const State = (() => {
       },
       calorieGoal: 2000,
       workingProject: null,    // "Next Best Task" project scope
-      sidebarCollapsed: false, // desktop sidebar state
       hotkeys: {               // single-key shortcuts (when not typing)
         timer: 't',
         newTask: 'n',
@@ -40,14 +64,14 @@ const State = (() => {
       },
       maxNavTimers: 2,         // live timers shown in the header nav
       timerState: null,        // persisted clock + sessions (survive refresh)
-      showCompleted: true,     // finished tasks visible in project lists
       collapsedSections: {},   // Today sections the user folded away
       quickLogPromptTimes: '', // "09:00, 20:00" — scheduled check-in prompts
       quickShortcuts: [
         { id: 'qs-coffee', label: 'Cup of coffee', emoji: '☕', calories: 5, meal: 'snack' },
         { id: 'qs-water', label: 'Glass of water', emoji: '💧', calories: null, meal: null },
       ],
-      onboarded: false,
+      completedSort: 'completedAt', // project page: name | createdAt | updatedAt | completedAt
+      showCompletedOnProject: false, // finished-before-today items are opt-in
     },
   };
 
@@ -61,9 +85,13 @@ const State = (() => {
       try { return _ls.getItem(k); }
       catch (e) { return memoryStore[k] || null; }
     },
+    // Returns whether the value reached DURABLE storage. The in-memory
+    // fallback keeps this tab working, but it dies with the tab — callers
+    // have to be able to tell the difference, or a quota failure looks
+    // exactly like a successful save right up until the next reload.
     setItem(k, v) {
-      try { _ls.setItem(k, v); }
-      catch (e) { memoryStore[k] = v; }
+      try { _ls.setItem(k, v); return true; }
+      catch (e) { memoryStore[k] = v; return false; }
     },
     removeItem(k) {
       try { _ls.removeItem(k); }
@@ -71,19 +99,61 @@ const State = (() => {
     },
   };
 
+  // Health flags. `loadFailed` means a stored blob EXISTED but could not be
+  // read — the in-memory data is a phantom empty state, not the user's data,
+  // and sync must never push it over the server copy. `saveFailed` means the
+  // last write did not reach disk (quota), so this tab is the only place the
+  // newest edits exist.
+  let loadFailed = false;
+  let saveFailed = false;
+
   let data = load();
   let listeners = [];
 
   // ── Load from storage ──────────────────────────────────────
   function load() {
+    let loaded = null;
     try {
       const raw = storage.getItem(STORAGE_KEY);
       if (raw) {
-        const parsed = JSON.parse(raw);
-        return migrate(deepMerge(structuredClone(defaultData), parsed));
+        loaded = migrate(deepMerge(structuredClone(defaultData), JSON.parse(raw)));
       }
-    } catch (e) { console.error('Load error:', e); }
-    return structuredClone(defaultData);
+    } catch (e) {
+      console.error('Load error:', e);
+      loadFailed = true;
+    }
+    const out = loaded || structuredClone(defaultData);
+    // Credentials always come from their own key — they outlive a corrupt or
+    // missing main blob, so a wiped dataset reconnects and pulls itself back
+    // instead of sitting there empty waiting to be re-entered.
+    out.settings.sync = loadSyncConfig(out.settings.sync);
+    return out;
+  }
+
+  // ── Sync credentials (separate key, device-local) ───────────
+  function loadSyncConfig(fallback) {
+    const empty = { databaseUrl: '', passphrase: '', connected: false };
+    try {
+      const raw = storage.getItem(SYNC_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === 'object' && parsed.databaseUrl) {
+          return { ...empty, ...parsed };
+        }
+      }
+    } catch (e) { /* fall through to the legacy in-blob copy */ }
+    // Pre-split installs kept credentials inside the main blob — adopt them
+    // once and they migrate to the dedicated key on the next save.
+    if (fallback && fallback.databaseUrl) {
+      try { storage.setItem(SYNC_KEY, JSON.stringify(fallback)); } catch (e) {}
+      return { ...empty, ...fallback };
+    }
+    return empty;
+  }
+
+  function saveSyncConfig() {
+    try { storage.setItem(SYNC_KEY, JSON.stringify(data.settings.sync || {})); }
+    catch (e) { console.error('Sync config save error:', e); }
   }
 
   // ── Migrate older stored shapes to the current schema ───────
@@ -99,6 +169,9 @@ const State = (() => {
       if (e.spawnedNextId === undefined) e.spawnedNextId = null;
       if (!Array.isArray(e.blockedBy)) e.blockedBy = [];
       if (!Array.isArray(e.projectIds)) e.projectIds = e.projectId ? [e.projectId] : [];
+      if (e.txtRoom === undefined) e.txtRoom = null;
+      if (e.txtKey === undefined) e.txtKey = null;
+      if (e.txtDone === undefined) e.txtDone = null;
     });
     (d.tags || []).forEach(t => {
       if (t.projectId === undefined) t.projectId = null; // null = global tag
@@ -106,23 +179,60 @@ const State = (() => {
     (d.projects || []).forEach(p => {
       if (p.parentId === undefined) p.parentId = null;
       if (p.archived === undefined) p.archived = false;
+      // Cade.txt link: a workspace (top level) or a room (sub-project).
+      if (p.txtWorkspaceId === undefined) p.txtWorkspaceId = null;
+      if (p.txtRoom === undefined) p.txtRoom = null;
+      if (p.txtHasList === undefined) p.txtHasList = false;
     });
     return d;
   }
 
-  // ── Full reset to a CLEAN slate (no sample data re-seed) ────
-  function resetData() {
+  // ── Full reset to a CLEAN slate ─────────────────────────────
+  // Credentials survive deliberately: "delete my data" is not "forget how to
+  // reach my server". Sync.eraseRemote() is what clears the server copy.
+  //
+  // But keeping them means the reload right after a reset would auto-connect
+  // and pull the retained server copy straight back, making a local-only
+  // reset look like it did nothing. `pauseSync` keeps the credentials and
+  // suppresses the automatic reconnect until the user connects deliberately.
+  function resetData({ pauseSync = false } = {}) {
+    const sync = data.settings.sync;
     data = structuredClone(defaultData);
-    data.settings.onboarded = true; // blocks seed() from repopulating samples
+    data.settings.sync = { ...sync, paused: !!pauseSync };
+    loadFailed = false;
     save();
   }
 
   // ── Save to storage ────────────────────────────────────────
   function save() {
+    // Credentials write first and separately: they are ~100 bytes and must
+    // land even when the main blob is too big for the remaining quota.
+    saveSyncConfig();
+    // An unreadable stored blob is left exactly as it is. Overwriting it with
+    // the empty placeholder would look clean on the next boot — and a clean
+    // empty dataset is one that happily pushes itself over the server copy.
+    // The blob is only replaced once we hold real data again (setRawData from
+    // sync/import) or the user explicitly resets.
+    if (loadFailed) return;
+    let durable = false;
     try {
-      storage.setItem(STORAGE_KEY, JSON.stringify(data));
-    } catch (e) { console.error('Save error:', e); }
+      durable = storage.setItem(STORAGE_KEY, JSON.stringify(data));
+    } catch (e) {
+      console.error('Save error:', e); // e.g. a value that won't serialize
+    }
+    if (durable) { saveFailed = false; return; }
+    // Silent degradation to an in-memory store is how edits "randomly"
+    // vanished on the next reload. Say so, once per failure streak.
+    if (!saveFailed) {
+      saveFailed = true;
+      try { window.dispatchEvent(new CustomEvent('state-save-failed')); } catch (_) {}
+    }
   }
+
+  // Is the in-memory dataset trustworthy enough to publish? A phantom empty
+  // state from an unreadable blob must never be pushed over the server.
+  function isHealthy() { return !loadFailed; }
+  function healthReport() { return { loadFailed, saveFailed }; }
 
   // ── Deep merge helper ──────────────────────────────────────
   function deepMerge(target, source) {
@@ -188,6 +298,10 @@ const State = (() => {
     actualMinutes: null, // manual override of tracked time (estimate-vs-actual)
     lastNotified: null,  // date a reminder notification last fired (once per day)
     spawnedNextId: null, // recurring: id of the next occurrence already spawned
+    // ── Cade.txt link (see bridge.js) ──
+    txtRoom: null,  // room whose todo list this task mirrors
+    txtKey: null,   // normalized line text — identity across edits
+    txtDone: null,  // the document's completion state at the last scan
   };
 
   function createEntry(partial) {
@@ -382,6 +496,10 @@ const State = (() => {
       order: data.projects.length,
       parentId: null,
       archived: false,
+      createdAt: new Date().toISOString(),
+      txtWorkspaceId: null, // linked Cade.txt workspace (top-level projects)
+      txtRoom: null,        // linked Cade.txt room (sub-projects)
+      txtHasList: false,    // that room currently holds a [ ] todo list
       ...partial,
     };
     data.projects.push(project);
@@ -876,167 +994,41 @@ const State = (() => {
 
   function importData(jsonStr) {
     try {
-      const imported = JSON.parse(jsonStr);
-      data = migrate(deepMerge(structuredClone(defaultData), imported));
-      emit();
+      // setRawData, not a raw assignment: a backup file carries whatever
+      // credentials the exporting device had, and importing must not
+      // repoint (or disconnect) the device doing the import.
+      setRawData(JSON.parse(jsonStr));
       return true;
     } catch (e) { return false; }
   }
 
   function getRawData() { return data; }
-  function setRawData(newData) { data = migrate(deepMerge(structuredClone(defaultData), newData)); emit(); }
 
-  // ═══════════════════════════════════════════════════════════
-  // SEED DATA (demo content for first run)
-  // ═══════════════════════════════════════════════════════════
-  function seed() {
-    // onboarded=true after a reset means "stay empty" — never re-seed samples
-    if (data.settings.onboarded) return;
-    if (data.entries.length > 0 || data.projects.length > 0) return;
-
-    // Projects
-    const work = createProject({ name: 'Work', color: '#0f9598', icon: 'briefcase' });
-    const home = createProject({ name: 'Home', color: '#e06d6d', icon: 'home' });
-    const health = createProject({ name: 'Health', color: '#6fcf97', icon: 'heart' });
-    const learning = createProject({ name: 'Learning', color: '#6db4f0', icon: 'graduation-cap' });
-
-    // Tags
-    data.tags.push(
-      { id: uid(), name: 'urgent', color: 'red' },
-      { id: uid(), name: 'deep-work', color: 'purple' },
-      { id: uid(), name: 'quick', color: 'yellow' },
-      { id: uid(), name: 'creative', color: 'pink' },
-    );
-
-    // Goals
-    createEntry({
-      type: 'goal', title: 'Read 12 books this year', projectId: learning.id,
-      targetValue: 12, currentValue: 5, unit: 'books',
-      tags: ['deep-work'], effort: 'large', priority: 'medium',
-    });
-    createEntry({
-      type: 'goal', title: 'Run 500km this year', projectId: health.id,
-      targetValue: 500, currentValue: 187, unit: 'km',
-      tags: [], effort: 'large', priority: 'medium',
-    });
-
-    // Habits
-    const meditation = createEntry({
-      type: 'habit', title: 'Meditate 10 min', projectId: health.id,
-      tags: [], effort: 'small', priority: 'medium',
-      recurrence: { type: 'daily', interval: 1 },
-    });
-    const reading = createEntry({
-      type: 'habit', title: 'Read 30 min', projectId: learning.id,
-      tags: ['deep-work'], effort: 'small', priority: 'medium',
-      recurrence: { type: 'daily', interval: 1 },
-    });
-    const workout = createEntry({
-      type: 'habit', title: 'Workout', projectId: health.id,
-      tags: [], effort: 'large', priority: 'high',
-      recurrence: { type: 'weekly', interval: 1, daysOfWeek: [1, 3, 5] },
-    });
-
-    // Seed habit completions for last 2 weeks
-    const today = new Date();
-    const habits = [meditation.id, reading.id, workout.id];
-    habits.forEach((hid, hIdx) => {
-      for (let i = 0; i < 14; i++) {
-        // Vary completion rate per habit
-        const rate = hIdx === 2 ? 0.4 : 0.7;
-        if (Math.random() < rate) {
-          const d = new Date(today);
-          d.setDate(d.getDate() - i);
-          data.logs.push({
-            id: uid(),
-            type: 'habit_completion',
-            entryId: hid,
-            date: dateStr(d),
-            value: 1,
-            notes: '',
-            createdAt: new Date().toISOString(),
-          });
-        }
-      }
-    });
-
-    // Recalculate streaks
-    habits.forEach(hid => {
-      const s = calculateStreak(hid);
-      updateEntry(hid, { streak: s.current, bestStreak: s.best });
-    });
-
-    // Tasks
-    createEntry({
-      type: 'task', title: 'Q3 roadmap review', projectId: work.id,
-      tags: ['urgent', 'deep-work'], effort: 'large', priority: 'high',
-      dueDate: dateStr(new Date(Date.now() + 86400000)),
-    });
-    createEntry({
-      type: 'task', title: 'Fix auth bug in production', projectId: work.id,
-      tags: ['urgent'], effort: 'medium', priority: 'urgent',
-      dueDate: todayStr(),
-    });
-    createEntry({
-      type: 'task', title: 'Write blog post about habits', projectId: work.id,
-      tags: ['creative', 'deep-work'], effort: 'large', priority: 'low',
-      dueDate: dateStr(new Date(Date.now() + 3 * 86400000)),
-    });
-    createEntry({
-      type: 'task', title: 'Grocery shopping', projectId: home.id,
-      tags: ['quick'], effort: 'small', priority: 'medium',
-      scheduledDate: todayStr(),
-    });
-    createEntry({
-      type: 'task', title: 'Clean kitchen', projectId: home.id,
-      tags: ['quick'], effort: 'small', priority: 'low',
-    });
-    createEntry({
-      type: 'task', title: 'Review PR #42', projectId: work.id,
-      tags: ['quick'], effort: 'small', priority: 'high',
-      dueDate: todayStr(), completed: true, completedAt: new Date().toISOString(),
-    });
-    createEntry({
-      type: 'task', title: 'Plan weekend trip', projectId: home.id,
-      tags: ['creative'], effort: 'medium', priority: 'low',
-    });
-
-    // Reminders
-    createEntry({
-      type: 'reminder', title: 'Call dentist', projectId: null,
-      dueDate: dateStr(new Date(Date.now() + 2 * 86400000)),
-      tags: [], effort: 'trivial', priority: 'medium',
-    });
-    createEntry({
-      type: 'reminder', title: 'Pay rent', projectId: home.id,
-      dueDate: dateStr(new Date(Date.now() + 5 * 86400000)),
-      tags: ['urgent'], effort: 'trivial', priority: 'high',
-      recurrence: { type: 'monthly', interval: 1 },
-    });
-
-    // Checkins
-    createEntry({
-      type: 'checkin', title: 'Morning check-in', projectId: null,
-      emotion: 'good', tags: [], effort: 'trivial', priority: 'low',
-    });
-
-    // Today's emotion log
-    logEmotion('good', 'Feeling productive today');
-
-    // Calorie logs for today
-    logCalories(420, 'Oatmeal with berries', 'breakfast');
-    logCalories(650, 'Chicken salad', 'lunch');
-    logCalories(180, 'Greek yogurt', 'snack');
-
-    // Time session
-    logTimeSession(workout.id, 45, 'Morning run');
-
-    data.settings.onboarded = true;
-    save();
+  // Adopt a dataset from sync/import. Device-local settings are carried over
+  // from the running instance rather than taken from the payload — a remote
+  // device's credentials (or its empty ones) replacing ours is what silently
+  // disconnected this device and made its data look deleted.
+  function setRawData(newData) {
+    const localOnly = {};
+    DEVICE_LOCAL_SETTINGS.forEach(k => { localOnly[k] = data.settings[k]; });
+    data = migrate(deepMerge(structuredClone(defaultData), newData));
+    DEVICE_LOCAL_SETTINGS.forEach(k => { data.settings[k] = localOnly[k]; });
+    loadFailed = false; // we now hold a real dataset again
+    emit();
   }
 
-  // ── Init ────────────────────────────────────────────────────
-  seed();
+  // The payload that goes over the wire: same data, minus anything that
+  // describes this device.
+  function getSyncableData() {
+    const clone = structuredClone(data);
+    DEVICE_LOCAL_SETTINGS.forEach(k => { delete clone.settings[k]; });
+    return clone;
+  }
+
+  // NOTE: this app deliberately ships NO sample data. A first run starts
+  // empty. Demo goals/habits/tasks used to be seeded here, and every time a
+  // device lost its local blob the seed refilled it — then the next connect
+  // merged that fake content into the real synced dataset.
 
   return {
     subscribe, emit, save,
@@ -1055,7 +1047,8 @@ const State = (() => {
     getTodayCalories, getTodayEmotion, actualMinutesFor,
     getHabitCompletions, getHabitSkips, calculateStreak, getHabitRetention: (id) => calculateStreak(id),
     getSettings, updateSettings,
-    exportData, importData, getRawData, setRawData,
+    exportData, importData, getRawData, setRawData, getSyncableData,
+    isHealthy, healthReport,
     todayStr, yesterdayStr, dateStr, daysBetween,
     PROJECT_COLORS, PROJECT_ICONS, TAG_COLORS,
     uid,

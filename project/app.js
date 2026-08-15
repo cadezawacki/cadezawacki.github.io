@@ -21,9 +21,16 @@ const App = (() => {
     return `<i data-lucide="${name}" style="width:${size}px;height:${size}px"></i>`;
   }
 
-  function escHtml(s) {
-    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  }
+  // Every view here builds HTML strings and assigns them to innerHTML, so
+  // any free text — titles, project names, tags, notes — has to come through
+  // this first. Quotes are escaped too: plenty of these land inside
+  // attributes (title="…"), where &lt;/&gt; alone would not save us.
+  //
+  // This matters more than it used to. Task titles now arrive from Cade.txt
+  // documents, which sync between devices — so an unescaped title is not
+  // just a user typing at themselves, it is content crossing a trust
+  // boundary into this origin, where the encryption keys live.
+  const escHtml = window.escapeHtml;
 
   // Single-line-style textareas wrap + grow instead of scrolling sideways.
   // Modern browsers do it in CSS (field-sizing: content); this is the
@@ -344,6 +351,12 @@ const App = (() => {
     if (toggleBtn) {
       toggleBtn.innerHTML = saved === 'dark' ? icon('sun') : icon('moon');
     }
+    setThemeMenuLabel(saved);
+  }
+
+  function setThemeMenuLabel(theme) {
+    const label = document.getElementById('themeMenuLabel');
+    if (label) label.textContent = theme === 'dark' ? 'Theme: Dark' : 'Theme: Light';
   }
 
   function toggleTheme() {
@@ -357,8 +370,355 @@ const App = (() => {
       toggleBtn.innerHTML = next === 'dark' ? icon('sun') : icon('moon');
       toggleBtn.setAttribute('aria-label', 'Switch to ' + (next === 'dark' ? 'light' : 'dark') + ' mode');
     }
+    setThemeMenuLabel(next);
     render();
     refreshIcons();
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // NAVIGATION — menubar, scope pill, view tabs, sub-project tabs
+  //
+  // Three separate questions, three separate controls, mirroring Cade.txt:
+  //   menus  → what do you want to DO
+  //   pill   → which workspace are you IN
+  //   tabs   → which view are you LOOKING AT  (+ which room, below)
+  // Everything downstream reads the scope from here instead of each view
+  // inventing its own filter row.
+  // ═══════════════════════════════════════════════════════════
+  const WS_ALL = '__all__';
+  const WS_UNFILED = '__unfiled__';
+
+  const VIEWS = [
+    { id: 'today',    label: 'Today',    icon: 'layout-dashboard', primary: true },
+    { id: 'projects', label: 'Projects', icon: 'folder-kanban',    primary: true },
+    { id: 'habits',   label: 'Habits',   icon: 'repeat',           primary: true },
+    { id: 'planner',  label: 'Planner',  icon: 'calendar-days',    primary: true },
+    { id: 'insights', label: 'Insights', icon: 'bar-chart-3',      primary: true },
+    { id: 'history',  label: 'History',  icon: 'history',          primary: true },
+    { id: 'focus',    label: 'Focus',    icon: 'crosshair' },
+    { id: 'scratch',  label: 'Scratch',  icon: 'lightbulb' },
+    { id: 'health',   label: 'Health',   icon: 'apple' },
+    { id: 'tools',    label: 'Tools',    icon: 'wrench' },
+    { id: 'settings', label: 'Settings', icon: 'settings' },
+  ];
+
+  // Which workspace/room you are in is a property of this screen, not of the
+  // dataset — it lives outside the synced blob so switching tabs on a phone
+  // doesn't queue a push and fight with the desktop.
+  const NAV_KEY = 'cade.project.nav.v1';
+  let activeWorkspace = WS_ALL;
+  let activeSubproject = null;
+
+  function loadNav() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(NAV_KEY) || '{}');
+      if (saved.workspace) activeWorkspace = saved.workspace;
+      if (saved.subproject) activeSubproject = saved.subproject;
+      if (saved.tab && VIEWS.some(v => v.id === saved.tab)) currentTab = saved.tab;
+    } catch (e) {}
+    validateNav();
+  }
+
+  function saveNav() {
+    try {
+      localStorage.setItem(NAV_KEY, JSON.stringify({
+        workspace: activeWorkspace, subproject: activeSubproject, tab: currentTab,
+      }));
+    } catch (e) {}
+  }
+
+  // A workspace or room deleted elsewhere (or in Cade.txt) must not leave the
+  // app pointing at nothing.
+  function validateNav() {
+    if (activeWorkspace !== WS_ALL && activeWorkspace !== WS_UNFILED && !State.getProject(activeWorkspace)) {
+      activeWorkspace = WS_ALL;
+      activeSubproject = null;
+    }
+    if (activeSubproject && !State.getProject(activeSubproject)) activeSubproject = null;
+  }
+
+  // ── Scope: the set of project ids the current view should show ─────────
+  // null means "no project filter at all".
+  function scopeProjectIds() {
+    if (activeSubproject) return State.getProjectSubtreeIds(activeSubproject);
+    if (activeWorkspace === WS_ALL) return null;
+    if (activeWorkspace === WS_UNFILED) return [];
+    return State.getProjectSubtreeIds(activeWorkspace);
+  }
+
+  function inScope(entry) {
+    const ids = scopeProjectIds();
+    if (ids === null) return true;
+    const pids = State.entryProjectIds(entry);
+    if (ids.length === 0) return pids.length === 0; // the Unfiled bucket
+    return pids.some(pid => ids.includes(pid));
+  }
+
+  // Entries the current scope covers, with the usual archived filtering.
+  function scopedEntries(filter = {}) {
+    return State.getEntries(filter).filter(inScope);
+  }
+
+  // What the current scope is called — the deepest thing selected. Used in
+  // page headings, where naming the room is the useful answer.
+  function scopeLabel() {
+    if (activeSubproject) return State.getProject(activeSubproject)?.name || 'Sub-project';
+    return workspaceLabel();
+  }
+
+  // What the PILL says. It is a workspace switcher and its dropdown lists
+  // workspaces, so naming a room in it (with the workspace's colour on the
+  // dot beside it) reads as a mismatch. The room strip already shows which
+  // room is selected.
+  function workspaceLabel() {
+    if (activeWorkspace === WS_ALL) return 'All Projects';
+    if (activeWorkspace === WS_UNFILED) return 'Unfiled';
+    return State.getProject(activeWorkspace)?.name || 'Workspace';
+  }
+
+  function setWorkspace(id) {
+    activeWorkspace = id;
+    activeSubproject = null;
+    dropOutOfScopeSelections();
+    saveNav();
+    closeAllMenus();
+    render();
+  }
+
+  function setSubproject(id) {
+    activeSubproject = (activeSubproject === id) ? null : id;
+    dropOutOfScopeSelections();
+    saveNav();
+    render();
+  }
+
+  // Selections made inside one scope are meaningless in another. A habit
+  // opened in the previous workspace would otherwise keep the Habits page on
+  // its detail view — showing a habit the newly scoped list does not contain.
+  function dropOutOfScopeSelections() {
+    if (selectedHabit) {
+      const h = State.getEntry(selectedHabit);
+      if (!h || !inScope(h)) selectedHabit = null;
+    }
+    if (selectedEntryId) {
+      const e = State.getEntry(selectedEntryId);
+      if (!e || !inScope(e)) selectedEntryId = null;
+    }
+  }
+
+  // ── Sub-project visibility ─────────────────────────────────────────────
+  // A room with nothing left to do is noise. It stays visible on the day its
+  // last item was finished — long enough to undo a mis-tap — then drops out.
+  // "Show all" in the strip brings the settled ones back.
+  let showSettledSubs = false;
+
+  function subprojectActivity(p) {
+    const today = State.todayStr();
+    const entries = State.getEntries({ projectId: p.id });
+    const open = entries.filter(e => !e.completed && e.type !== 'habit').length;
+    const doneToday = entries.filter(e => e.completed && (e.completedAt || '').startsWith(today)).length;
+    // A sub-project made today counts as live even while still empty —
+    // creating one and watching it vanish would be baffling.
+    const fresh = entries.length === 0 && (p.createdAt || '').startsWith(today);
+    return { open, doneToday, total: entries.length, live: open > 0 || doneToday > 0 || fresh };
+  }
+
+  // EVERY descendant, depth-first, not just direct children — projects can
+  // still be nested arbitrarily deep from the project editor, and a
+  // grandchild that only its parent could reach would be stranded: its tasks
+  // roll up into the ancestor's totals with no way to open it.
+  // `depth` is relative to the workspace, for indenting.
+  function workspaceSubprojects(wsId) {
+    if (wsId === WS_ALL || wsId === WS_UNFILED) return [];
+    const all = State.getProjects();
+    const out = [];
+    const walk = (parentId, depth) => {
+      all.filter(p => p.parentId === parentId).forEach(p => {
+        out.push({ ...p, depth });
+        walk(p.id, depth + 1);
+      });
+    };
+    walk(wsId, 0);
+    return out;
+  }
+
+  // ── Rendering the chrome ───────────────────────────────────────────────
+  function renderNav() {
+    validateNav();
+    renderWorkspacePill();
+    renderViewTabs();
+    renderSubTabs();
+  }
+
+  function renderWorkspacePill() {
+    const pill = document.getElementById('wsPill');
+    if (!pill) return;
+    const nameEl = pill.querySelector('.ws-pill-name');
+    const dot = pill.querySelector('.ws-pill-dot');
+    const proj = (activeWorkspace !== WS_ALL && activeWorkspace !== WS_UNFILED)
+      ? State.getProject(activeWorkspace) : null;
+    nameEl.textContent = workspaceLabel();
+    dot.style.background = proj ? proj.color : 'var(--text-faint)';
+    pill.title = proj ? `Workspace: ${proj.name} — click to switch` : 'Switch workspace';
+  }
+
+  function renderWorkspaceDropdown() {
+    const dd = document.getElementById('wsDropdown');
+    if (!dd) return;
+    const tops = State.getProjects().filter(p => p.depth === 0);
+    // Two different questions: is there an Unfiled page worth offering, and
+    // how much is left to do there. Gating the entry on the OPEN count alone
+    // meant finishing the last unfiled task removed the only way back in to
+    // look at it — there is no Unfiled card in the grid either.
+    const unfiled = State.getEntries().filter(e => State.entryProjectIds(e).length === 0);
+    const unfiledCount = unfiled.filter(e => !e.completed).length;
+    const openIn = (p) => State.getEntries({ projectId: p.id }).filter(e => !e.completed && e.type !== 'habit').length;
+
+    let html = `<button class="ws-option ${activeWorkspace === WS_ALL ? 'active' : ''}" onclick="App.setWorkspace('${WS_ALL}')">
+      <span class="ws-pill-dot" style="background:var(--text-faint)"></span>
+      <span>All Projects</span>
+      <span class="ws-count">${State.getEntries().filter(e => !e.completed && e.type !== 'habit').length}</span>
+    </button>`;
+
+    tops.forEach(p => {
+      html += `<button class="ws-option ${activeWorkspace === p.id ? 'active' : ''}" onclick="App.setWorkspace('${p.id}')">
+        <span class="ws-pill-dot" style="background:${p.color}"></span>
+        <span class="truncate">${escHtml(p.name)}</span>
+        ${p.txtWorkspaceId ? '<span class="ws-link-badge" title="Shared with Cade.txt">txt</span>' : ''}
+        <span class="ws-count">${openIn(p)}</span>
+      </button>`;
+    });
+
+    if (unfiled.length > 0 || activeWorkspace === WS_UNFILED) {
+      html += `<button class="ws-option ${activeWorkspace === WS_UNFILED ? 'active' : ''}" onclick="App.setWorkspace('${WS_UNFILED}')">
+        <span class="ws-pill-dot" style="background:var(--text-faint)"></span>
+        <span>Unfiled</span><span class="ws-count">${unfiledCount}</span>
+      </button>`;
+    }
+
+    html += `<div class="menu-separator"></div>
+      <button class="ws-option" onclick="App.menuAction('openProjectModal')"><span>+ New workspace…</span></button>
+      <button class="ws-option" onclick="App.menuAction('openManageProjects')"><span>Manage projects…</span></button>`;
+    dd.innerHTML = html;
+  }
+
+  function renderViewTabs() {
+    const strip = document.getElementById('viewTabs');
+    const sel = document.getElementById('viewMobileSelect');
+    const shown = VIEWS.filter(v => v.primary || v.id === currentTab);
+    if (strip) {
+      strip.innerHTML = shown.map(v => `
+        <button class="view-tab ${currentTab === v.id ? 'active' : ''}" onclick="App.switchTab('${v.id}')">
+          <i data-lucide="${v.icon}"></i><span>${v.label}</span>
+        </button>`).join('');
+    }
+    if (sel) {
+      sel.innerHTML = `<select onchange="App.switchTab(this.value)" aria-label="View">
+        ${VIEWS.map(v => `<option value="${v.id}" ${currentTab === v.id ? 'selected' : ''}>${v.label}</option>`).join('')}
+      </select>`;
+    }
+  }
+
+  function renderSubTabs() {
+    const bar = document.getElementById('subTabs');
+    if (!bar) return;
+    const subs = workspaceSubprojects(activeWorkspace);
+    if (!subs.length) {
+      bar.style.display = 'none';
+      document.body.classList.remove('has-subtabs');
+      return;
+    }
+    const withActivity = subs.map(p => ({ p, a: subprojectActivity(p) }));
+    const live = withActivity.filter(x => x.a.live);
+    const settled = withActivity.filter(x => !x.a.live);
+    const visible = showSettledSubs ? withActivity : live;
+
+    // Whatever you are actually looking at is always in the strip, even if it
+    // just went quiet — otherwise selecting a room makes it disappear.
+    if (activeSubproject && !visible.some(x => x.p.id === activeSubproject)) {
+      const cur = withActivity.find(x => x.p.id === activeSubproject);
+      if (cur) visible.unshift(cur);
+    }
+
+    let html = `<span class="sub-tabs-label">Rooms</span>
+      <button class="sub-tab ${!activeSubproject ? 'active' : ''}" onclick="App.setSubproject(null)">All</button>`;
+    visible.forEach(({ p, a }) => {
+      // Indentation is meaningless in a horizontal strip, so a nested room
+      // shows its parent's name instead of losing its place in the tree.
+      const parent = p.depth ? State.getProject(p.parentId) : null;
+      html += `<button class="sub-tab ${activeSubproject === p.id ? 'active' : ''} ${a.live ? '' : 'settled'}"
+        onclick="App.setSubproject('${p.id}')"
+        title="${escHtml(parent ? parent.name + ' / ' + p.name : p.name)}${p.txtRoom ? ' — Cade.txt room' : ''}${a.live ? '' : ' — nothing left to do'}">
+        ${parent ? `<span class="sub-parent">${escHtml(parent.name)}/</span>` : ''}<span>${escHtml(p.name)}</span>
+        <span class="sub-count">${a.open || a.doneToday}</span>
+      </button>`;
+    });
+    if (settled.length && !showSettledSubs) {
+      html += `<button class="sub-tab-add" onclick="App.toggleSettledSubs()" title="Show rooms with nothing left to do">+${settled.length} done</button>`;
+    } else if (settled.length) {
+      html += `<button class="sub-tab-add" onclick="App.toggleSettledSubs()" title="Hide rooms with nothing left to do">hide done</button>`;
+    }
+    html += `<button class="sub-tab-add" onclick="App.openNewSubproject()" title="New sub-project — also creates the room in Cade.txt">+</button>`;
+
+    bar.innerHTML = html;
+    bar.style.display = 'flex';
+    document.body.classList.add('has-subtabs');
+  }
+
+  function toggleSettledSubs() {
+    showSettledSubs = !showSettledSubs;
+    renderSubTabs();
+  }
+
+  // ── Menus ──────────────────────────────────────────────────────────────
+  function closeAllMenus() {
+    document.querySelectorAll('.menu-dropdown.open').forEach(el => el.classList.remove('open'));
+    document.querySelectorAll('.menu-trigger.open').forEach(el => el.classList.remove('open'));
+    document.getElementById('wsDropdown')?.classList.remove('open');
+    document.getElementById('menuSheet')?.classList.remove('open');
+  }
+
+  function toggleMenu(name, trigger) {
+    const dd = document.getElementById('menu-' + name);
+    if (!dd) return;
+    const wasOpen = dd.classList.contains('open');
+    closeAllMenus();
+    if (!wasOpen) { dd.classList.add('open'); trigger.classList.add('open'); }
+  }
+
+  function toggleWorkspaceMenu(e) {
+    if (e) e.stopPropagation();
+    const dd = document.getElementById('wsDropdown');
+    const wasOpen = dd.classList.contains('open');
+    closeAllMenus();
+    if (!wasOpen) { renderWorkspaceDropdown(); dd.classList.add('open'); }
+  }
+
+  // Phones fold the four menus into one sheet. It is built from the same
+  // dropdown markup, so an item added to a menu shows up in both places.
+  function toggleMenuSheet() {
+    const sheet = document.getElementById('menuSheet');
+    if (!sheet) return;
+    const wasOpen = sheet.classList.contains('open');
+    closeAllMenus();
+    if (wasOpen) return;
+    const groups = [['new', 'New'], ['view', 'View'], ['track', 'Track'], ['data', 'Data']];
+    sheet.innerHTML = groups.map(([id, title]) => {
+      const src = document.getElementById('menu-' + id);
+      return src ? `<div class="menu-sheet-group"><div class="menu-sheet-title">${title}</div>${src.innerHTML}</div>` : '';
+    }).join('');
+    sheet.classList.add('open');
+    refreshIcons();
+  }
+
+  // Every menu item routes through here so the menu always closes, even when
+  // the action opens a modal that would otherwise leave it hanging open.
+  function menuAction(fn, arg) {
+    closeAllMenus();
+    const api = App;
+    if (typeof api[fn] === 'function') {
+      arg === undefined ? api[fn]() : api[fn](arg);
+    }
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -366,9 +726,8 @@ const App = (() => {
   // ═══════════════════════════════════════════════════════════
   function switchTab(tab) {
     currentTab = tab;
-    document.querySelectorAll('.tab-item').forEach(el => {
-      el.classList.toggle('active', el.dataset.tab === tab);
-    });
+    closeAllMenus();
+    saveNav();
     render();
   }
 
@@ -379,6 +738,7 @@ const App = (() => {
     const main = document.getElementById('mainContent');
     Charts.destroyAll();
     closePopover();
+    renderNav();
 
     switch (currentTab) {
       case 'today': main.innerHTML = renderToday(); break;
@@ -409,18 +769,29 @@ const App = (() => {
   // ═══════════════════════════════════════════════════════════
   // TODAY VIEW
   // ═══════════════════════════════════════════════════════════
+  // A finished task earns its place on the homepage for exactly one day —
+  // long enough to see what you got done and to undo a mis-tap. After that
+  // it belongs to history, not to today.
+  function finishedToday(e) {
+    return !!(e.completed && (e.completedAt || '').startsWith(State.todayStr()));
+  }
+  function hideStaleCompletions(list) {
+    return list.filter(e => !e.completed || finishedToday(e));
+  }
+
   function renderToday() {
     const today = State.todayStr();
-    const allEntries = State.getEntries();
+    const allEntries = scopedEntries();
     const tasks = allEntries.filter(e => e.type === 'task');
     const habits = allEntries.filter(e => e.type === 'habit');
 
-    // Today's tasks (due today, scheduled today, or unscheduled) — completed
-    // ones stay visible (struck through) so a mis-tap is recoverable.
+    // Today's tasks: due today, scheduled today, or unscheduled — plus
+    // anything finished today, struck through at the bottom. Tasks completed
+    // on an earlier day are gone from here entirely.
     const priOrder = { urgent: 0, high: 1, medium: 2, low: 3 };
-    const todayTasks = tasks.filter(t =>
+    const todayTasks = hideStaleCompletions(tasks.filter(t =>
       t.dueDate === today || t.scheduledDate === today || (!t.dueDate && !t.scheduledDate)
-    ).sort((a, b) => {
+    )).sort((a, b) => {
       if (a.completed !== b.completed) return a.completed ? 1 : -1; // done → bottom
       return (priOrder[a.priority] || 2) - (priOrder[b.priority] || 2);
     });
@@ -437,28 +808,35 @@ const App = (() => {
       .filter(t => !t.completed && t.dueDate && t.dueDate > today)
       .sort((a, b) => a.dueDate.localeCompare(b.dueDate) || taskScore(b) - taskScore(a));
 
-    const workingProject = State.getSettings().workingProject || null;
-    const wpSubtree = workingProject ? State.getProjectSubtreeIds(workingProject) : null;
-    const inWorking = (t) => !wpSubtree || State.entryProjectIds(t).some(pid => wpSubtree.includes(pid));
+    // Scope now comes from the workspace pill in the menubar — one control
+    // instead of a page-level "working on" select duplicating it.
     // blocked tasks can't be the next best thing to do — they're waiting
-    const nextPool = [...openToday, ...upcomingTasks].filter(inWorking).filter(t => !isBlocked(t));
+    const nextPool = [...openToday, ...upcomingTasks].filter(t => !isBlocked(t));
     const nextTask = [...nextPool].sort((a, b) => taskScore(b) - taskScore(a))[0];
-    const projects = State.getProjects();
+    const scoped = activeWorkspace !== WS_ALL || activeSubproject;
+    const doneToday = tasks.filter(finishedToday).length;
 
     const todayEmotion = State.getTodayEmotion();
+    // Sessions are logged against entries, so they scope the same way the
+    // counts beside them do. A session with no entry (a bare timer) has no
+    // project to judge, so it only counts when nothing is scoped.
     const focusSeconds = State.getLogs({ type: 'time_session', date: today })
+      .filter(l => {
+        if (!scoped) return true;
+        const e = l.entryId ? State.getEntry(l.entryId) : null;
+        return e ? inScope(e) : false;
+      })
       .reduce((s, l) => s + (l.value || 0), 0);
 
     let html = `
       <div class="page-header">
         <div>
           <h1 class="page-title">${new Date().toLocaleDateString('en', { weekday: 'long', month: 'long', day: 'numeric' })}</h1>
-          <p class="page-subtitle">${openToday.length + overdueTasks.length} tasks today · ${habits.filter(h => State.isHabitScheduledOn(h.id, today) && !State.habitStatusOn(h.id, today)).length} habits pending</p>
+          <p class="page-subtitle">${scoped ? escHtml(scopeLabel()) + ' · ' : ''}${openToday.length + overdueTasks.length} to do · ${habits.filter(h => State.isHabitScheduledOn(h.id, today) && !State.habitStatusOn(h.id, today)).length} habits pending</p>
         </div>
         <div style="display:flex;gap:var(--space-2);">
           ${overdueTasks.length > 0 ? `<button class="btn btn-secondary review-btn" onclick="App.openDailyReview()" title="Triage everything overdue — one decision per item">${icon('list-todo', 16)}Review<span class="review-count">${overdueTasks.length}</span></button>` : ''}
-          <button class="btn btn-secondary" onclick="Timers.openPanel()">${icon('timer', 16)}Timer</button>
-          <button class="btn btn-secondary" onclick="App.openQuickLog()">${icon('zap', 16)}Quick Log</button>
+          <button class="btn btn-primary" onclick="App.openNewEntry('task')">${icon('plus', 16)}Task</button>
         </div>
       </div>
     `;
@@ -466,8 +844,8 @@ const App = (() => {
     // Stats row
     html += `<div class="grid-3 section">
       <div class="card stat-card">
-        <span class="stat-label">Tasks Done Today</span>
-        <span class="stat-value">${tasks.filter(e => e.completed && e.completedAt?.startsWith(today)).length} / ${todayTasks.length + overdueTasks.length}</span>
+        <span class="stat-label">Done Today</span>
+        <span class="stat-value">${doneToday} / ${openToday.length + overdueTasks.length + doneToday}</span>
       </div>
       <div class="card stat-card">
         <span class="stat-label">Habits Today</span>
@@ -479,18 +857,15 @@ const App = (() => {
       </div>
     </div>`;
 
-    // Next best task — with a "working on" project scope selector
+    // Next best task
     html += `
       <div class="section">
         <div class="section-header"><span class="section-title">Next Best Task</span>
-          <select class="form-select" style="width:auto;padding:var(--space-1) var(--space-2);font-size:var(--text-xs);" onchange="App.setWorkingProject(this.value || null)" title="Which project are you working in right now?">
-            <option value="">Working on: anything</option>
-            ${projects.map(p => `<option value="${p.id}" ${workingProject === p.id ? 'selected' : ''}>Working on: ${p.name}</option>`).join('')}
-          </select>
+          ${scoped ? `<span class="text-xs text-faint">within ${escHtml(scopeLabel())}</span>` : ''}
         </div>
         ${nextTask
           ? renderEntryCard(nextTask, nextTask.projectId ? State.getProject(nextTask.projectId) : null, null, { highlight: true })
-          : `<div class="card"><p class="text-xs text-faint">No open tasks${workingProject ? ` in ${State.getProject(workingProject)?.name || 'this project'}` : ''} right now.</p></div>`}
+          : `<div class="card"><p class="text-xs text-faint">Nothing open${scoped ? ` in ${escHtml(scopeLabel())}` : ''} right now.</p></div>`}
       </div>
     `;
 
@@ -681,7 +1056,7 @@ const App = (() => {
         style="top:${top}px;height:${Math.max(height, 16)}px;left:calc(var(--gutter) + 4px + ${leftPct}% - ${leftPct / 100} * (var(--gutter) + 8px));right:auto;width:calc(${widthPct}% - ${widthPct / 100} * (var(--gutter) + 8px) - 2px);border-left-color:${color};background:color-mix(in srgb, ${color} 12%, var(--surface));pointer-events:auto;"
         onpointerdown="App.blockPointerDown(event,'${b.id}')"
         title="${b.title} · ${b.start}–${b.end} — tap to edit, drag to move, pull the bottom edge to resize">
-        <div class="pb-title">${overdue ? '⚠ ' : ''}${b.title}</div>
+        <div class="pb-title">${overdue ? '⚠ ' : ''}${escHtml(b.title)}</div>
         ${height >= 30 ? `<div class="pb-time">${b.start}–${b.end} · ${estimateLabel(dur)}</div>` : ''}
         <div class="pb-resize" aria-hidden="true"></div>
       </div>`;
@@ -901,7 +1276,7 @@ const App = (() => {
           <label class="form-label">Project (color)</label>
           <select class="form-select" id="agendaProject">
             <option value="">None</option>
-            ${projects.map(p => `<option value="${p.id}" ${block?.projectId === p.id ? 'selected' : ''}>${p.name}</option>`).join('')}
+            ${projects.map(p => `<option value="${p.id}" ${block?.projectId === p.id ? 'selected' : ''}>${escHtml(p.name)}</option>`).join('')}
           </select>
         </div>
       </div>
@@ -920,7 +1295,7 @@ const App = (() => {
         <select class="form-select" id="agendaEntry">
           <option value="">None</option>
           ${State.getEntries({ type: 'task' }).filter(t => !t.completed || t.id === block?.entryId).map(t =>
-            `<option value="${t.id}" ${block?.entryId === t.id ? 'selected' : ''}>${t.title}</option>`).join('')}
+            `<option value="${t.id}" ${block?.entryId === t.id ? 'selected' : ''}>${escHtml(t.title)}</option>`).join('')}
         </select>
       </div>
       <div class="form-group">
@@ -1128,13 +1503,13 @@ const App = (() => {
     }
     const blocker = blockingEntry(entry);
     if (blocker) {
-      metaHtml += `<span class="pill pill-blocked" title="Blocked until “${blocker.title}” is done">${icon('lock', 10)}${blocker.title}</span>`;
+      metaHtml += `<span class="pill pill-blocked" title="Blocked until “${escHtml(blocker.title)}” is done">${icon('lock', 10)}${escHtml(blocker.title)}</span>`;
     }
     if (entry.tags && entry.tags.length > 0) {
       entry.tags.forEach(tag => {
         const tagObj = State.getAllTags().find(t => t.name === tag);
         const colorCls = tagObj ? `pill-${tagObj.color}` : 'pill-gray';
-        metaHtml += `<span class="pill ${colorCls}">#${tag}</span>`;
+        metaHtml += `<span class="pill ${colorCls}">#${escHtml(tag)}</span>`;
       });
     }
     if (entry.type === 'habit' && streakInfo) {
@@ -1159,7 +1534,7 @@ const App = (() => {
           <i data-lucide="check"></i>
         </div>
         <div class="entry-body">
-          <div class="entry-title">${entry.title}</div>
+          <div class="entry-title">${escHtml(entry.title)}</div>
           ${metaHtml ? `<div class="entry-meta">${metaHtml}</div>` : ''}
           ${entry.type === 'goal' && entry.targetValue ? `
             <div class="progress-bar mt-2">
@@ -1243,7 +1618,7 @@ const App = (() => {
         <div style="display:flex;align-items:flex-start;gap:var(--space-3);">
           <button class="btn btn-secondary btn-sm" onclick="App.backFromTaskPage()" style="margin-top:2px;">${icon('arrow-left', 14)}Back</button>
           <div>
-            <h1 class="page-title" style="${entry.completed ? 'text-decoration:line-through;color:var(--text-muted);' : ''}">${entry.title}</h1>
+            <h1 class="page-title" style="${entry.completed ? 'text-decoration:line-through;color:var(--text-muted);' : ''}">${escHtml(entry.title)}</h1>
             <div class="entry-meta" style="margin-top:var(--space-2);">${metaHtml}</div>
           </div>
         </div>
@@ -1252,7 +1627,7 @@ const App = (() => {
           <button class="btn ${entry.completed ? 'btn-secondary' : 'btn-primary'}" onclick="App.toggleEntry('${entry.id}')">${icon('check', 14)}${entry.completed ? 'Reopen' : 'Complete'}</button>
         </div>
       </div>
-      ${entry.description ? `<p class="text-sm text-muted" style="margin-bottom:var(--space-4);max-width:70ch;">${entry.description}</p>` : ''}
+      ${entry.description ? `<p class="text-sm text-muted" style="margin-bottom:var(--space-4);max-width:70ch;">${escHtml(entry.description)}</p>` : ''}
     `;
 
     // Sticky timer strip
@@ -1397,216 +1772,330 @@ const App = (() => {
 
   // ═══════════════════════════════════════════════════════════
   // PROJECTS VIEW
+  //
+  // The workspace pill and the room strip decide WHAT you are looking at,
+  // so this view no longer carries its own project chip wall. It shows one
+  // of three things: the grid of workspaces, one workspace's page, or one
+  // sub-project's page.
+  //
+  // Completed work is handled by recency, not by a single on/off switch:
+  // anything finished today stays in place, everything older is opt-in and
+  // sortable — because "what did I finish and when" is a different question
+  // from "what is left".
   // ═══════════════════════════════════════════════════════════
-  let projectFilter = null;
   let tagFilter = null;
 
+  const COMPLETED_SORTS = [
+    { id: 'completedAt', label: 'Completed date' },
+    { id: 'name',        label: 'Name' },
+    { id: 'createdAt',   label: 'Created date' },
+    { id: 'updatedAt',   label: 'Last modified' },
+  ];
+
+  function sortCompleted(list, key) {
+    const by = {
+      name:        (a, b) => (a.title || '').localeCompare(b.title || ''),
+      createdAt:   (a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''),
+      updatedAt:   (a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || ''),
+      completedAt: (a, b) => (b.completedAt || '').localeCompare(a.completedAt || ''),
+    };
+    return [...list].sort(by[key] || by.completedAt);
+  }
+
+  function setCompletedSort(key) {
+    State.updateSettings({ completedSort: key });
+    render();
+  }
+
+  function toggleShowCompleted() {
+    State.updateSettings({ showCompletedOnProject: !State.getSettings().showCompletedOnProject });
+    render();
+  }
+
   function renderProjects() {
-    const projects = State.getProjects();
-    // Tag chips only offer tags actually used inside the current project
-    // scope (the active filter chip survives even if newly empty).
-    const scopeEntries = projectFilter
-      ? (projectFilter === 'none'
-        ? State.getEntries().filter(e => State.entryProjectIds(e).length === 0)
-        : State.getEntries({ projectId: projectFilter }))
-      : State.getEntries();
-    const usedTagNames = new Set(scopeEntries.flatMap(e => e.tags || []));
-    const allTags = State.getAllTags().filter(t => usedTagNames.has(t.name) || t.name === tagFilter);
+    // The pill decides the page. A sub-project beats a workspace; "All
+    // Projects" with nothing selected shows the grid.
+    const focusId = activeSubproject
+      || (activeWorkspace !== WS_ALL && activeWorkspace !== WS_UNFILED ? activeWorkspace : null);
+    if (focusId) return renderProjectPage(State.getProject(focusId));
+    if (activeWorkspace === WS_UNFILED) return renderProjectPage(null);
+    return renderProjectGrid();
+  }
+
+  // ── The grid: one card per workspace ──────────────────────────────────
+  function renderProjectGrid() {
+    const tops = State.getProjects().filter(p => p.depth === 0);
+    const allOpen = State.getEntries().filter(e => !e.completed && e.type !== 'habit').length;
+
     let html = `
       <div class="page-header">
         <div>
           <h1 class="page-title">Projects</h1>
-          <p class="page-subtitle">${projects.length} projects · ${State.getEntries().length} total entries</p>
+          <p class="page-subtitle">${tops.length} workspace${tops.length === 1 ? '' : 's'} · ${allOpen} open</p>
+        </div>
+        <div style="display:flex;gap:var(--space-2);">
+          <button class="btn btn-secondary" onclick="App.openNewSubproject()">${icon('file-plus', 14)}Sub-project</button>
+          <button class="btn btn-primary" onclick="App.openProjectModal()">${icon('folder-plus', 14)}Workspace</button>
+        </div>
+      </div>`;
+
+    if (tops.length === 0) {
+      return html + `<div class="empty-state">
+        <i data-lucide="folder-kanban"></i>
+        <p class="empty-state-text">No projects yet.</p>
+        <p class="text-xs text-faint" style="margin-top:var(--space-2);line-height:1.7;">
+          Create one here, or open <a href="../txt.html" style="color:var(--accent-text)">Cade.txt</a> —
+          its workspaces arrive as projects and any room with a <code>[ ]</code> list arrives as a sub-project.
+        </p>
+      </div>`;
+    }
+
+    html += `<div class="grid-3 section">`;
+    tops.forEach(p => {
+      const entries = State.getEntries({ projectId: p.id });
+      const open = entries.filter(e => !e.completed && e.type !== 'habit').length;
+      const doneToday = entries.filter(finishedToday).length;
+      const done = entries.filter(e => e.completed).length;
+      const subs = workspaceSubprojects(p.id).map(sp => ({ sp, a: subprojectActivity(sp) }));
+      const liveSubs = subs.filter(x => x.a.live);
+      const settledSubs = subs.length - liveSubs.length;
+
+      html += `
+        <div class="card card-interactive project-card" onclick="App.setWorkspace('${p.id}')" style="cursor:pointer;">
+          <div class="project-header">
+            <div class="project-icon" style="background:${p.color}20;color:${p.color}">
+              <i data-lucide="${p.icon}"></i>
+            </div>
+            <div style="flex:1;min-width:0;">
+              <div class="project-name">${escHtml(p.name)}${p.txtWorkspaceId ? ' <span class="ws-link-badge" title="Shared with Cade.txt">txt</span>' : ''}</div>
+              <div class="project-stats">
+                <span class="project-stat">${open} open</span>
+                ${doneToday ? `<span class="project-stat">${doneToday} done today</span>` : ''}
+              </div>
+            </div>
+            <button class="icon-btn" onclick="event.stopPropagation();App.openProjectModal('${p.id}')" aria-label="Edit project">${icon('pencil', 14)}</button>
+          </div>
+          <div class="progress-bar">
+            <div class="progress-fill" style="width:${entries.length > 0 ? done / entries.length * 100 : 0}%;background:${p.color};"></div>
+          </div>
+          ${liveSubs.length ? `<div class="subproj-list">${liveSubs.map(({ sp, a }) => `
+            <div class="subproj-row" style="padding-left:${(sp.depth || 0) * 14}px"
+              onclick="event.stopPropagation();App.openSubproject('${p.id}','${sp.id}')">
+              <span class="proj-dot" style="background:${sp.color}"></span>
+              <span class="truncate" style="flex:1;">${escHtml(sp.name)}</span>
+              <span class="project-stat">${a.open ? a.open + ' open' : a.doneToday + ' done today'}</span>
+            </div>`).join('')}</div>` : ''}
+          ${settledSubs ? `<p class="text-xs text-faint" style="margin-top:var(--space-2);">${settledSubs} sub-project${settledSubs === 1 ? '' : 's'} with nothing left to do</p>` : ''}
+        </div>`;
+    });
+    html += `</div>`;
+    return html;
+  }
+
+  // ── One project's page ────────────────────────────────────────────────
+  // `proj` null means the Unfiled bucket.
+  function renderProjectPage(proj) {
+    const settings = State.getSettings();
+    const showDone = !!settings.showCompletedOnProject;
+    const sortKey = settings.completedSort || 'completedAt';
+
+    const all = proj
+      ? State.getEntries({ projectId: proj.id })
+      : State.getEntries().filter(e => State.entryProjectIds(e).length === 0);
+    const entries = all.filter(e => !tagFilter || (e.tags || []).includes(tagFilter));
+
+    const open = entries.filter(e => !e.completed || e.type === 'habit');
+    const doneToday = entries.filter(finishedToday);
+    const doneEarlier = entries.filter(e => e.completed && e.type !== 'habit' && !finishedToday(e));
+
+    // Derived from the UNFILTERED set, plus the active tag: computing this
+    // from `entries` (already narrowed by that very tag) made the selector
+    // vanish the moment the filter matched nothing, stranding the page on an
+    // empty view with no way back to "Any tag".
+    const usedTags = [...new Set([
+      ...all.flatMap(e => e.tags || []),
+      ...(tagFilter ? [tagFilter] : []),
+    ])];
+    const subs = proj ? workspaceSubprojects(proj.id).map(sp => ({ sp, a: subprojectActivity(sp) })) : [];
+    const liveSubs = subs.filter(x => x.a.live);
+    const settledSubs = subs.filter(x => !x.a.live);
+
+    let html = `
+      <div class="page-header">
+        <div>
+          <h1 class="page-title">${proj ? `${icon(proj.icon, 16)} ${escHtml(proj.name)}` : 'Unfiled'}</h1>
+          <p class="page-subtitle">
+            ${open.filter(e => e.type !== 'habit').length} open${doneToday.length ? ` · ${doneToday.length} done today` : ''}${doneEarlier.length ? ` · ${doneEarlier.length} finished earlier` : ''}
+            ${proj?.txtRoom ? ` · <a href="../txt.html#${encodeURIComponent(proj.txtRoom)}" style="color:var(--accent-text)">open in Cade.txt</a>` : ''}
+          </p>
         </div>
         <div style="display:flex;gap:var(--space-2);align-items:center;">
-          <div class="btn-cluster" role="group" aria-label="Project tools">
-            <button class="icon-btn" onclick="App.exportForLLM()" aria-label="Copy for LLM" title="Copy for LLM — current filters as JSON">${icon('clipboard-copy', 16)}</button>
-            <span class="cluster-sep"></span>
-            <button class="icon-btn" onclick="App.openPasteImport()" aria-label="Paste tasks" title="Paste tasks — every line becomes an entry">${icon('clipboard-paste', 16)}</button>
-            <span class="cluster-sep"></span>
-            <button class="icon-btn" onclick="App.openManageProjects()" aria-label="Manage projects" title="Manage projects — rename, nest, archive">${icon('settings-2', 16)}</button>
-          </div>
-          <button class="btn btn-primary" onclick="App.openNewEntry('task')">${icon('plus', 14)}New Task</button>
-          <button class="btn btn-secondary" onclick="App.openProjectModal()">${icon('folder-plus', 14)}New Project</button>
+          <button class="btn btn-primary" onclick="App.openNewEntry('task')">${icon('plus', 14)}Task</button>
+          ${proj ? `<button class="icon-btn" onclick="App.openProjectModal('${proj.id}')" aria-label="Edit project" title="Edit project">${icon('pencil', 15)}</button>` : ''}
         </div>
-      </div>
-    `;
-
-    // Project filter — phones always get the compact dropdown; desktop
-    // keeps chips until they outgrow the space. The 4-row chip wall on
-    // mobile was the biggest source of clutter.
-    const projSelect = `
-      <select class="form-select" style="width:auto;max-width:240px;padding:var(--space-1) var(--space-2);font-size:var(--text-xs);" onchange="App.setProjectFilter(this.value || null)">
-        <option value="">All projects</option>
-        ${projects.map(p => `<option value="${p.id}" ${projectFilter === p.id ? 'selected' : ''}>${projectLabel(p)}</option>`).join('')}
-        <option value="none" ${projectFilter === 'none' ? 'selected' : ''}>No project</option>
-      </select>`;
-    if (projects.length > 8) {
-      html += `<div class="filter-chips" style="align-items:center;">${projSelect}</div>`;
-    } else {
-      html += `<div class="filter-chips only-mobile" style="align-items:center;">${projSelect}</div>`;
-      html += `<div class="filter-chips only-desktop">
-        <button class="filter-chip ${!projectFilter ? 'active' : ''}" onclick="App.setProjectFilter(null)">All</button>
-        ${projects.map(p => `<button class="filter-chip ${projectFilter === p.id ? 'active' : ''}" onclick="App.setProjectFilter('${p.id}')" ${p.depth ? `style="margin-left:${p.depth * 10}px"` : ''}>
-          <span class="proj-dot" style="background:${p.color}"></span>${p.name}
-        </button>`).join('')}
-        <button class="filter-chip ${projectFilter === 'none' ? 'active' : ''}" onclick="App.setProjectFilter('none')">No Project</button>
       </div>`;
-    }
 
-    // Tag filter — a single swipeable row on phones instead of wrapping
-    if (allTags.length > 10) {
-      html += `<div class="filter-chips"><select class="form-select" style="width:auto;max-width:180px;padding:var(--space-1) var(--space-2);font-size:var(--text-xs);" onchange="App.setTagFilter(this.value || null)">
+    // Toolbar: tag filter, plus the completed-work controls together in one
+    // place instead of a lone eye icon in a section header.
+    html += `<div class="proj-toolbar">
+      ${usedTags.length ? `<select class="form-select proj-toolbar-select" onchange="App.setTagFilter(this.value || null)" aria-label="Filter by tag">
         <option value="">Any tag</option>
-        ${allTags.map(t => `<option value="${t.name}" ${tagFilter === t.name ? 'selected' : ''}>#${t.name}</option>`).join('')}
-      </select></div>`;
-    } else if (allTags.length > 0) {
-      html += `<div class="filter-chips chips-scroll-x">
-        <span class="stat-label" style="align-self:center;">${icon('tag', 11)}</span>
-        <button class="filter-chip ${!tagFilter ? 'active' : ''}" onclick="App.setTagFilter(null)">Any tag</button>
-        ${allTags.map(t => `
-          <button class="filter-chip pill-${t.color} ${tagFilter === t.name ? 'active' : ''}" onclick="App.setTagFilter('${t.name}')">#${t.name}</button>
-        `).join('')}
+        ${usedTags.map(t => `<option value="${escHtml(t)}" ${tagFilter === t ? 'selected' : ''}>#${escHtml(t)}</option>`).join('')}
+      </select>` : ''}
+      <div class="proj-toolbar-spacer"></div>
+      ${doneEarlier.length ? `
+        <button class="btn btn-ghost btn-sm" onclick="App.toggleShowCompleted()" title="${showDone ? 'Hide work finished before today' : 'Show work finished before today'}">
+          ${icon(showDone ? 'eye-off' : 'eye', 14)}${showDone ? 'Hide' : 'Show'} finished (${doneEarlier.length})
+        </button>
+        ${showDone ? `<select class="form-select proj-toolbar-select" onchange="App.setCompletedSort(this.value)" aria-label="Sort finished work">
+          ${COMPLETED_SORTS.map(s => `<option value="${s.id}" ${sortKey === s.id ? 'selected' : ''}>Sort: ${s.label}</option>`).join('')}
+        </select>` : ''}
+      ` : ''}
+    </div>`;
+
+    // Sub-projects — a room with nothing left to do is hidden until asked for.
+    if (subs.length) {
+      const shown = showSettledSubs ? subs : liveSubs;
+      html += `<div class="section">
+        <div class="section-header">
+          <span class="section-title">Sub-projects</span>
+          <span style="display:inline-flex;align-items:center;gap:var(--space-2);">
+            ${settledSubs.length ? `<button class="btn btn-ghost btn-sm" onclick="App.toggleSettledSubs()">
+              ${showSettledSubs ? 'Hide' : 'Show'} ${settledSubs.length} settled</button>` : ''}
+            <button class="btn btn-ghost btn-sm" onclick="App.openNewSubproject()">${icon('plus', 13)}New</button>
+          </span>
+        </div>
+        ${shown.length === 0
+          ? `<p class="text-xs text-faint">Every sub-project here is finished.</p>`
+          : `<div class="subproj-grid">${shown.map(({ sp, a }) => `
+              <button class="subproj-tile ${a.live ? '' : 'settled'}"
+                style="margin-left:${(sp.depth || 0) * 14}px" onclick="App.setSubproject('${sp.id}')">
+                <span class="proj-dot" style="background:${sp.color}"></span>
+                <span class="truncate">${escHtml(sp.name)}</span>
+                <span class="project-stat">${a.open ? a.open + ' open' : (a.doneToday ? a.doneToday + ' done today' : 'clear')}</span>
+              </button>`).join('')}</div>`}
       </div>`;
     }
 
-    const tagMatch = (e) => !tagFilter || (e.tags || []).includes(tagFilter);
-    const showDone = State.getSettings().showCompleted !== false;
-
-    if (projectFilter) {
-      // Project-specific view — a parent project rolls up everything in
-      // its sub-projects, and multi-project entries match through any
-      const proj = projectFilter === 'none' ? null : State.getProject(projectFilter);
-      const hasChildren = proj ? State.getProjectSubtreeIds(proj.id).length > 1 : false;
-      const entries = (projectFilter === 'none'
-        ? State.getEntries().filter(e => State.entryProjectIds(e).length === 0)
-        : State.getEntries({ projectId: projectFilter })
-      ).filter(tagMatch);
-
+    // Open work, grouped by type.
+    const types = ['goal', 'task', 'habit', 'reminder', 'checkin'];
+    const typeIcons = { goal: 'target', task: 'list-checks', habit: 'repeat', reminder: 'clock', checkin: 'brain' };
+    const typeLabels = { goal: 'Goals', task: 'Tasks', habit: 'Habits', reminder: 'Reminders', checkin: 'Check-ins' };
+    let anyOpen = false;
+    types.forEach(type => {
+      const list = sortEntriesSmart(open.filter(e => e.type === type));
+      if (!list.length) return;
+      anyOpen = true;
       html += `<div class="section">
-        <div class="section-header proj-detail-header">
-          <span class="section-title">${proj ? `${icon(proj.icon, 13)} ${proj.name}` : 'Unassigned'}${hasChildren ? ` <span class="pill" title="Includes everything in its sub-projects">+subs</span>` : ''}${tagFilter ? ` · #${tagFilter}` : ''}</span>
-          <span style="display:inline-flex;align-items:center;gap:var(--space-1);flex-shrink:0;">
-            <span class="stat-label">${entries.length}</span>
-            <button class="icon-btn" onclick="App.updateAppSetting('showCompleted', ${showDone ? 'false' : 'true'})"
-              aria-label="${showDone ? 'Hide finished tasks' : 'Show finished tasks'}"
-              title="${showDone ? 'Hide finished tasks' : 'Finished hidden — click to show'}">${icon(showDone ? 'eye' : 'eye-off', 15)}</button>
-            ${proj ? `<button class="icon-btn" onclick="App.openProjectModal('${proj.id}')" aria-label="Edit project" title="Edit project">${icon('pencil', 15)}</button>` : ''}
-          </span>
-        </div>`;
+        <div class="section-header"><span class="section-title">${icon(typeIcons[type])} ${typeLabels[type]} (${list.length})</span></div>
+        <div style="display:flex;flex-direction:column;gap:var(--space-2);">
+          ${list.map(e => renderEntryCard(e, proj)).join('')}
+        </div>
+      </div>`;
+    });
 
-      // Group by type — open items up top by priority, done at the bottom
-      const types = ['goal', 'task', 'habit', 'reminder', 'checkin'];
-      types.forEach(type => {
-        let typeEntries = sortEntriesSmart(entries.filter(e => e.type === type));
-        if (!showDone && type !== 'habit') typeEntries = typeEntries.filter(e => !e.completed);
-        if (typeEntries.length === 0) return;
-        const typeIcons = { goal: 'target', task: 'list-checks', habit: 'repeat', reminder: 'clock', checkin: 'brain' };
-        html += `<div class="section">
-          <div class="section-header"><span class="section-title">${icon(typeIcons[type])} ${type}s (${typeEntries.length})</span></div>
-          <div style="display:flex;flex-direction:column;gap:var(--space-2);">
-        `;
-        typeEntries.forEach(e => { html += renderEntryCard(e, proj); });
-        html += `</div></div>`;
-      });
+    if (!anyOpen && !doneToday.length) {
+      html += `<div class="empty-state"><i data-lucide="check-check"></i>
+        <p class="empty-state-text">Nothing open here${tagFilter ? ` tagged #${escHtml(tagFilter)}` : ''}.</p></div>`;
+    }
 
-      // Task chains
-      const chainedTasks = entries.filter(e => e.type === 'task' && (e.blockedBy?.length > 0 || e.blocks?.length > 0));
-      if (chainedTasks.length > 0) {
-        html += `<div class="section">
-          <div class="section-header"><span class="section-title">Task Chains</span></div>
-          <div class="task-chain">
-        `;
-        chainedTasks.forEach(t => {
-          if (t.blockedBy?.length > 0) {
-            t.blockedBy.forEach(bid => {
-              const blocked = State.getEntry(bid);
-              if (blocked) {
-                html += `<div class="chain-link">
-                  <span class="proj-dot" style="background:${proj?.color || '#888'}"></span>
-                  <span class="text-sm">${blocked.title}</span>
-                  <i data-lucide="chevron-right" class="chain-arrow" style="width:14px;height:14px;"></i>
-                  <span class="text-sm">${t.title}</span>
-                </div>`;
-              }
-            });
-          }
-        });
-        html += `</div></div>`;
-      }
+    // Finished today — always visible, so the day's work reads back.
+    if (doneToday.length) {
+      html += `<div class="section">
+        <div class="section-header"><span class="section-title">${icon('check')} Done today (${doneToday.length})</span>${sectionToggle('projDoneToday')}</div>
+        ${isCollapsed('projDoneToday') ? '' : `<div style="display:flex;flex-direction:column;gap:var(--space-2);">
+          ${sortCompleted(doneToday, 'completedAt').map(e => renderEntryCard(e, proj)).join('')}
+        </div>`}
+      </div>`;
+    }
 
-      html += `</div>`;
-    } else {
-      // Project cards grid — one card per TOP-LEVEL project; sub-projects
-      // list vertically inside their parent's card, indented. Parent stats
-      // aggregate the whole subtree (getEntries rolls up).
-      const renderSubRows = (parentId, depth) =>
-        State.getProjects().filter(sp => sp.parentId === parentId).map(sp => {
-          const spEntries = State.getEntries({ projectId: sp.id });
-          const spDone = spEntries.filter(e => e.completed).length;
-          return `
-            <div class="subproj-row" style="padding-left:${depth * 14}px" onclick="event.stopPropagation();App.setProjectFilter('${sp.id}')">
-              <span class="proj-dot" style="background:${sp.color}"></span>
-              <span class="truncate" style="flex:1;">${sp.name}</span>
-              <span class="project-stat">${spEntries.length - spDone} open</span>
-              <button class="icon-btn" onclick="event.stopPropagation();App.openProjectModal('${sp.id}')" aria-label="Edit sub-project">${icon('pencil', 12)}</button>
-            </div>
-            ${renderSubRows(sp.id, depth + 1)}`;
-        }).join('');
+    // Everything finished before today — opt-in, sorted the chosen way.
+    if (showDone && doneEarlier.length) {
+      const sorted = sortCompleted(doneEarlier, sortKey);
+      const label = COMPLETED_SORTS.find(s => s.id === sortKey)?.label || 'Completed date';
+      html += `<div class="section">
+        <div class="section-header">
+          <span class="section-title">${icon('archive')} Finished earlier (${sorted.length})</span>
+          <span class="text-xs text-faint">by ${label.toLowerCase()}</span>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:var(--space-2);">
+          ${sorted.map(e => renderEntryCard(e, proj)).join('')}
+        </div>
+      </div>`;
+    }
 
-      html += `<div class="grid-3 section">`;
-      projects.filter(p => p.depth === 0).forEach(p => {
-        // Aggregated over the subtree — the parent card speaks for the family
-        const entries = State.getEntries({ projectId: p.id });
-        const completed = entries.filter(e => e.completed).length;
-        const pending = entries.length - completed;
-        const subRows = renderSubRows(p.id, 0);
-        html += `
-          <div class="card card-interactive project-card" onclick="App.setProjectFilter('${p.id}')" style="cursor:pointer;">
-            <div class="project-header">
-              <div class="project-icon" style="background:${p.color}20;color:${p.color}">
-                <i data-lucide="${p.icon}"></i>
-              </div>
-              <div style="flex:1">
-                <div class="project-name">${p.name}</div>
-                <div class="project-stats">
-                  <span class="project-stat">${pending} pending</span>
-                  <span class="project-stat">${completed} done</span>
-                  ${subRows ? `<span class="project-stat">incl. subs</span>` : ''}
-                </div>
-              </div>
-              <button class="icon-btn" onclick="event.stopPropagation();App.openProjectModal('${p.id}')" aria-label="Edit project">${icon('pencil', 14)}</button>
-            </div>
-            <div class="progress-bar">
-              <div class="progress-fill" style="width:${entries.length > 0 ? completed / entries.length * 100 : 0}%;background:${p.color};"></div>
-            </div>
-            ${subRows ? `<div class="subproj-list">${subRows}</div>` : ''}
-          </div>
-        `;
-      });
-      html += `</div>`;
-
-      // Tag-filtered flat list across all projects
-      if (tagFilter) {
-        const tagged = State.getEntries().filter(tagMatch);
-        html += `<div class="section">
-          <div class="section-header"><span class="section-title">#${tagFilter} — everywhere</span>
-            <span class="stat-label">${tagged.length} items</span>
-          </div>
-          <div style="display:flex;flex-direction:column;gap:var(--space-2);">
-            ${tagged.length === 0 ? '<div class="empty-state"><p class="empty-state-text">Nothing carries this tag yet.</p></div>' :
-              tagged.map(e => renderEntryCard(e)).join('')}
-          </div>
-        </div>`;
-      }
+    // Task chains stay — they answer "why can't I start this yet".
+    const chained = entries.filter(e => e.type === 'task' && !e.completed && e.blockedBy?.length > 0);
+    if (chained.length > 0) {
+      html += `<div class="section">
+        <div class="section-header"><span class="section-title">Waiting on</span></div>
+        <div class="task-chain">
+          ${chained.map(t => (t.blockedBy || []).map(bid => {
+            const blocker = State.getEntry(bid);
+            return blocker ? `<div class="chain-link">
+              <span class="proj-dot" style="background:${proj?.color || '#888'}"></span>
+              <span class="text-sm">${escHtml(blocker.title)}</span>
+              <i data-lucide="chevron-right" class="chain-arrow" style="width:14px;height:14px;"></i>
+              <span class="text-sm">${escHtml(t.title)}</span>
+            </div>` : '';
+          }).join('')).join('')}
+        </div>
+      </div>`;
     }
 
     return html;
   }
 
-  function setProjectFilter(id) {
-    projectFilter = id;
+  // Jump straight to a sub-project from the grid: adopt its workspace so the
+  // room strip comes with it.
+  function openSubproject(wsId, subId) {
+    activeWorkspace = wsId;
+    activeSubproject = subId;
+    saveNav();
     render();
+  }
+
+  // The project the app is currently pointed at: a project id, the string
+  // 'none' for the Unfiled bucket, or null for everything. Replaces the old
+  // page-local `projectFilter` — the pill and the room strip own this now,
+  // and export/new-entry/delete all read the same answer.
+  // The top-level project a given one lives under — the pill only ever shows
+  // a workspace, and a project nested more than one level deep has another
+  // sub-project as its parent, not its workspace.
+  function rootWorkspaceOf(id) {
+    let cur = State.getProject(id);
+    let guard = 0;
+    while (cur && cur.parentId && guard++ < 100) {
+      const parent = State.getProject(cur.parentId);
+      if (!parent) break;
+      cur = parent;
+    }
+    return cur ? cur.id : null;
+  }
+
+  // Navigate to a project wherever it sits in the tree: its workspace becomes
+  // the scope, and the project itself the selected room.
+  function revealProject(id) {
+    const proj = State.getProject(id);
+    if (!proj) return;
+    if (!proj.parentId) { activeWorkspace = id; activeSubproject = null; }
+    else { activeWorkspace = rootWorkspaceOf(id) || WS_ALL; activeSubproject = id; }
+    saveNav();
+  }
+
+  // A project that just got archived or deleted must not leave the pill or
+  // the room strip pointing at it.
+  function dropNavIfGone(id) {
+    if (activeSubproject === id) activeSubproject = null;
+    if (activeWorkspace === id) { activeWorkspace = WS_ALL; activeSubproject = null; }
+    saveNav();
+  }
+
+  function focusedProjectId() {
+    if (activeSubproject) return activeSubproject;
+    if (activeWorkspace === WS_UNFILED) return 'none';
+    if (activeWorkspace !== WS_ALL) return activeWorkspace;
+    return null;
   }
 
   function setTagFilter(name) {
@@ -1619,19 +2108,21 @@ const App = (() => {
   // the clipboard: filter for #bugs, copy, paste into a chat.
   // ═══════════════════════════════════════════════════════════
   function currentProjectViewEntries() {
-    // Mirrors exactly what the Projects view shows under current filters
+    // Mirrors exactly what the Projects view shows under the current scope
+    const focus = focusedProjectId();
     let entries;
-    if (projectFilter === 'none') {
+    if (focus === 'none') {
       entries = State.getEntries().filter(e => State.entryProjectIds(e).length === 0);
-    } else if (projectFilter) {
-      entries = State.getEntries({ projectId: projectFilter });
+    } else if (focus) {
+      entries = State.getEntries({ projectId: focus });
     } else {
       entries = State.getEntries();
     }
     entries = entries.filter(e => !tagFilter || (e.tags || []).includes(tagFilter));
-    // "Hide done" hides them from the export too — copy what you can see
-    if (State.getSettings().showCompleted === false) {
-      entries = entries.filter(e => e.type === 'habit' || !e.completed);
+    // Work finished before today is opt-in on screen, so it is opt-in here
+    // too — the export copies what you can actually see.
+    if (!State.getSettings().showCompletedOnProject) {
+      entries = entries.filter(e => e.type === 'habit' || !e.completed || finishedToday(e));
     }
     return entries;
   }
@@ -1676,14 +2167,15 @@ const App = (() => {
     });
 
     const filterDesc = {};
-    if (projectFilter && projectFilter !== 'none') {
-      const proj = State.getProject(projectFilter);
-      filterDesc.project = proj ? `${proj.name}${State.getProjectSubtreeIds(proj.id).length > 1 ? ' (incl. sub-projects)' : ''}` : projectFilter;
-    } else if (projectFilter === 'none') {
+    const focus = focusedProjectId();
+    if (focus && focus !== 'none') {
+      const proj = State.getProject(focus);
+      filterDesc.project = proj ? `${proj.name}${State.getProjectSubtreeIds(proj.id).length > 1 ? ' (incl. sub-projects)' : ''}` : focus;
+    } else if (focus === 'none') {
       filterDesc.project = 'unassigned only';
     }
     if (tagFilter) filterDesc.tag = `#${tagFilter}`;
-    if (State.getSettings().showCompleted === false) filterDesc.finished = 'hidden — open items only';
+    if (!State.getSettings().showCompletedOnProject) filterDesc.finished = 'open items and today\u2019s completions only';
 
     return {
       source: 'Cade.project task tracker export',
@@ -1716,7 +2208,8 @@ const App = (() => {
       } catch (e2) { copied = false; }
     }
     if (copied) {
-      const scope = [tagFilter ? `#${tagFilter}` : null, projectFilter && projectFilter !== 'none' ? State.getProject(projectFilter)?.name : null]
+      const focusName = focusedProjectId();
+      const scope = [tagFilter ? `#${tagFilter}` : null, focusName && focusName !== 'none' ? State.getProject(focusName)?.name : null]
         .filter(Boolean).join(' in ') || 'all entries';
       toast(`Copied ${entries.length} entr${entries.length === 1 ? 'y' : 'ies'} as JSON — ${scope}`);
     } else {
@@ -1734,12 +2227,13 @@ const App = (() => {
   let selectedHabit = null;
 
   function renderHabits() {
-    const habits = State.getEntries({ type: 'habit' });
+    const habits = scopedEntries({ type: 'habit' });
+    const scoped = activeWorkspace !== WS_ALL || activeSubproject;
     let html = `
       <div class="page-header">
         <div>
           <h1 class="page-title">Habits</h1>
-          <p class="page-subtitle">${habits.length} tracked · ${habits.filter(h => State.isHabitDoneToday(h.id)).length} done today</p>
+          <p class="page-subtitle">${scoped ? escHtml(scopeLabel()) + ' · ' : ''}${habits.length} tracked · ${habits.filter(h => State.isHabitDoneToday(h.id)).length} done today</p>
         </div>
         <button class="btn btn-primary" onclick="App.openNewEntry('habit')">${icon('plus', 14)}New Habit</button>
       </div>
@@ -1765,8 +2259,8 @@ const App = (() => {
 
       html += `<div style="display:flex;align-items:center;gap:var(--space-3);margin-bottom:var(--space-3);">
         <div style="width:120px;flex-shrink:0;cursor:pointer;" onclick="App.selectHabit('${h.id}')">
-          <div class="text-sm" style="font-weight:500;color:${selectedHabit === h.id ? 'var(--accent-text)' : 'inherit'};">${h.title}</div>
-          ${proj ? `<div class="text-xs" style="color:${proj.color}">${proj.name}</div>` : ''}
+          <div class="text-sm" style="font-weight:500;color:${selectedHabit === h.id ? 'var(--accent-text)' : 'inherit'};">${escHtml(h.title)}</div>
+          ${proj ? `<div class="text-xs" style="color:${proj.color}">${escHtml(proj.name)}</div>` : ''}
           ${dow?.length ? `<div class="text-xs text-faint">${dow.map(d => 'SMTWTFS'[d]).join('·')}</div>` : ''}
         </div>
         <div class="habit-grid">`;
@@ -1865,7 +2359,9 @@ const App = (() => {
       }
     } else {
       const agg = document.getElementById('habitsAggChart');
-      if (agg) Charts.renderHabitsAggregate('habitsAggChart', 30);
+      // Same scope the page's habit list uses — see renderHabits().
+      if (agg) Charts.renderHabitsAggregate('habitsAggChart', 30,
+        scopedEntries({ type: 'habit' }).map(h => h.id));
     }
   }
 
@@ -2013,7 +2509,7 @@ const App = (() => {
         ${top.length ? `<div class="digest-projects">
           ${top.map(x => `<div class="digest-proj-row">
             <span class="proj-dot" style="background:${x.p.color}"></span>
-            <span class="digest-proj-name truncate">${x.p.name}</span>
+            <span class="digest-proj-name truncate">${escHtml(x.p.name)}</span>
             <div class="digest-bar-track"><div class="digest-bar" style="width:${Math.round(x.min / maxMin * 100)}%;background:${x.p.color};"></div></div>
             <span class="text-xs font-mono text-muted">${fmtMin(x.min)}</span>
           </div>`).join('')}
@@ -2055,11 +2551,11 @@ const App = (() => {
       <button class="filter-chip ${!insightsProject ? 'active' : ''}" onclick="App.setInsightsProject(null)">All Projects</button>
       ${projects.map(p => `
         <button class="filter-chip ${insightsProject === p.id ? 'active' : ''}" onclick="App.setInsightsProject('${p.id}')">
-          <span class="proj-dot" style="background:${p.color}"></span>${p.name}
+          <span class="proj-dot" style="background:${p.color}"></span>${escHtml(p.name)}
         </button>`).join('')}
       <select class="form-select" style="width:auto;max-width:220px;padding:var(--space-1) var(--space-2);font-size:var(--text-xs);" onchange="App.setInsightsEntry(this.value || null)">
         <option value="">All items</option>
-        ${filterableEntries.map(t => `<option value="${t.id}" ${insightsEntry === t.id ? 'selected' : ''}>[${t.type}] ${t.title}</option>`).join('')}
+        ${filterableEntries.map(t => `<option value="${t.id}" ${insightsEntry === t.id ? 'selected' : ''}>[${t.type}] ${escHtml(t.title)}</option>`).join('')}
       </select>
     </div>`;
 
@@ -2196,7 +2692,6 @@ const App = (() => {
   // FOCUS TAB — "what should I work on next?"
   // Four-quadrant board: color-coded, draggable, full-item hitbox
   // ═══════════════════════════════════════════════════════════
-  let focusProject = null;
   let focusDue = null; // null | 'overdue' | 'today' | 'week' | 'later' | 'none'
 
   const FOCUS_DUE_CHIPS = [
@@ -2224,22 +2719,17 @@ const App = (() => {
   ];
 
   function renderFocus() {
-    const projects = State.getProjects();
+    // Project scope comes from the menubar pill, like everywhere else — the
+    // page-level chip wall that used to sit here said the same thing twice.
+    const scoped = activeWorkspace !== WS_ALL || activeSubproject;
     let html = `
       <div class="page-header">
         <div>
           <h1 class="page-title">Focus</h1>
-          <p class="page-subtitle">Effort vs priority — figure out what to work on next</p>
+          <p class="page-subtitle">Effort vs priority${scoped ? ` · ${escHtml(scopeLabel())}` : ''} — figure out what to work on next</p>
         </div>
       </div>
       <div class="filter-chips">
-        <button class="filter-chip ${!focusProject ? 'active' : ''}" onclick="App.setFocusProject(null)">All Projects</button>
-        ${projects.map(p => `
-          <button class="filter-chip ${focusProject === p.id ? 'active' : ''}" onclick="App.setFocusProject('${p.id}')">
-            <span class="proj-dot" style="background:${p.color}"></span>${p.name}
-          </button>`).join('')}
-      </div>
-      <div class="filter-chips" style="margin-top:calc(var(--space-2) * -1);">
         <span class="stat-label" style="align-self:center;">${icon('calendar-days', 11)}</span>
         ${FOCUS_DUE_CHIPS.map(([val, label]) => `
           <button class="filter-chip ${focusDue === val ? 'active' : ''}" onclick="App.setFocusDue(${val === null ? 'null' : `'${val}'`})">${label}</button>
@@ -2250,16 +2740,11 @@ const App = (() => {
           <span class="text-xs text-faint">drag between boxes to reprioritize · click to complete</span>
         </div>
         <div class="card">
-          <div class="quadrant quadrant-xl" id="quadrantView">${renderQuadrant(focusProject)}</div>
+          <div class="quadrant quadrant-xl" id="quadrantView">${renderQuadrant()}</div>
         </div>
       </div>
     `;
     return html;
-  }
-
-  function setFocusProject(id) {
-    focusProject = id;
-    render();
   }
 
   function setFocusDue(v) {
@@ -2267,12 +2752,12 @@ const App = (() => {
     render();
   }
 
-  function renderQuadrant(projectId) {
-    const tasks = State.getEntries({ type: 'task', completed: false, projectId: projectId || undefined })
-      .filter(focusDueMatch);
+  function renderQuadrant() {
+    const tasks = scopedEntries({ type: 'task', completed: false }).filter(focusDueMatch);
     const effOrder = { trivial: 0, small: 1, medium: 2, large: 3, xl: 4 };
     const priOrder = { urgent: 0, high: 1, medium: 2, low: 3 };
-    const multiProject = !projectId; // show project dots in all-projects view
+    // Project dots only earn their place when more than one project is in view
+    const multiProject = activeWorkspace === WS_ALL && !activeSubproject;
 
     function itemsFor(qd) {
       return tasks.filter(t => {
@@ -2292,10 +2777,10 @@ const App = (() => {
         const score = taskScore(t);
         return `<div class="q-item ${t.completed ? 'completed' : ''} ${t.priority === 'urgent' ? 'urgent' : ''}" draggable="true" data-id="${t.id}"
           ondragstart="App.qDragStart(event,'${t.id}')" ondragend="App.qDragEnd(event)"
-          onclick="App.qItemClick(event,'${t.id}')" ondblclick="App.openTaskPage('${t.id}')" title="${t.title} · score ${score}">
+          onclick="App.qItemClick(event,'${t.id}')" ondblclick="App.openTaskPage('${t.id}')" title="${escHtml(t.title)} · score ${score}">
           <span class="q-handle">⠿</span>
           ${multiProject && proj ? `<span class="proj-dot" style="background:${proj.color}"></span>` : ''}
-          <span class="q-title">${t.title}</span>
+          <span class="q-title">${escHtml(t.title)}</span>
           ${t.estimateMinutes ? `<span class="q-est">${estimateLabel(t.estimateMinutes)}</span>` : ''}
           <span class="q-score" title="Next-best score">${score}</span>
           <span class="q-actions">
@@ -2506,7 +2991,7 @@ const App = (() => {
         ${shortcuts.length > 0 ? `<div class="shortcut-chips" style="margin-bottom:var(--space-3);">
           ${shortcuts.map(s => `
             <button class="shortcut-chip" id="sc-${s.id}" onclick="App.useShortcutHealth('${s.id}')">
-              <span>${s.emoji}</span><span>${s.label}</span><span class="sc-cal">${s.calories} cal</span>
+              <span>${s.emoji}</span><span>${escHtml(s.label)}</span><span class="sc-cal">${s.calories} cal</span>
             </button>`).join('')}
         </div>` : ''}
         <div class="grid-2">
@@ -2573,7 +3058,7 @@ const App = (() => {
         html += `<div class="food-row">
           <span class="done-time">${logTimeOf(l)}</span>
           <span class="pill">${l.meal || 'snack'}</span>
-          <span class="truncate" style="flex:1;">${l.emoji ? l.emoji + ' ' : ''}${l.notes || 'Food'}</span>
+          <span class="truncate" style="flex:1;">${l.emoji ? l.emoji + ' ' : ''}${escHtml(l.notes || 'Food')}</span>
           ${macros ? `<span class="food-macros">${macros}</span>` : ''}
           <span class="font-mono text-xs" style="color:var(--accent-text);flex-shrink:0;">${l.value ? `${l.value} cal` : '—'}</span>
           <button class="icon-btn" onclick="App.deleteFoodLog('${l.id}')" aria-label="Delete">${icon('trash-2', 14)}</button>
@@ -2695,7 +3180,7 @@ const App = (() => {
           <span class="done-time">${r.time}</span>
           ${icon(kindIcons[r.kind], 14)}
           <span class="proj-dot" style="background:${proj?.color || 'var(--text-faint)'}"></span>
-          <span class="truncate" style="flex:1">${r.title}</span>
+          <span class="truncate" style="flex:1">${escHtml(r.title)}</span>
           ${r.kind === 'task' ? `<button class="icon-btn" onclick="App.toggleEntry('${r.entry.id}')" aria-label="Un-complete" title="Mark as not done">${icon('undo-2', 14)}</button>` : ''}
           ${r.kind === 'time' ? `<button class="icon-btn" onclick="App.deleteHistoryLog('${r.logId}')" aria-label="Delete" title="Delete this time log">${icon('trash-2', 14)}</button>` : ''}
         </div>`;
@@ -2741,7 +3226,7 @@ const App = (() => {
         const proj = e.projectId ? State.getProject(e.projectId) : null;
         html += `<div class="done-row">
           <span class="proj-dot" style="background:${proj?.color || 'var(--text-faint)'}"></span>
-          <span class="truncate" style="flex:1;${e.completed ? 'text-decoration:line-through;color:var(--text-muted);' : ''}">${e.title}</span>
+          <span class="truncate" style="flex:1;${e.completed ? 'text-decoration:line-through;color:var(--text-muted);' : ''}">${escHtml(e.title)}</span>
           <span class="pill">${e.type}</span>
           <button class="icon-btn" onclick="App.unarchiveEntry('${e.id}')" aria-label="Restore" title="Restore">${icon('archive-restore', 15)}</button>
           <button class="icon-btn" onclick="App.deleteEntry('${e.id}')" aria-label="Delete forever" title="Delete forever">${icon('trash-2', 15)}</button>
@@ -2758,15 +3243,15 @@ const App = (() => {
     switch (l.type) {
       case 'calorie': {
         const macros = [l.protein ? `${l.protein}P` : '', l.carbs ? `${l.carbs}C` : '', l.fat ? `${l.fat}F` : ''].filter(Boolean).join('/');
-        return `${l.emoji || '🍽'} ${l.notes || 'Food'}${l.value ? ` · ${l.value} cal` : ''} (${l.meal || 'snack'})${macros ? ` · ${macros}` : ''}`;
+        return `${escHtml(l.emoji || '🍽')} ${escHtml(l.notes || 'Food')}${l.value ? ` · ${l.value} cal` : ''} (${escHtml(l.meal || 'snack')})${macros ? ` · ${macros}` : ''}`;
       }
-      case 'quick': return `${l.emoji || '⭐'} ${l.notes || 'Quick log'}`;
+      case 'quick': return `${escHtml(l.emoji || '⭐')} ${escHtml(l.notes || 'Quick log')}`;
       case 'checkin':
-        return `Check-in ${l.emotion ? moodIc(l.emotion) : ''}${l.energy ? ` energy ${l.energy}/5` : ''}${l.notes ? ` · ${l.notes}` : ''}`;
-      case 'emotion': return `${moodIc(l.emotion)} Day mood: ${l.emotion}`;
+        return `Check-in ${l.emotion ? moodIc(l.emotion) : ''}${l.energy ? ` energy ${l.energy}/5` : ''}${l.notes ? ` · ${escHtml(l.notes)}` : ''}`;
+      case 'emotion': return `${moodIc(l.emotion)} Day mood: ${escHtml(l.emotion)}`;
       case 'wake': return `${icon('sunrise', 13)} Woke up`;
       case 'sleep': return `${icon('moon', 13)} Bedtime`;
-      default: return l.type;
+      default: return escHtml(l.type);
     }
   }
 
@@ -3076,7 +3561,8 @@ const App = (() => {
     currentEffort = 'medium';
     currentWeekdays = [];
     // Creating from inside a project folder → that project is the default
-    const contextProject = (currentTab === 'projects' && projectFilter && projectFilter !== 'none') ? projectFilter : null;
+    const focus = focusedProjectId();
+    const contextProject = (focus && focus !== 'none') ? focus : null;
     currentProjects = contextProject ? withAncestors(contextProject) : [];
     showModal('New Entry', renderEntryForm(type, contextProject ? { projectId: contextProject } : {}), [
       `<button class="btn btn-secondary" onclick="App.closeModal()">Cancel</button>`,
@@ -3131,7 +3617,7 @@ const App = (() => {
               data-filter-text="${p.name.toLowerCase()}"
               style="--chip-color:${p.color};${p.depth ? `margin-left:${p.depth * 10}px;` : ''}"
               onclick="App.toggleFormProject('${p.id}')">
-              <span class="proj-dot" style="background:${p.color}"></span>${p.name}
+              <span class="proj-dot" style="background:${p.color}"></span>${escHtml(p.name)}
             </button>`).join('')}
         </div>
       </div>`;
@@ -3192,7 +3678,7 @@ const App = (() => {
             <option value="">Nothing — ready to work on</option>
             ${State.getEntries({ type: 'task', completed: false })
               .filter(t => t.id !== entry.id && !(t.blockedBy || []).includes(entry.id))
-              .map(t => `<option value="${t.id}" ${(entry.blockedBy || [])[0] === t.id ? 'selected' : ''}>${t.title}</option>`).join('')}
+              .map(t => `<option value="${t.id}" ${(entry.blockedBy || [])[0] === t.id ? 'selected' : ''}>${escHtml(t.title)}</option>`).join('')}
           </select>
         </div>`;
     } else if (type === 'goal') {
@@ -3283,7 +3769,7 @@ const App = (() => {
 
       <div class="form-group">
         <label class="form-label">Description</label>
-        <textarea class="form-textarea" id="entryDescription" placeholder="Add details...">${entry.description || ''}</textarea>
+        <textarea class="form-textarea" id="entryDescription" placeholder="Add details...">${escHtml(entry.description || '')}</textarea>
       </div>
 
       ${projectChips}
@@ -3306,15 +3792,18 @@ const App = (() => {
     const many = suggestTags.length > 10;
     return `
       <div style="display:flex;flex-wrap:wrap;gap:var(--space-2);margin-bottom:var(--space-2);">
-        ${currentTags.map(t => {
+        ${currentTags.map((t, i) => {
           const tagObj = tags.find(tg => tg.name === t);
           const colorCls = tagObj ? `pill-${tagObj.color}` : 'pill-gray';
-          return `<span class="pill ${colorCls}">#${t}<button onclick="App.removeTag('${t}')" style="margin-left:4px;background:none;border:none;color:inherit;cursor:pointer;font-size:14px;line-height:1;">×</button></span>`;
+          // Position, not the tag text, goes into the handler. A name
+          // interpolated into onclick="…('NAME')" is a JS string literal a
+          // quote can break out of — HTML-escaping alone does not close that.
+          return `<span class="pill ${colorCls}">#${escHtml(t)}<button onclick="App.removeTagAt(${i})" style="margin-left:4px;background:none;border:none;color:inherit;cursor:pointer;font-size:14px;line-height:1;">×</button></span>`;
         }).join('')}
       </div>
       <input type="text" class="form-input" id="entryTagInput" placeholder="Type a tag and press Enter" onkeydown="if(event.key==='Enter'){event.preventDefault();App.addTag(this.value);this.value='';}">
       ${suggestTags.length > 0 ? `<div class="${many ? 'chip-scroll' : ''}" style="display:flex;flex-wrap:wrap;gap:var(--space-1);margin-top:var(--space-2);">
-        ${suggestTags.map(t => `<button class="pill pill-${t.color}" style="cursor:pointer;" onclick="App.addTag('${t.name}')">#${t.name}</button>`).join('')}
+        ${suggestTags.map(t => `<button class="pill pill-${t.color}" style="cursor:pointer;" onclick="App.addTagById('${t.id}')">#${escHtml(t.name)}</button>`).join('')}
       </div>` : ''}
     `;
   }
@@ -3404,6 +3893,18 @@ const App = (() => {
     refreshTagDisplay();
   }
 
+  // Index- and id-based entry points, so no tag text ever has to survive a
+  // trip through an inline event-handler attribute.
+  function removeTagAt(i) {
+    currentTags = currentTags.filter((_, idx) => idx !== i);
+    refreshTagDisplay();
+  }
+
+  function addTagById(id) {
+    const tag = State.getAllTags().find(t => t.id === id);
+    if (tag) addTag(tag.name);
+  }
+
   // Touch ONLY the tags block — everything else the user typed stays put
   function refreshTagDisplay() {
     const block = document.getElementById('entryTagsBlock');
@@ -3462,12 +3963,28 @@ const App = (() => {
       data.recurrence = recType && recType !== 'none' ? { type: recType, interval: 1 } : null;
     }
 
+    // Tasks that mirror a Cade.txt checkbox keep the document in step: a
+    // rename rewrites the line, a new task in a linked room is appended to
+    // its list. Both are fire-and-forget — the local write already landed.
+    const bridged = typeof Bridge !== 'undefined';
     if (editingEntryId) {
+      const before = State.getEntry(editingEntryId);
+      const renamed = before && before.txtRoom && data.title && data.title !== before.title;
+      const oldKey = before?.txtKey;
       State.updateEntry(editingEntryId, data);
       toast('Entry updated');
+      const updated = State.getEntry(editingEntryId);
+      if (bridged && renamed) Bridge.pushRename(updated, oldKey).catch(() => {});
+      // Moving an existing task INTO a linked sub-project has to add the
+      // checkbox there. Nothing else would: scans match on a link this task
+      // does not have yet, so without this it stays invisible in Cade.txt.
+      else if (bridged && updated && updated.type === 'task' && !updated.txtRoom) {
+        Bridge.pushNewTask(updated).catch(() => {});
+      }
     } else {
-      State.createEntry(data);
+      const created = State.createEntry(data);
       toast('Entry created');
+      if (bridged && created.type === 'task') Bridge.pushNewTask(created).catch(() => {});
     }
 
     currentTags = [];
@@ -3486,7 +4003,7 @@ const App = (() => {
   let editingProjectId = null;
 
   function projectLabel(p) {
-    return `${'– '.repeat(p.depth || 0)}${p.name}`;
+    return `${'– '.repeat(p.depth || 0)}${escHtml(p.name)}`;
   }
 
   function openProjectModal(id = null) {
@@ -3556,12 +4073,26 @@ const App = (() => {
     if (dupe) { toast('A project with this name already exists'); return; }
     const parentId = document.getElementById('projectParent')?.value || null;
     const payload = { name, color: selectedColor, icon: selectedIcon, parentId };
+    const linkOn = typeof Bridge !== 'undefined' && Bridge.available();
+
     if (editingProjectId) {
+      const before = State.getProject(editingProjectId);
       State.updateProject(editingProjectId, payload);
       toast('Project updated');
+      // Workspaces are shared, so a rename here is a rename over there.
+      if (linkOn && before?.txtWorkspaceId && before.name !== name) {
+        Bridge.renameWorkspace(before.txtWorkspaceId, name).catch(() => {});
+      }
     } else {
-      State.createProject(payload);
+      const created = State.createProject(payload);
       toast('Project created');
+      // A new top-level project is a new Cade.txt workspace — the link runs
+      // both ways, so its rooms can be filed from either app.
+      if (linkOn && !parentId) {
+        Bridge.ensureWorkspace(name, 'teal')
+          .then(wsId => { if (wsId) { State.updateProject(created.id, { txtWorkspaceId: wsId }); render(); } })
+          .catch(() => {});
+      }
     }
     editingProjectId = null;
     closeModal();
@@ -3570,7 +4101,7 @@ const App = (() => {
 
   function archiveProjectAction(id) {
     State.archiveProject(id);
-    if (projectFilter === id) projectFilter = null;
+    dropNavIfGone(id);
     toast('Project archived — restore from Settings');
     closeModal();
     render();
@@ -3586,7 +4117,7 @@ const App = (() => {
     const count = State.getEntries({ includeArchived: true }).filter(e => e.projectId === id).length;
     if (!confirm(`Delete this project?${count > 0 ? ` ${count} entr${count === 1 ? 'y' : 'ies'} will be unassigned (not deleted).` : ''}`)) return;
     State.deleteProject(id);
-    if (projectFilter === id) projectFilter = null;
+    dropNavIfGone(id);
     toast('Project deleted');
     closeModal();
     render();
@@ -3602,7 +4133,7 @@ const App = (() => {
           <div class="chain-link" style="justify-content:space-between;cursor:pointer;${p.depth ? `margin-left:${p.depth * 18}px;` : ''}" onclick="App.openProjectModal('${p.id}')">
             <span style="display:inline-flex;align-items:center;gap:var(--space-2);">
               ${p.depth ? `<span class="text-faint" style="font-family:var(--font-mono);">└</span>` : ''}
-              <span class="proj-dot" style="background:${p.color}"></span>${p.name}
+              <span class="proj-dot" style="background:${p.color}"></span>${escHtml(p.name)}
             </span>
             <span class="text-xs text-faint">edit ›</span>
           </div>`).join('')}
@@ -3614,7 +4145,7 @@ const App = (() => {
           ${archived.map(p => `
             <div class="chain-link" style="justify-content:space-between;opacity:0.7;">
               <span style="display:inline-flex;align-items:center;gap:var(--space-2);">
-                <span class="proj-dot" style="background:${p.color}"></span>${p.name}
+                <span class="proj-dot" style="background:${p.color}"></span>${escHtml(p.name)}
               </span>
               <span>
                 <button class="icon-btn" onclick="App.unarchiveProjectAction('${p.id}')" aria-label="Restore" title="Restore">${icon('archive-restore', 15)}</button>
@@ -3679,6 +4210,170 @@ const App = (() => {
     toast('Disconnected');
     closeModal();
     render();
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // CADE.TXT LINK
+  // ═══════════════════════════════════════════════════════════
+  function openBridgePanel() {
+    if (typeof Bridge === 'undefined' || !Bridge.available()) {
+      showModal('Cade.txt Link', `
+        <p class="text-sm text-muted" style="line-height:1.7;">
+          Nothing to link yet. Open <a href="../txt.html" style="color:var(--accent-text)">Cade.txt</a>
+          in this browser and create a room, then come back — the two apps share
+          storage on this origin, so no setup is needed.
+        </p>`, [`<button class="btn btn-secondary" onclick="App.closeModal()">Close</button>`]);
+      return;
+    }
+
+    const rooms = Bridge.getRooms();
+    const membership = Bridge.getRoomWorkspace();
+    const workspaces = Bridge.getWorkspaces();
+    const linked = State.getProjects({ includeArchived: true });
+
+    const rows = rooms.map(name => {
+      const todos = Bridge.parseTodos(Bridge.roomText(name));
+      const proj = linked.find(p => p.txtRoom === name);
+      const wsNames = (membership[name] || [])
+        .map(id => workspaces.find(w => w.id === id)?.name).filter(Boolean);
+      const done = todos.filter(t => t.done).length;
+      return { name, todos: todos.length, done, proj, wsNames };
+    });
+    const withLists = rows.filter(r => r.todos > 0);
+    const without = rows.filter(r => r.todos === 0);
+    const { url } = Bridge.creds();
+
+    showModal('Cade.txt Link', `
+      <p class="text-sm text-muted" style="line-height:1.7;margin-bottom:var(--space-4);">
+        Workspaces appear here as projects and rooms as sub-projects. A room joins
+        in as soon as it contains a line starting with <code>[ ]</code> or
+        <code>[x]</code> — ticking a box in either app updates the other.
+      </p>
+
+      <div class="section">
+        <div class="section-header"><span class="section-title">Linked rooms</span>
+          <span class="stat-label">${withLists.length}</span></div>
+        ${withLists.length === 0
+          ? '<p class="text-xs text-faint">No room holds a todo list yet. Add a <code>[ ]</code> line to one in Cade.txt.</p>'
+          : `<div style="display:flex;flex-direction:column;gap:var(--space-1);">${withLists.map(r => `
+              <div class="subproj-row" style="cursor:default">
+                <span class="proj-dot" style="background:${r.proj?.color || 'var(--text-faint)'}"></span>
+                <span class="truncate" style="flex:1">${escHtml(r.name)}</span>
+                ${r.wsNames.length ? `<span class="pill">${escHtml(r.wsNames.join(', '))}</span>` : ''}
+                <span class="project-stat">${r.todos - r.done} open · ${r.done} done</span>
+              </div>`).join('')}</div>`}
+      </div>
+
+      ${without.length ? `<div class="section">
+        <div class="section-header"><span class="section-title">Rooms without a list</span>
+          <span class="stat-label">${without.length}</span></div>
+        <p class="text-xs text-faint">${without.map(r => escHtml(r.name)).join(' · ')}</p>
+      </div>` : ''}
+
+      <p class="text-xs text-faint" style="margin-top:var(--space-4);line-height:1.6;">
+        ${url ? 'Room edits made here are encrypted with Cade.txt&rsquo;s key and pushed to its database, so other devices see them.'
+              : 'Cade.txt has no Firebase database configured, so changes stay on this device until it does.'}
+      </p>
+    `, [
+      `<button class="btn btn-secondary" onclick="App.closeModal()">Close</button>`,
+      `<button class="btn btn-primary" onclick="App.rescanBridge()">Rescan now</button>`,
+    ]);
+  }
+
+  function rescanBridge() {
+    if (typeof Bridge === 'undefined') return;
+    const stats = Bridge.scan();
+    closeModal();
+    render();
+    toast(stats && stats.changed ? 'Cade.txt rooms re-read' : 'Already up to date');
+  }
+
+  // Creating a sub-project here creates the matching room in Cade.txt. An
+  // existing room keeps everything it already holds — the new sub-project
+  // simply adopts it.
+  function openNewSubproject() {
+    const tops = State.getProjects().filter(p => p.depth === 0);
+    const preselect = (activeWorkspace !== WS_ALL && activeWorkspace !== WS_UNFILED) ? activeWorkspace : '';
+    const txtOn = typeof Bridge !== 'undefined' && Bridge.available();
+    showModal('New Sub-project', `
+      <div class="form-group">
+        <label class="form-label">Name</label>
+        <input type="text" class="form-input" id="subName" placeholder="e.g. Kitchen remodel" autocomplete="off">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Inside</label>
+        <select class="form-select" id="subParent">
+          <option value="">— top level —</option>
+          ${tops.map(p => `<option value="${p.id}" ${preselect === p.id ? 'selected' : ''}>${escHtml(p.name)}</option>`).join('')}
+        </select>
+      </div>
+      ${txtOn ? `<label class="form-check" style="display:flex;align-items:center;gap:var(--space-2);">
+        <input type="checkbox" id="subMakeRoom" checked>
+        <span class="text-sm">Also create the room in Cade.txt</span>
+      </label>
+      <p class="text-xs text-faint" style="margin-top:var(--space-2);line-height:1.6;">
+        If a room with this name already exists its contents are kept — the
+        sub-project adopts it and new tasks are appended to the bottom of its list.
+      </p>` : ''}
+    `, [
+      `<button class="btn btn-secondary" onclick="App.closeModal()">Cancel</button>`,
+      `<button class="btn btn-primary" onclick="App.saveNewSubproject()">Create</button>`,
+    ]);
+    setTimeout(() => document.getElementById('subName')?.focus(), 60);
+  }
+
+  async function saveNewSubproject() {
+    const name = document.getElementById('subName')?.value?.trim();
+    if (!name) { toast('Name required'); return; }
+    const parentId = document.getElementById('subParent')?.value || null;
+    const makeRoom = document.getElementById('subMakeRoom')?.checked;
+
+    const parent = parentId ? State.getProject(parentId) : null;
+
+    // Naming an existing room adopts its sub-project rather than standing a
+    // second, empty one next to it — the same "append, don't replace" rule
+    // the room itself follows.
+    const existing = State.getProjects({ includeArchived: true }).find(p =>
+      p.txtRoom === name || (p.name === name && p.parentId === parentId));
+    if (existing) {
+      closeModal();
+      const patch = { archived: false };
+      if (parentId && existing.parentId !== parentId && !State.wouldCycleProject(existing.id, parentId)) {
+        patch.parentId = parentId;
+      }
+      State.updateProject(existing.id, patch);
+      openSubproject(existing.parentId || parentId || WS_ALL, existing.id);
+      toast(`"${name}" already exists — opened it`);
+      return;
+    }
+
+    const proj = State.createProject({ name, parentId, icon: 'file-text' });
+    closeModal();
+
+    if (makeRoom && typeof Bridge !== 'undefined') {
+      // The room needs a workspace to live in; if the parent project isn't
+      // linked to one yet, create that workspace too so the room isn't
+      // orphaned in Cade.txt's "Unlabeled" bucket.
+      let wsId = parent ? parent.txtWorkspaceId : null;
+      if (parent && !wsId) {
+        wsId = await Bridge.ensureWorkspace(parent.name, 'teal');
+        State.updateProject(parent.id, { txtWorkspaceId: wsId });
+      }
+      const result = await Bridge.ensureRoom(name, wsId);
+      State.updateProject(proj.id, { txtRoom: name, txtHasList: true });
+      toast(result.appended ? `Adopted existing room "${name}"` : `Created room "${name}" in Cade.txt`);
+    }
+
+    if (parentId) { activeWorkspace = parentId; activeSubproject = proj.id; saveNav(); }
+    render();
+  }
+
+  function openTimer() { Timers.openPanel(); }
+  function stopAllTimers() { Timers.stopAll(); toast('All timers stopped'); }
+
+  function addScratchFromMenu() {
+    switchTab('scratch');
+    setTimeout(() => document.getElementById('scratchInput')?.focus(), 120);
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -3755,7 +4450,7 @@ const App = (() => {
           <div class="shortcut-chips" id="shortcutChips">
             ${shortcuts.map(s => `
               <button class="shortcut-chip" id="sc-${s.id}" onclick="App.useShortcut('${s.id}')">
-                <span>${s.emoji}</span><span>${s.label}</span>
+                <span>${s.emoji}</span><span>${escHtml(s.label)}</span>
                 ${s.calories ? `<span class="sc-cal">${s.calories} cal</span>` : ''}
               </button>`).join('')}
             ${shortcuts.length === 0 ? '<p class="text-xs text-faint">No shortcuts yet — add coffee, water, or saved meals via Manage.</p>' : ''}
@@ -3950,7 +4645,7 @@ const App = (() => {
       <div style="display:flex;flex-direction:column;gap:var(--space-2);margin-bottom:var(--space-4);" id="shortcutManageList">
         ${shortcuts.length === 0 ? '<p class="text-xs text-faint">No shortcuts yet.</p>' : shortcuts.map(s => `
           <div class="chain-link" style="justify-content:space-between;">
-            <span>${s.emoji} ${s.label}${s.calories ? ` <span class="text-xs text-faint">· ${s.calories} cal (${s.meal || 'snack'})</span>` : ''}</span>
+            <span>${s.emoji} ${escHtml(s.label)}${s.calories ? ` <span class="text-xs text-faint">· ${s.calories} cal (${s.meal || 'snack'})</span>` : ''}</span>
             <button class="icon-btn" onclick="App.deleteShortcut('${s.id}')" aria-label="Remove">${icon('trash-2', 14)}</button>
           </div>`).join('')}
       </div>
@@ -4015,7 +4710,7 @@ const App = (() => {
             <input type="text" class="form-input" value="${t.name}" onchange="App.renameTag('${t.id}', this.value)" aria-label="Tag name">
             <select class="form-select" onchange="App.setTagProject('${t.id}', this.value || null)" aria-label="Tag scope">
               <option value="">Global</option>
-              ${projects.map(p => `<option value="${p.id}" ${t.projectId === p.id ? 'selected' : ''}>${p.name}</option>`).join('')}
+              ${projects.map(p => `<option value="${p.id}" ${t.projectId === p.id ? 'selected' : ''}>${escHtml(p.name)}</option>`).join('')}
             </select>
             <span class="tag-usage" title="Entries using this tag">×${State.tagUsageCount(t.id)}</span>
             <button class="icon-btn" onclick="App.deleteTagPrompt('${t.id}')" aria-label="Delete tag">${icon('trash-2', 14)}</button>
@@ -4297,7 +4992,7 @@ const App = (() => {
     ac.style.display = 'flex';
     ac.innerHTML = matches.map((p, i) => `
       <button class="scratch-ac-item ${i === 0 ? 'active' : ''}" onclick="App.scratchAcPick('${p.id}')">
-        <span class="proj-dot" style="background:${p.color}"></span>${p.name}
+        <span class="proj-dot" style="background:${p.color}"></span>${escHtml(p.name)}
       </button>`).join('');
   }
 
@@ -4387,15 +5082,20 @@ const App = (() => {
   // ═══════════════════════════════════════════════════════════
   // DAILY REVIEW — one-tap triage of everything that slipped
   // ═══════════════════════════════════════════════════════════
+  // The Today button's badge counts overdue work IN SCOPE, so the modal it
+  // opens has to work on that same set — otherwise a badge reading "3" for
+  // one workspace opens a triage list spanning all of them.
   function reviewPool() {
     const today = State.todayStr();
-    return State.getEntries()
+    return scopedEntries()
       .filter(e => (e.type === 'task' || e.type === 'reminder') && !e.completed && e.dueDate && e.dueDate < today)
       .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
   }
 
   function openDailyReview() {
-    showModal('Daily Review', `
+    const scopeNote = (activeWorkspace !== WS_ALL || activeSubproject)
+      ? ` — ${scopeLabel()}` : '';
+    showModal('Daily Review' + scopeNote, `
       <p class="text-xs text-muted" style="margin-bottom:var(--space-3);">
         Everything overdue, one decision each: reschedule it, park it, finish it, or let it go.
       </p>
@@ -4431,7 +5131,7 @@ const App = (() => {
         return `<div class="review-row" data-id="${e.id}">
           <span class="proj-dot" style="background:${proj?.color || 'var(--text-faint)'}"></span>
           <div class="review-main">
-            <span class="review-title">${e.title}</span>
+            <span class="review-title">${escHtml(e.title)}</span>
             <span class="text-xs" style="color:var(--error);">${formatDueDate(e.dueDate)}</span>
           </div>
           <div class="review-actions">
@@ -4451,7 +5151,10 @@ const App = (() => {
       case 'tomorrow': State.updateEntry(id, { dueDate: offsetDateStr(1) }); break;
       case 'nextweek': State.updateEntry(id, { dueDate: offsetDateStr(7) }); break;
       case 'someday': State.updateEntry(id, { dueDate: null }); break;
-      case 'done': State.toggleComplete(id); celebrate(); break;
+      // Through toggleEntry, not State directly: that is where the Cade.txt
+      // write-through lives, and a checkbox ticked here must reach the room
+      // like any other completion.
+      case 'done': toggleEntry(id); break;
       case 'drop': State.deleteEntry(id); break;
     }
     render();
@@ -4569,7 +5272,7 @@ const App = (() => {
           return `<div class="autoplan-row">
             <span class="font-mono text-xs autoplan-time">${minToTime(p.start)}–${minToTime(p.end)}</span>
             <span class="proj-dot" style="background:${proj?.color || 'var(--accent)'}"></span>
-            <span class="truncate" style="flex:1;">${p.task.title}</span>
+            <span class="truncate" style="flex:1;">${escHtml(p.task.title)}</span>
             <span class="pill">${estimateLabel(p.end - p.start)}</span>
           </div>`;
         }).join('')}
@@ -4591,7 +5294,7 @@ const App = (() => {
           <label class="form-label">Project</label>
           <select class="form-select" id="apProject" onchange="App.renderAutoPlanPreview()">
             <option value="">All projects</option>
-            ${projects.map(p => `<option value="${p.id}">${'– '.repeat(p.depth || 0)}${p.name}</option>`).join('')}
+            ${projects.map(p => `<option value="${p.id}">${'– '.repeat(p.depth || 0)}${escHtml(p.name)}</option>`).join('')}
           </select>
         </div>
         <div class="form-group">
@@ -4669,7 +5372,8 @@ const App = (() => {
   }
 
   function pasteDefaultProject() {
-    return currentTab === 'projects' && projectFilter && projectFilter !== 'none' ? projectFilter : null;
+    const focus = focusedProjectId();
+    return focus && focus !== 'none' ? focus : null;
   }
 
   function openPasteImport() {
@@ -4678,7 +5382,7 @@ const App = (() => {
       <p class="text-xs text-muted" style="margin-bottom:var(--space-2);">
         One item per line — markdown lists and numbering are stripped. Lines speak the quick-add shorthand
         (<span class="font-mono">tomorrow 3pm #tag @project !high ~30m</span>), and the "Copy for LLM" JSON pastes straight back in.
-        ${proj ? `New tasks land in <strong>${proj.name}</strong> unless a line says otherwise.` : ''}
+        ${proj ? `New tasks land in <strong>${escHtml(proj.name)}</strong> unless a line says otherwise.` : ''}
       </p>
       <textarea class="form-input" id="pasteInput" rows="9" spellcheck="false"
         placeholder="- [ ] Fix header overflow #bugs !high&#10;- Write release notes tomorrow ~30m&#10;- Call the vendor friday 10am"
@@ -4788,7 +5492,8 @@ const App = (() => {
     if (!el) return;
 
     // Inside a project? Its tasks get boosted to the top.
-    const ctxProject = (currentTab === 'projects' && projectFilter && projectFilter !== 'none') ? projectFilter : null;
+    const ctxFocus = focusedProjectId();
+    const ctxProject = (ctxFocus && ctxFocus !== 'none') ? ctxFocus : null;
     const results = [];
 
     State.getProjects().forEach(p => {
@@ -4823,8 +5528,8 @@ const App = (() => {
       <button class="search-result" onclick="App.searchGo('${r.kind}','${r.id}')">
         ${icon(typeIcons[r.kind === 'project' ? 'project' : r.type] || 'list-checks', 14)}
         <span class="proj-dot" style="background:${r.color || 'var(--text-faint)'}"></span>
-        <span class="sr-title ${r.completed ? 'completed' : ''}">${r.title}</span>
-        <span class="sr-context">${r.context}</span>
+        <span class="sr-title ${r.completed ? 'completed' : ''}">${escHtml(r.title)}</span>
+        <span class="sr-context">${escHtml(r.context)}</span>
       </button>
     `).join('');
     refreshIcons();
@@ -4833,7 +5538,10 @@ const App = (() => {
   function searchGo(kind, id) {
     closeModal();
     if (kind === 'project') {
-      projectFilter = id;
+      // Land on the project's own page, taking its WORKSPACE with it — for a
+      // deeply nested project the parent is another sub-project, which would
+      // scope the app to the wrong subtree and hide its real siblings.
+      revealProject(id);
       switchTab('projects');
     } else {
       editEntry(id);
@@ -4967,11 +5675,6 @@ const App = (() => {
     if (typeof Timers !== 'undefined') Timers.updateMini();
   }
 
-  function toggleSidebar() {
-    const collapsed = document.body.classList.toggle('sidebar-collapsed');
-    State.updateSettings({ sidebarCollapsed: collapsed });
-  }
-
   // ═══════════════════════════════════════════════════════════
   // ENTRY ACTIONS
   // ═══════════════════════════════════════════════════════════
@@ -4991,6 +5694,13 @@ const App = (() => {
       if (after?.recurrence && after.spawnedNextId) {
         const next = State.getEntry(after.spawnedNextId);
         if (next?.dueDate) toast(`Done — repeats ${after.recurrence.type}, next ${formatDueDate(next.dueDate)}`);
+        // The spawned occurrence is a brand-new entry with no link of its
+        // own. Scans find bridged tasks by their link, so without pushing it
+        // the next occurrence would exist only here — the room would show the
+        // series stopping at the one just ticked.
+        if (next && next.txtRoom == null && typeof Bridge !== 'undefined') {
+          Bridge.pushNewTask(next).catch(() => {});
+        }
       }
       // dependency chain: announce what this completion freed up
       const freed = State.getEntries({ type: 'task', completed: false })
@@ -4998,6 +5708,12 @@ const App = (() => {
       if (freed.length > 0) {
         toast(`Unblocked: ${freed.map(t => t.title).join(', ')}`);
       }
+    }
+    // A task mirroring a Cade.txt checkbox ticks the box over there too —
+    // immediately, so the two views never disagree while you look at them.
+    const after = State.getEntry(id);
+    if (after && after.txtRoom && typeof Bridge !== 'undefined') {
+      Bridge.pushCompletion(after).catch(() => {});
     }
     render();
   }
@@ -5127,6 +5843,7 @@ const App = (() => {
   async function confirmReset() {
     if (!confirm('Delete ALL data? This cannot be undone.')) return;
     const settings = State.getSettings();
+    let erasedRemote = false;
     // The synced copy is a separate encrypted blob on Firebase — if it isn't
     // erased too, reconnecting with the same passphrase restores everything.
     if (settings.sync.databaseUrl && settings.sync.passphrase) {
@@ -5136,14 +5853,22 @@ const App = (() => {
         if (!result.success) {
           if (!confirm(`Cloud erase failed (${result.error}). Reset local data anyway? The server copy will remain.`)) return;
         }
+        // A FAILED erase leaves the server copy standing, which is exactly
+        // the case that needs the reconnect paused.
+        erasedRemote = result.success;
       } else {
         // At minimum stop the pending debounced push from re-uploading
         Sync.disconnect();
       }
     }
-    // Write a clean empty dataset (onboarded=true) so the sample-data seed
-    // does NOT repopulate on reload.
-    State.resetData();
+    // Keeping the server copy means the reload would auto-connect and pull it
+    // straight back, so sync is paused until the user reconnects — otherwise
+    // a local-only reset looks like it did nothing at all.
+    const hadSync = !!(settings.sync.databaseUrl && settings.sync.passphrase);
+    State.resetData({ pauseSync: hadSync && !erasedRemote });
+    if (hadSync && !erasedRemote) {
+      alert('Local data cleared. Sync is paused so it cannot pull the server copy back — reconnect from Data \u25b8 Firebase Sync when you are ready.');
+    }
     location.reload();
   }
 
@@ -5152,11 +5877,27 @@ const App = (() => {
   // ═══════════════════════════════════════════════════════════
   function init() {
     initTheme();
+    loadNav();
 
-    // Tab navigation
-    document.querySelectorAll('.tab-item').forEach(el => {
-      el.addEventListener('click', () => switchTab(el.dataset.tab));
+    // Menubar menus
+    document.querySelectorAll('.menu-trigger[data-menu]').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleMenu(btn.dataset.menu, btn);
+      });
     });
+    document.getElementById('menuMore')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      toggleMenuSheet();
+    });
+    // Anything outside a menu dismisses it — the sheet included. Capture
+    // phase, because plenty of in-page handlers stopPropagation() (the
+    // planner grid, entry cards); on the bubble phase those clicks never
+    // reach here and the menu stays stuck open over the content.
+    document.addEventListener('click', (e) => {
+      if (e.target.closest('.menu-wrap, .ws-pill-wrap, .menu-sheet, #menuMore')) return;
+      closeAllMenus();
+    }, true);
 
     // FAB
     document.getElementById('fabBtn').addEventListener('click', () => openNewEntry('task'));
@@ -5176,14 +5917,20 @@ const App = (() => {
     // Panel close (timers keep running; the nav element brings it back)
     document.getElementById('panelClose').addEventListener('click', closePanel);
 
-    // Sidebar collapse (desktop)
-    if (State.getSettings().sidebarCollapsed) document.body.classList.add('sidebar-collapsed');
-    document.getElementById('sidebarToggle')?.addEventListener('click', toggleSidebar);
+    // A save that never reached disk is the difference between "my edit is
+    // here" and "my edit exists until I reload" — say so rather than letting
+    // the next reload look like data loss.
+    window.addEventListener('state-save-failed', () => {
+      toast('Storage full — changes are not being saved. Free space in Settings.');
+    });
+    if (!State.isHealthy()) {
+      setTimeout(() => toast('Saved data could not be read. Connect sync to restore it — nothing will be overwritten.'), 800);
+    }
 
     // Keyboard shortcuts — Cmd/Ctrl combos plus configurable single-key
     // hotkeys (Gmail-style: only fire when not typing in a field)
     document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') { closeModal(); closePanel(); closePopover(); return; }
+      if (e.key === 'Escape') { closeAllMenus(); closeModal(); closePanel(); closePopover(); return; }
       if ((e.metaKey || e.ctrlKey) && e.key === 'n') { e.preventDefault(); openNewEntry('task'); return; }
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); openPalette(); return; }
       if ((e.metaKey || e.ctrlKey) && e.key === 'l' && currentTab === 'scratch') { e.preventDefault(); clearScratchAll(); return; }
@@ -5225,6 +5972,33 @@ const App = (() => {
     Sync.autoConnect();
     Sync.updateStatus();
 
+    // Cade.txt link — rooms in, completions both ways. Silent when txt has
+    // never run on this device.
+    //
+    // With sync configured the first import waits for reconciliation: this
+    // device's copy of the dataset isn't authoritative until then, and
+    // importing a room into a stale copy that the server copy is then merged
+    // on top of yields two of everything. The timeout is the backstop for a
+    // device that is offline or whose database is unreachable — the import
+    // has to happen eventually, and the bridge de-duplicates on every scan.
+    if (typeof Bridge !== 'undefined') {
+      const onScan = (stats) => {
+        render();
+        const bits = [];
+        if (stats.rooms) bits.push(`${stats.rooms} room${stats.rooms > 1 ? 's' : ''}`);
+        if (stats.tasks) bits.push(`${stats.tasks} task${stats.tasks > 1 ? 's' : ''}`);
+        if (bits.length) toast(`Cade.txt: linked ${bits.join(', ')}`);
+      };
+      const waitForSync = Sync.isConfigured() && !Sync.isReconciled();
+      Bridge.init(onScan, { defer: waitForSync });
+      // Every reconcile triggers a scan, not just the first. If the timeout
+      // below fired because the database was slow, the import ran against a
+      // pre-reconcile dataset — the scan after the server copy lands is what
+      // folds any duplicate links back together.
+      window.addEventListener('sync-reconciled', () => Bridge.requestScan(0));
+      if (waitForSync) setTimeout(() => Bridge.requestScan(0), 15000);
+    }
+
     // Running timers survive page refreshes — resume before first paint
     if (typeof Timers !== 'undefined' && Timers.restore) Timers.restore();
 
@@ -5256,7 +6030,7 @@ const App = (() => {
   return {
     init, render, switchTab, toggleTheme,
     openNewEntry, editEntry, saveEntry, changeEntryType, selectEffort,
-    addTag, removeTag,
+    addTag, removeTag, removeTagAt, addTagById,
     openNewProject, openProjectModal, openManageProjects, selectColor, selectIcon, saveProject,
     archiveProjectAction, unarchiveProjectAction, deleteProjectAction,
     openSyncConfig, connectSync, disconnectSync,
@@ -5281,11 +6055,18 @@ const App = (() => {
     toolCoin, toolDice, toolPick, toolName, toolRandom, toolUuid, toolCopy, toolListChanged,
     logFood, deleteFoodLog, useShortcutHealth,
     toggleEntry, deleteEntry, archiveEntry, unarchiveEntry, startTimerForTask,
-    selectEntryCard, setWorkingProject, toggleSidebar,
+    selectEntryCard, setWorkingProject,
+    // Navigation chrome
+    menuAction, toggleWorkspaceMenu, setWorkspace, setSubproject, toggleSettledSubs,
+    revealProject,
+    // Cade.txt link
+    openBridgePanel, rescanBridge, openNewSubproject, saveNewSubproject,
+    openTimer, stopAllTimers, addScratchFromMenu,
     viewArchive, deleteHistoryLog, editMoodLog, setEditLogEmotion, setEditLogEnergy, saveMoodLog,
-    setProjectFilter, setTagFilter, selectHabit, toggleHabitCell, cycleHabitCell, exportForLLM,
+    setTagFilter, openSubproject, toggleShowCompleted, setCompletedSort,
+    selectHabit, toggleHabitCell, cycleHabitCell, exportForLLM,
     onRecurrenceChange, toggleWeekday,
-    setInsightsProject, setInsightsEntry, setFocusProject,
+    setInsightsProject, setInsightsEntry,
     qDragStart, qDragEnd, qDragOver, qDragLeave, qDrop, qItemClick,
     plannerNav, plannerToday, setPlannerView, plannerTap, blockPointerDown,
     popoverAgenda, popoverTask, popoverTimer,
