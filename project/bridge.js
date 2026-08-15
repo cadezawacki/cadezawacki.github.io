@@ -472,6 +472,7 @@ const Bridge = (() => {
     const canReachServer = !lockedHere && !!(database && key);
 
     let next = null;
+    let baseUsed = null;
     let rebased = false;
     // 'contended' doubles as "keep going". The body always runs at least once
     // — the local edit has to be computed even with no server to talk to.
@@ -485,6 +486,7 @@ const Bridge = (() => {
       let stop = null;
       rebased = false;
       let expectedPacked;
+      baseUsed = base;
 
       if (canReachServer) {
         const remote = await readRemoteRoom(name, key, database);
@@ -493,7 +495,7 @@ const Bridge = (() => {
         else {
           expectedPacked = remote.packed;
           if (remote.ok && remote.text !== local) {
-            if (cacheClean) { base = remote.text; rebased = true; }
+            if (cacheClean) { base = remote.text; baseUsed = base; rebased = true; }
             // Both sides moved. Resolving that is a text merge, and Cade.txt
             // already owns one — it reconciles properly the next time it
             // opens this room. The edit still lands locally; what we refuse
@@ -544,9 +546,9 @@ const Bridge = (() => {
       // edit takes the defer path and is never published again.
       writeRaw(SYNCED_PREFIX + name, next);
       database.ref(`rooms/${name}/v`).transaction(c => (c || 0) + 1).catch(() => {});
-      return { ok: true, remote: true, rebased };
+      return { ok: true, remote: true, rebased, before: baseUsed, after: next };
     }
-    return { ok: true, remote: false, reason: outcome || 'offline' };
+    return { ok: true, remote: false, reason: outcome || 'offline', before: baseUsed, after: next };
   }
 
   // ── The operations themselves ─────────────────────────────────────────
@@ -1203,8 +1205,12 @@ const Bridge = (() => {
   // Adding a task to a bridged sub-project appends a checkbox to its room.
   async function pushNewTask(entry) {
     if (!entry || entry.type !== 'task') return false;
-    const proj = entry.projectId ? State.getProject(entry.projectId) : null;
-    if (!proj || !proj.txtRoom) return false;
+    // Any membership will do, not just the primary: a task filed into a
+    // linked room as a secondary project still belongs in that room's list.
+    const proj = State.entryProjectIds(entry)
+      .map(id => State.getProject(id))
+      .find(p => p && p.txtRoom);
+    if (!proj) return false;
     const out = {};
     const res = await applyRoomEdit(proj.txtRoom,
       opAppendForTask(entry.title, claimedKeys(proj.txtRoom, entry.id), out));
@@ -1222,8 +1228,41 @@ const Bridge = (() => {
     const out = {};
     const res = await applyRoomEdit(entry.txtRoom, opRename(oldKey, entry.title, out));
     if (!res.ok || !out.key) return false;
-    State.updateEntry(entry.id, { txtKey: out.key });
+    // Renaming a line ONTO a title another line already uses renumbers the
+    // occurrence suffixes, so other tasks in this room can be left holding
+    // keys that no longer point at their line. Realign every one of them
+    // against the document as written, not just the one that was renamed.
+    rekeyRoomTasks(entry.txtRoom, res.before, res.after, entry.id, out.key);
     return true;
+  }
+
+  // Lines keep their positions through a rename — only their text changes —
+  // so the before/after documents line up index for index, which is what
+  // makes the shifted keys recoverable.
+  function rekeyRoomTasks(room, before, after, renamedId, renamedKey) {
+    const setKey = (id, key) => State.updateEntry(id, { txtKey: key });
+    const beforeTodos = parseTodos(before || '');
+    const afterTodos = parseTodos(after || '');
+    if (beforeTodos.length !== afterTodos.length) {
+      if (renamedId && renamedKey) setKey(renamedId, renamedKey);
+      return;
+    }
+    const owners = new Map();
+    State.getEntries({ includeArchived: true }).forEach(e => {
+      if (e.txtRoom === room && e.txtKey && !owners.has(e.txtKey)) owners.set(e.txtKey, e);
+    });
+    beforeTodos.forEach((was, i) => {
+      const now = afterTodos[i];
+      if (!now || now.key === was.key) return;
+      const owner = owners.get(was.key);
+      if (owner) setKey(owner.id, now.key);
+    });
+    // The renamed entry may not have been in the map (a fresh link), so make
+    // sure it ends up on the key the document actually gave its line.
+    if (renamedId && renamedKey) {
+      const cur = State.getEntry(renamedId);
+      if (cur && cur.txtKey !== renamedKey) setKey(renamedId, renamedKey);
+    }
   }
 
   // Keys in this room already spoken for by some other task.

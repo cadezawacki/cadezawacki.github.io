@@ -190,10 +190,15 @@ const State = (() => {
   // ── Full reset to a CLEAN slate ─────────────────────────────
   // Credentials survive deliberately: "delete my data" is not "forget how to
   // reach my server". Sync.eraseRemote() is what clears the server copy.
-  function resetData() {
+  //
+  // But keeping them means the reload right after a reset would auto-connect
+  // and pull the retained server copy straight back, making a local-only
+  // reset look like it did nothing. `pauseSync` keeps the credentials and
+  // suppresses the automatic reconnect until the user connects deliberately.
+  function resetData({ pauseSync = false } = {}) {
     const sync = data.settings.sync;
     data = structuredClone(defaultData);
-    data.settings.sync = sync;
+    data.settings.sync = { ...sync, paused: !!pauseSync };
     loadFailed = false;
     save();
   }

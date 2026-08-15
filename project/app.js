@@ -3942,7 +3942,14 @@ const App = (() => {
       const oldKey = before?.txtKey;
       State.updateEntry(editingEntryId, data);
       toast('Entry updated');
-      if (bridged && renamed) Bridge.pushRename(State.getEntry(editingEntryId), oldKey).catch(() => {});
+      const updated = State.getEntry(editingEntryId);
+      if (bridged && renamed) Bridge.pushRename(updated, oldKey).catch(() => {});
+      // Moving an existing task INTO a linked sub-project has to add the
+      // checkbox there. Nothing else would: scans match on a link this task
+      // does not have yet, so without this it stays invisible in Cade.txt.
+      else if (bridged && updated && updated.type === 'task' && !updated.txtRoom) {
+        Bridge.pushNewTask(updated).catch(() => {});
+      }
     } else {
       const created = State.createEntry(data);
       toast('Entry created');
@@ -5790,6 +5797,7 @@ const App = (() => {
   async function confirmReset() {
     if (!confirm('Delete ALL data? This cannot be undone.')) return;
     const settings = State.getSettings();
+    let erasedRemote = false;
     // The synced copy is a separate encrypted blob on Firebase — if it isn't
     // erased too, reconnecting with the same passphrase restores everything.
     if (settings.sync.databaseUrl && settings.sync.passphrase) {
@@ -5799,14 +5807,22 @@ const App = (() => {
         if (!result.success) {
           if (!confirm(`Cloud erase failed (${result.error}). Reset local data anyway? The server copy will remain.`)) return;
         }
+        // A FAILED erase leaves the server copy standing, which is exactly
+        // the case that needs the reconnect paused.
+        erasedRemote = result.success;
       } else {
         // At minimum stop the pending debounced push from re-uploading
         Sync.disconnect();
       }
     }
-    // Write a clean empty dataset (onboarded=true) so the sample-data seed
-    // does NOT repopulate on reload.
-    State.resetData();
+    // Keeping the server copy means the reload would auto-connect and pull it
+    // straight back, so sync is paused until the user reconnects — otherwise
+    // a local-only reset looks like it did nothing at all.
+    const hadSync = !!(settings.sync.databaseUrl && settings.sync.passphrase);
+    State.resetData({ pauseSync: hadSync && !erasedRemote });
+    if (hadSync && !erasedRemote) {
+      alert('Local data cleared. Sync is paused so it cannot pull the server copy back — reconnect from Data \u25b8 Firebase Sync when you are ready.');
+    }
     location.reload();
   }
 

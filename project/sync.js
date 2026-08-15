@@ -40,7 +40,8 @@ const Sync = (() => {
   function isReconciled() { return reconciled; }
   function isConfigured() {
     const s = State.getSettings();
-    return !!(s.sync && s.sync.databaseUrl && s.sync.passphrase);
+    if (!s.sync || s.sync.paused) return false;
+    return !!(s.sync.databaseUrl && s.sync.passphrase);
   }
 
   // Identifies THIS session's writes so echoes are recognized by identity,
@@ -239,7 +240,7 @@ const Sync = (() => {
       });
 
       const settings = State.getSettings();
-      State.updateSettings({ sync: { ...settings.sync, databaseUrl, passphrase, connected: true } });
+      State.updateSettings({ sync: { ...settings.sync, databaseUrl, passphrase, connected: true, paused: false } });
       return { success: true };
     } catch (e) {
       connecting = false;
@@ -585,7 +586,9 @@ const Sync = (() => {
     el.style.display = 'block';
     const state = connected ? 'online' : connecting ? 'syncing' : 'offline';
     el.className = 'sync-dot ' + state;
-    el.title = 'Sync: ' + (connected ? 'connected' : connecting ? 'reconnecting…' : 'disconnected');
+    el.title = settings.sync.paused
+      ? 'Sync paused after a local reset — open Data ▸ Firebase Sync to reconnect'
+      : 'Sync: ' + (connected ? 'connected' : connecting ? 'reconnecting…' : 'disconnected');
   }
 
   function isConnected() { return connected; }
@@ -593,6 +596,10 @@ const Sync = (() => {
   // ── Auto-connect on load if configured ────────────────────
   function autoConnect() {
     const settings = State.getSettings();
+    // `paused` is set by a local-only reset: the credentials are kept, but
+    // reconnecting has to be the user's decision — otherwise the reload
+    // immediately restores everything they just deleted.
+    if (settings.sync.paused) { updateStatus(); return; }
     if (settings.sync.databaseUrl && settings.sync.passphrase) {
       connect(settings.sync.databaseUrl, settings.sync.passphrase);
     }
