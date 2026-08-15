@@ -368,11 +368,15 @@ const Charts = (() => {
   // ALL-HABITS AGGREGATE — stacked completions per day (30 days),
   // one color-coded series per habit
   // ═══════════════════════════════════════════════════════════
-  function renderHabitsAggregate(canvasId, days = 30) {
+  // `only` (optional) restricts the chart to a set of habit ids. The page
+  // scopes its habit list to the active workspace, and a chart quietly
+  // covering every workspace under a scoped heading is just wrong.
+  function renderHabitsAggregate(canvasId, days = 30, only = null) {
     destroy(canvasId);
     if (typeof Chart === 'undefined') return;
     const colors = getColors();
-    const habits = State.getEntries({ type: 'habit' });
+    const ids = only ? new Set(only) : null;
+    const habits = State.getEntries({ type: 'habit' }).filter(h => !ids || ids.has(h.id));
     if (habits.length === 0) return;
     const today = new Date();
     const fallback = ['#0f9598', '#e06d6d', '#6db4f0', '#6fcf97', '#f0d96a', '#a06df0', '#f0a06d'];

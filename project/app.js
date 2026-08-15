@@ -459,8 +459,18 @@ const App = (() => {
     return State.getEntries(filter).filter(inScope);
   }
 
+  // What the current scope is called — the deepest thing selected. Used in
+  // page headings, where naming the room is the useful answer.
   function scopeLabel() {
     if (activeSubproject) return State.getProject(activeSubproject)?.name || 'Sub-project';
+    return workspaceLabel();
+  }
+
+  // What the PILL says. It is a workspace switcher and its dropdown lists
+  // workspaces, so naming a room in it (with the workspace's colour on the
+  // dot beside it) reads as a mismatch. The room strip already shows which
+  // room is selected.
+  function workspaceLabel() {
     if (activeWorkspace === WS_ALL) return 'All Projects';
     if (activeWorkspace === WS_UNFILED) return 'Unfiled';
     return State.getProject(activeWorkspace)?.name || 'Workspace';
@@ -531,7 +541,7 @@ const App = (() => {
     const dot = pill.querySelector('.ws-pill-dot');
     const proj = (activeWorkspace !== WS_ALL && activeWorkspace !== WS_UNFILED)
       ? State.getProject(activeWorkspace) : null;
-    nameEl.textContent = scopeLabel();
+    nameEl.textContent = workspaceLabel();
     dot.style.background = proj ? proj.color : 'var(--text-faint)';
     pill.title = proj ? `Workspace: ${proj.name} — click to switch` : 'Switch workspace';
   }
@@ -2018,6 +2028,30 @@ const App = (() => {
   // 'none' for the Unfiled bucket, or null for everything. Replaces the old
   // page-local `projectFilter` — the pill and the room strip own this now,
   // and export/new-entry/delete all read the same answer.
+  // The top-level project a given one lives under — the pill only ever shows
+  // a workspace, and a project nested more than one level deep has another
+  // sub-project as its parent, not its workspace.
+  function rootWorkspaceOf(id) {
+    let cur = State.getProject(id);
+    let guard = 0;
+    while (cur && cur.parentId && guard++ < 100) {
+      const parent = State.getProject(cur.parentId);
+      if (!parent) break;
+      cur = parent;
+    }
+    return cur ? cur.id : null;
+  }
+
+  // Navigate to a project wherever it sits in the tree: its workspace becomes
+  // the scope, and the project itself the selected room.
+  function revealProject(id) {
+    const proj = State.getProject(id);
+    if (!proj) return;
+    if (!proj.parentId) { activeWorkspace = id; activeSubproject = null; }
+    else { activeWorkspace = rootWorkspaceOf(id) || WS_ALL; activeSubproject = id; }
+    saveNav();
+  }
+
   // A project that just got archived or deleted must not leave the pill or
   // the room strip pointing at it.
   function dropNavIfGone(id) {
@@ -2294,7 +2328,9 @@ const App = (() => {
       }
     } else {
       const agg = document.getElementById('habitsAggChart');
-      if (agg) Charts.renderHabitsAggregate('habitsAggChart', 30);
+      // Same scope the page's habit list uses — see renderHabits().
+      if (agg) Charts.renderHabitsAggregate('habitsAggChart', 30,
+        scopedEntries({ type: 'habit' }).map(h => h.id));
     }
   }
 
@@ -5456,11 +5492,10 @@ const App = (() => {
   function searchGo(kind, id) {
     closeModal();
     if (kind === 'project') {
-      // Land on the project's own page, taking its workspace with it so the
-      // room strip shows the right siblings.
-      const p = State.getProject(id);
-      if (p && p.parentId) openSubproject(p.parentId, id);
-      else { activeWorkspace = id; activeSubproject = null; saveNav(); }
+      // Land on the project's own page, taking its WORKSPACE with it — for a
+      // deeply nested project the parent is another sub-project, which would
+      // scope the app to the wrong subtree and hide its real siblings.
+      revealProject(id);
       switchTab('projects');
     } else {
       editEntry(id);
@@ -5961,6 +5996,7 @@ const App = (() => {
     selectEntryCard, setWorkingProject,
     // Navigation chrome
     menuAction, toggleWorkspaceMenu, setWorkspace, setSubproject, toggleSettledSubs,
+    revealProject,
     // Cade.txt link
     openBridgePanel, rescanBridge, openNewSubproject, saveNewSubproject,
     openTimer, stopAllTimers, addScratchFromMenu,

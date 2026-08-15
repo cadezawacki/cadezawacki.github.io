@@ -403,69 +403,150 @@ const Bridge = (() => {
   async function readRemoteRoom(name, key, database) {
     try {
       const snap = await database.ref(`rooms/${name}/text`).once('value');
-      const encoded = unpackRoomText(snap.val());
-      if (encoded == null) return { ok: false, text: '' };
+      const packed = snap.val();
+      const encoded = unpackRoomText(packed);
+      // No node at all — nothing to rebase onto, and nothing to overwrite.
+      if (encoded == null) return { ok: false, text: '', packed: packed == null ? null : undefined };
       const plain = await decryptText(encoded, key);
-      if (plain == null) return { ok: false, text: '' }; // wrong key / corrupt
-      return { ok: true, text: stripLockSentinel(plain) };
+      // A document we cannot read is one we must not replace: it belongs to
+      // a key we do not hold (a room locked elsewhere) or it is damaged.
+      if (plain == null) return { ok: false, text: '', packed, undecryptable: true };
+      return { ok: true, text: stripLockSentinel(plain), packed };
     } catch (e) {
-      return { ok: false, text: '' };
+      return { ok: false, text: '', unreachable: true };
+    }
+  }
+
+  // Is the server still holding exactly what we based our edit on? Compares
+  // through the chunked representation so a re-chunked but identical payload
+  // does not read as someone else's write.
+  function samePacked(a, b) {
+    if (a == null && b == null) return true;
+    if (a == null || b == null) return false;
+    const ua = unpackRoomText(a);
+    const ub = unpackRoomText(b);
+    return ua != null && ua === ub;
+  }
+
+  // A room can be locked on ANOTHER device, leaving no local password hash
+  // here. Its document is encrypted with a key derived from a password we do
+  // not hold, so writing base-key ciphertext over it would leave Cade.txt
+  // unable to decrypt its own room.
+  async function remoteRoomLocked(name, database) {
+    try {
+      const snap = await database.ref(`rooms/${name}/locked`).once('value');
+      return snap.val() === true;
+    } catch (e) {
+      return false; // unreachable — the write below will fail on its own
     }
   }
 
   // `mutate(text) -> string | null`. Returning null means the operation no
   // longer applies to this document (the line is gone) — nothing is written.
-  async function applyRoomEdit(name, mutate) {
-    const local = roomText(name);
-    const locked = roomIsLocked(name);
-    const { key } = creds();
-    const database = locked ? null : db();
+  //
+  // The server write is a compare-and-set, not a plain set. Fetching first
+  // narrows the window but does not close it: two devices ticking different
+  // boxes can read the same document and then each write a whole new one,
+  // and the loser's change vanishes. The write commits only while the server
+  // still holds what we based on; otherwise we re-read and re-apply, which a
+  // line-scoped operation can do without losing meaning.
+  const EDIT_ATTEMPTS = 3;
 
-    let base = local;
+  async function applyRoomEdit(name, mutate) {
+    const { key } = creds();
+    const database = db();
+
+    // Locked rooms use a key derived from a room password. Locally flagged
+    // is the easy case — the edit stays on this device and Cade.txt pushes
+    // it. Locked on another device leaves no local flag, so ask the server.
+    const lockedHere = roomIsLocked(name);
+    if (!lockedHere && database && await remoteRoomLocked(name, database)) {
+      return { ok: false, reason: 'locked-remotely' };
+    }
+
+    // Everything is decided against the ORIGINAL local state; retries must
+    // not read back the cache we are about to write, or the second attempt
+    // would see its own edit as unsynced local work and defer.
+    const local = roomText(name);
+    const cacheClean = roomCacheIsClean(name);
+    const canReachServer = !lockedHere && !!(database && key);
+
+    let next = null;
     let rebased = false;
-    let deferRemote = false;
-    if (database && key) {
-      const remote = await readRemoteRoom(name, key, database);
-      if (remote.ok && remote.text !== local) {
-        if (roomCacheIsClean(name)) {
-          base = remote.text;
-          rebased = true;
-        } else {
-          // Both sides have moved. Resolving that is a text merge, and
-          // Cade.txt already owns one — it reconciles properly the next time
-          // it opens this room. The edit still lands locally; what we refuse
-          // to do is publish a whole document over a genuinely newer one.
-          deferRemote = true;
+    // 'contended' doubles as "keep going". The body always runs at least once
+    // — the local edit has to be computed even with no server to talk to.
+    let outcome = 'contended';
+
+    for (let attempt = 0; attempt < EDIT_ATTEMPTS && outcome === 'contended'; attempt++) {
+      // Each attempt starts from a clean verdict — carrying the previous
+      // round's outcome forward would make the retry bail out before it
+      // could commit, which defeats the whole point of retrying.
+      let base = local;
+      let stop = null;
+      rebased = false;
+      let expectedPacked;
+
+      if (canReachServer) {
+        const remote = await readRemoteRoom(name, key, database);
+        if (remote.unreachable) stop = 'unreachable';
+        else if (remote.undecryptable) stop = 'unreadable-remote';
+        else {
+          expectedPacked = remote.packed;
+          if (remote.ok && remote.text !== local) {
+            if (cacheClean) { base = remote.text; rebased = true; }
+            // Both sides moved. Resolving that is a text merge, and Cade.txt
+            // already owns one — it reconciles properly the next time it
+            // opens this room. The edit still lands locally; what we refuse
+            // to do is publish a whole document over a genuinely newer one.
+            else stop = 'deferred';
+          }
         }
+      }
+
+      next = mutate(base);
+      // The operation didn't apply to the document we based on. If we
+      // rebased, the two versions have diverged past what a line-scoped edit
+      // can bridge — leave it alone; the next scan re-derives the truth.
+      if (next == null) return { ok: false, reason: rebased ? 'diverged' : 'not-applicable' };
+
+      if (lockedHere) { outcome = 'locked'; break; }
+      if (!canReachServer) { outcome = 'offline'; break; }
+      if (stop) { outcome = stop; break; }
+
+      const cipher = packRoomText(await encryptText(next, key));
+      try {
+        const res = await database.ref(`rooms/${name}/text`).transaction(cur =>
+          samePacked(cur, expectedPacked) ? cipher : undefined); // undefined = abort
+        // Not committed means someone wrote between our read and our write;
+        // the loop condition sends us round again, onto their version.
+        outcome = (res && res.committed) ? 'committed' : 'contended';
+      } catch (e) {
+        console.warn('Bridge: room push failed', e);
+        outcome = e.message || 'push-failed';
+        break;
       }
     }
 
-    let next = mutate(base);
-    // The operation didn't apply to the document we based on. If we rebased,
-    // the two versions have diverged past what a line-scoped edit can bridge
-    // — leave it alone and let the next scan re-derive the truth.
-    if (next == null) return { ok: false, reason: rebased ? 'diverged' : 'not-applicable' };
-
-    writeRaw(CACHE_PREFIX + name, next);
+    // The cache is what scans read, so a write that does not land means the
+    // next scan reverses this edit. Report failure rather than let the caller
+    // stamp a link against a document that never changed.
+    if (!writeRaw(CACHE_PREFIX + name, next)) {
+      return { ok: false, reason: 'local-write-failed' };
+    }
     stampRoomModified(name);
     try {
       if (channel) channel.postMessage({ t: 'doc', room: name, text: next, ts: Date.now(), tab: TAB_ID });
     } catch (e) {}
 
-    if (locked) return { ok: true, remote: false, reason: 'locked' };
-    if (!key || !database) return { ok: true, remote: false, reason: 'offline' };
-    if (deferRemote) return { ok: true, remote: false, reason: 'deferred' };
-    try {
-      // Chunked exactly like Cade.txt writes it — a single Firebase string
-      // has a size ceiling, and a room past it would otherwise fail to reach
-      // the server after the local copy had already changed.
-      await database.ref(`rooms/${name}/text`).set(packRoomText(await encryptText(next, key)));
+    if (outcome === 'committed') {
+      // Confirmed on the server, so this text IS the synced base now. Without
+      // recording it the room looks permanently unsynced, and every later
+      // edit takes the defer path and is never published again.
+      writeRaw(SYNCED_PREFIX + name, next);
       database.ref(`rooms/${name}/v`).transaction(c => (c || 0) + 1).catch(() => {});
       return { ok: true, remote: true, rebased };
-    } catch (e) {
-      console.warn('Bridge: room push failed', e);
-      return { ok: true, remote: false, reason: e.message };
     }
+    return { ok: true, remote: false, reason: outcome || 'offline' };
   }
 
   // ── The operations themselves ─────────────────────────────────────────
@@ -646,11 +727,33 @@ const Bridge = (() => {
         Object.entries(remote.tomb || {}).forEach(([r, ts]) => {
           if (typeof ts === 'number' && ts > (tomb[r] || 0)) tomb[r] = ts;
         });
+        // Room metadata, resolved the way Cade.txt resolves it: the entry as
+        // a whole goes to the fresher stamp, but `pinned` and `archived` are
+        // each decided by their OWN change stamp. Typing in a room bumps
+        // `modified`, so without that split a stale local entry could win on
+        // recency alone and write its old pin or archive flag back over a
+        // newer one made elsewhere.
+        const stampOf = x => Math.max((x && x.modified) || 0, (x && x.created) || 0);
+        const pinTsOf = x => (x && (x.pinTs || x.flagsTs)) || 0;
+        const archTsOf = x => (x && (x.archTs || x.flagsTs)) || 0;
         Object.entries(remote.roomMeta || {}).forEach(([r, m]) => {
           if (!m || typeof m !== 'object') return;
           const mine = meta[r];
-          const stamp = x => Math.max((x && x.modified) || 0, (x && x.created) || 0);
-          if (!mine || stamp(m) > stamp(mine)) meta[r] = m;
+          if (!mine) { meta[r] = m; return; }
+          const winner = stampOf(m) > stampOf(mine) ? m : mine;
+          const merged = { ...winner };
+          const pinFrom = pinTsOf(m) > pinTsOf(mine) ? m : mine;
+          const archFrom = archTsOf(m) > archTsOf(mine) ? m : mine;
+          merged.pinned = !!pinFrom.pinned;
+          merged.archived = !!archFrom.archived;
+          if (pinTsOf(pinFrom)) merged.pinTs = pinTsOf(pinFrom);
+          if (archTsOf(archFrom)) merged.archTs = archTsOf(archFrom);
+          // Creation is monotonic: the earliest known stamp is the real one,
+          // except that re-creating a room deliberately bumps it past its
+          // tombstone — so take the LATER, matching txt's resurrection rule.
+          merged.created = Math.max(m.created || 0, mine.created || 0) || undefined;
+          merged.modified = Math.max(m.modified || 0, mine.modified || 0) || undefined;
+          meta[r] = merged;
         });
         // Workspace definitions: unknown ones are adopted; for ids we both
         // know, the fresher blob wins. Only adding the missing ones meant a
@@ -755,6 +858,11 @@ const Bridge = (() => {
       State.getProjects({ includeArchived: true }).forEach(c => {
         if (c.parentId === loser.id) State.updateProject(c.id, { parentId: winner.id });
       });
+      // Entries filed DIRECTLY on the losing workspace need moving too.
+      // deleteProject only clears the legacy `projectId`, so a dead id left
+      // in `projectIds` matches neither the survivor nor Unfiled and the
+      // entry drops out of navigation entirely.
+      remapProject(loser.id, winner.id);
       State.deleteProject(loser.id);
       changed = true;
     });
@@ -767,12 +875,70 @@ const Bridge = (() => {
       const keep = seenTask.get(k);
       if (!keep) { seenTask.set(k, e); return; }
       const [winner, loser] = (keep.createdAt || '') <= (e.createdAt || '') ? [keep, e] : [e, keep];
-      seenTask.set(k, winner);
-      State.deleteEntry(loser.id);
+      seenTask.set(k, mergeDuplicateTask(winner, loser));
       changed = true;
     });
 
     return changed;
+  }
+
+  // Move every membership from one project onto another.
+  function remapProject(fromId, toId) {
+    State.getEntries({ includeArchived: true }).forEach(e => {
+      const ids = State.entryProjectIds(e);
+      if (!ids.includes(fromId)) return;
+      State.updateEntry(e.id, {
+        projectId: e.projectId === fromId ? toId : e.projectId,
+        projectIds: [...new Set(ids.map(id => (id === fromId ? toId : id)))],
+      });
+    });
+  }
+
+  // Fold a duplicate task into the one being kept. Both are the same checkbox
+  // imported twice, but each may have accumulated work only this app knows
+  // about — a description, a due date, tracked time. Deleting the loser
+  // outright would throw that away and leave its time sessions pointing at an
+  // id nothing references, which is the opposite of what de-duplication here
+  // is for.
+  function mergeDuplicateTask(winner, loser) {
+    const patch = {};
+    const takeIfEmpty = (field) => {
+      const w = winner[field], l = loser[field];
+      if ((w == null || w === '') && l != null && l !== '') patch[field] = l;
+    };
+    ['description', 'dueDate', 'scheduledDate', 'estimateMinutes', 'actualMinutes',
+     'remindTime', 'recurrence', 'emotion', 'color', 'icon'].forEach(takeIfEmpty);
+
+    if ((loser.tags || []).length) {
+      patch.tags = [...new Set([...(winner.tags || []), ...loser.tags])];
+    }
+    if ((loser.blockedBy || []).length) {
+      patch.blockedBy = [...new Set([...(winner.blockedBy || []), ...loser.blockedBy])];
+    }
+    const ids = [...new Set([...State.entryProjectIds(winner), ...State.entryProjectIds(loser)])];
+    if (ids.length > State.entryProjectIds(winner).length) patch.projectIds = ids;
+    // Priority and effort default to 'medium'; a non-default on the loser is
+    // a deliberate choice worth keeping when the winner never made one.
+    if (winner.priority === 'medium' && loser.priority && loser.priority !== 'medium') patch.priority = loser.priority;
+    if (winner.effort === 'medium' && loser.effort && loser.effort !== 'medium') patch.effort = loser.effort;
+
+    if (Object.keys(patch).length) State.updateEntry(winner.id, patch);
+
+    // Logs reference entries by id — retarget them before the id disappears.
+    State.getLogs().forEach(l => {
+      if (l.entryId === loser.id) State.updateLog(l.id, { entryId: winner.id });
+    });
+    // And anything blocked BY the loser now waits on the survivor.
+    State.getEntries({ includeArchived: true }).forEach(e => {
+      if ((e.blockedBy || []).includes(loser.id)) {
+        State.updateEntry(e.id, {
+          blockedBy: [...new Set(e.blockedBy.map(id => (id === loser.id ? winner.id : id)))],
+        });
+      }
+    });
+
+    State.deleteEntry(loser.id);
+    return State.getEntry(winner.id) || winner;
   }
 
   function runScan(opts) {
