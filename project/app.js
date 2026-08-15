@@ -4239,8 +4239,10 @@ const App = (() => {
       const done = todos.filter(t => t.done).length;
       return { name, todos: todos.length, done, proj, wsNames };
     });
+    const waiting = Bridge.roomsNeedingText();
+    const waitingSet = new Set(waiting);
     const withLists = rows.filter(r => r.todos > 0);
-    const without = rows.filter(r => r.todos === 0);
+    const without = rows.filter(r => r.todos === 0 && !waitingSet.has(r.name));
     const { url } = Bridge.creds();
 
     showModal('Cade.txt Link', `
@@ -4264,6 +4266,16 @@ const App = (() => {
               </div>`).join('')}</div>`}
       </div>
 
+      ${waiting.length ? `<div class="section">
+        <div class="section-header"><span class="section-title">Not fetched yet</span>
+          <span class="stat-label">${waiting.length}</span></div>
+        <p class="text-xs text-faint" style="line-height:1.6;">
+          ${waiting.map(n => escHtml(n)).join(' · ')}<br>
+          Cade.txt only stores a room's text on a device once you open it there.
+          These are pulled from Firebase on the next scan — press Rescan to do it now.
+        </p>
+      </div>` : ''}
+
       ${without.length ? `<div class="section">
         <div class="section-header"><span class="section-title">Rooms without a list</span>
           <span class="stat-label">${without.length}</span></div>
@@ -4280,12 +4292,19 @@ const App = (() => {
     ]);
   }
 
-  function rescanBridge() {
+  async function rescanBridge() {
     if (typeof Bridge === 'undefined') return;
-    const stats = Bridge.scan();
     closeModal();
+    const waiting = Bridge.roomsNeedingText().length;
+    if (waiting) toast(`Fetching ${waiting} room${waiting > 1 ? 's' : ''} from Firebase…`);
+    let pulled = { fetched: 0 };
+    // Explicit user action — bypass the retry cooldown.
+    try { pulled = await Bridge.hydrateMissingRooms({ force: true }); } catch (e) {}
+    const stats = Bridge.scan();
     render();
-    toast(stats && stats.changed ? 'Cade.txt rooms re-read' : 'Already up to date');
+    if (pulled.fetched) toast(`Pulled ${pulled.fetched} room${pulled.fetched > 1 ? 's' : ''} from Firebase`);
+    else toast(stats && stats.changed ? 'Cade.txt rooms re-read' : 'Already up to date');
+    if (pulled.pending > 0) setTimeout(() => rescanBridge(), 400);
   }
 
   // Creating a sub-project here creates the matching room in Cade.txt. An
