@@ -114,6 +114,19 @@ const Sync = (() => {
     return pickNewer(localItem, serverItem) === serverItem ? 'server' : 'local';
   }
 
+  // Settings merge field by field, taking the server's value only for keys
+  // this device does not have. Taking the local object wholesale meant two
+  // devices whose settings differed could never converge: each merged to its
+  // own copy and pushed it, the other saw a foreign write while its own copy
+  // was dirty, and that pair of conditions IS the conflict verdict — with
+  // nobody having changed anything. (Genuinely per-device settings do not
+  // reach this function at all; State keeps them out of the payload.)
+  function mergeSettings(localSettings, serverSettings) {
+    if (!localSettings) return serverSettings || {};
+    if (!serverSettings) return localSettings;
+    return { ...serverSettings, ...localSettings };
+  }
+
   function mergeData(local, server) {
     const l = local || {};
     const s = server || {};
@@ -121,8 +134,7 @@ const Sync = (() => {
       // Local first for anything not enumerated below, matching the settings
       // rule: unknown keys belong to the device being merged into.
       ...s, ...l,
-      // Device settings stay this device's. A merge is about content.
-      settings: l.settings || s.settings,
+      settings: mergeSettings(l.settings, s.settings),
     };
     MERGED_COLLECTIONS.forEach(k => { merged[k] = mergeCollection(l[k], s[k]); });
     return merged;
@@ -372,8 +384,13 @@ const Sync = (() => {
     return true;
   }
 
+  // Returns whether the server now holds this device's data: true after a
+  // successful write AND when there was nothing to write. `false` means the
+  // push was refused or failed, which callers must not report as success —
+  // silently swallowing that is how "I clicked merge and it kept asking"
+  // happens.
   async function pushLocal(bootstrap = false) {
-    if (!canPush(bootstrap)) return;
+    if (!canPush(bootstrap)) return false;
     pushing = true;
     const prevSnapshot = lastSyncedSnapshot;
     try {
@@ -381,7 +398,7 @@ const Sync = (() => {
       // Nothing changed since the last sync (e.g. we just adopted a foreign
       // write, which re-triggers schedulePush) — skip the redundant write.
       if (lastSyncedSnapshot && stableStringify(raw) === stableStringify(lastSyncedSnapshot)) {
-        return;
+        return true;                     // already up there
       }
       const encrypted = await encrypt(raw);
 
@@ -401,9 +418,11 @@ const Sync = (() => {
 
       lastSyncedVersion++;
       updateStatus();
+      return true;
     } catch (e) {
       lastSyncedSnapshot = prevSnapshot; // write failed — we are NOT synced
       console.error('Push error:', e);
+      return false;
     } finally {
       pushing = false;
     }
@@ -576,7 +595,23 @@ const Sync = (() => {
   // ═══════════════════════════════════════════════════════════
   // CONFLICT RESOLUTION UI
   // ═══════════════════════════════════════════════════════════
+  // The signature of the server payload the user last answered a conflict
+  // about. Re-asking the identical question is the single most maddening way
+  // for sync to fail: nothing the user does makes it stop, because their
+  // answer never reached the server (an offline push, a refused push, an
+  // unreadable local blob) and the same divergence is rediscovered on every
+  // load. One decision per distinct server state — no repeats.
+  let answeredSignature = null;
+
   function showConflictModal(localSide, serverSide) {
+    const sig = stableStringify(serverSide);
+    if (sig === answeredSignature) {
+      // Same server state as the answer we already have. Re-apply that answer
+      // silently rather than asking again.
+      console.warn('Sync: server state unchanged since the last conflict answer — not re-asking');
+      schedulePush();
+      return;
+    }
     if (typeof App !== 'undefined') App.showConflictModal(localSide, serverSide);
   }
 
@@ -597,9 +632,14 @@ const Sync = (() => {
     // The conflict path bails out of onReconnect before it can mark the
     // reconcile done; answering the dialog IS the reconcile finishing.
     markReconciled();
+    // Remember what was answered BEFORE attempting the push. If the push is
+    // the part that fails, this same server state must still not be raised
+    // again — that loop is the fault, not the missing write.
+    answeredSignature = stableStringify(serverData);
+    let pushed = true;
     if (resolution === 'local') {
       lastSyncedSnapshot = null; // guarantee the push writes
-      await pushLocal(true);
+      pushed = await pushLocal(true);
     } else if (resolution === 'server') {
       State.setRawData(serverData);
       lastSyncedSnapshot = structuredClone(localData());
@@ -608,12 +648,15 @@ const Sync = (() => {
       const merged = mergeData(localData(), serverData);
       State.setRawData(merged);
       lastSyncedSnapshot = null; // force the merged result to push
-      await pushLocal(true);
+      pushed = await pushLocal(true);
     } else {
       return { ok: false, reason: 'unknown-resolution' };
     }
     setupLiveListener();
-    return { ok: true, resolution };
+    // The local half always landed; `pushed` says whether the server has it
+    // yet. The caller words its confirmation accordingly instead of claiming
+    // a sync that did not happen.
+    return { ok: true, resolution, pushed };
   }
 
   // ═══════════════════════════════════════════════════════════

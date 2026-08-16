@@ -26,9 +26,19 @@ const State = (() => {
   // and re-seeded itself".
   const SYNC_KEY = 'cade.project.sync.v1';
 
-  // Settings that describe THIS DEVICE and must never travel over sync:
-  // credentials, the running-timer clock, and per-screen layout state.
-  const DEVICE_LOCAL_SETTINGS = ['sync', 'timerState', 'collapsedSections'];
+  // Settings that describe THIS device rather than the data, and so never
+  // travel. The view preferences joined the list because they are a permanent
+  // source of divergence: a phone and a laptop legitimately disagree about
+  // what is on screen, and syncing that disagreement means the two devices
+  // overwrite each other on every load and each sees the other's write as a
+  // conflict — with the user having changed nothing.
+  const DEVICE_LOCAL_SETTINGS = [
+    'sync', 'timerState', 'collapsedSections',
+    'workingProject',           // which project this device is scoped to
+    'completedSort',            // how this device sorts finished work
+    'showCompletedOnProject',   // whether this device is showing it at all
+    'showCompletedOnToday',     // ditto, for the homepage
+  ];
 
   // ── Default data schema ──────────────────────────────────────
   const defaultData = {
@@ -72,6 +82,7 @@ const State = (() => {
       ],
       completedSort: 'completedAt', // project page: name | createdAt | updatedAt | completedAt
       showCompletedOnProject: false, // finished-before-today items are opt-in
+      showCompletedOnToday: false,   // ...and separately opt-in on the homepage
     },
   };
 
@@ -298,6 +309,7 @@ const State = (() => {
     actualMinutes: null, // manual override of tracked time (estimate-vs-actual)
     lastNotified: null,  // date a reminder notification last fired (once per day)
     spawnedNextId: null, // recurring: id of the next occurrence already spawned
+    archivedByProject: null, // archived as part of a project's subtree, by id
     // ── Cade.txt link (see bridge.js) ──
     txtRoom: null,  // room whose todo list this task mirrors
     txtKey: null,   // normalized line text — identity across edits
@@ -562,8 +574,48 @@ const State = (() => {
     return out;
   }
 
-  function archiveProject(id) { return updateProject(id, { archived: true }); }
-  function unarchiveProject(id) { return updateProject(id, { archived: false }); }
+  // Archiving a project takes its whole subtree with it: every sub-project
+  // and every entry filed into any of them. Archiving the parent alone was
+  // worse than useless — getProjects() re-roots a child whose parent has been
+  // filtered out, so the thing you just archived reappeared immediately as a
+  // handful of loose top-level projects with all their tasks intact.
+  //
+  // What the cascade touches is tagged with the project that took it, so
+  // restoring brings back exactly that and leaves anything you had archived
+  // on its own purposes alone.
+  function setProjectTreeArchived(id, archived) {
+    const ids = getProjectSubtreeIds(id);
+    const inTree = new Set(ids);
+    const stampTs = archived ? Date.now() : 0;
+
+    ids.forEach(pid => {
+      if (pid === id) return;
+      const p = data.projects.find(x => x.id === pid);
+      if (!p) return;
+      if (archived) {
+        if (!p.archived) updateProject(pid, { archived: true, archivedByProject: id, archTs: stampTs });
+      } else if (p.archivedByProject === id) {
+        updateProject(pid, { archived: false, archivedByProject: null });
+      }
+    });
+
+    data.entries.slice().forEach(e => {
+      if (!entryProjectIds(e).some(pid => inTree.has(pid))) return;
+      if (archived) {
+        if (!e.archived) updateEntry(e.id, { archived: true, archivedByProject: id });
+      } else if (e.archivedByProject === id) {
+        updateEntry(e.id, { archived: false, archivedByProject: null });
+      }
+    });
+
+    updateProject(id, archived
+      ? { archived: true, archTs: stampTs }
+      : { archived: false, archivedByProject: null });
+    return ids;
+  }
+
+  function archiveProject(id) { return setProjectTreeArchived(id, true); }
+  function unarchiveProject(id) { return setProjectTreeArchived(id, false); }
 
   // Would setting `parentId` on `id` create a cycle?
   function wouldCycleProject(id, parentId) {

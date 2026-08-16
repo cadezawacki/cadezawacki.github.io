@@ -4060,11 +4060,24 @@ function parseDirectiveNames(lineText) {
 }
 
 // Scan the whole doc for the set of active block/page plugins.
+//
+// A checkbox line activates the todo plugin by itself — writing "[ ] thing"
+// is already saying what you mean, and having to add an @todo line before it
+// would render, strike through or toggle was busywork. It also made rooms
+// arriving from Cade.project inert: their lists are plain [ ] lines, so they
+// showed as raw text with no checkbox and no strike-through on completion.
+// An explicit @todo still works and is still what the plugin picker inserts.
 function getActivePlugins(state) {
   const set = new Set();
   const n = state.doc.lines;
+  let inFence = false;
   for (let i = 1; i <= n; i++) {
-    const names = parseDirectiveNames(state.doc.line(i).text);
+    const text = state.doc.line(i).text;
+    // "[ ]" inside ``` is a list literal someone is writing ABOUT, the same
+    // exclusion buildTodoDecorations already makes when drawing.
+    if (/^\s*```/.test(text)) { inFence = !inFence; continue; }
+    if (!inFence && !set.has('todo') && TODO_LINE_RE.test(text)) set.add('todo');
+    const names = parseDirectiveNames(text);
     for (const nm of names) {
       if (nm === 'todo') set.add('todo');
       else if (nm === 'journal' || nm === 'diary') set.add('journal');
@@ -4186,17 +4199,22 @@ function buildTodoDecorations(view) {
 // line containing one is edited. Checking the changed spans (inserted text,
 // deleted text, touched lines) is O(edit) instead of O(document), so typing in
 // a large doc no longer re-scans every line on every keystroke.
+// '[' joins '@' as a trigger now that a checkbox line activates the plugin on
+// its own: typing the very first "[ ] " in a document has to switch it on, and
+// deleting the last one has to switch it back off.
+const PLUGIN_TRIGGER_RE = /[@[`]/;
+
 function directivesMayHaveChanged(update) {
   let may = false;
   update.changes.iterChanges((fromA, toA, fromB, toB, inserted) => {
     if (may) return;
-    if (inserted.length && inserted.toString().indexOf('@') !== -1) { may = true; return; }
-    if (toA > fromA && update.startState.doc.sliceString(fromA, toA).indexOf('@') !== -1) { may = true; return; }
+    if (inserted.length && PLUGIN_TRIGGER_RE.test(inserted.toString())) { may = true; return; }
+    if (toA > fromA && PLUGIN_TRIGGER_RE.test(update.startState.doc.sliceString(fromA, toA))) { may = true; return; }
     const doc = update.state.doc;
     const fromLine = doc.lineAt(Math.min(fromB, doc.length)).number;
     const toLine = doc.lineAt(Math.min(toB, doc.length)).number;
     for (let i = fromLine; i <= toLine; i++) {
-      if (doc.line(i).text.indexOf('@') !== -1) { may = true; return; }
+      if (PLUGIN_TRIGGER_RE.test(doc.line(i).text)) { may = true; return; }
     }
   });
   return may;
@@ -7326,6 +7344,11 @@ editor.dom.addEventListener('click', (e) => {
       return;
     }
     if (spellHit) { if (!consumeSpellReopenSuppression(spellHit)) openSpellPopup(spellHit); return; }
+    // A checkbox line. Ticking one was hotkey-only (Ctrl+D), which a phone
+    // has no way to press — so on touch there was no way to complete a todo
+    // at all. Tapping the line offers it.
+    const todo = hitTodoLine(pos);
+    if (todo) { e.preventDefault(); openTodoMenu(todo, e.clientX, e.clientY); return; }
     closeSpellPopup(); closeCtxMenu();
     return;
   }
@@ -7355,6 +7378,10 @@ editor.dom.addEventListener('contextmenu', (e) => {
   const link = hitLink(pos);
   if (link && link.kind !== 'nav') { e.preventDefault(); openLinkMenu(link, e.clientX, e.clientY); return; }
   if (spellHit) { e.preventDefault(); openSpellPopup(spellHit); return; }
+  const todoHit = hitTodoLine(pos);
+  if (todoHit && editor.state.selection.main.empty) {
+    e.preventDefault(); openTodoMenu(todoHit, e.clientX, e.clientY); return;
+  }
   // Item 23: right-clicking INSIDE a selection opens an editing menu.
   // (Right-click outside any selection still gives the browser's native menu,
   // which is also where Inspect lives — pages can't open devtools themselves.)
@@ -7493,6 +7520,41 @@ function ctxPaste() {
       editor.focus();
     }).catch(() => showToast('Clipboard read denied', 'error', 2000));
   } catch {}
+}
+
+// The checkbox line under a document position, or null.
+function hitTodoLine(pos) {
+  if (!isTodoPage(editor.state)) return null;
+  const line = editor.state.doc.lineAt(pos);
+  if (fenceContaining(line.from)) return null;   // a list literal in ``` code
+  const m = line.text.match(TODO_LINE_RE);
+  if (!m) return null;
+  return { number: line.number, done: m[2] !== ' ', text: line.text.slice(m[0].length).trim() };
+}
+
+// Toggle a checkbox by line number rather than by cursor position, so a tap
+// acts on the line you touched instead of wherever the caret happened to be.
+function toggleTodoOnLine(lineNumber) {
+  const sel = editor.state.selection.main;
+  const line = editor.state.doc.line(lineNumber);
+  editor.dispatch({ selection: { anchor: line.from } });
+  window.toggleTodoAtCursor();
+  // Put the caret back where the user had it if the line is unchanged in
+  // length; otherwise leave it on the line that was just ticked.
+  if (sel.empty && sel.head <= editor.state.doc.length) {
+    try { editor.dispatch({ selection: { anchor: Math.min(sel.head, editor.state.doc.length) } }); } catch {}
+  }
+}
+
+function openTodoMenu(todo, x, y) {
+  const label = todo.text ? (todo.text.length > 28 ? todo.text.slice(0, 28) + '…' : todo.text) : 'this item';
+  openMenu([
+    { label: todo.done ? `☐  Mark "${label}" not done` : `☑  Mark "${label}" done`,
+      run: () => toggleTodoOnLine(todo.number) },
+    { sep: true },
+    { label: 'Copy', run: () => ctxCopy(todo.text) },
+    { label: 'Paste', run: () => ctxPaste() },
+  ], x, y);
 }
 
 // Build the menu for a URL / titled-markdown link.
