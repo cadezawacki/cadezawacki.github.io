@@ -1583,11 +1583,144 @@ const App = (() => {
   // ═══════════════════════════════════════════════════════════
   let selectedEntryId = null;
 
-  function selectEntryCard(id) {
-    selectedEntryId = selectedEntryId === id ? null : id;
+  // ═══════════════════════════════════════════════════════════
+  // MULTI-SELECT
+  // ═══════════════════════════════════════════════════════════
+  // Re-filing a dozen tasks was a dozen round trips through the edit modal.
+  // Shift-click extends from the last one clicked; Ctrl/Cmd-click adds a
+  // single card; a plain click still just highlights one.
+  const bulkSelection = new Set();
+  let lastClickedEntryId = null;
+
+  function visibleEntryIds() {
+    return [...document.querySelectorAll('.entry-card')].map(el => el.dataset.id);
+  }
+
+  function selectEntryCard(id, ev) {
+    const e = ev || (typeof window !== 'undefined' ? window.event : null);
+    const additive = !!(e && (e.metaKey || e.ctrlKey));
+    const ranged = !!(e && e.shiftKey);
+
+    if (ranged && lastClickedEntryId) {
+      const ids = visibleEntryIds();
+      const a = ids.indexOf(lastClickedEntryId), b = ids.indexOf(id);
+      if (a !== -1 && b !== -1) {
+        ids.slice(Math.min(a, b), Math.max(a, b) + 1).forEach(x => bulkSelection.add(x));
+      }
+    } else if (additive) {
+      if (bulkSelection.has(id)) bulkSelection.delete(id); else bulkSelection.add(id);
+      lastClickedEntryId = id;
+    } else {
+      bulkSelection.clear();
+      selectedEntryId = selectedEntryId === id ? null : id;
+      lastClickedEntryId = id;
+    }
+    if (bulkSelection.size) selectedEntryId = null;
+    paintSelection();
+  }
+
+  function paintSelection() {
     document.querySelectorAll('.entry-card').forEach(el => {
-      el.classList.toggle('selected', el.dataset.id === selectedEntryId);
+      const id = el.dataset.id;
+      el.classList.toggle('selected', id === selectedEntryId);
+      el.classList.toggle('bulk-selected', bulkSelection.has(id));
     });
+    renderBulkBar();
+  }
+
+  function clearBulkSelection() {
+    bulkSelection.clear();
+    lastClickedEntryId = null;
+    paintSelection();
+  }
+
+  function selectedEntries() {
+    return [...bulkSelection].map(id => State.getEntry(id)).filter(Boolean);
+  }
+
+  function renderBulkBar() {
+    let bar = document.getElementById('bulkBar');
+    const n = bulkSelection.size;
+    if (!n) { if (bar) bar.remove(); return; }
+    if (!bar) {
+      bar = document.createElement('div');
+      bar.id = 'bulkBar';
+      bar.className = 'bulk-bar';
+      document.body.appendChild(bar);
+    }
+    const projects = State.getProjects();
+    const anyOpen = selectedEntries().some(e => !e.completed);
+    bar.innerHTML = `
+      <span class="bulk-count">${n} selected</span>
+      <select class="form-select bulk-select" onchange="App.bulkSetProject(this.value);this.selectedIndex=0;" aria-label="Move to project">
+        <option value="">Move to…</option>
+        <option value="__none__">— no project —</option>
+        ${projects.map(p => `<option value="${p.id}">${'– '.repeat(p.depth || 0)}${escHtml(p.name)}</option>`).join('')}
+      </select>
+      <select class="form-select bulk-select" onchange="App.bulkSetDue(this.value);this.selectedIndex=0;" aria-label="Set due date">
+        <option value="">Due…</option>
+        <option value="today">Today</option>
+        <option value="tomorrow">Tomorrow</option>
+        <option value="week">In a week</option>
+        <option value="none">Clear</option>
+      </select>
+      <select class="form-select bulk-select" onchange="App.bulkSetPriority(this.value);this.selectedIndex=0;" aria-label="Set priority">
+        <option value="">Priority…</option>
+        <option value="urgent">Urgent</option><option value="high">High</option>
+        <option value="medium">Medium</option><option value="low">Low</option>
+      </select>
+      <button class="btn btn-ghost btn-sm" onclick="App.bulkComplete()">${icon('check', 13)}${anyOpen ? 'Complete' : 'Reopen'}</button>
+      <button class="btn btn-ghost btn-sm" onclick="App.bulkArchive()">${icon('archive', 13)}Archive</button>
+      <button class="btn btn-ghost btn-sm" onclick="App.bulkDelete()">${icon('trash-2', 13)}Delete</button>
+      <button class="icon-btn" onclick="App.clearBulkSelection()" aria-label="Clear selection" title="Clear selection">${icon('x', 15)}</button>`;
+    refreshIcons();
+  }
+
+  function bulkApply(label, fn) {
+    const items = selectedEntries();
+    if (!items.length) return;
+    undoable(`${label} ${items.length} task${items.length === 1 ? '' : 's'}`, () => items.forEach(fn));
+    clearBulkSelection();
+    render();
+  }
+
+  function bulkSetProject(value) {
+    if (!value) return;
+    const pid = value === '__none__' ? null : value;
+    const name = pid ? (State.getProject(pid) || {}).name : 'no project';
+    bulkApply(`Moved to ${name} —`, (e) => State.updateEntry(e.id, { projectId: pid, projectIds: pid ? [pid] : [] }));
+  }
+
+  function bulkSetDue(value) {
+    if (!value) return;
+    const map = {
+      today: State.todayStr(),
+      tomorrow: State.dateStr(new Date(Date.now() + 86400000)),
+      week: State.dateStr(new Date(Date.now() + 7 * 86400000)),
+      none: null,
+    };
+    bulkApply('Re-dated', (e) => State.updateEntry(e.id, { dueDate: map[value] }));
+  }
+
+  function bulkSetPriority(value) {
+    if (!value) return;
+    bulkApply('Re-prioritised', (e) => State.updateEntry(e.id, { priority: value }));
+  }
+
+  // A mixed selection completes everything; an all-complete one reopens.
+  function bulkComplete() {
+    const anyOpen = selectedEntries().some(e => !e.completed);
+    bulkApply(anyOpen ? 'Completed' : 'Reopened', (e) => {
+      if (anyOpen ? !e.completed : e.completed) State.toggleComplete(e.id);
+    });
+  }
+
+  function bulkArchive() { bulkApply('Archived', (e) => State.archiveEntry(e.id)); }
+
+  function bulkDelete() {
+    const items = selectedEntries();
+    if (!items.length) return;
+    bulkApply('Deleted', (e) => State.deleteEntry(e.id));
   }
 
   // A project id plus every ancestor up the nesting chain
@@ -1604,9 +1737,19 @@ const App = (() => {
 
   // Open first (by priority, then due date), finished at the bottom
   const PRI_ORDER = { urgent: 0, high: 1, medium: 2, low: 3 };
+  // A hand-arranged list stays as arranged; an untouched one keeps the smart
+  // order. Deciding per-list rather than globally means dragging one task in
+  // one project does not switch every other list to manual mode.
   function sortEntriesSmart(list) {
+    const arranged = list.some(e => Number.isFinite(e.order));
     return [...list].sort((a, b) => {
       if (!!a.completed !== !!b.completed) return a.completed ? 1 : -1;
+      if (arranged) {
+        // Anything never dragged sorts after everything that was.
+        const oa = Number.isFinite(a.order) ? a.order : Number.MAX_SAFE_INTEGER;
+        const ob = Number.isFinite(b.order) ? b.order : Number.MAX_SAFE_INTEGER;
+        if (oa !== ob) return oa - ob;
+      }
       const pa = PRI_ORDER[a.priority] ?? 2, pb = PRI_ORDER[b.priority] ?? 2;
       if (pa !== pb) return pa - pb;
       const da = a.dueDate || '9999', db = b.dueDate || '9999';
@@ -1694,8 +1837,13 @@ const App = (() => {
 
     return `
       <div class="entry-card ${isDone ? 'completed' : ''} ${isSelected ? 'selected' : ''} ${opts.highlight ? 'highlight' : ''}" data-id="${entry.id}"
-        ${canTrack ? `draggable="true" ondragstart="App.taskDragStart(event,'${entry.id}')" ondragend="App.taskDragEnd(event)"` : ''}
-        onclick="App.selectEntryCard('${entry.id}')" ${entry.type === 'task' ? `ondblclick="App.openTaskPage('${entry.id}')" title="Double-click to open task page — or drag onto the planner to schedule it"` : ''}>
+        ${opts.reorder
+          ? `data-reorder-id="${entry.id}" draggable="true"
+             ondragstart="App.reorderStart(event,'${entry.id}','task')" ondragend="App.reorderEnd(event)"
+             ondragover="App.reorderOver(event,'task')" ondragleave="App.reorderLeave(event)"
+             ondrop="App.reorderDrop(event,'${entry.id}','task')"`
+          : (canTrack ? `draggable="true" ondragstart="App.taskDragStart(event,'${entry.id}')" ondragend="App.taskDragEnd(event)"` : '')}
+        onclick="App.selectEntryCard('${entry.id}', event)" ${entry.type === 'task' ? `ondblclick="App.openTaskPage('${entry.id}')" title="Double-click to open task page — or drag onto the planner to schedule it"` : ''}>
         <div class="check-toggle ${isDone ? 'checked' : ''}" onclick="event.stopPropagation();App.toggleEntry('${entry.id}')" title="Mark ${isDone ? 'not done' : 'done'}">
           <i data-lucide="check"></i>
         </div>
@@ -2185,9 +2333,10 @@ const App = (() => {
       if (!list.length) return;
       anyOpen = true;
       html += `<div class="section">
-        <div class="section-header"><span class="section-title">${icon(typeIcons[type])} ${typeLabels[type]} (${list.length})</span></div>
-        <div style="display:flex;flex-direction:column;gap:var(--space-2);">
-          ${list.map(e => renderEntryCard(e, proj)).join('')}
+        <div class="section-header"><span class="section-title">${icon(typeIcons[type])} ${typeLabels[type]} (${list.length})</span>
+          ${list.length > 1 ? '<span class="text-xs text-faint">drag to reorder</span>' : ''}</div>
+        <div style="display:flex;flex-direction:column;gap:var(--space-2);" data-reorder-list="task">
+          ${list.map(e => renderEntryCard(e, proj, null, { reorder: true })).join('')}
         </div>
       </div>`;
     });
@@ -3000,6 +3149,60 @@ const App = (() => {
 
   let draggingTaskId = null;
   let didDrag = false;
+
+  // ═══════════════════════════════════════════════════════════
+  // DRAG TO REORDER
+  // ═══════════════════════════════════════════════════════════
+  // One mechanism for both lists. The row being dragged is remembered by id;
+  // dropping on another row splices it into that position and rewrites the
+  // whole run's order fields, because nudging one number leaves ties that
+  // then sort unpredictably.
+  let reorderDrag = null;   // { id, list: 'project' | 'task' }
+
+  function reorderStart(e, id, list) {
+    reorderDrag = { id, list };
+    e.dataTransfer.effectAllowed = 'move';
+    try { e.dataTransfer.setData('text/plain', id); } catch (err) {}
+    e.currentTarget.classList.add('reordering');
+    e.stopPropagation();
+  }
+
+  function reorderEnd(e) {
+    reorderDrag = null;
+    e.currentTarget.classList.remove('reordering');
+    document.querySelectorAll('.reorder-over').forEach(x => x.classList.remove('reorder-over'));
+  }
+
+  function reorderOver(e, list) {
+    if (!reorderDrag || reorderDrag.list !== list) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    e.currentTarget.classList.add('reorder-over');
+  }
+
+  function reorderLeave(e) { e.currentTarget.classList.remove('reorder-over'); }
+
+  function reorderDrop(e, targetId, list) {
+    if (!reorderDrag || reorderDrag.list !== list) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.currentTarget.classList.remove('reorder-over');
+    const movedId = reorderDrag.id;
+    reorderDrag = null;
+    if (!movedId || movedId === targetId) return;
+
+    const container = e.currentTarget.closest('[data-reorder-list]');
+    if (!container) return;
+    const ids = [...container.querySelectorAll('[data-reorder-id]')].map(x => x.dataset.reorderId);
+    const from = ids.indexOf(movedId), to = ids.indexOf(targetId);
+    if (from === -1 || to === -1) return;
+    ids.splice(to, 0, ids.splice(from, 1)[0]);
+
+    undoable('Reordered', () => {
+      if (list === 'project') State.reorderProjects(ids); else State.reorderEntries(ids);
+    }, { quiet: true });
+    render();
+  }
 
   // ═══════════════════════════════════════════════════════════
   // TASK → PLANNER
@@ -4439,9 +4642,13 @@ const App = (() => {
     const active = State.getProjects();
     const archived = State.getProjects({ includeArchived: true }).filter(p => p.archived);
     showModal('Manage Projects', `
-      <div style="display:flex;flex-direction:column;gap:var(--space-2);">
+      <div style="display:flex;flex-direction:column;gap:var(--space-2);" data-reorder-list="project">
         ${active.length === 0 ? '<p class="text-xs text-faint">No projects yet.</p>' : active.map(p => `
-          <div class="chain-link" style="justify-content:space-between;cursor:pointer;${p.depth ? `margin-left:${p.depth * 18}px;` : ''}" onclick="App.openProjectModal('${p.id}', { backTo: 'manage' })">
+          <div class="chain-link" data-reorder-id="${p.id}" draggable="true"
+            ondragstart="App.reorderStart(event,'${p.id}','project')" ondragend="App.reorderEnd(event)"
+            ondragover="App.reorderOver(event,'project')" ondragleave="App.reorderLeave(event)"
+            ondrop="App.reorderDrop(event,'${p.id}','project')"
+            style="justify-content:space-between;cursor:pointer;${p.depth ? `margin-left:${p.depth * 18}px;` : ''}" onclick="App.openProjectModal('${p.id}', { backTo: 'manage' })">
             <span style="display:inline-flex;align-items:center;gap:var(--space-2);">
               ${p.depth ? `<span class="text-faint" style="font-family:var(--font-mono);">└</span>` : ''}
               <span class="proj-dot" style="background:${p.color}"></span>${escHtml(p.name)}
@@ -7148,7 +7355,8 @@ const App = (() => {
     toolCoin, toolDice, toolPick, toolName, toolRandom, toolUuid, toolCopy, toolListChanged,
     logFood, deleteFoodLog, useShortcutHealth,
     toggleEntry, deleteEntry, archiveEntry, unarchiveEntry, togglePin, openSnooze, snoozeEntry, startTimerForTask,
-    selectEntryCard, setWorkingProject,
+    selectEntryCard, clearBulkSelection, bulkSetProject, bulkSetDue, bulkSetPriority,
+    bulkComplete, bulkArchive, bulkDelete, setWorkingProject,
     // Navigation chrome
     menuAction, toggleWorkspaceMenu, setWorkspace, setSubproject, toggleSettledSubs,
     revealProject,
@@ -7162,6 +7370,7 @@ const App = (() => {
     setInsightsProject, setInsightsEntry,
     qDragStart, qDragEnd, qDragOver, qDragLeave, qDrop, qItemClick,
     taskDragStart, taskDragEnd, plannerDragOver, plannerDragLeave, plannerDrop,
+    reorderStart, reorderEnd, reorderOver, reorderLeave, reorderDrop,
     plannerNav, plannerToday, setPlannerView, plannerTap, blockPointerDown,
     popoverAgenda, popoverTask, popoverTimer,
     openAgendaModal, saveAgendaBlock, deleteAgendaBlock, editPlannerBlock,

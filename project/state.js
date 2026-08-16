@@ -455,6 +455,7 @@ const State = (() => {
     spawnedNextId: null, // recurring: id of the next occurrence already spawned
     archivedByProject: null, // archived as part of a project's subtree, by id
     pinned: false,       // on the shortlist, visible whatever the scope
+    order: null,         // hand-arranged position within a project's list
     // ── Cade.txt link (see bridge.js) ──
     txtRoom: null,  // room whose todo list this task mirrors
     txtKey: null,   // normalized line text — identity across edits
@@ -566,6 +567,23 @@ const State = (() => {
   }
   function getPinned() {
     return data.entries.filter(e => e.pinned && !e.archived && !e.completed);
+  }
+
+  // Rewrite a run of items' order fields from the sequence given. Used by
+  // both the project task list and the project tree — the alternative,
+  // nudging one item's number, leaves ties that sort unpredictably.
+  function reorderEntries(idsInOrder) {
+    (idsInOrder || []).forEach((id, i) => {
+      const e = getEntry(id);
+      if (e && e.order !== i) updateEntry(id, { order: i });
+    });
+  }
+
+  function reorderProjects(idsInOrder) {
+    (idsInOrder || []).forEach((id, i) => {
+      const p = data.projects.find(x => x.id === id);
+      if (p && p.order !== i) updateProject(id, { order: i });
+    });
   }
 
   function archiveEntry(id) { return updateEntry(id, { archived: true }); }
@@ -1277,7 +1295,8 @@ const State = (() => {
   return {
     subscribe, emit, save,
     createEntry, updateEntry, deleteEntry, getEntry, getEntries, toggleComplete, isHabitDoneToday,
-    archiveEntry, unarchiveEntry, togglePinned, getPinned, toggleHabitOnDate, cycleHabitOnDate,
+    archiveEntry, unarchiveEntry, togglePinned, getPinned, reorderEntries, reorderProjects,
+    toggleHabitOnDate, cycleHabitOnDate,
     habitStatusOn, isHabitScheduledOn, resetData,
     nextOccurrenceDate,
     entryProjectIds, getProjectSubtreeIds,

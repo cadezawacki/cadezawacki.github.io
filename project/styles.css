@@ -3642,3 +3642,47 @@ textarea.input-grow,
   font-family: var(--font-mono);
   font-size: var(--text-xs);
 }
+
+/* ── Bulk selection ───────────────────────────────────────────── */
+.entry-card.bulk-selected {
+  border-color: var(--accent);
+  background: var(--accent-tint);
+}
+.bulk-bar {
+  position: fixed;
+  left: 50%;
+  bottom: var(--space-4);
+  transform: translateX(-50%);
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  justify-content: center;
+  max-width: min(56rem, calc(100vw - 2rem));
+  padding: var(--space-2) var(--space-3);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.28);
+}
+.bulk-count {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--accent-text);
+  white-space: nowrap;
+}
+.bulk-select {
+  width: auto;
+  min-width: 6.5rem;
+  font-size: var(--text-xs);
+  padding: 4px 6px;
+}
+@media (max-width: 620px) {
+  .bulk-bar { bottom: 0; border-radius: var(--radius-lg) var(--radius-lg) 0 0; width: 100%; max-width: none; }
+}
+
+/* ── Drag to reorder ──────────────────────────────────────────── */
+[data-reorder-id] { cursor: grab; }
+[data-reorder-id].reordering { opacity: 0.4; cursor: grabbing; }
+.reorder-over { box-shadow: inset 0 2px 0 var(--accent); }
