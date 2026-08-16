@@ -825,7 +825,8 @@ const Bridge = (() => {
   // ═══════════════════════════════════════════════════════════
   const HYDRATE_PER_PASS = 25;            // a burst cap; later passes take the rest
   const HYDRATE_RETRY_MS = 60 * 1000;     // don't re-ask for the same room constantly
-  const hydrateTried = new Map();         // room -> when we last asked
+  const HYDRATE_MAX_BACKOFF = 6;          // 60s doubled six times ≈ an hour
+  const hydrateState = new Map();         // room -> { at, misses }
 
   // Rooms this device holds no text for. Reported without the retry cooldown,
   // because this is also what the Cade.txt Link panel shows the user.
@@ -839,32 +840,62 @@ const Bridge = (() => {
       raw(SYNCED_PREFIX + name) == null);
   }
 
+  // A room that keeps coming back empty waits longer each time rather than
+  // being re-asked every minute for the life of the tab.
+  function hydrateCooldown(misses) {
+    return HYDRATE_RETRY_MS * Math.pow(2, Math.min(misses, HYDRATE_MAX_BACKOFF));
+  }
+
   // A room with no document on the server yet is not a permanent no: another
   // device may create it a minute from now. So the guard is a cooldown, not a
   // blacklist — and an explicit Rescan skips it entirely.
+  //
+  // `fetched` is a caller's ONLY licence to come back for another pass.
+  // `pending` counts rooms still without text, which is what the Cade.txt Link
+  // panel shows — but it is NOT a loop condition: a room with no document on
+  // the server keeps it above zero for good, so chaining on it never ends.
   async function hydrateMissingRooms({ force = false } = {}) {
-    const { key } = creds();
-    const database = db();
+    const { url, key } = creds();
     const outstanding = () => roomsNeedingText().length;
-    if (!key || !database) return { fetched: 0, pending: outstanding() };
+    const nothing = (reason) => ({
+      fetched: 0, pending: outstanding(), tried: 0,
+      missing: 0, unreadable: 0, unreachable: 0, storageFull: false, reason,
+    });
+    if (!url || !key) return nothing('no-credentials');
+    const database = db();
+    if (!database) return nothing('no-database');
 
     const now = Date.now();
     const todo = roomsNeedingText()
-      .filter(name => force || now - (hydrateTried.get(name) || 0) > HYDRATE_RETRY_MS)
+      .filter(name => {
+        if (force) return true;
+        const st = hydrateState.get(name);
+        return !st || now - st.at > hydrateCooldown(st.misses);
+      })
       .slice(0, HYDRATE_PER_PASS);
 
-    let fetched = 0;
+    let fetched = 0, missing = 0, unreadable = 0, unreachable = 0, storageFull = false;
     for (const name of todo) {
-      hydrateTried.set(name, Date.now());
+      const misses = (hydrateState.get(name) || {}).misses || 0;
       const remote = await readRemoteRoom(name, key, database);
-      if (!remote.ok) continue;            // no document, unreachable, or not ours
-      if (!writeRaw(CACHE_PREFIX + name, remote.text)) break; // out of storage
+      if (!remote.ok) {                    // no document, unreachable, or not ours
+        if (remote.unreachable) unreachable++;
+        else if (remote.undecryptable) unreadable++;
+        else missing++;
+        hydrateState.set(name, { at: Date.now(), misses: misses + 1 });
+        continue;
+      }
+      if (!writeRaw(CACHE_PREFIX + name, remote.text)) { storageFull = true; break; }
       // Straight from the server, so it IS the confirmed base — recording it
       // keeps the room publishable instead of looking permanently unsynced.
       writeRaw(SYNCED_PREFIX + name, remote.text);
+      hydrateState.delete(name);
       fetched++;
     }
-    return { fetched, pending: outstanding() };
+    return {
+      fetched, pending: outstanding(), tried: todo.length,
+      missing, unreadable, unreachable, storageFull, reason: '',
+    };
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -1347,19 +1378,26 @@ const Bridge = (() => {
   // ═══════════════════════════════════════════════════════════
   let onChange = null;
   let rescanTimer = null;
+  let chainedPasses = 0;
+  const HYDRATE_MAX_PASSES = 40;          // 40 × 25 = 1000 rooms, then stop chaining
 
   function requestScan(delay = 300) {
     clearTimeout(rescanTimer);
     rescanTimer = setTimeout(async () => {
       // Pull down any room whose text this device has never held, then scan —
       // otherwise those rooms look empty and never link.
-      let hydrated = { fetched: 0 };
+      let hydrated = { fetched: 0, pending: 0 };
       try { hydrated = await hydrateMissingRooms(); } catch (e) { console.warn('Bridge: hydrate failed', e); }
       const result = scan();
       if (result && hydrated.fetched) { result.changed = true; result.hydrated = hydrated.fetched; }
       if (result && result.changed && onChange) onChange(result);
-      // More rooms than one pass allows — come back for the rest.
-      if (hydrated.pending > 0 && hydrated.fetched > 0) requestScan(600);
+      // More rooms than one pass allows — come back for the rest, but only
+      // while a pass is actually pulling rooms down. Chaining on `pending`
+      // alone never terminates: rooms with no document on the server keep it
+      // above zero for good. The pass ceiling covers the other stall, where a
+      // write reports success and does not survive to the next read.
+      if (hydrated.fetched > 0 && hydrated.pending > 0 && ++chainedPasses < HYDRATE_MAX_PASSES) requestScan(600);
+      else chainedPasses = 0;
     }, delay);
   }
 

@@ -93,6 +93,9 @@ They fill in on their own.
   on a device once you have opened it there, so rooms created on your phone
   are not on your laptop. Cade.project fetches those from Firebase itself,
   25 at a time, and records them as synced.
+- A room that has **never been synced from any device** has no document to
+  fetch, so it stays listed as not fetched however often you rescan. Open it
+  once in Cade.txt with sync on and it uploads.
 - A room becomes a sub-project **only if it contains a todo list** — a line
   starting with `[ ]` or `[x]`. Prose rooms are left alone.
 - **Password-locked rooms are skipped.** Their text uses a key derived from

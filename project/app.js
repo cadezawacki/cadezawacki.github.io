@@ -4272,7 +4272,11 @@ const App = (() => {
         <p class="text-xs text-faint" style="line-height:1.6;">
           ${waiting.map(n => escHtml(n)).join(' · ')}<br>
           Cade.txt only stores a room's text on a device once you open it there.
-          These are pulled from Firebase on the next scan — press Rescan to do it now.
+          ${url ? `These are pulled from Firebase on the next scan — press Rescan to do it now.
+                   A room that has never been synced from any device has nothing to pull, so it
+                   stays listed here until Cade.txt uploads it.`
+                : `With no Firebase database configured there is nowhere to pull them from —
+                   open them in Cade.txt on this device instead.`}
         </p>
       </div>` : ''}
 
@@ -4292,19 +4296,60 @@ const App = (() => {
     ]);
   }
 
+  // What a finished rescan should say. Rooms that could not be pulled are
+  // named as such rather than passed over: reporting "already up to date"
+  // while dozens of rooms are still missing is what made the old version look
+  // like it was working when it was in fact spinning.
+  const RESCAN_MAX_PASSES = 40;           // 40 × 25 rooms, then stop regardless
+
+  function rescanMessage(pulled, last, changed) {
+    if (last.reason === 'no-credentials') return 'Cade.txt has no Firebase set up — nothing to fetch';
+    if (last.reason === 'no-database') return 'Firebase is unavailable right now';
+    const parts = [];
+    if (pulled) parts.push(`Pulled ${pulled} room${pulled > 1 ? 's' : ''}`);
+    if (last.storageFull) parts.push('storage is full');
+    const stuck = last.pending || 0;
+    if (stuck) {
+      if (last.unreachable) parts.push(`${stuck} unreachable`);
+      else if (last.unreadable) parts.push(`${stuck} locked or unreadable`);
+      else parts.push(`${stuck} not on the server yet`);
+    }
+    if (parts.length) return parts.join(' · ');
+    return changed ? 'Cade.txt rooms re-read' : 'Already up to date';
+  }
+
+  // Explicit Rescan. Pulls in bursts until a pass stops making progress —
+  // NOT until nothing is left outstanding. A room whose document was never
+  // written to Firebase can never be pulled, so looping while any room is
+  // still missing runs forever, re-fetching the same rooms several times a
+  // second. `fetched` is the only condition that can go false.
+  let rescanning = false;
+
   async function rescanBridge() {
-    if (typeof Bridge === 'undefined') return;
+    if (typeof Bridge === 'undefined' || rescanning) return;
     closeModal();
+    rescanning = true;
     const waiting = Bridge.roomsNeedingText().length;
     if (waiting) toast(`Fetching ${waiting} room${waiting > 1 ? 's' : ''} from Firebase…`);
-    let pulled = { fetched: 0 };
-    // Explicit user action — bypass the retry cooldown.
-    try { pulled = await Bridge.hydrateMissingRooms({ force: true }); } catch (e) {}
+
+    let pulled = 0;
+    let last = { fetched: 0, pending: waiting, missing: 0, unreadable: 0, unreachable: 0, reason: '' };
+    try {
+      for (let pass = 0; pass < RESCAN_MAX_PASSES; pass++) {
+        // Explicit user action — bypass the retry cooldown.
+        last = await Bridge.hydrateMissingRooms({ force: true });
+        pulled += last.fetched;
+        if (!last.fetched || !last.pending) break;   // no progress, or nothing left
+      }
+    } catch (e) {
+      console.warn('Rescan failed', e);
+    } finally {
+      rescanning = false;
+    }
+
     const stats = Bridge.scan();
     render();
-    if (pulled.fetched) toast(`Pulled ${pulled.fetched} room${pulled.fetched > 1 ? 's' : ''} from Firebase`);
-    else toast(stats && stats.changed ? 'Cade.txt rooms re-read' : 'Already up to date');
-    if (pulled.pending > 0) setTimeout(() => rescanBridge(), 400);
+    toast(rescanMessage(pulled, last, !!(stats && stats.changed)));
   }
 
   // Creating a sub-project here creates the matching room in Cade.txt. An

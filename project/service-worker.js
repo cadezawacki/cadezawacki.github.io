@@ -3,8 +3,8 @@
    Caches CDN libraries and app shell for full offline use
    ═══════════════════════════════════════════════════════════════ */
 
-const CACHE_NAME = 'cade-project-v9';
-const CDN_CACHE = 'cade-cdn-v9';
+const CACHE_NAME = 'cade-project-v10';
+const CDN_CACHE = 'cade-cdn-v10';
 
 // App shell — local files
 const APP_SHELL = [
