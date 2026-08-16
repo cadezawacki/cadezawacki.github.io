@@ -317,10 +317,25 @@ const State = (() => {
     return entry;
   }
 
+  // A merge decides which side of a conflict wins by comparing updatedAt, so
+  // the stamp has to mean "someone changed this". The bridge re-asserts link
+  // fields on every scan; if a write that changes nothing still moved the
+  // clock, this device would look newer than every other one forever, and
+  // sync would read as dirty on every scan and raise conflicts of its own.
+  function touched(current, updates) {
+    return Object.keys(updates || {}).some(k =>
+      JSON.stringify(current[k]) !== JSON.stringify(updates[k]));
+  }
+  function stamp(current, updates) {
+    const next = { ...current, ...updates };
+    if (touched(current, updates)) next.updatedAt = new Date().toISOString();
+    return next;
+  }
+
   function updateEntry(id, updates) {
     const idx = data.entries.findIndex(e => e.id === id);
     if (idx === -1) return null;
-    data.entries[idx] = { ...data.entries[idx], ...updates, updatedAt: new Date().toISOString() };
+    data.entries[idx] = stamp(data.entries[idx], updates);
     emit();
     return data.entries[idx];
   }
@@ -497,6 +512,7 @@ const State = (() => {
       parentId: null,
       archived: false,
       createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
       txtWorkspaceId: null, // linked Cade.txt workspace (top-level projects)
       txtRoom: null,        // linked Cade.txt room (sub-projects)
       txtHasList: false,    // that room currently holds a [ ] todo list
@@ -510,7 +526,7 @@ const State = (() => {
   function updateProject(id, updates) {
     const idx = data.projects.findIndex(p => p.id === id);
     if (idx === -1) return null;
-    data.projects[idx] = { ...data.projects[idx], ...updates };
+    data.projects[idx] = stamp(data.projects[idx], updates);
     emit();
     return data.projects[idx];
   }
@@ -578,6 +594,7 @@ const State = (() => {
       kind: 'agenda',
       notes: '',
       createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
       ...partial,
     };
     data.planner.push(block);
@@ -588,7 +605,7 @@ const State = (() => {
   function updatePlannerBlock(id, updates) {
     const idx = data.planner.findIndex(b => b.id === id);
     if (idx === -1) return null;
-    data.planner[idx] = { ...data.planner[idx], ...updates };
+    data.planner[idx] = stamp(data.planner[idx], updates);
     emit();
     return data.planner[idx];
   }
@@ -604,7 +621,8 @@ const State = (() => {
   // SCRATCHPAD — frictionless idea capture
   // ═══════════════════════════════════════════════════════════
   function addScratch(text) {
-    const idea = { id: uid(), text: String(text).trim(), createdAt: new Date().toISOString() };
+    const now = new Date().toISOString();
+    const idea = { id: uid(), text: String(text).trim(), createdAt: now, updatedAt: now };
     if (!idea.text) return null;
     data.scratch.push(idea);
     emit();
@@ -650,6 +668,8 @@ const State = (() => {
         name,
         color: TAG_COLORS[data.tags.length % TAG_COLORS.length],
         projectId: null, // null = usable everywhere
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
       };
       data.tags.push(tag);
       emit();
@@ -676,7 +696,10 @@ const State = (() => {
         }
       });
     }
+    // Assigned in place — callers hold the reference this returns.
+    const moved = touched(tag, updates);
     Object.assign(tag, updates);
+    if (moved) tag.updatedAt = new Date().toISOString();
     emit();
     return tag;
   }
@@ -706,6 +729,7 @@ const State = (() => {
     const log = {
       id: uid(),
       createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
       ...partial,
     };
     data.logs.push(log);
@@ -719,11 +743,11 @@ const State = (() => {
   }
 
   function updateLog(id, updates) {
-    const log = data.logs.find(l => l.id === id);
-    if (!log) return null;
-    Object.assign(log, updates);
+    const idx = data.logs.findIndex(l => l.id === id);
+    if (idx === -1) return null;
+    data.logs[idx] = stamp(data.logs[idx], updates);
     emit();
-    return log;
+    return data.logs[idx];
   }
 
   function getLogs(filter = {}) {

@@ -4163,6 +4163,15 @@ const App = (() => {
   // SYNC CONFIG MODAL
   // ═══════════════════════════════════════════════════════════
   function openSyncConfig() {
+    // The sync dot is where a deferred conflict lives — it is showing the
+    // conflict colour, so tapping it has to bring the question back rather
+    // than open settings over the top of it.
+    if (pendingConflict) {
+      const [l, s] = pendingConflict;
+      setPendingConflict(null);
+      showConflictModal(l, s);
+      return;
+    }
     const settings = State.getSettings();
     showModal('Firebase Sync', `
       <div class="form-group">
@@ -5613,106 +5622,349 @@ const App = (() => {
   }
 
   // ═══════════════════════════════════════════════════════════
-  // CONFLICT MODAL
+  // CONFLICT SCREEN
   // ═══════════════════════════════════════════════════════════
-  // What actually differs between two datasets — id-level comparison per
-  // collection, with example titles for the human-facing ones.
-  function dataDiff(local, server) {
-    const compare = (label, l = [], s = [], nameOf = null) => {
-      const lm = new Map(l.filter(x => x && x.id).map(x => [x.id, x]));
-      const sm = new Map(s.filter(x => x && x.id).map(x => [x.id, x]));
-      const localOnly = [], serverOnly = [], changed = [];
-      lm.forEach((v, id) => {
-        if (!sm.has(id)) localOnly.push(v);
-        else if (JSON.stringify(v) !== JSON.stringify(sm.get(id))) changed.push(v);
-      });
-      sm.forEach((v, id) => { if (!lm.has(id)) serverOnly.push(v); });
-      return { label, nameOf, localOnly, serverOnly, changed };
-    };
-    return [
-      compare('Entries', local.entries, server.entries, (e) => e.title),
-      compare('Projects', local.projects, server.projects, (p) => p.name),
-      compare('Scratch ideas', local.scratch, server.scratch, (s) => (s.text || '').slice(0, 30)),
-      compare('Logs', local.logs, server.logs),
-      compare('Planner blocks', local.planner, server.planner),
-    ].filter(d => d.localOnly.length || d.serverOnly.length || d.changed.length);
+  // The old screen said "Entries: +3 only here · 2 differ (Buy milk, …)".
+  // That announces a conflict without describing it: not which items, not
+  // what changed inside them, and not what any of the three buttons would
+  // cost. This one answers those three questions in that order.
+
+  // Presentation only. Sync owns WHICH collections a merge touches; this
+  // supplies a label and a way to name a member. Driving the loop from Sync's
+  // list rather than a copy of it means a collection added there can never go
+  // missing from this screen — it appears under a fallback label instead.
+  const CONFLICT_GROUP_META = {
+    entries:  { label: 'Tasks, goals & habits', nameOf: e => e.title },
+    projects: { label: 'Projects',              nameOf: p => p.name },
+    planner:  { label: 'Planner blocks',        nameOf: b => b.title || b.kind },
+    scratch:  { label: 'Scratch ideas',         nameOf: s => s.text },
+    tags:     { label: 'Tags',                  nameOf: t => t.name },
+    logs:     { label: 'Logs',                  nameOf: l => l.type },
+  };
+  // The order someone would look for them in, most consequential first.
+  const CONFLICT_GROUP_ORDER = ['entries', 'projects', 'planner', 'scratch', 'tags', 'logs'];
+
+  function conflictGroups() {
+    const merged = (typeof Sync !== 'undefined' && Sync.MERGED_COLLECTIONS) || CONFLICT_GROUP_ORDER;
+    const keys = [
+      ...CONFLICT_GROUP_ORDER.filter(k => merged.includes(k)),
+      ...merged.filter(k => !CONFLICT_GROUP_ORDER.includes(k)),
+    ];
+    return keys.map(key => ({
+      key,
+      label: (CONFLICT_GROUP_META[key] || {}).label || key,
+      nameOf: (CONFLICT_GROUP_META[key] || {}).nameOf || (x => x.name || x.title || x.id),
+    }));
   }
 
-  function diffBoxHtml(local, server) {
-    const diffs = dataDiff(local, server);
-    if (diffs.length === 0) {
-      return `<div class="diff-box"><p class="text-xs text-faint">Same content — only formatting or ordering differs. Either choice is safe.</p></div>`;
-    }
-    const names = (list, nameOf) => nameOf && list.length
-      ? ` <span class="text-faint">(${list.slice(0, 3).map(x => escHtml(nameOf(x) || '?')).join(', ')}${list.length > 3 ? ', …' : ''})</span>` : '';
-    return `<div class="diff-box">
-      ${diffs.map(d => `<div class="diff-row">
-        <span class="diff-label">${d.label}</span>
-        <span class="diff-detail">
-          ${d.localOnly.length ? `<span class="diff-chip local">+${d.localOnly.length} only here${names(d.localOnly, d.nameOf)}</span>` : ''}
-          ${d.serverOnly.length ? `<span class="diff-chip server">+${d.serverOnly.length} only on server${names(d.serverOnly, d.nameOf)}</span>` : ''}
-          ${d.changed.length ? `<span class="diff-chip changed">${d.changed.length} differ${names(d.changed, d.nameOf)}</span>` : ''}
-        </span>
-      </div>`).join('')}
+  // Bookkeeping, not a change anyone made on purpose — listing it as a
+  // difference buries the ones that mean something.
+  const DIFF_SKIP = new Set(['updatedAt']);
+
+  // Fields whose values are ids of other records, shown by name instead.
+  const DIFF_ID_FIELDS = new Set([
+    'projectId', 'parentId', 'entryId', 'projectIds', 'blockedBy', 'spawnedNextId',
+  ]);
+
+  const FIELD_LABELS = {
+    completed: 'done', completedAt: 'finished', dueDate: 'due', createdAt: 'created',
+    projectId: 'project', projectIds: 'projects', parentId: 'inside', entryId: 'task',
+    archived: 'archived', archTs: 'archived on', blockedBy: 'blocked by',
+    spawnedNextId: 'next occurrence', txtRoom: 'Cade.txt room', txtKey: 'Cade.txt line',
+    txtDone: 'Cade.txt tick', txtWorkspaceId: 'Cade.txt workspace', txtHasList: 'has a todo list',
+  };
+
+  function fieldLabel(key) {
+    return FIELD_LABELS[key] || key.replace(/([a-z0-9])([A-Z])/g, '$1 $2').toLowerCase();
+  }
+
+  function diffValue(key, v, names) {
+    if (v === null || v === undefined || v === '') return '—';
+    if (typeof v === 'boolean') return v ? 'yes' : 'no';
+    if (Array.isArray(v)) return v.length ? v.map(x => diffValue(key, x, names)).join(', ') : 'none';
+    if (typeof v === 'object') return JSON.stringify(v);
+    const s = String(v);
+    if (DIFF_ID_FIELDS.has(key) && names.has(s)) return names.get(s);
+    if (/^\d{4}-\d{2}-\d{2}T/.test(s)) return s.slice(0, 16).replace('T', ' ');
+    return s.length > 70 ? s.slice(0, 70) + '…' : s;
+  }
+
+  // Absent, null and empty-string all mean "nothing here". Comparing them
+  // literally listed a field as differing and then printed "—" against "—"
+  // on both sides, which reads as a bug in the diff rather than as data. It
+  // happens whenever the two sides were written by different app versions:
+  // the newer one has migrated in fields the older one never stored.
+  function sameValue(a, b) {
+    const blank = (v) => v === null || v === undefined || v === '';
+    if (blank(a) && blank(b)) return true;
+    return JSON.stringify(a) === JSON.stringify(b);
+  }
+
+  // projectIds is derived from projectId whenever a task belongs to exactly
+  // one project, so re-filing one otherwise reports the identical change
+  // twice, once as "project" and once as "projects". Only the derived case
+  // is suppressed — a genuine multi-project difference still shows.
+  function mirrorsPrimaryProject(item) {
+    const ids = item && item.projectIds;
+    if (!Array.isArray(ids) || ids.length > 1) return false;
+    return (ids[0] || null) === ((item && item.projectId) || null);
+  }
+
+  function fieldDiffs(a, b) {
+    const keys = [...new Set([...Object.keys(a || {}), ...Object.keys(b || {})])];
+    const derived = mirrorsPrimaryProject(a) && mirrorsPrimaryProject(b);
+    return keys
+      .filter(k => !DIFF_SKIP.has(k) && !(k === 'projectIds' && derived))
+      .filter(k => !sameValue(a?.[k], b?.[k]))
+      .map(k => ({ key: k, local: a?.[k], server: b?.[k] }));
+  }
+
+  // Everything the screen needs, computed once: per-item differences, which
+  // side a merge would keep, and the totals each button is priced against.
+  function conflictReport(local, server) {
+    const l = local || {}, s = server || {};
+
+    // Ids read as noise; a task called "Buy milk" does not. Both sides feed
+    // the map — an item that exists on only one side still needs a name.
+    const names = new Map();
+    [s, l].forEach(side => {
+      (side.projects || []).forEach(p => p && p.id && names.set(p.id, p.name || 'Untitled project'));
+      (side.entries || []).forEach(e => e && e.id && names.set(e.id, e.title || 'Untitled'));
+    });
+
+    const winnerOf = (a, b) => (typeof Sync !== 'undefined' && Sync.mergeWinner)
+      ? Sync.mergeWinner(a, b) : 'local';
+
+    const groups = conflictGroups().map(g => {
+      const nameOf = (x) => {
+        const raw = g.nameOf(x);
+        const text = raw == null ? '' : String(raw).trim();
+        return text ? (text.length > 70 ? text.slice(0, 70) + '…' : text) : 'Untitled';
+      };
+      const index = (list) => new Map((Array.isArray(list) ? list : [])
+        .filter(x => x && x.id).map(x => [x.id, x]));
+      const lm = index(l[g.key]), sm = index(s[g.key]);
+      const items = [];
+      lm.forEach((mine, id) => {
+        if (!sm.has(id)) { items.push({ id, side: 'local', name: nameOf(mine) }); return; }
+        const theirs = sm.get(id);
+        const fields = fieldDiffs(mine, theirs);
+        if (!fields.length) return;   // same content, different key order
+        items.push({ id, side: 'both', name: nameOf(mine), fields, wins: winnerOf(mine, theirs) });
+      });
+      sm.forEach((theirs, id) => {
+        if (!lm.has(id)) items.push({ id, side: 'server', name: nameOf(theirs) });
+      });
+      const count = (side) => items.filter(i => i.side === side).length;
+      return { label: g.label, items, localOnly: count('local'), serverOnly: count('server'), both: count('both') };
+    }).filter(g => g.items.length);
+
+    const sum = (k) => groups.reduce((n, g) => n + g[k], 0);
+    return { groups, names, localOnly: sum('localOnly'), serverOnly: sum('serverOnly'), both: sum('both') };
+  }
+
+  const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+
+  // What each button costs, in items, from the data actually in front of the
+  // user. This is the part that makes the decision possible.
+  function conflictChoicesHtml(r) {
+    const keepLocal = r.serverOnly || r.both
+      ? [r.serverOnly ? `${plural(r.serverOnly, 'item', 'items')} that exist only on the server` : '',
+         r.both ? `${plural(r.both, 'edit', 'edits')} made elsewhere` : '']
+        .filter(Boolean).join(' and ')
+      : '';
+    const takeServer = r.localOnly || r.both
+      ? [r.localOnly ? `${plural(r.localOnly, 'item', 'items')} that exist only here` : '',
+         r.both ? `${plural(r.both, 'edit', 'edits')} made here` : '']
+        .filter(Boolean).join(' and ')
+      : '';
+    const mergeNote = r.both
+      ? `Nothing is discarded. ${plural(r.both, 'item', 'items')} edited on both sides resolve to the more recently edited copy — marked below.`
+      : 'Nothing is discarded. Both sides keep everything they hold.';
+
+    const choice = (res, name, note, loss, rec) => `
+      <button type="button" class="cf-choice${rec ? ' cf-recommended' : ''}" onclick="App.resolveConflict('${res}')">
+        <span class="cf-choice-name">${escHtml(name)}${rec ? '<span class="cf-rec">recommended</span>' : ''}</span>
+        <span class="cf-choice-note${loss ? ' cf-loss' : ''}">${escHtml(note)}</span>
+      </button>`;
+
+    return `<div class="cf-choices">
+      ${choice('merge', 'Merge both', mergeNote, false, true)}
+      ${choice('local', 'Keep this device',
+        keepLocal ? `Permanently discards ${keepLocal}.` : 'Overwrites the server with this device’s copy.',
+        !!keepLocal, false)}
+      ${choice('server', 'Take the server',
+        takeServer ? `Permanently discards ${takeServer}.` : 'Replaces this device with the server’s copy.',
+        !!takeServer, false)}
     </div>`;
+  }
+
+  const CF_MAX_ITEMS = 25;    // a divergence of hundreds is a scroll, not a read
+  const CF_MAX_FIELDS = 6;
+
+  function conflictItemHtml(item, names) {
+    const badge = {
+      local: '<span class="cf-badge here">only here</span>',
+      server: '<span class="cf-badge server">only on server</span>',
+      both: '<span class="cf-badge both">edited on both</span>',
+    }[item.side];
+    const shown = item.side === 'both' ? item.fields.slice(0, CF_MAX_FIELDS) : [];
+    const spare = item.side === 'both' ? item.fields.length - shown.length : 0;
+    return `<div class="cf-item">
+      <div class="cf-item-head">
+        ${badge}
+        <span class="cf-item-name">${escHtml(item.name)}</span>
+        ${item.side === 'both'
+          ? `<span class="cf-wins">merge keeps ${item.wins === 'server' ? 'the server’s' : 'this device’s'}</span>`
+          : ''}
+      </div>
+      ${shown.length ? `<div class="cf-fields">
+        <div class="cf-field cf-field-head"><span></span><span>this device</span><span>server</span></div>
+        ${shown.map(f => `<div class="cf-field">
+          <span class="cf-fname">${escHtml(fieldLabel(f.key))}</span>
+          <span class="cf-val${item.wins === 'local' ? ' cf-win' : ''}">${escHtml(diffValue(f.key, f.local, names))}</span>
+          <span class="cf-val${item.wins === 'server' ? ' cf-win' : ''}">${escHtml(diffValue(f.key, f.server, names))}</span>
+        </div>`).join('')}
+        ${spare > 0 ? `<div class="cf-more">and ${plural(spare, 'other field', 'other fields')}</div>` : ''}
+      </div>` : ''}
+    </div>`;
+  }
+
+  function conflictDiffHtml(r) {
+    if (!r.groups.length) {
+      return `<div class="cf-empty">Both copies hold the same content — they differ only in
+        ordering or in fields that carry no meaning. Any choice here is safe.</div>`;
+    }
+    return r.groups.map(g => {
+      const shown = g.items.slice(0, CF_MAX_ITEMS);
+      const spare = g.items.length - shown.length;
+      const tally = [
+        g.localOnly ? `${g.localOnly} only here` : '',
+        g.serverOnly ? `${g.serverOnly} only on server` : '',
+        g.both ? `${g.both} edited on both` : '',
+      ].filter(Boolean).join(' · ');
+      return `<div class="cf-group">
+        <div class="cf-group-head">
+          <span class="cf-group-name">${escHtml(g.label)}</span>
+          <span class="cf-group-tally">${escHtml(tally)}</span>
+        </div>
+        ${shown.map(i => conflictItemHtml(i, r.names)).join('')}
+        ${spare > 0 ? `<div class="cf-more">and ${plural(spare, 'more', 'more')}</div>` : ''}
+      </div>`;
+    }).join('');
   }
 
   // A conflict must never clobber a form mid-edit — if any modal is open,
   // park the conflict and surface it right after that modal closes.
   let pendingConflict = null;
+  // The two datasets the open dialog is describing. The buttons resolve
+  // against THIS server payload; passing null instead is what broke Merge.
+  let conflictSides = null;
 
-  function showConflictModal(localData, serverData) {
+  // Every write goes through here so the sync dot can never disagree with
+  // whether a conflict is actually outstanding.
+  function setPendingConflict(sides) {
+    pendingConflict = sides;
+    if (typeof Sync !== 'undefined' && Sync.setConflictWaiting) Sync.setConflictWaiting(!!sides);
+  }
+
+  function hasPendingConflict() { return !!pendingConflict; }
+
+  function showConflictModal(localSide, serverSide) {
     if (document.getElementById('modalOverlay').classList.contains('active')) {
-      pendingConflict = [localData, serverData];
-      toast('Sync conflict detected — will ask once you finish here');
+      setPendingConflict([localSide, serverSide]);
+      toast('Sync conflict — you’ll be asked once you finish here');
       return;
     }
-    pendingConflict = null;
+    setPendingConflict(null);
+    conflictSides = { local: localSide, server: serverSide };
+    const report = conflictReport(localSide, serverSide);
     showModal('Sync Conflict', `
-      <p class="text-sm text-muted" style="margin-bottom:var(--space-2);">
-        Your local data and the server have diverged. Here's what differs:
-      </p>
-      ${diffBoxHtml(localData, serverData)}
-      <div style="display:flex;flex-direction:column;gap:var(--space-2);">
-        <div class="card card-interactive" onclick="App.resolveConflict('local')">
-          <div style="font-weight:600;margin-bottom:var(--space-1);">Keep Local</div>
-          <div class="text-xs text-muted">Use your device's data and overwrite server</div>
-        </div>
-        <div class="card card-interactive" onclick="App.resolveConflict('server')">
-          <div style="font-weight:600;margin-bottom:var(--space-1);">Take Server</div>
-          <div class="text-xs text-muted">Replace local data with server version</div>
-        </div>
-        <div class="card card-interactive" onclick="App.resolveConflict('merge')">
-          <div style="font-weight:600;margin-bottom:var(--space-1);">Merge Both</div>
-          <div class="text-xs text-muted">Keep server entries, add local-only entries</div>
-        </div>
-      </div>
-    `, []);
+      <p class="cf-intro">This device and the server both changed since they last agreed.
+        Nothing has been written yet.</p>
+      ${conflictChoicesHtml(report)}
+      <div class="cf-diff-head">What differs</div>
+      ${conflictDiffHtml(report)}
+    `, [`<button class="btn btn-secondary" onclick="App.deferConflict()">Decide later</button>`],
+    // Answering IS the reconcile finishing. Dismissing this with Escape used
+    // to leave sync half-connected until the next reload.
+    { sticky: true });
   }
 
   async function resolveConflict(resolution) {
-    await Sync.resolveConflict(resolution, null);
-    closeModal();
+    if (!conflictSides) { closeModal({ force: true }); return; }
+    let res;
+    try {
+      res = await Sync.resolveConflict(resolution, conflictSides.server);
+    } catch (e) {
+      // The local half of every resolution has already been applied by the
+      // time a push can fail, so stranding the dialog would hide a change
+      // that did land. Close, redraw, and say the push is still owed.
+      console.error('Conflict resolution failed', e);
+      conflictSides = null;
+      closeModal({ force: true });
+      render();
+      toast('Resolved on this device — the server copy will catch up when sync reconnects');
+      return;
+    }
+    if (!res || res.ok === false) {
+      // Leave the dialog up. Closing it on a failure is how the old version
+      // reported success while having written nothing.
+      toast('Could not resolve — reconnect to the database and try again');
+      return;
+    }
+    conflictSides = null;
+    closeModal({ force: true });
     render();
-    toast('Conflict resolved');
+    if (typeof Sync !== 'undefined') Sync.updateStatus();
+    toast({
+      local: 'Kept this device — the server now matches it',
+      server: 'Took the server’s copy',
+      merge: 'Merged — nothing was discarded',
+    }[resolution] || 'Conflict resolved');
+  }
+
+  // Deferring is allowed, disappearing is not: the conflict stays on the sync
+  // dot until it is answered.
+  function deferConflict() {
+    const sides = conflictSides;
+    conflictSides = null;
+    // Park it only AFTER closing. closeModal's tail exists to resurface a
+    // conflict that arrived while a form was open, and it would consume this
+    // one on the way out — re-opening the dialog a quarter-second after the
+    // user asked for it to go away.
+    closeModal({ force: true });
+    if (sides) setPendingConflict([sides.local, sides.server]);
+    toast('Sync is holding until you decide — tap the sync dot');
   }
 
   // ═══════════════════════════════════════════════════════════
   // MODAL SYSTEM
   // ═══════════════════════════════════════════════════════════
-  function showModal(title, bodyHtml, footerHtml = []) {
+  // A sticky modal is one that must be answered before anything else. Only
+  // the sync conflict uses it: leaving that question unanswered strands the
+  // reconcile half-done, so Escape, an overlay click and a stray hotkey all
+  // have to bounce off it rather than quietly dismiss it.
+  let modalSticky = false;
+
+  function showModal(title, bodyHtml, footerHtml = [], opts = {}) {
+    if (modalSticky && !opts.sticky) return false;
     document.getElementById('modalTitle').textContent = title;
     document.getElementById('modalBody').innerHTML = bodyHtml;
     document.getElementById('modalFooter').innerHTML = footerHtml.join('');
     document.getElementById('modalOverlay').classList.add('active');
+    modalSticky = !!opts.sticky;
     refreshIcons();
     setTimeout(() => {
       const t = document.getElementById('entryTitle');
       if (t) { t.focus(); autoGrow(t); } // pre-filled long titles size correctly
     }, 100);
+    return true;
   }
 
-  function closeModal() {
+  function closeModal(opts = {}) {
+    if (modalSticky && !opts.force) return false;
+    modalSticky = false;
     document.getElementById('modalOverlay').classList.remove('active');
     editingEntryId = null;
     editingBlockId = null;
@@ -5724,7 +5976,7 @@ const App = (() => {
     // A sync conflict that arrived mid-form was parked — surface it now
     if (pendingConflict) {
       const [l, s] = pendingConflict;
-      pendingConflict = null;
+      setPendingConflict(null);
       setTimeout(() => showConflictModal(l, s), 250);
     }
   }
@@ -6139,7 +6391,9 @@ const App = (() => {
     updateTimerSetting, updateCalorieGoal,
     exportData, importData, confirmReset,
     showModal, closeModal, closePanel,
-    showConflictModal, resolveConflict,
+    showConflictModal, resolveConflict, deferConflict, hasPendingConflict,
+    // The conflict screen's pure parts, checkable without a live database.
+    _conflictReport: conflictReport,
   };
 })();
 

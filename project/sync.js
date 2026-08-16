@@ -70,31 +70,62 @@ const Sync = (() => {
   // local work, or user-chosen merge). Entries/projects: newer updatedAt
   // wins on shared ids, one-sided items are kept. Logs/planner/scratch:
   // union by id. Settings: the device in hand wins.
+  // Every collection that a merge touches. Named here so the conflict screen
+  // can describe exactly the same set the merge acts on, rather than a
+  // hand-kept second list that drifts.
+  const MERGED_COLLECTIONS = ['entries', 'projects', 'tags', 'logs', 'planner', 'scratch'];
+
+  // When an item exists on both sides, the copy edited more recently wins.
+  //
+  // This used to be two rules: newest-wins for entries and projects, and
+  // first-wins for everything else — which meant an edit to a log, a planner
+  // block or a tag made on this device was silently discarded in favour of
+  // the server's copy. And since projects carried no updatedAt at all, even
+  // their "newest wins" always fell through to the same server-wins default,
+  // so a project renamed here reverted on every merge.
+  function itemStamp(item) {
+    return (item && (item.updatedAt || item.createdAt)) || '';
+  }
+
+  // Ties go to LOCAL. A tie almost always means neither side has a usable
+  // stamp — records written before stamping existed — and between two equally
+  // unknown copies the right one to keep is the one belonging to the person
+  // answering the dialog.
+  function pickNewer(localItem, serverItem) {
+    return itemStamp(serverItem) > itemStamp(localItem) ? serverItem : localItem;
+  }
+
+  function mergeCollection(localList, serverList) {
+    const out = new Map();
+    const list = (x) => (Array.isArray(x) ? x : []);
+    list(serverList).forEach(item => { if (item && item.id) out.set(item.id, item); });
+    list(localList).forEach(item => {
+      if (!item || !item.id) return;
+      const rival = out.get(item.id);
+      out.set(item.id, rival ? pickNewer(item, rival) : item);
+    });
+    return [...out.values()];
+  }
+
+  // Which side each shared item resolves to, without performing the merge —
+  // the conflict screen shows this per item so the outcome is visible before
+  // the button is pressed.
+  function mergeWinner(localItem, serverItem) {
+    return pickNewer(localItem, serverItem) === serverItem ? 'server' : 'local';
+  }
+
   function mergeData(local, server) {
-    const byNewer = (a = [], b = []) => {
-      const map = new Map();
-      [...a, ...b].forEach(item => {
-        if (!item || !item.id) return;
-        const prev = map.get(item.id);
-        if (!prev || (item.updatedAt || '') > (prev.updatedAt || '')) map.set(item.id, item);
-      });
-      return [...map.values()];
+    const l = local || {};
+    const s = server || {};
+    const merged = {
+      // Local first for anything not enumerated below, matching the settings
+      // rule: unknown keys belong to the device being merged into.
+      ...s, ...l,
+      // Device settings stay this device's. A merge is about content.
+      settings: l.settings || s.settings,
     };
-    const unionById = (a = [], b = []) => {
-      const map = new Map();
-      [...a, ...b].forEach(item => { if (item && item.id && !map.has(item.id)) map.set(item.id, item); });
-      return [...map.values()];
-    };
-    return {
-      ...server,
-      entries: byNewer(server.entries, local.entries),
-      projects: byNewer(server.projects, local.projects),
-      tags: unionById(server.tags, local.tags),
-      logs: unionById(server.logs, local.logs),
-      planner: unionById(server.planner, local.planner),
-      scratch: unionById(server.scratch, local.scratch),
-      settings: local.settings || server.settings,
-    };
+    MERGED_COLLECTIONS.forEach(k => { merged[k] = mergeCollection(l[k], s[k]); });
+    return merged;
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -549,7 +580,20 @@ const Sync = (() => {
     if (typeof App !== 'undefined') App.showConflictModal(localSide, serverSide);
   }
 
+  function isDataset(x) {
+    return !!x && typeof x === 'object' && !Array.isArray(x);
+  }
+
   async function resolveConflict(resolution, serverData) {
+    // Two of the three answers are meaningless without the payload they were
+    // offered against, and the UI used to pass null for all three. That made
+    // "Take Server" call setRawData(null) — which resets to defaults, i.e.
+    // erases everything — and made "Merge Both" throw on null.entries before
+    // it wrote anything, so the button appeared to do nothing at all.
+    if ((resolution === 'server' || resolution === 'merge') && !isDataset(serverData)) {
+      console.error('Sync: resolveConflict(' + resolution + ') without a server payload — refusing');
+      return { ok: false, reason: 'no-server-data' };
+    }
     // The conflict path bails out of onReconnect before it can mark the
     // reconcile done; answering the dialog IS the reconcile finishing.
     markReconciled();
@@ -561,19 +605,32 @@ const Sync = (() => {
       lastSyncedSnapshot = structuredClone(localData());
       State.emit();
     } else if (resolution === 'merge') {
-      // Field-level merge: newer updatedAt wins on shared entries/projects,
-      // one-sided items survive, logs/planner/scratch union by id.
       const merged = mergeData(localData(), serverData);
       State.setRawData(merged);
       lastSyncedSnapshot = null; // force the merged result to push
       await pushLocal(true);
+    } else {
+      return { ok: false, reason: 'unknown-resolution' };
     }
     setupLiveListener();
+    return { ok: true, resolution };
   }
 
   // ═══════════════════════════════════════════════════════════
   // STATUS
   // ═══════════════════════════════════════════════════════════
+  // Whether a conflict is parked awaiting an answer. Pushed in by the UI
+  // rather than read back out of it: App is a top-level `const`, so a
+  // `typeof App` guard here would throw a ReferenceError instead of yielding
+  // 'undefined' if this ever ran before app.js had evaluated — and `const`
+  // never lands on `window`, so the usual window.App fallback reads as
+  // permanently absent.
+  let conflictWaiting = false;
+  function setConflictWaiting(waiting) {
+    conflictWaiting = !!waiting;
+    updateStatus();
+  }
+
   // Menubar dot: green = connected, yellow = reconnecting, red = disconnected.
   function updateStatus() {
     const el = document.getElementById('syncStatus');
@@ -584,11 +641,16 @@ const Sync = (() => {
       return;
     }
     el.style.display = 'block';
-    const state = connected ? 'online' : connecting ? 'syncing' : 'offline';
+    // A deferred conflict outranks the connection state: sync is technically
+    // up but is holding, and the dot is the only place that says so.
+    const state = conflictWaiting ? 'conflict'
+      : connected ? 'online' : connecting ? 'syncing' : 'offline';
     el.className = 'sync-dot ' + state;
-    el.title = settings.sync.paused
-      ? 'Sync paused after a local reset — open Data ▸ Firebase Sync to reconnect'
-      : 'Sync: ' + (connected ? 'connected' : connecting ? 'reconnecting…' : 'disconnected');
+    el.title = conflictWaiting
+      ? 'Sync conflict waiting — click to decide what to keep'
+      : settings.sync.paused
+        ? 'Sync paused after a local reset — open Data ▸ Firebase Sync to reconnect'
+        : 'Sync: ' + (connected ? 'connected' : connecting ? 'reconnecting…' : 'disconnected');
   }
 
   function isConnected() { return connected; }
@@ -607,9 +669,11 @@ const Sync = (() => {
 
   return {
     connect, disconnect, schedulePush, pushLocal, resolveConflict,
-    isConnected, updateStatus, autoConnect, eraseRemote,
+    isConnected, updateStatus, setConflictWaiting, autoConnect, eraseRemote,
     isReconciled, isConfigured,
     encrypt, decrypt, classifyIncoming, stableStringify, mergeData, // exposed for testing
+    // The conflict screen previews the merge it is about to run.
+    MERGED_COLLECTIONS, mergeWinner,
     // test-only handles: simulate the live listener without a real Firebase
     _test: {
       handleIncoming,
