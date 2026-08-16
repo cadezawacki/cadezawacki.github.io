@@ -3839,6 +3839,30 @@ const App = (() => {
   // ═══════════════════════════════════════════════════════════
   // SETTINGS VIEW
   // ═══════════════════════════════════════════════════════════
+  // Settings was one long scroll of seven unrelated sections with the
+  // destructive ones at the bottom, reachable by accident on the way past.
+  // A filter narrows it to what you came for, and each section collapses.
+  let settingsFilter = '';
+
+  function setSettingsFilter(v) {
+    settingsFilter = String(v || '').trim().toLowerCase();
+    applySettingsFilter();
+  }
+
+  function applySettingsFilter() {
+    const q = settingsFilter;
+    let shown = 0;
+    document.querySelectorAll('#mainContent .section[data-settings-section]').forEach(sec => {
+      const hit = !q || sec.textContent.toLowerCase().includes(q);
+      sec.style.display = hit ? '' : 'none';
+      if (hit) shown++;
+      // A search should show you the answer, not a folded section to open.
+      if (q && hit) { const d = sec.querySelector('details'); if (d) d.open = true; }
+    });
+    const empty = document.getElementById('settingsEmpty');
+    if (empty) empty.style.display = shown ? 'none' : '';
+  }
+
   function renderSettings() {
     const settings = State.getSettings();
     let html = `
@@ -3848,11 +3872,20 @@ const App = (() => {
           <p class="page-subtitle">Sync, preferences, data</p>
         </div>
       </div>
+      <div class="settings-search">
+        ${icon('search', 15)}
+        <input type="search" class="settings-search-input" id="settingsFilter" placeholder="Find a setting…"
+          value="${escHtml(settingsFilter)}" autocomplete="off" oninput="App.setSettingsFilter(this.value)">
+      </div>
+      <p class="text-xs text-faint" id="settingsEmpty" style="display:none;">Nothing matches that.</p>
     `;
+    // The filter has to be re-applied after every render, or typing then
+    // toggling a setting silently un-filters the page under you.
+    setTimeout(applySettingsFilter, 0);
 
     // Appearance
     const curAccent = settings.accent || 'teal';
-    html += `<div class="section">
+    html += `<div class="section" data-settings-section="appearance">
       <div class="section-header"><span class="section-title">Appearance</span></div>
       <div class="card">
         <div class="setting-row">
@@ -3883,7 +3916,7 @@ const App = (() => {
       default: 'Reminders fire as in-app toasts; enable for system notifications',
       unsupported: 'Not supported in this browser — in-app toasts still fire',
     }[notifState];
-    html += `<div class="section">
+    html += `<div class="section" data-settings-section="reminders">
       <div class="section-header"><span class="section-title">Reminders</span></div>
       <div class="card">
         <div class="setting-row">
@@ -3901,7 +3934,7 @@ const App = (() => {
     </div>`;
 
     // Sync section
-    html += `<div class="section">
+    html += `<div class="section" data-settings-section="firebase sync">
       <div class="section-header"><span class="section-title">Firebase Sync</span></div>
       <div class="card">
         <div class="setting-row">
@@ -3922,7 +3955,7 @@ const App = (() => {
     </div>`;
 
     // Timer settings
-    html += `<div class="section">
+    html += `<div class="section" data-settings-section="timer defaults">
       <div class="section-header"><span class="section-title">Timer Defaults</span></div>
       <div class="card">
         <div class="setting-row">
@@ -3949,7 +3982,7 @@ const App = (() => {
     </div>`;
 
     // Health + quick log
-    html += `<div class="section">
+    html += `<div class="section" data-settings-section="health & quick log">
       <div class="section-header"><span class="section-title">Health & Quick Log</span></div>
       <div class="card">
         <div class="setting-row">
@@ -3975,7 +4008,7 @@ const App = (() => {
       ['search', 'Search'],
       ['stopTimers', 'Stop all timers'],
     ];
-    html += `<div class="section">
+    html += `<div class="section" data-settings-section="hotkeys">
       <div class="section-header"><span class="section-title">Hotkeys</span>
         <span class="text-xs text-faint">single keys · never fire while typing</span>
       </div>
@@ -3991,7 +4024,7 @@ const App = (() => {
     </div>`;
 
     // Data management
-    html += `<div class="section">
+    html += `<div class="section" data-settings-section="data">
       <div class="section-header"><span class="section-title">Data</span></div>
       <div class="card">
         <div class="setting-row">
@@ -4011,10 +4044,27 @@ const App = (() => {
           <button class="btn btn-secondary btn-sm" onclick="App.viewArchive()">${icon('archive', 14)}View</button>
         </div>
         <div class="setting-row">
-          <div><div class="setting-label" style="color:var(--error)">Reset All Data</div><div class="setting-desc">Delete everything and start fresh</div></div>
-          <button class="btn btn-danger btn-sm" onclick="App.confirmReset()">${icon('trash-2', 14)}Reset</button>
+          <div><div class="setting-label">Trash</div><div class="setting-desc">${State.getTrash().length} deleted item${State.getTrash().length === 1 ? '' : 's'} — restorable for ${State.TRASH_DAYS} days</div></div>
+          <button class="btn btn-secondary btn-sm" onclick="App.openTrash()">${icon('trash-2', 14)}Open</button>
         </div>
       </div>
+    </div>`;
+
+    // Destructive actions, behind a disclosure of their own. Reset used to sit
+    // at the bottom of the same card as Export, one row below a button people
+    // press regularly, reachable by accident on the way past.
+    html += `<div class="section" data-settings-section="danger reset erase delete everything">
+      <details class="danger-zone">
+        <summary>${icon('alert-triangle', 14)}Things you cannot undo</summary>
+        <div class="card" style="margin-top:var(--space-2);">
+          <div class="setting-row">
+            <div><div class="setting-label" style="color:var(--error)">Reset all data</div>
+              <div class="setting-desc">Deletes every project, task, log and planner block on this device.
+                Export a backup first — this one is not in the trash and not undoable.</div></div>
+            <button class="btn btn-danger btn-sm" onclick="App.confirmReset()">${icon('trash-2', 14)}Reset</button>
+          </div>
+        </div>
+      </details>
     </div>`;
 
     // About
@@ -4752,12 +4802,55 @@ const App = (() => {
           Reconnect re-reads the server and reconciles. Force Reload clears this
           app's cached files and fetches them again — use it when a fix has
           shipped but the old version is still running.
-        </p>` : ''}
+        </p>
+        ${syncActivityHtml()}` : ''}
     `, [
       `<button class="btn btn-secondary" onclick="App.closeModal()">Cancel</button>`,
       settings.sync.connected ? `<button class="btn btn-danger" onclick="App.disconnectSync()">Disconnect</button>` : '',
       `<button class="btn btn-primary" onclick="App.connectSync()">${configured ? 'Save & Connect' : 'Connect'}</button>`,
     ]);
+  }
+
+  // What this tab has seen sync do. Not stored and not synced — it is a record
+  // of this session, which is what you want when something has just gone
+  // wrong and the console has already scrolled past it.
+  const SYNC_EVENT_META = {
+    online:   { icon: 'plug', label: 'Connected' },
+    offline:  { icon: 'plug-zap', label: 'Disconnected' },
+    push:     { icon: 'upload', label: 'Pushed' },
+    adopt:    { icon: 'download', label: 'Received' },
+    conflict: { icon: 'git-merge', label: 'Conflict' },
+    resolve:  { icon: 'check', label: 'Resolved' },
+    error:    { icon: 'alert-triangle', label: 'Failed' },
+  };
+
+  function syncActivityHtml() {
+    if (typeof Sync === 'undefined' || !Sync.getActivity) return '';
+    const events = Sync.getActivity();
+    if (!events.length) {
+      return `<details class="sync-log"><summary class="text-xs text-faint">Activity</summary>
+        <p class="text-xs text-faint" style="margin:var(--space-2) 0 0;">Nothing has synced in this session yet.</p></details>`;
+    }
+    const when = (t) => {
+      const secs = Math.max(0, Math.round((Date.now() - t) / 1000));
+      if (secs < 60) return secs + 's ago';
+      if (secs < 3600) return Math.round(secs / 60) + 'm ago';
+      return Math.round(secs / 3600) + 'h ago';
+    };
+    return `<details class="sync-log">
+      <summary class="text-xs text-faint">Activity — ${events.length} event${events.length === 1 ? '' : 's'} this session</summary>
+      <div class="sync-log-list">
+        ${events.slice(0, 25).map(e => {
+          const meta = SYNC_EVENT_META[e.kind] || { icon: 'dot', label: e.kind };
+          return `<div class="sync-log-row ${e.kind === 'error' || e.kind === 'conflict' ? 'bad' : ''}">
+            ${icon(meta.icon, 12)}
+            <span class="slr-label">${escHtml(meta.label)}</span>
+            <span class="slr-detail truncate">${escHtml(e.detail || '')}</span>
+            <span class="slr-when">${escHtml(when(e.at))}</span>
+          </div>`;
+        }).join('')}
+      </div>
+    </details>`;
   }
 
   // Mirrors Cade.txt's Connection actions: drop and re-establish, so a stalled
@@ -4871,6 +4964,205 @@ const App = (() => {
       if (again) { again.focus(); quickAddPreview(); }
     }, 0);
     toast(created.summary ? `Added — ${created.summary}` : 'Added', { undo: true });
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // WEEKLY REVIEW
+  // ═══════════════════════════════════════════════════════════
+  // The week digest exists as a strip of numbers on Insights. This is the
+  // moment: what moved, what stalled, where the hours went, and what you
+  // kept carrying — the four questions a weekly review is actually for.
+  function weeklyFacts() {
+    const days = [...Array(7)].map((_, i) => offsetDateStr(-i));
+    const inWeek = (iso) => days.includes(String(iso || '').slice(0, 10));
+    const entries = State.getEntries({ includeArchived: true });
+
+    const finished = entries.filter(e => e.completed && inWeek(e.completedAt));
+    const created = entries.filter(e => inWeek(e.createdAt));
+
+    // Where the hours went, by project.
+    const byProject = new Map();
+    days.forEach(d => State.getLogs({ type: 'time_session', date: d }).forEach(l => {
+      const e = l.entryId ? State.getEntry(l.entryId) : null;
+      const pid = e ? (State.entryProjectIds(e)[0] || null) : null;
+      byProject.set(pid, (byProject.get(pid) || 0) + (l.value || 0));
+    }));
+    const hours = [...byProject.entries()]
+      .map(([pid, secs]) => ({ name: pid ? (State.getProject(pid) || {}).name || 'Deleted project' : 'No project', secs }))
+      .sort((a, b) => b.secs - a.secs);
+    const totalSecs = hours.reduce((s, h) => s + h.secs, 0);
+
+    // Projects that finished something, and projects that did not but have
+    // open work — "stalled" only means anything with work outstanding.
+    const movedIds = new Set();
+    finished.forEach(e => State.entryProjectIds(e).forEach(id => movedIds.add(id)));
+    const stalled = State.getProjects().filter(p =>
+      !movedIds.has(p.id) &&
+      State.getEntries({ type: 'task', completed: false }).some(t => State.entryProjectIds(t).includes(p.id)));
+
+    const carried = State.getEntries({ type: 'task', completed: false })
+      .map(t => ({ t, days: carriedDays(t) }))
+      .filter(x => x.days >= 3)
+      .sort((a, b) => b.days - a.days);
+
+    const moods = days.map(d => State.getLogs({ type: 'emotion', date: d }))
+      .flat().map(l => Number(l.value)).filter(Number.isFinite);
+    const avgMood = moods.length ? moods.reduce((a, c) => a + c, 0) / moods.length : null;
+
+    const habits = State.getEntries({ type: 'habit' });
+    const habitRate = habits.length
+      ? Math.round(days.reduce((sum, d) => sum + habits.filter(h =>
+          State.isHabitScheduledOn(h.id, d) && State.habitStatusOn(h.id, d) === 'done').length, 0) /
+          Math.max(1, days.reduce((sum, d) => sum + habits.filter(h => State.isHabitScheduledOn(h.id, d)).length, 0)) * 100)
+      : null;
+
+    return { days, finished, created, hours, totalSecs, movedIds, stalled, carried, avgMood, habitRate };
+  }
+
+  function openWeeklyReview() {
+    const f = weeklyFacts();
+    const moved = State.getProjects().filter(p => f.movedIds.has(p.id));
+    const pct = (secs) => (f.totalSecs ? Math.round(secs / f.totalSecs * 100) : 0);
+
+    showModal('This week', `
+      <p class="text-sm text-muted" style="line-height:1.7;margin-bottom:var(--space-3);">
+        ${f.finished.length
+          ? `${f.finished.length} finished, ${f.created.length} added${f.totalSecs ? `, ${Timers.formatTime(f.totalSecs)} tracked` : ''}.`
+          : 'Nothing was marked finished this week.'}
+        ${f.habitRate !== null ? ` Habits ran at ${f.habitRate}%.` : ''}
+        ${f.avgMood !== null ? ` Mood averaged ${f.avgMood.toFixed(1)} out of 5.` : ''}
+      </p>
+
+      ${moved.length ? `<div class="section">
+        <div class="section-header"><span class="section-title">What moved</span>
+          <span class="stat-label">${moved.length}</span></div>
+        <div class="shutdown-list">${moved.map(p => {
+          const n = f.finished.filter(e => State.entryProjectIds(e).includes(p.id)).length;
+          return `<div class="shutdown-row"><span class="proj-dot" style="background:${p.color}"></span>
+            <span class="truncate" style="flex:1">${escHtml(p.name)}</span>
+            <span class="text-xs text-faint">${n} done</span></div>`;
+        }).join('')}</div>
+      </div>` : ''}
+
+      ${f.stalled.length ? `<div class="section">
+        <div class="section-header"><span class="section-title">What stalled</span>
+          <span class="stat-label">${f.stalled.length}</span></div>
+        <p class="text-xs text-faint" style="margin-bottom:var(--space-2);">Open work, nothing finished in seven days.</p>
+        <div class="shutdown-list">${f.stalled.slice(0, 8).map(p =>
+          `<div class="shutdown-row"><span class="proj-dot" style="background:${p.color}"></span>
+            <span class="truncate" style="flex:1">${escHtml(p.name)}</span>
+            <button class="btn btn-ghost btn-sm" onclick="App.closeModal();App.revealProject('${p.id}');App.switchTab('projects')">Open</button>
+          </div>`).join('')}</div>
+      </div>` : ''}
+
+      ${f.hours.length ? `<div class="section">
+        <div class="section-header"><span class="section-title">Where the hours went</span>
+          <span class="stat-label">${Timers.formatTime(f.totalSecs)}</span></div>
+        <div class="week-bars">${f.hours.slice(0, 6).map(h => `
+          <div class="week-bar-row">
+            <span class="week-bar-label truncate">${escHtml(h.name)}</span>
+            <span class="week-bar"><span class="week-bar-fill" style="width:${pct(h.secs)}%"></span></span>
+            <span class="week-bar-val">${Timers.formatTime(h.secs)}</span>
+          </div>`).join('')}</div>
+      </div>` : ''}
+
+      ${f.carried.length ? `<div class="section">
+        <div class="section-header"><span class="section-title">Kept carrying</span>
+          <span class="stat-label">${f.carried.length}</span></div>
+        <div class="shutdown-list">${f.carried.slice(0, 8).map(({ t, days }) =>
+          `<div class="shutdown-row">
+            <span class="truncate" style="flex:1">${escHtml(t.title)}</span>
+            <span class="pill pill-orange">${days} days</span>
+          </div>`).join('')}</div>
+        <p class="text-xs text-faint" style="margin-top:var(--space-2);line-height:1.6;">
+          Three days or more on the list. Usually a sign the task is really several,
+          or that it was never going to happen.
+        </p>
+      </div>` : ''}
+    `, [`<button class="btn btn-secondary" onclick="App.closeModal()">Close</button>`]);
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // RECORDS
+  // ═══════════════════════════════════════════════════════════
+  // Cheap to compute from data already kept, and the only part of a personal
+  // system that ever feels like a reward.
+  function computeRecords() {
+    const entries = State.getEntries({ includeArchived: true });
+    const done = entries.filter(e => e.completed && e.completedAt);
+    const byDay = new Map();
+    done.forEach(e => {
+      const d = String(e.completedAt).slice(0, 10);
+      byDay.set(d, (byDay.get(d) || 0) + 1);
+    });
+    const bestDay = [...byDay.entries()].sort((a, b) => b[1] - a[1])[0] || null;
+
+    const byWeek = new Map();
+    byDay.forEach((n, d) => {
+      const monday = new Date(d + 'T00:00');
+      monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
+      const k = State.dateStr(monday);
+      byWeek.set(k, (byWeek.get(k) || 0) + n);
+    });
+    const bestWeek = [...byWeek.entries()].sort((a, b) => b[1] - a[1])[0] || null;
+
+    // The longest run of consecutive days with at least one completion.
+    const dayList = [...byDay.keys()].sort();
+    let bestStreak = 0, run = 0, prev = null;
+    dayList.forEach(d => {
+      run = (prev && (Date.parse(d) - Date.parse(prev)) === 86400000) ? run + 1 : 1;
+      prev = d;
+      if (run > bestStreak) bestStreak = run;
+    });
+
+    const habitBest = State.getEntries({ type: 'habit' })
+      .map(h => ({ title: h.title, streak: (State.calculateStreak(h.id) || {}).best || 0 }))
+      .sort((a, b) => b.streak - a.streak)[0] || null;
+
+    const totalSecs = State.getLogs({ type: 'time_session' }).reduce((s, l) => s + (l.value || 0), 0);
+    const firstDone = done.map(e => e.completedAt).sort()[0] || null;
+
+    return {
+      total: done.length, bestDay, bestWeek, bestStreak, habitBest, totalSecs, firstDone,
+      activeDays: byDay.size,
+    };
+  }
+
+  const MILESTONES = [1, 10, 25, 50, 100, 250, 500, 1000, 2500];
+
+  function openRecords() {
+    const r = computeRecords();
+    const next = MILESTONES.find(m => m > r.total);
+    const fmtDay = (d) => new Date(d + 'T00:00').toLocaleDateString('en', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+    const row = (label, value, note) => `<div class="rec-row">
+      <span class="rec-label">${escHtml(label)}</span>
+      <span class="rec-value">${value}</span>
+      ${note ? `<span class="rec-note">${escHtml(note)}</span>` : ''}
+    </div>`;
+
+    showModal('Records', r.total === 0 ? `
+      <p class="text-sm text-muted" style="line-height:1.7;">
+        Nothing finished yet, so there is nothing to beat. Come back once you have.
+      </p>` : `
+      <div class="rec-list">
+        ${row('Finished, all time', r.total, r.firstDone ? 'since ' + fmtDay(String(r.firstDone).slice(0, 10)) : '')}
+        ${r.bestDay ? row('Best day', r.bestDay[1] + ' tasks', fmtDay(r.bestDay[0])) : ''}
+        ${r.bestWeek ? row('Best week', r.bestWeek[1] + ' tasks', 'week of ' + fmtDay(r.bestWeek[0])) : ''}
+        ${row('Longest run', r.bestStreak + ' day' + (r.bestStreak === 1 ? '' : 's'), 'finishing something every day')}
+        ${row('Days with something done', r.activeDays, '')}
+        ${r.habitBest && r.habitBest.streak ? row('Longest habit streak', r.habitBest.streak + ' days', r.habitBest.title) : ''}
+        ${r.totalSecs ? row('Time tracked', Timers.formatTime(r.totalSecs), 'all time') : ''}
+      </div>
+      ${next ? `<div class="rec-next">
+        <div class="rec-next-head">
+          <span>Next milestone</span><span class="rec-next-count">${r.total} / ${next}</span>
+        </div>
+        <span class="progress-bar"><span class="progress-fill" style="width:${Math.round(r.total / next * 100)}%"></span></span>
+        <p class="text-xs text-faint" style="margin-top:var(--space-2);">
+          ${next - r.total} more to reach ${next}.
+        </p>
+      </div>` : ''}
+    `, [`<button class="btn btn-secondary" onclick="App.closeModal()">Close</button>`]);
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -7389,9 +7681,9 @@ const App = (() => {
     openManageTags, cycleTagColor, renameTag, setTagProject, deleteTagPrompt, createTagFromManager,
     openSearch, runSearch, searchGo, openPalette, toast, undo, redo,
     quickAddSubmit, quickAddPreview, quickAddKey,
-    setAccent, openHistoryDay, celebrate, updateAppSetting, autoGrow,
+    setAccent, openHistoryDay, celebrate, updateAppSetting, autoGrow, setSettingsFilter,
     checkReminders, enableNotifications,
-    openDailyReview, reviewAction, openShutdown, shutdownPushAll,
+    openDailyReview, reviewAction, openShutdown, shutdownPushAll, openWeeklyReview, openRecords,
     openAutoPlan, confirmAutoPlan, openWhyThis,
     openPasteImport, previewPasteImport, runPasteImport,
     hardRefresh, setPixelsMode, renderAutoPlanPreview,

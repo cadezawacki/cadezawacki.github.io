@@ -268,8 +268,10 @@ const Sync = (() => {
         if (isLive && !connected) {
           connected = true;
           connecting = false;
+          note('online', 'connected as ' + deviceName(clientId));
           onReconnect();
         } else if (!isLive) {
+          if (connected) note('offline', 'lost the connection');
           connected = false;
           // Losing the connection invalidates the reconcile: the server can
           // move while we are away, so the next onReconnect() has to compare
@@ -417,11 +419,13 @@ const Sync = (() => {
       });
 
       lastSyncedVersion++;
+      note('push', 'sent this device\u2019s copy', { version: lastSyncedVersion });
       updateStatus();
       return true;
     } catch (e) {
       lastSyncedSnapshot = prevSnapshot; // write failed — we are NOT synced
       console.error('Push error:', e);
+      note('error', 'push failed: ' + (e && e.message ? e.message : 'unknown'));
       return false;
     } finally {
       pushing = false;
@@ -568,12 +572,14 @@ const Sync = (() => {
     if (serverVersion > 0 && serverVersion <= lastSyncedVersion) return;
 
     if (verdict === 'adopt') {
+      note('adopt', 'took a change from ' + deviceName(node.meta && node.meta.clientId), { version: serverVersion });
       State.setRawData(payload);
       // store the NORMALIZED form — what getRawData now returns — so the
       // followup schedulePush sees "nothing changed" and stays quiet
       lastSyncedSnapshot = structuredClone(localData());
       lastSyncedVersion = serverVersion || lastSyncedVersion;
     } else if (verdict === 'conflict') {
+      note('conflict', 'diverged from ' + deviceName(node.meta && node.meta.clientId), { version: serverVersion });
       showConflictModal(localData(), payload);
     }
     // 'defer': our queued push will overwrite shortly — do nothing
@@ -653,10 +659,40 @@ const Sync = (() => {
       return { ok: false, reason: 'unknown-resolution' };
     }
     setupLiveListener();
+    note('resolve', 'conflict answered: ' + resolution, { pushed });
     // The local half always landed; `pushed` says whether the server has it
     // yet. The caller words its confirmation accordingly instead of claiming
     // a sync that did not happen.
     return { ok: true, resolution, pushed };
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // ACTIVITY LOG
+  // ═══════════════════════════════════════════════════════════
+  // What synced, when, and which way. When sync misbehaved the only evidence
+  // was the console — and by the time anyone thought to open it, the events
+  // had scrolled away. Device-local and in memory: this is a record of what
+  // THIS tab saw, not another thing to synchronise.
+  const ACTIVITY_LIMIT = 60;
+  const activity = [];
+
+  function note(kind, detail, extra) {
+    activity.unshift(Object.assign({ at: Date.now(), kind, detail: detail || '' }, extra || {}));
+    if (activity.length > ACTIVITY_LIMIT) activity.length = ACTIVITY_LIMIT;
+    try { window.dispatchEvent(new CustomEvent('sync-activity')); } catch (e) {}
+  }
+
+  function getActivity() { return activity.slice(); }
+
+  // A short, stable name for a client id, so the log reads as "the other
+  // device" rather than a UUID. Same id always gets the same name.
+  const DEVICE_WORDS = ['Ash', 'Birch', 'Cedar', 'Elm', 'Fir', 'Hazel', 'Larch', 'Maple', 'Oak', 'Pine', 'Rowan', 'Willow'];
+  function deviceName(id) {
+    if (!id) return 'unknown device';
+    if (id === clientId) return 'this device';
+    let h = 0;
+    for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+    return DEVICE_WORDS[h % DEVICE_WORDS.length];
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -713,6 +749,7 @@ const Sync = (() => {
   return {
     connect, disconnect, schedulePush, pushLocal, resolveConflict,
     isConnected, updateStatus, setConflictWaiting, autoConnect, eraseRemote,
+    getActivity, deviceName,
     isReconciled, isConfigured,
     encrypt, decrypt, classifyIncoming, stableStringify, mergeData, // exposed for testing
     // The conflict screen previews the merge it is about to run.
