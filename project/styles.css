@@ -811,6 +811,16 @@ body.has-subtabs .main-content { padding-top: calc(var(--menubar-height) + var(-
   text-decoration: line-through;
   color: var(--text-muted);
 }
+/* The project swatch now rides with the title instead of claiming a row.
+   .proj-dot sets width/height but no display; inside .entry-meta it gets them
+   for free as a flex item, and in running text it would collapse to nothing
+   without this. */
+.entry-title .proj-dot {
+  display: inline-block;
+  margin-right: 6px;
+  vertical-align: middle;
+}
+
 
 /* Checkbox / completion toggle */
 .check-toggle {

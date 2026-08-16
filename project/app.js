@@ -789,9 +789,15 @@ const App = (() => {
     // anything finished today, struck through at the bottom. Tasks completed
     // on an earlier day are gone from here entirely.
     const priOrder = { urgent: 0, high: 1, medium: 2, low: 3 };
-    const todayTasks = hideStaleCompletions(tasks.filter(t =>
-      t.dueDate === today || t.scheduledDate === today || (!t.dueDate && !t.scheduledDate)
-    )).sort((a, b) => {
+    // Work finished before today is hidden here by default and revealed by
+    // the toggle in the section header. Deliberately its OWN switch, not the
+    // project page's: opting into a deep-dive on one project's history should
+    // not quietly refill the homepage with months of finished work.
+    const showDone = !!State.getSettings().showCompletedOnToday;
+    const inToday = tasks.filter(t =>
+      t.dueDate === today || t.scheduledDate === today || (!t.dueDate && !t.scheduledDate));
+    const staleDone = inToday.filter(t => t.completed && !finishedToday(t));
+    const todayTasks = (showDone ? inToday : hideStaleCompletions(inToday)).sort((a, b) => {
       if (a.completed !== b.completed) return a.completed ? 1 : -1; // done → bottom
       return (priOrder[a.priority] || 2) - (priOrder[b.priority] || 2);
     });
@@ -832,7 +838,14 @@ const App = (() => {
       <div class="page-header">
         <div>
           <h1 class="page-title">${new Date().toLocaleDateString('en', { weekday: 'long', month: 'long', day: 'numeric' })}</h1>
-          <p class="page-subtitle">${scoped ? escHtml(scopeLabel()) + ' · ' : ''}${openToday.length + overdueTasks.length} to do · ${habits.filter(h => State.isHabitScheduledOn(h.id, today) && !State.habitStatusOn(h.id, today)).length} habits pending</p>
+          <p class="page-subtitle">${[
+            scoped ? escHtml(scopeLabel()) : '',
+            `${openToday.length + overdueTasks.length} to do`,
+            doneToday ? `${doneToday} done` : '',
+            (() => { const pend = habits.filter(h => State.isHabitScheduledOn(h.id, today) && !State.habitStatusOn(h.id, today)).length;
+                     return pend ? `${pend} habit${pend > 1 ? 's' : ''} pending` : ''; })(),
+            focusSeconds > 0 ? `${Timers.formatTime(focusSeconds)} focused` : '',
+          ].filter(Boolean).join(' · ')}</p>
         </div>
         <div style="display:flex;gap:var(--space-2);">
           ${overdueTasks.length > 0 ? `<button class="btn btn-secondary review-btn" onclick="App.openDailyReview()" title="Triage everything overdue — one decision per item">${icon('list-todo', 16)}Review<span class="review-count">${overdueTasks.length}</span></button>` : ''}
@@ -841,21 +854,10 @@ const App = (() => {
       </div>
     `;
 
-    // Stats row
-    html += `<div class="grid-3 section">
-      <div class="card stat-card">
-        <span class="stat-label">Done Today</span>
-        <span class="stat-value">${doneToday} / ${openToday.length + overdueTasks.length + doneToday}</span>
-      </div>
-      <div class="card stat-card">
-        <span class="stat-label">Habits Today</span>
-        <span class="stat-value">${habits.filter(h => State.isHabitDoneToday(h.id)).length} / ${habits.filter(h => State.isHabitScheduledOn(h.id, today)).length}</span>
-      </div>
-      <div class="card stat-card">
-        <span class="stat-label">Focus Time</span>
-        <span class="stat-value">${focusSeconds > 0 ? Timers.formatTime(focusSeconds) : '—'}</span>
-      </div>
-    </div>`;
+    // The three stat tiles that used to sit here said the same thing as the
+    // subtitle immediately above them, in a fifth of the first screen, with a
+    // "Focus Time —" tile that is empty until a timer has run. The numbers
+    // are in the subtitle; the tiles are gone.
 
     // Next best task
     html += `
@@ -893,7 +895,15 @@ const App = (() => {
 
     // Today's tasks
     html += `<div class="section">
-      <div class="section-header"><span class="section-title">Today's Tasks</span>${sectionToggle('todayTasks')}</div>`;
+      <div class="section-header"><span class="section-title">Today's Tasks</span>
+        <span style="display:inline-flex;align-items:center;gap:var(--space-1);margin-left:auto;">
+          ${(staleDone.length || showDone) ? `<button class="btn btn-ghost btn-sm" onclick="App.toggleShowCompletedToday()"
+            title="${showDone ? 'Hide work finished before today' : 'Show work finished before today'}">
+            ${icon(showDone ? 'eye-off' : 'eye', 14)}${showDone ? 'Hide done' : `Show done${staleDone.length ? ` (${staleDone.length})` : ''}`}
+          </button>` : ''}
+          ${sectionToggle('todayTasks')}
+        </span>
+      </div>`;
     if (isCollapsed('todayTasks')) {
       html += `</div>`;
     } else {
@@ -939,7 +949,19 @@ const App = (() => {
     }
 
     // Day planner
-    html += renderPlannerSection();
+    // The planner grid is sixteen hours of empty rows until something is in
+    // it — half the page, below the tasks, on most days. It keeps its own tab;
+    // Today shows it only once the day actually has blocks.
+    if (State.getPlannerBlocks({ date: today }).length) {
+      html += renderPlannerSection();
+    } else {
+      html += `<div class="section">
+        <div class="section-header"><span class="section-title">Day Planner</span></div>
+        <button class="btn btn-ghost btn-sm" onclick="App.switchTab('planner')">
+          ${icon('calendar-plus', 14)}Nothing scheduled — open the planner
+        </button>
+      </div>`;
+    }
 
     // Day mood widget (food/calorie tracking lives on the Health tab)
     html += `<div class="section">
@@ -1476,17 +1498,24 @@ const App = (() => {
     const canTrack = entry.type === 'task' && !entry.completed;
 
     let metaHtml = '';
-    // Multi-project entries show a dot per membership (up to 3)
+    // Multi-project entries show a dot per membership (up to 3). Kept apart
+    // from the pills: on a card whose only other meta was a dot, the dot was
+    // taking a whole second row to say what a swatch beside the title says.
+    let dotsHtml = '';
     const pids = State.entryProjectIds(entry);
     pids.slice(0, 3).forEach(pid => {
       const pr = State.getProject(pid);
-      if (pr) metaHtml += `<span class="proj-dot" style="background:${pr.color}" title="${pr.name}"></span>`;
+      if (pr) dotsHtml += `<span class="proj-dot" style="background:${pr.color}" title="${escHtml(pr.name)}"></span>`;
     });
-    if (pids.length > 3) metaHtml += `<span class="text-xs text-faint">+${pids.length - 3}</span>`;
-    if (entry.priority && entry.priority !== 'low') {
+    if (pids.length > 3) dotsHtml += `<span class="text-xs text-faint">+${pids.length - 3}</span>`;
+    // Only what is NOT the default. Every task is medium priority and medium
+    // effort unless someone says otherwise, so badging those put the same two
+    // chips on every row — which is the same as having no chips, except it
+    // also buried the rows that were genuinely urgent.
+    if (entry.priority && entry.priority !== 'medium' && entry.priority !== 'low') {
       metaHtml += `<span class="pill pill-${priorityColor(entry.priority)}">${entry.priority}</span>`;
     }
-    if (entry.effort) {
+    if (entry.effort && entry.effort !== 'medium') {
       metaHtml += `<span class="pill">${effortLabel(entry.effort)}</span>`;
     }
     if (entry.estimateMinutes) {
@@ -1512,7 +1541,7 @@ const App = (() => {
         metaHtml += `<span class="pill ${colorCls}">#${escHtml(tag)}</span>`;
       });
     }
-    if (entry.type === 'habit' && streakInfo) {
+    if (entry.type === 'habit' && streakInfo && streakInfo.current > 0) {
       metaHtml += `<span class="streak-display"><i data-lucide="flame"></i>${streakInfo.current}</span>`;
     }
     if (entry.type === 'habit') {
@@ -1534,7 +1563,7 @@ const App = (() => {
           <i data-lucide="check"></i>
         </div>
         <div class="entry-body">
-          <div class="entry-title">${escHtml(entry.title)}</div>
+          <div class="entry-title">${dotsHtml}${escHtml(entry.title)}</div>
           ${metaHtml ? `<div class="entry-meta">${metaHtml}</div>` : ''}
           ${entry.type === 'goal' && entry.targetValue ? `
             <div class="progress-bar mt-2">
@@ -1804,6 +1833,11 @@ const App = (() => {
 
   function setCompletedSort(key) {
     State.updateSettings({ completedSort: key });
+    render();
+  }
+
+  function toggleShowCompletedToday() {
+    State.updateSettings({ showCompletedOnToday: !State.getSettings().showCompletedOnToday });
     render();
   }
 
@@ -4006,7 +4040,25 @@ const App = (() => {
     return `${'– '.repeat(p.depth || 0)}${escHtml(p.name)}`;
   }
 
-  function openProjectModal(id = null) {
+  // A modal opened FROM another one records how to get back. Editing three
+  // projects used to mean opening Manage Projects three times, because every
+  // save, archive, delete and Cancel dropped you out to the page instead of
+  // to the list you started from.
+  // Named rather than a function reference: this travels through an onclick
+  // attribute, where only strings survive.
+  const MODAL_RETURNS = { manage: () => openManageProjects() };
+  let modalReturn = null;
+
+  function dismissModal() {
+    const back = modalReturn;
+    modalReturn = null;
+    closeModal();
+    const reopen = MODAL_RETURNS[back];
+    if (reopen) reopen();
+  }
+
+  function openProjectModal(id = null, opts = {}) {
+    modalReturn = opts.backTo || null;
     editingProjectId = id;
     const proj = id ? State.getProject(id) : null;
     // Reset selection state on EVERY open — stale values from a previous
@@ -4044,7 +4096,7 @@ const App = (() => {
       id ? `<button class="btn btn-danger" onclick="App.deleteProjectAction('${id}')">Delete</button>
             <button class="btn btn-secondary" onclick="App.archiveProjectAction('${id}')">${icon('archive', 14)}Archive</button>
             <div style="flex:1"></div>` : '',
-      `<button class="btn btn-secondary" onclick="App.closeModal()">Cancel</button>`,
+      `<button class="btn btn-secondary" onclick="App.dismissModal()">Cancel</button>`,
       `<button class="btn btn-primary" onclick="App.saveProject()">${id ? 'Save' : 'Create'}</button>`,
     ]);
   }
@@ -4095,20 +4147,41 @@ const App = (() => {
       }
     }
     editingProjectId = null;
-    closeModal();
     render();
+    dismissModal();
+  }
+
+  // Archiving takes the sub-projects and their tasks with it, and quietens
+  // the linked Cade.txt rooms, so the whole thing goes away in both apps
+  // rather than leaving the children behind as loose top-level projects.
+  // What a subtree contains, counted before the archive so the summary
+  // describes what was actually taken.
+  function subtreeFacts(id) {
+    const ids = new Set(State.getProjectSubtreeIds(id));
+    const projects = State.getProjects({ includeArchived: true }).filter(p => ids.has(p.id));
+    return {
+      ids,
+      rooms: projects.filter(p => p.txtRoom).map(p => p.txtRoom),
+      subprojects: projects.length - 1,
+      openTasks: State.getEntries({ includeArchived: true }).filter(e =>
+        !e.archived && State.entryProjectIds(e).some(pid => ids.has(pid))).length,
+    };
   }
 
   function archiveProjectAction(id) {
+    const { rooms, subprojects: subtree, openTasks: tasks } = subtreeFacts(id);
     State.archiveProject(id);
+    if (rooms.length && typeof Bridge !== 'undefined') Bridge.archiveRooms(rooms, true).catch(() => {});
     dropNavIfGone(id);
-    toast('Project archived — restore from Settings');
-    closeModal();
+    toast(`Archived${subtree ? `, with ${subtree} sub-project${subtree > 1 ? 's' : ''}` : ''}${tasks ? ` and ${tasks} task${tasks > 1 ? 's' : ''}` : ''} — restore from Manage projects`);
     render();
+    dismissModal();
   }
 
   function unarchiveProjectAction(id) {
+    const { rooms } = subtreeFacts(id);
     State.unarchiveProject(id);
+    if (rooms.length && typeof Bridge !== 'undefined') Bridge.archiveRooms(rooms, false).catch(() => {});
     render();
     openManageProjects();
   }
@@ -4119,18 +4192,19 @@ const App = (() => {
     State.deleteProject(id);
     dropNavIfGone(id);
     toast('Project deleted');
-    closeModal();
     render();
+    dismissModal();
   }
 
   // Settings-side list: archived projects live here for restore
   function openManageProjects() {
+    modalReturn = null;                 // this list IS the destination
     const active = State.getProjects();
     const archived = State.getProjects({ includeArchived: true }).filter(p => p.archived);
     showModal('Manage Projects', `
       <div style="display:flex;flex-direction:column;gap:var(--space-2);">
         ${active.length === 0 ? '<p class="text-xs text-faint">No projects yet.</p>' : active.map(p => `
-          <div class="chain-link" style="justify-content:space-between;cursor:pointer;${p.depth ? `margin-left:${p.depth * 18}px;` : ''}" onclick="App.openProjectModal('${p.id}')">
+          <div class="chain-link" style="justify-content:space-between;cursor:pointer;${p.depth ? `margin-left:${p.depth * 18}px;` : ''}" onclick="App.openProjectModal('${p.id}', { backTo: 'manage' })">
             <span style="display:inline-flex;align-items:center;gap:var(--space-2);">
               ${p.depth ? `<span class="text-faint" style="font-family:var(--font-mono);">└</span>` : ''}
               <span class="proj-dot" style="background:${p.color}"></span>${escHtml(p.name)}
@@ -4155,7 +4229,7 @@ const App = (() => {
         </div>` : ''}
     `, [
       `<button class="btn btn-secondary" onclick="App.closeModal()">Done</button>`,
-      `<button class="btn btn-primary" onclick="App.openProjectModal()">${icon('plus', 14)}New Project</button>`,
+      `<button class="btn btn-primary" onclick="App.openProjectModal(null, { backTo: 'manage' })">${icon('plus', 14)}New Project</button>`,
     ]);
   }
 
@@ -5917,11 +5991,14 @@ const App = (() => {
     closeModal({ force: true });
     render();
     if (typeof Sync !== 'undefined') Sync.updateStatus();
-    toast({
-      local: 'Kept this device — the server now matches it',
-      server: 'Took the server’s copy',
-      merge: 'Merged — nothing was discarded',
-    }[resolution] || 'Conflict resolved');
+    // Only claim the server has it when it actually does.
+    toast(res.pushed === false
+      ? 'Applied here — the server copy will catch up when sync reconnects'
+      : ({
+          local: 'Kept this device — the server now matches it',
+          server: 'Took the server’s copy',
+          merge: 'Merged — nothing was discarded',
+        }[resolution] || 'Conflict resolved'));
   }
 
   // Deferring is allowed, disappearing is not: the conflict stays on the sync
@@ -6347,7 +6424,7 @@ const App = (() => {
     init, render, switchTab, toggleTheme,
     openNewEntry, editEntry, saveEntry, changeEntryType, selectEffort,
     addTag, removeTag, removeTagAt, addTagById,
-    openNewProject, openProjectModal, openManageProjects, selectColor, selectIcon, saveProject,
+    openNewProject, openProjectModal, openManageProjects, dismissModal, selectColor, selectIcon, saveProject,
     archiveProjectAction, unarchiveProjectAction, deleteProjectAction,
     openSyncConfig, connectSync, disconnectSync,
     openQuickLog, setQuickLogTab, openCalorieLog, logCaloriesFromModal, quickAddTask, logEmotion,
@@ -6379,7 +6456,7 @@ const App = (() => {
     openBridgePanel, rescanBridge, openNewSubproject, saveNewSubproject,
     openTimer, stopAllTimers, addScratchFromMenu,
     viewArchive, deleteHistoryLog, editMoodLog, setEditLogEmotion, setEditLogEnergy, saveMoodLog,
-    setTagFilter, openSubproject, toggleShowCompleted, setCompletedSort,
+    setTagFilter, openSubproject, toggleShowCompleted, toggleShowCompletedToday, setCompletedSort,
     selectHabit, toggleHabitCell, cycleHabitCell, exportForLLM,
     onRecurrenceChange, toggleWeekday,
     setInsightsProject, setInsightsEntry,

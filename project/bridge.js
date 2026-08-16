@@ -196,7 +196,11 @@ const Bridge = (() => {
       if (inFence) continue;
       const m = line.match(TODO_LINE_RE);
       if (!m) continue;
-      const title = line.slice(m[0].length).trim();
+      // Strike marks are Cade.txt's rendering of a ticked box, not part of
+      // what the task is called — a title carrying them would show up here as
+      // s̶t̶r̶u̶c̶k̶ ̶t̶e̶x̶t̶ and would stop matching its own line the moment it was
+      // un-ticked over there.
+      const title = unstrike(line.slice(m[0].length)).trim();
       if (!title) continue; // an empty checkbox is a template, not a task
       const base = normalizeKey(title);
       const n = (seen.get(base) || 0) + 1;
@@ -225,8 +229,19 @@ const Bridge = (() => {
   // neither line could tick independently, so repeats carry an occurrence
   // suffix. The separator is a control character no document will contain.
   const DUP_SEP = '\u0000#';
+  // Cade.txt's own toggle draws its strike-through by interleaving U+0336
+  // combining strokes into the line text, and strips them again when the box
+  // is un-ticked. Those are decoration, not content: keeping them in the key
+  // meant ticking a task in txt gave it a new identity, so the bridge saw the
+  // old line disappear and a struck-through one arrive, and forked the task
+  // in two. Stripped from keys AND titles, so neither carries them.
+  const STRIKE_MARKS = /[\u0335\u0336]/g;
+  function unstrike(text) {
+    return String(text == null ? '' : text).replace(STRIKE_MARKS, '');
+  }
+
   function normalizeKey(title) {
-    return String(title).trim().replace(/\s+/g, ' ').toLowerCase();
+    return unstrike(title).trim().replace(/\s+/g, ' ').toLowerCase();
   }
 
   function hasTodoList(text) {
@@ -361,8 +376,26 @@ const Bridge = (() => {
   // ═══════════════════════════════════════════════════════════
   // FIREBASE (txt's credentials — the bridge never asks for its own)
   // ═══════════════════════════════════════════════════════════
+  // Cade.txt's own credentials when it has been set up in this browser.
+  //
+  // When it has NOT, fall back to the ones the user gave Cade.project. The
+  // two apps share one database and, in every real setup, one passphrase —
+  // and without a fallback a browser that only ever ran Cade.project could
+  // not reach the shared room config at all, which is precisely the second
+  // browser where the link looked broken. This only ever READS Cade.txt's
+  // keys; it never writes them, so txt's own configuration is untouched.
   function creds() {
-    return { url: raw(FB_URL_KEY) || '', key: raw(SYNC_KEY) || '' };
+    const url = raw(FB_URL_KEY) || '';
+    const key = raw(SYNC_KEY) || '';
+    if (url && key) return { url, key, from: 'txt' };
+    try {
+      const s = (State.getSettings() || {}).sync || {};
+      // `paused` means a local reset deliberately cut this device off.
+      if (s.databaseUrl && s.passphrase && !s.paused) {
+        return { url: s.databaseUrl, key: s.passphrase, from: 'project' };
+      }
+    } catch (e) { /* State not ready — fall through */ }
+    return { url, key, from: 'none' };
   }
 
   function db() {
@@ -707,14 +740,20 @@ const Bridge = (() => {
   // copy is pulled and merged first — additive for rooms, meta and
   // tombstones — so a write from here can never delete another device's
   // room just because this device hadn't heard about it yet.
-  async function publishWorkspaceBlob() {
+  // `publish` false makes this a pure PULL: read the shared config, merge it
+  // into what this device holds, and stop. That is what a browser where
+  // Cade.txt has never run needs — it has no rooms of its own to contribute
+  // and must not overwrite the server with its emptiness, but it still has to
+  // learn the room list before anything else in the bridge can work.
+  async function syncWorkspaceBlob({ publish = true } = {}) {
     const { key } = creds();
     const database = db();
-    if (!key || !database) return false;
+    if (!key || !database) return { ok: false, contributed: false };
     try {
       const fp = await keyFingerprint(key);
       const ref = database.ref(wsBlobPath(fp));
       let remote = null;
+      let remoteTs = 0;
       try {
         const snap = await ref.once('value');
         const val = snap.val();
@@ -730,7 +769,15 @@ const Bridge = (() => {
       const workspaces = getWorkspaces();
       const tomb = getTombstones();
 
+      // What the server already knows, captured before the merge folds the
+      // two sides together and the distinction is lost.
+      const knownRooms = new Set(
+        (remote && Array.isArray(remote.rooms)) ? remote.rooms.filter(r => typeof r === 'string') : []);
+      const knownWorkspaces = new Set(
+        (remote && Array.isArray(remote.workspaces)) ? remote.workspaces.filter(w => w && w.id).map(w => w.id) : []);
+
       if (remote && typeof remote === 'object') {
+        remoteTs = Number(remote.ts) || 0;
         (Array.isArray(remote.rooms) ? remote.rooms : []).forEach(r => {
           if (typeof r === 'string' && r && !rooms.includes(r)) rooms.push(r);
         });
@@ -789,25 +836,64 @@ const Bridge = (() => {
         });
       }
 
+      // Does this device know rooms or workspaces the shared config does not?
+      // If so a pull alone leaves them stranded here, invisible to every
+      // other browser — which is what "it only works in one window" was.
+      const contributed = rooms.some(r => !knownRooms.has(r)) ||
+        workspaces.some(w => w && w.id && !knownWorkspaces.has(w.id));
+
       const blob = { ts: Date.now(), workspaces, roomWorkspace: membership, rooms, roomMeta: meta, tomb };
-      const encrypted = await encryptText(JSON.stringify(blob), key);
-      if (encrypted.length > WS_BLOB_MAX) {
-        console.warn('Bridge: workspace blob too large — not published');
-        return false;
+      if (publish) {
+        const encrypted = await encryptText(JSON.stringify(blob), key);
+        if (encrypted.length > WS_BLOB_MAX) {
+          console.warn('Bridge: workspace blob too large — not published');
+          return { ok: false, contributed };
+        }
+        await ref.set(encrypted);
       }
-      await ref.set(encrypted);
-      // Keep the merged view locally too, so the next scan sees everything.
+      // Keep the merged view locally either way, so the next scan sees
+      // everything the shared config knows about.
       writeRaw(ROOMS_KEY, JSON.stringify(rooms));
       writeRaw(ROOM_META_KEY, JSON.stringify(meta));
       writeRaw(ROOM_WS_KEY, JSON.stringify(membership));
       writeRaw(WS_KEY, JSON.stringify(workspaces));
       writeRaw(ROOM_TOMB_KEY, JSON.stringify(tomb));
-      writeRaw(WS_TS_KEY, String(blob.ts));
-      return true;
+      // A pull must not claim this device's view is newer than the blob it
+      // just read, or the next publish would push these values back over a
+      // fresher name from elsewhere.
+      writeRaw(WS_TS_KEY, String(publish ? blob.ts : Math.max(remoteTs, parseInt(raw(WS_TS_KEY) || '0', 10))));
+      return { ok: true, contributed };
     } catch (e) {
-      console.warn('Bridge: workspace blob publish failed', e);
-      return false;
+      console.warn('Bridge: workspace blob ' + (publish ? 'publish' : 'pull') + ' failed', e);
+      return { ok: false, contributed: false };
     }
+  }
+
+  const publishWorkspaceBlob = () => syncWorkspaceBlob({ publish: true });
+  const pullWorkspaceBlob = () => syncWorkspaceBlob({ publish: false });
+
+  // Archive (or restore) rooms in the shared config, the way Cade.txt marks
+  // them: a flag plus its own change stamp, so the flag is resolved on its
+  // own recency rather than losing to an unrelated edit elsewhere. Called
+  // when a project is archived here, so its rooms go quiet in txt too.
+  async function archiveRooms(names, archived = true) {
+    const list = (Array.isArray(names) ? names : [names]).filter(Boolean);
+    if (!list.length) return false;
+    const meta = getRoomMeta();
+    const now = Date.now();
+    let touched = false;
+    list.forEach(name => {
+      const m = meta[name] || (meta[name] = {});
+      if (!!m.archived === !!archived) return;
+      m.archived = !!archived;
+      m.archTs = now;
+      touched = true;
+    });
+    if (!touched) return false;
+    writeRaw(ROOM_META_KEY, JSON.stringify(meta));
+    notifyRooms();
+    const res = await publishWorkspaceBlob();
+    return !!(res && res.ok);
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -1381,14 +1467,42 @@ const Bridge = (() => {
   let chainedPasses = 0;
   const HYDRATE_MAX_PASSES = 40;          // 40 × 25 = 1000 rooms, then stop chaining
 
+  // Read the shared room/workspace config before the first scan of a session.
+  // Without this the bridge only ever knew what Cade.txt had written into
+  // THIS browser's storage, so a second browser — where txt has not run, or
+  // has not caught up — saw no rooms at all and stayed dormant for good. The
+  // room list is shared state; it has to come off the server, not off disk.
+  let pulledConfigThisSession = false;
+
+  async function refreshSharedConfig() {
+    if (pulledConfigThisSession) return false;
+    const { url, key } = creds();
+    if (!url || !key) return false;
+    pulledConfigThisSession = true;
+    try {
+      const pulled = await pullWorkspaceBlob();
+      // Rooms this device holds that the shared config has never seen — from
+      // a Cade.txt that has not synced here yet, or rooms this app created
+      // offline. Publishing is additive and merge-safe, so contributing them
+      // costs nothing and is the only way another browser learns they exist.
+      if (pulled && pulled.contributed) await publishWorkspaceBlob();
+      return !!(pulled && pulled.ok);
+    } catch (e) {
+      console.warn('Bridge: shared config sync failed', e);
+      return false;
+    }
+  }
+
   function requestScan(delay = 300) {
     clearTimeout(rescanTimer);
     rescanTimer = setTimeout(async () => {
-      // Pull down any room whose text this device has never held, then scan —
-      // otherwise those rooms look empty and never link.
+      // The room list first, then the text of rooms this device has never
+      // held, and only then the scan — each step feeds the next.
+      const pulledConfig = await refreshSharedConfig();
       let hydrated = { fetched: 0, pending: 0 };
       try { hydrated = await hydrateMissingRooms(); } catch (e) { console.warn('Bridge: hydrate failed', e); }
       const result = scan();
+      if (result && pulledConfig) result.changed = true;
       if (result && hydrated.fetched) { result.changed = true; result.hydrated = hydrated.fetched; }
       if (result && result.changed && onChange) onChange(result);
       // More rooms than one pass allows — come back for the rest, but only
@@ -1445,12 +1559,19 @@ const Bridge = (() => {
       if (!document.hidden && Date.now() - lastScanAt > 5000) requestScan(200);
     });
 
-    if (!opts.defer && available()) requestScan(0);
+    // A browser where Cade.txt has never run has no local room list, so
+    // available() is false — but it may still hold credentials that can reach
+    // the shared config. Scanning on credentials alone is what lets a second
+    // browser discover the rooms at all; without it the bridge sat dormant
+    // there permanently, which read as "sync works in one window only".
+    const { url, key } = creds();
+    if (!opts.defer && (available() || (url && key))) requestScan(0);
     return available();
   }
 
   return {
     init, scan, requestScan, available,
+    pullWorkspaceBlob, archiveRooms,
     hydrateMissingRooms, roomsNeedingText,
     parseTodos, hasTodoList, setTodoState, appendTodo, normalizeKey,
     roomText, roomCacheIsClean, applyRoomEdit,
