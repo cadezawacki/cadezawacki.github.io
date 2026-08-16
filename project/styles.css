@@ -3474,3 +3474,21 @@ textarea.input-grow,
 /* A nested room in the strip carries its parent's name — depth can't be
    shown by indentation in a single horizontal row. */
 .sub-tab .sub-parent { color: var(--text-faint); }
+
+/* Connection actions on the sync screen, mirroring Cade.txt's. */
+.sync-state {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+.sync-state .sync-dot { margin-left: 0; animation: none; }
+.sync-state-text { font-size: var(--text-sm); color: var(--text-muted); }
+.sync-action-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-2);
+}
+@media (max-width: 480px) {
+  .sync-action-grid { grid-template-columns: 1fr; }
+}

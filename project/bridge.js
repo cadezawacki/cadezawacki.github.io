@@ -1474,6 +1474,10 @@ const Bridge = (() => {
   // room list is shared state; it has to come off the server, not off disk.
   let pulledConfigThisSession = false;
 
+  // A deliberate reconnect should re-read the shared config, not reuse the
+  // once-per-session answer from before the connection went bad.
+  function resetConfigPull() { pulledConfigThisSession = false; }
+
   async function refreshSharedConfig() {
     if (pulledConfigThisSession) return false;
     const { url, key } = creds();
@@ -1571,7 +1575,7 @@ const Bridge = (() => {
 
   return {
     init, scan, requestScan, available,
-    pullWorkspaceBlob, archiveRooms,
+    pullWorkspaceBlob, archiveRooms, resetConfigPull,
     hydrateMissingRooms, roomsNeedingText,
     parseTodos, hasTodoList, setTodoState, appendTodo, normalizeKey,
     roomText, roomCacheIsClean, applyRoomEdit,

@@ -7759,7 +7759,7 @@ const SLASH_CODES = {
 // the caret lands. Values are functions so date/time are evaluated on accept.
 const SLASH_SNIPPETS = {
   table: () => '| Column 1 | Column 2 |\n| --- | --- |\n| \u0000 |  |',
-  todo: () => '- [ ] \u0000',
+  todo: () => '[ ] \u0000',
   hr: () => '\n---\n\u0000',
   code: () => '```\n\u0000\n```',
   quote: () => '> \u0000',
@@ -16296,7 +16296,7 @@ const MD_BTN_DEFS = {
   code: { label: '<>', title: 'Code', wrap: ['`', '`'] },
   head: { label: 'H', title: 'Heading', prefix: '# ' },
   list: { label: '•', title: 'List', prefix: '- ' },
-  todo: { label: '☐', title: 'Checkbox', prefix: '- [ ] ' },
+  todo: { label: '☐', title: 'Checkbox', prefix: '[ ] ' },
   quote: { label: '"', title: 'Quote', prefix: '> ' },
   link: { label: '🔗', title: 'Link', special: 'link' },
 };

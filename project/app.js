@@ -4247,14 +4247,25 @@ const App = (() => {
       return;
     }
     const settings = State.getSettings();
+    const configured = !!(settings.sync.databaseUrl && settings.sync.passphrase);
+    const live = typeof Sync !== 'undefined' && Sync.isConnected();
+    const status = !configured ? { cls: 'offline', text: 'Not set up yet' }
+      : settings.sync.paused ? { cls: 'offline', text: 'Paused after a local reset' }
+      : live ? { cls: 'online', text: 'Connected' }
+      : { cls: 'offline', text: 'Not connected right now' };
+
     showModal('Firebase Sync', `
+      ${configured ? `<div class="sync-state">
+        <span class="sync-dot ${status.cls}" style="cursor:default"></span>
+        <span class="sync-state-text">${escHtml(status.text)}</span>
+      </div>` : ''}
       <div class="form-group">
         <label class="form-label">Database URL</label>
-        <input type="text" class="form-input" id="syncUrl" value="${settings.sync.databaseUrl || ''}" placeholder="https://your-project.firebaseio.com">
+        <input type="text" class="form-input" id="syncUrl" value="${escHtml(settings.sync.databaseUrl || '')}" placeholder="https://your-project.firebaseio.com">
       </div>
       <div class="form-group">
         <label class="form-label">Passphrase (Encryption Key)</label>
-        <input type="password" class="form-input" id="syncPass" value="${settings.sync.passphrase || ''}" placeholder="Your secret passphrase">
+        <input type="password" class="form-input" id="syncPass" value="${escHtml(settings.sync.passphrase || '')}" placeholder="Your secret passphrase">
       </div>
       <div class="form-group">
         <p class="text-xs text-muted" style="line-height:1.6;">
@@ -4263,11 +4274,47 @@ const App = (() => {
           Multiple devices sharing the same passphrase will automatically sync.
         </p>
       </div>
+      ${configured ? `
+        <div class="divider"></div>
+        <label class="form-label">Connection</label>
+        <div class="sync-action-grid">
+          <button class="btn btn-secondary" onclick="App.reconnectSync()"
+            title="Drop the connection and re-reconcile against the server">${icon('refresh-cw', 14)}Reconnect</button>
+          <button class="btn btn-secondary" onclick="App.hardRefresh()"
+            title="Re-download the app and clear its caches, then reload">${icon('download-cloud', 14)}Force Reload</button>
+        </div>
+        <p class="text-xs text-faint" style="margin-top:var(--space-2);line-height:1.6;">
+          Reconnect re-reads the server and reconciles. Force Reload clears this
+          app's cached files and fetches them again — use it when a fix has
+          shipped but the old version is still running.
+        </p>` : ''}
     `, [
       `<button class="btn btn-secondary" onclick="App.closeModal()">Cancel</button>`,
       settings.sync.connected ? `<button class="btn btn-danger" onclick="App.disconnectSync()">Disconnect</button>` : '',
-      `<button class="btn btn-primary" onclick="App.connectSync()">Connect</button>`,
+      `<button class="btn btn-primary" onclick="App.connectSync()">${configured ? 'Save & Connect' : 'Connect'}</button>`,
     ]);
+  }
+
+  // Mirrors Cade.txt's Connection actions: drop and re-establish, so a stalled
+  // session re-reconciles without the user having to reload the whole app.
+  async function reconnectSync() {
+    const settings = State.getSettings();
+    if (!settings.sync.databaseUrl || !settings.sync.passphrase) { toast('Nothing to reconnect to'); return; }
+    toast('Reconnecting…');
+    Sync.disconnect();
+    const res = await Sync.connect(settings.sync.databaseUrl, settings.sync.passphrase);
+    Sync.updateStatus();
+    if (res && res.success) {
+      // The bridge's shared-config pull is once per session; a deliberate
+      // reconnect is exactly when it should happen again.
+      if (typeof Bridge !== 'undefined' && Bridge.resetConfigPull) Bridge.resetConfigPull();
+      if (typeof Bridge !== 'undefined') Bridge.requestScan(200);
+      toast('Reconnected');
+      closeModal();
+      render();
+    } else {
+      toast('Could not reconnect: ' + ((res && res.error) || 'unknown error'));
+    }
   }
 
   async function connectSync() {
@@ -6426,7 +6473,7 @@ const App = (() => {
     addTag, removeTag, removeTagAt, addTagById,
     openNewProject, openProjectModal, openManageProjects, dismissModal, selectColor, selectIcon, saveProject,
     archiveProjectAction, unarchiveProjectAction, deleteProjectAction,
-    openSyncConfig, connectSync, disconnectSync,
+    openSyncConfig, connectSync, disconnectSync, reconnectSync,
     openQuickLog, setQuickLogTab, openCalorieLog, logCaloriesFromModal, quickAddTask, logEmotion,
     useShortcut, setQuickEmotion, setQuickEnergy, logCheckinFromModal, logWake, logSleep,
     removeWakeSleep, deleteQuickLogRow, toggleFormProject, setHotkey,
