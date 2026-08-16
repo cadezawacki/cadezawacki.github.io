@@ -7759,7 +7759,7 @@ const SLASH_CODES = {
 // the caret lands. Values are functions so date/time are evaluated on accept.
 const SLASH_SNIPPETS = {
   table: () => '| Column 1 | Column 2 |\n| --- | --- |\n| \u0000 |  |',
-  todo: () => '- [ ] \u0000',
+  todo: () => '[ ] \u0000',
   hr: () => '\n---\n\u0000',
   code: () => '```\n\u0000\n```',
   quote: () => '> \u0000',
@@ -14702,6 +14702,34 @@ window.shareNative = function() {
   } catch (e) { /* ignore */ }
 })();
 
+// Deep link from Cade.project: "#room=Groceries" opens that room. Only the
+// #p= share format was routed, so the "open in Cade.txt" links the other app
+// has always rendered landed on whatever document happened to be open.
+(function() {
+  const openFromHash = async () => {
+    const m = (window.location.hash || '').match(/[#&]room=([^&]+)/);
+    if (!m) return;
+    let name;
+    try { name = decodeURIComponent(m[1]); } catch (e) { name = m[1]; }
+    // Clear it so a refresh does not yank you back here after you navigate.
+    window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
+    if (!name) return;
+    try {
+      // Read the list from storage rather than a script-scoped variable —
+      // this block runs from its own IIFE and cannot see `rooms`.
+      let known = [];
+      try { known = JSON.parse(store.get('cade-rooms')) || []; } catch (e) {}
+      const hit = known.find(r => r === name)
+        || known.find(r => String(r).toLowerCase() === name.toLowerCase());
+      if (!hit) { showToast('No room called “' + name + '” here', 'error', 3000); return; }
+      if (window.switchRoom) await window.switchRoom(hit);
+    } catch (e) {}
+  };
+  if (document.readyState === 'complete') setTimeout(openFromHash, 400);
+  else window.addEventListener('load', () => setTimeout(openFromHash, 400));
+  window.addEventListener('hashchange', openFromHash);
+})();
+
 // Public share link (#p=...) — a compressed, self-contained copy of a document
 // embedded in the URL hash (so the text never hits the server). Read on load,
 // after the bootstrap, so it can open the shared text (#15). Core promise:
@@ -16296,7 +16324,7 @@ const MD_BTN_DEFS = {
   code: { label: '<>', title: 'Code', wrap: ['`', '`'] },
   head: { label: 'H', title: 'Heading', prefix: '# ' },
   list: { label: '•', title: 'List', prefix: '- ' },
-  todo: { label: '☐', title: 'Checkbox', prefix: '- [ ] ' },
+  todo: { label: '☐', title: 'Checkbox', prefix: '[ ] ' },
   quote: { label: '"', title: 'Quote', prefix: '> ' },
   link: { label: '🔗', title: 'Link', special: 'link' },
 };

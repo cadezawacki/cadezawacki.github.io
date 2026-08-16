@@ -205,6 +205,23 @@ const Bridge = (() => {
       const base = normalizeKey(title);
       const n = (seen.get(base) || 0) + 1;
       seen.set(base, n);
+      // Lines indented FURTHER than the checkbox, up to the next checkbox or
+      // blank line, are that task's notes. Both apps already read indentation
+      // as belonging to the line above; this makes it mean the same thing on
+      // both sides instead of being invisible over here.
+      const baseIndent = indentWidth(m[1]);
+      const noteLines = [];
+      let j = i + 1;
+      while (j < lines.length) {
+        const nxt = lines[j];
+        if (!nxt.trim()) break;                       // a blank line ends the note
+        if (/^\s*```/.test(nxt)) break;
+        if (TODO_LINE_RE.test(nxt)) break;            // the next task
+        if (indentWidth(nxt) <= baseIndent) break;    // back out to the list level
+        noteLines.push(unstrike(nxt).trim());
+        j++;
+      }
+
       out.push({
         line: i,
         done: m[2] !== ' ',
@@ -214,9 +231,41 @@ const Bridge = (() => {
         // recorded before duplicate handling existed still resolve.
         key: n === 1 ? base : base + DUP_SEP + n,
         occurrence: n,
+        notes: noteLines.join('\n'),
+        noteLineCount: noteLines.length,
       });
+      i = j - 1;   // the note lines are consumed, not re-examined
     }
     return out;
+  }
+
+  // Leading whitespace as a column count, tabs counted as two.
+  function indentWidth(text) {
+    const m = String(text || '').match(/^[\t ]*/);
+    return m ? m[0].replace(/\t/g, '  ').length : 0;
+  }
+
+  // Replace the note block beneath a checkbox line, adding or removing lines
+  // as needed. Indentation matches the checkbox's own plus two spaces, which
+  // is what Cade.txt's list continuation produces.
+  function setTodoNotes(text, lineIndex, notes) {
+    const lines = String(text || '').split('\n');
+    if (lineIndex < 0 || lineIndex >= lines.length) return null;
+    const m = lines[lineIndex].match(TODO_LINE_RE);
+    if (!m) return null;
+    const pad = ' '.repeat(indentWidth(m[1]) + 2);
+
+    let end = lineIndex + 1;
+    while (end < lines.length) {
+      const nxt = lines[end];
+      if (!nxt.trim() || /^\s*```/.test(nxt) || TODO_LINE_RE.test(nxt)) break;
+      if (indentWidth(nxt) <= indentWidth(m[1])) break;
+      end++;
+    }
+    const body = String(notes == null ? '' : notes).split('\n')
+      .map(l => l.trim()).filter(Boolean).map(l => pad + l);
+    lines.splice(lineIndex + 1, end - (lineIndex + 1), ...body);
+    return lines.join('\n');
   }
 
   // Identity of a todo line across scans. Text-based rather than positional:
@@ -985,6 +1034,60 @@ const Bridge = (() => {
   }
 
   // ═══════════════════════════════════════════════════════════
+  // SEEDING — publish rooms the server has never held
+  // ═══════════════════════════════════════════════════════════
+  // The room LIST syncs, but a room whose document was never uploaded — a
+  // room made before sync was configured, or on a device that has not synced
+  // since — has nothing for another browser to pull. This device holds that
+  // text. Writing it is safe precisely because the server node is ABSENT: a
+  // missing node is "never synced", not "deliberately empty", and the write
+  // is refused the moment anything is there to overwrite.
+  const SEED_PER_PASS = 10;
+  const seedTried = new Set();
+
+  function roomsNeedingUpload() {
+    const meta = getRoomMeta();
+    const tomb = getTombstones();
+    return getRooms().filter(name =>
+      roomIsLive(name, meta, tomb) &&
+      !roomIsLocked(name) &&
+      typeof raw(CACHE_PREFIX + name) === 'string' &&
+      raw(CACHE_PREFIX + name).length > 0);
+  }
+
+  async function seedMissingRooms({ force = false } = {}) {
+    const { url, key } = creds();
+    const database = db();
+    if (!url || !key || !database) return { seeded: 0, checked: 0, reason: 'no-credentials' };
+
+    const todo = roomsNeedingUpload()
+      .filter(name => force || !seedTried.has(name))
+      .slice(0, SEED_PER_PASS);
+
+    let seeded = 0;
+    for (const name of todo) {
+      seedTried.add(name);
+      try {
+        const ref = database.ref(`rooms/${name}/text`);
+        const snap = await ref.once('value');
+        if (snap.val() != null) continue;         // already up there — never overwrite
+        if (await remoteRoomLocked(name, database)) continue;
+        const text = raw(CACHE_PREFIX + name);
+        if (typeof text !== 'string' || !text) continue;
+        const encrypted = await encryptText(text, key);
+        // Compare-and-set against "still absent", so a race with the device
+        // that owns the room cannot clobber a document written meanwhile.
+        const res = await ref.transaction(cur => (cur == null ? packRoomText(encrypted) : undefined));
+        if (res && res.committed) {
+          writeRaw(SYNCED_PREFIX + name, text);   // the server now holds this
+          seeded++;
+        }
+      } catch (e) { /* unreachable or refused — try again next session */ }
+    }
+    return { seeded, checked: todo.length, reason: '' };
+  }
+
+  // ═══════════════════════════════════════════════════════════
   // SCAN — project txt's world into this app's data model
   // ═══════════════════════════════════════════════════════════
   // Runs on load, on focus, and whenever txt broadcasts a change. Everything
@@ -1287,6 +1390,8 @@ const Bridge = (() => {
           txtRoom: room,
           txtKey: todo.key,
           txtDone: todo.done,
+          txtNotes: todo.notes || '',
+          description: todo.notes || '',
           completed: todo.done,
           completedAt: todo.done ? priorIso : null,
         });
@@ -1331,6 +1436,25 @@ const Bridge = (() => {
       }
       if (entry.txtDone !== todo.done) patch.txtDone = todo.done;
 
+      // Notes reconciliation, decided exactly as completion is: `txtNotes`
+      // holds what the document said last time, which is what makes it
+      // possible to tell which side moved rather than guessing and, on a
+      // both-moved tie, to let the document win — it is the surface the
+      // user was looking at.
+      const docNotes = (todo.notes || '').trim();
+      const mine = (entry.description || '').trim();
+      const seenNotes = entry.txtNotes;
+      if (docNotes !== mine) {
+        const docNotesMoved = seenNotes == null || docNotes !== seenNotes.trim();
+        const mineMoved = seenNotes != null && mine !== seenNotes.trim();
+        if (docNotesMoved) {
+          patch.description = docNotes;
+        } else if (mineMoved) {
+          queueNoteWrite(room, todo.key, mine);
+        }
+      }
+      if ((entry.txtNotes || '') !== docNotes) patch.txtNotes = docNotes;
+
       if (Object.keys(patch).length) {
         State.updateEntry(entry.id, patch);
         out.changed = true;
@@ -1360,6 +1484,33 @@ const Bridge = (() => {
     pendingWrites.set(room, list);
     clearTimeout(writeTimer);
     writeTimer = setTimeout(flushDocWrites, 200);
+  }
+
+  // Note writes go in their own queue: the completion batch rewrites boxes
+  // by key, and interleaving line insertions with it would invalidate the
+  // line numbers it is working from.
+  let pendingNotes = new Map();
+  let noteTimer = null;
+
+  function queueNoteWrite(room, key, notes) {
+    const list = pendingNotes.get(room) || [];
+    list.push({ key, notes });
+    pendingNotes.set(room, list);
+    clearTimeout(noteTimer);
+    noteTimer = setTimeout(flushNoteWrites, 350);
+  }
+
+  async function flushNoteWrites() {
+    noteTimer = null;
+    const batch = pendingNotes;
+    pendingNotes = new Map();
+    for (const [room, edits] of batch) {
+      // One edit per pass: each rewrites the note block, which moves every
+      // line below it, so they cannot share a single parse of the document.
+      for (const { key, notes } of edits) {
+        await applyRoomEdit(room, opSetNotes(key, notes));
+      }
+    }
   }
 
   async function flushDocWrites() {
@@ -1452,6 +1603,30 @@ const Bridge = (() => {
     }
   }
 
+  // Rewrite the note block under a task's line. Returns a string or null,
+  // like every other operation — applyRoomEdit reads the return value AS the
+  // new document, so anything else lands in the cache verbatim.
+  function opSetNotes(key, notes) {
+    return (text) => {
+      const todos = parseTodos(text);
+      const hit = todos.find(t => t.key === key) || todos.find(t => t.key.split(DUP_SEP)[0] === key);
+      if (!hit) return null;
+      const wanted = String(notes == null ? '' : notes).split('\n')
+        .map(l => l.trim()).filter(Boolean).join('\n');
+      if ((hit.notes || '') === wanted) return text;   // already agrees — no-op
+      return setTodoNotes(text, hit.line, wanted);
+    };
+  }
+
+  // Push a bridged task's description into its room as indented lines.
+  async function pushNotes(entry) {
+    if (!entry || !entry.txtRoom || !entry.txtKey) return false;
+    const res = await applyRoomEdit(entry.txtRoom, opSetNotes(entry.txtKey, entry.description || ''));
+    if (!res.ok && res.reason !== 'not-applicable') return false;
+    State.updateEntry(entry.id, { txtNotes: (entry.description || '').trim() });
+    return true;
+  }
+
   // Keys in this room already spoken for by some other task.
   function claimedKeys(room, exceptEntryId) {
     return new Set(State.getEntries({ includeArchived: true })
@@ -1473,6 +1648,10 @@ const Bridge = (() => {
   // has not caught up — saw no rooms at all and stayed dormant for good. The
   // room list is shared state; it has to come off the server, not off disk.
   let pulledConfigThisSession = false;
+
+  // A deliberate reconnect should re-read the shared config, not reuse the
+  // once-per-session answer from before the connection went bad.
+  function resetConfigPull() { pulledConfigThisSession = false; }
 
   async function refreshSharedConfig() {
     if (pulledConfigThisSession) return false;
@@ -1571,13 +1750,15 @@ const Bridge = (() => {
 
   return {
     init, scan, requestScan, available,
-    pullWorkspaceBlob, archiveRooms,
+    pullWorkspaceBlob, archiveRooms, resetConfigPull,
+    seedMissingRooms, roomsNeedingUpload,
     hydrateMissingRooms, roomsNeedingText,
     parseTodos, hasTodoList, setTodoState, appendTodo, normalizeKey,
     roomText, roomCacheIsClean, applyRoomEdit,
     opSetDone, opRename, opAppendForTask, claimedKeys,
     ensureRoom, ensureWorkspace, renameWorkspace, publishWorkspaceBlob,
-    pushCompletion, pushNewTask, pushRename,
+    pushCompletion, pushNewTask, pushRename, pushNotes,
+    setTodoNotes, opSetNotes,
     getRooms, getWorkspaces, getRoomWorkspace, getRoomMeta,
     creds,
     TODO_LINE_RE,

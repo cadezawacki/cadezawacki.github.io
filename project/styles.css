@@ -3474,3 +3474,339 @@ textarea.input-grow,
 /* A nested room in the strip carries its parent's name — depth can't be
    shown by indentation in a single horizontal row. */
 .sub-tab .sub-parent { color: var(--text-faint); }
+
+/* Connection actions on the sync screen, mirroring Cade.txt's. */
+.sync-state {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+.sync-state .sync-dot { margin-left: 0; animation: none; }
+.sync-state-text { font-size: var(--text-sm); color: var(--text-muted); }
+.sync-action-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-2);
+}
+@media (max-width: 480px) {
+  .sync-action-grid { grid-template-columns: 1fr; }
+}
+
+/* ── Undo affordance in the toast ─────────────────────────────── */
+.toast-msg { margin-right: var(--space-3); }
+.toast-action {
+  font: inherit;
+  font-weight: 600;
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--accent-text);
+  background: none;
+  border: none;
+  border-left: 1px solid var(--border);
+  padding: 0 0 0 var(--space-3);
+  cursor: pointer;
+}
+.toast-action:hover { text-decoration: underline; }
+
+/* ── Trash ────────────────────────────────────────────────────── */
+.trash-list { display: flex; flex-direction: column; }
+.trash-row {
+  display: grid;
+  grid-template-columns: 5.5rem 1fr auto auto;
+  gap: var(--space-2);
+  align-items: center;
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.trash-row:last-child { border-bottom: none; }
+.trash-kind {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-faint);
+}
+.trash-name { font-size: var(--text-sm); min-width: 0; }
+.trash-age {
+  font-size: var(--text-xs);
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.trash-acts { display: inline-flex; gap: 2px; }
+@media (max-width: 480px) {
+  .trash-row { grid-template-columns: 1fr auto; grid-template-areas: 'name acts' 'kind age'; }
+  .trash-name { grid-area: name; }
+  .trash-acts { grid-area: acts; }
+  .trash-kind { grid-area: kind; }
+  .trash-age  { grid-area: age; text-align: right; }
+}
+
+/* ── Quick add ────────────────────────────────────────────────── */
+.qadd {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-3);
+  margin-bottom: var(--space-3);
+  color: var(--text-faint);
+  transition: border-color var(--transition);
+}
+.qadd:focus-within { border-color: var(--accent); }
+.qadd-input {
+  flex: 1 1 14rem;
+  min-width: 0;
+  border: none;
+  background: none;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: var(--text-sm);
+  padding: var(--space-1) 0;
+  outline: none;
+}
+.qadd-input::placeholder { color: var(--text-faint); }
+.qadd-chips { display: inline-flex; flex-wrap: wrap; gap: var(--space-1); }
+.qadd-chip {
+  font-size: var(--text-xs);
+  color: var(--accent-text);
+  background: var(--accent-tint);
+  border-radius: var(--radius-sm);
+  padding: 1px 6px;
+  white-space: nowrap;
+}
+
+/* ── Breadcrumbs ──────────────────────────────────────────────── */
+.crumbs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1);
+  margin-bottom: var(--space-2);
+  font-size: var(--text-xs);
+}
+.crumb {
+  font: inherit;
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--text-faint);
+  cursor: pointer;
+}
+.crumb:hover { color: var(--accent-text); text-decoration: underline; }
+.crumb-here { color: var(--text-muted); cursor: default; }
+.crumb-here:hover { text-decoration: none; }
+.crumb-sep { color: var(--text-faint); opacity: 0.6; }
+
+/* A pinned entry keeps its star lit rather than only on hover. */
+.icon-btn.is-pinned { color: var(--hl-yellow); opacity: 1; }
+
+.search-hint { margin: var(--space-2) 0 0; color: var(--accent-text); }
+.search-ops { margin: var(--space-2) 0 0; }
+.search-ops summary { cursor: pointer; }
+
+/* A task being dragged toward the planner, and the hour it would land in. */
+.entry-card[draggable="true"] { cursor: grab; }
+.entry-card.dragging { opacity: 0.45; cursor: grabbing; }
+.planner-hour.drop-target {
+  background: var(--accent-tint);
+  box-shadow: inset 0 2px 0 var(--accent);
+}
+
+/* ── Shutdown review & "why this?" ────────────────────────────── */
+.shutdown-list { display: flex; flex-direction: column; gap: var(--space-1); }
+.shutdown-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  min-width: 0;
+}
+.why-list { display: flex; flex-direction: column; }
+.why-row {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-1) 0;
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: var(--text-sm);
+}
+.why-row:last-child { border-bottom: none; }
+.why-pts {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-faint);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+
+/* ── Bulk selection ───────────────────────────────────────────── */
+.entry-card.bulk-selected {
+  border-color: var(--accent);
+  background: var(--accent-tint);
+}
+.bulk-bar {
+  position: fixed;
+  left: 50%;
+  bottom: var(--space-4);
+  transform: translateX(-50%);
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  justify-content: center;
+  max-width: min(56rem, calc(100vw - 2rem));
+  padding: var(--space-2) var(--space-3);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.28);
+}
+.bulk-count {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--accent-text);
+  white-space: nowrap;
+}
+.bulk-select {
+  width: auto;
+  min-width: 6.5rem;
+  font-size: var(--text-xs);
+  padding: 4px 6px;
+}
+@media (max-width: 620px) {
+  .bulk-bar { bottom: 0; border-radius: var(--radius-lg) var(--radius-lg) 0 0; width: 100%; max-width: none; }
+}
+
+/* ── Drag to reorder ──────────────────────────────────────────── */
+[data-reorder-id] { cursor: grab; }
+[data-reorder-id].reordering { opacity: 0.4; cursor: grabbing; }
+.reorder-over { box-shadow: inset 0 2px 0 var(--accent); }
+
+/* The Cade.txt room a task mirrors — a link, so it looks like one. */
+.pill-room {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--hl-blue);
+  background: var(--hl-blue-bg);
+  text-decoration: none;
+}
+.pill-room:hover { text-decoration: underline; }
+
+/* ── Weekly review bars & records ─────────────────────────────── */
+.week-bars { display: flex; flex-direction: column; gap: var(--space-2); }
+.week-bar-row {
+  display: grid;
+  grid-template-columns: minmax(5rem, 9rem) 1fr auto;
+  gap: var(--space-2);
+  align-items: center;
+  font-size: var(--text-xs);
+}
+.week-bar-label { color: var(--text-muted); min-width: 0; }
+.week-bar {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.week-bar-fill { display: block; height: 100%; background: var(--accent); border-radius: 3px; }
+.week-bar-val { font-variant-numeric: tabular-nums; color: var(--text-faint); white-space: nowrap; }
+
+.rec-list { display: flex; flex-direction: column; }
+.rec-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0 var(--space-3);
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--border-subtle);
+  align-items: baseline;
+}
+.rec-row:last-child { border-bottom: none; }
+.rec-label { font-size: var(--text-sm); }
+.rec-value {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.rec-note { grid-column: 1 / -1; font-size: var(--text-xs); color: var(--text-faint); }
+.rec-next {
+  margin-top: var(--space-4);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border);
+}
+.rec-next-head {
+  display: flex;
+  justify-content: space-between;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  margin-bottom: var(--space-2);
+}
+.rec-next-count { font-variant-numeric: tabular-nums; }
+
+/* ── Sync activity log ────────────────────────────────────────── */
+.sync-log { margin-top: var(--space-3); }
+.sync-log summary { cursor: pointer; }
+.sync-log-list {
+  display: flex;
+  flex-direction: column;
+  margin-top: var(--space-2);
+  max-height: 14rem;
+  overflow-y: auto;
+}
+.sync-log-row {
+  display: grid;
+  grid-template-columns: auto 5.5rem 1fr auto;
+  gap: var(--space-2);
+  align-items: center;
+  padding: 3px 0;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+.sync-log-row.bad { color: var(--hl-orange); }
+.slr-label { font-weight: 600; }
+.slr-detail { min-width: 0; color: var(--text-faint); }
+.slr-when { color: var(--text-faint); white-space: nowrap; font-variant-numeric: tabular-nums; }
+@media (max-width: 480px) {
+  .sync-log-row { grid-template-columns: auto 1fr auto; }
+  .slr-detail { grid-column: 1 / -1; }
+}
+
+/* ── Settings: find a setting, and keep the sharp edges apart ─── */
+.settings-search {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-3);
+  margin-bottom: var(--space-4);
+  color: var(--text-faint);
+}
+.settings-search:focus-within { border-color: var(--accent); }
+.settings-search-input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: none;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: var(--text-sm);
+  outline: none;
+}
+.danger-zone > summary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  cursor: pointer;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--error);
+  padding: var(--space-2) 0;
+}

@@ -46,7 +46,8 @@ const Palette = (() => {
     let text = ' ' + (raw || '').trim() + ' ';
     const out = {
       type: 'task', title: '', tags: [], projectId: null, projectName: null,
-      priority: null, estimateMinutes: null, dueDate: null, remindTime: null,
+      priority: null, effort: null, estimateMinutes: null, dueDate: null,
+      remindTime: null, recurrence: null,
     };
 
     // type prefix — "habit: drink water"
@@ -90,8 +91,46 @@ const Palette = (() => {
       out.estimateMinutes = Number(n); return ' ';
     });
 
+    // effort — "*xl" or the long form "effort:large". Estimate is how long
+    // it takes; effort is how big it feels, and the two disagree often
+    // enough that both are worth being able to say.
+    const EFFORT = { xs: 'trivial', trivial: 'trivial', s: 'small', small: 'small',
+                     m: 'medium', med: 'medium', medium: 'medium',
+                     l: 'large', large: 'large', xl: 'xl', huge: 'xl' };
+    text = text.replace(/\s\*(xs|s|m|l|xl|trivial|small|med|medium|large|huge)\b/i, (_, e) => {
+      out.effort = EFFORT[e.toLowerCase()]; return ' ';
+    }).replace(/\seffort:(xs|s|m|l|xl|trivial|small|med|medium|large|huge)\b/i, (m0, e) => {
+      if (out.effort) return m0;
+      out.effort = EFFORT[e.toLowerCase()]; return ' ';
+    });
+
+    // recurrence — "every day", "every week", "every monday", "weekdays"
+    text = text.replace(/\severy\s+(day|weekday|week|month|year|mon|monday|tue|tuesday|wed|wednesday|thu|thursday|fri|friday|sat|saturday|sun|sunday)\b/i, (_, r) => {
+      const k = r.toLowerCase();
+      if (k === 'day') out.recurrence = { type: 'daily' };
+      else if (k === 'weekday') out.recurrence = { type: 'weekdays' };
+      else if (k === 'week') out.recurrence = { type: 'weekly' };
+      else if (k === 'month') out.recurrence = { type: 'monthly' };
+      else if (k === 'year') out.recurrence = { type: 'yearly' };
+      else {
+        out.recurrence = { type: 'weekly', weekdays: [WEEKDAYS[k]] };
+        // "every monday" also means the next Monday, unless a date was given.
+        if (out.dueDate == null) {
+          const diff = ((WEEKDAYS[k] - new Date().getDay() + 7) % 7) || 7;
+          out.dueDate = plusDays(diff);
+        }
+      }
+      return ' ';
+    }).replace(/\sweekdays\b/i, () => {
+      if (!out.recurrence) out.recurrence = { type: 'weekdays' };
+      return ' ';
+    });
+
+
     // dates — most specific first
-    text = text.replace(/\s(\d{4}-\d{2}-\d{2})\b/, (_, iso) => { out.dueDate = iso; return ' '; });
+    // The "due"/"by"/"on" that introduces a date goes with it — leaving it
+    // behind produced titles like "Renew passport due".
+    text = text.replace(/\s(?:due\s+|by\s+|on\s+)?(\d{4}-\d{2}-\d{2})\b/, (_, iso) => { out.dueDate = iso; return ' '; });
     if (!out.dueDate) {
       // "aug 12" / "august 12th" / "12 aug"
       const md = /\s(?:on\s+|by\s+|due\s+)?([a-z]{3,9})\.?\s+(\d{1,2})(?:st|nd|rd|th)?\b/i;
@@ -116,7 +155,7 @@ const Palette = (() => {
     }
     if (!out.dueDate) {
       text = text
-        .replace(/\s(?:due\s+|by\s+)?(today|tonight)\b/i, () => { out.dueDate = plusDays(0); return ' '; })
+        .replace(/\s(?:due\s+|by\s+|on\s+)?(today|tonight)\b/i, () => { out.dueDate = plusDays(0); return ' '; })
         .replace(/\s(?:due\s+|by\s+|on\s+)?(tomorrow|tmrw|tmr)\b/i, () => { out.dueDate = plusDays(1); return ' '; })
         .replace(/\snext\s+week\b/i, () => { out.dueDate = plusDays(7); return ' '; })
         .replace(/\sin\s+(\d+)\s*(?:days?|d)\b/i, (_, n) => { out.dueDate = plusDays(Number(n)); return ' '; });
@@ -151,6 +190,96 @@ const Palette = (() => {
     return out;
   }
 
+  // ═══════════════════════════════════════════════════════════
+  // SEARCH OPERATORS
+  // ═══════════════════════════════════════════════════════════
+  // "project:kitchen due:week is:open tag:errand" — the filters the app can
+  // already express internally, finally sayable from a search box. Anything
+  // that is not an operator stays as free text for the fuzzy matcher.
+  const IS_VALUES = new Set(['open', 'done', 'completed', 'overdue', 'today', 'archived',
+                             'blocked', 'pinned', 'starred', 'untagged', 'unfiled', 'bridged']);
+  const DUE_VALUES = new Set(['today', 'tomorrow', 'week', 'month', 'overdue', 'none', 'any']);
+
+  function parseQuery(raw) {
+    const filters = { is: [], tags: [], projects: [], types: [], due: null, priority: null };
+    const text = String(raw || '')
+      .replace(/\b(is|due|tag|project|proj|type|p|priority):("[^"]+"|[^\s]+)/gi, (m, key, val) => {
+        const v = val.replace(/^"|"$/g, '').toLowerCase();
+        const k = key.toLowerCase();
+        if (k === 'is' && IS_VALUES.has(v)) { filters.is.push(v); return ' '; }
+        if (k === 'due' && DUE_VALUES.has(v)) { filters.due = v; return ' '; }
+        if (k === 'tag') { filters.tags.push(v); return ' '; }
+        if (k === 'type') { filters.types.push(v); return ' '; }
+        if ((k === 'p' || k === 'priority') && ['low', 'medium', 'high', 'urgent'].includes(v)) {
+          filters.priority = v; return ' ';
+        }
+        if (k === 'project' || k === 'proj') {
+          const hit = State.getProjects({ includeArchived: true })
+            .find(x => x.name.toLowerCase() === v)
+            || State.getProjects({ includeArchived: true }).find(x => x.name.toLowerCase().startsWith(v))
+            || State.getProjects({ includeArchived: true }).find(x => x.name.toLowerCase().includes(v));
+          if (hit) { filters.projects.push(hit.id); return ' '; }
+        }
+        return m;    // unrecognised — leave it as search text, not silently dropped
+      })
+      .replace(/\s+/g, ' ').trim();
+    filters.active = !!(filters.is.length || filters.tags.length || filters.projects.length
+      || filters.types.length || filters.due || filters.priority);
+    return { text, filters };
+  }
+
+  function withinDue(entry, due) {
+    const today = State.todayStr();
+    if (due === 'none') return !entry.dueDate;
+    if (due === 'any') return !!entry.dueDate;
+    if (!entry.dueDate) return false;
+    if (due === 'overdue') return entry.dueDate < today && !entry.completed;
+    if (due === 'today') return entry.dueDate === today;
+    if (due === 'tomorrow') return entry.dueDate === State.dateStr(new Date(Date.now() + 86400000));
+    const days = due === 'week' ? 7 : 30;
+    const limit = State.dateStr(new Date(Date.now() + days * 86400000));
+    return entry.dueDate >= today && entry.dueDate <= limit;
+  }
+
+  function matchesFilters(entry, filters) {
+    if (!entry || !filters || !filters.active) return true;
+    const today = State.todayStr();
+    const ids = State.entryProjectIds(entry);
+    if (filters.projects.length && !filters.projects.some(id => ids.includes(id))) return false;
+    if (filters.types.length && !filters.types.includes(entry.type)) return false;
+    if (filters.priority && entry.priority !== filters.priority) return false;
+    if (filters.tags.length && !filters.tags.every(t => (entry.tags || []).map(x => x.toLowerCase()).includes(t))) return false;
+    if (filters.due && !withinDue(entry, filters.due)) return false;
+    return filters.is.every(v => {
+      switch (v) {
+        case 'open': return !entry.completed && !entry.archived;
+        case 'done': case 'completed': return !!entry.completed;
+        case 'archived': return !!entry.archived;
+        case 'overdue': return !!entry.dueDate && entry.dueDate < today && !entry.completed;
+        case 'today': return entry.dueDate === today || entry.scheduledDate === today;
+        case 'blocked': return (entry.blockedBy || []).length > 0;
+        case 'pinned': case 'starred': return !!entry.pinned;
+        case 'untagged': return !(entry.tags || []).length;
+        case 'unfiled': return ids.length === 0;
+        case 'bridged': return !!entry.txtRoom;
+        default: return true;
+      }
+    });
+  }
+
+  // What the operators in a query add up to, for showing back to the user.
+  function describeFilters(filters) {
+    if (!filters || !filters.active) return '';
+    const bits = [];
+    filters.projects.forEach(id => { const p = State.getProject(id); if (p) bits.push('in ' + p.name); });
+    filters.types.forEach(t => bits.push(t + 's'));
+    filters.is.forEach(v => bits.push(v));
+    if (filters.due) bits.push('due ' + filters.due);
+    if (filters.priority) bits.push(filters.priority + ' priority');
+    filters.tags.forEach(t => bits.push('#' + t));
+    return bits.join(' · ');
+  }
+
   function chipsFor(p) {
     const chips = [];
     if (p.type !== 'task') chips.push({ icon: 'shapes', label: p.type });
@@ -164,6 +293,12 @@ const Palette = (() => {
     }
     if (p.remindTime) chips.push({ icon: 'clock', label: p.remindTime });
     if (p.priority) chips.push({ icon: 'flag', label: p.priority });
+    if (p.effort) chips.push({ icon: 'weight', label: p.effort });
+    if (p.recurrence) {
+      chips.push({ icon: 'repeat-2', label: 'every ' + (p.recurrence.weekdays
+        ? ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'][p.recurrence.weekdays[0]]
+        : p.recurrence.type.replace(/ly$/, '')) });
+    }
     if (p.estimateMinutes) {
       const h = Math.floor(p.estimateMinutes / 60), m = p.estimateMinutes % 60;
       chips.push({ icon: 'hourglass', label: h ? (m ? `${h}h${m}m` : `${h}h`) : `${m}m` });
@@ -182,6 +317,8 @@ const Palette = (() => {
     const pid = p.projectId || opts.defaultProjectId || null;
     if (pid) { partial.projectId = pid; partial.projectIds = [pid]; }
     if (p.priority) partial.priority = p.priority;
+    if (p.effort) partial.effort = p.effort;
+    if (p.recurrence) partial.recurrence = p.recurrence;
     if (p.estimateMinutes) partial.estimateMinutes = p.estimateMinutes;
     if (p.dueDate) partial.dueDate = p.dueDate;
     if (p.remindTime) partial.remindTime = p.remindTime;
@@ -217,7 +354,20 @@ const Palette = (() => {
       { icon: 'folder-cog', title: 'Manage projects', kw: 'rename nest archive project', run: () => App.openManageProjects() },
       { icon: 'tags', title: 'Manage tags', kw: 'rename color tag', run: () => App.openManageTags() },
       { icon: 'archive', title: 'View archive', kw: 'archived hidden', run: () => App.viewArchive() },
+      { icon: 'trash-2', title: 'Open trash', kw: 'deleted restore recover bin', run: () => App.openTrash() },
+      { icon: 'undo-2', title: 'Undo last change', kw: 'revert back mistake', run: () => App.undo() },
+      { icon: 'redo-2', title: 'Redo', kw: 'again forward', run: () => App.redo() },
+      { icon: 'refresh-cw', title: 'Reconnect sync', kw: 'firebase server sync stalled', run: () => App.reconnectSync() },
+      { icon: 'download-cloud', title: 'Force reload the app', kw: 'cache stale update version', run: () => App.hardRefresh() },
+      { icon: 'link', title: 'Cade.txt link', kw: 'rooms workspaces bridge txt', run: () => App.openBridgePanel() },
     ];
+    // Scope switching, built from the projects that actually exist.
+    acts.push({ icon: 'layers', title: 'Scope: all projects', kw: 'workspace scope everything clear filter',
+                run: () => App.setWorkspace('__all__') });
+    State.getProjects().filter(p => p.depth === 0).slice(0, 12).forEach(p => acts.push({
+      icon: 'folder', title: 'Scope to ' + p.name, kw: 'workspace scope filter project ' + p.name,
+      run: () => { App.setWorkspace(p.id); App.switchTab('today'); },
+    }));
     Object.keys(TAB_META).forEach(tab => acts.push({
       icon: TAB_META[tab],
       title: 'Go to ' + tab.charAt(0).toUpperCase() + tab.slice(1),
@@ -225,6 +375,47 @@ const Palette = (() => {
       run: () => App.switchTab(tab),
     }));
     return acts.map(a => ({ ...a, kind: 'action', group: 'Actions' }));
+  }
+
+  // Verbs that take a target. Typing "done milk" offers to complete the task
+  // called milk; "start" arms its timer; "pin", "snooze" and "open" likewise.
+  // Without these the palette could find a task and then only look at it.
+  const VERBS = [
+    { key: 'done', words: ['done', 'complete', 'finish', 'tick'], icon: 'check',
+      label: (t) => `Complete “${t.title}”`, run: (t) => { App.toggleEntry(t.id); },
+      accepts: (t) => !t.completed },
+    { key: 'reopen', words: ['reopen', 'undone', 'untick'], icon: 'rotate-ccw',
+      label: (t) => `Reopen “${t.title}”`, run: (t) => { App.toggleEntry(t.id); },
+      accepts: (t) => !!t.completed },
+    { key: 'start', words: ['start', 'track', 'timer'], icon: 'play',
+      label: (t) => `Start a timer on “${t.title}”`, run: (t) => { Timers.armTracking(t.id); },
+      accepts: (t) => t.type === 'task' && !t.completed },
+    { key: 'pin', words: ['pin', 'star', 'shortlist'], icon: 'star',
+      label: (t) => `${t.pinned ? 'Unpin' : 'Pin'} “${t.title}”`, run: (t) => { App.togglePin(t.id); } },
+    { key: 'snooze', words: ['snooze', 'later', 'defer', 'postpone'], icon: 'alarm-clock',
+      label: (t) => `Snooze “${t.title}”`, run: (t) => { App.openSnooze(t.id); },
+      accepts: (t) => !t.completed },
+    { key: 'archive', words: ['archive', 'shelve'], icon: 'archive',
+      label: (t) => `Archive “${t.title}”`, run: (t) => { App.archiveEntry(t.id); } },
+  ];
+
+  function verbItems(query) {
+    const m = query.match(/^(\w+)\s+(.+)$/);
+    if (!m) return [];
+    const verb = VERBS.find(v => v.words.some(w => w === m[1] || (m[1].length >= 3 && w.startsWith(m[1]))));
+    if (!verb) return [];
+    const target = m[2].trim().toLowerCase();
+    return State.getEntries({ includeArchived: true })
+      .filter(e => !verb.accepts || verb.accepts(e))
+      .map(e => ({ e, s: fuzzy(target, e.title) }))
+      .filter(x => x.s >= 0)
+      .sort((a, b) => b.s - a.s)
+      .slice(0, 5)
+      .map(({ e, s }) => ({
+        item: { kind: 'action', group: 'Do it', icon: verb.icon, title: verb.label(e),
+                run: () => { verb.run(e); App.render(); } },
+        s: s + 120,     // an explicit verb outranks a coincidental text match
+      }));
   }
 
   function buildItems(q) {
@@ -248,6 +439,19 @@ const Palette = (() => {
         }));
       } else {
         const scored = [];
+        scored.push(...verbItems(query));
+        // Operators narrow the entry list here exactly as they do in Search.
+        const { text: freeText, filters } = parseQuery(q.trim());
+        const ft = freeText.toLowerCase();
+        if (filters.active) {
+          State.getEntries({ includeArchived: filters.is.includes('archived') })
+            .filter(e => matchesFilters(e, filters))
+            .map(e => ({ e, s: ft ? fuzzy(ft, e.title) : 50 }))
+            .filter(x => x.s >= 0)
+            .sort((a, b) => b.s - a.s)
+            .slice(0, 12)
+            .forEach(({ e, s }) => scored.push({ item: entryItem(e, describeFilters(filters)), s: s + 60 }));
+        }
         actionItems().forEach(a => {
           const s = Math.max(fuzzy(query, a.title), fuzzy(query, a.kw) - 30);
           if (s >= 0) scored.push({ item: { ...a, group: 'Results' }, s: s + 5 });
@@ -446,5 +650,6 @@ const Palette = (() => {
     return !!document.getElementById('cmdkOverlay')?.classList.contains('active');
   }
 
-  return { open, close, isOpen, parse, createFromText };
+  return { open, close, isOpen, parse, chipsFor, createFromText,
+           parseQuery, matchesFilters, describeFilters };
 })();

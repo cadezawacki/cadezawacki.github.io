@@ -10,11 +10,68 @@ const App = (() => {
   // ═══════════════════════════════════════════════════════════
   // UTILITIES
   // ═══════════════════════════════════════════════════════════
-  function toast(msg) {
+  let toastTimer = null;
+
+  // `opts.undo` puts an Undo button in the toast and keeps it up longer —
+  // the window in which a mis-tap is still obviously a mis-tap.
+  function toast(msg, opts = {}) {
     const el = document.getElementById('toast');
-    el.textContent = msg;
+    clearTimeout(toastTimer);
+    if (opts.undo) {
+      el.innerHTML = `<span class="toast-msg"></span>` +
+        `<button type="button" class="toast-action" onclick="App.undo()">Undo</button>`;
+      el.querySelector('.toast-msg').textContent = msg;
+    } else {
+      el.textContent = msg;
+    }
     el.classList.add('show');
-    setTimeout(() => el.classList.remove('show'), 2500);
+    toastTimer = setTimeout(() => el.classList.remove('show'), opts.undo ? 6000 : 2500);
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // UNDO
+  // ═══════════════════════════════════════════════════════════
+  // One checkpoint per thing a person did. Taken HERE rather than inside
+  // State because a single action is often several mutations — archiving a
+  // project walks a subtree; completing a recurring task spawns the next one
+  // — and undo should step back over the action, not over its pieces.
+  //
+  // `run` performs the action and reports whether it changed anything, so an
+  // action that no-ops leaves no checkpoint behind for undo to land on.
+  function undoable(label, run, opts = {}) {
+    State.checkpoint(label);
+    const result = run();
+    if (State.dropCheckpointIfUnchanged()) return result;
+    if (opts.quiet !== true) toast(label, { undo: true });
+    return result;
+  }
+
+  function undo() {
+    const label = State.undo();
+    if (!label) { toast('Nothing to undo'); return; }
+    render();
+    // The Cade.txt side of a reverted completion has to be reverted too, or
+    // the document keeps the tick that this app has just taken back.
+    resyncBridgedCompletions();
+    toast('Undone — ' + label);
+  }
+
+  function redo() {
+    const label = State.redo();
+    if (!label) { toast('Nothing to redo'); return; }
+    render();
+    resyncBridgedCompletions();
+    toast('Redone — ' + label);
+  }
+
+  // After an undo the entries hold the OLD completion states; anything whose
+  // recorded document state no longer matches gets pushed back to the room.
+  function resyncBridgedCompletions() {
+    if (typeof Bridge === 'undefined') return;
+    State.getEntries({ includeArchived: true })
+      .filter(e => e.txtRoom && e.txtKey && e.txtDone !== undefined && !!e.txtDone !== !!e.completed)
+      .slice(0, 50)
+      .forEach(e => { Bridge.pushCompletion(e).catch(() => {}); });
   }
 
   function icon(name, size = 18) {
@@ -110,6 +167,67 @@ const App = (() => {
     }
     const effPts = { trivial: 20, small: 16, medium: 10, large: 5, xl: 2 }[t.effort] ?? 10;
     return Math.min(100, priPts + duePts + effPts);
+  }
+
+  // The same arithmetic taskScore does, said in words. Next Best Task used to
+  // show a conclusion with no working, which is either trusted blindly or
+  // ignored — and there was no way to tell it that it was wrong.
+  function scoreReasons(t) {
+    const out = [];
+    const pri = { urgent: 40, high: 30, medium: 18, low: 8 }[t.priority] ?? 18;
+    if (t.priority && t.priority !== 'medium') out.push({ text: t.priority + ' priority', pts: pri });
+    if (t.dueDate) {
+      const diff = daysUntil(t.dueDate);
+      out.push({
+        text: diff < 0 ? `${Math.abs(diff)} day${Math.abs(diff) === 1 ? '' : 's'} overdue`
+          : diff === 0 ? 'due today' : diff === 1 ? 'due tomorrow' : `due in ${diff} days`,
+        pts: diff < 0 ? 40 : diff === 0 ? 35 : diff === 1 ? 25 : diff <= 3 ? 18 : diff <= 7 ? 10 : 5,
+      });
+    } else {
+      out.push({ text: 'no due date', pts: 10 });
+    }
+    const eff = { trivial: 20, small: 16, medium: 10, large: 5, xl: 2 }[t.effort] ?? 10;
+    if (t.effort && t.effort !== 'medium') out.push({ text: t.effort + ' effort', pts: eff });
+    if (t.estimateMinutes) out.push({ text: 'about ' + estimateLabel(t.estimateMinutes), pts: 0 });
+    return out.sort((a, b) => b.pts - a.pts);
+  }
+
+  function openWhyThis(id) {
+    const t = State.getEntry(id);
+    if (!t) return;
+    const reasons = scoreReasons(t);
+    // Who it beat, and by how much — the comparison is the actual answer.
+    const rivals = State.getEntries({ type: 'task', completed: false })
+      .filter(x => x.id !== id && !isBlocked(x) && inScope(x))
+      .sort((a, b) => taskScore(b) - taskScore(a))
+      .slice(0, 3);
+    showModal('Why this one?', `
+      <p class="text-sm" style="margin-bottom:var(--space-3);">
+        <strong>${escHtml(t.title)}</strong> scores <strong>${taskScore(t)}</strong> out of 100.
+      </p>
+      <div class="why-list">
+        ${reasons.map(r => `<div class="why-row">
+          <span class="why-text">${escHtml(r.text)}</span>
+          <span class="why-pts">${r.pts ? '+' + r.pts : '—'}</span>
+        </div>`).join('')}
+      </div>
+      ${rivals.length ? `<div class="divider"></div>
+        <label class="form-label">Runners-up</label>
+        <div class="why-list">
+          ${rivals.map(r => `<div class="why-row">
+            <span class="why-text truncate">${escHtml(r.title)}</span>
+            <span class="why-pts">${taskScore(r)}</span>
+          </div>`).join('')}
+        </div>` : ''}
+      <p class="text-xs text-faint" style="margin-top:var(--space-3);line-height:1.6;">
+        Priority, how close the deadline is, and how small the job is. Blocked
+        tasks are never suggested. Change a priority or an estimate and this
+        moves — it is arithmetic, not an opinion.
+      </p>
+    `, [
+      `<button class="btn btn-secondary" onclick="App.closeModal()">Close</button>`,
+      `<button class="btn btn-primary" onclick="App.editEntry('${id}')">Edit this task</button>`,
+    ]);
   }
 
   function timeToMin(t) {
@@ -859,11 +977,26 @@ const App = (() => {
     // "Focus Time —" tile that is empty until a timer has run. The numbers
     // are in the subtitle; the tiles are gone.
 
+    // The shortlist, deliberately outside the scope: pinning something and
+    // then having it hidden by a workspace filter defeats the point of it.
+    const pinned = State.getPinned();
+    if (pinned.length) {
+      html += `<div class="section">
+        <div class="section-header"><span class="section-title">Pinned</span>
+          <span class="text-xs text-faint">${pinned.length} on your shortlist</span></div>
+        <div style="display:flex;flex-direction:column;gap:var(--space-2);">
+          ${pinned.map(t => renderEntryCard(t, t.projectId ? State.getProject(t.projectId) : null)).join('')}
+        </div></div>`;
+    }
+
     // Next best task
     html += `
       <div class="section">
         <div class="section-header"><span class="section-title">Next Best Task</span>
-          ${scoped ? `<span class="text-xs text-faint">within ${escHtml(scopeLabel())}</span>` : ''}
+          <span style="display:inline-flex;align-items:center;gap:var(--space-2);margin-left:auto;">
+            ${scoped ? `<span class="text-xs text-faint">within ${escHtml(scopeLabel())}</span>` : ''}
+            ${nextTask ? `<button class="btn btn-ghost btn-sm" onclick="App.openWhyThis('${nextTask.id}')" title="How this was chosen">Why this?</button>` : ''}
+          </span>
         </div>
         ${nextTask
           ? renderEntryCard(nextTask, nextTask.projectId ? State.getProject(nextTask.projectId) : null, null, { highlight: true })
@@ -894,6 +1027,7 @@ const App = (() => {
     }
 
     // Today's tasks
+    html += quickAddHtml(null);
     html += `<div class="section">
       <div class="section-header"><span class="section-title">Today's Tasks</span>
         <span style="display:inline-flex;align-items:center;gap:var(--space-1);margin-left:auto;">
@@ -1058,7 +1192,9 @@ const App = (() => {
 
     let html = `<div class="planner-grid" data-hs="${hs}" data-date="${dateStr}" style="height:${totalH}px">`;
     for (let hour = hs; hour < he; hour++) {
-      html += `<div class="planner-hour" onclick="App.plannerTap(event,'${dateStr}',${hour})">
+      html += `<div class="planner-hour" onclick="App.plannerTap(event,'${dateStr}',${hour})"
+        ondragover="App.plannerDragOver(event)" ondragleave="App.plannerDragLeave(event)"
+        ondrop="App.plannerDrop(event,'${dateStr}',${hour})">
         <div class="planner-hour-label">${String(hour).padStart(2, '0')}:00</div>
       </div>`;
     }
@@ -1447,11 +1583,144 @@ const App = (() => {
   // ═══════════════════════════════════════════════════════════
   let selectedEntryId = null;
 
-  function selectEntryCard(id) {
-    selectedEntryId = selectedEntryId === id ? null : id;
+  // ═══════════════════════════════════════════════════════════
+  // MULTI-SELECT
+  // ═══════════════════════════════════════════════════════════
+  // Re-filing a dozen tasks was a dozen round trips through the edit modal.
+  // Shift-click extends from the last one clicked; Ctrl/Cmd-click adds a
+  // single card; a plain click still just highlights one.
+  const bulkSelection = new Set();
+  let lastClickedEntryId = null;
+
+  function visibleEntryIds() {
+    return [...document.querySelectorAll('.entry-card')].map(el => el.dataset.id);
+  }
+
+  function selectEntryCard(id, ev) {
+    const e = ev || (typeof window !== 'undefined' ? window.event : null);
+    const additive = !!(e && (e.metaKey || e.ctrlKey));
+    const ranged = !!(e && e.shiftKey);
+
+    if (ranged && lastClickedEntryId) {
+      const ids = visibleEntryIds();
+      const a = ids.indexOf(lastClickedEntryId), b = ids.indexOf(id);
+      if (a !== -1 && b !== -1) {
+        ids.slice(Math.min(a, b), Math.max(a, b) + 1).forEach(x => bulkSelection.add(x));
+      }
+    } else if (additive) {
+      if (bulkSelection.has(id)) bulkSelection.delete(id); else bulkSelection.add(id);
+      lastClickedEntryId = id;
+    } else {
+      bulkSelection.clear();
+      selectedEntryId = selectedEntryId === id ? null : id;
+      lastClickedEntryId = id;
+    }
+    if (bulkSelection.size) selectedEntryId = null;
+    paintSelection();
+  }
+
+  function paintSelection() {
     document.querySelectorAll('.entry-card').forEach(el => {
-      el.classList.toggle('selected', el.dataset.id === selectedEntryId);
+      const id = el.dataset.id;
+      el.classList.toggle('selected', id === selectedEntryId);
+      el.classList.toggle('bulk-selected', bulkSelection.has(id));
     });
+    renderBulkBar();
+  }
+
+  function clearBulkSelection() {
+    bulkSelection.clear();
+    lastClickedEntryId = null;
+    paintSelection();
+  }
+
+  function selectedEntries() {
+    return [...bulkSelection].map(id => State.getEntry(id)).filter(Boolean);
+  }
+
+  function renderBulkBar() {
+    let bar = document.getElementById('bulkBar');
+    const n = bulkSelection.size;
+    if (!n) { if (bar) bar.remove(); return; }
+    if (!bar) {
+      bar = document.createElement('div');
+      bar.id = 'bulkBar';
+      bar.className = 'bulk-bar';
+      document.body.appendChild(bar);
+    }
+    const projects = State.getProjects();
+    const anyOpen = selectedEntries().some(e => !e.completed);
+    bar.innerHTML = `
+      <span class="bulk-count">${n} selected</span>
+      <select class="form-select bulk-select" onchange="App.bulkSetProject(this.value);this.selectedIndex=0;" aria-label="Move to project">
+        <option value="">Move to…</option>
+        <option value="__none__">— no project —</option>
+        ${projects.map(p => `<option value="${p.id}">${'– '.repeat(p.depth || 0)}${escHtml(p.name)}</option>`).join('')}
+      </select>
+      <select class="form-select bulk-select" onchange="App.bulkSetDue(this.value);this.selectedIndex=0;" aria-label="Set due date">
+        <option value="">Due…</option>
+        <option value="today">Today</option>
+        <option value="tomorrow">Tomorrow</option>
+        <option value="week">In a week</option>
+        <option value="none">Clear</option>
+      </select>
+      <select class="form-select bulk-select" onchange="App.bulkSetPriority(this.value);this.selectedIndex=0;" aria-label="Set priority">
+        <option value="">Priority…</option>
+        <option value="urgent">Urgent</option><option value="high">High</option>
+        <option value="medium">Medium</option><option value="low">Low</option>
+      </select>
+      <button class="btn btn-ghost btn-sm" onclick="App.bulkComplete()">${icon('check', 13)}${anyOpen ? 'Complete' : 'Reopen'}</button>
+      <button class="btn btn-ghost btn-sm" onclick="App.bulkArchive()">${icon('archive', 13)}Archive</button>
+      <button class="btn btn-ghost btn-sm" onclick="App.bulkDelete()">${icon('trash-2', 13)}Delete</button>
+      <button class="icon-btn" onclick="App.clearBulkSelection()" aria-label="Clear selection" title="Clear selection">${icon('x', 15)}</button>`;
+    refreshIcons();
+  }
+
+  function bulkApply(label, fn) {
+    const items = selectedEntries();
+    if (!items.length) return;
+    undoable(`${label} ${items.length} task${items.length === 1 ? '' : 's'}`, () => items.forEach(fn));
+    clearBulkSelection();
+    render();
+  }
+
+  function bulkSetProject(value) {
+    if (!value) return;
+    const pid = value === '__none__' ? null : value;
+    const name = pid ? (State.getProject(pid) || {}).name : 'no project';
+    bulkApply(`Moved to ${name} —`, (e) => State.updateEntry(e.id, { projectId: pid, projectIds: pid ? [pid] : [] }));
+  }
+
+  function bulkSetDue(value) {
+    if (!value) return;
+    const map = {
+      today: State.todayStr(),
+      tomorrow: State.dateStr(new Date(Date.now() + 86400000)),
+      week: State.dateStr(new Date(Date.now() + 7 * 86400000)),
+      none: null,
+    };
+    bulkApply('Re-dated', (e) => State.updateEntry(e.id, { dueDate: map[value] }));
+  }
+
+  function bulkSetPriority(value) {
+    if (!value) return;
+    bulkApply('Re-prioritised', (e) => State.updateEntry(e.id, { priority: value }));
+  }
+
+  // A mixed selection completes everything; an all-complete one reopens.
+  function bulkComplete() {
+    const anyOpen = selectedEntries().some(e => !e.completed);
+    bulkApply(anyOpen ? 'Completed' : 'Reopened', (e) => {
+      if (anyOpen ? !e.completed : e.completed) State.toggleComplete(e.id);
+    });
+  }
+
+  function bulkArchive() { bulkApply('Archived', (e) => State.archiveEntry(e.id)); }
+
+  function bulkDelete() {
+    const items = selectedEntries();
+    if (!items.length) return;
+    bulkApply('Deleted', (e) => State.deleteEntry(e.id));
   }
 
   // A project id plus every ancestor up the nesting chain
@@ -1468,9 +1737,19 @@ const App = (() => {
 
   // Open first (by priority, then due date), finished at the bottom
   const PRI_ORDER = { urgent: 0, high: 1, medium: 2, low: 3 };
+  // A hand-arranged list stays as arranged; an untouched one keeps the smart
+  // order. Deciding per-list rather than globally means dragging one task in
+  // one project does not switch every other list to manual mode.
   function sortEntriesSmart(list) {
+    const arranged = list.some(e => Number.isFinite(e.order));
     return [...list].sort((a, b) => {
       if (!!a.completed !== !!b.completed) return a.completed ? 1 : -1;
+      if (arranged) {
+        // Anything never dragged sorts after everything that was.
+        const oa = Number.isFinite(a.order) ? a.order : Number.MAX_SAFE_INTEGER;
+        const ob = Number.isFinite(b.order) ? b.order : Number.MAX_SAFE_INTEGER;
+        if (oa !== ob) return oa - ob;
+      }
       const pa = PRI_ORDER[a.priority] ?? 2, pb = PRI_ORDER[b.priority] ?? 2;
       if (pa !== pb) return pa - pb;
       const da = a.dueDate || '9999', db = b.dueDate || '9999';
@@ -1488,6 +1767,12 @@ const App = (() => {
     return null;
   }
   function isBlocked(entry) { return !!blockingEntry(entry); }
+
+  // Cade.txt routes "#room=<name>". The bare "#<name>" this used to emit was
+  // not routed at all, so the link landed on whatever document was last open.
+  function txtRoomUrl(room) {
+    return '../txt.html#room=' + encodeURIComponent(room);
+  }
 
   function renderEntryCard(entry, project, streakInfo, opts = {}) {
     const proj = project || (entry.projectId ? State.getProject(entry.projectId) : null);
@@ -1555,10 +1840,22 @@ const App = (() => {
       const pct = Math.round((entry.currentValue || 0) / entry.targetValue * 100);
       metaHtml += `<span class="pill pill-accent">${pct}%</span>`;
     }
+    // Nothing on a card said it mirrors a line in another app, which made
+    // "ticking this changed something over there" a surprise.
+    if (entry.txtRoom) {
+      metaHtml += `<a class="pill pill-room" href="${txtRoomUrl(entry.txtRoom)}" onclick="event.stopPropagation()"
+        title="Mirrors a checkbox in the Cade.txt room “${escHtml(entry.txtRoom)}” — open it">${icon('file-text', 10)}${escHtml(entry.txtRoom)}</a>`;
+    }
 
     return `
       <div class="entry-card ${isDone ? 'completed' : ''} ${isSelected ? 'selected' : ''} ${opts.highlight ? 'highlight' : ''}" data-id="${entry.id}"
-        onclick="App.selectEntryCard('${entry.id}')" ${entry.type === 'task' ? `ondblclick="App.openTaskPage('${entry.id}')" title="Double-click to open task page"` : ''}>
+        ${opts.reorder
+          ? `data-reorder-id="${entry.id}" draggable="true"
+             ondragstart="App.reorderStart(event,'${entry.id}','task')" ondragend="App.reorderEnd(event)"
+             ondragover="App.reorderOver(event,'task')" ondragleave="App.reorderLeave(event)"
+             ondrop="App.reorderDrop(event,'${entry.id}','task')"`
+          : (canTrack ? `draggable="true" ondragstart="App.taskDragStart(event,'${entry.id}')" ondragend="App.taskDragEnd(event)"` : '')}
+        onclick="App.selectEntryCard('${entry.id}', event)" ${entry.type === 'task' ? `ondblclick="App.openTaskPage('${entry.id}')" title="Double-click to open task page — or drag onto the planner to schedule it"` : ''}>
         <div class="check-toggle ${isDone ? 'checked' : ''}" onclick="event.stopPropagation();App.toggleEntry('${entry.id}')" title="Mark ${isDone ? 'not done' : 'done'}">
           <i data-lucide="check"></i>
         </div>
@@ -1573,6 +1870,8 @@ const App = (() => {
         ${tracking ? `<span class="track-tick ${tracking.state === 'paused' ? 'paused' : ''}" data-tick-entry="${entry.id}"
           onclick="event.stopPropagation();Timers.openPanel()" title="Open timer">${Timers.formatTime(tracking.elapsed)}</span>` : ''}
         <div class="entry-actions">
+          <button class="icon-btn${entry.pinned ? ' is-pinned' : ''}" onclick="event.stopPropagation();App.togglePin('${entry.id}')"
+            aria-label="${entry.pinned ? 'Unpin' : 'Pin to shortlist'}" title="${entry.pinned ? 'Unpin' : 'Pin to shortlist'}">${icon(entry.pinned ? 'star' : 'star', 15)}</button>
           ${entry.type === 'task' ? `<button class="icon-btn" onclick="event.stopPropagation();App.openTaskPage('${entry.id}')" aria-label="Open task page" title="Open task page">${icon('panel-right-open', 15)}</button>` : ''}
           ${canTrack && !tracking ? `<button class="icon-btn" onclick="event.stopPropagation();Timers.armTracking('${entry.id}')" aria-label="Start timer" title="Track time">${icon('play', 15)}</button>` : ''}
           <button class="icon-btn" onclick="event.stopPropagation();App.editEntry('${entry.id}')" aria-label="Edit">${icon('pencil', 15)}</button>
@@ -1928,6 +2227,26 @@ const App = (() => {
 
   // ── One project's page ────────────────────────────────────────────────
   // `proj` null means the Unfiled bucket.
+  // Where you are, and the way back up. Three levels down a sub-project page
+  // named the project but gave no clue what it sat inside or how to leave.
+  function breadcrumbHtml(proj) {
+    if (!proj) return '';
+    const chain = [];
+    let cur = proj.parentId ? State.getProject(proj.parentId) : null;
+    let guard = 0;
+    while (cur && guard++ < 20) {
+      chain.unshift(cur);
+      cur = cur.parentId ? State.getProject(cur.parentId) : null;
+    }
+    if (!chain.length) return '';
+    return `<nav class="crumbs" aria-label="Breadcrumb">
+      <button class="crumb" onclick="App.setWorkspace('${WS_ALL}')">All projects</button>
+      ${chain.map(p => `<span class="crumb-sep">›</span>
+        <button class="crumb" onclick="App.revealProject('${p.id}');App.switchTab('projects')">${escHtml(p.name)}</button>`).join('')}
+      <span class="crumb-sep">›</span><span class="crumb crumb-here">${escHtml(proj.name)}</span>
+    </nav>`;
+  }
+
   function renderProjectPage(proj) {
     const settings = State.getSettings();
     const showDone = !!settings.showCompletedOnProject;
@@ -1955,12 +2274,13 @@ const App = (() => {
     const settledSubs = subs.filter(x => !x.a.live);
 
     let html = `
+      ${breadcrumbHtml(proj)}
       <div class="page-header">
         <div>
           <h1 class="page-title">${proj ? `${icon(proj.icon, 16)} ${escHtml(proj.name)}` : 'Unfiled'}</h1>
           <p class="page-subtitle">
             ${open.filter(e => e.type !== 'habit').length} open${doneToday.length ? ` · ${doneToday.length} done today` : ''}${doneEarlier.length ? ` · ${doneEarlier.length} finished earlier` : ''}
-            ${proj?.txtRoom ? ` · <a href="../txt.html#${encodeURIComponent(proj.txtRoom)}" style="color:var(--accent-text)">open in Cade.txt</a>` : ''}
+            ${proj?.txtRoom ? ` · <a href="${txtRoomUrl(proj.txtRoom)}" style="color:var(--accent-text)">open in Cade.txt</a>` : ''}
           </p>
         </div>
         <div style="display:flex;gap:var(--space-2);align-items:center;">
@@ -1986,6 +2306,10 @@ const App = (() => {
         </select>` : ''}
       ` : ''}
     </div>`;
+
+    // Anything typed here lands in THIS project, so the @project token is
+    // only needed when you want it somewhere else.
+    html += quickAddHtml(proj.id);
 
     // Sub-projects — a room with nothing left to do is hidden until asked for.
     if (subs.length) {
@@ -2021,9 +2345,10 @@ const App = (() => {
       if (!list.length) return;
       anyOpen = true;
       html += `<div class="section">
-        <div class="section-header"><span class="section-title">${icon(typeIcons[type])} ${typeLabels[type]} (${list.length})</span></div>
-        <div style="display:flex;flex-direction:column;gap:var(--space-2);">
-          ${list.map(e => renderEntryCard(e, proj)).join('')}
+        <div class="section-header"><span class="section-title">${icon(typeIcons[type])} ${typeLabels[type]} (${list.length})</span>
+          ${list.length > 1 ? '<span class="text-xs text-faint">drag to reorder</span>' : ''}</div>
+        <div style="display:flex;flex-direction:column;gap:var(--space-2);" data-reorder-list="task">
+          ${list.map(e => renderEntryCard(e, proj, null, { reorder: true })).join('')}
         </div>
       </div>`;
     });
@@ -2837,6 +3162,131 @@ const App = (() => {
   let draggingTaskId = null;
   let didDrag = false;
 
+  // ═══════════════════════════════════════════════════════════
+  // DRAG TO REORDER
+  // ═══════════════════════════════════════════════════════════
+  // One mechanism for both lists. The row being dragged is remembered by id;
+  // dropping on another row splices it into that position and rewrites the
+  // whole run's order fields, because nudging one number leaves ties that
+  // then sort unpredictably.
+  let reorderDrag = null;   // { id, list: 'project' | 'task' }
+
+  function reorderStart(e, id, list) {
+    reorderDrag = { id, list };
+    e.dataTransfer.effectAllowed = 'move';
+    try { e.dataTransfer.setData('text/plain', id); } catch (err) {}
+    e.currentTarget.classList.add('reordering');
+    e.stopPropagation();
+  }
+
+  function reorderEnd(e) {
+    reorderDrag = null;
+    e.currentTarget.classList.remove('reordering');
+    document.querySelectorAll('.reorder-over').forEach(x => x.classList.remove('reorder-over'));
+  }
+
+  function reorderOver(e, list) {
+    if (!reorderDrag || reorderDrag.list !== list) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    e.currentTarget.classList.add('reorder-over');
+  }
+
+  function reorderLeave(e) { e.currentTarget.classList.remove('reorder-over'); }
+
+  function reorderDrop(e, targetId, list) {
+    if (!reorderDrag || reorderDrag.list !== list) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.currentTarget.classList.remove('reorder-over');
+    const movedId = reorderDrag.id;
+    reorderDrag = null;
+    if (!movedId || movedId === targetId) return;
+
+    const container = e.currentTarget.closest('[data-reorder-list]');
+    if (!container) return;
+    const ids = [...container.querySelectorAll('[data-reorder-id]')].map(x => x.dataset.reorderId);
+    const from = ids.indexOf(movedId), to = ids.indexOf(targetId);
+    if (from === -1 || to === -1) return;
+    ids.splice(to, 0, ids.splice(from, 1)[0]);
+
+    undoable('Reordered', () => {
+      if (list === 'project') State.reorderProjects(ids); else State.reorderEntries(ids);
+    }, { quiet: true });
+    render();
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // TASK → PLANNER
+  // ═══════════════════════════════════════════════════════════
+  // The planner grid and the task list were the same day drawn twice, with
+  // no way to get from one to the other. Dropping a task on an hour schedules
+  // it there, for as long as its estimate says.
+  const TASK_DRAG_TYPE = 'application/x-cade-task';
+  let draggingPlannerTask = null;
+
+  function taskDragStart(e, id) {
+    draggingPlannerTask = id;
+    e.dataTransfer.effectAllowed = 'copy';
+    try {
+      e.dataTransfer.setData(TASK_DRAG_TYPE, id);
+      e.dataTransfer.setData('text/plain', id);   // Safari wants a known type
+    } catch (err) {}
+    e.currentTarget.classList.add('dragging');
+  }
+
+  function taskDragEnd(e) {
+    draggingPlannerTask = null;
+    e.currentTarget.classList.remove('dragging');
+    document.querySelectorAll('.planner-hour.drop-target').forEach(x => x.classList.remove('drop-target'));
+  }
+
+  function plannerDragOver(e) {
+    if (!draggingPlannerTask) return;   // not our drag — leave the browser to it
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+    e.currentTarget.classList.add('drop-target');
+  }
+
+  function plannerDragLeave(e) {
+    e.currentTarget.classList.remove('drop-target');
+  }
+
+  function plannerDrop(e, dateStr, hour) {
+    e.preventDefault();
+    e.currentTarget.classList.remove('drop-target');
+    const id = draggingPlannerTask ||
+      (e.dataTransfer && (e.dataTransfer.getData(TASK_DRAG_TYPE) || e.dataTransfer.getData('text/plain')));
+    draggingPlannerTask = null;
+    const task = id && State.getEntry(id);
+    if (!task) return;
+
+    // Drop position within the hour, rounded to the nearest quarter, so the
+    // block lands where the pointer was rather than always on the hour.
+    const rect = e.currentTarget.getBoundingClientRect();
+    const frac = rect.height ? Math.min(Math.max((e.clientY - rect.top) / rect.height, 0), 0.99) : 0;
+    const startMin = hour * 60 + Math.round(frac * 4) * 15;
+    const dur = Math.min(Math.max(task.estimateMinutes || 30, 15), 240);
+    const proj = task.projectId ? State.getProject(task.projectId) : null;
+
+    undoable(`Scheduled “${task.title}”`, () => {
+      State.createPlannerBlock({
+        date: dateStr,
+        start: minToTime(startMin),
+        end: minToTime(Math.min(startMin + dur, 24 * 60 - 1)),
+        title: task.title,
+        entryId: task.id,
+        projectId: task.projectId || null,
+        color: proj?.color || null,
+        kind: 'agenda',
+      });
+      // A task you have given a time to is a task you mean to do that day.
+      State.updateEntry(task.id, { scheduledDate: dateStr });
+    }, { quiet: true });
+    toast(`Scheduled at ${minToTime(startMin)}`, { undo: true });
+    render();
+  }
+
   function qDragStart(e, id) {
     draggingTaskId = id;
     didDrag = false;
@@ -3389,6 +3839,30 @@ const App = (() => {
   // ═══════════════════════════════════════════════════════════
   // SETTINGS VIEW
   // ═══════════════════════════════════════════════════════════
+  // Settings was one long scroll of seven unrelated sections with the
+  // destructive ones at the bottom, reachable by accident on the way past.
+  // A filter narrows it to what you came for, and each section collapses.
+  let settingsFilter = '';
+
+  function setSettingsFilter(v) {
+    settingsFilter = String(v || '').trim().toLowerCase();
+    applySettingsFilter();
+  }
+
+  function applySettingsFilter() {
+    const q = settingsFilter;
+    let shown = 0;
+    document.querySelectorAll('#mainContent .section[data-settings-section]').forEach(sec => {
+      const hit = !q || sec.textContent.toLowerCase().includes(q);
+      sec.style.display = hit ? '' : 'none';
+      if (hit) shown++;
+      // A search should show you the answer, not a folded section to open.
+      if (q && hit) { const d = sec.querySelector('details'); if (d) d.open = true; }
+    });
+    const empty = document.getElementById('settingsEmpty');
+    if (empty) empty.style.display = shown ? 'none' : '';
+  }
+
   function renderSettings() {
     const settings = State.getSettings();
     let html = `
@@ -3398,11 +3872,20 @@ const App = (() => {
           <p class="page-subtitle">Sync, preferences, data</p>
         </div>
       </div>
+      <div class="settings-search">
+        ${icon('search', 15)}
+        <input type="search" class="settings-search-input" id="settingsFilter" placeholder="Find a setting…"
+          value="${escHtml(settingsFilter)}" autocomplete="off" oninput="App.setSettingsFilter(this.value)">
+      </div>
+      <p class="text-xs text-faint" id="settingsEmpty" style="display:none;">Nothing matches that.</p>
     `;
+    // The filter has to be re-applied after every render, or typing then
+    // toggling a setting silently un-filters the page under you.
+    setTimeout(applySettingsFilter, 0);
 
     // Appearance
     const curAccent = settings.accent || 'teal';
-    html += `<div class="section">
+    html += `<div class="section" data-settings-section="appearance">
       <div class="section-header"><span class="section-title">Appearance</span></div>
       <div class="card">
         <div class="setting-row">
@@ -3433,7 +3916,7 @@ const App = (() => {
       default: 'Reminders fire as in-app toasts; enable for system notifications',
       unsupported: 'Not supported in this browser — in-app toasts still fire',
     }[notifState];
-    html += `<div class="section">
+    html += `<div class="section" data-settings-section="reminders">
       <div class="section-header"><span class="section-title">Reminders</span></div>
       <div class="card">
         <div class="setting-row">
@@ -3451,7 +3934,7 @@ const App = (() => {
     </div>`;
 
     // Sync section
-    html += `<div class="section">
+    html += `<div class="section" data-settings-section="firebase sync">
       <div class="section-header"><span class="section-title">Firebase Sync</span></div>
       <div class="card">
         <div class="setting-row">
@@ -3472,7 +3955,7 @@ const App = (() => {
     </div>`;
 
     // Timer settings
-    html += `<div class="section">
+    html += `<div class="section" data-settings-section="timer defaults">
       <div class="section-header"><span class="section-title">Timer Defaults</span></div>
       <div class="card">
         <div class="setting-row">
@@ -3499,7 +3982,7 @@ const App = (() => {
     </div>`;
 
     // Health + quick log
-    html += `<div class="section">
+    html += `<div class="section" data-settings-section="health & quick log">
       <div class="section-header"><span class="section-title">Health & Quick Log</span></div>
       <div class="card">
         <div class="setting-row">
@@ -3525,7 +4008,7 @@ const App = (() => {
       ['search', 'Search'],
       ['stopTimers', 'Stop all timers'],
     ];
-    html += `<div class="section">
+    html += `<div class="section" data-settings-section="hotkeys">
       <div class="section-header"><span class="section-title">Hotkeys</span>
         <span class="text-xs text-faint">single keys · never fire while typing</span>
       </div>
@@ -3541,7 +4024,7 @@ const App = (() => {
     </div>`;
 
     // Data management
-    html += `<div class="section">
+    html += `<div class="section" data-settings-section="data">
       <div class="section-header"><span class="section-title">Data</span></div>
       <div class="card">
         <div class="setting-row">
@@ -3561,10 +4044,27 @@ const App = (() => {
           <button class="btn btn-secondary btn-sm" onclick="App.viewArchive()">${icon('archive', 14)}View</button>
         </div>
         <div class="setting-row">
-          <div><div class="setting-label" style="color:var(--error)">Reset All Data</div><div class="setting-desc">Delete everything and start fresh</div></div>
-          <button class="btn btn-danger btn-sm" onclick="App.confirmReset()">${icon('trash-2', 14)}Reset</button>
+          <div><div class="setting-label">Trash</div><div class="setting-desc">${State.getTrash().length} deleted item${State.getTrash().length === 1 ? '' : 's'} — restorable for ${State.TRASH_DAYS} days</div></div>
+          <button class="btn btn-secondary btn-sm" onclick="App.openTrash()">${icon('trash-2', 14)}Open</button>
         </div>
       </div>
+    </div>`;
+
+    // Destructive actions, behind a disclosure of their own. Reset used to sit
+    // at the bottom of the same card as Export, one row below a button people
+    // press regularly, reachable by accident on the way past.
+    html += `<div class="section" data-settings-section="danger reset erase delete everything">
+      <details class="danger-zone">
+        <summary>${icon('alert-triangle', 14)}Things you cannot undo</summary>
+        <div class="card" style="margin-top:var(--space-2);">
+          <div class="setting-row">
+            <div><div class="setting-label" style="color:var(--error)">Reset all data</div>
+              <div class="setting-desc">Deletes every project, task, log and planner block on this device.
+                Export a backup first — this one is not in the trash and not undoable.</div></div>
+            <button class="btn btn-danger btn-sm" onclick="App.confirmReset()">${icon('trash-2', 14)}Reset</button>
+          </div>
+        </div>
+      </details>
     </div>`;
 
     // About
@@ -4004,11 +4504,20 @@ const App = (() => {
     if (editingEntryId) {
       const before = State.getEntry(editingEntryId);
       const renamed = before && before.txtRoom && data.title && data.title !== before.title;
+      const notesChanged = before && before.txtRoom &&
+        (data.description || '').trim() !== (before.description || '').trim();
       const oldKey = before?.txtKey;
       State.updateEntry(editingEntryId, data);
       toast('Entry updated');
       const updated = State.getEntry(editingEntryId);
       if (bridged && renamed) Bridge.pushRename(updated, oldKey).catch(() => {});
+      // Notes on a bridged task are the indented lines under its checkbox,
+      // so editing them here rewrites them over there. A rename re-keys the
+      // link first, hence the sequencing.
+      if (bridged && notesChanged) {
+        const push = () => Bridge.pushNotes(State.getEntry(editingEntryId)).catch(() => {});
+        if (renamed) setTimeout(push, 400); else push();
+      }
       // Moving an existing task INTO a linked sub-project has to add the
       // checkbox there. Nothing else would: scans match on a link this task
       // does not have yet, so without this it stays invisible in Cade.txt.
@@ -4170,10 +4679,12 @@ const App = (() => {
 
   function archiveProjectAction(id) {
     const { rooms, subprojects: subtree, openTasks: tasks } = subtreeFacts(id);
+    const proj = State.getProject(id);
+    State.checkpoint(`Archived “${proj ? proj.name : 'project'}”`);
     State.archiveProject(id);
     if (rooms.length && typeof Bridge !== 'undefined') Bridge.archiveRooms(rooms, true).catch(() => {});
     dropNavIfGone(id);
-    toast(`Archived${subtree ? `, with ${subtree} sub-project${subtree > 1 ? 's' : ''}` : ''}${tasks ? ` and ${tasks} task${tasks > 1 ? 's' : ''}` : ''} — restore from Manage projects`);
+    toast(`Archived${subtree ? `, with ${subtree} sub-project${subtree > 1 ? 's' : ''}` : ''}${tasks ? ` and ${tasks} task${tasks > 1 ? 's' : ''}` : ''}`, { undo: true });
     render();
     dismissModal();
   }
@@ -4187,11 +4698,11 @@ const App = (() => {
   }
 
   function deleteProjectAction(id) {
+    const proj = State.getProject(id) ||
+      State.getProjects({ includeArchived: true }).find(p => p.id === id);
     const count = State.getEntries({ includeArchived: true }).filter(e => e.projectId === id).length;
-    if (!confirm(`Delete this project?${count > 0 ? ` ${count} entr${count === 1 ? 'y' : 'ies'} will be unassigned (not deleted).` : ''}`)) return;
-    State.deleteProject(id);
-    dropNavIfGone(id);
-    toast('Project deleted');
+    undoable(`Deleted “${proj ? proj.name : 'project'}”${count ? ` — ${count} entr${count === 1 ? 'y' : 'ies'} unassigned` : ''}`,
+      () => { State.deleteProject(id); dropNavIfGone(id); });
     render();
     dismissModal();
   }
@@ -4202,9 +4713,13 @@ const App = (() => {
     const active = State.getProjects();
     const archived = State.getProjects({ includeArchived: true }).filter(p => p.archived);
     showModal('Manage Projects', `
-      <div style="display:flex;flex-direction:column;gap:var(--space-2);">
+      <div style="display:flex;flex-direction:column;gap:var(--space-2);" data-reorder-list="project">
         ${active.length === 0 ? '<p class="text-xs text-faint">No projects yet.</p>' : active.map(p => `
-          <div class="chain-link" style="justify-content:space-between;cursor:pointer;${p.depth ? `margin-left:${p.depth * 18}px;` : ''}" onclick="App.openProjectModal('${p.id}', { backTo: 'manage' })">
+          <div class="chain-link" data-reorder-id="${p.id}" draggable="true"
+            ondragstart="App.reorderStart(event,'${p.id}','project')" ondragend="App.reorderEnd(event)"
+            ondragover="App.reorderOver(event,'project')" ondragleave="App.reorderLeave(event)"
+            ondrop="App.reorderDrop(event,'${p.id}','project')"
+            style="justify-content:space-between;cursor:pointer;${p.depth ? `margin-left:${p.depth * 18}px;` : ''}" onclick="App.openProjectModal('${p.id}', { backTo: 'manage' })">
             <span style="display:inline-flex;align-items:center;gap:var(--space-2);">
               ${p.depth ? `<span class="text-faint" style="font-family:var(--font-mono);">└</span>` : ''}
               <span class="proj-dot" style="background:${p.color}"></span>${escHtml(p.name)}
@@ -4247,14 +4762,25 @@ const App = (() => {
       return;
     }
     const settings = State.getSettings();
+    const configured = !!(settings.sync.databaseUrl && settings.sync.passphrase);
+    const live = typeof Sync !== 'undefined' && Sync.isConnected();
+    const status = !configured ? { cls: 'offline', text: 'Not set up yet' }
+      : settings.sync.paused ? { cls: 'offline', text: 'Paused after a local reset' }
+      : live ? { cls: 'online', text: 'Connected' }
+      : { cls: 'offline', text: 'Not connected right now' };
+
     showModal('Firebase Sync', `
+      ${configured ? `<div class="sync-state">
+        <span class="sync-dot ${status.cls}" style="cursor:default"></span>
+        <span class="sync-state-text">${escHtml(status.text)}</span>
+      </div>` : ''}
       <div class="form-group">
         <label class="form-label">Database URL</label>
-        <input type="text" class="form-input" id="syncUrl" value="${settings.sync.databaseUrl || ''}" placeholder="https://your-project.firebaseio.com">
+        <input type="text" class="form-input" id="syncUrl" value="${escHtml(settings.sync.databaseUrl || '')}" placeholder="https://your-project.firebaseio.com">
       </div>
       <div class="form-group">
         <label class="form-label">Passphrase (Encryption Key)</label>
-        <input type="password" class="form-input" id="syncPass" value="${settings.sync.passphrase || ''}" placeholder="Your secret passphrase">
+        <input type="password" class="form-input" id="syncPass" value="${escHtml(settings.sync.passphrase || '')}" placeholder="Your secret passphrase">
       </div>
       <div class="form-group">
         <p class="text-xs text-muted" style="line-height:1.6;">
@@ -4263,11 +4789,90 @@ const App = (() => {
           Multiple devices sharing the same passphrase will automatically sync.
         </p>
       </div>
+      ${configured ? `
+        <div class="divider"></div>
+        <label class="form-label">Connection</label>
+        <div class="sync-action-grid">
+          <button class="btn btn-secondary" onclick="App.reconnectSync()"
+            title="Drop the connection and re-reconcile against the server">${icon('refresh-cw', 14)}Reconnect</button>
+          <button class="btn btn-secondary" onclick="App.hardRefresh()"
+            title="Re-download the app and clear its caches, then reload">${icon('download-cloud', 14)}Force Reload</button>
+        </div>
+        <p class="text-xs text-faint" style="margin-top:var(--space-2);line-height:1.6;">
+          Reconnect re-reads the server and reconciles. Force Reload clears this
+          app's cached files and fetches them again — use it when a fix has
+          shipped but the old version is still running.
+        </p>
+        ${syncActivityHtml()}` : ''}
     `, [
       `<button class="btn btn-secondary" onclick="App.closeModal()">Cancel</button>`,
       settings.sync.connected ? `<button class="btn btn-danger" onclick="App.disconnectSync()">Disconnect</button>` : '',
-      `<button class="btn btn-primary" onclick="App.connectSync()">Connect</button>`,
+      `<button class="btn btn-primary" onclick="App.connectSync()">${configured ? 'Save & Connect' : 'Connect'}</button>`,
     ]);
+  }
+
+  // What this tab has seen sync do. Not stored and not synced — it is a record
+  // of this session, which is what you want when something has just gone
+  // wrong and the console has already scrolled past it.
+  const SYNC_EVENT_META = {
+    online:   { icon: 'plug', label: 'Connected' },
+    offline:  { icon: 'plug-zap', label: 'Disconnected' },
+    push:     { icon: 'upload', label: 'Pushed' },
+    adopt:    { icon: 'download', label: 'Received' },
+    conflict: { icon: 'git-merge', label: 'Conflict' },
+    resolve:  { icon: 'check', label: 'Resolved' },
+    error:    { icon: 'alert-triangle', label: 'Failed' },
+  };
+
+  function syncActivityHtml() {
+    if (typeof Sync === 'undefined' || !Sync.getActivity) return '';
+    const events = Sync.getActivity();
+    if (!events.length) {
+      return `<details class="sync-log"><summary class="text-xs text-faint">Activity</summary>
+        <p class="text-xs text-faint" style="margin:var(--space-2) 0 0;">Nothing has synced in this session yet.</p></details>`;
+    }
+    const when = (t) => {
+      const secs = Math.max(0, Math.round((Date.now() - t) / 1000));
+      if (secs < 60) return secs + 's ago';
+      if (secs < 3600) return Math.round(secs / 60) + 'm ago';
+      return Math.round(secs / 3600) + 'h ago';
+    };
+    return `<details class="sync-log">
+      <summary class="text-xs text-faint">Activity — ${events.length} event${events.length === 1 ? '' : 's'} this session</summary>
+      <div class="sync-log-list">
+        ${events.slice(0, 25).map(e => {
+          const meta = SYNC_EVENT_META[e.kind] || { icon: 'dot', label: e.kind };
+          return `<div class="sync-log-row ${e.kind === 'error' || e.kind === 'conflict' ? 'bad' : ''}">
+            ${icon(meta.icon, 12)}
+            <span class="slr-label">${escHtml(meta.label)}</span>
+            <span class="slr-detail truncate">${escHtml(e.detail || '')}</span>
+            <span class="slr-when">${escHtml(when(e.at))}</span>
+          </div>`;
+        }).join('')}
+      </div>
+    </details>`;
+  }
+
+  // Mirrors Cade.txt's Connection actions: drop and re-establish, so a stalled
+  // session re-reconciles without the user having to reload the whole app.
+  async function reconnectSync() {
+    const settings = State.getSettings();
+    if (!settings.sync.databaseUrl || !settings.sync.passphrase) { toast('Nothing to reconnect to'); return; }
+    toast('Reconnecting…');
+    Sync.disconnect();
+    const res = await Sync.connect(settings.sync.databaseUrl, settings.sync.passphrase);
+    Sync.updateStatus();
+    if (res && res.success) {
+      // The bridge's shared-config pull is once per session; a deliberate
+      // reconnect is exactly when it should happen again.
+      if (typeof Bridge !== 'undefined' && Bridge.resetConfigPull) Bridge.resetConfigPull();
+      if (typeof Bridge !== 'undefined') Bridge.requestScan(200);
+      toast('Reconnected');
+      closeModal();
+      render();
+    } else {
+      toast('Could not reconnect: ' + ((res && res.error) || 'unknown error'));
+    }
   }
 
   async function connectSync() {
@@ -4293,6 +4898,449 @@ const App = (() => {
     toast('Disconnected');
     closeModal();
     render();
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // QUICK ADD
+  // ═══════════════════════════════════════════════════════════
+  // One line in, one task out. The parser behind this has existed since the
+  // command palette was built, and was reachable only by pressing Ctrl+K and
+  // knowing it was there — so in practice every task went through a modal
+  // with eight fields. This puts the same parser where tasks actually get
+  // added, with a live preview of what it understood.
+  function quickAddHtml(projectId) {
+    return `<form class="qadd" onsubmit="event.preventDefault();App.quickAddSubmit();" ${projectId ? `data-project="${projectId}"` : ''}>
+      ${icon('plus', 15)}
+      <input type="text" id="quickAdd" class="qadd-input" autocomplete="off" spellcheck="false"
+        placeholder="Add a task — try: call the fitter tue 3pm !high ~30m #home"
+        oninput="App.quickAddPreview()" onkeydown="App.quickAddKey(event)">
+      <span class="qadd-chips" id="quickAddChips"></span>
+    </form>`;
+  }
+
+  function quickAddScope() {
+    const el = document.querySelector('.qadd');
+    const scoped = el && el.dataset.project;
+    if (scoped) return scoped;
+    const focus = focusedProjectId();
+    return focus && focus !== 'none' ? focus : null;
+  }
+
+  function quickAddPreview() {
+    const input = document.getElementById('quickAdd');
+    const box = document.getElementById('quickAddChips');
+    if (!input || !box || typeof Palette === 'undefined') return;
+    const raw = input.value.trim();
+    if (!raw) { box.innerHTML = ''; return; }
+    const p = Palette.parse(raw);
+    // The title is shown back only when the parser has eaten something —
+    // otherwise the chip row would just echo what is already in the box.
+    const chips = Palette.chipsFor(p);
+    box.innerHTML = chips.map(c =>
+      `<span class="qadd-chip">${escHtml(c.label)}</span>`).join('');
+  }
+
+  function quickAddKey(e) {
+    if (e.key === 'Escape') { e.target.value = ''; quickAddPreview(); e.target.blur(); }
+  }
+
+  function quickAddSubmit() {
+    const input = document.getElementById('quickAdd');
+    if (!input) return;
+    const raw = input.value.trim();
+    if (!raw) return;
+    if (typeof Palette === 'undefined') { toast('Quick add is unavailable'); return; }
+    const defaultProjectId = quickAddScope();
+    let created = null;
+    undoable('Added a task', () => { created = Palette.createFromText(raw, { defaultProjectId }); }, { quiet: true });
+    if (!created) { toast('Nothing to add — that parsed to an empty title'); return; }
+    // A task added to a bridged project belongs in its room's list too.
+    if (typeof Bridge !== 'undefined') Bridge.pushNewTask(created.entry).catch(() => {});
+    input.value = '';
+    render();
+    // Re-focus so five tasks are five lines, not five round trips.
+    setTimeout(() => {
+      const again = document.getElementById('quickAdd');
+      if (again) { again.focus(); quickAddPreview(); }
+    }, 0);
+    toast(created.summary ? `Added — ${created.summary}` : 'Added', { undo: true });
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // WEEKLY REVIEW
+  // ═══════════════════════════════════════════════════════════
+  // The week digest exists as a strip of numbers on Insights. This is the
+  // moment: what moved, what stalled, where the hours went, and what you
+  // kept carrying — the four questions a weekly review is actually for.
+  function weeklyFacts() {
+    const days = [...Array(7)].map((_, i) => offsetDateStr(-i));
+    const inWeek = (iso) => days.includes(String(iso || '').slice(0, 10));
+    const entries = State.getEntries({ includeArchived: true });
+
+    const finished = entries.filter(e => e.completed && inWeek(e.completedAt));
+    const created = entries.filter(e => inWeek(e.createdAt));
+
+    // Where the hours went, by project.
+    const byProject = new Map();
+    days.forEach(d => State.getLogs({ type: 'time_session', date: d }).forEach(l => {
+      const e = l.entryId ? State.getEntry(l.entryId) : null;
+      const pid = e ? (State.entryProjectIds(e)[0] || null) : null;
+      byProject.set(pid, (byProject.get(pid) || 0) + (l.value || 0));
+    }));
+    const hours = [...byProject.entries()]
+      .map(([pid, secs]) => ({ name: pid ? (State.getProject(pid) || {}).name || 'Deleted project' : 'No project', secs }))
+      .sort((a, b) => b.secs - a.secs);
+    const totalSecs = hours.reduce((s, h) => s + h.secs, 0);
+
+    // Projects that finished something, and projects that did not but have
+    // open work — "stalled" only means anything with work outstanding.
+    const movedIds = new Set();
+    finished.forEach(e => State.entryProjectIds(e).forEach(id => movedIds.add(id)));
+    const stalled = State.getProjects().filter(p =>
+      !movedIds.has(p.id) &&
+      State.getEntries({ type: 'task', completed: false }).some(t => State.entryProjectIds(t).includes(p.id)));
+
+    const carried = State.getEntries({ type: 'task', completed: false })
+      .map(t => ({ t, days: carriedDays(t) }))
+      .filter(x => x.days >= 3)
+      .sort((a, b) => b.days - a.days);
+
+    const moods = days.map(d => State.getLogs({ type: 'emotion', date: d }))
+      .flat().map(l => Number(l.value)).filter(Number.isFinite);
+    const avgMood = moods.length ? moods.reduce((a, c) => a + c, 0) / moods.length : null;
+
+    const habits = State.getEntries({ type: 'habit' });
+    const habitRate = habits.length
+      ? Math.round(days.reduce((sum, d) => sum + habits.filter(h =>
+          State.isHabitScheduledOn(h.id, d) && State.habitStatusOn(h.id, d) === 'done').length, 0) /
+          Math.max(1, days.reduce((sum, d) => sum + habits.filter(h => State.isHabitScheduledOn(h.id, d)).length, 0)) * 100)
+      : null;
+
+    return { days, finished, created, hours, totalSecs, movedIds, stalled, carried, avgMood, habitRate };
+  }
+
+  function openWeeklyReview() {
+    const f = weeklyFacts();
+    const moved = State.getProjects().filter(p => f.movedIds.has(p.id));
+    const pct = (secs) => (f.totalSecs ? Math.round(secs / f.totalSecs * 100) : 0);
+
+    showModal('This week', `
+      <p class="text-sm text-muted" style="line-height:1.7;margin-bottom:var(--space-3);">
+        ${f.finished.length
+          ? `${f.finished.length} finished, ${f.created.length} added${f.totalSecs ? `, ${Timers.formatTime(f.totalSecs)} tracked` : ''}.`
+          : 'Nothing was marked finished this week.'}
+        ${f.habitRate !== null ? ` Habits ran at ${f.habitRate}%.` : ''}
+        ${f.avgMood !== null ? ` Mood averaged ${f.avgMood.toFixed(1)} out of 5.` : ''}
+      </p>
+
+      ${moved.length ? `<div class="section">
+        <div class="section-header"><span class="section-title">What moved</span>
+          <span class="stat-label">${moved.length}</span></div>
+        <div class="shutdown-list">${moved.map(p => {
+          const n = f.finished.filter(e => State.entryProjectIds(e).includes(p.id)).length;
+          return `<div class="shutdown-row"><span class="proj-dot" style="background:${p.color}"></span>
+            <span class="truncate" style="flex:1">${escHtml(p.name)}</span>
+            <span class="text-xs text-faint">${n} done</span></div>`;
+        }).join('')}</div>
+      </div>` : ''}
+
+      ${f.stalled.length ? `<div class="section">
+        <div class="section-header"><span class="section-title">What stalled</span>
+          <span class="stat-label">${f.stalled.length}</span></div>
+        <p class="text-xs text-faint" style="margin-bottom:var(--space-2);">Open work, nothing finished in seven days.</p>
+        <div class="shutdown-list">${f.stalled.slice(0, 8).map(p =>
+          `<div class="shutdown-row"><span class="proj-dot" style="background:${p.color}"></span>
+            <span class="truncate" style="flex:1">${escHtml(p.name)}</span>
+            <button class="btn btn-ghost btn-sm" onclick="App.closeModal();App.revealProject('${p.id}');App.switchTab('projects')">Open</button>
+          </div>`).join('')}</div>
+      </div>` : ''}
+
+      ${f.hours.length ? `<div class="section">
+        <div class="section-header"><span class="section-title">Where the hours went</span>
+          <span class="stat-label">${Timers.formatTime(f.totalSecs)}</span></div>
+        <div class="week-bars">${f.hours.slice(0, 6).map(h => `
+          <div class="week-bar-row">
+            <span class="week-bar-label truncate">${escHtml(h.name)}</span>
+            <span class="week-bar"><span class="week-bar-fill" style="width:${pct(h.secs)}%"></span></span>
+            <span class="week-bar-val">${Timers.formatTime(h.secs)}</span>
+          </div>`).join('')}</div>
+      </div>` : ''}
+
+      ${f.carried.length ? `<div class="section">
+        <div class="section-header"><span class="section-title">Kept carrying</span>
+          <span class="stat-label">${f.carried.length}</span></div>
+        <div class="shutdown-list">${f.carried.slice(0, 8).map(({ t, days }) =>
+          `<div class="shutdown-row">
+            <span class="truncate" style="flex:1">${escHtml(t.title)}</span>
+            <span class="pill pill-orange">${days} days</span>
+          </div>`).join('')}</div>
+        <p class="text-xs text-faint" style="margin-top:var(--space-2);line-height:1.6;">
+          Three days or more on the list. Usually a sign the task is really several,
+          or that it was never going to happen.
+        </p>
+      </div>` : ''}
+    `, [`<button class="btn btn-secondary" onclick="App.closeModal()">Close</button>`]);
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // RECORDS
+  // ═══════════════════════════════════════════════════════════
+  // Cheap to compute from data already kept, and the only part of a personal
+  // system that ever feels like a reward.
+  function computeRecords() {
+    const entries = State.getEntries({ includeArchived: true });
+    const done = entries.filter(e => e.completed && e.completedAt);
+    const byDay = new Map();
+    done.forEach(e => {
+      const d = String(e.completedAt).slice(0, 10);
+      byDay.set(d, (byDay.get(d) || 0) + 1);
+    });
+    const bestDay = [...byDay.entries()].sort((a, b) => b[1] - a[1])[0] || null;
+
+    const byWeek = new Map();
+    byDay.forEach((n, d) => {
+      const monday = new Date(d + 'T00:00');
+      monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
+      const k = State.dateStr(monday);
+      byWeek.set(k, (byWeek.get(k) || 0) + n);
+    });
+    const bestWeek = [...byWeek.entries()].sort((a, b) => b[1] - a[1])[0] || null;
+
+    // The longest run of consecutive days with at least one completion.
+    const dayList = [...byDay.keys()].sort();
+    let bestStreak = 0, run = 0, prev = null;
+    dayList.forEach(d => {
+      run = (prev && (Date.parse(d) - Date.parse(prev)) === 86400000) ? run + 1 : 1;
+      prev = d;
+      if (run > bestStreak) bestStreak = run;
+    });
+
+    const habitBest = State.getEntries({ type: 'habit' })
+      .map(h => ({ title: h.title, streak: (State.calculateStreak(h.id) || {}).best || 0 }))
+      .sort((a, b) => b.streak - a.streak)[0] || null;
+
+    const totalSecs = State.getLogs({ type: 'time_session' }).reduce((s, l) => s + (l.value || 0), 0);
+    const firstDone = done.map(e => e.completedAt).sort()[0] || null;
+
+    return {
+      total: done.length, bestDay, bestWeek, bestStreak, habitBest, totalSecs, firstDone,
+      activeDays: byDay.size,
+    };
+  }
+
+  const MILESTONES = [1, 10, 25, 50, 100, 250, 500, 1000, 2500];
+
+  function openRecords() {
+    const r = computeRecords();
+    const next = MILESTONES.find(m => m > r.total);
+    const fmtDay = (d) => new Date(d + 'T00:00').toLocaleDateString('en', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+    const row = (label, value, note) => `<div class="rec-row">
+      <span class="rec-label">${escHtml(label)}</span>
+      <span class="rec-value">${value}</span>
+      ${note ? `<span class="rec-note">${escHtml(note)}</span>` : ''}
+    </div>`;
+
+    showModal('Records', r.total === 0 ? `
+      <p class="text-sm text-muted" style="line-height:1.7;">
+        Nothing finished yet, so there is nothing to beat. Come back once you have.
+      </p>` : `
+      <div class="rec-list">
+        ${row('Finished, all time', r.total, r.firstDone ? 'since ' + fmtDay(String(r.firstDone).slice(0, 10)) : '')}
+        ${r.bestDay ? row('Best day', r.bestDay[1] + ' tasks', fmtDay(r.bestDay[0])) : ''}
+        ${r.bestWeek ? row('Best week', r.bestWeek[1] + ' tasks', 'week of ' + fmtDay(r.bestWeek[0])) : ''}
+        ${row('Longest run', r.bestStreak + ' day' + (r.bestStreak === 1 ? '' : 's'), 'finishing something every day')}
+        ${row('Days with something done', r.activeDays, '')}
+        ${r.habitBest && r.habitBest.streak ? row('Longest habit streak', r.habitBest.streak + ' days', r.habitBest.title) : ''}
+        ${r.totalSecs ? row('Time tracked', Timers.formatTime(r.totalSecs), 'all time') : ''}
+      </div>
+      ${next ? `<div class="rec-next">
+        <div class="rec-next-head">
+          <span>Next milestone</span><span class="rec-next-count">${r.total} / ${next}</span>
+        </div>
+        <span class="progress-bar"><span class="progress-fill" style="width:${Math.round(r.total / next * 100)}%"></span></span>
+        <p class="text-xs text-faint" style="margin-top:var(--space-2);">
+          ${next - r.total} more to reach ${next}.
+        </p>
+      </div>` : ''}
+    `, [`<button class="btn btn-secondary" onclick="App.closeModal()">Close</button>`]);
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // SHUTDOWN REVIEW
+  // ═══════════════════════════════════════════════════════════
+  // Daily Review triages what is overdue — a morning tool. This is its
+  // evening counterpart: what got done, what slipped and by how often, where
+  // the hours went, and what is first tomorrow. Ending the day deliberately
+  // is the part a task list usually leaves out.
+  function shutdownFacts() {
+    const today = State.todayStr();
+    const tomorrow = State.dateStr(new Date(Date.now() + 86400000));
+    const entries = State.getEntries({ includeArchived: true });
+
+    const done = entries.filter(e => e.completed && (e.completedAt || '').startsWith(today));
+    const openToday = State.getEntries({ type: 'task', completed: false }).filter(t =>
+      t.dueDate === today || t.scheduledDate === today || (!t.dueDate && !t.scheduledDate));
+    const slipped = openToday.filter(t => t.dueDate === today || t.scheduledDate === today);
+    const focusSeconds = State.getLogs({ type: 'time_session', date: today })
+      .reduce((sum, l) => sum + (l.value || 0), 0);
+    const habits = State.getEntries({ type: 'habit' })
+      .filter(h => State.isHabitScheduledOn(h.id, today));
+    const habitsDone = habits.filter(h => State.isHabitDoneToday(h.id));
+    const tomorrowTasks = State.getEntries({ type: 'task', completed: false })
+      .filter(t => t.dueDate === tomorrow || t.scheduledDate === tomorrow)
+      .sort((a, b) => taskScore(b) - taskScore(a));
+
+    return { today, tomorrow, done, slipped, focusSeconds, habits, habitsDone, tomorrowTasks };
+  }
+
+  // How many days running a task has been on the list without being done.
+  // A task dodged four times is telling you something — break it up or drop
+  // it — and nothing in the app was keeping count.
+  function carriedDays(t) {
+    const from = t.scheduledDate || t.dueDate || (t.createdAt || '').slice(0, 10);
+    if (!from || t.completed) return 0;
+    const start = Date.parse(from + 'T00:00');
+    if (!Number.isFinite(start)) return 0;
+    return Math.max(0, Math.floor((Date.now() - start) / 86400000));
+  }
+
+  function openShutdown() {
+    const f = shutdownFacts();
+    const carried = f.slipped
+      .map(t => ({ t, days: carriedDays(t) }))
+      .filter(x => x.days >= 1)
+      .sort((a, b) => b.days - a.days);
+
+    showModal('Shutdown', `
+      <p class="text-sm text-muted" style="line-height:1.7;margin-bottom:var(--space-3);">
+        ${f.done.length
+          ? `You finished ${f.done.length} thing${f.done.length === 1 ? '' : 's'} today${f.focusSeconds ? ` and tracked ${Timers.formatTime(f.focusSeconds)}` : ''}.`
+          : 'Nothing was marked done today — which is sometimes just how a day goes.'}
+      </p>
+
+      ${f.done.length ? `<div class="section">
+        <div class="section-header"><span class="section-title">Done today</span>
+          <span class="stat-label">${f.done.length}</span></div>
+        <div class="shutdown-list">${f.done.slice(0, 12).map(e =>
+          `<div class="shutdown-row">${icon('check', 13)}<span class="truncate">${escHtml(e.title)}</span></div>`).join('')}
+          ${f.done.length > 12 ? `<div class="text-xs text-faint">and ${f.done.length - 12} more</div>` : ''}</div>
+      </div>` : ''}
+
+      ${f.habits.length ? `<div class="section">
+        <div class="section-header"><span class="section-title">Habits</span>
+          <span class="stat-label">${f.habitsDone.length} / ${f.habits.length}</span></div>
+        ${f.habitsDone.length < f.habits.length ? `<p class="text-xs" style="color:var(--hl-orange);">
+          Still open: ${f.habits.filter(h => !State.isHabitDoneToday(h.id)).map(h => escHtml(h.title)).join(', ')}</p>` : ''}
+      </div>` : ''}
+
+      ${f.slipped.length ? `<div class="section">
+        <div class="section-header"><span class="section-title">Didn’t happen</span>
+          <span class="stat-label">${f.slipped.length}</span></div>
+        <div class="shutdown-list">${f.slipped.slice(0, 10).map(t => {
+          const days = carriedDays(t);
+          return `<div class="shutdown-row">
+            ${icon('circle', 13)}<span class="truncate" style="flex:1">${escHtml(t.title)}</span>
+            ${days >= 2 ? `<span class="pill pill-orange" title="On the list this long without being finished">carried ${days}×</span>` : ''}
+            <button class="btn btn-ghost btn-sm" onclick="App.snoozeEntry('${t.id}','tomorrow')">Tomorrow</button>
+          </div>`;
+        }).join('')}</div>
+        ${carried.length ? `<p class="text-xs text-faint" style="margin-top:var(--space-2);line-height:1.6;">
+          ${carried.length === 1 ? 'One task has' : `${carried.length} tasks have`} been carried more than a day.
+          Something carried repeatedly usually wants breaking up, or dropping.
+        </p>` : ''}
+      </div>` : ''}
+
+      <div class="section">
+        <div class="section-header"><span class="section-title">First thing tomorrow</span></div>
+        ${f.tomorrowTasks.length
+          ? `<div class="shutdown-list">${f.tomorrowTasks.slice(0, 5).map(t =>
+              `<div class="shutdown-row">${icon('arrow-right', 13)}<span class="truncate">${escHtml(t.title)}</span></div>`).join('')}</div>`
+          : `<p class="text-xs text-faint">Nothing is dated tomorrow yet. Snooze something above, or leave it open.</p>`}
+      </div>
+    `, [
+      `<button class="btn btn-secondary" onclick="App.closeModal()">Close</button>`,
+      f.slipped.length ? `<button class="btn btn-primary" onclick="App.shutdownPushAll()">${icon('calendar-arrow-down', 14)}Move ${f.slipped.length} to tomorrow</button>` : '',
+    ]);
+  }
+
+  function shutdownPushAll() {
+    const f = shutdownFacts();
+    if (!f.slipped.length) return;
+    undoable(`Moved ${f.slipped.length} task${f.slipped.length === 1 ? '' : 's'} to tomorrow`, () => {
+      f.slipped.forEach(t => State.updateEntry(t.id, {
+        scheduledDate: f.tomorrow,
+        dueDate: t.dueDate ? f.tomorrow : t.dueDate,
+      }));
+    });
+    closeModal();
+    render();
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // TRASH
+  // ═══════════════════════════════════════════════════════════
+  const TRASH_KIND_LABEL = {
+    entry: 'Task', project: 'Project', scratch: 'Scratch idea',
+    planner: 'Planner block', log: 'Log', tag: 'Tag',
+  };
+
+  function trashItemName(rec) {
+    const p = rec.payload || {};
+    return p.title || p.name || p.text || p.type || TRASH_KIND_LABEL[rec.kind] || 'Item';
+  }
+
+  function daysLeft(rec) {
+    const t = Date.parse(rec.deletedAt || '');
+    if (!Number.isFinite(t)) return State.TRASH_DAYS;
+    return Math.max(0, State.TRASH_DAYS - Math.floor((Date.now() - t) / 86400000));
+  }
+
+  function openTrash() {
+    const items = State.getTrash();
+    showModal('Trash', `
+      <p class="text-sm text-muted" style="line-height:1.7;margin-bottom:var(--space-3);">
+        Deleted items wait here for ${State.TRASH_DAYS} days, then go for good.
+        ${items.length ? '' : 'Nothing in here right now.'}
+      </p>
+      ${items.length ? `<div class="trash-list">${items.map(rec => `
+        <div class="trash-row">
+          <span class="trash-kind">${escHtml(TRASH_KIND_LABEL[rec.kind] || rec.kind)}</span>
+          <span class="trash-name truncate">${escHtml(trashItemName(rec))}</span>
+          <span class="trash-age">${daysLeft(rec)}d left</span>
+          <span class="trash-acts">
+            <button class="icon-btn" onclick="App.restoreFromTrash('${rec.id}')" title="Restore" aria-label="Restore">${icon('undo-2', 15)}</button>
+            <button class="icon-btn" onclick="App.purgeFromTrash('${rec.id}')" title="Delete for good" aria-label="Delete for good">${icon('trash-2', 15)}</button>
+          </span>
+        </div>`).join('')}</div>` : ''}
+    `, [
+      `<button class="btn btn-secondary" onclick="App.closeModal()">Close</button>`,
+      items.length ? `<button class="btn btn-danger" onclick="App.emptyTrash()">Empty Trash</button>` : '',
+    ]);
+  }
+
+  function restoreFromTrash(id) {
+    const rec = State.restoreFromTrash(id);
+    toast(rec ? `Restored “${trashItemName(rec)}”` : 'Could not restore that');
+    render();
+    openTrash();
+  }
+
+  function purgeFromTrash(id) {
+    const rec = State.getTrash().find(r => r.id === id);
+    // Past this point there is genuinely no way back, so this one does ask.
+    if (!confirm(`Delete “${rec ? trashItemName(rec) : 'this item'}” permanently?`)) return;
+    State.purgeFromTrash(id);
+    render();
+    openTrash();
+  }
+
+  function emptyTrash() {
+    const n = State.getTrash().length;
+    if (!n || !confirm(`Permanently delete ${n} item${n === 1 ? '' : 's'}? This cannot be undone.`)) return;
+    State.emptyTrash();
+    toast(`Emptied the trash — ${n} item${n === 1 ? '' : 's'} gone`);
+    render();
+    closeModal();
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -4375,8 +5423,34 @@ const App = (() => {
       </p>
     `, [
       `<button class="btn btn-secondary" onclick="App.closeModal()">Close</button>`,
+      url ? `<button class="btn btn-secondary" onclick="App.seedRooms()" title="Upload rooms this device holds that the database has never seen">${icon('upload-cloud', 14)}Upload missing</button>` : '',
       `<button class="btn btn-primary" onclick="App.rescanBridge()">Rescan now</button>`,
     ]);
+  }
+
+  // Rooms this device holds text for that the server has never seen. Without
+  // this they are invisible in every other browser, however often you rescan
+  // there — there is simply nothing to fetch.
+  let seeding = false;
+  async function seedRooms() {
+    if (typeof Bridge === 'undefined' || seeding) return;
+    seeding = true;
+    closeModal();
+    toast('Checking which rooms the database is missing…');
+    let res = { seeded: 0 };
+    try {
+      for (let pass = 0; pass < 20; pass++) {
+        const r = await Bridge.seedMissingRooms({ force: pass === 0 });
+        res = { seeded: (res.seeded || 0) + r.seeded, reason: r.reason };
+        if (!r.checked) break;
+      }
+    } catch (e) { console.warn('Seeding failed', e); }
+    seeding = false;
+    if (res.reason === 'no-credentials') { toast('No database configured — nothing to upload to'); return; }
+    toast(res.seeded
+      ? `Uploaded ${res.seeded} room${res.seeded === 1 ? '' : 's'} — other browsers can see them now`
+      : 'The database already had every room this device holds');
+    render();
   }
 
   // What a finished rescan should say. Rooms that could not be pulled are
@@ -5216,13 +6290,15 @@ const App = (() => {
   }
 
   function deleteScratchIdea(id) {
-    State.deleteScratch(id);
+    undoable('Deleted a scratch idea', () => State.deleteScratch(id));
     render();
   }
 
   function clearScratchAll() {
-    const n = State.clearScratch();
-    toast(n ? `Cleared ${n} idea${n === 1 ? '' : 's'}` : 'Scratchpad already empty');
+    let n = 0;
+    undoable('Cleared the scratchpad', () => { n = State.clearScratch(); }, { quiet: !0 });
+    if (!n) { toast('Scratchpad already empty'); return; }
+    toast(`Cleared ${n} idea${n === 1 ? '' : 's'}`, { undo: true });
     render();
   }
 
@@ -5327,6 +6403,17 @@ const App = (() => {
     };
   }
 
+  // The tasks auto-plan would consider, in the order it would consider them.
+  function computeAutoPlanCandidates(opts = {}) {
+    const today = State.todayStr();
+    return State.getEntries({ type: 'task', completed: false, projectId: opts.projectId || undefined })
+      .filter(t => !isBlocked(t) && (!t.dueDate || t.dueDate <= today || t.scheduledDate === today))
+      .sort((a, b) => {
+        const aDue = a.dueDate ? 0 : 1, bDue = b.dueDate ? 0 : 1;
+        return aDue - bDue || taskScore(b) - taskScore(a);
+      });
+  }
+
   function computeAutoPlan(opts = {}) {
     const today = State.todayStr();
     const d = autoPlanDefaults();
@@ -5350,12 +6437,7 @@ const App = (() => {
 
     // candidates: unblocked open tasks due (or overdue) today first,
     // then undated ones — best score first, optionally project-scoped
-    const cands = State.getEntries({ type: 'task', completed: false, projectId: opts.projectId || undefined })
-      .filter(t => !isBlocked(t) && (!t.dueDate || t.dueDate <= today))
-      .sort((a, b) => {
-        const aDue = a.dueDate ? 0 : 1, bDue = b.dueDate ? 0 : 1;
-        return aDue - bDue || taskScore(b) - taskScore(a);
-      });
+    const cands = computeAutoPlanCandidates(opts);
 
     const sizeOf = (t) => Math.min(Math.max(Math.ceil((t.estimateMinutes || 30) / 15) * 15, 15), 120);
     const place = (task, dur) => {
@@ -5412,6 +6494,10 @@ const App = (() => {
       return;
     }
     const total = pendingPlan.reduce((s, p) => s + (p.end - p.start), 0);
+    // What the day had no room for. Silently dropping it made auto-plan look
+    // like it had considered less than it had.
+    const planned = new Set(pendingPlan.map(p => p.task.id));
+    const left = computeAutoPlanCandidates(readAutoPlanOpts()).filter(t => !planned.has(t.id));
     el.innerHTML = `
       <div class="autoplan-list">
         ${pendingPlan.map(p => {
@@ -5424,7 +6510,10 @@ const App = (() => {
           </div>`;
         }).join('')}
       </div>
-      <p class="text-xs text-faint" style="margin-top:var(--space-2);">${pendingPlan.length} block${pendingPlan.length === 1 ? '' : 's'} · ${estimateLabel(total)} planned</p>`;
+      <p class="text-xs text-faint" style="margin-top:var(--space-2);">${pendingPlan.length} block${pendingPlan.length === 1 ? '' : 's'} · ${estimateLabel(total)} planned</p>
+      ${left.length ? `<p class="text-xs" style="color:var(--hl-orange);line-height:1.6;margin-top:var(--space-1);">
+        ${left.length} didn’t fit: ${left.slice(0, 4).map(t => escHtml(t.title)).join(', ')}${left.length > 4 ? `, and ${left.length - 4} more` : ''}.
+      </p>` : ''}`;
     const btn = document.getElementById('apConfirm');
     if (btn) btn.disabled = false;
   }
@@ -5512,10 +6601,42 @@ const App = (() => {
         }
       } catch (err) { /* not JSON — fall through to line parsing */ }
     }
-    return trimmed.split('\n')
-      .map(l => l.replace(/^\s*(?:[-*+]\s*(?:\[[ xX]\]\s*)?|\d+[.)]\s*)/, '').trim())
-      .filter(l => l && !/^#{1,6}\s/.test(l) && !/^```/.test(l))
-      .map(raw => ({ raw }));
+    // Line parsing. Three things the old version threw away and shouldn't:
+    //   • a ticked "[x]" box means the task is already done
+    //   • indentation, and markdown headings, name the group a run belongs to
+    //   • "— due Friday" trailing clauses are dates, not part of the title
+    const out = [];
+    let heading = null;         // last "## Kitchen" seen
+    const indentGroup = [];     // group name by indent depth
+    let inFence = false;
+
+    trimmed.split('\n').forEach(line => {
+      if (/^\s*```/.test(line)) { inFence = !inFence; return; }
+      if (inFence) return;
+      if (!line.trim()) return;
+
+      const h = line.match(/^\s*#{1,6}\s+(.*)$/);
+      if (h) { heading = h[1].trim() || null; indentGroup.length = 0; return; }
+
+      const bullet = line.match(/^(\s*)(?:[-*+]\s*(\[[ xX]\]\s*)?|\d+[.)]\s*)?(.*)$/);
+      const indent = bullet ? bullet[1].replace(/\t/g, '  ').length : 0;
+      const box = bullet ? bullet[2] : null;
+      let body = (bullet ? bullet[3] : line).trim();
+      if (!body) return;
+
+      // Trailing "— due friday" / "- due 2026-01-02" clauses fold into the
+      // text the quick-add parser reads, so it can pick the date out.
+      body = body.replace(/\s*[—–-]{1,2}\s*(due\s+.+)$/i, ' $1');
+
+      const depth = Math.floor(indent / 2);
+      // A line with children names them: remember it at this depth.
+      indentGroup.length = depth;
+      const group = depth > 0 ? (indentGroup[depth - 1] || heading) : heading;
+      indentGroup[depth] = body.replace(/\s+[!#@~*].*$/, '').trim();
+
+      out.push({ raw: body, done: !!(box && /[xX]/.test(box)), group: group || null });
+    });
+    return out;
   }
 
   function pasteDefaultProject() {
@@ -5527,10 +6648,16 @@ const App = (() => {
     const proj = pasteDefaultProject() ? State.getProject(pasteDefaultProject()) : null;
     showModal('Paste Tasks', `
       <p class="text-xs text-muted" style="margin-bottom:var(--space-2);">
-        One item per line — markdown lists and numbering are stripped. Lines speak the quick-add shorthand
-        (<span class="font-mono">tomorrow 3pm #tag @project !high ~30m</span>), and the "Copy for LLM" JSON pastes straight back in.
+        One item per line. Lines speak the quick-add shorthand
+        (<span class="font-mono">tomorrow 3pm #tag @project !high ~30m *xl every week</span>),
+        a ticked <span class="font-mono">[x]</span> box imports as already done, and the
+        "Copy for LLM" JSON pastes straight back in.
         ${proj ? `New tasks land in <strong>${escHtml(proj.name)}</strong> unless a line says otherwise.` : ''}
       </p>
+      <label class="form-check" style="display:flex;align-items:center;gap:var(--space-2);margin-bottom:var(--space-2);">
+        <input type="checkbox" id="pasteGroups" checked onchange="App.previewPasteImport()">
+        <span class="text-xs">Turn headings and indented groups into sub-projects</span>
+      </label>
       <textarea class="form-input" id="pasteInput" rows="9" spellcheck="false"
         placeholder="- [ ] Fix header overflow #bugs !high&#10;- Write release notes tomorrow ~30m&#10;- Call the vendor friday 10am"
         oninput="App.previewPasteImport()"></textarea>
@@ -5556,10 +6683,15 @@ const App = (() => {
       if (p.remindTime) bits.push(p.remindTime);
       if (p.priority) bits.push(p.priority);
       if (p.estimateMinutes) bits.push('~' + estimateLabel(p.estimateMinutes));
+      if (p.effort) bits.push(p.effort);
+      if (p.recurrence) bits.push('repeats');
       p.tags.forEach(t => bits.push('#' + t));
       if (p.projectName) bits.push('@' + p.projectName);
-      return `<div class="paste-row">${icon('corner-down-right', 12)}<span class="truncate">${p.title || '(untitled)'}</span>
-        ${bits.length ? `<span class="text-xs text-faint paste-bits">${bits.join(' · ')}</span>` : ''}</div>`;
+      if (it.done) bits.push('done');
+      const groups = !!document.getElementById('pasteGroups')?.checked;
+      if (groups && it.group) bits.push('in ' + it.group);
+      return `<div class="paste-row">${icon(it.done ? 'check' : 'corner-down-right', 12)}<span class="truncate">${escHtml(p.title || '(untitled)')}</span>
+        ${bits.length ? `<span class="text-xs text-faint paste-bits">${escHtml(bits.join(' · '))}</span>` : ''}</div>`;
     }).join('');
     el.innerHTML = `<p class="text-xs text-faint" style="margin:var(--space-2) 0 var(--space-1);">${items.length} item${items.length === 1 ? '' : 's'} detected${items.length > 6 ? ' — showing first 6' : ''}</p>${rows}`;
     refreshIcons();
@@ -5568,11 +6700,34 @@ const App = (() => {
   function runPasteImport() {
     const items = parsePasteText(document.getElementById('pasteInput')?.value);
     if (items.length === 0) { toast('Nothing to import'); return; }
+    State.checkpoint('Pasted ' + items.length + ' item' + (items.length === 1 ? '' : 's'));
     const defaultProjectId = pasteDefaultProject();
+    const makeGroups = !!document.getElementById('pasteGroups')?.checked;
+    // A heading or an indent parent becomes a sub-project, created once and
+    // reused, so pasting a structured note keeps its structure.
+    const groupIds = new Map();
+    const groupProject = (name) => {
+      if (!name || !makeGroups) return defaultProjectId;
+      const key = name.toLowerCase();
+      if (groupIds.has(key)) return groupIds.get(key);
+      const existing = State.getProjects({ includeArchived: true })
+        .find(p => p.name.toLowerCase() === key);
+      const id = existing ? existing.id
+        : State.createProject({ name, parentId: defaultProjectId || null }).id;
+      groupIds.set(key, id);
+      return id;
+    };
+
     let n = 0;
     items.forEach(it => {
       if (it.raw) {
-        if (Palette.createFromText(it.raw, { defaultProjectId })) n++;
+        const pid = groupProject(it.group);
+        const made = Palette.createFromText(it.raw, { defaultProjectId: pid });
+        if (made) {
+          n++;
+          // "[x] thing" is a record of something already finished.
+          if (it.done) State.updateEntry(made.entry.id, { completed: true, completedAt: new Date().toISOString() });
+        }
       } else if (it.obj) {
         const o = it.obj;
         (o.tags || []).forEach(t => State.getOrCreateTag(t));
@@ -5592,7 +6747,8 @@ const App = (() => {
         n++;
       }
     });
-    toast(`Imported ${n} item${n === 1 ? '' : 's'}`);
+    const groups = groupIds.size;
+    toast(`Imported ${n} item${n === 1 ? '' : 's'}${groups ? ` into ${groups} sub-project${groups === 1 ? '' : 's'}` : ''}`, { undo: true });
     closeModal();
     render();
   }
@@ -5606,9 +6762,19 @@ const App = (() => {
 
   function openSearch() {
     showModal('Search', `
-      <input type="search" class="form-input" id="searchInput" placeholder="Search projects, tasks, habits…"
+      <input type="search" class="form-input" id="searchInput" placeholder="Search, or filter: is:overdue project:kitchen tag:errand"
         autocomplete="off" oninput="App.runSearch(this.value)"
         onkeydown="if(event.key==='Enter'){document.querySelector('.search-result')?.click();}">
+      <p class="text-xs text-faint search-hint" id="searchHint" style="display:none;"></p>
+      <details class="search-ops">
+        <summary class="text-xs text-faint">Operators</summary>
+        <p class="text-xs text-faint" style="line-height:1.7;margin:var(--space-2) 0 0;">
+          <span class="font-mono">is:</span> open · done · overdue · today · blocked · pinned · untagged · unfiled · bridged · archived<br>
+          <span class="font-mono">due:</span> today · tomorrow · week · month · overdue · none · any<br>
+          <span class="font-mono">project:</span>name &nbsp; <span class="font-mono">tag:</span>name &nbsp;
+          <span class="font-mono">type:</span>task|habit|goal &nbsp; <span class="font-mono">p:</span>urgent|high|medium|low
+        </p>
+      </details>
       <div class="search-results" id="searchResults"></div>
     `, []);
     setTimeout(() => document.getElementById('searchInput')?.focus(), 100);
@@ -5634,23 +6800,40 @@ const App = (() => {
   }
 
   function runSearch(qRaw) {
-    const q = (qRaw || '').trim().toLowerCase();
     const el = document.getElementById('searchResults');
     if (!el) return;
+    // Operators first — "is:overdue project:kitchen" narrows the set, and
+    // whatever is left over is the text the fuzzy matcher works on.
+    const parsed = typeof Palette !== 'undefined' && Palette.parseQuery
+      ? Palette.parseQuery(qRaw) : { text: qRaw || '', filters: { active: false } };
+    const q = parsed.text.trim().toLowerCase();
+    const filters = parsed.filters;
+    const hint = document.getElementById('searchHint');
+    if (hint) {
+      const desc = Palette.describeFilters(filters);
+      hint.textContent = desc ? 'Filtering: ' + desc : '';
+      hint.style.display = desc ? '' : 'none';
+    }
 
     // Inside a project? Its tasks get boosted to the top.
     const ctxFocus = focusedProjectId();
     const ctxProject = (ctxFocus && ctxFocus !== 'none') ? ctxFocus : null;
     const results = [];
 
-    State.getProjects().forEach(p => {
-      const s = q ? fuzzyScore(q, p.name) : 10;
-      if (s >= 0) results.push({ kind: 'project', id: p.id, title: p.name, color: p.color, score: s + 10, context: 'project' });
-    });
+    // Operators are about entries; a project row would ignore them, so with
+    // filters on we list only what they actually filtered.
+    if (!filters.active) {
+      State.getProjects().forEach(p => {
+        const s = q ? fuzzyScore(q, p.name) : 10;
+        if (s >= 0) results.push({ kind: 'project', id: p.id, title: p.name, color: p.color, score: s + 10, context: 'project' });
+      });
+    }
 
-    State.getEntries().forEach(e => {
+    const wantArchived = filters.is && filters.is.includes('archived');
+    State.getEntries({ includeArchived: wantArchived }).forEach(e => {
+      if (!Palette.matchesFilters(e, filters)) return;
       const hay = e.title + ' ' + (e.tags || []).join(' ');
-      let s = q ? fuzzyScore(q, hay) : (e.type === 'task' && !e.completed ? 5 : -1);
+      let s = q ? fuzzyScore(q, hay) : ((filters.active || (e.type === 'task' && !e.completed)) ? 5 : -1);
       if (s < 0) return;
       if (ctxProject && e.projectId === ctxProject) s += 80; // favor current project
       if (e.completed) s -= 20;
@@ -5666,7 +6849,7 @@ const App = (() => {
     const top = results.slice(0, 12);
 
     if (top.length === 0) {
-      el.innerHTML = `<p class="text-xs text-faint" style="padding:var(--space-2);">No matches for "${qRaw}".</p>`;
+      el.innerHTML = `<p class="text-xs text-faint" style="padding:var(--space-2);">No matches for “${escHtml(qRaw)}”.</p>`;
       return;
     }
 
@@ -6074,7 +7257,13 @@ const App = (() => {
   function toggleEntry(id) {
     const before = State.getEntry(id);
     const wasDone = before?.type === 'habit' ? State.isHabitDoneToday(id) : !!before?.completed;
+    // Ticking a bridged task edits a document in another app. That is exactly
+    // the mis-tap that most needs a way back, so it gets a checkpoint — but
+    // no Undo toast, because completions already have their own feedback and
+    // the box itself is the affordance for un-ticking.
+    State.checkpoint(`${wasDone ? 'Reopened' : 'Completed'} “${before ? before.title : 'task'}”`);
     State.toggleComplete(id);
+    State.dropCheckpointIfUnchanged();
     if (before && !wasDone) {
       // completing (not un-completing) earns the burst
       if (before.type === 'habit') {
@@ -6112,8 +7301,8 @@ const App = (() => {
   }
 
   function archiveEntry(id) {
-    State.archiveEntry(id);
-    toast('Archived — find it under History');
+    const e = State.getEntry(id);
+    undoable(`Archived “${e ? e.title : 'entry'}”`, () => State.archiveEntry(id));
     closeModal();
     render();
   }
@@ -6123,10 +7312,58 @@ const App = (() => {
     render();
   }
 
+  function togglePin(id) {
+    const e = State.getEntry(id);
+    State.togglePinned(id);
+    toast(e && e.pinned ? 'Unpinned' : 'Pinned to your shortlist');
+    render();
+  }
+
+  // Snooze — "not today" as an action rather than an edit. Pushing the date
+  // out by hand is four taps and leaves you looking at a date picker to say
+  // something you already knew.
+  const SNOOZE_OPTIONS = [
+    { key: 'tomorrow', label: 'Tomorrow', days: 1 },
+    { key: 'weekend', label: 'This weekend', weekend: true },
+    { key: 'nextweek', label: 'Next week', days: 7 },
+  ];
+
+  function snoozeEntry(id, key) {
+    const e = State.getEntry(id);
+    if (!e) return;
+    const opt = SNOOZE_OPTIONS.find(o => o.key === key) || SNOOZE_OPTIONS[0];
+    let target;
+    if (opt.weekend) {
+      const dow = new Date().getDay();
+      target = State.dateStr(new Date(Date.now() + (((6 - dow + 7) % 7) || 7) * 86400000));
+    } else {
+      target = State.dateStr(new Date(Date.now() + opt.days * 86400000));
+    }
+    undoable(`Snoozed “${e.title}” to ${opt.label.toLowerCase()}`,
+      () => State.updateEntry(id, { scheduledDate: target, dueDate: e.dueDate ? target : e.dueDate }));
+    closeModal();
+    render();
+  }
+
+  function openSnooze(id) {
+    const e = State.getEntry(id);
+    if (!e) return;
+    showModal('Snooze', `
+      <p class="text-sm text-muted" style="margin-bottom:var(--space-3);">
+        Move “${escHtml(e.title)}” out of today. ${e.dueDate ? 'Its due date moves with it.' : 'It has no due date, so only its place in Today changes.'}
+      </p>
+      <div style="display:flex;flex-direction:column;gap:var(--space-2);">
+        ${SNOOZE_OPTIONS.map(o => `<button class="btn btn-secondary" onclick="App.snoozeEntry('${id}','${o.key}')">${escHtml(o.label)}</button>`).join('')}
+      </div>
+    `, [`<button class="btn btn-secondary" onclick="App.closeModal()">Cancel</button>`]);
+  }
+
+  // No confirm() any more: deleting moves the entry to the trash, where it
+  // stays for a month, and the toast offers an immediate way back. A dialog
+  // guarding a reversible action is just an extra click.
   function deleteEntry(id) {
-    if (!confirm('Delete this entry permanently? Archive keeps it recoverable.')) return;
-    State.deleteEntry(id);
-    toast('Entry deleted');
+    const e = State.getEntry(id);
+    undoable(`Deleted “${e ? e.title : 'entry'}”`, () => State.deleteEntry(id));
     closeModal();
     render();
   }
@@ -6271,6 +7508,8 @@ const App = (() => {
   function init() {
     initTheme();
     loadNav();
+    // Anything past its month goes now, so the blob does not grow forever.
+    try { State.expireTrash(); } catch (e) {}
 
     // Menubar menus
     document.querySelectorAll('.menu-trigger[data-menu]').forEach(btn => {
@@ -6324,6 +7563,12 @@ const App = (() => {
     // hotkeys (Gmail-style: only fire when not typing in a field)
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') { closeAllMenus(); closeModal(); closePanel(); closePopover(); return; }
+      if ((e.metaKey || e.ctrlKey) && (e.key === 'z' || e.key === 'Z')) {
+        e.preventDefault();
+        if (e.shiftKey) redo(); else undo();
+        return;
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key === 'y') { e.preventDefault(); redo(); return; }
       if ((e.metaKey || e.ctrlKey) && e.key === 'n') { e.preventDefault(); openNewEntry('task'); return; }
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); openPalette(); return; }
       if ((e.metaKey || e.ctrlKey) && e.key === 'l' && currentTab === 'scratch') { e.preventDefault(); clearScratchAll(); return; }
@@ -6426,7 +7671,7 @@ const App = (() => {
     addTag, removeTag, removeTagAt, addTagById,
     openNewProject, openProjectModal, openManageProjects, dismissModal, selectColor, selectIcon, saveProject,
     archiveProjectAction, unarchiveProjectAction, deleteProjectAction,
-    openSyncConfig, connectSync, disconnectSync,
+    openSyncConfig, connectSync, disconnectSync, reconnectSync,
     openQuickLog, setQuickLogTab, openCalorieLog, logCaloriesFromModal, quickAddTask, logEmotion,
     useShortcut, setQuickEmotion, setQuickEnergy, logCheckinFromModal, logWake, logSleep,
     removeWakeSleep, deleteQuickLogRow, toggleFormProject, setHotkey,
@@ -6434,11 +7679,12 @@ const App = (() => {
     setFocusDue, filterChips, updateMaxNavTimers,
     openManageShortcuts, addShortcut, deleteShortcut,
     openManageTags, cycleTagColor, renameTag, setTagProject, deleteTagPrompt, createTagFromManager,
-    openSearch, runSearch, searchGo, openPalette, toast,
-    setAccent, openHistoryDay, celebrate, updateAppSetting, autoGrow,
+    openSearch, runSearch, searchGo, openPalette, toast, undo, redo,
+    quickAddSubmit, quickAddPreview, quickAddKey,
+    setAccent, openHistoryDay, celebrate, updateAppSetting, autoGrow, setSettingsFilter,
     checkReminders, enableNotifications,
-    openDailyReview, reviewAction,
-    openAutoPlan, confirmAutoPlan,
+    openDailyReview, reviewAction, openShutdown, shutdownPushAll, openWeeklyReview, openRecords,
+    openAutoPlan, confirmAutoPlan, openWhyThis,
     openPasteImport, previewPasteImport, runPasteImport,
     hardRefresh, setPixelsMode, renderAutoPlanPreview,
     addScratchIdea, scratchToTask, copyScratchIdea, deleteScratchIdea, clearScratchAll,
@@ -6447,20 +7693,23 @@ const App = (() => {
     setPostMode, togglePostTodo,
     toolCoin, toolDice, toolPick, toolName, toolRandom, toolUuid, toolCopy, toolListChanged,
     logFood, deleteFoodLog, useShortcutHealth,
-    toggleEntry, deleteEntry, archiveEntry, unarchiveEntry, startTimerForTask,
-    selectEntryCard, setWorkingProject,
+    toggleEntry, deleteEntry, archiveEntry, unarchiveEntry, togglePin, openSnooze, snoozeEntry, startTimerForTask,
+    selectEntryCard, clearBulkSelection, bulkSetProject, bulkSetDue, bulkSetPriority,
+    bulkComplete, bulkArchive, bulkDelete, setWorkingProject,
     // Navigation chrome
     menuAction, toggleWorkspaceMenu, setWorkspace, setSubproject, toggleSettledSubs,
     revealProject,
     // Cade.txt link
-    openBridgePanel, rescanBridge, openNewSubproject, saveNewSubproject,
+    openBridgePanel, rescanBridge, seedRooms, openNewSubproject, saveNewSubproject,
     openTimer, stopAllTimers, addScratchFromMenu,
-    viewArchive, deleteHistoryLog, editMoodLog, setEditLogEmotion, setEditLogEnergy, saveMoodLog,
+    viewArchive, openTrash, restoreFromTrash, purgeFromTrash, emptyTrash, deleteHistoryLog, editMoodLog, setEditLogEmotion, setEditLogEnergy, saveMoodLog,
     setTagFilter, openSubproject, toggleShowCompleted, toggleShowCompletedToday, setCompletedSort,
     selectHabit, toggleHabitCell, cycleHabitCell, exportForLLM,
     onRecurrenceChange, toggleWeekday,
     setInsightsProject, setInsightsEntry,
     qDragStart, qDragEnd, qDragOver, qDragLeave, qDrop, qItemClick,
+    taskDragStart, taskDragEnd, plannerDragOver, plannerDragLeave, plannerDrop,
+    reorderStart, reorderEnd, reorderOver, reorderLeave, reorderDrop,
     plannerNav, plannerToday, setPlannerView, plannerTap, blockPointerDown,
     popoverAgenda, popoverTask, popoverTimer,
     openAgendaModal, saveAgendaBlock, deleteAgendaBlock, editPlannerBlock,
@@ -6471,6 +7720,7 @@ const App = (() => {
     showConflictModal, resolveConflict, deferConflict, hasPendingConflict,
     // The conflict screen's pure parts, checkable without a live database.
     _conflictReport: conflictReport,
+    _parsePasteForTest: parsePasteText,
   };
 })();
 
