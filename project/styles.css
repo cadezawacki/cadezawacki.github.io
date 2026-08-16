@@ -3492,3 +3492,90 @@ textarea.input-grow,
 @media (max-width: 480px) {
   .sync-action-grid { grid-template-columns: 1fr; }
 }
+
+/* ── Undo affordance in the toast ─────────────────────────────── */
+.toast-msg { margin-right: var(--space-3); }
+.toast-action {
+  font: inherit;
+  font-weight: 600;
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--accent-text);
+  background: none;
+  border: none;
+  border-left: 1px solid var(--border);
+  padding: 0 0 0 var(--space-3);
+  cursor: pointer;
+}
+.toast-action:hover { text-decoration: underline; }
+
+/* ── Trash ────────────────────────────────────────────────────── */
+.trash-list { display: flex; flex-direction: column; }
+.trash-row {
+  display: grid;
+  grid-template-columns: 5.5rem 1fr auto auto;
+  gap: var(--space-2);
+  align-items: center;
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.trash-row:last-child { border-bottom: none; }
+.trash-kind {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-faint);
+}
+.trash-name { font-size: var(--text-sm); min-width: 0; }
+.trash-age {
+  font-size: var(--text-xs);
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.trash-acts { display: inline-flex; gap: 2px; }
+@media (max-width: 480px) {
+  .trash-row { grid-template-columns: 1fr auto; grid-template-areas: 'name acts' 'kind age'; }
+  .trash-name { grid-area: name; }
+  .trash-acts { grid-area: acts; }
+  .trash-kind { grid-area: kind; }
+  .trash-age  { grid-area: age; text-align: right; }
+}
+
+/* ── Quick add ────────────────────────────────────────────────── */
+.qadd {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-3);
+  margin-bottom: var(--space-3);
+  color: var(--text-faint);
+  transition: border-color var(--transition);
+}
+.qadd:focus-within { border-color: var(--accent); }
+.qadd-input {
+  flex: 1 1 14rem;
+  min-width: 0;
+  border: none;
+  background: none;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: var(--text-sm);
+  padding: var(--space-1) 0;
+  outline: none;
+}
+.qadd-input::placeholder { color: var(--text-faint); }
+.qadd-chips { display: inline-flex; flex-wrap: wrap; gap: var(--space-1); }
+.qadd-chip {
+  font-size: var(--text-xs);
+  color: var(--accent-text);
+  background: var(--accent-tint);
+  border-radius: var(--radius-sm);
+  padding: 1px 6px;
+  white-space: nowrap;
+}

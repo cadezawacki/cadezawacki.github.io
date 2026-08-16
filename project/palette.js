@@ -46,7 +46,8 @@ const Palette = (() => {
     let text = ' ' + (raw || '').trim() + ' ';
     const out = {
       type: 'task', title: '', tags: [], projectId: null, projectName: null,
-      priority: null, estimateMinutes: null, dueDate: null, remindTime: null,
+      priority: null, effort: null, estimateMinutes: null, dueDate: null,
+      remindTime: null, recurrence: null,
     };
 
     // type prefix — "habit: drink water"
@@ -90,8 +91,46 @@ const Palette = (() => {
       out.estimateMinutes = Number(n); return ' ';
     });
 
+    // effort — "*xl" or the long form "effort:large". Estimate is how long
+    // it takes; effort is how big it feels, and the two disagree often
+    // enough that both are worth being able to say.
+    const EFFORT = { xs: 'trivial', trivial: 'trivial', s: 'small', small: 'small',
+                     m: 'medium', med: 'medium', medium: 'medium',
+                     l: 'large', large: 'large', xl: 'xl', huge: 'xl' };
+    text = text.replace(/\s\*(xs|s|m|l|xl|trivial|small|med|medium|large|huge)\b/i, (_, e) => {
+      out.effort = EFFORT[e.toLowerCase()]; return ' ';
+    }).replace(/\seffort:(xs|s|m|l|xl|trivial|small|med|medium|large|huge)\b/i, (m0, e) => {
+      if (out.effort) return m0;
+      out.effort = EFFORT[e.toLowerCase()]; return ' ';
+    });
+
+    // recurrence — "every day", "every week", "every monday", "weekdays"
+    text = text.replace(/\severy\s+(day|weekday|week|month|year|mon|monday|tue|tuesday|wed|wednesday|thu|thursday|fri|friday|sat|saturday|sun|sunday)\b/i, (_, r) => {
+      const k = r.toLowerCase();
+      if (k === 'day') out.recurrence = { type: 'daily' };
+      else if (k === 'weekday') out.recurrence = { type: 'weekdays' };
+      else if (k === 'week') out.recurrence = { type: 'weekly' };
+      else if (k === 'month') out.recurrence = { type: 'monthly' };
+      else if (k === 'year') out.recurrence = { type: 'yearly' };
+      else {
+        out.recurrence = { type: 'weekly', weekdays: [WEEKDAYS[k]] };
+        // "every monday" also means the next Monday, unless a date was given.
+        if (out.dueDate == null) {
+          const diff = ((WEEKDAYS[k] - new Date().getDay() + 7) % 7) || 7;
+          out.dueDate = plusDays(diff);
+        }
+      }
+      return ' ';
+    }).replace(/\sweekdays\b/i, () => {
+      if (!out.recurrence) out.recurrence = { type: 'weekdays' };
+      return ' ';
+    });
+
+
     // dates — most specific first
-    text = text.replace(/\s(\d{4}-\d{2}-\d{2})\b/, (_, iso) => { out.dueDate = iso; return ' '; });
+    // The "due"/"by"/"on" that introduces a date goes with it — leaving it
+    // behind produced titles like "Renew passport due".
+    text = text.replace(/\s(?:due\s+|by\s+|on\s+)?(\d{4}-\d{2}-\d{2})\b/, (_, iso) => { out.dueDate = iso; return ' '; });
     if (!out.dueDate) {
       // "aug 12" / "august 12th" / "12 aug"
       const md = /\s(?:on\s+|by\s+|due\s+)?([a-z]{3,9})\.?\s+(\d{1,2})(?:st|nd|rd|th)?\b/i;
@@ -116,7 +155,7 @@ const Palette = (() => {
     }
     if (!out.dueDate) {
       text = text
-        .replace(/\s(?:due\s+|by\s+)?(today|tonight)\b/i, () => { out.dueDate = plusDays(0); return ' '; })
+        .replace(/\s(?:due\s+|by\s+|on\s+)?(today|tonight)\b/i, () => { out.dueDate = plusDays(0); return ' '; })
         .replace(/\s(?:due\s+|by\s+|on\s+)?(tomorrow|tmrw|tmr)\b/i, () => { out.dueDate = plusDays(1); return ' '; })
         .replace(/\snext\s+week\b/i, () => { out.dueDate = plusDays(7); return ' '; })
         .replace(/\sin\s+(\d+)\s*(?:days?|d)\b/i, (_, n) => { out.dueDate = plusDays(Number(n)); return ' '; });
@@ -164,6 +203,12 @@ const Palette = (() => {
     }
     if (p.remindTime) chips.push({ icon: 'clock', label: p.remindTime });
     if (p.priority) chips.push({ icon: 'flag', label: p.priority });
+    if (p.effort) chips.push({ icon: 'weight', label: p.effort });
+    if (p.recurrence) {
+      chips.push({ icon: 'repeat-2', label: 'every ' + (p.recurrence.weekdays
+        ? ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'][p.recurrence.weekdays[0]]
+        : p.recurrence.type.replace(/ly$/, '')) });
+    }
     if (p.estimateMinutes) {
       const h = Math.floor(p.estimateMinutes / 60), m = p.estimateMinutes % 60;
       chips.push({ icon: 'hourglass', label: h ? (m ? `${h}h${m}m` : `${h}h`) : `${m}m` });
@@ -182,6 +227,8 @@ const Palette = (() => {
     const pid = p.projectId || opts.defaultProjectId || null;
     if (pid) { partial.projectId = pid; partial.projectIds = [pid]; }
     if (p.priority) partial.priority = p.priority;
+    if (p.effort) partial.effort = p.effort;
+    if (p.recurrence) partial.recurrence = p.recurrence;
     if (p.estimateMinutes) partial.estimateMinutes = p.estimateMinutes;
     if (p.dueDate) partial.dueDate = p.dueDate;
     if (p.remindTime) partial.remindTime = p.remindTime;
@@ -446,5 +493,5 @@ const Palette = (() => {
     return !!document.getElementById('cmdkOverlay')?.classList.contains('active');
   }
 
-  return { open, close, isOpen, parse, createFromText };
+  return { open, close, isOpen, parse, chipsFor, createFromText };
 })();

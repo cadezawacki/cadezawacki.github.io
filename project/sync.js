@@ -66,14 +66,14 @@ const Sync = (() => {
     return '{' + Object.keys(v).sort().map(k => JSON.stringify(k) + ':' + stableStringify(v[k])).join(',') + '}';
   }
 
-  // Field-level merge for genuinely diverged datasets (cold start with
-  // local work, or user-chosen merge). Entries/projects: newer updatedAt
-  // wins on shared ids, one-sided items are kept. Logs/planner/scratch:
-  // union by id. Settings: the device in hand wins.
-  // Every collection that a merge touches. Named here so the conflict screen
-  // can describe exactly the same set the merge acts on, rather than a
-  // hand-kept second list that drifts.
-  const MERGED_COLLECTIONS = ['entries', 'projects', 'tags', 'logs', 'planner', 'scratch'];
+  // Every collection a merge touches. Named here so the conflict screen can
+  // describe exactly the same set the merge acts on, rather than keeping a
+  // second list by hand that drifts out of step.
+  //
+  // `trash` travels too: deleting on one device has to delete on the others,
+  // and a restore made here has to be visible there. Trash records carry the
+  // deleted item's own id, so they merge by identity like everything else.
+  const MERGED_COLLECTIONS = ['entries', 'projects', 'tags', 'logs', 'planner', 'scratch', 'trash'];
 
   // When an item exists on both sides, the copy edited more recently wins.
   //

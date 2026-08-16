@@ -48,6 +48,7 @@ const State = (() => {
     tags: [],
     planner: [], // day-planner blocks: agenda items, tracked time, breaks
     scratch: [], // scratchpad ideas — quick capture, promote to tasks later
+    trash: [],   // deleted items, recoverable for TRASH_DAYS
     settings: {
       theme: 'dark',
       accent: 'teal',        // accent palette name (Settings → Appearance)
@@ -171,6 +172,7 @@ const State = (() => {
   function migrate(d) {
     if (!Array.isArray(d.planner)) d.planner = [];
     if (!Array.isArray(d.scratch)) d.scratch = [];
+    if (!Array.isArray(d.trash)) d.trash = [];
     (d.entries || []).forEach(e => {
       if (e.archived === undefined) e.archived = false;
       if (e.estimateMinutes === undefined) e.estimateMinutes = null;
@@ -211,7 +213,149 @@ const State = (() => {
     data = structuredClone(defaultData);
     data.settings.sync = { ...sync, paused: !!pauseSync };
     loadFailed = false;
+    clearUndo();
     save();
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // UNDO / REDO
+  // ═══════════════════════════════════════════════════════════
+  // Whole-collection snapshots rather than inverse operations. This app has
+  // actions that fan out — archiving a project touches a subtree and every
+  // entry in it; completing a recurring task spawns another — and writing a
+  // correct inverse for each of those is where undo implementations go wrong.
+  // A snapshot is trivially correct, and at this data size it is cheap.
+  //
+  // Checkpoints are taken by the UI, once per thing a person did, NOT by the
+  // mutators here: one user action is frequently several mutations, and undo
+  // should step back over the action, not over its parts.
+  const UNDO_LIMIT = 40;
+  const UNDONE = [];        // past states, most recent last
+  const REDONE = [];        // states undone, awaiting redo
+
+  // settings are excluded: undoing a completed task should not also revert a
+  // theme change made in between, and device-local settings must never move.
+  const UNDO_COLLECTIONS = ['entries', 'projects', 'tags', 'logs', 'planner', 'scratch', 'trash'];
+
+  function snapshot() {
+    const out = {};
+    UNDO_COLLECTIONS.forEach(k => { out[k] = structuredClone(data[k] || []); });
+    return out;
+  }
+
+  function sameSnapshot(a, b) {
+    return UNDO_COLLECTIONS.every(k => JSON.stringify(a[k]) === JSON.stringify(b[k]));
+  }
+
+  function checkpoint(label) {
+    UNDONE.push({ label: label || 'change', at: Date.now(), state: snapshot() });
+    if (UNDONE.length > UNDO_LIMIT) UNDONE.shift();
+    REDONE.length = 0;        // a new branch discards the redo future
+    return true;
+  }
+
+  // A checkpoint taken for an action that then changed nothing would make the
+  // next undo appear to do nothing at all. Callers that may no-op drop theirs.
+  function dropCheckpointIfUnchanged() {
+    const top = UNDONE[UNDONE.length - 1];
+    if (top && sameSnapshot(top.state, snapshot())) { UNDONE.pop(); return true; }
+    return false;
+  }
+
+  function applySnapshot(snap) {
+    UNDO_COLLECTIONS.forEach(k => { data[k] = structuredClone(snap[k] || []); });
+    emit();
+  }
+
+  function undo() {
+    const step = UNDONE.pop();
+    if (!step) return null;
+    REDONE.push({ label: step.label, at: Date.now(), state: snapshot() });
+    applySnapshot(step.state);
+    return step.label;
+  }
+
+  function redo() {
+    const step = REDONE.pop();
+    if (!step) return null;
+    UNDONE.push({ label: step.label, at: Date.now(), state: snapshot() });
+    applySnapshot(step.state);
+    return step.label;
+  }
+
+  // Wholesale replacements of the dataset invalidate the history. Undoing
+  // back across a sync adoption would restore this device's pre-sync copy and
+  // then publish it over the one it just accepted; undoing back across a
+  // reset would defeat the reset. Both drop the stack.
+  function clearUndo() { UNDONE.length = 0; REDONE.length = 0; }
+
+  function undoLabel() { return UNDONE.length ? UNDONE[UNDONE.length - 1].label : null; }
+  function redoLabel() { return REDONE.length ? REDONE[REDONE.length - 1].label : null; }
+  function canUndo() { return UNDONE.length > 0; }
+  function canRedo() { return REDONE.length > 0; }
+
+  // ═══════════════════════════════════════════════════════════
+  // TRASH
+  // ═══════════════════════════════════════════════════════════
+  // Delete used to be final, guarded only by a browser confirm(). Everything
+  // deletable lands here first and stays recoverable for a month.
+  const TRASH_DAYS = 30;
+
+  function trashPut(kind, payload, note) {
+    if (!payload || !payload.id) return null;
+    const rec = {
+      id: payload.id,          // the original id, so sync merges by identity
+      kind,                    // entry | project | scratch | planner | log | tag
+      deletedAt: new Date().toISOString(),
+      note: note || '',
+      payload: structuredClone(payload),
+    };
+    data.trash = [rec, ...(data.trash || []).filter(r => r.id !== payload.id)];
+    return rec;
+  }
+
+  function getTrash() {
+    return [...(data.trash || [])].sort((a, b) => (b.deletedAt || '').localeCompare(a.deletedAt || ''));
+  }
+
+  function restoreFromTrash(id) {
+    const rec = (data.trash || []).find(r => r.id === id);
+    if (!rec) return null;
+    const target = { entry: 'entries', project: 'projects', scratch: 'scratch',
+                     planner: 'planner', log: 'logs', tag: 'tags' }[rec.kind];
+    if (!target) return null;
+    // A restored item whose id has since been reused would collide; the
+    // surviving copy wins and the trash record is simply dropped.
+    if (!(data[target] || []).some(x => x && x.id === rec.id)) {
+      data[target] = [...(data[target] || []), structuredClone(rec.payload)];
+    }
+    data.trash = (data.trash || []).filter(r => r.id !== id);
+    emit();
+    return rec;
+  }
+
+  function purgeFromTrash(id) {
+    const before = (data.trash || []).length;
+    data.trash = (data.trash || []).filter(r => r.id !== id);
+    if (data.trash.length !== before) emit();
+  }
+
+  function emptyTrash() {
+    if (!(data.trash || []).length) return 0;
+    const n = data.trash.length;
+    data.trash = [];
+    emit();
+    return n;
+  }
+
+  // Anything past its month goes on load, so the blob does not grow forever.
+  function expireTrash() {
+    const cutoff = Date.now() - TRASH_DAYS * 86400000;
+    const kept = (data.trash || []).filter(r => {
+      const t = Date.parse(r.deletedAt || '');
+      return !Number.isFinite(t) || t > cutoff;
+    });
+    if (kept.length !== (data.trash || []).length) { data.trash = kept; save(); }
   }
 
   // ── Save to storage ────────────────────────────────────────
@@ -354,6 +498,7 @@ const State = (() => {
 
   function deleteEntry(id) {
     const entry = getEntry(id);
+    if (entry) trashPut('entry', entry);
     data.entries = data.entries.filter(e => e.id !== id);
     // Remove from blockedBy/blocks references
     data.entries.forEach(e => {
@@ -544,6 +689,8 @@ const State = (() => {
   }
 
   function deleteProject(id) {
+    const project = data.projects.find(p => p.id === id);
+    if (project) trashPut('project', project);
     data.projects = data.projects.filter(p => p.id !== id);
     // Unassign entries and re-root any child projects
     data.entries.forEach(e => { if (e.projectId === id) e.projectId = null; });
@@ -663,6 +810,8 @@ const State = (() => {
   }
 
   function deletePlannerBlock(id) {
+    const block = data.planner.find(b => b.id === id);
+    if (block) trashPut('planner', block);
     data.planner = data.planner.filter(b => b.id !== id);
     emit();
   }
@@ -686,6 +835,8 @@ const State = (() => {
   }
 
   function deleteScratch(id) {
+    const idea = data.scratch.find(s => s.id === id);
+    if (idea) trashPut('scratch', idea);
     data.scratch = data.scratch.filter(s => s.id !== id);
     emit();
   }
@@ -759,6 +910,7 @@ const State = (() => {
   function deleteTag(id) {
     const tag = data.tags.find(t => t.id === id);
     if (!tag) return;
+    trashPut('tag', tag);
     data.tags = data.tags.filter(t => t.id !== id);
     data.entries.forEach(e => {
       if (e.tags?.includes(tag.name)) {
@@ -790,6 +942,8 @@ const State = (() => {
   }
 
   function deleteLog(id) {
+    const log = data.logs.find(l => l.id === id);
+    if (log) trashPut('log', log);
     data.logs = data.logs.filter(l => l.id !== id);
     emit();
   }
@@ -1090,6 +1244,7 @@ const State = (() => {
     data = migrate(deepMerge(structuredClone(defaultData), newData));
     DEVICE_LOCAL_SETTINGS.forEach(k => { data.settings[k] = localOnly[k]; });
     loadFailed = false; // we now hold a real dataset again
+    clearUndo();
     emit();
   }
 
@@ -1113,6 +1268,10 @@ const State = (() => {
     habitStatusOn, isHabitScheduledOn, resetData,
     nextOccurrenceDate,
     entryProjectIds, getProjectSubtreeIds,
+    // Undo / redo — checkpoints are taken by the UI, one per user action.
+    checkpoint, dropCheckpointIfUnchanged, clearUndo, undo, redo, canUndo, canRedo, undoLabel, redoLabel,
+    // Trash
+    getTrash, restoreFromTrash, purgeFromTrash, emptyTrash, expireTrash, TRASH_DAYS,
     createProject, updateProject, deleteProject, getProject, getProjects,
     archiveProject, unarchiveProject, wouldCycleProject,
     getOrCreateTag, getAllTags, updateTag, deleteTag, tagUsageCount,

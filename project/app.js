@@ -10,11 +10,68 @@ const App = (() => {
   // ═══════════════════════════════════════════════════════════
   // UTILITIES
   // ═══════════════════════════════════════════════════════════
-  function toast(msg) {
+  let toastTimer = null;
+
+  // `opts.undo` puts an Undo button in the toast and keeps it up longer —
+  // the window in which a mis-tap is still obviously a mis-tap.
+  function toast(msg, opts = {}) {
     const el = document.getElementById('toast');
-    el.textContent = msg;
+    clearTimeout(toastTimer);
+    if (opts.undo) {
+      el.innerHTML = `<span class="toast-msg"></span>` +
+        `<button type="button" class="toast-action" onclick="App.undo()">Undo</button>`;
+      el.querySelector('.toast-msg').textContent = msg;
+    } else {
+      el.textContent = msg;
+    }
     el.classList.add('show');
-    setTimeout(() => el.classList.remove('show'), 2500);
+    toastTimer = setTimeout(() => el.classList.remove('show'), opts.undo ? 6000 : 2500);
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // UNDO
+  // ═══════════════════════════════════════════════════════════
+  // One checkpoint per thing a person did. Taken HERE rather than inside
+  // State because a single action is often several mutations — archiving a
+  // project walks a subtree; completing a recurring task spawns the next one
+  // — and undo should step back over the action, not over its pieces.
+  //
+  // `run` performs the action and reports whether it changed anything, so an
+  // action that no-ops leaves no checkpoint behind for undo to land on.
+  function undoable(label, run, opts = {}) {
+    State.checkpoint(label);
+    const result = run();
+    if (State.dropCheckpointIfUnchanged()) return result;
+    if (opts.quiet !== true) toast(label, { undo: true });
+    return result;
+  }
+
+  function undo() {
+    const label = State.undo();
+    if (!label) { toast('Nothing to undo'); return; }
+    render();
+    // The Cade.txt side of a reverted completion has to be reverted too, or
+    // the document keeps the tick that this app has just taken back.
+    resyncBridgedCompletions();
+    toast('Undone — ' + label);
+  }
+
+  function redo() {
+    const label = State.redo();
+    if (!label) { toast('Nothing to redo'); return; }
+    render();
+    resyncBridgedCompletions();
+    toast('Redone — ' + label);
+  }
+
+  // After an undo the entries hold the OLD completion states; anything whose
+  // recorded document state no longer matches gets pushed back to the room.
+  function resyncBridgedCompletions() {
+    if (typeof Bridge === 'undefined') return;
+    State.getEntries({ includeArchived: true })
+      .filter(e => e.txtRoom && e.txtKey && e.txtDone !== undefined && !!e.txtDone !== !!e.completed)
+      .slice(0, 50)
+      .forEach(e => { Bridge.pushCompletion(e).catch(() => {}); });
   }
 
   function icon(name, size = 18) {
@@ -894,6 +951,7 @@ const App = (() => {
     }
 
     // Today's tasks
+    html += quickAddHtml(null);
     html += `<div class="section">
       <div class="section-header"><span class="section-title">Today's Tasks</span>
         <span style="display:inline-flex;align-items:center;gap:var(--space-1);margin-left:auto;">
@@ -1986,6 +2044,10 @@ const App = (() => {
         </select>` : ''}
       ` : ''}
     </div>`;
+
+    // Anything typed here lands in THIS project, so the @project token is
+    // only needed when you want it somewhere else.
+    html += quickAddHtml(proj.id);
 
     // Sub-projects — a room with nothing left to do is hidden until asked for.
     if (subs.length) {
@@ -4170,10 +4232,12 @@ const App = (() => {
 
   function archiveProjectAction(id) {
     const { rooms, subprojects: subtree, openTasks: tasks } = subtreeFacts(id);
+    const proj = State.getProject(id);
+    State.checkpoint(`Archived “${proj ? proj.name : 'project'}”`);
     State.archiveProject(id);
     if (rooms.length && typeof Bridge !== 'undefined') Bridge.archiveRooms(rooms, true).catch(() => {});
     dropNavIfGone(id);
-    toast(`Archived${subtree ? `, with ${subtree} sub-project${subtree > 1 ? 's' : ''}` : ''}${tasks ? ` and ${tasks} task${tasks > 1 ? 's' : ''}` : ''} — restore from Manage projects`);
+    toast(`Archived${subtree ? `, with ${subtree} sub-project${subtree > 1 ? 's' : ''}` : ''}${tasks ? ` and ${tasks} task${tasks > 1 ? 's' : ''}` : ''}`, { undo: true });
     render();
     dismissModal();
   }
@@ -4187,11 +4251,11 @@ const App = (() => {
   }
 
   function deleteProjectAction(id) {
+    const proj = State.getProject(id) ||
+      State.getProjects({ includeArchived: true }).find(p => p.id === id);
     const count = State.getEntries({ includeArchived: true }).filter(e => e.projectId === id).length;
-    if (!confirm(`Delete this project?${count > 0 ? ` ${count} entr${count === 1 ? 'y' : 'ies'} will be unassigned (not deleted).` : ''}`)) return;
-    State.deleteProject(id);
-    dropNavIfGone(id);
-    toast('Project deleted');
+    undoable(`Deleted “${proj ? proj.name : 'project'}”${count ? ` — ${count} entr${count === 1 ? 'y' : 'ies'} unassigned` : ''}`,
+      () => { State.deleteProject(id); dropNavIfGone(id); });
     render();
     dismissModal();
   }
@@ -4340,6 +4404,139 @@ const App = (() => {
     toast('Disconnected');
     closeModal();
     render();
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // QUICK ADD
+  // ═══════════════════════════════════════════════════════════
+  // One line in, one task out. The parser behind this has existed since the
+  // command palette was built, and was reachable only by pressing Ctrl+K and
+  // knowing it was there — so in practice every task went through a modal
+  // with eight fields. This puts the same parser where tasks actually get
+  // added, with a live preview of what it understood.
+  function quickAddHtml(projectId) {
+    return `<form class="qadd" onsubmit="event.preventDefault();App.quickAddSubmit();" ${projectId ? `data-project="${projectId}"` : ''}>
+      ${icon('plus', 15)}
+      <input type="text" id="quickAdd" class="qadd-input" autocomplete="off" spellcheck="false"
+        placeholder="Add a task — try: call the fitter tue 3pm !high ~30m #home"
+        oninput="App.quickAddPreview()" onkeydown="App.quickAddKey(event)">
+      <span class="qadd-chips" id="quickAddChips"></span>
+    </form>`;
+  }
+
+  function quickAddScope() {
+    const el = document.querySelector('.qadd');
+    const scoped = el && el.dataset.project;
+    if (scoped) return scoped;
+    const focus = focusedProjectId();
+    return focus && focus !== 'none' ? focus : null;
+  }
+
+  function quickAddPreview() {
+    const input = document.getElementById('quickAdd');
+    const box = document.getElementById('quickAddChips');
+    if (!input || !box || typeof Palette === 'undefined') return;
+    const raw = input.value.trim();
+    if (!raw) { box.innerHTML = ''; return; }
+    const p = Palette.parse(raw);
+    // The title is shown back only when the parser has eaten something —
+    // otherwise the chip row would just echo what is already in the box.
+    const chips = Palette.chipsFor(p);
+    box.innerHTML = chips.map(c =>
+      `<span class="qadd-chip">${escHtml(c.label)}</span>`).join('');
+  }
+
+  function quickAddKey(e) {
+    if (e.key === 'Escape') { e.target.value = ''; quickAddPreview(); e.target.blur(); }
+  }
+
+  function quickAddSubmit() {
+    const input = document.getElementById('quickAdd');
+    if (!input) return;
+    const raw = input.value.trim();
+    if (!raw) return;
+    if (typeof Palette === 'undefined') { toast('Quick add is unavailable'); return; }
+    const defaultProjectId = quickAddScope();
+    let created = null;
+    undoable('Added a task', () => { created = Palette.createFromText(raw, { defaultProjectId }); }, { quiet: true });
+    if (!created) { toast('Nothing to add — that parsed to an empty title'); return; }
+    // A task added to a bridged project belongs in its room's list too.
+    if (typeof Bridge !== 'undefined') Bridge.pushNewTask(created.entry).catch(() => {});
+    input.value = '';
+    render();
+    // Re-focus so five tasks are five lines, not five round trips.
+    setTimeout(() => {
+      const again = document.getElementById('quickAdd');
+      if (again) { again.focus(); quickAddPreview(); }
+    }, 0);
+    toast(created.summary ? `Added — ${created.summary}` : 'Added', { undo: true });
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // TRASH
+  // ═══════════════════════════════════════════════════════════
+  const TRASH_KIND_LABEL = {
+    entry: 'Task', project: 'Project', scratch: 'Scratch idea',
+    planner: 'Planner block', log: 'Log', tag: 'Tag',
+  };
+
+  function trashItemName(rec) {
+    const p = rec.payload || {};
+    return p.title || p.name || p.text || p.type || TRASH_KIND_LABEL[rec.kind] || 'Item';
+  }
+
+  function daysLeft(rec) {
+    const t = Date.parse(rec.deletedAt || '');
+    if (!Number.isFinite(t)) return State.TRASH_DAYS;
+    return Math.max(0, State.TRASH_DAYS - Math.floor((Date.now() - t) / 86400000));
+  }
+
+  function openTrash() {
+    const items = State.getTrash();
+    showModal('Trash', `
+      <p class="text-sm text-muted" style="line-height:1.7;margin-bottom:var(--space-3);">
+        Deleted items wait here for ${State.TRASH_DAYS} days, then go for good.
+        ${items.length ? '' : 'Nothing in here right now.'}
+      </p>
+      ${items.length ? `<div class="trash-list">${items.map(rec => `
+        <div class="trash-row">
+          <span class="trash-kind">${escHtml(TRASH_KIND_LABEL[rec.kind] || rec.kind)}</span>
+          <span class="trash-name truncate">${escHtml(trashItemName(rec))}</span>
+          <span class="trash-age">${daysLeft(rec)}d left</span>
+          <span class="trash-acts">
+            <button class="icon-btn" onclick="App.restoreFromTrash('${rec.id}')" title="Restore" aria-label="Restore">${icon('undo-2', 15)}</button>
+            <button class="icon-btn" onclick="App.purgeFromTrash('${rec.id}')" title="Delete for good" aria-label="Delete for good">${icon('trash-2', 15)}</button>
+          </span>
+        </div>`).join('')}</div>` : ''}
+    `, [
+      `<button class="btn btn-secondary" onclick="App.closeModal()">Close</button>`,
+      items.length ? `<button class="btn btn-danger" onclick="App.emptyTrash()">Empty Trash</button>` : '',
+    ]);
+  }
+
+  function restoreFromTrash(id) {
+    const rec = State.restoreFromTrash(id);
+    toast(rec ? `Restored “${trashItemName(rec)}”` : 'Could not restore that');
+    render();
+    openTrash();
+  }
+
+  function purgeFromTrash(id) {
+    const rec = State.getTrash().find(r => r.id === id);
+    // Past this point there is genuinely no way back, so this one does ask.
+    if (!confirm(`Delete “${rec ? trashItemName(rec) : 'this item'}” permanently?`)) return;
+    State.purgeFromTrash(id);
+    render();
+    openTrash();
+  }
+
+  function emptyTrash() {
+    const n = State.getTrash().length;
+    if (!n || !confirm(`Permanently delete ${n} item${n === 1 ? '' : 's'}? This cannot be undone.`)) return;
+    State.emptyTrash();
+    toast(`Emptied the trash — ${n} item${n === 1 ? '' : 's'} gone`);
+    render();
+    closeModal();
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -5263,13 +5460,15 @@ const App = (() => {
   }
 
   function deleteScratchIdea(id) {
-    State.deleteScratch(id);
+    undoable('Deleted a scratch idea', () => State.deleteScratch(id));
     render();
   }
 
   function clearScratchAll() {
-    const n = State.clearScratch();
-    toast(n ? `Cleared ${n} idea${n === 1 ? '' : 's'}` : 'Scratchpad already empty');
+    let n = 0;
+    undoable('Cleared the scratchpad', () => { n = State.clearScratch(); }, { quiet: !0 });
+    if (!n) { toast('Scratchpad already empty'); return; }
+    toast(`Cleared ${n} idea${n === 1 ? '' : 's'}`, { undo: true });
     render();
   }
 
@@ -5559,10 +5758,42 @@ const App = (() => {
         }
       } catch (err) { /* not JSON — fall through to line parsing */ }
     }
-    return trimmed.split('\n')
-      .map(l => l.replace(/^\s*(?:[-*+]\s*(?:\[[ xX]\]\s*)?|\d+[.)]\s*)/, '').trim())
-      .filter(l => l && !/^#{1,6}\s/.test(l) && !/^```/.test(l))
-      .map(raw => ({ raw }));
+    // Line parsing. Three things the old version threw away and shouldn't:
+    //   • a ticked "[x]" box means the task is already done
+    //   • indentation, and markdown headings, name the group a run belongs to
+    //   • "— due Friday" trailing clauses are dates, not part of the title
+    const out = [];
+    let heading = null;         // last "## Kitchen" seen
+    const indentGroup = [];     // group name by indent depth
+    let inFence = false;
+
+    trimmed.split('\n').forEach(line => {
+      if (/^\s*```/.test(line)) { inFence = !inFence; return; }
+      if (inFence) return;
+      if (!line.trim()) return;
+
+      const h = line.match(/^\s*#{1,6}\s+(.*)$/);
+      if (h) { heading = h[1].trim() || null; indentGroup.length = 0; return; }
+
+      const bullet = line.match(/^(\s*)(?:[-*+]\s*(\[[ xX]\]\s*)?|\d+[.)]\s*)?(.*)$/);
+      const indent = bullet ? bullet[1].replace(/\t/g, '  ').length : 0;
+      const box = bullet ? bullet[2] : null;
+      let body = (bullet ? bullet[3] : line).trim();
+      if (!body) return;
+
+      // Trailing "— due friday" / "- due 2026-01-02" clauses fold into the
+      // text the quick-add parser reads, so it can pick the date out.
+      body = body.replace(/\s*[—–-]{1,2}\s*(due\s+.+)$/i, ' $1');
+
+      const depth = Math.floor(indent / 2);
+      // A line with children names them: remember it at this depth.
+      indentGroup.length = depth;
+      const group = depth > 0 ? (indentGroup[depth - 1] || heading) : heading;
+      indentGroup[depth] = body.replace(/\s+[!#@~*].*$/, '').trim();
+
+      out.push({ raw: body, done: !!(box && /[xX]/.test(box)), group: group || null });
+    });
+    return out;
   }
 
   function pasteDefaultProject() {
@@ -5574,10 +5805,16 @@ const App = (() => {
     const proj = pasteDefaultProject() ? State.getProject(pasteDefaultProject()) : null;
     showModal('Paste Tasks', `
       <p class="text-xs text-muted" style="margin-bottom:var(--space-2);">
-        One item per line — markdown lists and numbering are stripped. Lines speak the quick-add shorthand
-        (<span class="font-mono">tomorrow 3pm #tag @project !high ~30m</span>), and the "Copy for LLM" JSON pastes straight back in.
+        One item per line. Lines speak the quick-add shorthand
+        (<span class="font-mono">tomorrow 3pm #tag @project !high ~30m *xl every week</span>),
+        a ticked <span class="font-mono">[x]</span> box imports as already done, and the
+        "Copy for LLM" JSON pastes straight back in.
         ${proj ? `New tasks land in <strong>${escHtml(proj.name)}</strong> unless a line says otherwise.` : ''}
       </p>
+      <label class="form-check" style="display:flex;align-items:center;gap:var(--space-2);margin-bottom:var(--space-2);">
+        <input type="checkbox" id="pasteGroups" checked onchange="App.previewPasteImport()">
+        <span class="text-xs">Turn headings and indented groups into sub-projects</span>
+      </label>
       <textarea class="form-input" id="pasteInput" rows="9" spellcheck="false"
         placeholder="- [ ] Fix header overflow #bugs !high&#10;- Write release notes tomorrow ~30m&#10;- Call the vendor friday 10am"
         oninput="App.previewPasteImport()"></textarea>
@@ -5603,10 +5840,15 @@ const App = (() => {
       if (p.remindTime) bits.push(p.remindTime);
       if (p.priority) bits.push(p.priority);
       if (p.estimateMinutes) bits.push('~' + estimateLabel(p.estimateMinutes));
+      if (p.effort) bits.push(p.effort);
+      if (p.recurrence) bits.push('repeats');
       p.tags.forEach(t => bits.push('#' + t));
       if (p.projectName) bits.push('@' + p.projectName);
-      return `<div class="paste-row">${icon('corner-down-right', 12)}<span class="truncate">${p.title || '(untitled)'}</span>
-        ${bits.length ? `<span class="text-xs text-faint paste-bits">${bits.join(' · ')}</span>` : ''}</div>`;
+      if (it.done) bits.push('done');
+      const groups = !!document.getElementById('pasteGroups')?.checked;
+      if (groups && it.group) bits.push('in ' + it.group);
+      return `<div class="paste-row">${icon(it.done ? 'check' : 'corner-down-right', 12)}<span class="truncate">${escHtml(p.title || '(untitled)')}</span>
+        ${bits.length ? `<span class="text-xs text-faint paste-bits">${escHtml(bits.join(' · '))}</span>` : ''}</div>`;
     }).join('');
     el.innerHTML = `<p class="text-xs text-faint" style="margin:var(--space-2) 0 var(--space-1);">${items.length} item${items.length === 1 ? '' : 's'} detected${items.length > 6 ? ' — showing first 6' : ''}</p>${rows}`;
     refreshIcons();
@@ -5615,11 +5857,34 @@ const App = (() => {
   function runPasteImport() {
     const items = parsePasteText(document.getElementById('pasteInput')?.value);
     if (items.length === 0) { toast('Nothing to import'); return; }
+    State.checkpoint('Pasted ' + items.length + ' item' + (items.length === 1 ? '' : 's'));
     const defaultProjectId = pasteDefaultProject();
+    const makeGroups = !!document.getElementById('pasteGroups')?.checked;
+    // A heading or an indent parent becomes a sub-project, created once and
+    // reused, so pasting a structured note keeps its structure.
+    const groupIds = new Map();
+    const groupProject = (name) => {
+      if (!name || !makeGroups) return defaultProjectId;
+      const key = name.toLowerCase();
+      if (groupIds.has(key)) return groupIds.get(key);
+      const existing = State.getProjects({ includeArchived: true })
+        .find(p => p.name.toLowerCase() === key);
+      const id = existing ? existing.id
+        : State.createProject({ name, parentId: defaultProjectId || null }).id;
+      groupIds.set(key, id);
+      return id;
+    };
+
     let n = 0;
     items.forEach(it => {
       if (it.raw) {
-        if (Palette.createFromText(it.raw, { defaultProjectId })) n++;
+        const pid = groupProject(it.group);
+        const made = Palette.createFromText(it.raw, { defaultProjectId: pid });
+        if (made) {
+          n++;
+          // "[x] thing" is a record of something already finished.
+          if (it.done) State.updateEntry(made.entry.id, { completed: true, completedAt: new Date().toISOString() });
+        }
       } else if (it.obj) {
         const o = it.obj;
         (o.tags || []).forEach(t => State.getOrCreateTag(t));
@@ -5639,7 +5904,8 @@ const App = (() => {
         n++;
       }
     });
-    toast(`Imported ${n} item${n === 1 ? '' : 's'}`);
+    const groups = groupIds.size;
+    toast(`Imported ${n} item${n === 1 ? '' : 's'}${groups ? ` into ${groups} sub-project${groups === 1 ? '' : 's'}` : ''}`, { undo: true });
     closeModal();
     render();
   }
@@ -6121,7 +6387,13 @@ const App = (() => {
   function toggleEntry(id) {
     const before = State.getEntry(id);
     const wasDone = before?.type === 'habit' ? State.isHabitDoneToday(id) : !!before?.completed;
+    // Ticking a bridged task edits a document in another app. That is exactly
+    // the mis-tap that most needs a way back, so it gets a checkpoint — but
+    // no Undo toast, because completions already have their own feedback and
+    // the box itself is the affordance for un-ticking.
+    State.checkpoint(`${wasDone ? 'Reopened' : 'Completed'} “${before ? before.title : 'task'}”`);
     State.toggleComplete(id);
+    State.dropCheckpointIfUnchanged();
     if (before && !wasDone) {
       // completing (not un-completing) earns the burst
       if (before.type === 'habit') {
@@ -6159,8 +6431,8 @@ const App = (() => {
   }
 
   function archiveEntry(id) {
-    State.archiveEntry(id);
-    toast('Archived — find it under History');
+    const e = State.getEntry(id);
+    undoable(`Archived “${e ? e.title : 'entry'}”`, () => State.archiveEntry(id));
     closeModal();
     render();
   }
@@ -6170,10 +6442,12 @@ const App = (() => {
     render();
   }
 
+  // No confirm() any more: deleting moves the entry to the trash, where it
+  // stays for a month, and the toast offers an immediate way back. A dialog
+  // guarding a reversible action is just an extra click.
   function deleteEntry(id) {
-    if (!confirm('Delete this entry permanently? Archive keeps it recoverable.')) return;
-    State.deleteEntry(id);
-    toast('Entry deleted');
+    const e = State.getEntry(id);
+    undoable(`Deleted “${e ? e.title : 'entry'}”`, () => State.deleteEntry(id));
     closeModal();
     render();
   }
@@ -6318,6 +6592,8 @@ const App = (() => {
   function init() {
     initTheme();
     loadNav();
+    // Anything past its month goes now, so the blob does not grow forever.
+    try { State.expireTrash(); } catch (e) {}
 
     // Menubar menus
     document.querySelectorAll('.menu-trigger[data-menu]').forEach(btn => {
@@ -6371,6 +6647,12 @@ const App = (() => {
     // hotkeys (Gmail-style: only fire when not typing in a field)
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') { closeAllMenus(); closeModal(); closePanel(); closePopover(); return; }
+      if ((e.metaKey || e.ctrlKey) && (e.key === 'z' || e.key === 'Z')) {
+        e.preventDefault();
+        if (e.shiftKey) redo(); else undo();
+        return;
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key === 'y') { e.preventDefault(); redo(); return; }
       if ((e.metaKey || e.ctrlKey) && e.key === 'n') { e.preventDefault(); openNewEntry('task'); return; }
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); openPalette(); return; }
       if ((e.metaKey || e.ctrlKey) && e.key === 'l' && currentTab === 'scratch') { e.preventDefault(); clearScratchAll(); return; }
@@ -6481,7 +6763,8 @@ const App = (() => {
     setFocusDue, filterChips, updateMaxNavTimers,
     openManageShortcuts, addShortcut, deleteShortcut,
     openManageTags, cycleTagColor, renameTag, setTagProject, deleteTagPrompt, createTagFromManager,
-    openSearch, runSearch, searchGo, openPalette, toast,
+    openSearch, runSearch, searchGo, openPalette, toast, undo, redo,
+    quickAddSubmit, quickAddPreview, quickAddKey,
     setAccent, openHistoryDay, celebrate, updateAppSetting, autoGrow,
     checkReminders, enableNotifications,
     openDailyReview, reviewAction,
@@ -6502,7 +6785,7 @@ const App = (() => {
     // Cade.txt link
     openBridgePanel, rescanBridge, openNewSubproject, saveNewSubproject,
     openTimer, stopAllTimers, addScratchFromMenu,
-    viewArchive, deleteHistoryLog, editMoodLog, setEditLogEmotion, setEditLogEnergy, saveMoodLog,
+    viewArchive, openTrash, restoreFromTrash, purgeFromTrash, emptyTrash, deleteHistoryLog, editMoodLog, setEditLogEmotion, setEditLogEnergy, saveMoodLog,
     setTagFilter, openSubproject, toggleShowCompleted, toggleShowCompletedToday, setCompletedSort,
     selectHabit, toggleHabitCell, cycleHabitCell, exportForLLM,
     onRecurrenceChange, toggleWeekday,
@@ -6518,6 +6801,7 @@ const App = (() => {
     showConflictModal, resolveConflict, deferConflict, hasPendingConflict,
     // The conflict screen's pure parts, checkable without a live database.
     _conflictReport: conflictReport,
+    _parsePasteForTest: parsePasteText,
   };
 })();
 
