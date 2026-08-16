@@ -3686,3 +3686,14 @@ textarea.input-grow,
 [data-reorder-id] { cursor: grab; }
 [data-reorder-id].reordering { opacity: 0.4; cursor: grabbing; }
 .reorder-over { box-shadow: inset 0 2px 0 var(--accent); }
+
+/* The Cade.txt room a task mirrors — a link, so it looks like one. */
+.pill-room {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--hl-blue);
+  background: var(--hl-blue-bg);
+  text-decoration: none;
+}
+.pill-room:hover { text-decoration: underline; }

@@ -1768,6 +1768,12 @@ const App = (() => {
   }
   function isBlocked(entry) { return !!blockingEntry(entry); }
 
+  // Cade.txt routes "#room=<name>". The bare "#<name>" this used to emit was
+  // not routed at all, so the link landed on whatever document was last open.
+  function txtRoomUrl(room) {
+    return '../txt.html#room=' + encodeURIComponent(room);
+  }
+
   function renderEntryCard(entry, project, streakInfo, opts = {}) {
     const proj = project || (entry.projectId ? State.getProject(entry.projectId) : null);
     const isOverdueFlag = entry.dueDate && isOverdue(entry.dueDate) && !entry.completed;
@@ -1833,6 +1839,12 @@ const App = (() => {
     if (entry.type === 'goal' && entry.targetValue) {
       const pct = Math.round((entry.currentValue || 0) / entry.targetValue * 100);
       metaHtml += `<span class="pill pill-accent">${pct}%</span>`;
+    }
+    // Nothing on a card said it mirrors a line in another app, which made
+    // "ticking this changed something over there" a surprise.
+    if (entry.txtRoom) {
+      metaHtml += `<a class="pill pill-room" href="${txtRoomUrl(entry.txtRoom)}" onclick="event.stopPropagation()"
+        title="Mirrors a checkbox in the Cade.txt room “${escHtml(entry.txtRoom)}” — open it">${icon('file-text', 10)}${escHtml(entry.txtRoom)}</a>`;
     }
 
     return `
@@ -2268,7 +2280,7 @@ const App = (() => {
           <h1 class="page-title">${proj ? `${icon(proj.icon, 16)} ${escHtml(proj.name)}` : 'Unfiled'}</h1>
           <p class="page-subtitle">
             ${open.filter(e => e.type !== 'habit').length} open${doneToday.length ? ` · ${doneToday.length} done today` : ''}${doneEarlier.length ? ` · ${doneEarlier.length} finished earlier` : ''}
-            ${proj?.txtRoom ? ` · <a href="../txt.html#${encodeURIComponent(proj.txtRoom)}" style="color:var(--accent-text)">open in Cade.txt</a>` : ''}
+            ${proj?.txtRoom ? ` · <a href="${txtRoomUrl(proj.txtRoom)}" style="color:var(--accent-text)">open in Cade.txt</a>` : ''}
           </p>
         </div>
         <div style="display:flex;gap:var(--space-2);align-items:center;">
@@ -4442,11 +4454,20 @@ const App = (() => {
     if (editingEntryId) {
       const before = State.getEntry(editingEntryId);
       const renamed = before && before.txtRoom && data.title && data.title !== before.title;
+      const notesChanged = before && before.txtRoom &&
+        (data.description || '').trim() !== (before.description || '').trim();
       const oldKey = before?.txtKey;
       State.updateEntry(editingEntryId, data);
       toast('Entry updated');
       const updated = State.getEntry(editingEntryId);
       if (bridged && renamed) Bridge.pushRename(updated, oldKey).catch(() => {});
+      // Notes on a bridged task are the indented lines under its checkbox,
+      // so editing them here rewrites them over there. A rename re-keys the
+      // link first, hence the sequencing.
+      if (bridged && notesChanged) {
+        const push = () => Bridge.pushNotes(State.getEntry(editingEntryId)).catch(() => {});
+        if (renamed) setTimeout(push, 400); else push();
+      }
       // Moving an existing task INTO a linked sub-project has to add the
       // checkbox there. Nothing else would: scans match on a link this task
       // does not have yet, so without this it stays invisible in Cade.txt.
@@ -5110,8 +5131,34 @@ const App = (() => {
       </p>
     `, [
       `<button class="btn btn-secondary" onclick="App.closeModal()">Close</button>`,
+      url ? `<button class="btn btn-secondary" onclick="App.seedRooms()" title="Upload rooms this device holds that the database has never seen">${icon('upload-cloud', 14)}Upload missing</button>` : '',
       `<button class="btn btn-primary" onclick="App.rescanBridge()">Rescan now</button>`,
     ]);
+  }
+
+  // Rooms this device holds text for that the server has never seen. Without
+  // this they are invisible in every other browser, however often you rescan
+  // there — there is simply nothing to fetch.
+  let seeding = false;
+  async function seedRooms() {
+    if (typeof Bridge === 'undefined' || seeding) return;
+    seeding = true;
+    closeModal();
+    toast('Checking which rooms the database is missing…');
+    let res = { seeded: 0 };
+    try {
+      for (let pass = 0; pass < 20; pass++) {
+        const r = await Bridge.seedMissingRooms({ force: pass === 0 });
+        res = { seeded: (res.seeded || 0) + r.seeded, reason: r.reason };
+        if (!r.checked) break;
+      }
+    } catch (e) { console.warn('Seeding failed', e); }
+    seeding = false;
+    if (res.reason === 'no-credentials') { toast('No database configured — nothing to upload to'); return; }
+    toast(res.seeded
+      ? `Uploaded ${res.seeded} room${res.seeded === 1 ? '' : 's'} — other browsers can see them now`
+      : 'The database already had every room this device holds');
+    render();
   }
 
   // What a finished rescan should say. Rooms that could not be pulled are
@@ -7361,7 +7408,7 @@ const App = (() => {
     menuAction, toggleWorkspaceMenu, setWorkspace, setSubproject, toggleSettledSubs,
     revealProject,
     // Cade.txt link
-    openBridgePanel, rescanBridge, openNewSubproject, saveNewSubproject,
+    openBridgePanel, rescanBridge, seedRooms, openNewSubproject, saveNewSubproject,
     openTimer, stopAllTimers, addScratchFromMenu,
     viewArchive, openTrash, restoreFromTrash, purgeFromTrash, emptyTrash, deleteHistoryLog, editMoodLog, setEditLogEmotion, setEditLogEnergy, saveMoodLog,
     setTagFilter, openSubproject, toggleShowCompleted, toggleShowCompletedToday, setCompletedSort,

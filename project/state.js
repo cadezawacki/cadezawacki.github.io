@@ -460,6 +460,7 @@ const State = (() => {
     txtRoom: null,  // room whose todo list this task mirrors
     txtKey: null,   // normalized line text — identity across edits
     txtDone: null,  // the document's completion state at the last scan
+    txtNotes: null, // the indented note block as it stood at the last scan
   };
 
   function createEntry(partial) {
