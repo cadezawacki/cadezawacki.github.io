@@ -916,6 +916,18 @@ const App = (() => {
     // "Focus Time —" tile that is empty until a timer has run. The numbers
     // are in the subtitle; the tiles are gone.
 
+    // The shortlist, deliberately outside the scope: pinning something and
+    // then having it hidden by a workspace filter defeats the point of it.
+    const pinned = State.getPinned();
+    if (pinned.length) {
+      html += `<div class="section">
+        <div class="section-header"><span class="section-title">Pinned</span>
+          <span class="text-xs text-faint">${pinned.length} on your shortlist</span></div>
+        <div style="display:flex;flex-direction:column;gap:var(--space-2);">
+          ${pinned.map(t => renderEntryCard(t, t.projectId ? State.getProject(t.projectId) : null)).join('')}
+        </div></div>`;
+    }
+
     // Next best task
     html += `
       <div class="section">
@@ -1631,6 +1643,8 @@ const App = (() => {
         ${tracking ? `<span class="track-tick ${tracking.state === 'paused' ? 'paused' : ''}" data-tick-entry="${entry.id}"
           onclick="event.stopPropagation();Timers.openPanel()" title="Open timer">${Timers.formatTime(tracking.elapsed)}</span>` : ''}
         <div class="entry-actions">
+          <button class="icon-btn${entry.pinned ? ' is-pinned' : ''}" onclick="event.stopPropagation();App.togglePin('${entry.id}')"
+            aria-label="${entry.pinned ? 'Unpin' : 'Pin to shortlist'}" title="${entry.pinned ? 'Unpin' : 'Pin to shortlist'}">${icon(entry.pinned ? 'star' : 'star', 15)}</button>
           ${entry.type === 'task' ? `<button class="icon-btn" onclick="event.stopPropagation();App.openTaskPage('${entry.id}')" aria-label="Open task page" title="Open task page">${icon('panel-right-open', 15)}</button>` : ''}
           ${canTrack && !tracking ? `<button class="icon-btn" onclick="event.stopPropagation();Timers.armTracking('${entry.id}')" aria-label="Start timer" title="Track time">${icon('play', 15)}</button>` : ''}
           <button class="icon-btn" onclick="event.stopPropagation();App.editEntry('${entry.id}')" aria-label="Edit">${icon('pencil', 15)}</button>
@@ -1986,6 +2000,26 @@ const App = (() => {
 
   // ── One project's page ────────────────────────────────────────────────
   // `proj` null means the Unfiled bucket.
+  // Where you are, and the way back up. Three levels down a sub-project page
+  // named the project but gave no clue what it sat inside or how to leave.
+  function breadcrumbHtml(proj) {
+    if (!proj) return '';
+    const chain = [];
+    let cur = proj.parentId ? State.getProject(proj.parentId) : null;
+    let guard = 0;
+    while (cur && guard++ < 20) {
+      chain.unshift(cur);
+      cur = cur.parentId ? State.getProject(cur.parentId) : null;
+    }
+    if (!chain.length) return '';
+    return `<nav class="crumbs" aria-label="Breadcrumb">
+      <button class="crumb" onclick="App.setWorkspace('${WS_ALL}')">All projects</button>
+      ${chain.map(p => `<span class="crumb-sep">›</span>
+        <button class="crumb" onclick="App.revealProject('${p.id}');App.switchTab('projects')">${escHtml(p.name)}</button>`).join('')}
+      <span class="crumb-sep">›</span><span class="crumb crumb-here">${escHtml(proj.name)}</span>
+    </nav>`;
+  }
+
   function renderProjectPage(proj) {
     const settings = State.getSettings();
     const showDone = !!settings.showCompletedOnProject;
@@ -2013,6 +2047,7 @@ const App = (() => {
     const settledSubs = subs.filter(x => !x.a.live);
 
     let html = `
+      ${breadcrumbHtml(proj)}
       <div class="page-header">
         <div>
           <h1 class="page-title">${proj ? `${icon(proj.icon, 16)} ${escHtml(proj.name)}` : 'Unfiled'}</h1>
@@ -5919,9 +5954,19 @@ const App = (() => {
 
   function openSearch() {
     showModal('Search', `
-      <input type="search" class="form-input" id="searchInput" placeholder="Search projects, tasks, habits…"
+      <input type="search" class="form-input" id="searchInput" placeholder="Search, or filter: is:overdue project:kitchen tag:errand"
         autocomplete="off" oninput="App.runSearch(this.value)"
         onkeydown="if(event.key==='Enter'){document.querySelector('.search-result')?.click();}">
+      <p class="text-xs text-faint search-hint" id="searchHint" style="display:none;"></p>
+      <details class="search-ops">
+        <summary class="text-xs text-faint">Operators</summary>
+        <p class="text-xs text-faint" style="line-height:1.7;margin:var(--space-2) 0 0;">
+          <span class="font-mono">is:</span> open · done · overdue · today · blocked · pinned · untagged · unfiled · bridged · archived<br>
+          <span class="font-mono">due:</span> today · tomorrow · week · month · overdue · none · any<br>
+          <span class="font-mono">project:</span>name &nbsp; <span class="font-mono">tag:</span>name &nbsp;
+          <span class="font-mono">type:</span>task|habit|goal &nbsp; <span class="font-mono">p:</span>urgent|high|medium|low
+        </p>
+      </details>
       <div class="search-results" id="searchResults"></div>
     `, []);
     setTimeout(() => document.getElementById('searchInput')?.focus(), 100);
@@ -5947,23 +5992,40 @@ const App = (() => {
   }
 
   function runSearch(qRaw) {
-    const q = (qRaw || '').trim().toLowerCase();
     const el = document.getElementById('searchResults');
     if (!el) return;
+    // Operators first — "is:overdue project:kitchen" narrows the set, and
+    // whatever is left over is the text the fuzzy matcher works on.
+    const parsed = typeof Palette !== 'undefined' && Palette.parseQuery
+      ? Palette.parseQuery(qRaw) : { text: qRaw || '', filters: { active: false } };
+    const q = parsed.text.trim().toLowerCase();
+    const filters = parsed.filters;
+    const hint = document.getElementById('searchHint');
+    if (hint) {
+      const desc = Palette.describeFilters(filters);
+      hint.textContent = desc ? 'Filtering: ' + desc : '';
+      hint.style.display = desc ? '' : 'none';
+    }
 
     // Inside a project? Its tasks get boosted to the top.
     const ctxFocus = focusedProjectId();
     const ctxProject = (ctxFocus && ctxFocus !== 'none') ? ctxFocus : null;
     const results = [];
 
-    State.getProjects().forEach(p => {
-      const s = q ? fuzzyScore(q, p.name) : 10;
-      if (s >= 0) results.push({ kind: 'project', id: p.id, title: p.name, color: p.color, score: s + 10, context: 'project' });
-    });
+    // Operators are about entries; a project row would ignore them, so with
+    // filters on we list only what they actually filtered.
+    if (!filters.active) {
+      State.getProjects().forEach(p => {
+        const s = q ? fuzzyScore(q, p.name) : 10;
+        if (s >= 0) results.push({ kind: 'project', id: p.id, title: p.name, color: p.color, score: s + 10, context: 'project' });
+      });
+    }
 
-    State.getEntries().forEach(e => {
+    const wantArchived = filters.is && filters.is.includes('archived');
+    State.getEntries({ includeArchived: wantArchived }).forEach(e => {
+      if (!Palette.matchesFilters(e, filters)) return;
       const hay = e.title + ' ' + (e.tags || []).join(' ');
-      let s = q ? fuzzyScore(q, hay) : (e.type === 'task' && !e.completed ? 5 : -1);
+      let s = q ? fuzzyScore(q, hay) : ((filters.active || (e.type === 'task' && !e.completed)) ? 5 : -1);
       if (s < 0) return;
       if (ctxProject && e.projectId === ctxProject) s += 80; // favor current project
       if (e.completed) s -= 20;
@@ -5979,7 +6041,7 @@ const App = (() => {
     const top = results.slice(0, 12);
 
     if (top.length === 0) {
-      el.innerHTML = `<p class="text-xs text-faint" style="padding:var(--space-2);">No matches for "${qRaw}".</p>`;
+      el.innerHTML = `<p class="text-xs text-faint" style="padding:var(--space-2);">No matches for “${escHtml(qRaw)}”.</p>`;
       return;
     }
 
@@ -6442,6 +6504,52 @@ const App = (() => {
     render();
   }
 
+  function togglePin(id) {
+    const e = State.getEntry(id);
+    State.togglePinned(id);
+    toast(e && e.pinned ? 'Unpinned' : 'Pinned to your shortlist');
+    render();
+  }
+
+  // Snooze — "not today" as an action rather than an edit. Pushing the date
+  // out by hand is four taps and leaves you looking at a date picker to say
+  // something you already knew.
+  const SNOOZE_OPTIONS = [
+    { key: 'tomorrow', label: 'Tomorrow', days: 1 },
+    { key: 'weekend', label: 'This weekend', weekend: true },
+    { key: 'nextweek', label: 'Next week', days: 7 },
+  ];
+
+  function snoozeEntry(id, key) {
+    const e = State.getEntry(id);
+    if (!e) return;
+    const opt = SNOOZE_OPTIONS.find(o => o.key === key) || SNOOZE_OPTIONS[0];
+    let target;
+    if (opt.weekend) {
+      const dow = new Date().getDay();
+      target = State.dateStr(new Date(Date.now() + (((6 - dow + 7) % 7) || 7) * 86400000));
+    } else {
+      target = State.dateStr(new Date(Date.now() + opt.days * 86400000));
+    }
+    undoable(`Snoozed “${e.title}” to ${opt.label.toLowerCase()}`,
+      () => State.updateEntry(id, { scheduledDate: target, dueDate: e.dueDate ? target : e.dueDate }));
+    closeModal();
+    render();
+  }
+
+  function openSnooze(id) {
+    const e = State.getEntry(id);
+    if (!e) return;
+    showModal('Snooze', `
+      <p class="text-sm text-muted" style="margin-bottom:var(--space-3);">
+        Move “${escHtml(e.title)}” out of today. ${e.dueDate ? 'Its due date moves with it.' : 'It has no due date, so only its place in Today changes.'}
+      </p>
+      <div style="display:flex;flex-direction:column;gap:var(--space-2);">
+        ${SNOOZE_OPTIONS.map(o => `<button class="btn btn-secondary" onclick="App.snoozeEntry('${id}','${o.key}')">${escHtml(o.label)}</button>`).join('')}
+      </div>
+    `, [`<button class="btn btn-secondary" onclick="App.closeModal()">Cancel</button>`]);
+  }
+
   // No confirm() any more: deleting moves the entry to the trash, where it
   // stays for a month, and the toast offers an immediate way back. A dialog
   // guarding a reversible action is just an extra click.
@@ -6777,7 +6885,7 @@ const App = (() => {
     setPostMode, togglePostTodo,
     toolCoin, toolDice, toolPick, toolName, toolRandom, toolUuid, toolCopy, toolListChanged,
     logFood, deleteFoodLog, useShortcutHealth,
-    toggleEntry, deleteEntry, archiveEntry, unarchiveEntry, startTimerForTask,
+    toggleEntry, deleteEntry, archiveEntry, unarchiveEntry, togglePin, openSnooze, snoozeEntry, startTimerForTask,
     selectEntryCard, setWorkingProject,
     // Navigation chrome
     menuAction, toggleWorkspaceMenu, setWorkspace, setSubproject, toggleSettledSubs,

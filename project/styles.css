@@ -3579,3 +3579,32 @@ textarea.input-grow,
   padding: 1px 6px;
   white-space: nowrap;
 }
+
+/* ── Breadcrumbs ──────────────────────────────────────────────── */
+.crumbs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1);
+  margin-bottom: var(--space-2);
+  font-size: var(--text-xs);
+}
+.crumb {
+  font: inherit;
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--text-faint);
+  cursor: pointer;
+}
+.crumb:hover { color: var(--accent-text); text-decoration: underline; }
+.crumb-here { color: var(--text-muted); cursor: default; }
+.crumb-here:hover { text-decoration: none; }
+.crumb-sep { color: var(--text-faint); opacity: 0.6; }
+
+/* A pinned entry keeps its star lit rather than only on hover. */
+.icon-btn.is-pinned { color: var(--hl-yellow); opacity: 1; }
+
+.search-hint { margin: var(--space-2) 0 0; color: var(--accent-text); }
+.search-ops { margin: var(--space-2) 0 0; }
+.search-ops summary { cursor: pointer; }

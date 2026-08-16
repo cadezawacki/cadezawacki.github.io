@@ -454,6 +454,7 @@ const State = (() => {
     lastNotified: null,  // date a reminder notification last fired (once per day)
     spawnedNextId: null, // recurring: id of the next occurrence already spawned
     archivedByProject: null, // archived as part of a project's subtree, by id
+    pinned: false,       // on the shortlist, visible whatever the scope
     // ── Cade.txt link (see bridge.js) ──
     txtRoom: null,  // room whose todo list this task mirrors
     txtKey: null,   // normalized line text — identity across edits
@@ -553,6 +554,18 @@ const State = (() => {
       if (filter.tag && !(e.tags || []).includes(filter.tag)) return false;
       return true;
     });
+  }
+
+  // The shortlist. Pinned entries show on Today regardless of the workspace
+  // or sub-project the app is scoped to — they are the handful you decided
+  // matter this week, and scoping them away defeats the point.
+  function togglePinned(id) {
+    const e = getEntry(id);
+    if (!e) return null;
+    return updateEntry(id, { pinned: !e.pinned });
+  }
+  function getPinned() {
+    return data.entries.filter(e => e.pinned && !e.archived && !e.completed);
   }
 
   function archiveEntry(id) { return updateEntry(id, { archived: true }); }
@@ -1264,7 +1277,7 @@ const State = (() => {
   return {
     subscribe, emit, save,
     createEntry, updateEntry, deleteEntry, getEntry, getEntries, toggleComplete, isHabitDoneToday,
-    archiveEntry, unarchiveEntry, toggleHabitOnDate, cycleHabitOnDate,
+    archiveEntry, unarchiveEntry, togglePinned, getPinned, toggleHabitOnDate, cycleHabitOnDate,
     habitStatusOn, isHabitScheduledOn, resetData,
     nextOccurrenceDate,
     entryProjectIds, getProjectSubtreeIds,
