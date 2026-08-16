@@ -3608,3 +3608,37 @@ textarea.input-grow,
 .search-hint { margin: var(--space-2) 0 0; color: var(--accent-text); }
 .search-ops { margin: var(--space-2) 0 0; }
 .search-ops summary { cursor: pointer; }
+
+/* A task being dragged toward the planner, and the hour it would land in. */
+.entry-card[draggable="true"] { cursor: grab; }
+.entry-card.dragging { opacity: 0.45; cursor: grabbing; }
+.planner-hour.drop-target {
+  background: var(--accent-tint);
+  box-shadow: inset 0 2px 0 var(--accent);
+}
+
+/* ── Shutdown review & "why this?" ────────────────────────────── */
+.shutdown-list { display: flex; flex-direction: column; gap: var(--space-1); }
+.shutdown-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  min-width: 0;
+}
+.why-list { display: flex; flex-direction: column; }
+.why-row {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-1) 0;
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: var(--text-sm);
+}
+.why-row:last-child { border-bottom: none; }
+.why-pts {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-faint);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}

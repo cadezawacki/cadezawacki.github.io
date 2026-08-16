@@ -169,6 +169,67 @@ const App = (() => {
     return Math.min(100, priPts + duePts + effPts);
   }
 
+  // The same arithmetic taskScore does, said in words. Next Best Task used to
+  // show a conclusion with no working, which is either trusted blindly or
+  // ignored — and there was no way to tell it that it was wrong.
+  function scoreReasons(t) {
+    const out = [];
+    const pri = { urgent: 40, high: 30, medium: 18, low: 8 }[t.priority] ?? 18;
+    if (t.priority && t.priority !== 'medium') out.push({ text: t.priority + ' priority', pts: pri });
+    if (t.dueDate) {
+      const diff = daysUntil(t.dueDate);
+      out.push({
+        text: diff < 0 ? `${Math.abs(diff)} day${Math.abs(diff) === 1 ? '' : 's'} overdue`
+          : diff === 0 ? 'due today' : diff === 1 ? 'due tomorrow' : `due in ${diff} days`,
+        pts: diff < 0 ? 40 : diff === 0 ? 35 : diff === 1 ? 25 : diff <= 3 ? 18 : diff <= 7 ? 10 : 5,
+      });
+    } else {
+      out.push({ text: 'no due date', pts: 10 });
+    }
+    const eff = { trivial: 20, small: 16, medium: 10, large: 5, xl: 2 }[t.effort] ?? 10;
+    if (t.effort && t.effort !== 'medium') out.push({ text: t.effort + ' effort', pts: eff });
+    if (t.estimateMinutes) out.push({ text: 'about ' + estimateLabel(t.estimateMinutes), pts: 0 });
+    return out.sort((a, b) => b.pts - a.pts);
+  }
+
+  function openWhyThis(id) {
+    const t = State.getEntry(id);
+    if (!t) return;
+    const reasons = scoreReasons(t);
+    // Who it beat, and by how much — the comparison is the actual answer.
+    const rivals = State.getEntries({ type: 'task', completed: false })
+      .filter(x => x.id !== id && !isBlocked(x) && inScope(x))
+      .sort((a, b) => taskScore(b) - taskScore(a))
+      .slice(0, 3);
+    showModal('Why this one?', `
+      <p class="text-sm" style="margin-bottom:var(--space-3);">
+        <strong>${escHtml(t.title)}</strong> scores <strong>${taskScore(t)}</strong> out of 100.
+      </p>
+      <div class="why-list">
+        ${reasons.map(r => `<div class="why-row">
+          <span class="why-text">${escHtml(r.text)}</span>
+          <span class="why-pts">${r.pts ? '+' + r.pts : '—'}</span>
+        </div>`).join('')}
+      </div>
+      ${rivals.length ? `<div class="divider"></div>
+        <label class="form-label">Runners-up</label>
+        <div class="why-list">
+          ${rivals.map(r => `<div class="why-row">
+            <span class="why-text truncate">${escHtml(r.title)}</span>
+            <span class="why-pts">${taskScore(r)}</span>
+          </div>`).join('')}
+        </div>` : ''}
+      <p class="text-xs text-faint" style="margin-top:var(--space-3);line-height:1.6;">
+        Priority, how close the deadline is, and how small the job is. Blocked
+        tasks are never suggested. Change a priority or an estimate and this
+        moves — it is arithmetic, not an opinion.
+      </p>
+    `, [
+      `<button class="btn btn-secondary" onclick="App.closeModal()">Close</button>`,
+      `<button class="btn btn-primary" onclick="App.editEntry('${id}')">Edit this task</button>`,
+    ]);
+  }
+
   function timeToMin(t) {
     if (!t) return 0;
     const [h, m] = t.split(':').map(Number);
@@ -932,7 +993,10 @@ const App = (() => {
     html += `
       <div class="section">
         <div class="section-header"><span class="section-title">Next Best Task</span>
-          ${scoped ? `<span class="text-xs text-faint">within ${escHtml(scopeLabel())}</span>` : ''}
+          <span style="display:inline-flex;align-items:center;gap:var(--space-2);margin-left:auto;">
+            ${scoped ? `<span class="text-xs text-faint">within ${escHtml(scopeLabel())}</span>` : ''}
+            ${nextTask ? `<button class="btn btn-ghost btn-sm" onclick="App.openWhyThis('${nextTask.id}')" title="How this was chosen">Why this?</button>` : ''}
+          </span>
         </div>
         ${nextTask
           ? renderEntryCard(nextTask, nextTask.projectId ? State.getProject(nextTask.projectId) : null, null, { highlight: true })
@@ -1128,7 +1192,9 @@ const App = (() => {
 
     let html = `<div class="planner-grid" data-hs="${hs}" data-date="${dateStr}" style="height:${totalH}px">`;
     for (let hour = hs; hour < he; hour++) {
-      html += `<div class="planner-hour" onclick="App.plannerTap(event,'${dateStr}',${hour})">
+      html += `<div class="planner-hour" onclick="App.plannerTap(event,'${dateStr}',${hour})"
+        ondragover="App.plannerDragOver(event)" ondragleave="App.plannerDragLeave(event)"
+        ondrop="App.plannerDrop(event,'${dateStr}',${hour})">
         <div class="planner-hour-label">${String(hour).padStart(2, '0')}:00</div>
       </div>`;
     }
@@ -1628,7 +1694,8 @@ const App = (() => {
 
     return `
       <div class="entry-card ${isDone ? 'completed' : ''} ${isSelected ? 'selected' : ''} ${opts.highlight ? 'highlight' : ''}" data-id="${entry.id}"
-        onclick="App.selectEntryCard('${entry.id}')" ${entry.type === 'task' ? `ondblclick="App.openTaskPage('${entry.id}')" title="Double-click to open task page"` : ''}>
+        ${canTrack ? `draggable="true" ondragstart="App.taskDragStart(event,'${entry.id}')" ondragend="App.taskDragEnd(event)"` : ''}
+        onclick="App.selectEntryCard('${entry.id}')" ${entry.type === 'task' ? `ondblclick="App.openTaskPage('${entry.id}')" title="Double-click to open task page — or drag onto the planner to schedule it"` : ''}>
         <div class="check-toggle ${isDone ? 'checked' : ''}" onclick="event.stopPropagation();App.toggleEntry('${entry.id}')" title="Mark ${isDone ? 'not done' : 'done'}">
           <i data-lucide="check"></i>
         </div>
@@ -2933,6 +3000,77 @@ const App = (() => {
 
   let draggingTaskId = null;
   let didDrag = false;
+
+  // ═══════════════════════════════════════════════════════════
+  // TASK → PLANNER
+  // ═══════════════════════════════════════════════════════════
+  // The planner grid and the task list were the same day drawn twice, with
+  // no way to get from one to the other. Dropping a task on an hour schedules
+  // it there, for as long as its estimate says.
+  const TASK_DRAG_TYPE = 'application/x-cade-task';
+  let draggingPlannerTask = null;
+
+  function taskDragStart(e, id) {
+    draggingPlannerTask = id;
+    e.dataTransfer.effectAllowed = 'copy';
+    try {
+      e.dataTransfer.setData(TASK_DRAG_TYPE, id);
+      e.dataTransfer.setData('text/plain', id);   // Safari wants a known type
+    } catch (err) {}
+    e.currentTarget.classList.add('dragging');
+  }
+
+  function taskDragEnd(e) {
+    draggingPlannerTask = null;
+    e.currentTarget.classList.remove('dragging');
+    document.querySelectorAll('.planner-hour.drop-target').forEach(x => x.classList.remove('drop-target'));
+  }
+
+  function plannerDragOver(e) {
+    if (!draggingPlannerTask) return;   // not our drag — leave the browser to it
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+    e.currentTarget.classList.add('drop-target');
+  }
+
+  function plannerDragLeave(e) {
+    e.currentTarget.classList.remove('drop-target');
+  }
+
+  function plannerDrop(e, dateStr, hour) {
+    e.preventDefault();
+    e.currentTarget.classList.remove('drop-target');
+    const id = draggingPlannerTask ||
+      (e.dataTransfer && (e.dataTransfer.getData(TASK_DRAG_TYPE) || e.dataTransfer.getData('text/plain')));
+    draggingPlannerTask = null;
+    const task = id && State.getEntry(id);
+    if (!task) return;
+
+    // Drop position within the hour, rounded to the nearest quarter, so the
+    // block lands where the pointer was rather than always on the hour.
+    const rect = e.currentTarget.getBoundingClientRect();
+    const frac = rect.height ? Math.min(Math.max((e.clientY - rect.top) / rect.height, 0), 0.99) : 0;
+    const startMin = hour * 60 + Math.round(frac * 4) * 15;
+    const dur = Math.min(Math.max(task.estimateMinutes || 30, 15), 240);
+    const proj = task.projectId ? State.getProject(task.projectId) : null;
+
+    undoable(`Scheduled “${task.title}”`, () => {
+      State.createPlannerBlock({
+        date: dateStr,
+        start: minToTime(startMin),
+        end: minToTime(Math.min(startMin + dur, 24 * 60 - 1)),
+        title: task.title,
+        entryId: task.id,
+        projectId: task.projectId || null,
+        color: proj?.color || null,
+        kind: 'agenda',
+      });
+      // A task you have given a time to is a task you mean to do that day.
+      State.updateEntry(task.id, { scheduledDate: dateStr });
+    }, { quiet: true });
+    toast(`Scheduled at ${minToTime(startMin)}`, { undo: true });
+    render();
+  }
 
   function qDragStart(e, id) {
     draggingTaskId = id;
@@ -4508,6 +4646,117 @@ const App = (() => {
   }
 
   // ═══════════════════════════════════════════════════════════
+  // SHUTDOWN REVIEW
+  // ═══════════════════════════════════════════════════════════
+  // Daily Review triages what is overdue — a morning tool. This is its
+  // evening counterpart: what got done, what slipped and by how often, where
+  // the hours went, and what is first tomorrow. Ending the day deliberately
+  // is the part a task list usually leaves out.
+  function shutdownFacts() {
+    const today = State.todayStr();
+    const tomorrow = State.dateStr(new Date(Date.now() + 86400000));
+    const entries = State.getEntries({ includeArchived: true });
+
+    const done = entries.filter(e => e.completed && (e.completedAt || '').startsWith(today));
+    const openToday = State.getEntries({ type: 'task', completed: false }).filter(t =>
+      t.dueDate === today || t.scheduledDate === today || (!t.dueDate && !t.scheduledDate));
+    const slipped = openToday.filter(t => t.dueDate === today || t.scheduledDate === today);
+    const focusSeconds = State.getLogs({ type: 'time_session', date: today })
+      .reduce((sum, l) => sum + (l.value || 0), 0);
+    const habits = State.getEntries({ type: 'habit' })
+      .filter(h => State.isHabitScheduledOn(h.id, today));
+    const habitsDone = habits.filter(h => State.isHabitDoneToday(h.id));
+    const tomorrowTasks = State.getEntries({ type: 'task', completed: false })
+      .filter(t => t.dueDate === tomorrow || t.scheduledDate === tomorrow)
+      .sort((a, b) => taskScore(b) - taskScore(a));
+
+    return { today, tomorrow, done, slipped, focusSeconds, habits, habitsDone, tomorrowTasks };
+  }
+
+  // How many days running a task has been on the list without being done.
+  // A task dodged four times is telling you something — break it up or drop
+  // it — and nothing in the app was keeping count.
+  function carriedDays(t) {
+    const from = t.scheduledDate || t.dueDate || (t.createdAt || '').slice(0, 10);
+    if (!from || t.completed) return 0;
+    const start = Date.parse(from + 'T00:00');
+    if (!Number.isFinite(start)) return 0;
+    return Math.max(0, Math.floor((Date.now() - start) / 86400000));
+  }
+
+  function openShutdown() {
+    const f = shutdownFacts();
+    const carried = f.slipped
+      .map(t => ({ t, days: carriedDays(t) }))
+      .filter(x => x.days >= 1)
+      .sort((a, b) => b.days - a.days);
+
+    showModal('Shutdown', `
+      <p class="text-sm text-muted" style="line-height:1.7;margin-bottom:var(--space-3);">
+        ${f.done.length
+          ? `You finished ${f.done.length} thing${f.done.length === 1 ? '' : 's'} today${f.focusSeconds ? ` and tracked ${Timers.formatTime(f.focusSeconds)}` : ''}.`
+          : 'Nothing was marked done today — which is sometimes just how a day goes.'}
+      </p>
+
+      ${f.done.length ? `<div class="section">
+        <div class="section-header"><span class="section-title">Done today</span>
+          <span class="stat-label">${f.done.length}</span></div>
+        <div class="shutdown-list">${f.done.slice(0, 12).map(e =>
+          `<div class="shutdown-row">${icon('check', 13)}<span class="truncate">${escHtml(e.title)}</span></div>`).join('')}
+          ${f.done.length > 12 ? `<div class="text-xs text-faint">and ${f.done.length - 12} more</div>` : ''}</div>
+      </div>` : ''}
+
+      ${f.habits.length ? `<div class="section">
+        <div class="section-header"><span class="section-title">Habits</span>
+          <span class="stat-label">${f.habitsDone.length} / ${f.habits.length}</span></div>
+        ${f.habitsDone.length < f.habits.length ? `<p class="text-xs" style="color:var(--hl-orange);">
+          Still open: ${f.habits.filter(h => !State.isHabitDoneToday(h.id)).map(h => escHtml(h.title)).join(', ')}</p>` : ''}
+      </div>` : ''}
+
+      ${f.slipped.length ? `<div class="section">
+        <div class="section-header"><span class="section-title">Didn’t happen</span>
+          <span class="stat-label">${f.slipped.length}</span></div>
+        <div class="shutdown-list">${f.slipped.slice(0, 10).map(t => {
+          const days = carriedDays(t);
+          return `<div class="shutdown-row">
+            ${icon('circle', 13)}<span class="truncate" style="flex:1">${escHtml(t.title)}</span>
+            ${days >= 2 ? `<span class="pill pill-orange" title="On the list this long without being finished">carried ${days}×</span>` : ''}
+            <button class="btn btn-ghost btn-sm" onclick="App.snoozeEntry('${t.id}','tomorrow')">Tomorrow</button>
+          </div>`;
+        }).join('')}</div>
+        ${carried.length ? `<p class="text-xs text-faint" style="margin-top:var(--space-2);line-height:1.6;">
+          ${carried.length === 1 ? 'One task has' : `${carried.length} tasks have`} been carried more than a day.
+          Something carried repeatedly usually wants breaking up, or dropping.
+        </p>` : ''}
+      </div>` : ''}
+
+      <div class="section">
+        <div class="section-header"><span class="section-title">First thing tomorrow</span></div>
+        ${f.tomorrowTasks.length
+          ? `<div class="shutdown-list">${f.tomorrowTasks.slice(0, 5).map(t =>
+              `<div class="shutdown-row">${icon('arrow-right', 13)}<span class="truncate">${escHtml(t.title)}</span></div>`).join('')}</div>`
+          : `<p class="text-xs text-faint">Nothing is dated tomorrow yet. Snooze something above, or leave it open.</p>`}
+      </div>
+    `, [
+      `<button class="btn btn-secondary" onclick="App.closeModal()">Close</button>`,
+      f.slipped.length ? `<button class="btn btn-primary" onclick="App.shutdownPushAll()">${icon('calendar-arrow-down', 14)}Move ${f.slipped.length} to tomorrow</button>` : '',
+    ]);
+  }
+
+  function shutdownPushAll() {
+    const f = shutdownFacts();
+    if (!f.slipped.length) return;
+    undoable(`Moved ${f.slipped.length} task${f.slipped.length === 1 ? '' : 's'} to tomorrow`, () => {
+      f.slipped.forEach(t => State.updateEntry(t.id, {
+        scheduledDate: f.tomorrow,
+        dueDate: t.dueDate ? f.tomorrow : t.dueDate,
+      }));
+    });
+    closeModal();
+    render();
+  }
+
+  // ═══════════════════════════════════════════════════════════
   // TRASH
   // ═══════════════════════════════════════════════════════════
   const TRASH_KIND_LABEL = {
@@ -5608,6 +5857,17 @@ const App = (() => {
     };
   }
 
+  // The tasks auto-plan would consider, in the order it would consider them.
+  function computeAutoPlanCandidates(opts = {}) {
+    const today = State.todayStr();
+    return State.getEntries({ type: 'task', completed: false, projectId: opts.projectId || undefined })
+      .filter(t => !isBlocked(t) && (!t.dueDate || t.dueDate <= today || t.scheduledDate === today))
+      .sort((a, b) => {
+        const aDue = a.dueDate ? 0 : 1, bDue = b.dueDate ? 0 : 1;
+        return aDue - bDue || taskScore(b) - taskScore(a);
+      });
+  }
+
   function computeAutoPlan(opts = {}) {
     const today = State.todayStr();
     const d = autoPlanDefaults();
@@ -5631,12 +5891,7 @@ const App = (() => {
 
     // candidates: unblocked open tasks due (or overdue) today first,
     // then undated ones — best score first, optionally project-scoped
-    const cands = State.getEntries({ type: 'task', completed: false, projectId: opts.projectId || undefined })
-      .filter(t => !isBlocked(t) && (!t.dueDate || t.dueDate <= today))
-      .sort((a, b) => {
-        const aDue = a.dueDate ? 0 : 1, bDue = b.dueDate ? 0 : 1;
-        return aDue - bDue || taskScore(b) - taskScore(a);
-      });
+    const cands = computeAutoPlanCandidates(opts);
 
     const sizeOf = (t) => Math.min(Math.max(Math.ceil((t.estimateMinutes || 30) / 15) * 15, 15), 120);
     const place = (task, dur) => {
@@ -5693,6 +5948,10 @@ const App = (() => {
       return;
     }
     const total = pendingPlan.reduce((s, p) => s + (p.end - p.start), 0);
+    // What the day had no room for. Silently dropping it made auto-plan look
+    // like it had considered less than it had.
+    const planned = new Set(pendingPlan.map(p => p.task.id));
+    const left = computeAutoPlanCandidates(readAutoPlanOpts()).filter(t => !planned.has(t.id));
     el.innerHTML = `
       <div class="autoplan-list">
         ${pendingPlan.map(p => {
@@ -5705,7 +5964,10 @@ const App = (() => {
           </div>`;
         }).join('')}
       </div>
-      <p class="text-xs text-faint" style="margin-top:var(--space-2);">${pendingPlan.length} block${pendingPlan.length === 1 ? '' : 's'} · ${estimateLabel(total)} planned</p>`;
+      <p class="text-xs text-faint" style="margin-top:var(--space-2);">${pendingPlan.length} block${pendingPlan.length === 1 ? '' : 's'} · ${estimateLabel(total)} planned</p>
+      ${left.length ? `<p class="text-xs" style="color:var(--hl-orange);line-height:1.6;margin-top:var(--space-1);">
+        ${left.length} didn’t fit: ${left.slice(0, 4).map(t => escHtml(t.title)).join(', ')}${left.length > 4 ? `, and ${left.length - 4} more` : ''}.
+      </p>` : ''}`;
     const btn = document.getElementById('apConfirm');
     if (btn) btn.disabled = false;
   }
@@ -6875,8 +7137,8 @@ const App = (() => {
     quickAddSubmit, quickAddPreview, quickAddKey,
     setAccent, openHistoryDay, celebrate, updateAppSetting, autoGrow,
     checkReminders, enableNotifications,
-    openDailyReview, reviewAction,
-    openAutoPlan, confirmAutoPlan,
+    openDailyReview, reviewAction, openShutdown, shutdownPushAll,
+    openAutoPlan, confirmAutoPlan, openWhyThis,
     openPasteImport, previewPasteImport, runPasteImport,
     hardRefresh, setPixelsMode, renderAutoPlanPreview,
     addScratchIdea, scratchToTask, copyScratchIdea, deleteScratchIdea, clearScratchAll,
@@ -6899,6 +7161,7 @@ const App = (() => {
     onRecurrenceChange, toggleWeekday,
     setInsightsProject, setInsightsEntry,
     qDragStart, qDragEnd, qDragOver, qDragLeave, qDrop, qItemClick,
+    taskDragStart, taskDragEnd, plannerDragOver, plannerDragLeave, plannerDrop,
     plannerNav, plannerToday, setPlannerView, plannerTap, blockPointerDown,
     popoverAgenda, popoverTask, popoverTimer,
     openAgendaModal, saveAgendaBlock, deleteAgendaBlock, editPlannerBlock,
