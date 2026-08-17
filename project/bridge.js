@@ -913,7 +913,15 @@ const Bridge = (() => {
       writeRaw(WS_TS_KEY, String(publish ? blob.ts : Math.max(remoteTs, parseInt(raw(WS_TS_KEY) || '0', 10))));
       return { ok: true, contributed };
     } catch (e) {
-      console.warn('Bridge: workspace blob ' + (publish ? 'publish' : 'pull') + ' failed', e);
+      // A refused write here means the rules do not allow `rooms/`, which is
+      // Cade.txt's own path — worth saying plainly rather than as a warning
+      // among many, because nothing about the link will work without it.
+      if (/permission[_ ]denied/i.test(String((e && e.message) || ''))) {
+        console.error('Bridge: the database refused access to rooms/ — its rules do not ' +
+          'allow it. Cade.txt and this app both need that path. See project/FIREBASE_RULES.md.');
+      } else {
+        console.warn('Bridge: workspace blob ' + (publish ? 'publish' : 'pull') + ' failed', e);
+      }
       return { ok: false, contributed: false };
     }
   }

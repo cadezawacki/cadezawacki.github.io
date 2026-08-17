@@ -246,6 +246,9 @@ const Sync = (() => {
   async function connect(databaseUrl, passphrase) {
     if (!databaseUrl || !passphrase) return { success: false, error: 'URL and passphrase required' };
     try {
+      // Connecting deliberately is the user saying "try again" — the rules
+      // may well be what they just went and fixed.
+      refusal = null;
       connecting = true;
       updateStatus();
 
@@ -344,6 +347,10 @@ const Sync = (() => {
     }
   }
 
+  function subtreePath() {
+    return `cade/${keyFingerprint}`;
+  }
+
   function dataPath() {
     return `cade/${keyFingerprint}/data`;
   }
@@ -374,7 +381,31 @@ const Sync = (() => {
 
   // Guards every write to the server. `bootstrap` is the one caller allowed
   // to run before reconciliation — it is the reconcile itself.
+  // The database refused a write outright. This is a configuration fault, not
+  // a transient one: retrying cannot fix it, and retrying anyway means every
+  // edit fires another denied request and another console error while the app
+  // silently fails to sync. Latch it, say so, and stop.
+  let refusal = null;   // { path, at, message }
+
+  function isRefused(e) {
+    const msg = String((e && (e.message || e.code)) || '');
+    return /permission[_ ]denied/i.test(msg);
+  }
+
+  function noteRefusal(path, e) {
+    refusal = { path, at: Date.now(), message: String((e && e.message) || 'Permission denied') };
+    note('refused', 'the database refused a write to ' + path);
+    updateStatus();
+    try { window.dispatchEvent(new CustomEvent('sync-refused', { detail: refusal })); } catch (_) {}
+  }
+
+  function getRefusal() { return refusal; }
+  function clearRefusal() { refusal = null; updateStatus(); }
+
   function canPush(bootstrap) {
+    // A refused database stays refused until the rules change and the user
+    // reconnects. Pushing into it only produces more denials.
+    if (refusal) return false;
     if (!connected || !db) return false;
     if (!bootstrap && !reconciled) return false;
     // An unreadable local blob leaves State holding an empty placeholder.
@@ -408,14 +439,18 @@ const Sync = (() => {
       // update(), and it must compare against what we're pushing now.
       lastSyncedSnapshot = structuredClone(raw);
 
-      // Multi-path update scoped to this fingerprint's subtree. The version
-      // counter uses a server-side atomic increment; a root-level transaction
-      // would require root read/write permission and reject slash-keys.
-      // meta identifies the writer so every client can ignore its own echoes.
-      await db.ref().update({
-        [dataPath()]: encrypted,
-        [versionPath()]: firebase.database.ServerValue.increment(1),
-        [metaPath()]: { clientId, at: firebase.database.ServerValue.TIMESTAMP },
+      // One atomic update of this fingerprint's three children, made through
+      // a ref AT that fingerprint rather than at the root. The keys are the
+      // same either way, but the write is then unambiguously a write inside
+      // `cade/` — a root ref asks the database to accept an update at `/`,
+      // which rules that grant `cade` and deny everything else refuse
+      // outright ("update at / failed: permission_denied"). The version
+      // counter uses a server-side atomic increment, and meta identifies the
+      // writer so every client can ignore its own echoes.
+      await db.ref(subtreePath()).update({
+        data: encrypted,
+        version: firebase.database.ServerValue.increment(1),
+        meta: { clientId, at: firebase.database.ServerValue.TIMESTAMP },
       });
 
       lastSyncedVersion++;
@@ -424,8 +459,14 @@ const Sync = (() => {
       return true;
     } catch (e) {
       lastSyncedSnapshot = prevSnapshot; // write failed — we are NOT synced
-      console.error('Push error:', e);
-      note('error', 'push failed: ' + (e && e.message ? e.message : 'unknown'));
+      if (isRefused(e)) {
+        console.error('Sync: the database refused the write to ' + subtreePath() +
+          ' — its rules do not allow writing there. See project/FIREBASE_RULES.md.');
+        noteRefusal(subtreePath(), e);
+      } else {
+        console.error('Push error:', e);
+        note('error', 'push failed: ' + (e && e.message ? e.message : 'unknown'));
+      }
       return false;
     } finally {
       pushing = false;
@@ -722,10 +763,13 @@ const Sync = (() => {
     el.style.display = 'block';
     // A deferred conflict outranks the connection state: sync is technically
     // up but is holding, and the dot is the only place that says so.
-    const state = conflictWaiting ? 'conflict'
+    const state = refusal ? 'refused'
+      : conflictWaiting ? 'conflict'
       : connected ? 'online' : connecting ? 'syncing' : 'offline';
     el.className = 'sync-dot ' + state;
-    el.title = conflictWaiting
+    el.title = refusal
+      ? 'The database refused to store your data — click for what to change'
+      : conflictWaiting
       ? 'Sync conflict waiting — click to decide what to keep'
       : settings.sync.paused
         ? 'Sync paused after a local reset — open Data ▸ Firebase Sync to reconnect'
@@ -749,7 +793,7 @@ const Sync = (() => {
   return {
     connect, disconnect, schedulePush, pushLocal, resolveConflict,
     isConnected, updateStatus, setConflictWaiting, autoConnect, eraseRemote,
-    getActivity, deviceName,
+    getActivity, deviceName, getRefusal, clearRefusal,
     isReconciled, isConfigured,
     encrypt, decrypt, classifyIncoming, stableStringify, mergeData, // exposed for testing
     // The conflict screen previews the merge it is about to run.

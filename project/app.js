@@ -4769,8 +4769,26 @@ const App = (() => {
       : live ? { cls: 'online', text: 'Connected' }
       : { cls: 'offline', text: 'Not connected right now' };
 
+    const refusal = typeof Sync !== 'undefined' && Sync.getRefusal ? Sync.getRefusal() : null;
+
     showModal('Firebase Sync', `
-      ${configured ? `<div class="sync-state">
+      ${refusal ? `<div class="sync-refused">
+        <div class="sync-refused-head">${icon('shield-alert', 16)}The database refused to store your data</div>
+        <p>Firebase replied <span class="font-mono">permission_denied</span> when this app tried to write to
+          <span class="font-mono">${escHtml(refusal.path)}</span>. Nothing has been lost — your data is on
+          this device — but it is not reaching the server and will not reach your other devices.</p>
+        <p>Your database rules do not allow writing under <span class="font-mono">cade/</span>. That path is
+          Cade.project's own; Cade.txt uses <span class="font-mono">rooms/</span>, so a database set up for
+          Cade.txt alone will refuse this. In the Firebase console, under
+          <strong>Realtime Database → Rules</strong>, add:</p>
+        <pre class="sync-rules">"cade": {
+  ".read": true,
+  ".write": true
+},</pre>
+        <p>Publish the rules, then press Reconnect below. The full rule set is in
+          <span class="font-mono">project/FIREBASE_RULES.md</span>.</p>
+      </div>` : ''}
+      ${configured && !refusal ? `<div class="sync-state">
         <span class="sync-dot ${status.cls}" style="cursor:default"></span>
         <span class="sync-state-text">${escHtml(status.text)}</span>
       </div>` : ''}
@@ -4815,6 +4833,7 @@ const App = (() => {
   // of this session, which is what you want when something has just gone
   // wrong and the console has already scrolled past it.
   const SYNC_EVENT_META = {
+    refused:  { icon: 'shield-alert', label: 'Refused' },
     online:   { icon: 'plug', label: 'Connected' },
     offline:  { icon: 'plug-zap', label: 'Disconnected' },
     push:     { icon: 'upload', label: 'Pushed' },
@@ -4842,7 +4861,7 @@ const App = (() => {
       <div class="sync-log-list">
         ${events.slice(0, 25).map(e => {
           const meta = SYNC_EVENT_META[e.kind] || { icon: 'dot', label: e.kind };
-          return `<div class="sync-log-row ${e.kind === 'error' || e.kind === 'conflict' ? 'bad' : ''}">
+          return `<div class="sync-log-row ${['error', 'conflict', 'refused'].includes(e.kind) ? 'bad' : ''}">
             ${icon(meta.icon, 12)}
             <span class="slr-label">${escHtml(meta.label)}</span>
             <span class="slr-detail truncate">${escHtml(e.detail || '')}</span>

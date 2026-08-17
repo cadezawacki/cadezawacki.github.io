@@ -68,6 +68,41 @@ itself, and not reversible into it.
 anywhere in either codebase. Rules demanding `auth != null` will reject
 every read and write from both.
 
+## "permission_denied"
+
+If the browser console shows
+
+```
+FIREBASE WARNING: update at / failed: permission_denied
+sync.js  Push error: Error: PERMISSION_DENIED: Permission denied
+```
+
+then the database is refusing to store Cade.project's data. Nothing is lost —
+it is all still on the device — but it is not reaching the server, and so not
+reaching your other devices. Cade.project now says so on the sync dot and on
+**Data ▸ Firebase Sync**, with the fix, rather than only in the console.
+
+Almost always the cause is a database that was set up for Cade.txt alone.
+Cade.txt writes under `rooms/`; Cade.project writes under `cade/`, and rules
+that grant the first and deny everything else refuse the second. Add:
+
+```json
+"cade": {
+  ".read": true,
+  ".write": true
+},
+```
+
+publish the rules, and press **Reconnect**. The full set is at the top of this
+file.
+
+Two rarer causes worth ruling out:
+
+- **Rules requiring `auth != null`.** Neither app signs in, so every read and
+  write is refused. See below.
+- **A `.validate` on `rooms/$room/text`.** Also below — it breaks large rooms
+  specifically, so most rooms work and the big ones do not.
+
 ## What this does and does not protect
 
 Every payload is encrypted in the browser before it is sent, so the database
