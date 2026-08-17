@@ -3810,3 +3810,46 @@ textarea.input-grow,
   color: var(--error);
   padding: var(--space-2) 0;
 }
+
+/* ── A database that refuses to store the data ────────────────── */
+.sync-dot.refused {
+  background: var(--error);
+  box-shadow: 0 0 0 3px var(--error-tint);
+  cursor: pointer;
+  animation: pulse 1.2s infinite;
+}
+.sync-refused {
+  background: var(--error-tint);
+  border: 1px solid var(--error);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+.sync-refused-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-weight: 600;
+  font-size: var(--text-sm);
+  color: var(--error);
+  margin-bottom: var(--space-2);
+}
+.sync-refused p {
+  font-size: var(--text-xs);
+  line-height: 1.65;
+  color: var(--text-muted);
+  margin: 0 0 var(--space-2);
+}
+.sync-refused p:last-child { margin-bottom: 0; }
+.sync-rules {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  background: var(--surface-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2);
+  margin: 0 0 var(--space-2);
+  overflow-x: auto;
+  white-space: pre;
+}
