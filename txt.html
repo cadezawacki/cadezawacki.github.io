@@ -2652,9 +2652,13 @@ body.readonly .cm-img-grip { display: none; }
         <kbd id="kbd-goto">Ctrl+G</kbd>
       </button>
       <div class="menu-separator"></div>
-      <button class="menu-item" onclick="importFiles()">
+      <button class="menu-item" onclick="importFiles()" title="Read files into the document as text; images embed, binaries attach">
         <span>Import Files…</span>
         <kbd id="kbd-import">Ctrl+Shift+I</kbd>
+      </button>
+      <button class="menu-item" onclick="uploadFiles()" title="Always attach as a synced file pill, even for text files">
+        <span>Upload File…</span>
+        <kbd id="kbd-upload">Ctrl+Shift+U</kbd>
       </button>
       <button class="menu-item" onclick="clearEditor()">
         <span>Clear Editor</span>
@@ -2662,6 +2666,7 @@ body.readonly .cm-img-grip { display: none; }
       </button>
     </div>
     <input type="file" id="import-file-input" multiple style="display:none;">
+    <input type="file" id="upload-file-input" multiple style="display:none;">
   </div>
 
   <!-- View Menu -->
@@ -6796,24 +6801,104 @@ function _liveDocFileHashes() {
 // Route a mixed batch of incoming files (drop / menu import) by kind:
 // images embed, text-like files import as fenced text (zips expand, as
 // before), and everything else attaches as a synced file pill.
-const _TEXTLIKE_EXT_RE = /\.(txt|md|markdown|json|csv|tsv|log|js|mjs|cjs|ts|tsx|jsx|py|rb|go|rs|java|c|h|cpp|hpp|cs|css|scss|less|html?|xml|yml|yaml|toml|ini|cfg|conf|sh|bat|ps1|sql|zip)$/i;
+//
+// "Text-like" used to be a closed extension list, so every source file with an
+// unlisted extension (.bas, .cla, .csproj, .vbproj, .gradle, .sln, dotfiles…)
+// attached as an opaque pill instead of landing in the document. Now anything
+// that isn't a known binary container gets SNIFFED: read the head of the file
+// and call it text when the bytes carry no NULs, little control junk, and
+// decode cleanly. Deliberate attachment lives on its own menu path (Upload
+// File…), so Import is free to prefer text.
+const _TEXTLIKE_EXT_RE = /\.(txt|md|markdown|json|csv|tsv|log|js|mjs|cjs|ts|tsx|jsx|py|rb|go|rs|java|c|h|cpp|hpp|cs|css|scss|less|html?|xml|yml|yaml|toml|ini|cfg|conf|sh|bat|ps1|sql)$/i;
+// Known binary containers — sniffing these is a waste, they always attach.
+const _BINARY_EXT_RE = /\.(png|jpe?g|gif|bmp|webp|avif|ico|tiff?|heic|heif|mp3|wav|flac|ogg|oga|m4a|aac|opus|mid|midi|mp4|m4v|mov|avi|mkv|webm|wmv|mpe?g|pdf|docx?|xlsx?|pptx?|odt|ods|odp|pages|numbers|key|gz|bz2|xz|zst|7z|rar|tar|tgz|jar|war|apk|ipa|dmg|iso|deb|rpm|exe|dll|so|dylib|bin|obj|lib|class|pyc|pyo|wasm|db|sqlite\d?|mdb|accdb|psd|ai|indd|sketch|fig|blend|ttf|otf|woff2?|eot)$/i;
+const _SNIFF_BYTES = 8192;                        // head of file used for the text test
+const _SNIFF_TEXT_MAX_BYTES = 8 * 1024 * 1024;    // unknown blobs bigger than this attach
+
+function _isZipFile(f) { return /\.zip$/i.test(f.name || ''); }
+
+// Fast, synchronous "definitely text" answer from mime type / extension only.
 function _isTextLikeFile(f) {
   if (/^image\//.test(f.type)) return false;
   if (/^text\//.test(f.type)) return true;
   if (/(json|xml|javascript|ecmascript|csv|x-sh|x-python)/.test(f.type || '')) return true;
   return _TEXTLIKE_EXT_RE.test(f.name || '');
 }
+
+// Fast, synchronous "definitely NOT text" answer. Deliberately excludes
+// application/octet-stream — that's what browsers hand back for the unknown
+// extensions this whole change exists to rescue, so those go to the sniffer.
+function _isKnownBinaryFile(f) {
+  const t = f.type || '';
+  if (/^(image|audio|video)\//.test(t)) return true;
+  if (/(pdf|zip|gzip|x-tar|x-7z|x-rar|msword|ms-excel|ms-powerpoint|officedocument|^font\/|x-font)/.test(t)) return true;
+  return _BINARY_EXT_RE.test(f.name || '');
+}
+
+// Read the first few KB and decide whether the bytes look like human-readable
+// text. Conservative on purpose: a false "text" pastes mojibake into the
+// document, while a false "binary" only means the file attaches as a pill.
+async function _sniffIsTextFile(f) {
+  try {
+    const n = Math.min(f.size, _SNIFF_BYTES);
+    if (!n) return true;                                   // empty file — harmless as text
+    const buf = new Uint8Array(await f.slice(0, n).arrayBuffer());
+    // UTF-16/32 BOMs are text even though the body is full of NULs; FileReader
+    // decodes them for us, so accept before the NUL scan below rejects them.
+    if (buf.length >= 2 && ((buf[0] === 0xFF && buf[1] === 0xFE) || (buf[0] === 0xFE && buf[1] === 0xFF))) return true;
+    let ctrl = 0, high = 0;
+    for (let i = 0; i < buf.length; i++) {
+      const b = buf[i];
+      if (b === 0) return false;                           // a NUL byte means binary
+      if (b < 9 || (b > 13 && b < 32) || b === 127) ctrl++;
+      else if (b > 127) high++;
+    }
+    if (ctrl / buf.length > 0.02) return false;            // too much control junk
+    // Prefer a clean UTF-8 decode; drop the tail so a multi-byte char sliced in
+    // half by the 8 KB window doesn't fail an otherwise fine file.
+    const body = buf.length < f.size ? buf.subarray(0, Math.max(0, buf.length - 4)) : buf;
+    try {
+      new TextDecoder('utf-8', { fatal: true }).decode(body);
+      return true;
+    } catch {
+      // Not UTF-8 — legacy single-byte text (Windows-1252 .bas files and the
+      // like) still counts as text as long as high bytes are the exception.
+      return high / buf.length < 0.1;
+    }
+  } catch { return false; }
+}
+
+// 'image' | 'text' | 'attach' for one incoming file.
+async function _classifyIncomingFile(f) {
+  if (/^image\//.test(f.type)) return 'image';
+  if (_isZipFile(f)) return 'text';                        // expanded entry-by-entry on import
+  if (_isTextLikeFile(f)) return 'text';
+  if (_isKnownBinaryFile(f)) return 'attach';
+  if (f.size > _SNIFF_TEXT_MAX_BYTES) return 'attach';     // too big to paste in wholesale
+  return (await _sniffIsTextFile(f)) ? 'text' : 'attach';
+}
+
 async function routeIncomingFiles(fileList) {
   const files = Array.from(fileList || []);
   if (!files.length) return;
-  const imgs = files.filter(f => /^image\//.test(f.type));
-  const texts = files.filter(f => !/^image\//.test(f.type) && _isTextLikeFile(f));
-  const attach = files.filter(f => !/^image\//.test(f.type) && !_isTextLikeFile(f));
+  const kinds = await Promise.all(files.map(f => _classifyIncomingFile(f)));
+  const imgs = files.filter((f, i) => kinds[i] === 'image');
+  const texts = files.filter((f, i) => kinds[i] === 'text');
+  const attach = files.filter((f, i) => kinds[i] === 'attach');
   if (texts.length) { try { await appendFilesToEditor(texts); } catch { showToast('Import failed', 'error', 2500); } }
   for (const im of imgs) { try { await insertImageFile(im); } catch {} }
   for (const f of attach) { try { await insertAttachmentFile(f); } catch {} }
 }
 window.routeIncomingFiles = routeIncomingFiles;
+
+// UPLOAD FILE — the deliberate counterpart to Import. Whatever the bytes look
+// like, every file attaches as a synced pill; nothing is read into the document.
+async function attachIncomingFiles(fileList) {
+  const files = Array.from(fileList || []);
+  if (!files.length) return;
+  for (const f of files) { try { await insertAttachmentFile(f); } catch (e) { console.error(e); } }
+}
+window.attachIncomingFiles = attachIncomingFiles;
 
 // DIAG: time each decoration builder so the long-task observer can name the
 // slowest one. These are mutable function-declaration bindings, and the plugins
@@ -8717,6 +8802,24 @@ window.importFiles = function() {
     // Same routing as drag-and-drop: text-like files import as fenced text,
     // images embed, everything else attaches as a synced file pill.
     await routeIncomingFiles(e.target.files);
+    input.value = '';
+  };
+  input.click();
+};
+
+// Upload is NOT Import: it never reads anything into the document. Every file
+// picked here attaches as a synced pill, text ones included — that's the point
+// of having a separate menu path now that Import prefers text.
+window.uploadFiles = function() {
+  closeAllMenus();
+  const input = document.getElementById('upload-file-input');
+  if (!input) {
+    showToast('Upload input not found', 'error', 2500);
+    return;
+  }
+  input.value = '';
+  input.onchange = async (e) => {
+    await attachIncomingFiles(e.target.files);
     input.value = '';
   };
   input.click();
@@ -16819,6 +16922,7 @@ const defaultHotkeys = {
   'rerunScript': 'Ctrl+Shift+K',
   'clearEditor': 'Ctrl+L',
   'importFiles': 'Ctrl+Shift+I',
+  'uploadFiles': 'Ctrl+Shift+U',
   'openSync': 'Ctrl+S',
   'forceSync': 'Ctrl+Shift+S',
   'toggleTodo': 'Ctrl+D',
@@ -16831,6 +16935,7 @@ const hotkeyLabels = {
   'rerunScript': 'Rerun Last Script',
   'clearEditor': 'Clear Editor',
   'importFiles': 'Import Files',
+  'uploadFiles': 'Upload File (attach)',
   'openSync': 'Open Sync',
   'forceSync': 'Force Sync Reload',
   'toggleTodo': 'Toggle Todo Checkbox',
@@ -16866,6 +16971,7 @@ function updateHotkeyDisplay() {
   set('kbd-rerun', hotkeys.rerunScript);
   set('kbd-clear', hotkeys.clearEditor);
   set('kbd-import', hotkeys.importFiles);
+  set('kbd-upload', hotkeys.uploadFiles);
   set('kbd-sync', hotkeys.openSync);
   set('kbd-force-sync', hotkeys.forceSync);
   set('kbd-find', hotkeys.findReplace);
@@ -16933,6 +17039,11 @@ document.addEventListener('keydown', (e) => {
   if (eventMatchesHotkey(e, hotkeys.importFiles) && !isInputField) {
     e.preventDefault(); e.stopPropagation();
     window.importFiles();
+    return;
+  }
+  if (eventMatchesHotkey(e, hotkeys.uploadFiles) && !isInputField) {
+    e.preventDefault(); e.stopPropagation();
+    window.uploadFiles();
     return;
   }
   if (eventMatchesHotkey(e, hotkeys.openSync) && !isInputField) {
