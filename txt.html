@@ -6810,8 +6810,13 @@ function _liveDocFileHashes() {
 // decode cleanly. Deliberate attachment lives on its own menu path (Upload
 // File…), so Import is free to prefer text.
 const _TEXTLIKE_EXT_RE = /\.(txt|md|markdown|json|csv|tsv|log|js|mjs|cjs|ts|tsx|jsx|py|rb|go|rs|java|c|h|cpp|hpp|cs|css|scss|less|html?|xml|yml|yaml|toml|ini|cfg|conf|sh|bat|ps1|sql)$/i;
-// Known binary containers — sniffing these is a waste, they always attach.
-const _BINARY_EXT_RE = /\.(png|jpe?g|gif|bmp|webp|avif|ico|tiff?|heic|heif|mp3|wav|flac|ogg|oga|m4a|aac|opus|mid|midi|mp4|m4v|mov|avi|mkv|webm|wmv|mpe?g|pdf|docx?|xlsx?|pptx?|odt|ods|odp|pages|numbers|key|gz|bz2|xz|zst|7z|rar|tar|tgz|jar|war|apk|ipa|dmg|iso|deb|rpm|exe|dll|so|dylib|bin|obj|lib|class|pyc|pyo|wasm|db|sqlite\d?|mdb|accdb|psd|ai|indd|sketch|fig|blend|ttf|otf|woff2?|eot)$/i;
+// Unambiguously binary containers — sniffing these is a waste, they always
+// attach. Extensions that BOTH a binary and a text format claim stay off this
+// list on purpose (.obj is a MSVC object file but also a Wavefront model, .key
+// a Keynote bundle but also a PEM private key, .ai a PDF but also old EPS) —
+// those go to the sniffer, which reads the actual bytes and gets each instance
+// right instead of guessing from the name.
+const _BINARY_EXT_RE = /\.(png|jpe?g|gif|bmp|webp|avif|ico|tiff?|heic|heif|mp3|wav|flac|ogg|oga|m4a|aac|opus|mid|midi|mp4|m4v|mov|avi|mkv|webm|wmv|mpe?g|pdf|docx?|xlsx?|pptx?|odt|ods|odp|pages|numbers|gz|bz2|xz|zst|7z|rar|tar|tgz|jar|war|apk|ipa|dmg|iso|deb|rpm|exe|dll|so|dylib|bin|class|pyc|pyo|wasm|db|sqlite\d?|mdb|accdb|psd|indd|sketch|blend|ttf|otf|woff2?|eot)$/i;
 const _SNIFF_BYTES = 8192;                        // head of file used for the text test
 const _SNIFF_TEXT_MAX_BYTES = 8 * 1024 * 1024;    // unknown blobs bigger than this attach
 
@@ -6835,6 +6840,43 @@ function _isKnownBinaryFile(f) {
   return _BINARY_EXT_RE.test(f.name || '');
 }
 
+// Byte-order marks we can act on. UTF-16 is decodable (see _decodeTextBytes),
+// so a UTF-16 BOM is an immediate "yes, text" — the body is full of NULs that
+// the scan below would otherwise reject. UTF-32 is NOT decodable by any
+// TextDecoder, and its LE mark starts with the same FF FE as UTF-16LE, so it
+// has to be ruled out first or a UTF-32 file imports as NUL-riddled garbage.
+function _bomKind(buf) {
+  if (buf.length >= 4) {
+    if (buf[0] === 0xFF && buf[1] === 0xFE && buf[2] === 0x00 && buf[3] === 0x00) return 'utf-32le';
+    if (buf[0] === 0x00 && buf[1] === 0x00 && buf[2] === 0xFE && buf[3] === 0xFF) return 'utf-32be';
+  }
+  if (buf.length >= 2) {
+    if (buf[0] === 0xFF && buf[1] === 0xFE) return 'utf-16le';
+    if (buf[0] === 0xFE && buf[1] === 0xFF) return 'utf-16be';
+  }
+  if (buf.length >= 3 && buf[0] === 0xEF && buf[1] === 0xBB && buf[2] === 0xBF) return 'utf-8';
+  return '';
+}
+
+// Drop a trailing UTF-8 sequence that the sample window cut in half — and only
+// then. Blindly trimming a fixed number of bytes just moves the cut, which for
+// dense non-ASCII text (Japanese, say) still fails the strict decode below and
+// wrongly demotes a perfectly good text file to an attachment.
+function _trimPartialUtf8(buf) {
+  for (let i = buf.length - 1; i >= 0 && i > buf.length - 5; i--) {
+    const b = buf[i];
+    if ((b & 0xC0) === 0x80) continue;                     // continuation byte — keep walking back
+    let need = 0;
+    if ((b & 0x80) === 0x00) need = 1;
+    else if ((b & 0xE0) === 0xC0) need = 2;
+    else if ((b & 0xF0) === 0xE0) need = 3;
+    else if ((b & 0xF8) === 0xF0) need = 4;
+    else return buf;                                       // malformed lead — let the decoder judge it
+    return need > buf.length - i ? buf.subarray(0, i) : buf;
+  }
+  return buf;
+}
+
 // Read the first few KB and decide whether the bytes look like human-readable
 // text. Conservative on purpose: a false "text" pastes mojibake into the
 // document, while a false "binary" only means the file attaches as a pill.
@@ -6843,27 +6885,35 @@ async function _sniffIsTextFile(f) {
     const n = Math.min(f.size, _SNIFF_BYTES);
     if (!n) return true;                                   // empty file — harmless as text
     const buf = new Uint8Array(await f.slice(0, n).arrayBuffer());
-    // UTF-16/32 BOMs are text even though the body is full of NULs; FileReader
-    // decodes them for us, so accept before the NUL scan below rejects them.
-    if (buf.length >= 2 && ((buf[0] === 0xFF && buf[1] === 0xFE) || (buf[0] === 0xFE && buf[1] === 0xFF))) return true;
-    let ctrl = 0, high = 0;
+    const bom = _bomKind(buf);
+    if (bom === 'utf-16le' || bom === 'utf-16be') return true;
+    if (bom === 'utf-32le' || bom === 'utf-32be') return false;  // nothing here can decode it
+    let ctrl = 0, high = 0, deadSlot = 0;
     for (let i = 0; i < buf.length; i++) {
       const b = buf[i];
       if (b === 0) return false;                           // a NUL byte means binary
       if (b < 9 || (b > 13 && b < 32) || b === 127) ctrl++;
-      else if (b > 127) high++;
+      else if (b > 127) {
+        high++;
+        // Bytes Windows-1252 leaves undefined. Real legacy text never has them;
+        // binary that got this far almost always does.
+        if (b === 0x81 || b === 0x8D || b === 0x8F || b === 0x90 || b === 0x9D) deadSlot++;
+      }
     }
     if (ctrl / buf.length > 0.02) return false;            // too much control junk
-    // Prefer a clean UTF-8 decode; drop the tail so a multi-byte char sliced in
-    // half by the 8 KB window doesn't fail an otherwise fine file.
-    const body = buf.length < f.size ? buf.subarray(0, Math.max(0, buf.length - 4)) : buf;
+    // Prefer a clean UTF-8 decode of the sample, minus any character the window
+    // sliced in half.
     try {
-      new TextDecoder('utf-8', { fatal: true }).decode(body);
+      new TextDecoder('utf-8', { fatal: true }).decode(buf.length < f.size ? _trimPartialUtf8(buf) : buf);
       return true;
     } catch {
       // Not UTF-8 — legacy single-byte text (Windows-1252 .bas files and the
-      // like) still counts as text as long as high bytes are the exception.
-      return high / buf.length < 0.1;
+      // like). Judge it by whether the high bytes look like a code page rather
+      // than by a bare count: accented prose can be a third high bytes, while
+      // binary that got this far still lands in the slots cp1252 leaves
+      // undefined. _decodeTextBytes reads it back with the same fallback, so
+      // what the sniffer accepts here is what lands in the document.
+      return deadSlot === 0 && high / buf.length < 0.4;
     }
   } catch { return false; }
 }
@@ -8692,13 +8742,28 @@ window.clearEditor = function() {
 //   ```
 // JSZip is already loaded globally, so .zip archives are unpacked transparently.
 // ============================================
-function readFileAsText(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result);
-    reader.onerror = () => reject(new Error('Error reading ' + file.name));
-    reader.readAsText(file);
-  });
+// Decode bytes to text the same way _sniffIsTextFile judged them: BOM first,
+// then strict UTF-8, then Windows-1252. The last step is what makes the sniffer
+// honest — it accepts legacy single-byte source files, and a plain UTF-8 read
+// would have turned exactly those bytes into U+FFFD in the document.
+function _decodeTextBytes(bytes) {
+  const bom = _bomKind(bytes);
+  if (bom === 'utf-16le' || bom === 'utf-16be') return new TextDecoder(bom).decode(bytes);
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(bytes);   // strips a UTF-8 BOM
+  } catch {
+    return new TextDecoder('windows-1252').decode(bytes);             // never throws
+  }
+}
+
+async function readFileAsText(file) {
+  let bytes;
+  try {
+    bytes = new Uint8Array(await file.arrayBuffer());
+  } catch {
+    throw new Error('Error reading ' + file.name);
+  }
+  return _decodeTextBytes(bytes);
 }
 
 function formatImportedFile(path, content) {
@@ -16944,9 +17009,10 @@ const hotkeyLabels = {
 };
 
 let hotkeys = { ...defaultHotkeys };
+let _savedHotkeys = null;
 try {
   const saved = JSON.parse(store.get('cade-hotkeys'));
-  if (saved) hotkeys = { ...defaultHotkeys, ...saved };
+  if (saved) { _savedHotkeys = saved; hotkeys = { ...defaultHotkeys, ...saved }; }
 } catch {}
 
 // Script-specific hotkeys: { hotkeyString: scriptName }
@@ -16955,6 +17021,20 @@ try {
   const saved = JSON.parse(store.get('cade-script-hotkeys'));
   if (saved) scriptHotkeys = saved;
 } catch {}
+
+// System hotkeys are matched before script bindings, so shipping a NEW system
+// default silently steals the combo from any script an existing install already
+// bound to it. Only claim such a default when nothing else holds it and the user
+// hasn't chosen their own; otherwise leave it unbound and let them set it in
+// Settings. List every hotkey id added after the initial release here.
+const _NEW_HOTKEY_IDS = ['uploadFiles'];
+(function claimNewHotkeyDefaultsOnlyIfFree() {
+  const taken = new Set(Object.keys(scriptHotkeys).map(k => String(k).toLowerCase()));
+  for (const id of _NEW_HOTKEY_IDS) {
+    if (_savedHotkeys && _savedHotkeys[id]) continue;                 // user picked this one
+    if (taken.has(String(defaultHotkeys[id] || '').toLowerCase())) hotkeys[id] = '';
+  }
+})();
 
 function saveScriptHotkeys() {
   store.set('cade-script-hotkeys', JSON.stringify(scriptHotkeys));
