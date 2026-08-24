@@ -71,7 +71,7 @@ Everything else serves this.
 
 Two rules decide whether the numbers are honest:
 
-**Retroactive trim.** Closing on idle ends the session at `lastActivityAt +
+**Retroactive trim.** Closing on idle ends the session at `lastActivity +
 trimGrace`, never at `now()`. Without it every session is inflated by exactly
 the idle threshold — silently, forever, and the totals look plausible the
 whole time. It is the single reason hand-rolled trackers flatter their
@@ -83,6 +83,13 @@ lid was closed. The span is discarded and the session closed retroactively.
 (`nanoTime` corroborates on Linux and macOS, where `CLOCK_MONOTONIC` excludes
 suspend; it is unreliable on Windows, so interval drift is the primary
 signal.)
+
+"Last activity" is the last *evidence* of work, which is not the same as the
+last keystroke: a twenty-minute test suite you sat and watched produces no
+input at all, and trimming that session back to the last key would end it
+before most of the work it recorded — sometimes before its own start. Input
+counts as evidence, and so does a live run/test process or a debugger sitting
+on a breakpoint. A file merely left open does not.
 
 Sessions are force-closed at 30 minutes and reopened, which bounds crash loss
 and keeps records small.
@@ -110,10 +117,22 @@ check whose two sides are both copies proves only that the copies agree. Use
 covering the sub-minute floor, the background switch, cross-tab dedupe, and a
 session that runs past midnight.
 
+`gradle verifyPlugin` runs the JetBrains Plugin Verifier over the built
+artifact. Last run: **Compatible** against IC-243.28141.18, and eligible for
+dynamic load.
+
 ## Tuning
 
 Every log carries `closedBy` and the raw `activeSeconds` / `readingSeconds` /
-`backgroundSeconds` split. Run a week, look at the histogram, and only then
+`backgroundSeconds` split.
+
+One thing to know before reading those numbers: reading credit accrues for up
+to `hardIdle` after the last input, while the session's *span* ends at the last
+evidence plus `trimGrace`. So on a day of long reading `readingSeconds` can
+exceed the wall-clock span of its own planner block, by up to `hardIdle -
+trimGrace`. That is the design — reading is work — but it is the reason to
+look at the split rather than at the totals when deciding whether `hardIdle`
+is set where you want it. Run a week, look at the histogram, and only then
 touch a threshold. The defaults (120s soft, 900s hard, 180s background, 60s
 trim) are WakaTime-ish and a reasonable prior, but reading-heavy days and
 pairing days pull in opposite directions and only your own data settles it.

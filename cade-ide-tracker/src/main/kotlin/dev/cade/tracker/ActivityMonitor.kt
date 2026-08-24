@@ -65,6 +65,14 @@ class ActivityMonitor(private val scope: CoroutineScope) {
     // a lock there is a lock in the typing loop.
     private val lastInputAt = AtomicLong(System.currentTimeMillis())
     private val lastUnfocusAt = AtomicLong(0)
+
+    // The last moment there was EVIDENCE of work — which is not the same as
+    // the last keystroke. Watching a twenty-minute test suite produces no
+    // input at all, and trimming that session back to the last keystroke ends
+    // it before most of the work it recorded: a record whose end precedes its
+    // own heartbeats, and sometimes its own start. A live process or a
+    // suspended debugger is evidence; a file merely sitting open is not.
+    private val lastEvidenceAt = AtomicLong(System.currentTimeMillis())
     private val processesAlive = AtomicInteger(0)
     private val suspendedDebuggers = AtomicInteger(0)
 
@@ -98,7 +106,9 @@ class ActivityMonitor(private val scope: CoroutineScope) {
     // ── input path — called from EDT listeners, stays allocation-free ──────
 
     fun noteInput(project: Project? = null, file: String? = null) {
-        lastInputAt.set(System.currentTimeMillis())
+        val now = System.currentTimeMillis()
+        lastInputAt.set(now)
+        lastEvidenceAt.set(now)
         if (project != null) activeProject = project
         if (file != null) activeFile = file
     }
@@ -112,7 +122,9 @@ class ActivityMonitor(private val scope: CoroutineScope) {
     fun noteFocus(project: Project?) {
         focused = true
         if (project != null) activeProject = project
-        lastInputAt.set(System.currentTimeMillis())
+        val now = System.currentTimeMillis()
+        lastInputAt.set(now)
+        lastEvidenceAt.set(now)
     }
 
     fun noteUnfocus() {
@@ -123,7 +135,9 @@ class ActivityMonitor(private val scope: CoroutineScope) {
     fun noteFileOpened(project: Project, path: String) {
         activeProject = project
         activeFile = path
-        lastInputAt.set(System.currentTimeMillis())
+        val now = System.currentTimeMillis()
+        lastInputAt.set(now)
+        lastEvidenceAt.set(now)
         builder?.switchFile(path)
     }
 
@@ -139,7 +153,7 @@ class ActivityMonitor(private val scope: CoroutineScope) {
     /** Its windows are going away; anything still open belongs to that project. */
     fun noteProjectClosed(project: Project) {
         if (activeProject !== project) return
-        closeSession("shutdown", trimTo = lastInputAt.get(), synchronous = true)
+        closeSession("shutdown", trimTo = lastEvidenceAt.get(), synchronous = true)
         activeProject = null
         activeFile = null
     }
@@ -154,7 +168,9 @@ class ActivityMonitor(private val scope: CoroutineScope) {
             // idle minute look like a running test suite forever after.
             processesAlive.updateAndGet { if (it > 0) it - 1 else 0 }
         }
-        lastInputAt.set(System.currentTimeMillis())
+        val now = System.currentTimeMillis()
+        lastInputAt.set(now)
+        lastEvidenceAt.set(now)
     }
 
     /**
@@ -183,7 +199,7 @@ class ActivityMonitor(private val scope: CoroutineScope) {
         // excludes suspend on Linux and macOS but not reliably on Windows.
         if (sinceTick > GAP_MS) {
             log.debug("Cade: ${sinceTick / 1000}s gap between ticks — treating as away")
-            closeSession("away", trimTo = lastInputAt.get())
+            closeSession("away", trimTo = lastEvidenceAt.get())
             state = Activity.AWAY
             ui()
             return
@@ -192,7 +208,7 @@ class ActivityMonitor(private val scope: CoroutineScope) {
         val settings = CadeSettings.get()
         val s = settings.state
         if (!s.enabled) {
-            closeSession("disabled", trimTo = lastInputAt.get())
+            closeSession("disabled", trimTo = lastEvidenceAt.get())
             state = Activity.IDLE
             ui()
             return
@@ -207,6 +223,11 @@ class ActivityMonitor(private val scope: CoroutineScope) {
             return
         }
 
+        // Something is running, or the debugger is sitting on a breakpoint:
+        // that is happening now, whatever the keyboard has been doing.
+        val liveProcess = suspendedDebuggers.get() > 0 || processesAlive.get() > 0
+        if (liveProcess) lastEvidenceAt.set(now)
+
         val sinceInput = now - lastInputAt.get()
         val next = when {
             !focused && now - lastUnfocusAt.get() < s.bgGraceSec * 1000L -> Activity.BACKGROUND
@@ -215,7 +236,7 @@ class ActivityMonitor(private val scope: CoroutineScope) {
             // Reading is work. A breakpoint you are staring at is work. A test
             // suite you are watching is work. Keystroke-only detection scores
             // all three as idle and undercounts a real day badly.
-            suspendedDebuggers.get() > 0 || processesAlive.get() > 0 -> Activity.ACTIVE
+            liveProcess -> Activity.ACTIVE
             sinceInput < s.hardIdleSec * 1000L && activeFile != null -> Activity.READING
             else -> Activity.IDLE
         }
@@ -223,16 +244,22 @@ class ActivityMonitor(private val scope: CoroutineScope) {
         when (next) {
             Activity.ACTIVE, Activity.READING, Activity.BACKGROUND -> {
                 val b = builder ?: openSession(now) ?: run { state = next; ui(); return }
-                b.heartbeat(next, sinceTick, activeFile)
+                // Never credit a session with time from before it existed: the
+                // first tick after an anchored open covers only the part of
+                // the interval the session was actually alive for.
+                b.heartbeat(next, minOf(sinceTick, now - b.startedAt), activeFile)
                 if (now - b.startedAt > SESSION_MAX_MS) {
                     // Bounds crash loss to half an hour and keeps records
                     // small. Adjacent blocks coalesce in the app if you would
                     // rather see fewer of them.
                     closeSession("rollover", trimTo = now)
-                    openSession(now)
+                    // Anchored at `now`, not at the last keystroke: the
+                    // session that just closed ends here, and anchoring back
+                    // would draw two overlapping blocks on the planner.
+                    openSession(now, anchorToInput = false)
                 }
             }
-            Activity.IDLE, Activity.AWAY -> closeSession("idle", trimTo = lastInputAt.get())
+            Activity.IDLE, Activity.AWAY -> closeSession("idle", trimTo = lastEvidenceAt.get())
         }
         state = next
         maybeFlush()
@@ -251,7 +278,7 @@ class ActivityMonitor(private val scope: CoroutineScope) {
         scope.launch(Dispatchers.IO) { runCatching { CadeClient.flush() } }
     }
 
-    private fun openSession(now: Long): SessionBuilder? {
+    private fun openSession(now: Long, anchorToInput: Boolean = true): SessionBuilder? {
         val p = activeProject ?: return null
         if (runCatching { p.isDisposed }.getOrDefault(true)) {
             activeProject = null
@@ -260,7 +287,8 @@ class ActivityMonitor(private val scope: CoroutineScope) {
         // Anchor the session to the keystroke that woke it, not to the tick
         // that noticed — otherwise every planner block starts up to half a
         // minute late. Bounded to one tick back so no time is invented.
-        val startedAt = maxOf(lastInputAt.get(), now - TICK_MS).coerceAtMost(now)
+        val startedAt = if (anchorToInput)
+            maxOf(lastInputAt.get(), now - TICK_MS).coerceAtMost(now) else now
         return SessionBuilder(p, startedAt, activeFile).also { builder = it }
     }
 
@@ -278,7 +306,10 @@ class ActivityMonitor(private val scope: CoroutineScope) {
 
         val settings = CadeSettings.get()
         val grace = settings.state.trimGraceSec * 1000L
-        val end = minOf(trimTo + grace, System.currentTimeMillis())
+        // Clamped at both ends: never later than now (no future timestamps),
+        // never earlier than the start (no record that ends before it began,
+        // whatever the evidence clock says).
+        val end = minOf(trimTo + grace, System.currentTimeMillis()).coerceAtLeast(b.startedAt)
         val rec = b.build(end, reason) ?: return          // under a minute: dropped
 
         addToTally(rec.activeSeconds + rec.readingSeconds)
@@ -314,7 +345,7 @@ class ActivityMonitor(private val scope: CoroutineScope) {
 
     /** The IDE is closing. Flush on this thread or the last session is lost. */
     fun shutdown() {
-        closeSession("shutdown", trimTo = lastInputAt.get(), synchronous = true)
+        closeSession("shutdown", trimTo = lastEvidenceAt.get(), synchronous = true)
         runCatching { CadeClient.flush(SHUTDOWN_TIMEOUT, SHUTDOWN_BUDGET_MS) }
     }
 

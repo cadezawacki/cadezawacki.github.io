@@ -21,6 +21,9 @@ dependencies {
         // every IDE in the family.
         intellijIdeaCommunity("2024.3")
         instrumentationTools()
+
+        // The verifier CLI itself, for `gradle verifyPlugin`.
+        pluginVerifier()
     }
 }
 
