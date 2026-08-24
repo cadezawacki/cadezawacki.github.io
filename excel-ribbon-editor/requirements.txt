@@ -1,0 +1,5 @@
+# RibbonForge runs on a stock Python 3.11 install - tkinter is part of the
+# standard library on Windows, so there is nothing you have to install.
+#
+# Optional, and only for slightly nicer scaling of embedded pictures:
+# pillow>=10.0
