@@ -32,6 +32,10 @@ Paste into **Realtime Database → Rules** in the Firebase console.
       ".read": true,
       ".write": true
     },
+    "ide": {
+      ".read": true,
+      ".write": true
+    },
     "$other": {
       ".read": false,
       ".write": false
@@ -54,9 +58,24 @@ Paste into **Realtime Database → Rules** in the Firebase console.
 | `images/<fp>/<hash>` | Cade.txt | Out-of-document images. |
 | `files/<fp>/<hash>` | Cade.txt | Attached files. |
 | `cade/<fp>/{data,version,meta}` | Cade.project | Cade.project's own encrypted dataset. |
+| `ide/<fp>/q/<id>` | The IDE plugin | Encrypted session records awaiting pickup. Drained and deleted by Cade.project. |
 
 `<fp>` is a fingerprint derived from your passphrase — not the passphrase
 itself, and not reversible into it.
+
+## Why `ide/` is a sibling of `cade/` and not a child
+
+The IDE plugin writes one encrypted record per work session, append-only,
+each under its own id. That is deliberately *not* how `cade/` works: every
+open tab subscribes to the whole of `cade/<fp>`, so a heartbeat written
+underneath it would wake all of them and make each re-decrypt the entire
+dataset. As a sibling it wakes only `ide.js`, which drains the queue, writes
+the sessions into the normal `logs` and `planner` collections, and deletes
+the nodes it has taken.
+
+The plugin never reads or writes `cade/<fp>`. It is not a participant in the
+merge protocol — it hands work over a queue and Cade.project owns the write.
+Adding `ide` to the rules is the whole server-side change.
 
 ## Two things the rules must NOT do
 
@@ -95,6 +114,19 @@ that grant the first and deny everything else refuse the second. Add:
 
 publish the rules, and press **Reconnect**. The full set is at the top of this
 file.
+
+The IDE plugin fails the same way one path over. Rules that grant `cade` but
+not `ide` make its queue writes return **403**, which the plugin reports in
+its status bar (a growing queue depth) and in **Settings ▸ Tools ▸
+Cade.project Tracker ▸ Test connection**, which prints the status code
+verbatim. The browser console says the read half of it:
+
+```
+IdeLink: the database refused to read ide/<fp> — add the "ide" rule
+```
+
+Nothing is lost while this is broken: the plugin keeps unsent records on
+disk and retries, and the queue drains once the rule is published.
 
 Two rarer causes worth ruling out:
 

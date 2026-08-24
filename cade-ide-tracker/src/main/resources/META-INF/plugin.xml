@@ -1,0 +1,71 @@
+<idea-plugin>
+  <id>dev.cade.ide-tracker</id>
+  <name>Cade.project Tracker</name>
+  <vendor>cade</vendor>
+
+  <description><![CDATA[
+    Records what the IDE was actually used for — active, reading, background —
+    and hands each session to <a href="https://cadezawacki.github.io/project/">Cade.project</a>
+    as tracked time and a planner block.
+    <br/><br/>
+    Sessions are encrypted in the IDE with the same passphrase Cade.project
+    syncs with, and queued on disk until they are accepted, so a closed laptop
+    or a dropped network costs nothing. The plugin writes to its own subtree
+    and never touches the app's dataset.
+    <br/><br/>
+    Set it up in <b>Settings ▸ Tools ▸ Cade.project Tracker</b>.
+  ]]></description>
+
+  <depends>com.intellij.modules.platform</depends>
+
+  <!-- Optional: an IDE in the family without the debugger gets one fewer
+       signal, not a stack trace at startup. Nothing outside this config file
+       references the classes it registers, so they never load there. -->
+  <depends optional="true" config-file="cade-xdebugger.xml">com.intellij.modules.xdebugger</depends>
+
+  <!-- The three services are declared by @Service on the classes themselves and
+       are deliberately NOT listed here as well. Registering both ways is not
+       merely redundant: the XML path constructs the service without the
+       coroutine scope ActivityMonitor takes as a constructor parameter, and
+       the ticker that is the whole plugin never starts. -->
+
+  <extensions defaultExtensionNs="com.intellij">
+    <postStartupActivity implementation="dev.cade.tracker.TrackerStartup"/>
+
+    <statusBarWidgetFactory id="CadeTracker"
+                            implementation="dev.cade.tracker.ui.CadeWidgetFactory"/>
+
+    <applicationConfigurable instance="dev.cade.tracker.ui.CadeConfigurable"
+                             id="dev.cade.tracker.settings"
+                             displayName="Cade.project Tracker"
+                             groupId="tools"/>
+
+    <notificationGroup id="Cade.project Tracker" displayType="BALLOON"/>
+  </extensions>
+
+  <applicationListeners>
+    <listener class="dev.cade.tracker.listeners.AppFocusListener"
+              topic="com.intellij.openapi.application.ApplicationActivationListener"/>
+    <listener class="dev.cade.tracker.listeners.LifecycleListener"
+              topic="com.intellij.ide.AppLifecycleListener"/>
+    <listener class="dev.cade.tracker.listeners.ActionActivityListener"
+              topic="com.intellij.openapi.actionSystem.ex.AnActionListener"/>
+  </applicationListeners>
+
+  <projectListeners>
+    <listener class="dev.cade.tracker.listeners.EditorSelectionListener"
+              topic="com.intellij.openapi.fileEditor.FileEditorManagerListener"/>
+    <listener class="dev.cade.tracker.listeners.RunListener"
+              topic="com.intellij.execution.ExecutionListener"/>
+  </projectListeners>
+
+  <actions>
+    <group id="dev.cade.tracker.menu" text="Cade.project Tracker" popup="true">
+      <add-to-group group-id="ToolsMenu" anchor="last"/>
+      <action id="dev.cade.tracker.SendTestSession"
+              class="dev.cade.tracker.ui.SendTestSessionAction"
+              text="Send Test Session"
+              description="Write one fake session through the real path, to prove the pipe"/>
+    </group>
+  </actions>
+</idea-plugin>

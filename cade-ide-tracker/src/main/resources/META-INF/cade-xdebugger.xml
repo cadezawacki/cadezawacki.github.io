@@ -1,0 +1,7 @@
+<idea-plugin>
+  <!-- Loaded only when com.intellij.modules.xdebugger is present. -->
+  <projectListeners>
+    <listener class="dev.cade.tracker.listeners.DebuggerListener"
+              topic="com.intellij.xdebugger.XDebuggerManagerListener"/>
+  </projectListeners>
+</idea-plugin>

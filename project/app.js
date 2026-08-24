@@ -7656,6 +7656,17 @@ const App = (() => {
       if (waitForSync) setTimeout(() => Bridge.requestScan(0), 15000);
     }
 
+    // IDE link — sessions from the IntelliJ plugin arrive as tracked time and
+    // planner blocks. Silent when the plugin has never run. It waits on the
+    // same reconcile signal and for the same reason: importing into a
+    // pre-reconcile dataset yields two of every project.
+    if (typeof IdeLink !== 'undefined') {
+      IdeLink.init((s) => {
+        render();
+        toast(`IDE: logged ${s.added} session${s.added > 1 ? 's' : ''}`);
+      });
+    }
+
     // Running timers survive page refreshes — resume before first paint
     if (typeof Timers !== 'undefined' && Timers.restore) Timers.restore();
 

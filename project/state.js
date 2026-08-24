@@ -84,6 +84,7 @@ const State = (() => {
       completedSort: 'completedAt', // project page: name | createdAt | updatedAt | completedAt
       showCompletedOnProject: false, // finished-before-today items are opt-in
       showCompletedOnToday: false,   // ...and separately opt-in on the homepage
+      ideCountBackground: false,     // count IDE time spent in other windows
     },
   };
 
@@ -461,6 +462,8 @@ const State = (() => {
     txtKey: null,   // normalized line text — identity across edits
     txtDone: null,  // the document's completion state at the last scan
     txtNotes: null, // the indented note block as it stood at the last scan
+    // ── IDE link (see ide.js) ──
+    ideProjectPath: null, // IDE project whose sessions this task collects
   };
 
   function createEntry(partial) {
@@ -705,6 +708,7 @@ const State = (() => {
       txtWorkspaceId: null, // linked Cade.txt workspace (top-level projects)
       txtRoom: null,        // linked Cade.txt room (sub-projects)
       txtHasList: false,    // that room currently holds a [ ] todo list
+      ideProjectPath: null, // linked IDE project, by its path on disk
       ...partial,
     };
     data.projects.push(project);
