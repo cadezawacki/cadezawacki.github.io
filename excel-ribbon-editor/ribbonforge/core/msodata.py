@@ -1,9 +1,10 @@
 """Curated catalogues of built-in Office identifiers.
 
-Office ships roughly 8,000 ``imageMso`` icons and tens of thousands of
-control ids; nobody memorises them.  These lists cover the ones people
-actually reach for in Excel, grouped so the icon browser can present
-them sensibly.
+Office ships thousands of ``imageMso`` icons and tens of thousands of
+control ids; nobody memorises them.  The complete identifier list (3,244
+names, from the published reference) is folded in at import time; on top
+of it a curated set - every name verified against that list - is grouped
+into categories so the icon browser stays navigable.
 
 The gallery is *extensible*: drop a plain-text file named
 ``imagemso.txt`` (one id per line, ``# comment`` lines ignored, optional
@@ -18,132 +19,119 @@ from typing import Dict, List, Tuple
 
 IMAGE_MSO: Dict[str, Tuple[str, ...]] = {
     "File": (
-        "FileNew", "FileNewDefault", "FileOpen", "FileClose", "FileSave", "FileSaveAs",
-        "FileSaveAsExcelXlsx", "FileSaveAsExcelXlsm", "FileSaveAsPdfOrXps", "FileSaveAsWebPage",
-        "FilePrint", "FilePrintQuick", "FilePrintPreview", "FileProperties",
-        "FileSendAsAttachment", "FileSendMenu", "FileCheckIn", "FileCheckOut",
-        "FileCompatibilityChecker", "FileDocumentInspect", "FileDocumentEncrypt",
-        "FilePermissionRestrictMenu", "FilePrepareMenu", "FilePublishMenu",
-        "FileOpenRecentFile", "FileExit", "FileManageMenu", "FileStartWorkflow",
-        "FileCreateDocumentWorkspace", "FileVersions", "FileImport", "FileExport",
+        "FileNew", "FileNewDefault", "FileOpen", "FileClose",
+        "FileSave", "FileSaveAs", "FileSaveAsExcelXlsx", "FileSaveAsPdfOrXps",
+        "FileSaveAsWebPage", "FilePrint", "FilePrintQuick", "FilePrintPreview",
+        "FileProperties", "FileSendAsAttachment", "FileSendMenu", "FileCheckIn",
+        "FileCheckOut", "FileCompatibilityChecker", "FileDocumentInspect", "FileDocumentEncrypt",
+        "FilePermissionRestrictMenu", "FilePrepareMenu", "RecentFileList", "FileExit",
+        "FileStartWorkflow", "FileCreateDocumentWorkspace", "ExportTextFile", "ExportExcel",
+        "ImportExcel", "ImportTextFile", "ImportAccess", "ImportSharePointList",
     ),
     "Clipboard": (
-        "Cut", "Copy", "Paste", "PasteMenu", "PasteSpecialDialog", "PasteFormatting",
-        "PasteValues", "PasteAsHyperlink", "PasteTextOnly", "FormatPainter",
-        "ClipboardShowPane", "ClearAll", "ClearFormats", "ClearContents", "ClearComments",
-        "ClearHyperlinks", "Undo", "Redo", "Repeat", "Delete", "Copy2", "Duplicate",
+        "Cut", "Copy", "Paste", "PasteMenu",
+        "PasteSpecialDialog", "PasteFormatting", "PasteAsHyperlink", "FormatPainter",
+        "ClearAll", "ClearFormats", "Undo", "Redo",
+        "Delete", "SelectAll",
     ),
     "Font & Text": (
-        "Bold", "Italic", "Underline", "UnderlineGallery", "Strikethrough", "Superscript",
-        "Subscript", "FontDialog", "FontColorPicker", "FontColorMoreColorsDialog",
-        "FontSizeIncreaseWord", "FontSizeDecreaseWord", "GrowFont", "ShrinkFont",
-        "TextHighlightColorPicker", "ChangeCase", "ClearFormatting", "TextEffectGallery",
-        "TextBoxInsert", "TextDirectionGallery", "SpellingAndGrammar", "Thesaurus",
-        "Research", "Translate", "TranslateToolTipMenu", "Language",
+        "Bold", "Italic", "Underline", "UnderlineGallery",
+        "Strikethrough", "Superscript", "Subscript", "FontDialog",
+        "FontColorPicker", "FontSizeIncrease", "FontSizeDecrease", "TextHighlightColorPicker",
+        "ChangeCaseGallery", "ClearFormatting", "TextBoxInsert", "TextDirectionGallery",
+        "Spelling", "SpellingAndGrammar", "Thesaurus", "SetLanguage",
+        "WordCount",
     ),
     "Alignment": (
-        "AlignLeft", "AlignCenter", "AlignRight", "AlignJustify", "AlignTop", "AlignMiddle",
-        "AlignBottom", "AlignLeftToRight", "AlignRightToLeft", "WrapText",
-        "IndentIncreaseExcel", "IndentDecreaseExcel", "OrientationGallery",
-        "MergeCenterAcrossCells", "CellsMerge", "AlignDistributeHorizontal",
-        "AlignDistributeVertical", "AlignJustifyLow", "ParagraphDialog",
+        "AlignLeft", "AlignCenter", "AlignRight", "AlignJustify",
+        "AlignTopExcel", "AlignMiddleExcel", "AlignBottomExcel", "WrapText",
+        "IndentIncreaseExcel", "IndentDecreaseExcel", "OrientationMenu", "MergeCenterMenu",
+        "MergeCenter", "MergeCells", "UnmergeCells", "ObjectsGroupMenu",
+        "TextAlignGallery",
     ),
     "Numbers": (
-        "NumberFormatGallery", "NumberFormatDialog", "NumberFormatPercent",
-        "NumberFormatComma", "NumberFormatAccounting", "NumberFormatCurrencyMenu",
-        "DecimalsIncrease", "DecimalsDecrease", "NumberFormatCurrencyOther",
-        "NumberFormatGeneral", "NumberFormatDateShort", "NumberFormatDateLong",
-        "NumberFormatTime", "NumberFormatFraction", "NumberFormatScientific",
+        "NumberFormatGallery", "FormatCellsNumberDialog", "PercentStyle", "CommaStyle",
+        "AccountingFormat", "AccountingFormatMenu", "DecimalsIncrease", "DecimalsDecrease",
+        "FormatNumberDefault", "PercentSign", "CommaSign", "DollarSign",
     ),
     "Styles & Format": (
-        "CellStylesGallery", "CellStyleNew", "ConditionalFormattingMenu",
-        "ConditionalFormattingNewRule", "ConditionalFormattingClearRulesMenu",
-        "FormatAsTableGallery", "CellsFormatMenu", "CellFillColorPicker",
-        "BordersGallery", "BordersAll", "BordersMoreBordersDialog", "BorderDrawGrid",
-        "BorderErase", "CellsFormatStyleDialog", "ThemeColorsGallery", "ThemeFontsGallery",
-        "ThemeEffectsGallery", "ThemesGallery", "ShapeStylesGallery", "ShapeFillColorPicker",
-        "ShapeOutlineColorPicker", "ShapeEffectsMenu", "PictureStylesGallery",
+        "CellStylesGallery", "ConditionalFormattingMenu", "ConditionalFormattingColorScalesGallery", "ConditionalFormattingDataBarsGallery",
+        "ConditionalFormattingIconSetsGallery", "ConditionalFormattingHighlightCellsMenu", "FormatAsTableGallery", "CellFillColorPicker",
+        "BordersGallery", "BordersAll", "BorderDrawGrid", "BorderErase",
+        "ThemeColorsGallery", "ThemeFontsGallery", "ThemeEffectsGallery", "ThemesGallery",
+        "ShapeFillColorPicker", "ShapeOutlineColorPicker", "PictureStylesGallery", "TableStylesGallery",
+        "FormatPainter", "GridSettings",
     ),
     "Cells & Sheets": (
-        "CellsInsert", "CellsInsertDialog", "CellsDelete", "CellsFormatSheetMenu",
-        "SheetInsert", "SheetDelete", "SheetRename", "SheetMoveOrCopy", "SheetProtect",
-        "SheetRowHeight", "SheetColumnWidth", "SheetRowsHide", "SheetColumnsHide",
-        "SheetRowsUnhide", "SheetColumnsUnhide", "FreezePanesGallery", "SplitVertical",
-        "WindowSplit", "HeaderFooterInsert", "ViewGridlinesExcel", "ViewHeadingsExcel",
-        "ViewFormulas", "ViewNormalViewExcel", "ViewPageBreakPreviewView",
+        "CellsInsertDialog", "CellsInsertSmart", "CellsDelete", "CellsDeleteSmart",
+        "SheetInsert", "SheetDelete", "SheetProtect", "RowHeight",
+        "ColumnWidth", "FreezePanes", "ViewFreezePanesGallery", "WindowSplit",
+        "HeaderFooterInsert", "ViewNormalViewExcel", "ViewPageBreakPreviewView", "ViewPageLayoutView",
         "PageSetupDialog", "PrintTitles", "PrintAreaMenu", "PageOrientationGallery",
-        "PageMarginsGallery", "PageSizeGallery", "ScaleToFitDialog",
+        "PageMarginsGallery", "PageSizeGallery",
     ),
     "Data": (
-        "AutoSum", "FillDown", "FillRight", "FillSeriesMenu", "SortAscendingExcel",
-        "SortDescendingExcel", "SortDialog", "SortCustomExcel", "FilterBySelection",
-        "FilterExcel", "FilterAdvancedExcel", "FilterClearAllFilters", "FilterReapply",
-        "TextToColumnsWizard", "RemoveDuplicates", "DataValidation", "DataValidationMenu",
-        "WhatIfAnalysisMenu", "GoalSeek", "Consolidate", "GroupData", "UngroupData",
-        "Subtotals", "OutlineShowDetail", "OutlineHideDetail", "RefreshAll",
-        "DataConnections", "QueryTable", "ImportTextFile", "ImportFromAccess",
-        "ImportFromWeb", "ImportOtherSources", "ExportExcel",
+        "AutoSum", "AutoSumMenu", "FillDown", "FillRight",
+        "FillUp", "FillLeft", "FillMenu", "SortAscendingExcel",
+        "SortDescendingExcel", "SortDialog", "SortCustomExcel", "SortFilterMenu",
+        "Filter", "AdvancedFilterDialog", "FilterReapply", "RemoveDuplicates",
+        "DataValidation", "DataValidationMenu", "WhatIfAnalysisMenu", "Consolidate",
+        "OutlineShowDetail", "OutlineHideDetail", "RefreshAll", "DataRefreshAll",
+        "Connections", "GetExternalDataFromAccess", "GetExternalDataFromWeb", "GetExternalDataFromText",
     ),
     "Formulas": (
-        "FunctionWizard", "FunctionsFinancialInsertGallery", "FunctionsLogicalInsertGallery",
-        "FunctionsTextInsertGallery", "FunctionsDateTimeInsertGallery",
-        "FunctionsLookupAndReferenceInsertGallery", "FunctionsMathInsertGallery",
-        "FunctionsMoreInsertGallery", "AutoSumMenu", "NameDefine", "NameManager",
-        "UseInFormulaMenu", "CreateFromSelection", "FormulaEvaluate", "TracePrecedents",
-        "TraceDependents", "RemoveAllArrows", "ErrorChecking", "WatchWindow",
-        "CalculateNow", "CalculateSheet", "CalculationOptionsMenu", "ShowFormulas",
+        "FunctionWizard", "FunctionsFinancialInsertGallery", "FunctionsLogicalInsertGallery", "FunctionsTextInsertGallery",
+        "FunctionsDateTimeInsertGallery", "FunctionsMathTrigInsertGallery", "FunctionsRecentlyUsedtInsertGallery", "NameDefine",
+        "NameDefineMenu", "NameManager", "NameUseInFormula", "NameCreateFromSelection",
+        "FormulaEvaluate", "TracePrecedents", "TraceDependents", "TraceRemoveAllArrows",
+        "ErrorChecking", "WatchWindow", "CalculateNow", "CalculateSheet",
+        "CalculationOptionsMenu", "ShowFormulas",
     ),
     "Insert & Objects": (
-        "PivotTableInsertMenu", "PivotTableInsert", "PivotChartInsert", "TableExcel",
+        "PivotTableInsertMenu", "PivotTableInsert", "PivotChartInsert", "TableInsert",
         "PictureInsertFromFile", "ClipArtInsert", "ShapesInsertGallery", "SmartArtInsert",
-        "ChartInsert", "ChartTypeColumnInsert", "ChartTypeLineInsert", "ChartTypePieInsert",
-        "ChartTypeBarInsert", "ChartTypeAreaInsert", "ChartTypeScatterInsert",
-        "ChartTypeOtherInsert", "HyperlinkInsert", "SymbolInsert", "ObjectInsert",
-        "SignatureLineInsert", "WordArtInsert", "EquationInsert", "ScreenshotInsert",
-        "SparklineLineInsert", "SparklineColumnInsert", "SlicerInsert",
+        "ChartInsert", "ChartTypeColumnInsertGallery", "ChartTypeLineInsertGallery", "ChartTypePieInsertGallery",
+        "ChartTypeBarInsertGallery", "ChartTypeAreaInsertGallery", "ChartTypeXYScatterInsertGallery", "ChartTypeOtherInsertGallery",
+        "ChartTypeAllInsertDialog", "HyperlinkInsert", "SymbolInsertGallery", "SymbolsDialog",
+        "SignatureLineInsert", "WordArtInsertGallery", "EquationInsertNew", "OleObjectctInsert",
+        "TextBoxInsertExcel", "CalendarInsert", "DrawingInsert",
     ),
     "Review & Comments": (
-        "ReviewNewComment", "ReviewDeleteComment", "ReviewPreviousComment",
-        "ReviewNextComment", "ReviewShowComment", "ReviewShowAllComments",
-        "ReviewProtectSheet", "ReviewProtectWorkbook", "ReviewShareWorkbook",
-        "ReviewTrackChangesMenu", "ReviewAcceptChange", "ReviewRejectChange",
-        "ReviewProtectDocument", "ReviewCompareMenu",
+        "ReviewNewComment", "ReviewDeleteComment", "ReviewPreviousComment", "ReviewNextComment",
+        "ReviewShowAllComments", "ReviewEditComment", "ReviewShareWorkbook", "ReviewTrackChangesMenu",
+        "ReviewHighlightChanges", "ProtectDocument",
     ),
     "View & Window": (
-        "ZoomDialog", "Zoom100", "ZoomToSelection", "ZoomIn", "ZoomOut",
-        "WindowNew", "WindowArrangeAllDialog", "WindowSwitchWindowsMenuExcel",
-        "WindowFreezePanesGallery", "WindowHide", "WindowUnhide", "WindowSideBySide",
-        "ViewFullScreenView", "ViewCustomViews", "ViewRulerExcel", "ViewMessageBar",
-        "MacroPlay", "MacroRecord", "MacroSecurity", "MacrosMenu", "VisualBasic",
+        "ZoomDialog", "Zoom100", "ZoomToSelection", "ZoomIn",
+        "ZoomOut", "WindowNew", "WindowsArrangeAll", "WindowSwitchWindowsMenuExcel",
+        "WindowHide", "WindowUnhide", "ViewSideBySide", "ViewFullScreenView",
+        "ViewCustomViews", "ViewRulerExcel", "ViewDocumentMap", "WindowSplit",
     ),
     "Developer": (
-        "VisualBasic", "MacroPlay", "MacroRecord", "MacroSecurity", "UseRelativeReferences",
-        "ControlInsertGallery", "ControlProperties", "ControlDesignMode", "ViewCode",
-        "RunDialog", "AddInsDialog", "ComAddInsDialog", "XmlSource", "XmlMapProperties",
-        "XmlExpansionPacks", "XmlRefreshData", "XmlImport", "XmlExport",
+        "VisualBasic", "MacroPlay", "MacroRecord", "MacroSecurity",
+        "ListMacros", "MacroRelativeReferences", "ControlsGallery", "ControlProperties",
+        "DesignMode", "ViewCode", "AddInsMenu", "ComAddInsDialog",
+        "XmlSource", "XmlMapProperties", "XmlExpansionPacksExcel", "XmlImport",
+        "XmlExport", "DocumentPanelTemplate", "ControlToolboxOutlook",
     ),
-    "Symbols & Fun": (
-        "HappyFace", "Info", "Help", "Bullet", "Star", "Flag", "Heart", "Lightning",
-        "Lightbulb", "Warning", "Cancel", "Ok", "Refresh", "Repeat", "Search",
-        "Calculator", "Calendar", "CalendarToday", "Clock", "Home", "Mail", "Phone",
-        "Lock", "Unlock", "ListMacros", "TableDesign", "ReportDesign",
-        "ReportModifyDesign", "ExportTextFile", "ExportExcel",
-        "Camera", "CameraTool", "Airplane", "Bell", "Gear", "Key", "Pin",
-        "AcceptTask", "AcceptInvitation", "DeclineInvitation", "Cancel2",
-        "TagMarkComplete", "TaskComplete", "TrafficLightsGallery",
+    "Symbols & Shapes": (
+        "HappyFace", "TraceError", "Info", "Help",
+        "Risks", "Piggy", "Lock", "MeetingsWorkspace",
+        "BlackAndWhiteAutomatic", "DollarSign", "MagicEightBall", "Magnifier",
+        "PickUpStyle", "Repeat", "RecurrenceEdit", "Camera",
+        "SadFace", "AcceptTask",
     ),
     "Arrows & Nav": (
-        "ArrowStyleGallery", "ArrowMoreArrows", "GoToNextArrow", "GoToPreviousArrow",
-        "GoToFirstRecord", "GoToLastRecord", "GoToNextRecord", "GoToPreviousRecord",
-        "Forward", "Back", "Upload", "Download", "PreviousPage", "NextPage",
-        "BringForward", "BringToFront", "SendBackward", "SendToBack",
-        "ObjectRotateGallery", "ObjectFlipHorizontal", "ObjectFlipVertical",
-        "GroupShapes", "UngroupShapes", "ObjectAlignMenu", "SelectionPane",
+        "Forward", "UpArrow2", "DownArrow2", "LeftArrow2",
+        "RightArrow2", "GoToNewRecord", "ObjectBringToFront", "ObjectSendToBack",
+        "ObjectRotateGallery", "ObjectFlipHorizontal", "ObjectFlipVertical", "ObjectsGroup",
+        "ObjectsUngroup", "SelectionPane",
     ),
-    "Communication": (
-        "Mail", "MailMerge", "FileSendAsAttachment", "NewMailMessage", "ReplyAll",
-        "Reply", "Forward", "MeetingRequest", "AddressBook", "ContactCard",
-        "AssignTask", "SendUpdate", "Print", "PrintDialog",
+    "Mail & Tasks": (
+        "NewMailMessage", "ReplyAll", "Reply", "ForwardAsAttachment",
+        "MeetingRequest", "AddressBook", "CheckNames", "AttachFile",
+        "AttachItem", "MailMergeRecipientsEditList", "AssignTask", "SendStatusReport",
+        "NewTask", "ShowTaskPage", "OpenAttachedCalendar",
     ),
 }
 
@@ -227,6 +215,29 @@ def _dedupe(pairs: List[Tuple[str, str]]) -> List[Tuple[str, str]]:
 
 FLAT_IMAGE_MSO = _dedupe(FLAT_IMAGE_MSO)
 FLAT_CONTROL_IDMSO = _dedupe(FLAT_CONTROL_IDMSO)
+
+
+def _merge_full_catalogue() -> None:
+    """Fold the complete 3,244-name imageMso index into the catalogue.
+
+    Curated names keep their hand-picked categories; everything else lands
+    in "More icons" so the browser stays navigable while search and
+    validation see the whole set.
+    """
+    try:
+        from . import msoicons
+        full = msoicons.all_names()
+    except Exception:
+        return
+    known = {name for name, _ in FLAT_IMAGE_MSO}
+    extra = tuple(name for name in full if name not in known)
+    if not extra:
+        return
+    IMAGE_MSO["More icons"] = extra
+    FLAT_IMAGE_MSO.extend((name, "More icons") for name in extra)
+
+
+_merge_full_catalogue()
 
 
 def load_user_catalogue(*paths: str) -> int:

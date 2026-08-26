@@ -212,7 +212,7 @@ class CodeEditor(tk.Frame):
                     self.after_cancel(self._change_job)
                 except tk.TclError:
                     pass
-            self._change_job = self.after(220, self._emit_change)
+            self._change_job = self.after(350, self._emit_change)
 
     def _emit_change(self) -> None:
         self._change_job = None

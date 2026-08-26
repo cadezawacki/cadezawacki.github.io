@@ -25,7 +25,6 @@ class StructureTree(tk.Frame):
         self.on_activate = on_activate
 
         self.part = None
-        self.document: Optional[xmldoc.XmlDocument] = None
         self._items: Dict[str, int] = {}       # tree item -> node uid
         self._by_uid: Dict[int, str] = {}      # node uid -> tree item
         self._paths: Dict[str, tuple] = {}     # tree item -> stable path key
@@ -89,6 +88,11 @@ class StructureTree(tk.Frame):
         theme.subscribe(self.restyle)
 
     # ------------------------------------------------------------------ state
+    @property
+    def document(self) -> Optional[xmldoc.XmlDocument]:
+        """Always the part's live tree - a reparse swaps the object out."""
+        return self.part.tree if self.part is not None else None
+
     def _configure_tags(self) -> None:
         c = self.theme
         self.tree.tag_configure("error", foreground=c.c("error"))
@@ -120,7 +124,6 @@ class StructureTree(tk.Frame):
         if self.part is None:
             self._show_placeholder("Open a workbook or create a custom UI part to begin.")
             return
-        self.document = self.part.tree
         root = self.document.root if self.document else None
         if root is None:
             self._show_placeholder("Nothing to show yet - the XML has no <customUI> root.")

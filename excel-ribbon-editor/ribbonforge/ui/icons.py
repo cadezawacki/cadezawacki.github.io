@@ -436,11 +436,18 @@ def glyph_key(name: str) -> str:
 
 
 class IconCache:
-    """Renders imageMso monograms/glyphs and embedded pictures onto a canvas."""
+    """Renders imageMso icons and embedded pictures onto a canvas.
+
+    Order of preference: the real Office artwork (when the downloadable icon
+    pack is installed), then a hand-drawn vector glyph for well-known names,
+    then a tinted monogram that is at least never *wrong*.
+    """
 
     def __init__(self, theme) -> None:
         self.theme = theme
         self._photos: Dict[Tuple[int, int], tk.PhotoImage] = {}
+        from ..core import msoicons
+        self.pack = msoicons.pack()
 
     def clear(self) -> None:
         self._photos.clear()
@@ -479,8 +486,14 @@ class IconCache:
     # ------------------------------------------------------------- drawing
     def draw(self, canvas: tk.Canvas, x: float, y: float, size: float,
              image_mso: str = "", image_data: Optional[bytes] = None,
-             fallback: str = "", tags: tuple = (), muted: bool = False) -> None:
-        """Draw an icon with its top-left corner at (x, y)."""
+             fallback: str = "", tags: tuple = (), muted: bool = False,
+             honest: bool = False) -> None:
+        """Draw an icon with its top-left corner at (x, y).
+
+        ``honest=True`` (the gallery) never guesses: real artwork or a
+        neutral monogram, but no pictogram stand-ins that could suggest the
+        wrong picture for a name.
+        """
         if image_data:
             photo = self.photo(image_data, int(size))
             if photo is not None:
@@ -488,10 +501,22 @@ class IconCache:
                 return
 
         name = image_mso or fallback or "?"
+
+        if image_mso and self.pack.has(image_mso):
+            photo = self.pack.icon(image_mso, int(size))
+            if photo is not None:
+                # The sprite bakes a white background in, so give the icon a
+                # small white chip - it reads as deliberate in both themes.
+                pad = max(1.0, size * 0.06)
+                _rounded(canvas, x - pad, y - pad, size + 2 * pad, size + 2 * pad,
+                         size * 0.18, "#ffffff", tags)
+                canvas.create_image(x + size / 2, y + size / 2, image=photo, tags=tags)
+                return
+
         base = tint_for(name)
         if muted:
             base = mix_toward(base, self.theme.c("panel"), 0.45)
-        key = glyph_key(name)
+        key = "" if honest else glyph_key(name)
         surface = self.theme.c("panel")
 
         if key:

@@ -352,9 +352,40 @@ class ScrollFrame(tk.Frame):
         self._window = self.canvas.create_window((0, 0), window=self.body, anchor="nw")
         self.body.bind("<Configure>", self._on_body)
         self.canvas.bind("<Configure>", self._on_canvas)
-        bind_mousewheel(self.canvas, self.canvas)
-        bind_mousewheel(self.body, self.canvas)
+        # Wheel events go to the widget under the pointer, which is almost
+        # always a child row - so grab the wheel globally while the pointer
+        # is anywhere over this frame.
+        self.bind("<Enter>", self._grab_wheel)
+        self.bind("<Leave>", self._release_wheel)
+        self.bind("<Destroy>", self._release_wheel, add="+")
         theme.subscribe(self.restyle)
+
+    def _grab_wheel(self, _event=None) -> None:
+        for sequence in ("<MouseWheel>", "<Button-4>", "<Button-5>"):
+            self.bind_all(sequence, self._on_wheel, add=False)
+
+    def _release_wheel(self, _event=None) -> None:
+        for sequence in ("<MouseWheel>", "<Button-4>", "<Button-5>"):
+            try:
+                self.unbind_all(sequence)
+            except tk.TclError:
+                pass
+
+    def _on_wheel(self, event) -> str:
+        if getattr(event, "num", None) == 4:
+            delta = -1
+        elif getattr(event, "num", None) == 5:
+            delta = 1
+        else:
+            delta = -1 if event.delta > 0 else 1
+        try:
+            first, last = self.canvas.yview()
+            if first <= 0.0 and last >= 1.0:
+                return "break"
+            self.canvas.yview_scroll(delta * 2, "units")
+        except tk.TclError:
+            pass
+        return "break"
 
     def _on_scroll(self, first, last) -> None:
         if float(first) <= 0.0 and float(last) >= 1.0:

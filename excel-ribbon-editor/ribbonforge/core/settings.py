@@ -32,6 +32,7 @@ DEFAULTS: Dict[str, Any] = {
     "callback_pointer_recovery": False,
     "strict_imagemso": False,
     "confirm_overwrite_office": True,
+    "quests": {},
 }
 
 MAX_RECENT = 12

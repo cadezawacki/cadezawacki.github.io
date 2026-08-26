@@ -8,7 +8,7 @@ from typing import Dict, List, Optional
 from . import templates, validator
 from .ooxml import (NAMESPACE_FOR, PART_LABEL, V2007, V2010, ImageResource,
                     OfficePackage, PackageError, sniff_variant)
-from .xmldoc import XmlDocument
+from .xmldoc import XmlDocument, adopt_uids, tree_signature
 
 KIND_PACKAGE = "package"
 KIND_XML = "xml"
@@ -41,8 +41,12 @@ class PartState:
         self.reparse()
 
     def reparse(self) -> None:
+        previous = self.tree
         self.document = XmlDocument.parse(self.text)
         if self.document.error is None and self.document.root is not None:
+            if (previous.root is not None
+                    and tree_signature(previous) == tree_signature(self.document)):
+                adopt_uids(previous.root, self.document.root)
             self.last_good = self.document
         self.validate()
 

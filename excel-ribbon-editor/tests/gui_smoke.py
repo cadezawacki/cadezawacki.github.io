@@ -70,6 +70,22 @@ def main():
 
     step("edit a property", lambda: app.properties._set_value(
         app.properties.node, "label", "Build report NOW"), app)
+
+    def properties_scrolls():
+        app.properties._show_all.set(True)
+        app.properties._render()
+        for _ in range(8):
+            app.update_idletasks(); app.update()
+        canvas = app.properties.scroll.canvas
+        first, last = canvas.yview()
+        assert last < 1.0, "properties content should overflow with every attribute shown"
+        canvas.yview_moveto(0.5)
+        app.update_idletasks()
+        assert canvas.yview()[0] > 0.2, "properties canvas did not scroll"
+        canvas.yview_moveto(0.0)
+        app.properties._show_all.set(False)
+        app.properties._render()
+    step("properties panel scrolls", properties_scrolls, app)
     assert "Build report NOW" in app.editor.get_text(), "property edit did not reach the editor"
 
     before = len(part.tree.root.find_all("toggleButton"))
@@ -127,22 +143,23 @@ def main():
     step("drag and drop respects the schema", reject_bad_drag, app)
 
     def view_modes():
-        for mode in ("xml", "preview", "both"):
+        for mode in ("xml", "preview", "design", "both"):
             app.view_switch.select(mode)
             for _ in range(3):
                 app.update_idletasks(); app.update()
             panes = [str(p) for p in app.centre_panes.panes()]
-            if mode in ("both", "preview"):
-                assert str(app.preview) in panes, (mode, panes)
+            if mode in ("both", "preview", "design"):
+                assert str(app.design_row) in panes, (mode, panes)
             else:
-                assert str(app.preview) not in panes, (mode, panes)
+                assert str(app.design_row) not in panes, (mode, panes)
             if mode in ("both", "xml"):
                 assert str(app.editor.master) in panes, (mode, panes)
             else:
                 assert str(app.editor.master) not in panes, (mode, panes)
+            assert (mode == "design") == app.drag_controller.enabled
         # panes must stay in preview / editor / problems order, and be visible
         panes = [str(p) for p in app.centre_panes.panes()]
-        assert panes == [str(app.preview), str(app.editor.master), str(app.problems)], panes
+        assert panes == [str(app.design_row), str(app.editor.master), str(app.problems)], panes
         for _ in range(20):
             app.update_idletasks(); app.update()
         assert app.preview.winfo_height() > 100, f"preview collapsed: {app.preview.winfo_height()}"
@@ -157,6 +174,62 @@ def main():
         app._editor_edit("undo")
         assert app.editor.get_text().strip() == before.strip(), "keyboard undo did not restore"
     step("undo a manual edit", undo_via_keyboard, app)
+
+    # ---- design mode: palette drop + preview drag
+    def design_mode():
+        app.view_switch.select("design")
+        for _ in range(10):
+            app.update_idletasks(); app.update()
+        assert app.palette.winfo_ismapped(), "palette not shown in design mode"
+        assert app.drag_controller.enabled, "preview drag not enabled"
+    step("enter design mode", design_mode, app)
+    shot(app, "17-design-mode")
+
+    def palette_drop():
+        groups = [g for g in app.part.tree.root.find_all("group")
+                  if "backstage" not in [a.local for a in g.ancestors()]]
+        target = groups[0]
+        before = len(target.find_all("gallery"))
+        app.designer_insert("gallery", target)
+        for _ in range(4):
+            app.update_idletasks(); app.update()
+        groups2 = [g for g in app.part.tree.root.find_all("group")
+                   if "backstage" not in [a.local for a in g.ancestors()]]
+        assert len(groups2[0].find_all("gallery")) == before + 1, "palette drop failed"
+        assert app.part.report.counts()[0] == 0, [i.message for i in app.part.report.issues]
+    step("drop a gallery from the palette", palette_drop, app)
+
+    def designer_move_test():
+        groups = [g for g in app.part.tree.root.find_all("group")
+                  if "backstage" not in [a.local for a in g.ancestors()]]
+        src_group, dst_group = groups[0], groups[1]
+        control = src_group.find_all("gallery")[0]
+        app.designer_move(control, dst_group)
+        for _ in range(4):
+            app.update_idletasks(); app.update()
+        groups2 = [g for g in app.part.tree.root.find_all("group")
+                   if "backstage" not in [a.local for a in g.ancestors()]]
+        assert groups2[1].find_all("gallery"), "designer move failed"
+    step("move a control between groups", designer_move_test, app)
+    shot(app, "18-design-after-drop")
+
+    def quest_progress():
+        app.palette.mark_quest("tab"); app.palette.mark_quest("group")
+        app.palette.mark_quest("button")
+        assert sum(1 for v in app.palette.quests.values() if v) >= 3
+    step("quest checklist", quest_progress, app)
+
+    def drop_target_resolution():
+        class FakeEvent:
+            pass
+        # target resolution falls back to a legal home even off-canvas
+        target = app.palette._fallback_target("button", app.part.tree)
+        assert target is not None and target.local == "group", target
+        target = app.palette._fallback_target("tab", app.part.tree)
+        assert target is not None and target.local == "tabs", target
+    step("drop target fallbacks", drop_target_resolution, app)
+
+    step("leave design mode", lambda: app.view_switch.select("both"), app)
 
     step("switch to preview-only", lambda: app.view_switch.select("preview"), app)
     shot(app, "05-preview-only")
@@ -175,10 +248,19 @@ def main():
     # dialogs
     def open_icon_gallery():
         from ribbonforge.ui.dialogs import IconGallery
+        from ribbonforge.core import msoicons
         dialog = IconGallery(app, app.theme, "FileSave")
         dialog.deiconify(); dialog.lift()
         for _ in range(8):
             app.update_idletasks(); app.update()
+        assert len(dialog._items) > 3000, f"catalogue too small: {len(dialog._items)}"
+        if msoicons.is_installed():
+            assert dialog.icons.pack.has("GridSettings"), "GridSettings missing from pack"
+            assert dialog.icons.pack.icon("FileSave", 32) is not None, "real icon failed to load"
+        dialog.search.var.set("GridSettings")
+        for _ in range(6):
+            app.update_idletasks(); app.update()
+        assert dialog._items and dialog._items[0][0] == "GridSettings", dialog._items[:3]
         dialog.search.var.set("chart")
         for _ in range(6):
             app.update_idletasks(); app.update()

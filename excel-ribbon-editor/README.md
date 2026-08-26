@@ -49,10 +49,11 @@ copies every other part through byte-for-byte, repairs
 Files that cannot carry a ribbon (`.xls`, anything that is not a ZIP
 package) are rejected with an explanation rather than a traceback.
 
-**Four views of the same document, always in sync.**
+**Five views of the same document, always in sync.**
 
 | View | What it gives you |
 | --- | --- |
+| ✦ Design mode | Build the ribbon by dragging control cards straight onto the live preview. Valid drop targets light up as you drag, existing controls can be picked up and moved between groups or reordered, and a "getting started" quest list with a progress bar walks newcomers through their first ribbon. |
 | Structure tree | The whole ribbon as a tree. Insert, duplicate, reorder, delete, drag and drop between containers — every move is checked against the schema first. |
 | XML editor | Syntax highlighting, a line-number gutter with problem markers, tag matching, auto-closing tags, auto-indent, comment toggling, line moving/duplication, find and replace with regex, and go-to-line. |
 | Properties | Every attribute the selected element actually accepts, grouped and documented, with the right editor for each: booleans and enumerations as drop-downs, `imageMso` with an icon browser, `image` with the pictures embedded in the part, `idMso` with a catalogue browser, and callbacks with their exact VBA signature. |
@@ -91,11 +92,18 @@ survives a VBA state reset. Save it as a `.bas` and import it into the VBE.
 rename their ids, export them again, or delete them. Relationships and
 content types are maintained for you.
 
-**The rest.** Eleven starter templates and eighteen snippets, a curated
-catalogue of built-in icons and control ids (extensible with your own list —
-see below), a command palette (`Ctrl+Shift+P`), dark and light themes with
-six accent colours, a recent-file list, per-document `.bak` backups, and a
-warning when the file you are about to save looks like it is open in Office.
+**Real icons.** The complete list of 3,244 built-in `imageMso`
+identifiers ships with the app, searchable in a virtualised gallery that
+stays instant however fast you scroll. A one-click download (~300 KB, from
+bert-toolkit.com's published reference sheet) installs the genuine Office
+artwork so every icon in the gallery and the preview looks exactly as it
+will in Excel; until then the gallery shows neutral monograms rather than
+guesses.
+
+**The rest.** Eleven starter templates and eighteen snippets, a command
+palette (`Ctrl+Shift+P`), dark and light themes with six accent colours, a
+recent-file list, per-document `.bak` backups, and a warning when the file
+you are about to save looks like it is open in Office.
 
 ## A five-minute tour
 
@@ -111,14 +119,15 @@ warning when the file you are about to save looks like it is open in Office.
 6. Press **F5** to validate, then **Ctrl+S**. Reopen the workbook in Excel to
    see the ribbon.
 
-## Extending the icon catalogue
+## The icon catalogue
 
-Office ships thousands of `imageMso` ids; RibbonForge includes a curated few
-hundred of the ones people actually use, grouped by category. Any valid name
-can always be typed by hand. To extend the browsable gallery, drop a
-plain-text file at `%APPDATA%\RibbonForge\imagemso.txt` with one id per line
-(optionally `Id, Category`); it is merged in at start-up. Microsoft publishes
-the complete list as a set of Office icon-gallery workbooks.
+All 3,244 published `imageMso` identifiers are built in; on top of them a
+curated set — every name verified against that list — is grouped into
+categories so the browser stays navigable. Anything newer that Office
+understands can still be typed by hand, and extra ids can be added to the
+gallery via `%APPDATA%\RibbonForge\imagemso.txt` (one id per line,
+optionally `Id, Category`). The real artwork lives in
+`%APPDATA%\RibbonForge\msoicons\` once downloaded from the gallery.
 
 ## Keyboard
 
@@ -135,18 +144,18 @@ palette · `Ctrl+1/2/3` focus tree / editor / preview · `Insert`, `Delete`,
 * Office reads the ribbon when a file is **opened**. Save from RibbonForge
   while the workbook is closed, then open it in Excel.
 * The preview is a faithful approximation, not Office's own layout engine.
-  It is there to catch structural mistakes, not to be pixel-perfect — and it
-  cannot show real `imageMso` artwork, which lives inside Office, so built-in
-  icons are drawn as recognisable stand-ins.
-* Unknown `imageMso` names are reported as hints, never errors: the catalogue
-  is deliberately incomplete.
+  It is there to catch structural mistakes, not to be pixel-perfect. With the
+  icon pack installed it shows the real artwork at 16/32 px; without it,
+  recognisable vector stand-ins.
+* Unknown `imageMso` names are reported as hints, never errors — Office
+  versions newer than the reference list may add ids.
 * `.xls`, `.doc` and `.ppt` are not Open XML packages and cannot carry a
   ribbon at all.
 
 ## Tests
 
 ```
-py -3.11 -m unittest discover -s tests          # 54 headless tests
+py -3.11 -m unittest discover -s tests          # 60 headless tests
 py -3.12 tests/gui_smoke.py sample.xlsm         # drives the real window
 ```
 

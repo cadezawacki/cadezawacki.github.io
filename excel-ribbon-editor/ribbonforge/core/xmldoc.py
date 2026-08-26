@@ -536,6 +536,40 @@ def _render(node: Node, level: int, indent: str, wrap: bool, width: int) -> str:
     return "\n".join(lines)
 
 
+def tree_signature(document: "XmlDocument") -> int:
+    """Structural hash of a document - equal hashes mean same shape and content."""
+    if document is None or document.root is None:
+        return 0
+    parts: List[str] = []
+    for node in document.root.walk():
+        parts.append(node.kind)
+        parts.append(node.tag)
+        if node.kind == ELEMENT:
+            for key, value in node.attrs.items():
+                parts.append(key)
+                parts.append(value)
+        elif node.text:
+            parts.append(node.text)
+    return hash(tuple(parts))
+
+
+def adopt_uids(old_root: Node, new_root: Node) -> None:
+    """Copy node identities from an equal-shaped old tree onto a new parse.
+
+    After an edit that only moves whitespace or reflows attributes, the
+    reparsed tree is structurally identical - carrying the uids across keeps
+    every uid-keyed map (structure tree, preview hit boxes, issue anchors)
+    valid without a rebuild.
+    """
+    old_nodes = list(old_root.walk())
+    new_nodes = list(new_root.walk())
+    if len(old_nodes) != len(new_nodes):
+        return
+    for old, new in zip(old_nodes, new_nodes):
+        if old.kind == new.kind and old.tag == new.tag:
+            new.uid = old.uid
+
+
 def build(tag: str, attrs: Optional[dict] = None, children: Optional[List[Node]] = None) -> Node:
     """Convenience constructor used by templates and the insert menu."""
     node = Node(ELEMENT, tag=tag)

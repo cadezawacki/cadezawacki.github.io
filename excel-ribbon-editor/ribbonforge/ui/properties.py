@@ -75,6 +75,12 @@ class PropertiesPanel(tk.Frame):
     def refresh(self) -> None:
         self._render()
 
+    def retarget(self, node: Optional[Node], report=None) -> None:
+        """Point the panel at the same logical node after a reparse, without
+        rebuilding the widgets (which would steal keyboard focus)."""
+        self.node = node
+        self.report = report
+
     def _panel_menu(self) -> None:
         menu = make_menu(self, self.theme)
         menu.add_checkbutton(label="Show attributes that are not set", variable=self._show_all,

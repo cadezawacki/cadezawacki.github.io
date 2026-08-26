@@ -6,7 +6,7 @@ from __future__ import annotations
 import os
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
-from typing import Callable, Dict, List, Optional, Sequence, Tuple
+from typing import Callable, Dict, Optional, Sequence, Tuple
 
 from ..core import callbacks as cb
 from ..core import msodata, templates
@@ -76,24 +76,32 @@ class Dialog(tk.Toplevel):
 
 
 class IconGallery(Dialog):
-    """Browse and pick an imageMso identifier."""
+    """Browse and pick an imageMso identifier.
 
-    CELL_W, CELL_H = 96, 78
+    Renders only the visible rows, so scrolling through all 3,244 icons
+    stays instant. When the downloadable icon pack is installed the tiles
+    show Microsoft's real artwork; otherwise a neutral monogram.
+    """
+
+    CELL_W, CELL_H = 100, 78
 
     def __init__(self, parent, theme, current: str = "") -> None:
-        super().__init__(parent, theme, "Icon gallery", 780, 580,
-                         subtitle="Office ships thousands of built-in icons. This is a curated "
-                                  "catalogue - any valid imageMso name can also be typed directly.")
+        from ..core import msoicons
+        self.msoicons = msoicons
+        super().__init__(parent, theme, "Icon gallery", 820, 600,
+                         subtitle=f"All {len(msoicons.load_index()):,} built-in imageMso "
+                                  f"identifiers, searchable by name.")
         self.icons = IconCache(theme)
         self.selected = current
-        self._cells: List[Tuple[float, float, str]] = []
         self._items = msodata.FLAT_IMAGE_MSO
+        self._columns = 1
+        self._render_job = None
 
         top = tk.Frame(self.body, background=theme.c("panel"))
         top.pack(fill="x", pady=(0, 8))
         self.search = SearchEntry(top, theme, placeholder="Search icons", command=self._filter, width=24)
         self.search.pack(side="left")
-        self.category = ttk.Combobox(top, values=["All categories"] + sorted(msodata.IMAGE_MSO),
+        self.category = ttk.Combobox(top, values=["All categories"] + list(msodata.IMAGE_MSO),
                                      state="readonly", width=22)
         self.category.current(0)
         self.category.bind("<<ComboboxSelected>>", lambda _e: self._filter(self.search.value))
@@ -106,14 +114,30 @@ class IconGallery(Dialog):
                           highlightbackground=theme.c("border"))
         holder.pack(fill="both", expand=True)
         self.canvas = tk.Canvas(holder, background=theme.c("code_bg"), highlightthickness=0, bd=0)
-        scroll = ttk.Scrollbar(holder, orient="vertical", command=self.canvas.yview)
-        self.canvas.configure(yscrollcommand=scroll.set)
-        scroll.pack(side="right", fill="y")
+        self.vbar = ttk.Scrollbar(holder, orient="vertical", command=self._yview)
+        self.canvas.configure(yscrollcommand=self._on_scrolled)
+        self.vbar.pack(side="right", fill="y")
         self.canvas.pack(side="left", fill="both", expand=True)
-        self.canvas.bind("<Configure>", lambda _e: self._render())
+        self.canvas.bind("<Configure>", lambda _e: self._layout())
         self.canvas.bind("<Button-1>", self._on_click)
         self.canvas.bind("<Double-Button-1>", self._on_double)
         bind_mousewheel(self.canvas, self.canvas)
+
+        if not msoicons.is_installed():
+            self.pack_bar = tk.Frame(self.body, background=theme.c("info_soft"))
+            self.pack_bar.pack(fill="x", pady=(8, 0))
+            tk.Label(self.pack_bar,
+                     text="Icons are shown as placeholders. Download the real Office artwork "
+                          f"(about 300 KB, from {msoicons.SPRITE_SOURCE}) to see every icon "
+                          "as it appears in Excel.",
+                     background=theme.c("info_soft"), foreground=theme.c("text"),
+                     font=theme.font("small"), justify="left", wraplength=560,
+                     padx=10, pady=8).pack(side="left", fill="x", expand=True)
+            self.pack_button = ToolButton(self.pack_bar, theme, text="Download icons",
+                                          accent=True, command=self._download_pack)
+            self.pack_button.pack(side="right", padx=8, pady=6)
+        else:
+            self.pack_bar = None
 
         row = tk.Frame(self.body, background=theme.c("panel"))
         row.pack(fill="x", pady=(8, 0))
@@ -128,42 +152,104 @@ class IconGallery(Dialog):
         self.add_button("Cancel", self.cancel)
         self._filter("")
 
+    # ------------------------------------------------------------ downloading
+    def _download_pack(self) -> None:
+        self.pack_button.set_enabled(False)
+        self.pack_button.set_text("Downloading...")
+
+        import threading
+
+        def worker() -> None:
+            try:
+                self.msoicons.download()
+                error = None
+            except OSError as exc:
+                error = str(exc)
+            try:
+                self.after(0, lambda: self._download_done(error))
+            except tk.TclError:
+                pass
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _download_done(self, error) -> None:
+        if error:
+            self.pack_button.set_enabled(True)
+            self.pack_button.set_text("Download icons")
+            messagebox.showerror("Download failed", error, parent=self)
+            return
+        self.msoicons.pack().forget()
+        self.icons = IconCache(self.theme)
+        if self.pack_bar is not None:
+            self.pack_bar.destroy()
+            self.pack_bar = None
+        self._render()
+
+    # --------------------------------------------------------------- filtering
     def _filter(self, query: str) -> None:
         if not hasattr(self, "category"):
             return
         category = self.category.get()
         category = "" if category.startswith("All") else category
         self._items = msodata.search_image_mso(query, category)
-        self.count.configure(text=f"{len(self._items)} icons")
+        self.count.configure(text=f"{len(self._items):,} icons")
+        self.canvas.yview_moveto(0.0)
+        self._layout()
+
+    # ------------------------------------------------------------ virtual grid
+    def _layout(self) -> None:
+        width = max(self.canvas.winfo_width(), 200)
+        self._columns = max(1, int(width // self.CELL_W))
+        rows = (len(self._items) + self._columns - 1) // self._columns
+        self.canvas.configure(scrollregion=(0, 0, width, rows * self.CELL_H + 16))
         self._render()
 
+    def _yview(self, *args) -> None:
+        self.canvas.yview(*args)
+        self._schedule_render()
+
+    def _on_scrolled(self, first, last) -> None:
+        self.vbar.set(first, last)
+        self._schedule_render()
+
+    def _schedule_render(self) -> None:
+        if self._render_job is None:
+            self._render_job = self.after(16, self._render)
+
     def _render(self) -> None:
+        self._render_job = None
         canvas = self.canvas
         canvas.delete("all")
-        self._cells.clear()
         c = self.theme
-        width = max(canvas.winfo_width(), 200)
-        columns = max(1, int(width // self.CELL_W))
-        for index, (name, _category) in enumerate(self._items):
+        columns = self._columns
+        top = canvas.canvasy(0)
+        bottom = top + canvas.winfo_height()
+        first_row = max(0, int(top // self.CELL_H) - 1)
+        last_row = int(bottom // self.CELL_H) + 1
+        start = first_row * columns
+        stop = min(len(self._items), (last_row + 1) * columns)
+        for index in range(start, stop):
+            name, _category = self._items[index]
             column, row = index % columns, index // columns
             x = column * self.CELL_W + 8
             y = row * self.CELL_H + 8
             if name == self.selected:
-                rounded_rect(canvas, x - 2, y - 2, self.CELL_W - 8, self.CELL_H - 8, 5,
+                rounded_rect(canvas, x - 3, y - 3, self.CELL_W - 10, self.CELL_H - 8, 5,
                              c.c("accent_soft"), outline=c.c("accent"))
-            self.icons.draw(canvas, x + (self.CELL_W - 16 - 32) / 2, y + 6, 32, image_mso=name)
-            label = name if len(name) <= 15 else name[:14] + "…"
-            canvas.create_text(x + (self.CELL_W - 16) / 2, y + 50, text=label,
-                               fill=c.c("text_dim"), font=c.font("tiny"), width=self.CELL_W - 14)
-            self._cells.append((x, y, name))
-        rows = (len(self._items) + columns - 1) // columns
-        canvas.configure(scrollregion=(0, 0, width, rows * self.CELL_H + 16))
+            self.icons.draw(canvas, x + (self.CELL_W - 16 - 32) / 2, y + 4, 32, image_mso=name, honest=True)
+            label = name if len(name) <= 16 else name[:15] + "\u2026"
+            canvas.create_text(x + (self.CELL_W - 16) / 2, y + 52, text=label,
+                               fill=c.c("text_dim"), font=c.font("tiny"), width=self.CELL_W - 12)
 
-    def _cell_at(self, x: float, y: float) -> Optional[str]:
+    def _cell_at(self, x: float, y: float):
         cx, cy = self.canvas.canvasx(x), self.canvas.canvasy(y)
-        for left, top, name in self._cells:
-            if left - 4 <= cx <= left + self.CELL_W - 8 and top - 4 <= cy <= top + self.CELL_H - 8:
-                return name
+        column = int((cx - 8) // self.CELL_W)
+        row = int((cy - 8) // self.CELL_H)
+        if not (0 <= column < self._columns):
+            return None
+        index = row * self._columns + column
+        if 0 <= index < len(self._items):
+            return self._items[index][0]
         return None
 
     def _on_click(self, event) -> None:

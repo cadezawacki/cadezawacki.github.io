@@ -710,8 +710,7 @@ class RibbonPreview(tk.Frame):
         if self.selected_uid == node.uid:
             self.canvas.create_rectangle(x1, y1, x2, y2, outline=self.theme.c("accent"),
                                          width=2, dash=() if not outline_only else (3, 2))
-        elif self._hover_uid == node.uid:
-            self.canvas.create_rectangle(x1, y1, x2, y2, outline=self.theme.c("border"), width=1)
+
 
     def _hit(self, x: float, y: float) -> Optional[Node]:
         canvas_x = self.canvas.canvasx(x)
@@ -754,7 +753,18 @@ class RibbonPreview(tk.Frame):
             return
         self._hover_uid = uid
         self.canvas.configure(cursor="hand2" if uid is not None else "")
-        self.redraw()
+        # Redrawing everything on every mouse move makes the whole app feel
+        # laggy - draw just the hover outline instead.
+        self.canvas.delete("hoverbox")
+        if uid is None:
+            return
+        for item in self.canvas.find_withtag(f"hit{uid}"):
+            box = self.canvas.bbox(item)
+            if box:
+                self.canvas.create_rectangle(box[0] + 1, box[1] + 1, box[2] - 1, box[3] - 1,
+                                             outline=self.theme.c("border"), width=1,
+                                             tags=("hoverbox",))
+            break
 
     def _on_theme(self) -> None:
         self.icons.clear()

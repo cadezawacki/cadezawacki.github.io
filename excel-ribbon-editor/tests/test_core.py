@@ -101,6 +101,26 @@ class XmlDocumentTests(unittest.TestCase):
         self.assertIn("<mso:ribbon/>", doc.serialize())
 
 
+class UidAdoptionTests(unittest.TestCase):
+    def test_uids_survive_a_formatting_only_edit(self):
+        from ribbonforge.core.document import RibbonDocument
+        document = RibbonDocument.new_xml("2010", "starter")
+        part = document.first_part()
+        button = part.tree.root.find_all("button")[0]
+        uid = button.uid
+        part.set_text(part.text.replace("\n", "\n "))  # whitespace only
+        self.assertTrue(part.parse_ok)
+        again = part.tree.root.find_all("button")[0]
+        self.assertEqual(again.uid, uid)
+
+    def test_uids_change_when_the_tree_changes(self):
+        from ribbonforge.core.document import RibbonDocument
+        document = RibbonDocument.new_xml("2010", "starter")
+        part = document.first_part()
+        part.set_text(part.text.replace('label="Run"', 'label="Sprint"'))
+        self.assertEqual(part.tree.root.find_all("button")[0].get("label"), "Sprint")
+
+
 class SchemaTests(unittest.TestCase):
     def test_context_sensitive_resolution(self):
         self.assertEqual(schema.key_for_chain(
@@ -424,6 +444,41 @@ class DocumentTests(unittest.TestCase):
         document = RibbonDocument.new_xml(V2010, "toolbelt")
         self.assertTrue(document.dirty)
         self.assertEqual(document.first_part().report.counts()[0], 0)
+
+
+class IconPackTests(unittest.TestCase):
+    def test_full_index_ships_with_the_app(self):
+        from ribbonforge.core import msoicons
+        index = msoicons.load_index()
+        self.assertGreater(len(index), 3000)
+        self.assertIn("GridSettings", index)
+        self.assertIn("FileSave", index)
+        rows = list(index.values())
+        self.assertEqual(len(rows), len(set(rows)), "sprite rows must be unique")
+
+    def test_every_catalogue_name_is_authoritative(self):
+        from ribbonforge.core import msodata, msoicons
+        full = set(msoicons.load_index())
+        # user-imported ids are legitimately outside the authoritative list
+        bad = [name for name, cat in msodata.FLAT_IMAGE_MSO
+               if name not in full and cat not in ("Imported", "Custom")]
+        self.assertEqual(bad, [])
+
+    def test_every_template_icon_is_authoritative(self):
+        import re
+        from ribbonforge.core import msoicons, templates
+        full = set(msoicons.load_index())
+        for template in templates.TEMPLATES:
+            for name in re.findall(r'imageMso="([A-Za-z0-9]+)"', template.body):
+                self.assertIn(name, full, f"{template.key} uses unknown icon {name}")
+        for snippet in templates.SNIPPETS.values():
+            for name in re.findall(r'imageMso="([A-Za-z0-9]+)"', snippet):
+                self.assertIn(name, full, f"snippet uses unknown icon {name}")
+
+    def test_gridsettings_validates_cleanly(self):
+        xml = SAMPLE_XML.replace('imageMso="FileSave"', 'imageMso="GridSettings"')
+        report = validator.validate(XmlDocument.parse(xml), V2010)
+        self.assertNotIn("unknown-imagemso", {i.code for i in report.issues})
 
 
 class CatalogueTests(unittest.TestCase):

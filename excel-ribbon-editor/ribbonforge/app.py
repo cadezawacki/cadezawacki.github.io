@@ -18,6 +18,7 @@ from .core.ooxml import (NAMESPACE_FOR, OPEN_FILTER, PART_LABEL, V2007, V2010,
 from .core.settings import Settings, config_dir
 from .core.xmldoc import Node
 from .ui import dialogs
+from .ui.designer import DesignerPalette, PreviewDragController
 from .ui.codeeditor import CodeEditor, Completion, CompletionContext
 from .ui.preview import RibbonPreview
 from .ui.properties import PropertiesPanel
@@ -263,7 +264,9 @@ class RibbonForgeApp(tk.Tk):
         view_bar = tk.Frame(centre, background=c.c("panel"))
         view_bar.pack(fill="x")
         self.view_switch = SegmentedControl(
-            view_bar, c, [("both", "Preview + XML"), ("xml", "XML only"), ("preview", "Preview only")],
+            view_bar, c,
+            [("design", "✦ Design"), ("both", "Preview + XML"), ("xml", "XML only"),
+             ("preview", "Preview only")],
             command=self.set_view_mode, value="both")
         self.view_switch.pack(side="left", padx=8, pady=5)
         self.part_label = tk.Label(view_bar, text="", background=c.c("panel"),
@@ -275,11 +278,20 @@ class RibbonForgeApp(tk.Tk):
         self.centre_panes = ttk.PanedWindow(centre, orient="vertical")
         self.centre_panes.pack(fill="both", expand=True)
 
-        self.preview = RibbonPreview(self.centre_panes, c, on_select=self.on_preview_select,
+        self.design_row = tk.Frame(self.centre_panes, background=c.c("panel"))
+        self.preview = RibbonPreview(self.design_row, c, on_select=self.on_preview_select,
                                      zoom=float(self.settings["preview_zoom"]))
+        self.palette = DesignerPalette(
+            self.design_row, c, self.preview,
+            on_insert=self.designer_insert,
+            quest_state=self.settings.get("quests") or {},
+            on_quest=self._quest_done)
+        self.drag_controller = PreviewDragController(self.preview, self.palette,
+                                                     on_move=self.designer_move)
+        self.preview.pack(side="left", fill="both", expand=True)
         self.preview.set_image_lookup(self._image_bytes)
         self.preview.on_mode_change = self._preview_mode_changed
-        self.centre_panes.add(self.preview, weight=0)
+        self.centre_panes.add(self.design_row, weight=0)
 
         editor_holder = tk.Frame(self.centre_panes, background=c.c("code_bg"))
         self.editor = CodeEditor(editor_holder, c, on_change=self.on_editor_change,
@@ -302,7 +314,7 @@ class RibbonForgeApp(tk.Tk):
 
         # ---- right column
         self.properties = PropertiesPanel(
-            self.main, c, on_change=self.on_tree_change,
+            self.main, c, on_change=lambda d: self.on_tree_change(d, source="props"),
             image_provider=self._image_ids,
             pick_image_mso=self.pick_image_mso,
             pick_control_mso=self.pick_control_mso,
@@ -495,6 +507,16 @@ class RibbonForgeApp(tk.Tk):
 
     # -------------------------------------------------------------- explorer
     def refresh_explorer(self) -> None:
+        signature = tuple(
+            (document.name, document.dirty,
+             tuple((variant, document.parts[variant].report.counts(),
+                    len(document.parts[variant].images()),
+                    document.parts[variant] is self.part)
+                   for variant in document.variants()))
+            for document in self.documents)
+        if signature == getattr(self, "_explorer_signature", None):
+            return
+        self._explorer_signature = signature
         selected = self.explorer.selection()
         self.explorer.delete(*self.explorer.get_children(""))
         self._explorer_items.clear()
@@ -670,6 +692,7 @@ class RibbonForgeApp(tk.Tk):
         self.title(f"{document.name} - {APP_TITLE}")
         backup = " (a .bak copy was kept)" if self.settings["backup_on_save"] else ""
         self.toast.show(f"Saved {os.path.basename(written)}{backup}", "ok")
+        self.palette.mark_quest("save")
         return True
 
     def export_part(self) -> None:
@@ -705,25 +728,35 @@ class RibbonForgeApp(tk.Tk):
         else:
             self.part.flush()
 
+    @staticmethod
+    def _tree_signature(document) -> int:
+        from .core.xmldoc import tree_signature
+        return tree_signature(document)
+
     def on_editor_change(self) -> None:
         if self._syncing or self.part is None:
             return
+        old_signature = self._tree_signature(self.part.tree)
         self.part.set_text(self.editor.get_text())
-        selected = self.structure.selected_node()
-        key = selected.path_key() if selected is not None else None
-        self.structure.rebuild()
-        if key:
-            node = self.part.tree.find_path(key)
-            if node is not None:
-                self.structure.select_uid(node.uid, notify=False)
-                self.properties.show_node(node, self.part.report)
-                self.preview.selected_uid = node.uid
-        self.preview.refresh()
-        self.revalidate(reparse=False)
+        new_signature = self._tree_signature(self.part.tree)
+        structure_changed = new_signature != old_signature
+
+        if structure_changed:
+            selected = self.structure.selected_node()
+            key = selected.path_key() if selected is not None else None
+            self.structure.rebuild()
+            if key:
+                node = self.part.tree.find_path(key)
+                if node is not None:
+                    self.structure.select_uid(node.uid, notify=False)
+                    self.properties.show_node(node, self.part.report)
+                    self.preview.selected_uid = node.uid
+            self.preview.refresh()
+        self.revalidate(reparse=False, rebuild_tree=structure_changed)
         self.refresh_explorer()
         self._update_status()
 
-    def on_tree_change(self, description: str) -> None:
+    def on_tree_change(self, description: str, source: str = "tree") -> None:
         """A structured edit happened - re-serialise and push into the editor."""
         if self.part is None:
             return
@@ -743,13 +776,23 @@ class RibbonForgeApp(tk.Tk):
         target = self.part.tree.find_path(key) if key else None
         if target is not None:
             self.structure.select_uid(target.uid, notify=False)
-            self.properties.show_node(target, self.part.report)
+            if source == "props":
+                # Re-point the panel at the reparsed node without rebuilding
+                # its widgets - a full re-render would steal the focus from
+                # the field the user is typing in.
+                self.properties.retarget(target, self.part.report)
+            else:
+                self.properties.show_node(target, self.part.report)
             self.preview.select_node(target)
         else:
             self.preview.refresh()
-        self.revalidate(reparse=False)
+        self.revalidate(reparse=False, rebuild_tree=False)
         self.refresh_explorer()
         self._update_status(description)
+        if description.startswith(("Set imageMso", "Set image")):
+            self.palette.mark_quest("icon")
+        elif description.startswith("Set label"):
+            self.palette.mark_quest("label")
 
     def on_node_selected(self, node: Optional[Node]) -> None:
         self.properties.show_node(node, self.part.report if self.part else None)
@@ -764,6 +807,7 @@ class RibbonForgeApp(tk.Tk):
     def on_preview_select(self, node: Node) -> None:
         self.structure.select_node(node, notify=False)
         self.on_node_selected(node)
+        self.palette.mark_quest("preview")
 
     def focus_node_in_editor(self, node: Node) -> None:
         line, column = node.position()
@@ -787,7 +831,7 @@ class RibbonForgeApp(tk.Tk):
         self.status_right.configure(text=f"Ln {line}, Col {column + 1}    {label}")
 
     # ------------------------------------------------------------ validation
-    def revalidate(self, reparse: bool = True) -> None:
+    def revalidate(self, reparse: bool = True, rebuild_tree: bool = True) -> None:
         if self.part is None:
             self.problems.set_report(None, None)
             return
@@ -795,7 +839,8 @@ class RibbonForgeApp(tk.Tk):
             self.part.reparse()
         report = self.part.validate(strict_imagemso=bool(self.settings["strict_imagemso"]))
         self.problems.set_report(report, self.part)
-        self.structure.rebuild()
+        if rebuild_tree:
+            self.structure.rebuild()
         lines = {}
         for issue in report.issues:
             existing = lines.get(issue.line)
@@ -1061,20 +1106,29 @@ class RibbonForgeApp(tk.Tk):
         self.view_mode = mode
         self.show_preview_var.set(mode != "xml")
         self._apply_visibility()
+        if mode == "design":
+            self.preview.set_zoom(max(self.preview.zoom, 1.3))
 
     def _apply_visibility(self) -> None:
         """Rebuild the centre panes so their order is always preview / editor /
         problems, whichever of them are switched on."""
-        if not self.show_preview_var.get() and self.view_mode != "xml":
+        if not self.show_preview_var.get() and self.view_mode not in ("xml",):
             self.view_mode = "xml"
         elif self.show_preview_var.get() and self.view_mode == "xml":
             self.view_mode = "both"
         if hasattr(self, "view_switch"):
             self.view_switch.select(self.view_mode, notify=False)
 
+        design = self.view_mode == "design"
+        self.drag_controller.enabled = design
+        if design:
+            self.palette.pack(side="right", fill="y")
+        else:
+            self.palette.pack_forget()
+
         wanted = []
-        if self.view_mode in ("both", "preview"):
-            wanted.append((self.preview, 0))
+        if self.view_mode in ("both", "preview", "design"):
+            wanted.append((self.design_row, 3 if design or self.view_mode == "preview" else 0))
         if self.view_mode in ("both", "xml"):
             wanted.append((self.editor.master, 3))
         if self.show_problems_var.get():
@@ -1135,7 +1189,7 @@ class RibbonForgeApp(tk.Tk):
             issues = len(self.part.report.issues) if self.part else 0
             height = 34 if not issues else min(190, max(90, 40 + issues * 26))
             targets.append((len(panes) - 2, max(120, total - height)))
-        if str(self.preview) in panes and str(self.editor.master) in panes:
+        if str(self.design_row) in panes and str(self.editor.master) in panes:
             targets.append((0, 182))
 
         try:
@@ -1244,6 +1298,36 @@ class RibbonForgeApp(tk.Tk):
         self.editor.text.tag_add("sel", "1.0", "end-1c")
         self.editor.text.mark_set("insert", "1.0")
         return "break"
+
+    # ------------------------------------------------------------- designer
+    def designer_insert(self, key: str, target: Node) -> None:
+        """A palette card was dropped on ``target`` in the preview."""
+        if self.part is None:
+            return
+        child = schema.make_node(key, __import__("ribbonforge.core.xmldoc", fromlist=["build"]))
+        if child is None:
+            return
+        self.structure._ensure_unique_ids(child)
+        target.add(child)
+        self.on_tree_change(f"Add {child.local}")
+        self.structure.select_uid(child.uid)
+        elem = schema.SCHEMA.get(key)
+        self.toast.show(f"{elem.glyph}  Added a {elem.name} to <{target.tag}>", "ok", 1800)
+
+    def designer_move(self, node: Node, target: Node) -> None:
+        if self.part is None or node.parent is None:
+            return
+        if target is not node.parent:
+            node.parent.remove(node)
+            target.add(node)
+        self.on_tree_change(f"Move {node.local}")
+        self.structure.select_uid(node.uid)
+
+    def _quest_done(self, key: str) -> None:
+        titles = dict(__import__("ribbonforge.ui.designer", fromlist=["QUESTS"]).QUESTS)
+        self.settings["quests"] = dict(self.palette.quests)
+        done = sum(1 for value in self.palette.quests.values() if value)
+        self.toast.show(f"✓  {titles.get(key, key)}   ({done}/{len(titles)})", "ok", 1600)
 
     def _editor_edit(self, action: str) -> None:
         try:

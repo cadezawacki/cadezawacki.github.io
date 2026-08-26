@@ -100,13 +100,13 @@ TEMPLATES: List[Template] = [
                     getPressed="GetVerbose" onAction="OnVerbose"/>
         </group>
         <group id="rfGrpMore" label="More">
-          <menu id="rfMenu" label="Reports" imageMso="ReportDesign" size="large" itemSize="large">
-            <button id="rfRepDaily" label="Daily" imageMso="CalendarToday"
+          <menu id="rfMenu" label="Reports" imageMso="CreateReport" size="large" itemSize="large">
+            <button id="rfRepDaily" label="Daily" imageMso="CalendarInsert"
                     description="Build the daily summary sheet." onAction="OnReport" tag="daily"/>
-            <button id="rfRepWeekly" label="Weekly" imageMso="Calendar"
+            <button id="rfRepWeekly" label="Weekly" imageMso="DateAndTimeInsert"
                     description="Build the weekly roll-up." onAction="OnReport" tag="weekly"/>
             <menuSeparator id="rfMenuSep" title="Advanced"/>
-            <button id="rfRepCustom" label="Custom..." imageMso="ReportModifyDesign"
+            <button id="rfRepCustom" label="Custom..." imageMso="CreateReportInDesignView"
                     description="Choose your own date range." onAction="OnReport" tag="custom"/>
           </menu>
           <splitButton id="rfSplit" size="large">
@@ -178,7 +178,7 @@ TEMPLATES: List[Template] = [
       <tabSet idMso="TabSetChartTools">
         <tab idMso="TabChartToolsDesign">
           <group id="rfChartExtras" label="My Chart Tools">
-            <button id="rfChartTidy" label="Tidy up" imageMso="ChartTypeColumnInsert"
+            <button id="rfChartTidy" label="Tidy up" imageMso="ChartTypeColumnInsertGallery"
                     size="large" onAction="OnTidyChart"/>
           </group>
         </tab>
@@ -289,7 +289,7 @@ TEMPLATES: List[Template] = [
     <tabs>
       <tab id="rfDynTab" label="Dynamic">
         <group id="rfDynGroup" label="Built at run time">
-          <dynamicMenu id="rfDynMenu" label="Recent files" imageMso="FileOpenRecentFile"
+          <dynamicMenu id="rfDynMenu" label="Recent files" imageMso="RecentFileList"
                        size="large" getContent="GetRecentFilesMenu"
                        invalidateContentOnDrop="true"/>
         </group>
