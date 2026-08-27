@@ -481,6 +481,124 @@ class IconPackTests(unittest.TestCase):
         self.assertNotIn("unknown-imagemso", {i.code for i in report.issues})
 
 
+class VbaXRayTests(unittest.TestCase):
+    def test_synthetic_project_parses(self):
+        import make_vba
+        from ribbonforge.core import vbaproject
+        project = vbaproject.parse(make_vba.build_vba_project())
+        self.assertEqual(project.project_name, "RibbonForgeDemo")
+        self.assertIsNotNone(project.find("OnBuildReport"))
+        self.assertEqual(project.find("GetVerbose").arg_count, 2)
+        self.assertEqual(project.module("Sheet1").kind, "document")
+        self.assertEqual(project.find("HelperTotal").kind, "Function")
+
+    def test_decompress_round_trips(self):
+        import make_vba
+        from ribbonforge.core import vbaproject
+        for compress in (make_vba.compress_raw, make_vba.compress_with_copytokens):
+            for payload in (b"x", b"Sub A()\r\nEnd Sub\r\n" * 60, bytes(range(256)) * 4):
+                data = payload[:4096]
+                out = vbaproject.decompress(compress(data))
+                self.assertEqual(out[:len(data)], data, compress.__name__)
+
+    def test_validator_flags_missing_and_wrong_module(self):
+        import make_vba
+        from ribbonforge.core import vbaproject
+        project = vbaproject.parse(make_vba.build_vba_project())
+        xml = SAMPLE_XML.replace('onAction="OnGo"', 'onAction="OnBuildReport"') \
+                        .replace('onAction="OnWatch"', 'onAction="Worksheet_Change"')
+        report = validator.validate(XmlDocument.parse(xml), V2010, vba=project)
+        codes = {i.code for i in report.issues}
+        self.assertIn("vba-wrong-module", codes)     # Worksheet_Change is in Sheet1
+        self.assertIn("vba-missing", codes)          # GetWatch does not exist
+        messages = " ".join(i.message for i in report.issues)
+        self.assertNotIn("'OnBuildReport'", messages)  # exists -> no complaint
+
+    def test_validator_flags_signature_mismatch(self):
+        import make_vba
+        from ribbonforge.core import vbaproject
+        project = vbaproject.parse(make_vba.build_vba_project())
+        # HelperTotal takes 2 args; onAction on a plain button expects 1
+        xml = SAMPLE_XML.replace('onAction="OnGo"', 'onAction="HelperTotal"')
+        report = validator.validate(XmlDocument.parse(xml), V2010, vba=project)
+        self.assertIn("vba-signature", {i.code for i in report.issues})
+
+    def test_document_exposes_vba(self):
+        import make_sample, tempfile, os, shutil
+        tmp = tempfile.mkdtemp(prefix="ribbonforge-")
+        try:
+            path = make_sample.build(os.path.join(tmp, "book.xlsm"), with_vba=True)
+            document = RibbonDocument.open_package(path)
+            self.assertIsNotNone(document.vba)
+            self.assertIn("onbuildreport", document.vba.procedure_names())
+            report = document.first_part().validate()
+            self.assertIn("vba-missing", {i.code for i in report.issues})
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+
+class ExcelBridgeTests(unittest.TestCase):
+    """The bridge plumbing, exercised end-to-end through a fake PowerShell."""
+
+    def setUp(self):
+        import sys
+        self.fake = os.path.join(HERE, "fakebin", "fakepowershell.py")
+        os.environ["RIBBONFORGE_POWERSHELL"] = sys.executable
+        self._orig_run = None
+
+    def tearDown(self):
+        os.environ.pop("RIBBONFORGE_POWERSHELL", None)
+
+    def _patch_argv(self):
+        # powershell_exe() returns python; prepend the fake script by wrapping _run's args
+        from ribbonforge.core import excelbridge
+        original = excelbridge.subprocess.run
+
+        def wrapper(cmd, **kwargs):
+            return original([cmd[0], self.fake] + cmd[1:], **kwargs)
+
+        excelbridge.subprocess.run = wrapper
+        self.addCleanup(lambda: setattr(excelbridge.subprocess, "run", original))
+
+    def test_probe(self):
+        from ribbonforge.core import excelbridge
+        self._patch_argv()
+        status = excelbridge.probe()
+        self.assertTrue(status.available and status.excel_running and status.vbom_trusted)
+        self.assertEqual(status.excel_version, "16.0")
+
+    def test_test_in_excel(self):
+        from ribbonforge.core import excelbridge
+        self._patch_argv()
+        result = excelbridge.test_in_excel("/tmp/book.xlsm")
+        self.assertEqual(result["opened"], "book.xlsm")
+
+    def test_inject_vba(self):
+        from ribbonforge.core import excelbridge
+        self._patch_argv()
+        result = excelbridge.inject_vba("/tmp/book.xlsm", "/tmp/mod.bas", "RibbonCallbacks")
+        self.assertEqual(result["module"], "RibbonCallbacks")
+
+    def test_harvest_icons(self):
+        import tempfile, shutil
+        from ribbonforge.core import excelbridge
+        self._patch_argv()
+        out = tempfile.mkdtemp(prefix="rf-icons-")
+        try:
+            result = excelbridge.harvest_icons(["FileSave", "GridSettings"], out)
+            self.assertEqual(result["saved"], 2)
+            self.assertTrue(os.path.exists(os.path.join(out, "GridSettings.png")))
+        finally:
+            shutil.rmtree(out, ignore_errors=True)
+
+    def test_unavailable_off_windows(self):
+        from ribbonforge.core import excelbridge, winplatform
+        os.environ.pop("RIBBONFORGE_POWERSHELL", None)
+        if not winplatform.IS_WINDOWS:
+            status = excelbridge.probe()
+            self.assertFalse(status.available)
+
+
 class CatalogueTests(unittest.TestCase):
     def test_catalogues_are_deduplicated(self):
         names = msodata.image_mso_names()

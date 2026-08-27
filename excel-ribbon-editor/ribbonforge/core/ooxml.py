@@ -68,6 +68,7 @@ OPEN_FILTER = [
                          "*.dotm *.dotx *.pptm *.pptx *.potm *.potx *.ppam"),
     ("Excel macro-enabled", "*.xlsm *.xlam *.xltm *.xlsb"),
     ("Ribbon XML", "*.xml"),
+    ("Exported Office customisation", "*.exportedUI"),
     ("All files", "*.*"),
 ]
 

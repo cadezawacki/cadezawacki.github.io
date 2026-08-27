@@ -5,7 +5,16 @@ pure Python 3.11 with a Tkinter interface. It opens `.xlsm` / `.xlam` /
 `.xlsx` (and Word/PowerPoint) files directly, edits the ribbon markup inside
 them, and writes the package back with everything else untouched.
 
-No third-party dependencies. Nothing to install beyond Python itself.
+It does several things no other ribbon editor does: it **reads the
+workbook's actual VBA** (straight out of `vbaProject.bin`, no Excel needed)
+so it knows which callbacks really exist; it **drives a live Excel over COM**
+to test the ribbon, inject the generated macros, and harvest real icons; it
+**simulates dynamic callbacks** so you can watch `getVisible`/`getEnabled`
+states in the preview; and it keeps a **visual snapshot history** of every
+save.
+
+No third-party dependencies. Nothing to install beyond Python itself
+(Windows ships tkinter and PowerShell; Pillow is used if present).
 
 ```
 excel-ribbon-editor/
@@ -62,6 +71,44 @@ package) are rejected with an explanation rather than a traceback.
 Editing in any view updates the others. Structured edits are re-serialised
 into the editor as one undo step, so `Ctrl+Z` walks back through tree and
 property changes as well as typing.
+
+### What makes it different
+
+**VBA X-Ray — see the macros without opening Excel.** An `.xlsm` keeps its
+code in an OLE compound file using MS-OVBA compression; RibbonForge reads
+both formats in pure Python. So the moment a workbook opens it knows every
+procedure in every module, and validation tells you *precisely* which ribbon
+callbacks already exist, which are in the wrong (non-standard) module where
+Office can't call them, and which take the wrong number of arguments — with
+jump-to-line, before you ever run the file.
+
+**Excel Live Bridge — one machine, both apps.** On Windows with Office,
+RibbonForge talks to a running Excel through PowerShell + COM (no pip
+packages):
+
+* **Test in Excel** (F8) saves, then closes and reopens the workbook inside
+  Excel so your ribbon appears in seconds.
+* **Inject VBA callbacks** imports the generated `.bas` straight into the
+  workbook's VBA project (it detects and explains the one Trust Center
+  setting this needs).
+* **Harvest icons** asks Office itself for `imageMso` artwork at 32 px via
+  `CommandBars.GetImageMso`, alpha channel intact, and caches it so every
+  icon in the editor is pixel-for-pixel what your Excel shows.
+
+**Callback Lab — see a dynamic ribbon come alive.** A ribbon driven by
+`getVisible`, `getEnabled`, `getLabel`, `getItemCount`… is normally
+invisible outside Excel. The Lab gives you a switch, number, or text box per
+callback; flip them and the live preview responds exactly as the real ribbon
+would — controls appear and disappear, toggles press in, drop-downs fill.
+
+**Time Machine — never lose a ribbon.** Every save stores a snapshot of each
+part. Browse them by time, see a colour-coded diff against the current XML,
+and restore any version as a single undoable edit.
+
+**Exported customisations.** Opens and round-trips Excel's own
+`.exportedUI` files (the prefixed-namespace form Excel writes when you
+export your Quick Access Toolbar and ribbon customisations), preserving the
+`mso:` prefixes exactly.
 
 **Context-aware autocomplete.** `Ctrl+Space` (or just typing `<`) offers
 exactly the elements valid at that point in the tree, then the attributes
@@ -151,13 +198,22 @@ palette · `Ctrl+1/2/3` focus tree / editor / preview · `Insert`, `Delete`,
   versions newer than the reference list may add ids.
 * `.xls`, `.doc` and `.ppt` are not Open XML packages and cannot carry a
   ribbon at all.
+* The Excel Live Bridge and icon harvesting need Windows with Office
+  installed; on other platforms those actions are disabled and the rest of
+  the editor works normally. VBA X-Ray is pure Python and works everywhere.
 
 ## Tests
 
 ```
-py -3.11 -m unittest discover -s tests          # 60 headless tests
+py -3.11 -m unittest discover -s tests          # 70 headless tests
 py -3.12 tests/gui_smoke.py sample.xlsm         # drives the real window
 ```
+
+The VBA reader is tested against both a synthetic project (built by
+`tests/make_vba.py`, exercising raw *and* copy-token OVBA compression) and
+real-world `vbaProject.bin` files; the Excel bridge is tested end-to-end
+through a fake PowerShell so the script generation and JSON handling are
+verified without needing Office.
 
 `tests/test_core.py` covers XML round-tripping and source positions, schema
 resolution, every validation rule and auto-fix, callback signatures, and the

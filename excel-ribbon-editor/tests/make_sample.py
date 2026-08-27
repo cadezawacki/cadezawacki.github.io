@@ -115,7 +115,7 @@ def make_png(size=32, rgba=(47, 162, 106, 255)) -> bytes:
             + chunk(b"IEND", b""))
 
 
-def build(path: str, with_ribbon: bool = True) -> str:
+def build(path: str, with_ribbon: bool = True, with_vba: bool = False) -> str:
     entries = {
         "[Content_Types].xml": CONTENT_TYPES,
         "_rels/.rels": ROOT_RELS,
@@ -132,16 +132,25 @@ def build(path: str, with_ribbon: bool = True) -> str:
         entries["_rels/.rels"] = rels
         entries["customUI/customUI14.xml"] = CUSTOMUI14
         entries["customUI/_rels/customUI14.xml.rels"] = CUSTOMUI_RELS
+    if with_vba:
+        entries["[Content_Types].xml"] = CONTENT_TYPES.replace(
+            "</Types>",
+            '<Override PartName="/xl/vbaProject.bin" '
+            'ContentType="application/vnd.ms-office.vbaProject"/></Types>')
     with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as zf:
         for name, body in entries.items():
             zf.writestr(name, body)
         if with_ribbon:
             zf.writestr("customUI/images/logo.png", make_png())
+        if with_vba:
+            import make_vba
+            zf.writestr("xl/vbaProject.bin", make_vba.build_vba_project())
     return path
 
 
 if __name__ == "__main__":
+    sys.path.insert(0, HERE)
     out = sys.argv[1] if len(sys.argv) > 1 else os.path.join(HERE, "sample.xlsm")
-    build(out)
+    build(out, with_vba=True)
     build(out.replace(".xlsm", "_plain.xlsm"), with_ribbon=False)
     print("wrote", out)

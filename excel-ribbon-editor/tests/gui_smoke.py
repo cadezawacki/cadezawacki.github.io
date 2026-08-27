@@ -164,7 +164,11 @@ def main():
             app.update_idletasks(); app.update()
         assert app.preview.winfo_height() > 100, f"preview collapsed: {app.preview.winfo_height()}"
         assert app.editor.winfo_height() > 100, f"editor collapsed: {app.editor.winfo_height()}"
-        assert app.problems.winfo_height() < 90, f"problems too tall: {app.problems.winfo_height()}"
+        # problems pane auto-sizes to its content: tiny when clean, taller with issues
+        issues = len(app.part.report.issues) if app.part else 0
+        cap = 90 if issues == 0 else 210
+        assert app.problems.winfo_height() < cap, \
+            f"problems too tall ({app.problems.winfo_height()}) for {issues} issues"
     step("view modes", view_modes, app)
 
     def undo_via_keyboard():
@@ -218,6 +222,48 @@ def main():
         app.palette.mark_quest("button")
         assert sum(1 for v in app.palette.quests.values() if v) >= 3
     step("quest checklist", quest_progress, app)
+
+    # ---- callback lab
+    def callback_lab():
+        app.right_tabs.select(app.lab)
+        for _ in range(4):
+            app.update_idletasks(); app.update()
+        entries = app.lab._entries
+        assert entries, "lab found no callbacks"
+        # turn the lab on and hide a control via getVisible
+        sim = app.part.simulation
+        target = None
+        for node in app.part.tree.root.iter_elements():
+            if node.get("getVisible"):
+                target = node; break
+        if target is not None:
+            sim.set(target.get("getVisible"), False)
+            sim.enabled = True
+            app.preview.refresh()
+            for _ in range(3):
+                app.update_idletasks(); app.update()
+            assert not app.preview._visible(target), "getVisible sim did not hide control"
+            sim.set(target.get("getVisible"), True)
+            app.preview.refresh()
+    step("callback lab hides a control", callback_lab, app)
+    shot(app, "19-callback-lab")
+
+    def toggle_sim():
+        sim = app.part.simulation
+        pressed = None
+        for node in app.part.tree.root.iter_elements():
+            if node.local == "toggleButton" and node.get("getPressed"):
+                pressed = node; break
+        if pressed is not None:
+            sim.enabled = True
+            sim.set(pressed.get("getPressed"), True)
+            app.preview.refresh()
+            for _ in range(2):
+                app.update_idletasks(); app.update()
+            assert app.preview._pressed(pressed), "getPressed sim ignored"
+        sim.enabled = False
+        app.preview.refresh()
+    step("toggle simulation", toggle_sim, app)
 
     def drop_target_resolution():
         class FakeEvent:
@@ -352,6 +398,66 @@ def main():
 
     step("problems panel population", lambda: app.problems.set_report(
         app.part.report, app.part), app)
+
+    # ---- time machine: save writes a snapshot, restore brings it back
+    def time_machine():
+        import os
+        from ribbonforge.core import history
+        target = os.path.join(os.environ.get("SHOT_DIR", "/tmp"), "history_book.xlsm")
+        import shutil
+        shutil.copy(sample, target)
+        doc = __import__("ribbonforge.core.document", fromlist=["RibbonDocument"]) \
+            .RibbonDocument.open_package(target)
+        app.documents.append(doc)
+        app.activate(doc, doc.first_part())
+        for _ in range(4):
+            app.update_idletasks(); app.update()
+        original = app.part.text
+        app._write(doc, None)                                   # snapshot #1
+        app.editor.set_text(original.replace("Reporting", "Q3 Reporting"), keep_view=False)
+        app.on_editor_change()
+        app._write(doc, None)                                   # snapshot #2
+        snaps = history.snapshots(target, app.part.variant)
+        assert len(snaps) >= 2, f"expected 2 snapshots, got {len(snaps)}"
+        app.history_panel.rebuild()
+        app.history_panel.listbox.selection_clear(0, "end")
+        app.history_panel.listbox.selection_set(1)              # the older one
+        app.history_panel._show_diff()
+        for _ in range(3):
+            app.update_idletasks(); app.update()
+        diff_text = app.history_panel.diff.get("1.0", "end")
+        assert "Q3 Reporting" in diff_text or "Reporting" in diff_text, "diff empty"
+        app.right_tabs.select(app.history_panel)
+    step("time machine snapshots + diff", time_machine, app)
+    shot(app, "20-time-machine")
+
+    # ---- excel bridge through the fake PowerShell
+    def excel_bridge():
+        import sys
+        from ribbonforge.core import excelbridge
+        fake = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fakebin",
+                            "fakepowershell.py")
+        os.environ["RIBBONFORGE_POWERSHELL"] = sys.executable
+        original = excelbridge.subprocess.run
+        excelbridge.subprocess.run = lambda cmd, **kw: original([cmd[0], fake] + cmd[1:], **kw)
+        try:
+            status = excelbridge.probe()
+            assert status.available and status.vbom_trusted, "bridge probe failed"
+            result = excelbridge.test_in_excel(app.document.path)
+            assert result["opened"].endswith(".xlsm"), result
+        finally:
+            excelbridge.subprocess.run = original
+            os.environ.pop("RIBBONFORGE_POWERSHELL", None)
+    step("excel bridge round-trip", excel_bridge, app)
+
+    def vba_xray():
+        vba = app.document.vba
+        if vba is not None:
+            assert "onbuildreport" in vba.procedure_names(), "X-Ray missed a proc"
+            report = app.part.validate()
+            codes = {i.code for i in report.issues}
+            assert "vba-missing" in codes, "X-Ray did not flag missing callbacks"
+    step("vba x-ray on the workbook", vba_xray, app)
 
     step("close all", lambda: [app.documents.clear(), app.refresh_explorer(),
                                app._show_welcome()], app)

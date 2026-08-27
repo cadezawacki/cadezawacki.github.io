@@ -13,6 +13,7 @@ from tkinter import font as tkfont
 from tkinter import ttk
 from typing import Callable, Dict, List, Optional, Tuple
 
+from ..core.simulator import Simulation
 from ..core.xmldoc import Node
 from .icons import IconCache, rounded_rect
 from .widgets import PanelHeader, SegmentedControl, ToolButton
@@ -42,6 +43,7 @@ class RibbonPreview(tk.Frame):
         self._fonts: Dict[str, tkfont.Font] = {}
         self._image_lookup: Callable[[str], Optional[bytes]] = lambda _rid: None
         self.on_mode_change: Optional[Callable[[str], None]] = None
+        self.simulation = Simulation()
 
         self.header = PanelHeader(self, theme, "Live preview", "▤")
         self.header.pack(fill="x")
@@ -330,6 +332,8 @@ class RibbonPreview(tk.Frame):
         for control in group.elements:
             if control.local == "dialogBoxLauncher":
                 continue
+            if self.simulation.enabled and not self._visible(control):
+                continue
             if self._is_large(control):
                 flush()
                 cursor += self._draw_large(control, cursor, content_top, content_h) + z(3)
@@ -385,18 +389,21 @@ class RibbonPreview(tk.Frame):
 
     def _label_of(self, control: Node) -> str:
         control = self._primary(control)
-        label = control.get("label")
-        if label:
-            return label
+        resolved = self.simulation.resolve_text(control, "label", "getLabel")
+        if resolved:
+            return resolved
         if control.get("getLabel"):
             return f"⟨{control.get('getLabel')}⟩"
         return control.get("idMso") or control.get("id") or control.local
 
     def _enabled(self, control: Node) -> bool:
-        return (control.get("enabled") or "true").lower() not in ("false", "0")
+        return self.simulation.resolve_bool(control, "enabled", "getEnabled", True)
 
     def _visible(self, control: Node) -> bool:
-        return (control.get("visible") or "true").lower() not in ("false", "0")
+        return self.simulation.resolve_bool(control, "visible", "getVisible", True)
+
+    def _pressed(self, control: Node) -> bool:
+        return self.simulation.resolve_bool(control, "", "getPressed", False)
 
     def _draw_icon(self, control: Node, x: float, y: float, size: float) -> None:
         tag_uid = control.uid
@@ -473,7 +480,7 @@ class RibbonPreview(tk.Frame):
             self.canvas.create_rectangle(cursor, top + z(3), cursor + box, top + z(3) + box,
                                          outline=c.c("ribbon_dim"), fill=c.c("ribbon_strip"),
                                          tags=(f"node{control.uid}",))
-            if control.get("getPressed"):
+            if self._pressed(control) if self.simulation.enabled else control.get("getPressed"):
                 self.canvas.create_line(cursor + z(2), top + z(8), cursor + z(4.5), top + z(11),
                                         cursor + z(9), top + z(5), fill=c.c("accent"), width=max(1, z(1.6)))
             cursor += box + z(5)
@@ -489,14 +496,30 @@ class RibbonPreview(tk.Frame):
             self.canvas.create_rectangle(cursor, fy, cursor + field_w, fy + field_h,
                                          fill=c.c("ribbon_strip"), outline=c.c("ribbon_line"),
                                          tags=(f"node{control.uid}",))
-            if kind != "editBox":
+            if kind == "editBox":
+                typed = self.simulation.resolve_text(control, "", "getText")
+                if typed:
+                    self.canvas.create_text(cursor + z(4), fy + field_h / 2, anchor="w",
+                                            text=typed[:16], fill=c.c("ribbon_text"),
+                                            font=self._fonts["small"])
+            else:
                 self.canvas.create_text(cursor + field_w - z(7), fy + field_h / 2, text="▾",
                                         fill=c.c("ribbon_dim"), font=self._fonts["small"],
                                         tags=(f"node{control.uid}",))
-                first = control.find("item")
-                if first is not None and first.get("label"):
+                shown = None
+                if self.simulation.enabled and control.get("getItemCount"):
+                    count = self.simulation.resolve_number(control, "getItemCount", 3)
+                    labels = self.simulation.item_labels(control, count)
+                    index = self.simulation.resolve_number(control, "getSelectedItemIndex", 0)
+                    if labels:
+                        shown = labels[min(index, len(labels) - 1)]
+                if shown is None:
+                    first = control.find("item")
+                    if first is not None and first.get("label"):
+                        shown = first.get("label")
+                if shown:
                     self.canvas.create_text(cursor + z(4), fy + field_h / 2, anchor="w",
-                                            text=first.get("label")[:14], fill=c.c("ribbon_dim"),
+                                            text=shown[:14], fill=c.c("ribbon_dim"),
                                             font=self._fonts["small"])
             width = cursor + field_w - x
             self._register(control, x, y, x + width, y + height)
@@ -526,9 +549,12 @@ class RibbonPreview(tk.Frame):
             self.canvas.create_text(cursor, y + height / 2, anchor="w", text="▾", fill=colour,
                                     font=self._fonts["small"], tags=(f"node{control.uid}",))
             cursor += z(9)
-        if control.local == "toggleButton" and control.get("getPressed"):
+        toggled = (self._pressed(control) if self.simulation.enabled
+                   else bool(control.get("getPressed")))
+        if control.local == "toggleButton" and toggled:
             self.canvas.create_rectangle(x, top - z(1), cursor, top + z(19),
-                                         outline=self.theme.c("accent"), width=1)
+                                         outline=self.theme.c("accent"),
+                                         width=2 if self.simulation.enabled else 1)
 
         width = max(cursor - x, z(20))
         if not self._visible(control):

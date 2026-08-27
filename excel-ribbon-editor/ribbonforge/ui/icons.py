@@ -505,11 +505,13 @@ class IconCache:
         if image_mso and self.pack.has(image_mso):
             photo = self.pack.icon(image_mso, int(size))
             if photo is not None:
-                # The sprite bakes a white background in, so give the icon a
-                # small white chip - it reads as deliberate in both themes.
-                pad = max(1.0, size * 0.06)
-                _rounded(canvas, x - pad, y - pad, size + 2 * pad, size + 2 * pad,
-                         size * 0.18, "#ffffff", tags)
+                if not self.pack.is_harvested(image_mso):
+                    # The 16px sprite bakes a white background in, so give it
+                    # a small white chip; harvested 32px art keeps its alpha
+                    # and sits directly on the surface.
+                    pad = max(1.0, size * 0.06)
+                    _rounded(canvas, x - pad, y - pad, size + 2 * pad, size + 2 * pad,
+                             size * 0.18, "#ffffff", tags)
                 canvas.create_image(x + size / 2, y + size / 2, image=photo, tags=tags)
                 return
 

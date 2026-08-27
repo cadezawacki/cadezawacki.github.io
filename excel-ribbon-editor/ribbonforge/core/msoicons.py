@@ -99,8 +99,13 @@ def download(progress: Optional[Callable[[str], None]] = None) -> str:
     return sprite_path()
 
 
+def harvest_dir() -> str:
+    """32 px PNGs harvested from the user's own Office via the Excel bridge."""
+    return os.path.join(config_dir(), "msoicons32")
+
+
 class IconPack:
-    """Slices the sprite strip into per-name Tk images, at 16 or 32 px."""
+    """Per-name Tk images: harvested 32 px art first, then the 16 px sprite."""
 
     def __init__(self) -> None:
         self.index = load_index()
@@ -108,19 +113,36 @@ class IconPack:
         self._strip = None          # tk.PhotoImage of the full strip (no-Pillow path)
         self._cache: Dict[tuple, object] = {}
         self._failed = False
+        self._harvested: Optional[set] = None
+
+    def _harvest_names(self) -> set:
+        if self._harvested is None:
+            try:
+                self._harvested = {name[:-4] for name in os.listdir(harvest_dir())
+                                   if name.endswith(".png")}
+            except OSError:
+                self._harvested = set()
+        return self._harvested
 
     @property
     def available(self) -> bool:
-        return not self._failed and is_installed() and bool(self.index)
+        return (not self._failed and is_installed() and bool(self.index)) \
+            or bool(self._harvest_names())
+
+    def is_harvested(self, name: str) -> bool:
+        return name in self._harvest_names()
 
     def has(self, name: str) -> bool:
-        return self.available and name in self.index
+        if name in self._harvest_names():
+            return True
+        return not self._failed and is_installed() and name in self.index
 
     def forget(self) -> None:
         self._pil = None
         self._strip = None
         self._cache.clear()
         self._failed = False
+        self._harvested = None
 
     def _ensure_loaded(self) -> bool:
         if self._failed:
@@ -146,13 +168,17 @@ class IconPack:
 
     def icon(self, name: str, size: int = 16):
         """A Tk image for ``name`` at roughly ``size`` px, or None."""
-        row = self.index.get(name)
-        if row is None or not self._ensure_loaded():
-            return None
         size = 32 if size >= 24 else 16
         key = (name, size)
         if key in self._cache:
             return self._cache[key]
+        harvested = self._load_harvested(name, size)
+        if harvested is not None:
+            self._cache[key] = harvested
+            return harvested
+        row = self.index.get(name)
+        if row is None or not self._ensure_loaded():
+            return None
         image = None
         try:
             if self._pil is not None:
@@ -174,6 +200,28 @@ class IconPack:
         if image is not None:
             self._cache[key] = image
         return image
+
+
+    def _load_harvested(self, name: str, size: int):
+        if name not in self._harvest_names():
+            return None
+        path = os.path.join(harvest_dir(), name + ".png")
+        try:
+            try:
+                from PIL import Image, ImageTk  # type: ignore
+                img = Image.open(path).convert("RGBA")
+                if img.width != size:
+                    img = img.resize((size, size),
+                                     Image.LANCZOS if size < img.width else Image.NEAREST)
+                return ImageTk.PhotoImage(img)
+            except ImportError:
+                import tkinter as tk
+                photo = tk.PhotoImage(file=path)
+                if photo.width() > size:
+                    photo = photo.subsample(max(1, photo.width() // size))
+                return photo
+        except Exception:
+            return None
 
 
 _pack: Optional[IconPack] = None

@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import tkinter as tk
 from tkinter import ttk
+
+from ..core.winplatform import WHEEL_SEQUENCES
 from typing import Callable, Dict, Optional, Sequence, Tuple
 
 
@@ -361,11 +363,11 @@ class ScrollFrame(tk.Frame):
         theme.subscribe(self.restyle)
 
     def _grab_wheel(self, _event=None) -> None:
-        for sequence in ("<MouseWheel>", "<Button-4>", "<Button-5>"):
+        for sequence in WHEEL_SEQUENCES:
             self.bind_all(sequence, self._on_wheel, add=False)
 
     def _release_wheel(self, _event=None) -> None:
-        for sequence in ("<MouseWheel>", "<Button-4>", "<Button-5>"):
+        for sequence in WHEEL_SEQUENCES:
             try:
                 self.unbind_all(sequence)
             except tk.TclError:
@@ -429,9 +431,8 @@ def bind_mousewheel(widget: tk.Misc, target: tk.Misc) -> None:
             pass
         return "break"
 
-    widget.bind("<MouseWheel>", on_wheel, add="+")
-    widget.bind("<Button-4>", on_wheel, add="+")
-    widget.bind("<Button-5>", on_wheel, add="+")
+    for sequence in WHEEL_SEQUENCES:
+        widget.bind(sequence, on_wheel, add="+")
 
 
 class Chip(tk.Label):

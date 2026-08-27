@@ -6,3 +6,7 @@ __pycache__/
 *.xlam
 !tests/fixtures/*.xlsm
 .~rf-*
+# runtime caches (never committed)
+history/
+msoicons/
+msoicons32/

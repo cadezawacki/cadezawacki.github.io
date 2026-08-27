@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from tkinter import ttk
 from typing import Callable, Dict, List, Optional, Tuple
 
+from ..core.winplatform import WHEEL_SEQUENCES
 from .widgets import SearchEntry, ToolButton, bind_mousewheel
 
 TOKEN_RE = re.compile(
@@ -128,9 +129,8 @@ class CodeEditor(tk.Frame):
         text.bind("<KeyRelease>", self._on_key_release)
         text.bind("<ButtonRelease-1>", self._on_click)
         text.bind("<Configure>", lambda _e: self._redraw_gutter())
-        text.bind("<MouseWheel>", self._after_scroll, add="+")
-        text.bind("<Button-4>", self._after_scroll, add="+")
-        text.bind("<Button-5>", self._after_scroll, add="+")
+        for sequence in WHEEL_SEQUENCES:
+            text.bind(sequence, self._after_scroll, add="+")
         text.bind("<Return>", self._on_return)
         text.bind("<greater>", self._on_gt)
         text.bind("<quotedbl>", self._on_quote)

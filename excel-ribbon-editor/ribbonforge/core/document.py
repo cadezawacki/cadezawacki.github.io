@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 from typing import Dict, List, Optional
 
-from . import templates, validator
+from . import templates, validator, vbaproject
 from .ooxml import (NAMESPACE_FOR, PART_LABEL, V2007, V2010, ImageResource,
                     OfficePackage, PackageError, sniff_variant)
 from .xmldoc import XmlDocument, adopt_uids, tree_signature
@@ -55,6 +55,7 @@ class PartState:
             self.document, self.variant,
             available_images=self.image_ids(),
             strict_imagemso=strict_imagemso,
+            vba=self.owner.vba,
         )
         return self.report
 
@@ -116,6 +117,8 @@ class RibbonDocument:
         self.package = package
         self.parts: Dict[str, PartState] = {}
         self._dirty = False
+        self._vba: Optional[vbaproject.VbaProject] = None
+        self._vba_loaded = False
         if not path:
             RibbonDocument._untitled_counter += 1
             self._untitled = f"Untitled {RibbonDocument._untitled_counter}"
@@ -179,6 +182,19 @@ class RibbonDocument:
             part.dirty = False
         if self.package is not None:
             self.package.mark_clean()
+
+    @property
+    def vba(self) -> Optional[vbaproject.VbaProject]:
+        """The workbook's VBA project, read straight out of vbaProject.bin."""
+        if not self._vba_loaded:
+            self._vba_loaded = True
+            if self.package is not None:
+                self._vba = vbaproject.from_package(self.package)
+        return self._vba
+
+    def reload_vba(self) -> Optional[vbaproject.VbaProject]:
+        self._vba_loaded = False
+        return self.vba
 
     def variants(self) -> List[str]:
         return [v for v in (V2007, V2010) if v in self.parts]

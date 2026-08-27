@@ -86,8 +86,13 @@ class _Collector:
 
 def validate(document: XmlDocument, variant: str = V2010,
              available_images: Optional[Sequence[str]] = None,
-             strict_imagemso: bool = False) -> Report:
-    """Check a parsed document. ``variant`` is the part it will be saved into."""
+             strict_imagemso: bool = False, vba=None) -> Report:
+    """Check a parsed document. ``variant`` is the part it will be saved into.
+
+    ``vba`` is an optional :class:`~.vbaproject.VbaProject`; when present,
+    every callback attribute is checked against the macros that actually
+    exist in the workbook.
+    """
     collector = _Collector()
     images: Set[str] = set(available_images or ())
 
@@ -114,12 +119,22 @@ def validate(document: XmlDocument, variant: str = V2010,
     ids: Dict[str, Node] = {}
     _walk(collector, root, variant, images, ids, strict_imagemso)
     _check_cross_cutting(collector, root, variant)
+    if vba is not None:
+        _check_vba(collector, root, vba)
 
     return Report(sorted(collector.issues, key=Issue.sort_key))
 
 
 def _check_namespace(collector: _Collector, root: Node, variant: str) -> None:
     ns = root.get("xmlns")
+    if ns is None:
+        # Excel's own exported customisation files (.exportedUI) declare the
+        # namespace through a prefix, e.g. xmlns:mso="...". Accept any
+        # declaration that binds a CustomUI namespace.
+        for key, value in root.attrs.items():
+            if key.startswith("xmlns:") and value in NAMESPACE_FOR.values():
+                ns = value
+                break
     expected = NAMESPACE_FOR[variant]
     other = NAMESPACE_FOR[V2007 if variant == V2010 else V2010]
     if not ns:
@@ -379,10 +394,67 @@ def _check_children(collector: _Collector, node: Node, elem: schema.Elem) -> Non
                           node)
 
 
+def _check_vba(collector: _Collector, root: Node, vba) -> None:
+    """Cross-check every callback attribute against the workbook's real VBA."""
+    from . import callbacks as cbmod
+
+    standard = {p.name.lower(): p for m in vba.modules if m.kind == "standard"
+                for p in m.procedures}
+    elsewhere = {p.name.lower(): p for m in vba.modules if m.kind != "standard"
+                 for p in m.procedures}
+    module_names = sorted({m.name for m in vba.modules if m.kind == "standard"}) or ["a standard module"]
+
+    seen: Set[str] = set()
+    for node in root.iter_elements():
+        elem = schema.elem_for_node(node)
+        if elem is None:
+            continue
+        for raw_name, value in node.attrs.items():
+            local = raw_name.rsplit(":", 1)[-1]
+            attr = elem.attr(local)
+            if attr is None or attr.kind != schema.CALLBACK or not value.strip():
+                continue
+            name = value.strip()
+            key = f"{name.lower()}|{local}"
+            if key in seen:
+                continue
+            seen.add(key)
+            proc = standard.get(name.lower())
+            if proc is not None:
+                params, _returns, _default = cbmod.signature_for(elem.key, local)
+                expected = params.count(",") + 1 if params.strip() else 0
+                if proc.arg_count != expected:
+                    collector.add(WARNING, "vba-signature",
+                                  f"'{name}' exists in {proc.module} but takes "
+                                  f"{proc.arg_count} argument{'s' if proc.arg_count != 1 else ''}; "
+                                  f"Office will call it with {expected}.",
+                                  node, raw_name,
+                                  hint=f"Expected: Sub {name}({params})")
+                continue
+            other = elsewhere.get(name.lower())
+            if other is not None:
+                collector.add(WARNING, "vba-wrong-module",
+                              f"'{name}' lives in {other.module}, which Office cannot call "
+                              f"from the ribbon.",
+                              node, raw_name,
+                              hint="Move it to a standard module such as "
+                                   + module_names[0] + ".")
+            else:
+                collector.add(WARNING, "vba-missing",
+                              f"'{name}' does not exist in this workbook's VBA yet.",
+                              node, raw_name,
+                              hint="Press F9 to generate it, or the control will do "
+                                   "nothing in Excel.")
+
+
 def _check_cross_cutting(collector: _Collector, root: Node, variant: str) -> None:
     ribbon = root.find("ribbon")
     qat = ribbon.find("qat") if ribbon is not None else None
-    if qat is not None:
+    exported_ui = any(key.startswith("xmlns:") for key in root.attrs)
+    if qat is not None and not exported_ui:
+        # In a document part the QAT needs startFromScratch; in an
+        # .exportedUI file (prefixed namespace) a bare <qat> is exactly how
+        # Excel stores the user's own toolbar, so it is fine there.
         scratch = (ribbon.get("startFromScratch") or "false").lower()
         if scratch not in ("true", "1"):
             collector.add(WARNING, "qat-scratch",

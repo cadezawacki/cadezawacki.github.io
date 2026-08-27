@@ -18,7 +18,10 @@ from .core.ooxml import (NAMESPACE_FOR, OPEN_FILTER, PART_LABEL, V2007, V2010,
 from .core.settings import Settings, config_dir
 from .core.xmldoc import Node
 from .ui import dialogs
+from .core import excelbridge, history
+from .ui.callbacklab import CallbackLab
 from .ui.designer import DesignerPalette, PreviewDragController
+from .ui.historypanel import HistoryPanel
 from .ui.codeeditor import CodeEditor, Completion, CompletionContext
 from .ui.preview import RibbonPreview
 from .ui.properties import PropertiesPanel
@@ -146,6 +149,19 @@ class RibbonForgeApp(tk.Tk):
         part_menu.add_command(label="Copy XML to clipboard", command=self.copy_xml)
         menubar.add_cascade(label="Ribbon", menu=part_menu)
 
+        excel_menu = make_menu(menubar, self.theme)
+        self.excel_menu = excel_menu
+        excel_menu.add_command(label="Test in Excel  (save + reopen)", accelerator="F8",
+                               command=self.bridge_test)
+        excel_menu.add_command(label="Inject VBA callbacks into the workbook...",
+                               command=self.bridge_inject)
+        excel_menu.add_command(label="Harvest crisp 32px icons from Office...",
+                               command=self.bridge_harvest)
+        excel_menu.add_separator()
+        excel_menu.add_command(label="Reload macros from disk", command=self.reload_vba)
+        excel_menu.add_command(label="Bridge status...", command=self.bridge_status)
+        menubar.add_cascade(label="Excel", menu=excel_menu)
+
         view_menu = make_menu(menubar, self.theme)
         self.show_preview_var = tk.BooleanVar(value=bool(self.settings["show_preview"]))
         self.show_props_var = tk.BooleanVar(value=bool(self.settings["show_properties"]))
@@ -206,6 +222,11 @@ class RibbonForgeApp(tk.Tk):
         add("Pictures", "image", self.show_images, "Manage pictures embedded in this part")
         Separator(bar, c, "vertical").pack(side="left", fill="y", pady=8, padx=8)
         add("Icons", "palette", lambda: self.pick_image_mso(""), "Browse the built-in icon gallery")
+        self.excel_button = add("Test in Excel", "play", self.bridge_test,
+                                "Save and reopen the workbook in Excel so the new ribbon "
+                                "loads  (F8)")
+        if not excelbridge.IS_WINDOWS and not os.environ.get("RIBBONFORGE_POWERSHELL"):
+            self.excel_button.set_enabled(False)
 
         right = tk.Frame(bar, background=c.c("panel"))
         right.pack(side="right", padx=8)
@@ -312,15 +333,21 @@ class RibbonForgeApp(tk.Tk):
 
         self.main.add(centre, weight=1)
 
-        # ---- right column
+        # ---- right column: Properties / Callback lab / Time machine
+        self.right_tabs = ttk.Notebook(self.main)
         self.properties = PropertiesPanel(
-            self.main, c, on_change=lambda d: self.on_tree_change(d, source="props"),
+            self.right_tabs, c, on_change=lambda d: self.on_tree_change(d, source="props"),
             image_provider=self._image_ids,
             pick_image_mso=self.pick_image_mso,
             pick_control_mso=self.pick_control_mso,
             import_image=self.import_image,
             show_callbacks=self.show_callback_for)
-        self.main.add(self.properties, weight=0)
+        self.lab = CallbackLab(self.right_tabs, c, on_change=self._on_lab_change)
+        self.history_panel = HistoryPanel(self.right_tabs, c, on_restore=self.restore_snapshot)
+        self.right_tabs.add(self.properties, text="  Properties  ")
+        self.right_tabs.add(self.lab, text="  ⚗ Lab  ")
+        self.right_tabs.add(self.history_panel, text="  🕒 History  ")
+        self.main.add(self.right_tabs, weight=0)
 
         self.welcome = WelcomeScreen(centre, c, self)
         self._show_welcome()
@@ -370,6 +397,7 @@ class RibbonForgeApp(tk.Tk):
             "<Control-Shift-F>": lambda e: self.format_document(),
             "<Control-F>": lambda e: self.format_document(),
             "<F5>": lambda e: self.validate_now(),
+            "<F8>": lambda e: self.bridge_test(),
             "<F9>": lambda e: self.show_callbacks(),
             "<F1>": lambda e: dialogs.ShortcutsDialog(self, self.theme).show(),
             "<Control-P>": lambda e: self.show_palette(),
@@ -405,7 +433,7 @@ class RibbonForgeApp(tk.Tk):
                 self.activate(document, document.first_part())
                 return True
         try:
-            if path.lower().endswith(".xml"):
+            if path.lower().endswith((".xml", ".exportedui")):
                 document = RibbonDocument.open_xml(path)
             else:
                 document = RibbonDocument.open_package(path)
@@ -496,6 +524,13 @@ class RibbonForgeApp(tk.Tk):
             self._syncing = False
         self.structure.set_part(part)
         self.preview.set_part(part)
+        if part is not None:
+            if not hasattr(part, "simulation"):
+                from .core.simulator import Simulation
+                part.simulation = Simulation()
+            self.preview.simulation = part.simulation
+        self.lab.set_part(part)
+        self.history_panel.set_part(part)
         self.properties.show_node(None)
         self.refresh_explorer()
         self.revalidate()
@@ -685,6 +720,9 @@ class RibbonForgeApp(tk.Tk):
         except (PackageError, OSError) as exc:
             messagebox.showerror("Could not save", str(exc), parent=self)
             return False
+        for variant, part in document.parts.items():
+            history.record(written, variant, part.text)
+        self.history_panel.rebuild()
         self.settings.push_recent(written)
         self._refresh_recent_menu()
         self.refresh_explorer()
@@ -752,6 +790,7 @@ class RibbonForgeApp(tk.Tk):
                     self.properties.show_node(node, self.part.report)
                     self.preview.selected_uid = node.uid
             self.preview.refresh()
+            self.lab.rebuild()
         self.revalidate(reparse=False, rebuild_tree=structure_changed)
         self.refresh_explorer()
         self._update_status()
@@ -968,7 +1007,8 @@ class RibbonForgeApp(tk.Tk):
         if self.part is None:
             return
         self._flush_editor()
-        dialogs.CallbackDialog(self, self.theme, self.part.tree, self.settings).show()
+        dialogs.CallbackDialog(self, self.theme, self.part.tree, self.settings,
+                               vba=self.document.vba if self.document else None).show()
 
     def show_callback_for(self, attribute: str) -> None:
         node = self.properties.node
@@ -976,7 +1016,8 @@ class RibbonForgeApp(tk.Tk):
             return
         name = node.get(attribute) or ""
         dialogs.CallbackDialog(self, self.theme, self.part.tree, self.settings,
-                               highlight=f"Sub {name}(").show()
+                               highlight=f"Sub {name}(",
+                               vba=self.document.vba if self.document else None).show()
 
     def show_images(self) -> None:
         if self.document is None or self.part is None:
@@ -1145,10 +1186,10 @@ class RibbonForgeApp(tk.Tk):
 
             main_panes = list(self.main.panes())
             if self.show_props_var.get():
-                if str(self.properties) not in main_panes:
-                    self.main.add(self.properties, weight=0)
-            elif str(self.properties) in main_panes:
-                self.main.forget(self.properties)
+                if str(self.right_tabs) not in main_panes:
+                    self.main.add(self.right_tabs, weight=0)
+            elif str(self.right_tabs) in main_panes:
+                self.main.forget(self.right_tabs)
         except tk.TclError:
             pass
         self.settings["show_preview"] = bool(self.show_preview_var.get())
@@ -1298,6 +1339,190 @@ class RibbonForgeApp(tk.Tk):
         self.editor.text.tag_add("sel", "1.0", "end-1c")
         self.editor.text.mark_set("insert", "1.0")
         return "break"
+
+    # ---------------------------------------------------------- excel bridge
+    def _bridge_ready(self, need_package: bool = True) -> bool:
+        if excelbridge.powershell_exe() is None:
+            messagebox.showinfo(
+                "Excel bridge",
+                "The Excel bridge drives a real Excel over COM and is available on "
+                "Windows with Office installed.", parent=self)
+            return False
+        if need_package and (self.document is None or self.document.kind != KIND_PACKAGE):
+            messagebox.showinfo(
+                "Excel bridge",
+                "Open an Office workbook (.xlsm, .xlam, ...) first - the bridge acts on "
+                "the real file.", parent=self)
+            return False
+        return True
+
+    def bridge_test(self) -> None:
+        """Save, then close and reopen the workbook inside Excel."""
+        if not self._bridge_ready():
+            return
+        if self.document.dirty or not self.document.path:
+            if not self.save():
+                return
+        path = self.document.path
+        self.status_left.configure(text="Opening in Excel ...")
+        self.toast.show("Handing the workbook to Excel ...", "info", 2000)
+
+        def done(result, error):
+            if error:
+                self.toast.show(error, "error", 5000)
+            else:
+                self.toast.show(f"Excel {result.get('excel', '')} reloaded "
+                                f"{result.get('opened', 'the workbook')} - your ribbon "
+                                f"is live", "ok", 4000)
+            self._update_status()
+
+        excelbridge.run_async(lambda: excelbridge.test_in_excel(path), done, self)
+
+    def bridge_inject(self) -> None:
+        """Generate the callbacks module and import it into the workbook's VBA."""
+        if not self._bridge_ready():
+            return
+        if self.part is None:
+            return
+        self._flush_editor()
+        from .core import callbacks as cbmod
+        vba = self.document.vba
+        existing = sorted({p.name.lower() for m in (vba.modules if vba else [])
+                           if m.kind == "standard" for p in m.procedures})
+        module_name = self.settings["callback_module"] or "RibbonCallbacks"
+        replacing = vba is not None and vba.module(module_name) is not None
+        code = cbmod.generate_module(
+            self.part.tree, module_name=module_name,
+            include_pointer_recovery=bool(self.settings["callback_pointer_recovery"]),
+            existing_names=[] if replacing else existing)
+        message = (f"Import module '{module_name}' into {self.document.name}?\n\n"
+                   f"{'An existing module with that name is replaced. ' if replacing else ''}"
+                   "The workbook is saved by Excel afterwards. Requires 'Trust access to "
+                   "the VBA project object model' in Excel's Trust Center.")
+        if not messagebox.askyesno("Inject VBA callbacks", message, parent=self):
+            return
+        if self.document.dirty or not self.document.path:
+            if not self.save():
+                return
+        import tempfile
+        with tempfile.NamedTemporaryFile("w", suffix=".bas", delete=False,
+                                         newline="\r\n", encoding="utf-8") as handle:
+            handle.write(code)
+            bas_path = handle.name
+        path = self.document.path
+        self.toast.show("Injecting the module through Excel ...", "info", 2500)
+
+        def done(result, error):
+            try:
+                os.unlink(bas_path)
+            except OSError:
+                pass
+            if error:
+                self.toast.show(error, "error", 7000)
+                return
+            self.toast.show(f"Module {result.get('module')} is now inside "
+                            f"{result.get('workbook')}", "ok", 4000)
+            self.reload_vba(quiet=True)
+
+        excelbridge.run_async(
+            lambda: excelbridge.inject_vba(path, bas_path, module_name), done, self)
+
+    def bridge_harvest(self) -> None:
+        """Pull real 32px imageMso artwork out of the user's own Office."""
+        if not self._bridge_ready(need_package=False):
+            return
+        used = set()
+        for document in self.documents:
+            for part in document.parts.values():
+                if part.tree.root is None:
+                    continue
+                for node in part.tree.root.iter_elements():
+                    value = node.get("imageMso")
+                    if value:
+                        used.add(value)
+        from .core import msodata
+        curated = [name for name, cat in msodata.FLAT_IMAGE_MSO if cat != "More icons"]
+        names = sorted(used) + [n for n in curated if n not in used]
+        if not messagebox.askyesno(
+                "Harvest icons from Office",
+                f"Ask Excel for {len(names)} icons at 32 px (every icon this session uses, "
+                f"plus the curated set)?\n\nThey are cached and used everywhere in "
+                f"RibbonForge from then on - crisper than the 16 px pack, straight from "
+                f"your own Office, alpha channel intact.", parent=self):
+            return
+        out = excelbridge.harvest_dir()
+        self.toast.show("Excel is drawing the icons ...", "info", 3000)
+
+        def done(result, error):
+            if error:
+                self.toast.show(error, "error", 6000)
+                return
+            from .core import msoicons
+            msoicons.pack().forget()
+            self.preview.icons.clear()
+            self.preview.refresh()
+            self.toast.show(f"Harvested {result.get('saved', 0)} icons at 32 px "
+                            f"({result.get('failed', 0)} unavailable)", "ok", 4500)
+
+        excelbridge.run_async(lambda: excelbridge.harvest_icons(names, out), done, self)
+
+    def reload_vba(self, quiet: bool = False) -> None:
+        """Re-read vbaProject.bin from disk - e.g. after an injection or after
+        editing macros in Excel."""
+        if self.document is None:
+            return
+        vba = self.document.reload_vba()
+        self.revalidate(reparse=False)
+        if not quiet:
+            if vba is None:
+                self.toast.show("No VBA project in this workbook", "info")
+            else:
+                count = len(vba.procedures())
+                self.toast.show(f"VBA X-Ray: {len(vba.modules)} modules, "
+                                f"{count} procedures", "ok")
+
+    def bridge_status(self) -> None:
+        self.toast.show("Asking PowerShell about Excel ...", "info", 1500)
+
+        def done(result_status, error):
+            if error:
+                messagebox.showinfo("Excel bridge", error, parent=self)
+                return
+            status = result_status
+            lines = [
+                f"Excel installed:  {'yes, version ' + status.excel_version if status.excel_installed else 'not found'}",
+                f"Excel running now:  {'yes' if status.excel_running else 'no'}",
+                f"VBA project access trusted:  {'yes' if status.vbom_trusted else 'no - needed only for VBA injection'}",
+            ]
+            if status.detail:
+                lines.append(status.detail)
+            messagebox.showinfo("Excel bridge", "\n".join(lines), parent=self)
+
+        def probe_wrapped():
+            return excelbridge.probe()
+
+        import threading
+
+        def worker():
+            try:
+                status = probe_wrapped()
+                self.after(0, lambda: done(status, None))
+            except Exception as exc:
+                message = str(exc)
+                self.after(0, lambda: done(None, message))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _on_lab_change(self) -> None:
+        self.preview.refresh()
+
+    def restore_snapshot(self, xml: str) -> None:
+        """Bring a Time Machine snapshot back as a normal, undoable edit."""
+        if self.part is None:
+            return
+        self.editor.set_text(xml, keep_view=False)
+        self.on_editor_change()
+        self.toast.show("Snapshot restored - Ctrl+Z undoes it", "ok")
 
     # ------------------------------------------------------------- designer
     def designer_insert(self, key: str, target: Node) -> None:
@@ -1581,13 +1806,11 @@ def _looks_locked(path: str) -> bool:
 
 
 def _reveal(folder: str) -> None:
+    from .core.winplatform import IS_WINDOWS
+    if not IS_WINDOWS:
+        return
     try:
-        if sys.platform.startswith("win"):
-            os.startfile(folder)  # noqa: S606 - user-initiated
-        elif sys.platform == "darwin":
-            os.system(f'open "{folder}"')
-        else:
-            os.system(f'xdg-open "{folder}"')
+        os.startfile(folder)  # noqa: S606 - user-initiated
     except OSError:
         pass
 

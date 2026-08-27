@@ -534,12 +534,16 @@ class ImageManager(Dialog):
 class CallbackDialog(Dialog):
     """Show, copy and export the VBA the current ribbon needs."""
 
-    def __init__(self, parent, theme, document, settings, highlight: str = "") -> None:
-        super().__init__(parent, theme, "VBA callbacks", 780, 620,
+    def __init__(self, parent, theme, document, settings, highlight: str = "",
+                 vba=None) -> None:
+        super().__init__(parent, theme, "VBA callbacks", 780, 640,
                          subtitle="Every callback referenced by this ribbon, with the exact "
                                   "signature Office expects.")
         self.document = document
         self.settings = settings
+        self.vba = vba
+        self._existing = {p.name.lower() for m in vba.modules if m.kind == "standard"
+                          for p in m.procedures} if vba is not None else set()
 
         options = tk.Frame(self.body, background=theme.c("panel"))
         options.pack(fill="x", pady=(0, 8))
@@ -555,11 +559,23 @@ class CallbackDialog(Dialog):
         self.comments = tk.BooleanVar(value=True)
         ttk.Checkbutton(options, text="Usage comments", variable=self.comments,
                         command=self.regenerate).pack(side="left")
+        self.only_missing = tk.BooleanVar(value=bool(self._existing))
+        if self.vba is not None:
+            ttk.Checkbutton(options, text="Skip callbacks already in the workbook",
+                            variable=self.only_missing, command=self.regenerate
+                            ).pack(side="left", padx=10)
 
         summary = cb.summary(document)
         chip_row = tk.Frame(self.body, background=theme.c("panel"))
         chip_row.pack(fill="x", pady=(0, 6))
         Chip(chip_row, theme, f"{len(summary)} callbacks", "ok").pack(side="left", padx=(0, 6))
+        if self.vba is not None:
+            wired = sum(1 for name, _k, _n in summary if name.lower() in self._existing)
+            missing = len(summary) - wired
+            Chip(chip_row, theme, f"{wired} already in {self.vba.project_name or 'the workbook'}",
+                 "info").pack(side="left", padx=(0, 6))
+            if missing:
+                Chip(chip_row, theme, f"{missing} missing", "warn").pack(side="left", padx=(0, 6))
         conflicts = [c for c in cb.collect(document) if c.conflict]
         if conflicts:
             Chip(chip_row, theme, f"{len(conflicts)} signature clash", "error").pack(side="left")
@@ -587,10 +603,12 @@ class CallbackDialog(Dialog):
 
     def regenerate(self) -> None:
         module = self.module.get().strip() or "RibbonCallbacks"
+        skip = sorted(self._existing) if (self.vba is not None and self.only_missing.get()) else []
         code = cb.generate_module(
             self.document, module_name=module,
             include_pointer_recovery=self.pointer.get(),
-            include_usage_comments=self.comments.get())
+            include_usage_comments=self.comments.get(),
+            existing_names=skip)
         self.text.delete("1.0", "end")
         self.text.insert("1.0", code)
         self._colourise()
