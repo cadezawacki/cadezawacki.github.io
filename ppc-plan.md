@@ -1,7 +1,16 @@
 # ppc.html — Cade & Avery Life Planner — Implementation Plan
 
-Status: **planning complete — approved for implementation.**
-Scope: new page `ppc.html` + small `sw.js` extension + `tools/ppc-make-login.mjs`. No card on index.html.
+Status: **IMPLEMENTED** (all milestones M1–M7 shipped and verified).
+Scope: new page `ppc.html` (~573KB) + small `sw.js` extension + `tools/ppc-make-login.mjs`. No card on index.html.
+
+## As built — deviations from the plan below
+
+- Zone page: the budget bar is **pinned above** the section tabs (tabs are List · Builder · Mood) rather than being a fourth tab — it is small and always relevant.
+- Status set: `untouched / planning / buying / installing / done` (colors gray/purple/amber/blue/green).
+- Weekly showdown renders as **quarter crown counts** (🏆 per past week won) instead of a stored +25/+10 bonus — the crowns ARE the showdown display; all other scoring rules are as specified and derived on render.
+- "Free warp": box/triangle corners convert the shape to an absolute polygon on first warp (context menu → Warp corners), then each vertex drags freely; circles stay affine (move/resize/rotate).
+- Notes blobs are plain strings (no `{_chunks}` packing) — couple-scale notes never approach the 10MB cap.
+- Test infrastructure: every milestone was verified with two real browser contexts against the production RTDB (websocket relayed through the sandbox proxy), covering live convergence, authorship, offline queues, conflicts, builder co-editing, feed, and scoring determinism. The database was wiped clean of test data afterwards.
 
 ## Context
 
