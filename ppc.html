@@ -268,6 +268,7 @@ svg { display: block; }
   border-radius: var(--radius-md); color: var(--text-muted);
 }
 .menubar-btn:hover { background: var(--surface-hover); color: var(--text); }
+.menubar-btn.on { color: var(--accent); background: var(--accent-bg); }
 .menubar-btn svg { width: 15px; height: 15px; fill: currentColor; }
 
 /* ============================================
@@ -753,6 +754,73 @@ svg[data-tool]:not([data-tool="select"]):not([data-tool="erase"]) .bld-shape { p
 .tc-laps div { padding: 2px 0; border-bottom: 1px dashed var(--border); }
 
 /* ============================================
+   Calendar
+   ============================================ */
+.cal-scroll { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 10px 14px 40px; }
+.cal-head { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
+.cal-head h3 { font-size: 1.05rem; font-weight: 600; flex: 1; }
+.cal-nav { display: flex; gap: 2px; }
+.cal-nav button { padding: 4px 12px; border-radius: 8px; color: var(--text-muted); font-size: 1rem; }
+.cal-nav button:hover { background: var(--surface-hover); }
+.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; margin-bottom: 12px; }
+.cal-dow { text-align: center; font-family: var(--font-mono); font-size: 0.56rem; color: var(--text-faint); padding: 2px 0; }
+.cal-cell {
+  aspect-ratio: 1 / 0.9; border-radius: 9px; background: var(--surface); border: 1px solid var(--border);
+  display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 2px;
+  padding-top: 4px; font-size: 0.72rem; color: var(--text-muted); cursor: pointer;
+}
+.cal-cell.other { opacity: 0.35; }
+.cal-cell.today { border-color: var(--accent); color: var(--text); font-weight: 700; }
+.cal-cell.sel { background: var(--accent-bg); border-color: var(--accent); }
+.cal-cell .cc-dots { display: flex; gap: 2px; flex-wrap: wrap; justify-content: center; padding: 0 2px; }
+.cal-cell .cc-dots i { width: 5px; height: 5px; border-radius: 50%; }
+.cal-day-title { display: flex; align-items: baseline; gap: 8px; margin: 4px 2px 6px; }
+.cal-day-title h4 { font-size: 0.85rem; font-weight: 600; flex: 1; }
+.ev-row {
+  display: flex; align-items: center; gap: 9px; width: 100%; text-align: left;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+  padding: 8px 10px; margin-bottom: 6px; min-height: 44px;
+}
+.ev-row .ev-bar { width: 4px; align-self: stretch; border-radius: 2px; flex-shrink: 0; }
+.ev-row .ev-mid { flex: 1; min-width: 0; }
+.ev-row .ev-t { font-size: var(--text-sm); font-weight: 600; }
+.ev-row .ev-time { font-family: var(--font-mono); font-size: 0.64rem; color: var(--text-muted); }
+.ev-add { color: var(--text-muted); justify-content: center; border-style: dashed; }
+
+/* ============================================
+   Today dashboard
+   ============================================ */
+.td-card {
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg);
+  padding: 11px 12px; margin-bottom: 10px;
+}
+.td-head {
+  display: flex; align-items: center; gap: 6px; margin-bottom: 8px; cursor: pointer;
+  font-size: 0.68rem; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase; color: var(--text-faint);
+  user-select: none; -webkit-user-select: none;
+}
+.td-head .td-more { margin-left: auto; color: var(--text-faint); font-size: 0.85rem; }
+.td-pills { display: flex; gap: 7px; }
+.td-pill {
+  flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px;
+  border: 1.5px solid var(--border); border-radius: 12px; padding: 8px 2px 6px;
+  font-size: 0.6rem; color: var(--text-muted); min-height: 56px;
+}
+.td-pill .tp-ic { font-size: 17px; }
+.td-pill.done { border-color: var(--success); background: var(--success-bg); }
+.td-pill.done::after { content: '✓ done'; color: var(--success); font-weight: 700; }
+.td-pill.skipped { border-style: dotted; opacity: 0.7; }
+.td-pill.skipped::after { content: 'skipped'; }
+.td-pill:not(.done):not(.skipped)::after { content: 'tap'; color: var(--text-faint); }
+.td-duel { margin-top: 9px; }
+.td-empty { color: var(--text-faint); font-size: var(--text-sm); padding: 4px 0; }
+.td-room { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; padding: 7px 4px; border-radius: 8px; font-size: var(--text-sm); font-weight: 600; }
+.td-room:hover { background: var(--surface-hover); }
+.td-room .mi-when { margin-left: auto; font-family: var(--font-mono); font-size: 0.62rem; color: var(--text-faint); font-weight: 400; }
+.td-house { display: flex; align-items: center; gap: 10px; font-size: var(--text-sm); }
+.td-house .budget-bar { flex: 1; height: 10px; }
+
+/* ============================================
    Mobile
    ============================================ */
 @media (pointer: coarse) {
@@ -790,6 +858,10 @@ svg[data-tool]:not([data-tool="select"]):not([data-tool="erase"]) .bld-shape { p
   <div class="menubar">
     <a class="menubar-logo" href="https://cadezawacki.github.io/" aria-label="home"></a>
     <nav class="app-tabs" aria-label="apps">
+      <button class="seg-tab" data-app="today" id="tab-today">
+        <svg viewBox="0 0 24 24"><path d="M12 7a5 5 0 1 0 0 10 5 5 0 0 0 0-10zm0-5l1.5 3h-3L12 2zm0 20l-1.5-3h3L12 22zM2 12l3-1.5v3L2 12zm20 0l-3 1.5v-3L22 12zM4.9 4.9l3.2 1.1-2.1 2.1L4.9 4.9zm14.2 14.2l-3.2-1.1 2.1-2.1 1.1 3.2zM4.9 19.1l1.1-3.2 2.1 2.1-3.2 1.1zM19.1 4.9l-1.1 3.2-2.1-2.1 3.2-1.1z"/></svg>
+        <span class="seg-label">Today</span>
+      </button>
       <button class="seg-tab" data-app="notes" id="tab-notes">
         <svg viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
         <span class="seg-label">Notes</span>
@@ -807,6 +879,9 @@ svg[data-tool]:not([data-tool="select"]):not([data-tool="erase"]) .bld-shape { p
       <button class="menu-trigger" id="menu-app-btn" aria-expanded="false" aria-haspopup="true">⋯</button>
       <div class="menu-dropdown" id="menu-app"></div>
     </div>
+    <button class="menubar-btn" id="cal-btn" aria-label="calendar" title="calendar">
+      <svg viewBox="0 0 24 24"><path d="M19 4h-1V2h-2v2H8V2H6v2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2zm0 16H5V10h14v10zM5 8V6h14v2H5z"/></svg>
+    </button>
     <div class="menubar-spacer"></div>
     <span class="user-chip" id="user-chip"></span>
     <div class="sync-dot" id="sync-dot" title="Sync off"></div>
@@ -868,6 +943,12 @@ svg[data-tool]:not([data-tool="select"]):not([data-tool="erase"]) .bld-shape { p
     <div class="fit-scroll" id="fit-main"></div>
     <div class="fit-scroll" id="fit-feed" style="display:none"></div>
     <div class="fit-scroll" id="fit-tools" style="display:none"></div>
+  </div>
+  <div class="screen" id="screen-cal">
+    <div class="cal-scroll" id="cal-body"></div>
+  </div>
+  <div class="screen" id="screen-today">
+    <div class="fit-scroll" id="today-body"></div>
   </div>
 
   <div class="footer">
@@ -1006,6 +1087,35 @@ svg[data-tool]:not([data-tool="select"]):not([data-tool="erase"]) .bld-shape { p
     <div class="modal-title">Link to item</div>
     <div class="modal-desc">The shape wears the item's name on the plan.</div>
     <div id="link-list"></div>
+  </div>
+</div>
+
+<!-- ===== Calendar: event editor ===== -->
+<div class="modal-overlay" id="event-overlay">
+  <div class="modal-dialog" style="width:330px">
+    <div class="modal-title" id="ev-lbl">New event</div>
+    <div class="form-group">
+      <label class="form-label" for="ev-title">What</label>
+      <input class="form-input" id="ev-title" type="text" maxlength="80" autocomplete="off">
+    </div>
+    <div class="it-two">
+      <div class="form-group">
+        <label class="form-label" for="ev-date">Day</label>
+        <input class="form-input" id="ev-date" type="date">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="ev-time">Time</label>
+        <input class="form-input" id="ev-time" type="time">
+      </div>
+    </div>
+    <div class="form-group">
+      <div class="color-row" id="ev-colors"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-danger" id="ev-delete" style="margin-right:auto">Delete</button>
+      <button class="btn" onclick="closeModal('event-overlay')">Cancel</button>
+      <button class="btn btn-primary" id="ev-save">Save</button>
+    </div>
   </div>
 </div>
 
@@ -1782,14 +1892,14 @@ $('menu-app-btn').addEventListener('click', e => {
 document.addEventListener('click', closeAllMenus);
 
 // --- router
-const APPS = { notes: {}, home: {}, fit: {} };   // apps register {mount, unmount, menu, stat}
+const APPS = { today: {}, notes: {}, home: {}, fit: {}, cal: {} };   // apps register {mount, unmount, menu, stat}
 let currentApp = null;
 let currentUnmount = null;
 
 function route() {
   const h = location.hash.replace(/^#/, '');
-  const app = h.split('/')[0] || (store.get('ppc-pref:ui.lastApp') || 'notes');
-  const target = APPS[app] ? app : 'notes';
+  const app = h.split('/')[0] || 'today';   // the day starts on the overview
+  const target = APPS[app] ? app : 'today';
   if (!location.hash) { history.replaceState(null, '', '#' + target); }
   // per-app remount even on subroute change: apps handle their own subroutes
   if (currentApp !== target) {
@@ -1799,6 +1909,7 @@ function route() {
     document.querySelectorAll('.screen').forEach(s => s.classList.remove('on'));
     $('screen-' + target).classList.add('on');
     document.querySelectorAll('.seg-tab').forEach(t => t.classList.toggle('on', t.dataset.app === target));
+    $('cal-btn').classList.toggle('on', target === 'cal');
     const a = APPS[target];
     if (a.mount) currentUnmount = a.mount() || null;
     touchPresence();
@@ -2422,7 +2533,15 @@ const Notes = (() => {
   function scheduleBroadcast() { clearTimeout(castTimer); castTimer = setTimeout(doBroadcast, 500); }
   async function doBroadcast() {
     if (!roomId || !db || !editor) return;
-    if (!syncState.connected) return;   // dirty flag + onConnect reconcile handle the flush
+    if (!syncState.connected) {
+      // dirty + onConnect reconcile normally flush this; the retry loop is a
+      // backstop for a missed connect edge so a merge/conflict resolution can
+      // never sit unpushed forever
+      const rid = roomId;
+      clearTimeout(retryTimer);
+      retryTimer = setTimeout(() => { if (roomId === rid && dirty) doBroadcast(); }, 5000);
+      return;
+    }
     if (suppress) { clearTimeout(castTimer); castTimer = setTimeout(doBroadcast, 250); return; }
     const id = roomId;
     const text = curText();
@@ -2527,6 +2646,7 @@ const Notes = (() => {
   /* ---- reconcile (REST bypasses the SDK's stale local cache) -------------- */
   async function reconcile(id) {
     if (!db || roomId !== id) return;
+    if (conflictOpen) return;   // never rebuild the modal under the user's finger
     let server = null;
     try {
       const ctrl = new AbortController();
@@ -2600,6 +2720,7 @@ const Notes = (() => {
 
   let conflictServer = null;
   function showConflict(s) {
+    if (conflictOpen) { conflictServer = s; return; }   // keep the newest server copy, keep the DOM still
     conflictServer = s;
     conflictOpen = true;
     const ops = _lineDiffOps(curText(), s.t);
@@ -2698,6 +2819,8 @@ const Notes = (() => {
 
   function openRoom(id) {
     if (!index[id] || roomId === id) return;
+    if (!editor) buildEditorOnce();   // reachable before the notes screen ever mounted
+    if (!editor) return;
     closeRoom();
     roomId = id;
     store.set('ppc-notes-room', id);
@@ -4152,7 +4275,9 @@ const Fit = (() => {
     const mult = 1 + 0.05 * Math.min(sweepStreak(u, k), 10);
     let p = scoringDone ? Math.round(scoringDone * C.pts * mult) : 0;
     if (scoringDone && isSweep(k, u)) p += C.sweep;
-    if (k < todayKey()) {
+    // Miss penalties only on closed days the app was in play (someone logged
+    // something) — a shared vacation or pre-adoption history isn't a debt.
+    if (k < todayKey() && (dayObj(k).C || dayObj(k).A)) {
       const missed = HABITS[u].filter(h => !resolvedAt(k, u, h)).length;
       p -= missed * C.penalty;
     }
@@ -4555,21 +4680,28 @@ const Fit = (() => {
     if (v === 'tools') renderTools();
   }
 
+  // Habit log, rules and shared timers are watched GLOBALLY (from login on):
+  // the Today card and timer alerts must work from any screen.
+  let _globalInit = false;
+  function initGlobal() {
+    if (_globalInit) return;
+    _globalInit = true;
+    KV.watch('fit/days', v => {
+      days = v || {};
+      renderMain();
+      updateFooterStat();
+      if (window.PPCToday) window.PPCToday.render();
+    });
+    KV.watch('fit/config', v => { config = v || {}; renderMain(); if (window.PPCToday) window.PPCToday.render(); });
+    KV.watch('fit/timers', v => { timers = v || {}; renderTools(); updateWakeLock(); });
+    toolTimer = setInterval(toolTick, 250);   // countdown alerts fire from any screen
+  }
+
   APPS.fit.mount = () => {
-    unwatch = [
-      KV.watch('fit/days', v => { days = v || {}; renderMain(); updateFooterStat(); }),
-      KV.watch('fit/config', v => { config = v || {}; renderMain(); }),
-      KV.watch('fit/timers', v => { timers = v || {}; renderTools(); updateWakeLock(); }),
-    ];
     watchFeedMonth();
-    clearInterval(toolTimer);
-    toolTimer = setInterval(toolTick, 100);
     APPS.fit.subroute(location.hash.replace(/^#/, ''));
     return () => {
-      unwatch.forEach(u => u());
-      unwatch = [];
       if (unwatchFeed) { unwatchFeed(); unwatchFeed = null; }
-      clearInterval(toolTimer);   // timers keep state; display resumes on remount
     };
   };
   APPS.fit.subroute = h => {
@@ -4589,10 +4721,321 @@ const Fit = (() => {
     apply: () => renderMain(),
   });
 
-  return { _debug: () => ({ view, days, weekPoints: { C: weekPoints('C', weekKeys(0)), A: weekPoints('A', weekKeys(0)) }, crowns: { C: crowns('C'), A: crowns('A') } }),
+  function summary() {
+    const tk = todayKey();
+    return {
+      habitsMine: HABITS[ME].map(h => ({
+        h, icon: HM[h].icon, label: HM[h].label,
+        done: didAt(tk, ME, h), skipped: skipAt(tk, ME, h),
+      })),
+      doneMine: doneCount(tk, ME),
+      totalMine: HABITS[ME].length,
+      doneOther: doneCount(tk, OTHER(ME)),
+      totalOther: HABITS[OTHER(ME)].length,
+      weekC: weekPoints('C', weekKeys(0)),
+      weekA: weekPoints('A', weekKeys(0)),
+    };
+  }
+
+  return { initGlobal, summary, quickToggle: toggleHabit,
+    _debug: () => ({ view, days, weekPoints: { C: weekPoints('C', weekKeys(0)), A: weekPoints('A', weekKeys(0)) }, crowns: { C: crowns('C'), A: crowns('A') } }),
     _score: { dayPoints, duelPoints, weekPoints, sweepStreak, habitStreak, weekKeys } };
 })();
 window.PPCFit = Fit;
+
+/* ============================================
+   §13b CALENDAR — shared, month-sharded (cal/<YYYY-MM>/<id>), tap to add,
+   color-coded, with while-open notifications. The current and next month
+   are watched globally so Today and reminders work from any screen.
+   ============================================ */
+const Cal = (() => {
+  let events = {};              // ym -> {id: ev}
+  const watched = new Map();    // ym -> unwatch
+  const dk2 = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  const todayK = () => dk2(new Date());
+  const ymOf = key => key.slice(0, 7);
+  const ymAdd = (ym, n) => {
+    let y = +ym.slice(0, 4), m = +ym.slice(5, 7) - 1 + n;
+    y += Math.floor(m / 12); m = ((m % 12) + 12) % 12;
+    return y + '-' + String(m + 1).padStart(2, '0');
+  };
+  let viewYm = ymOf(todayK());
+  let selDate = todayK();
+  let editId = null, editWasYm = null;
+  let evColor = 'teal';
+  const notified = new Set();
+
+  function watchYm(ym) {
+    if (watched.has(ym)) return;
+    watched.set(ym, KV.watch('cal/' + ym, v => {
+      events[ym] = v || {};
+      if (currentApp === 'cal') renderCal();
+      if (currentApp === 'today' && window.PPCToday) window.PPCToday.render();
+    }));
+  }
+  function ensureWatches() {
+    const want = new Set([ymOf(todayK()), ymAdd(ymOf(todayK()), 1), ymAdd(viewYm, -1), viewYm, ymAdd(viewYm, 1)]);
+    for (const ym of want) watchYm(ym);
+    for (const [ym, un] of watched) if (!want.has(ym)) { un(); watched.delete(ym); }
+  }
+
+  const allEvents = () => {
+    const out = [];
+    for (const [ym, m] of Object.entries(events)) {
+      if (!watched.has(ym)) continue;
+      for (const [id, ev] of Object.entries(m || {})) {
+        if (ev && ev.title && ev.date) out.push({ id, ym, ...ev });
+      }
+    }
+    return out;
+  };
+  const eventsOn = key => allEvents().filter(e => e.date === key)
+    .sort((a, b) => (a.time || '') < (b.time || '') ? -1 : 1);
+  const upcoming = n => allEvents()
+    .filter(e => e.date >= todayK())
+    .sort((a, b) => (a.date + (a.time || '')) < (b.date + (b.time || '')) ? -1 : 1)
+    .slice(0, n);
+  const catColor2 = c => 'var(--cat-' + (CAT_COLORS.includes(c) ? c : 'teal') + ')';
+
+  /* ---- notifications (while any screen of the app is open) ---- */
+  setInterval(() => {
+    if (!ME) return;
+    const tk = todayK();
+    const now = Date.now();
+    for (const ev of allEvents()) {
+      if (ev.date !== tk || !ev.time) continue;
+      const t = new Date(+tk.slice(0, 4), +tk.slice(5, 7) - 1, +tk.slice(8, 10), +ev.time.slice(0, 2), +ev.time.slice(3, 5)).getTime();
+      for (const [tag, from, to, msg] of [
+        ['soon', t - 600000, t - 540000, ev.title + ' in 10 minutes'],
+        ['now', t, t + 60000, ev.title + ' — now'],
+      ]) {
+        const key = ev.id + ':' + tag + ':' + ev.date + (ev.time || '');
+        if (now >= from && now < to && !notified.has(key)) {
+          notified.add(key);
+          haptic(150);
+          showToast('📅 ' + msg, 'success', 6000);
+          try { if (Notification.permission === 'granted') new Notification('📅 ' + ev.title, { body: tag === 'now' ? 'Now' : 'In 10 minutes' }); } catch {}
+        }
+      }
+    }
+  }, 20000);
+
+  /* ---- render ---- */
+  function renderCal() {
+    if (currentApp !== 'cal') return;
+    ensureWatches();
+    const el = $('cal-body');
+    const y = +viewYm.slice(0, 4), mo = +viewYm.slice(5, 7) - 1;
+    const first = new Date(y, mo, 1);
+    const startOffset = (first.getDay() + 6) % 7;   // Monday grid
+    const gridStart = new Date(y, mo, 1 - startOffset);
+    const tk = todayK();
+    let cells = '';
+    for (let i = 0; i < 42; i++) {
+      const d = new Date(gridStart); d.setDate(gridStart.getDate() + i);
+      const key = dk2(d);
+      const evs = eventsOn(key);
+      const dots = evs.slice(0, 4).map(e => `<i style="background:${catColor2(e.color)}"></i>`).join('');
+      cells += `<button class="cal-cell${ymOf(key) !== viewYm ? ' other' : ''}${key === tk ? ' today' : ''}${key === selDate ? ' sel' : ''}" data-d="${key}">
+        ${d.getDate()}<span class="cc-dots">${dots}</span></button>`;
+      if (i === 41 && ymOf(key) !== viewYm && d.getDate() < 8) break;
+    }
+    const selD = new Date(+selDate.slice(0, 4), +selDate.slice(5, 7) - 1, +selDate.slice(8, 10));
+    const selLbl = selDate === tk ? 'Today' : selD.toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' });
+    const dows = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+    el.innerHTML = `
+      <div class="cal-head">
+        <h3>${first.toLocaleDateString([], { month: 'long', year: 'numeric' })}</h3>
+        <span class="cal-nav"><button id="cal-prev">‹</button><button id="cal-today-btn" style="font-size:0.7rem">today</button><button id="cal-next">›</button></span>
+      </div>
+      <div class="cal-grid">${dows.map(d => `<span class="cal-dow">${d}</span>`).join('')}${cells}</div>
+      <div class="cal-day-title"><h4>${selLbl}</h4></div>
+      ${eventsOn(selDate).map(e => `<button class="ev-row" data-ev="${e.id}" data-evym="${e.ym}">
+        <span class="ev-bar" style="background:${catColor2(e.color)}"></span>
+        <span class="ev-mid"><span class="ev-t">${esc(e.title)}</span>${e.time ? `<br><span class="ev-time">${esc(e.time)}</span>` : ''}</span>
+        <span class="by-chip ${e.by === 'A' ? 'u-a' : 'u-c'}">${e.by === 'A' ? 'A' : 'C'}</span>
+      </button>`).join('')}
+      <button class="ev-row ev-add" id="ev-add">＋ add on ${selLbl.toLowerCase()}</button>`;
+    el.querySelectorAll('.cal-cell').forEach(c => c.addEventListener('click', () => {
+      if (selDate === c.dataset.d) { openEvent(selDate, null); return; }   // second tap adds
+      selDate = c.dataset.d;
+      if (ymOf(selDate) !== viewYm) viewYm = ymOf(selDate);
+      renderCal();
+    }));
+    $('cal-prev').addEventListener('click', () => { viewYm = ymAdd(viewYm, -1); renderCal(); });
+    $('cal-next').addEventListener('click', () => { viewYm = ymAdd(viewYm, 1); renderCal(); });
+    $('cal-today-btn').addEventListener('click', () => { viewYm = ymOf(todayK()); selDate = todayK(); renderCal(); });
+    el.querySelectorAll('[data-ev]').forEach(r => r.addEventListener('click', () => openEvent(null, r.dataset.ev, r.dataset.evym)));
+    $('ev-add').addEventListener('click', () => openEvent(selDate, null));
+  }
+
+  /* ---- event editor ---- */
+  function paintEvColors() {
+    $('ev-colors').innerHTML = CAT_COLORS.map(c =>
+      `<button class="color-pick${c === evColor ? ' sel' : ''}" data-c="${c}" style="--rm-c:${catColor2(c)}"></button>`).join('');
+    $('ev-colors').querySelectorAll('.color-pick').forEach(b => b.addEventListener('click', () => { evColor = b.dataset.c; paintEvColors(); }));
+  }
+  function openEvent(dateKey, id, ym) {
+    editId = id || null;
+    editWasYm = ym || null;
+    const ev = id ? ((events[ym] || {})[id] || {}) : {};
+    evColor = ev.color || 'teal';
+    $('ev-lbl').textContent = id ? 'Edit event' : 'New event';
+    $('ev-title').value = ev.title || '';
+    $('ev-date').value = ev.date || dateKey || todayK();
+    $('ev-time').value = ev.time || '';
+    $('ev-delete').style.display = id ? '' : 'none';
+    paintEvColors();
+    openModal('event-overlay');
+    if (!id) setTimeout(() => $('ev-title').focus(), 50);
+    try { if (Notification.permission === 'default') Notification.requestPermission(); } catch {}
+  }
+  $('ev-save').addEventListener('click', () => {
+    const title = $('ev-title').value.trim();
+    const date = $('ev-date').value;
+    if (!title || !/^\d{4}-\d{2}-\d{2}$/.test(date)) { $('ev-title').focus(); return; }
+    const ev = { title, date, time: $('ev-time').value || null, color: evColor };
+    const id = editId || uid();
+    const ym = ymOf(date);
+    if (editId && editWasYm && editWasYm !== ym) KV.remove('cal/' + editWasYm + '/' + editId);
+    if (editId) { const old = (events[editWasYm] || {})[editId]; if (old && old.by) ev.by = old.by; }
+    KV.set('cal/' + ym + '/' + id, ev);
+    selDate = date;
+    viewYm = ym;
+    closeModal('event-overlay');
+    renderCal();
+  });
+  $('ev-delete').addEventListener('click', () => {
+    if (!editId) return;
+    const ev = (events[editWasYm] || {})[editId] || {};
+    askConfirm('Delete "' + (ev.title || 'event') + '"?', 'Removed from both calendars.', () => {
+      KV.remove('cal/' + editWasYm + '/' + editId);
+      closeModal('event-overlay');
+      renderCal();
+    }, 'Delete');
+  });
+
+  /* ---- app registration ---- */
+  APPS.cal.mount = () => {
+    viewYm = ymOf(todayK());
+    selDate = todayK();
+    ensureWatches();
+    renderCal();
+    return () => {};
+  };
+  APPS.cal.subroute = () => renderCal();
+  APPS.cal.menu = () =>
+    `<button class="menu-item" onclick="location.hash='#today'">Today overview</button>`;
+  APPS.cal.stat = () => {
+    const up = upcoming(1)[0];
+    return up ? 'next: ' + up.title + (up.date === todayK() && up.time ? ' ' + up.time : '') : 'no upcoming events';
+  };
+  const initGlobal = () => ensureWatches();
+  return { initGlobal, upcoming, eventsOn, todayK, catColor: catColor2,
+    _debug: () => ({ months: [...watched.keys()], count: allEvents().length }) };
+})();
+window.PPCCal = Cal;
+
+/* ============================================
+   §13c TODAY — the landing overview: calendar, habits, notes, house.
+   ============================================ */
+const Today = (() => {
+  let notesIdx = {}, zones = {}, items = {};
+  let unwatch = [];
+  const money = n => '$' + (n || 0).toLocaleString('en-US', Math.round(n) === n ? {} : { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const agoTxt = ts => {
+    if (!ts) return '';
+    const m = Math.round((Date.now() - ts) / 60000);
+    return m < 1 ? 'now' : m < 60 ? m + 'm' : m < 1440 ? Math.round(m / 60) + 'h' : Math.round(m / 1440) + 'd';
+  };
+
+  function render() {
+    if (currentApp !== 'today') return;
+    const el = $('today-body');
+    if (!el) return;
+    const s = Fit.summary();
+    const tk = Cal.todayK();
+    const evToday = Cal.eventsOn(tk);
+    const evNext = Cal.upcoming(8).filter(e => e.date !== tk).slice(0, 3);
+    const now = new Date();
+    const total = s.weekC + s.weekA;
+    const wc = total ? Math.round(s.weekC / Math.max(1, total) * 100) : 50;
+    const rooms = Object.entries(notesIdx)
+      .filter(([, r]) => r && r.name)
+      .sort((a, b) => (b[1].lastModified || 0) - (a[1].lastModified || 0))
+      .slice(0, 3);
+    const spent = Object.values(items).reduce((a, z) => a + Object.values(z || {})
+      .reduce((b, it) => b + ((it && typeof it.price === 'number') ? it.price : 0), 0), 0);
+    const budget = Object.values(zones).reduce((a, z) => a + ((z && z.budgetMax) || 0), 0);
+    const evRow = e => `<button class="ev-row" data-nav="#cal">
+      <span class="ev-bar" style="background:${Cal.catColor(e.color)}"></span>
+      <span class="ev-mid"><span class="ev-t">${esc(e.title)}</span><br><span class="ev-time">${e.date === tk ? (e.time || 'today') : new Date(+e.date.slice(0, 4), +e.date.slice(5, 7) - 1, +e.date.slice(8, 10)).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' }) + (e.time ? ' · ' + e.time : '')}</span></span>
+      <span class="by-chip ${e.by === 'A' ? 'u-a' : 'u-c'}">${e.by === 'A' ? 'A' : 'C'}</span></button>`;
+
+    el.innerHTML = `
+      <div class="fit-head"><h3>${now.toLocaleDateString([], { weekday: 'long' })}</h3>
+        <span class="fh-date">${now.toLocaleDateString([], { month: 'short', day: 'numeric' }).toUpperCase()} · HI ${MY_NAME.toUpperCase()}</span></div>
+
+      <div class="td-card">
+        <div class="td-head" data-nav="#cal">📅 Calendar<span class="td-more">›</span></div>
+        ${evToday.map(evRow).join('') || '<div class="td-empty">nothing scheduled today</div>'}
+        ${evNext.length ? '<div class="td-head" style="margin-top:8px;cursor:default">Coming up</div>' + evNext.map(evRow).join('') : ''}
+      </div>
+
+      <div class="td-card">
+        <div class="td-head" data-nav="#fit">💪 Habits — ${s.doneMine} of ${s.totalMine}<span class="td-more">›</span></div>
+        <div class="td-pills">${s.habitsMine.map(h =>
+          `<button class="td-pill${h.done ? ' done' : ''}${h.skipped ? ' skipped' : ''}" data-hab="${h.h}"><span class="tp-ic">${h.icon}</span>${h.label}</button>`).join('')}</div>
+        <div class="td-duel">
+          <div class="duel-names" style="font-size:0.7rem"><span class="dn-c">Cade · ${s.weekC}</span><span class="dn-a">Avery · ${s.weekA}</span></div>
+          <div class="duel-bar" style="height:8px"><i class="db-c" style="width:${wc}%"></i><i class="db-a" style="width:${100 - wc}%"></i></div>
+        </div>
+      </div>
+
+      <div class="td-card">
+        <div class="td-head" data-nav="#notes">✏️ Notes<span class="td-more">›</span></div>
+        ${rooms.map(([id, r]) => `<button class="td-room" data-nav="#notes/${esc(id)}">
+          <span class="mi-dot" style="background:var(--cat-${CAT_COLORS.includes(r.color) ? r.color : 'neutral'})"></span>
+          <span style="color:var(--cat-${CAT_COLORS.includes(r.color) ? r.color : 'neutral'})">${esc(r.name)}</span>
+          <span class="mi-when">${agoTxt(r.lastModified)}</span></button>`).join('') || '<div class="td-empty">no rooms yet</div>'}
+      </div>
+
+      <div class="td-card">
+        <div class="td-head" data-nav="#home">🏠 House<span class="td-more">›</span></div>
+        <div class="td-house">
+          <span>${money(spent)}${budget ? ' / ' + money(budget) : ''}</span>
+          ${budget ? `<div class="budget-bar"><div class="budget-fill${spent > budget ? '' : ''}" style="width:${Math.min(100, spent / budget * 100)}%"></div>${spent > budget ? `<div class="budget-fill over" style="width:${Math.min(30, (spent - budget) / budget * 100)}%"></div>` : ''}</div>` : '<span class="td-empty">no budgets set</span>'}
+        </div>
+      </div>`;
+
+    el.querySelectorAll('[data-nav]').forEach(x => x.addEventListener('click', e => {
+      if (e.target.closest && e.target.closest('[data-hab]')) return;
+      location.hash = x.dataset.nav;
+    }));
+    el.querySelectorAll('[data-hab]').forEach(p => p.addEventListener('click', e => {
+      e.stopPropagation();
+      Fit.quickToggle(p.dataset.hab);
+    }));
+  }
+
+  APPS.today.mount = () => {
+    unwatch = [
+      KV.watch('notes/index', v => { notesIdx = v || {}; render(); }),
+      KV.watch('home/zones', v => { zones = v || {}; render(); }),
+      KV.watch('home/items', v => { items = v || {}; render(); }),
+    ];
+    render();
+    return () => { unwatch.forEach(u => u()); unwatch = []; };
+  };
+  APPS.today.subroute = () => render();
+  APPS.today.menu = () => `<button class="menu-item" onclick="location.hash='#cal'">Calendar</button>`;
+  APPS.today.stat = () => {
+    const s = Fit.summary();
+    return s.doneMine + '/' + s.totalMine + ' habits';
+  };
+  return { render };
+})();
+window.PPCToday = Today;
 
 /* ============================================
    §14 BOOT
@@ -4609,6 +5052,9 @@ function enterApp(fresh) {
   clockArm();
   initFirebase();
   watchPresence();
+  Cal.initGlobal();     // calendar months (Today card + reminders from any screen)
+  Fit.initGlobal();     // habit log + rules + timers (Today card, timer alerts)
+  $('cal-btn').addEventListener('click', () => { location.hash = '#cal'; });
   route();
   if (Settings.get('sync.debug')) $('sync-log').classList.add('open');
   if (fresh) showToast('hi, ' + MY_NAME);
