@@ -10,8 +10,11 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <link rel="icon" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%23111110'/><circle cx='32' cy='32' r='7' fill='%230f9598'/></svg>">
-  <link rel="apple-touch-icon" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' fill='%23111110'/><circle cx='32' cy='32' r='9' fill='%230f9598'/></svg>">
+  <!-- Dot favicon. Safari/iOS ignore SVG favicons and apple-touch-icon must be
+       a fetchable PNG, so real PNG files back up the crisp SVG data URI. -->
+  <link rel="icon" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%23111110'/><circle cx='32' cy='32' r='12' fill='%230f9598'/></svg>">
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/ppc-icon-32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="assets/ppc-icon.png">
   <link href="https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600&f[]=jetbrains-mono@400,500&display=swap" rel="stylesheet">
 
 <style>
@@ -1831,6 +1834,8 @@ const Settings = (() => {
             `<option value="${esc(o.value)}"${String(val) === String(o.value) ? ' selected' : ''}>${esc(o.label)}</option>`).join('') + `</select>`;
         } else if (def.type === 'number') {
           ctrl = `<input class="form-input" style="width:72px" type="number" data-skey="${esc(def.key)}" value="${esc(val)}"${def.min != null ? ` min="${def.min}"` : ''}${def.max != null ? ` max="${def.max}"` : ''}>`;
+        } else if (def.type === 'button') {
+          ctrl = `<button class="btn" data-sbtn="${esc(def.key)}">${esc(def.buttonLabel || def.label)}</button>`;
         }
         html += `<div class="setting-row"><div class="setting-info"><div class="setting-label">${esc(def.label)}</div>${def.hint ? `<div class="setting-hint">${esc(def.hint)}</div>` : ''}</div><div class="setting-control">${ctrl}</div></div>`;
       }
@@ -1845,6 +1850,10 @@ const Settings = (() => {
         const v = def.type === 'toggle' ? el.checked : el.value;
         setVal(key, v);
       });
+    });
+    wrap.querySelectorAll('[data-sbtn]').forEach(el => {
+      const def = registry.get(el.getAttribute('data-sbtn'));
+      if (def && def.onClick) el.addEventListener('click', def.onClick);
     });
   }
   return { registerSetting, get, set: setVal, render };
@@ -2054,6 +2063,39 @@ Settings.registerSetting({
   hint: 'Show a live pane of sync events',
   apply: v => { $('sync-log').classList.toggle('open', v === true || v === 'true'); },
 });
+Settings.registerSetting({
+  key: 'app.hardReload', label: 'Hard reload', type: 'button', section: 'Advanced',
+  buttonLabel: 'Reload now',
+  hint: 'Re-download the app from the network and refresh caches',
+  onClick: () => window.ppcForceReload(),
+});
+
+// Force a fresh copy of the app from the network: wipe the service-worker
+// caches, ask the SW to re-precache + activate any waiting version, then
+// reload. Local state (rooms, prefs, pending ops) lives in localStorage/IDB
+// and is untouched; the reload's pagehide flushes any in-flight note edits.
+window.ppcForceReload = async function () {
+  closeAllMenus();
+  try { closeModal('settings-overlay'); } catch {}
+  showToast('Refreshing app…', 'success', 2000);
+  try {
+    if (window.caches && caches.keys) {
+      const names = await caches.keys();
+      await Promise.all(names.map(n => caches.delete(n)));
+    }
+    if (navigator.serviceWorker) {
+      try {
+        const c = navigator.serviceWorker.controller;
+        if (c) { c.postMessage('REFRESH_CACHE'); c.postMessage('SKIP_WAITING'); }
+      } catch {}
+      if (navigator.serviceWorker.getRegistrations) {
+        const regs = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(regs.map(r => r.update().catch(() => {})));
+      }
+    }
+  } catch {}
+  setTimeout(() => { try { location.reload(); } catch { location.href = location.href; } }, 300);
+};
 
 /* ============================================
    §02 IDB STORE — big-blob cache (images) in its own database, separate
