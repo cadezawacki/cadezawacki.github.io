@@ -136,6 +136,11 @@ body {
 
 button { font-family: inherit; color: inherit; background: none; border: none; cursor: pointer; }
 button, a, .menu-item, .seg-tab { -webkit-tap-highlight-color: transparent; }
+/* No text selection on chrome/controls, and no double-tap zoom on taps. */
+button, a, label, .menu-dropdown, .bld-ctx, .zn-tabs, .app-tabs, .fp-legend, .statusleg,
+.status-pill, .fc-tag, .tc-chip, .hab-row, .room-pill, .fab {
+  user-select: none; -webkit-user-select: none; touch-action: manipulation;
+}
 input, select, textarea { font-family: inherit; color: inherit; }
 svg { display: block; }
 
@@ -1782,17 +1787,28 @@ $('footer-clock').addEventListener('click', () => {
 
 // --- visualViewport pinning: keep the fixed body sized to the visible area so
 // the iOS keyboard doesn't shove the chrome around. Never use transforms here.
+// Pin ONLY while the keyboard is plausibly up — a stale pin after it closes
+// left the footer floating mid-screen; when in doubt, clear back to inset:0.
 (function () {
   const vv = window.visualViewport;
   if (!vv) return;
   let raf = 0;
   function apply() {
-    document.body.style.height = vv.height + 'px';
-    document.body.style.top = (vv.offsetTop || 0) + 'px';
+    const keyboardUp = (window.innerHeight - vv.height) > 120;
+    if (keyboardUp) {
+      document.body.style.height = vv.height + 'px';
+      document.body.style.top = (vv.offsetTop || 0) + 'px';
+    } else {
+      document.body.style.height = '';
+      document.body.style.top = '';
+    }
   }
   function sched() { if (raf) return; raf = requestAnimationFrame(() => { raf = 0; apply(); }); }
   vv.addEventListener('resize', sched);
   vv.addEventListener('scroll', sched);
+  window.addEventListener('resize', sched);
+  // iOS sometimes skips the resize after a blur — re-check shortly after.
+  document.addEventListener('focusout', () => setTimeout(sched, 250));
 })();
 
 // --- cross-tab
@@ -2031,6 +2047,8 @@ const Notes = (() => {
   let authors = '';              // one char per line: C | A | B
   let authorsRev = 0;
   let ver = 0;                   // last known server version for this room
+  let baseText = null;           // last server-agreed doc (3-way merge base)
+  let baseAuthors = '';
   let dirty = false;             // local edits not yet confirmed on the server
   let suppress = false;          // applying a remote change
   let lastLocalEdit = 0;
@@ -2217,10 +2235,93 @@ const Notes = (() => {
   }
   const curText = () => editor ? editor.state.doc.toString() : '';
 
+  /* ---- three-way line merge ------------------------------------------------
+     Both users type at once constantly; whole-blob last-write-wins silently
+     dropped the earlier writer's newest lines. With the last server-agreed
+     base kept, edits touching DISJOINT base lines merge; only true overlaps
+     fall back to local-wins/conflict. */
+  function diffSegs(bText, xText) {
+    // Replacement segments over base line indexes: base [bs,be) → X [xs,xe).
+    const ops = _lineDiffOps(bText, xText);
+    const segs = [];
+    let bi = 0, xi = 0, cur = null;
+    for (const op of ops) {
+      if (op.t === '=') {
+        if (cur) { segs.push(cur); cur = null; }
+        bi++; xi++;
+      } else if (op.t === '-') {
+        if (!cur) cur = { bs: bi, be: bi, xs: xi, xe: xi };
+        cur.be++; bi++;
+      } else {
+        if (!cur) cur = { bs: bi, be: bi, xs: xi, xe: xi };
+        cur.xe++; xi++;
+      }
+    }
+    if (cur) segs.push(cur);
+    return segs;
+  }
+  function merge3(bText, mineText, mineAuthors, theirsText, theirsAuthors) {
+    if (bText == null) return null;
+    const segsM = diffSegs(bText, mineText);
+    let segsT = diffSegs(bText, theirsText);
+    const bLines = bText.split('\n');
+    const mLines = mineText.split('\n'), tLines = theirsText.split('\n');
+    // Overlaps are fatal UNLESS both sides made the identical change there
+    // (common after the partner adopted our pushes and built on them) — then
+    // theirs' copy of the segment is dropped and ours is emitted once.
+    const segLines = (seg, lines) => lines.slice(seg.xs, seg.xe).join('\n');
+    const dropT = new Set();
+    for (const a of segsM) for (const b of segsT) {
+      if (a.be <= b.bs || b.be <= a.bs) continue;   // disjoint (touching inserts ok)
+      const identical = a.bs === b.bs && a.be === b.be && segLines(a, mLines) === segLines(b, tLines);
+      if (identical) { dropT.add(b); continue; }
+      return null;                                   // genuinely conflicting edits
+    }
+    segsT = segsT.filter(s => !dropT.has(s));
+    const mAuth = normAuthors(mineAuthors, mLines.length, 'B');
+    const tAuth = normAuthors(theirsAuthors, tLines.length, 'B');
+    const events = [];
+    segsM.forEach(s => events.push({ ...s, who: 'm' }));
+    segsT.forEach(s => events.push({ ...s, who: 't' }));
+    events.sort((x, y) => x.bs - y.bs || (x.who === 'm' ? -1 : 1));
+    const out = [], outA = [];
+    let bi = 0, mShift = 0;   // mineIdx = baseIdx + mShift on kept lines
+    for (const ev of events) {
+      while (bi < ev.bs) { out.push(bLines[bi]); outA.push(mAuth[bi + mShift] || 'B'); bi++; }
+      const src = ev.who === 'm' ? mLines : tLines;
+      const srcA = ev.who === 'm' ? mAuth : tAuth;
+      for (let x = ev.xs; x < ev.xe; x++) { out.push(src[x]); outA.push(srcA[x] || 'B'); }
+      bi = ev.be;
+      if (ev.who === 'm') mShift += (ev.xe - ev.xs) - (ev.be - ev.bs);
+    }
+    while (bi < bLines.length) { out.push(bLines[bi]); outA.push(mAuth[bi + mShift] || 'B'); bi++; }
+    return { text: out.join('\n'), authors: outA.join('') };
+  }
+
+  function applyMerged(m, r) {
+    if (m.text === r.t) { applyRemote({ t: r.t, a: normAuthors(m.authors, lineCount(r.t), 'B'), v: r.v }); return; }
+    const cur = curText();
+    suppress = true;
+    try {
+      authors = normAuthors(m.authors, lineCount(m.text), 'B');
+      authorsRev++;
+      editor.dispatch({ changes: _minimalRemoteChange(cur, m.text) });
+    } finally { suppress = false; }
+    ver = Math.max(ver, r.v || 0);
+    baseText = r.t;
+    baseAuthors = r.a;
+    dirty = true;               // merged doc is ahead of the server — push it
+    pendingRemote = null;
+    persistNow();
+    updateStat();
+    scheduleBroadcast();
+    slog('notes: merged concurrent edits');
+  }
+
   /* ---- persistence -------------------------------------------------------- */
   function persistNow() {
     if (!roomId || !editor) return;
-    store.set(cacheKey(roomId), JSON.stringify({ t: curText(), a: authors, ver, dirty }));
+    store.set(cacheKey(roomId), JSON.stringify({ t: curText(), a: authors, ver, dirty, b: baseText, ba: baseAuthors }));
   }
   function schedulePersist() { clearTimeout(saveTimer); saveTimer = setTimeout(persistNow, 300); }
   window.addEventListener('pagehide', persistNow);
@@ -2244,6 +2345,10 @@ const Notes = (() => {
       await withTimeout(db.ref(PPC_BASE + '/' + P(id) + '/blob').set(enc), 15000);
       if (roomId !== id) return;
       ver = Math.max(ver, newVer);
+      // NOTE: baseText deliberately NOT advanced here. The merge base must be
+      // the last text OBSERVED from the partner (the common ancestor) — if it
+      // advanced to our own push, a concurrent blob built on the older
+      // ancestor would look like "nothing of ours to keep" and clobber us.
       if (curText() === text) dirty = false;
       persistNow();
       KV.set('notes/index/' + id + '/lastModified', Date.now());
@@ -2272,16 +2377,23 @@ const Notes = (() => {
 
   function handleRemote(r) {
     if (!editor || !roomId || conflictOpen) return;
+    if (r.v && r.v < ver) return;              // stale snapshot — never go backwards
     const cur = curText();
     if (r.t === cur) {
       if (r.a !== authors) { authors = r.a; authorsRev++; editor.dispatch({}); }
       ver = Math.max(ver, r.v);
+      baseText = cur;
+      baseAuthors = r.a;
       dirty = false;
       persistNow();
       return;
     }
     if (Date.now() - lastLocalEdit < 4000) { pendingRemote = r; return; }
-    if (dirty) { scheduleRepair(); return; }   // local wins; reconcile untangles
+    if (cur === baseText) { applyRemote(r); return; }        // nothing of ours since last observation
+    if (r.t === baseText) { dirty = true; doBroadcast(); return; }  // server shows our old ancestor — re-push
+    const m = merge3(baseText, cur, authors, r.t, r.a);
+    if (m) { applyMerged(m, r); return; }
+    if (dirty) { scheduleRepair(); return; }   // overlapping edits: local wins; reconcile untangles
     applyRemote(r);
   }
 
@@ -2294,6 +2406,8 @@ const Notes = (() => {
       editor.dispatch({ changes: _minimalRemoteChange(cur, r.t) });
     } finally { suppress = false; }
     ver = Math.max(ver, r.v || 0);
+    baseText = r.t;
+    baseAuthors = r.a;
     dirty = false;
     pendingRemote = null;
     persistNow();
@@ -2343,10 +2457,15 @@ const Notes = (() => {
     try { s = JSON.parse(payload); } catch { s = { t: payload }; }
     if (typeof s.t !== 'string') return;
     const sa = normAuthors(s.a, lineCount(s.t), s.by || 'B');
-    if (s.t === cur) { ver = Math.max(ver, sVer); dirty = false; if (sa !== authors) { authors = sa; authorsRev++; editor.dispatch({}); } persistNow(); return; }
+    if (s.t === cur) { ver = Math.max(ver, sVer); dirty = false; baseText = cur; baseAuthors = sa; if (sa !== authors) { authors = sa; authorsRev++; editor.dispatch({}); } persistNow(); return; }
+    if (sVer < ver) { if (dirty) doBroadcast(); return; }   // stale REST snapshot — never adopt older
     if (sVer <= ver && dirty) { doBroadcast(); return; }
     if (s.t === '') { doBroadcast(); return; }
     if (cur === '' && !dirty) { applyRemote({ t: s.t, a: sa, v: sVer }); return; }
+    if (cur === baseText) { applyRemote({ t: s.t, a: sa, v: sVer }); return; }
+    if (s.t === baseText) { dirty = true; doBroadcast(); return; }
+    const m = merge3(baseText, cur, authors, s.t, sa);
+    if (m) { applyMerged(m, { t: s.t, a: sa, v: sVer }); return; }
     if (!dirty) { applyRemote({ t: s.t, a: sa, v: sVer }); return; }
     if (cur.includes(s.t)) { doBroadcast(); return; }
     if (s.t.includes(cur)) { applyRemote({ t: s.t, a: sa, v: sVer }); return; }
@@ -2428,6 +2547,9 @@ const Notes = (() => {
       authorsRev++;
       editor.dispatch({ changes: { from: 0, to: cur.length, insert: merged } });
     } finally { suppress = false; }
+    baseText = s.t;                 // server currently holds theirs
+    baseAuthors = s.a;
+    ver = Math.max(ver, s.v || 0);
     dirty = true;
     persistNow();
     doBroadcast();
@@ -2493,6 +2615,8 @@ const Notes = (() => {
     const text = c && typeof c.t === 'string' ? c.t : '';
     ver = (c && c.ver) || 0;
     dirty = !!(c && c.dirty);
+    baseText = c && typeof c.b === 'string' ? c.b : null;
+    baseAuthors = (c && c.ba) || '';
     authors = text === '' ? ME : normAuthors(c && c.a, lineCount(text), 'B');
     authorsRev++;
     setEditorDoc(text);
@@ -2675,8 +2799,8 @@ const Notes = (() => {
   };
   APPS.notes.onConnect = () => { if (roomId) reconcile(roomId); };
 
-  return { openRoom, get roomId() { return roomId; }, _mapAuthors: mapAuthors, _deriveAuthors: deriveAuthors,
-    _debug: () => ({ roomId, authors, authorsRev, ver, dirty, suppress, pendingRemote: !!pendingRemote, conflictOpen }) };
+  return { openRoom, get roomId() { return roomId; }, _mapAuthors: mapAuthors, _deriveAuthors: deriveAuthors, _merge3: merge3,
+    _debug: () => ({ roomId, authors, authorsRev, ver, dirty, suppress, pendingRemote: !!pendingRemote, conflictOpen, base: baseText }) };
 })();
 window.PPCNotes = Notes;
 
@@ -4129,9 +4253,10 @@ const Fit = (() => {
     setView(sub === 'feed' ? 'feed' : sub === 'tools' ? 'tools' : 'main');
   };
   APPS.fit.menu = () =>
-    `<button class="menu-item" onclick="location.hash='#fit'">Today</button>` +
-    `<button class="menu-item" onclick="location.hash='#fit/feed'">Proof feed</button>` +
-    `<button class="menu-item" onclick="location.hash='#fit/tools'">Timer & stopwatch</button>`;
+    `<button class="menu-item" onclick="location.hash='#fit'">Habits</button>` +
+    `<button class="menu-item" onclick="location.hash='#fit/feed'">Feed</button>` +
+    `<button class="menu-item" onclick="location.hash='#fit/tools'">Timers</button>` +
+    `<button class="menu-item" onclick="ppcFitRules()">Scoring rules…</button>`;
   APPS.fit.stat = () => doneCount(todayKey(), ME) + '/' + HABITS[ME].length + ' today';
 
   Settings.registerSetting({
