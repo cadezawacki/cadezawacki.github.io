@@ -1,0 +1,13 @@
+{
+  "name": "ppc",
+  "short_name": "ppc",
+  "start_url": "./ppc.html",
+  "id": "./ppc.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#111110",
+  "theme_color": "#111110",
+  "icons": [
+    { "src": "assets/ppc-icon.png", "sizes": "180x180", "type": "image/png" }
+  ]
+}
