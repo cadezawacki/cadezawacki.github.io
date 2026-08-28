@@ -783,6 +783,8 @@ svg[data-tool]:not([data-tool="select"]):not([data-tool="erase"]) .bld-shape { p
 .feed-post .fp-cap { font-size: var(--text-sm); flex: 1; }
 .feed-post .fp-tag { font-size: 0.6rem; color: var(--accent); font-family: var(--font-mono); }
 .feed-post .fp-when { font-size: 0.6rem; color: var(--text-faint); font-family: var(--font-mono); flex-shrink: 0; }
+.feed-post .fp-del { color: var(--text-faint); padding: 2px 6px; border-radius: 6px; flex-shrink: 0; font-size: 0.7rem; }
+.feed-post .fp-del:hover { color: var(--error); background: var(--surface-hover); }
 .feed-more { width: 100%; text-align: center; padding: 10px; color: var(--text-muted); font-size: var(--text-sm); }
 
 /* tools */
@@ -5056,13 +5058,13 @@ const Fit = (() => {
     const draft = document.getElementById('fc-cap') ? document.getElementById('fc-cap').value : '';
     const posts = [];
     for (const ym of feedMonths) {
-      for (const [id, p] of Object.entries(feed[ym] || {})) if (p && p.ts) posts.push([id, p]);
+      for (const [id, p] of Object.entries(feed[ym] || {})) if (p && p.ts) posts.push([id, p, ym]);
     }
     posts.sort((a, b) => b[1].ts - a[1].ts);
     const tk = todayKey(), yk = dk(addDays(new Date(), -1));
     let lastDay = null;
     let list = '';
-    for (const [id, p] of posts) {
+    for (const [id, p, ym] of posts) {
       const day = dk(new Date(p.ts));
       if (day !== lastDay) {
         lastDay = day;
@@ -5075,7 +5077,9 @@ const Fit = (() => {
         `<div class="fp-body"><span class="by-chip ${p.by === 'A' ? 'u-a' : 'u-c'}">${p.by === 'A' ? 'A' : 'C'}</span>` +
         `<span class="fp-cap">${esc(p.caption || '')}</span>` +
         (p.habit ? `<span class="fp-tag">#${HM[p.habit] ? HM[p.habit].label.toLowerCase() : p.habit}</span>` : '') +
-        `<span class="fp-when">${fmtT(p.ts)}</span></div></div>`;
+        `<span class="fp-when">${fmtT(p.ts)}</span>` +
+        (p.by === ME ? `<button class="fp-del" data-del="${esc(id)}" data-ym="${ym}" title="delete post">✕</button>` : '') +
+        `</div></div>`;
     }
     el.innerHTML = `
       <div class="feed-composer">
@@ -5117,6 +5121,18 @@ const Fit = (() => {
       fImg = null; fTag = null;
       renderFeed();
     });
+    el.querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', () => {
+      const id = b.dataset.del, ym = b.dataset.ym;
+      const p = (feed[ym] || {})[id];
+      if (!p || p.by !== ME) return;   // only your own posts
+      askConfirm('Delete this post?', 'Removed from the feed for both of you.', () => {
+        KV.remove('fit/feed/' + ym + '/' + id);
+        if (p.img) KV.remove('fit/img/' + p.img);
+        // months older than the watched one only live in local state — prune it
+        if (feed[ym]) delete feed[ym][id];
+        renderFeed();
+      }, 'Delete');
+    }));
     const more = $('feed-more');
     if (more) more.addEventListener('click', loadEarlier);
   }
