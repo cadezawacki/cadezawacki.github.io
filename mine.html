@@ -2478,8 +2478,9 @@ function revealFlood(i) {
   const order = [];
   const dist = new Map([[i, 0]]);
   const queue = [i];
-  while (queue.length) {
-    const cur = queue.shift();
+  let qHead = 0;                       // index pointer: shift() is O(n²) on big floods
+  while (qHead < queue.length) {
+    const cur = queue[qHead++];
     if (G.state[cur] === ST_REVEALED || G.state[cur] === ST_FLAG || G.mines[cur]) continue;
     G.state[cur] = ST_REVEALED;
     G.revealedSafe++;
@@ -2731,7 +2732,9 @@ function updateHUD() {
   const minesEl = $('mines-left');
   if (minesEl && G) {
     const left = (G.minesTotal || 0) - (G.flags || 0);
-    minesEl.textContent = String(Math.max(-99, left)).padStart(3, '0').replace('-0', '-');
+    minesEl.textContent = left < 0
+      ? '-' + String(Math.min(99, -left)).padStart(2, '0')
+      : String(Math.min(999, left)).padStart(3, '0');
   }
   const timeEl = $('time-lcd');
   if (timeEl && G) {
@@ -4292,7 +4295,8 @@ const Rogue = {
   playStage(run) {
     const spec = Rogue.stageSpec(run.runSeed, run.stage);
     closeSheet(); closeDrawer();
-    newGame(spec, { mode: 'rogue', rogue: { stage: run.stage, runSeed: run.runSeed } });
+    // runs are inherently timed — practice mode doesn't apply here
+    newGame(spec, { mode: 'rogue', rogue: { stage: run.stage, runSeed: run.runSeed }, practice: false });
   },
   onFinish(result) {
     const run = Rogue.run();
@@ -4425,8 +4429,10 @@ function challengeLinkFor(result) {
 const ModeHooks = {
   onFinish(result) {
     if (result.mode === 'daily' && result.dailyKey) {
-      store.setJSON('daily-done:' + result.dailyKey, { t: result.timeMs, s: result.score, won: result.won, un: result.undos });
-      refreshDailyBadge();
+      if (!result.practice) {
+        store.setJSON('daily-done:' + result.dailyKey, { t: result.timeMs, s: result.score, won: result.won, un: result.undos });
+        refreshDailyBadge();
+      }
     } else if (result.mode === 'rogue') {
       Rogue.onFinish(result);
     } else if (result.mode === 'story') {
@@ -4670,7 +4676,7 @@ function panelDaily(body) {
   }
   body.appendChild(h('div.row', { style: { margin: '8px 0 18px' } },
     h('button.btn.primary', { onclick: () => { playDaily().catch(e => showToast('Daily fetch failed — ' + e.message)); } },
-      done ? 'Play it again (practice)' : 'Play today\'s challenge'),
+      done ? 'Play it again (best result counts)' : 'Play today\'s challenge'),
   ));
 
   if (!Cloud.on || !Cloud.userKey) { connectPrompt(body, 'Connect to fetch the shared daily seed, post your score and see the loss heatmap.'); return; }
