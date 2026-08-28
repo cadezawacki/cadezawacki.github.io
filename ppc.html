@@ -687,6 +687,17 @@ svg[data-tool]:not([data-tool="select"]):not([data-tool="erase"]) .bld-shape { p
 .hab-row.partner { opacity: 0.85; cursor: default; }
 .hab-row.partner .hb-tick { border-style: dashed; }
 .hab-row.partner.done .hb-tick { border-style: solid; }
+.hab-row.skipped .hb-t { color: var(--text-faint); font-style: italic; }
+.hab-row.skipped .hb-tick { border-style: dotted; color: var(--text-faint); font-size: 15px; }
+
+/* timers */
+.timer-add-row { display: flex; gap: 8px; margin-bottom: 10px; }
+.timer-add-row .btn { flex: 1; }
+.tc-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 4px; }
+.tc-head .tc-title { margin-bottom: 0; flex: 1; text-align: left; }
+.tc-head .tc-del { color: var(--text-faint); padding: 2px 8px; border-radius: 6px; }
+.tc-head .tc-del:hover { color: var(--error); }
+.tc-by { font-size: 0.58rem; color: var(--text-faint); font-family: var(--font-mono); }
 
 .week-grid { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 10px 12px; margin-bottom: 12px; }
 .wg-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
@@ -995,6 +1006,29 @@ svg[data-tool]:not([data-tool="select"]):not([data-tool="erase"]) .bld-shape { p
     <div class="modal-title">Link to item</div>
     <div class="modal-desc">The shape wears the item's name on the plan.</div>
     <div id="link-list"></div>
+  </div>
+</div>
+
+<!-- ===== Fit: scoring rules ===== -->
+<div class="modal-overlay" id="rules-overlay">
+  <div class="modal-dialog" style="width:340px">
+    <div class="modal-title">Scoring rules</div>
+    <div class="modal-desc">Shared between you two. Scores recompute from the log instantly — past days included. Cade's workout is his own extra: it counts for sweeps but scores 0.</div>
+    <div class="it-two">
+      <div class="form-group"><label class="form-label" for="rl-pts">Points per habit</label><input class="form-input" id="rl-pts" type="number" min="0" step="1"></div>
+      <div class="form-group"><label class="form-label" for="rl-sweep">Sweep bonus</label><input class="form-input" id="rl-sweep" type="number" min="0" step="1"></div>
+    </div>
+    <div class="it-two">
+      <div class="form-group"><label class="form-label" for="rl-pen">Miss penalty</label><input class="form-input" id="rl-pen" type="number" min="0" step="1"></div>
+      <div class="form-group"><label class="form-label" for="rl-win">Duel win</label><input class="form-input" id="rl-win" type="number" min="0" step="1"></div>
+    </div>
+    <div class="form-group"><label class="form-label" for="rl-lose">Duel slack penalty</label><input class="form-input" id="rl-lose" type="number" min="0" step="1">
+      <div class="form-hint">Skipping a habit (long-press it) is excused: no points, no penalties, streaks survive.</div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal('rules-overlay')">Cancel</button>
+      <button class="btn btn-primary" id="rl-save">Save</button>
+    </div>
   </div>
 </div>
 
@@ -4056,13 +4090,15 @@ const Fit = (() => {
   };
 
   let days = {};        // fit/days
-  let goals = {};       // fit/goals
+  let config = {};      // fit/config — shared scoring rules
+  let timers = {};      // fit/timers — shared, multiple
   let feed = {};        // {ym: {id: post}}
   let feedMonths = [];  // loaded months, desc
   let unwatch = [];
   let unwatchFeed = null;
   let view = 'main';
   let weekOffset = 0;
+  const CFG = () => ({ pts: 10, sweep: 5, penalty: 2, duelWin: 3, duelLose: 2, ...(config || {}) });
 
   /* ---- date helpers (local time — same household) ---- */
   const dk = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
@@ -4084,11 +4120,14 @@ const Fit = (() => {
     return Array.from({ length: 7 }, (_, i) => dk(addDays(start, i)));
   };
 
-  /* ---- scoring ---- */
+  /* ---- scoring (all values from the shared, editable fit/config) ---- */
   const dayObj = k => days[k] || {};
-  const didAt = (k, u, h) => !!((dayObj(k)[u] || {})[h]);
+  const didAt = (k, u, h) => typeof ((dayObj(k)[u] || {})[h]) === 'number';
+  const skipAt = (k, u, h) => ((dayObj(k)[u] || {})[h]) === 'skip';
+  const resolvedAt = (k, u, h) => didAt(k, u, h) || skipAt(k, u, h);
   const doneCount = (k, u) => HABITS[u].filter(h => didAt(k, u, h)).length;
-  const isSweep = (k, u) => HABITS[u].every(h => didAt(k, u, h));
+  // sweep tolerates permitted skips but needs at least one real completion
+  const isSweep = (k, u) => HABITS[u].every(h => resolvedAt(k, u, h)) && HABITS[u].some(h => didAt(k, u, h));
   function sweepStreak(u, endKey) {
     let n = 0, d = parseKey(endKey);
     while (isSweep(dk(d), u)) { n++; d = addDays(d, -1); if (n > 3650) break; }
@@ -4097,24 +4136,38 @@ const Fit = (() => {
   function habitStreak(u, h) {
     let d = new Date();
     if (!didAt(dk(d), u, h)) d = addDays(d, -1);
-    let n = 0;
-    while (didAt(dk(d), u, h)) { n++; d = addDays(d, -1); if (n > 3650) break; }
+    let n = 0, guard = 0;
+    for (;;) {
+      if (didAt(dk(d), u, h)) n++;
+      else if (!skipAt(dk(d), u, h)) break;   // a skip preserves the streak
+      d = addDays(d, -1);
+      if (++guard > 3650) break;
+    }
     return n;
   }
   function dayPoints(u, k) {
-    const done = doneCount(k, u);
-    if (!done) return 0;
+    const C = CFG();
+    // Cade's extra workout counts toward sweeps but never scores points.
+    const scoringDone = SHARED.filter(h => HABITS[u].includes(h) && didAt(k, u, h)).length;
     const mult = 1 + 0.05 * Math.min(sweepStreak(u, k), 10);
-    return Math.round(done * 10 * mult) + (isSweep(k, u) ? 5 : 0);
+    let p = scoringDone ? Math.round(scoringDone * C.pts * mult) : 0;
+    if (scoringDone && isSweep(k, u)) p += C.sweep;
+    if (k < todayKey()) {
+      const missed = HABITS[u].filter(h => !resolvedAt(k, u, h)).length;
+      p -= missed * C.penalty;
+    }
+    return p;
   }
   function duelPoints(u, k) {
     if (k >= todayKey()) return 0;   // only closed days duel
+    const C = CFG();
     const o = OTHER(u);
     let p = 0;
     for (const h of SHARED) {
+      if (skipAt(k, u, h) || skipAt(k, o, h)) continue;   // excused — no duel
       const me = didAt(k, u, h), them = didAt(k, o, h);
-      if (me && !them) p += 3;
-      if (!me && them) p -= 2;
+      if (me && !them) p += C.duelWin;
+      if (!me && them) p -= C.duelLose;
     }
     return p;
   }
@@ -4138,21 +4191,23 @@ const Fit = (() => {
 
   function habRow(u, h, mine) {
     const tk = todayKey();
-    const ts = (dayObj(tk)[u] || {})[h];
-    const done = !!ts;
+    const val = (dayObj(tk)[u] || {})[h];
+    const done = typeof val === 'number';
+    const skipped = val === 'skip';
     const streak = habitStreak(u, h);
     let sub;
-    if (done) sub = fmtT(ts);
-    else if (h === 'wrk') sub = 'Cade only · +10 pts';
+    if (done) sub = fmtT(val);
+    else if (skipped) sub = 'skipped — excused';
+    else if (h === 'wrk') sub = "Cade's extra · sweeps only, 0 pts";
     else {
       const otherDid = didAt(tk, OTHER(u), h);
       sub = otherDid ? USER_NAMES[OTHER(u)] + ' already did ' + (OTHER(u) === 'A' ? 'hers' : 'his') : 'not yet';
     }
-    return `<button class="hab-row${done ? ' done' : ''}${mine ? '' : ' partner'}" data-h="${h}" ${mine ? '' : 'disabled'}>
+    return `<button class="hab-row${done ? ' done' : ''}${skipped ? ' skipped' : ''}${mine ? '' : ' partner'}" data-h="${h}" ${mine ? '' : 'disabled'}>
       <span class="hb-ic">${HM[h].icon}</span>
       <span class="hb-mid"><span class="hb-t">${HM[h].label}</span><br><span class="hb-s">${sub}</span></span>
       ${streak ? `<span class="hb-flame">🔥 ${streak}</span>` : ''}
-      <span class="hb-tick">✓</span>
+      <span class="hb-tick">${skipped ? '–' : '✓'}</span>
     </button>`;
   }
 
@@ -4196,32 +4251,65 @@ const Fit = (() => {
           <span class="wg-nav"><button id="wg-prev">‹</button><button id="wg-next"${weekOffset >= 0 ? ' disabled style="opacity:.3"' : ''}>›</button></span></div>
         ${gv(weekOffset)}
       </div>
-      <div class="goal-card">
-        <div class="fit-subh" style="margin-top:0">Goals</div>
-        <div class="gc-row"><span class="gc-who" style="color:var(--user-c)">Cade</span><span class="gc-text${ME === 'C' ? ' mine' : ''}" data-goal="C">${esc((goals.C && goals.C.text) || (ME === 'C' ? 'tap to set a goal' : '—'))}</span></div>
-        <div class="gc-row"><span class="gc-who" style="color:var(--user-a)">Avery</span><span class="gc-text${ME === 'A' ? ' mine' : ''}" data-goal="A">${esc((goals.A && goals.A.text) || (ME === 'A' ? 'tap to set a goal' : '—'))}</span></div>
-      </div>`;
-    el.querySelectorAll('.hab-row:not(.partner)').forEach(row => row.addEventListener('click', () => toggleHabit(row.dataset.h)));
+      <div class="form-hint" style="text-align:center;margin-bottom:8px">tap = done · long-press = permitted skip</div>`;
+    el.querySelectorAll('.hab-row:not(.partner)').forEach(row => {
+      const h = row.dataset.h;
+      let lpT = 0, lpFired = false, sx = 0, sy = 0;
+      row.addEventListener('pointerdown', e => {
+        lpFired = false; sx = e.clientX; sy = e.clientY;
+        lpT = setTimeout(() => { lpFired = true; skipHabit(h); }, 500);
+      });
+      row.addEventListener('pointermove', e => { if (Math.hypot(e.clientX - sx, e.clientY - sy) > 10) clearTimeout(lpT); });
+      row.addEventListener('pointerup', () => clearTimeout(lpT));
+      row.addEventListener('pointercancel', () => clearTimeout(lpT));
+      row.addEventListener('contextmenu', e => { e.preventDefault(); clearTimeout(lpT); });
+      row.addEventListener('click', () => { if (!lpFired) toggleHabit(h); });
+    });
     $('wg-prev').addEventListener('click', () => { weekOffset--; renderMain(); });
     $('wg-next').addEventListener('click', () => { if (weekOffset < 0) { weekOffset++; renderMain(); } });
-    const mineGoal = el.querySelector('.gc-text.mine');
-    if (mineGoal) mineGoal.addEventListener('click', async () => {
-      const t = await askPrompt('Your goal', { value: (goals[ME] && goals[ME].text) || '', placeholder: 'e.g. 5k under 30 min by October' });
-      if (t != null) KV.set('fit/goals/' + ME, { text: t.trim() || null });
-    });
     updateFooterStat();
   }
 
   function toggleHabit(h) {
     const tk = todayKey();
     const path = 'fit/days/' + tk + '/' + ME + '/' + h;
-    if (didAt(tk, ME, h)) {
+    if (skipAt(tk, ME, h)) {
+      askConfirm('Un-skip ' + HM[h].label + '?', 'Back on the hook for today.', () => KV.remove(path), 'Un-skip');
+    } else if (didAt(tk, ME, h)) {
       askConfirm('Undo ' + HM[h].label + '?', 'Removes today\'s checkmark.', () => KV.remove(path), 'Undo');
     } else {
       KV.set(path, Date.now());
       haptic(18);
     }
   }
+  function skipHabit(h) {
+    const tk = todayKey();
+    if (didAt(tk, ME, h) || skipAt(tk, ME, h)) return;
+    askConfirm('Skip ' + HM[h].label + ' today?', 'Excused: no points, no penalty, streak survives, duel sits out.', () => {
+      KV.set('fit/days/' + tk + '/' + ME + '/' + h, 'skip');
+    }, 'Skip');
+  }
+
+  /* ---- scoring rules modal ---- */
+  window.ppcFitRules = () => {
+    closeAllMenus();
+    const C = CFG();
+    $('rl-pts').value = C.pts;
+    $('rl-sweep').value = C.sweep;
+    $('rl-pen').value = C.penalty;
+    $('rl-win').value = C.duelWin;
+    $('rl-lose').value = C.duelLose;
+    openModal('rules-overlay');
+  };
+  $('rl-save').addEventListener('click', () => {
+    const num = (id, dflt) => { const v = parseFloat($(id).value); return isNaN(v) || v < 0 ? dflt : v; };
+    KV.set('fit/config', {
+      pts: num('rl-pts', 10), sweep: num('rl-sweep', 5), penalty: num('rl-pen', 2),
+      duelWin: num('rl-win', 3), duelLose: num('rl-lose', 2),
+    });
+    closeModal('rules-overlay');
+    showToast('Rules updated for both of you', 'success');
+  });
 
   /* ---- feed ---- */
   let fImg = null;    // pending photo dataURL
@@ -4288,7 +4376,7 @@ const Fit = (() => {
           `<button class="fc-tag${fTag === h ? ' on' : ''}" data-h="${h}">#${m.label.toLowerCase()}</button>`).join('')}</div>
         <input type="file" id="fc-file" accept="image/*" style="display:none">
       </div>
-      ${list || '<div class="zn-empty">no posts yet — first proof photo wins smugness points</div>'}
+      ${list || '<div class="zn-empty">no posts yet — first photo wins smugness points</div>'}
       ${posts.length ? `<button class="feed-more" id="feed-more">load earlier</button>` : ''}`;
     el.querySelectorAll('img[data-img-id]').forEach(img =>
       getImage('fit', img.dataset.imgId).then(d => { if (d) img.src = d; }));
@@ -4321,12 +4409,17 @@ const Fit = (() => {
     if (more) more.addEventListener('click', loadEarlier);
   }
 
-  /* ---- tools: stopwatch + countdown (local only) ---- */
-  let swRun = false, swStart = 0, swAcc = 0, swLaps = [];
-  let cdEnd = 0, cdRemain = 0, cdRun = false, cdFlash = false;
-  let toolTimer = 0;
+  /* ---- tools: shared timers (synced, multiple) ---- */
+  let unwatchTimers = null;
+  const firedEnds = new Set();     // locally-notified countdown endings
   let wakeLock = null;
+  let toolTimer = 0;
+  const TPATH = id => 'fit/timers/' + id;
+  const cdLeft = t => t.endsAt ? t.endsAt - Date.now() : (typeof t.remain === 'number' ? t.remain : (t.dur || 0));
+  const swElapsed = t => (t.acc || 0) + (t.startAt ? Date.now() - t.startAt : 0);
+  const timerRunning = t => t && ((t.kind === 'cd' && t.endsAt) || (t.kind === 'sw' && t.startAt));
   const fmtSw = ms => {
+    ms = Math.max(0, ms);
     const cs = Math.floor(ms / 10) % 100, s = Math.floor(ms / 1000) % 60, m = Math.floor(ms / 60000);
     return String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0') + '.' + String(cs).padStart(2, '0');
   };
@@ -4336,7 +4429,7 @@ const Fit = (() => {
     return String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0');
   };
   async function updateWakeLock() {
-    const want = swRun || cdRun;
+    const want = Object.values(timers).some(timerRunning);
     try {
       if (want && !wakeLock && navigator.wakeLock) {
         wakeLock = await navigator.wakeLock.request('screen');
@@ -4347,81 +4440,108 @@ const Fit = (() => {
   document.addEventListener('visibilitychange', () => { if (!document.hidden) updateWakeLock(); });
 
   function toolTick() {
-    const swEl = document.getElementById('sw-display');
-    if (swEl) swEl.textContent = fmtSw(swRun ? swAcc + (performance.now() - swStart) : swAcc);
-    const cdEl = document.getElementById('cd-display');
-    if (cdEl) {
-      const left = cdRun ? cdEnd - Date.now() : cdRemain;
-      cdEl.textContent = fmtCd(left);
-      cdEl.classList.toggle('running', cdRun);
-      cdEl.classList.toggle('flash', cdFlash);
-      if (cdRun && left <= 0) {
-        cdRun = false; cdRemain = 0; cdFlash = true;
-        haptic(300);
-        showToast('Time! ⏰', 'success', 4000);
-        renderTools();
-        updateWakeLock();
+    for (const [id, t] of Object.entries(timers)) {
+      if (!t || !t.kind) continue;
+      const el = document.querySelector('.tc-display[data-tid="' + id + '"]');
+      if (el) {
+        el.textContent = t.kind === 'cd' ? fmtCd(cdLeft(t)) : fmtSw(swElapsed(t));
+        el.classList.toggle('running', !!timerRunning(t));
+      }
+      if (t.kind === 'cd' && t.endsAt && Date.now() >= t.endsAt) {
+        const key = id + ':' + t.endsAt;
+        if (!firedEnds.has(key)) {
+          firedEnds.add(key);
+          if (el) el.classList.add('flash');
+          haptic(300);
+          showToast((t.label || 'Timer') + ' — time! \u23f0', 'success', 5000);
+          try { if (Notification.permission === 'granted') new Notification(t.label || 'Timer', { body: 'Time!' }); } catch {}
+        }
       }
     }
-    const swD = document.getElementById('sw-display');
-    if (swD) swD.classList.toggle('running', swRun);
+  }
+
+  function setTimer(id, patch) {
+    const t = { ...(timers[id] || {}), ...patch };
+    KV.set(TPATH(id), t);
+    updateWakeLock();
   }
 
   function renderTools() {
     if (currentApp !== 'fit' || view !== 'tools') return;
     const el = $('fit-tools');
-    const lastCd = parseInt(store.get('ppc-fit-timer-cfg') || '300', 10);
+    const list = Object.entries(timers)
+      .filter(([, t]) => t && t.kind)
+      .sort((a, b) => (a[1].createdAt || 0) - (b[1].createdAt || 0));
     el.innerHTML = `
-      <div class="tool-card">
-        <div class="tc-title">Countdown</div>
-        <div class="tc-display" id="cd-display">${fmtCd(cdRun ? cdEnd - Date.now() : cdRemain)}</div>
-        <div class="tc-btns">
-          <button class="btn btn-primary" id="cd-go">${cdRun ? 'Pause' : 'Start'}</button>
-          <button class="btn" id="cd-reset">Reset</button>
-        </div>
-        <div class="tc-chips">${[60, 180, 300, 600].map(s => `<button class="tc-chip" data-s="${s}">${s / 60} min</button>`).join('')}<button class="tc-chip" data-s="custom">custom</button></div>
+      <div class="timer-add-row">
+        <button class="btn" id="tt-add-cd">\uff0b Countdown</button>
+        <button class="btn" id="tt-add-sw">\uff0b Stopwatch</button>
       </div>
-      <div class="tool-card">
-        <div class="tc-title">Stopwatch</div>
-        <div class="tc-display" id="sw-display">${fmtSw(swRun ? swAcc + (performance.now() - swStart) : swAcc)}</div>
-        <div class="tc-btns">
-          <button class="btn btn-primary" id="sw-go">${swRun ? 'Stop' : 'Start'}</button>
-          <button class="btn" id="sw-lap"${swRun ? '' : ' disabled'}>Lap</button>
-          <button class="btn" id="sw-reset">Reset</button>
-        </div>
-        ${swLaps.length ? `<div class="tc-laps">${swLaps.map((l, i) => `<div>lap ${i + 1} — ${fmtSw(l)}</div>`).reverse().join('')}</div>` : ''}
-      </div>`;
-    $('cd-go').addEventListener('click', () => {
-      if (cdRun) { cdRemain = Math.max(0, cdEnd - Date.now()); cdRun = false; }
-      else {
-        if (cdRemain <= 0) cdRemain = lastCd * 1000;
-        cdEnd = Date.now() + cdRemain;
-        cdRun = true; cdFlash = false;
+      ${list.map(([id, t]) => {
+        const running = timerRunning(t);
+        const disp = t.kind === 'cd' ? fmtCd(cdLeft(t)) : fmtSw(swElapsed(t));
+        return `<div class="tool-card" data-card="${id}">
+          <div class="tc-head"><span class="tc-title">${esc(t.label || (t.kind === 'cd' ? 'Countdown' : 'Stopwatch'))}</span>
+            <span class="tc-by">${t.by === 'A' ? 'Avery' : 'Cade'}</span>
+            <button class="tc-del" data-tdel="${id}">\u2715</button></div>
+          <div class="tc-display${running ? ' running' : ''}" data-tid="${id}"${t.kind === 'cd' && !running ? ' style="cursor:pointer" title="tap to set minutes"' : ''}>${disp}</div>
+          <div class="tc-btns">
+            <button class="btn btn-primary" data-tgo="${id}">${running ? 'Pause' : 'Start'}</button>
+            <button class="btn" data-treset="${id}">Reset</button>
+          </div>
+        </div>`;
+      }).join('') || '<div class="zn-empty">no timers yet \u2014 they sync live between your phones</div>'}`;
+    $('tt-add-cd').addEventListener('click', async () => {
+      const label = await askPrompt('Countdown name', { placeholder: 'e.g. plank hold' });
+      if (label == null) return;
+      const mins = parseFloat(await askPrompt('Minutes', { type: 'number', inputmode: 'decimal', value: '5' }) || '');
+      if (!mins || mins <= 0) return;
+      setTimer(uid(), { kind: 'cd', label: (label || 'Countdown').trim().slice(0, 40), dur: Math.round(mins * 60000), remain: Math.round(mins * 60000), endsAt: null, createdAt: Date.now() });
+      try { if (Notification.permission === 'default') Notification.requestPermission(); } catch {}
+    });
+    $('tt-add-sw').addEventListener('click', async () => {
+      const label = await askPrompt('Stopwatch name', { placeholder: 'e.g. 5k run' });
+      if (label == null) return;
+      setTimer(uid(), { kind: 'sw', label: (label || 'Stopwatch').trim().slice(0, 40), acc: 0, startAt: null, createdAt: Date.now() });
+    });
+    el.querySelectorAll('[data-tgo]').forEach(b => b.addEventListener('click', () => {
+      const id = b.dataset.tgo, t = timers[id];
+      if (!t) return;
+      if (t.kind === 'cd') {
+        if (t.endsAt) setTimer(id, { remain: Math.max(0, t.endsAt - Date.now()), endsAt: null });
+        else {
+          const left = cdLeft(t);
+          setTimer(id, { endsAt: Date.now() + (left > 0 ? left : (t.dur || 60000)), remain: null });
+        }
+      } else {
+        if (t.startAt) setTimer(id, { acc: swElapsed(t), startAt: null });
+        else setTimer(id, { startAt: Date.now() });
       }
       renderTools();
-      updateWakeLock();
-    });
-    $('cd-reset').addEventListener('click', () => { cdRun = false; cdFlash = false; cdRemain = lastCd * 1000; renderTools(); updateWakeLock(); });
-    el.querySelectorAll('.tc-chip').forEach(b => b.addEventListener('click', async () => {
-      let s;
-      if (b.dataset.s === 'custom') {
-        const v = await askPrompt('Minutes', { type: 'number', inputmode: 'decimal', value: '' });
-        s = Math.round(parseFloat(v) * 60);
-        if (!s || s <= 0) return;
-      } else s = +b.dataset.s;
-      store.set('ppc-fit-timer-cfg', String(s));
-      cdRun = false; cdFlash = false; cdRemain = s * 1000;
-      renderTools();
-      updateWakeLock();
     }));
-    $('sw-go').addEventListener('click', () => {
-      if (swRun) { swAcc += performance.now() - swStart; swRun = false; }
-      else { swStart = performance.now(); swRun = true; }
+    el.querySelectorAll('[data-treset]').forEach(b => b.addEventListener('click', () => {
+      const id = b.dataset.treset, t = timers[id];
+      if (!t) return;
+      document.querySelectorAll('.tc-display.flash').forEach(x => x.classList.remove('flash'));
+      if (t.kind === 'cd') setTimer(id, { endsAt: null, remain: t.dur || 60000 });
+      else setTimer(id, { startAt: null, acc: 0 });
       renderTools();
-      updateWakeLock();
-    });
-    $('sw-lap').addEventListener('click', () => { if (swRun) { swLaps.push(swAcc + (performance.now() - swStart)); renderTools(); } });
-    $('sw-reset').addEventListener('click', () => { swRun = false; swAcc = 0; swLaps = []; renderTools(); updateWakeLock(); });
+    }));
+    el.querySelectorAll('[data-tdel]').forEach(b => b.addEventListener('click', () => {
+      const id = b.dataset.tdel, t = timers[id];
+      askConfirm('Delete "' + ((t && t.label) || 'timer') + '"?', 'Removed for both of you.', () => {
+        KV.remove(TPATH(id));
+        updateWakeLock();
+      }, 'Delete');
+    }));
+    el.querySelectorAll('.tc-display[data-tid]').forEach(d => d.addEventListener('click', async () => {
+      const id = d.dataset.tid, t = timers[id];
+      if (!t || t.kind !== 'cd' || timerRunning(t)) return;
+      const mins = parseFloat(await askPrompt('Minutes', { type: 'number', inputmode: 'decimal', value: String((t.dur || 60000) / 60000) }) || '');
+      if (!mins || mins <= 0) return;
+      setTimer(id, { dur: Math.round(mins * 60000), remain: Math.round(mins * 60000), endsAt: null });
+      renderTools();
+    }));
   }
 
   /* ---- app registration ---- */
@@ -4438,7 +4558,8 @@ const Fit = (() => {
   APPS.fit.mount = () => {
     unwatch = [
       KV.watch('fit/days', v => { days = v || {}; renderMain(); updateFooterStat(); }),
-      KV.watch('fit/goals', v => { goals = v || {}; renderMain(); }),
+      KV.watch('fit/config', v => { config = v || {}; renderMain(); }),
+      KV.watch('fit/timers', v => { timers = v || {}; renderTools(); updateWakeLock(); }),
     ];
     watchFeedMonth();
     clearInterval(toolTimer);
