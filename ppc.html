@@ -612,6 +612,99 @@ svg[data-tool]:not([data-tool="select"]):not([data-tool="erase"]) .bld-shape { p
 .status-opt.on { background: var(--surface-2); font-weight: 600; }
 
 /* ============================================
+   Fitness app
+   ============================================ */
+.fit-scroll { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 10px 14px 40px; }
+.fit-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 8px; }
+.fit-head h3 { font-size: 1.05rem; font-weight: 600; }
+.fit-head .fh-date { font-family: var(--font-mono); font-size: 0.62rem; color: var(--text-muted); letter-spacing: 0.06em; text-transform: uppercase; }
+
+.duel-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 10px 12px; margin-bottom: 12px; }
+.duel-names { display: flex; justify-content: space-between; font-size: var(--text-sm); font-weight: 700; margin-bottom: 5px; }
+.duel-names .dn-c { color: var(--user-c); }
+.duel-names .dn-a { color: var(--user-a); }
+.duel-bar { height: 11px; border-radius: 6px; overflow: hidden; display: flex; background: var(--surface-2); }
+.duel-bar i { display: block; }
+.duel-bar .db-c { background: var(--user-c); }
+.duel-bar .db-a { background: var(--user-a); margin-left: auto; }
+.duel-sub { display: flex; justify-content: space-between; font-family: var(--font-mono); font-size: 0.62rem; color: var(--text-muted); margin-top: 5px; }
+
+.fit-subh { font-size: 0.66rem; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase; color: var(--text-faint); margin: 12px 2px 6px; }
+.hab-row {
+  display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg);
+  padding: 9px 11px; margin-bottom: 7px; min-height: 52px;
+}
+.hab-row .hb-ic { width: 32px; height: 32px; border-radius: 9px; background: var(--surface-2); display: grid; place-items: center; font-size: 16px; flex-shrink: 0; }
+.hab-row .hb-mid { flex: 1; min-width: 0; }
+.hab-row .hb-t { font-size: var(--text-sm); font-weight: 600; }
+.hab-row .hb-s { font-size: 0.66rem; color: var(--text-muted); }
+.hab-row .hb-flame { font-family: var(--font-mono); font-size: 0.66rem; color: var(--text-muted); flex-shrink: 0; }
+.hab-row .hb-tick {
+  width: 26px; height: 26px; border-radius: 9px; border: 1.5px solid var(--border);
+  display: grid; place-items: center; font-size: 13px; color: transparent; flex-shrink: 0;
+  transition: background var(--transition), border-color var(--transition);
+}
+.hab-row.done .hb-tick { background: var(--success); border-color: var(--success); color: #fff; }
+.hab-row.done .hb-t { color: var(--text-muted); }
+.hab-row.partner { opacity: 0.85; cursor: default; }
+.hab-row.partner .hb-tick { border-style: dashed; }
+.hab-row.partner.done .hb-tick { border-style: solid; }
+
+.week-grid { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 10px 12px; margin-bottom: 12px; }
+.wg-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.wg-title { font-size: 0.66rem; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase; color: var(--text-faint); }
+.wg-nav { display: flex; gap: 4px; }
+.wg-nav button { padding: 2px 9px; border-radius: 6px; color: var(--text-muted); font-size: 0.8rem; }
+.wg-nav button:hover { background: var(--surface-hover); }
+.wg-table { display: grid; grid-template-columns: 34px repeat(7, 1fr); gap: 3px; align-items: center; }
+.wg-table .wg-day { text-align: center; font-family: var(--font-mono); font-size: 0.56rem; color: var(--text-faint); }
+.wg-table .wg-u { font-family: var(--font-mono); font-size: 0.62rem; font-weight: 700; }
+.wg-cell { height: 20px; border-radius: 6px; background: var(--surface-2); display: grid; place-items: center; font-size: 0.5rem; color: var(--text-faint); }
+.wg-cell.p1 { background: color-mix(in srgb, var(--wg-c) 30%, var(--surface-2)); }
+.wg-cell.sweep { background: var(--wg-c); color: #fff; font-weight: 700; }
+.wg-cell.today { outline: 1.5px solid var(--accent); outline-offset: 1px; }
+
+.goal-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 10px 12px; margin-bottom: 8px; }
+.goal-card .gc-row { display: flex; gap: 8px; align-items: baseline; padding: 3px 0; }
+.goal-card .gc-who { font-family: var(--font-mono); font-size: 0.66rem; font-weight: 700; flex-shrink: 0; width: 44px; }
+.goal-card .gc-text { font-size: var(--text-sm); color: var(--text-muted); }
+.goal-card .gc-text.mine { color: var(--text); cursor: pointer; }
+
+/* feed */
+.feed-composer { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 10px; margin-bottom: 12px; }
+.fc-row { display: flex; gap: 8px; align-items: center; }
+.fc-thumb { width: 42px; height: 42px; border-radius: 9px; background: var(--surface-2); border: 1px dashed var(--border); display: grid; place-items: center; overflow: hidden; font-size: 15px; color: var(--text-faint); cursor: pointer; flex-shrink: 0; }
+.fc-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.fc-row .form-input { flex: 1; }
+.fc-tags { display: flex; gap: 5px; margin-top: 8px; flex-wrap: wrap; }
+.fc-tag { font-size: 0.66rem; padding: 3px 9px; border-radius: 99px; border: 1px solid var(--border); color: var(--text-muted); }
+.fc-tag.on { border-color: var(--accent); color: var(--accent); background: var(--accent-bg); }
+.fc-post { margin-left: auto; }
+.feed-day { font-size: 0.66rem; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase; color: var(--text-faint); margin: 14px 2px 6px; }
+.feed-post { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; margin-bottom: 8px; }
+.feed-post img { width: 100%; display: block; background: var(--surface-2); }
+.feed-post .fp-body { padding: 8px 11px; display: flex; align-items: baseline; gap: 8px; }
+.feed-post .fp-cap { font-size: var(--text-sm); flex: 1; }
+.feed-post .fp-tag { font-size: 0.6rem; color: var(--accent); font-family: var(--font-mono); }
+.feed-post .fp-when { font-size: 0.6rem; color: var(--text-faint); font-family: var(--font-mono); flex-shrink: 0; }
+.feed-more { width: 100%; text-align: center; padding: 10px; color: var(--text-muted); font-size: var(--text-sm); }
+
+/* tools */
+.tool-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 14px; margin-bottom: 12px; text-align: center; }
+.tool-card .tc-title { font-size: 0.66rem; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase; color: var(--text-faint); margin-bottom: 8px; }
+.tc-display { font-family: var(--font-mono); font-size: 2.4rem; font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: 0.02em; }
+.tc-display.running { color: var(--accent); }
+.tc-display.flash { animation: tcFlash 0.5s step-end infinite; }
+@keyframes tcFlash { 50% { color: var(--error); } }
+.tc-btns { display: flex; gap: 8px; justify-content: center; margin-top: 10px; }
+.tc-chips { display: flex; gap: 6px; justify-content: center; margin-top: 10px; flex-wrap: wrap; }
+.tc-chip { font-size: 0.7rem; padding: 4px 11px; border-radius: 99px; border: 1px solid var(--border); color: var(--text-muted); }
+.tc-chip:hover { border-color: var(--accent); color: var(--accent); }
+.tc-laps { margin-top: 10px; font-family: var(--font-mono); font-size: 0.7rem; color: var(--text-muted); max-height: 120px; overflow-y: auto; }
+.tc-laps div { padding: 2px 0; border-bottom: 1px dashed var(--border); }
+
+/* ============================================
    Mobile
    ============================================ */
 @media (pointer: coarse) {
@@ -724,10 +817,9 @@ svg[data-tool]:not([data-tool="select"]):not([data-tool="erase"]) .bld-shape { p
     </div>
   </div>
   <div class="screen" id="screen-fit">
-    <div class="stub">
-      <svg viewBox="0 0 24 24"><path d="M20.57 14.86L22 13.43 20.57 12 17 15.57 8.43 7 12 3.43 10.57 2 9.14 3.43 7.71 2 5.57 4.14 4.14 2.71 2.71 4.14l1.43 1.43L2 7.71l1.43 1.43L2 10.57 3.43 12 7 8.43 15.57 17 12 20.57 13.43 22l1.43-1.43L16.29 22l2.14-2.14 1.43 1.43 1.43-1.43-1.43-1.43L22 16.29l-1.43-1.43z"/></svg>
-      <span>Fitness — coming next</span>
-    </div>
+    <div class="fit-scroll" id="fit-main"></div>
+    <div class="fit-scroll" id="fit-feed" style="display:none"></div>
+    <div class="fit-scroll" id="fit-tools" style="display:none"></div>
   </div>
 
   <div class="footer">
@@ -3620,6 +3712,438 @@ const Home = (() => {
     _debug: () => ({ curZone, curTab, zones, itemCount: Object.values(items).reduce((a, z) => a + Object.keys(z || {}).length, 0) }) };
 })();
 window.PPCHome = Home;
+
+/* ============================================
+   §13 FIT — habits, duel scoring, feed, tools.
+   Scores are DERIVED from the completion log on every render — identical on
+   both clients, nothing stored, rules retunable without migration.
+   ============================================ */
+const Fit = (() => {
+  const HABITS = { C: ['med', 'str', 'exe', 'wrk'], A: ['med', 'str', 'exe'] };
+  const SHARED = ['med', 'str', 'exe'];
+  const HM = {
+    med: { label: 'Meditation', icon: '🧘' },
+    str: { label: 'Stretch', icon: '🙆' },
+    exe: { label: 'Exercise', icon: '🏃' },
+    wrk: { label: 'Workout', icon: '🏋️' },
+  };
+
+  let days = {};        // fit/days
+  let goals = {};       // fit/goals
+  let feed = {};        // {ym: {id: post}}
+  let feedMonths = [];  // loaded months, desc
+  let unwatch = [];
+  let unwatchFeed = null;
+  let view = 'main';
+  let weekOffset = 0;
+
+  /* ---- date helpers (local time — same household) ---- */
+  const dk = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  const todayKey = () => dk(new Date());
+  const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
+  const parseKey = k => new Date(+k.slice(0, 4), +k.slice(5, 7) - 1, +k.slice(8, 10));
+  const ymNow = () => todayKey().slice(0, 7);
+  const prevYm = ym => {
+    const y = +ym.slice(0, 4), m = +ym.slice(5, 7);
+    return m === 1 ? (y - 1) + '-12' : y + '-' + String(m - 1).padStart(2, '0');
+  };
+  function weekStartOf(d) {
+    const sunStart = Settings.get('fit.weekStart') === 'sun';
+    const off = sunStart ? d.getDay() : (d.getDay() + 6) % 7;
+    return addDays(d, -off);
+  }
+  const weekKeys = offset => {
+    const start = addDays(weekStartOf(new Date()), offset * 7);
+    return Array.from({ length: 7 }, (_, i) => dk(addDays(start, i)));
+  };
+
+  /* ---- scoring ---- */
+  const dayObj = k => days[k] || {};
+  const didAt = (k, u, h) => !!((dayObj(k)[u] || {})[h]);
+  const doneCount = (k, u) => HABITS[u].filter(h => didAt(k, u, h)).length;
+  const isSweep = (k, u) => HABITS[u].every(h => didAt(k, u, h));
+  function sweepStreak(u, endKey) {
+    let n = 0, d = parseKey(endKey);
+    while (isSweep(dk(d), u)) { n++; d = addDays(d, -1); if (n > 3650) break; }
+    return n;
+  }
+  function habitStreak(u, h) {
+    let d = new Date();
+    if (!didAt(dk(d), u, h)) d = addDays(d, -1);
+    let n = 0;
+    while (didAt(dk(d), u, h)) { n++; d = addDays(d, -1); if (n > 3650) break; }
+    return n;
+  }
+  function dayPoints(u, k) {
+    const done = doneCount(k, u);
+    if (!done) return 0;
+    const mult = 1 + 0.05 * Math.min(sweepStreak(u, k), 10);
+    return Math.round(done * 10 * mult) + (isSweep(k, u) ? 5 : 0);
+  }
+  function duelPoints(u, k) {
+    if (k >= todayKey()) return 0;   // only closed days duel
+    const o = OTHER(u);
+    let p = 0;
+    for (const h of SHARED) {
+      const me = didAt(k, u, h), them = didAt(k, o, h);
+      if (me && !them) p += 3;
+      if (!me && them) p -= 2;
+    }
+    return p;
+  }
+  const weekPoints = (u, keys) => keys.reduce((a, k) => a + dayPoints(u, k) + duelPoints(u, k), 0);
+  function crowns(u) {
+    // past complete weeks won this quarter
+    const now = new Date();
+    const qStart = new Date(now.getFullYear(), Math.floor(now.getMonth() / 3) * 3, 1);
+    let n = 0;
+    for (let off = -1; off > -15; off--) {
+      const keys = weekKeys(off);
+      if (parseKey(keys[6]) < qStart) break;
+      const mine = weekPoints(u, keys), theirs = weekPoints(OTHER(u), keys);
+      if (mine > theirs && mine > 0) n++;
+    }
+    return n;
+  }
+
+  /* ---- today / main view ---- */
+  const fmtT = ts => new Date(ts).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+
+  function habRow(u, h, mine) {
+    const tk = todayKey();
+    const ts = (dayObj(tk)[u] || {})[h];
+    const done = !!ts;
+    const streak = habitStreak(u, h);
+    let sub;
+    if (done) sub = fmtT(ts);
+    else if (h === 'wrk') sub = 'Cade only · +10 pts';
+    else {
+      const otherDid = didAt(tk, OTHER(u), h);
+      sub = otherDid ? USER_NAMES[OTHER(u)] + ' already did ' + (OTHER(u) === 'A' ? 'hers' : 'his') : 'not yet';
+    }
+    return `<button class="hab-row${done ? ' done' : ''}${mine ? '' : ' partner'}" data-h="${h}" ${mine ? '' : 'disabled'}>
+      <span class="hb-ic">${HM[h].icon}</span>
+      <span class="hb-mid"><span class="hb-t">${HM[h].label}</span><br><span class="hb-s">${sub}</span></span>
+      ${streak ? `<span class="hb-flame">🔥 ${streak}</span>` : ''}
+      <span class="hb-tick">✓</span>
+    </button>`;
+  }
+
+  function renderMain() {
+    if (currentApp !== 'fit' || view !== 'main') return;
+    const el = $('fit-main');
+    const tk = todayKey();
+    const wk = weekKeys(0);
+    const pc = weekPoints('C', wk), pa = weekPoints('A', wk);
+    const total = pc + pa;
+    const wc = total ? Math.round(pc / total * 100) : 50;
+    const dowNames = wk.map(k => parseKey(k).toLocaleDateString([], { weekday: 'narrow' }));
+    const gv = wkOff => {
+      const keys = weekKeys(wkOff);
+      let g = `<div class="wg-table"><span></span>${keys.map((k, i) => `<span class="wg-day">${dowNames[i]}<br>${k.slice(8)}</span>`).join('')}`;
+      for (const u of ['C', 'A']) {
+        g += `<span class="wg-u" style="color:var(--user-${u.toLowerCase()})">${USER_NAMES[u].slice(0, 4)}</span>`;
+        g += keys.map(k => {
+          const n = doneCount(k, u);
+          const cls = isSweep(k, u) ? 'sweep' : n ? 'p1' : '';
+          return `<span class="wg-cell ${cls}${k === tk ? ' today' : ''}" style="--wg-c:var(--user-${u.toLowerCase()})">${n || ''}</span>`;
+        }).join('');
+      }
+      return g + '</div>';
+    };
+    const wkLabel = weekOffset === 0 ? 'This week' :
+      weekOffset === -1 ? 'Last week' : (-weekOffset) + ' weeks ago';
+    el.innerHTML = `
+      <div class="fit-head"><h3>Today</h3><span class="fh-date">${new Date().toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' }).toUpperCase()}</span></div>
+      <div class="duel-card">
+        <div class="duel-names"><span class="dn-c">Cade · ${pc}</span><span class="dn-a">Avery · ${pa}</span></div>
+        <div class="duel-bar"><i class="db-c" style="width:${wc}%"></i><i class="db-a" style="width:${100 - wc}%"></i></div>
+        <div class="duel-sub"><span>🏆 ${crowns('C')} · ${sweepStreak('C', tk) || sweepStreak('C', dk(addDays(new Date(), -1)))}🔥</span><span>this week's points</span><span>🏆 ${crowns('A')} · ${sweepStreak('A', tk) || sweepStreak('A', dk(addDays(new Date(), -1)))}🔥</span></div>
+      </div>
+      <div class="fit-subh">${MY_NAME} — ${doneCount(tk, ME)} of ${HABITS[ME].length}</div>
+      ${HABITS[ME].map(h => habRow(ME, h, true)).join('')}
+      <div class="fit-subh">${USER_NAMES[OTHER(ME)]} — ${doneCount(tk, OTHER(ME))} of ${HABITS[OTHER(ME)].length}</div>
+      ${HABITS[OTHER(ME)].map(h => habRow(OTHER(ME), h, false)).join('')}
+      <div class="week-grid">
+        <div class="wg-head"><span class="wg-title">${wkLabel}</span>
+          <span class="wg-nav"><button id="wg-prev">‹</button><button id="wg-next"${weekOffset >= 0 ? ' disabled style="opacity:.3"' : ''}>›</button></span></div>
+        ${gv(weekOffset)}
+      </div>
+      <div class="goal-card">
+        <div class="fit-subh" style="margin-top:0">Goals</div>
+        <div class="gc-row"><span class="gc-who" style="color:var(--user-c)">Cade</span><span class="gc-text${ME === 'C' ? ' mine' : ''}" data-goal="C">${esc((goals.C && goals.C.text) || (ME === 'C' ? 'tap to set a goal' : '—'))}</span></div>
+        <div class="gc-row"><span class="gc-who" style="color:var(--user-a)">Avery</span><span class="gc-text${ME === 'A' ? ' mine' : ''}" data-goal="A">${esc((goals.A && goals.A.text) || (ME === 'A' ? 'tap to set a goal' : '—'))}</span></div>
+      </div>`;
+    el.querySelectorAll('.hab-row:not(.partner)').forEach(row => row.addEventListener('click', () => toggleHabit(row.dataset.h)));
+    $('wg-prev').addEventListener('click', () => { weekOffset--; renderMain(); });
+    $('wg-next').addEventListener('click', () => { if (weekOffset < 0) { weekOffset++; renderMain(); } });
+    const mineGoal = el.querySelector('.gc-text.mine');
+    if (mineGoal) mineGoal.addEventListener('click', async () => {
+      const t = await askPrompt('Your goal', { value: (goals[ME] && goals[ME].text) || '', placeholder: 'e.g. 5k under 30 min by October' });
+      if (t != null) KV.set('fit/goals/' + ME, { text: t.trim() || null });
+    });
+    updateFooterStat();
+  }
+
+  function toggleHabit(h) {
+    const tk = todayKey();
+    const path = 'fit/days/' + tk + '/' + ME + '/' + h;
+    if (didAt(tk, ME, h)) {
+      askConfirm('Undo ' + HM[h].label + '?', 'Removes today\'s checkmark.', () => KV.remove(path), 'Undo');
+    } else {
+      KV.set(path, Date.now());
+      haptic(18);
+    }
+  }
+
+  /* ---- feed ---- */
+  let fImg = null;    // pending photo dataURL
+  let fTag = null;
+  function watchFeedMonth() {
+    if (unwatchFeed) unwatchFeed();
+    const ym = ymNow();
+    if (!feedMonths.includes(ym)) feedMonths.unshift(ym);
+    unwatchFeed = KV.watch('fit/feed/' + ym, v => {
+      feed[ym] = v || {};
+      renderFeed();
+    });
+  }
+  async function loadEarlier() {
+    const last = feedMonths[feedMonths.length - 1] || ymNow();
+    const ym = prevYm(last);
+    feedMonths.push(ym);
+    if (db) {
+      try {
+        const snap = await withTimeout10(db.ref(PPC_BASE + '/fit/feed/' + ym).once('value'));
+        feed[ym] = snap.val() || {};
+      } catch { feed[ym] = {}; }
+    }
+    renderFeed();
+  }
+  const withTimeout10 = p => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 10000))]);
+
+  function renderFeed() {
+    if (currentApp !== 'fit' || view !== 'feed') return;
+    const el = $('fit-feed');
+    // a partner's post arriving mid-typing must not eat the caption draft
+    const draft = document.getElementById('fc-cap') ? document.getElementById('fc-cap').value : '';
+    const posts = [];
+    for (const ym of feedMonths) {
+      for (const [id, p] of Object.entries(feed[ym] || {})) if (p && p.ts) posts.push([id, p]);
+    }
+    posts.sort((a, b) => b[1].ts - a[1].ts);
+    const tk = todayKey(), yk = dk(addDays(new Date(), -1));
+    let lastDay = null;
+    let list = '';
+    for (const [id, p] of posts) {
+      const day = dk(new Date(p.ts));
+      if (day !== lastDay) {
+        lastDay = day;
+        const lbl = day === tk ? 'Today' : day === yk ? 'Yesterday' :
+          parseKey(day).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
+        list += `<div class="feed-day">${lbl}</div>`;
+      }
+      list += `<div class="feed-post" data-id="${esc(id)}">` +
+        (p.img ? `<img data-img-id="${esc(p.img)}" alt="">` : '') +
+        `<div class="fp-body"><span class="by-chip ${p.by === 'A' ? 'u-a' : 'u-c'}">${p.by === 'A' ? 'A' : 'C'}</span>` +
+        `<span class="fp-cap">${esc(p.caption || '')}</span>` +
+        (p.habit ? `<span class="fp-tag">#${HM[p.habit] ? HM[p.habit].label.toLowerCase() : p.habit}</span>` : '') +
+        `<span class="fp-when">${fmtT(p.ts)}</span></div></div>`;
+    }
+    el.innerHTML = `
+      <div class="feed-composer">
+        <div class="fc-row">
+          <span class="fc-thumb" id="fc-thumb">${fImg ? `<img src="${fImg}">` : '📷'}</span>
+          <input class="form-input" id="fc-cap" placeholder="proof, excuses, trash talk…" maxlength="200">
+          <button class="btn btn-primary fc-post" id="fc-post">Post</button>
+        </div>
+        <div class="fc-tags">${Object.entries(HM).filter(([h]) => HABITS[ME].includes(h)).map(([h, m]) =>
+          `<button class="fc-tag${fTag === h ? ' on' : ''}" data-h="${h}">#${m.label.toLowerCase()}</button>`).join('')}</div>
+        <input type="file" id="fc-file" accept="image/*" style="display:none">
+      </div>
+      ${list || '<div class="zn-empty">no posts yet — first proof photo wins smugness points</div>'}
+      ${posts.length ? `<button class="feed-more" id="feed-more">load earlier</button>` : ''}`;
+    el.querySelectorAll('img[data-img-id]').forEach(img =>
+      getImage('fit', img.dataset.imgId).then(d => { if (d) img.src = d; }));
+    if (draft) $('fc-cap').value = draft;
+    $('fc-thumb').addEventListener('click', () => $('fc-file').click());
+    $('fc-file').addEventListener('change', async () => {
+      const f = $('fc-file').files[0];
+      if (!f) return;
+      const d = await downscaleToB64(f);
+      if (d) { fImg = d; $('fc-thumb').innerHTML = `<img src="${d}">`; }
+    });
+    el.querySelectorAll('.fc-tag').forEach(b => b.addEventListener('click', () => {
+      fTag = fTag === b.dataset.h ? null : b.dataset.h;
+      el.querySelectorAll('.fc-tag').forEach(x => x.classList.toggle('on', x.dataset.h === fTag));
+    }));
+    $('fc-post').addEventListener('click', () => {
+      const cap = $('fc-cap').value.trim();
+      if (!cap && !fImg) { $('fc-cap').focus(); return; }
+      const post = { caption: cap || null, habit: fTag, img: null };
+      if (fImg) {
+        const imgId = uid();
+        putImage('fit', imgId, fImg);
+        post.img = imgId;
+      }
+      KV.set('fit/feed/' + ymNow() + '/' + uid(), post);
+      fImg = null; fTag = null;
+      renderFeed();
+    });
+    const more = $('feed-more');
+    if (more) more.addEventListener('click', loadEarlier);
+  }
+
+  /* ---- tools: stopwatch + countdown (local only) ---- */
+  let swRun = false, swStart = 0, swAcc = 0, swLaps = [];
+  let cdEnd = 0, cdRemain = 0, cdRun = false, cdFlash = false;
+  let toolTimer = 0;
+  let wakeLock = null;
+  const fmtSw = ms => {
+    const cs = Math.floor(ms / 10) % 100, s = Math.floor(ms / 1000) % 60, m = Math.floor(ms / 60000);
+    return String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0') + '.' + String(cs).padStart(2, '0');
+  };
+  const fmtCd = ms => {
+    ms = Math.max(0, ms);
+    const s = Math.ceil(ms / 1000);
+    return String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0');
+  };
+  async function updateWakeLock() {
+    const want = swRun || cdRun;
+    try {
+      if (want && !wakeLock && navigator.wakeLock) {
+        wakeLock = await navigator.wakeLock.request('screen');
+        wakeLock.addEventListener('release', () => { wakeLock = null; });
+      } else if (!want && wakeLock) { await wakeLock.release(); wakeLock = null; }
+    } catch { wakeLock = null; }
+  }
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) updateWakeLock(); });
+
+  function toolTick() {
+    const swEl = document.getElementById('sw-display');
+    if (swEl) swEl.textContent = fmtSw(swRun ? swAcc + (performance.now() - swStart) : swAcc);
+    const cdEl = document.getElementById('cd-display');
+    if (cdEl) {
+      const left = cdRun ? cdEnd - Date.now() : cdRemain;
+      cdEl.textContent = fmtCd(left);
+      cdEl.classList.toggle('running', cdRun);
+      cdEl.classList.toggle('flash', cdFlash);
+      if (cdRun && left <= 0) {
+        cdRun = false; cdRemain = 0; cdFlash = true;
+        haptic(300);
+        showToast('Time! ⏰', 'success', 4000);
+        renderTools();
+        updateWakeLock();
+      }
+    }
+    const swD = document.getElementById('sw-display');
+    if (swD) swD.classList.toggle('running', swRun);
+  }
+
+  function renderTools() {
+    if (currentApp !== 'fit' || view !== 'tools') return;
+    const el = $('fit-tools');
+    const lastCd = parseInt(store.get('ppc-fit-timer-cfg') || '300', 10);
+    el.innerHTML = `
+      <div class="tool-card">
+        <div class="tc-title">Countdown</div>
+        <div class="tc-display" id="cd-display">${fmtCd(cdRun ? cdEnd - Date.now() : cdRemain)}</div>
+        <div class="tc-btns">
+          <button class="btn btn-primary" id="cd-go">${cdRun ? 'Pause' : 'Start'}</button>
+          <button class="btn" id="cd-reset">Reset</button>
+        </div>
+        <div class="tc-chips">${[60, 180, 300, 600].map(s => `<button class="tc-chip" data-s="${s}">${s / 60} min</button>`).join('')}<button class="tc-chip" data-s="custom">custom</button></div>
+      </div>
+      <div class="tool-card">
+        <div class="tc-title">Stopwatch</div>
+        <div class="tc-display" id="sw-display">${fmtSw(swRun ? swAcc + (performance.now() - swStart) : swAcc)}</div>
+        <div class="tc-btns">
+          <button class="btn btn-primary" id="sw-go">${swRun ? 'Stop' : 'Start'}</button>
+          <button class="btn" id="sw-lap"${swRun ? '' : ' disabled'}>Lap</button>
+          <button class="btn" id="sw-reset">Reset</button>
+        </div>
+        ${swLaps.length ? `<div class="tc-laps">${swLaps.map((l, i) => `<div>lap ${i + 1} — ${fmtSw(l)}</div>`).reverse().join('')}</div>` : ''}
+      </div>`;
+    $('cd-go').addEventListener('click', () => {
+      if (cdRun) { cdRemain = Math.max(0, cdEnd - Date.now()); cdRun = false; }
+      else {
+        if (cdRemain <= 0) cdRemain = lastCd * 1000;
+        cdEnd = Date.now() + cdRemain;
+        cdRun = true; cdFlash = false;
+      }
+      renderTools();
+      updateWakeLock();
+    });
+    $('cd-reset').addEventListener('click', () => { cdRun = false; cdFlash = false; cdRemain = lastCd * 1000; renderTools(); updateWakeLock(); });
+    el.querySelectorAll('.tc-chip').forEach(b => b.addEventListener('click', async () => {
+      let s;
+      if (b.dataset.s === 'custom') {
+        const v = await askPrompt('Minutes', { type: 'number', inputmode: 'decimal', value: '' });
+        s = Math.round(parseFloat(v) * 60);
+        if (!s || s <= 0) return;
+      } else s = +b.dataset.s;
+      store.set('ppc-fit-timer-cfg', String(s));
+      cdRun = false; cdFlash = false; cdRemain = s * 1000;
+      renderTools();
+      updateWakeLock();
+    }));
+    $('sw-go').addEventListener('click', () => {
+      if (swRun) { swAcc += performance.now() - swStart; swRun = false; }
+      else { swStart = performance.now(); swRun = true; }
+      renderTools();
+      updateWakeLock();
+    });
+    $('sw-lap').addEventListener('click', () => { if (swRun) { swLaps.push(swAcc + (performance.now() - swStart)); renderTools(); } });
+    $('sw-reset').addEventListener('click', () => { swRun = false; swAcc = 0; swLaps = []; renderTools(); updateWakeLock(); });
+  }
+
+  /* ---- app registration ---- */
+  function setView(v) {
+    view = v;
+    $('fit-main').style.display = v === 'main' ? '' : 'none';
+    $('fit-feed').style.display = v === 'feed' ? '' : 'none';
+    $('fit-tools').style.display = v === 'tools' ? '' : 'none';
+    if (v === 'main') renderMain();
+    if (v === 'feed') renderFeed();
+    if (v === 'tools') renderTools();
+  }
+
+  APPS.fit.mount = () => {
+    unwatch = [
+      KV.watch('fit/days', v => { days = v || {}; renderMain(); updateFooterStat(); }),
+      KV.watch('fit/goals', v => { goals = v || {}; renderMain(); }),
+    ];
+    watchFeedMonth();
+    clearInterval(toolTimer);
+    toolTimer = setInterval(toolTick, 100);
+    APPS.fit.subroute(location.hash.replace(/^#/, ''));
+    return () => {
+      unwatch.forEach(u => u());
+      unwatch = [];
+      if (unwatchFeed) { unwatchFeed(); unwatchFeed = null; }
+      clearInterval(toolTimer);   // timers keep state; display resumes on remount
+    };
+  };
+  APPS.fit.subroute = h => {
+    const sub = h.split('/')[1];
+    setView(sub === 'feed' ? 'feed' : sub === 'tools' ? 'tools' : 'main');
+  };
+  APPS.fit.menu = () =>
+    `<button class="menu-item" onclick="location.hash='#fit'">Today</button>` +
+    `<button class="menu-item" onclick="location.hash='#fit/feed'">Proof feed</button>` +
+    `<button class="menu-item" onclick="location.hash='#fit/tools'">Timer & stopwatch</button>`;
+  APPS.fit.stat = () => doneCount(todayKey(), ME) + '/' + HABITS[ME].length + ' today';
+
+  Settings.registerSetting({
+    key: 'fit.weekStart', label: 'Week starts on', type: 'select', section: 'Fitness', default: 'mon',
+    options: [{ value: 'mon', label: 'Monday' }, { value: 'sun', label: 'Sunday' }],
+    apply: () => renderMain(),
+  });
+
+  return { _debug: () => ({ view, days, weekPoints: { C: weekPoints('C', weekKeys(0)), A: weekPoints('A', weekKeys(0)) }, crowns: { C: crowns('C'), A: crowns('A') } }),
+    _score: { dayPoints, duelPoints, weekPoints, sweepStreak, habitStreak, weekKeys } };
+})();
+window.PPCFit = Fit;
 
 /* ============================================
    §14 BOOT
