@@ -445,6 +445,110 @@ svg { display: block; }
 .conf-diff .cd-gap { color: var(--text-faint); text-align: center; padding: 2px 0; }
 
 /* ============================================
+   Home app — floorplan, zones, budget, list
+   ============================================ */
+.home-plan { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.fp-head { display: flex; align-items: center; gap: 8px; padding: 10px 14px 2px; }
+.fp-head h3 { font-size: 1rem; font-weight: 600; letter-spacing: -0.01em; }
+.fp-chip {
+  margin-left: auto; font-family: var(--font-mono); font-size: 0.68rem;
+  background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px;
+  padding: 4px 9px; color: var(--text-muted); white-space: nowrap;
+}
+.fp-chip b { color: var(--text); font-weight: 600; }
+.fp-stage { flex: 1; min-height: 0; padding: 4px 10px; }
+.fp-stage svg { width: 100%; height: 100%; display: block; }
+.fp-img { opacity: 0.95; }
+[data-theme="dark"] .fp-img { filter: invert(0.93) hue-rotate(180deg); opacity: 0.8; }
+.zone { cursor: pointer; }
+.zone polygon, .zone rect { fill-opacity: 0.28; stroke-width: 3; transition: fill-opacity var(--transition); }
+.zone:active polygon, .zone:active rect, .zone:hover polygon, .zone:hover rect { fill-opacity: 0.45; }
+.zone .zone-hit { fill: transparent; fill-opacity: 1; stroke: transparent; stroke-width: 22; }
+.zone text {
+  font-family: var(--font-body); font-weight: 600; text-anchor: middle;
+  paint-order: stroke; stroke-width: 4px; stroke-linejoin: round; pointer-events: none;
+}
+.fp-legend {
+  display: flex; flex-wrap: wrap; gap: 6px 14px; padding: 8px 14px 10px;
+  font-size: 0.66rem; color: var(--text-muted); user-select: none; -webkit-user-select: none;
+}
+.fp-legend i { width: 9px; height: 9px; border-radius: 3px; display: inline-block; margin-right: 4px; vertical-align: -1px; }
+
+/* zone page */
+.home-zone { flex: 1; min-height: 0; display: none; flex-direction: column; }
+.zn-head { padding: 10px 14px 0; flex-shrink: 0; }
+.zn-back { font-size: var(--text-sm); color: var(--text-muted); padding: 2px 0; display: inline-flex; align-items: center; gap: 4px; }
+.zn-title { display: flex; align-items: center; gap: 9px; margin-top: 2px; }
+.zn-title h3 { font-size: 1.15rem; font-weight: 600; letter-spacing: -0.01em; }
+.status-pill {
+  font-size: 0.62rem; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase;
+  padding: 3px 9px; border-radius: 99px; cursor: pointer; border: none;
+  background: color-mix(in srgb, var(--st-c, #9ca3af) 18%, transparent); color: var(--st-c, #9ca3af);
+}
+.zn-budget { margin: 10px 14px 0; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 10px 12px; flex-shrink: 0; }
+.zn-budget .zb-lab { display: flex; justify-content: space-between; align-items: baseline; font-size: 0.68rem; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: var(--text-faint); margin-bottom: 6px; }
+.zn-budget .zb-lab .zb-edit { color: var(--text-muted); font-family: var(--font-mono); text-transform: none; letter-spacing: 0; cursor: pointer; font-weight: 500; }
+.budget-bar { height: 14px; background: var(--surface-2); border-radius: 7px; overflow: hidden; display: flex; }
+.budget-fill { background: var(--accent); }
+.budget-fill.over { background: var(--error); }
+.zb-nums { display: flex; justify-content: space-between; font-family: var(--font-mono); font-size: 0.62rem; color: var(--text-muted); margin-top: 5px; }
+.zb-nums .over-flag { color: var(--error); font-weight: 700; }
+
+.zn-tabs { display: flex; gap: 2px; background: var(--surface-2); border-radius: 8px; padding: 2px; margin: 10px 14px 0; flex-shrink: 0; }
+.zn-tabs button { flex: 1; text-align: center; padding: 6px 0; border-radius: 6px; font-size: var(--text-sm); color: var(--text-muted); }
+.zn-tabs button.on { background: var(--surface); color: var(--text); font-weight: 600; box-shadow: var(--shadow-sm); }
+.zn-body { flex: 1; min-height: 0; overflow-y: auto; padding: 10px 14px 90px; overscroll-behavior: contain; }
+
+/* items */
+.item-card {
+  display: flex; gap: 10px; align-items: center;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg);
+  padding: 9px; margin-bottom: 8px; cursor: pointer;
+}
+.item-card .it-thumb {
+  width: 52px; height: 52px; border-radius: 8px; background: var(--surface-2);
+  flex-shrink: 0; display: grid; place-items: center; overflow: hidden; color: var(--text-faint);
+}
+.item-card .it-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.item-card .it-mid { min-width: 0; flex: 1; }
+.item-card .it-title { font-size: var(--text-sm); font-weight: 600; line-height: 1.3; }
+.item-card .it-sub { font-size: 0.68rem; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.item-card .it-right { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex-shrink: 0; }
+.item-card .it-price { font-family: var(--font-mono); font-size: var(--text-sm); font-weight: 600; }
+.by-chip { width: 16px; height: 16px; border-radius: 50%; font-size: 0.55rem; font-weight: 800; color: #fff; display: grid; place-items: center; }
+.by-chip.u-c { background: var(--user-c); }
+.by-chip.u-a { background: var(--user-a); }
+.zn-empty { text-align: center; color: var(--text-faint); font-size: var(--text-sm); padding: 30px 0 10px; }
+
+.fab {
+  position: absolute; right: 16px; bottom: calc(34px + env(safe-area-inset-bottom));
+  width: 44px; height: 44px; border-radius: 14px; background: var(--accent); color: #fff;
+  display: grid; place-items: center; font-size: 22px; font-weight: 500;
+  box-shadow: 0 8px 20px rgba(0,0,0,0.3); z-index: 10; border: none;
+}
+.fab:active { background: var(--accent-hover); }
+
+/* item editor */
+.it-url-row { display: flex; gap: 6px; }
+.it-url-row .form-input { flex: 1; }
+.it-img-row { display: flex; align-items: center; gap: 10px; margin-bottom: var(--space-4); }
+.it-img-preview {
+  width: 64px; height: 64px; border-radius: 10px; background: var(--surface-2);
+  border: 1px dashed var(--border); display: grid; place-items: center; overflow: hidden;
+  color: var(--text-faint); font-size: 0.6rem; flex-shrink: 0; cursor: pointer;
+}
+.it-img-preview img { width: 100%; height: 100%; object-fit: cover; }
+.it-two { display: flex; gap: 10px; }
+.it-two .form-group { flex: 1; }
+.fetch-note { font-size: 0.68rem; color: var(--text-faint); min-height: 1.2em; margin-top: 3px; }
+
+/* status sheet */
+.status-opt { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; padding: 10px; border-radius: var(--radius-md); font-size: var(--text-sm); }
+.status-opt:hover { background: var(--surface-hover); }
+.status-opt i { width: 11px; height: 11px; border-radius: 4px; }
+.status-opt.on { background: var(--surface-2); font-weight: 600; }
+
+/* ============================================
    Mobile
    ============================================ */
 @media (pointer: coarse) {
@@ -530,9 +634,30 @@ svg { display: block; }
     </div>
   </div>
   <div class="screen" id="screen-home">
-    <div class="stub">
-      <svg viewBox="0 0 24 24"><path d="M12 3l9 8h-3v9h-4v-6h-4v6H6v-9H3l9-8z"/></svg>
-      <span>House remodel — coming next</span>
+    <div class="home-plan" id="home-plan">
+      <div class="fp-head">
+        <h3>The apartment</h3>
+        <span class="fp-chip" id="fp-chip">…</span>
+      </div>
+      <div class="fp-stage" id="fp-stage"></div>
+      <div class="fp-legend" id="fp-legend"></div>
+    </div>
+    <div class="home-zone" id="home-zone">
+      <div class="zn-head">
+        <a class="zn-back" href="#home">‹ floorplan</a>
+        <div class="zn-title">
+          <h3 id="zn-name">…</h3>
+          <button class="status-pill" id="zn-status">…</button>
+        </div>
+      </div>
+      <div class="zn-budget" id="zn-budget"></div>
+      <div class="zn-tabs" id="zn-tabs">
+        <button data-tab="list" class="on">List</button>
+        <button data-tab="build">Builder</button>
+        <button data-tab="mood">Mood</button>
+      </div>
+      <div class="zn-body" id="zn-body"></div>
+      <button class="fab" id="zn-fab" aria-label="add">＋</button>
     </div>
   </div>
   <div class="screen" id="screen-fit">
@@ -601,6 +726,75 @@ svg { display: block; }
     <div class="modal-actions">
       <button class="btn" onclick="ppcNotesNew()">＋ New room</button>
       <button class="btn btn-primary" onclick="closeModal('rooms-overlay')">Done</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== Home: item editor ===== -->
+<div class="modal-overlay" id="item-overlay">
+  <div class="modal-dialog">
+    <div class="modal-title" id="item-title-lbl">New item</div>
+    <div class="form-group">
+      <label class="form-label" for="it-url">Product link</label>
+      <div class="it-url-row">
+        <input class="form-input" id="it-url" type="url" placeholder="paste a link — we grab the rest" autocomplete="off">
+        <button class="btn" id="it-fetch">Fetch</button>
+      </div>
+      <div class="fetch-note" id="it-fetch-note"></div>
+    </div>
+    <div class="it-img-row">
+      <div class="it-img-preview" id="it-img-preview">image</div>
+      <div style="display:flex;flex-direction:column;gap:6px">
+        <button class="btn" id="it-img-pick">Choose photo</button>
+        <button class="btn" id="it-img-clear">Remove</button>
+      </div>
+      <input type="file" id="it-img-file" accept="image/*" style="display:none">
+    </div>
+    <div class="form-group">
+      <label class="form-label" for="it-name">Title</label>
+      <input class="form-input" id="it-name" type="text" maxlength="120" autocomplete="off">
+    </div>
+    <div class="it-two">
+      <div class="form-group">
+        <label class="form-label" for="it-price">Price</label>
+        <input class="form-input" id="it-price" type="number" inputmode="decimal" min="0" step="0.01" placeholder="$">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="it-dims">Dimensions</label>
+        <input class="form-input" id="it-dims" type="text" maxlength="80" placeholder='88"w × 34"d'>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label" for="it-desc">Notes</label>
+      <input class="form-input" id="it-desc" type="text" maxlength="240" autocomplete="off">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-danger" id="it-delete" style="margin-right:auto">Delete</button>
+      <button class="btn" onclick="closeModal('item-overlay')">Cancel</button>
+      <button class="btn btn-primary" id="it-save">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== Home: status sheet ===== -->
+<div class="modal-overlay" id="status-overlay">
+  <div class="modal-dialog" style="width:280px">
+    <div class="modal-title">Zone status</div>
+    <div id="status-opts"></div>
+  </div>
+</div>
+
+<!-- ===== Generic prompt ===== -->
+<div class="modal-overlay" id="prompt-overlay">
+  <div class="modal-dialog" style="width:320px">
+    <div class="modal-title" id="prompt-title"></div>
+    <div class="form-group">
+      <input class="form-input" id="prompt-input" autocomplete="off">
+      <div class="form-hint" id="prompt-hint"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" id="prompt-cancel">Cancel</button>
+      <button class="btn btn-primary" id="prompt-ok">OK</button>
     </div>
   </div>
 </div>
@@ -1466,6 +1660,181 @@ Settings.registerSetting({
 });
 
 /* ============================================
+   §02 IDB STORE — big-blob cache (images) in its own database, separate
+   from txt.html's 'cadetxt-blobs' on the shared origin.
+   ============================================ */
+const idbStore = (() => {
+  let dbp = null;
+  function open() {
+    if (dbp) return dbp;
+    dbp = new Promise(res => {
+      try {
+        const r = indexedDB.open('ppc-blobs', 1);
+        r.onupgradeneeded = () => r.result.createObjectStore('kv');
+        r.onsuccess = () => res(r.result);
+        r.onerror = () => res(null);
+      } catch { res(null); }
+    });
+    return dbp;
+  }
+  return {
+    async get(k) {
+      const d = await open();
+      if (!d) return null;
+      return new Promise(res => {
+        try {
+          const t = d.transaction('kv').objectStore('kv').get(k);
+          t.onsuccess = () => res(t.result == null ? null : t.result);
+          t.onerror = () => res(null);
+        } catch { res(null); }
+      });
+    },
+    async set(k, v) {
+      const d = await open();
+      if (!d) return;
+      return new Promise(res => {
+        try {
+          const t = d.transaction('kv', 'readwrite').objectStore('kv').put(v, k);
+          t.onsuccess = res;
+          t.onerror = res;
+        } catch { res(); }
+      });
+    },
+    async del(k) {
+      const d = await open();
+      if (!d) return;
+      return new Promise(res => {
+        try {
+          const t = d.transaction('kv', 'readwrite').objectStore('kv').delete(k);
+          t.onsuccess = res;
+          t.onerror = res;
+        } catch { res(); }
+      });
+    },
+  };
+})();
+
+/* ============================================
+   §08 IMAGES — downscale to a ≤90KB data URL (txt.html's budget), store at
+   <app>/img/<id> in RTDB, cache in memory + IndexedDB, upload queue for
+   offline adds.
+   ============================================ */
+const IMG_MAX_B64 = 90 * 1024;
+async function downscaleToB64(blob) {
+  let bmp;
+  try { bmp = await createImageBitmap(blob); } catch { return null; }
+  let maxDim = 800;
+  let smallest = null;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const scale = Math.min(1, maxDim / Math.max(bmp.width, bmp.height));
+    const w = Math.max(1, Math.round(bmp.width * scale));
+    const h = Math.max(1, Math.round(bmp.height * scale));
+    const cv = document.createElement('canvas');
+    cv.width = w; cv.height = h;
+    cv.getContext('2d').drawImage(bmp, 0, 0, w, h);
+    for (const [type, q] of [['image/webp', 0.82], ['image/jpeg', 0.78]]) {
+      const url = cv.toDataURL(type, q);
+      if (!url.startsWith('data:' + type)) continue;   // encoder unsupported
+      if (url.length <= IMG_MAX_B64) return url;
+      if (!smallest || url.length < smallest.length) smallest = url;
+    }
+    maxDim = Math.round(maxDim * 0.68);
+  }
+  return smallest;   // over budget but the best we could do
+}
+
+const _imgMem = new Map();
+async function getImage(app, id) {
+  const key = app + ':' + id;
+  if (_imgMem.has(key)) return _imgMem.get(key);
+  const cached = await idbStore.get('img:' + key);
+  if (cached) { _imgMem.set(key, cached); return cached; }
+  if (!db) return null;
+  try {
+    const snap = await db.ref(PPC_BASE + '/' + app + '/img/' + id).once('value');
+    const v = snap.val();
+    const d = v && v.d;
+    if (d) { _imgMem.set(key, d); idbStore.set('img:' + key, d); return d; }
+  } catch {}
+  return null;
+}
+function putImage(app, id, dataUrl) {
+  const key = app + ':' + id;
+  _imgMem.set(key, dataUrl);
+  idbStore.set('img:' + key, dataUrl);
+  KV.set(app + '/img/' + id, { d: dataUrl });   // KV queue covers offline
+}
+
+/* ============================================
+   URL metadata — static site, no backend: microlink → allorigins OG parse →
+   slug guess. Degrades to manual entry, never blocks it.
+   ============================================ */
+async function fetchUrlMeta(url) {
+  const withTO = (p, ms) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms))]);
+  try {
+    const r = await withTO(fetch('https://api.microlink.io/?url=' + encodeURIComponent(url)), 7000);
+    if (r.ok) {
+      const j = await r.json();
+      if (j && j.data && (j.data.title || j.data.image)) {
+        return {
+          title: j.data.title || '',
+          desc: j.data.description || '',
+          imgUrl: (j.data.image && j.data.image.url) || '',
+          price: null,
+          via: 'microlink',
+        };
+      }
+    }
+  } catch {}
+  try {
+    const r = await withTO(fetch('https://api.allorigins.win/raw?url=' + encodeURIComponent(url)), 8000);
+    if (r.ok) {
+      const html = await r.text();
+      const doc = new DOMParser().parseFromString(html, 'text/html');
+      const og = p => {
+        const m = doc.querySelector('meta[property="' + p + '"], meta[name="' + p + '"]');
+        return m ? (m.getAttribute('content') || '') : '';
+      };
+      const title = og('og:title') || (doc.querySelector('title') ? doc.querySelector('title').textContent.trim() : '');
+      const price = parseFloat(og('og:price:amount') || og('product:price:amount')) || null;
+      if (title || og('og:image')) {
+        return { title, desc: og('og:description'), imgUrl: og('og:image'), price, via: 'page' };
+      }
+    }
+  } catch {}
+  try {
+    const u = new URL(url);
+    const seg = u.pathname.split('/').filter(Boolean).pop() || u.hostname;
+    return { title: decodeURIComponent(seg).replace(/\.[a-z0-9]+$/i, '').replace(/[-_+]/g, ' ').trim(), via: 'slug' };
+  } catch { return { title: '', via: 'none' }; }
+}
+
+/* ---- generic prompt modal ---- */
+let _promptCb = null;
+window.askPrompt = (title, opts = {}) => new Promise(resolve => {
+  $('prompt-title').textContent = title;
+  const inp = $('prompt-input');
+  inp.type = opts.type || 'text';
+  if (opts.inputmode) inp.setAttribute('inputmode', opts.inputmode); else inp.removeAttribute('inputmode');
+  inp.value = opts.value != null ? opts.value : '';
+  inp.placeholder = opts.placeholder || '';
+  $('prompt-hint').textContent = opts.hint || '';
+  _promptCb = resolve;
+  openModal('prompt-overlay');
+  setTimeout(() => { inp.focus(); inp.select(); }, 50);
+});
+function _promptDone(val) {
+  const cb = _promptCb;
+  _promptCb = null;
+  closeModal('prompt-overlay');
+  if (cb) cb(val);
+}
+$('prompt-ok').addEventListener('click', () => _promptDone($('prompt-input').value));
+$('prompt-cancel').addEventListener('click', () => _promptDone(null));
+$('prompt-input').addEventListener('keydown', e => { if (e.key === 'Enter') _promptDone($('prompt-input').value); });
+$('prompt-overlay').addEventListener('click', e => { if (e.target.id === 'prompt-overlay') _promptDone(null); });
+
+/* ============================================
    §11 NOTES — shared rooms with per-line authorship.
    Sync mirrors txt.html's room engine: encrypted blob + version counter,
    self-echo suppression, local-wins with idle-gated remote applies, REST
@@ -2133,6 +2502,338 @@ const Notes = (() => {
     _debug: () => ({ roomId, authors, authorsRev, ver, dirty, suppress, pendingRemote: !!pendingRemote, conflictOpen }) };
 })();
 window.PPCNotes = Notes;
+
+/* ============================================
+   §12 HOME — floorplan zones, budgets, official list.
+   All structured data flows through the KV channel (fine-grained nodes,
+   optimistic local apply, offline queue).
+   ============================================ */
+const Home = (() => {
+  const STATUSES = [
+    { id: 'untouched', label: 'Untouched', c: '#9ca3af' },
+    { id: 'planning', label: 'Planning', c: '#8b5cf6' },
+    { id: 'buying', label: 'Buying', c: '#eab308' },
+    { id: 'installing', label: 'Installing', c: '#3b82f6' },
+    { id: 'done', label: 'Done', c: '#16a34a' },
+  ];
+  const stMeta = id => STATUSES.find(s => s.id === id) || STATUSES[0];
+
+  // Zone polygons traced over assets/floorplan.jpeg (1206×1400 px).
+  // Data-only: tune vertices here, nothing else changes.
+  const ZONES = [
+    { id: 'terrace', label: 'Terrace',
+      poly: [[105,212],[1130,212],[1130,1185],[958,1185],[958,872],[905,872],[905,488],[105,488]],
+      lx: 540, ly: 365, fs: 40 },
+    { id: 'kitchen', label: 'Kitchen', poly: [[112,492],[308,492],[308,758],[112,758]], lx: 210, ly: 635, fs: 30 },
+    { id: 'office', label: 'Office', poly: [[112,758],[308,758],[308,1008],[112,1008]], lx: 210, ly: 895, fs: 30 },
+    { id: 'foyer', label: 'Foyer', poly: [[266,868],[520,868],[520,1112],[266,1112]], lx: 396, ly: 1005, fs: 30 },
+    { id: 'bedroom', label: 'Bedroom', poly: [[518,500],[900,500],[900,868],[518,868]], lx: 710, ly: 695, fs: 34 },
+    { id: 'living', label: 'Livingroom', poly: [[455,868],[958,868],[958,1185],[455,1185]], lx: 712, ly: 1040, fs: 34 },
+    { id: 'bedcloset', label: 'Bed closet',
+      polys: [[[432,505],[518,505],[518,700],[432,700]], [[425,775],[518,775],[518,860],[425,860]]],
+      lx: 475, ly: 745, fs: 18 },
+    { id: 'hallcloset', label: 'Hall closet', poly: [[308,700],[362,700],[362,865],[308,865]], lx: 336, ly: 792, fs: 16 },
+  ];
+  const zoneById = id => ZONES.find(z => z.id === id);
+  const zonePolys = z => z.polys || [z.poly];
+
+  let zones = {};       // home/zones
+  let items = {};       // home/items — all zones (thumbs are ids, cheap)
+  let unwatch = [];
+  let curZone = null;
+  let curTab = 'list';
+  let svgBuilt = false;
+
+  const fmtMoney = n => {
+    if (n == null || isNaN(n)) return '$0';
+    const opts = Math.round(n) === n ? {} : { minimumFractionDigits: 2, maximumFractionDigits: 2 };
+    return '$' + n.toLocaleString('en-US', opts);
+  };
+  const zoneSpent = z => Object.values(items[z] || {}).reduce((a, it) => a + ((it && typeof it.price === 'number') ? it.price : 0), 0);
+  const totalSpent = () => ZONES.reduce((a, z) => a + zoneSpent(z.id), 0);
+  const totalBudget = () => ZONES.reduce((a, z) => a + ((zones[z.id] && zones[z.id].budgetMax) || 0), 0);
+  const zoneStatus = z => (zones[z] && zones[z].status) || 'untouched';
+
+  /* ---- floorplan ---- */
+  function buildSvg() {
+    if (svgBuilt) return;
+    svgBuilt = true;
+    const gs = ZONES.map(z => {
+      const shapes = zonePolys(z).map(p => `<polygon points="${p.map(pt => pt.join(',')).join(' ')}"/>`).join('');
+      const hits = zonePolys(z).map(p => `<polygon class="zone-hit" points="${p.map(pt => pt.join(',')).join(' ')}"/>`).join('');
+      return `<g class="zone" data-z="${z.id}">${shapes}${hits}<text x="${z.lx}" y="${z.ly}" font-size="${z.fs}"></text></g>`;
+    }).join('');
+    $('fp-stage').innerHTML =
+      `<svg viewBox="0 0 1206 1400" preserveAspectRatio="xMidYMid meet">` +
+      `<image class="fp-img" href="assets/floorplan.jpeg" width="1206" height="1400"/>` + gs + `</svg>`;
+    $('fp-stage').querySelectorAll('.zone').forEach(g => {
+      g.addEventListener('click', () => { location.hash = '#home/' + g.dataset.z; });
+    });
+    $('fp-legend').innerHTML = STATUSES.map(s => `<span><i style="background:${s.c}"></i>${s.label}</span>`).join('');
+  }
+
+  function updatePlan() {
+    if (!svgBuilt) return;
+    ZONES.forEach(z => {
+      const g = $('fp-stage').querySelector(`.zone[data-z="${z.id}"]`);
+      if (!g) return;
+      const c = stMeta(zoneStatus(z.id)).c;
+      g.querySelectorAll('polygon:not(.zone-hit)').forEach(p => { p.style.fill = c; p.style.stroke = c; });
+      const t = g.querySelector('text');
+      t.style.fill = c;
+      t.style.stroke = 'var(--bg)';
+      t.textContent = z.label;
+    });
+    const tb = totalBudget();
+    $('fp-chip').innerHTML = `spent <b>${fmtMoney(totalSpent())}</b>` + (tb ? ` / ${fmtMoney(tb)}` : '');
+    updateFooterStat();
+  }
+
+  /* ---- zone page ---- */
+  function showZone(id, tab) {
+    curZone = id;
+    curTab = tab || 'list';
+    $('home-plan').style.display = 'none';
+    $('home-zone').style.display = 'flex';
+    renderZone();
+  }
+  function showPlan() {
+    curZone = null;
+    $('home-zone').style.display = 'none';
+    $('home-plan').style.display = 'flex';
+    updatePlan();
+  }
+
+  function renderZone() {
+    const z = zoneById(curZone);
+    if (!z) { showPlan(); return; }
+    $('zn-name').textContent = z.label;
+    const st = stMeta(zoneStatus(curZone));
+    const pill = $('zn-status');
+    pill.textContent = st.label;
+    pill.style.setProperty('--st-c', st.c);
+    renderBudget();
+    $('zn-tabs').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.tab === curTab));
+    $('zn-fab').style.display = curTab === 'list' ? '' : 'none';
+    renderZoneBody();
+    updateFooterStat();
+  }
+
+  function renderBudget() {
+    const max = (zones[curZone] && zones[curZone].budgetMax) || 0;
+    const spent = zoneSpent(curZone);
+    let html = `<div class="zb-lab"><span>Budget</span><span class="zb-edit" id="zb-edit">${max ? 'edit' : 'set budget'}</span></div>`;
+    if (max) {
+      const range = Math.max(max, spent);
+      const teal = Math.min(spent, max) / range * 100;
+      const red = spent > max ? (spent - max) / range * 100 : 0;
+      html += `<div class="budget-bar"><div class="budget-fill" style="width:${teal}%"></div>` +
+        (red ? `<div class="budget-fill over" style="width:${red}%"></div>` : '') + `</div>` +
+        `<div class="zb-nums"><span>${fmtMoney(spent)} spent</span>` +
+        (spent > max ? `<span class="over-flag">OVER +${fmtMoney(spent - max)}</span>` : '') +
+        `<span>${fmtMoney(max)}</span></div>`;
+    } else {
+      html += `<div class="zb-nums"><span>${fmtMoney(spent)} spent</span><span>no budget set</span></div>`;
+    }
+    $('zn-budget').innerHTML = html;
+    $('zb-edit').addEventListener('click', async () => {
+      const v = await askPrompt(zoneById(curZone).label + ' budget', {
+        type: 'number', inputmode: 'decimal', value: max || '', placeholder: '$', hint: 'Leave empty to clear',
+      });
+      if (v == null) return;
+      const n = parseFloat(v);
+      KV.set('home/zones/' + curZone + '/budgetMax', (isNaN(n) || n <= 0) ? null : n);
+    });
+  }
+
+  function renderZoneBody() {
+    const body = $('zn-body');
+    if (curTab === 'build') { body.innerHTML = '<div class="zn-empty">Builder — coming in the next update</div>'; return; }
+    if (curTab === 'mood') { body.innerHTML = '<div class="zn-empty">Moodboard — coming in the next update</div>'; return; }
+    const its = Object.entries(items[curZone] || {})
+      .filter(([, it]) => it && it.title)
+      .sort((a, b) => (a[1].createdAt || 0) - (b[1].createdAt || 0));
+    if (!its.length) {
+      body.innerHTML = '<div class="zn-empty">nothing locked in yet — ＋ adds the first item</div>';
+      return;
+    }
+    body.innerHTML = its.map(([id, it]) => {
+      const sub = [it.dims, it.desc].filter(Boolean).join(' · ');
+      const thumb = it.img
+        ? `<img data-img-id="${esc(it.img)}" alt="">`
+        : it.imgUrl ? `<img src="${esc(it.imgUrl)}" alt="" loading="lazy">` : '▫';
+      return `<div class="item-card" data-id="${esc(id)}">
+        <div class="it-thumb">${thumb}</div>
+        <div class="it-mid"><div class="it-title">${esc(it.title)}</div>${sub ? `<div class="it-sub">${esc(sub)}</div>` : ''}</div>
+        <div class="it-right">${it.price != null ? `<span class="it-price">${fmtMoney(it.price)}</span>` : ''}
+          <span class="by-chip ${it.by === 'A' ? 'u-a' : 'u-c'}" title="added by ${it.by === 'A' ? 'Avery' : 'Cade'}">${it.by === 'A' ? 'A' : 'C'}</span></div>
+      </div>`;
+    }).join('');
+    body.querySelectorAll('.item-card').forEach(card =>
+      card.addEventListener('click', () => openItemEditor(curZone, card.dataset.id)));
+    body.querySelectorAll('img[data-img-id]').forEach(img =>
+      getImage('home', img.dataset.imgId).then(d => { if (d) img.src = d; }));
+  }
+
+  /* ---- status sheet ---- */
+  $('zn-status').addEventListener('click', () => {
+    $('status-opts').innerHTML = STATUSES.map(s =>
+      `<button class="status-opt${s.id === zoneStatus(curZone) ? ' on' : ''}" data-st="${s.id}"><i style="background:${s.c}"></i>${s.label}</button>`).join('');
+    $('status-opts').querySelectorAll('.status-opt').forEach(b => b.addEventListener('click', () => {
+      KV.set('home/zones/' + curZone + '/status', b.dataset.st);
+      closeModal('status-overlay');
+    }));
+    openModal('status-overlay');
+  });
+
+  /* ---- item editor ---- */
+  let editZone = null, editId = null;
+  let editImg;      // undefined = unchanged · null = cleared · dataURL = new upload
+  let editImgUrl = '';
+
+  function paintPreview(existing) {
+    const pv = $('it-img-preview');
+    if (editImg) { pv.innerHTML = `<img src="${editImg}">`; return; }
+    if (editImg === null) { pv.textContent = 'image'; return; }
+    if (existing && existing.img) {
+      pv.textContent = '…';
+      getImage('home', existing.img).then(d => { pv.innerHTML = d ? `<img src="${d}">` : 'image'; });
+    } else if (editImgUrl) {
+      pv.innerHTML = `<img src="${esc(editImgUrl)}">`;
+    } else pv.textContent = 'image';
+  }
+
+  function openItemEditor(zoneId, itemId) {
+    editZone = zoneId;
+    editId = itemId;
+    editImg = undefined;
+    const it = itemId ? (items[zoneId] || {})[itemId] || {} : {};
+    editImgUrl = it.imgUrl || '';
+    $('item-title-lbl').textContent = itemId ? 'Edit item' : 'New item';
+    $('it-url').value = it.url || '';
+    $('it-name').value = it.title || '';
+    $('it-price').value = it.price != null ? it.price : '';
+    $('it-dims').value = it.dims || '';
+    $('it-desc').value = it.desc || '';
+    $('it-fetch-note').textContent = '';
+    $('it-delete').style.display = itemId ? '' : 'none';
+    paintPreview(it);
+    openModal('item-overlay');
+    if (!itemId) setTimeout(() => $('it-url').focus(), 50);
+  }
+  window.ppcHomeAddItem = () => { if (curZone) openItemEditor(curZone, null); };
+
+  $('it-fetch').addEventListener('click', async () => {
+    const url = $('it-url').value.trim();
+    if (!url) { $('it-url').focus(); return; }
+    $('it-fetch').disabled = true;
+    $('it-fetch-note').textContent = 'reading the page…';
+    const meta = await fetchUrlMeta(url);
+    $('it-fetch').disabled = false;
+    const got = [];
+    if (meta.title && !$('it-name').value.trim()) { $('it-name').value = meta.title; got.push('title'); }
+    if (meta.desc && !$('it-desc').value.trim()) { $('it-desc').value = meta.desc.slice(0, 240); got.push('notes'); }
+    if (meta.price && !$('it-price').value) { $('it-price').value = meta.price; got.push('price'); }
+    if (meta.imgUrl) { editImgUrl = meta.imgUrl; if (editImg === undefined || editImg === null) { editImg = undefined; } got.push('image'); }
+    paintPreview(editId ? (items[editZone] || {})[editId] : null);
+    $('it-fetch-note').textContent = got.length
+      ? 'found: ' + got.join(', ') + ' — edit anything before saving'
+      : (meta.via === 'slug' && meta.title ? 'guessed a title from the link — fill in the rest' : "couldn't read the page — fill in manually");
+  });
+
+  async function acceptImageBlob(blob) {
+    $('it-img-preview').textContent = '…';
+    const d = await downscaleToB64(blob);
+    if (!d) { $('it-img-preview').textContent = 'image'; showToast('Could not read that image', 'error'); return; }
+    editImg = d;
+    paintPreview(null);
+  }
+  $('it-img-pick').addEventListener('click', () => $('it-img-file').click());
+  $('it-img-preview').addEventListener('click', () => $('it-img-file').click());
+  $('it-img-file').addEventListener('change', () => {
+    const f = $('it-img-file').files[0];
+    $('it-img-file').value = '';
+    if (f) acceptImageBlob(f);
+  });
+  $('it-img-clear').addEventListener('click', () => { editImg = null; editImgUrl = ''; paintPreview(null); });
+  $('item-overlay').addEventListener('paste', e => {
+    const f = [...(e.clipboardData ? e.clipboardData.items : [])].find(i => i.type.startsWith('image/'));
+    if (f) { e.preventDefault(); acceptImageBlob(f.getAsFile()); }
+  });
+
+  $('it-save').addEventListener('click', () => {
+    const title = $('it-name').value.trim();
+    if (!title) { $('it-name').focus(); return; }
+    const prev = editId ? (items[editZone] || {})[editId] || {} : {};
+    const id = editId || uid();
+    const priceRaw = parseFloat($('it-price').value);
+    const item = {
+      title,
+      url: $('it-url').value.trim() || null,
+      desc: $('it-desc').value.trim() || null,
+      dims: $('it-dims').value.trim() || null,
+      price: isNaN(priceRaw) ? null : priceRaw,
+      img: prev.img || null,
+      imgUrl: editImgUrl || null,
+      by: prev.by || ME,                       // creator sticks
+      createdAt: prev.createdAt || Date.now(),
+    };
+    if (editImg) {                              // new upload replaces old
+      const imgId = uid();
+      putImage('home', imgId, editImg);
+      if (prev.img) KV.remove('home/img/' + prev.img);
+      item.img = imgId;
+      item.imgUrl = null;
+    } else if (editImg === null && prev.img) {  // explicit clear
+      KV.remove('home/img/' + prev.img);
+      item.img = null;
+    }
+    KV.set('home/items/' + editZone + '/' + id, item);
+    closeModal('item-overlay');
+  });
+  $('it-delete').addEventListener('click', () => {
+    if (!editId) return;
+    const it = (items[editZone] || {})[editId] || {};
+    askConfirm('Delete "' + (it.title || 'item') + '"?', 'Removed for both of you; the budget updates.', () => {
+      if (it.img) KV.remove('home/img/' + it.img);
+      KV.remove('home/items/' + editZone + '/' + editId);
+      closeModal('item-overlay');
+    }, 'Delete');
+  });
+
+  /* ---- wiring ---- */
+  $('zn-tabs').querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
+    if (!curZone) return;
+    location.hash = '#home/' + curZone + (b.dataset.tab === 'list' ? '' : '/' + b.dataset.tab);
+  }));
+  $('zn-fab').addEventListener('click', () => window.ppcHomeAddItem());
+
+  APPS.home.mount = () => {
+    buildSvg();
+    unwatch = [
+      KV.watch('home/zones', v => { zones = v || {}; curZone ? renderZone() : updatePlan(); }),
+      KV.watch('home/items', v => { items = v || {}; curZone ? renderZone() : updatePlan(); }),
+    ];
+    APPS.home.subroute(location.hash.replace(/^#/, ''));
+    return () => { unwatch.forEach(u => u()); unwatch = []; curZone = null; };
+  };
+  APPS.home.subroute = h => {
+    const parts = h.split('/');
+    if (parts[1] && zoneById(parts[1])) showZone(parts[1], parts[2] || 'list');
+    else showPlan();
+  };
+  APPS.home.menu = () =>
+    `<button class="menu-item" onclick="location.hash='#home'">Floorplan</button>` +
+    ZONES.map(z => `<button class="menu-item muted" onclick="location.hash='#home/${z.id}'">${esc(z.label)}</button>`).join('');
+  APPS.home.stat = () => {
+    const tb = totalBudget();
+    return 'spent ' + fmtMoney(totalSpent()) + (tb ? ' / ' + fmtMoney(tb) : '');
+  };
+
+  return { ZONES, STATUSES, get curZone() { return curZone; },
+    _debug: () => ({ curZone, curTab, zones, itemCount: Object.values(items).reduce((a, z) => a + Object.keys(z || {}).length, 0) }) };
+})();
+window.PPCHome = Home;
 
 /* ============================================
    §14 BOOT
