@@ -1,0 +1,1392 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <!-- Nondescript on purpose: the page reveals nothing until the gate passes. -->
+  <title>ppc</title>
+  <meta name="theme-color" content="#111110">
+  <meta name="color-scheme" content="light dark">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="icon" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%23111110'/><circle cx='32' cy='32' r='7' fill='%230f9598'/></svg>">
+  <link rel="apple-touch-icon" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' fill='%23111110'/><circle cx='32' cy='32' r='9' fill='%230f9598'/></svg>">
+  <link href="https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600&f[]=jetbrains-mono@400,500&display=swap" rel="stylesheet">
+
+<style>
+/* ============================================
+   PPC — Design Tokens & Base (mirrors Cade.txt)
+   ============================================ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --font-body: 'General Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
+  --menubar-h: calc(40px + env(safe-area-inset-top));
+
+  --text-xs: 0.75rem;
+  --text-sm: 0.8125rem;
+  --text-base: 0.875rem;
+  --text-lg: 1rem;
+
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+
+  --transition: 150ms cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* Light mode */
+  --bg: #fafaf9;
+  --surface: #ffffff;
+  --surface-2: #f5f5f4;
+  --surface-hover: #f0efee;
+  --border: #e2e0dc;
+  --border-focus: #0f9598;
+  --text: #1c1917;
+  --text-muted: #78716c;
+  --text-faint: #a8a29e;
+  --accent: #0f9598;
+  --accent-hover: #12b3b7;
+  --accent-bg: rgba(14, 165, 233, 0.08);
+  --error: #dc2626;
+  --error-bg: #fef2f2;
+  --success: #16a34a;
+  --success-bg: #f0fdf4;
+  --warn: #d97706;
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.06);
+  --shadow-md: 0 4px 16px rgba(0,0,0,0.08);
+  --shadow-lg: 0 12px 40px rgba(0,0,0,0.12);
+
+  /* Per-user identity colors (authorship, chips, duel bar) */
+  --user-c: #0f9598;               /* Cade — teal */
+  --user-a: #e86a5f;               /* Avery — pastel red */
+  --user-b: #8b7ae0;               /* both — lavender */
+  --auth-c: #d9f1ef;               /* line backgrounds, light */
+  --auth-a: #fce3e1;
+  --auth-b: #e9e3f8;
+
+  /* Room category palette (8) — tints dropdown titles */
+  --cat-neutral:#78716c; --cat-teal:#0f9598; --cat-blue:#3b82f6; --cat-green:#16a34a;
+  --cat-amber:#d97706;  --cat-orange:#ea580c; --cat-pink:#db2777; --cat-purple:#8b5cf6;
+}
+
+[data-theme="dark"] {
+  --bg: #111110;
+  --surface: #1a1918;
+  --surface-2: #222120;
+  --surface-hover: #2a2928;
+  --border: #333231;
+  --border-focus: #0f9598;
+  --text: #e7e5e3;
+  --text-muted: #8c8a87;
+  --text-faint: #5c5a58;
+  --accent: #0f9598;
+  --accent-hover: #12b3b7;
+  --accent-bg: rgba(56, 189, 248, 0.1);
+  --error: #f87171;
+  --error-bg: rgba(248, 113, 113, 0.1);
+  --success: #4ade80;
+  --success-bg: rgba(74, 222, 128, 0.1);
+  --warn: #fbbf24;
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.2);
+  --shadow-md: 0 4px 16px rgba(0,0,0,0.3);
+  --shadow-lg: 0 12px 40px rgba(0,0,0,0.4);
+
+  --auth-c: #0f2b28;               /* line backgrounds, dark */
+  --auth-a: #38201f;
+  --auth-b: #2a2340;
+
+  --cat-neutral:#8c8a87; --cat-teal:#2dd4bf; --cat-blue:#60a5fa; --cat-green:#4ade80;
+  --cat-amber:#fbbf24;  --cat-orange:#fb923c; --cat-pink:#f472b6; --cat-purple:#a78bfa;
+}
+
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* The app never scrolls the page: body is a fixed flex column, screens scroll
+   internally. Mirrors txt.html — keeps the menubar/footer glued to the edges
+   and safe areas honored on iOS. */
+body {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: var(--text-base);
+  line-height: 1.5;
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+  -webkit-tap-highlight-color: transparent;
+}
+
+button { font-family: inherit; color: inherit; background: none; border: none; cursor: pointer; }
+button, a, .menu-item, .seg-tab { -webkit-tap-highlight-color: transparent; }
+input, select, textarea { font-family: inherit; color: inherit; }
+svg { display: block; }
+
+/* ============================================
+   Login gate — deliberately nondescript
+   ============================================ */
+#login-screen {
+  position: fixed; inset: 0; z-index: 50;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  background: var(--bg); padding: 0 clamp(28px, 14vw, 90px);
+  user-select: none; -webkit-user-select: none;
+}
+.login-card { width: 100%; max-width: 300px; display: flex; flex-direction: column; align-items: center; }
+.login-mark {
+  width: 52px; height: 52px; border-radius: 16px; background: var(--surface-2);
+  border: 1px solid var(--border);
+  display: grid; place-items: center; margin-bottom: 26px;
+}
+.login-mark::after { content: ''; width: 10px; height: 10px; border-radius: 50%; background: var(--text-faint); transition: background var(--transition); }
+.login-card.checking .login-mark::after { background: var(--accent); }
+#login-input {
+  width: 100%; background: var(--surface); border: 1.5px solid var(--border);
+  border-radius: var(--radius-lg); padding: 12px 14px;
+  font-family: var(--font-mono); font-size: 16px; text-align: center; letter-spacing: 0.14em;
+  outline: none; transition: border-color var(--transition);
+  -webkit-user-select: text; user-select: text;
+}
+#login-input:focus { border-color: var(--accent); }
+.login-card.fail #login-input { border-color: var(--error); }
+#login-btn {
+  width: 100%; margin-top: 10px; background: var(--accent); color: #fff;
+  border-radius: var(--radius-lg); padding: 11px; font-weight: 600; font-size: var(--text-base);
+  transition: background var(--transition), opacity var(--transition);
+}
+#login-btn:active { background: var(--accent-hover); }
+#login-btn:disabled { opacity: 0.55; cursor: default; }
+#login-msg { margin-top: 16px; font-size: var(--text-sm); color: var(--error); min-height: 1.4em; text-align: center; }
+#login-msg .soft { color: var(--text-faint); }
+@keyframes loginShake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-7px); } 40% { transform: translateX(6px); }
+  60% { transform: translateX(-4px); } 80% { transform: translateX(3px); }
+}
+.login-card.fail { animation: loginShake 300ms ease; }
+@media (prefers-reduced-motion: reduce) { .login-card.fail { animation: none; } }
+
+/* ============================================
+   Menubar
+   ============================================ */
+.menubar {
+  display: flex; align-items: center; gap: var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  padding-top: calc(var(--space-1) + env(safe-area-inset-top));
+  background: var(--surface); border-bottom: 1px solid var(--border);
+  height: var(--menubar-h); flex-shrink: 0;
+  user-select: none; -webkit-user-select: none;
+  position: relative; z-index: 20;
+}
+.menubar-logo {
+  display: flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px; border-radius: 8px; background: var(--surface-2);
+  border: 1px solid var(--border); flex-shrink: 0; text-decoration: none;
+}
+.menubar-logo::after { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
+
+.app-tabs {
+  display: flex; gap: 2px; background: var(--surface-2); border-radius: 8px; padding: 2px;
+}
+.seg-tab {
+  display: flex; align-items: center; gap: 5px;
+  padding: 4px 10px; border-radius: 6px; font-size: var(--text-sm); font-weight: 500;
+  color: var(--text-muted); transition: background var(--transition), color var(--transition);
+  min-height: 26px;
+}
+.seg-tab svg { width: 14px; height: 14px; fill: currentColor; }
+.seg-tab.on { background: var(--surface); color: var(--text); font-weight: 600; box-shadow: var(--shadow-sm); }
+.seg-tab:not(.on):hover { color: var(--text); }
+
+.menu-trigger {
+  padding: 4px 8px; border-radius: var(--radius-md); font-size: var(--text-sm);
+  color: var(--text-muted); min-height: 26px;
+}
+.menu-trigger:hover, .menu-trigger[aria-expanded="true"] { background: var(--surface-hover); color: var(--text); }
+
+.menu-wrap { position: relative; }
+.menu-dropdown {
+  display: none; position: absolute; top: 100%; left: 0; margin-top: 4px;
+  min-width: 210px; max-height: min(60dvh, 340px); overflow-y: auto; overscroll-behavior: contain;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg); padding: 4px; z-index: 100;
+}
+.menu-dropdown.open { display: block; animation: menuFadeIn 100ms ease; }
+.menu-dropdown.align-right { left: auto; right: 0; }
+@keyframes menuFadeIn { from { opacity: 0; transform: translateY(-3px); } to { opacity: 1; transform: none; } }
+.menu-item {
+  display: flex; align-items: center; gap: 8px; width: 100%; text-align: left;
+  padding: 7px 10px; border-radius: var(--radius-md); font-size: var(--text-sm);
+}
+.menu-item:hover { background: var(--surface-hover); }
+.menu-item .mi-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.menu-item .mi-when { margin-left: auto; font-family: var(--font-mono); font-size: 0.65rem; color: var(--text-faint); }
+.menu-item.muted { color: var(--text-muted); }
+.menu-sep { height: 1px; background: var(--border); margin: 4px 6px; }
+
+.menubar-spacer { flex: 1; }
+
+.user-chip {
+  font-family: var(--font-mono); font-size: 0.65rem; letter-spacing: 0.08em;
+  padding: 2px 8px; border-radius: 99px; border: 1px solid var(--border); color: var(--text-muted);
+}
+.user-chip.u-c { border-color: var(--user-c); color: var(--user-c); }
+.user-chip.u-a { border-color: var(--user-a); color: var(--user-a); }
+
+.sync-dot {
+  width: 10px; height: 10px; border-radius: 50%; background: var(--text-faint);
+  margin: 0 6px 0 4px; cursor: pointer; flex-shrink: 0;
+  transition: background var(--transition);
+}
+.sync-dot.connected { background: var(--success); }
+.sync-dot.connecting { background: #eab308; animation: syncPulse 1.5s ease infinite; }
+@keyframes syncPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+.menubar-btn {
+  display: grid; place-items: center; width: 28px; height: 28px;
+  border-radius: var(--radius-md); color: var(--text-muted);
+}
+.menubar-btn:hover { background: var(--surface-hover); color: var(--text); }
+.menubar-btn svg { width: 15px; height: 15px; fill: currentColor; }
+
+/* ============================================
+   Screens & footer
+   ============================================ */
+.screen { flex: 1; min-height: 0; display: none; flex-direction: column; }
+.screen.on { display: flex; }
+.stub {
+  flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 10px; color: var(--text-faint);
+}
+.stub svg { width: 34px; height: 34px; fill: var(--text-faint); opacity: 0.6; }
+.stub span { font-size: var(--text-sm); }
+
+.footer {
+  display: flex; align-items: center; gap: var(--space-3);
+  padding: 0 var(--space-3); padding-bottom: env(safe-area-inset-bottom);
+  height: calc(20px + env(safe-area-inset-bottom));
+  background: var(--surface); border-top: 1px solid var(--border);
+  font-size: var(--text-xs); line-height: 1; color: var(--text-muted);
+  flex-shrink: 0; user-select: none; -webkit-user-select: none;
+}
+#footer-clock { font-variant-numeric: tabular-nums; font-family: var(--font-mono); font-size: 0.7rem; cursor: pointer; }
+#footer-stat { font-size: 0.7rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.footer-spacer { flex: 1; }
+#footer-presence { font-size: 0.7rem; display: flex; align-items: center; gap: 4px; }
+#footer-presence .p-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--text-faint); }
+#footer-presence.live .p-dot { background: var(--success); }
+#footer-sync { font-size: 0.7rem; color: var(--text-faint); }
+
+/* ============================================
+   Modal primitives (mirrors txt.html)
+   ============================================ */
+.modal-overlay {
+  display: none; position: fixed; inset: 0; z-index: 300;
+  background: rgba(0,0,0,0.3); padding: 28px 16px;
+  align-items: center; justify-content: center;
+}
+.modal-overlay.open { display: flex; }
+.modal-dialog {
+  width: 400px; max-width: calc(100vw - 40px);
+  max-height: min(84vh, calc(100dvh - 56px)); overflow-y: auto; overscroll-behavior: contain;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg); padding: var(--space-6);
+  animation: dialogIn 150ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes dialogIn { from { opacity: 0; transform: translateY(6px) scale(0.985); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .modal-dialog { animation: none; } }
+.modal-title { font-size: var(--text-lg); font-weight: 600; margin-bottom: var(--space-2); }
+.modal-desc { font-size: var(--text-sm); color: var(--text-muted); margin-bottom: var(--space-4); }
+.modal-actions { display: flex; gap: var(--space-2); justify-content: flex-end; margin-top: var(--space-5); }
+
+.form-group { margin-bottom: var(--space-4); }
+.form-label { display: block; font-size: var(--text-sm); font-weight: 500; margin-bottom: var(--space-1); }
+.form-input {
+  width: 100%; background: var(--bg); border: 1.5px solid var(--border);
+  border-radius: var(--radius-md); padding: 8px 10px; font-size: var(--text-base);
+  outline: none; transition: border-color var(--transition);
+}
+.form-input:focus { border-color: var(--accent); }
+.form-hint { font-size: var(--text-xs); color: var(--text-faint); margin-top: var(--space-1); }
+
+.btn {
+  padding: 7px 14px; border-radius: var(--radius-md); font-size: var(--text-sm); font-weight: 500;
+  background: var(--surface-2); border: 1px solid var(--border); transition: background var(--transition);
+  min-height: 32px;
+}
+.btn:hover { background: var(--surface-hover); }
+.btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn-primary:hover { background: var(--accent-hover); }
+.btn-danger { color: var(--error); }
+
+/* Settings */
+.settings-section { margin-bottom: var(--space-5); }
+.settings-section-title { font-size: var(--text-xs); font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-faint); margin-bottom: var(--space-2); }
+.setting-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); padding: 7px 0; }
+.setting-info { min-width: 0; }
+.setting-label { font-size: var(--text-sm); }
+.setting-hint { font-size: var(--text-xs); color: var(--text-faint); }
+.setting-control select {
+  background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-md);
+  padding: 4px 8px; font-size: var(--text-sm); outline: none;
+}
+.setting-toggle { position: relative; display: inline-block; width: 38px; height: 22px; flex-shrink: 0; cursor: pointer; }
+.setting-toggle input { position: absolute; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; z-index: 1; }
+.toggle-track { position: absolute; inset: 0; background: var(--border); border-radius: 11px; transition: background var(--transition); }
+.toggle-thumb { position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; background: #fff; border-radius: 50%; box-shadow: var(--shadow-sm); transition: transform var(--transition); }
+.setting-toggle input:checked ~ .toggle-track { background: var(--accent); }
+.setting-toggle input:checked ~ .toggle-thumb { transform: translateX(16px); }
+
+/* Toasts */
+#toast-wrap {
+  position: fixed; left: 50%; transform: translateX(-50%);
+  bottom: calc(30px + env(safe-area-inset-bottom)); z-index: 400;
+  display: flex; flex-direction: column; gap: 6px; align-items: center; pointer-events: none;
+}
+.toast {
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md); padding: 8px 14px; font-size: var(--text-sm);
+  animation: toastIn 180ms cubic-bezier(0.16, 1, 0.3, 1); max-width: min(86vw, 420px);
+}
+.toast.error { border-color: var(--error); color: var(--error); }
+.toast.success { border-color: var(--success); }
+@keyframes toastIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+/* Sync debug pane */
+#sync-log {
+  display: none; position: fixed; right: 8px; bottom: calc(28px + env(safe-area-inset-bottom));
+  width: min(76vw, 320px); max-height: 34vh; overflow-y: auto; z-index: 250;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md); padding: 6px 8px;
+  font-family: var(--font-mono); font-size: 0.62rem; color: var(--text-muted);
+}
+#sync-log.open { display: block; }
+#sync-log .sl-row { padding: 1px 0; border-bottom: 1px dashed var(--border); word-break: break-all; }
+
+/* ============================================
+   Mobile
+   ============================================ */
+@media (pointer: coarse) {
+  .menu-item { min-height: 40px; }
+  .seg-tab { min-height: 30px; }
+  .btn { min-height: 40px; }
+  .setting-row { padding: 9px 0; }
+}
+@media (max-width: 600px) {
+  .form-input, #login-input { font-size: 16px !important; } /* stop iOS zoom-on-focus */
+  .modal-dialog { max-height: calc(100dvh - 96px); }
+}
+@media (max-width: 480px) {
+  .seg-tab { padding: 4px 8px; }
+  .seg-tab .seg-label { display: none; }
+  .seg-tab.on .seg-label { display: inline; }
+}
+</style>
+</head>
+<body>
+
+<!-- ===== Login gate (nondescript) ===== -->
+<div id="login-screen">
+  <div class="login-card" id="login-card">
+    <div class="login-mark"></div>
+    <input id="login-input" type="text" placeholder="···" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="go" aria-label="entry">
+    <button id="login-btn">Enter</button>
+    <div id="login-msg" aria-live="polite"></div>
+  </div>
+</div>
+
+<!-- ===== App shell ===== -->
+<div id="app" hidden>
+  <div class="menubar">
+    <a class="menubar-logo" href="https://cadezawacki.github.io/" aria-label="home"></a>
+    <nav class="app-tabs" aria-label="apps">
+      <button class="seg-tab" data-app="notes" id="tab-notes">
+        <svg viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+        <span class="seg-label">Notes</span>
+      </button>
+      <button class="seg-tab" data-app="home" id="tab-home">
+        <svg viewBox="0 0 24 24"><path d="M12 3l9 8h-3v9h-4v-6h-4v6H6v-9H3l9-8z"/></svg>
+        <span class="seg-label">Home</span>
+      </button>
+      <button class="seg-tab" data-app="fit" id="tab-fit">
+        <svg viewBox="0 0 24 24"><path d="M20.57 14.86L22 13.43 20.57 12 17 15.57 8.43 7 12 3.43 10.57 2 9.14 3.43 7.71 2 5.57 4.14 4.14 2.71 2.71 4.14l1.43 1.43L2 7.71l1.43 1.43L2 10.57 3.43 12 7 8.43 15.57 17 12 20.57 13.43 22l1.43-1.43L16.29 22l2.14-2.14 1.43 1.43 1.43-1.43-1.43-1.43L22 16.29l-1.43-1.43z"/></svg>
+        <span class="seg-label">Fit</span>
+      </button>
+    </nav>
+    <div class="menu-wrap">
+      <button class="menu-trigger" id="menu-app-btn" aria-expanded="false" aria-haspopup="true">⋯</button>
+      <div class="menu-dropdown" id="menu-app"></div>
+    </div>
+    <div class="menubar-spacer"></div>
+    <span class="user-chip" id="user-chip"></span>
+    <div class="sync-dot" id="sync-dot" title="Sync off"></div>
+    <button class="menubar-btn" id="theme-btn" aria-label="toggle theme"></button>
+  </div>
+
+  <div class="screen" id="screen-notes">
+    <div class="stub">
+      <svg viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+      <span>Shared notes — coming next</span>
+    </div>
+  </div>
+  <div class="screen" id="screen-home">
+    <div class="stub">
+      <svg viewBox="0 0 24 24"><path d="M12 3l9 8h-3v9h-4v-6h-4v6H6v-9H3l9-8z"/></svg>
+      <span>House remodel — coming next</span>
+    </div>
+  </div>
+  <div class="screen" id="screen-fit">
+    <div class="stub">
+      <svg viewBox="0 0 24 24"><path d="M20.57 14.86L22 13.43 20.57 12 17 15.57 8.43 7 12 3.43 10.57 2 9.14 3.43 7.71 2 5.57 4.14 4.14 2.71 2.71 4.14l1.43 1.43L2 7.71l1.43 1.43L2 10.57 3.43 12 7 8.43 15.57 17 12 20.57 13.43 22l1.43-1.43L16.29 22l2.14-2.14 1.43 1.43 1.43-1.43-1.43-1.43L22 16.29l-1.43-1.43z"/></svg>
+      <span>Fitness — coming next</span>
+    </div>
+  </div>
+
+  <div class="footer">
+    <span id="footer-clock"></span>
+    <span id="footer-stat"></span>
+    <div class="footer-spacer"></div>
+    <span id="footer-presence"><span class="p-dot"></span><span id="footer-presence-txt"></span></span>
+    <span id="footer-sync"></span>
+  </div>
+</div>
+
+<!-- ===== Settings modal ===== -->
+<div class="modal-overlay" id="settings-overlay">
+  <div class="modal-dialog">
+    <div class="modal-title">Settings</div>
+    <div id="settings-sections"></div>
+    <div class="modal-actions">
+      <button class="btn btn-danger" id="logout-btn">Log out</button>
+      <button class="btn btn-primary" onclick="closeModal('settings-overlay')">Done</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== Confirm modal (generic) ===== -->
+<div class="modal-overlay" id="confirm-overlay">
+  <div class="modal-dialog">
+    <div class="modal-title" id="confirm-title"></div>
+    <div class="modal-desc" id="confirm-desc"></div>
+    <div class="modal-actions">
+      <button class="btn" id="confirm-no">Cancel</button>
+      <button class="btn btn-primary" id="confirm-yes">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast-wrap"></div>
+<div id="sync-log"></div>
+
+<!-- @CM6_BUNDLE_SLOT -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<script>
+(() => {
+'use strict';
+
+/* ============================================
+   §00 UTIL
+   ============================================ */
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const uid = () => Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
+const debounce = (fn, ms) => { let t = 0; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; };
+const throttle = (fn, ms) => {
+  let last = 0, t = 0;
+  return (...a) => {
+    const now = Date.now();
+    if (now - last >= ms) { last = now; fn(...a); }
+    else { clearTimeout(t); t = setTimeout(() => { last = Date.now(); fn(...a); }, ms - (now - last)); }
+  };
+};
+window.haptic = ms => { try { if (navigator.vibrate) navigator.vibrate(ms || 12); } catch {} };
+
+function showToast(msg, kind, ms) {
+  const el = document.createElement('div');
+  el.className = 'toast' + (kind ? ' ' + kind : '');
+  el.textContent = msg;
+  $('toast-wrap').appendChild(el);
+  setTimeout(() => { el.style.opacity = '0'; el.style.transition = 'opacity 200ms'; setTimeout(() => el.remove(), 220); }, ms || 2200);
+}
+window.showToast = showToast;
+
+window.closeModal = id => $(id).classList.remove('open');
+window.openModal = id => $(id).classList.add('open');
+document.querySelectorAll('.modal-overlay').forEach(ov => {
+  ov.addEventListener('click', e => { if (e.target === ov) ov.classList.remove('open'); });
+});
+
+let _confirmCb = null;
+window.askConfirm = (title, desc, cb, yesLabel) => {
+  $('confirm-title').textContent = title;
+  $('confirm-desc').textContent = desc || '';
+  $('confirm-yes').textContent = yesLabel || 'Confirm';
+  _confirmCb = cb;
+  openModal('confirm-overlay');
+};
+$('confirm-yes').addEventListener('click', () => { closeModal('confirm-overlay'); const cb = _confirmCb; _confirmCb = null; if (cb) cb(); });
+$('confirm-no').addEventListener('click', () => { _confirmCb = null; closeModal('confirm-overlay'); });
+
+/* ============================================
+   §01 STORE — localStorage wrapper (ported from txt.html)
+   Chunked writes, in-memory fallback, quota sweep. The quota path may ONLY
+   evict ppc-* cache keys — never anything of Cade.txt's (`cade-*`) on the
+   shared origin.
+   ============================================ */
+const store = (() => {
+  const mem = {};
+  const _s = (() => { try { return window[['local','Storage'].join('')]; } catch { return null; } })();
+  let ok = false;
+  try { if (_s) { const k = '__t_ppc'; _s.setItem(k, '1'); _s.removeItem(k); ok = true; } } catch {}
+
+  const CHUNK_SIZE = 500000;
+  const CHUNK_SEP = '\u0000chunk\u0000';
+  const CHUNK_MARK = '\u0000CHUNKED\u0000';
+  const chunkKey = (key, i) => key + CHUNK_SEP + i;
+  const isQuotaError = e => !!e && (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED' || e.code === 22 || e.code === 1014);
+
+  function rawKeys() {
+    const out = [];
+    if (!ok) return out;
+    for (let i = 0; i < _s.length; i++) { const k = _s.key(i); if (k != null) out.push(k); }
+    return out;
+  }
+  const manifestCount = v => (v != null && v.startsWith(CHUNK_MARK)) ? (parseInt(v.slice(CHUNK_MARK.length), 10) || 0) : 0;
+  function clearChunks(key) {
+    if (!ok) return;
+    const prefix = key + CHUNK_SEP;
+    rawKeys().forEach(k => { if (k.startsWith(prefix)) _s.removeItem(k); });
+  }
+  function writeRaw(key, val) {
+    if (!ok) { mem[key] = val; return; }
+    const prev = _s.getItem(key);
+    const wasChunked = prev != null && prev.startsWith(CHUNK_MARK);
+    if (val.length <= CHUNK_SIZE) {
+      if (wasChunked) clearChunks(key);
+      _s.setItem(key, val);
+      return;
+    }
+    const n = Math.ceil(val.length / CHUNK_SIZE);
+    try {
+      for (let i = 0; i < n; i++) _s.setItem(chunkKey(key, i), val.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE));
+      if (wasChunked) for (let i = n; i < manifestCount(prev); i++) _s.removeItem(chunkKey(key, i));
+      _s.setItem(key, CHUNK_MARK + n);
+    } catch (e) {
+      // Half-written chunk sets are unreachable debris; roll back before rethrowing.
+      try { clearChunks(key); if (wasChunked) _s.removeItem(key); } catch {}
+      throw e;
+    }
+  }
+  // Quota relief: drop ppc snapshot caches only. They rebuild from Firebase.
+  function evictPpcCaches() {
+    if (!ok) return;
+    rawKeys().forEach(k => {
+      if (k.startsWith('ppc-kv-cache:') || k.startsWith('ppc-notes-cache:')) {
+        const base = k.split(CHUNK_SEP)[0];
+        remove(base);
+      }
+    });
+  }
+  function get(key) {
+    if (Object.prototype.hasOwnProperty.call(mem, key)) return mem[key];
+    if (!ok) return null;
+    const v = _s.getItem(key);
+    if (v == null || !v.startsWith(CHUNK_MARK)) return v;
+    const n = parseInt(v.slice(CHUNK_MARK.length), 10) || 0;
+    let out = '';
+    for (let i = 0; i < n; i++) {
+      const part = _s.getItem(chunkKey(key, i));
+      if (part == null) return null;
+      out += part;
+    }
+    return out;
+  }
+  function set(key, val) {
+    val = String(val);
+    try { writeRaw(key, val); if (ok) delete mem[key]; return; }
+    catch (e) { if (!isQuotaError(e)) { mem[key] = val; return; } }
+    try { evictPpcCaches(); writeRaw(key, val); delete mem[key]; return; }
+    catch (e2) { if (!isQuotaError(e2)) { mem[key] = val; return; } }
+    mem[key] = val;
+  }
+  function remove(key) {
+    delete mem[key];
+    if (ok) {
+      const prev = _s.getItem(key);
+      if (prev != null && prev.startsWith(CHUNK_MARK)) clearChunks(key);
+      _s.removeItem(key);
+    }
+  }
+  function keys() {
+    const seen = new Set();
+    const out = [];
+    if (ok) {
+      for (let i = 0; i < _s.length; i++) {
+        const k = _s.key(i);
+        if (k && k.indexOf(CHUNK_SEP) === -1) { seen.add(k); out.push(k); }
+      }
+    }
+    for (const k in mem) if (!seen.has(k) && k.indexOf(CHUNK_SEP) === -1) out.push(k);
+    return out;
+  }
+  return { get, set, remove, keys, ok };
+})();
+
+/* ============================================
+   §03 CRYPTO — ported verbatim from txt.html (same salt, magic, wire format)
+   ============================================ */
+async function _compress(data) {
+  const cs = new CompressionStream('deflate-raw');
+  const writer = cs.writable.getWriter();
+  writer.write(data);
+  writer.close();
+  const chunks = [];
+  const reader = cs.readable.getReader();
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+  }
+  let len = 0; for (const c of chunks) len += c.length;
+  const out = new Uint8Array(len); let off = 0;
+  for (const c of chunks) { out.set(c, off); off += c.length; }
+  return out;
+}
+async function _decompress(data) {
+  const ds = new DecompressionStream('deflate-raw');
+  const writer = ds.writable.getWriter();
+  writer.write(data);
+  writer.close();
+  const chunks = [];
+  const reader = ds.readable.getReader();
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+  }
+  let len = 0; for (const c of chunks) len += c.length;
+  const out = new Uint8Array(len); let off = 0;
+  for (const c of chunks) { out.set(c, off); off += c.length; }
+  return new TextDecoder().decode(out);
+}
+
+// PBKDF2 is expensive (100k iterations) — memoize the derived key per password.
+const _deriveKeyCache = new Map();
+function deriveKey(password) {
+  let p = _deriveKeyCache.get(password);
+  if (p) return p;
+  p = (async () => {
+    const enc = new TextEncoder();
+    const keyMaterial = await crypto.subtle.importKey('raw', enc.encode(password), 'PBKDF2', false, ['deriveKey']);
+    return crypto.subtle.deriveKey(
+      { name: 'PBKDF2', salt: enc.encode('cade.txt-salt'), iterations: 100000, hash: 'SHA-256' },
+      keyMaterial,
+      { name: 'AES-GCM', length: 256 },
+      false,
+      ['encrypt', 'decrypt']
+    );
+  })();
+  p.catch(() => { if (_deriveKeyCache.get(password) === p) _deriveKeyCache.delete(password); });
+  if (_deriveKeyCache.size > 50) _deriveKeyCache.clear();
+  _deriveKeyCache.set(password, p);
+  return p;
+}
+
+const _CRYPT_MAGIC = [0xCA, 0xDE, 0x01, 0x00];
+const _MAGIC_LEN = _CRYPT_MAGIC.length;
+
+async function encryptText(text, password) {
+  const key = await deriveKey(password);
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const plainBytes = await _compress(new TextEncoder().encode(text));
+  const ciphertext = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, plainBytes);
+  const combined = new Uint8Array(_MAGIC_LEN + iv.byteLength + ciphertext.byteLength);
+  combined.set(_CRYPT_MAGIC, 0);
+  combined.set(iv, _MAGIC_LEN);
+  combined.set(new Uint8Array(ciphertext), _MAGIC_LEN + iv.byteLength);
+  let binary = '';
+  const chunk = 8192;
+  for (let i = 0; i < combined.length; i += chunk) {
+    binary += String.fromCharCode.apply(null, combined.subarray(i, i + chunk));
+  }
+  return btoa(binary);
+}
+
+async function decryptText(encoded, password) {
+  const key = await deriveKey(password);
+  let combined;
+  try {
+    const raw = atob(encoded);
+    combined = new Uint8Array(raw.length);
+    for (let i = 0; i < raw.length; i++) combined[i] = raw.charCodeAt(i);
+  } catch { return null; }
+  let iv, ciphertext, isCompressed;
+  const hasMagic = combined.length >= _MAGIC_LEN &&
+    combined[0] === _CRYPT_MAGIC[0] && combined[1] === _CRYPT_MAGIC[1] &&
+    combined[2] === _CRYPT_MAGIC[2] && combined[3] === _CRYPT_MAGIC[3];
+  if (hasMagic) {
+    iv = combined.slice(_MAGIC_LEN, _MAGIC_LEN + 12);
+    ciphertext = combined.slice(_MAGIC_LEN + 12);
+    isCompressed = true;
+  } else if (combined[0] === 0x01) {
+    iv = combined.slice(1, 13);
+    ciphertext = combined.slice(13);
+    isCompressed = true;
+  } else {
+    iv = combined.slice(0, 12);
+    ciphertext = combined.slice(12);
+    isCompressed = false;
+  }
+  try {
+    const decrypted = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ciphertext);
+    if (isCompressed) return await _decompress(new Uint8Array(decrypted));
+    return new TextDecoder().decode(decrypted);
+  } catch {
+    return null;
+  }
+}
+
+/* ============================================
+   §04 LOGIN — trial-decrypt the two embedded ciphertexts.
+   The gate is anti-spam, not high security: the ciphertexts are public, only
+   the two login words decode them into the database URL.
+   Generated by tools/ppc-make-login.mjs — regenerate there if the URL changes.
+   ============================================ */
+const LOGIN_CTS = [
+  { ct: 'yt4BAH9Lq54GjH8ZnM+Jfi9Y6g6CUyv32LIP+d84myWFsYtVhtvRrTUML0pSn8G5fnHU/nmTZTWjJk/dJrNoTpZfVJNapTToPpaKKwU=', user: 'C', name: 'Cade' },
+  { ct: 'yt4BAIWSEbedl75SFsFdr9wMaZtroeImY/S7+2ETK/xsxntK0STphgkWn6S+kPvEenlaGcUGdCqlApykTT+Zx7WJnM13huSdbn3NhN8=', user: 'A', name: 'Avery' },
+];
+const FB_URL_RE = /^https:\/\/[a-z0-9.-]+\.firebaseio\.com\/?$/;
+
+let ME = null;          // 'C' | 'A'
+let MY_NAME = '';
+let FB_URL = '';
+let ENC_KEY = '';       // shared data key — derived from the URL, see plan §2.3
+let _loginFails = 0;
+
+const USER_NAMES = { C: 'Cade', A: 'Avery' };
+const OTHER = u => u === 'C' ? 'A' : 'C';
+
+async function tryLogin(raw) {
+  const input = String(raw || '').trim().toLowerCase();
+  if (!input) return false;
+  for (const entry of LOGIN_CTS) {
+    const dec = await decryptText(entry.ct, input);
+    if (dec && FB_URL_RE.test(dec)) {
+      ME = entry.user;
+      MY_NAME = entry.name;
+      FB_URL = dec.replace(/\/+$/, '');
+      store.set('ppc-user', ME);
+      store.set('ppc-fb-url', FB_URL);
+      return true;
+    }
+  }
+  return false;
+}
+
+function initLoginUI() {
+  const card = $('login-card'), input = $('login-input'), btn = $('login-btn'), msg = $('login-msg');
+  let busy = false;
+  async function go() {
+    if (busy) return;
+    const val = input.value;
+    if (!val.trim()) { input.focus(); return; }
+    busy = true;
+    btn.disabled = true;
+    btn.textContent = 'checking…';
+    card.classList.add('checking');
+    card.classList.remove('fail');
+    const ok = await tryLogin(val);
+    busy = false;
+    btn.disabled = false;
+    btn.textContent = 'Enter';
+    card.classList.remove('checking');
+    if (ok) {
+      enterApp(true);
+    } else {
+      _loginFails++;
+      card.classList.add('fail');
+      msg.innerHTML = _loginFails >= 3
+        ? 'That&#39;s not it. <span class="soft">ask the other one</span>'
+        : 'That&#39;s not it';
+      input.select();
+      haptic(30);
+    }
+  }
+  btn.addEventListener('click', go);
+  input.addEventListener('keydown', e => { if (e.key === 'Enter') go(); });
+  input.addEventListener('input', () => { card.classList.remove('fail'); msg.textContent = ''; });
+  input.focus();
+}
+
+function doLogout() {
+  askConfirm('Log out?', 'This device forgets who you are. Synced data stays on the server.', () => {
+    store.remove('ppc-user');
+    store.remove('ppc-fb-url');
+    try { tabs.post({ t: 'logout' }); } catch {}
+    location.reload();
+  }, 'Log out');
+}
+
+/* ============================================
+   §05 FIREBASE CORE
+   ============================================ */
+const PPC_BASE = 'rooms/__ppc';   // lives under rooms/ so existing DB rules cover it
+let db = null;
+let _fbAppSeq = 0;
+const syncState = { connected: false, everConnected: false, onConnect: [] };
+
+function slog(msg) {
+  if (!Settings.get('sync.debug')) return;
+  const pane = $('sync-log');
+  const row = document.createElement('div');
+  row.className = 'sl-row';
+  row.textContent = new Date().toTimeString().slice(0, 8) + ' ' + msg;
+  pane.appendChild(row);
+  while (pane.children.length > 120) pane.firstChild.remove();
+  pane.scrollTop = pane.scrollHeight;
+}
+
+function _applySyncUI(status, text) {
+  const dot = $('sync-dot');
+  dot.className = 'sync-dot' + (status ? ' ' + status : '');
+  dot.title = text || '';
+  $('footer-sync').textContent = text || '';
+}
+
+function initFirebase() {
+  if (!FB_URL || typeof firebase === 'undefined') { _applySyncUI('', 'Sync off'); return; }
+  try {
+    const appName = 'ppc-' + (++_fbAppSeq);
+    const app = firebase.initializeApp({ databaseURL: FB_URL }, appName);
+    db = firebase.database(app);
+  } catch (e) {
+    _applySyncUI('', 'Sync failed');
+    slog('init error ' + e.message);
+    return;
+  }
+  _applySyncUI('connecting', 'Connecting…');
+  db.ref('.info/connected').on('value', snap => {
+    const on = !!snap.val();
+    const was = syncState.connected;
+    syncState.connected = on;
+    if (on) {
+      syncState.everConnected = true;
+      _applySyncUI('connected', 'Synced');
+      slog('connected');
+      if (!was) {
+        // true-edge: replay queued writes, refresh presence
+        KV.flushPending();
+        touchPresence();
+      }
+    } else {
+      _applySyncUI(navigator.onLine ? 'connecting' : '', navigator.onLine ? 'Reconnecting…' : 'Offline');
+      slog('disconnected');
+    }
+  });
+}
+
+// Faster-reacting backups for the socket state.
+window.addEventListener('offline', () => { if (ME) _applySyncUI('', 'Offline'); });
+window.addEventListener('online', () => { if (ME && db) _applySyncUI('connecting', 'Reconnecting…'); });
+
+// After a long background (mobile sleep) the SDK socket can zombie: cycle it.
+let _hiddenAt = 0;
+const RESUME_CYCLE_MS = 10000;
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) { _hiddenAt = Date.now(); return; }
+  if (db && _hiddenAt && Date.now() - _hiddenAt >= RESUME_CYCLE_MS) {
+    slog('resume: cycling socket');
+    try { db.goOffline(); db.goOnline(); } catch {}
+  }
+  if (ME) touchPresence();
+  _hiddenAt = 0;
+});
+window.addEventListener('pageshow', e => {
+  if (e.persisted && db) { try { db.goOffline(); db.goOnline(); } catch {} }
+});
+
+// Presence heartbeat: on connect, on visibility, every 60s while visible.
+function touchPresence() {
+  if (!db || !ME) return;
+  try { db.ref(PPC_BASE + '/presence/' + ME).set({ t: Date.now(), page: currentApp }).catch(() => {}); } catch {}
+}
+setInterval(() => { if (!document.hidden && syncState.connected) touchPresence(); }, 60000);
+
+function watchPresence() {
+  if (!db || !ME) return;
+  db.ref(PPC_BASE + '/presence/' + OTHER(ME)).on('value', snap => {
+    const v = snap.val();
+    const el = $('footer-presence');
+    if (!v || !v.t) { el.classList.remove('live'); $('footer-presence-txt').textContent = ''; return; }
+    const mins = Math.max(0, Math.round((Date.now() - v.t) / 60000));
+    el.classList.toggle('live', mins < 5);
+    $('footer-presence-txt').textContent = USER_NAMES[OTHER(ME)][0] + ' · ' + (mins < 1 ? 'now' : mins < 60 ? mins + 'm' : Math.round(mins / 60) + 'h');
+  });
+}
+
+/* ============================================
+   §06 KV CHANNEL — structured data sync.
+   Fine-grained nodes, last-write-wins by `ts`, optimistic local apply, and a
+   persisted pending-ops queue replayed on the connect true-edge.
+   ============================================ */
+const KV = (() => {
+  const PENDING_KEY = 'ppc-pending-ops';
+  const watchers = new Map();   // relPath -> { ref, handler, last, cbs:Set }
+
+  const cacheKey = rel => 'ppc-kv-cache:' + rel;
+  function readCache(rel) {
+    const raw = store.get(cacheKey(rel));
+    if (raw == null) return undefined;
+    try { return JSON.parse(raw); } catch { return undefined; }
+  }
+
+  function watch(rel, cb) {
+    let w = watchers.get(rel);
+    if (!w) {
+      w = { ref: null, handler: null, last: undefined, cbs: new Set() };
+      watchers.set(rel, w);
+      const cached = readCache(rel);
+      if (cached !== undefined) w.last = cached;
+      if (db) {
+        w.ref = db.ref(PPC_BASE + '/' + rel);
+        w.handler = w.ref.on('value', snap => {
+          const val = snap.val();
+          const j = JSON.stringify(val);
+          if (j === JSON.stringify(w.last)) return;   // echo / no-op
+          w.last = val;
+          store.set(cacheKey(rel), j);
+          slog('recv ' + rel);
+          w.cbs.forEach(fn => { try { fn(val); } catch (e) { console.error(e); } });
+        }, err => slog('watch err ' + rel + ' ' + (err && err.message)));
+      }
+    }
+    w.cbs.add(cb);
+    // offline-first paint from cache (or last known)
+    if (w.last !== undefined) { try { cb(w.last); } catch (e) { console.error(e); } }
+    return () => {
+      w.cbs.delete(cb);
+      if (!w.cbs.size) {
+        if (w.ref && w.handler) { try { w.ref.off('value', w.handler); } catch {} }
+        watchers.delete(rel);
+      }
+    };
+  }
+
+  // Patch every watcher whose subtree contains `rel` so offline writes render
+  // immediately and survive reload via the kv-cache.
+  function _localPatch(rel, val) {
+    for (const [wp, w] of watchers) {
+      let root;
+      if (rel === wp) root = val;
+      else if (rel.startsWith(wp + '/')) {
+        const sub = rel.slice(wp.length + 1).split('/');
+        root = w.last == null ? {} : JSON.parse(JSON.stringify(w.last));
+        let node = root;
+        for (let i = 0; i < sub.length - 1; i++) {
+          if (typeof node[sub[i]] !== 'object' || node[sub[i]] == null) node[sub[i]] = {};
+          node = node[sub[i]];
+        }
+        if (val === null) delete node[sub[sub.length - 1]];
+        else node[sub[sub.length - 1]] = val;
+      } else continue;
+      w.last = root;
+      store.set(cacheKey(wp), JSON.stringify(root));
+      w.cbs.forEach(fn => { try { fn(root); } catch (e) { console.error(e); } });
+    }
+  }
+
+  function _queue(op) {
+    let q = [];
+    try { q = JSON.parse(store.get(PENDING_KEY) || '[]'); } catch {}
+    q = q.filter(o => o.p !== op.p);   // coalesce: newest write per path wins
+    q.push(op);
+    store.set(PENDING_KEY, JSON.stringify(q));
+    slog('queued ' + op.p);
+  }
+
+  function _netSet(rel, val) {
+    if (!db) return Promise.reject(new Error('no db'));
+    return Promise.race([
+      db.ref(PPC_BASE + '/' + rel).set(val),
+      new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 10000)),
+    ]);
+  }
+
+  function set(rel, val) {
+    if (val && typeof val === 'object' && !Array.isArray(val)) {
+      if (val.ts == null) val.ts = Date.now();
+      if (val.by == null && ME) val.by = ME;
+    }
+    _localPatch(rel, val);
+    const op = { p: rel, v: val, ts: Date.now() };
+    if (!syncState.connected) { _queue(op); return Promise.resolve(false); }
+    return _netSet(rel, val).then(() => { slog('set ' + rel); return true; })
+      .catch(e => { slog('set fail ' + rel + ' ' + e.message); _queue(op); return false; });
+  }
+
+  const remove = rel => set(rel, null);
+
+  async function flushPending() {
+    let q = [];
+    try { q = JSON.parse(store.get(PENDING_KEY) || '[]'); } catch {}
+    if (!q.length || !db) return;
+    store.set(PENDING_KEY, '[]');
+    slog('flush ' + q.length + ' op(s)');
+    for (const op of q) {
+      try {
+        // LWW guard: if the server value moved past this op while we were
+        // offline, the other user won — drop it.
+        const snap = await db.ref(PPC_BASE + '/' + op.p).once('value');
+        const remote = snap.val();
+        if (remote && typeof remote === 'object' && remote.ts && op.v && typeof op.v === 'object' && op.v.ts && remote.ts > op.v.ts) {
+          slog('drop (older) ' + op.p);
+          continue;
+        }
+        await _netSet(op.p, op.v);
+      } catch (e) {
+        _queue(op);   // still failing: keep for next edge
+      }
+    }
+  }
+
+  return { watch, set, remove, flushPending, _watchers: watchers };
+})();
+
+/* ============================================
+   §10 SETTINGS — declarative registry (ported pattern from txt.html)
+   ============================================ */
+const Settings = (() => {
+  const PREFIX = 'ppc-pref:';
+  const registry = new Map();
+  const SECTION_ORDER = ['General', 'Notes', 'Home', 'Fitness', 'Advanced'];
+
+  function registerSetting(def) {
+    registry.set(def.key, def);
+  }
+  function get(key) {
+    const def = registry.get(key);
+    if (!def) return null;
+    if (def.getState) return def.getState();
+    const raw = store.get(PREFIX + key);
+    if (raw == null) return def.default;
+    if (def.type === 'toggle') return raw === 'true';
+    if (def.type === 'number') return parseFloat(raw);
+    return raw;
+  }
+  function setVal(key, value) {
+    const def = registry.get(key);
+    if (!def) return;
+    if (!def.getState) store.set(PREFIX + key, String(value));
+    if (def.apply) { try { def.apply(value); } catch (e) { console.error(e); } }
+  }
+  function render() {
+    const wrap = $('settings-sections');
+    const sections = new Map();
+    for (const def of registry.values()) {
+      const s = def.section || 'General';
+      if (!sections.has(s)) sections.set(s, []);
+      sections.get(s).push(def);
+    }
+    const ordered = [...sections.keys()].sort((a, b) => {
+      const ia = SECTION_ORDER.indexOf(a), ib = SECTION_ORDER.indexOf(b);
+      return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+    });
+    let html = '';
+    for (const s of ordered) {
+      html += `<div class="settings-section"><div class="settings-section-title">${esc(s)}</div>`;
+      for (const def of sections.get(s)) {
+        const val = get(def.key);
+        let ctrl = '';
+        if (def.type === 'toggle') {
+          ctrl = `<label class="setting-toggle"><input type="checkbox" data-skey="${esc(def.key)}"${val ? ' checked' : ''}><span class="toggle-track"></span><span class="toggle-thumb"></span></label>`;
+        } else if (def.type === 'select') {
+          ctrl = `<select data-skey="${esc(def.key)}">` + def.options.map(o =>
+            `<option value="${esc(o.value)}"${String(val) === String(o.value) ? ' selected' : ''}>${esc(o.label)}</option>`).join('') + `</select>`;
+        } else if (def.type === 'number') {
+          ctrl = `<input class="form-input" style="width:72px" type="number" data-skey="${esc(def.key)}" value="${esc(val)}"${def.min != null ? ` min="${def.min}"` : ''}${def.max != null ? ` max="${def.max}"` : ''}>`;
+        }
+        html += `<div class="setting-row"><div class="setting-info"><div class="setting-label">${esc(def.label)}</div>${def.hint ? `<div class="setting-hint">${esc(def.hint)}</div>` : ''}</div><div class="setting-control">${ctrl}</div></div>`;
+      }
+      html += `</div>`;
+    }
+    wrap.innerHTML = html;
+    wrap.querySelectorAll('[data-skey]').forEach(el => {
+      const key = el.getAttribute('data-skey');
+      const def = registry.get(key);
+      const evt = def.type === 'toggle' || def.type === 'select' ? 'change' : 'input';
+      el.addEventListener(evt, () => {
+        const v = def.type === 'toggle' ? el.checked : el.value;
+        setVal(key, v);
+      });
+    });
+  }
+  return { registerSetting, get, set: setVal, render };
+})();
+window.Settings = Settings;
+
+/* ============================================
+   §09 SHELL — theme, router, menus, clock, footer
+   ============================================ */
+const html = document.documentElement;
+let currentTheme = store.get('ppc-theme') || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+html.setAttribute('data-theme', currentTheme);
+
+const SUN_SVG = '<svg viewBox="0 0 24 24"><path d="M12 7a5 5 0 1 0 0 10 5 5 0 0 0 0-10zm0-5l1.5 3h-3L12 2zm0 20l-1.5-3h3L12 22zM2 12l3-1.5v3L2 12zm20 0l-3 1.5v-3L22 12zM4.9 4.9l3.2 1.1-2.1 2.1L4.9 4.9zm14.2 14.2l-3.2-1.1 2.1-2.1 1.1 3.2zM4.9 19.1l1.1-3.2 2.1 2.1-3.2 1.1zM19.1 4.9l-1.1 3.2-2.1-2.1 3.2-1.1z"/></svg>';
+const MOON_SVG = '<svg viewBox="0 0 24 24"><path d="M12.3 3a9 9 0 1 0 8.7 11.3A7.5 7.5 0 0 1 12.3 3z"/></svg>';
+
+function updateThemeIcon() { $('theme-btn').innerHTML = currentTheme === 'dark' ? SUN_SVG : MOON_SVG; }
+function toggleTheme() {
+  currentTheme = currentTheme === 'dark' ? 'light' : 'dark';
+  html.setAttribute('data-theme', currentTheme);
+  store.set('ppc-theme', currentTheme);
+  updateThemeIcon();
+  closeAllMenus();
+  try { tabs.post({ t: 'theme', v: currentTheme }); } catch {}
+}
+$('theme-btn').addEventListener('click', toggleTheme);
+
+// --- dropdown menus (pure class toggle, txt.html pattern)
+function closeAllMenus() {
+  document.querySelectorAll('.menu-dropdown.open').forEach(m => m.classList.remove('open'));
+  document.querySelectorAll('.menu-trigger[aria-expanded="true"]').forEach(b => b.setAttribute('aria-expanded', 'false'));
+}
+$('menu-app-btn').addEventListener('click', e => {
+  e.stopPropagation();
+  const menu = $('menu-app');
+  const wasOpen = menu.classList.contains('open');
+  closeAllMenus();
+  if (!wasOpen) {
+    renderAppMenu();
+    menu.scrollTop = 0;
+    menu.classList.add('open');
+    $('menu-app-btn').setAttribute('aria-expanded', 'true');
+  }
+});
+document.addEventListener('click', closeAllMenus);
+
+// --- router
+const APPS = { notes: {}, home: {}, fit: {} };   // apps register {mount, unmount, menu, stat}
+let currentApp = null;
+let currentUnmount = null;
+
+function route() {
+  const h = location.hash.replace(/^#/, '');
+  const app = h.split('/')[0] || (store.get('ppc-pref:ui.lastApp') || 'notes');
+  const target = APPS[app] ? app : 'notes';
+  if (!location.hash) { history.replaceState(null, '', '#' + target); }
+  // per-app remount even on subroute change: apps handle their own subroutes
+  if (currentApp !== target) {
+    if (currentUnmount) { try { currentUnmount(); } catch (e) { console.error(e); } currentUnmount = null; }
+    currentApp = target;
+    store.set('ppc-pref:ui.lastApp', target);
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('on'));
+    $('screen-' + target).classList.add('on');
+    document.querySelectorAll('.seg-tab').forEach(t => t.classList.toggle('on', t.dataset.app === target));
+    const a = APPS[target];
+    if (a.mount) currentUnmount = a.mount() || null;
+    touchPresence();
+  } else {
+    const a = APPS[target];
+    if (a.subroute) { try { a.subroute(h); } catch (e) { console.error(e); } }
+  }
+  updateFooterStat();
+}
+window.addEventListener('hashchange', route);
+document.querySelectorAll('.seg-tab').forEach(t => {
+  t.addEventListener('click', () => { location.hash = '#' + t.dataset.app; });
+});
+
+function renderAppMenu() {
+  const menu = $('menu-app');
+  const a = APPS[currentApp] || {};
+  let html = '';
+  if (a.menu) html += a.menu();
+  if (html) html += '<div class="menu-sep"></div>';
+  html += `<button class="menu-item" onclick="openSettingsModal()">Settings…</button>`;
+  menu.innerHTML = html;
+}
+window.openSettingsModal = () => { closeAllMenus(); Settings.render(); openModal('settings-overlay'); };
+$('logout-btn').addEventListener('click', () => { closeModal('settings-overlay'); doLogout(); });
+
+function updateFooterStat() {
+  const a = APPS[currentApp] || {};
+  $('footer-stat').textContent = a.stat ? a.stat() : '';
+}
+window.updateFooterStat = updateFooterStat;
+
+// --- footer clock (ported behavior: 12/12s/24/24s, click cycles)
+const CLOCK_MODES = ['12', '12s', '24', '24s'];
+let _clockTimer = 0;
+function clockMode() {
+  const m = Settings.get('ui.clockMode');
+  return CLOCK_MODES.includes(m) ? m : '12';
+}
+function clockTick() {
+  const m = clockMode();
+  const now = new Date();
+  const opt = { hour: 'numeric', minute: '2-digit' };
+  if (m.endsWith('s')) opt.second = '2-digit';
+  if (m.startsWith('24')) opt.hour12 = false;
+  $('footer-clock').textContent = now.toLocaleTimeString([], opt);
+}
+function clockArm() {
+  clearInterval(_clockTimer);
+  _clockTimer = setInterval(clockTick, clockMode().endsWith('s') ? 1000 : 10000);
+  clockTick();
+}
+$('footer-clock').addEventListener('click', () => {
+  const next = CLOCK_MODES[(CLOCK_MODES.indexOf(clockMode()) + 1) % CLOCK_MODES.length];
+  Settings.set('ui.clockMode', next);
+});
+
+// --- visualViewport pinning: keep the fixed body sized to the visible area so
+// the iOS keyboard doesn't shove the chrome around. Never use transforms here.
+(function () {
+  const vv = window.visualViewport;
+  if (!vv) return;
+  let raf = 0;
+  function apply() {
+    document.body.style.height = vv.height + 'px';
+    document.body.style.top = (vv.offsetTop || 0) + 'px';
+  }
+  function sched() { if (raf) return; raf = requestAnimationFrame(() => { raf = 0; apply(); }); }
+  vv.addEventListener('resize', sched);
+  vv.addEventListener('scroll', sched);
+})();
+
+// --- cross-tab
+const tabs = (() => {
+  let ch = null;
+  try { ch = new BroadcastChannel('ppc-tabs'); } catch {}
+  const TAB_ID = uid();
+  if (ch) ch.onmessage = e => {
+    const m = e.data;
+    if (!m || m.tab === TAB_ID) return;
+    if (m.t === 'theme' && m.v && m.v !== currentTheme) {
+      currentTheme = m.v;
+      html.setAttribute('data-theme', currentTheme);
+      updateThemeIcon();
+    }
+    if (m.t === 'logout') location.reload();
+    if (m.t === 'notes-edit' && window._onPeerNotesEdit) window._onPeerNotesEdit(m);
+  };
+  return { post: m => { if (ch) { m.tab = TAB_ID; ch.postMessage(m); } } };
+})();
+
+/* ============================================
+   Settings registrations (M1 set)
+   ============================================ */
+Settings.registerSetting({
+  key: 'ui.clockMode', label: 'Clock', type: 'select', section: 'General', default: '12',
+  options: [
+    { value: '12', label: '12-hour' }, { value: '12s', label: '12-hour + seconds' },
+    { value: '24', label: '24-hour' }, { value: '24s', label: '24-hour + seconds' },
+  ],
+  apply: () => clockArm(),
+});
+Settings.registerSetting({
+  key: 'ui.darkMode', label: 'Dark mode', type: 'toggle', section: 'General',
+  getState: () => currentTheme === 'dark',
+  apply: v => { if ((v === true || v === 'true') !== (currentTheme === 'dark')) toggleTheme(); },
+});
+Settings.registerSetting({
+  key: 'sync.debug', label: 'Sync log', type: 'toggle', section: 'Advanced', default: false,
+  hint: 'Show a live pane of sync events',
+  apply: v => { $('sync-log').classList.toggle('open', v === true || v === 'true'); },
+});
+
+/* ============================================
+   §14 BOOT
+   ============================================ */
+function enterApp(fresh) {
+  $('login-screen').style.display = 'none';
+  const app = $('app');
+  app.hidden = false;
+  app.style.display = 'contents';
+  const chip = $('user-chip');
+  chip.textContent = MY_NAME.toUpperCase();
+  chip.classList.add(ME === 'C' ? 'u-c' : 'u-a');
+  document.title = 'C&A';
+  clockArm();
+  initFirebase();
+  watchPresence();
+  route();
+  if (Settings.get('sync.debug')) $('sync-log').classList.add('open');
+  if (fresh) showToast('hi, ' + MY_NAME);
+}
+
+function boot() {
+  updateThemeIcon();
+  const savedUser = store.get('ppc-user');
+  const savedUrl = store.get('ppc-fb-url');
+  if (savedUser && (savedUser === 'C' || savedUser === 'A') && savedUrl && FB_URL_RE.test(savedUrl)) {
+    ME = savedUser;
+    MY_NAME = USER_NAMES[ME];
+    FB_URL = savedUrl.replace(/\/+$/, '');
+    ENC_KEY = FB_URL + '|ppc1';
+    enterApp(false);
+  } else {
+    initLoginUI();
+  }
+}
+// finalize ENC_KEY after a fresh login too
+const _origTryLogin = tryLogin;
+tryLogin = async raw => {
+  const ok = await _origTryLogin(raw);
+  if (ok) ENC_KEY = FB_URL + '|ppc1';
+  return ok;
+};
+
+// expose the internals later app sections (M2+) build on
+window.PPC = { store, KV, Settings, encryptText, decryptText, deriveKey, slog,
+  get db() { return db; }, get ME() { return ME; }, get ENC_KEY() { return ENC_KEY; },
+  get connected() { return syncState.connected; },
+  PPC_BASE, USER_NAMES, OTHER, APPS, uid, esc, debounce, throttle, showToast,
+  registerAppHooks: (name, hooks) => Object.assign(APPS[name], hooks) };
+
+boot();
+})();
+</script>
+
+<script>
+// Service Worker registration (txt.html pattern)
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('./sw.js').then(reg => {
+    if (reg.waiting) reg.waiting.postMessage('SKIP_WAITING');
+    reg.addEventListener('updatefound', () => {
+      const newSW = reg.installing;
+      if (!newSW) return;
+      newSW.addEventListener('statechange', () => {
+        if (newSW.state === 'installed' && navigator.serviceWorker.controller) {
+          newSW.postMessage('SKIP_WAITING');
+        }
+      });
+    });
+  }).catch(() => {});
+  window.addEventListener('online', () => {
+    if (navigator.serviceWorker.controller) {
+      navigator.serviceWorker.controller.postMessage('REFRESH_CACHE');
+    }
+  });
+}
+</script>
+</body>
+</html>
