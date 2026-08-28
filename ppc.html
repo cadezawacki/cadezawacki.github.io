@@ -402,6 +402,8 @@ svg { display: block; }
 .bld-colorrow { display: flex; align-items: center; gap: 8px; padding: 6px 10px 8px; border-top: 1px solid var(--border); margin-top: 4px; }
 .bld-colorrow input[type="color"] { width: 34px; height: 26px; border: none; background: none; padding: 0; cursor: pointer; }
 .bld-colorrow span { font-size: 0.7rem; color: var(--text-muted); }
+.bld-colorrow .bld-usec { font-size: 0.72rem; font-weight: 600; color: var(--accent); padding: 6px 10px; border-radius: var(--radius-md); background: var(--surface-2); }
+.bld-recent { padding: 6px 10px 0; font-size: 0.6rem; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.08em; }
 .vr-row { display: flex; align-items: center; gap: 6px; }
 .vr-row .vr-load { flex: 1; text-align: left; padding: 7px 10px; border-radius: var(--radius-md); font-size: var(--text-sm); }
 .vr-row .vr-load:hover { background: var(--surface-hover); }
@@ -659,6 +661,7 @@ svg[data-tool]:not([data-tool="select"]):not([data-tool="erase"]) .bld-shape { p
 .fit-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 8px; }
 .fit-head h3 { font-size: 1.05rem; font-weight: 600; }
 .fit-head .fh-date { font-family: var(--font-mono); font-size: 0.62rem; color: var(--text-muted); letter-spacing: 0.06em; text-transform: uppercase; }
+.fit-head .fh-link { margin-left: auto; align-self: center; font-size: 0.72rem; font-weight: 600; color: var(--accent); padding: 5px 10px; border-radius: var(--radius-md); background: var(--surface-2); white-space: nowrap; }
 
 .duel-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 10px 12px; margin-bottom: 12px; }
 .duel-names { display: flex; justify-content: space-between; font-size: var(--text-sm); font-weight: 700; margin-bottom: 5px; }
@@ -702,6 +705,7 @@ svg[data-tool]:not([data-tool="select"]):not([data-tool="erase"]) .bld-shape { p
 .tc-head .tc-del { color: var(--text-faint); padding: 2px 8px; border-radius: 6px; }
 .tc-head .tc-del:hover { color: var(--error); }
 .tc-by { font-size: 0.58rem; color: var(--text-faint); font-family: var(--font-mono); }
+.tc-head .tc-vis { font-size: 0.6rem; color: var(--text-muted); padding: 3px 7px; border-radius: 6px; background: var(--surface-2); white-space: nowrap; }
 
 .week-grid { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 10px 12px; margin-bottom: 12px; }
 .wg-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
@@ -834,7 +838,9 @@ svg[data-tool]:not([data-tool="select"]):not([data-tool="erase"]) .bld-shape { p
 }
 @media (max-width: 600px) {
   .form-input, #login-input { font-size: 16px !important; } /* stop iOS zoom-on-focus */
-  .notes-editor .cm-editor { font-size: 16px !important; }  /* same for the editor */
+  /* Same anti-zoom floor for the editor, but let the text-size setting win
+     above 16px — a flat 16px here silently disabled the setting on phones. */
+  .notes-editor .cm-editor { font-size: max(16px, var(--notes-fs)) !important; }
   .modal-dialog { max-height: calc(100dvh - 96px); }
 }
 @media (max-width: 480px) {
@@ -1112,6 +1118,13 @@ svg[data-tool]:not([data-tool="select"]):not([data-tool="erase"]) .bld-shape { p
       </div>
     </div>
     <div class="form-group">
+      <label class="form-label" for="ev-notify">Remind</label>
+      <select class="form-input" id="ev-notify">
+        <option value="me">just me</option>
+        <option value="both">both of us</option>
+      </select>
+    </div>
+    <div class="form-group">
       <div class="color-row" id="ev-colors"></div>
     </div>
     <div class="modal-actions">
@@ -1126,7 +1139,7 @@ svg[data-tool]:not([data-tool="select"]):not([data-tool="erase"]) .bld-shape { p
 <div class="modal-overlay" id="rules-overlay">
   <div class="modal-dialog" style="width:340px">
     <div class="modal-title">Scoring rules</div>
-    <div class="modal-desc">Shared between you two. Scores recompute from the log instantly — past days included. Cade's workout is his own extra: it counts for sweeps but scores 0.</div>
+    <div class="modal-desc">Shared between you two. Scores recompute from the log instantly — past days included. Exercise and Cade's workout share one slot: either one earns the points and satisfies the day, doing both never scores twice.</div>
     <div class="it-two">
       <div class="form-group"><label class="form-label" for="rl-pts">Points per habit</label><input class="form-input" id="rl-pts" type="number" min="0" step="1"></div>
       <div class="form-group"><label class="form-label" for="rl-sweep">Sweep bonus</label><input class="form-input" id="rl-sweep" type="number" min="0" step="1"></div>
@@ -4031,19 +4044,40 @@ const Home = (() => {
       KV.set(SHAPE_PATH(sel), s);
       pushUndo({ id: sel, before, after: snap(s) });
     }
+    function recentColors() {
+      try {
+        const a = JSON.parse(store.get('ppc-recent-colors') || '[]');
+        return Array.isArray(a) ? a.filter(c => /^#[0-9a-f]{6}$/i.test(c)) : [];
+      } catch { return []; }
+    }
+    function pushRecentColor(c) {
+      if (!/^#[0-9a-f]{6}$/i.test(c || '')) return;
+      const a = [c.toLowerCase(), ...recentColors().filter(x => x !== c.toLowerCase())].slice(0, 6);
+      try { store.set('ppc-recent-colors', JSON.stringify(a)); } catch {}
+    }
     function openPalette(kind, cx, cy) {
-      const opts = (kind === 'fill' ? ['', ...PALETTE] : PALETTE).map(c =>
-        `<button data-c="${c}" style="display:inline-grid;place-items:center;width:34px;height:34px;border-radius:8px">${c ? `<span style="width:18px;height:18px;border-radius:5px;background:${c};display:block"></span>` : '<span style="font-size:9px;color:var(--text-faint)">none</span>'}</button>`).join('');
+      const swBtn = c => `<button data-c="${c}" style="display:inline-grid;place-items:center;width:34px;height:34px;border-radius:8px">${c ? `<span style="width:18px;height:18px;border-radius:5px;background:${c};display:block"></span>` : '<span style="font-size:9px;color:var(--text-faint)">none</span>'}</button>`;
+      const opts = (kind === 'fill' ? ['', ...PALETTE] : PALETTE).map(swBtn).join('');
+      const rec = recentColors().filter(c => !PALETTE.includes(c));
       const curHex = /^#[0-9a-f]{6}$/i.test(kind === 'fill' ? fill : stroke) ? (kind === 'fill' ? fill : stroke) : '#0f9598';
+      // The native picker's change/blur used to auto-close the menu mid-pick
+      // (iOS dismisses the popover almost immediately) — now input only
+      // live-previews and the explicit "Use color" button commits + closes.
       showCtx(`<div style="display:grid;grid-template-columns:repeat(3,1fr)">${opts}</div>` +
-        `<div class="bld-colorrow"><input type="color" id="bld-custom-c" value="${curHex}"><span>any color</span></div>`, cx, cy);
+        (rec.length ? `<div class="bld-recent">recent</div><div style="display:grid;grid-template-columns:repeat(3,1fr)">${rec.map(swBtn).join('')}</div>` : '') +
+        `<div class="bld-colorrow"><input type="color" id="bld-custom-c" value="${curHex}"><button class="bld-usec" id="bld-custom-use">Use color</button></div>`, cx, cy);
       $('bld-ctx').querySelectorAll('[data-c]').forEach(b => b.addEventListener('click', () => {
         applyColor(kind, b.dataset.c);
+        pushRecentColor(b.dataset.c);
         hideCtx();
       }));
       const cust = document.getElementById('bld-custom-c');
-      cust.addEventListener('input', () => applyColor(kind, cust.value));   // live while picking
-      cust.addEventListener('change', () => { applyColor(kind, cust.value); hideCtx(); });
+      cust.addEventListener('input', () => applyColor(kind, cust.value));   // live preview while picking
+      document.getElementById('bld-custom-use').addEventListener('click', () => {
+        applyColor(kind, cust.value);
+        pushRecentColor(cust.value);
+        hideCtx();
+      });
     }
     function openWidthSlider(cx, cy) {
       const s0 = sel && shapes[sel] ? snap(shapes[sel]) : null;
@@ -4291,8 +4325,12 @@ const Fit = (() => {
   const skipAt = (k, u, h) => ((dayObj(k)[u] || {})[h]) === 'skip';
   const resolvedAt = (k, u, h) => didAt(k, u, h) || skipAt(k, u, h);
   const doneCount = (k, u) => HABITS[u].filter(h => didAt(k, u, h)).length;
+  // exercise + Cade's extra workout form ONE slot — either resolves it
+  const exeSlotOk = (k, u) => resolvedAt(k, u, 'exe') || (HABITS[u].includes('wrk') && resolvedAt(k, u, 'wrk'));
   // sweep tolerates permitted skips but needs at least one real completion
-  const isSweep = (k, u) => HABITS[u].every(h => resolvedAt(k, u, h)) && HABITS[u].some(h => didAt(k, u, h));
+  const isSweep = (k, u) =>
+    resolvedAt(k, u, 'med') && resolvedAt(k, u, 'str') && exeSlotOk(k, u) &&
+    HABITS[u].some(h => didAt(k, u, h));
   function sweepStreak(u, endKey) {
     let n = 0, d = parseKey(endKey);
     while (isSweep(dk(d), u)) { n++; d = addDays(d, -1); if (n > 3650) break; }
@@ -4312,15 +4350,18 @@ const Fit = (() => {
   }
   function dayPoints(u, k) {
     const C = CFG();
-    // Cade's extra workout counts toward sweeps but never scores points.
-    const scoringDone = SHARED.filter(h => HABITS[u].includes(h) && didAt(k, u, h)).length;
+    // med/str score individually; exercise and Cade's extra workout share ONE
+    // scoring slot — either earns the points, both never double-count.
+    let scoringDone = ['med', 'str'].filter(h => didAt(k, u, h)).length;
+    if (didAt(k, u, 'exe') || didAt(k, u, 'wrk')) scoringDone++;
     const mult = 1 + 0.05 * Math.min(sweepStreak(u, k), 10);
     let p = scoringDone ? Math.round(scoringDone * C.pts * mult) : 0;
     if (scoringDone && isSweep(k, u)) p += C.sweep;
     // Miss penalties only on closed days the app was in play (someone logged
     // something) — a shared vacation or pre-adoption history isn't a debt.
     if (k < todayKey() && (dayObj(k).C || dayObj(k).A)) {
-      const missed = HABITS[u].filter(h => !resolvedAt(k, u, h)).length;
+      // the exe/wrk slot counts as one habit here too — never a double penalty
+      const missed = ['med', 'str'].filter(h => !resolvedAt(k, u, h)).length + (exeSlotOk(k, u) ? 0 : 1);
       p -= missed * C.penalty;
     }
     return p;
@@ -4332,7 +4373,9 @@ const Fit = (() => {
     let p = 0;
     for (const h of SHARED) {
       if (skipAt(k, u, h) || skipAt(k, o, h)) continue;   // excused — no duel
-      const me = didAt(k, u, h), them = didAt(k, o, h);
+      // the exercise duel honors the shared exe/wrk slot: a workout counts
+      const fulfilled = (k2, u2) => didAt(k2, u2, h) || (h === 'exe' && didAt(k2, u2, 'wrk'));
+      const me = fulfilled(k, u), them = fulfilled(k, o);
       if (me && !them) p += C.duelWin;
       if (!me && them) p -= C.duelLose;
     }
@@ -4365,7 +4408,7 @@ const Fit = (() => {
     let sub;
     if (done) sub = fmtT(val);
     else if (skipped) sub = 'skipped — excused';
-    else if (h === 'wrk') sub = "Cade's extra · sweeps only, 0 pts";
+    else if (h === 'wrk') sub = "Cade's extra · counts as exercise, never double";
     else {
       const otherDid = didAt(tk, OTHER(u), h);
       sub = otherDid ? USER_NAMES[OTHER(u)] + ' already did ' + (OTHER(u) === 'A' ? 'hers' : 'his') : 'not yet';
@@ -4403,7 +4446,7 @@ const Fit = (() => {
     const wkLabel = weekOffset === 0 ? 'This week' :
       weekOffset === -1 ? 'Last week' : (-weekOffset) + ' weeks ago';
     el.innerHTML = `
-      <div class="fit-head"><h3>Today</h3><span class="fh-date">${new Date().toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' }).toUpperCase()}</span></div>
+      <div class="fit-head"><h3>Today</h3><span class="fh-date">${new Date().toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' }).toUpperCase()}</span><button class="fh-link" id="fh-feed">📸 Feed ›</button></div>
       <div class="duel-card">
         <div class="duel-names"><span class="dn-c">Cade · ${pc}</span><span class="dn-a">Avery · ${pa}</span></div>
         <div class="duel-bar"><i class="db-c" style="width:${wc}%"></i><i class="db-a" style="width:${100 - wc}%"></i></div>
@@ -4419,6 +4462,7 @@ const Fit = (() => {
         ${gv(weekOffset)}
       </div>
       <div class="form-hint" style="text-align:center;margin-bottom:8px">tap = done · long-press = permitted skip</div>`;
+    $('fh-feed').addEventListener('click', () => { location.hash = '#fit/feed'; });
     el.querySelectorAll('.hab-row:not(.partner)').forEach(row => {
       const h = row.dataset.h;
       let lpT = 0, lpFired = false, sx = 0, sy = 0;
@@ -4596,7 +4640,7 @@ const Fit = (() => {
     return String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0');
   };
   async function updateWakeLock() {
-    const want = Object.values(timers).some(timerRunning);
+    const want = Object.values(timers).some(t => timerVisible(t) && timerRunning(t));
     try {
       if (want && !wakeLock && navigator.wakeLock) {
         wakeLock = await navigator.wakeLock.request('screen');
@@ -4606,9 +4650,12 @@ const Fit = (() => {
   }
   document.addEventListener('visibilitychange', () => { if (!document.hidden) updateWakeLock(); });
 
+  // A timer is mine to see/alert unless its creator kept it private.
+  // Legacy timers without vis stay shared (they were created that way).
+  const timerVisible = t => t && (t.vis !== 'me' || t.by === ME);
   function toolTick() {
     for (const [id, t] of Object.entries(timers)) {
-      if (!t || !t.kind) continue;
+      if (!t || !t.kind || !timerVisible(t)) continue;
       const el = document.querySelector('.tc-display[data-tid="' + id + '"]');
       if (el) {
         el.textContent = t.kind === 'cd' ? fmtCd(cdLeft(t)) : fmtSw(swElapsed(t));
@@ -4637,7 +4684,7 @@ const Fit = (() => {
     if (currentApp !== 'fit' || view !== 'tools') return;
     const el = $('fit-tools');
     const list = Object.entries(timers)
-      .filter(([, t]) => t && t.kind)
+      .filter(([, t]) => t && t.kind && timerVisible(t))
       .sort((a, b) => (a[1].createdAt || 0) - (b[1].createdAt || 0));
     el.innerHTML = `
       <div class="timer-add-row">
@@ -4650,6 +4697,7 @@ const Fit = (() => {
         return `<div class="tool-card" data-card="${id}">
           <div class="tc-head"><span class="tc-title">${esc(t.label || (t.kind === 'cd' ? 'Countdown' : 'Stopwatch'))}</span>
             <span class="tc-by">${t.by === 'A' ? 'Avery' : 'Cade'}</span>
+            ${t.by === ME ? `<button class="tc-vis" data-tvis="${id}" title="${t.vis === 'me' ? 'only you see this \u2014 tap to share' : 'visible to both \u2014 tap to keep it yours'}">${t.vis === 'me' ? '\ud83d\udd12 mine' : '\ud83d\udc65 shared'}</button>` : ''}
             <button class="tc-del" data-tdel="${id}">\u2715</button></div>
           <div class="tc-display${running ? ' running' : ''}" data-tid="${id}"${t.kind === 'cd' && !running ? ' style="cursor:pointer" title="tap to set minutes"' : ''}>${disp}</div>
           <div class="tc-btns">
@@ -4657,20 +4705,26 @@ const Fit = (() => {
             <button class="btn" data-treset="${id}">Reset</button>
           </div>
         </div>`;
-      }).join('') || '<div class="zn-empty">no timers yet \u2014 they sync live between your phones</div>'}`;
+      }).join('') || '<div class="zn-empty">no timers yet \u2014 yours by default, tap \ud83d\udd12 to share one</div>'}`;
     $('tt-add-cd').addEventListener('click', async () => {
       const label = await askPrompt('Countdown name', { placeholder: 'e.g. plank hold' });
       if (label == null) return;
       const mins = parseFloat(await askPrompt('Minutes', { type: 'number', inputmode: 'decimal', value: '5' }) || '');
       if (!mins || mins <= 0) return;
-      setTimer(uid(), { kind: 'cd', label: (label || 'Countdown').trim().slice(0, 40), dur: Math.round(mins * 60000), remain: Math.round(mins * 60000), endsAt: null, createdAt: Date.now() });
+      setTimer(uid(), { kind: 'cd', label: (label || 'Countdown').trim().slice(0, 40), dur: Math.round(mins * 60000), remain: Math.round(mins * 60000), endsAt: null, createdAt: Date.now(), vis: 'me' });
       try { if (Notification.permission === 'default') Notification.requestPermission(); } catch {}
     });
     $('tt-add-sw').addEventListener('click', async () => {
       const label = await askPrompt('Stopwatch name', { placeholder: 'e.g. 5k run' });
       if (label == null) return;
-      setTimer(uid(), { kind: 'sw', label: (label || 'Stopwatch').trim().slice(0, 40), acc: 0, startAt: null, createdAt: Date.now() });
+      setTimer(uid(), { kind: 'sw', label: (label || 'Stopwatch').trim().slice(0, 40), acc: 0, startAt: null, createdAt: Date.now(), vis: 'me' });
     });
+    el.querySelectorAll('[data-tvis]').forEach(b => b.addEventListener('click', () => {
+      const id = b.dataset.tvis, t = timers[id];
+      if (!t || t.by !== ME) return;
+      setTimer(id, { vis: t.vis === 'me' ? 'both' : 'me' });
+      renderTools();
+    }));
     el.querySelectorAll('[data-tgo]').forEach(b => b.addEventListener('click', () => {
       const id = b.dataset.tgo, t = timers[id];
       if (!t) return;
@@ -4696,7 +4750,7 @@ const Fit = (() => {
     }));
     el.querySelectorAll('[data-tdel]').forEach(b => b.addEventListener('click', () => {
       const id = b.dataset.tdel, t = timers[id];
-      askConfirm('Delete "' + ((t && t.label) || 'timer') + '"?', 'Removed for both of you.', () => {
+      askConfirm('Delete "' + ((t && t.label) || 'timer') + '"?', t && t.vis === 'me' ? 'Only you can see it.' : 'Removed for both of you.', () => {
         KV.remove(TPATH(id));
         updateWakeLock();
       }, 'Delete');
@@ -4846,6 +4900,7 @@ const Cal = (() => {
     const now = Date.now();
     for (const ev of allEvents()) {
       if (ev.date !== tk || !ev.time) continue;
+      if (ev.notify === 'me' && ev.by !== ME) continue;   // creator-only reminder
       const t = new Date(+tk.slice(0, 4), +tk.slice(5, 7) - 1, +tk.slice(8, 10), +ev.time.slice(0, 2), +ev.time.slice(3, 5)).getTime();
       for (const [tag, from, to, msg] of [
         ['soon', t - 600000, t - 540000, ev.title + ' in 10 minutes'],
@@ -4926,6 +4981,9 @@ const Cal = (() => {
     $('ev-title').value = ev.title || '';
     $('ev-date').value = ev.date || dateKey || todayK();
     $('ev-time').value = ev.time || '';
+    // New events remind just their creator; events saved before the option
+    // existed keep reminding both.
+    $('ev-notify').value = ev.notify || (id ? 'both' : 'me');
     $('ev-delete').style.display = id ? '' : 'none';
     paintEvColors();
     openModal('event-overlay');
@@ -4936,7 +4994,7 @@ const Cal = (() => {
     const title = $('ev-title').value.trim();
     const date = $('ev-date').value;
     if (!title || !/^\d{4}-\d{2}-\d{2}$/.test(date)) { $('ev-title').focus(); return; }
-    const ev = { title, date, time: $('ev-time').value || null, color: evColor };
+    const ev = { title, date, time: $('ev-time').value || null, color: evColor, notify: $('ev-notify').value === 'both' ? 'both' : 'me' };
     const id = editId || uid();
     const ym = ymOf(date);
     if (editId && editWasYm && editWasYm !== ym) KV.remove('cal/' + editWasYm + '/' + editId);
