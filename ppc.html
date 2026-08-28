@@ -373,6 +373,38 @@ svg { display: block; }
 .toast.success { border-color: var(--success); }
 @keyframes toastIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 
+/* Floating undo/redo toolbar (txt.html-style: absolute, not fixed — iOS
+   re-anchors fixed elements to the shrinking visual viewport) */
+#float-bar {
+  position: absolute; left: 10px; bottom: calc(30px + env(safe-area-inset-bottom));
+  display: none; gap: 2px; z-index: 40;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+  box-shadow: var(--shadow-md); padding: 3px;
+  user-select: none; -webkit-user-select: none;
+}
+#float-bar.on { display: flex; }
+#float-bar button {
+  width: 38px; height: 34px; border-radius: 9px; display: grid; place-items: center;
+  color: var(--text-muted); font-size: 15px;
+}
+#float-bar button:active { background: var(--surface-hover); }
+#float-bar button:disabled { opacity: 0.3; }
+
+/* builder extras: live dims, slider popover, variants */
+.bld-dims { font-family: var(--font-mono); font-weight: 600; fill: var(--accent); paint-order: stroke; stroke: var(--bg); stroke-width: 3px; pointer-events: none; }
+.bld-slider { display: flex; align-items: center; gap: 8px; padding: 8px 10px; }
+.bld-slider input[type="range"] { width: 130px; accent-color: var(--accent); }
+.bld-slider .bs-val { font-family: var(--font-mono); font-size: 0.7rem; color: var(--text-muted); min-width: 26px; text-align: right; }
+.bld-colorrow { display: flex; align-items: center; gap: 8px; padding: 6px 10px 8px; border-top: 1px solid var(--border); margin-top: 4px; }
+.bld-colorrow input[type="color"] { width: 34px; height: 26px; border: none; background: none; padding: 0; cursor: pointer; }
+.bld-colorrow span { font-size: 0.7rem; color: var(--text-muted); }
+.vr-row { display: flex; align-items: center; gap: 6px; }
+.vr-row .vr-load { flex: 1; text-align: left; padding: 7px 10px; border-radius: var(--radius-md); font-size: var(--text-sm); }
+.vr-row .vr-load:hover { background: var(--surface-hover); }
+.vr-row .vr-load .vr-meta { display: block; font-size: 0.6rem; color: var(--text-faint); font-family: var(--font-mono); }
+.vr-row .vr-del { color: var(--text-faint); padding: 6px 8px; border-radius: var(--radius-md); }
+.vr-row .vr-del:hover { color: var(--error); background: var(--surface-hover); }
+
 /* Sync debug pane */
 #sync-log {
   display: none; position: fixed; right: 8px; bottom: calc(28px + env(safe-area-inset-bottom));
@@ -993,6 +1025,11 @@ svg[data-tool]:not([data-tool="select"]):not([data-tool="erase"]) .bld-shape { p
       <button class="btn btn-primary" id="conf-both">Keep both</button>
     </div>
   </div>
+</div>
+
+<div id="float-bar">
+  <button id="fb-undo" aria-label="undo">⟲</button>
+  <button id="fb-redo" aria-label="redo">⟳</button>
 </div>
 
 <div id="toast-wrap"></div>
@@ -1757,8 +1794,29 @@ $('logout-btn').addEventListener('click', () => { closeModal('settings-overlay')
 function updateFooterStat() {
   const a = APPS[currentApp] || {};
   $('footer-stat').textContent = a.stat ? a.stat() : '';
+  updateFloatBar();
 }
 window.updateFooterStat = updateFooterStat;
+
+/* ---- floating undo/redo (notes editor + room builder) ---- */
+function _undoTarget() {
+  if (currentApp === 'home' && window.PPCBuilder && window.PPCBuilder.active()) return window.PPCBuilder;
+  if (currentApp === 'notes' && window.PPCNotes) return window.PPCNotes;
+  return null;
+}
+function updateFloatBar() {
+  const bar = $('float-bar');
+  const show = ME && (currentApp === 'notes' || currentApp === 'home');
+  bar.classList.toggle('on', !!show);
+  if (!show) return;
+  const t = _undoTarget();
+  $('fb-undo').disabled = !t || !t.canUndo();
+  $('fb-redo').disabled = !t || !t.canRedo();
+}
+window.updateFloatBar = updateFloatBar;
+$('fb-undo').addEventListener('click', () => { const t = _undoTarget(); if (t) t.undo(); updateFloatBar(); });
+$('fb-redo').addEventListener('click', () => { const t = _undoTarget(); if (t) t.redo(); updateFloatBar(); });
+setInterval(() => { if ($('float-bar').classList.contains('on')) updateFloatBar(); }, 700);
 
 // --- footer clock (ported behavior: 12/12s/24/24s, click cycles)
 const CLOCK_MODES = ['12', '12s', '24', '24s'];
@@ -2800,6 +2858,10 @@ const Notes = (() => {
   APPS.notes.onConnect = () => { if (roomId) reconcile(roomId); };
 
   return { openRoom, get roomId() { return roomId; }, _mapAuthors: mapAuthors, _deriveAuthors: deriveAuthors, _merge3: merge3,
+    undo: () => { if (editor) undo(editor); },
+    redo: () => { if (editor) redo(editor); },
+    canUndo: () => !!editor,
+    canRedo: () => !!editor,
     _debug: () => ({ roomId, authors, authorsRev, ver, dirty, suppress, pendingRemote: !!pendingRemote, conflictOpen, base: baseText }) };
 })();
 window.PPCNotes = Notes;
@@ -3259,11 +3321,13 @@ const Home = (() => {
     let tool = 'select';
     let fill = '#0f9598', stroke = '#0f9598', sw = 2.5;
     const SW_STEPS = [1.5, 2.5, 4, 6];
-    let unwatchB = null;
+    let unwatchB = null, unwatchV = null;
+    let variants = {};
     let svg = null, gShapes = null, gOv = null;
     let crop = null;
     let drag = null, longT = 0;
     const dragLock = new Set();
+    const undoStack = [], redoStack = [];
 
     const snap = s => JSON.parse(JSON.stringify(s));
     const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
@@ -3334,6 +3398,13 @@ const Home = (() => {
       renderOverlay();
     }
 
+    // Live size readout in feet, shown while creating or resizing.
+    function dimsSvg(b) {
+      const fs = Math.max(13, crop.w / 38);
+      const ftW = (b.w / PX_PER_FT).toFixed(1), ftH = (b.h / PX_PER_FT).toFixed(1);
+      return `<text class="bld-dims" x="${b.x + b.w / 2}" y="${b.y - fs * 0.5}" font-size="${fs}" text-anchor="middle">${ftW} × ${ftH} ft</text>`;
+    }
+
     function renderOverlay() {
       if (!svg) return;
       const H = Math.max(9, crop.w / 46);   // handle radius in svg units
@@ -3381,6 +3452,7 @@ const Home = (() => {
           const p = corners[2];
           out += `<rect class="bld-handle" data-handle="resize" data-corner="2" x="${p.x - H * 0.7}" y="${p.y - H * 0.7}" width="${H * 1.4}" height="${H * 1.4}"/>`;
         }
+        if (drag && (drag.mode === 'resize' || drag.mode === 'warp') && s.type !== 'text') out += dimsSvg(b);
       }
       gOv.innerHTML = out;
     }
@@ -3468,7 +3540,8 @@ const Home = (() => {
         const x = Math.min(drag.start.x, pt.x), y = Math.min(drag.start.y, pt.y);
         const w = Math.abs(pt.x - drag.start.x), h = Math.abs(pt.y - drag.start.y);
         const ghost = { type: drag.type, x, y, w, h, fill, stroke, sw };
-        gOv.innerHTML = shapeSvg('__ghost', ghost).replace('class="bld-shape"', 'class="bld-ghost" pointer-events="none"');
+        gOv.innerHTML = shapeSvg('__ghost', ghost).replace('class="bld-shape"', 'class="bld-ghost" pointer-events="none"')
+          + dimsSvg({ x, y, w, h });
         return;
       }
       const s = shapes[drag.id];
@@ -3535,6 +3608,7 @@ const Home = (() => {
       }
       if (d.mode === 'erase') return;
       if (d.id && shapes[d.id]) {
+        if (d.moved && d.orig) pushUndo({ id: d.id, before: d.orig, after: snap(shapes[d.id]) });
         syncShape(d.id, true);
         setTimeout(() => dragLock.delete(d.id), 400);   // let our echo settle
       } else if (d.id) dragLock.delete(d.id);
@@ -3569,6 +3643,43 @@ const Home = (() => {
       return out;
     }
 
+    /* ---- undo/redo (local history of this session's actions) ---- */
+    function pushUndo(entry) {
+      undoStack.push(entry);
+      if (undoStack.length > 60) undoStack.shift();
+      redoStack.length = 0;
+      if (window.updateFloatBar) updateFloatBar();
+    }
+    function writeWholeShapes(snapIn) {
+      // per-shape writes: KV stamps ts/by on objects, and a root-level write
+      // would pollute the shapes map with those keys
+      const next = JSON.parse(JSON.stringify(snapIn || {}));
+      for (const id of Object.keys(shapes)) if (!next[id]) KV.remove(SHAPE_PATH(id));
+      for (const [id, s] of Object.entries(next)) KV.set(SHAPE_PATH(id), s);
+      shapes = next;
+      sel = null; warpId = null;
+      renderShapes();
+    }
+    function _applyHist(st) {
+      if (st.whole !== undefined) { writeWholeShapes(st.whole); return; }
+      const val = st.val ? JSON.parse(JSON.stringify(st.val)) : null;
+      if (val) { shapes[st.id] = val; KV.set(SHAPE_PATH(st.id), val); }
+      else { delete shapes[st.id]; if (sel === st.id) { sel = null; warpId = null; } KV.remove(SHAPE_PATH(st.id)); }
+      renderShapes();
+    }
+    function bUndo() {
+      const e = undoStack.pop();
+      if (!e) return;
+      redoStack.push(e);
+      _applyHist(e.wholeBefore !== undefined ? { whole: e.wholeBefore } : { id: e.id, val: e.before });
+    }
+    function bRedo() {
+      const e = redoStack.pop();
+      if (!e) return;
+      undoStack.push(e);
+      _applyHist(e.wholeAfter !== undefined ? { whole: e.wholeAfter } : { id: e.id, val: e.after });
+    }
+
     function addShape(props) {
       const id = uid();
       const shape = { rot: 0, ...props, z: maxZ() + 1 };
@@ -3576,8 +3687,10 @@ const Home = (() => {
       sel = id; warpId = null;
       renderShapes();
       KV.set(SHAPE_PATH(id), shape);
+      pushUndo({ id, before: null, after: snap(shape) });
     }
     function deleteShape(id) {
+      if (shapes[id]) pushUndo({ id, before: snap(shapes[id]), after: null });
       delete shapes[id];
       if (sel === id) { sel = null; warpId = null; }
       renderShapes();
@@ -3625,6 +3738,7 @@ const Home = (() => {
     function ctxAction(id, act) {
       const s = shapes[id];
       if (!s) return;
+      const before = snap(s);
       const zs = Object.entries(shapes).filter(([, v]) => v).sort((a, b) => (a[1].z || 0) - (b[1].z || 0)).map(([i]) => i);
       const at = zs.indexOf(id);
       if (act === 'del') { deleteShape(id); return; }
@@ -3644,6 +3758,7 @@ const Home = (() => {
             corners.forEach(([px, py]) => { const p = rotate(px, py, c.x, c.y, rot); s.pts.push(p.x, p.y); });
             s.rot = 0;
             KV.set(SHAPE_PATH(id), s);
+            pushUndo({ id, before, after: snap(s) });
           }
           warpId = id;
         }
@@ -3652,7 +3767,12 @@ const Home = (() => {
       }
       if (act === 'edittext') {
         askPrompt('Text', { value: s.text || '' }).then(t => {
-          if (t != null && t.trim()) { s.text = t.trim().slice(0, 80); renderShapes(); KV.set(SHAPE_PATH(id), s); }
+          if (t != null && t.trim()) {
+            s.text = t.trim().slice(0, 80);
+            renderShapes();
+            KV.set(SHAPE_PATH(id), s);
+            pushUndo({ id, before, after: snap(s) });
+          }
         });
         return;
       }
@@ -3660,6 +3780,7 @@ const Home = (() => {
       if (act === 'unlink') { s.href = null; s.lx = null; s.ly = null; }
       renderShapes();
       KV.set(SHAPE_PATH(id), s);
+      pushUndo({ id, before, after: snap(s) });
     }
     function openLinkPicker(id) {
       const its = Object.entries(items[zone] || {}).filter(([, it]) => it && it.title);
@@ -3668,7 +3789,13 @@ const Home = (() => {
         : '<div class="modal-desc">No items on the official list yet.</div>';
       $('link-list').querySelectorAll('[data-iid]').forEach(b => b.addEventListener('click', () => {
         const s = shapes[id];
-        if (s) { s.href = b.dataset.iid; renderShapes(); KV.set(SHAPE_PATH(id), s); }
+        if (s) {
+          const before = snap(s);
+          s.href = b.dataset.iid;
+          renderShapes();
+          KV.set(SHAPE_PATH(id), s);
+          pushUndo({ id, before, after: snap(s) });
+        }
         closeModal('link-overlay');
       }));
       openModal('link-overlay');
@@ -3692,29 +3819,100 @@ const Home = (() => {
       st.querySelector('.sw-c').style.setProperty('--sw', stroke);
       w.textContent = 'w' + sw;
     }
+    function applyColor(kind, c) {
+      if (kind === 'fill') fill = c; else stroke = c || stroke;
+      paintSwatches();
+      const s = sel && shapes[sel];
+      if (!s) return;
+      const before = snap(s);
+      if (kind === 'fill' && s.type !== 'draw' && s.type !== 'text') s.fill = c || null;
+      else if (kind === 'stroke') s.stroke = c;
+      else return;
+      renderShapes();
+      KV.set(SHAPE_PATH(sel), s);
+      pushUndo({ id: sel, before, after: snap(s) });
+    }
     function openPalette(kind, cx, cy) {
       const opts = (kind === 'fill' ? ['', ...PALETTE] : PALETTE).map(c =>
         `<button data-c="${c}" style="display:inline-grid;place-items:center;width:34px;height:34px;border-radius:8px">${c ? `<span style="width:18px;height:18px;border-radius:5px;background:${c};display:block"></span>` : '<span style="font-size:9px;color:var(--text-faint)">none</span>'}</button>`).join('');
-      showCtx(`<div style="display:grid;grid-template-columns:repeat(3,1fr)">${opts}</div>`, cx, cy);
+      const curHex = /^#[0-9a-f]{6}$/i.test(kind === 'fill' ? fill : stroke) ? (kind === 'fill' ? fill : stroke) : '#0f9598';
+      showCtx(`<div style="display:grid;grid-template-columns:repeat(3,1fr)">${opts}</div>` +
+        `<div class="bld-colorrow"><input type="color" id="bld-custom-c" value="${curHex}"><span>any color</span></div>`, cx, cy);
       $('bld-ctx').querySelectorAll('[data-c]').forEach(b => b.addEventListener('click', () => {
-        const c = b.dataset.c;
-        if (kind === 'fill') fill = c; else stroke = c || stroke;
-        paintSwatches();
-        const s = sel && shapes[sel];
-        if (s) {
-          if (kind === 'fill' && s.type !== 'draw' && s.type !== 'text') s.fill = c || null;
-          if (kind === 'stroke') s.stroke = c;
-          renderShapes();
-          KV.set(SHAPE_PATH(sel), s);
-        }
+        applyColor(kind, b.dataset.c);
         hideCtx();
       }));
+      const cust = document.getElementById('bld-custom-c');
+      cust.addEventListener('input', () => applyColor(kind, cust.value));   // live while picking
+      cust.addEventListener('change', () => { applyColor(kind, cust.value); hideCtx(); });
+    }
+    function openWidthSlider(cx, cy) {
+      const s0 = sel && shapes[sel] ? snap(shapes[sel]) : null;
+      showCtx(`<div class="bld-slider"><input type="range" id="bld-sw-range" min="1" max="8" step="0.5" value="${sw}"><span class="bs-val" id="bld-sw-val">${sw}</span></div>`, cx, cy);
+      const r = document.getElementById('bld-sw-range');
+      r.addEventListener('input', () => {
+        sw = parseFloat(r.value);
+        document.getElementById('bld-sw-val').textContent = sw;
+        paintSwatches();
+        const s = sel && shapes[sel];
+        if (s) { s.sw = sw; renderShapes(); KV.set(SHAPE_PATH(sel), s); }
+      });
+      r.addEventListener('change', () => {
+        const s = sel && shapes[sel];
+        if (s && s0 && s.sw !== s0.sw) pushUndo({ id: sel, before: s0, after: snap(s) });
+      });
+    }
+
+    /* ---- variants: named snapshots of the whole layout ---- */
+    function openVariantsMenu(cx, cy) {
+      const rows = Object.entries(variants)
+        .filter(([, v]) => v && v.name)
+        .sort((a, b) => (b[1].ts || 0) - (a[1].ts || 0))
+        .map(([vid, v]) => {
+          const n = Object.keys(v.shapes || {}).length;
+          const ago = v.ts ? Math.max(0, Math.round((Date.now() - v.ts) / 60000)) : 0;
+          const when = ago < 60 ? ago + 'm' : ago < 1440 ? Math.round(ago / 60) + 'h' : Math.round(ago / 1440) + 'd';
+          return `<div class="vr-row"><button class="vr-load" data-vid="${vid}">${esc(v.name)}<span class="vr-meta">${n} shapes · ${v.by === 'A' ? 'Avery' : 'Cade'} · ${when}</span></button><button class="vr-del" data-vdel="${vid}">✕</button></div>`;
+        }).join('');
+      showCtx((rows || '<div style="padding:8px 10px;font-size:0.75rem;color:var(--text-faint)">no saved variants yet</div>') +
+        `<div class="bld-ctx-sep"></div><button data-vsave>💾 Save current as…</button>`, cx, cy);
+      const m = $('bld-ctx');
+      m.querySelectorAll('[data-vid]').forEach(b => b.addEventListener('click', () => {
+        hideCtx();
+        const v = variants[b.dataset.vid];
+        if (!v) return;
+        askConfirm('Load "' + v.name + '"?', 'Replaces the current layout for both of you (undo can bring it back).', () => {
+          pushUndo({ wholeBefore: JSON.parse(JSON.stringify(shapes)), wholeAfter: JSON.parse(JSON.stringify(v.shapes || {})) });
+          writeWholeShapes(v.shapes || {});
+        }, 'Load');
+      }));
+      m.querySelectorAll('[data-vdel]').forEach(b => b.addEventListener('click', e => {
+        e.stopPropagation();
+        hideCtx();
+        const v = variants[b.dataset.vdel];
+        askConfirm('Delete variant "' + ((v && v.name) || '') + '"?', 'The saved snapshot is removed for both of you.', () => {
+          KV.remove('home/builder/' + zone + '/variants/' + b.dataset.vdel);
+        }, 'Delete');
+      }));
+      const sv = m.querySelector('[data-vsave]');
+      if (sv) sv.addEventListener('click', async () => {
+        hideCtx();
+        const name = await askPrompt('Variant name', { placeholder: 'e.g. sofa against the window' });
+        if (!name || !name.trim()) return;
+        KV.set('home/builder/' + zone + '/variants/' + uid(), {
+          name: name.trim().slice(0, 60),
+          shapes: JSON.parse(JSON.stringify(shapes)),
+        });
+        showToast('Variant saved', 'success');
+      });
     }
 
     /* ---- lifecycle ---- */
     function enter(zoneId) {
       zone = zoneId;
       sel = null; warpId = null; tool = 'select'; shapes = {};
+      variants = {};
+      undoStack.length = 0; redoStack.length = 0;
       crop = computeCrop(zoneId);
       const body = $('zn-body');
       body.style.padding = '0';
@@ -3727,6 +3925,8 @@ const Home = (() => {
           <button class="bld-swatch" id="bld-fill" title="fill"><span class="sw-c"></span><span class="sw-tag">f</span></button>
           <button class="bld-swatch" id="bld-stroke" title="stroke"><span class="sw-c"></span><span class="sw-tag">s</span></button>
           <button class="bld-tool" id="bld-width" style="font-size:10px;font-family:var(--font-mono)"></button>
+          <span class="bld-sep"></span>
+          <button class="bld-tool" id="bld-variants" title="variants" style="font-size:13px">▤</button>
         </div>
         <div class="bld-stage"><svg viewBox="${crop.x} ${crop.y} ${crop.w} ${crop.h}" data-tool="select" preserveAspectRatio="xMidYMid meet">
           <image class="fp-img" href="assets/floorplan.jpeg" width="1206" height="1400"/>
@@ -3744,12 +3944,8 @@ const Home = (() => {
       body.querySelectorAll('.bld-tool[data-tool]').forEach(b => b.addEventListener('click', () => setTool(b.dataset.tool)));
       document.getElementById('bld-fill').addEventListener('click', e => openPalette('fill', e.clientX, e.clientY));
       document.getElementById('bld-stroke').addEventListener('click', e => openPalette('stroke', e.clientX, e.clientY));
-      document.getElementById('bld-width').addEventListener('click', () => {
-        sw = SW_STEPS[(SW_STEPS.indexOf(sw) + 1) % SW_STEPS.length];
-        paintSwatches();
-        const s = sel && shapes[sel];
-        if (s) { s.sw = sw; renderShapes(); KV.set(SHAPE_PATH(sel), s); }
-      });
+      document.getElementById('bld-width').addEventListener('click', e => openWidthSlider(e.clientX, e.clientY));
+      document.getElementById('bld-variants').addEventListener('click', e => openVariantsMenu(e.clientX, e.clientY));
       paintSwatches();
       svg.addEventListener('pointerdown', onDown);
       svg.addEventListener('pointermove', onMove);
@@ -3768,9 +3964,14 @@ const Home = (() => {
         shapes = inc;
         renderShapes();
       });
+      unwatchV = KV.watch('home/builder/' + zoneId + '/variants', v => { variants = v || {}; });
+      if (window.updateFloatBar) updateFloatBar();
     }
     function exit() {
       if (unwatchB) { unwatchB(); unwatchB = null; }
+      if (unwatchV) { unwatchV(); unwatchV = null; }
+      undoStack.length = 0; redoStack.length = 0;
+      if (window.updateFloatBar) setTimeout(updateFloatBar, 0);
       if (zone) {
         const body = $('zn-body');
         body.style.padding = '';
@@ -3781,7 +3982,9 @@ const Home = (() => {
       dragLock.clear();
     }
     return { enter, exit, active: () => zone, rerender: renderShapes,
-      _debug: () => ({ zone, tool, sel, count: Object.keys(shapes).length, shapes }) };
+      undo: bUndo, redo: bRedo,
+      canUndo: () => undoStack.length > 0, canRedo: () => redoStack.length > 0,
+      _debug: () => ({ zone, tool, sel, count: Object.keys(shapes).length, shapes, undoDepth: undoStack.length, redoDepth: redoStack.length, variants: Object.keys(variants).length }) };
   })();
   window.PPCBuilder = Builder;
 
