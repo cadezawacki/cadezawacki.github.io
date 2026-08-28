@@ -489,6 +489,17 @@ svg { display: block; }
 }
 .cm-line.cm-todo-done { color: var(--text-faint); }
 .cm-todo-text { text-decoration: line-through; color: var(--text-faint); }
+/* a checked box wears the checker's color (teal Cade, red Avery, lavender both) */
+.cm-todo-box.done.by-c { background: var(--user-c); border-color: var(--user-c); }
+.cm-todo-box.done.by-a { background: var(--user-a); border-color: var(--user-a); }
+.cm-todo-box.done.by-b { background: #8b7ae0; border-color: #8b7ae0; }
+/* (done/total) + mini progress bar on a list's title line */
+.cm-todo-count { display: inline-flex; align-items: center; gap: 5px; margin-left: 8px; user-select: none; -webkit-user-select: none; }
+.cm-todo-count .tct { display: inline-block; width: 34px; height: 4px; border-radius: 2px; background: var(--border); overflow: hidden; }
+.cm-todo-count .tct i { display: block; height: 100%; background: var(--accent); border-radius: 2px; }
+.cm-todo-count b { font-size: 0.62rem; font-weight: 600; color: var(--text-faint); font-family: var(--font-mono); }
+.cm-todo-count.full b { color: var(--success); }
+.cm-todo-count.full .tct i { background: var(--success); }
 
 /* Room dropdown + manager */
 .room-dd-title { font-size: 0.62rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-faint); padding: 5px 10px 3px; }
@@ -2518,11 +2529,13 @@ const Notes = (() => {
   const TODO_RE = /^(\s*(?:[-•*]\s+)?)\[( |x|X|#|)\](\s|$)/;
   const todoDone = ch => ch !== ' ' && ch !== '';
   class TodoBox extends (WidgetType || class {}) {
-    constructor(done) { super(); this.done = done; }
-    eq(o) { return o.done === this.done; }
+    // auth = the line's author (C/A/B) — a checked box wears the checker's color
+    constructor(done, auth) { super(); this.done = done; this.auth = auth || ''; }
+    eq(o) { return o.done === this.done && o.auth === this.auth; }
     toDOM(view) {
       const b = document.createElement('span');
-      b.className = 'cm-todo-box' + (this.done ? ' done' : '');
+      b.className = 'cm-todo-box' + (this.done ? ' done' : '') +
+        (this.done && this.auth ? ' by-' + this.auth.toLowerCase() : '');
       b.setAttribute('role', 'checkbox');
       b.setAttribute('aria-checked', this.done ? 'true' : 'false');
       b.addEventListener('mousedown', e => {
@@ -2531,6 +2544,18 @@ const Notes = (() => {
         toggleTodoAt(view, b);
       });
       return b;
+    }
+    ignoreEvent() { return true; }
+  }
+  class TodoCount extends (WidgetType || class {}) {
+    // "(2/5)" + mini progress bar appended to a list's title line
+    constructor(done, total) { super(); this.done = done; this.total = total; }
+    eq(o) { return o.done === this.done && o.total === this.total; }
+    toDOM() {
+      const s = document.createElement('span');
+      s.className = 'cm-todo-count' + (this.done === this.total ? ' full' : '');
+      s.innerHTML = `<span class="tct"><i style="width:${Math.round(this.done / this.total * 100)}%"></i></span><b>${this.done}/${this.total}</b>`;
+      return s;
     }
     ignoreEvent() { return true; }
   }
@@ -2545,8 +2570,9 @@ const Notes = (() => {
     try { haptic(10); } catch {}
   }
   const todoPlugin = ViewPlugin && WidgetType ? ViewPlugin.fromClass(class {
-    constructor(view) { this.build(view); }
+    constructor(view) { this.rev = authorsRev; this.build(view); }
     build(view) {
+      const doc = view.state.doc;
       const deco = [], atomics = [];
       for (const { from, to } of view.visibleRanges) {
         let pos = from;
@@ -2558,11 +2584,22 @@ const Notes = (() => {
             const bFrom = line.from + m[1].length;
             const bTo = bFrom + 2 + m[2].length;
             if (done) deco.push(Decoration.line({ class: 'cm-todo-done' }).range(line.from));
-            const box = Decoration.replace({ widget: new TodoBox(done) }).range(bFrom, bTo);
+            const box = Decoration.replace({ widget: new TodoBox(done, authors[line.number - 1]) }).range(bFrom, bTo);
             deco.push(box);
             atomics.push(box);   // caret steps over the marker as one unit
             const tStart = bTo + (m[3] ? 1 : 0);
             if (done && tStart < line.to) deco.push(Decoration.mark({ class: 'cm-todo-text' }).range(tStart, line.to));
+          } else if (line.text.trim() !== '' && line.number < doc.lines && TODO_RE.test(doc.line(line.number + 1).text)) {
+            // a title line right above a checkbox block gets a live (done/total)
+            let j = line.number + 1, dn = 0, tot = 0;
+            while (j <= doc.lines) {
+              const mm = doc.line(j).text.match(TODO_RE);
+              if (!mm) break;
+              tot++;
+              if (todoDone(mm[2])) dn++;
+              j++;
+            }
+            if (tot > 0) deco.push(Decoration.widget({ widget: new TodoCount(dn, tot), side: 1 }).range(line.to));
           }
           pos = line.to + 1;
         }
@@ -2570,7 +2607,12 @@ const Notes = (() => {
       this.decorations = Decoration.set(deco, true);
       this.atomic = Decoration.set(atomics, true);
     }
-    update(u) { if (u.docChanged || u.viewportChanged) this.build(u.view); }
+    update(u) {
+      if (u.docChanged || u.viewportChanged || this.rev !== authorsRev) {
+        this.rev = authorsRev;
+        this.build(u.view);
+      }
+    }
   }, {
     decorations: v => v.decorations,
     provide: p => EditorView.atomicRanges.of(v => { const pl = v.plugin(p); return pl ? pl.atomic : Decoration.none; }),
@@ -3212,11 +3254,75 @@ const Notes = (() => {
     });
   }
 
+  /* ---- doc-wide todo actions ---------------------------------------------- */
+  function todoStats() {
+    if (!editor) return { done: 0, total: 0 };
+    const doc = editor.state.doc;
+    let done = 0, total = 0;
+    for (let i = 1; i <= doc.lines; i++) {
+      const m = doc.line(i).text.match(TODO_RE);
+      if (m) { total++; if (todoDone(m[2])) done++; }
+    }
+    return { done, total };
+  }
+  window.ppcNotesClearChecked = () => {
+    closeAllMenus();
+    if (!editor) return;
+    const doc = editor.state.doc;
+    const runs = [];
+    let run = null, count = 0;
+    for (let i = 1; i <= doc.lines; i++) {
+      const line = doc.line(i);
+      const m = line.text.match(TODO_RE);
+      if (m && todoDone(m[2])) {
+        count++;
+        if (run) run.end = line; else run = { start: line, end: line };
+      } else if (run) { runs.push(run); run = null; }
+    }
+    if (run) runs.push(run);
+    if (!count) { showToast('No checked items', 'error', 1600); return; }
+    askConfirm('Clear ' + count + ' checked item' + (count > 1 ? 's' : '') + '?', 'Removes them from the note for both of you.', () => {
+      const changes = runs.map(r =>
+        r.end.to < doc.length ? { from: r.start.from, to: r.end.to + 1 }
+          : { from: Math.max(0, r.start.from - 1), to: r.end.to });
+      editor.dispatch({ changes });
+      showToast('Cleared', 'success', 1200);
+    }, 'Clear');
+  };
+  window.ppcNotesDoneToBottom = () => {
+    closeAllMenus();
+    if (!editor) return;
+    const doc = editor.state.doc;
+    const changes = [];
+    let i = 1;
+    while (i <= doc.lines) {
+      if (!TODO_RE.test(doc.line(i).text)) { i++; continue; }
+      const start = i;
+      while (i <= doc.lines && TODO_RE.test(doc.line(i).text)) i++;
+      const end = i - 1;
+      const lines = [];
+      for (let j = start; j <= end; j++) lines.push(doc.line(j).text);
+      const next = [...lines.filter(t => !todoDone(t.match(TODO_RE)[2])), ...lines.filter(t => todoDone(t.match(TODO_RE)[2]))];
+      if (next.join('\n') !== lines.join('\n')) {
+        changes.push({ from: doc.line(start).from, to: doc.line(end).to, insert: next.join('\n') });
+      }
+    }
+    if (!changes.length) { showToast('Nothing to move', 'error', 1600); return; }
+    editor.dispatch({ changes });
+    showToast('Done items moved down', 'success', 1400);
+  };
+
   /* ---- app registration ---------------------------------------------------- */
+  function statText() {
+    const r = roomId && index[roomId];
+    if (!r) return 'notes';
+    const t = todoStats();
+    const tail = t.total ? t.done + '/' + t.total + ' ✓' : (editor ? editor.state.doc.lines : 0) + ' ln';
+    return r.name + ' · ' + tail;
+  }
   function updateStat() {
     if (currentApp !== 'notes') return;
-    const r = roomId && index[roomId];
-    $('footer-stat').textContent = r ? r.name + ' · ' + (editor ? editor.state.doc.lines : 0) + ' ln' : 'notes';
+    $('footer-stat').textContent = statText();
   }
 
   Settings.registerSetting({
@@ -3271,11 +3377,11 @@ const Notes = (() => {
   };
   APPS.notes.menu = () =>
     `<button class="menu-item" onclick="ppcNotesNew()">＋ New room</button>` +
-    `<button class="menu-item" onclick="ppcNotesManage()">✎ Manage rooms…</button>`;
-  APPS.notes.stat = () => {
-    const r = roomId && index[roomId];
-    return r ? r.name + ' · ' + (editor ? editor.state.doc.lines : 0) + ' ln' : 'notes';
-  };
+    `<button class="menu-item" onclick="ppcNotesManage()">✎ Manage rooms…</button>` +
+    `<div class="menu-sep"></div>` +
+    `<button class="menu-item" onclick="ppcNotesDoneToBottom()">⇣ Done to bottom</button>` +
+    `<button class="menu-item" onclick="ppcNotesClearChecked()">✓ Clear checked</button>`;
+  APPS.notes.stat = statText;
   APPS.notes.onConnect = () => { if (roomId) reconcile(roomId); };
 
   return { openRoom, get roomId() { return roomId; }, _mapAuthors: mapAuthors, _deriveAuthors: deriveAuthors, _merge3: merge3,
