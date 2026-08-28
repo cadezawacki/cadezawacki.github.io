@@ -542,6 +542,53 @@ svg { display: block; }
 .it-two .form-group { flex: 1; }
 .fetch-note { font-size: 0.68rem; color: var(--text-faint); min-height: 1.2em; margin-top: 3px; }
 
+/* builder */
+.bld-wrap { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+.bld-bar {
+  display: flex; align-items: center; gap: 3px; padding: 6px 8px;
+  border-bottom: 1px solid var(--border); flex-shrink: 0; overflow-x: auto;
+  user-select: none; -webkit-user-select: none; scrollbar-width: none;
+}
+.bld-tool {
+  min-width: 32px; height: 32px; border-radius: 8px; display: grid; place-items: center;
+  font-size: 15px; color: var(--text-muted); flex-shrink: 0; border: none;
+}
+.bld-tool.on { background: var(--accent); color: #fff; }
+.bld-tool:not(.on):hover { background: var(--surface-hover); }
+.bld-sep { width: 1px; height: 20px; background: var(--border); margin: 0 4px; flex-shrink: 0; }
+.bld-swatch {
+  width: 24px; height: 24px; border-radius: 7px; border: 2px solid var(--border);
+  flex-shrink: 0; cursor: pointer; position: relative; background: transparent; padding: 0;
+}
+.bld-swatch .sw-c { position: absolute; inset: 3px; border-radius: 4px; background: var(--sw, transparent); }
+.bld-swatch.none .sw-c { background: repeating-linear-gradient(45deg, transparent, transparent 3px, var(--border) 3px, var(--border) 5px); }
+.bld-swatch .sw-tag { position: absolute; bottom: -3px; right: -3px; font-size: 7px; background: var(--surface); border-radius: 3px; padding: 0 2px; color: var(--text-faint); line-height: 1.3; }
+.bld-stage { flex: 1; min-height: 0; position: relative; margin: 8px; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: var(--surface-2); }
+.bld-stage svg { width: 100%; height: 100%; display: block; touch-action: none; }
+.bld-dim { fill: var(--bg); opacity: 0.62; pointer-events: none; }
+.bld-shape { cursor: grab; }
+.bld-shape text { user-select: none; -webkit-user-select: none; }
+svg[data-tool]:not([data-tool="select"]):not([data-tool="erase"]) .bld-shape { pointer-events: none; }
+.bld-handle { fill: #fff; stroke: var(--accent); stroke-width: 1.6; cursor: pointer; }
+.bld-handle.rot { cursor: grab; }
+.bld-handle.warp { fill: var(--accent); stroke: #fff; }
+.bld-sel-outline { fill: none; stroke: var(--accent); stroke-width: 1.2; stroke-dasharray: 5 4; pointer-events: none; }
+.bld-callout-line { stroke-width: 1.2; pointer-events: none; }
+.bld-label { font-family: var(--font-mono); font-weight: 600; cursor: grab; paint-order: stroke; stroke-width: 3px; stroke-linejoin: round; }
+.bld-ruler line { stroke: var(--text-muted); stroke-width: 2; }
+.bld-ruler text { font-family: var(--font-mono); fill: var(--text-muted); }
+.bld-ctx {
+  position: fixed; z-index: 500; display: none;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg); padding: 4px; min-width: 150px;
+}
+.bld-ctx.open { display: block; }
+.bld-ctx button { display: block; width: 100%; text-align: left; padding: 7px 10px; border-radius: var(--radius-md); font-size: var(--text-sm); }
+.bld-ctx button:hover { background: var(--surface-hover); }
+.bld-ctx .danger { color: var(--error); }
+.bld-ctx .bld-ctx-sep { height: 1px; background: var(--border); margin: 4px 6px; }
+@media (pointer: coarse) { .bld-ctx button { min-height: 40px; } }
+
 /* status sheet */
 .status-opt { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; padding: 10px; border-radius: var(--radius-md); font-size: var(--text-sm); }
 .status-opt:hover { background: var(--surface-hover); }
@@ -781,6 +828,16 @@ svg { display: block; }
   <div class="modal-dialog" style="width:280px">
     <div class="modal-title">Zone status</div>
     <div id="status-opts"></div>
+  </div>
+</div>
+
+<!-- ===== Builder: context menu + link picker ===== -->
+<div class="bld-ctx" id="bld-ctx"></div>
+<div class="modal-overlay" id="link-overlay">
+  <div class="modal-dialog" style="width:320px">
+    <div class="modal-title">Link to item</div>
+    <div class="modal-desc">The shape wears the item's name on the plan.</div>
+    <div id="link-list"></div>
   </div>
 </div>
 
@@ -2598,6 +2655,7 @@ const Home = (() => {
     renderZone();
   }
   function showPlan() {
+    Builder.exit();
     curZone = null;
     $('home-zone').style.display = 'none';
     $('home-plan').style.display = 'flex';
@@ -2648,7 +2706,12 @@ const Home = (() => {
 
   function renderZoneBody() {
     const body = $('zn-body');
-    if (curTab === 'build') { body.innerHTML = '<div class="zn-empty">Builder — coming in the next update</div>'; return; }
+    if (curTab === 'build') {
+      if (Builder.active() !== curZone) { Builder.exit(); Builder.enter(curZone); }
+      else Builder.rerender();   // items/zones changed → labels may need refresh
+      return;
+    }
+    Builder.exit();
     if (curTab === 'mood') { body.innerHTML = '<div class="zn-empty">Moodboard — coming in the next update</div>'; return; }
     const its = Object.entries(items[curZone] || {})
       .filter(([, it]) => it && it.title)
@@ -2801,6 +2864,543 @@ const Home = (() => {
     }, 'Delete');
   });
 
+  /* ---- Builder — SVG layout editor over the zone's floorplan crop ---- */
+  const PX_PER_FT = 26;   // calibrated: bedroom 14'0" ≈ 382px on the plan
+  const Builder = (() => {
+    const PALETTE = ['#0f9598', '#e86a5f', '#8b7ae0', '#3b82f6', '#16a34a', '#eab308', '#ea580c', '#78716c'];
+    const SHAPE_PATH = id => 'home/builder/' + zone + '/shapes/' + id;
+    let zone = null;
+    let shapes = {};
+    let sel = null, warpId = null;
+    let tool = 'select';
+    let fill = '#0f9598', stroke = '#0f9598', sw = 2.5;
+    const SW_STEPS = [1.5, 2.5, 4, 6];
+    let unwatchB = null;
+    let svg = null, gShapes = null, gOv = null;
+    let crop = null;
+    let drag = null, longT = 0;
+    const dragLock = new Set();
+
+    const snap = s => JSON.parse(JSON.stringify(s));
+    const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+    const maxZ = () => Object.values(shapes).reduce((m, s) => Math.max(m, (s && s.z) || 0), 0);
+    const minZ = () => Object.values(shapes).reduce((m, s) => Math.min(m, (s && s.z) || 0), 0);
+
+    function computeCrop(z) {
+      const zn = zoneById(z);
+      let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+      zonePolys(zn).forEach(p => p.forEach(([x, y]) => {
+        x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y);
+      }));
+      const pad = 40;
+      x0 = Math.max(0, x0 - pad); y0 = Math.max(0, y0 - pad);
+      x1 = Math.min(1206, x1 + pad); y1 = Math.min(1400, y1 + pad);
+      return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+    }
+
+    function bboxOf(s) {
+      if (s.pts) {
+        let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+        for (let i = 0; i < s.pts.length; i += 2) {
+          x0 = Math.min(x0, s.pts[i]); x1 = Math.max(x1, s.pts[i]);
+          y0 = Math.min(y0, s.pts[i + 1]); y1 = Math.max(y1, s.pts[i + 1]);
+        }
+        return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+      }
+      if (s.type === 'text') {
+        const w = (s.text || '').length * (s.fs || 16) * 0.6;
+        return { x: s.x, y: s.y - (s.fs || 16), w: Math.max(w, 20), h: (s.fs || 16) * 1.3 };
+      }
+      return { x: s.x, y: s.y, w: s.w, h: s.h };
+    }
+    const centerOf = s => { const b = bboxOf(s); return { x: b.x + b.w / 2, y: b.y + b.h / 2 }; };
+    const rotate = (px, py, cx, cy, deg) => {
+      const r = deg * Math.PI / 180, c = Math.cos(r), si = Math.sin(r);
+      const dx = px - cx, dy = py - cy;
+      return { x: cx + dx * c - dy * si, y: cy + dx * si + dy * c };
+    };
+
+    function shapeSvg(id, s) {
+      const common = `class="bld-shape" data-id="${id}" fill="${s.fill || 'none'}" fill-opacity="0.35" stroke="${s.stroke || '#0f9598'}" stroke-width="${s.sw || 2}" stroke-linejoin="round" stroke-linecap="round"`;
+      const tr = s.rot && !s.pts ? (() => { const c = centerOf(s); return ` transform="rotate(${s.rot} ${c.x} ${c.y})"`; })() : '';
+      if (s.type === 'draw') {
+        const pts = []; for (let i = 0; i < s.pts.length; i += 2) pts.push(s.pts[i] + ',' + s.pts[i + 1]);
+        return `<polyline ${common} fill="none" points="${pts.join(' ')}"/>`;
+      }
+      if (s.type === 'text') {
+        return `<text class="bld-shape" data-id="${id}" x="${s.x}" y="${s.y}" font-size="${s.fs || 16}" fill="${s.stroke || '#0f9598'}" font-family="var(--font-body)" font-weight="600">${esc(s.text || '')}</text>`;
+      }
+      if (s.pts) {
+        const pts = []; for (let i = 0; i < s.pts.length; i += 2) pts.push(s.pts[i] + ',' + s.pts[i + 1]);
+        return `<polygon ${common} points="${pts.join(' ')}"/>`;
+      }
+      if (s.type === 'circle') {
+        return `<ellipse ${common}${tr} cx="${s.x + s.w / 2}" cy="${s.y + s.h / 2}" rx="${s.w / 2}" ry="${s.h / 2}"/>`;
+      }
+      if (s.type === 'tri') {
+        return `<polygon ${common}${tr} points="${s.x + s.w / 2},${s.y} ${s.x},${s.y + s.h} ${s.x + s.w},${s.y + s.h}"/>`;
+      }
+      return `<rect ${common}${tr} x="${s.x}" y="${s.y}" width="${s.w}" height="${s.h}"/>`;
+    }
+
+    function renderShapes() {
+      if (!svg) return;
+      const order = Object.entries(shapes).filter(([, s]) => s && s.type).sort((a, b) => ((a[1].z || 0) - (b[1].z || 0)));
+      gShapes.innerHTML = order.map(([id, s]) => shapeSvg(id, s)).join('');
+      renderOverlay();
+    }
+
+    function renderOverlay() {
+      if (!svg) return;
+      const H = Math.max(9, crop.w / 46);   // handle radius in svg units
+      let out = '';
+      // linked labels
+      for (const [id, s] of Object.entries(shapes)) {
+        if (!s || !s.href) continue;
+        const it = (items[zone] || {})[s.href];
+        const title = it && it.title ? it.title : '(removed)';
+        const b = bboxOf(s);
+        const fs = Math.max(12, crop.w / 42);
+        const tw = title.length * fs * 0.62;
+        const col = s.stroke || '#0f9598';
+        if (tw < b.w * 0.9 && b.h > fs * 1.6 && s.type !== 'draw' && s.type !== 'text') {
+          // centered label rides the shape — click-through so the shape stays tappable
+          out += `<text class="bld-label" data-label-for="${id}" pointer-events="none" x="${b.x + b.w / 2}" y="${b.y + b.h / 2 + fs * 0.35}" font-size="${fs}" text-anchor="middle" fill="${col}" style="stroke:var(--bg)">${esc(title)}</text>`;
+        } else {
+          const ax = s.lx != null ? s.lx : b.x + b.w + H * 2;
+          const ay = s.ly != null ? s.ly : b.y - H;
+          out += `<line class="bld-callout-line" stroke="${col}" x1="${b.x + b.w}" y1="${b.y + b.h / 2}" x2="${ax}" y2="${ay + 4}"/>` +
+            `<text class="bld-label" data-label-for="${id}" x="${ax}" y="${ay}" font-size="${fs}" fill="${col}" style="stroke:var(--bg)">${esc(title)}</text>`;
+        }
+      }
+      // selection
+      const s = sel && shapes[sel];
+      if (s) {
+        const b = bboxOf(s);
+        const c = centerOf(s);
+        const rot = (!s.pts && s.rot) || 0;
+        const corners = [[b.x, b.y], [b.x + b.w, b.y], [b.x + b.w, b.y + b.h], [b.x, b.y + b.h]]
+          .map(([px, py]) => rotate(px, py, c.x, c.y, rot));
+        out += `<polygon class="bld-sel-outline" points="${corners.map(p => p.x + ',' + p.y).join(' ')}"/>`;
+        if (warpId === sel && s.pts) {
+          for (let i = 0; i < s.pts.length; i += 2) {
+            out += `<rect class="bld-handle warp" data-handle="warp" data-i="${i}" x="${s.pts[i] - H * 0.8}" y="${s.pts[i + 1] - H * 0.8}" width="${H * 1.6}" height="${H * 1.6}" transform="rotate(45 ${s.pts[i]} ${s.pts[i + 1]})"/>`;
+          }
+        } else if (s.type !== 'draw' && s.type !== 'text') {
+          corners.forEach((p, i) => {
+            out += `<rect class="bld-handle" data-handle="resize" data-corner="${i}" x="${p.x - H * 0.7}" y="${p.y - H * 0.7}" width="${H * 1.4}" height="${H * 1.4}"/>`;
+          });
+          const top = rotate(c.x, b.y - H * 2.6, c.x, c.y, rot);
+          out += `<line class="bld-callout-line" stroke="var(--accent)" x1="${rotate(c.x, b.y, c.x, c.y, rot).x}" y1="${rotate(c.x, b.y, c.x, c.y, rot).y}" x2="${top.x}" y2="${top.y}"/>` +
+            `<circle class="bld-handle rot" data-handle="rot" cx="${top.x}" cy="${top.y}" r="${H * 0.85}"/>`;
+        } else if (s.type === 'text') {
+          const p = corners[2];
+          out += `<rect class="bld-handle" data-handle="resize" data-corner="2" x="${p.x - H * 0.7}" y="${p.y - H * 0.7}" width="${H * 1.4}" height="${H * 1.4}"/>`;
+        }
+      }
+      gOv.innerHTML = out;
+    }
+
+    /* ---- pointer machinery ---- */
+    const evtPt = e => {
+      const p = svg.createSVGPoint();
+      p.x = e.clientX; p.y = e.clientY;
+      const m = svg.getScreenCTM();
+      return m ? p.matrixTransform(m.inverse()) : { x: 0, y: 0 };
+    };
+
+    function syncShape(id, final) {
+      const s = shapes[id];
+      if (!s) return;
+      const now = Date.now();
+      if (!final && drag && now - (drag.lastSync || 0) < 150) return;
+      if (drag) drag.lastSync = now;
+      KV.set(SHAPE_PATH(id), s);
+    }
+
+    function onDown(e) {
+      if (e.button === 2) return;
+      const pt = evtPt(e);
+      try { svg.setPointerCapture(e.pointerId); } catch {}
+      hideCtx();
+      const hEl = e.target.closest && e.target.closest('[data-handle]');
+      const lEl = e.target.closest && e.target.closest('.bld-label');
+      const sEl = e.target.closest && e.target.closest('.bld-shape');
+      if (tool === 'select') {
+        if (hEl && sel) {
+          const s = shapes[sel];
+          drag = { mode: hEl.dataset.handle, id: sel, start: pt, orig: snap(s), corner: +(hEl.dataset.corner || 0), i: +(hEl.dataset.i || 0), moved: false };
+          dragLock.add(sel);
+          return;
+        }
+        if (lEl) {
+          const id = lEl.dataset.labelFor;
+          drag = { mode: 'label', id, start: pt, orig: snap(shapes[id]), moved: false };
+          dragLock.add(id);
+          return;
+        }
+        if (sEl) {
+          const id = sEl.dataset.id;
+          if (sel !== id) { sel = id; warpId = null; renderOverlay(); }
+          drag = { mode: 'move', id, start: pt, orig: snap(shapes[id]), moved: false };
+          dragLock.add(id);
+          clearTimeout(longT);
+          longT = setTimeout(() => {
+            if (drag && !drag.moved) {
+              dragLock.delete(id);
+              drag = null;
+              showShapeCtx(id, e.clientX, e.clientY);
+            }
+          }, 500);
+          return;
+        }
+        if (sel) { sel = null; warpId = null; renderOverlay(); }
+        return;
+      }
+      if (tool === 'erase') { drag = { mode: 'erase' }; eraseAt(e); return; }
+      if (tool === 'text') {
+        askPrompt('Text').then(t => {
+          if (t && t.trim()) addShape({ type: 'text', x: pt.x, y: pt.y, text: t.trim().slice(0, 80), fs: Math.max(14, crop.w / 34), stroke, fill: null, sw });
+        });
+        return;
+      }
+      if (tool === 'draw') { drag = { mode: 'drawing', pts: [pt.x, pt.y], last: pt }; return; }
+      drag = { mode: 'create', type: tool, start: pt, cur: pt };   // box | circle | tri
+    }
+
+    function onMove(e) {
+      if (!drag) return;
+      const pt = evtPt(e);
+      if (!drag.moved && drag.start && dist(pt, drag.start) > 5) { drag.moved = true; clearTimeout(longT); }
+      if (drag.mode === 'erase') { eraseAt(e); return; }
+      if (drag.mode === 'drawing') {
+        if (dist(pt, drag.last) >= 3) { drag.pts.push(pt.x, pt.y); drag.last = pt; }
+        const pts = []; for (let i = 0; i < drag.pts.length; i += 2) pts.push(drag.pts[i] + ',' + drag.pts[i + 1]);
+        gOv.innerHTML = `<polyline fill="none" stroke="${stroke}" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round" points="${pts.join(' ')}"/>`;
+        return;
+      }
+      if (drag.mode === 'create') {
+        drag.cur = pt;
+        const x = Math.min(drag.start.x, pt.x), y = Math.min(drag.start.y, pt.y);
+        const w = Math.abs(pt.x - drag.start.x), h = Math.abs(pt.y - drag.start.y);
+        const ghost = { type: drag.type, x, y, w, h, fill, stroke, sw };
+        gOv.innerHTML = shapeSvg('__ghost', ghost).replace('class="bld-shape"', 'class="bld-ghost" pointer-events="none"');
+        return;
+      }
+      const s = shapes[drag.id];
+      if (!s) { drag = null; return; }
+      const dx = pt.x - drag.start.x, dy = pt.y - drag.start.y;
+      const o = drag.orig;
+      if (drag.mode === 'move') {
+        if (o.pts) { s.pts = o.pts.map((v, i) => v + (i % 2 ? dy : dx)); }
+        else { s.x = o.x + dx; s.y = o.y + dy; }
+      } else if (drag.mode === 'label') {
+        const b = bboxOf(o);
+        s.lx = (o.lx != null ? o.lx : b.x + b.w + 20) + dx;
+        s.ly = (o.ly != null ? o.ly : b.y - 10) + dy;
+      } else if (drag.mode === 'rot') {
+        const c = centerOf(o);
+        const a0 = Math.atan2(drag.start.y - c.y, drag.start.x - c.x);
+        const a1 = Math.atan2(pt.y - c.y, pt.x - c.x);
+        s.rot = Math.round(((o.rot || 0) + (a1 - a0) * 180 / Math.PI) % 360);
+      } else if (drag.mode === 'warp') {
+        s.pts = o.pts.slice();
+        s.pts[drag.i] = pt.x; s.pts[drag.i + 1] = pt.y;
+      } else if (drag.mode === 'resize') {
+        // Work in the shape's unrotated frame so rotated resizes track the finger.
+        const c = centerOf(o);
+        const local = rotate(pt.x, pt.y, c.x, c.y, -((!o.pts && o.rot) || 0));
+        const b = bboxOf(o);
+        const anchor = [[b.x + b.w, b.y + b.h], [b.x, b.y + b.h], [b.x, b.y], [b.x + b.w, b.y]][drag.corner];
+        if (o.pts) {
+          const sx = Math.abs(local.x - anchor[0]) / Math.max(8, Math.abs([b.x, b.x + b.w, b.x + b.w, b.x][drag.corner] - anchor[0])) || 1;
+          const sy = Math.abs(local.y - anchor[1]) / Math.max(8, Math.abs([b.y, b.y, b.y + b.h, b.y + b.h][drag.corner] - anchor[1])) || 1;
+          s.pts = o.pts.map((v, i) => i % 2 ? anchor[1] + (v - anchor[1]) * sy : anchor[0] + (v - anchor[0]) * sx);
+        } else if (o.type === 'text') {
+          s.fs = Math.max(9, Math.round((o.fs || 16) * Math.max(0.2, (local.x - o.x) / Math.max(20, bboxOf(o).w))));
+        } else {
+          s.x = Math.min(local.x, anchor[0]); s.y = Math.min(local.y, anchor[1]);
+          s.w = Math.max(8, Math.abs(local.x - anchor[0]));
+          s.h = Math.max(8, Math.abs(local.y - anchor[1]));
+        }
+      }
+      renderShapes();
+      syncShape(drag.id, false);
+    }
+
+    function onUp() {
+      clearTimeout(longT);
+      if (!drag) return;
+      const d = drag;
+      drag = null;
+      if (d.mode === 'drawing') {
+        gOv.innerHTML = '';
+        if (d.pts.length >= 6) {
+          addShape({ type: 'draw', pts: rdp(d.pts, 1.5).slice(0, 800), stroke, fill: null, sw });
+        }
+        renderOverlay();
+        return;
+      }
+      if (d.mode === 'create') {
+        gOv.innerHTML = '';
+        const x = Math.min(d.start.x, d.cur.x), y = Math.min(d.start.y, d.cur.y);
+        const w = Math.abs(d.cur.x - d.start.x), h = Math.abs(d.cur.y - d.start.y);
+        if (w >= 8 && h >= 8) addShape({ type: d.type, x, y, w, h, rot: 0, fill, stroke, sw });
+        else renderOverlay();
+        return;
+      }
+      if (d.mode === 'erase') return;
+      if (d.id && shapes[d.id]) {
+        syncShape(d.id, true);
+        setTimeout(() => dragLock.delete(d.id), 400);   // let our echo settle
+      } else if (d.id) dragLock.delete(d.id);
+    }
+
+    function eraseAt(e) {
+      const el = document.elementFromPoint(e.clientX, e.clientY);
+      const sEl = el && el.closest && el.closest('.bld-shape');
+      if (!sEl) return;
+      const s = shapes[sEl.dataset.id];
+      if (s && s.type === 'draw') deleteShape(sEl.dataset.id);
+    }
+
+    // Ramer–Douglas–Peucker on a flat [x0,y0,x1,y1,…] array
+    function rdp(flat, eps) {
+      const pts = [];
+      for (let i = 0; i < flat.length; i += 2) pts.push([flat[i], flat[i + 1]]);
+      function simplify(lo, hi, keep) {
+        let maxD = 0, idx = -1;
+        const [ax, ay] = pts[lo], [bx, by] = pts[hi];
+        const len = Math.hypot(bx - ax, by - ay) || 1e-9;
+        for (let i = lo + 1; i < hi; i++) {
+          const d = Math.abs((by - ay) * pts[i][0] - (bx - ax) * pts[i][1] + bx * ay - by * ax) / len;
+          if (d > maxD) { maxD = d; idx = i; }
+        }
+        if (maxD > eps && idx > 0) { simplify(lo, idx, keep); keep.add(idx); simplify(idx, hi, keep); }
+      }
+      const keep = new Set([0, pts.length - 1]);
+      if (pts.length > 2) simplify(0, pts.length - 1, keep);
+      const out = [];
+      [...keep].sort((a, b) => a - b).forEach(i => out.push(Math.round(pts[i][0] * 10) / 10, Math.round(pts[i][1] * 10) / 10));
+      return out;
+    }
+
+    function addShape(props) {
+      const id = uid();
+      const shape = { rot: 0, ...props, z: maxZ() + 1 };
+      shapes[id] = shape;
+      sel = id; warpId = null;
+      renderShapes();
+      KV.set(SHAPE_PATH(id), shape);
+    }
+    function deleteShape(id) {
+      delete shapes[id];
+      if (sel === id) { sel = null; warpId = null; }
+      renderShapes();
+      KV.remove(SHAPE_PATH(id));
+    }
+
+    /* ---- context menu ---- */
+    let ctxShownAt = 0;
+    function hideCtx() { $('bld-ctx').classList.remove('open'); }
+    document.addEventListener('click', e => {
+      // The long-press release fires a click right after the menu opens —
+      // don't let it close the menu it just summoned.
+      if (Date.now() - ctxShownAt < 350) return;
+      if (!e.target.closest || !e.target.closest('#bld-ctx')) hideCtx();
+    });
+    function showCtx(html, cx, cy) {
+      ctxShownAt = Date.now();
+      const m = $('bld-ctx');
+      m.innerHTML = html;
+      m.classList.add('open');
+      const r = m.getBoundingClientRect();
+      m.style.left = Math.min(cx, innerWidth - r.width - 8) + 'px';
+      m.style.top = Math.min(cy, innerHeight - r.height - 8) + 'px';
+    }
+    function showShapeCtx(id, cx, cy) {
+      const s = shapes[id];
+      if (!s) return;
+      sel = id; renderOverlay();
+      let h = '';
+      if (s.type === 'text') h += `<button data-act="edittext">Edit text</button>`;
+      if (s.type !== 'draw' && s.type !== 'text') {
+        h += s.href ? `<button data-act="unlink">Unlink item</button>` : `<button data-act="link">Link to item…</button>`;
+      }
+      if ((s.type === 'box' || s.type === 'tri') ) h += `<button data-act="warp">${warpId === id ? 'Finish warping' : 'Warp corners'}</button>`;
+      h += `<div class="bld-ctx-sep"></div>
+        <button data-act="front">Bring to front</button><button data-act="fwd">Forward</button>
+        <button data-act="back">Backward</button><button data-act="rear">Send to back</button>
+        <div class="bld-ctx-sep"></div><button data-act="del" class="danger">Delete</button>`;
+      showCtx(h, cx, cy);
+      $('bld-ctx').querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
+        hideCtx();
+        ctxAction(id, b.dataset.act);
+      }));
+    }
+    function ctxAction(id, act) {
+      const s = shapes[id];
+      if (!s) return;
+      const zs = Object.entries(shapes).filter(([, v]) => v).sort((a, b) => (a[1].z || 0) - (b[1].z || 0)).map(([i]) => i);
+      const at = zs.indexOf(id);
+      if (act === 'del') { deleteShape(id); return; }
+      if (act === 'front') s.z = maxZ() + 1;
+      if (act === 'rear') s.z = minZ() - 1;
+      if (act === 'fwd' && at < zs.length - 1) s.z = (shapes[zs[at + 1]].z || 0) + 0.5;
+      if (act === 'back' && at > 0) s.z = (shapes[zs[at - 1]].z || 0) - 0.5;
+      if (act === 'warp') {
+        if (warpId === id) warpId = null;
+        else {
+          if (!s.pts) {
+            const b = bboxOf(s), c = centerOf(s), rot = s.rot || 0;
+            const corners = s.type === 'tri'
+              ? [[b.x + b.w / 2, b.y], [b.x, b.y + b.h], [b.x + b.w, b.y + b.h]]
+              : [[b.x, b.y], [b.x + b.w, b.y], [b.x + b.w, b.y + b.h], [b.x, b.y + b.h]];
+            s.pts = [];
+            corners.forEach(([px, py]) => { const p = rotate(px, py, c.x, c.y, rot); s.pts.push(p.x, p.y); });
+            s.rot = 0;
+            KV.set(SHAPE_PATH(id), s);
+          }
+          warpId = id;
+        }
+        renderShapes();
+        return;
+      }
+      if (act === 'edittext') {
+        askPrompt('Text', { value: s.text || '' }).then(t => {
+          if (t != null && t.trim()) { s.text = t.trim().slice(0, 80); renderShapes(); KV.set(SHAPE_PATH(id), s); }
+        });
+        return;
+      }
+      if (act === 'link') { openLinkPicker(id); return; }
+      if (act === 'unlink') { s.href = null; s.lx = null; s.ly = null; }
+      renderShapes();
+      KV.set(SHAPE_PATH(id), s);
+    }
+    function openLinkPicker(id) {
+      const its = Object.entries(items[zone] || {}).filter(([, it]) => it && it.title);
+      $('link-list').innerHTML = its.length
+        ? its.map(([iid, it]) => `<button class="menu-item" data-iid="${esc(iid)}"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(it.title)}</span><span class="mi-when">${it.price != null ? fmtMoney(it.price) : ''}</span></button>`).join('')
+        : '<div class="modal-desc">No items on the official list yet.</div>';
+      $('link-list').querySelectorAll('[data-iid]').forEach(b => b.addEventListener('click', () => {
+        const s = shapes[id];
+        if (s) { s.href = b.dataset.iid; renderShapes(); KV.set(SHAPE_PATH(id), s); }
+        closeModal('link-overlay');
+      }));
+      openModal('link-overlay');
+    }
+
+    /* ---- toolbar ---- */
+    const TOOLS = [
+      ['select', '➤'], ['box', '▭'], ['circle', '◯'], ['tri', '△'], ['text', 'Ｔ'], ['draw', '✎'], ['erase', '⌫'],
+    ];
+    function setTool(t) {
+      tool = t;
+      if (t !== 'select') { sel = null; warpId = null; renderOverlay(); }
+      svg.setAttribute('data-tool', t);
+      document.querySelectorAll('.bld-tool[data-tool]').forEach(b => b.classList.toggle('on', b.dataset.tool === t));
+    }
+    function paintSwatches() {
+      const f = document.getElementById('bld-fill'), st = document.getElementById('bld-stroke'), w = document.getElementById('bld-width');
+      if (!f) return;
+      f.classList.toggle('none', !fill);
+      f.querySelector('.sw-c').style.setProperty('--sw', fill || 'transparent');
+      st.querySelector('.sw-c').style.setProperty('--sw', stroke);
+      w.textContent = 'w' + sw;
+    }
+    function openPalette(kind, cx, cy) {
+      const opts = (kind === 'fill' ? ['', ...PALETTE] : PALETTE).map(c =>
+        `<button data-c="${c}" style="display:inline-grid;place-items:center;width:34px;height:34px;border-radius:8px">${c ? `<span style="width:18px;height:18px;border-radius:5px;background:${c};display:block"></span>` : '<span style="font-size:9px;color:var(--text-faint)">none</span>'}</button>`).join('');
+      showCtx(`<div style="display:grid;grid-template-columns:repeat(3,1fr)">${opts}</div>`, cx, cy);
+      $('bld-ctx').querySelectorAll('[data-c]').forEach(b => b.addEventListener('click', () => {
+        const c = b.dataset.c;
+        if (kind === 'fill') fill = c; else stroke = c || stroke;
+        paintSwatches();
+        const s = sel && shapes[sel];
+        if (s) {
+          if (kind === 'fill' && s.type !== 'draw' && s.type !== 'text') s.fill = c || null;
+          if (kind === 'stroke') s.stroke = c;
+          renderShapes();
+          KV.set(SHAPE_PATH(sel), s);
+        }
+        hideCtx();
+      }));
+    }
+
+    /* ---- lifecycle ---- */
+    function enter(zoneId) {
+      zone = zoneId;
+      sel = null; warpId = null; tool = 'select'; shapes = {};
+      crop = computeCrop(zoneId);
+      const body = $('zn-body');
+      body.style.padding = '0';
+      body.style.overflow = 'hidden';
+      const ft = (5 * PX_PER_FT);
+      body.innerHTML = `<div class="bld-wrap">
+        <div class="bld-bar">
+          ${TOOLS.map(([t, ic]) => `<button class="bld-tool${t === 'select' ? ' on' : ''}" data-tool="${t}" title="${t}">${ic}</button>`).join('')}
+          <span class="bld-sep"></span>
+          <button class="bld-swatch" id="bld-fill" title="fill"><span class="sw-c"></span><span class="sw-tag">f</span></button>
+          <button class="bld-swatch" id="bld-stroke" title="stroke"><span class="sw-c"></span><span class="sw-tag">s</span></button>
+          <button class="bld-tool" id="bld-width" style="font-size:10px;font-family:var(--font-mono)"></button>
+        </div>
+        <div class="bld-stage"><svg viewBox="${crop.x} ${crop.y} ${crop.w} ${crop.h}" data-tool="select" preserveAspectRatio="xMidYMid meet">
+          <image class="fp-img" href="assets/floorplan.jpeg" width="1206" height="1400"/>
+          <rect class="bld-dim" x="${crop.x}" y="${crop.y}" width="${crop.w}" height="${crop.h}"/>
+          <g id="bld-shapes"></g><g id="bld-overlay"></g>
+          <g class="bld-ruler"><line x1="${crop.x + 14}" y1="${crop.y + crop.h - 16}" x2="${crop.x + 14 + ft}" y2="${crop.y + crop.h - 16}"/>
+            <line x1="${crop.x + 14}" y1="${crop.y + crop.h - 22}" x2="${crop.x + 14}" y2="${crop.y + crop.h - 10}"/>
+            <line x1="${crop.x + 14 + ft}" y1="${crop.y + crop.h - 22}" x2="${crop.x + 14 + ft}" y2="${crop.y + crop.h - 10}"/>
+            <text x="${crop.x + 20 + ft}" y="${crop.y + crop.h - 12}" font-size="${Math.max(11, crop.w / 46)}">5 ft</text></g>
+        </svg></div></div>`;
+      svg = body.querySelector('svg');
+      gShapes = svg.querySelector('#bld-shapes');
+      gOv = svg.querySelector('#bld-overlay');
+      if (!Settings.get('home.showRuler')) svg.querySelector('.bld-ruler').style.display = 'none';
+      body.querySelectorAll('.bld-tool[data-tool]').forEach(b => b.addEventListener('click', () => setTool(b.dataset.tool)));
+      document.getElementById('bld-fill').addEventListener('click', e => openPalette('fill', e.clientX, e.clientY));
+      document.getElementById('bld-stroke').addEventListener('click', e => openPalette('stroke', e.clientX, e.clientY));
+      document.getElementById('bld-width').addEventListener('click', () => {
+        sw = SW_STEPS[(SW_STEPS.indexOf(sw) + 1) % SW_STEPS.length];
+        paintSwatches();
+        const s = sel && shapes[sel];
+        if (s) { s.sw = sw; renderShapes(); KV.set(SHAPE_PATH(sel), s); }
+      });
+      paintSwatches();
+      svg.addEventListener('pointerdown', onDown);
+      svg.addEventListener('pointermove', onMove);
+      svg.addEventListener('pointerup', onUp);
+      svg.addEventListener('pointercancel', onUp);
+      svg.addEventListener('contextmenu', e => {
+        e.preventDefault();
+        const lEl = e.target.closest && e.target.closest('.bld-label');
+        const sEl = e.target.closest && e.target.closest('.bld-shape');
+        if (lEl) showShapeCtx(lEl.dataset.labelFor, e.clientX, e.clientY);
+        else if (sEl) showShapeCtx(sEl.dataset.id, e.clientX, e.clientY);
+      });
+      unwatchB = KV.watch('home/builder/' + zoneId + '/shapes', v => {
+        const inc = JSON.parse(JSON.stringify(v || {}));   // never mutate KV's cache
+        for (const id of dragLock) if (shapes[id]) inc[id] = shapes[id];
+        shapes = inc;
+        renderShapes();
+      });
+    }
+    function exit() {
+      if (unwatchB) { unwatchB(); unwatchB = null; }
+      if (zone) {
+        const body = $('zn-body');
+        body.style.padding = '';
+        body.style.overflow = '';
+      }
+      hideCtx();
+      zone = null; svg = null; gShapes = null; gOv = null; shapes = {}; sel = null; drag = null;
+      dragLock.clear();
+    }
+    return { enter, exit, active: () => zone, rerender: renderShapes,
+      _debug: () => ({ zone, tool, sel, count: Object.keys(shapes).length, shapes }) };
+  })();
+  window.PPCBuilder = Builder;
+
   /* ---- wiring ---- */
   $('zn-tabs').querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
     if (!curZone) return;
@@ -2815,7 +3415,7 @@ const Home = (() => {
       KV.watch('home/items', v => { items = v || {}; curZone ? renderZone() : updatePlan(); }),
     ];
     APPS.home.subroute(location.hash.replace(/^#/, ''));
-    return () => { unwatch.forEach(u => u()); unwatch = []; curZone = null; };
+    return () => { Builder.exit(); unwatch.forEach(u => u()); unwatch = []; curZone = null; };
   };
   APPS.home.subroute = h => {
     const parts = h.split('/');
@@ -2829,6 +3429,15 @@ const Home = (() => {
     const tb = totalBudget();
     return 'spent ' + fmtMoney(totalSpent()) + (tb ? ' / ' + fmtMoney(tb) : '');
   };
+
+  Settings.registerSetting({
+    key: 'home.showRuler', label: 'Scale ruler in Builder', type: 'toggle', section: 'Home', default: true,
+    hint: '5 ft reference bar on the plan',
+    apply: v => {
+      const r = document.querySelector('.bld-ruler');
+      if (r) r.style.display = (v === true || v === 'true') ? '' : 'none';
+    },
+  });
 
   return { ZONES, STATUSES, get curZone() { return curZone; },
     _debug: () => ({ curZone, curTab, zones, itemCount: Object.values(items).reduce((a, z) => a + Object.keys(z || {}).length, 0) }) };
