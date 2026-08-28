@@ -11,7 +11,7 @@
 //   - Firebase realtime DB: bypass (live data, needs network)
 // ============================================
 
-const CACHE_VERSION = 95;
+const CACHE_VERSION = 96;
 const CACHE_NAME = `cade-v${CACHE_VERSION}`;
 
 // Same-origin pages to precache on install.
@@ -20,6 +20,8 @@ const PRECACHE = [
   './txt.html',
   './gif.html',
   './photo.html',
+  './ppc.html',
+  './assets/floorplan.jpeg',
   './manifest.webmanifest',
 ];
 
@@ -203,14 +205,16 @@ self.addEventListener('message', (e) => {
 // ---- Strategy: navigation (HTML) ----
 // Serve cached HTML instantly, revalidate in background. Cache under the
 // requested URL (never under a hard-coded key) so sibling pages at the
-// SW's root scope can't overwrite the txt.html offline shell.
-// Only txt.html itself is used as the offline fallback.
+// SW's root scope can't overwrite an app's offline shell.
+// Only the app-shell pages (txt.html, ppc.html) get a shell fallback,
+// each strictly under its own canonical key.
 async function navigationHandler(request) {
   const cache = await caches.open(CACHE_NAME);
   const url = new URL(request.url);
-  const isAppShell =
+  const shellMatch =
     url.origin === self.location.origin &&
-    /(^|\/)txt\.html$/.test(url.pathname);
+    url.pathname.match(/(^|\/)(txt|ppc)\.html$/);
+  const shellKey = shellMatch ? './' + shellMatch[2] + '.html' : null;
 
   const cached = await cache.match(request);
 
@@ -218,9 +222,9 @@ async function navigationHandler(request) {
     if (response && response.ok) {
       // Cache under the exact request, not a shared key.
       cache.put(request, response.clone());
-      // Also keep a canonical './txt.html' copy in sync, but ONLY when
-      // the request actually IS txt.html.
-      if (isAppShell) cache.put('./txt.html', response.clone());
+      // Also keep the page's canonical shell copy in sync, but ONLY when
+      // the request actually IS that shell page.
+      if (shellKey) cache.put(shellKey, response.clone());
     }
     return response;
   }).catch(() => null);
@@ -234,9 +238,9 @@ async function navigationHandler(request) {
   if (network) return network;
 
   // Offline and no cache for this exact URL.
-  // Only fall back to the txt.html shell if that's what was requested.
-  if (isAppShell) {
-    const shell = await cache.match('./txt.html');
+  // Only fall back to the page's own shell if that's what was requested.
+  if (shellKey) {
+    const shell = await cache.match(shellKey);
     if (shell) return shell;
   }
 
