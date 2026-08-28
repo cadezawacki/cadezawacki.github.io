@@ -1611,7 +1611,13 @@ function doLogout() {
 /* ============================================
    §05 FIREBASE CORE
    ============================================ */
-const PPC_BASE = 'rooms/__ppc';   // lives under rooms/ so existing DB rules cover it
+// Lives under rooms/ so existing DB rules cover it. The e2e harness points the
+// app at a scratch tree via localStorage 'ppc-test-base' so test suites can
+// NEVER touch real data (a battery cleanup once wiped the live tree — never
+// again). Real devices never set that key.
+const PPC_BASE = (() => {
+  try { return localStorage.getItem('ppc-test-base') || 'rooms/__ppc'; } catch { return 'rooms/__ppc'; }
+})();
 let db = null;
 let _fbAppSeq = 0;
 const syncState = { connected: false, everConnected: false, onConnect: [] };
@@ -3254,6 +3260,75 @@ const Notes = (() => {
     });
   }
 
+  /* ---- wipe guard ----------------------------------------------------------
+     The index mirror survives an empty server snapshot (unlike the KV cache,
+     which faithfully caches the emptiness), so a wiped or misconfigured
+     server can be refilled from any device that still remembers the rooms.
+     Room text comes from this device's per-room caches; rooms cached only on
+     the partner's device come back as empty rooms here and their device
+     refills the text through the normal server-empty reconcile path. */
+  const MIRROR_KEY = 'ppc-notes-index-mirror';
+  let wipePrompted = false;
+  function readMirror() {
+    try {
+      const m = JSON.parse(store.get(MIRROR_KEY) || '{}');
+      return m && typeof m === 'object' ? m : {};
+    } catch { return {}; }
+  }
+  function cachedRoomIds() {
+    const ids = [];
+    try {
+      for (const k of Object.keys(localStorage)) {
+        if (k.startsWith('ppc-notes-cache:') && !k.includes('\u0000')) ids.push(k.slice('ppc-notes-cache:'.length));
+      }
+    } catch {}
+    return ids;
+  }
+  function wipeCheck(idx) {
+    const live = Object.keys(idx || {}).filter(id => idx[id] && idx[id].name);
+    if (live.length) {
+      const mir = {};
+      for (const id of live) mir[id] = { name: idx[id].name, color: idx[id].color || 'teal' };
+      try { store.set(MIRROR_KEY, JSON.stringify(mir)); } catch {}
+      return;
+    }
+    if (wipePrompted || !syncState.connected) return;
+    const mir = readMirror();
+    // rooms whose names were lost but whose text is still cached here
+    for (const id of cachedRoomIds()) {
+      if (!mir[id]) {
+        let t = '';
+        try { t = (JSON.parse(store.get(cacheKey(id)) || '{}').t) || ''; } catch {}
+        if (t.trim()) mir[id] = { name: 'recovered ' + id.slice(0, 4), color: 'stone' };
+      }
+    }
+    const n = Object.keys(mir).length;
+    if (!n) return;
+    wipePrompted = true;
+    askConfirm('Server has no rooms — restore ' + n + ' from this device?',
+      'This device still remembers them. Restore puts them back for both of you. (If you deleted them on purpose, cancel.)',
+      () => { restoreFromDevice(mir); }, 'Restore');
+  }
+  async function restoreFromDevice(mir) {
+    let restored = 0;
+    for (const [id, meta] of Object.entries(mir)) {
+      KV.set('notes/index/' + id, { name: meta.name || 'recovered', color: meta.color || 'teal', lastModified: Date.now(), createdBy: ME });
+      let cache = null;
+      try { cache = JSON.parse(store.get(cacheKey(id)) || 'null'); } catch {}
+      if (cache && typeof cache.t === 'string' && cache.t.trim()) {
+        try {
+          const payload = JSON.stringify({ t: cache.t, a: cache.a || '', by: ME, ts: Date.now() });
+          const enc = await encryptText(payload, ENC_KEY);
+          await withTimeout(db.ref(PPC_BASE + '/' + P(id) + '/v').transaction(cur => (cur || 0) + 1), 15000);
+          await withTimeout(db.ref(PPC_BASE + '/' + P(id) + '/blob').set(enc), 15000);
+        } catch (e) { slog('restore push fail ' + id + ': ' + e.message); }
+      }
+      restored++;
+    }
+    showToast('Restored ' + restored + ' room' + (restored === 1 ? '' : 's'), 'success', 3500);
+    slog('notes: restored ' + restored + ' rooms from device caches');
+  }
+
   /* ---- doc-wide todo actions ---------------------------------------------- */
   function todoStats() {
     if (!editor) return { done: 0, total: 0 };
@@ -3342,6 +3417,28 @@ const Notes = (() => {
     key: 'notes.fontSize', label: 'Editor text size', type: 'number', section: 'Notes', default: 15, min: 12, max: 24,
     apply: applyFontSize,
   });
+  Settings.registerSetting({
+    key: 'notes.recover', label: 'Recover cached rooms', type: 'button', section: 'Advanced',
+    buttonLabel: 'Scan device',
+    hint: 'Bring back rooms this device remembers but the server lost',
+    onClick: () => {
+      closeModal('settings-overlay');
+      const mir = readMirror();
+      const missing = {};
+      for (const [id, meta] of Object.entries(mir)) if (!index[id]) missing[id] = meta;
+      for (const id of cachedRoomIds()) {
+        if (index[id] || missing[id]) continue;
+        let t = '';
+        try { t = (JSON.parse(store.get(cacheKey(id)) || '{}').t) || ''; } catch {}
+        if (t.trim()) missing[id] = { name: 'recovered ' + id.slice(0, 4), color: 'stone' };
+      }
+      const n = Object.keys(missing).length;
+      if (!n) { showToast('Nothing to recover — server has everything this device knows', 'success', 3200); return; }
+      askConfirm('Recover ' + n + ' room' + (n === 1 ? '' : 's') + '?',
+        'Found on this device but missing from the server. Recovered rooms may need renaming.',
+        () => { restoreFromDevice(missing); }, 'Recover');
+    },
+  });
 
   APPS.notes.mount = () => {
     if (!EditorView) { $('notes-editor').textContent = 'editor failed to load'; return () => {}; }
@@ -3349,6 +3446,7 @@ const Notes = (() => {
     $('auth-legend').style.display = Settings.get('notes.authorHighlight') ? '' : 'none';
     unwatchIndex = KV.watch('notes/index', v => {
       index = v || {};
+      wipeCheck(index);
       // GC: a delete racing an in-flight lastModified bump leaves a nameless
       // index node behind. Rooms are always created with a name in one write,
       // so nameless entries are tombstone debris — clear them.
@@ -3382,9 +3480,13 @@ const Notes = (() => {
     `<button class="menu-item" onclick="ppcNotesDoneToBottom()">⇣ Done to bottom</button>` +
     `<button class="menu-item" onclick="ppcNotesClearChecked()">✓ Clear checked</button>`;
   APPS.notes.stat = statText;
-  APPS.notes.onConnect = () => { if (roomId) reconcile(roomId); };
+  APPS.notes.onConnect = () => {
+    if (roomId) reconcile(roomId);
+    if (currentApp === 'notes' || currentApp === 'today') wipeCheck(index);
+  };
 
   return { openRoom, get roomId() { return roomId; }, _mapAuthors: mapAuthors, _deriveAuthors: deriveAuthors, _merge3: merge3,
+    _wipeCheck: wipeCheck, _restoreFromDevice: restoreFromDevice,
     undo: () => { if (editor) undo(editor); },
     redo: () => { if (editor) redo(editor); },
     canUndo: () => !!editor,
@@ -5519,7 +5621,13 @@ const Today = (() => {
 
   APPS.today.mount = () => {
     unwatch = [
-      KV.watch('notes/index', v => { notesIdx = v || {}; render(); }),
+      KV.watch('notes/index', v => {
+        notesIdx = v || {};
+        // Today is the landing tab — run the wipe guard here too so a wiped
+        // server gets caught before anyone even opens Notes.
+        try { if (window.PPCNotes && PPCNotes._wipeCheck) PPCNotes._wipeCheck(notesIdx); } catch {}
+        render();
+      }),
       KV.watch('home/zones', v => { zones = v || {}; render(); }),
       KV.watch('home/items', v => { items = v || {}; render(); }),
     ];
