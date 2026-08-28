@@ -589,6 +589,22 @@ svg[data-tool]:not([data-tool="select"]):not([data-tool="erase"]) .bld-shape { p
 .bld-ctx .bld-ctx-sep { height: 1px; background: var(--border); margin: 4px 6px; }
 @media (pointer: coarse) { .bld-ctx button { min-height: 40px; } }
 
+/* moodboard */
+.mood-wrap { column-count: 2; column-gap: 8px; }
+@media (min-width: 700px) { .mood-wrap { column-count: 3; } }
+.mood-card {
+  break-inside: avoid; background: var(--surface); border: 1px solid var(--border);
+  border-radius: 10px; margin-bottom: 8px; overflow: hidden; position: relative; cursor: pointer;
+}
+.mood-card img { width: 100%; display: block; background: var(--surface-2); min-height: 40px; }
+.mood-card .mc-body { padding: 8px 10px; }
+.mood-card .mc-title { font-size: var(--text-sm); font-weight: 600; line-height: 1.3; }
+.mood-card .mc-desc { font-size: 0.68rem; color: var(--text-muted); margin-top: 2px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.mood-card .mc-host { font-size: 0.6rem; color: var(--text-faint); font-family: var(--font-mono); margin-top: 4px; }
+.mood-card .mc-text { font-size: var(--text-sm); white-space: pre-wrap; word-break: break-word; }
+.mood-card .mc-by { position: absolute; top: 6px; right: 6px; }
+.mood-hint { text-align: center; color: var(--text-faint); font-size: 0.68rem; padding: 14px 0 4px; }
+
 /* status sheet */
 .status-opt { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; padding: 10px; border-radius: var(--radius-md); font-size: var(--text-sm); }
 .status-opt:hover { background: var(--surface-hover); }
@@ -822,6 +838,18 @@ svg[data-tool]:not([data-tool="select"]):not([data-tool="erase"]) .bld-shape { p
     </div>
   </div>
 </div>
+
+<!-- ===== Home: moodboard add sheet ===== -->
+<div class="modal-overlay" id="mood-add-overlay">
+  <div class="modal-dialog" style="width:260px">
+    <div class="modal-title">Add to the board</div>
+    <button class="menu-item" id="mood-add-link">🔗&nbsp; A link</button>
+    <button class="menu-item" id="mood-add-photo">🖼&nbsp; A photo</button>
+    <button class="menu-item" id="mood-add-note">✏️&nbsp; A note</button>
+    <div class="form-hint" style="margin-top:8px">…or just paste a link, image, or text anywhere on the board.</div>
+  </div>
+</div>
+<input type="file" id="mood-img-file" accept="image/*" style="display:none">
 
 <!-- ===== Home: status sheet ===== -->
 <div class="modal-overlay" id="status-overlay">
@@ -2648,6 +2676,7 @@ const Home = (() => {
 
   /* ---- zone page ---- */
   function showZone(id, tab) {
+    if (curZone !== id) watchMood(id);
     curZone = id;
     curTab = tab || 'list';
     $('home-plan').style.display = 'none';
@@ -2656,6 +2685,7 @@ const Home = (() => {
   }
   function showPlan() {
     Builder.exit();
+    if (unwatchMood) { unwatchMood(); unwatchMood = null; }
     curZone = null;
     $('home-zone').style.display = 'none';
     $('home-plan').style.display = 'flex';
@@ -2672,7 +2702,7 @@ const Home = (() => {
     pill.style.setProperty('--st-c', st.c);
     renderBudget();
     $('zn-tabs').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.tab === curTab));
-    $('zn-fab').style.display = curTab === 'list' ? '' : 'none';
+    $('zn-fab').style.display = (curTab === 'list' || curTab === 'mood') ? '' : 'none';
     renderZoneBody();
     updateFooterStat();
   }
@@ -2712,7 +2742,7 @@ const Home = (() => {
       return;
     }
     Builder.exit();
-    if (curTab === 'mood') { body.innerHTML = '<div class="zn-empty">Moodboard — coming in the next update</div>'; return; }
+    if (curTab === 'mood') { renderMood(); return; }
     const its = Object.entries(items[curZone] || {})
       .filter(([, it]) => it && it.title)
       .sort((a, b) => (a[1].createdAt || 0) - (b[1].createdAt || 0));
@@ -2862,6 +2892,144 @@ const Home = (() => {
       KV.remove('home/items/' + editZone + '/' + editId);
       closeModal('item-overlay');
     }, 'Delete');
+  });
+
+  /* ---- Moodboard — a free space per zone: links, photos, notes ---- */
+  let mood = {};              // home/mood/<curZone> snapshot
+  let unwatchMood = null;
+  const MOOD_PATH = id => 'home/mood/' + curZone + '/' + id;
+
+  function watchMood(z) {
+    if (unwatchMood) { unwatchMood(); unwatchMood = null; }
+    mood = {};
+    unwatchMood = KV.watch('home/mood/' + z, v => {
+      mood = v || {};
+      if (curZone === z && curTab === 'mood') renderMood();
+    });
+  }
+
+  function renderMood() {
+    const body = $('zn-body');
+    const cards = Object.entries(mood).filter(([, c]) => c && c.kind).sort((a, b) => (b[1].ts || 0) - (a[1].ts || 0));
+    if (!cards.length) {
+      body.innerHTML = '<div class="zn-empty">an empty board — ＋ or paste anything</div>';
+      return;
+    }
+    body.innerHTML = '<div class="mood-wrap">' + cards.map(([id, c]) => {
+      const by = `<span class="mc-by by-chip ${c.by === 'A' ? 'u-a' : 'u-c'}">${c.by === 'A' ? 'A' : 'C'}</span>`;
+      if (c.kind === 'img') {
+        return `<div class="mood-card" data-id="${esc(id)}">${by}<img data-img-id="${esc(c.img)}" alt="">${c.text ? `<div class="mc-body"><div class="mc-text">${esc(c.text)}</div></div>` : ''}</div>`;
+      }
+      if (c.kind === 'url') {
+        let host = '';
+        try { host = new URL(c.url).hostname.replace(/^www\./, ''); } catch {}
+        return `<div class="mood-card" data-id="${esc(id)}" data-url="${esc(c.url)}">${by}` +
+          (c.imgUrl ? `<img src="${esc(c.imgUrl)}" alt="" loading="lazy">` : '') +
+          `<div class="mc-body"><div class="mc-title">${esc(c.title || c.url)}</div>` +
+          (c.desc ? `<div class="mc-desc">${esc(c.desc)}</div>` : '') +
+          `<div class="mc-host">${esc(host)}</div></div></div>`;
+      }
+      return `<div class="mood-card" data-id="${esc(id)}">${by}<div class="mc-body"><div class="mc-text">${esc(c.text || '')}</div></div></div>`;
+    }).join('') + '</div><div class="mood-hint">tap a link card to open it · long-press to edit or remove</div>';
+    body.querySelectorAll('img[data-img-id]').forEach(img =>
+      getImage('home', img.dataset.imgId).then(d => { if (d) img.src = d; }));
+    body.querySelectorAll('.mood-card').forEach(card => {
+      const id = card.dataset.id;
+      let lpT = 0, lpFired = false, sx = 0, sy = 0;
+      card.addEventListener('pointerdown', e => {
+        lpFired = false; sx = e.clientX; sy = e.clientY;
+        lpT = setTimeout(() => { lpFired = true; moodCardMenu(id, sx, sy); }, 500);
+      });
+      card.addEventListener('pointermove', e => { if (Math.hypot(e.clientX - sx, e.clientY - sy) > 10) clearTimeout(lpT); });
+      card.addEventListener('pointerup', () => clearTimeout(lpT));
+      card.addEventListener('pointercancel', () => clearTimeout(lpT));
+      card.addEventListener('contextmenu', e => { e.preventDefault(); clearTimeout(lpT); moodCardMenu(id, e.clientX, e.clientY); });
+      card.addEventListener('click', e => {
+        if (lpFired) { e.preventDefault(); return; }
+        if (card.dataset.url) { try { window.open(card.dataset.url, '_blank', 'noopener'); } catch {} }
+      });
+    });
+  }
+
+  // Small context menu on the shared #bld-ctx element.
+  function moodCardMenu(id, cx, cy) {
+    const c = mood[id];
+    if (!c) return;
+    const m = $('bld-ctx');
+    let h = '';
+    if (c.kind === 'url') h += `<button data-act="open">Open link</button>`;
+    if (c.kind === 'text') h += `<button data-act="edit">Edit note</button>`;
+    if (c.kind === 'img') h += `<button data-act="edit">${c.text ? 'Edit caption' : 'Add caption'}</button>`;
+    h += `<div class="bld-ctx-sep"></div><button data-act="del" class="danger">Remove</button>`;
+    m.innerHTML = h;
+    m.classList.add('open');
+    m.dataset.shownAt = Date.now();
+    const r = m.getBoundingClientRect();
+    m.style.left = Math.min(cx, innerWidth - r.width - 8) + 'px';
+    m.style.top = Math.min(cy, innerHeight - r.height - 8) + 'px';
+    m.querySelectorAll('button').forEach(b => b.addEventListener('click', async () => {
+      m.classList.remove('open');
+      const act = b.dataset.act;
+      if (act === 'open') { try { window.open(c.url, '_blank', 'noopener'); } catch {} }
+      if (act === 'edit') {
+        const t = await askPrompt(c.kind === 'text' ? 'Edit note' : 'Caption', { value: c.text || '' });
+        if (t != null) KV.set(MOOD_PATH(id), { ...c, text: t.trim() || null });
+      }
+      if (act === 'del') {
+        askConfirm('Remove this card?', (c.title || c.text || c.url || '').slice(0, 80), () => {
+          if (c.img) KV.remove('home/img/' + c.img);
+          KV.remove(MOOD_PATH(id));
+        }, 'Remove');
+      }
+    }));
+  }
+
+  async function addMoodUrl(url) {
+    const id = uid();
+    KV.set(MOOD_PATH(id), { kind: 'url', url, title: '', desc: '', imgUrl: null });
+    const meta = await fetchUrlMeta(url);
+    const c = mood[id];
+    if (c) KV.set(MOOD_PATH(id), { ...c, title: meta.title || url, desc: meta.desc || null, imgUrl: meta.imgUrl || null });
+  }
+  async function addMoodImage(blob) {
+    const d = await downscaleToB64(blob);
+    if (!d) { showToast('Could not read that image', 'error'); return; }
+    const imgId = uid();
+    putImage('home', imgId, d);
+    KV.set(MOOD_PATH(uid()), { kind: 'img', img: imgId });
+  }
+  const addMoodText = t => KV.set(MOOD_PATH(uid()), { kind: 'text', text: t.slice(0, 2000) });
+
+  $('mood-add-link').addEventListener('click', async () => {
+    closeModal('mood-add-overlay');
+    const u = await askPrompt('Link', { type: 'url', placeholder: 'https://…' });
+    if (u && /^https?:\/\//i.test(u.trim())) addMoodUrl(u.trim());
+    else if (u) showToast('That does not look like a link', 'error');
+  });
+  $('mood-add-photo').addEventListener('click', () => { closeModal('mood-add-overlay'); $('mood-img-file').click(); });
+  $('mood-img-file').addEventListener('change', () => {
+    const f = $('mood-img-file').files[0];
+    $('mood-img-file').value = '';
+    if (f && curZone) addMoodImage(f);
+  });
+  $('mood-add-note').addEventListener('click', async () => {
+    closeModal('mood-add-overlay');
+    const t = await askPrompt('Note');
+    if (t && t.trim()) addMoodText(t.trim());
+  });
+
+  // paste anywhere while the board is open
+  document.addEventListener('paste', e => {
+    if (currentApp !== 'home' || curTab !== 'mood' || !curZone) return;
+    if (e.target.closest && e.target.closest('input, textarea, [contenteditable]')) return;
+    const items_ = e.clipboardData ? [...e.clipboardData.items] : [];
+    const imgIt = items_.find(i => i.type.startsWith('image/'));
+    if (imgIt) { e.preventDefault(); addMoodImage(imgIt.getAsFile()); return; }
+    const text = e.clipboardData ? e.clipboardData.getData('text/plain').trim() : '';
+    if (!text) return;
+    e.preventDefault();
+    if (/^https?:\/\/\S+$/i.test(text)) addMoodUrl(text);
+    else addMoodText(text);
   });
 
   /* ---- Builder — SVG layout editor over the zone's floorplan crop ---- */
@@ -3201,17 +3369,17 @@ const Home = (() => {
     }
 
     /* ---- context menu ---- */
-    let ctxShownAt = 0;
     function hideCtx() { $('bld-ctx').classList.remove('open'); }
     document.addEventListener('click', e => {
       // The long-press release fires a click right after the menu opens —
-      // don't let it close the menu it just summoned.
-      if (Date.now() - ctxShownAt < 350) return;
+      // don't let it close the menu it just summoned. (shownAt is shared with
+      // the moodboard, which borrows this element.)
+      if (Date.now() - (+($('bld-ctx').dataset.shownAt || 0)) < 350) return;
       if (!e.target.closest || !e.target.closest('#bld-ctx')) hideCtx();
     });
     function showCtx(html, cx, cy) {
-      ctxShownAt = Date.now();
       const m = $('bld-ctx');
+      m.dataset.shownAt = Date.now();
       m.innerHTML = html;
       m.classList.add('open');
       const r = m.getBoundingClientRect();
@@ -3406,7 +3574,10 @@ const Home = (() => {
     if (!curZone) return;
     location.hash = '#home/' + curZone + (b.dataset.tab === 'list' ? '' : '/' + b.dataset.tab);
   }));
-  $('zn-fab').addEventListener('click', () => window.ppcHomeAddItem());
+  $('zn-fab').addEventListener('click', () => {
+    if (curTab === 'mood') openModal('mood-add-overlay');
+    else window.ppcHomeAddItem();
+  });
 
   APPS.home.mount = () => {
     buildSvg();
@@ -3415,7 +3586,13 @@ const Home = (() => {
       KV.watch('home/items', v => { items = v || {}; curZone ? renderZone() : updatePlan(); }),
     ];
     APPS.home.subroute(location.hash.replace(/^#/, ''));
-    return () => { Builder.exit(); unwatch.forEach(u => u()); unwatch = []; curZone = null; };
+    return () => {
+      Builder.exit();
+      if (unwatchMood) { unwatchMood(); unwatchMood = null; }
+      unwatch.forEach(u => u());
+      unwatch = [];
+      curZone = null;
+    };
   };
   APPS.home.subroute = h => {
     const parts = h.split('/');
