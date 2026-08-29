@@ -1,8 +1,8 @@
-# Cade.mine — premium Minesweeper (as-built)
+# MINEZ — premium Minesweeper (as-built)
 
 Status: **as-built**. This documents what shipped in `mine.html` + `mine/`,
 how it mirrors the txt.html / ppc.html infrastructure, and where each piece
-of the feature spec landed. Verified by 55 Node engine tests + 45 Playwright
+of the feature spec landed. Verified by 58 Node engine tests + 51 Playwright
 browser tests at build time (suites live outside the repo; the engine is
 re-runnable headless via `window.MINE`).
 
@@ -46,7 +46,7 @@ re-runnable headless via `window.MINE`).
   where neighbors = "shares ≥1 vertex" — one rule that yields 8-neighbor
   squares, 6-neighbor hexes, 12-neighbor triangles. Torus wraps the vertex
   keys so edges genuinely touch. Shape masks: analytic (circle, diamond,
-  ring, heart, swiss-cheese gaps) and pixel-art (skull, cat, star, invader);
+  ring, heart, swiss gaps) and pixel-art (skull, cat, star, invader);
   the largest connected component survives masking.
 - **Seeded boards**: board = pure function of `(spec, seed, start)`.
   Mulberry32 seeded by xmur3; share links (`#s=`) and challenges (`#c=`)
@@ -72,19 +72,21 @@ re-runnable headless via `window.MINE`).
   middle, double) and touch (tap, long-press, double-tap) bindings; smart
   actions: middle = chord-on-number / ?-on-unopened, long-press =
   chord-on-number / flag-on-unopened. Chord both reveals satisfied numbers
-  and flags saturated ones. Optional auto-flag pass (default off).
+  and flags saturated ones.
 - Keyboard-only play: arrow-key spatial cursor + remappable
   reveal/flag/chord/? keys, P/N/±/0/Esc.
 - Zoom/pan: wheel + pinch, drag with inertia, fit button, virtualized canvas
   rendering (bucketed culling + LOD) for huge boards (up to ~16 k cells).
-- Undo: off by default; when on, exactly 1 per game, mine-hits only,
-  tracked — results route to the "with undo" leaderboard.
+- Undo: practice mode only (mine hits can be taken back there; nothing is
+  recorded in practice). Rated play has no undo.
 - Pause/resume with frozen timer and hidden board; auto-pause on
   blur/visibility loss; crash-safe autosave every move (debounced) +
   pagehide; saved games restore across sessions into a paused state.
-- Practice mode: no timer, nothing recorded.
+- Practice mode: no timer, nothing recorded, undo allowed.
+- Countdown mode: optional beat-the-clock on new boards — fixed budgets or
+  Auto (~2.5s per 3BV point); the clock hitting zero is a loss.
 - Presets easy/medium/hard/extreme + full custom builder (grid, size, mines,
-  torus, shape, seed, no-guess).
+  torus, shape, seed). The no-guess guarantee is always on.
 
 ## Scoring, stats, meta
 
@@ -94,10 +96,10 @@ re-runnable headless via `window.MINE`).
 - Local profile: per-difficulty best/avg/win-rate, streaks, 500-game
   history; trend graphs (time per difficulty, rating) on canvas; synced
   encrypted under the username.
-- Leaderboards: all-time (no-undo), all-time-with-undo, per-preset best
-  times (clean wins), per-day daily, per-seed challenge boards, roguelike
-  runs — one best entry per player per board.
-- Daily challenge: spec is a pure function of the UTC date (grids, shapes,
+- Leaderboards: all-time, per-preset best times (clean wins), per-day
+  daily, per-seed challenge boards, continuous runs — one best entry per
+  player per board.
+- Daily challenge (one attempt per day, no retries): spec is a pure function of the UTC date (grids, shapes,
   weekend-bigger), stored get-or-create at `daily/<date>` (identical docs, so
   last-write-wins is invisible); offline players derive it locally and still
   match. Losses feed the day's **heat-map** (fatal tile, drawn over the real
@@ -105,12 +107,9 @@ re-runnable headless via `window.MINE`).
 
 ## Modes
 
-- **Roguelike**: seeded chained boards escalating in size/density/variety,
+- **Continuous**: seeded chained boards escalating in size/density/variety,
   ×1.15 compounding stage multiplier, run persistence, personal best +
   cloud run board.
-- **Story**: "The Surveyor's Field" — 8 fixed-seed chapters with narrative
-  beats and outros, teaching flags → chords → hex → tri → torus → shapes,
-  ending on the skull field. All verified logic-solvable.
 - **Tournaments**: create (players, 1–5 seeded rounds, flavor) → 5-char code
   under `trn/<code>`; single-elim bracket decided by combined score through
   each tier, byes auto; async play, read-merge-write results, share via
@@ -131,10 +130,8 @@ re-runnable headless via `window.MINE`).
   LCD counters, classic number colors) that also swaps to the retro art
   pack. The header is a 3-column grid (HUD truly centered), flat and
   shadow-free; the new-board control is a minimal restart glyph that tints
-  by game state (no smiley). Story chapters carry their own board flavors
-  (parchment, moss, honey, sea glass, twilight, blush, bone…) via
-  `Renderer.setFlavor` — a per-board palette overlay that any mode can pass
-  through `meta.flavor`; retro ignores flavors. `prefers-reduced-motion`
+  by game state (no smiley). `Renderer.setFlavor` offers a per-board palette overlay any mode can
+  pass through `meta.flavor`; retro ignores flavors. `prefers-reduced-motion`
   deliberately ignored; explosion shake + haptics, staggered flood reveal
   wave, win sweep + confetti.
 
