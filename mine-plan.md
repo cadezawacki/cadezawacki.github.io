@@ -1,4 +1,4 @@
-# MINEZ — premium Minesweeper (as-built)
+# Cade.Mines — premium Minesweeper (as-built)
 
 Status: **as-built**. This documents what shipped in `mine.html` + `mine/`,
 how it mirrors the txt.html / ppc.html infrastructure, and where each piece

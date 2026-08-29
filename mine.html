@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>MINEZ</title>
+  <title>Cade.Mines</title>
   <meta name="theme-color" content="#F5F3EA">
   <meta name="color-scheme" content="light dark">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -511,7 +511,8 @@ input, select, textarea { font-family: inherit; font-size: 0.9rem; color: var(--
 .tb-left { display: flex; align-items: center; gap: 8px; min-width: 0; overflow: hidden; }
 .tb-right { display: flex; align-items: center; gap: 4px; justify-content: flex-end; }
 html[data-theme="retro"] #topbar { border-bottom: 2px solid; border-color: #fff #808080 #808080 #fff; background: #c0c0c0; }
-.brand { display: flex; align-items: baseline; gap: 2px; font-weight: 700; font-size: 0.95rem; letter-spacing: 0.14em; white-space: nowrap; }
+.brand { display: flex; align-items: baseline; gap: 2px; font-weight: 600; font-size: 1rem; letter-spacing: -0.01em; white-space: nowrap; }
+.brand .dim { color: var(--m-text-faint); font-weight: 500; }
 #mode-chip {
   font-size: 0.68rem; font-weight: 600; color: var(--m-text-faint);
   white-space: nowrap; max-width: 140px; overflow: hidden; text-overflow: ellipsis;
@@ -904,6 +905,7 @@ html[data-theme="retro"] .kbd { border: 1px solid var(--m-border); box-shadow: n
 /* ---- Responsive topbar ---- */
 @media (max-width: 600px) { #mode-chip { display: none; } }
 @media (max-width: 470px) {
+  .brand .dim { display: none; }
   .hud-cluster { gap: 6px; }
   .lcd { min-width: 48px; font-size: 0.82rem; }
 }
@@ -929,7 +931,7 @@ html[data-theme="retro"] .kbd { border: 1px solid var(--m-border); box-shadow: n
       <button class="icon-btn" id="menu-btn" aria-label="Menu">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg>
       </button>
-      <div class="brand">MINEZ</div>
+      <div class="brand">Cade<span class="dim">.Mines</span></div>
       <span id="mode-chip"></span>
     </div>
     <div class="hud-cluster">
@@ -999,7 +1001,7 @@ html[data-theme="retro"] .kbd { border: 1px solid var(--m-border); box-shadow: n
 
 <aside id="drawer">
   <div class="drawer-head">
-    <div class="brand">MINEZ</div>
+    <div class="brand">Cade<span class="dim">.Mines</span></div>
     <button class="icon-btn" id="drawer-close" aria-label="Close">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>
     </button>
