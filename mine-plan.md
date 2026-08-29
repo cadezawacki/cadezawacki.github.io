@@ -123,7 +123,11 @@ re-runnable headless via `window.MINE`).
 - Default light theme is a **cozy cream** — warm paper ground, ivory tiles
   (never pure white), soft warm shadows, muted warm number colors; dark is a
   warmed charcoal. Both are built over the attached palette (embedded
-  verbatim as CSS tokens). Retro theme = Win3.1 homage (silver bevels, red
+  verbatim as CSS tokens). Modern themes render tiles in a 'soft' style:
+  rounded corners + a cast shadow peeking through the gaps (no stroke
+  bevels), flat quiet revealed ground, a faint board mat behind the field,
+  and a thin cleared-progress hairline under the header; retro keeps its
+  classic hard bevels untouched. Retro theme = Win3.1 homage (silver bevels, red
   LCD counters, classic number colors) that also swaps to the retro art
   pack. The header is a 3-column grid (HUD truly centered), flat and
   shadow-free; the new-board control is a minimal restart glyph that tints

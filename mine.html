@@ -383,8 +383,8 @@
   --font-body: 'General Sans', -apple-system, BlinkMacSystemFont, sans-serif;
   --font-mono: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
   --topbar-h: calc(52px + env(safe-area-inset-top));
-  --m-radius: 12px;
-  --m-radius-sm: 8px;
+  --m-radius: 14px;
+  --m-radius-sm: 10px;
   --m-transition: 160ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
@@ -566,6 +566,19 @@ html[data-theme="retro"] .lcd svg { display: none; }
 #face-btn[data-state="pause"] { color: var(--m-text-faint); }
 html[data-theme="retro"] #face-btn { border-radius: 0; border: 3px solid; border-color: #fff #808080 #808080 #fff; background: #c0c0c0; color: #000; width: 40px; height: 40px; }
 html[data-theme="retro"] #face-btn:active { border-color: #808080 #fff #fff #808080; }
+
+/* ---- Progress hairline (cleared %) ---- */
+#progress { height: 3px; flex: none; position: relative; z-index: 29; background: transparent; }
+#progress .fill {
+  height: 100%; width: 0%;
+  background: var(--m-accent);
+  border-radius: 0 999px 999px 0;
+  opacity: 0.75;
+  transition: width 320ms cubic-bezier(0.16, 1, 0.3, 1), background 300ms ease;
+}
+#progress.won .fill { background: var(--m-ok); }
+#progress.lost .fill { background: var(--m-danger); }
+html[data-theme="retro"] #progress { display: none; }
 
 /* ---- Stage (board canvas) ---- */
 #stage { position: relative; flex: 1; min-height: 0; overflow: hidden; }
@@ -953,6 +966,7 @@ html[data-theme="retro"] .kbd { border: 1px solid var(--m-border); box-shadow: n
       </button>
     </div>
   </header>
+  <div id="progress"><div class="fill"></div></div>
 
   <div id="stage">
     <canvas id="board"></canvas>
@@ -2192,7 +2206,7 @@ function solveBoard(cells, mines, adj, startIdx, caps) {
 
 /* ---- What does the CURRENT visible position prove? (loss recap, hints) ----
    Works only from what the player could see: revealed numbers + total mine
-   count. Returns everything provable at this moment.
+   count. Returns everything the position pins down at this moment.
 */
 function deduceVisible(game) {
   const { cells, adj, state } = game;
@@ -2763,6 +2777,14 @@ function updateHUD() {
   if (pauseBtn && G) {
     pauseBtn.style.visibility = (G.status === 'play' || G.status === 'pause') ? 'visible' : 'hidden';
   }
+  const prog = $('progress');
+  if (prog && G) {
+    const fill = prog.firstElementChild;
+    const p = G.safeTotal > 0 ? clamp(G.revealedSafe / G.safeTotal, 0, 1) : 0;
+    if (fill) fill.style.width = (p * 100).toFixed(1) + '%';
+    prog.classList.toggle('won', G.status === 'won');
+    prog.classList.toggle('lost', G.status === 'lost');
+  }
 }
 // state of the new-board control: idle | press | won | lost | pause
 function setFace(state) { const el = $('face-btn'); if (el) el.dataset.state = state; }
@@ -2826,29 +2848,39 @@ const NUM_COLORS = {
 };
 const BOARD_PALETTES = {
   light: {
-    // cozy cream: warm paper ground, ivory tiles, deeper cream wells
-    bg: '#F5F3EA', hidden: '#FBFAF2', hiddenHover: '#FFFEF8',
+    // cozy cream: warm paper ground, ivory tiles, deeper cream wells.
+    // style 'soft' = rounded tiles + cast shadow (no stroke bevels).
+    style: 'soft', cornerR: 0.13,
+    bg: '#F5F3EA', hidden: '#FCFBF3', hiddenHover: '#FFFEF9',
+    tileShadow: 'rgba(148,134,101,0.4)', tileOutline: 'rgba(255,255,252,0.9)',
+    matTint: 'rgba(118,102,66,0.055)',
     bevelLight: 'rgba(255,255,250,0.92)', bevelDark: 'rgba(186,176,148,0.5)',
-    revealed: '#EBE8DB', revealedBevelDark: 'rgba(186,176,148,0.36)', revealedBevelLight: 'rgba(255,255,248,0.7)',
-    line: '#E0DCCB', fatalBg: '#F0CDC4', mineBg: '#E6E1D2', flagWrongX: '#BD4D3F',
+    revealed: '#EAE6D6', revealedBevelDark: 'rgba(186,176,148,0.36)', revealedBevelLight: 'rgba(255,255,248,0.7)',
+    line: '#E0DCCB', fatalBg: '#F0CDC4', mineBg: '#E4DFCE', flagWrongX: '#BD4D3F',
     startRing: '#20808D', cursor: '#2A9AA9', numbers: NUM_COLORS.light,
     inset: 0.93, gapLine: false, sunkenLine: 'rgba(150,140,115,0.3)',
-    press: '#F1EEE2', torusEdge: 'rgba(32,128,141,0.45)',
+    press: '#EFEBDD', torusEdge: 'rgba(32,128,141,0.45)',
     confetti: ['#20808D', '#4A9D8A', '#D49A55', '#7B5EA7', '#BD4D3F', '#FFBA80', '#7FB377'],
   },
   dark: {
     // warmed charcoal
-    bg: '#171613', hidden: '#32302A', hiddenHover: '#3B3931',
+    style: 'soft', cornerR: 0.13,
+    bg: '#171613', hidden: '#343229', hiddenHover: '#3D3A30',
+    tileShadow: 'rgba(0,0,0,0.55)', tileOutline: 'rgba(255,248,230,0.06)',
+    matTint: 'rgba(255,248,230,0.035)',
     bevelLight: 'rgba(146,140,118,0.32)', bevelDark: 'rgba(0,0,0,0.5)',
-    revealed: '#1F1E19', revealedBevelDark: 'rgba(0,0,0,0.48)', revealedBevelLight: 'rgba(146,140,118,0.18)',
-    line: '#2A2822', fatalBg: '#54241C', mineBg: '#38302A', flagWrongX: '#E06B5C',
+    revealed: '#201E19', revealedBevelDark: 'rgba(0,0,0,0.48)', revealedBevelLight: 'rgba(146,140,118,0.18)',
+    line: '#2A2822', fatalBg: '#54241C', mineBg: '#382F26', flagWrongX: '#E06B5C',
     startRing: '#1FB8CD', cursor: '#59CEE0', numbers: NUM_COLORS.dark,
     inset: 0.93, gapLine: false, sunkenLine: 'rgba(0,0,0,0.4)',
-    press: '#26241F', torusEdge: 'rgba(31,184,205,0.5)',
+    press: '#2A2820', torusEdge: 'rgba(31,184,205,0.5)',
     confetti: ['#1FB8CD', '#33C798', '#FFD166', '#9F84C7', '#E06B5C', '#59CEE0', '#FFBA80'],
   },
   retro: {
+    // classic hard bevels, square corners, tiles touch — untouched by 'soft'
+    style: 'bevel', cornerR: 0,
     bg: '#bdbdbd', hidden: '#c0c0c0', hiddenHover: '#c8c8c8',
+    tileShadow: 'rgba(0,0,0,0)', tileOutline: 'rgba(0,0,0,0)', matTint: null,
     bevelLight: '#ffffff', bevelDark: '#808080',
     revealed: '#c0c0c0', revealedBevelDark: '#808080', revealedBevelLight: '#c0c0c0',
     line: '#808080', fatalBg: '#ff0000', mineBg: '#c0c0c0', flagWrongX: '#ff0000',
@@ -3120,10 +3152,26 @@ const Renderer = (() => {
   function getCursor() { return cursorI; }
 
   /* ---- draw helpers ---- */
-  function poly(vs) {
+  function poly(vs, dx, dy) {
+    dx = dx || 0; dy = dy || 0;
     ctx.beginPath();
-    ctx.moveTo((vs[0][0] - cam.x) * cam.scale, (vs[0][1] - cam.y) * cam.scale);
-    for (let i = 1; i < vs.length; i++) ctx.lineTo((vs[i][0] - cam.x) * cam.scale, (vs[i][1] - cam.y) * cam.scale);
+    ctx.moveTo((vs[0][0] - cam.x) * cam.scale + dx, (vs[0][1] - cam.y) * cam.scale + dy);
+    for (let i = 1; i < vs.length; i++) ctx.lineTo((vs[i][0] - cam.x) * cam.scale + dx, (vs[i][1] - cam.y) * cam.scale + dy);
+    ctx.closePath();
+  }
+  // rounded polygon via arcTo — the cozy tile silhouette
+  function polyR(vs, r, dx, dy) {
+    if (r < 1.2) { poly(vs, dx, dy); return; }
+    dx = dx || 0; dy = dy || 0;
+    const n = vs.length;
+    const P = new Array(n);
+    for (let i = 0; i < n; i++) P[i] = [(vs[i][0] - cam.x) * cam.scale + dx, (vs[i][1] - cam.y) * cam.scale + dy];
+    ctx.beginPath();
+    ctx.moveTo((P[n - 1][0] + P[0][0]) / 2, (P[n - 1][1] + P[0][1]) / 2);
+    for (let i = 0; i < n; i++) {
+      const c = P[i], nx2 = P[(i + 1) % n];
+      ctx.arcTo(c[0], c[1], (c[0] + nx2[0]) / 2, (c[1] + nx2[1]) / 2, r);
+    }
     ctx.closePath();
   }
   function strokeEdges(edges, color, w) {
@@ -3184,6 +3232,21 @@ const Renderer = (() => {
     const paused = game.status === 'pause';
     const lod = cam.scale < 8;
     const bevelW = Math.max(1, cam.scale * (pal.gapLine ? 0.1 : 0.075));
+    const soft = pal.style === 'soft' && !lod;
+    const cornerPx = soft ? Math.min(pal.cornerR * cam.scale, cam.scale * 0.28) : 0;
+    const shX = cam.scale * 0.03, shY = cam.scale * 0.065;   // cast-shadow offset
+
+    // board mat: a soft tray the tiles sit on
+    if (pal.matTint && !lod) {
+      const bb = game.grid.bbox, mPad = 0.42;
+      const mx = (bb.x0 - mPad - cam.x) * cam.scale, my = (bb.y0 - mPad - cam.y) * cam.scale;
+      const mw = (bb.w + mPad * 2) * cam.scale, mh = (bb.h + mPad * 2) * cam.scale;
+      ctx.fillStyle = pal.matTint;
+      ctx.beginPath();
+      if (ctx.roundRect) ctx.roundRect(mx, my, mw, mh, Math.min(18, cam.scale * 0.4));
+      else ctx.rect(mx, my, mw, mh);
+      ctx.fill();
+    }
 
     // visible cell set via buckets
     const x0 = cam.x - 1, y0 = cam.y - 1, x1 = cam.x + W / cam.scale + 1, y1 = cam.y + H / cam.scale + 1;
@@ -3213,43 +3276,53 @@ const Renderer = (() => {
       const fatal = game.fatal && game.fatal.i === i;
 
       if (s === ST_REVEALED || (showMines && isMine && s !== ST_FLAG)) {
-        // sunken tile
-        poly(cell.iverts);
+        // open ground: flat, quiet paper — the numbers carry the scene
+        polyR(cell.iverts, cornerPx * 0.7);
         ctx.fillStyle = fatal ? pal.fatalBg : (showMines && isMine) ? pal.mineBg : pal.revealed;
         ctx.fill();
-        if (!lod) {
-          strokeEdges(cell.lightE, pal.revealedBevelDark, bevelW);   // inverted bevel = recessed
+        if (!soft && !lod) {
+          strokeEdges(cell.lightE, pal.revealedBevelDark, bevelW);   // retro: inverted bevel = recessed
           strokeEdges(cell.darkE, pal.revealedBevelLight, bevelW);
         }
         if (showMines && isMine) {
           drawAsset(fatal ? 'boom' : 'mine', cell.cx, cell.cy, cell.rIn * 1.5);
         } else if (s === ST_REVEALED && game.adj && game.adj[i] > 0 && !isMine && cam.scale > 5.5) {
           const n = game.adj[i];
-          const fs = cell.rIn * 1.25 * cam.scale;
+          const fs = cell.rIn * 1.18 * cam.scale;
           const nudge = cell.up === true ? fs * 0.12 : cell.up === false ? -fs * 0.12 : 0;
           const nsx = (cell.cx - cam.x) * cam.scale, nsy = (cell.cy - cam.y) * cam.scale + nudge;
           ctx.font = '600 ' + fs + 'px ' + (themeName === 'retro' ? 'Tahoma, monospace' : 'General Sans, sans-serif');
-          // subtle depth: shadow pass under the glyph
-          if (!lod && themeName !== 'retro') {
-            ctx.fillStyle = 'rgba(0,0,0,0.18)';
-            ctx.fillText(String(n), nsx, nsy + fs * 0.055);
-          }
           ctx.fillStyle = pal.numbers[Math.min(n, pal.numbers.length - 1)] || pal.numbers[8];
           ctx.fillText(String(n), nsx, nsy);
         }
       } else {
         // raised tile (hidden / flag / question)
         const isPressed = pressed.has(i);
-        poly(cell.iverts);
-        ctx.fillStyle = isPressed ? pal.press : (i === hoverI && s === ST_HIDDEN ? pal.hiddenHover : pal.hidden);
-        ctx.fill();
-        if (!lod) {
-          if (isPressed) {
-            strokeEdges(cell.lightE, pal.revealedBevelDark, bevelW);
-            strokeEdges(cell.darkE, pal.revealedBevelLight, bevelW);
-          } else {
-            strokeEdges(cell.lightE, pal.bevelLight, bevelW);
-            strokeEdges(cell.darkE, pal.bevelDark, bevelW);
+        if (soft) {
+          // cast shadow peeks through the tile gaps — quiet depth, no bevels
+          if (!isPressed) {
+            polyR(cell.iverts, cornerPx, shX, shY);
+            ctx.fillStyle = pal.tileShadow;
+            ctx.fill();
+          }
+          polyR(cell.iverts, cornerPx);
+          ctx.fillStyle = isPressed ? pal.press : (i === hoverI && s === ST_HIDDEN ? pal.hiddenHover : pal.hidden);
+          ctx.fill();
+          ctx.strokeStyle = pal.tileOutline;
+          ctx.lineWidth = 1;
+          ctx.stroke();
+        } else {
+          poly(cell.iverts);
+          ctx.fillStyle = isPressed ? pal.press : (i === hoverI && s === ST_HIDDEN ? pal.hiddenHover : pal.hidden);
+          ctx.fill();
+          if (!lod) {
+            if (isPressed) {
+              strokeEdges(cell.lightE, pal.revealedBevelDark, bevelW);
+              strokeEdges(cell.darkE, pal.revealedBevelLight, bevelW);
+            } else {
+              strokeEdges(cell.lightE, pal.bevelLight, bevelW);
+              strokeEdges(cell.darkE, pal.bevelDark, bevelW);
+            }
           }
         }
         let popScale = 1;
@@ -3287,10 +3360,19 @@ const Renderer = (() => {
         ctx.scale(coverP, coverP);
         ctx.translate(-sx, -sy);
         ctx.globalAlpha = Math.min(1, coverP * 1.6);
-        poly(cell.iverts);
-        ctx.fillStyle = pal.hidden;
-        ctx.fill();
-        if (!lod) { strokeEdges(cell.lightE, pal.bevelLight, bevelW); strokeEdges(cell.darkE, pal.bevelDark, bevelW); }
+        if (soft) {
+          polyR(cell.iverts, cornerPx);
+          ctx.fillStyle = pal.hidden;
+          ctx.fill();
+          ctx.strokeStyle = pal.tileOutline;
+          ctx.lineWidth = 1;
+          ctx.stroke();
+        } else {
+          poly(cell.iverts);
+          ctx.fillStyle = pal.hidden;
+          ctx.fill();
+          if (!lod) { strokeEdges(cell.lightE, pal.bevelLight, bevelW); strokeEdges(cell.darkE, pal.bevelDark, bevelW); }
+        }
         ctx.restore();
       }
     }
@@ -4374,6 +4456,8 @@ const Rogue = {
 function boardFlavor(o) {
   return {
     bg: o.bg, hidden: o.hidden, hiddenHover: o.hover, revealed: o.revealed,
+    tileShadow: o.deep, tileOutline: 'rgba(255,255,252,0.9)',
+    matTint: 'rgba(90,78,52,0.05)',
     bevelLight: 'rgba(255,255,252,0.88)', bevelDark: o.deep,
     revealedBevelDark: o.deep, revealedBevelLight: 'rgba(255,255,250,0.6)',
     line: o.revealed, press: o.revealed, mineBg: o.revealed,
@@ -5296,12 +5380,12 @@ function showEndCard(won, canUndo) {
     const rec = G.recap;
     const cls = rec.fatalWasProvenMine ? '' : rec.safeAvailable > 0 ? ' was-safe' : ' forced';
     const txt = rec.fatalWasProvenMine
-      ? ['That tile was ', h('b', {}, 'provably a mine'), ' — the numbers had it fenced in.']
+      ? ['The numbers had already ', h('b', {}, 'ruled that tile out'), '.']
       : rec.safeAvailable > 0
-        ? [h('b', {}, rec.safeAvailable + ' provably safe tile' + (rec.safeAvailable === 1 ? '' : 's')), ' were available when you clicked — the logic was there.']
-        : ['No safe move was provable — a ', h('b', {}, 'forced guess'), '. Bad luck, not bad logic.'];
+        ? [h('b', {}, rec.safeAvailable + ' safe tile' + (rec.safeAvailable === 1 ? '' : 's')), (rec.safeAvailable === 1 ? ' was' : ' were') + ' still findable from the numbers.']
+        : ['No safe move existed — that one was ', h('b', {}, 'pure chance'), '.'];
     card.appendChild(h('div.recap-verdict' + cls.replace(' ', '.'), {}, ...txt,
-      h('div.hint', { style: { marginTop: '5px' } }, 'All mines are shown on the board; misplaced flags are crossed out.')));
+      h('div.hint', { style: { marginTop: '5px' } }, 'Mines are shown on the board; wrong flags are crossed out.')));
   }
 
   if (!G.practice && r.ratingAfter) {
