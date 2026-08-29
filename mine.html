@@ -2328,7 +2328,11 @@ const PRESETS = {
 function canonicalSpec(spec) {
   return {
     g: spec.g || 'sq', w: spec.w | 0, h: spec.h | 0, m: spec.m | 0,
-    t: spec.t ? 1 : 0, sh: spec.sh || '', s: String(spec.s || ''),
+    // torus only exists on unmasked square grids (buildGrid can't wrap a
+    // shaped board) — normalize here so descriptions/fingerprints never
+    // claim a wrap the board doesn't have
+    t: spec.t && (spec.g || 'sq') === 'sq' && !spec.sh ? 1 : 0,
+    sh: spec.sh || '', s: String(spec.s || ''),
     st: spec.st == null ? null : spec.st | 0, ng: spec.ng === 0 ? 0 : 1,
   };
 }
@@ -2485,6 +2489,14 @@ function resumeFromSave(blob) {
       }
       G.status = G.moveCount > 0 ? 'pause' : 'idle';
       if (G.status === 'pause') showPauseOverlay(true);
+    } else {
+      // board not generated yet — flags/questions placed before the first
+      // reveal still restore (the crash-safe promise covers them too)
+      const st = b64ToBytes(blob.state);
+      if (st.length === G.N) G.state = st;
+      G.flags = 0;
+      for (let i = 0; i < G.N; i++) if (G.state[i] === ST_FLAG) G.flags++;
+      G.status = 'idle';
     }
     updateHUD();
     updateBoardInfo();
@@ -4109,7 +4121,8 @@ function drawBoardHeatmap(canvasEl, spec, counts, opts) {
      daily/<yyyy-mm-dd>       the day's board spec (get-or-create, last wins)
      heat/<yyyy-mm-dd>/<user> that player's daily loss points [{i, n}]
      players/<userKey>        profile snapshot (rating + recent games)
-     trn/<code>               tournament doc (read-merge-write)
+     trn/<code>/doc           tournament setup (immutable after create)
+     trn/<code>/res/<r>/<usr> per-player round results (clobber-proof)
    Sync happens ONLY at: daily fetch, leaderboard view, game finish,
    tournament actions. Never while playing or paused.
    ============================================ */
@@ -4242,9 +4255,31 @@ const CloudGame = (() => {
     return remote;
   }
 
-  /* ---- tournaments ---- */
+  /* ---- tournaments ----
+     Layout: trn/<id>/doc            immutable setup (name, players, rounds)
+             trn/<id>/res/<r>/<user> that player's round result
+     Results live under independently writable player nodes, so two players
+     finishing at the same moment can never clobber each other's scores. ---- */
   function trnCode() {
     return uid().slice(-5).replace(/[^a-z0-9]/gi, 'x').toLowerCase();
+  }
+  async function trnFetchResults(id) {
+    const raw = await fbOp('read trn res', async database => {
+      const snap = await ref(database, 'trn/' + id + '/res').once('value');
+      return snap.val() || {};
+    });
+    const results = {};
+    for (const [round, users] of Object.entries(raw)) {
+      if (!users || typeof users !== 'object') continue;
+      results[round] = {};
+      for (const [userKey, enc] of Object.entries(users)) {
+        if (typeof enc !== 'string') continue;
+        const dec = await decryptText(enc, Cloud.encKey);
+        if (dec == null) continue;
+        try { results[round][userKey] = JSON.parse(dec); } catch {}
+      }
+    }
+    return results;
   }
   async function trnCreate(name, players, roundsCount, presetBase) {
     const id = trnCode();
@@ -4267,32 +4302,38 @@ const CloudGame = (() => {
       spec.m = clamp(spec.m, 1, Math.max(1, grid.cells.length - 10));
       rounds.push({ spec });
     }
-    const doc = { id, name: String(name || 'Tournament').slice(0, 40), players: players.slice(0, 16), rounds, results: {}, ts: Date.now(), by: Cloud.name || '' };
-    await encSet('trn/' + id, doc);
+    const doc = { id, name: String(name || 'Tournament').slice(0, 40), players: players.slice(0, 16), rounds, ts: Date.now(), by: Cloud.name || '' };
+    await encSet('trn/' + id + '/doc', doc);
+    doc.results = {};
     const mine = store.getJSON('my-trns') || [];
     if (!mine.includes(id)) { mine.push(id); store.setJSON('my-trns', mine); }
+    store.setJSON('trn-cache:' + id, doc);
     return doc;
   }
   async function trnFetch(id) {
-    const doc = await encGet('trn/' + id);
-    if (doc) {
-      const mine = store.getJSON('my-trns') || [];
-      if (!mine.includes(id)) { mine.push(id); store.setJSON('my-trns', mine); }
-      store.setJSON('trn-cache:' + id, doc);
-    }
+    const doc = await encGet('trn/' + id + '/doc');
+    if (!doc) return null;
+    doc.results = await trnFetchResults(id);
+    const mine = store.getJSON('my-trns') || [];
+    if (!mine.includes(id)) { mine.push(id); store.setJSON('my-trns', mine); }
+    store.setJSON('trn-cache:' + id, doc);
     return doc;
   }
   async function trnSubmitInner(id, round, res) {
-    const doc = await encGet('trn/' + id);
+    const doc = await encGet('trn/' + id + '/doc');
     if (!doc) throw new Error('tournament missing');
-    doc.results = doc.results || {};
-    const slot = doc.results[round] || (doc.results[round] = {});
-    const prev = slot[Cloud.userKey];
-    if (!prev || (res.s || 0) > (prev.s || 0)) {
-      slot[Cloud.userKey] = Object.assign({ u: Cloud.name, ts: Date.now() }, res);
-      await encSet('trn/' + id, doc);
+    const rel = 'trn/' + id + '/res/' + round + '/' + Cloud.userKey;
+    const prev = await encGet(rel);
+    const entry = Object.assign({ u: Cloud.name, ts: Date.now() }, res);
+    if (!prev || (res.s || 0) > (prev.s || 0)) await encSet(rel, entry);
+    // keep the local bracket cache fresh without another full fetch
+    const cached = store.getJSON('trn-cache:' + id);
+    if (cached) {
+      cached.results = cached.results || {};
+      const slot = cached.results[round] || (cached.results[round] = {});
+      if (!slot[Cloud.userKey] || (res.s || 0) > (slot[Cloud.userKey].s || 0)) slot[Cloud.userKey] = entry;
+      store.setJSON('trn-cache:' + id, cached);
     }
-    store.setJSON('trn-cache:' + id, doc);
     return doc;
   }
   async function trnSubmit(id, round, res) {
@@ -4563,14 +4604,19 @@ const ModeHooks = {
   onFinish(result) {
     if (result.mode === 'daily' && result.dailyKey) {
       if (!result.practice) {
-        store.setJSON('daily-done:' + result.dailyKey, { t: result.timeMs, s: result.score, won: result.won, un: result.undos });
+        // "best result counts": same ordering as the daily leaderboard
+        const prev = dailyDoneInfo(result.dailyKey);
+        const better = !prev
+          || (result.score || 0) > (prev.s || 0)
+          || ((result.score || 0) === (prev.s || 0) && result.timeMs < (prev.t || Infinity));
+        if (better) store.setJSON('daily-done:' + result.dailyKey, { t: result.timeMs, s: result.score, won: result.won, un: result.undos });
         refreshDailyBadge();
       }
     } else if (result.mode === 'rogue') {
       Rogue.onFinish(result);
     } else if (result.mode === 'story') {
       Story.onFinish(result);
-    } else if (result.mode === 'trn' && G.meta.trn) {
+    } else if (result.mode === 'trn' && G.meta.trn && !result.practice) {
       const payload = { s: result.score, t: result.timeMs, w: result.won ? 1 : 0 };
       CloudGame.trnSubmit(G.meta.trn.id, G.meta.round, payload);
     }
@@ -4621,7 +4667,7 @@ function panelPlay(body) {
     const best = Stats.bestTimeFor(key);
     const density = Math.round(p.m / (p.w * p.h) * 100);
     grid.appendChild(h('button.preset-card', {
-      onclick: () => { closeSheet(); closeDrawer(); startClassic({ g: p.g, w: p.w, h: p.h, m: p.m, ng: 1 }); },
+      onclick: () => { closeSheet(); closeDrawer(); startClassic({ g: p.g, w: p.w, h: p.h, m: p.m }); },
     },
       h('div.p-name', {}, p.label),
       h('div.p-sub', {}, `${p.w}×${p.h} · ${p.m} mines · ${density}%`),
@@ -4649,16 +4695,19 @@ function panelPlay(body) {
   wIn.oninput = hIn.oninput = mIn.oninput = updDensity;
   updDensity();
 
-  const torusRow = toggleRow('Toroidal (wrap-around)', 'Left edge touches right, top touches bottom. Square grids only.', torus, on => { torus = on; });
+  // torus only works on unmasked square grids — hide it when it can't apply
+  const torusRow = toggleRow('Toroidal (wrap-around)', 'Left edge touches right, top touches bottom. Plain square grids only.', torus, on => { torus = on; });
+  const updTorusVis = () => { torusRow.style.display = (gridType === 'sq' && !shapeSel.value) ? '' : 'none'; };
   body.appendChild(fieldRow('Grid', segControl([['sq', 'Square'], ['hex', 'Hex'], ['tri', 'Triangle']], gridType, v => {
     gridType = v;
-    torusRow.style.display = v === 'sq' ? '' : 'none';
+    updTorusVis();
   })));
   body.appendChild(h('div.row', {},
     fieldRow('Width', wIn), fieldRow('Height', hIn), fieldRow('Mines', mIn)));
   body.appendChild(densityHint);
   body.appendChild(fieldRow('Shape', shapeSel, 'Shapes carve the board — gaps, rings, even pictures. Pixel shapes pick their own proportions.'));
-  torusRow.style.display = gridType === 'sq' ? '' : 'none';
+  shapeSel.addEventListener('change', updTorusVis);
+  updTorusVis();
   body.appendChild(torusRow);
   body.appendChild(toggleRow('No-guess guarantee', 'Generate until the board is fully solvable by logic. Costs a moment on huge boards.', noGuess, on => { noGuess = on; }));
   body.appendChild(fieldRow('Seed', seedIn, 'Same seed = same board, for everyone. Leave empty for a fresh one.'));
@@ -4672,7 +4721,7 @@ function panelPlay(body) {
         if (w * hgt > 16000) { showToast('That board is too big (max ~16k cells)'); return; }
         const spec = {
           g: gridType, w, h: hgt, m: clamp(parseInt(mIn.value, 10) || 10, 1, 5000),
-          t: gridType === 'sq' && torus ? 1 : 0, sh, s: seedIn.value.trim() || '', ng: noGuess ? 1 : 0,
+          t: gridType === 'sq' && torus && !sh ? 1 : 0, sh, s: seedIn.value.trim() || '', ng: noGuess ? 1 : 0,
         };
         store.setJSON('custom-spec', spec);
         closeSheet(); closeDrawer();
@@ -4685,6 +4734,9 @@ function panelPlay(body) {
   body.appendChild(toggleRow('Practice mode', 'No timer, nothing recorded — pure zen digging.', Settings.get('practice'), on => Settings.set('practice', on)));
 }
 function startClassic(spec) {
+  // specs without an explicit choice follow the Settings no-guess toggle;
+  // the custom builder always passes its own explicit ng (override kept)
+  if (spec.ng == null) spec.ng = Settings.get('noGuess') ? 1 : 0;
   spec = canonicalSpec(spec);
   store.setJSON('last-spec', spec);
   newGame(spec, { mode: 'classic' });
@@ -4919,7 +4971,9 @@ function panelStory(body) {
     const done = Story.isDone(idx);
     const unlocked = Story.unlocked(idx);
     body.appendChild(h('button.chapter-row' + (done ? '.done' : '') + (unlocked ? '' : '.locked'), {
+      disabled: !unlocked,      // real disabled: keyboard focus can't bypass the lock
       onclick: () => {
+        if (!unlocked) return;
         openSheet('Chapter ' + (idx + 1) + ' — ' + ch.title, sub => {
           sub.appendChild(h('div.story-beat', {}, ch.text));
           if (done) sub.appendChild(h('div.hint', { style: { margin: '4px 0 10px' } }, '✓ completed — ' + ch.outro));
@@ -5033,7 +5087,8 @@ function openTrnView(doc) {
         h('button.btn.small' + (my ? '' : '.primary'), {
           onclick: () => {
             closeSheet(); closeDrawer();
-            newGame(round.spec, { mode: 'trn', trn: { id: doc.id }, round: r });
+            // tournaments are inherently competitive — practice mode never applies
+            newGame(round.spec, { mode: 'trn', trn: { id: doc.id }, round: r, practice: false });
           },
         }, my ? 'Replay' : 'Play'),
       ));
@@ -5064,7 +5119,9 @@ function renderBracket(doc) {
       const A = field[k], B = field[k + 1];
       const sa = A ? trnCombined(doc, A, roundIdx) : -1;
       const sb = B ? trnCombined(doc, B, roundIdx) : -1;
-      const decided = (A && B && (trnScoreOf(doc, roundIdx, A) || trnScoreOf(doc, roundIdx, B))) || !A || !B;
+      // a real matchup is decided only once BOTH players have posted this
+      // tier's round — never advance someone over an opponent still playing
+      const decided = (!A || !B) || !!(trnScoreOf(doc, roundIdx, A) && trnScoreOf(doc, roundIdx, B));
       const winner = !B ? A : !A ? B : (sb > sa ? B : A);
       next.push(decided ? winner : null);
       col.appendChild(h('div.b-match', {},
@@ -5594,7 +5651,7 @@ function boot() {
       showToast('Game restored — right where you left it');
     } else {
       const last = store.getJSON('last-spec');
-      startClassic(last || { g: 'sq', w: PRESETS.medium.w, h: PRESETS.medium.h, m: PRESETS.medium.m, ng: 1 });
+      startClassic(last || { g: 'sq', w: PRESETS.medium.w, h: PRESETS.medium.h, m: PRESETS.medium.m });
     }
   }
 
