@@ -3,6 +3,15 @@
 Status: **IMPLEMENTED** (all milestones M1–M7 shipped and verified).
 Scope: new page `ppc.html` (~573KB) + small `sw.js` extension + `tools/ppc-make-login.mjs`. No card on index.html.
 
+## V2 additions (user feedback round)
+
+- **Notes concurrency rework**: the sync engine keeps the last *observed* remote doc as a three-way merge base; concurrent edits on disjoint lines from both users now interleave (identical overlapping segments dedupe; only true same-line conflicts reach local-wins/conflict modal). Stale snapshots (older `v`) can never replace newer data. The conflict modal never rebuilds its DOM while open.
+- **Today dashboard** (`#today`, the default tab): today's + upcoming calendar events, tappable habit pills, week duel mini-bar, recent notes rooms, house budget status.
+- **Shared calendar** (`#cal`, calendar button in the menubar): month-sharded `cal/<YYYY-MM>/<id>` events, tap-to-add with time + color, edit/delete, while-open notifications (toast + haptic + Web Notification at event time and 10 minutes before).
+- **Builder**: floating undo/redo toolbar (also drives CM6 history on Notes), full-spectrum native color picker beside the palette, stroke-width slider, live W×H readout in feet during create/resize/warp, and named **variants** — synced snapshots of a zone's whole layout (save/load/delete, load is undoable).
+- **Fitness**: scoring rules editable in a shared modal (`fit/config`: points, sweep bonus, miss penalty, duel win/slack); long-press = permitted skip (excused everywhere, streaks survive); Cade's workout counts for sweeps but scores 0; miss penalties only on closed days the app was in play; goals removed; timers are shared, plural, and epoch-synced (countdowns/stopwatches live on both devices, alerts on any open screen); Proof feed → Feed.
+- **Interaction**: keyboard-aware viewport pinning clears when the keyboard closes (footer no longer floats mid-screen), menus/controls are non-selectable with `touch-action: manipulation` (no double-tap zoom).
+
 ## As built — deviations from the plan below
 
 - Zone page: the budget bar is **pinned above** the section tabs (tabs are List · Builder · Mood) rather than being a fourth tab — it is small and always relevant.

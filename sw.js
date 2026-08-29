@@ -13,7 +13,7 @@
 //   - Firebase realtime DB: bypass (live data, needs network)
 // ============================================
 
-const CACHE_VERSION = 97;
+const CACHE_VERSION = 99;
 const CACHE_NAME = `cade-v${CACHE_VERSION}`;
 
 // Same-origin pages to precache on install.
@@ -34,7 +34,10 @@ const PRECACHE = [
   './mine/assets/retro/boom.svg',
   './mine/assets/retro/question.svg',
   './assets/floorplan.jpeg',
+  './assets/ppc-icon.png',
+  './assets/ppc-icon-32.png',
   './manifest.webmanifest',
+  './ppc.webmanifest',
 ];
 
 // Cross-origin assets to precache (opaque, no-cors).
