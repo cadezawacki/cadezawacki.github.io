@@ -609,8 +609,6 @@ html[data-theme="retro"] #progress { display: none; }
 }
 #boardinfo .stars { color: var(--m-warn); letter-spacing: 1px; }
 #boardinfo .seed { font-family: var(--font-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#boardinfo .ng { color: var(--m-ok); font-weight: 600; }
-#boardinfo .ng.guessy { color: var(--m-warn); }
 html[data-theme="retro"] #boardinfo, html[data-theme="retro"] #zoomctl .icon-btn { border-radius: 0; border: 2px solid; border-color: #fff #808080 #808080 #fff; box-shadow: none; background: #c0c0c0; }
 
 /* ---- Banners (resume / challenge / keyboard hint) ---- */
@@ -986,7 +984,6 @@ html[data-theme="retro"] .kbd { border: 1px solid var(--m-border); box-shadow: n
 
     <button id="boardinfo" title="Board details & share">
       <span class="stars" id="bi-stars">★★</span>
-      <span class="ng" id="bi-ng">✓</span>
       <span class="seed" id="bi-seed"></span>
     </button>
 
@@ -2805,15 +2802,8 @@ function updateModeChip() {
 
 function updateBoardInfo() {
   if (!G) return;
-  const stars = $('bi-stars'), ng = $('bi-ng'), seed = $('bi-seed');
+  const stars = $('bi-stars'), seed = $('bi-seed');
   if (stars) stars.textContent = G.generated ? '★'.repeat(G.stars) + '☆'.repeat(Math.max(0, 5 - G.stars)) : '★…';
-  if (ng) {
-    const a = G.analysis;
-    if (!G.generated) { ng.textContent = ''; }
-    else if (a && a.guessFree) { ng.textContent = 'no-guess ✓'; ng.className = 'ng'; }
-    else if (a && a.checked) { ng.textContent = 'may need guesses'; ng.className = 'ng guessy'; }
-    else { ng.textContent = 'unchecked'; ng.className = 'ng guessy'; }
-  }
   if (seed) seed.textContent = G.spec.s;
 }
 
