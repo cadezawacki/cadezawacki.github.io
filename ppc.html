@@ -501,6 +501,61 @@ svg { display: block; }
 .cm-todo-count.full b { color: var(--success); }
 .cm-todo-count.full .tct i { background: var(--success); }
 
+.txt-link { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; word-break: break-all; }
+.notes-editor .cm-url { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+
+/* Chat (iMessage-ish pinned room) */
+.chat-wrap { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.chat-scroll {
+  flex: 1; min-height: 0; overflow-y: auto; padding: 12px 12px 6px;
+  display: flex; flex-direction: column; gap: 3px; overscroll-behavior: contain;
+}
+.chat-day { text-align: center; font-size: 0.62rem; color: var(--text-faint); font-family: var(--font-mono); margin: 10px 0 4px; flex-shrink: 0; }
+.chat-msg {
+  max-width: 78%; width: fit-content; padding: 7px 12px; border-radius: 17px;
+  font-size: var(--text-base); line-height: 1.35; overflow-wrap: anywhere; flex-shrink: 0;
+}
+.chat-msg.mine { align-self: flex-end; background: var(--accent); color: #fff; border-bottom-right-radius: 5px; }
+.chat-msg.theirs { align-self: flex-start; background: var(--surface-2); border-bottom-left-radius: 5px; }
+.chat-msg.mine .txt-link { color: #fff; }
+.chat-compose {
+  display: flex; gap: 8px; padding: 8px 10px; align-items: center;
+  border-top: 1px solid var(--border); background: var(--surface);
+}
+.chat-compose .form-input { flex: 1; border-radius: 20px; }
+.chat-send {
+  width: 34px; height: 34px; border-radius: 50%; background: var(--accent); color: #fff;
+  font-size: 14px; display: grid; place-items: center; flex-shrink: 0;
+}
+.chat-empty { text-align: center; color: var(--text-faint); font-size: var(--text-sm); margin: auto; }
+
+/* Whiteboard */
+.wb-wrap { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.wb-bar {
+  display: flex; align-items: center; gap: 6px; padding: 6px 10px; flex-wrap: wrap;
+  border-bottom: 1px solid var(--border); background: var(--surface);
+  user-select: none; -webkit-user-select: none;
+}
+.wb-colors, .wb-widths { display: inline-flex; align-items: center; gap: 3px; }
+.wb-dot { width: 24px; height: 24px; border-radius: 50%; border: 2px solid transparent; display: inline-grid; place-items: center; }
+.wb-dot i { width: 14px; height: 14px; border-radius: 50%; display: block; background: var(--wbc); }
+.wb-dot.on { border-color: var(--text); }
+.wb-w { width: 26px; height: 24px; border-radius: 7px; display: inline-grid; place-items: center; color: var(--text-muted); }
+.wb-w.on { background: var(--surface-2); color: var(--text); }
+.wb-w i { display: block; border-radius: 3px; background: currentColor; width: 14px; }
+.wb-tool { width: 30px; height: 26px; border-radius: 7px; display: inline-grid; place-items: center; font-size: 13px; color: var(--text-muted); }
+.wb-tool.on { background: var(--accent); color: #fff; }
+.wb-tool:not(.on):hover { background: var(--surface-hover); }
+.wb-clear { font-size: 0.7rem; font-weight: 600; color: var(--error); padding: 5px 10px; border-radius: var(--radius-md); }
+.wb-clear:hover { background: var(--surface-hover); }
+.wb-stage { flex: 1; min-height: 0; background: var(--surface); }
+.wb-stage svg {
+  width: 100%; height: 100%; display: block; touch-action: none;
+  background: radial-gradient(var(--border) 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+.wb-stroke-hit { pointer-events: stroke; }
+
 /* Room dropdown + manager */
 .room-dd-title { font-size: 0.62rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-faint); padding: 5px 10px 3px; }
 .rm-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; }
@@ -647,6 +702,9 @@ svg { display: block; }
 .bld-swatch .sw-tag { position: absolute; bottom: -3px; right: -3px; font-size: 7px; background: var(--surface); border-radius: 3px; padding: 0 2px; color: var(--text-faint); line-height: 1.3; }
 .bld-stage { flex: 1; min-height: 0; position: relative; margin: 8px; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: var(--surface-2); }
 .bld-stage svg { width: 100%; height: 100%; display: block; touch-action: none; }
+/* invisible fat hit companions — tap target only, never painted */
+.bld-hitproxy { pointer-events: all; }
+.bld-hitproxy.stroke-only { pointer-events: stroke; }
 .bld-dim { fill: var(--bg); opacity: 0.62; pointer-events: none; }
 .bld-shape { cursor: grab; }
 .bld-shape text { user-select: none; -webkit-user-select: none; }
@@ -848,6 +906,9 @@ svg[data-tool]:not([data-tool="select"]):not([data-tool="erase"]) .bld-shape { p
   user-select: none; -webkit-user-select: none;
 }
 .td-head .td-more { margin-left: auto; color: var(--text-faint); font-size: 0.85rem; }
+.td-post { display: flex; align-items: center; gap: 8px; padding: 4px 0; font-size: var(--text-sm); }
+.td-post .tdp-thumb img { width: 36px; height: 36px; object-fit: cover; border-radius: 9px; display: block; background: var(--surface-2); }
+.td-post .tdp-mid { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .td-pills { display: flex; gap: 7px; }
 .td-pill {
   flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px;
@@ -959,6 +1020,27 @@ svg[data-tool]:not([data-tool="select"]):not([data-tool="erase"]) .bld-shape { p
       <div class="notes-empty" id="notes-empty" style="display:none">
         <span>no rooms yet</span>
         <button class="btn btn-primary" onclick="ppcNotesNew()">＋ Create the first room</button>
+        <button class="btn" onclick="ppcNotesChat()">💬 Open the chat</button>
+        <button class="btn" onclick="ppcNotesWhiteboard()">🎨 Open the whiteboard</button>
+      </div>
+      <div class="wb-wrap" id="wb-wrap" style="display:none">
+        <div class="wb-bar">
+          <span class="wb-colors" id="wb-colors"></span>
+          <span class="wb-widths" id="wb-widths"></span>
+          <button class="wb-tool" id="wb-erase" title="eraser — tap or drag over strokes">⌫</button>
+          <span style="flex:1"></span>
+          <button class="wb-clear" id="wb-clear">clear</button>
+        </div>
+        <div class="wb-stage"><svg id="wb-svg" viewBox="0 0 1000 1400" preserveAspectRatio="xMidYMid meet">
+          <g id="wb-strokes"></g><g id="wb-live"></g>
+        </svg></div>
+      </div>
+      <div class="chat-wrap" id="chat-wrap" style="display:none">
+        <div class="chat-scroll" id="chat-scroll"></div>
+        <div class="chat-compose">
+          <input class="form-input" id="chat-input" placeholder="message…" maxlength="1000" autocomplete="off" autocorrect="on">
+          <button class="chat-send" id="chat-send" aria-label="send">➤</button>
+        </div>
       </div>
     </div>
   </div>
@@ -1271,6 +1353,21 @@ window.__CM6__.undo = Zh;
    ============================================ */
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+// Escape text AND turn bare URLs into safe links (chat, feed captions, cards).
+const URL_RE = /(?:https?:\/\/|www\.)[^\s<>()[\]"']+/g;
+function linkify(raw) {
+  const s = String(raw ?? '');
+  let out = '', last = 0;
+  s.replace(URL_RE, (m, off) => {
+    out += esc(s.slice(last, off));
+    const url = m.replace(/[.,;:!?]+$/, '');          // trailing punctuation isn't part of it
+    const href = /^https?:/i.test(url) ? url : 'https://' + url;
+    out += `<a class="txt-link" href="${esc(href)}" target="_blank" rel="noopener noreferrer">${esc(url)}</a>` + esc(m.slice(url.length));
+    last = off + m.length;
+    return m;
+  });
+  return out + esc(s.slice(last));
+}
 const uid = () => Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
 const debounce = (fn, ms) => { let t = 0; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; };
 const throttle = (fn, ms) => {
@@ -2020,7 +2117,9 @@ function _undoTarget() {
 }
 function updateFloatBar() {
   const bar = $('float-bar');
-  const show = ME && (currentApp === 'notes' || currentApp === 'home');
+  // chat has no undo and the bar would sit on the composer — hide it there
+  const chatUp = currentApp === 'notes' && window.PPCNotes && PPCNotes._chatOpen;
+  const show = ME && !chatUp && (currentApp === 'notes' || currentApp === 'home');
   bar.classList.toggle('on', !!show);
   if (!show) return;
   const t = _undoTarget();
@@ -2057,39 +2156,18 @@ $('footer-clock').addEventListener('click', () => {
   Settings.set('ui.clockMode', next);
 });
 
-// --- visualViewport pinning (txt.html parity + iOS-standalone hardening).
-// Pin the fixed body to the visual viewport unconditionally — never clear back
-// to inset:0: iOS home-screen launches can leave the layout viewport short by
-// exactly the status-bar height (footer floating mid-screen), and inset:0
-// re-exposes that short box. In standalone the webview is physically
-// full-screen, so with no editable focused (keyboard necessarily down) the
-// visible height can never be less than the screen height — floor stale
-// readings to it. Never use transforms here.
+// --- visualViewport pinning (txt.html parity). Pin the fixed body to the
+// visual viewport unconditionally and re-apply on every lifecycle edge.
+// Trust vv.height AS-IS: a "floor to screen.height" guard here once pushed
+// the footer clean off the bottom on installs whose webview doesn't span
+// the full screen — worse than the launch gap it guarded against. If a gap
+// ever reappears, instrument before guessing. Never use transforms here.
 (function () {
   const vv = window.visualViewport;
   if (!vv) return;
   let raf = 0;
-  // Apple-only API: true for home-screen installs, undefined elsewhere —
-  // keeps the floor off Android PWAs where screen.height includes system bars.
-  const iosStandalone = (navigator.standalone === true);
-  function editableFocused() {
-    const el = document.activeElement;
-    return !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable);
-  }
-  function targetHeight() {
-    let h = vv.height;
-    if (iosStandalone && (vv.scale || 1) === 1) {
-      const portrait = !window.matchMedia || matchMedia('(orientation: portrait)').matches;
-      const screenH = portrait ? Math.max(screen.width, screen.height) : Math.min(screen.width, screen.height);
-      // The keyboard can only be up while an editable is focused; a short vv
-      // reading without one is stale launch geometry — trust the screen.
-      // (<150px shortfall is never a keyboard either.)
-      if (!editableFocused() || (screenH - h) < 150) h = Math.max(h, screenH);
-    }
-    return h;
-  }
   function apply() {
-    document.body.style.height = targetHeight() + 'px';
+    document.body.style.height = vv.height + 'px';
     document.body.style.top = (vv.offsetTop || 0) + 'px';
   }
   function sched() { if (raf) return; raf = requestAnimationFrame(() => { raf = 0; apply(); }); }
@@ -2626,6 +2704,43 @@ const Notes = (() => {
     provide: p => EditorView.atomicRanges.of(v => { const pl = v.plugin(p); return pl ? pl.atomic : Decoration.none; }),
   }) : null;
 
+  /* ---- auto-hyperlink URLs in the editor (tap opens, style via .cm-url) ---- */
+  const urlPlugin = ViewPlugin ? ViewPlugin.fromClass(class {
+    constructor(view) { this.decorations = this.build(view); }
+    build(view) {
+      const re = /(?:https?:\/\/|www\.)[^\s<>()[\]"']+/g;
+      const deco = [];
+      for (const { from, to } of view.visibleRanges) {
+        let pos = from;
+        while (pos <= to) {
+          const line = view.state.doc.lineAt(pos);
+          re.lastIndex = 0;
+          let m;
+          while ((m = re.exec(line.text))) {
+            const u = m[0].replace(/[.,;:!?]+$/, '');
+            if (u.length > 4) {
+              deco.push(Decoration.mark({ class: 'cm-url', attributes: { 'data-url': u } })
+                .range(line.from + m.index, line.from + m.index + u.length));
+            }
+          }
+          pos = line.to + 1;
+        }
+      }
+      return Decoration.set(deco, true);
+    }
+    update(u) { if (u.docChanged || u.viewportChanged) this.decorations = this.build(u.view); }
+  }, { decorations: v => v.decorations }) : null;
+  const urlClickExt = EditorView ? EditorView.domEventHandlers({
+    mousedown: e => {
+      const a = e.target.closest && e.target.closest('.cm-url');
+      if (!a) return false;
+      const u = a.dataset.url || a.textContent;
+      e.preventDefault();
+      try { window.open(/^https?:/i.test(u) ? u : 'https://' + u, '_blank', 'noopener'); } catch {}
+      return true;
+    },
+  }) : null;
+
   function listContinuation(line) {
     const text = line.text;
     let m;
@@ -2728,6 +2843,8 @@ const Notes = (() => {
       lineNumComp.of(Settings.get('notes.lineNumbers') ? [lineNumbers()] : []),
       authorPlugin,
       todoPlugin,
+      urlPlugin,
+      urlClickExt,
       EditorView.updateListener.of(renumberListener),
     ].filter(Boolean);
   }
@@ -3102,11 +3219,15 @@ const Notes = (() => {
 
   function renderRoomBar() {
     const r = roomId && index[roomId];
-    $('rp-name').textContent = r ? r.name : '…';
-    $('rp-dot').style.background = r ? catColor(r.color) : 'var(--text-faint)';
-    const empty = !sortedRooms().length;
+    const special = wbOpen ? 'whiteboard' : chatOpen ? 'chat' : null;
+    $('rp-name').textContent = special || (r ? r.name : '…');
+    $('rp-dot').style.background = special ? 'var(--accent)' : r ? catColor(r.color) : 'var(--text-faint)';
+    const empty = !sortedRooms().length && !special;
     $('notes-empty').style.display = empty ? 'flex' : 'none';
-    $('notes-editor').style.display = empty ? 'none' : '';
+    $('notes-editor').style.display = empty || special ? 'none' : '';
+    $('wb-wrap').style.display = wbOpen ? '' : 'none';
+    $('chat-wrap').style.display = chatOpen ? '' : 'none';
+    $('auth-legend').style.display = !special && Settings.get('notes.authorHighlight') ? '' : 'none';
     document.querySelector('.notes-bar').style.visibility = empty ? 'hidden' : '';
   }
 
@@ -3120,6 +3241,9 @@ const Notes = (() => {
     $('room-dd').innerHTML =
       '<div class="room-dd-title">Rooms · newest edit first</div>' + rows +
       '<div class="menu-sep"></div>' +
+      '<button class="menu-item" onclick="ppcNotesChat()"><span class="mi-dot" style="background:var(--accent)"></span>💬 chat</button>' +
+      '<button class="menu-item" onclick="ppcNotesWhiteboard()"><span class="mi-dot" style="background:var(--accent)"></span>🎨 whiteboard</button>' +
+      '<div class="menu-sep"></div>' +
       '<button class="menu-item muted" onclick="ppcNotesNew()">＋ New room</button>' +
       '<button class="menu-item muted" onclick="ppcNotesManage()">✎ Manage rooms…</button>';
   }
@@ -3132,9 +3256,11 @@ const Notes = (() => {
   });
 
   function openRoom(id) {
-    if (!index[id] || roomId === id) return;
+    if (!index[id] || (roomId === id && !wbOpen)) return;
     if (!editor) buildEditorOnce();   // reachable before the notes screen ever mounted
     if (!editor) return;
+    closeWhiteboard();
+    closeChat();
     closeRoom();
     roomId = id;
     store.set('ppc-notes-room', id);
@@ -3172,13 +3298,22 @@ const Notes = (() => {
   }
 
   function ensureRoom(preferred) {
-    const rooms = sortedRooms();
-    if (!rooms.length) { closeRoom(); renderRoomBar(); updateStat(); return; }
+    if (preferred === 'wb') { openWhiteboard(); return; }
+    if (preferred === 'chat') { openChat(); return; }
     if (preferred && index[preferred] && preferred !== roomId) { openRoom(preferred); return; }
+    if (wbOpen || chatOpen) { renderRoomBar(); return; }
+    const last = store.get('ppc-notes-room');
+    const rooms = sortedRooms();
+    if (!rooms.length) {
+      // no rooms is fine when a pinned special was the last thing open
+      if (last === '__wb') { openWhiteboard(); return; }
+      if (last === '__chat') { openChat(); return; }
+      closeRoom(); renderRoomBar(); updateStat(); return;
+    }
     if (roomId && index[roomId]) { renderRoomBar(); return; }
-    const pick = (preferred && index[preferred] && preferred) ||
-      (store.get('ppc-notes-room') && index[store.get('ppc-notes-room')] && store.get('ppc-notes-room')) ||
-      rooms[0][0];
+    if (last === '__wb') { openWhiteboard(); return; }
+    if (last === '__chat') { openChat(); return; }
+    const pick = (last && index[last] && last) || rooms[0][0];
     openRoom(pick);
   }
 
@@ -3261,6 +3396,275 @@ const Notes = (() => {
       });
     });
   }
+
+  /* ---- whiteboard (permanent pinned "room", just for fun) ------------------
+     Free-draw strokes as plain KV nodes at wb/strokes/<id> {pts,c,w,ts,by} in
+     a fixed 1000×1400 logical space — collaborative like everything else. */
+  const WB_PATH = 'wb/strokes';
+  const WB_COLORS = ['#1c1917', '#0f9598', '#e86a5f', '#8b7ae0', '#3b82f6', '#16a34a', '#eab308', '#ea580c'];
+  let wbOpen = false, wbUnwatch = null, wbStrokes = {}, wbTool = 'pen';
+  let wbColor = null, wbW = 4, wbDrag = null;
+  const wbUndoStack = [], wbRedoStack = [];
+  function wbRdp(flat, eps) {
+    const pts = [];
+    for (let i = 0; i < flat.length; i += 2) pts.push([flat[i], flat[i + 1]]);
+    function simplify(lo, hi, keep) {
+      let maxD = 0, idx = -1;
+      const [ax, ay] = pts[lo], [bx, by] = pts[hi];
+      const len = Math.hypot(bx - ax, by - ay) || 1e-9;
+      for (let i = lo + 1; i < hi; i++) {
+        const d = Math.abs((by - ay) * pts[i][0] - (bx - ax) * pts[i][1] + bx * ay - by * ax) / len;
+        if (d > maxD) { maxD = d; idx = i; }
+      }
+      if (maxD > eps && idx > 0) { simplify(lo, idx, keep); keep.add(idx); simplify(idx, hi, keep); }
+    }
+    const keep = new Set([0, pts.length - 1]);
+    if (pts.length > 2) simplify(0, pts.length - 1, keep);
+    const out = [];
+    [...keep].sort((a, b) => a - b).forEach(i => out.push(Math.round(pts[i][0] * 10) / 10, Math.round(pts[i][1] * 10) / 10));
+    return out;
+  }
+  function wbRender() {
+    const g = document.getElementById('wb-strokes');
+    if (!g || !wbOpen) return;
+    g.innerHTML = Object.entries(wbStrokes)
+      .filter(([, s]) => s && Array.isArray(s.pts) && s.pts.length >= 4)
+      .sort((a, b) => (a[1].ts || 0) - (b[1].ts || 0))
+      .map(([id, s]) => {
+        const pts = []; for (let i = 0; i < s.pts.length; i += 2) pts.push(s.pts[i] + ',' + s.pts[i + 1]);
+        const line = `fill="none" stroke-linecap="round" stroke-linejoin="round" points="${pts.join(' ')}"`;
+        return `<polyline data-wbid="${esc(id)}" stroke="${esc(s.c || '#1c1917')}" stroke-width="${+s.w || 4}" ${line}/>` +
+          `<polyline class="wb-stroke-hit" data-wbid="${esc(id)}" opacity="0" stroke="#000" stroke-width="${Math.max(20, (+s.w || 4) * 3)}" ${line}/>`;
+      }).join('');
+    updateStat();
+  }
+  function wbPt(e) {
+    const svg = document.getElementById('wb-svg');
+    const p = svg.createSVGPoint();
+    p.x = e.clientX; p.y = e.clientY;
+    const m = svg.getScreenCTM();
+    return m ? p.matrixTransform(m.inverse()) : { x: 0, y: 0 };
+  }
+  function wbDown(e) {
+    if (!wbOpen || wbDrag) return;   // one finger draws; extras ignored
+    try { document.getElementById('wb-svg').setPointerCapture(e.pointerId); } catch {}
+    if (wbTool === 'erase') { wbDrag = { mode: 'erase', pid: e.pointerId }; wbEraseAt(e); return; }
+    const pt = wbPt(e);
+    wbDrag = { mode: 'draw', pid: e.pointerId, pts: [pt.x, pt.y], last: pt };
+  }
+  function wbMove(e) {
+    if (!wbDrag || e.pointerId !== wbDrag.pid) return;
+    if (wbDrag.mode === 'erase') { wbEraseAt(e); return; }
+    const pt = wbPt(e);
+    if (Math.hypot(pt.x - wbDrag.last.x, pt.y - wbDrag.last.y) < 3) return;
+    wbDrag.pts.push(pt.x, pt.y);
+    wbDrag.last = pt;
+    const pts = []; for (let i = 0; i < wbDrag.pts.length; i += 2) pts.push(wbDrag.pts[i] + ',' + wbDrag.pts[i + 1]);
+    document.getElementById('wb-live').innerHTML =
+      `<polyline fill="none" stroke="${wbColor}" stroke-width="${wbW}" stroke-linecap="round" stroke-linejoin="round" points="${pts.join(' ')}"/>`;
+  }
+  function wbUp(e) {
+    if (!wbDrag || e.pointerId !== wbDrag.pid) return;
+    const d = wbDrag;
+    wbDrag = null;
+    if (d.mode === 'erase') return;
+    document.getElementById('wb-live').innerHTML = '';
+    if (d.pts.length < 4) d.pts.push(d.pts[0] + 0.1, d.pts[1] + 0.1);   // a tap = a dot
+    const id = uid();
+    const stroke = { pts: wbRdp(d.pts, 1.2).slice(0, 600), c: wbColor, w: wbW };
+    wbStrokes[id] = { ...stroke, ts: Date.now(), by: ME };
+    wbRender();
+    KV.set(WB_PATH + '/' + id, stroke);
+    wbUndoStack.push(id);
+    wbRedoStack.length = 0;
+    if (window.updateFloatBar) updateFloatBar();
+  }
+  function wbEraseAt(e) {
+    const el = document.elementFromPoint(e.clientX, e.clientY);
+    const hit = el && el.closest && el.closest('[data-wbid]');
+    if (!hit) return;
+    const id = hit.dataset.wbid;
+    delete wbStrokes[id];
+    wbRender();
+    KV.remove(WB_PATH + '/' + id);
+  }
+  function wbUndo() {
+    const id = wbUndoStack.pop();
+    if (!id || !wbStrokes[id]) return;
+    wbRedoStack.push({ id, s: wbStrokes[id] });
+    delete wbStrokes[id];
+    wbRender();
+    KV.remove(WB_PATH + '/' + id);
+  }
+  function wbRedo() {
+    const r = wbRedoStack.pop();
+    if (!r) return;
+    wbStrokes[r.id] = r.s;
+    wbRender();
+    KV.set(WB_PATH + '/' + r.id, { pts: r.s.pts, c: r.s.c, w: r.s.w });
+    wbUndoStack.push(r.id);
+  }
+  function wbBar() {
+    if (!wbColor) wbColor = ME === 'A' ? '#e86a5f' : '#0f9598';   // your ink by default
+    $('wb-colors').innerHTML = WB_COLORS.map(c =>
+      `<button class="wb-dot${c === wbColor ? ' on' : ''}" data-wc="${c}" style="--wbc:${c}"><i></i></button>`).join('');
+    $('wb-colors').querySelectorAll('[data-wc]').forEach(b => b.addEventListener('click', () => { wbColor = b.dataset.wc; wbTool = 'pen'; wbBar(); }));
+    $('wb-widths').innerHTML = [[2, 'fine'], [4, 'medium'], [9, 'bold']].map(([w, l]) =>
+      `<button class="wb-w${w === wbW ? ' on' : ''}" data-ww="${w}" title="${l}"><i style="height:${Math.min(8, w)}px"></i></button>`).join('');
+    $('wb-widths').querySelectorAll('[data-ww]').forEach(b => b.addEventListener('click', () => { wbW = +b.dataset.ww; wbTool = 'pen'; wbBar(); }));
+    $('wb-erase').classList.toggle('on', wbTool === 'erase');
+  }
+  $('wb-erase').addEventListener('click', () => { wbTool = wbTool === 'erase' ? 'pen' : 'erase'; wbBar(); });
+  $('wb-clear').addEventListener('click', () => {
+    askConfirm('Clear the whiteboard?', 'Wipes every stroke for both of you.', () => {
+      wbStrokes = {};
+      wbUndoStack.length = 0;
+      wbRedoStack.length = 0;
+      wbRender();
+      KV.remove(WB_PATH);
+    }, 'Clear');
+  });
+  {
+    const s = document.getElementById('wb-svg');
+    s.addEventListener('pointerdown', wbDown);
+    s.addEventListener('pointermove', wbMove);
+    s.addEventListener('pointerup', wbUp);
+    s.addEventListener('pointercancel', wbUp);
+  }
+  function openWhiteboard() {
+    if (wbOpen) return;
+    closeChat();
+    closeRoom();
+    wbOpen = true;
+    store.set('ppc-notes-room', '__wb');
+    if (currentApp === 'notes') window.history.replaceState(null, '', '#notes/wb');
+    wbBar();
+    wbUnwatch = KV.watch(WB_PATH, v => {
+      wbStrokes = v ? JSON.parse(JSON.stringify(v)) : {};   // never mutate KV's cache
+      wbRender();
+    });
+    renderRoomBar();
+    updateStat();
+    if (window.updateFloatBar) updateFloatBar();
+  }
+  function closeWhiteboard() {
+    if (!wbOpen) return;
+    wbOpen = false;
+    if (wbUnwatch) { wbUnwatch(); wbUnwatch = null; }
+    wbDrag = null;
+  }
+  window.ppcNotesWhiteboard = () => { closeAllMenus(); openWhiteboard(); };
+
+  /* ---- chat (permanent pinned room, iMessage-style) ------------------------
+     Plain messages at chat/<YYYY-MM>/<id> {t,by,ts}, month-sharded like the
+     feed. The current month is watched globally from login so an incoming
+     message toasts from any screen. */
+  const chatYm = () => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); };
+  const chatPrevYm = ym => { const y = +ym.slice(0, 4), m = +ym.slice(5, 7); return m === 1 ? (y - 1) + '-12' : y + '-' + String(m - 1).padStart(2, '0'); };
+  let chatOpen = false, chatUnwatch = null, chatWatchedYm = null, chatSeeded = false;
+  let chatMsgs = {}, chatMonths = [];
+  const chatSeen = new Set();
+  function chatAll() {
+    const out = [];
+    for (const ym of chatMonths) {
+      for (const [id, m] of Object.entries(chatMsgs[ym] || {})) {
+        if (m && typeof m.t === 'string' && m.ts) out.push({ id, ym, ...m });
+      }
+    }
+    return out.sort((a, b) => a.ts - b.ts);
+  }
+  function chatRender(keepScroll) {
+    const sc = document.getElementById('chat-scroll');
+    if (!sc || !chatOpen) return;
+    const nearBottom = sc.scrollHeight - sc.scrollTop - sc.clientHeight < 90;
+    const msgs = chatAll();
+    let html = msgs.length ? `<button class="feed-more" id="chat-more">load earlier</button>` : '';
+    let lastDayKey = null, lastTs = 0;
+    for (const m of msgs) {
+      const d = new Date(m.ts);
+      const dayKey = d.toDateString();
+      if (dayKey !== lastDayKey) {
+        lastDayKey = dayKey;
+        lastTs = 0;
+        html += `<div class="chat-day">${d.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })}</div>`;
+      }
+      if (m.ts - lastTs > 15 * 60000) {
+        html += `<div class="chat-day">${d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</div>`;
+      }
+      lastTs = m.ts;
+      html += `<div class="chat-msg ${m.by === ME ? 'mine' : 'theirs'}">${linkify(m.t)}</div>`;
+    }
+    sc.innerHTML = html || '<div class="chat-empty">say something — it lands on both phones instantly 💬</div>';
+    const more = document.getElementById('chat-more');
+    if (more) more.addEventListener('click', chatLoadEarlier);
+    if (!keepScroll || nearBottom) sc.scrollTop = sc.scrollHeight;
+    updateStat();
+  }
+  function chatWatch() {
+    const ym = chatYm();
+    if (chatWatchedYm === ym) return;
+    if (chatUnwatch) { chatUnwatch(); chatUnwatch = null; }
+    chatWatchedYm = ym;
+    if (!chatMonths.includes(ym)) chatMonths.unshift(ym);
+    chatUnwatch = KV.watch('chat/' + ym, v => {
+      chatMsgs[ym] = v || {};
+      for (const [id, m] of Object.entries(chatMsgs[ym])) {
+        if (!m || chatSeen.has(id)) continue;
+        chatSeen.add(id);
+        if (chatSeeded && m.by && m.by !== ME && !(currentApp === 'notes' && chatOpen)) {
+          showToast('💬 ' + (USER_NAMES[m.by] || '') + ': ' + String(m.t || '').slice(0, 60), 'success', 4500);
+        }
+      }
+      chatSeeded = true;
+      chatRender(true);
+    });
+  }
+  async function chatLoadEarlier() {
+    const last = chatMonths[chatMonths.length - 1] || chatYm();
+    const ym = chatPrevYm(last);
+    if (chatMonths.includes(ym)) return;
+    chatMonths.push(ym);
+    try {
+      const snap = await withTimeout(db.ref(PPC_BASE + '/chat/' + ym).once('value'), 10000);
+      chatMsgs[ym] = snap.val() || {};
+      for (const id of Object.keys(chatMsgs[ym])) chatSeen.add(id);
+    } catch { chatMsgs[ym] = {}; }
+    chatRender(true);
+  }
+  function openChat() {
+    if (chatOpen) return;
+    closeWhiteboard();
+    closeRoom();
+    chatOpen = true;
+    store.set('ppc-notes-room', '__chat');
+    if (currentApp === 'notes') window.history.replaceState(null, '', '#notes/chat');
+    chatWatch();   // no-op when the global watch is already on this month
+    renderRoomBar();
+    updateStat();
+    chatRender();
+    if (window.updateFloatBar) updateFloatBar();
+  }
+  function closeChat() {
+    if (!chatOpen) return;
+    chatOpen = false;   // the month watch stays live for toasts
+  }
+  window.ppcNotesChat = () => { closeAllMenus(); openChat(); };
+  function chatSend() {
+    const inp = $('chat-input');
+    const t = inp.value.trim();
+    if (!t) return;
+    chatWatch();   // month can roll over mid-session
+    const ym = chatYm();
+    const id = uid();
+    chatSeen.add(id);
+    (chatMsgs[ym] = chatMsgs[ym] || {})[id] = { t, by: ME, ts: Date.now() };
+    inp.value = '';
+    chatRender();
+    KV.set('chat/' + ym + '/' + id, { t });
+    inp.focus();
+  }
+  $('chat-send').addEventListener('click', chatSend);
+  $('chat-input').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); chatSend(); } });
 
   /* ---- wipe guard ----------------------------------------------------------
      The index mirror survives an empty server snapshot (unlike the KV cache,
@@ -3391,6 +3795,14 @@ const Notes = (() => {
 
   /* ---- app registration ---------------------------------------------------- */
   function statText() {
+    if (wbOpen) {
+      const n = Object.keys(wbStrokes).length;
+      return 'whiteboard · ' + n + ' stroke' + (n === 1 ? '' : 's');
+    }
+    if (chatOpen) {
+      const n = chatAll().length;
+      return 'chat · ' + n + ' message' + (n === 1 ? '' : 's');
+    }
     const r = roomId && index[roomId];
     if (!r) return 'notes';
     const t = todoStats();
@@ -3467,12 +3879,16 @@ const Notes = (() => {
     const sub = location.hash.split('/')[1];
     ensureRoom(sub || null);
     return () => {
+      closeWhiteboard();
+      closeChat();
       closeRoom();
       if (unwatchIndex) { unwatchIndex(); unwatchIndex = null; }
     };
   };
   APPS.notes.subroute = h => {
     const id = h.split('/')[1];
+    if (id === 'wb') { openWhiteboard(); return; }
+    if (id === 'chat') { openChat(); return; }
     if (id && index[id] && id !== roomId) openRoom(id);
   };
   APPS.notes.menu = () =>
@@ -3489,10 +3905,12 @@ const Notes = (() => {
 
   return { openRoom, get roomId() { return roomId; }, _mapAuthors: mapAuthors, _deriveAuthors: deriveAuthors, _merge3: merge3,
     _wipeCheck: wipeCheck, _restoreFromDevice: restoreFromDevice,
-    undo: () => { if (editor) undo(editor); },
-    redo: () => { if (editor) redo(editor); },
-    canUndo: () => !!editor,
-    canRedo: () => !!editor,
+    undo: () => { if (wbOpen) wbUndo(); else if (!chatOpen && editor) undo(editor); },
+    redo: () => { if (wbOpen) wbRedo(); else if (!chatOpen && editor) redo(editor); },
+    canUndo: () => wbOpen ? wbUndoStack.length > 0 : chatOpen ? false : !!editor,
+    canRedo: () => wbOpen ? wbRedoStack.length > 0 : chatOpen ? false : !!editor,
+    _chatInit: chatWatch,
+    get _chatOpen() { return chatOpen; },
     _debug: () => ({ roomId, authors, authorsRev, ver, dirty, suppress, pendingRemote: !!pendingRemote, conflictOpen, base: baseText }) };
 })();
 window.PPCNotes = Notes;
@@ -3958,9 +4376,6 @@ const Home = (() => {
     let crop = null;
     let drag = null, longT = 0;
     const dragLock = new Set();
-    // zoom state — local to this device, never synced
-    let vb = null, zoomLevel = 1, pinch = null;
-    const pinchPts = new Map();
     const undoStack = [], redoStack = [];
 
     const snap = s => JSON.parse(JSON.stringify(s));
@@ -4025,10 +4440,33 @@ const Home = (() => {
       return `<rect ${common}${tr} x="${s.x}" y="${s.y}" width="${s.w}" height="${s.h}"/>`;
     }
 
+    // Invisible fat companion per shape: thin strokes, unfilled boxes and small
+    // text get a finger-sized halo without changing how anything looks.
+    function hitSvg(id, s) {
+      const HIT = Math.max(20, crop.w / 30);
+      const tr = s.rot && !s.pts ? (() => { const c = centerOf(s); return ` transform="rotate(${s.rot} ${c.x} ${c.y})"`; })() : '';
+      const base = (cls, fill, w) => `class="bld-shape bld-hitproxy${cls}" data-id="${id}" opacity="0" fill="${fill}" stroke="#000" stroke-width="${w}"`;
+      if (s.type === 'draw') {
+        const pts = []; for (let i = 0; i < s.pts.length; i += 2) pts.push(s.pts[i] + ',' + s.pts[i + 1]);
+        return `<polyline ${base(' stroke-only', 'none', HIT)} points="${pts.join(' ')}"/>`;
+      }
+      if (s.type === 'text') {
+        const b = bboxOf(s), p = HIT / 2;
+        return `<rect ${base('', '#000', 0)} x="${b.x - p}" y="${b.y - p}" width="${b.w + 2 * p}" height="${b.h + 2 * p}"/>`;
+      }
+      if (s.pts) {
+        const pts = []; for (let i = 0; i < s.pts.length; i += 2) pts.push(s.pts[i] + ',' + s.pts[i + 1]);
+        return `<polygon ${base('', '#000', HIT)} points="${pts.join(' ')}"/>`;
+      }
+      if (s.type === 'circle') return `<ellipse ${base('', '#000', HIT)}${tr} cx="${s.x + s.w / 2}" cy="${s.y + s.h / 2}" rx="${s.w / 2}" ry="${s.h / 2}"/>`;
+      if (s.type === 'tri') return `<polygon ${base('', '#000', HIT)}${tr} points="${s.x + s.w / 2},${s.y} ${s.x},${s.y + s.h} ${s.x + s.w},${s.y + s.h}"/>`;
+      return `<rect ${base('', '#000', HIT)}${tr} x="${s.x}" y="${s.y}" width="${s.w}" height="${s.h}"/>`;
+    }
+
     function renderShapes() {
       if (!svg) return;
       const order = Object.entries(shapes).filter(([, s]) => s && s.type).sort((a, b) => ((a[1].z || 0) - (b[1].z || 0)));
-      gShapes.innerHTML = order.map(([id, s]) => shapeSvg(id, s)).join('');
+      gShapes.innerHTML = order.map(([id, s]) => shapeSvg(id, s) + hitSvg(id, s)).join('');
       renderOverlay();
     }
 
@@ -4041,7 +4479,7 @@ const Home = (() => {
 
     function renderOverlay() {
       if (!svg) return;
-      const H = Math.max(9, crop.w / 46) / (zoomLevel || 1);   // handle radius — constant on screen across zoom
+      const H = Math.max(9, crop.w / 46);   // handle radius in svg units
       let out = '';
       // linked labels
       for (const [id, s] of Object.entries(shapes)) {
@@ -4099,53 +4537,8 @@ const Home = (() => {
       return m ? p.matrixTransform(m.inverse()) : { x: 0, y: 0 };
     };
 
-    /* ---- zoom/pan (pinch, wheel, toolbar) ---- */
-    function setVb(x, y, w) {
-      w = Math.max(crop.w / 8, Math.min(crop.w, w));
-      const h = w * crop.h / crop.w;
-      const mx = crop.w * 0.05, my = crop.h * 0.05;
-      x = Math.max(crop.x - mx, Math.min(crop.x + crop.w + mx - w, x));
-      y = Math.max(crop.y - my, Math.min(crop.y + crop.h + my - h, y));
-      vb = { x, y, w, h };
-      zoomLevel = crop.w / w;
-      svg.setAttribute('viewBox', x + ' ' + y + ' ' + w + ' ' + h);
-      const zv = document.getElementById('bld-zoom-val');
-      if (zv) zv.textContent = Math.round(zoomLevel * 100) + '%';
-      renderOverlay();
-    }
-    function zoomAt(cx, cy, f) {
-      // scale, then translate so the floorplan point under (cx,cy) stays put
-      const a = evtPt({ clientX: cx, clientY: cy });
-      setVb(vb.x, vb.y, vb.w / f);
-      const b = evtPt({ clientX: cx, clientY: cy });
-      setVb(vb.x + a.x - b.x, vb.y + a.y - b.y, vb.w);
-    }
-    function startPinch() {
-      clearTimeout(longT);
-      if (drag) {
-        // a second finger means "zoom", not "edit" — roll the half-drag back
-        const d = drag;
-        drag = null;
-        gOv.innerHTML = '';
-        if (d.id && d.orig && shapes[d.id]) {
-          shapes[d.id] = JSON.parse(JSON.stringify(d.orig));
-          KV.set(SHAPE_PATH(d.id), shapes[d.id]);
-          setTimeout(() => dragLock.delete(d.id), 400);
-        }
-        renderShapes();
-      }
-      const [a, b] = [...pinchPts.values()];
-      pinch = { d0: Math.hypot(a.x - b.x, a.y - b.y), w0: vb.w };
-    }
-    function movePinch() {
-      const [a, b] = [...pinchPts.values()];
-      if (!pinch) pinch = { d0: Math.hypot(a.x - b.x, a.y - b.y), w0: vb.w };
-      const mid = { clientX: (a.x + b.x) / 2, clientY: (a.y + b.y) / 2 };
-      const anchor = evtPt(mid);
-      setVb(vb.x, vb.y, pinch.w0 * pinch.d0 / Math.max(30, Math.hypot(a.x - b.x, a.y - b.y)));
-      const after = evtPt(mid);
-      setVb(vb.x + anchor.x - after.x, vb.y + anchor.y - after.y, vb.w);
-    }
+    // (Pinch/wheel zoom lived here once — it fought the shape gestures and
+    // got pulled as more glitch than help.)
 
     function syncShape(id, final) {
       const s = shapes[id];
@@ -4161,8 +4554,6 @@ const Home = (() => {
       const pt = evtPt(e);
       try { svg.setPointerCapture(e.pointerId); } catch {}
       hideCtx();
-      pinchPts.set(e.pointerId, { x: e.clientX, y: e.clientY });
-      if (pinchPts.size >= 2) { startPinch(); return; }
       const hEl = e.target.closest && e.target.closest('[data-handle]');
       const lEl = e.target.closest && e.target.closest('.bld-label');
       const sEl = e.target.closest && e.target.closest('.bld-shape');
@@ -4195,8 +4586,6 @@ const Home = (() => {
           return;
         }
         if (sel) { sel = null; warpId = null; renderOverlay(); }
-        // zoomed in: dragging empty space pans the view
-        if (zoomLevel > 1.01) drag = { mode: 'pan', sc: { x: e.clientX, y: e.clientY }, vb0: { ...vb } };
         return;
       }
       if (tool === 'erase') { drag = { mode: 'erase' }; eraseAt(e); return; }
@@ -4214,17 +4603,7 @@ const Home = (() => {
     }
 
     function onMove(e) {
-      if (pinchPts.size >= 2) {
-        if (pinchPts.has(e.pointerId)) { pinchPts.set(e.pointerId, { x: e.clientX, y: e.clientY }); movePinch(); }
-        return;
-      }
       if (!drag) return;
-      if (drag.mode === 'pan') {
-        const m = svg.getScreenCTM();
-        const k = (m && m.a) || 1;
-        setVb(drag.vb0.x - (e.clientX - drag.sc.x) / k, drag.vb0.y - (e.clientY - drag.sc.y) / k, drag.vb0.w);
-        return;
-      }
       const pt = evtPt(e);
       if (!drag.moved && drag.start && dist(pt, drag.start) > 5) { drag.moved = true; clearTimeout(longT); }
       if (drag.mode === 'erase') { eraseAt(e); return; }
@@ -4284,13 +4663,11 @@ const Home = (() => {
       syncShape(drag.id, false);
     }
 
-    function onUp(e) {
-      if (e) { pinchPts.delete(e.pointerId); if (pinchPts.size < 2) pinch = null; }
+    function onUp() {
       clearTimeout(longT);
       if (!drag) return;
       const d = drag;
       drag = null;
-      if (d.mode === 'pan') return;
       if (d.mode === 'drawing') {
         gOv.innerHTML = '';
         if (d.pts.length >= 6) {
@@ -4651,10 +5028,6 @@ const Home = (() => {
           <button class="bld-tool" id="bld-width" style="font-size:10px;font-family:var(--font-mono)"></button>
           <span class="bld-sep"></span>
           <button class="bld-tool" id="bld-variants" title="variants" style="font-size:13px">▤</button>
-          <span class="bld-sep"></span>
-          <button class="bld-tool" id="bld-zo" title="zoom out">−</button>
-          <button class="bld-tool" id="bld-zoom-val" title="reset zoom" style="font-size:9px;font-family:var(--font-mono);width:auto;padding:0 5px">100%</button>
-          <button class="bld-tool" id="bld-zi" title="zoom in">＋</button>
         </div>
         <div class="bld-stage"><svg viewBox="${crop.x} ${crop.y} ${crop.w} ${crop.h}" data-tool="select" preserveAspectRatio="xMidYMid meet">
           <image class="fp-img" href="assets/floorplan.jpeg" width="1206" height="1400"/>
@@ -4674,14 +5047,6 @@ const Home = (() => {
       document.getElementById('bld-stroke').addEventListener('click', e => openPalette('stroke', e.clientX, e.clientY));
       document.getElementById('bld-width').addEventListener('click', e => openWidthSlider(e.clientX, e.clientY));
       document.getElementById('bld-variants').addEventListener('click', e => openVariantsMenu(e.clientX, e.clientY));
-      pinchPts.clear();
-      pinch = null;
-      setVb(crop.x, crop.y, crop.w);
-      const stageMid = () => { const r = svg.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; };
-      document.getElementById('bld-zi').addEventListener('click', () => { const [cx, cy] = stageMid(); zoomAt(cx, cy, 1.4); });
-      document.getElementById('bld-zo').addEventListener('click', () => { const [cx, cy] = stageMid(); zoomAt(cx, cy, 1 / 1.4); });
-      document.getElementById('bld-zoom-val').addEventListener('click', () => setVb(crop.x, crop.y, crop.w));
-      svg.addEventListener('wheel', e => { e.preventDefault(); zoomAt(e.clientX, e.clientY, Math.exp(-e.deltaY * 0.0022)); }, { passive: false });
       paintSwatches();
       svg.addEventListener('pointerdown', onDown);
       svg.addEventListener('pointermove', onMove);
@@ -5075,7 +5440,7 @@ const Fit = (() => {
       list += `<div class="feed-post" data-id="${esc(id)}">` +
         (p.img ? `<img data-img-id="${esc(p.img)}" alt="">` : '') +
         `<div class="fp-body"><span class="by-chip ${p.by === 'A' ? 'u-a' : 'u-c'}">${p.by === 'A' ? 'A' : 'C'}</span>` +
-        `<span class="fp-cap">${esc(p.caption || '')}</span>` +
+        `<span class="fp-cap">${linkify(p.caption || '')}</span>` +
         (p.habit ? `<span class="fp-tag">#${HM[p.habit] ? HM[p.habit].label.toLowerCase() : p.habit}</span>` : '') +
         `<span class="fp-when">${fmtT(p.ts)}</span>` +
         (p.by === ME ? `<button class="fp-del" data-del="${esc(id)}" data-ym="${ym}" title="delete post">✕</button>` : '') +
@@ -5557,8 +5922,9 @@ window.PPCCal = Cal;
    §13c TODAY — the landing overview: calendar, habits, notes, house.
    ============================================ */
 const Today = (() => {
-  let notesIdx = {}, zones = {}, items = {};
+  let notesIdx = {}, zones = {}, items = {}, feedTd = {};
   let unwatch = [];
+  const ymLocal = () => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); };
   const money = n => '$' + (n || 0).toLocaleString('en-US', Math.round(n) === n ? {} : { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const agoTxt = ts => {
     if (!ts) return '';
@@ -5610,6 +5976,17 @@ const Today = (() => {
       </div>
 
       <div class="td-card">
+        <div class="td-head" data-nav="#fit/feed">📸 Feed<span class="td-more">›</span></div>
+        ${Object.entries(feedTd).filter(([, p]) => p && p.ts).sort((a, b) => b[1].ts - a[1].ts).slice(0, 2)
+          .map(([, p]) => `<div class="td-post">
+            ${p.img ? `<span class="tdp-thumb"><img data-img-id="${esc(p.img)}" alt=""></span>` : ''}
+            <span class="tdp-mid">${p.caption ? linkify(p.caption) : '<i style="color:var(--text-faint)">photo</i>'}</span>
+            <span class="by-chip ${p.by === 'A' ? 'u-a' : 'u-c'}">${p.by === 'A' ? 'A' : 'C'}</span>
+            <span class="mi-when">${agoTxt(p.ts)}</span></div>`).join('')
+          || '<div class="td-empty">no posts yet</div>'}
+      </div>
+
+      <div class="td-card">
         <div class="td-head" data-nav="#notes">✏️ Notes<span class="td-more">›</span></div>
         ${rooms.map(([id, r]) => `<button class="td-room" data-nav="#notes/${esc(id)}">
           <span class="mi-dot" style="background:var(--cat-${CAT_COLORS.includes(r.color) ? r.color : 'neutral'})"></span>
@@ -5626,9 +6003,11 @@ const Today = (() => {
       </div>`;
 
     el.querySelectorAll('[data-nav]').forEach(x => x.addEventListener('click', e => {
-      if (e.target.closest && e.target.closest('[data-hab]')) return;
+      if (e.target.closest && (e.target.closest('[data-hab]') || e.target.closest('a'))) return;
       location.hash = x.dataset.nav;
     }));
+    el.querySelectorAll('img[data-img-id]').forEach(img =>
+      getImage('fit', img.dataset.imgId).then(d => { if (d) img.src = d; }));
     el.querySelectorAll('[data-hab]').forEach(p => p.addEventListener('click', e => {
       e.stopPropagation();
       Fit.quickToggle(p.dataset.hab);
@@ -5646,6 +6025,7 @@ const Today = (() => {
       }),
       KV.watch('home/zones', v => { zones = v || {}; render(); }),
       KV.watch('home/items', v => { items = v || {}; render(); }),
+      KV.watch('fit/feed/' + ymLocal(), v => { feedTd = v || {}; render(); }),
     ];
     render();
     return () => { unwatch.forEach(u => u()); unwatch = []; };
@@ -5677,6 +6057,7 @@ function enterApp(fresh) {
   watchPresence();
   Cal.initGlobal();     // calendar months (Today card + reminders from any screen)
   Fit.initGlobal();     // habit log + rules + timers (Today card, timer alerts)
+  Notes._chatInit();    // chat month (incoming-message toasts from any screen)
   $('cal-btn').addEventListener('click', () => { location.hash = '#cal'; });
   route();
   if (Settings.get('sync.debug')) $('sync-log').classList.add('open');
