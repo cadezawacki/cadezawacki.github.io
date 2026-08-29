@@ -501,6 +501,34 @@ svg { display: block; }
 .cm-todo-count.full b { color: var(--success); }
 .cm-todo-count.full .tct i { background: var(--success); }
 
+.txt-link { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; word-break: break-all; }
+.notes-editor .cm-url { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+
+/* Chat (iMessage-ish pinned room) */
+.chat-wrap { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.chat-scroll {
+  flex: 1; min-height: 0; overflow-y: auto; padding: 12px 12px 6px;
+  display: flex; flex-direction: column; gap: 3px; overscroll-behavior: contain;
+}
+.chat-day { text-align: center; font-size: 0.62rem; color: var(--text-faint); font-family: var(--font-mono); margin: 10px 0 4px; flex-shrink: 0; }
+.chat-msg {
+  max-width: 78%; width: fit-content; padding: 7px 12px; border-radius: 17px;
+  font-size: var(--text-base); line-height: 1.35; overflow-wrap: anywhere; flex-shrink: 0;
+}
+.chat-msg.mine { align-self: flex-end; background: var(--accent); color: #fff; border-bottom-right-radius: 5px; }
+.chat-msg.theirs { align-self: flex-start; background: var(--surface-2); border-bottom-left-radius: 5px; }
+.chat-msg.mine .txt-link { color: #fff; }
+.chat-compose {
+  display: flex; gap: 8px; padding: 8px 10px; align-items: center;
+  border-top: 1px solid var(--border); background: var(--surface);
+}
+.chat-compose .form-input { flex: 1; border-radius: 20px; }
+.chat-send {
+  width: 34px; height: 34px; border-radius: 50%; background: var(--accent); color: #fff;
+  font-size: 14px; display: grid; place-items: center; flex-shrink: 0;
+}
+.chat-empty { text-align: center; color: var(--text-faint); font-size: var(--text-sm); margin: auto; }
+
 /* Whiteboard */
 .wb-wrap { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .wb-bar {
@@ -878,6 +906,9 @@ svg[data-tool]:not([data-tool="select"]):not([data-tool="erase"]) .bld-shape { p
   user-select: none; -webkit-user-select: none;
 }
 .td-head .td-more { margin-left: auto; color: var(--text-faint); font-size: 0.85rem; }
+.td-post { display: flex; align-items: center; gap: 8px; padding: 4px 0; font-size: var(--text-sm); }
+.td-post .tdp-thumb img { width: 36px; height: 36px; object-fit: cover; border-radius: 9px; display: block; background: var(--surface-2); }
+.td-post .tdp-mid { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .td-pills { display: flex; gap: 7px; }
 .td-pill {
   flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px;
@@ -989,6 +1020,7 @@ svg[data-tool]:not([data-tool="select"]):not([data-tool="erase"]) .bld-shape { p
       <div class="notes-empty" id="notes-empty" style="display:none">
         <span>no rooms yet</span>
         <button class="btn btn-primary" onclick="ppcNotesNew()">＋ Create the first room</button>
+        <button class="btn" onclick="ppcNotesChat()">💬 Open the chat</button>
         <button class="btn" onclick="ppcNotesWhiteboard()">🎨 Open the whiteboard</button>
       </div>
       <div class="wb-wrap" id="wb-wrap" style="display:none">
@@ -1002,6 +1034,13 @@ svg[data-tool]:not([data-tool="select"]):not([data-tool="erase"]) .bld-shape { p
         <div class="wb-stage"><svg id="wb-svg" viewBox="0 0 1000 1400" preserveAspectRatio="xMidYMid meet">
           <g id="wb-strokes"></g><g id="wb-live"></g>
         </svg></div>
+      </div>
+      <div class="chat-wrap" id="chat-wrap" style="display:none">
+        <div class="chat-scroll" id="chat-scroll"></div>
+        <div class="chat-compose">
+          <input class="form-input" id="chat-input" placeholder="message…" maxlength="1000" autocomplete="off" autocorrect="on">
+          <button class="chat-send" id="chat-send" aria-label="send">➤</button>
+        </div>
       </div>
     </div>
   </div>
@@ -1314,6 +1353,21 @@ window.__CM6__.undo = Zh;
    ============================================ */
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+// Escape text AND turn bare URLs into safe links (chat, feed captions, cards).
+const URL_RE = /(?:https?:\/\/|www\.)[^\s<>()[\]"']+/g;
+function linkify(raw) {
+  const s = String(raw ?? '');
+  let out = '', last = 0;
+  s.replace(URL_RE, (m, off) => {
+    out += esc(s.slice(last, off));
+    const url = m.replace(/[.,;:!?]+$/, '');          // trailing punctuation isn't part of it
+    const href = /^https?:/i.test(url) ? url : 'https://' + url;
+    out += `<a class="txt-link" href="${esc(href)}" target="_blank" rel="noopener noreferrer">${esc(url)}</a>` + esc(m.slice(url.length));
+    last = off + m.length;
+    return m;
+  });
+  return out + esc(s.slice(last));
+}
 const uid = () => Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
 const debounce = (fn, ms) => { let t = 0; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; };
 const throttle = (fn, ms) => {
@@ -2063,7 +2117,9 @@ function _undoTarget() {
 }
 function updateFloatBar() {
   const bar = $('float-bar');
-  const show = ME && (currentApp === 'notes' || currentApp === 'home');
+  // chat has no undo and the bar would sit on the composer — hide it there
+  const chatUp = currentApp === 'notes' && window.PPCNotes && PPCNotes._chatOpen;
+  const show = ME && !chatUp && (currentApp === 'notes' || currentApp === 'home');
   bar.classList.toggle('on', !!show);
   if (!show) return;
   const t = _undoTarget();
@@ -2648,6 +2704,43 @@ const Notes = (() => {
     provide: p => EditorView.atomicRanges.of(v => { const pl = v.plugin(p); return pl ? pl.atomic : Decoration.none; }),
   }) : null;
 
+  /* ---- auto-hyperlink URLs in the editor (tap opens, style via .cm-url) ---- */
+  const urlPlugin = ViewPlugin ? ViewPlugin.fromClass(class {
+    constructor(view) { this.decorations = this.build(view); }
+    build(view) {
+      const re = /(?:https?:\/\/|www\.)[^\s<>()[\]"']+/g;
+      const deco = [];
+      for (const { from, to } of view.visibleRanges) {
+        let pos = from;
+        while (pos <= to) {
+          const line = view.state.doc.lineAt(pos);
+          re.lastIndex = 0;
+          let m;
+          while ((m = re.exec(line.text))) {
+            const u = m[0].replace(/[.,;:!?]+$/, '');
+            if (u.length > 4) {
+              deco.push(Decoration.mark({ class: 'cm-url', attributes: { 'data-url': u } })
+                .range(line.from + m.index, line.from + m.index + u.length));
+            }
+          }
+          pos = line.to + 1;
+        }
+      }
+      return Decoration.set(deco, true);
+    }
+    update(u) { if (u.docChanged || u.viewportChanged) this.decorations = this.build(u.view); }
+  }, { decorations: v => v.decorations }) : null;
+  const urlClickExt = EditorView ? EditorView.domEventHandlers({
+    mousedown: e => {
+      const a = e.target.closest && e.target.closest('.cm-url');
+      if (!a) return false;
+      const u = a.dataset.url || a.textContent;
+      e.preventDefault();
+      try { window.open(/^https?:/i.test(u) ? u : 'https://' + u, '_blank', 'noopener'); } catch {}
+      return true;
+    },
+  }) : null;
+
   function listContinuation(line) {
     const text = line.text;
     let m;
@@ -2750,6 +2843,8 @@ const Notes = (() => {
       lineNumComp.of(Settings.get('notes.lineNumbers') ? [lineNumbers()] : []),
       authorPlugin,
       todoPlugin,
+      urlPlugin,
+      urlClickExt,
       EditorView.updateListener.of(renumberListener),
     ].filter(Boolean);
   }
@@ -3124,14 +3219,15 @@ const Notes = (() => {
 
   function renderRoomBar() {
     const r = roomId && index[roomId];
-    $('rp-name').textContent = wbOpen ? 'whiteboard' : r ? r.name : '…';
-    $('rp-dot').style.background = wbOpen ? 'var(--accent)' : r ? catColor(r.color) : 'var(--text-faint)';
-    const empty = !sortedRooms().length && !wbOpen;
+    const special = wbOpen ? 'whiteboard' : chatOpen ? 'chat' : null;
+    $('rp-name').textContent = special || (r ? r.name : '…');
+    $('rp-dot').style.background = special ? 'var(--accent)' : r ? catColor(r.color) : 'var(--text-faint)';
+    const empty = !sortedRooms().length && !special;
     $('notes-empty').style.display = empty ? 'flex' : 'none';
-    $('notes-editor').style.display = empty || wbOpen ? 'none' : '';
+    $('notes-editor').style.display = empty || special ? 'none' : '';
     $('wb-wrap').style.display = wbOpen ? '' : 'none';
-    if (wbOpen) $('auth-legend').style.display = 'none';
-    else $('auth-legend').style.display = Settings.get('notes.authorHighlight') ? '' : 'none';
+    $('chat-wrap').style.display = chatOpen ? '' : 'none';
+    $('auth-legend').style.display = !special && Settings.get('notes.authorHighlight') ? '' : 'none';
     document.querySelector('.notes-bar').style.visibility = empty ? 'hidden' : '';
   }
 
@@ -3145,6 +3241,7 @@ const Notes = (() => {
     $('room-dd').innerHTML =
       '<div class="room-dd-title">Rooms · newest edit first</div>' + rows +
       '<div class="menu-sep"></div>' +
+      '<button class="menu-item" onclick="ppcNotesChat()"><span class="mi-dot" style="background:var(--accent)"></span>💬 chat</button>' +
       '<button class="menu-item" onclick="ppcNotesWhiteboard()"><span class="mi-dot" style="background:var(--accent)"></span>🎨 whiteboard</button>' +
       '<div class="menu-sep"></div>' +
       '<button class="menu-item muted" onclick="ppcNotesNew()">＋ New room</button>' +
@@ -3163,6 +3260,7 @@ const Notes = (() => {
     if (!editor) buildEditorOnce();   // reachable before the notes screen ever mounted
     if (!editor) return;
     closeWhiteboard();
+    closeChat();
     closeRoom();
     roomId = id;
     store.set('ppc-notes-room', id);
@@ -3201,17 +3299,20 @@ const Notes = (() => {
 
   function ensureRoom(preferred) {
     if (preferred === 'wb') { openWhiteboard(); return; }
+    if (preferred === 'chat') { openChat(); return; }
     if (preferred && index[preferred] && preferred !== roomId) { openRoom(preferred); return; }
-    if (wbOpen) { renderRoomBar(); return; }
+    if (wbOpen || chatOpen) { renderRoomBar(); return; }
+    const last = store.get('ppc-notes-room');
     const rooms = sortedRooms();
     if (!rooms.length) {
-      // no rooms is fine when the whiteboard was the last thing open
-      if (store.get('ppc-notes-room') === '__wb') { openWhiteboard(); return; }
+      // no rooms is fine when a pinned special was the last thing open
+      if (last === '__wb') { openWhiteboard(); return; }
+      if (last === '__chat') { openChat(); return; }
       closeRoom(); renderRoomBar(); updateStat(); return;
     }
     if (roomId && index[roomId]) { renderRoomBar(); return; }
-    const last = store.get('ppc-notes-room');
     if (last === '__wb') { openWhiteboard(); return; }
+    if (last === '__chat') { openChat(); return; }
     const pick = (last && index[last] && last) || rooms[0][0];
     openRoom(pick);
   }
@@ -3432,6 +3533,7 @@ const Notes = (() => {
   }
   function openWhiteboard() {
     if (wbOpen) return;
+    closeChat();
     closeRoom();
     wbOpen = true;
     store.set('ppc-notes-room', '__wb');
@@ -3452,6 +3554,117 @@ const Notes = (() => {
     wbDrag = null;
   }
   window.ppcNotesWhiteboard = () => { closeAllMenus(); openWhiteboard(); };
+
+  /* ---- chat (permanent pinned room, iMessage-style) ------------------------
+     Plain messages at chat/<YYYY-MM>/<id> {t,by,ts}, month-sharded like the
+     feed. The current month is watched globally from login so an incoming
+     message toasts from any screen. */
+  const chatYm = () => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); };
+  const chatPrevYm = ym => { const y = +ym.slice(0, 4), m = +ym.slice(5, 7); return m === 1 ? (y - 1) + '-12' : y + '-' + String(m - 1).padStart(2, '0'); };
+  let chatOpen = false, chatUnwatch = null, chatWatchedYm = null, chatSeeded = false;
+  let chatMsgs = {}, chatMonths = [];
+  const chatSeen = new Set();
+  function chatAll() {
+    const out = [];
+    for (const ym of chatMonths) {
+      for (const [id, m] of Object.entries(chatMsgs[ym] || {})) {
+        if (m && typeof m.t === 'string' && m.ts) out.push({ id, ym, ...m });
+      }
+    }
+    return out.sort((a, b) => a.ts - b.ts);
+  }
+  function chatRender(keepScroll) {
+    const sc = document.getElementById('chat-scroll');
+    if (!sc || !chatOpen) return;
+    const nearBottom = sc.scrollHeight - sc.scrollTop - sc.clientHeight < 90;
+    const msgs = chatAll();
+    let html = msgs.length ? `<button class="feed-more" id="chat-more">load earlier</button>` : '';
+    let lastDayKey = null, lastTs = 0;
+    for (const m of msgs) {
+      const d = new Date(m.ts);
+      const dayKey = d.toDateString();
+      if (dayKey !== lastDayKey) {
+        lastDayKey = dayKey;
+        lastTs = 0;
+        html += `<div class="chat-day">${d.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })}</div>`;
+      }
+      if (m.ts - lastTs > 15 * 60000) {
+        html += `<div class="chat-day">${d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</div>`;
+      }
+      lastTs = m.ts;
+      html += `<div class="chat-msg ${m.by === ME ? 'mine' : 'theirs'}">${linkify(m.t)}</div>`;
+    }
+    sc.innerHTML = html || '<div class="chat-empty">say something — it lands on both phones instantly 💬</div>';
+    const more = document.getElementById('chat-more');
+    if (more) more.addEventListener('click', chatLoadEarlier);
+    if (!keepScroll || nearBottom) sc.scrollTop = sc.scrollHeight;
+    updateStat();
+  }
+  function chatWatch() {
+    const ym = chatYm();
+    if (chatWatchedYm === ym) return;
+    if (chatUnwatch) { chatUnwatch(); chatUnwatch = null; }
+    chatWatchedYm = ym;
+    if (!chatMonths.includes(ym)) chatMonths.unshift(ym);
+    chatUnwatch = KV.watch('chat/' + ym, v => {
+      chatMsgs[ym] = v || {};
+      for (const [id, m] of Object.entries(chatMsgs[ym])) {
+        if (!m || chatSeen.has(id)) continue;
+        chatSeen.add(id);
+        if (chatSeeded && m.by && m.by !== ME && !(currentApp === 'notes' && chatOpen)) {
+          showToast('💬 ' + (USER_NAMES[m.by] || '') + ': ' + String(m.t || '').slice(0, 60), 'success', 4500);
+        }
+      }
+      chatSeeded = true;
+      chatRender(true);
+    });
+  }
+  async function chatLoadEarlier() {
+    const last = chatMonths[chatMonths.length - 1] || chatYm();
+    const ym = chatPrevYm(last);
+    if (chatMonths.includes(ym)) return;
+    chatMonths.push(ym);
+    try {
+      const snap = await withTimeout(db.ref(PPC_BASE + '/chat/' + ym).once('value'), 10000);
+      chatMsgs[ym] = snap.val() || {};
+      for (const id of Object.keys(chatMsgs[ym])) chatSeen.add(id);
+    } catch { chatMsgs[ym] = {}; }
+    chatRender(true);
+  }
+  function openChat() {
+    if (chatOpen) return;
+    closeWhiteboard();
+    closeRoom();
+    chatOpen = true;
+    store.set('ppc-notes-room', '__chat');
+    if (currentApp === 'notes') window.history.replaceState(null, '', '#notes/chat');
+    chatWatch();   // no-op when the global watch is already on this month
+    renderRoomBar();
+    updateStat();
+    chatRender();
+    if (window.updateFloatBar) updateFloatBar();
+  }
+  function closeChat() {
+    if (!chatOpen) return;
+    chatOpen = false;   // the month watch stays live for toasts
+  }
+  window.ppcNotesChat = () => { closeAllMenus(); openChat(); };
+  function chatSend() {
+    const inp = $('chat-input');
+    const t = inp.value.trim();
+    if (!t) return;
+    chatWatch();   // month can roll over mid-session
+    const ym = chatYm();
+    const id = uid();
+    chatSeen.add(id);
+    (chatMsgs[ym] = chatMsgs[ym] || {})[id] = { t, by: ME, ts: Date.now() };
+    inp.value = '';
+    chatRender();
+    KV.set('chat/' + ym + '/' + id, { t });
+    inp.focus();
+  }
+  $('chat-send').addEventListener('click', chatSend);
+  $('chat-input').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); chatSend(); } });
 
   /* ---- wipe guard ----------------------------------------------------------
      The index mirror survives an empty server snapshot (unlike the KV cache,
@@ -3586,6 +3799,10 @@ const Notes = (() => {
       const n = Object.keys(wbStrokes).length;
       return 'whiteboard · ' + n + ' stroke' + (n === 1 ? '' : 's');
     }
+    if (chatOpen) {
+      const n = chatAll().length;
+      return 'chat · ' + n + ' message' + (n === 1 ? '' : 's');
+    }
     const r = roomId && index[roomId];
     if (!r) return 'notes';
     const t = todoStats();
@@ -3663,6 +3880,7 @@ const Notes = (() => {
     ensureRoom(sub || null);
     return () => {
       closeWhiteboard();
+      closeChat();
       closeRoom();
       if (unwatchIndex) { unwatchIndex(); unwatchIndex = null; }
     };
@@ -3670,6 +3888,7 @@ const Notes = (() => {
   APPS.notes.subroute = h => {
     const id = h.split('/')[1];
     if (id === 'wb') { openWhiteboard(); return; }
+    if (id === 'chat') { openChat(); return; }
     if (id && index[id] && id !== roomId) openRoom(id);
   };
   APPS.notes.menu = () =>
@@ -3686,10 +3905,12 @@ const Notes = (() => {
 
   return { openRoom, get roomId() { return roomId; }, _mapAuthors: mapAuthors, _deriveAuthors: deriveAuthors, _merge3: merge3,
     _wipeCheck: wipeCheck, _restoreFromDevice: restoreFromDevice,
-    undo: () => { if (wbOpen) wbUndo(); else if (editor) undo(editor); },
-    redo: () => { if (wbOpen) wbRedo(); else if (editor) redo(editor); },
-    canUndo: () => wbOpen ? wbUndoStack.length > 0 : !!editor,
-    canRedo: () => wbOpen ? wbRedoStack.length > 0 : !!editor,
+    undo: () => { if (wbOpen) wbUndo(); else if (!chatOpen && editor) undo(editor); },
+    redo: () => { if (wbOpen) wbRedo(); else if (!chatOpen && editor) redo(editor); },
+    canUndo: () => wbOpen ? wbUndoStack.length > 0 : chatOpen ? false : !!editor,
+    canRedo: () => wbOpen ? wbRedoStack.length > 0 : chatOpen ? false : !!editor,
+    _chatInit: chatWatch,
+    get _chatOpen() { return chatOpen; },
     _debug: () => ({ roomId, authors, authorsRev, ver, dirty, suppress, pendingRemote: !!pendingRemote, conflictOpen, base: baseText }) };
 })();
 window.PPCNotes = Notes;
@@ -5219,7 +5440,7 @@ const Fit = (() => {
       list += `<div class="feed-post" data-id="${esc(id)}">` +
         (p.img ? `<img data-img-id="${esc(p.img)}" alt="">` : '') +
         `<div class="fp-body"><span class="by-chip ${p.by === 'A' ? 'u-a' : 'u-c'}">${p.by === 'A' ? 'A' : 'C'}</span>` +
-        `<span class="fp-cap">${esc(p.caption || '')}</span>` +
+        `<span class="fp-cap">${linkify(p.caption || '')}</span>` +
         (p.habit ? `<span class="fp-tag">#${HM[p.habit] ? HM[p.habit].label.toLowerCase() : p.habit}</span>` : '') +
         `<span class="fp-when">${fmtT(p.ts)}</span>` +
         (p.by === ME ? `<button class="fp-del" data-del="${esc(id)}" data-ym="${ym}" title="delete post">✕</button>` : '') +
@@ -5701,8 +5922,9 @@ window.PPCCal = Cal;
    §13c TODAY — the landing overview: calendar, habits, notes, house.
    ============================================ */
 const Today = (() => {
-  let notesIdx = {}, zones = {}, items = {};
+  let notesIdx = {}, zones = {}, items = {}, feedTd = {};
   let unwatch = [];
+  const ymLocal = () => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); };
   const money = n => '$' + (n || 0).toLocaleString('en-US', Math.round(n) === n ? {} : { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const agoTxt = ts => {
     if (!ts) return '';
@@ -5754,6 +5976,17 @@ const Today = (() => {
       </div>
 
       <div class="td-card">
+        <div class="td-head" data-nav="#fit/feed">📸 Feed<span class="td-more">›</span></div>
+        ${Object.entries(feedTd).filter(([, p]) => p && p.ts).sort((a, b) => b[1].ts - a[1].ts).slice(0, 2)
+          .map(([, p]) => `<div class="td-post">
+            ${p.img ? `<span class="tdp-thumb"><img data-img-id="${esc(p.img)}" alt=""></span>` : ''}
+            <span class="tdp-mid">${p.caption ? linkify(p.caption) : '<i style="color:var(--text-faint)">photo</i>'}</span>
+            <span class="by-chip ${p.by === 'A' ? 'u-a' : 'u-c'}">${p.by === 'A' ? 'A' : 'C'}</span>
+            <span class="mi-when">${agoTxt(p.ts)}</span></div>`).join('')
+          || '<div class="td-empty">no posts yet</div>'}
+      </div>
+
+      <div class="td-card">
         <div class="td-head" data-nav="#notes">✏️ Notes<span class="td-more">›</span></div>
         ${rooms.map(([id, r]) => `<button class="td-room" data-nav="#notes/${esc(id)}">
           <span class="mi-dot" style="background:var(--cat-${CAT_COLORS.includes(r.color) ? r.color : 'neutral'})"></span>
@@ -5770,9 +6003,11 @@ const Today = (() => {
       </div>`;
 
     el.querySelectorAll('[data-nav]').forEach(x => x.addEventListener('click', e => {
-      if (e.target.closest && e.target.closest('[data-hab]')) return;
+      if (e.target.closest && (e.target.closest('[data-hab]') || e.target.closest('a'))) return;
       location.hash = x.dataset.nav;
     }));
+    el.querySelectorAll('img[data-img-id]').forEach(img =>
+      getImage('fit', img.dataset.imgId).then(d => { if (d) img.src = d; }));
     el.querySelectorAll('[data-hab]').forEach(p => p.addEventListener('click', e => {
       e.stopPropagation();
       Fit.quickToggle(p.dataset.hab);
@@ -5790,6 +6025,7 @@ const Today = (() => {
       }),
       KV.watch('home/zones', v => { zones = v || {}; render(); }),
       KV.watch('home/items', v => { items = v || {}; render(); }),
+      KV.watch('fit/feed/' + ymLocal(), v => { feedTd = v || {}; render(); }),
     ];
     render();
     return () => { unwatch.forEach(u => u()); unwatch = []; };
@@ -5821,6 +6057,7 @@ function enterApp(fresh) {
   watchPresence();
   Cal.initGlobal();     // calendar months (Today card + reminders from any screen)
   Fit.initGlobal();     // habit log + rules + timers (Today card, timer alerts)
+  Notes._chatInit();    // chat month (incoming-message toasts from any screen)
   $('cal-btn').addEventListener('click', () => { location.hash = '#cal'; });
   route();
   if (Settings.get('sync.debug')) $('sync-log').classList.add('open');
