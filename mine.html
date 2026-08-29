@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>Cade.mine</title>
+  <title>Cade.Mines</title>
   <meta name="theme-color" content="#F5F3EA">
   <meta name="color-scheme" content="light dark">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -437,9 +437,10 @@ html[data-theme="dark"] {
   --m-ok-soft: rgba(51, 199, 152, 0.13);
   --m-warn: var(--amber-base);
   --m-gold: var(--amber-base);
-  --m-shadow-out: 5px 5px 12px rgba(0, 0, 0, 0.45), -5px -5px 12px rgba(88, 85, 72, 0.2);
-  --m-shadow-out-sm: 2px 3px 7px rgba(0, 0, 0, 0.4), -2px -3px 7px rgba(88, 85, 72, 0.16);
-  --m-shadow-in: inset 2px 2px 6px rgba(0, 0, 0, 0.45), inset -2px -2px 6px rgba(88, 85, 72, 0.2);
+  /* quiet dark: shallow shadows, no light-side glow */
+  --m-shadow-out: 3px 4px 9px rgba(0, 0, 0, 0.3);
+  --m-shadow-out-sm: 2px 2px 5px rgba(0, 0, 0, 0.26);
+  --m-shadow-in: inset 2px 2px 5px rgba(0, 0, 0, 0.32);
   --m-overlay: rgba(19, 18, 15, 0.74);
 }
 
@@ -542,6 +543,8 @@ html[data-theme="retro"] .icon-btn:active { border-color: #808080 #fff #fff #808
 }
 .lcd svg { width: 13px; height: 13px; color: var(--m-text-faint); flex: none; }
 .lcd.paused-blink { animation: lcdblink 1.1s step-end infinite; }
+.lcd.count-low { color: var(--m-danger); }
+.lcd.count-low svg { color: var(--m-danger); }
 @keyframes lcdblink { 50% { color: var(--m-text-faint); } }
 html[data-theme="retro"] .lcd {
   background: #000; color: #f00; border: 2px solid; border-color: #808080 #fff #fff #808080;
@@ -868,18 +871,7 @@ html[data-theme="retro"] .center-card { border-radius: 0; border: 2px solid; bor
 @keyframes toastin { from { opacity: 0; transform: translateY(10px); } }
 html[data-theme="retro"] .toast { border-radius: 0; }
 
-/* ---- Story mode ---- */
-.story-beat { font-size: 0.86rem; line-height: 1.65; color: var(--m-text); background: var(--m-bg2); border-left: 3px solid var(--m-accent); padding: 12px 14px; border-radius: 0 var(--m-radius-sm) var(--m-radius-sm) 0; margin: 10px 0; font-style: italic; }
-.chapter-row { display: flex; align-items: center; gap: 12px; padding: 11px 12px; border-radius: var(--m-radius-sm); transition: var(--m-transition); width: 100%; text-align: left; }
-.chapter-row:hover { background: var(--m-surface2); }
-.chapter-row .ch-num { width: 30px; height: 30px; border-radius: 50%; background: var(--m-bg2); box-shadow: var(--m-shadow-in); display: grid; place-items: center; font-size: 0.72rem; font-weight: 700; color: var(--m-text-muted); flex: none; }
-.chapter-row.done .ch-num { background: var(--m-ok); color: #fff; box-shadow: none; }
-.chapter-row.locked { opacity: 0.45; pointer-events: none; }
-.chapter-row .ch-t { flex: 1; min-width: 0; }
-.chapter-row .ch-title { font-weight: 600; font-size: 0.85rem; }
-.chapter-row .ch-sub { font-size: 0.68rem; color: var(--m-text-faint); }
-
-/* ---- Roguelike ---- */
+/* ---- Continuous ---- */
 .rogue-hud { display: flex; gap: 8px; margin-bottom: 12px; }
 .rogue-stage-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--m-bg2); box-shadow: var(--m-shadow-in); }
 .rogue-stage-dot.done { background: var(--m-ok); box-shadow: none; }
@@ -939,7 +931,7 @@ html[data-theme="retro"] .kbd { border: 1px solid var(--m-border); box-shadow: n
       <button class="icon-btn" id="menu-btn" aria-label="Menu">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg>
       </button>
-      <div class="brand">Cade<span class="dim">.mine</span></div>
+      <div class="brand">Cade<span class="dim">.Mines</span></div>
       <span id="mode-chip"></span>
     </div>
     <div class="hud-cluster">
@@ -1009,7 +1001,7 @@ html[data-theme="retro"] .kbd { border: 1px solid var(--m-border); box-shadow: n
 
 <aside id="drawer">
   <div class="drawer-head">
-    <div class="brand">Cade<span class="dim">.mine</span></div>
+    <div class="brand">Cade<span class="dim">.Mines</span></div>
     <button class="icon-btn" id="drawer-close" aria-label="Close">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>
     </button>
@@ -1024,12 +1016,8 @@ html[data-theme="retro"] .kbd { border: 1px solid var(--m-border); box-shadow: n
     <span class="n-badge hidden" id="daily-badge">new</span>
   </button>
   <button class="nav-item" data-nav="rogue">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3c-4 0-7 3-7 7 0 3 1.5 4.5 1.5 6.5h11C17.5 14.5 19 13 19 10c0-4-3-7-7-7z"/><circle cx="9.5" cy="10.5" r="1.3" fill="currentColor" stroke="none"/><circle cx="14.5" cy="10.5" r="1.3" fill="currentColor" stroke="none"/><path d="M8 16.5v3M12 16.5V21M16 16.5v3"/></svg>
-    Roguelike run
-  </button>
-  <button class="nav-item" data-nav="story">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15.5H6.5A2.5 2.5 0 0 0 4 21z"/><path d="M4 18.5A2.5 2.5 0 0 1 6.5 16H20"/><line x1="8.5" y1="7.5" x2="15.5" y2="7.5"/><line x1="8.5" y1="11" x2="13.5" y2="11"/></svg>
-    Story mode
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 4h4v4M21 4l-6.5 6.5-4-4L3 14"/><path d="M17 20h4v-4M21 20l-6.5-6.5"/></svg>
+    Continuous
   </button>
   <button class="nav-item" data-nav="trn">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 4h8v5a4 4 0 0 1-8 0z"/><path d="M8 5H4.5v1.5A3.5 3.5 0 0 0 8 10M16 5h3.5v1.5A3.5 3.5 0 0 1 16 10"/><path d="M12 13v3M9 20h6M10.5 16h3v4h-3z"/></svg>
@@ -1233,10 +1221,8 @@ const SETTINGS_DEFAULTS = {
   anim: true,               // animations (we deliberately ignore prefers-reduced-motion)
   haptics: true,
   autoPause: true,          // pause when app loses focus
-  autoFlag: false,          // auto-flag forced mines (off by default)
-  allowUndo: false,         // 1 undo, mine hits only ("with undo" boards)
-  noGuess: true,            // generate logic-solvable boards
-  practice: false,          // no timer, nothing recorded
+  practice: false,          // no timer, nothing recorded (and undo works)
+  countdown: 'off',         // off | auto | seconds — beat the clock on new boards
   kbHint: true,
   zoomBtns: true,
   ctl: {
@@ -1711,7 +1697,7 @@ const SHAPES = {
                  const a = x * x + y * y - 1;
                  return a * a * a - x * x * y * y * y <= 0;
                } },
-  swiss:     { label: 'Swiss cheese', kind: 'fn', aw: 1, ah: 1, seeded: true,
+  swiss:     { label: 'Swiss', kind: 'fn', aw: 1, ah: 1, seeded: true,
                fn: (u, v, ctx) => {
                  // deterministic holes from the board seed
                  const hx = xmur3(ctx.seed + ':' + Math.round(u * ctx.w * 2) + ':' + Math.round(v * ctx.h * 2))();
@@ -2333,7 +2319,8 @@ function canonicalSpec(spec) {
     // claim a wrap the board doesn't have
     t: spec.t && (spec.g || 'sq') === 'sq' && !spec.sh ? 1 : 0,
     sh: spec.sh || '', s: String(spec.s || ''),
-    st: spec.st == null ? null : spec.st | 0, ng: spec.ng === 0 ? 0 : 1,
+    st: spec.st == null ? null : spec.st | 0,
+    ng: 1,    // the no-guess guarantee is always on
   };
 }
 function specFingerprint(spec) { return hashStr(JSON.stringify(canonicalSpec(spec))); }
@@ -2373,16 +2360,21 @@ function newGame(spec, meta) {
     undosUsed: 0, fatal: null, recap: null,
     bv3: null, analysis: null, stars: 0,
     practice: meta.practice != null ? meta.practice : Settings.get('practice'),
-    allowUndo: meta.allowUndo != null ? meta.allowUndo : Settings.get('allowUndo'),
     generated: false, generating: false,
     finalized: false,
     startHint: spec.st,
+    countdownMs: null, timedOut: false,
   };
+  // countdown (beat-the-clock): fixed budgets apply now; 'auto' resolves
+  // once the board generates and its 3BV is known. Practice has no clock.
+  if (meta.countdown && meta.countdown !== 'auto' && !G.practice) {
+    G.countdownMs = Math.max(15, meta.countdown | 0) * 1000;
+  }
   hideOverlays();
   const banners = $('banners');
   if (banners) banners.innerHTML = '';
   Renderer.setGame(G);
-  Renderer.setFlavor(meta.flavor || null);   // per-board palette (story chapters)
+  Renderer.setFlavor(meta.flavor || null);   // optional per-board palette
   Renderer.fitCamera();
   updateHUD();
   updateModeChip();
@@ -2416,7 +2408,11 @@ async function ensureGenerated(startIdx) {
   G.stars = complexityStars(out.analysis, G.N, out.minesTotal);
   G.generated = true;
   G.generating = false;
+  if (G.meta.countdown === 'auto' && !G.practice && G.countdownMs == null) {
+    G.countdownMs = clamp(G.bv3 * 2500, 45000, 1200000);   // ~2.5s per 3BV point
+  }
   updateBoardInfo();
+  updateHUD();
   return true;
 }
 
@@ -2431,6 +2427,10 @@ function postMove(act, i) {
   G.moveCount++;
   G.moves.push({ t: Math.round(timerElapsed()), a: act, i });
   if (G.moves.length > 4000) G.moves.splice(0, G.moves.length - 4000);
+  // the daily is one attempt: the first move burns it
+  if (G.moveCount === 1 && G.meta.mode === 'daily' && G.meta.dailyKey) {
+    store.set('daily-attempt:' + G.meta.dailyKey, '1');
+  }
   scheduleSave();
   updateHUD();
 }
@@ -2449,7 +2449,7 @@ function saveNow() {
     undosUsed: G.undosUsed, moveCount: G.moveCount,
     moves: G.moves.slice(-800),
     analysis: G.analysis, bv3: G.bv3, stars: G.stars,
-    practice: G.practice, allowUndo: G.allowUndo,
+    practice: G.practice, countdownMs: G.countdownMs,
   };
   store.setJSON('save', blob);
 }
@@ -2469,7 +2469,7 @@ function resumeFromSave(blob) {
     G.moveCount = blob.moveCount || 0;
     G.moves = Array.isArray(blob.moves) ? blob.moves : [];
     G.practice = !!blob.practice;
-    G.allowUndo = !!blob.allowUndo;
+    G.countdownMs = blob.countdownMs || G.countdownMs || null;
     if (blob.mines) {
       G.mines = b64ToBytes(blob.mines);
       if (G.mines.length !== G.N) throw new Error('save mismatch');
@@ -2553,7 +2553,6 @@ async function actReveal(i) {
   const order = revealFlood(i);
   postMove('r', i);
   Renderer.animateReveal(order, i);
-  if (Settings.get('autoFlag')) autoFlagPass(order);
   checkWin();
 }
 
@@ -2608,7 +2607,6 @@ function actChord(i) {
     postMove('c', i);
     if (allOrder.length) Renderer.animateReveal(allOrder, i);
     if (hit >= 0) { mineHit(hit); return; }
-    if (Settings.get('autoFlag')) autoFlagPass(allOrder);
     checkWin();
   } else if (flags + hidden.length === G.adj[i]) {
     // the remaining neighbors must all be mines: flag them
@@ -2621,35 +2619,6 @@ function actChord(i) {
   } else {
     Renderer.pulseNeighbors(i);
   }
-}
-
-// Optional QoL: flag neighbors that are trivially forced (numbers whose
-// remaining hidden neighbors all must be mines). Runs only around new reveals.
-function autoFlagPass(order) {
-  if (!G || !G.generated) return;
-  const candidates = new Set();
-  for (const o of order) {
-    candidates.add(o.i);
-    for (const nb of G.cells[o.i].nbrs) candidates.add(nb);
-  }
-  let any = false;
-  for (const i of candidates) {
-    if (G.state[i] !== ST_REVEALED || G.adj[i] === 0) continue;
-    let flags = 0;
-    const hidden = [];
-    for (const nb of G.cells[i].nbrs) {
-      const s = G.state[nb];
-      if (s === ST_FLAG) flags++;
-      else if (s === ST_HIDDEN || s === ST_Q) hidden.push(nb);
-    }
-    if (hidden.length && flags + hidden.length === G.adj[i]) {
-      for (const nb of hidden) {
-        if (G.state[nb] === ST_Q) G.state[nb] = ST_HIDDEN;
-        G.state[nb] = ST_FLAG; G.flags++; any = true; Renderer.popCell(nb);
-      }
-    }
-  }
-  if (any) updateHUD();
 }
 
 /* ---- losing, undo, winning ---- */
@@ -2678,13 +2647,13 @@ function mineHit(i) {
   G.state[i] = st;
   G.recap = recap;
   saveNow();
-  const canUndo = G.allowUndo && G.undosUsed < 1;
+  const canUndo = G.practice;    // undo lives in practice mode only
   if (!canUndo) finalizeGame(false);
   setTimeout(() => showEndCard(false, canUndo), Settings.get('anim') ? 850 : 60);
 }
 
 function undoMineHit() {
-  if (!G || G.status !== 'lost' || !G.fatal || !G.allowUndo || G.undosUsed >= 1 || G.finalized) return;
+  if (!G || G.status !== 'lost' || !G.fatal || !G.practice || G.finalized) return;
   G.state[G.fatal.i] = ST_HIDDEN;
   G.undosUsed++;
   G.status = 'play';
@@ -2696,7 +2665,25 @@ function undoMineHit() {
   startTimerLoop();
   postMove('u', -1);
   Renderer.requestDraw();
-  showToast('Undone — that one stays buried (1/1 used)');
+  showToast('Undone — practice makes perfect');
+}
+
+/* ---- countdown: the clock itself can end the game ---- */
+function timeOut() {
+  if (!G || G.status !== 'play' || !G.countdownMs) return;
+  timerStop();
+  G.timeMs = G.countdownMs;
+  G.status = 'lost';
+  G.timedOut = true;
+  G.fatal = null;
+  G.recap = null;
+  setFace('lost');
+  haptic([60, 40, 120]);
+  stopTimerLoop();
+  finalizeGame(false);
+  updateHUD();
+  Renderer.requestDraw();
+  setTimeout(() => showEndCard(false, false), Settings.get('anim') ? 500 : 60);
 }
 
 function checkWin() {
@@ -2759,12 +2746,24 @@ function togglePause() {
 
 /* ---- HUD ---- */
 let _timerLoop = null;
+function timeDisplay() {
+  if (!G) return '0:00';
+  if (G.practice) return '∞';
+  if (G.countdownMs) return fmtTimeMs(Math.max(0, G.countdownMs - timerElapsed()));
+  return fmtTimeMs(timerElapsed());
+}
 function startTimerLoop() {
   if (_timerLoop) return;
   _timerLoop = setInterval(() => {
     if (!G || G.status !== 'play') { stopTimerLoop(); return; }
     const el = $('time-lcd');
-    if (el) el.textContent = G.practice ? '∞' : fmtTimeMs(timerElapsed());
+    if (el) el.textContent = timeDisplay();
+    if (G.countdownMs && !G.practice) {
+      const left = G.countdownMs - timerElapsed();
+      const lcd = el && el.parentElement;
+      if (lcd) lcd.classList.toggle('count-low', left < 30000);
+      if (left <= 0) timeOut();
+    }
   }, 250);
 }
 function stopTimerLoop() { clearInterval(_timerLoop); _timerLoop = null; }
@@ -2779,8 +2778,11 @@ function updateHUD() {
   }
   const timeEl = $('time-lcd');
   if (timeEl && G) {
-    timeEl.textContent = G.practice ? '∞' : fmtTimeMs(timerElapsed());
-    timeEl.parentElement.classList.toggle('paused-blink', G.status === 'pause');
+    timeEl.textContent = timeDisplay();
+    const lcd = timeEl.parentElement;
+    lcd.classList.toggle('paused-blink', G.status === 'pause');
+    lcd.classList.toggle('count-low',
+      !!(G.countdownMs && !G.practice && G.status !== 'won' && G.countdownMs - timerElapsed() < 30000));
   }
   const pauseBtn = $('pause-btn');
   if (pauseBtn && G) {
@@ -2804,12 +2806,13 @@ function updateModeChip() {
   const m = G.meta.mode;
   const label =
     m === 'daily' ? 'Daily · ' + (G.meta.dailyKey || '') :
-    m === 'rogue' ? 'Rogue · stage ' + ((G.meta.rogue && G.meta.rogue.stage) || 1) :
-    m === 'story' ? 'Story · ch.' + ((G.meta.chapter | 0) + 1) :
+    m === 'rogue' ? 'Continuous · stage ' + ((G.meta.rogue && G.meta.rogue.stage) || 1) :
     m === 'challenge' ? 'Challenge' :
     m === 'trn' ? 'Tournament R' + ((G.meta.round | 0) + 1) :
     (presetKeyFor(G.spec) ? PRESETS[presetKeyFor(G.spec)].label : 'Custom');
-  el.textContent = label + (G.practice ? ' · practice' : '');
+  el.textContent = label
+    + (G.countdownMs || G.meta.countdown === 'auto' ? ' · countdown' : '')
+    + (G.practice ? ' · practice' : '');
 }
 
 function updateBoardInfo() {
@@ -2868,7 +2871,7 @@ const BOARD_PALETTES = {
     // warmed charcoal
     style: 'soft', cornerR: 0.13,
     bg: '#171613', hidden: '#343229', hiddenHover: '#3D3A30',
-    tileShadow: 'rgba(0,0,0,0.55)', tileOutline: 'rgba(255,248,230,0.06)',
+    tileShadow: 'rgba(0,0,0,0.42)', tileOutline: 'rgba(255,248,230,0.06)',
     matTint: 'rgba(255,248,230,0.035)',
     bevelLight: 'rgba(146,140,118,0.32)', bevelDark: 'rgba(0,0,0,0.5)',
     revealed: '#201E19', revealedBevelDark: 'rgba(0,0,0,0.48)', revealedBevelLight: 'rgba(146,140,118,0.18)',
@@ -2935,7 +2938,7 @@ const Renderer = (() => {
   }
 
   /* ---- theme & per-board flavor ----
-     `flavorPal` (story chapters etc.) overlays the theme's board palette;
+     `flavorPal` (optional per-board themes) overlays the theme's palette;
      retro ignores flavors — the nostalgia look stays whole. */
   let themeName = 'light';
   let flavorPal = null;
@@ -4128,9 +4131,8 @@ function drawBoardHeatmap(canvasEl, spec, counts, opts) {
    ============================================ */
 const LB_TIME_BOARDS = new Set(['easy', 'medium', 'hard', 'extreme']);
 function lbLabel(id) {
-  if (id === 'alltime') return 'All-time · no undo';
-  if (id === 'alltime-undo') return 'All-time · with undo';
-  if (id === 'rogue') return 'Roguelike runs';
+  if (id === 'alltime') return 'All-time';
+  if (id === 'continuous') return 'Continuous runs';
   if (LB_TIME_BOARDS.has(id)) return PRESETS[id].label + ' · best time';
   if (id.startsWith('daily:')) return 'Daily · ' + id.slice(6);
   if (id.startsWith('seed:')) return 'Seed ' + id.slice(5);
@@ -4158,11 +4160,11 @@ const CloudGame = (() => {
     if (result.practice) return;
     if (!Cloud.on || !Cloud.userKey) return;      // playing anonymously: local stats only
     const ops = [];
-    const base = { u: Cloud.name, t: result.timeMs, s: result.score, ts: result.ts, un: result.undos, eff: result.eff, w: result.won ? 1 : 0 };
-    // score boards (undo split)
-    ops.push({ k: 'lb', id: result.undos > 0 ? 'alltime-undo' : 'alltime', e: base });
+    const base = { u: Cloud.name, t: result.timeMs, s: result.score, ts: result.ts, eff: result.eff, w: result.won ? 1 : 0 };
+    // overall score board
+    ops.push({ k: 'lb', id: 'alltime', e: base });
     // preset time boards: clean wins only
-    if (result.won && result.undos === 0 && result.preset && result.mode === 'classic') {
+    if (result.won && result.preset && result.mode === 'classic') {
       ops.push({ k: 'lb', id: result.preset, e: base });
     }
     // daily
@@ -4358,7 +4360,7 @@ function centerCellOf(grid) {
   return best;
 }
 /* ============================================
-   §12 MODES — daily challenge, roguelike, story, shares & challenges.
+   §12 MODES — daily challenge, continuous runs, shares & challenges.
    ============================================ */
 
 /* ---- Daily challenge: identical for everyone, no central server.
@@ -4397,12 +4399,22 @@ function dailySpecFor(dateKey) {
   return spec;
 }
 function dailyDoneInfo(dateKey) { return store.getJSON('daily-done:' + dateKey); }
+function dailyAttempted(dateKey) { return !!store.get('daily-attempt:' + dateKey); }
+// is the CURRENT game this date's daily, still in progress?
+function dailyInProgress(dateKey) {
+  return !!(G && G.meta.mode === 'daily' && G.meta.dailyKey === dateKey
+    && G.status !== 'won' && G.status !== 'lost');
+}
 function refreshDailyBadge() {
   const badge = $('daily-badge');
-  if (badge) badge.classList.toggle('hidden', !!dailyDoneInfo(dayKeyUTC()));
+  if (badge) badge.classList.toggle('hidden', dailyAttempted(dayKeyUTC()) || !!dailyDoneInfo(dayKeyUTC()));
 }
 async function playDaily() {
   const dateKey = dayKeyUTC();
+  // one attempt per day, no retries
+  if (dailyDoneInfo(dateKey)) { showToast('Today\'s challenge is done — next board at UTC midnight'); return; }
+  if (dailyInProgress(dateKey)) { closeSheet(); closeDrawer(); return; }   // back to the board
+  if (dailyAttempted(dateKey)) { showToast('Your attempt is used — next board at UTC midnight'); return; }
   const localSpec = dailySpecFor(dateKey);
   let spec = localSpec;
   if (Cloud.on) {
@@ -4415,7 +4427,7 @@ async function playDaily() {
   newGame(spec, { mode: 'daily', dailyKey: dateKey });
 }
 
-/* ---- Roguelike: chained boards, escalating difficulty, run-based ---- */
+/* ---- Continuous: chained boards, escalating difficulty, run-based ---- */
 const Rogue = {
   run() { return store.getJSON('rogue-run'); },
   best() { return store.getJSON('rogue-best'); },
@@ -4473,108 +4485,10 @@ const Rogue = {
       result.rogueBest = isBest;
       result.rogueStages = run.stage - 1;
       if (Cloud.on && Cloud.userKey && total > 0) {
-        CloudGame.runSyncOpInner({ k: 'lb', id: 'rogue', e: { u: Cloud.name, t: Date.now() - run.startedTs, s: total, ts: Date.now(), un: 0, eff: run.stage - 1, w: run.stage - 1 } })
-          .catch(() => queuePending({ k: 'lb', id: 'rogue', e: { u: Cloud.name, t: Date.now() - run.startedTs, s: total, ts: Date.now(), un: 0, eff: run.stage - 1, w: run.stage - 1 } }));
+        CloudGame.runSyncOpInner({ k: 'lb', id: 'continuous', e: { u: Cloud.name, t: Date.now() - run.startedTs, s: total, ts: Date.now(), un: 0, eff: run.stage - 1, w: run.stage - 1 } })
+          .catch(() => queuePending({ k: 'lb', id: 'continuous', e: { u: Cloud.name, t: Date.now() - run.startedTs, s: total, ts: Date.now(), un: 0, eff: run.stage - 1, w: run.stage - 1 } }));
       }
     }
-  },
-};
-
-/* ---- Story mode: hand-authored boards with narrative beats.
-   Boards are fixed (spec + seed + fixed start), so every reader digs the
-   same field. Each chapter carries its own little board theme — parchment,
-   honey, sea glass… — just for fun; the normal game stays cream & cozy. ---- */
-function boardFlavor(o) {
-  return {
-    bg: o.bg, hidden: o.hidden, hiddenHover: o.hover, revealed: o.revealed,
-    tileShadow: o.deep, tileOutline: 'rgba(255,255,252,0.9)',
-    matTint: 'rgba(90,78,52,0.05)',
-    bevelLight: 'rgba(255,255,252,0.88)', bevelDark: o.deep,
-    revealedBevelDark: o.deep, revealedBevelLight: 'rgba(255,255,250,0.6)',
-    line: o.revealed, press: o.revealed, mineBg: o.revealed,
-    startRing: o.accent, cursor: o.accent, torusEdge: o.accent,
-    fatalBg: o.fatal || '#F0CDC4',
-  };
-}
-const STORY_FLAVORS = [
-  /* 1 The Letter — parchment */    boardFlavor({ bg: '#F4EEE3', hidden: '#FAF5EB', hover: '#FFFCF4', revealed: '#E9DFCE', deep: 'rgba(173,148,116,0.42)', accent: '#8A7257' }),
-  /* 2 Fence Posts — moss */        boardFlavor({ bg: '#EDF2E8', hidden: '#F5F9F0', hover: '#FBFEF6', revealed: '#D9E6D2', deep: 'rgba(127,179,119,0.4)', accent: '#3F7338' }),
-  /* 3 Both Hands — slate blue */   boardFlavor({ bg: '#EBF0F6', hidden: '#F4F8FC', hover: '#FAFDFF', revealed: '#D8E2EE', deep: 'rgba(143,175,211,0.45)', accent: '#4F6D94' }),
-  /* 4 The Beehive — honey */       boardFlavor({ bg: '#F8EFDD', hidden: '#FDF6E7', hover: '#FFFBF0', revealed: '#F0E0BC', deep: 'rgba(212,154,85,0.42)', accent: '#A87A41' }),
-  /* 5 Broken Glass — sea glass */  boardFlavor({ bg: '#E8F3EE', hidden: '#F2FAF6', hover: '#F9FFFC', revealed: '#D3E8DE', deep: 'rgba(115,185,166,0.42)', accent: '#2F7A6A' }),
-  /* 6 Round World — twilight */    boardFlavor({ bg: '#ECEDF4', hidden: '#F4F5FA', hover: '#FAFBFF', revealed: '#D9DBE9', deep: 'rgba(146,156,187,0.45)', accent: '#525B73' }),
-  /* 7 What He Buried — blush */    boardFlavor({ bg: '#F8ECEF', hidden: '#FCF4F6', hover: '#FFFAFB', revealed: '#EFD8DE', deep: 'rgba(216,149,166,0.42)', accent: '#9D596A' }),
-  /* 8 The Surveyor — bone */       boardFlavor({ bg: '#EDEAE3', hidden: '#F5F2EC', hover: '#FBF8F2', revealed: '#DCD7CB', deep: 'rgba(122,116,104,0.42)', accent: '#45474A' }),
-];
-const STORY = [
-  {
-    title: 'The Letter',
-    text: 'A letter arrives with no return address: "The old surveyor left his field unfinished. Four charges remain. The map says the middle is safe — it always is." You pack a trowel and a pencil.',
-    outro: 'Under the last tile, a brass key.',
-    spec: { g: 'sq', w: 7, h: 7, m: 4, s: 'story-ch1', ng: 1 },
-  },
-  {
-    title: 'Fence Posts',
-    text: 'The key opens a gate into a wider plot. The surveyor\'s notebook, first page: "Numbers count what they touch. When you are CERTAIN, plant a flag — certainty is the only fence that holds."',
-    outro: 'Eight flags, eight fences. The notebook approves.',
-    spec: { g: 'sq', w: 9, h: 9, m: 9, s: 'story-ch2', ng: 1 },
-  },
-  {
-    title: 'Both Hands',
-    text: 'Page two, ink smudged: "A satisfied number will do the digging for you — press it and its neighbors turn together. Work with both hands and the field moves twice as fast."',
-    outro: 'You are getting quicker. The field notices.',
-    spec: { g: 'sq', w: 11, h: 11, m: 16, s: 'story-ch3', ng: 1 },
-  },
-  {
-    title: 'The Beehive',
-    text: 'Past the orchard the plots go six-sided. "Bees got here first," the notebook shrugs. "Six neighbors, no corners to hide in. Trust the numbers; they never learned to lie."',
-    outro: 'Honey on your fingers, and not one sting.',
-    spec: { g: 'hex', w: 10, h: 9, m: 12, s: 'story-ch4', ng: 1 },
-  },
-  {
-    title: 'Broken Glass',
-    text: 'A greenhouse fell here years ago; the ground is all triangles now. "Twelve neighbors apiece," warns the margin note. "Glass cuts wide. Count twice, dig once."',
-    outro: 'You sweep the last shard into the pail.',
-    spec: { g: 'tri', w: 22, h: 9, m: 22, s: 'story-ch5', ng: 1 },
-  },
-  {
-    title: 'The Round World',
-    text: 'The final page folds into a cylinder, then a donut. "The east fence IS the west fence," it says. "The field wraps. Nothing here has an edge to lean on — neither can you."',
-    outro: 'You walk east and arrive from the west, whole.',
-    spec: { g: 'sq', w: 11, h: 11, m: 18, t: 1, s: 'story-ch6', ng: 1 },
-  },
-  {
-    title: 'What He Buried',
-    text: 'Behind the barn, a plot shaped like a heart. No notes for this one — only initials scratched into the gatepost, two letters you almost recognize.',
-    outro: 'Some charges are memories. You leave the flags standing.',
-    spec: { g: 'sq', w: 26, h: 24, m: 52, sh: 'heart', s: 'story-ch7', ng: 1 },
-  },
-  {
-    title: 'The Surveyor',
-    text: 'The last map is drawn in bone. "Finish it," reads the only line, "and the field is yours." The trowel feels light. The morning is very quiet.',
-    outro: 'The field is yours. It was always going to be.',
-    spec: { g: 'sq', w: 39, h: 39, m: 210, sh: 'skull', s: 'story-ch8', ng: 1 },
-  },
-];
-const Story = {
-  progress() { const p = store.getJSON('story-progress'); return Array.isArray(p) ? p : []; },
-  isDone(idx) { return !!Story.progress()[idx]; },
-  unlocked(idx) { return idx === 0 || Story.isDone(idx - 1); },
-  play(idx) {
-    const ch = STORY[idx];
-    if (!ch) return;
-    const spec = canonicalSpec(ch.spec);
-    const grid = buildGrid(spec);
-    spec.st = centerCellOf(grid);
-    spec.m = clamp(spec.m, 1, Math.max(1, grid.cells.length - 10));
-    closeSheet(); closeDrawer();
-    newGame(spec, { mode: 'story', chapter: idx, practice: false, flavor: STORY_FLAVORS[idx] || null });
-  },
-  onFinish(result) {
-    if (result.chapter == null || !result.won) return;
-    const p = Story.progress();
-    p[result.chapter] = true;
-    store.setJSON('story-progress', p);
   },
 };
 
@@ -4614,8 +4528,6 @@ const ModeHooks = {
       }
     } else if (result.mode === 'rogue') {
       Rogue.onFinish(result);
-    } else if (result.mode === 'story') {
-      Story.onFinish(result);
     } else if (result.mode === 'trn' && G.meta.trn && !result.practice) {
       const payload = { s: result.score, t: result.timeMs, w: result.won ? 1 : 0 };
       CloudGame.trnSubmit(G.meta.trn.id, G.meta.round, payload);
@@ -4659,7 +4571,7 @@ function fieldRow(labelTxt, inputEl, hint) {
 /* ============================================
    Panel: NEW GAME
    ============================================ */
-const customState = () => store.getJSON('custom-spec') || { g: 'sq', w: 16, h: 16, m: 40, t: 0, sh: '', ng: 1 };
+const customState = () => store.getJSON('custom-spec') || { g: 'sq', w: 16, h: 16, m: 40, t: 0, sh: '' };
 function panelPlay(body) {
   body.appendChild(h('div.sec-title', {}, 'Presets'));
   const grid = h('div.preset-grid');
@@ -4685,12 +4597,12 @@ function panelPlay(body) {
   const densityHint = h('div.hint');
   const shapeSel = h('select', {},
     ...Object.entries(SHAPES).map(([k, def]) => h('option', { value: k, selected: cs.sh === k || null }, def.label)));
-  let gridType = cs.g, torus = !!cs.t, noGuess = cs.ng !== 0;
+  let gridType = cs.g, torus = !!cs.t;
 
   const updDensity = () => {
     const cellsApprox = (parseInt(wIn.value, 10) || 1) * (parseInt(hIn.value, 10) || 1);
     const d = (parseInt(mIn.value, 10) || 0) / Math.max(1, cellsApprox);
-    densityHint.textContent = 'density ≈ ' + Math.round(d * 100) + '%' + (d > 0.25 ? ' — dense boards may not be fully no-guess solvable' : '');
+    densityHint.textContent = 'density ≈ ' + Math.round(d * 100) + '%' + (d > 0.25 ? ' — very dense boards can need guesses' : '');
   };
   wIn.oninput = hIn.oninput = mIn.oninput = updDensity;
   updDensity();
@@ -4709,7 +4621,6 @@ function panelPlay(body) {
   shapeSel.addEventListener('change', updTorusVis);
   updTorusVis();
   body.appendChild(torusRow);
-  body.appendChild(toggleRow('No-guess guarantee', 'Generate until the board is fully solvable by logic. Costs a moment on huge boards.', noGuess, on => { noGuess = on; }));
   body.appendChild(fieldRow('Seed', seedIn, 'Same seed = same board, for everyone. Leave empty for a fresh one.'));
 
   body.appendChild(h('div.row', { style: { marginTop: '14px' } },
@@ -4721,7 +4632,7 @@ function panelPlay(body) {
         if (w * hgt > 16000) { showToast('That board is too big (max ~16k cells)'); return; }
         const spec = {
           g: gridType, w, h: hgt, m: clamp(parseInt(mIn.value, 10) || 10, 1, 5000),
-          t: gridType === 'sq' && torus && !sh ? 1 : 0, sh, s: seedIn.value.trim() || '', ng: noGuess ? 1 : 0,
+          t: gridType === 'sq' && torus && !sh ? 1 : 0, sh, s: seedIn.value.trim() || '',
         };
         store.setJSON('custom-spec', spec);
         closeSheet(); closeDrawer();
@@ -4730,22 +4641,29 @@ function panelPlay(body) {
     }, 'Start custom game'),
   ));
 
+  body.appendChild(h('div.sec-title', {}, 'Countdown'));
+  body.appendChild(fieldRow('Beat the clock', segControl(
+    [['off', 'Off'], ['auto', 'Auto'], ['120', '2:00'], ['300', '5:00'], ['600', '10:00']],
+    String(Settings.get('countdown') || 'off'), v => Settings.set('countdown', v)),
+    'Solve before the clock hits zero. Applies to new boards started here; Auto sizes the clock to the board.'));
+
   body.appendChild(h('div.sec-title', {}, 'Practice'));
-  body.appendChild(toggleRow('Practice mode', 'No timer, nothing recorded — pure zen digging.', Settings.get('practice'), on => Settings.set('practice', on)));
+  body.appendChild(toggleRow('Practice mode', 'No timer, nothing recorded — and mine hits can be taken back.', Settings.get('practice'), on => Settings.set('practice', on)));
 }
 function startClassic(spec) {
-  // specs without an explicit choice follow the Settings no-guess toggle;
-  // the custom builder always passes its own explicit ng (override kept)
-  if (spec.ng == null) spec.ng = Settings.get('noGuess') ? 1 : 0;
   spec = canonicalSpec(spec);
   store.setJSON('last-spec', spec);
-  newGame(spec, { mode: 'classic' });
+  const cd = Settings.get('countdown');
+  const meta = { mode: 'classic' };
+  if (cd && cd !== 'off') meta.countdown = cd === 'auto' ? 'auto' : (parseInt(cd, 10) || 0);
+  newGame(spec, meta);
 }
 function restartFresh() {
   if (!G) return;
   const m = G.meta.mode;
+  if (m === 'daily') { showToast('The daily is one attempt — no restarts'); return; }
   hideOverlays();
-  if (m === 'daily' || m === 'story' || m === 'challenge' || m === 'trn') {
+  if (m === 'challenge' || m === 'trn') {
     newGame(G.spec, G.meta);                    // shared board: replay the same field
   } else if (m === 'rogue') {
     const run = Rogue.run();
@@ -4756,6 +4674,7 @@ function restartFresh() {
 }
 function retrySameBoard() {
   if (!G) return;
+  if (G.meta.mode === 'daily') { showToast('The daily is one attempt — no retries'); return; }
   const spec = Object.assign({}, G.spec);
   if (spec.st == null && G.genStart != null) spec.st = G.genStart;
   hideOverlays();
@@ -4767,11 +4686,11 @@ function retrySameBoard() {
    ============================================ */
 function connectPrompt(body, why) {
   body.appendChild(h('div.lb-empty', {}, why || 'Connect to sync scores with the others.'));
-  const input = h('input', { type: 'text', placeholder: 'access word · or paste a firebase URL', spellcheck: false, autocomplete: 'off' });
+  const input = h('input', { type: 'text', placeholder: 'access word', spellcheck: false, autocomplete: 'off' });
   const msg = h('div.login-msg');
   const nameIn = h('input', { type: 'text', placeholder: 'your name (shown on boards)', value: Cloud.name || '', maxlength: 20 });
   body.appendChild(fieldRow('Access', input));
-  body.appendChild(fieldRow('Username', nameIn, 'Naive by design: no password — this crew trusts each other.'));
+  body.appendChild(fieldRow('Username', nameIn, 'Shown on leaderboards.'));
   body.appendChild(msg);
   body.appendChild(h('div.row', {}, h('button.btn.primary', {
     onclick: async ev => {
@@ -4797,9 +4716,9 @@ function panelRanks(body) {
   const tabs = h('div.lb-tabs');
   const list = h('div.lb-list');
   const boards = [
-    ['alltime', 'All-time'], ['alltime-undo', 'With undo'],
+    ['alltime', 'All-time'],
     ['easy', 'Easy'], ['medium', 'Medium'], ['hard', 'Hard'], ['extreme', 'Extreme'],
-    ['daily:' + dayKeyUTC(), 'Today'], ['rogue', 'Rogue'],
+    ['daily:' + dayKeyUTC(), 'Today'], ['continuous', 'Continuous'],
   ];
   if (G && G.spec.st != null && !boards.some(b => b[0] === 'seed:' + specFingerprint(G.spec))) {
     boards.push(['seed:' + specFingerprint(G.spec), 'This board']);
@@ -4833,8 +4752,7 @@ function renderLbRows(list, id, rows) {
     list.appendChild(h('div.lb-row' + (isMe ? '.me' : ''), {},
       h('span.lb-rank' + (idx < 3 ? '.r' + (idx + 1) : ''), {}, String(idx + 1)),
       h('span.lb-name', {}, row.u || row.key),
-      row.un > 0 ? h('span.lb-tag', {}, row.un + ' undo') : null,
-      id === 'rogue' ? h('span.lb-tag', {}, (row.w || 0) + ' stages') : (row.w === 0 ? h('span.lb-tag', {}, 'partial') : null),
+      id === 'continuous' ? h('span.lb-tag', {}, (row.w || 0) + ' stages') : (row.w === 0 ? h('span.lb-tag', {}, 'partial') : null),
       h('span.lb-val', {}, timeBoard
         ? h('b', {}, fmtTimeMs(row.t, true))
         : [h('b', {}, fmtInt(row.s)), ' · ' + fmtTimeMs(row.t || 0, true)]),
@@ -4848,20 +4766,30 @@ function renderLbRows(list, id, rows) {
 function panelDaily(body) {
   const dateKey = dayKeyUTC();
   const done = dailyDoneInfo(dateKey);
+  const inProgress = dailyInProgress(dateKey);
+  const attempted = dailyAttempted(dateKey);
   body.appendChild(h('div.sec-title', {}, 'Today · ' + dateKey + ' (UTC)'));
   body.appendChild(h('div', { style: { fontSize: '0.82rem', lineHeight: 1.55, color: 'var(--m-text-muted)', marginBottom: '10px' } },
-    'One board, identical for every player, fresh every UTC midnight. Shapes, hexes, wraps — the field decides.'));
+    'One board, one attempt, identical for every player — fresh every UTC midnight. Shapes, hexes, wraps: the field decides.'));
   if (done) {
     body.appendChild(h('div.end-stats', {},
-      h('div.es', {}, h('b', {}, done.won ? fmtTimeMs(done.t, true) : '✕'), h('span', {}, done.won ? 'your time' : 'boom')),
+      h('div.es', {}, h('b', {}, fmtTimeMs(done.t, true)), h('span', {}, 'time')),
       h('div.es', {}, h('b', {}, fmtInt(done.s)), h('span', {}, 'score')),
-      h('div.es', {}, h('b', {}, done.un || 0), h('span', {}, 'undos')),
+      h('div.es', {}, h('b', {}, done.won ? '✓' : '✕'), h('span', {}, done.won ? 'cleared' : 'boom')),
+    ));
+    body.appendChild(h('div.hint', { style: { margin: '8px 0 18px', textAlign: 'center' } }, 'Next board at UTC midnight.'));
+  } else if (inProgress) {
+    body.appendChild(h('div.row', { style: { margin: '8px 0 18px' } },
+      h('button.btn.primary', { onclick: () => { closeSheet(); closeDrawer(); } }, 'Return to the board'),
+    ));
+  } else if (attempted) {
+    body.appendChild(h('div.lb-empty', {}, 'Your attempt is used. Next board at UTC midnight.'));
+  } else {
+    body.appendChild(h('div.row', { style: { margin: '8px 0 18px' } },
+      h('button.btn.primary', { onclick: () => { playDaily().catch(e => showToast('Daily fetch failed — ' + e.message)); } },
+        'Play today\'s challenge'),
     ));
   }
-  body.appendChild(h('div.row', { style: { margin: '8px 0 18px' } },
-    h('button.btn.primary', { onclick: () => { playDaily().catch(e => showToast('Daily fetch failed — ' + e.message)); } },
-      done ? 'Play it again (best result counts)' : 'Play today\'s challenge'),
-  ));
 
   if (!Cloud.on || !Cloud.userKey) { connectPrompt(body, 'Connect to fetch the shared daily seed, post your score and see the loss heatmap.'); return; }
 
@@ -4920,7 +4848,7 @@ function panelRogue(body) {
   const run = Rogue.run();
   const best = Rogue.best();
   body.appendChild(h('div', { style: { fontSize: '0.82rem', lineHeight: 1.55, color: 'var(--m-text-muted)', marginBottom: '12px' } },
-    'Chained boards that escalate — bigger, denser, stranger. Score compounds ×', h('b', {}, '1.15'), ' per stage. One mine ends the run (your single undo counts here, if enabled).'));
+    'Chained boards that escalate — bigger, denser, stranger. Score compounds ×', h('b', {}, '1.15'), ' per stage. One mine ends the run.'));
   if (run) {
     const dots = h('div.rogue-hud');
     for (let k = 1; k < run.stage; k++) dots.appendChild(h('span.rogue-stage-dot.done'));
@@ -4954,41 +4882,11 @@ function panelRogue(body) {
     const list = h('div.lb-list');
     body.appendChild(h('div.sec-title', {}, 'Run leaderboard'));
     body.appendChild(list);
-    CloudGame.fetchLeaderboard('rogue').then(rows => {
+    CloudGame.fetchLeaderboard('continuous').then(rows => {
       if (!rows.length) list.appendChild(h('div.lb-empty', {}, 'No finished runs on the board yet.'));
-      else renderLbRows(list, 'rogue', rows);
+      else renderLbRows(list, 'continuous', rows);
     }).catch(() => list.appendChild(h('div.lb-empty', {}, 'Could not fetch.')));
   }
-}
-
-/* ============================================
-   Panel: STORY
-   ============================================ */
-function panelStory(body) {
-  body.appendChild(h('div', { style: { fontSize: '0.82rem', lineHeight: 1.55, color: 'var(--m-text-muted)', marginBottom: '10px' } },
-    h('b', {}, 'The Surveyor\'s Field'), ' — eight hand-drawn plots, each teaching the ground a new trick. Boards are fixed: everyone digs the same field.'));
-  STORY.forEach((ch, idx) => {
-    const done = Story.isDone(idx);
-    const unlocked = Story.unlocked(idx);
-    body.appendChild(h('button.chapter-row' + (done ? '.done' : '') + (unlocked ? '' : '.locked'), {
-      disabled: !unlocked,      // real disabled: keyboard focus can't bypass the lock
-      onclick: () => {
-        if (!unlocked) return;
-        openSheet('Chapter ' + (idx + 1) + ' — ' + ch.title, sub => {
-          sub.appendChild(h('div.story-beat', {}, ch.text));
-          if (done) sub.appendChild(h('div.hint', { style: { margin: '4px 0 10px' } }, '✓ completed — ' + ch.outro));
-          sub.appendChild(h('div.row', { style: { marginTop: '12px' } },
-            h('button.btn.primary', { onclick: () => Story.play(idx) }, done ? 'Dig it again' : 'Begin digging'),
-            h('button.btn.flex-none', { onclick: () => openPanel('story') }, 'Back'),
-          ));
-          sub.appendChild(h('div.hint', { style: { marginTop: '12px' } }, specDescribe(canonicalSpec(ch.spec))));
-        });
-      },
-    },
-      h('span.ch-num', {}, done ? '✓' : String(idx + 1)),
-      h('div.ch-t', {}, h('div.ch-title', {}, unlocked ? ch.title : '· · ·'), h('div.ch-sub', {}, unlocked ? specDescribe(canonicalSpec(ch.spec)) : 'finish the previous chapter')),
-    ));
-  });
 }
 
 /* ============================================
@@ -5163,12 +5061,13 @@ function panelStats(body) {
   const table = h('table.mini-table', {}, h('thead', {}, h('tr', {},
     h('th', {}, 'Board'), h('th', {}, 'Plays'), h('th', {}, 'Win %'), h('th', {}, 'Best'), h('th', {}, 'Avg win'))));
   const tbody = h('tbody');
-  const rows = ['easy', 'medium', 'hard', 'extreme', 'custom', 'daily', 'rogue', 'story', 'challenge', 'trn'];
+  const rows = ['easy', 'medium', 'hard', 'extreme', 'custom', 'daily', 'rogue', 'challenge', 'trn'];
+  const rowLabel = { custom: 'Custom', daily: 'Daily', rogue: 'Continuous', challenge: 'Challenge', trn: 'Tournament' };
   for (const key of rows) {
     const a = ag.per[key];
     if (!a) continue;
     tbody.appendChild(h('tr', {},
-      h('td', {}, PRESETS[key] ? PRESETS[key].label : key),
+      h('td', {}, PRESETS[key] ? PRESETS[key].label : (rowLabel[key] || key)),
       h('td', {}, String(a.plays)),
       h('td', {}, pct(a.wins / a.plays)),
       h('td', {}, a.bestT != null ? fmtTimeMs(a.bestT, true) : '—'),
@@ -5197,8 +5096,8 @@ function panelStats(body) {
   paint();
   body.appendChild(h('div.hint', { style: { marginTop: '10px' } },
     Cloud.on && Cloud.userKey
-      ? 'History syncs (encrypted) under your username after each finished game — play on any device, same graph.'
-      : 'Connect in Settings to sync history across devices under your username.'));
+      ? 'History syncs under your username — play on any device, same graph.'
+      : 'Connect in Settings to sync history across devices.'));
 }
 
 /* ============================================
@@ -5235,7 +5134,7 @@ function panelSettings(body) {
   body.appendChild(h('div.sec-title', {}, 'Identity & sync'));
   if (Cloud.on) {
     const nameIn = h('input', { type: 'text', value: Cloud.name || '', placeholder: 'username', maxlength: 20 });
-    body.appendChild(fieldRow('Username', nameIn, 'Shown on leaderboards. Naive by design — no password, trusted crew only.'));
+    body.appendChild(fieldRow('Username', nameIn, 'Shown on leaderboards.'));
     body.appendChild(h('div.row', {},
       h('button.btn', {
         onclick: () => {
@@ -5247,9 +5146,9 @@ function panelSettings(body) {
       }, 'Disconnect'),
     ));
     body.appendChild(h('div.hint', { style: { marginTop: '8px' } },
-      'Connected. Everything sent up is encrypted in this browser first — the database only ever sees ciphertext. Sync happens only on: daily fetch, leaderboard views, game finish.'));
+      'Connected — scores and history sync automatically.'));
   } else {
-    connectPrompt(body, 'Connect once with the access word (or a firebase URL) to join leaderboards, dailies and tournaments. The game is fully playable without it.');
+    connectPrompt(body, 'Connect once with the access word to join leaderboards, dailies and tournaments. The game is fully playable without it.');
   }
 
   /* appearance */
@@ -5266,11 +5165,8 @@ function panelSettings(body) {
 
   /* gameplay */
   body.appendChild(h('div.sec-title', {}, 'Gameplay'));
-  body.appendChild(toggleRow('No-guess boards', 'Generated boards are solvable by pure logic — no forced guesses.', Settings.get('noGuess'), on => Settings.set('noGuess', on)));
-  body.appendChild(toggleRow('Allow undo', 'One undo per game, mine hits only. Scores go to the "with undo" boards once used.', Settings.get('allowUndo'), on => Settings.set('allowUndo', on)));
-  body.appendChild(toggleRow('Auto-flag', 'When a number\'s remaining hidden neighbors must all be mines, flag them automatically.', Settings.get('autoFlag'), on => Settings.set('autoFlag', on)));
   body.appendChild(toggleRow('Auto-pause', 'Freeze the timer when the app loses focus.', Settings.get('autoPause'), on => Settings.set('autoPause', on)));
-  body.appendChild(toggleRow('Practice mode', 'No timer, nothing recorded.', Settings.get('practice'), on => { Settings.set('practice', on); }));
+  body.appendChild(toggleRow('Practice mode', 'No timer, nothing recorded — and mine hits can be taken back.', Settings.get('practice'), on => { Settings.set('practice', on); }));
 
   /* controls */
   body.appendChild(h('div.sec-title', {}, 'Mouse buttons'));
@@ -5300,7 +5196,7 @@ function panelSettings(body) {
     }, 'Refresh offline cache'),
   ));
   body.appendChild(h('div.hint', { style: { marginTop: '8px' } },
-    'The whole game (art included) caches for offline play. Results finished offline queue up and sync when the network returns.'));
+    'The whole game caches for offline play. Results finished offline send themselves when the network returns.'));
 
   /* danger */
   body.appendChild(h('div.sec-title', {}, 'Danger zone'));
@@ -5340,15 +5236,17 @@ Drag to pan, pinch or scroll to zoom. Keyboard play: arrows + <span class="kbd">
 <h4>Chording</h4>
 Press a revealed number whose flags already satisfy it: the remaining neighbors open at once. If instead its hidden neighbors <i>must</i> all be mines, the same press flags them.
 <h4>Seeds & the ★ rating</h4>
-Every board grows from a seed — share it and the other player digs the identical field. With the no-guess guarantee on, the generator re-deals until pure logic can clear the board. The ★ rating estimates how deep that logic goes: ★ trivial counting, ★★ subset tricks, ★★★ case analysis, ★★★★+ endgame counting. Your first click is always safe — except on shared/challenge boards, which fix a marked starting tile instead so everyone gets the same opening.
+Every board grows from a seed — share it and the other player digs the identical field. Boards are dealt until pure logic can clear them, so you're never forced to guess. The ★ rating estimates how deep that logic goes: ★ trivial counting, ★★ subset tricks, ★★★ case analysis, ★★★★+ endgame counting. Your first click is always safe — except on shared/challenge boards, which fix a marked starting tile instead so everyone gets the same opening.
 <h4>Score & rating</h4>
 Score = difficulty × progress<sup>1.5</sup> × speed bonus — so a fast loss deep into a hard board still counts. Difficulty grows with mines, density, grid type and the ★ rating. The skill rating is ELO-style against the board's difficulty, driven by solve <i>efficiency</i> (3BV/s), not raw time.
+<h4>Countdown</h4>
+Optional beat-the-clock play: pick a time limit in New game (or Auto, which sizes the clock to the board). The clock hits zero, the field wins.
 <h4>Undo</h4>
-Off by default, for purists. When on: one undo per game, only on a mine hit — and your result moves to the "with undo" leaderboard.
-<h4>Offline & sync</h4>
-The game installs into the offline cache (art included) and runs with zero network. Connecting is optional: one access word unlocks the shared database for leaderboards, the daily, and tournaments. Everything uploaded is encrypted in your browser first — the server only stores ciphertext. Syncs happen only on daily fetch, leaderboard views, and game finish; results finished offline queue and send later.
+Practice mode only: hit a mine while practicing and you can take it back. Everywhere else, the boom is the boom.
+<h4>Offline & playing with others</h4>
+The game installs for offline play and runs with zero network. Connecting is optional: one access word unlocks leaderboards, the daily, and tournaments. Results finished offline send themselves later.
 <h4>Daily</h4>
-One board per UTC day, identical for all players. Lose, and the tile that got you joins the day's communal heat-map — see where everyone else went out, below the scores.
+One board per UTC day, one attempt, identical for all players. Lose, and the tile that got you joins the day's communal heat-map — see where everyone else went out, below the scores.
 ` }));
 }
 
@@ -5405,14 +5303,18 @@ function showEndCard(won, canUndo) {
     card.appendChild(h('h2', {}, winTitle()));
     card.appendChild(h('div.card-rule.won'));
     const bestT = r.preset ? Stats.bestTimeFor(r.preset) : null;
-    const isBest = r.preset && r.undos === 0 && bestT != null && timeMs <= bestT && !G.practice;
+    const isBest = r.preset && bestT != null && timeMs <= bestT && !G.practice;
     card.appendChild(h('p.sub', {}, G.practice ? 'Practice — nothing recorded, everything learned.'
       : isBest ? '★ New personal best on ' + PRESETS[r.preset].label + '!'
       : specDescribe(G.spec)));
+  } else if (G.timedOut) {
+    card.appendChild(h('h2', {}, 'Time\'s up.'));
+    card.appendChild(h('div.card-rule.lost'));
+    card.appendChild(h('p.sub', {}, 'The clock beat you to it — ' + pct(r.progress || 0) + ' cleared.'));
   } else {
     card.appendChild(h('h2', {}, canUndo ? 'Boom — but wait' : 'Boom.'));
     card.appendChild(h('div.card-rule.lost'));
-    card.appendChild(h('p.sub', {}, canUndo ? 'You have one undo (mine hits only). Use it?' : lossSub()));
+    card.appendChild(h('p.sub', {}, canUndo ? 'Practice mode: you can take that one back.' : lossSub()));
   }
 
   card.appendChild(h('div.end-stats', {},
@@ -5444,9 +5346,6 @@ function showEndCard(won, canUndo) {
     if (r.rogueNext) card.appendChild(h('div.recap-verdict', {}, 'Stage cleared! +', h('b', {}, fmtInt(r.rogueGained)), ' pts — run total ', h('b', {}, fmtInt(r.rogueTotal)), '.'));
     if (r.rogueOver) card.appendChild(h('div.recap-verdict', {}, 'Run over after ' + r.rogueStages + ' cleared stage' + (r.rogueStages === 1 ? '' : 's') + ' — final ', h('b', {}, fmtInt(r.rogueTotal)), ' pts.', r.rogueBest ? ' ★ New best run!' : ''));
   }
-  if (r.mode === 'story' && won && STORY[G.meta.chapter]) {
-    card.appendChild(h('div.story-beat', { style: { textAlign: 'left' } }, STORY[G.meta.chapter].outro));
-  }
   if (r.mode === 'challenge' && G.meta.challenge) {
     const ch = G.meta.challenge;
     const beatTime = won && ch.t && timeMs < ch.t;
@@ -5465,16 +5364,16 @@ function showEndCard(won, canUndo) {
   // actions
   const actions = h('div.end-actions');
   if (canUndo) {
-    actions.appendChild(h('button.btn.primary', { onclick: undoMineHit }, '↶ Undo (1 left)'));
+    actions.appendChild(h('button.btn.primary', { onclick: undoMineHit }, '↶ Take it back'));
     actions.appendChild(h('button.btn', {
       onclick: () => { finalizeGame(false); showEndCard(false, false); },
     }, 'Accept the boom'));
   } else if (r.mode === 'rogue' && r.rogueNext) {
     actions.appendChild(h('button.btn.primary', { onclick: () => { const run = Rogue.run(); if (run) Rogue.playStage(run); } }, 'Next stage →'));
     actions.appendChild(h('button.btn', { onclick: () => { hideOverlays(); openPanel('rogue'); } }, 'Run details'));
-  } else if (r.mode === 'story' && won && G.meta.chapter + 1 < STORY.length) {
-    actions.appendChild(h('button.btn.primary', { onclick: () => Story.play(G.meta.chapter + 1) }, 'Next chapter →'));
-    actions.appendChild(h('button.btn', { onclick: retrySameBoard }, 'Replay'));
+  } else if (r.mode === 'daily') {
+    actions.appendChild(h('button.btn.primary', { onclick: () => { hideOverlays(); openPanel('play'); } }, 'New board'));
+    actions.appendChild(h('button.btn', { onclick: () => { hideOverlays(); openPanel('daily'); } }, 'Daily scores'));
   } else if (r.mode === 'trn' && G.meta.trn) {
     actions.appendChild(h('button.btn.primary', {
       onclick: async () => { hideOverlays(); try { const doc = await CloudGame.trnFetch(G.meta.trn.id); if (doc) openTrnView(doc); } catch { openPanel('trn'); } },
@@ -5503,7 +5402,7 @@ function showSummaryBanner() {
   const wrap = $('banners');
   wrap.innerHTML = '';
   const b = h('div.banner', {},
-    h('div.b-txt', {}, h('b', {}, G && G.status === 'won' ? 'Cleared' : 'Board over'), h('div.b-sub', {}, 'take your time — the field keeps its secrets no longer')),
+    h('div.b-txt', {}, h('b', {}, G && G.status === 'won' ? 'Cleared' : 'Board over')),
     h('button.btn.small.primary', { onclick: () => { wrap.innerHTML = ''; showEndCard(G.status === 'won', false); } }, 'Summary'),
     h('button.btn.small', { onclick: restartFresh }, 'New'),
   );
@@ -5539,8 +5438,7 @@ try {
 const PANELS = {
   play: ['New game', panelPlay],
   daily: ['Daily challenge', panelDaily],
-  rogue: ['Roguelike run', panelRogue],
-  story: ['Story mode', panelStory],
+  rogue: ['Continuous', panelRogue],
   trn: ['Tournaments', panelTrn],
   ranks: ['Leaderboards', panelRanks],
   stats: ['My stats', panelStats],
@@ -5662,7 +5560,7 @@ function boot() {
   window.MINE = {
     get G() { return G; }, Settings, Cloud, Stats, Renderer, CloudGame,
     newGame, buildGrid, solveBoard, generateBoardSync, deduceVisible, calc3BV,
-    dailySpecFor, Rogue, Story, STORY, PRESETS, SHAPES,
+    dailySpecFor, dailyAttempted, dailyDoneInfo, Rogue, PRESETS, SHAPES,
     encryptText, decryptText, specFingerprint, shareLinkForSpec,
     actReveal, actFlag, actChord, actQuestion, undoMineHit,
     pauseGame, resumeGame, restartFresh, retrySameBoard, openPanel,
