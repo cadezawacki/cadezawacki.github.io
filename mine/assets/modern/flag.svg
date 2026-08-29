@@ -1,8 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <!-- minimal rounded pennant — crimson on a charcoal pole -->
-  <path d="M24 8 L48 17 Q50 18 48 19.5 L24 29 Z" fill="#C91717"/>
-  <path d="M24 8 L48 17 Q50 18 48 19.5 L24 29 Z" fill="#ffffff" opacity="0.12" transform="translate(0.5 -0.5)"/>
-  <rect x="22" y="7" width="3.6" height="42" rx="1.8" fill="#2A2A32"/>
-  <rect x="14" y="50" width="26" height="5" rx="2.5" fill="#2A2A32"/>
-  <rect x="10" y="55" width="34" height="4" rx="2" fill="#424252"/>
+  <!-- minimal rounded pennant — warm brick on a soft charcoal pole -->
+  <path d="M24 8 L48 17 Q50 18 48 19.5 L24 29 Z" fill="#BD4D3F"/>
+  <path d="M24 8 L48 17 Q50 18 48 19.5 L24 29 Z" fill="#ffffff" opacity="0.14" transform="translate(0.5 -0.5)"/>
+  <rect x="22" y="7" width="3.6" height="42" rx="1.8" fill="#33302A"/>
+  <rect x="14" y="50" width="26" height="5" rx="2.5" fill="#33302A"/>
+  <rect x="10" y="55" width="34" height="4" rx="2" fill="#55504A"/>
 </svg>

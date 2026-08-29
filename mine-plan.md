@@ -48,7 +48,7 @@ re-runnable headless via `window.MINE`).
   keys so edges genuinely touch. Shape masks: analytic (circle, diamond,
   ring, heart, swiss-cheese gaps) and pixel-art (skull, cat, star, invader);
   the largest connected component survives masking.
-- **Provably fair**: board = pure function of `(spec, seed, start)`.
+- **Seeded boards**: board = pure function of `(spec, seed, start)`.
   Mulberry32 seeded by xmur3; share links (`#s=`) and challenges (`#c=`)
   carry the canonical spec, so everyone digs the identical field (shared
   boards fix a marked safe-start cell; fresh boards guarantee a safe first
@@ -120,10 +120,17 @@ re-runnable headless via `window.MINE`).
 
 ## Theming
 
-- Minimal light (default) and dark themes built from the attached palette
-  (embedded verbatim as CSS tokens), neumorphic tiles with edge-lit bevels;
-  Retro theme = Win3.1 homage (silver bevels, red LCD counters, classic
-  number colors) that also swaps to the retro art pack. `prefers-reduced-motion`
+- Default light theme is a **cozy cream** — warm paper ground, ivory tiles
+  (never pure white), soft warm shadows, muted warm number colors; dark is a
+  warmed charcoal. Both are built over the attached palette (embedded
+  verbatim as CSS tokens). Retro theme = Win3.1 homage (silver bevels, red
+  LCD counters, classic number colors) that also swaps to the retro art
+  pack. The header is a 3-column grid (HUD truly centered), flat and
+  shadow-free; the new-board control is a minimal restart glyph that tints
+  by game state (no smiley). Story chapters carry their own board flavors
+  (parchment, moss, honey, sea glass, twilight, blush, bone…) via
+  `Renderer.setFlavor` — a per-board palette overlay that any mode can pass
+  through `meta.flavor`; retro ignores flavors. `prefers-reduced-motion`
   deliberately ignored; explosion shake + haptics, staggered flood reveal
   wave, win sweep + confetti.
 

@@ -1,15 +1,15 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <!-- the mine that got you — crimson burst behind the charcoal mine -->
+  <!-- the mine that got you — warm burst behind the charcoal mine -->
   <path d="M32 2 L37 20 L52 8 L44 25 L62 26 L45 33 L58 47 L40 40 L38 62 L31 43 L18 58 L23 38 L3 39 L20 30 L8 14 L26 23 Z"
-        fill="#F73D3D" opacity="0.9"/>
+        fill="#D25C4C" opacity="0.9"/>
   <path d="M32 10 L35.5 22 L46 15 L40.5 26.5 L54 28 L41.5 33 L50 43 L37.5 38.5 L36 54 L31 40 L21 51 L25 37 L11 37.5 L23.5 31 L15 20 L27.5 25 Z"
         fill="#FFD166" opacity="0.95"/>
-  <g stroke="#2A2A32" stroke-width="3.4" stroke-linecap="round">
+  <g stroke="#33302A" stroke-width="3.4" stroke-linecap="round">
     <line x1="32" y1="14" x2="32" y2="50"/>
     <line x1="14" y1="32" x2="50" y2="32"/>
     <line x1="19.3" y1="19.3" x2="44.7" y2="44.7"/>
     <line x1="44.7" y1="19.3" x2="19.3" y2="44.7"/>
   </g>
-  <circle cx="32" cy="32" r="12.5" fill="#141418"/>
+  <circle cx="32" cy="32" r="12.5" fill="#1F1D18"/>
   <circle cx="28" cy="28" r="3.6" fill="#FFD166"/>
 </svg>
