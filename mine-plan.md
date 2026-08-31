@@ -136,9 +136,9 @@ re-runnable headless via `window.MINE`).
   a deeper linen, and both hidden and revealed cells alternate a ~2%
   two-tone checker by (col+row) parity — woven-cloth texture that also makes
   rows countable. Figure/ground: page → mat → open linen → raised tiles.
-- **Motion**: staggered flood-reveal wave, then each number pops in with a
-  little ease-out-back overshoot; hovered tiles lift toward you (eased, the
-  cast shadow grows); planting a flag kicks up a dust puff; the win sweep
+- **Motion**: staggered flood-reveal wave (numbers land instantly with their
+  tile — no per-number animation, snappiness wins); hovered tiles lift toward
+  you (eased, the cast shadow grows); planting a flag kicks up a dust puff; the win sweep
   rains themed confetti (paper strips + tiny flags + sparkles + dots — plain
   paper in retro); explosion shake + haptics. Countdown's final 10 seconds
   put a heartbeat on the clock and breathe a warm vignette at the stage

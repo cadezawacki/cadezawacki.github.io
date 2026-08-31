@@ -3110,7 +3110,6 @@ const Renderer = (() => {
 
   // animation registry
   const revealAnims = new Map();           // i -> {t0, dur}
-  const numPops = new Map();               // i -> t0 (number pop-in after the tile flips)
   let flagPops = new Map();                // i -> t0
   let dustFx = [];                         // flag-plant dust motes
   let pulseCells = null;                   // {cells:[], t0}
@@ -3189,7 +3188,7 @@ const Renderer = (() => {
   /* ---- geometry precompute per game ---- */
   function setGame(g) {
     game = g;
-    revealAnims.clear(); flagPops.clear(); numPops.clear(); dustFx = [];
+    revealAnims.clear(); flagPops.clear(); dustFx = [];
     pulseCells = null; boomFx = null; sweepFx = null;
     confetti = null;                   // last game's celebration doesn't follow us
     pressed = new Set(); hoverI = -1; cursorI = -1;
@@ -3507,18 +3506,14 @@ const Renderer = (() => {
       if (cell.cx < x0 - 2 || cell.cx > x1 + 2 || cell.cy < y0 - 2 || cell.cy > y1 + 2) continue;
       let s = paused ? ST_HIDDEN : game.state[i];   // paused: hide everything (no peeking)
 
-      // reveal animation: draw as revealed, then hidden tile shrinking on top;
-      // once the cover lifts, the number pops in with a little overshoot
+      // reveal animation: draw as revealed, then hidden tile shrinking on top
       const anim = revealAnims.get(i);
       let coverP = 0;
       if (anim && !paused) {
         const p = (now - anim.t0) / anim.dur;
         if (p < 0) { s = ST_HIDDEN; animating = true; }
         else if (p < 1) { coverP = 1 - p; animating = true; }
-        else {
-          revealAnims.delete(i);
-          if (soft && game.adj && game.adj[i] > 0) numPops.set(i, anim.t0 + anim.dur);
-        }
+        else revealAnims.delete(i);
       }
 
       const isMine = game.generated && game.mines[i] === 1;
@@ -3539,29 +3534,12 @@ const Renderer = (() => {
           drawAsset(fatal ? 'boom' : 'mine', cell.cx, cell.cy, cell.rIn * 1.5);
         } else if (s === ST_REVEALED && game.adj && game.adj[i] > 0 && !isMine && cam.scale > 5.5) {
           const n = game.adj[i];
-          let nScale = 1, nAlpha = 1;
-          const np = numPops.get(i);
-          if (np != null) {
-            const q = (now - np) / 230;
-            if (q >= 1) numPops.delete(i);
-            else if (q <= 0) { nScale = 0; }
-            else {
-              const u = q - 1;                       // easeOutBack overshoot
-              nScale = 1 + 2.70158 * u * u * u + 1.70158 * u * u;
-              nAlpha = clamp(q * 2.4, 0, 1);
-              animating = true;
-            }
-          }
-          if (nScale > 0.02) {
-            const fs = cell.rIn * 1.18 * cam.scale * nScale;
-            const nudge = cell.up === true ? fs * 0.12 : cell.up === false ? -fs * 0.12 : 0;
-            const nsx = (cell.cx - cam.x) * cam.scale, nsy = (cell.cy - cam.y) * cam.scale + nudge;
-            ctx.font = '600 ' + fs + 'px ' + (themeName === 'retro' ? 'Tahoma, monospace' : FONT_NUM);
-            ctx.fillStyle = pal.numbers[Math.min(n, pal.numbers.length - 1)] || pal.numbers[8];
-            if (nAlpha < 1) { ctx.save(); ctx.globalAlpha = nAlpha; }
-            ctx.fillText(String(n), nsx, nsy);
-            if (nAlpha < 1) ctx.restore();
-          } else animating = true;
+          const fs = cell.rIn * 1.18 * cam.scale;
+          const nudge = cell.up === true ? fs * 0.12 : cell.up === false ? -fs * 0.12 : 0;
+          const nsx = (cell.cx - cam.x) * cam.scale, nsy = (cell.cy - cam.y) * cam.scale + nudge;
+          ctx.font = '600 ' + fs + 'px ' + (themeName === 'retro' ? 'Tahoma, monospace' : FONT_NUM);
+          ctx.fillStyle = pal.numbers[Math.min(n, pal.numbers.length - 1)] || pal.numbers[8];
+          ctx.fillText(String(n), nsx, nsy);
         }
       } else {
         // raised tile (hidden / flag / question)
@@ -3818,16 +3796,10 @@ const Renderer = (() => {
     }
 
     // purge finished entries for off-screen cells so the raf loop can rest
-    if (revealAnims.size || flagPops.size || numPops.size) {
-      for (const [k, a] of revealAnims) {
-        if (now - (a.t0 + a.dur) > 40) {
-          revealAnims.delete(k);
-          if (soft && game.adj && game.adj[k] > 0) numPops.set(k, a.t0 + a.dur);
-        }
-      }
+    if (revealAnims.size || flagPops.size) {
+      for (const [k, a] of revealAnims) if (now - (a.t0 + a.dur) > 40) revealAnims.delete(k);
       for (const [k, t] of flagPops) if (now - t > 250) flagPops.delete(k);
-      for (const [k, t] of numPops) if (now - t > 280) numPops.delete(k);
-      if (revealAnims.size || flagPops.size || numPops.size) animating = true;
+      if (revealAnims.size || flagPops.size) animating = true;
     }
     return drawFx(now) || animating;
   }
