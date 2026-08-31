@@ -1396,15 +1396,17 @@ document.querySelectorAll('.modal-overlay').forEach(ov => {
 });
 
 let _confirmCb = null;
-window.askConfirm = (title, desc, cb, yesLabel) => {
+let _confirmNoCb = null;
+window.askConfirm = (title, desc, cb, yesLabel, onNo) => {
   $('confirm-title').textContent = title;
   $('confirm-desc').textContent = desc || '';
   $('confirm-yes').textContent = yesLabel || 'Confirm';
   _confirmCb = cb;
+  _confirmNoCb = onNo || null;
   openModal('confirm-overlay');
 };
-$('confirm-yes').addEventListener('click', () => { closeModal('confirm-overlay'); const cb = _confirmCb; _confirmCb = null; if (cb) cb(); });
-$('confirm-no').addEventListener('click', () => { _confirmCb = null; closeModal('confirm-overlay'); });
+$('confirm-yes').addEventListener('click', () => { closeModal('confirm-overlay'); const cb = _confirmCb; _confirmCb = null; _confirmNoCb = null; if (cb) cb(); });
+$('confirm-no').addEventListener('click', () => { const no = _confirmNoCb; _confirmCb = null; _confirmNoCb = null; closeModal('confirm-overlay'); if (no) no(); });
 
 /* ============================================
    §01 STORE — localStorage wrapper (ported from txt.html)
@@ -3696,6 +3698,7 @@ const Notes = (() => {
       const mir = {};
       for (const id of live) mir[id] = { name: idx[id].name, color: idx[id].color || 'teal' };
       try { store.set(MIRROR_KEY, JSON.stringify(mir)); } catch {}
+      try { store.remove('ppc-wipe-dismissed'); } catch {}
       return;
     }
     if (wipePrompted || !syncState.connected) return;
@@ -3710,10 +3713,27 @@ const Notes = (() => {
     }
     const n = Object.keys(mir).length;
     if (!n) return;
+    const sig = Object.keys(mir).sort().join(',');
+    if (store.get('ppc-wipe-dismissed') === sig) return;   // already declined this exact set
     wipePrompted = true;
-    askConfirm('Server has no rooms — restore ' + n + ' from this device?',
-      'This device still remembers them. Restore puts them back for both of you. (If you deleted them on purpose, cancel.)',
-      () => { restoreFromDevice(mir); }, 'Restore');
+    // The watch hands us the CACHED value before the server snapshot lands —
+    // a stale empty cache used to fire this prompt on every single open even
+    // though the server was fine. Never prompt on cache alone: confirm the
+    // emptiness with a fresh no-store REST read first.
+    (async () => {
+      try {
+        const r = await fetch(FB_URL + '/' + PPC_BASE + '/notes/index.json', { cache: 'no-store' });
+        const server = await r.json();
+        if (server && Object.values(server).some(e => e && e.name)) {
+          wipeCheck(server);   // server is fine — adopt it into the mirror, no prompt
+          return;
+        }
+      } catch { return; }   // can't verify → never prompt on doubt
+      askConfirm('Server has no rooms — restore ' + n + ' from this device?',
+        'This device still remembers them. Restore puts them back for both of you. (If you deleted them on purpose, cancel.)',
+        () => { restoreFromDevice(mir); }, 'Restore',
+        () => { try { store.set('ppc-wipe-dismissed', sig); } catch {} });
+    })();
   }
   async function restoreFromDevice(mir) {
     let restored = 0;
@@ -3898,10 +3918,11 @@ const Notes = (() => {
     `<button class="menu-item" onclick="ppcNotesDoneToBottom()">⇣ Done to bottom</button>` +
     `<button class="menu-item" onclick="ppcNotesClearChecked()">✓ Clear checked</button>`;
   APPS.notes.stat = statText;
-  APPS.notes.onConnect = () => {
-    if (roomId) reconcile(roomId);
-    if (currentApp === 'notes' || currentApp === 'today') wipeCheck(index);
-  };
+  // NOTE: no wipeCheck here — this module's `index` stays {} until the notes
+  // screen mounts, and running the guard against that unloaded value on every
+  // connect edge is what made the restore prompt nag on each app open. The
+  // index watches re-fire on reconnect and carry the real data.
+  APPS.notes.onConnect = () => { if (roomId) reconcile(roomId); };
 
   return { openRoom, get roomId() { return roomId; }, _mapAuthors: mapAuthors, _deriveAuthors: deriveAuthors, _merge3: merge3,
     _wipeCheck: wipeCheck, _restoreFromDevice: restoreFromDevice,
