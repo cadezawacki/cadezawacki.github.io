@@ -2,7 +2,7 @@
 
 Status: **as-built**. This documents what shipped in `mine.html` + `mine/`,
 how it mirrors the txt.html / ppc.html infrastructure, and where each piece
-of the feature spec landed. Verified by 58 Node engine tests + 51 Playwright
+of the feature spec landed. Verified by 67 Node engine tests + 66 Playwright
 browser tests at build time (suites live outside the repo; the engine is
 re-runnable headless via `window.MINE`).
 
@@ -10,12 +10,14 @@ re-runnable headless via `window.MINE`).
 
 | File | Role |
 |---|---|
-| `mine.html` | The whole app, one file (~232 KB), §-sectioned like ppc.html |
+| `mine.html` | The whole app, one file (~250 KB), §-sectioned like ppc.html |
 | `mine/assets/modern/*.svg` | Default board art (flag, mine, boom, question) |
 | `mine/assets/retro/*.svg` | Win3.1 nostalgia art pack |
+| `mine/icon-180.png`, `mine/icon-512.png` | Flag-mark app icons (apple-touch + manifest) |
+| `mines.webmanifest` | Install-to-homescreen manifest (standalone, cream) |
 | `mine/README.md` | How to swap art / add packs |
 | `tools/mine-make-login.mjs` | Regenerates the embedded login ciphertexts |
-| `sw.js` | Bumped to v97; precaches mine.html + both art packs; `mine` added to the app-shell fallback regex |
+| `sw.js` | Bumped to v100; precaches mine.html, both art packs, icons + manifest, and mine's fontshare stylesheet; `mine` in the app-shell fallback regex |
 
 ## Infrastructure mirror (txt/ppc parity)
 
@@ -117,23 +119,53 @@ re-runnable headless via `window.MINE`).
 - **Async challenges**: "beat my time" links carry spec+seed+start+result;
   the recipient's finish compares head-to-head and posts to the seed board.
 
-## Theming
+## Theming & design language
 
 - Default light theme is a **cozy cream** — warm paper ground, ivory tiles
   (never pure white), soft warm shadows, muted warm number colors; dark is a
   warmed charcoal. Both are built over the attached palette (embedded
-  verbatim as CSS tokens). Modern themes render tiles in a 'soft' style:
-  rounded corners + a cast shadow peeking through the gaps (no stroke
-  bevels), flat quiet revealed ground, a faint board mat behind the field,
-  and a thin cleared-progress hairline under the header; retro keeps its
-  classic hard bevels untouched. Retro theme = Win3.1 homage (silver bevels, red
+  verbatim as CSS tokens). Retro theme = Win3.1 homage (silver bevels, red
   LCD counters, classic number colors) that also swaps to the retro art
-  pack. The header is a 3-column grid (HUD truly centered), flat and
-  shadow-free; the new-board control is a minimal restart glyph that tints
-  by game state (no smiley). `Renderer.setFlavor` offers a per-board palette overlay any mode can
-  pass through `meta.flavor`; retro ignores flavors. `prefers-reduced-motion`
-  deliberately ignored; explosion shake + haptics, staggered flood reveal
-  wave, win sweep + confetti.
+  pack; every soft-theme flourish below deliberately skips retro.
+- **Typography**: Clash Display (fontshare) is the display voice — wordmark,
+  panel titles, end-card headlines and the board numbers themselves (canvas
+  preloads the face and repaints when it lands); General Sans stays the body,
+  JetBrains Mono the numerals-in-tables. Retro keeps Tahoma everywhere.
+- **Board depth**: raised ivory tiles cast real shadows onto an opaque board
+  mat (soft drop shadow below, hairline edge on top); the revealed ground is
+  a deeper linen, and both hidden and revealed cells alternate a ~2%
+  two-tone checker by (col+row) parity — woven-cloth texture that also makes
+  rows countable. Figure/ground: page → mat → open linen → raised tiles.
+- **Motion**: staggered flood-reveal wave, then each number pops in with a
+  little ease-out-back overshoot; hovered tiles lift toward you (eased, the
+  cast shadow grows); planting a flag kicks up a dust puff; the win sweep
+  rains themed confetti (paper strips + tiny flags + sparkles + dots — plain
+  paper in retro); explosion shake + haptics. Countdown's final 10 seconds
+  put a heartbeat on the clock and breathe a warm vignette at the stage
+  edges. A fresh untouched board whispers "tap/click anywhere to begin" in a
+  pill that fades on the first move. `prefers-reduced-motion` deliberately
+  ignored; the Animations toggle kills all of it.
+- **Sound**: a tiny synthesized WebAudio set (no samples, no network) — soft
+  pock on reveal with a hush on big floods, thock on flag, whump + sine-drop
+  on boom, warm G-major arpeggio on the clear, two-tone descent on timeout.
+  On by default at a low mix; Settings → Sound turns it off. Engine-safe:
+  every call no-ops without an AudioContext.
+- **Branding**: the flag mark (brick pennant, charcoal pole) is the favicon,
+  the wordmark prefix in the topbar + drawer, and the PNG app icons;
+  `mines.webmanifest` installs the game standalone over the cream.
+- **Chrome**: 3-column header grid (HUD truly centered), flat and
+  shadow-free; minimal restart glyph tinted by game state (no smiley); thin
+  cleared-progress hairline under the header; on phones (≤600px) a bottom
+  action bar (New game / Daily / Ranks) sits in thumb reach.
+- **Pickers**: preset cards carry live-palette mini-board thumbnails drawn at
+  each preset's true proportions (the four cards read as a size/danger
+  scale); shapes are chosen from silhouette chips rasterized from the real
+  masks; grid types carry square/hex/triangle glyphs.
+- **Leaderboards**: gold/silver/bronze medal chips on the top three, a
+  hairline bar under every row showing how close it runs to the leader, and
+  your own row tinted + outlined.
+- `Renderer.setFlavor` offers a per-board palette overlay any mode can pass
+  through `meta.flavor`; retro ignores flavors.
 
 ## Notes for future work
 

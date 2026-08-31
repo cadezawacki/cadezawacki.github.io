@@ -13,7 +13,7 @@
 //   - Firebase realtime DB: bypass (live data, needs network)
 // ============================================
 
-const CACHE_VERSION = 99;
+const CACHE_VERSION = 100;
 const CACHE_NAME = `cade-v${CACHE_VERSION}`;
 
 // Same-origin pages to precache on install.
@@ -33,6 +33,9 @@ const PRECACHE = [
   './mine/assets/retro/mine.svg',
   './mine/assets/retro/boom.svg',
   './mine/assets/retro/question.svg',
+  './mine/icon-180.png',
+  './mine/icon-512.png',
+  './mines.webmanifest',
   './assets/floorplan.jpeg',
   './assets/ppc-icon.png',
   './assets/ppc-icon-32.png',
@@ -45,6 +48,8 @@ const PRECACHE = [
 // stall / render unstyled when offline on iOS.
 const PRECACHE_CROSS_ORIGIN = [
   'https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600&f[]=jetbrains-mono@400,500&display=swap',
+  // mine.html adds Clash Display (its display face) to the same stack
+  'https://api.fontshare.com/v2/css?f[]=clash-display@500,600,700&f[]=general-sans@400,500,600&f[]=jetbrains-mono@400,500&display=swap',
   // IBM Plex (Google Fonts) — used by gif.html / index.html. Caching the CSS
   // lets the font load offline; the referenced gstatic font files get cached
   // on first use via the stale-while-revalidate fetch handler below.
