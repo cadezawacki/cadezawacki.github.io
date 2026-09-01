@@ -8,10 +8,12 @@
 //     precaching it keeps video import working offline
 //   - Spell-check dictionary (.aff/.dic): precached CORS-readable so the
 //     page can read them with fetch().text() while offline
+//   - mine.html + mine/assets/*: precached so Minesweeper (board art
+//     included) plays fully offline
 //   - Firebase realtime DB: bypass (live data, needs network)
 // ============================================
 
-const CACHE_VERSION = 99;
+const CACHE_VERSION = 101;
 const CACHE_NAME = `cade-v${CACHE_VERSION}`;
 
 // Same-origin pages to precache on install.
@@ -21,6 +23,19 @@ const PRECACHE = [
   './gif.html',
   './photo.html',
   './ppc.html',
+  './mine.html',
+  // mine.html board art packs (swappable in mine/assets/ — see mine/README.md)
+  './mine/assets/modern/flag.svg',
+  './mine/assets/modern/mine.svg',
+  './mine/assets/modern/boom.svg',
+  './mine/assets/modern/question.svg',
+  './mine/assets/retro/flag.svg',
+  './mine/assets/retro/mine.svg',
+  './mine/assets/retro/boom.svg',
+  './mine/assets/retro/question.svg',
+  './mine/icon-180.png',
+  './mine/icon-512.png',
+  './mines.webmanifest',
   './assets/floorplan.jpeg',
   './assets/ppc-icon.png',
   './assets/ppc-icon-32.png',
@@ -33,6 +48,8 @@ const PRECACHE = [
 // stall / render unstyled when offline on iOS.
 const PRECACHE_CROSS_ORIGIN = [
   'https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600&f[]=jetbrains-mono@400,500&display=swap',
+  // mine.html adds Clash Display (its display face) to the same stack
+  'https://api.fontshare.com/v2/css?f[]=clash-display@500,600,700&f[]=general-sans@400,500,600&f[]=jetbrains-mono@400,500&display=swap',
   // IBM Plex (Google Fonts) — used by gif.html / index.html. Caching the CSS
   // lets the font load offline; the referenced gstatic font files get cached
   // on first use via the stale-while-revalidate fetch handler below.
@@ -235,14 +252,14 @@ self.addEventListener('notificationclick', (e) => {
 // Serve cached HTML instantly, revalidate in background. Cache under the
 // requested URL (never under a hard-coded key) so sibling pages at the
 // SW's root scope can't overwrite an app's offline shell.
-// Only the app-shell pages (txt.html, ppc.html) get a shell fallback,
-// each strictly under its own canonical key.
+// Only the app-shell pages (txt.html, ppc.html, mine.html) get a shell
+// fallback, each strictly under its own canonical key.
 async function navigationHandler(request) {
   const cache = await caches.open(CACHE_NAME);
   const url = new URL(request.url);
   const shellMatch =
     url.origin === self.location.origin &&
-    url.pathname.match(/(^|\/)(txt|ppc)\.html$/);
+    url.pathname.match(/(^|\/)(txt|ppc|mine)\.html$/);
   const shellKey = shellMatch ? './' + shellMatch[2] + '.html' : null;
 
   const cached = await cache.match(request);
