@@ -822,6 +822,23 @@ svg[data-tool]:not([data-tool="select"]):not([data-tool="erase"]) .bld-shape { p
 .shop-row .sh-desc { color: var(--text-muted); font-size: 0.66rem; }
 .shop-row .sh-held { color: var(--accent); font-size: 0.64rem; font-family: var(--font-mono); }
 
+/* ---- arcade config modal ---- */
+.arc-flags { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 10px; }
+.arc-flag { display: flex; align-items: center; gap: 7px; font-size: 0.74rem; padding: 3px 0; }
+.arc-flag input { accent-color: var(--accent); width: 15px; height: 15px; }
+.arc-knobs { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; }
+.arc-knob { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 0.7rem; color: var(--text-muted); }
+.arc-knob input { width: 62px; padding: 4px 7px; font-size: 0.78rem; }
+.deck-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.deck-chip {
+  display: inline-flex; align-items: center; gap: 5px; font-size: 0.72rem;
+  background: var(--surface-2); border-radius: 20px; padding: 4px 6px 4px 11px;
+}
+.deck-chip button { color: var(--text-faint); font-size: 0.66rem; padding: 2px 5px; border-radius: 50%; }
+.deck-chip button:hover { color: var(--error); }
+.deck-add { display: flex; gap: 6px; margin-top: 7px; }
+.deck-add .form-input { flex: 1; padding: 6px 10px; font-size: 0.78rem; }
+
 /* ---- loser's lotto ---- */
 .lot-overlay { display: none; position: fixed; inset: 0; z-index: 390; background: rgba(10,10,10,0.6); align-items: center; justify-content: center; }
 .lot-overlay.open { display: flex; }
@@ -1200,6 +1217,19 @@ svg[data-tool]:not([data-tool="select"]):not([data-tool="erase"]) .bld-shape { p
     <div class="footer-spacer"></div>
     <span id="footer-presence"><span class="p-dot"></span><span id="footer-presence-txt"></span></span>
     <span id="footer-sync"></span>
+  </div>
+</div>
+
+<!-- ===== Arcade config ===== -->
+<div class="modal-overlay" id="arcade-overlay">
+  <div class="modal-dialog" style="width:380px">
+    <div class="modal-title">🎰 Arcade</div>
+    <div class="modal-desc">Shared between you two — every change recomputes scores instantly, history included.</div>
+    <div id="arcade-body"></div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal('arcade-overlay')">Cancel</button>
+      <button class="btn btn-primary" id="arc-save">Save for both</button>
+    </div>
   </div>
 </div>
 
@@ -6380,6 +6410,78 @@ const Fit = (() => {
     showToast('Rules updated for both of you', 'success');
   });
 
+  /* ---- arcade config screen ---- */
+  const ARC_FEATURES = [
+    ['ticker', '⚔️ Live duel ticker'], ['flame', '💜 Couple Flame'], ['nudge', '👉 Nudges'],
+    ['twin', '⚡ Twin strikes'], ['wheel', '🎡 Daily wheel'], ['noon', '🤠 High Noon'],
+    ['job', '🏦 Vault Job'], ['bounty', '💰 Bounty pot'], ['boss', '👹 Boss weekends'],
+    ['press', '🔴 Press your luck'], ['odds', '💸 Odds board'], ['lotto', '🎟 Loser\'s lotto'],
+    ['items', '🎒 Items & shop'], ['bomb', '💣 Glitter bombs'],
+  ];
+  const ARC_KNOBS = [
+    ['twin', 'Twin strike'], ['twinPerfect', 'Perfect twin'], ['assist', 'Nudge assist'],
+    ['coupleBonus', 'Both-sweep bonus'], ['coupleEvery', 'Date credit every (days)'],
+    ['noonPot', 'High Noon pot'], ['bombStake', 'Bomb stake'], ['betMax', 'Max bet'],
+    ['jobBonus', 'Vault Job hit'], ['bossBounty', 'Boss bounty'], ['bossHp', 'Boss HP'],
+    ['priceX2', '✖️2 price'], ['priceShield', '🛡 price'], ['priceUno', '🔄 price'],
+  ];
+  let _arcDecks = null;
+  function renderArcadeModal() {
+    const C = CFG();
+    const deckRow = (kind, title, hint) => `
+      <div class="settings-section-title" style="margin-top:12px">${title}</div>
+      <div class="form-hint" style="margin:2px 0 6px">${hint}</div>
+      <div class="deck-chips" data-deck="${kind}"></div>
+      <div class="deck-add"><input class="form-input" data-deckinp="${kind}" placeholder="add one…" maxlength="60">
+      <button class="btn" data-deckadd="${kind}">＋</button></div>`;
+    $('arcade-body').innerHTML = `
+      <div class="settings-section-title">Features</div>
+      <div class="arc-flags">${ARC_FEATURES.map(([f, label]) =>
+        `<label class="arc-flag"><input type="checkbox" data-flag="${f}"${FLAG(f) ? ' checked' : ''}><span>${label}</span></label>`).join('')}</div>
+      <div class="settings-section-title" style="margin-top:12px">Values</div>
+      <div class="arc-knobs">${ARC_KNOBS.map(([k, label]) =>
+        `<label class="arc-knob"><span>${label}</span><input class="form-input" type="number" min="0" data-knob="${k}" value="${C[k]}"></label>`).join('')}</div>
+      ${deckRow('rewards', '🎁 Reward deck', 'date credits + wheel prizes draw from these')}
+      ${deckRow('penalties', '🧦 Penalty deck', 'micro-forfeits (bomb detonations) draw from these')}`;
+    // deck chips repaint alone — a full re-render would wipe unsaved knob edits
+    function paintDeck(kind) {
+      const wrap = $('arcade-body').querySelector(`[data-deck="${kind}"]`);
+      wrap.innerHTML = _arcDecks[kind].map((d, i) =>
+        `<span class="deck-chip">${esc(d)}<button data-deckdel="${kind}:${i}">✕</button></span>`).join('');
+      wrap.querySelectorAll('[data-deckdel]').forEach(b => b.addEventListener('click', () => {
+        const [kk, i] = b.dataset.deckdel.split(':');
+        _arcDecks[kk].splice(+i, 1);
+        paintDeck(kk);
+      }));
+    }
+    paintDeck('rewards');
+    paintDeck('penalties');
+    $('arcade-body').querySelectorAll('[data-deckadd]').forEach(b => b.addEventListener('click', () => {
+      const kind = b.dataset.deckadd;
+      const inp = $('arcade-body').querySelector(`[data-deckinp="${kind}"]`);
+      const v = inp.value.trim();
+      if (v) { _arcDecks[kind].push(v); inp.value = ''; paintDeck(kind); }
+    }));
+  }
+  window.ppcArcade = () => {
+    closeAllMenus();
+    _arcDecks = JSON.parse(JSON.stringify(DECKS()));
+    renderArcadeModal();
+    openModal('arcade-overlay');
+  };
+  $('arc-save').addEventListener('click', () => {
+    const flags = {};
+    $('arcade-body').querySelectorAll('[data-flag]').forEach(cb => { flags[cb.dataset.flag] = cb.checked; });
+    const next = { ...(config || {}), flags, decks: _arcDecks };
+    $('arcade-body').querySelectorAll('[data-knob]').forEach(inp => {
+      const v = parseFloat(inp.value);
+      if (!isNaN(v) && v >= 0) next[inp.dataset.knob] = v;
+    });
+    KV.set('fit/config', next);
+    closeModal('arcade-overlay');
+    showToast('🎰 Arcade rules updated for both of you', 'success', 2600);
+  });
+
   /* ---- feed ---- */
   let fImg = null;    // pending photo dataURL
   let fTag = null;
@@ -6687,7 +6789,8 @@ const Fit = (() => {
     `<button class="menu-item" onclick="location.hash='#fit'">Habits</button>` +
     `<button class="menu-item" onclick="location.hash='#fit/feed'">Feed</button>` +
     `<button class="menu-item" onclick="location.hash='#fit/tools'">Timers</button>` +
-    `<button class="menu-item" onclick="ppcFitRules()">Scoring rules…</button>`;
+    `<button class="menu-item" onclick="ppcFitRules()">Scoring rules…</button>` +
+    `<button class="menu-item" onclick="ppcArcade()">🎰 Arcade…</button>`;
   APPS.fit.stat = () => doneCount(todayKey(), ME) + '/' + HABITS[ME].length + ' today';
 
   Settings.registerSetting({
