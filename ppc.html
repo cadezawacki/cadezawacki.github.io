@@ -6820,6 +6820,7 @@ const Fit = (() => {
       if (window.PPCToday) window.PPCToday.render();
     });
     KV.watch('fit/config', v => { config = v || {}; renderMain(); if (window.PPCToday) window.PPCToday.render(); });
+    watchFeedMonth();   // photo-finish bets read the current feed month from anywhere
     KV.watch('fit/arc', v => {
       arc = v ? JSON.parse(JSON.stringify(v)) : {};   // never mutate KV's cache
       try { nudgeToasts(); mintFlameCredits(); } catch (e) { console.error(e); }
@@ -6894,6 +6895,7 @@ const Fit = (() => {
     _score: { dayPoints, duelPoints, duelCalc, weekPoints, sweepStreak, habitStreak, weekKeys,
       wheelFor, jobFor, jobHit, noonFor, noonClaims, noonPotFor, bountyState, weekKeysOf,
       bossFor, bossDamage, twinPts, coupleStreak, oddsFor, photoProof, eventAdj: (u, k) => eventAdj(u, k, CFG()),
+      bombAdj: (u, k) => bombAdj(u, k, CFG()), betAdj: (u, k) => betAdj(u, k, CFG()),
       slotPts: (k, u, h) => slotPts(k, u, h, CFG()), CFG, FLAG, DECKS, seedHash } };
 })();
 window.PPCFit = Fit;
