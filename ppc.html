@@ -787,6 +787,54 @@ svg[data-tool]:not([data-tool="select"]):not([data-tool="erase"]) .bld-shape { p
 .hab-row.nudgeable:active { background: var(--surface-hover); }
 .hb-flame.dim { opacity: 0.45; font-size: 0.62rem; }
 
+/* ---- arcade strip + cards ---- */
+.arc-strip { display: flex; flex-direction: column; gap: 6px; margin: 8px 0 4px; }
+.arc-card {
+  font-size: 0.72rem; line-height: 1.45; padding: 8px 11px; border-radius: var(--radius-md);
+  background: var(--surface); border: 1px solid var(--border); color: var(--text-muted);
+  text-align: left; width: 100%;
+}
+.arc-card b { color: var(--text); }
+.arc-card.live { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 7%, var(--surface)); }
+.arc-card.done { opacity: 0.75; }
+.arc-card.btn-press { cursor: pointer; }
+.arc-card.press.btn-press { border-color: var(--error); animation: pressPulse 1.6s ease-in-out infinite; }
+@keyframes pressPulse { 0%,100% { box-shadow: 0 0 0 0 rgba(220,38,38,0.35); } 50% { box-shadow: 0 0 0 6px rgba(220,38,38,0); } }
+.arc-card.bomb.live { border-color: #eab308; }
+.arc-card .ob, .shop-row .ob, .lot-days .ob {
+  font-size: 0.66rem; font-weight: 700; padding: 4px 9px; border-radius: 7px;
+  background: var(--surface-2); color: var(--text); margin-left: 4px;
+}
+.arc-card .ob.go, .shop-row .ob.go, .lot-days .ob.go { background: var(--accent); color: #fff; }
+.odds-stake { display: inline-flex; align-items: center; gap: 6px; margin-left: 6px; }
+.odds-stake b { font-family: var(--font-mono); min-width: 18px; text-align: center; }
+.odds-note { color: var(--text-faint); font-size: 0.62rem; }
+.arc-card.rack .rk { font-family: var(--font-mono); font-size: 0.66rem; background: var(--surface-2); padding: 3px 7px; border-radius: 6px; margin-right: 2px; }
+.arc-card.rack .rk.on { background: var(--accent); color: #fff; }
+.arc-card.rack .rk.dim { opacity: 0.5; }
+.boss-name { font-family: var(--font-mono); font-weight: 700; font-size: 0.7rem; letter-spacing: 0.04em; }
+.boss-hp { height: 10px; border-radius: 5px; background: #16a34a; overflow: hidden; margin: 6px 0 4px; direction: rtl; }
+.boss-hp i { display: block; height: 100%; background: var(--error); }
+.boss-sub { font-size: 0.64rem; }
+.shop-head { font-family: var(--font-mono); font-weight: 700; font-size: 0.78rem; margin-bottom: 10px; }
+.shop-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--border); }
+.shop-row .sh-mid { flex: 1; font-size: 0.78rem; }
+.shop-row .sh-desc { color: var(--text-muted); font-size: 0.66rem; }
+.shop-row .sh-held { color: var(--accent); font-size: 0.64rem; font-family: var(--font-mono); }
+
+/* ---- loser's lotto ---- */
+.lot-overlay { display: none; position: fixed; inset: 0; z-index: 390; background: rgba(10,10,10,0.6); align-items: center; justify-content: center; }
+.lot-overlay.open { display: flex; }
+.lot-box { background: var(--surface); border-radius: 18px; padding: 20px; width: min(330px, 92vw); text-align: center; box-shadow: var(--shadow-lg); border-top: 4px solid #eab308; }
+.lot-head { font-family: var(--font-mono); font-weight: 800; letter-spacing: 0.1em; margin-bottom: 4px; }
+.lot-head span { font-weight: 400; font-size: 0.66rem; color: var(--text-muted); letter-spacing: 0; }
+.lot-grid { position: relative; display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin: 12px 0; }
+.lot-cell { display: grid; place-items: center; aspect-ratio: 1; font-size: 30px; background: var(--surface-2); border-radius: 10px; }
+.lot-scratch { position: absolute; inset: 0; width: 100%; height: 100%; border-radius: 10px; touch-action: none; }
+.lot-claim { font-size: 0.8rem; margin: 8px 0; }
+.lot-days { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin-top: 8px; }
+.lot-close { margin-top: 4px; }
+
 /* ---- celebration overlay ---- */
 .celebrate {
   position: fixed; inset: 0; z-index: 400; display: flex; align-items: center; justify-content: center;
@@ -971,6 +1019,7 @@ svg[data-tool]:not([data-tool="select"]):not([data-tool="erase"]) .bld-shape { p
 .td-post { display: flex; align-items: center; gap: 8px; padding: 4px 0; font-size: var(--text-sm); }
 .td-post .tdp-thumb img { width: 36px; height: 36px; object-fit: cover; border-radius: 9px; display: block; background: var(--surface-2); }
 .td-post .tdp-mid { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.td-arc { margin-top: 7px; font-size: 0.66rem; color: var(--text-muted); font-family: var(--font-mono); }
 .td-pills { display: flex; gap: 7px; }
 .td-pill {
   flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px;
@@ -1153,6 +1202,15 @@ svg[data-tool]:not([data-tool="select"]):not([data-tool="erase"]) .bld-shape { p
     <span id="footer-sync"></span>
   </div>
 </div>
+
+<!-- ===== Arcade: bottom sheet (shop) + lotto scratch card ===== -->
+<div class="modal-overlay" id="sheet-overlay">
+  <div class="modal-dialog" style="width:340px">
+    <div id="sheet-body"></div>
+    <div class="modal-actions"><button class="btn" onclick="closeModal('sheet-overlay')">Done</button></div>
+  </div>
+</div>
+<div class="lot-overlay" id="lotto-overlay"></div>
 
 <!-- ===== Celebration overlay (day seal, credits, boss kills) ===== -->
 <div class="celebrate" id="celebrate" hidden></div>
@@ -5867,6 +5925,338 @@ const Fit = (() => {
       sub: FLAG('flame') && isSweep(tk, 'C') && isSweep(tk, 'A') ? '💜 Couple Flame burns on' : (streak >= 3 ? '🔥 streak day ' + streak : '') });
   }
 
+  /* ==========================================================================
+     ARCADE UIs — one strip on the fit main screen that shows ONLY what is
+     live right now, so the arcade never buries the habits.
+     ========================================================================== */
+  const fmtMin = m => {
+    const h = Math.floor(m / 60), mm = m % 60;
+    const h12 = ((h + 11) % 12) + 1;
+    return h12 + (mm ? ':' + String(mm).padStart(2, '0') : '') + (h < 12 ? 'am' : 'pm');
+  };
+  function inventory(u) {
+    const inv = { x2: 0, shield: 0, uno: 0 };
+    for (const s of Object.values(A('shop'))) if (s && s.by === u && inv[s.kind] != null) inv[s.kind]++;
+    for (const users of Object.values(A('plays'))) {
+      const pl = (users || {})[u] || {};
+      if (pl.x2) inv.x2--;
+      if (pl.shield) inv.shield--;
+    }
+    for (const bombs of Object.values(A('bombs'))) {
+      for (const [planter, b] of Object.entries(bombs || {})) if (b && b.rev && OTHER(planter) === u) inv.uno--;
+    }
+    return inv;
+  }
+  function lastWeekLoser() {
+    const keys = weekKeys(-1);
+    const c = weekPoints('C', keys), a = weekPoints('A', keys);
+    if (c === a) return null;
+    return c < a ? 'C' : 'A';
+  }
+  const LOTTO_PRIZES = {
+    golden: { label: 'GOLDEN TICKET', sub: '+30 to open the week', icon: '🎫' },
+    x2day: { label: '2× MULTIPLIER DAY', sub: 'pick a day — everything doubles', icon: '✨' },
+    mulligan: { label: 'MULLIGAN', sub: 'retro-fill one missed habit', icon: '⏪' },
+    head15: { label: 'HEAD START', sub: '+15 right now', icon: '🚀' },
+  };
+  function lottoPrizeFor(monK, loser) {
+    const r = rand01('lotto:' + monK + loser);
+    return r < 0.05 ? 'golden' : r < 0.35 ? 'x2day' : r < 0.65 ? 'mulligan' : 'head15';
+  }
+
+  function arcadeStrip(tk) {
+    if (!arcadeOn(tk)) return '';
+    const now = new Date();
+    const nowMin = now.getHours() * 60 + now.getMinutes();
+    const cards = [];
+    // 🎡 wheel — today's wedge (if wild) + tomorrow's after the 8pm spin
+    const w = wheelFor(tk);
+    const tmK = dk(addDays(now, 1));
+    const wt = wheelFor(tmK);
+    if (FLAG('wheel') && (w.id !== 'vanilla' || (now.getHours() >= 20 && wt.id !== 'vanilla'))) {
+      let txt = w.id !== 'vanilla' ? `<b>${w.icon} ${w.label}</b> today` : '';
+      if (now.getHours() >= 20 && wt.id !== 'vanilla') txt += `${txt ? ' · ' : ''}8pm spin → tomorrow: <b>${wt.icon} ${wt.label}</b>`;
+      cards.push(`<div class="arc-card wheel">🎡 ${txt}</div>`);
+    }
+    // 🤠 high noon
+    const nn = noonFor(tk);
+    if (nn) {
+      const cl = noonClaims(tk), pot = noonPotFor(tk);
+      if (cl.C != null || cl.A != null) {
+        const winU = cl.C != null && cl.A != null ? (cl.C <= cl.A ? 'C' : 'A') : (cl.C != null ? 'C' : 'A');
+        cards.push(`<div class="arc-card noon done">🤠 HIGH NOON — <b>${USER_NAMES[winU]}</b> drew first: +${pot}${cl[OTHER(winU)] != null ? ' · runner-up +' + CFG().noonRunnerUp : ''}</div>`);
+      } else if (nowMin >= nn.startMin && nowMin < nn.endMin) {
+        cards.push(`<div class="arc-card noon live">🤠 <b>HIGH NOON — ${HM[nn.habit].label.toUpperCase()}. DRAW!</b> pot +${pot} · closes ${fmtMin(nn.endMin)}</div>`);
+      } else if (nowMin < nn.startMin) {
+        cards.push(`<div class="arc-card noon">🤠 standoff at <b>${fmtMin(nn.startMin)}</b> — first to a habit takes +${pot}</div>`);
+      }
+    }
+    // 🏦 vault job
+    const j = jobFor(tk);
+    if (j) {
+      if (jobHit(tk)) cards.push(`<div class="arc-card job done">🏦 <b>VAULT JOB HIT</b> — you both cashed +${CFG().jobBonus} (and 2× logs)</div>`);
+      else if (nowMin >= j.startMin && nowMin < j.endMin) cards.push(`<div class="arc-card job live">🏦 <b>THE VAULT IS OPEN</b> — logs pay 2× until ${fmtMin(j.endMin)}; both log = +${CFG().jobBonus} each</div>`);
+      else if (nowMin < j.startMin) cards.push(`<div class="arc-card job">🏦 vault job tonight <b>${fmtMin(j.startMin)}–${fmtMin(j.endMin)}</b> — 2× inside, jackpot if you both show</div>`);
+    }
+    // 🤔 wanted bounty
+    const bs = bountyState(weekKeysOf(tk));
+    if (bs) {
+      if (!bs.claimedBy) cards.push(`<div class="arc-card bounty">🤠 <b>WANTED: ${HM[bs.habit].label}</b> — pot ${bs.pot}, first log takes it</div>`);
+      else if (bs.claimK && (tk === bs.claimK || parseKey(tk) - parseKey(bs.claimK) < 2 * 86400000)) {
+        cards.push(`<div class="arc-card bounty done">🤠 bounty CLAIMED by <b>${bs.claimedBy === 'both' ? 'both (split!)' : USER_NAMES[bs.claimedBy]}</b> +${bs.claimedBy === 'both' ? Math.round(bs.pot / 2) : bs.pot}</div>`);
+      }
+    }
+    // 👹 boss weekend
+    const boss = bossFor(tk);
+    if (boss && tk >= boss.satK && tk <= boss.sunK) {
+      const dmg = Math.min(bossDamage(boss), boss.hp);
+      const dead = dmg >= boss.hp;
+      cards.push(`<div class="arc-card boss${dead ? ' done' : ''}">
+        <div class="boss-name">👹 ${boss.name}</div>
+        <div class="boss-hp"><i style="width:${100 - Math.round(dmg / boss.hp * 100)}%"></i></div>
+        <div class="boss-sub">${dead ? `<b>SLAIN — +${CFG().bossBounty} each + date credit</b>` : (boss.hp - dmg) + ' HP · every habit hits 10 · sweeps crit · same habit = tag team 15'}</div>
+      </div>`);
+    }
+    // 🔴 press your luck (evenings, winning, not yet pressed) + live wager
+    if (FLAG('press')) {
+      const yk = dk(addDays(now, -1));
+      const prY = (A('press')[yk] || {})[ME];
+      if (prY && duelPoints(ME, yk) > 0) {
+        cards.push(`<div class="arc-card press live">🔴 <b>WAGER LIVE</b> — win today's duel and yesterday's +${duelPoints(ME, yk)} doubles; lose and it zeroes</div>`);
+      }
+      const mineProj = duelCalc(ME, tk);
+      const pressed = (A('press')[tk] || {})[ME];
+      if (pressed) cards.push(`<div class="arc-card press">🔴 pressed — tonight's ${mineProj > 0 ? '+' + mineProj : 'duel'} rides on tomorrow</div>`);
+      else if (now.getHours() >= 18 && mineProj > 0) {
+        cards.push(`<button class="arc-card press btn-press" data-arc="press">🔴 <b>PRESS YOUR LUCK</b> — double tonight's +${mineProj} on tomorrow's duel</button>`);
+      }
+    }
+    // 💸 odds board (mornings) / bet slip
+    if (FLAG('odds')) {
+      const bet = (A('bets')[tk] || {})[ME];
+      const target = OTHER(ME);
+      const odds = oddsFor(target, tk);
+      if (bet) {
+        const swept = isSweep(tk, target);
+        cards.push(`<div class="arc-card odds${swept ? ' done' : ''}">💸 ${swept ? `<b>CASHED</b> — ${USER_NAMES[target]} swept, +${Math.round(bet.stake * (odds - 1))}${photoProof(target, tk) ? ' ×1.5 PHOTO FINISH' : ''}` : `bet slip: ${bet.stake} on ${USER_NAMES[target]} to sweep @ ${odds}×${photoProof(target, tk) ? ' · 📸 bonus armed' : ''}`}</div>`);
+      } else if (now.getHours() < 12) {
+        cards.push(`<div class="arc-card odds">💸 <b>${USER_NAMES[target]} to sweep today pays ${odds}×</b> <span class="odds-note">+50% if they post proof 📸 · locks at noon</span>
+          <span class="odds-stake"><button data-arc="stake-" class="ob">−</button><b id="ob-stake">${obStake}</b><button data-arc="stake+" class="ob">＋</button><button data-arc="bet" class="ob go">PLACE</button></span></div>`);
+      }
+    }
+    // 💣 bombs aimed at me / armed by me
+    if (FLAG('bomb')) {
+      const myBomb = (A('bombs')[tk] || {})[OTHER(ME)];
+      if (myBomb && !myBomb.rev && slotTs(tk, ME, myBomb.habit) == null) {
+        const inv = inventory(ME);
+        cards.push(`<div class="arc-card bomb live">💣 <b>${HM[myBomb.habit].label} is ticking</b> — do it and steal +${CFG().bombStake}${inv.uno > 0 ? ` <button class="ob" data-arc="uno">🔄 UNO ×${inv.uno}</button>` : ''}</div>`);
+      }
+      const armed = (A('bombs')[tk] || {})[ME];
+      if (armed) cards.push(`<div class="arc-card bomb">💣 armed on ${USER_NAMES[OTHER(ME)]}'s ${HM[armed.habit].label}${armed.rev ? ' — 🔄 REVERSED onto you!' : ''}</div>`);
+    }
+    // 🎟 loser's lotto
+    if (FLAG('lotto')) {
+      const monK = weekKeysOf(tk)[0];
+      const loser = lastWeekLoser();
+      if (loser === ME && !A('lotto')[monK]) {
+        cards.push(`<button class="arc-card lotto btn-press" data-arc="lotto">🎟 <b>LOSER'S LOTTO</b> — you dropped last week: scratch your comeback card</button>`);
+      }
+    }
+    // 🎒 item rack + shop
+    if (FLAG('items')) {
+      const inv = inventory(ME);
+      const held = Object.entries(inv).filter(([, n]) => n > 0);
+      const plays = playsFor(tk, ME);
+      const canX2 = inv.x2 > 0 && !plays.x2 && SHARED.every(h => slotTs(tk, ME, h) == null);
+      const canShield = inv.shield > 0 && !plays.shield;
+      cards.push(`<div class="arc-card rack">🎒 ${held.length ? held.map(([k, n]) =>
+        `<span class="rk">${{ x2: '✖️2', shield: '🛡', uno: '🔄' }[k]}×${n}</span>`).join(' ') : '<span class="rk dim">no items</span>'}
+        ${canX2 ? '<button class="ob" data-arc="playx2">play ✖️2</button>' : ''}
+        ${canShield ? '<button class="ob" data-arc="playshield">play 🛡</button>' : ''}
+        ${plays.x2 ? '<span class="rk on">✖️2 LIVE</span>' : ''}${plays.shield ? '<span class="rk on">🛡 UP</span>' : ''}
+        <button class="ob" data-arc="shop">SHOP</button></div>`);
+    }
+    return cards.length ? `<div class="arc-strip">${cards.join('')}</div>` : '';
+  }
+
+  let obStake = 5;
+  function wireArcade(el) {
+    el.querySelectorAll('[data-arc]').forEach(b => b.addEventListener('click', e => {
+      e.stopPropagation();
+      const act = b.dataset.arc;
+      const tk = todayKey();
+      const C = CFG();
+      if (act === 'press') {
+        askConfirm('Press your luck?', 'Tonight\'s +' + duelCalc(ME, tk) + ' doubles if you ALSO win tomorrow\'s duel — or zeroes if you don\'t. Your call is public.', () => {
+          KV.set('fit/arc/press/' + tk + '/' + ME, { ts: Date.now() });
+          showToast('🔴 PRESSED — tomorrow is for double', 'success', 3000);
+          haptic(40);
+        }, 'PRESS');
+      }
+      if (act === 'stake+') { obStake = Math.min(C.betMax, obStake + 1); renderMain(); }
+      if (act === 'stake-') { obStake = Math.max(1, obStake - 1); renderMain(); }
+      if (act === 'bet') {
+        const target = OTHER(ME);
+        KV.set('fit/arc/bets/' + tk + '/' + ME, { stake: obStake, ts: Date.now() });
+        showToast('💸 ' + obStake + ' on ' + USER_NAMES[target] + ' @ ' + oddsFor(target, tk) + '× — tell them you believe', 'success', 3200);
+      }
+      if (act === 'uno') {
+        askConfirm('Reverse the bomb?', 'It boomerangs onto ' + USER_NAMES[OTHER(ME)] + ' — same habit, same stakes. Spends your 🔄.', () => {
+          KV.set('fit/arc/bombs/' + tk + '/' + OTHER(ME) + '/rev', true);
+          showToast('🔄 NO U', 'success', 2400);
+        }, 'Reverse');
+      }
+      if (act === 'playx2') {
+        askConfirm('Play the ✖️2 chip?', 'Every point you score today doubles. If you blank, it fizzles publicly.', () => {
+          KV.set('fit/arc/plays/' + tk + '/' + ME + '/x2', Date.now());
+          showToast('✖️2 LIVE — no pressure', 'success', 2600);
+        }, 'Play it');
+      }
+      if (act === 'playshield') {
+        askConfirm('Raise the 🛡 shield?', 'Zeroes all duel damage against you today.', () => {
+          KV.set('fit/arc/plays/' + tk + '/' + ME + '/shield', Date.now());
+          showToast('🛡 shield up', 'success', 2200);
+        }, 'Raise it');
+      }
+      if (act === 'shop') openShop();
+      if (act === 'lotto') openLotto();
+    }));
+  }
+
+  /* ---- shop sheet ---- */
+  function openShop() {
+    const C = CFG();
+    const inv = inventory(ME);
+    const wk = weekPoints(ME, weekKeys(0));
+    const ITEMS = [
+      ['x2', '✖️2 Chip', 'play before your first log — the whole day doubles', C.priceX2],
+      ['shield', '🛡 Force Field', 'no duel damage against you for one day', C.priceShield],
+      ['uno', '🔄 Uno Reverse', 'boomerang an incoming glitter bomb', C.priceUno],
+    ];
+    showCtxSheet(`<div class="shop-head">🎒 ARMORY — you hold ${wk} pts this week</div>` +
+      ITEMS.map(([k, name, desc, cost]) =>
+        `<div class="shop-row"><span class="sh-mid"><b>${name}</b> <span class="sh-held">${inv[k] ? 'held ×' + inv[k] : ''}</span><br><span class="sh-desc">${desc}</span></span>
+         <button class="ob go" data-buy="${k}" data-cost="${cost}"${inv[k] >= 2 ? ' disabled' : ''}>${inv[k] >= 2 ? 'MAX 2' : '−' + cost + ' pts'}</button></div>`).join(''));
+    $('sheet-overlay').querySelectorAll('[data-buy]').forEach(b => b.addEventListener('click', () => {
+      const kind = b.dataset.buy, cost = +b.dataset.cost;
+      KV.set('fit/arc/shop/' + uid(), { by: ME, kind, cost, ts: Date.now() });
+      showToast('bought — it\'s in your rack', 'success', 2000);
+      closeModal('sheet-overlay');
+    }));
+  }
+  function showCtxSheet(html) {
+    $('sheet-body').innerHTML = html;
+    openModal('sheet-overlay');
+  }
+
+  /* ---- loser's lotto: scratch card ---- */
+  function openLotto() {
+    const tk = todayKey();
+    const monK = weekKeysOf(tk)[0];
+    const loser = lastWeekLoser();
+    if (loser !== ME || A('lotto')[monK]) return;
+    const prize = lottoPrizeFor(monK, ME);
+    // 3 of the prize + a pair of each other symbol, seeded shuffle — always one triple
+    const others = Object.keys(LOTTO_PRIZES).filter(p => p !== prize);
+    const cells = [prize, prize, prize, ...others.flatMap(p => [p, p])];
+    for (let i = cells.length - 1; i > 0; i--) {
+      const j = seedHash('shuf:' + monK + ':' + i) % (i + 1);
+      [cells[i], cells[j]] = [cells[j], cells[i]];
+    }
+    const el = $('lotto-overlay');
+    el.innerHTML = `<div class="lot-box">
+      <div class="lot-head">🎟 LOSER'S LOTTO<br><span>match 3 — scratch with your thumb</span></div>
+      <div class="lot-grid">${cells.map(c => `<span class="lot-cell">${LOTTO_PRIZES[c].icon}</span>`).join('')}
+        <canvas class="lot-scratch" id="lot-scratch"></canvas></div>
+      <div class="lot-claim" id="lot-claim" hidden></div>
+      <button class="btn lot-close" onclick="document.getElementById('lotto-overlay').classList.remove('open')">later</button>
+    </div>`;
+    el.classList.add('open');
+    const cv = $('lot-scratch');
+    const grid = cv.parentElement;
+    requestAnimationFrame(() => {
+      cv.width = grid.clientWidth; cv.height = grid.clientHeight;
+      const g = cv.getContext('2d');
+      g.fillStyle = '#9aa0a8';
+      g.fillRect(0, 0, cv.width, cv.height);
+      g.fillStyle = '#8a9098';
+      for (let i = 0; i < 40; i++) g.fillRect(seedHash('fx' + i) % cv.width, seedHash('fy' + i) % cv.height, 14, 3);
+      let scratched = 0, drawing = false;
+      const scratch = e => {
+        const r = cv.getBoundingClientRect();
+        g.globalCompositeOperation = 'destination-out';
+        g.beginPath();
+        g.arc(e.clientX - r.left, e.clientY - r.top, 20, 0, 7);
+        g.fill();
+        haptic(4);
+        if (++scratched === 40 || scratched === 90) checkDone();
+        if (scratched > 140) checkDone();
+      };
+      const checkDone = () => {
+        const d = g.getImageData(0, 0, cv.width, cv.height).data;
+        let clear = 0;
+        for (let i = 3; i < d.length; i += 160) if (d[i] === 0) clear++;
+        if (clear / (d.length / 160) > 0.55) revealLotto(monK, prize, cv);
+      };
+      cv.addEventListener('pointerdown', e => { drawing = true; cv.setPointerCapture(e.pointerId); scratch(e); });
+      cv.addEventListener('pointermove', e => { if (drawing) scratch(e); });
+      cv.addEventListener('pointerup', () => { drawing = false; });
+    });
+  }
+  function revealLotto(monK, prize, cv) {
+    cv.style.transition = 'opacity 400ms';
+    cv.style.opacity = '0';
+    setTimeout(() => cv.remove(), 420);
+    const P = LOTTO_PRIZES[prize];
+    const claim = $('lot-claim');
+    claim.hidden = false;
+    const tk = todayKey();
+    if (prize === 'x2day') {
+      const daysLeft = weekKeysOf(tk).filter(k => k >= tk);
+      claim.innerHTML = `<b>${P.icon} ${P.label}</b> — pick your day:<div class="lot-days">` +
+        daysLeft.map(k => `<button class="ob" data-ld="${k}">${k === tk ? 'today' : parseKey(k).toLocaleDateString([], { weekday: 'short' })}</button>`).join('') + '</div>';
+      claim.querySelectorAll('[data-ld]').forEach(b => b.addEventListener('click', () => claimLotto(monK, prize, b.dataset.ld)));
+    } else if (prize === 'mulligan') {
+      const missed = [];
+      for (let i = 1; i <= 3; i++) {
+        const k = dk(addDays(new Date(), -i));
+        for (const h of SHARED) if (slotTs(k, ME, h) == null && !skipAt(k, ME, h)) missed.push([k, h]);
+      }
+      claim.innerHTML = `<b>${P.icon} ${P.label}</b> — ${missed.length ? 'retro-fill one:' : 'nothing missed lately — converts to +15'}<div class="lot-days">` +
+        (missed.length ? missed.slice(0, 6).map(([k, h]) => `<button class="ob" data-lm="${k}|${h}">${HM[h].label} · ${k.slice(5)}</button>`).join('') :
+          `<button class="ob" data-lm="">take +15</button>`) + '</div>';
+      claim.querySelectorAll('[data-lm]').forEach(b => b.addEventListener('click', () => {
+        const [k, h] = (b.dataset.lm || '').split('|');
+        if (k && h) KV.set('fit/days/' + k + '/' + ME + '/' + h, Date.now());
+        claimLotto(monK, k && h ? prize : 'head15', k && h ? k + '|' + h : null);
+      }));
+    } else {
+      claim.innerHTML = `<b>${P.icon} ${P.label}</b> — ${P.sub}<div class="lot-days"><button class="ob go" data-lc="1">CLAIM</button></div>`;
+      claim.querySelector('[data-lc]').addEventListener('click', () => claimLotto(monK, prize, null));
+    }
+  }
+  function claimLotto(monK, prize, arg) {
+    KV.set('fit/arc/lotto/' + monK, { u: ME, prize, arg: arg || null, ts: Date.now() });
+    $('lotto-overlay').classList.remove('open');
+    const P = LOTTO_PRIZES[prize];
+    celebrate({ stamp: '🎟 ' + P.label, sub: prize === 'golden' ? 'walk into the kitchen holding this up' : P.sub, kind: ME === 'C' ? 'c' : 'a' });
+  }
+
+  /* ---- glitter bomb planting (long-press a partner row) ---- */
+  function plantBomb(h) {
+    const habit = h === 'wrk' ? 'exe' : h;
+    const now = new Date();
+    const targetK = now.getHours() < 12 ? todayKey() : dk(addDays(now, 1));
+    if ((A('bombs')[targetK] || {})[ME]) { showToast('You already have a bomb armed', 'error', 2000); return; }
+    askConfirm('💣 Glitter-bomb ' + USER_NAMES[OTHER(ME)] + '\'s ' + HM[habit].label + '?',
+      (targetK === todayKey() ? 'Today' : 'Tomorrow') + ': if they DO it they steal your +' + CFG().bombStake +
+      '; if they skip, it detonates — glitter, a micro-forfeit (' + (DECKS().penalties[seedHash('bp' + targetK) % Math.max(1, DECKS().penalties.length)] || 'a chore') + '), and you take +' + CFG().bombStake + '.',
+      () => {
+        KV.set('fit/arc/bombs/' + targetK + '/' + ME, { habit, ts: Date.now() });
+        showToast('💣 armed for ' + (targetK === todayKey() ? 'today' : 'tomorrow'), 'success', 2400);
+      }, 'ARM IT');
+  }
+
   function renderMain() {
     if (currentApp !== 'fit' || view !== 'main') return;
     const el = $('fit-main');
@@ -5900,6 +6290,7 @@ const Fit = (() => {
         ${coupleFlameHtml(tk)}
         ${tickerHtml(tk)}
       </div>
+      ${arcadeStrip(tk)}
       <div class="fit-subh">${MY_NAME} — ${doneCount(tk, ME)} of ${HABITS[ME].length}</div>
       ${HABITS[ME].map(h => habRow(ME, h, true)).join('')}
       <div class="fit-subh">${USER_NAMES[OTHER(ME)]} — ${doneCount(tk, OTHER(ME))} of ${HABITS[OTHER(ME)].length}</div>
@@ -5909,7 +6300,7 @@ const Fit = (() => {
           <span class="wg-nav"><button id="wg-prev">‹</button><button id="wg-next"${weekOffset >= 0 ? ' disabled style="opacity:.3"' : ''}>›</button></span></div>
         ${gv(weekOffset)}
       </div>
-      <div class="form-hint" style="text-align:center;margin-bottom:8px">tap = done · long-press = permitted skip</div>`;
+      <div class="form-hint" style="text-align:center;margin-bottom:8px">tap = done · long-press = skip${FLAG('nudge') ? ' · partner rows: tap = 👉 nudge' + (FLAG('bomb') ? ' · hold = 💣' : '') : ''}</div>`;
     $('fh-feed').addEventListener('click', () => { location.hash = '#fit/feed'; });
     el.querySelectorAll('.hab-row:not(.partner)').forEach(row => {
       const h = row.dataset.h;
@@ -5924,8 +6315,20 @@ const Fit = (() => {
       row.addEventListener('contextmenu', e => { e.preventDefault(); clearTimeout(lpT); });
       row.addEventListener('click', () => { if (!lpFired) toggleHabit(h); });
     });
-    el.querySelectorAll('.hab-row.nudgeable').forEach(row =>
-      row.addEventListener('click', () => sendNudge(row.dataset.h)));
+    el.querySelectorAll('.hab-row.nudgeable').forEach(row => {
+      // tap = nudge · long-press = glitter bomb
+      let lpT = 0, lpFired = false, sx = 0, sy = 0;
+      row.addEventListener('pointerdown', e => {
+        lpFired = false; sx = e.clientX; sy = e.clientY;
+        if (FLAG('bomb')) lpT = setTimeout(() => { lpFired = true; plantBomb(row.dataset.h); }, 550);
+      });
+      row.addEventListener('pointermove', e => { if (Math.hypot(e.clientX - sx, e.clientY - sy) > 10) clearTimeout(lpT); });
+      row.addEventListener('pointerup', () => clearTimeout(lpT));
+      row.addEventListener('pointercancel', () => clearTimeout(lpT));
+      row.addEventListener('contextmenu', e => { e.preventDefault(); clearTimeout(lpT); });
+      row.addEventListener('click', () => { if (!lpFired) sendNudge(row.dataset.h); });
+    });
+    wireArcade(el);
     $('wg-prev').addEventListener('click', () => { weekOffset--; renderMain(); });
     $('wg-next').addEventListener('click', () => { if (weekOffset < 0) { weekOffset++; renderMain(); } });
     updateFooterStat();
@@ -6309,7 +6712,25 @@ const Fit = (() => {
     };
   }
 
-  return { initGlobal, summary, quickToggle: toggleHabit,
+  function arcadeLine() {
+    const tk = todayKey();
+    if (!arcadeOn(tk)) return '';
+    const bits = [];
+    const w = wheelFor(tk);
+    if (FLAG('wheel') && w.id !== 'vanilla') bits.push(w.icon + ' ' + w.label);
+    const cl = noonClaims(tk);
+    const nn = noonFor(tk);
+    if (nn && cl && cl.C == null && cl.A == null) bits.push('🤠 noon ' + fmtMin(nn.startMin));
+    const j = jobFor(tk);
+    if (j && !jobHit(tk)) bits.push('🏦 vault ' + fmtMin(j.startMin));
+    const bs = bountyState(weekKeysOf(tk));
+    if (bs && !bs.claimedBy) bits.push('💰 pot ' + bs.pot);
+    const boss = bossFor(tk);
+    if (boss && tk >= boss.satK && tk <= boss.sunK && bossDamage(boss) < boss.hp) bits.push('👹 ' + (boss.hp - bossDamage(boss)) + ' HP');
+    return bits.slice(0, 3).join(' · ');
+  }
+
+  return { initGlobal, summary, arcadeLine, quickToggle: toggleHabit,
     _debug: () => ({ view, days, weekPoints: { C: weekPoints('C', weekKeys(0)), A: weekPoints('A', weekKeys(0)) }, crowns: { C: crowns('C'), A: crowns('A') } }),
     _score: { dayPoints, duelPoints, duelCalc, weekPoints, sweepStreak, habitStreak, weekKeys,
       wheelFor, jobFor, jobHit, noonFor, noonClaims, noonPotFor, bountyState, weekKeysOf,
@@ -6570,6 +6991,7 @@ const Today = (() => {
           <div class="duel-names" style="font-size:0.7rem"><span class="dn-c">Cade · ${s.weekC}</span><span class="dn-a">Avery · ${s.weekA}</span></div>
           <div class="duel-bar" style="height:8px"><i class="db-c" style="width:${wc}%"></i><i class="db-a" style="width:${100 - wc}%"></i></div>
         </div>
+        ${(() => { try { const l = Fit.arcadeLine(); return l ? `<div class="td-arc">${l}</div>` : ''; } catch { return ''; } })()}
       </div>
 
       <div class="td-card">
