@@ -760,6 +760,68 @@ svg[data-tool]:not([data-tool="select"]):not([data-tool="erase"]) .bld-shape { p
 .fit-head .fh-date { font-family: var(--font-mono); font-size: 0.62rem; color: var(--text-muted); letter-spacing: 0.06em; text-transform: uppercase; }
 .fit-head .fh-link { margin-left: auto; align-self: center; font-size: 0.72rem; font-weight: 600; color: var(--accent); padding: 5px 10px; border-radius: var(--radius-md); background: var(--surface-2); white-space: nowrap; }
 
+/* ---- arcade: couple flame + live duel ticker ---- */
+.cflame {
+  display: flex; align-items: center; gap: 9px; margin-top: 8px; padding: 7px 10px;
+  background: var(--auth-b); border-radius: var(--radius-md);
+}
+.cflame .cf-fire { font-size: 19px; filter: grayscale(1) opacity(0.45); }
+.cflame.lit .cf-fire { filter: none; animation: cfPulse 2.2s ease-in-out infinite; }
+@keyframes cfPulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.22); } }
+.cflame .cf-mid { flex: 1; font-size: 0.72rem; line-height: 1.3; }
+.cflame .cf-mid b { color: #6d5bc7; }
+.cflame .cf-sub { color: var(--text-muted); font-size: 0.64rem; }
+.cflame .cf-days { display: inline-flex; gap: 3px; }
+.cflame .cf-days i { width: 7px; height: 7px; border-radius: 50%; background: var(--border); display: block; }
+.cflame .cf-days i.on { background: #8b7ae0; }
+.ticker {
+  display: flex; align-items: center; gap: 8px; margin-top: 7px; font-size: 0.68rem;
+  color: var(--text-muted); font-family: var(--font-mono); flex-wrap: wrap;
+}
+.ticker .tk-up { color: var(--success); }
+.ticker .tk-down { color: var(--error); }
+.ticker .tk-count { margin-left: auto; }
+.ticker.hot { animation: tkHot 1.6s ease-in-out infinite; }
+@keyframes tkHot { 0%,100% { opacity: 1; } 50% { opacity: 0.55; } }
+.hab-row.nudgeable { border-style: dashed; }
+.hab-row.nudgeable:active { background: var(--surface-hover); }
+.hb-flame.dim { opacity: 0.45; font-size: 0.62rem; }
+
+/* ---- celebration overlay ---- */
+.celebrate {
+  position: fixed; inset: 0; z-index: 400; display: flex; align-items: center; justify-content: center;
+  background: rgba(10, 10, 10, 0.55); backdrop-filter: blur(2px);
+}
+.celebrate[hidden] { display: none; }   /* the class display beats the UA hidden rule */
+.celebrate .cel-box {
+  background: var(--surface); border-radius: 18px; padding: 26px 34px; text-align: center;
+  min-width: 230px; box-shadow: var(--shadow-lg); border-top: 4px solid var(--accent);
+  animation: celIn 320ms cubic-bezier(0.2, 1.6, 0.4, 1);
+}
+.celebrate .cel-box.kind-c { border-top-color: var(--user-c); }
+.celebrate .cel-box.kind-a { border-top-color: var(--user-a); }
+.celebrate .cel-box.kind-b { border-top-color: #8b7ae0; }
+@keyframes celIn { from { transform: scale(0.6) rotate(-2deg); opacity: 0; } to { transform: none; opacity: 1; } }
+.cel-stamp {
+  font-family: var(--font-mono); font-weight: 700; font-size: 1.05rem; letter-spacing: 0.18em;
+  color: var(--accent); border: 2px solid currentColor; display: inline-block; padding: 3px 12px;
+  border-radius: 7px; transform: rotate(-3deg); margin-bottom: 12px;
+}
+.kind-a .cel-stamp { color: var(--user-a); } .kind-c .cel-stamp { color: var(--user-c); } .kind-b .cel-stamp { color: #8b7ae0; }
+.cel-title { font-weight: 650; margin-bottom: 8px; }
+.cel-row { display: flex; justify-content: space-between; gap: 26px; font-size: 0.78rem; color: var(--text-muted); padding: 2px 0; }
+.cel-total { font-size: 2.4rem; font-weight: 800; font-family: var(--font-mono); margin-top: 8px; }
+.cel-sub { margin-top: 9px; font-size: 0.72rem; color: var(--text-muted); }
+.cel-conf { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+.cel-conf i {
+  position: absolute; top: -12px; width: 8px; height: 13px; border-radius: 2px;
+  animation: confFall 2.6s linear infinite;
+}
+@keyframes confFall {
+  0% { transform: translateY(-10vh) rotate(0); opacity: 1; }
+  100% { transform: translateY(110vh) rotate(720deg); opacity: 0.6; }
+}
+
 .duel-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 10px 12px; margin-bottom: 12px; }
 .duel-names { display: flex; justify-content: space-between; font-size: var(--text-sm); font-weight: 700; margin-bottom: 5px; }
 .duel-names .dn-c { color: var(--user-c); }
@@ -1091,6 +1153,9 @@ svg[data-tool]:not([data-tool="select"]):not([data-tool="erase"]) .bld-shape { p
     <span id="footer-sync"></span>
   </div>
 </div>
+
+<!-- ===== Celebration overlay (day seal, credits, boss kills) ===== -->
+<div class="celebrate" id="celebrate" hidden></div>
 
 <!-- ===== Settings modal ===== -->
 <div class="modal-overlay" id="settings-overlay">
@@ -5178,7 +5243,8 @@ const Fit = (() => {
   };
 
   let days = {};        // fit/days
-  let config = {};      // fit/config — shared scoring rules
+  let config = {};      // fit/config — shared scoring rules (+ arcade fields, flags, decks)
+  let arc = {};         // fit/arc — arcade event log (press/bets/bombs/plays/shop/lotto/nudges/credits)
   let timers = {};      // fit/timers — shared, multiple
   let feed = {};        // {ym: {id: post}}
   let feedMonths = [];  // loaded months, desc
@@ -5186,7 +5252,24 @@ const Fit = (() => {
   let unwatchFeed = null;
   let view = 'main';
   let weekOffset = 0;
-  const CFG = () => ({ pts: 10, sweep: 5, penalty: 2, duelWin: 3, duelLose: 2, ...(config || {}) });
+  const CFG = () => ({
+    pts: 10, sweep: 5, penalty: 2, duelWin: 3, duelLose: 2,
+    // arcade knobs (all editable in the Arcade screen)
+    twin: 8, twinPerfect: 15, assist: 2, coupleBonus: 10, coupleEvery: 7,
+    noonPot: 10, noonRunnerUp: 4, noonRollover: 8,
+    bombStake: 8, betMax: 10,
+    jobBonus: 25, bossBounty: 40, bossHp: 140,
+    priceX2: 12, priceShield: 10, priceUno: 15,
+    arcadeEpoch: '2026-09-01',   // arcade scoring applies from this day; history before it never rewrites
+    ...(config || {}),
+  });
+  // feature toggles: config.flags.<f> === false turns a mechanic off
+  const FLAG = f => (((config || {}).flags || {})[f]) !== false;
+  const DECKS = () => ({
+    rewards: ['massage', 'read to in bed', 'choose tv show'],
+    penalties: ['laundry', 'cat litter'],
+    ...((config || {}).decks || {}),
+  });
 
   /* ---- date helpers (local time — same household) ---- */
   const dk = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
@@ -5237,15 +5320,34 @@ const Fit = (() => {
     }
     return n;
   }
+  // per-slot points with arcade multipliers (wheel wedge, pre-noon, vault-job
+  // window, X2 chip, lotto 2× day). Pre-epoch this is exactly C.pts per slot,
+  // so history scores byte-identically to the pre-arcade app.
+  function slotPts(k, u, h, C) {
+    const ts = slotTs(k, u, h);
+    if (ts == null) return 0;
+    if (!arcadeOn(k)) return C.pts;
+    let m = 1;
+    const w = wheelFor(k);
+    if (w.id === h + '3') m *= 3;
+    if (w.id === 'morning2' && hourOf(ts) < 12) m *= 2;
+    if (inJob(k, ts)) m *= 2;
+    if (FLAG('items') && playsFor(k, u).x2) m *= 2;
+    if (lottoX2(u, k)) m *= 2;
+    return C.pts * m;
+  }
   function dayPoints(u, k) {
     const C = CFG();
     // med/str score individually; exercise and Cade's extra workout share ONE
     // scoring slot — either earns the points, both never double-count.
-    let scoringDone = ['med', 'str'].filter(h => didAt(k, u, h)).length;
-    if (didAt(k, u, 'exe') || didAt(k, u, 'wrk')) scoringDone++;
+    let base = 0, done = 0;
+    for (const h of SHARED) {
+      const p = slotPts(k, u, h, C);
+      if (p) { base += p; done++; }
+    }
     const mult = 1 + 0.05 * Math.min(sweepStreak(u, k), 10);
-    let p = scoringDone ? Math.round(scoringDone * C.pts * mult) : 0;
-    if (scoringDone && isSweep(k, u)) p += C.sweep;
+    let p = done ? Math.round(base * mult) : 0;
+    if (done && isSweep(k, u)) p += (arcadeOn(k) && wheelFor(k).id === 'sweep15') ? 15 : C.sweep;
     // Miss penalties only on closed days the app was in play (someone logged
     // something) — a shared vacation or pre-adoption history isn't a debt.
     if (k < todayKey() && (dayObj(k).C || dayObj(k).A)) {
@@ -5253,24 +5355,339 @@ const Fit = (() => {
       const missed = ['med', 'str'].filter(h => !resolvedAt(k, u, h)).length + (exeSlotOk(k, u) ? 0 : 1);
       p -= missed * C.penalty;
     }
+    if (arcadeOn(k)) p += eventAdj(u, k, C);
     return p;
   }
   function duelPoints(u, k) {
     if (k >= todayKey()) return 0;   // only closed days duel
+    return duelCalc(u, k);
+  }
+  // Same math without the closed-day guard — powers the live ticker projection.
+  function duelCalc(u, k) {
     const C = CFG();
     const o = OTHER(u);
+    const w = arcadeOn(k) ? wheelFor(k) : { id: 'vanilla' };
+    if (w.id === 'deadeven') return 0;
+    const dmult = w.id === 'duel2' ? 2 : 1;
+    const myShield = arcadeOn(k) && FLAG('items') && playsFor(k, u).shield;
     let p = 0;
     for (const h of SHARED) {
       if (skipAt(k, u, h) || skipAt(k, o, h)) continue;   // excused — no duel
       // the exercise duel honors the shared exe/wrk slot: a workout counts
       const fulfilled = (k2, u2) => didAt(k2, u2, h) || (h === 'exe' && didAt(k2, u2, 'wrk'));
       const me = fulfilled(k, u), them = fulfilled(k, o);
-      if (me && !them) p += C.duelWin;
-      if (!me && them) p -= C.duelLose;
+      if (me && !them) p += C.duelWin * dmult;
+      if (!me && them && !myShield) p -= C.duelLose * dmult;
     }
     return p;
   }
   const weekPoints = (u, keys) => keys.reduce((a, k) => a + dayPoints(u, k) + duelPoints(u, k), 0);
+
+  /* ==========================================================================
+     ARCADE ENGINE — every mechanic below is a pure function of fit/days +
+     fit/arc + fit/config, seeded by date keys so both phones (and the push
+     cron) agree without a server. Nothing here applies before arcadeEpoch,
+     so shipping it never rewrote history. Mirror any change into
+     tools/fit-push.mjs (the cron ports this kernel for notification copy).
+     ========================================================================== */
+  function seedHash(s) {
+    let h = 1779033703 ^ s.length;
+    for (let i = 0; i < s.length; i++) {
+      h = Math.imul(h ^ s.charCodeAt(i), 3432918353);
+      h = (h << 13) | (h >>> 19);
+    }
+    h = Math.imul(h ^ (h >>> 16), 2246822507);
+    h = Math.imul(h ^ (h >>> 13), 3266489909);
+    return (h ^= h >>> 16) >>> 0;
+  }
+  const rand01 = s => seedHash(s) / 4294967296;
+  const arcadeOn = k => k >= CFG().arcadeEpoch;
+  const A = kind => (arc || {})[kind] || {};
+
+  // one-slot completion timestamp (exe covers Cade's wrk)
+  function slotTs(k, u, h) {
+    const d = dayObj(k)[u] || {};
+    if (h === 'exe') {
+      const a = typeof d.exe === 'number' ? d.exe : null;
+      const b = typeof d.wrk === 'number' ? d.wrk : null;
+      return a != null && b != null ? Math.min(a, b) : (a != null ? a : b);
+    }
+    return typeof d[h] === 'number' ? d[h] : null;
+  }
+  const hourOf = ts => new Date(ts).getHours();
+  const sameDayMin = (a, b) => Math.abs(a - b) / 60000;
+
+  /* ---- B11 · Midnight Wheel — daily mutator, day rolls at 8pm ---- */
+  const WEDGES = [
+    { id: 'vanilla', w: 40, label: 'vanilla day', icon: '🎡' },
+    { id: 'med3', w: 6, label: 'Meditation pays 3×', icon: '🧘' },
+    { id: 'str3', w: 6, label: 'Stretch pays 3×', icon: '🙆' },
+    { id: 'exe3', w: 6, label: 'Exercise pays 3×', icon: '🏃' },
+    { id: 'morning2', w: 8, label: 'Pre-noon logs pay 2×', icon: '🌅' },
+    { id: 'sweep15', w: 8, label: 'Sweep bonus is +15', icon: '💰' },
+    { id: 'deadeven', w: 6, label: 'Dead even — duels OFF', icon: '🤝' },
+    { id: 'twinday', w: 6, label: 'Twin strikes pay double', icon: '⚡' },
+    { id: 'duel2', w: 7, label: 'Duels pay DOUBLE', icon: '⚔️' },
+    { id: 'nudge5', w: 7, label: 'Assists pay +5', icon: '👉' },
+  ];
+  function wheelFor(k) {
+    if (!arcadeOn(k) || !FLAG('wheel')) return WEDGES[0];
+    let r = rand01('wheel:' + k) * WEDGES.reduce((a, w) => a + w.w, 0);
+    for (const w of WEDGES) { r -= w.w; if (r < 0) return w; }
+    return WEDGES[0];
+  }
+
+  /* ---- B10 · Vault Job — seeded ~2 evening 2× windows a week ---- */
+  function jobFor(k) {
+    if (!arcadeOn(k) || !FLAG('job') || rand01('job:' + k) >= 2 / 7) return null;
+    const startMin = 17 * 60 + Math.floor(rand01('jobm:' + k) * 150);   // 5:00–7:30pm start, 90 min
+    return { startMin, endMin: startMin + 90 };
+  }
+  const minOfDay = ts => { const d = new Date(ts); return d.getHours() * 60 + d.getMinutes(); };
+  function inJob(k, ts) {
+    const j = jobFor(k);
+    return !!j && dk(new Date(ts)) === k && minOfDay(ts) >= j.startMin && minOfDay(ts) < j.endMin;
+  }
+  function jobHit(k) {   // both partners logged something inside the window
+    const j = jobFor(k);
+    if (!j) return false;
+    const logged = u => ['med', 'str', 'exe'].some(h => { const t = slotTs(k, u, h); return t != null && inJob(k, t); });
+    return logged('C') && logged('A');
+  }
+
+  /* ---- B5 · High Noon — seeded standoff (skips Vault Job days) ---- */
+  function noonFor(k) {
+    if (!arcadeOn(k) || !FLAG('noon') || jobFor(k) || rand01('noon:' + k) >= 1.5 / 7) return null;
+    const habit = SHARED[Math.floor(rand01('noonh:' + k) * SHARED.length)];
+    const startMin = 13 * 60 + Math.floor(rand01('noonm:' + k) * 210);   // 1:00–4:30pm, 90 min
+    return { habit, startMin, endMin: startMin + 90 };
+  }
+  function noonClaims(k) {   // {C: ts|null, A: ts|null} completions inside the window
+    const nn = noonFor(k);
+    if (!nn) return null;
+    const at = u => {
+      const t = slotTs(k, u, nn.habit);
+      return t != null && dk(new Date(t)) === k && minOfDay(t) >= nn.startMin && minOfDay(t) < nn.endMin ? t : null;
+    };
+    return { C: at('C'), A: at('A') };
+  }
+  function noonPotFor(k) {   // pot grows over trailing unclaimed standoffs
+    const C = CFG();
+    let pot = C.noonPot, d = parseKey(k), guard = 0;
+    for (;;) {
+      d = addDays(d, -1);
+      const pk = dk(d);
+      if (!arcadeOn(pk) || ++guard > 30) break;
+      const cl = noonClaims(pk);
+      if (!cl) continue;
+      if (cl.C != null || cl.A != null) break;   // someone claimed — chain ends
+      pot += C.noonRollover;
+    }
+    return pot;
+  }
+
+  /* ---- B15 · Bounty Pot — the week's WANTED habit ---- */
+  function bountyFor(monK) {
+    if (!FLAG('bounty') || !arcadeOn(monK)) return null;
+    return SHARED[Math.floor(rand01('bounty:' + monK) * SHARED.length)];
+  }
+  function bountyState(wkKeys) {   // {habit, pot, claimedBy, claimK, splitWith}
+    const monK = wkKeys[0];
+    const habit = bountyFor(monK);
+    if (!habit) return null;
+    const C = CFG();
+    let pot = C.noonRollover, claimedBy = null, claimK = null, split = false;
+    for (const k of wkKeys) {
+      if (k > todayKey()) break;
+      const tc = slotTs(k, 'C', habit), ta = slotTs(k, 'A', habit);
+      if (tc != null || ta != null) {
+        if (tc != null && ta != null && sameDayMin(tc, ta) < 1) { claimedBy = 'both'; split = true; }
+        else claimedBy = ta == null || (tc != null && tc < ta) ? 'C' : 'A';
+        claimK = k;
+        break;
+      }
+      if (k < todayKey()) pot += C.noonRollover;   // another day nobody logged it
+    }
+    return { habit, pot, claimedBy, claimK, split };
+  }
+
+  /* ---- B17 · Boss Weekend — every 3rd ISO week ---- */
+  function isoWeek(d) {
+    const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+    const dow = t.getUTCDay() || 7;
+    t.setUTCDate(t.getUTCDate() + 4 - dow);
+    const y0 = new Date(Date.UTC(t.getUTCFullYear(), 0, 1));
+    return Math.ceil(((t - y0) / 86400000 + 1) / 7);
+  }
+  const BOSS_NAMES = ['GLUTEUS MAXIMUS, DEVOURER OF REST DAYS', 'THE DREAD COUCH', 'PROCRASTINATRON 9000',
+    'BARON VON BLANKET', 'THE SNOOZE HYDRA', 'CAPTAIN EXCUSES'];
+  function bossFor(anyKeyInWeek) {   // {name, satK, sunK, hp} or null
+    if (!FLAG('boss')) return null;
+    const d = parseKey(anyKeyInWeek);
+    if (isoWeek(d) % 3 !== 0) return null;
+    const off = (d.getDay() + 6) % 7;                       // days since Monday
+    const sat = addDays(d, 5 - off), sun = addDays(d, 6 - off);
+    const satK = dk(sat), sunK = dk(sun);
+    if (!arcadeOn(satK)) return null;
+    return { name: BOSS_NAMES[seedHash('boss:' + satK) % BOSS_NAMES.length], satK, sunK, hp: CFG().bossHp };
+  }
+  function bossDamage(b) {
+    let dmg = 0;
+    for (const k of [b.satK, b.sunK]) {
+      if (k > todayKey()) continue;
+      for (const u of ['C', 'A']) {
+        for (const h of ['med', 'str', 'exe']) if (slotTs(k, u, h) != null) dmg += 10;
+        if (isSweep(k, u)) dmg += 15;                       // sweep crit
+      }
+      for (const h of ['med', 'str', 'exe']) {              // tag-team: same habit, same day
+        if (slotTs(k, 'C', h) != null && slotTs(k, 'A', h) != null) dmg += 15;
+      }
+    }
+    return dmg;
+  }
+
+  /* ---- B6 · Twin Strike + Couple Flame ---- */
+  function twinPts(u, k, C) {
+    if (!FLAG('twin')) return 0;
+    const mult = wheelFor(k).id === 'twinday' ? 2 : 1;
+    let p = 0;
+    for (const h of SHARED) {
+      const a = slotTs(k, 'C', h), b = slotTs(k, 'A', h);
+      if (a == null || b == null) continue;
+      const gap = sameDayMin(a, b);
+      if (gap <= 5) p += C.twinPerfect;
+      else if (gap <= 30) p += C.twin;
+    }
+    return p * mult;
+  }
+  function coupleStreak(endKey) {
+    if (!FLAG('flame')) return 0;
+    let n = 0, d = parseKey(endKey);
+    while (isSweep(dk(d), 'C') && isSweep(dk(d), 'A')) { n++; d = addDays(d, -1); if (n > 3650) break; }
+    return n;
+  }
+
+  /* ---- stored-event adjustments (press, bets, bombs, plays, shop, lotto,
+          nudges) + derived events — everything lands on day k ---- */
+  function pressAdj(u, k) {
+    const pr = (A('press')[k] || {})[u];
+    if (!FLAG('press') || !pr) return 0;
+    // void a third consecutive press
+    const back1 = dk(addDays(parseKey(k), -1)), back2 = dk(addDays(parseKey(k), -2));
+    if ((A('press')[back1] || {})[u] && (A('press')[back2] || {})[u]) return 0;
+    const d0 = duelPoints(u, k);
+    if (d0 <= 0) return 0;
+    const nextK = dk(addDays(parseKey(k), 1));
+    if (nextK >= todayKey()) return 0;                       // tomorrow not closed yet — wager pending
+    return duelPoints(u, nextK) > 0 ? d0 : -d0;              // double or nothing
+  }
+  function betAdj(u, k, C) {
+    if (!FLAG('odds')) return 0;
+    const b = (A('bets')[k] || {})[u];
+    if (!b || typeof b.stake !== 'number') return 0;
+    const target = OTHER(u);
+    const stake = Math.min(Math.max(1, Math.round(b.stake)), C.betMax);
+    if (isSweep(k, target)) {
+      const odds = oddsFor(target, k);
+      let win = Math.round(stake * (odds - 1));
+      if (photoProof(target, k)) win = Math.round(win * 1.5);   // PHOTO FINISH +50%
+      return win;
+    }
+    return k < todayKey() ? -stake : 0;                      // lost when the day closes
+  }
+  function oddsFor(target, k) {
+    // 1 / trailing-14-day sweep rate, clamped [1.2, 5] — derived from pre-k days only
+    let sweeps = 0;
+    for (let i = 1; i <= 14; i++) if (isSweep(dk(addDays(parseKey(k), -i)), target)) sweeps++;
+    const rate = Math.max(sweeps / 14, 0.2);
+    return Math.min(5, Math.max(1.2, Math.round(10 / rate) / 10));
+  }
+  function photoProof(u, k) {
+    const m = feed[k.slice(0, 7)] || {};
+    return Object.values(m).some(p => p && p.by === u && p.img && p.ts && dk(new Date(p.ts)) === k);
+  }
+  function bombAdj(u, k, C) {
+    if (!FLAG('bomb')) return 0;
+    let p = 0;
+    for (const [planter, bomb] of Object.entries(A('bombs')[k] || {})) {
+      if (!bomb || !bomb.habit) continue;
+      const effPlanter = bomb.rev ? OTHER(planter) : planter;   // Uno Reverse flips it
+      const effTarget = OTHER(effPlanter);
+      const defused = slotTs(k, effTarget, bomb.habit === 'wrk' ? 'exe' : bomb.habit) != null;
+      if (k >= todayKey() && !defused) continue;                // still ticking
+      if (defused) { if (u === effTarget) p += C.bombStake; if (u === effPlanter) p -= C.bombStake; }
+      else if (u === effPlanter) p += C.bombStake;              // detonated
+    }
+    return p;
+  }
+  function playsFor(k, u) { return (A('plays')[k] || {})[u] || {}; }
+  function shopAdj(u, k) {
+    if (!FLAG('items')) return 0;
+    let p = 0;
+    for (const s of Object.values(A('shop'))) {
+      if (s && s.by === u && s.ts && dk(new Date(s.ts)) === k) p -= (s.cost || 0);
+    }
+    return p;
+  }
+  function lottoAdj(u, k, C) {
+    if (!FLAG('lotto')) return 0;
+    let p = 0;
+    for (const [monK, cl] of Object.entries(A('lotto'))) {
+      if (!cl || cl.u !== u) continue;
+      if (cl.prize === 'head15' && k === monK) p += 15;
+      if (cl.prize === 'golden' && k === monK) p += 30;
+    }
+    return p;
+  }
+  function lottoX2(u, k) {   // "2× day" scratch prize aimed at day k
+    return FLAG('lotto') && Object.values(A('lotto')).some(cl => cl && cl.u === u && cl.prize === 'x2day' && cl.arg === k);
+  }
+  function assistAdj(u, k, C) {
+    if (!FLAG('nudge')) return 0;
+    const per = wheelFor(k).id === 'nudge5' ? 5 : C.assist;
+    let p = 0;
+    for (const n of Object.values(A('nudges')[k] || {})) {
+      if (!n || !n.habit || !n.ts) continue;
+      const t = slotTs(k, n.target, n.habit === 'wrk' ? 'exe' : n.habit);
+      if (t != null && t > n.ts && t - n.ts <= 2 * 3600000) {
+        if (u === n.by || u === n.target) p += per;           // both earn the assist
+      }
+    }
+    return p;
+  }
+  function eventAdj(u, k, C) {
+    let p = 0;
+    // couple flame both-sweep bonus
+    if (FLAG('flame') && isSweep(k, 'C') && isSweep(k, 'A')) p += C.coupleBonus;
+    // vault job joint hit
+    if (jobHit(k)) p += C.jobBonus;
+    // high noon pot
+    const cl = noonClaims(k);
+    if (cl && (cl.C != null || cl.A != null)) {
+      const pot = noonPotFor(k);
+      const win = cl.C != null && cl.A != null ? (cl.C <= cl.A ? 'C' : 'A') : (cl.C != null ? 'C' : 'A');
+      if (u === win) p += pot;
+      else if (cl[u] != null) p += C.noonRunnerUp;
+    }
+    // bounty
+    const bs = bountyState(weekKeysOf(k));
+    if (bs && bs.claimK === k) {
+      if (bs.claimedBy === 'both') p += Math.round(bs.pot / 2);
+      else if (bs.claimedBy === u) p += bs.pot;
+    }
+    // boss bounty lands on Sunday once slain
+    const boss = bossFor(k);
+    if (boss && k === boss.sunK && k <= todayKey() && bossDamage(boss) >= boss.hp) p += C.bossBounty;
+    p += twinPts(u, k, C) + assistAdj(u, k, C) + pressAdj(u, k) + betAdj(u, k, C) +
+      bombAdj(u, k, C) + shopAdj(u, k) + lottoAdj(u, k, C);
+    return p;
+  }
+  function weekKeysOf(k) {
+    const d = parseKey(k);
+    const off = (d.getDay() + 6) % 7;
+    return Array.from({ length: 7 }, (_, i) => dk(addDays(d, i - off)));
+  }
+
   function crowns(u) {
     // past complete weeks won this quarter
     const now = new Date();
@@ -5288,26 +5705,166 @@ const Fit = (() => {
   /* ---- today / main view ---- */
   const fmtT = ts => new Date(ts).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 
+  function nudgeFor(k, target, h) {
+    for (const n of Object.values(A('nudges')[k] || {})) {
+      if (n && n.target === target && (n.habit === h || (h === 'wrk' && n.habit === 'exe'))) return n;
+    }
+    return null;
+  }
   function habRow(u, h, mine) {
     const tk = todayKey();
     const val = (dayObj(tk)[u] || {})[h];
     const done = typeof val === 'number';
     const skipped = val === 'skip';
     const streak = habitStreak(u, h);
+    const nudge = !mine && FLAG('nudge') ? nudgeFor(tk, u, h) : null;
     let sub;
     if (done) sub = fmtT(val);
     else if (skipped) sub = 'skipped — excused';
+    else if (nudge) sub = '👉 nudged ' + fmtT(nudge.ts) + ' — assist pays double-sided';
     else if (h === 'wrk') sub = "Cade's extra · counts as exercise, never double";
+    else if (!mine) sub = 'tap to nudge ' + (u === 'A' ? 'her' : 'him');
     else {
       const otherDid = didAt(tk, OTHER(u), h);
       sub = otherDid ? USER_NAMES[OTHER(u)] + ' already did ' + (OTHER(u) === 'A' ? 'hers' : 'his') : 'not yet';
     }
-    return `<button class="hab-row${done ? ' done' : ''}${skipped ? ' skipped' : ''}${mine ? '' : ' partner'}" data-h="${h}" ${mine ? '' : 'disabled'}>
+    // flame reads 🔥 only from 3 days — below that a quiet growing ember
+    const flame = streak >= 3 ? `<span class="hb-flame">🔥 ${streak}</span>` :
+      streak > 0 ? `<span class="hb-flame dim">· ${streak}</span>` : '';
+    const nudgeable = !mine && !done && !skipped && FLAG('nudge');
+    return `<button class="hab-row${done ? ' done' : ''}${skipped ? ' skipped' : ''}${mine ? '' : ' partner'}${nudgeable ? ' nudgeable' : ''}" data-h="${h}" ${mine || nudgeable ? '' : 'disabled'}>
       <span class="hb-ic">${HM[h].icon}</span>
       <span class="hb-mid"><span class="hb-t">${HM[h].label}</span><br><span class="hb-s">${sub}</span></span>
-      ${streak ? `<span class="hb-flame">🔥 ${streak}</span>` : ''}
+      ${flame}
       <span class="hb-tick">${skipped ? '–' : '✓'}</span>
     </button>`;
+  }
+
+  /* ---- couple flame + live ticker (duel card) ---- */
+  function coupleFlameHtml(tk) {
+    if (!FLAG('flame') || !arcadeOn(tk)) return '';
+    const yk = dk(addDays(new Date(), -1));
+    const live = coupleStreak(tk) || coupleStreak(yk);
+    const every = CFG().coupleEvery;
+    const toNext = live ? every - (live % every || every) : every;
+    const doneToday = isSweep(tk, 'C') && isSweep(tk, 'A');
+    return `<div class="cflame${doneToday ? ' lit' : ''}">
+      <span class="cf-fire">💜</span>
+      <span class="cf-mid"><b>Couple Flame · ${live}</b><br>
+      <span class="cf-sub">${live ? (toNext === every && doneToday ? 'date credit minted! 🎟️' : toNext + ' day' + (toNext === 1 ? '' : 's') + ' to a date credit') : 'both sweep today to light it'}</span></span>
+      <span class="cf-days">${Array.from({ length: every }, (_, i) => `<i class="${i < (live % every || (live && doneToday ? every : 0)) ? 'on' : ''}"></i>`).join('')}</span>
+    </div>`;
+  }
+  function tickerHtml(tk) {
+    if (!FLAG('ticker') || !arcadeOn(tk)) return '';
+    const c = duelCalc('C', tk), a = duelCalc('A', tk);
+    const mine = ME === 'C' ? c : a, theirs = ME === 'C' ? a : c;
+    const fmt = n => (n > 0 ? '+' : '') + n;
+    const urgent = new Date().getHours() >= 20;
+    return `<div class="ticker${urgent && (mine < 0) ? ' hot' : ''}" id="duel-ticker">
+      <span>⚔️ if the day ended now:</span>
+      <b class="${mine >= 0 ? 'tk-up' : 'tk-down'}">you ${fmt(mine)}</b>
+      <b class="${theirs >= 0 ? 'tk-up' : 'tk-down'}">${USER_NAMES[OTHER(ME)]} ${fmt(theirs)}</b>
+      <span class="tk-count" id="tk-count">${tickerCountdown()}</span>
+    </div>`;
+  }
+  function tickerCountdown() {
+    const now = new Date();
+    if (now.getHours() < 20) return '';
+    const ms = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1) - now;
+    return '⏳ ' + Math.floor(ms / 3600000) + 'h' + String(Math.floor(ms / 60000) % 60).padStart(2, '0') + 'm';
+  }
+  setInterval(() => {
+    const el = document.getElementById('tk-count');
+    if (el) el.textContent = tickerCountdown();
+  }, 30000);
+
+  /* ---- nudges ---- */
+  function sendNudge(h) {
+    const tk = todayKey();
+    const habit = h === 'wrk' ? 'exe' : h;
+    if (nudgeFor(tk, OTHER(ME), habit)) { showToast('Already nudged today', 'error', 1600); return; }
+    KV.set('fit/arc/nudges/' + tk + '/' + uid(), { by: ME, target: OTHER(ME), habit });
+    haptic(15);
+    showToast('👉 Nudge sent — if it lands in 2h you BOTH get the assist', 'success', 2600);
+  }
+  const _seenNudges = new Set();
+  let _nudgeSeeded = false;
+  function nudgeToasts() {
+    const tk = todayKey();
+    for (const [id, n] of Object.entries(A('nudges')[tk] || {})) {
+      if (_seenNudges.has(id)) continue;
+      _seenNudges.add(id);
+      if (_nudgeSeeded && n && n.target === ME) {
+        const teases = ['tick tock…', 'the couch is not a personality', 'your move', 'do it for the flame 💜', 'points are watching'];
+        showToast('👉 ' + USER_NAMES[n.by] + ' nudged you: ' + (HM[n.habit] || {}).label + ' — ' + teases[seedHash(id) % teases.length], 'success', 5000);
+        haptic(60);
+      }
+    }
+    _nudgeSeeded = true;
+  }
+
+  /* ---- couple-flame date credits (idempotent deterministic mints) ---- */
+  function mintFlameCredits() {
+    if (!FLAG('flame')) return;
+    const every = CFG().coupleEvery;
+    const deck = DECKS().rewards;
+    for (let i = 0; i < 3; i++) {
+      const k = dk(addDays(new Date(), -i));
+      if (!arcadeOn(k)) continue;
+      const cs = coupleStreak(k);
+      if (cs > 0 && cs % every === 0 && !(A('credits')['flame-' + k])) {
+        const label = 'date credit — ' + deck[seedHash('fcred:' + k) % Math.max(1, deck.length)];
+        KV.set('fit/arc/credits/flame-' + k, { label, src: 'flame', ts: parseKey(k).getTime() });
+        celebrate({ stamp: '💜 DATE CREDIT', title: label, sub: 'Couple Flame day ' + cs + ' — earned together', kind: 'b' });
+      }
+    }
+  }
+
+  /* ---- celebration overlay (day seal, credits, kills — one shared layer) ---- */
+  function celebrate(o) {
+    const el = $('celebrate');
+    const conf = Array.from({ length: 26 }, (_, i) =>
+      `<i style="left:${(seedHash('c' + i) % 100)}%;animation-delay:${(i % 13) * 90}ms;background:var(--${['user-c', 'user-a', 'user-b', 'accent'][i % 4]})"></i>`).join('');
+    el.innerHTML = `<div class="cel-conf">${conf}</div>
+      <div class="cel-box kind-${o.kind || 'n'}">
+        ${o.stamp ? `<div class="cel-stamp">${o.stamp}</div>` : ''}
+        ${o.title ? `<div class="cel-title">${o.title}</div>` : ''}
+        ${(o.rows || []).map(r => `<div class="cel-row"><span>${r.label}</span><b>${r.val}</b></div>`).join('')}
+        ${o.total != null ? `<div class="cel-total" data-total="${o.total}">0</div>` : ''}
+        ${o.sub ? `<div class="cel-sub">${o.sub}</div>` : ''}
+      </div>`;
+    el.hidden = false;
+    haptic(o.total != null ? 80 : 40);
+    const totalEl = el.querySelector('.cel-total');
+    if (totalEl) {
+      const total = +totalEl.dataset.total;
+      const t0 = Date.now();
+      const tick = () => {
+        const f = Math.min(1, (Date.now() - t0) / 900);
+        totalEl.textContent = '+' + Math.round(total * (1 - Math.pow(1 - f, 3)));
+        if (f < 1 && !el.hidden) requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    }
+    clearTimeout(celebrate._t);
+    celebrate._t = setTimeout(() => { el.hidden = true; }, o.ms || 4200);
+  }
+  $('celebrate').addEventListener('click', () => { $('celebrate').hidden = true; });
+
+  function sealCelebration() {
+    const tk = todayKey(), C = CFG();
+    let base = 0;
+    for (const h of SHARED) base += slotPts(tk, ME, h, C);
+    const streak = sweepStreak(ME, tk);
+    const mult = 1 + 0.05 * Math.min(streak, 10);
+    const rows = [{ label: 'habits', val: '+' + base }];
+    if (mult > 1) rows.push({ label: 'streak ×' + mult.toFixed(2), val: '+' + (Math.round(base * mult) - base) });
+    rows.push({ label: 'sweep bonus', val: '+' + ((arcadeOn(tk) && wheelFor(tk).id === 'sweep15') ? 15 : C.sweep) });
+    const extras = arcadeOn(tk) ? eventAdj(ME, tk, C) : 0;
+    if (extras) rows.push({ label: 'arcade extras', val: (extras > 0 ? '+' : '') + extras });
+    celebrate({ stamp: 'DAY SEALED', rows, total: dayPoints(ME, tk), kind: ME === 'C' ? 'c' : 'a',
+      sub: FLAG('flame') && isSweep(tk, 'C') && isSweep(tk, 'A') ? '💜 Couple Flame burns on' : (streak >= 3 ? '🔥 streak day ' + streak : '') });
   }
 
   function renderMain() {
@@ -5340,6 +5897,8 @@ const Fit = (() => {
         <div class="duel-names"><span class="dn-c">Cade · ${pc}</span><span class="dn-a">Avery · ${pa}</span></div>
         <div class="duel-bar"><i class="db-c" style="width:${wc}%"></i><i class="db-a" style="width:${100 - wc}%"></i></div>
         <div class="duel-sub"><span>🏆 ${crowns('C')} · ${sweepStreak('C', tk) || sweepStreak('C', dk(addDays(new Date(), -1)))}🔥</span><span>this week's points</span><span>🏆 ${crowns('A')} · ${sweepStreak('A', tk) || sweepStreak('A', dk(addDays(new Date(), -1)))}🔥</span></div>
+        ${coupleFlameHtml(tk)}
+        ${tickerHtml(tk)}
       </div>
       <div class="fit-subh">${MY_NAME} — ${doneCount(tk, ME)} of ${HABITS[ME].length}</div>
       ${HABITS[ME].map(h => habRow(ME, h, true)).join('')}
@@ -5365,6 +5924,8 @@ const Fit = (() => {
       row.addEventListener('contextmenu', e => { e.preventDefault(); clearTimeout(lpT); });
       row.addEventListener('click', () => { if (!lpFired) toggleHabit(h); });
     });
+    el.querySelectorAll('.hab-row.nudgeable').forEach(row =>
+      row.addEventListener('click', () => sendNudge(row.dataset.h)));
     $('wg-prev').addEventListener('click', () => { weekOffset--; renderMain(); });
     $('wg-next').addEventListener('click', () => { if (weekOffset < 0) { weekOffset++; renderMain(); } });
     updateFooterStat();
@@ -5378,8 +5939,11 @@ const Fit = (() => {
     } else if (didAt(tk, ME, h)) {
       askConfirm('Undo ' + HM[h].label + '?', 'Removes today\'s checkmark.', () => KV.remove(path), 'Undo');
     } else {
+      const wasSweep = isSweep(tk, ME);
       KV.set(path, Date.now());
       haptic(18);
+      // the LAST tap of the day is the best moment — pay it out loudly
+      if (!wasSweep && isSweep(tk, ME) && arcadeOn(tk)) setTimeout(sealCelebration, 250);
     }
   }
   function skipHabit(h) {
@@ -5403,7 +5967,9 @@ const Fit = (() => {
   };
   $('rl-save').addEventListener('click', () => {
     const num = (id, dflt) => { const v = parseFloat($(id).value); return isNaN(v) || v < 0 ? dflt : v; };
+    // merge — a base-rules save must never wipe the arcade fields
     KV.set('fit/config', {
+      ...(config || {}),
       pts: num('rl-pts', 10), sweep: num('rl-sweep', 5), penalty: num('rl-pen', 2),
       duelWin: num('rl-win', 3), duelLose: num('rl-lose', 2),
     });
@@ -5687,11 +6253,18 @@ const Fit = (() => {
     _globalInit = true;
     KV.watch('fit/days', v => {
       days = v || {};
+      try { mintFlameCredits(); } catch (e) { console.error(e); }
       renderMain();
       updateFooterStat();
       if (window.PPCToday) window.PPCToday.render();
     });
     KV.watch('fit/config', v => { config = v || {}; renderMain(); if (window.PPCToday) window.PPCToday.render(); });
+    KV.watch('fit/arc', v => {
+      arc = v ? JSON.parse(JSON.stringify(v)) : {};   // never mutate KV's cache
+      try { nudgeToasts(); mintFlameCredits(); } catch (e) { console.error(e); }
+      renderMain();
+      if (window.PPCToday) window.PPCToday.render();
+    });
     KV.watch('fit/timers', v => { timers = v || {}; renderTools(); updateWakeLock(); });
     toolTimer = setInterval(toolTick, 250);   // countdown alerts fire from any screen
   }
@@ -5738,7 +6311,10 @@ const Fit = (() => {
 
   return { initGlobal, summary, quickToggle: toggleHabit,
     _debug: () => ({ view, days, weekPoints: { C: weekPoints('C', weekKeys(0)), A: weekPoints('A', weekKeys(0)) }, crowns: { C: crowns('C'), A: crowns('A') } }),
-    _score: { dayPoints, duelPoints, weekPoints, sweepStreak, habitStreak, weekKeys } };
+    _score: { dayPoints, duelPoints, duelCalc, weekPoints, sweepStreak, habitStreak, weekKeys,
+      wheelFor, jobFor, jobHit, noonFor, noonClaims, noonPotFor, bountyState, weekKeysOf,
+      bossFor, bossDamage, twinPts, coupleStreak, oddsFor, photoProof, eventAdj: (u, k) => eventAdj(u, k, CFG()),
+      slotPts: (k, u, h) => slotPts(k, u, h, CFG()), CFG, FLAG, DECKS, seedHash } };
 })();
 window.PPCFit = Fit;
 
