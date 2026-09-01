@@ -13,7 +13,7 @@
 //   - Firebase realtime DB: bypass (live data, needs network)
 // ============================================
 
-const CACHE_VERSION = 100;
+const CACHE_VERSION = 101;
 const CACHE_NAME = `cade-v${CACHE_VERSION}`;
 
 // Same-origin pages to precache on install.
@@ -220,6 +220,32 @@ self.addEventListener('message', (e) => {
       await precacheModules(cache);
     });
   }
+});
+
+// ---- Web Push (ppc fitness arcade — sent by the repo's Actions cron) ----
+self.addEventListener('push', (e) => {
+  let d = {};
+  try { d = e.data.json(); } catch { d = { title: 'ppc', body: e.data ? e.data.text() : '' }; }
+  e.waitUntil((async () => {
+    if (typeof d.badge === 'number' && self.navigator && navigator.setAppBadge) {
+      try { await navigator.setAppBadge(d.badge); } catch {}
+    }
+    await self.registration.showNotification(d.title || 'ppc', {
+      body: d.body || '',
+      tag: d.tag || 'ppc',
+      data: { url: d.url || './ppc.html#fit' },
+      icon: './assets/ppc-icon.png',
+      badge: './assets/ppc-icon.png',
+    });
+  })());
+});
+self.addEventListener('notificationclick', (e) => {
+  e.notification.close();
+  const url = (e.notification.data || {}).url || './ppc.html';
+  e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
+    for (const c of list) if (c.url.includes('ppc.html') && c.focus) return c.focus();
+    return self.clients.openWindow(url);
+  }));
 });
 
 // ---- Strategy: navigation (HTML) ----
