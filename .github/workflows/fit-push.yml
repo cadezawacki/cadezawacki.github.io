@@ -1,0 +1,27 @@
+# The Wire — ppc fitness push notifications.
+# Runs every 30 minutes; tools/fit-push.mjs decides whether this run falls in
+# a send window (times + timezone live in the app's shared fit/config) and
+# stays silent otherwise. Requires the VAPID_PRIVATE_KEY repository secret
+# (Settings → Secrets and variables → Actions).
+name: fit-push
+on:
+  schedule:
+    - cron: '*/30 * * * *'
+  workflow_dispatch: {}
+permissions: {}
+concurrency:
+  group: fit-push
+  cancel-in-progress: false
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm install --no-save web-push@3
+      - run: node tools/fit-push.mjs
+        env:
+          VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}

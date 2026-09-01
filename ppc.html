@@ -1872,6 +1872,9 @@ function doLogout() {
 const PPC_BASE = (() => {
   try { return localStorage.getItem('ppc-test-base') || 'rooms/__ppc'; } catch { return 'rooms/__ppc'; }
 })();
+// Web Push (The Wire): public half of the VAPID pair; the private half lives
+// only in the repo's Actions secrets, where tools/fit-push.mjs signs sends.
+const VAPID_PUB = 'BLDjqScSs7wFz6yfdHv5lZw-8La0X1fBJSrthKp5jguCBgpHVXTf-GXF10C3OpsL4mGWhh56UTr4bYzst2OxTAI';
 let db = null;
 let _fbAppSeq = 0;
 const syncState = { connected: false, everConnected: false, onConnect: [] };
@@ -6410,6 +6413,46 @@ const Fit = (() => {
     showToast('Rules updated for both of you', 'success');
   });
 
+  /* ---- The Wire: push subscribe + home-screen badge ---- */
+  const urlB64ToU8 = s => {
+    const pad = '='.repeat((4 - (s.length % 4)) % 4);
+    const raw = atob((s + pad).replace(/-/g, '+').replace(/_/g, '/'));
+    return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
+  };
+  async function enablePush() {
+    try {
+      if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+        showToast('Push needs the home-screen app (iOS 16.4+)', 'error', 3600);
+        return;
+      }
+      const perm = await Notification.requestPermission();
+      if (perm !== 'granted') { showToast('Notifications denied — allow them in iOS Settings → ppc', 'error', 4000); return; }
+      const reg = await navigator.serviceWorker.ready;
+      const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlB64ToU8(VAPID_PUB) });
+      let dev = store.get('ppc-dev-id');
+      if (!dev) { dev = uid().replace(/[^a-z0-9]/gi, ''); store.set('ppc-dev-id', dev); }
+      KV.set('push/subs/' + ME + '/' + dev, { sub: JSON.parse(JSON.stringify(sub)), ua: (navigator.userAgent || '').slice(0, 60), ts: Date.now() });
+      showToast('🔔 The Wire is live on this phone', 'success', 3200);
+    } catch (e) {
+      showToast('Push setup failed: ' + ((e && e.message) || e), 'error', 4200);
+    }
+  }
+  Settings.registerSetting({
+    key: 'push.enable', label: 'Push notifications', type: 'button', section: 'General',
+    buttonLabel: 'Enable on this phone',
+    hint: 'The Wire — morning brief, partner strikes, last call',
+    onClick: () => { closeModal('settings-overlay'); enablePush(); },
+  });
+  function updateAppBadge() {
+    try {
+      if (!navigator.setAppBadge || !ME) return;
+      const tk = todayKey();
+      const left = ['med', 'str'].filter(h => !resolvedAt(tk, ME, h)).length + (exeSlotOk(tk, ME) ? 0 : 1);
+      if (left > 0) navigator.setAppBadge(left); else navigator.clearAppBadge();
+    } catch {}
+  }
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) updateAppBadge(); });
+
   /* ---- arcade config screen ---- */
   const ARC_FEATURES = [
     ['ticker', '⚔️ Live duel ticker'], ['flame', '💜 Couple Flame'], ['nudge', '👉 Nudges'],
@@ -6441,6 +6484,14 @@ const Fit = (() => {
       <div class="settings-section-title" style="margin-top:12px">Values</div>
       <div class="arc-knobs">${ARC_KNOBS.map(([k, label]) =>
         `<label class="arc-knob"><span>${label}</span><input class="form-input" type="number" min="0" data-knob="${k}" value="${C[k]}"></label>`).join('')}</div>
+      <div class="settings-section-title" style="margin-top:12px">🔔 The Wire (push times)</div>
+      <div class="arc-knobs">
+        <label class="arc-knob"><span>Timezone</span><select class="form-input" data-ptz style="width:auto;padding:4px">${['America/New_York', 'America/Chicago', 'America/Denver', 'America/Phoenix', 'America/Los_Angeles', 'UTC'].map(z =>
+          `<option value="${z}"${(C.tz || 'America/New_York') === z ? ' selected' : ''}>${z.split('/')[1] || z}</option>`).join('')}</select></label>
+        <label class="arc-knob"><span>Morning brief</span><input class="form-input" type="time" data-ptime="pushMorning" value="${C.pushMorning || '08:00'}"></label>
+        <label class="arc-knob"><span>Evening report</span><input class="form-input" type="time" data-ptime="pushEvening" value="${C.pushEvening || '19:00'}"></label>
+        <label class="arc-knob"><span>Last call</span><input class="form-input" type="time" data-ptime="pushLast" value="${C.pushLast || '21:30'}"></label>
+      </div>
       ${deckRow('rewards', '🎁 Reward deck', 'date credits + wheel prizes draw from these')}
       ${deckRow('penalties', '🧦 Penalty deck', 'micro-forfeits (bomb detonations) draw from these')}`;
     // deck chips repaint alone — a full re-render would wipe unsaved knob edits
@@ -6477,6 +6528,11 @@ const Fit = (() => {
       const v = parseFloat(inp.value);
       if (!isNaN(v) && v >= 0) next[inp.dataset.knob] = v;
     });
+    $('arcade-body').querySelectorAll('[data-ptime]').forEach(inp => {
+      if (/^\d{2}:\d{2}$/.test(inp.value)) next[inp.dataset.ptime] = inp.value;
+    });
+    const tzSel = $('arcade-body').querySelector('[data-ptz]');
+    if (tzSel) next.tz = tzSel.value;
     KV.set('fit/config', next);
     closeModal('arcade-overlay');
     showToast('🎰 Arcade rules updated for both of you', 'success', 2600);
@@ -6758,7 +6814,7 @@ const Fit = (() => {
     _globalInit = true;
     KV.watch('fit/days', v => {
       days = v || {};
-      try { mintFlameCredits(); } catch (e) { console.error(e); }
+      try { mintFlameCredits(); updateAppBadge(); } catch (e) { console.error(e); }
       renderMain();
       updateFooterStat();
       if (window.PPCToday) window.PPCToday.render();
