@@ -13,7 +13,7 @@
 //   - Firebase realtime DB: bypass (live data, needs network)
 // ============================================
 
-const CACHE_VERSION = 101;
+const CACHE_VERSION = 102;
 const CACHE_NAME = `cade-v${CACHE_VERSION}`;
 
 // Same-origin pages to precache on install.
@@ -242,8 +242,15 @@ self.addEventListener('push', (e) => {
 self.addEventListener('notificationclick', (e) => {
   e.notification.close();
   const url = (e.notification.data || {}).url || './ppc.html';
+  const hash = url.includes('#') ? url.slice(url.indexOf('#')) : '';
   e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
-    for (const c of list) if (c.url.includes('ppc.html') && c.focus) return c.focus();
+    for (const c of list) {
+      if (c.url.includes('ppc.html') && c.focus) {
+        // steer the live page instead of reloading it — the page routes on hash
+        if (hash) { try { c.postMessage({ type: 'ppc-nav', hash }); } catch {} }
+        return c.focus();
+      }
+    }
     return self.clients.openWindow(url);
   }));
 });

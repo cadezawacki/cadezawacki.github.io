@@ -6492,6 +6492,10 @@ const Fit = (() => {
         <label class="arc-knob"><span>Evening report</span><input class="form-input" type="time" data-ptime="pushEvening" value="${C.pushEvening || '19:00'}"></label>
         <label class="arc-knob"><span>Last call</span><input class="form-input" type="time" data-ptime="pushLast" value="${C.pushLast || '21:30'}"></label>
       </div>
+      <div class="arc-flags" style="margin-top:8px">
+        <label class="arc-flag"><input type="checkbox" data-pflag="pushChat"${C.pushChat !== false ? ' checked' : ''}><span>💬 Chat messages</span></label>
+        <label class="arc-flag"><input type="checkbox" data-pflag="pushFeed"${C.pushFeed !== false ? ' checked' : ''}><span>📸 Feed posts</span></label>
+      </div>
       ${deckRow('rewards', '🎁 Reward deck', 'date credits + wheel prizes draw from these')}
       ${deckRow('penalties', '🧦 Penalty deck', 'micro-forfeits (bomb detonations) draw from these')}`;
     // deck chips repaint alone — a full re-render would wipe unsaved knob edits
@@ -6531,6 +6535,7 @@ const Fit = (() => {
     $('arcade-body').querySelectorAll('[data-ptime]').forEach(inp => {
       if (/^\d{2}:\d{2}$/.test(inp.value)) next[inp.dataset.ptime] = inp.value;
     });
+    $('arcade-body').querySelectorAll('[data-pflag]').forEach(cb => { next[cb.dataset.pflag] = cb.checked; });
     const tzSel = $('arcade-body').querySelector('[data-ptz]');
     if (tzSel) next.tz = tzSel.value;
     KV.set('fit/config', next);
@@ -7296,6 +7301,11 @@ if ('serviceWorker' in navigator) {
     if (navigator.serviceWorker.controller) {
       navigator.serviceWorker.controller.postMessage('REFRESH_CACHE');
     }
+  });
+  // tapping a push notification steers the already-open page to its target
+  navigator.serviceWorker.addEventListener('message', e => {
+    const d = e.data;
+    if (d && d.type === 'ppc-nav' && typeof d.hash === 'string' && d.hash[0] === '#') location.hash = d.hash;
   });
 }
 </script>

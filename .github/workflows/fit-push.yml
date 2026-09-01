@@ -1,12 +1,13 @@
-# The Wire — ppc fitness push notifications.
-# Runs every 30 minutes; tools/fit-push.mjs decides whether this run falls in
-# a send window (times + timezone live in the app's shared fit/config) and
-# stays silent otherwise. Requires the VAPID_PRIVATE_KEY repository secret
-# (Settings → Secrets and variables → Actions).
+# The Wire — ppc push notifications.
+# Runs every 5 minutes; tools/fit-push.mjs decides whether this run falls in
+# a fitness send window (times + timezone live in the app's shared
+# fit/config), relays fresh chat messages and feed posts to the other phone,
+# and stays silent otherwise. Requires the VAPID_PRIVATE_KEY repository
+# secret (Settings → Secrets and variables → Actions).
 name: fit-push
 on:
   schedule:
-    - cron: '*/30 * * * *'
+    - cron: '*/5 * * * *'
   workflow_dispatch: {}
 permissions: {}
 concurrency:

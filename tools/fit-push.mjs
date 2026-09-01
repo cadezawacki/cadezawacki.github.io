@@ -1,13 +1,24 @@
-// The Wire — ppc fitness push sender, run by .github/workflows/fit-push.yml
-// every 30 minutes. Reads the RTDB over REST, decides which notification
-// window (if any) this run falls into for each partner, and sends Web Push
-// via the VAPID pair (public half in ppc.html, private half in the
+// The Wire — ppc push sender, run by .github/workflows/fit-push.yml every
+// 5 minutes. Reads the RTDB over REST, decides which fitness notification
+// window (if any) this run falls into for each partner, relays fresh chat
+// messages and feed posts to the other phone, and sends Web Push via the
+// VAPID pair (public half in ppc.html, private half in the
 // VAPID_PRIVATE_KEY Actions secret).
 //
 // Design rules:
 //  - silence is the reward: a finished day gets NO evening/last-call sends
 //  - never send to someone who is in the app right now (fresh presence)
 //  - one send per window per day, deduped through push/log
+//  - chat/feed relays dedupe per item through push/state/<kind>/<recipient>
+//    (the newest relayed ts); a missing state baselines silently so a fresh
+//    subscription never gets blasted with history. After a real send attempt
+//    state advances even when the send fails or nobody is subscribed — a
+//    lost push costs one ping, a non-advancing state would repeat it
+//    forever. A fresh-presence recipient consumes only items up to their
+//    last heartbeat (later ones defer to the next run). DRY runs never
+//    write — they print the state PUTs they would make.
+//  - message text goes only inside the encrypted push payload, never into
+//    the Actions log: this repo is public and so are its logs
 //  - every derived event (wheel/noon/job) ports the page's seeded kernel —
 //    keep the two in sync when either changes
 //
@@ -32,7 +43,10 @@ async function dbGet(path) {
   return r.json();
 }
 async function dbPut(path, val) {
-  await fetch(`${DB}/${BASE}/${path}.json`, { method: 'PUT', body: JSON.stringify(val) });
+  // a swallowed failed write would green-loop duplicate sends every 5 minutes
+  // (push/log and push/state are the only dedupe) — fail the run loudly instead
+  const r = await fetch(`${DB}/${BASE}/${path}.json`, { method: 'PUT', body: JSON.stringify(val) });
+  if (!r.ok) throw new Error(`PUT ${path}: ${r.status}`);
 }
 
 /* ---- seeded kernel (MUST match ppc.html) ---- */
@@ -132,14 +146,15 @@ function duelExposure(days, k, u, cfg) {
 }
 
 /* ---- main ---- */
-const [days, cfgRaw, subsRaw, logRaw, presence] = await Promise.all([
+const [days, cfgRaw, subsRaw, logRaw, presence, stateRaw] = await Promise.all([
   dbGet('fit/days'), dbGet('fit/config'), dbGet('push/subs'), dbGet('push/log'), dbGet('presence'),
+  dbGet('push/state'),
 ]).then(r => r.map(x => x || {}));
 const cfg = { duelLose: 2, coupleEvery: 7, jobBonus: 25, arcadeEpoch: '2026-09-01', tz: 'America/New_York',
   pushMorning: '08:00', pushEvening: '19:00', pushLast: '21:30', ...cfgRaw };
 const { dateKey: tk, min: nowMin } = localParts(cfg.tz);
 const epoch = cfg.arcadeEpoch;
-const WINDOW = 30;   // matches the cron cadence
+const WINDOW = 30;   // a window stays open across several 5-min runs; push/log keeps it to one send
 const inWindow = startMin => nowMin >= startMin && nowMin < startMin + WINDOW;
 const fresh = u => presence[u] && presence[u].t && Date.now() - presence[u].t < 5 * 60000;
 
@@ -249,5 +264,89 @@ for (const s of sends) {
     }
   }
   if (any && !DRY) await dbPut(`push/log/${tk}/${s.slot}`, Date.now());
+}
+
+/* ---- chat + feed relays (every run, per-item state — not the day/slot log) ---- */
+const oneLine = (s, n) => String(s || '').replace(/\s+/g, ' ').trim().slice(0, n);
+const ymOf = k => k.slice(0, 7);
+const prevYm = ym => {
+  const y = +ym.slice(0, 4), m = +ym.slice(5, 7);
+  return m === 1 ? (y - 1) + '-12' : y + '-' + String(m - 1).padStart(2, '0');
+};
+// DRY never writes: it prints the state PUT it would make instead, so a
+// preview run can't consume a pending real notification.
+async function putState(kind, u, ts) {
+  if (DRY) { console.log(`DRY state ${kind}/${u} -> ${ts}`); return; }
+  await dbPut(`push/state/${kind}/${u}`, ts);
+}
+async function relay(kind, paths, url, mk) {
+  // both months cover items written just before a month rolled over
+  const months = await Promise.all(paths.map(p => dbGet(p).catch(() => null)));
+  const state = stateRaw[kind] || {};
+  for (const u of ['C', 'A']) {
+    const o = OTHER(u);
+    const items = [];
+    for (const m of months) {
+      for (const it of Object.values(m || {})) {
+        if (it && it.by === o && typeof it.ts === 'number') items.push(it);
+      }
+    }
+    items.sort((a, b) => a.ts - b.ts);
+    if (state[u] == null) {
+      // first sighting of this recipient: baseline silently — never blast history
+      await putState(kind, u, NOW.getTime());
+      console.log(`init ${kind}/${u}`);
+      continue;
+    }
+    const news = items.filter(it => it.ts > state[u]);
+    if (!news.length) continue;
+    const newest = news[news.length - 1].ts;
+    if (fresh(u)) {
+      // in the app: the in-page toast covers anything up to their last
+      // heartbeat. Items sent AFTER it stay pending — presence lingers fresh
+      // for ~5 minutes after the app closes, and consuming those here would
+      // drop the push for a message they never saw. Deferring also means no
+      // buzz mid-conversation; the send happens once presence goes stale.
+      const seenTo = Math.min(newest, presence[u].t);
+      if (seenTo > state[u]) await putState(kind, u, seenTo);
+      console.log(`seen ${kind}/${u}: in the app${seenTo < newest ? ' (newer items deferred)' : ''}`);
+      continue;
+    }
+    // per-batch tag: batches stack like a messenger instead of silently
+    // replacing a still-unread earlier notification
+    const payload = { ...mk(o, news), tag: `ppc-${kind}-${newest}`, url };
+    const devices = Object.entries(subsRaw[u] || {}).filter(([, d]) => d && d.sub && !d.dead);
+    for (const [dev, d] of devices) {
+      if (DRY) { console.log(`DRY ${kind}/${u}/${dev}:`, JSON.stringify(payload)); sent++; continue; }
+      try {
+        await webpush.sendNotification(d.sub, JSON.stringify(payload), { TTL: 3600 });
+        sent++;
+        console.log(`sent ${kind}/${u}/${dev}`);
+      } catch (e) {
+        console.error(`send fail ${kind}/${u}/${dev}: ${e.statusCode || e.message}`);
+        if (e.statusCode === 404 || e.statusCode === 410) await dbPut(`push/subs/${u}/${dev}/dead`, true);
+      }
+    }
+    if (!devices.length) console.log(`skip ${kind}/${u}: no live subscription`);
+    await putState(kind, u, newest);
+  }
+}
+const curYm = ymOf(tk);
+if (cfg.pushChat !== false) {
+  await relay('chat', [`chat/${curYm}`, `chat/${prevYm(curYm)}`], './ppc.html#notes/chat', (o, news) => ({
+    title: '💬 ' + USER_NAMES[o],
+    body: oneLine(news[news.length - 1].t, 110) + (news.length > 1 ? ` (+${news.length - 1} earlier)` : ''),
+  }));
+}
+if (cfg.pushFeed !== false) {
+  const HMF = { ...HM, wrk: 'Workout' };
+  await relay('feed', [`fit/feed/${curYm}`, `fit/feed/${prevYm(curYm)}`], './ppc.html#fit/feed', (o, news) => {
+    const p = news[news.length - 1];
+    const what = p.caption ? `“${oneLine(p.caption, 90)}”` : (p.img ? 'a photo' : 'an update');
+    return {
+      title: '📸 ppc — proof drop',
+      body: `${USER_NAMES[o]} posted ${what}${p.habit && HMF[p.habit] ? ` · ${HMF[p.habit]}` : ''}${news.length > 1 ? ` (+${news.length - 1} more)` : ''}`,
+    };
+  });
 }
 console.log(`done — ${sent} notification(s) ${DRY ? '(dry run)' : 'sent'} at ${tk} ${Math.floor(nowMin / 60)}:${String(nowMin % 60).padStart(2, '0')} ${cfg.tz}`);
