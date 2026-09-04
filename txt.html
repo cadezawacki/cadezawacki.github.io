@@ -3094,7 +3094,7 @@ body.readonly .cm-img-grip { display: none; }
 <div class="modal-overlay" id="storage-cleanup-overlay">
   <div class="modal-dialog" style="max-width: 440px;">
     <div class="modal-title">Manage Storage</div>
-    <div class="modal-desc">Select rooms to clear from offline storage (cache, sync base and snapshots together). Synced content reloads from the server when you next open the room.</div>
+    <div class="modal-desc">Select rooms to clear from offline storage (cache, sync base and snapshots together). Synced content reloads from the server when you next open the room. Nothing here touches the server.</div>
     <div style="color:var(--text-faint);font-size:var(--text-xs);margin:-4px 0 8px;" id="storage-cleanup-usage"></div>
     <div class="room-manager-list" id="storage-cleanup-list"></div>
     <div style="margin-top:8px;display:flex;flex-direction:column;gap:6px;">
@@ -3438,8 +3438,23 @@ const store = (() => {
     return out;
   }
 
+  // Volatile tier: keys matching the predicate live in memory only and are
+  // never written to localStorage — the "sync only" rooms, whose text stays on
+  // the server and in RAM while open. Registered by the room system once
+  // roomMeta exists; until then nothing is volatile.
+  let _volatilePred = null;
+  function setVolatile(fn) { _volatilePred = typeof fn === 'function' ? fn : null; }
+  function isVolatile(key) { try { return !!(_volatilePred && _volatilePred(key)); } catch { return false; } }
+  function isPersisted(key) { try { return ok && _s.getItem(key) != null; } catch { return false; } }
+
   function set(key, val) {
     val = String(val);
+    if (isVolatile(key)) {
+      mem[key] = val;
+      // A copy persisted before the room went volatile must go too.
+      if (ok) { try { const prev = _s.getItem(key); if (prev != null) { if (prev.startsWith(CHUNK_MARK)) clearChunks(key); _s.removeItem(key); } } catch {} }
+      return;
+    }
     try {
       writeRaw(key, val);
       if (ok) delete mem[key];
@@ -3489,8 +3504,11 @@ const store = (() => {
   // Bytes a logical key occupies, chunk parts summed WITHOUT rebuilding the
   // value — the cleanup dialog sizes every key in the store, and concatenating
   // multi-MB caches just to measure them froze the UI on a full device.
+  //
+  // Memory-only entries (volatile rooms, writes that failed on quota) occupy
+  // none of the localStorage quota, so they count as 0 here — reporting them
+  // used to make the cleanup dialog offer "space" that clearing never freed.
   const sizeOf = key => {
-    if (Object.prototype.hasOwnProperty.call(mem, key)) { const v = mem[key]; return v ? v.length * 2 : 0; }
     if (!ok) return 0;
     const v = _s.getItem(key);
     if (v == null) return 0;
@@ -3502,7 +3520,7 @@ const store = (() => {
     return total;
   };
 
-  return { get, set, remove, keys, sizeOf, ok, rawBytes, sweepOrphanChunks };
+  return { get, set, remove, keys, sizeOf, ok, rawBytes, sweepOrphanChunks, setVolatile, isVolatile, isPersisted };
 })();
 window.__store = store; // exposed for external feature modules (window.Cade.store)
 
@@ -3991,7 +4009,17 @@ const editorTheme = EditorView.theme({
   '.cm-line': { padding: '0', lineHeight: '1.7' },
 }, { dark: false });
 
-const savedContent = store.get('cade-content') || '';
+// Seed the editor with the active room's own cache when one is set. The global
+// 'cade-content' key used to hold a second full copy of the open room's text
+// purely for this first paint — for a large document that duplicate alone ate
+// a third of the ~5 MB localStorage bucket (see persistContent).
+const savedContent = (() => {
+  try {
+    const r = store.get('cade-active-room');
+    if (r) { const c = store.get('cade-room-cache:' + r); if (c != null) return c; }
+  } catch {}
+  return store.get('cade-content') || '';
+})();
 
 // ============================================
 // HANGING INDENT FOR LISTS
@@ -6064,6 +6092,10 @@ function _collectReferencedImageHashes() {
       else if (k.indexOf('cade-snap:') === 0) {
         try { (JSON.parse(store.get(k) || '[]') || []).forEach(s => s && addFrom(s.c)); } catch {}
       }
+      // Rooms with no local text (sync-only / offloaded) leave a hash index behind.
+      else if (k.indexOf('cade-room-refs:') === 0) {
+        try { ((JSON.parse(store.get(k) || '{}') || {}).i || []).forEach(h => set.add(h)); } catch {}
+      }
     });
   } catch {}
   return set;
@@ -6749,6 +6781,10 @@ function _collectReferencedFileHashes() {
       if (k.indexOf('cade-room-cache:') === 0 || k.indexOf('cade-room-synced:') === 0) addFrom(store.get(k));
       else if (k.indexOf('cade-snap:') === 0) {
         try { (JSON.parse(store.get(k) || '[]') || []).forEach(s => s && addFrom(s.c)); } catch {}
+      }
+      // Rooms with no local text (sync-only / offloaded) leave a hash index behind.
+      else if (k.indexOf('cade-room-refs:') === 0) {
+        try { ((JSON.parse(store.get(k) || '{}') || {}).f || []).forEach(h => set.add(h)); } catch {}
       }
     });
   } catch {}
@@ -8040,10 +8076,20 @@ let saveTimer = null;
 function persistContent() {
   const text = editor.state.doc.toString();
   __mark('persist(' + text.length + 'ch)');
-  store.set('cade-content', text);
-  // Also save per-room cache if connected
   if (syncState.roomName) {
+    // In a room the per-room cache is the single local copy. 'cade-content' is
+    // only for the no-room document — mirroring the room text there as well
+    // doubled the open document's footprint (tripled with the synced base), so
+    // one big room filled the bucket by itself and clearing every other room
+    // could never make the quota dialog go away.
     store.set('cade-room-cache:' + syncState.roomName, text);
+    store.remove('cade-content');
+    // Sync-only rooms keep no text on this device, so index the image/file
+    // hashes they reference — otherwise the blob GC can't see them and would
+    // delete the attachments (server copy included) as orphans.
+    try { if (roomIsSyncOnly(syncState.roomName)) noteRoomRefs(syncState.roomName, text); } catch {}
+  } else {
+    store.set('cade-content', text);
   }
   // Stamp last-modified for room sorting (no re-render here; tabs re-sort on the
   // next natural render, so this never reorders tabs mid-keystroke).
@@ -10861,6 +10907,7 @@ window.sidebarRoomMenu = function(evt, name) {
     { label: '✏️ Rename…', run: () => renameRoom(name) },
     { label: pinned ? '📌 Unpin' : '📌 Pin to top', run: () => toggleRoomPin(name) },
     { label: archived ? '↩ Restore' : '🗄 Archive', run: () => toggleRoomArchive(name) },
+    { label: roomIsSyncOnly(name) ? '💾 Keep a local copy' : '☁ Sync only (no copy on this device)', run: () => toggleRoomSyncOnly(name) },
     { sep: true },
     { label: 'Remove from tab list', danger: true, run: () => removeRoom(name) },
     { label: 'Delete from server…', danger: true, run: () => deleteRoomFromServer(name) },
@@ -10934,10 +10981,11 @@ window.renameRoom = async function(oldName) {
   if (rooms.includes(name)) { showToast('A room with that name already exists', 'error', 3000); return; }
   const wasActive = activeRoom === oldName;
   // Copy every local per-room key to the new name (old ones purge below).
-  ['cade-room-cache:', 'cade-room-synced:', 'cade-room-ver:', 'cade-snap:', 'cade-autocolor:', 'cade-room-pw-hash:', 'cade-room-pw-remote:'].forEach(p => {
+  [...ROOM_STORAGE_PREFIXES, 'cade-room-pw-hash:', 'cade-room-pw-remote:'].forEach(p => {
     const v = store.get(p + oldName);
     if (v != null) store.set(p + name, v);
   });
+  try { if (_roomLastOpen[oldName]) { _roomLastOpen[name] = _roomLastOpen[oldName]; _saveRoomLastOpen(); } } catch {}
   const idx = rooms.indexOf(oldName);
   if (idx !== -1) rooms.splice(idx, 0, name); else rooms.push(name);
   if (roomWorkspace[oldName]) roomWorkspace[name] = roomWorkspace[oldName];
@@ -11473,6 +11521,7 @@ async function _doSwitchRoom(name, firebaseUrl, baseEncKey) {
   store.set('cade-room-name', name);
   store.set('cade-active-room', name);
   try { recordRoomVisit(name); } catch {}
+  try { stampRoomOpened(name); } catch {}
   const syncRoomInput = document.getElementById('sync-room-name');
   if (syncRoomInput) syncRoomInput.value = name;
 
@@ -11481,6 +11530,11 @@ async function _doSwitchRoom(name, firebaseUrl, baseEncKey) {
   try { closeSpellPopup(); } catch {}
 
   const cached = loadRoomCache(name);
+  // A sync-only room has no copy here by design; say so instead of showing a
+  // silently blank document when nothing can arrive from the server.
+  if (!cached && roomIsSyncOnly(name) && !(firebaseUrl && baseEncKey && navigator.onLine)) {
+    showToast('Sync-only room — no copy is kept on this device. Its text loads when sync connects.', 'info', 3500);
+  }
   syncState.suppressUpdate = true;
   const _savedState = roomStates.get(_newStateKey);
   if (_savedState && _savedState.doc.toString() === cached) {
@@ -11986,6 +12040,7 @@ function renderRoomRow(name, showBadge) {
         ${isActive ? '<span class="room-manager-active">● active</span>' : ''}
         ${archived ? '<span class="room-manager-archived" style="font-size:10px;color:var(--text-faint);">archived</span>' : ''}
         ${hasPassword ? '<span style="font-size:10px;color:var(--text-faint);" title="Password protected">🔒</span>' : ''}
+        ${roomIsSyncOnly(name) ? '<span style="font-size:10px;color:var(--text-faint);" title="Sync only — no copy kept on this device">☁ sync-only</span>' : ''}
       </div>
       <div style="display:flex;gap:4px;flex-shrink:0;">
         ${archived
@@ -12357,6 +12412,36 @@ window.toggleRoomPin = function(name) {
   renderRoomTabs();
 };
 
+// Per-room "sync only" (no copy on this device). Pass forceOn=true to switch
+// on without toggling (the storage dialog's shortcut).
+window.toggleRoomSyncOnly = function(name, forceOn) {
+  closeActionMenu();
+  if (!name) return;
+  if (_syncOnlyAll()) { showToast('Every room is sync-only right now (Settings → Storage → “Sync only, all rooms”)', 'info', 3500); return; }
+  const on = forceOn === true ? true : !roomIsSyncOnly(name);
+  if (on) {
+    if (!_syncConfigured()) { showToast('Set up sync first — a sync-only room has no copy anywhere else.', 'error', 4000); return; }
+    // Unsynced offline edits in a room that isn't open would be stranded in
+    // memory: have the user open it (which pushes them) before switching.
+    if (name !== (activeRoom || syncState.roomName)) {
+      const cache = store.get('cade-room-cache:' + name), base = store.get('cade-room-synced:' + name);
+      if (cache != null && cache !== '' && cache !== base) {
+        showToast(`"${name}" has edits not yet synced — open it once so they reach the server, then try again.`, 'error', 5000);
+        return;
+      }
+    }
+  }
+  setRoomSyncOnly(name, on);
+  const freed = applyRoomSyncOnlyStorage(name);
+  try { renderRoomManagerList(); } catch {}
+  renderRoomTabs();
+  showToast(on
+    ? `"${name}" is now sync-only — nothing stored on this device${freed ? ` (~${_fmtKB(freed)} freed)` : ''}`
+    : `"${name}" keeps a local copy on this device again`, 'success', 3200);
+  // Whatever write was failing on quota can likely land now.
+  if (on) { try { persistContent(); } catch {} }
+};
+
 window.toggleRoomArchive = function(name) {
   const nowArchived = !roomIsArchived(name);
   setRoomArchived(name, nowArchived);
@@ -12501,10 +12586,62 @@ document.getElementById('room-manager-overlay').addEventListener('keydown', (e) 
 // clears ALL of these — the old dialog only offered `cade-room-cache:` and
 // left snapshots/synced-bases behind, so "clear" often freed almost nothing
 // and the quota popup came right back.
-const ROOM_STORAGE_PREFIXES = [
-  'cade-room-cache:', 'cade-room-synced:', 'cade-snap:',
-  'cade-room-ver:', 'cade-autocolor:',
-];
+//
+// CONTENT prefixes hold the document itself (text cache, synced base, version
+// history, server version) — the bytes that matter. They are what idle
+// offloading and "sync only" drop. The remaining per-room keys are small
+// settings plus the attachment-reference index, purged only when the room
+// leaves the tab list.
+const ROOM_CONTENT_PREFIXES = ['cade-room-cache:', 'cade-room-synced:', 'cade-snap:', 'cade-room-ver:'];
+const ROOM_STORAGE_PREFIXES = [...ROOM_CONTENT_PREFIXES, 'cade-autocolor:', 'cade-room-refs:'];
+const _MS_DAY = 86400000;
+
+// ---- Attachment reference index --------------------------------------------
+// The image/file GC decides what is unused by scanning every room text stored
+// on this device. A room with no local text (sync-only, or offloaded after
+// sitting idle) would make its attachments look orphaned — and the GC deletes
+// the SERVER copy too. So whenever a room's text leaves this device we keep a
+// tiny index of the hashes it referenced (~70 bytes each) under
+// `cade-room-refs:<room>`; the collectors read it alongside the caches.
+function extractRefHashes(text) {
+  const out = { i: [], f: [] };
+  if (!text) return out;
+  try {
+    if (text.indexOf('![img:') !== -1) {
+      IMG_TOKEN_RE.lastIndex = 0; let m;
+      while ((m = IMG_TOKEN_RE.exec(text)) !== null) { if (m[2] === '#' && !out.i.includes(m[3])) out.i.push(m[3]); }
+    }
+    if (text.indexOf('![file:') !== -1) {
+      FILE_TOKEN_RE.lastIndex = 0; let m;
+      while ((m = FILE_TOKEN_RE.exec(text)) !== null) { if (!out.f.includes(m[2])) out.f.push(m[2]); }
+    }
+  } catch {}
+  return out;
+}
+function noteRoomRefs(room, text) {
+  if (!room || room === '__local__') return;
+  const k = 'cade-room-refs:' + room;
+  const refs = extractRefHashes(text);
+  if (!refs.i.length && !refs.f.length) { if (store.get(k) != null) store.remove(k); return; }
+  const json = JSON.stringify(refs);
+  if (store.get(k) !== json) store.set(k, json);
+}
+
+// Drop a room's document bytes from this device (text cache, synced base,
+// snapshots, version) after recording what the GC needs to know. Returns the
+// physical bytes freed. Never touches the server.
+function _offloadRoomContent(name) {
+  let freed = 0;
+  const text = store.get('cade-room-cache:' + name);
+  const base = store.get('cade-room-synced:' + name);
+  try { noteRoomRefs(name, (text || '') + '\n' + (base || '')); } catch {}
+  ROOM_CONTENT_PREFIXES.forEach(p => {
+    const k = p + name;
+    freed += store.sizeOf(k);
+    store.remove(k);
+  });
+  return freed;
+}
 
 // Drop every device-local storage trace of a room (keys, session password,
 // cached editor state). Shared by purgeLocalRoom and the remote-tombstone
@@ -12515,10 +12652,93 @@ function _purgeRoomStorageKeys(name) {
   store.remove('cade-room-pw-remote:' + name);
   try { delete sessionRoomPasswords[name]; } catch {}
   try { if (typeof roomStates !== 'undefined') roomStates.delete(typeof roomStateKey === 'function' ? roomStateKey(name) : name); } catch {}
+  try { forgetRoomOpened(name); } catch {}
 }
 
+// ---- Last-opened stamps (device-local) -------------------------------------
+// When each room was last switched to ON THIS DEVICE — the signal the idle
+// offload uses. Distinct from roomMeta.modified (account-wide, edits only).
+let _roomLastOpen = {};
+try { _roomLastOpen = JSON.parse(store.get('cade-room-lastopen')) || {}; } catch {}
+if (!_roomLastOpen || typeof _roomLastOpen !== 'object' || Array.isArray(_roomLastOpen)) _roomLastOpen = {};
+function _saveRoomLastOpen() { try { store.set('cade-room-lastopen', JSON.stringify(_roomLastOpen)); } catch {} }
+function stampRoomOpened(name) {
+  if (!name || name === '__local__') return;
+  _roomLastOpen[name] = Date.now();
+  _saveRoomLastOpen();
+}
+function forgetRoomOpened(name) {
+  if (name && _roomLastOpen[name] != null) { delete _roomLastOpen[name]; _saveRoomLastOpen(); }
+}
+// Best guess at when a room was last used here: the open stamp, else the
+// account-wide modified/created stamps (a room nobody has touched anywhere in
+// weeks is safe to offload even before this device has stamped it). 0 = no idea.
+function roomLastUsedAt(name) {
+  const open = _roomLastOpen[name] || 0;
+  let m = null;
+  try { m = roomMeta[name]; } catch {}
+  m = m || {};
+  return Math.max(open, m.modified || 0, m.created || 0);
+}
+function _offloadDays() {
+  try { const d = parseInt(window.Settings && Settings.get('storage.offloadDays'), 10); return Number.isNaN(d) ? 7 : d; }
+  catch { return 7; }
+}
+// Sync must be configured before anything local may be dropped — otherwise
+// the local cache IS the document.
+function _syncConfigured() { return !!(store.get('cade-firebase-url') && store.get('cade-sync-key')); }
+
+// Rooms whose text is fully on the server and that haven't been opened here in
+// N days lose their local copy (they reload from the server on next open).
+// Skips: the open room, sync-only rooms (nothing stored), rooms with unsynced
+// local edits (cache ≠ synced base — dropping those would lose work) and rooms
+// with no usable stamp (stamped now so they age out from here).
+let _lastOffloadSweep = 0;
+window.__offloadIdleRooms = function(opts) {
+  const out = { count: 0, freed: 0, skippedDirty: [] };
+  if (!store.ok || !window.__roomsApi || !_syncConfigured()) return out; // room system not up yet
+  const days = _offloadDays();
+  if (!days) return out;
+  const cutoff = Date.now() - days * _MS_DAY;
+  const current = activeRoom || syncState.roomName || '';
+  const candidates = new Set();
+  store.keys().forEach(k => {
+    for (const p of ROOM_CONTENT_PREFIXES) {
+      if (k.startsWith(p)) { const r = k.slice(p.length); if (r && r !== '__local__') candidates.add(r); return; }
+    }
+  });
+  let stamped = false;
+  candidates.forEach(room => {
+    if (room === current) return;
+    if (roomIsSyncOnly(room)) return;
+    const last = roomLastUsedAt(room);
+    if (!last) { _roomLastOpen[room] = Date.now(); stamped = true; return; }
+    if (last >= cutoff) return;
+    const cache = store.get('cade-room-cache:' + room);
+    const base = store.get('cade-room-synced:' + room);
+    // Unsynced edits (or text we can't prove reached the server) stay put.
+    if (cache != null && cache !== '' && cache !== base) { out.skippedDirty.push(room); return; }
+    out.freed += _offloadRoomContent(room);
+    out.count++;
+  });
+  if (stamped) _saveRoomLastOpen();
+  _lastOffloadSweep = Date.now();
+  if (out.count && !(opts && opts.quiet)) {
+    showToast(`Offloaded ${out.count} room${out.count === 1 ? '' : 's'} not opened in ${days}+ days (~${_fmtKB(out.freed)} freed here; still on the server)`, 'success', 4000);
+  }
+  return out;
+};
+// Re-sweep when the page comes back after a long time in the background —
+// mobile tabs live for days without a reload.
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'visible') return;
+  if (Date.now() - _lastOffloadSweep < 6 * 3600e3) return;
+  setTimeout(() => { try { window.__offloadIdleRooms(); } catch {} }, 3000);
+});
+
 // Step 1 (automatic): drop offline caches for rooms no longer in view —
-// i.e. rooms that are not in the tab list and not the active room.
+// i.e. rooms that are not in the tab list and not the active room — then
+// offload rooms idle past the window.
 window.__evictStaleRoomCaches = function() {
   if (!store.ok) return;
   const keep = new Set(rooms);
@@ -12533,6 +12753,11 @@ window.__evictStaleRoomCaches = function() {
       }
     }
   });
+  // Stamps for rooms that no longer exist here are noise.
+  let changed = false;
+  Object.keys(_roomLastOpen).forEach(r => { if (!keep.has(r)) { delete _roomLastOpen[r]; changed = true; } });
+  if (changed) _saveRoomLastOpen();
+  try { window.__offloadIdleRooms({ quiet: true }); } catch {}
 };
 
 // Image/file payloads land here when IndexedDB is unavailable (private mode,
@@ -12557,35 +12782,68 @@ function _storageOtherKeys(claimed) {
 }
 
 // All reclaimable storage grouped per room: cache + synced base + snapshots +
-// small per-room keys, summed. The active room is offered too, but only its
-// snapshots (its live cache would immediately be rewritten by persistContent).
-// Rooms no longer in the tab list are flagged as orphaned and pre-checked.
-// Locally-held image/file payloads are offered as one extra group.
+// version, summed. The active room is offered too, but only its snapshots (its
+// live cache would immediately be rewritten by persistContent — it gets its
+// own "open document" panel instead). Rooms no longer in the tab list are
+// flagged as orphaned and pre-checked, as are rooms idle past the offload
+// window. Rooms too small to matter fold into one "small rooms" row so the
+// list stays readable with dozens of rooms. Locally-held image/file payloads
+// are offered as one extra group.
+const STORAGE_SMALL_ROOM_BYTES = 6 * 1024;
 function _storageCleanupItems() {
   const current = activeRoom || syncState.roomName || '';
   const roomSet = new Set(rooms);
   roomSet.add('__local__'); // pseudo-room for no-room snapshots/autocolor rules
   if (current) roomSet.add(current);
+  const days = _offloadDays();
+  const idleCutoff = days ? Date.now() - days * _MS_DAY : 0;
+  const now = Date.now();
   const groups = new Map();
   store.keys().forEach(k => {
     for (const prefix of ROOM_STORAGE_PREFIXES) {
       if (!k.startsWith(prefix)) continue;
       const room = k.slice(prefix.length);
       if (!room) return;
+      const orphan = !roomSet.has(room);
+      // Settings/refs keys are tiny and only worth clearing once the room is gone.
+      if (!orphan && !ROOM_CONTENT_PREFIXES.includes(prefix)) return;
       // The active room's live cache/base stay — clearing them mid-edit is
       // pointless (rewritten within 300ms) or dangerous (base guards edits).
       if (room === current && prefix !== 'cade-snap:') return;
+      const bytes = store.sizeOf(k);
+      if (!bytes) return; // memory-only — occupies none of the quota
       let g = groups.get(room);
       if (!g) {
-        g = { room, bytes: 0, keys: [], orphan: !roomSet.has(room), isCurrent: room === current };
+        const last = roomLastUsedAt(room);
+        g = { room, bytes: 0, keys: [], orphan, isCurrent: room === current, dirty: false,
+              idleDays: last ? Math.floor((now - last) / _MS_DAY) : null,
+              idle: !!(idleCutoff && last && last < idleCutoff) };
         groups.set(room, g);
       }
-      g.bytes += store.sizeOf(k);
+      g.bytes += bytes;
       g.keys.push(k);
       return;
     }
   });
-  const items = [...groups.values()].sort((a, b) => (a.orphan === b.orphan ? b.bytes - a.bytes : (a.orphan ? -1 : 1)));
+  groups.forEach(g => {
+    if (g.isCurrent || g.orphan) return;
+    const cache = store.get('cade-room-cache:' + g.room);
+    const base = store.get('cade-room-synced:' + g.room);
+    g.dirty = cache != null && cache !== '' && cache !== base;
+  });
+  const all = [...groups.values()];
+  const big = all.filter(g => g.orphan || g.isCurrent || g.dirty || g.bytes >= STORAGE_SMALL_ROOM_BYTES);
+  const small = all.filter(g => !big.includes(g));
+  const items = big.sort((a, b) => (a.orphan === b.orphan ? b.bytes - a.bytes : (a.orphan ? -1 : 1)));
+  if (small.length === 1) items.push(small[0]);
+  else if (small.length > 1) {
+    items.push({
+      label: `${small.length} small rooms`, note: small.map(g => g.room).sort().join(', '),
+      bytes: small.reduce((n, g) => n + g.bytes, 0),
+      keys: small.reduce((a, g) => a.concat(g.keys), []),
+      idle: small.every(g => g.idle),
+    });
+  }
 
   // Image/file payloads sitting in localStorage because IndexedDB wasn't
   // usable. Not pre-checked: anything still queued for upload only exists here.
@@ -12646,33 +12904,65 @@ function _fillStorageUsage(extraNote) {
 //
 // Dismissing used to snooze a flat 60s, so a device that genuinely had nothing
 // left to clear got the dialog thrown at it once a minute forever. The snooze
-// now escalates (1m → 5m → 15m → 1h) with every unproductive prompt and resets
-// only when a cleanup actually frees bytes.
+// escalates (1m → 5m → 15m → 1h → 6h → 24h) with every unproductive prompt and
+// resets only when a cleanup actually frees bytes. It is PERSISTED: a phone
+// reloads the page many times a day, and an in-memory snooze restarted from
+// one minute on every reload — the "constant popup".
 let _storageCleanupOpen = false;
 let _storageCleanupSnoozeUntil = 0;
 let _storageCleanupStrikes = 0;
-const STORAGE_SNOOZE_STEPS = [60e3, 5 * 60e3, 15 * 60e3, 60 * 60e3];
+try {
+  const st = JSON.parse(store.get('cade-storage-snooze') || 'null');
+  if (st && typeof st === 'object') { _storageCleanupSnoozeUntil = +st.until || 0; _storageCleanupStrikes = +st.strikes || 0; }
+} catch {}
+const STORAGE_SNOOZE_STEPS = [60e3, 5 * 60e3, 15 * 60e3, 60 * 60e3, 6 * 3600e3, 24 * 3600e3];
 
+function _persistStorageSnooze() {
+  try { store.set('cade-storage-snooze', JSON.stringify({ until: _storageCleanupSnoozeUntil, strikes: _storageCleanupStrikes })); } catch {}
+}
 function _snoozeStorageCleanup() {
   const step = STORAGE_SNOOZE_STEPS[Math.min(_storageCleanupStrikes, STORAGE_SNOOZE_STEPS.length - 1)];
   _storageCleanupStrikes++;
   _storageCleanupSnoozeUntil = Date.now() + step;
+  _persistStorageSnooze();
+}
+function _resetStorageSnooze() {
+  _storageCleanupStrikes = 0;
+  _storageCleanupSnoozeUntil = 0;
+  _persistStorageSnooze();
 }
 
 const _fmtKB = bytes => (bytes >= 1024 * 1024
   ? (bytes / (1024 * 1024)).toFixed(1) + ' MB'
-  : Math.max(1, Math.round(bytes / 1024)) + ' KB');
+  : (bytes > 0 ? Math.max(1, Math.round(bytes / 1024)) : 0) + ' KB');
 
 window.__promptStorageCleanup = function(force) {
   if (_storageCleanupOpen) return;
   if (!force && Date.now() < _storageCleanupSnoozeUntil) return;
 
-  // Free unreachable chunk fragments first — they are pure debris, so there is
-  // nothing to ask about. (On the quota path store.set() has already swept, so
-  // this normally reclaims nothing there; opening the dialog from the menu is
-  // where it earns its keep.)
+  // Free what needs no asking first: unreachable chunk fragments (pure debris)
+  // and the local copies of rooms idle past the offload window. Most quota
+  // prompts end right here without a dialog.
   let swept = 0;
   try { swept = store.sweepOrphanChunks(); } catch {}
+  let offloaded = null;
+  try { offloaded = window.__offloadIdleRooms({ quiet: true }); } catch {}
+  const freedNow = swept + (offloaded ? offloaded.freed : 0);
+
+  const current = activeRoom || syncState.roomName || '';
+  const curSyncOnly = !!current && roomIsSyncOnly(current);
+  const docPart = p => (current && store.ok) ? store.sizeOf(p + current) : 0;
+  const cacheB = docPart('cade-room-cache:'), baseB = docPart('cade-room-synced:'), snapB = docPart('cade-snap:');
+  const docBytes = cacheB + baseB + snapB + docPart('cade-room-ver:');
+  const docDominant = docBytes >= LOCALSTORAGE_TYPICAL_CAP * 0.4;
+
+  if (!force && freedNow > 0) {
+    // Space came back on its own — retry the save instead of nagging.
+    _resetStorageSnooze();
+    showToast(`Reclaimed ${_fmtKB(freedNow)} of idle/stranded storage — retrying save.`, 'success', 4000);
+    try { persistContent(); } catch {}
+    return;
+  }
 
   const items = _storageCleanupItems();
   const claimed = new Set();
@@ -12680,24 +12970,60 @@ window.__promptStorageCleanup = function(force) {
   const others = _storageOtherKeys(claimed);
   const reclaimable = items.reduce((n, it) => n + it.bytes, 0);
 
-  if (items.length === 0 && !force) {
-    showToast(swept
-      ? `Reclaimed ${_fmtKB(swept)} of stranded storage — retrying save.`
-      : 'Storage full — recent changes are kept in memory only. Open View → Manage Storage to see what is using the space.',
-      swept ? 'success' : 'error', 6000);
+  // Nothing to offer and the open document isn't the problem either: a toast,
+  // not a dialog. (When the document IS the problem the dialog opens so its
+  // panel can explain and offer sync-only.)
+  if (items.length === 0 && !force && !docDominant) {
+    showToast('Storage full — recent changes are kept in memory only. Open View → Manage Storage to see what is using the space.', 'error', 6000);
     _snoozeStorageCleanup();
-    if (swept) { _storageCleanupStrikes = 0; try { persistContent(); } catch {} }
     return;
   }
 
   const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-  const rows = items.map((it, i) => `
+  const days = _offloadDays();
+  const faint = t => ` <span style="color:var(--text-faint)">${t}</span>`;
+  const rows = items.map((it, i) => {
+    const pre = it.orphan || (it.idle && !it.dirty && !it.isCurrent);
+    let tags = '';
+    if (it.isCurrent) tags += faint('(snapshots only)');
+    if (it.orphan) tags += faint('(orphaned)');
+    if (it.dirty) tags += ` <span style="color:var(--warning, #d97706)">(unsynced edits)</span>`;
+    if (!it.orphan && !it.isCurrent && it.idleDays != null && it.idleDays >= 1) tags += faint(`· ${it.idleDays}d idle`);
+    const note = it.note ? `<div style="font-size:10px;color:var(--text-faint);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%;" title="${esc(it.note)}">${esc(it.note)}</div>` : '';
+    return `
     <label class="room-manager-item" style="cursor:pointer;gap:8px;">
-      <input type="checkbox" data-idx="${i}" ${it.orphan ? 'checked' : ''}>
-      <span class="room-manager-name" style="flex:1;">${esc(it.label)}${it.isCurrent ? ' <span style="color:var(--text-faint)">(snapshots only)</span>' : ''}${it.orphan ? ' <span style="color:var(--text-faint)">(orphaned)</span>' : ''}${it.note ? ` <span style="color:var(--text-faint)">(${esc(it.note)})</span>` : ''}</span>
+      <input type="checkbox" data-idx="${i}" data-idle="${pre ? 1 : 0}" ${pre ? 'checked' : ''}>
+      <span class="room-manager-name" style="flex:1;min-width:0;display:flex;flex-direction:column;">
+        <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(it.label)}${tags}</span>${note}
+      </span>
       <span style="color:var(--text-faint);font-size:var(--text-xs);">${_fmtKB(it.bytes)}</span>
-    </label>
-  `).join('');
+    </label>`;
+  }).join('');
+
+  // The open document's own footprint — the one thing the checkboxes can't
+  // touch. When it dominates, say so plainly and offer the fix: sync-only
+  // rooms live on the server and in memory while open, nothing written here.
+  let docBlock = '';
+  if (current) {
+    const pct = Math.round((docBytes / LOCALSTORAGE_TYPICAL_CAP) * 100);
+    const line = curSyncOnly
+      ? `Open document “${esc(current)}”: sync-only — nothing stored on this device.`
+      : `Open document “${esc(current)}”: ${_fmtKB(docBytes)} (~${pct}% of the cap)`;
+    docBlock = `<div style="font-size:var(--text-xs);color:var(--text-muted);padding:8px 10px;margin-bottom:8px;border:1px solid var(--border, rgba(128,128,128,.25));border-radius:8px;">
+      <div><b style="color:var(--text)">${line}</b></div>
+      ${curSyncOnly ? '' : `<div style="margin-top:2px;">Text cache ${_fmtKB(cacheB)} · sync base ${_fmtKB(baseB)} · snapshots ${_fmtKB(snapB)}. Not clearable while open.</div>`}
+      ${(!curSyncOnly && docDominant) ? `<div style="margin-top:4px;">This document alone is too big to keep offline on this device — clearing other rooms won’t stop this dialog. Sync-only keeps it on the server and in memory while open, and writes nothing here.</div>` : ''}
+      ${curSyncOnly ? '' : `<button class="btn" style="margin-top:6px;width:100%;" onclick="storageMakeCurrentSyncOnly()">☁ Make “${esc(current)}” sync-only on this device</button>`}
+    </div>`;
+  }
+
+  const selectBar = rows ? `<div style="display:flex;gap:10px;align-items:center;font-size:var(--text-xs);color:var(--text-muted);padding:0 2px 6px;">
+      <span>Select:</span>
+      <a href="#" style="color:var(--accent);" onclick="storageCleanupSelect('all');return false;">all</a>
+      <a href="#" style="color:var(--accent);" onclick="storageCleanupSelect('none');return false;">none</a>
+      <a href="#" style="color:var(--accent);" onclick="storageCleanupSelect('idle');return false;">idle &amp; orphaned</a>
+      <span style="margin-left:auto;">${days ? `auto-offload after ${days}d idle` : 'auto-offload off'}</span>
+    </div>` : '';
 
   // When the checkboxes add up to almost nothing, say so and name what IS
   // holding the space — otherwise the dialog reads as "everything is tiny, I
@@ -12710,12 +13036,13 @@ window.__promptStorageCleanup = function(force) {
   ).join('');
   const otherBlock = others.length ? `
     <div style="color:var(--text-muted);font-size:var(--text-xs);padding:8px 2px 2px;border-top:1px solid var(--border, rgba(128,128,128,.25));margin-top:6px;">
-      <div style="margin-bottom:4px;">Not clearable from this list — ${_fmtKB(otherTotal)} in app data (the open document, sync settings, workspaces).${reclaimable < otherTotal ? ' This is where most of your local storage is going.' : ''}</div>
+      <div style="margin-bottom:4px;">Not clearable from this list — ${_fmtKB(otherTotal)} in app data (the open document, sync settings, workspaces).${reclaimable < otherTotal && !docDominant ? ' This is where most of your local storage is going.' : ''}</div>
       ${breakdown}
     </div>` : '';
 
   document.getElementById('storage-cleanup-list').innerHTML =
-    (rows || '<div style="color:var(--text-muted);font-size:var(--text-sm);padding:8px 2px;">Nothing reclaimable here — every room cache is already minimal.</div>') + otherBlock;
+    docBlock + selectBar +
+    (rows || '<div style="color:var(--text-muted);font-size:var(--text-sm);padding:8px 2px;">Nothing reclaimable here — every other room is already minimal or offloaded.</div>') + otherBlock;
   _storageCleanupItemsCache = items;
   _fillStorageUsage(swept ? `Reclaimed ${_fmtKB(swept)} of stranded fragments just now.` : '');
 
@@ -12723,6 +13050,21 @@ window.__promptStorageCleanup = function(force) {
   document.getElementById('storage-cleanup-overlay').classList.add('open');
 };
 let _storageCleanupItemsCache = [];
+
+window.storageCleanupSelect = function(mode) {
+  document.querySelectorAll('#storage-cleanup-list input[type="checkbox"]').forEach(cb => {
+    cb.checked = mode === 'all' ? true : mode === 'none' ? false : cb.dataset.idle === '1';
+  });
+};
+
+// The dialog's "make the open document sync-only" shortcut.
+window.storageMakeCurrentSyncOnly = function() {
+  const current = activeRoom || syncState.roomName || '';
+  if (!current) return;
+  closeStorageCleanupModal();
+  _resetStorageSnooze();
+  toggleRoomSyncOnly(current, true);
+};
 
 function closeStorageCleanupModal() {
   document.getElementById('storage-cleanup-overlay').classList.remove('open');
@@ -12747,10 +13089,14 @@ window.confirmStorageCleanup = function() {
     if (!g) return;
     count++;
     freed += g.bytes;
+    // Keep the GC's view of the room's attachments before its text goes.
+    if (g.room && !g.orphan) {
+      try { noteRoomRefs(g.room, (store.get('cade-room-cache:' + g.room) || '') + '\n' + (store.get('cade-room-synced:' + g.room) || '')); } catch {}
+    }
     g.keys.forEach(k => store.remove(k));
   });
   // A cleanup that actually recovered space earns a fresh set of strikes.
-  if (freed > 0) _storageCleanupStrikes = 0;
+  if (freed > 0) _resetStorageSnooze();
   showToast(`Cleared ${count} item${count === 1 ? '' : 's'} (~${_fmtKB(freed)})`, 'success', 2500);
   // Retry persisting the current document into the space we just freed.
   persistContent();
@@ -13000,7 +13346,11 @@ document.getElementById('file-manager-overlay').addEventListener('keydown', (e) 
 // in the tab list (orphans from removals on other tabs, renames, legacy bugs).
 // Delayed so it never competes with first paint; waiting for quota pressure to
 // do this meant orphans sat around bloating storage for months.
-setTimeout(() => { try { window.__evictStaleRoomCaches(); } catch {} }, 8000);
+setTimeout(() => {
+  try { window.__offloadIdleRooms(); } catch {}      // idle rooms → server-only (toasts if any)
+  try { window.__evictStaleRoomCaches(); } catch {}  // orphans of removed/renamed rooms
+  try { reconcileSyncOnlyStorage(); } catch {}       // sync-only rooms must hold nothing here
+}, 8000);
 
 // ============================================
 // WORKSPACES — organize rooms into projects
@@ -13186,6 +13536,56 @@ function removeRoomFromWorkspace(name, wsId) {
 // ---------- Pin / Archive flags (Features 51/52) ----------
 function roomIsPinned(name) { return !!(roomMeta[name] && roomMeta[name].pinned); }
 function roomIsArchived(name) { return !!(roomMeta[name] && roomMeta[name].archived); }
+// "Sync only" rooms keep NO text on this device: the document lives on the
+// server and in memory while open, so nothing of it touches the ~5 MB
+// localStorage bucket. Either the global switch (storage.syncOnlyAll) or the
+// per-room `nocache` flag, which rides in the synced meta so it applies to the
+// room NAME on every device.
+function _syncOnlyAll() { try { return !!(window.Settings && Settings.get('storage.syncOnlyAll')); } catch { return false; } }
+function roomIsSyncOnly(name) { return _syncOnlyAll() || !!(name && roomMeta[name] && roomMeta[name].nocache); }
+function setRoomSyncOnly(name, on) {
+  roomMeta[name] = roomMeta[name] || {};
+  roomMeta[name].nocache = !!on;
+  roomMeta[name].nocacheTs = Date.now();
+  _maybeDropRoomMeta(name);
+  saveRoomMeta();
+}
+// Move a room's content keys between localStorage and memory to match its
+// current flag. store.set routes by the volatile predicate, so a read → remove
+// → write cycle does the right thing in both directions. Returns the physical
+// bytes freed (only non-zero when the room went sync-only).
+function applyRoomSyncOnlyStorage(name) {
+  let freed = 0;
+  const syncOnly = roomIsSyncOnly(name);
+  if (syncOnly) {
+    try { noteRoomRefs(name, (store.get('cade-room-cache:' + name) || '') + '\n' + (store.get('cade-room-synced:' + name) || '')); } catch {}
+  }
+  ROOM_CONTENT_PREFIXES.forEach(p => {
+    const k = p + name;
+    const v = store.get(k);
+    freed += store.sizeOf(k);
+    store.remove(k);
+    if (v != null) store.set(k, v);
+  });
+  return syncOnly ? freed : 0;
+}
+// Any sync-only room that still has a persisted copy (flagged on another
+// device, or the global switch turned on) loses it. Cheap: a few getItem
+// probes per room.
+function reconcileSyncOnlyStorage() {
+  try {
+    rooms.forEach(r => {
+      if (roomIsSyncOnly(r) && ROOM_CONTENT_PREFIXES.some(p => store.isPersisted(p + r))) applyRoomSyncOnlyStorage(r);
+    });
+  } catch {}
+}
+// Memory-only routing for sync-only rooms' content keys (see store.setVolatile).
+store.setVolatile(key => {
+  for (const p of ROOM_CONTENT_PREFIXES) {
+    if (key.startsWith(p)) { const r = key.slice(p.length); return !!r && r !== '__local__' && roomIsSyncOnly(r); }
+  }
+  return false;
+});
 // Item 11: pins + custom order can be PER WORKSPACE. A global pin (roomMeta)
 // still surfaces the room in every workspace; a workspace pin (ws.pins) only
 // floats it within that workspace. Both live in the synced blob.
@@ -13202,7 +13602,7 @@ function roomPinnedHere(name) {
 // "the user unpinned/unarchived this at T", which must survive the sync merge.
 function _maybeDropRoomMeta(name) {
   const m = roomMeta[name];
-  if (m && !m.pinned && !m.archived && !m.created && !m.modified && !m.pinTs && !m.archTs && !m.flagsTs) delete roomMeta[name];
+  if (m && !m.pinned && !m.archived && !m.nocache && !m.created && !m.modified && !m.pinTs && !m.archTs && !m.nocacheTs && !m.flagsTs) delete roomMeta[name];
 }
 // Pin and archive changes each carry their OWN timestamp (pinTs / archTs).
 // The blob merge picks a room's meta entry by max(modified, created) — stamps
@@ -13971,6 +14371,7 @@ window.showRoomActionMenu = function(evt, roomName) {
   const hasPassword = roomHasPassword(roomName);
   const pinned = roomPinnedHere(roomName);
   const archived = roomIsArchived(roomName);
+  const syncOnly = roomIsSyncOnly(roomName);
   const esc = s => escapeHtml(s.replace(/\\/g, '\\\\').replace(/'/g, "\\'"));
   const er = esc(roomName);
   const wsItems = _roomWsToggleItems(roomName, er, esc);
@@ -13981,6 +14382,7 @@ window.showRoomActionMenu = function(evt, roomName) {
     <div class="rm-action-divider"></div>
     <div class="rm-action-item" onclick="toggleRoomPin('${er}')">${pinned ? '📌 Unpin' : '📌 Pin to top'}</div>
     <div class="rm-action-item" onclick="toggleRoomArchive('${er}')">${archived ? '↩ Restore from archive' : '🗄 Archive'}</div>
+    <div class="rm-action-item" onclick="toggleRoomSyncOnly('${er}')" title="Sync-only rooms keep no copy on this device — text lives on the server and in memory while open">${syncOnly ? '💾 Keep a local copy' : '☁ Sync only (no copy on this device)'}</div>
     <div class="rm-action-divider"></div>
     <div class="rm-action-item" onclick="closeActionMenu(); roomPasswordAction('${er}')">${hasPassword ? '🔑 Change password' : '🔒 Set password'}</div>
     ${hasPassword ? `<div class="rm-action-item" onclick="closeActionMenu(); removeRoomPassword('${er}')">Remove password</div>` : ''}
@@ -14000,6 +14402,7 @@ window.showRoomTabContextMenu = function(evt, roomName) {
   if (!menu) return;
   const pinned = roomPinnedHere(roomName);
   const archived = roomIsArchived(roomName);
+  const syncOnly = roomIsSyncOnly(roomName);
   const esc = s => escapeHtml(s.replace(/\\/g, '\\\\').replace(/'/g, "\\'"));
   const er = esc(roomName);
   const wsItems = _roomWsToggleItems(roomName, er, esc);
@@ -14008,6 +14411,7 @@ window.showRoomTabContextMenu = function(evt, roomName) {
     <div class="rm-action-item" onclick="closeActionMenu(); switchRoom('${er}')">↗ Switch to here</div>
     <div class="rm-action-item" onclick="toggleRoomPin('${er}')">${pinned ? '📌 Unpin' : '📌 Pin to top'}</div>
     <div class="rm-action-item" onclick="toggleRoomArchive('${er}')">${archived ? '↩ Restore' : '🗄 Archive'}</div>
+    <div class="rm-action-item" onclick="toggleRoomSyncOnly('${er}')">${syncOnly ? '💾 Keep a local copy' : '☁ Sync only (no copy on this device)'}</div>
     <div class="rm-action-divider"></div>
     <div class="rm-action-section">workspaces</div>
     ${wsItems}
@@ -14288,6 +14692,7 @@ async function applyRemoteWorkspaceBlob(encrypted, baseKey, source) {
     const stampOf = m => m ? Math.max(m.modified || 0, m.created || 0) : 0;
     const pinTsOf = m => (m && (m.pinTs || m.flagsTs)) || 0;
     const archTsOf = m => (m && (m.archTs || m.flagsTs)) || 0;
+    const ncTsOf = m => (m && m.nocacheTs) || 0; // sync-only flag, same treatment
     for (const n of new Set([...Object.keys(roomMeta), ...Object.keys(remoteMeta)])) {
       const L = roomMeta[n], R = remoteMeta[n];
       const winner = !L ? R : (!R ? L : (stampOf(R) >= stampOf(L) ? R : L));
@@ -14300,6 +14705,9 @@ async function applyRemoteWorkspaceBlob(encrypted, baseKey, source) {
         if (pinTsOf(pinSrc)) entry.pinTs = pinTsOf(pinSrc); else delete entry.pinTs;
         if (archSrc.archived) entry.archived = true; else delete entry.archived;
         if (archTsOf(archSrc)) entry.archTs = archTsOf(archSrc); else delete entry.archTs;
+        const ncSrc = ncTsOf(L) === ncTsOf(R) ? winner : (ncTsOf(L) > ncTsOf(R) ? L : R);
+        if (ncSrc.nocache) entry.nocache = true; else delete entry.nocache;
+        if (ncTsOf(ncSrc)) entry.nocacheTs = ncTsOf(ncSrc); else delete entry.nocacheTs;
       } else {
         // Single-sided entry: normalize its legacy stamp onto the new fields
         // (read from the original — entry's own flagsTs was just deleted).
@@ -14308,7 +14716,7 @@ async function applyRemoteWorkspaceBlob(encrypted, baseKey, source) {
       }
       // Effective flags differ from what the remote copy says → push back so
       // every device converges on the surviving pin/archive state.
-      if (!!entry.pinned !== !!(R && R.pinned) || !!entry.archived !== !!(R && R.archived)) {
+      if (!!entry.pinned !== !!(R && R.pinned) || !!entry.archived !== !!(R && R.archived) || !!entry.nocache !== !!(R && R.nocache)) {
         flagsChangedBeyondRemote = true;
       }
       mergedMeta[n] = entry;
@@ -14366,6 +14774,8 @@ async function applyRemoteWorkspaceBlob(encrypted, baseKey, source) {
 
     store.set('cade-rooms', JSON.stringify(rooms));
     store.set('cade-room-meta', JSON.stringify(roomMeta));
+    // A room flagged sync-only on another device must drop its copy here too.
+    reconcileSyncOnlyStorage();
     saveRoomTombstones();
     store.set('cade-workspaces', JSON.stringify(workspaces));
     store.set('cade-room-workspace', JSON.stringify(roomWorkspace));
@@ -17266,7 +17676,7 @@ const Settings = (() => {
   const PREFIX = 'cade-pref:';
   const registry = new Map();       // key -> definition
   const listeners = new Map();      // key -> Set<cb>
-  const SECTION_ORDER = ['Appearance', 'Editor', 'Behavior'];
+  const SECTION_ORDER = ['Appearance', 'Editor', 'Behavior', 'Storage'];
 
   function coerce(def, raw) {
     if (raw == null) return def.default;
@@ -17399,6 +17809,8 @@ window.registerSetting = registerSetting;
 // Convenience for openSettings() to re-render the auto section.
 function renderSettingsSections() { Settings._render(); }
 
+let _syncOnlyAllApplied; // last value storage.syncOnlyAll's apply() acted on
+
 // ---- Deferred widget settings ----
 // These were authored earlier in the file but MUST register here: registerSetting
 // is a const initialized just above, so any call before this point hits its
@@ -17434,6 +17846,38 @@ try {
   ], apply(v) {
     const map = { compact: '6px', normal: 'var(--space-4)', roomy: '6%', wide: 'max(12%, 48px)' };
     document.documentElement.style.setProperty('--editor-hpad', map[v] || map.normal);
+  } });
+  // Device-local storage policy (the ~5 MB localStorage bucket that holds the
+  // room texts). Idle rooms are offloaded — local copy dropped, server copy
+  // untouched — and "sync only" keeps room text out of the bucket entirely.
+  registerSetting({ key: 'storage.offloadDays', label: 'Offload idle rooms from this device', type: 'select', default: '7', section: 'Storage', hint: 'Drop the local copy (text, sync base, snapshots) of rooms you haven’t opened on this device for this long. They stay on the server and reload when opened. Rooms with unsynced edits are never offloaded.', options: [
+    { value: '0', label: 'Never' },
+    { value: '3', label: 'After 3 days' },
+    { value: '7', label: 'After 7 days' },
+    { value: '14', label: 'After 14 days' },
+    { value: '30', label: 'After 30 days' },
+  ] });
+  registerSetting({ key: 'storage.syncOnlyAll', label: 'Sync only, all rooms', type: 'toggle', default: false, section: 'Storage', hint: 'Never store room text on this device: rooms live on the server and in memory while open. Great for pasting between devices; no offline access, no snapshots kept here. For single rooms use a room’s ⚙ menu → Sync only.', apply(v) {
+    const on = !!v;
+    if (_syncOnlyAllApplied === on) return;
+    const first = _syncOnlyAllApplied === undefined;
+    if (on && !_syncConfigured()) {
+      _syncOnlyAllApplied = false;
+      showToast('Set up sync first — sync-only rooms have no copy anywhere else.', 'error', 4000);
+      setTimeout(() => { try { Settings.set('storage.syncOnlyAll', false); } catch {} }, 0);
+      return;
+    }
+    _syncOnlyAllApplied = on;
+    if (first && !on) return; // boot with the default — nothing to move
+    try {
+      let freed = 0;
+      // On: every room's persisted copy moves to memory. Off: whatever the
+      // session holds in memory is written back (rooms not open this session
+      // simply reload from the server next time).
+      rooms.forEach(r => { if (!on || ROOM_CONTENT_PREFIXES.some(p => store.isPersisted(p + r))) freed += applyRoomSyncOnlyStorage(r); });
+      if (!first) showToast(on ? `Sync-only for all rooms — ~${_fmtKB(freed)} freed on this device` : 'Rooms keep local copies on this device again', 'success', 3200);
+      try { renderRoomTabs(); } catch {}
+    } catch {}
   } });
   registerSetting({ key: 'snapshots.maxAgeDays', label: 'Auto-delete old snapshots', type: 'select', default: '0', section: 'Behavior', hint: 'Discard a document’s snapshots older than this (the most recent is always kept). Use Snapshots → Manage storage to clear by size across all rooms.', options: [
     { value: '0', label: 'Keep all' },
