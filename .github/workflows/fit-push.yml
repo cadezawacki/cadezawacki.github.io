@@ -1,8 +1,14 @@
 # The Wire — ppc fitness push notifications.
 # Runs every 30 minutes; tools/fit-push.mjs decides whether this run falls in
 # a send window (times + timezone live in the app's shared fit/config) and
-# stays silent otherwise. Requires the VAPID_PRIVATE_KEY repository secret
-# (Settings → Secrets and variables → Actions).
+# stays silent otherwise.
+#
+# Requires the VAPID_PRIVATE_KEY repository secret (Settings → Secrets and
+# variables → Actions). Generate a pair with `node tools/vapid-keygen.mjs`;
+# the public half lives in ppc.html (VAPID_PUB) and MUST come from the same
+# pair. While the secret is missing the job runs in DRY_RUN mode — it logs
+# what it would have sent and finishes green with a warning instead of
+# failing every half hour.
 name: fit-push
 on:
   schedule:
@@ -17,11 +23,17 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
-          node-version: 20
+          node-version: 22
       - run: npm install --no-save web-push@3
-      - run: node tools/fit-push.mjs
+      - name: send
         env:
           VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
+        run: |
+          if [ -z "$VAPID_PRIVATE_KEY" ]; then
+            echo "::warning title=The Wire is muted::VAPID_PRIVATE_KEY secret is not set — running in DRY_RUN mode. Generate a pair with 'node tools/vapid-keygen.mjs', put the public key in ppc.html and the private key in the repo's Actions secrets."
+            export DRY_RUN=1
+          fi
+          node tools/fit-push.mjs
