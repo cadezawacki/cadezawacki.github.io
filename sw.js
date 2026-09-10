@@ -13,7 +13,7 @@
 //   - Firebase realtime DB: bypass (live data, needs network)
 // ============================================
 
-const CACHE_VERSION = 104;
+const CACHE_VERSION = 105;
 const CACHE_NAME = `cade-v${CACHE_VERSION}`;
 
 // Same-origin pages to precache on install.
@@ -185,6 +185,17 @@ self.addEventListener('fetch', (e) => {
 // ---- Message channel ----
 self.addEventListener('message', (e) => {
   if (e.data === 'SKIP_WAITING') self.skipWaiting();
+  // ppc: delayed test notification — the SW timer keeps running after the
+  // page is backgrounded, which is the whole point of the test.
+  if (e.data && e.data.type === 'TEST_NOTIFY') {
+    const delay = Math.max(0, Math.min(30000, +e.data.delay || 3000));
+    e.waitUntil(new Promise((resolve) => setTimeout(resolve, delay)).then(() =>
+      self.registration.showNotification('🔔 ppc test', {
+        body: 'Notifications work on this phone. The Wire can reach you here.',
+        tag: 'ppc-test', data: { url: './ppc.html' },
+        icon: './assets/ppc-icon.png', badge: './assets/ppc-icon.png',
+      })));
+  }
   if (e.data && e.data.type === 'CLEAR_PHOTO_CACHE') {
     caches.open(CACHE_NAME).then(async (cache) => {
       const keys = await cache.keys();
