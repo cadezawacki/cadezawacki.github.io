@@ -7892,11 +7892,21 @@ const Fit = (() => {
       const perm = await Notification.requestPermission();
       if (perm !== 'granted') { showToast('Notifications denied — allow them in iOS Settings → ppc', 'error', 4000); return; }
       const reg = await navigator.serviceWorker.ready;
-      const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlB64ToU8(VAPID_PUB) });
+      const wantKey = urlB64ToU8(VAPID_PUB);
+      // A subscription made with an OLDER public key blocks a new one
+      // ("applicationServerKey does not match") — drop it first. Rotating
+      // VAPID_PUB therefore just means tapping Enable again on each phone.
+      const old = await reg.pushManager.getSubscription();
+      if (old) {
+        const oldKey = old.options && old.options.applicationServerKey ? new Uint8Array(old.options.applicationServerKey) : null;
+        const same = oldKey && oldKey.length === wantKey.length && oldKey.every((b, i) => b === wantKey[i]);
+        if (!same) { try { await old.unsubscribe(); } catch {} }
+      }
+      const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: wantKey });
       let dev = store.get('ppc-dev-id');
       if (!dev) { dev = uid().replace(/[^a-z0-9]/gi, ''); store.set('ppc-dev-id', dev); }
       KV.set('push/subs/' + ME + '/' + dev, { sub: JSON.parse(JSON.stringify(sub)), ua: (navigator.userAgent || '').slice(0, 60), ts: Date.now() });
-      showToast('🔔 The Wire is live on this phone', 'success', 3200);
+      showToast('🔔 The Wire is live on this phone' + (old ? ' (re-subscribed with the current key)' : ''), 'success', 3200);
     } catch (e) {
       showToast('Push setup failed: ' + ((e && e.message) || e), 'error', 4200);
     }
