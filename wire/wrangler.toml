@@ -1,0 +1,21 @@
+# The Wire — Cloudflare Worker. Deploy from this directory: `npx wrangler deploy`
+name = "ppc-wire"
+main = "src/index.mjs"
+compatibility_date = "2025-09-01"
+workers_dev = true
+
+[triggers]
+# every minute — the free plan allows this; each pass is a few KB of reads and finishes in well under a second
+crons = ["* * * * *"]
+
+[vars]
+VAPID_PUBLIC_KEY = "BLDjqScSs7wFz6yfdHv5lZw-8La0X1fBJSrthKp5jguCBgpHVXTf-GXF10C3OpsL4mGWhh56UTr4bYzst2OxTAI"
+VAPID_SUBJECT = "mailto:cade.a.zawacki@gmail.com"
+PPC_DB = "https://cadetxt-default-rtdb.firebaseio.com"
+PPC_BASE = "rooms/__ppc"
+# DRY_RUN = "1"   # uncomment to deploy a sender that only logs
+
+# secrets (never in this file):  npx wrangler secret put VAPID_PRIVATE_KEY
+#                                npx wrangler secret put POKE_TOKEN
+[observability]
+enabled = true

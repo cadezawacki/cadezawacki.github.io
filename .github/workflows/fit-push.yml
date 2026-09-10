@@ -1,18 +1,16 @@
-# The Wire — ppc fitness push notifications.
-# Runs every 30 minutes; tools/fit-push.mjs decides whether this run falls in
-# a send window (times + timezone live in the app's shared fit/config) and
-# stays silent otherwise.
+# The Wire — ppc fitness push notifications, GitHub Actions entry point.
+#
+# The LIVE sender is the Cloudflare Worker in wire/ (every minute + instant
+# pokes from the app). This workflow is manual-only now: use "Run workflow"
+# to send a pass by hand or to dry-run the logic in the Actions log. It runs
+# the same pass (tools/fit-push-core.mjs) as the Worker.
 #
 # Requires the VAPID_PRIVATE_KEY repository secret (Settings → Secrets and
 # variables → Actions). Generate a pair with `node tools/vapid-keygen.mjs`;
 # the public half lives in ppc.html (VAPID_PUB) and MUST come from the same
-# pair. While the secret is missing the job runs in DRY_RUN mode — it logs
-# what it would have sent and finishes green with a warning instead of
-# failing every half hour.
+# pair. While the secret is missing the job runs in DRY_RUN mode.
 name: fit-push
 on:
-  schedule:
-    - cron: '*/30 * * * *'
   workflow_dispatch: {}
 permissions: {}
 concurrency:

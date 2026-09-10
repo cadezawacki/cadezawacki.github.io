@@ -4026,6 +4026,7 @@ const Notes = (() => {
     inp.value = '';
     chatRender();
     KV.set('chat/' + ym + '/' + id, { t });
+    if (window.ppcWirePoke) ppcWirePoke();
     inp.focus();
   }
   $('chat-send').addEventListener('click', chatSend);
@@ -7961,6 +7962,20 @@ const Fit = (() => {
       else setTimeout(() => ppcNotify('🔔 ppc test', 'Notifications work on this phone.', 'ppc-test'), 3000);
     },
   });
+  // The Wire worker: poke it right after a chat message / feed post so the
+  // partner's phone buzzes in seconds instead of at the next cron minute.
+  // URL + token live in the shared config (🎰 Arcade → The Wire).
+  let _pokeT = 0;
+  window.ppcWirePoke = () => {
+    const url = String((config || {}).wireUrl || '').trim().replace(/\/+$/, '');
+    if (!/^https:\/\//.test(url)) return;
+    clearTimeout(_pokeT);
+    _pokeT = setTimeout(() => {   // let the KV write land first, coalesce bursts
+      try {
+        fetch(url + '/poke', { method: 'POST', keepalive: true, headers: { authorization: 'Bearer ' + String((config || {}).wireToken || '') } }).catch(() => {});
+      } catch {}
+    }, 900);
+  };
   // mirror the prefs once per login so a fresh cron sees defaults (on/on)
   setTimeout(() => { if (ME) { syncPushPref('chat', prefOn('push.chat')); syncPushPref('feed', prefOn('push.feed')); } }, 4000);
   function updateAppBadge() {
@@ -8022,6 +8037,11 @@ const Fit = (() => {
         <label class="arc-knob"><span>Evening report</span><input class="form-input" type="time" data-ptime="pushEvening" value="${C.pushEvening || '19:00'}"></label>
         <label class="arc-knob"><span>Last call</span><input class="form-input" type="time" data-ptime="pushLast" value="${C.pushLast || '21:30'}"></label>
       </div>
+      <div class="form-hint" style="margin:8px 0 4px">Cloudflare Worker (wire/) — the live sender. Leave blank to rely on the GitHub cron only.</div>
+      <div class="arc-knobs" style="grid-template-columns:1fr">
+        <label class="arc-knob"><span>Worker URL</span><input class="form-input" type="url" data-pstr="wireUrl" placeholder="https://ppc-wire.you.workers.dev" value="${esc(C.wireUrl || '')}" style="width:62%"></label>
+        <label class="arc-knob"><span>Poke token</span><input class="form-input" type="text" data-pstr="wireToken" autocomplete="off" placeholder="same as the POKE_TOKEN secret" value="${esc(C.wireToken || '')}" style="width:62%"></label>
+      </div>
       ${deckRow('rewards', '🎁 Reward deck', 'date credits + wheel prizes draw from these')}
       ${deckRow('penalties', '🧦 Penalty deck', 'micro-forfeits (bomb detonations) draw from these')}`;
     // deck chips repaint alone — a full re-render would wipe unsaved knob edits
@@ -8063,6 +8083,7 @@ const Fit = (() => {
     });
     const tzSel = $('arcade-body').querySelector('[data-ptz]');
     if (tzSel) next.tz = tzSel.value;
+    $('arcade-body').querySelectorAll('[data-pstr]').forEach(inp => { next[inp.dataset.pstr] = inp.value.trim(); });
     KV.set('fit/config', next);
     closeModal('arcade-overlay');
     showToast('🎰 Arcade rules updated for both of you', 'success', 2600);
@@ -8174,6 +8195,7 @@ const Fit = (() => {
         post.img = imgId;
       }
       KV.set('fit/feed/' + ymNow() + '/' + uid(), post);
+      if (window.ppcWirePoke) ppcWirePoke();
       fImg = null; fTag = null;
       renderFeed();
     });

@@ -1,0 +1,14 @@
+{
+  "name": "ppc-wire",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "deploy": "wrangler deploy",
+    "dev": "wrangler dev --test-scheduled",
+    "tail": "wrangler tail --format pretty",
+    "test": "node test/webpush.test.mjs"
+  },
+  "devDependencies": {
+    "wrangler": "^4"
+  }
+}
