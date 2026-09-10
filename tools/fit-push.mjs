@@ -8,8 +8,8 @@
 //  - silence is the reward: a finished day gets NO evening/last-call sends
 //  - never send to someone who is in the app right now (fresh presence)
 //  - one send per window per day, deduped through push/log
-//  - every derived event (wheel/noon/job) ports the page's seeded kernel —
-//    keep the two in sync when either changes
+//  - every derived event (wheel/noon/job/flash/quest/featured game) ports
+//    the page's seeded kernel — keep the two in sync when either changes
 //
 // Env: VAPID_PRIVATE_KEY (secret, required unless DRY_RUN=1)
 //      PPC_DB (default https://cadetxt-default-rtdb.firebaseio.com)
@@ -55,7 +55,9 @@ const WEDGES = [
 ];
 function wheelFor(k, epoch) {
   if (k < epoch) return WEDGES[0];
-  let r = rand01('wheel:' + k) * WEDGES.reduce((a, w) => a + w[1], 0);
+  // 🎲 Loaded Dice re-spins — mirrors ppc.html (one suffix per player who played it)
+  const rr = ['C', 'A'].filter(u => playsFor(k, u).dice).length;
+  let r = rand01('wheel:' + k + (rr ? ':r' + rr : '')) * WEDGES.reduce((a, w) => a + w[1], 0);
   for (const w of WEDGES) { r -= w[1]; if (r < 0) return w; }
   return WEDGES[0];
 }
@@ -70,6 +72,65 @@ function noonFor(k, epoch) {
   const startMin = 13 * 60 + Math.floor(rand01('noonm:' + k) * 210);
   return { habit, startMin, endMin: startMin + 90 };
 }
+
+/* ---- arcade II seeded pieces (MUST match ppc.html) ---- */
+function seededShuffle(arr, seed) {
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) { const j = seedHash(seed + ':' + i) % (i + 1); [a[i], a[j]] = [a[j], a[i]]; }
+  return a;
+}
+const FLASH_POOL = ['20 jumping jacks', '15 squats', 'a 30-second plank', 'drink a full glass of water', '10 push-ups',
+  'walk around the block', '1 minute of deep breathing', 'stretch your hamstrings for 60s', 'a 45-second wall sit',
+  '20 lunges', 'stand up and shake it out for 30s', 'text your partner one thing you appreciate', '25 calf raises',
+  'balance on one foot, 30s each side', '10 burpees', 'dance to one song', '5 sun salutations', '30 mountain climbers',
+  'take the stairs twice', 'sit in a deep squat for 60s', '2 minutes of neck and shoulder rolls', 'a 20-second dead hang',
+  '15 glute bridges', 'a cold splash of water on your face', 'hold a hollow body for 30s', 'drink water, then 10 squats'];
+function flashSlots(k, epoch) {
+  if (k < epoch) return [];
+  const n = 1 + (rand01('flashn:' + k) < 0.55 ? 1 : 0) + (rand01('flashn2:' + k) < 0.3 ? 1 : 0);
+  const starts = seededShuffle(Array.from({ length: 24 }, (_, i) => 9 * 60 + i * 30), 'flashs:' + k).slice(0, n).sort((a, b) => a - b);
+  return starts.map((startMin, i) => ({ i, startMin, endMin: startMin + 40, task: FLASH_POOL[seedHash('flasht:' + k + i) % FLASH_POOL.length] }));
+}
+const QUESTS = [
+  ['🚶', 'walk 20 minutes outside'], ['💧', 'drink 8 glasses of water'], ['🧗', 'take the stairs every single time'],
+  ['🛏', 'in bed by 10:30 with no phone'], ['🥗', 'a vegetable with every meal'], ['🫁', '5 extra minutes of breathing'],
+  ['📵', 'no phone for the first 30 minutes awake'], ['🍳', 'cook a meal from scratch'], ['🙆', 'stretch 10 extra minutes'],
+  ['🏃', '5,000 extra steps'], ['🧹', 'tidy one whole room'], ['🌅', 'log a habit before 8am'],
+  ['🚿', 'finish your shower cold (30s)'], ['🍬', 'zero added sugar today'], ['🥤', 'no caffeine after noon'],
+  ['📖', 'read 15 pages'], ['🧠', 'learn one new thing and tell your partner'], ['💬', 'a real compliment, out loud'],
+  ['🎧', 'walk with a podcast'], ['🪥', 'floss (yes, actually)'], ['🌳', '10 minutes in the sun'],
+  ['🧴', 'sunscreen before you leave'], ['🍎', 'fruit instead of the snack'], ['⏰', 'up at the first alarm'],
+  ['🦶', '2 minutes of balance work'], ['🧍', 'stand up every hour'], ['🏋️', '3 sets of anything, anywhere'],
+  ['🥶', '1 minute of cold water on the wrists'], ['🍽', 'one meal with zero screens'], ['🧘', 'a 2-minute body scan before bed'],
+  ['🚰', 'a full glass of water before coffee'], ['🪟', 'open the windows and air the place out'], ['🛒', 'no takeout today'],
+  ['🧦', 'put the laundry AWAY, not on the chair'], ['🎵', 'dance to one full song'], ['🏞', 'a photo of something green outside'],
+];
+const COUPLE_QUESTS = [
+  ['🤝', 'a 15-minute walk together'], ['🍳', 'cook dinner together'], ['🧘', 'meditate side by side'],
+  ['🙆', 'stretch together for 10 minutes'], ['🎲', 'play one round of any game together'], ['📵', 'a phone-free dinner'],
+  ['💌', 'write each other one line of thanks'], ['🛌', 'lights out at the same time'], ['🏃', 'work out at the same time'],
+  ['🗣', 'tell each other your win of the day'], ['☕', 'coffee on the porch, no phones'], ['🧹', 'a 10-minute tidy blitz together'],
+];
+function questFor(k, epoch) {
+  if (k < epoch) return null;
+  const couple = rand01('questc:' + k) < 0.3;
+  const pool = couple ? COUPLE_QUESTS : QUESTS;
+  const [icon, text] = pool[seedHash('quest:' + k) % pool.length];
+  return { icon, text, couple };
+}
+const questDone = (k, u) => !!(((A('quests')[k] || {})[u] || {}).done);
+const VS_GAMES = ['react', 'taps', 'math', 'memory', 'hold', 'bar', 'simon', 'aim', 'hilo', 'dice'];
+const GAME_NAMES = { react: 'Reflex', taps: 'Rep Race', math: 'Quick Math', memory: 'Memory', hold: 'Steady Hand', bar: 'Timing Bar', simon: 'Simon', aim: 'Pop', hilo: 'Hi-Lo', dice: 'Dice Duel' };
+const gotd = k => VS_GAMES[seedHash('gotd:' + k) % VS_GAMES.length];
+const gamePlayed = (k, g, u) => !!(((A('games')[k] || {})[g] || {})[u]);
+function dareStatus(d) {
+  if (!d) return 'gone';
+  if (d.status === 'done' || d.status === 'declined') return d.status;
+  if (d.dl && Date.now() > d.dl) return 'failed';
+  return d.status || 'open';
+}
+const pendingDares = u => Object.values(A('dares')).filter(d => d && d.to === u && dareStatus(d) === 'open');
+const flashClaimed = (k, i, u) => typeof (((A('flash')[k] || {})['s' + i] || {})[u]) === 'number';
 
 /* ---- local time in the couple's timezone ---- */
 function localParts(tz, at = NOW) {
@@ -132,9 +193,11 @@ function duelExposure(days, k, u, cfg) {
 }
 
 /* ---- main ---- */
-const [days, cfgRaw, subsRaw, logRaw, presence] = await Promise.all([
-  dbGet('fit/days'), dbGet('fit/config'), dbGet('push/subs'), dbGet('push/log'), dbGet('presence'),
+const [days, cfgRaw, subsRaw, logRaw, presence, arc] = await Promise.all([
+  dbGet('fit/days'), dbGet('fit/config'), dbGet('push/subs'), dbGet('push/log'), dbGet('presence'), dbGet('fit/arc'),
 ]).then(r => r.map(x => x || {}));
+const A = kind => arc[kind] || {};
+const playsFor = (k, u) => (A('plays')[k] || {})[u] || {};
 const cfg = { duelLose: 2, coupleEvery: 7, jobBonus: 25, arcadeEpoch: '2026-09-01', tz: 'America/New_York',
   pushMorning: '08:00', pushEvening: '19:00', pushLast: '21:30', ...cfgRaw };
 const { dateKey: tk, min: nowMin } = localParts(cfg.tz);
@@ -160,6 +223,11 @@ if (inWindow(parseHHMM(cfg.pushMorning, 480))) {
       if (nn) bits.push(`🤠 standoff at ${fmtMin(nn.startMin)}`);
       const j = jobFor(tk, epoch);
       if (j) bits.push(`🏦 vault ${fmtMin(j.startMin)}`);
+      const q = questFor(tk, epoch);
+      if (q) bits.push(`${q.icon} quest: ${q.text}`);
+      const fl = flashSlots(tk, epoch);
+      if (fl.length) bits.push(`⚡ ${fl.length} flash task${fl.length === 1 ? '' : 's'} (first ${fmtMin(fl[0].startMin)})`);
+      bits.push(`🕹 featured: ${GAME_NAMES[gotd(tk)]} 2×`);
       return { title: '🌅 ppc — today\'s board', body: bits.join(' · '), badge: n };
     },
   });
@@ -172,9 +240,13 @@ if (inWindow(parseHHMM(cfg.pushEvening, 1140))) {
       const o = OTHER(u);
       const n = remaining(days, tk, u);
       const exp = duelExposure(days, tk, u, cfg);
-      const body = isSweep(days, tk, o)
+      let body = isSweep(days, tk, o)
         ? `${USER_NAMES[o]} swept at ${sweepTime(days, tk, o, cfg.tz)} — you have ${n} left${exp ? ` and −${exp} exposure` : ''}`
         : `${n} left tonight${exp ? ` · −${exp} exposure if the day ends now` : ''}`;
+      const pd = pendingDares(u).length;
+      if (pd) body += ` · 😈 ${pd} dare${pd === 1 ? '' : 's'} waiting`;
+      if (questFor(tk, epoch) && !questDone(tk, u)) body += ' · 🗺 quest open';
+      if (!gamePlayed(tk, gotd(tk), u)) body += ` · 🕹 ${GAME_NAMES[gotd(tk)]} unplayed`;
       return { title: '⚔️ ppc — evening report', body, badge: n };
     },
   });
@@ -206,6 +278,33 @@ if (jNow && inWindow(jNow.startMin)) {
     users: ['C', 'A'],
     mk: () => ({ title: '🏦 THE VAULT IS OPEN', body: `90 minutes of 2× — and if you BOTH log inside, +${cfg.jobBonus} each.` }),
   });
+}
+// ⚡ flash tasks — one send per window, to whoever hasn't claimed it
+for (const f of flashSlots(tk, epoch)) {
+  if (!inWindow(f.startMin)) continue;
+  sends.push({
+    slot: 'flash' + f.i,
+    users: ['C', 'A'].filter(u => !flashClaimed(tk, f.i, u)),
+    mk: () => ({ title: '⚡ FLASH TASK', body: `${f.task} — claim it in the app before ${fmtMin(f.endMin)}. First one in gets the bonus.` }),
+  });
+}
+// 🏆 Monday morning: last week's result (the page mints fit/arc/weeks; we just announce)
+{
+  const sinceMon = (new Date(tk + 'T12:00:00Z').getUTCDay() + 6) % 7;   // days since this week's Monday
+  const monK = addDaysKey(tk, -(sinceMon + 7));                            // last week's Monday
+  const w = A('weeks')[monK];
+  if (sinceMon === 0 && w && inWindow(parseHHMM(cfg.pushMorning, 480) + WINDOW)) {
+    sends.push({
+      slot: 'showdown',
+      users: ['C', 'A'],
+      mk: u => ({ title: w.winner ? `🏆 ${USER_NAMES[w.winner]} took the week` : '🤝 dead heat', body: `Cade ${w.c} · Avery ${w.a}${w.forfeit ? (w.winner === u ? ` — ${USER_NAMES[OTHER(u)]} owes you: ${w.forfeit}` : ` — you owe: ${w.forfeit}`) : ''}` }),
+    });
+  }
+}
+// 😈 a dare that has sat unanswered for 2h+ gets one poke
+for (const u of ['C', 'A']) {
+  const stale = pendingDares(u).filter(d => d.ts && Date.now() - d.ts > 2 * 3600000);
+  if (stale.length) sends.push({ slot: 'dare-' + u, users: [u], mk: () => ({ title: '😈 a dare is waiting', body: `${USER_NAMES[stale[0].by]}: ${stale[0].text} — ${stale[0].stake || 0} coins on it. Accept or decline in Quests.` }) });
 }
 const wheelTomorrow = wheelFor(addDaysKey(tk, 1), epoch);
 if (inWindow(20 * 60) && wheelTomorrow[0] !== 'vanilla') {

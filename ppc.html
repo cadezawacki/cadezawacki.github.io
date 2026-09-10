@@ -811,6 +811,7 @@ svg[data-tool]:not([data-tool="select"]):not([data-tool="erase"]) .bld-shape { p
 .odds-note { color: var(--text-faint); font-size: 0.62rem; }
 .arc-card.rack .rk { font-family: var(--font-mono); font-size: 0.66rem; background: var(--surface-2); padding: 3px 7px; border-radius: 6px; margin-right: 2px; }
 .arc-card.rack .rk.on { background: var(--accent); color: #fff; }
+.arc-card.rack .rk.go { background: var(--text); color: var(--bg); cursor: pointer; }
 .arc-card.rack .rk.dim { opacity: 0.5; }
 .boss-name { font-family: var(--font-mono); font-weight: 700; font-size: 0.7rem; letter-spacing: 0.04em; }
 .boss-hp { height: 10px; border-radius: 5px; background: #16a34a; overflow: hidden; margin: 6px 0 4px; direction: rtl; }
@@ -985,6 +986,205 @@ svg[data-tool]:not([data-tool="select"]):not([data-tool="erase"]) .bld-shape { p
 .tc-chip:hover { border-color: var(--accent); color: var(--accent); }
 .tc-laps { margin-top: 10px; font-family: var(--font-mono); font-size: 0.7rem; color: var(--text-muted); max-height: 120px; overflow-y: auto; }
 .tc-laps div { padding: 2px 0; border-bottom: 1px dashed var(--border); }
+
+
+/* ---- arcade II: fit nav, daily loop, games, quests, trophies, shop ---- */
+.fit-nav {
+  display: flex; gap: 5px; overflow-x: auto; scrollbar-width: none; -ms-overflow-style: none;
+  margin: -2px -14px 10px; padding: 2px 14px 4px; -webkit-overflow-scrolling: touch;
+  user-select: none; -webkit-user-select: none;
+}
+.fit-nav::-webkit-scrollbar { display: none; }
+.fit-nav .fn {
+  position: relative; flex-shrink: 0; font-size: 0.7rem; font-weight: 600; padding: 5px 10px; border-radius: 99px;
+  background: var(--surface); border: 1px solid var(--border); color: var(--text-muted); text-decoration: none; white-space: nowrap;
+  touch-action: manipulation;
+}
+.fit-nav .fn.on { background: var(--text); color: var(--bg); border-color: var(--text); }
+.fit-nav .fn i { position: absolute; top: -2px; right: -2px; width: 8px; height: 8px; border-radius: 50%; background: var(--error); border: 1.5px solid var(--bg); }
+.duel-lv { display: flex; justify-content: space-between; gap: 8px; margin-top: 5px; font-size: 0.62rem; font-family: var(--font-mono); color: var(--text-muted); }
+.lv-line { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.lv-line b { color: var(--text); }
+.lv-line .lv-t { font-style: italic; font-family: var(--font-body); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lv-line.lv-a { text-align: right; align-items: flex-end; }
+.daily-loop { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin: 8px 0 4px; }
+.daily-loop:has(> :nth-child(3):last-child) { grid-template-columns: repeat(3, 1fr); }
+.dl-tile {
+  display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 7px 4px; border-radius: var(--radius-md);
+  background: var(--surface); border: 1px dashed var(--border); text-decoration: none; color: var(--text-muted); min-width: 0;
+  touch-action: manipulation;
+}
+.dl-tile span { font-size: 18px; }
+.dl-tile b { font-size: 0.58rem; font-family: var(--font-mono); letter-spacing: 0.02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.dl-tile.done { border-style: solid; border-color: var(--success); background: var(--success-bg); color: var(--success); }
+.dl-tile.half { border-style: solid; border-color: var(--warn); }
+.arc-card.flash.live { border-color: #eab308; background: color-mix(in srgb, #eab308 12%, var(--surface)); animation: pressPulse 1.4s ease-in-out infinite; }
+.arc-card.dare.live { border-color: #8b5cf6; }
+.arc-card.underdog.live { border-color: var(--success); }
+.hab-row.cloaked .hb-ic { filter: grayscale(1); }
+.hab-row.cloaked .hb-tick { border-style: dotted; color: var(--text-faint); }
+
+/* arcade view */
+.arc-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px; }
+.chest {
+  display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 12px 8px; border-radius: var(--radius-lg);
+  background: var(--surface); border: 1px solid var(--border); text-align: center;
+}
+.chest .ch-ic { font-size: 30px; }
+.chest b { font-size: 0.78rem; }
+.chest > span:last-child { font-size: 0.62rem; color: var(--text-muted); font-family: var(--font-mono); }
+.chest:not(.open):not(.slots) { border-color: #eab308; animation: chestWiggle 2.4s ease-in-out infinite; }
+@keyframes chestWiggle { 0%,88%,100% { transform: rotate(0); } 91% { transform: rotate(-3deg); } 94% { transform: rotate(3deg); } 97% { transform: rotate(-2deg); } }
+.chest.open { opacity: 0.8; }
+.games-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+.game-tile {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 1px; text-align: left; padding: 9px 10px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); min-height: 88px; position: relative;
+}
+.game-tile .gt-ic { font-size: 20px; }
+.game-tile .gt-name { font-size: 0.78rem; font-weight: 650; }
+.game-tile .gt-name i { font-style: normal; font-size: 0.58rem; background: #eab308; color: #1c1917; padding: 1px 5px; border-radius: 5px; font-family: var(--font-mono); vertical-align: middle; }
+.game-tile .gt-desc { font-size: 0.6rem; color: var(--text-muted); line-height: 1.3; }
+.game-tile .gt-scores { display: flex; gap: 8px; margin-top: auto; padding-top: 4px; font-family: var(--font-mono); font-size: 0.62rem; }
+.game-tile .u-me { color: var(--accent); font-weight: 700; }
+.game-tile .u-them { color: var(--text-faint); }
+.game-tile.gotd { border-color: #eab308; }
+.game-tile.won { border-color: var(--success); background: var(--success-bg); }
+.game-tile.lost { opacity: 0.85; }
+.game-tile.won::after { content: '🏆'; position: absolute; top: 8px; right: 9px; font-size: 14px; }
+.sync-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 10px 12px; }
+.sync-card.match { border-color: #8b7ae0; background: var(--auth-b); }
+.sync-q { font-weight: 650; font-size: 0.85rem; margin-bottom: 8px; }
+.sync-opts { display: flex; flex-wrap: wrap; gap: 6px; }
+.sync-opts .ob { margin-left: 0; padding: 6px 12px; font-size: 0.72rem; }
+.sync-opts .ob:disabled:not(.go) { opacity: 0.45; }
+.sync-sub { font-size: 0.64rem; color: var(--text-muted); margin-top: 8px; font-family: var(--font-mono); }
+
+/* game overlay */
+.gm-overlay { display: none; position: fixed; inset: 0; z-index: 395; background: rgba(10,10,10,0.7); align-items: center; justify-content: center; padding: 16px; }
+.gm-overlay.open { display: flex; }
+.gm-box {
+  background: var(--surface); border-radius: 18px; width: min(380px, 100%); max-height: calc(100dvh - 40px); overflow: hidden;
+  box-shadow: var(--shadow-lg); border-top: 4px solid var(--accent); display: flex; flex-direction: column;
+  user-select: none; -webkit-user-select: none;
+}
+.gm-head { display: flex; align-items: center; gap: 8px; padding: 10px 12px 8px 16px; font-weight: 700; font-size: 0.9rem; }
+.gm-head .gm-meta { margin-left: auto; font-family: var(--font-mono); font-size: 0.6rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; }
+.gm-close { width: 30px; height: 30px; border-radius: 8px; color: var(--text-muted); font-size: 14px; }
+.gm-close:hover { background: var(--surface-hover); }
+.gm-body { padding: 8px 16px 18px; display: flex; flex-direction: column; align-items: center; gap: 10px; min-height: 300px; justify-content: center; overflow-y: auto; }
+.gm-sub { font-size: 0.72rem; color: var(--text-muted); text-align: center; font-family: var(--font-mono); }
+.gm-big { font-family: var(--font-mono); font-size: 2.6rem; font-weight: 700; letter-spacing: 0.02em; text-align: center; }
+.gm-pad {
+  width: 100%; min-height: 150px; border-radius: 16px; font-family: var(--font-mono); font-weight: 800; font-size: 1.2rem; letter-spacing: 0.1em;
+  background: var(--surface-2); border: 2px solid var(--border); touch-action: none; transition: background 80ms;
+}
+.gm-pad:active { background: var(--surface-hover); }
+.gm-pad.wait { background: #7f1d1d; color: #fecaca; border-color: #7f1d1d; }
+.gm-pad.go { background: #16a34a; color: #fff; border-color: #16a34a; }
+.gm-pad.bad { background: #78716c; color: #fff; }
+.gm-opts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; width: 100%; }
+.gm-opts.two { grid-template-columns: 1fr 1fr; }
+.gm-opt { padding: 16px 8px; border-radius: 12px; font-family: var(--font-mono); font-weight: 700; font-size: 1.1rem; background: var(--surface-2); border: 1.5px solid var(--border); touch-action: none; }
+.gm-opt:active { background: var(--accent); color: #fff; }
+.gm-grid4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; width: 100%; }
+.gm-card { aspect-ratio: 1; border-radius: 10px; background: var(--accent); font-size: 24px; touch-action: none; display: grid; place-items: center; transition: background 150ms; }
+.gm-card span { visibility: hidden; }
+.gm-card.up { background: var(--surface-2); border: 1.5px solid var(--border); }
+.gm-card.up span { visibility: visible; }
+.gm-card.ok { background: var(--success-bg); border-color: var(--success); }
+.gm-bar { position: relative; width: 100%; height: 26px; border-radius: 13px; background: var(--surface-2); overflow: hidden; border: 1px solid var(--border); }
+.gm-bar .zone { position: absolute; top: 0; bottom: 0; width: 10%; background: var(--success); opacity: 0.55; }
+.gm-bar .mark { position: absolute; top: 0; bottom: 0; width: 4px; margin-left: -2px; background: var(--text); }
+.gm-simon { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; width: 100%; }
+.gm-sp { aspect-ratio: 1; border-radius: 14px; opacity: 0.35; transition: opacity 80ms, transform 80ms; touch-action: none; }
+.gm-sp.s0 { background: #dc2626; } .gm-sp.s1 { background: #2563eb; } .gm-sp.s2 { background: #16a34a; } .gm-sp.s3 { background: #eab308; }
+.gm-sp.lit { opacity: 1; transform: scale(0.96); }
+.gm-arena { position: relative; width: 100%; height: 300px; border-radius: 14px; background: var(--surface-2); border: 1px solid var(--border); overflow: hidden; }
+.gm-balloon { position: absolute; width: 52px; height: 52px; border-radius: 50%; font-size: 30px; display: grid; place-items: center; touch-action: none; animation: celIn 160ms ease; }
+.gm-cardbig { width: 110px; height: 150px; border-radius: 12px; background: #fff; color: #1c1917; border: 2px solid var(--border); font-family: var(--font-mono); font-size: 3rem; font-weight: 800; display: grid; place-items: center; box-shadow: var(--shadow-md); }
+.gm-dice { display: flex; gap: 14px; font-size: 5rem; line-height: 1; }
+.gm-result { display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; }
+.gm-score { font-family: var(--font-mono); font-size: 2.6rem; font-weight: 800; }
+.gm-verdict { font-size: 0.78rem; color: var(--text-muted); max-width: 280px; text-align: center; }
+.slot-reels { display: flex; gap: 8px; }
+.slot-reels span { width: 74px; height: 88px; display: grid; place-items: center; font-size: 42px; background: var(--surface-2); border: 2px solid var(--border); border-radius: 12px; }
+.slot-pay { display: flex; flex-wrap: wrap; gap: 4px 10px; justify-content: center; font-family: var(--font-mono); font-size: 0.6rem; color: var(--text-faint); }
+
+/* quests view */
+.quest-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 10px 12px; margin-bottom: 8px; }
+.quest-card.done { border-color: var(--success); }
+.qc-top { display: flex; gap: 10px; align-items: flex-start; margin-bottom: 6px; }
+.qc-ic { width: 36px; height: 36px; border-radius: 10px; background: var(--surface-2); display: grid; place-items: center; font-size: 19px; flex-shrink: 0; }
+.qc-mid { flex: 1; font-size: 0.82rem; line-height: 1.35; }
+.qc-sub { font-size: 0.64rem; color: var(--text-muted); }
+.qc-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; border-top: 1px dashed var(--border); font-size: 0.72rem; }
+.qc-state { color: var(--text-muted); font-family: var(--font-mono); font-size: 0.66rem; display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.qc-state.dim { opacity: 0.6; }
+.wq-row { display: flex; align-items: center; gap: 8px; padding: 3px 0; font-size: 0.7rem; }
+.wq-u { width: 44px; font-family: var(--font-mono); font-weight: 700; font-size: 0.64rem; }
+.wq-bar { flex: 1; height: 9px; border-radius: 5px; background: var(--surface-2); overflow: hidden; }
+.wq-bar i { display: block; height: 100%; transition: width 300ms; }
+.wq-n { font-family: var(--font-mono); font-size: 0.64rem; min-width: 38px; text-align: right; }
+.flash-row { display: flex; align-items: center; gap: 8px; padding: 7px 10px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md); margin-bottom: 5px; font-size: 0.72rem; }
+.flash-row.live { border-color: #eab308; }
+.flash-row.past { opacity: 0.6; }
+.fr-time { font-family: var(--font-mono); font-size: 0.66rem; width: 54px; color: var(--text-muted); }
+.fr-task { flex: 1; }
+.fr-state { font-family: var(--font-mono); font-size: 0.62rem; color: var(--text-muted); }
+.dare-compose { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 8px 10px; margin-bottom: 8px; }
+.dare-ctl { display: flex; align-items: center; gap: 4px; margin-top: 6px; font-size: 0.64rem; color: var(--text-muted); flex-wrap: wrap; }
+.dare-ctl b { font-family: var(--font-mono); min-width: 22px; text-align: center; }
+.dare-ctl .ob { margin-left: 0; }
+.dare-ctl .go { margin-left: auto; }
+.dare-row { display: flex; align-items: center; gap: 8px; padding: 7px 10px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md); margin-bottom: 5px; }
+.dare-row .dr-mid { flex: 1; font-size: 0.76rem; }
+.dare-row .dr-sub { font-size: 0.62rem; color: var(--text-muted); font-family: var(--font-mono); }
+.dare-row.st-open { border-color: #8b5cf6; }
+.dare-row.st-done { border-color: var(--success); }
+.dare-row.st-declined, .dare-row.st-failed { opacity: 0.6; }
+.iou-row { display: flex; align-items: center; gap: 8px; padding: 7px 10px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md); margin-bottom: 5px; }
+.iou-row .iou-mid { flex: 1; font-size: 0.76rem; }
+.iou-row .iou-sub { font-size: 0.62rem; color: var(--text-muted); font-family: var(--font-mono); }
+.iou-row.done { opacity: 0.55; }
+.iou-row.done b { text-decoration: line-through; }
+
+/* trophies */
+.lv-card { display: flex; align-items: center; gap: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 10px 12px; margin-bottom: 8px; }
+.lv-ring {
+  width: 52px; height: 52px; border-radius: 50%; flex-shrink: 0; display: grid; place-items: center;
+  background: conic-gradient(var(--c) var(--f), var(--surface-2) 0); position: relative;
+}
+.lv-ring::before { content: ''; position: absolute; inset: 5px; border-radius: 50%; background: var(--surface); }
+.lv-ring b { position: relative; font-family: var(--font-mono); font-size: 1rem; }
+.lv-mid { font-size: 0.8rem; line-height: 1.4; }
+.lv-title { color: var(--text-muted); font-style: italic; }
+.lv-sub { font-size: 0.64rem; color: var(--text-muted); font-family: var(--font-mono); }
+.rec-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; margin-bottom: 4px; }
+.rec { display: flex; align-items: center; gap: 6px; padding: 6px 9px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md); font-family: var(--font-mono); font-size: 0.62rem; }
+.rec .rc-l { flex: 1; color: var(--text-muted); }
+.rec .rc-c { color: var(--user-c); font-weight: 700; }
+.rec .rc-a { color: var(--user-a); font-weight: 700; }
+.shelf { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 4px 10px; }
+.shelf-row { display: grid; grid-template-columns: 52px 40px 1fr 40px minmax(0, 1.2fr); align-items: center; gap: 6px; padding: 6px 0; border-bottom: 1px dashed var(--border); font-size: 0.7rem; }
+.shelf-row:last-child { border-bottom: none; }
+.sr-when { font-family: var(--font-mono); font-size: 0.62rem; color: var(--text-muted); }
+.sr-c, .sr-a { font-family: var(--font-mono); text-align: center; color: var(--text-faint); }
+.sr-c.win { color: var(--user-c); font-weight: 700; } .sr-a.win { color: var(--user-a); font-weight: 700; }
+.sr-vs { text-align: center; font-size: 0.66rem; }
+.sr-note { font-size: 0.6rem; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fh-toggle { font-size: 0.62rem; padding: 2px 8px; border-radius: 99px; border: 1px solid var(--border); color: var(--text-muted); text-transform: none; letter-spacing: 0; }
+.fh-toggle.on { border-color: var(--accent); color: var(--accent); }
+.badge-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.badge { display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 8px 3px; border-radius: var(--radius-md); background: var(--surface); border: 1px solid var(--border); min-width: 0; }
+.badge .bd-ic { font-size: 22px; filter: grayscale(1); opacity: 0.4; }
+.badge .bd-name { font-size: 0.58rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.badge .bd-sub { font-size: 0.52rem; font-family: var(--font-mono); color: var(--text-faint); }
+.badge.t1, .badge.t2, .badge.t3 { border-width: 1.5px; }
+.badge.t1 { border-color: #b87333; } .badge.t2 { border-color: #9ca3af; } .badge.t3 { border-color: #d4af37; background: color-mix(in srgb, #d4af37 10%, var(--surface)); }
+.badge.t1 .bd-ic, .badge.t2 .bd-ic, .badge.t3 .bd-ic { filter: none; opacity: 1; }
+.badge.t1 .bd-sub { color: #b87333; } .badge.t2 .bd-sub { color: #9ca3af; } .badge.t3 .bd-sub { color: #d4af37; }
+@media (max-width: 360px) { .badge-grid { grid-template-columns: repeat(3, 1fr); } .daily-loop { grid-template-columns: repeat(2, 1fr) !important; } }
 
 /* ============================================
    Calendar
@@ -1203,6 +1403,9 @@ svg[data-tool]:not([data-tool="select"]):not([data-tool="erase"]) .bld-shape { p
     <div class="fit-scroll" id="fit-main"></div>
     <div class="fit-scroll" id="fit-feed" style="display:none"></div>
     <div class="fit-scroll" id="fit-tools" style="display:none"></div>
+    <div class="fit-scroll" id="fit-arcade" style="display:none"></div>
+    <div class="fit-scroll" id="fit-quests" style="display:none"></div>
+    <div class="fit-scroll" id="fit-trophies" style="display:none"></div>
   </div>
   <div class="screen" id="screen-cal">
     <div class="cal-scroll" id="cal-body"></div>
@@ -1241,6 +1444,8 @@ svg[data-tool]:not([data-tool="select"]):not([data-tool="erase"]) .bld-shape { p
   </div>
 </div>
 <div class="lot-overlay" id="lotto-overlay"></div>
+<!-- ===== Arcade II: mini-game overlay ===== -->
+<div class="gm-overlay" id="game-overlay"></div>
 
 <!-- ===== Celebration overlay (day seal, credits, boss kills) ===== -->
 <div class="celebrate" id="celebrate" hidden></div>
@@ -5352,6 +5557,11 @@ const Fit = (() => {
     jobBonus: 25, bossBounty: 40, bossHp: 140,
     priceX2: 12, priceShield: 10, priceUno: 15,
     arcadeEpoch: '2026-09-01',   // arcade scoring applies from this day; history before it never rewrites
+    // arcade II — economy + daily loop + games + quests + flash + dares + items
+    coinLog: 2, coinSweep: 5, coinPlay: 2, coinWin: 5, coinQuest: 8, coinWeekly: 30, coinFlash: 6,
+    gamePts: 3, questPts: 5, weeklyPts: 20, flashPts: 5, flashFirst: 3, underdogGap: 30, underdogMult: 1.25,
+    priceFreeze: 12, priceFuel: 10, priceGem: 10, priceDice: 8, priceCloak: 6, priceLatepass: 14, priceMagnet: 16,
+    priceMystery: 9, priceTitle: 20, priceSkin: 25, priceIou: 40, dareMax: 30, slotsPull: 5,
     ...(config || {}),
   });
   // feature toggles: config.flags.<f> === false turns a mechanic off
@@ -5361,6 +5571,19 @@ const Fit = (() => {
     penalties: ['laundry', 'cat litter'],
     ...((config || {}).decks || {}),
   });
+  // Scores are pure functions of (days, arc, config, feed, today). A version
+  // counter bumps on every watch callback and every derived value is cached
+  // until then — badges, levels and the wallet scan whole history, and this
+  // is what keeps that instant on a phone.
+  const _memo = new Map();
+  const bumpState = () => _memo.clear();
+  function memo(key, fn) {
+    const k = todayKey() + '|' + key;
+    if (_memo.has(k)) return _memo.get(k);
+    const v = fn();
+    _memo.set(k, v);
+    return v;
+  }
 
   /* ---- date helpers (local time — same household) ---- */
   const dk = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
@@ -5395,9 +5618,18 @@ const Fit = (() => {
     resolvedAt(k, u, 'med') && resolvedAt(k, u, 'str') && exeSlotOk(k, u) &&
     HABITS[u].some(h => didAt(k, u, h));
   function sweepStreak(u, endKey) {
-    let n = 0, d = parseKey(endKey);
-    while (isSweep(dk(d), u)) { n++; d = addDays(d, -1); if (n > 3650) break; }
-    return n;
+    // a 🧊 Streak Freeze played on a day bridges it: no count, no break
+    return memo('ss:' + u + endKey, () => {
+      let n = 0, d = parseKey(endKey), g = 0;
+      for (;;) {
+        const k = dk(d);
+        if (isSweep(k, u)) n++;
+        else if (!frozen(k, u)) break;
+        d = addDays(d, -1);
+        if (++g > 3650) break;
+      }
+      return n;
+    });
   }
   function habitStreak(u, h) {
     let d = new Date();
@@ -5427,7 +5659,13 @@ const Fit = (() => {
     if (lottoX2(u, k)) m *= 2;
     return C.pts * m;
   }
-  function dayPoints(u, k) {
+  const sweepBonusFor = (k, u, C) => {
+    let sb = (arcadeOn(k) && wheelFor(k).id === 'sweep15') ? 15 : C.sweep;
+    if (arcadeOn(k) && FLAG('items') && playsFor(k, u).gem) sb *= 3;   // 💎
+    return sb;
+  };
+  const dayPoints = (u, k) => memo('dp:' + u + k, () => dayPointsRaw(u, k));
+  function dayPointsRaw(u, k) {
     const C = CFG();
     // med/str score individually; exercise and Cade's extra workout share ONE
     // scoring slot — either earns the points, both never double-count.
@@ -5436,17 +5674,22 @@ const Fit = (() => {
       const p = slotPts(k, u, h, C);
       if (p) { base += p; done++; }
     }
-    const mult = 1 + 0.05 * Math.min(sweepStreak(u, k), 10);
+    const arc = arcadeOn(k);
+    if (arc && underdogFor(k) === u) base = Math.round(base * C.underdogMult);   // 🐕
+    let streakN = sweepStreak(u, k);
+    if (arc && FLAG('items') && playsFor(k, u).fuel) streakN += 3;               // ⛽
+    const mult = 1 + 0.05 * Math.min(streakN, 10);
     let p = done ? Math.round(base * mult) : 0;
-    if (done && isSweep(k, u)) p += (arcadeOn(k) && wheelFor(k).id === 'sweep15') ? 15 : C.sweep;
+    if (done && isSweep(k, u)) p += sweepBonusFor(k, u, C);
     // Miss penalties only on closed days the app was in play (someone logged
     // something) — a shared vacation or pre-adoption history isn't a debt.
-    if (k < todayKey() && (dayObj(k).C || dayObj(k).A)) {
+    // A 🎫 Late Pass excuses the whole day.
+    if (k < todayKey() && (dayObj(k).C || dayObj(k).A) && !(arc && FLAG('items') && playsFor(k, u).latepass)) {
       // the exe/wrk slot counts as one habit here too — never a double penalty
       const missed = ['med', 'str'].filter(h => !resolvedAt(k, u, h)).length + (exeSlotOk(k, u) ? 0 : 1);
       p -= missed * C.penalty;
     }
-    if (arcadeOn(k)) p += eventAdj(u, k, C);
+    if (arc) p += eventAdj(u, k, C);
     return p;
   }
   function duelPoints(u, k) {
@@ -5523,7 +5766,9 @@ const Fit = (() => {
   ];
   function wheelFor(k) {
     if (!arcadeOn(k) || !FLAG('wheel')) return WEDGES[0];
-    let r = rand01('wheel:' + k) * WEDGES.reduce((a, w) => a + w.w, 0);
+    // 🎲 Loaded Dice re-spins the day for both — once per player, seeded
+    const rr = FLAG('items') ? ['C', 'A'].filter(u => playsFor(k, u).dice).length : 0;
+    let r = rand01('wheel:' + k + (rr ? ':r' + rr : '')) * WEDGES.reduce((a, w) => a + w.w, 0);
     for (const w of WEDGES) { r -= w.w; if (r < 0) return w; }
     return WEDGES[0];
   }
@@ -5769,6 +6014,10 @@ const Fit = (() => {
     // boss bounty lands on Sunday once slain
     const boss = bossFor(k);
     if (boss && k === boss.sunK && k <= todayKey() && bossDamage(boss) >= boss.hp) p += C.bossBounty;
+    // 🧲 magnet: a sweep pulls 4 off the partner
+    if (FLAG('items')) for (const v of ['C', 'A']) if (playsFor(k, v).magnet && isSweep(k, v)) p += (u === v ? 4 : -4);
+    // arcade II: game wins, quests, the weekly challenge, flash tasks
+    p += gameAdj(u, k, C) + questAdj(u, k, C) + weeklyAdj(u, k, C) + flashAdj(u, k, C);
     p += twinPts(u, k, C) + assistAdj(u, k, C) + pressAdj(u, k) + betAdj(u, k, C) +
       bombAdj(u, k, C) + shopAdj(u, k) + lottoAdj(u, k, C);
     return p;
@@ -5793,6 +6042,594 @@ const Fit = (() => {
     return n;
   }
 
+  /* ==========================================================================
+     ARCADE II — the economy (🪙 coins), the daily loop (chest · quest ·
+     featured game), twelve mini games, quests + weekly challenges, flash
+     tasks, dares, badges, levels, the weekly/monthly ceremonies and the
+     in-person ledger. Same contract as the engine above: every value is a
+     pure function of fit/days + fit/arc + fit/config seeded by date keys,
+     nothing applies before arcadeEpoch, and the push cron mirrors the
+     seeded parts (flash windows, featured game, quest of the day).
+     ========================================================================== */
+  const seededShuffle = (arr, seed) => {
+    const a = arr.slice();
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = seedHash(seed + ':' + i) % (i + 1);
+      [a[i], a[j]] = [a[j], a[i]];
+    }
+    return a;
+  };
+  const fmtSigned = n => (n > 0 ? '+' : '') + n;
+  const frozen = (k, u) => FLAG('items') && !!playsFor(k, u).freeze;
+
+  /* ---- items registry — one table drives the shop, the rack and the engine ---- */
+  const ITEMS = {
+    x2: { icon: '✖️2', name: 'Double Chip', price: 'priceX2', play: true, desc: 'play before your first log — the whole day doubles' },
+    shield: { icon: '🛡', name: 'Force Field', price: 'priceShield', play: true, desc: 'no duel damage against you for one day' },
+    uno: { icon: '🔄', name: 'Uno Reverse', price: 'priceUno', desc: 'boomerang an incoming glitter bomb' },
+    freeze: { icon: '🧊', name: 'Streak Freeze', price: 'priceFreeze', play: true, desc: 'play on a day you\'ll miss — your sweep streak survives it' },
+    fuel: { icon: '⛽', name: 'Streak Fuel', price: 'priceFuel', play: true, desc: 'today your streak multiplier counts +3 days' },
+    gem: { icon: '💎', name: 'Gem', price: 'priceGem', play: true, desc: 'today\'s sweep bonus pays triple' },
+    dice: { icon: '🎲', name: 'Loaded Dice', price: 'priceDice', play: true, desc: 're-spin today\'s wheel for BOTH of you (before your first log)' },
+    cloak: { icon: '🥷', name: 'Ninja Cloak', price: 'priceCloak', play: true, desc: 'hide your logs from your partner until midnight' },
+    latepass: { icon: '🎫', name: 'Late Pass', price: 'priceLatepass', play: true, desc: 'no miss penalties today — the day is excused' },
+    magnet: { icon: '🧲', name: 'Magnet', price: 'priceMagnet', play: true, desc: 'sweep today to pull 4 points off your partner' },
+    mystery: { icon: '🎁', name: 'Mystery Box', price: 'priceMystery', desc: 'a random item from the shelf — could be anything above' },
+  };
+  const PLAYABLE = Object.keys(ITEMS).filter(k => ITEMS[k].play);
+  const TITLES = ['the Machine', 'Couch Slayer', 'Sheriff', 'Iron Lungs', 'Dawn Patrol', 'Night Shift', 'Bounty Hunter',
+    'Flame Keeper', 'Big Spender', 'Glass Cannon', 'Zen Master', 'Menace', 'Snack Goblin', 'the Closer'];
+  const SKINS = {
+    stripes: { name: 'Stripes', css: 'repeating-linear-gradient(45deg, var(--user-x) 0 6px, color-mix(in srgb, var(--user-x) 70%, #fff) 6px 12px)' },
+    neon: { name: 'Neon', css: 'linear-gradient(90deg, var(--user-x), #fff 50%, var(--user-x))' },
+    gold: { name: 'Gold', css: 'linear-gradient(90deg, #b8860b, #ffd700, #b8860b)' },
+    lava: { name: 'Lava', css: 'linear-gradient(90deg, #7f1d1d, #f97316, #fde047)' },
+    ocean: { name: 'Ocean', css: 'linear-gradient(90deg, #0c4a6e, #38bdf8, #a5f3fc)' },
+    candy: { name: 'Candy', css: 'repeating-linear-gradient(-45deg, #f472b6 0 5px, #fdf2f8 5px 10px)' },
+  };
+  const priceOf = kind => CFG()[ITEMS[kind].price];
+  function inventory(u) {
+    const inv = {};
+    for (const k of Object.keys(ITEMS)) inv[k] = 0;
+    for (const s of Object.values(A('shop'))) {
+      if (!s || s.by !== u) continue;
+      const kind = s.kind === 'mystery' ? s.got : s.kind;
+      if (kind && inv[kind] != null && kind !== 'mystery') inv[kind]++;
+    }
+    for (const users of Object.values(A('plays'))) {
+      const pl = (users || {})[u] || {};
+      for (const k of Object.keys(pl)) if (inv[k] != null) inv[k]--;
+    }
+    for (const bombs of Object.values(A('bombs'))) {
+      for (const [planter, b] of Object.entries(bombs || {})) if (b && b.rev && OTHER(planter) === u) inv.uno--;
+    }
+    return inv;
+  }
+  const owns = (u, kind, arg) => Object.values(A('shop')).some(s => s && s.by === u && s.kind === kind && s.arg === arg);
+  const cosmetics = u => A('cos')[u] || {};
+  function canPlay(kind, k, u) {
+    const pl = playsFor(k, u);
+    if (pl[kind]) return false;
+    if (inventory(u)[kind] <= 0) return false;
+    if (kind === 'x2' || kind === 'dice') return SHARED.every(h => slotTs(k, u, h) == null);
+    return true;
+  }
+
+  /* ---- mini games — one scored run per game per day; both play → winner scores ---- */
+  const GAMES = {
+    react: { icon: '⚡', name: 'Reflex', desc: 'tap the instant it turns green', unit: 'ms', lower: true, vs: true },
+    taps: { icon: '👆', name: 'Rep Race', desc: '5 seconds — how many taps?', unit: 'taps', vs: true },
+    math: { icon: '🧮', name: 'Quick Math', desc: '20 seconds of arithmetic', unit: 'right', vs: true },
+    memory: { icon: '🧠', name: 'Memory', desc: 'match 8 pairs, fast', lower: true, vs: true, fmt: s => (s / 1000).toFixed(1) + 's' },
+    hold: { icon: '⏱', name: 'Steady Hand', desc: 'release at exactly 5.00s — no clock', unit: 'ms off', lower: true, vs: true },
+    bar: { icon: '🎯', name: 'Timing Bar', desc: 'stop it in the zone, 3 rounds', unit: 'pts', vs: true },
+    simon: { icon: '🎹', name: 'Simon', desc: 'repeat the growing sequence', unit: 'steps', vs: true },
+    aim: { icon: '🎈', name: 'Pop', desc: 'pop 12 balloons', lower: true, vs: true, fmt: s => (s / 1000).toFixed(1) + 's' },
+    hilo: { icon: '🃏', name: 'Hi-Lo', desc: 'call the next card, build a streak', unit: 'streak', vs: true },
+    dice: { icon: '🎲', name: 'Dice Duel', desc: 'one roll each — high roll wins', unit: '', vs: true },
+    slots: { icon: '🎰', name: 'Slots', desc: 'one free pull a day', coins: true },
+    sync: { icon: '💞', name: 'Couple Sync', desc: 'answer alike, both get paid', sync: true },
+  };
+  const VS_GAMES = Object.keys(GAMES).filter(g => GAMES[g].vs);
+  const gameRec = (k, g, u) => ((A('games')[k] || {})[g] || {})[u] || null;
+  const gotd = k => VS_GAMES[seedHash('gotd:' + k) % VS_GAMES.length];
+  function gameWinner(k, g) {
+    const G = GAMES[g];
+    if (!G || !G.vs) return null;
+    const c = gameRec(k, g, 'C'), a = gameRec(k, g, 'A');
+    if (!c || !a || typeof c.score !== 'number' || typeof a.score !== 'number' || c.score === a.score) return null;
+    return (G.lower ? c.score < a.score : c.score > a.score) ? 'C' : 'A';
+  }
+  function gameAdj(u, k, C) {
+    if (!FLAG('games')) return 0;
+    let p = 0;
+    for (const g of VS_GAMES) if (gameWinner(k, g) === u) p += C.gamePts * (gotd(k) === g ? 2 : 1);
+    return p;
+  }
+  const gameFmt = (g, s) => { const G = GAMES[g]; return G.fmt ? G.fmt(s) : s + (G.unit ? ' ' + G.unit : ''); };
+  // slots — reels seeded per pull, payouts derived (never stored)
+  const SLOT_SYMS = ['🍒', '🍋', '🔔', '⭐', '💎', '7️⃣'];
+  const SLOT_PAY = { '7️⃣': 60, '💎': 30, '⭐': 20, '🔔': 15, '🍋': 12, '🍒': 10 };
+  const slotReels = (k, u, i) => [0, 1, 2].map(r => SLOT_SYMS[seedHash('slot:' + k + u + i + r) % SLOT_SYMS.length]);
+  function slotPayout(reels) {
+    const [a, b, c] = reels;
+    if (a === b && b === c) return SLOT_PAY[a];
+    return (a === b || b === c || a === c) ? 3 : 0;
+  }
+  const slotsPulls = (k, u) => (gameRec(k, 'slots', u) || {}).n || 0;
+  function slotsNet(k, u) {
+    let c = 0;
+    for (let i = 0; i < slotsPulls(k, u); i++) c += slotPayout(slotReels(k, u, i)) - (i ? CFG().slotsPull : 0);
+    return c;
+  }
+  // couple sync — one seeded question a day, match = both paid
+  const SYNC_QS = [
+    ['Tonight\'s ideal dinner?', ['tacos', 'sushi', 'pasta', 'pizza']], ['Pick the workout', ['run', 'lift', 'yoga', 'long walk']],
+    ['Beach or mountains?', ['beach', 'mountains']], ['Who snores more?', ['Cade', 'Avery']], ['First to skip a habit this week?', ['Cade', 'Avery']],
+    ['Coffee or tea?', ['coffee', 'tea']], ['Cook in or eat out?', ['cook in', 'eat out']], ['Best day of the week?', ['Friday', 'Saturday', 'Sunday', 'Wednesday']],
+    ['Who\'s the better dancer?', ['Cade', 'Avery']], ['Sunrise or sunset?', ['sunrise', 'sunset']], ['Weekend plan', ['hike', 'movie', 'brunch', 'nap']],
+    ['Who wins this week?', ['Cade', 'Avery']], ['Pancakes or waffles?', ['pancakes', 'waffles']], ['Rain or snow?', ['rain', 'snow']],
+    ['Pick a superpower', ['fly', 'invisible', 'teleport', 'stop time']], ['Sweet or salty?', ['sweet', 'salty']], ['Who survives longer in the wild?', ['Cade', 'Avery']],
+    ['Hardest habit?', ['meditation', 'stretch', 'exercise']], ['Book or movie?', ['book', 'movie']], ['Window or aisle?', ['window', 'aisle']],
+    ['Fries or onion rings?', ['fries', 'onion rings']], ['Who\'s more competitive?', ['Cade', 'Avery']], ['Summer or winter?', ['summer', 'winter']],
+    ['Who is the better cook?', ['Cade', 'Avery']], ['Cat or dog?', ['cat', 'dog']], ['Morning person?', ['Cade', 'Avery', 'neither']],
+    ['Pool or ocean?', ['pool', 'ocean']], ['Who apologizes first?', ['Cade', 'Avery']], ['Dream trip', ['Japan', 'Italy', 'Iceland', 'Mexico']],
+    ['Who\'d win a staring contest?', ['Cade', 'Avery']], ['Late night snack', ['ice cream', 'chips', 'cereal', 'nothing, I\'m disciplined']],
+  ];
+  const syncQ = k => SYNC_QS[seedHash('sync:' + k) % SYNC_QS.length];
+  function syncMatch(k) {
+    const c = gameRec(k, 'sync', 'C'), a = gameRec(k, 'sync', 'A');
+    return !!(c && a && typeof c.score === 'number' && c.score === a.score);
+  }
+
+  /* ---- daily chest ---- */
+  const chestOpened = (k, u) => !!((A('chest')[k] || {})[u]);
+  function chestStreak(k, u) {   // consecutive opened days BEFORE k
+    let n = 0, d = parseKey(k);
+    for (;;) { d = addDays(d, -1); if (!chestOpened(dk(d), u) || n > 30) break; n++; }
+    return n;
+  }
+  const chestPayout = (k, u) => 3 + seedHash('chest:' + k + u) % 10 + Math.min(10, 2 * chestStreak(k, u));
+
+  /* ---- quests — one seeded off-screen task a day (30% are for two) ---- */
+  const QUESTS = [
+    ['🚶', 'walk 20 minutes outside'], ['💧', 'drink 8 glasses of water'], ['🧗', 'take the stairs every single time'],
+    ['🛏', 'in bed by 10:30 with no phone'], ['🥗', 'a vegetable with every meal'], ['🫁', '5 extra minutes of breathing'],
+    ['📵', 'no phone for the first 30 minutes awake'], ['🍳', 'cook a meal from scratch'], ['🙆', 'stretch 10 extra minutes'],
+    ['🏃', '5,000 extra steps'], ['🧹', 'tidy one whole room'], ['🌅', 'log a habit before 8am'],
+    ['🚿', 'finish your shower cold (30s)'], ['🍬', 'zero added sugar today'], ['🥤', 'no caffeine after noon'],
+    ['📖', 'read 15 pages'], ['🧠', 'learn one new thing and tell your partner'], ['💬', 'a real compliment, out loud'],
+    ['🎧', 'walk with a podcast'], ['🪥', 'floss (yes, actually)'], ['🌳', '10 minutes in the sun'],
+    ['🧴', 'sunscreen before you leave'], ['🍎', 'fruit instead of the snack'], ['⏰', 'up at the first alarm'],
+    ['🦶', '2 minutes of balance work'], ['🧍', 'stand up every hour'], ['🏋️', '3 sets of anything, anywhere'],
+    ['🥶', '1 minute of cold water on the wrists'], ['🍽', 'one meal with zero screens'], ['🧘', 'a 2-minute body scan before bed'],
+    ['🚰', 'a full glass of water before coffee'], ['🪟', 'open the windows and air the place out'], ['🛒', 'no takeout today'],
+    ['🧦', 'put the laundry AWAY, not on the chair'], ['🎵', 'dance to one full song'], ['🏞', 'a photo of something green outside'],
+  ];
+  const COUPLE_QUESTS = [
+    ['🤝', 'a 15-minute walk together'], ['🍳', 'cook dinner together'], ['🧘', 'meditate side by side'],
+    ['🙆', 'stretch together for 10 minutes'], ['🎲', 'play one round of any game together'], ['📵', 'a phone-free dinner'],
+    ['💌', 'write each other one line of thanks'], ['🛌', 'lights out at the same time'], ['🏃', 'work out at the same time'],
+    ['🗣', 'tell each other your win of the day'], ['☕', 'coffee on the porch, no phones'], ['🧹', 'a 10-minute tidy blitz together'],
+  ];
+  function questFor(k) {
+    if (!arcadeOn(k) || !FLAG('quests')) return null;
+    const couple = rand01('questc:' + k) < 0.3;
+    const pool = couple ? COUPLE_QUESTS : QUESTS;
+    const [icon, text] = pool[seedHash('quest:' + k) % pool.length];
+    return { icon, text, couple };
+  }
+  const questRec = (k, u) => (A('quests')[k] || {})[u] || null;
+  function questDone(k, u) {
+    const q = questFor(k);
+    if (!q) return false;
+    const r = questRec(k, u);
+    if (!r || !r.done) return false;
+    if (q.couple) { const o = questRec(k, OTHER(u)); return !!(o && o.done); }
+    return true;
+  }
+  function questAdj(u, k, C) {
+    if (!questDone(k, u)) return 0;
+    const q = questFor(k), r = questRec(k, u);
+    return C.questPts * ((q.couple || (r && r.wit)) ? 2 : 1);
+  }
+
+  /* ---- weekly challenges — seeded per Monday, derived or tap-counted ---- */
+  const WEEKLY = [
+    { id: 'sweep5', icon: '🧹', t: 'Sweep 5 of 7 days', goal: 5, prog: (u, ks) => ks.filter(k => isSweep(k, u)).length },
+    { id: 'med7', icon: '🧘', t: 'Meditate every single day', goal: 7, prog: (u, ks) => ks.filter(k => slotTs(k, u, 'med') != null).length },
+    { id: 'str6', icon: '🙆', t: 'Stretch 6 days', goal: 6, prog: (u, ks) => ks.filter(k => slotTs(k, u, 'str') != null).length },
+    { id: 'exe5', icon: '🏃', t: 'Move 5 days', goal: 5, prog: (u, ks) => ks.filter(k => slotTs(k, u, 'exe') != null).length },
+    { id: 'early3', icon: '🌅', t: '3 logs before 8am', goal: 3, prog: (u, ks) => ks.reduce((n, k) => n + SHARED.filter(h => { const t = slotTs(k, u, h); return t != null && hourOf(t) < 8; }).length, 0) },
+    { id: 'twin3', icon: '⚡', t: '3 twin strikes together', goal: 3, prog: (u, ks) => ks.reduce((n, k) => n + SHARED.filter(h => { const a = slotTs(k, 'C', h), b = slotTs(k, 'A', h); return a != null && b != null && sameDayMin(a, b) <= 30; }).length, 0) },
+    { id: 'quest4', icon: '🗺', t: '4 daily quests', goal: 4, prog: (u, ks) => ks.filter(k => questDone(k, u)).length },
+    { id: 'games6', icon: '🕹', t: 'Play 6 arcade games', goal: 6, prog: (u, ks) => ks.reduce((n, k) => n + VS_GAMES.filter(g => gameRec(k, g, u)).length, 0) },
+    { id: 'photo3', icon: '📸', t: 'Post 3 proof photos', goal: 3, prog: (u, ks) => ks.filter(k => photoProof(u, k)).length },
+    { id: 'walk', icon: '🚶', t: 'Walk 25k steps (tap +5k)', goal: 5, manual: true },
+    { id: 'water', icon: '💧', t: '8 glasses of water, 5 days (tap per day)', goal: 5, manual: true },
+    { id: 'together', icon: '🤝', t: '3 workouts together (tap each)', goal: 3, manual: true },
+    { id: 'sleep', icon: '🛏', t: 'In bed by 10:30, 4 nights (tap each)', goal: 4, manual: true },
+    { id: 'nophone', icon: '📵', t: '4 screen-free dinners (tap each)', goal: 4, manual: true },
+    { id: 'veg', icon: '🥦', t: 'Veg with every meal, 5 days (tap per day)', goal: 5, manual: true },
+    { id: 'cook', icon: '🍳', t: 'Cook 4 meals from scratch (tap each)', goal: 4, manual: true },
+  ];
+  const weeklyFor = monK => (arcadeOn(monK) && FLAG('quests')) ? WEEKLY[seedHash('weekly:' + monK) % WEEKLY.length] : null;
+  function weeklyProg(u, monK) {
+    const W = weeklyFor(monK);
+    if (!W) return 0;
+    if (W.manual) return Math.min(W.goal, ((A('wq')[monK] || {})[u] || {}).n || 0);
+    return Math.min(W.goal, W.prog(u, weekKeysOf(monK).filter(k => k <= todayKey())));
+  }
+  const weeklyComplete = (u, monK) => { const W = weeklyFor(monK); return !!W && weeklyProg(u, monK) >= W.goal; };
+  const weeklyAdj = (u, k, C) => (k === weekKeysOf(k)[0] && weeklyComplete(u, k)) ? C.weeklyPts : 0;
+  function weeklyDone(u) {
+    const out = [];
+    let d = parseKey(weekKeysOf(todayKey())[0]);
+    for (let i = 0; i < 60; i++) {
+      const monK = dk(d);
+      if (!arcadeOn(monK)) break;
+      if (weeklyComplete(u, monK)) out.push(monK);
+      d = addDays(d, -7);
+    }
+    return out;
+  }
+
+  /* ---- flash tasks — 1–3 seeded 40-minute windows a day, first claim pays extra ---- */
+  const FLASH_POOL = ['20 jumping jacks', '15 squats', 'a 30-second plank', 'drink a full glass of water', '10 push-ups',
+    'walk around the block', '1 minute of deep breathing', 'stretch your hamstrings for 60s', 'a 45-second wall sit',
+    '20 lunges', 'stand up and shake it out for 30s', 'text your partner one thing you appreciate', '25 calf raises',
+    'balance on one foot, 30s each side', '10 burpees', 'dance to one song', '5 sun salutations', '30 mountain climbers',
+    'take the stairs twice', 'sit in a deep squat for 60s', '2 minutes of neck and shoulder rolls', 'a 20-second dead hang',
+    '15 glute bridges', 'a cold splash of water on your face', 'hold a hollow body for 30s', 'drink water, then 10 squats'];
+  function flashSlots(k) {
+    if (!arcadeOn(k) || !FLAG('flash')) return [];
+    const n = 1 + (rand01('flashn:' + k) < 0.55 ? 1 : 0) + (rand01('flashn2:' + k) < 0.3 ? 1 : 0);
+    const starts = seededShuffle(Array.from({ length: 24 }, (_, i) => 9 * 60 + i * 30), 'flashs:' + k).slice(0, n).sort((a, b) => a - b);
+    return starts.map((startMin, i) => ({ i, startMin, endMin: startMin + 40, task: FLASH_POOL[seedHash('flasht:' + k + i) % FLASH_POOL.length] }));
+  }
+  function flashClaim(k, i, u) {   // claim ts if it landed inside the window on day k, else null
+    const t = ((A('flash')[k] || {})['s' + i] || {})[u];
+    const f = flashSlots(k)[i];
+    if (typeof t !== 'number' || !f) return null;
+    const m = minOfDay(t);
+    return dk(new Date(t)) === k && m >= f.startMin && m < f.endMin ? t : null;
+  }
+  function flashAdj(u, k, C) {
+    let p = 0;
+    for (const f of flashSlots(k)) {
+      const me = flashClaim(k, f.i, u);
+      if (me == null) continue;
+      p += C.flashPts;
+      const o = flashClaim(k, f.i, OTHER(u));
+      if (o == null || me < o) p += C.flashFirst;
+    }
+    return p;
+  }
+  function flashLive(k) {   // the open window right now (or null)
+    const m = new Date().getHours() * 60 + new Date().getMinutes();
+    return flashSlots(k).find(f => m >= f.startMin && m < f.endMin) || null;
+  }
+
+  /* ---- dares — partner-authored challenges with a coin stake ---- */
+  function dareStatus(d) {
+    if (!d) return 'gone';
+    if (d.status === 'done' || d.status === 'declined') return d.status;
+    if (d.dl && Date.now() > d.dl) return 'failed';
+    return d.status || 'open';
+  }
+  const dareWinner = d => { const s = dareStatus(d); return s === 'done' ? d.to : (s === 'declined' || s === 'failed') ? d.by : null; };
+  const myDares = () => Object.entries(A('dares')).filter(([, d]) => d && (d.by === ME || d.to === ME)).sort((a, b) => (b[1].ts || 0) - (a[1].ts || 0));
+  const pendingDares = () => FLAG('dares') ? myDares().filter(([, d]) => d.to === ME && dareStatus(d) === 'open') : [];
+
+  /* ---- underdog — trailing by a lot at the start of a day? base points ×1.25 ---- */
+  function underdogFor(k) {
+    if (!FLAG('underdog') || !arcadeOn(k)) return null;
+    return memo('ud:' + k, () => {
+      const ks = weekKeysOf(k).filter(x => x < k);
+      if (!ks.length) return null;
+      const c = weekPoints('C', ks), a = weekPoints('A', ks);
+      if (Math.abs(c - a) < CFG().underdogGap) return null;
+      return c < a ? 'C' : 'A';
+    });
+  }
+
+  /* ---- wallet — every coin is derived; the shop is the only sink ---- */
+  function wallet(u) {
+    return memo('wallet:' + u + ':' + Math.floor(Date.now() / 300000), () => {
+      const C = CFG();
+      let c = 0;
+      for (const k of allKeys()) {
+        if (!arcadeOn(k)) continue;
+        for (const h of SHARED) if (slotTs(k, u, h) != null) c += C.coinLog;
+        if (isSweep(k, u)) c += C.coinSweep;
+        if (chestOpened(k, u)) c += chestPayout(k, u);
+        if (questDone(k, u)) c += C.coinQuest * ((questFor(k).couple || (questRec(k, u) || {}).wit) ? 2 : 1);
+        for (const f of flashSlots(k)) if (flashClaim(k, f.i, u) != null) c += C.coinFlash;
+        for (const g of Object.keys(GAMES)) {
+          const G = GAMES[g], r = gameRec(k, g, u);
+          if (!r) continue;
+          if (G.coins) c += slotsNet(k, u);
+          else if (G.sync) { if (syncMatch(k)) c += C.coinWin; }
+          else { c += C.coinPlay; if (gameWinner(k, g) === u) c += C.coinWin; }
+        }
+      }
+      c += weeklyDone(u).length * C.coinWeekly;
+      for (const d of Object.values(A('dares'))) {
+        if (!d || (d.by !== u && d.to !== u)) continue;
+        const w = dareWinner(d);
+        if (w === u) c += d.stake || 0; else if (w) c -= d.stake || 0;
+      }
+      for (const b of badgeList(u)) c += 10 * (b.tier * (b.tier + 1) / 2);
+      for (const s of Object.values(A('shop'))) if (s && s.by === u && typeof s.coins === 'number') c -= s.coins;
+      return c;
+    });
+  }
+
+  /* ---- levels — lifetime points → level + title ---- */
+  const firstKey = () => memo('firstKey', () => {
+    const ks = Object.keys(days).filter(k => /^\d{4}-\d{2}-\d{2}$/.test(k)).sort();
+    return ks[0] || todayKey();
+  });
+  function allKeys() {
+    return memo('allKeys', () => {
+      const out = [], tk = todayKey(), fk = firstKey(), ep = CFG().arcadeEpoch;
+      let d = parseKey(fk < ep ? fk : ep), g = 0;
+      while (dk(d) <= tk && g++ < 4000) { out.push(dk(d)); d = addDays(d, 1); }
+      return out;
+    });
+  }
+  const xp = u => memo('xp:' + u, () => Math.max(0, allKeys().reduce((a, k) => a + dayPoints(u, k) + duelPoints(u, k), 0)));
+  const LEVEL_TITLES = ['Couch Larva', 'Sock Finder', 'Warm-Up Act', 'Stretch Goblin', 'Mat Rat', 'Habit Hobbyist', 'Sweeper',
+    'Streak Freak', 'Point Pirate', 'Duel Dealer', 'Iron Will', 'Flame Keeper', 'Arcade Rat', 'Boss Breaker', 'Sheriff',
+    'Machine', 'Titan', 'Legend', 'Mythic', 'Ascended'];
+  const levelOf = x => Math.min(LEVEL_TITLES.length, Math.floor(Math.sqrt(Math.max(0, x) / 60)) + 1);
+  const xpForLevel = L => 60 * (L - 1) * (L - 1);
+  function levelInfo(u) {
+    const x = xp(u), L = levelOf(x), lo = xpForLevel(L), hi = xpForLevel(L + 1);
+    const maxed = L >= LEVEL_TITLES.length;
+    return { xp: x, level: L, title: LEVEL_TITLES[L - 1], frac: maxed ? 1 : Math.max(0, Math.min(1, (x - lo) / (hi - lo))), toNext: maxed ? 0 : hi - x };
+  }
+  const displayTitle = u => { const t = cosmetics(u).title; return t && owns(u, 'title', t) ? t : levelInfo(u).title; };
+
+  /* ---- stats + badges — one memoized pass over history per user ---- */
+  function stats(u) {
+    return memo('stats:' + u, () => {
+      const s = { sweeps: 0, bestStreak: 0, logs: 0, early: 0, owl: 0, twin: 0, noon: 0, vault: 0, boss: 0, bestFlame: 0, weeks: 0, perfect: 0,
+        comeback: 0, bets: 0, bombs: 0, defused: 0, assists: 0, quests: 0, weekly: 0, flash: 0, gameWins: 0, bestReact: null, bestMath: 0,
+        items: 0, dares: 0, photos: 0, level: 1, med: 0, str: 0, exe: 0, chests: 0, bestWeek: 0, wins: 0 };
+      const tk = todayKey();
+      let run = 0, flame = 0;
+      for (const k of allKeys()) {
+        for (const h of SHARED) {
+          const t = slotTs(k, u, h);
+          if (t == null) continue;
+          s.logs++; s[h]++;
+          const hr = hourOf(t);
+          if (hr < 7) s.early++;
+          if (hr >= 22) s.owl++;
+        }
+        if (isSweep(k, u)) { s.sweeps++; run++; s.bestStreak = Math.max(s.bestStreak, run); }
+        else if (!frozen(k, u)) run = 0;
+        if (isSweep(k, 'C') && isSweep(k, 'A')) { flame++; s.bestFlame = Math.max(s.bestFlame, flame); } else flame = 0;
+        if (!arcadeOn(k)) continue;
+        s.twin += SHARED.filter(h => { const a = slotTs(k, 'C', h), b = slotTs(k, 'A', h); return a != null && b != null && sameDayMin(a, b) <= 30; }).length;
+        const cl = noonClaims(k);
+        if (cl && (cl.C != null || cl.A != null)) {
+          const win = cl.C != null && cl.A != null ? (cl.C <= cl.A ? 'C' : 'A') : (cl.C != null ? 'C' : 'A');
+          if (win === u) s.noon++;
+        }
+        if (jobHit(k)) s.vault++;
+        const boss = bossFor(k);
+        if (boss && k === boss.sunK && bossDamage(boss) >= boss.hp) s.boss++;
+        if (k < tk) { const b = (A('bets')[k] || {})[u]; if (b && isSweep(k, OTHER(u))) s.bets++; }
+        for (const [planter, bomb] of Object.entries(A('bombs')[k] || {})) {
+          if (!bomb || !bomb.habit) continue;
+          const ep = bomb.rev ? OTHER(planter) : planter, et = OTHER(ep);
+          const def = slotTs(k, et, bomb.habit === 'wrk' ? 'exe' : bomb.habit) != null;
+          if (def && et === u) s.defused++;
+          if (!def && k < tk && ep === u) s.bombs++;
+        }
+        for (const n of Object.values(A('nudges')[k] || {})) {
+          if (!n || !n.habit || !n.ts || n.by !== u) continue;
+          const t = slotTs(k, n.target, n.habit === 'wrk' ? 'exe' : n.habit);
+          if (t != null && t > n.ts && t - n.ts <= 7200000) s.assists++;
+        }
+        if (questDone(k, u)) s.quests++;
+        for (const f of flashSlots(k)) if (flashClaim(k, f.i, u) != null) s.flash++;
+        for (const g of VS_GAMES) if (gameWinner(k, g) === u) s.gameWins++;
+        const r = gameRec(k, 'react', u);
+        if (r && typeof r.score === 'number') s.bestReact = s.bestReact == null ? r.score : Math.min(s.bestReact, r.score);
+        const m = gameRec(k, 'math', u);
+        if (m && typeof m.score === 'number') s.bestMath = Math.max(s.bestMath, m.score);
+        if (chestOpened(k, u)) s.chests++;
+        if (photoProof(u, k)) s.photos++;
+      }
+      // closed weeks (Monday-based), newest first
+      let d = parseKey(weekKeysOf(tk)[0]);
+      for (let i = 0; i < 60; i++) {
+        d = addDays(d, -7);
+        const ks = weekKeysOf(dk(d));
+        if (ks[6] < firstKey()) break;
+        const mine = weekPoints(u, ks), theirs = weekPoints(OTHER(u), ks);
+        s.bestWeek = Math.max(s.bestWeek, mine);
+        if (mine > theirs && mine > 0) {
+          s.weeks++;
+          if (weekPoints(OTHER(u), ks.slice(0, 4)) - weekPoints(u, ks.slice(0, 4)) >= 15) s.comeback++;
+        }
+        if (ks.every(k => isSweep(k, u))) s.perfect++;
+      }
+      s.weekly = weeklyDone(u).length;
+      for (const sh of Object.values(A('shop'))) if (sh && sh.by === u) s.items++;
+      for (const dr of Object.values(A('dares'))) if (dr && dr.to === u && dareStatus(dr) === 'done') s.dares++;
+      s.level = levelOf(xp(u));
+      return s;
+    });
+  }
+  const BADGES = [
+    { id: 'sweeper', icon: '🧹', name: 'Sweeper', stat: 'sweeps', tiers: [1, 25, 100], what: 'clean sweeps' },
+    { id: 'streak', icon: '🔥', name: 'On Fire', stat: 'bestStreak', tiers: [7, 21, 60], what: 'day sweep streak' },
+    { id: 'grinder', icon: '🪨', name: 'Grinder', stat: 'logs', tiers: [25, 150, 600], what: 'habits logged' },
+    { id: 'monk', icon: '🧘', name: 'Monk', stat: 'med', tiers: [10, 60, 250], what: 'meditations' },
+    { id: 'gumby', icon: '🙆', name: 'Gumby', stat: 'str', tiers: [10, 60, 250], what: 'stretches' },
+    { id: 'engine', icon: '🏃', name: 'Engine', stat: 'exe', tiers: [10, 60, 250], what: 'exercise days' },
+    { id: 'dawn', icon: '🌅', name: 'Dawn Patrol', stat: 'early', tiers: [5, 30, 120], what: 'logs before 7am' },
+    { id: 'owl', icon: '🦉', name: 'Night Owl', stat: 'owl', tiers: [5, 30, 120], what: 'logs after 10pm' },
+    { id: 'twin', icon: '⚡', name: 'Twin Flame', stat: 'twin', tiers: [3, 20, 80], what: 'twin strikes' },
+    { id: 'sheriff', icon: '🤠', name: 'Sheriff', stat: 'noon', tiers: [1, 5, 20], what: 'High Noon wins' },
+    { id: 'cracker', icon: '🏦', name: 'Safecracker', stat: 'vault', tiers: [1, 5, 20], what: 'vault jobs hit' },
+    { id: 'slayer', icon: '👹', name: 'Boss Slayer', stat: 'boss', tiers: [1, 3, 10], what: 'bosses slain' },
+    { id: 'flame', icon: '💜', name: 'Flame Keeper', stat: 'bestFlame', tiers: [7, 21, 60], what: 'day couple flame' },
+    { id: 'champ', icon: '🏆', name: 'Champion', stat: 'weeks', tiers: [1, 5, 20], what: 'weeks won' },
+    { id: 'perfect', icon: '💯', name: 'Perfectionist', stat: 'perfect', tiers: [1, 4, 12], what: 'perfect weeks' },
+    { id: 'comeback', icon: '🔄', name: 'Comeback Kid', stat: 'comeback', tiers: [1, 3, 10], what: 'weeks won from behind' },
+    { id: 'gambler', icon: '💸', name: 'High Roller', stat: 'bets', tiers: [1, 5, 25], what: 'bets cashed' },
+    { id: 'bomber', icon: '💣', name: 'Demolitions', stat: 'bombs', tiers: [1, 5, 20], what: 'bombs detonated' },
+    { id: 'defuser', icon: '✂️', name: 'Bomb Squad', stat: 'defused', tiers: [1, 5, 20], what: 'bombs defused' },
+    { id: 'wingman', icon: '👉', name: 'Wingman', stat: 'assists', tiers: [3, 15, 60], what: 'assists landed' },
+    { id: 'quester', icon: '🗺', name: 'Quester', stat: 'quests', tiers: [1, 20, 100], what: 'daily quests' },
+    { id: 'marathon', icon: '📅', name: 'Marathoner', stat: 'weekly', tiers: [1, 5, 20], what: 'weekly challenges' },
+    { id: 'flash', icon: '⚡️', name: 'Flash', stat: 'flash', tiers: [1, 10, 50], what: 'flash tasks' },
+    { id: 'gamer', icon: '🕹', name: 'Arcade Rat', stat: 'gameWins', tiers: [1, 15, 75], what: 'game wins' },
+    { id: 'reflex', icon: '🐆', name: 'Cat Reflexes', stat: 'bestReact', tiers: [300, 220, 170], lower: true, what: 'ms reflex' },
+    { id: 'brain', icon: '🧮', name: 'Big Brain', stat: 'bestMath', tiers: [8, 15, 25], what: 'quick-math best' },
+    { id: 'hoarder', icon: '🎒', name: 'Hoarder', stat: 'items', tiers: [1, 10, 40], what: 'items bought' },
+    { id: 'daredevil', icon: '😈', name: 'Daredevil', stat: 'dares', tiers: [1, 5, 25], what: 'dares completed' },
+    { id: 'paparazzi', icon: '📸', name: 'Paparazzi', stat: 'photos', tiers: [1, 10, 50], what: 'proof photos' },
+    { id: 'chest', icon: '🧰', name: 'Treasure Hunter', stat: 'chests', tiers: [3, 30, 150], what: 'chests opened' },
+    { id: 'level', icon: '⭐', name: 'Ascendant', stat: 'level', tiers: [5, 10, 20], what: 'level' },
+  ];
+  const TIER_NAMES = ['', 'bronze', 'silver', 'gold'];
+  function badgeTier(u, b) {
+    const v = stats(u)[b.stat];
+    if (v == null) return 0;
+    let t = 0;
+    for (const th of b.tiers) if (b.lower ? v <= th : v >= th) t++;
+    return t;
+  }
+  const badgeList = u => BADGES.map(b => ({ ...b, tier: badgeTier(u, b) })).filter(b => b.tier > 0);
+  function records(u) {
+    const s = stats(u);
+    return [['best week', s.bestWeek + ' pts'], ['longest streak', s.bestStreak + 'd'], ['couple flame', s.bestFlame + 'd'],
+      ['reflex', s.bestReact == null ? '—' : s.bestReact + 'ms'], ['quick math', s.bestMath], ['sweeps', s.sweeps],
+      ['weeks won', s.weeks], ['game wins', s.gameWins]];
+  }
+
+  /* ---- ceremonies — week + month close with a mint, a forfeit/reward and a toast ---- */
+  const monthKeys = ym => allKeys().filter(k => k.startsWith(ym));
+  const monthPoints = (u, ym) => memo('mp:' + u + ym, () => monthKeys(ym).reduce((a, k) => a + dayPoints(u, k) + duelPoints(u, k), 0));
+  function weekResult(monK) {
+    const ks = weekKeysOf(monK);
+    const c = weekPoints('C', ks), a = weekPoints('A', ks);
+    return { c, a, winner: c === a ? null : (c > a ? 'C' : 'A') };
+  }
+  let _mintingCer = false;
+  function mintCeremonies() {
+    if (!FLAG('ceremony') || !ME || _mintingCer) return;
+    _mintingCer = true;
+    try { mintCeremoniesInner(); } finally { _mintingCer = false; }
+  }
+  function mintCeremoniesInner() {
+    const tk = todayKey(), D = DECKS();
+    const monK = dk(addDays(parseKey(weekKeysOf(tk)[0]), -7));   // last complete week
+    if (arcadeOn(monK) && !A('weeks')[monK]) {
+      const r = weekResult(monK);
+      if (r.c || r.a) {
+        const forfeit = r.winner ? (D.penalties[seedHash('wf:' + monK) % Math.max(1, D.penalties.length)] || 'a chore') : null;
+        KV.set('fit/arc/weeks/' + monK, { winner: r.winner, c: r.c, a: r.a, forfeit, ts: Date.now() });
+        if (r.winner) KV.set('fit/arc/ious/wk-' + monK, { to: r.winner, from: OTHER(r.winner), label: forfeit, src: 'week', ts: Date.now(), redeemed: null });
+      }
+    }
+    const ym = prevYm(ymNow());
+    if (ym >= CFG().arcadeEpoch.slice(0, 7) && !A('months')[ym]) {
+      const c = monthPoints('C', ym), a = monthPoints('A', ym);
+      if (c || a) {
+        const winner = c === a ? null : (c > a ? 'C' : 'A');
+        const reward = winner ? (D.rewards[seedHash('mr:' + ym) % Math.max(1, D.rewards.length)] || 'winner\'s choice') : null;
+        KV.set('fit/arc/months/' + ym, { winner, c, a, reward, ts: Date.now() });
+        if (winner) KV.set('fit/arc/ious/mo-' + ym, { to: winner, from: OTHER(winner), label: reward + ' — monthly cup', src: 'month', ts: Date.now(), redeemed: null });
+      }
+    }
+    const w = A('weeks')[monK];
+    if (w && store.get('ppc-seen-week') !== monK) {
+      store.set('ppc-seen-week', monK);
+      celebrate({ stamp: w.winner ? '🏆 WEEK ' + (w.winner === ME ? 'WON' : 'LOST') : '🤝 DEAD HEAT', title: w.winner ? USER_NAMES[w.winner] + ' takes the week' : 'a tie — nobody owes anybody',
+        rows: [{ label: 'Cade', val: w.c }, { label: 'Avery', val: w.a }], sub: w.winner ? (w.winner === ME ? USER_NAMES[OTHER(ME)] + ' owes you: ' + w.forfeit : 'you owe ' + USER_NAMES[w.winner] + ': ' + w.forfeit) : '',
+        kind: w.winner ? (w.winner === 'C' ? 'c' : 'a') : 'b', ms: 6000 });
+    }
+    const mo = A('months')[ym];
+    if (mo && store.get('ppc-seen-month') !== ym) {
+      store.set('ppc-seen-month', ym);
+      if (mo.winner) setTimeout(() => celebrate({ stamp: '🏅 MONTHLY CUP', title: USER_NAMES[mo.winner] + ' — ' + ym, rows: [{ label: 'Cade', val: mo.c }, { label: 'Avery', val: mo.a }],
+        sub: 'prize: ' + mo.reward + (mo.winner === ME ? ' (they owe you)' : ' (you owe them)'), kind: mo.winner === 'C' ? 'c' : 'a', ms: 6000 }), 6500);
+    }
+  }
+
+  /* ---- badge mints — each client mints its own, partner gets a toast ---- */
+  const _seenBadges = new Set();
+  let _badgeSeeded = false, _minting = false;
+  function mintBadges() {
+    if (!ME || !FLAG('badges') || _minting) return;
+    // KV.set patches the arc watcher synchronously, which re-enters this
+    // function — the guard keeps one pass = one decision (backfill vs unlock)
+    _minting = true;
+    try { mintBadgesInner(); } finally { _minting = false; }
+  }
+  function mintBadgesInner() {
+    const mine = A('badges')[ME] || {};
+    const fresh = [];
+    for (const b of badgeList(ME)) for (let t = 1; t <= b.tier; t++) {
+      const key = b.id + '.' + t;
+      if (mine[key]) continue;
+      KV.set('fit/arc/badges/' + ME + '/' + key, Date.now());
+      fresh.push([b, t]);
+    }
+    // a backfill (first load with history) stays quiet; a real unlock celebrates
+    if (_badgeSeeded && fresh.length && fresh.length <= 2) {
+      const [b, t] = fresh[fresh.length - 1];
+      celebrate({ stamp: TIER_NAMES[t].toUpperCase() + ' BADGE', title: b.icon + ' ' + b.name, sub: b.tiers[t - 1] + ' ' + b.what + ' · +' + (10 * t) + ' 🪙', kind: ME === 'C' ? 'c' : 'a' });
+    }
+    for (const key of Object.keys(A('badges')[OTHER(ME)] || {})) {
+      if (_seenBadges.has(key)) continue;
+      _seenBadges.add(key);
+      if (!_badgeSeeded) continue;
+      const [id, t] = key.split('.');
+      const b = BADGES.find(x => x.id === id);
+      if (b) showToast(b.icon + ' ' + USER_NAMES[OTHER(ME)] + ' unlocked ' + TIER_NAMES[+t] + ' ' + b.name, 'success', 3600);
+    }
+    _badgeSeeded = true;
+  }
+
+  /* ---- spontaneous pop-ups: flash windows opening, incoming dares ---- */
+  const _flashToasted = new Set();
+  const _seenDares = new Set();
+  let _dareSeeded = false;
+  function flashTick() {
+    if (!ME) return;
+    const tk = todayKey();
+    const f = flashLive(tk);
+    if (!f) return;
+    const key = tk + ':' + f.i;
+    if (_flashToasted.has(key)) return;
+    _flashToasted.add(key);
+    if (flashClaim(tk, f.i, ME) != null) return;
+    haptic([40, 60, 40]);
+    showToast('⚡ FLASH: ' + f.task + ' — ' + (f.endMin - (new Date().getHours() * 60 + new Date().getMinutes())) + ' min to claim it', 'success', 7000);
+    try { if (Notification.permission === 'granted' && document.hidden) new Notification('⚡ FLASH TASK', { body: f.task + ' — closes ' + fmtMin(f.endMin) }); } catch {}
+    renderMain();
+  }
+  setInterval(flashTick, 20000);
+  function dareToasts() {
+    for (const [id, d] of Object.entries(A('dares'))) {
+      if (!d || _seenDares.has(id)) continue;
+      _seenDares.add(id);
+      if (_dareSeeded && d.to === ME && dareStatus(d) === 'open') {
+        haptic(60);
+        showToast('😈 ' + USER_NAMES[d.by] + ' dares you: ' + d.text + ' — ' + (d.stake || 0) + ' 🪙 on it', 'success', 6000);
+      }
+    }
+    _dareSeeded = true;
+  }
+
   /* ---- today / main view ---- */
   const fmtT = ts => new Date(ts).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 
@@ -5804,6 +6641,12 @@ const Fit = (() => {
   }
   function habRow(u, h, mine) {
     const tk = todayKey();
+    if (!mine && FLAG('items') && arcadeOn(tk) && playsFor(tk, u).cloak) {
+      return `<button class="hab-row partner cloaked" data-h="${h}" disabled>
+        <span class="hb-ic">${HM[h].icon}</span>
+        <span class="hb-mid"><span class="hb-t">${HM[h].label}</span><br><span class="hb-s">🥷 cloaked — revealed at midnight</span></span>
+        <span class="hb-tick">?</span></button>`;
+    }
     const val = (dayObj(tk)[u] || {})[h];
     const done = typeof val === 'number';
     const skipped = val === 'skip';
@@ -5951,7 +6794,7 @@ const Fit = (() => {
     const mult = 1 + 0.05 * Math.min(streak, 10);
     const rows = [{ label: 'habits', val: '+' + base }];
     if (mult > 1) rows.push({ label: 'streak ×' + mult.toFixed(2), val: '+' + (Math.round(base * mult) - base) });
-    rows.push({ label: 'sweep bonus', val: '+' + ((arcadeOn(tk) && wheelFor(tk).id === 'sweep15') ? 15 : C.sweep) });
+    rows.push({ label: 'sweep bonus', val: '+' + sweepBonusFor(tk, ME, C) });
     const extras = arcadeOn(tk) ? eventAdj(ME, tk, C) : 0;
     if (extras) rows.push({ label: 'arcade extras', val: (extras > 0 ? '+' : '') + extras });
     celebrate({ stamp: 'DAY SEALED', rows, total: dayPoints(ME, tk), kind: ME === 'C' ? 'c' : 'a',
@@ -5967,19 +6810,6 @@ const Fit = (() => {
     const h12 = ((h + 11) % 12) + 1;
     return h12 + (mm ? ':' + String(mm).padStart(2, '0') : '') + (h < 12 ? 'am' : 'pm');
   };
-  function inventory(u) {
-    const inv = { x2: 0, shield: 0, uno: 0 };
-    for (const s of Object.values(A('shop'))) if (s && s.by === u && inv[s.kind] != null) inv[s.kind]++;
-    for (const users of Object.values(A('plays'))) {
-      const pl = (users || {})[u] || {};
-      if (pl.x2) inv.x2--;
-      if (pl.shield) inv.shield--;
-    }
-    for (const bombs of Object.values(A('bombs'))) {
-      for (const [planter, b] of Object.entries(bombs || {})) if (b && b.rev && OTHER(planter) === u) inv.uno--;
-    }
-    return inv;
-  }
   function lastWeekLoser() {
     const keys = weekKeys(-1);
     const c = weekPoints('C', keys), a = weekPoints('A', keys);
@@ -6095,20 +6925,17 @@ const Fit = (() => {
         cards.push(`<button class="arc-card lotto btn-press" data-arc="lotto">🎟 <b>LOSER'S LOTTO</b> — you dropped last week: scratch your comeback card</button>`);
       }
     }
-    // 🎒 item rack + shop
+    // 🎒 item rack (registry-driven) + shop
     if (FLAG('items')) {
       const inv = inventory(ME);
       const held = Object.entries(inv).filter(([, n]) => n > 0);
-      const plays = playsFor(tk, ME);
-      const canX2 = inv.x2 > 0 && !plays.x2 && SHARED.every(h => slotTs(tk, ME, h) == null);
-      const canShield = inv.shield > 0 && !plays.shield;
+      const live = PLAYABLE.filter(k => playsFor(tk, ME)[k]);
       cards.push(`<div class="arc-card rack">🎒 ${held.length ? held.map(([k, n]) =>
-        `<span class="rk">${{ x2: '✖️2', shield: '🛡', uno: '🔄' }[k]}×${n}</span>`).join(' ') : '<span class="rk dim">no items</span>'}
-        ${canX2 ? '<button class="ob" data-arc="playx2">play ✖️2</button>' : ''}
-        ${canShield ? '<button class="ob" data-arc="playshield">play 🛡</button>' : ''}
-        ${plays.x2 ? '<span class="rk on">✖️2 LIVE</span>' : ''}${plays.shield ? '<span class="rk on">🛡 UP</span>' : ''}
-        <button class="ob" data-arc="shop">SHOP</button></div>`);
+        canPlay(k, tk, ME) ? `<button class="rk go" data-arc="play:${k}">${ITEMS[k].icon}×${n} · play</button>` : `<span class="rk">${ITEMS[k].icon}×${n}</span>`).join(' ') : '<span class="rk dim">no items</span>'}
+        ${live.map(k => `<span class="rk on">${ITEMS[k].icon} LIVE</span>`).join('')}
+        <button class="ob" data-arc="shop">SHOP · ${wallet(ME)} 🪙</button></div>`);
     }
+    cards.push(...arcadeStrip2(tk, nowMin));
     return cards.length ? `<div class="arc-strip">${cards.join('')}</div>` : '';
   }
 
@@ -6119,6 +6946,7 @@ const Fit = (() => {
       const act = b.dataset.arc;
       const tk = todayKey();
       const C = CFG();
+      if (arcadeAction(act)) return;
       if (act === 'press') {
         askConfirm('Press your luck?', 'Tonight\'s +' + duelCalc(ME, tk) + ' doubles if you ALSO win tomorrow\'s duel — or zeroes if you don\'t. Your call is public.', () => {
           KV.set('fit/arc/press/' + tk + '/' + ME, { ts: Date.now() });
@@ -6154,32 +6982,6 @@ const Fit = (() => {
       if (act === 'shop') openShop();
       if (act === 'lotto') openLotto();
     }));
-  }
-
-  /* ---- shop sheet ---- */
-  function openShop() {
-    const C = CFG();
-    const inv = inventory(ME);
-    const wk = weekPoints(ME, weekKeys(0));
-    const ITEMS = [
-      ['x2', '✖️2 Chip', 'play before your first log — the whole day doubles', C.priceX2],
-      ['shield', '🛡 Force Field', 'no duel damage against you for one day', C.priceShield],
-      ['uno', '🔄 Uno Reverse', 'boomerang an incoming glitter bomb', C.priceUno],
-    ];
-    showCtxSheet(`<div class="shop-head">🎒 ARMORY — you hold ${wk} pts this week</div>` +
-      ITEMS.map(([k, name, desc, cost]) =>
-        `<div class="shop-row"><span class="sh-mid"><b>${name}</b> <span class="sh-held">${inv[k] ? 'held ×' + inv[k] : ''}</span><br><span class="sh-desc">${desc}</span></span>
-         <button class="ob go" data-buy="${k}" data-cost="${cost}"${inv[k] >= 2 ? ' disabled' : ''}>${inv[k] >= 2 ? 'MAX 2' : '−' + cost + ' pts'}</button></div>`).join(''));
-    $('sheet-overlay').querySelectorAll('[data-buy]').forEach(b => b.addEventListener('click', () => {
-      const kind = b.dataset.buy, cost = +b.dataset.cost;
-      KV.set('fit/arc/shop/' + uid(), { by: ME, kind, cost, ts: Date.now() });
-      showToast('bought — it\'s in your rack', 'success', 2000);
-      closeModal('sheet-overlay');
-    }));
-  }
-  function showCtxSheet(html) {
-    $('sheet-body').innerHTML = html;
-    openModal('sheet-overlay');
   }
 
   /* ---- loser's lotto: scratch card ---- */
@@ -6314,19 +7116,22 @@ const Fit = (() => {
     };
     const wkLabel = weekOffset === 0 ? 'This week' :
       weekOffset === -1 ? 'Last week' : (-weekOffset) + ' weeks ago';
-    el.innerHTML = `
+    const cloakedO = FLAG('items') && arcadeOn(tk) && !!playsFor(tk, OTHER(ME)).cloak;
+    el.innerHTML = navHtml('main') + `
       <div class="fit-head"><h3>Today</h3><span class="fh-date">${new Date().toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' }).toUpperCase()}</span><button class="fh-link" id="fh-feed">📸 Feed ›</button></div>
       <div class="duel-card">
         <div class="duel-names"><span class="dn-c">Cade · ${pc}</span><span class="dn-a">Avery · ${pa}</span></div>
-        <div class="duel-bar"><i class="db-c" style="width:${wc}%"></i><i class="db-a" style="width:${100 - wc}%"></i></div>
+        <div class="duel-bar"><i class="db-c" style="width:${wc}%${skinCss('C') ? ';background:' + skinCss('C') : ''}"></i><i class="db-a" style="width:${100 - wc}%${skinCss('A') ? ';background:' + skinCss('A') : ''}"></i></div>
         <div class="duel-sub"><span>🏆 ${crowns('C')} · ${sweepStreak('C', tk) || sweepStreak('C', dk(addDays(new Date(), -1)))}🔥</span><span>this week's points</span><span>🏆 ${crowns('A')} · ${sweepStreak('A', tk) || sweepStreak('A', dk(addDays(new Date(), -1)))}🔥</span></div>
+        ${arcadeOn(tk) ? `<div class="duel-lv">${levelLine('C')}${levelLine('A')}</div>` : ''}
         ${coupleFlameHtml(tk)}
         ${tickerHtml(tk)}
       </div>
+      ${dailyLoopHtml(tk)}
       ${arcadeStrip(tk)}
       <div class="fit-subh">${MY_NAME} — ${doneCount(tk, ME)} of ${HABITS[ME].length}</div>
       ${HABITS[ME].map(h => habRow(ME, h, true)).join('')}
-      <div class="fit-subh">${USER_NAMES[OTHER(ME)]} — ${doneCount(tk, OTHER(ME))} of ${HABITS[OTHER(ME)].length}</div>
+      <div class="fit-subh">${USER_NAMES[OTHER(ME)]} — ${cloakedO ? '?' : doneCount(tk, OTHER(ME))} of ${HABITS[OTHER(ME)].length}</div>
       ${HABITS[OTHER(ME)].map(h => habRow(OTHER(ME), h, false)).join('')}
       <div class="week-grid">
         <div class="wg-head"><span class="wg-title">${wkLabel}</span>
@@ -6388,6 +7193,665 @@ const Fit = (() => {
     askConfirm('Skip ' + HM[h].label + ' today?', 'Excused: no points, no penalty, streak survives, duel sits out.', () => {
       KV.set('fit/days/' + tk + '/' + ME + '/' + h, 'skip');
     }, 'Skip');
+  }
+
+  /* ==========================================================================
+     ARCADE II UIs — the fit nav, the daily loop row, Arcade / Quests /
+     Trophies screens, the game overlay and its twelve runners, the shop.
+     ========================================================================== */
+  const VIEWS = [['main', '💪', 'Habits'], ['arcade', '🕹', 'Arcade'], ['quests', '🗺', 'Quests'], ['trophies', '🏆', 'Trophies'], ['feed', '📸', 'Feed'], ['tools', '⏱', 'Timers']];
+  function navHtml(cur) {
+    const tk = todayKey();
+    const on = arcadeOn(tk);
+    const dots = {
+      arcade: on && ((FLAG('chest') && !chestOpened(tk, ME)) || (FLAG('games') && !gameRec(tk, gotd(tk), ME))),
+      quests: on && (pendingDares().length > 0 || (questFor(tk) && !questRec(tk, ME)) || (flashLive(tk) && flashClaim(tk, flashLive(tk).i, ME) == null)),
+    };
+    return `<div class="fit-nav">${VIEWS.map(([v, ic, l]) =>
+      `<a class="fn${v === cur ? ' on' : ''}" href="#fit${v === 'main' ? '' : '/' + v}">${ic} ${l}${dots[v] ? '<i></i>' : ''}</a>`).join('')}</div>`;
+  }
+  function dailyLoopHtml(tk) {
+    if (!arcadeOn(tk)) return '';
+    const q = questFor(tk), g = gotd(tk), monK = weekKeysOf(tk)[0], W = weeklyFor(monK);
+    const tiles = [];
+    if (FLAG('chest')) tiles.push(`<a class="dl-tile${chestOpened(tk, ME) ? ' done' : ''}" href="#fit/arcade"><span>🧰</span><b>${chestOpened(tk, ME) ? '+' + chestPayout(tk, ME) + ' 🪙' : 'chest'}</b></a>`);
+    if (q) tiles.push(`<a class="dl-tile${questDone(tk, ME) ? ' done' : (questRec(tk, ME) ? ' half' : '')}" href="#fit/quests"><span>${q.icon}</span><b>${questDone(tk, ME) ? 'quest ✓' : 'quest'}</b></a>`);
+    if (FLAG('games')) tiles.push(`<a class="dl-tile${gameRec(tk, g, ME) ? ' done' : ''}" href="#fit/arcade"><span>${GAMES[g].icon}</span><b>${GAMES[g].name} 2×</b></a>`);
+    if (W) tiles.push(`<a class="dl-tile${weeklyComplete(ME, monK) ? ' done' : ''}" href="#fit/quests"><span>${W.icon}</span><b>${weeklyProg(ME, monK)}/${W.goal} wk</b></a>`);
+    return tiles.length ? `<div class="daily-loop">${tiles.join('')}</div>` : '';
+  }
+  function levelLine(u) {
+    const L = levelInfo(u);
+    return `<span class="lv-line lv-${u.toLowerCase()}"><span><b>Lv ${L.level}</b> · 🪙 ${wallet(u)}</span><span class="lv-t">${esc(displayTitle(u))}</span></span>`;
+  }
+  const skinCss = u => { const s = cosmetics(u).skin; return s && SKINS[s] && owns(u, 'skin', s) ? SKINS[s].css.replace(/var\(--user-x\)/g, 'var(--user-' + u.toLowerCase() + ')') : ''; };
+
+  /* ---- strip additions: flash · dares · underdog · cloak ---- */
+  function arcadeStrip2(tk, nowMin) {
+    const cards = [];
+    if (FLAG('flash')) {
+      for (const f of flashSlots(tk)) {
+        const me = flashClaim(tk, f.i, ME), them = flashClaim(tk, f.i, OTHER(ME));
+        if (nowMin >= f.startMin && nowMin < f.endMin) {
+          if (me != null) cards.push(`<div class="arc-card flash done">⚡ claimed <b>${f.task}</b>${them == null ? ' — first! +' + (CFG().flashPts + CFG().flashFirst) : (me < them ? ' — first! +' + (CFG().flashPts + CFG().flashFirst) : ' +' + CFG().flashPts)}</div>`);
+          else cards.push(`<button class="arc-card flash live btn-press" data-arc="flash:${f.i}">⚡ <b>FLASH: ${f.task}</b> — do it now, tap to claim · ${f.endMin - nowMin} min left${them != null ? ' · ' + USER_NAMES[OTHER(ME)] + ' already did' : ''}</button>`);
+        } else if (nowMin < f.startMin && f.startMin - nowMin <= 30) {
+          cards.push(`<div class="arc-card flash">⚡ flash task at <b>${fmtMin(f.startMin)}</b> — stay near your phone</div>`);
+        }
+      }
+    }
+    if (FLAG('dares')) {
+      for (const [id, d] of pendingDares().slice(0, 2)) {
+        cards.push(`<div class="arc-card dare live">😈 <b>${USER_NAMES[d.by]} dares you:</b> ${esc(d.text)} · ${d.stake || 0} 🪙 · ${dareLeft(d)}
+          <span class="odds-stake"><button class="ob go" data-arc="dare:accept:${esc(id)}">ACCEPT</button><button class="ob" data-arc="dare:decline:${esc(id)}">nope</button></span></div>`);
+      }
+      const running = myDares().filter(([, d]) => d.to === ME && dareStatus(d) === 'accepted');
+      for (const [id, d] of running.slice(0, 2)) {
+        cards.push(`<div class="arc-card dare">😈 <b>${esc(d.text)}</b> · ${dareLeft(d)} <button class="ob go" data-arc="dare:done:${esc(id)}">DONE ✓</button></div>`);
+      }
+    }
+    const ud = underdogFor(tk);
+    if (ud) cards.push(`<div class="arc-card underdog${ud === ME ? ' live' : ''}">🐕 <b>UNDERDOG</b> — ${USER_NAMES[ud]} is way behind: ${ud === ME ? 'your' : 'their'} habits pay ×${CFG().underdogMult} today</div>`);
+    if (FLAG('items') && playsFor(tk, OTHER(ME)).cloak) cards.push(`<div class="arc-card">🥷 ${USER_NAMES[OTHER(ME)]} is cloaked — you'll see their day at midnight</div>`);
+    return cards;
+  }
+  const dareLeft = d => {
+    if (!d.dl) return '';
+    const ms = d.dl - Date.now();
+    if (ms <= 0) return 'expired';
+    return Math.floor(ms / 3600000) + 'h' + String(Math.floor(ms / 60000) % 60).padStart(2, '0') + 'm left';
+  };
+
+  /* ---- generic arcade actions (strip + views) ---- */
+  function arcadeAction(act) {
+    const tk = todayKey(), C = CFG();
+    if (act.startsWith('play:')) {
+      const kind = act.slice(5), it = ITEMS[kind];
+      if (!it || !canPlay(kind, tk, ME)) { showToast('can\'t play that right now', 'error', 1800); return; }
+      askConfirm('Play ' + it.icon + ' ' + it.name + '?', it.desc + (kind === 'dice' ? ' It spins for both of you.' : ''), () => {
+        KV.set('fit/arc/plays/' + tk + '/' + ME + '/' + kind, Date.now());
+        haptic(30);
+        showToast(it.icon + ' ' + it.name + ' — LIVE', 'success', 2400);
+      }, 'Play it');
+      return true;
+    }
+    if (act === 'chest') {
+      if (!FLAG('chest') || chestOpened(tk, ME)) return true;
+      KV.set('fit/arc/chest/' + tk + '/' + ME, Date.now());
+      const run = chestStreak(tk, ME) + 1;
+      celebrate({ stamp: '🧰 CHEST', title: '+' + chestPayout(tk, ME) + ' 🪙', sub: run > 1 ? run + '-day run — the streak bonus grows to +10' : 'come back tomorrow: consecutive days pay more', kind: ME === 'C' ? 'c' : 'a', ms: 2600 });
+      return true;
+    }
+    if (act === 'quest') {
+      if (questRec(tk, ME) && questRec(tk, ME).done) return true;
+      KV.set('fit/arc/quests/' + tk + '/' + ME + '/done', Date.now());
+      haptic(25);
+      const q = questFor(tk);
+      showToast(q.couple ? '🗺 logged — pays when you both have it' : '🗺 quest done +' + C.questPts + ' · +' + C.coinQuest + ' 🪙 (double if witnessed)', 'success', 3200);
+      return true;
+    }
+    if (act === 'witness') {
+      const o = OTHER(ME), r = questRec(tk, o);
+      if (!r || !r.done || r.wit) return true;
+      KV.set('fit/arc/quests/' + tk + '/' + o + '/wit', Date.now());
+      showToast('👀 witnessed — ' + USER_NAMES[o] + '\'s quest pays double', 'success', 2600);
+      return true;
+    }
+    if (act === 'weekly+') {
+      const monK = weekKeysOf(tk)[0], W = weeklyFor(monK);
+      if (!W || !W.manual) return true;
+      const n = Math.min(W.goal, (((A('wq')[monK] || {})[ME] || {}).n || 0) + 1);
+      KV.set('fit/arc/wq/' + monK + '/' + ME, { n, ts: Date.now() });
+      haptic(15);
+      if (n >= W.goal) celebrate({ stamp: '📅 WEEKLY', title: W.icon + ' ' + W.t, sub: '+' + C.weeklyPts + ' · +' + C.coinWeekly + ' 🪙', kind: ME === 'C' ? 'c' : 'a' });
+      return true;
+    }
+    if (act.startsWith('flash:')) {
+      const i = +act.slice(6), f = flashSlots(tk)[i];
+      const m = new Date().getHours() * 60 + new Date().getMinutes();
+      if (!f || m < f.startMin || m >= f.endMin) { showToast('that window is closed', 'error', 1800); return true; }
+      if (flashClaim(tk, i, ME) != null) return true;
+      const first = flashClaim(tk, i, OTHER(ME)) == null;
+      KV.set('fit/arc/flash/' + tk + '/s' + i + '/' + ME, Date.now());
+      celebrate({ stamp: '⚡ FLASH', title: f.task, sub: (first ? 'FIRST — +' + (C.flashPts + C.flashFirst) : '+' + C.flashPts) + ' · +' + C.coinFlash + ' 🪙', kind: ME === 'C' ? 'c' : 'a', ms: 2600 });
+      return true;
+    }
+    if (act.startsWith('dare:')) {
+      const [, what, id] = act.split(':');
+      const d = A('dares')[id];
+      if (!d) return true;
+      if (what === 'accept' && d.to === ME) { KV.set('fit/arc/dares/' + id + '/status', 'accepted'); showToast('😈 accepted — ' + dareLeft(d), 'success', 2400); }
+      if (what === 'decline' && d.to === ME) askConfirm('Decline the dare?', USER_NAMES[d.by] + ' pockets your ' + (d.stake || 0) + ' 🪙.', () => KV.set('fit/arc/dares/' + id + '/status', 'declined'), 'Decline');
+      if (what === 'done' && d.to === ME && dareStatus(d) === 'accepted') {
+        askConfirm('Dare done?', 'Honor system. ' + USER_NAMES[d.by] + ' pays you ' + (d.stake || 0) + ' 🪙.', () => {
+          KV.set('fit/arc/dares/' + id + '/status', 'done');
+          KV.set('fit/arc/dares/' + id + '/doneTs', Date.now());
+          celebrate({ stamp: '😈 DARE DONE', title: d.text, sub: '+' + (d.stake || 0) + ' 🪙 from ' + USER_NAMES[d.by], kind: ME === 'C' ? 'c' : 'a' });
+        }, 'Done');
+      }
+      if (what === 'cancel' && d.by === ME && dareStatus(d) === 'open') KV.remove('fit/arc/dares/' + id);
+      return true;
+    }
+    if (act.startsWith('iou:')) {
+      const [, id] = act.split(':');
+      const io = A('ious')[id];
+      if (io) KV.set('fit/arc/ious/' + id + '/redeemed', io.redeemed ? null : Date.now());
+      else if (A('credits')[id]) KV.set('fit/arc/credits/' + id + '/redeemed', A('credits')[id].redeemed ? null : Date.now());
+      return true;
+    }
+    if (act.startsWith('sync:')) {
+      const idx = +act.slice(5);
+      if (gameRec(tk, 'sync', ME)) return true;
+      KV.set('fit/arc/games/' + tk + '/sync/' + ME, { score: idx, ts: Date.now() });
+      haptic(15);
+      return true;
+    }
+    if (act.startsWith('equip:')) {
+      const [, kind, arg] = act.split(':');
+      const cur = cosmetics(ME);
+      KV.set('fit/arc/cos/' + ME, { ...cur, [kind]: cur[kind] === arg ? null : arg, ts: Date.now() });
+      return true;
+    }
+    return false;
+  }
+
+  /* ==================== ARCADE VIEW ==================== */
+  function renderArcade() {
+    if (currentApp !== 'fit' || view !== 'arcade') return;
+    const el = $('fit-arcade');
+    const tk = todayKey(), C = CFG();
+    if (!arcadeOn(tk)) { el.innerHTML = navHtml('arcade') + '<div class="zn-empty">the arcade opens ' + C.arcadeEpoch + '</div>'; return; }
+    const g = gotd(tk);
+    const wins = { C: 0, A: 0 };
+    for (const gg of VS_GAMES) { const w = gameWinner(tk, gg); if (w) wins[w]++; }
+    const tile = gg => {
+      const G = GAMES[gg], me = gameRec(tk, gg, ME), them = gameRec(tk, gg, OTHER(ME)), w = gameWinner(tk, gg);
+      return `<button class="game-tile${gg === g ? ' gotd' : ''}${w === ME ? ' won' : w ? ' lost' : ''}" data-game="${gg}">
+        <span class="gt-ic">${G.icon}</span><span class="gt-name">${G.name}${gg === g ? ' <i>2×</i>' : ''}</span>
+        <span class="gt-desc">${G.desc}</span>
+        <span class="gt-scores"><span class="u-me">${me ? gameFmt(gg, me.score) : '—'}</span><span class="u-them">${them ? gameFmt(gg, them.score) : '—'}</span></span></button>`;
+    };
+    const pulls = slotsPulls(tk, ME);
+    const inv = inventory(ME);
+    const held = Object.entries(inv).filter(([, n]) => n > 0);
+    const Q = syncQ(tk), mine = gameRec(tk, 'sync', ME), theirs = gameRec(tk, 'sync', OTHER(ME));
+    el.innerHTML = navHtml('arcade') + `
+      <div class="fit-head"><h3>Arcade</h3><span class="fh-date">${wallet(ME)} 🪙 · LV ${levelInfo(ME).level}</span><button class="fh-link" data-arc="shop">🎒 Shop</button></div>
+      <div class="arc-row2">
+        ${FLAG('chest') ? `<button class="chest${chestOpened(tk, ME) ? ' open' : ''}" data-arc="chest"><span class="ch-ic">${chestOpened(tk, ME) ? '📭' : '🧰'}</span><b>${chestOpened(tk, ME) ? '+' + chestPayout(tk, ME) + ' 🪙 today' : 'Daily chest'}</b><span>${chestOpened(tk, ME) ? (chestStreak(tk, ME) + 1) + '-day run' : 'tap to open · run of ' + chestStreak(tk, ME)}</span></button>` : ''}
+        <button class="chest slots" data-game="slots"><span class="ch-ic">🎰</span><b>Slots</b><span>${pulls ? pulls + ' pull' + (pulls === 1 ? '' : 's') + ' · net ' + fmtSigned(slotsNet(tk, ME)) + ' 🪙' : 'free pull waiting'}</span></button>
+      </div>
+      ${held.length ? `<div class="arc-card rack">🎒 ${held.map(([k, n]) => canPlay(k, tk, ME) ? `<button class="rk go" data-arc="play:${k}">${ITEMS[k].icon}×${n} · play</button>` : `<span class="rk">${ITEMS[k].icon}×${n}</span>`).join(' ')}
+        ${PLAYABLE.filter(k => playsFor(tk, ME)[k]).map(k => `<span class="rk on">${ITEMS[k].icon} LIVE</span>`).join('')}</div>` : ''}
+      ${FLAG('games') ? `<div class="fit-subh">Today's board — Cade ${wins.C} · Avery ${wins.A} · win = +${C.gamePts} (2× featured)</div>
+      <div class="games-grid">${VS_GAMES.map(tile).join('')}</div>` : ''}
+      <div class="fit-subh">💞 Couple Sync — match and you both get +${C.coinWin} 🪙</div>
+      <div class="sync-card${syncMatch(tk) ? ' match' : ''}">
+        <div class="sync-q">${esc(Q[0])}</div>
+        <div class="sync-opts">${Q[1].map((o, i) => `<button class="ob${mine && mine.score === i ? ' go' : ''}" data-arc="sync:${i}"${mine ? ' disabled' : ''}>${esc(o)}</button>`).join('')}</div>
+        <div class="sync-sub">${mine && theirs ? (syncMatch(tk) ? '💞 MATCHED — ' + esc(Q[1][mine.score]) : 'no match: you said ' + esc(Q[1][mine.score]) + ', ' + USER_NAMES[OTHER(ME)] + ' said ' + esc(Q[1][theirs.score] || '?')) :
+          mine ? 'locked in — waiting on ' + USER_NAMES[OTHER(ME)] : theirs ? USER_NAMES[OTHER(ME)] + ' already answered' : 'answer without conferring'}</div>
+      </div>
+      <div class="form-hint" style="text-align:center;margin:8px 0">one scored run per game per day · both must play for the points · practice runs are free</div>`;
+    el.querySelectorAll('[data-game]').forEach(b => b.addEventListener('click', () => openGame(b.dataset.game)));
+    wireArcade(el);
+  }
+
+  /* ==================== GAME OVERLAY + RUNNERS ==================== */
+  let gameCleanup = null;
+  function openGame(g) {
+    const G = GAMES[g], tk = todayKey(), el = $('game-overlay');
+    if (g === 'slots') return openSlots();
+    el.innerHTML = `<div class="gm-box"><div class="gm-head"><span>${G.icon} ${G.name}</span><span class="gm-meta" id="gm-meta"></span><button class="gm-close" id="gm-close">✕</button></div><div class="gm-body" id="gm-body"></div></div>`;
+    el.classList.add('open');
+    $('gm-close').addEventListener('click', closeGame);
+    const already = gameRec(tk, g, ME);
+    $('gm-meta').textContent = already ? 'scored ' + gameFmt(g, already.score) + ' · practice' : 'THIS RUN COUNTS';
+    if (g === 'dice' && already) { finishGame(g, already.score, true); return; }
+    gameCleanup = RUNNERS[g]($('gm-body'), score => finishGame(g, score));
+  }
+  function closeGame() {
+    if (gameCleanup) { try { gameCleanup(); } catch {} gameCleanup = null; }
+    $('game-overlay').classList.remove('open');
+    renderArcade();
+  }
+  function finishGame(g, score, replay) {
+    if (gameCleanup) { try { gameCleanup(); } catch {} gameCleanup = null; }
+    const tk = todayKey(), G = GAMES[g], body = $('gm-body');
+    const prev = gameRec(tk, g, ME);
+    if (!prev && !replay) KV.set('fit/arc/games/' + tk + '/' + g + '/' + ME, { score, ts: Date.now() });
+    const them = gameRec(tk, g, OTHER(ME)), oN = USER_NAMES[OTHER(ME)];
+    let verdict;
+    if (prev && !replay) verdict = 'practice — your scored ' + gameFmt(g, prev.score) + ' stands';
+    else if (them) {
+      const w = gameWinner(tk, g);
+      verdict = w === ME ? '🏆 you beat ' + oN + '\'s ' + gameFmt(g, them.score) + ' — +' + (CFG().gamePts * (gotd(tk) === g ? 2 : 1)) :
+        w ? oN + '\'s ' + gameFmt(g, them.score) + ' holds — they take it' : 'dead heat with ' + oN;
+    } else verdict = 'logged · ' + oN + ' hasn\'t played yet';
+    body.innerHTML = `<div class="gm-result"><div class="gm-score">${gameFmt(g, score)}</div><div class="gm-verdict">${verdict}</div>
+      <div class="tc-btns">${g === 'dice' ? '' : '<button class="btn btn-primary" id="gm-again">play again</button>'}<button class="btn" id="gm-done">done</button></div></div>`;
+    haptic(30);
+    const again = $('gm-again');
+    if (again) again.addEventListener('click', () => openGame(g));
+    $('gm-done').addEventListener('click', closeGame);
+  }
+  const RUNNERS = {
+    react: (body, done) => {
+      let t0 = 0, armed = false, timer = 0, fails = 0;
+      const pad = document.createElement('button');
+      pad.className = 'gm-pad wait';
+      body.appendChild(pad);
+      const arm = () => {
+        pad.className = 'gm-pad wait'; pad.textContent = 'wait for green…'; armed = false;
+        timer = setTimeout(() => { pad.className = 'gm-pad go'; pad.textContent = 'TAP!'; armed = true; t0 = performance.now(); }, 1200 + Math.random() * 2800);
+      };
+      pad.addEventListener('pointerdown', e => {
+        e.preventDefault();
+        if (armed) { armed = false; done(Math.round(performance.now() - t0)); return; }
+        clearTimeout(timer); fails++;
+        pad.className = 'gm-pad bad'; pad.textContent = fails >= 3 ? 'jumpy — that\'s a 999' : 'too early!';
+        if (fails >= 3) timer = setTimeout(() => done(999), 700); else timer = setTimeout(arm, 900);
+      });
+      arm();
+      return () => clearTimeout(timer);
+    },
+    taps: (body, done) => {
+      let n = 0, started = 0, timer = 0, tick = 0;
+      body.innerHTML = `<div class="gm-big" id="gm-big">0</div><div class="gm-sub" id="gm-sub">first tap starts 5 seconds</div><button class="gm-pad" id="gm-tap">TAP</button>`;
+      const big = body.querySelector('#gm-big'), sub = body.querySelector('#gm-sub');
+      body.querySelector('#gm-tap').addEventListener('pointerdown', e => {
+        e.preventDefault();
+        if (!started) {
+          started = performance.now();
+          timer = setTimeout(() => { clearInterval(tick); done(n); }, 5000);
+          tick = setInterval(() => { sub.textContent = Math.max(0, 5 - (performance.now() - started) / 1000).toFixed(1) + 's'; }, 100);
+        }
+        n++; big.textContent = n;
+      });
+      return () => { clearTimeout(timer); clearInterval(tick); };
+    },
+    math: (body, done) => {
+      let right = 0, t0 = 0, timer = 0, tick = 0;
+      const q = () => {
+        const op = ['+', '−', '×'][Math.floor(Math.random() * 3)];
+        let a = 2 + Math.floor(Math.random() * 12), b = 2 + Math.floor(Math.random() * 12);
+        if (op === '×') { a = 2 + Math.floor(Math.random() * 9); b = 2 + Math.floor(Math.random() * 9); }
+        if (op === '−' && b > a) [a, b] = [b, a];
+        const ans = op === '+' ? a + b : op === '−' ? a - b : a * b;
+        const opts = new Set([ans]);
+        let guard = 0;
+        while (opts.size < 4 && guard++ < 50) { const d = Math.floor(Math.random() * 11) - 5; if (d) opts.add(Math.abs(ans + d)); }
+        return { text: a + ' ' + op + ' ' + b, ans, opts: [...opts].sort(() => Math.random() - 0.5) };
+      };
+      const left = () => Math.max(0, 20 - (performance.now() - t0) / 1000).toFixed(0) + 's';
+      const show = () => {
+        const Q = q();
+        body.innerHTML = `<div class="gm-sub" id="gm-sub">${right} right · ${left()}</div><div class="gm-big">${Q.text}</div><div class="gm-opts">${Q.opts.map(o => `<button class="gm-opt" data-v="${o}">${o}</button>`).join('')}</div>`;
+        body.querySelectorAll('.gm-opt').forEach(b => b.addEventListener('pointerdown', e => {
+          e.preventDefault();
+          if (+b.dataset.v === Q.ans) { right++; haptic(6); } else haptic(40);
+          show();
+        }));
+      };
+      t0 = performance.now();
+      timer = setTimeout(() => { clearInterval(tick); done(right); }, 20000);
+      tick = setInterval(() => { const s = body.querySelector('#gm-sub'); if (s) s.textContent = right + ' right · ' + left(); }, 250);
+      show();
+      return () => { clearTimeout(timer); clearInterval(tick); };
+    },
+    memory: (body, done) => {
+      const syms = ['🧘', '🙆', '🏃', '🏋️', '💜', '🔥', '🏆', '🎯'];
+      const cards = [...syms, ...syms].sort(() => Math.random() - 0.5);
+      let open = [], matched = 0, t0 = 0, lock = false, timer = 0;
+      body.innerHTML = `<div class="gm-sub">flip two — match all 8 pairs</div><div class="gm-grid4">${cards.map((s, i) => `<button class="gm-card" data-i="${i}"><span>${s}</span></button>`).join('')}</div>`;
+      body.querySelectorAll('.gm-card').forEach(c => c.addEventListener('pointerdown', e => {
+        e.preventDefault();
+        if (lock || c.classList.contains('up')) return;
+        if (!t0) t0 = performance.now();
+        c.classList.add('up'); open.push(c);
+        if (open.length < 2) return;
+        const [a, b] = open;
+        if (cards[+a.dataset.i] === cards[+b.dataset.i]) {
+          a.classList.add('ok'); b.classList.add('ok'); matched++; open = []; haptic(8);
+          if (matched === 8) timer = setTimeout(() => done(Math.round(performance.now() - t0)), 300);
+        } else {
+          lock = true;
+          timer = setTimeout(() => { a.classList.remove('up'); b.classList.remove('up'); open = []; lock = false; }, 650);
+        }
+      }));
+      return () => clearTimeout(timer);
+    },
+    hold: (body, done) => {
+      let t0 = 0;
+      body.innerHTML = `<div class="gm-sub">press, hold, release at exactly 5.00s — no clock, just feel</div><button class="gm-pad" id="gm-hold">HOLD</button>`;
+      const pad = body.querySelector('#gm-hold');
+      pad.addEventListener('pointerdown', e => { e.preventDefault(); t0 = performance.now(); pad.textContent = '…'; pad.classList.add('go'); });
+      const up = () => { if (!t0) return; const ms = performance.now() - t0; t0 = 0; done(Math.round(Math.abs(ms - 5000))); };
+      pad.addEventListener('pointerup', up);
+      pad.addEventListener('pointercancel', up);
+      return () => {};
+    },
+    bar: (body, done) => {
+      let round = 0, total = 0, pos = 0, dir = 1, raf = 0, running = false, target = 0.5, speed = 0.9, timer = 0;
+      body.innerHTML = `<div class="gm-sub" id="gm-sub">round 1 of 3 — tap STOP inside the zone</div><div class="gm-bar"><i class="zone" id="gm-zone"></i><i class="mark" id="gm-mark"></i></div><div class="gm-big" id="gm-tot">0</div><button class="gm-pad" id="gm-stop">STOP</button>`;
+      const mark = body.querySelector('#gm-mark'), zone = body.querySelector('#gm-zone'), sub = body.querySelector('#gm-sub'), tot = body.querySelector('#gm-tot');
+      const start = () => {
+        target = 0.15 + Math.random() * 0.7;
+        zone.style.left = (target * 100 - 5) + '%';
+        pos = 0; dir = 1; running = true; speed = 0.9 + round * 0.4;
+        let last = performance.now();
+        const step = now => {
+          if (!running) return;
+          const dt = Math.min(0.05, (now - last) / 1000); last = now;
+          pos += dir * speed * dt;
+          if (pos > 1) { pos = 1; dir = -1; }
+          if (pos < 0) { pos = 0; dir = 1; }
+          mark.style.left = (pos * 100) + '%';
+          raf = requestAnimationFrame(step);
+        };
+        raf = requestAnimationFrame(step);
+      };
+      body.querySelector('#gm-stop').addEventListener('pointerdown', e => {
+        e.preventDefault();
+        if (!running) return;
+        running = false; cancelAnimationFrame(raf);
+        const pts = Math.max(0, Math.round(100 - Math.abs(pos - target) * 500));
+        total += pts; round++; tot.textContent = total; haptic(pts > 80 ? 30 : 8);
+        if (round >= 3) timer = setTimeout(() => done(total), 500);
+        else { sub.textContent = 'round ' + (round + 1) + ' of 3 — last: ' + pts; timer = setTimeout(start, 700); }
+      });
+      start();
+      return () => { running = false; cancelAnimationFrame(raf); clearTimeout(timer); };
+    },
+    simon: (body, done) => {
+      const seq = [], timers = [];
+      let idx = 0, showing = false;
+      body.innerHTML = `<div class="gm-sub" id="gm-sub">watch, then repeat</div><div class="gm-simon">${[0, 1, 2, 3].map(i => `<button class="gm-sp s${i}" data-i="${i}"></button>`).join('')}</div><div class="gm-big" id="gm-len">0</div>`;
+      const pads = [...body.querySelectorAll('.gm-sp')], sub = body.querySelector('#gm-sub'), len = body.querySelector('#gm-len');
+      const flash = (i, ms) => { pads[i].classList.add('lit'); timers.push(setTimeout(() => pads[i].classList.remove('lit'), ms)); };
+      const play = () => {
+        showing = true; seq.push(Math.floor(Math.random() * 4)); idx = 0; sub.textContent = 'watch…';
+        seq.forEach((s, j) => timers.push(setTimeout(() => flash(s, 320), 500 + j * 520)));
+        timers.push(setTimeout(() => { showing = false; sub.textContent = 'your turn'; }, 500 + seq.length * 520));
+      };
+      pads.forEach(p => p.addEventListener('pointerdown', e => {
+        e.preventDefault();
+        if (showing) return;
+        const i = +p.dataset.i;
+        flash(i, 180);
+        if (i === seq[idx]) {
+          idx++; haptic(5);
+          if (idx === seq.length) { len.textContent = seq.length; showing = true; timers.push(setTimeout(play, 700)); }
+        } else { haptic(60); showing = true; sub.textContent = 'wrong — ' + (seq.length - 1) + ' steps'; timers.push(setTimeout(() => done(seq.length - 1), 700)); }
+      }));
+      play();
+      return () => timers.forEach(clearTimeout);
+    },
+    aim: (body, done) => {
+      let n = 0;
+      const t0 = performance.now();
+      body.innerHTML = `<div class="gm-sub" id="gm-sub">pop 12 balloons — fast</div><div class="gm-arena" id="gm-arena"></div>`;
+      const arena = body.querySelector('#gm-arena'), sub = body.querySelector('#gm-sub');
+      const spawn = () => {
+        const b = document.createElement('button');
+        b.className = 'gm-balloon';
+        b.textContent = ['🎈', '🟡', '🔵', '🟣'][n % 4];
+        b.style.left = (5 + Math.random() * 78) + '%';
+        b.style.top = (5 + Math.random() * 78) + '%';
+        b.addEventListener('pointerdown', e => {
+          e.preventDefault(); n++; haptic(6); b.remove(); sub.textContent = n + ' / 12';
+          if (n >= 12) done(Math.round(performance.now() - t0)); else spawn();
+        });
+        arena.appendChild(b);
+      };
+      spawn();
+      return () => {};
+    },
+    hilo: (body, done) => {
+      let cur = 1 + Math.floor(Math.random() * 13), streak = 0, timer = 0;
+      const face = v => ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'][v - 1];
+      const draw = () => {
+        body.innerHTML = `<div class="gm-sub">streak ${streak} — is the next card higher or lower?</div><div class="gm-cardbig">${face(cur)}</div><div class="gm-opts two"><button class="gm-opt" data-g="lo">▼ lower</button><button class="gm-opt" data-g="hi">▲ higher</button></div>`;
+        body.querySelectorAll('.gm-opt').forEach(b => b.addEventListener('pointerdown', e => {
+          e.preventDefault();
+          let nx;
+          do nx = 1 + Math.floor(Math.random() * 13); while (nx === cur);
+          const ok = b.dataset.g === 'hi' ? nx > cur : nx < cur;
+          cur = nx;
+          if (ok) { streak++; haptic(6); if (streak >= 20) return done(20); draw(); }
+          else { body.querySelector('.gm-cardbig').textContent = face(nx); haptic(50); timer = setTimeout(() => done(streak), 600); }
+        }));
+      };
+      draw();
+      return () => clearTimeout(timer);
+    },
+    dice: (body, done) => {
+      const tk = todayKey();
+      const a = 1 + seedHash('dice:' + tk + ME + 'a') % 6, b = 1 + seedHash('dice:' + tk + ME + 'b') % 6;
+      const F = ['⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
+      let timer = 0, tick = 0;
+      body.innerHTML = `<div class="gm-sub">one roll — high total wins the day</div><div class="gm-dice" id="gm-dice"><span>${F[0]}</span><span>${F[0]}</span></div><button class="gm-pad" id="gm-roll">ROLL</button>`;
+      const dice = body.querySelector('#gm-dice');
+      body.querySelector('#gm-roll').addEventListener('pointerdown', e => {
+        e.preventDefault(); e.target.disabled = true;
+        let n = 0;
+        tick = setInterval(() => { dice.innerHTML = `<span>${F[Math.floor(Math.random() * 6)]}</span><span>${F[Math.floor(Math.random() * 6)]}</span>`; haptic(4); if (++n > 12) { clearInterval(tick); dice.innerHTML = `<span>${F[a - 1]}</span><span>${F[b - 1]}</span>`; timer = setTimeout(() => done(a + b), 700); } }, 90);
+      });
+      return () => { clearTimeout(timer); clearInterval(tick); };
+    },
+  };
+  function openSlots() {
+    const tk = todayKey(), el = $('game-overlay');
+    const paint = () => {
+      const C = CFG(), pulls = slotsPulls(tk, ME), w = wallet(ME);
+      const last = pulls ? slotReels(tk, ME, pulls - 1) : ['❔', '❔', '❔'];
+      const pay = pulls ? slotPayout(slotReels(tk, ME, pulls - 1)) : 0;
+      const canPull = pulls === 0 || (pulls < 4 && w >= C.slotsPull);
+      el.innerHTML = `<div class="gm-box"><div class="gm-head"><span>🎰 Slots</span><span class="gm-meta">${w} 🪙</span><button class="gm-close" id="gm-close">✕</button></div>
+        <div class="gm-body"><div class="slot-reels" id="slot-reels">${last.map(s => `<span>${s}</span>`).join('')}</div>
+        <div class="gm-verdict">${pulls ? (pay ? '+' + pay + ' 🪙' + (pay >= 10 ? ' — JACKPOT' : '') : 'nothing — the house nods') + ' · net today ' + fmtSigned(slotsNet(tk, ME)) + ' 🪙' : 'first pull is free'}</div>
+        <div class="slot-pay">${Object.entries(SLOT_PAY).map(([s, p]) => `<span>${s}${s}${s} ${p}</span>`).join('')}<span>any pair 3</span></div>
+        <div class="tc-btns"><button class="btn btn-primary" id="slot-pull"${canPull ? '' : ' disabled'}>${pulls === 0 ? 'FREE PULL' : pulls >= 4 ? 'max 4 today' : 'pull again −' + C.slotsPull + ' 🪙'}</button><button class="btn" id="gm-done">done</button></div></div></div>`;
+      $('gm-close').addEventListener('click', closeGame);
+      $('gm-done').addEventListener('click', closeGame);
+      const pull = $('slot-pull');
+      if (canPull) pull.addEventListener('click', () => {
+        pull.disabled = true;
+        const reels = slotReels(tk, ME, pulls), R = $('slot-reels').children;
+        let n = 0;
+        const tick = setInterval(() => {
+          for (let i = 0; i < 3; i++) if (n < 8 + i * 5) R[i].textContent = SLOT_SYMS[Math.floor(Math.random() * 6)]; else R[i].textContent = reels[i];
+          haptic(3);
+          if (++n > 20) {
+            clearInterval(tick);
+            KV.set('fit/arc/games/' + tk + '/slots/' + ME, { n: pulls + 1, ts: Date.now() });
+            const p = slotPayout(reels);
+            haptic(p >= 10 ? [60, 40, 60, 40, 120] : p ? 30 : 10);
+            setTimeout(paint, 250);
+          }
+        }, 80);
+      });
+    };
+    el.classList.add('open');
+    paint();
+  }
+
+  /* ==================== QUESTS VIEW ==================== */
+  let dareStake = 5, dareHours = 4;
+  function renderQuests() {
+    if (currentApp !== 'fit' || view !== 'quests') return;
+    const el = $('fit-quests');
+    const tk = todayKey(), C = CFG(), o = OTHER(ME), oN = USER_NAMES[o];
+    if (!arcadeOn(tk)) { el.innerHTML = navHtml('quests') + '<div class="zn-empty">quests open ' + C.arcadeEpoch + '</div>'; return; }
+    const nowMin = new Date().getHours() * 60 + new Date().getMinutes();
+    // daily quest
+    const q = questFor(tk), mine = questRec(tk, ME), theirs = questRec(tk, o);
+    let questHtml = '';
+    if (q) {
+      questHtml = `<div class="quest-card${questDone(tk, ME) ? ' done' : ''}">
+        <div class="qc-top"><span class="qc-ic">${q.icon}</span><span class="qc-mid"><b>${q.couple ? 'For two: ' : ''}${esc(q.text)}</b><br><span class="qc-sub">+${C.questPts * (q.couple ? 2 : 1)} pts · +${C.coinQuest * (q.couple ? 2 : 1)} 🪙${q.couple ? ' each — both must log it' : ' · witnessed = double'}</span></span></div>
+        <div class="qc-row"><span class="by-chip ${ME === 'A' ? 'u-a' : 'u-c'}">${ME}</span>${mine && mine.done ? `<span class="qc-state">done ${fmtT(mine.done)}${mine.wit ? ' · 👀 witnessed' : ''}</span>` : `<button class="ob go" data-arc="quest">I did it</button>`}</div>
+        <div class="qc-row"><span class="by-chip ${o === 'A' ? 'u-a' : 'u-c'}">${o}</span>${theirs && theirs.done ? `<span class="qc-state">done ${fmtT(theirs.done)}${theirs.wit ? ' · 👀 witnessed' : (q.couple ? '' : ` <button class="ob" data-arc="witness">👀 I saw it</button>`)}</span>` : `<span class="qc-state dim">not yet</span>`}</div>
+      </div>`;
+    }
+    // weekly
+    const monK = weekKeysOf(tk)[0], W = weeklyFor(monK);
+    const bar = u => { const n = weeklyProg(u, monK); return `<div class="wq-row"><span class="wq-u" style="color:var(--user-${u.toLowerCase()})">${USER_NAMES[u]}</span><div class="wq-bar"><i style="width:${Math.round(n / W.goal * 100)}%;background:var(--user-${u.toLowerCase()})"></i></div><span class="wq-n">${n}/${W.goal}${weeklyComplete(u, monK) ? ' ✓' : ''}</span>${u === ME && W.manual && !weeklyComplete(u, monK) ? '<button class="ob go" data-arc="weekly+">+1</button>' : ''}</div>`; };
+    const weeklyHtml = W ? `<div class="quest-card weekly"><div class="qc-top"><span class="qc-ic">${W.icon}</span><span class="qc-mid"><b>${esc(W.t)}</b><br><span class="qc-sub">this week · +${C.weeklyPts} pts · +${C.coinWeekly} 🪙 · ${W.manual ? 'honor system, tap as you go' : 'tracked automatically'}</span></span></div>${bar('C')}${bar('A')}</div>` : '';
+    // flash schedule
+    const flashes = flashSlots(tk);
+    const flashHtml = FLAG('flash') ? `<div class="fit-subh">⚡ Flash tasks — ${flashes.length} today · +${C.flashPts} (+${C.flashFirst} first) · 40-minute windows</div>` +
+      (flashes.map(f => {
+        const me = flashClaim(tk, f.i, ME), them = flashClaim(tk, f.i, o);
+        const live = nowMin >= f.startMin && nowMin < f.endMin, past = nowMin >= f.endMin;
+        const state = me != null ? '✓ you' + (them != null ? (me < them ? ' (first) · ' + oN : ' · ' + oN + ' (first)') : '') : them != null ? oN + ' claimed' : past ? 'missed' : live ? 'LIVE' : 'upcoming';
+        return `<div class="flash-row${live ? ' live' : ''}${past ? ' past' : ''}"><span class="fr-time">${fmtMin(f.startMin)}</span><span class="fr-task">${live || past ? esc(f.task) : '???'}</span><span class="fr-state">${live && me == null ? `<button class="ob go" data-arc="flash:${f.i}">CLAIM</button>` : state}</span></div>`;
+      }).join('') || '<div class="td-empty">a quiet day — none scheduled</div>') : '';
+    // dares
+    const dares = myDares();
+    const dareRow = ([id, d]) => {
+      const s = dareStatus(d), toMe = d.to === ME;
+      const act = toMe && s === 'open' ? `<button class="ob go" data-arc="dare:accept:${esc(id)}">accept</button><button class="ob" data-arc="dare:decline:${esc(id)}">nope</button>` :
+        toMe && s === 'accepted' ? `<button class="ob go" data-arc="dare:done:${esc(id)}">done ✓</button>` :
+        !toMe && s === 'open' ? `<button class="ob" data-arc="dare:cancel:${esc(id)}">cancel</button>` : '';
+      const badge = { open: 'pending', accepted: dareLeft(d), done: '✓ done', declined: 'declined', failed: 'expired' }[s] || s;
+      return `<div class="dare-row st-${s}"><span class="by-chip ${d.by === 'A' ? 'u-a' : 'u-c'}">${d.by}</span><span class="dr-mid"><b>${esc(d.text)}</b><br><span class="dr-sub">${toMe ? 'to you' : 'to ' + oN} · ${d.stake || 0} 🪙 · ${badge}</span></span>${act}</div>`;
+    };
+    const canDare = FLAG('dares') && myDares().filter(([, d]) => d.by === ME && ['open', 'accepted'].includes(dareStatus(d))).length < 3;
+    const daresHtml = FLAG('dares') ? `<div class="fit-subh">😈 Dares — stake coins, ${oN} has to accept</div>
+      <div class="dare-compose"><input class="form-input" id="dare-text" placeholder="I dare you to…" maxlength="80">
+        <div class="dare-ctl"><span>stake</span><button class="ob" data-dr="stake-">−</button><b>${dareStake}</b><button class="ob" data-dr="stake+">＋</button>
+          <span>within</span><button class="ob" data-dr="hrs-">−</button><b>${dareHours}h</b><button class="ob" data-dr="hrs+">＋</button>
+          <button class="ob go" id="dare-send"${canDare ? '' : ' disabled'}>${canDare ? 'DARE' : 'max 3 live'}</button></div></div>
+      ${dares.slice(0, 8).map(dareRow).join('') || '<div class="td-empty">no dares yet — be brave</div>'}` : '';
+    // ledger
+    const ious = Object.entries(A('ious')).filter(([, x]) => x && x.label).map(([id, x]) => ({ id, ...x }));
+    for (const [id, c] of Object.entries(A('credits'))) if (c && c.label) ious.push({ id, label: c.label, src: 'flame', ts: c.ts, redeemed: c.redeemed || null, both: true });
+    ious.sort((a, b) => (a.redeemed ? 1 : 0) - (b.redeemed ? 1 : 0) || (b.ts || 0) - (a.ts || 0));
+    const SRC = { week: '🏆 weekly forfeit', month: '🏅 monthly cup', flame: '💜 date credit', coupon: '🎟 coupon', boss: '👹 boss kill' };
+    const ledgerHtml = FLAG('ious') ? `<div class="fit-subh">🎟 Owed — in real life</div>` +
+      (ious.slice(0, 12).map(x => `<div class="iou-row${x.redeemed ? ' done' : ''}"><span class="iou-mid"><b>${esc(x.label)}</b><br><span class="iou-sub">${SRC[x.src] || x.src || ''}${x.both ? ' · for both of you' : x.to ? ' · ' + USER_NAMES[x.from] + ' → ' + USER_NAMES[x.to] : ''}${x.redeemed ? ' · redeemed' : ''}</span></span><button class="ob${x.redeemed ? '' : ' go'}" data-arc="iou:${esc(x.id)}">${x.redeemed ? 'undo' : 'redeemed'}</button></div>`).join('') || '<div class="td-empty">nothing owed — win a week</div>') : '';
+    el.innerHTML = navHtml('quests') + `
+      <div class="fit-head"><h3>Quests</h3><span class="fh-date">${new Date().toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' }).toUpperCase()}</span></div>
+      ${questHtml}${weeklyHtml}${flashHtml}${daresHtml}${ledgerHtml}`;
+    el.querySelectorAll('[data-dr]').forEach(b => b.addEventListener('click', () => {
+      const a = b.dataset.dr;
+      if (a === 'stake+') dareStake = Math.min(C.dareMax, dareStake + 1);
+      if (a === 'stake-') dareStake = Math.max(1, dareStake - 1);
+      if (a === 'hrs+') dareHours = Math.min(48, dareHours + (dareHours >= 12 ? 12 : 1));
+      if (a === 'hrs-') dareHours = Math.max(1, dareHours - (dareHours > 12 ? 12 : 1));
+      const txt = $('dare-text').value;
+      renderQuests();
+      $('dare-text').value = txt;
+    }));
+    const send = $('dare-send');
+    if (send) send.addEventListener('click', () => {
+      const text = $('dare-text').value.trim();
+      if (!text) { $('dare-text').focus(); return; }
+      if (wallet(ME) < dareStake) { showToast('not enough coins for that stake', 'error', 2000); return; }
+      KV.set('fit/arc/dares/' + uid(), { by: ME, to: o, text, stake: dareStake, dl: Date.now() + dareHours * 3600000, status: 'open', ts: Date.now() });
+      showToast('😈 dare sent — ' + dareHours + 'h on the clock once they accept', 'success', 3000);
+      haptic(20);
+    });
+    wireArcade(el);
+  }
+
+  /* ==================== TROPHIES VIEW ==================== */
+  let trophyUser = null;
+  function renderTrophies() {
+    if (currentApp !== 'fit' || view !== 'trophies') return;
+    const el = $('fit-trophies');
+    const tk = todayKey();
+    const u = trophyUser || ME;
+    const userCard = x => {
+      const L = levelInfo(x), s = stats(x);
+      return `<div class="lv-card lv-${x.toLowerCase()}">
+        <div class="lv-ring" style="--f:${Math.round(L.frac * 100)}%;--c:var(--user-${x.toLowerCase()})"><b>${L.level}</b></div>
+        <div class="lv-mid"><b>${USER_NAMES[x]}</b> <span class="lv-title">${esc(displayTitle(x))}</span><br>
+          <span class="lv-sub">${L.xp} xp${L.toNext ? ' · ' + L.toNext + ' to Lv ' + (L.level + 1) : ' · MAX'} · 🪙 ${wallet(x)}</span><br>
+          <span class="lv-sub">🏆 ${s.weeks} weeks · 🏅 ${Object.values(A('months')).filter(m => m && m.winner === x).length} cups · 👹 ${s.boss} · 🎖 ${badgeList(x).length}/${BADGES.length}</span></div></div>`;
+    };
+    // shelf: weeks + months
+    const weeks = [];
+    let d = parseKey(weekKeysOf(tk)[0]);
+    for (let i = 0; i < 10; i++) {
+      d = addDays(d, -7);
+      const monK = dk(d), ks = weekKeysOf(monK);
+      if (ks[6] < firstKey()) break;
+      const r = weekResult(monK), w = A('weeks')[monK] || {};
+      weeks.push(`<div class="shelf-row"><span class="sr-when">${parseKey(monK).toLocaleDateString([], { month: 'short', day: 'numeric' })}</span>
+        <span class="sr-c${r.winner === 'C' ? ' win' : ''}">${r.c}</span><span class="sr-vs">${r.winner ? '🏆 ' + USER_NAMES[r.winner] : '🤝 tie'}</span><span class="sr-a${r.winner === 'A' ? ' win' : ''}">${r.a}</span>
+        <span class="sr-note">${w.forfeit ? esc(w.forfeit) : ''}</span></div>`);
+    }
+    const months = Object.entries(A('months')).sort((a, b) => b[0] < a[0] ? -1 : 1).slice(0, 6).map(([ym, m]) =>
+      `<div class="shelf-row"><span class="sr-when">${ym}</span><span class="sr-c${m.winner === 'C' ? ' win' : ''}">${m.c}</span><span class="sr-vs">${m.winner ? '🏅 ' + USER_NAMES[m.winner] : '🤝 tie'}</span><span class="sr-a${m.winner === 'A' ? ' win' : ''}">${m.a}</span><span class="sr-note">${esc(m.reward || '')}</span></div>`);
+    const st = stats(u);
+    const badgeCell = b => {
+      const t = badgeTier(u, b), v = st[b.stat];
+      const next = t < 3 ? b.tiers[t] : null;
+      return `<button class="badge t${t}" data-badge="${b.id}"><span class="bd-ic">${b.icon}</span><span class="bd-name">${b.name}</span><span class="bd-sub">${t ? TIER_NAMES[t] : (v == null ? '—' : v + '/' + next)}</span></button>`;
+    };
+    el.innerHTML = navHtml('trophies') + `
+      <div class="fit-head"><h3>Trophy room</h3><span class="fh-date">SEASON Q${Math.floor(new Date().getMonth() / 3) + 1} · 👑 ${crowns('C')}–${crowns('A')}</span></div>
+      ${userCard('C')}${userCard('A')}
+      <div class="fit-subh">Records</div>
+      <div class="rec-grid">${records('C').map(([l, v], i) => `<div class="rec"><span class="rc-l">${l}</span><span class="rc-c">${v}</span><span class="rc-a">${records('A')[i][1]}</span></div>`).join('')}</div>
+      <div class="fit-subh">Shelf — weekly crowns${months.length ? ' + monthly cups' : ''}</div>
+      <div class="shelf">${months.join('')}${weeks.join('') || '<div class="td-empty">no closed weeks yet</div>'}</div>
+      <div class="fit-subh">Badges — <button class="fh-toggle${u === 'C' ? ' on' : ''}" data-tu="C">Cade</button> <button class="fh-toggle${u === 'A' ? ' on' : ''}" data-tu="A">Avery</button> · ${badgeList(u).length}/${BADGES.length}</div>
+      <div class="badge-grid">${BADGES.map(badgeCell).join('')}</div>
+      <div class="form-hint" style="text-align:center;margin:8px 0">bronze · silver · gold — each tier mints coins · tap a badge for the story</div>`;
+    el.querySelectorAll('[data-tu]').forEach(b => b.addEventListener('click', () => { trophyUser = b.dataset.tu; renderTrophies(); }));
+    el.querySelectorAll('[data-badge]').forEach(b => b.addEventListener('click', () => {
+      const B = BADGES.find(x => x.id === b.dataset.badge), t = badgeTier(u, B), v = st[B.stat];
+      showCtxSheet(`<div class="shop-head">${B.icon} ${B.name}</div><div style="font-size:0.8rem">${USER_NAMES[u]}: <b>${v == null ? '—' : v}</b> ${B.what}<br><span class="sh-desc">${B.tiers.map((th, i) => `${TIER_NAMES[i + 1]} ${B.lower ? '≤' : ''}${th}${t > i ? ' ✓' : ''}`).join(' · ')}</span><br><span class="sh-desc">coins on unlock: 10 · 20 · 30</span></div>`);
+    }));
+  }
+
+  /* ==================== SHOP ==================== */
+  function openShop() {
+    const C = CFG(), tk = todayKey();
+    const inv = inventory(ME), w = wallet(ME), cos = cosmetics(ME);
+    const row = (name, desc, held, price, attr, disabled, btnLabel) =>
+      `<div class="shop-row"><span class="sh-mid"><b>${name}</b> <span class="sh-held">${held || ''}</span><br><span class="sh-desc">${desc}</span></span>
+       <button class="ob go" ${attr}${disabled ? ' disabled' : ''}>${btnLabel || ('−' + price + ' 🪙')}</button></div>`;
+    const items = Object.entries(ITEMS).map(([k, it]) => row(it.icon + ' ' + it.name, it.desc, inv[k] ? 'held ×' + inv[k] : '', priceOf(k), `data-buy="${k}"`,
+      (k !== 'mystery' && inv[k] >= 2) || w < priceOf(k), k !== 'mystery' && inv[k] >= 2 ? 'MAX 2' : null)).join('');
+    const titles = TITLES.map(t => owns(ME, 'title', t) ?
+      row('🏷 ' + t, 'owned', cos.title === t ? 'equipped' : '', 0, `data-arc="equip:title:${esc(t)}"`, false, cos.title === t ? 'unequip' : 'equip') :
+      row('🏷 ' + t, 'a title next to your name, for good', '', C.priceTitle, `data-buy="title" data-arg="${esc(t)}"`, w < C.priceTitle)).join('');
+    const skins = Object.entries(SKINS).map(([id, s]) => owns(ME, 'skin', id) ?
+      row('🎨 ' + s.name, 'owned', cos.skin === id ? 'equipped' : '', 0, `data-arc="equip:skin:${id}"`, false, cos.skin === id ? 'unequip' : 'equip') :
+      row('🎨 ' + s.name, 'your side of the duel bar, restyled', '', C.priceSkin, `data-buy="skin" data-arg="${id}"`, w < C.priceSkin)).join('');
+    const coupons = DECKS().rewards.map(r => row('🎟 ' + esc(r), 'an IOU from ' + USER_NAMES[OTHER(ME)] + ' — lands in Owed', '', C.priceIou, `data-buy="iou" data-arg="${esc(r)}"`, w < C.priceIou)).join('');
+    showCtxSheet(`<div class="shop-head">🎒 ARMORY — ${w} 🪙</div>
+      <div class="settings-section-title">Items</div>${items}
+      <div class="settings-section-title" style="margin-top:12px">Titles</div>${titles}
+      <div class="settings-section-title" style="margin-top:12px">Duel bar skins</div>${skins}
+      <div class="settings-section-title" style="margin-top:12px">Coupons — real-life IOUs</div>${coupons || '<div class="sh-desc">add rewards in 🎰 Arcade → reward deck</div>'}`);
+    const sheet = $('sheet-overlay');
+    sheet.querySelectorAll('[data-buy]').forEach(b => b.addEventListener('click', () => {
+      const kind = b.dataset.buy, arg = b.dataset.arg || null;
+      const price = kind === 'title' ? C.priceTitle : kind === 'skin' ? C.priceSkin : kind === 'iou' ? C.priceIou : priceOf(kind);
+      if (wallet(ME) < price) { showToast('not enough coins', 'error', 1800); return; }
+      const id = uid();
+      const rec = { by: ME, kind, coins: price, ts: Date.now() };
+      if (arg) rec.arg = arg;
+      if (kind === 'mystery') rec.got = PLAYABLE.concat(['uno'])[seedHash('myst:' + id) % (PLAYABLE.length + 1)];
+      KV.set('fit/arc/shop/' + id, rec);
+      if (kind === 'iou') KV.set('fit/arc/ious/cp-' + id, { to: ME, from: OTHER(ME), label: arg, src: 'coupon', ts: Date.now(), redeemed: null });
+      if (kind === 'title' || kind === 'skin') KV.set('fit/arc/cos/' + ME, { ...cosmetics(ME), [kind]: arg, ts: Date.now() });
+      haptic(20);
+      if (kind === 'mystery') celebrate({ stamp: '🎁 MYSTERY BOX', title: ITEMS[rec.got].icon + ' ' + ITEMS[rec.got].name, sub: ITEMS[rec.got].desc, kind: ME === 'C' ? 'c' : 'a', ms: 3200 });
+      else showToast('bought — ' + (kind === 'iou' ? 'it\'s in Owed' : kind === 'title' || kind === 'skin' ? 'equipped' : 'it\'s in your rack'), 'success', 2000);
+      closeModal('sheet-overlay');
+      renderArcade();
+    }));
+    sheet.querySelectorAll('[data-arc]').forEach(b => b.addEventListener('click', () => { arcadeAction(b.dataset.arc); closeModal('sheet-overlay'); }));
+  }
+  function showCtxSheet(html) {
+    $('sheet-body').innerHTML = html;
+    openModal('sheet-overlay');
   }
 
   /* ---- scoring rules modal ---- */
@@ -6460,6 +7924,9 @@ const Fit = (() => {
     ['job', '🏦 Vault Job'], ['bounty', '💰 Bounty pot'], ['boss', '👹 Boss weekends'],
     ['press', '🔴 Press your luck'], ['odds', '💸 Odds board'], ['lotto', '🎟 Loser\'s lotto'],
     ['items', '🎒 Items & shop'], ['bomb', '💣 Glitter bombs'],
+    ['games', '🕹 Mini games'], ['chest', '🧰 Daily chest'], ['quests', '🗺 Quests & weeklies'], ['flash', '⚡ Flash tasks'],
+    ['dares', '😈 Dares'], ['badges', '🎖 Badges'], ['underdog', '🐕 Underdog boost'], ['ceremony', '🏆 Week/month ceremonies'],
+    ['ious', '🎟 Owed ledger'],
   ];
   const ARC_KNOBS = [
     ['twin', 'Twin strike'], ['twinPerfect', 'Perfect twin'], ['assist', 'Nudge assist'],
@@ -6467,6 +7934,13 @@ const Fit = (() => {
     ['noonPot', 'High Noon pot'], ['bombStake', 'Bomb stake'], ['betMax', 'Max bet'],
     ['jobBonus', 'Vault Job hit'], ['bossBounty', 'Boss bounty'], ['bossHp', 'Boss HP'],
     ['priceX2', '✖️2 price'], ['priceShield', '🛡 price'], ['priceUno', '🔄 price'],
+    ['gamePts', 'Game win'], ['questPts', 'Daily quest'], ['weeklyPts', 'Weekly challenge'], ['flashPts', 'Flash task'],
+    ['flashFirst', 'Flash first bonus'], ['underdogGap', 'Underdog gap'], ['underdogMult', 'Underdog ×'],
+    ['coinLog', '🪙 per habit'], ['coinSweep', '🪙 per sweep'], ['coinPlay', '🪙 per game'], ['coinWin', '🪙 game win'],
+    ['coinQuest', '🪙 quest'], ['coinWeekly', '🪙 weekly'], ['coinFlash', '🪙 flash'], ['slotsPull', 'Slots extra pull'],
+    ['dareMax', 'Max dare stake'], ['priceFreeze', '🧊 price'], ['priceFuel', '⛽ price'], ['priceGem', '💎 price'],
+    ['priceDice', '🎲 price'], ['priceCloak', '🥷 price'], ['priceLatepass', '🎫 price'], ['priceMagnet', '🧲 price'],
+    ['priceMystery', '🎁 price'], ['priceTitle', '🏷 title price'], ['priceSkin', '🎨 skin price'], ['priceIou', '🎟 coupon price'],
   ];
   let _arcDecks = null;
   function renderArcadeModal() {
@@ -6547,6 +8021,7 @@ const Fit = (() => {
     if (!feedMonths.includes(ym)) feedMonths.unshift(ym);
     unwatchFeed = KV.watch('fit/feed/' + ym, v => {
       feed[ym] = v || {};
+      bumpState();
       renderFeed();
     });
   }
@@ -6594,7 +8069,7 @@ const Fit = (() => {
         (p.by === ME ? `<button class="fp-del" data-del="${esc(id)}" data-ym="${ym}" title="delete post">✕</button>` : '') +
         `</div></div>`;
     }
-    el.innerHTML = `
+    el.innerHTML = navHtml('feed') + `
       <div class="feed-composer">
         <div class="fc-row">
           <span class="fc-thumb" id="fc-thumb">${fImg ? `<img src="${fImg}">` : '📷'}</span>
@@ -6716,7 +8191,7 @@ const Fit = (() => {
     const list = Object.entries(timers)
       .filter(([, t]) => t && t.kind && timerVisible(t))
       .sort((a, b) => (a[1].createdAt || 0) - (b[1].createdAt || 0));
-    el.innerHTML = `
+    el.innerHTML = navHtml('tools') + `
       <div class="timer-add-row">
         <button class="btn" id="tt-add-cd">\uff0b Countdown</button>
         <button class="btn" id="tt-add-sw">\uff0b Stopwatch</button>
@@ -6796,15 +8271,15 @@ const Fit = (() => {
   }
 
   /* ---- app registration ---- */
+  const VIEW_RENDER = { main: renderMain, feed: renderFeed, tools: renderTools, arcade: renderArcade, quests: renderQuests, trophies: renderTrophies };
   function setView(v) {
+    if (!VIEW_RENDER[v]) v = 'main';
     view = v;
-    $('fit-main').style.display = v === 'main' ? '' : 'none';
-    $('fit-feed').style.display = v === 'feed' ? '' : 'none';
-    $('fit-tools').style.display = v === 'tools' ? '' : 'none';
-    if (v === 'main') renderMain();
-    if (v === 'feed') renderFeed();
-    if (v === 'tools') renderTools();
+    for (const x of Object.keys(VIEW_RENDER)) $('fit-' + x).style.display = x === v ? '' : 'none';
+    VIEW_RENDER[v]();
+    try { $('fit-' + v).scrollTop = 0; } catch {}
   }
+  function renderViews() { renderMain(); renderArcade(); renderQuests(); renderTrophies(); }
 
   // Habit log, rules and shared timers are watched GLOBALLY (from login on):
   // the Today card and timer alerts must work from any screen.
@@ -6814,17 +8289,19 @@ const Fit = (() => {
     _globalInit = true;
     KV.watch('fit/days', v => {
       days = v || {};
-      try { mintFlameCredits(); updateAppBadge(); } catch (e) { console.error(e); }
-      renderMain();
+      bumpState();
+      try { mintFlameCredits(); mintBadges(); mintCeremonies(); updateAppBadge(); } catch (e) { console.error(e); }
+      renderViews();
       updateFooterStat();
       if (window.PPCToday) window.PPCToday.render();
     });
-    KV.watch('fit/config', v => { config = v || {}; renderMain(); if (window.PPCToday) window.PPCToday.render(); });
+    KV.watch('fit/config', v => { config = v || {}; bumpState(); renderViews(); if (window.PPCToday) window.PPCToday.render(); });
     watchFeedMonth();   // photo-finish bets read the current feed month from anywhere
     KV.watch('fit/arc', v => {
       arc = v ? JSON.parse(JSON.stringify(v)) : {};   // never mutate KV's cache
-      try { nudgeToasts(); mintFlameCredits(); } catch (e) { console.error(e); }
-      renderMain();
+      bumpState();
+      try { nudgeToasts(); dareToasts(); mintFlameCredits(); mintBadges(); mintCeremonies(); } catch (e) { console.error(e); }
+      renderViews();
       if (window.PPCToday) window.PPCToday.render();
     });
     KV.watch('fit/timers', v => { timers = v || {}; renderTools(); updateWakeLock(); });
@@ -6840,10 +8317,13 @@ const Fit = (() => {
   };
   APPS.fit.subroute = h => {
     const sub = h.split('/')[1];
-    setView(sub === 'feed' ? 'feed' : sub === 'tools' ? 'tools' : 'main');
+    setView(sub || 'main');
   };
   APPS.fit.menu = () =>
     `<button class="menu-item" onclick="location.hash='#fit'">Habits</button>` +
+    `<button class="menu-item" onclick="location.hash='#fit/arcade'">🕹 Arcade</button>` +
+    `<button class="menu-item" onclick="location.hash='#fit/quests'">🗺 Quests & dares</button>` +
+    `<button class="menu-item" onclick="location.hash='#fit/trophies'">🏆 Trophy room</button>` +
     `<button class="menu-item" onclick="location.hash='#fit/feed'">Feed</button>` +
     `<button class="menu-item" onclick="location.hash='#fit/tools'">Timers</button>` +
     `<button class="menu-item" onclick="ppcFitRules()">Scoring rules…</button>` +
@@ -6853,7 +8333,7 @@ const Fit = (() => {
   Settings.registerSetting({
     key: 'fit.weekStart', label: 'Week starts on', type: 'select', section: 'Fitness', default: 'mon',
     options: [{ value: 'mon', label: 'Monday' }, { value: 'sun', label: 'Sunday' }],
-    apply: () => renderMain(),
+    apply: () => { bumpState(); renderViews(); },
   });
 
   function summary() {
@@ -6887,6 +8367,13 @@ const Fit = (() => {
     if (bs && !bs.claimedBy) bits.push('💰 pot ' + bs.pot);
     const boss = bossFor(tk);
     if (boss && tk >= boss.satK && tk <= boss.sunK && bossDamage(boss) < boss.hp) bits.push('👹 ' + (boss.hp - bossDamage(boss)) + ' HP');
+    const fl = flashLive(tk);
+    if (fl && flashClaim(tk, fl.i, ME) == null) bits.unshift('⚡ FLASH: ' + fl.task);
+    const pd = pendingDares();
+    if (pd.length) bits.unshift('😈 ' + pd.length + ' dare' + (pd.length === 1 ? '' : 's') + ' waiting');
+    const q = questFor(tk);
+    if (q && !questDone(tk, ME)) bits.push(q.icon + ' ' + q.text);
+    if (FLAG('chest') && !chestOpened(tk, ME)) bits.push('🧰 chest');
     return bits.slice(0, 3).join(' · ');
   }
 
@@ -6896,7 +8383,11 @@ const Fit = (() => {
       wheelFor, jobFor, jobHit, noonFor, noonClaims, noonPotFor, bountyState, weekKeysOf,
       bossFor, bossDamage, twinPts, coupleStreak, oddsFor, photoProof, eventAdj: (u, k) => eventAdj(u, k, CFG()),
       bombAdj: (u, k) => bombAdj(u, k, CFG()), betAdj: (u, k) => betAdj(u, k, CFG()),
-      slotPts: (k, u, h) => slotPts(k, u, h, CFG()), CFG, FLAG, DECKS, seedHash } };
+      slotPts: (k, u, h) => slotPts(k, u, h, CFG()), CFG, FLAG, DECKS, seedHash,
+      // arcade II
+      wallet, levelInfo, stats, badgeList, badgeTier, BADGES, GAMES, gotd, gameWinner, questFor, questDone, weeklyFor, weeklyProg,
+      flashSlots, flashClaim, chestPayout, underdogFor, inventory, canPlay, ITEMS, dareStatus, dareWinner, weekResult, monthPoints,
+      slotReels, slotPayout, slotsNet, syncQ, syncMatch, xp, allKeys } };
 })();
 window.PPCFit = Fit;
 

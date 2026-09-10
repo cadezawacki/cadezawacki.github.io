@@ -12,6 +12,29 @@ Scope: new page `ppc.html` (~573KB) + small `sw.js` extension + `tools/ppc-make-
 - **Fitness**: scoring rules editable in a shared modal (`fit/config`: points, sweep bonus, miss penalty, duel win/slack); long-press = permitted skip (excused everywhere, streaks survive); Cade's workout counts for sweeps but scores 0; miss penalties only on closed days the app was in play; goals removed; timers are shared, plural, and epoch-synced (countdowns/stopwatches live on both devices, alerts on any open screen); Proof feed → Feed.
 - **Interaction**: keyboard-aware viewport pinning clears when the keyboard closes (footer no longer floats mid-screen), menus/controls are non-selectable with `touch-action: manipulation` (no double-tap zoom).
 
+## V3 — Arcade II (10× the fitness game)
+
+Everything below keeps the engine contract: every value is a pure function of `fit/days` + `fit/arc` + `fit/config` (+ the feed month), seeded by date keys, nothing applies before `arcadeEpoch`, and `tools/fit-push.mjs` ports the seeded parts (flash windows, quest of the day, featured game, dice re-spin). A memo layer (`memo()`/`bumpState()`) caches every derived value between watch callbacks so history-wide scans (badges, levels, wallet) stay instant on a phone.
+
+- **Fit nav** — pill bar on every fit screen: Habits · Arcade · Quests · Trophies · Feed · Timers (red dot = something waiting). Routes: `#fit/arcade`, `#fit/quests`, `#fit/trophies`.
+- **🪙 Coins** (`wallet(u)`, derived): +2 per habit log, +5 per sweep, chest payouts, quests, flash tasks, game plays/wins, weekly challenges, dare stakes (zero-sum), badge tiers (10/20/30). The shop is the only sink (`arc/shop/<id>.coins`; legacy `cost` entries still subtract score as before). Points stay the competitive score; coins buy edges, cosmetics and real-life coupons.
+- **Daily loop row** on Habits: chest · quest · featured game · weekly progress tiles.
+- **🧰 Daily chest** (`arc/chest/<k>/<u>`): seeded 3–12 coins, +2 per consecutive day (cap +10).
+- **🕹 Mini games** (`arc/games/<k>/<game>/<u> = {score, ts}`), one scored run per day, practice free; both play → winner +`gamePts` (3), featured game of the day (seeded) pays 2×. Reflex, Rep Race, Quick Math, Memory, Steady Hand, Timing Bar, Simon, Pop, Hi-Lo, Dice Duel (seeded), Slots (free daily pull, extra pulls cost `slotsPull`, payouts derived from seeded reels), Couple Sync (seeded question, match = both +5 coins).
+- **🗺 Quests** (`arc/quests/<k>/<u> = {done, wit}`): one seeded off-screen task a day from a 36-entry pool (+12 couple quests at 30%); +5 pts/+8 coins, witnessed by the partner = double, couple quests pay double when both log.
+- **📅 Weekly challenge** (`weeklyFor(monK)`, 16 kinds): derived (sweeps, med streaks, twin strikes, photos, games…) or tap-counted (`arc/wq/<monK>/<u>.n`); +20 pts on the Monday key, +30 coins.
+- **⚡ Flash tasks** (`flashSlots(k)`): 1–3 seeded 40-minute windows on half-hours 9:00–20:30, task from a 26-entry pool; claim inside the window (`arc/flash/<k>/s<i>/<u> = ts`, validated against the window on derive) → +5, first claimer +3, +6 coins. In-app toast + Notification at window open; the cron pushes the window too.
+- **😈 Dares** (`arc/dares/<id>`): partner-authored, coin stake (≤ `dareMax`), deadline; accept/decline/done, auto-fail past the deadline, max 3 live per author. Coins only.
+- **🐕 Underdog**: trailing by ≥ `underdogGap` at the start of a day → that day's base habit points × `underdogMult`.
+- **🎒 Items** (registry `ITEMS`, all playable via `arc/plays/<k>/<u>/<kind>`): ✖️2 Double Chip, 🛡 Force Field, 🔄 Uno, 🧊 Streak Freeze (a missed day bridges the streak), ⛽ Streak Fuel (+3 streak days), 💎 Gem (sweep bonus ×3), 🎲 Loaded Dice (re-spins the wheel for both; mirrored in the cron), 🥷 Ninja Cloak (partner sees `?` rows until midnight), 🎫 Late Pass (no miss penalties), 🧲 Magnet (sweep pulls 4 off the partner), 🎁 Mystery Box (seeded item). Max 2 held per kind.
+- **Cosmetics**: 14 purchasable titles, 6 duel-bar skins (`arc/cos/<u>`), shown on the duel card and trophy room.
+- **🎟 Owed ledger** (`arc/ious/<id>` + flame credits): weekly loser owes the penalty-deck forfeit, monthly loser owes a reward-deck prize, coupons bought with coins (`priceIou`) are IOUs from the partner; either can mark redeemed.
+- **🏆 Ceremonies** (`arc/weeks/<monK>`, `arc/months/<ym>`): minted idempotently on the first render after a close, celebrated once per device (`ppc-seen-week/month`), announced by the cron on Monday morning.
+- **🎖 Badges** (31, bronze/silver/gold, `arc/badges/<u>/<id>.<tier>` mint stamps): derived from one memoized `stats(u)` pass; unlock celebration (backfills stay quiet), partner toast.
+- **⭐ Levels**: lifetime points → level (60·(L−1)² xp), 20 titles; trophy room shows rings, records, weekly/monthly shelf and the badge grid.
+- **Config**: 9 new feature flags + 32 new knobs in the 🎰 Arcade modal.
+- **The Wire**: morning brief adds quest/flash/featured game; evening report adds pending dares, open quest, unplayed featured game; new sends: flash windows, Monday showdown, stale-dare poke. Workflow now runs DRY when `VAPID_PRIVATE_KEY` is unset (warning, green) instead of failing every 30 minutes; `tools/vapid-keygen.mjs` mints a pair.
+
 ## As built — deviations from the plan below
 
 - Zone page: the budget bar is **pinned above** the section tabs (tabs are List · Builder · Mood) rather than being a fourth tab — it is small and always relevant.
