@@ -8,6 +8,9 @@
 //  - silence is the reward: a finished day gets NO evening/last-call sends
 //  - never send to someone who is in the app right now (fresh presence)
 //  - one send per window per day, deduped through push/log
+//  - chat messages + feed posts: pushed to the partner on every run they
+//    aren't in the app (push/prefs/<u>.chat|feed default on), watermarked
+//    in push/seen/<u> so nothing sends twice
 //  - every derived event (wheel/noon/job/flash/quest/featured game) ports
 //    the page's seeded kernel — keep the two in sync when either changes
 //
@@ -193,14 +196,17 @@ function duelExposure(days, k, u, cfg) {
 }
 
 /* ---- main ---- */
-const [days, cfgRaw, subsRaw, logRaw, presence, arc] = await Promise.all([
+const [days, cfgRaw, subsRaw, logRaw, presence, arc, prefs, seenRaw] = await Promise.all([
   dbGet('fit/days'), dbGet('fit/config'), dbGet('push/subs'), dbGet('push/log'), dbGet('presence'), dbGet('fit/arc'),
+  dbGet('push/prefs'), dbGet('push/seen'),
 ]).then(r => r.map(x => x || {}));
 const A = kind => arc[kind] || {};
 const playsFor = (k, u) => (A('plays')[k] || {})[u] || {};
 const cfg = { duelLose: 2, coupleEvery: 7, jobBonus: 25, arcadeEpoch: '2026-09-01', tz: 'America/New_York',
   pushMorning: '08:00', pushEvening: '19:00', pushLast: '21:30', ...cfgRaw };
 const { dateKey: tk, min: nowMin } = localParts(cfg.tz);
+// chat + feed are month-sharded by the phones' LOCAL month — same month key as the page
+const [chatRaw, feedRaw] = await Promise.all([dbGet('chat/' + tk.slice(0, 7)), dbGet('fit/feed/' + tk.slice(0, 7))]).then(r => r.map(x => x || {}));
 const epoch = cfg.arcadeEpoch;
 const WINDOW = 30;   // matches the cron cadence
 const inWindow = startMin => nowMin >= startMin && nowMin < startMin + WINDOW;
@@ -315,6 +321,35 @@ if (inWindow(20 * 60) && wheelTomorrow[0] !== 'vanilla') {
   });
 }
 
+/* ---- chat + feed: continuous, watermarked (not once-a-day slots) ---- */
+const prefOn = (u, kind) => !(prefs[u] && prefs[u][kind] === false);
+const seenMarks = {};   // path → ts to PUT after the loop
+for (const u of ['C', 'A']) {
+  const o = OTHER(u);
+  const since = (seenRaw[u] && seenRaw[u].chat) || (Date.now() - 12 * 3600000);
+  const msgs = Object.values(chatRaw).filter(m => m && m.by === o && typeof m.ts === 'number' && m.ts > since && m.ts < Date.now() - 60000)
+    .sort((a, b) => a.ts - b.ts);
+  if (msgs.length && prefOn(u, 'chat')) {
+    const last = msgs[msgs.length - 1];
+    seenMarks[`push/seen/${u}/chat`] = last.ts;
+    sends.push({
+      slot: 'chat-' + u + '-' + last.ts, users: [u],
+      mk: () => ({ title: `💬 ${USER_NAMES[o]}`, body: String(last.t || '').slice(0, 140) + (msgs.length > 1 ? ` (+${msgs.length - 1} more)` : ''), url: './ppc.html#notes', tag: 'ppc-chat' }),
+    });
+  }
+  const sinceF = (seenRaw[u] && seenRaw[u].feed) || (Date.now() - 12 * 3600000);
+  const posts = Object.values(feedRaw).filter(p => p && p.by === o && typeof p.ts === 'number' && p.ts > sinceF && p.ts < Date.now() - 60000)
+    .sort((a, b) => a.ts - b.ts);
+  if (posts.length && prefOn(u, 'feed')) {
+    const last = posts[posts.length - 1];
+    seenMarks[`push/seen/${u}/feed`] = last.ts;
+    sends.push({
+      slot: 'feed-' + u + '-' + last.ts, users: [u],
+      mk: () => ({ title: `📸 ${USER_NAMES[o]} posted`, body: (last.caption ? String(last.caption).slice(0, 140) : (last.img ? 'a photo' : 'something')) + (posts.length > 1 ? ` (+${posts.length - 1} more)` : ''), url: './ppc.html#fit/feed', tag: 'ppc-feed' }),
+    });
+  }
+}
+
 /* ---- dedupe, suppress, send ---- */
 const log = logRaw[tk] || {};
 let webpush = null;
@@ -331,7 +366,7 @@ for (const s of sends) {
   let any = false;
   for (const u of s.users) {
     if (fresh(u)) { console.log(`skip ${s.slot}/${u}: in the app right now`); continue; }
-    const payload = { ...s.mk(u), tag: 'ppc-' + s.slot, url: './ppc.html#fit' };
+    const payload = { tag: 'ppc-' + s.slot, url: './ppc.html#fit', ...s.mk(u) };
     const devices = Object.entries(subsRaw[u] || {}).filter(([, d]) => d && d.sub && !d.dead);
     if (!devices.length) { console.log(`skip ${s.slot}/${u}: no live subscription`); continue; }
     for (const [dev, d] of devices) {
@@ -349,4 +384,7 @@ for (const s of sends) {
   }
   if (any && !DRY) await dbPut(`push/log/${tk}/${s.slot}`, Date.now());
 }
+// chat/feed watermarks advance whether we sent, or skipped because they were
+// in the app (they saw it) — never on a DRY run
+if (!DRY) for (const [path, ts] of Object.entries(seenMarks)) await dbPut(path, ts);
 console.log(`done — ${sent} notification(s) ${DRY ? '(dry run)' : 'sent'} at ${tk} ${Math.floor(nowMin / 60)}:${String(nowMin % 60).padStart(2, '0')} ${cfg.tz}`);

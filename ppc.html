@@ -3976,6 +3976,8 @@ const Notes = (() => {
         chatSeen.add(id);
         if (chatSeeded && m.by && m.by !== ME && !(currentApp === 'notes' && chatOpen)) {
           showToast('💬 ' + (USER_NAMES[m.by] || '') + ': ' + String(m.t || '').slice(0, 60), 'success', 4500);
+          const on = Settings.get('push.chat');
+          if (on !== false && on !== 'false' && document.hidden && window.ppcNotify) ppcNotify('💬 ' + (USER_NAMES[m.by] || ''), String(m.t || '').slice(0, 140), 'ppc-chat', './ppc.html#notes');
         }
       }
       chatSeeded = true;
@@ -7914,9 +7916,53 @@ const Fit = (() => {
   Settings.registerSetting({
     key: 'push.enable', label: 'Push notifications', type: 'button', section: 'General',
     buttonLabel: 'Enable on this phone',
-    hint: 'The Wire — morning brief, partner strikes, last call',
+    hint: 'The Wire — morning brief, partner strikes, last call, chat + feed',
     onClick: () => { closeModal('settings-overlay'); enablePush(); },
   });
+  // Local notifications (app open or just backgrounded) go through the
+  // service worker — iOS has no page-level Notification constructor. The
+  // cron backstops the closed-app case using push/prefs/<user>.
+  const prefOn = key => { const v = Settings.get(key); return v !== false && v !== 'false'; };
+  window.ppcNotify = async (title, body, tag, url) => {
+    try {
+      if (!('Notification' in window) || Notification.permission !== 'granted') return false;
+      const reg = navigator.serviceWorker && await navigator.serviceWorker.ready;
+      if (reg && reg.showNotification) {
+        await reg.showNotification(title, { body, tag: tag || 'ppc', data: { url: url || './ppc.html' }, icon: './assets/ppc-icon.png', badge: './assets/ppc-icon.png' });
+        return true;
+      }
+      new Notification(title, { body });
+      return true;
+    } catch { return false; }
+  };
+  const syncPushPref = (kind, v) => { if (ME) KV.set('push/prefs/' + ME + '/' + kind, v === true || v === 'true'); };
+  Settings.registerSetting({
+    key: 'push.chat', label: 'Notify on chat messages', type: 'toggle', section: 'General', default: true,
+    hint: 'Every message from the other one — instantly while the app is open, via The Wire when it isn\'t',
+    apply: v => syncPushPref('chat', v),
+  });
+  Settings.registerSetting({
+    key: 'push.feed', label: 'Notify on feed posts', type: 'toggle', section: 'General', default: true,
+    hint: 'Proof photos, excuses, trash talk',
+    apply: v => syncPushPref('feed', v),
+  });
+  Settings.registerSetting({
+    key: 'push.test', label: 'Test notification', type: 'button', section: 'General',
+    buttonLabel: 'Fire in 3 seconds',
+    hint: 'Lock the phone or switch apps after tapping — it should still land',
+    onClick: async () => {
+      closeModal('settings-overlay');
+      try { if (Notification.permission === 'default') await Notification.requestPermission(); } catch {}
+      if (!('Notification' in window) || Notification.permission !== 'granted') { showToast('Notifications are not allowed for this app yet', 'error', 3600); return; }
+      showToast('🔔 test notification in 3 seconds — lock the phone now', 'success', 3000);
+      haptic(20);
+      const c = navigator.serviceWorker && navigator.serviceWorker.controller;
+      if (c) c.postMessage({ type: 'TEST_NOTIFY', delay: 3000 });   // the SW timer survives the page being suspended
+      else setTimeout(() => ppcNotify('🔔 ppc test', 'Notifications work on this phone.', 'ppc-test'), 3000);
+    },
+  });
+  // mirror the prefs once per login so a fresh cron sees defaults (on/on)
+  setTimeout(() => { if (ME) { syncPushPref('chat', prefOn('push.chat')); syncPushPref('feed', prefOn('push.feed')); } }, 4000);
   function updateAppBadge() {
     try {
       if (!navigator.setAppBadge || !ME) return;
@@ -8025,6 +8071,8 @@ const Fit = (() => {
   /* ---- feed ---- */
   let fImg = null;    // pending photo dataURL
   let fTag = null;
+  const _seenPosts = new Set();
+  let _postsSeeded = false;
   function watchFeedMonth() {
     if (unwatchFeed) unwatchFeed();
     const ym = ymNow();
@@ -8032,6 +8080,16 @@ const Fit = (() => {
     unwatchFeed = KV.watch('fit/feed/' + ym, v => {
       feed[ym] = v || {};
       bumpState();
+      for (const [id, p] of Object.entries(feed[ym])) {
+        if (!p || _seenPosts.has(id)) continue;
+        _seenPosts.add(id);
+        if (_postsSeeded && p.by && p.by !== ME && !(currentApp === 'fit' && view === 'feed')) {
+          const body = p.caption ? String(p.caption).slice(0, 140) : (p.img ? 'posted a photo' : 'posted');
+          showToast('📸 ' + USER_NAMES[p.by] + ': ' + body.slice(0, 60), 'success', 4500);
+          if (prefOn('push.feed') && document.hidden && window.ppcNotify) ppcNotify('📸 ' + USER_NAMES[p.by], body, 'ppc-feed', './ppc.html#fit/feed');
+        }
+      }
+      _postsSeeded = true;
       renderFeed();
     });
   }
