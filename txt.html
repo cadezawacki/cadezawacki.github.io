@@ -2138,6 +2138,21 @@ body.sel-mode .editor-wrap .cm-content { -webkit-touch-callout: none; }
   cursor: pointer;
   -webkit-touch-callout: none;
 }
+/* [[Room Name]] links. No padding or background: the hit area is exactly the
+   glyphs, so on a phone the words either side stay reachable for the caret.
+   A link to a room that doesn't exist yet is dimmed and dashed. */
+.cm-wikilink {
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 2px;
+  color: var(--accent);
+  cursor: pointer;
+  -webkit-touch-callout: none;
+}
+.cm-wikilink-new {
+  color: var(--text-faint);
+  text-decoration-style: dashed;
+}
 
 /* In-document tags — ¥tag rendered as a badge.
    The pill is drawn with a tight box on purpose: no margin, no extra
@@ -4573,6 +4588,9 @@ const RE_URL = /(?:https?:\/\/|www\.)[^\s<>()\[\]]+/g;
 // Leading boundary captured in group 1 (no lookbehind — keeps older iOS Safari
 // from choking on the regex literal). @ws:room with ws optional ("@:room").
 const RE_NAV = /(^|[^\w@])@([\w.-]*):([\w.-]+)/g;
+// [[Room Name]] — the room link that can carry spaces, which @ws:room cannot
+// (its name charset is \w.- only, and most room names have a space in them).
+const RE_WIKI = /\[\[([^\[\]\n]{1,120})\]\]/g;
 
 function normalizeUrl(u) { return /^https?:\/\//i.test(u) ? u : 'https://' + u; }
 function trimTrailingPunct(s) {
@@ -4600,6 +4618,14 @@ function findLinksInLine(text) {
     const start = m.index, end = start + raw.length;
     if (overlaps(start, end)) continue;
     spans.push({ start, end, kind: 'url', url: normalizeUrl(raw) });
+    taken.push([start, end]);
+  }
+  RE_WIKI.lastIndex = 0;
+  while ((m = RE_WIKI.exec(text)) !== null) {
+    const start = m.index, end = start + m[0].length;
+    const room = m[1].trim();
+    if (!room || overlaps(start, end)) continue;
+    spans.push({ start, end, kind: 'wiki', room });
     taken.push([start, end]);
   }
   RE_NAV.lastIndex = 0;
@@ -4664,6 +4690,17 @@ function buildLinkDecorations(view) {
         } else if (sp.kind === 'url') {
           ranges.push(Decoration.mark({ class: 'cm-link', attributes: { 'data-url': sp.url } }).range(f, t));
           linkRanges.push({ from: f, to: t, kind: 'url', url: sp.url });
+        } else if (sp.kind === 'wiki') {
+          // Code is never a room link: a[[i]] indexes an array, and Lua and wiki
+          // markup both use [[...]] for their own purposes. URLs inside fences
+          // still linkify (long-standing behaviour); this rule is only for the
+          // syntax added here.
+          if (fenceContaining(f) || _inInlineCode(doc, f)) continue;
+          // A link to a room that doesn't exist yet is drawn as "missing" rather
+          // than hidden — that's the affordance for creating it.
+          const known = resolveRoomName(sp.room);
+          ranges.push(Decoration.mark({ class: known ? 'cm-wikilink' : 'cm-wikilink cm-wikilink-new' }).range(f, t));
+          linkRanges.push({ from: f, to: t, kind: 'wiki', room: sp.room, known: !!known });
         } else {
           ranges.push(Decoration.mark({ class: 'cm-navlink' }).range(f, t));
           linkRanges.push({ from: f, to: t, kind: 'nav', ws: sp.ws, room: sp.room });
@@ -7831,6 +7868,7 @@ editor.dom.addEventListener('click', (e) => {
     if (link) {
       e.preventDefault();
       if (link.kind === 'nav') navigateToDoc(link.ws, link.room);
+      else if (link.kind === 'wiki') openWikiMenu(link, e.clientX, e.clientY);
       else openLinkMenu(link, e.clientX, e.clientY);
       return;
     }
@@ -7854,6 +7892,7 @@ editor.dom.addEventListener('click', (e) => {
   if (link && !e.ctrlKey && !e.metaKey) {
     e.preventDefault();
     if (link.kind === 'nav') navigateToDoc(link.ws, link.room);
+    else if (link.kind === 'wiki') window.openWikiLink(link.room);
     else openLink(link.url);
     return;
   }
@@ -7879,6 +7918,7 @@ editor.dom.addEventListener('contextmenu', (e) => {
   if (spellHit && hl) { e.preventDefault(); openSpellPopup(spellHit); return; }
   if (hl) { e.preventDefault(); openHighlightMenu(hl, e.clientX, e.clientY); return; }
   const link = hitLink(pos);
+  if (link && link.kind === 'wiki') { e.preventDefault(); openWikiMenu(link, e.clientX, e.clientY); return; }
   if (link && link.kind !== 'nav') { e.preventDefault(); openLinkMenu(link, e.clientX, e.clientY); return; }
   const tagHit = hitTag(pos);
   if (tagHit) { e.preventDefault(); openTagMenu(tagHit, e.clientX, e.clientY); return; }
@@ -7941,6 +7981,48 @@ function openLink(url) {
 }
 
 // Navigate to an internal @ws:room document link.
+// Room names are matched exactly first, then case-insensitively, so [[acme
+// proposal]] finds "Acme proposal" without needing the capitals.
+function resolveRoomName(name) {
+  const n = String(name || '').trim();
+  if (!n) return null;
+  if (rooms.includes(n)) return n;
+  const low = n.toLowerCase();
+  return rooms.find(r => r.toLowerCase() === low) || null;
+}
+
+// Open a [[Room Name]] target: follow it into its own workspace the way the
+// quick switcher does, or offer to create it when it doesn't exist yet.
+window.openWikiLink = async function(name) {
+  closeCtxMenu();
+  const room = resolveRoomName(name);
+  if (room) { try { await window.quickSwitchPick(room); } catch {} return; }
+  // Same rules as the Add Room modal: names are lowercase, capped, and '__'
+  // is reserved. A link that can never be a room says so instead of prompting.
+  const fresh = String(name || '').trim().toLowerCase();
+  if (!fresh || fresh.length > 100 || fresh.startsWith('__')) {
+    showToast('"' + name + '" is not a usable room name', 'error', 2500);
+    return;
+  }
+  if (!confirm('"' + fresh + '" doesn\u2019t exist yet. Create it?')) return;
+  rooms.push(fresh);
+  touchRoomCreated(fresh);              // beats any deletion tombstone
+  if (activeWorkspace !== WS_ALL && activeWorkspace !== WS_UNLABELED && getWorkspace(activeWorkspace)) {
+    addRoomToWorkspace(fresh, activeWorkspace);
+    saveWorkspaces();
+  }
+  saveRooms();
+  try { await switchRoom(fresh); } catch (e) { console.error(e); }
+};
+
+function openWikiMenu(link, x, y) {
+  const known = link.known;
+  openMenu([
+    { label: known ? 'Open ' + link.room : 'Create ' + link.room, run: () => window.openWikiLink(link.room) },
+    { label: 'Copy name', run: () => ctxCopy(link.room) },
+  ], x, y);
+}
+
 function navigateToDoc(wsName, room) {
   closeCtxMenu();
   let targetWs = WS_ALL;
@@ -8313,6 +8395,21 @@ function maybeAutocomplete() {
     acTo = sel.head;
     showAutocomplete(items);
     return;
+  }
+  // [[Room completion. Offers the rooms you have, closing brackets included.
+  const wm = before.match(/\[\[([^\[\]\n]{0,80})$/);
+  if (wm) {
+    const q = wm[1].trim().toLowerCase();
+    const items = rooms
+      .filter(r => !roomIsArchived(r) && (!q || r.toLowerCase().includes(q)))
+      .slice(0, 8)
+      .map(r => ({ label: '[[' + r + ']]', insert: '[[' + r + ']]', desc: 'Room', kind: 'nav' }));
+    if (items.length) {
+      acFrom = sel.head - wm[1].length - 2;   // start of '[['
+      acTo = sel.head;
+      showAutocomplete(items);
+      return;
+    }
   }
   // Tag completion: the sentinel plus a partial name, so ¥inv offers ¥invoice
   // instead of letting near-duplicate tags pile up.
