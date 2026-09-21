@@ -3197,6 +3197,14 @@ body.readonly .cm-img-grip { display: none; }
       </div>
       <div class="imp-stats" id="imp-stats"></div>
       <div class="imp-roots" id="imp-roots"></div>
+      <div class="setting-row imp-opt" title="Off: paths start below the folder you picked (src/app.js). On: the folder name leads (project/src/app.js). Every file inside is imported either way — this only changes the names. With several folders selected, off can produce identical paths.">
+        <div class="setting-info">
+          <div class="setting-label">Append root folder</div>
+        </div>
+        <div class="setting-control">
+          <label class="setting-toggle"><input type="checkbox" id="imp-opt-root"><span class="toggle-track"></span><span class="toggle-thumb"></span></label>
+        </div>
+      </div>
       <div class="setting-row imp-opt" title="Skip everything inside a folder starting with “.” — .git, .next, .venv… Dotfiles themselves still import.">
         <div class="setting-info">
           <div class="setting-label">Ignore dot-folders</div>
@@ -9531,6 +9539,10 @@ function _impHasDotDir(p) {
 function _impComputePlan() {
   const dotOn = !!(document.getElementById('imp-opt-dot') || {}).checked;
   const giOn = !!(document.getElementById('imp-opt-gi') || {}).checked;
+  // Off (the default): paths land relative to the folder you picked. The root
+  // segment is only ever dropped from the NAME — every file under it is still
+  // imported, and the filters below still match on the full path.
+  const rootOn = !!(document.getElementById('imp-opt-root') || {}).checked;
   const files = [];
   const skip = { dot: 0, gi: 0, binary: 0, large: 0 };
   let bytes = 0;
@@ -9545,6 +9557,7 @@ function _impComputePlan() {
       if (match && match(cut ? p.slice(cut) : p)) { skip.gi++; continue; }
       if (f.size > _SNIFF_TEXT_MAX_BYTES) { skip.large++; continue; }
       if (_isKnownBinaryFile(f)) { skip.binary++; continue; }
+      f.__impOut = (rootOn || !cut) ? p : p.slice(cut);
       files.push(f);
       bytes += f.size || 0;
     }
@@ -9637,7 +9650,7 @@ window.impRun = async function() {
         // same byte sniff Import Files uses, so a stray .pak or .dat sitting in
         // a source tree can't paste binary garbage into the document.
         if (_TEXTLIKE_EXT_RE.test(f.name) || await _sniffIsTextFile(f)) {
-          parts[i] = formatImportedFile(f.__impPath, await readFileAsText(f));
+          parts[i] = formatImportedFile(f.__impOut || f.__impPath, await readFileAsText(f));
           ok++;
         } else binary++;
       } catch (err) { console.error(err); failed++; }
@@ -9733,7 +9746,7 @@ async function _impAcceptDrop(dt) {
     if (!_impBusy) _impAcceptDrop(e.dataTransfer);
   });
   // The toggles change the plan, never the selection: recompute and redraw.
-  ['imp-opt-dot', 'imp-opt-gi'].forEach(id => {
+  ['imp-opt-root', 'imp-opt-dot', 'imp-opt-gi'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.addEventListener('change', _impRender);
   });
