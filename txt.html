@@ -2638,6 +2638,11 @@ body.readonly .cm-img-grip { display: none; }
 .imp-root-meta { flex: 0 0 auto; color: var(--text-faint); font-size: var(--text-xs); }
 .imp-root-x { flex: 0 0 auto; padding: 1px 8px; line-height: 1.4; }
 .imp-skips { font-size: var(--text-xs); color: var(--text-faint); line-height: 1.5; }
+/* The toggles stay one line each so the options don't outweigh the selection
+   they describe — the full explanation lives in each row's tooltip, and which
+   .gitignore is in play rides on the label instead of a second line. */
+.imp-opt .setting-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.imp-gi-src { color: var(--text-faint); font-family: var(--font-mono); font-size: var(--text-xs); }
 
 @media (max-width: 768px) {
   #outline-panel, #pomodoro-panel, #cal-panel { right: 8px; left: 8px; width: auto; }
@@ -3175,19 +3180,17 @@ body.readonly .cm-img-grip { display: none; }
       </div>
       <div class="imp-stats" id="imp-stats"></div>
       <div class="imp-roots" id="imp-roots"></div>
-      <div class="setting-row">
+      <div class="setting-row imp-opt" title="Skip everything inside a folder starting with “.” — .git, .next, .venv… Dotfiles themselves still import.">
         <div class="setting-info">
           <div class="setting-label">Ignore dot-folders</div>
-          <div class="setting-hint">Skip everything inside a folder starting with “.” — .git, .next, .venv…</div>
         </div>
         <div class="setting-control">
           <label class="setting-toggle"><input type="checkbox" id="imp-opt-dot" checked><span class="toggle-track"></span><span class="toggle-thumb"></span></label>
         </div>
       </div>
-      <div class="setting-row">
+      <div class="setting-row imp-opt" title="Applies when an ignore file is present: one found at a picked folder's root covers that folder, a hand-added one covers the rest. Matched per folder root, and never imported.">
         <div class="setting-info">
-          <div class="setting-label">Respect .gitignore</div>
-          <div class="setting-hint" id="imp-gi-hint"></div>
+          <div class="setting-label">Respect .gitignore <span class="imp-gi-src" id="imp-gi-hint"></span></div>
         </div>
         <div class="setting-control">
           <label class="setting-toggle"><input type="checkbox" id="imp-opt-gi" checked><span class="toggle-track"></span><span class="toggle-thumb"></span></label>
@@ -9348,10 +9351,11 @@ function _impRender() {
   if (hintEl) {
     const auto = Array.from(_impGiByRoot.values()).map(g => g.name);
     const bits = [];
-    if (auto.length) bits.push(auto.length === 1 ? 'Using ' + auto[0] : 'Using ' + auto.length + ' folder .gitignore files');
-    if (_impGiManual) bits.push((auto.length ? 'plus ' : 'Using ') + _impGiManual.name + ' (added by hand)');
-    hintEl.textContent = bits.length
-      ? bits.join(' · ') + ' — matched per folder root, and never imported.'
+    if (auto.length) bits.push(auto.length === 1 ? auto[0] : auto.length + ' folder files');
+    if (_impGiManual) bits.push(_impGiManual.name + ' (added)');
+    hintEl.textContent = bits.length ? '· ' + bits.join(' + ') : '· none loaded';
+    hintEl.title = bits.length
+      ? 'Using ' + bits.join(' and ') + ' — matched per folder root, and never imported.'
       : 'Nothing to respect yet: add a .gitignore, or pick a folder that has one.';
   }
 
