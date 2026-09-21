@@ -1125,6 +1125,13 @@ body.sel-mode .editor-wrap .cm-content { -webkit-touch-callout: none; }
 .qs-chip:hover { color: var(--text-muted); }
 .qs-chip.on { color: var(--accent); border-color: var(--accent); background: var(--accent-bg); }
 .qs-status { flex: 0 0 auto; font-size: var(--text-xs, 11px); color: var(--text-faint); white-space: nowrap; }
+
+/* Clip setup */
+.clip-step { margin-top: var(--space-5); }
+.clip-step-title { font-size: var(--text-sm); font-weight: 600; margin-bottom: var(--space-2); }
+.clip-steps { margin: 0 0 var(--space-3); padding-left: 1.2em; font-size: var(--text-sm); color: var(--text-muted); line-height: 1.6; }
+.clip-steps li { margin-bottom: 2px; }
+.clip-steps code, .form-hint code { font-family: var(--font-mono); font-size: 0.92em; }
 @media (max-width: 480px) { .qs-status { display: none; } }
 
 /* Tree twisties + tag picker + pin/archive (Features 51/52/54) */
@@ -2804,6 +2811,10 @@ body.readonly .cm-img-grip { display: none; }
         <span>Share Link</span>
         <span></span>
       </button>
+      <button class="menu-item" onclick="openClipSetup()" title="Save links into an inbox room from the iOS share sheet or a bookmarklet">
+        <span>Clip a Link…</span>
+        <span></span>
+      </button>
       <button class="menu-item" onclick="shareDocument()" title="Send the document text to another app">
         <span>Share Text…</span>
         <span></span>
@@ -3269,6 +3280,57 @@ body.readonly .cm-img-grip { display: none; }
      a coin flip for programmatic .click() on some mobile browsers. -->
 <input type="file" id="import-folder-input" webkitdirectory directory multiple style="display:none;">
 <input type="file" id="import-gitignore-input" style="display:none;">
+
+<!-- ========== CLIP / CAPTURE SETUP ========== -->
+<div class="modal-overlay" id="clip-overlay">
+  <div class="modal-dialog modal-dialog-scroll" style="max-width: 560px;" id="clip-dialog" tabindex="-1">
+    <div class="modal-header">
+      <div class="modal-title">Clip a link</div>
+      <div class="modal-desc" style="margin-bottom:0;">Save a page into this app from anywhere — the share sheet on iOS, a bookmarklet on a desktop browser. Clips are appended to one inbox room.</div>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label class="form-label" for="clip-inbox">Inbox room</label>
+        <div style="display:flex; gap:var(--space-2);">
+          <input class="form-input" id="clip-inbox" spellcheck="false" autocomplete="off" placeholder="inbox">
+          <button class="btn" style="flex:none;" onclick="clipSaveInbox()">Save</button>
+        </div>
+        <div class="form-hint">Created on the first clip if it doesn’t exist.</div>
+      </div>
+
+      <div class="clip-step">
+        <div class="clip-step-title">iPhone / iPad — once, in the Shortcuts app</div>
+        <ol class="clip-steps">
+          <li>New shortcut → <b>Receive</b> <i>URLs</i> from <i>Share Sheet</i>.</li>
+          <li>Add <b>Get Details of Safari Web Page</b> → <i>Name</i>. (Gives you the page title.)</li>
+          <li>Add <b>Text</b>, and paste the template below, replacing <code>URL</code> with the Shortcut Input variable and <code>TITLE</code> with that Name variable.</li>
+          <li>Add <b>Open URLs</b>, fed by that Text.</li>
+          <li>Name it “Clip to Cade.txt”. It now appears in Safari’s Share sheet.</li>
+        </ol>
+        <div style="display:flex; gap:var(--space-2);">
+          <input class="form-input" id="clip-template" readonly spellcheck="false">
+          <button class="btn" style="flex:none;" onclick="clipCopy('clip-template')">Copy</button>
+        </div>
+        <div class="form-hint">Wrap each variable in a <b>URL Encode</b> action if a title with <code>&amp;</code> or <code>#</code> ever truncates the clip.</div>
+      </div>
+
+      <div class="clip-step">
+        <div class="clip-step-title">Desktop — drag to the bookmarks bar</div>
+        <div style="display:flex; gap:var(--space-2);">
+          <input class="form-input" id="clip-bookmarklet" readonly spellcheck="false">
+          <button class="btn" style="flex:none;" onclick="clipCopy('clip-bookmarklet')">Copy</button>
+        </div>
+        <div class="form-hint">New bookmark → paste as the address. It clips the page, its title, and anything you have selected.</div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <div class="modal-actions">
+        <button class="btn" onclick="clipTest()" title="File a sample clip so you can see where it lands">Try it</button>
+        <button class="btn btn-primary" onclick="closeClipSetup()">Done</button>
+      </div>
+    </div>
+  </div>
+</div>
 
 <!-- ========== ROOM ACTION MENU (popover) ========== -->
 <div class="rm-action-menu" id="rm-action-menu"></div>
@@ -9836,6 +9898,15 @@ async function _impAcceptDrop(dt) {
   await _impAddFiles(files);
 }
 
+(function clipWireModal() {
+  const ov = document.getElementById('clip-overlay');
+  if (!ov) return;
+  ov.addEventListener('click', (e) => { if (e.target === ov) closeClipSetup(); });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && ov.classList.contains('open')) { e.preventDefault(); closeClipSetup(); }
+  }, true);
+})();
+
 (function impWireModal() {
   const overlay = document.getElementById('import-folder-overlay');
   const zone = document.getElementById('imp-drop');
@@ -9885,6 +9956,129 @@ window.copyAllToClipboard = function() {
   }).catch(() => {
     showToast('Failed to copy', 'error');
   });
+};
+
+
+// ============================================
+// LINK CAPTURE  (?clip=…)
+// ============================================
+// Raindrop-style saving on iOS, where a PWA cannot be a Web Share Target:
+// Safari's share sheet can't reach this app directly, but a one-off Shortcut
+// can, and a Shortcut can open a URL. So capture is a URL contract —
+//   txt.html?clip=<url>&title=<title>&text=<selection>&tag=<tag>
+// — which the Shortcut, a desktop bookmarklet, or anything else able to open a
+// link can drive. The title comes from the share sheet, so nothing has to be
+// fetched cross-origin to name the page (which CORS would block on most sites
+// anyway).
+//
+// The clip is appended to an inbox room and the parameters are stripped from
+// the address bar immediately, so a refresh can never file the same link twice.
+
+function _clipBaseUrl() { return location.origin + location.pathname; }
+
+function _clipInboxRoom() {
+  let n = '';
+  try { n = String(Settings.get('capture.inbox') || '').trim().toLowerCase(); } catch {}
+  return n && !n.startsWith('__') && n.length <= 100 ? n : 'inbox';
+}
+
+// One markdown list item, with the selection quoted under it when there is one.
+function _clipEntry({ url, title, text, tag }) {
+  let label = (title || '').trim();
+  if (!label && url) { try { label = new URL(url).hostname.replace(/^www\./, ''); } catch { label = url; } }
+  const safeTag = (tag || '').trim().replace(/[^\w/-]/g, '');
+  const suffix = safeTag ? ' ' + tagSentinel() + safeTag : '';
+  let out = url ? `- [${label.replace(/[\[\]]/g, '')}](${url})${suffix}\n` : `- ${label}${suffix}\n`;
+  const quote = (text || '').trim();
+  if (quote) {
+    out += quote.slice(0, 2000).split('\n').map(l => '  > ' + l).join('\n') + '\n';
+  }
+  return out;
+}
+
+async function _clipApply(entry) {
+  const inbox = _clipInboxRoom();
+  if (!rooms.includes(inbox)) {
+    rooms.push(inbox);
+    try { touchRoomCreated(inbox); } catch {}
+    saveRooms();
+    try { renderRoomTabs(); } catch {}
+  }
+  if (activeRoom !== inbox && typeof switchRoom === 'function') {
+    try { await switchRoom(inbox); } catch (e) { console.error(e); }
+  }
+  appendTextToDocEnd(entry);
+  // Say where it went — on a cold open the room that ends up in front may not
+  // be the one that was there a second ago.
+  showToast('Clipped to ' + (activeRoom || inbox), 'success', 2500);
+}
+
+(function _clipFromUrl() {
+  let p;
+  try { p = new URLSearchParams(location.search); } catch { return; }
+  const url = p.get('clip');
+  const text = p.get('text');
+  if (!url && !text) return;
+  const entry = _clipEntry({ url, title: p.get('title'), text, tag: p.get('tag') });
+  // Strip first, act second: a refresh (or the deep-link writer below stamping
+  // ws/room back into the address) must never re-file the same clip.
+  try {
+    ['clip', 'title', 'text', 'tag'].forEach(k => p.delete(k));
+    const qs = p.toString();
+    // window.history, not history: `const {history} = window.__CM6__` shadows
+    // the global in this scope with CodeMirror's undo extension.
+    window.history.replaceState(null, '', location.pathname + (qs ? '?' + qs : '') + location.hash);
+  } catch {}
+  // The room system commits the first switch asynchronously; wait for it rather
+  // than racing it, or the clip lands in whatever room was open a moment ago.
+  // But _activeRoomReady only flips once a room switch commits, and an install
+  // with no rooms yet never switches — so a grace period releases that case
+  // instead of dropping the clip on the floor.
+  let waited = 0;
+  const tryApply = () => {
+    const bootSettled = (typeof _activeRoomReady !== 'undefined' && _activeRoomReady) || waited >= 1500;
+    if (window.editor && bootSettled) {
+      _clipApply(entry).catch(e => console.error(e));
+      return;
+    }
+    if ((waited += 120) > 15000) return;      // nothing ever came up — drop it
+    setTimeout(tryApply, 120);
+  };
+  setTimeout(tryApply, 120);
+})();
+
+window.openClipSetup = function() {
+  closeAllMenus();
+  const base = _clipBaseUrl();
+  const tmpl = base + '?clip=URL&title=TITLE';
+  const bm = "javascript:(function(){var u=encodeURIComponent(location.href),t=encodeURIComponent(document.title),s=encodeURIComponent(String(getSelection()||''));location.href='" +
+    base + "?clip='+u+'&title='+t+(s?'&text='+s:'');})()";
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
+  set('clip-inbox', _clipInboxRoom());
+  set('clip-template', tmpl);
+  set('clip-bookmarklet', bm);
+  const ov = document.getElementById('clip-overlay');
+  if (ov) ov.classList.add('open');
+};
+window.closeClipSetup = function() {
+  const ov = document.getElementById('clip-overlay');
+  if (ov) ov.classList.remove('open');
+};
+window.clipSaveInbox = function() {
+  const el = document.getElementById('clip-inbox');
+  if (!el) return;
+  const v = el.value.trim().toLowerCase();
+  try { Settings.set('capture.inbox', v || 'inbox'); } catch {}
+  el.value = _clipInboxRoom();
+  showToast('Clips will land in "' + _clipInboxRoom() + '"', 'success', 2000);
+};
+window.clipCopy = function(id) {
+  const el = document.getElementById(id);
+  if (el) ctxCopy(el.value);
+};
+window.clipTest = function() {
+  _clipApply(_clipEntry({ url: 'https://example.com/article', title: 'Example article', text: 'A quoted line from the page.' }))
+    .then(() => closeClipSetup());
 };
 
 // ============================================
@@ -16276,7 +16470,11 @@ function _updateLocationForRoom() {
     params.set('ws', wsLabel);
     params.set('room', activeRoom);
     const qs = params.toString();
-    history.replaceState(null, '', window.location.pathname + (qs ? '?' + qs : '') + window.location.hash);
+    // window.history, not history: CodeMirror's history() extension is
+    // destructured into this scope at the top of the file and shadows the
+    // global, so the bare call threw (silently, inside the try) and the
+    // ?ws=&room= deep link was never actually written to the address bar.
+    window.history.replaceState(null, '', window.location.pathname + (qs ? '?' + qs : '') + window.location.hash);
   } catch {}
 }
 window._updateLocationForRoom = _updateLocationForRoom;
@@ -19048,6 +19246,8 @@ try {
   // are registered by the timer module itself when it loads.)
   // F2 — snapshot retention. Auto-discard snapshots older than the chosen window
   // (the newest is always kept). Storage is also capped per-room by count + bytes.
+  // Where clipped links land (see openClipSetup).
+  registerSetting({ key: 'capture.inbox', label: 'Clip inbox room', type: 'text', default: 'inbox', section: 'Behavior', hint: 'Room that ?clip= links are appended to — from the iOS share sheet or the desktop bookmarklet. Created on the first clip.' });
   // Temp-room lifetime (item 33): Ctrl+Shift+N rooms self-delete after this.
   registerSetting({ key: 'behavior.tempRoomTtl', label: 'Temp room lifetime', type: 'select', default: '24', section: 'Behavior', hint: 'Ctrl+Shift+N creates a temp_<stamp> room that deletes itself (server + all devices) after this long.', options: [
     { value: '1', label: '1 hour' },
