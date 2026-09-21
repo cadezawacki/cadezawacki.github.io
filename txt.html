@@ -267,6 +267,7 @@ body {
   border-radius: 3px;
   line-height: 1.4;
 }
+.menu-item kbd:empty { display: none; }
 
 .menu-separator {
   height: 1px;
@@ -2610,6 +2611,39 @@ body.readonly .cm-img-grip { display: none; }
 .snap-diff .d-del { background: color-mix(in srgb, #ef4444 22%, transparent); text-decoration: line-through; opacity: 0.8; }
 .snap-diff .d-ctx { color: var(--text-muted); }
 
+/* Import Folder modal — deliberately DOM-light: one row per selected root,
+   never one per file, so a 40k-file checkout renders like a 20-file one. There
+   is no document preview here on purpose (that would mean reading every file
+   twice); the modal only ever holds File handles, counts and sizes until the
+   Import button is pressed. */
+.imp-drop {
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  text-align: center;
+  transition: border-color var(--transition), background var(--transition);
+}
+.imp-drop.over { border-color: var(--accent); background: var(--accent-bg); }
+.imp-drop-text { font-size: var(--text-sm); color: var(--text-muted); margin-bottom: var(--space-3); }
+.imp-drop-actions { display: flex; gap: var(--space-2); justify-content: center; flex-wrap: wrap; }
+.imp-stats { font-size: var(--text-sm); color: var(--text); margin: var(--space-3) 0 var(--space-2); }
+.imp-dim { color: var(--text-faint); }
+.imp-roots { max-height: 164px; overflow-y: auto; overscroll-behavior: contain; margin-bottom: var(--space-2); }
+.imp-root {
+  display: flex; align-items: center; gap: var(--space-2);
+  padding: 6px 0; border-bottom: 1px solid var(--border); font-size: var(--text-sm);
+}
+.imp-root:last-child { border-bottom: none; }
+.imp-root-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-mono); }
+.imp-root-meta { flex: 0 0 auto; color: var(--text-faint); font-size: var(--text-xs); }
+.imp-root-x { flex: 0 0 auto; padding: 1px 8px; line-height: 1.4; }
+.imp-skips { font-size: var(--text-xs); color: var(--text-faint); line-height: 1.5; }
+/* The toggles stay one line each so the options don't outweigh the selection
+   they describe — the full explanation lives in each row's tooltip, and which
+   .gitignore is in play rides on the label instead of a second line. */
+.imp-opt .setting-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.imp-gi-src { color: var(--text-faint); font-family: var(--font-mono); font-size: var(--text-xs); }
+
 @media (max-width: 768px) {
   #outline-panel, #pomodoro-panel, #cal-panel { right: 8px; left: 8px; width: auto; }
 }
@@ -2655,6 +2689,10 @@ body.readonly .cm-img-grip { display: none; }
       <button class="menu-item" onclick="importFiles()" title="Read files into the document as text; images embed, binaries attach">
         <span>Import Files…</span>
         <kbd id="kbd-import">Ctrl+Shift+I</kbd>
+      </button>
+      <button class="menu-item" onclick="openImportFolder()" title="Pick or drop whole folders; filter them, then import as path-tagged fenced text">
+        <span>Import Folder…</span>
+        <kbd id="kbd-import-folder"></kbd>
       </button>
       <button class="menu-item" onclick="uploadFiles()" title="Always attach as a synced file pill, even for text files">
         <span>Upload File…</span>
@@ -3124,6 +3162,54 @@ body.readonly .cm-img-grip { display: none; }
     </div>
   </div>
 </div>
+
+<!-- ========== IMPORT FOLDER MODAL ========== -->
+<div class="modal-overlay" id="import-folder-overlay">
+  <div class="modal-dialog modal-dialog-scroll" style="max-width: 560px;" id="import-folder-dialog" tabindex="-1">
+    <div class="modal-header">
+      <div class="modal-title">Import Folder</div>
+      <div class="modal-desc" style="margin-bottom:0;">Pick or drop folders — each file lands as its full path followed by a fenced block, so the folder structure survives in the names. Nothing is read from disk until you press Import.</div>
+    </div>
+    <div class="modal-body">
+      <div class="imp-drop" id="imp-drop">
+        <div class="imp-drop-text">Drop folders here — add as many as you like</div>
+        <div class="imp-drop-actions">
+          <button class="btn" onclick="impPickFolder()">Choose Folder…</button>
+          <button class="btn" onclick="impPickGitignore()" title="Only used while this modal is open; never imported">Add .gitignore…</button>
+        </div>
+      </div>
+      <div class="imp-stats" id="imp-stats"></div>
+      <div class="imp-roots" id="imp-roots"></div>
+      <div class="setting-row imp-opt" title="Skip everything inside a folder starting with “.” — .git, .next, .venv… Dotfiles themselves still import.">
+        <div class="setting-info">
+          <div class="setting-label">Ignore dot-folders</div>
+        </div>
+        <div class="setting-control">
+          <label class="setting-toggle"><input type="checkbox" id="imp-opt-dot" checked><span class="toggle-track"></span><span class="toggle-thumb"></span></label>
+        </div>
+      </div>
+      <div class="setting-row imp-opt" title="Applies when an ignore file is present: one found at a picked folder's root covers that folder, a hand-added one covers the rest. Matched per folder root, and never imported.">
+        <div class="setting-info">
+          <div class="setting-label">Respect .gitignore <span class="imp-gi-src" id="imp-gi-hint"></span></div>
+        </div>
+        <div class="setting-control">
+          <label class="setting-toggle"><input type="checkbox" id="imp-opt-gi" checked><span class="toggle-track"></span><span class="toggle-thumb"></span></label>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <div class="imp-skips" id="imp-skips"></div>
+      <div class="modal-actions">
+        <button class="btn" onclick="closeImportFolder()">Cancel</button>
+        <button class="btn btn-primary" id="imp-go" onclick="impRun()" disabled>Import</button>
+      </div>
+    </div>
+  </div>
+</div>
+<!-- Kept outside the overlay: a hidden input inside a display:none ancestor is
+     a coin flip for programmatic .click() on some mobile browsers. -->
+<input type="file" id="import-folder-input" webkitdirectory directory multiple style="display:none;">
+<input type="file" id="import-gitignore-input" style="display:none;">
 
 <!-- ========== ROOM ACTION MENU (popover) ========== -->
 <div class="rm-action-menu" id="rm-action-menu"></div>
@@ -8845,6 +8931,33 @@ async function expandZipFiles(files) {
   return out;
 }
 
+// Append pre-formatted text at the very end of the document, on a fresh line
+// and separated from existing content by a blank one. Shared by Import Files
+// and Import Folder so both land identically.
+function appendTextToDocEnd(text) {
+  if (!text) return;
+  const doc = editor.state.doc;
+  const docLen = doc.length;
+  let prefix = '';
+  if (docLen > 0) {
+    const tail = doc.sliceString(Math.max(0, docLen - 2), docLen);
+    if (tail.endsWith('\n\n')) prefix = '';
+    else if (tail.endsWith('\n')) prefix = '\n';
+    else prefix = '\n\n';
+  }
+  // CM normalizes \r\n and bare \r to \n on insert, so the text that lands in
+  // the doc can be SHORTER than what was measured here — a CRLF file made the
+  // selection anchor point past the end of the document (RangeError).
+  // Normalize first so the arithmetic is exact.
+  const insertText = (prefix + text).replace(/\r\n?/g, '\n');
+
+  editor.dispatch({
+    changes: { from: docLen, insert: insertText },
+    selection: { anchor: docLen + insertText.length },
+    scrollIntoView: true,
+  });
+}
+
 async function appendFilesToEditor(fileList) {
   const files = Array.from(fileList || []);
   if (!files.length) return;
@@ -8871,28 +8984,7 @@ async function appendFilesToEditor(fileList) {
     return;
   }
 
-  const doc = editor.state.doc;
-  const docLen = doc.length;
-  // Make sure we start on a fresh line and leave a blank line of separation
-  // if the current document already has content.
-  let prefix = '';
-  if (docLen > 0) {
-    const tail = doc.sliceString(Math.max(0, docLen - 2), docLen);
-    if (tail.endsWith('\n\n')) prefix = '';
-    else if (tail.endsWith('\n')) prefix = '\n';
-    else prefix = '\n\n';
-  }
-  // CM normalizes \r\n and bare \r to \n on insert, so the text that lands in
-  // the doc can be SHORTER than what was measured here — a CRLF file made the
-  // selection anchor point past the end of the document (RangeError).
-  // Normalize first so the arithmetic is exact.
-  const insertText = (prefix + chunks.join('')).replace(/\r\n?/g, '\n');
-
-  editor.dispatch({
-    changes: { from: docLen, insert: insertText },
-    selection: { anchor: docLen + insertText.length },
-    scrollIntoView: true,
-  });
+  appendTextToDocEnd(chunks.join(''));
 
   const msg = failCount
     ? `Imported ${okCount} file${okCount === 1 ? '' : 's'} (${failCount} failed)`
@@ -8935,6 +9027,484 @@ window.uploadFiles = function() {
   };
   input.click();
 };
+
+// ============================================
+// IMPORT FOLDER
+// ============================================
+// Import Files… reads whatever you hand it, immediately. Import Folder PLANS
+// first: pick or drop as many folders as you like, filter them down, and only
+// then read the survivors. Until Import is pressed this modal holds nothing but
+// File handles, paths and sizes — no contents — which is what keeps it usable
+// on a 40k-file checkout. There is deliberately no text preview (advFile.html's
+// textarea means reading every file twice and re-rendering the lot); the fenced
+// blocks go straight into the document in the same `path` + fence format, so
+// each file's folder path survives in its name.
+
+const _IMP_READ_CONCURRENCY = 8;   // parallel reads during the final import
+
+let _impRoots = [];             // [{ name, files: File[], bytes }] — one per picked/dropped folder
+let _impGiManual = null;        // { name, text } — .gitignore added by hand; applies to every root
+const _impGiByRoot = new Map(); // root name -> { name, text } found at that root
+let _impPlan = null;            // { files, bytes, skip } — what Import would take right now
+let _impBusy = false;           // an import is running; ignore re-entry and close requests
+let _impScans = 0;              // in-flight directory traversals (dropped folders)
+
+// ---- .gitignore ---------------------------------------------------------
+// Compact gitignore(5): last matching rule wins, '!' re-includes, a trailing
+// '/' matches directories only, a leading or embedded '/' anchors to the root,
+// '*' and '?' stop at separators but '**' doesn't. Patterns compile to RegExp
+// once and directory verdicts are memoized, so a big tree costs one test per
+// file plus one per distinct directory — not one per file per rule.
+function _giEsc(c) { return c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+
+function _giToRegex(glob, anchored) {
+  let re = anchored ? '^' : '^(?:.*/)?';
+  for (let i = 0; i < glob.length; i++) {
+    const c = glob[i];
+    if (c === '\\') { const n = glob[++i]; re += n === undefined ? '\\\\' : _giEsc(n); continue; }
+    if (c === '*') {
+      if (glob[i + 1] === '*') {
+        const atStart = i === 0 || glob[i - 1] === '/';
+        if (atStart && glob[i + 2] === '/') { re += '(?:.*/)?'; i += 2; continue; }   // a/**/b
+        re += '.*'; i += 1; continue;                                                 // a/** and odd cases
+      }
+      re += '[^/]*'; continue;
+    }
+    if (c === '?') { re += '[^/]'; continue; }
+    if (c === '[') {                                   // character class, copied through
+      let j = i + 1, cls = '';
+      if (glob[j] === '!' || glob[j] === '^') { cls += '^'; j++; }
+      if (glob[j] === ']') { cls += '\\]'; j++; }
+      while (j < glob.length && glob[j] !== ']') { cls += glob[j] === '\\' ? '\\\\' : glob[j]; j++; }
+      if (j >= glob.length) { re += '\\['; continue; }  // unterminated — a literal '['
+      re += '[' + cls + ']'; i = j; continue;
+    }
+    re += _giEsc(c);
+  }
+  return new RegExp(re + '$');
+}
+
+function _giCompile(text) {
+  const rules = [];
+  for (const raw of String(text || '').split(/\r?\n/)) {
+    if (!raw.trim() || /^\s*#/.test(raw)) continue;
+    // Trailing whitespace is stripped unless it was escaped — no lookbehind,
+    // Safari only grew those recently.
+    let end = raw.length;
+    while (end > 0 && (raw[end - 1] === ' ' || raw[end - 1] === '\t')) {
+      let bs = 0;
+      for (let j = end - 2; j >= 0 && raw[j] === '\\'; j--) bs++;
+      if (bs % 2 === 1) break;
+      end--;
+    }
+    let line = raw.slice(0, end);
+    let neg = false;
+    if (line[0] === '!') { neg = true; line = line.slice(1); }
+    else if (line[0] === '\\' && (line[1] === '!' || line[1] === '#')) line = line.slice(1);
+    let dirOnly = false;
+    if (line.endsWith('/')) { dirOnly = true; line = line.slice(0, -1); }
+    if (!line) continue;
+    let anchored = false;
+    if (line[0] === '/') { anchored = true; line = line.slice(1); }
+    else if (line.includes('/')) anchored = true;
+    if (!line) continue;
+    try { rules.push({ re: _giToRegex(line, anchored), neg, dirOnly }); } catch {}
+  }
+  return rules;
+}
+
+// -> (relativePath) => boolean, or null when the file has no usable rules.
+function _giMatcher(text) {
+  const rules = _giCompile(text);
+  if (!rules.length) return null;
+  const dirCache = new Map();
+  const test = (path, isDir) => {
+    let ignored = false;
+    for (let i = 0; i < rules.length; i++) {
+      const r = rules[i];
+      if (r.dirOnly && !isDir) continue;
+      if (r.re.test(path)) ignored = !r.neg;
+    }
+    return ignored;
+  };
+  return function isIgnored(path) {
+    // Walk the parents first: git can't re-include a file whose directory is
+    // excluded, and the memo means each directory is judged exactly once.
+    let from = 0;
+    for (;;) {
+      const slash = path.indexOf('/', from);
+      if (slash < 0) break;
+      const dir = path.slice(0, slash);
+      let v = dirCache.get(dir);
+      if (v === undefined) { v = test(dir, true); dirCache.set(dir, v); }
+      if (v) return true;
+      from = slash + 1;
+    }
+    return test(path, false);
+  };
+}
+
+// ---- modal state --------------------------------------------------------
+function _impIsOpen() {
+  const o = document.getElementById('import-folder-overlay');
+  return !!(o && o.classList.contains('open'));
+}
+
+window.openImportFolder = function() {
+  closeAllMenus();
+  const overlay = document.getElementById('import-folder-overlay');
+  if (!overlay) { showToast('Import Folder unavailable', 'error', 2500); return; }
+  overlay.classList.add('open');
+  _impRender();
+  const dlg = document.getElementById('import-folder-dialog');
+  if (dlg) setTimeout(() => dlg.focus(), 0);   // so Escape lands on the dialog
+};
+
+// Cancel, Escape, a backdrop click and a finished import all end up here. The
+// .gitignore text lives in this modal and nowhere else — closing drops it, the
+// picked folders and the plan together, so it can never reach the document or
+// outlive the import that used it.
+window.closeImportFolder = function() {
+  if (_impBusy) return;
+  const overlay = document.getElementById('import-folder-overlay');
+  if (overlay) overlay.classList.remove('open');
+  _impRoots = [];
+  _impGiManual = null;
+  _impGiByRoot.clear();
+  _impPlan = null;
+  _impScans = 0;
+  const fi = document.getElementById('import-folder-input'); if (fi) fi.value = '';
+  const gi = document.getElementById('import-gitignore-input'); if (gi) gi.value = '';
+};
+
+window.impPickFolder = function() {
+  const input = document.getElementById('import-folder-input');
+  if (!input || _impBusy) return;
+  // Chrome's directory picker takes one folder per trip whatever `multiple`
+  // says, so picks accumulate — pick again to add a second root.
+  input.value = '';
+  // Copy the list out BEFORE resetting the input: input.files is live, so
+  // clearing the value empties the very FileList we were about to read.
+  input.onchange = (e) => { const picked = Array.from(e.target.files || []); input.value = ''; _impAddFiles(picked); };
+  input.click();
+};
+
+window.impPickGitignore = function() {
+  const input = document.getElementById('import-gitignore-input');
+  if (!input || _impBusy) return;
+  input.value = '';
+  input.onchange = async (e) => {
+    const f = e.target.files && e.target.files[0];
+    input.value = '';
+    if (!f) return;
+    try {
+      _impGiManual = { name: f.name || '.gitignore', text: await readFileAsText(f) };
+      const opt = document.getElementById('imp-opt-gi'); if (opt) opt.checked = true;
+      _impRender();
+    } catch { showToast('Could not read ' + (f.name || '.gitignore'), 'error', 2500); }
+  };
+  input.click();
+};
+
+// Group an incoming batch by the folder that was actually picked (the first
+// path segment) so the modal can list and drop whole roots. Re-picking the same
+// folder replaces that root instead of doubling it up — and since a picked
+// folder arrives with no parent path, two different folders that happen to
+// share a name are the same root here, which is also what their identical
+// output paths would say.
+async function _impAddFiles(fileList) {
+  const files = Array.from(fileList || []);
+  if (!files.length) return;
+  // A .gitignore arriving on its own — dropped or picked — is the ignore file,
+  // not a folder to import. Adopt it instead of making a one-file root out of
+  // the only file we're guaranteed never to import.
+  if (files.length === 1 && /(^|[\\/])\.gitignore$/.test(files[0].name || '')) {
+    try {
+      _impGiManual = { name: files[0].name || '.gitignore', text: await readFileAsText(files[0]) };
+      const opt = document.getElementById('imp-opt-gi'); if (opt) opt.checked = true;
+    } catch { showToast('Could not read .gitignore', 'error', 2500); }
+    _impRender();
+    return;
+  }
+  const byRoot = new Map();
+  for (const f of files) {
+    const p = String(f.__impPath || f.webkitRelativePath || f.relativePath || f.name || '')
+      .replace(/\\/g, '/').replace(/^\.\//, '');
+    if (!p) continue;
+    f.__impPath = p;
+    const slash = p.indexOf('/');
+    const rootName = slash > 0 ? p.slice(0, slash) : '';
+    let bucket = byRoot.get(rootName);
+    if (!bucket) { bucket = []; byRoot.set(rootName, bucket); }
+    bucket.push(f);
+  }
+  for (const [name, list] of byRoot) {
+    const at = _impRoots.findIndex(r => r.name === name);
+    // Loose files (no folder of their own) accumulate across drops — each drop
+    // is its own handful, not a re-pick of the same folder.
+    let files = list;
+    if (!name && at >= 0) {
+      const merged = new Map(_impRoots[at].files.map(f => [f.__impPath, f]));
+      for (const f of list) merged.set(f.__impPath, f);
+      files = Array.from(merged.values());
+    }
+    files.sort((a, b) => (a.__impPath < b.__impPath ? -1 : a.__impPath > b.__impPath ? 1 : 0));
+    const root = { name, files, bytes: files.reduce((n, f) => n + (f.size || 0), 0) };
+    if (at >= 0) _impRoots[at] = root; else _impRoots.push(root);
+    // A .gitignore sitting at the root of what was picked is the one git itself
+    // would apply here, so adopt it: hunting down that exact file by hand right
+    // after picking the folder it lives in is busywork.
+    _impGiByRoot.delete(name);
+    const giPath = name ? name + '/.gitignore' : '.gitignore';
+    const gi = files.find(f => f.__impPath === giPath);
+    if (gi) { try { _impGiByRoot.set(name, { name: giPath, text: await readFileAsText(gi) }); } catch {} }
+  }
+  _impRender();
+}
+
+window.impRemoveRoot = function(i) {
+  if (_impBusy) return;
+  const root = _impRoots[i];
+  if (!root) return;
+  _impGiByRoot.delete(root.name);
+  _impRoots.splice(i, 1);
+  _impRender();
+};
+
+// A folder's own .gitignore wins for that folder; a hand-added one covers the
+// rest. Compiled lazily and cached on the source object.
+function _impMatcherFor(root) {
+  const src = _impGiByRoot.get(root.name) || _impGiManual || null;
+  if (!src) return null;
+  if (!src.__compiled) { src.__compiled = true; src.__match = _giMatcher(src.text); }
+  return src.__match;
+}
+
+// True when any DIRECTORY segment of the path starts with a dot. The basename
+// is skipped on purpose: this option is about folders (.git, .venv), not about
+// hiding .eslintrc from an import of the project that configures.
+function _impHasDotDir(p) {
+  let from = 0;
+  for (;;) {
+    const slash = p.indexOf('/', from);
+    if (slash < 0) return false;
+    if (p.charCodeAt(from) === 46) return true;
+    from = slash + 1;
+  }
+}
+
+// Decide what Import would take, without reading a byte. Cheap enough to re-run
+// on every toggle: one pass over the paths, plus the matcher's memoized dirs.
+function _impComputePlan() {
+  const dotOn = !!(document.getElementById('imp-opt-dot') || {}).checked;
+  const giOn = !!(document.getElementById('imp-opt-gi') || {}).checked;
+  const files = [];
+  const skip = { dot: 0, gi: 0, binary: 0, large: 0 };
+  let bytes = 0;
+  for (const root of _impRoots) {
+    const match = giOn ? _impMatcherFor(root) : null;
+    const cut = root.name ? root.name.length + 1 : 0;
+    for (const f of root.files) {
+      const p = f.__impPath;
+      // The .gitignore shapes the import; it is never part of it.
+      if (p === '.gitignore' || p.endsWith('/.gitignore')) { skip.gi++; continue; }
+      if (dotOn && _impHasDotDir(p)) { skip.dot++; continue; }
+      if (match && match(cut ? p.slice(cut) : p)) { skip.gi++; continue; }
+      if (f.size > _SNIFF_TEXT_MAX_BYTES) { skip.large++; continue; }
+      if (_isKnownBinaryFile(f)) { skip.binary++; continue; }
+      files.push(f);
+      bytes += f.size || 0;
+    }
+  }
+  return { files, bytes, skip };
+}
+
+function _impRender() {
+  if (!_impIsOpen()) return;
+  _impPlan = _impComputePlan();
+  const n = _impPlan.files.length;
+
+  const statsEl = document.getElementById('imp-stats');
+  if (statsEl) {
+    statsEl.innerHTML = _impScans
+      ? 'Scanning dropped folders…'
+      : !_impRoots.length
+        ? '<span class="imp-dim">No folders selected yet.</span>'
+        : '<strong>' + n.toLocaleString() + '</strong> file' + (n === 1 ? '' : 's') +
+          ' <span class="imp-dim">· ' + _fmtBytes(_impPlan.bytes) + ' to read</span>';
+  }
+
+  // One row per ROOT — the whole point of the modal. Never one per file.
+  const rootsEl = document.getElementById('imp-roots');
+  if (rootsEl) {
+    rootsEl.innerHTML = _impRoots.map((r, i) => {
+      const label = escapeHtml(r.name || 'Loose files');
+      return '<div class="imp-root">' +
+        '<span class="imp-root-name" title="' + label + '">📁 ' + label + '</span>' +
+        '<span class="imp-root-meta">' + r.files.length.toLocaleString() + ' file' + (r.files.length === 1 ? '' : 's') + ' · ' + _fmtBytes(r.bytes) + '</span>' +
+        '<button class="btn imp-root-x" title="Remove this folder" onclick="impRemoveRoot(' + i + ')">×</button>' +
+        '</div>';
+    }).join('');
+  }
+
+  const hintEl = document.getElementById('imp-gi-hint');
+  if (hintEl) {
+    const auto = Array.from(_impGiByRoot.values()).map(g => g.name);
+    const bits = [];
+    if (auto.length) bits.push(auto.length === 1 ? auto[0] : auto.length + ' folder files');
+    if (_impGiManual) bits.push(_impGiManual.name + ' (added)');
+    hintEl.textContent = bits.length ? '· ' + bits.join(' + ') : '· none loaded';
+    hintEl.title = bits.length
+      ? 'Using ' + bits.join(' and ') + ' — matched per folder root, and never imported.'
+      : 'Nothing to respect yet: add a .gitignore, or pick a folder that has one.';
+  }
+
+  const skipsEl = document.getElementById('imp-skips');
+  if (skipsEl) {
+    const s = _impPlan.skip;
+    const total = s.dot + s.gi + s.binary + s.large;
+    const parts = [];
+    if (s.dot) parts.push(s.dot.toLocaleString() + ' in dot-folders');
+    if (s.gi) parts.push(s.gi.toLocaleString() + ' by .gitignore');
+    if (s.binary) parts.push(s.binary.toLocaleString() + ' binary');
+    if (s.large) parts.push(s.large.toLocaleString() + ' over ' + _fmtBytes(_SNIFF_TEXT_MAX_BYTES));
+    skipsEl.textContent = total ? total.toLocaleString() + ' skipped — ' + parts.join(' · ') : '';
+  }
+
+  const go = document.getElementById('imp-go');
+  if (go && !_impBusy) {
+    go.disabled = !n;
+    go.textContent = n ? 'Import ' + n.toLocaleString() + ' file' + (n === 1 ? '' : 's') : 'Import';
+  }
+}
+
+// ---- the actual import --------------------------------------------------
+window.impRun = async function() {
+  if (_impBusy) return;
+  const plan = _impPlan || _impComputePlan();
+  const files = plan.files;
+  const total = files.length;
+  if (!total) { showToast('Nothing to import', 'error', 2000); return; }
+
+  _impBusy = true;
+  const go = document.getElementById('imp-go');
+  const parts = new Array(total);           // holes join as '', so no filter pass
+  let done = 0, ok = 0, failed = 0, binary = 0, next = 0;
+  const tick = () => { if (go) go.textContent = 'Reading ' + done.toLocaleString() + ' / ' + total.toLocaleString() + '…'; };
+  if (go) go.disabled = true;
+  tick();
+
+  const worker = async () => {
+    for (;;) {
+      const i = next++;
+      if (i >= total) return;
+      const f = files[i];
+      try {
+        // Known text extension goes straight through; anything else gets the
+        // same byte sniff Import Files uses, so a stray .pak or .dat sitting in
+        // a source tree can't paste binary garbage into the document.
+        if (_TEXTLIKE_EXT_RE.test(f.name) || await _sniffIsTextFile(f)) {
+          parts[i] = formatImportedFile(f.__impPath, await readFileAsText(f));
+          ok++;
+        } else binary++;
+      } catch (err) { console.error(err); failed++; }
+      done++;
+      // Yield every so often so the counter actually paints on long imports.
+      if ((done & 31) === 0 || done === total) { tick(); await new Promise(r => setTimeout(r, 0)); }
+    }
+  };
+
+  try {
+    await Promise.all(Array.from({ length: Math.min(_IMP_READ_CONCURRENCY, total) }, worker));
+    const text = parts.join('');
+    if (!text) { showToast('No files could be read', 'error', 3000); return; }
+    appendTextToDocEnd(text);
+    const extra = [];
+    if (binary) extra.push(binary + ' binary');
+    if (failed) extra.push(failed + ' failed');
+    showToast('Imported ' + ok.toLocaleString() + ' file' + (ok === 1 ? '' : 's') +
+      (extra.length ? ' (' + extra.join(', ') + ' skipped)' : ''), failed ? 'error' : 'success', 3000);
+  } finally {
+    _impBusy = false;
+    closeImportFolder();                    // drops the .gitignore with everything else
+  }
+};
+
+// ---- dropped folders ----------------------------------------------------
+// readEntries() hands back ~100 entries per call at most — read once and a big
+// folder silently truncates, so keep asking until it gives nothing back.
+function _impTraverseEntry(entry, path, out) {
+  return new Promise((resolve) => {
+    if (!entry) return resolve();
+    if (entry.isFile) {
+      entry.file((file) => { file.__impPath = path + file.name; out.push(file); resolve(); }, () => resolve());
+      return;
+    }
+    if (!entry.isDirectory) return resolve();
+    const dir = path + entry.name + '/';
+    const reader = entry.createReader();
+    const readBatch = () => reader.readEntries(async (entries) => {
+      if (!entries || !entries.length) return resolve();
+      try { for (const e of entries) await _impTraverseEntry(e, dir, out); } catch {}
+      readBatch();
+    }, () => resolve());
+    readBatch();
+  });
+}
+
+async function _impAcceptDrop(dt) {
+  if (!dt) return;
+  const entries = [];
+  for (const item of Array.from(dt.items || [])) {
+    if (item.kind !== 'file') continue;
+    const entry = item.webkitGetAsEntry && item.webkitGetAsEntry();
+    if (entry) entries.push(entry);
+  }
+  if (!entries.length) { await _impAddFiles(dt.files); return; }   // no FS access — flat files only
+  _impScans++;
+  _impRender();
+  const files = [];
+  try {
+    for (const entry of entries) await _impTraverseEntry(entry, '', files);
+  } finally { _impScans--; }
+  await _impAddFiles(files);
+}
+
+(function impWireModal() {
+  const overlay = document.getElementById('import-folder-overlay');
+  const zone = document.getElementById('imp-drop');
+  if (!overlay || !zone) return;
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) closeImportFolder(); });
+  // Escape is bound on the document, not the overlay: an overlay-scoped
+  // listener only fires while focus is inside the dialog, and a trip through
+  // the file picker or a click on a toggle label leaves it elsewhere.
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && _impIsOpen() && !_impBusy) { e.preventDefault(); e.stopPropagation(); closeImportFolder(); }
+  }, true);
+  // Drag handling covers the whole overlay, not just the dashed box: the
+  // window-level importer stands down while this modal is open, so a drop that
+  // missed the box would otherwise land nowhere at all. The box still does the
+  // highlighting.
+  ['dragenter', 'dragover'].forEach(ev => overlay.addEventListener(ev, (e) => {
+    e.preventDefault(); e.stopPropagation(); zone.classList.add('over');
+  }));
+  ['dragleave', 'dragend'].forEach(ev => overlay.addEventListener(ev, (e) => {
+    e.stopPropagation();
+    if (e.type === 'dragend' || e.target === overlay) zone.classList.remove('over');  // ignore child-to-child crossings
+  }));
+  overlay.addEventListener('drop', (e) => {
+    // Stop here, or the window-level drop handler imports the same files again
+    // — straight into the document, past every filter in this modal.
+    e.preventDefault(); e.stopPropagation();
+    zone.classList.remove('over');
+    if (!_impBusy) _impAcceptDrop(e.dataTransfer);
+  });
+  // The toggles change the plan, never the selection: recompute and redraw.
+  ['imp-opt-dot', 'imp-opt-gi'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('change', _impRender);
+  });
+})();
 
 window.copyAllToClipboard = function() {
   // The top-bar copy icon was removed (copy lives in the floating/mobile dash);
@@ -16790,7 +17360,9 @@ window.installApp = function() {
 // attaches as a synced file pill (routeIncomingFiles decides per file).
 (function() {
   let depth = 0, overlay = null;
-  const hasFiles = e => e.dataTransfer && Array.from(e.dataTransfer.types || []).indexOf('Files') >= 0;
+  // Import Folder does its own drag handling and its own filtering — while it
+  // is open, the window-level import stays out of the way completely.
+  const hasFiles = e => e.dataTransfer && Array.from(e.dataTransfer.types || []).indexOf('Files') >= 0 && !_impIsOpen();
   const show = () => { if (!overlay) { overlay = document.createElement('div'); overlay.className = 'drop-overlay'; overlay.textContent = 'Drop files to import'; document.body.appendChild(overlay); } };
   const hide = () => { if (overlay) { overlay.remove(); overlay = null; } depth = 0; };
   window.addEventListener('dragover', e => { if (hasFiles(e)) e.preventDefault(); });
@@ -17397,6 +17969,7 @@ const defaultHotkeys = {
   'rerunScript': 'Ctrl+Shift+K',
   'clearEditor': 'Ctrl+L',
   'importFiles': 'Ctrl+Shift+I',
+  'importFolder': '',
   'uploadFiles': 'Ctrl+Shift+U',
   'openSync': 'Ctrl+S',
   'forceSync': 'Ctrl+Shift+S',
@@ -17410,6 +17983,7 @@ const hotkeyLabels = {
   'rerunScript': 'Rerun Last Script',
   'clearEditor': 'Clear Editor',
   'importFiles': 'Import Files',
+  'importFolder': 'Import Folder',
   'uploadFiles': 'Upload File (attach)',
   'openSync': 'Open Sync',
   'forceSync': 'Force Sync Reload',
@@ -17461,6 +18035,7 @@ function updateHotkeyDisplay() {
   set('kbd-rerun', hotkeys.rerunScript);
   set('kbd-clear', hotkeys.clearEditor);
   set('kbd-import', hotkeys.importFiles);
+  set('kbd-import-folder', hotkeys.importFolder);
   set('kbd-upload', hotkeys.uploadFiles);
   set('kbd-sync', hotkeys.openSync);
   set('kbd-force-sync', hotkeys.forceSync);
@@ -17529,6 +18104,11 @@ document.addEventListener('keydown', (e) => {
   if (eventMatchesHotkey(e, hotkeys.importFiles) && !isInputField) {
     e.preventDefault(); e.stopPropagation();
     window.importFiles();
+    return;
+  }
+  if (eventMatchesHotkey(e, hotkeys.importFolder) && !isInputField) {
+    e.preventDefault(); e.stopPropagation();
+    window.openImportFolder();
     return;
   }
   if (eventMatchesHotkey(e, hotkeys.uploadFiles) && !isInputField) {
