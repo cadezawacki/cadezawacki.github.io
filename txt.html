@@ -1107,6 +1107,25 @@ body.sel-mode .editor-wrap .cm-content { -webkit-touch-callout: none; }
 .qs-item .qs-meta { color: var(--text-faint, #888); font-size: var(--text-xs, 11px); }
 .qs-item .qs-pin { font-size: 11px; color: var(--accent, #6c9); font-weight: 700; }
 .qs-empty { padding: 14px 10px; color: var(--text-faint, #888); font-size: var(--text-sm, 13px); }
+.qs-item .qs-why { color: var(--accent); font-size: var(--text-xs, 11px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 45%; }
+/* One compact row: scope chips left, scan status right. Deliberately quiet —
+   it is a footnote to the list, not a second control surface. */
+.qs-foot {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 8px; border-top: 1px solid var(--border);
+  background: var(--surface-2, var(--surface));
+}
+.qs-toggles { display: flex; gap: 4px; flex: 1 1 auto; min-width: 0; flex-wrap: wrap; }
+.qs-chip {
+  font: inherit; font-size: var(--text-xs, 11px); line-height: 1.6;
+  padding: 1px 8px; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--border); background: transparent; color: var(--text-faint);
+  transition: color var(--transition), border-color var(--transition), background var(--transition);
+}
+.qs-chip:hover { color: var(--text-muted); }
+.qs-chip.on { color: var(--accent); border-color: var(--accent); background: var(--accent-bg); }
+.qs-status { flex: 0 0 auto; font-size: var(--text-xs, 11px); color: var(--text-faint); white-space: nowrap; }
+@media (max-width: 480px) { .qs-status { display: none; } }
 
 /* Tree twisties + tag picker + pin/archive (Features 51/52/54) */
 .ws-dd-twisty, .ws-mgr-twisty { display: inline-flex; width: 14px; justify-content: center; cursor: pointer; opacity: 0.7; font-size: 10px; flex-shrink: 0; }
@@ -3242,8 +3261,12 @@ body.readonly .cm-img-grip { display: none; }
 <!-- ========== QUICK SWITCHER (Ctrl+P) ========== -->
 <div class="modal-overlay qs-overlay" id="qs-overlay">
   <div class="qs-dialog">
-    <input class="qs-input" id="qs-input" type="text" placeholder="Switch to room…  (↑↓ to move, Enter to open, Esc to close)" spellcheck="false" autocomplete="off">
+    <input class="qs-input" id="qs-input" type="text" placeholder="Search rooms, text, files, tags…  (↑↓ move · Enter open · Esc close)" spellcheck="false" autocomplete="off">
     <div class="qs-list" id="qs-list"></div>
+    <div class="qs-foot">
+      <div class="qs-toggles" id="qs-toggles"></div>
+      <span class="qs-status" id="qs-status"></span>
+    </div>
   </div>
 </div>
 
@@ -10939,18 +10962,26 @@ async function reconcileOnLive() {
 // trusted it concluded "nothing changed", stamped the stale text as synced,
 // and the user's next edit pushed the stale doc over newer server data
 // (the unlock-phone-and-clobber bug, item 2). REST can't lie about staleness.
-async function _restFetchRoomVal(roomName, child, timeoutMs) {
+async function _restFetchRoomVal(roomName, child, timeoutMs, signal) {
   const base = syncState.firebaseUrl || store.get('cade-firebase-url') || '';
   if (!base || typeof fetch !== 'function') throw new Error('rest-unavailable');
   const url = base.replace(/\/+$/, '') + '/rooms/' + encodeURIComponent(roomName) + '/' + child + '.json';
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), timeoutMs || 8000);
+  // An optional caller-owned signal (the quick-switcher's scan) drops the
+  // request the moment its results stop being wanted.
+  const relay = () => ctrl.abort();
+  if (signal) {
+    if (signal.aborted) ctrl.abort();
+    else signal.addEventListener('abort', relay, { once: true });
+  }
   try {
     const r = await fetch(url, { signal: ctrl.signal, cache: 'no-store' });
     if (!r.ok) throw new Error('rest-' + r.status);
     return await r.json();
   } finally {
     clearTimeout(t);
+    if (signal) signal.removeEventListener('abort', relay);
   }
 }
 
@@ -11982,60 +12013,331 @@ function quickSwitchBaseOrder() {
   });
 }
 
-let _qsIndex = 0;
-let _qsResults = [];
+// ---------- Unified search (rooms · workspaces · text · files · tags) -------
+// One box for everything. Room NAMES always match — that's the floor, and the
+// reason the toggles can all be off without leaving nothing to search. On top
+// of that sit four layers the footer chips turn on and off:
+//
+//   Workspaces  workspace names, as jump targets
+//   Text        the body of every room
+//   Files       names of attached file pills
+//   Tags        ¥tags used in a room
+//
+// The name pass is synchronous and instant. Everything else is asynchronous and
+// STREAMS: results merge in as they are found and the list re-sorts under them,
+// so a strong content hit can climb past a weak fuzzy name match after the fact.
+// The selected row is tracked by identity, not index, so re-sorting never moves
+// the highlight out from under the arrow keys.
+//
+// Two async passes, in order of how fast they can answer:
+//   1. rooms whose text is cached on this device — chunked with an 8ms budget
+//      per slice so typing never stutters;
+//   2. rooms this device has OFFLOADED to the server (see __offloadIdleRooms) —
+//      fetched over REST, four at a time, decrypted in memory. Without this
+//      pass the search quietly lies about every room you haven't opened lately.
+// Both are cancelled by a newer keystroke, by closing, and by picking a result:
+// the scan token invalidates late arrivals and the AbortController drops the
+// requests still in flight.
 
-function quickSwitchResults(query) {
-  const q = query.trim().toLowerCase();
-  if (!q) return quickSwitchBaseOrder().map(name => ({ name, score: 0 }));
-  // Score: exact > prefix > substring > subsequence (fuzzyMatch). Break ties by
-  // recency then pinned.
-  const recencyRank = new Map();
-  roomRecency.forEach((r, i) => recencyRank.set(r, i));
-  return rooms
-    .filter(r => !roomIsArchived(r))
-    .map(name => {
-      const n = name.toLowerCase();
-      let score = 0;
-      if (n === q) score = 1000;
-      else if (n.startsWith(q)) score = 800;
-      else if (n.includes(q)) score = 600;
-      else if (fuzzyMatch(q, n)) score = 300;
-      return { name, score };
-    })
-    .filter(x => x.score > 0)
-    .sort((a, b) => {
-      if (b.score !== a.score) return b.score - a.score;
-      // Equal match quality → the active workspace's room outranks (round-5).
-      const wa = _qsInActiveWs(a.name) ? 0 : 1, wb = _qsInActiveWs(b.name) ? 0 : 1;
-      if (wa !== wb) return wa - wb;
-      const ra = recencyRank.has(a.name) ? recencyRank.get(a.name) : Infinity;
-      const rb = recencyRank.has(b.name) ? recencyRank.get(b.name) : Infinity;
-      return ra - rb;
-    });
+const QS_TOGGLES = [
+  { id: 'ws',    key: 'cade-qs-ws',    label: 'Workspaces' },
+  { id: 'text',  key: 'cade-qs-text',  label: 'Text' },
+  { id: 'files', key: 'cade-qs-files', label: 'Files' },
+  { id: 'tags',  key: 'cade-qs-tags',  label: 'Tags' },
+];
+function _qsTog() {
+  const t = {};
+  for (const d of QS_TOGGLES) t[d.id] = store.get(d.key) !== '0';   // default on
+  return t;
+}
+function _qsSetTog(id, on) {
+  const d = QS_TOGGLES.find(x => x.id === id);
+  if (d) store.set(d.key, on ? '1' : '0');
 }
 
+const QS_MAX_ROWS = 40;        // rows kept in the list; the scan stops filling past this
+const QS_REMOTE_CONC = 4;      // parallel server reads for offloaded rooms
+const QS_MIN_ASYNC = 2;        // characters before the async layers engage
+
+let _qsIndex = 0;
+let _qsResults = [];
+let _qsSelKey = null;          // identity of the highlighted row, across re-sorts
+let _qsQuery = '';
+
+function _qsKey(res) { return res.kind === 'ws' ? 'ws:' + res.wsId : 'room:' + res.name; }
+
+// Score a room name against the query: exact > prefix > substring > subsequence.
+function _qsNameScore(name, q) {
+  const n = name.toLowerCase();
+  if (n === q) return 1000;
+  if (n.startsWith(q)) return 800;
+  if (n.includes(q)) return 600;
+  if (fuzzyMatch(q, n)) return 300;
+  return 0;
+}
+
+function _qsSort() {
+  const recencyRank = new Map();
+  roomRecency.forEach((r, i) => recencyRank.set(r, i));
+  _qsResults.sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score;
+    const pa = a.kind === 'ws' ? 0 : 1, pb = b.kind === 'ws' ? 0 : 1;
+    if (pa !== pb) return pa - pb;                       // equal score → workspace first
+    if (a.kind === 'ws' || b.kind === 'ws') return 0;
+    const wa = _qsInActiveWs(a.name) ? 0 : 1, wb = _qsInActiveWs(b.name) ? 0 : 1;
+    if (wa !== wb) return wa - wb;
+    const ra = recencyRank.has(a.name) ? recencyRank.get(a.name) : Infinity;
+    const rb = recencyRank.has(b.name) ? recencyRank.get(b.name) : Infinity;
+    return ra - rb;
+  });
+}
+
+// The synchronous floor: room names, plus workspace names when that chip is on.
+function quickSwitchResults(query) {
+  const q = query.trim().toLowerCase();
+  const t = _qsTog();
+  if (!q) return quickSwitchBaseOrder().map(name => ({ kind: 'room', name, score: 0, why: {} }));
+  const out = [];
+  for (const name of rooms) {
+    if (roomIsArchived(name)) continue;
+    const score = _qsNameScore(name, q);
+    if (score) out.push({ kind: 'room', name, score, why: { name: true } });
+  }
+  if (t.ws) {
+    for (const w of workspaces) {
+      const n = (w.name || '').toLowerCase();
+      if (!n) continue;
+      const score = n === q ? 950 : n.startsWith(q) ? 750 : n.includes(q) ? 550 : 0;
+      if (score) out.push({ kind: 'ws', wsId: w.id, name: w.name, color: w.color, score });
+    }
+  }
+  return out;
+}
+
+// ---- the async layers ------------------------------------------------------
+let _qsScanToken = 0;
+let _qsScanAbort = null;
+const _qsIndexCache = new Map();  // room -> { low, tags:Set, files:[names] } ('' = known empty)
+let _qsRenderPending = false;
+
+function _qsBuildIndex(text) {
+  const t = _qsTog();
+  const idx = { low: (text || '').toLowerCase(), tags: null, files: null };
+  // Built once per room per open, not per keystroke — these walk the whole text.
+  try { idx.tags = extractTags(text); } catch { idx.tags = new Set(); }
+  const files = [];
+  try {
+    FILE_TOKEN_RE.lastIndex = 0;
+    let m;
+    while ((m = FILE_TOKEN_RE.exec(text)) !== null) files.push(m[1]);
+  } catch {}
+  idx.files = files;
+  return idx;
+}
+
+function _qsLocalText(r) {
+  try {
+    if (r === activeRoom) return editor.state.doc.toString();
+    return store.get('cade-room-cache:' + r) || store.get('cade-room-synced:' + r) || '';
+  } catch { return ''; }
+}
+function _qsHasLocalText(r) {
+  if (r === activeRoom) return true;
+  try { return !!(store.get('cade-room-cache:' + r) || store.get('cade-room-synced:' + r)); } catch { return false; }
+}
+
+function _qsIndexFor(r, textIfKnown) {
+  let idx = _qsIndexCache.get(r);
+  if (idx !== undefined) return idx;
+  const text = textIfKnown != null ? textIfKnown : _qsLocalText(r);
+  idx = text ? _qsBuildIndex(text) : null;
+  _qsIndexCache.set(r, idx);
+  return idx;
+}
+
+function _qsSnippet(low, at, q) {
+  const s = Math.max(0, at - 24);
+  const raw = (s > 0 ? '…' : '') + low.slice(s, at + q.length + 44).replace(/\s+/g, ' ') + '…';
+  return escapeHtml(raw);
+}
+
+// What, if anything, this room's text says about the query.
+function _qsEvidence(idx, q, tagQ, t) {
+  if (!idx) return null;
+  const why = {};
+  if (t.tags && idx.tags) {
+    const needle = tagQ != null ? tagQ : q;
+    if (needle) {
+      for (const tg of idx.tags) {
+        if (tg === needle) { why.tag = tg; why.tagExact = true; break; }
+        if (!why.tag && tg.startsWith(needle)) why.tag = tg;
+      }
+    }
+  }
+  if (t.files && idx.files) {
+    for (const f of idx.files) {
+      if (f.toLowerCase().includes(q)) { why.file = f; break; }
+    }
+  }
+  if (t.text) {
+    const at = idx.low.indexOf(q);
+    if (at >= 0) why.text = { snippet: _qsSnippet(idx.low, at, q), seek: q };
+  }
+  if (!why.tag && !why.file && !why.text) return null;
+  why.score = why.tagExact ? 500 : why.tag ? 450 : why.file ? 350 : 100;
+  return why;
+}
+
+// Fold a room's evidence into the result list: enrich the row if the room is
+// already listed (a name match keeps its rank and gains a snippet), else append.
+function _qsMerge(room, why) {
+  let row = _qsResults.find(r => r.kind === 'room' && r.name === room);
+  if (!row) {
+    if (_qsResults.length >= QS_MAX_ROWS) return false;
+    row = { kind: 'room', name: room, score: 0, why: {} };
+    _qsResults.push(row);
+  }
+  Object.assign(row.why, why);
+  if (why.score > row.score) row.score = why.score;
+  return true;
+}
+
+function _qsScheduleRender() {
+  if (_qsRenderPending) return;
+  _qsRenderPending = true;
+  setTimeout(() => {
+    _qsRenderPending = false;
+    _qsSort();
+    renderQuickSwitchList();
+  }, 50);
+}
+
+function _qsStatus(msg) {
+  const el = document.getElementById('qs-status');
+  if (el) el.textContent = msg || '';
+}
+
+function quickSwitchScan(query) {
+  const token = ++_qsScanToken;
+  if (_qsScanAbort) { try { _qsScanAbort.abort(); } catch {} }
+  _qsScanAbort = null;
+  const q = query.trim().toLowerCase();
+  const t = _qsTog();
+  if (q.length < QS_MIN_ASYNC || (!t.text && !t.files && !t.tags)) { _qsStatus(''); return; }
+  const sent = tagSentinel().toLowerCase();
+  const tagQ = q.startsWith(sent) ? q.slice(sent.length) : null;
+
+  const live = rooms.filter(r => !roomIsArchived(r));
+  const order = (a, b) => (_qsInActiveWs(a) ? 0 : 1) - (_qsInActiveWs(b) ? 0 : 1);
+  const localRooms = live.filter(_qsHasLocalText).sort(order);
+  const remoteRooms = live.filter(r => !_qsHasLocalText(r)).sort(order);
+
+  let i = 0, hits = 0;
+  const step = () => {
+    if (token !== _qsScanToken) return;                 // superseded by a newer keystroke
+    const deadline = Date.now() + 8;                    // ≤8ms per slice, then yield
+    while (i < localRooms.length && Date.now() < deadline) {
+      const r = localRooms[i++];
+      const why = _qsEvidence(_qsIndexFor(r), q, tagQ, t);
+      if (why && _qsMerge(r, why)) hits++;
+    }
+    if (hits) _qsScheduleRender();
+    if (i < localRooms.length && _qsResults.length < QS_MAX_ROWS) { setTimeout(step, 0); return; }
+    _qsScanRemote(token, remoteRooms, q, tagQ, t);
+  };
+  setTimeout(step, 0);
+}
+
+// Rooms this device offloaded live only on the server. Fetch, decrypt in
+// memory, index, and stream the hits in. A room we can't decrypt (locked, not
+// unlocked this session) is skipped in silence — that's the lock working.
+async function _qsScanRemote(token, list, q, tagQ, t) {
+  if (!list.length || _qsResults.length >= QS_MAX_ROWS) { _qsStatus(''); return; }
+  if (!_syncConfigured() || !navigator.onLine) { _qsStatus(''); return; }
+  const baseKey = store.get('cade-sync-key') || '';
+  const abort = new AbortController();
+  _qsScanAbort = abort;
+  let next = 0, done = 0, hits = 0;
+  const total = list.length;
+  _qsStatus('searching ' + total + ' offloaded room' + (total === 1 ? '' : 's') + '…');
+  const worker = async () => {
+    for (;;) {
+      if (token !== _qsScanToken || _qsResults.length >= QS_MAX_ROWS) return;
+      const i = next++;
+      if (i >= list.length) return;
+      const r = list[i];
+      let idx = _qsIndexCache.get(r);
+      if (idx === undefined) {
+        let text = '';
+        try {
+          const val = await _restFetchRoomVal(r, 'text', 6000, abort.signal);
+          const enc = unpackRoomText(val);
+          if (enc) {
+            const dec = await decryptText(enc, getRoomEncKey(r, baseKey));
+            if (dec != null) text = dec.startsWith(ROOM_LOCK_SENTINEL) ? dec.slice(ROOM_LOCK_SENTINEL.length) : dec;
+          }
+        } catch {}
+        if (token !== _qsScanToken) return;
+        idx = text ? _qsBuildIndex(text) : null;
+        _qsIndexCache.set(r, idx);                      // later keystrokes reuse this
+      }
+      const why = _qsEvidence(idx, q, tagQ, t);
+      if (why && _qsMerge(r, why)) hits++;
+      done++;
+      if (hits) _qsScheduleRender();
+      if ((done & 3) === 0 && token === _qsScanToken) {
+        _qsStatus('searching ' + (total - done) + ' offloaded room' + (total - done === 1 ? '' : 's') + '…');
+      }
+    }
+  };
+  try {
+    await Promise.all(Array.from({ length: Math.min(QS_REMOTE_CONC, list.length) }, worker));
+  } catch {}
+  if (token === _qsScanToken) { _qsScheduleRender(); _qsStatus(''); }
+}
+
+// ---- rendering -------------------------------------------------------------
 function renderQuickSwitchList() {
   const listEl = document.getElementById('qs-list');
   if (!listEl) return;
   if (_qsResults.length === 0) {
-    listEl.innerHTML = '<div class="qs-empty">No matching rooms.</div>';
+    listEl.innerHTML = '<div class="qs-empty">No matches.</div>';
     return;
+  }
+  // Keep the highlight on the row it was on, wherever the re-sort put it.
+  if (_qsSelKey) {
+    const at = _qsResults.findIndex(r => _qsKey(r) === _qsSelKey);
+    if (at >= 0) _qsIndex = at;
   }
   if (_qsIndex < 0) _qsIndex = 0;
   if (_qsIndex >= _qsResults.length) _qsIndex = _qsResults.length - 1;
+  _qsSelKey = _qsKey(_qsResults[_qsIndex]);
+
   listEl.innerHTML = _qsResults.map((res, i) => {
+    const active = i === _qsIndex ? ' active' : '';
+    if (res.kind === 'ws') {
+      const cc = 'ws-color-' + (WS_COLORS.includes(res.color) ? res.color : 'neutral');
+      const count = rooms.filter(r => !roomIsArchived(r) && roomInWorkspace(r, res.wsId)).length;
+      return `<div class="qs-item${active}" data-idx="${i}">
+        <span class="qs-dot ${cc}"></span>
+        <span class="qs-name">${escapeHtml(res.name)}</span>
+        <span class="qs-meta">Workspace · ${count} room${count === 1 ? '' : 's'}</span>
+      </div>`;
+    }
     const name = res.name;
     const colorClass = workspaceColorClassForRoom(name);
     const wsIds = getRoomWorkspaceIds(name);
     const pin = roomPinnedHere(name) ? '<span class="qs-pin" title="Pinned">📌</span>' : '';
     const lock = roomHasPassword(name) ? ' 🔒' : '';
-    const escAttr = escapeHtml(name.replace(/\\/g, '\\\\').replace(/'/g, "\\'"));
-    // Item 22: every workspace the room belongs to, as colour-coded badges
-    // (up to 3 before overflowing to +N).
+    const why = res.why || {};
+    // Why this row is here, most specific evidence first.
     let meta;
-    if (res.content) {
-      meta = `<span class="qs-snip" title="content match">📄 ${res.snippet}</span>`;
+    if (why.tag) {
+      meta = `<span class="qs-why" title="tag match">${escapeHtml(tagSentinel() + why.tag)}</span>`;
+    } else if (why.file) {
+      meta = `<span class="qs-why" title="attached file">📎 ${escapeHtml(why.file)}</span>`;
+    } else if (why.text) {
+      meta = `<span class="qs-snip" title="text match">📄 ${why.text.snippet}</span>`;
     } else if (wsIds.length) {
       const shown = wsIds.slice(0, 3).map(id => {
         const w = getWorkspace(id);
@@ -12048,14 +12350,48 @@ function renderQuickSwitchList() {
     } else {
       meta = '<span class="qs-meta">Unlabeled</span>';
     }
-    return `<div class="qs-item ${i === _qsIndex ? 'active' : ''}" data-idx="${i}" onclick="quickSwitchPick('${escAttr}')">
+    return `<div class="qs-item${active}" data-idx="${i}">
       ${pin}<span class="qs-dot ${colorClass}"></span>
       <span class="qs-name">${escapeHtml(name)}${lock}</span>
       ${meta}
     </div>`;
   }).join('');
+
+  listEl.querySelectorAll('.qs-item').forEach(el => {
+    el.addEventListener('click', () => quickSwitchPickAt(parseInt(el.dataset.idx, 10)));
+  });
   const active = listEl.querySelector('.qs-item.active');
   if (active) active.scrollIntoView({ block: 'nearest' });
+}
+
+function renderQsFooter() {
+  const host = document.getElementById('qs-toggles');
+  if (!host) return;
+  const t = _qsTog();
+  host.innerHTML = QS_TOGGLES.map(d =>
+    `<button type="button" class="qs-chip${t[d.id] ? ' on' : ''}" data-tog="${d.id}" tabindex="-1">${d.label}</button>`
+  ).join('');
+  host.querySelectorAll('.qs-chip').forEach(btn => {
+    // mousedown is where focus would be stolen from the input — never let it.
+    btn.addEventListener('mousedown', e => e.preventDefault());
+    btn.addEventListener('click', () => {
+      const id = btn.dataset.tog;
+      _qsSetTog(id, !btn.classList.contains('on'));
+      renderQsFooter();
+      const input = document.getElementById('qs-input');
+      if (input) { qsRunQuery(input.value); input.focus(); }
+    });
+  });
+}
+
+function qsRunQuery(value) {
+  _qsQuery = value;
+  _qsResults = quickSwitchResults(value);
+  _qsSort();
+  _qsIndex = 0;
+  _qsSelKey = _qsResults.length ? _qsKey(_qsResults[0]) : null;
+  renderQuickSwitchList();
+  quickSwitchScan(value);
 }
 
 window.openQuickSwitcher = function(prefill) {
@@ -12063,40 +12399,62 @@ window.openQuickSwitcher = function(prefill) {
   const overlay = document.getElementById('qs-overlay');
   const input = document.getElementById('qs-input');
   if (!overlay || !input) return;
+  _qsScanToken++;             // cancel anything left running from a previous open
+  if (_qsScanAbort) { try { _qsScanAbort.abort(); } catch {} _qsScanAbort = null; }
+  _qsIndexCache.clear();      // fresh snapshot per open (and releases the text)
+  _qsStatus('');
   input.value = prefill || '';
-  _qsIndex = 0;
-  _qsScanToken++;       // cancel any in-flight content scan
-  _qsTextCache.clear(); // fresh text snapshot per open (memory care)
-  _qsResults = quickSwitchResults(input.value);
-  renderQuickSwitchList();
+  renderQsFooter();
+  qsRunQuery(input.value);
   overlay.classList.add('open');
   setTimeout(() => { input.focus(); input.select(); }, 10);
-  if (input.value) quickSwitchContentSearch(input.value);
 };
 
 window.closeQuickSwitcher = function() {
   const overlay = document.getElementById('qs-overlay');
   if (overlay) overlay.classList.remove('open');
-  _qsScanToken++;       // stop any running content scan
-  _qsTextCache.clear(); // release the text snapshots (memory care)
+  _qsScanToken++;             // late arrivals are dropped
+  if (_qsScanAbort) { try { _qsScanAbort.abort(); } catch {} _qsScanAbort = null; }
+  _qsIndexCache.clear();      // release every room text we pulled in
+  _qsStatus('');
+  _qsSelKey = null;
   try { editor.focus(); } catch {}
 };
 
-window.quickSwitchPick = async function(name) {
-  // Content matches earn their keep: picking one jumps to the first hit in
-  // the opened document (retry once — a live sync snapshot can land late).
+function quickSwitchPickAt(i) {
+  const res = _qsResults[i];
+  if (!res) return;
+  if (res.kind === 'ws') {
+    closeQuickSwitcher();
+    activeWorkspace = res.wsId;
+    store.set('cade-active-workspace', activeWorkspace);
+    try { renderWorkspacePill(); } catch {}
+    try { renderRoomTabs(); } catch {}
+    try { renderBreadcrumb(); } catch {}
+    try { renderSidebar(); } catch {}
+    return;
+  }
+  quickSwitchPick(res.name, res);
+}
+
+window.quickSwitchPick = async function(name, res) {
+  // A content/tag/file hit earns its keep: picking one jumps to the first
+  // occurrence in the opened document (retried once — a live sync snapshot can
+  // land late).
   let seekQ = null;
-  try {
-    const input = document.getElementById('qs-input');
-    const res = _qsResults.find(r => r.name === name);
-    if (res && res.content && input && input.value.trim().length >= 2) seekQ = input.value.trim().toLowerCase();
-  } catch {}
+  if (!res) res = _qsResults.find(r => r.kind === 'room' && r.name === name);
+  const why = res && res.why;
+  if (why) {
+    if (why.tag) seekQ = (tagSentinel() + why.tag).toLowerCase();
+    else if (why.file) seekQ = why.file.toLowerCase();
+    else if (why.text) seekQ = why.text.seek;
+  }
   closeQuickSwitcher();
   if (!name) return;
   if (name === activeRoom) { if (seekQ) _qsSeek(seekQ); return; }
-  // Item 22: follow the room into ITS OWN workspace (first membership) rather
-  // than dumping to All Rooms — the tab bar then shows its real context.
-  // Archived rooms still land in All Rooms (they're hidden everywhere else).
+  // Follow the room into ITS OWN workspace (first membership) rather than
+  // dumping to All Rooms — the tab bar then shows its real context. Archived
+  // rooms still land in All Rooms (they're hidden everywhere else).
   if (roomIsArchived(name)) {
     activeWorkspace = WS_ALL;
     store.set('cade-active-workspace', WS_ALL);
@@ -12124,84 +12482,27 @@ function _qsSeek(q) {
   } catch { return false; }
 }
 
-// Item 29: content search across the workspace's rooms (all rooms in the All
-// view) — async, time-budgeted chunks, capped results, per-open text cache so
-// keystrokes don't re-read localStorage. Kicks in from 2 chars.
-let _qsScanToken = 0;
-const _qsTextCache = new Map(); // room -> lowercased text ('' = known empty)
-function _qsRoomTextLower(r) {
-  if (_qsTextCache.has(r)) return _qsTextCache.get(r);
-  let t = '';
-  try {
-    // Cache first; fall back to the last-synced base for rooms whose cache
-    // hasn't been written on this device yet.
-    t = (r === activeRoom
-      ? editor.state.doc.toString()
-      : (store.get('cade-room-cache:' + r) || store.get('cade-room-synced:' + r) || '')).toLowerCase();
-  } catch {}
-  _qsTextCache.set(r, t);
-  return t;
-}
-function quickSwitchContentSearch(query) {
-  const token = ++_qsScanToken;
-  const q = query.trim().toLowerCase();
-  if (q.length < 2) return;
-  // Round-5: content search spans EVERY workspace; the active workspace's
-  // rooms just scan first, so with plentiful hits they surface first.
-  const live = rooms.filter(r => !roomIsArchived(r));
-  const scope = (activeWorkspace === WS_ALL)
-    ? live
-    : live.slice().sort((a, b) => (_qsInActiveWs(a) ? 0 : 1) - (_qsInActiveWs(b) ? 0 : 1));
-  let i = 0;
-  const found = [];
-  const step = () => {
-    if (token !== _qsScanToken) return; // a newer keystroke superseded us
-    const deadline = Date.now() + 8;    // ≤8ms of work per chunk
-    while (i < scope.length && Date.now() < deadline && found.length < 12) {
-      const r = scope[i++];
-      const text = _qsRoomTextLower(r);
-      if (!text) continue;
-      const at = text.indexOf(q);
-      if (at === -1) continue;
-      const s = Math.max(0, at - 24);
-      const raw = (s > 0 ? '…' : '') + text.slice(s, at + q.length + 44).replace(/\s+/g, ' ') + '…';
-      found.push({ name: r, score: 1, content: true, snippet: escapeHtml(raw) });
-    }
-    if (i < scope.length && found.length < 12) { setTimeout(step, 0); return; }
-    if (token !== _qsScanToken) return;
-    // Rooms already listed as NAME matches get their snippet attached in
-    // place (so a weak fuzzy name-match can't hide a strong content hit);
-    // the rest append as 📄 rows.
-    const byName = new Map(found.map(f => [f.name, f]));
-    let changed = false;
-    _qsResults.forEach(res => {
-      const f = byName.get(res.name);
-      if (f && !res.content) { res.content = true; res.snippet = f.snippet; byName.delete(res.name); changed = true; }
-    });
-    const extra = [...byName.values()];
-    if (extra.length) { _qsResults = _qsResults.concat(extra); changed = true; }
-    if (changed) renderQuickSwitchList();
-  };
-  setTimeout(step, 0);
-}
-
 (function() {
   const input = document.getElementById('qs-input');
   const overlay = document.getElementById('qs-overlay');
   if (!input || !overlay) return;
-  input.addEventListener('input', () => {
-    _qsResults = quickSwitchResults(input.value);
-    _qsIndex = 0;
-    renderQuickSwitchList();
-    quickSwitchContentSearch(input.value); // item 29 — appends 📄 content hits
-  });
+  input.addEventListener('input', () => qsRunQuery(input.value));
   input.addEventListener('keydown', (e) => {
-    if (e.key === 'ArrowDown') { e.preventDefault(); _qsIndex++; renderQuickSwitchList(); }
-    else if (e.key === 'ArrowUp') { e.preventDefault(); _qsIndex--; renderQuickSwitchList(); }
-    else if (e.key === 'Enter') {
+    if (e.key === 'ArrowDown') {
       e.preventDefault();
-      const res = _qsResults[_qsIndex];
-      if (res) quickSwitchPick(res.name);
+      _qsIndex++;
+      if (_qsIndex >= _qsResults.length) _qsIndex = _qsResults.length - 1;
+      _qsSelKey = _qsResults[_qsIndex] ? _qsKey(_qsResults[_qsIndex]) : null;
+      renderQuickSwitchList();
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      _qsIndex--;
+      if (_qsIndex < 0) _qsIndex = 0;
+      _qsSelKey = _qsResults[_qsIndex] ? _qsKey(_qsResults[_qsIndex]) : null;
+      renderQuickSwitchList();
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      quickSwitchPickAt(_qsIndex);
     } else if (e.key === 'Escape') {
       e.preventDefault(); e.stopPropagation(); closeQuickSwitcher();
     }
