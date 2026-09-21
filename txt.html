@@ -3385,8 +3385,8 @@ body.readonly .cm-img-grip { display: none; }
       <div class="clip-step">
         <div class="clip-step-title">iPhone / iPad — in the background <span class="clip-rec">recommended</span></div>
         <ol class="clip-steps">
-          <li>Shortcuts → new shortcut → <b>Receive</b> <i>URLs</i> from <i>Share Sheet</i>.</li>
-          <li>Add <b>Get Details of Safari Web Page</b> → <i>Name</i>, for the page title.</li>
+          <li>Shortcuts → new shortcut → <b>Receive</b> <i>Safari web pages and URLs</i> from <i>Share Sheet</i>. Both types matter — with URLs alone the page title isn’t available.</li>
+          <li>Add <b>Get Details of Safari Web Page</b>, input <i>Shortcut Input</i>, detail <i>Name</i>. That is the page title.</li>
           <li>Add <b>Get Contents of URL</b> with the address below, <b>Method: POST</b>, <b>Request Body: JSON</b>.</li>
           <li>Two JSON fields: <code>u</code> = Shortcut Input, <code>t</code> = that Name.</li>
           <li>Name it “Clip to Cade.txt”. Sharing now files the link without Safari leaving the page.</li>
@@ -3396,7 +3396,7 @@ body.readonly .cm-img-grip { display: none; }
           <button class="btn" style="flex:none;" onclick="clipCopy('clip-queue-url')">Copy</button>
         </div>
         <div class="form-hint" id="clip-bg-note"></div>
-        <div class="form-hint">Queued clips are filed into the inbox whenever this app has that room open — automatically, or with the button below.</div>
+        <div class="form-hint">Clips appear the moment they arrive if the inbox is open here; otherwise they wait and file when you open it. If <code>t</code> is missing the link’s own words are used for the title.</div>
         <div style="display:flex; gap:var(--space-2); margin-top:var(--space-2); flex-wrap:wrap;">
           <button class="btn" onclick="clipTestQueue()" title="POST a probe to that address and delete it again">Test address</button>
           <button class="btn" id="clip-waiting-btn" hidden onclick="clipFileWaiting()"></button>
@@ -10151,9 +10151,27 @@ function _clipInboxRoom() {
 }
 
 // One markdown list item, with the selection quoted under it when there is one.
+// When no title arrives, build a readable one out of the URL instead of
+// showing a bare link: the last meaningful path segment, de-slugified, with
+// the host after it. /blog/how-to-fix-css → "How to fix css — example.com".
+function _clipLabelFromUrl(url) {
+  try {
+    const u = new URL(url);
+    const host = u.hostname.replace(/^www\./, '');
+    const seg = u.pathname.split('/').filter(Boolean).pop() || '';
+    const words = decodeURIComponent(seg)
+      .replace(/\.(html?|php|aspx?|md)$/i, '')
+      .replace(/[-_+]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (!words || /^\d+$/.test(words) || words.length > 90) return host;
+    return words.charAt(0).toUpperCase() + words.slice(1) + ' — ' + host;
+  } catch { return url; }
+}
+
 function _clipEntry({ url, title, text, tag }) {
   let label = (title || '').trim();
-  if (!label && url) { try { label = new URL(url).hostname.replace(/^www\./, ''); } catch { label = url; } }
+  if (!label && url) label = _clipLabelFromUrl(url);
   const safeTag = (tag || '').trim().replace(/[^\w/-]/g, '');
   const suffix = safeTag ? ' ' + tagSentinel() + safeTag : '';
   let out = url ? `- [${label.replace(/[\[\]]/g, '')}](${url})${suffix}\n` : `- ${label}${suffix}\n`;
@@ -10162,6 +10180,31 @@ function _clipEntry({ url, title, text, tag }) {
     out += quote.slice(0, 2000).split('\n').map(l => '  > ' + l).join('\n') + '\n';
   }
   return out;
+}
+
+// Append clip lines. appendTextToDocEnd leaves a BLANK line of separation,
+// which is right for fenced import blocks and wrong for list items — it put a
+// gap between every saved link. Follow a previous clip line directly; keep the
+// blank line only when the clip is landing after ordinary prose.
+function appendClipsToDoc(text) {
+  if (!text) return;
+  const doc = editor.state.doc;
+  let end = doc.length;
+  // Trim trailing blank lines so repeated clips can't drift apart.
+  while (end > 0 && /\s/.test(doc.sliceString(end - 1, end))) end--;
+  if (end === 0) {
+    editor.dispatch({ changes: { from: 0, to: doc.length, insert: text }, scrollIntoView: true });
+    return;
+  }
+  const lastLine = doc.lineAt(end).text.trimEnd();
+  const isClipLine = /^\s*(-\s*\[|\s*>)/.test(lastLine);
+  const prefix = isClipLine ? '\n' : '\n\n';
+  const insert = (prefix + text).replace(/\r\n?/g, '\n');
+  editor.dispatch({
+    changes: { from: end, to: doc.length, insert },
+    selection: { anchor: end + insert.length },
+    scrollIntoView: true,
+  });
 }
 
 async function _clipApply(entry) {
@@ -10175,7 +10218,7 @@ async function _clipApply(entry) {
   if (activeRoom !== inbox && typeof switchRoom === 'function') {
     try { await switchRoom(inbox); } catch (e) { console.error(e); }
   }
-  appendTextToDocEnd(entry);
+  appendClipsToDoc(entry);
   // Say where it went — on a cold open the room that ends up in front may not
   // be the one that was there a second ago.
   showToast('Clipped to ' + (activeRoom || inbox), 'success', 2500);
@@ -10313,8 +10356,9 @@ async function drainClips(opts) {
   for (const id of ids) {
     const e = val[id] || {};
     text += _clipEntry({ url: e.u || e.url, title: e.t || e.title, text: e.x || e.text, tag: e.g || e.tag });
+    _clipPending.delete(id);           // the listener must not file these again
   }
-  appendTextToDocEnd(text);
+  appendClipsToDoc(text);
   const nulls = {};
   for (const id of ids) nulls[id] = null;
   try { await db.ref(_clipQueuePath(fp)).update(nulls); } catch {}
@@ -10323,6 +10367,79 @@ async function drainClips(opts) {
   return ids.length;
 }
 window.drainClips = drainClips;
+
+// ---- live queue ------------------------------------------------------------
+// Polling meant a clip saved on the phone sat there until something happened to
+// wake the drain — in practice, switching rooms. A child_added listener makes it
+// immediate: Firebase replays the existing children on attach (so the backlog
+// files itself) and then pushes each new one as it arrives.
+let _clipListenRef = null;
+let _clipListenFn = null;
+let _clipListenFp = null;
+const _clipPending = new Map();   // id -> entry object, waiting to be filed
+let _clipFlushTimer = 0;
+let _clipToldWaiting = 0;
+
+function _clipFlush() {
+  clearTimeout(_clipFlushTimer);
+  _clipFlushTimer = 0;
+  if (!_clipPending.size) return;
+  const inbox = _clipInboxRoom();
+  if (activeRoom !== inbox) {
+    // Never drag someone out of the room they're in. Say it once per new count.
+    _clipsWaiting = _clipPending.size;
+    if (_clipsWaiting !== _clipToldWaiting) {
+      _clipToldWaiting = _clipsWaiting;
+      showToast(_clipsWaiting + ' clip' + (_clipsWaiting === 1 ? '' : 's') + ' waiting — open "' + inbox + '" to file ' + (_clipsWaiting === 1 ? 'it' : 'them'), 'info', 4000);
+    }
+    return;
+  }
+  const ids = Array.from(_clipPending.keys()).sort();   // push ids are chronological
+  let text = '';
+  for (const id of ids) {
+    const e = _clipPending.get(id) || {};
+    text += _clipEntry({ url: e.u || e.url, title: e.t || e.title, text: e.x || e.text, tag: e.g || e.tag });
+  }
+  _clipPending.clear();
+  _clipsWaiting = 0;
+  _clipToldWaiting = 0;
+  appendClipsToDoc(text);
+  // Delete only what was filed; anything that lands mid-flush stays queued.
+  try {
+    const nulls = {};
+    for (const id of ids) nulls[id] = null;
+    if (_clipListenRef) _clipListenRef.update(nulls).catch(() => {});
+  } catch {}
+  showToast('Filed ' + ids.length + ' clip' + (ids.length === 1 ? '' : 's'), 'success', 2200);
+}
+
+async function startClipListener() {
+  if (!_syncConfigured() || !navigator.onLine) return;
+  const fp = await _clipFp();
+  if (!fp) return;
+  if (_clipListenRef && _clipListenFp === fp) return;    // already listening
+  stopClipListener();
+  let db;
+  try { db = initFirebase(store.get('cade-firebase-url')); } catch { return; }
+  try {
+    _clipListenFp = fp;
+    _clipListenRef = db.ref(_clipQueuePath(fp));
+    _clipListenFn = _clipListenRef.on('child_added', (snap) => {
+      try {
+        if (!snap || !snap.key) return;
+        _clipPending.set(snap.key, snap.val() || {});
+        // Small debounce so a replayed backlog lands as one edit, not N.
+        clearTimeout(_clipFlushTimer);
+        _clipFlushTimer = setTimeout(_clipFlush, 250);
+      } catch (e) { console.error(e); }
+    }, () => {});
+  } catch (e) { console.error(e); _clipListenRef = null; }
+}
+function stopClipListener() {
+  try { if (_clipListenRef && _clipListenFn) _clipListenRef.off('child_added', _clipListenFn); } catch {}
+  _clipListenRef = null; _clipListenFn = null; _clipListenFp = null;
+}
+window.startClipListener = startClipListener;
 
 // Switch to the inbox and file whatever is queued — the one-tap version of the
 // "clips waiting" toast.
@@ -10333,6 +10450,9 @@ window.clipFileWaiting = async function() {
     if (!rooms.includes(inbox)) { rooms.push(inbox); try { touchRoomCreated(inbox); } catch {} saveRooms(); }
     try { await switchRoom(inbox); } catch (e) { console.error(e); }
   }
+  // Prefer whatever the listener is already holding; only read the queue
+  // directly when nothing is attached (no sync, or it never connected).
+  if (_clipPending.size) { _clipFlush(); return; }
   const n = await drainClips();
   if (!n) showToast('Nothing queued', 'info', 2000);
 };
@@ -10359,12 +10479,16 @@ window.openClipSetup = function() {
     if (note) note.textContent = 'Queued clips are NOT encrypted (a Shortcut can’t run the app’s crypto). They are deleted the moment this app files them.';
     _clipFp().then(fp => {
       set('clip-queue-url', _clipQueueUrl(fp) || '');
-      drainClips({ quiet: true }).catch(() => {});
-      const btn = document.getElementById('clip-waiting-btn');
-      if (btn) {
-        btn.hidden = !_clipsWaiting;
-        btn.textContent = 'File ' + _clipsWaiting + ' waiting clip' + (_clipsWaiting === 1 ? '' : 's');
-      }
+      // Make sure we're listening, then report what is actually held.
+      startClipListener().catch(() => {});
+      setTimeout(() => {
+        const waiting = _clipPending.size || _clipsWaiting;
+        const btn = document.getElementById('clip-waiting-btn');
+        if (btn) {
+          btn.hidden = !waiting;
+          btn.textContent = 'File ' + waiting + ' waiting clip' + (waiting === 1 ? '' : 's');
+        }
+      }, 600);
     }).catch(() => {});
   }
 };
@@ -17274,16 +17398,19 @@ setTimeout(() => {
 const _origSwitchRoomForClips = window.switchRoom;
 window.switchRoom = async function(name) {
   const r = await _origSwitchRoomForClips.apply(this, arguments);
-  try { if (activeRoom === _clipInboxRoom()) drainClips({ quiet: true }); } catch {}
+  // Arriving in the inbox files whatever the listener is holding.
+  try { _clipFlush(); } catch {}
   return r;
 };
-setTimeout(() => { try { drainClips(); } catch {} }, 4000);
-setInterval(() => {
-  // Only ever acts when the inbox is in front; otherwise it's a cheap read.
-  if (document.visibilityState === 'visible' && activeRoom === _clipInboxRoom()) {
-    try { drainClips({ quiet: true }); } catch {}
-  }
-}, 90000);
+setTimeout(() => { try { startClipListener(); } catch {} }, 2500);
+// A socket that died while the tab was backgrounded (phones do this constantly)
+// would otherwise stop delivering; re-attaching is cheap and idempotent.
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'visible') return;
+  try { startClipListener(); } catch {}
+  try { _clipFlush(); } catch {}
+});
+window.addEventListener('online', () => { try { startClipListener(); } catch {} });
 
 // Also update room tabs when syncConnect runs
 const origSyncConnect = window.syncConnect;
