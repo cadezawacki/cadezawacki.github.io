@@ -1107,6 +1107,91 @@ body.sel-mode .editor-wrap .cm-content { -webkit-touch-callout: none; }
 .qs-item .qs-meta { color: var(--text-faint, #888); font-size: var(--text-xs, 11px); }
 .qs-item .qs-pin { font-size: 11px; color: var(--accent, #6c9); font-weight: 700; }
 .qs-empty { padding: 14px 10px; color: var(--text-faint, #888); font-size: var(--text-sm, 13px); }
+.qs-item .qs-why { color: var(--accent); font-size: var(--text-xs, 11px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 45%; }
+/* One compact row: scope chips left, scan status right. Deliberately quiet —
+   it is a footnote to the list, not a second control surface. */
+.qs-foot {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 8px; border-top: 1px solid var(--border);
+  background: var(--surface-2, var(--surface));
+}
+.qs-toggles { display: flex; gap: 4px; flex: 1 1 auto; min-width: 0; flex-wrap: wrap; }
+.qs-chip {
+  font: inherit; font-size: var(--text-xs, 11px); line-height: 1.6;
+  padding: 1px 8px; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--border); background: transparent; color: var(--text-faint);
+  transition: color var(--transition), border-color var(--transition), background var(--transition);
+}
+.qs-chip:hover { color: var(--text-muted); }
+.qs-chip.on { color: var(--accent); border-color: var(--accent); background: var(--accent-bg); }
+.qs-status { flex: 0 0 auto; font-size: var(--text-xs, 11px); color: var(--text-faint); white-space: nowrap; }
+
+
+/* Split view. Side by side on a desktop, stacked on a phone — a 50%-wide
+   column of prose on a 390px screen is unreadable, and the diff is easier to
+   follow vertically anyway. */
+.editor-wrap.split { display: flex; flex-direction: row; }
+/* CM appends its editor AFTER the markup already in .editor-wrap, so source
+   order would put the compare pane on the left. Order it explicitly: the live
+   document is always the leading pane. */
+.editor-wrap.split > .cm-editor { flex: 1 1 50%; min-width: 0; order: 0; }
+.split-pane {
+  order: 1;
+  flex: 1 1 50%;
+  /* Both axes: a flex item defaults to min-height/min-width:auto, which refuses
+     to shrink below its content. In the stacked (mobile) layout that let the
+     compare pane's full document height squeeze the live pane to nothing. */
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--border);
+  background: var(--bg);
+}
+.split-pane[hidden] { display: none; }
+.split-head {
+  display: flex; align-items: center; gap: 3px; flex-wrap: wrap;
+  padding: 4px 6px; border-bottom: 1px solid var(--border);
+  background: var(--surface-2, var(--surface));
+}
+.split-room { max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 2px 8px; }
+.split-caret { color: var(--text-faint); }
+.split-icon { padding: 2px 6px; line-height: 1.5; }
+.split-opts { display: flex; gap: 3px; }
+.split-nav { display: flex; align-items: center; gap: 3px; }
+.split-count { font-size: var(--text-xs); color: var(--text-faint); white-space: nowrap; min-width: 4ch; text-align: center; }
+.split-spacer { flex: 1 1 0; min-width: 0; }
+.split-body { flex: 1 1 auto; min-height: 0; position: relative; }
+.split-body .cm-editor { height: 100%; font-family: var(--font-mono); font-size: var(--text-base); background: var(--bg); }
+.split-body .cm-scroller { overflow: auto; padding: 8px var(--space-3) var(--space-3); }
+
+/* Diff tints. Translucent so both themes stay readable and so an existing
+   highlight underneath still shows through. */
+.cm-diff-a   { background: color-mix(in srgb, #22c55e 16%, transparent); }
+.cm-diff-b   { background: color-mix(in srgb, #ef4444 16%, transparent); }
+.cm-diff-chg { background: color-mix(in srgb, #f59e0b 18%, transparent); }
+
+/* The floating toolbar belongs to the live document, but it is absolutely
+   positioned across the whole editor area — so while split it would hang over
+   the compare pane's header. Pull it back to the live half. (On mobile the
+   split is vertical and the live pane is on top, so it already lines up.) */
+body.split-open .mobile-toolbar { right: 50%; }
+
+@media (max-width: 768px) {
+  body.split-open .mobile-toolbar { right: 0; }
+  .editor-wrap.split { flex-direction: column; }
+  .editor-wrap.split > .cm-editor { flex: 1 1 50%; min-height: 0; }
+  .split-pane { flex: 1 1 50%; border-left: none; border-top: 1px solid var(--border); }
+  .split-room { max-width: 32%; }
+}
+
+/* Clip setup */
+.clip-step { margin-top: var(--space-5); }
+.clip-step-title { font-size: var(--text-sm); font-weight: 600; margin-bottom: var(--space-2); }
+.clip-steps { margin: 0 0 var(--space-3); padding-left: 1.2em; font-size: var(--text-sm); color: var(--text-muted); line-height: 1.6; }
+.clip-steps li { margin-bottom: 2px; }
+.clip-steps code, .form-hint code { font-family: var(--font-mono); font-size: 0.92em; }
+@media (max-width: 480px) { .qs-status { display: none; } }
 
 /* Tree twisties + tag picker + pin/archive (Features 51/52/54) */
 .ws-dd-twisty, .ws-mgr-twisty { display: inline-flex; width: 14px; justify-content: center; cursor: pointer; opacity: 0.7; font-size: 10px; flex-shrink: 0; }
@@ -2119,6 +2204,38 @@ body.sel-mode .editor-wrap .cm-content { -webkit-touch-callout: none; }
   cursor: pointer;
   -webkit-touch-callout: none;
 }
+/* [[Room Name]] links. No padding or background: the hit area is exactly the
+   glyphs, so on a phone the words either side stay reachable for the caret.
+   A link to a room that doesn't exist yet is dimmed and dashed. */
+.cm-wikilink {
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 2px;
+  color: var(--accent);
+  cursor: pointer;
+  -webkit-touch-callout: none;
+}
+.cm-wikilink-new {
+  color: var(--text-faint);
+  text-decoration-style: dashed;
+}
+
+/* In-document tags — ¥tag rendered as a badge.
+   The pill is drawn with a tight box on purpose: no margin, no extra
+   line-height, and padding small enough that the hit area never spills past
+   the glyphs. On a phone that matters — an oversized badge steals taps meant
+   for placing the caret in the words either side of it. */
+.cm-tag {
+  color: var(--accent);
+  background: var(--accent-bg);
+  border-radius: 4px;
+  padding: 0 3px;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+  cursor: pointer;
+  -webkit-touch-callout: none;
+}
+.cm-tag:hover { background: color-mix(in srgb, var(--accent) 18%, transparent); }
 
 /* Shared popover menu (link actions) */
 .cm-ctx-menu {
@@ -2728,6 +2845,10 @@ body.readonly .cm-img-grip { display: none; }
         <span></span>
       </button>
       <div class="menu-separator"></div>
+      <button class="menu-item" onclick="toggleSplit()" title="Show another room beside this one; compare and merge">
+        <span>Split / Compare</span>
+        <span></span>
+      </button>
       <button class="menu-item" onclick="openWhiteboard()">
         <span>Whiteboard</span>
         <span></span>
@@ -2751,6 +2872,10 @@ body.readonly .cm-img-grip { display: none; }
       <div class="menu-separator"></div>
       <button class="menu-item" onclick="shareLink()">
         <span>Share Link</span>
+        <span></span>
+      </button>
+      <button class="menu-item" onclick="openClipSetup()" title="Save links into an inbox room from the iOS share sheet or a bookmarklet">
+        <span>Clip a Link…</span>
         <span></span>
       </button>
       <button class="menu-item" onclick="shareDocument()" title="Send the document text to another app">
@@ -2873,7 +2998,27 @@ body.readonly .cm-img-grip { display: none; }
 </div>
 
 <!-- ========== EDITOR ========== -->
-<div class="editor-wrap" id="editor-wrap"></div>
+<div class="editor-wrap" id="editor-wrap">
+<div class="split-pane" id="split-pane" hidden>
+  <div class="split-head">
+    <button class="btn split-room" id="split-room-btn" onclick="splitPickRoom()" title="Choose the room to compare against">
+      <span id="split-title">Pick a room</span> <span class="split-caret">▾</span>
+    </button>
+    <button type="button" class="qs-chip" id="split-diff-btn" onclick="toggleSplitDiff()" title="Compare the two documents line by line">Diff</button>
+    <div class="split-opts" id="split-opts" hidden></div>
+    <div class="split-nav" id="split-nav" hidden>
+      <button class="btn split-icon" onclick="splitGoHunk(-1)" title="Previous change">‹</button>
+      <span class="split-count" id="split-count"></span>
+      <button class="btn split-icon" onclick="splitGoHunk(1)" title="Next change">›</button>
+      <button class="btn split-icon" onclick="splitTakeHunk()" title="Copy this change into the live document">◀ Take</button>
+    </div>
+    <span class="split-spacer"></span>
+    <button class="btn split-icon" onclick="splitSwap()" title="Swap: edit the other room instead">⇄</button>
+    <button class="btn split-icon" onclick="closeSplit()" title="Close split">✕</button>
+  </div>
+  <div class="split-body" id="split-body"></div>
+</div>
+</div>
 
 <!-- ========== MOBILE SCROLL BUTTONS ========== -->
 <div class="mobile-scroll-btns" aria-hidden="true">
@@ -3180,6 +3325,14 @@ body.readonly .cm-img-grip { display: none; }
       </div>
       <div class="imp-stats" id="imp-stats"></div>
       <div class="imp-roots" id="imp-roots"></div>
+      <div class="setting-row imp-opt" title="Off: paths start below the folder you picked (src/app.js). On: the folder name leads (project/src/app.js). Every file inside is imported either way — this only changes the names. With several folders selected, off can produce identical paths.">
+        <div class="setting-info">
+          <div class="setting-label">Append root folder</div>
+        </div>
+        <div class="setting-control">
+          <label class="setting-toggle"><input type="checkbox" id="imp-opt-root"><span class="toggle-track"></span><span class="toggle-thumb"></span></label>
+        </div>
+      </div>
       <div class="setting-row imp-opt" title="Skip everything inside a folder starting with “.” — .git, .next, .venv… Dotfiles themselves still import.">
         <div class="setting-info">
           <div class="setting-label">Ignore dot-folders</div>
@@ -3211,14 +3364,69 @@ body.readonly .cm-img-grip { display: none; }
 <input type="file" id="import-folder-input" webkitdirectory directory multiple style="display:none;">
 <input type="file" id="import-gitignore-input" style="display:none;">
 
+<!-- ========== CLIP / CAPTURE SETUP ========== -->
+<div class="modal-overlay" id="clip-overlay">
+  <div class="modal-dialog modal-dialog-scroll" style="max-width: 560px;" id="clip-dialog" tabindex="-1">
+    <div class="modal-header">
+      <div class="modal-title">Clip a link</div>
+      <div class="modal-desc" style="margin-bottom:0;">Save a page into this app from anywhere — the share sheet on iOS, a bookmarklet on a desktop browser. Clips are appended to one inbox room.</div>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label class="form-label" for="clip-inbox">Inbox room</label>
+        <div style="display:flex; gap:var(--space-2);">
+          <input class="form-input" id="clip-inbox" spellcheck="false" autocomplete="off" placeholder="inbox">
+          <button class="btn" style="flex:none;" onclick="clipSaveInbox()">Save</button>
+        </div>
+        <div class="form-hint">Created on the first clip if it doesn’t exist.</div>
+      </div>
+
+      <div class="clip-step">
+        <div class="clip-step-title">iPhone / iPad — once, in the Shortcuts app</div>
+        <ol class="clip-steps">
+          <li>New shortcut → <b>Receive</b> <i>URLs</i> from <i>Share Sheet</i>.</li>
+          <li>Add <b>Get Details of Safari Web Page</b> → <i>Name</i>. (Gives you the page title.)</li>
+          <li>Add <b>Text</b>, and paste the template below, replacing <code>URL</code> with the Shortcut Input variable and <code>TITLE</code> with that Name variable.</li>
+          <li>Add <b>Open URLs</b>, fed by that Text.</li>
+          <li>Name it “Clip to Cade.txt”. It now appears in Safari’s Share sheet.</li>
+        </ol>
+        <div style="display:flex; gap:var(--space-2);">
+          <input class="form-input" id="clip-template" readonly spellcheck="false">
+          <button class="btn" style="flex:none;" onclick="clipCopy('clip-template')">Copy</button>
+        </div>
+        <div class="form-hint">Wrap each variable in a <b>URL Encode</b> action if a title with <code>&amp;</code> or <code>#</code> ever truncates the clip.</div>
+      </div>
+
+      <div class="clip-step">
+        <div class="clip-step-title">Desktop — drag to the bookmarks bar</div>
+        <div style="display:flex; gap:var(--space-2);">
+          <input class="form-input" id="clip-bookmarklet" readonly spellcheck="false">
+          <button class="btn" style="flex:none;" onclick="clipCopy('clip-bookmarklet')">Copy</button>
+        </div>
+        <div class="form-hint">New bookmark → paste as the address. It clips the page, its title, and anything you have selected.</div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <div class="modal-actions">
+        <button class="btn" onclick="clipTest()" title="File a sample clip so you can see where it lands">Try it</button>
+        <button class="btn btn-primary" onclick="closeClipSetup()">Done</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- ========== ROOM ACTION MENU (popover) ========== -->
 <div class="rm-action-menu" id="rm-action-menu"></div>
 
 <!-- ========== QUICK SWITCHER (Ctrl+P) ========== -->
 <div class="modal-overlay qs-overlay" id="qs-overlay">
   <div class="qs-dialog">
-    <input class="qs-input" id="qs-input" type="text" placeholder="Switch to room…  (↑↓ to move, Enter to open, Esc to close)" spellcheck="false" autocomplete="off">
+    <input class="qs-input" id="qs-input" type="text" placeholder="Search rooms, text, files, tags…  (↑↓ move · Enter open · Esc close)" spellcheck="false" autocomplete="off">
     <div class="qs-list" id="qs-list"></div>
+    <div class="qs-foot">
+      <div class="qs-toggles" id="qs-toggles"></div>
+      <span class="qs-status" id="qs-status"></span>
+    </div>
   </div>
 </div>
 
@@ -4525,6 +4733,9 @@ const RE_URL = /(?:https?:\/\/|www\.)[^\s<>()\[\]]+/g;
 // Leading boundary captured in group 1 (no lookbehind — keeps older iOS Safari
 // from choking on the regex literal). @ws:room with ws optional ("@:room").
 const RE_NAV = /(^|[^\w@])@([\w.-]*):([\w.-]+)/g;
+// [[Room Name]] — the room link that can carry spaces, which @ws:room cannot
+// (its name charset is \w.- only, and most room names have a space in them).
+const RE_WIKI = /\[\[([^\[\]\n]{1,120})\]\]/g;
 
 function normalizeUrl(u) { return /^https?:\/\//i.test(u) ? u : 'https://' + u; }
 function trimTrailingPunct(s) {
@@ -4552,6 +4763,14 @@ function findLinksInLine(text) {
     const start = m.index, end = start + raw.length;
     if (overlaps(start, end)) continue;
     spans.push({ start, end, kind: 'url', url: normalizeUrl(raw) });
+    taken.push([start, end]);
+  }
+  RE_WIKI.lastIndex = 0;
+  while ((m = RE_WIKI.exec(text)) !== null) {
+    const start = m.index, end = start + m[0].length;
+    const room = m[1].trim();
+    if (!room || overlaps(start, end)) continue;
+    spans.push({ start, end, kind: 'wiki', room });
     taken.push([start, end]);
   }
   RE_NAV.lastIndex = 0;
@@ -4616,6 +4835,17 @@ function buildLinkDecorations(view) {
         } else if (sp.kind === 'url') {
           ranges.push(Decoration.mark({ class: 'cm-link', attributes: { 'data-url': sp.url } }).range(f, t));
           linkRanges.push({ from: f, to: t, kind: 'url', url: sp.url });
+        } else if (sp.kind === 'wiki') {
+          // Code is never a room link: a[[i]] indexes an array, and Lua and wiki
+          // markup both use [[...]] for their own purposes. URLs inside fences
+          // still linkify (long-standing behaviour); this rule is only for the
+          // syntax added here.
+          if (fenceContaining(f) || _inInlineCode(doc, f)) continue;
+          // A link to a room that doesn't exist yet is drawn as "missing" rather
+          // than hidden — that's the affordance for creating it.
+          const known = resolveRoomName(sp.room);
+          ranges.push(Decoration.mark({ class: known ? 'cm-wikilink' : 'cm-wikilink cm-wikilink-new' }).range(f, t));
+          linkRanges.push({ from: f, to: t, kind: 'wiki', room: sp.room, known: !!known });
         } else {
           ranges.push(Decoration.mark({ class: 'cm-navlink' }).range(f, t));
           linkRanges.push({ from: f, to: t, kind: 'nav', ws: sp.ws, room: sp.room });
@@ -4633,6 +4863,251 @@ const linkPlugin = ViewPlugin.fromClass(class {
     if (update.docChanged || update.viewportChanged) this.decorations = buildLinkDecorations(update.view);
   }
 }, { decorations: v => v.decorations });
+
+// ============================================
+// IN-DOCUMENT TAGS   ¥tag
+// ============================================
+// Workspaces label ROOMS; this labels CONTENT. A tag is a sentinel plus a word
+// — ¥invoice, ¥work/acme — drawn as a badge and searchable from Ctrl+P.
+//
+// WHY ¥: '#' opens a Python/shell comment and a markdown heading, so half the
+// documents in this app would light up with false tags. '@' is already spoken
+// for twice — @ws:room nav links and @remind! tokens. '¥' appears in neither
+// prose nor code, and /yen already types it through the slash-code system. The
+// sentinel is a setting all the same (Settings → Editor), because the right
+// answer depends on what you write.
+const TAG_SENTINELS = ['¥', '€', '§', '@', '#'];
+const TAG_SENTINEL_DEFAULT = '¥';
+let _tagSentinel = TAG_SENTINEL_DEFAULT;
+let _tagRe = null;
+
+function tagSentinel() { return _tagSentinel; }
+function setTagSentinel(s) {
+  const next = TAG_SENTINELS.includes(s) ? s : TAG_SENTINEL_DEFAULT;
+  if (next === _tagSentinel) return;
+  _tagSentinel = next;
+  _tagRe = null;
+  _tagVocab = null;
+  mdVersion++;                       // every rendered tag is now a different token
+  try { editor.dispatch({}); } catch {}
+}
+
+// (boundary)(sentinel)(name). The name starts alphanumeric and may nest with
+// '/', so ¥work/acme is one tag. A trailing separator is trimmed by the caller.
+function tagRegex() {
+  if (!_tagRe) {
+    const s = _tagSentinel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    _tagRe = new RegExp('(^|[^\\w' + s + '])' + s + '([A-Za-z0-9_][A-Za-z0-9_/-]{0,63})', 'g');
+  }
+  _tagRe.lastIndex = 0;
+  return _tagRe;
+}
+
+function _tagTrim(name) { return name.replace(/[/-]+$/, ''); }
+
+// Line-relative spans, for the decorator.
+function findTagsInLine(text) {
+  const out = [];
+  if (!text || text.length > 2000) return out;   // data/image lines aren't prose
+  const re = tagRegex();
+  let m;
+  while ((m = re.exec(text)) !== null) {
+    const name = _tagTrim(m[2]);
+    if (!name) continue;
+    const start = m.index + m[1].length;
+    out.push({ start, end: start + _tagSentinel.length + name.length, name });
+  }
+  return out;
+}
+
+// Every distinct tag in a block of text, lowercased. Fenced code is skipped so
+// the '#' sentinel doesn't turn every Python comment into a tag. Used by the
+// Ctrl+P index and by tag autocomplete.
+function extractTags(text) {
+  const set = new Set();
+  if (!text) return set;
+  let inFence = false;
+  for (const line of String(text).split('\n')) {
+    if (line.startsWith('```')) { inFence = !inFence; continue; }
+    if (inFence || line.length > 2000) continue;
+    // Blank out what the badge renderer also refuses — inline `code` and URLs
+    // — so the index finds exactly the tags a reader can see.
+    const scan = line.replace(/`[^`\n]*`/g, ' ').replace(/https?:\/\/\S+/g, ' ');
+    const re = tagRegex();
+    let m;
+    while ((m = re.exec(scan)) !== null) {
+      const name = _tagTrim(m[2]);
+      if (name) set.add(name.toLowerCase());
+    }
+  }
+  return set;
+}
+
+let tagRanges = [];   // viewport spans, for hit-testing pointer events
+
+function buildTagDecorations(view) {
+  tagRanges = [];
+  if (!mdStyleEnabled) return Decoration.none;   // "no syntax" mode shows raw text
+  const doc = view.state.doc;
+  const ranges = [];
+  for (const { from, to } of view.visibleRanges) {
+    const startLine = doc.lineAt(from).number;
+    const endLine = doc.lineAt(to).number;
+    for (let i = startLine; i <= endLine; i++) {
+      const line = doc.line(i);
+      if (line.text.length > 2000) continue;
+      if (fenceContaining(line.from)) continue;                    // code is never a tag
+      for (const sp of findTagsInLine(line.text)) {
+        const f = line.from + sp.start, t = line.from + sp.end;
+        if (_inInlineCode(doc, f)) continue;
+        // A link wins the overlap. This is what keeps the '@' sentinel usable
+        // (@ws:room would otherwise badge as ¥ws) and stops a '#fragment' in a
+        // URL from badging under the '#' sentinel. linkPlugin is registered
+        // first, so linkRanges already covers this viewport.
+        if (linkRanges.some(r => f < r.to && t > r.from)) continue;
+        ranges.push(Decoration.mark({ class: 'cm-tag', attributes: { 'data-tag': sp.name } }).range(f, t));
+        tagRanges.push({ from: f, to: t, name: sp.name });
+      }
+    }
+  }
+  ranges.sort((a, b) => a.from - b.from || a.startSide - b.startSide);
+  return Decoration.set(ranges, true);
+}
+
+// ---- Split view: state + diff decorations ---------------------------------
+// These live up here, above the editor's construction, because
+// buildEditorExtensions() names splitDiffPluginA — a const in the temporal dead
+// zone until its own line runs. The rest of the split feature is further down,
+// past the pieces it calls into at runtime.
+let _splitOpen = false;
+let _splitRoom = '';
+let _splitView = null;          // the compare pane's EditorView
+let _splitDiffOn = false;
+let _splitOps = [];             // [{t:'='|'~', a0,a1, b0,b1}] in line indices (0-based)
+let _splitHunks = [];
+let _splitHunk = -1;
+let _splitSyncing = false;      // re-entry guard for scroll locking
+let _splitVersion = 0;          // bumped to invalidate in-flight loads
+
+// ---- decorations -----------------------------------------------------------
+// Line tints on both sides. A side-by-side diff normally draws filler rows to
+// keep the two columns level; the scroll lock below maps positions through the
+// diff instead, which keeps the panes aligned without inventing lines that
+// aren't in either document.
+function _splitLineDeco(view, side) {
+  if (!_splitDiffOn || !_splitOps.length) return Decoration.none;
+  const doc = view.state.doc;
+  const ranges = [];
+  for (const op of _splitOps) {
+    if (op.t !== '~') continue;
+    const aEmpty = op.a1 <= op.a0, bEmpty = op.b1 <= op.b0;
+    const cls = (aEmpty || bEmpty) ? (side === 'a' ? 'cm-diff-a' : 'cm-diff-b') : 'cm-diff-chg';
+    const from = side === 'a' ? op.a0 : op.b0;
+    const to = side === 'a' ? op.a1 : op.b1;
+    for (let ln = from; ln < to && ln < doc.lines; ln++) {
+      const line = doc.line(ln + 1);
+      ranges.push(Decoration.line({ class: cls }).range(line.from));
+    }
+  }
+  ranges.sort((x, y) => x.from - y.from);
+  return Decoration.set(ranges, true);
+}
+
+const splitDiffPluginA = ViewPlugin.fromClass(class {
+  constructor(view) { this.v = _splitVersion; this.decorations = _splitLineDeco(view, 'a'); }
+  update(u) {
+    if (u.docChanged || u.viewportChanged || this.v !== _splitVersion) {
+      this.v = _splitVersion;
+      this.decorations = _splitLineDeco(u.view, 'a');
+    }
+  }
+}, { decorations: v => v.decorations });
+
+const splitDiffPluginB = ViewPlugin.fromClass(class {
+  constructor(view) { this.v = _splitVersion; this.decorations = _splitLineDeco(view, 'b'); }
+  update(u) {
+    if (u.docChanged || u.viewportChanged || this.v !== _splitVersion) {
+      this.v = _splitVersion;
+      this.decorations = _splitLineDeco(u.view, 'b');
+    }
+  }
+}, { decorations: v => v.decorations });
+
+
+const tagPlugin = ViewPlugin.fromClass(class {
+  constructor(view) { this.v = mdVersion; this.decorations = buildTagDecorations(view); }
+  update(update) {
+    if (update.docChanged || update.viewportChanged || this.v !== mdVersion) {
+      this.v = mdVersion;
+      this.decorations = buildTagDecorations(update.view);
+    }
+  }
+}, { decorations: v => v.decorations });
+
+function hitTag(pos) { return tagRanges.find(r => pos >= r.from && pos < r.to); }
+
+function openTagMenu(tag, x, y) {
+  try { closeAutocomplete(); } catch {}
+  const token = _tagSentinel + tag.name;
+  openMenu([
+    { label: 'Find ' + token, run: () => window.searchTag(tag.name) },
+    { label: 'Copy tag', run: () => ctxCopy(token) },
+    { sep: true },
+    { label: 'Remove tag', danger: true, run: () => {
+      try { editor.dispatch({ changes: { from: tag.from, to: tag.to, insert: '' } }); editor.focus(); } catch {}
+    } },
+  ], x, y);
+}
+
+// Hand the tag to the Ctrl+P search, which knows how to find every room
+// carrying it (Search Tags layer).
+window.searchTag = function(name) {
+  if (!name) return;
+  try { window.openQuickSwitcher(_tagSentinel + name); } catch {}
+};
+
+// Known tags for autocomplete: the open document always, plus whatever the
+// locally-cached rooms carry (recomputed at most every 20s — this walks every
+// cached room's text and is only worth doing while someone is mid-token).
+let _tagVocab = null;
+let _tagVocabAt = 0;
+function tagVocabulary() {
+  const now = Date.now();
+  if (_tagVocab && now - _tagVocabAt < 20000) {
+    const live = new Set(_tagVocab);
+    try { extractTags(editor.state.doc.toString()).forEach(t => live.add(t)); } catch {}
+    return live;
+  }
+  const set = new Set();
+  try {
+    for (const r of rooms) {
+      if (roomIsArchived(r)) continue;
+      const text = store.get('cade-room-cache:' + r) || store.get('cade-room-synced:' + r) || '';
+      if (text) extractTags(text).forEach(t => set.add(t));
+    }
+  } catch {}
+  _tagVocab = set;
+  _tagVocabAt = now;
+  const live = new Set(set);
+  try { extractTags(editor.state.doc.toString()).forEach(t => live.add(t)); } catch {}
+  return live;
+}
+
+function buildTagItems(prefix) {
+  const p = (prefix || '').toLowerCase();
+  const out = [];
+  for (const t of tagVocabulary()) {
+    if (p && !t.startsWith(p)) continue;
+    // Never offer what is already typed. That covers both the caret simply
+    // resting at the end of a finished tag (nothing to complete, so no popup
+    // over the text) and the half-typed token itself, which the vocabulary
+    // picks up from the open document the moment it is typed.
+    if (t === p) continue;
+    out.push({ label: _tagSentinel + t, insert: _tagSentinel + t, desc: 'Tag', kind: 'tag' });
+  }
+  out.sort((a, b) => a.label.length - b.label.length || (a.label < b.label ? -1 : 1));
+  return out.slice(0, 8);
+}
 
 // ============================================
 // TEXT HIGHLIGHTS v2  %%bg|text%%  ·  %%bg/fg|text%%  ·  %%/fg|text%%
@@ -7143,6 +7618,7 @@ function buildEditorExtensions() {
         try { if (spellPopupEl) closeSpellPopup(); } catch {}
         saveContentDebounced();
         scheduleWordCount();
+        try { scheduleSplitDiff(); } catch {}   // keep the comparison honest while typing
         try { scheduleImgRemovalCheck(); } catch {} // GC deleted images (widget/memory)
         if (_wrapMode === 'hard' && !_hardWrapBusy) scheduleHardWrap();
         if (!syncState.suppressUpdate) {
@@ -7169,6 +7645,8 @@ function buildEditorExtensions() {
     listIndentPlugin,
     todoPlugin,
     linkPlugin,
+    splitDiffPluginA,   // line tints while the split pane is comparing
+    tagPlugin,     // after linkPlugin: a link wins any overlap with a tag
     highlightPlugin,
     alignPlugin,
     autoColorCompartment.of([autoColorPlugin]),
@@ -7597,9 +8075,15 @@ editor.dom.addEventListener('click', (e) => {
     if (link) {
       e.preventDefault();
       if (link.kind === 'nav') navigateToDoc(link.ws, link.room);
+      else if (link.kind === 'wiki') openWikiMenu(link, e.clientX, e.clientY);
       else openLinkMenu(link, e.clientX, e.clientY);
       return;
     }
+    // A tag opens its MENU on touch rather than jumping straight to a search:
+    // a badge sits inline in a sentence, so a mistaken tap has to be
+    // recoverable by dismissing, not by navigating back.
+    const tagHit = hitTag(pos);
+    if (tagHit) { e.preventDefault(); openTagMenu(tagHit, e.clientX, e.clientY); return; }
     if (spellHit) { if (!consumeSpellReopenSuppression(spellHit)) openSpellPopup(spellHit); return; }
     // A checkbox line. Ticking one was hotkey-only (Ctrl+D), which a phone
     // has no way to press — so on touch there was no way to complete a todo
@@ -7615,7 +8099,15 @@ editor.dom.addEventListener('click', (e) => {
   if (link && !e.ctrlKey && !e.metaKey) {
     e.preventDefault();
     if (link.kind === 'nav') navigateToDoc(link.ws, link.room);
+    else if (link.kind === 'wiki') window.openWikiLink(link.room);
     else openLink(link.url);
+    return;
+  }
+  const tagHit = hitTag(pos);
+  if (tagHit && !e.ctrlKey && !e.metaKey) {
+    e.preventDefault();
+    try { closeAutocomplete(); } catch {}
+    window.searchTag(tagHit.name);
     return;
   }
   closeSpellPopup(); closeCtxMenu();
@@ -7633,7 +8125,10 @@ editor.dom.addEventListener('contextmenu', (e) => {
   if (spellHit && hl) { e.preventDefault(); openSpellPopup(spellHit); return; }
   if (hl) { e.preventDefault(); openHighlightMenu(hl, e.clientX, e.clientY); return; }
   const link = hitLink(pos);
+  if (link && link.kind === 'wiki') { e.preventDefault(); openWikiMenu(link, e.clientX, e.clientY); return; }
   if (link && link.kind !== 'nav') { e.preventDefault(); openLinkMenu(link, e.clientX, e.clientY); return; }
+  const tagHit = hitTag(pos);
+  if (tagHit) { e.preventDefault(); openTagMenu(tagHit, e.clientX, e.clientY); return; }
   if (spellHit) { e.preventDefault(); openSpellPopup(spellHit); return; }
   const todoHit = hitTodoLine(pos);
   if (todoHit && editor.state.selection.main.empty) {
@@ -7693,6 +8188,48 @@ function openLink(url) {
 }
 
 // Navigate to an internal @ws:room document link.
+// Room names are matched exactly first, then case-insensitively, so [[acme
+// proposal]] finds "Acme proposal" without needing the capitals.
+function resolveRoomName(name) {
+  const n = String(name || '').trim();
+  if (!n) return null;
+  if (rooms.includes(n)) return n;
+  const low = n.toLowerCase();
+  return rooms.find(r => r.toLowerCase() === low) || null;
+}
+
+// Open a [[Room Name]] target: follow it into its own workspace the way the
+// quick switcher does, or offer to create it when it doesn't exist yet.
+window.openWikiLink = async function(name) {
+  closeCtxMenu();
+  const room = resolveRoomName(name);
+  if (room) { try { await window.quickSwitchPick(room); } catch {} return; }
+  // Same rules as the Add Room modal: names are lowercase, capped, and '__'
+  // is reserved. A link that can never be a room says so instead of prompting.
+  const fresh = String(name || '').trim().toLowerCase();
+  if (!fresh || fresh.length > 100 || fresh.startsWith('__')) {
+    showToast('"' + name + '" is not a usable room name', 'error', 2500);
+    return;
+  }
+  if (!confirm('"' + fresh + '" doesn\u2019t exist yet. Create it?')) return;
+  rooms.push(fresh);
+  touchRoomCreated(fresh);              // beats any deletion tombstone
+  if (activeWorkspace !== WS_ALL && activeWorkspace !== WS_UNLABELED && getWorkspace(activeWorkspace)) {
+    addRoomToWorkspace(fresh, activeWorkspace);
+    saveWorkspaces();
+  }
+  saveRooms();
+  try { await switchRoom(fresh); } catch (e) { console.error(e); }
+};
+
+function openWikiMenu(link, x, y) {
+  const known = link.known;
+  openMenu([
+    { label: known ? 'Open ' + link.room : 'Create ' + link.room, run: () => window.openWikiLink(link.room) },
+    { label: 'Copy name', run: () => ctxCopy(link.room) },
+  ], x, y);
+}
+
 function navigateToDoc(wsName, room) {
   closeCtxMenu();
   let targetWs = WS_ALL;
@@ -8045,6 +8582,10 @@ function buildSlashItems(code) {
 
 function maybeAutocomplete() {
   if (acSuppress) { acSuppress = false; closeAutocomplete(); return; }
+  // Nothing completes over an open popover menu, or while focus has left the
+  // editor: clicking a tag badge opens one or the other, and the caret it
+  // leaves behind would otherwise pop a completion list on top of it.
+  if (ctxMenuEl || !editor.hasFocus) { closeAutocomplete(); return; }
   const sel = editor.state.selection.main;
   if (!sel.empty) { closeAutocomplete(); return; }
   const line = editor.state.doc.lineAt(sel.head);
@@ -8061,6 +8602,33 @@ function maybeAutocomplete() {
     acTo = sel.head;
     showAutocomplete(items);
     return;
+  }
+  // [[Room completion. Offers the rooms you have, closing brackets included.
+  const wm = before.match(/\[\[([^\[\]\n]{0,80})$/);
+  if (wm) {
+    const q = wm[1].trim().toLowerCase();
+    const items = rooms
+      .filter(r => !roomIsArchived(r) && (!q || r.toLowerCase().includes(q)))
+      .slice(0, 8)
+      .map(r => ({ label: '[[' + r + ']]', insert: '[[' + r + ']]', desc: 'Room', kind: 'nav' }));
+    if (items.length) {
+      acFrom = sel.head - wm[1].length - 2;   // start of '[['
+      acTo = sel.head;
+      showAutocomplete(items);
+      return;
+    }
+  }
+  // Tag completion: the sentinel plus a partial name, so ¥inv offers ¥invoice
+  // instead of letting near-duplicate tags pile up.
+  const tm = before.match(new RegExp('(?:^|[\\s,;(])' + _tagSentinel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '([A-Za-z0-9_/-]*)$'));
+  if (tm) {
+    const items = buildTagItems(tm[1]);
+    if (items.length) {
+      acFrom = sel.head - tm[1].length - _tagSentinel.length;
+      acTo = sel.head;
+      showAutocomplete(items);
+      return;
+    }
   }
   // "/code" symbol shortcuts (always available).
   const sm = before.match(/(?:^|[\s,;(])\/([-A-Za-z0-9<>=!~*.()$|]{1,6})$/);
@@ -9298,6 +9866,10 @@ function _impHasDotDir(p) {
 function _impComputePlan() {
   const dotOn = !!(document.getElementById('imp-opt-dot') || {}).checked;
   const giOn = !!(document.getElementById('imp-opt-gi') || {}).checked;
+  // Off (the default): paths land relative to the folder you picked. The root
+  // segment is only ever dropped from the NAME — every file under it is still
+  // imported, and the filters below still match on the full path.
+  const rootOn = !!(document.getElementById('imp-opt-root') || {}).checked;
   const files = [];
   const skip = { dot: 0, gi: 0, binary: 0, large: 0 };
   let bytes = 0;
@@ -9312,6 +9884,7 @@ function _impComputePlan() {
       if (match && match(cut ? p.slice(cut) : p)) { skip.gi++; continue; }
       if (f.size > _SNIFF_TEXT_MAX_BYTES) { skip.large++; continue; }
       if (_isKnownBinaryFile(f)) { skip.binary++; continue; }
+      f.__impOut = (rootOn || !cut) ? p : p.slice(cut);
       files.push(f);
       bytes += f.size || 0;
     }
@@ -9404,7 +9977,7 @@ window.impRun = async function() {
         // same byte sniff Import Files uses, so a stray .pak or .dat sitting in
         // a source tree can't paste binary garbage into the document.
         if (_TEXTLIKE_EXT_RE.test(f.name) || await _sniffIsTextFile(f)) {
-          parts[i] = formatImportedFile(f.__impPath, await readFileAsText(f));
+          parts[i] = formatImportedFile(f.__impOut || f.__impPath, await readFileAsText(f));
           ok++;
         } else binary++;
       } catch (err) { console.error(err); failed++; }
@@ -9470,6 +10043,15 @@ async function _impAcceptDrop(dt) {
   await _impAddFiles(files);
 }
 
+(function clipWireModal() {
+  const ov = document.getElementById('clip-overlay');
+  if (!ov) return;
+  ov.addEventListener('click', (e) => { if (e.target === ov) closeClipSetup(); });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && ov.classList.contains('open')) { e.preventDefault(); closeClipSetup(); }
+  }, true);
+})();
+
 (function impWireModal() {
   const overlay = document.getElementById('import-folder-overlay');
   const zone = document.getElementById('imp-drop');
@@ -9500,7 +10082,7 @@ async function _impAcceptDrop(dt) {
     if (!_impBusy) _impAcceptDrop(e.dataTransfer);
   });
   // The toggles change the plan, never the selection: recompute and redraw.
-  ['imp-opt-dot', 'imp-opt-gi'].forEach(id => {
+  ['imp-opt-root', 'imp-opt-dot', 'imp-opt-gi'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.addEventListener('change', _impRender);
   });
@@ -9520,6 +10102,543 @@ window.copyAllToClipboard = function() {
     showToast('Failed to copy', 'error');
   });
 };
+
+
+// ============================================
+// LINK CAPTURE  (?clip=…)
+// ============================================
+// Raindrop-style saving on iOS, where a PWA cannot be a Web Share Target:
+// Safari's share sheet can't reach this app directly, but a one-off Shortcut
+// can, and a Shortcut can open a URL. So capture is a URL contract —
+//   txt.html?clip=<url>&title=<title>&text=<selection>&tag=<tag>
+// — which the Shortcut, a desktop bookmarklet, or anything else able to open a
+// link can drive. The title comes from the share sheet, so nothing has to be
+// fetched cross-origin to name the page (which CORS would block on most sites
+// anyway).
+//
+// The clip is appended to an inbox room and the parameters are stripped from
+// the address bar immediately, so a refresh can never file the same link twice.
+
+function _clipBaseUrl() { return location.origin + location.pathname; }
+
+function _clipInboxRoom() {
+  let n = '';
+  try { n = String(Settings.get('capture.inbox') || '').trim().toLowerCase(); } catch {}
+  return n && !n.startsWith('__') && n.length <= 100 ? n : 'inbox';
+}
+
+// One markdown list item, with the selection quoted under it when there is one.
+function _clipEntry({ url, title, text, tag }) {
+  let label = (title || '').trim();
+  if (!label && url) { try { label = new URL(url).hostname.replace(/^www\./, ''); } catch { label = url; } }
+  const safeTag = (tag || '').trim().replace(/[^\w/-]/g, '');
+  const suffix = safeTag ? ' ' + tagSentinel() + safeTag : '';
+  let out = url ? `- [${label.replace(/[\[\]]/g, '')}](${url})${suffix}\n` : `- ${label}${suffix}\n`;
+  const quote = (text || '').trim();
+  if (quote) {
+    out += quote.slice(0, 2000).split('\n').map(l => '  > ' + l).join('\n') + '\n';
+  }
+  return out;
+}
+
+async function _clipApply(entry) {
+  const inbox = _clipInboxRoom();
+  if (!rooms.includes(inbox)) {
+    rooms.push(inbox);
+    try { touchRoomCreated(inbox); } catch {}
+    saveRooms();
+    try { renderRoomTabs(); } catch {}
+  }
+  if (activeRoom !== inbox && typeof switchRoom === 'function') {
+    try { await switchRoom(inbox); } catch (e) { console.error(e); }
+  }
+  appendTextToDocEnd(entry);
+  // Say where it went — on a cold open the room that ends up in front may not
+  // be the one that was there a second ago.
+  showToast('Clipped to ' + (activeRoom || inbox), 'success', 2500);
+}
+
+(function _clipFromUrl() {
+  let p;
+  try { p = new URLSearchParams(location.search); } catch { return; }
+  const url = p.get('clip');
+  const text = p.get('text');
+  if (!url && !text) return;
+  const entry = _clipEntry({ url, title: p.get('title'), text, tag: p.get('tag') });
+  // Strip first, act second: a refresh (or the deep-link writer below stamping
+  // ws/room back into the address) must never re-file the same clip.
+  try {
+    ['clip', 'title', 'text', 'tag'].forEach(k => p.delete(k));
+    const qs = p.toString();
+    // window.history, not history: `const {history} = window.__CM6__` shadows
+    // the global in this scope with CodeMirror's undo extension.
+    window.history.replaceState(null, '', location.pathname + (qs ? '?' + qs : '') + location.hash);
+  } catch {}
+  // The room system commits the first switch asynchronously; wait for it rather
+  // than racing it, or the clip lands in whatever room was open a moment ago.
+  // But _activeRoomReady only flips once a room switch commits, and an install
+  // with no rooms yet never switches — so a grace period releases that case
+  // instead of dropping the clip on the floor.
+  let waited = 0;
+  const tryApply = () => {
+    const bootSettled = (typeof _activeRoomReady !== 'undefined' && _activeRoomReady) || waited >= 1500;
+    if (window.editor && bootSettled) {
+      _clipApply(entry).catch(e => console.error(e));
+      return;
+    }
+    if ((waited += 120) > 15000) return;      // nothing ever came up — drop it
+    setTimeout(tryApply, 120);
+  };
+  setTimeout(tryApply, 120);
+})();
+
+window.openClipSetup = function() {
+  closeAllMenus();
+  const base = _clipBaseUrl();
+  const tmpl = base + '?clip=URL&title=TITLE';
+  const bm = "javascript:(function(){var u=encodeURIComponent(location.href),t=encodeURIComponent(document.title),s=encodeURIComponent(String(getSelection()||''));location.href='" +
+    base + "?clip='+u+'&title='+t+(s?'&text='+s:'');})()";
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
+  set('clip-inbox', _clipInboxRoom());
+  set('clip-template', tmpl);
+  set('clip-bookmarklet', bm);
+  const ov = document.getElementById('clip-overlay');
+  if (ov) ov.classList.add('open');
+};
+window.closeClipSetup = function() {
+  const ov = document.getElementById('clip-overlay');
+  if (ov) ov.classList.remove('open');
+};
+window.clipSaveInbox = function() {
+  const el = document.getElementById('clip-inbox');
+  if (!el) return;
+  const v = el.value.trim().toLowerCase();
+  try { Settings.set('capture.inbox', v || 'inbox'); } catch {}
+  el.value = _clipInboxRoom();
+  showToast('Clips will land in "' + _clipInboxRoom() + '"', 'success', 2000);
+};
+window.clipCopy = function(id) {
+  const el = document.getElementById(id);
+  if (el) ctxCopy(el.value);
+};
+window.clipTest = function() {
+  _clipApply(_clipEntry({ url: 'https://example.com/article', title: 'Example article', text: 'A quoted line from the page.' }))
+    .then(() => closeClipSetup());
+};
+
+
+// ============================================
+// SPLIT VIEW  &  DIFF / MERGE
+// ============================================
+// A second pane beside (or, on a phone, below) the live document, holding
+// another room. Flip on Diff and the two are compared line by line: changes are
+// tinted on both sides, the panes scroll as one THROUGH the diff rather than by
+// raw pixel ratio, and hunks can be pulled into the live document one at a time.
+//
+// The compare pane is read-only on purpose. Writing to a room that isn't the
+// active one means writing its cache behind the back of the sync machinery,
+// which would either be clobbered on its next open or never pushed at all.
+// Merging in the other direction is done by SWAPPING sides — the live document
+// is always the one being edited, so there is no second write path to get wrong.
+
+const SPLIT_OPTS = [
+  { id: 'ws',    key: 'cade-split-ws',    label: 'Whitespace', title: 'Ignore whitespace changes: ends trimmed, runs collapsed' },
+  { id: 'case',  key: 'cade-split-case',  label: 'Case',       title: 'Ignore case differences' },
+  { id: 'blank', key: 'cade-split-blank', label: 'Blank',      title: 'Ignore added or removed blank lines' },
+];
+function _splitOptsState() {
+  const o = {};
+  for (const d of SPLIT_OPTS) o[d.id] = store.get(d.key) === '1';   // default off
+  return o;
+}
+
+// ---- line normalisation ----------------------------------------------------
+function _splitNorm(line, o) {
+  let t = line;
+  if (o.ws) t = t.trim().replace(/\s+/g, ' ');
+  if (o.case) t = t.toLowerCase();
+  return t;
+}
+
+// ---- diff ------------------------------------------------------------------
+// Patience diff: anchor on lines that appear exactly once on BOTH sides, take
+// the longest increasing run of those anchors, and recurse between them. It
+// produces the alignment a human would draw (matching braces and blank lines
+// don't drag unrelated blocks together), and it degrades gracefully — a region
+// with no unique anchors falls back to an LCS when it's small, or is reported
+// as one replaced block when it isn't.
+const SPLIT_LCS_MAX = 600;      // cells per side before LCS gives up
+
+function _lisIndices(seq) {
+  // Longest increasing subsequence over seq (values = b-side indices).
+  const piles = [], back = new Array(seq.length).fill(-1), idx = [];
+  for (let i = 0; i < seq.length; i++) {
+    const v = seq[i];
+    let lo = 0, hi = piles.length;
+    while (lo < hi) { const mid = (lo + hi) >> 1; if (piles[mid] < v) lo = mid + 1; else hi = mid; }
+    piles[lo] = v;
+    idx[lo] = i;
+    back[i] = lo > 0 ? idx[lo - 1] : -1;
+  }
+  const out = [];
+  let k = piles.length ? idx[piles.length - 1] : -1;
+  while (k >= 0) { out.push(k); k = back[k]; }
+  return out.reverse();
+}
+
+function _lcsOps(A, B, a0, a1, b0, b1, out) {
+  const n = a1 - a0, m = b1 - b0;
+  const dp = new Uint32Array((n + 1) * (m + 1));
+  for (let i = n - 1; i >= 0; i--) {
+    for (let j = m - 1; j >= 0; j--) {
+      dp[i * (m + 1) + j] = A[a0 + i] === B[b0 + j]
+        ? dp[(i + 1) * (m + 1) + j + 1] + 1
+        : Math.max(dp[(i + 1) * (m + 1) + j], dp[i * (m + 1) + j + 1]);
+    }
+  }
+  let i = 0, j = 0;
+  while (i < n && j < m) {
+    if (A[a0 + i] === B[b0 + j]) { _pushOp(out, '=', a0 + i, a0 + i + 1, b0 + j, b0 + j + 1); i++; j++; }
+    else if (dp[(i + 1) * (m + 1) + j] >= dp[i * (m + 1) + j + 1]) { _pushOp(out, '~', a0 + i, a0 + i + 1, b0 + j, b0 + j); i++; }
+    else { _pushOp(out, '~', a0 + i, a0 + i, b0 + j, b0 + j + 1); j++; }
+  }
+  if (i < n || j < m) _pushOp(out, '~', a0 + i, a1, b0 + j, b1);
+}
+
+function _pushOp(out, t, a0, a1, b0, b1) {
+  if (t === '~' && a0 === a1 && b0 === b1) return;
+  const last = out[out.length - 1];
+  if (last && last.t === t && last.a1 === a0 && last.b1 === b0) { last.a1 = a1; last.b1 = b1; return; }
+  out.push({ t, a0, a1, b0, b1 });
+}
+
+function _patience(A, B, a0, a1, b0, b1, out, depth) {
+  // Common prefix / suffix first — most of two versions of a document.
+  while (a0 < a1 && b0 < b1 && A[a0] === B[b0]) { _pushOp(out, '=', a0, a0 + 1, b0, b0 + 1); a0++; b0++; }
+  const tail = [];
+  while (a1 > a0 && b1 > b0 && A[a1 - 1] === B[b1 - 1]) { a1--; b1--; tail.push([a1, b1]); }
+  if (a0 === a1 || b0 === b1) {
+    _pushOp(out, '~', a0, a1, b0, b1);
+  } else {
+    const countA = new Map(), countB = new Map();
+    for (let i = a0; i < a1; i++) countA.set(A[i], (countA.get(A[i]) || 0) + 1);
+    for (let j = b0; j < b1; j++) countB.set(B[j], (countB.get(B[j]) || 0) + 1);
+    const posB = new Map();
+    for (let j = b0; j < b1; j++) if (countB.get(B[j]) === 1 && countA.get(B[j]) === 1) posB.set(B[j], j);
+    const pairs = [];
+    for (let i = a0; i < a1; i++) if (countA.get(A[i]) === 1 && posB.has(A[i])) pairs.push([i, posB.get(A[i])]);
+    const lis = _lisIndices(pairs.map(p => p[1])).map(k => pairs[k]);
+    if (!lis.length || depth > 24) {
+      if ((a1 - a0) <= SPLIT_LCS_MAX && (b1 - b0) <= SPLIT_LCS_MAX) _lcsOps(A, B, a0, a1, b0, b1, out);
+      else _pushOp(out, '~', a0, a1, b0, b1);        // too big to align finely
+    } else {
+      let ai = a0, bi = b0;
+      for (const [pa, pb] of lis) {
+        _patience(A, B, ai, pa, bi, pb, out, depth + 1);
+        _pushOp(out, '=', pa, pa + 1, pb, pb + 1);
+        ai = pa + 1; bi = pb + 1;
+      }
+      _patience(A, B, ai, a1, bi, b1, out, depth + 1);
+    }
+  }
+  for (let k = tail.length - 1; k >= 0; k--) _pushOp(out, '=', tail[k][0], tail[k][0] + 1, tail[k][1], tail[k][1] + 1);
+}
+
+// Diff two documents by line, honouring the ignore options. Ignored blank lines
+// are dropped before comparing and folded back into the surrounding op after.
+function splitDiff(aText, bText, o) {
+  const aRaw = aText.split('\n'), bRaw = bText.split('\n');
+  const keep = (l) => !o.blank || l.trim() !== '';
+  const aIdx = [], bIdx = [], A = [], B = [];
+  for (let i = 0; i < aRaw.length; i++) if (keep(aRaw[i])) { aIdx.push(i); A.push(_splitNorm(aRaw[i], o)); }
+  for (let j = 0; j < bRaw.length; j++) if (keep(bRaw[j])) { bIdx.push(j); B.push(_splitNorm(bRaw[j], o)); }
+  const raw = [];
+  _patience(A, B, 0, A.length, 0, B.length, raw, 0);
+  if (!o.blank) return raw;
+  const mapA = (i) => (i < aIdx.length ? aIdx[i] : aRaw.length);
+  const mapB = (j) => (j < bIdx.length ? bIdx[j] : bRaw.length);
+  const out = [];
+  for (const op of raw) _pushOp(out, op.t, mapA(op.a0), mapA(op.a1), mapB(op.b0), mapB(op.b1));
+  return out;
+}
+
+// ---- reading another room --------------------------------------------------
+// Local cache first, then the server copy for a room this device offloaded —
+// the same two-step the unified search uses.
+async function loadRoomTextAnywhere(room) {
+  if (room === activeRoom) return editor.state.doc.toString();
+  let t = '';
+  try { t = store.get('cade-room-cache:' + room) || store.get('cade-room-synced:' + room) || ''; } catch {}
+  if (t) return t;
+  if (!_syncConfigured() || !navigator.onLine) return '';
+  try {
+    const val = await _restFetchRoomVal(room, 'text', 8000);
+    const enc = unpackRoomText(val);
+    if (!enc) return '';
+    let dec = await decryptText(enc, getRoomEncKey(room, store.get('cade-sync-key') || ''));
+    if (dec == null) return '';
+    if (dec.startsWith(ROOM_LOCK_SENTINEL)) dec = dec.slice(ROOM_LOCK_SENTINEL.length);
+    return dec;
+  } catch { return ''; }
+}
+
+// ---- scroll lock -----------------------------------------------------------
+// Map a line on one side to its counterpart on the other by walking the diff:
+// exact inside matched runs, proportional inside a changed block.
+function _splitMapLine(line, fromSide) {
+  if (!_splitOps.length) return line;
+  for (const op of _splitOps) {
+    const f0 = fromSide === 'a' ? op.a0 : op.b0, f1 = fromSide === 'a' ? op.a1 : op.b1;
+    const t0 = fromSide === 'a' ? op.b0 : op.a0, t1 = fromSide === 'a' ? op.b1 : op.a1;
+    if (line < f1 || (f0 === f1 && line === f0)) {
+      if (op.t === '=') return t0 + (line - f0);
+      const span = f1 - f0;
+      const ratio = span > 0 ? (line - f0) / span : 0;
+      return Math.round(t0 + ratio * (t1 - t0));
+    }
+  }
+  const last = _splitOps[_splitOps.length - 1];
+  return (fromSide === 'a' ? last.b1 : last.a1) + (line - (fromSide === 'a' ? last.a1 : last.b1));
+}
+
+function _splitTopLine(view) {
+  try {
+    const block = view.lineBlockAtHeight(view.scrollDOM.scrollTop - view.documentTop + view.scrollDOM.getBoundingClientRect().top);
+    return view.state.doc.lineAt(block.from).number - 1;
+  } catch {
+    try { return view.state.doc.lineAt(view.viewport.from).number - 1; } catch { return 0; }
+  }
+}
+function _splitScrollToLine(view, line) {
+  try {
+    const n = Math.max(1, Math.min(view.state.doc.lines, line + 1));
+    const pos = view.state.doc.line(n).from;
+    const block = view.lineBlockAt(pos);
+    view.scrollDOM.scrollTop = Math.max(0, block.top);
+  } catch {}
+}
+function _splitSyncScroll(fromView, fromSide) {
+  if (!_splitDiffOn || _splitSyncing || !_splitView) return;
+  const other = fromSide === 'a' ? _splitView : editor;
+  if (!other) return;
+  _splitSyncing = true;
+  try { _splitScrollToLine(other, _splitMapLine(_splitTopLine(fromView), fromSide)); } finally {
+    requestAnimationFrame(() => { _splitSyncing = false; });
+  }
+}
+
+// ---- the pane --------------------------------------------------------------
+function _splitCompareExts() {
+  return [
+    lineNumbers(),
+    EditorView.lineWrapping,
+    EditorState.readOnly.of(true),
+    EditorView.editable.of(false),
+    editorTheme,
+    splitDiffPluginB,
+    EditorView.domEventHandlers({ scroll: (e, v) => { _splitSyncScroll(v, 'b'); } }),
+  ];
+}
+
+window.openSplit = async function(room) {
+  closeAllMenus();
+  const wrap = document.getElementById('editor-wrap');
+  const pane = document.getElementById('split-pane');
+  if (!wrap || !pane) return;
+  _splitOpen = true;
+  wrap.classList.add('split');
+  pane.hidden = false;
+  document.body.classList.add('split-open');
+  if (!_splitView) {
+    _splitView = new EditorView({
+      state: EditorState.create({ doc: '', extensions: _splitCompareExts() }),
+      parent: document.getElementById('split-body'),
+    });
+  }
+  renderSplitHead();
+  const target = room || _splitRoom || rooms.find(r => r !== activeRoom && !roomIsArchived(r)) || '';
+  if (target) await splitLoadRoom(target);
+  else renderSplitHead();
+};
+
+window.closeSplit = function() {
+  _splitOpen = false;
+  _splitDiffOn = false;
+  _splitOps = []; _splitHunks = []; _splitHunk = -1;
+  _splitVersion++;
+  const wrap = document.getElementById('editor-wrap');
+  const pane = document.getElementById('split-pane');
+  if (wrap) wrap.classList.remove('split');
+  if (pane) pane.hidden = true;
+  document.body.classList.remove('split-open');
+  // Drop the compare document — it can be a whole room's text.
+  if (_splitView) { try { _splitView.destroy(); } catch {} _splitView = null; }
+  try { editor.dispatch({}); } catch {}
+  try { editor.focus(); } catch {}
+};
+
+window.toggleSplit = function() {
+  if (_splitOpen) closeSplit(); else openSplit();
+};
+
+// The compare pane reports its own scrolling through a CM dom handler; the live
+// editor needs a plain listener on its scroller.
+try {
+  editor.scrollDOM.addEventListener('scroll', () => _splitSyncScroll(editor, 'a'), { passive: true });
+} catch {}
+
+async function splitLoadRoom(room) {
+  const v = ++_splitVersion;
+  _splitRoom = room;
+  const head = document.getElementById('split-title');
+  if (head) head.textContent = 'Loading ' + room + '…';
+  const text = await loadRoomTextAnywhere(room);
+  if (v !== _splitVersion || !_splitView) return;         // superseded or closed
+  _splitView.dispatch({ changes: { from: 0, to: _splitView.state.doc.length, insert: text } });
+  if (_splitDiffOn) recomputeDiff(); else renderSplitHead();
+}
+
+window.splitPickRoom = function() {
+  const names = rooms.filter(r => !roomIsArchived(r));
+  if (!names.length) { showToast('No other rooms yet', 'error', 2000); return; }
+  // Reuse the quick switcher for the picker: one search box, already knows how
+  // to find a room by name, text, file or tag.
+  _splitPicking = true;
+  window.openQuickSwitcher('');
+};
+let _splitPicking = false;
+
+// Swap which room is live. Merging only ever writes to the live document, so
+// this is how a change travels the other way.
+window.splitSwap = async function() {
+  if (!_splitOpen || !_splitRoom || _splitRoom === activeRoom) return;
+  const other = _splitRoom;
+  const mine = activeRoom;
+  await switchRoom(other);
+  await splitLoadRoom(mine);
+};
+
+window.toggleSplitDiff = function() {
+  _splitDiffOn = !_splitDiffOn;
+  if (_splitDiffOn) recomputeDiff();
+  else {
+    _splitOps = []; _splitHunks = []; _splitHunk = -1;
+    _splitVersion++;
+    try { editor.dispatch({}); } catch {}
+    try { _splitView && _splitView.dispatch({}); } catch {}
+    renderSplitHead();
+  }
+};
+
+window.splitSetOpt = function(id, on) {
+  const d = SPLIT_OPTS.find(x => x.id === id);
+  if (!d) return;
+  store.set(d.key, on ? '1' : '0');
+  if (_splitDiffOn) recomputeDiff(); else renderSplitHead();
+};
+
+function recomputeDiff() {
+  if (!_splitView) return;
+  const a = editor.state.doc.toString();
+  const b = _splitView.state.doc.toString();
+  const t0 = Date.now();
+  try {
+    _splitOps = splitDiff(a, b, _splitOptsState());
+  } catch (e) { console.error(e); _splitOps = []; }
+  _splitHunks = _splitOps.filter(o => o.t === '~');
+  if (_splitHunk >= _splitHunks.length) _splitHunk = _splitHunks.length - 1;
+  _splitVersion++;
+  try { editor.dispatch({}); } catch {}
+  try { _splitView.dispatch({}); } catch {}
+  renderSplitHead(Date.now() - t0);
+}
+
+// Re-diff as the live document is edited (debounced — a diff per keystroke on a
+// long document would be felt).
+let _splitDiffTimer = 0;
+function scheduleSplitDiff() {
+  if (!_splitOpen || !_splitDiffOn) return;
+  clearTimeout(_splitDiffTimer);
+  _splitDiffTimer = setTimeout(() => { if (_splitOpen && _splitDiffOn) recomputeDiff(); }, 300);
+}
+
+window.splitGoHunk = function(delta) {
+  if (!_splitHunks.length) return;
+  _splitHunk = (_splitHunk + delta + _splitHunks.length) % _splitHunks.length;
+  const h = _splitHunks[_splitHunk];
+  _splitSyncing = true;
+  try {
+    const aLine = Math.min(editor.state.doc.lines, Math.max(1, h.a0 + 1));
+    const pos = editor.state.doc.line(aLine).from;
+    editor.dispatch({ selection: { anchor: pos }, effects: EditorView.scrollIntoView(pos, { y: 'center' }) });
+    if (_splitView) _splitScrollToLine(_splitView, Math.max(0, h.b0 - 2));
+  } catch {}
+  requestAnimationFrame(() => { _splitSyncing = false; });
+  renderSplitHead();
+};
+
+// Replace the live document's lines for this hunk with the compare side's.
+window.splitTakeHunk = function() {
+  if (!_splitDiffOn || !_splitView || !_splitHunks.length) { showToast('Nothing to take', 'error', 1800); return; }
+  if (_splitHunk < 0) _splitHunk = 0;
+  const h = _splitHunks[_splitHunk];
+  const doc = editor.state.doc;
+  const bDoc = _splitView.state.doc;
+  const from = h.a0 < doc.lines ? doc.line(h.a0 + 1).from : doc.length;
+  const to = h.a1 <= 0 ? from : (h.a1 <= doc.lines ? doc.line(h.a1).to : doc.length);
+  let insert = '';
+  if (h.b1 > h.b0) {
+    const bFrom = bDoc.line(Math.min(bDoc.lines, h.b0 + 1)).from;
+    const bTo = bDoc.line(Math.min(bDoc.lines, h.b1)).to;
+    insert = bDoc.sliceString(bFrom, bTo);
+  }
+  // A pure insertion has no lines to replace on this side: splice it in at the
+  // boundary, carrying a newline so it doesn't fuse with the line above.
+  let changes;
+  if (h.a1 <= h.a0) changes = { from, to: from, insert: insert + (insert ? '\n' : '') };
+  else if (!insert) {
+    const delTo = Math.min(doc.length, to + 1);          // take the trailing newline too
+    changes = { from, to: delTo, insert: '' };
+  } else changes = { from, to, insert };
+  editor.dispatch({ changes, scrollIntoView: true });
+  showToast('Took 1 change from ' + _splitRoom, 'success', 1600);
+  recomputeDiff();
+};
+
+window.splitTakeAll = function() {
+  if (!_splitView) return;
+  const b = _splitView.state.doc.toString();
+  if (!confirm('Replace this document with all of "' + _splitRoom + '"?\nThis is one undo step.')) return;
+  editor.dispatch({ changes: { from: 0, to: editor.state.doc.length, insert: b } });
+  showToast('Replaced with ' + _splitRoom, 'success', 2000);
+  recomputeDiff();
+};
+
+function renderSplitHead(ms) {
+  const title = document.getElementById('split-title');
+  if (title) title.textContent = _splitRoom || 'Pick a room';
+  const diffBtn = document.getElementById('split-diff-btn');
+  if (diffBtn) diffBtn.classList.toggle('on', _splitDiffOn);
+  const opts = document.getElementById('split-opts');
+  if (opts) {
+    opts.hidden = !_splitDiffOn;
+    const st = _splitOptsState();
+    opts.innerHTML = SPLIT_OPTS.map(d =>
+      `<button type="button" class="qs-chip${st[d.id] ? ' on' : ''}" data-sopt="${d.id}" title="${escapeHtml(d.title)}">${d.label}</button>`
+    ).join('');
+    opts.querySelectorAll('[data-sopt]').forEach(btn => {
+      btn.addEventListener('click', () => window.splitSetOpt(btn.dataset.sopt, !btn.classList.contains('on')));
+    });
+  }
+  const nav = document.getElementById('split-nav');
+  if (nav) nav.hidden = !_splitDiffOn;
+  const count = document.getElementById('split-count');
+  if (count) {
+    if (!_splitDiffOn) count.textContent = '';
+    else if (!_splitHunks.length) count.textContent = 'identical';
+    else count.textContent = (_splitHunk >= 0 ? (_splitHunk + 1) + '/' : '') + _splitHunks.length;
+  }
+}
 
 // ============================================
 // SCRIPT PICKER
@@ -10693,18 +11812,26 @@ async function reconcileOnLive() {
 // trusted it concluded "nothing changed", stamped the stale text as synced,
 // and the user's next edit pushed the stale doc over newer server data
 // (the unlock-phone-and-clobber bug, item 2). REST can't lie about staleness.
-async function _restFetchRoomVal(roomName, child, timeoutMs) {
+async function _restFetchRoomVal(roomName, child, timeoutMs, signal) {
   const base = syncState.firebaseUrl || store.get('cade-firebase-url') || '';
   if (!base || typeof fetch !== 'function') throw new Error('rest-unavailable');
   const url = base.replace(/\/+$/, '') + '/rooms/' + encodeURIComponent(roomName) + '/' + child + '.json';
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), timeoutMs || 8000);
+  // An optional caller-owned signal (the quick-switcher's scan) drops the
+  // request the moment its results stop being wanted.
+  const relay = () => ctrl.abort();
+  if (signal) {
+    if (signal.aborted) ctrl.abort();
+    else signal.addEventListener('abort', relay, { once: true });
+  }
   try {
     const r = await fetch(url, { signal: ctrl.signal, cache: 'no-store' });
     if (!r.ok) throw new Error('rest-' + r.status);
     return await r.json();
   } finally {
     clearTimeout(t);
+    if (signal) signal.removeEventListener('abort', relay);
   }
 }
 
@@ -11736,60 +12863,331 @@ function quickSwitchBaseOrder() {
   });
 }
 
-let _qsIndex = 0;
-let _qsResults = [];
+// ---------- Unified search (rooms · workspaces · text · files · tags) -------
+// One box for everything. Room NAMES always match — that's the floor, and the
+// reason the toggles can all be off without leaving nothing to search. On top
+// of that sit four layers the footer chips turn on and off:
+//
+//   Workspaces  workspace names, as jump targets
+//   Text        the body of every room
+//   Files       names of attached file pills
+//   Tags        ¥tags used in a room
+//
+// The name pass is synchronous and instant. Everything else is asynchronous and
+// STREAMS: results merge in as they are found and the list re-sorts under them,
+// so a strong content hit can climb past a weak fuzzy name match after the fact.
+// The selected row is tracked by identity, not index, so re-sorting never moves
+// the highlight out from under the arrow keys.
+//
+// Two async passes, in order of how fast they can answer:
+//   1. rooms whose text is cached on this device — chunked with an 8ms budget
+//      per slice so typing never stutters;
+//   2. rooms this device has OFFLOADED to the server (see __offloadIdleRooms) —
+//      fetched over REST, four at a time, decrypted in memory. Without this
+//      pass the search quietly lies about every room you haven't opened lately.
+// Both are cancelled by a newer keystroke, by closing, and by picking a result:
+// the scan token invalidates late arrivals and the AbortController drops the
+// requests still in flight.
 
-function quickSwitchResults(query) {
-  const q = query.trim().toLowerCase();
-  if (!q) return quickSwitchBaseOrder().map(name => ({ name, score: 0 }));
-  // Score: exact > prefix > substring > subsequence (fuzzyMatch). Break ties by
-  // recency then pinned.
-  const recencyRank = new Map();
-  roomRecency.forEach((r, i) => recencyRank.set(r, i));
-  return rooms
-    .filter(r => !roomIsArchived(r))
-    .map(name => {
-      const n = name.toLowerCase();
-      let score = 0;
-      if (n === q) score = 1000;
-      else if (n.startsWith(q)) score = 800;
-      else if (n.includes(q)) score = 600;
-      else if (fuzzyMatch(q, n)) score = 300;
-      return { name, score };
-    })
-    .filter(x => x.score > 0)
-    .sort((a, b) => {
-      if (b.score !== a.score) return b.score - a.score;
-      // Equal match quality → the active workspace's room outranks (round-5).
-      const wa = _qsInActiveWs(a.name) ? 0 : 1, wb = _qsInActiveWs(b.name) ? 0 : 1;
-      if (wa !== wb) return wa - wb;
-      const ra = recencyRank.has(a.name) ? recencyRank.get(a.name) : Infinity;
-      const rb = recencyRank.has(b.name) ? recencyRank.get(b.name) : Infinity;
-      return ra - rb;
-    });
+const QS_TOGGLES = [
+  { id: 'ws',    key: 'cade-qs-ws',    label: 'Workspaces' },
+  { id: 'text',  key: 'cade-qs-text',  label: 'Text' },
+  { id: 'files', key: 'cade-qs-files', label: 'Files' },
+  { id: 'tags',  key: 'cade-qs-tags',  label: 'Tags' },
+];
+function _qsTog() {
+  const t = {};
+  for (const d of QS_TOGGLES) t[d.id] = store.get(d.key) !== '0';   // default on
+  return t;
+}
+function _qsSetTog(id, on) {
+  const d = QS_TOGGLES.find(x => x.id === id);
+  if (d) store.set(d.key, on ? '1' : '0');
 }
 
+const QS_MAX_ROWS = 40;        // rows kept in the list; the scan stops filling past this
+const QS_REMOTE_CONC = 4;      // parallel server reads for offloaded rooms
+const QS_MIN_ASYNC = 2;        // characters before the async layers engage
+
+let _qsIndex = 0;
+let _qsResults = [];
+let _qsSelKey = null;          // identity of the highlighted row, across re-sorts
+let _qsQuery = '';
+
+function _qsKey(res) { return res.kind === 'ws' ? 'ws:' + res.wsId : 'room:' + res.name; }
+
+// Score a room name against the query: exact > prefix > substring > subsequence.
+function _qsNameScore(name, q) {
+  const n = name.toLowerCase();
+  if (n === q) return 1000;
+  if (n.startsWith(q)) return 800;
+  if (n.includes(q)) return 600;
+  if (fuzzyMatch(q, n)) return 300;
+  return 0;
+}
+
+function _qsSort() {
+  const recencyRank = new Map();
+  roomRecency.forEach((r, i) => recencyRank.set(r, i));
+  _qsResults.sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score;
+    const pa = a.kind === 'ws' ? 0 : 1, pb = b.kind === 'ws' ? 0 : 1;
+    if (pa !== pb) return pa - pb;                       // equal score → workspace first
+    if (a.kind === 'ws' || b.kind === 'ws') return 0;
+    const wa = _qsInActiveWs(a.name) ? 0 : 1, wb = _qsInActiveWs(b.name) ? 0 : 1;
+    if (wa !== wb) return wa - wb;
+    const ra = recencyRank.has(a.name) ? recencyRank.get(a.name) : Infinity;
+    const rb = recencyRank.has(b.name) ? recencyRank.get(b.name) : Infinity;
+    return ra - rb;
+  });
+}
+
+// The synchronous floor: room names, plus workspace names when that chip is on.
+function quickSwitchResults(query) {
+  const q = query.trim().toLowerCase();
+  const t = _qsTog();
+  if (!q) return quickSwitchBaseOrder().map(name => ({ kind: 'room', name, score: 0, why: {} }));
+  const out = [];
+  for (const name of rooms) {
+    if (roomIsArchived(name)) continue;
+    const score = _qsNameScore(name, q);
+    if (score) out.push({ kind: 'room', name, score, why: { name: true } });
+  }
+  if (t.ws) {
+    for (const w of workspaces) {
+      const n = (w.name || '').toLowerCase();
+      if (!n) continue;
+      const score = n === q ? 950 : n.startsWith(q) ? 750 : n.includes(q) ? 550 : 0;
+      if (score) out.push({ kind: 'ws', wsId: w.id, name: w.name, color: w.color, score });
+    }
+  }
+  return out;
+}
+
+// ---- the async layers ------------------------------------------------------
+let _qsScanToken = 0;
+let _qsScanAbort = null;
+const _qsIndexCache = new Map();  // room -> { low, tags:Set, files:[names] } ('' = known empty)
+let _qsRenderPending = false;
+
+function _qsBuildIndex(text) {
+  const t = _qsTog();
+  const idx = { low: (text || '').toLowerCase(), tags: null, files: null };
+  // Built once per room per open, not per keystroke — these walk the whole text.
+  try { idx.tags = extractTags(text); } catch { idx.tags = new Set(); }
+  const files = [];
+  try {
+    FILE_TOKEN_RE.lastIndex = 0;
+    let m;
+    while ((m = FILE_TOKEN_RE.exec(text)) !== null) files.push(m[1]);
+  } catch {}
+  idx.files = files;
+  return idx;
+}
+
+function _qsLocalText(r) {
+  try {
+    if (r === activeRoom) return editor.state.doc.toString();
+    return store.get('cade-room-cache:' + r) || store.get('cade-room-synced:' + r) || '';
+  } catch { return ''; }
+}
+function _qsHasLocalText(r) {
+  if (r === activeRoom) return true;
+  try { return !!(store.get('cade-room-cache:' + r) || store.get('cade-room-synced:' + r)); } catch { return false; }
+}
+
+function _qsIndexFor(r, textIfKnown) {
+  let idx = _qsIndexCache.get(r);
+  if (idx !== undefined) return idx;
+  const text = textIfKnown != null ? textIfKnown : _qsLocalText(r);
+  idx = text ? _qsBuildIndex(text) : null;
+  _qsIndexCache.set(r, idx);
+  return idx;
+}
+
+function _qsSnippet(low, at, q) {
+  const s = Math.max(0, at - 24);
+  const raw = (s > 0 ? '…' : '') + low.slice(s, at + q.length + 44).replace(/\s+/g, ' ') + '…';
+  return escapeHtml(raw);
+}
+
+// What, if anything, this room's text says about the query.
+function _qsEvidence(idx, q, tagQ, t) {
+  if (!idx) return null;
+  const why = {};
+  if (t.tags && idx.tags) {
+    const needle = tagQ != null ? tagQ : q;
+    if (needle) {
+      for (const tg of idx.tags) {
+        if (tg === needle) { why.tag = tg; why.tagExact = true; break; }
+        if (!why.tag && tg.startsWith(needle)) why.tag = tg;
+      }
+    }
+  }
+  if (t.files && idx.files) {
+    for (const f of idx.files) {
+      if (f.toLowerCase().includes(q)) { why.file = f; break; }
+    }
+  }
+  if (t.text) {
+    const at = idx.low.indexOf(q);
+    if (at >= 0) why.text = { snippet: _qsSnippet(idx.low, at, q), seek: q };
+  }
+  if (!why.tag && !why.file && !why.text) return null;
+  why.score = why.tagExact ? 500 : why.tag ? 450 : why.file ? 350 : 100;
+  return why;
+}
+
+// Fold a room's evidence into the result list: enrich the row if the room is
+// already listed (a name match keeps its rank and gains a snippet), else append.
+function _qsMerge(room, why) {
+  let row = _qsResults.find(r => r.kind === 'room' && r.name === room);
+  if (!row) {
+    if (_qsResults.length >= QS_MAX_ROWS) return false;
+    row = { kind: 'room', name: room, score: 0, why: {} };
+    _qsResults.push(row);
+  }
+  Object.assign(row.why, why);
+  if (why.score > row.score) row.score = why.score;
+  return true;
+}
+
+function _qsScheduleRender() {
+  if (_qsRenderPending) return;
+  _qsRenderPending = true;
+  setTimeout(() => {
+    _qsRenderPending = false;
+    _qsSort();
+    renderQuickSwitchList();
+  }, 50);
+}
+
+function _qsStatus(msg) {
+  const el = document.getElementById('qs-status');
+  if (el) el.textContent = msg || '';
+}
+
+function quickSwitchScan(query) {
+  const token = ++_qsScanToken;
+  if (_qsScanAbort) { try { _qsScanAbort.abort(); } catch {} }
+  _qsScanAbort = null;
+  const q = query.trim().toLowerCase();
+  const t = _qsTog();
+  if (q.length < QS_MIN_ASYNC || (!t.text && !t.files && !t.tags)) { _qsStatus(''); return; }
+  const sent = tagSentinel().toLowerCase();
+  const tagQ = q.startsWith(sent) ? q.slice(sent.length) : null;
+
+  const live = rooms.filter(r => !roomIsArchived(r));
+  const order = (a, b) => (_qsInActiveWs(a) ? 0 : 1) - (_qsInActiveWs(b) ? 0 : 1);
+  const localRooms = live.filter(_qsHasLocalText).sort(order);
+  const remoteRooms = live.filter(r => !_qsHasLocalText(r)).sort(order);
+
+  let i = 0, hits = 0;
+  const step = () => {
+    if (token !== _qsScanToken) return;                 // superseded by a newer keystroke
+    const deadline = Date.now() + 8;                    // ≤8ms per slice, then yield
+    while (i < localRooms.length && Date.now() < deadline) {
+      const r = localRooms[i++];
+      const why = _qsEvidence(_qsIndexFor(r), q, tagQ, t);
+      if (why && _qsMerge(r, why)) hits++;
+    }
+    if (hits) _qsScheduleRender();
+    if (i < localRooms.length && _qsResults.length < QS_MAX_ROWS) { setTimeout(step, 0); return; }
+    _qsScanRemote(token, remoteRooms, q, tagQ, t);
+  };
+  setTimeout(step, 0);
+}
+
+// Rooms this device offloaded live only on the server. Fetch, decrypt in
+// memory, index, and stream the hits in. A room we can't decrypt (locked, not
+// unlocked this session) is skipped in silence — that's the lock working.
+async function _qsScanRemote(token, list, q, tagQ, t) {
+  if (!list.length || _qsResults.length >= QS_MAX_ROWS) { _qsStatus(''); return; }
+  if (!_syncConfigured() || !navigator.onLine) { _qsStatus(''); return; }
+  const baseKey = store.get('cade-sync-key') || '';
+  const abort = new AbortController();
+  _qsScanAbort = abort;
+  let next = 0, done = 0, hits = 0;
+  const total = list.length;
+  _qsStatus('searching ' + total + ' offloaded room' + (total === 1 ? '' : 's') + '…');
+  const worker = async () => {
+    for (;;) {
+      if (token !== _qsScanToken || _qsResults.length >= QS_MAX_ROWS) return;
+      const i = next++;
+      if (i >= list.length) return;
+      const r = list[i];
+      let idx = _qsIndexCache.get(r);
+      if (idx === undefined) {
+        let text = '';
+        try {
+          const val = await _restFetchRoomVal(r, 'text', 6000, abort.signal);
+          const enc = unpackRoomText(val);
+          if (enc) {
+            const dec = await decryptText(enc, getRoomEncKey(r, baseKey));
+            if (dec != null) text = dec.startsWith(ROOM_LOCK_SENTINEL) ? dec.slice(ROOM_LOCK_SENTINEL.length) : dec;
+          }
+        } catch {}
+        if (token !== _qsScanToken) return;
+        idx = text ? _qsBuildIndex(text) : null;
+        _qsIndexCache.set(r, idx);                      // later keystrokes reuse this
+      }
+      const why = _qsEvidence(idx, q, tagQ, t);
+      if (why && _qsMerge(r, why)) hits++;
+      done++;
+      if (hits) _qsScheduleRender();
+      if ((done & 3) === 0 && token === _qsScanToken) {
+        _qsStatus('searching ' + (total - done) + ' offloaded room' + (total - done === 1 ? '' : 's') + '…');
+      }
+    }
+  };
+  try {
+    await Promise.all(Array.from({ length: Math.min(QS_REMOTE_CONC, list.length) }, worker));
+  } catch {}
+  if (token === _qsScanToken) { _qsScheduleRender(); _qsStatus(''); }
+}
+
+// ---- rendering -------------------------------------------------------------
 function renderQuickSwitchList() {
   const listEl = document.getElementById('qs-list');
   if (!listEl) return;
   if (_qsResults.length === 0) {
-    listEl.innerHTML = '<div class="qs-empty">No matching rooms.</div>';
+    listEl.innerHTML = '<div class="qs-empty">No matches.</div>';
     return;
+  }
+  // Keep the highlight on the row it was on, wherever the re-sort put it.
+  if (_qsSelKey) {
+    const at = _qsResults.findIndex(r => _qsKey(r) === _qsSelKey);
+    if (at >= 0) _qsIndex = at;
   }
   if (_qsIndex < 0) _qsIndex = 0;
   if (_qsIndex >= _qsResults.length) _qsIndex = _qsResults.length - 1;
+  _qsSelKey = _qsKey(_qsResults[_qsIndex]);
+
   listEl.innerHTML = _qsResults.map((res, i) => {
+    const active = i === _qsIndex ? ' active' : '';
+    if (res.kind === 'ws') {
+      const cc = 'ws-color-' + (WS_COLORS.includes(res.color) ? res.color : 'neutral');
+      const count = rooms.filter(r => !roomIsArchived(r) && roomInWorkspace(r, res.wsId)).length;
+      return `<div class="qs-item${active}" data-idx="${i}">
+        <span class="qs-dot ${cc}"></span>
+        <span class="qs-name">${escapeHtml(res.name)}</span>
+        <span class="qs-meta">Workspace · ${count} room${count === 1 ? '' : 's'}</span>
+      </div>`;
+    }
     const name = res.name;
     const colorClass = workspaceColorClassForRoom(name);
     const wsIds = getRoomWorkspaceIds(name);
     const pin = roomPinnedHere(name) ? '<span class="qs-pin" title="Pinned">📌</span>' : '';
     const lock = roomHasPassword(name) ? ' 🔒' : '';
-    const escAttr = escapeHtml(name.replace(/\\/g, '\\\\').replace(/'/g, "\\'"));
-    // Item 22: every workspace the room belongs to, as colour-coded badges
-    // (up to 3 before overflowing to +N).
+    const why = res.why || {};
+    // Why this row is here, most specific evidence first.
     let meta;
-    if (res.content) {
-      meta = `<span class="qs-snip" title="content match">📄 ${res.snippet}</span>`;
+    if (why.tag) {
+      meta = `<span class="qs-why" title="tag match">${escapeHtml(tagSentinel() + why.tag)}</span>`;
+    } else if (why.file) {
+      meta = `<span class="qs-why" title="attached file">📎 ${escapeHtml(why.file)}</span>`;
+    } else if (why.text) {
+      meta = `<span class="qs-snip" title="text match">📄 ${why.text.snippet}</span>`;
     } else if (wsIds.length) {
       const shown = wsIds.slice(0, 3).map(id => {
         const w = getWorkspace(id);
@@ -11802,54 +13200,120 @@ function renderQuickSwitchList() {
     } else {
       meta = '<span class="qs-meta">Unlabeled</span>';
     }
-    return `<div class="qs-item ${i === _qsIndex ? 'active' : ''}" data-idx="${i}" onclick="quickSwitchPick('${escAttr}')">
+    return `<div class="qs-item${active}" data-idx="${i}">
       ${pin}<span class="qs-dot ${colorClass}"></span>
       <span class="qs-name">${escapeHtml(name)}${lock}</span>
       ${meta}
     </div>`;
   }).join('');
+
+  listEl.querySelectorAll('.qs-item').forEach(el => {
+    el.addEventListener('click', () => quickSwitchPickAt(parseInt(el.dataset.idx, 10)));
+  });
   const active = listEl.querySelector('.qs-item.active');
   if (active) active.scrollIntoView({ block: 'nearest' });
 }
 
-window.openQuickSwitcher = function() {
+function renderQsFooter() {
+  const host = document.getElementById('qs-toggles');
+  if (!host) return;
+  const t = _qsTog();
+  host.innerHTML = QS_TOGGLES.map(d =>
+    `<button type="button" class="qs-chip${t[d.id] ? ' on' : ''}" data-tog="${d.id}" tabindex="-1">${d.label}</button>`
+  ).join('');
+  host.querySelectorAll('.qs-chip').forEach(btn => {
+    // mousedown is where focus would be stolen from the input — never let it.
+    btn.addEventListener('mousedown', e => e.preventDefault());
+    btn.addEventListener('click', () => {
+      const id = btn.dataset.tog;
+      _qsSetTog(id, !btn.classList.contains('on'));
+      renderQsFooter();
+      const input = document.getElementById('qs-input');
+      if (input) { qsRunQuery(input.value); input.focus(); }
+    });
+  });
+}
+
+function qsRunQuery(value) {
+  _qsQuery = value;
+  _qsResults = quickSwitchResults(value);
+  _qsSort();
+  _qsIndex = 0;
+  _qsSelKey = _qsResults.length ? _qsKey(_qsResults[0]) : null;
+  renderQuickSwitchList();
+  quickSwitchScan(value);
+}
+
+window.openQuickSwitcher = function(prefill) {
   closeAllMenus && closeAllMenus();
   const overlay = document.getElementById('qs-overlay');
   const input = document.getElementById('qs-input');
   if (!overlay || !input) return;
-  input.value = '';
-  _qsIndex = 0;
-  _qsScanToken++;       // cancel any in-flight content scan
-  _qsTextCache.clear(); // fresh text snapshot per open (memory care)
-  _qsResults = quickSwitchResults('');
-  renderQuickSwitchList();
+  _qsScanToken++;             // cancel anything left running from a previous open
+  if (_qsScanAbort) { try { _qsScanAbort.abort(); } catch {} _qsScanAbort = null; }
+  _qsIndexCache.clear();      // fresh snapshot per open (and releases the text)
+  _qsStatus('');
+  input.value = prefill || '';
+  renderQsFooter();
+  qsRunQuery(input.value);
   overlay.classList.add('open');
-  setTimeout(() => input.focus(), 10);
+  setTimeout(() => { input.focus(); input.select(); }, 10);
 };
 
 window.closeQuickSwitcher = function() {
   const overlay = document.getElementById('qs-overlay');
   if (overlay) overlay.classList.remove('open');
-  _qsScanToken++;       // stop any running content scan
-  _qsTextCache.clear(); // release the text snapshots (memory care)
+  if (typeof _splitPicking !== 'undefined') _splitPicking = false;   // abandoned pick doesn't leak
+  _qsScanToken++;             // late arrivals are dropped
+  if (_qsScanAbort) { try { _qsScanAbort.abort(); } catch {} _qsScanAbort = null; }
+  _qsIndexCache.clear();      // release every room text we pulled in
+  _qsStatus('');
+  _qsSelKey = null;
   try { editor.focus(); } catch {}
 };
 
-window.quickSwitchPick = async function(name) {
-  // Content matches earn their keep: picking one jumps to the first hit in
-  // the opened document (retry once — a live sync snapshot can land late).
+function quickSwitchPickAt(i) {
+  const res = _qsResults[i];
+  if (!res) return;
+  // The split pane borrows this picker: a room chosen while it's waiting loads
+  // into the compare side instead of switching the live document.
+  if (typeof _splitPicking !== 'undefined' && _splitPicking && res.kind === 'room') {
+    _splitPicking = false;
+    closeQuickSwitcher();
+    try { splitLoadRoom(res.name); } catch (e) { console.error(e); }
+    return;
+  }
+  if (res.kind === 'ws') {
+    closeQuickSwitcher();
+    activeWorkspace = res.wsId;
+    store.set('cade-active-workspace', activeWorkspace);
+    try { renderWorkspacePill(); } catch {}
+    try { renderRoomTabs(); } catch {}
+    try { renderBreadcrumb(); } catch {}
+    try { renderSidebar(); } catch {}
+    return;
+  }
+  quickSwitchPick(res.name, res);
+}
+
+window.quickSwitchPick = async function(name, res) {
+  // A content/tag/file hit earns its keep: picking one jumps to the first
+  // occurrence in the opened document (retried once — a live sync snapshot can
+  // land late).
   let seekQ = null;
-  try {
-    const input = document.getElementById('qs-input');
-    const res = _qsResults.find(r => r.name === name);
-    if (res && res.content && input && input.value.trim().length >= 2) seekQ = input.value.trim().toLowerCase();
-  } catch {}
+  if (!res) res = _qsResults.find(r => r.kind === 'room' && r.name === name);
+  const why = res && res.why;
+  if (why) {
+    if (why.tag) seekQ = (tagSentinel() + why.tag).toLowerCase();
+    else if (why.file) seekQ = why.file.toLowerCase();
+    else if (why.text) seekQ = why.text.seek;
+  }
   closeQuickSwitcher();
   if (!name) return;
   if (name === activeRoom) { if (seekQ) _qsSeek(seekQ); return; }
-  // Item 22: follow the room into ITS OWN workspace (first membership) rather
-  // than dumping to All Rooms — the tab bar then shows its real context.
-  // Archived rooms still land in All Rooms (they're hidden everywhere else).
+  // Follow the room into ITS OWN workspace (first membership) rather than
+  // dumping to All Rooms — the tab bar then shows its real context. Archived
+  // rooms still land in All Rooms (they're hidden everywhere else).
   if (roomIsArchived(name)) {
     activeWorkspace = WS_ALL;
     store.set('cade-active-workspace', WS_ALL);
@@ -11877,84 +13341,27 @@ function _qsSeek(q) {
   } catch { return false; }
 }
 
-// Item 29: content search across the workspace's rooms (all rooms in the All
-// view) — async, time-budgeted chunks, capped results, per-open text cache so
-// keystrokes don't re-read localStorage. Kicks in from 2 chars.
-let _qsScanToken = 0;
-const _qsTextCache = new Map(); // room -> lowercased text ('' = known empty)
-function _qsRoomTextLower(r) {
-  if (_qsTextCache.has(r)) return _qsTextCache.get(r);
-  let t = '';
-  try {
-    // Cache first; fall back to the last-synced base for rooms whose cache
-    // hasn't been written on this device yet.
-    t = (r === activeRoom
-      ? editor.state.doc.toString()
-      : (store.get('cade-room-cache:' + r) || store.get('cade-room-synced:' + r) || '')).toLowerCase();
-  } catch {}
-  _qsTextCache.set(r, t);
-  return t;
-}
-function quickSwitchContentSearch(query) {
-  const token = ++_qsScanToken;
-  const q = query.trim().toLowerCase();
-  if (q.length < 2) return;
-  // Round-5: content search spans EVERY workspace; the active workspace's
-  // rooms just scan first, so with plentiful hits they surface first.
-  const live = rooms.filter(r => !roomIsArchived(r));
-  const scope = (activeWorkspace === WS_ALL)
-    ? live
-    : live.slice().sort((a, b) => (_qsInActiveWs(a) ? 0 : 1) - (_qsInActiveWs(b) ? 0 : 1));
-  let i = 0;
-  const found = [];
-  const step = () => {
-    if (token !== _qsScanToken) return; // a newer keystroke superseded us
-    const deadline = Date.now() + 8;    // ≤8ms of work per chunk
-    while (i < scope.length && Date.now() < deadline && found.length < 12) {
-      const r = scope[i++];
-      const text = _qsRoomTextLower(r);
-      if (!text) continue;
-      const at = text.indexOf(q);
-      if (at === -1) continue;
-      const s = Math.max(0, at - 24);
-      const raw = (s > 0 ? '…' : '') + text.slice(s, at + q.length + 44).replace(/\s+/g, ' ') + '…';
-      found.push({ name: r, score: 1, content: true, snippet: escapeHtml(raw) });
-    }
-    if (i < scope.length && found.length < 12) { setTimeout(step, 0); return; }
-    if (token !== _qsScanToken) return;
-    // Rooms already listed as NAME matches get their snippet attached in
-    // place (so a weak fuzzy name-match can't hide a strong content hit);
-    // the rest append as 📄 rows.
-    const byName = new Map(found.map(f => [f.name, f]));
-    let changed = false;
-    _qsResults.forEach(res => {
-      const f = byName.get(res.name);
-      if (f && !res.content) { res.content = true; res.snippet = f.snippet; byName.delete(res.name); changed = true; }
-    });
-    const extra = [...byName.values()];
-    if (extra.length) { _qsResults = _qsResults.concat(extra); changed = true; }
-    if (changed) renderQuickSwitchList();
-  };
-  setTimeout(step, 0);
-}
-
 (function() {
   const input = document.getElementById('qs-input');
   const overlay = document.getElementById('qs-overlay');
   if (!input || !overlay) return;
-  input.addEventListener('input', () => {
-    _qsResults = quickSwitchResults(input.value);
-    _qsIndex = 0;
-    renderQuickSwitchList();
-    quickSwitchContentSearch(input.value); // item 29 — appends 📄 content hits
-  });
+  input.addEventListener('input', () => qsRunQuery(input.value));
   input.addEventListener('keydown', (e) => {
-    if (e.key === 'ArrowDown') { e.preventDefault(); _qsIndex++; renderQuickSwitchList(); }
-    else if (e.key === 'ArrowUp') { e.preventDefault(); _qsIndex--; renderQuickSwitchList(); }
-    else if (e.key === 'Enter') {
+    if (e.key === 'ArrowDown') {
       e.preventDefault();
-      const res = _qsResults[_qsIndex];
-      if (res) quickSwitchPick(res.name);
+      _qsIndex++;
+      if (_qsIndex >= _qsResults.length) _qsIndex = _qsResults.length - 1;
+      _qsSelKey = _qsResults[_qsIndex] ? _qsKey(_qsResults[_qsIndex]) : null;
+      renderQuickSwitchList();
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      _qsIndex--;
+      if (_qsIndex < 0) _qsIndex = 0;
+      _qsSelKey = _qsResults[_qsIndex] ? _qsKey(_qsResults[_qsIndex]) : null;
+      renderQuickSwitchList();
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      quickSwitchPickAt(_qsIndex);
     } else if (e.key === 'Escape') {
       e.preventDefault(); e.stopPropagation(); closeQuickSwitcher();
     }
@@ -15631,7 +17038,11 @@ function _updateLocationForRoom() {
     params.set('ws', wsLabel);
     params.set('room', activeRoom);
     const qs = params.toString();
-    history.replaceState(null, '', window.location.pathname + (qs ? '?' + qs : '') + window.location.hash);
+    // window.history, not history: CodeMirror's history() extension is
+    // destructured into this scope at the top of the file and shadows the
+    // global, so the bare call threw (silently, inside the try) and the
+    // ?ws=&room= deep link was never actually written to the address bar.
+    window.history.replaceState(null, '', window.location.pathname + (qs ? '?' + qs : '') + window.location.hash);
   } catch {}
 }
 window._updateLocationForRoom = _updateLocationForRoom;
@@ -18403,6 +19814,8 @@ try {
   // are registered by the timer module itself when it loads.)
   // F2 — snapshot retention. Auto-discard snapshots older than the chosen window
   // (the newest is always kept). Storage is also capped per-room by count + bytes.
+  // Where clipped links land (see openClipSetup).
+  registerSetting({ key: 'capture.inbox', label: 'Clip inbox room', type: 'text', default: 'inbox', section: 'Behavior', hint: 'Room that ?clip= links are appended to — from the iOS share sheet or the desktop bookmarklet. Created on the first clip.' });
   // Temp-room lifetime (item 33): Ctrl+Shift+N rooms self-delete after this.
   registerSetting({ key: 'behavior.tempRoomTtl', label: 'Temp room lifetime', type: 'select', default: '24', section: 'Behavior', hint: 'Ctrl+Shift+N creates a temp_<stamp> room that deletes itself (server + all devices) after this long.', options: [
     { value: '1', label: '1 hour' },
@@ -18412,6 +19825,16 @@ try {
     { value: '48', label: '48 hours' },
     { value: 'never', label: 'Never (keep)' },
   ] });
+  // In-document tag sentinel. Switching it re-reads every document through the
+  // new character — tags already typed with the old one stop rendering, so this
+  // is a choice to make early.
+  registerSetting({ key: 'editor.tagSentinel', label: 'Tag sentinel', type: 'select', default: TAG_SENTINEL_DEFAULT, section: 'Editor', hint: 'The character that starts an in-document tag (¥invoice). ¥ is the default because # opens a comment in most code and a heading in markdown, and @ already means nav links and reminders. Type ¥ with /yen.', options: [
+    { value: '¥', label: '¥  (recommended)' },
+    { value: '€', label: '€' },
+    { value: '§', label: '§' },
+    { value: '@', label: '@  (collides with @ws:room)' },
+    { value: '#', label: '#  (collides with code + headings)' },
+  ], apply(v) { try { setTagSentinel(v); } catch {} } });
   // Bold/italic/underline flavor (item 2): markdown tags vs fancy Unicode.
   registerSetting({ key: 'editor.styleFlavor', label: 'Bold/italic/underline style', type: 'select', default: 'markdown', section: 'Editor', hint: 'What the B/I/U buttons and Ctrl+B/I/U produce. Fancy Unicode survives copy-paste anywhere; markdown tags render in-app. (Fancy is always used while Markdown Styling is off.)', options: [
     { value: 'markdown', label: 'Markdown (**bold**)' },
