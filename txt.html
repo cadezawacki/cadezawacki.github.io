@@ -3396,6 +3396,7 @@ body.readonly .cm-img-grip { display: none; }
           <button class="btn" style="flex:none;" onclick="clipCopy('clip-queue-url')">Copy</button>
         </div>
         <div class="form-hint" id="clip-bg-note"></div>
+        <div class="form-hint" id="clip-status" style="font-family:var(--font-mono);"></div>
         <div class="form-hint">Clips appear the moment they arrive if the inbox is open here; otherwise they wait and file when you open it. Missing <code>t</code> → the link’s own words are used as the title; missing <code>c</code> → the clip lands under <code>[ UNSORTED ]</code>.</div>
         <div style="display:flex; gap:var(--space-2); margin-top:var(--space-2); flex-wrap:wrap;">
           <button class="btn" onclick="clipTestQueue()" title="POST a probe to that address and delete it again">Test address</button>
@@ -10403,6 +10404,7 @@ async function _clipApply(entry) {
 // a particular link, use the foreground path instead.
 
 let _clipsWaiting = 0;
+let _clipStatusTimer = 0;
 
 async function _clipFp() {
   const key = store.get('cade-sync-key') || '';
@@ -10537,14 +10539,31 @@ function _clipFlush() {
   showToast('Filed ' + ids.length + ' clip' + (ids.length === 1 ? '' : 's'), 'success', 2200);
 }
 
+// Attaching can legitimately fail on a cold start: initFirebase THROWS while
+// the SDK's CDN scripts are still in flight, which on a phone is routinely
+// true a couple of seconds after load. The first version gave up silently
+// there and never tried again, so the listener stayed detached for the whole
+// session and no clip ever arrived. Every failure now schedules a retry.
+let _clipRetryTimer = 0;
+let _clipRetryDelay = 0;
+let _clipListenState = 'off';
+function _clipRetry(why) {
+  _clipListenState = 'retrying — ' + why;
+  clearTimeout(_clipRetryTimer);
+  _clipRetryDelay = Math.min(_clipRetryDelay ? _clipRetryDelay * 2 : 3000, 60000);
+  _clipRetryTimer = setTimeout(() => { startClipListener().catch(() => {}); }, _clipRetryDelay);
+}
+
 async function startClipListener() {
-  if (!_syncConfigured() || !navigator.onLine) return;
+  if (!_syncConfigured()) { _clipListenState = 'sync not configured'; return; }
+  if (!navigator.onLine) { _clipRetry('offline'); return; }
   const fp = await _clipFp();
-  if (!fp) return;
+  if (!fp) { _clipListenState = 'no sync key'; return; }
   if (_clipListenRef && _clipListenFp === fp) return;    // already listening
   stopClipListener();
   let db;
-  try { db = initFirebase(store.get('cade-firebase-url')); } catch { return; }
+  try { db = initFirebase(store.get('cade-firebase-url')); }
+  catch (e) { _clipRetry((e && e.message) ? e.message.split('(')[0].trim() : 'database not ready'); return; }
   try {
     _clipListenFp = fp;
     _clipListenRef = db.ref(_clipQueuePath(fp));
@@ -10556,13 +10575,25 @@ async function startClipListener() {
         clearTimeout(_clipFlushTimer);
         _clipFlushTimer = setTimeout(_clipFlush, 250);
       } catch (e) { console.error(e); }
-    }, () => {});
-  } catch (e) { console.error(e); _clipListenRef = null; }
+    }, (err) => { _clipRetry((err && err.message) || 'listen refused'); });
+    _clipListenState = 'attached';
+    _clipRetryDelay = 0;
+    clearTimeout(_clipRetryTimer);
+  } catch (e) {
+    console.error(e);
+    _clipListenRef = null; _clipListenFp = null;
+    _clipRetry((e && e.message) || 'attach failed');
+  }
 }
 function stopClipListener() {
   try { if (_clipListenRef && _clipListenFn) _clipListenRef.off('child_added', _clipListenFn); } catch {}
   _clipListenRef = null; _clipListenFn = null; _clipListenFp = null;
 }
+function clipStatusText() {
+  const q = _clipPending.size || _clipsWaiting;
+  return 'Live queue: ' + _clipListenState + (q ? ' · ' + q + ' held' : '');
+}
+window.clipStatusText = clipStatusText;
 window.startClipListener = startClipListener;
 
 // Switch to the inbox and file whatever is queued — the one-tap version of the
@@ -10603,16 +10634,25 @@ window.openClipSetup = function() {
     if (note) note.textContent = 'Queued clips are NOT encrypted (a Shortcut can’t run the app’s crypto). They are deleted the moment this app files them.';
     _clipFp().then(fp => {
       set('clip-queue-url', _clipQueueUrl(fp) || '');
-      // Make sure we're listening, then report what is actually held.
+      // Make sure we're listening, then report what is actually held. The
+      // status line is the answer to "is this thing even connected?" — the
+      // question that is otherwise impossible to answer from the outside.
       startClipListener().catch(() => {});
-      setTimeout(() => {
+      clearInterval(_clipStatusTimer);
+      const paint = () => {
+        const st = document.getElementById('clip-status');
+        const ov = document.getElementById('clip-overlay');
+        if (!ov || !ov.classList.contains('open')) { clearInterval(_clipStatusTimer); return; }
+        if (st) st.textContent = clipStatusText();
         const waiting = _clipPending.size || _clipsWaiting;
         const btn = document.getElementById('clip-waiting-btn');
         if (btn) {
           btn.hidden = !waiting;
           btn.textContent = 'File ' + waiting + ' waiting clip' + (waiting === 1 ? '' : 's');
         }
-      }, 600);
+      };
+      setTimeout(paint, 400);
+      _clipStatusTimer = setInterval(paint, 1500);
     }).catch(() => {});
   }
 };
@@ -17522,11 +17562,28 @@ setTimeout(() => {
 const _origSwitchRoomForClips = window.switchRoom;
 window.switchRoom = async function(name) {
   const r = await _origSwitchRoomForClips.apply(this, arguments);
-  // Arriving in the inbox files whatever the listener is holding.
+  // Arriving in the inbox files whatever the listener is holding, and is a
+  // good moment to make sure there IS a listener.
   try { _clipFlush(); } catch {}
+  try {
+    if (activeRoom === _clipInboxRoom()) {
+      startClipListener().catch(() => {});
+      if (_clipListenState !== 'attached') drainClips({ quiet: true }).catch(() => {});
+    }
+  } catch {}
   return r;
 };
 setTimeout(() => { try { startClipListener(); } catch {} }, 2500);
+// Belt and braces: if the socket never attaches (blocked, flaky, SDK failed to
+// load at all), a slow poll still delivers. Removing this entirely is what made
+// a detached listener silent rather than merely slow.
+setInterval(() => {
+  if (document.visibilityState !== 'visible') return;
+  if (_clipListenState !== 'attached') { try { startClipListener(); } catch {} }
+  if (_clipListenState !== 'attached' && activeRoom === _clipInboxRoom()) {
+    try { drainClips({ quiet: true }); } catch {}
+  }
+}, 45000);
 // A socket that died while the tab was backgrounded (phones do this constantly)
 // would otherwise stop delivering; re-attaching is cheap and idempotent.
 document.addEventListener('visibilitychange', () => {
