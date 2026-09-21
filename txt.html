@@ -1191,6 +1191,7 @@ body.split-open .mobile-toolbar { right: 50%; }
 .clip-steps { margin: 0 0 var(--space-3); padding-left: 1.2em; font-size: var(--text-sm); color: var(--text-muted); line-height: 1.6; }
 .clip-steps li { margin-bottom: 2px; }
 .clip-steps code, .form-hint code { font-family: var(--font-mono); font-size: 0.92em; }
+.clip-rec { font-size: var(--text-xs); font-weight: 500; color: var(--accent); background: var(--accent-bg); border-radius: 999px; padding: 1px 7px; margin-left: 4px; }
 @media (max-width: 480px) { .qs-status { display: none; } }
 
 /* Tree twisties + tag picker + pin/archive (Features 51/52/54) */
@@ -3382,19 +3383,34 @@ body.readonly .cm-img-grip { display: none; }
       </div>
 
       <div class="clip-step">
-        <div class="clip-step-title">iPhone / iPad — once, in the Shortcuts app</div>
+        <div class="clip-step-title">iPhone / iPad — in the background <span class="clip-rec">recommended</span></div>
         <ol class="clip-steps">
-          <li>New shortcut → <b>Receive</b> <i>URLs</i> from <i>Share Sheet</i>.</li>
-          <li>Add <b>Get Details of Safari Web Page</b> → <i>Name</i>. (Gives you the page title.)</li>
-          <li>Add <b>Text</b>, and paste the template below, replacing <code>URL</code> with the Shortcut Input variable and <code>TITLE</code> with that Name variable.</li>
-          <li>Add <b>Open URLs</b>, fed by that Text.</li>
-          <li>Name it “Clip to Cade.txt”. It now appears in Safari’s Share sheet.</li>
+          <li>Shortcuts → new shortcut → <b>Receive</b> <i>URLs</i> from <i>Share Sheet</i>.</li>
+          <li>Add <b>Get Details of Safari Web Page</b> → <i>Name</i>, for the page title.</li>
+          <li>Add <b>Get Contents of URL</b> with the address below, <b>Method: POST</b>, <b>Request Body: JSON</b>.</li>
+          <li>Two JSON fields: <code>u</code> = Shortcut Input, <code>t</code> = that Name.</li>
+          <li>Name it “Clip to Cade.txt”. Sharing now files the link without Safari leaving the page.</li>
+        </ol>
+        <div style="display:flex; gap:var(--space-2);">
+          <input class="form-input" id="clip-queue-url" readonly spellcheck="false" placeholder="needs Sync">
+          <button class="btn" style="flex:none;" onclick="clipCopy('clip-queue-url')">Copy</button>
+        </div>
+        <div class="form-hint" id="clip-bg-note"></div>
+        <div class="form-hint">Queued clips are filed into the inbox whenever this app has that room open — automatically, or with the button below.</div>
+        <button class="btn" id="clip-waiting-btn" hidden style="margin-top:var(--space-2);" onclick="clipFileWaiting()"></button>
+      </div>
+
+      <div class="clip-step">
+        <div class="clip-step-title">iPhone / iPad — opening the app instead</div>
+        <ol class="clip-steps">
+          <li>Same first two steps, then add <b>Text</b> with the template below — <code>URL</code> = Shortcut Input, <code>TITLE</code> = the Name.</li>
+          <li>End with <b>Open URLs</b>, fed by that Text.</li>
         </ol>
         <div style="display:flex; gap:var(--space-2);">
           <input class="form-input" id="clip-template" readonly spellcheck="false">
           <button class="btn" style="flex:none;" onclick="clipCopy('clip-template')">Copy</button>
         </div>
-        <div class="form-hint">Wrap each variable in a <b>URL Encode</b> action if a title with <code>&amp;</code> or <code>#</code> ever truncates the clip.</div>
+        <div class="form-hint">Opens the app on the inbox room and files the clip straight away — use it when a link shouldn’t sit unencrypted in the queue. Wrap each variable in a <b>URL Encode</b> action if a title with <code>&amp;</code> or <code>#</code> ever truncates the clip.</div>
       </div>
 
       <div class="clip-step">
@@ -4307,10 +4323,14 @@ const editorTheme = EditorView.theme({
 // 'cade-content' key used to hold a second full copy of the open room's text
 // purely for this first paint — for a large document that duplicate alone ate
 // a third of the ~5 MB localStorage bucket (see persistContent).
+// Which room the boot text belongs to, kept so a deep link that retargets the
+// active room can be told apart from a plain reload (see the guard after the
+// sync auto-connect block).
+let _savedContentRoom = '';
 const savedContent = (() => {
   try {
     const r = store.get('cade-active-room');
-    if (r) { const c = store.get('cade-room-cache:' + r); if (c != null) return c; }
+    if (r) { const c = store.get('cade-room-cache:' + r); if (c != null) { _savedContentRoom = r; return c; } }
   } catch {}
   return store.get('cade-content') || '';
 })();
@@ -10165,10 +10185,15 @@ async function _clipApply(entry) {
   const text = p.get('text');
   if (!url && !text) return;
   const entry = _clipEntry({ url, title: p.get('title'), text, tag: p.get('tag') });
-  // Strip first, act second: a refresh (or the deep-link writer below stamping
-  // ws/room back into the address) must never re-file the same clip.
+  // Strip the clip parameters and hand the inbox to the app's OWN deep-link
+  // reader as ?room=. That runs later in this same script and makes the inbox
+  // the room boot opens, so the clip has somewhere settled to land. Switching
+  // afterwards instead was a race: on a device where boot takes longer than the
+  // grace period, the clip was appended to whatever was open and boot then
+  // switched away from it.
   try {
     ['clip', 'title', 'text', 'tag'].forEach(k => p.delete(k));
+    p.set('room', _clipInboxRoom());
     const qs = p.toString();
     // window.history, not history: `const {history} = window.__CM6__` shadows
     // the global in this scope with CodeMirror's undo extension.
@@ -10192,6 +10217,92 @@ async function _clipApply(entry) {
   setTimeout(tryApply, 120);
 })();
 
+
+// ---- Background clipping (no tab) ------------------------------------------
+// Opening the app to save a link is the part worth removing. A Shortcut can
+// POST in the background instead — this database takes no auth header at all
+// (the URL is the credential, which is why room text is encrypted before it
+// ever leaves the device), so one "Get Contents of URL" action files a clip
+// without Safari ever coming forward:
+//
+//   POST <database>/clips/<fp>.json     body: {"u":"<url>","t":"<title>"}
+//
+// <fp> is the fingerprint of the sync key — the same path component the file
+// store uses, so clips are scoped to your key without revealing it. Firebase
+// push ids are chronological, so the queue drains in the order things were
+// saved without the Shortcut needing to send a timestamp.
+//
+// THE TRADE: a Shortcut cannot run AES-GCM, so a queued clip sits in plain
+// text under that path until this app files it. Anyone holding the database
+// URL could read the queue (they could already read every room, but those are
+// encrypted). Clips are deleted the moment they're filed; if that matters for
+// a particular link, use the foreground path instead.
+
+let _clipsWaiting = 0;
+
+async function _clipFp() {
+  const key = store.get('cade-sync-key') || '';
+  if (!key) return null;
+  try { return _imgKeyFp || (_imgKeyFp = await _computeKeyFingerprint(key)); } catch { return null; }
+}
+
+function _clipQueueUrl(fp) {
+  const base = (store.get('cade-firebase-url') || '').replace(/\/+$/, '');
+  return base && fp ? base + '/clips/' + fp + '.json' : '';
+}
+
+// Read the queue, append everything to the inbox, then delete exactly what we
+// filed. Appending first means a failed delete costs a duplicate rather than
+// the clip itself; entries that arrive mid-drain are left for the next pass.
+async function drainClips(opts) {
+  const quiet = !!(opts && opts.quiet);
+  if (!_syncConfigured() || !navigator.onLine) return 0;
+  const fp = await _clipFp();
+  if (!fp) return 0;
+  let db;
+  try { db = initFirebase(store.get('cade-firebase-url')); } catch { return 0; }
+  let val = null;
+  try { val = await db.ref('clips/' + fp).once('value').then(s => s.val()); } catch { return 0; }
+  const ids = val ? Object.keys(val) : [];
+  if (!ids.length) { _clipsWaiting = 0; return 0; }
+
+  const inbox = _clipInboxRoom();
+  if (activeRoom !== inbox) {
+    // Never yank someone out of the room they're working in to file a link.
+    _clipsWaiting = ids.length;
+    if (!quiet) showToast(ids.length + ' clip' + (ids.length === 1 ? '' : 's') + ' waiting — open "' + inbox + '" to file ' + (ids.length === 1 ? 'it' : 'them'), 'info', 4500);
+    return 0;
+  }
+
+  ids.sort();                          // push ids are chronological
+  let text = '';
+  for (const id of ids) {
+    const e = val[id] || {};
+    text += _clipEntry({ url: e.u || e.url, title: e.t || e.title, text: e.x || e.text, tag: e.g || e.tag });
+  }
+  appendTextToDocEnd(text);
+  const nulls = {};
+  for (const id of ids) nulls[id] = null;
+  try { await db.ref('clips/' + fp).update(nulls); } catch {}
+  _clipsWaiting = 0;
+  showToast('Filed ' + ids.length + ' clip' + (ids.length === 1 ? '' : 's'), 'success', 2500);
+  return ids.length;
+}
+window.drainClips = drainClips;
+
+// Switch to the inbox and file whatever is queued — the one-tap version of the
+// "clips waiting" toast.
+window.clipFileWaiting = async function() {
+  const inbox = _clipInboxRoom();
+  closeClipSetup();
+  if (activeRoom !== inbox) {
+    if (!rooms.includes(inbox)) { rooms.push(inbox); try { touchRoomCreated(inbox); } catch {} saveRooms(); }
+    try { await switchRoom(inbox); } catch (e) { console.error(e); }
+  }
+  const n = await drainClips();
+  if (!n) showToast('Nothing queued', 'info', 2000);
+};
+
 window.openClipSetup = function() {
   closeAllMenus();
   const base = _clipBaseUrl();
@@ -10204,6 +10315,24 @@ window.openClipSetup = function() {
   set('clip-bookmarklet', bm);
   const ov = document.getElementById('clip-overlay');
   if (ov) ov.classList.add('open');
+  // The queue endpoint needs the key fingerprint, which is a hash — fill it in
+  // once it resolves rather than blocking the modal on it.
+  const note = document.getElementById('clip-bg-note');
+  set('clip-queue-url', '');
+  if (!_syncConfigured()) {
+    if (note) note.textContent = 'Set up Sync first — background clipping writes to your synced database.';
+  } else {
+    if (note) note.textContent = 'Queued clips are NOT encrypted (a Shortcut can’t run the app’s crypto). They are deleted the moment this app files them.';
+    _clipFp().then(fp => {
+      set('clip-queue-url', _clipQueueUrl(fp) || '');
+      drainClips({ quiet: true }).catch(() => {});
+      const btn = document.getElementById('clip-waiting-btn');
+      if (btn) {
+        btn.hidden = !_clipsWaiting;
+        btn.textContent = 'File ' + _clipsWaiting + ' waiting clip' + (_clipsWaiting === 1 ? '' : 's');
+      }
+    }).catch(() => {});
+  }
 };
 window.closeClipSetup = function() {
   const ov = document.getElementById('clip-overlay');
@@ -17063,12 +17192,14 @@ try {
 } catch {}
 
 // Auto-connect on page load
+let _bootSwitchIssued = false;
 if (savedFirebaseUrl && savedEncKey) {
   // Kick off workspace sync independently (so workspaces appear even if no room is active)
   ensureWorkspaceSync();
   try { ensureSyncedBlobs(); } catch {}
   // If rooms exist, connect to active room
   if (rooms.length > 0 && activeRoom && rooms.includes(activeRoom)) {
+    _bootSwitchIssued = true;
     switchRoom(activeRoom);
   } else if (savedRoomName) {
     // Legacy: single room mode
@@ -17080,6 +17211,14 @@ if (savedFirebaseUrl && savedEncKey) {
     }
     switchRoom(savedRoomName);
   }
+}
+// A deep link (?room=…) can point the app at a room other than the one whose
+// text was loaded into the editor. The bootstrap switch above only runs when
+// sync is configured, so without this the editor would keep showing the
+// PREVIOUS room's text under the new room's name — and the first save would
+// write it there, clobbering the room that was linked to.
+if (!_bootSwitchIssued && activeRoom && activeRoom !== _savedContentRoom) {
+  try { switchRoom(activeRoom); } catch (e) { console.error(e); }
 }
 renderRoomTabs();
 // Restore this room's auto-color word rules on load (widget g) — covers the
@@ -17094,6 +17233,23 @@ setTimeout(() => {
   try { scheduleImageGC(); } catch {}
   try { flushPendingFileDeletes(); } catch {}
 }, 9000);
+
+// Background clips: file them when the inbox is the room in front, and notice
+// them (without interrupting) when it isn't. switchRoom is wrapped rather than
+// edited so the hook sits next to the other post-boot wiring.
+const _origSwitchRoomForClips = window.switchRoom;
+window.switchRoom = async function(name) {
+  const r = await _origSwitchRoomForClips.apply(this, arguments);
+  try { if (activeRoom === _clipInboxRoom()) drainClips({ quiet: true }); } catch {}
+  return r;
+};
+setTimeout(() => { try { drainClips(); } catch {} }, 4000);
+setInterval(() => {
+  // Only ever acts when the inbox is in front; otherwise it's a cheap read.
+  if (document.visibilityState === 'visible' && activeRoom === _clipInboxRoom()) {
+    try { drainClips({ quiet: true }); } catch {}
+  }
+}, 90000);
 
 // Also update room tabs when syncConnect runs
 const origSyncConnect = window.syncConnect;
