@@ -1126,6 +1126,65 @@ body.sel-mode .editor-wrap .cm-content { -webkit-touch-callout: none; }
 .qs-chip.on { color: var(--accent); border-color: var(--accent); background: var(--accent-bg); }
 .qs-status { flex: 0 0 auto; font-size: var(--text-xs, 11px); color: var(--text-faint); white-space: nowrap; }
 
+
+/* Split view. Side by side on a desktop, stacked on a phone — a 50%-wide
+   column of prose on a 390px screen is unreadable, and the diff is easier to
+   follow vertically anyway. */
+.editor-wrap.split { display: flex; flex-direction: row; }
+/* CM appends its editor AFTER the markup already in .editor-wrap, so source
+   order would put the compare pane on the left. Order it explicitly: the live
+   document is always the leading pane. */
+.editor-wrap.split > .cm-editor { flex: 1 1 50%; min-width: 0; order: 0; }
+.split-pane {
+  order: 1;
+  flex: 1 1 50%;
+  /* Both axes: a flex item defaults to min-height/min-width:auto, which refuses
+     to shrink below its content. In the stacked (mobile) layout that let the
+     compare pane's full document height squeeze the live pane to nothing. */
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--border);
+  background: var(--bg);
+}
+.split-pane[hidden] { display: none; }
+.split-head {
+  display: flex; align-items: center; gap: 3px; flex-wrap: wrap;
+  padding: 4px 6px; border-bottom: 1px solid var(--border);
+  background: var(--surface-2, var(--surface));
+}
+.split-room { max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 2px 8px; }
+.split-caret { color: var(--text-faint); }
+.split-icon { padding: 2px 6px; line-height: 1.5; }
+.split-opts { display: flex; gap: 3px; }
+.split-nav { display: flex; align-items: center; gap: 3px; }
+.split-count { font-size: var(--text-xs); color: var(--text-faint); white-space: nowrap; min-width: 4ch; text-align: center; }
+.split-spacer { flex: 1 1 0; min-width: 0; }
+.split-body { flex: 1 1 auto; min-height: 0; position: relative; }
+.split-body .cm-editor { height: 100%; font-family: var(--font-mono); font-size: var(--text-base); background: var(--bg); }
+.split-body .cm-scroller { overflow: auto; padding: 8px var(--space-3) var(--space-3); }
+
+/* Diff tints. Translucent so both themes stay readable and so an existing
+   highlight underneath still shows through. */
+.cm-diff-a   { background: color-mix(in srgb, #22c55e 16%, transparent); }
+.cm-diff-b   { background: color-mix(in srgb, #ef4444 16%, transparent); }
+.cm-diff-chg { background: color-mix(in srgb, #f59e0b 18%, transparent); }
+
+/* The floating toolbar belongs to the live document, but it is absolutely
+   positioned across the whole editor area — so while split it would hang over
+   the compare pane's header. Pull it back to the live half. (On mobile the
+   split is vertical and the live pane is on top, so it already lines up.) */
+body.split-open .mobile-toolbar { right: 50%; }
+
+@media (max-width: 768px) {
+  body.split-open .mobile-toolbar { right: 0; }
+  .editor-wrap.split { flex-direction: column; }
+  .editor-wrap.split > .cm-editor { flex: 1 1 50%; min-height: 0; }
+  .split-pane { flex: 1 1 50%; border-left: none; border-top: 1px solid var(--border); }
+  .split-room { max-width: 32%; }
+}
+
 /* Clip setup */
 .clip-step { margin-top: var(--space-5); }
 .clip-step-title { font-size: var(--text-sm); font-weight: 600; margin-bottom: var(--space-2); }
@@ -2786,6 +2845,10 @@ body.readonly .cm-img-grip { display: none; }
         <span></span>
       </button>
       <div class="menu-separator"></div>
+      <button class="menu-item" onclick="toggleSplit()" title="Show another room beside this one; compare and merge">
+        <span>Split / Compare</span>
+        <span></span>
+      </button>
       <button class="menu-item" onclick="openWhiteboard()">
         <span>Whiteboard</span>
         <span></span>
@@ -2935,7 +2998,27 @@ body.readonly .cm-img-grip { display: none; }
 </div>
 
 <!-- ========== EDITOR ========== -->
-<div class="editor-wrap" id="editor-wrap"></div>
+<div class="editor-wrap" id="editor-wrap">
+<div class="split-pane" id="split-pane" hidden>
+  <div class="split-head">
+    <button class="btn split-room" id="split-room-btn" onclick="splitPickRoom()" title="Choose the room to compare against">
+      <span id="split-title">Pick a room</span> <span class="split-caret">▾</span>
+    </button>
+    <button type="button" class="qs-chip" id="split-diff-btn" onclick="toggleSplitDiff()" title="Compare the two documents line by line">Diff</button>
+    <div class="split-opts" id="split-opts" hidden></div>
+    <div class="split-nav" id="split-nav" hidden>
+      <button class="btn split-icon" onclick="splitGoHunk(-1)" title="Previous change">‹</button>
+      <span class="split-count" id="split-count"></span>
+      <button class="btn split-icon" onclick="splitGoHunk(1)" title="Next change">›</button>
+      <button class="btn split-icon" onclick="splitTakeHunk()" title="Copy this change into the live document">◀ Take</button>
+    </div>
+    <span class="split-spacer"></span>
+    <button class="btn split-icon" onclick="splitSwap()" title="Swap: edit the other room instead">⇄</button>
+    <button class="btn split-icon" onclick="closeSplit()" title="Close split">✕</button>
+  </div>
+  <div class="split-body" id="split-body"></div>
+</div>
+</div>
 
 <!-- ========== MOBILE SCROLL BUTTONS ========== -->
 <div class="mobile-scroll-btns" aria-hidden="true">
@@ -4890,6 +4973,66 @@ function buildTagDecorations(view) {
   ranges.sort((a, b) => a.from - b.from || a.startSide - b.startSide);
   return Decoration.set(ranges, true);
 }
+
+// ---- Split view: state + diff decorations ---------------------------------
+// These live up here, above the editor's construction, because
+// buildEditorExtensions() names splitDiffPluginA — a const in the temporal dead
+// zone until its own line runs. The rest of the split feature is further down,
+// past the pieces it calls into at runtime.
+let _splitOpen = false;
+let _splitRoom = '';
+let _splitView = null;          // the compare pane's EditorView
+let _splitDiffOn = false;
+let _splitOps = [];             // [{t:'='|'~', a0,a1, b0,b1}] in line indices (0-based)
+let _splitHunks = [];
+let _splitHunk = -1;
+let _splitSyncing = false;      // re-entry guard for scroll locking
+let _splitVersion = 0;          // bumped to invalidate in-flight loads
+
+// ---- decorations -----------------------------------------------------------
+// Line tints on both sides. A side-by-side diff normally draws filler rows to
+// keep the two columns level; the scroll lock below maps positions through the
+// diff instead, which keeps the panes aligned without inventing lines that
+// aren't in either document.
+function _splitLineDeco(view, side) {
+  if (!_splitDiffOn || !_splitOps.length) return Decoration.none;
+  const doc = view.state.doc;
+  const ranges = [];
+  for (const op of _splitOps) {
+    if (op.t !== '~') continue;
+    const aEmpty = op.a1 <= op.a0, bEmpty = op.b1 <= op.b0;
+    const cls = (aEmpty || bEmpty) ? (side === 'a' ? 'cm-diff-a' : 'cm-diff-b') : 'cm-diff-chg';
+    const from = side === 'a' ? op.a0 : op.b0;
+    const to = side === 'a' ? op.a1 : op.b1;
+    for (let ln = from; ln < to && ln < doc.lines; ln++) {
+      const line = doc.line(ln + 1);
+      ranges.push(Decoration.line({ class: cls }).range(line.from));
+    }
+  }
+  ranges.sort((x, y) => x.from - y.from);
+  return Decoration.set(ranges, true);
+}
+
+const splitDiffPluginA = ViewPlugin.fromClass(class {
+  constructor(view) { this.v = _splitVersion; this.decorations = _splitLineDeco(view, 'a'); }
+  update(u) {
+    if (u.docChanged || u.viewportChanged || this.v !== _splitVersion) {
+      this.v = _splitVersion;
+      this.decorations = _splitLineDeco(u.view, 'a');
+    }
+  }
+}, { decorations: v => v.decorations });
+
+const splitDiffPluginB = ViewPlugin.fromClass(class {
+  constructor(view) { this.v = _splitVersion; this.decorations = _splitLineDeco(view, 'b'); }
+  update(u) {
+    if (u.docChanged || u.viewportChanged || this.v !== _splitVersion) {
+      this.v = _splitVersion;
+      this.decorations = _splitLineDeco(u.view, 'b');
+    }
+  }
+}, { decorations: v => v.decorations });
+
 
 const tagPlugin = ViewPlugin.fromClass(class {
   constructor(view) { this.v = mdVersion; this.decorations = buildTagDecorations(view); }
@@ -7475,6 +7618,7 @@ function buildEditorExtensions() {
         try { if (spellPopupEl) closeSpellPopup(); } catch {}
         saveContentDebounced();
         scheduleWordCount();
+        try { scheduleSplitDiff(); } catch {}   // keep the comparison honest while typing
         try { scheduleImgRemovalCheck(); } catch {} // GC deleted images (widget/memory)
         if (_wrapMode === 'hard' && !_hardWrapBusy) scheduleHardWrap();
         if (!syncState.suppressUpdate) {
@@ -7501,6 +7645,7 @@ function buildEditorExtensions() {
     listIndentPlugin,
     todoPlugin,
     linkPlugin,
+    splitDiffPluginA,   // line tints while the split pane is comparing
     tagPlugin,     // after linkPlugin: a link wins any overlap with a tag
     highlightPlugin,
     alignPlugin,
@@ -10080,6 +10225,420 @@ window.clipTest = function() {
   _clipApply(_clipEntry({ url: 'https://example.com/article', title: 'Example article', text: 'A quoted line from the page.' }))
     .then(() => closeClipSetup());
 };
+
+
+// ============================================
+// SPLIT VIEW  &  DIFF / MERGE
+// ============================================
+// A second pane beside (or, on a phone, below) the live document, holding
+// another room. Flip on Diff and the two are compared line by line: changes are
+// tinted on both sides, the panes scroll as one THROUGH the diff rather than by
+// raw pixel ratio, and hunks can be pulled into the live document one at a time.
+//
+// The compare pane is read-only on purpose. Writing to a room that isn't the
+// active one means writing its cache behind the back of the sync machinery,
+// which would either be clobbered on its next open or never pushed at all.
+// Merging in the other direction is done by SWAPPING sides — the live document
+// is always the one being edited, so there is no second write path to get wrong.
+
+const SPLIT_OPTS = [
+  { id: 'ws',    key: 'cade-split-ws',    label: 'Whitespace', title: 'Ignore whitespace changes: ends trimmed, runs collapsed' },
+  { id: 'case',  key: 'cade-split-case',  label: 'Case',       title: 'Ignore case differences' },
+  { id: 'blank', key: 'cade-split-blank', label: 'Blank',      title: 'Ignore added or removed blank lines' },
+];
+function _splitOptsState() {
+  const o = {};
+  for (const d of SPLIT_OPTS) o[d.id] = store.get(d.key) === '1';   // default off
+  return o;
+}
+
+// ---- line normalisation ----------------------------------------------------
+function _splitNorm(line, o) {
+  let t = line;
+  if (o.ws) t = t.trim().replace(/\s+/g, ' ');
+  if (o.case) t = t.toLowerCase();
+  return t;
+}
+
+// ---- diff ------------------------------------------------------------------
+// Patience diff: anchor on lines that appear exactly once on BOTH sides, take
+// the longest increasing run of those anchors, and recurse between them. It
+// produces the alignment a human would draw (matching braces and blank lines
+// don't drag unrelated blocks together), and it degrades gracefully — a region
+// with no unique anchors falls back to an LCS when it's small, or is reported
+// as one replaced block when it isn't.
+const SPLIT_LCS_MAX = 600;      // cells per side before LCS gives up
+
+function _lisIndices(seq) {
+  // Longest increasing subsequence over seq (values = b-side indices).
+  const piles = [], back = new Array(seq.length).fill(-1), idx = [];
+  for (let i = 0; i < seq.length; i++) {
+    const v = seq[i];
+    let lo = 0, hi = piles.length;
+    while (lo < hi) { const mid = (lo + hi) >> 1; if (piles[mid] < v) lo = mid + 1; else hi = mid; }
+    piles[lo] = v;
+    idx[lo] = i;
+    back[i] = lo > 0 ? idx[lo - 1] : -1;
+  }
+  const out = [];
+  let k = piles.length ? idx[piles.length - 1] : -1;
+  while (k >= 0) { out.push(k); k = back[k]; }
+  return out.reverse();
+}
+
+function _lcsOps(A, B, a0, a1, b0, b1, out) {
+  const n = a1 - a0, m = b1 - b0;
+  const dp = new Uint32Array((n + 1) * (m + 1));
+  for (let i = n - 1; i >= 0; i--) {
+    for (let j = m - 1; j >= 0; j--) {
+      dp[i * (m + 1) + j] = A[a0 + i] === B[b0 + j]
+        ? dp[(i + 1) * (m + 1) + j + 1] + 1
+        : Math.max(dp[(i + 1) * (m + 1) + j], dp[i * (m + 1) + j + 1]);
+    }
+  }
+  let i = 0, j = 0;
+  while (i < n && j < m) {
+    if (A[a0 + i] === B[b0 + j]) { _pushOp(out, '=', a0 + i, a0 + i + 1, b0 + j, b0 + j + 1); i++; j++; }
+    else if (dp[(i + 1) * (m + 1) + j] >= dp[i * (m + 1) + j + 1]) { _pushOp(out, '~', a0 + i, a0 + i + 1, b0 + j, b0 + j); i++; }
+    else { _pushOp(out, '~', a0 + i, a0 + i, b0 + j, b0 + j + 1); j++; }
+  }
+  if (i < n || j < m) _pushOp(out, '~', a0 + i, a1, b0 + j, b1);
+}
+
+function _pushOp(out, t, a0, a1, b0, b1) {
+  if (t === '~' && a0 === a1 && b0 === b1) return;
+  const last = out[out.length - 1];
+  if (last && last.t === t && last.a1 === a0 && last.b1 === b0) { last.a1 = a1; last.b1 = b1; return; }
+  out.push({ t, a0, a1, b0, b1 });
+}
+
+function _patience(A, B, a0, a1, b0, b1, out, depth) {
+  // Common prefix / suffix first — most of two versions of a document.
+  while (a0 < a1 && b0 < b1 && A[a0] === B[b0]) { _pushOp(out, '=', a0, a0 + 1, b0, b0 + 1); a0++; b0++; }
+  const tail = [];
+  while (a1 > a0 && b1 > b0 && A[a1 - 1] === B[b1 - 1]) { a1--; b1--; tail.push([a1, b1]); }
+  if (a0 === a1 || b0 === b1) {
+    _pushOp(out, '~', a0, a1, b0, b1);
+  } else {
+    const countA = new Map(), countB = new Map();
+    for (let i = a0; i < a1; i++) countA.set(A[i], (countA.get(A[i]) || 0) + 1);
+    for (let j = b0; j < b1; j++) countB.set(B[j], (countB.get(B[j]) || 0) + 1);
+    const posB = new Map();
+    for (let j = b0; j < b1; j++) if (countB.get(B[j]) === 1 && countA.get(B[j]) === 1) posB.set(B[j], j);
+    const pairs = [];
+    for (let i = a0; i < a1; i++) if (countA.get(A[i]) === 1 && posB.has(A[i])) pairs.push([i, posB.get(A[i])]);
+    const lis = _lisIndices(pairs.map(p => p[1])).map(k => pairs[k]);
+    if (!lis.length || depth > 24) {
+      if ((a1 - a0) <= SPLIT_LCS_MAX && (b1 - b0) <= SPLIT_LCS_MAX) _lcsOps(A, B, a0, a1, b0, b1, out);
+      else _pushOp(out, '~', a0, a1, b0, b1);        // too big to align finely
+    } else {
+      let ai = a0, bi = b0;
+      for (const [pa, pb] of lis) {
+        _patience(A, B, ai, pa, bi, pb, out, depth + 1);
+        _pushOp(out, '=', pa, pa + 1, pb, pb + 1);
+        ai = pa + 1; bi = pb + 1;
+      }
+      _patience(A, B, ai, a1, bi, b1, out, depth + 1);
+    }
+  }
+  for (let k = tail.length - 1; k >= 0; k--) _pushOp(out, '=', tail[k][0], tail[k][0] + 1, tail[k][1], tail[k][1] + 1);
+}
+
+// Diff two documents by line, honouring the ignore options. Ignored blank lines
+// are dropped before comparing and folded back into the surrounding op after.
+function splitDiff(aText, bText, o) {
+  const aRaw = aText.split('\n'), bRaw = bText.split('\n');
+  const keep = (l) => !o.blank || l.trim() !== '';
+  const aIdx = [], bIdx = [], A = [], B = [];
+  for (let i = 0; i < aRaw.length; i++) if (keep(aRaw[i])) { aIdx.push(i); A.push(_splitNorm(aRaw[i], o)); }
+  for (let j = 0; j < bRaw.length; j++) if (keep(bRaw[j])) { bIdx.push(j); B.push(_splitNorm(bRaw[j], o)); }
+  const raw = [];
+  _patience(A, B, 0, A.length, 0, B.length, raw, 0);
+  if (!o.blank) return raw;
+  const mapA = (i) => (i < aIdx.length ? aIdx[i] : aRaw.length);
+  const mapB = (j) => (j < bIdx.length ? bIdx[j] : bRaw.length);
+  const out = [];
+  for (const op of raw) _pushOp(out, op.t, mapA(op.a0), mapA(op.a1), mapB(op.b0), mapB(op.b1));
+  return out;
+}
+
+// ---- reading another room --------------------------------------------------
+// Local cache first, then the server copy for a room this device offloaded —
+// the same two-step the unified search uses.
+async function loadRoomTextAnywhere(room) {
+  if (room === activeRoom) return editor.state.doc.toString();
+  let t = '';
+  try { t = store.get('cade-room-cache:' + room) || store.get('cade-room-synced:' + room) || ''; } catch {}
+  if (t) return t;
+  if (!_syncConfigured() || !navigator.onLine) return '';
+  try {
+    const val = await _restFetchRoomVal(room, 'text', 8000);
+    const enc = unpackRoomText(val);
+    if (!enc) return '';
+    let dec = await decryptText(enc, getRoomEncKey(room, store.get('cade-sync-key') || ''));
+    if (dec == null) return '';
+    if (dec.startsWith(ROOM_LOCK_SENTINEL)) dec = dec.slice(ROOM_LOCK_SENTINEL.length);
+    return dec;
+  } catch { return ''; }
+}
+
+// ---- scroll lock -----------------------------------------------------------
+// Map a line on one side to its counterpart on the other by walking the diff:
+// exact inside matched runs, proportional inside a changed block.
+function _splitMapLine(line, fromSide) {
+  if (!_splitOps.length) return line;
+  for (const op of _splitOps) {
+    const f0 = fromSide === 'a' ? op.a0 : op.b0, f1 = fromSide === 'a' ? op.a1 : op.b1;
+    const t0 = fromSide === 'a' ? op.b0 : op.a0, t1 = fromSide === 'a' ? op.b1 : op.a1;
+    if (line < f1 || (f0 === f1 && line === f0)) {
+      if (op.t === '=') return t0 + (line - f0);
+      const span = f1 - f0;
+      const ratio = span > 0 ? (line - f0) / span : 0;
+      return Math.round(t0 + ratio * (t1 - t0));
+    }
+  }
+  const last = _splitOps[_splitOps.length - 1];
+  return (fromSide === 'a' ? last.b1 : last.a1) + (line - (fromSide === 'a' ? last.a1 : last.b1));
+}
+
+function _splitTopLine(view) {
+  try {
+    const block = view.lineBlockAtHeight(view.scrollDOM.scrollTop - view.documentTop + view.scrollDOM.getBoundingClientRect().top);
+    return view.state.doc.lineAt(block.from).number - 1;
+  } catch {
+    try { return view.state.doc.lineAt(view.viewport.from).number - 1; } catch { return 0; }
+  }
+}
+function _splitScrollToLine(view, line) {
+  try {
+    const n = Math.max(1, Math.min(view.state.doc.lines, line + 1));
+    const pos = view.state.doc.line(n).from;
+    const block = view.lineBlockAt(pos);
+    view.scrollDOM.scrollTop = Math.max(0, block.top);
+  } catch {}
+}
+function _splitSyncScroll(fromView, fromSide) {
+  if (!_splitDiffOn || _splitSyncing || !_splitView) return;
+  const other = fromSide === 'a' ? _splitView : editor;
+  if (!other) return;
+  _splitSyncing = true;
+  try { _splitScrollToLine(other, _splitMapLine(_splitTopLine(fromView), fromSide)); } finally {
+    requestAnimationFrame(() => { _splitSyncing = false; });
+  }
+}
+
+// ---- the pane --------------------------------------------------------------
+function _splitCompareExts() {
+  return [
+    lineNumbers(),
+    EditorView.lineWrapping,
+    EditorState.readOnly.of(true),
+    EditorView.editable.of(false),
+    editorTheme,
+    splitDiffPluginB,
+    EditorView.domEventHandlers({ scroll: (e, v) => { _splitSyncScroll(v, 'b'); } }),
+  ];
+}
+
+window.openSplit = async function(room) {
+  closeAllMenus();
+  const wrap = document.getElementById('editor-wrap');
+  const pane = document.getElementById('split-pane');
+  if (!wrap || !pane) return;
+  _splitOpen = true;
+  wrap.classList.add('split');
+  pane.hidden = false;
+  document.body.classList.add('split-open');
+  if (!_splitView) {
+    _splitView = new EditorView({
+      state: EditorState.create({ doc: '', extensions: _splitCompareExts() }),
+      parent: document.getElementById('split-body'),
+    });
+  }
+  renderSplitHead();
+  const target = room || _splitRoom || rooms.find(r => r !== activeRoom && !roomIsArchived(r)) || '';
+  if (target) await splitLoadRoom(target);
+  else renderSplitHead();
+};
+
+window.closeSplit = function() {
+  _splitOpen = false;
+  _splitDiffOn = false;
+  _splitOps = []; _splitHunks = []; _splitHunk = -1;
+  _splitVersion++;
+  const wrap = document.getElementById('editor-wrap');
+  const pane = document.getElementById('split-pane');
+  if (wrap) wrap.classList.remove('split');
+  if (pane) pane.hidden = true;
+  document.body.classList.remove('split-open');
+  // Drop the compare document — it can be a whole room's text.
+  if (_splitView) { try { _splitView.destroy(); } catch {} _splitView = null; }
+  try { editor.dispatch({}); } catch {}
+  try { editor.focus(); } catch {}
+};
+
+window.toggleSplit = function() {
+  if (_splitOpen) closeSplit(); else openSplit();
+};
+
+// The compare pane reports its own scrolling through a CM dom handler; the live
+// editor needs a plain listener on its scroller.
+try {
+  editor.scrollDOM.addEventListener('scroll', () => _splitSyncScroll(editor, 'a'), { passive: true });
+} catch {}
+
+async function splitLoadRoom(room) {
+  const v = ++_splitVersion;
+  _splitRoom = room;
+  const head = document.getElementById('split-title');
+  if (head) head.textContent = 'Loading ' + room + '…';
+  const text = await loadRoomTextAnywhere(room);
+  if (v !== _splitVersion || !_splitView) return;         // superseded or closed
+  _splitView.dispatch({ changes: { from: 0, to: _splitView.state.doc.length, insert: text } });
+  if (_splitDiffOn) recomputeDiff(); else renderSplitHead();
+}
+
+window.splitPickRoom = function() {
+  const names = rooms.filter(r => !roomIsArchived(r));
+  if (!names.length) { showToast('No other rooms yet', 'error', 2000); return; }
+  // Reuse the quick switcher for the picker: one search box, already knows how
+  // to find a room by name, text, file or tag.
+  _splitPicking = true;
+  window.openQuickSwitcher('');
+};
+let _splitPicking = false;
+
+// Swap which room is live. Merging only ever writes to the live document, so
+// this is how a change travels the other way.
+window.splitSwap = async function() {
+  if (!_splitOpen || !_splitRoom || _splitRoom === activeRoom) return;
+  const other = _splitRoom;
+  const mine = activeRoom;
+  await switchRoom(other);
+  await splitLoadRoom(mine);
+};
+
+window.toggleSplitDiff = function() {
+  _splitDiffOn = !_splitDiffOn;
+  if (_splitDiffOn) recomputeDiff();
+  else {
+    _splitOps = []; _splitHunks = []; _splitHunk = -1;
+    _splitVersion++;
+    try { editor.dispatch({}); } catch {}
+    try { _splitView && _splitView.dispatch({}); } catch {}
+    renderSplitHead();
+  }
+};
+
+window.splitSetOpt = function(id, on) {
+  const d = SPLIT_OPTS.find(x => x.id === id);
+  if (!d) return;
+  store.set(d.key, on ? '1' : '0');
+  if (_splitDiffOn) recomputeDiff(); else renderSplitHead();
+};
+
+function recomputeDiff() {
+  if (!_splitView) return;
+  const a = editor.state.doc.toString();
+  const b = _splitView.state.doc.toString();
+  const t0 = Date.now();
+  try {
+    _splitOps = splitDiff(a, b, _splitOptsState());
+  } catch (e) { console.error(e); _splitOps = []; }
+  _splitHunks = _splitOps.filter(o => o.t === '~');
+  if (_splitHunk >= _splitHunks.length) _splitHunk = _splitHunks.length - 1;
+  _splitVersion++;
+  try { editor.dispatch({}); } catch {}
+  try { _splitView.dispatch({}); } catch {}
+  renderSplitHead(Date.now() - t0);
+}
+
+// Re-diff as the live document is edited (debounced — a diff per keystroke on a
+// long document would be felt).
+let _splitDiffTimer = 0;
+function scheduleSplitDiff() {
+  if (!_splitOpen || !_splitDiffOn) return;
+  clearTimeout(_splitDiffTimer);
+  _splitDiffTimer = setTimeout(() => { if (_splitOpen && _splitDiffOn) recomputeDiff(); }, 300);
+}
+
+window.splitGoHunk = function(delta) {
+  if (!_splitHunks.length) return;
+  _splitHunk = (_splitHunk + delta + _splitHunks.length) % _splitHunks.length;
+  const h = _splitHunks[_splitHunk];
+  _splitSyncing = true;
+  try {
+    const aLine = Math.min(editor.state.doc.lines, Math.max(1, h.a0 + 1));
+    const pos = editor.state.doc.line(aLine).from;
+    editor.dispatch({ selection: { anchor: pos }, effects: EditorView.scrollIntoView(pos, { y: 'center' }) });
+    if (_splitView) _splitScrollToLine(_splitView, Math.max(0, h.b0 - 2));
+  } catch {}
+  requestAnimationFrame(() => { _splitSyncing = false; });
+  renderSplitHead();
+};
+
+// Replace the live document's lines for this hunk with the compare side's.
+window.splitTakeHunk = function() {
+  if (!_splitDiffOn || !_splitView || !_splitHunks.length) { showToast('Nothing to take', 'error', 1800); return; }
+  if (_splitHunk < 0) _splitHunk = 0;
+  const h = _splitHunks[_splitHunk];
+  const doc = editor.state.doc;
+  const bDoc = _splitView.state.doc;
+  const from = h.a0 < doc.lines ? doc.line(h.a0 + 1).from : doc.length;
+  const to = h.a1 <= 0 ? from : (h.a1 <= doc.lines ? doc.line(h.a1).to : doc.length);
+  let insert = '';
+  if (h.b1 > h.b0) {
+    const bFrom = bDoc.line(Math.min(bDoc.lines, h.b0 + 1)).from;
+    const bTo = bDoc.line(Math.min(bDoc.lines, h.b1)).to;
+    insert = bDoc.sliceString(bFrom, bTo);
+  }
+  // A pure insertion has no lines to replace on this side: splice it in at the
+  // boundary, carrying a newline so it doesn't fuse with the line above.
+  let changes;
+  if (h.a1 <= h.a0) changes = { from, to: from, insert: insert + (insert ? '\n' : '') };
+  else if (!insert) {
+    const delTo = Math.min(doc.length, to + 1);          // take the trailing newline too
+    changes = { from, to: delTo, insert: '' };
+  } else changes = { from, to, insert };
+  editor.dispatch({ changes, scrollIntoView: true });
+  showToast('Took 1 change from ' + _splitRoom, 'success', 1600);
+  recomputeDiff();
+};
+
+window.splitTakeAll = function() {
+  if (!_splitView) return;
+  const b = _splitView.state.doc.toString();
+  if (!confirm('Replace this document with all of "' + _splitRoom + '"?\nThis is one undo step.')) return;
+  editor.dispatch({ changes: { from: 0, to: editor.state.doc.length, insert: b } });
+  showToast('Replaced with ' + _splitRoom, 'success', 2000);
+  recomputeDiff();
+};
+
+function renderSplitHead(ms) {
+  const title = document.getElementById('split-title');
+  if (title) title.textContent = _splitRoom || 'Pick a room';
+  const diffBtn = document.getElementById('split-diff-btn');
+  if (diffBtn) diffBtn.classList.toggle('on', _splitDiffOn);
+  const opts = document.getElementById('split-opts');
+  if (opts) {
+    opts.hidden = !_splitDiffOn;
+    const st = _splitOptsState();
+    opts.innerHTML = SPLIT_OPTS.map(d =>
+      `<button type="button" class="qs-chip${st[d.id] ? ' on' : ''}" data-sopt="${d.id}" title="${escapeHtml(d.title)}">${d.label}</button>`
+    ).join('');
+    opts.querySelectorAll('[data-sopt]').forEach(btn => {
+      btn.addEventListener('click', () => window.splitSetOpt(btn.dataset.sopt, !btn.classList.contains('on')));
+    });
+  }
+  const nav = document.getElementById('split-nav');
+  if (nav) nav.hidden = !_splitDiffOn;
+  const count = document.getElementById('split-count');
+  if (count) {
+    if (!_splitDiffOn) count.textContent = '';
+    else if (!_splitHunks.length) count.textContent = 'identical';
+    else count.textContent = (_splitHunk >= 0 ? (_splitHunk + 1) + '/' : '') + _splitHunks.length;
+  }
+}
 
 // ============================================
 // SCRIPT PICKER
@@ -12704,6 +13263,7 @@ window.openQuickSwitcher = function(prefill) {
 window.closeQuickSwitcher = function() {
   const overlay = document.getElementById('qs-overlay');
   if (overlay) overlay.classList.remove('open');
+  if (typeof _splitPicking !== 'undefined') _splitPicking = false;   // abandoned pick doesn't leak
   _qsScanToken++;             // late arrivals are dropped
   if (_qsScanAbort) { try { _qsScanAbort.abort(); } catch {} _qsScanAbort = null; }
   _qsIndexCache.clear();      // release every room text we pulled in
@@ -12715,6 +13275,14 @@ window.closeQuickSwitcher = function() {
 function quickSwitchPickAt(i) {
   const res = _qsResults[i];
   if (!res) return;
+  // The split pane borrows this picker: a room chosen while it's waiting loads
+  // into the compare side instead of switching the live document.
+  if (typeof _splitPicking !== 'undefined' && _splitPicking && res.kind === 'room') {
+    _splitPicking = false;
+    closeQuickSwitcher();
+    try { splitLoadRoom(res.name); } catch (e) { console.error(e); }
+    return;
+  }
   if (res.kind === 'ws') {
     closeQuickSwitcher();
     activeWorkspace = res.wsId;
