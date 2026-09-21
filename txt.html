@@ -2120,6 +2120,23 @@ body.sel-mode .editor-wrap .cm-content { -webkit-touch-callout: none; }
   -webkit-touch-callout: none;
 }
 
+/* In-document tags — ¥tag rendered as a badge.
+   The pill is drawn with a tight box on purpose: no margin, no extra
+   line-height, and padding small enough that the hit area never spills past
+   the glyphs. On a phone that matters — an oversized badge steals taps meant
+   for placing the caret in the words either side of it. */
+.cm-tag {
+  color: var(--accent);
+  background: var(--accent-bg);
+  border-radius: 4px;
+  padding: 0 3px;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+  cursor: pointer;
+  -webkit-touch-callout: none;
+}
+.cm-tag:hover { background: color-mix(in srgb, var(--accent) 18%, transparent); }
+
 /* Shared popover menu (link actions) */
 .cm-ctx-menu {
   position: fixed;
@@ -4633,6 +4650,191 @@ const linkPlugin = ViewPlugin.fromClass(class {
     if (update.docChanged || update.viewportChanged) this.decorations = buildLinkDecorations(update.view);
   }
 }, { decorations: v => v.decorations });
+
+// ============================================
+// IN-DOCUMENT TAGS   ¥tag
+// ============================================
+// Workspaces label ROOMS; this labels CONTENT. A tag is a sentinel plus a word
+// — ¥invoice, ¥work/acme — drawn as a badge and searchable from Ctrl+P.
+//
+// WHY ¥: '#' opens a Python/shell comment and a markdown heading, so half the
+// documents in this app would light up with false tags. '@' is already spoken
+// for twice — @ws:room nav links and @remind! tokens. '¥' appears in neither
+// prose nor code, and /yen already types it through the slash-code system. The
+// sentinel is a setting all the same (Settings → Editor), because the right
+// answer depends on what you write.
+const TAG_SENTINELS = ['¥', '€', '§', '@', '#'];
+const TAG_SENTINEL_DEFAULT = '¥';
+let _tagSentinel = TAG_SENTINEL_DEFAULT;
+let _tagRe = null;
+
+function tagSentinel() { return _tagSentinel; }
+function setTagSentinel(s) {
+  const next = TAG_SENTINELS.includes(s) ? s : TAG_SENTINEL_DEFAULT;
+  if (next === _tagSentinel) return;
+  _tagSentinel = next;
+  _tagRe = null;
+  _tagVocab = null;
+  mdVersion++;                       // every rendered tag is now a different token
+  try { editor.dispatch({}); } catch {}
+}
+
+// (boundary)(sentinel)(name). The name starts alphanumeric and may nest with
+// '/', so ¥work/acme is one tag. A trailing separator is trimmed by the caller.
+function tagRegex() {
+  if (!_tagRe) {
+    const s = _tagSentinel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    _tagRe = new RegExp('(^|[^\\w' + s + '])' + s + '([A-Za-z0-9_][A-Za-z0-9_/-]{0,63})', 'g');
+  }
+  _tagRe.lastIndex = 0;
+  return _tagRe;
+}
+
+function _tagTrim(name) { return name.replace(/[/-]+$/, ''); }
+
+// Line-relative spans, for the decorator.
+function findTagsInLine(text) {
+  const out = [];
+  if (!text || text.length > 2000) return out;   // data/image lines aren't prose
+  const re = tagRegex();
+  let m;
+  while ((m = re.exec(text)) !== null) {
+    const name = _tagTrim(m[2]);
+    if (!name) continue;
+    const start = m.index + m[1].length;
+    out.push({ start, end: start + _tagSentinel.length + name.length, name });
+  }
+  return out;
+}
+
+// Every distinct tag in a block of text, lowercased. Fenced code is skipped so
+// the '#' sentinel doesn't turn every Python comment into a tag. Used by the
+// Ctrl+P index and by tag autocomplete.
+function extractTags(text) {
+  const set = new Set();
+  if (!text) return set;
+  let inFence = false;
+  for (const line of String(text).split('\n')) {
+    if (line.startsWith('```')) { inFence = !inFence; continue; }
+    if (inFence || line.length > 2000) continue;
+    // Blank out what the badge renderer also refuses — inline `code` and URLs
+    // — so the index finds exactly the tags a reader can see.
+    const scan = line.replace(/`[^`\n]*`/g, ' ').replace(/https?:\/\/\S+/g, ' ');
+    const re = tagRegex();
+    let m;
+    while ((m = re.exec(scan)) !== null) {
+      const name = _tagTrim(m[2]);
+      if (name) set.add(name.toLowerCase());
+    }
+  }
+  return set;
+}
+
+let tagRanges = [];   // viewport spans, for hit-testing pointer events
+
+function buildTagDecorations(view) {
+  tagRanges = [];
+  if (!mdStyleEnabled) return Decoration.none;   // "no syntax" mode shows raw text
+  const doc = view.state.doc;
+  const ranges = [];
+  for (const { from, to } of view.visibleRanges) {
+    const startLine = doc.lineAt(from).number;
+    const endLine = doc.lineAt(to).number;
+    for (let i = startLine; i <= endLine; i++) {
+      const line = doc.line(i);
+      if (line.text.length > 2000) continue;
+      if (fenceContaining(line.from)) continue;                    // code is never a tag
+      for (const sp of findTagsInLine(line.text)) {
+        const f = line.from + sp.start, t = line.from + sp.end;
+        if (_inInlineCode(doc, f)) continue;
+        // A link wins the overlap. This is what keeps the '@' sentinel usable
+        // (@ws:room would otherwise badge as ¥ws) and stops a '#fragment' in a
+        // URL from badging under the '#' sentinel. linkPlugin is registered
+        // first, so linkRanges already covers this viewport.
+        if (linkRanges.some(r => f < r.to && t > r.from)) continue;
+        ranges.push(Decoration.mark({ class: 'cm-tag', attributes: { 'data-tag': sp.name } }).range(f, t));
+        tagRanges.push({ from: f, to: t, name: sp.name });
+      }
+    }
+  }
+  ranges.sort((a, b) => a.from - b.from || a.startSide - b.startSide);
+  return Decoration.set(ranges, true);
+}
+
+const tagPlugin = ViewPlugin.fromClass(class {
+  constructor(view) { this.v = mdVersion; this.decorations = buildTagDecorations(view); }
+  update(update) {
+    if (update.docChanged || update.viewportChanged || this.v !== mdVersion) {
+      this.v = mdVersion;
+      this.decorations = buildTagDecorations(update.view);
+    }
+  }
+}, { decorations: v => v.decorations });
+
+function hitTag(pos) { return tagRanges.find(r => pos >= r.from && pos < r.to); }
+
+function openTagMenu(tag, x, y) {
+  try { closeAutocomplete(); } catch {}
+  const token = _tagSentinel + tag.name;
+  openMenu([
+    { label: 'Find ' + token, run: () => window.searchTag(tag.name) },
+    { label: 'Copy tag', run: () => ctxCopy(token) },
+    { sep: true },
+    { label: 'Remove tag', danger: true, run: () => {
+      try { editor.dispatch({ changes: { from: tag.from, to: tag.to, insert: '' } }); editor.focus(); } catch {}
+    } },
+  ], x, y);
+}
+
+// Hand the tag to the Ctrl+P search, which knows how to find every room
+// carrying it (Search Tags layer).
+window.searchTag = function(name) {
+  if (!name) return;
+  try { window.openQuickSwitcher(_tagSentinel + name); } catch {}
+};
+
+// Known tags for autocomplete: the open document always, plus whatever the
+// locally-cached rooms carry (recomputed at most every 20s — this walks every
+// cached room's text and is only worth doing while someone is mid-token).
+let _tagVocab = null;
+let _tagVocabAt = 0;
+function tagVocabulary() {
+  const now = Date.now();
+  if (_tagVocab && now - _tagVocabAt < 20000) {
+    const live = new Set(_tagVocab);
+    try { extractTags(editor.state.doc.toString()).forEach(t => live.add(t)); } catch {}
+    return live;
+  }
+  const set = new Set();
+  try {
+    for (const r of rooms) {
+      if (roomIsArchived(r)) continue;
+      const text = store.get('cade-room-cache:' + r) || store.get('cade-room-synced:' + r) || '';
+      if (text) extractTags(text).forEach(t => set.add(t));
+    }
+  } catch {}
+  _tagVocab = set;
+  _tagVocabAt = now;
+  const live = new Set(set);
+  try { extractTags(editor.state.doc.toString()).forEach(t => live.add(t)); } catch {}
+  return live;
+}
+
+function buildTagItems(prefix) {
+  const p = (prefix || '').toLowerCase();
+  const out = [];
+  for (const t of tagVocabulary()) {
+    if (p && !t.startsWith(p)) continue;
+    // Never offer what is already typed. That covers both the caret simply
+    // resting at the end of a finished tag (nothing to complete, so no popup
+    // over the text) and the half-typed token itself, which the vocabulary
+    // picks up from the open document the moment it is typed.
+    if (t === p) continue;
+    out.push({ label: _tagSentinel + t, insert: _tagSentinel + t, desc: 'Tag', kind: 'tag' });
+  }
+  out.sort((a, b) => a.label.length - b.label.length || (a.label < b.label ? -1 : 1));
+  return out.slice(0, 8);
+}
 
 // ============================================
 // TEXT HIGHLIGHTS v2  %%bg|text%%  ·  %%bg/fg|text%%  ·  %%/fg|text%%
@@ -7169,6 +7371,7 @@ function buildEditorExtensions() {
     listIndentPlugin,
     todoPlugin,
     linkPlugin,
+    tagPlugin,     // after linkPlugin: a link wins any overlap with a tag
     highlightPlugin,
     alignPlugin,
     autoColorCompartment.of([autoColorPlugin]),
@@ -7600,6 +7803,11 @@ editor.dom.addEventListener('click', (e) => {
       else openLinkMenu(link, e.clientX, e.clientY);
       return;
     }
+    // A tag opens its MENU on touch rather than jumping straight to a search:
+    // a badge sits inline in a sentence, so a mistaken tap has to be
+    // recoverable by dismissing, not by navigating back.
+    const tagHit = hitTag(pos);
+    if (tagHit) { e.preventDefault(); openTagMenu(tagHit, e.clientX, e.clientY); return; }
     if (spellHit) { if (!consumeSpellReopenSuppression(spellHit)) openSpellPopup(spellHit); return; }
     // A checkbox line. Ticking one was hotkey-only (Ctrl+D), which a phone
     // has no way to press — so on touch there was no way to complete a todo
@@ -7618,6 +7826,13 @@ editor.dom.addEventListener('click', (e) => {
     else openLink(link.url);
     return;
   }
+  const tagHit = hitTag(pos);
+  if (tagHit && !e.ctrlKey && !e.metaKey) {
+    e.preventDefault();
+    try { closeAutocomplete(); } catch {}
+    window.searchTag(tagHit.name);
+    return;
+  }
   closeSpellPopup(); closeCtxMenu();
 });
 
@@ -7634,6 +7849,8 @@ editor.dom.addEventListener('contextmenu', (e) => {
   if (hl) { e.preventDefault(); openHighlightMenu(hl, e.clientX, e.clientY); return; }
   const link = hitLink(pos);
   if (link && link.kind !== 'nav') { e.preventDefault(); openLinkMenu(link, e.clientX, e.clientY); return; }
+  const tagHit = hitTag(pos);
+  if (tagHit) { e.preventDefault(); openTagMenu(tagHit, e.clientX, e.clientY); return; }
   if (spellHit) { e.preventDefault(); openSpellPopup(spellHit); return; }
   const todoHit = hitTodoLine(pos);
   if (todoHit && editor.state.selection.main.empty) {
@@ -8045,6 +8262,10 @@ function buildSlashItems(code) {
 
 function maybeAutocomplete() {
   if (acSuppress) { acSuppress = false; closeAutocomplete(); return; }
+  // Nothing completes over an open popover menu, or while focus has left the
+  // editor: clicking a tag badge opens one or the other, and the caret it
+  // leaves behind would otherwise pop a completion list on top of it.
+  if (ctxMenuEl || !editor.hasFocus) { closeAutocomplete(); return; }
   const sel = editor.state.selection.main;
   if (!sel.empty) { closeAutocomplete(); return; }
   const line = editor.state.doc.lineAt(sel.head);
@@ -8061,6 +8282,18 @@ function maybeAutocomplete() {
     acTo = sel.head;
     showAutocomplete(items);
     return;
+  }
+  // Tag completion: the sentinel plus a partial name, so ¥inv offers ¥invoice
+  // instead of letting near-duplicate tags pile up.
+  const tm = before.match(new RegExp('(?:^|[\\s,;(])' + _tagSentinel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '([A-Za-z0-9_/-]*)$'));
+  if (tm) {
+    const items = buildTagItems(tm[1]);
+    if (items.length) {
+      acFrom = sel.head - tm[1].length - _tagSentinel.length;
+      acTo = sel.head;
+      showAutocomplete(items);
+      return;
+    }
   }
   // "/code" symbol shortcuts (always available).
   const sm = before.match(/(?:^|[\s,;(])\/([-A-Za-z0-9<>=!~*.()$|]{1,6})$/);
@@ -11812,19 +12045,20 @@ function renderQuickSwitchList() {
   if (active) active.scrollIntoView({ block: 'nearest' });
 }
 
-window.openQuickSwitcher = function() {
+window.openQuickSwitcher = function(prefill) {
   closeAllMenus && closeAllMenus();
   const overlay = document.getElementById('qs-overlay');
   const input = document.getElementById('qs-input');
   if (!overlay || !input) return;
-  input.value = '';
+  input.value = prefill || '';
   _qsIndex = 0;
   _qsScanToken++;       // cancel any in-flight content scan
   _qsTextCache.clear(); // fresh text snapshot per open (memory care)
-  _qsResults = quickSwitchResults('');
+  _qsResults = quickSwitchResults(input.value);
   renderQuickSwitchList();
   overlay.classList.add('open');
-  setTimeout(() => input.focus(), 10);
+  setTimeout(() => { input.focus(); input.select(); }, 10);
+  if (input.value) quickSwitchContentSearch(input.value);
 };
 
 window.closeQuickSwitcher = function() {
@@ -18412,6 +18646,16 @@ try {
     { value: '48', label: '48 hours' },
     { value: 'never', label: 'Never (keep)' },
   ] });
+  // In-document tag sentinel. Switching it re-reads every document through the
+  // new character — tags already typed with the old one stop rendering, so this
+  // is a choice to make early.
+  registerSetting({ key: 'editor.tagSentinel', label: 'Tag sentinel', type: 'select', default: TAG_SENTINEL_DEFAULT, section: 'Editor', hint: 'The character that starts an in-document tag (¥invoice). ¥ is the default because # opens a comment in most code and a heading in markdown, and @ already means nav links and reminders. Type ¥ with /yen.', options: [
+    { value: '¥', label: '¥  (recommended)' },
+    { value: '€', label: '€' },
+    { value: '§', label: '§' },
+    { value: '@', label: '@  (collides with @ws:room)' },
+    { value: '#', label: '#  (collides with code + headings)' },
+  ], apply(v) { try { setTagSentinel(v); } catch {} } });
   // Bold/italic/underline flavor (item 2): markdown tags vs fancy Unicode.
   registerSetting({ key: 'editor.styleFlavor', label: 'Bold/italic/underline style', type: 'select', default: 'markdown', section: 'Editor', hint: 'What the B/I/U buttons and Ctrl+B/I/U produce. Fancy Unicode survives copy-paste anywhere; markdown tags render in-app. (Fancy is always used while Markdown Styling is off.)', options: [
     { value: 'markdown', label: 'Markdown (**bold**)' },
