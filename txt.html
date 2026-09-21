@@ -3370,7 +3370,7 @@ body.readonly .cm-img-grip { display: none; }
   <div class="modal-dialog modal-dialog-scroll" style="max-width: 560px;" id="clip-dialog" tabindex="-1">
     <div class="modal-header">
       <div class="modal-title">Clip a link</div>
-      <div class="modal-desc" style="margin-bottom:0;">Save a page into this app from anywhere — the share sheet on iOS, a bookmarklet on a desktop browser. Clips are appended to one inbox room.</div>
+      <div class="modal-desc" style="margin-bottom:0;">Save a page into this app from anywhere — the share sheet on iOS, a bookmarklet on a desktop browser. Clips file themselves into <code>[ CATEGORY ]</code> sections of one inbox room.</div>
     </div>
     <div class="modal-body">
       <div class="form-group">
@@ -3385,10 +3385,10 @@ body.readonly .cm-img-grip { display: none; }
       <div class="clip-step">
         <div class="clip-step-title">iPhone / iPad — in the background <span class="clip-rec">recommended</span></div>
         <ol class="clip-steps">
-          <li>Shortcuts → new shortcut → <b>Receive</b> <i>URLs</i> from <i>Share Sheet</i>.</li>
-          <li>Add <b>Get Details of Safari Web Page</b> → <i>Name</i>, for the page title.</li>
+          <li>Shortcuts → new shortcut → <b>Receive</b> <i>Safari web pages and URLs</i> from <i>Share Sheet</i>. Both types matter — with URLs alone the page title isn’t available.</li>
+          <li>Add <b>Get Details of Safari Web Page</b>, input <i>Shortcut Input</i>, detail <i>Name</i>. That is the page title.</li>
           <li>Add <b>Get Contents of URL</b> with the address below, <b>Method: POST</b>, <b>Request Body: JSON</b>.</li>
-          <li>Two JSON fields: <code>u</code> = Shortcut Input, <code>t</code> = that Name.</li>
+          <li>JSON fields: <code>u</code> = Shortcut Input, <code>t</code> = that Name, and optionally <code>c</code> = a category such as <i>Code</i>.</li>
           <li>Name it “Clip to Cade.txt”. Sharing now files the link without Safari leaving the page.</li>
         </ol>
         <div style="display:flex; gap:var(--space-2);">
@@ -3396,7 +3396,7 @@ body.readonly .cm-img-grip { display: none; }
           <button class="btn" style="flex:none;" onclick="clipCopy('clip-queue-url')">Copy</button>
         </div>
         <div class="form-hint" id="clip-bg-note"></div>
-        <div class="form-hint">Queued clips are filed into the inbox whenever this app has that room open — automatically, or with the button below.</div>
+        <div class="form-hint">Clips appear the moment they arrive if the inbox is open here; otherwise they wait and file when you open it. Missing <code>t</code> → the link’s own words are used as the title; missing <code>c</code> → the clip lands under <code>[ UNSORTED ]</code>.</div>
         <div style="display:flex; gap:var(--space-2); margin-top:var(--space-2); flex-wrap:wrap;">
           <button class="btn" onclick="clipTestQueue()" title="POST a probe to that address and delete it again">Test address</button>
           <button class="btn" id="clip-waiting-btn" hidden onclick="clipFileWaiting()"></button>
@@ -3406,7 +3406,7 @@ body.readonly .cm-img-grip { display: none; }
       <div class="clip-step">
         <div class="clip-step-title">iPhone / iPad — opening the app instead</div>
         <ol class="clip-steps">
-          <li>Same first two steps, then add <b>Text</b> with the template below — <code>URL</code> = Shortcut Input, <code>TITLE</code> = the Name.</li>
+          <li>Same first two steps, then add <b>Text</b> with the template below — <code>URL</code> = Shortcut Input, <code>TITLE</code> = the Name, <code>CATEGORY</code> = a section name (drop it to file under UNSORTED).</li>
           <li>End with <b>Open URLs</b>, fed by that Text.</li>
         </ol>
         <div style="display:flex; gap:var(--space-2);">
@@ -10151,17 +10151,171 @@ function _clipInboxRoom() {
 }
 
 // One markdown list item, with the selection quoted under it when there is one.
-function _clipEntry({ url, title, text, tag }) {
+// When no title arrives, build a readable one out of the URL instead of
+// showing a bare link: the last meaningful path segment, de-slugified, with
+// the host after it. /blog/how-to-fix-css → "How to fix css — example.com".
+function _clipLabelFromUrl(url) {
+  try {
+    const u = new URL(url);
+    const host = u.hostname.replace(/^www\./, '');
+    const seg = u.pathname.split('/').filter(Boolean).pop() || '';
+    const words = decodeURIComponent(seg)
+      .replace(/\.(html?|php|aspx?|md)$/i, '')
+      .replace(/[-_+]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (!words || /^\d+$/.test(words) || words.length > 90) return host;
+    return words.charAt(0).toUpperCase() + words.slice(1) + ' — ' + host;
+  } catch { return url; }
+}
+
+function _clipEntry({ url, title, text, tag, at }) {
   let label = (title || '').trim();
-  if (!label && url) { try { label = new URL(url).hostname.replace(/^www\./, ''); } catch { label = url; } }
+  if (!label && url) label = _clipLabelFromUrl(url);
   const safeTag = (tag || '').trim().replace(/[^\w/-]/g, '');
-  const suffix = safeTag ? ' ' + tagSentinel() + safeTag : '';
+  const date = ' (' + _clipDateStr(at) + ')';
+  const suffix = date + (safeTag ? ' ' + tagSentinel() + safeTag : '');
   let out = url ? `- [${label.replace(/[\[\]]/g, '')}](${url})${suffix}\n` : `- ${label}${suffix}\n`;
   const quote = (text || '').trim();
   if (quote) {
     out += quote.slice(0, 2000).split('\n').map(l => '  > ' + l).join('\n') + '\n';
   }
   return out;
+}
+
+// ---- categories ------------------------------------------------------------
+// The inbox is a set of sections rather than one running list:
+//
+//   [ CODE ]
+//   - [Title](url) (2026-09-21)
+//
+//   [ UNSORTED ]
+//
+// A clip's section comes from the "c" field of the queued JSON (or ?c= on the
+// foreground link). Names are matched case-insensitively with whitespace
+// collapsed, so {"c":"Code"}, " code " and an existing "[ Code ]" heading are
+// all the same section; the heading is written upper-case. Anything without a
+// category lands in UNSORTED.
+const CLIP_UNSORTED = 'UNSORTED';
+const CLIP_HEAD_RE = /^\s*\[\s*([^\[\]]+?)\s*\]\s*$/;
+
+function _clipCat(c) {
+  const t = String(c || '').trim().replace(/\s+/g, ' ');
+  return t ? t.toUpperCase() : CLIP_UNSORTED;
+}
+function _clipHeading(cat) { return '[ ' + cat + ' ]'; }
+
+// Every "[ … ]" heading in the document, with the line range it owns.
+function _clipSections(doc) {
+  const out = [];
+  for (let i = 1; i <= doc.lines; i++) {
+    const m = doc.line(i).text.match(CLIP_HEAD_RE);
+    if (m) out.push({ cat: m[1].trim().replace(/\s+/g, ' ').toUpperCase(), line: i });
+  }
+  for (let k = 0; k < out.length; k++) {
+    out[k].endLine = (k + 1 < out.length) ? out[k + 1].line - 1 : doc.lines;
+  }
+  return out;
+}
+
+// Firebase push ids carry the time they were created in their first 8
+// characters, so a clip knows when it was SAVED rather than when it was
+// eventually filed — which matters when it sat in the queue overnight.
+const _PUSH_CHARS = '-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz';
+function _clipTimeFromId(id) {
+  if (!id || id.length < 8) return 0;
+  let ms = 0;
+  for (let i = 0; i < 8; i++) {
+    const v = _PUSH_CHARS.indexOf(id.charAt(i));
+    if (v < 0) return 0;
+    ms = ms * 64 + v;
+  }
+  return (ms > 1e12 && ms < 4e12) ? ms : 0;    // sanity-check the decode
+}
+function _clipDateStr(ms) {
+  const d = ms ? new Date(ms) : new Date();
+  const p = (n) => String(n).padStart(2, '0');
+  return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+}
+
+// Where a new entry goes in an existing section: after its last non-blank line,
+// so entries stay in the order they were clipped.
+function _clipInsertPos(doc, sec) {
+  let last = sec.line;
+  for (let i = sec.line + 1; i <= sec.endLine; i++) {
+    if (doc.line(i).text.trim()) last = i;
+  }
+  return doc.line(last).to;
+}
+
+// One change spec per category, all measured against the SAME document so they
+// can go in a single transaction (one undo step, one sync push).
+function _clipChangesFor(groups) {
+  const doc = editor.state.doc;
+  const secs = _clipSections(doc);
+  const changes = [];
+  // A brand-new section goes above UNSORTED when there is one — it stays the
+  // catch-all at the bottom — and otherwise at the end of the document.
+  const unsorted = secs.find(s => s.cat === CLIP_UNSORTED);
+  let tailPos = doc.length;
+  let tailPrefix = '\n\n';
+  let tailSuffix = '';
+  if (unsorted) {
+    // Land on the last line that actually has text, stepping back over the
+    // blank line(s) that already separate the sections — inserting after one of
+    // them is what left a double gap above UNSORTED.
+    let ln = unsorted.line - 1;
+    while (ln >= 1 && !doc.line(ln).text.trim()) ln--;
+    if (ln >= 1) {
+      tailPos = doc.line(ln).to;
+      tailPrefix = '\n\n';
+      // Those skipped blanks now separate the NEW section from UNSORTED; only
+      // add one when there weren't any.
+      const hadBlank = !doc.line(unsorted.line - 1).text.trim();
+      tailSuffix = hadBlank ? '' : '\n';
+    } else {
+      // UNSORTED is the first line: we insert above it, so the gap has to come
+      // from the end of what we insert.
+      tailPos = doc.line(unsorted.line).from;
+      tailPrefix = '';
+      tailSuffix = '\n\n';
+    }
+  } else {
+    let end = doc.length;
+    while (end > 0 && /\s/.test(doc.sliceString(end - 1, end))) end--;
+    tailPos = end;
+    tailPrefix = end === 0 ? '' : '\n\n';
+  }
+  // Sections that don't exist yet are built as ONE insert. Pushing them as
+  // separate changes at the same position concatenated them without the blank
+  // line between, since every one of them carried the same leading prefix.
+  const fresh = [];
+  for (const [cat, body] of groups) {
+    const sec = secs.find(s => s.cat === cat);
+    if (sec) {
+      const at = _clipInsertPos(doc, sec);
+      changes.push({ from: at, to: at, insert: '\n' + body.replace(/\n$/, '') });
+    } else {
+      fresh.push(_clipHeading(cat) + '\n' + body.replace(/\n$/, ''));
+    }
+  }
+  if (fresh.length) {
+    changes.push({ from: tailPos, to: tailPos, insert: tailPrefix + fresh.join('\n\n') + tailSuffix });
+  }
+  return changes;
+}
+
+// File a batch of clips into their sections in one transaction.
+function fileClipsIntoSections(entries) {
+  if (!entries || !entries.length) return;
+  const groups = new Map();
+  for (const e of entries) {
+    const cat = _clipCat(e.cat);
+    groups.set(cat, (groups.get(cat) || '') + e.text);
+  }
+  const changes = _clipChangesFor(groups);
+  if (!changes.length) return;
+  editor.dispatch({ changes, scrollIntoView: true });
 }
 
 async function _clipApply(entry) {
@@ -10175,7 +10329,7 @@ async function _clipApply(entry) {
   if (activeRoom !== inbox && typeof switchRoom === 'function') {
     try { await switchRoom(inbox); } catch (e) { console.error(e); }
   }
-  appendTextToDocEnd(entry);
+  fileClipsIntoSections([entry]);
   // Say where it went — on a cold open the room that ends up in front may not
   // be the one that was there a second ago.
   showToast('Clipped to ' + (activeRoom || inbox), 'success', 2500);
@@ -10187,7 +10341,10 @@ async function _clipApply(entry) {
   const url = p.get('clip');
   const text = p.get('text');
   if (!url && !text) return;
-  const entry = _clipEntry({ url, title: p.get('title'), text, tag: p.get('tag') });
+  const entry = {
+    cat: p.get('c') || p.get('cat'),
+    text: _clipEntry({ url, title: p.get('title'), text, tag: p.get('tag') }),
+  };
   // Strip the clip parameters and hand the inbox to the app's OWN deep-link
   // reader as ?room=. That runs later in this same script and makes the inbox
   // the room boot opens, so the clip has somewhere settled to land. Switching
@@ -10195,7 +10352,7 @@ async function _clipApply(entry) {
   // grace period, the clip was appended to whatever was open and boot then
   // switched away from it.
   try {
-    ['clip', 'title', 'text', 'tag'].forEach(k => p.delete(k));
+    ['clip', 'title', 'text', 'tag', 'c', 'cat'].forEach(k => p.delete(k));
     p.set('room', _clipInboxRoom());
     const qs = p.toString();
     // window.history, not history: `const {history} = window.__CM6__` shadows
@@ -10309,12 +10466,18 @@ async function drainClips(opts) {
   }
 
   ids.sort();                          // push ids are chronological
-  let text = '';
-  for (const id of ids) {
+  const entries = ids.map(id => {
     const e = val[id] || {};
-    text += _clipEntry({ url: e.u || e.url, title: e.t || e.title, text: e.x || e.text, tag: e.g || e.tag });
-  }
-  appendTextToDocEnd(text);
+    _clipPending.delete(id);           // the listener must not file these again
+    return {
+      cat: e.c || e.cat,
+      text: _clipEntry({
+        url: e.u || e.url, title: e.t || e.title, text: e.x || e.text, tag: e.g || e.tag,
+        at: e.ts || _clipTimeFromId(id),
+      }),
+    };
+  });
+  fileClipsIntoSections(entries);
   const nulls = {};
   for (const id of ids) nulls[id] = null;
   try { await db.ref(_clipQueuePath(fp)).update(nulls); } catch {}
@@ -10323,6 +10486,84 @@ async function drainClips(opts) {
   return ids.length;
 }
 window.drainClips = drainClips;
+
+// ---- live queue ------------------------------------------------------------
+// Polling meant a clip saved on the phone sat there until something happened to
+// wake the drain — in practice, switching rooms. A child_added listener makes it
+// immediate: Firebase replays the existing children on attach (so the backlog
+// files itself) and then pushes each new one as it arrives.
+let _clipListenRef = null;
+let _clipListenFn = null;
+let _clipListenFp = null;
+const _clipPending = new Map();   // id -> entry object, waiting to be filed
+let _clipFlushTimer = 0;
+let _clipToldWaiting = 0;
+
+function _clipFlush() {
+  clearTimeout(_clipFlushTimer);
+  _clipFlushTimer = 0;
+  if (!_clipPending.size) return;
+  const inbox = _clipInboxRoom();
+  if (activeRoom !== inbox) {
+    // Never drag someone out of the room they're in. Say it once per new count.
+    _clipsWaiting = _clipPending.size;
+    if (_clipsWaiting !== _clipToldWaiting) {
+      _clipToldWaiting = _clipsWaiting;
+      showToast(_clipsWaiting + ' clip' + (_clipsWaiting === 1 ? '' : 's') + ' waiting — open "' + inbox + '" to file ' + (_clipsWaiting === 1 ? 'it' : 'them'), 'info', 4000);
+    }
+    return;
+  }
+  const ids = Array.from(_clipPending.keys()).sort();   // push ids are chronological
+  const entries = ids.map(id => {
+    const e = _clipPending.get(id) || {};
+    return {
+      cat: e.c || e.cat,
+      text: _clipEntry({
+        url: e.u || e.url, title: e.t || e.title, text: e.x || e.text, tag: e.g || e.tag,
+        at: e.ts || _clipTimeFromId(id),
+      }),
+    };
+  });
+  _clipPending.clear();
+  _clipsWaiting = 0;
+  _clipToldWaiting = 0;
+  fileClipsIntoSections(entries);
+  // Delete only what was filed; anything that lands mid-flush stays queued.
+  try {
+    const nulls = {};
+    for (const id of ids) nulls[id] = null;
+    if (_clipListenRef) _clipListenRef.update(nulls).catch(() => {});
+  } catch {}
+  showToast('Filed ' + ids.length + ' clip' + (ids.length === 1 ? '' : 's'), 'success', 2200);
+}
+
+async function startClipListener() {
+  if (!_syncConfigured() || !navigator.onLine) return;
+  const fp = await _clipFp();
+  if (!fp) return;
+  if (_clipListenRef && _clipListenFp === fp) return;    // already listening
+  stopClipListener();
+  let db;
+  try { db = initFirebase(store.get('cade-firebase-url')); } catch { return; }
+  try {
+    _clipListenFp = fp;
+    _clipListenRef = db.ref(_clipQueuePath(fp));
+    _clipListenFn = _clipListenRef.on('child_added', (snap) => {
+      try {
+        if (!snap || !snap.key) return;
+        _clipPending.set(snap.key, snap.val() || {});
+        // Small debounce so a replayed backlog lands as one edit, not N.
+        clearTimeout(_clipFlushTimer);
+        _clipFlushTimer = setTimeout(_clipFlush, 250);
+      } catch (e) { console.error(e); }
+    }, () => {});
+  } catch (e) { console.error(e); _clipListenRef = null; }
+}
+function stopClipListener() {
+  try { if (_clipListenRef && _clipListenFn) _clipListenRef.off('child_added', _clipListenFn); } catch {}
+  _clipListenRef = null; _clipListenFn = null; _clipListenFp = null;
+}
+window.startClipListener = startClipListener;
 
 // Switch to the inbox and file whatever is queued — the one-tap version of the
 // "clips waiting" toast.
@@ -10333,6 +10574,9 @@ window.clipFileWaiting = async function() {
     if (!rooms.includes(inbox)) { rooms.push(inbox); try { touchRoomCreated(inbox); } catch {} saveRooms(); }
     try { await switchRoom(inbox); } catch (e) { console.error(e); }
   }
+  // Prefer whatever the listener is already holding; only read the queue
+  // directly when nothing is attached (no sync, or it never connected).
+  if (_clipPending.size) { _clipFlush(); return; }
   const n = await drainClips();
   if (!n) showToast('Nothing queued', 'info', 2000);
 };
@@ -10340,7 +10584,7 @@ window.clipFileWaiting = async function() {
 window.openClipSetup = function() {
   closeAllMenus();
   const base = _clipBaseUrl();
-  const tmpl = base + '?clip=URL&title=TITLE';
+  const tmpl = base + '?clip=URL&title=TITLE&c=CATEGORY';
   const bm = "javascript:(function(){var u=encodeURIComponent(location.href),t=encodeURIComponent(document.title),s=encodeURIComponent(String(getSelection()||''));location.href='" +
     base + "?clip='+u+'&title='+t+(s?'&text='+s:'');})()";
   const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
@@ -10359,12 +10603,16 @@ window.openClipSetup = function() {
     if (note) note.textContent = 'Queued clips are NOT encrypted (a Shortcut can’t run the app’s crypto). They are deleted the moment this app files them.';
     _clipFp().then(fp => {
       set('clip-queue-url', _clipQueueUrl(fp) || '');
-      drainClips({ quiet: true }).catch(() => {});
-      const btn = document.getElementById('clip-waiting-btn');
-      if (btn) {
-        btn.hidden = !_clipsWaiting;
-        btn.textContent = 'File ' + _clipsWaiting + ' waiting clip' + (_clipsWaiting === 1 ? '' : 's');
-      }
+      // Make sure we're listening, then report what is actually held.
+      startClipListener().catch(() => {});
+      setTimeout(() => {
+        const waiting = _clipPending.size || _clipsWaiting;
+        const btn = document.getElementById('clip-waiting-btn');
+        if (btn) {
+          btn.hidden = !waiting;
+          btn.textContent = 'File ' + waiting + ' waiting clip' + (waiting === 1 ? '' : 's');
+        }
+      }, 600);
     }).catch(() => {});
   }
 };
@@ -17274,16 +17522,19 @@ setTimeout(() => {
 const _origSwitchRoomForClips = window.switchRoom;
 window.switchRoom = async function(name) {
   const r = await _origSwitchRoomForClips.apply(this, arguments);
-  try { if (activeRoom === _clipInboxRoom()) drainClips({ quiet: true }); } catch {}
+  // Arriving in the inbox files whatever the listener is holding.
+  try { _clipFlush(); } catch {}
   return r;
 };
-setTimeout(() => { try { drainClips(); } catch {} }, 4000);
-setInterval(() => {
-  // Only ever acts when the inbox is in front; otherwise it's a cheap read.
-  if (document.visibilityState === 'visible' && activeRoom === _clipInboxRoom()) {
-    try { drainClips({ quiet: true }); } catch {}
-  }
-}, 90000);
+setTimeout(() => { try { startClipListener(); } catch {} }, 2500);
+// A socket that died while the tab was backgrounded (phones do this constantly)
+// would otherwise stop delivering; re-attaching is cheap and idempotent.
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'visible') return;
+  try { startClipListener(); } catch {}
+  try { _clipFlush(); } catch {}
+});
+window.addEventListener('online', () => { try { startClipListener(); } catch {} });
 
 // Also update room tabs when syncConnect runs
 const origSyncConnect = window.syncConnect;
