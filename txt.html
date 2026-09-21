@@ -3397,7 +3397,10 @@ body.readonly .cm-img-grip { display: none; }
         </div>
         <div class="form-hint" id="clip-bg-note"></div>
         <div class="form-hint">Queued clips are filed into the inbox whenever this app has that room open — automatically, or with the button below.</div>
-        <button class="btn" id="clip-waiting-btn" hidden style="margin-top:var(--space-2);" onclick="clipFileWaiting()"></button>
+        <div style="display:flex; gap:var(--space-2); margin-top:var(--space-2); flex-wrap:wrap;">
+          <button class="btn" onclick="clipTestQueue()" title="POST a probe to that address and delete it again">Test address</button>
+          <button class="btn" id="clip-waiting-btn" hidden onclick="clipFileWaiting()"></button>
+        </div>
       </div>
 
       <div class="clip-step">
@@ -10225,12 +10228,16 @@ async function _clipApply(entry) {
 // ever leaves the device), so one "Get Contents of URL" action files a clip
 // without Safari ever coming forward:
 //
-//   POST <database>/clips/<fp>.json     body: {"u":"<url>","t":"<title>"}
+//   POST <database>/rooms/__cade_clips_<fp>.json   body: {"u":"…","t":"…"}
 //
-// <fp> is the fingerprint of the sync key — the same path component the file
-// store uses, so clips are scoped to your key without revealing it. Firebase
-// push ids are chronological, so the queue drains in the order things were
-// saved without the Shortcut needing to send a timestamp.
+// The path is under rooms/ deliberately. A new top-level node is refused by
+// security rules written for the paths this app already uses ("Permission
+// denied"), which is why the workspace and synced-blob stores also hide under
+// rooms/__cade_… — Explore Rooms filters keys starting with '__', so they stay
+// invisible. <fp> is the fingerprint of the sync key, so clips are scoped to
+// your key without revealing it, and Firebase push ids are chronological, so
+// the queue drains in the order things were saved without the Shortcut
+// needing to send a timestamp.
 //
 // THE TRADE: a Shortcut cannot run AES-GCM, so a queued clip sits in plain
 // text under that path until this app files it. Anyone holding the database
@@ -10246,10 +10253,37 @@ async function _clipFp() {
   try { return _imgKeyFp || (_imgKeyFp = await _computeKeyFingerprint(key)); } catch { return null; }
 }
 
+function _clipQueuePath(fp) { return 'rooms/__cade_clips_' + fp; }
 function _clipQueueUrl(fp) {
   const base = (store.get('cade-firebase-url') || '').replace(/\/+$/, '');
-  return base && fp ? base + '/clips/' + fp + '.json' : '';
+  return base && fp ? base + '/' + _clipQueuePath(fp) + '.json' : '';
 }
+
+// Round-trip the queue exactly the way the Shortcut will — POST, read back,
+// delete — so a rules problem shows up here in one tap instead of as a bare
+// "Permission denied" from a share sheet.
+window.clipTestQueue = async function() {
+  const note = document.getElementById('clip-bg-note');
+  const say = (msg) => { if (note) note.textContent = msg; };
+  if (!_syncConfigured()) { say('Set up Sync first.'); return; }
+  const fp = await _clipFp();
+  const url = _clipQueueUrl(fp);
+  if (!url) { say('No database URL configured.'); return; }
+  say('Testing…');
+  try {
+    const r = await fetch(url, { method: 'POST', body: JSON.stringify({ u: 'https://example.com/_probe', t: 'probe' }) });
+    const j = await r.json().catch(() => null);
+    if (!r.ok || (j && j.error)) {
+      say('Rejected: ' + ((j && j.error) || ('HTTP ' + r.status)) + ' — your database rules need write access under rooms/.');
+      return;
+    }
+    const base = (store.get('cade-firebase-url') || '').replace(/\/+$/, '');
+    if (j && j.name) { try { await fetch(base + '/' + _clipQueuePath(fp) + '/' + j.name + '.json', { method: 'DELETE' }); } catch {} }
+    say('Works — that address accepts clips. The probe was removed again.');
+  } catch (e) {
+    say('Could not reach the database: ' + ((e && e.message) || 'network error'));
+  }
+};
 
 // Read the queue, append everything to the inbox, then delete exactly what we
 // filed. Appending first means a failed delete costs a duplicate rather than
@@ -10262,7 +10296,7 @@ async function drainClips(opts) {
   let db;
   try { db = initFirebase(store.get('cade-firebase-url')); } catch { return 0; }
   let val = null;
-  try { val = await db.ref('clips/' + fp).once('value').then(s => s.val()); } catch { return 0; }
+  try { val = await db.ref(_clipQueuePath(fp)).once('value').then(s => s.val()); } catch { return 0; }
   const ids = val ? Object.keys(val) : [];
   if (!ids.length) { _clipsWaiting = 0; return 0; }
 
@@ -10283,7 +10317,7 @@ async function drainClips(opts) {
   appendTextToDocEnd(text);
   const nulls = {};
   for (const id of ids) nulls[id] = null;
-  try { await db.ref('clips/' + fp).update(nulls); } catch {}
+  try { await db.ref(_clipQueuePath(fp)).update(nulls); } catch {}
   _clipsWaiting = 0;
   showToast('Filed ' + ids.length + ' clip' + (ids.length === 1 ? '' : 's'), 'success', 2500);
   return ids.length;
