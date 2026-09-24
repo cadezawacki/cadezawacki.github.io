@@ -9636,7 +9636,7 @@ const _IMP_READ_CONCURRENCY = 8;   // parallel reads during the final import
 
 let _impRoots = [];             // [{ name, files: File[], bytes }] — one per picked/dropped folder
 let _impGiManual = null;        // { name, text } — .gitignore added by hand; applies to every root
-const _impGiByRoot = new Map(); // root name -> { name, text } found at that root
+const _impGiByRoot = new Map(); // root name -> [{ name, dir, text }] — every .gitignore found under it
 let _impPlan = null;            // { files, bytes, skip } — what Import would take right now
 let _impBusy = false;           // an import is running; ignore re-entry and close requests
 let _impScans = 0;              // in-flight directory traversals (dropped folders)
@@ -9706,18 +9706,41 @@ function _giCompile(text) {
 }
 
 // -> (relativePath) => boolean, or null when the file has no usable rules.
-function _giMatcher(text) {
-  const rules = _giCompile(text);
-  if (!rules.length) return null;
+// One file's verdict on a path: true (ignored), false (re-included by a '!'
+// rule), or null when no rule matched — the null is what lets a deeper file
+// stay silent and defer to the one above it.
+function _giTest(rules, path, isDir) {
+  let v = null;
+  for (let i = 0; i < rules.length; i++) {
+    const r = rules[i];
+    if (r.dirOnly && !isDir) continue;
+    if (r.re.test(path)) v = !r.neg;
+  }
+  return v;
+}
+
+// A matcher over every .gitignore found in a root, layered the way git layers
+// them: each file's patterns are relative to the directory it sits in, and
+// when several files have an opinion about a path the deeper one wins.
+// `layers` is [{ dir, rules }] with dir relative to the root ('' = the root
+// itself); a hand-added file is just another layer at ''.
+function _giMatcher(layers) {
+  const live = (layers || []).filter(l => l && l.rules && l.rules.length)
+    .slice().sort((a, b) => a.dir.length - b.dir.length);   // outermost first
+  if (!live.length) return null;
   const dirCache = new Map();
-  const test = (path, isDir) => {
-    let ignored = false;
-    for (let i = 0; i < rules.length; i++) {
-      const r = rules[i];
-      if (r.dirOnly && !isDir) continue;
-      if (r.re.test(path)) ignored = !r.neg;
+  const verdict = (path, isDir) => {
+    let v = null;
+    for (const l of live) {
+      let rel = path;
+      if (l.dir) {
+        if (!(path.startsWith(l.dir + '/'))) continue;       // not under this file's dir
+        rel = path.slice(l.dir.length + 1);
+      }
+      const r = _giTest(l.rules, rel, isDir);
+      if (r !== null) v = r;
     }
-    return ignored;
+    return v;
   };
   return function isIgnored(path) {
     // Walk the parents first: git can't re-include a file whose directory is
@@ -9728,11 +9751,11 @@ function _giMatcher(text) {
       if (slash < 0) break;
       const dir = path.slice(0, slash);
       let v = dirCache.get(dir);
-      if (v === undefined) { v = test(dir, true); dirCache.set(dir, v); }
+      if (v === undefined) { v = verdict(dir, true) === true; dirCache.set(dir, v); }
       if (v) return true;
       from = slash + 1;
     }
-    return test(path, false);
+    return verdict(path, false) === true;
   };
 }
 
@@ -9791,6 +9814,7 @@ window.impPickGitignore = function() {
     if (!f) return;
     try {
       _impGiManual = { name: f.name || '.gitignore', text: await readFileAsText(f) };
+      for (const r of _impRoots) r.__giMatch = undefined;
       const opt = document.getElementById('imp-opt-gi'); if (opt) opt.checked = true;
       _impRender();
     } catch { showToast('Could not read ' + (f.name || '.gitignore'), 'error', 2500); }
@@ -9813,6 +9837,7 @@ async function _impAddFiles(fileList) {
   if (files.length === 1 && /(^|[\\/])\.gitignore$/.test(files[0].name || '')) {
     try {
       _impGiManual = { name: files[0].name || '.gitignore', text: await readFileAsText(files[0]) };
+      for (const r of _impRoots) r.__giMatch = undefined;
       const opt = document.getElementById('imp-opt-gi'); if (opt) opt.checked = true;
     } catch { showToast('Could not read .gitignore', 'error', 2500); }
     _impRender();
@@ -9843,13 +9868,20 @@ async function _impAddFiles(fileList) {
     files.sort((a, b) => (a.__impPath < b.__impPath ? -1 : a.__impPath > b.__impPath ? 1 : 0));
     const root = { name, files, bytes: files.reduce((n, f) => n + (f.size || 0), 0) };
     if (at >= 0) _impRoots[at] = root; else _impRoots.push(root);
-    // A .gitignore sitting at the root of what was picked is the one git itself
-    // would apply here, so adopt it: hunting down that exact file by hand right
-    // after picking the folder it lives in is busywork.
+    // Every .gitignore in the upload is adopted, each for its own subtree —
+    // the root's, and any nested ones a monorepo or vendored package carries.
+    // Picking a parent folder that holds several projects therefore just
+    // works, with no file to hunt down by hand.
     _impGiByRoot.delete(name);
-    const giPath = name ? name + '/.gitignore' : '.gitignore';
-    const gi = files.find(f => f.__impPath === giPath);
-    if (gi) { try { _impGiByRoot.set(name, { name: giPath, text: await readFileAsText(gi) }); } catch {} }
+    const cut = name ? name.length + 1 : 0;
+    const found = files.filter(f => f.__impPath === '.gitignore' || f.__impPath.endsWith('/.gitignore'));
+    const layers = [];
+    for (const gi of found) {
+      const rel = gi.__impPath.slice(cut);                 // e.g. "packages/api/.gitignore"
+      const dir = rel.slice(0, Math.max(0, rel.length - '.gitignore'.length - 1));
+      try { layers.push({ name: gi.__impPath, dir, text: await readFileAsText(gi) }); } catch {}
+    }
+    if (layers.length) _impGiByRoot.set(name, layers);
   }
   _impRender();
 }
@@ -9863,13 +9895,22 @@ window.impRemoveRoot = function(i) {
   _impRender();
 };
 
-// A folder's own .gitignore wins for that folder; a hand-added one covers the
-// rest. Compiled lazily and cached on the source object.
+// The matcher for a root: a hand-added .gitignore is the outermost layer,
+// then every file found under the root, deeper files overriding shallower.
+// Compiled once per root and cached until the selection changes.
 function _impMatcherFor(root) {
-  const src = _impGiByRoot.get(root.name) || _impGiManual || null;
-  if (!src) return null;
-  if (!src.__compiled) { src.__compiled = true; src.__match = _giMatcher(src.text); }
-  return src.__match;
+  if (root.__giMatch !== undefined) return root.__giMatch;
+  const layers = [];
+  if (_impGiManual) {
+    if (!_impGiManual.__rules) _impGiManual.__rules = _giCompile(_impGiManual.text);
+    layers.push({ dir: '', rules: _impGiManual.__rules });
+  }
+  for (const l of (_impGiByRoot.get(root.name) || [])) {
+    if (!l.__rules) l.__rules = _giCompile(l.text);
+    layers.push({ dir: l.dir, rules: l.__rules });
+  }
+  root.__giMatch = _giMatcher(layers);
+  return root.__giMatch;
 }
 
 // True when any DIRECTORY segment of the path starts with a dot. The basename
@@ -9946,14 +9987,15 @@ function _impRender() {
 
   const hintEl = document.getElementById('imp-gi-hint');
   if (hintEl) {
-    const auto = Array.from(_impGiByRoot.values()).map(g => g.name);
+    const auto = [];
+    for (const layers of _impGiByRoot.values()) for (const l of layers) auto.push(l.name);
     const bits = [];
-    if (auto.length) bits.push(auto.length === 1 ? auto[0] : auto.length + ' folder files');
+    if (auto.length) bits.push(auto.length === 1 ? auto[0] : auto.length + ' files found');
     if (_impGiManual) bits.push(_impGiManual.name + ' (added)');
     hintEl.textContent = bits.length ? '· ' + bits.join(' + ') : '· none loaded';
     hintEl.title = bits.length
       ? 'Using ' + bits.join(' and ') + ' — matched per folder root, and never imported.'
-      : 'Nothing to respect yet: add a .gitignore, or pick a folder that has one.';
+      : 'None found in the upload. Every .gitignore inside a picked folder is adopted automatically; add one by hand only if the folder has none.';
   }
 
   const skipsEl = document.getElementById('imp-skips');
