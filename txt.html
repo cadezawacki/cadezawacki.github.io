@@ -2765,6 +2765,223 @@ body.readonly .cm-img-grip { display: none; }
 @media (max-width: 768px) {
   #outline-panel, #pomodoro-panel, #cal-panel { right: 8px; left: 8px; width: auto; }
 }
+
+/* ============================================
+   INBOX LIST VIEW
+   ============================================
+   The clip inbox rendered as a list over the editor: search, section chips,
+   folding "── NAME ──── n" rules, and "title ..... 09-25" rows. Mono
+   throughout so it still reads as the same text document. */
+:root {
+  --ibx-rule: #cfcbc6;
+  --ibx-leader: #c9c5c0;
+  --ibx-new: #0b7c7e;
+  --ibx-chip-on-bg: #dcf0f0;
+  --ibx-chip-on-border: #8ccbcd;
+  --ibx-chip-on-text: #0a5a5c;
+  --ibx-hit-bg: rgba(15, 149, 152, 0.2);
+}
+[data-theme="dark"] {
+  --ibx-rule: #4a4846;
+  --ibx-leader: #45433f;
+  --ibx-new: #2cc4c7;
+  --ibx-chip-on-bg: #133a3b;
+  --ibx-chip-on-border: #1e6b6d;
+  --ibx-chip-on-text: #dcf5f5;
+  --ibx-hit-bg: rgba(44, 196, 199, 0.24);
+}
+.ibx {
+  position: absolute; inset: 0; z-index: 40;
+  display: flex; flex-direction: column;
+  background: var(--bg); color: var(--text);
+  font-family: var(--font-mono);
+}
+.ibx[hidden] { display: none; }
+.ibx-top { flex: none; padding-top: 10px; background: var(--bg); border-bottom: 1px solid var(--border); }
+.ibx-search {
+  display: flex; align-items: center; gap: 8px;
+  height: 42px; margin: 0 12px; padding: 0 3px 0 12px;
+  border: 1px solid var(--border); border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+.ibx-search:focus-within { border-color: var(--border-focus); }
+.ibx-search > svg { flex: none; width: 16px; height: 16px; color: var(--text-muted); }
+.ibx-q {
+  flex: 1; min-width: 0; height: 100%;
+  border: 0; outline: 0; background: transparent; color: var(--text);
+  font: inherit; font-size: 14px;
+  -webkit-appearance: none; appearance: none;
+}
+.ibx-q::-webkit-search-cancel-button, .ibx-q::-webkit-search-decoration { -webkit-appearance: none; display: none; }
+.ibx-q::placeholder { color: var(--text-muted); opacity: 1; }
+.ibx-clear {
+  flex: none; width: 36px; height: 36px;
+  display: flex; align-items: center; justify-content: center;
+  border: 0; border-radius: var(--radius-md); background: none; color: var(--text-muted); cursor: pointer;
+}
+.ibx-clear[hidden] { display: none; }
+.ibx-clear svg { width: 16px; height: 16px; }
+.ibx-chips {
+  display: flex; gap: 6px; padding: 8px 12px;
+  overflow-x: auto; overflow-y: hidden; scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.ibx-chips::-webkit-scrollbar { display: none; }
+.ibx-chips:empty { display: none; }
+.ibx-chip {
+  flex: none; display: inline-flex; align-items: center; gap: 6px;
+  height: 30px; padding: 0 10px;
+  border: 1px solid var(--border); border-radius: var(--radius-md);
+  background: var(--surface); color: var(--text);
+  font: inherit; font-size: 12.5px; text-transform: lowercase; white-space: nowrap; cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.ibx-chip .n { color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.ibx-chip[aria-pressed="true"] { background: var(--ibx-chip-on-bg); border-color: var(--ibx-chip-on-border); color: var(--ibx-chip-on-text); }
+.ibx-chip[aria-pressed="true"] .n { color: inherit; opacity: 0.75; }
+.ibx-chip.none { opacity: 0.45; }
+.ibx-list {
+  flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  padding: 4px 0 calc(84px + var(--ibx-kb, 0px));
+}
+.ibx-sec-head {
+  display: flex; align-items: center; gap: 8px;
+  width: 100%; height: 44px; margin: 0; padding: 0 14px 0 16px;
+  border: 0; background: none; color: var(--text);
+  font: inherit; font-size: 12.5px; font-weight: 500; text-align: left; cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.ibx-h { margin: 0; font: inherit; }
+.ibx-rule { flex: none; color: var(--ibx-rule); font-weight: 400; }
+.ibx-rule.fill { flex: 1 1 0; min-width: 0; overflow: hidden; white-space: nowrap; }
+.ibx-sec-name { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; letter-spacing: 0.08em; text-transform: uppercase; }
+.ibx-sec-n { flex: none; color: var(--text-muted); font-variant-numeric: tabular-nums; font-weight: 400; }
+.ibx-chev { flex: none; width: 14px; display: flex; justify-content: center; color: var(--text-muted); transition: transform 160ms ease; }
+.ibx-chev svg { width: 12px; height: 12px; }
+.ibx-sec.folded .ibx-chev { transform: rotate(-90deg); }
+.ibx-sec.folded .ibx-rows { display: none; }
+.ibx-rows { padding-bottom: 10px; }
+.ibx-item { position: relative; }
+.ibx-row {
+  display: flex; flex-direction: column; justify-content: center; gap: 1px;
+  min-height: 46px; padding: 6px 46px 6px 40px;
+  color: var(--text); text-decoration: none; cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: default;
+}
+.ibx-row:active { background: var(--surface-hover); }
+@media (hover: hover) { .ibx-row:hover { background: var(--surface-hover); } }
+.ibx-l1 { display: flex; align-items: baseline; min-width: 0; font-size: 13.5px; line-height: 20px; }
+.ibx-title { flex: 0 1 auto; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.ibx-lead { flex: 1 1 0; min-width: 20px; margin: 0 8px; overflow: hidden; white-space: nowrap; color: var(--ibx-leader); }
+.ibx-date { flex: none; margin-left: auto; color: var(--text-muted); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.ibx-date.fresh { color: var(--ibx-new); }
+.ibx-l2 { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 12px; line-height: 17px; color: var(--text-muted); }
+.ibx-quote {
+  font-size: 12px; line-height: 17px; color: var(--text-muted); font-style: italic;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.ibx-more {
+  position: absolute; top: 1px; right: 4px; width: 40px; height: 44px;
+  display: flex; align-items: center; justify-content: center;
+  border: 0; border-radius: var(--radius-md); background: none; color: var(--text-muted); cursor: pointer;
+}
+.ibx-more svg { width: 16px; height: 16px; }
+@media (hover: hover) { .ibx-more:hover { color: var(--text); background: var(--surface-hover); } }
+mark.ibx-hit { background: var(--ibx-hit-bg); color: inherit; border-radius: 2px; }
+.ibx-empty { padding: 48px 24px; text-align: center; color: var(--text-muted); font-size: 13px; line-height: 1.6; }
+.ibx-empty b { color: var(--text); font-weight: 500; }
+.ibx-empty .btn { margin-top: 14px; font-family: var(--font-mono); }
+@keyframes ibxFresh { from { background: var(--ibx-hit-bg); } to { background: transparent; } }
+.ibx-item.fresh .ibx-row { animation: ibxFresh 1.8s ease-out; }
+.ibx-undo {
+  position: absolute; left: 50%; bottom: 68px; transform: translateX(-50%); z-index: 46;
+  display: flex; align-items: center; gap: 10px;
+  max-width: calc(100% - 32px); padding: 4px 4px 4px 14px;
+  border-radius: var(--radius-lg); background: var(--text); color: var(--bg);
+  font-size: 12.5px; box-shadow: var(--shadow-md);
+}
+.ibx-undo[hidden] { display: none; }
+.ibx-undo span { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.ibx-undo button { flex: none; height: 34px; padding: 0 10px; border: 0; border-radius: 7px; background: none; color: var(--bg); font: inherit; font-weight: 600; text-decoration: underline; cursor: pointer; }
+/* List | Text — floats over whichever view is showing, inbox room only. */
+.ibx-mode {
+  position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); z-index: 45;
+  display: flex; gap: 2px; padding: 3px;
+  border: 1px solid var(--border); border-radius: 12px;
+  background: var(--picker-bg); box-shadow: var(--shadow-md);
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  font-family: var(--font-mono);
+}
+.ibx-mode[hidden] { display: none; }
+.ibx-mode button {
+  height: 36px; min-width: 60px; padding: 0 12px;
+  border: 0; border-radius: 9px; background: none; color: var(--text-muted);
+  font: inherit; font-size: 12.5px; cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.ibx-mode button[aria-pressed="true"] { background: var(--surface-hover); color: var(--text); }
+/* Row actions: a bottom sheet on phones, a centred card on desktop. */
+.ibx-sheet-wrap {
+  position: fixed; inset: 0; z-index: 900;
+  display: flex; align-items: flex-end; justify-content: center;
+  background: rgba(0, 0, 0, 0.42);
+}
+.ibx-sheet-wrap[hidden] { display: none; }
+.ibx-sheet {
+  width: 100%; max-width: 480px; max-height: 82dvh; overflow-y: auto; overscroll-behavior: contain;
+  padding: 14px 8px calc(10px + env(safe-area-inset-bottom));
+  border: 1px solid var(--border); border-bottom: 0; border-radius: 14px 14px 0 0;
+  background: var(--surface); color: var(--text); box-shadow: var(--shadow-lg);
+  font-family: var(--font-mono);
+}
+.ibx-sheet-head { padding: 0 12px 12px; margin-bottom: 6px; border-bottom: 1px solid var(--border); }
+.ibx-sheet-title { font-size: 14px; line-height: 20px; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.ibx-sheet-sub { margin-top: 3px; font-size: 12px; line-height: 17px; color: var(--text-muted); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.ibx-act {
+  display: flex; align-items: center; gap: 12px;
+  width: 100%; min-height: 46px; padding: 0 12px;
+  border: 0; border-radius: var(--radius-lg); background: none; color: var(--text);
+  font: inherit; font-size: 14px; text-align: left; cursor: pointer;
+}
+.ibx-act svg { flex: none; width: 18px; height: 18px; color: var(--text-muted); }
+.ibx-act:active { background: var(--surface-hover); }
+@media (hover: hover) { .ibx-act:hover { background: var(--surface-hover); } }
+.ibx-act.danger, .ibx-act.danger svg { color: var(--error); }
+.ibx-move { display: flex; flex-wrap: wrap; gap: 6px; padding: 4px 12px 10px 42px; }
+.ibx-move[hidden] { display: none; }
+.ibx-move .ibx-chip { height: 36px; }
+.ibx-newsec { display: flex; gap: 6px; width: 100%; }
+.ibx-newsec[hidden] { display: none; }
+.ibx-newsec input {
+  flex: 1; min-width: 0; height: 36px; padding: 0 10px;
+  border: 1px solid var(--border); border-radius: var(--radius-md);
+  background: var(--bg); color: var(--text); font: inherit; font-size: 14px; text-transform: uppercase;
+}
+.ibx-newsec input:focus { outline: none; border-color: var(--border-focus); }
+@media (min-width: 769px) {
+  .ibx-sheet-wrap { align-items: center; }
+  .ibx-sheet { border-bottom: 1px solid var(--border); border-radius: 14px; padding-bottom: 10px; }
+}
+/* Wide screens: one reading column, so a date stays near its title. */
+@media (min-width: 820px) {
+  .ibx-search { max-width: 756px; margin: 0 auto; }
+  .ibx-chips { max-width: 780px; margin: 0 auto; }
+  .ibx-list > * { max-width: 780px; margin-left: auto; margin-right: auto; }
+}
+/* In Text mode the pill floats over the editor; leave room to scroll the last line past it. */
+body.inbox-room .editor-wrap .cm-scroller { padding-bottom: 72px; }
+/* While the list is up the editor's own chrome has nothing to act on. */
+body.inbox-list .mobile-toolbar,
+body.inbox-list .mobile-scroll-btns,
+body.inbox-list .find-panel { display: none !important; }
+@media (max-width: 768px) {
+  .ibx-q, .ibx-newsec input { font-size: 16px; }   /* under 16px iOS zooms the page on focus */
+  .ibx-l1 { font-size: 14.5px; line-height: 21px; }
+  .ibx-l2, .ibx-quote { font-size: 12.5px; }
+  .ibx-sec-head { font-size: 13px; }
+}
 </style>
 </head>
 <body>
@@ -3019,6 +3236,25 @@ body.readonly .cm-img-grip { display: none; }
   </div>
   <div class="split-body" id="split-body"></div>
 </div>
+<!-- Inbox list view (see INBOX LIST VIEW) — covers the editor in the clip inbox room. -->
+<div class="ibx" id="inbox-view" hidden>
+  <div class="ibx-top">
+    <label class="ibx-search">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="16.5" y1="16.5" x2="21" y2="21"/></svg>
+      <input class="ibx-q" id="ibx-q" type="search" placeholder="Search links" aria-label="Search links" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" enterkeyhint="search">
+      <button class="ibx-clear" id="ibx-clear" type="button" aria-label="Clear search" hidden>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>
+      </button>
+    </label>
+    <div class="ibx-chips" id="ibx-chips" role="toolbar" aria-label="Filter by section"></div>
+  </div>
+  <div class="ibx-list" id="ibx-list"></div>
+  <div class="ibx-undo" id="ibx-undo" role="status" hidden><span id="ibx-undo-msg"></span><button type="button" id="ibx-undo-btn">Undo</button></div>
+</div>
+<div class="ibx-mode" id="ibx-mode" role="group" aria-label="Inbox view" hidden>
+  <button type="button" data-mode="list" aria-pressed="true">List</button>
+  <button type="button" data-mode="text" aria-pressed="false">Text</button>
+</div>
 </div>
 
 <!-- ========== MOBILE SCROLL BUTTONS ========== -->
@@ -3043,6 +3279,23 @@ body.readonly .cm-img-grip { display: none; }
     <span id="footer-lines" class="footer-stat-btn" onclick="openTextStats()" title="Open Text Stats">0 lines</span>
   </div>
   <span id="sync-status" style="display:none;"></span>
+</div>
+
+<!-- Inbox row actions -->
+<div class="ibx-sheet-wrap" id="ibx-sheet" hidden>
+  <div class="ibx-sheet" role="dialog" aria-modal="true" aria-labelledby="ibx-sheet-title">
+    <div class="ibx-sheet-head">
+      <div class="ibx-sheet-title" id="ibx-sheet-title"></div>
+      <div class="ibx-sheet-sub" id="ibx-sheet-sub"></div>
+    </div>
+    <button class="ibx-act" type="button" data-act="open"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>Open link</button>
+    <button class="ibx-act" type="button" data-act="copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>Copy link</button>
+    <button class="ibx-act" type="button" data-act="share"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>Share…</button>
+    <button class="ibx-act" type="button" data-act="move" aria-expanded="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7h13l-3-3M21 17H8l3 3"/></svg>Move to…</button>
+    <div class="ibx-move" id="ibx-move" hidden></div>
+    <button class="ibx-act" type="button" data-act="text"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>Show in text</button>
+    <button class="ibx-act danger" type="button" data-act="delete"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6M10 11v6M14 11v6M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>Delete</button>
+  </div>
 </div>
 
 <!-- ========== SHARE ========== -->
@@ -10292,9 +10545,11 @@ function _clipInsertPos(doc, sec) {
 }
 
 // One change spec per category, all measured against the SAME document so they
-// can go in a single transaction (one undo step, one sync push).
-function _clipChangesFor(groups) {
-  const doc = editor.state.doc;
+// can go in a single transaction (one undo step, one sync push). `doc` defaults
+// to the editor's; the inbox list passes the document as it will be after a
+// removal, to move an entry in one step.
+function _clipChangesFor(groups, doc) {
+  doc = doc || editor.state.doc;
   const secs = _clipSections(doc);
   const changes = [];
   // A brand-new section goes above UNSORTED when there is one — it stays the
@@ -10348,20 +10603,90 @@ function _clipChangesFor(groups) {
   return changes;
 }
 
-// File a batch of clips into their sections in one transaction.
+// File a batch of clips into their sections in one transaction. Returns how
+// many went in.
 function fileClipsIntoSections(entries) {
-  if (!entries || !entries.length) return;
+  if (!entries || !entries.length) return 0;
   const groups = new Map();
   for (const e of entries) {
     const cat = _clipCat(e.cat);
     groups.set(cat, (groups.get(cat) || '') + e.text);
   }
   const changes = _clipChangesFor(groups);
-  if (!changes.length) return;
-  editor.dispatch({ changes, scrollIntoView: true });
+  if (!changes.length) return 0;
+  // Don't yank the view away from someone typing elsewhere in the inbox.
+  const typing = Date.now() - (syncState.lastLocalTouch || 0) < 3000;
+  editor.dispatch({ changes, scrollIntoView: !typing });
+  return entries.length;
 }
 
-async function _clipApply(entry) {
+// A queued clip — from the background queue or the local outbox, both use the
+// Shortcut's short field names — as the entry fileClipsIntoSections takes.
+function _clipRecEntry(id, rec) {
+  const r = rec || {};
+  const url = r.u || r.url || '';
+  const at = r.ts || _clipTimeFromId(id);
+  return {
+    cat: r.c || r.cat,
+    url,
+    at,
+    text: _clipEntry({ url, title: r.t || r.title, text: r.x || r.text, tag: r.g || r.tag, at }),
+  };
+}
+
+// Is this clip already in the document? A queue entry can be delivered more
+// than once — two devices on the inbox, a delete that hadn't reached the server
+// yet, the fallback poll racing the listener — and the same link saved twice
+// on the same day is never wanted twice. The link may have been retitled or
+// moved to another section since, so match on URL + date anywhere.
+function _clipAlreadyIn(docText, entry) {
+  if (entry.url) {
+    const needle = '](' + entry.url + ')';
+    const date = '(' + _clipDateStr(entry.at) + ')';
+    for (let i = docText.indexOf(needle); i !== -1; i = docText.indexOf(needle, i + needle.length)) {
+      const ls = docText.lastIndexOf('\n', i) + 1;
+      let le = docText.indexOf('\n', i);
+      if (le === -1) le = docText.length;
+      if (docText.slice(ls, le).includes(date)) return true;
+    }
+    return false;
+  }
+  const first = entry.text.split('\n')[0];
+  return !!first && ('\n' + docText + '\n').includes('\n' + first + '\n');
+}
+
+// ---- local outbox ----------------------------------------------------------
+// A foreground ?clip= link used to be filed the instant the app came up — into
+// the inbox's cached copy, before sync had compared it with the server. It now
+// waits here (persisted, so a reload or a slow boot can't drop it) and is filed
+// by the same settled path as the background queue.
+const CLIP_OUTBOX_KEY = 'cade-clip-outbox';
+function _clipOutboxLoad() {
+  try {
+    const a = JSON.parse(store.get(CLIP_OUTBOX_KEY) || '[]');
+    return Array.isArray(a) ? a.filter(r => r && typeof r === 'object') : [];
+  } catch { return []; }
+}
+function _clipOutboxSave(list) {
+  try {
+    if (list.length) store.set(CLIP_OUTBOX_KEY, JSON.stringify(list));
+    else store.remove(CLIP_OUTBOX_KEY);
+  } catch {}
+}
+function _clipOutboxAdd(rec) {
+  const list = _clipOutboxLoad();
+  list.push(Object.assign({}, rec, {
+    id: 'local-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 7),
+    ts: Date.now(),
+  }));
+  _clipOutboxSave(list);
+}
+
+// Bring the inbox to the front, creating it on the first clip. "In front"
+// means a committed switch, not just activeRoom naming it: a local-only boot
+// that reopens the room it closed on never switches at all, which leaves the
+// editor saving to the no-room document instead of the room.
+async function _clipGoToInbox() {
   const inbox = _clipInboxRoom();
   if (!rooms.includes(inbox)) {
     rooms.push(inbox);
@@ -10369,13 +10694,11 @@ async function _clipApply(entry) {
     saveRooms();
     try { renderRoomTabs(); } catch {}
   }
-  if (activeRoom !== inbox && typeof switchRoom === 'function') {
+  let committed = false;
+  try { committed = _activeRoomReady; } catch {}
+  if ((activeRoom !== inbox || !committed) && typeof switchRoom === 'function') {
     try { await switchRoom(inbox); } catch (e) { console.error(e); }
   }
-  fileClipsIntoSections([entry]);
-  // Say where it went — on a cold open the room that ends up in front may not
-  // be the one that was there a second ago.
-  showToast('Clipped to ' + (activeRoom || inbox), 'success', 2500);
 }
 
 (function _clipFromUrl() {
@@ -10384,16 +10707,14 @@ async function _clipApply(entry) {
   const url = p.get('clip');
   const text = p.get('text');
   if (!url && !text) return;
-  const entry = {
-    cat: p.get('c') || p.get('cat'),
-    text: _clipEntry({ url, title: p.get('title'), text, tag: p.get('tag') }),
-  };
+  _clipOutboxAdd({
+    u: url || '', t: p.get('title') || '', x: text || '', g: p.get('tag') || '',
+    c: p.get('c') || p.get('cat') || '',
+  });
   // Strip the clip parameters and hand the inbox to the app's OWN deep-link
   // reader as ?room=. That runs later in this same script and makes the inbox
-  // the room boot opens, so the clip has somewhere settled to land. Switching
-  // afterwards instead was a race: on a device where boot takes longer than the
-  // grace period, the clip was appended to whatever was open and boot then
-  // switched away from it.
+  // the room boot opens. The parameters go before anything else can fail, so
+  // a refresh can never queue the same link twice.
   try {
     ['clip', 'title', 'text', 'tag', 'c', 'cat'].forEach(k => p.delete(k));
     p.set('room', _clipInboxRoom());
@@ -10402,19 +10723,19 @@ async function _clipApply(entry) {
     // the global in this scope with CodeMirror's undo extension.
     window.history.replaceState(null, '', location.pathname + (qs ? '?' + qs : '') + location.hash);
   } catch {}
-  // The room system commits the first switch asynchronously; wait for it rather
-  // than racing it, or the clip lands in whatever room was open a moment ago.
-  // But _activeRoomReady only flips once a room switch commits, and an install
-  // with no rooms yet never switches — so a grace period releases that case
-  // instead of dropping the clip on the floor.
+  // Wait for the first room switch to commit, then file. _activeRoomReady only
+  // flips once a switch commits, and an install with no rooms yet never
+  // switches — so a grace period releases that case. Nothing is lost if boot
+  // never comes up: the clip stays in the outbox for the next launch.
   let waited = 0;
   const tryApply = () => {
-    const bootSettled = (typeof _activeRoomReady !== 'undefined' && _activeRoomReady) || waited >= 1500;
-    if (window.editor && bootSettled) {
-      _clipApply(entry).catch(e => console.error(e));
+    let ready = false;
+    try { ready = _activeRoomReady; } catch {}
+    if (window.editor && (ready || waited >= 1500)) {
+      _clipGoToInbox().then(() => _clipFlush()).catch(e => console.error(e));
       return;
     }
-    if ((waited += 120) > 15000) return;      // nothing ever came up — drop it
+    if ((waited += 120) > 15000) return;
     setTimeout(tryApply, 120);
   };
   setTimeout(tryApply, 120);
@@ -10486,51 +10807,6 @@ window.clipTestQueue = async function() {
   }
 };
 
-// Read the queue, append everything to the inbox, then delete exactly what we
-// filed. Appending first means a failed delete costs a duplicate rather than
-// the clip itself; entries that arrive mid-drain are left for the next pass.
-async function drainClips(opts) {
-  const quiet = !!(opts && opts.quiet);
-  if (!_syncConfigured() || !navigator.onLine) return 0;
-  const fp = await _clipFp();
-  if (!fp) return 0;
-  let db;
-  try { db = initFirebase(store.get('cade-firebase-url')); } catch { return 0; }
-  let val = null;
-  try { val = await db.ref(_clipQueuePath(fp)).once('value').then(s => s.val()); } catch { return 0; }
-  const ids = val ? Object.keys(val) : [];
-  if (!ids.length) { _clipsWaiting = 0; return 0; }
-
-  const inbox = _clipInboxRoom();
-  if (activeRoom !== inbox) {
-    // Never yank someone out of the room they're working in to file a link.
-    _clipsWaiting = ids.length;
-    if (!quiet) showToast(ids.length + ' clip' + (ids.length === 1 ? '' : 's') + ' waiting — open "' + inbox + '" to file ' + (ids.length === 1 ? 'it' : 'them'), 'info', 4500);
-    return 0;
-  }
-
-  ids.sort();                          // push ids are chronological
-  const entries = ids.map(id => {
-    const e = val[id] || {};
-    _clipPending.delete(id);           // the listener must not file these again
-    return {
-      cat: e.c || e.cat,
-      text: _clipEntry({
-        url: e.u || e.url, title: e.t || e.title, text: e.x || e.text, tag: e.g || e.tag,
-        at: e.ts || _clipTimeFromId(id),
-      }),
-    };
-  });
-  fileClipsIntoSections(entries);
-  const nulls = {};
-  for (const id of ids) nulls[id] = null;
-  try { await db.ref(_clipQueuePath(fp)).update(nulls); } catch {}
-  _clipsWaiting = 0;
-  showToast('Filed ' + ids.length + ' clip' + (ids.length === 1 ? '' : 's'), 'success', 2500);
-  return ids.length;
-}
-window.drainClips = drainClips;
-
 // ---- live queue ------------------------------------------------------------
 // Polling meant a clip saved on the phone sat there until something happened to
 // wake the drain — in practice, switching rooms. A child_added listener makes it
@@ -10538,47 +10814,162 @@ window.drainClips = drainClips;
 // files itself) and then pushes each new one as it arrives.
 let _clipListenRef = null;
 let _clipListenFn = null;
+let _clipRemovedFn = null;
 let _clipListenFp = null;
-const _clipPending = new Map();   // id -> entry object, waiting to be filed
+const _clipPending = new Map();   // queue id -> raw record, held until the inbox can take it
 let _clipFlushTimer = 0;
 let _clipToldWaiting = 0;
+
+// Queue ids this device has already filed. Its delete can lag the insert (or
+// fail outright offline), and the entry must not be filed a second time when it
+// is delivered again — on reconnect, by the fallback poll, on the next launch.
+const CLIP_FILED_KEY = 'cade-clip-filed';
+function _clipFiledLoad() {
+  try { const a = JSON.parse(store.get(CLIP_FILED_KEY) || '[]'); return Array.isArray(a) ? a : []; } catch { return []; }
+}
+function _clipWasFiled(id) { return _clipFiledLoad().includes(id); }
+function _clipMarkFiled(ids) {
+  if (!ids.length) return;
+  const next = _clipFiledLoad().filter(x => !ids.includes(x)).concat(ids).slice(-300);
+  try { store.set(CLIP_FILED_KEY, JSON.stringify(next)); } catch {}
+}
+
+// Delete filed entries from the queue. Fire-and-forget: a failure only means
+// the entry comes back, and _clipWasFiled / _clipAlreadyIn skip it then.
+function _clipRetire(ids) {
+  if (!ids || !ids.length || !_syncConfigured()) return;
+  const nulls = {};
+  for (const id of ids) nulls[id] = null;
+  (async () => {
+    let ref = _clipListenRef;
+    if (!ref) {
+      const fp = await _clipFp();
+      if (!fp) return;
+      ref = initFirebase(store.get('cade-firebase-url')).ref(_clipQueuePath(fp));
+    }
+    await ref.update(nulls);
+  })().catch(() => {});
+}
+
+function _clipHeldCount() { return _clipPending.size + _clipOutboxLoad().length; }
+
+// ---- when a clip may go in -------------------------------------------------
+// THE CONFLICT BUG: arriving in the inbox filed the held clips straight into the
+// editor — that is, into this device's cached copy of the room — while the
+// room's reconcile was still fetching the server's text. Whenever the cache was
+// behind the server (another device had filed or edited since, or this one's
+// version counter had slipped), reconcile saw BOTH sides changed; and because a
+// clip goes into the middle of a section, neither text contained the other, so
+// every visit ended in the Sync Conflict dialog.
+//
+// Clips now go in only once the inbox has settled: reconcile finished, the
+// stream live, no remote snapshot waiting to land. The editor then holds what
+// the server holds, and a clip is an ordinary edit the next broadcast pushes.
+const CLIP_SETTLE_MAX_MS = 20000;
+let _clipWaitSince = 0;
+let _clipWaitTimer = 0;
+function _clipInboxState() {
+  if (!window.editor || activeRoom !== _clipInboxRoom()) return 'away';
+  let committed = false;
+  try { committed = _activeRoomReady; } catch {}
+  // Local-only boot into the inbox: nothing will ever switch, so do it here.
+  if (!committed) return _syncConfigured() ? 'wait' : 'commit';
+  // A Sync Conflict dialog is waiting on the user. Nothing goes into the
+  // document under it — whichever side they pick replaces the editor text, and
+  // a clip filed meanwhile would vanish with its queue entry already deleted.
+  if (syncState.conflictResolving) return 'busy';
+  // Without sync, or offline, there is no server copy to race: the clip is a
+  // plain local edit, reconciled on reconnect like any other.
+  if (!_syncConfigured() || !navigator.onLine) return 'ready';
+  if (syncState.roomName !== activeRoom || !syncState.connected) return 'wait';
+  if (syncState.pendingReconcile) return 'wait';
+  if (!isStreamLive()) return 'wait';
+  if (syncState.pendingRemoteText != null) return 'wait';
+  return 'ready';
+}
+
+// Reconcile just finished for some room — if clips are waiting on the inbox to
+// settle, this is the moment.
+function _clipOnSettled() {
+  if (_clipWaitTimer) _clipFlush();
+}
 
 function _clipFlush() {
   clearTimeout(_clipFlushTimer);
   _clipFlushTimer = 0;
-  if (!_clipPending.size) return;
+  clearTimeout(_clipWaitTimer);
+  _clipWaitTimer = 0;
+  const outbox = _clipOutboxLoad();
+  const held = _clipPending.size + outbox.length;
+  if (!held) { _clipWaitSince = 0; _clipsWaiting = 0; _clipToldWaiting = 0; return; }
   const inbox = _clipInboxRoom();
-  if (activeRoom !== inbox) {
+  const state = _clipInboxState();
+  if (state === 'away') {
     // Never drag someone out of the room they're in. Say it once per new count.
-    _clipsWaiting = _clipPending.size;
-    if (_clipsWaiting !== _clipToldWaiting) {
-      _clipToldWaiting = _clipsWaiting;
-      showToast(_clipsWaiting + ' clip' + (_clipsWaiting === 1 ? '' : 's') + ' waiting — open "' + inbox + '" to file ' + (_clipsWaiting === 1 ? 'it' : 'them'), 'info', 4000);
+    _clipWaitSince = 0;
+    _clipsWaiting = held;
+    if (held !== _clipToldWaiting) {
+      _clipToldWaiting = held;
+      showToast(held + ' clip' + (held === 1 ? '' : 's') + ' waiting — open "' + inbox + '" to file ' + (held === 1 ? 'it' : 'them'), 'info', 4000);
     }
     return;
   }
-  const ids = Array.from(_clipPending.keys()).sort();   // push ids are chronological
-  const entries = ids.map(id => {
-    const e = _clipPending.get(id) || {};
-    return {
-      cat: e.c || e.cat,
-      text: _clipEntry({
-        url: e.u || e.url, title: e.t || e.title, text: e.x || e.text, tag: e.g || e.tag,
-        at: e.ts || _clipTimeFromId(id),
-      }),
-    };
-  });
+  if (state === 'commit') {
+    _clipGoToInbox().then(() => {
+      let committed = false;
+      try { committed = _activeRoomReady; } catch {}
+      if (committed) _clipFlush();
+    }).catch(e => console.error(e));
+    return;
+  }
+  if (state === 'busy') {
+    _clipWaitSince = 0;                 // no deadline while the user decides
+    _clipWaitTimer = setTimeout(_clipFlush, 800);
+    return;
+  }
+  if (state === 'wait') {
+    if (!_clipWaitSince) _clipWaitSince = Date.now();
+    if (Date.now() - _clipWaitSince < CLIP_SETTLE_MAX_MS) {
+      _clipWaitTimer = setTimeout(_clipFlush, 400);
+      return;
+    }
+    // Sync never settled (socket blocked, room waiting on its password). File
+    // anyway: the clip is then an ordinary unsynced edit, and reconcile's
+    // three-way merge folds it into whatever the server has.
+  }
+  _clipWaitSince = 0;
+
+  const remoteIds = Array.from(_clipPending.keys());
+  const candidates = remoteIds.map(id => ({ id, e: _clipRecEntry(id, _clipPending.get(id)) }))
+    .concat(outbox.map(r => ({ id: r.id, e: _clipRecEntry(r.id, r) })));
+  // Oldest first, so entries land in the order they were saved (push ids and
+  // outbox stamps are both creation times).
+  candidates.sort((a, b) => (a.e.at || 0) - (b.e.at || 0) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+
+  const doc = editor.state.doc.toString();
+  const seen = new Set();
+  const fresh = [];
+  for (const c of candidates) {
+    const key = c.e.url ? c.e.url + ' ' + _clipDateStr(c.e.at) : c.e.text;
+    if (seen.has(key) || _clipAlreadyIn(doc, c.e)) continue;
+    seen.add(key);
+    fresh.push(c.e);
+  }
+  let n;
+  try { n = fileClipsIntoSections(fresh); }
+  catch (e) { console.error(e); return; }    // still held; the next flush retries
   _clipPending.clear();
+  _clipOutboxSave([]);
   _clipsWaiting = 0;
   _clipToldWaiting = 0;
-  fileClipsIntoSections(entries);
-  // Delete only what was filed; anything that lands mid-flush stays queued.
-  try {
-    const nulls = {};
-    for (const id of ids) nulls[id] = null;
-    if (_clipListenRef) _clipListenRef.update(nulls).catch(() => {});
-  } catch {}
-  showToast('Filed ' + ids.length + ' clip' + (ids.length === 1 ? '' : 's'), 'success', 2200);
+  // Onto disk now rather than on the 300ms debounce: the queue entries are
+  // deleted next, and the clip must already be safe locally when they go.
+  if (n) {
+    try { clearTimeout(saveTimer); saveTimer = null; persistContent(); } catch {}
+  }
+  if (remoteIds.length) { _clipMarkFiled(remoteIds); _clipRetire(remoteIds); }
+  if (n) showToast('Filed ' + n + ' clip' + (n === 1 ? '' : 's'), 'success', 2200);
+  else if (outbox.length) showToast('Already in "' + inbox + '"', 'info', 2000);
 }
 
 // Attaching can legitimately fail on a cold start: initFirebase THROWS while
@@ -10612,12 +11003,24 @@ async function startClipListener() {
     _clipListenFn = _clipListenRef.on('child_added', (snap) => {
       try {
         if (!snap || !snap.key) return;
+        // Filed here already; its delete just hadn't landed. Finish the delete.
+        if (_clipWasFiled(snap.key)) { _clipRetire([snap.key]); return; }
         _clipPending.set(snap.key, snap.val() || {});
         // Small debounce so a replayed backlog lands as one edit, not N.
         clearTimeout(_clipFlushTimer);
         _clipFlushTimer = setTimeout(_clipFlush, 250);
       } catch (e) { console.error(e); }
     }, (err) => { _clipRetry((err && err.message) || 'listen refused'); });
+    // Another device filed (and deleted) it. Holding on would file it a second
+    // time here the next time this device opens the inbox.
+    _clipRemovedFn = _clipListenRef.on('child_removed', (snap) => {
+      try {
+        if (snap && snap.key && _clipPending.delete(snap.key)) {
+          _clipsWaiting = _clipHeldCount();
+          _clipToldWaiting = Math.min(_clipToldWaiting, _clipsWaiting);
+        }
+      } catch (e) { console.error(e); }
+    });
     _clipListenState = 'attached';
     _clipRetryDelay = 0;
     clearTimeout(_clipRetryTimer);
@@ -10629,27 +11032,51 @@ async function startClipListener() {
 }
 function stopClipListener() {
   try { if (_clipListenRef && _clipListenFn) _clipListenRef.off('child_added', _clipListenFn); } catch {}
-  _clipListenRef = null; _clipListenFn = null; _clipListenFp = null;
+  try { if (_clipListenRef && _clipRemovedFn) _clipListenRef.off('child_removed', _clipRemovedFn); } catch {}
+  _clipListenRef = null; _clipListenFn = null; _clipRemovedFn = null; _clipListenFp = null;
 }
 function clipStatusText() {
-  const q = _clipPending.size || _clipsWaiting;
+  const q = _clipHeldCount() || _clipsWaiting;
   return 'Live queue: ' + _clipListenState + (q ? ' · ' + q + ' held' : '');
 }
 window.clipStatusText = clipStatusText;
 window.startClipListener = startClipListener;
 
+// One read of the queue, for when the live listener isn't attached (no socket,
+// SDK blocked). It feeds the same held set the listener does, so the filing
+// rules — settled inbox, dedupe, delete after — are identical either way.
+// Returns how many clips are now held.
+async function drainClips(opts) {
+  const quiet = !!(opts && opts.quiet);
+  if (!_syncConfigured() || !navigator.onLine) return 0;
+  const fp = await _clipFp();
+  if (!fp) return 0;
+  let db;
+  try { db = initFirebase(store.get('cade-firebase-url')); } catch { return 0; }
+  let val = null;
+  try { val = await db.ref(_clipQueuePath(fp)).once('value').then(s => s.val()); } catch { return 0; }
+  const done = [];
+  for (const id of Object.keys(val || {})) {
+    if (_clipWasFiled(id)) done.push(id);
+    else _clipPending.set(id, val[id] || {});
+  }
+  _clipRetire(done);
+  const held = _clipHeldCount();
+  if (!held) { _clipsWaiting = 0; return 0; }
+  if (quiet) _clipToldWaiting = held;   // a background poll doesn't announce itself
+  _clipFlush();
+  return held;
+}
+window.drainClips = drainClips;
+
 // Switch to the inbox and file whatever is queued — the one-tap version of the
 // "clips waiting" toast.
 window.clipFileWaiting = async function() {
-  const inbox = _clipInboxRoom();
   closeClipSetup();
-  if (activeRoom !== inbox) {
-    if (!rooms.includes(inbox)) { rooms.push(inbox); try { touchRoomCreated(inbox); } catch {} saveRooms(); }
-    try { await switchRoom(inbox); } catch (e) { console.error(e); }
-  }
+  await _clipGoToInbox();
   // Prefer whatever the listener is already holding; only read the queue
   // directly when nothing is attached (no sync, or it never connected).
-  if (_clipPending.size) { _clipFlush(); return; }
+  if (_clipHeldCount()) { _clipFlush(); return; }
   const n = await drainClips();
   if (!n) showToast('Nothing queued', 'info', 2000);
 };
@@ -10686,7 +11113,7 @@ window.openClipSetup = function() {
         const ov = document.getElementById('clip-overlay');
         if (!ov || !ov.classList.contains('open')) { clearInterval(_clipStatusTimer); return; }
         if (st) st.textContent = clipStatusText();
-        const waiting = _clipPending.size || _clipsWaiting;
+        const waiting = _clipHeldCount() || _clipsWaiting;
         const btn = document.getElementById('clip-waiting-btn');
         if (btn) {
           btn.hidden = !waiting;
@@ -10715,10 +11142,629 @@ window.clipCopy = function(id) {
   if (el) ctxCopy(el.value);
 };
 window.clipTest = function() {
-  _clipApply(_clipEntry({ url: 'https://example.com/article', title: 'Example article', text: 'A quoted line from the page.' }))
-    .then(() => closeClipSetup());
+  _clipOutboxAdd({ u: 'https://example.com/article', t: 'Example article', x: 'A quoted line from the page.' });
+  closeClipSetup();
+  _clipGoToInbox().then(() => _clipFlush()).catch(e => console.error(e));
 };
 
+
+
+// ============================================
+// INBOX LIST VIEW
+// ============================================
+// The clip inbox is "[ SECTION ]" headings over "- [title](url) (date)" lines:
+// good text, but on a phone it reads as a wall of wrapped markdown. In the
+// inbox room this lays a list over the editor — a search box, a chip per
+// section, "── NAME ──── n" rules that fold, and "title ..... 09-25" rows with
+// the site underneath.
+//
+// The text stays the only source of truth. The list is rebuilt from the
+// document on every change, and moving or deleting a link is an ordinary edit
+// of that document, so sync, undo and snapshots treat it exactly like typing.
+// A List | Text pill flips to the raw document and back.
+
+const INBOX_MODE_KEY = 'cade-inbox-mode';      // 'list' | 'text', per device
+const INBOX_FOLDS_KEY = 'cade-inbox-folds';    // { SECTION: true } for folded ones
+const _IBX_ENTRY_RE = /^\s*[-*+]\s+\[([^\]]*)\]\((\S+)\)(?:\s+\((\d{4}-\d{2}-\d{2})\))?(.*)$/;
+const _IBX_BARE_URL_RE = /^\s*(?:[-*+]\s+)?(https?:\/\/\S+)\s*$/;
+const _IBX_QUOTE_RE = /^\s+>\s?(.*)$/;
+const _IBX_LEADER = '.'.repeat(160);
+const _IBX_RULE = '─'.repeat(200);
+const _IBX_CHEV = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>';
+const _IBX_DOTS = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg>';
+
+let _ibxInited = false;
+let _ibxVisible = false;
+let _ibxItems = [];            // flat list of the rows in the last render, by data-i
+let _ibxQuery = '';
+let _ibxFilter = '';           // '' = every section, else one section's name
+let _ibxSearchFolds = new Set();   // folds made while searching; reset per query
+let _ibxRenderTimer = 0;
+let _ibxSeen = null;           // row keys in the last render — new ones get a flash
+let _ibxUndo = null;           // { room, before, after, timer }
+let _ibxSheetItem = null;
+
+// ---- reading the document --------------------------------------------------
+function _ibxLinkParts(it) {
+  let host = '';
+  try {
+    const u = new URL(it.url);
+    if (u.protocol === 'http:' || u.protocol === 'https:') host = u.hostname.replace(/^www\./, '');
+  } catch {}
+  it.host = host;
+  it.href = host ? it.url : '';          // only http(s) ever becomes a live link
+  let title = it.title;
+  // A clip saved without a title reads "Words — host": show the words, and
+  // the host on its own line like every other row.
+  if (host && title.endsWith(' — ' + host)) title = title.slice(0, -(' — ' + host).length).trim();
+  it.title = title || host || it.url;
+  it.showHost = !!host && host.toLowerCase() !== it.title.toLowerCase();
+  return it;
+}
+
+function _ibxItemFromLine(t) {
+  let m = t.match(_IBX_ENTRY_RE);
+  if (m) {
+    const sent = tagSentinel();
+    const tags = [], extra = [];
+    for (const w of (m[4] || '').trim().split(/\s+/)) {
+      if (!w) continue;
+      if (w.startsWith(sent) && w.length > sent.length) tags.push(w.slice(sent.length));
+      else extra.push(w);
+    }
+    return _ibxLinkParts({ kind: 'link', title: m[1].trim(), url: m[2], date: m[3] || '', tags, extra: extra.join(' ') });
+  }
+  m = t.match(_IBX_BARE_URL_RE);
+  if (m) return _ibxLinkParts({ kind: 'link', title: '', url: m[1], date: '', tags: [], extra: '' });
+  // Anything else in a section shows as written (minus a list marker), so the
+  // list never hides part of the document.
+  let title = t.trim().replace(/^[-*+]\s+/, '');
+  let date = '';
+  const dm = title.match(/\s\((\d{4}-\d{2}-\d{2})\)$/);
+  if (dm) { date = dm[1]; title = title.slice(0, dm.index); }
+  return { kind: 'note', title, url: '', href: '', host: '', showHost: false, date, tags: [], extra: '' };
+}
+
+// Sections in document order. Lines above the first heading form an unnamed
+// leading group. An entry owns the "  > quote" lines directly under it.
+function _ibxParse(doc) {
+  const sections = [];
+  let cur = { name: '', items: [] };
+  sections.push(cur);
+  let last = null;
+  for (let i = 1; i <= doc.lines; i++) {
+    const line = doc.line(i);
+    const t = line.text;
+    const head = t.match(CLIP_HEAD_RE);
+    if (head) {
+      cur = { name: _clipCat(head[1]), items: [] };
+      sections.push(cur);
+      last = null;
+      continue;
+    }
+    if (!t.trim()) { last = null; continue; }
+    const q = last && t.match(_IBX_QUOTE_RE);
+    if (q) {
+      last.quote = (last.quote ? last.quote + ' ' : '') + q[1].trim();
+      last.to = line.to;
+      continue;
+    }
+    const it = _ibxItemFromLine(t);
+    it.from = line.from;
+    it.to = line.to;
+    it.sec = cur.name;
+    cur.items.push(it);
+    last = it;
+  }
+  for (const sec of sections) for (const it of sec.items) it.raw = doc.sliceString(it.from, it.to);
+  if (!sections[0].items.length) sections.shift();
+  return sections;
+}
+
+function _ibxDate(d) {
+  if (!d) return { text: '', fresh: false };
+  const [y, mo, da] = d.split('-').map(Number);
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const age = Math.round((today - new Date(y, mo - 1, da)) / 86400000);
+  return { text: y === now.getFullYear() ? d.slice(5) : d, fresh: age >= 0 && age <= 1 };
+}
+
+// ---- search ----------------------------------------------------------------
+// Every word must appear somewhere in the row: title, site, URL, section,
+// date, tags or quote. Case-insensitive, any order.
+function _ibxTerms(q) { return String(q || '').toLowerCase().split(/\s+/).filter(Boolean); }
+function _ibxMatches(it, terms) {
+  if (!terms.length) return true;
+  const hay = [it.title, it.host, it.url, it.sec, it.date, it.tags.join(' '), it.extra, it.quote || ''].join(' ').toLowerCase();
+  return terms.every(t => hay.includes(t));
+}
+function _ibxMark(text, terms) {
+  text = String(text || '');
+  const lower = text.toLowerCase();
+  if (!terms.length || lower.length !== text.length) return escapeHtml(text);
+  const hits = [];
+  for (const t of terms) for (let i = lower.indexOf(t); i !== -1; i = lower.indexOf(t, i + t.length)) hits.push([i, i + t.length]);
+  if (!hits.length) return escapeHtml(text);
+  hits.sort((a, b) => a[0] - b[0]);
+  let out = '', pos = 0;
+  for (const [a, b] of hits) {
+    if (b <= pos) continue;
+    const from = Math.max(a, pos);
+    out += escapeHtml(text.slice(pos, from)) + '<mark class="ibx-hit">' + escapeHtml(text.slice(from, b)) + '</mark>';
+    pos = b;
+  }
+  return out + escapeHtml(text.slice(pos));
+}
+
+// ---- folds -----------------------------------------------------------------
+function _ibxFolds() {
+  try { const o = JSON.parse(store.get(INBOX_FOLDS_KEY) || '{}'); return o && typeof o === 'object' ? o : {}; } catch { return {}; }
+}
+function _ibxIsFolded(name) {
+  return _ibxQuery ? _ibxSearchFolds.has(name) : !!_ibxFolds()[name];
+}
+function _ibxToggleFold(name) {
+  if (_ibxQuery) {
+    if (_ibxSearchFolds.has(name)) _ibxSearchFolds.delete(name); else _ibxSearchFolds.add(name);
+  } else {
+    const f = _ibxFolds();
+    if (f[name]) delete f[name]; else f[name] = true;
+    try { store.set(INBOX_FOLDS_KEY, JSON.stringify(f)); } catch {}
+  }
+  inboxViewRender();
+}
+
+// ---- rendering -------------------------------------------------------------
+function _ibxRowHtml(it, i, terms, fresh) {
+  const d = _ibxDate(it.date);
+  const title = _ibxMark(it.title, terms);
+  const l1 = '<span class="ibx-l1"><span class="ibx-title">' + title + '</span>'
+    + (d.text ? '<span class="ibx-lead" aria-hidden="true">' + _IBX_LEADER + '</span><span class="ibx-date' + (d.fresh ? ' fresh' : '') + '">' + d.text + '</span>' : '')
+    + '</span>';
+  const bits = [];
+  if (it.showHost) bits.push(_ibxMark(it.host, terms));
+  for (const t of it.tags) bits.push(_ibxMark(tagSentinel() + t, terms));
+  if (it.extra) bits.push(_ibxMark(it.extra, terms));
+  const l2 = bits.length ? '<span class="ibx-l2">' + bits.join(' · ') + '</span>' : '';
+  const quote = it.quote ? '<span class="ibx-quote">' + _ibxMark(it.quote, terms) + '</span>' : '';
+  const body = l1 + l2 + quote;
+  const row = it.href
+    ? '<a class="ibx-row" href="' + escapeHtml(it.href) + '" target="_blank" rel="noopener noreferrer">' + body + '</a>'
+    : '<div class="ibx-row" data-more="' + i + '">' + body + '</div>';
+  return '<div class="ibx-item' + (fresh ? ' fresh' : '') + '">' + row
+    + '<button class="ibx-more" type="button" data-more="' + i + '" aria-label="Actions for ' + escapeHtml(it.title) + '">' + _IBX_DOTS + '</button></div>';
+}
+
+function _ibxScheduleRender() {
+  clearTimeout(_ibxRenderTimer);
+  _ibxRenderTimer = setTimeout(inboxViewRender, 120);
+}
+
+function inboxViewRender() {
+  clearTimeout(_ibxRenderTimer);
+  _ibxRenderTimer = 0;
+  if (!_ibxVisible) return;
+  const list = document.getElementById('ibx-list');
+  const chipsEl = document.getElementById('ibx-chips');
+  const input = document.getElementById('ibx-q');
+  if (!list || !chipsEl) return;
+  const sections = _ibxParse(editor.state.doc);
+  const terms = _ibxTerms(_ibxQuery);
+  const names = [];
+  const counts = new Map();
+  let links = 0, total = 0, matched = 0;
+  for (const sec of sections) {
+    if (sec.name && !counts.has(sec.name)) { names.push(sec.name); counts.set(sec.name, 0); }
+    for (const it of sec.items) {
+      total++;
+      if (it.kind === 'link') links++;
+      if (_ibxMatches(it, terms)) { matched++; if (sec.name) counts.set(sec.name, counts.get(sec.name) + 1); }
+    }
+  }
+  if (_ibxFilter && !counts.has(_ibxFilter)) _ibxFilter = '';
+
+  // Chips: every section, with how many rows it has (or matches, mid-search).
+  let chips = '';
+  if (names.length) {
+    chips += '<button class="ibx-chip" type="button" data-chip="" aria-pressed="' + (!_ibxFilter) + '">all <span class="n">' + matched + '</span></button>';
+    for (const n of names) {
+      const c = counts.get(n);
+      chips += '<button class="ibx-chip' + (terms.length && !c ? ' none' : '') + '" type="button" data-chip="' + escapeHtml(n) + '" aria-pressed="' + (_ibxFilter === n) + '">'
+        + escapeHtml(n) + ' <span class="n">' + c + '</span></button>';
+    }
+  }
+  if (chipsEl.innerHTML !== chips) chipsEl.innerHTML = chips;
+  if (input) input.placeholder = 'Search ' + links + ' link' + (links === 1 ? '' : 's');
+
+  const seen = new Set();
+  const items = [];
+  let html = '';
+  for (const sec of sections) {
+    if (_ibxFilter && sec.name !== _ibxFilter) continue;
+    const rows = sec.items.filter(it => _ibxMatches(it, terms));
+    if (terms.length && !rows.length) continue;
+    let rowsHtml = '';
+    for (const it of rows) {
+      const key = (it.url || it.raw) + '|' + it.date;
+      seen.add(key);
+      rowsHtml += _ibxRowHtml(it, items.length, terms, !!_ibxSeen && !_ibxSeen.has(key));
+      items.push(it);
+    }
+    if (!sec.name) { html += '<div class="ibx-rows">' + rowsHtml + '</div>'; continue; }
+    // A section picked from the chips is always shown open.
+    const folded = _ibxFilter !== sec.name && _ibxIsFolded(sec.name);
+    html += '<section class="ibx-sec' + (folded ? ' folded' : '') + '">'
+      + '<h2 class="ibx-h"><button class="ibx-sec-head" type="button" data-fold="' + escapeHtml(sec.name) + '" aria-expanded="' + !folded + '">'
+      + '<span class="ibx-rule" aria-hidden="true">──</span><span class="ibx-sec-name">' + _ibxMark(sec.name, terms) + '</span>'
+      + '<span class="ibx-rule fill" aria-hidden="true">' + _IBX_RULE + '</span>'
+      + '<span class="ibx-sec-n">' + rows.length + '</span><span class="ibx-chev" aria-hidden="true">' + _IBX_CHEV + '</span>'
+      + '</button></h2>'
+      + '<div class="ibx-rows">' + rowsHtml + '</div></section>';
+  }
+  if (!total && !names.length) {
+    html = '<div class="ibx-empty">Nothing clipped yet.<br>Share a page to this app from the share sheet, or save a bookmarklet.'
+      + '<br><button class="btn" type="button" data-empty="setup">Set up clipping</button></div>';
+  } else if (terms.length && !matched) {
+    html = '<div class="ibx-empty">No links match <b>' + escapeHtml(_ibxQuery.trim()) + '</b>'
+      + '<br><button class="btn" type="button" data-empty="clear">Clear search</button></div>';
+  }
+  _ibxItems = items;
+  _ibxSeen = seen;
+  list.innerHTML = html;
+}
+
+// ---- visibility & mode -----------------------------------------------------
+function _ibxApplicable() {
+  let on = true;
+  try { on = Settings.get('capture.listView') !== false; } catch {}
+  if (!on || !window.editor || _splitOpen) return false;
+  if (!activeRoom || activeRoom !== _clipInboxRoom()) return false;
+  // The editor has to actually hold the inbox: boot can name a room a moment
+  // before its text is loaded.
+  let committed = false;
+  try { committed = _activeRoomReady; } catch {}
+  return committed || _savedContentRoom === activeRoom;
+}
+
+function inboxViewMode() { return store.get(INBOX_MODE_KEY) === 'text' ? 'text' : 'list'; }
+
+function inboxViewSync() {
+  if (!_ibxInited) return;
+  const applicable = _ibxApplicable();
+  const mode = inboxViewMode();
+  const show = applicable && mode === 'list';
+  document.body.classList.toggle('inbox-room', applicable);
+  const pill = document.getElementById('ibx-mode');
+  if (pill) {
+    pill.hidden = !applicable;
+    pill.querySelectorAll('button[data-mode]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.mode === mode)));
+  }
+  const view = document.getElementById('inbox-view');
+  if (!view) return;
+  if (show !== _ibxVisible) {
+    _ibxVisible = show;
+    view.hidden = !show;
+    document.body.classList.toggle('inbox-list', show);
+    if (show) {
+      // The find panel works on the hidden editor; close it without handing
+      // focus back to the editor (that would raise the keyboard on a phone).
+      try {
+        if (searchState.open) {
+          searchState.open = false;
+          searchState.matches = [];
+          searchState.current = -1;
+          searchVersion++;
+          document.getElementById('find-panel').classList.remove('open');
+          editor.dispatch({});
+        }
+      } catch {}
+      try { editor.contentDOM.blur(); } catch {}
+      _ibxSeen = null;                 // no "new" flash for what was already there
+    } else {
+      _ibxCloseSheet();
+      _ibxHideUndo();
+    }
+  }
+  if (show) inboxViewRender();
+}
+window.inboxViewSync = inboxViewSync;
+
+function inboxSetMode(mode) {
+  try { store.set(INBOX_MODE_KEY, mode === 'text' ? 'text' : 'list'); } catch {}
+  inboxViewSync();
+}
+window.inboxSetMode = inboxSetMode;
+
+// ---- edits -----------------------------------------------------------------
+// Find a row in the CURRENT document: where it was when rendered if it's still
+// there, else its exact text on a line of its own (a sync may have shifted it).
+function _ibxLocate(it) {
+  const doc = editor.state.doc;
+  if (it.to <= doc.length && doc.sliceString(it.from, it.to) === it.raw) return { from: it.from, to: it.to };
+  const full = doc.toString();
+  let found = -1;
+  for (let i = full.indexOf(it.raw); i !== -1; i = full.indexOf(it.raw, i + 1)) {
+    const lineStart = i === 0 || full.charCodeAt(i - 1) === 10;
+    const lineEnd = i + it.raw.length === full.length || full.charCodeAt(i + it.raw.length) === 10;
+    if (!lineStart || !lineEnd) continue;
+    if (found !== -1) return null;     // twice — don't guess which
+    found = i;
+  }
+  return found === -1 ? null : { from: found, to: found + it.raw.length };
+}
+
+// The whole lines plus one line break, so no blank line is left behind.
+function _ibxLineSpan(doc, from, to) {
+  if (to < doc.length) return { from, to: to + 1 };
+  if (from > 0) return { from: from - 1, to };
+  return { from, to };
+}
+
+function _ibxCanEdit(it) {
+  if (editor.state.readOnly) { showToast('This room is read-only', 'info', 2000); return null; }
+  const loc = _ibxLocate(it);
+  if (!loc) { showToast('That link changed — try again', 'info', 2200); inboxViewRender(); return null; }
+  return loc;
+}
+
+function _ibxApply(changes, message) {
+  const before = editor.state.doc.toString();
+  editor.dispatch({ changes });
+  _ibxShowUndo(message, before, editor.state.doc.toString());
+}
+
+function _ibxDelete(it) {
+  const loc = _ibxCanEdit(it);
+  if (!loc) return;
+  _ibxApply(_ibxLineSpan(editor.state.doc, loc.from, loc.to), 'Deleted ' + it.title);
+}
+
+function _ibxMove(it, target) {
+  const cat = _clipCat(target);
+  if (cat === it.sec) return;
+  const loc = _ibxCanEdit(it);
+  if (!loc) return;
+  const st = editor.state;
+  const text = st.doc.sliceString(loc.from, loc.to);
+  // Remove, then file into the target section of the document AS IT WILL BE —
+  // composed into one change, so it's one undo step and one sync push.
+  const tr = st.update({ changes: _ibxLineSpan(st.doc, loc.from, loc.to) });
+  const ins = _clipChangesFor(new Map([[cat, text + '\n']]), tr.state.doc);
+  _ibxApply(tr.changes.compose(tr.state.changes(ins)), 'Moved to ' + cat);
+}
+
+function _ibxShowInText(it) {
+  const loc = _ibxLocate(it);
+  inboxSetMode('text');
+  if (!loc) return;
+  requestAnimationFrame(() => {
+    try {
+      editor.dispatch({
+        selection: { anchor: loc.from, head: loc.to },
+        effects: EditorView.scrollIntoView(loc.from, { y: 'center' }),
+      });
+    } catch {}
+  });
+}
+
+function _ibxShowUndo(message, before, after) {
+  const bar = document.getElementById('ibx-undo');
+  if (!bar) return;
+  clearTimeout(_ibxUndo && _ibxUndo.timer);
+  _ibxUndo = { room: activeRoom, before, after, timer: setTimeout(_ibxHideUndo, 6000) };
+  document.getElementById('ibx-undo-msg').textContent = message;
+  bar.hidden = false;
+}
+function _ibxHideUndo() {
+  if (_ibxUndo) clearTimeout(_ibxUndo.timer);
+  _ibxUndo = null;
+  const bar = document.getElementById('ibx-undo');
+  if (bar) bar.hidden = true;
+}
+function _ibxUndoNow() {
+  const u = _ibxUndo;
+  _ibxHideUndo();
+  if (!u || activeRoom !== u.room) return;
+  const cur = editor.state.doc.toString();
+  // Something else changed the inbox since (a clip landed, another device
+  // synced): putting back the old text would undo that too.
+  if (cur !== u.after) { showToast('The inbox changed since — undo from the Text view', 'info', 3000); return; }
+  editor.dispatch({ changes: _minimalRemoteChange(cur, u.before) });
+}
+
+// ---- row actions sheet -----------------------------------------------------
+function _ibxOpenSheet(it) {
+  const wrap = document.getElementById('ibx-sheet');
+  if (!wrap || !it) return;
+  _ibxSheetItem = it;
+  document.getElementById('ibx-sheet-title').textContent = it.title;
+  const sub = document.getElementById('ibx-sheet-sub');
+  sub.textContent = it.url || (it.sec ? it.sec : '');
+  const has = (act, on) => { const b = wrap.querySelector('[data-act="' + act + '"]'); if (b) b.hidden = !on; };
+  has('open', !!it.href);
+  has('copy', !!it.url);
+  has('share', !!it.url && typeof navigator.share === 'function');
+  const move = document.getElementById('ibx-move');
+  move.hidden = true;
+  move.innerHTML = '';
+  const mv = wrap.querySelector('[data-act="move"]');
+  if (mv) mv.setAttribute('aria-expanded', 'false');
+  wrap.hidden = false;
+  try { (wrap.querySelector('.ibx-act:not([hidden])') || wrap).focus({ preventScroll: true }); } catch {}
+}
+function _ibxCloseSheet() {
+  const wrap = document.getElementById('ibx-sheet');
+  if (wrap) wrap.hidden = true;
+  _ibxSheetItem = null;
+}
+function _ibxShowMove() {
+  const it = _ibxSheetItem;
+  const move = document.getElementById('ibx-move');
+  if (!it || !move) return;
+  const btn = document.querySelector('#ibx-sheet [data-act="move"]');
+  if (!move.hidden) { move.hidden = true; if (btn) btn.setAttribute('aria-expanded', 'false'); return; }
+  const names = [];
+  for (const sec of _ibxParse(editor.state.doc)) if (sec.name && !names.includes(sec.name)) names.push(sec.name);
+  let html = '';
+  for (const n of names) {
+    if (n === it.sec) continue;
+    html += '<button class="ibx-chip" type="button" data-move="' + escapeHtml(n) + '">' + escapeHtml(n) + '</button>';
+  }
+  html += '<button class="ibx-chip" type="button" data-move-new>+ new section</button>'
+    + '<form class="ibx-newsec" id="ibx-newsec" hidden><input id="ibx-newsec-name" type="text" placeholder="section name" aria-label="New section name" autocomplete="off" autocapitalize="characters" spellcheck="false" enterkeyhint="done"><button class="btn" type="submit">Move</button></form>';
+  move.innerHTML = html;
+  move.hidden = false;
+  if (btn) btn.setAttribute('aria-expanded', 'true');
+}
+
+function _ibxSheetAction(act) {
+  const it = _ibxSheetItem;
+  if (!it) return;
+  if (act === 'move') { _ibxShowMove(); return; }
+  _ibxCloseSheet();
+  if (act === 'open' && it.href) window.open(it.href, '_blank', 'noopener');
+  else if (act === 'copy') ctxCopy(it.url);
+  else if (act === 'share') { try { navigator.share({ url: it.url, title: it.title }).catch(() => {}); } catch {} }
+  else if (act === 'text') _ibxShowInText(it);
+  else if (act === 'delete') _ibxDelete(it);
+}
+
+// ---- wiring ----------------------------------------------------------------
+function _ibxFocusSearch() {
+  const q = document.getElementById('ibx-q');
+  if (q) { q.focus(); q.select(); }
+}
+
+function _ibxSetQuery(v) {
+  _ibxQuery = v;
+  _ibxSearchFolds = new Set();
+  const clear = document.getElementById('ibx-clear');
+  if (clear) clear.hidden = !v;
+  const list = document.getElementById('ibx-list');
+  if (list) list.scrollTop = 0;
+  inboxViewRender();
+}
+
+function inboxViewInit() {
+  if (_ibxInited) return;
+  const view = document.getElementById('inbox-view');
+  if (!view || !window.editor) return;
+  _ibxInited = true;
+  const list = document.getElementById('ibx-list');
+  const input = document.getElementById('ibx-q');
+  const clear = document.getElementById('ibx-clear');
+
+  list.addEventListener('click', (e) => {
+    const t = e.target.closest('[data-fold], [data-more], [data-empty]');
+    if (!t) return;
+    if (t.hasAttribute('data-fold')) _ibxToggleFold(t.getAttribute('data-fold'));
+    else if (t.hasAttribute('data-more')) { e.preventDefault(); _ibxOpenSheet(_ibxItems[+t.getAttribute('data-more')]); }
+    else if (t.getAttribute('data-empty') === 'setup') { try { openClipSetup(); } catch {} }
+    else if (t.getAttribute('data-empty') === 'clear') { input.value = ''; _ibxSetQuery(''); }
+  });
+  // Scrolling the results puts the keyboard away, the way native lists do.
+  list.addEventListener('touchmove', () => { if (document.activeElement === input) input.blur(); }, { passive: true });
+
+  document.getElementById('ibx-chips').addEventListener('click', (e) => {
+    const c = e.target.closest('[data-chip]');
+    if (!c) return;
+    const name = c.getAttribute('data-chip');
+    _ibxFilter = (name && _ibxFilter !== name) ? name : '';
+    list.scrollTop = 0;
+    inboxViewRender();
+  });
+
+  let qTimer = 0;
+  input.addEventListener('input', () => {
+    clear.hidden = !input.value;
+    clearTimeout(qTimer);
+    qTimer = setTimeout(() => _ibxSetQuery(input.value), 80);
+  });
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+    else if (e.key === 'Escape') {
+      e.preventDefault();
+      if (input.value) { input.value = ''; _ibxSetQuery(''); } else input.blur();
+    }
+  });
+  clear.addEventListener('click', (e) => {
+    e.preventDefault();
+    input.value = '';
+    _ibxSetQuery('');
+    input.focus();
+  });
+
+  document.getElementById('ibx-mode').addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-mode]');
+    if (b) inboxSetMode(b.dataset.mode);
+  });
+  document.getElementById('ibx-undo-btn').addEventListener('click', _ibxUndoNow);
+
+  const sheet = document.getElementById('ibx-sheet');
+  sheet.addEventListener('click', (e) => {
+    if (e.target === sheet) { _ibxCloseSheet(); return; }
+    const a = e.target.closest('[data-act]');
+    if (a) { _ibxSheetAction(a.getAttribute('data-act')); return; }
+    const m = e.target.closest('[data-move]');
+    if (m && _ibxSheetItem) { const it = _ibxSheetItem; _ibxCloseSheet(); _ibxMove(it, m.getAttribute('data-move')); return; }
+    if (e.target.closest('[data-move-new]')) {
+      const f = document.getElementById('ibx-newsec');
+      if (f) { f.hidden = false; const inp = document.getElementById('ibx-newsec-name'); if (inp) inp.focus(); }
+    }
+  });
+  sheet.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const inp = document.getElementById('ibx-newsec-name');
+    const name = inp ? inp.value.trim() : '';
+    if (!name || !_ibxSheetItem) return;
+    const it = _ibxSheetItem;
+    _ibxCloseSheet();
+    _ibxMove(it, name);
+  });
+
+  document.addEventListener('keydown', (e) => {
+    if (!sheet.hidden && e.key === 'Escape') { e.preventDefault(); _ibxCloseSheet(); return; }
+    if (!_ibxVisible || e.key !== '/' || e.ctrlKey || e.metaKey || e.altKey) return;
+    const el = e.target;
+    if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) return;
+    e.preventDefault();
+    _ibxFocusSearch();
+  }, true);
+
+  // Keep the last rows reachable above the on-screen keyboard.
+  const vv = window.visualViewport;
+  if (vv) {
+    const fit = () => { view.style.setProperty('--ibx-kb', Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop)) + 'px'); };
+    vv.addEventListener('resize', fit);
+    vv.addEventListener('scroll', fit);
+  }
+
+  // Nothing should focus the hidden editor while the list is up — on a phone
+  // that raises the keyboard over the list.
+  editor.contentDOM.addEventListener('focus', () => { if (_ibxVisible) editor.contentDOM.blur(); });
+
+  // Re-read the document whenever it changes (typing in Text mode, a clip
+  // landing, a remote sync).
+  (window.__cadeUpdateHooks = window.__cadeUpdateHooks || []).push((u) => {
+    if (u.docChanged && _ibxVisible) _ibxScheduleRender();
+  });
+
+  // The split view needs the editor — the list steps aside while it's open.
+  ['openSplit', 'closeSplit'].forEach((name) => {
+    const orig = window[name];
+    if (typeof orig !== 'function') return;
+    window[name] = function() {
+      const r = orig.apply(this, arguments);
+      try { inboxViewSync(); } catch {}
+      Promise.resolve(r).then(() => { try { inboxViewSync(); } catch {} }, () => {});
+      return r;
+    };
+  });
+
+  inboxViewSync();
+}
+window.inboxViewInit = inboxViewInit;
 
 // ============================================
 // SPLIT VIEW  &  DIFF / MERGE
@@ -12294,6 +13340,8 @@ async function reconcileOnLive() {
   } finally {
     syncState.conflictResolving = false;
     syncState.pendingRemoteText = null;
+    // The inbox may have been waiting on exactly this to take its clips.
+    try { _clipOnSettled(); } catch {}
   }
 }
 
@@ -12411,7 +13459,13 @@ async function reconcileRoom() {
   } else if (serverText.includes(localText)) {
     applyResolvedServer(roomName, serverText, serverVer); // server strictly extended local → adopt server
   } else {
-    await showSyncConflictModal(roomName, localText, serverText); // genuine conflict → ask
+    // Both sides changed since the last sync. When they changed different
+    // lines that isn't a conflict at all — merge; ask only when the same lines
+    // were changed two different ways.
+    const base = loadRoomSynced(roomName);
+    const merged = base != null ? _merge3(base, localText, serverText) : null;
+    if (merged != null) await applyResolvedMerge(roomName, merged);
+    else await showSyncConflictModal(roomName, localText, serverText); // genuine conflict → ask
   }
   if (!syncState.pageTypeApplied) { syncState.pageTypeApplied = true; applyPageType(); }
 }
@@ -12419,10 +13473,18 @@ async function reconcileRoom() {
 // --- Resolution primitives ---------------------------------------------------
 
 // Keep the local version; push it up so the server matches (replacing incoming).
+// The synced base is recorded only once the push lands: the three-way merge
+// trusts it as the common ancestor, so it must never name text the server
+// didn't get. A failed push leaves the room dirty and hands it to the
+// broadcast loop, which retries until it lands.
 async function applyResolvedLocal(roomName, localText) {
-  saveRoomSynced(roomName, localText);
-  try { await pushTextToServer(roomName, localText, syncState.encKey); }
-  catch (e) { console.warn('Failed to push local after resolve:', e); }
+  try {
+    await pushTextToServer(roomName, localText, syncState.encKey);
+    saveRoomSynced(roomName, localText);
+  } catch (e) {
+    console.warn('Failed to push local after resolve:', e);
+    try { if (syncState.roomName === roomName) window.broadcastText(); } catch {}
+  }
 }
 
 // Adopt the server version, replacing local entirely.
@@ -12456,11 +13518,119 @@ async function applyResolvedAppend(roomName, localText, serverText, where) {
     return;
   }
   dispatchRemoteDoc(merged);
-  saveRoomSynced(roomName, merged);
   persistContent();
   redecorateAfterRemote();
-  try { await pushTextToServer(roomName, merged, syncState.encKey); }
-  catch (e) { console.warn('Failed to push merged after resolve:', e); }
+  await _pushResolved(roomName, merged);
+}
+
+// Push a resolution and, only once it has landed, record it as the synced base
+// (see applyResolvedLocal for why the order matters).
+async function _pushResolved(roomName, text) {
+  try {
+    await pushTextToServer(roomName, text, syncState.encKey);
+    saveRoomSynced(roomName, text);
+  } catch (e) {
+    console.warn('Failed to push resolution:', e);
+    try { if (syncState.roomName === roomName) window.broadcastText(); } catch {}
+  }
+}
+
+// Adopt a three-way merge of local and server and push it, so every device
+// converges on it.
+async function applyResolvedMerge(roomName, merged) {
+  // Switched rooms while reconcile awaited — park the merge in that room's
+  // cache. It's dirty against the base, so its next reconcile pushes it.
+  if (syncState.roomName !== roomName) {
+    store.set('cade-room-cache:' + roomName, merged);
+    return;
+  }
+  dispatchRemoteDoc(merged);
+  persistContent();
+  redecorateAfterRemote();
+  await _pushResolved(roomName, merged);
+}
+
+// --- Three-way merge -----------------------------------------------------------
+// The synced base is the common ancestor of the two texts reconcile compares:
+// local = base + this device's unsynced edits, server = base + whatever other
+// devices pushed since. Edits to different lines don't conflict — a link filed
+// into one section here while another device tidied a different one is two
+// independent changes — so merge line by line the way version control does.
+//
+// Hunks come from the split view's patience diff (base → each side). Two hunks
+// collide when their base ranges overlap, or when both insert at the same
+// point. An identical collision is taken once; two different insertions at one
+// point keep both, server's first, since neither removes anything. Any other
+// collision returns null and the caller asks.
+function _merge3(base, local, server) {
+  if (local === server) return local;
+  if (base === local) return server;
+  if (base === server) return local;
+  const B = base.split('\n');
+  const hunksOf = (text, side) => {
+    const X = text.split('\n');
+    const ops = [];
+    _patience(B, X, 0, B.length, 0, X.length, ops, 0);
+    const out = [];
+    for (const o of ops) if (o.t !== '=') out.push({ b0: o.a0, b1: o.a1, lines: X.slice(o.b0, o.b1), side });
+    return out;
+  };
+  const all = hunksOf(local, 'L').concat(hunksOf(server, 'S'));
+  // By position; at one position an insertion sorts before a replaced range,
+  // so text inserted just above a changed line stays above it.
+  all.sort((p, q) => p.b0 - q.b0 || p.b1 - q.b1 || (p.side === q.side ? 0 : p.side === 'S' ? -1 : 1));
+  const out = [];
+  const put = (lines) => { for (let i = 0; i < lines.length; i++) out.push(lines[i]); };
+  let pos = 0;
+  for (let k = 0; k < all.length;) {
+    const group = [all[k]];
+    let g0 = all[k].b0, g1 = all[k].b1;
+    for (k++; k < all.length; k++) {
+      const h = all[k];
+      const overlaps = (h.b0 < g1 && g0 < h.b1) || (h.b0 === h.b1 && g0 === g1 && h.b0 === g0);
+      if (!overlaps) break;
+      group.push(h);
+      if (h.b1 > g1) g1 = h.b1;
+    }
+    for (let i = pos; i < g0; i++) out.push(B[i]);
+    // One side's version of base[g0, g1): its hunks applied, the rest kept.
+    const render = (side) => {
+      const res = [];
+      let i = g0;
+      for (const h of group) {
+        if (h.side !== side) continue;
+        for (; i < h.b0; i++) res.push(B[i]);
+        for (const l of h.lines) res.push(l);
+        i = h.b1;
+      }
+      for (; i < g1; i++) res.push(B[i]);
+      return res;
+    };
+    if (group.every(h => h.side === group[0].side)) {
+      put(render(group[0].side));
+    } else {
+      const l = render('L'), sv = render('S');
+      if (l.length === sv.length && l.every((x, i) => x === sv[i])) put(sv);
+      else if (g0 === g1) put(_mergeUnionLines(sv, l));
+      else return null;
+    }
+    pos = g1;
+  }
+  for (let i = pos; i < B.length; i++) out.push(B[i]);
+  return out.join('\n');
+}
+
+// Both sides inserted different lines at the same point: keep every line of
+// both, in order, with lines they share written once.
+function _mergeUnionLines(first, second) {
+  const ops = [];
+  _patience(first, second, 0, first.length, 0, second.length, ops, 0);
+  const out = [];
+  for (const o of ops) {
+    for (let i = o.a0; i < o.a1; i++) out.push(first[i]);
+    if (o.t !== '=') for (let j = o.b0; j < o.b1; j++) out.push(second[j]);
+  }
+  return out;
 }
 
 // Build the conflict document name: <room>_conflict_<YYYY-MM-DD_HH-MM-SS>.
@@ -13873,7 +15043,7 @@ window.switchRoom = async function(name) {
   // unlock flow below (otherwise a cancelled/deferred prompt can never be
   // re-opened by tapping its tab, and sync can't resume for the visible room).
   if (name === activeRoom && _activeRoomReady && !(roomHasPassword(name) && !roomIsUnlocked(name))) {
-    try { editor.focus(); } catch {}
+    try { if (!_ibxVisible) editor.focus(); } catch {}
     return;
   }
 
@@ -14034,6 +15204,7 @@ async function _doSwitchRoom(name, firebaseUrl, baseEncKey) {
   // Keep an open Snapshots panel pointed at the new room's history (#6).
   try { if (document.getElementById('snapshots-overlay').classList.contains('open')) renderSnapshotsList(); } catch {}
   _activeRoomReady = true; // local switch committed; same-room clicks now no-op
+  try { inboxViewSync(); } catch {} // the inbox shows as a list (or stops)
   try { _updateLocationForRoom(); } catch {} // reflect ws/room in the URL (item 5)
   try { loadAutoColorRules(); refreshAutoColor(); } catch {} // per-room auto-color rules (widget g)
   try { _lastDocImgHashes = _liveDocImgHashes(); } catch {} // reset image-removal baseline for the new room
@@ -17583,6 +18754,12 @@ if (savedFirebaseUrl && savedEncKey) {
 // write it there, clobbering the room that was linked to.
 if (!_bootSwitchIssued && activeRoom && activeRoom !== _savedContentRoom) {
   try { switchRoom(activeRoom); } catch (e) { console.error(e); }
+} else if (!_bootSwitchIssued && activeRoom && activeRoom === _savedContentRoom && !syncState.roomName) {
+  // Local-only boot back into the room it closed on: the editor already holds
+  // that room's text, so nothing switches — but nothing named the room either,
+  // and persistContent wrote every edit to the no-room document. The next
+  // reload then showed the room's stale cache and the edits were gone.
+  syncState.roomName = activeRoom;
 }
 renderRoomTabs();
 // Restore this room's auto-color word rules on load (widget g) — covers the
@@ -17615,7 +18792,12 @@ window.switchRoom = async function(name) {
   } catch {}
   return r;
 };
-setTimeout(() => { try { startClipListener(); } catch {} }, 2500);
+try { inboxViewInit(); } catch (e) { console.error(e); }
+setTimeout(() => {
+  try { startClipListener(); } catch {}
+  // Anything a previous launch left in the outbox (it never got to settle).
+  try { if (_clipOutboxLoad().length) _clipFlush(); } catch {}
+}, 2500);
 // Belt and braces: if the socket never attaches (blocked, flaky, SDK failed to
 // load at all), a slow poll still delivers. Removing this entirely is what made
 // a detached listener silent rather than merely slow.
@@ -18470,6 +19652,8 @@ window.findReplaceAll = function() {
 
 window.openFindPanel = function() {
   closeAllMenus();
+  // Over the inbox list, Find (Ctrl+F, the menu) means the list's own search.
+  if (_ibxVisible) { _ibxFocusSearch(); return; }
   const panel = document.getElementById('find-panel');
   const input = document.getElementById('find-input');
   // Pre-fill from a (reasonably sized) selection, like editors do.
@@ -20355,7 +21539,8 @@ try {
   // F2 — snapshot retention. Auto-discard snapshots older than the chosen window
   // (the newest is always kept). Storage is also capped per-room by count + bytes.
   // Where clipped links land (see openClipSetup).
-  registerSetting({ key: 'capture.inbox', label: 'Clip inbox room', type: 'text', default: 'inbox', section: 'Behavior', hint: 'Room that ?clip= links are appended to — from the iOS share sheet or the desktop bookmarklet. Created on the first clip.' });
+  registerSetting({ key: 'capture.inbox', label: 'Clip inbox room', type: 'text', default: 'inbox', section: 'Behavior', hint: 'Room that ?clip= links are appended to — from the iOS share sheet or the desktop bookmarklet. Created on the first clip.', apply() { try { inboxViewSync(); } catch {} } });
+  registerSetting({ key: 'capture.listView', label: 'Inbox as a link list', type: 'toggle', default: true, section: 'Behavior', hint: 'Show the clip inbox room as a searchable list of links. The List | Text pill switches to the raw text.', apply() { try { inboxViewSync(); } catch {} } });
   // Temp-room lifetime (item 33): Ctrl+Shift+N rooms self-delete after this.
   registerSetting({ key: 'behavior.tempRoomTtl', label: 'Temp room lifetime', type: 'select', default: '24', section: 'Behavior', hint: 'Ctrl+Shift+N creates a temp_<stamp> room that deletes itself (server + all devices) after this long.', options: [
     { value: '1', label: '1 hour' },
