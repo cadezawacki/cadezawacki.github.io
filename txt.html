@@ -10348,20 +10348,90 @@ function _clipChangesFor(groups) {
   return changes;
 }
 
-// File a batch of clips into their sections in one transaction.
+// File a batch of clips into their sections in one transaction. Returns how
+// many went in.
 function fileClipsIntoSections(entries) {
-  if (!entries || !entries.length) return;
+  if (!entries || !entries.length) return 0;
   const groups = new Map();
   for (const e of entries) {
     const cat = _clipCat(e.cat);
     groups.set(cat, (groups.get(cat) || '') + e.text);
   }
   const changes = _clipChangesFor(groups);
-  if (!changes.length) return;
-  editor.dispatch({ changes, scrollIntoView: true });
+  if (!changes.length) return 0;
+  // Don't yank the view away from someone typing elsewhere in the inbox.
+  const typing = Date.now() - (syncState.lastLocalTouch || 0) < 3000;
+  editor.dispatch({ changes, scrollIntoView: !typing });
+  return entries.length;
 }
 
-async function _clipApply(entry) {
+// A queued clip — from the background queue or the local outbox, both use the
+// Shortcut's short field names — as the entry fileClipsIntoSections takes.
+function _clipRecEntry(id, rec) {
+  const r = rec || {};
+  const url = r.u || r.url || '';
+  const at = r.ts || _clipTimeFromId(id);
+  return {
+    cat: r.c || r.cat,
+    url,
+    at,
+    text: _clipEntry({ url, title: r.t || r.title, text: r.x || r.text, tag: r.g || r.tag, at }),
+  };
+}
+
+// Is this clip already in the document? A queue entry can be delivered more
+// than once — two devices on the inbox, a delete that hadn't reached the server
+// yet, the fallback poll racing the listener — and the same link saved twice
+// on the same day is never wanted twice. The link may have been retitled or
+// moved to another section since, so match on URL + date anywhere.
+function _clipAlreadyIn(docText, entry) {
+  if (entry.url) {
+    const needle = '](' + entry.url + ')';
+    const date = '(' + _clipDateStr(entry.at) + ')';
+    for (let i = docText.indexOf(needle); i !== -1; i = docText.indexOf(needle, i + needle.length)) {
+      const ls = docText.lastIndexOf('\n', i) + 1;
+      let le = docText.indexOf('\n', i);
+      if (le === -1) le = docText.length;
+      if (docText.slice(ls, le).includes(date)) return true;
+    }
+    return false;
+  }
+  const first = entry.text.split('\n')[0];
+  return !!first && ('\n' + docText + '\n').includes('\n' + first + '\n');
+}
+
+// ---- local outbox ----------------------------------------------------------
+// A foreground ?clip= link used to be filed the instant the app came up — into
+// the inbox's cached copy, before sync had compared it with the server. It now
+// waits here (persisted, so a reload or a slow boot can't drop it) and is filed
+// by the same settled path as the background queue.
+const CLIP_OUTBOX_KEY = 'cade-clip-outbox';
+function _clipOutboxLoad() {
+  try {
+    const a = JSON.parse(store.get(CLIP_OUTBOX_KEY) || '[]');
+    return Array.isArray(a) ? a.filter(r => r && typeof r === 'object') : [];
+  } catch { return []; }
+}
+function _clipOutboxSave(list) {
+  try {
+    if (list.length) store.set(CLIP_OUTBOX_KEY, JSON.stringify(list));
+    else store.remove(CLIP_OUTBOX_KEY);
+  } catch {}
+}
+function _clipOutboxAdd(rec) {
+  const list = _clipOutboxLoad();
+  list.push(Object.assign({}, rec, {
+    id: 'local-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 7),
+    ts: Date.now(),
+  }));
+  _clipOutboxSave(list);
+}
+
+// Bring the inbox to the front, creating it on the first clip. "In front"
+// means a committed switch, not just activeRoom naming it: a local-only boot
+// that reopens the room it closed on never switches at all, which leaves the
+// editor saving to the no-room document instead of the room.
+async function _clipGoToInbox() {
   const inbox = _clipInboxRoom();
   if (!rooms.includes(inbox)) {
     rooms.push(inbox);
@@ -10369,13 +10439,11 @@ async function _clipApply(entry) {
     saveRooms();
     try { renderRoomTabs(); } catch {}
   }
-  if (activeRoom !== inbox && typeof switchRoom === 'function') {
+  let committed = false;
+  try { committed = _activeRoomReady; } catch {}
+  if ((activeRoom !== inbox || !committed) && typeof switchRoom === 'function') {
     try { await switchRoom(inbox); } catch (e) { console.error(e); }
   }
-  fileClipsIntoSections([entry]);
-  // Say where it went — on a cold open the room that ends up in front may not
-  // be the one that was there a second ago.
-  showToast('Clipped to ' + (activeRoom || inbox), 'success', 2500);
 }
 
 (function _clipFromUrl() {
@@ -10384,16 +10452,14 @@ async function _clipApply(entry) {
   const url = p.get('clip');
   const text = p.get('text');
   if (!url && !text) return;
-  const entry = {
-    cat: p.get('c') || p.get('cat'),
-    text: _clipEntry({ url, title: p.get('title'), text, tag: p.get('tag') }),
-  };
+  _clipOutboxAdd({
+    u: url || '', t: p.get('title') || '', x: text || '', g: p.get('tag') || '',
+    c: p.get('c') || p.get('cat') || '',
+  });
   // Strip the clip parameters and hand the inbox to the app's OWN deep-link
   // reader as ?room=. That runs later in this same script and makes the inbox
-  // the room boot opens, so the clip has somewhere settled to land. Switching
-  // afterwards instead was a race: on a device where boot takes longer than the
-  // grace period, the clip was appended to whatever was open and boot then
-  // switched away from it.
+  // the room boot opens. The parameters go before anything else can fail, so
+  // a refresh can never queue the same link twice.
   try {
     ['clip', 'title', 'text', 'tag', 'c', 'cat'].forEach(k => p.delete(k));
     p.set('room', _clipInboxRoom());
@@ -10402,19 +10468,19 @@ async function _clipApply(entry) {
     // the global in this scope with CodeMirror's undo extension.
     window.history.replaceState(null, '', location.pathname + (qs ? '?' + qs : '') + location.hash);
   } catch {}
-  // The room system commits the first switch asynchronously; wait for it rather
-  // than racing it, or the clip lands in whatever room was open a moment ago.
-  // But _activeRoomReady only flips once a room switch commits, and an install
-  // with no rooms yet never switches — so a grace period releases that case
-  // instead of dropping the clip on the floor.
+  // Wait for the first room switch to commit, then file. _activeRoomReady only
+  // flips once a switch commits, and an install with no rooms yet never
+  // switches — so a grace period releases that case. Nothing is lost if boot
+  // never comes up: the clip stays in the outbox for the next launch.
   let waited = 0;
   const tryApply = () => {
-    const bootSettled = (typeof _activeRoomReady !== 'undefined' && _activeRoomReady) || waited >= 1500;
-    if (window.editor && bootSettled) {
-      _clipApply(entry).catch(e => console.error(e));
+    let ready = false;
+    try { ready = _activeRoomReady; } catch {}
+    if (window.editor && (ready || waited >= 1500)) {
+      _clipGoToInbox().then(() => _clipFlush()).catch(e => console.error(e));
       return;
     }
-    if ((waited += 120) > 15000) return;      // nothing ever came up — drop it
+    if ((waited += 120) > 15000) return;
     setTimeout(tryApply, 120);
   };
   setTimeout(tryApply, 120);
@@ -10486,51 +10552,6 @@ window.clipTestQueue = async function() {
   }
 };
 
-// Read the queue, append everything to the inbox, then delete exactly what we
-// filed. Appending first means a failed delete costs a duplicate rather than
-// the clip itself; entries that arrive mid-drain are left for the next pass.
-async function drainClips(opts) {
-  const quiet = !!(opts && opts.quiet);
-  if (!_syncConfigured() || !navigator.onLine) return 0;
-  const fp = await _clipFp();
-  if (!fp) return 0;
-  let db;
-  try { db = initFirebase(store.get('cade-firebase-url')); } catch { return 0; }
-  let val = null;
-  try { val = await db.ref(_clipQueuePath(fp)).once('value').then(s => s.val()); } catch { return 0; }
-  const ids = val ? Object.keys(val) : [];
-  if (!ids.length) { _clipsWaiting = 0; return 0; }
-
-  const inbox = _clipInboxRoom();
-  if (activeRoom !== inbox) {
-    // Never yank someone out of the room they're working in to file a link.
-    _clipsWaiting = ids.length;
-    if (!quiet) showToast(ids.length + ' clip' + (ids.length === 1 ? '' : 's') + ' waiting — open "' + inbox + '" to file ' + (ids.length === 1 ? 'it' : 'them'), 'info', 4500);
-    return 0;
-  }
-
-  ids.sort();                          // push ids are chronological
-  const entries = ids.map(id => {
-    const e = val[id] || {};
-    _clipPending.delete(id);           // the listener must not file these again
-    return {
-      cat: e.c || e.cat,
-      text: _clipEntry({
-        url: e.u || e.url, title: e.t || e.title, text: e.x || e.text, tag: e.g || e.tag,
-        at: e.ts || _clipTimeFromId(id),
-      }),
-    };
-  });
-  fileClipsIntoSections(entries);
-  const nulls = {};
-  for (const id of ids) nulls[id] = null;
-  try { await db.ref(_clipQueuePath(fp)).update(nulls); } catch {}
-  _clipsWaiting = 0;
-  showToast('Filed ' + ids.length + ' clip' + (ids.length === 1 ? '' : 's'), 'success', 2500);
-  return ids.length;
-}
-window.drainClips = drainClips;
-
 // ---- live queue ------------------------------------------------------------
 // Polling meant a clip saved on the phone sat there until something happened to
 // wake the drain — in practice, switching rooms. A child_added listener makes it
@@ -10538,47 +10559,162 @@ window.drainClips = drainClips;
 // files itself) and then pushes each new one as it arrives.
 let _clipListenRef = null;
 let _clipListenFn = null;
+let _clipRemovedFn = null;
 let _clipListenFp = null;
-const _clipPending = new Map();   // id -> entry object, waiting to be filed
+const _clipPending = new Map();   // queue id -> raw record, held until the inbox can take it
 let _clipFlushTimer = 0;
 let _clipToldWaiting = 0;
+
+// Queue ids this device has already filed. Its delete can lag the insert (or
+// fail outright offline), and the entry must not be filed a second time when it
+// is delivered again — on reconnect, by the fallback poll, on the next launch.
+const CLIP_FILED_KEY = 'cade-clip-filed';
+function _clipFiledLoad() {
+  try { const a = JSON.parse(store.get(CLIP_FILED_KEY) || '[]'); return Array.isArray(a) ? a : []; } catch { return []; }
+}
+function _clipWasFiled(id) { return _clipFiledLoad().includes(id); }
+function _clipMarkFiled(ids) {
+  if (!ids.length) return;
+  const next = _clipFiledLoad().filter(x => !ids.includes(x)).concat(ids).slice(-300);
+  try { store.set(CLIP_FILED_KEY, JSON.stringify(next)); } catch {}
+}
+
+// Delete filed entries from the queue. Fire-and-forget: a failure only means
+// the entry comes back, and _clipWasFiled / _clipAlreadyIn skip it then.
+function _clipRetire(ids) {
+  if (!ids || !ids.length || !_syncConfigured()) return;
+  const nulls = {};
+  for (const id of ids) nulls[id] = null;
+  (async () => {
+    let ref = _clipListenRef;
+    if (!ref) {
+      const fp = await _clipFp();
+      if (!fp) return;
+      ref = initFirebase(store.get('cade-firebase-url')).ref(_clipQueuePath(fp));
+    }
+    await ref.update(nulls);
+  })().catch(() => {});
+}
+
+function _clipHeldCount() { return _clipPending.size + _clipOutboxLoad().length; }
+
+// ---- when a clip may go in -------------------------------------------------
+// THE CONFLICT BUG: arriving in the inbox filed the held clips straight into the
+// editor — that is, into this device's cached copy of the room — while the
+// room's reconcile was still fetching the server's text. Whenever the cache was
+// behind the server (another device had filed or edited since, or this one's
+// version counter had slipped), reconcile saw BOTH sides changed; and because a
+// clip goes into the middle of a section, neither text contained the other, so
+// every visit ended in the Sync Conflict dialog.
+//
+// Clips now go in only once the inbox has settled: reconcile finished, the
+// stream live, no remote snapshot waiting to land. The editor then holds what
+// the server holds, and a clip is an ordinary edit the next broadcast pushes.
+const CLIP_SETTLE_MAX_MS = 20000;
+let _clipWaitSince = 0;
+let _clipWaitTimer = 0;
+function _clipInboxState() {
+  if (!window.editor || activeRoom !== _clipInboxRoom()) return 'away';
+  let committed = false;
+  try { committed = _activeRoomReady; } catch {}
+  // Local-only boot into the inbox: nothing will ever switch, so do it here.
+  if (!committed) return _syncConfigured() ? 'wait' : 'commit';
+  // A Sync Conflict dialog is waiting on the user. Nothing goes into the
+  // document under it — whichever side they pick replaces the editor text, and
+  // a clip filed meanwhile would vanish with its queue entry already deleted.
+  if (syncState.conflictResolving) return 'busy';
+  // Without sync, or offline, there is no server copy to race: the clip is a
+  // plain local edit, reconciled on reconnect like any other.
+  if (!_syncConfigured() || !navigator.onLine) return 'ready';
+  if (syncState.roomName !== activeRoom || !syncState.connected) return 'wait';
+  if (syncState.pendingReconcile) return 'wait';
+  if (!isStreamLive()) return 'wait';
+  if (syncState.pendingRemoteText != null) return 'wait';
+  return 'ready';
+}
+
+// Reconcile just finished for some room — if clips are waiting on the inbox to
+// settle, this is the moment.
+function _clipOnSettled() {
+  if (_clipWaitTimer) _clipFlush();
+}
 
 function _clipFlush() {
   clearTimeout(_clipFlushTimer);
   _clipFlushTimer = 0;
-  if (!_clipPending.size) return;
+  clearTimeout(_clipWaitTimer);
+  _clipWaitTimer = 0;
+  const outbox = _clipOutboxLoad();
+  const held = _clipPending.size + outbox.length;
+  if (!held) { _clipWaitSince = 0; _clipsWaiting = 0; _clipToldWaiting = 0; return; }
   const inbox = _clipInboxRoom();
-  if (activeRoom !== inbox) {
+  const state = _clipInboxState();
+  if (state === 'away') {
     // Never drag someone out of the room they're in. Say it once per new count.
-    _clipsWaiting = _clipPending.size;
-    if (_clipsWaiting !== _clipToldWaiting) {
-      _clipToldWaiting = _clipsWaiting;
-      showToast(_clipsWaiting + ' clip' + (_clipsWaiting === 1 ? '' : 's') + ' waiting — open "' + inbox + '" to file ' + (_clipsWaiting === 1 ? 'it' : 'them'), 'info', 4000);
+    _clipWaitSince = 0;
+    _clipsWaiting = held;
+    if (held !== _clipToldWaiting) {
+      _clipToldWaiting = held;
+      showToast(held + ' clip' + (held === 1 ? '' : 's') + ' waiting — open "' + inbox + '" to file ' + (held === 1 ? 'it' : 'them'), 'info', 4000);
     }
     return;
   }
-  const ids = Array.from(_clipPending.keys()).sort();   // push ids are chronological
-  const entries = ids.map(id => {
-    const e = _clipPending.get(id) || {};
-    return {
-      cat: e.c || e.cat,
-      text: _clipEntry({
-        url: e.u || e.url, title: e.t || e.title, text: e.x || e.text, tag: e.g || e.tag,
-        at: e.ts || _clipTimeFromId(id),
-      }),
-    };
-  });
+  if (state === 'commit') {
+    _clipGoToInbox().then(() => {
+      let committed = false;
+      try { committed = _activeRoomReady; } catch {}
+      if (committed) _clipFlush();
+    }).catch(e => console.error(e));
+    return;
+  }
+  if (state === 'busy') {
+    _clipWaitSince = 0;                 // no deadline while the user decides
+    _clipWaitTimer = setTimeout(_clipFlush, 800);
+    return;
+  }
+  if (state === 'wait') {
+    if (!_clipWaitSince) _clipWaitSince = Date.now();
+    if (Date.now() - _clipWaitSince < CLIP_SETTLE_MAX_MS) {
+      _clipWaitTimer = setTimeout(_clipFlush, 400);
+      return;
+    }
+    // Sync never settled (socket blocked, room waiting on its password). File
+    // anyway: the clip is then an ordinary unsynced edit, and reconcile's
+    // three-way merge folds it into whatever the server has.
+  }
+  _clipWaitSince = 0;
+
+  const remoteIds = Array.from(_clipPending.keys());
+  const candidates = remoteIds.map(id => ({ id, e: _clipRecEntry(id, _clipPending.get(id)) }))
+    .concat(outbox.map(r => ({ id: r.id, e: _clipRecEntry(r.id, r) })));
+  // Oldest first, so entries land in the order they were saved (push ids and
+  // outbox stamps are both creation times).
+  candidates.sort((a, b) => (a.e.at || 0) - (b.e.at || 0) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+
+  const doc = editor.state.doc.toString();
+  const seen = new Set();
+  const fresh = [];
+  for (const c of candidates) {
+    const key = c.e.url ? c.e.url + ' ' + _clipDateStr(c.e.at) : c.e.text;
+    if (seen.has(key) || _clipAlreadyIn(doc, c.e)) continue;
+    seen.add(key);
+    fresh.push(c.e);
+  }
+  let n;
+  try { n = fileClipsIntoSections(fresh); }
+  catch (e) { console.error(e); return; }    // still held; the next flush retries
   _clipPending.clear();
+  _clipOutboxSave([]);
   _clipsWaiting = 0;
   _clipToldWaiting = 0;
-  fileClipsIntoSections(entries);
-  // Delete only what was filed; anything that lands mid-flush stays queued.
-  try {
-    const nulls = {};
-    for (const id of ids) nulls[id] = null;
-    if (_clipListenRef) _clipListenRef.update(nulls).catch(() => {});
-  } catch {}
-  showToast('Filed ' + ids.length + ' clip' + (ids.length === 1 ? '' : 's'), 'success', 2200);
+  // Onto disk now rather than on the 300ms debounce: the queue entries are
+  // deleted next, and the clip must already be safe locally when they go.
+  if (n) {
+    try { clearTimeout(saveTimer); saveTimer = null; persistContent(); } catch {}
+  }
+  if (remoteIds.length) { _clipMarkFiled(remoteIds); _clipRetire(remoteIds); }
+  if (n) showToast('Filed ' + n + ' clip' + (n === 1 ? '' : 's'), 'success', 2200);
+  else if (outbox.length) showToast('Already in "' + inbox + '"', 'info', 2000);
 }
 
 // Attaching can legitimately fail on a cold start: initFirebase THROWS while
@@ -10612,12 +10748,24 @@ async function startClipListener() {
     _clipListenFn = _clipListenRef.on('child_added', (snap) => {
       try {
         if (!snap || !snap.key) return;
+        // Filed here already; its delete just hadn't landed. Finish the delete.
+        if (_clipWasFiled(snap.key)) { _clipRetire([snap.key]); return; }
         _clipPending.set(snap.key, snap.val() || {});
         // Small debounce so a replayed backlog lands as one edit, not N.
         clearTimeout(_clipFlushTimer);
         _clipFlushTimer = setTimeout(_clipFlush, 250);
       } catch (e) { console.error(e); }
     }, (err) => { _clipRetry((err && err.message) || 'listen refused'); });
+    // Another device filed (and deleted) it. Holding on would file it a second
+    // time here the next time this device opens the inbox.
+    _clipRemovedFn = _clipListenRef.on('child_removed', (snap) => {
+      try {
+        if (snap && snap.key && _clipPending.delete(snap.key)) {
+          _clipsWaiting = _clipHeldCount();
+          _clipToldWaiting = Math.min(_clipToldWaiting, _clipsWaiting);
+        }
+      } catch (e) { console.error(e); }
+    });
     _clipListenState = 'attached';
     _clipRetryDelay = 0;
     clearTimeout(_clipRetryTimer);
@@ -10629,27 +10777,51 @@ async function startClipListener() {
 }
 function stopClipListener() {
   try { if (_clipListenRef && _clipListenFn) _clipListenRef.off('child_added', _clipListenFn); } catch {}
-  _clipListenRef = null; _clipListenFn = null; _clipListenFp = null;
+  try { if (_clipListenRef && _clipRemovedFn) _clipListenRef.off('child_removed', _clipRemovedFn); } catch {}
+  _clipListenRef = null; _clipListenFn = null; _clipRemovedFn = null; _clipListenFp = null;
 }
 function clipStatusText() {
-  const q = _clipPending.size || _clipsWaiting;
+  const q = _clipHeldCount() || _clipsWaiting;
   return 'Live queue: ' + _clipListenState + (q ? ' · ' + q + ' held' : '');
 }
 window.clipStatusText = clipStatusText;
 window.startClipListener = startClipListener;
 
+// One read of the queue, for when the live listener isn't attached (no socket,
+// SDK blocked). It feeds the same held set the listener does, so the filing
+// rules — settled inbox, dedupe, delete after — are identical either way.
+// Returns how many clips are now held.
+async function drainClips(opts) {
+  const quiet = !!(opts && opts.quiet);
+  if (!_syncConfigured() || !navigator.onLine) return 0;
+  const fp = await _clipFp();
+  if (!fp) return 0;
+  let db;
+  try { db = initFirebase(store.get('cade-firebase-url')); } catch { return 0; }
+  let val = null;
+  try { val = await db.ref(_clipQueuePath(fp)).once('value').then(s => s.val()); } catch { return 0; }
+  const done = [];
+  for (const id of Object.keys(val || {})) {
+    if (_clipWasFiled(id)) done.push(id);
+    else _clipPending.set(id, val[id] || {});
+  }
+  _clipRetire(done);
+  const held = _clipHeldCount();
+  if (!held) { _clipsWaiting = 0; return 0; }
+  if (quiet) _clipToldWaiting = held;   // a background poll doesn't announce itself
+  _clipFlush();
+  return held;
+}
+window.drainClips = drainClips;
+
 // Switch to the inbox and file whatever is queued — the one-tap version of the
 // "clips waiting" toast.
 window.clipFileWaiting = async function() {
-  const inbox = _clipInboxRoom();
   closeClipSetup();
-  if (activeRoom !== inbox) {
-    if (!rooms.includes(inbox)) { rooms.push(inbox); try { touchRoomCreated(inbox); } catch {} saveRooms(); }
-    try { await switchRoom(inbox); } catch (e) { console.error(e); }
-  }
+  await _clipGoToInbox();
   // Prefer whatever the listener is already holding; only read the queue
   // directly when nothing is attached (no sync, or it never connected).
-  if (_clipPending.size) { _clipFlush(); return; }
+  if (_clipHeldCount()) { _clipFlush(); return; }
   const n = await drainClips();
   if (!n) showToast('Nothing queued', 'info', 2000);
 };
@@ -10686,7 +10858,7 @@ window.openClipSetup = function() {
         const ov = document.getElementById('clip-overlay');
         if (!ov || !ov.classList.contains('open')) { clearInterval(_clipStatusTimer); return; }
         if (st) st.textContent = clipStatusText();
-        const waiting = _clipPending.size || _clipsWaiting;
+        const waiting = _clipHeldCount() || _clipsWaiting;
         const btn = document.getElementById('clip-waiting-btn');
         if (btn) {
           btn.hidden = !waiting;
@@ -10715,8 +10887,9 @@ window.clipCopy = function(id) {
   if (el) ctxCopy(el.value);
 };
 window.clipTest = function() {
-  _clipApply(_clipEntry({ url: 'https://example.com/article', title: 'Example article', text: 'A quoted line from the page.' }))
-    .then(() => closeClipSetup());
+  _clipOutboxAdd({ u: 'https://example.com/article', t: 'Example article', x: 'A quoted line from the page.' });
+  closeClipSetup();
+  _clipGoToInbox().then(() => _clipFlush()).catch(e => console.error(e));
 };
 
 
@@ -12294,6 +12467,8 @@ async function reconcileOnLive() {
   } finally {
     syncState.conflictResolving = false;
     syncState.pendingRemoteText = null;
+    // The inbox may have been waiting on exactly this to take its clips.
+    try { _clipOnSettled(); } catch {}
   }
 }
 
@@ -12411,7 +12586,13 @@ async function reconcileRoom() {
   } else if (serverText.includes(localText)) {
     applyResolvedServer(roomName, serverText, serverVer); // server strictly extended local → adopt server
   } else {
-    await showSyncConflictModal(roomName, localText, serverText); // genuine conflict → ask
+    // Both sides changed since the last sync. When they changed different
+    // lines that isn't a conflict at all — merge; ask only when the same lines
+    // were changed two different ways.
+    const base = loadRoomSynced(roomName);
+    const merged = base != null ? _merge3(base, localText, serverText) : null;
+    if (merged != null) await applyResolvedMerge(roomName, merged);
+    else await showSyncConflictModal(roomName, localText, serverText); // genuine conflict → ask
   }
   if (!syncState.pageTypeApplied) { syncState.pageTypeApplied = true; applyPageType(); }
 }
@@ -12419,10 +12600,18 @@ async function reconcileRoom() {
 // --- Resolution primitives ---------------------------------------------------
 
 // Keep the local version; push it up so the server matches (replacing incoming).
+// The synced base is recorded only once the push lands: the three-way merge
+// trusts it as the common ancestor, so it must never name text the server
+// didn't get. A failed push leaves the room dirty and hands it to the
+// broadcast loop, which retries until it lands.
 async function applyResolvedLocal(roomName, localText) {
-  saveRoomSynced(roomName, localText);
-  try { await pushTextToServer(roomName, localText, syncState.encKey); }
-  catch (e) { console.warn('Failed to push local after resolve:', e); }
+  try {
+    await pushTextToServer(roomName, localText, syncState.encKey);
+    saveRoomSynced(roomName, localText);
+  } catch (e) {
+    console.warn('Failed to push local after resolve:', e);
+    try { if (syncState.roomName === roomName) window.broadcastText(); } catch {}
+  }
 }
 
 // Adopt the server version, replacing local entirely.
@@ -12456,11 +12645,119 @@ async function applyResolvedAppend(roomName, localText, serverText, where) {
     return;
   }
   dispatchRemoteDoc(merged);
-  saveRoomSynced(roomName, merged);
   persistContent();
   redecorateAfterRemote();
-  try { await pushTextToServer(roomName, merged, syncState.encKey); }
-  catch (e) { console.warn('Failed to push merged after resolve:', e); }
+  await _pushResolved(roomName, merged);
+}
+
+// Push a resolution and, only once it has landed, record it as the synced base
+// (see applyResolvedLocal for why the order matters).
+async function _pushResolved(roomName, text) {
+  try {
+    await pushTextToServer(roomName, text, syncState.encKey);
+    saveRoomSynced(roomName, text);
+  } catch (e) {
+    console.warn('Failed to push resolution:', e);
+    try { if (syncState.roomName === roomName) window.broadcastText(); } catch {}
+  }
+}
+
+// Adopt a three-way merge of local and server and push it, so every device
+// converges on it.
+async function applyResolvedMerge(roomName, merged) {
+  // Switched rooms while reconcile awaited — park the merge in that room's
+  // cache. It's dirty against the base, so its next reconcile pushes it.
+  if (syncState.roomName !== roomName) {
+    store.set('cade-room-cache:' + roomName, merged);
+    return;
+  }
+  dispatchRemoteDoc(merged);
+  persistContent();
+  redecorateAfterRemote();
+  await _pushResolved(roomName, merged);
+}
+
+// --- Three-way merge -----------------------------------------------------------
+// The synced base is the common ancestor of the two texts reconcile compares:
+// local = base + this device's unsynced edits, server = base + whatever other
+// devices pushed since. Edits to different lines don't conflict — a link filed
+// into one section here while another device tidied a different one is two
+// independent changes — so merge line by line the way version control does.
+//
+// Hunks come from the split view's patience diff (base → each side). Two hunks
+// collide when their base ranges overlap, or when both insert at the same
+// point. An identical collision is taken once; two different insertions at one
+// point keep both, server's first, since neither removes anything. Any other
+// collision returns null and the caller asks.
+function _merge3(base, local, server) {
+  if (local === server) return local;
+  if (base === local) return server;
+  if (base === server) return local;
+  const B = base.split('\n');
+  const hunksOf = (text, side) => {
+    const X = text.split('\n');
+    const ops = [];
+    _patience(B, X, 0, B.length, 0, X.length, ops, 0);
+    const out = [];
+    for (const o of ops) if (o.t !== '=') out.push({ b0: o.a0, b1: o.a1, lines: X.slice(o.b0, o.b1), side });
+    return out;
+  };
+  const all = hunksOf(local, 'L').concat(hunksOf(server, 'S'));
+  // By position; at one position an insertion sorts before a replaced range,
+  // so text inserted just above a changed line stays above it.
+  all.sort((p, q) => p.b0 - q.b0 || p.b1 - q.b1 || (p.side === q.side ? 0 : p.side === 'S' ? -1 : 1));
+  const out = [];
+  const put = (lines) => { for (let i = 0; i < lines.length; i++) out.push(lines[i]); };
+  let pos = 0;
+  for (let k = 0; k < all.length;) {
+    const group = [all[k]];
+    let g0 = all[k].b0, g1 = all[k].b1;
+    for (k++; k < all.length; k++) {
+      const h = all[k];
+      const overlaps = (h.b0 < g1 && g0 < h.b1) || (h.b0 === h.b1 && g0 === g1 && h.b0 === g0);
+      if (!overlaps) break;
+      group.push(h);
+      if (h.b1 > g1) g1 = h.b1;
+    }
+    for (let i = pos; i < g0; i++) out.push(B[i]);
+    // One side's version of base[g0, g1): its hunks applied, the rest kept.
+    const render = (side) => {
+      const res = [];
+      let i = g0;
+      for (const h of group) {
+        if (h.side !== side) continue;
+        for (; i < h.b0; i++) res.push(B[i]);
+        for (const l of h.lines) res.push(l);
+        i = h.b1;
+      }
+      for (; i < g1; i++) res.push(B[i]);
+      return res;
+    };
+    if (group.every(h => h.side === group[0].side)) {
+      put(render(group[0].side));
+    } else {
+      const l = render('L'), sv = render('S');
+      if (l.length === sv.length && l.every((x, i) => x === sv[i])) put(sv);
+      else if (g0 === g1) put(_mergeUnionLines(sv, l));
+      else return null;
+    }
+    pos = g1;
+  }
+  for (let i = pos; i < B.length; i++) out.push(B[i]);
+  return out.join('\n');
+}
+
+// Both sides inserted different lines at the same point: keep every line of
+// both, in order, with lines they share written once.
+function _mergeUnionLines(first, second) {
+  const ops = [];
+  _patience(first, second, 0, first.length, 0, second.length, ops, 0);
+  const out = [];
+  for (const o of ops) {
+    for (let i = o.a0; i < o.a1; i++) out.push(first[i]);
+    if (o.t !== '=') for (let j = o.b0; j < o.b1; j++) out.push(second[j]);
+  }
+  return out;
 }
 
 // Build the conflict document name: <room>_conflict_<YYYY-MM-DD_HH-MM-SS>.
@@ -17615,7 +17912,11 @@ window.switchRoom = async function(name) {
   } catch {}
   return r;
 };
-setTimeout(() => { try { startClipListener(); } catch {} }, 2500);
+setTimeout(() => {
+  try { startClipListener(); } catch {}
+  // Anything a previous launch left in the outbox (it never got to settle).
+  try { if (_clipOutboxLoad().length) _clipFlush(); } catch {}
+}, 2500);
 // Belt and braces: if the socket never attaches (blocked, flaky, SDK failed to
 // load at all), a slow poll still delivers. Removing this entirely is what made
 // a detached listener silent rather than merely slow.
