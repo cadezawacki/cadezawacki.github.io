@@ -1,0 +1,12 @@
+/* ARG Desk — host-side styles (loaded into cade.txt). Only the full-screen
+   overlay that holds the desk's iframe; the desk styles itself inside the frame. */
+.argdesk-overlay {
+  position: fixed; inset: 0; z-index: 8000;
+  display: flex;
+  background: var(--bg);
+  padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
+}
+.argdesk-overlay[hidden] { display: none; }
+.argdesk-frame { flex: 1; width: 100%; height: 100%; border: 0; display: block; background: var(--bg); }
+/* keep cade.txt's own toasts visible above the desk while it is open */
+html.argdesk-open .toast-container { z-index: 8100; }
