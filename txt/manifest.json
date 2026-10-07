@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "version": "2026.07.12-4",
+  "version": "2026.10.07-1",
   "modules": [
     {
       "id": "crawler",
@@ -716,6 +716,35 @@
       "tags": "rss,atom,feed,news,reader,bookmarks,subscribe",
       "entry": "widgets/rss/rss.js",
       "css": "widgets/rss/rss.css"
+    },
+    {
+      "id": "arg",
+      "type": "widget",
+      "name": "ARG Desk",
+      "description": "Plan your alternate reality game: chapters, events, puzzles, research, crafter, LLM export",
+      "icon": "◈",
+      "tags": "arg,game,puzzle,planning,codex,trail,chapters,events,clues,research,ideas,cipher,crafter,llm,json,export,import",
+      "entry": "widgets/arg/arg.js",
+      "css": "widgets/arg/arg.css",
+      "precache": [
+        "widgets/arg/desk.html",
+        "widgets/arg/shared/model.js",
+        "widgets/arg/shared/kit.js",
+        "widgets/arg/shared/desk.js",
+        "widgets/arg/shared/arg.css",
+        "widgets/arg/shared/desk.css",
+        "widgets/arg/sample/sample.js",
+        "widgets/arg/views/overview.js",
+        "widgets/arg/views/overview.css",
+        "widgets/arg/views/trail.js",
+        "widgets/arg/views/trail.css",
+        "widgets/arg/views/codex.js",
+        "widgets/arg/views/codex.css",
+        "widgets/arg/views/library.js",
+        "widgets/arg/views/library.css",
+        "widgets/arg/views/crafter.js",
+        "widgets/arg/views/crafter.css"
+      ]
     }
   ]
 }

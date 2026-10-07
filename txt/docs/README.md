@@ -77,6 +77,7 @@ Real, working examples to read and copy from:
 - Script pack (many scripts, one file): `txt/scripts/pack-lines/pack-lines.js`
 - Plugin: `txt/plugins/code-highlight/code-highlight.js`
 - Game with HUD/log: `txt/widgets/crawler/crawler.js`
+- Multi-file app in an isolated iframe, sharded synced storage, own router: `txt/widgets/arg/` (see its README.md)
 
 ---
 
