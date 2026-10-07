@@ -407,8 +407,9 @@
 .v-trail .side-tabs button { flex: 1; }
 .v-trail .insp, .v-trail .povr { flex: 1; min-height: 0; overflow: auto; position: relative; }
 .v-trail .insp[hidden], .v-trail .povr[hidden] { display: none; }
-.v-trail .in { padding: 10px 16px 48px; display: grid; gap: 18px; }
-.v-trail .in-head { display: grid; gap: 8px; }
+.v-trail .in { padding: 10px 16px 48px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; }
+.v-trail .in > * { min-width: 0; }
+.v-trail .in-head { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
 .v-trail .in-row1 { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 24px; }
 .v-trail .in-row1 > .eyebrow { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .v-trail .ph-id { display: none; }
@@ -523,7 +524,7 @@
 /* event card in the inspector */
 .v-trail .ev-pick { flex: 1; min-width: 0; }
 .v-trail .evcard {
-  display: grid; gap: 8px; padding: 8px 10px 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-md);
+  display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; padding: 8px 10px 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-md);
   background: var(--bg); box-shadow: inset 3px 0 0 var(--ws-fg);
 }
 .v-trail .ev-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
