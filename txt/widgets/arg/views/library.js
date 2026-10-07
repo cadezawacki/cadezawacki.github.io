@@ -1,28 +1,30 @@
 /* ============================================================
-   ARG DESK (round 2) — Library view
+   ARG Desk — Library view
    Research (links + sources) and Ideas (half-thoughts) in one
    place. Quick-add bar on top; dense cards that are edited in
-   place on desktop and phone.
+   place on desktop and phone. Model v3: research supports events
+   (inside chapters), puzzles, characters, places, timeline entries,
+   clues and questions; ideas promote into puzzles, events and pages.
 
    Routes: research · ideas → { tab }
    Entity pages (R01, I03) belong to the Codex view.
 
    Rendering: the whole view is rebuilt as an HTML string and
    morphed into the live DOM (keyed by data-k), so the field the
-   user is typing in is never replaced and keeps its caret.
+   user is typing in is never replaced and keeps its caret, even
+   when a remote change from another device arrives mid-sentence.
    ============================================================ */
 (function () {
   'use strict';
-  var D = window.ARG;
   var esc = Kit.esc;
 
   var RES_STATUS = [['to read', 'To read'], ['read', 'Read'], ['verified', 'Verified']];
   var REL = [['primary', 'Primary', 'tone-teal'], ['scholarly', 'Scholarly', 'tone-blue'], ['popular', 'Popular', 'tone-neutral'], ['fringe', 'Fringe', 'tone-purple']];
   var RES_KINDS = (Kit.FIELDS.research.kind || {}).values || ['web', 'book', 'article', 'archive', 'story', 'video', 'other'];
   var IDEA_ST = [['raw', 'Raw', 'Just captured'], ['exploring', 'Exploring', 'Being worked out'], ['used', 'Used', 'In the game'], ['parked', 'Parked', 'Not now']];
-  var PROMOTE = ['puzzle', 'mystery', 'character', 'question', 'research', 'note'];
+  var PROMOTE = ['puzzle', 'event', 'character', 'question', 'research', 'note'];
   var LINK_TYPES = Kit.CLAIM_TYPES.concat(['puzzle', 'question']);
-  var GROUPS = [['none', 'None'], ['tag', 'Tag'], ['status', 'Status'], ['mystery', 'What it supports']];
+  var GROUPS = [['none', 'None'], ['tag', 'Tag'], ['status', 'Status'], ['event', 'What it supports']];
 
   var IC = {
     pencil: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>',
@@ -35,8 +37,9 @@
     dots: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg>',
   };
 
-  /* view state that survives remounts within the session */
+  /* view state that survives remounts within one game (reset when another game opens) */
   var S = {
+    gid: null,
     rs: { status: 'all', rel: [], tags: [], unlinked: false, q: '', group: 'none' },
     rsMore: false,   /* phone: secondary research filters unfolded */
     id: { status: 'all', tags: [], q: '' },
@@ -48,7 +51,24 @@
     sel: null,
     flash: null,
   };
-  var RISK_KEY = 'arg-lib-risk-collapsed';
+  function freshState(gid) {
+    S.gid = gid;
+    S.rs = { status: 'all', rel: [], tags: [], unlinked: false, q: '', group: S.rs.group };
+    S.id = { status: 'all', tags: [], q: '' };
+    S.details = {}; S.showField = {}; S.promoted = {};
+    S.confirmDel = null; S.menu = null; S.sel = null; S.flash = null;
+  }
+  /* the only thing kept in localStorage: whether the risk list is folded (one tiny pref) */
+  var RISK_KEY = 'argdesk-library-risk';
+  (function migrateKeys() {
+    try {
+      var old = localStorage.getItem('arg-lib-risk-collapsed');
+      if (old != null) {
+        if (localStorage.getItem(RISK_KEY) == null) localStorage.setItem(RISK_KEY, old);
+        localStorage.removeItem('arg-lib-risk-collapsed');
+      }
+    } catch (e) { /* storage off */ }
+  })();
   /* no stored choice: open on desktop, folded on phone (it would fill the first screen) */
   function riskCollapsed() {
     var v = null;
@@ -65,8 +85,24 @@
   function relInfo(v) { return REL.filter(function (r) { return r[0] === v; })[0] || ['', v || '—', 'tone-neutral']; }
   function ideaInfo(v) { return IDEA_ST.filter(function (r) { return r[0] === v; })[0] || [v, v, '']; }
   function resLabel(v) { var r = RES_STATUS.filter(function (x) { return x[0] === v; })[0]; return r ? r[1] : v; }
-  function reliesOn(r) { return (r.supports || []).filter(function (x) { return Kit.type(x) === 'puzzle'; }); }
-  function isRisk(r) { return r.status !== 'verified' && reliesOn(r).length > 0; }
+  /* puzzles that rely on a source: the ones it supports directly, plus the puzzles
+     inside any event it supports (the event's record stands on it) */
+  function reliance(r) {
+    var direct = [], via = [], all = [];
+    (r.supports || []).forEach(function (x) {
+      var t = Kit.type(x);
+      if (t === 'puzzle') { if (direct.indexOf(x) < 0) direct.push(x); }
+      else if (t === 'event') {
+        var ps = ((Kit.get(x) || {}).puzzles || []).filter(function (p) { return Kit.type(p) === 'puzzle'; });
+        if (ps.length) via.push({ ev: x, ps: ps });
+      }
+    });
+    direct.forEach(function (p) { all.push(p); });
+    via.forEach(function (v) { v.ps.forEach(function (p) { if (all.indexOf(p) < 0) all.push(p); }); });
+    return { direct: direct, via: via, all: all };
+  }
+  function isRisk(r) { return r.status !== 'verified' && reliance(r).all.length > 0; }
+  function todayYear() { return Kit.today.getFullYear(); }
 
   /* ---------- quick-add parsing (no network: titles come from the URL) ---------- */
   var URL_RE = /\bhttps?:\/\/[^\s<>"']+|\bwww\.[^\s<>"']+|\b[a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,}\/[^\s<>"']*/i;
@@ -86,7 +122,9 @@
     }
     var tags = [], refs = [], bare;
     text = text.replace(/(^|\s)#([A-Za-z0-9][\w-]*)/g, function (all, pre, word) {
-      if (Kit.has(word)) { if (refs.indexOf(word) < 0) refs.push(word); return pre + '\u0000' + word; }
+      /* #E01, #TL01, #P04, #c-ida … link to that page (coded ids also match typed in lower case) */
+      var id = Kit.has(word) ? word : (/^[a-z]{1,2}\d+$/i.test(word) && Kit.has(word.toUpperCase()) ? word.toUpperCase() : null);
+      if (id) { if (refs.indexOf(id) < 0) refs.push(id); return pre + '\u0000' + id; }
       var t = word.toLowerCase();
       if (tags.indexOf(t) < 0) tags.push(t);
       return pre;
@@ -236,26 +274,77 @@
       }
 
       /* ---------------- header: tabs + quick add ---------------- */
-      function headHtml() {
+      function tabEmpty() { return tab === 'research' ? !Kit.list('research').length : !Kit.list('idea').length; }
+      /* the capture box: in the sticky top bar, or front and centre when the tab is empty */
+      function qaForm(hero) {
         var isR = tab === 'research';
+        var ph = hero ? (isR ? 'Paste a link to start your research library…' : 'Jot an idea… (#tags)') : 'Paste a link or jot an idea… (#tags)';
+        return '<form class="lib-qa' + (hero ? ' is-hero' : '') + '" data-k="qa-form" autocomplete="off" novalidate>' +
+          '<label class="lib-qa-field" data-k="qa-field"><span class="lib-qa-plus">' + Kit.ICONS.plus + '</span>' +
+            '<input class="lib-qa-in" id="lib-qa" data-k="qa" type="text" enterkeyhint="done" autocapitalize="sentences" placeholder="' + attr(ph) + '" aria-label="Quick add to ' + (isR ? 'Research' : 'Ideas') + '">' +
+            (hero ? '' : '<span class="kbd lib-qa-kbd" aria-hidden="true" title="Press / to jump here">/</span>') + '</label>' +
+          '<button class="btn primary lib-qa-btn" data-k="qa-btn" type="submit">' + (hero ? (isR ? 'Add source' : 'Add idea') : 'Add') + '</button>' +
+          (hero ? '' : '<div class="lib-qa-hint" data-k="qa-hint">' + (isR
+            ? 'Adds a source to read. Wikipedia links name themselves; other links use the site and page name.'
+            : 'Adds a raw idea dated today. A link in the text is kept as its inspiration.') +
+            ' <b>#word</b> adds a tag; <b>#E01</b>, <b>#P04</b> or <b>#TL01</b> links to that page.</div>') +
+        '</form>';
+      }
+      function headHtml() {
         function tabBtn(t, ico, name, n) {
           return '<button type="button" class="lib-tab" data-k="tab-' + t + '" data-act="tab" data-tab="' + t + '"' + (tab === t ? ' aria-current="page"' : '') + '>' +
             '<span class="lib-tab-ico">' + ico + '</span>' + name + '<span class="lib-tab-n">' + n + '</span></button>';
         }
-        return '<div class="lib-top" data-k="top">' +
+        return '<div class="lib-top' + (tabEmpty() ? ' is-bare' : '') + '" data-k="top">' +
           '<nav class="lib-tabs" data-k="tabs" aria-label="Library">' +
-            tabBtn('research', 'RES', 'Research', D.research.length) + tabBtn('ideas', 'IDA', 'Ideas', D.ideas.length) +
-          '</nav>' +
-          '<form class="lib-qa" data-k="qa-form" autocomplete="off" novalidate>' +
-            '<label class="lib-qa-field" data-k="qa-field"><span class="lib-qa-plus">' + Kit.ICONS.plus + '</span>' +
-              '<input class="lib-qa-in" id="lib-qa" data-k="qa" type="text" enterkeyhint="done" autocapitalize="sentences" placeholder="Paste a link or jot an idea… (#tags)" aria-label="Quick add to ' + (isR ? 'Research' : 'Ideas') + '">' +
-              '<span class="kbd lib-qa-kbd" aria-hidden="true" title="Press / to jump here">/</span></label>' +
-            '<button class="btn primary lib-qa-btn" data-k="qa-btn" type="submit">Add</button>' +
-            '<div class="lib-qa-hint" data-k="qa-hint">' + (isR
-              ? 'Adds a source to read. Wikipedia links name themselves; other links use the site and page name.'
-              : 'Adds a raw idea dated today. A link in the text is kept as its inspiration.') +
-              ' <b>#word</b> adds a tag, <b>#P04</b> links to P04.</div>' +
-          '</form></div>';
+            tabBtn('research', 'RES', 'Research', Kit.list('research').length) + tabBtn('ideas', 'IDA', 'Ideas', Kit.list('idea').length) +
+          '</nav>' + (tabEmpty() ? '' : qaForm(false)) + '</div>';
+      }
+      function tip(code, text) { return '<li><b>' + esc(code) + '</b><span>' + esc(text) + '</span></li>'; }
+      /* empty research library: say what goes here, and capture the first link right here */
+      function heroResearch() {
+        return '<section class="lib-hero" data-k="hero-r" aria-labelledby="lib-hero-h">' +
+          '<span class="lib-hero-ico" aria-hidden="true">RES</span>' +
+          '<h2 id="lib-hero-h">Start your research library</h2>' +
+          '<p>Every source the game leans on: Wikipedia pages, books, archive scans, articles. Read each one, then mark it verified once the facts check out. ' +
+            'Anything a puzzle relies on that isn\'t verified gets flagged here, because players will Google everything.</p>' +
+          '<div class="lib-hero-flow" aria-hidden="true"><span class="lib-stag st-to-read">To read</span><i></i><span class="lib-stag st-read">Read</span><i></i><span class="lib-stag st-verified">Verified</span></div>' +
+          qaForm(true) +
+          '<ul class="lib-hero-tips">' +
+            tip('en.wikipedia.org/wiki/Tunguska_event', 'is saved as “Tunguska event”') +
+            tip('#1908', 'adds a tag') +
+            tip('#E01', 'says which event it supports') +
+          '</ul></section>';
+      }
+      /* empty idea board: capture box front and centre, the four lanes waiting underneath */
+      function heroIdeas(phone) {
+        var h = '<section class="lib-hero is-ideas" data-k="hero-i" aria-labelledby="lib-hero-h">' +
+          '<span class="lib-hero-ico" aria-hidden="true">IDA</span>' +
+          '<h2 id="lib-hero-h">Catch ideas before they get away</h2>' +
+          '<p>Half-thoughts, odd facts, a link you\'ll want later. New ideas land in Raw. Move them along as you work on them, and promote the good ones into a puzzle, event, character, question, research or note.</p>' +
+          qaForm(true) +
+          '<ul class="lib-hero-tips">' +
+            tip('#audio', 'adds a tag') +
+            tip('https://…', 'a pasted link is kept as its inspiration') +
+            tip('#E01', 'links it to an event') +
+          '</ul></section>';
+        if (phone) {
+          h += '<div class="lib-lanes" data-k="lanes" aria-label="How ideas move">' + IDEA_ST.map(function (s) {
+            return '<div class="lib-lane col-' + s[0] + '"><span class="lib-col-name">' + s[1] + '</span><span class="lib-col-d">' + s[2] + '</span></div>';
+          }).join('') + '</div>';
+        } else {
+          h += '<div class="id-board is-empty" data-k="board-empty">' + IDEA_ST.map(function (s) {
+            return '<section class="lib-col col-' + s[0] + '" data-k="col:' + s[0] + '" aria-label="' + s[1] + ' ideas">' +
+              '<header class="lib-col-h"><span class="lib-col-name">' + s[1] + '</span><span class="count">0</span><span class="lib-col-d">' + s[2] + '</span></header>' +
+              '<div class="lib-col-body" data-k="cb"><div class="lib-col-empty" data-k="ce">' + {
+                raw: 'Your first idea lands here.',
+                exploring: 'Ideas you are working out.',
+                used: 'Ideas that made it into the game. Promoting one moves it here.',
+                parked: 'Not now, but not deleted.',
+              }[s[0]] + '</div></div></section>';
+          }).join('') + '</div>';
+        }
+        return h;
       }
 
       /* ================= RESEARCH ================= */
@@ -282,22 +371,20 @@
       function newestFirst(a, b) { return num(b.id) - num(a.id) || (a.id < b.id ? 1 : -1); }
 
       function viewResearch() {
-        var all = D.research.slice();
+        var all = Kit.list('research');
+        if (!all.length) return heroResearch();
         var list = all.filter(function (r) { return passR(r); }).sort(newestFirst);
         var h = riskHtml() + toolbarR(all, list.length);
-        if (!all.length) {
-          h += '<div class="lib-empty" data-k="empty-all"><b>No research yet.</b>Paste a link in the box above and press Enter. Wikipedia links take their title from the URL; plain text becomes the title. Add <span class="mono">#tags</span> as you go.</div>';
-        } else if (!list.length) {
+        if (!list.length) {
           h += '<div class="lib-empty" data-k="empty-f"><b>Nothing matches these filters.</b><button type="button" class="btn sm" data-act="f-clear">Clear filters</button></div>';
         } else h += groupsR(list);
         return h;
       }
 
       function riskHtml() {
-        var items = D.research.filter(isRisk).sort(function (a, b) {
+        var items = Kit.list('research').filter(isRisk).sort(function (a, b) {
           var o = { 'to read': 0, read: 1 }; return (o[a.status] - o[b.status]) || num(a.id) - num(b.id);
         });
-        if (!D.research.length) return '';
         if (!items.length) {
           return '<div class="lib-risk is-ok" data-k="risk-ok"><span class="lib-risk-ic ok">' + IC.check + '</span>Every source a puzzle relies on is verified.</div>';
         }
@@ -313,7 +400,7 @@
               '<button type="button" class="lib-risk-jump" data-act="jump" data-id="' + attr(r.id) + '" title="Show this card">' +
                 '<span class="id">' + esc(r.id) + '</span><span class="lib-risk-name">' + esc(r.title || 'Untitled source') + '</span></button>' +
               '<span class="lib-risk-meta"><span class="lib-stag st-' + cls(r.status) + '">' + esc(resLabel(r.status)) + '</span>' +
-              '<span class="lib-risk-deps"><span class="faint">relied on by</span>' + reliesOn(r).map(function (p) { return Kit.refHtml(p, { idOnly: true }); }).join('') + '</span></span>' +
+              '<span class="lib-risk-deps"><span class="faint">relied on by</span>' + depsHtml(r) + '</span></span>' +
               '<button type="button" class="btn sm lib-verify" data-act="verify" data-id="' + attr(r.id) + '">' + IC.check + 'Mark verified</button>' +
             '</div>';
           }).join('') + '</div>';
@@ -321,6 +408,23 @@
         return h + '</section>';
       }
 
+      /* "P04" for a puzzle it supports directly; "P01 via E01" for puzzles inside an event it supports */
+      function depsHtml(r) {
+        var rel = reliance(r), seen = {}, out = [];
+        rel.direct.forEach(function (p) { seen[p] = 1; out.push(Kit.refHtml(p, { idOnly: true })); });
+        rel.via.forEach(function (v) {
+          var ps = v.ps.filter(function (p) { return !seen[p]; });
+          if (!ps.length) return;
+          ps.forEach(function (p) { seen[p] = 1; });
+          out.push('<span class="lib-via">' + ps.map(function (p) { return Kit.refHtml(p, { idOnly: true }); }).join('') + '<span class="faint">via</span>' + Kit.refHtml(v.ev, { idOnly: true }) + '</span>');
+        });
+        return out.join('');
+      }
+      function relianceTitle(r) {
+        var rel = reliance(r), parts = rel.direct.slice();
+        rel.via.forEach(function (v) { parts.push(v.ps.join(', ') + ' (inside ' + v.ev + ')'); });
+        return 'Not verified, and these puzzles depend on it: ' + parts.join('; ');
+      }
       function searchHtml(key, val, label) {
         return '<label class="lib-search" data-k="srch-' + key + '">' + Kit.ICONS.search +
           '<input class="input" type="search" data-k="' + key + '" data-act="q" value="' + attr(val) + '" placeholder="' + attr(label) + '" aria-label="' + attr(label) + '" autocomplete="off" spellcheck="false"></label>';
@@ -384,13 +488,19 @@
             groups.push({ key: 't-' + t, label: '<span class="lib-grp-tag">#' + esc(t) + '</span>', items: list.filter(function (r) { return (r.tags || []).indexOf(t) >= 0; }) });
           });
           groups.push({ key: 'none', label: '<span class="muted">No tags</span>', items: list.filter(function (r) { return !(r.tags || []).length; }) });
-        } else if (g === 'mystery') {
-          D.mysteries.forEach(function (m) {
-            groups.push({ key: 'm-' + m.id, label: Kit.refHtml(m.id), items: list.filter(function (r) { return (r.supports || []).indexOf(m.id) >= 0; }) });
+        } else if (g === 'event') {
+          /* events in trail order: chapter by chapter, then the ones not placed yet */
+          var evs = [];
+          Kit.chapters().forEach(function (c) { Kit.eventsIn(c.id).forEach(function (ev) { evs.push({ ev: ev, ch: c }); }); });
+          Kit.eventsIn(null).forEach(function (ev) { evs.push({ ev: ev, ch: null }); });
+          evs.forEach(function (x) {
+            var where = x.ch ? 'Ch ' + x.ch.n + ' · ' + x.ch.title : 'Not placed';
+            groups.push({ key: 'e-' + x.ev.id, label: '<span class="lib-grp-ch" title="' + attr(where) + '">' + esc(where) + '</span>' + Kit.refHtml(x.ev.id),
+              items: list.filter(function (r) { return (r.supports || []).indexOf(x.ev.id) >= 0; }) });
           });
-          groups.push({ key: 'none', label: '<span class="muted">Not tied to a mystery</span>', items: list.filter(function (r) { return !(r.supports || []).some(function (x) { return Kit.type(x) === 'mystery'; }); }) });
+          groups.push({ key: 'none', label: '<span class="muted">Not tied to an event</span>', items: list.filter(function (r) { return !(r.supports || []).some(function (x) { return Kit.type(x) === 'event'; }); }) });
         }
-        var note = g === 'tag' || g === 'mystery' ? '<p class="lib-grp-note" data-k="gnote">A source with several ' + (g === 'tag' ? 'tags' : 'mysteries') + ' appears in each group.</p>' : '';
+        var note = g === 'tag' || g === 'event' ? '<p class="lib-grp-note" data-k="gnote">A source with several ' + (g === 'tag' ? 'tags' : 'events') + ' appears in each group.</p>' : '';
         return note + groups.filter(function (x) { return x.items.length; }).map(function (x) {
           return '<section class="rs-grp" data-k="g:' + attr(g + ':' + x.key) + '"><h3 class="rs-grp-h">' + x.label + '<span class="count">' + x.items.length + '</span></h3>' +
             '<div class="rs-list">' + x.items.map(cardR).join('') + '</div></section>';
@@ -443,7 +553,7 @@
         h += '<div class="rs-grid" data-k="grid"><div class="rs-main" data-k="main">' +
           '<div class="rs-meta" data-k="meta">' + meta.join('<span class="sep" aria-hidden="true">·</span>') +
             '<button type="button" class="lib-tool" data-k="det" data-act="details" data-id="' + attr(id) + '" aria-expanded="' + det + '">' + IC.pencil + '<span>' + (det ? 'Done' : 'Edit details') + '</span></button>' +
-            (risk ? '<span class="lib-mk" title="A puzzle depends on this source and it is not verified">' + IC.warn + 'Unverified · ' + esc(reliesOn(r).join(', ')) + ' relies on it</span>' : '') +
+            (risk ? (function () { var ps = reliance(r).all; return '<span class="lib-mk" title="' + attr(relianceTitle(r)) + '">' + IC.warn + 'Unverified · ' + esc(ps.join(', ')) + (ps.length === 1 ? ' relies' : ' rely') + ' on it</span>'; })() : '') +
           '</div>';
         if (det) {
           h += '<div class="rs-det" data-k="det-row">' +
@@ -486,12 +596,10 @@
       function isBoard() { return !ctx.isPhone(); }
 
       function viewIdeas() {
-        var all = D.ideas.slice(), phone = !isBoard();
+        var all = Kit.list('idea'), phone = !isBoard();
+        if (!all.length) return heroIdeas(phone);
         var list = all.filter(function (i) { return passI(i); }).sort(newestIdea);
         var h = toolbarI(all, list, phone);
-        if (!all.length) {
-          return h + '<div class="lib-empty" data-k="empty-all"><b>No ideas yet.</b>Type a half-thought in the box above and press Enter. <span class="mono">#words</span> become tags, a pasted link is kept as its inspiration, and <span class="mono">#P04</span> links it to P04.</div>';
-        }
         if (phone) {
           var shown = S.id.status === 'all' ? list : list.filter(function (i) { return i.status === S.id.status; });
           if (!shown.length) {
@@ -526,7 +634,7 @@
               return '<button type="button" data-k="is:' + s[0] + '" data-act="i-status" data-v="' + s[0] + '" aria-pressed="' + (f.status === s[0]) + '">' + s[1] + '<span class="n">' + (c[s[0]] || 0) + '</span></button>';
             }).join('') + '</div></div>';
         } else {
-          h += '<span class="lib-sp" data-k="sp"></span><span class="lib-hint" data-k="hint">Drag a card to another column, or use <b>Move</b> on the card. <b>Promote</b> turns an idea into a puzzle, mystery or page.</span>';
+          h += '<span class="lib-sp" data-k="sp"></span><span class="lib-hint" data-k="hint">Drag a card to another column, or use <b>Move</b> on the card. <b>Promote</b> turns an idea into a puzzle, event or page.</span>';
         }
         h += '</div>';
         if (tagKeys.length) {
@@ -568,7 +676,7 @@
         h += '<div class="id-top" data-k="top">' + (listMode ? '' : '<span class="id-grip" title="Drag to another column">' + IC.grip + '</span>') +
           '<span class="id">' + esc(id) + '</span>' +
           (listMode ? '<span class="lib-stag s-' + cls(i.status) + '">' + esc(st[1]) + '</span>' : '') +
-          '<span class="id-date" title="Captured ' + attr(Kit.fmtDate(i.created)) + '">' + esc(i.created ? Kit.fmtDate(i.created, { noYear: Kit.year(i.created) === Kit.year(D.game.today) }) : '—') + '</span></div>';
+          '<span class="id-date" title="Captured ' + attr(Kit.fmtDate(i.created)) + '">' + esc(i.created ? Kit.fmtDate(i.created, { noYear: Kit.year(i.created) === todayYear() }) : '—') + '</span></div>';
         h += ta(id, 'text', i.text, 'id-text', 'Idea', 'Write the idea…');
         h += '<div class="id-url" data-k="url">' + (i.url ? '<a class="rs-dom" href="' + attr(i.url) + '" target="_blank" rel="noopener" title="' + attr(i.url) + '">' + esc(Kit.domain(i.url) || i.url) + IC.ext + '</a>' : '') +
           '<button type="button" class="lib-tool" data-k="det" data-act="details" data-id="' + attr(id) + '" aria-expanded="' + det + '">' + (i.url ? IC.pencil + '<span>' + (det ? 'Done' : 'Edit') + '</span>' : '<span>' + (det ? 'Done' : '+ Inspiration link') + '</span>') + '</button></div>';
@@ -581,7 +689,10 @@
         h += '<div class="id-row" data-k="r-links"><span class="id-row-l">Links</span>' + refsHtml(id, 'links', i.links) + '</div>';
         var pid = S.promoted[id];
         if (pid && Kit.has(pid) && (i.links || []).indexOf(pid) >= 0) {
-          h += '<div class="id-promoted" data-k="promoted"><span>Created <b>' + esc(pid) + '</b> · ' + esc(Kit.typeName(pid).toLowerCase()) + '</span><button type="button" class="btn sm" data-act="open" data-id="' + attr(pid) + '">Open ' + esc(pid) + '</button></div>';
+          var pt = Kit.type(pid), po = Kit.get(pid), where = '';
+          if (pt === 'event') where = po.chapter ? '' : ', not in a chapter yet';
+          else if (pt === 'puzzle') where = po.event ? ' in ' + po.event : ', not inside an event yet';
+          h += '<div class="id-promoted" data-k="promoted"><span>Created <b>' + esc(pid) + '</b> · ' + esc(Kit.typeName(pid).toLowerCase() + where) + '</span><button type="button" class="btn sm" data-act="open" data-id="' + attr(pid) + '">Open ' + esc(pid) + '</button></div>';
         }
         h += '<div class="id-foot" data-k="foot">' + (S.confirmDel === id ? confirmHtml(id) :
           menuBtn(id, 'promote', 'Promote to…') + menuBtn(id, 'move', 'Move') + '<span class="lib-sp"></span>' +
@@ -592,7 +703,8 @@
       /* ---------------- status bar ---------------- */
       function setStatus() {
         if (tab === 'research') {
-          var R = D.research, by = { 'to read': 0, read: 0, verified: 0 };
+          var R = Kit.list('research'), by = { 'to read': 0, read: 0, verified: 0 };
+          if (!R.length) { ctx.setStatus(['Library · Research', 'No sources yet: paste a link to start']); return; }
           R.forEach(function (r) { by[r.status] = (by[r.status] || 0) + 1; });
           var risk = R.filter(isRisk).length, unl = R.filter(function (r) { return !(r.supports || []).length; }).length;
           var shown = R.filter(function (r) { return passR(r); }).length;
@@ -600,7 +712,8 @@
             risk ? risk + ' unverified that puzzles rely on' : 'puzzle sources verified',
             unl ? unl + ' not linked' : null, shown !== R.length ? 'showing ' + shown : null]);
         } else {
-          var I = D.ideas, c = {};
+          var I = Kit.list('idea'), c = {};
+          if (!I.length) { ctx.setStatus(['Library · Ideas', 'No ideas yet: jot one to start']); return; }
           I.forEach(function (i) { c[i.status] = (c[i.status] || 0) + 1; });
           ctx.setStatus(['Library · Ideas', plural(I.length, 'idea')].concat(IDEA_ST.map(function (s) { return (c[s[0]] || 0) + ' ' + s[1].toLowerCase(); })));
         }
@@ -610,10 +723,14 @@
       function quickAdd(input) {
         var raw = input.value.trim();
         if (!raw) { input.focus(); return; }
-        var p = parseQuick(raw);
+        var p = parseQuick(raw), hadFocus = document.activeElement === input;
+        function keepFocus() {
+          var q = root.querySelector('.lib-qa-in');
+          if (hadFocus && q && q !== document.activeElement) q.focus({ preventScroll: true });
+        }
         if (tab === 'research') {
           if (p.url) {
-            var dup = D.research.filter(function (r) { return r.url && normUrl(r.url) === normUrl(p.url); })[0];
+            var dup = Kit.list('research').filter(function (r) { return r.url && normUrl(r.url) === normUrl(p.url); })[0];
             if (dup) {
               input.value = '';
               if (!passR(dup)) clearFiltersR();
@@ -633,16 +750,16 @@
           input.value = '';
           var o = Kit.get(nid);
           if (!passR(o)) clearFiltersR();
-          S.flash = nid; render();
+          S.flash = nid; render(); keepFocus();
           Kit.toast('Added ' + nid + ' · ' + o.title, { label: 'Undo', run: function () { Kit.restore(snap); Kit.toast('Removed ' + nid); } });
         } else {
           var text = p.text || (p.url ? titleFromUrl(p.url).title : '');
           var snap2 = Kit.snapshot();
-          var iid = Kit.create('idea', { text: text, url: p.url || null, tags: p.tags, status: 'raw', created: D.game.today, links: p.refs });
+          var iid = Kit.create('idea', { text: text, url: p.url || null, tags: p.tags, status: 'raw', created: Kit.todayIso(), links: p.refs });
           input.value = '';
           if (!passI(Kit.get(iid))) S.id.tags = [], S.id.q = '';
           if (S.id.status !== 'all' && S.id.status !== 'raw') S.id.status = 'all';
-          S.flash = iid; render();
+          S.flash = iid; render(); keepFocus();
           Kit.toast('Added ' + iid + ' to Ideas', { label: 'Undo', run: function () { Kit.restore(snap2); Kit.toast('Removed ' + iid); } });
         }
       }
@@ -742,12 +859,16 @@
         var withUrl = text + (idea.url ? (text ? '\n\n' : '') + idea.url : '');
         var links = (idea.links || []).slice(), obj;
         switch (type) {
-          case 'puzzle': obj = { title: title, status: 'idea', notes: 'From idea ' + ideaId + ': ' + withUrl }; break;
-          case 'mystery': obj = { name: title, twist: withUrl, used: false }; break;
+          /* a puzzle goes inside the first event the idea is linked to (its chapter follows); otherwise it waits unplaced */
+          case 'puzzle': obj = { title: title, status: 'idea', notes: 'From idea ' + ideaId + ': ' + withUrl,
+            event: links.filter(function (x) { return Kit.type(x) === 'event'; })[0] || null }; break;
+          /* a new event starts in the parking lot (no chapter) on the pseudo layer; place it from the Codex or the Trail */
+          case 'event': obj = { title: title, twist: withUrl, layer: 'pseudo', chapter: null, order: Kit.eventsIn(null).length + 1 }; break;
           case 'character': obj = { name: title, role: withUrl }; break;
           case 'question': obj = { text: text || title, kind: 'design', links: links }; break;
           case 'research': obj = { title: fromUrl ? fromUrl.title : title, url: idea.url || null, author: fromUrl ? fromUrl.author : '', kind: idea.url ? 'web' : 'other',
-            reliability: 'popular', status: 'to read', tags: (idea.tags || []).slice(), notes: text }; break;
+            reliability: 'popular', status: 'to read', tags: (idea.tags || []).slice(), notes: text,
+            supports: links.filter(function (x) { return Kit.type(x) === 'event'; }) }; break;
           case 'note': obj = { title: title, body: withUrl + (links.length ? '\n\nLinked: ' + links.map(function (x) { return '#' + x; }).join(' ') : '') + '\n\nFrom idea #' + ideaId }; break;
         }
         var snap = Kit.snapshot(), newId = null;
@@ -788,7 +909,7 @@
       /* ---------------- events ---------------- */
       root.addEventListener('submit', function (e) {
         e.preventDefault();
-        var inp = root.querySelector('.lib-qa-in');
+        var inp = e.target.querySelector && e.target.querySelector('.lib-qa-in');
         if (inp) quickAdd(inp);
       });
 

@@ -276,6 +276,17 @@
     if (!p || !p.recipe || !(p.recipe.steps || []).length) return 'none';
     return verify(p.recipe, { output: p.recipe.output }).state;
   }
+  /* The desk's recipe check. Kit.integrity (Problems) prefers this over Kit.checkRecipe when present,
+     so the rail, the checks tab and the Problems list always agree, lossy ops included. */
+  Kit.verifyRecipe = function (recipe) {
+    try {
+      if (!recipe || !Array.isArray(recipe.steps) || !recipe.steps.length) return { ok: true, state: 'none', problems: [], notes: [], built: null };
+      var r = verify(recipe, { output: recipe.output });
+      return { ok: r.state !== 'broken', state: r.state, problems: r.problems, notes: r.notes, built: r.built, roundTrip: r.decoded };
+    } catch (err) {
+      return { ok: false, state: 'broken', problems: ['The recipe could not be checked: ' + err.message], notes: [], built: null };
+    }
+  };
 
   /* ============================================================
      ANALYSIS
@@ -355,47 +366,105 @@
   }
 
   /* ============================================================
-     PER-VIEWER MEMORY (working copies, last puzzle, tab)
-     The working copy is never written over a stored recipe.
+     PER-VIEWER MEMORY (working copies, last puzzle, tab), per game.
+     The iframe shares localStorage with cade.txt, which runs close to
+     its quota: one small key, drafts only while they hold unsaved
+     changes, 20 KB at most (oldest drafts go first). The working copy
+     is never written over a stored recipe; Save does that.
      ============================================================ */
-  var MEM_KEY = 'arg-crafter-v1';
-  var mem = { loaded: false, last: null, tab: 'bench', drafts: {} };
-  function loadMem() {
-    if (mem.loaded) return;
-    mem.loaded = true;
+  var MEM_KEY = 'argdesk-crafter-v3';
+  var OLD_KEYS = ['arg-crafter-v1', 'argdesk-crafter', 'argdesk-crafter-v1', 'argdesk-crafter-v2'];
+  var MEM_CAP = 20000;
+  var store = { loaded: false, g: {} };
+  var mem = { last: null, tab: 'bench', drafts: {} };   /* the slot of the game on screen */
+  var SCRATCH_SEED = { plaintext: 'THE LEDGER HAS MORE PAGES THAN IDA ADMITS', steps: [{ op: 'keyword', keyword: 'MERIDIAN' }] };
+  function loadStore() {
+    if (store.loaded) return;
+    store.loaded = true;
     try {
+      OLD_KEYS.forEach(function (k) { if (localStorage.getItem(k) != null) localStorage.removeItem(k); });
       var raw = localStorage.getItem(MEM_KEY); if (!raw) return;
       var m = JSON.parse(raw);
-      if (m && typeof m === 'object') { mem.last = m.last || null; mem.tab = m.tab || 'bench'; mem.drafts = m.drafts && typeof m.drafts === 'object' ? m.drafts : {}; }
-    } catch (e) { /* storage unavailable: memory only */ }
+      Object.keys((m && m.g) || {}).forEach(function (gid) {
+        var o = m.g[gid] || {}, slot = { last: o.last || null, tab: o.tab || 'bench', drafts: {} };
+        Object.keys(o.d || {}).forEach(function (k) {
+          var c = o.d[k]; if (!c || typeof c !== 'object') return;
+          slot.drafts[k] = { plaintext: String(c.p || ''), steps: Array.isArray(c.s) ? c.s : [], player: String(c.pl || ''), mode: c.m ? 'decode' : 'encode', clues: {}, base: null, t: +c.t || 0, restored: true };
+        });
+        store.g[gid] = slot;
+      });
+    } catch (e) { /* storage unavailable or corrupt: memory only */ }
+  }
+  function useGame(gid) {
+    loadStore();
+    gid = gid || '_';
+    if (!store.g[gid]) store.g[gid] = { last: null, tab: 'bench', drafts: {} };
+    mem = store.g[gid];
+    return mem;
+  }
+  function worthKeeping(gid, k, d) {
+    if (k === 'scratch') return recipeKey(d) !== recipeKey(SCRATCH_SEED) || !!d.player;
+    if (gid !== Kit.games.current()) return true;                 /* another game's drafts were dirty when saved */
+    var p = Kit.get(k);
+    return !!(p && recipeKey(d) !== storedKey(p));               /* keep only unsaved work */
   }
   var memTimer = null;
-  function saveMem() {
+  function saveMem(now) {
     clearTimeout(memTimer);
-    memTimer = setTimeout(function () {
-      try { localStorage.setItem(MEM_KEY, JSON.stringify({ last: mem.last, tab: mem.tab, drafts: mem.drafts })); } catch (e) { /* ignore */ }
-    }, 300);
+    if (now) writeMem(); else memTimer = setTimeout(writeMem, 300);
+  }
+  function writeMem() {
+    clearTimeout(memTimer);
+    var games = {}; try { Kit.games.list().forEach(function (g) { games[g.id] = 1; }); } catch (e) { /* no registry */ }
+    var out = { g: {} }, list = [];
+    Object.keys(store.g).forEach(function (gid) {
+      if (gid !== '_' && !games[gid]) return;                     /* the game was deleted */
+      var s = store.g[gid], o = { d: {} };
+      if (s.last) o.last = s.last;
+      if (s.tab && s.tab !== 'bench') o.tab = s.tab;
+      Object.keys(s.drafts).forEach(function (k) {
+        var d = s.drafts[k];
+        if (!worthKeeping(gid, k, d)) return;
+        var c = { p: d.plaintext, s: d.steps, t: d.t || 0 };
+        if (d.mode === 'decode') c.m = 1;
+        if (d.player) c.pl = d.player;
+        o.d[k] = c; list.push({ gid: gid, k: k, t: c.t });
+      });
+      if (!Object.keys(o.d).length) delete o.d;
+      if (o.last || o.tab || o.d) out.g[gid] = o;
+    });
+    var str = JSON.stringify(out);
+    list.sort(function (a, b) { return a.t - b.t; });
+    while (str.length > MEM_CAP && list.length) {
+      var x = list.shift(); delete out.g[x.gid].d[x.k];
+      str = JSON.stringify(out);
+    }
+    try {
+      if (!Object.keys(out.g).length) localStorage.removeItem(MEM_KEY);
+      else localStorage.setItem(MEM_KEY, str);
+    } catch (e) { /* quota or storage off: the working copy stays in memory */ }
   }
   function normSteps(steps) {
     return (steps || []).map(function (st) { var o = { op: st.op }; Object.keys(st).sort().forEach(function (k) { if (k !== 'op') o[k] = st[k]; }); return o; });
   }
   function recipeKey(r) { r = r || {}; return JSON.stringify({ p: r.plaintext || '', s: normSteps(r.steps) }); }
   function storedKey(p) { return recipeKey(p && p.recipe); }
-  var SCRATCH_SEED = { plaintext: 'THE LEDGER HAS MORE PAGES THAN IDA ADMITS', steps: [{ op: 'keyword', keyword: 'MERIDIAN' }] };
   function getDraft(pid) {
     var key = pid || 'scratch', d = mem.drafts[key];
     if (!d) {
       var src = pid ? ((Kit.get(pid) || {}).recipe || {}) : SCRATCH_SEED;
-      d = mem.drafts[key] = { plaintext: src.plaintext || '', steps: clone(src.steps || []), player: '', mode: 'encode', clues: {}, base: pid ? storedKey(Kit.get(pid)) : null };
+      d = mem.drafts[key] = { plaintext: src.plaintext || '', steps: clone(src.steps || []), player: '', mode: 'encode', clues: {}, base: pid ? storedKey(Kit.get(pid)) : null, t: 0 };
     }
+    if (pid && d.restored) { d.restored = false; d.base = storedKey(Kit.get(pid)); }  /* restored unsaved work stays unsaved */
     if (!d.clues) d.clues = {};
     if (!Array.isArray(d.steps)) d.steps = [];
     return d;
   }
-  /* stored recipe changed elsewhere (import, undo, reset): a clean working copy follows it */
+  function touch(d) { d.t = Date.now(); }
+  /* stored recipe changed elsewhere (another device, import, undo): a clean working copy follows it */
   function syncDraft(pid) {
     var p = Kit.get(pid), d = mem.drafts[pid];
-    if (!p || !d) return false;
+    if (!p || !d || d.restored) return false;
     var sk = storedKey(p);
     if (d.base === sk) return false;
     var clean = recipeKey(d) === d.base;
@@ -427,7 +496,7 @@
     none: { label: '', title: 'No recipe' },
   };
   function kindLabel(k) { var x = D.puzzleKinds.find(function (y) { return y.id === k; }); return x ? x.label : (k || '—'); }
-  function chapterLabel(cid) { var c = Kit.chapter(cid); return c ? 'CH' + c.n + ' · ' + c.title : '—'; }
+  function chapterLabel(cid) { var c = Kit.chapter(cid); return c ? 'Ch ' + c.n + ' · ' + c.title : 'No chapter'; }
   function captureFocus(container) {
     var a = document.activeElement;
     if (!a || !container.contains(a)) return null;
@@ -457,7 +526,7 @@
       return m ? { puzzle: m[1] } : null;
     },
     mount: function (root, params, ctx) {
-      loadMem();
+      useGame(Kit.games.current());
       var S = { pid: null, tab: mem.tab || 'bench', q: '', menuOpen: false, expanded: {}, other: false, otherText: '', tableOpen: false, external: false, pathStale: false, alive: true };
       var own = 0, pending = null, timers = {}, rafId = 0, lastAn = null, saveSig = '';
 
@@ -469,7 +538,7 @@
             '<div class="cf-rail-list scroll" id="cf-list"></div>' +
           '</aside>' +
           '<section class="cf-main scroll" id="cf-main">' +
-            '<div class="cf-pick"><label class="field-label" for="cf-pick-sel">Puzzle</label><select class="input" id="cf-pick-sel" data-ch="pick" data-fk="pick"></select></div>' +
+            '<div class="cf-pick" id="cf-pick"></div>' +
             '<header class="cf-head" id="cf-head"></header>' +
             '<div class="cf-tabs" id="cf-tabs" role="tablist" aria-label="Crafter sections"></div>' +
             '<div class="cf-panel" id="cf-panel" role="tabpanel"></div>' +
@@ -477,19 +546,20 @@
         '</div>' +
         '<div class="cf-tip" role="tooltip" hidden></div>';
       var el = {
-        list: root.querySelector('#cf-list'), main: root.querySelector('#cf-main'), pick: root.querySelector('#cf-pick-sel'),
+        list: root.querySelector('#cf-list'), main: root.querySelector('#cf-main'), pick: root.querySelector('#cf-pick'),
         head: root.querySelector('#cf-head'), tabs: root.querySelector('#cf-tabs'), panel: root.querySelector('#cf-panel'), tip: root.querySelector('.cf-tip'),
       };
 
       function puzzle() { return S.pid ? Kit.get(S.pid) : null; }
       function draft() { return getDraft(S.pid); }
       function ownUpdate(fn) { own++; try { fn(); } finally { own--; } }
+      /* last puzzle used here; else the first puzzle with a recipe; an empty game opens the scratchpad */
       function defaultPid() {
-        if (mem.last === 'scratch') return null;
-        if (mem.last && Kit.get(mem.last) && Kit.type(mem.last) === 'puzzle') return mem.last;
-        if (Kit.get('P03')) return 'P03';
-        var first = Kit.puzzleOrder()[0];
-        return first ? first.id : null;
+        if (!D.puzzles.length || mem.last === 'scratch') return null;
+        if (mem.last && Kit.type(mem.last) === 'puzzle') return mem.last;
+        var order = Kit.puzzleOrder();
+        var withRecipe = order.filter(function (p) { return p.recipe && (p.recipe.steps || []).length; })[0];
+        return (withRecipe || order[0]).id;
       }
       function resolve(prm) {
         if (prm && prm.scratch) return null;
@@ -517,7 +587,40 @@
       /* ============================================================
          RAIL + PHONE PICKER
          ============================================================ */
-      function railRowState(p) { return storedState(p); }
+      /* chapters → events → puzzles; unplaced events and puzzles without an event at the end */
+      function hasEvent(p) { return !!(p.event && Kit.type(p.event) === 'event'); }
+      function groups(filter) {
+        var out = [];
+        function evGroup(ev) { return { ev: ev, ps: Kit.puzzlesInEvent(ev.id).filter(filter) }; }
+        Kit.chapters().forEach(function (ch) {
+          var evs = Kit.eventsIn(ch.id).map(evGroup).filter(function (g) { return g.ps.length; });
+          if (evs.length) out.push({ label: chapterLabel(ch.id), events: evs });
+        });
+        var loose = Kit.eventsIn(null).map(evGroup).filter(function (g) { return g.ps.length; });
+        if (loose.length) out.push({ label: 'Not in a chapter yet', events: loose });
+        var none = Kit.puzzleOrder().filter(function (p) { return !hasEvent(p) && filter(p); });
+        if (none.length) out.push({ label: 'No event', events: [{ ev: null, ps: none }] });
+        return out;
+      }
+      function matches(q) {
+        return function (p) { return !q || (p.id + ' ' + p.title + ' ' + p.kind + ' ' + kindLabel(p.kind) + ' ' + (hasEvent(p) ? Kit.label(p.event) : '')).toLowerCase().indexOf(q) >= 0; };
+      }
+      function firstEvent() {
+        var chs = Kit.chapters();
+        for (var i = 0; i < chs.length; i++) { var evs = Kit.eventsIn(chs[i].id); if (evs.length) return evs[0]; }
+        return Kit.eventsIn(null)[0] || null;
+      }
+      function newPuzzleBlock(where) {
+        var ev = firstEvent(), ch = Kit.chapters()[0];
+        var dest = ev ? 'It goes into ' + ev.title + ' (' + ev.id + '); move it to another event later.'
+          : 'A first event is added to ' + (ch ? chapterLabel(ch.id) : 'the game') + ' to hold it.';
+        return '<div class="cf-nop">' +
+          '<p class="cf-nop-t">No puzzles yet — add one in the Trail or Codex.</p>' +
+          '<p class="cf-nop-s">Or start one here and build its cipher on the bench. ' + esc(dest) + '</p>' +
+          '<div class="cf-np"><input type="text" class="input" data-np="' + where + '" data-fk="np-' + where + '" placeholder="Puzzle title" aria-label="New puzzle title" autocomplete="off" spellcheck="false">' +
+          '<button type="button" class="btn sm primary" data-act="np-create" data-where="' + where + '">Create puzzle</button></div>' +
+        '</div>';
+      }
       function renderRail() {
         var q = S.q.trim().toLowerCase(), html = '';
         var scratchOn = S.pid === null;
@@ -526,29 +629,27 @@
             '<span class="cf-row-top"><span class="cf-row-ico">SCR</span><span class="cf-row-t">Scratchpad</span></span>' +
             '<span class="cf-row-meta">Try a cipher without touching a puzzle</span></button>';
         }
+        if (!D.puzzles.length) {
+          var f0 = captureFocus(el.list);
+          el.list.innerHTML = html + newPuzzleBlock('rail');
+          restoreFocus(el.list, f0);
+          return;
+        }
         var shown = 0;
-        Kit.chapters().forEach(function (ch) {
-          var ps = Kit.puzzlesIn(ch.id).filter(function (p) {
-            if (!q) return true;
-            return (p.id + ' ' + p.title + ' ' + p.kind + ' ' + kindLabel(p.kind)).toLowerCase().indexOf(q) >= 0;
+        groups(matches(q)).forEach(function (g) {
+          html += '<div class="cf-grp"><span class="eyebrow">' + esc(g.label) + '</span></div>';
+          g.events.forEach(function (eg) {
+            if (eg.ev) html += '<div class="cf-evh" title="' + esc(eg.ev.id + ' · ' + eg.ev.title) + '">' + Kit.layerDot(eg.ev.layer) + '<span class="cf-evh-id">' + esc(eg.ev.id) + '</span><span class="cf-evh-t">' + esc(eg.ev.title) + '</span></div>';
+            eg.ps.forEach(function (p) {
+              shown++;
+              var rs = storedState(p), on = p.id === S.pid;
+              html += '<button type="button" class="cf-row" data-act="pick" data-id="' + esc(p.id) + '"' + (on ? ' aria-current="page"' : '') + '>' +
+                '<span class="cf-row-top"><span class="cf-row-id">' + esc(p.id) + '</span><span class="cf-row-t">' + esc(p.title || 'Untitled puzzle') + '</span>' +
+                '<span class="cf-dot" data-dirty="' + esc(p.id) + '"' + (isDirty(p.id) ? '' : ' hidden') + ' title="Unsaved recipe changes"></span></span>' +
+                '<span class="cf-row-meta">' + Kit.pips(p.status) + '<span class="cf-row-kind">' + esc(kindLabel(p.kind)) + '</span>' +
+                (rs !== 'none' ? '<span class="cf-rs cf-rs-' + rs + '" title="' + esc(RSTATE[rs].title) + '">' + RSTATE[rs].label + '</span>' : '') + '</span></button>';
+            });
           });
-          if (!ps.length) return;
-          html += '<div class="cf-grp"><span class="eyebrow">CH' + ch.n + ' · ' + esc(ch.title) + '</span></div>';
-          ps.forEach(function (p) {
-            shown++;
-            var rs = railRowState(p), on = p.id === S.pid;
-            html += '<button type="button" class="cf-row" data-act="pick" data-id="' + esc(p.id) + '"' + (on ? ' aria-current="page"' : '') + '>' +
-              '<span class="cf-row-top"><span class="cf-row-id">' + esc(p.id) + '</span><span class="cf-row-t">' + esc(p.title) + '</span>' +
-              '<span class="cf-dot" data-dirty="' + esc(p.id) + '"' + (isDirty(p.id) ? '' : ' hidden') + ' title="Unsaved recipe changes"></span></span>' +
-              '<span class="cf-row-meta">' + Kit.pips(p.status) + '<span class="cf-row-kind">' + esc(kindLabel(p.kind)) + '</span>' +
-              (rs !== 'none' ? '<span class="cf-rs cf-rs-' + rs + '" title="' + esc(RSTATE[rs].title) + '">' + RSTATE[rs].label + '</span>' : '') + '</span></button>';
-          });
-        });
-        var orphans = D.puzzles.filter(function (p) { return !Kit.chapter(p.chapter); });
-        orphans.forEach(function (p) {
-          if (q && (p.id + ' ' + p.title).toLowerCase().indexOf(q) < 0) return;
-          shown++;
-          html += '<button type="button" class="cf-row" data-act="pick" data-id="' + esc(p.id) + '"' + (p.id === S.pid ? ' aria-current="page"' : '') + '><span class="cf-row-top"><span class="cf-row-id">' + esc(p.id) + '</span><span class="cf-row-t">' + esc(p.title) + '</span></span><span class="cf-row-meta">No chapter</span></button>';
         });
         if (q && !shown) html += '<p class="cf-empty">No puzzle matches "' + esc(S.q) + '".</p>';
         var st = el.list.scrollTop;
@@ -556,17 +657,19 @@
         el.list.scrollTop = st;
       }
       function renderPick() {
+        var f = captureFocus(el.pick);
+        if (!D.puzzles.length) { el.pick.innerHTML = newPuzzleBlock('phone'); restoreFocus(el.pick, f); return; }
         var html = '<option value="scratch"' + (S.pid === null ? ' selected' : '') + '>Scratchpad</option>';
-        Kit.chapters().forEach(function (ch) {
-          var ps = Kit.puzzlesIn(ch.id); if (!ps.length) return;
-          html += '<optgroup label="CH' + ch.n + ' · ' + esc(ch.title) + '">' + ps.map(function (p) {
-            var rs = storedState(p);
-            return '<option value="' + esc(p.id) + '"' + (p.id === S.pid ? ' selected' : '') + '>' + esc(p.id + ' · ' + p.title) + (rs !== 'none' ? ' — recipe ' + rs : '') + (isDirty(p.id) ? ' (unsaved)' : '') + '</option>';
-          }).join('') + '</optgroup>';
+        groups(function () { return true; }).forEach(function (g) {
+          g.events.forEach(function (eg) {
+            html += '<optgroup label="' + esc(g.label + (eg.ev ? ' › ' + eg.ev.title : '')) + '">' + eg.ps.map(function (p) {
+              var rs = storedState(p);
+              return '<option value="' + esc(p.id) + '"' + (p.id === S.pid ? ' selected' : '') + '>' + esc(p.id + ' · ' + (p.title || 'Untitled puzzle')) + (rs !== 'none' ? ' — recipe ' + rs : '') + (isDirty(p.id) ? ' (unsaved)' : '') + '</option>';
+            }).join('') + '</optgroup>';
+          });
         });
-        var f = captureFocus(el.pick.parentNode);
-        el.pick.innerHTML = html;
-        restoreFocus(el.pick.parentNode, f);
+        el.pick.innerHTML = '<label class="field-label" for="cf-pick-sel">Puzzle</label><select class="input" id="cf-pick-sel" data-ch="pick" data-fk="pick">' + html + '</select>';
+        restoreFocus(el.pick, f);
       }
 
       /* ============================================================
@@ -584,8 +687,10 @@
         var statusSel = '<select class="input cf-status" data-ch="status" data-fk="status" aria-label="Status">' +
           D.statuses.map(function (s) { return '<option value="' + s.id + '"' + (s.id === p.status ? ' selected' : '') + '>' + esc(s.label) + '</option>'; }).join('') + '</select>';
         el.head.innerHTML = '<div class="cf-head-l">' +
-            '<span class="eyebrow">Puzzle crafter · ' + esc(chapterLabel(p.chapter)) + '</span>' +
-            '<h1 class="cf-title"><span class="cf-title-t">' + esc(p.title) + '</span><span class="id">' + esc(p.id) + '</span>' + (p.final ? '<span class="chip tone-amber">finale</span>' : '') + '</h1>' +
+            '<div class="cf-crumbs"><span class="eyebrow">' + esc(hasEvent(p) ? chapterLabel(Kit.get(p.event).chapter) : 'Puzzle crafter') + '</span>' +
+              (hasEvent(p) ? '<span class="cf-crumb-sep" aria-hidden="true">›</span><span class="cf-crumb-ev">' + Kit.refHtml(p.event) + '</span>'
+                : '<span class="chip tone-amber" title="Puzzles sit inside events. Pick one on the puzzle page.">No event yet</span>') + '</div>' +
+            '<h1 class="cf-title"><span class="cf-title-t">' + esc(p.title || 'Untitled puzzle') + '</span><span class="id">' + esc(p.id) + '</span>' + (p.final ? '<span class="chip tone-amber">finale</span>' : '') + '</h1>' +
             '<div class="cf-meta">' +
               '<span class="cf-meta-i"><span class="cf-k">Kind</span>' + esc(kindLabel(p.kind)) + '</span>' +
               '<span class="cf-meta-i"><span class="cf-k">Difficulty</span>' + Kit.diff(p.difficulty || 0) + '</span>' +
