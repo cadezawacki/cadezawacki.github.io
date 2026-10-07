@@ -597,7 +597,9 @@
           (n.error ? '<span class="chip tone-orange">' + n.error + ' can\'t import</span>' : '') +
           (warns ? '<span class="chip tone-amber">' + warns + ' warning' + (warns === 1 ? '' : 's') + '</span>' : '') }));
         if (gameMeta && (gameMeta.title || gameMeta.premise) && (gameMeta.title !== D.game.title || gameMeta.premise !== D.game.premise)) {
-          gameCb = Kit.h('input', { type: 'checkbox', id: 'im-game', checked: Kit.isEmpty() || D.game.title === 'Imported game' });
+          /* a game that holds nothing but chapters is still a fresh one */
+          var fresh = Kit.count() === Kit.list('chapter').length;
+          gameCb = Kit.h('input', { type: 'checkbox', id: 'im-game', checked: fresh || D.game.title === 'Imported game' });
           out.appendChild(Kit.h('label', { class: 'check-row im-game' }, gameCb, 'Also set the game title and premise to “' + (gameMeta.title || D.game.title) + '”'));
         }
         var list = Kit.h('div', { class: 'im-items' });
@@ -638,7 +640,7 @@
         if (!chosen.length) return;
         var res = Kit.importApply(chosen);
         if (gameCb && gameCb.checked && gameMeta) {
-          var g = {}; ['title', 'tagline', 'premise', 'format', 'players'].forEach(function (k) { if (gameMeta[k]) g[k] = gameMeta[k]; });
+          var g = {}; ['title', 'codename', 'tagline', 'premise', 'format', 'players'].forEach(function (k) { if (gameMeta[k]) g[k] = gameMeta[k]; });
           Kit.updateGame(g);
         }
         sheet.close();

@@ -634,6 +634,7 @@
       var S = window.ARG_SAMPLE;
       if (!S) return false;
       if (!reg.games.sample) {
+        if (G.id && Store.pending) flushSave(); /* the open game's last edits must not wait out the save timer */
         Kit.games.create((S.game.title || 'Sample') + ' (sample)', { id: 'sample' });
         loadGame('sample');
         var t = now(), seq = 0;
@@ -1103,7 +1104,7 @@
     });
     var lastCh = Math.max.apply(null, D.chapters.map(function (c) { return +c.n || 0; }).concat([0]));
     D.puzzles.forEach(function (p) {
-      var si = Kit.statusIndex(p.status), cn = +((Kit.chapter(p.chapter) || {}).n) || 0;
+      var si = Kit.statusIndex(p.status), placed = !!Kit.chapter(p.chapter), cn = +((Kit.chapter(p.chapter) || {}).n) || 0;
       if (si >= 1 && (!p.solution || /^tbd\.?$/i.test(p.solution.trim()))) add('med', 'No solution', p.id + ' ' + p.title + ' is past Idea but has no solution written down.', [p.id]);
       if (si >= 2 && !(p.solvePath || []).length) add('med', 'No solve path', p.id + ' ' + p.title + ' is built but has no step-by-step solve path.', [p.id]);
       if (si >= 3) {
@@ -1118,11 +1119,11 @@
       (p.requires || []).forEach(function (r) {
         var rp = Kit.get(r);
         if (!rp) add('high', 'Broken link', p.id + ' requires ' + r + ', which does not exist.', [p.id]);
-        else if ((Kit.chapter(rp.chapter) || {}).n > cn) add('high', 'Order', p.id + ' requires ' + r + ' from a later chapter.', [p.id, r]);
+        else if (placed && (Kit.chapter(rp.chapter) || {}).n > cn) add('high', 'Order', p.id + ' requires ' + r + ' from a later chapter.', [p.id, r]);
       });
       (p.inputs || []).forEach(function (cid) {
         var c = Kit.get(cid);
-        if (c && c.plantedIn && Kit.type(c.plantedIn) === 'asset') {
+        if (placed && c && c.plantedIn && Kit.type(c.plantedIn) === 'asset') { /* an unplaced puzzle is flagged as "No event" instead */
           var a = Kit.get(c.plantedIn), ach = (Kit.chapter(a.chapter) || {}).n;
           if (ach > cn) add('high', 'Clue too late', cid + ' lives in ' + a.id + ' (chapter ' + ach + ') but ' + p.id + ' needs it in chapter ' + cn + '.', [cid, a.id, p.id]);
         }
@@ -1544,7 +1545,7 @@
       if (e.key === 'ArrowDown') { pal.sel = Math.min(pal.items.length - 1, pal.sel + 1); palRender(); e.preventDefault(); }
       else if (e.key === 'ArrowUp') { pal.sel = Math.max(0, pal.sel - 1); palRender(); e.preventDefault(); }
       else if (e.key === 'Enter') { var it = pal.items[pal.sel]; if (it) pal.choose(it.id); e.preventDefault(); }
-      else if (e.key === 'Escape') { pal.close(); }
+      else if (e.key === 'Escape') { pal.close(); e.preventDefault(); /* the shell closes the desk on an unhandled Esc */ }
     });
     pal.el = ov; pal.input = input; pal.list = list; pal.titleEl = title;
   }
@@ -1634,7 +1635,7 @@
     return api;
   };
   document.addEventListener('keydown', function (e) {
-    if (e.key === 'Escape' && openSheets.length && (!pal.el || pal.el.hidden)) { openSheets[openSheets.length - 1].close(); }
+    if (e.key === 'Escape' && openSheets.length && (!pal.el || pal.el.hidden)) { openSheets[openSheets.length - 1].close(); e.preventDefault(); }
   });
 
   /* ---------- toast (optional action button) ---------- */
