@@ -1,5 +1,5 @@
 /* ============================================================
-   ARG DESK — Codex view. Every selector is scoped to .v-codex.
+   ARG Desk — Codex view. Every selector is scoped to .v-codex.
    Tokens only: no literal colors.
    ============================================================ */
 .v-codex { background: var(--bg); }
@@ -443,3 +443,78 @@
   .v-codex .cx-lt { height: 32px; }
 }
 .v-codex .cx-vm.mid { color: var(--warn); }
+
+/* ---------- v3: chapters → events → puzzles ---------- */
+/* read-only placement (a puzzle's chapter follows its event) */
+.v-codex .cx-ro { color: var(--text); }
+.v-codex .cx-ro-note { font-size: var(--text-2xs); }
+.v-codex .cx-evsel { max-width: min(100%, 300px); }
+.v-codex .cx-ord-tools { display: inline-flex; gap: 0; }
+.v-codex .cx-move { height: 26px; font-size: var(--text-xs); max-width: 180px; padding-right: 22px; color: var(--text-muted); }
+.v-codex .cx-lr-t { font-weight: 500; color: var(--text); }
+
+/* designed empty states */
+.v-codex .cx-empty-first { display: grid; justify-items: center; gap: 10px; padding: 36px 20px; text-align: center; }
+.v-codex .cx-empty-first p { max-width: 58ch; color: var(--text-muted); font-size: var(--text-sm); line-height: 1.55; }
+.v-codex .cx-empty-first .cx-row-btns { justify-content: center; }
+.v-codex .cx-empty-first .btn { margin-top: 0; }
+.v-codex .cx-empty-ic { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.04em; color: var(--accent); border: 1px solid var(--accent); border-radius: var(--radius-sm); padding: 2px 7px; }
+.v-codex .cx-empty-inline { padding: 14px 16px; text-align: left; font-size: var(--text-sm); }
+
+/* invented events: no record panel to fill */
+.v-codex .cx-rt-inv { border-style: dashed; background: transparent; }
+.v-codex .cx-rt-note { font-size: var(--text-sm); color: var(--text-muted); line-height: 1.55; margin-bottom: 6px; }
+.v-codex .cx-hidden-ed { display: none; }
+.v-codex .cx-hidden-ed.editing { display: block; margin-top: 8px; }
+
+/* Chapters collection: the table of contents */
+.v-codex .cx-toc-tot { font-size: var(--text-xs); color: var(--text-faint); }
+.v-codex .cx-toc-ch { margin-bottom: 14px; padding: 12px 14px 10px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); }
+.v-codex .cx-toc-unplaced { border-style: dashed; background: transparent; }
+.v-codex .cx-toc-h { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.v-codex .cx-toc-n { min-width: 22px; height: 22px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--border-strong); border-radius: 50%; font-size: var(--text-xs); color: var(--text-muted); align-self: center; }
+.v-codex .cx-toc-title { font-size: var(--text-lg); font-weight: 600; color: var(--text); text-align: left; padding: 0; letter-spacing: -0.01em; }
+.v-codex button.cx-toc-title:hover { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
+.v-codex .cx-toc-title.static { color: var(--text-muted); }
+.v-codex .cx-toc-meta { margin-left: auto; font-size: var(--text-2xs); color: var(--text-faint); }
+.v-codex .cx-toc-sum { margin: 4px 0 0 32px; font-size: var(--text-sm); color: var(--text-muted); max-width: 80ch; }
+.v-codex .cx-toc-evs { list-style: none; margin: 10px 0 0 32px; border-top: 1px solid var(--border); }
+.v-codex .cx-toc-ev { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 6px 0 6px 6px; border-bottom: 1px solid var(--border); }
+.v-codex .cx-toc-ev[data-layer="record"] { box-shadow: inset 2px 0 0 var(--ws-teal-fg); }
+.v-codex .cx-toc-ev[data-layer="pseudo"] { box-shadow: inset 2px 0 0 var(--ws-purple-fg); }
+.v-codex .cx-toc-ev[data-layer="fiction"] { box-shadow: inset 2px 0 0 var(--ws-pink-fg); }
+.v-codex .cx-toc-ord { font-size: var(--text-xs); color: var(--text-faint); text-align: right; }
+.v-codex .cx-toc-evmain { display: flex; align-items: baseline; gap: 8px; min-width: 0; flex-wrap: wrap; }
+.v-codex .cx-toc-when { font-size: var(--text-2xs); color: var(--text-faint); }
+.v-codex .cx-toc-pzs { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; align-items: center; }
+.v-codex .cx-toc-pz { display: inline-flex; align-items: center; gap: 5px; }
+.v-codex .cx-toc-none { font-size: var(--text-2xs); }
+.v-codex .cx-toc-emptych { margin: 10px 0 0 32px; padding: 10px 12px; border: 1px dashed var(--border-strong); border-radius: var(--radius-sm); font-size: var(--text-sm); color: var(--text-muted); }
+.v-codex .cx-toc-foot { margin: 8px 0 0 32px; }
+
+/* chapter page: the outline */
+.v-codex .cx-outline { list-style: none; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); }
+.v-codex .cx-ol-ev { padding: 8px 10px 8px 12px; border-bottom: 1px solid var(--border); }
+.v-codex .cx-ol-ev:last-child { border-bottom: 0; }
+.v-codex .cx-ol-ev[data-layer="record"] { box-shadow: inset 3px 0 0 var(--ws-teal-fg); }
+.v-codex .cx-ol-ev[data-layer="pseudo"] { box-shadow: inset 3px 0 0 var(--ws-purple-fg); }
+.v-codex .cx-ol-ev[data-layer="fiction"] { box-shadow: inset 3px 0 0 var(--ws-pink-fg); }
+.v-codex .cx-ol-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
+.v-codex .cx-ol-ord { min-width: 18px; text-align: right; font-size: var(--text-xs); color: var(--text-faint); }
+.v-codex .cx-ol-title.cx-ed-text { font-weight: 600; font-size: var(--text-sm); margin-left: -2px; min-width: 0; overflow-wrap: anywhere; }
+.v-codex .cx-ol-title.editing { flex: 1 1 260px; }
+.v-codex .cx-ol-when { font-size: var(--text-2xs); color: var(--text-faint); }
+.v-codex .cx-ol-tools { margin-left: auto; display: inline-flex; align-items: center; gap: 2px; }
+.v-codex .cx-ol-pzs { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 6px 0 0 26px; }
+.v-codex .cx-ol-foot { margin-top: 8px; }
+
+@media (max-width: 760px) {
+  .v-codex .cx-toc-sum, .v-codex .cx-toc-evs, .v-codex .cx-toc-emptych, .v-codex .cx-toc-foot { margin-left: 0; }
+  .v-codex .cx-toc-ev { grid-template-columns: 18px minmax(0, 1fr); }
+  .v-codex .cx-toc-pzs { grid-column: 2; justify-content: flex-start; }
+  .v-codex .cx-toc-meta { margin-left: 0; width: 100%; }
+  .v-codex .cx-ol-tools { margin-left: 0; width: 100%; }
+  .v-codex .cx-ol-pzs { margin-left: 0; }
+  .v-codex .cx-move { height: 34px; font-size: 16px; max-width: 100%; flex: 1 1 160px; }
+  .v-codex .cx-evsel { max-width: 100%; }
+}

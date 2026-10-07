@@ -56,7 +56,7 @@
     S.rs = { status: 'all', rel: [], tags: [], unlinked: false, q: '', group: S.rs.group };
     S.id = { status: 'all', tags: [], q: '' };
     S.details = {}; S.showField = {}; S.promoted = {};
-    S.confirmDel = null; S.menu = null; S.sel = null; S.flash = null;
+    S.confirmDel = null; S.menu = null; S.sel = null; S.flash = null; S.riskAll = false;
   }
   /* the only thing kept in localStorage: whether the risk list is folded (one tiny pref) */
   var RISK_KEY = 'argdesk-library-risk';
@@ -235,6 +235,7 @@
       var drag = null, suppressClick = false;
       var mq = window.matchMedia('(max-width: 760px)');
       var lastPhone = mq.matches;
+      if (S.gid !== Kit.games.current()) freshState(Kit.games.current());
 
       /* ---------------- render ---------------- */
       function scroller() { return root.querySelector('.lib-scroll'); }
@@ -395,7 +396,9 @@
             '<span class="lib-risk-t"><b>' + plural(items.length, 'source') + ' that puzzles rely on ' + (items.length === 1 ? 'is' : 'are') + ' not verified.</b> ' +
             '<span class="lib-risk-why">Players will Google everything. Check these before anything else.</span></span>' + IC.chev + '</button>';
         if (open) {
-          h += '<div class="lib-risk-list" data-k="risk-list">' + items.map(function (r) {
+          var RISK_CAP = 5, more = items.length - RISK_CAP;
+          var shownItems = S.riskAll || more <= 1 ? items : items.slice(0, RISK_CAP);
+          h += '<div class="lib-risk-list" data-k="risk-list">' + shownItems.map(function (r) {
             return '<div class="lib-risk-row" data-k="rr:' + attr(r.id) + '">' +
               '<button type="button" class="lib-risk-jump" data-act="jump" data-id="' + attr(r.id) + '" title="Show this card">' +
                 '<span class="id">' + esc(r.id) + '</span><span class="lib-risk-name">' + esc(r.title || 'Untitled source') + '</span></button>' +
@@ -403,7 +406,9 @@
               '<span class="lib-risk-deps"><span class="faint">relied on by</span>' + depsHtml(r) + '</span></span>' +
               '<button type="button" class="btn sm lib-verify" data-act="verify" data-id="' + attr(r.id) + '">' + IC.check + 'Mark verified</button>' +
             '</div>';
-          }).join('') + '</div>';
+          }).join('') +
+          (more > 1 ? '<button type="button" class="lib-risk-more" data-k="risk-more" data-act="risk-all" aria-expanded="' + !!S.riskAll + '">' +
+            (S.riskAll ? 'Show the first ' + RISK_CAP : 'Show ' + more + ' more') + '</button>' : '') + '</div>';
         }
         return h + '</section>';
       }
@@ -743,7 +748,7 @@
           var obj = {
             title: t.title || p.bare || p.text || 'Untitled source', url: p.url || null, author: t.author || '',
             kind: p.url ? 'web' : 'other', reliability: 'popular', status: 'to read',
-            notes: p.url ? p.text : '', excerpt: '', tags: p.tags, supports: p.refs,
+            notes: p.url ? p.bare : '', excerpt: '', tags: p.tags, supports: p.refs,
           };
           var snap = Kit.snapshot();
           var nid = Kit.create('research', obj);
@@ -928,6 +933,7 @@
           case 'f-clear': clearFiltersR(); render(); break;
           case 'f-fold': S.rsMore = !S.rsMore; render(); break;
           case 'risk-toggle': setRiskCollapsed(!riskCollapsed()); render(); break;
+          case 'risk-all': S.riskAll = !S.riskAll; render(); break;
           case 'jump': jumpTo(id); break;
           case 'verify': setResStatus(id, 'verified', true); break;
           /* idea filters */
@@ -997,9 +1003,19 @@
           }
         } else if (t.classList && t.classList.contains('lib-tagin')) {
           if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); if (t.value.trim()) addTags(t); }
-          else if (e.key === 'Escape') { t.value = ''; t.blur(); }
-        } else if (t.matches && t.matches('input[data-field]') && e.key === 'Enter') {
-          e.preventDefault(); t.blur();
+          else if (e.key === 'Escape') { e.preventDefault(); t.value = ''; t.blur(); }
+        } else if (t.matches && t.matches('input[data-field]')) {
+          if (e.key === 'Enter') { e.preventDefault(); t.blur(); }
+          else if (e.key === 'Escape') {
+            /* Esc cancels the edit (and never closes the desk) */
+            e.preventDefault();
+            if (typeof t._orig === 'string') t.value = t._orig;
+            t.blur();
+          }
+        } else if (t.getAttribute && t.getAttribute('data-act') === 'q' && e.key === 'Escape') {
+          e.preventDefault();
+          if (t.value) { t.value = ''; if (tab === 'research') S.rs.q = ''; else S.id.q = ''; render(); }
+          else t.blur();
         } else if (t.closest && t.closest('.lib-menu')) {
           var items = Array.prototype.slice.call(t.closest('.lib-menu').querySelectorAll('.lib-mi')), i = items.indexOf(t);
           if (e.key === 'ArrowDown') { e.preventDefault(); items[(i + 1) % items.length].focus(); }
@@ -1008,7 +1024,7 @@
           else if (e.key === 'End') { e.preventDefault(); items[items.length - 1].focus(); }
           else if (e.key === 'Tab') { S.menu = null; scheduleRender(); }
         } else if (t.classList && t.classList.contains('lib-qa-in') && e.key === 'Escape') {
-          t.blur();
+          e.preventDefault(); t.blur();
         }
       });
 
@@ -1116,9 +1132,23 @@
       root.addEventListener('contextmenu', function (e) { if (drag) e.preventDefault(); });
 
       /* ---------- document-level listeners (removed on unmount) ---------- */
+      /* capture phase, so it runs before the shell's "Esc goes back to the editor": every Esc this view
+         handles (drag, menus, inline delete confirm) is preventDefault()ed so the desk stays open */
       function onDocKey(e) {
-        if (drag && e.key === 'Escape') { endDrag(); render(); return; }
-        if (S.menu && e.key === 'Escape') { e.preventDefault(); closeMenu(true); return; }
+        if (e.key === 'Escape') {
+          if (drag) { e.preventDefault(); var wasActive = drag.active; endDrag(); if (wasActive) render(); return; }
+          if (S.menu) { e.preventDefault(); closeMenu(true); return; }
+          if (S.confirmDel && root.contains(document.activeElement)) {
+            e.preventDefault();
+            var cid = S.confirmDel; S.confirmDel = null; render();
+            var db = root.querySelector('.lib-card[data-id="' + cid + '"] [data-act="del"], .lib-card[data-id="' + cid + '"] [data-menu="more"]');
+            if (db) db.focus({ preventScroll: true });
+            return;
+          }
+          /* a sheet opened from here (copy fallback, export…): Kit closes it; don't let the same Esc close the desk too */
+          if (document.querySelector('.kit-sheet-overlay')) e.preventDefault();
+          return;
+        }
         if (e.key === '/' && !e.ctrlKey && !e.metaKey && !e.altKey) {
           var t = e.target;
           if (t && t.closest && t.closest('input, textarea, select, [contenteditable="true"], [contenteditable=""]')) return;
@@ -1134,7 +1164,7 @@
       function onMq() { if (mq.matches !== lastPhone) { lastPhone = mq.matches; S.menu = null; render(); } }
       var resizeT = null;
       function onResize() { if (FIELD_SIZING) return; clearTimeout(resizeT); resizeT = setTimeout(function () { autosize(Array.prototype.slice.call(root.querySelectorAll('textarea.lib-ta'))); }, 120); }
-      document.addEventListener('keydown', onDocKey);
+      document.addEventListener('keydown', onDocKey, true);
       document.addEventListener('pointerdown', onDocDown, true);
       if (mq.addEventListener) mq.addEventListener('change', onMq); else if (mq.addListener) mq.addListener(onMq);
       window.addEventListener('resize', onResize);
@@ -1161,7 +1191,7 @@
           endDrag();
           clearTimeout(renderT); clearTimeout(flashT); clearTimeout(resizeT); clearTimeout(liveT);
           S.menu = null; S.confirmDel = null;
-          document.removeEventListener('keydown', onDocKey);
+          document.removeEventListener('keydown', onDocKey, true);
           document.removeEventListener('pointerdown', onDocDown, true);
           if (mq.removeEventListener) mq.removeEventListener('change', onMq); else if (mq.removeListener) mq.removeListener(onMq);
           window.removeEventListener('resize', onResize);

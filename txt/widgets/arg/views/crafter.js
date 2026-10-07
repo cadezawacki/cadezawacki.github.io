@@ -1,10 +1,13 @@
 /* ============================================================
-   ARG DESK (round 2) — Puzzle crafter view
+   ARG Desk — Puzzle crafter view
    A workbench for building and checking word puzzles and pen-and-
    paper ciphers: a cipher bench (steps pipeline, encode/decode,
    round-trip check, analysis), the solve path, and the design
-   checks with automated helpers.
+   checks with automated helpers. Puzzles are listed by chapter and
+   event (chapters → events → puzzles).
    Routes: crafter · crafter.<puzzleId> · crafter.scratch
+   Registers four cipher ops (keyword, polybius, bookcode, numbase)
+   and Kit.verifyRecipe, the stricter recipe check Problems uses.
    ============================================================ */
 (function () {
   'use strict';
@@ -461,6 +464,7 @@
     return d;
   }
   function touch(d) { d.t = Date.now(); }
+  function tooBigToKeep(d) { return JSON.stringify({ p: d.plaintext, s: d.steps, pl: d.player }).length > MEM_CAP - 200; }
   /* stored recipe changed elsewhere (another device, import, undo): a clean working copy follows it */
   function syncDraft(pid) {
     var p = Kit.get(pid), d = mem.drafts[pid];
@@ -496,7 +500,7 @@
     none: { label: '', title: 'No recipe' },
   };
   function kindLabel(k) { var x = D.puzzleKinds.find(function (y) { return y.id === k; }); return x ? x.label : (k || '—'); }
-  function chapterLabel(cid) { var c = Kit.chapter(cid); return c ? 'Ch ' + c.n + ' · ' + c.title : 'No chapter'; }
+  function chapterLabel(cid) { var c = Kit.chapter(cid); return c ? 'Ch ' + c.n + ' · ' + (c.title || 'Untitled chapter') : 'Not in a chapter yet'; }
   function captureFocus(container) {
     var a = document.activeElement;
     if (!a || !container.contains(a)) return null;
@@ -527,7 +531,7 @@
     },
     mount: function (root, params, ctx) {
       useGame(Kit.games.current());
-      var S = { pid: null, tab: mem.tab || 'bench', q: '', menuOpen: false, expanded: {}, other: false, otherText: '', tableOpen: false, external: false, pathStale: false, alive: true };
+      var S = { np: {}, pid: null, tab: mem.tab || 'bench', q: '', menuOpen: false, expanded: {}, other: false, otherText: '', tableOpen: false, external: false, pathStale: false, alive: true };
       var own = 0, pending = null, timers = {}, rafId = 0, lastAn = null, saveSig = '';
 
       root.innerHTML =
@@ -617,7 +621,7 @@
         return '<div class="cf-nop">' +
           '<p class="cf-nop-t">No puzzles yet — add one in the Trail or Codex.</p>' +
           '<p class="cf-nop-s">Or start one here and build its cipher on the bench. ' + esc(dest) + '</p>' +
-          '<div class="cf-np"><input type="text" class="input" data-np="' + where + '" data-fk="np-' + where + '" placeholder="Puzzle title" aria-label="New puzzle title" autocomplete="off" spellcheck="false">' +
+          '<div class="cf-np"><input type="text" class="input" data-np="' + where + '" data-fk="np-' + where + '" value="' + esc(S.np[where] || '') + '" placeholder="Puzzle title" aria-label="New puzzle title" autocomplete="off" spellcheck="false">' +
           '<button type="button" class="btn sm primary" data-act="np-create" data-where="' + where + '">Create puzzle</button></div>' +
         '</div>';
       }
@@ -915,20 +919,29 @@
         var box = el.panel.querySelector('#cf-save'); if (!box) return;
         var p = puzzle(), d = draft();
         if (!p) {
-          var sig0 = 'scratch|' + d.steps.length;
+          var any = D.puzzles.length, big = tooBigToKeep(d), sig0 = 'scratch|' + d.steps.length + '|' + any + '|' + big;
           if (sig0 === saveSig) return; saveSig = sig0;
-          box.innerHTML = '<div class="cf-save-row"><button type="button" class="btn primary" data-act="save-to" data-fk="save-to"' + (d.steps.length ? '' : ' disabled') + '>Save to a puzzle…</button>' +
-            '<span class="cf-save-note">The scratchpad stays in this browser. Saving copies the plaintext, steps and output into the puzzle you pick.</span></div>';
+          var fs = captureFocus(box), off = d.steps.length ? '' : ' disabled';
+          box.innerHTML = '<div class="cf-save-row">' +
+              (any ? '<button type="button" class="btn primary" data-act="save-to" data-fk="save-to"' + off + '>Save to a puzzle…</button>' : '') +
+              '<span class="cf-save-note">' + (!d.steps.length ? 'Add a step first, then save the cipher to a puzzle.'
+                : big ? 'This scratchpad is over 20 KB, too big to keep in this browser: save it to a puzzle or it is gone when you close the desk.'
+                : 'The scratchpad stays in this browser. Saving copies the plaintext, steps and output into a puzzle.') + '</span></div>' +
+            '<div class="cf-np cf-np-save"><label class="field-label" for="cf-np-save">' + (any ? 'Or save it as a new puzzle' : 'Save it as a new puzzle') + '</label>' +
+              '<div class="cf-np-row"><input type="text" class="input" id="cf-np-save" data-np="save" data-fk="np-save" value="' + esc(S.np.save || '') + '" placeholder="New puzzle title" autocomplete="off" spellcheck="false"' + off + '>' +
+              '<button type="button" class="btn' + (any ? '' : ' primary') + '" data-act="save-new" data-fk="save-new"' + off + '>Save as a new puzzle</button></div>' +
+              '<span class="cf-save-note">It goes into ' + esc(firstEvent() ? Kit.label(firstEvent().id) : 'a new first event') + ' as a draft cipher puzzle.</span></div>';
+          restoreFocus(box, fs);
           return;
         }
         var dirty = isDirty(S.pid), hasSaved = !!(p.recipe && (p.recipe.steps || []).length);
         var stored = hasSaved ? verify(p.recipe, { output: p.recipe.output }) : null;
         var clues = (p.inputs || []).map(Kit.get).filter(function (c) { return c && c.kind === 'text'; });
         var clearing = !d.steps.length && hasSaved;
-        var sig = [S.pid, dirty, hasSaved, stored && stored.state, stored && stored.problems.join('|'), clearing, d.steps.length, built, clues.map(function (c) { return c.id + ':' + c.text + ':' + !!d.clues[c.id]; }).join('|')].join('¦');
+        var sig = [S.pid, dirty, dirty && tooBigToKeep(d), hasSaved, stored && stored.state, stored && stored.problems.join('|'), clearing, d.steps.length, built, clues.map(function (c) { return c.id + ':' + c.text + ':' + !!d.clues[c.id]; }).join('|')].join('¦');
         if (sig === saveSig) return; saveSig = sig;
         var f = captureFocus(box);
-        var stateTxt = dirty ? '<span class="cf-save-state dirty"><i class="cf-dot"></i>Unsaved changes. The saved recipe is untouched until you save.</span>'
+        var stateTxt = dirty ? '<span class="cf-save-state dirty"><i class="cf-dot"></i>Unsaved changes. The saved recipe is untouched until you save' + (tooBigToKeep(d) ? ', and this working copy is too big to keep in the browser if you close the desk.' : '.') + '</span>'
           : hasSaved ? '<span class="cf-save-state">Saved recipe matches the bench' + (stored.state === 'verified' ? ' and verifies.' : '.') + '</span>'
           : '<span class="cf-save-state">' + esc(p.id) + ' has no saved recipe yet.</span>';
         var html = '<div class="cf-save-row">' +
@@ -1086,7 +1099,7 @@
       }
       function addStep(name) {
         var d = draft();
-        d.steps.push(newStep(name));
+        d.steps.push(newStep(name)); touch(d);
         S.menuOpen = false;
         var btn = el.panel.querySelector('[data-act="add-open"]'); if (btn) btn.setAttribute('aria-expanded', 'false');
         var menu = el.panel.querySelector('#cf-menu'); if (menu) menu.hidden = true;
@@ -1101,14 +1114,14 @@
       function moveStep(i, delta) {
         var d = draft(), j = i + delta;
         if (j < 0 || j >= d.steps.length) return;
-        var t = d.steps[i]; d.steps[i] = d.steps[j]; d.steps[j] = t;
+        var t = d.steps[i]; d.steps[i] = d.steps[j]; d.steps[j] = t; touch(d);
         var e = S.expanded[i]; S.expanded[i] = S.expanded[j]; S.expanded[j] = e;
         renderSteps(); recompute();
         var b = el.panel.querySelector('.cf-step[data-i="' + j + '"] [data-act="step-move"][data-d="' + delta + '"]');
         if (b && !b.disabled) b.focus(); else { b = el.panel.querySelector('.cf-step[data-i="' + j + '"] [data-act="step-rm"]'); if (b) b.focus(); }
       }
       function removeStep(i) {
-        var d = draft(), gone = d.steps.splice(i, 1)[0];
+        var d = draft(), gone = d.steps.splice(i, 1)[0]; touch(d);
         S.expanded = {};
         renderSteps(); recompute();
         Kit.toast('Removed step ' + (i + 1) + ' (' + opLabel(gone.op) + ')', { label: 'Undo', run: function () {
@@ -1119,6 +1132,7 @@
       }
       function setParam(i, key, raw) {
         var d = draft(), st = d.steps[i]; if (!st) return;
+        touch(d);
         var op = Kit.ops[st.op], pr = op && (op.params || []).find(function (x) { return x.key === key; });
         st[key] = pr && pr.type === 'number' ? (raw === '' || isNaN(+raw) ? raw : +raw) : raw;
         recompute();
@@ -1138,6 +1152,7 @@
         d.base = storedKey(Kit.get(pid));
         saveSig = '';
         recompute();
+        saveMem(true);                       /* saved: its draft leaves browser storage now */
         renderRail(); renderPick();
         var msg = d.steps.length ? 'Saved the recipe to ' + pid + (clueIds.length ? ' and set the text of ' + clueIds.join(', ') : '') : 'Cleared the saved recipe on ' + pid;
         Kit.toast(msg, { label: 'Undo', run: function () {
@@ -1147,16 +1162,52 @@
           Kit.toast('Save undone. Your bench still has the changes.');
         } });
       }
+      function createPuzzle(title, extra) {
+        var ev = firstEvent(), made = null, id = null;
+        ownUpdate(function () {
+          Kit.batch(function () {
+            if (!ev) { var ch = Kit.chapters()[0]; made = Kit.create('event', { title: 'New event', chapter: ch ? ch.id : null, order: 1 }); ev = Kit.get(made); }
+            id = Kit.create('puzzle', Object.assign({ title: title || 'Untitled puzzle', event: ev.id }, extra || {}));
+          });
+        });
+        return { id: id, event: ev.id, madeEvent: made };
+      }
+      function createdNote(res) {
+        return res.madeEvent ? ' and a first event, ' + res.madeEvent + ', to hold it' : ' in ' + Kit.label(res.event);
+      }
+      function createFromEmpty(where) {
+        var inp = root.querySelector('[data-np="' + where + '"]'), title = (inp && inp.value.trim()) || 'Untitled puzzle';
+        var snap = Kit.snapshot(), res = createPuzzle(title);
+        go(res.id);
+        Kit.toast('Created ' + res.id + createdNote(res), { label: 'Undo', run: function () { Kit.restore(snap); Kit.toast('Removed ' + res.id); } });
+      }
+      function scratchRecipe() {
+        var d = draft();
+        return { plaintext: d.plaintext, steps: clone(d.steps), output: Kit.runRecipe(d.plaintext, d.steps, 'encode').output };
+      }
+      function adoptDraft(id, recipe) {
+        mem.drafts[id] = { plaintext: recipe.plaintext, steps: clone(recipe.steps), player: '', mode: 'encode', clues: {}, base: storedKey(Kit.get(id)), t: 0 };
+      }
+      function saveAsNew() {
+        var d = draft(); if (!d.steps.length) return;
+        var inp = root.querySelector('[data-np="save"]'), title = (inp && inp.value.trim()) || 'Untitled cipher';
+        var recipe = scratchRecipe(), snap = Kit.snapshot();
+        var res = createPuzzle(title, { kind: 'cipher', status: 'draft', recipe: recipe });
+        adoptDraft(res.id, recipe);
+        go(res.id);
+        Kit.toast('Saved the scratchpad as ' + res.id + createdNote(res), { label: 'Undo', run: function () { Kit.restore(snap); Kit.toast('Removed ' + res.id); } });
+      }
       function saveToPuzzle() {
         var d = draft();
         if (!d.steps.length) return;
-        Kit.pick({ title: 'Save the scratchpad recipe to…', types: ['puzzle'], placeholder: 'Pick a puzzle (its saved recipe is replaced)', onPick: function (id) {
+        Kit.pick({ title: 'Save the scratchpad recipe to…', types: ['puzzle'], allowCreate: true, placeholder: 'Pick a puzzle (its saved recipe is replaced), or type a new title', onPick: function (id) {
           if (Kit.type(id) !== 'puzzle') return;
-          var built = Kit.runRecipe(d.plaintext, d.steps, 'encode').output, snap = Kit.snapshot(), had = !!(Kit.get(id).recipe && (Kit.get(id).recipe.steps || []).length);
-          ownUpdate(function () { Kit.update(id, { recipe: { plaintext: d.plaintext, steps: clone(d.steps), output: built } }); });
-          mem.drafts[id] = { plaintext: d.plaintext, steps: clone(d.steps), player: '', mode: 'encode', clues: {}, base: storedKey(Kit.get(id)) };
+          var target = Kit.get(id), recipe = scratchRecipe(), snap = Kit.snapshot(), had = !!(target.recipe && (target.recipe.steps || []).length);
+          var fresh = !hasEvent(target) && Date.now() - (target._c || 0) < 10000, ev = fresh ? firstEvent() : null;
+          ownUpdate(function () { Kit.update(id, Object.assign({ recipe: recipe }, ev ? { event: ev.id, kind: 'cipher', status: 'draft' } : {})); });
+          adoptDraft(id, recipe);
           go(id);
-          Kit.toast('Saved the scratchpad recipe to ' + id + (had ? ', replacing its old recipe' : ''), { label: 'Undo', run: function () {
+          Kit.toast('Saved the scratchpad recipe to ' + id + (had ? ', replacing its old recipe' : '') + (ev ? ' in ' + Kit.label(ev.id) : ''), { label: 'Undo', run: function () {
             ownUpdate(function () { Kit.restore(snap); });
             var dd = mem.drafts[id]; if (dd) dd.base = storedKey(Kit.get(id));
             saveSig = ''; refreshAll(false);
@@ -1170,9 +1221,10 @@
         d.plaintext = r.plaintext || ''; d.steps = clone(r.steps || []); d.base = storedKey(p);
         if (d.mode === 'decode') d.player = Kit.runRecipe(d.plaintext, d.steps, 'encode').output;
         S.expanded = {}; renderBench(); renderRail();
+        saveMem(true);                       /* reverted: nothing unsaved left to keep */
         var pid = p.id;
         Kit.toast('Reverted ' + pid + ' to its saved recipe', { label: 'Undo', run: function () {
-          var dd = getDraft(pid); dd.plaintext = before.plaintext; dd.steps = before.steps;
+          var dd = getDraft(pid); dd.plaintext = before.plaintext; dd.steps = before.steps; touch(dd); saveMem();
           if (S.pid === pid && S.tab === 'bench') renderBench(); renderRail();
           Kit.toast('Unsaved changes restored');
         } });
@@ -1303,34 +1355,56 @@
         out.push('<li class="cf-ask">Ask yourself: could a different reading of the same clues also fit? Try the steps in another order or direction.</li>');
         return { flags: flags, html: '<ul class="cf-hl">' + out.join('') + '</ul>' };
       }
+      /* verifiable: the puzzle's event (its layer, record and research), then any clue or reveal on the record/pseudo layers */
       function helperVerifiable(p) {
-        var claims = [], flags = 0;
-        (p.mysteries || []).forEach(function (mid) { if (Kit.get(mid)) claims.push(mid); });
-        (p.reveals || []).concat(p.inputs || []).forEach(function (id) { var l = Kit.layerOf(id); if ((l === 'record' || l === 'pseudo') && claims.indexOf(id) < 0) claims.push(id); });
-        if (!claims.length) return { flags: 0, html: '<p class="cf-empty">No real-world claims are linked to this puzzle.</p>' };
+        var flags = 0, maybes = 0, html = '';
+        var isV = function (r) { return (Kit.get(r) || {}).status === 'verified'; };
+        var ev = hasEvent(p) ? Kit.get(p.event) : null;
+        var evResearch = ev ? (ev.research || []).filter(function (r) { return Kit.type(r) === 'research'; }) : [];
+        if (!ev) {
+          flags++;
+          html += '<div class="cf-evcheck flag"><div class="cf-claim-h"><span class="cf-k">Event</span><span class="cf-flag bad">No event yet</span></div>' +
+            '<p class="cf-guide">This puzzle isn\'t inside an event, so there is no record to check. Put it in an event on its page.</p></div>';
+        } else {
+          var lay = ev.layer, real = lay === 'record' || lay === 'pseudo', verified = evResearch.some(isV);
+          var needs = real && !verified, noRecord = real && !String(ev.record || '').trim(), blank = noRecord && !evResearch.length;
+          flags += blank ? 1 : (needs ? 1 : 0) + (noRecord ? 1 : 0);
+          var verdict = !real ? '<span class="cf-flag">Invented for the game: nothing to verify</span>'
+            : blank ? '<span class="cf-flag bad">Not written up yet</span>'
+            : needs ? '<span class="cf-flag bad">No verified source</span>' : '<span class="cf-flag ok">Verified source</span>';
+          html += '<div class="cf-evcheck' + (needs || noRecord ? ' flag' : '') + '">' +
+            '<div class="cf-claim-h"><span class="cf-k">Event</span>' + (lay ? Kit.layerBadge(lay, { short: true }) : '') + Kit.refHtml(ev.id) + verdict + '</div>' +
+            (real ? (blank ? '<p class="cf-guide">Open ' + esc(ev.id) + ' and give it a layer (record, pseudo-history or fiction), what is actually on the record, and the research behind it. Fiction needs no source.</p>'
+              : noRecord ? '<p class="cf-guide cf-flagtxt">The record is empty. Write down what is actually on the record so it can be checked.</p>'
+              : '<blockquote class="cf-record doc">' + esc(clip(ev.record, 420)) + '</blockquote>') : (ev.twist ? '<p class="cf-guide">' + esc(clip(ev.twist, 220)) + '</p>' : '')) +
+            (evResearch.length ? '<div class="cf-srcs">' + evResearch.map(researchRow).join('') + '</div>'
+              : real && !blank ? '<div class="cf-srcs"><span class="faint">No research linked to this event yet.</span></div>' : '') +
+          '</div>';
+        }
+        var claims = [];
+        (p.inputs || []).concat(p.reveals || []).forEach(function (id) { var l = Kit.layerOf(id); if ((l === 'record' || l === 'pseudo') && claims.indexOf(id) < 0 && id !== p.event) claims.push(id); });
+        if (!claims.length) { html += '<p class="cf-empty cf-claims-none">No clue or reveal of this puzzle sits on the record or pseudo layers.</p>'; return { flags: flags, html: html }; }
         var rows = claims.map(function (id) {
-          var o = Kit.get(id), t = Kit.type(id), srcs = [];
+          var o = Kit.get(id), t = Kit.type(id), srcs = [], via = [];
           D.research.forEach(function (r) { if ((r.supports || []).indexOf(id) >= 0) srcs.push(r.id); });
-          if (t === 'mystery') (o.research || []).forEach(function (r) { if (srcs.indexOf(r) < 0) srcs.push(r); });
-          /* events borrow their linked mysteries' research; clues (no links of their own) borrow the puzzle's */
-          var via = [];
-          function addVia(r) { if (srcs.indexOf(r) < 0 && via.indexOf(r) < 0) via.push(r); }
-          if (t === 'event') (o.links || []).filter(function (x) { return Kit.type(x) === 'mystery'; }).forEach(function (mid) { ((Kit.get(mid) || {}).research || []).forEach(addVia); });
-          if (t === 'clue') D.research.forEach(function (r) { if ((r.supports || []).indexOf(p.id) >= 0) addVia(r.id); });
-          var isV = function (r) { return (Kit.get(r) || {}).status === 'verified'; };
-          var all = srcs.concat(via), direct = srcs.some(isV), viaOnly = !direct && via.some(isV);
-          var lay = Kit.layerOf(id) || o.layer, claim = lay === 'record' || lay === 'pseudo', needs = claim && !direct && !viaOnly;
+          function addVia(r) { if (Kit.type(r) === 'research' && srcs.indexOf(r) < 0 && via.indexOf(r) < 0) via.push(r); }
+          /* timeline entries borrow the research of the events they link; everything else borrows the puzzle's event and the puzzle's own research */
+          if (t === 'entry') (o.links || []).filter(function (x) { return Kit.type(x) === 'event'; }).forEach(function (eid) { ((Kit.get(eid) || {}).research || []).forEach(addVia); });
+          else { evResearch.forEach(addVia); D.research.forEach(function (r) { if ((r.supports || []).indexOf(p.id) >= 0) addVia(r.id); }); }
+          var direct = srcs.some(isV), viaOnly = !direct && via.some(isV), lay = Kit.layerOf(id), needs = !direct && !viaOnly;
           if (needs) flags++;
+          if (viaOnly) maybes++;
           var verdict = needs ? '<span class="cf-flag bad">No verified source</span>'
             : viaOnly ? '<span class="cf-flag warn">Verified only via linked research: check it covers this</span>'
-            : direct ? '<span class="cf-flag ok">Verified source</span>' : '<span class="cf-flag">Not a real-world claim</span>';
+            : '<span class="cf-flag ok">Verified source</span>';
           return '<li class="cf-claim' + (needs ? ' flag' : viaOnly ? ' maybe' : '') + '"><div class="cf-claim-h">' + (lay ? Kit.layerBadge(lay, { short: true }) : '') + Kit.refHtml(id) + verdict + '</div>' +
-            (all.length ? '<div class="cf-srcs">' + srcs.map(researchRow).join('') + (via.length ? '<span class="cf-via">' + (t === 'event' ? 'via its mystery' : 'via the puzzle\'s research') + '</span>' + via.map(researchRow).join('') : '') + '</div>' : '<div class="cf-srcs"><span class="faint">No research linked.</span></div>') + '</li>';
+            (srcs.length || via.length ? '<div class="cf-srcs">' + srcs.map(researchRow).join('') + (via.length ? '<span class="cf-via">' + (t === 'entry' ? 'via its event' : 'via the event\'s research') + '</span>' + via.map(researchRow).join('') : '') + '</div>'
+              : '<div class="cf-srcs"><span class="faint">No research linked.</span></div>') + '</li>';
         }).join('');
-        return { flags: flags, html: '<ul class="cf-claims">' + rows + '</ul>' };
+        return { flags: flags, maybes: maybes, html: html + '<div class="cf-sub-h">Clues and reveals on the record or pseudo layers</div><ul class="cf-claims">' + rows + '</ul>' };
       }
       function helperContained(p) {
-        var out = [], flags = 0, cn = (Kit.chapter(p.chapter) || {}).n, up = upstreamOf(p.id);
+        var pc = Kit.chapter(p.chapter), out = [], flags = 0, cn = pc ? +pc.n : null, up = upstreamOf(p.id);
         var clues = (p.inputs || []).map(Kit.get).filter(Boolean);
         if (!clues.length) { flags++; out.push('<li class="flag"><b>No input clues.</b> What does the player start from?</li>'); }
         clues.forEach(function (c) {
@@ -1342,16 +1416,16 @@
             out.push('<li class="' + (fine ? 'ok' : 'flag') + '">' + line + 'produced by ' + Kit.refHtml(c.plantedIn) + (fine ? ', which comes first.' : ', which this puzzle does not require. A player may not have it yet.') + '</li>');
             return;
           }
-          var a = Kit.get(c.plantedIn), an = a ? (Kit.chapter(a.chapter) || {}).n : null, late = an != null && cn != null && an > cn;
+          var a = Kit.get(c.plantedIn), ac = a ? Kit.chapter(a.chapter) : null, an = ac ? +ac.n : null, late = an != null && cn != null && an > cn;
           if (late) flags++;
-          out.push('<li class="' + (late ? 'flag' : 'ok') + '">' + line + 'planted in ' + Kit.refHtml(c.plantedIn) + (late ? ', which first appears in chapter ' + an + ', after this puzzle.' : '.') + '</li>');
+          out.push('<li class="' + (late ? 'flag' : 'ok') + '">' + line + 'planted in ' + Kit.refHtml(c.plantedIn) + (late ? ', which first appears in ' + esc(chapterLabel(a.chapter)) + ', after this puzzle.' : '.') + '</li>');
         });
         (p.requires || []).forEach(function (rid) {
           var r = Kit.get(rid);
           if (!r) { flags++; out.push('<li class="flag">Requires <span class="id">' + esc(rid) + '</span>, which does not exist.</li>'); return; }
-          var rn = (Kit.chapter(r.chapter) || {}).n, late = rn > cn;
+          var rc = Kit.chapter(r.chapter), rn = rc ? +rc.n : null, late = rn != null && cn != null && rn > cn;
           if (late) flags++;
-          out.push('<li class="' + (late ? 'flag' : 'ok') + '">Requires ' + Kit.refHtml(rid) + (late ? ', from a later chapter (' + rn + ').' : ' (chapter ' + rn + ').') + '</li>');
+          out.push('<li class="' + (late ? 'flag' : 'ok') + '">Requires ' + Kit.refHtml(rid) + (late ? ', from a later chapter (' + esc(chapterLabel(r.chapter)) + ').' : rc ? ' (' + esc(chapterLabel(r.chapter)) + ').' : ', which is not in a chapter yet.') + '</li>');
         });
         out.push('<li class="cf-ask">Ask yourself: is there any step that needs knowledge the trail never gives?</li>');
         return { flags: flags, html: '<ul class="cf-hl">' + out.join('') + '</ul>' };
@@ -1381,20 +1455,24 @@
         if (!out.length) out.push('<li>No assets linked yet. Note where this puzzle lives so you can test it on a phone.</li>');
         return { flags: 0, html: '<ul class="cf-hl">' + out.join('') + '</ul>' };
       }
+      /* people: real people (a guard) linked to the puzzle's event, its reveals, or appearing in it */
       function helperPeople(p) {
-        var mys = p.mysteries || [], found = [];
+        var evId = hasEvent(p) ? p.event : null, found = [];
         D.characters.forEach(function (c) {
           if (!c.guard) return;
           var why = [];
           if ((c.appears || []).indexOf(p.id) >= 0) why.push('appears in ' + p.id);
           if ((p.reveals || []).indexOf(c.id) >= 0) why.push('revealed by ' + p.id);
-          Kit.backlinks(c.id).forEach(function (x) {
-            var refs = Kit.refs(x);
-            mys.forEach(function (mid) { if (refs.indexOf(mid) >= 0 && why.length < 4) { var w = 'linked to ' + mid + ' through ' + x; if (why.indexOf(w) < 0) why.push(w); } });
-          });
+          if (evId) {
+            if (Kit.refs(evId).indexOf(c.id) >= 0) why.push('named by ' + evId);
+            Kit.backlinks(c.id).forEach(function (x) {
+              if (x === evId || x === p.id || why.length >= 4) return;
+              if (Kit.refs(x).indexOf(evId) >= 0) { var w = 'linked to ' + evId + ' through ' + x; if (why.indexOf(w) < 0) why.push(w); }
+            });
+          }
           if (why.length) found.push({ c: c, why: why });
         });
-        if (!found.length) return { flags: 0, html: '<p class="cf-empty">No real people are linked to this puzzle.</p>' };
+        if (!found.length) return { flags: 0, html: '<p class="cf-empty">No real people are linked to this puzzle' + (evId ? ' or its event' : '') + '.</p>' };
         return { flags: 0, people: found.length, html: '<ul class="cf-people">' + found.map(function (f) {
           return '<li><div class="cf-person">' + Kit.refHtml(f.c.id) + '<span class="cf-ckind">' + esc(f.c.kind) + '</span>' + (f.c.life ? '<span class="faint mono">' + esc(f.c.life) + '</span>' : '') + '</div>' +
             '<div class="cf-guard"><span class="eyebrow">Guard</span>' + esc(f.c.guard) + '</div>' +
@@ -1412,7 +1490,7 @@
             '<span><b>' + passed + ' of ' + D.designChecks.length + '</b> design checks passed. Tick a check when you are satisfied; the helper under each one does the legwork.</span></div>';
         D.designChecks.forEach(function (dc) {
           var on = have.indexOf(dc.id) >= 0, hp = HELPERS[dc.id] ? HELPERS[dc.id](p) : { flags: 0, html: '' };
-          var tag = hp.flags ? '<span class="chip tone-orange">' + plural(hp.flags, 'flag') + '</span>' : (dc.id === 'people' && hp.people ? '<span class="chip tone-amber">' + plural(hp.people, 'real person', 'real people') + '</span>' : dc.id === 'phone' ? '<span class="chip">reminders</span>' : '<span class="chip tone-teal">no flags</span>');
+          var tag = hp.flags ? '<span class="chip tone-orange">' + plural(hp.flags, 'flag') + '</span>' : hp.maybes ? '<span class="chip tone-amber">' + hp.maybes + ' to check</span>' : (dc.id === 'people' && hp.people ? '<span class="chip tone-amber">' + plural(hp.people, 'real person', 'real people') + '</span>' : dc.id === 'phone' ? '<span class="chip">reminders</span>' : '<span class="chip tone-teal">no flags</span>');
           html += '<section class="cf-check' + (on ? ' on' : '') + '" data-check="' + dc.id + '">' +
             '<label class="cf-check-h"><input type="checkbox" data-ch="check" value="' + dc.id + '" data-fk="chk-' + dc.id + '"' + (on ? ' checked' : '') + '>' +
               '<span class="cf-check-t">' + esc(dc.label) + '</span><span class="cf-check-id mono">' + dc.id + '</span>' + tag + '</label>' +
@@ -1501,6 +1579,8 @@
           case 'copy-out': var o = el.panel.querySelector('#cf-out'); if (o && !o.classList.contains('empty')) Kit.copy(o.textContent, o); break;
           case 'save': doSave(); break;
           case 'save-to': saveToPuzzle(); break;
+          case 'save-new': saveAsNew(); break;
+          case 'np-create': createFromEmpty(t.getAttribute('data-where')); break;
           case 'revert': revert(); break;
           case 'fill-built': var d = draft(); d.player = Kit.runRecipe(d.plaintext, d.steps, 'encode').output; el.panel.querySelector('#cf-player').value = d.player; recompute(); break;
           case 'fill-clue': var c = Kit.get(t.getAttribute('data-id')), dd = draft(); if (c) { dd.player = c.text; el.panel.querySelector('#cf-player').value = dd.player; recompute(); } break;
@@ -1540,12 +1620,14 @@
         Kit.toast('Removed ' + cid + ' from ' + p.id + '\'s inputs', { label: 'Undo', run: function () { Kit.restore(snap); Kit.toast(cid + ' is back'); } });
       }
       function onInput(e) {
-        var t = e.target, k = t.getAttribute && t.getAttribute('data-in'); if (!k) return;
+        var t = e.target;
+        if (t.getAttribute && t.getAttribute('data-np')) { S.np[t.getAttribute('data-np')] = t.value; return; }
+        var k = t.getAttribute && t.getAttribute('data-in'); if (!k) return;
         var d;
         switch (k) {
           case 'q': S.q = t.value; renderRail(); break;
-          case 'pt': d = draft(); d.plaintext = t.value; recompute(); break;
-          case 'player': d = draft(); d.player = t.value; recompute(); break;
+          case 'pt': d = draft(); d.plaintext = t.value; touch(d); recompute(); break;
+          case 'player': d = draft(); d.player = t.value; touch(d); recompute(); break;
           case 'param': setParam(+t.getAttribute('data-i'), t.getAttribute('data-k'), t.value); break;
           case 'other': S.otherText = t.value; S.anText = t.value; S.anRef = null; cancelAnimationFrame(rafId); rafId = requestAnimationFrame(renderAnalysis); break;
           case 'premise': case 'aha': case 'solution': queueField(k, t.value); break;
@@ -1586,8 +1668,23 @@
           S.pathStale = false; renderPath();
         }, 0);
       }
+      /* Esc closes the whole desk unless a view handles it: our menu, analysis panel and inline editors do */
       function onKey(e) {
-        if (e.key === 'Escape' && S.menuOpen) { closeMenu(); var b = el.panel.querySelector('[data-act="add-open"]'); if (b) b.focus(); e.stopPropagation(); return; }
+        var t = e.target;
+        if (e.key === 'Escape') {
+          if (S.menuOpen) { e.preventDefault(); closeMenu(); var b = el.panel.querySelector('[data-act="add-open"]'); if (b) b.focus(); return; }
+          var editing = /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || t.isContentEditable;
+          if (editing || (t.closest && t.closest('.cf-an, .cf-np, .cf-nop, .cf-add, .cf-prev'))) {
+            e.preventDefault();
+            if (t.blur) t.blur();
+          }
+          return;
+        }
+        if (e.key === 'Enter' && t.getAttribute && t.getAttribute('data-np')) {
+          e.preventDefault();
+          if (t.getAttribute('data-np') === 'save') saveAsNew(); else createFromEmpty(t.getAttribute('data-np'));
+          return;
+        }
         if (e.target.closest && e.target.closest('.cf-tabs') && (e.key === 'ArrowRight' || e.key === 'ArrowLeft')) {
           var tabs = Array.prototype.slice.call(el.tabs.querySelectorAll('.cf-tab')), i = tabs.indexOf(e.target.closest('.cf-tab'));
           var n = tabs[(i + (e.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length];

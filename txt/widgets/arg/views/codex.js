@@ -1,10 +1,10 @@
 /* ============================================================
-   ARG DESK — Codex view (id 'codex')
+   ARG Desk — Codex view (id 'codex')
    Every thing in the game gets a page, and every page knows what
-   links to it. Collections (tables / cards), entity pages with a
+   links to it. Chapters hold events, events hold puzzles. Collections
+   (tables / cards / the chapter contents), entity pages with a
    properties grid, type-specific bodies, a fact check, and link /
-   backlink rails. All edits go through Kit.update/create/remove.
-   (Built from scratchpad/codex2-src by build.js.)
+   backlink rails. All edits go through Kit.update/create/remove/batch.
    ============================================================ */
 (function () {
   'use strict';
@@ -41,13 +41,18 @@
   var LAYER_IDS = D.layers.map(function (l) { return l.id; });
   var SEVL = { high: 'High', med: 'Med', low: 'Low' };
   var SEVR = { high: 0, med: 1, low: 2 };
-  var IDPAT = /^(CH|AS|P|C|R|I|Q|T|N)\d/;
+  var IDPAT = /^(CH|AS|TL|P|C|R|I|Q|T|N|E)\d/;
   var F = K.FIELDS;
 
   function chapter(cid) { return K.chapter(cid); }
   function chapShort(cid) { var c = chapter(cid); return c ? 'Ch ' + c.n : '—'; }
-  function chapFull(cid) { var c = chapter(cid); return c ? 'Ch ' + c.n + ' · ' + c.title : 'No chapter'; }
-  function chapN(cid) { var c = chapter(cid); return c ? c.n : 99; }
+  /* "Ch 1 · Folio One", or just the title when it already says "Chapter …" */
+  function chapTitle(c) { return /^chapter\b/i.test(c.title || '') ? c.title : 'Ch ' + c.n + ' · ' + (c.title || 'Untitled'); }
+  function chapFull(cid) { var c = chapter(cid); return c ? chapTitle(c) : 'Not placed yet'; }
+  function chapN(cid) { var c = chapter(cid); return c ? (+c.n || 0) : 999; }
+  function evOrderKey(e) { return chapN(e.chapter) * 1000 + (+e.order || 0); }
+  function eventsSorted() { return K.list('event').sort(function (a, b) { return evOrderKey(a) - evOrderKey(b) || String(a.id).localeCompare(String(b.id)); }); }
+  function firstChapter() { return K.chapters()[0] || null; }
   function pkind(k) { var x = D.puzzleKinds.find(function (p) { return p.id === k; }); return x ? x.label : (k || '—'); }
   function isClaim(type) { return K.CLAIM_TYPES.indexOf(type) >= 0; }
   function shown(id) { if (!isClaim(K.type(id))) return true; var l = K.layerOf(id); return !l || S.on[l] !== false; }
@@ -108,8 +113,8 @@
   function stChip(g, v) { return v ? chip(v, (TONES[g] || {})[v] || 'neutral') : '<span class="faint">—</span>'; }
 
   /* puzzles: which reality layers a puzzle touches */
-  function puzzleTouch(p) { return [].concat(p.mysteries || [], p.inputs || [], p.reveals || []); }
-  function anchorLayer(p) { var m = (p.mysteries || [])[0]; return (m && K.layerOf(m)) || 'fiction'; }
+  function puzzleTouch(p) { return [].concat(p.event ? [p.event] : [], p.inputs || [], p.reveals || []); }
+  function anchorLayer(p) { return (p.event && K.layerOf(p.event)) || ''; }
   function mixHtml(ids, withLabel) {
     var c = {}, tot = 0, segs = '', tip = [];
     ids.forEach(function (id) { var l = K.layerOf(id); if (l) c[l] = (c[l] || 0) + 1; });
@@ -136,7 +141,7 @@
     var t = K.type(id), set = new Set();
     D.characters.forEach(function (c) { if (c.guard && (c.appears || []).indexOf(id) >= 0) set.add(c.id); });
     K.refs(id).forEach(function (r) { var c = K.get(r); if (K.type(r) === 'character' && c.guard) set.add(r); });
-    if (t === 'mystery') D.events.forEach(function (e) {
+    if (t === 'event') D.timeline.forEach(function (e) {
       if ((e.links || []).indexOf(id) >= 0) e.links.forEach(function (l) { var c = K.get(l); if (K.type(l) === 'character' && c && c.guard) set.add(l); });
     });
     if (t === 'character') set.delete(id);
@@ -152,14 +157,14 @@
     ids = (ids || []).filter(function (s) { return K.type(s) === 'research'; });
     if (!ids.length) return '<span class="cx-mk bad">none</span>';
     var v = ids.filter(function (s) { return K.get(s).status === 'verified'; }).length;
-    return '<span class="num">' + ids.length + '</span> <span class="t-mono">' + (v ? '<span class="ok">' + v + ' verified</span>' : '<span class="bad">none verified</span>') + '</span>';
+    return '<span class="t-mono"><span class="' + (v ? 'ok' : 'bad') + '">' + v + '</span> of ' + ids.length + ' verified</span>';
   }
   function centuryOf(y) { if (y == null || isNaN(y) || !y) return ''; return String(Math.floor((y - 1) / 100) + 1); }
   function ordinal(n) { n = +n; var s = ['th', 'st', 'nd', 'rd'], v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); }
 
   /* ---------- per-viewer state (filters, view prefs) ---------- */
   var S = { on: { record: true, pseudo: true, fiction: true }, views: {}, probSev: 'all' };
-  var PREF_KEY = 'arg-desk-codex-prefs';
+  var PREF_KEY = 'argdesk-codex-prefs';
   var prefs = {};
   try { prefs = JSON.parse(localStorage.getItem(PREF_KEY) || '{}') || {}; } catch (e) { prefs = {}; }
   if (prefs.__layers) LAYER_IDS.forEach(function (l) { if (prefs.__layers[l] === false) S.on[l] = false; });
@@ -182,18 +187,30 @@
   function idxOrd(list) { return function (k) { var i = list.indexOf(k); return i < 0 ? 99 : i; }; }
   function plainName(k) { return esc(k ? cap(k) : 'None'); }
   function vals(type, field) { return ((F[type] || {})[field] || {}).values || []; }
-  var gChapter = { k: 'chapter', l: 'Chapter', v: function (o) { return o.chapter || ''; }, ord: chapN, name: function (k) { return esc(chapFull(k)); } };
+  var gChapter = { k: 'chapter', l: 'Chapter', v: function (o) { return o.chapter || ''; }, ord: function (k) { return k ? chapN(k) : 9999; }, name: function (k) { return esc(chapFull(k)); } };
   function dateVal(o) { var d = K.parseDate(o.date); return d ? d.getTime() : 9e15; }
+  function whenVal(o) { var d = K.parseDate(o.when); return d ? d.getTime() : 9e15; }
+  /* <select> of events grouped by chapter (with "Not placed yet" and an optional none) */
+  function eventOptions(cur, none) {
+    var html = none ? '<option value=""' + (!cur ? ' selected' : '') + '>' + esc(none) + '</option>' : '';
+    var groups = K.chapters().map(function (c) { return { label: chapTitle(c), evs: K.eventsIn(c.id) }; }).concat([{ label: 'Not placed yet', evs: K.eventsIn(null) }]);
+    groups.forEach(function (g) {
+      if (!g.evs.length) return;
+      html += '<optgroup label="' + esc(g.label) + '">' + g.evs.map(function (e) { return '<option value="' + esc(e.id) + '"' + (e.id === cur ? ' selected' : '') + '>' + esc(e.id + ' · ' + trunc(e.title, 44)) + '</option>'; }).join('') + '</optgroup>';
+    });
+    return html;
+  }
 
   var COLL = {};
-  var COLL_KEYS = ['puzzles', 'clues', 'mysteries', 'characters', 'places', 'timeline', 'assets', 'chapters', 'questions', 'tasks', 'notes'];
+  var COLL_KEYS = ['chapters', 'events', 'puzzles', 'clues', 'characters', 'places', 'timeline', 'assets', 'questions', 'tasks', 'notes'];
 
   COLL.puzzles = {
-    type: 'puzzle', label: 'Puzzles', desc: 'Everything players solve, chapter by chapter. Status runs Idea → Draft → Built → Tested → Ready; the layer bar shows how much real history each one leans on.',
+    type: 'puzzle', label: 'Puzzles', desc: 'Everything players solve. Each puzzle sits inside an event, and its chapter follows the event. Status runs Idea → Draft → Built → Tested → Ready.',
+    empty: 'No puzzles yet. Puzzles live inside events: open an event and add one there, or start one here and place it later.',
     cols: [
       col('id', 'ID', cKey, hKey, 'c-key'),
-      col('title', 'Title', function (o) { return o.title.toLowerCase(); }, function (o) { return strong(o.title) + (o.final ? ' <span class="cx-mk">final</span>' : ''); }, 'c-title'),
-      col('chapter', 'Chapter', function (o) { return chapN(o.chapter); }, function (o) { return muted(chapShort(o.chapter)); }),
+      col('title', 'Title', function (o) { return (o.title || '').toLowerCase(); }, function (o) { return strong(o.title || 'Untitled') + (o.final ? ' <span class="cx-mk">final</span>' : ''); }, 'c-title'),
+      col('event', 'Event', function (o) { var e = o.event && K.get(o.event); return e ? evOrderKey(e) : 9e9; }, function (o) { return o.event && K.get(o.event) ? R(o.event, { max: 26 }) : '<span class="cx-mk warn">No event</span>'; }),
       col('kind', 'Kind', function (o) { return pkind(o.kind); }, function (o) { return esc(pkind(o.kind)); }),
       col('difficulty', 'Diff.', function (o) { return o.difficulty; }, function (o) { return K.diff(o.difficulty); }),
       col('status', 'Status', function (o) { return K.statusIndex(o.status); }, function (o) { return K.pips(o.status, { label: true }); }),
@@ -203,37 +220,45 @@
       col('layer', 'Layers', function (o) { return layOrd(anchorLayer(o)); }, function (o) { return mixHtml(puzzleTouch(o)); }),
     ],
     groups: [gChapter,
+      { k: 'event', l: 'Event', v: function (o) { return o.event && K.get(o.event) ? o.event : ''; }, ord: function (k) { var e = k && K.get(k); return e ? evOrderKey(e) : 9e9; },
+        name: function (k) { return k ? Rflat(k, { max: 40 }) : '<span class="cx-mk warn">No event</span>'; },
+        aside: function (k) { var e = k && K.get(k); return e ? { t: chapFull(e.chapter) } : { t: 'place these inside an event', c: 'urg-med' }; } },
       { k: 'status', l: 'Status', v: function (o) { return o.status; }, ord: function (k) { return K.statusIndex(k); }, name: function (k) { return K.pips(k) + ' ' + esc(K.statusLabel(k)); } },
       { k: 'kind', l: 'Kind', v: function (o) { return o.kind; }, ord: function (k) { return D.puzzleKinds.findIndex(function (t) { return t.id === k; }); }, name: function (k) { return esc(pkind(k)); } },
-      { k: 'layer', l: 'Anchor layer', v: anchorLayer, ord: layOrd, name: function (k) { return K.layerBadge(k); } }],
-    group: 'chapter', sort: { k: 'id', dir: 1 },
-    hay: function (o) { return [o.premise, o.mechanic, pkind(o.kind), o.status, chapFull(o.chapter), o.notes].join(' '); },
-    cardCols: ['status', 'difficulty', 'checks', 'layer'],
-    newF: [['title', 'Title', 'text', { req: 1, ph: 'e.g. The Second Hand', wide: 1 }], ['chapter', 'Chapter', 'chapter'], ['kind', 'Kind', D.puzzleKinds.map(function (t) { return [t.id, t.label]; })], ['difficulty', 'Difficulty', [['1', '1'], ['2', '2'], ['3', '3'], ['4', '4'], ['5', '5']], { def: '3', num: 1 }]],
+      { k: 'layer', l: 'Event layer', v: anchorLayer, ord: layOrd, name: function (k) { return k ? K.layerBadge(k) : 'No event'; } }],
+    group: 'chapter', sort: { k: 'event', dir: 1 },
+    hay: function (o) { return [o.premise, o.mechanic, pkind(o.kind), o.status, chapFull(o.chapter), o.event ? K.label(o.event) : '', o.notes].join(' '); },
+    cardCols: ['event', 'status', 'difficulty', 'checks'],
+    newF: [['title', 'Title', 'text', { req: 1, ph: 'e.g. The Second Hand', wide: 1 }], ['event', 'Event', 'event'], ['kind', 'Kind', D.puzzleKinds.map(function (t) { return [t.id, t.label]; })], ['difficulty', 'Difficulty', [['1', '1'], ['2', '2'], ['3', '3'], ['4', '4'], ['5', '5']], { def: '3', num: 1 }]],
   };
 
-  COLL.mysteries = {
-    type: 'mystery', label: 'Mysteries', desc: 'The real anomalies the game is anchored to. Each one keeps what is on the record apart from our twist.',
+  COLL.events = {
+    type: 'event', label: 'Events', desc: 'The moments a chapter is built from: real, contested or invented. Each event holds the puzzles that use it, and keeps what is on the record apart from our twist.',
+    empty: 'No events yet. An event is a moment in the world, real or invented, that a chapter is built from. Puzzles live inside events.',
     cols: [
-      col('name', 'Name', function (o) { return o.name.toLowerCase(); }, function (o) { return strong(o.name); }, 'c-title'),
-      col('year', 'Year', function (o) { return o.year; }, function (o) { return '<span class="t-mono">' + esc(o.year || '—') + '</span>'; }),
-      col('place', 'Place', function (o) { return o.place ? K.label(o.place) : 'zzz'; }, function (o) { return o.place ? R(o.place, { max: 26 }) : '<span class="faint">—</span>'; }),
+      col('id', 'ID', cKey, hKey, 'c-key'),
+      col('title', 'Title', function (o) { return (o.title || '').toLowerCase(); }, function (o) { return strong(o.title || 'Untitled'); }, 'c-title'),
+      col('chapter', 'Chapter', function (o) { return chapN(o.chapter); }, function (o) { return o.chapter ? muted(chapShort(o.chapter)) : '<span class="cx-mk warn">Unplaced</span>'; }),
+      col('order', 'Order', evOrderKey, function (o) { return o.chapter ? '<span class="t-mono">' + esc(o.order || '—') + '</span>' : '<span class="faint">—</span>'; }),
       col('layer', 'Layer', function (o) { return layOrd(o.layer); }, lay),
-      col('puzzles', 'Puzzles', function (o) { return (o.puzzles || []).length; }, function (o) { return Rs(o.puzzles, { idOnly: true }); }),
-      col('research', 'Research', function (o) { return directSrc(o.id).length; }, function (o) { return researchSummary(directSrc(o.id)); }),
-      col('used', 'In game', function (o) { return o.used ? 0 : 1; }, function (o) { return o.used ? chip('In game', 'teal') : chip('Parking lot', 'neutral'); }),
+      col('when', 'When', whenVal, function (o) { return o.when ? '<span class="t-mono">' + esc(K.fmtDate(o.when)) + '</span>' : '<span class="faint">—</span>'; }),
+      col('puzzles', 'Puzzles', function (o) { return K.puzzlesInEvent(o.id).length; }, function (o) { var ps = K.puzzlesInEvent(o.id).map(function (p) { return p.id; }); return ps.length ? Rs(ps, { idOnly: true }) : '<span class="faint">none yet</span>'; }),
+      col('research', 'Research', function (o) { return directSrc(o.id).filter(function (r) { return K.get(r).status === 'verified'; }).length; }, function (o) { return o.layer === 'fiction' && !directSrc(o.id).length ? '<span class="faint">invented</span>' : researchSummary(directSrc(o.id)); }),
     ],
-    groups: [gLayer,
-      { k: 'used', l: 'In game', v: function (o) { return o.used ? 'yes' : 'no'; }, ord: function (k) { return k === 'yes' ? 0 : 1; }, name: function (k) { return k === 'yes' ? 'In game' : 'Parking lot'; } },
-      { k: 'century', l: 'Century', v: function (o) { return centuryOf(o.year); }, ord: function (k) { return +k || 99; }, name: function (k) { return k ? esc(ordinal(k) + ' century') : 'Undated'; } }],
-    group: 'none', sort: { k: 'year', dir: 1 },
-    hay: function (o) { return o.record + ' ' + o.twist + ' ' + o.year; },
-    cardCols: ['year', 'puzzles', 'research'],
-    newF: [['name', 'Name', 'text', { req: 1, ph: 'e.g. Antikythera mechanism', wide: 1 }], ['year', 'Year', 'number', { ph: '1901' }], ['layer', 'Layer', vals('mystery', 'layer').map(function (l) { return [l, K.layer(l).label]; }), { def: 'record' }]],
+    groups: [
+      { k: 'chapter', l: 'Chapter', v: function (o) { return o.chapter || ''; }, ord: function (k) { return k ? chapN(k) : 9999; },
+        name: function (k) { return k ? esc(chapFull(k)) : '<span class="cx-mk warn">Not placed yet</span>'; },
+        aside: function (k) { return k ? '' : { t: 'parking lot: give them a chapter when they earn one', c: 'urg-med' }; } },
+      gLayer],
+    group: 'chapter', sort: { k: 'order', dir: 1 },
+    hay: function (o) { return [o.record, o.twist, o.when, o.notes, chapFull(o.chapter)].join(' '); },
+    cardCols: ['chapter', 'when', 'puzzles'],
+    newF: [['title', 'Title', 'text', { req: 1, ph: 'e.g. The Antikythera wreck', wide: 1 }], ['chapter', 'Chapter', 'chapter', { none: 'Not placed yet' }], ['layer', 'Layer', 'layer', { def: 'pseudo' }]],
   };
 
   COLL.clues = {
     type: 'clue', label: 'Clues', desc: 'Atomic pieces of information: where each one is planted and which puzzles need it.',
+    empty: 'No clues yet. Clues are the pieces players find: text, images, data, objects. Plant each one in an asset and attach it to the puzzles that need it.',
     cols: [
       col('id', 'ID', cKey, hKey, 'c-key'),
       col('text', 'Text', function (o) { return o.text.toLowerCase(); }, function (o) { return '<span class="doc">' + esc(o.text) + '</span>'; }, 'c-title c-doc'),
@@ -256,6 +281,7 @@
   var CKINDS = vals('character', 'kind');
   COLL.characters = {
     type: 'character', label: 'Characters', desc: 'Fictional people, the personas we run, and real people we must protect. A guard line marks anyone real.',
+    empty: 'No characters yet. Add the people in your story: invented ones, personas you run in the wild, and real people (each real person gets a guard).',
     cols: [
       col('name', 'Name', function (o) { return o.name.toLowerCase(); }, function (o) { return strong(o.name); }, 'c-title'),
       col('kind', 'Kind', function (o) { return CKINDS.indexOf(o.kind); }, function (o) { return stChip('ckind', o.kind); }),
@@ -277,6 +303,7 @@
 
   COLL.places = {
     type: 'place', label: 'Places', desc: 'Where things happened, or where we say they did.',
+    empty: 'No places yet. Add where things happened, or where you say they did.',
     cols: [
       col('name', 'Name', function (o) { return o.name.toLowerCase(); }, function (o) { return strong(o.name); }, 'c-title'),
       col('coords', 'Coordinates', function (o) { return +o.lat; }, function (o) { return '<span class="t-mono">' + (+o.lat).toFixed(2) + ', ' + (+o.lng).toFixed(2) + '</span>'; }),
@@ -289,10 +316,11 @@
   };
 
   COLL.timeline = {
-    type: 'event', label: 'Timeline', desc: 'The in-world timeline: real anchors and our fiction, interleaved by date.',
+    type: 'entry', label: 'Timeline', desc: 'The in-world timeline: real dates and our fiction, interleaved.',
+    empty: 'No timeline entries yet. Add the dates your story touches, real and invented, and they line up here in order.',
     cols: [
       col('date', 'Date', dateVal, function (o) { return '<span class="t-mono">' + esc(K.fmtDate(o.date)) + '</span>'; }, 'c-key'),
-      col('title', 'Event', function (o) { return o.title.toLowerCase(); }, function (o) { return strong(o.title); }, 'c-title'),
+      col('title', 'Entry', function (o) { return (o.title || '').toLowerCase(); }, function (o) { return strong(o.title || 'Untitled'); }, 'c-title'),
       col('layer', 'Layer', function (o) { return layOrd(o.layer); }, lay),
       col('links', 'Links', function (o) { return (o.links || []).length; }, function (o) { return Rs(o.links, { idOnly: true, max: 22 }); }),
       col('revealedBy', 'Revealed by', function (o) { return o.revealedBy || 'zzz'; }, function (o) { return o.revealedBy ? R(o.revealedBy, { idOnly: true }) : '<span class="faint">—</span>'; }),
@@ -300,12 +328,13 @@
     groups: [{ k: 'century', l: 'Century', v: function (o) { return centuryOf(K.year(o.date)); }, ord: function (k) { return +k || 99; }, name: function (k) { return k ? esc(ordinal(k) + ' century') : 'Undated'; } }, gLayer],
     group: 'none', sort: { k: 'date', dir: 1 },
     cardCols: ['date', 'revealedBy'],
-    newF: [['title', 'Event', 'text', { req: 1, ph: 'e.g. Antikythera wreck found by sponge divers', wide: 1 }], ['date', 'Date', 'text', { req: 1, ph: 'YYYY or YYYY-MM-DD' }], ['layer', 'Layer', 'layer', { def: 'record' }]],
+    newF: [['title', 'What happened', 'text', { req: 1, ph: 'e.g. Antikythera wreck found by sponge divers', wide: 1 }], ['date', 'Date', 'text', { req: 1, ph: 'YYYY or YYYY-MM-DD' }], ['layer', 'Layer', 'layer', { def: 'record' }]],
   };
 
   var ASTAT = vals('asset', 'status');
   COLL.assets = {
     type: 'asset', label: 'Assets', desc: 'Everything that has to exist in the wild: domains, documents, accounts, objects. Placed means it is out there.',
+    empty: 'No assets yet. Assets are the things that must exist in the wild: domains, documents, accounts, objects.',
     cols: [
       col('id', 'ID', cKey, hKey, 'c-key'),
       col('name', 'Name', function (o) { return o.name.toLowerCase(); }, function (o) { return strong(o.name); }, 'c-title'),
@@ -326,20 +355,23 @@
   };
 
   COLL.chapters = {
-    type: 'chapter', label: 'Chapters', desc: 'The order of the trail. The whole game ships at once; chapters are just how it is laid out.',
+    type: 'chapter', label: 'Chapters', desc: 'The contents of the game: chapters in order, the events inside each one, and the puzzles inside those.',
+    empty: 'No chapters yet. A chapter is a stretch of the trail; events and their puzzles go inside it.',
+    toc: true,
     cols: [
-      col('n', '#', function (o) { return o.n; }, function (o) { return '<span class="t-mono">' + esc(o.n) + '</span>'; }, 'c-key'),
-      col('title', 'Title', function (o) { return o.title.toLowerCase(); }, function (o) { return strong(o.title) + ' ' + idc(o.id); }, 'c-title'),
-      col('summary', 'Summary', function (o) { return o.summary || ''; }, function (o) { return '<span class="t-muted cx-clamp2">' + esc(o.summary || '—') + '</span>'; }),
+      col('n', '#', function (o) { return +o.n || 0; }, function (o) { return '<span class="t-mono">' + esc(o.n) + '</span>'; }, 'c-key'),
+      col('title', 'Title', function (o) { return (o.title || '').toLowerCase(); }, function (o) { return strong(o.title) + ' ' + idc(o.id); }, 'c-title'),
+      col('events', 'Events', function (o) { return K.eventsIn(o.id).length; }, function (o) { return Rs(K.eventsIn(o.id).map(function (e) { return e.id; }), { idOnly: true }); }),
       col('puzzles', 'Puzzles', function (o) { return K.puzzlesIn(o.id).length; }, function (o) { return Rs(K.puzzlesIn(o.id).map(function (p) { return p.id; }), { idOnly: true }); }),
     ],
-    groups: [], group: 'none', sort: { k: 'n', dir: 1 }, cardCols: ['puzzles'],
+    groups: [], group: 'none', sort: { k: 'n', dir: 1 }, cardCols: ['events', 'puzzles'],
     newF: [['title', 'Title', 'text', { req: 1, ph: 'e.g. The Second Folio', wide: 1 }]],
   };
 
   var QKINDS = vals('question', 'kind');
   COLL.questions = {
     type: 'question', label: 'Questions', desc: 'Open calls: continuity problems, research to do, ethics decisions, design debates.',
+    empty: 'No questions. Write down continuity problems, research to do and ethics calls as they come up, so none of them get lost.',
     cols: [
       col('severity', 'Severity', function (o) { return SEVR[o.severity]; }, function (o) { return '<span class="sev sev-' + o.severity + '">' + SEVL[o.severity] + '</span>'; }),
       col('id', 'ID', cKey, hKey, 'c-key'),
@@ -361,6 +393,7 @@
   var TSTAT = ['doing', 'todo', 'done'];
   COLL.tasks = {
     type: 'task', label: 'Tasks', desc: 'Concrete production work. No due dates: it is done when the game is ready.',
+    empty: 'No tasks yet. Concrete production work goes here: things to make, buy, record or check.',
     cols: [
       col('id', 'ID', cKey, hKey, 'c-key'),
       col('title', 'Task', function (o) { return o.title.toLowerCase(); }, function (o) { return strong(o.title); }, 'c-title'),
@@ -375,6 +408,7 @@
 
   COLL.notes = {
     type: 'note', label: 'Notes', desc: 'Free-form pages. #P04, @Ida Vance and [[Phaistos Disc]] become links.',
+    empty: 'No notes yet. Notes are free-form pages where #P04, @Name and [[Name]] link to things. You can also bring in one of your cade.txt rooms.',
     cols: [
       col('id', 'ID', cKey, hKey, 'c-key'),
       col('title', 'Title', function (o) { return o.title.toLowerCase(); }, function (o) { return strong(o.title); }, 'c-title'),
@@ -457,7 +491,8 @@
 
   /* ---------- collection view ---------- */
   function renderColl(key) {
-    var c = COLL[key], v = view(key), r = rows(key), hidden = r.all.length - r.vis.length;
+    if (COLL[key].toc) { renderToc(key); return; }
+    var c = COLL[key], v = view(key), r = rows(key), hidden = r.all.length - r.vis.length, bare = !r.all.length;
     var groups = c.groups || [];
     var sortOpts = '';
     c.cols.forEach(function (x) {
@@ -471,16 +506,16 @@
           '<span class="cx-ch-n num">' + r.vis.length + (hidden ? '<span class="faint"> of ' + r.all.length + '</span>' : '') + '</span>' +
           (hidden ? '<span class="cx-ch-hidden">' + hidden + ' on hidden layers</span>' : '') + '</header>' +
         '<p class="cx-coll-desc">' + esc(c.desc) + '</p>' +
-        layerChips(key) +
-        '<div class="cx-toolbar">' +
+        (bare ? '' : layerChips(key)) +
+        '<div class="cx-toolbar">' + (bare ? '<span class="cx-tb-sp"></span>' :
           '<label class="cx-filter">' + IC.search + '<input id="cx-flt" data-fk="flt" class="input" type="search" autocomplete="off" spellcheck="false" placeholder="Filter ' + esc(c.label.toLowerCase()) + '" aria-label="Filter ' + esc(c.label) + '" value="' + esc(v.q) + '"><span class="kbd">/</span></label>' +
           (groups.length ? '<label class="cx-tb-l">Group <select id="cx-grp" data-fk="grp" class="input"><option value="none">None</option>' +
             groups.map(function (g) { return '<option value="' + g.k + '"' + (v.group === g.k ? ' selected' : '') + '>' + esc(g.l) + '</option>'; }).join('') + '</select></label>' : '') +
           '<label class="cx-tb-l cx-sort-m">Sort <select id="cx-srt" data-fk="srt" class="input">' + sortOpts + '</select></label>' +
           '<span class="cx-tb-sp"></span>' +
           '<div class="seg" role="group" aria-label="View as"><button type="button" data-act="mode" data-mode="table" data-fk="mode-table" aria-pressed="' + (v.mode === 'table') + '">Table</button><button type="button" data-act="mode" data-mode="cards" data-fk="mode-cards" aria-pressed="' + (v.mode === 'cards') + '">Cards</button></div>' +
-          '<button type="button" class="btn sm" data-act="export" data-fk="export" title="Export this collection for an LLM">' + IC.exp + '<span class="cx-hide-s">Export</span></button>' +
-          '<button type="button" class="btn primary sm" data-act="new" data-fk="new" aria-expanded="' + !!V.newOpen + '">' + IC.plus + 'New</button>' +
+          '<button type="button" class="btn sm" data-act="export" data-fk="export" title="Export this collection for an LLM">' + IC.exp + '<span class="cx-hide-s">Export</span></button>') +
+          '<button type="button" class="btn primary sm" data-act="new" data-fk="new" aria-expanded="' + !!V.newOpen + '">' + IC.plus + 'New ' + esc(K.TYPES[c.type].label.toLowerCase()) + '</button>' +
         '</div>' +
         '<div id="cx-newform"></div>' +
         '<div id="cx-body"></div>' +
@@ -507,7 +542,7 @@
     if (t === 'puzzle') sum = o.premise || o.mechanic;
     else if (t === 'character') sum = o.role;
     else if (t === 'question') sum = o.resolution || '';
-    else if (t === 'mystery') sum = o.record;
+    else if (t === 'event') sum = o.twist || o.record;
     else if (t === 'note') sum = (o.body || '').slice(0, 220);
     else if (t === 'chapter') sum = o.summary;
     else if (t !== 'clue') sum = K.summary(o.id);
@@ -527,8 +562,9 @@
     if (!r.list.length) {
       var hiddenN = r.all.length - r.vis.length;
       var off = D.layers.filter(function (l) { return !S.on[l.id]; }).map(function (l) { return l.label; });
-      el.innerHTML = '<div class="cx-empty">' + (v.q ? 'Nothing matches “' + esc(v.q) + '”.' : hiddenN ? 'All ' + hiddenN + ' ' + esc(c.label.toLowerCase()) + ' are on hidden layers (' + esc(off.join(', ')) + ').' : 'No ' + esc(c.label.toLowerCase()) + ' yet.') +
-        '<div>' + (v.q ? '<button type="button" class="btn sm" data-act="clear-q">Clear filter</button>' : hiddenN ? '<button type="button" class="btn sm" data-act="all-layers">Show all layers</button>' : '<button type="button" class="btn sm primary" data-act="new">' + IC.plus + 'New ' + esc(K.TYPES[c.type].label.toLowerCase()) + '</button>') + '</div></div>';
+      if (v.q) el.innerHTML = '<div class="cx-empty">Nothing matches “' + esc(v.q) + '”.<div><button type="button" class="btn sm" data-act="clear-q">Clear filter</button></div></div>';
+      else if (hiddenN) el.innerHTML = '<div class="cx-empty">All ' + hiddenN + ' ' + esc(c.label.toLowerCase()) + ' are on hidden layers (' + esc(off.join(', ')) + ').<div><button type="button" class="btn sm" data-act="all-layers">Show all layers</button></div></div>';
+      else el.innerHTML = emptyState(key);
       return;
     }
     var groups = grouped(key, r.list);
@@ -560,7 +596,8 @@
       '<div class="cx-nf-fields">' + c.newF.map(function (f) {
         var name = f[0], label = f[1], kind = f[2], o = f[3] || {}, ctl;
         if (kind === 'layer') ctl = '<select class="input" name="' + name + '" data-fk="nf-' + name + '">' + D.layers.filter(function (l) { return vals(c.type, 'layer').indexOf(l.id) >= 0; }).map(function (l) { return '<option value="' + l.id + '"' + (o.def === l.id ? ' selected' : '') + '>' + esc(l.label) + '</option>'; }).join('') + '</select>';
-        else if (kind === 'chapter') ctl = '<select class="input" name="' + name + '" data-fk="nf-' + name + '">' + K.chapters().map(function (a, i) { return '<option value="' + a.id + '"' + (i === 1 ? ' selected' : '') + '>' + esc(chapFull(a.id)) + '</option>'; }).join('') + '</select>';
+        else if (kind === 'chapter') ctl = '<select class="input" name="' + name + '" data-fk="nf-' + name + '">' + K.chapters().map(function (a, i) { return '<option value="' + a.id + '"' + (i === 0 ? ' selected' : '') + '>' + esc(chapTitle(a)) + '</option>'; }).join('') + (o.none ? '<option value="">' + esc(o.none) + '</option>' : '') + '</select>';
+        else if (kind === 'event') ctl = '<select class="input" name="' + name + '" data-fk="nf-' + name + '">' + eventOptions(V.newEvent || '', 'No event yet') + '</select>';
         else if (Array.isArray(kind)) ctl = '<select class="input" name="' + name + '" data-fk="nf-' + name + '"' + (o.num ? ' data-num="1"' : '') + '>' + kind.map(function (op) { return '<option value="' + esc(op[0]) + '"' + (String(o.def) === String(op[0]) ? ' selected' : '') + '>' + esc(op[1]) + '</option>'; }).join('') + '</select>';
         else ctl = '<input class="input" name="' + name + '" data-fk="nf-' + name + '" type="' + (kind === 'number' ? 'number' : 'text') + '"' + (kind === 'number' ? ' data-num="1" inputmode="decimal"' : '') + (o.ph ? ' placeholder="' + esc(o.ph) + '"' : '') + (o.req ? ' data-req="1"' : '') + '>';
         return '<label class="cx-nf-f' + (o.wide ? ' wide' : '') + '"><span>' + esc(label) + '</span>' + ctl + '</label>';
@@ -579,8 +616,9 @@
     });
     if (bad) { bad.classList.add('invalid'); bad.focus(); K.toast('Give it a ' + bad.closest('label').firstChild.textContent.toLowerCase() + ' first.'); return; }
     if (c.type === 'character' && (obj.kind === 'historical' || obj.kind === 'living')) obj.guard = 'Real person. Use documented facts only. No invented words or deeds.';
-    if (c.type === 'mystery') obj.used = false;
-    V.newOpen = false;
+    if (c.type === 'event') { obj.chapter = obj.chapter || null; obj.order = nextOrder(obj.chapter); }
+    if (c.type === 'puzzle' && !obj.event) obj.event = null;
+    V.newOpen = false; V.newEvent = null;
     var id = K.create(c.type, obj);
     V.ctx.go(id);
     K.toast('Created ' + K.typeName(id).toLowerCase() + ' ' + id + ' · ' + trunc(K.label(id), 40) + (obj.guard ? ' (guard added)' : ''));
@@ -619,14 +657,73 @@
     list.forEach(function (i) { if (!by[i.kind]) { by[i.kind] = []; kinds.push(i.kind); } by[i.kind].push(i); });
     V.main.innerHTML = '<section class="cx-coll"><header class="cx-coll-head"><span class="cx-ch-ic">!</span><h1>Problems</h1><span class="cx-ch-n num">' + iss.length + '</span></header>' +
       '<p class="cx-coll-desc">Checks across the whole game. They rerun after every edit: unplanted and orphan clues, missing solutions and solve paths, design checks, broken recipes, chapter order, dead ends, unverified research, renewals.</p>' +
-      '<div class="cx-toolbar"><div class="seg" role="group" aria-label="Severity">' + [['all', 'All', iss.length], ['high', 'High', n.high], ['med', 'Med', n.med], ['low', 'Low', n.low]].map(function (s) {
+      '<div class="cx-toolbar">' + (iss.length ? '<div class="seg" role="group" aria-label="Severity">' + [['all', 'All', iss.length], ['high', 'High', n.high], ['med', 'Med', n.med], ['low', 'Low', n.low]].map(function (s) {
         return '<button type="button" data-act="prob-sev" data-s="' + s[0] + '" data-fk="sev-' + s[0] + '" aria-pressed="' + (f === s[0]) + '">' + s[1] + ' <span class="num">' + s[2] + '</span></button>';
-      }).join('') + '</div><span class="cx-tb-sp"></span><button type="button" class="btn sm" data-act="export" title="Export the whole game for an LLM">' + IC.exp + 'Export game</button></div>' +
+      }).join('') + '</div>' : '') + '<span class="cx-tb-sp"></span><button type="button" class="btn sm" data-act="export" title="Export the whole game for an LLM">' + IC.exp + 'Export game</button></div>' +
       (kinds.length ? kinds.map(function (k) {
         return '<section class="cx-pg"><div class="cx-pg-h"><h2>' + esc(k) + '</h2><span class="count">' + by[k].length + '</span></div><div class="cx-pg-list">' + by[k].map(function (i) {
           return '<div class="cx-pi"><span class="sev sev-' + i.severity + '">' + SEVL[i.severity] + '</span><div><div class="cx-pi-t">' + esc(i.text) + '</div>' + Rs(i.ids, { max: 30 }) + '</div></div>';
         }).join('') + '</div></section>';
-      }).join('') : '<div class="cx-empty">Nothing at this severity.</div>') + '</section>';
+      }).join('') : '<div class="cx-empty">' + (iss.length ? 'Nothing at this severity.' : '<b>No problems.</b> Every check passes. They rerun as you add events, puzzles and clues.') + '</div>') + '</section>';
+    decorate(V.main);
+  }
+
+  /* ---------- empty states: say what goes here, offer the first action ---------- */
+  function nextOrder(ch) { var evs = K.eventsIn(ch || null); return evs.length ? Math.max.apply(null, evs.map(function (e) { return +e.order || 0; })) + 1 : 1; }
+  function addEventBtn(ch, label, primary) {
+    return '<button type="button" class="btn sm' + (primary ? ' primary' : '') + '" data-act="new-event" data-ch="' + esc(ch ? ch.id : '') + '" data-fk="new-event-' + esc(ch ? ch.id : 'none') + '">' + IC.plus + esc(label || ('Add an event to ' + (ch ? chapTitle(ch) : 'the parking lot'))) + '</button>';
+  }
+  function emptyState(key) {
+    var c = COLL[key], t = K.TYPES[c.type].label.toLowerCase(), ch = firstChapter(), btns;
+    switch (key) {
+      case 'events': btns = ch ? addEventBtn(ch, null, true) : '<button type="button" class="btn sm primary" data-act="new">' + IC.plus + 'Add an event</button>'; break;
+      case 'puzzles':
+        btns = D.events.length ? '<button type="button" class="btn sm primary" data-act="new">' + IC.plus + 'Add your first puzzle</button>'
+          : (ch ? addEventBtn(ch, 'Add an event to ' + chapTitle(ch) + ' first', true) : '') + '<button type="button" class="btn sm" data-act="new">' + IC.plus + 'Add a puzzle without an event</button>';
+        break;
+      case 'notes': btns = '<button type="button" class="btn sm primary" data-act="new">' + IC.plus + 'Write a note</button><button type="button" class="btn sm" data-act="import">Bring in a cade.txt room…</button>'; break;
+      case 'questions': btns = '<button type="button" class="btn sm primary" data-act="new">' + IC.plus + 'Raise a question</button>'; break;
+      case 'tasks': btns = '<button type="button" class="btn sm primary" data-act="new">' + IC.plus + 'Add a task</button>'; break;
+      case 'timeline': btns = '<button type="button" class="btn sm primary" data-act="new">' + IC.plus + 'Add your first entry</button>'; break;
+      default: btns = '<button type="button" class="btn sm primary" data-act="new">' + IC.plus + 'Add your first ' + esc(t) + '</button>';
+    }
+    return '<div class="cx-empty cx-empty-first"><span class="cx-empty-ic">' + esc(K.TYPES[c.type].icon) + '</span><p>' + esc(c.empty || ('No ' + c.label.toLowerCase() + ' yet.')) + '</p><div class="cx-row-btns">' + btns + '</div></div>';
+  }
+
+  /* ---------- Chapters: the game's table of contents ---------- */
+  function tocPuzzles(eid) {
+    var ps = K.puzzlesInEvent(eid);
+    if (!ps.length) return '<span class="faint cx-toc-none">no puzzles yet</span>';
+    return ps.map(function (p) { return '<span class="cx-toc-pz">' + R(p.id, { idOnly: true }) + K.pips(p.status) + '</span>'; }).join('');
+  }
+  function tocEvent(e) {
+    return '<li class="cx-toc-ev"' + (e.layer ? ' data-layer="' + e.layer + '"' : '') + '><span class="cx-toc-ord t-mono">' + esc(e.chapter ? (e.order || '·') : '·') + '</span>' +
+      '<span class="cx-toc-evmain">' + R(e.id, { max: 60 }) + (e.when ? '<span class="t-mono cx-toc-when">' + esc(K.fmtDate(e.when)) + '</span>' : '') + '</span>' +
+      '<span class="cx-toc-pzs">' + tocPuzzles(e.id) + '</span></li>';
+  }
+  function renderToc(key) {
+    var c = COLL[key], chs = K.chapters(), unplaced = K.eventsIn(null);
+    var body;
+    if (!chs.length) body = emptyState(key);
+    else body = chs.map(function (ch) {
+      var evs = K.eventsIn(ch.id), np = K.puzzlesIn(ch.id).length;
+      return '<section class="cx-toc-ch" aria-label="' + esc(chapTitle(ch)) + '"><header class="cx-toc-h"><span class="cx-toc-n t-mono">' + esc(ch.n) + '</span>' +
+        '<button type="button" class="cx-toc-title" data-act="go" data-to="' + esc(ch.id) + '">' + esc(ch.title || 'Untitled chapter') + '</button>' +
+        '<span class="cx-toc-meta t-mono">' + evs.length + ' event' + (evs.length === 1 ? '' : 's') + ' · ' + np + ' puzzle' + (np === 1 ? '' : 's') + '</span></header>' +
+        (ch.summary ? '<p class="cx-toc-sum">' + esc(ch.summary) + '</p>' : '') +
+        (evs.length ? '<ol class="cx-toc-evs">' + evs.map(tocEvent).join('') + '</ol>' : '<p class="cx-toc-emptych">Nothing in this chapter yet. Events are the moments it is built from; puzzles go inside them.</p>') +
+        '<div class="cx-toc-foot">' + addEventBtn(ch, 'Add an event', !evs.length) + '</div></section>';
+    }).join('') + (unplaced.length ? '<section class="cx-toc-ch cx-toc-unplaced" aria-label="Not placed yet"><header class="cx-toc-h"><span class="cx-toc-n t-mono">·</span><span class="cx-toc-title static">Not placed yet</span><span class="cx-toc-meta t-mono">' + unplaced.length + ' event' + (unplaced.length === 1 ? '' : 's') + '</span></header>' +
+      '<p class="cx-toc-sum">The parking lot. Open an event to give it a chapter.</p><ol class="cx-toc-evs">' + unplaced.map(tocEvent).join('') + '</ol></section>' : '');
+    var ne = D.events.length, np2 = D.puzzles.length;
+    V.main.innerHTML = '<section class="cx-coll cx-toc" aria-label="Chapters">' +
+      '<header class="cx-coll-head"><span class="cx-ch-ic">CH</span><h1>Chapters</h1><span class="cx-ch-n num">' + chs.length + '</span><span class="t-mono cx-toc-tot">' + ne + ' event' + (ne === 1 ? '' : 's') + ' · ' + np2 + ' puzzle' + (np2 === 1 ? '' : 's') + '</span></header>' +
+      '<p class="cx-coll-desc">' + esc(c.desc) + '</p>' +
+      '<div class="cx-toolbar"><span class="cx-tb-sp"></span>' +
+        '<button type="button" class="btn sm" data-act="export" data-fk="export" title="Export every chapter for an LLM">' + IC.exp + '<span class="cx-hide-s">Export</span></button>' +
+        '<button type="button" class="btn primary sm" data-act="new" data-fk="new" aria-expanded="' + !!V.newOpen + '">' + IC.plus + 'New chapter</button></div>' +
+      '<div id="cx-newform"></div><div id="cx-body">' + body + '</div></section>';
+    renderNewForm(key);
     decorate(V.main);
   }
 
@@ -678,8 +775,8 @@
       case 'task': return esc(o.title) + ' · ' + esc(o.status);
       case 'research': return '<span class="cx-rs ' + (o.status === 'verified' ? 'ok' : o.status === 'read' ? 'mid' : 'bad') + '">' + esc(o.status) + '</span> ' + esc(o.title);
       case 'idea': return esc(o.status + ' · ' + o.text);
-      case 'event': return esc(K.fmtDate(o.date)) + (o.revealedBy ? ' · revealed by ' + esc(o.revealedBy) : '');
-      case 'mystery': return esc((o.year || '') + ' · ' + (o.record || ''));
+      case 'entry': return esc(K.fmtDate(o.date)) + (o.revealedBy ? ' · revealed by ' + esc(o.revealedBy) : '');
+      case 'event': return esc([o.title, o.chapter ? chapShort(o.chapter) + (o.order ? ' #' + o.order : '') : 'not placed yet', o.when ? K.fmtDate(o.when) : ''].filter(Boolean).join(' · '));
       case 'puzzle': return esc(o.title) + ' · ' + esc(K.statusLabel(o.status));
       case 'character': return esc(o.kind + ' · ' + (o.role || ''));
       case 'asset': return esc(o.name + ' · ' + o.status);
@@ -707,7 +804,7 @@
       attachBtn(id, field, opts.add || 'Link'), ids.length);
   }
 
-  var TYPE_ORDER = ['chapter', 'mystery', 'puzzle', 'clue', 'character', 'place', 'event', 'asset', 'research', 'idea', 'question', 'task', 'note'];
+  var TYPE_ORDER = ['chapter', 'event', 'puzzle', 'clue', 'character', 'place', 'entry', 'asset', 'research', 'idea', 'question', 'task', 'note'];
   function railSec(title, ids, self, incoming, note) {
     var by = {};
     ids.forEach(function (x) { var t = K.type(x); if (t) (by[t] = by[t] || []).push(x); });
@@ -724,39 +821,41 @@
   function srcInfo(cid) {
     var t = K.type(cid), o = K.get(cid), direct = directSrc(cid), via = [];
     function viaM(mid) { if (mid === cid || !K.get(mid)) return; var s = directSrc(mid); if (s.length && !via.some(function (v) { return v.via === mid; })) via.push({ via: mid, ids: s }); }
-    if (t === 'event') (o.links || []).filter(function (l) { return K.type(l) === 'mystery'; }).forEach(viaM);
-    if (t === 'character') D.events.forEach(function (e) { if ((e.links || []).indexOf(cid) >= 0) e.links.filter(function (l) { return K.type(l) === 'mystery'; }).forEach(viaM); });
-    if (t === 'clue') (o.usedBy || []).forEach(function (pid) { var p = K.get(pid); ((p && p.mysteries) || []).forEach(viaM); });
+    if (t === 'entry') (o.links || []).filter(function (l) { return K.type(l) === 'event'; }).forEach(viaM);
+    if (t === 'character') D.timeline.forEach(function (e) { if ((e.links || []).indexOf(cid) >= 0) e.links.filter(function (l) { return K.type(l) === 'event'; }).forEach(viaM); });
+    if (t === 'clue') (o.usedBy || []).forEach(function (pid) { var p = K.get(pid); if (p && p.event) viaM(p.event); });
     var all = direct.slice(); via.forEach(function (v) { v.ids.forEach(function (s) { if (all.indexOf(s) < 0) all.push(s); }); });
     var lay = K.layerOf(cid), ver = all.some(function (s) { return K.get(s).status === 'verified'; }), state;
     if (lay === 'fiction') state = 'inv';
     else state = ver ? 'ok' : all.length ? 'unv' : 'none';
+    /* an event no puzzle uses yet is still a plan, not a problem */
+    if ((state === 'unv' || state === 'none') && t === 'event' && !K.puzzlesInEvent(cid).length) state = 'todo';
     return { direct: direct, via: via, all: all, state: state, flag: state === 'unv' || state === 'none' };
   }
   function factClaims(id) {
     var t = K.type(id), o = K.get(id), out = [];
     function add(cid, role) { if (cid && K.get(cid) && K.layerOf(cid) && !out.some(function (x) { return x.id === cid; })) out.push({ id: cid, role: role }); }
     if (t === 'puzzle') {
-      (o.mysteries || []).forEach(function (m) { add(m, 'anchor'); });
+      if (o.event) add(o.event, 'event');
       (o.reveals || []).forEach(function (r) { add(r, 'reveals'); });
       (o.inputs || []).forEach(function (c) { add(c, 'input'); });
       guardedFor(id).forEach(function (c) { add(c, 'real person'); });
-    } else if (t === 'mystery') {
-      add(id, 'this page');
-      D.events.forEach(function (e) { if ((e.links || []).indexOf(id) >= 0) add(e.id, 'event'); });
-      guardedFor(id).forEach(function (c) { add(c, 'real person'); });
     } else if (t === 'event') {
       add(id, 'this page');
-      (o.links || []).forEach(function (l) { var lt = K.type(l); if (lt === 'mystery' || lt === 'character') add(l, lt); });
+      D.timeline.forEach(function (e) { if ((e.links || []).indexOf(id) >= 0) add(e.id, 'timeline'); });
+      guardedFor(id).forEach(function (c) { add(c, 'real person'); });
+    } else if (t === 'entry') {
+      add(id, 'this page');
+      (o.links || []).forEach(function (l) { var lt = K.type(l); if (lt === 'event' || lt === 'character') add(l, lt); });
     } else if (t === 'character') {
       add(id, 'this page');
-      D.events.forEach(function (e) { if ((e.links || []).indexOf(id) >= 0) add(e.id, 'event'); });
+      D.timeline.forEach(function (e) { if ((e.links || []).indexOf(id) >= 0) add(e.id, 'timeline'); });
     } else if (t === 'clue') add(id, 'this page');
     return out;
   }
   var FS = {
     ok: '<span class="cx-fs ok">✓ Verified</span>', unv: '<span class="cx-fs bad">Needs a source</span>', none: '<span class="cx-fs bad">Needs a source</span>',
-    inv: '<span class="cx-fs inv">Invented</span>',
+    inv: '<span class="cx-fs inv">Invented</span>', todo: '<span class="cx-fs mute">No source yet</span>',
   };
   function srcRef(s) { var so = K.get(s); return R(s, { idOnly: true }) + '<span class="cx-vm ' + (so.status === 'verified' ? 'ok' : so.status === 'read' ? 'mid' : 'bad') + '">' + (so.status === 'verified' ? '✓' : esc(so.status)) + '</span>'; }
   function factSec(id) {
@@ -764,15 +863,15 @@
     var tally = { ok: 0, flag: 0, inv: 0 };
     var rowsH = claims.map(function (c) {
       var si = srcInfo(c.id), l = K.layerOf(c.id), o = K.get(c.id);
-      if (si.flag) tally.flag++; else if (si.state === 'ok') tally.ok++; else tally.inv++;
-      var claimText = K.type(c.id) === 'mystery' ? o.record : K.type(c.id) === 'character' ? (o.guard || o.role) : '';
+      if (si.flag) tally.flag++; else if (si.state === 'ok') tally.ok++; else if (si.state === 'todo') tally.todo = (tally.todo || 0) + 1; else tally.inv++;
+      var claimText = K.type(c.id) === 'event' ? (o.record || (o.layer === 'fiction' ? '' : 'Nothing on the record written down yet.')) : K.type(c.id) === 'character' ? (o.guard || o.role) : '';
       var srcs;
       if (si.state !== 'inv') {
         srcs = si.direct.map(srcRef).join('') +
           si.via.map(function (v) { return '<span>via ' + esc(trunc(K.label(v.via).split(' (')[0], 28)) + '</span>' + v.ids.map(srcRef).join(''); }).join('') ||
-          '<span>No research on file.</span>';
+          '<span>No research attached yet.</span>';
       } else srcs = '<span>Our fiction needs no source.</span>';
-      var cite = si.flag ? '<button type="button" class="btn sm cx-cite" data-act="cite" data-id="' + esc(c.id) + '" data-fk="cite-' + esc(c.id) + '">' + IC.link + 'Cite research</button>' : '';
+      var cite = si.flag || si.state === 'todo' ? '<button type="button" class="btn sm cx-cite" data-act="cite" data-id="' + esc(c.id) + '" data-fk="cite-' + esc(c.id) + '">' + IC.link + 'Cite research</button>' : '';
       return '<div class="cx-fact-row' + (si.flag ? ' flag' : '') + '">' + K.layerBadge(l, { short: true }) +
         '<div class="cx-fact-c"><div class="cx-fact-c-top">' + R(c.id, { max: 40 }) + '<span class="cx-fact-role">' + esc(c.role) + '</span></div>' +
           (claimText ? '<div class="cx-fact-claim">' + esc(claimText) + '</div>' : '') +
@@ -783,6 +882,7 @@
     var head = '<div class="cx-fact-h"><b>' + claims.length + ' claim' + (claims.length === 1 ? '' : 's') + '</b><span class="cx-fact-sum">' +
       (tally.ok ? '<span><span class="cx-fs ok">' + tally.ok + '</span> verified</span>' : '') +
       (tally.flag ? '<span><span class="cx-fs bad">' + tally.flag + '</span> need a source</span>' : '') +
+      (tally.todo ? '<span><span class="cx-fs mute">' + tally.todo + '</span> not sourced yet</span>' : '') +
       (tally.inv ? '<span><span class="cx-fs inv">' + tally.inv + '</span> invented</span>' : '') + '</span></div>';
     var foot = '<div class="cx-fact-foot">Record and pseudo-history claims need verified research. Our fiction needs none.' +
       (own.length ? ' <span>Research cited for this puzzle:</span> ' + own.map(srcRef).join(' ') : '') + '</div>';
@@ -849,7 +949,9 @@
     var chOpts = [['', 'No chapter']].concat(K.chapters().map(function (c) { return [c.id, chapFull(c.id)]; }));
     switch (t) {
       case 'puzzle':
-        p('Chapter', psel(id, 'chapter', chOpts.slice(1), o.chapter, { label: 'Chapter' }));
+        p('Event', '<select class="cx-psel cx-evsel" data-set="event" data-null="1" data-id="' + esc(id) + '" data-fk="set-' + esc(id) + '-event" aria-label="Event">' + eventOptions(o.event || '', 'No event yet') + '</select>' +
+          (o.event ? '' : '<span class="cx-mk warn">place it</span>'));
+        p('Chapter', '<span class="cx-ro">' + esc(o.chapter ? chapFull(o.chapter) : 'Follows the event') + '</span>' + (o.chapter ? '<span class="faint cx-ro-note">follows the event</span>' : ''));
         p('Status', K.pips(o.status) + psel(id, 'status', D.statuses.map(function (s) { return [s.id, s.label]; }), o.status, { label: 'Status' }));
         p('Kind', psel(id, 'kind', D.puzzleKinds.map(function (x) { return [x.id, x.label]; }), o.kind, { label: 'Kind' }));
         p('Difficulty', diffEdit(o));
@@ -864,11 +966,16 @@
           (o.plantedIn ? '' : '<span class="cx-mk bad">' + IC.warn + 'gap</span>'));
         p('Used by', (o.usedBy || []).length ? Rs(o.usedBy, { idOnly: true }) : '<span class="cx-mk warn">Orphan</span>');
         break;
-      case 'mystery':
-        p('Year', ed(id, 'year', o.year, 'Year', 'num'));
+      case 'event':
+        p('Chapter', psel(id, 'chapter', chOpts.map(function (x) { return x[0] ? x : ['', 'Not placed yet']; }), o.chapter || '', { nul: 1, label: 'Chapter' }));
+        p('Order', o.chapter ? ed(id, 'order', o.order, '1', 'num') + '<span class="cx-ord-tools">' +
+          '<button type="button" class="cx-tool" data-act="ev-move" data-d="-1" data-id="' + esc(id) + '" aria-label="Move earlier in the chapter"' + (evIndex(o) <= 0 ? ' disabled' : '') + '>' + IC.up + '</button>' +
+          '<button type="button" class="cx-tool" data-act="ev-move" data-d="1" data-id="' + esc(id) + '" aria-label="Move later in the chapter"' + (evIndex(o) >= K.eventsIn(o.chapter).length - 1 ? ' disabled' : '') + '>' + IC.down + '</button></span>' +
+          '<span class="faint">of ' + K.eventsIn(o.chapter).length + '</span>' : '<span class="faint">Give it a chapter first</span>');
+        p('Layer', psel(id, 'layer', D.layers.map(function (l) { return [l.id, l.label]; }), o.layer, { label: 'Layer' }));
+        p('When', ed(id, 'when', o.when, 'YYYY or YYYY-MM-DD', 'text') + (o.when ? '<span class="faint">' + esc(K.fmtDate(o.when)) + '</span>' : ''));
         p('Place', psel(id, 'place', refOpts(['place'], 'No place'), o.place || '', { nul: 1, label: 'Place' }));
-        p('In game', sw(id, 'used', o.used, 'In the game', 'Parking lot'));
-        p('Research', researchSummary(directSrc(id)));
+        p('Research', o.layer === 'fiction' && !directSrc(id).length ? '<span class="faint">invented, none needed</span>' : researchSummary(directSrc(id)));
         break;
       case 'character':
         p('Kind', psel(id, 'kind', enumOpts('character', 'kind'), o.kind));
@@ -879,7 +986,7 @@
         p('Latitude', ed(id, 'lat', o.lat, '0', 'num'));
         p('Longitude', ed(id, 'lng', o.lng, '0', 'num'));
         break;
-      case 'event':
+      case 'entry':
         p('Date', ed(id, 'date', o.date, 'YYYY-MM-DD', 'text') + (o.date ? '<span class="faint">' + esc(K.fmtDate(o.date)) + '</span>' : ''));
         p('Revealed by', psel(id, 'revealedBy', refOpts(['puzzle'], 'Not revealed by a puzzle'), o.revealedBy || '', { nul: 1, label: 'Revealed by' }));
         break;
@@ -892,8 +999,8 @@
         p('Cost', ed(id, 'cost', o.cost, 'e.g. $12/yr', 'text'));
         break;
       case 'chapter':
-        p('Order', ed(id, 'n', o.n, '0', 'num'));
-        p('Puzzles', '<span class="num">' + K.puzzlesIn(id).length + '</span>');
+        p('Number', ed(id, 'n', o.n, '1', 'num'));
+        p('Contents', '<span class="t-mono">' + K.eventsIn(id).length + ' events · ' + K.puzzlesIn(id).length + ' puzzles</span>');
         break;
       case 'question':
         p('Severity', '<span class="sev sev-' + o.severity + '"></span>' + psel(id, 'severity', [['high', 'High'], ['med', 'Med'], ['low', 'Low']], o.severity));
@@ -961,7 +1068,7 @@
       }).join('') + attachBtn(id, field, add) + '</span>';
     }
     h += sec('Connections', '<div class="cx-conn">' +
-      conn('Requires', 'requires', 'Require') + conn('Anchors', 'mysteries', 'Anchor') + conn('Reveals', 'reveals', 'Reveal') + conn('Assets', 'assets', 'Asset') + '</div>');
+      conn('Requires', 'requires', 'Require') + conn('Reveals', 'reveals', 'Reveal') + conn('Assets', 'assets', 'Asset') + '</div>');
     h += sec('Notes', ed(id, 'notes', p.notes, 'Design notes, test results, decisions.'));
     return h;
   }
@@ -979,15 +1086,27 @@
       '<div class="cx-rc-row"><span class="cx-prop-l">Output</span><code class="cx-rc-code">' + esc(r.output || rc.built || '') + '</code></div>' +
       '<div class="cx-rc-st">' + (rc.ok ? '<span class="cx-fs ok">✓ Checks out</span><span class="faint">The steps produce the output and decode back to the plaintext.</span>' : '<span class="cx-fs bad">✗ Broken</span><span class="bad">' + esc(rc.problems.join(' ')) + '</span>') + '</div></div>', btn);
   }
-  function eventsFor(id) { return D.events.filter(function (e) { return (e.links || []).indexOf(id) >= 0; }).sort(function (a, b) { return (K.parseDate(a.date) || 0) - (K.parseDate(b.date) || 0); }).map(function (e) { return e.id; }); }
-  function bodyMystery(m) {
-    var h = '<section class="cx-sec"><div class="cx-rt">' +
-      '<div class="cx-rt-p layer-' + m.layer + '"><div class="cx-rt-h"><span class="eyebrow">On the record</span>' + K.layerBadge(m.layer) + '</div>' + ed(m.id, 'record', m.record, 'What is documented and checkable?') + '</div>' +
-      '<div class="cx-rt-p layer-fiction"><div class="cx-rt-h"><span class="eyebrow">Our twist</span>' + K.layerBadge('fiction') + '</div>' + ed(m.id, 'twist', m.twist, 'What does the game add?') + '</div>' +
+  function entriesFor(id) { return D.timeline.filter(function (e) { return (e.links || []).indexOf(id) >= 0; }).sort(function (a, b) { return (K.parseDate(a.date) || 0) - (K.parseDate(b.date) || 0); }).map(function (e) { return e.id; }); }
+  function evIndex(e) { return K.eventsIn(e.chapter || null).findIndex(function (x) { return x.id === e.id; }); }
+  function bodyEvent(e) {
+    var fic = e.layer === 'fiction';
+    var recordPanel = fic && !e.record
+      ? '<div class="cx-rt-p cx-rt-inv layer-fiction"><div class="cx-rt-h"><span class="eyebrow">On the record</span>' + K.layerBadge('fiction') + '</div><p class="cx-rt-note">Invented for the game. There is nothing on the record to check; the twist is the whole story.</p>' +
+        '<button type="button" class="linkish" data-act="edit-target" data-target="#cx-rec-' + esc(e.id) + '">Add a real anchor anyway</button><div id="cx-rec-' + esc(e.id) + '" class="cx-ed cx-ed-long cx-hidden-ed" data-id="' + esc(e.id) + '" data-path="record" data-kind="long" data-fk="ed-' + esc(e.id) + '-record"></div></div>'
+      : '<div class="cx-rt-p layer-' + esc(e.layer) + '"><div class="cx-rt-h"><span class="eyebrow">On the record</span>' + K.layerBadge(e.layer) + '</div>' + ed(e.id, 'record', e.record, 'What is documented and checkable? Players will look it up.') + '</div>';
+    var h = '<section class="cx-sec"><div class="cx-rt">' + recordPanel +
+      '<div class="cx-rt-p layer-fiction"><div class="cx-rt-h"><span class="eyebrow">' + (fic ? 'Our story' : 'Our twist') + '</span>' + K.layerBadge('fiction') + '</div>' + ed(e.id, 'twist', e.twist, fic ? 'What happens in this invented event?' : 'What does the game add on top?') + '</div>' +
       '</div></section>';
-    h += refsSec(m.id, 'research', 'Research', { add: 'Attach research', empty: 'No research yet. Players will check.', side: function (x) { var o = K.get(x); return stChip('rel', o.reliability) + stChip('rstatus', o.status); } });
-    h += sec('Timeline', lrows(eventsFor(m.id), layerSide, 'No events link here.'));
-    h += refsSec(m.id, 'puzzles', 'Puzzles', { add: 'Use in puzzle', empty: 'Not used by any puzzle yet. Parking lot.' });
+    var ps = K.puzzlesInEvent(e.id);
+    h += sec('Puzzles in this event', ps.length ? '<div class="cx-list">' + ps.map(function (p) {
+      return '<div class="cx-lr"><div class="cx-lr-main">' + R(p.id, { idOnly: true }) + '<span class="cx-lr-ctx"><b class="cx-lr-t">' + esc(p.title || 'Untitled') + '</b> · ' + esc(pkind(p.kind)) + '</span></div><div class="cx-lr-side">' + K.pips(p.status, { label: true }) +
+        '<select class="input cx-move" data-move-puzzle="' + esc(p.id) + '" data-fk="move-' + esc(p.id) + '" aria-label="Move ' + esc(p.id) + ' to another event"><option value="' + esc(e.id) + '" selected>Move to…</option>' + eventOptions('\u0000', 'Out of any event').replace('<option value="' + esc(e.id) + '">', '<option value="' + esc(e.id) + '" disabled>') + '</select></div></div>';
+    }).join('') + '</div>' : '<div class="cx-empty cx-empty-inline">No puzzles in this event yet. A puzzle here is something players solve with what this event gives them.</div>',
+      '<span class="note">in trail order</span><button type="button" class="btn sm' + (ps.length ? '' : ' primary') + '" data-act="new-puzzle-in" data-id="' + esc(e.id) + '" data-fk="new-puzzle-in">' + IC.plus + 'Add puzzle here</button>', ps.length || null);
+    h += refsSec(e.id, 'research', 'Research', { add: 'Attach research', empty: fic ? 'Invented events need no research.' : 'No research yet. Players will check this one.', side: function (x) { var o = K.get(x); return stChip('rel', o.reliability) + stChip('rstatus', o.status); } });
+    var tl = entriesFor(e.id);
+    if (tl.length) h += sec('On the timeline', lrows(tl, layerSide));
+    h += sec('Notes', ed(e.id, 'notes', e.notes, 'Design notes for this event.'));
     return h;
   }
   function bodyCharacter(c) {
@@ -996,7 +1115,7 @@
     h += sec('Secret', '<div class="cx-sol" data-id="' + c.id + '" data-path="secret" data-kind="long" data-fk="ed-' + c.id + '-secret">' + (c.secret && c.secret !== '—' ? '<span class="spoiler" title="Click to reveal">' + esc(c.secret) + '</span>' : '<span class="ph">None.</span>') + '</div>',
       '<span class="note">spoiler</span><button type="button" class="btn ghost sm" data-act="edit-target" data-target=".cx-sol">' + IC.edit + 'Edit</button>');
     h += refsSec(c.id, 'appears', 'Appears in', { add: 'Add appearance', empty: 'Not placed anywhere yet.' });
-    var ev = eventsFor(c.id);
+    var ev = entriesFor(c.id);
     if (ev.length) h += sec('Timeline', lrows(ev, layerSide));
     return h;
   }
@@ -1021,8 +1140,8 @@
     return sec('Where', mapSvg(pl), '<span class="note">every place, on a latitude / longitude grid</span>') +
       sec('Linked here', lrows(K.backlinks(pl.id), layerSide, 'Nothing links here.'), '', K.backlinks(pl.id).length);
   }
-  function bodyEvent(e) {
-    var all = D.events.slice().sort(function (a, b) { return (K.parseDate(a.date) || 0) - (K.parseDate(b.date) || 0); });
+  function bodyEntry(e) {
+    var all = D.timeline.slice().sort(function (a, b) { return (K.parseDate(a.date) || 0) - (K.parseDate(b.date) || 0); });
     var i = all.indexOf(e), near = all.slice(Math.max(0, i - 2), i + 3);
     var tl = '<div class="cx-list">' + near.map(function (x) {
       return '<div class="cx-lr' + (x === e ? ' cur' : '') + '"><div class="cx-lr-main"><span class="t-mono cx-tl-date">' + esc(K.fmtDate(x.date)) + '</span>' + (x === e ? '<span class="t-strong">' + esc(x.title) + '</span>' : R(x.id, { max: 50 })) + '</div><div class="cx-lr-side">' + K.layerBadge(x.layer, { short: true }) + '</div></div>';
@@ -1041,12 +1160,30 @@
     h += sec('Notes', ed(a.id, 'notes', a.notes, 'Logins, costs, how to keep it alive.'));
     return h;
   }
+  function outlineEvent(e, i, n, chId) {
+    var ps = K.puzzlesInEvent(e.id);
+    return '<li class="cx-ol-ev"' + (e.layer ? ' data-layer="' + esc(e.layer) + '"' : '') + '>' +
+      '<div class="cx-ol-head"><span class="cx-ol-ord t-mono">' + esc(e.order || i + 1) + '</span>' + R(e.id, { idOnly: true }) + ed(e.id, '__title', e.title, 'Name this event', 'text', 'cx-ol-title') +
+        (e.when ? '<span class="t-mono cx-ol-when">' + esc(K.fmtDate(e.when)) + '</span>' : '') + K.layerBadge(e.layer, { short: true }) +
+        '<span class="cx-ol-tools">' +
+        '<button type="button" class="cx-tool" data-act="ev-move" data-d="-1" data-id="' + esc(e.id) + '" aria-label="Move ' + esc(e.id) + ' earlier"' + (i === 0 ? ' disabled' : '') + '>' + IC.up + '</button>' +
+        '<button type="button" class="cx-tool" data-act="ev-move" data-d="1" data-id="' + esc(e.id) + '" aria-label="Move ' + esc(e.id) + ' later"' + (i === n - 1 ? ' disabled' : '') + '>' + IC.down + '</button>' +
+        '<select class="input cx-move" data-move-event="' + esc(e.id) + '" data-fk="mvch-' + esc(e.id) + '" aria-label="Move ' + esc(e.id) + ' to another chapter"><option value="' + esc(chId) + '" selected>Move to…</option>' +
+          K.chapters().filter(function (c) { return c.id !== chId; }).map(function (c) { return '<option value="' + esc(c.id) + '">' + esc(chapTitle(c)) + '</option>'; }).join('') + '<option value="">Not placed yet</option></select>' +
+        '</span></div>' +
+      '<div class="cx-ol-pzs">' + ps.map(function (p) { return '<span class="cx-toc-pz">' + R(p.id, { max: 28 }) + K.pips(p.status) + '</span>'; }).join('') +
+        '<button type="button" class="btn ghost sm cx-attach" data-act="new-puzzle-in" data-id="' + esc(e.id) + '">' + IC.plus + (ps.length ? 'Puzzle' : 'Add the first puzzle') + '</button></div></li>';
+  }
   function bodyChapter(c) {
-    var ps = K.puzzleOrder().filter(function (p) { return p.chapter === c.id; }).map(function (p) { return p.id; });
-    return sec('Summary', ed(c.id, 'summary', c.summary, 'What happens in this chapter?')) +
-      sec('Puzzles', lrows(ps, function (x) { var o = K.get(x); return K.diff(o.difficulty) + K.pips(o.status, { label: true }); }, 'No puzzles in this chapter yet.'),
-        '<span class="note">in trail order</span><button type="button" class="btn sm" data-act="new-in-chapter" data-id="' + c.id + '">' + IC.plus + 'New puzzle here</button><button type="button" class="btn sm" data-act="export-chapter" data-id="' + c.id + '">' + IC.exp + 'Export chapter</button>', ps.length) +
-      sec('Assets', lrows(D.assets.filter(function (a) { return a.chapter === c.id; }).map(function (a) { return a.id; }), function (x) { return stChip('asset', K.get(x).status); }, 'No assets first needed here.'));
+    var evs = K.eventsIn(c.id), unplaced = K.eventsIn(null);
+    var outline = evs.length
+      ? '<ol class="cx-outline">' + evs.map(function (e, i) { return outlineEvent(e, i, evs.length, c.id); }).join('') + '</ol>'
+      : '<div class="cx-empty cx-empty-first"><span class="cx-empty-ic">EV</span><p>This chapter is empty. Add the events it is built from: a real mystery, a contested story, or something you invent. Puzzles go inside events.</p><div class="cx-row-btns">' + addEventBtn(c, 'Add an event to ' + chapTitle(c), true) + '</div></div>';
+    return sec('Summary', ed(c.id, 'summary', c.summary, 'What happens in this chapter? One or two lines.')) +
+      sec('Outline', outline + (evs.length ? '<div class="cx-ol-foot">' + addEventBtn(c, 'Add an event', false) + '</div>' : ''),
+        '<span class="note">events in order, puzzles inside them</span><button type="button" class="btn sm" data-act="export-chapter" data-id="' + c.id + '">' + IC.exp + 'Export chapter</button>', evs.length) +
+      (unplaced.length ? sec('Not placed yet', lrows(unplaced.map(function (e) { return e.id; }), function (x) { return '<button type="button" class="btn ghost sm" data-act="place-event" data-id="' + esc(x) + '" data-ch="' + esc(c.id) + '">' + IC.plus + 'Add to this chapter</button>'; }), '<span class="note">the parking lot</span>', unplaced.length) : '') +
+      sec('Assets first needed here', lrows(D.assets.filter(function (a) { return a.chapter === c.id; }).map(function (a) { return a.id; }), function (x) { return stChip('asset', K.get(x).status); }, 'No assets are first needed in this chapter.'));
   }
   function bodyQuestion(q) {
     var h = refsSec(q.id, 'links', 'Affects', { add: 'Link', side: layerSide });
@@ -1068,7 +1205,7 @@
       sec('Tags', tagsEditor(r.id)) +
       refsSec(r.id, 'supports', 'Supports', { add: 'Link to…', side: layerSide, empty: 'Supports nothing yet.' });
   }
-  var PROMOTE = [['puzzle', 'Puzzle'], ['mystery', 'Mystery'], ['character', 'Character'], ['question', 'Question'], ['research', 'Research'], ['note', 'Note']];
+  var PROMOTE = [['puzzle', 'Puzzle'], ['event', 'Event'], ['character', 'Character'], ['question', 'Question'], ['research', 'Research'], ['note', 'Note']];
   function bodyIdea(i) {
     return sec('Tags', tagsEditor(i.id)) +
       refsSec(i.id, 'links', 'Links', { add: 'Link', side: layerSide, empty: 'Not linked to anything yet.' }) +
@@ -1101,22 +1238,22 @@
       : (n.body ? '<div class="cx-note-body">' + noteHtml(n.body) + '</div>' : '<p class="cx-empty-note">Empty note. Switch to Edit to write.</p>');
     return sec('Body', inner, seg);
   }
-  var BODY = { puzzle: bodyPuzzle, mystery: bodyMystery, character: bodyCharacter, clue: bodyClue, place: bodyPlace, event: bodyEvent, asset: bodyAsset, chapter: bodyChapter, question: bodyQuestion, task: bodyTask, research: bodyResearch, idea: bodyIdea, note: bodyNote };
+  var BODY = { puzzle: bodyPuzzle, event: bodyEvent, entry: bodyEntry, character: bodyCharacter, clue: bodyClue, place: bodyPlace, asset: bodyAsset, chapter: bodyChapter, question: bodyQuestion, task: bodyTask, research: bodyResearch, idea: bodyIdea, note: bodyNote };
 
   /* ---------- the entity page ---------- */
   function eyebrow(o, t) {
     var bits = [K.TYPES[t].label];
-    if (t === 'puzzle') { bits.push(chapFull(o.chapter)); bits.push(pkind(o.kind)); }
+    if (t === 'puzzle') { bits.push(o.chapter ? chapShort(o.chapter) : 'no chapter yet'); bits.push(pkind(o.kind)); }
     if (t === 'clue' || t === 'character' || t === 'question' || t === 'asset' || t === 'research') bits.push(o.kind);
-    if (t === 'event') bits.push(K.fmtDate(o.date));
-    if (t === 'mystery' && o.year) bits.push(String(o.year));
+    if (t === 'entry') bits.push(K.fmtDate(o.date));
+    if (t === 'event') { bits.push(o.chapter ? chapFull(o.chapter) + (o.order ? ' · #' + o.order : '') : 'not placed yet'); if (o.when) bits.push(K.fmtDate(o.when)); }
     if (t === 'idea' && (o.tags || []).length) bits.push('#' + o.tags.join(' #'));
     return bits.filter(Boolean).join(' · ');
   }
   function renderEntity(id) {
     var o = K.get(id), t = K.type(id), ct = collToken(t), lay = K.layerOf(id);
     var collLabel = t === 'research' ? 'Research' : t === 'idea' ? 'Ideas' : COLL[TYPE_COLL[t]].label;
-    var list = K.list(t).filter(function (x) { return shown(x.id) || x.id === id; });
+    var list = (t === 'event' ? eventsSorted() : K.list(t)).filter(function (x) { return shown(x.id) || x.id === id; });
     var ix = list.findIndex(function (x) { return x.id === id; }), prev = list[ix - 1], next = list[ix + 1];
     var label = K.label(id), longT = label.length > 60 || t === 'idea' || t === 'question';
     var titleCls = 'cx-title cx-ed' + (t === 'clue' ? ' doc' : '') + (longT ? ' long' : '');
@@ -1182,7 +1319,7 @@
     else loc = 'Not found';
     var pages = 0; Object.keys(K.TYPES).forEach(function (t) { pages += K.list(t).length; });
     var off = D.layers.filter(function (l) { return !S.on[l.id]; }).map(function (l) { return l.label; });
-    V.ctx.setStatus(['Codex', loc, pages + ' pages', off.length ? 'Hiding ' + off.join(', ') : '']);
+    V.ctx.setStatus(['Codex', loc, pages + (pages === 1 ? ' page' : ' pages'), off.length ? 'Hiding ' + off.join(', ') : '']);
   }
   function fkSel(k) { return '[data-fk="' + (window.CSS && CSS.escape ? CSS.escape(k) : k) + '"]'; }
   function renderAll(keepScroll) {
@@ -1259,6 +1396,9 @@
       var f = path.split('.')[0], i = +path.split('.')[1], arr = (o[f] || []).slice();
       if (v) { arr[i] = v; msg = (f === 'solvePath' ? 'Step ' : 'Hint ') + (i + 1) + ' updated'; } else { arr.splice(i, 1); msg = (f === 'solvePath' ? 'Step ' : 'Hint ') + (i + 1) + ' removed'; }
       patch[f] = arr;
+    } else if (t === 'event' && path === 'order') {
+      if (v === '' || isNaN(+v)) { K.toast('That needs to be a number.'); renderAll(true); return; }
+      V.force = true; reorderEvent(id, Math.round(+v) - 1); return;
     } else if (kind === 'num') {
       if (v !== '' && isNaN(+v)) { K.toast('That needs to be a number.'); renderAll(true); return; }
       patch[path] = v === '' ? null : +v; msg = 'Saved ' + (PATH_LABEL[path] || path) + ' on ' + id;
@@ -1270,6 +1410,31 @@
   }
 
   /* ---------- actions ---------- */
+  /* ---------- events: order inside a chapter, moving between chapters ---------- */
+  function renumber(list) { list.forEach(function (e, i) { if (+e.order !== i + 1) K.update(e.id, { order: i + 1 }); }); }
+  function reorderEvent(eid, to) {
+    var e = K.get(eid); if (!e || !e.chapter) return;
+    var list = K.eventsIn(e.chapter).filter(function (x) { return x.id !== eid; });
+    to = Math.max(0, Math.min(list.length, to)); list.splice(to, 0, e);
+    K.batch(function () { renumber(list); });
+    K.toast(eid + ' is now #' + (to + 1) + ' in ' + chapFull(e.chapter));
+  }
+  function moveEvent(eid, ch) {
+    var e = K.get(eid), old = (e && e.chapter) || null; ch = ch || null;
+    if (!e || old === ch) return;
+    K.batch(function () {
+      K.update(eid, { chapter: ch, order: nextOrder(ch) });
+      if (old) renumber(K.eventsIn(old));
+    });
+    K.toast(ch ? 'Moved ' + eid + ' to ' + chapFull(ch) : eid + ' is back in the parking lot');
+  }
+  function newEvent(ch, stay) {
+    var nid = K.create('event', { title: 'New event', chapter: ch || null, order: nextOrder(ch || null), layer: 'pseudo' });
+    if (stay) { V.autoEdit = 'ed-' + nid + '-__title'; V.force = true; }
+    else { V.ctx.go(nid); if (V) V.autoEdit = 'ed-' + nid + '-__title'; }
+    K.toast('Added ' + nid + (ch ? ' to ' + chapFull(ch) : ' to the parking lot') + '. Name it.');
+    return nid;
+  }
   var confirmTimer;
   function pickInto(id, field) {
     var o = K.get(id), t = K.type(id), f = (F[t] || {})[field] || {}, cur = o[field] || [];
@@ -1287,7 +1452,7 @@
     var i = K.get(ideaId), snap = K.snapshot(), title = shortTitle(i.text), newId;
     var obj = {
       puzzle: { title: title, premise: i.text, notes: 'From idea ' + ideaId + '.' + (i.url ? ' ' + i.url : '') },
-      mystery: { name: title, twist: i.text, layer: 'pseudo', used: false },
+      event: { title: title, twist: i.text, layer: 'pseudo', chapter: null, order: nextOrder(null) },
       character: { name: title, role: i.text },
       question: { text: i.text, links: (i.links || []).slice() },
       research: { title: title, url: i.url || null, notes: i.text, tags: (i.tags || []).slice(), kind: i.url ? 'web' : 'other' },
@@ -1315,7 +1480,16 @@
       case 'export': V.ctx.openExport(); break;
       case 'export-chapter': V.ctx.openExport({ kind: 'chapter', id: id }); break;
       case 'go': V.ctx.go(el.dataset.to); break;
-      case 'back': if (V.navCount > 0) history.back(); else V.ctx.go(collToken(K.type(V.route.id)) || 'puzzles'); break;
+      case 'back': V.ctx.back(); break;
+      case 'import': V.ctx.openImport(); break;
+      case 'new-event': newEvent(el.dataset.ch || null, V.route.kind === 'entity' && K.type(V.route.id) === 'chapter'); break;
+      case 'new-puzzle-in':
+        var pid = K.create('puzzle', { event: id, title: 'Untitled puzzle' });
+        V.ctx.go(pid); if (V) V.autoEdit = 'ed-' + pid + '-__title';
+        K.toast('Added ' + pid + ' to ' + trunc(K.label(id), 40) + '. Name it.');
+        break;
+      case 'ev-move': var ev0 = K.get(id), ix = K.eventsIn(ev0.chapter || null).findIndex(function (x) { return x.id === id; }); reorderEvent(id, ix + (+el.dataset.d)); break;
+      case 'place-event': moveEvent(id, el.dataset.ch); break;
       case 'lmenu': V.lmenu = !V.lmenu; renderAll(true); if (V.lmenu) { var lb = $('.cx-lmenu button[aria-checked="true"]', V.root); if (lb) lb.focus(); } break;
       case 'set-layer': V.lmenu = false; if (K.layerOf(id) === el.dataset.layer) { renderAll(true); break; } V.refocusKey = 'lmenu'; update(id, { layer: el.dataset.layer }, (IDPAT.test(id) ? id : K.label(id)) + ' moved to ' + K.layer(el.dataset.layer).label); break;
       case 'diff': update(id, { difficulty: +el.dataset.n }, id + ' difficulty: ' + el.dataset.n + ' of 5'); break;
@@ -1369,11 +1543,6 @@
       case 'note-mode': saveNoteNow(); V.noteMode[id] = el.dataset.mode; V.refocusKey = el.dataset.mode === 'edit' ? 'note-ta-' + id : 'note-preview'; renderAll(true); break;
       case 'promote': promote(id, el.dataset.as); break;
       case 'add-guard': V.autoEdit = 'ed-' + id + '-guard'; update(id, { guard: 'Real person. Use documented facts only.' }, 'Guard added to ' + K.label(id)); break;
-      case 'new-in-chapter':
-        var nid = K.create('puzzle', { chapter: id, title: 'Untitled puzzle' });
-        V.ctx.go(nid); if (V) V.autoEdit = 'ed-' + nid + '-__title';
-        K.toast('Created ' + nid + ' in chapter ' + o.n + '. Name it.');
-        break;
     }
   }
   function saveListItem(inp) {
@@ -1419,6 +1588,14 @@
       }
       function onChange(e) { if (V !== me) return;
         var el = e.target, id = el.dataset.id;
+        if (el.matches('[data-move-puzzle]')) {
+          var mp = el.dataset.movePuzzle, cur = (K.get(mp) || {}).event || '';
+          if (el.value === cur) return;
+          update(mp, { event: el.value || null }, el.value ? 'Moved ' + mp + ' to ' + trunc(K.label(el.value), 40) : mp + ' is out of any event now');
+          return;
+        }
+        if (el.matches('[data-move-event]')) { if (el.value !== ((K.get(el.dataset.moveEvent) || {}).chapter || '')) moveEvent(el.dataset.moveEvent, el.value || null); return; }
+        if (el.matches('[data-set="chapter"]') && K.type(id) === 'event') { V.refocusKey = el.getAttribute('data-fk'); moveEvent(id, el.value || null); return; }
         if (el.matches('[data-set]')) {
           var val = el.value; if (el.dataset.num) val = +val; if (el.dataset.null && val === '') val = null;
           var p = {}; p[el.dataset.set] = val;
@@ -1439,7 +1616,7 @@
       function onSubmit(e) { if (V !== me) return; if (e.target.matches('[data-form="new"]')) { e.preventDefault(); createNew(e.target); } }
       function onKey(e) { if (V !== me) return;
         var el = e.target;
-        if (el.classList.contains('cx-add-in')) { if (e.key === 'Enter') { e.preventDefault(); saveListItem(el); } else if (e.key === 'Escape') { V.adding = null; renderAll(true); } return; }
+        if (el.classList.contains('cx-add-in')) { if (e.key === 'Enter') { e.preventDefault(); saveListItem(el); } else if (e.key === 'Escape') { e.preventDefault(); V.adding = null; V.refocusKey = 'add-' + el.dataset.f; renderAll(true); } return; }
         if (el.classList.contains('cx-tag-in')) {
           if (e.key === 'Enter' || e.key === ',') {
             e.preventDefault();
@@ -1450,10 +1627,11 @@
             V.refocusKey = el.getAttribute('data-fk');
             update(el.dataset.id, { tags: tags.concat([tg]) }, 'Tagged #' + tg);
           }
+          if (e.key === 'Escape') { e.preventDefault(); el.value = ''; el.blur(); }
           return;
         }
-        if (el.id === 'cx-flt' && e.key === 'Escape') { if (el.value) { el.value = ''; view(V.route.key).q = ''; renderBody(V.route.key); } else el.blur(); return; }
-        if (el.closest && el.closest('[data-form="new"]') && e.key === 'Escape') { V.newOpen = false; V.refocusKey = 'new'; renderAll(true); return; }
+        if (el.id === 'cx-flt' && e.key === 'Escape') { e.preventDefault(); if (el.value) { el.value = ''; view(V.route.key).q = ''; renderBody(V.route.key); } else el.blur(); return; }
+        if (el.closest && el.closest('[data-form="new"]') && e.key === 'Escape') { e.preventDefault(); V.newOpen = false; V.refocusKey = 'new'; renderAll(true); return; }
         if (el.matches('tr.row, .cx-card')) {
           if (e.key === 'Enter') { e.preventDefault(); V.ctx.go(el.dataset.id); }
           else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
@@ -1463,7 +1641,10 @@
           return;
         }
         if (el.matches('.cx-ed') && !el.classList.contains('editing') && e.key === 'Enter') { e.preventDefault(); startEdit(el); return; }
-        if (e.key === 'Escape' && V.lmenu) { V.lmenu = false; V.refocusKey = 'lmenu'; renderAll(true); }
+        if (e.key === 'Escape' && V.lmenu) { e.preventDefault(); V.lmenu = false; V.refocusKey = 'lmenu'; renderAll(true); return; }
+        if (e.key === 'Escape' && V.confirmDel) { e.preventDefault(); V.confirmDel = null; V.refocusKey = 'delete'; renderAll(true); return; }
+        if (e.key === 'Escape' && V.confirm) { e.preventDefault(); V.confirm = null; renderAll(true); return; }
+        if (e.key === 'Escape' && V.adding) { e.preventDefault(); V.adding = null; renderAll(true); return; }
       }
       function onFocusOut(e) { if (V !== me) return;
         if (e.target.classList && e.target.classList.contains('cx-note-ta')) saveNoteNow();

@@ -1,5 +1,5 @@
 /* ============================================================
-   ARG DESK (round 2) — Library view (research + ideas)
+   ARG Desk — Library view (research + ideas)
    Every selector is scoped to .v-library. Tokens only.
    ============================================================ */
 .v-library { background: var(--bg); }
@@ -46,6 +46,41 @@
 }
 .v-library .lib-qa-hint b { font-family: var(--font-mono); font-weight: 500; font-size: var(--text-2xs); color: var(--text); }
 .v-library .lib-qa:focus-within .lib-qa-hint { display: block; }
+
+/* empty tab: the top bar carries only the tabs; the capture box sits in the hero */
+.v-library .lib-top.is-bare { padding-top: 11px; padding-bottom: 11px; }
+
+/* ---------- empty state: capture front and centre ---------- */
+.v-library .lib-hero {
+  max-width: 640px; margin: 6vh auto 28px; padding: 28px 28px 22px;
+  display: grid; gap: 14px; justify-items: start;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg);
+}
+.v-library .lib-hero-ico {
+  font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.04em; line-height: 18px; padding: 0 6px;
+  color: var(--accent); border: 1px solid var(--accent); border-radius: 3px; background: var(--accent-bg);
+}
+.v-library .lib-hero h2 { font-size: var(--text-xl); font-weight: 600; line-height: 1.25; }
+.v-library .lib-hero p { color: var(--text-muted); font-size: var(--text-sm); line-height: 1.6; max-width: 62ch; }
+.v-library .lib-hero-flow { display: flex; align-items: center; gap: 6px; }
+.v-library .lib-hero-flow i { width: 14px; height: 1px; background: var(--border-strong); }
+.v-library .lib-qa.is-hero { width: 100%; max-width: none; flex: none; }
+.v-library .lib-qa.is-hero .lib-qa-field { height: 44px; padding-left: 12px; border-color: var(--border-strong); background: var(--bg); }
+.v-library .lib-qa.is-hero .lib-qa-field:focus-within { border-color: var(--accent); }
+.v-library .lib-qa.is-hero .lib-qa-in { font-size: var(--text-base); }
+.v-library .lib-qa.is-hero .lib-qa-btn { height: 44px; padding: 0 16px; font-size: var(--text-sm); }
+.v-library .lib-hero-tips { list-style: none; display: grid; gap: 4px; width: 100%; padding-top: 12px; border-top: 1px dashed var(--border); }
+.v-library .lib-hero-tips li { display: flex; align-items: baseline; gap: 10px; font-size: var(--text-xs); color: var(--text-muted); min-width: 0; }
+.v-library .lib-hero-tips b { font-family: var(--font-mono); font-weight: 500; font-size: var(--text-2xs); color: var(--text); background: var(--surface-2); border: 1px solid var(--border); border-radius: 3px; padding: 0 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 60%; flex: none; }
+.v-library .id-board.is-empty { opacity: 0.85; }
+.v-library .id-board.is-empty .lib-col-empty { padding: 26px 12px; }
+.v-library .lib-lanes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 4px; }
+.v-library .lib-lane { display: grid; gap: 2px; padding: 8px 10px; border: 1px dashed var(--border); border-top: 2px solid var(--col); border-radius: var(--radius-md); }
+.v-library .lib-lane.col-raw { --col: var(--accent); }
+.v-library .lib-lane.col-exploring { --col: var(--ws-blue-fg); }
+.v-library .lib-lane.col-used { --col: var(--success); }
+.v-library .lib-lane.col-parked { --col: var(--text-faint); }
+.v-library .lib-lane .lib-col-d { margin-left: 0; white-space: normal; font-size: var(--text-xs); }
 
 /* ---------- body + toolbar ---------- */
 .v-library .lib-body { padding: 16px 24px 96px; max-width: 1320px; }
@@ -113,15 +148,19 @@
 .v-library .lib-risk-h .chev { width: 16px; height: 16px; color: var(--text-muted); flex: none; transition: transform var(--transition); }
 .v-library .lib-risk-h[aria-expanded="false"] .chev { transform: rotate(-90deg); }
 .v-library .lib-risk-list { border-top: 1px solid var(--ws-amber-bd); background: var(--surface); }
-.v-library .lib-risk-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 14px; align-items: center; padding: 5px 12px; border-bottom: 1px solid var(--border); font-size: var(--text-sm); }
+.v-library .lib-risk-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 340px) auto; gap: 14px; align-items: center; padding: 5px 12px; border-bottom: 1px solid var(--border); font-size: var(--text-sm); }
 .v-library .lib-risk-row:last-child { border-bottom: 0; }
 .v-library .lib-risk-jump { display: flex; align-items: center; gap: 8px; min-width: 0; text-align: left; color: var(--text); padding: 2px 0; }
 .v-library .lib-risk-jump:hover .lib-risk-name { text-decoration: underline; text-underline-offset: 2px; }
 .v-library .lib-risk-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.v-library .lib-risk-meta { display: inline-flex; align-items: center; gap: 10px; min-width: 0; }
+.v-library .lib-risk-meta { display: inline-flex; align-items: center; gap: 10px; min-width: 0; flex-wrap: wrap; }
+.v-library .lib-risk-more { display: block; width: 100%; padding: 6px 12px; text-align: left; font-size: var(--text-xs); color: var(--accent); }
+.v-library .lib-risk-more:hover { background: var(--surface-hover); text-decoration: underline; text-underline-offset: 2px; }
 .v-library .lib-risk-meta .lib-stag { min-width: 66px; }
 .v-library .lib-risk-deps { display: inline-flex; align-items: center; gap: 4px; font-size: var(--text-xs); flex-wrap: wrap; }
 .v-library .lib-verify svg { width: 12px; height: 12px; color: var(--success); }
+.v-library .lib-via { display: inline-flex; align-items: center; gap: 4px; }
+.v-library .lib-via .faint { font-size: var(--text-2xs); }
 
 /* status tag (mono, small) */
 .v-library .lib-stag {
@@ -210,8 +249,6 @@
   font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.02em; color: var(--warn); background: var(--warn-bg);
 }
 .v-library .lib-mk svg { width: 11px; height: 11px; }
-.v-library .btn.danger { color: var(--error); border-color: var(--error); background: var(--error-bg); }
-.v-library .btn.danger:hover { color: var(--error); border-color: var(--error); filter: brightness(1.1); }
 .v-library .lib-del:hover { color: var(--error); }
 .v-library .lib-confirm { display: inline-flex; align-items: center; gap: 6px; font-size: var(--text-xs); color: var(--text); flex-wrap: wrap; }
 .v-library .lib-empty {
@@ -264,6 +301,7 @@
 .v-library .rs-grp-h { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid var(--border); font-size: var(--text-xs); font-weight: 600; }
 .v-library .rs-grp-h .count { font-family: var(--font-mono); font-size: var(--text-2xs); color: var(--text-faint); font-weight: 400; }
 .v-library .lib-grp-tag { font-family: var(--font-mono); font-size: var(--text-xs); }
+.v-library .lib-grp-ch { font-family: var(--font-mono); font-size: var(--text-2xs); font-weight: 400; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.05em; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .v-library .lib-grp-note { font-size: var(--text-xs); color: var(--text-faint); margin: -4px 0 12px; }
 
 /* ---------- ideas: board ---------- */
@@ -383,6 +421,15 @@
   .v-library .lib-qa-btn { height: 42px; padding: 0 16px; font-size: var(--text-base); }
   .v-library .lib-qa-hint { left: 16px; right: 16px; }
   .v-library .lib-body { padding: 12px 16px 40px; }
+  .v-library .lib-top.is-bare .lib-tabs { padding-bottom: 4px; }
+  .v-library .lib-hero { margin: 8px 0 16px; padding: 20px 16px 16px; }
+  .v-library .lib-hero h2 { font-size: var(--text-lg); }
+  .v-library .lib-qa.is-hero { position: static; padding: 0; border: 0; background: transparent; }
+  .v-library .lib-qa.is-hero .lib-qa-in { font-size: 16px; }
+  .v-library .lib-qa.is-hero { flex-wrap: wrap; }
+  .v-library .lib-qa.is-hero .lib-qa-field { flex: 1 1 100%; }
+  .v-library .lib-qa.is-hero .lib-qa-btn { flex: 1 1 100%; }
+  .v-library .lib-hero-tips b { max-width: 55%; }
 
   .v-library .lib-search { flex: 1 1 0; min-width: 0; }
   .v-library .lib-ffold { display: inline-flex; height: 36px; gap: 6px; padding: 0 10px 0 12px; color: var(--text-muted); }
