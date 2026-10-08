@@ -103,6 +103,8 @@ button,select,input{font:inherit;color:inherit}
 .ic.diff{background:rgb(var(--warn)/.20);color:rgb(185 125 30)}
 html[data-mode="dark"] .ic.diff{color:rgb(var(--warn))}
 .ic.only{background:rgb(var(--bad)/.18);color:rgb(200 95 85)}
+.ic.unrel{background:rgb(var(--bad)/.12);color:rgb(200 95 85)}
+.ic.pend{background:var(--panel3);color:var(--faint)}
 html[data-mode="dark"] .ic.only{color:rgb(var(--bad))}
 .unlink{border:0;background:none;color:var(--faint);cursor:pointer;font-size:12px;padding:0 2px}
 .unlink:hover{color:var(--text)}
@@ -160,6 +162,8 @@ html[data-mode="dark"] .pill.only{color:rgb(var(--bad))}
 .ln,.fill,.fold,.g,.m{height:var(--lh)}
 .ln{padding:0 12px 0 10px;position:relative}
 .wrapmode .ln{white-space:pre-wrap;overflow-wrap:anywhere;height:auto;min-height:var(--lh)}
+.fill.blank{background:none!important;cursor:text}
+.fill{cursor:text}
 .fill{background:repeating-linear-gradient(135deg,transparent 0 5px,var(--hatch) 5px 6px);user-select:none}
 .g{padding:0 8px 0 4px;position:relative;display:flex;align-items:center;justify-content:flex-end;gap:4px}
 .g.chg{color:var(--text);background:rgb(var(--hl)/var(--a1));box-shadow:inset 3px 0 rgb(var(--hl))}
@@ -315,6 +319,7 @@ html[data-mode="dark"] .pill.only{color:rgb(var(--bad))}
     <button class="chip" data-opt="wrap" title="Wrap long lines (rows stay aligned)">Wrap</button>
     <button class="chip" data-opt="syntax" title="Syntax colouring">Syntax</button>
     <button class="chip" data-opt="sync" title="Synchronise scrolling of both sides">Sync scroll</button>
+    <button class="chip" data-opt="smartIndent" title="Re-indent pasted code and merged changes to fit the surrounding block (Python-safe); Enter indents after ':' / '{'">Smart indent</button>
     <select class="sel" id="intra" title="Inline (intra-line) highlighting granularity">
       <option value="word">Inline: words</option><option value="char">Inline: chars</option><option value="none">Inline: off</option>
     </select>
@@ -725,7 +730,7 @@ function patience(a, b, a0, a1, b0, b1) {
   return res.reverse();
 }
 function myers(a, b, a0, a1, b0, b1, out) {
-  const N = a1 - a0, M = b1 - b0, LIM = Math.min(N + M, 2500), off = LIM + 1;
+  const N = a1 - a0, M = b1 - b0, LIM = Math.min(N + M, N * M > 4e6 ? 600 : 1500), off = LIM + 1;
   const v = new Int32Array(2 * LIM + 3); v[off + 1] = 0; const trace = []; let D = -1;
   for (let d = 0; d <= LIM && D < 0; d++) {
     trace.push(v.slice(off - d - 1, off + d + 2));
@@ -748,12 +753,35 @@ function myers(a, b, a0, a1, b0, b1, out) {
   }
   for (let i = res.length - 1; i >= 0; i--) out.push(res[i]);
 }
-function sim(a, b) {
-  a = a.trim().slice(0, 400); b = b.trim().slice(0, 400);
-  if (a === b) return 1; if (a.length < 2 || b.length < 2) return 0;
-  const m = new Map(); for (let i = 0; i < a.length - 1; i++) { const g = a.substr(i, 2); m.set(g, (m.get(g) || 0) + 1); }
-  let hit = 0; for (let i = 0; i < b.length - 1; i++) { const g = b.substr(i, 2); const c = m.get(g); if (c) { hit++; m.set(g, c - 1); } }
-  return 2 * hit / (a.length + b.length - 2);
+// bigram similarity on pre-sorted integer arrays (no Maps / substrings → no garbage)
+function bigrams(s) {
+  s = s.trim(); if (s.length > 300) s = s.slice(0, 300);
+  const n = Math.max(0, s.length - 1); const a = new Int32Array(n);
+  for (let i = 0; i < n; i++) a[i] = (s.charCodeAt(i) << 16) | s.charCodeAt(i + 1);
+  return a.sort();
+}
+function simBG(a, b) {
+  if (!a.length || !b.length) return 0; let i = 0, j = 0, h = 0;
+  while (i < a.length && j < b.length) { if (a[i] === b[j]) { h++; i++; j++; } else if (a[i] < b[j]) i++; else j++; }
+  return 2 * h / (a.length + b.length);
+}
+// cheap pre-check: are two files worth diffing line-by-line at all?
+function comparability(A, B) {
+  const blank = L => { for (const l of L) if (l.trim()) return false; return true; };
+  const bA = blank(A), bB = blank(B);
+  if (bA !== bB) return { reason: 'empty', side: bA ? 'L' : 'R', pct: 0 };
+  if (bA) return null;
+  const norm = l => l.toLowerCase().replace(/\s+/g, '');
+  const set = new Set(); let nA = 0; for (const l of A) { const t = norm(l); if (t.length > 2) { set.add(t); nA++; } }
+  let nB = 0, hit = 0; for (const l of B) { const t = norm(l); if (t.length > 2) { nB++; if (set.has(t)) hit++; } }
+  if (Math.min(nA, nB) < 12) return null;
+  const pct = hit / nB;
+  return pct < 0.06 ? { reason: 'unrelated', pct: Math.round(pct * 100) } : null;
+}
+function rawDiff(A, B, pre) {
+  const n = Math.max(A.length, B.length), rows = new Array(n);
+  for (let i = 0; i < n; i++) rows[i] = { t: 'raw', l: i < A.length ? i : null, r: i < B.length ? i : null, c: null };
+  return { rows, chunks: [], st: { add: 0, del: 0, mod: 0, mov: 0, eq: 0, soft: 0, ign: 0, ca: 0, cd: 0 }, diffs: 0, same: false, equiv: false, sim: pre.pct || 0, nA: A.length, nB: B.length, raw: pre };
 }
 
 const EXACT = { ws: 'exact', icase: false, iblank: false, icomments: false, iquotes: false, ipunct: false, iorder: false, iattr: false, intra: 'word' };
@@ -777,7 +805,8 @@ function makeKeyer(o) {
 /* intra-line diff */
 const TOKW = /\s+|[\p{L}\p{N}_]+|[^\s\p{L}\p{N}_]/gu;
 function intra(a, b, o, mode) {
-  if (a.length + b.length > 6000) return { a: [[0, a.length]], b: [[0, b.length]], na: a.length, nb: b.length, full: true };
+  if (a.length + b.length > 4000) return { a: [[0, a.length]], b: [[0, b.length]], na: a.length, nb: b.length, full: true };
+  if (mode === 'char' && a.length + b.length > 1500) mode = 'word';
   const tok = s => { const r = []; if (mode === 'char') { let p = 0; for (const ch of s) { r.push([p, ch]); p += ch.length; } return r; } let m; TOKW.lastIndex = 0; while ((m = TOKW.exec(s))) r.push([m.index, m[0]]); return r; };
   const ta = tok(a), tb = tok(b);
   const wsI = o.ws !== 'exact';
@@ -805,17 +834,18 @@ function intra(a, b, o, mode) {
 function alignHunk(D, I, kA, kB, igA, igB, movable) {
   const n = D.length, m = I.length;
   if (!n) return I.map(j => [-1, j]); if (!m) return D.map(i => [i, -1]);
-  if (n * m > 40000) {
+  if (n * m > 20000) {
     const out = []; const k = Math.min(n, m);
     for (let x = 0; x < k; x++) out.push([D[x], I[x]]);
     for (let x = k; x < n; x++) out.push([D[x], -1]); for (let x = k; x < m; x++) out.push([-1, I[x]]);
     return out;
   }
+  const gA = D.map(i => bigrams(kA[i])), gB = I.map(j => bigrams(kB[j]));
   const W = (x, y) => {
     const i = D[x], j = I[y]; if (igA[i] || igB[j]) return -1;
     const ka = kA[i], kb = kB[j]; if (ka === kb) return 2;
     if (movable.has(ka) || movable.has(kb)) return -1;
-    return 0.02 + sim(ka, kb);
+    return 0.02 + simBG(gA[x], gB[y]);
   };
   const w = m + 1; const S = new Float64Array((n + 1) * w); const B = new Uint8Array((n + 1) * w);
   for (let x = 0; x <= n; x++) for (let y = 0; y <= m; y++) {
@@ -836,6 +866,7 @@ function alignHunk(D, I, kA, kB, igA, igB, movable) {
 
 function computeDiff(fA, fB, o, light) {
   const A = fA ? fA.lines : [], B = fB ? fB.lines : [];
+  if (fA && fB && !o.force && !S.forceCmp.has(fA.id + ':' + fB.id)) { const pre = comparability(A, B); if (pre) return rawDiff(A, B, pre); }
   const keyer = makeKeyer(o);
   const cA = o.icomments && fA ? scanOf(fA).code : A, cB = o.icomments && fB ? scanOf(fB).code : B;
   const kA = A.map((l, i) => keyer(l, cA[i])), kB = B.map((l, i) => keyer(l, cB[i]));
@@ -891,6 +922,8 @@ function computeDiff(fA, fB, o, light) {
   rows.forEach((r, i) => { if (r.t !== 'ins') return; const lst = dels.get(kB[r.r]); if (lst && lst.length) { const di = lst.shift(); rows[di].t = 'mov'; rows[di].mv = i; r.t = 'mov'; r.mv = di; } });
 
   const st = { add: 0, del: 0, mod: 0, mov: 0, eq: 0, soft: 0, ign: 0, ca: 0, cd: 0 };
+  let modN = 0; for (const r of rows) if (r.t === 'mod') modN++;
+  if (modN > 3000) { light = true; st.approx = true; } // inline diff computed lazily while rendering instead
   for (const r of rows) {
     switch (r.t) {
       case 'eq': st.eq++; break;
@@ -923,14 +956,14 @@ function computeDiff(fA, fB, o, light) {
 /* =========================================================================
    State
    ========================================================================= */
-const DEF = { compact: false, ctx: 3, wrap: false, syntax: true, sync: true, intra: 'word', ws: 'exact', icase: false, iblank: false, icomments: false, iquotes: false, ipunct: false, iorder: false, iattr: false, tab: 4, theme: 'auto', showOpts: true, fileFilter: 'all' };
+const DEF = { smartIndent: true, compact: false, ctx: 3, wrap: false, syntax: true, sync: true, intra: 'word', ws: 'exact', icase: false, iblank: false, icomments: false, iquotes: false, ipunct: false, iorder: false, iattr: false, tab: 4, theme: 'auto', showOpts: true, fileFilter: 'all' };
 const savedSide = store.get('side', {});
 const S = {
   files: { L: [], R: [] }, cur: { L: null, R: null }, links: [], pairs: [],
   opts: Object.assign({}, DEF, store.get('opts', {})),
   side: { L: Object.assign({ label: '', color: 'teal' }, savedSide.L), R: Object.assign({ label: '', color: 'teal' }, savedSide.R) },
   d: null, vis: [], rowToVis: null, lineEl: { L: [], R: [] }, curChunk: -1, expanded: new Set(),
-  composing: false, lastMs: 0, statusCache: new Map(), filesOpen: null
+  composing: false, lastMs: 0, statusCache: new Map(), filesOpen: null, forceCmp: new Set(), wrapOn: false
 };
 const saveOpts = () => store.set('opts', S.opts);
 const saveSide = () => store.set('side', S.side);
@@ -982,25 +1015,32 @@ async function readFile(file, path) {
   if (u8[0] === 0xFF && u8[1] === 0xFE) { enc = 'utf-16le'; text = new TextDecoder('utf-16le', { ignoreBOM: true }).decode(buf); }
   else if (u8[0] === 0xFE && u8[1] === 0xFF) { enc = 'utf-16be'; text = new TextDecoder('utf-16be', { ignoreBOM: true }).decode(buf); }
   else {
+    const n = Math.min(u8.length, 4096); let ze = 0, zo = 0; for (let i = 0; i < n; i++) if (!u8[i]) (i & 1 ? zo++ : ze++);
+    if (n >= 4 && zo > n * 0.2 && ze < n * 0.02) { enc = 'utf-16le'; text = new TextDecoder('utf-16le').decode(buf); }
+    else if (n >= 4 && ze > n * 0.2 && zo < n * 0.02) { enc = 'utf-16be'; text = new TextDecoder('utf-16be').decode(buf); }
+  }
+  if (text === undefined) {
     text = new TextDecoder('utf-8', { ignoreBOM: true }).decode(buf);
     if (text.includes('�')) { enc = 'windows-1252'; text = new TextDecoder('windows-1252').decode(buf); }
   }
   if (/\u0000/.test(text.slice(0, 8000))) return null; // binary
   return mkFile(file.name, text, { path: path || file.webkitRelativePath || file.name, enc });
 }
-const SKIP_DIR = /(^|\/)(\.git|node_modules|__pycache__|\.venv|venv|\.idea|\.vs|bin|obj|dist)\//i;
+const SKIP_DIR = /(^|\/)(\.git|\.svn|\.hg|node_modules|__pycache__|\.venv|\.idea|\.vs)\//i;
 async function loadFileList(s, list) {
-  const out = []; let skipped = 0;
+  const out = []; const why = { binary: 0, large: 0, ignored: 0, error: 0 };
   const folderMode = list.some(x => x.path && x.path.includes('/'));
   for (const { file, path } of list) {
     let p = (path || file.webkitRelativePath || file.name).replace(/\\/g, '/').replace(/^\/+/, '');
-    if (SKIP_DIR.test(p) || file.size > 8e6) { skipped++; continue; }
-    if (folderMode && p.includes('/')) p = p.split('/').slice(1).join('/') || p;
-    try { const f = await readFile(file, p); if (f) out.push(f); else skipped++; } catch { skipped++; }
+    if (folderMode && p.includes('/')) p = p.split('/').slice(1).join('/') || p;   // drop the picked folder's own name
+    if (SKIP_DIR.test('/' + p)) { why.ignored++; continue; }
+    if (file.size > 15e6) { why.large++; continue; }
+    try { const f = await readFile(file, p); if (f) out.push(f); else why.binary++; } catch { why.error++; }
   }
-  if (!out.length) { toast(skipped ? `No text files found (${skipped} skipped)` : 'No files', 'warn'); return; }
+  const sk = Object.entries(why).filter(([, n]) => n).map(([k, n]) => `${n} ${k === 'ignored' ? 'in .git/node_modules-type folders' : k === 'large' ? 'over 15 MB' : k === 'error' ? 'unreadable' : 'binary'}`).join(', ');
+  if (!out.length) { toast(sk ? `No text files loaded — skipped ${sk}` : 'No files', 'warn'); return; }
   addFiles(s, out);
-  toast(`Loaded ${out.length} file${out.length > 1 ? 's' : ''} into ${sideName(s)}${skipped ? ` · ${skipped} skipped (binary/large/ignored folders)` : ''}`);
+  toast(`Loaded ${out.length} file${out.length > 1 ? 's' : ''} into ${sideName(s)}${sk ? ` · skipped ${sk}` : ''}`);
 }
 async function entriesToFiles(items) {
   const out = [];
@@ -1120,13 +1160,15 @@ function render(caret) {
   if (S.curChunk >= 0 && d.chunks[S.curChunk]) force.push(d.chunks[S.curChunk].r0);
   const vis = buildVis(force); S.vis = vis; S.rowToVis = new Int32Array(d.rows.length).fill(-1);
   vis.forEach((v, vi) => { if (typeof v === 'number') S.rowToVis[v] = vi; });
-  S.rc = []; S.virtual = !S.opts.wrap && vis.length > VIRT_MIN; S.win = null;
+  const wantWrap = !!S.opts.wrap; S.wrapOn = wantWrap && vis.length <= 4000;
+  if (wantWrap && !S.wrapOn && !S.wrapWarned) { S.wrapWarned = true; toast('Wrap is paused for very large files (keeps scrolling fast)', 'warn'); }
+  S.rc = []; S.virtual = !S.wrapOn && vis.length > VIRT_MIN; S.win = null;
   for (const s of ['L', 'R']) {
     const f = cur(s);
     E.gut[s].style.setProperty('--gw', String(Math.max(2, String(f ? f.lines.length : 1).length)));
     E.code[s].contentEditable = f ? (PLAIN ? 'plaintext-only' : 'true') : 'false';
   }
-  E.diff.classList.toggle('wrapmode', !!S.opts.wrap);
+  E.diff.classList.toggle('wrapmode', !!S.wrapOn);
   renderWindow(true);
   renderRuler();
 }
@@ -1148,13 +1190,13 @@ function rowHTML(vi) {
   for (const s of ['L', 'R']) {
     const ln = s === 'L' ? row.l : row.r; const f = files[s];
     if (ln == null || !f) {
-      H[s] = '<div class="fill" contenteditable="false"></div>';
+      H[s] = `<div class="fill${row.t === 'raw' ? ' blank' : ''}" contenteditable="false" data-row="${i}"></div>`;
       G[s] = `<div class="g${c && !c.soft ? ' chg' : ''}${isCur ? ' cur' : ''}">${c && c.r0 === i ? mgBtn(s, row.c) : ''}</div>`;
       continue;
     }
     let cls = 'ln', gcls = 'g', rng = null, rcls = 'x';
     switch (row.t) {
-      case 'mod': cls += ' chg'; gcls += ' chg'; if (row.x) { if (row.x.full) cls += ' full'; else rng = s === 'L' ? row.x.a : row.x.b; } break;
+      case 'mod': cls += ' chg'; gcls += ' chg'; if (!row.x && files.L && files.R && S.opts.intra !== 'none') row.x = intra(files.L.lines[row.l], files.R.lines[row.r], S.opts, S.opts.intra === 'char' ? 'char' : 'word'); if (row.x) { if (row.x.full) cls += ' full'; else rng = s === 'L' ? row.x.a : row.x.b; } break;
       case 'del': case 'ins': cls += ' chg full'; gcls += ' chg'; break;
       case 'mov': cls += ' mov'; gcls += ' mov'; break;
       case 'ign': cls += ' ign'; break;
@@ -1217,14 +1259,14 @@ function renderWindow(force) {
   E.gut.L.innerHTML = cols[2].join(''); E.gut.R.innerHTML = cols[3].join(''); E.midIn.innerHTML = cols[4].join('');
   S.win = [w0, w1];
   for (const s of ['L', 'R']) { const arr = []; for (const el of E.code[s].children) { const ln = el.dataset.ln; if (ln !== undefined) arr[+ln] = el; } S.lineEl[s] = arr; }
-  if (S.opts.wrap) syncHeights();
+  if (S.wrapOn) syncHeights();
   if (caret) { if (S.lineEl[caret.s][caret.a.l]) { E.code[caret.s].focus({ preventScroll: true }); setModelSel(caret.s, caret.a, caret.b); } else E.code[caret.s].blur(); }
   return true;
 }
 // DOM child index of a visual row (or -1 if not rendered)
 function domIdx(vi) { if (!S.win) return -1; if (vi < S.win[0] || vi >= S.win[1]) return -1; return vi - S.win[0] + (S.win[0] > 0 ? 1 : 0); }
 function rowTop(vi) {
-  if (!S.opts.wrap) return vi * LH;
+  if (!S.wrapOn) return vi * LH;
   const el = E.code.L.children[domIdx(vi)]; return el ? el.offsetTop : vi * LH;
 }
 let winRaf = 0;
@@ -1251,7 +1293,7 @@ function renderRuler() {
   E.ruler.innerHTML = html + '<div class="rview" id="rview"></div>'; E.rview = $('#rview'); updateViewport();
 }
 function contentH() {
-  if (!S.opts.wrap) return Math.max(1, S.vis.length * LH);
+  if (!S.wrapOn) return Math.max(1, S.vis.length * LH);
   const c = E.code.L; return Math.max(1, c.offsetHeight - parseFloat(getComputedStyle(c).paddingBottom || 0));
 }
 function updateViewport() {
@@ -1265,6 +1307,8 @@ function updateStats() {
   const d = S.d, fL = cur('L'), fR = cur('R'), st = d.st;
   let pill;
   if (fL && fR && isBlankScratch(fL) && isBlankScratch(fR)) pill = '<span class="pill">Empty — add files or text</span>';
+  else if (d.raw && d.raw.reason === 'empty') pill = `<span class="pill">Not compared — ${esc(sideName(d.raw.side))} is empty</span>`;
+  else if (d.raw) pill = `<span class="pill only" title="Line-by-line diff skipped to save time and memory">≠ Too different — ${d.raw.pct}% shared lines</span>`;
   else if (!fL || !fR) pill = `<span class="pill only">◐ Only in ${esc(sideName(fL ? 'L' : 'R'))}</span>`;
   else if (d.same) pill = '<span class="pill same">✓ Identical</span>';
   else if (d.equiv) pill = '<span class="pill equiv">≈ Equivalent</span>';
@@ -1282,13 +1326,13 @@ function updateStats() {
   const pos = chunksReal.findIndex(([, i]) => i === S.curChunk);
   E.stats.innerHTML = `${pill}
     <span class="st" title="Lines in ${esc(sideName('L'))} / ${esc(sideName('R'))}">lines <b>${fmt(d.nA)}</b> / <b>${fmt(d.nB)}</b></span>
-    <span class="st add" title="Lines only in ${esc(sideName('R'))}">added <b>+${fmt(st.add)}</b></span>
+    ${d.raw ? '' : `<span class="st add" title="Lines only in ${esc(sideName('R'))}">added <b>+${fmt(st.add)}</b></span>
     <span class="st del" title="Lines only in ${esc(sideName('L'))}">removed <b>−${fmt(st.del)}</b></span>
     <span class="st" title="Lines changed on both sides">modified <b>~${fmt(st.mod)}</b></span>
     ${st.mov ? `<span class="st mov" title="Lines that moved position">moved <b>↕${fmt(st.mov)}</b></span>` : ''}
-    <span class="st opt" title="Characters added / removed (inline diff)">chars <b style="color:rgb(var(--hlR))">+${fmt(st.ca)}</b> <b style="color:rgb(var(--hlL))">−${fmt(st.cd)}</b></span>
+    <span class="st opt" title="Characters added / removed (inline diff)">chars${st.approx ? ' ≈' : ''} <b style="color:rgb(var(--hlR))">+${fmt(st.ca)}</b> <b style="color:rgb(var(--hlL))">−${fmt(st.cd)}</b></span>
     <span class="st" title="Similarity">similar <b>${d.sim}%</b> <span class="simbar"><i style="width:${d.sim}%"></i></span></span>
-    ${ignored ? `<span class="st" title="Differences hidden by your Ignore options (shown with dotted underline / hatch)">ignored <b>${fmt(ignored)}</b></span>` : ''}
+    `}${ignored ? `<span class="st" title="Differences hidden by your Ignore options (shown with dotted underline / hatch)">ignored <b>${fmt(ignored)}</b></span>` : ''}
     ${notes.map(n => `<span class="note">${esc(n)}</span>`).join('')}
     <span class="dnav">
       <button class="ibtn sm" id="prevDiff" title="Previous difference (Shift+F7)"><svg viewBox="0 0 24 24"><path d="M6 15l6-6 6 6"/></svg></button>
@@ -1299,7 +1343,11 @@ function updateStats() {
 }
 function updateBanner() {
   const d = S.d, fL = cur('L'), fR = cur('R'), b = E.banner; let html = '', cls = '';
-  if ((!fL || !fR) && (fL || fR)) {
+  if (d.raw && d.raw.reason === 'unrelated') {
+    cls = 'only';
+    html = `<span class="big">≠ These files look unrelated</span><span style="color:var(--muted)">Only ${d.raw.pct}% of lines are shared, so the line-by-line diff was skipped (saves time &amp; memory). Both stay fully editable.</span>
+      <button class="btn" data-bn="force">Compare anyway</button><button class="btn" data-bn="pick" data-side="R">Pick another file…</button>`;
+  } else if ((!fL || !fR) && (fL || fR)) {
     const has = fL ? 'L' : 'R', miss = OTHER[has], f = fL || fR;
     cls = 'only';
     html = `<span class="big">“${esc(f.name)}” exists only in ${esc(sideName(has))}.</span><span style="color:var(--muted)">No matching file in ${esc(sideName(miss))}.</span>
@@ -1344,33 +1392,54 @@ function updateHeaders() {
   const many = S.files.L.filter(f => !f.scratch).length > 1 || S.files.R.filter(f => !f.scratch).length > 1;
   document.body.classList.toggle('nofiles', S.filesOpen === false || (S.filesOpen === null && !many));
 }
-function pairStatus(p) {
+const statusKey = p => `${p.L.id}:${p.L.ver}:${p.L.lang}|${p.R.id}:${p.R.ver}:${p.R.lang}|${optSig()}|${S.forceCmp.has(p.L.id + ':' + p.R.id) ? 1 : 0}`;
+function pairStatus(p, peek) {
   if (!p.L || !p.R) return { k: 'only' };
-  const key = `${p.L.id}:${p.L.ver}|${p.R.id}:${p.R.ver}|${optSig()}`;
+  const key = statusKey(p);
   if (S.statusCache.has(key)) return S.statusCache.get(key);
+  if (peek) return null;
   let r;
   if (arrEq(p.L.lines, p.R.lines)) r = { k: 'same' };
-  else { const d = computeDiff(p.L, p.R, S.opts, true); r = d.equiv ? { k: 'equiv' } : { k: 'diff', a: d.st.add + d.st.mod, r: d.st.del + d.st.mod, n: d.diffs }; }
-  S.statusCache.set(key, r); if (S.statusCache.size > 2000) S.statusCache.clear(); return r;
+  else {
+    const d = computeDiff(p.L, p.R, S.opts, true);
+    if (d.raw) r = { k: d.raw.reason === 'empty' ? 'diff' : 'unrel', a: 0, r: 0, n: 0, pct: d.raw.pct };
+    else r = d.equiv ? { k: 'equiv' } : { k: 'diff', a: d.st.add + d.st.mod, r: d.st.del + d.st.mod, n: d.diffs };
+    // free per-file caches of files that are not on screen
+    for (const f of [p.L, p.R]) if (f.id !== S.cur.L && f.id !== S.cur.R) f._scan = null;
+  }
+  if (S.statusCache.size > 3000) S.statusCache.clear();
+  S.statusCache.set(key, r); return r;
 }
 const optSig = () => ['ws', 'icase', 'iblank', 'icomments', 'iquotes', 'ipunct', 'iorder', 'iattr'].map(k => S.opts[k]).join(',');
 function renderFiles() {
   const ci = curPairIndex(); const flt = S.opts.fileFilter; const cnt = { same: 0, equiv: 0, diff: 0, only: 0 };
+  let pending = 0;
   const items = S.pairs.map((p, i) => {
-    const st = pairStatus(p); cnt[st.k]++;
-    const show = flt === 'all' || (flt === 'diff' && st.k === 'diff') || (flt === 'same' && (st.k === 'same' || st.k === 'equiv')) || (flt === 'only' && st.k === 'only');
+    let st = pairStatus(p, true); if (!st) { st = { k: 'pend' }; pending++; } else cnt[st.k] = (cnt[st.k] || 0) + 1;
+    const show = flt === 'all' || st.k === 'pend' || (flt === 'diff' && (st.k === 'diff' || st.k === 'unrel')) || (flt === 'same' && (st.k === 'same' || st.k === 'equiv')) || (flt === 'only' && st.k === 'only');
     if (!show) return '';
-    const name = (p.L || p.R).path; const ic = { same: '✓', equiv: '≈', diff: '±', only: '◐' }[st.k];
+    const name = (p.L || p.R).path; const ic = { same: '✓', equiv: '≈', diff: '±', only: '◐', unrel: '≠', pend: '…' }[st.k];
     let sub;
     if (st.k === 'only') sub = `only in ${esc(sideName(p.L ? 'L' : 'R'))}`;
     else if (p.L.path !== p.R.path) sub = `${esc(p.L.path)} ⇄ ${esc(p.R.path)}`;
-    else sub = st.k === 'same' ? 'identical' : st.k === 'equiv' ? 'equivalent (ignored diffs)' : `${st.n} difference${st.n === 1 ? '' : 's'}`;
+    else sub = st.k === 'same' ? 'identical' : st.k === 'equiv' ? 'equivalent (ignored diffs)' : st.k === 'unrel' ? `too different (${st.pct}% shared)` : st.k === 'pend' ? 'checking…' : `${st.n} difference${st.n === 1 ? '' : 's'}`;
     const bd = st.k === 'diff' ? `<span class="bd"><span class="p">+${st.a}</span> <span class="m">−${st.r}</span></span>` : p.manual ? `<button class="unlink" data-unlink="${p.L.id}" title="Remove manual pairing">🔗✕</button>` : '<span></span>';
     return `<div class="fi${i === ci ? ' on' : ''}" data-pair="${i}" title="${esc(name)}"><span class="ic ${st.k}">${ic}</span><span class="nm">${esc(baseName(name))}</span>${bd}<span class="sub">${p.manual ? '🔗 ' : ''}${sub}${name.includes('/') && st.k !== 'only' && p.L.path === p.R.path ? ' · ' + esc(name.slice(0, name.lastIndexOf('/'))) : ''}</span></div>`;
   }).join('');
   E.flist.innerHTML = items || '<div style="padding:14px;color:var(--muted);font-size:12.5px">Nothing matches this filter.</div>';
-  E.fsum.innerHTML = `${S.pairs.length} pair${S.pairs.length === 1 ? '' : 's'} · <span style="color:var(--accentInk)">${cnt.same} identical</span>${cnt.equiv ? ` · ${cnt.equiv} equivalent` : ''} · ${cnt.diff} changed · ${cnt.only} unmatched`;
+  E.fsum.innerHTML = `${S.pairs.length} pair${S.pairs.length === 1 ? '' : 's'} · <span style="color:var(--accentInk)">${cnt.same} identical</span>${cnt.equiv ? ` · ${cnt.equiv} equivalent` : ''} · ${cnt.diff + (cnt.unrel || 0)} changed · ${cnt.only} unmatched${pending ? ` · checking ${pending}…` : ''}`;
+  if (pending) statusWork();
   $$('#ffilter .chip').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.f === flt)));
+}
+// compute pair statuses in small time slices so big folders never freeze or spike memory
+let statusTimer = 0;
+function statusWork() {
+  if (statusTimer) return;
+  statusTimer = setTimeout(() => {
+    statusTimer = 0; const t0 = performance.now(); let left = false;
+    for (const p of S.pairs) { if (pairStatus(p, true)) continue; if (performance.now() - t0 > 30) { left = true; break; } pairStatus(p); }
+    renderFiles(); if (left) statusWork();
+  }, 16);
 }
 let filesTimer = 0;
 const scheduleFiles = () => { clearTimeout(filesTimer); filesTimer = setTimeout(renderFiles, 400); };
@@ -1468,11 +1537,12 @@ function pushUndo(f, kind = 'op') {
   const now = Date.now();
   if (kind === 'type' && f._lastType && now - f._lastType < 900) { f._lastType = now; return; }
   f._lastType = kind === 'type' ? now : 0;
-  f.undo.push(snap(f)); if (f.undo.length > 300) f.undo.shift(); f.redo.length = 0;
+  f.undo.push(snap(f)); f.redo.length = 0;
+  const per = Math.max(1, f.lines.length); while (f.undo.length > 1 && (f.undo.length > 150 || f.undo.length * per > 1.5e6)) f.undo.shift();
 }
 function setLines(s, lines, { caret = null, undo = true, msg = null } = {}) {
   const f = cur(s); if (!f) return;
-  if (undo) pushUndo(f); f.lines = lines.length ? lines : ['']; bump(f); S.statusCache.clear();
+  if (undo) pushUndo(f); f.lines = lines.length ? lines : ['']; bump(f);
   if (caret) { E.code[s].focus({ preventScroll: true }); }
   recompute(); render(caret ? { s, a: caret, b: caret } : null);
   if (caret) restoreCaret({ s, a: caret, b: caret });
@@ -1498,7 +1568,15 @@ function selText(s, sel) {
   return [L[a.l].slice(a.o), ...L.slice(a.l + 1, b.l), L[b.l].slice(0, b.o)].join('\n');
 }
 function syncFromDOM(s) {
-  const f = cur(s); if (!f) return; const host = E.code[s]; const out = [];
+  const f = cur(s); if (!f) return; const host = E.code[s];
+  // fast path: a normal keystroke only changes the line under the caret
+  const sl = window.getSelection(); let el = sl && sl.anchorNode; el = el && (el.nodeType === 1 ? el : el.parentElement);
+  while (el && el.parentElement !== host) el = el.parentElement;
+  if (el && el.dataset.ln !== undefined && host.childNodes.length === host.childElementCount) {
+    const l = +el.dataset.ln, t = el.textContent;
+    if (!t.includes('\n') && l < f.lines.length) { if (f.lines[l] !== t) { f.lines[l] = t; bump(f); scheduleDiff(); } return; }
+  }
+  const out = [];
   for (const ch of host.childNodes) {
     if (ch.nodeType === 3) { const t = ch.nodeValue; if (t) out.push(...t.split('\n')); continue; }
     if (ch.nodeType !== 1) continue;
@@ -1508,6 +1586,79 @@ function syncFromDOM(s) {
   }
   if (!out.length) out.push('');
   if (!arrEq(out, f.lines)) { f.lines = out; bump(f); scheduleDiff(); }
+}
+/* ---------- smart indentation ---------- */
+const tabW = () => +S.opts.tab || 4;
+const leadWS = l => /^[ \t]*/.exec(l)[0];
+function colW(ws) { let c = 0; const n = tabW(); for (const ch of ws) c = ch === '\t' ? c + n - (c % n) : c + 1; return c; }
+function mkIndent(w, tabs) { const n = tabW(); return tabs ? '\t'.repeat(Math.floor(w / n)) + ' '.repeat(w % n) : ' '.repeat(w); }
+function opensBlock(line, lang) {
+  const t = line.replace(/\s+$/, '');
+  if (lang === 'py') return /:\s*(#.*)?$/.test(t) && !/^\s*#/.test(t);
+  if (lang === 'vba') return /^\s*(((Public|Private|Friend)\s+)?(Static\s+)?(Sub|Function|Property)\b|If\b.*\bThen$|For\b|Do\b|While\b|With\b|Select\s+Case\b|Else\b|ElseIf\b|Case\b)/i.test(t);
+  if (lang === 'txt') return false;
+  return /[{[(]\s*$/.test(t);
+}
+// shift a block so its least-indented non-blank line sits at column `target`, keeping relative structure
+function reindentBlock(lines, target, tabs, keep) {
+  let base = Infinity; lines.forEach((l, i) => { if (l.trim() && !(keep && keep[i])) base = Math.min(base, colW(leadWS(l))); });
+  if (base === Infinity) return lines.slice();
+  return lines.map((l, i) => { if (keep && keep[i]) return l; if (!l.trim()) return ''; const lw = leadWS(l); return mkIndent(Math.max(0, colW(lw) - base + target), tabs) + l.slice(lw.length); });
+}
+function shiftBlock(lines, delta, tabs, keep) {
+  if (!delta) return lines;
+  return lines.map((l, i) => { if ((keep && keep[i]) || !l.trim()) return l; const lw = leadWS(l); return mkIndent(Math.max(0, colW(lw) + delta), tabs) + l.slice(lw.length); });
+}
+// indentation the caret context implies on a blank line (inside a loop/def → body level)
+function contextIndent(f, l) {
+  let p = l - 1; while (p >= 0 && !f.lines[p].trim()) p--;
+  if (p < 0) return 0;
+  const pw = colW(leadWS(f.lines[p]));
+  return opensBlock(f.lines[p], f.lang) ? pw + tabW() : pw;
+}
+function smartPaste(s, sel, txt) {
+  const f = cur(s); txt = txt.replace(/\r\n?/g, '\n');
+  if (!S.opts.smartIndent || !txt.includes('\n') || f.lang === 'txt') return { sel, txt };
+  const tabs = indentUnit(f) === '\t'; const line = f.lines[sel.a.l]; const before = line.slice(0, sel.a.o);
+  const lines = txt.split('\n');
+  if (!before.trim()) {
+    let target = colW(before);
+    if (!line.trim() && target === 0) target = contextIndent(f, sel.a.l);         // blank line at column 0 inside a block
+    const out = reindentBlock(lines, target, tabs);
+    sel = { a: { l: sel.a.l, o: 0 }, b: sel.b };                                // we supply the indentation ourselves
+    if (sel.b.l === sel.a.l && sel.b.o < before.length) sel.b = { l: sel.b.l, o: before.length };
+    if (!out[0].trim() && lines[0] === '') out[0] = '';
+    return { sel, txt: out.join('\n') };
+  }
+  // caret after code: first pasted line continues this line, the rest is indented relative to it
+  let target = colW(leadWS(line)); if (opensBlock(before + lines[0], f.lang)) target += tabW();
+  const rest = reindentBlock(lines.slice(1), target, tabs);
+  return { sel, txt: [lines[0].replace(/^[ \t]+/, ''), ...rest].join('\n') };
+}
+// how much the destination is indented relative to the source *around* a chunk.
+// Only unchanged anchor lines outside the chunk count: lines inside the chunk get replaced,
+// so their indentation must not influence the result (e.g. when a wrapper loop is removed).
+function mergeDelta(c, src, dst) {
+  const rows = S.d.rows, fs = cur(src), fd = cur(dst); if (!fs || !fd) return 0;
+  const ks = src === 'L' ? 'l' : 'r', kd = dst === 'L' ? 'l' : 'r';
+  const anchor = r => {
+    if (r.c != null || r[ks] == null || r[kd] == null) return null;
+    const a = fs.lines[r[ks]], b = fd.lines[r[kd]]; if (!a.trim() || !b.trim()) return null;
+    return colW(leadWS(b)) - colW(leadWS(a));
+  };
+  for (const dir of [-1, 1]) {
+    for (let i = dir < 0 ? c.r0 - 1 : c.r1, n = 0; i >= 0 && i < rows.length && n < 60; i += dir, n++) {
+      const d = anchor(rows[i]); if (d != null) return d;
+    }
+  }
+  return 0;
+}
+function mergeLines(c, src, dst) {
+  const fs = cur(src), fd = cur(dst); let lines = fs.lines.slice(c[src].a, c[src].b);
+  if (!S.opts.smartIndent || !fd || !lines.length || fs.lang === 'txt') return { lines, delta: 0 };
+  const delta = mergeDelta(c, src, dst); if (!delta) return { lines, delta: 0 };
+  const sc = scanOf(fs); const keep = lines.map((_, k) => sc.cont[c[src].a + k] === 's');
+  return { lines: shiftBlock(lines, delta, indentUnit(fd) === '\t', keep), delta };
 }
 function indentUnit(f) {
   let tabs = 0, sp = 0; for (let i = 0; i < Math.min(f.lines.length, 400); i++) { const c = f.lines[i][0]; if (c === '\t') tabs++; else if (c === ' ') sp++; }
@@ -1530,7 +1681,7 @@ function undo(s, redo = false) {
   const f = cur(s); if (!f) return;
   const from = redo ? f.redo : f.undo, to = redo ? f.undo : f.redo;
   if (!from.length) { toast(redo ? 'Nothing to redo' : 'Nothing to undo'); return; }
-  to.push(snap(f)); const st = from.pop(); f.lines = st.lines; f.finalNL = st.finalNL; bump(f); f._lastType = 0; S.statusCache.clear();
+  to.push(snap(f)); const st = from.pop(); f.lines = st.lines; f.finalNL = st.finalNL; bump(f); f._lastType = 0;
   refresh({ keepCaret: true });
 }
 function bindEditor(s) {
@@ -1544,12 +1695,18 @@ function bindEditor(s) {
     const sel = getModelSel(s); if (!sel) { e.preventDefault(); return; }
     const multi = sel.a.l !== sel.b.l; const coll = !multi && sel.a.o === sel.b.o;
     if (t === 'insertParagraph' || t === 'insertLineBreak') {
-      e.preventDefault(); const ind = (/^[ \t]*/.exec(f.lines[sel.a.l])[0]).slice(0, sel.a.o);
+      e.preventDefault(); const line = f.lines[sel.a.l]; let ind = leadWS(line).slice(0, sel.a.o);
+      if (S.opts.smartIndent) {
+        const before = line.slice(0, sel.a.o);
+        if (!line.trim() && !ind) ind = mkIndent(contextIndent(f, sel.a.l), indentUnit(f) === '\t');
+        if (opensBlock(before, f.lang)) ind = mkIndent(colW(leadWS(line)) + tabW(), indentUnit(f) === '\t');
+        else if (f.lang === 'py' && /^\s*(return|pass|break|continue|raise)\b/.test(before)) ind = mkIndent(Math.max(0, colW(leadWS(line)) - tabW()), indentUnit(f) === '\t');
+      }
       replaceRange(s, sel, '\n' + ind); return;
     }
     if (t === 'insertFromPaste' || t === 'insertFromDrop' || t === 'insertFromYank' || t === 'insertReplacementText') {
       const txt = (e.dataTransfer && e.dataTransfer.getData('text/plain')) || e.data || '';
-      e.preventDefault(); replaceRange(s, sel, txt); return;
+      e.preventDefault(); const sp = smartPaste(s, sel, txt); replaceRange(s, sp.sel, sp.txt); return;
     }
     if (t.startsWith('delete')) {
       if (multi) { e.preventDefault(); replaceRange(s, sel, ''); return; }
@@ -1570,7 +1727,7 @@ function bindEditor(s) {
   host.addEventListener('paste', e => {
     const f = cur(s); if (!f) return; e.preventDefault();
     const sel = getModelSel(s); if (!sel) return;
-    replaceRange(s, sel, e.clipboardData.getData('text/plain'));
+    const sp = smartPaste(s, sel, e.clipboardData.getData('text/plain')); replaceRange(s, sp.sel, sp.txt);
   });
   const copyH = cut => e => {
     const sel = getModelSel(s); if (!sel) return; e.preventDefault();
@@ -1595,7 +1752,25 @@ function bindEditor(s) {
     const ln = e.target.closest('[data-row]'); if (ln) { const r = S.d.rows[+ln.dataset.row]; if (r && r.c != null && r.c !== S.curChunk) { S.curChunk = r.c; markCurrent(); } }
   });
   host.addEventListener('focus', () => { if (!E.hint[s].classList.contains('hidden') && cur(s) && isBlankScratch(cur(s))) E.hint[s].classList.add('hidden'); });
-  host.addEventListener('blur', () => setTimeout(updateHeaders, 0));
+  host.addEventListener('blur', () => { S.composing = false; setTimeout(updateHeaders, 0); });
+  // clicking a hatched filler / empty area puts the caret on the nearest real line (so you can always click & paste)
+  host.addEventListener('mousedown', e => {
+    const f = cur(s); if (!f || e.button !== 0) return;
+    const t = e.target; const fill = t.closest ? t.closest('.fill, .vsp') : null;
+    if (!fill && t !== host) return;
+    e.preventDefault();
+    let pos;
+    if (t === host && !fill) { const l = f.lines.length - 1; pos = { l, o: f.lines[l].length }; }
+    else if (fill.classList.contains('vsp')) pos = { l: Math.min(+fill.dataset.a, f.lines.length - 1), o: 0 };
+    else pos = nearestPos(s, +fill.dataset.row);
+    host.focus({ preventScroll: true }); setModelSel(s, pos, pos); E.hint[s].classList.add('hidden');
+  });
+}
+function nearestPos(s, ri) {
+  const rows = S.d.rows, k = s === 'L' ? 'l' : 'r', f = cur(s);
+  for (let i = ri - 1; i >= 0; i--) if (rows[i][k] != null) { const l = rows[i][k]; return { l, o: f.lines[l].length }; }
+  for (let i = ri + 1; i < rows.length; i++) if (rows[i][k] != null) return { l: rows[i][k], o: 0 };
+  return { l: 0, o: 0 };
 }
 function markCurrent() {
   $$('.g.cur,.m.cur,.ln.curln').forEach(el => el.classList.remove('cur', 'curln'));
@@ -1639,22 +1814,22 @@ function ensureSide(dst) {
 function mergeChunk(ci, dst) {
   const c = S.d.chunks[ci]; if (!c) return; const src = OTHER[dst];
   const fs = cur(src); if (!fs) return; const fd = ensureSide(dst);
-  const lines = fs.lines.slice(c[src].a, c[src].b);
+  const { lines, delta } = mergeLines(c, src, dst);
   const nl = fd.lines.slice(); spliceArr(nl, c[dst].a, c[dst].b - c[dst].a, lines);
-  pushUndo(fd); fd.lines = nl.length ? nl : ['']; bump(fd); S.statusCache.clear();
+  pushUndo(fd); fd.lines = nl.length ? nl : ['']; bump(fd);
   const keepTop = E.pane.L.scrollTop;
   refresh({ keepCaret: false });
   E.pane.L.scrollTop = keepTop; E.pane.R.scrollTop = keepTop; E.mid.scrollTop = keepTop;
   const next = S.d.chunks.findIndex((x, i) => !x.soft && x.r0 >= (c.r0 || 0));
   S.curChunk = next; markCurrent();
-  toast(`Copied ${lines.length || 'removal of'} line${lines.length === 1 ? '' : 's'} ${sideName(src)} → ${sideName(dst)}`);
+  toast(`Copied ${lines.length || 'removal of'} line${lines.length === 1 ? '' : 's'} ${sideName(src)} → ${sideName(dst)}${delta ? ` · re-indented ${delta > 0 ? '+' : ''}${delta} to fit` : ''}`);
 }
 function mergeAll(dst) {
   const src = OTHER[dst]; const fs = cur(src); if (!fs) return; const fd = ensureSide(dst);
   const ch = S.d.chunks.filter(c => !c.soft); if (!ch.length) { toast('Nothing to copy'); return; }
   const nl = fd.lines.slice();
-  for (let k = ch.length - 1; k >= 0; k--) { const c = ch[k]; spliceArr(nl, c[dst].a, c[dst].b - c[dst].a, fs.lines.slice(c[src].a, c[src].b)); }
-  pushUndo(fd); fd.lines = nl.length ? nl : ['']; bump(fd); S.statusCache.clear(); S.curChunk = -1;
+  for (let k = ch.length - 1; k >= 0; k--) { const c = ch[k]; spliceArr(nl, c[dst].a, c[dst].b - c[dst].a, mergeLines(c, src, dst).lines); }
+  pushUndo(fd); fd.lines = nl.length ? nl : ['']; bump(fd); S.curChunk = -1;
   refresh({ keepCaret: false }); toast(`Applied ${ch.length} change${ch.length === 1 ? '' : 's'} ${sideName(src)} → ${sideName(dst)}`);
 }
 
@@ -1903,9 +2078,9 @@ function fileStatus(s, f) {
 }
 const SETS = {
   all: { label: 'all files', test: () => true },
-  changed: { label: 'changed files', test: k => k === 'diff' },
+  changed: { label: 'changed files', test: k => k === 'diff' || k === 'unrel' },
   unmatched: { label: 'unmatched files', test: k => k === 'only' },
-  cu: { label: 'changed + unmatched files', test: k => k === 'diff' || k === 'only' },
+  cu: { label: 'changed + unmatched files', test: k => k === 'diff' || k === 'unrel' || k === 'only' },
   identical: { label: 'identical files', test: k => k === 'same' || k === 'equiv' },
   edited: { label: 'files edited here', test: (k, f) => !f.scratch && isDirty(f) }
 };
@@ -1987,8 +2162,8 @@ function renderMgr() {
   $('#mgrSide [data-ms="L"]').textContent = `L1 · ${sideName('L')}`; $('#mgrSide [data-ms="R"]').textContent = `L2 · ${sideName('R')}`;
   const shown = files.filter(f => SETS[MGR.filter].test(fileStatus(s, f), f));
   $$('#mgrFilter [data-mf]').forEach(b => { const k = b.dataset.mf; b.setAttribute('aria-pressed', String(k === MGR.filter)); b.querySelector('i').textContent = files.filter(f => SETS[k].test(fileStatus(s, f), f)).length; });
-  const ICON = { same: '✓', equiv: '≈', diff: '±', only: '◐' };
-  const TXT = { same: 'identical', equiv: 'equivalent', diff: 'changed', only: 'unmatched' };
+  const ICON = { same: '✓', equiv: '≈', diff: '±', only: '◐', unrel: '≠' };
+  const TXT = { same: 'identical', equiv: 'equivalent', diff: 'changed', only: 'unmatched', unrel: 'too different' };
   $('#mgrList').innerHTML = shown.length ? shown.map(f => {
     const k = fileStatus(s, f);
     return `<label class="mr${MGR.sel.has(f.id) ? ' on' : ''}${f.id === S.cur[s] ? ' curf' : ''}" data-id="${f.id}">
@@ -2221,6 +2396,7 @@ document.addEventListener('click', e => {
   if (b.dataset.bn) {
     const bn = b.dataset.bn;
     if (bn === 'demo') return loadDemo();
+    if (bn === 'force') { const a = cur('L'), c = cur('R'); if (a && c) S.forceCmp.add(a.id + ':' + c.id); refresh({ keepCaret: false }); return; }
     if (bn === 'upload' || bn === 'folder') { uploadSide = s; return (bn === 'upload' ? $('#fileIn') : $('#dirIn')).click(); }
     if (bn === 'pick') { E.fsel[s].focus(); E.fsel[s].showPicker?.(); return; }
     if (bn === 'create' || bn === 'copy') { const src = cur(OTHER[s]); const f = ensureSide(s); if (bn === 'copy' && src) { f.lines = src.lines.slice(); f.eol = src.eol; f.finalNL = src.finalNL; bump(f); } S.statusCache.clear(); refresh({ keepCaret: false }); renderFiles(); return; }
@@ -2283,7 +2459,7 @@ document.addEventListener('keydown', e => {
 window.addEventListener('dragover', e => e.preventDefault());
 window.addEventListener('drop', e => e.preventDefault());
 let rsT = 0, lastStack = isStacked();
-new ResizeObserver(() => { clearTimeout(rsT); rsT = setTimeout(() => { if (S.opts.wrap) syncHeights(); updateViewport(); if (lastStack !== isStacked()) { lastStack = isStacked(); updateHeaders(); } }, 80); }).observe(E.diff);
+new ResizeObserver(() => { clearTimeout(rsT); rsT = setTimeout(() => { if (S.wrapOn) syncHeights(); updateViewport(); if (lastStack !== isStacked()) { lastStack = isStacked(); updateHeaders(); } }, 80); }).observe(E.diff);
 
 /* =========================================================================
    Demo
@@ -2482,7 +2658,7 @@ if (store.get('opts', null) === null && innerWidth < 860) S.opts.showOpts = fals
 applyTheme(); applyColors(); syncOptUI();
 S.files.L.push(scratch()); S.files.R.push(scratch());
 computePairs(); selectPair(S.pairs[0]); renderFiles();
-window.__lineup = { S, computeDiff, loadDemo, refresh, makePatch, applyTool, mergeChunk, cur };
+window.__lineup = { S, computeDiff, loadDemo, refresh, makePatch, applyTool, mergeChunk, cur, computePairs, renderFiles, selectPair };
 })();
 </script>
 </body>
