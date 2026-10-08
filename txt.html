@@ -9743,8 +9743,19 @@ async function readFileAsText(file) {
   return _decodeTextBytes(bytes);
 }
 
+// A file's own ``` would otherwise read as the end of its fence (and split the
+// file in two on a .zip download). Escape every ``` by prefixing a backslash;
+// a ``` already preceded by backslashes gets one more, so the mapping is
+// exactly reversible — unescapeImportedFences undoes it on the way out.
+function escapeImportedFences(content) {
+  return content.replace(/(\\*)```/g, '\\$1```');
+}
+function unescapeImportedFences(content) {
+  return content.replace(/\\(\\*)```/g, '$1```');
+}
+
 function formatImportedFile(path, content) {
-  return `${path}\n\`\`\`\n${content}\n\`\`\`\n\n`;
+  return `${path}\n\`\`\`\n${escapeImportedFences(content)}\n\`\`\`\n\n`;
 }
 
 async function expandZipFiles(files) {
@@ -21876,12 +21887,28 @@ window.mobileCopy = function() {
     showToast('Failed to copy', 'error');
   });
 };
+// Split on fence markers, skipping the backslash-escaped \``` that import
+// writes for a file's own backticks (escapeImportedFences). An escaped run is
+// stepped over whole so the backticks after it can't pair up into a marker.
+function _splitOnFences(text) {
+  const parts = [];
+  let start = 0, from = 0, i;
+  while ((i = text.indexOf('```', from)) !== -1) {
+    if (i > 0 && text[i - 1] === '\\') { from = i + 3; continue; }
+    parts.push(text.slice(start, i));
+    start = from = i + 3;
+  }
+  parts.push(text.slice(start));
+  return parts;
+}
+
 // Detect the multi-doc format: fenced ``` blocks each preceded by a file-path
 // line. Returns [{path, content}, ...] (empty when the doc isn't multi-doc).
+// Content comes back with the import escaping undone.
 function _detectMultiDocFiles() {
   const content = editor.state.doc.toString().trim();
   const files = [];
-  const parts = content.split('```');
+  const parts = _splitOnFences(content);
   for (let i = 0; i < parts.length - 1; i += 2) {
     const before = parts[i];
     const code = parts[i + 1];
@@ -21889,7 +21916,7 @@ function _detectMultiDocFiles() {
     const beforeLines = before.trim().split('\n');
     const filePath = beforeLines[beforeLines.length - 1]?.trim();
     if (filePath && !filePath.includes('```')) {
-      files.push({ path: filePath, content: code });
+      files.push({ path: filePath, content: unescapeImportedFences(code) });
     }
   }
   return files;
