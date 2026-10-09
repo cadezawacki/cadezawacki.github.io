@@ -179,6 +179,37 @@ const Bridge = (() => {
     return null;
   }
 
+  // Cade.txt streams large documents: `text` then holds a manifest behind this
+  // header (must match STREAM_HEAD in txt.html exactly), and the document
+  // itself lives in encrypted pieces under rooms/<room>/chunks/<id>, joined in
+  // manifest order. Writing such a room back as one ordinary blob is fine —
+  // Cade.txt reads both forms.
+  const STREAM_HEAD = '⚠ This document is large, so it is stored in a newer format.\n'
+    + 'Reload Cade.txt to update it, then reopen this room. Please don’t edit this text.\n'
+    + '\u0000CADE_STREAM_V2\u0000';
+  function parseStreamManifest(plain) {
+    if (!plain.startsWith(STREAM_HEAD)) return null;
+    try {
+      const m = JSON.parse(plain.slice(STREAM_HEAD.length));
+      if (!m || m.v !== 2 || !Array.isArray(m.c) || !Number.isInteger(m.n)) return null;
+      return m.c.every(e => Array.isArray(e) && typeof e[0] === 'string' && /^[0-9a-f]{32}$/.test(e[0]) && Number.isInteger(e[1])) ? m : null;
+    } catch (e) { return null; }
+  }
+  async function readStreamedText(name, m, key, database) {
+    const pieces = new Map();
+    await Promise.all([...new Set(m.c.map(e => e[0]))].map(async (id) => {
+      const snap = await database.ref(`rooms/${name}/chunks/${id}`).once('value');
+      const encoded = unpackRoomText(snap.val());
+      if (!encoded) throw new Error('piece missing');
+      const text = await decryptText(encoded, key);
+      if (text == null) throw new Error('piece unreadable');
+      pieces.set(id, text);
+    }));
+    const out = m.c.map(e => pieces.get(e[0])).join('');
+    if (out.length !== m.n) throw new Error('streamed document incomplete');
+    return out;
+  }
+
   // ═══════════════════════════════════════════════════════════
   // TODO PARSING
   // ═══════════════════════════════════════════════════════════
@@ -493,7 +524,12 @@ const Bridge = (() => {
       // A document we cannot read is one we must not replace: it belongs to
       // a key we do not hold (a room locked elsewhere) or it is damaged.
       if (plain == null) return { ok: false, text: '', packed, undecryptable: true };
-      return { ok: true, text: stripLockSentinel(plain), packed };
+      let text = stripLockSentinel(plain);
+      // A streamed document's pieces can't be fetched: treat it as out of
+      // reach (the catch below) rather than rebase onto the manifest.
+      const manifest = parseStreamManifest(text);
+      if (manifest) text = await readStreamedText(name, manifest, key, database);
+      return { ok: true, text, packed };
     } catch (e) {
       return { ok: false, text: '', unreachable: true };
     }

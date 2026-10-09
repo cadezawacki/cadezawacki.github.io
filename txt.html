@@ -858,6 +858,38 @@ body.sel-mode .editor-wrap .cm-content { -webkit-touch-callout: none; }
 
 .editor-wrap .cm-line { padding: 0; }
 
+/* Big-document transfer: progress pill, and a read-only preview that fills in
+   as an incoming document streams down (covers the editor until it lands). */
+.xfer-pill {
+  position: absolute;
+  right: 22px;
+  bottom: 12px;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: min(380px, calc(100% - 44px));
+  padding: 8px 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+.xfer-pill[hidden] { display: none; }
+.xfer-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.xfer-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+.xfer-meta { font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.xfer-btn { flex-shrink: 0; padding: 0; border: none; background: none; color: var(--accent); font: inherit; cursor: pointer; }
+.xfer-btn[hidden] { display: none; }
+.xfer-track { height: 4px; border-radius: 2px; background: var(--surface-2); overflow: hidden; }
+.xfer-fill { width: 0; height: 100%; background: var(--accent); transition: width 200ms linear; }
+.xfer-preview { position: absolute; inset: 0; z-index: 30; background: var(--bg); }
+.xfer-preview[hidden] { display: none; }
+/* Phones: clear of the floating scroll buttons on the right edge. */
+@media (max-width: 600px) { .xfer-pill { left: 12px; right: 54px; width: auto; } }
+
 .editor-wrap .cm-gutters {
   background: var(--bg);
   border-right: 1px solid var(--border);
@@ -11925,10 +11957,8 @@ async function loadRoomTextAnywhere(room) {
     const val = await _restFetchRoomVal(room, 'text', 8000);
     const enc = unpackRoomText(val);
     if (!enc) return '';
-    let dec = await decryptText(enc, getRoomEncKey(room, store.get('cade-sync-key') || ''));
-    if (dec == null) return '';
-    if (dec.startsWith(ROOM_LOCK_SENTINEL)) dec = dec.slice(ROOM_LOCK_SENTINEL.length);
-    return dec;
+    const dec = await decodeRoomPlain(room, enc, getRoomEncKey(room, store.get('cade-sync-key') || ''));
+    return dec == null ? '' : dec;
   } catch { return ''; }
 }
 
@@ -12605,6 +12635,862 @@ function unpackRoomText(val) {
   return null;
 }
 
+// ============================================
+// STREAMED ROOM TEXT (large documents)
+// ------------------------------------------------------------------
+// A room's text used to travel as ONE encrypted blob at rooms/<room>/text:
+// every push re-sent the whole document, and a reader saw nothing until the
+// last byte arrived. On a slow link a multi-MB document took longer to upload
+// than the push timeout, so the push was retried while the first copy was
+// still queued — copies stacked up, the sender never saw an ack, and readers
+// downloaded the document again and again.
+//
+// Documents past STREAM_MIN_CHARS now travel in pieces:
+//   rooms/<room>/chunks/<id>  one encrypted piece of the text. Pieces are cut
+//                             where the content says (content-defined
+//                             chunking), so an edit only changes the pieces
+//                             around it. <id> is an HMAC of the piece under a
+//                             key derived from the sync key: equal pieces share
+//                             an id, and the id says nothing about the text.
+//   rooms/<room>/text         still the one source of truth. It holds a small
+//                             encrypted MANIFEST (piece ids in order) behind a
+//                             readable header, so a copy of the app that
+//                             predates this shows "reload to update" instead of
+//                             treating the room as empty. It is written only
+//                             once every piece it names is on the server.
+//   rooms/<room>/live         while a big upload runs: its manifest and how
+//                             many leading pieces have landed, so a reader can
+//                             download (and show) the start before the sender
+//                             is done. Removed when the upload ends, and by the
+//                             server if the sender drops offline.
+// An edit uploads only the pieces the server lacks plus a new manifest. A
+// reader downloads only the pieces it doesn't hold, several at once, and checks
+// each against its id. Smaller rooms keep the single-blob format unchanged.
+// ============================================
+const STREAM_MIN_CHARS = 256 * 1024;     // documents this long are streamed…
+const STREAM_KEEP_CHARS = 192 * 1024;    // …and stay streamed until they shrink below this
+const STREAM_HEAD = '⚠ This document is large, so it is stored in a newer format.\n'
+  + 'Reload Cade.txt to update it, then reopen this room. Please don’t edit this text.\n'
+  + '\u0000CADE_STREAM_V2\u0000';
+const STREAM_CDC_MIN = 32 * 1024;        // piece size bounds (chars); ~85K on average
+const STREAM_CDC_MAX = 256 * 1024;
+const STREAM_UP_WINDOW = 768 * 1024;     // encoded bytes in flight per upload
+const STREAM_UP_MAX_WRITES = 12;
+const STREAM_DOWN_CONC = 6;              // pieces downloaded at once
+const STREAM_UI_MIN_CHARS = 256 * 1024;  // transfers this big show progress
+const STREAM_LIVE_MIN_CHARS = 512 * 1024; // …and this big are streamed to readers while uploading
+const STREAM_CACHE_MAX_CHARS = 16 * 1024 * 1024;
+const STREAM_TAB_ID = Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+
+function _streamErr(kind) { const e = new Error('stream-' + kind); e.stream = kind; return e; }
+const _streamSleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+// Gear table for the rolling hash. Fixed forever: every device must cut the
+// same text at the same places, or unchanged pieces stop deduplicating.
+const _STREAM_GEAR = (() => {
+  const g = new Int32Array(256);
+  let s = 0x9E3779B9 | 0;
+  for (let i = 0; i < 256; i++) { s ^= s << 13; s ^= s >>> 17; s ^= s << 5; g[i] = s; }
+  return g;
+})();
+
+// Piece boundaries (end offsets) for `text`. The hash only sees the last 32
+// characters, so where a cut lands depends on the text around it, not on where
+// the piece started — after an edit the cuts fall back into step within one
+// piece. A cut is where the hash's TOP 16 bits are zero: those mix all 32
+// characters, while the low bits only see the last few and cut too rarely on
+// text with a small alphabet. Never splits a surrogate pair.
+function _streamCuts(text) {
+  const n = text.length, cuts = [];
+  const G = _STREAM_GEAR;
+  let start = 0;
+  while (start < n) {
+    if (n - start <= STREAM_CDC_MIN) { cuts.push(n); break; }
+    let i = start + STREAM_CDC_MIN;
+    const end = Math.min(n, start + STREAM_CDC_MAX);
+    let h = 0;
+    for (let j = i - 32; j < i; j++) h = ((h << 1) + G[text.charCodeAt(j) & 255]) | 0;
+    let cut = end;
+    for (; i < end; i++) {
+      h = ((h << 1) + G[text.charCodeAt(i) & 255]) | 0;
+      if ((h >>> 16) === 0) { cut = i + 1; break; }
+    }
+    if (cut < n) { const c = text.charCodeAt(cut - 1); if (c >= 0xD800 && c <= 0xDBFF) cut++; }
+    cuts.push(cut);
+    start = cut;
+  }
+  return cuts;
+}
+
+// HMAC key for piece ids: PBKDF2 like deriveKey, with its own salt so ids
+// can't be checked against the AES key, and the same cost to brute-force.
+const _streamIdKeyCache = new Map();
+function _streamIdKey(password) {
+  let p = _streamIdKeyCache.get(password);
+  if (p) return p;
+  p = (async () => {
+    const enc = new TextEncoder();
+    const km = await crypto.subtle.importKey('raw', enc.encode(password), 'PBKDF2', false, ['deriveKey']);
+    return crypto.subtle.deriveKey(
+      { name: 'PBKDF2', salt: enc.encode('cade.txt-piece-id'), iterations: 100000, hash: 'SHA-256' },
+      km, { name: 'HMAC', hash: 'SHA-256', length: 256 }, false, ['sign']);
+  })();
+  p.catch(() => { if (_streamIdKeyCache.get(password) === p) _streamIdKeyCache.delete(password); });
+  if (_streamIdKeyCache.size > 20) _streamIdKeyCache.clear();
+  _streamIdKeyCache.set(password, p);
+  return p;
+}
+async function _streamId(hkey, str) {
+  const sig = new Uint8Array(await crypto.subtle.sign('HMAC', hkey, new TextEncoder().encode(str)));
+  let s = '';
+  for (let i = 0; i < 16; i++) s += (sig[i] < 16 ? '0' : '') + sig[i].toString(16);
+  return s;
+}
+
+// Manifest: { v: 2, n: total chars, c: [[pieceId, chars], …] } in text order.
+function _streamManifestFromJSON(json) {
+  let m;
+  try { m = JSON.parse(json); } catch { return null; }
+  if (!m || m.v !== 2 || !Array.isArray(m.c) || !m.c.length || !Number.isInteger(m.n)) return null;
+  let sum = 0;
+  for (const e of m.c) {
+    if (!Array.isArray(e) || typeof e[0] !== 'string' || !/^[0-9a-f]{32}$/.test(e[0]) || !Number.isInteger(e[1]) || e[1] <= 0) return null;
+    sum += e[1];
+  }
+  return sum === m.n ? { v: 2, n: m.n, c: m.c } : null;
+}
+function _streamStubText(m) { return STREAM_HEAD + JSON.stringify({ v: 2, n: m.n, c: m.c }); }
+// The manifest behind a decrypted `text` value (lock sentinel already
+// stripped), or null when it's an ordinary document.
+function _parseStreamStub(plain) {
+  if (typeof plain !== 'string' || !plain.startsWith(STREAM_HEAD)) return null;
+  return _streamManifestFromJSON(plain.slice(STREAM_HEAD.length));
+}
+function _streamSig(m) { return m.n + ':' + m.c.map(e => e[0]).join(''); }
+
+// What each room's `text` held when this tab last read or wrote it:
+// a manifest, null for an ordinary document, absent when unknown.
+const _streamServer = new Map();
+// The last streamed text this tab resolved or pushed per room, with its
+// manifest: the cheapest source of pieces for the next update.
+const _streamKnown = new Map();
+function _streamKnownSet(room, m, text) {
+  _streamKnown.delete(room);
+  _streamKnown.set(room, { m, text });
+  while (_streamKnown.size > 3) _streamKnown.delete(_streamKnown.keys().next().value);
+}
+// When this tab last started writing each room's `text`. A snapshot that
+// arrived before that is superseded by our write, however long it took to
+// download.
+const _lastPushAt = new Map();
+
+// Decrypted pieces by id, bounded by total size (LRU).
+const _streamCache = new Map();
+let _streamCacheChars = 0;
+function _streamCacheGet(id) {
+  const t = _streamCache.get(id);
+  if (t === undefined) return null;
+  _streamCache.delete(id); _streamCache.set(id, t);
+  return t;
+}
+function _streamCachePut(id, t) {
+  if (_streamCache.has(id)) return;
+  _streamCache.set(id, t);
+  _streamCacheChars += t.length;
+  while (_streamCacheChars > STREAM_CACHE_MAX_CHARS && _streamCache.size > 1) {
+    const [k, v] = _streamCache.entries().next().value;
+    _streamCache.delete(k);
+    _streamCacheChars -= v.length;
+  }
+}
+
+// One piece from the server, decrypted and checked against its id; null when
+// the server doesn't have it.
+async function _streamFetchPiece(room, id, key, hkey) {
+  let val;
+  try {
+    val = await _restFetchRoomVal(room, 'chunks/' + id, 15000);
+  } catch (e) {
+    if (!syncState.firebaseDb) throw e;
+    val = await Promise.race([
+      syncState.firebaseDb.ref(`rooms/${room}/chunks/${id}`).once('value').then(s => s.val()),
+      _streamSleep(30000).then(() => { throw _streamErr('timeout'); }),
+    ]);
+  }
+  const enc = unpackRoomText(val);
+  if (!enc) return null;
+  const t = await decryptText(enc, key);
+  if (t == null) throw _streamErr('undecryptable');
+  if (await _streamId(hkey, t) !== id) throw _streamErr('bad-piece');
+  return t;
+}
+const _streamPieceInflight = new Map();
+function _streamGetPiece(room, id, key, hkey) {
+  const c = _streamCacheGet(id);
+  if (c != null) return Promise.resolve(c);
+  let p = _streamPieceInflight.get(id);
+  if (!p) {
+    p = _streamFetchPiece(room, id, key, hkey)
+      .then(t => { if (t != null) _streamCachePut(id, t); return t; })
+      .finally(() => { _streamPieceInflight.delete(id); });
+    _streamPieceInflight.set(id, p);
+  }
+  return p;
+}
+
+// Server truth for a room's `text`: { m } when streamed, { legacy: true } for
+// an ordinary (or absent) document, null when it can't be decrypted with
+// `key`. Throws when the server can't be reached.
+async function _streamReadServerManifest(room, key) {
+  let val;
+  try { val = await _restFetchRoomVal(room, 'text', 10000, null, { maxBytes: 4 << 20 }); }
+  catch (e) { if (e && e.message === 'rest-too-big') return { legacy: true }; throw e; }
+  const enc = unpackRoomText(val);
+  if (!enc) return { legacy: true };
+  let plain = await decryptText(enc, key);
+  if (plain == null) return null;
+  if (plain.startsWith(ROOM_LOCK_SENTINEL)) plain = plain.slice(ROOM_LOCK_SENTINEL.length);
+  const m = _parseStreamStub(plain);
+  return m ? { m } : { legacy: true };
+}
+
+// Pieces of `m` we can take from text already in memory instead of
+// downloading: the last streamed text for this room first (no hashing needed),
+// then whatever else this device holds for the room, re-cut and hashed.
+async function _streamFillLocal(room, m, have, hkey) {
+  const wanted = new Set(m.c.map(e => e[0]).filter(id => !have.has(id)));
+  if (!wanted.size) return;
+  const known = _streamKnown.get(room);
+  if (known) {
+    let off = 0;
+    for (const [id, len] of known.m.c) {
+      if (wanted.has(id)) { have.set(id, known.text.slice(off, off + len)); wanted.delete(id); }
+      off += len;
+    }
+    if (!wanted.size) return;
+  }
+  const texts = [];
+  try { if (room === syncState.roomName) texts.push(editor.state.doc.toString()); } catch {}
+  try { const b = loadRoomSynced(room); if (b) texts.push(b); } catch {}
+  try { const c = store.get('cade-room-cache:' + room); if (c) texts.push(c); } catch {}
+  const done = new Set(known ? [known.text] : []);
+  for (const t of texts) {
+    if (t.length < STREAM_CDC_MIN || done.has(t)) continue;
+    done.add(t);
+    let s = 0;
+    for (const e of _streamCuts(t)) {
+      const piece = t.slice(s, e);
+      s = e;
+      const id = await _streamId(hkey, piece);
+      if (wanted.has(id)) { have.set(id, piece); wanted.delete(id); }
+    }
+    if (!wanted.size) return;
+  }
+}
+
+// Assemble the document a manifest names. opts: { ui, preview, isCurrent } —
+// `preview` may be a function (only asked when the transfer is big enough to
+// show one). Throws a stream error when it can't (stale manifest, piece
+// missing, network).
+async function resolveStreamDoc(room, m, key, opts) {
+  opts = opts || {};
+  const sig = _streamSig(m);
+  const hkey = await _streamIdKey(key);
+  const have = new Map();
+  for (const [id] of m.c) { const t = _streamCacheGet(id); if (t != null) have.set(id, t); }
+  // Pieces a live upload already streamed to us.
+  const ls = _liveSess;
+  if (ls && ls.room === room) ls.have.forEach((t, id) => { if (!have.has(id)) have.set(id, t); });
+  await _streamFillLocal(room, m, have, hkey);
+
+  const order = [];
+  const queued = new Set();
+  for (const [id] of m.c) if (!have.has(id) && !queued.has(id)) { queued.add(id); order.push(id); }
+  const lenOf = new Map(m.c.map(e => [e[0], e[1]]));
+  let missingChars = 0;
+  for (const id of order) missingChars += lenOf.get(id);
+
+  const wantPreview = () => missingChars >= STREAM_LIVE_MIN_CHARS
+    && !!(typeof opts.preview === 'function' ? opts.preview() : opts.preview);
+  const xfer = (opts.ui && missingChars >= STREAM_UI_MIN_CHARS)
+    ? StreamXfer.begin({ room, dir: 'down', total: m.n, done: m.n - missingChars, preview: wantPreview() })
+    : null;
+  let pi = 0;
+  const feedPreview = () => {
+    if (!xfer) return;
+    while (pi < m.c.length && have.has(m.c[pi][0])) xfer.append(have.get(m.c[pi++][0]));
+  };
+  const abandoned = () => !!(opts.isCurrent && !opts.isCurrent());
+  let finalLen = -1;
+  try {
+    feedPreview();
+    let next = 0, done = m.n - missingChars;
+    const getOne = async (id) => {
+      for (let attempt = 0; ; attempt++) {
+        const t = await _streamGetPiece(room, id, key, hkey);
+        if (t != null) return t;
+        // Not on the server: a newer manifest replaced this one and its pieces
+        // were cleaned up, or a cleanup raced the upload that needs it (the
+        // writer re-uploads those shortly after its commit).
+        let cur;
+        try { cur = await _streamReadServerManifest(room, key); } catch { cur = undefined; }
+        if (cur && (!cur.m || _streamSig(cur.m) !== sig)) throw _streamErr('stale');
+        if (attempt >= 4) throw _streamErr('missing');
+        await _streamSleep(1500 * 2 ** attempt);
+        if (abandoned()) throw _streamErr('abandoned');
+      }
+    };
+    const worker = async () => {
+      while (next < order.length) {
+        if (abandoned()) throw _streamErr('abandoned');
+        const id = order[next++];
+        const t = await getOne(id);
+        have.set(id, t);
+        for (const [eid, len] of m.c) if (eid === id) done += len;
+        if (xfer) { xfer.progress(done); feedPreview(); }
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(STREAM_DOWN_CONC, order.length) }, worker));
+    const out = m.c.map(e => have.get(e[0])).join('');
+    if (out.length !== m.n) throw _streamErr('length');
+    _streamKnownSet(room, m, out);
+    finalLen = out.length;
+    return out;
+  } finally {
+    if (xfer) xfer.end(finalLen);
+  }
+}
+
+// Decrypt a `rooms/<room>/text` payload to the document text: lock sentinel
+// stripped, a streamed document's pieces fetched and joined. null when it
+// can't be decrypted; throws a stream error when pieces can't be fetched.
+async function decodeRoomPlain(room, encoded, key, opts) {
+  let plain = await decryptText(encoded, key);
+  if (plain == null) return null;
+  if (plain.startsWith(ROOM_LOCK_SENTINEL)) plain = plain.slice(ROOM_LOCK_SENTINEL.length);
+  const m = _parseStreamStub(plain);
+  if (room) _streamServer.set(room, m || null);
+  if (!m) return plain;
+  return resolveStreamDoc(room, m, key, opts);
+}
+
+function _shouldStream(room, text) {
+  return text.length >= STREAM_MIN_CHARS || (text.length >= STREAM_KEEP_CHARS && !!_streamServer.get(room));
+}
+
+// Piece ids an upload of this tab has sent but not yet committed. Our own
+// cleanup must never delete them.
+const _streamPinned = new Map(); // room -> Map<token, Set<id>>
+function _streamPinnedIds(room) {
+  const out = new Set();
+  const per = _streamPinned.get(room);
+  if (per) per.forEach(set => set.forEach(id => out.add(id)));
+  return out;
+}
+
+// Upload the pieces of `text` the server lacks, in text order with a bounded
+// window. Returns { m, finish } — call finish() once the manifest is
+// committed (or abandoned). opts.shouldContinue() false stops the upload.
+let _streamUpSeq = 0;
+async function _streamUpload(db, room, text, key, opts) {
+  const hkey = await _streamIdKey(key);
+  const cuts = _streamCuts(text);
+  const spans = [];
+  let s = 0;
+  for (const e of cuts) { spans.push([s, e]); s = e; }
+  const ids = await Promise.all(spans.map(([a, b]) => _streamId(hkey, text.slice(a, b))));
+  const m = { v: 2, n: text.length, c: spans.map(([a, b], i) => [ids[i], b - a]) };
+
+  // Which pieces are already up there? Server listing first; if REST is
+  // unavailable, trust the manifest we last saw for the room.
+  let onServer = null;
+  try {
+    const list = await _restFetchRoomVal(room, 'chunks', 10000, null, { shallow: true });
+    onServer = new Set(list && typeof list === 'object' ? Object.keys(list) : []);
+  } catch {}
+  if (!onServer) {
+    onServer = new Set();
+    const sm = _streamServer.get(room);
+    if (sm) sm.c.forEach(e => onServer.add(e[0]));
+  }
+  const todo = [];
+  const seen = new Set();
+  spans.forEach(([a, b], i) => {
+    const id = ids[i];
+    if (seen.has(id)) return;
+    seen.add(id);
+    if (!onServer.has(id)) todo.push({ id, a, b });
+  });
+  let todoChars = 0;
+  for (const t of todo) todoChars += t.b - t.a;
+
+  const token = ++_streamUpSeq;
+  if (!_streamPinned.has(room)) _streamPinned.set(room, new Map());
+  _streamPinned.get(room).set(token, new Set(ids));
+  const xfer = todoChars >= STREAM_UI_MIN_CHARS
+    ? StreamXfer.begin({ room, dir: 'up', total: m.n, done: m.n - todoChars }) : null;
+
+  const landed = new Set();
+  let prefix = 0;
+  const advancePrefix = () => {
+    while (prefix < m.c.length && (onServer.has(m.c[prefix][0]) || landed.has(m.c[prefix][0]))) prefix++;
+  };
+  advancePrefix();
+
+  // Readers can follow a big upload as it happens (see `live` above).
+  let liveRef = null, liveTimer = null, liveSent = -1;
+  const pushLive = () => {
+    liveTimer = null;
+    if (!liveRef || prefix === liveSent) return;
+    liveSent = prefix;
+    liveRef.child('p').set(prefix).catch(() => {});
+  };
+  if (todoChars >= STREAM_LIVE_MIN_CHARS) {
+    try {
+      liveRef = db.ref(`rooms/${room}/live`);
+      const lm = await encryptText(JSON.stringify(m), key);
+      liveSent = prefix;
+      liveRef.set({ by: STREAM_TAB_ID, u: STREAM_TAB_ID + '-' + token, m: lm, p: prefix }).catch(() => {});
+      liveRef.onDisconnect().remove().catch(() => {});
+    } catch { liveRef = null; }
+  }
+
+  let finished = false;
+  const finish = () => {
+    if (finished) return;
+    finished = true;
+    if (liveRef) {
+      clearTimeout(liveTimer);
+      try { liveRef.onDisconnect().cancel().catch(() => {}); } catch {}
+      try { liveRef.remove().catch(() => {}); } catch {}
+    }
+    const per = _streamPinned.get(room);
+    if (per) { per.delete(token); if (!per.size) _streamPinned.delete(room); }
+    if (xfer) xfer.end();
+  };
+
+  try {
+    let done = m.n - todoChars;
+    await new Promise((resolve, reject) => {
+      if (!todo.length) { resolve(); return; }
+      let next = 0, inflight = 0, inflightBytes = 0, failed = false;
+      let issue = Promise.resolve(); // keeps writes in text order
+      // Keep ~2s of data in flight at the measured rate: enough to fill the
+      // link, little enough that the `live` progress marker (queued behind
+      // these writes) reaches readers promptly on a slow connection.
+      const t0 = Date.now();
+      let acked = 0;
+      let ratio = 0.5; // encoded bytes per char, refined as pieces are encrypted
+      const windowBytes = () => {
+        const secs = (Date.now() - t0) / 1000;
+        if (!acked || secs < 0.5) return STREAM_UP_WINDOW / 3;
+        return Math.max(96 * 1024, Math.min(STREAM_UP_WINDOW, acked / secs * 2));
+      };
+      const pump = () => {
+        if (failed) return;
+        if (opts && opts.shouldContinue && !opts.shouldContinue()) { failed = true; reject(new Error('push-superseded')); return; }
+        while (next < todo.length && inflight < STREAM_UP_MAX_WRITES && (inflight === 0 || inflightBytes < windowBytes())) {
+          const it = todo[next++];
+          inflight++;
+          // Counted at its estimated size now, corrected once encrypted.
+          it.bytes = Math.ceil((it.b - it.a) * ratio);
+          inflightBytes += it.bytes;
+          const encP = encryptText(text.slice(it.a, it.b), key);
+          issue = issue.then(() => encP).then(enc => {
+            if (failed) return;
+            inflightBytes += enc.length - it.bytes;
+            it.bytes = enc.length;
+            ratio = ratio * 0.5 + (enc.length / (it.b - it.a)) * 0.5;
+            _fbTrackWrite(db.ref(`rooms/${room}/chunks/${it.id}`).set(enc)).then(() => {
+              inflight--;
+              inflightBytes -= it.bytes;
+              acked += it.bytes;
+              landed.add(it.id);
+              done += it.b - it.a;
+              if (xfer) xfer.progress(done);
+              advancePrefix();
+              if (liveRef && !liveTimer) liveTimer = setTimeout(pushLive, 400);
+              if (next >= todo.length && inflight === 0) resolve(); else pump();
+            }, (err) => { if (!failed) { failed = true; reject(err); } });
+          }, (err) => { if (!failed) { failed = true; reject(err); } });
+        }
+      };
+      pump();
+    });
+  } catch (e) {
+    finish();
+    throw e;
+  }
+  return { m, finish };
+}
+
+// Cleanup: pieces no manifest uses any more. Runs a while after this tab
+// commits (debounced), in two passes 30s apart: a piece is deleted only if the
+// CURRENT server manifest named it in neither pass. Another tab or device may
+// be uploading pieces for a manifest it hasn't committed yet; a normal push
+// commits within seconds (and a long one announces itself in `live`, which
+// stops cleanup), so its pieces are named by the second pass. Ids an upload of
+// ours is still holding are never touched.
+const STREAM_GC_CONFIRM_MS = 30000;
+const _streamGcTimers = new Map();
+function _streamScheduleGc(room, delay) {
+  clearTimeout(_streamGcTimers.get(room));
+  _streamGcTimers.set(room, setTimeout(() => {
+    _streamGcTimers.delete(room);
+    _streamGc(room).catch(() => {});
+  }, delay || 45000));
+}
+// Pieces on the server that the current manifest doesn't name, or null when
+// cleanup must not run now.
+async function _streamGcCandidates(room) {
+  if (!syncState.firebaseDb || !navigator.onLine) return null;
+  const list = await _restFetchRoomVal(room, 'chunks', 10000, null, { shallow: true });
+  if (!list || typeof list !== 'object') return null;
+  const live = await _restFetchRoomVal(room, 'live', 8000);
+  if (live && live.by !== STREAM_TAB_ID) return null;
+  const cur = await _streamReadServerManifest(room, getRoomEncKey(room, store.get('cade-sync-key') || ''));
+  if (!cur) return null; // can't read it — don't guess
+  const keep = new Set(cur.m ? cur.m.c.map(e => e[0]) : []);
+  const pinned = _streamPinnedIds(room);
+  return new Set(Object.keys(list).filter(id => !keep.has(id) && !pinned.has(id)));
+}
+async function _streamGc(room) {
+  if (_roomPushQ.has(room)) { _streamScheduleGc(room); return; }
+  const first = await _streamGcCandidates(room);
+  if (!first || !first.size) return;
+  await _streamSleep(STREAM_GC_CONFIRM_MS);
+  if (_roomPushQ.has(room)) { _streamScheduleGc(room); return; }
+  const second = await _streamGcCandidates(room);
+  if (!second) return;
+  const doomed = [...second].filter(id => first.has(id));
+  const db = syncState.firebaseDb;
+  for (let i = 0; i < doomed.length; i += 400) {
+    const upd = {};
+    doomed.slice(i, i + 400).forEach(id => { upd[id] = null; });
+    await db.ref(`rooms/${room}/chunks`).update(upd);
+  }
+}
+// After a commit, make sure every piece it names is still there — another
+// device's cleanup can race an upload that reused a piece it was deleting.
+// Re-upload any that went missing while our manifest is still the current one.
+function _streamScheduleVerify(room, m, text, key) {
+  setTimeout(async () => {
+    try {
+      const db = syncState.firebaseDb;
+      if (!db) return;
+      const cur = await _streamReadServerManifest(room, key);
+      if (!cur || !cur.m || _streamSig(cur.m) !== _streamSig(m)) return;
+      const list = await _restFetchRoomVal(room, 'chunks', 10000, null, { shallow: true }) || {};
+      let off = 0;
+      const sent = new Set();
+      for (const [id, len] of m.c) {
+        if (!list[id] && !sent.has(id)) {
+          sent.add(id);
+          console.warn('stream: re-uploading a piece that went missing in ' + room);
+          await db.ref(`rooms/${room}/chunks/${id}`).set(await encryptText(text.slice(off, off + len), key));
+        }
+        off += len;
+      }
+    } catch {}
+  }, 65000);
+}
+
+// Write `text` as room `room`'s document: streamed when large, the single blob
+// otherwise. opts: { locked, shouldContinue }. Returns { startedAt } — when the
+// authoritative `text` write began.
+async function _writeRoomText(db, room, text, key, opts) {
+  opts = opts || {};
+  const locked = opts.locked != null ? !!opts.locked : !!sessionRoomPasswords[room];
+  const lockPrefix = locked ? ROOM_LOCK_SENTINEL : '';
+  const up = _shouldStream(room, text) ? await _streamUpload(db, room, text, key, opts) : null;
+  try {
+    const encrypted = await encryptText(lockPrefix + (up ? _streamStubText(up.m) : text), key);
+    if (opts.shouldContinue && !opts.shouldContinue()) throw new Error('push-superseded');
+    // Fingerprint BEFORE the write: the local echo event fires synchronously
+    // inside `.set()`, so recording after would miss it.
+    _notePushedPayload(encrypted);
+    const startedAt = Date.now();
+    _lastPushAt.set(room, startedAt);
+    await _fbTrackWrite(db.ref(`rooms/${room}/text`).set(packRoomText(encrypted)));
+    const wasStreamed = !!_streamServer.get(room);
+    _streamServer.set(room, up ? up.m : null);
+    if (up) {
+      _streamKnownSet(room, up.m, text);
+      _streamScheduleVerify(room, up.m, text, key);
+    }
+    if (up || wasStreamed) _streamScheduleGc(room);
+    return { startedAt };
+  } finally {
+    if (up) up.finish();
+  }
+}
+
+// Every write of a room's text goes through here, so two pushes of one room
+// never overlap: a second push waits for the first to land instead of queueing
+// a second full copy behind it.
+const _roomPushQ = new Map();
+function _serializeRoomPush(room, fn) {
+  const prev = _roomPushQ.get(room);
+  const run = (prev || Promise.resolve()).then(fn);
+  const tail = run.then(() => {}, () => {});
+  _roomPushQ.set(room, tail);
+  tail.then(() => {
+    if (_roomPushQ.get(room) === tail) _roomPushQ.delete(room);
+    _servicePendingBroadcast(room);
+  });
+  return run;
+}
+
+// Firebase write promises stay pending while the socket is down — the SDK
+// queues the write and resends it on reconnect — so a slow or offline write is
+// not a failure and must never be re-issued (that is what stacked copies of big
+// documents). What's worth catching is a zombie socket: the stream claims to
+// be up yet nothing is acknowledged for a minute. Then cycle the connection.
+const WRITE_STALL_MS = 60000;
+let _fbWritesOut = 0, _fbLastAckAt = 0, _fbStallTimer = null;
+function _fbTrackWrite(promise) {
+  if (_fbWritesOut++ === 0) _fbLastAckAt = Date.now();
+  if (!_fbStallTimer) {
+    _fbStallTimer = setInterval(() => {
+      if (_fbWritesOut <= 0) { clearInterval(_fbStallTimer); _fbStallTimer = null; return; }
+      if (!syncState.streamConnected || !navigator.onLine) { _fbLastAckAt = Date.now(); return; }
+      if (Date.now() - _fbLastAckAt > WRITE_STALL_MS && syncState.firebaseDb) {
+        console.warn('Sync: writes unacknowledged for ' + (WRITE_STALL_MS / 1000) + 's — reconnecting');
+        _fbLastAckAt = Date.now();
+        try { syncState.firebaseDb.goOffline(); } catch {}
+        try { syncState.firebaseDb.goOnline(); } catch {}
+      }
+    }, 5000);
+  }
+  return promise.finally(() => { _fbWritesOut--; _fbLastAckAt = Date.now(); });
+}
+
+// ---- Following another device's upload as it happens (`live`) ----
+let _liveSess = null;
+function _streamAttachLive(db, room) {
+  const ref = db.ref(`rooms/${room}/live`);
+  syncState.liveRef = ref;
+  syncState.liveListener = ref.on('value', (snap) => { _streamOnLive(room, snap.val()).catch(() => {}); });
+}
+function _streamDetachLive() {
+  if (syncState.liveRef && syncState.liveListener) {
+    try { syncState.liveRef.off('value', syncState.liveListener); } catch {}
+  }
+  syncState.liveRef = null;
+  syncState.liveListener = null;
+  _streamLiveStop();
+}
+function _streamLiveStop() {
+  const s = _liveSess;
+  _liveSess = null;
+  if (!s) return;
+  s.stopped = true;
+  clearInterval(s.watch);
+  if (s.xfer) s.xfer.end(s.complete ? s.m.n : -1);
+}
+async function _streamOnLive(room, val) {
+  if (room !== syncState.roomName) return;
+  if (!val || typeof val !== 'object' || typeof val.m !== 'string' || !val.u || val.by === STREAM_TAB_ID) { _streamLiveStop(); return; }
+  if (_liveSess && _liveSess.u === val.u) {
+    _liveSess.p = Math.max(_liveSess.p, val.p | 0);
+    _liveSess.seenAt = Date.now();
+    _streamLivePump(_liveSess);
+    return;
+  }
+  _streamLiveStop();
+  const s = _liveSess = { room, u: val.u, p: val.p | 0, next: 0, active: 0, have: new Map(), stopped: false, seenAt: Date.now() };
+  const key = syncState.encKey;
+  const plain = await decryptText(val.m, key).catch(() => null);
+  const m = plain ? _streamManifestFromJSON(plain) : null;
+  if (s.stopped || !m) return;
+  const hkey = await _streamIdKey(key);
+  if (s.stopped) return;
+  for (const [id] of m.c) { const t = _streamCacheGet(id); if (t != null) s.have.set(id, t); }
+  await _streamFillLocal(room, m, s.have, hkey);
+  if (s.stopped) return;
+  let missing = 0;
+  for (const [id, len] of m.c) if (!s.have.has(id)) missing += len;
+  if (missing < STREAM_LIVE_MIN_CHARS) { s.stopped = true; if (_liveSess === s) _liveSess = null; return; }
+  Object.assign(s, { m, key, hkey, pi: 0 });
+  s.xfer = StreamXfer.begin({ room, dir: 'down', total: m.n, done: m.n - missing, preview: room === activeRoom && !localHasUnsyncedEdits(room) });
+  _streamLiveFeed(s);
+  // The sender went quiet without finishing: stop showing a transfer that
+  // isn't moving (the server drops `live` once it notices the disconnect).
+  s.watch = setInterval(() => { if (Date.now() - s.seenAt > 90000 && _liveSess === s) _streamLiveStop(); }, 10000);
+  _streamLivePump(s);
+}
+function _streamLiveFeed(s) {
+  let done = 0;
+  for (const [id, len] of s.m.c) if (s.have.has(id)) done += len;
+  s.xfer.progress(done);
+  while (s.pi < s.m.c.length && s.have.has(s.m.c[s.pi][0])) s.xfer.append(s.have.get(s.m.c[s.pi++][0]));
+  s.complete = s.pi >= s.m.c.length;
+}
+function _streamLivePump(s) {
+  if (s.stopped || !s.m) return;
+  const upto = Math.min(s.p, s.m.c.length);
+  while (s.active < STREAM_DOWN_CONC && s.next < upto) {
+    const id = s.m.c[s.next++][0];
+    if (s.have.has(id)) continue;
+    s.active++;
+    _streamGetPiece(s.room, id, s.key, s.hkey).then((t) => {
+      s.active--;
+      if (s.stopped) return;
+      if (t != null) { s.have.set(id, t); _streamLiveFeed(s); }
+      _streamLivePump(s);
+    }, () => { s.active--; if (!s.stopped) _streamLivePump(s); });
+  }
+}
+
+// ---- Transfer progress + streaming preview ----
+// One pill shows the transfer that matters most (the open room's, newest
+// first). An incoming document for the open room can also open a read-only
+// preview over the editor that fills in piece by piece, so the start is
+// readable (and copyable) long before the end arrives. It closes once the
+// full document is in the editor, keeping the reader's scroll position.
+const StreamXfer = (() => {
+  const xfers = new Map();
+  let seq = 0;
+  let pill = null, labelEl = null, metaEl = null, fillEl = null, btnEl = null;
+  let pv = null; // { room, el, view, shown, hidden, buf, timer }
+  let renderTimer = null;
+
+  function ensurePill() {
+    if (pill) return pill;
+    const wrap = document.getElementById('editor-wrap');
+    if (!wrap) return null;
+    pill = document.createElement('div');
+    pill.className = 'xfer-pill';
+    pill.hidden = true;
+    pill.setAttribute('role', 'status');
+    pill.innerHTML = '<div class="xfer-row"><span class="xfer-label"></span><button type="button" class="xfer-btn" hidden></button></div>'
+      + '<div class="xfer-track"><div class="xfer-fill"></div></div><div class="xfer-meta"></div>';
+    wrap.appendChild(pill);
+    labelEl = pill.querySelector('.xfer-label');
+    metaEl = pill.querySelector('.xfer-meta');
+    fillEl = pill.querySelector('.xfer-fill');
+    btnEl = pill.querySelector('.xfer-btn');
+    btnEl.addEventListener('click', () => {
+      if (!pv) return;
+      pv.hidden = !pv.hidden;
+      pv.el.hidden = pv.hidden;
+      render();
+    });
+    return pill;
+  }
+  function pick() {
+    let best = null;
+    for (const x of xfers.values()) {
+      const a = x.room === activeRoom ? 1 : 0, b = best && best.room === activeRoom ? 1 : 0;
+      if (!best || a > b || (a === b && x.id > best.id)) best = x;
+    }
+    return best;
+  }
+  function fmtSecs(s) {
+    if (s < 60) return Math.ceil(s) + 's';
+    if (s < 3600) return Math.round(s / 60) + 'm';
+    return (s / 3600).toFixed(1) + 'h';
+  }
+  function render() {
+    renderTimer = null;
+    if (!ensurePill()) return;
+    const x = pick();
+    if (!x) { pill.hidden = true; return; }
+    pill.hidden = false;
+    const pct = x.total > 0 ? Math.min(100, Math.floor(x.done / x.total * 100)) : 0;
+    labelEl.textContent = (x.dir === 'up' ? '↑ Sending' : '↓ Receiving') + ' “' + x.room + '”';
+    let meta = pct + '% · ' + _fmtBytes(x.done) + ' of ' + _fmtBytes(x.total);
+    const secs = (Date.now() - x.t0) / 1000, moved = x.done - x.d0;
+    if (secs > 3 && moved > 0 && x.done < x.total) meta += ' · ~' + fmtSecs((x.total - x.done) / (moved / secs)) + ' left';
+    if (xfers.size > 1) meta += ' · +' + (xfers.size - 1) + ' more';
+    metaEl.textContent = meta;
+    fillEl.style.width = pct + '%';
+    const showBtn = !!(pv && pv.room === x.room);
+    btnEl.hidden = !showBtn;
+    if (showBtn) btnEl.textContent = pv.hidden ? 'Show preview' : 'Hide preview';
+  }
+  function schedule() { if (!renderTimer) renderTimer = setTimeout(render, 120); }
+
+  function openPreview(room) {
+    if (pv) return pv.room === room;
+    const wrap = document.getElementById('editor-wrap');
+    if (!wrap) return false;
+    const el = document.createElement('div');
+    el.className = 'xfer-preview';
+    wrap.appendChild(el);
+    const exts = [EditorView.editable.of(false), EditorState.readOnly.of(true), editorTheme];
+    if (_wrapMode !== 'none') exts.push(EditorView.lineWrapping);
+    if (showLineNums) exts.push(lineNumbers());
+    const view = new EditorView({ state: EditorState.create({ doc: '', extensions: exts }), parent: el });
+    pv = { room, el, view, shown: 0, hidden: false, buf: [], timer: null };
+    if (ensurePill()) wrap.appendChild(pill); // keep the pill above the preview
+    // Keystrokes must not land in the covered editor.
+    try { editor.contentDOM.blur(); } catch {}
+    return true;
+  }
+  function flushPreview() {
+    if (!pv) return;
+    pv.timer = null;
+    if (!pv.buf.length) return;
+    const add = pv.buf.join('');
+    pv.buf = [];
+    pv.view.dispatch({ changes: { from: pv.view.state.doc.length, insert: add } });
+  }
+  function closePreview(finalLen) {
+    if (!pv) return;
+    const p = pv;
+    pv = null;
+    clearTimeout(p.timer);
+    let pos = -1;
+    try { if (!p.hidden && p.view.scrollDOM.scrollTop > 4) pos = p.view.lineBlockAtHeight(p.view.scrollDOM.scrollTop).from; } catch {}
+    try { p.view.destroy(); } catch {}
+    p.el.remove();
+    // The full document starts with what the preview showed: keep the place.
+    if (pos > 0 && finalLen >= 0 && p.room === activeRoom && editor.state.doc.length === finalLen) {
+      try { editor.dispatch({ effects: EditorView.scrollIntoView(pos, { y: 'start' }) }); } catch {}
+    }
+    schedule();
+  }
+
+  function begin(o) {
+    const x = { id: ++seq, room: o.room, dir: o.dir, total: o.total, done: o.done || 0, d0: o.done || 0, t0: Date.now(), preview: false, fed: 0 };
+    xfers.set(x.id, x);
+    if (o.preview && o.dir === 'down' && o.room === activeRoom) x.preview = openPreview(o.room);
+    schedule();
+    return {
+      progress(done) { x.done = done; schedule(); },
+      append(text) {
+        if (!x.preview || !pv || pv.room !== x.room) return;
+        // Two transfers of one document can feed one preview (the live upload,
+        // then the committed manifest); each appends from the start, so only
+        // text past what is already shown is new.
+        const start = x.fed;
+        x.fed += text.length;
+        if (x.fed <= pv.shown) return;
+        pv.buf.push(start >= pv.shown ? text : text.slice(pv.shown - start));
+        pv.shown = x.fed;
+        if (!pv.timer) pv.timer = setTimeout(flushPreview, 80);
+      },
+      // finalLen: length of the finished document, or -1 when it didn't finish.
+      end(finalLen) {
+        if (!xfers.delete(x.id)) return;
+        schedule();
+        if (!x.preview) return;
+        // Close once nothing else feeds the preview — after the caller has had
+        // its turn to put the finished document in the editor.
+        setTimeout(() => {
+          if (!pv || pv.room !== x.room) return;
+          for (const y of xfers.values()) if (y.preview && y.room === x.room) return;
+          closePreview(finalLen == null ? -1 : finalLen);
+        }, 0);
+      },
+    };
+  }
+  // The open room changed: a preview of another room's document must go.
+  function roomChanged() { if (pv && pv.room !== activeRoom) closePreview(-1); schedule(); }
+  return { begin, roomChanged };
+})();
+
 let _fbAppSeq = 0;
 // The two firebase compat scripts load synchronously in <head>, but on a
 // fresh device a flaky network can drop one (classically: app-compat lands,
@@ -12680,6 +13566,7 @@ function cleanupFirebase() {
       syncState.lockedListener = null;
     }
   }
+  _streamDetachLive();
   if (syncState.connRef && syncState.connListener) {
     syncState.connRef.off('value', syncState.connListener);
   }
@@ -12743,6 +13630,25 @@ function _notePushedPayload(payload) {
 }
 function _isSelfEcho(encoded) {
   return _recentPushSigs.includes(_pushSig(encoded));
+}
+
+// Every `text` event bumps this. A streamed document can take a while to
+// download, so by the time one is assembled a newer event (or our own write)
+// may already have replaced it on the server.
+let _textEventSeq = 0;
+function _remoteSnapshotSuperseded(room, seq, arrivedAt) {
+  if (seq !== _textEventSeq || syncState.roomName !== room) return true;
+  // We started writing after this snapshot arrived: the server holds ours now.
+  return arrivedAt <= (_lastPushAt.get(room) || 0);
+}
+// A remote document that couldn't be assembled (pieces missing, network) is
+// retried through the reconcile path, which re-reads the server.
+function _onRemoteDecodeError(room, e) {
+  const kind = e && e.stream;
+  if (kind === 'stale' || kind === 'abandoned' || syncState.roomName !== room) return;
+  console.warn('Sync: could not assemble the remote document (' + (kind || (e && e.message) || e) + ') — retrying');
+  syncState.pendingReconcile = true;
+  setTimeout(() => { try { reconcileOnLive(); } catch {} }, 3000);
 }
 
 // Replace the editor document with `newText` via the smallest single change
@@ -12915,6 +13821,8 @@ window.syncConnect = async function() {
 
     // Listen for remote changes
     syncState.firebaseListener = textRef.on('value', async (snap) => {
+      const seq = ++_textEventSeq;
+      const arrivedAt = Date.now();
       if (syncState.suppressUpdate) return;
       // During an offline→online reconcile, the reconcile flow fetches the
       // server snapshot itself and owns the merge decision — stay out of its way.
@@ -12926,18 +13834,21 @@ window.syncConnect = async function() {
       if (_isSelfEcho(encoded)) return;
       try {
         __mark('sync:recv-decrypt(' + encoded.length + 'b)');
-        let text = await decryptText(encoded, syncState.encKey);
+        const text = await decodeRoomPlain(roomName, encoded, syncState.encKey, {
+          ui: true,
+          preview: () => !localHasUnsyncedEdits(roomName),
+          isCurrent: () => seq === _textEventSeq && syncState.roomName === roomName,
+        });
         if (text === null) return;
-        // Strip sentinel if present (content was written by a locked client)
-        if (text.startsWith(ROOM_LOCK_SENTINEL)) text = text.slice(ROOM_LOCK_SENTINEL.length);
+        if (_remoteSnapshotSuperseded(roomName, seq, arrivedAt)) return;
         const currentText = editor.state.doc.toString();
         if (text !== currentText) {
           syncState.pendingRemoteText = text;
-          syncState.pendingRemoteAt = Date.now();
+          syncState.pendingRemoteAt = arrivedAt;
           tryApplyPendingRemote();
         }
       } catch (e) {
-        console.error('Sync decrypt error:', e);
+        _onRemoteDecodeError(roomName, e);
       }
     });
 
@@ -12983,23 +13894,16 @@ window.syncCancel = function() {
 // as the room's synced base; on failure we schedule a retry so offline edits
 // aren't lost.
 // Encrypt `text` for `roomName` (prepending the lock sentinel if the room is
-// password-locked this session) and write it to Firebase. `encKey` overrides
-// the active room key — used when mirroring a conflict into a *different* room.
-// A Firebase `.set()` on a wedged connection can stay pending forever (the SDK
-// queues it until the socket recovers). Bound every push so the broadcast retry
-// loop keeps breathing instead of dead-locking sync until reload.
-const PUSH_TIMEOUT_MS = 15000;
-function _withPushTimeout(promise) {
-  return Promise.race([
-    promise,
-    new Promise((_, rej) => setTimeout(() => rej(new Error('push-timeout')), PUSH_TIMEOUT_MS)),
-  ]);
-}
-async function pushTextToServer(roomName, text, encKey) {
+// password-locked this session) and write it to Firebase — streamed in pieces
+// when large (see STREAMED ROOM TEXT). `encKey` overrides the active room key —
+// used when mirroring a conflict into a *different* room. Pushes of one room
+// run one at a time (_serializeRoomPush); there is no timeout-and-retry: the
+// SDK resends a write that was pending across a reconnect, and re-issuing it
+// only queued another full copy behind the first (the big-document stall).
+// Returns { startedAt } — when the authoritative write began.
+async function pushTextToServer(roomName, text, encKey, opts) {
   const key = encKey || syncState.encKey;
-  const isLocked = !!sessionRoomPasswords[roomName];
-  const textToSend = isLocked ? ROOM_LOCK_SENTINEL + text : text;
-  const encrypted = await encryptText(textToSend, key);
+  const db = syncState.firebaseDb;
   // NOTE: deliberately no `suppressUpdate` here. The old code held that global
   // flag across this network await; while a write was in flight (or wedged,
   // offline) EVERY editor update skipped broadcast scheduling and EVERY remote
@@ -13007,23 +13911,24 @@ async function pushTextToServer(roomName, text, encKey) {
   // already echo-safe: our own write decrypts to text identical to the editor
   // (→ just records the synced base) and anything else goes through the
   // base-guarded safeApplyRemote path.
-  // Fingerprint BEFORE the write: the local echo event fires synchronously
-  // inside `.set()`, so recording after would miss it.
-  _notePushedPayload(encrypted);
-  await _withPushTimeout(syncState.firebaseDb.ref(`rooms/${roomName}/text`).set(packRoomText(encrypted)));
-  // Bump the room's version counter so reconnecting peers can tell the server
-  // advanced (#3). Fire-and-forget so it never blocks the caller; a failure
-  // here is harmless (reconcile falls back to the text-based heuristics when
-  // the version is unknown).
-  syncState.firebaseDb.ref(`rooms/${roomName}/v`).transaction(cur => (cur || 0) + 1)
-    .then(res => {
-      const v = res && res.snapshot ? res.snapshot.val() : null;
-      if (v != null) {
-        saveRoomVersion(roomName, v);
-        if (roomName === syncState.roomName) syncState.serverVersion = v;
-      }
-    })
-    .catch(() => {});
+  return _serializeRoomPush(roomName, async () => {
+    if (!db) throw new Error('sync-not-ready');
+    const res = await _writeRoomText(db, roomName, text, key, opts);
+    // Bump the room's version counter so reconnecting peers can tell the server
+    // advanced (#3). Fire-and-forget so it never blocks the caller; a failure
+    // here is harmless (reconcile falls back to the text-based heuristics when
+    // the version is unknown).
+    db.ref(`rooms/${roomName}/v`).transaction(cur => (cur || 0) + 1)
+      .then(r => {
+        const v = r && r.snapshot ? r.snapshot.val() : null;
+        if (v != null) {
+          saveRoomVersion(roomName, v);
+          if (roomName === syncState.roomName) syncState.serverVersion = v;
+        }
+      })
+      .catch(() => {});
+    return res;
+  });
 }
 
 // Encrypt + write `text` for `roomName` WITHOUT touching the global
@@ -13034,21 +13939,30 @@ async function pushTextToServer(roomName, text, encKey) {
 async function pushRoomTextQuiet(roomName, text, encKey) {
   if (!roomName || !syncState.firebaseDb) return;
   const key = encKey || syncState.encKey;
-  const isLocked = !!sessionRoomPasswords[roomName];
-  const textToSend = isLocked ? ROOM_LOCK_SENTINEL + text : text;
-  const encrypted = await encryptText(textToSend, key);
-  _notePushedPayload(encrypted); // before .set() — its local echo is synchronous
-  await _withPushTimeout(syncState.firebaseDb.ref(`rooms/${roomName}/text`).set(packRoomText(encrypted)));
-  saveRoomSynced(roomName, text); // confirmed on the server
-  try {
-    const res = await syncState.firebaseDb.ref(`rooms/${roomName}/v`).transaction(cur => (cur || 0) + 1);
-    const v = res && res.snapshot ? res.snapshot.val() : null;
-    if (v != null) saveRoomVersion(roomName, v);
-  } catch (_) {}
+  const db = syncState.firebaseDb;
+  return _serializeRoomPush(roomName, async () => {
+    await _writeRoomText(db, roomName, text, key);
+    saveRoomSynced(roomName, text); // confirmed on the server
+    try {
+      const res = await db.ref(`rooms/${roomName}/v`).transaction(cur => (cur || 0) + 1);
+      const v = res && res.snapshot ? res.snapshot.val() : null;
+      if (v != null) saveRoomVersion(roomName, v);
+    } catch (_) {}
+  });
 }
 
 let broadcastTimer = null;
 let _broadcastEpoch = -1; // _switchEpoch captured when the broadcast was queued
+// An edit made while a push of the open room is still uploading. It is sent by
+// one follow-up push once that push lands — never by a second copy queued
+// behind it.
+let _broadcastAgain = false;
+function _servicePendingBroadcast(room) {
+  if (!_broadcastAgain || room !== syncState.roomName || _roomPushQ.has(room)) return;
+  _broadcastAgain = false;
+  clearTimeout(broadcastTimer);
+  broadcastTimer = setTimeout(_doBroadcast, 250);
+}
 async function _doBroadcast() {
   if (!syncState.connected) return;
   // A suppress window (a remote snapshot being dispatched) is transient; a
@@ -13075,6 +13989,9 @@ async function _doBroadcast() {
   }
   const roomName = syncState.roomName;
   if (!roomName || !syncState.firebaseDb) return;
+  // One push of a room at a time (see _servicePendingBroadcast).
+  if (_roomPushQ.has(roomName)) { _broadcastAgain = true; return; }
+  const epoch = _switchEpoch;
   let raw;
   try {
     raw = editor.state.doc.toString();
@@ -13082,18 +13999,21 @@ async function _doBroadcast() {
     // sides — pushing identical text again would only churn the version counter.
     if (raw === loadRoomSynced(roomName)) return;
     __mark('sync:broadcast(' + raw.length + 'ch)');
-    const pushStartedAt = Date.now();
-    await pushTextToServer(roomName, raw, syncState.encKey);
+    // A big streamed upload stops between pieces (and never commits) once the
+    // room is left or a reconcile takes over — that flow owns the text then.
+    const { startedAt: pushStartedAt } = await pushTextToServer(roomName, raw, syncState.encKey, {
+      shouldContinue: () => syncState.roomName === roomName && _switchEpoch === epoch
+        && !syncState.pendingReconcile && !syncState.conflictResolving,
+    });
     // If the editor hasn't moved on, mark this text as synced. If it has
-    // (user kept typing during the in-flight broadcast — those edits couldn't
-    // schedule their own broadcast because suppressUpdate was true), schedule
-    // a follow-up pass so the latest content reaches the server.
+    // (user kept typing during the in-flight broadcast), schedule a follow-up
+    // pass so the latest content reaches the server.
     if (syncState.roomName !== roomName) return;
     // The server now holds `raw`. Any remote snapshot that arrived BEFORE this
-    // push began is superseded — the server state it captured was overwritten
-    // by our write — so drop it before the idle gate can "restore" stale text
-    // over what the user typed. Snapshots that arrived DURING the flight may
-    // reflect a write that landed after ours; those stay queued.
+    // push's write began is superseded — the server state it captured was
+    // overwritten by our write — so drop it before the idle gate can "restore"
+    // stale text over what the user typed. Snapshots that arrived DURING the
+    // flight may reflect a write that landed after ours; those stay queued.
     if (syncState.pendingRemoteText != null && (syncState.pendingRemoteAt || 0) <= pushStartedAt) {
       syncState.pendingRemoteText = null;
     }
@@ -13104,6 +14024,7 @@ async function _doBroadcast() {
       broadcastTimer = setTimeout(_doBroadcast, 500);
     }
   } catch (e) {
+    if (e && e.message === 'push-superseded') return; // the room was left or a reconcile took over
     console.warn('Sync broadcast failed (will retry):', e && (e.message || e.code) || e);
     // Retry: the local text is unsynced; re-attempt after a delay. Subsequent
     // edits will reset the debounce; otherwise this keeps trying until success.
@@ -13364,12 +14285,18 @@ async function reconcileOnLive() {
 // trusted it concluded "nothing changed", stamped the stale text as synced,
 // and the user's next edit pushed the stale doc over newer server data
 // (the unlock-phone-and-clobber bug, item 2). REST can't lie about staleness.
-async function _restFetchRoomVal(roomName, child, timeoutMs, signal) {
+async function _restFetchRoomVal(roomName, child, timeoutMs, signal, opts) {
   const base = syncState.firebaseUrl || store.get('cade-firebase-url') || '';
   if (!base || typeof fetch !== 'function') throw new Error('rest-unavailable');
-  const url = base.replace(/\/+$/, '') + '/rooms/' + encodeURIComponent(roomName) + '/' + child + '.json';
+  const shallow = !!(opts && opts.shallow);
+  const maxBytes = (opts && opts.maxBytes) || 0;
+  const url = base.replace(/\/+$/, '') + '/rooms/' + encodeURIComponent(roomName) + '/' + child + '.json' + (shallow ? '?shallow=true' : '');
   const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), timeoutMs || 8000);
+  // An IDLE timeout: it restarts whenever bytes arrive, so a big document on a
+  // slow link finishes instead of being cut off (and fetched again) mid-way.
+  const idleMs = timeoutMs || 8000;
+  let t = setTimeout(() => ctrl.abort(), idleMs);
+  const alive = () => { clearTimeout(t); t = setTimeout(() => ctrl.abort(), idleMs); };
   // An optional caller-owned signal (the quick-switcher's scan) drops the
   // request the moment its results stop being wanted.
   const relay = () => ctrl.abort();
@@ -13380,7 +14307,20 @@ async function _restFetchRoomVal(roomName, child, timeoutMs, signal) {
   try {
     const r = await fetch(url, { signal: ctrl.signal, cache: 'no-store' });
     if (!r.ok) throw new Error('rest-' + r.status);
-    return await r.json();
+    if (!r.body || typeof r.body.getReader !== 'function') return await r.json();
+    const reader = r.body.getReader();
+    const dec = new TextDecoder();
+    let body = '', bytes = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      bytes += value.length;
+      if (maxBytes && bytes > maxBytes) { ctrl.abort(); throw new Error('rest-too-big'); }
+      body += dec.decode(value, { stream: true });
+      alive();
+    }
+    body += dec.decode();
+    return JSON.parse(body);
   } finally {
     clearTimeout(t);
     if (signal) signal.removeEventListener('abort', relay);
@@ -13419,12 +14359,17 @@ async function reconcileRoom() {
   const encoded = unpackRoomText(snapVal);
   if (encoded) {
     __mark('sync:reconcile-decrypt(' + encoded.length + 'b)');
-    let decoded = await decryptText(encoded, syncState.encKey);
+    // A streamed document's pieces download here; a failure throws, and
+    // reconcileOnLive retries.
+    const decoded = await decodeRoomPlain(roomName, encoded, syncState.encKey, {
+      ui: true,
+      preview: () => !localHasUnsyncedEdits(roomName),
+      isCurrent: () => syncState.roomName === roomName,
+    });
     if (syncState.roomName !== roomName) return;
     // Undecryptable (wrong key / locked room not yet unlocked): don't risk
     // clobbering — bail and let the lock/unlock flow handle it.
     if (decoded === null) return;
-    if (decoded.startsWith(ROOM_LOCK_SENTINEL)) decoded = decoded.slice(ROOM_LOCK_SENTINEL.length);
     serverText = decoded;
   }
 
@@ -13864,6 +14809,16 @@ function _flushPendingPersist() {
   try { saveRoomMeta(); } catch {}
 }
 window.addEventListener('pagehide', _flushPendingPersist);
+// A sync-only room's text exists only in this tab until its push lands —
+// closing mid-upload (a big paste can take a while) would lose it. Ask first.
+window.addEventListener('beforeunload', (e) => {
+  try {
+    let unsent = false;
+    for (const r of _roomPushQ.keys()) if (roomIsSyncOnly(r)) { unsent = true; break; }
+    if (!unsent && activeRoom && roomIsSyncOnly(activeRoom) && localHasUnsyncedEdits(activeRoom)) unsent = true;
+    if (unsent) { e.preventDefault(); e.returnValue = ''; }
+  } catch {}
+});
 
 // Resume-from-hidden resync. While the page is hidden (mobile screen off, app
 // minimized, device asleep) the OS suspends timers and can silently kill the
@@ -13988,9 +14943,8 @@ window.rotateEncryptionKey = async function() {
     const newRoomKey = pw ? newKey + '\n' + pw : newKey;
     const isLocked = !!pw;
     try {
-      const payload = isLocked ? ROOM_LOCK_SENTINEL + text : text;
-      const encrypted = await encryptText(payload, newRoomKey);
-      await db.ref(`rooms/${room}/text`).set(packRoomText(encrypted));
+      // Streamed rooms get every piece re-encrypted (piece ids follow the key).
+      await _serializeRoomPush(room, () => _writeRoomText(db, room, text, newRoomKey, { locked: isLocked }));
       db.ref(`rooms/${room}/v`).transaction(c => (c || 0) + 1)
         .then(res => { const v = res && res.snapshot ? res.snapshot.val() : null; if (v != null) saveRoomVersion(room, v); })
         .catch(() => {});
@@ -14797,8 +15751,8 @@ async function _qsScanRemote(token, list, q, tagQ, t) {
           const val = await _restFetchRoomVal(r, 'text', 6000, abort.signal);
           const enc = unpackRoomText(val);
           if (enc) {
-            const dec = await decryptText(enc, getRoomEncKey(r, baseKey));
-            if (dec != null) text = dec.startsWith(ROOM_LOCK_SENTINEL) ? dec.slice(ROOM_LOCK_SENTINEL.length) : dec;
+            const dec = await decodeRoomPlain(r, enc, getRoomEncKey(r, baseKey), { isCurrent: () => token === _qsScanToken });
+            if (dec != null) text = dec;
           }
         } catch {}
         if (token !== _qsScanToken) return;
@@ -15215,6 +16169,7 @@ async function _doSwitchRoom(name, firebaseUrl, baseEncKey) {
   // Keep an open Snapshots panel pointed at the new room's history (#6).
   try { if (document.getElementById('snapshots-overlay').classList.contains('open')) renderSnapshotsList(); } catch {}
   _activeRoomReady = true; // local switch committed; same-room clicks now no-op
+  try { StreamXfer.roomChanged(); } catch {} // a preview of the old room's download goes
   try { inboxViewSync(); } catch {} // the inbox shows as a list (or stops)
   try { _updateLocationForRoom(); } catch {} // reflect ws/room in the URL (item 5)
   try { loadAutoColorRules(); refreshAutoColor(); } catch {} // per-room auto-color rules (widget g)
@@ -15302,6 +16257,8 @@ async function _doSwitchRoom(name, firebaseUrl, baseEncKey) {
       // Stale listener safety: if the active room moved on (listener detach
       // raced with an in-flight callback), never touch the editor.
       if (syncState.roomName !== name) return;
+      const seq = ++_textEventSeq;
+      const arrivedAt = Date.now();
       if (syncState.suppressUpdate) return;
       // During an offline→online reconcile, reconcileRoom fetches the server
       // snapshot itself and owns the merge decision — stay out of its way.
@@ -15319,11 +16276,18 @@ async function _doSwitchRoom(name, firebaseUrl, baseEncKey) {
       if (_isSelfEcho(encoded)) return;
       __mark('sync:recv(' + encoded.length + 'b)');
       try {
-        let text = await decryptText(encoded, syncState.encKey);
-        // Re-check after the async decrypt — the room may have changed mid-await.
+        // A streamed document downloads its pieces here (with progress, and a
+        // preview when it will replace a clean local copy).
+        const text = await decodeRoomPlain(name, encoded, syncState.encKey, {
+          ui: true,
+          preview: () => !localHasUnsyncedEdits(name),
+          isCurrent: () => seq === _textEventSeq && syncState.roomName === name,
+        });
+        // Re-check after the async decode — the room may have changed, or a
+        // newer snapshot replaced this one, while it downloaded.
         if (syncState.roomName !== name) return;
         if (text === null) return;
-        if (text.startsWith(ROOM_LOCK_SENTINEL)) text = text.slice(ROOM_LOCK_SENTINEL.length);
+        if (_remoteSnapshotSuperseded(name, seq, arrivedAt)) return;
         // Defer to safeApplyRemote, which checks the synced base so we never
         // clobber unsynced local edits (the old "first snapshot" path here
         // overwrote the editor blindly — that was the truncation bug).
@@ -15337,12 +16301,14 @@ async function _doSwitchRoom(name, firebaseUrl, baseEncKey) {
         // active typing. For the first snapshot in a session (no local edits
         // recorded against this base), apply immediately via safeApplyRemote.
         syncState.pendingRemoteText = text;
-        syncState.pendingRemoteAt = Date.now();
+        syncState.pendingRemoteAt = arrivedAt;
         tryApplyPendingRemote();
       } catch (e) {
-        console.error('Sync decrypt error:', e);
+        _onRemoteDecodeError(name, e);
       }
     });
+    // A big upload from another device streams in before it's committed.
+    _streamAttachLive(db, name);
 
     // Watch lock flag — also the canonical mechanism to discover a remote lock
     // when initial connection was offline (locked listener fires once data is
