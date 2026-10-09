@@ -13981,14 +13981,19 @@ async function _doBroadcast() {
   // unsynced offline edits would clobber the server before the user can choose.
   // Retry rather than drop: edits typed DURING the reconcile still need to
   // reach the server once it completes (dropping left them stranded until the
-  // next keystroke or divergence repair).
-  if (syncState.pendingReconcile || syncState.conflictResolving) {
+  // next keystroke or divergence repair). The same holds while the room's key
+  // is being changed (rekeying) — this push would use the old key.
+  if (syncState.pendingReconcile || syncState.conflictResolving || syncState.rekeying) {
     clearTimeout(broadcastTimer);
     broadcastTimer = setTimeout(_doBroadcast, 1000);
     return;
   }
   const roomName = syncState.roomName;
   if (!roomName || !syncState.firebaseDb) return;
+  // A locked room this device hasn't unlocked (or whose password changed
+  // elsewhere) would be pushed under the wrong key. Its edits stay local and
+  // go up once it's unlocked (the unlock re-reads and reconciles).
+  if (roomHasPassword(roomName) && !roomIsUnlocked(roomName)) return;
   // One push of a room at a time (see _servicePendingBroadcast).
   if (_roomPushQ.has(roomName)) { _broadcastAgain = true; return; }
   const epoch = _switchEpoch;
@@ -14003,7 +14008,7 @@ async function _doBroadcast() {
     // room is left or a reconcile takes over — that flow owns the text then.
     const { startedAt: pushStartedAt } = await pushTextToServer(roomName, raw, syncState.encKey, {
       shouldContinue: () => syncState.roomName === roomName && _switchEpoch === epoch
-        && !syncState.pendingReconcile && !syncState.conflictResolving,
+        && !syncState.pendingReconcile && !syncState.conflictResolving && !syncState.rekeying,
     });
     // If the editor hasn't moved on, mark this text as synced. If it has
     // (user kept typing during the in-flight broadcast), schedule a follow-up
@@ -14258,7 +14263,9 @@ function scheduleDivergenceRepair(roomName) {
 // so it runs a single resolution at a time; leaves `pendingReconcile` set if the
 // server fetch fails so it retries on the next live signal.
 async function reconcileOnLive() {
-  if (!syncState.connected || !syncState.pendingReconcile || syncState.conflictResolving) return;
+  // While a key change is in flight, a reconcile could push under the old key;
+  // the reconnect that ends the key change reconciles afresh.
+  if (!syncState.connected || !syncState.pendingReconcile || syncState.conflictResolving || syncState.rekeying) return;
   if (!isStreamLive()) return;
   syncState.conflictResolving = true;
   try {
@@ -14895,6 +14902,44 @@ window.forceSyncReload = async function() {
   setTimeout(() => { try { location.reload(); } catch { location.href = location.href; } }, 300);
 };
 
+// Move one room's server copy from `oldKey` to `newKey` (effective room keys,
+// a room password folded in). It is the SERVER's text that gets re-encrypted:
+// this device's copy can be stale (another device edited the room since this
+// one last opened it) or missing altogether (sync-only and offloaded rooms
+// keep none), and writing that would replace newer text or wipe the room. The
+// local copy is uploaded only when the server has never held the room. Local
+// edits that never reached the server stay local and sync as usual once the
+// room is open under the new key (reconcile merges them).
+// Returns 'done', 'empty' (nothing anywhere to re-encrypt) or 'unreadable'
+// (the server copy doesn't decrypt with oldKey — left untouched). Throws when
+// the server can't be reached.
+async function _reencryptRoomOnServer(db, room, oldKey, newKey, locked) {
+  return _serializeRoomPush(room, async () => {
+    let val;
+    try { val = await _restFetchRoomVal(room, 'text', 15000); }
+    catch {
+      val = await Promise.race([
+        db.ref(`rooms/${room}/text`).once('value').then(s => s.val()),
+        _streamSleep(20000).then(() => { throw new Error('server unreachable'); }),
+      ]);
+    }
+    let text;
+    if (val != null) {
+      const enc = unpackRoomText(val);
+      if (!enc) return 'unreadable';
+      text = await decodeRoomPlain(room, enc, oldKey);
+      if (text == null) return 'unreadable';
+    } else {
+      text = room === activeRoom ? editor.state.doc.toString() : loadRoomCache(room);
+      if (!text) return 'empty';
+    }
+    await _writeRoomText(db, room, text, newKey, { locked });
+    if (val == null) saveRoomSynced(room, text); // the server holds this device's copy now
+    db.ref(`rooms/${room}/v`).transaction(c => (c || 0) + 1).catch(() => {});
+    return 'done';
+  });
+}
+
 // Encryption key rotation (#10). Changing the shared passphrase used to orphan
 // every server blob — the new key couldn't decrypt the old ciphertext, so
 // reconcile bailed and rooms read as empty. This re-encrypts every room we can
@@ -14932,48 +14977,52 @@ window.rotateEncryptionKey = async function() {
   const targets = (rooms && rooms.length) ? rooms.slice() : (activeRoom ? [activeRoom] : []);
   let rekeyed = 0;
   const skipped = [];
-  for (const room of targets) {
-    // Skip reserved workspace-config pseudo-rooms (handled separately below).
-    if (room.indexOf('__cade_ws_') === 0) continue;
-    // Locked rooms we don't hold the session password for can't be re-encrypted
-    // correctly — their content key folds in the password.
-    if (roomHasPassword(room) && !(room in sessionRoomPasswords)) { skipped.push(room); continue; }
-    const text = (room === activeRoom) ? editor.state.doc.toString() : loadRoomCache(room);
-    const pw = sessionRoomPasswords[room];
-    const newRoomKey = pw ? newKey + '\n' + pw : newKey;
-    const isLocked = !!pw;
-    try {
-      // Streamed rooms get every piece re-encrypted (piece ids follow the key).
-      await _serializeRoomPush(room, () => _writeRoomText(db, room, text, newRoomKey, { locked: isLocked }));
-      db.ref(`rooms/${room}/v`).transaction(c => (c || 0) + 1)
-        .then(res => { const v = res && res.snapshot ? res.snapshot.val() : null; if (v != null) saveRoomVersion(room, v); })
-        .catch(() => {});
-      if (isLocked) {
-        const verifyBlob = await encryptText(ROOM_LOCK_SENTINEL, newRoomKey);
-        await db.ref(`rooms/${room}/verify`).set(verifyBlob);
+  // Hold the open room's pushes until it switches to the new key: an old-key
+  // broadcast landing after its re-encryption would leave the server copy
+  // unreadable to every device on the new key.
+  syncState.rekeying = true;
+  try {
+    for (const room of targets) {
+      // Skip reserved workspace-config pseudo-rooms (handled separately below).
+      if (room.indexOf('__cade_ws_') === 0) continue;
+      // Locked rooms we don't hold the session password for can't be re-encrypted
+      // correctly — their content key folds in the password.
+      if (roomHasPassword(room) && !(room in sessionRoomPasswords)) { skipped.push(room); continue; }
+      const pw = sessionRoomPasswords[room];
+      const oldRoomKey = pw ? oldKey + '\n' + pw : oldKey;
+      const newRoomKey = pw ? newKey + '\n' + pw : newKey;
+      try {
+        // Streamed rooms get every piece re-encrypted (piece ids follow the key).
+        const res = await _reencryptRoomOnServer(db, room, oldRoomKey, newRoomKey, !!pw);
+        if (res === 'unreadable') { skipped.push(room); continue; }
+        if (pw) {
+          const verifyBlob = await encryptText(ROOM_LOCK_SENTINEL, newRoomKey);
+          await db.ref(`rooms/${room}/verify`).set(verifyBlob);
+        }
+        if (res === 'done') rekeyed++;
+      } catch (e) {
+        console.warn('Re-key failed for room', room, e);
+        skipped.push(room);
       }
-      saveRoomSynced(room, text);
-      rekeyed++;
-    } catch (e) {
-      console.warn('Re-key failed for room', room, e);
-      skipped.push(room);
     }
-  }
 
-  // Commit the new base key everywhere it's read from.
-  store.set('cade-sync-key', newKey);
-  syncState.encKey = getRoomEncKey(activeRoom, newKey);
-  const keyInput = document.getElementById('sync-enc-key');
-  if (keyInput) keyInput.value = newKey;
+    // Commit the new base key everywhere it's read from.
+    store.set('cade-sync-key', newKey);
+    syncState.encKey = getRoomEncKey(activeRoom, newKey);
+    const keyInput = document.getElementById('sync-enc-key');
+    if (keyInput) keyInput.value = newKey;
+  } finally {
+    syncState.rekeying = false;
+  }
 
   // Re-publish the workspace config under the new key. Its storage path is
   // derived from a key fingerprint, so clear the cached fingerprint first.
   try { _wsKeyFp = null; if (typeof pushWorkspacesNow === 'function') await pushWorkspacesNow(); }
   catch (e) { console.warn('Workspace re-key push failed:', e); }
 
-  // Reconnect the active room so its live listener uses the new key. The server
-  // text we just wrote matches local with a saved synced base, so reconcile is
-  // a no-op (no spurious conflict).
+  // Reconnect the active room so its live listener uses the new key. Its
+  // reconcile then adopts the re-encrypted server copy, or merges in edits made
+  // here that hadn't reached the server.
   if (activeRoom) {
     await _doSwitchRoom(activeRoom, firebaseUrl, newKey);
   } else {
@@ -16226,19 +16275,7 @@ async function _doSwitchRoom(name, firebaseUrl, baseEncKey) {
         // (already dispatched above) so user data isn't hidden in the meantime.
         updateSyncUI('', 'Locked — unlock to sync');
         const isRemoteLock = !store.get('cade-room-pw-hash:' + name);
-        const verifyFn = isRemoteLock ? async (pw) => {
-          const testKey = baseEncKey + '\n' + pw;
-          const verifySnap = await db.ref(`rooms/${name}/verify`).once('value');
-          if (verifySnap.val()) {
-            const result = await decryptText(verifySnap.val(), testKey);
-            return result !== null && result.startsWith(ROOM_LOCK_SENTINEL);
-          }
-          const textSnap = await db.ref(`rooms/${name}/text`).once('value');
-          const textEncoded = unpackRoomText(textSnap.val());
-          if (!textEncoded) return false;
-          const result = await decryptText(textEncoded, testKey);
-          return result !== null && result.startsWith(ROOM_LOCK_SENTINEL);
-        } : null;
+        const verifyFn = isRemoteLock ? _remoteLockVerifyFn(db, name, baseEncKey) : null;
         showRoomUnlock(name, async () => {
           await _doSwitchRoom(name, firebaseUrl, baseEncKey);
         }, verifyFn);
@@ -16286,7 +16323,12 @@ async function _doSwitchRoom(name, firebaseUrl, baseEncKey) {
         // Re-check after the async decode — the room may have changed, or a
         // newer snapshot replaced this one, while it downloaded.
         if (syncState.roomName !== name) return;
-        if (text === null) return;
+        if (text === null) {
+          // Doesn't decrypt with the password this device unlocked it with:
+          // it may have been changed on another device.
+          if (name in sessionRoomPasswords) _recheckRoomLock(name, baseEncKey);
+          return;
+        }
         if (_remoteSnapshotSuperseded(name, seq, arrivedAt)) return;
         // Defer to safeApplyRemote, which checks the synced base so we never
         // clobber unsynced local edits (the old "first snapshot" path here
@@ -16319,24 +16361,21 @@ async function _doSwitchRoom(name, firebaseUrl, baseEncKey) {
         store.set('cade-room-pw-remote:' + name, 'true');
       } else if (snap.val() !== true) {
         store.remove('cade-room-pw-remote:' + name);
+        // Unlocked on another device: its text is back under the plain sync
+        // key, so the password this device unlocked it with no longer applies.
+        if (!store.get('cade-room-pw-hash:' + name) && (name in sessionRoomPasswords)) {
+          delete sessionRoomPasswords[name];
+          syncState.encKey = getRoomEncKey(name, baseEncKey);
+          _rereadOpenRoom();
+        }
       }
       if (snap.val() === true && !roomIsUnlocked(name)) {
         const isRemoteLock = !store.get('cade-room-pw-hash:' + name);
-        const verifyFn = isRemoteLock ? async (pw) => {
-          const testKey = baseEncKey + '\n' + pw;
-          const verifySnap = await db.ref(`rooms/${name}/verify`).once('value');
-          if (verifySnap.val()) {
-            const result = await decryptText(verifySnap.val(), testKey);
-            return result !== null && result.startsWith(ROOM_LOCK_SENTINEL);
-          }
-          const textSnap = await db.ref(`rooms/${name}/text`).once('value');
-          const textEncoded = unpackRoomText(textSnap.val());
-          if (!textEncoded) return false;
-          const result = await decryptText(textEncoded, testKey);
-          return result !== null && result.startsWith(ROOM_LOCK_SENTINEL);
-        } : null;
+        const verifyFn = isRemoteLock ? _remoteLockVerifyFn(db, name, baseEncKey) : null;
         showRoomUnlock(name, async (pw) => {
           syncState.encKey = getRoomEncKey(name, baseEncKey);
+          // The text that arrived while it was locked couldn't be read — fetch it.
+          _rereadOpenRoom();
           renderRoomTabs();
         }, verifyFn);
       }
@@ -20240,6 +20279,71 @@ editor.contentDOM.addEventListener('blur', () => {
 var _unlockCallback = null;
 var _unlockVerifyFn = null;
 
+// Password check for a room locked on another device (no local hash here):
+// the password is right if it decrypts the room's verify blob (or, for rooms
+// locked before verify blobs existed, its text) to the lock sentinel.
+function _remoteLockVerifyFn(db, name, baseEncKey) {
+  return async (pw) => {
+    const testKey = baseEncKey + '\n' + pw;
+    const verifySnap = await db.ref(`rooms/${name}/verify`).once('value');
+    if (verifySnap.val()) {
+      const result = await decryptText(verifySnap.val(), testKey);
+      return result !== null && result.startsWith(ROOM_LOCK_SENTINEL);
+    }
+    const textSnap = await db.ref(`rooms/${name}/text`).once('value');
+    const textEncoded = unpackRoomText(textSnap.val());
+    if (!textEncoded) return false;
+    const result = await decryptText(textEncoded, testKey);
+    return result !== null && result.startsWith(ROOM_LOCK_SENTINEL);
+  };
+}
+
+// Fetch the open room's server text again and reconcile (after its key changed
+// under it — unlocked, re-locked or its password removed).
+function _rereadOpenRoom() {
+  if (!syncState.connected) return;
+  syncState.pendingReconcile = true;
+  try { reconcileOnLive(); } catch {}
+}
+
+// The open room's text stopped decrypting with the password this device
+// unlocked it with. If the room's verify blob no longer matches that password
+// either, it was changed on another device: forget it (so nothing is pushed
+// under the old one — see _doBroadcast) and ask for the new one. Debounced: a
+// password change writes the text and the verify blob a moment apart.
+let _lockRecheckTimer = null;
+function _recheckRoomLock(name, baseEncKey) {
+  if (_lockRecheckTimer) return;
+  _lockRecheckTimer = setTimeout(async () => {
+    _lockRecheckTimer = null;
+    const db = syncState.firebaseDb;
+    if (!db || syncState.roomName !== name || !(name in sessionRoomPasswords)) return;
+    let locked, verify;
+    try {
+      [locked, verify] = await Promise.all([
+        db.ref(`rooms/${name}/locked`).once('value').then(s => s.val()),
+        db.ref(`rooms/${name}/verify`).once('value').then(s => s.val()),
+      ]);
+    } catch { return; }
+    if (locked !== true) return; // removed instead — the lock listener handles that
+    const check = verify ? await decryptText(verify, getRoomEncKey(name, baseEncKey)) : null;
+    if (check != null && check.startsWith(ROOM_LOCK_SENTINEL)) return; // still current — a stray payload
+    if (syncState.roomName !== name || !(name in sessionRoomPasswords)) return;
+    delete sessionRoomPasswords[name];
+    // A local hash of the old password would now reject the new one.
+    store.remove('cade-room-pw-hash:' + name);
+    store.set('cade-room-pw-remote:' + name, 'true');
+    syncState.encKey = baseEncKey;
+    renderRoomTabs();
+    showToast('The password for “' + name + '” was changed on another device — enter the new one', 'info', 4500);
+    showRoomUnlock(name, () => {
+      syncState.encKey = getRoomEncKey(name, baseEncKey);
+      _rereadOpenRoom();
+      renderRoomTabs();
+    }, _remoteLockVerifyFn(db, name, baseEncKey));
+  }, 1500);
+}
+
 function showRoomUnlock(name, callback, verifyFn = null) {
   _unlockCallback = callback;
   _unlockVerifyFn = verifyFn;
@@ -20361,31 +20465,80 @@ function _safeId(s) { return s.replace(/[^a-z0-9]/gi, '_'); }
 let _roomPwActionTarget = null;
 let _roomPwActionMode = null; // 'set' | 'change' | 'remove'
 
+// Move a room to a new password on the server, then on this device. The
+// room's server copy is re-encrypted under the new key — for any room, open or
+// not — before the change is kept here, so a failure can't leave this device
+// and the server on different keys. (The old code only touched the server for
+// the open room, and its re-broadcast was skipped because the text hadn't
+// changed: the document stayed under the old key.) Without sync there's
+// nothing to move. local.apply() records the change on this device and
+// local.undo() reverts it.
+async function _changeRoomPassword(name, oldPw, newPw, local) {
+  const baseKey = store.get('cade-sync-key') || '';
+  const isOpen = name === activeRoom;
+  if (!_syncConfigured()) { local.apply(); return true; }
+  if (!navigator.onLine) { showToast('You appear offline — reconnect to change a room password', 'error', 3500); return false; }
+  let db;
+  try { db = initFirebase(store.get('cade-firebase-url')); }
+  catch (e) { showToast('Sync error: ' + (e.message || e), 'error', 4000); return false; }
+  const oldKey = oldPw ? baseKey + '\n' + oldPw : baseKey;
+  const newKey = newPw ? baseKey + '\n' + newPw : baseKey;
+  const lockingNow = !oldPw && !!newPw;
+  const unlockFlags = async () => {
+    await db.ref(`rooms/${name}/locked`).set(false);
+    await db.ref(`rooms/${name}/verify`).remove();
+  };
+  // Locking: this device must know the password before the lock flag goes up,
+  // or its own lock listener would ask for it.
+  let applied = false;
+  if (lockingNow) { local.apply(); applied = true; }
+  if (isOpen) syncState.rekeying = true;
+  try {
+    if (lockingNow) {
+      // Flag the lock first: other devices stop pushing this room (it isn't
+      // unlocked there) before its text moves to the locked key.
+      await db.ref(`rooms/${name}/verify`).set(await encryptText(ROOM_LOCK_SENTINEL, newKey));
+      await db.ref(`rooms/${name}/locked`).set(true);
+    }
+    const res = await _reencryptRoomOnServer(db, name, oldKey, newKey, !!newPw);
+    if (res === 'unreadable') {
+      if (lockingNow) await unlockFlags();
+      if (applied) local.undo();
+      showToast('\u201C' + name + '\u201D on the server can\u2019t be decrypted with ' + (oldPw ? 'that password' : 'the sync key') + ' \u2014 nothing changed', 'error', 4500);
+      return false;
+    }
+    if (newPw && !lockingNow) await db.ref(`rooms/${name}/verify`).set(await encryptText(ROOM_LOCK_SENTINEL, newKey));
+    if (!newPw) await unlockFlags();
+    if (!applied) { local.apply(); applied = true; }
+    if (isOpen) syncState.encKey = getRoomEncKey(name, baseKey);
+  } catch (e) {
+    if (lockingNow) unlockFlags().catch(() => {});
+    if (applied) local.undo();
+    showToast('Couldn\u2019t update \u201C' + name + '\u201D on the server: ' + ((e && e.message) || e), 'error', 4500);
+    return false;
+  } finally {
+    if (isOpen) syncState.rekeying = false;
+  }
+  // Edits typed while this ran go up under the new key.
+  if (isOpen && syncState.connected) window.broadcastText();
+  return true;
+}
+
 window.submitRoomPwAction = async function(name) {
   const safeId = _safeId(name);
   const inp = document.getElementById('rpm-pw-input-' + safeId);
   const inp2 = document.getElementById('rpm-pw-input2-' + safeId);
   if (!inp) return;
 
-  const baseKey = store.get('cade-sync-key') || '';
-  const isActive = name === activeRoom && syncState.connected && syncState.firebaseDb;
-
   if (_roomPwActionMode === 'set') {
     const pw = inp.value;
     if (!pw) return;
     const hash = await sha256hex(pw);
-    store.set('cade-room-pw-hash:' + name, hash);
-    sessionRoomPasswords[name] = pw;
-    if (isActive) {
-      syncState.encKey = getRoomEncKey(name, baseKey);
-      // Signal to all peers that this room is now locked
-      await syncState.firebaseDb.ref(`rooms/${name}/locked`).set(true);
-      // Write verify blob so peers can confirm the correct password
-      const verifyBlob = await encryptText(ROOM_LOCK_SENTINEL, syncState.encKey);
-      await syncState.firebaseDb.ref(`rooms/${name}/verify`).set(verifyBlob);
-      // Re-broadcast with sentinel so peers get correctly encrypted content
-      broadcastText();
-    }
+    const ok = await _changeRoomPassword(name, null, pw, {
+      apply() { store.set('cade-room-pw-hash:' + name, hash); sessionRoomPasswords[name] = pw; },
+      undo() { store.remove('cade-room-pw-hash:' + name); delete sessionRoomPasswords[name]; },
+    });
+    if (!ok) return;
     _roomPwActionTarget = null; _roomPwActionMode = null;
     renderRoomManagerList(); renderRoomTabs();
     showToast('Password set for ' + name, 'success', 2000);
@@ -20399,16 +20552,11 @@ window.submitRoomPwAction = async function(name) {
     if (hash !== stored) { showToast('Incorrect current password', 'error'); return; }
     if (!newPw) { showToast('New password cannot be empty', 'error'); return; }
     const newHash = await sha256hex(newPw);
-    store.set('cade-room-pw-hash:' + name, newHash);
-    sessionRoomPasswords[name] = newPw;
-    if (isActive) {
-      syncState.encKey = getRoomEncKey(name, baseKey);
-      // Update verify blob for the new password
-      const verifyBlob = await encryptText(ROOM_LOCK_SENTINEL, syncState.encKey);
-      await syncState.firebaseDb.ref(`rooms/${name}/verify`).set(verifyBlob);
-      // Re-broadcast so content is re-encrypted under new password
-      broadcastText();
-    }
+    const ok = await _changeRoomPassword(name, current, newPw, {
+      apply() { store.set('cade-room-pw-hash:' + name, newHash); sessionRoomPasswords[name] = newPw; },
+      undo() { store.set('cade-room-pw-hash:' + name, hash); sessionRoomPasswords[name] = current; },
+    });
+    if (!ok) return;
     _roomPwActionTarget = null; _roomPwActionMode = null;
     renderRoomManagerList(); renderRoomTabs();
     showToast('Password changed for ' + name, 'success', 2000);
@@ -20419,16 +20567,11 @@ window.submitRoomPwAction = async function(name) {
     const hash = await sha256hex(current);
     const stored = store.get('cade-room-pw-hash:' + name);
     if (hash !== stored) { showToast('Incorrect password', 'error'); return; }
-    store.remove('cade-room-pw-hash:' + name);
-    delete sessionRoomPasswords[name];
-    if (isActive) {
-      // Drop back to base key (no room password)
-      syncState.encKey = baseKey;
-      // Tell peers room is unlocked, remove verify blob, push content without sentinel
-      await syncState.firebaseDb.ref(`rooms/${name}/locked`).set(false);
-      await syncState.firebaseDb.ref(`rooms/${name}/verify`).remove();
-      broadcastText();
-    }
+    const ok = await _changeRoomPassword(name, current, null, {
+      apply() { store.remove('cade-room-pw-hash:' + name); delete sessionRoomPasswords[name]; },
+      undo() { store.set('cade-room-pw-hash:' + name, hash); sessionRoomPasswords[name] = current; },
+    });
+    if (!ok) return;
     _roomPwActionTarget = null; _roomPwActionMode = null;
     renderRoomManagerList(); renderRoomTabs();
     showToast('Password removed from ' + name, 'success', 2000);
