@@ -44,7 +44,9 @@ Paste into **Realtime Database → Rules** in the Firebase console.
 
 | Path | Written by | Holds |
 |---|---|---|
-| `rooms/<room>/text` | Cade.txt, bridge | The room document, encrypted. A plain string, or `{_chunks, parts}` when very large. |
+| `rooms/<room>/text` | Cade.txt, bridge | The room document, encrypted. A plain string (older clients wrote `{_chunks, parts}` when very large). For documents over ~256K characters Cade.txt stores a small encrypted manifest here instead, and the text in `chunks/`. |
+| `rooms/<room>/chunks/<id>` | Cade.txt | Encrypted pieces of a large document, named by a keyed hash of their content. The bridge **reads** these. |
+| `rooms/<room>/live` | Cade.txt | Progress of a large upload in flight, so other devices can start receiving early. Removed when the upload ends. |
 | `rooms/<room>/v` | Cade.txt, bridge | Version counter, bumped on every write. |
 | `rooms/<room>/locked` | Cade.txt | Whether the room has a password. The bridge **reads** this and refuses to write a locked room. |
 | `rooms/<room>/verify` | Cade.txt | Password verification blob. |
