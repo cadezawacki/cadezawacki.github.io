@@ -6425,11 +6425,20 @@ function buildColorChipDecorations(view) {
   }
   return Decoration.set(ranges, true);
 }
+// The text colour of a translucent chip depends on the editor background, so a
+// theme switch (data-theme or the OS scheme) has to rebuild the chips too.
+let _chipThemeVersion = 0;
+function _bumpChipTheme() {
+  _chipThemeVersion++;
+  try { if (window.editor) window.editor.dispatch({}); } catch {}
+}
+try { new MutationObserver(_bumpChipTheme).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] }); } catch {}
+try { window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', _bumpChipTheme); } catch {}
 const colorChipPlugin = ViewPlugin.fromClass(class {
-  constructor(view) { this.v = mdVersion; this.decorations = buildColorChipDecorations(view); }
+  constructor(view) { this.v = mdVersion; this.t = _chipThemeVersion; this.decorations = buildColorChipDecorations(view); }
   update(update) {
-    if (update.docChanged || update.viewportChanged || this.v !== mdVersion) {
-      this.v = mdVersion;
+    if (update.docChanged || update.viewportChanged || this.v !== mdVersion || this.t !== _chipThemeVersion) {
+      this.v = mdVersion; this.t = _chipThemeVersion;
       this.decorations = buildColorChipDecorations(update.view);
     }
   }
@@ -7161,6 +7170,20 @@ class ImageWidget extends WidgetType {
         showImageMenu(e.clientX, e.clientY, mime, b64, menuHash, posOf);
       });
     };
+    // An unresolvable ref has no bytes to copy or save, but it can still be
+    // removed — same right-click / tap gesture, removal-only menu.
+    const attachMissingMenu = () => {
+      if (wrap._missingMenu) return;
+      wrap._missingMenu = true;
+      const show = (e) => {
+        if (!wrap.classList.contains('missing')) return; // resolved since
+        e.preventDefault(); e.stopPropagation();
+        const at = posOf(); // read now: CM may redraw the placeholder before the click
+        openMenu([{ label: '🗑 Remove photo', danger: true, run: () => removeImageAt(at, null, menuHash) }], e.clientX, e.clientY);
+      };
+      wrap.addEventListener('contextmenu', show);
+      wrap.addEventListener('click', (e) => { if (isCoarsePointer() || _lastPointerWasTouch) show(e); });
+    };
     _attachImageResize(view, wrap, img, this.data);
     img.onerror = () => { wrap.classList.add('missing'); wrap.textContent = '⚠ broken image'; };
     wrap.appendChild(img);
@@ -7185,13 +7208,14 @@ class ImageWidget extends WidgetType {
             if (attempt < 8) { setTimeout(tryResolve, Math.min(1500 * attempt, 12000)); return; }
             wrap.classList.remove('loading'); wrap.classList.add('missing');
             if (!img.src) { img.remove(); wrap.textContent = '⌛ image not downloaded'; }
+            attachMissingMenu();
             return;
           }
           wrap.classList.remove('loading', 'missing');
           if (!img.parentNode) { wrap.textContent = ''; wrap.appendChild(img); }
           img.src = r.url;
           attachMenu(r.b64);
-        }).catch(() => { if (wrap.isConnected) { wrap.classList.remove('loading'); wrap.classList.add('missing'); } });
+        }).catch(() => { if (wrap.isConnected) { wrap.classList.remove('loading'); wrap.classList.add('missing'); attachMissingMenu(); } });
       };
       tryResolve();
     }
@@ -7264,6 +7288,7 @@ function _commitImageWidth(view, wrap, data, w) {
 // edit the drawing (loads the draw module on demand).
 function showImageMenu(x, y, mime, b64, hash, posOf) {
   const dataUrl = 'data:' + mime + ';base64,' + b64;
+  const openPos = posOf ? posOf() : null; // the widget DOM may be redrawn before a click
   const ext = (mime.split('/')[1] || 'jpg').replace('jpeg', 'jpg');
   // Align the image's LINE (round-8) — alignment is a line property, and the
   // token position is resolved fresh so edits since render can't misplace it.
@@ -7312,7 +7337,7 @@ function showImageMenu(x, y, mime, b64, hash, posOf) {
         a.href = dataUrl; a.download = 'image-' + Date.now() + '.' + ext;
         document.body.appendChild(a); a.click(); a.remove();
       } },
-    ...(posOf ? [{ sep: true }, { label: '🗑 Remove photo', danger: true, run: () => removeImageAt(posOf(), b64, hash) }] : []),
+    ...(posOf ? [{ sep: true }, { label: '🗑 Remove photo', danger: true, run: () => removeImageAt(openPos, b64, hash) }] : []),
   ], x, y);
 }
 // Delete the image token the menu was opened on. The token is re-located on

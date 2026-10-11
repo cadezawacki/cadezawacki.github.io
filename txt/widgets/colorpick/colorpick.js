@@ -98,7 +98,16 @@
     var hex = toHex(cur);
     var sw = p.querySelector('.cp-swatch');
     sw.style.background = toRgb(cur);
-    sw.style.color = lum(cur) < 0.179 && cur.a > 0.5 ? '#fff' : '#000';
+    // Judge translucent colours as they render: composited over the panel.
+    var bg = null;
+    try { bg = parse(getComputedStyle(p).backgroundColor); } catch (e) {}
+    if (!bg || bg.a === 0) bg = { r: 255, g: 255, b: 255 };
+    var seen = {
+      r: cur.r * cur.a + bg.r * (1 - cur.a),
+      g: cur.g * cur.a + bg.g * (1 - cur.a),
+      b: cur.b * cur.a + bg.b * (1 - cur.a),
+    };
+    sw.style.color = lum(seen) < 0.179 ? '#fff' : '#000';
     sw.textContent = hex.toUpperCase();
     p.querySelector('.cp-native').value = hex.slice(0, 7);
     if (!opts.fromText) p.querySelector('.cp-text').value = hex;
