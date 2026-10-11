@@ -1,5 +1,6 @@
 /* Color Picker — a floating panel with a native colour input, an on-screen
- * eyedropper (EyeDropper API: Chrome / Edge desktop), any-CSS-colour entry,
+ * eyedropper (EyeDropper API: Chrome / Edge desktop), a pick-from-screen
+ * mode (screen capture snapshot, reaches other apps), any-CSS-colour entry,
  * HEX / RGB / HSL readouts that copy or insert at the cursor, and a short
  * list of recent picks. Self-contained IIFE. */
 (function () {
@@ -146,6 +147,146 @@
     });
   }
 
+  // ---- Pick from screen -------------------------------------------------
+  // The EyeDropper API can't always reach outside the browser window (it
+  // depends on the browser and OS). Screen capture can: the browser asks which
+  // screen or window to share, we grab ONE frame and stop the capture straight
+  // away, then show that still full-size with a magnifier; a click picks the
+  // pixel. Choosing an app's window in the "Window" tab captures it even when
+  // the browser is covering it. Desktop Chrome / Edge / Firefox; not iOS.
+  var canCapture = !!(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia);
+
+  function grabFrame(stream) {
+    return new Promise(function (resolve, reject) {
+      var v = document.createElement('video');
+      v.muted = true; v.playsInline = true; v.srcObject = stream;
+      var done = false;
+      var snap = function () {
+        if (done) return;
+        if (!v.videoWidth) { setTimeout(snap, 50); return; }
+        done = true;
+        var c = document.createElement('canvas');
+        c.width = v.videoWidth; c.height = v.videoHeight;
+        c.getContext('2d').drawImage(v, 0, 0);
+        resolve(c);
+      };
+      v.play().then(function () {
+        // The first frame can be blank; wait for a couple of real ones.
+        if (v.requestVideoFrameCallback) v.requestVideoFrameCallback(function () { v.requestVideoFrameCallback(snap); });
+        else setTimeout(snap, 250);
+        setTimeout(snap, 1500); // fallback if frame callbacks never fire
+      }).catch(reject);
+    });
+  }
+
+  function pickFromScreen() {
+    if (!canCapture) {
+      Cade.showToast('Screen capture isn\'t available here — try Chrome or Edge on desktop', 'error', 3200);
+      return;
+    }
+    navigator.mediaDevices.getDisplayMedia({ video: true, audio: false, selfBrowserSurface: 'include', surfaceSwitching: 'exclude' })
+      .then(function (stream) {
+        var stop = function () { stream.getTracks().forEach(function (t) { try { t.stop(); } catch (e) {} }); };
+        return grabFrame(stream).then(function (c) { stop(); showSnapshot(c); }, function (err) { stop(); throw err; });
+      })
+      .catch(function (err) {
+        if (err && (err.name === 'NotAllowedError' || err.name === 'AbortError')) return; // user cancelled
+        Cade.showToast('Couldn\'t capture the screen', 'error', 2500);
+      });
+  }
+
+  function showSnapshot(src) {
+    var W = src.width, H = src.height;
+    var data = src.getContext('2d').getImageData(0, 0, W, H).data;
+    var px = function (x, y) {
+      x = Math.max(0, Math.min(W - 1, x)); y = Math.max(0, Math.min(H - 1, y));
+      var i = (y * W + x) * 4;
+      return { r: data[i], g: data[i + 1], b: data[i + 2], a: 1 };
+    };
+
+    var ov = document.createElement('div');
+    ov.className = 'cp-snap';
+    ov.tabIndex = -1;
+    src.className = 'cp-snap-img';
+    ov.appendChild(src);
+    var hint = document.createElement('div');
+    hint.className = 'cp-snap-hint';
+    hint.textContent = 'Click a pixel to pick it · arrow keys nudge · Enter picks · Esc cancels';
+    ov.appendChild(hint);
+    var LOUPE = 15, ZOOM = 10; // 15×15 source pixels at 10×
+    var loupe = document.createElement('div');
+    loupe.className = 'cp-loupe';
+    var lc = document.createElement('canvas');
+    lc.width = lc.height = LOUPE * ZOOM;
+    var lab = document.createElement('div');
+    lab.className = 'cp-loupe-lab';
+    loupe.appendChild(lc); loupe.appendChild(lab);
+    ov.appendChild(loupe);
+    document.body.appendChild(ov);
+    var lctx = lc.getContext('2d');
+    lctx.imageSmoothingEnabled = false;
+
+    var sx = W >> 1, sy = H >> 1, cx = 0, cy = 0;
+    // Map a client point to a source pixel via the displayed canvas rect.
+    var toSrc = function (clientX, clientY) {
+      var r = src.getBoundingClientRect();
+      sx = Math.floor((clientX - r.left) * W / r.width);
+      sy = Math.floor((clientY - r.top) * H / r.height);
+    };
+    var draw = function () {
+      var half = LOUPE >> 1;
+      lctx.clearRect(0, 0, lc.width, lc.height);
+      lctx.drawImage(src, sx - half, sy - half, LOUPE, LOUPE, 0, 0, lc.width, lc.height);
+      lctx.strokeStyle = '#fff'; lctx.lineWidth = 2;
+      lctx.strokeRect(half * ZOOM, half * ZOOM, ZOOM, ZOOM);
+      lctx.strokeStyle = '#000'; lctx.lineWidth = 1;
+      lctx.strokeRect(half * ZOOM - 1.5, half * ZOOM - 1.5, ZOOM + 3, ZOOM + 3);
+      var c = px(sx, sy);
+      lab.textContent = toHex(c).toUpperCase();
+      lab.style.background = toHex(c);
+      lab.style.color = lum(c) < 0.179 ? '#fff' : '#000';
+      // Keep the loupe beside the cursor and on screen.
+      var size = lc.width + 8;
+      var lx = cx + 24, ly = cy + 24;
+      if (lx + size > window.innerWidth) lx = cx - size - 24;
+      if (ly + size + 28 > window.innerHeight) ly = cy - size - 52;
+      loupe.style.left = Math.max(4, lx) + 'px';
+      loupe.style.top = Math.max(4, ly) + 'px';
+    };
+    var close = function () {
+      document.removeEventListener('keydown', onKey, true);
+      ov.remove();
+    };
+    var pick = function () {
+      var c = px(sx, sy);
+      close();
+      setColor(c); pushRecent(toHex(c)); renderRecent();
+      Cade.showToast('Picked ' + toHex(c), 'success', 1400);
+    };
+    var onKey = function (e) {
+      var step = e.shiftKey ? 10 : 1, moved = true;
+      if (e.key === 'Escape') { close(); }
+      else if (e.key === 'Enter') { pick(); }
+      else if (e.key === 'ArrowLeft') sx -= step;
+      else if (e.key === 'ArrowRight') sx += step;
+      else if (e.key === 'ArrowUp') sy -= step;
+      else if (e.key === 'ArrowDown') sy += step;
+      else moved = false;
+      if (e.key === 'Escape' || e.key === 'Enter' || moved) { e.preventDefault(); e.stopPropagation(); }
+      if (moved && e.key.indexOf('Arrow') === 0) {
+        sx = Math.max(0, Math.min(W - 1, sx)); sy = Math.max(0, Math.min(H - 1, sy));
+        draw();
+      }
+    };
+    ov.addEventListener('pointermove', function (e) { cx = e.clientX; cy = e.clientY; toSrc(cx, cy); draw(); });
+    ov.addEventListener('click', function (e) { if (e.target === src) { toSrc(e.clientX, e.clientY); pick(); } });
+    ov.addEventListener('contextmenu', function (e) { e.preventDefault(); close(); });
+    document.addEventListener('keydown', onKey, true);
+    cx = window.innerWidth / 2; cy = window.innerHeight / 2;
+    draw();
+    ov.focus();
+  }
+
   function row(fmt, label) {
     return '<div class="cp-row" data-fmt="' + fmt + '"><span class="cp-lbl">' + label + '</span>' +
       '<code class="cp-val"></code>' +
@@ -163,6 +304,7 @@
         '<div class="cp-swatch"></div>' +
         '<div class="cp-tools">' +
           '<button class="cp-btn cp-drop"' + (hasDropper ? '' : ' disabled title="Needs Chrome or Edge on desktop"') + '>🎯 Eyedropper</button>' +
+          (canCapture ? '<button class="cp-btn cp-screen" title="Pick from anywhere on screen. In the share prompt, choose Entire screen, or an app under Window (works even if the browser covers it).">🖥 Pick from screen</button>' : '') +
           '<label class="cp-btn cp-native-wrap" title="Open the system colour picker">🎨 Palette<input type="color" class="cp-native"></label>' +
         '</div>' +
       '</div>' +
@@ -186,6 +328,8 @@
     } catch (e) {}
 
     p.querySelector('.cp-drop').addEventListener('click', eyedrop);
+    var scr = p.querySelector('.cp-screen');
+    if (scr) scr.addEventListener('click', pickFromScreen);
     var native = p.querySelector('.cp-native');
     native.addEventListener('input', function () { setColor(parse(native.value)); });
     native.addEventListener('change', function () { pushRecent(native.value); renderRecent(); });
