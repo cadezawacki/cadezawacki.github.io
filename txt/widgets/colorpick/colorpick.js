@@ -33,13 +33,18 @@
     return null;
   }
   function hex2(n) { return ('0' + Math.round(n).toString(16)).slice(-2); }
+  // Alpha is written only when the colour is actually translucent at the
+  // format's own precision, so an opaque colour always comes out as plain
+  // #rrggbb / rgb() / hsl() for tools that don't accept an alpha channel.
   function toHex(c) {
-    return '#' + hex2(c.r) + hex2(c.g) + hex2(c.b) + (c.a < 1 ? hex2(c.a * 255) : '');
+    var a = Math.round(c.a * 255);
+    return '#' + hex2(c.r) + hex2(c.g) + hex2(c.b) + (a < 255 ? hex2(a) : '');
   }
   function round(n, d) { var p = Math.pow(10, d || 0); return Math.round(n * p) / p; }
   function toRgb(c) {
-    return c.a < 1 ? 'rgba(' + c.r + ', ' + c.g + ', ' + c.b + ', ' + round(c.a, 2) + ')'
-                   : 'rgb(' + c.r + ', ' + c.g + ', ' + c.b + ')';
+    var a = round(c.a, 2);
+    return a < 1 ? 'rgba(' + c.r + ', ' + c.g + ', ' + c.b + ', ' + a + ')'
+                 : 'rgb(' + c.r + ', ' + c.g + ', ' + c.b + ')';
   }
   function toHsl(c) {
     var r = c.r / 255, g = c.g / 255, b = c.b / 255;
@@ -51,7 +56,8 @@
       h *= 60;
     }
     var body = Math.round(h) + ', ' + Math.round(s * 100) + '%, ' + Math.round(l * 100) + '%';
-    return c.a < 1 ? 'hsla(' + body + ', ' + round(c.a, 2) + ')' : 'hsl(' + body + ')';
+    var a = round(c.a, 2);
+    return a < 1 ? 'hsla(' + body + ', ' + a + ')' : 'hsl(' + body + ')';
   }
   function lum(c) {
     var f = function (v) { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
