@@ -2581,6 +2581,15 @@ body.split-open .mobile-toolbar { right: 50%; }
   border-radius: 3px;
   padding: 0 2px;
 }
+/* Colour literals (#rrggbb, rgb(), rgba(), hsl()) tinted with their own colour;
+   --chip-fg is white or black by luminance. !important + the descendant rule
+   so syntax-token colours inside a code block can't make the text unreadable. */
+.cm-color-chip {
+  border-radius: 3px;
+  padding: 0 2px;
+  box-shadow: inset 0 0 0 1px rgba(127, 127, 127, 0.35);
+}
+.cm-color-chip, .cm-color-chip * { color: var(--chip-fg) !important; }
 .cm-md-hr {
   color: var(--text-faint);
   letter-spacing: 2px;
@@ -6333,6 +6342,109 @@ const mdStylePlugin = ViewPlugin.fromClass(class {
 }, { decorations: v => v.decorations });
 
 // ============================================
+// COLOR CHIPS — hex / rgb(a) / hsl(a) literals tinted with their own colour
+// --------------------------------------------------------------------------
+// Part of Markdown Styling: off → no chips at all. Each literal gets its own
+// colour as a background, and the text flips to white or black depending on
+// the luminance of that colour composited over the editor background, so it
+// stays legible on dark and light swatches alike. Visual only; the text is
+// untouched. Parsing goes through a canvas fillStyle, so anything the browser
+// rejects as a colour is simply left alone.
+// ============================================
+const COLOR_LIT_RE = /#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{3,4})(?![0-9a-zA-Z_])|\b(?:rgba?|hsla?)\(\s*[-+\d.]+(?:deg|%)?\s*(?:,\s*|\s+)[-+\d.]+%?\s*(?:,\s*|\s+)[-+\d.]+%?\s*(?:(?:,|\/)\s*[\d.]+%?\s*)?\)/gi;
+const _colorParseCache = new Map();
+let _colorCtx = null;
+// → [r, g, b, a] (0-255, a 0-1) or null when the browser doesn't accept it.
+function _parseCssColor(str) {
+  if (_colorParseCache.has(str)) return _colorParseCache.get(str);
+  let out = null;
+  try {
+    if (!_colorCtx) _colorCtx = document.createElement('canvas').getContext('2d');
+    // Two different sentinels: an invalid colour leaves fillStyle unchanged,
+    // so it only counts when both runs agree.
+    _colorCtx.fillStyle = '#010203'; _colorCtx.fillStyle = str; const a1 = _colorCtx.fillStyle;
+    _colorCtx.fillStyle = '#040506'; _colorCtx.fillStyle = str; const a2 = _colorCtx.fillStyle;
+    if (a1 === a2) {
+      let m;
+      if ((m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(a1))) out = [parseInt(m[1], 16), parseInt(m[2], 16), parseInt(m[3], 16), 1];
+      else if ((m = /^rgba?\(\s*([\d.]+),\s*([\d.]+),\s*([\d.]+)(?:,\s*([\d.]+))?\s*\)$/i.exec(a1))) out = [+m[1], +m[2], +m[3], m[4] == null ? 1 : +m[4]];
+    }
+  } catch {}
+  if (_colorParseCache.size > 2000) _colorParseCache.clear();
+  _colorParseCache.set(str, out);
+  return out;
+}
+// 3/4-digit and digitless hex is ambiguous with #tags (#bad, #face, #decade):
+// a short code needs a digit or a single repeated letter (#fff), and any
+// all-letter code must be 3/6/8 long and not run straight into a word.
+function _plausibleHex(hex) {
+  const h = hex.slice(1);
+  if (/\d/.test(h)) return true;
+  if (h.length <= 4) return /^(.)\1+$/i.test(h);
+  return h.length === 6 || h.length === 8;
+}
+function _relLum(r, g, b) {
+  const f = v => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+  return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
+}
+function buildColorChipDecorations(view) {
+  if (!mdStyleEnabled) return Decoration.none;
+  const doc = view.state.doc;
+  // Translucent colours are judged as they actually render: over the editor bg.
+  let bg = [255, 255, 255];
+  try { const p = _parseCssColor(getComputedStyle(view.dom).backgroundColor); if (p && p[3] > 0) bg = p; } catch {}
+  const ranges = [];
+  for (const { from, to } of view.visibleRanges) {
+    const startLine = doc.lineAt(from).number, endLine = doc.lineAt(to).number;
+    for (let i = startLine; i <= endLine; i++) {
+      const line = doc.line(i);
+      const text = line.text;
+      if (text.length > 2000 || (text.indexOf('#') === -1 && !/(?:rgb|hsl)a?\(/i.test(text))) continue;
+      COLOR_LIT_RE.lastIndex = 0;
+      let m;
+      while ((m = COLOR_LIT_RE.exec(text)) !== null) {
+        const lit = m[0];
+        if (lit[0] === '#') {
+          const prev = text[m.index - 1] || '';
+          if (/[\w&\/#]/.test(prev)) continue; // word#abc, &#123; entities, URL fragments, ##
+          if (!_plausibleHex(lit)) continue;
+        }
+        const c = _parseCssColor(lit);
+        if (!c) continue;
+        const a = Math.max(0, Math.min(1, c[3]));
+        const r = c[0] * a + bg[0] * (1 - a), g = c[1] * a + bg[1] * (1 - a), b = c[2] * a + bg[2] * (1 - a);
+        // 0.179 is where white and black text have equal WCAG contrast.
+        const fg = _relLum(r, g, b) < 0.179 ? '#ffffff' : '#000000';
+        const s = line.from + m.index;
+        ranges.push(Decoration.mark({
+          class: 'cm-color-chip',
+          attributes: { style: 'background-color:' + lit + ';--chip-fg:' + fg },
+        }).range(s, s + lit.length));
+      }
+    }
+  }
+  return Decoration.set(ranges, true);
+}
+// The text colour of a translucent chip depends on the editor background, so a
+// theme switch (data-theme or the OS scheme) has to rebuild the chips too.
+let _chipThemeVersion = 0;
+function _bumpChipTheme() {
+  _chipThemeVersion++;
+  try { if (window.editor) window.editor.dispatch({}); } catch {}
+}
+try { new MutationObserver(_bumpChipTheme).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] }); } catch {}
+try { window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', _bumpChipTheme); } catch {}
+const colorChipPlugin = ViewPlugin.fromClass(class {
+  constructor(view) { this.v = mdVersion; this.t = _chipThemeVersion; this.decorations = buildColorChipDecorations(view); }
+  update(update) {
+    if (update.docChanged || update.viewportChanged || this.v !== mdVersion || this.t !== _chipThemeVersion) {
+      this.v = mdVersion; this.t = _chipThemeVersion;
+      this.decorations = buildColorChipDecorations(update.view);
+    }
+  }
+}, { decorations: v => v.decorations });
+
+// ============================================
 // COLLAPSIBLE SECTIONS (item 31)
 // --------------------------------------------------------------------------
 // Every markdown heading gets a ▾ caret; clicking it folds the section (from
@@ -7058,6 +7170,20 @@ class ImageWidget extends WidgetType {
         showImageMenu(e.clientX, e.clientY, mime, b64, menuHash, posOf);
       });
     };
+    // An unresolvable ref has no bytes to copy or save, but it can still be
+    // removed — same right-click / tap gesture, removal-only menu.
+    const attachMissingMenu = () => {
+      if (wrap._missingMenu) return;
+      wrap._missingMenu = true;
+      const show = (e) => {
+        if (!wrap.classList.contains('missing')) return; // resolved since
+        e.preventDefault(); e.stopPropagation();
+        const at = posOf(); // read now: CM may redraw the placeholder before the click
+        openMenu([{ label: '🗑 Remove photo', danger: true, run: () => removeImageAt(at, null, menuHash) }], e.clientX, e.clientY);
+      };
+      wrap.addEventListener('contextmenu', show);
+      wrap.addEventListener('click', (e) => { if (isCoarsePointer() || _lastPointerWasTouch) show(e); });
+    };
     _attachImageResize(view, wrap, img, this.data);
     img.onerror = () => { wrap.classList.add('missing'); wrap.textContent = '⚠ broken image'; };
     wrap.appendChild(img);
@@ -7082,13 +7208,14 @@ class ImageWidget extends WidgetType {
             if (attempt < 8) { setTimeout(tryResolve, Math.min(1500 * attempt, 12000)); return; }
             wrap.classList.remove('loading'); wrap.classList.add('missing');
             if (!img.src) { img.remove(); wrap.textContent = '⌛ image not downloaded'; }
+            attachMissingMenu();
             return;
           }
           wrap.classList.remove('loading', 'missing');
           if (!img.parentNode) { wrap.textContent = ''; wrap.appendChild(img); }
           img.src = r.url;
           attachMenu(r.b64);
-        }).catch(() => { if (wrap.isConnected) { wrap.classList.remove('loading'); wrap.classList.add('missing'); } });
+        }).catch(() => { if (wrap.isConnected) { wrap.classList.remove('loading'); wrap.classList.add('missing'); attachMissingMenu(); } });
       };
       tryResolve();
     }
@@ -7161,6 +7288,7 @@ function _commitImageWidth(view, wrap, data, w) {
 // edit the drawing (loads the draw module on demand).
 function showImageMenu(x, y, mime, b64, hash, posOf) {
   const dataUrl = 'data:' + mime + ';base64,' + b64;
+  const openPos = posOf ? posOf() : null; // the widget DOM may be redrawn before a click
   const ext = (mime.split('/')[1] || 'jpg').replace('jpeg', 'jpg');
   // Align the image's LINE (round-8) — alignment is a line property, and the
   // token position is resolved fresh so edits since render can't misplace it.
@@ -7209,7 +7337,36 @@ function showImageMenu(x, y, mime, b64, hash, posOf) {
         a.href = dataUrl; a.download = 'image-' + Date.now() + '.' + ext;
         document.body.appendChild(a); a.click(); a.remove();
       } },
+    ...(posOf ? [{ sep: true }, { label: '🗑 Remove photo', danger: true, run: () => removeImageAt(openPos, b64, hash) }] : []),
   ], x, y);
+}
+// Delete the image token the menu was opened on. The token is re-located on
+// the widget's line at click time (nearest match to its position), and when
+// the image was alone on its line the line goes too, so no blank gap is left.
+function removeImageAt(pos, b64, hash) {
+  if (pos == null) return;
+  if (editor.state.readOnly) { showToast('Read-only mode — editing is locked', 'error', 2000); return; }
+  const doc = editor.state.doc;
+  let line;
+  try { line = doc.lineAt(pos); } catch { return; }
+  IMG_TOKEN_RE.lastIndex = 0;
+  let m, best = null;
+  while ((m = IMG_TOKEN_RE.exec(line.text)) !== null) {
+    if (m[2] !== '#' && m[3].length < 24) continue;
+    if (hash ? m[3] !== hash : (m[2] === '#' || m[3] !== b64)) continue;
+    const s = line.from + m.index, e = s + m[0].length;
+    const d = (pos >= s && pos <= e) ? 0 : Math.min(Math.abs(pos - s), Math.abs(pos - e));
+    if (!best || d < best.d) best = { s, e, d };
+  }
+  if (!best) { showToast('Could not find that photo in the text', 'error', 2000); return; }
+  let from = best.s, to = best.e;
+  if (!line.text.slice(0, from - line.from).trim() && !line.text.slice(to - line.from).trim()) {
+    from = line.from; to = line.to;
+    if (line.number < doc.lines) to += 1;            // eat the line break after it
+    else if (line.number > 1) from -= 1;             // last line: eat the one before
+  }
+  editor.dispatch({ changes: { from, to }, selection: { anchor: Math.min(from, doc.length - (to - from)) }, userEvent: 'delete' });
+  showToast('Photo removed', 'success', 1500);
 }
 // Backspace/Delete next to (or inside) an image token removes the WHOLE token
 // instead of breaking it into raw base64. Returns true if it handled the key.
@@ -7964,6 +8121,7 @@ function buildEditorExtensions() {
     spellPlugin,
     searchPlugin,
     mdStylePlugin,
+    colorChipPlugin,
     collapseExtension,
     tableExtension,
     imagePlugin,

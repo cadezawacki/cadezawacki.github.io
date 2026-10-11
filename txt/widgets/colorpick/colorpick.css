@@ -1,0 +1,21 @@
+/* Color Picker widget styles. */
+#colorpick-panel { top: 56px; right: 12px; width: 290px; max-width: calc(100vw - 24px); }
+#colorpick-panel .cade-panel-body { padding: 10px 12px 12px; display: flex; flex-direction: column; gap: 6px; }
+#colorpick-panel.cp-picking { opacity: 0.35; }
+.cp-top { display: flex; gap: 8px; align-items: stretch; }
+.cp-swatch { flex: 1; min-height: 64px; border-radius: 8px; border: 1px solid var(--border); display: flex; align-items: flex-end; justify-content: flex-start; padding: 6px 8px; font: 600 var(--text-xs) ui-monospace, SFMono-Regular, Menlo, monospace; cursor: copy; }
+.cp-tools { display: flex; flex-direction: column; gap: 6px; }
+.cp-btn { font: inherit; font-size: var(--text-xs); padding: 4px 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface-2, transparent); color: var(--text); cursor: pointer; white-space: nowrap; }
+.cp-btn:hover:not([disabled]) { background: var(--surface-hover, rgba(127,127,127,0.15)); }
+.cp-btn[disabled] { opacity: 0.45; cursor: not-allowed; }
+.cp-native-wrap { position: relative; display: inline-flex; align-items: center; justify-content: center; }
+.cp-native { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; border: 0; padding: 0; }
+.cp-text { font: var(--text-sm) ui-monospace, SFMono-Regular, Menlo, monospace; padding: 5px 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg, transparent); color: var(--text); width: 100%; box-sizing: border-box; }
+.cp-text.bad { border-color: #ef4444; }
+.cp-row { display: flex; align-items: center; gap: 6px; font-size: var(--text-xs); }
+.cp-lbl { flex: 0 0 30px; color: var(--text-faint); letter-spacing: 0.05em; }
+.cp-val { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-xs); }
+.cp-sec { font-size: var(--text-xs); color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.05em; padding-top: 6px; }
+.cp-recent { display: flex; flex-wrap: wrap; gap: 5px; }
+.cp-chip { width: 22px; height: 22px; border-radius: 5px; border: 1px solid var(--border); cursor: pointer; padding: 0; }
+.cp-empty { font-size: var(--text-xs); color: var(--text-faint); }

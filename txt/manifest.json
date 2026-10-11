@@ -678,6 +678,16 @@
       "css": "widgets/stats/stats.css"
     },
     {
+      "id": "colorpick",
+      "type": "widget",
+      "name": "Color Picker",
+      "description": "Pick a colour — eyedropper from screen, HEX / RGB / HSL, insert or copy",
+      "icon": "🎨",
+      "tags": "color,colour,picker,eyedropper,dropper,hex,rgb,rgba,hsl,swatch,palette",
+      "entry": "widgets/colorpick/colorpick.js",
+      "css": "widgets/colorpick/colorpick.css"
+    },
+    {
       "id": "dict",
       "type": "widget",
       "name": "Dictionary",
