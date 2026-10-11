@@ -1,7 +1,8 @@
 /* Color Picker — a floating panel with a native colour input, an on-screen
  * eyedropper (EyeDropper API: Chrome / Edge desktop), a pick-from-screen
  * mode (screen capture snapshot, reaches other apps), any-CSS-colour entry,
- * HEX / RGB / HSL readouts that copy or insert at the cursor, and a short
+ * editable HEX / RGB / HSL fields kept in sync (each copies or inserts at
+ * the cursor), a transparency slider, and a short
  * list of recent picks. Self-contained IIFE. */
 (function () {
   'use strict';
@@ -87,6 +88,12 @@
     Cade.showToast('Inserted ' + text, 'success', 1400);
   }
 
+  var FORMATS = ['hex', 'rgb', 'hsl'];
+  var FORMAT_FN = { hex: toHex, rgb: toRgb, hsl: toHsl };
+  // Picks from the palette / eyedropper / screen choose a colour, not an
+  // opacity, so they keep whatever the transparency slider is set to.
+  function keepAlpha(c) { return c ? { r: c.r, g: c.g, b: c.b, a: cur.a } : c; }
+
   function setColor(c, opts) {
     if (!c) return;
     cur = { r: Math.round(c.r), g: Math.round(c.g), b: Math.round(c.b), a: c.a == null ? 1 : c.a };
@@ -98,11 +105,11 @@
     if (!p) return;
     var hex = toHex(cur);
     var sw = p.querySelector('.cp-swatch');
-    sw.style.background = toRgb(cur);
-    // Judge translucent colours as they render: composited over the panel.
-    var bg = null;
-    try { bg = parse(getComputedStyle(p).backgroundColor); } catch (e) {}
-    if (!bg || bg.a === 0) bg = { r: 255, g: 255, b: 255 };
+    sw.style.setProperty('--cp-c', toRgb(cur));
+    p.style.setProperty('--cp-solid', 'rgb(' + cur.r + ', ' + cur.g + ', ' + cur.b + ')');
+    // Judge translucent colours as they render: composited over the swatch's
+    // checkerboard (light grey on average).
+    var bg = { r: 230, g: 230, b: 230 };
     var seen = {
       r: cur.r * cur.a + bg.r * (1 - cur.a),
       g: cur.g * cur.a + bg.g * (1 - cur.a),
@@ -111,10 +118,15 @@
     sw.style.color = lum(seen) < 0.179 ? '#fff' : '#000';
     sw.textContent = hex.toUpperCase();
     p.querySelector('.cp-native').value = hex.slice(0, 7);
-    if (!opts.fromText) p.querySelector('.cp-text').value = hex;
-    p.querySelector('[data-fmt="hex"] .cp-val').textContent = hex;
-    p.querySelector('[data-fmt="rgb"] .cp-val').textContent = toRgb(cur);
-    p.querySelector('[data-fmt="hsl"] .cp-val').textContent = toHsl(cur);
+    // The field being typed in keeps its text; the others follow it.
+    FORMATS.forEach(function (f) {
+      if (opts.from === f) return;
+      var inp = p.querySelector('[data-fmt="' + f + '"] .cp-val');
+      inp.value = FORMAT_FN[f](cur);
+      inp.classList.remove('bad');
+    });
+    if (opts.from !== 'alpha') p.querySelector('.cp-a').value = Math.round(cur.a * 100);
+    p.querySelector('.cp-a-num').textContent = Math.round(cur.a * 100) + '%';
   }
   function renderRecent() {
     var p = document.getElementById(PANEL_ID);
@@ -141,7 +153,7 @@
     if (p) p.classList.add('cp-picking');
     new window.EyeDropper().open().then(function (res) {
       var c = parse(res && res.sRGBHex);
-      if (c) { setColor(c); pushRecent(toHex(c)); renderRecent(); }
+      if (c) { setColor(keepAlpha(c)); pushRecent(toHex(cur)); renderRecent(); }
     }).catch(function () { /* cancelled with Esc */ }).then(function () {
       if (p) p.classList.remove('cp-picking');
     });
@@ -260,8 +272,8 @@
     var pick = function () {
       var c = px(sx, sy);
       close();
-      setColor(c); pushRecent(toHex(c)); renderRecent();
-      Cade.showToast('Picked ' + toHex(c), 'success', 1400);
+      setColor(keepAlpha(c)); pushRecent(toHex(cur)); renderRecent();
+      Cade.showToast('Picked ' + toHex(cur), 'success', 1400);
     };
     var onKey = function (e) {
       var step = e.shiftKey ? 10 : 1, moved = true;
@@ -289,9 +301,9 @@
 
   function row(fmt, label) {
     return '<div class="cp-row" data-fmt="' + fmt + '"><span class="cp-lbl">' + label + '</span>' +
-      '<code class="cp-val"></code>' +
-      '<button class="cp-btn" data-act="copy" title="Copy">Copy</button>' +
-      '<button class="cp-btn" data-act="insert" title="Insert at cursor">Insert</button></div>';
+      '<input class="cp-val" type="text" spellcheck="false" autocomplete="off" title="Edit — any CSS colour works here">' +
+      '<button class="cp-btn cp-icon" data-act="copy" title="Copy" aria-label="Copy">⧉</button>' +
+      '<button class="cp-btn cp-icon" data-act="insert" title="Insert at cursor" aria-label="Insert at cursor">↵</button></div>';
   }
 
   function open() {
@@ -308,8 +320,10 @@
           '<label class="cp-btn cp-native-wrap" title="Open the system colour picker">🎨 Palette<input type="color" class="cp-native"></label>' +
         '</div>' +
       '</div>' +
-      '<input class="cp-text" type="text" spellcheck="false" autocomplete="off" placeholder="#hex, rgb(), hsl(), or a name">' +
       row('hex', 'HEX') + row('rgb', 'RGB') + row('hsl', 'HSL') +
+      '<div class="cp-alpha"><span class="cp-lbl">Alpha</span>' +
+        '<input class="cp-a" type="range" min="0" max="100" step="1" title="Transparency">' +
+        '<span class="cp-a-num"></span></div>' +
       '<div class="cp-sec">Recent</div><div class="cp-recent"></div>');
 
     // Start from the colour literal under the cursor / in the selection, if any.
@@ -331,22 +345,38 @@
     var scr = p.querySelector('.cp-screen');
     if (scr) scr.addEventListener('click', pickFromScreen);
     var native = p.querySelector('.cp-native');
-    native.addEventListener('input', function () { setColor(parse(native.value)); });
-    native.addEventListener('change', function () { pushRecent(native.value); renderRecent(); });
-    var text = p.querySelector('.cp-text');
-    text.addEventListener('input', function () {
-      var c = parse(text.value);
-      text.classList.toggle('bad', !c && !!text.value.trim());
-      if (c) setColor(c, { fromText: true });
+    native.addEventListener('input', function () { setColor(keepAlpha(parse(native.value))); });
+    native.addEventListener('change', function () { pushRecent(toHex(cur)); renderRecent(); });
+    // Each format field is editable: a valid value updates the colour and the
+    // other fields live; an invalid one is flagged and changes nothing. On
+    // Enter or leaving the field it snaps back to its tidy form.
+    FORMATS.forEach(function (f) {
+      var inp = p.querySelector('[data-fmt="' + f + '"] .cp-val');
+      inp.addEventListener('input', function () {
+        var c = parse(inp.value);
+        inp.classList.toggle('bad', !c && !!inp.value.trim());
+        if (c) setColor(c, { from: f });
+      });
+      inp.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          if (parse(inp.value)) { pushRecent(toHex(cur)); renderRecent(); }
+          render({});
+          inp.select();
+        } else if (e.key === 'Escape') { render({}); inp.blur(); }
+        e.stopPropagation(); // keep editor/global shortcuts out of the field
+      });
+      inp.addEventListener('blur', function () { render({}); });
     });
-    text.addEventListener('keydown', function (e) {
-      if (e.key === 'Enter') { e.preventDefault(); if (parse(text.value)) { pushRecent(toHex(cur)); renderRecent(); } }
-      e.stopPropagation(); // keep editor/global shortcuts out of the field
+    var alpha = p.querySelector('.cp-a');
+    alpha.addEventListener('input', function () {
+      setColor({ r: cur.r, g: cur.g, b: cur.b, a: (parseInt(alpha.value, 10) || 0) / 100 }, { from: 'alpha' });
     });
+    alpha.addEventListener('change', function () { pushRecent(toHex(cur)); renderRecent(); });
     p.addEventListener('click', function (e) {
       var b = e.target.closest ? e.target.closest('.cp-row .cp-btn') : null;
       if (!b) return;
-      var val = b.parentNode.querySelector('.cp-val').textContent;
+      var val = FORMAT_FN[b.parentNode.getAttribute('data-fmt')](cur);
       if (b.getAttribute('data-act') === 'copy') { copy(val); pushRecent(toHex(cur)); renderRecent(); }
       else insert(val);
     });

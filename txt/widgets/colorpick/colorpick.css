@@ -1,20 +1,27 @@
 /* Color Picker widget styles. */
-#colorpick-panel { top: 56px; right: 12px; width: 290px; max-width: calc(100vw - 24px); }
+#colorpick-panel { top: 56px; right: 12px; width: 320px; max-width: calc(100vw - 24px); }
 #colorpick-panel .cade-panel-body { padding: 10px 12px 12px; display: flex; flex-direction: column; gap: 6px; }
 #colorpick-panel.cp-picking { opacity: 0.35; }
 .cp-top { display: flex; gap: 8px; align-items: stretch; }
-.cp-swatch { flex: 1; min-height: 64px; border-radius: 8px; border: 1px solid var(--border); display: flex; align-items: flex-end; justify-content: flex-start; padding: 6px 8px; font: 600 var(--text-xs) ui-monospace, SFMono-Regular, Menlo, monospace; cursor: copy; }
+.cp-swatch { --cp-checker: repeating-conic-gradient(#ccc 0 25%, #fff 0 50%) 0 0 / 12px 12px; background: linear-gradient(var(--cp-c), var(--cp-c)), var(--cp-checker); flex: 1; min-height: 64px; border-radius: 8px; border: 1px solid var(--border); display: flex; align-items: flex-end; justify-content: flex-start; padding: 6px 8px; font: 600 var(--text-xs) ui-monospace, SFMono-Regular, Menlo, monospace; cursor: copy; }
 .cp-tools { display: flex; flex-direction: column; gap: 6px; }
 .cp-btn { font: inherit; font-size: var(--text-xs); padding: 4px 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface-2, transparent); color: var(--text); cursor: pointer; white-space: nowrap; }
 .cp-btn:hover:not([disabled]) { background: var(--surface-hover, rgba(127,127,127,0.15)); }
 .cp-btn[disabled] { opacity: 0.45; cursor: not-allowed; }
 .cp-native-wrap { position: relative; display: inline-flex; align-items: center; justify-content: center; }
 .cp-native { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; border: 0; padding: 0; }
-.cp-text { font: var(--text-sm) ui-monospace, SFMono-Regular, Menlo, monospace; padding: 5px 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg, transparent); color: var(--text); width: 100%; box-sizing: border-box; }
-.cp-text.bad { border-color: #ef4444; }
 .cp-row { display: flex; align-items: center; gap: 6px; font-size: var(--text-xs); }
 .cp-lbl { flex: 0 0 30px; color: var(--text-faint); letter-spacing: 0.05em; }
-.cp-val { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-xs); }
+.cp-val { flex: 1; min-width: 0; font: var(--text-xs) ui-monospace, SFMono-Regular, Menlo, monospace; padding: 4px 6px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg, transparent); color: var(--text); box-sizing: border-box; }
+.cp-val:focus { outline: none; border-color: var(--accent); }
+.cp-val.bad { border-color: #ef4444; }
+.cp-alpha { display: flex; align-items: center; gap: 6px; font-size: var(--text-xs); }
+.cp-a-num { flex: 0 0 36px; text-align: right; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.cp-a { flex: 1; min-width: 0; height: 14px; margin: 0; -webkit-appearance: none; appearance: none; border-radius: 7px; border: 1px solid var(--border); cursor: pointer;
+  background: linear-gradient(to right, transparent, var(--cp-solid, #000)), repeating-conic-gradient(#ccc 0 25%, #fff 0 50%) 0 0 / 10px 10px; }
+.cp-a::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: #fff; border: 2px solid #333; box-shadow: 0 1px 3px rgba(0,0,0,0.4); }
+.cp-a::-moz-range-thumb { width: 14px; height: 14px; border-radius: 50%; background: #fff; border: 2px solid #333; }
+.cp-a::-moz-range-track { background: transparent; }
 .cp-sec { font-size: var(--text-xs); color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.05em; padding-top: 6px; }
 .cp-recent { display: flex; flex-wrap: wrap; gap: 5px; }
 .cp-chip { width: 22px; height: 22px; border-radius: 5px; border: 1px solid var(--border); cursor: pointer; padding: 0; }
@@ -26,3 +33,4 @@
 .cp-loupe { position: fixed; pointer-events: none; background: #fff; border: 1px solid #000; border-radius: 8px; padding: 4px; box-shadow: 0 6px 20px rgba(0,0,0,0.45); }
 .cp-loupe canvas { display: block; image-rendering: pixelated; border-radius: 4px; }
 .cp-loupe-lab { margin-top: 4px; text-align: center; font: 600 12px ui-monospace, SFMono-Regular, Menlo, monospace; padding: 3px 0; border-radius: 4px; }
+.cp-icon { width: 28px; padding: 4px 0; text-align: center; font-size: 13px; line-height: 1; }
