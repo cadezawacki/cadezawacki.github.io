@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "version": "2026.10.07-2",
+  "version": "2026.10.12-1",
   "modules": [
     {
       "id": "crawler",
@@ -686,6 +686,17 @@
       "tags": "color,colour,picker,eyedropper,dropper,hex,rgb,rgba,hsl,swatch,palette",
       "entry": "widgets/colorpick/colorpick.js",
       "css": "widgets/colorpick/colorpick.css"
+    },
+    {
+      "id": "symbols",
+      "type": "widget",
+      "name": "Symbols & Alt Codes",
+      "description": "Search or browse symbols, emoji & Alt codes — copy or insert",
+      "icon": "✦",
+      "tags": "symbol,symbols,unicode,emoji,alt,altcode,alt code,character,special character,glyph,arrow,math,copyright,degree,accent,insert,kaomoji",
+      "entry": "widgets/symbols/symbols.js",
+      "css": "widgets/symbols/symbols.css",
+      "precache": ["widgets/symbols/symbols-data.js"]
     },
     {
       "id": "dict",
