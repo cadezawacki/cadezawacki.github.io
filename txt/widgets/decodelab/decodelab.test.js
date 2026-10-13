@@ -209,6 +209,81 @@ test('language detection on short samples (every supported language)', function 
   });
   assert.ok(miss.length <= 1, 'misdetected:\n' + miss.join('\n'));
 });
+// Regression (user report): old Dutch written without spaces read as Dutch on
+// one line but "Nothing clearly readable" once it was split over lines — each
+// line counted as a "word", no line is a dictionary word, so the word-hit term
+// capped the score below "clear".
+var NL_LINES = 'Tweeoogenblikkentredenin\neenmaetwijckt\nWerpteenschipwederhuyswaerts\nOmteleerenwatdentijtgelooft';
+var NL_ONE = 'Tweeoogenblikkentredenineenmaetwijcktwerpteenschipwederhuyswaertsomteleerenwatdentijtgelooft';
+function unspaced(lines) { return lines.map(function (l) { return l.replace(/\s+/g, ''); }).join('\n'); }
+var VERSES = {
+  en: ['It was the best of times', 'it was the worst of times', 'it was the age of wisdom', 'it was the age of foolishness'],
+  es: ['En un lugar de la Mancha', 'de cuyo nombre no quiero acordarme', 'no ha mucho tiempo que vivía un hidalgo'],
+  de: ['Das Wetter war schön', 'also gingen wir zum Markt', 'und kauften frisches Brot'],
+  fr: ['Il faisait beau alors', 'nous sommes allés au marché', 'acheter du pain frais'],
+  pt: ['O tempo estava bom então', 'fomos a pé ao mercado', 'comprar pão fresco'],
+  nl: ['Het weer was mooi', 'dus liepen we naar de markt', 'om vers brood te kopen'],
+  ru: ['Погода была хорошая', 'поэтому мы пошли на рынок', 'и купили свежего хлеба'],
+  el: ['Ο καιρός ήταν ωραίος', 'και πήγαμε με τα πόδια', 'στην αγορά να αγοράσουμε ψωμί'],
+};
+test('unspaced text split over lines still reads as its language (old Dutch report)', function () {
+  [NL_LINES, NL_ONE, NL_LINES.replace(/\n/g, ' '), NL_LINES.replace(/\n/g, '\r\n'), NL_LINES.replace(/\n/g, ''), NL_LINES + '\n'].forEach(function (s) {
+    var r = core.score(s);
+    assert.strictEqual(r.lang, 'nl', JSON.stringify(s) + ' ' + JSON.stringify(r));
+    assert.ok(r.score >= 70, JSON.stringify(s) + ' score ' + r.score);
+  });
+  // two lines are enough to trigger it too
+  var two = core.score('Tweeoogenblikkentredenineenmaetwijckt\nWerpteenschipwederhuyswaertsomteleeren');
+  assert.ok(two.lang === 'nl' && two.score >= 70, JSON.stringify(two));
+  // the search reports the input itself as already readable
+  var s = core.createSearch(NL_LINES, { depth: 1, budget: 1500 }).runSync(), inp = s.progress().input;
+  assert.strictEqual(inp.lang, 'nl');
+  assert.ok(inp.score >= 70, 'input score ' + inp.score);
+});
+test('multi-line verse in other languages: unspaced and spaced', function () {
+  var miss = [];
+  Object.keys(VERSES).forEach(function (l) {
+    [unspaced(VERSES[l]), VERSES[l].join('\n'), unspaced(VERSES[l]).replace(/\n/g, '')].forEach(function (s) {
+      var r = core.score(s);
+      if (r.lang !== l || r.score < 70) miss.push(l + ': ' + JSON.stringify(r) + ' ' + JSON.stringify(s));
+    });
+  });
+  assert.deepStrictEqual(miss, []);
+});
+test('random letters stay unreadable when split over lines', function () {
+  var seed = 1234567;
+  function rnd() { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; }
+  var worst = 0, worstS = '';
+  for (var k = 0; k < 120; k++) {
+    var lines = [], n = 2 + Math.floor(rnd() * 4);
+    for (var l = 0; l < n; l++) {
+      var w = '', len = 8 + Math.floor(rnd() * 24);
+      for (var i = 0; i < len; i++) w += String.fromCharCode(97 + Math.floor(rnd() * 26));
+      lines.push(l === 0 ? w[0].toUpperCase() + w.slice(1) : w);
+    }
+    [lines.join('\n'), lines.join(' ')].forEach(function (s) { var sc = core.score(s).score; if (sc > worst) { worst = sc; worstS = s; } });
+  }
+  assert.ok(worst < 40, 'random letters scored ' + worst + ': ' + JSON.stringify(worstS));
+  assert.ok(core.score('asdfghjkl\nqwertyuiop\nzxcvbnmasdf\nlkjhgfdsaqwe').score < 40);
+  assert.ok(core.score('Xkqzvbnmtrw\nplkjhgfdswq\nzzxcvbnmqwrtp').score < 25);
+  // random-case junk (Base64-like) is still penalised with line breaks
+  var b64 = 'SGVsbG8gd29ybGQsIHRoaXMgaXMgYSB0ZXN0IG9m\nIHRoZSBlbWVyZ2VuY3kgYnJvYWRjYXN0IHN5c3Rl\nbSBhbmQgbm90aGluZyBlbHNlIGF0IGFsbCBoZXJl';
+  assert.ok(core.score(b64).score < 15, 'b64 ' + core.score(b64).score);
+  assert.ok(core.score('qWeRtYuIoP\naSdFgHjKl\nZxCvBnMqWe').score < 15);
+});
+test('search: Caesar of unspaced multi-line text is solved and reads clearly', function () {
+  [unspaced(VERSES.en), NL_LINES].forEach(function (src) {
+    var b = best(search(core.apply('caesar', src, { shift: 7 }, 'enc'), { depth: 2, budget: 6000 }));
+    assert.strictEqual(b.text, src);
+    assert.ok(b.score >= 70, 'score ' + b.score);
+  });
+});
+test('run-together words keep their capitals without the mixed-case penalty', function () {
+  var r = core.score('TweeoogenblikkentredenineenmaetwijcktWerpteenschipwederhuyswaertsOmteleerenwatdentijtgelooft');
+  assert.ok(r.lang === 'nl' && r.score >= 70, JSON.stringify(r));
+  var g = core.score('DasWetterwarschönalsogingenwirzumMarktundkauftenfrischesBrot');
+  assert.ok(g.lang === 'de' && g.score >= 70, JSON.stringify(g));
+});
 test('junk scores low, CTF flag / JSON / URL recognised', function () {
   assert.ok(core.score('Wkh txlfn eurzq ira mxpsv ryhu wkh odcb grj').score < 25);
   assert.ok(core.score('SGVsbG8gd29ybGQsIHRoaXMgaXMgYSB0ZXN0').score < 15);

@@ -1445,15 +1445,44 @@
       "name": "Decode Lab",
       "description": "Auto-decode mystery text: Base64/hex/Morse/… chains, Caesar, Vigenère, XOR & more, frequency analysis, offline translation to English",
       "icon": "🔓",
-      "tags": "decode,decoder,cipher,brute force,base64,caesar,vigenere,xor,crypto,ctf,frequency analysis,identify,magic,rot13,morse,hex,encoding,puzzle,cryptanalysis,kasiski,index of coincidence,translate,translation,offline translation,english",
+      "tags": "decode,decoder,cipher,brute force,base64,caesar,vigenere,xor,crypto,ctf,frequency analysis,identify,magic,rot13,morse,hex,encoding,puzzle,cryptanalysis,kasiski,index of coincidence,translate,translation,translator,translate to english,offline translation,english,language,detect language,foreign language",
       "entry": "widgets/decodelab/decodelab.js",
       "css": "widgets/decodelab/decodelab.css",
       "precache": [
         "widgets/decodelab/decodelab-core.js",
         "widgets/decodelab/decodelab-data.js",
         "widgets/decodelab/decodelab-translate.js",
-        "widgets/decodelab/decodelab-translate-worker.js?v=1"
+        "widgets/decodelab/decodelab-translate-worker.js?v=1",
+        "widgets/decodelab/decodelab-inline.js"
       ]
+    },
+    {
+      "id": "decodelab-scripts",
+      "type": "script-pack",
+      "name": "Decode Lab scripts",
+      "description": "Translate the selection / block / line into English on this device",
+      "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M3 5h9M7.5 3v2M10.5 5c-.8 4-3.3 7-7 8.6M5.4 8.4c1.2 2.1 3 3.8 5.2 4.7'/><path d='M12.5 21l4-10 4 10M13.8 18h5.4'/></svg>",
+      "tags": "translate,translation,translator,english,language",
+      "entry": "widgets/decodelab/decodelab-scripts.js",
+      "scripts": [
+        {
+          "name": "Translate to English",
+          "description": "Translate the selection, or the ```language block / line at the cursor, on this device — inserted below as a ```English block (language auto-detected)",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M3 5h9M7.5 3v2M10.5 5c-.8 4-3.3 7-7 8.6M5.4 8.4c1.2 2.1 3 3.8 5.2 4.7'/><path d='M12.5 21l4-10 4 10M13.8 18h5.4'/></svg>",
+          "tags": "translate,translation,translator,english,to english,language,detect language,foreign,offline translation,on-device,spanish,french,german,dutch,italian,portuguese,russian,chinese,japanese,korean,arabic,decode lab"
+        }
+      ]
+    },
+    {
+      "id": "translate-blocks",
+      "type": "plugin",
+      "name": "Translate buttons on language blocks",
+      "description": "A “Translate” chip on ```Spanish / ```español / ```es-ES … blocks (any of 46 languages; never on code) — writes the English below as a ```English block, on this device (one-time model download per language, size shown first)",
+      "entry": "plugins/translate-blocks/translate-blocks.js",
+      "css": "plugins/translate-blocks/translate-blocks.css",
+      "settingKey": "plugins.translate-blocks",
+      "section": "Editor",
+      "default": true
     },
     {
       "id": "bookmarks",
