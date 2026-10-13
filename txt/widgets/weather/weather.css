@@ -38,6 +38,7 @@
 /* ---- scroll area ---- */
 .wx-scroll { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
 .wx-main { padding: 10px 10px 8px; display: flex; flex-direction: column; gap: 10px; }
+.wx-rest { display: flex; flex-direction: column; gap: 10px; }
 
 /* ---- hero ---- */
 .wx-hero {
@@ -45,6 +46,7 @@
   --wx-a: #2c7bd6; --wx-b: #4b9be3; --wx-c: #86c3ef;
   background: linear-gradient(160deg, var(--wx-a) 0%, var(--wx-b) 55%, var(--wx-c) 100%);
   box-shadow: 0 10px 28px -16px var(--wx-a), inset 0 1px 0 rgba(255,255,255,0.14);
+  text-shadow: 0 1px 2px rgba(0,0,0,0.14);
 }
 .wx-hero::after { content: ''; position: absolute; inset: 0; z-index: -1; background: rgba(6,10,24,0); pointer-events: none; }
 [data-theme="dark"] .wx-hero::after { background: rgba(6,10,24,0.2); }

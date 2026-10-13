@@ -570,7 +570,16 @@
       return;
     }
     var now = Date.now();
-    main.innerHTML = heroHTML(m, now) +
+    // The hero is only rebuilt when its markup changes, so the minute tick
+    // (relative times, sun position) doesn't restart the glyph animations.
+    var first = main.firstElementChild;
+    if (!first || first.className !== 'wx-hero-slot') {
+      main.innerHTML = '<div class="wx-hero-slot"></div><div class="wx-rest"></div>';
+      S.heroStr = '';
+    }
+    var heroStr = heroHTML(m, now);
+    if (heroStr !== S.heroStr) { main.firstElementChild.innerHTML = heroStr; S.heroStr = heroStr; }
+    main.lastElementChild.innerHTML =
       '<section class="wx-card wx-hourly"><div class="wx-h">Next 48 hours</div><div class="wx-hscroll">' + hourlySVG(m) + '</div></section>' +
       '<section class="wx-card"><div class="wx-h">' + m.d.t.length + '-day forecast</div><div class="wx-days">' + dailyHTML(m, now) + '</div></section>' +
       '<div class="wx-tiles">' + tilesHTML(m, now) + '</div>' +

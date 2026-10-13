@@ -196,6 +196,9 @@
   function renderIP() {
     var st = S; if (!st) return;
     var box = st.p.querySelector('.ni-ip'), ip = st.ip;
+    var btn = st.p.querySelector('.ni-ipbtn');
+    btn.textContent = st.ipBusy ? 'Checking\u2026' : ip ? '\u21bb Re-check' : 'Check';
+    btn.disabled = !!st.ipBusy;
     var head = '<div class="ni-auto"><label><input type="checkbox" class="ni-autochk"' + (st.prefs.auto ? ' checked' : '') + '> Check automatically when opened</label></div>';
     if (!ip && !st.ipBusy) {
       box.innerHTML = '<div class="ni-note">Looks up your public IP address, provider and approximate location using ipify, ipwho.is and Cloudflare. Nothing is sent until you press Check.</div>' + head;
