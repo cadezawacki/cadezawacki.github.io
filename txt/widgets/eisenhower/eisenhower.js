@@ -1,5 +1,5 @@
 /* Eisenhower Matrix for Cade.txt — the CURRENT DOCUMENT's todos, sorted into
- * Do first / Schedule / Delegate / Eliminate.
+ * Do first / Schedule / Later / Down the Road.
  *
  * Every checkbox line ("- [ ] x", "* [x] x", "1. [ ] x", a bare "[ ] x"; any
  * indentation, so nested sub-tasks count too) is a card. Its quadrant lives IN
@@ -7,10 +7,10 @@
  * (Settings → Editor → Tag sentinel, default ¥) so the core draws them as tag
  * badges and Ctrl+P finds them:
  *     ¥urgent ¥important  → Do first        ¥important → Schedule
- *     ¥urgent             → Delegate        ¥someday   → Eliminate
+ *     ¥urgent             → Later           ¥someday   → Down the Road
  *     none of these       → Unsorted (the tray)
- * "Eliminate" needs its own explicit tag: if "no tags" meant Eliminate, every
- * untouched todo in the document would land in the bin. Tags typed with any of
+ * "Down the Road" needs its own explicit tag: if "no tags" meant Down the Road,
+ * every untouched todo in the document would be pushed off to someday. Tags typed with any of
  * the core's sentinels (¥ € § @ #) are recognised, and rewritten with the
  * current one whenever the card moves.
  *
@@ -283,7 +283,7 @@
     }
 
     // ---- markdown summary ------------------------------------------------------
-    var QNAMES = ['Unsorted', 'Do first', 'Schedule', 'Delegate', 'Eliminate'];
+    var QNAMES = ['Unsorted', 'Do first', 'Schedule', 'Later', 'Down the Road'];
     var QSUBS = ['no quadrant yet', 'urgent & important', 'important, not urgent', 'urgent, not important', 'neither'];
     function summary(P, opts) {
       opts = opts || {};
@@ -354,8 +354,8 @@
     { n: 0, name: 'Unsorted', sub: 'No quadrant yet', icon: '' },
     { n: 1, name: 'Do first', sub: 'Urgent \u00b7 important', icon: '\ud83d\udd25' },
     { n: 2, name: 'Schedule', sub: 'Important \u00b7 not urgent', icon: '\ud83d\udcc5' },
-    { n: 3, name: 'Delegate', sub: 'Urgent \u00b7 not important', icon: '\ud83d\udc65' },
-    { n: 4, name: 'Eliminate', sub: 'Neither \u2014 drop it?', icon: '\ud83d\uddd1\ufe0f' },
+    { n: 3, name: 'Later', sub: 'Urgent \u00b7 not important', icon: '\u23f3' },
+    { n: 4, name: 'Down the Road', sub: 'Neither \u2014 someday', icon: '\ud83d\udee3\ufe0f' },
   ];
   var INLINE_SRC = [
     '`([^`\\n]+)`',                                        // 1 code
@@ -605,7 +605,7 @@
     tog.classList.toggle('on', prefs.hideDone);
     tog.setAttribute('aria-pressed', prefs.hideDone ? 'true' : 'false');
     var s = S.sentinel, hint = p.querySelector('.em-tags');
-    var tags = s + 'urgent ' + s + 'important \u2192 Do first \u00b7 ' + s + 'important \u2192 Schedule \u00b7 ' + s + 'urgent \u2192 Delegate \u00b7 ' + s + 'someday \u2192 Eliminate \u00b7 none \u2192 Unsorted';
+    var tags = s + 'urgent ' + s + 'important \u2192 Do first \u00b7 ' + s + 'important \u2192 Schedule \u00b7 ' + s + 'urgent \u2192 Later \u00b7 ' + s + 'someday \u2192 Down the Road \u00b7 none \u2192 Unsorted';
     if (hint.textContent !== tags) hint.textContent = tags;
   }
 
@@ -1114,9 +1114,9 @@
 
   Cade.registerWidget({
     name: 'Eisenhower Matrix',
-    description: 'Sort the document\u2019s todos into Do first / Schedule / Delegate / Eliminate by urgency & importance',
+    description: 'Sort the document\u2019s todos into Do first / Schedule / Later / Down the Road by urgency & importance',
     icon: '\ud83c\udfaf',
-    tags: 'eisenhower,matrix,priority,prioritize,urgent,important,todo,tasks,quadrant,triage,checklist,planning',
+    tags: 'eisenhower,matrix,priority,prioritize,urgent,important,todo,tasks,quadrant,triage,checklist,planning,later,someday,down the road',
     open: open,
   });
 })();
