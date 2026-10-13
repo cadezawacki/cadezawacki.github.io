@@ -42,6 +42,9 @@
 .cm-activeLine .cm-co-gt,
 .cm-activeLine .cm-co-mk { display: inline; color: var(--text-faint); }
 .cm-activeLine .cm-co-autolabel { display: none; }
+/* the ">" of an empty body line: invisible but still giving the line height */
+.cm-co-gtb { visibility: hidden; }
+.cm-activeLine .cm-co-gtb { visibility: visible; color: var(--text-faint); }
 
 /* Header: [chevron] icon Title */
 .cm-co-hw {

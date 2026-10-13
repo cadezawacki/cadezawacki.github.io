@@ -175,23 +175,23 @@
     var mb = monthsBetween(lo, hiEnd);
     var ys = Math.floor(mb.months / 12), ms = mb.months % 12;
     var bd = businessDays(dnOf(lo), dnOf(hiEnd));
-    var neg = sign < 0 ? '−' : '';
+    var neg = sign < 0 ? '\u2212' : '';
     var wk = Math.floor(days / 7), wr = days % 7;
     var rows = [
       ['Days', neg + group(days) + ' day' + (days === 1 ? '' : 's')],
       ['Weeks', neg + joinParts([wk ? plural(wk, 'week') : '', wr || !wk ? plural(wr, 'day') : ''])],
       ['Months', neg + joinParts([mb.months ? plural(mb.months, 'month') : '', mb.days || !mb.months ? plural(mb.days, 'day') : ''])],
       ['Years', neg + joinParts([ys ? plural(ys, 'year') : '', ms ? plural(ms, 'month') : '', mb.days || (!ys && !ms) ? plural(mb.days, 'day') : ''])],
-      ['Business days', neg + group(bd) + ' (Mon–Fri)'],
+      ['Business days', neg + group(bd) + ' (Mon\u2013Fri)'],
       ['Weekend days', neg + group(days - bd)],
       ['Hours', neg + group(days * 24)],
       ['Minutes', neg + group(days * 1440)],
       ['Seconds', neg + group(days * 86400)]
     ];
-    var summary = iso(a) + ' → ' + iso(b) + ': ' + neg + plural(days, 'day') +
-      (days >= 7 ? ' (' + rows[ys ? 3 : (mb.months ? 2 : 1)][1].replace(/^−/, '') + ')' : '') +
+    var summary = iso(a) + ' \u2192 ' + iso(b) + ': ' + neg + plural(days, 'day') +
+      (days >= 7 ? ' (' + rows[ys ? 3 : (mb.months ? 2 : 1)][1].replace(/^\u2212/, '') + ')' : '') +
       ', ' + plural(bd, 'business day') + (prefs.inclEnd ? ', end date included' : '');
-    return { rows: rows, summary: summary, note: (sign < 0 ? 'End is before start — shown as negative. ' : '') + longDate(a) + ' → ' + longDate(b) };
+    return { rows: rows, summary: summary, note: (sign < 0 ? 'End is before start \u2014 shown as negative. ' : '') + longDate(a) + ' \u2192 ' + longDate(b) };
   }
 
   function computeAdd() {
@@ -211,13 +211,13 @@
       ['ISO', iso(r)],
       ['Weekday', local(r, { weekday: 'long' })],
       ['Long', local(r, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })],
-      ['Span', (diff < 0 ? '−' : '') + plural(Math.abs(diff), 'day') + ' · ' + plural(businessDays(Math.min(dnOf(s), dnOf(r)), Math.max(dnOf(s), dnOf(r))), 'business day')]
+      ['Span', (diff < 0 ? '\u2212' : '') + plural(Math.abs(diff), 'day') + ' \u00b7 ' + plural(businessDays(Math.min(dnOf(s), dnOf(r)), Math.max(dnOf(s), dnOf(r))), 'business day')]
     ];
     var unitWord = prefs.unit === 'business' ? 'business day' : prefs.unit.replace(/s$/, '');
     return {
       rows: rows, result: r,
       summary: fmtDate(r, prefs.fmt),
-      note: iso(s) + ' ' + (n < 0 ? '−' : '+') + ' ' + plural(Math.abs(n), unitWord) + ' = ' + longDate(r) +
+      note: iso(s) + ' ' + (n < 0 ? '\u2212' : '+') + ' ' + plural(Math.abs(n), unitWord) + ' = ' + longDate(r) +
         (clamped ? ' (day clamped to the end of the month)' : '')
     };
   }
@@ -242,7 +242,7 @@
     ];
     return {
       rows: rows,
-      summary: iso(o) + ' — ' + rows[0][1] + ', ' + w.year + '-W' + pad(w.week) + ', day ' + doy + ', Q' + Math.ceil(o.m / 3),
+      summary: iso(o) + ' \u2014 ' + rows[0][1] + ', ' + w.year + '-W' + pad(w.week) + ', day ' + doy + ', Q' + Math.ceil(o.m / 3),
       note: local(o, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
     };
   }
@@ -279,9 +279,9 @@
   function insertText(text) {
     var ed = Cade.editor;
     if (!ed || !text) return;
-    if (ed.state.readOnly) { Cade.showToast('Read-only mode — editing is locked', 'error', 2000); return; }
+    if (ed.state.readOnly) { Cade.showToast('Read-only mode \u2014 editing is locked', 'error', 2000); return; }
     ed.dispatch(ed.state.replaceSelection(text), { userEvent: 'input', scrollIntoView: true });
-    Cade.showToast('Inserted ' + (text.length > 48 ? text.slice(0, 48) + '…' : text), 'success', 1200);
+    Cade.showToast('Inserted ' + (text.length > 48 ? text.slice(0, 48) + '\u2026' : text), 'success', 1200);
   }
 
   function close() {
@@ -320,7 +320,7 @@
     var t = todayDate();
     dates = { from: t, to: t, start: t, info: t };
     seedFromSelection();
-    var p = Cade.mkPanel(PANEL_ID, '📅 Date Calculator',
+    var p = Cade.mkPanel(PANEL_ID, '\ud83d\udcc5 Date Calculator',
       '<div class="dc-tabs" role="tablist">' +
         '<button class="dc-tab" data-tab="diff" role="tab">Difference</button>' +
         '<button class="dc-tab" data-tab="add" role="tab">Add / subtract</button>' +
@@ -333,7 +333,7 @@
       '<div class="dc-sec" data-sec="add" hidden>' +
         dateField('dc-start', 'Start') +
         '<div class="dc-addrow">' +
-          '<select class="dc-op" aria-label="Add or subtract"><option value="+">+ add</option><option value="-">− subtract</option></select>' +
+          '<select class="dc-op" aria-label="Add or subtract"><option value="+">+ add</option><option value="-">\u2212 subtract</option></select>' +
           '<input class="dc-n" type="text" inputmode="numeric" aria-label="Amount" autocomplete="off">' +
           '<select class="dc-unit" aria-label="Unit"><option value="days">days</option><option value="weeks">weeks</option>' +
             '<option value="months">months</option><option value="years">years</option><option value="business">business days</option></select>' +
@@ -343,8 +343,8 @@
       '<div class="dc-sec" data-sec="info" hidden>' + dateField('dc-info', 'Date') + '</div>' +
       '<div class="dc-out"></div>' +
       '<div class="dc-acts">' +
-        '<button class="dc-btn primary" data-act="insert" title="Insert the summary at the cursor">↵ Insert</button>' +
-        '<button class="dc-btn" data-act="copy" title="Copy the summary">⧉ Copy</button>' +
+        '<button class="dc-btn primary" data-act="insert" title="Insert the summary at the cursor">\u21b5 Insert</button>' +
+        '<button class="dc-btn" data-act="copy" title="Copy the summary">\u29c9 Copy</button>' +
         '<span class="dc-hint">Click a row to copy it</span>' +
       '</div>');
 
@@ -390,7 +390,7 @@
   Cade.registerWidget({
     name: 'Date Calculator',
     description: 'Days between dates, business days, add/subtract days or months, week numbers',
-    icon: '📅',
+    icon: '\ud83d\udcc5',
     tags: 'date,dates,calculator,days,between,difference,duration,business days,workdays,add days,weeks,months,iso week,week number,day of year,countdown,unix timestamp',
     open: open,
     _utils: { dn: dn, fromDn: fromDn, weekday: weekday, addMonths: addMonths, monthsBetween: monthsBetween, businessDays: businessDays,

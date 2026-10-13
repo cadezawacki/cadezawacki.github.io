@@ -592,8 +592,9 @@
         if (keepAlive && ++WS.aliveTicks >= 20) { WS.aliveTicks = 0; try { ss.pause(); ss.resume(); } catch (e) {} }
         return;
       }
-      // Only trust "idle" on engines that report speaking at all.
-      if (!WS.sawSpeaking) return;
+      // Only trust "idle" on engines that report speaking at all, and never
+      // while the page is hidden (mobile browsers pause speech in the background).
+      if (!WS.sawSpeaking || document.hidden) { WS.idleTicks = 0; return; }
       if (++WS.idleTicks < 6) return; // ~3 s of silence with no end event
       WS.idleTicks = 0;
       if (!WS.started && !WS.retried) { WS.retried = true; wsSpeak(R.wordAt); return; }
@@ -779,6 +780,8 @@
   function hdTick() {
     if (!panelEl()) { cleanup(); return; }
     if (R.state !== 'playing') return;
+    // iOS can suspend/"interrupt" the context behind our back (calls, Siri)
+    if (HD.ctx.state !== 'running') { try { HD.ctx.resume(); } catch (e) {} }
     var now = HD.ctx.currentTime, cur = null;
     for (var k = 0; k < HD.sched.length; k++) if (HD.sched[k].start <= now + 0.03) cur = HD.sched[k];
     if (cur && cur.i !== R.idx && now < cur.end + 0.05) {
@@ -986,7 +989,7 @@
   var PREV_ICON = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M6 5h2v14H6zM9.5 12 19 18.5v-13z" fill="currentColor"/></svg>';
   var NEXT_ICON = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M16 5h2v14h-2zM14.5 12 5 18.5v-13z" fill="currentColor"/></svg>';
   var STOP_ICON = '<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="1.5" fill="currentColor"/></svg>';
-  var GEAR_ICON = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M19.4 13a7.6 7.6 0 0 0 0-2l2.1-1.6-2-3.5-2.5 1a7.4 7.4 0 0 0-1.7-1L15 3.3h-4L10.7 6a7.4 7.4 0 0 0-1.7 1l-2.5-1-2 3.5L6.6 11a7.6 7.6 0 0 0 0 2l-2.1 1.6 2 3.5 2.5-1c.5.4 1.1.7 1.7 1l.3 2.6h4l.3-2.6c.6-.3 1.2-.6 1.7-1l2.5 1 2-3.5zM13 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7z" transform="translate(-1 0)"/></svg>';
+  var GEAR_ICON = '<svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h8.5M17.5 7H20M4 17h2.5M11.5 17H20"/><circle cx="15" cy="7" r="2.3"/><circle cx="9" cy="17" r="2.3"/></svg>';
 
   function langName(code) {
     try {
@@ -1036,7 +1039,8 @@
     if (on) {
       var pct = Math.min(100, 100 * HD.dl.loaded / HD.dl.total);
       fill.style.width = pct.toFixed(1) + '%';
-      st.textContent = (HD.cached[HD.workerVoice] ? 'Loading\u2026 ' : 'Downloading\u2026 ') + Math.floor(pct) + '% \u00b7 ' + mb(HD.dl.loaded) + ' of ' + mb(HD.dl.total);
+      st.textContent = 'Downloading\u2026 ' + Math.floor(pct) + '% \u00b7 ' + mb(HD.dl.loaded) + ' of ' + mb(HD.dl.total) +
+        ' \u2014 keep this panel open';
     }
     setStatus();
   }

@@ -40,8 +40,8 @@
 
   // A list item: indent + bullet / number / letter / [n] marker (+ checkbox),
   // or a bare "[ ] " checkbox line (todo pages).
-  var ITEM_RE = /^[ \t]*(?:(?:[-*+•]|\d{1,9}[.)]|[A-Za-z][.)]|\[\d{1,9}\])[ \t]+|\[[ xX]\][ \t]+)/;
-  var EMPTY_RE = /^[ \t]*(?:(?:[-*+•]|\d{1,9}[.)]|[A-Za-z][.)]|\[\d{1,9}\])[ \t]+(?:\[[ xX]\][ \t]+)?|\[[ xX]\][ \t]+)$/;
+  var ITEM_RE = /^[ \t]*(?:(?:[-*+\u2022]|\d{1,9}[.)]|[A-Za-z][.)]|\[\d{1,9}\])[ \t]+|\[[ xX]\][ \t]+)/;
+  var EMPTY_RE = /^[ \t]*(?:(?:[-*+\u2022]|\d{1,9}[.)]|[A-Za-z][.)]|\[\d{1,9}\])[ \t]+(?:\[[ xX]\][ \t]+)?|\[[ xX]\][ \t]+)$/;
   var NUM_RE = /^([ \t]*)(\d{1,9})([.)])([ \t])/;
   var QUOTE_RE = /^[ \t]{0,3}(?:>[ \t]?)+/;
 
@@ -168,7 +168,9 @@
     if (l2 > l1 && sel.to === doc.line(l2).from) l2--; // a selection ending at a line start excludes that line
     var first = doc.line(l1);
     if (first.length > 2000 || !ITEM_RE.test(first.text) || inFence(first.from)) return false;
-    if (l1 === l2 && sel.empty && sel.head === first.to && ghostOnLine(view, first)) return false;
+    // Same condition inline-math accepts on (caret after the trailing "="): defer to it.
+    if (l1 === l2 && sel.empty && sel.head >= first.from + first.text.replace(/\s+$/, '').length &&
+        ghostOnLine(view, first)) return false;
     // The last selected line's children move with it.
     var end = l2, base = indentOf(doc.line(l2).text);
     for (var i = l2 + 1; i <= doc.lines && i - l2 <= WIN; i++) {
@@ -233,8 +235,8 @@
 
   // ---- auto-pairs ---------------------------------------------------------------------
   var MD = '*_~=`';
-  var OPEN_BEFORE = /[\s([{<"'*_~=>|“‘]/; // may precede an opener
-  var CLOSE_AFTER = /[\s)\]}>.,;:!?"'*_~=`|”’]/; // may follow the caret
+  var OPEN_BEFORE = /[\s([{<"'*_~=>|\u201c\u2018]/; // may precede an opener
+  var CLOSE_AFTER = /[\s)\]}>.,;:!?"'*_~=`|\u201d\u2019]/; // may follow the caret
 
   // Tracks the closers this plugin inserted (positions mapped through edits),
   // so only those are overtyped / undone, and owns the capture keydown.

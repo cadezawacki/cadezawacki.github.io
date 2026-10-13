@@ -84,9 +84,9 @@
   function insertText(text) {
     var ed = Cade.editor;
     if (!ed || !text) return;
-    if (ed.state.readOnly) { Cade.showToast('Read-only mode — editing is locked', 'error', 2000); return; }
+    if (ed.state.readOnly) { Cade.showToast('Read-only mode \u2014 editing is locked', 'error', 2000); return; }
     ed.dispatch(ed.state.replaceSelection(text), { userEvent: 'input', scrollIntoView: true });
-    Cade.showToast('Inserted ' + (text.length > 40 ? text.slice(0, 40) + '…' : text), 'success', 1200);
+    Cade.showToast('Inserted ' + (text.length > 40 ? text.slice(0, 40) + '\u2026' : text), 'success', 1200);
   }
   // What the action buttons act on: the live line if it evaluates, else the
   // newest history entry.
@@ -133,8 +133,8 @@
       html += '<div class="ca-item" data-i="' + i + '" title="Click to reuse">' +
         '<span class="ca-e">' + esc(hist[i].e) + '</span>' +
         '<span class="ca-r">= ' + esc(hist[i].r) + '</span>' +
-        '<span class="ca-ia"><button class="ca-ib" data-act="h-copy" title="Copy result" aria-label="Copy result">⧉</button>' +
-        '<button class="ca-ib" data-act="h-ins" title="Insert result at cursor" aria-label="Insert result">↵</button></span></div>';
+        '<span class="ca-ia"><button class="ca-ib" data-act="h-copy" title="Copy result" aria-label="Copy result">\u29c9</button>' +
+        '<button class="ca-ib" data-act="h-ins" title="Insert result at cursor" aria-label="Insert result">\u21b5</button></span></div>';
     }
     box.innerHTML = html;
     if (scroll) box.scrollTop = box.scrollHeight;
@@ -159,7 +159,7 @@
     var p = panel(); if (!p) return;
     var inp = p.querySelector('.ca-in'), out = p.querySelector('.ca-prev');
     var src = inp.value.trim();
-    if (!engine) { out.className = 'ca-prev'; out.textContent = 'Loading…'; return; }
+    if (!engine) { out.className = 'ca-prev'; out.textContent = 'Loading\u2026'; return; }
     preview = src ? evalPreview(src) : null;
     out.classList.remove('err', 'shake');
     if (!preview || preview.empty) {
@@ -183,10 +183,10 @@
   }
 
   var KEYS = [
-    ['7', '7'], ['8', '8'], ['9', '9'], ['÷', '/'], ['(', '('], [')', ')'],
-    ['4', '4'], ['5', '5'], ['6', '6'], ['×', '*'], ['^', '^'], ['√', 'sqrt('],
-    ['1', '1'], ['2', '2'], ['3', '3'], ['−', '-'], ['%', '%'], ['π', 'pi'],
-    ['0', '0'], ['.', '.'], ['ans', 'ans'], ['+', '+'], ['⌫', 'BS'], ['=', 'EQ']
+    ['7', '7'], ['8', '8'], ['9', '9'], ['\u00f7', '/'], ['(', '('], [')', ')'],
+    ['4', '4'], ['5', '5'], ['6', '6'], ['\u00d7', '*'], ['^', '^'], ['\u221a', 'sqrt('],
+    ['1', '1'], ['2', '2'], ['3', '3'], ['\u2212', '-'], ['%', '%'], ['\u03c0', 'pi'],
+    ['0', '0'], ['.', '.'], ['ans', 'ans'], ['+', '+'], ['\u232b', 'BS'], ['=', 'EQ']
   ];
   function padHtml() {
     return KEYS.map(function (k) {
@@ -199,15 +199,17 @@
   function typeIntoInput(text) {
     var p = panel(); if (!p) return;
     var inp = p.querySelector('.ca-in');
-    var s = inp.selectionStart == null ? inp.value.length : inp.selectionStart;
-    var e = inp.selectionEnd == null ? inp.value.length : inp.selectionEnd;
+    // Unfocused (keypad-only on a phone): always append at the end.
+    var focused = document.activeElement === inp;
+    var s = focused && inp.selectionStart != null ? inp.selectionStart : inp.value.length;
+    var e = focused && inp.selectionEnd != null ? inp.selectionEnd : inp.value.length;
     if (text === 'BS') {
       if (s === e && s > 0) s--;
       inp.value = inp.value.slice(0, s) + inp.value.slice(e);
-      inp.setSelectionRange(s, s);
+      if (focused) inp.setSelectionRange(s, s);
     } else {
       inp.value = inp.value.slice(0, s) + text + inp.value.slice(e);
-      inp.setSelectionRange(s + text.length, s + text.length);
+      if (focused) inp.setSelectionRange(s + text.length, s + text.length);
     }
     recall = -1;
     update();
@@ -267,21 +269,21 @@
       return;
     }
     loadState();
-    var p = Cade.mkPanel(PANEL_ID, '🧮 Calculator',
+    var p = Cade.mkPanel(PANEL_ID, '\ud83e\uddee Calculator',
       '<div class="ca-hist" role="log" aria-label="History"></div>' +
       '<div class="ca-vars" hidden></div>' +
       '<input class="ca-in" type="text" placeholder="2+2, 5 km in mi, 20% of 80, x = 3" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" enterkeyhint="done" aria-label="Expression">' +
-      '<div class="ca-prev" aria-live="polite">Loading…</div>' +
+      '<div class="ca-prev" aria-live="polite">Loading\u2026</div>' +
       '<div class="ca-acts">' +
-        '<button class="ca-btn primary" data-act="insert" title="Insert the result at the cursor (Ctrl+Enter)">↵ Insert</button>' +
-        '<button class="ca-btn" data-act="insert-eq" title="Insert “expression = result”">= Insert both</button>' +
-        '<button class="ca-btn" data-act="copy" title="Copy the result">⧉ Copy</button>' +
+        '<button class="ca-btn primary" data-act="insert" title="Insert the result at the cursor (Ctrl+Enter)">\u21b5 Insert</button>' +
+        '<button class="ca-btn" data-act="insert-eq" title="Insert \u201cexpression = result\u201d">= Insert both</button>' +
+        '<button class="ca-btn" data-act="copy" title="Copy the result">\u29c9 Copy</button>' +
         '<span class="ca-sp"></span>' +
         '<button class="ca-btn ca-tog" data-act="thousands" title="Thousands separators">1,000</button>' +
-        '<button class="ca-btn ca-tog" data-act="keypad" title="Show keypad">⌨</button>' +
+        '<button class="ca-btn ca-tog" data-act="keypad" title="Show keypad">\u2328</button>' +
       '</div>' +
       '<div class="ca-pad" hidden>' + padHtml() + '</div>' +
-      '<div class="ca-foot"><span>Enter save · ↑↓ history · Esc close</span><button class="ca-link" data-act="clear">Clear history</button></div>');
+      '<div class="ca-foot"><span>Enter save \u00b7 \u2191\u2193 history \u00b7 Esc close</span><button class="ca-link" data-act="clear">Clear history</button></div>');
 
     var inp = p.querySelector('.ca-in');
     if (pre) inp.value = pre;
@@ -326,21 +328,25 @@
     update();
     loadEngine().then(function (E) {
       engine = E;
-      if (!scope) scope = E.createScope();
+      if (!scope) {
+        scope = E.createScope();
+        // results are written to re-parse, so the last saved one becomes `ans` again
+        if (hist.length) E.evaluate(hist[hist.length - 1].r, { scope: scope });
+      }
       if (!panel()) return;
       renderVars();
       update();
     }, function () {
       var q = panel();
-      if (q) { var o = q.querySelector('.ca-prev'); o.classList.add('err'); o.textContent = 'Couldn’t load the calculator engine' + (navigator.onLine ? '' : ' — it needs one online load to cache'); }
+      if (q) { var o = q.querySelector('.ca-prev'); o.classList.add('err'); o.textContent = 'Couldn\u2019t load the calculator engine' + (navigator.onLine ? '' : ' \u2014 it needs one online load to cache'); }
     });
     if (!isTouch()) setTimeout(function () { inp.focus(); var n = inp.value.length; inp.setSelectionRange(n, n); }, 0);
   }
 
   Cade.registerWidget({
     name: 'Calculator',
-    description: 'Scratch calculator with units, %, variables & history — insert results',
-    icon: '🧮',
+    description: 'Scratch calculator with units, %, variables & history \u2014 insert results',
+    icon: '\ud83e\uddee',
     tags: 'calc,calculator,math,compute,arithmetic,percent,units,convert,expression',
     open: open,
   });

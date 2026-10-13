@@ -43,7 +43,7 @@
   // Every built-in rewrites the caret's line in ONE change (single undo step).
   // c = { text: line with "/query" removed, col: caret column in it }; actions
   // return { text, anchor, head } relative to the line start.
-  var PREFIX_RE = /^([ \t]*)(#{1,6}[ \t]+|>[ \t]?(?:\[![^\]\n]*\][+-]?[ \t]*)?|(?:[-*+•]|\d{1,9}[.)])[ \t]+(?:\[[ xX]\][ \t]+)?|\[[ xX]\][ \t]+)?/;
+  var PREFIX_RE = /^([ \t]*)(#{1,6}[ \t]+|>[ \t]?(?:\[![^\]\n]*\][+-]?[ \t]*)?|(?:[-*+\u2022]|\d{1,9}[.)])[ \t]+(?:\[[ xX]\][ \t]+)?|\[[ xX]\][ \t]+)?/;
 
   // Turn the line into a block of another kind, replacing any heading / quote /
   // callout / list / checkbox prefix it already has (so "- /h2" → "## ").
@@ -92,23 +92,23 @@
     { sec: 'Blocks', name: 'Heading 1', desc: 'Big section heading', icon: 'H1', keys: 'h1 # title', act: setPrefix('# ', false) },
     { sec: 'Blocks', name: 'Heading 2', desc: 'Medium section heading', icon: 'H2', keys: 'h2 ## subtitle', act: setPrefix('## ', false) },
     { sec: 'Blocks', name: 'Heading 3', desc: 'Small section heading', icon: 'H3', keys: 'h3 ###', act: setPrefix('### ', false) },
-    { sec: 'Blocks', name: 'Bullet list', desc: 'Simple bulleted list', icon: '•', keys: 'ul bullet bullets unordered - list', act: setPrefix('- ', true) },
+    { sec: 'Blocks', name: 'Bullet list', desc: 'Simple bulleted list', icon: '\u2022', keys: 'ul bullet bullets unordered - list', act: setPrefix('- ', true) },
     { sec: 'Blocks', name: 'Numbered list', desc: 'List with numbering', icon: '1.', keys: 'ol numbered ordered number 1.', act: setPrefix(numberPrefix, true) },
-    { sec: 'Blocks', name: 'Todo', desc: 'Checkbox task', icon: '☐', keys: 'todo task checkbox box [] check', act: setPrefix('[ ] ', true) },
-    { sec: 'Blocks', name: 'Quote', desc: 'Block quote', icon: '❝', keys: 'quote blockquote > cite', act: setPrefix('> ', false) },
-    { sec: 'Callouts', name: 'Note callout', desc: '> [!note] box', icon: '📝', keys: 'note callout', act: setPrefix('> [!note] ', false) },
-    { sec: 'Callouts', name: 'Tip callout', desc: '> [!tip] box', icon: '💡', keys: 'tip hint callout', act: setPrefix('> [!tip] ', false) },
-    { sec: 'Callouts', name: 'Info callout', desc: '> [!info] box', icon: 'ℹ️', keys: 'info callout', act: setPrefix('> [!info] ', false) },
-    { sec: 'Callouts', name: 'Warning callout', desc: '> [!warning] box', icon: '⚠️', keys: 'warning warn caution callout', act: setPrefix('> [!warning] ', false) },
-    { sec: 'Callouts', name: 'Danger callout', desc: '> [!danger] box', icon: '⛔', keys: 'danger error callout', act: setPrefix('> [!danger] ', false) },
-    { sec: 'Callouts', name: 'Collapsible callout', desc: '> [!note]- starts folded', icon: '▸', keys: 'fold collapse collapsible details toggle callout', act: setPrefix('> [!note]- ', false) },
+    { sec: 'Blocks', name: 'Todo', desc: 'Checkbox task', icon: '\u2610', keys: 'todo task checkbox box [] check', act: setPrefix('[ ] ', true) },
+    { sec: 'Blocks', name: 'Quote', desc: 'Block quote', icon: '\u275d', keys: 'quote blockquote > cite', act: setPrefix('> ', false) },
+    { sec: 'Callouts', name: 'Note callout', desc: '> [!note] box', icon: '\ud83d\udcdd', keys: 'note callout', act: setPrefix('> [!note] ', false) },
+    { sec: 'Callouts', name: 'Tip callout', desc: '> [!tip] box', icon: '\ud83d\udca1', keys: 'tip hint callout', act: setPrefix('> [!tip] ', false) },
+    { sec: 'Callouts', name: 'Info callout', desc: '> [!info] box', icon: '\u2139\ufe0f', keys: 'info callout', act: setPrefix('> [!info] ', false) },
+    { sec: 'Callouts', name: 'Warning callout', desc: '> [!warning] box', icon: '\u26a0\ufe0f', keys: 'warning warn caution callout', act: setPrefix('> [!warning] ', false) },
+    { sec: 'Callouts', name: 'Danger callout', desc: '> [!danger] box', icon: '\u26d4', keys: 'danger error callout', act: setPrefix('> [!danger] ', false) },
+    { sec: 'Callouts', name: 'Collapsible callout', desc: '> [!note]- starts folded', icon: '\u25b8', keys: 'fold collapse collapsible details toggle callout', act: setPrefix('> [!note]- ', false) },
     { sec: 'Insert', name: 'Code block', desc: '``` fenced code', icon: '{ }', keys: 'code block fence ``` pre snippet', act: block('```\n\n```', 4) },
-    { sec: 'Insert', name: 'Table', desc: '3 × 2 markdown table', icon: '▦', keys: 'table grid', act: block(TABLE, 2, 8) },
-    { sec: 'Insert', name: 'Divider', desc: 'Horizontal rule ---', icon: '—', keys: 'divider hr rule line --- separator', act: block('---\n', 4) },
-    { sec: 'Insert', name: 'Date', desc: "Today's date", icon: '📅', keys: 'date today day', act: inline(today) },
-    { sec: 'Insert', name: 'Time', desc: 'Current time', icon: '🕒', keys: 'time clock', act: inline(clock) },
-    { sec: 'Insert', name: 'Date & time', desc: 'Date and current time', icon: '🗓️', keys: 'now datetime timestamp stamp', act: inline(function () { return today() + ' ' + clock(); }) },
-    { sec: 'Insert', name: 'Link', desc: '[text](url)', icon: '🔗', keys: 'link url href', act: inline('[]()', 1) },
+    { sec: 'Insert', name: 'Table', desc: '3 \u00d7 2 markdown table', icon: '\u25a6', keys: 'table grid', act: block(TABLE, 2, 8) },
+    { sec: 'Insert', name: 'Divider', desc: 'Horizontal rule ---', icon: '\u2014', keys: 'divider hr rule line --- separator', act: block('---\n', 4) },
+    { sec: 'Insert', name: 'Date', desc: "Today's date", icon: '\ud83d\udcc5', keys: 'date today day', act: inline(today) },
+    { sec: 'Insert', name: 'Time', desc: 'Current time', icon: '\ud83d\udd52', keys: 'time clock', act: inline(clock) },
+    { sec: 'Insert', name: 'Date & time', desc: 'Date and current time', icon: '\ud83d\uddd3\ufe0f', keys: 'now datetime timestamp stamp', act: inline(function () { return today() + ' ' + clock(); }) },
+    { sec: 'Insert', name: 'Link', desc: '[text](url)', icon: '\ud83d\udd17', keys: 'link url href', act: inline('[]()', 1) },
     { sec: 'Format', name: 'Bold', desc: '**bold**', icon: 'B', keys: 'bold strong b', act: inline('****', 2) },
     { sec: 'Format', name: 'Italic', desc: '*italic*', icon: 'I', keys: 'italic em i', act: inline('**', 1) },
     { sec: 'Format', name: 'Strikethrough', desc: '~~strike~~', icon: 'S', keys: 'strike strikethrough del s', act: inline('~~~~', 2) },
@@ -338,7 +338,7 @@
         (r.desc ? '<span class="csl-desc">' + esc(r.desc) + '</span>' : '') + '</span>' +
         (r.hint ? '<span class="csl-hint">' + esc(r.hint) + '</span>' : '') + '</div>';
     }
-    if (grouped) html += '<div class="csl-foot">↑↓ navigate · ↵ select · esc close · type to filter</div>';
+    if (grouped) html += '<div class="csl-foot">\u2191\u2193 navigate \u00b7 \u21b5 select \u00b7 esc close \u00b7 type to filter</div>';
     this.el.innerHTML = html;
     this.el.scrollTop = 0;
   };

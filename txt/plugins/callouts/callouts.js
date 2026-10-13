@@ -139,7 +139,7 @@
   Pill.prototype.toDOM = function (view) {
     var s = document.createElement('span');
     s.className = 'cm-co-pill';
-    s.textContent = '… ' + this.n + ' line' + (this.n === 1 ? '' : 's');
+    s.textContent = '\u2026 ' + this.n + ' line' + (this.n === 1 ? '' : 's');
     s.title = 'Expand';
     s.addEventListener('mousedown', function (e) { e.preventDefault(); e.stopPropagation(); toggle(view, s); });
     return s;
@@ -168,6 +168,7 @@
 
   // ---- decorations ------------------------------------------------------------------
   var MARK_GT = Decoration.mark({ class: 'cm-co-gt' });
+  var MARK_GT_BLANK = Decoration.mark({ class: 'cm-co-gtb' });
   var MARK_MK = Decoration.mark({ class: 'cm-co-mk' });
   var MARK_TITLE = Decoration.mark({ class: 'cm-co-title' });
   var HIDDEN = Decoration.line({ class: 'cm-co-hidden' });
@@ -280,7 +281,9 @@
       var l = doc.line(k);
       out.push(lineDeco(base + ' cm-co-body' + (k === e ? ' cm-co-end' : '')).range(l.from));
       var g = /^>[ \t]?/.exec(l.text)[0].length;
-      if (l.length <= 2000) out.push(MARK_GT.range(l.from, l.from + g));
+      // An empty ">" paragraph line would collapse to zero height if its only
+      // text were display:none'd — make that marker invisible instead.
+      if (l.length <= 2000) out.push((/\S/.test(l.text.slice(g)) ? MARK_GT : MARK_GT_BLANK).range(l.from, l.from + g));
     }
   };
 

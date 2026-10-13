@@ -82,7 +82,7 @@
   function symFor(u, x) { return u.plural && Math.abs(x) !== 1 ? u.plural : u.sym; }
   function withUnit(x, u) {
     var n = fmt(x), s = symFor(u, parseFloat(engine.formatNumber(x)));
-    return n + (s === '°' ? '' : ' ') + s;
+    return n + (s === '\u00b0' ? '' : ' ') + s;
   }
 
   // The value box takes a number, any maths ("3/4", "2^10"), or a quantity
@@ -169,7 +169,7 @@
       html += '<div class="un-r' + (u.id === t.id ? ' on' : '') + (u.id === f.id ? ' src' : '') + '" data-id="' + esc(u.id) + '" title="Click to copy">' +
         '<span class="un-n">' + esc(fmt(v)) + '</span><span class="un-u">' + esc(symFor(u, v)) + '</span>' +
         '<span class="un-l">' + esc(u.label) + '</span>' +
-        '<button class="un-ib" data-act="row-ins" title="Insert at cursor" aria-label="Insert">↵</button></div>';
+        '<button class="un-ib" data-act="row-ins" title="Insert at cursor" aria-label="Insert">\u21b5</button></div>';
     });
     all.innerHTML = html;
   }
@@ -192,7 +192,7 @@
   function insertText(text) {
     var ed = Cade.editor;
     if (!ed || !text) return;
-    if (ed.state.readOnly) { Cade.showToast('Read-only mode — editing is locked', 'error', 2000); return; }
+    if (ed.state.readOnly) { Cade.showToast('Read-only mode \u2014 editing is locked', 'error', 2000); return; }
     ed.dispatch(ed.state.replaceSelection(text), { userEvent: 'input', scrollIntoView: true });
     Cade.showToast('Inserted ' + text, 'success', 1200);
   }
@@ -275,21 +275,21 @@
       return;
     }
     loadPrefs();
-    var p = Cade.mkPanel(PANEL_ID, '📐 Unit Converter',
+    var p = Cade.mkPanel(PANEL_ID, '\ud83d\udcd0 Unit Converter',
       '<div class="un-tabs" role="tablist" aria-label="Category"></div>' +
       '<div class="un-grid">' +
         '<input class="un-val" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" aria-label="Value" placeholder="Value">' +
         '<select class="un-from" aria-label="From unit"></select>' +
-        '<button class="un-swap" data-act="swap" title="Swap units" aria-label="Swap units">⇅</button>' +
+        '<button class="un-swap" data-act="swap" title="Swap units" aria-label="Swap units">\u21c5</button>' +
         '<div class="un-out" aria-live="polite"></div>' +
         '<select class="un-to" aria-label="To unit"></select>' +
       '</div>' +
       '<div class="un-acts">' +
-        '<button class="un-btn primary" data-act="insert" title="Insert the result at the cursor (Enter)">↵ Insert</button>' +
-        '<button class="un-btn" data-act="both" title="Insert “value = result”">= Insert both</button>' +
-        '<button class="un-btn" data-act="copy" title="Copy the result (Shift+Enter)">⧉ Copy</button>' +
+        '<button class="un-btn primary" data-act="insert" title="Insert the result at the cursor (Enter)">\u21b5 Insert</button>' +
+        '<button class="un-btn" data-act="both" title="Insert \u201cvalue = result\u201d">= Insert both</button>' +
+        '<button class="un-btn" data-act="copy" title="Copy the result (Shift+Enter)">\u29c9 Copy</button>' +
       '</div>' +
-      '<div class="un-all"><div class="un-dim">Loading units…</div></div>');
+      '<div class="un-all"><div class="un-dim">Loading units\u2026</div></div>');
 
     var val = p.querySelector('.un-val');
     p.addEventListener('keydown', onKey);
@@ -345,14 +345,14 @@
       if (!window.matchMedia || !window.matchMedia('(pointer: coarse)').matches) { val.focus(); val.select(); }
     }, function () {
       var q = panel();
-      if (q) q.querySelector('.un-all').innerHTML = '<div class="un-dim">Couldn’t load the unit table' + (navigator.onLine ? '' : ' — it needs one online load to cache') + '</div>';
+      if (q) q.querySelector('.un-all').innerHTML = '<div class="un-dim">Couldn\u2019t load the unit table' + (navigator.onLine ? '' : ' \u2014 it needs one online load to cache') + '</div>';
     });
   }
 
   Cade.registerWidget({
     name: 'Unit Converter',
     description: 'Convert length, weight, volume, cooking, temperature, speed, data, fuel & more',
-    icon: '📐',
+    icon: '\ud83d\udcd0',
     tags: 'unit,units,convert,converter,conversion,metric,imperial,length,weight,mass,volume,cooking,cups,temperature,celsius,fahrenheit,speed,data,bytes,pressure,energy,power,angle,fuel,mpg',
     open: open,
   });

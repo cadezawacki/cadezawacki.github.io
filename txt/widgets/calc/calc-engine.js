@@ -42,7 +42,7 @@
   var RAW = [
     // length
     ['nm', 'nm', 1e-9, 'L', 'length', 'Nanometre', 'nm|nanometer|nanometers|nanometre|nanometres'],
-    ['um', 'µm', 1e-6, 'L', 'length', 'Micrometre', 'µm|μm|um|micron|microns|micrometer|micrometers|micrometre|micrometres'],
+    ['um', '\u00b5m', 1e-6, 'L', 'length', 'Micrometre', '\u00b5m|\u03bcm|um|micron|microns|micrometer|micrometers|micrometre|micrometres'],
     ['mm', 'mm', 1e-3, 'L', 'length', 'Millimetre', 'mm|millimeter|millimeters|millimetre|millimetres'],
     ['cm', 'cm', 1e-2, 'L', 'length', 'Centimetre', 'cm|centimeter|centimeters|centimetre|centimetres'],
     ['dm', 'dm', 0.1, 'L', 'length', 'Decimetre', 'dm|decimeter|decimeters|decimetre|decimetres'],
@@ -56,12 +56,12 @@
     ['thou', 'thou', 2.54e-5, 'L', 'length', 'Thou (mil)', 'thou'],
     ['fathom', 'fathom', 1.8288, 'L', 'length', 'Fathom', 'fathom|fathoms', 'fathoms'],
     ['furlong', 'furlong', 201.168, 'L', 'length', 'Furlong', 'furlong|furlongs', 'furlongs'],
-    ['ang', 'Å', 1e-10, 'L', 'length', 'Ångström', 'Å|angstrom|angstroms'],
+    ['ang', '\u00c5', 1e-10, 'L', 'length', '\u00c5ngstr\u00f6m', '\u00c5|angstrom|angstroms'],
     ['au', 'au', 149597870700, 'L', 'length', 'Astronomical unit', 'au|AU|astronomical unit|astronomical units'],
     ['ly', 'ly', 9460730472580800, 'L', 'length', 'Light-year', 'ly|lightyear|lightyears|light year|light years'],
     ['pc', 'pc', 3.0856775814913673e16, 'L', 'length', 'Parsec', 'pc|parsec|parsecs'],
     // mass
-    ['ug', 'µg', 1e-9, 'M', 'mass', 'Microgram', 'µg|μg|ug|mcg|microgram|micrograms'],
+    ['ug', '\u00b5g', 1e-9, 'M', 'mass', 'Microgram', '\u00b5g|\u03bcg|ug|mcg|microgram|micrograms'],
     ['mg', 'mg', 1e-6, 'M', 'mass', 'Milligram', 'mg|milligram|milligrams'],
     ['g', 'g', 1e-3, 'M', 'mass', 'Gram', 'g|gm|gms|gram|grams|gramme|grammes'],
     ['kg', 'kg', 1, 'M', 'mass', 'Kilogram', 'kg|kgs|kilogram|kilograms|kilo|kilos'],
@@ -75,7 +75,7 @@
     ['lton', 'long ton', 1016.0469088, 'M', 'mass', 'UK ton (long)', 'long ton|long tons|uk ton|uk tons|imperial ton', 'long tons'],
     // time
     ['ns', 'ns', 1e-9, 'T', 'time', 'Nanosecond', 'ns|nanosecond|nanoseconds'],
-    ['us', 'µs', 1e-6, 'T', 'time', 'Microsecond', 'µs|μs|microsecond|microseconds'],
+    ['us', '\u00b5s', 1e-6, 'T', 'time', 'Microsecond', '\u00b5s|\u03bcs|microsecond|microseconds'],
     ['ms', 'ms', 1e-3, 'T', 'time', 'Millisecond', 'ms|msec|msecs|millisecond|milliseconds'],
     ['s', 's', 1, 'T', 'time', 'Second', 's|sec|secs|second|seconds'],
     ['min', 'min', 60, 'T', 'time', 'Minute', 'min|mins|minute|minutes'],
@@ -88,26 +88,26 @@
     ['decade', 'decade', 315569520, 'T', 'time', 'Decade', 'decade|decades', 'decades'],
     ['century', 'century', 3155695200, 'T', 'time', 'Century', 'century|centuries', 'centuries'],
     // area
-    ['mm2', 'mm²', 1e-6, 'L2', 'area', 'Square millimetre', 'mm2|sq mm|square millimeter|square millimeters|square millimetre|square millimetres'],
-    ['cm2', 'cm²', 1e-4, 'L2', 'area', 'Square centimetre', 'cm2|sq cm|square centimeter|square centimeters|square centimetre|square centimetres'],
-    ['m2', 'm²', 1, 'L2', 'area', 'Square metre', 'm2|sqm|sq m|square meter|square meters|square metre|square metres'],
+    ['mm2', 'mm\u00b2', 1e-6, 'L2', 'area', 'Square millimetre', 'mm2|sq mm|square millimeter|square millimeters|square millimetre|square millimetres'],
+    ['cm2', 'cm\u00b2', 1e-4, 'L2', 'area', 'Square centimetre', 'cm2|sq cm|square centimeter|square centimeters|square centimetre|square centimetres'],
+    ['m2', 'm\u00b2', 1, 'L2', 'area', 'Square metre', 'm2|sqm|sq m|square meter|square meters|square metre|square metres'],
     ['ha', 'ha', 1e4, 'L2', 'area', 'Hectare', 'ha|hectare|hectares'],
-    ['km2', 'km²', 1e6, 'L2', 'area', 'Square kilometre', 'km2|sqkm|sq km|square kilometer|square kilometers|square kilometre|square kilometres'],
-    ['in2', 'in²', 0.00064516, 'L2', 'area', 'Square inch', 'in2|sqin|sq in|square inch|square inches'],
-    ['ft2', 'ft²', 0.09290304, 'L2', 'area', 'Square foot', 'ft2|sqft|sq ft|square foot|square feet'],
-    ['yd2', 'yd²', 0.83612736, 'L2', 'area', 'Square yard', 'yd2|sqyd|sq yd|square yard|square yards'],
+    ['km2', 'km\u00b2', 1e6, 'L2', 'area', 'Square kilometre', 'km2|sqkm|sq km|square kilometer|square kilometers|square kilometre|square kilometres'],
+    ['in2', 'in\u00b2', 0.00064516, 'L2', 'area', 'Square inch', 'in2|sqin|sq in|square inch|square inches'],
+    ['ft2', 'ft\u00b2', 0.09290304, 'L2', 'area', 'Square foot', 'ft2|sqft|sq ft|square foot|square feet'],
+    ['yd2', 'yd\u00b2', 0.83612736, 'L2', 'area', 'Square yard', 'yd2|sqyd|sq yd|square yard|square yards'],
     ['acre', 'acre', 4046.8564224, 'L2', 'area', 'Acre', 'ac|acre|acres', 'acres'],
-    ['mi2', 'mi²', 2589988.110336, 'L2', 'area', 'Square mile', 'mi2|sqmi|sq mi|square mile|square miles'],
+    ['mi2', 'mi\u00b2', 2589988.110336, 'L2', 'area', 'Square mile', 'mi2|sqmi|sq mi|square mile|square miles'],
     // volume (incl. cooking)
     ['ml', 'ml', 1e-6, 'L3', 'volume', 'Millilitre', 'ml|mL|milliliter|milliliters|millilitre|millilitres'],
     ['cl', 'cl', 1e-5, 'L3', 'volume', 'Centilitre', 'cl|cL|centiliter|centiliters|centilitre|centilitres'],
     ['dl', 'dl', 1e-4, 'L3', 'volume', 'Decilitre', 'dl|dL|deciliter|deciliters|decilitre|decilitres'],
     ['l', 'L', 1e-3, 'L3', 'volume', 'Litre', 'l|L|ltr|liter|liters|litre|litres'],
-    ['m3', 'm³', 1, 'L3', 'volume', 'Cubic metre', 'm3|cu m|cubic meter|cubic meters|cubic metre|cubic metres'],
-    ['cm3', 'cm³', 1e-6, 'L3', 'volume', 'Cubic centimetre', 'cm3|cc|cu cm|cubic centimeter|cubic centimeters|cubic centimetre|cubic centimetres'],
-    ['in3', 'in³', 1.6387064e-5, 'L3', 'volume', 'Cubic inch', 'in3|cu in|cubic inch|cubic inches'],
-    ['ft3', 'ft³', 0.028316846592, 'L3', 'volume', 'Cubic foot', 'ft3|cu ft|cubic foot|cubic feet'],
-    ['yd3', 'yd³', 0.764554857984, 'L3', 'volume', 'Cubic yard', 'yd3|cu yd|cubic yard|cubic yards'],
+    ['m3', 'm\u00b3', 1, 'L3', 'volume', 'Cubic metre', 'm3|cu m|cubic meter|cubic meters|cubic metre|cubic metres'],
+    ['cm3', 'cm\u00b3', 1e-6, 'L3', 'volume', 'Cubic centimetre', 'cm3|cc|cu cm|cubic centimeter|cubic centimeters|cubic centimetre|cubic centimetres'],
+    ['in3', 'in\u00b3', 1.6387064e-5, 'L3', 'volume', 'Cubic inch', 'in3|cu in|cubic inch|cubic inches'],
+    ['ft3', 'ft\u00b3', 0.028316846592, 'L3', 'volume', 'Cubic foot', 'ft3|cu ft|cubic foot|cubic feet'],
+    ['yd3', 'yd\u00b3', 0.764554857984, 'L3', 'volume', 'Cubic yard', 'yd3|cu yd|cubic yard|cubic yards'],
     ['tsp', 'tsp', 4.92892159375e-6, 'L3', 'volume', 'Teaspoon (US)', 'tsp|tsps|teaspoon|teaspoons'],
     ['tbsp', 'tbsp', 1.478676478125e-5, 'L3', 'volume', 'Tablespoon (US)', 'tbsp|Tbsp|tbsps|tbs|tablespoon|tablespoons'],
     ['floz', 'fl oz', 2.95735295625e-5, 'L3', 'volume', 'Fluid ounce (US)', 'floz|fl oz|fluid ounce|fluid ounces|us fl oz'],
@@ -123,9 +123,9 @@
     ['bbl', 'bbl', 0.158987294928, 'L3', 'volume', 'Barrel (oil)', 'bbl|barrel|barrels'],
     // temperature (affine: K = value × factor + offset)
     ['K', 'K', 1, 'K', 'temperature', 'Kelvin', 'K|kelvin|kelvins', null, 0],
-    ['degC', '°C', 1, 'K', 'temperature', 'Celsius', '°C|C|degC|celsius|centigrade', null, 273.15],
-    ['degF', '°F', F_DEGF, 'K', 'temperature', 'Fahrenheit', '°F|F|degF|fahrenheit', null, 459.67 * F_DEGF],
-    ['degR', '°R', F_DEGF, 'K', 'temperature', 'Rankine', '°R|degR|rankine', null, 0],
+    ['degC', '\u00b0C', 1, 'K', 'temperature', 'Celsius', '\u00b0C|C|degC|celsius|centigrade', null, 273.15],
+    ['degF', '\u00b0F', F_DEGF, 'K', 'temperature', 'Fahrenheit', '\u00b0F|F|degF|fahrenheit', null, 459.67 * F_DEGF],
+    ['degR', '\u00b0R', F_DEGF, 'K', 'temperature', 'Rankine', '\u00b0R|degR|rankine', null, 0],
     // speed
     ['mps', 'm/s', 1, 'LT-1', 'speed', 'Metre/second', 'mps'],
     ['kmh', 'km/h', 1 / 3.6, 'LT-1', 'speed', 'Kilometre/hour', 'kph|kmh|kmph'],
@@ -184,7 +184,7 @@
     ['BTU', 'BTU', 1055.05585262, 'ML2T-2', 'energy', 'British thermal unit', 'BTU|Btu|btu'],
     ['therm', 'therm', 105505585.262, 'ML2T-2', 'energy', 'Therm', 'therm|therms', 'therms'],
     ['eV', 'eV', 1.602176634e-19, 'ML2T-2', 'energy', 'Electronvolt', 'eV|electronvolt|electronvolts'],
-    ['ftlbf', 'ft·lbf', 1.3558179483314004, 'ML2T-2', 'energy', 'Foot-pound', 'ftlbf|ftlb|ft lbf|foot pound|foot pounds'],
+    ['ftlbf', 'ft\u00b7lbf', 1.3558179483314004, 'ML2T-2', 'energy', 'Foot-pound', 'ftlbf|ftlb|ft lbf|foot pound|foot pounds'],
     ['erg', 'erg', 1e-7, 'ML2T-2', 'energy', 'Erg', 'erg|ergs'],
     // power
     ['mW', 'mW', 1e-3, 'ML2T-3', 'power', 'Milliwatt', 'mW|milliwatt|milliwatts'],
@@ -203,7 +203,7 @@
     ['kgf', 'kgf', 9.80665, 'MLT-2', 'force', 'Kilogram-force', 'kgf|kp|kilogram force'],
     // angle (dimensionless; radian = 1)
     ['rad', 'rad', 1, '', 'angle', 'Radian', 'rad|rads|radian|radians'],
-    ['deg', '°', Math.PI / 180, '', 'angle', 'Degree', 'deg|degs|degree|degrees|°'],
+    ['deg', '\u00b0', Math.PI / 180, '', 'angle', 'Degree', 'deg|degs|degree|degrees|\u00b0'],
     ['grad', 'grad', Math.PI / 200, '', 'angle', 'Gradian', 'grad|grads|gradian|gradians|gon|gons'],
     ['arcmin', 'arcmin', Math.PI / 10800, '', 'angle', 'Arcminute', 'arcmin|arcmins|arcminute|arcminutes'],
     ['arcsec', 'arcsec', Math.PI / 648000, '', 'angle', 'Arcsecond', 'arcsec|arcsecs|arcsecond|arcseconds'],
@@ -268,14 +268,14 @@
   function fail(msg) { throw new CalcError(msg); }
 
   // ---- tokenizer --------------------------------------------------------------
-  var SUP = { '⁰': 0, '¹': 1, '²': 2, '³': 3, '⁴': 4, '⁵': 5, '⁶': 6, '⁷': 7, '⁸': 8, '⁹': 9 };
+  var SUP = { '\u2070': 0, '\u00b9': 1, '\u00b2': 2, '\u00b3': 3, '\u2074': 4, '\u2075': 5, '\u2076': 6, '\u2077': 7, '\u2078': 8, '\u2079': 9 };
   var OPMAP = {
-    '+': '+', '-': '-', '−': '-', '–': '-', '*': '*', '×': '*', '⋅': '*', '·': '*', '∙': '*',
-    '/': '/', '÷': '/', '∕': '/', '^': '^', '%': '%', '!': '!', '(': '(', ')': ')', ',': ',', '=': '='
+    '+': '+', '-': '-', '\u2212': '-', '\u2013': '-', '*': '*', '\u00d7': '*', '\u22c5': '*', '\u00b7': '*', '\u2219': '*',
+    '/': '/', '\u00f7': '/', '\u2215': '/', '^': '^', '%': '%', '!': '!', '(': '(', ')': ')', ',': ',', '=': '='
   };
   function isDigit(c) { return c >= '0' && c <= '9'; }
-  function isIdStart(c) { return /[A-Za-z_µμÅ]/.test(c); }
-  function isIdChar(c) { return /[A-Za-z0-9_µμ]/.test(c); }
+  function isIdStart(c) { return /[A-Za-z_\u00b5\u03bc\u00c5]/.test(c); }
+  function isIdChar(c) { return /[A-Za-z0-9_\u00b5\u03bc]/.test(c); }
   function isOperandTok(t) { return t && (t.k === 'num' || (t.k === 'id' && !KEYWORDS[t.s]) || (t.k === 'op' && (t.s === ')' || t.s === '!' || t.s === '%'))); }
 
   function tokenize(src) {
@@ -298,7 +298,7 @@
         }
         // Fraction literal "1/2 cup": only when an operand starts here and a
         // unit follows, so "1/2 cup in tbsp" means half a cup.
-        var fm = /^(\d+)\/(\d+)\s*([A-Za-zµμ°][A-Za-z0-9_]*)/.exec(src.slice(i));
+        var fm = /^(\d+)\/(\d+)\s*([A-Za-z\u00b5\u03bc\u00b0][A-Za-z0-9_]*)/.exec(src.slice(i));
         if (fm && !isOperandTok(toks[toks.length - 1]) && findUnit(fm[3]) && src.charAt(i + fm[0].length) !== '(' && +fm[2] !== 0) {
           push('num', fm[1] + '/' + fm[2], +fm[1] / +fm[2], start);
           i += fm[1].length + 1 + fm[2].length; continue;
@@ -327,19 +327,19 @@
         continue;
       }
       // degree sign: °C / °F / °R or a bare ° (angle)
-      if (c === '°' || c === 'º') {
+      if (c === '\u00b0' || c === '\u00ba') {
         var nx = src.charAt(i + 1);
-        if (/[CcFfRr]/.test(nx) && !isIdChar(src.charAt(i + 2))) { push('id', '°' + nx.toUpperCase(), undefined, start); i += 2; }
+        if (/[CcFfRr]/.test(nx) && !isIdChar(src.charAt(i + 2))) { push('id', '\u00b0' + nx.toUpperCase(), undefined, start); i += 2; }
         else { push('id', 'deg', undefined, start); i++; }
         continue;
       }
-      if (c === '℃') { push('id', '°C', undefined, start); i++; continue; }
-      if (c === '℉') { push('id', '°F', undefined, start); i++; continue; }
-      if (c === 'π') { push('id', 'pi', undefined, start); i++; continue; }
-      if (c === 'τ') { push('id', 'tau', undefined, start); i++; continue; }
-      if (c === 'φ' || c === 'ϕ') { push('id', 'phi', undefined, start); i++; continue; }
-      if (c === '√') { push('id', 'sqrt', undefined, start).bare = true; i++; continue; }
-      if (c === '∛') { push('id', 'cbrt', undefined, start).bare = true; i++; continue; }
+      if (c === '\u2103') { push('id', '\u00b0C', undefined, start); i++; continue; }
+      if (c === '\u2109') { push('id', '\u00b0F', undefined, start); i++; continue; }
+      if (c === '\u03c0') { push('id', 'pi', undefined, start); i++; continue; }
+      if (c === '\u03c4') { push('id', 'tau', undefined, start); i++; continue; }
+      if (c === '\u03c6' || c === '\u03d5') { push('id', 'phi', undefined, start); i++; continue; }
+      if (c === '\u221a') { push('id', 'sqrt', undefined, start).bare = true; i++; continue; }
+      if (c === '\u221b') { push('id', 'cbrt', undefined, start).bare = true; i++; continue; }
       if (isIdStart(c)) {
         var k = readIdent(i);
         var name = src.slice(i, k);
@@ -367,18 +367,18 @@
         i = k; continue;
       }
       // superscript powers: m², s⁻¹
-      if (c === '⁻' || SUP[c] !== undefined) {
+      if (c === '\u207b' || SUP[c] !== undefined) {
         var neg = false, digits = '';
-        if (c === '⁻') { neg = true; i++; }
+        if (c === '\u207b') { neg = true; i++; }
         while (i < n && SUP[src.charAt(i)] !== undefined) { digits += SUP[src.charAt(i)]; i++; }
-        if (!digits) fail('Unexpected "⁻"');
+        if (!digits) fail('Unexpected "\u207b"');
         push('op', '^', undefined, start);
         if (neg) push('op', '-', undefined, start);
         push('num', digits, +digits, start);
         continue;
       }
       if (c === '-' && src.charAt(i + 1) === '>') { push('id', 'to', undefined, start); i += 2; continue; }
-      if (c === '→') { push('id', 'to', undefined, start); i++; continue; }
+      if (c === '\u2192') { push('id', 'to', undefined, start); i++; continue; }
       if (c === '*' && src.charAt(i + 1) === '*') { push('op', '^', undefined, start); i += 2; continue; }
       var op = OPMAP[c];
       if (op) {
@@ -867,9 +867,9 @@
   }
 
   // ---- formatting -------------------------------------------------------------
-  var SUPS = ['⁰', '¹', '²', '³', '⁴', '⁵', '⁶', '⁷', '⁸', '⁹'];
+  var SUPS = ['\u2070', '\u00b9', '\u00b2', '\u00b3', '\u2074', '\u2075', '\u2076', '\u2077', '\u2078', '\u2079'];
   function supNum(p) {
-    var s = String(Math.abs(p)), out = p < 0 ? '⁻' : '';
+    var s = String(Math.abs(p)), out = p < 0 ? '\u207b' : '';
     if (!/^\d+$/.test(s)) return '^' + p;
     for (var i = 0; i < s.length; i++) out += SUPS[+s.charAt(i)];
     return out;
@@ -878,7 +878,7 @@
     var sym = u.sym;
     if (p === 1 && u.plural && x != null && Math.abs(x) !== 1) sym = u.plural;
     if (p === 1) return sym;
-    if (/[²³\s\/·]/.test(sym)) return '(' + sym + ')' + supNum(p);
+    if (/[\u00b2\u00b3\s\/\u00b7]/.test(sym)) return '(' + sym + ')' + supNum(p);
     return sym + supNum(p);
   }
   function renderHint(h, x) {
@@ -886,9 +886,9 @@
     if (h.length === 1) return unitPow(h[0][0], h[0][1], x);
     var num = [], den = [];
     h.forEach(function (p) { if (p[1] > 0) num.push(unitPow(p[0], p[1])); else den.push(unitPow(p[0], -p[1])); });
-    if (!num.length) return h.map(function (p) { return unitPow(p[0], p[1]); }).join('·');
-    var s = num.join('·');
-    if (den.length) s += '/' + (den.length > 1 ? '(' + den.join('·') + ')' : den[0]);
+    if (!num.length) return h.map(function (p) { return unitPow(p[0], p[1]); }).join('\u00b7');
+    var s = num.join('\u00b7');
+    if (den.length) s += '/' + (den.length > 1 ? '(' + den.join('\u00b7') + ')' : den[0]);
     return s;
   }
   function groupInt(s, sep) { return s.replace(/\B(?=(\d{3})+(?!\d))/g, sep); }
@@ -896,7 +896,7 @@
     opts = opts || {};
     var prec = opts.precision || 10;
     if (typeof x !== 'number' || isNaN(x)) return 'NaN';
-    if (!isFinite(x)) return x > 0 ? '∞' : '-∞';
+    if (!isFinite(x)) return x > 0 ? '\u221e' : '-\u221e';
     if (x === 0) return '0';
     var ax = Math.abs(x), s;
     if (ax >= 1e15 || ax < 1e-9) {
@@ -929,7 +929,7 @@
     var n = formatNumber(x, opts);
     var u = renderHint(q.h, parseFloat(formatNumber(x, { precision: (opts && opts.precision) || 10 })));
     if (!u) return n;
-    return n + (u === '°' ? '' : ' ') + u;
+    return n + (u === '\u00b0' ? '' : ' ') + u;
   }
 
   function intText(q, base) {
@@ -947,7 +947,7 @@
     if (target.kind === 'fmt') {
       var r = Q(q.v, q.d, q.h); r.pct = q.pct; r.abs = q.abs;
       if (target.fmt === 'hex' || target.fmt === 'bin' || target.fmt === 'oct') r.fmtText = intText(q, target.fmt);
-      else if (target.fmt === 'sci') r.fmtText = (function () { var x = q.pct ? q.v * 100 : dispValue(q); var t = x.toExponential(9).replace(/\.?0+e/, 'e').replace('e+', 'e'); var u = q.pct ? '%' : renderHint(q.h, x); return t + (u ? (u === '%' || u === '°' ? '' : ' ') + u : ''); })();
+      else if (target.fmt === 'sci') r.fmtText = (function () { var x = q.pct ? q.v * 100 : dispValue(q); var t = x.toExponential(9).replace(/\.?0+e/, 'e').replace('e+', 'e'); var u = q.pct ? '%' : renderHint(q.h, x); return t + (u ? (u === '%' || u === '\u00b0' ? '' : ' ') + u : ''); })();
       else { r.pct = false; if (isPlain(q) || q.pct) r.h = null; }
       return r;
     }
@@ -1067,23 +1067,23 @@
 
   // ---- converter API (Unit Converter widget) ------------------------------------
   var CATEGORIES = [
-    { id: 'length', name: 'Length', icon: '📏', units: 'mm cm m km in ft yd mi nmi um nm dm thou fathom furlong ang au ly pc' },
-    { id: 'mass', name: 'Mass', icon: '⚖️', units: 'mg g kg t oz lb st ton lton ug gr ct' },
-    { id: 'volume', name: 'Volume', icon: '🧪', units: 'ml cl dl l m3 cm3 in3 ft3 yd3 tsp tbsp floz cup pt qt gal ukfloz ukpt ukqt ukgal bbl mcup' },
-    { id: 'cooking', name: 'Cooking', icon: '🥄', units: 'tsp tbsp floz cup mcup pt qt gal ml dl l ukfloz ukpt' },
-    { id: 'temperature', name: 'Temperature', icon: '🌡️', units: 'degC degF K degR' },
-    { id: 'area', name: 'Area', icon: '⬛', units: 'mm2 cm2 m2 ha km2 in2 ft2 yd2 acre mi2' },
-    { id: 'speed', name: 'Speed', icon: '🚀', units: 'kmh mph mps fps kn mach' },
-    { id: 'time', name: 'Time', icon: '⏱️', units: 'ns us ms s min h day week fortnight month year decade century' },
-    { id: 'data', name: 'Data', icon: '💾', units: 'bit B kB MB GB TB PB KiB MiB GiB TiB PiB kbit Mbit Gbit Tbit' },
-    { id: 'datarate', name: 'Data rate', icon: '📡', units: 'bps kbps Mbps Gbps Bps kBps MBps GBps' },
-    { id: 'pressure', name: 'Pressure', icon: '🎈', units: 'Pa hPa kPa MPa bar mbar atm psi mmHg inHg torr' },
-    { id: 'energy', name: 'Energy', icon: '⚡', units: 'J kJ MJ GJ cal kcal Wh kWh MWh BTU therm eV ftlbf erg' },
-    { id: 'power', name: 'Power', icon: '💡', units: 'W mW kW MW GW hp PS BTUh' },
-    { id: 'force', name: 'Force', icon: '💪', units: 'N kN dyn lbf kgf' },
-    { id: 'angle', name: 'Angle', icon: '📐', units: 'deg rad grad turn arcmin arcsec' },
-    { id: 'frequency', name: 'Frequency', icon: '〰️', units: 'Hz kHz MHz GHz THz rpm bpm' },
-    { id: 'fuel', name: 'Fuel economy', icon: '⛽', units: 'mpg mpguk kmpl l100km' }
+    { id: 'length', name: 'Length', icon: '\ud83d\udccf', units: 'mm cm m km in ft yd mi nmi um nm dm thou fathom furlong ang au ly pc' },
+    { id: 'mass', name: 'Mass', icon: '\u2696\ufe0f', units: 'mg g kg t oz lb st ton lton ug gr ct' },
+    { id: 'volume', name: 'Volume', icon: '\ud83e\uddea', units: 'ml cl dl l m3 cm3 in3 ft3 yd3 tsp tbsp floz cup pt qt gal ukfloz ukpt ukqt ukgal bbl mcup' },
+    { id: 'cooking', name: 'Cooking', icon: '\ud83e\udd44', units: 'tsp tbsp floz cup mcup pt qt gal ml dl l ukfloz ukpt' },
+    { id: 'temperature', name: 'Temperature', icon: '\ud83c\udf21\ufe0f', units: 'degC degF K degR' },
+    { id: 'area', name: 'Area', icon: '\u2b1b', units: 'mm2 cm2 m2 ha km2 in2 ft2 yd2 acre mi2' },
+    { id: 'speed', name: 'Speed', icon: '\ud83d\ude80', units: 'kmh mph mps fps kn mach' },
+    { id: 'time', name: 'Time', icon: '\u23f1\ufe0f', units: 'ns us ms s min h day week fortnight month year decade century' },
+    { id: 'data', name: 'Data', icon: '\ud83d\udcbe', units: 'bit B kB MB GB TB PB KiB MiB GiB TiB PiB kbit Mbit Gbit Tbit' },
+    { id: 'datarate', name: 'Data rate', icon: '\ud83d\udce1', units: 'bps kbps Mbps Gbps Bps kBps MBps GBps' },
+    { id: 'pressure', name: 'Pressure', icon: '\ud83c\udf88', units: 'Pa hPa kPa MPa bar mbar atm psi mmHg inHg torr' },
+    { id: 'energy', name: 'Energy', icon: '\u26a1', units: 'J kJ MJ GJ cal kcal Wh kWh MWh BTU therm eV ftlbf erg' },
+    { id: 'power', name: 'Power', icon: '\ud83d\udca1', units: 'W mW kW MW GW hp PS BTUh' },
+    { id: 'force', name: 'Force', icon: '\ud83d\udcaa', units: 'N kN dyn lbf kgf' },
+    { id: 'angle', name: 'Angle', icon: '\ud83d\udcd0', units: 'deg rad grad turn arcmin arcsec' },
+    { id: 'frequency', name: 'Frequency', icon: '\u3030\ufe0f', units: 'Hz kHz MHz GHz THz rpm bpm' },
+    { id: 'fuel', name: 'Fuel economy', icon: '\u26fd', units: 'mpg mpguk kmpl l100km' }
   ].map(function (c) { return { id: c.id, name: c.name, icon: c.icon, units: c.units.split(' ').map(function (id) { return BYID[id]; }).filter(Boolean) }; });
 
   // value in unit `from` → value in unit `to` (affine temperatures, reciprocal fuel units)

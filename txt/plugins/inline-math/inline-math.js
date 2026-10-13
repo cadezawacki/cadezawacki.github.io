@@ -136,8 +136,8 @@
       var expr = body.slice(starts[i]).trim();
       if (!expr || DATEY.test(expr)) continue;
       var c0 = expr.charAt(0);
-      if (/[*\/^%!,)=+×÷]/.test(c0)) continue;          // can't start with an operator
-      if (/^[-−–]\s/.test(expr)) continue;               // "- 5" is a dash, not minus
+      if (/[*\/^%!,)=+\u00d7\u00f7]/.test(c0)) continue;          // can't start with an operator
+      if (/^[-\u2212\u2013]\s/.test(expr)) continue;               // "- 5" is a dash, not minus
       var r = engine.evaluate(expr, opts);
       if (acceptable(r)) return r;
     }
@@ -177,7 +177,7 @@
       for (var i = a; i <= b; i++) {
         var line = doc.line(i), t = line.text;
         if (t.length > MAX_LINE || t.length < 2 || t.indexOf('=') === -1) continue;
-        if (TRAIL_EQ.test(t) && !CODEY.test(t)) eqLines.push(line);
+        if (TRAIL_EQ.test(t) && !CODEY.test(t.replace(LEAD, ''))) eqLines.push(line);
       }
     }
     if (!eqLines.length) return Decoration.none;
@@ -195,7 +195,7 @@
       var ln = doc.line(n), tx = ln.text;
       if (tx.length > MAX_LINE || tx.indexOf('=') === -1) continue;
       var isEq = eqSet[n] === 1;
-      var isAssign = !isEq && n < lastEq && ASSIGN.test(tx) && !TRAIL_EQ.test(tx) && !CODEY.test(tx);
+      var isAssign = !isEq && n < lastEq && ASSIGN.test(tx) && !TRAIL_EQ.test(tx) && !CODEY.test(tx.replace(LEAD, ''));
       if (!isEq && !isAssign) continue;
       if (inFence(doc, ln)) continue;
       var key = sig + '\u0001' + tx;

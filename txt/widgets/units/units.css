@@ -72,3 +72,6 @@
   .un-ib { visibility: visible; width: 30px; height: 26px; }
   .un-btn { padding: 7px 11px; }
 }
+/* native select arrows/popups follow the app theme, not the OS one */
+.un-from, .un-to { color-scheme: light; }
+[data-theme="dark"] .un-from, [data-theme="dark"] .un-to { color-scheme: dark; }
