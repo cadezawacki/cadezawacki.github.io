@@ -821,12 +821,13 @@
       "id": "pack-code",
       "type": "script-pack",
       "name": "Code Pack",
-      "description": "Minify, obfuscate and beautify code: JavaScript, Python, HTML, CSS, JSON and XML",
+      "description": "Minify, obfuscate, unobfuscate and beautify code: JavaScript, Python, HTML, CSS, JSON and XML",
       "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='4 14 10 14 10 20'/><polyline points='20 10 14 10 14 4'/><line x1='14' y1='10' x2='21' y2='3'/><line x1='3' y1='21' x2='10' y2='14'/></svg>",
-      "tags": "minify,minifier,compress,uglify,terser,obfuscate,obfuscator,beautify,prettify,js,javascript,css,html,python,py,json,xml,code",
+      "tags": "minify,minifier,compress,uglify,terser,obfuscate,obfuscator,unobfuscate,deobfuscate,beautify,prettify,js,javascript,css,html,python,py,json,xml,code",
       "entry": "scripts/pack-code/pack-code.js",
       "precache": [
-        "scripts/pack-code/pack-code-lib.js"
+        "scripts/pack-code/pack-code-lib.js",
+        "scripts/pack-code/pack-code-unobf.js"
       ],
       "scripts": [
         {
@@ -888,6 +889,12 @@
           "description": "Minify CSS and escape class/id names + strings as CSS hex escapes",
           "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='3' y='11' width='18' height='10' rx='2'/><path d='M7 11V7a5 5 0 0 1 10 0v4'/><line x1='12' y1='15' x2='12' y2='17'/></svg>",
           "tags": "obfuscate,css,escape,hex,class,stylesheet,scramble"
+        },
+        {
+          "name": "Unobfuscate Code",
+          "description": "Undo Obfuscate: decode JS string tables, unflatten & rename _0x names; unwrap Python / HTML loaders; unescape CSS",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='3' y='11' width='18' height='10' rx='2'/><path d='M7 11V7a5 5 0 0 1 9.9-1'/><line x1='12' y1='15' x2='12' y2='17'/></svg>",
+          "tags": "unobfuscate,deobfuscate,deobfuscator,unobfuscator,decode,reverse,unpack,readable,js,javascript,python,py,html,css,_0x,javascript-obfuscator"
         },
         {
           "name": "Beautify Code",

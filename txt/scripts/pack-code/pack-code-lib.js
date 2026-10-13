@@ -1,14 +1,18 @@
-/* Code Pack library - shared engine for Minify / Obfuscate / Beautify.
+/* Code Pack library - shared engine for Minify / Obfuscate / Unobfuscate / Beautify.
    Loaded lazily (as a separate <script>) by txt/scripts/pack-code/pack-code.js
    on the first time any Code Pack script runs. Sets window.__CADE_CODEPACK__.
    Heavy third-party libs (terser, js-beautify, javascript-obfuscator) are
    themselves loaded from cdn.jsdelivr.net only when actually needed.
+   Unobfuscate lives in pack-code-unobf.js next to this file, loaded on its
+   first use only.
    Kept as its own file (not inlined per-script) so the ~scripts share one copy
    and the big logic loads once. Pure helpers are exposed with a leading _ so
    they can be unit-checked in node. */
 (function () {
   'use strict';
   if (window.__CADE_CODEPACK__) return;
+  // this file's folder (it is injected as a plain <script src>, so currentScript is it)
+  var BASE = ((document.currentScript && document.currentScript.src) || '').replace(/[^/]*$/, '');
 
   // --- pinned, exact CDN versions (verified to exist + global/API read) ---
   var CDN = {
@@ -178,8 +182,9 @@
     // shorten hex colours
     css = css.replace(/#([0-9a-f])\1([0-9a-f])\2([0-9a-f])\3([0-9a-f])\4\b/gi, '#$1$2$3$4');
     css = css.replace(/#([0-9a-f])\1([0-9a-f])\2([0-9a-f])\3\b/gi, '#$1$2$3');
-    // restore
-    css = css.replace(new RegExp(CH1 + '(\\d+)' + CH2, 'g'), function (m, idx) { return store[+idx]; });
+    // restore (twice over: a protected url(...) can itself hold a protected string)
+    var ph = new RegExp(CH1 + '(\\d+)' + CH2, 'g');
+    for (var pass = 0; pass < 3 && css.indexOf(CH1) >= 0; pass++) css = css.replace(ph, function (m, idx) { return store[+idx]; });
     return css.trim();
   }
 
@@ -474,6 +479,15 @@
     catch (e) { throw new Error('JS obfuscation failed: ' + ((e && e.message) || e)); }
   }
 
+  function ensureUnobf() {
+    if (window.__CADE_UNOBF__) return Promise.resolve(window.__CADE_UNOBF__);
+    return loadScript(BASE + 'pack-code-unobf.js').then(function () {
+      if (!window.__CADE_UNOBF__) throw new Error('Unobfuscate failed to initialise');
+      return window.__CADE_UNOBF__;
+    });
+  }
+  var lastNote = '';
+
   // =====================================================================
   // JSON / XML trivial transforms + XML beautify
   // =====================================================================
@@ -523,6 +537,12 @@
       if (lang === 'json') return minifyJSON(input);
       if (lang === 'xml') return minifyXML(input);
       return await obfuscateJS(input, opts && opts.preset);
+    }
+    if (op === 'unobfuscate') {
+      var U = await ensureUnobf();
+      var r = await U.run(lang, input, { beautifyCSS: async function (css) { return (await ensureBeautify()).css(css, beautyOpts()); } });
+      lastNote = r.note;
+      return r.code;
     }
     if (op === 'beautify') {
       if (lang === 'css') return (await ensureBeautify()).css(input, beautyOpts());
@@ -580,10 +600,16 @@
     var input = R.text;
     if (!input || !input.trim()) { toast('Nothing to ' + op, 'error'); return; }
 
-    var lang = langArg;
+    var lang = langArg, uDet = null;
+    if (op === 'unobfuscate' && lang === 'auto') {
+      try { uDet = (await ensureUnobf()).detect(input); }
+      catch (e) { toast((e && e.message) || 'Unobfuscate failed to load', 'error', 5000); return; }
+    }
     if (lang === 'auto') {
       var fromInfo = R.fenced ? resolveLangFromInfo(R.info) : null;
-      if (fromInfo) lang = fromInfo;
+      if (uDet && uDet.sure) lang = uDet.lang;            // the loader / escapes say exactly what it is
+      else if (fromInfo) lang = fromInfo;
+      else if (uDet) lang = uDet.lang;
       else {
         var d = detectLang(input);
         lang = d.lang;
@@ -598,6 +624,7 @@
     if (R.ed.state.readOnly) { toast('Editor is read-only', 'error'); return; }
 
     var output;
+    lastNote = '';
     try { output = await transform(op, lang, input, opts); }
     catch (e) { toast((e && e.message) ? e.message : ('Could not ' + op + ' ' + lang), 'error', 6000); return; }
     if (typeof output !== 'string') { toast('Nothing produced', 'error'); return; }
@@ -608,6 +635,7 @@
     if (live.state.readOnly) { toast('Editor is read-only', 'error'); return; }
     live.dispatch({ changes: { from: from, to: to, insert: output }, userEvent: 'input' });
 
+    if (op === 'unobfuscate' && lastNote) { toast(lastNote, 'success', 6000); return; }
     var inB = enc(input), outB = enc(output);
     toast(capitalize(op) + ' ' + labelOf(lang) + ': ' + fmtSize(inB) + ' -> ' + fmtSize(outB) + ' (' + fmtDelta(inB, outB) + ')', 'success', 3200);
   }
