@@ -1538,9 +1538,9 @@
       "id": "eisenhower",
       "type": "widget",
       "name": "Eisenhower Matrix",
-      "description": "Sort the document’s todos into Do first / Schedule / Delegate / Eliminate by urgency & importance",
+      "description": "Sort the document’s todos into Do first / Schedule / Later / Down the Road by urgency & importance",
       "icon": "🎯",
-      "tags": "eisenhower,matrix,priority,prioritize,urgent,important,todo,tasks,quadrant,triage,checklist,planning",
+      "tags": "eisenhower,matrix,priority,prioritize,urgent,important,todo,tasks,quadrant,triage,checklist,planning,later,someday,down the road",
       "entry": "widgets/eisenhower/eisenhower.js",
       "css": "widgets/eisenhower/eisenhower.css"
     },

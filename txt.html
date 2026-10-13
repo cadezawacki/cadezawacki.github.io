@@ -1116,7 +1116,7 @@ body.sel-mode .editor-wrap .cm-content { -webkit-touch-callout: none; }
 .footer-breadcrumb.compact .bc-sep { display: none; }
 
 /* Quick switcher (Feature 50) — higher specificity so it beats .modal-overlay */
-.modal-overlay.qs-overlay { align-items: flex-start; }
+.modal-overlay.qs-overlay { align-items: flex-start; z-index: 7000; } /* global search: above every panel, like the picker */
 .qs-dialog {
   margin-top: 12vh; width: min(560px, 92vw); background: var(--surface, #1e1e1e);
   border: 1px solid var(--border, #333); border-radius: 10px; overflow: hidden;
@@ -1312,7 +1312,9 @@ body.split-open .mobile-toolbar { right: 50%; }
   position: fixed;
   inset: 0;
   background: rgba(0,0,0,0.3);
-  z-index: 200;
+  /* Always on top: above widget panels (5000) and game overlays (6000). It
+     closes before anything it launches opens. Same for the quick switcher. */
+  z-index: 7000;
   animation: overlayIn 100ms ease-out;
 }
 
@@ -1672,7 +1674,7 @@ body.split-open .mobile-toolbar { right: 50%; }
   position: fixed;
   bottom: 40px;
   right: 16px;
-  z-index: 400;
+  z-index: 7100; /* above panels, the picker and the quick switcher — a toast must never be hidden */
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
