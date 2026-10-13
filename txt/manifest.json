@@ -1273,6 +1273,16 @@
       "css": "widgets/flappy/flappy.css"
     },
     {
+      "id": "papertoss",
+      "type": "widget",
+      "name": "Paper Toss",
+      "description": "Flick crumpled drafts into the bin — mind the fan",
+      "icon": "🗑️",
+      "tags": "game,arcade,fun,train,paper,toss,throw,trash,bin,crumple,draft,wind,flick",
+      "entry": "widgets/papertoss/papertoss.js",
+      "css": "widgets/papertoss/papertoss.css"
+    },
+    {
       "id": "asteroids",
       "type": "widget",
       "name": "Asteroids",
@@ -1308,10 +1318,10 @@
     {
       "id": "spider",
       "type": "widget",
-      "name": "Spider Solitaire",
-      "description": "Classic two-deck solitaire — 1, 2 or 4 suits, numbered deals, undo & hints",
+      "name": "Solitaire",
+      "description": "Klondike (draw 1 or 3) and Spider (1, 2 or 4 suits) — numbered deals, undo & hints",
       "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'><rect x='3' y='5' width='11' height='15' rx='1.8' transform='rotate(-10 8.5 12.5)'/><rect x='9' y='3.5' width='11' height='15' rx='1.8' fill='var(--surface, #fff)'/><path d='M14.5 7.4c-1.6 1.6-3 2.6-3 4a1.6 1.6 0 0 0 3 .8 1.6 1.6 0 0 0 3-.8c0-1.4-1.4-2.4-3-4z' fill='currentColor' stroke='none'/><path d='M14.5 12.4l-.8 2.3h1.6z' fill='currentColor' stroke='none'/></svg>",
-      "tags": "game,cards,solitaire,spider,patience,card game,puzzle,fun,train",
+      "tags": "game,cards,solitaire,klondike,spider,patience,card game,windows solitaire,draw 3,puzzle,fun,train",
       "entry": "widgets/spider/spider.js",
       "css": "widgets/spider/spider.css"
     },
