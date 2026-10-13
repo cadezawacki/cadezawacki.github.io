@@ -21456,22 +21456,67 @@ function _mkPanel(id, title, bodyHtml) {
   if (GAME_PANEL_IDS.indexOf(id) !== -1) _watchGamePanel(p);
   p.querySelector('.cade-panel-x').addEventListener('click', () => { p.remove(); if (p._onClose) p._onClose(); });
   const head = p.querySelector('.cade-panel-head');
-  let sx, sy, ox, oy, drag = false;
+  // On a phone-width screen a drag only moves the panel up/down: switching it
+  // from its CSS left/right edges to an inline left (+ right:auto) would let a
+  // width:auto panel grow to its widest content and push the × off-screen.
+  let sx, sy, ox, oy, drag = false, vOnly = false;
   head.addEventListener('pointerdown', e => {
     if (e.target.classList.contains('cade-panel-x')) return;
     drag = true; sx = e.clientX; sy = e.clientY;
+    vOnly = window.innerWidth < 600;
     const r = p.getBoundingClientRect(); ox = r.left; oy = r.top;
-    p.style.right = 'auto'; p.style.left = ox + 'px'; p.style.top = oy + 'px';
+    if (!vOnly) { p.style.right = 'auto'; p.style.left = ox + 'px'; }
+    p.style.top = oy + 'px';
     try { head.setPointerCapture(e.pointerId); } catch {}
   });
   head.addEventListener('pointermove', e => {
     if (!drag) return;
-    p.style.left = Math.max(0, Math.min(window.innerWidth - 60, ox + e.clientX - sx)) + 'px';
+    if (!vOnly) p.style.left = Math.max(0, Math.min(window.innerWidth - 60, ox + e.clientX - sx)) + 'px';
     p.style.top = Math.max(0, Math.min(window.innerHeight - 40, oy + e.clientY - sy)) + 'px';
   });
-  head.addEventListener('pointerup', e => { drag = false; try { head.releasePointerCapture(e.pointerId); } catch {} });
+  head.addEventListener('pointerup', e => { drag = false; try { head.releasePointerCapture(e.pointerId); } catch {} _fitPanel(p); });
+  _watchPanelFit(p);
   return p;
 }
+
+// Keep every floating panel's header (and its ×) on screen: a panel that ends
+// up wider than the space to its right — content that loads later, a rotation,
+// a drag, a module's mobile CSS — is narrowed, and one pushed past an edge is
+// pulled back. One shared ResizeObserver; removed panels are unobserved.
+let _panelRO = null;
+function _fitPanel(p) {
+  if (!p || !p.isConnected) { if (_panelRO && p) _panelRO.unobserve(p); return; }
+  const r = p.getBoundingClientRect();
+  if (!r.width || !r.height) return;
+  const vw = document.documentElement.clientWidth || window.innerWidth, vh = window.innerHeight, m = 4;
+  if (r.right > vw + 0.5) {
+    if (r.width > vw - 2 * m) {
+      // Too wide for the screen: cap the width at what's left of the panel's left edge.
+      p.style.maxWidth = Math.max(160, vw - Math.max(0, r.left) - m) + 'px';
+      p.__fitMaxW = true;
+    } else if (p.style.left) {
+      p.style.left = Math.max(m, vw - r.width - m) + 'px';
+    } else {
+      p.style.right = m + 'px'; p.style.left = 'auto';
+    }
+  }
+  if (r.left < -0.5 && p.style.left) p.style.left = m + 'px';
+  if (r.top < 0) p.style.top = m + 'px';
+  else if (r.top > vh - 44) p.style.top = Math.max(m, vh - 44) + 'px';
+}
+function _watchPanelFit(p) {
+  if (typeof ResizeObserver === 'function') {
+    if (!_panelRO) _panelRO = new ResizeObserver(entries => { for (const en of entries) _fitPanel(en.target); });
+    _panelRO.observe(p);
+  }
+  requestAnimationFrame(() => _fitPanel(p));
+}
+window.addEventListener('resize', () => {
+  document.querySelectorAll('.cade-panel').forEach(el => {
+    if (el.__fitMaxW) { el.style.maxWidth = ''; el.__fitMaxW = false; }
+    _fitPanel(el);
+  });
+});
 window.__mkPanel = _mkPanel; // exposed for feature modules (window.Cade.mkPanel)
 window.__markGamePanel = (p) => { if (p && p.classList) _watchGamePanel(p); }; // Cade.markGamePanel
 
