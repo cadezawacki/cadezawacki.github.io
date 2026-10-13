@@ -40,6 +40,184 @@
   };
   K.RUNNABLE = { js: 1, ts: 1, py: 1, json: 1 };
 
+  // ---- language guessing -----------------------------------------------------------
+  // Used only on demand (Run on a block with no language, or the "Identify
+  // Code Blocks" script) — never while typing. A file name on the line above
+  // the fence (how file import writes blocks) decides outright; otherwise
+  // weighted regex evidence over the first 8 KB of the code, and only a clear
+  // winner counts as "sure".
+  var EXT = {
+    py: 'python', pyw: 'python', js: 'js', mjs: 'js', cjs: 'js', jsx: 'jsx', ts: 'ts', mts: 'ts', cts: 'ts', tsx: 'tsx',
+    json: 'json', geojson: 'json', webmanifest: 'json', jsonc: 'jsonc', html: 'html', htm: 'html', xhtml: 'html', css: 'css',
+    scss: 'scss', sass: 'sass', less: 'less', sh: 'bash', bash: 'bash', zsh: 'zsh', fish: 'fish', ps1: 'powershell',
+    psm1: 'powershell', bat: 'batch', cmd: 'batch', sql: 'sql', yaml: 'yaml', yml: 'yaml', toml: 'toml', ini: 'ini',
+    cfg: 'ini', conf: 'ini', xml: 'xml', svg: 'xml', plist: 'xml', xsd: 'xml', md: 'markdown', markdown: 'markdown',
+    c: 'c', h: 'c', cpp: 'cpp', cc: 'cpp', cxx: 'cpp', hpp: 'cpp', hh: 'cpp', cs: 'csharp', java: 'java', kt: 'kotlin',
+    kts: 'kotlin', go: 'go', rs: 'rust', rb: 'ruby', php: 'php', swift: 'swift', r: 'r', lua: 'lua', pl: 'perl', pm: 'perl',
+    q: 'q', k: 'q', scala: 'scala', dart: 'dart', hs: 'haskell', ex: 'elixir', exs: 'elixir', clj: 'clojure', vue: 'vue',
+    svelte: 'svelte', graphql: 'graphql', gql: 'graphql', proto: 'protobuf', tf: 'hcl', diff: 'diff', patch: 'diff',
+    csv: 'csv', tsv: 'tsv', txt: 'text', log: 'text', jl: 'julia', zig: 'zig', sol: 'solidity', vb: 'vb', m: 'objectivec'
+  };
+  var NAMED = { dockerfile: 'dockerfile', containerfile: 'dockerfile', makefile: 'makefile', gnumakefile: 'makefile',
+    gemfile: 'ruby', rakefile: 'ruby', vagrantfile: 'ruby', jenkinsfile: 'groovy', '.bashrc': 'bash', '.zshrc': 'zsh',
+    '.profile': 'bash', '.env': 'ini', '.gitignore': 'text', '.editorconfig': 'ini' };
+  var LABEL = { python: 'Python', js: 'JavaScript', jsx: 'JSX', ts: 'TypeScript', tsx: 'TSX', json: 'JSON', jsonc: 'JSON with comments',
+    html: 'HTML', css: 'CSS', scss: 'SCSS', sass: 'Sass', less: 'Less', bash: 'shell', zsh: 'zsh', fish: 'fish',
+    powershell: 'PowerShell', batch: 'batch', sql: 'SQL', yaml: 'YAML', toml: 'TOML', ini: 'INI', xml: 'XML',
+    markdown: 'Markdown', c: 'C', cpp: 'C++', csharp: 'C#', java: 'Java', kotlin: 'Kotlin', go: 'Go', rust: 'Rust',
+    ruby: 'Ruby', php: 'PHP', swift: 'Swift', r: 'R', lua: 'Lua', perl: 'Perl', q: 'q/kdb+', dockerfile: 'Dockerfile',
+    makefile: 'Makefile', diff: 'diff', text: 'plain text', csv: 'CSV', tsv: 'TSV' };
+  // [tag, weight, evidence]
+  var FEAT = [
+    ['python', 4, /^[ \t]*def\s+\w+\s*\([^)\n]*\)\s*(->\s*[^:\n]+)?:\s*(#.*)?$/m],
+    ['python', 3, /^[ \t]*(elif\b[^\n]*|else|try|finally|except\b[^\n]*|with\s[^\n]+|for\s+[^\n]+\s+in\s+[^\n]+|while\s[^\n]+|if\s[^\n]+|class\s+\w+(\([^)\n]*\))?)\s*:\s*(#.*)?$/m],
+    ['python', 3, /^[ \t]*(from\s+[\w.]+\s+)?import\s+[\w.*]+(\s+as\s+\w+)?(\s*,\s*[\w.]+(\s+as\s+\w+)?)*\s*$/m],
+    ['python', 3, /^[ \t]*print\s*\(/m],
+    ['python', 2, /\bprint\s*\(/],
+    ['python', 2, /\b(self\.|None\b|True\b|False\b|elif\b|lambda\s+\w*:|nonlocal\b|__name__)/],
+    ['python', 2, /\bf(["'])[^"'\n]*\{[^}\n]+\}[^"'\n]*\1/],
+    ['python', 1, /^[ \t]*#(?![!\[{]|include\b|define\b)/m],
+    ['js', 3, /\b(const|let|var)\s+[\w$]+\s*=/],
+    ['js', 3, /\bfunction\s*\*?\s*[\w$]*\s*\([^)]*\)\s*\{/],
+    ['js', 2, /=>\s*[{(\w'"`[]/],
+    ['js', 4, /\bconsole\.(log|warn|error|info|table|dir)\s*\(/],
+    ['js', 3, /\b(document|window|localStorage|navigator)\.\w+/],
+    ['js', 3, /\brequire\s*\(\s*['"]/],
+    ['js', 3, /^[ \t]*import\s+[^;'"\n]*\s+from\s+['"]/m],
+    ['js', 2, /^[ \t]*export\s+(default|const|let|function|class|async)\b/m],
+    ['js', 2, /===|!==/],
+    ['js', 1, /;[ \t]*$/m],
+    ['js', 1, /^[ \t]*\/\/(?!\/)/m],
+    ['js', 2, /\b(async\s+function|await\s+[\w$(])/],
+    ['js', 1, /`[^`\n]*\$\{[^}\n]+\}[^`\n]*`/],
+    ['ts', 4, /\binterface\s+\w+(\s+extends\s+[\w, <>]+)?\s*\{/],
+    ['ts', 4, /^[ \t]*(export\s+)?type\s+\w+(<[^>\n]+>)?\s*=\s*[^=]/m],
+    ['ts', 3, /[\w)\]]\??\s*:\s*(string|number|boolean|any|void|unknown|never|Record<|Array<|Promise<|readonly\s)(\[\])*\s*[,)=;{|>]/],
+    ['ts', 2, /\b(public|private|protected|readonly)\s+\w+\s*[:;=(]/],
+    ['ts', 2, /\bas\s+(const|string|number|any|unknown)\b/],
+    ['ts', 2, /\benum\s+\w+\s*\{/],
+    ['bash', 6, /^#!\s*\/(usr\/)?bin\/(env\s+)?(ba|z|k|da)?sh\b/],
+    ['bash', 3, /^[ \t]*(\$\s+)?(sudo\s+)?(echo|cd|ls|export|apt(-get)?|brew|npm|npx|yarn|pnpm|pip3?|git|curl|wget|mkdir|rm|cp|mv|chmod|chown|source|docker|kubectl|cat|grep|sed|awk|tar|ssh|scp|python3?\s+-m)\s[^=(\n]*$/m],
+    ['bash', 3, /^[ \t]*(fi|done|esac)\s*$/m],
+    ['bash', 2, /^[ \t]*if\s+\[\[?\s/m],
+    ['bash', 1, /\$\{?[A-Za-z_]\w*\}?/],
+    ['sql', 5, /^[ \t]*(SELECT\b[\s\S]+?\bFROM\b|INSERT\s+INTO\b|UPDATE\s+\w+\s+SET\b|DELETE\s+FROM\b|CREATE\s+(OR\s+REPLACE\s+)?(TABLE|VIEW|INDEX|DATABASE|FUNCTION)\b|ALTER\s+TABLE\b|DROP\s+TABLE\b|WITH\s+\w+\s+AS\s*\()/im],
+    ['sql', 2, /\b(WHERE|GROUP BY|ORDER BY|INNER JOIN|LEFT JOIN|VALUES|PRIMARY KEY|NOT NULL)\b/],
+    ['css', 5, /\{[^{}]*\b(color|margin|padding|display|font(-[a-z]+)?|background(-[a-z]+)?|width|height|border(-[a-z]+)?|position|flex|grid|top|left|z-index|opacity|transition|transform|box-shadow|cursor)\s*:\s*[^;{}\n]+;/],
+    ['css', 3, /^[ \t]*(@media|@import|@keyframes|@font-face|@supports|:root)\b/m],
+    ['css', 2, /^[ \t]*[.#][\w-]+[^{\n;=()]*\{\s*$/m],
+    ['html', 6, /^\s*<!doctype\s+html|<html[\s>]/i],
+    ['html', 4, /<(div|span|p|a|body|head|script|style|ul|ol|li|table|tr|td|h[1-6]|img|br|input|button|form|section|nav|header|footer|main|label|select|textarea|meta|link|title|canvas|svg)\b[^>]*>/i],
+    ['html', 2, /<\/(div|span|p|a|body|head|ul|ol|li|table|section|button|form|h[1-6])>/i],
+    ['xml', 7, /^\s*<\?xml\b/],
+    ['xml', 2, /<([\w-]+:)?[\w-]+(\s+[\w:-]+="[^"]*")+\s*\/>/],
+    ['c', 5, /^[ \t]*#include\s*[<"]/m],
+    ['c', 3, /\bint\s+main\s*\(/],
+    ['c', 2, /\b(printf|scanf|malloc|sizeof)\s*\(/],
+    ['cpp', 4, /\bstd::|\b(cout|cin|endl)\b|\bnamespace\s+\w+|\btemplate\s*</],
+    ['cpp', 2, /#include\s*<(iostream|vector|string|map|memory|algorithm|unordered_map)>/],
+    ['java', 5, /\bSystem\.out\.print/],
+    ['java', 4, /^[ \t]*import\s+java(x)?\./m],
+    ['java', 3, /\bpublic\s+(static\s+)?(final\s+)?(class|interface|void)\b/],
+    ['java', 2, /@Override\b/],
+    ['java', 2, /^[ \t]*package\s+[\w.]+;/m],
+    ['csharp', 5, /^[ \t]*using\s+System(\.\w+)*;/m],
+    ['csharp', 5, /\bConsole\.Write(Line)?\s*\(/],
+    ['csharp', 2, /\{\s*get;\s*(set;|init;)?\s*\}/],
+    ['go', 5, /^[ \t]*package\s+\w+\s*$/m],
+    ['go', 4, /\bfunc\s+(\(\w+\s+\*?\w+\)\s+)?\w+\s*\([^)]*\)\s*[\w*\[\]().,\s]*\{/],
+    ['go', 3, /\bfmt\.\w+\(/],
+    ['go', 2, /\w\s*:=\s*/],
+    ['rust', 4, /\bfn\s+\w+\s*(<[^>\n]*>)?\s*\(/],
+    ['rust', 4, /\b(println|vec|format|eprintln|panic)!\s*[(\[]/],
+    ['rust', 3, /\blet\s+mut\b/],
+    ['rust', 2, /\b(impl\s|pub\s+fn\b|use\s+std::|match\s+\w+\s*\{)/],
+    ['ruby', 3, /^[ \t]*def\s+[\w.]+[!?]?(\s*\([^)\n]*\))?\s*$/m],
+    ['ruby', 3, /^[ \t]*end\s*$/m],
+    ['ruby', 3, /^[ \t]*puts\s/m],
+    ['ruby', 3, /\bdo\s*\|[\w, ]+\|/],
+    ['ruby', 1, /\battr_(reader|accessor|writer)\b/],
+    ['php', 8, /<\?php/],
+    ['php', 2, /\$\w+\s*=\s*[^=]/],
+    ['powershell', 6, /\b(Get|Set|New|Remove|Write|Import|Invoke|Start|Stop|Test|Add)-[A-Z]\w+/],
+    ['dockerfile', 6, /^[ \t]*FROM\s+[\w.\/:@-]+(\s+AS\s+\w+)?\s*$/im],
+    ['dockerfile', 3, /^[ \t]*(RUN|COPY|CMD|ENTRYPOINT|WORKDIR|EXPOSE|ENV|ARG)\s/m],
+    ['makefile', 5, /^[\w.\/$()%-]+\s*:[^=\n]*\n\t\S/m],
+    ['diff', 8, /^(diff --git |@@ -\d+(,\d+)? \+\d+(,\d+)? @@|--- a\/|\+\+\+ b\/)/m],
+    ['q', 5, /^[ \t]*[\w.]+\s*:\s*\{\s*\[[\w;]*\]/m],
+    ['q', 4, /\b(til|enlist|xbar|xkey|xasc|xdesc|xcol|ungroup|raze|aj|wj|lj|ij|uj|peach|fby)\b/],
+    ['q', 3, /`[A-Za-z][\w.]*`[A-Za-z]/],
+    ['q', 2, /\bselect\b[^\n]*\bby\b[^\n]*\bfrom\b/],
+    ['r', 4, /<-\s*(function\s*\(|c\(|data\.frame|read\.csv|list\()/],
+    ['r', 3, /^[ \t]*library\(\w+\)/m],
+    ['lua', 3, /\blocal\s+(function\s+)?\w+/],
+    ['lua', 2, /\b(elseif|then)\b/],
+    ['kotlin', 4, /\bfun\s+(<[^>]+>\s*)?[\w.]+\s*\(/],
+    ['kotlin', 2, /\bval\s+\w+\s*[:=]/],
+    ['swift', 4, /\bimport\s+(Foundation|UIKit|SwiftUI|Combine)\b/],
+    ['swift', 3, /\bfunc\s+\w+\s*\([^)]*\)\s*->\s*[\w\[\]?]+\s*\{/],
+    ['perl', 5, /^[ \t]*use\s+(strict|warnings);/m],
+    ['perl', 2, /\bmy\s+[$@%]\w+/],
+    ['markdown', 1, /^#{1,6}\s+\S/m],
+    ['markdown', 2, /^\s*[-*+]\s+\[[ xX]\]\s/m],
+    ['markdown', 2, /\[[^\]\n]+\]\([^)\s]+\)/]
+  ];
+  // what each tag is checked against when deciding "clear winner" (a dialect
+  // is never beaten by its own base: TS by JS, C++ by C)
+  var BASE = { ts: 'js', cpp: 'c' };
+  function tagOfFile(name) {
+    var n = String(name || '').trim().toLowerCase().replace(/^.*[\/\\]/, '');
+    if (!n) return null;
+    if (Object.prototype.hasOwnProperty.call(NAMED, n)) return NAMED[n];
+    if (/^dockerfile\./.test(n)) return 'dockerfile';
+    var m = /\.([a-z0-9+]{1,12})$/.exec(n);
+    return m && Object.prototype.hasOwnProperty.call(EXT, m[1]) ? EXT[m[1]] : null;
+  }
+  function guessResult(tag, sure, via) {
+    return { tag: tag, lang: Object.prototype.hasOwnProperty.call(LANG, tag) ? LANG[tag] : null, label: LABEL[tag] || tag, sure: sure, via: via };
+  }
+  // File name written on the line just above the fence (file import writes
+  // "path/to/file.ext" there), or ''.
+  K.fileHint = function (doc, b) {
+    if (!b || b.open < 2) return '';
+    var t = doc.line(b.open - 1).text.trim().replace(/[:：]$/, '');
+    if (!t || t.length > 300 || t.indexOf('```') === 0) return '';
+    var last = t.split(/\s+/).pop().replace(/^[*_`'"(\[]+|[*_`'")\]]+$/g, '');
+    return tagOfFile(last) ? last : '';
+  };
+  // -> { tag, lang (runner key or null), label, sure, via: 'file' | 'content' } or null
+  K.guessLang = function (code, fileName) {
+    var ft = fileName ? tagOfFile(fileName) : null;
+    if (ft) return guessResult(ft, true, 'file');
+    var s = String(code || '');
+    if (s.length > 8192) s = s.slice(0, 8192);
+    var t = s.trim();
+    if (!t) return null;
+    if (/^[\[{]/.test(t) && /[\]}]$/.test(t)) { try { JSON.parse(t); return guessResult('json', true, 'content'); } catch (e) {} }
+    var sc = {};
+    for (var i = 0; i < FEAT.length; i++) if (FEAT[i][2].test(s)) sc[FEAT[i][0]] = (sc[FEAT[i][0]] || 0) + FEAT[i][1];
+    // YAML: most lines are "key: value" / "- item" and nothing looks like code
+    var lines = t.split('\n').filter(function (l) { return l.trim() && !/^\s*#/.test(l); });
+    if (lines.length >= 2 && !/[;{}]\s*$/m.test(t)) {
+      var y = lines.filter(function (l) { return /^\s*(-\s+)?["']?[\w .\/-]+["']?\s*:(\s+\S.*|\s*)$/.test(l) || /^\s*-\s+\S/.test(l) || /^---\s*$/.test(l); }).length;
+      if (y / lines.length >= 0.8) sc.yaml = (sc.yaml || 0) + 5;
+    }
+    // shell sessions: most lines start with a familiar command (or a $ prompt)
+    if (lines.length >= 2) {
+      var cmd = lines.filter(function (l) { return /^\s*(\$\s+)?(sudo\s+)?(echo|cd|ls|export|apt(-get)?|brew|npm|npx|yarn|pnpm|pip3?|git|curl|wget|mkdir|rm|cp|mv|chmod|chown|source|docker|kubectl|cat|grep|sed|awk|tar|ssh|scp|make|cargo|go|node|python3?|uv|conda|touch|ln|unzip|open|code)(\s|$)/.test(l); }).length;
+      if (cmd / lines.length >= 0.6) sc.bash = (sc.bash || 0) + 4;
+    }
+    if (sc.ts) sc.ts += sc.js || 0;
+    if (sc.cpp) sc.cpp += sc.c || 0;
+    var best = null, bs = 0;
+    for (var k in sc) if (sc[k] > bs) { bs = sc[k]; best = k; }
+    if (!best) return null;
+    var second = 0;
+    for (var k2 in sc) if (k2 !== best && k2 !== BASE[best] && sc[k2] > second) second = sc[k2];
+    return guessResult(best, bs >= 4 && bs - second >= 2, 'content');
+  };
+  K._tagOfFile = tagOfFile;
+
   // ---- fences --------------------------------------------------------------------
   // doc: CodeMirror Text-like ({lines, line(n) -> {from,to,text,number}, sliceString}).
   function isFence(t) { return t.charCodeAt(0) === 96 && t.lastIndexOf('```', 0) === 0; }

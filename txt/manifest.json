@@ -1364,7 +1364,7 @@
       "id": "coderun-scripts",
       "type": "script-pack",
       "name": "Code Runner scripts",
-      "description": "Run the code block at the cursor or every block, clear outputs, stop",
+      "description": "Run the code block at the cursor or every block, clear outputs, stop, tag untagged blocks with their language",
       "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polygon points='7 4 19 12 7 20 7 4'/></svg>",
       "tags": "run,code,execute,javascript,typescript,python,json,output",
       "entry": "widgets/coderun/coderun-scripts.js",
@@ -1386,6 +1386,12 @@
           "description": "Remove every ```output block from the document",
           "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M3 6h18'/><path d='M8 6V4h8v2'/><path d='M6 6l1 14h10l1-14'/></svg>",
           "tags": "clear,output,outputs,remove,code,results"
+        },
+        {
+          "name": "Identify Code Blocks",
+          "description": "Add the detected language after ``` on code blocks that have none (imported file names count) — selection or whole note",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M20.6 13.4l-7.2 7.2a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z'/><circle cx='7.5' cy='7.5' r='1.5'/></svg>",
+          "tags": "identify,detect,guess,language,tag,label,code,blocks,fence,syntax,auto,imported,files,python,javascript"
         },
         {
           "name": "Stop Running Code",
@@ -1412,7 +1418,7 @@
       "id": "coderun-buttons",
       "type": "plugin",
       "name": "Run buttons on code blocks",
-      "description": "A “Run” chip on ```js / ts / python / json blocks (“Preview” on html), spinner + Stop while running, × on ```output blocks; Ctrl/⌘+Enter runs the block at the cursor",
+      "description": "A “Run” chip on ```js / ts / python / json blocks (“Preview” on html; untagged blocks get theirs detected when pressed), spinner + Stop while running, × on ```output blocks; Ctrl/⌘+Enter runs the block at the cursor",
       "entry": "plugins/coderun-buttons/coderun-buttons.js",
       "css": "plugins/coderun-buttons/coderun-buttons.css",
       "settingKey": "plugins.coderun-buttons",

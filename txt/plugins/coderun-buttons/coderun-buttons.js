@@ -1,7 +1,10 @@
 /* Run buttons — a small "Run" chip at the end of the opening line of every
  * runnable ``` block (js / ts / python / json; html gets "Preview"), a spinner
  * + Stop while it runs, and a faint "x" on ```output blocks to remove them.
- * Ctrl/Cmd+Enter inside a runnable block runs it.
+ * Ctrl/Cmd+Enter inside a runnable block runs it. A block with no language
+ * gets a dimmer chip too: the runner works out its language only when it is
+ * pressed (nothing is scanned ahead of time) — unless the file name written
+ * above it (file import) is plainly not runnable, e.g. notes.txt.
  *
  * Cheap: viewport-only widget decorations, rebuilt only on doc / viewport /
  * read-only changes or when the runner's state changes; fence state comes
@@ -59,6 +62,17 @@
   function langOf(info) {
     var w = String(info || '').trim().replace(/^[{.]+/, '').split(/[\s},:;]/)[0].toLowerCase();
     return Object.prototype.hasOwnProperty.call(LANG, w) ? LANG[w] : null;
+  }
+  // Untagged block: worth a Run chip unless the line above names a file whose
+  // extension can't run (one line looked at, no code scanned).
+  var RUN_EXT = { py: 1, pyw: 1, js: 1, mjs: 1, cjs: 1, ts: 1, mts: 1, cts: 1, json: 1, html: 1, htm: 1, css: 1 };
+  function untaggedRunnable(doc, line) {
+    if (line.number < 2) return true;
+    var above = doc.line(line.number - 1).text.trim();
+    if (!above || above.length > 300) return true;
+    var name = above.split(/\s+/).pop().replace(/[:*_`'")\]]+$/, '');
+    var m = /^[\w.\/\\@+()-]*\.([A-Za-z0-9+]{1,12})$/.exec(name);
+    return !m || !!RUN_EXT[m[1].toLowerCase()];
   }
 
   // ---- fence positions, scanned lazily from the top and mapped through edits ----
@@ -141,8 +155,10 @@
     if (lang === 'output') {
       button('cm-crun-x', 'clear', ICON_X, 'Remove this output');
     } else if (!st) {
-      button('cm-crun-run', 'run', ICON_PLAY + '<span>' + (lang === 'html' ? 'Preview' : 'Run') + '</span>',
-        lang === 'html' ? 'Open this block in Live HTML Preview' : 'Run this block (Ctrl/⌘+Enter)');
+      button('cm-crun-run' + (lang === 'guess' ? ' cm-crun-guess' : ''), 'run', ICON_PLAY + '<span>' + (lang === 'html' ? 'Preview' : 'Run') + '</span>',
+        lang === 'html' ? 'Open this block in Live HTML Preview'
+          : lang === 'guess' ? 'Run this block — it has no language, so it is detected when you press Run (Ctrl/⌘+Enter)'
+          : 'Run this block (Ctrl/⌘+Enter)');
     } else {
       var pill = document.createElement('span');
       pill.className = 'cm-crun-state' + (st.state === 'queued' ? ' queued' : '');
@@ -179,8 +195,10 @@
       for (var i = a; i <= b; i++) {
         var line = doc.line(i), t = line.text;
         if (t.length > MAX_LINE || !startsFence(t)) continue;
-        var lang = langOf(t.slice(3));
-        if (!lang || !isOpening(doc, line)) continue;
+        var info = t.slice(3).trim(), lang = langOf(info);
+        if (!lang && info) continue;                                  // some other language: no chip
+        if (!isOpening(doc, line)) continue;
+        if (!lang) { if (!untaggedRunnable(doc, line)) continue; lang = 'guess'; }
         var st = lang !== 'output' && lang !== 'html' && E && E.statusAt ? E.statusAt(line.from) : null;
         out.push(Decoration.widget({ widget: new Chip(lang, st), side: 1 }).range(line.to));
       }
@@ -207,8 +225,9 @@
     try { if (Cade.inCodeFence && !Cade.inCodeFence(sel.head)) return false; } catch (e) {}
     var open = openingFor(doc, doc.lineAt(sel.head));
     if (!open) return false;
-    var lang = langOf(open.text.slice(3));
-    if (lang !== 'js' && lang !== 'ts' && lang !== 'py' && lang !== 'json' && lang !== 'html') return false;
+    var info = open.text.slice(3).trim(), lang = langOf(info);
+    if (!info && untaggedRunnable(doc, open)) lang = 'guess';      // detected by the runner
+    if (lang !== 'js' && lang !== 'ts' && lang !== 'py' && lang !== 'json' && lang !== 'html' && lang !== 'guess') return false;
     var from = open.from;
     withEngine(function (E) { E.runBlockAt(from); });
     return true;

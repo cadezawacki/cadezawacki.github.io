@@ -23312,7 +23312,12 @@ function _detectMultiDocFiles() {
     const beforeLines = before.trim().split('\n');
     const filePath = beforeLines[beforeLines.length - 1]?.trim();
     if (filePath && !filePath.includes('```')) {
-      files.push({ path: filePath, content: unescapeImportedFences(code) });
+      // The rest of the opening fence line is an info string (a language, e.g.
+      // "python" added by Identify Code Blocks), and import puts a newline
+      // after the fence and before the closing one: none of it is the file's.
+      const nl = code.indexOf('\n');
+      const body = nl === -1 ? code : code.slice(nl + 1).replace(/\n$/, '');
+      files.push({ path: filePath, content: unescapeImportedFences(body) });
     }
   }
   return files;

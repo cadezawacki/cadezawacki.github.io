@@ -1,7 +1,8 @@
 /* Code Runner palette scripts (script-pack): Run Code Block, Run All Code
- * Blocks, Clear Code Outputs, Stop Running Code. Each is a thin wrapper that
- * loads the shared engine (coderun-kit.js + coderun-engine.js) on first use and
- * calls it; the engine writes the output itself, so ctx is left untouched.
+ * Blocks, Clear Code Outputs, Stop Running Code, Identify Code Blocks. Each is
+ * a thin wrapper that loads the shared engine (coderun-kit.js +
+ * coderun-engine.js) on first use and calls it; the engine writes into the
+ * document itself, so ctx is left untouched.
  * Script sources are evaluated in isolation, so the engine URLs are baked
  * into each source string here. Self-contained IIFE. */
 (function () {
@@ -39,6 +40,7 @@
   var PLAY = "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polygon points='7 4 19 12 7 20 7 4'/></svg>";
   var ALL = "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polygon points='4 5 11 12 4 19 4 5'/><polygon points='13 5 20 12 13 19 13 5'/></svg>";
   var CLEAR = "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M3 6h18'/><path d='M8 6V4h8v2'/><path d='M6 6l1 14h10l1-14'/></svg>";
+  var TAG = "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M20.6 13.4l-7.2 7.2a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z'/><circle cx='7.5' cy='7.5' r='1.5'/></svg>";
   var STOP = "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='5' y='5' width='14' height='14' rx='2'/></svg>";
 
   reg({
@@ -61,6 +63,13 @@
     icon: CLEAR,
     tags: 'clear,output,outputs,remove,code,results'
   }, 'E.clearOutputs();');
+
+  reg({
+    name: 'Identify Code Blocks',
+    description: 'Add the detected language after ``` on code blocks that have none (imported file names count) — selection or whole note',
+    icon: TAG,
+    tags: 'identify,detect,guess,language,tag,label,code,blocks,fence,syntax,auto,imported,files,python,javascript'
+  }, 'E.identifyBlocks();');
 
   reg({
     name: 'Stop Running Code',
