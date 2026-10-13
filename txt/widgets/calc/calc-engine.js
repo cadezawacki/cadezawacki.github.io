@@ -973,11 +973,20 @@
     } else if (dimsEq(src.d, dimsScale(td, -1)) && (isFuel(h) || isFuel(src.h)) && src.v !== 0) {
       out = Q(1 / src.v, td, h); // mpg ↔ L/100km is a reciprocal
     } else {
-      fail('Can\'t convert ' + dimsName(src.d) + ' to ' + dimsName(td));
+      // say what the target needs: "Can't convert mass to km - expected a length"
+      var want = isZero(td) ? 'an angle or plain number' : aOrAn(dimsName(td));
+      fail('Can\'t convert ' + dimsName(src.d) + ' to ' + renderHint(h) + ' \u2014 expected ' + want +
+        (isZero(src.d) && !isZero(td) ? ' (e.g. 5 ' + exampleUnit(td, h) + ' to ' + renderHint(h) + ')' : ''));
     }
     out.conv = true;
     return out;
   }
+  function exampleUnit(td, h) {
+    var tgt = renderHint(h), us = (BYDIMS[dkey(td)] || []).filter(function (x) { return x.sym !== tgt && !x.affine; });
+    var u = us.filter(function (x) { return x.f === 1; })[0] || us[0] || h[0][0];
+    return u.sym;
+  }
+  function aOrAn(w) { return (/^[aeiou]/i.test(w) ? 'an ' : 'a ') + w; }
   function isFuel(h) { return !!h && h.some(function (x) { return x[0].cat === 'fuel'; }); }
 
   // ---- public evaluate --------------------------------------------------------
@@ -1017,7 +1026,7 @@
         P = new Parser(body.slice(0, cands[c]), scope);
         var e = P.parseExpr();
         if (P.i < P.t.length) continue;
-        node = e; target = tg;
+        node = e; target = tg; info.convWord = body[cands[c]].s;
       } catch (err) { if (!(err instanceof CalcError)) throw err; }
     }
     if (!node) {
@@ -1043,6 +1052,12 @@
       var toks = tokenize(src);
       var parsed = parseAll(toks, scope);
       var q = evalNode(parsed.node, scope);
+      // "5 in cm": a plain number before "in <length>" means inches (the
+      // "in" is the unit, with an implied "to")
+      if (parsed.target && parsed.target.kind === 'unit' && parsed.info.convWord === 'in' && isPlain(q) &&
+          dimsEq(parsed.target.h.reduce(function (d, x) { return dimsAdd(d, x[0].d, x[1]); }, ZERO), BYID['in'].d)) {
+        q = qtyLiteral(q.v, [[BYID['in'], 1]]);
+      }
       if (parsed.target) q = convertQ(q, parsed.target, scope);
       if (typeof q.v !== 'number' || isNaN(q.v)) fail('Not a number');
       if (!isFinite(q.v)) fail(q.v > 0 ? 'Result is infinite' : 'Result is -infinite');
