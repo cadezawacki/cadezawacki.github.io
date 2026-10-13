@@ -3908,6 +3908,17 @@ window.Cade = (function () {
     get roomsApi() { return window.__roomsApi; },
     // ---- small per-account synced JSON store (encrypted; offline-first) ----
     syncedBlob(id, opts) { return window.__cadeSyncedBlob(id, opts); },
+    // ---- command catalogue: the Ctrl+K palette's widgets + scripts (lazy
+    //      manifest stubs included) for other launchers, e.g. a "/" menu ----
+    commands() { return window.__cadeCommands ? window.__cadeCommands() : []; },
+    runCommand(name) { return window.__cadeRunCommand ? window.__cadeRunCommand(name) : false; },
+    // ---- editor context: is `pos` inside a ``` fence (core's tracked state) ----
+    inCodeFence(pos) { return window.__cadeInFence ? window.__cadeInFence(pos) : false; },
+    // ---- "/code" symbol shortcuts; a module drawing its own "/" menu claims
+    //      the trigger (fn() → true while it owns it) so the core's dropdown
+    //      doesn't stack on top of it ----
+    slashCodes() { return window.__cadeSlashCodes ? window.__cadeSlashCodes() : {}; },
+    claimSlash(fn) { window.__cadeSlashClaim = typeof fn === 'function' ? fn : null; },
   };
   return api;
 })();
@@ -6050,6 +6061,7 @@ function fenceContaining(pos) {
   }
   return null;
 }
+window.__cadeInFence = (pos) => !!fenceContaining(pos); // Cade.inCodeFence
 
 // Registered FIRST in the extensions list so every other plugin's update sees
 // current fence state within the same transaction.
@@ -9030,6 +9042,7 @@ const SLASH_SNIPPETS = {
   time: () => new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + '\u0000',
   now: () => new Date().toLocaleString() + '\u0000',
 };
+window.__cadeSlashCodes = () => Object.assign({}, SLASH_CODES); // Cade.slashCodes
 function buildSlashItems(code) {
   const items = [];
   for (const key in SLASH_CODES) {
@@ -9097,9 +9110,12 @@ function maybeAutocomplete() {
       return;
     }
   }
-  // "/code" symbol shortcuts (always available).
+  // "/code" symbol shortcuts (always available) — unless a module's own slash
+  // menu has claimed this "/" (Cade.claimSlash) and lists them itself.
   const sm = before.match(/(?:^|[\s,;(])\/([-A-Za-z0-9<>=!~*.()$|]{1,6})$/);
-  if (sm) {
+  let slashClaimed = false;
+  try { slashClaimed = !!(sm && window.__cadeSlashClaim && window.__cadeSlashClaim()); } catch {}
+  if (sm && !slashClaimed) {
     const items = buildSlashItems(sm[1]);
     if (items.length) {
       acFrom = sel.head - sm[1].length - 1; // position of '/'
@@ -12464,6 +12480,19 @@ function runPickerItem(item) {
   }
   executeScript(item);
 }
+// Command catalogue for module launchers (Cade.commands / Cade.runCommand): the
+// palette's own rows, so lazy manifest stubs load on first run exactly as here.
+window.__cadeCommands = () => pickerSource().map(s => ({
+  name: s.name, description: s.description || '', icon: s.icon || '', tags: s.tags || '',
+  kind: s.__widget ? 'widget' : 'script',
+}));
+window.__cadeRunCommand = (name) => {
+  const k = String(name || '').toLowerCase();
+  const item = pickerSource().find(s => (s.name || '').toLowerCase() === k);
+  if (!item) return false;
+  runPickerItem(item);
+  return true;
+};
 
 let pickerOpen = false;
 let pickerIndex = 0;
