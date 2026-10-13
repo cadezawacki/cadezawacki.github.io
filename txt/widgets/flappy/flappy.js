@@ -1,6 +1,7 @@
 /* Flit — a one-button flyer for Cade.txt. Tap / click / Space / ↑ to flap
  * through the gaps; they tighten and speed up as the score climbs. Medals at
- * 10 / 20 / 30 / 50. Original art, all drawn with canvas paths (no assets).
+ * 10 / 20 / 30 / 50. Drawn entirely in monospace ASCII glyphs to match the
+ * editor (pipes, hills, clouds, the bird =(o>), no image assets.
  * Physics runs on a fixed 120 Hz step with an accumulator, so the bird flies
  * identically at 60, 90, 120 or 144 Hz; rendering interpolates between steps.
  * Pauses on blur / tab hide. Best score persists. Offline module. */
@@ -18,10 +19,10 @@
   var COL_W = 52, CAP_H = 16, CAP_OVER = 3, SPACING = 172;
   var SPEED0 = 118, READY_Y = 188;
   var MEDALS = [
-    { key: 'platinum', name: 'Platinum', at: 50, color: '#9fd8d6' },
-    { key: 'gold', name: 'Gold', at: 30, color: '#f2c544' },
-    { key: 'silver', name: 'Silver', at: 20, color: '#c3c9d0' },
-    { key: 'bronze', name: 'Bronze', at: 10, color: '#cd8a4b' }
+    { key: 'platinum', name: 'Platinum', at: 50, color: '#9fd8d6', ink: '#3f8f8c' },
+    { key: 'gold', name: 'Gold', at: 30, color: '#f2c544', ink: '#b8860b' },
+    { key: 'silver', name: 'Silver', at: 20, color: '#c3c9d0', ink: '#7d8792' },
+    { key: 'bronze', name: 'Bronze', at: 10, color: '#cd8a4b', ink: '#a8652a' }
   ];
 
   function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
@@ -199,167 +200,206 @@
     function v(n) { return cs.getPropertyValue(n); }
     var bg = parseCol(v('--bg'), [17, 17, 16]), tx = parseCol(v('--text'), [231, 229, 227]), ac = parseCol(v('--accent'), [15, 149, 152]);
     var dark = (0.2126 * bg[0] + 0.7152 * bg[1] + 0.0722 * bg[2]) / 255 < 0.45;
-    var WHITE = [255, 255, 255], BLACK = [0, 0, 0];
     S.dark = dark;
     S.col = {
       bg: css(bg), text: css(tx), font: (v('--font-mono') || '').trim() || 'ui-monospace, monospace',
-      far: css(mix(bg, ac, dark ? 0.22 : 0.34)), near: css(mix(bg, ac, dark ? 0.34 : 0.5)),
-      cloud: dark ? css(tx, 0.08) : 'rgba(255,255,255,0.88)', star: css(tx, 0.5),
-      body: css(ac), light: css(mix(ac, WHITE, 0.3)), shade: css(mix(ac, BLACK, 0.22)), edge: css(mix(ac, BLACK, 0.42)),
-      ground: css(mix(bg, tx, dark ? 0.09 : 0.07)), stripe: css(mix(bg, tx, dark ? 0.14 : 0.12)),
-      grass: css(mix(ac, dark ? BLACK : WHITE, 0.18)), grassEdge: css(mix(ac, BLACK, 0.38))
+      star: css(mix(bg, tx, dark ? 0.34 : 0.32)), cloud: css(mix(bg, tx, dark ? 0.2 : 0.24)),
+      far: css(mix(bg, ac, dark ? 0.34 : 0.32)), near: css(mix(bg, ac, dark ? 0.55 : 0.52)),
+      pipe: css(ac), pipeHi: css(mix(ac, dark ? [255, 255, 255] : [0, 0, 0], dark ? 0.38 : 0.25)), pipeLo: css(mix(ac, bg, 0.5)),
+      ground: css(mix(bg, tx, dark ? 0.3 : 0.34)), edge: css(mix(ac, tx, 0.2)),
+      bird: dark ? '#f4b740' : '#c27d0e', wing: dark ? '#d8922a' : '#9c6208'
     };
-    var g = S.ctx.createLinearGradient(0, 0, 0, FLOOR);
-    g.addColorStop(0, css(mix(bg, ac, dark ? 0.15 : 0.26)));
-    g.addColorStop(1, css(mix(bg, ac, dark ? 0.03 : 0.05)));
-    S.col.sky = g;
+    fitFont();
   }
 
-  // ---- drawing (logical units; the context is pre-scaled) ----
-  var CLOUDS = [[20, 64, 1], [170, 112, 0.7], [300, 40, 0.85], [390, 92, 0.6]], CLOUD_P = 440;
-  var STARS = (function () { var r = rng(7), a = []; for (var i = 0; i < 34; i++) a.push([r() * 600, r() * 250, r() < 0.2 ? 1.6 : 1]); return a; })();
+  // ---- ASCII rendering ----
+  // Everything is drawn as monospace glyphs on a cell grid. A cell is a
+  // seventh of a column, so a pipe is exactly 7 glyphs wide and the drawing
+  // matches the engine's hitboxes; the font size is fitted to the font's real
+  // advance so strings line up with the grid in any monospace font. Things
+  // move smoothly (sub-cell offsets) while staying on their own grid.
+  var CWU = COL_W / 7, RHU = 12;
+  var PIPE_ROW = ['|', ':', '#', '=', '-', '.', '|'];   // highlight left of centre, shadow right
+  var CAP = '[=======]';
+  var GROUND_ROWS = ['=-==-=-===-=', '.:  .  :. . ', ' . :.   .  :', ':  .  . :  .'];
+  var BIRD_BODY = '=(o>', BIRD_DEAD = '=(x>';
+  var CLOUD_BIG = ['   .-~~~-.', ' .(       ).', '(___________)'], CLOUD_SMALL = [' .--.', '(____)'];
+  var DIGITS = ['###|#.#|#.#|#.#|###', '.#.|##.|.#.|.#.|###', '###|..#|###|#..|###', '###|..#|.##|..#|###', '#.#|#.#|###|..#|..#',
+    '###|#..|###|..#|###', '###|#..|###|#.#|###', '###|..#|.#.|.#.|.#.', '###|#.#|###|#.#|###', '###|#.#|###|..#|###'].map(function (d) {
+    return d.split('|').map(function (r) { return r.replace(/\./g, ' '); });
+  });
 
-  function hills(c, off, base, amp, f1, f2, f3, color) {
-    c.fillStyle = color;
-    c.beginPath();
-    c.moveTo(0, FLOOR);
-    for (var x = 0; x <= VW + 8; x += 8) {
-      var wx = x + off;
-      c.lineTo(x, base - amp * (0.55 * Math.sin(wx * f1) + 0.3 * Math.sin(wx * f2 + 1.7) + 0.15 * Math.sin(wx * f3 + 0.4)));
+  function fitFont() {
+    var c = S.ctx, f = S.col.font;
+    c.font = '600 100px ' + f;
+    var adv = c.measureText('MMMMMMMMMM').width / 1000 || 0.6;    // advance per px of font size
+    S.fpx = CWU / adv;
+    S.fnt = '600 ' + S.fpx.toFixed(3) + 'px ' + f;
+    S.adv = adv;
+    buildTiles();
+  }
+  function fontAt(scale, weight) { return (weight || 600) + ' ' + (S.fpx * scale).toFixed(3) + 'px ' + S.col.font; }
+  function glyphs(c, s, x, y, color) { c.fillStyle = color; c.fillText(s, x, y); }
+  function setText(c, font, align) { c.font = font; c.textAlign = align || 'left'; c.textBaseline = 'middle'; }
+
+  // Pre-rendered strips (device pixels) for the repeating parts: a tall pipe
+  // shaft and one period of the ground. Rebuilt on resize / theme change.
+  function tile(wu, hu) {
+    var cv = document.createElement('canvas');
+    cv.width = Math.max(1, Math.ceil(wu * S.k)); cv.height = Math.max(1, Math.ceil(hu * S.k));
+    var c = cv.getContext('2d');
+    c.setTransform(S.k, 0, 0, S.k, 0, 0);
+    setText(c, S.fnt);
+    return { cv: cv, c: c, w: wu, h: hu };
+  }
+  function buildTiles() {
+    if (!S.k || !S.col) return;
+    var k = S.col, i, j, rows = Math.ceil(VH / RHU) + 1;
+    var sh = tile(COL_W, rows * RHU);
+    for (i = 0; i < rows; i++) {
+      var y = i * RHU + RHU / 2;
+      for (j = 0; j < 7; j++) glyphs(sh.c, PIPE_ROW[j], j * CWU, y, j === 0 || j === 6 ? k.pipeHi : j <= 2 ? k.pipe : k.pipeLo);
     }
-    c.lineTo(VW + 8, FLOOR);
-    c.closePath();
-    c.fill();
+    S.shaft = sh;
+    var L = GROUND_ROWS[0].length, gr = tile(L * CWU, GROUND);
+    for (i = 0; i < GROUND_ROWS.length; i++) glyphs(gr.c, GROUND_ROWS[i], 0, 1 + i * RHU + RHU / 2, i ? k.ground : k.edge);
+    S.groundT = gr;
   }
-  function cloud(c, x, y, s) {
-    c.moveTo(x + 14 * s, y);
-    c.arc(x, y, 14 * s, 0, Math.PI * 2);
-    c.moveTo(x + 32 * s, y - 6 * s);
-    c.arc(x + 14 * s, y - 6 * s, 18 * s, 0, Math.PI * 2);
-    c.moveTo(x + 43 * s, y);
-    c.arc(x + 30 * s, y, 13 * s, 0, Math.PI * 2);
-    c.rect(x, y, 30 * s, 12 * s);
+  // Snap to the device pixel grid so tiles stay crisp.
+  function px(v) { return Math.round(v * S.k) / S.k; }
+
+  // ASCII mountain ranges: a seeded walk that climbs (/) and descends (\)
+  // one row per glyph column, with the odd flat stretch (_) in the valleys.
+  // Cyclic, so it scrolls forever; the glyphs belong to world columns, so
+  // they slide smoothly instead of shimmering.
+  function range(seed, maxH, n) {
+    var r = rng(seed), out = [], L = 0, up = true;
+    for (var i = 0; i < n; i++) {
+      if (L === 0 && !up && r() < 0.45) { out.push(['_', 1]); up = true; continue; }  // '_' sits on the cell bottom, level with the feet of / and \
+      if (L >= maxH || (L > 0 && r() < (up ? 0.22 : 0.08))) up = false;
+      else if (L === 0 || r() < (up ? 0.04 : 0.14)) up = true;
+      if (up) { L++; out.push(['/', L]); } else { out.push(['\\', L]); L--; }
+    }
+    while (L > 0) { out.push(['\\', L]); L--; }       // close the loop at ground level
+    return out;
+  }
+  var FAR = range(11, 6, 300), NEAR = range(29, 3, 240);
+  function ridge(c, cols, off, baseRow, color) {
+    var n = Math.ceil(VW / CWU) + 2, i0 = Math.floor(off / CWU), sx = -(off - i0 * CWU), rows = {}, j, N = cols.length;
+    for (j = 0; j < n; j++) {
+      var g = cols[((i0 + j) % N + N) % N], row = baseRow - g[1];
+      (rows[row] || (rows[row] = []))[j] = g[0];
+    }
+    setText(c, S.fnt); c.fillStyle = color;
+    for (var r in rows) {
+      var a2 = rows[r], str = '';
+      for (j = 0; j < n; j++) str += a2[j] || ' ';
+      c.fillText(str, sx, +r * RHU + RHU / 2);
+    }
   }
   function drawCol(c, col, x) {
-    var k = S.col, top = col.gy - col.gap / 2, bot = col.gy + col.gap / 2;
-    function shaft(y0, y1) {
-      c.fillStyle = k.body; c.fillRect(x, y0, COL_W, y1 - y0);
-      c.fillStyle = k.light; c.fillRect(x + 6, y0, 6, y1 - y0);
-      c.fillStyle = k.shade; c.fillRect(x + COL_W - 10, y0, 10, y1 - y0);
-    }
-    function cap(y0) {
-      c.fillStyle = k.body; c.fillRect(x - CAP_OVER, y0, COL_W + 2 * CAP_OVER, CAP_H);
-      c.fillStyle = k.light; c.fillRect(x - CAP_OVER + 5, y0 + 2, 6, CAP_H - 4);
-      c.strokeStyle = k.edge; c.lineWidth = 1.5;
-      c.strokeRect(x - CAP_OVER + 0.75, y0 + 0.75, COL_W + 2 * CAP_OVER - 1.5, CAP_H - 1.5);
-    }
-    shaft(-4, top - CAP_H); cap(top - CAP_H);
-    shaft(bot + CAP_H, FLOOR); cap(bot);
+    var k = S.col, sh = S.shaft, top = col.gy - col.gap / 2, bot = col.gy + col.gap / 2;
+    var xr = px(x), h1 = Math.max(0, top - CAP_H), h2 = Math.max(0, FLOOR - (bot + CAP_H));
+    c.fillStyle = k.bg;                              // solid behind the glyphs: hills don't show through
+    c.fillRect(xr - CWU, 0, COL_W + 2 * CWU, Math.max(0, top));
+    c.fillRect(xr - CWU, bot, COL_W + 2 * CWU, Math.max(0, FLOOR - bot));
+    // shafts: rows aligned to the caps (top shaft from the tile's bottom, bottom shaft from its top)
+    if (h1 > 0) { var sy = sh.h - h1; c.drawImage(sh.cv, 0, sy * S.k, sh.cv.width, h1 * S.k, xr, 0, COL_W, h1); }
+    if (h2 > 0) c.drawImage(sh.cv, 0, 0, sh.cv.width, h2 * S.k, xr, bot + CAP_H, COL_W, h2);
+    setText(c, S.fnt);
+    glyphs(c, CAP, xr - CWU, top - CAP_H / 2, k.pipeHi);
+    glyphs(c, CAP, xr - CWU, bot + CAP_H / 2, k.pipeHi);
   }
   function drawBird(c, x, y, rot, wing, dead) {
+    var k = S.col, w4 = 4 * CWU, x0 = -w4 / 2;
     c.save();
     c.translate(x, y);
     c.rotate(rot);
-    c.lineWidth = 1.4;
-    c.strokeStyle = '#a86a14';
-    // tail
-    c.fillStyle = '#e39a22';
-    c.beginPath(); c.moveTo(-13, -3); c.lineTo(-21, -7); c.lineTo(-19, 1); c.lineTo(-21, 6); c.lineTo(-12, 3); c.closePath(); c.fill(); c.stroke();
-    // body
-    c.fillStyle = '#f4b63f';
-    c.beginPath(); c.ellipse(0, 0, 15, 12, 0, 0, Math.PI * 2); c.fill(); c.stroke();
-    c.fillStyle = '#fde6ad';
-    c.beginPath(); c.ellipse(3, 5, 9, 5.5, -0.2, 0, Math.PI * 2); c.fill();
-    // eye (an X once it's down)
-    c.fillStyle = '#fff';
-    c.beginPath(); c.arc(7, -4, 4.6, 0, Math.PI * 2); c.fill();
-    c.lineWidth = 1; c.stroke();
-    if (dead) {
-      c.strokeStyle = '#1c1917'; c.lineWidth = 1.5;
-      c.beginPath(); c.moveTo(5.4, -5.8); c.lineTo(9.4, -1.8); c.moveTo(9.4, -5.8); c.lineTo(5.4, -1.8); c.stroke();
-    } else {
-      c.fillStyle = '#1c1917';
-      c.beginPath(); c.arc(8.6, -3.8, 2.1, 0, Math.PI * 2); c.fill();
-      c.fillStyle = '#fff';
-      c.beginPath(); c.arc(9.3, -4.6, 0.7, 0, Math.PI * 2); c.fill();
+    setText(c, fontAt(1, 800));
+    glyphs(c, dead ? BIRD_DEAD : BIRD_BODY, x0, 0, k.bird);
+    if (!dead) {                                    // the wing: up, level or down with the flap cycle
+      var s = Math.sin(wing);
+      if (s > 0.35) glyphs(c, '\\', x0 + CWU, -RHU * 0.72, k.wing);
+      else if (s < -0.35) glyphs(c, '/', x0 + CWU, RHU * 0.72, k.wing);
+      else glyphs(c, '~', x0 + CWU, -RHU * 0.62, k.wing);
     }
-    // beak
-    c.fillStyle = '#ea6a3a'; c.strokeStyle = '#a8431f'; c.lineWidth = 1;
-    c.beginPath(); c.moveTo(12, -2); c.lineTo(21, 1.5); c.lineTo(12, 5); c.closePath(); c.fill(); c.stroke();
-    // wing — swings about its root; fast after a flap, a lazy flutter otherwise
-    c.translate(-3, 1);
-    c.rotate(Math.sin(wing) * 0.7 - 0.1);
-    c.fillStyle = '#e39a22'; c.strokeStyle = '#a86a14'; c.lineWidth = 1.2;
-    c.beginPath(); c.ellipse(-4, 0, 8.5, 5, 0, 0, Math.PI * 2); c.fill(); c.stroke();
     c.restore();
   }
-  function txt(c, s, x, y, size, weight, fill, stroke) {
-    c.font = (weight || 700) + ' ' + size + 'px ' + S.col.font;
-    c.textAlign = 'center'; c.textBaseline = 'middle';
-    if (stroke) { c.lineJoin = 'round'; c.lineWidth = Math.max(3, size / 7); c.strokeStyle = stroke; c.strokeText(s, x, y); }
-    c.fillStyle = fill; c.fillText(s, x, y);
+  // Text centred on x inside a bg-coloured box (so it reads over pipes).
+  function label(c, s, x, y, scale, color, frame) {
+    setText(c, fontAt(scale), 'center');
+    var w = s.length * CWU * scale, h = RHU * scale;
+    if (frame) {
+      var bar = '+' + new Array(s.length + 3).join('-') + '+';
+      c.fillStyle = S.col.bg; c.fillRect(x - w / 2 - 2 * CWU * scale, y - h * 1.5, w + 4 * CWU * scale, h * 3);
+      glyphs(c, bar, x, y - h, frame);
+      glyphs(c, '| ' + s + ' |', x, y, frame);
+      glyphs(c, bar, x, y + h, frame);
+      c.fillStyle = color; c.fillText(s, x, y);
+    } else {
+      c.fillStyle = S.col.bg; c.fillRect(x - w / 2 - 2, y - h / 2, w + 4, h);
+      glyphs(c, s, x, y, color);
+    }
   }
+  function bigNumber(c, n, cx, cy, scale) {
+    var ds = String(n), cw = CWU * scale, rh = RHU * 0.64 * scale, rows = ['', '', '', '', ''];
+    for (var i = 0; i < ds.length; i++) for (var r = 0; r < 5; r++) rows[r] += (i ? ' ' : '') + DIGITS[+ds.charAt(i)][r];
+    setText(c, fontAt(scale, 800), 'center');
+    c.lineJoin = 'round'; c.lineWidth = Math.max(2.5, cw * 0.55); c.strokeStyle = S.col.bg;
+    for (r = 0; r < 5; r++) c.strokeText(rows[r], cx, cy + (r - 2) * rh);
+    c.fillStyle = S.col.text;
+    for (r = 0; r < 5; r++) c.fillText(rows[r], cx, cy + (r - 2) * rh);
+  }
+
+  var CLOUDS = [[20, 64, 1], [170, 112, 0.7], [300, 40, 0.85], [390, 92, 0.6]], CLOUD_P = 440;
+  var STARS = (function () { var r = rng(7), a = []; for (var i = 0; i < 34; i++) a.push([r() * 600, r() * 250, r() < 0.2 ? '+' : r() < 0.5 ? '.' : '·']); return a; })();
 
   function draw(alpha) {
     if (!S || !S.ctx) return;
     var c = S.ctx, w = S.w, k = S.col, i, a = alpha || 0;
     var cam = w.pcam + (w.cam - w.pcam) * a, y = w.py + (w.y - w.py) * a, rot = w.prot + (w.rot - w.prot) * a;
     c.setTransform(S.k, 0, 0, S.k, 0, 0);
-    c.fillStyle = k.sky; c.fillRect(0, 0, VW, FLOOR);
+    c.fillStyle = k.bg; c.fillRect(0, 0, VW, VH);
+    setText(c, S.fnt);
     if (S.dark) {
       c.fillStyle = k.star;
       for (i = 0; i < STARS.length; i++) {
         var sx = ((STARS[i][0] - cam * 0.03) % 600 + 600) % 600 - 100;
-        if (sx > -2 && sx < VW) c.fillRect(sx, STARS[i][1], STARS[i][2], STARS[i][2]);
+        if (sx > -8 && sx < VW) c.fillText(STARS[i][2], sx, STARS[i][1]);
       }
     }
     c.fillStyle = k.cloud;
-    c.beginPath();
     for (i = 0; i < CLOUDS.length; i++) {
-      var cx = ((CLOUDS[i][0] - cam * 0.1) % CLOUD_P + CLOUD_P) % CLOUD_P - 70;
-      if (cx < VW + 20) cloud(c, cx, CLOUDS[i][1], CLOUDS[i][2]);
+      var cx = ((CLOUDS[i][0] - cam * 0.1) % CLOUD_P + CLOUD_P) % CLOUD_P - 100, cl = CLOUDS[i][2] > 0.8 ? CLOUD_BIG : CLOUD_SMALL;
+      if (cx < VW + 4) for (var r = 0; r < cl.length; r++) c.fillText(cl[r], cx, CLOUDS[i][1] + r * RHU);
     }
-    c.fill();
-    hills(c, cam * 0.22, 298, 30, 0.011, 0.027, 0.061, k.far);
-    hills(c, cam * 0.5 + 900, 338, 20, 0.017, 0.041, 0.093, k.near);
+    ridge(c, FAR, cam * 0.22, 26, k.far);
+    ridge(c, NEAR, cam * 0.5, 30, k.near);
     for (i = 0; i < w.cols.length; i++) {
-      var px = w.cols[i].x - cam;
-      if (px < VW + CAP_OVER && px + COL_W + CAP_OVER > 0) drawCol(c, w.cols[i], px);
+      var pxl = w.cols[i].x - cam;
+      if (pxl < VW + CWU && pxl + COL_W + CWU > 0) drawCol(c, w.cols[i], pxl);
     }
-    // ground: grass lip + diagonal stripes that scroll with the world
-    c.fillStyle = k.ground; c.fillRect(0, FLOOR, VW, GROUND);
-    c.fillStyle = k.stripe;
-    c.beginPath();
-    var off = -(cam % 18);
-    for (var gx = off - 18; gx < VW + 18; gx += 18) {
-      c.moveTo(gx, FLOOR + 9); c.lineTo(gx + 9, FLOOR + 9); c.lineTo(gx + 3, VH); c.lineTo(gx - 6, VH); c.closePath();
-    }
-    c.fill();
-    c.fillStyle = k.grass; c.fillRect(0, FLOOR, VW, 7);
-    c.fillStyle = k.grassEdge; c.fillRect(0, FLOOR + 7, VW, 1.5);
-
-    drawBird(c, BIRD_X, y, rot, w.wing, w.state === 'dead');
+    // ground: one pre-rendered period, repeated and scrolled with the world
+    var gt = S.groundT, gw = gt.w, g0 = -(((cam % gw) + gw) % gw);
+    c.fillStyle = k.bg; c.fillRect(0, FLOOR, VW, GROUND);
+    for (var gx = g0; gx < VW; gx += gw) c.drawImage(gt.cv, px(gx), FLOOR, gw, GROUND);
 
     if (w.state === 'ready') {
-      txt(c, 'Get ready', VW / 2, 104, 26, 700, k.text, k.bg);
-      txt(c, S.coarse ? 'Tap to flap' : 'Space · ↑ · click to flap', VW / 2, 134, 12, 500, k.text, k.bg);
+      label(c, 'GET READY', VW / 2, 100, 1.25, k.text, k.pipe);
+      label(c, S.coarse ? 'tap to flap' : 'space / ↑ / click to flap', VW / 2, 138, 0.95, k.text);
       var best = S.best, md = medalFor(best);
-      if (best > 0) txt(c, 'Best ' + best + (md ? ' · ' + md.name : ''), VW / 2, 254, 12, 500, k.text, k.bg);
+      if (best > 0) label(c, 'best ' + best + (md ? ' · ' + md.name.toLowerCase() : ''), VW / 2, 254, 0.95, k.text);
     } else {
       var pop = S.rm ? 1 : 1 + 0.25 * Math.max(0, S.pop / 0.15);
-      txt(c, String(w.score), VW / 2, 44, Math.round(34 * pop), 800, k.text, k.bg);
+      bigNumber(c, w.score, VW / 2, 44, 0.9 * pop);
     }
     if (S.banner && S.banner.t > 0) {
-      var bm = S.banner.medal, bw = 132;
       c.globalAlpha = Math.min(1, S.banner.t / 0.3);
-      c.fillStyle = k.bg; c.strokeStyle = bm.color; c.lineWidth = 2;
-      c.beginPath();
-      if (c.roundRect) c.roundRect(VW / 2 - bw / 2, 70, bw, 26, 13); else c.rect(VW / 2 - bw / 2, 70, bw, 26);
-      c.fill(); c.stroke();
-      c.fillStyle = bm.color; c.beginPath(); c.arc(VW / 2 - bw / 2 + 16, 83, 6, 0, Math.PI * 2); c.fill();
-      txt(c, bm.name + ' medal!', VW / 2 + 9, 83.5, 12, 700, k.text);
+      var mc = S.dark ? S.banner.medal.color : S.banner.medal.ink;
+      label(c, '* ' + S.banner.medal.name.toUpperCase() + ' MEDAL *', VW / 2, 92, 0.95, mc, mc);
       c.globalAlpha = 1;
     }
+    drawBird(c, BIRD_X, y, rot, w.wing, w.state === 'dead');   // last: never hidden behind the HUD
     if (S.flash > 0 && !S.rm) {
       c.fillStyle = 'rgba(255,255,255,' + (S.flash / 0.25 * 0.6).toFixed(3) + ')';
       c.fillRect(0, 0, VW, VH);
@@ -449,26 +489,28 @@
     kick();
   }
 
+  // ASCII medal: a coin with the medal's initial (or an empty dashed one).
   function medalHtml(m) {
-    return '<div class="fl-medal' + (m ? ' fl-m-' + m.key : '') + '" title="' + (m ? m.name + ' medal' : 'No medal yet') + '">' +
-      (m ? '<span>★</span>' : '') + '</div>';
+    var art = m ? [' .---. ', '(  ' + m.name.charAt(0) + '  )', " '---' "] : [' .- -. ', '(     )', " '- -' "];
+    return '<pre class="fl-medal' + (m ? ' fl-m-' + m.key : '') + '" title="' + (m ? m.name + ' medal' : 'No medal yet') + '">' +
+      art.join('\n') + '</pre>';
   }
   function overlayHtml(kind) {
     var w = S.w;
     if (kind === 'pause') {
-      return '<div class="fl-card"><div class="fl-title">Paused</div><div class="fl-sub">Score ' + w.score + '</div>' +
-        '<button type="button" class="fl-go" data-act="resume">Resume</button>' +
-        '<div class="fl-note">' + (S.coarse ? 'Tap anywhere' : 'Space / P / click') + ' — resuming gives you a flap</div></div>';
+      return '<div class="fl-card"><div class="fl-title">PAUSED</div><div class="fl-sub">score ' + w.score + '</div>' +
+        '<button type="button" class="fl-go" data-act="resume">[ resume ]</button>' +
+        '<div class="fl-note">' + (S.coarse ? 'tap anywhere' : 'space / p / click') + ' — resuming gives you a flap</div></div>';
     }
     var m = medalFor(w.score), nm = null;
     for (var i = MEDALS.length - 1; i >= 0; i--) if (MEDALS[i].at > w.score) { nm = MEDALS[i]; break; }
-    return '<div class="fl-card"><div class="fl-title">Game over</div>' +
+    return '<div class="fl-card"><div class="fl-title">GAME OVER</div>' +
       '<div class="fl-res">' + medalHtml(m) +
-      '<div class="fl-nums"><div><span>Score</span><b>' + w.score + '</b></div><div><span>Best</span><b>' + S.best + '</b></div></div></div>' +
-      (S.newBest && w.score > 0 ? '<div class="fl-new">New best!</div>' : '') +
-      '<button type="button" class="fl-go" data-act="restart">Play again</button>' +
-      '<div class="fl-note">' + (nm ? (nm.at - w.score) + ' more for ' + nm.name : 'Top medal — nice flying') +
-      ' · ' + (S.coarse ? 'tap' : 'Space') + ' to retry</div></div>';
+      '<div class="fl-nums"><div><span>score</span><b>' + w.score + '</b></div><div><span>best</span><b>' + S.best + '</b></div></div></div>' +
+      (S.newBest && w.score > 0 ? '<div class="fl-new">** new best **</div>' : '') +
+      '<button type="button" class="fl-go" data-act="restart">[ play again ]</button>' +
+      '<div class="fl-note">' + (nm ? (nm.at - w.score) + ' more for ' + nm.name.toLowerCase() : 'top medal — nice flying') +
+      ' · ' + (S.coarse ? 'tap' : 'space') + ' to retry</div></div>';
   }
   function showOverlay(kind) {
     S.ovlKind = kind;
@@ -489,7 +531,7 @@
     sb.setAttribute('aria-label', sb.title);
     sb.classList.toggle('on', S.snd.on);
     var m = medalFor(S.best);
-    S.hint.innerHTML = 'Best <b>' + S.best + '</b>' + (m ? ' <i class="fl-dot fl-m-' + m.key + '" title="' + m.name + '"></i>' : '');
+    S.hint.innerHTML = 'best <b>' + S.best + '</b>' + (m ? ' <i class="fl-dot fl-m-' + m.key + '" title="' + m.name + ' medal">(' + m.name.charAt(0) + ')</i>' : '');
   }
 
   // ---- input ----
@@ -530,6 +572,7 @@
     S.stage.style.width = cw + 'px'; S.stage.style.height = ch + 'px';
     S.cv.width = Math.round(cw * dpr); S.cv.height = Math.round(ch * dpr);
     S.k = S.cv.width / VW;
+    if (S.col) buildTiles();
   }
 
   // ---- open / close ----
@@ -628,6 +671,12 @@
     showOverlay(null);
     draw(0);
     kick();
+    // The glyph grid is fitted to the mono font's advance: refit once it has loaded.
+    try {
+      if (document.fonts && document.fonts.load) {
+        document.fonts.load('600 12px ' + S.col.font).then(function () { if (S && S.panel === p) { fitFont(); draw(0); } }, function () {});
+      }
+    } catch (e) {}
   }
 
   Cade.registerWidget({
