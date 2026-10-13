@@ -634,7 +634,20 @@
       });
     }).then(function (ok) { HD.cached[id] = ok; return ok; }, function () { return false; });
   }
+  // Watchdog while loading: the worker posts progress at least every 400 ms
+  // while downloading, so a long silence means it is stuck — give up rather
+  // than spin forever (unpacking a cached voice takes a few seconds at most).
+  var HD_STALL_MS = 90000;
+  function hdWatch() {
+    clearTimeout(HD.stallTimer);
+    if (!HD.loading) return;
+    var w = HD.worker;
+    HD.stallTimer = setTimeout(function () {
+      if (HD.worker === w && HD.loading) hdFail('it stopped responding while starting up');
+    }, HD_STALL_MS);
+  }
   function hdTerminate() {
+    clearTimeout(HD.stallTimer);
     if (HD.worker) { try { HD.worker.terminate(); } catch (e) {} }
     HD.worker = null; HD.ready = false; HD.loading = false; HD.workerVoice = ''; HD.onReady = null;
   }
@@ -661,10 +674,12 @@
     };
     var sizes = { ort: HD_RUNTIME_SIZES.ort, glue: HD_RUNTIME_SIZES.glue, wasm: HD_RUNTIME_SIZES.wasm, phon: HD_RUNTIME_SIZES.phon, model: v.size, config: 5000 };
     w.postMessage({ type: 'init', files: u, sizes: sizes });
+    hdWatch();
     renderHd();
   }
   function hdMsg(w, m) {
     if (w !== HD.worker) return;
+    hdWatch();
     if (m.type === 'progress') {
       HD.dl.loaded = m.loaded; HD.dl.total = m.total;
       renderHdProgress();
