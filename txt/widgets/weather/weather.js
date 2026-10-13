@@ -949,7 +949,7 @@
       current: S.loc,
       onPick: function (loc) {
         var saved = geo().set(loc, 'weather');
-        closeSheet();
+        closeSheet(true);
         setLoc(saved || loc);
       },
     });
@@ -992,17 +992,17 @@
     } else {
       mountPicker(b, true);
     }
-    sh.querySelector('.wx-sheet-x').addEventListener('click', closeSheet);
+    sh.querySelector('.wx-sheet-x').addEventListener('click', function () { closeSheet(); });
     requestAnimationFrame(function () { sh.classList.add('in'); });
   }
-  function closeSheet() {
+  function closeSheet(picked) {
     var p = panel(); if (!p) return false;
     var sh = p.querySelector('.wx-sheet');
     if (!sh) return false;
     var hadPicker = S && S.picker && sh.contains(S.picker.el);
     if (hadPicker) { S.picker.destroy(); S.picker = null; }
     sh.remove();
-    if (hadPicker && S && !S.loc) render(); // the empty state's own picker was replaced — rebuild it
+    if (hadPicker && !picked && S && !S.loc) render(); // the empty state's own picker was replaced — rebuild it
     return true;
   }
 

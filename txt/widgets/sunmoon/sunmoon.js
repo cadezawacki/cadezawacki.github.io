@@ -346,7 +346,7 @@
       current: S.loc,
       onPick: function (loc) {
         var saved = geo().set(loc, 'sunmoon');
-        closeSheet();
+        closeSheet(true);
         setLoc(saved || loc);
       },
     });
@@ -361,17 +361,17 @@
     sh.innerHTML = '<div class="sm-sheet-h"><span>Location</span><button type="button" class="sm-ibtn sm-sheet-x" aria-label="Close">\u2715</button></div><div class="sm-sheet-b"></div>';
     p.querySelector('.cade-panel-body').appendChild(sh);
     mountPicker(sh.querySelector('.sm-sheet-b'), true);
-    sh.querySelector('.sm-sheet-x').addEventListener('click', closeSheet);
+    sh.querySelector('.sm-sheet-x').addEventListener('click', function () { closeSheet(); });
     requestAnimationFrame(function () { sh.classList.add('in'); });
   }
-  function closeSheet() {
+  function closeSheet(picked) {
     var p = panel(); if (!p) return false;
     var sh = p.querySelector('.sm-sheet');
     if (!sh) return false;
     var hadPicker = S && S.picker && sh.contains(S.picker.el);
     if (hadPicker) { S.picker.destroy(); S.picker = null; }
     sh.remove();
-    if (hadPicker && S && !S.loc) render(); // the empty state's own picker was replaced — rebuild it
+    if (hadPicker && !picked && S && !S.loc) render(); // the empty state's own picker was replaced — rebuild it
     return true;
   }
 
