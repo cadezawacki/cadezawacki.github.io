@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "version": "2026.10.13-4",
+  "version": "2026.10.13-5",
   "modules": [
     {
       "id": "crawler",
@@ -1231,6 +1231,450 @@
       "tags": "anagram,unscramble,scrabble,words with friends,word finder,word unscrambler,crossword,pattern,jumble,letters,word game,solver",
       "entry": "widgets/anagram/anagram.js",
       "css": "widgets/anagram/anagram.css"
+    },
+    {
+      "id": "adventure",
+      "type": "widget",
+      "name": "Wrenhallow — Text Adventure",
+      "description": "Interactive fiction: wake an old observatory before the comet passes. Type commands, explore, solve puzzles",
+      "icon": "🔭",
+      "tags": "game,text adventure,interactive fiction,zork,parser,story,puzzle,fun",
+      "entry": "widgets/adventure/adventure.js",
+      "css": "widgets/adventure/adventure.css",
+      "precache": [
+        "widgets/adventure/adventure-data.js"
+      ]
+    },
+    {
+      "id": "pong",
+      "type": "widget",
+      "name": "Pong",
+      "description": "Retro paddle duel — vs CPU or 2 players on one keyboard / phone",
+      "icon": "🏓",
+      "tags": "game,arcade,fun,train,pong,tennis,paddle,retro,two player,multiplayer",
+      "entry": "widgets/pong/pong.js",
+      "css": "widgets/pong/pong.css"
+    },
+    {
+      "id": "flappy",
+      "type": "widget",
+      "name": "Flit",
+      "description": "One-button flyer — tap to flap through the gaps, chase medals",
+      "icon": "🐦",
+      "tags": "game,arcade,fun,train,flap,bird,tap,one button,endless",
+      "entry": "widgets/flappy/flappy.js",
+      "css": "widgets/flappy/flappy.css"
+    },
+    {
+      "id": "asteroids",
+      "type": "widget",
+      "name": "Asteroids",
+      "description": "Vector rock-blaster — thrust, wrap, split rocks, dodge saucers",
+      "icon": "☄️",
+      "tags": "game,arcade,fun,train,asteroids,space,shooter,retro,vector",
+      "entry": "widgets/asteroids/asteroids.js",
+      "css": "widgets/asteroids/asteroids.css"
+    },
+    {
+      "id": "invaders",
+      "type": "widget",
+      "name": "Invaders",
+      "description": "Hold the line against a marching alien formation — shields, mystery ship, waves",
+      "icon": "👾",
+      "tags": "game,arcade,fun,train,invaders,aliens,space,shooter,retro",
+      "entry": "widgets/invaders/invaders.js",
+      "css": "widgets/invaders/invaders.css"
+    },
+    {
+      "id": "archive",
+      "type": "widget",
+      "name": "Archive Utility",
+      "description": "Open, extract & create ZIP, 7z, TAR/GZ (plus RAR, XZ, BZ2…) with passwords — all on this device",
+      "icon": "🗜️",
+      "tags": "archive,zip,unzip,7z,7zip,rar,unrar,tar,tgz,gz,gzip,gunzip,bz2,xz,zst,zstd,iso,cab,compress,decompress,extract,password,encrypt,aes,files",
+      "entry": "widgets/archive/archive.js",
+      "css": "widgets/archive/archive.css",
+      "precache": [
+        "widgets/archive/archive-worker.js?v=1"
+      ]
+    },
+    {
+      "id": "spider",
+      "type": "widget",
+      "name": "Spider Solitaire",
+      "description": "Classic two-deck solitaire — 1, 2 or 4 suits, numbered deals, undo & hints",
+      "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'><rect x='3' y='5' width='11' height='15' rx='1.8' transform='rotate(-10 8.5 12.5)'/><rect x='9' y='3.5' width='11' height='15' rx='1.8' fill='var(--surface, #fff)'/><path d='M14.5 7.4c-1.6 1.6-3 2.6-3 4a1.6 1.6 0 0 0 3 .8 1.6 1.6 0 0 0 3-.8c0-1.4-1.4-2.4-3-4z' fill='currentColor' stroke='none'/><path d='M14.5 12.4l-.8 2.3h1.6z' fill='currentColor' stroke='none'/></svg>",
+      "tags": "game,cards,solitaire,spider,patience,card game,puzzle,fun,train",
+      "entry": "widgets/spider/spider.js",
+      "css": "widgets/spider/spider.css"
+    },
+    {
+      "id": "connect4",
+      "type": "widget",
+      "name": "Connect Four",
+      "description": "Drop discs, line up four — vs the computer (Easy to Hard) or a friend",
+      "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'><rect x='2.5' y='4' width='19' height='16' rx='2.5'/><circle cx='7.5' cy='9' r='1.6'/><circle cx='12' cy='9' r='1.6'/><circle cx='16.5' cy='9' r='1.6' fill='currentColor'/><circle cx='7.5' cy='15' r='1.6' fill='currentColor'/><circle cx='12' cy='15' r='1.6' fill='currentColor'/><circle cx='16.5' cy='15' r='1.6'/></svg>",
+      "tags": "game,connect four,connect 4,four in a row,board game,strategy,ai,2 players,fun,train",
+      "entry": "widgets/connect4/connect4.js",
+      "css": "widgets/connect4/connect4.css"
+    },
+    {
+      "id": "fifteen",
+      "type": "widget",
+      "name": "15-Puzzle",
+      "description": "Slide the tiles back in order — 3×3 to 6×6, numbers or a picture",
+      "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='1.8' stroke-linejoin='round'><rect x='3' y='3' width='18' height='18' rx='2.5'/><rect x='5.5' y='5.5' width='5.5' height='5.5' rx='1'/><rect x='13' y='5.5' width='5.5' height='5.5' rx='1'/><rect x='5.5' y='13' width='5.5' height='5.5' rx='1'/><path d='M13.5 15.75h4.5m-1.6-1.6 1.6 1.6-1.6 1.6' stroke-linecap='round'/></svg>",
+      "tags": "game,15 puzzle,fifteen,sliding puzzle,slide,tiles,puzzle,numbers,picture,brain,fun,train",
+      "entry": "widgets/fifteen/fifteen.js",
+      "css": "widgets/fifteen/fifteen.css"
+    },
+    {
+      "id": "coderun",
+      "type": "widget",
+      "name": "Code Runner",
+      "description": "Run ```js, ts, python & json blocks — output below the block, timeouts, Python packages",
+      "icon": "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><polyline points=\"8 6 3 12 8 18\"/><polyline points=\"16 6 21 12 16 18\"/><path d=\"M10.5 9v6l4.5-3z\" fill=\"currentColor\" stroke-width=\"1.2\"/></svg>",
+      "tags": "run,code,execute,javascript,js,typescript,ts,python,py,pyodide,json,console,repl,output,sandbox,notebook,jupyter",
+      "entry": "widgets/coderun/coderun.js",
+      "css": "widgets/coderun/coderun.css",
+      "precache": [
+        "widgets/coderun/coderun-kit.js",
+        "widgets/coderun/coderun-engine.js",
+        "widgets/coderun/coderun-py-worker.js"
+      ]
+    },
+    {
+      "id": "coderun-scripts",
+      "type": "script-pack",
+      "name": "Code Runner scripts",
+      "description": "Run the code block at the cursor or every block, clear outputs, stop",
+      "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polygon points='7 4 19 12 7 20 7 4'/></svg>",
+      "tags": "run,code,execute,javascript,typescript,python,json,output",
+      "entry": "widgets/coderun/coderun-scripts.js",
+      "scripts": [
+        {
+          "name": "Run Code Block",
+          "description": "Run the ```js / ts / python / json block at the cursor — output goes below it",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polygon points='7 4 19 12 7 20 7 4'/></svg>",
+          "tags": "run,execute,code,block,javascript,js,typescript,ts,python,py,json,output,console"
+        },
+        {
+          "name": "Run All Code Blocks",
+          "description": "Run every runnable code block in order (Python blocks share variables)",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polygon points='4 5 11 12 4 19 4 5'/><polygon points='13 5 20 12 13 19 13 5'/></svg>",
+          "tags": "run,all,execute,code,blocks,notebook,javascript,python,json"
+        },
+        {
+          "name": "Clear Code Outputs",
+          "description": "Remove every ```output block from the document",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M3 6h18'/><path d='M8 6V4h8v2'/><path d='M6 6l1 14h10l1-14'/></svg>",
+          "tags": "clear,output,outputs,remove,code,results"
+        },
+        {
+          "name": "Stop Running Code",
+          "description": "Stop the running code block and clear the queue",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='5' y='5' width='14' height='14' rx='2'/></svg>",
+          "tags": "stop,cancel,kill,abort,interrupt,code,run"
+        }
+      ]
+    },
+    {
+      "id": "htmlpreview",
+      "type": "widget",
+      "name": "Live HTML Preview",
+      "description": "Live-render the ```html block at the cursor (+ nearby css / js) in a sandbox — devices, console, full screen",
+      "icon": "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"2\" y=\"4\" width=\"20\" height=\"16\" rx=\"2\"/><path d=\"M2 8h20\"/><polyline points=\"9 12 7 14 9 16\"/><polyline points=\"15 12 17 14 15 16\"/></svg>",
+      "tags": "html,css,js,javascript,preview,live,render,web,page,browser,sandbox,iframe,frontend,codepen,playground",
+      "entry": "widgets/htmlpreview/htmlpreview.js",
+      "css": "widgets/htmlpreview/htmlpreview.css",
+      "precache": [
+        "widgets/coderun/coderun-kit.js"
+      ]
+    },
+    {
+      "id": "coderun-buttons",
+      "type": "plugin",
+      "name": "Run buttons on code blocks",
+      "description": "A “Run” chip on ```js / ts / python / json blocks (“Preview” on html), spinner + Stop while running, × on ```output blocks; Ctrl/⌘+Enter runs the block at the cursor",
+      "entry": "plugins/coderun-buttons/coderun-buttons.js",
+      "css": "plugins/coderun-buttons/coderun-buttons.css",
+      "settingKey": "plugins.coderun-buttons",
+      "section": "Editor",
+      "default": true
+    },
+    {
+      "id": "convert",
+      "type": "widget",
+      "name": "File Converter",
+      "description": "Convert video, audio, photos (HEIC), PDF, Word & spreadsheets on this device — files never leave it",
+      "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M4 8h13l-3.5-3.5'/><path d='M20 16H7l3.5 3.5'/></svg>",
+      "tags": "convert,converter,file converter,transcode,compress,video,audio,image,photo,heic,heif,jpeg,jpg,png,webp,gif,ico,favicon,svg,mp4,mov,webm,mkv,avi,mp3,m4a,aac,wav,flac,ogg,opus,extract audio,pdf,pdf to text,pdf to png,images to pdf,docx,word,markdown,html,xlsx,excel,csv,tsv,json,ods,ffmpeg,offline,private",
+      "entry": "widgets/convert/convert.js",
+      "css": "widgets/convert/convert.css",
+      "precache": [
+        "widgets/convert/convert-worker.js",
+        "widgets/convert/convert-docs.js"
+      ]
+    },
+    {
+      "id": "decodelab",
+      "type": "widget",
+      "name": "Decode Lab",
+      "description": "Auto-decode mystery text: Base64/hex/Morse/… chains, Caesar, Vigenère, XOR & more, with frequency analysis",
+      "icon": "🔓",
+      "tags": "decode,decoder,cipher,brute force,base64,caesar,vigenere,xor,crypto,ctf,frequency analysis,identify,magic,rot13,morse,hex,encoding,puzzle,cryptanalysis,kasiski,index of coincidence",
+      "entry": "widgets/decodelab/decodelab.js",
+      "css": "widgets/decodelab/decodelab.css",
+      "precache": [
+        "widgets/decodelab/decodelab-core.js",
+        "widgets/decodelab/decodelab-data.js"
+      ]
+    },
+    {
+      "id": "bookmarks",
+      "type": "plugin",
+      "name": "Line bookmarks",
+      "description": "Ctrl/Cmd+F2 bookmarks the caret's line, F2 / Shift+F2 jump between them. The line number turns into a tab (click removes; long-press any number toggles). Per room, follows edits; palette: Bookmarks, Toggle / Next / Previous Bookmark",
+      "entry": "plugins/bookmarks/bookmarks.js",
+      "css": "plugins/bookmarks/bookmarks.css",
+      "settingKey": "plugins.bookmarks",
+      "section": "Editor",
+      "default": true
+    },
+    {
+      "id": "spoiler",
+      "type": "plugin",
+      "name": "Spoiler text (||hidden||)",
+      "description": "||text|| renders blurred until the caret touches it or you tap it; the || markers hide like other markdown. \"Spoiler\" in the palette or / menu wraps (or unwraps) the selection. Follows Markdown styling",
+      "entry": "plugins/spoiler/spoiler.js",
+      "css": "plugins/spoiler/spoiler.css",
+      "settingKey": "plugins.spoiler",
+      "section": "Editor",
+      "default": true
+    },
+    {
+      "id": "datechips",
+      "type": "plugin",
+      "name": "Natural date chips",
+      "description": "Dates in your text (tomorrow at 3pm, next Friday, in 3 days, Oct 20, 10/20, 2026-10-20) get a subtle underline: hover shows the exact date, a tap offers Add to Calendar, Set reminder, Replace with date, Copy",
+      "entry": "plugins/datechips/datechips.js",
+      "css": "plugins/datechips/datechips.css",
+      "settingKey": "plugins.datechips",
+      "section": "Editor",
+      "default": true
+    },
+    {
+      "id": "eisenhower",
+      "type": "widget",
+      "name": "Eisenhower Matrix",
+      "description": "Sort the document’s todos into Do first / Schedule / Delegate / Eliminate by urgency & importance",
+      "icon": "🎯",
+      "tags": "eisenhower,matrix,priority,prioritize,urgent,important,todo,tasks,quadrant,triage,checklist,planning",
+      "entry": "widgets/eisenhower/eisenhower.js",
+      "css": "widgets/eisenhower/eisenhower.css"
+    },
+    {
+      "id": "storage",
+      "type": "widget",
+      "name": "Storage Insights",
+      "description": "See what Cade.txt stores on this device — and free space safely",
+      "icon": "💾",
+      "tags": "storage,space,quota,disk,cache,cleanup,clean,free space,snapshots,images,offline,persist,usage,manage storage",
+      "entry": "widgets/storage/storage.js",
+      "css": "widgets/storage/storage.css"
+    },
+    {
+      "id": "trivia",
+      "type": "widget",
+      "name": "Trivia Quiz",
+      "description": "Trivia rounds from Open Trivia DB — categories, timer, streaks, offline set",
+      "icon": "❓",
+      "tags": "game,quiz,trivia,questions,general knowledge,pub quiz,opentdb,multiple choice,true false,fun",
+      "entry": "widgets/trivia/trivia.js",
+      "css": "widgets/trivia/trivia.css",
+      "precache": [
+        "widgets/trivia/trivia-data.js"
+      ]
+    },
+    {
+      "id": "geoquiz",
+      "type": "widget",
+      "name": "Geography Quiz",
+      "description": "Flags, capitals, continents, country shapes & map quiz — with flash cards",
+      "icon": "🌍",
+      "tags": "game,quiz,geography,flags,flag,capitals,capital,countries,country,continents,map,world,shapes,learn,flash cards,trivia,fun",
+      "entry": "widgets/geoquiz/geoquiz.js",
+      "css": "widgets/geoquiz/geoquiz.css",
+      "precache": [
+        "widgets/geoquiz/geo-data.js"
+      ]
+    },
+    {
+      "id": "pack-layout",
+      "type": "script-pack",
+      "name": "Layout & Format Pack",
+      "description": "One sentence per line & back, box drawing, ls-style columns, sort lines by date, locale number formatting",
+      "entry": "scripts/pack-layout/pack-layout.js",
+      "scripts": [
+        {
+          "name": "One Sentence Per Line",
+          "description": "Semantic line breaks — put each sentence on its own line (knows Dr., e.g., U.S., 3.14, URLs…; keeps list markers & quotes; skips code/tables/headings)",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M3 6h12M3 12h8M3 18h14'/><path d='M19 6h.01M15 12h.01M21 18h.01'/></svg>",
+          "tags": "sentence,sentences,per line,semantic line breaks,sembr,ventilated prose,split,line break,prose,markdown,diff,git,writing,one per line"
+        },
+        {
+          "name": "Join Sentences Into Paragraphs",
+          "description": "Reverse of One Sentence Per Line — rejoin sentence lines into paragraphs (keeps blank lines, list items, quotes, hard breaks and code apart)",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M3 5h7M3 9.5h5'/><path d='M13 7.25h7'/><polyline points='17 4.25 20 7.25 17 10.25'/><path d='M3 15h18M3 20h12'/></svg>",
+          "tags": "join,sentences,paragraph,paragraphs,merge,lines,unsplit,reflow,semantic line breaks,sembr,prose,markdown"
+        },
+        {
+          "name": "Box It…",
+          "description": "Draw a box around the selection — single ┌─┐, double ╔═╗, rounded ╭─╮, heavy ┏━┓, ASCII +-+ or a /* # // comment banner (run again to unbox)",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='2.5' y='4.5' width='19' height='15' rx='1.5'/><path d='M7 10h10M7 14h6'/></svg>",
+          "tags": "box,frame,border,box drawing,ascii art,banner,comment,header,unbox,callout,rounded,double,heavy,emoji,cjk,outline"
+        },
+        {
+          "name": "Columnize List…",
+          "description": "Lay a list (one per line or comma-separated) out in N aligned columns like ls — down or across, plain or as a markdown table",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='3' y='3' width='18' height='18' rx='2'/><path d='M9 3v18M15 3v18'/></svg>",
+          "tags": "columns,columnize,column,list,grid,ls,layout,align,table,markdown table,compact,multi column,format,bullets"
+        },
+        {
+          "name": "Sort Lines by Date",
+          "description": "Sort lines (or dated blocks) oldest first by the first date in each — 2026-10-13, 10/13/2026, Oct 13 2026, 13 Oct… — time of day breaks ties",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='2' y='5' width='13' height='13' rx='2'/><path d='M2 9.5h13M6 3v4M11 3v4'/><path d='M19.5 6v14M16.5 17l3 3 3-3'/></svg>",
+          "tags": "sort,date,dates,chronological,oldest,ascending,lines,timeline,log,journal,calendar,order,time"
+        },
+        {
+          "name": "Sort Lines by Date (newest first)",
+          "description": "Sort lines (or dated blocks) newest first by the first date in each; lines without a date go to the end",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='2' y='5' width='13' height='13' rx='2'/><path d='M2 9.5h13M6 3v4M11 3v4'/><path d='M19.5 20V6M16.5 9l3-3 3 3'/></svg>",
+          "tags": "sort,date,dates,newest,latest,descending,reverse chronological,lines,log,journal,calendar,order,time"
+        },
+        {
+          "name": "Format Numbers…",
+          "description": "Reformat numbers as 1,234.56 / 1.234,56 / 1 234,56 / 12,34,567 / 1'234.56, currency, %, compact 1.2M, or strip formatting — skips dates, times, versions, IPs, phones",
+          "icon": "<svg viewBox='0 0 24 24'><text x='12' y='16.5' text-anchor='middle' font-size='11' font-weight='700' font-family='ui-monospace,Menlo,Consolas,monospace' fill='currentColor'>1,2</text></svg>",
+          "tags": "number,numbers,format,thousands,separator,comma,decimal,locale,currency,percent,compact,intl,grouping,strip,money,indian,swiss,german,french"
+        }
+      ]
+    },
+    {
+      "id": "pack-codetime",
+      "type": "script-pack",
+      "name": "Code & Time Pack",
+      "description": "Strip code comments (string/regex aware, 20+ languages), convert times between zones, insert the time in several zones",
+      "entry": "scripts/pack-codetime/pack-codetime.js",
+      "scripts": [
+        {
+          "name": "Strip Code Comments",
+          "description": "Remove comments from code — JS/TS/Java/C/C#/Go/Rust/Swift/Kotlin, Python, Ruby, shell, YAML, TOML, CSS, HTML, SQL, Lua — never inside strings or regexes; keeps shebangs and /*! licences",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M9 5 5 19M15 5l-4 14'/><path d='M3 12h18'/><path d='M17 16l4 4M21 16l-4 4'/></svg>",
+          "tags": "comments,strip,remove,delete,code,uncomment,clean,javascript,typescript,python,ruby,shell,yaml,css,html,sql,lua,java,go,rust,docstring"
+        },
+        {
+          "name": "Convert Times Between Zones…",
+          "description": "Convert \"3pm PT\", \"15:30 CET\", \"10am New York\", \"noon UTC\", ISO timestamps… to another zone (DST-correct) — annotate \"3pm PT (6:00 PM EDT)\" or replace",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='12' r='9'/><path d='M3 12h18'/><path d='M12 3a14 14 0 0 1 0 18a14 14 0 0 1 0-18'/></svg>",
+          "tags": "time zone,timezone,convert,tz,utc,gmt,pst,est,cet,ist,jst,dst,meeting,schedule,world clock,iana,city,annotate"
+        },
+        {
+          "name": "Insert Time In Zones…",
+          "description": "Insert the current time in a list of time zones (remembered) — e.g. your zone, UTC, New York, London, Tokyo",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='11' cy='13' r='8'/><path d='M11 9v4l2.5 2'/><path d='M19 2v6M16 5h6'/></svg>",
+          "tags": "time zone,timezone,insert,now,current time,world clock,utc,clock,zones,cities,meeting,schedule"
+        }
+      ]
+    },
+    {
+      "id": "weather",
+      "type": "widget",
+      "name": "Weather",
+      "description": "Forecast, hourly & 10-day outlook, air quality, UV, wind — insert a summary",
+      "icon": "🌤",
+      "tags": "weather,forecast,temperature,rain,wind,humidity,uv,air quality,aqi,sunrise,sunset,climate,open-meteo",
+      "entry": "widgets/weather/weather.js",
+      "css": "widgets/weather/weather.css",
+      "precache": [
+        "widgets/weather/geo.js",
+        "widgets/weather/geo.css"
+      ]
+    },
+    {
+      "id": "sunmoon",
+      "type": "widget",
+      "name": "Sun & Moon",
+      "description": "Sunrise, sunset, twilight, golden hour, moon phase & moonrise — offline",
+      "icon": "☼",
+      "tags": "sun,moon,sunrise,sunset,twilight,dawn,dusk,golden hour,blue hour,moon phase,full moon,new moon,moonrise,daylight,astronomy",
+      "entry": "widgets/sunmoon/sunmoon.js",
+      "css": "widgets/sunmoon/sunmoon.css",
+      "precache": [
+        "widgets/sunmoon/astro.js",
+        "widgets/weather/geo.js",
+        "widgets/weather/geo.css"
+      ]
+    },
+    {
+      "id": "breathe",
+      "type": "widget",
+      "name": "Breathing Exercise",
+      "description": "Guided breathing — box, 4-7-8, coherent, physiological sigh or custom",
+      "icon": "◯",
+      "tags": "breathe,breathing,breath,calm,relax,meditation,box breathing,4-7-8,coherent,sigh,stress,anxiety,focus,mindfulness",
+      "entry": "widgets/breathe/breathe.js",
+      "css": "widgets/breathe/breathe.css"
+    },
+    {
+      "id": "netinfo",
+      "type": "widget",
+      "name": "Network Info",
+      "description": "Public IP & ISP, connection, latency, speed test and DNS lookup",
+      "icon": "⇅",
+      "tags": "network,ip,ip address,ipv4,ipv6,isp,asn,ping,latency,speed test,bandwidth,dns,lookup,dig,mx,txt,connection,wifi,online",
+      "entry": "widgets/netinfo/netinfo.js",
+      "css": "widgets/netinfo/netinfo.css"
+    },
+    {
+      "id": "designcalc",
+      "type": "widget",
+      "name": "Design Calculators",
+      "description": "px ↔ rem, aspect ratio, type scale, WCAG contrast checker, fluid clamp() — copy or insert",
+      "icon": "📐",
+      "tags": "design,css,px,rem,em,pt,unit,convert,aspect,ratio,16:9,type scale,modular scale,typography,contrast,wcag,accessibility,a11y,color,clamp,fluid,responsive",
+      "entry": "widgets/designcalc/designcalc.js",
+      "css": "widgets/designcalc/designcalc.css"
+    },
+    {
+      "id": "bigtext",
+      "type": "widget",
+      "name": "Big Text",
+      "description": "Show the selection full-screen in huge type — signs, passwords, messages across a room",
+      "icon": "🔠",
+      "tags": "big,text,large,huge,fullscreen,full screen,sign,display,show,present,flash,banner,zoom,airport,pickup",
+      "entry": "widgets/bigtext/bigtext.js",
+      "css": "widgets/bigtext/bigtext.css"
+    },
+    {
+      "id": "teleprompter",
+      "type": "widget",
+      "name": "Teleprompter",
+      "description": "Scroll the selection or note full-screen at a set words-per-minute — mirror, pedal & countdown",
+      "icon": "🎬",
+      "tags": "teleprompter,prompter,autocue,script,speech,presentation,scroll,read,video,record,mirror,wpm,pedal,speaker",
+      "entry": "widgets/teleprompter/teleprompter.js",
+      "css": "widgets/teleprompter/teleprompter.css"
+    },
+    {
+      "id": "picker",
+      "type": "widget",
+      "name": "Random Picker",
+      "description": "Spin a wheel, make teams, flip a coin, roll dice, random numbers, shuffle a list",
+      "icon": "🎲",
+      "tags": "random,picker,wheel,spin,raffle,draw,lottery,winner,team,teams,group,coin,flip,dice,roll,d20,number,generator,shuffle,choose,decide",
+      "entry": "widgets/picker/picker.js",
+      "css": "widgets/picker/picker.css"
     }
   ]
 }
