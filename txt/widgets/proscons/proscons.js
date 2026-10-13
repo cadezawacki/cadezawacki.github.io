@@ -45,7 +45,7 @@
   // ------------------------------------------------------------- persistence
   function clampW(w) { w = Math.round(+w); return w >= 1 && w <= 5 ? w : DEFAULT_W; }
   function cleanItem(it) {
-    if (!it || typeof it.t !== 'string') return null;
+    if (!it || typeof it.t !== 'string' || !it.t.trim()) return null; // emptied rows don't survive a reload
     return { t: it.t.slice(0, MAX_TEXT), w: clampW(it.w) };
   }
   function cleanDecision(d) {

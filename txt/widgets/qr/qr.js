@@ -1107,8 +1107,8 @@
   Cade.registerWidget({
     name: 'QR Code',
     description: 'Make QR codes (text, URL, Wi-Fi, contact…) — insert, copy or save; scan with the camera or from an image',
-    icon: '▦',
-    tags: 'qr,qr code,qrcode,barcode,scan,scanner,reader,camera,generate,generator,wifi,wi-fi,vcard,contact,link,url,share,code,png,svg',
+    icon: "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='3' y='3' width='7' height='7' rx='1'/><rect x='14' y='3' width='7' height='7' rx='1'/><rect x='3' y='14' width='7' height='7' rx='1'/><path d='M14 14h3v3h-3zM21 14v.01M14 21h.01M17.5 21H21v-3.5'/></svg>",
+    tags: 'qr,qr code,qrcode,barcode,2d code,scan,scanner,reader,decode,camera,photo,generate,generator,maker,create,wifi,wi-fi,password,vcard,contact,email,sms,phone,link,url,share,code,png,svg,image',
     open: open,
     _encode: encode,           // exposed for tests / other modules
     _payload: buildPayload

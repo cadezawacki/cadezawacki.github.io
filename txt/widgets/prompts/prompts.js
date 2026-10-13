@@ -254,7 +254,7 @@
   function renderPrompt() {
     var p = S.p, cur = promptAt(prefs.cur);
     var card = p.querySelector('.pr-pcard');
-    p.querySelector('.pr-back').disabled = !S.hist.length;
+    p.querySelector('[data-act="back"]').disabled = !S.hist.length;
     if (!cur) { card.innerHTML = '<div class="pr-empty">Press 🎲 Another for a prompt</div>'; return; }
     var cat = catById(cur.c) || { icon: '✎', label: cur.c };
     var fav = isFav(cur.t);
