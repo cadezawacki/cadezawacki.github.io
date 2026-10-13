@@ -179,7 +179,7 @@ select.rp-in option { background: var(--surface); color: var(--text); }
 @media (pointer: coarse) {
   .rp-in { height: 40px; font-size: 16px; } /* under 16px iOS zooms the page on focus */
   .rp-list { font-size: 16px; }
-  .rp-recent { height: 36px; font-size: 14px; }
+  .rp-recent { height: 36px; font-size: 16px; }
   .rp-tab { padding: 10px 8px 11px; }
   .rp-btn { padding: 10px 14px; }
   .rp-btn.sm { padding: 7px 11px; }

@@ -616,13 +616,13 @@
   }
 
   function hourlySVG(m) {
-    var h = m.h, n = h.t.length, CW = 50, W = n * CW, HT = 150, tz = m.tz;
+    var h = m.h, n = h.t.length, CW = 50, W = n * CW, HT = 160, tz = m.tz;
     if (!n) return '<div class="wx-msg-s">No hourly data</div>';
     var temps = h.tp.slice(0, n);
     temps[0] = m.c.tp != null ? m.c.tp : temps[0];
     var lo = Math.min.apply(null, temps), hi = Math.max.apply(null, temps);
     if (hi - lo < 3) { var mid = (hi + lo) / 2; lo = mid - 1.5; hi = mid + 1.5; }
-    var yT = 72, yB = 100, base = HT - 6, barMax = 24;
+    var yT = 72, yB = 110, base = HT - 4, barMax = 22;
     function yOf(v) { return yB - (v - lo) / (hi - lo) * (yB - yT); }
     var pts = temps.map(function (v, i) { return [i * CW + CW / 2, yOf(v)]; });
     var mids = {};
@@ -661,7 +661,7 @@
       s += '<circle class="wx-hdot' + (i === 0 ? ' now' : '') + '" cx="' + f1(p[0]) + '" cy="' + f1(p[1]) + '" r="' + (i === 0 ? 4 : 2.6) + '" stroke="' + tempColor(temps[i]) + '"/>';
       s += '<text class="wx-htemp" x="' + f1(p[0]) + '" y="' + f1(p[1] - 9) + '" text-anchor="middle">' + Math.round(tC(temps[i])) + '\u00b0</text>';
       var pp = h.pp[i] || 0;
-      if (pp > 0) {
+      if (pp >= 5) {
         var bh = Math.max(2, pp / 100 * barMax);
         s += '<rect class="wx-hbar" x="' + (i * CW + 15) + '" y="' + f1(base - bh) + '" width="' + (CW - 30) + '" height="' + f1(bh) + '" rx="2.5" opacity="' + (0.35 + 0.65 * pp / 100).toFixed(2) + '"/>';
         if (pp >= 15) s += '<text class="wx-hpp" x="' + (i * CW + CW / 2) + '" y="' + f1(base - bh - 3) + '" text-anchor="middle">' + pp + '%</text>';
@@ -731,15 +731,18 @@
       var a = k * 10 * RAD, r0 = k % 9 === 0 ? 30 : 33;
       ticks += '<line x1="' + f1(40 + Math.sin(a) * r0) + '" y1="' + f1(40 - Math.cos(a) * r0) + '" x2="' + f1(40 + Math.sin(a) * 36) + '" y2="' + f1(40 - Math.cos(a) * 36) + '"' + (k % 9 === 0 ? ' class="maj"' : '') + '/>';
     }
+    var spd = Math.round(wV(c.ws || 0)), to = (wd + 180) % 360;
     var comp = '<svg class="wx-comp" viewBox="0 0 80 80" aria-hidden="true"><g class="wx-comp-t">' + ticks + '</g>' +
-      '<text x="40" y="20" text-anchor="middle">N</text><text x="62" y="43.5" text-anchor="middle">E</text><text x="40" y="66" text-anchor="middle">S</text><text x="18" y="43.5" text-anchor="middle">W</text>' +
-      '<g transform="rotate(' + ((wd + 180) % 360) + ' 40 40)"><path class="wx-comp-a" d="M40 10 46 22H42V58H38V22H34Z"/><circle class="wx-comp-c" cx="40" cy="40" r="3.4"/></g></svg>';
+      '<text class="wx-comp-l" x="40" y="21.5" text-anchor="middle">N</text><text class="wx-comp-l" x="61" y="43" text-anchor="middle">E</text>' +
+      '<text class="wx-comp-l" x="40" y="64" text-anchor="middle">S</text><text class="wx-comp-l" x="19" y="43" text-anchor="middle">W</text>' +
+      (c.wd != null && spd > 0 ? '<g transform="rotate(' + to + ' 40 40)"><path class="wx-comp-a" d="M40 1.5 46.5 12.5H33.5Z"/><circle class="wx-comp-tail" cx="40" cy="73.5" r="3.2"/></g>' : '') +
+      '<text class="wx-comp-v" x="40" y="44" text-anchor="middle">' + spd + '</text><text class="wx-comp-u" x="40" y="53" text-anchor="middle">' + WIND_U[prefs.wind][0] + '</text></svg>';
     out += tile('wx-wind wide', '\u224b Wind',
       '<div class="wx-wind-row">' + comp +
-      '<div class="wx-wind-main"><div class="wx-big">' + Math.round(wV(c.ws || 0)) + '<small> ' + WIND_U[prefs.wind][0] + '</small></div>' +
-      '<div class="wx-sub">' + beaufort(c.ws || 0) + '</div></div>' +
-      '<div class="wx-kv"><span>Gusts</span><b>' + wStr(c.wg) + '</b><span>From</span><b>' + (c.wd != null ? dirName(c.wd) + ' ' + Math.round(wd) + '\u00b0' : '\u2013') + '</b>' +
-      '<span>Today\u2019s max</span><b>' + wStr(d.wm[di]) + '</b></div></div>');
+      '<div class="wx-wind-main"><div class="wx-wind-b">' + beaufort(c.ws || 0) + '</div>' +
+      '<div class="wx-kv"><span>Speed</span><b>' + wStr(c.ws) + '</b><span>Gusts</span><b>' + wStr(c.wg) + '</b>' +
+      '<span>From</span><b>' + (c.wd != null ? dirName(c.wd) + ' \u00b7 ' + Math.round(wd) + '\u00b0' : '\u2013') + '</b>' +
+      '<span>Today\u2019s max</span><b>' + wStr(d.wm[di]) + '</b></div></div></div>');
     // Humidity
     var dp = c.dp, comfort = dp == null ? '' : dp < 10 ? 'Dry' : dp < 16 ? 'Comfortable' : dp < 18 ? 'Humid' : dp < 21 ? 'Muggy' : 'Oppressive';
     out += tile('', '\u25cd Humidity', '<div class="wx-big">' + (c.rh != null ? c.rh : '\u2013') + '<small>%</small></div>' +
