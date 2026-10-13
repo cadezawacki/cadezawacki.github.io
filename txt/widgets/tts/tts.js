@@ -48,7 +48,7 @@
   // Resolved now, while currentScript is us. The ?v= tag changes whenever the
   // worker's protocol does, so a stale cached worker can never pair with a
   // newer panel (the service worker serves module files cache-first).
-  var WORKER_URL = Cade.asset('tts-worker.js') + '?v=3';
+  var WORKER_URL = Cade.asset('tts-worker.js') + '?v=4';
   var esc = Cade.escapeHtml;
 
   var PANEL_ID = 'tts-panel';
