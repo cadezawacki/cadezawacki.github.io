@@ -13,7 +13,10 @@
  *   only fetched the first time such a line appears, and the fence scan is
  *   cached per document and only extended up to the lines it needs.
  * - Tab returns false (core Tab behaviour unchanged) unless a ghost is
- *   showing on the cursor's line. Self-contained IIFE. */
+ *   showing on the cursor's line.
+ * - Setting "Inline math results": ghost + Tab (default) or insert
+ *   automatically on "=". While enabled it replaces core's arithmetic-only
+ *   auto-append (core's "sum=" / "total=" stays). Self-contained IIFE. */
 (function () {
   'use strict';
   if (typeof window.Cade === 'undefined') return;
@@ -216,10 +219,42 @@
     return widgets.length ? Decoration.set(widgets, true) : Decoration.none;
   }
 
-  function IMath(view) { this.ghosts = {}; this.withEngine = false; this.decorations = build(view, this); }
+  // "Insert automatically" mode: typing the trailing "=" inserts the answer
+  // straight away (the classic behaviour), instead of waiting for Tab. When the
+  // engine is still loading, the line is remembered and answered on arrival.
+  function autoMode() {
+    try { return Cade.Settings.get('inlineMath.mode') === 'auto'; } catch (e) { return false; }
+  }
+  function typedEquals(u) {
+    var hit = false;
+    u.transactions.forEach(function (tr) {
+      if (!tr.isUserEvent || !tr.isUserEvent('input.type')) return;
+      tr.changes.iterChanges(function (fA, tA, fB, tB, ins) { if (ins.toString().indexOf('=') !== -1) hit = true; });
+    });
+    return hit;
+  }
+  function autoAccept(view, inst) {
+    var st = view.state, sel = st.selection.main;
+    if (!sel.empty || st.selection.ranges.length !== 1) return;
+    var line = st.doc.lineAt(sel.head);
+    if (sel.head !== line.to || !TRAIL_EQ.test(line.text)) return; // kept typing
+    if (inst.ghosts[line.from]) accept(view, line);
+  }
+
+  function IMath(view) { this.ghosts = {}; this.withEngine = false; this.pendingAuto = false; this.decorations = build(view, this); }
   IMath.prototype.update = function (u) {
     if (u.docChanged) mapFences(u);
-    if (u.docChanged || u.viewportChanged || this.withEngine !== !!engine) this.decorations = build(u.view, this);
+    var engineArrived = this.withEngine !== !!engine;
+    if (u.docChanged || u.viewportChanged || engineArrived) this.decorations = build(u.view, this);
+    if (!autoMode()) return;
+    var inst = this, view = u.view;
+    if (u.docChanged && typedEquals(u)) this.pendingAuto = true;
+    else if (u.docChanged || u.selectionSet) this.pendingAuto = false;
+    // dispatching inside update() is not allowed — defer a tick
+    if (this.pendingAuto && engine) {
+      this.pendingAuto = false;
+      setTimeout(function () { try { autoAccept(view, inst); } catch (e) {} }, 0);
+    }
   };
   var imath = ViewPlugin.fromClass(IMath, { decorations: function (v) { return v.decorations; } });
 
@@ -243,6 +278,18 @@
     if (sel.main.head < eqAt) return false;
     return accept(view, line);
   }
+
+  Cade.registerSetting({
+    key: 'inlineMath.mode', label: 'Inline math results', type: 'select', default: 'ghost', section: 'Editor',
+    hint: 'How the answer to a line ending in "=" appears: as faint ghost text you accept with Tab, or inserted as soon as you type the "=".',
+    options: [{ value: 'ghost', label: 'Ghost — Tab inserts' }, { value: 'auto', label: 'Insert automatically' }],
+  });
+  // While this plugin is live it owns "=" lines; core's older arithmetic-only
+  // auto-append (maybeEvalMath) checks this and stands down.
+  window.__cadeInlineMathLive = function () {
+    var ed = Cade.editor;
+    try { return !!(ed && ed.plugin(imath)); } catch (e) { return false; }
+  };
 
   Cade.registerPlugin({ id: 'inline-math', ext: [imath, CM.keymap.of([{ key: 'Tab', run: onTab }])] });
 })();
