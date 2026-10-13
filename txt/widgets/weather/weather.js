@@ -236,7 +236,7 @@
         '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '"/></g>';
     }
     return '<g class="wx-sun">' +
-      '<circle class="wx-glow" cx="' + cx + '" cy="' + cy + '" r="' + f1(r * 1.55) + '"/>' +
+      '<circle class="wx-glow" cx="' + cx + '" cy="' + cy + '" r="' + f1(r * 2.1) + '" fill="url(#wx-gglow)"/>' +
       '<g class="wx-rays" stroke-width="' + f1(r * 0.24) + '" stroke-linecap="round">' + rays + '</g>' +
       '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="url(#wx-gsun)"/></g>';
   }
@@ -248,17 +248,20 @@
     var p1x = cx + R * Math.cos(th + al), p1y = cy + R * Math.sin(th + al);
     var p2x = cx + R * Math.cos(th - al), p2y = cy + R * Math.sin(th - al);
     var large = 2 * Math.PI - 2 * al > Math.PI ? 1 : 0;
-    // Inner arc (on the cut circle) runs back from p2 to p1 through the side
-    // facing the moon's centre: anticlockwise; it is the large arc when the
-    // cut circle's centre lies inside the moon.
-    var largeIn = d < Math.sqrt(Math.abs(r2 * r2 - 0)) && (R * R + d * d - r2 * r2) / (2 * d) < d ? 1 : 0;
-    return 'M' + f1(p1x) + ' ' + f1(p1y) + 'A' + R + ' ' + R + ' 0 ' + large + ' 1 ' + f1(p2x) + ' ' + f1(p2y) +
-      'A' + r2 + ' ' + r2 + ' 0 ' + largeIn + ' 0 ' + f1(p1x) + ' ' + f1(p1y) + 'Z';
+    // Inner arc: along the cut circle from p2 back to p1, through the side
+    // that faces the moon's centre (angles grow clockwise in SVG's y-down).
+    var qx = cx + ox, qy = cy + oy, TAU = 2 * Math.PI;
+    var a1 = Math.atan2(p1y - qy, p1x - qx), a2 = Math.atan2(p2y - qy, p2x - qx), ac = Math.atan2(-oy, -ox);
+    var inc = function (from, to) { var x = (to - from) % TAU; return x < 0 ? x + TAU : x; };
+    var spanCw = inc(a2, a1), viaCentre = inc(a2, ac) < spanCw;
+    var span = viaCentre ? spanCw : TAU - spanCw;
+    return 'M' + f1(p1x) + ' ' + f1(p1y) + 'A' + f1(R) + ' ' + f1(R) + ' 0 ' + large + ' 1 ' + f1(p2x) + ' ' + f1(p2y) +
+      'A' + f1(r2) + ' ' + f1(r2) + ' 0 ' + (span > Math.PI ? 1 : 0) + ' ' + (viaCentre ? 1 : 0) + ' ' + f1(p1x) + ' ' + f1(p1y) + 'Z';
   }
   function moon(cx, cy, R, mini) {
     var path = crescentPath(cx, cy, R, R * 0.58, -R * 0.42, R * 0.86);
     if (mini) return '<path class="wxm-moon" d="' + path + '"/>';
-    return '<g class="wx-moon"><circle class="wx-mglow" cx="' + f1(cx - R * 0.15) + '" cy="' + f1(cy + R * 0.1) + '" r="' + f1(R * 1.45) + '"/>' +
+    return '<g class="wx-moon"><circle class="wx-mglow" cx="' + f1(cx - R * 0.15) + '" cy="' + f1(cy + R * 0.1) + '" r="' + f1(R * 1.7) + '" fill="url(#wx-gmglow)"/>' +
       '<path d="' + path + '" fill="url(#wx-gmoon)"/>' +
       '<circle cx="' + f1(cx - R * 0.42) + '" cy="' + f1(cy + R * 0.18) + '" r="' + f1(R * 0.13) + '" class="wx-crater"/>' +
       '<circle cx="' + f1(cx - R * 0.12) + '" cy="' + f1(cy + R * 0.55) + '" r="' + f1(R * 0.09) + '" class="wx-crater"/></g>';
@@ -367,6 +370,8 @@
     }
     return '<svg class="wx-defs" width="0" height="0" aria-hidden="true" focusable="false"><defs>' +
       '<radialGradient id="wx-gsun" cx="0.42" cy="0.38" r="0.7"><stop offset="0" stop-color="#fff3b0"/><stop offset="0.45" stop-color="#ffcf3d"/><stop offset="1" stop-color="#ff9f1a"/></radialGradient>' +
+      '<radialGradient id="wx-gglow"><stop offset="0.35" stop-color="#ffd54a" stop-opacity=".55"/><stop offset="1" stop-color="#ffd54a" stop-opacity="0"/></radialGradient>' +
+      '<radialGradient id="wx-gmglow"><stop offset="0.4" stop-color="#fff4c8" stop-opacity=".3"/><stop offset="1" stop-color="#fff4c8" stop-opacity="0"/></radialGradient>' +
       '<linearGradient id="wx-gmoon" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fffbea"/><stop offset="1" stop-color="#f1d58d"/></linearGradient>' +
       lg('wx-gc-light', '#ffffff', '#dfe7f1') + lg('wx-gc-back', '#dbe3ec', '#a9b7c7') +
       lg('wx-gc-gray', '#eef2f6', '#a8b5c4') + lg('wx-gc-dark', '#aab4c2', '#5f6b7c') +

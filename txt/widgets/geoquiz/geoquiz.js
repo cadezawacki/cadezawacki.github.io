@@ -613,7 +613,11 @@
         });
       });
     }
-    var hw = Math.min(1.08, Math.max(ex * 1.7, ey * 1.7 / 0.75, 0.13) + 0.02), hh = hw * 0.75;
+    // Show some neighbouring land: widen until the nearest other land is in view
+    // (Fiji gets Vanuatu, a mid-ocean pin isn't just blue).
+    var near = 35;
+    atlas.land.forEach(function (p) { if (p.iso !== c.iso) { var d = angDist(ctr, p.center); if (d < near) near = d; } });
+    var hw = Math.min(1.08, Math.max(ex * 1.7, ey * 1.7 / 0.75, 0.13, Math.sin(Math.min(35, near * 1.2) * RAD)) + 0.02), hh = hw * 0.75;
     if (hw >= 1.08) hh = 1.08;
     var land = '', hit = '';
     atlas.land.forEach(function (p) {
@@ -631,10 +635,18 @@
       });
       if (p.iso === c.iso) hit += d; else land += d;
     });
+    // Places too small for the 1:110m map (Caribbean and Pacific islands, Malta…) as dots.
+    var dots = '';
+    data.list.forEach(function (o) {
+      if (!o.ll || o === c || (o.terr && !prefs.terr)) return;
+      var dq = P(o.ll[1], o.ll[0]);
+      if (dq[2] < 0 || Math.abs(dq[0]) > hw || Math.abs(dq[1]) > hh) return;
+      dots += '<circle cx="' + Math.round(dq[0] * S) + '" cy="' + Math.round(dq[1] * S) + '" r="' + Math.round(2 * hw * S / 400 * 2.5) + '"/>';
+    });
     var tiny = !s || Math.max(ex, ey) < hw * 0.07, unit = 2 * hw * S / 400;
     return '<svg class="gq-map gq-zoom" viewBox="' + Math.round(-hw * S) + ' ' + Math.round(-hh * S) + ' ' + Math.round(2 * hw * S) + ' ' + Math.round(2 * hh * S) + '" aria-hidden="true">' +
       '<circle class="gq-sea" cx="0" cy="0" r="' + S + '"/>' +
-      '<path class="gq-land" d="' + land + '"/>' + (hit ? '<path class="gq-hit" d="' + hit + '"/>' : '') +
+      '<path class="gq-land" d="' + land + '"/>' + (dots ? '<g class="gq-dot">' + dots + '</g>' : '') + (hit ? '<path class="gq-hit" d="' + hit + '"/>' : '') +
       (tiny ? '<circle class="gq-ring" cx="0" cy="0" r="' + Math.round(unit * 14) + '"/>' : '') +
       (tiny ? pinSvg(0, 0, unit * 1.1) : '') + '</svg>';
   }

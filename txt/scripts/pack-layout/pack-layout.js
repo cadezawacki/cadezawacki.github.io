@@ -909,7 +909,7 @@
         (/\p{L}/u.test(after) && /\p{N}/u.test(after2));
       for (var q = s; q < e && !bad; q++) if (prot[q]) bad = true;
       if (!bad && intRaw.length > 1 && intRaw.charAt(0) === '0' && !gsep) bad = true;           // 007, 0123: ids
-      if (!bad && !gsep && !dsep && intRaw.length === 4 && +intRaw >= 1000 && +intRaw <= 2100) bad = true;   // a year
+      if (!bad && !gsep && !dsep && intRaw.length === 4 && +intRaw >= 1900 && +intRaw <= 2100) bad = true;   // a year
       if (bad) { if (e < runEnd(e) || /[.,]/.test(after)) re.lastIndex = runEnd(e); continue; }
       var c = { s: ss, e: e, sign: sign, intRaw: intRaw, gsep: gsep, dsep: dsep, frac: frac, amb: false };
       // "0.123" / "0,123": a group can't start with 0, so that's a decimal.

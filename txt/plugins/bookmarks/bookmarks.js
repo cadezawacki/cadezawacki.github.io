@@ -142,28 +142,45 @@
   }
 
   // ---- mapping through edits ----------------------------------------------------------------
-  // A bookmark is the start of its line. A change that covers the whole line
-  // AND a line break next to it removed the line: the bookmark goes — unless
-  // the same text was inserted by this transaction (a moved line, a rewrite),
-  // where it follows the copy nearest to where it was.
+  // A bookmark is the start of its line and maps like a cursor that sticks to
+  // the text after it (Enter at the start of the line carries it down).
+  // Deleting a line removes its bookmark: a change that wipes out k line
+  // breaks removes k of the lines whose text it fully covers (lines with text
+  // first, then empty ones), so deleting a line never takes the empty line
+  // below it along. A removed line whose text this same transaction inserts
+  // elsewhere (move line up/down, a script or a sync rewriting the doc) is
+  // found again by its text, nearest copy first; so is a line whose content a
+  // replacement rewrote, which otherwise just keeps its place.
+  function goneLines(od, c) {
+    if (c.gone) return c.gone;
+    var g = {}, a = od.lineAt(c.fa), b = od.lineAt(c.ta), need = b.number - a.number, n, l;
+    var first = a.from >= c.fa ? a.number : a.number + 1, last = b.to <= c.ta ? b.number : b.number - 1;
+    if (last - first > 200000) { for (n = first; n <= last; n++) g[n] = 1; return (c.gone = g); }
+    for (n = first; n <= last && need > 0; n++) { l = od.line(n); if (l.length) { g[n] = 1; need--; } }
+    for (n = first; n <= last && need > 0; n++) { l = od.line(n); if (!l.length) { g[n] = 1; need--; } }
+    return (c.gone = g);
+  }
   function mapMarks(marks, tr) {
-    var od = tr.startState.doc, nd = tr.state.doc, ch = tr.changes, spans = [], ins = [];
-    ch.iterChanges(function (fa, ta, fb, tb) { spans.push([fa, ta]); if (tb > fb) ins.push([fb, tb]); });
-    var out = [], lost = [], same = true, i, j;
+    var od = tr.startState.doc, nd = tr.state.doc, ch = tr.changes, cs = [], ins = [];
+    ch.iterChanges(function (fa, ta, fb, tb) { cs.push({ fa: fa, ta: ta, fb: fb, tb: tb, gone: null }); if (tb > fb) ins.push([fb, tb]); });
+    var out = [], lost = [], same = true, ci = 0, i, j;
     for (i = 0; i < marks.length; i++) {
-      var p = marks[i], L = od.lineAt(p), gone = false;
-      for (j = 0; j < spans.length; j++) {
-        var c = spans[j];
-        if (c[0] > L.to) break;
-        if (c[0] <= L.from && c[1] >= L.to && c[1] - c[0] > L.to - L.from) { gone = true; break; }
+      var p = marks[i], L = od.lineAt(p), q = nd.lineAt(ch.mapPos(p, 1)).from;
+      while (ci < cs.length && cs[ci].ta < L.to) ci++;
+      var c = cs[ci];
+      if (!c || c.ta === c.fa || c.fa > L.from || c.ta < L.to) { // not wholly covered: just map
+        if (q !== p) same = false;
+        out.push(q);
+        continue;
       }
-      if (gone) { lost.push({ text: L.text, near: ch.mapPos(p, 1) }); same = false; continue; }
-      var q = nd.lineAt(ch.mapPos(p, 1)).from;
-      if (q !== p) same = false;
-      out.push(q);
+      same = false;
+      var gone = goneLines(od, c)[L.number] === 1;
+      if (gone && !ins.length) continue;
+      if (gone || c.tb > c.fb) lost.push({ text: L.text, near: ch.mapPos(p, 1), keep: gone ? -1 : q });
+      else out.push(q);
     }
     if (same) return marks;
-    if (lost.length && ins.length) {
+    if (lost.length) {
       var want = {}, at = {}, budget = 100000;
       lost.forEach(function (l) { want[l.text] = 1; });
       for (i = 0; i < ins.length && budget > 0; i++) {
@@ -174,11 +191,12 @@
         }
       }
       lost.forEach(function (l) {
-        var c = at[l.text], best = -1, bd = Infinity;
-        if (c) for (var k = 0; k < c.length; k++) {
-          var d = Math.abs(c[k] - l.near);
-          if (d < bd && out.indexOf(c[k]) < 0) { bd = d; best = c[k]; }
+        var c2 = at[l.text], best = -1, bd = Infinity;
+        if (c2) for (var k = 0; k < c2.length; k++) {
+          var d = Math.abs(c2[k] - l.near);
+          if (d < bd && out.indexOf(c2[k]) < 0) { bd = d; best = c2[k]; }
         }
+        if (best < 0) best = l.keep;
         if (best >= 0) out.push(best);
       });
     }
