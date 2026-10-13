@@ -52,7 +52,15 @@
   function now() { return window.performance && performance.now ? performance.now() : Date.now(); }
   function rnd() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
   function bust(u) { return u + (u.indexOf('?') < 0 ? '?' : '&') + '_=' + rnd(); }
+  // The SW stores a response only after reading its whole body, which can
+  // land just after we're done with it — so sweep now and once more shortly.
+  var sweepTimer = 0;
   function sweep() {
+    sweepNow();
+    clearTimeout(sweepTimer);
+    sweepTimer = setTimeout(sweepNow, 3000);
+  }
+  function sweepNow() {
     try {
       if (!window.caches || !caches.keys) return;
       caches.keys().then(function (names) {
@@ -370,7 +378,7 @@
       if (S !== st) return;
       st.speedBusy = false; st.speedCtrl = null; sp.label = '';
       renderSpeed();
-      sweep(); setTimeout(sweep, 4000); setTimeout(sweep, 20000);
+      sweep(); setTimeout(sweepNow, 20000);
     });
   }
   function abortErr() { var e = new Error('aborted'); e.name = 'AbortError'; return e; }

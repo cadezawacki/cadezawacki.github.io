@@ -915,10 +915,22 @@
     var m = /^(\d{4})-(\d\d)-(\d\d) (\d\d):(\d\d):(\d\d)/.exec(s || '');
     return m ? +new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]) : 0;
   }
-  function parse7zList(text) {
+  // Single-stream formats (xz, bzip2, zstd …) store no name: 7-Zip derives it
+  // from the archive name when extracting; do the same for the listing.
+  function streamName(name) {
+    var n = basename(name || 'archive');
+    var m = /^(.*)\.t(?:gz|az|xz|bz2?|zst|lz|lzma)$/i.exec(n);
+    if (m) return m[1] + '.tar';
+    m = /^(.*)\.(?:gz|xz|bz2|bz|zst|lzma|lz|z)$/i.exec(n);
+    return m && m[1] ? m[1] : n + '.out';
+  }
+  function parse7zList(text, arcName) {
     var i = text.indexOf('\n----------\n');
     var head = i >= 0 ? text.slice(0, i) : text;
-    var type = (/\nType = (.*)/.exec(head) || [])[1] || '';
+    // Nested containers (split volumes -> 7z) list one "Type =" each: the
+    // innermost (last) is the archive itself.
+    var type = '', tm, tre = /\nType = (.*)/g;
+    while ((tm = tre.exec(head))) type = tm[1];
     var ents = [];
     if (i < 0) return { type: type, entries: ents, headEnc: false };
     var blocks = text.slice(i + 12).split(/\n\s*\n/);
@@ -928,7 +940,7 @@
         var eq = lines[l].indexOf(' = ');
         if (eq > 0) f[lines[l].slice(0, eq)] = lines[l].slice(eq + 3);
       }
-      if (f.Path == null) continue;
+      if (f.Path == null) { if (f.Size == null) continue; f.Path = streamName(arcName); }
       var dir = f.Folder === '+' || /^D/.test(f.Attributes || '');
       var p = f.Path.replace(/\\/g, '/').replace(/^\/+/, '').replace(/\/+$/, '');
       if (!p) continue;
@@ -943,7 +955,7 @@
     var out = new SzOut(), M = await new7z(out);
     var paths = szMountInputs(M, files);
     szRun(M, out, ['l', '-slt', '-sccUTF-8', pwArg(pw), paths[0]]);
-    return parse7zList(out.stdout());
+    return parse7zList(out.stdout(), files[0].name);
   }
   // Extract `sel` (archive paths; null = everything) into a spool.
   async function szExtract(files, pw, sel, prog, total) {
@@ -1411,6 +1423,6 @@
   self.__archiveTest = {
     sniff: sniff, tarList: tarList, tarWrite: tarWrite, tarEntryHeaders: tarEntryHeaders, isTarHeader: isTarHeader,
     parsePax: parsePax, paxData: paxData, tarNum: tarNum, parse7zList: parse7zList, gzInnerName: gzInnerName,
-    safeParts: safeParts, OPS: OPS, setEngines: function (e) { ENG = e; },
+    safeParts: safeParts, streamName: streamName, OPS: OPS, setEngines: function (e) { ENG = e; },
   };
 })();

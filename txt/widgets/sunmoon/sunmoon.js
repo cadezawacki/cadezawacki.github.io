@@ -368,8 +368,10 @@
     var p = panel(); if (!p) return false;
     var sh = p.querySelector('.sm-sheet');
     if (!sh) return false;
-    if (S && S.picker && sh.contains(S.picker.el)) { S.picker.destroy(); S.picker = null; }
+    var hadPicker = S && S.picker && sh.contains(S.picker.el);
+    if (hadPicker) { S.picker.destroy(); S.picker = null; }
     sh.remove();
+    if (hadPicker && S && !S.loc) render(); // the empty state's own picker was replaced — rebuild it
     return true;
   }
 
@@ -417,6 +419,10 @@
       else if (t.closest('.sm-copy')) { var s = summary(); if (s) copyText(s); }
     });
     var dinput = p.querySelector('.sm-dinput');
+    // Desktop browsers only open the calendar from its icon; ask for it directly.
+    dinput.addEventListener('click', function () {
+      if (typeof dinput.showPicker === 'function') { try { dinput.showPicker(); } catch (e) {} }
+    });
     dinput.addEventListener('change', function () {
       var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dinput.value);
       if (m && S.loc) { S.ymd = { y: +m[1], m: +m[2], d: +m[3] }; render(); }

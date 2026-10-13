@@ -110,7 +110,10 @@
           var cells = [];
           for (var c = tr.firstElementChild; c; c = c.nextElementSibling) {
             if (c.nodeName !== 'TD' && c.nodeName !== 'TH') continue;
-            var md = td.turndown(c.innerHTML || '').replace(/\n+/g, ' ').replace(/\|/g, '\\|').trim();
+            // (pipes are escaped once, by rowsToMarkdown)
+            var md = td.turndown(c.innerHTML || '').replace(/\n+/g, ' ').trim();
+            // A header row Word made bold is already a header — drop the **.
+            if (!rows.length && /^\*\*[^*]+\*\*$/.test(md)) md = md.slice(2, -2);
             cells.push(md);
             var span = parseInt(c.getAttribute('colspan') || '1', 10);
             for (var s = 1; s < span && s < 50; s++) cells.push('');
@@ -352,7 +355,7 @@
         if (Array.isArray(v)) {
           if (!v.length) ws = XLSX.utils.aoa_to_sheet([[]]);
           else if (v.every(Array.isArray)) ws = XLSX.utils.aoa_to_sheet(v);
-          else if (v.every(function (x) { return x && typeof x === 'object'; })) ws = XLSX.utils.json_to_sheet(v.map(flatten));
+          else if (v.every(function (x) { return x && typeof x === 'object'; })) ws = XLSX.utils.json_to_sheet(v.map(function (x) { return flatten(x); }));
           else ws = XLSX.utils.aoa_to_sheet(v.map(function (x) { return [x]; }));
         } else if (v && typeof v === 'object') {
           ws = XLSX.utils.json_to_sheet([flatten(v)]);

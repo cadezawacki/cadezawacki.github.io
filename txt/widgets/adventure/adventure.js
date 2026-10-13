@@ -604,7 +604,7 @@
   };
   Engine.prototype.confirm = function (q, key) {
     this.pending = { kind: 'confirm', key: key };
-    this.say(q, 'ask');
+    this.say(String(q).replace('(yes or no)', '([yes>yes] or [no>no])'), 'ask');
   };
 
   Engine.prototype.pushUndo = function (label) {
@@ -903,7 +903,8 @@
     if (!noun) noun = words[words.length - 1];
     if (r.done && r.done.length) cc[r.role + 'Done'] = r.done;
     this.pending = { kind: 'which', cc: cc, role: r.role, cands: r.ask };
-    this.say('Which ' + noun + ' do you mean, ' + joinList(r.ask.map(function (id) { return self.theName(id); }), 'or') + '?', 'ask');
+    // Each choice is a tappable answer: [the oil can>oil can]
+    this.say('Which ' + noun + ' do you mean, ' + joinList(r.ask.map(function (id) { return '[' + self.theName(id) + '>' + self.nm(id).toLowerCase() + ']'; }), 'or') + '?', 'ask');
   };
 
   // Handle a reply to a question; false = treat the reply as a new command.
@@ -1064,7 +1065,11 @@
     this.say(inside.length ? (d.supporter ? 'On ' : 'In ') + the(this, c.d) + ' you can see ' + this.listOf(inside) + '.' : 'There’s nothing ' + (d.supporter ? 'on ' : 'in ') + the(this, c.d) + '.');
   };
   A.lookunder = function (c) { this.say(this.objs[c.d].npc ? 'That would be rude.' : 'You find nothing of interest under ' + the(this, c.d) + '.'); };
-  A.lookthrough = function (c) { this.say('You can’t see through ' + the(this, c.d) + '.'); };
+  A.lookthrough = function (c) {
+    var d = this.objs[c.d];
+    if (/window|porthole|pane|glass/.test(Object.keys(d._n).join(' '))) { A.examine.call(this, c); return; }
+    this.say('You can’t see through ' + the(this, c.d) + '.');
+  };
   A.lookdir = function (c) {
     var ex = (this.rooms[this.s.room].exits || {})[c.dir];
     if (!ex || (typeof ex === 'object' && ex.hidden && ex.hidden(this.g))) { this.say('You see nothing special in that direction.'); return; }
@@ -1567,6 +1572,11 @@
   function append(blocks, scrollToFirst) {
     if (!ui) return;
     var out = ui.out, first = null;
+    // Older exit chips belong to rooms you've left: grey them out.
+    if (blocks.some(function (b) { return b.t === 'exits'; })) {
+      var old = out.querySelectorAll('.adv-exits:not(.adv-old)');
+      for (var i = 0; i < old.length; i++) old[i].classList.add('adv-old');
+    }
     blocks.forEach(function (b) {
       transcript.push(b);
       var el = blockEl(b);
@@ -1835,11 +1845,14 @@
   function fitViewport() {
     if (!ui || !window.visualViewport) return;
     var p = ui.panel, vv = window.visualViewport;
-    if (!coarse()) { p.style.height = ''; return; }
+    p.style.height = '';
+    if (!coarse()) return;
+    // Keep the command line above the on-screen keyboard (iOS shrinks only the
+    // visual viewport), but never grow past the CSS height.
     var r = p.getBoundingClientRect(), bottom = vv.offsetTop + vv.height;
     if (r.top < vv.offsetTop) { p.style.top = (vv.offsetTop + 4) + 'px'; r = p.getBoundingClientRect(); }
     var h = Math.floor(bottom - r.top - 6);
-    p.style.height = h > 220 ? h + 'px' : '';
+    if (h < r.height && h > 200) p.style.height = h + 'px';
     ui.out.scrollTop = ui.out.scrollHeight;
   }
 

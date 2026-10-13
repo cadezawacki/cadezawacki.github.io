@@ -110,7 +110,15 @@
   }
 
   // Remove our one-off GETs from the service worker's cache (see header).
+  // The SW stores a response only after reading its whole body, which can
+  // land just after we're done with it — so sweep now and once more shortly.
+  var sweepTimer = 0;
   function sweep(bases) {
+    sweepNow(bases);
+    clearTimeout(sweepTimer);
+    sweepTimer = setTimeout(function () { sweepNow(bases); }, 3000);
+  }
+  function sweepNow(bases) {
     try {
       if (!window.caches || !caches.keys) return;
       caches.keys().then(function (names) {

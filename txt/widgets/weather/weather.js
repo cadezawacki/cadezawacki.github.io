@@ -789,16 +789,20 @@
     } else {
       out += tile('', '\u2601 Air quality', '<div class="wx-big">\u2013</div><div class="wx-sub faint">Not available here</div>');
     }
+    // Feels like
+    var diff = c.fl != null && c.tp != null ? c.fl - c.tp : 0;
+    out += tile('', '\u2668 Feels like', '<div class="wx-big">' + tStr(c.fl) + '</div><div class="wx-sub">' +
+      (Math.abs(diff) < 1.5 ? 'Similar to the actual temperature' : diff < 0 ? (c.ws > 10 ? 'Wind makes it feel colder' : 'Feels colder than it is') : (c.rh > 60 ? 'Humidity makes it feel warmer' : 'Feels warmer than it is')) + '</div>');
     out += sunTile(m, now, di);
     // Pressure gauge (950–1050 hPa over 240°) + 3-hour trend.
     var ps = c.ps, trend = '', dps = h.ps[3] != null && h.ps[0] != null ? h.ps[3] - h.ps[0] : 0;
     trend = dps > 1 ? '\u2197 Rising' : dps < -1 ? '\u2198 Falling' : '\u2192 Steady';
     var frac = ps == null ? 0.5 : Math.max(0, Math.min(1, (ps - 950) / 100)), ang = (-120 + frac * 240) * RAD;
-    var gauge = '<svg class="wx-gauge" viewBox="0 0 80 62" aria-hidden="true">' +
+    var gauge = '<svg class="wx-gauge" viewBox="0 0 80 67" aria-hidden="true">' +
       '<path class="wx-gauge-t" d="' + arcPath(40, 40, 30, -120, 120) + '"/>' +
       '<path class="wx-gauge-f" d="' + arcPath(40, 40, 30, -120, -120 + frac * 240) + '"/>' +
       '<line class="wx-gauge-n" x1="40" y1="40" x2="' + f1(40 + Math.sin(ang) * 24) + '" y2="' + f1(40 - Math.cos(ang) * 24) + '"/>' +
-      '<circle class="wx-comp-c" cx="40" cy="40" r="3"/><text x="13" y="60" text-anchor="middle">Low</text><text x="67" y="60" text-anchor="middle">High</text></svg>';
+      '<circle class="wx-comp-c" cx="40" cy="40" r="3"/><text x="13" y="65" text-anchor="middle">Low</text><text x="67" y="65" text-anchor="middle">High</text></svg>';
     out += tile('wx-press', '\u25d4 Pressure', '<div class="wx-press-row">' + gauge + '<div><div class="wx-big sm">' + big(pressStr(ps)) + '</div><div class="wx-sub">' + trend + '</div></div></div>');
     // Visibility
     var vis = c.vis, vdesc = vis == null ? '' : vis >= 20000 ? 'Excellent' : vis >= 10000 ? 'Good' : vis >= 4000 ? 'Moderate' : vis >= 1000 ? 'Poor' : 'Very poor \u00b7 fog';
@@ -811,10 +815,6 @@
     // Cloud cover
     var cc = c.cc != null ? c.cc : 0, cdesc = cc < 12 ? 'Clear' : cc < 38 ? 'Mostly clear' : cc < 70 ? 'Partly cloudy' : cc < 88 ? 'Mostly cloudy' : 'Overcast';
     out += tile('', '\u2601 Cloud cover', '<div class="wx-big">' + cc + '<small>%</small></div>' + meter(cc, 'linear-gradient(90deg,#cbd5e1,#64748b)') + '<div class="wx-sub">' + cdesc + '</div>');
-    // Feels like
-    var diff = c.fl != null && c.tp != null ? c.fl - c.tp : 0;
-    out += tile('', '\u2668 Feels like', '<div class="wx-big">' + tStr(c.fl) + '</div><div class="wx-sub">' +
-      (Math.abs(diff) < 1.5 ? 'Similar to the actual temperature' : diff < 0 ? (c.ws > 10 ? 'Wind makes it feel colder' : 'Feels colder than it is') : (c.rh > 60 ? 'Humidity makes it feel warmer' : 'Feels warmer than it is')) + '</div>');
     return out;
   }
 
@@ -999,8 +999,10 @@
     var p = panel(); if (!p) return false;
     var sh = p.querySelector('.wx-sheet');
     if (!sh) return false;
-    if (S && S.picker && sh.contains(S.picker.el)) { S.picker.destroy(); S.picker = null; }
+    var hadPicker = S && S.picker && sh.contains(S.picker.el);
+    if (hadPicker) { S.picker.destroy(); S.picker = null; }
     sh.remove();
+    if (hadPicker && S && !S.loc) render(); // the empty state's own picker was replaced — rebuild it
     return true;
   }
 

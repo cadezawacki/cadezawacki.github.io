@@ -558,6 +558,12 @@
     toast('Python variables reset for this room', 'success', 1800);
   };
 
+  E.pyUnload = function () {
+    if (!py.worker) { toast('Python isn\u2019t loaded', 'info', 1600); return; }
+    if (cur && cur.lang === 'py' && cur.cancel) cur.cancel(); else pyKill();
+    toast('Python unloaded', 'success', 1600);
+  };
+
   // ---- panel --------------------------------------------------------------------------------------
   var ICON = {
     play: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 2.8v10.4L13 8z" fill="currentColor"/></svg>',
@@ -579,7 +585,7 @@
         '<label class="cr-field"><span>Output</span><select data-pref="target"><option value="inline">Below the block (```output)</option><option value="panel">Only in this panel</option></select></label>' +
         '<label class="cr-field"><span>JavaScript timeout</span><span class="cr-num"><input type="number" inputmode="numeric" min="1" max="120" step="1" data-pref="jsTimeout"> s</span></label>' +
         '<label class="cr-field"><span>Python timeout</span><span class="cr-num"><input type="number" inputmode="numeric" min="1" max="600" step="1" data-pref="pyTimeout"> s</span></label>' +
-        '<div class="cr-pyrow"><span class="cr-py-state"></span><button type="button" class="cr-btn" data-act="pyload">Load Python</button><button type="button" class="cr-btn" data-act="pyreset">Reset variables</button></div>' +
+        '<div class="cr-pyrow"><span class="cr-py-state"></span><button type="button" class="cr-btn" data-act="pyload">Load Python</button><button type="button" class="cr-btn" data-act="pyreset">Reset variables</button><button type="button" class="cr-btn" data-act="pyunload" title="Stop the Python worker and free its memory">Unload</button></div>' +
         '<p class="cr-hint">JavaScript runs in a sandboxed frame with no access to your notes. Python ' + PY_VERSION + ' (Pyodide) runs in a background worker; variables persist per room. ' +
         'Packages you import load automatically; add <code># requires: name</code> for other pure-Python packages from PyPI. Shell blocks can’t run in a browser.</p>' +
       '</div></details>' +
@@ -625,6 +631,7 @@
     else if (act === 'clear') E.clearOutputs();
     else if (act === 'pyload') E.pyLoad();
     else if (act === 'pyreset') E.pyReset();
+    else if (act === 'pyunload') E.pyUnload();
     else {
       var item = t.closest('.cr-run'), r = item && runById(+item.getAttribute('data-id'));
       if (!r) return;

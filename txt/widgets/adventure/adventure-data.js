@@ -129,6 +129,13 @@ window.__cadeAdventureData = (function () {
     return 'You jam ' + g.the(w) + ' into the iron guides just below the rim of the gate. The counterweight, sinking, comes up against it with a *clunk* — and stops. The sluice stays open. The wheel thunders on.';
   }
 
+  function unwedge(g, w) {
+    if (!w || g.loc(w) !== 'sluice') return;
+    g.move(w, 'player');
+    closeSluiceNow(g, false);
+    return 'You wrench ' + g.the(w) + ' free. With nothing to stop it, the counterweight sinks and the sluice gate slams shut. The wheel slows to a halt.';
+  }
+
   function closeSluiceNow(g, loud) {
     g.set('sluice', 'open', false);
     g.set('sluice', 'wedged', false);
@@ -520,7 +527,8 @@ window.__cadeAdventureData = (function () {
       sc: {
         'wine racks|racks|rack|bottles|bottle|wine': { d: 'Dusty bottles with handwritten labels: ‘Elderflower 1971’, ‘Rhubarb (Dangerous)’.', on: { take: 'They’re your aunt’s, and some of them are older than you. Best left alone.' } },
         'coal|heap': 'A heap of coal, glittering in the lantern light like a pile of dark jewels. Not the kind of shiny that impresses anyone.',
-        'archway|arch': 'A low brick archway to the east.'
+        'archway|arch': 'A low brick archway to the east.',
+        'stone steps|steps|stairs': { d: 'Worn stone steps leading up to the hall.', climb: 'u' }
       }
     },
 
@@ -555,7 +563,12 @@ window.__cadeAdventureData = (function () {
           ' The cellar is south.';
       },
       exits: { s: 'cellar', out: 'cellar' },
-      on: { swim: 'The channel is narrow and fast and very cold. No.' },
+      on: {
+        swim: 'The channel is narrow and fast and very cold. No.',
+        // Pulling the wedge back out lets the counterweight shut the gate.
+        take: function (g, c) { return unwedge(g, c.d); },
+        remove: function (g, c) { return unwedge(g, c.d); }
+      },
       sc: {
         'stone channel|channel|water|spray': { d: function (g) { return g.p('sluice', 'open') ? 'Dark water, racing.' : 'A stone channel with a sulky trickle in the bottom.'; }, on: { drink: 'It tastes of iron and moss.' } }
       }
@@ -620,7 +633,8 @@ window.__cadeAdventureData = (function () {
       sc: {
         'trunks|trunk|chairs|clutter': 'Trunks with old shipping labels — Valparaíso, Hobart, Reykjavík — and chairs with three legs each, waiting for a fourth.',
         'round window|window|pane|gable': 'A round window with one pane missing: Pim’s front door.',
-        'old wardrobe|wardrobe': 'An old wardrobe serving as Pim’s plinth.'
+        'old wardrobe|wardrobe': 'An old wardrobe serving as Pim’s plinth.',
+        'ladder|folding ladder|hatch': { d: 'The folding ladder leads back down through the hatch to the gallery.', climb: 'd' }
       }
     },
 
@@ -630,7 +644,8 @@ window.__cadeAdventureData = (function () {
       exits: { u: 'dome', s: { to: 'landing', door: 'domedoor' }, d: { to: 'landing', door: 'domedoor' } },
       sc: {
         'portholes|porthole|windows': 'Little round windows, each with its own small piece of night.',
-        'brass stars|stars|star|steps': 'A brass star in every step. Your aunt climbed these every clear night for sixty years.'
+        'brass stars|stars|star|steps': 'A brass star in every step. Your aunt climbed these every clear night for sixty years.',
+        'spiral stair|stair|stairs|staircase': { d: 'Narrow, steep and spiralling, up into the dome.', climb: 'u' }
       }
     },
 
@@ -1119,15 +1134,7 @@ window.__cadeAdventureData = (function () {
       name: 'poker', nouns: ['poker', 'rod'], adj: ['iron', 'heavy', 'kitchen'], loc: 'kitchen',
       initial: 'An iron [poker] leans against the range.',
       desc: 'A heavy iron poker, as long as your arm, with a brass knob on the end.',
-      on: {
-        take: function (g) {
-          if (g.loc('poker') !== 'sluice') return;
-          g.move('poker', 'player');
-          var t = closeSluiceNow(g, false);
-          return 'You wrench the poker free. With nothing to stop it, the counterweight sinks and the sluice gate slams shut. The wheel slows to a halt.' + (t ? '' : '');
-        },
-        attack: 'You swish it about menacingly. The air retreats.'
-      }
+      on: { attack: 'You swish it about menacingly. The air retreats.' }
     },
     honey: {
       name: 'jar of honey', ref: 'honey', nouns: ['honey', 'jar'], adj: ['honey'], loc: 'larder',
@@ -1285,7 +1292,7 @@ window.__cadeAdventureData = (function () {
     wardrobe: {
       name: 'wardrobe', nouns: ['wardrobe', 'closet', 'coats', 'clothes'], adj: ['tall', 'oak'], loc: 'bedroom', scenery: true, container: true, openable: true, props: { open: false },
       desc: function (g) { return 'A tall oak wardrobe' + (g.isOpen('wardrobe') ? ', open: inside hang tweed jackets, a sou’wester and one extraordinary hat with a pheasant feather. It all smells of lavender and adventure.' : ', closed.'); },
-      on: { open: function (g, c) { if (g.isOpen('wardrobe')) return; g.dflt(c); return 'Inside hang tweed jackets, a sou’wester and one extraordinary hat with a pheasant feather. It all smells of lavender and adventure. Nothing you need tonight.'; }, enter: 'You step inside, among the coats. No snowy forest. Just more coats. You step out again.' }
+      on: { open: function (g) { if (g.isOpen('wardrobe')) return; g.set('wardrobe', 'open', true); return 'You open the wardrobe. Inside hang tweed jackets, a sou’wester and one extraordinary hat with a pheasant feather. It all smells of lavender and adventure. Nothing you need tonight.'; }, enter: 'You step inside, among the coats. No snowy forest. Just more coats. You step out again.' }
     },
     basket: {
       name: 'sewing basket', nouns: ['basket'], adj: ['sewing', 'wicker'], loc: 'bedroom', container: true, fixed: true,

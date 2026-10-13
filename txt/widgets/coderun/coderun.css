@@ -1,7 +1,7 @@
 /* Code Runner panel + the hidden JS sandbox frame. */
 .cr-sandbox {
   position: fixed; left: -10000px; top: 0; width: 400px; height: 300px;
-  border: 0; opacity: 0; pointer-events: none; visibility: hidden;
+  border: 0; opacity: 0; pointer-events: none; /* not visibility:hidden: hidden cross-origin frames get throttled */
 }
 
 #coderun-panel {

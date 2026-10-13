@@ -204,6 +204,11 @@ function upTo(G, cmd) { for (var i = 0; i < WALK.length && WALK[i].cmd !== cmd; 
   has(G.say('take poker'), 'slams shut', 'taking the wedge closes it');
   G.say('turn crank');
   has(G.say('put poker in sluice'), 'stays open', 'put X in sluice = wedge');
+  has(G.say('take poker'), 'slams shut', 'unwedge the poker');
+  G.say('turn crank');
+  has(G.say('wedge sluice with boathook'), 'stays open', 'boathook works as a wedge too');
+  has(G.say('take boathook out of sluice'), 'slams shut', 'taking the boathook back closes the gate (no soft-lock)');
+  ok(G.eng.s.loc.boathook === 'player', 'boathook back in hand');
 })();
 
 (function puzzlesFail() {

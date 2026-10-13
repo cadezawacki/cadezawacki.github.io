@@ -83,6 +83,8 @@
 }
 .adv-x:hover { border-color: var(--accent); color: var(--accent); }
 .adv-xt { color: var(--text-faint); font-family: var(--font-body); }
+.adv-exits.adv-old { opacity: 0.45; }
+.adv-exits.adv-old .adv-x { pointer-events: none; }
 
 /* ---- compass / verb pad ---------------------------------------------------- */
 .adv-pad {

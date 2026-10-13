@@ -149,8 +149,10 @@
     var ed = Cade.editor;
     if (!panel || !K || !ed || !ifr) return;
     var c = collect(ed.state.doc);
-    if (!c) {
-      if (!st.key) showEmpty(true);
+    if (!c) { // no html / css / js block left in the room
+      st.key = ''; st.built = null;
+      setLabel([]);
+      showEmpty(true);
       return;
     }
     var key = JSON.stringify(c.parts);
