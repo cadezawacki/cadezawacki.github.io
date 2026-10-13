@@ -1,28 +1,35 @@
-/* Code Runner — Python worker (dedicated Web Worker, no DOM).
+/* Code Runner — Python worker source (no DOM).
  *
- * Runs Pyodide (CPython compiled to WebAssembly), lazily downloaded from a
- * pinned jsDelivr URL the first time Python runs; the service worker caches
- * those files stale-while-revalidate so later starts work offline.
+ * Runs Pyodide (CPython compiled to WebAssembly). This file is never started
+ * on the app's origin: the engine fetches it as TEXT and hands it to a
+ * sandboxed, opaque-origin iframe (sandbox="allow-scripts", no
+ * allow-same-origin), which starts it as a Worker from a blob:/data: URL — or,
+ * where a browser refuses workers there, runs it in that iframe's own page
+ * with a stand-in `self`. Either way user code has an opaque origin:
+ * IndexedDB / Cache Storage / localStorage throw and requests carry
+ * Origin: null.
  *
- * Protocol (postMessage):
- *   in : {type:'init', indexURL, count}  {type:'run', id, code, ns, requires}
- *        {type:'reset', ns}
- *   out: {type:'progress', phase, loaded, text}  {type:'ready', version}
- *        {type:'initError', message}  {type:'started', id}
- *        {type:'out', id, chunks:[[ 'o'|'e', text ]], dropped}
- *        {type:'done', id, ms, result|null, error|null}
+ * Pyodide's files are fetched THROUGH the app ({type:'fetch'} -> relay ->
+ * engine), which only serves URLs under the pinned jsDelivr prefix, counts the
+ * bytes for the progress readout and goes through the service worker, so the
+ * runtime is cached for offline use. (A retry without the proxy loads straight
+ * from jsDelivr, relying on the browser's HTTP cache.)
  *
- * Each room gets its own namespace dict (variables persist between blocks of
- * the same room until reset). Interrupts need SharedArrayBuffer (cross-origin
- * isolation, which static hosting can't provide), so the page stops a run by
- * terminating this worker.
+ * Protocol (postMessage, relayed by the iframe):
+ *   out: {type:'alive'} first, then {type:'progress', phase, text}
+ *        {type:'ready', version}  {type:'initError', message}
+ *        {type:'started', id}  {type:'out', id, chunks:[['o'|'e', text]], dropped}
+ *        {type:'done', id, ms, result|null, error|null}  {type:'fetch', rid, url, integrity}
+ *   in : {type:'init', indexURL, proxy}  {type:'run', id, code, ns, requires}
+ *        {type:'reset', ns}  {type:'fetched', rid, ok, status, ct, buf, error}
  *
- * This worker shares the app's origin, so before any user code runs it drops
- * the storage/messaging APIs a script could use to reach app data (IndexedDB,
- * Cache Storage, BroadcastChannel, nested workers, navigator.storage/locks). */
+ * Each room gets its own namespace dict. Interrupts would need
+ * SharedArrayBuffer (cross-origin isolation, impossible on static hosting), so
+ * the app stops a run by destroying the iframe. As defence in depth, storage
+ * and messaging globals are also deleted before user code runs. */
 'use strict';
 var py = null, runFn = null, nsFn = null, spaces = {};
-var counting = false, got = 0, lastTick = 0;
+var INDEX = '', proxyOn = false, rid = 0, waiting = {};
 var outQ = [], outT = 0, outSize = 0, outDropped = 0, lastFlush = 0, curId = 0;
 var MAX_OUT = 400000;
 var HELPER = [
@@ -49,38 +56,36 @@ var HELPER = [
 
 function post(m) { self.postMessage(m); }
 function msg(e) { return String((e && (e.message || e)) || 'error'); }
-function now() { return (self.performance && performance.now) ? performance.now() : Date.now(); }
+function now() { return typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now(); }
 
-function tick(force) {
-  var t = now();
-  if (!force && t - lastTick < 150) return;
-  lastTick = t;
-  post({ type: 'progress', phase: 'download', loaded: got });
+// ---- files through the app (cached by its service worker) ----
+function viaApp(url, integrity) {
+  return new Promise(function (resolve, reject) {
+    var id = ++rid;
+    waiting[id] = { resolve: resolve, reject: reject };
+    post({ type: 'fetch', rid: id, url: url, integrity: integrity || '' });
+  }).then(function (m) {
+    if (!m.ok || !m.buf) throw new Error(m.error || ('HTTP ' + m.status + ' for ' + url));
+    return new Response(m.buf, { status: 200, headers: { 'Content-Type': m.ct || 'application/octet-stream' } });
+  });
 }
-
-// Count downloaded bytes for the progress bar by re-wrapping response bodies.
-// Only active while counting; any failure falls back to the plain response.
-function installCounter() {
-  if (typeof self.fetch !== 'function' || typeof ReadableStream !== 'function' || typeof Response !== 'function') return;
+function urlOf(input) {
+  if (typeof input === 'string') return input;
+  return input ? String(input.href || input.url || input) : '';
+}
+function installProxy() {
   var orig = self.fetch;
   self.fetch = function (input, init) {
-    return orig.call(self, input, init).then(function (res) {
-      if (!counting || !res || !res.ok || !res.body || typeof res.body.getReader !== 'function') return res;
-      var reader;
-      try { reader = res.body.getReader(); } catch (e) { return res; }
-      var stream = new ReadableStream({
-        pull: function (ctrl) {
-          return reader.read().then(function (r) {
-            if (r.done) { ctrl.close(); tick(true); return; }
-            got += r.value.byteLength; tick(false);
-            ctrl.enqueue(r.value);
-          });
-        },
-        cancel: function (why) { try { return reader.cancel(why); } catch (e) {} }
-      });
-      return new Response(stream, { status: res.status, statusText: res.statusText, headers: res.headers });
-    });
+    var url = urlOf(input);
+    if (proxyOn && url.indexOf(INDEX) === 0) return viaApp(url, init && init.integrity);
+    return orig.apply(typeof globalThis !== 'undefined' ? globalThis : self, arguments);
   };
+}
+// Load a classic script into this global scope.
+function loadScript(url) {
+  if (proxyOn) return viaApp(url).then(function (r) { return r.text(); }).then(function (src) { (0, eval)(src); });
+  if (typeof self.__cadeLoadScript === 'function') return self.__cadeLoadScript(url);
+  return new Promise(function (res, rej) { try { importScripts(url); res(); } catch (e) { rej(e); } });
 }
 
 function strip(obj, names) {
@@ -92,9 +97,14 @@ function strip(obj, names) {
     try { if (n in obj) Object.defineProperty(obj, n, { value: undefined, writable: false, configurable: false }); } catch (e) {}
   });
 }
+// Defence in depth on top of the opaque origin.
 function harden() {
-  strip(self, ['indexedDB', 'webkitIndexedDB', 'caches', 'BroadcastChannel', 'Worker', 'SharedWorker', 'cookieStore']);
-  try { strip(self.navigator, ['storage', 'serviceWorker', 'locks']); } catch (e) {}
+  var g = typeof globalThis !== 'undefined' ? globalThis : self;
+  [self, g].forEach(function (o, i) {
+    if (i && o === self) return;
+    strip(o, ['indexedDB', 'webkitIndexedDB', 'caches', 'BroadcastChannel', 'Worker', 'SharedWorker', 'cookieStore', 'localStorage', 'sessionStorage']);
+    try { strip(o.navigator, ['storage', 'serviceWorker', 'locks']); } catch (e) {}
+  });
 }
 
 function out(kind, s) {
@@ -128,27 +138,30 @@ function setup() {
 
 function init(m) {
   if (py) { post({ type: 'ready', version: py.version }); return; }
-  if (m.count !== false) installCounter();
-  counting = true;
-  try { importScripts(m.indexURL + 'pyodide.js'); }
-  catch (e) { post({ type: 'initError', message: 'Could not download Python (' + msg(e) + ')' }); return; }
-  tick(true);
-  self.loadPyodide({ indexURL: m.indexURL, stdout: function () {}, stderr: function () {} }).then(function (p) {
-    counting = false;
-    py = p;
+  INDEX = String(m.indexURL || '');
+  proxyOn = !!m.proxy;
+  if (proxyOn) installProxy();
+  post({ type: 'progress', phase: 'download', text: '' });
+  var p = loadScript(INDEX + 'pyodide.js');
+  // Pre-load the runtime script the same way: pyodide.js skips its own
+  // loader when _createPyodideModule already exists.
+  if (proxyOn) p = p.then(function () { return loadScript(INDEX + 'pyodide.asm.js'); });
+  p.then(function () {
+    if (typeof self.loadPyodide !== 'function') throw new Error('Pyodide did not load');
+    return self.loadPyodide({ indexURL: INDEX, stdout: function () {}, stderr: function () {} });
+  }).then(function (pyo) {
+    py = pyo;
     setup();
     harden();
-    post({ type: 'ready', version: p.version });
+    post({ type: 'ready', version: pyo.version });
   }, function (e) {
-    counting = false;
-    post({ type: 'initError', message: msg(e) });
+    post({ type: 'initError', message: 'Could not start Python (' + msg(e) + ')' });
   });
 }
 
-function pkgMsg(t) { post({ type: 'progress', phase: 'packages', text: String(t || '').slice(0, 200), loaded: got }); }
+function pkgMsg(t) { post({ type: 'progress', phase: 'packages', text: String(t || '').slice(0, 200) }); }
 
 function prepare(m) {
-  counting = true; got = 0;
   var p = py.loadPackagesFromImports(m.code, { messageCallback: pkgMsg, errorCallback: pkgMsg });
   if (m.requires && m.requires.length) {
     p = p.then(function () { return py.loadPackage('micropip', { messageCallback: pkgMsg, errorCallback: pkgMsg }); })
@@ -160,7 +173,7 @@ function prepare(m) {
         });
       });
   }
-  return p.then(function (v) { counting = false; return v; }, function (e) { counting = false; throw e; });
+  return p;
 }
 
 function run(m) {
@@ -186,10 +199,14 @@ function run(m) {
 
 self.onmessage = function (e) {
   var m = e.data || {};
-  if (m.type === 'init') init(m);
+  if (m.type === 'fetched') {
+    var w = waiting[m.rid];
+    if (w) { delete waiting[m.rid]; w.resolve(m); }
+  } else if (m.type === 'init') init(m);
   else if (m.type === 'run') run(m);
   else if (m.type === 'reset') {
     var d = spaces[m.ns];
     if (d) { try { d.destroy(); } catch (x) {} delete spaces[m.ns]; }
   }
 };
+post({ type: 'alive' });

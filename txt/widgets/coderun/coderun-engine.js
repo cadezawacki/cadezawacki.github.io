@@ -11,9 +11,13 @@
  *   Safari the iframe shares the app's thread, so a timer alone couldn't), and
  *   the frame is removed afterwards. TypeScript types are stripped by sucrase
  *   (pinned, lazy, from jsDelivr).
- * - Python: Pyodide in a dedicated worker (coderun-py-worker.js), loaded on
- *   first use with a progress readout; one namespace per room; stop / timeout
- *   terminate the worker.
+ * - Python: Pyodide in a worker that lives inside its own sandboxed,
+ *   opaque-origin iframe (coderun-py-worker.js is fetched as text and started
+ *   there from a blob:/data: URL; if a browser refuses workers in such a frame
+ *   it runs in that frame's page instead). Pyodide's files are fetched by the
+ *   app on the sandbox's behalf, only from the pinned jsDelivr prefix, so the
+ *   service worker caches them and the first download shows progress. One
+ *   namespace per room; stop / timeout destroy the iframe.
  * - JSON: validated (line/column errors) and pretty-printed.
  * - Shell: explained, not run. HTML/CSS open the Live HTML Preview.
  *
@@ -32,7 +36,7 @@
   var PY_VERSION = '0.29.5';
   var PY_INDEX = 'https://cdn.jsdelivr.net/pyodide/v' + PY_VERSION + '/full/';
   var PY_DL_MB = '5.3';            // compressed download: wasm + stdlib + loader
-  var PY_EST_BYTES = 11200000;     // the same, decompressed (what the worker counts)
+  var PY_EST_BYTES = 12300000;     // the same, decompressed (what the app counts while proxying)
   var SUCRASE_URL = 'https://cdn.jsdelivr.net/npm/sucrase@3.35.0/+esm';
   var PREFS_KEY = 'cade-coderun-prefs';
   var PYSEEN_KEY = 'cade-coderun-pyseen';
@@ -62,7 +66,7 @@
   // ---- state ----------------------------------------------------------------------------
   var queue = [], cur = null, seq = 0;
   var runs = []; // panel history, newest first
-  var py = { worker: null, state: 'off', ready: null, onInit: null, loaded: 0, version: '', pending: {}, seq: 0, error: '' };
+  var py = { host: null, state: 'off', ready: null, onInit: null, loaded: 0, pkgBytes: 0, version: '', pending: {}, seq: 0, error: '' };
   var E = window.__cadeCodeRun = { version: 0 };
 
   var nudgeT = 0;
@@ -308,7 +312,7 @@
   // ---- Python -------------------------------------------------------------------------------------
   function pySeen() { try { return Cade.store.get(PYSEEN_KEY) === PY_VERSION; } catch (e) { return false; } }
   function pyStatusText() {
-    if (py.state === 'ready') return 'Python ' + py.version + ' ready';
+    if (py.state === 'ready') return 'Python ' + py.version + ' ready' + (py.host && py.host.mode === 'page' ? ' (no worker: runs on the page)' : '');
     if (py.state === 'loading') {
       var pct = Math.min(99, Math.round(py.loaded / PY_EST_BYTES * 100));
       return (pySeen() ? 'Starting Python' : 'Downloading Python') + (py.loaded ? ' ' + pct + '%' : '…');
@@ -317,16 +321,19 @@
     return pySeen() ? 'Python not started' : 'Python not loaded (~' + PY_DL_MB + ' MB, first run only)';
   }
   var progT = 0;
-  function onPyMsg(e) {
-    var m = e.data || {}, p;
+  function progress() {
+    if (cur && cur.lang === 'py') {
+      if (cur.state === 'loading') cur.statusText = pyStatusText();
+      else if (py.pkgBytes) cur.statusText = 'Loading packages… ' + (Math.round(py.pkgBytes / 1e5) / 10) + ' MB';
+    }
+    if (!progT) progT = setTimeout(function () { progT = 0; bump(); }, 250);
+  }
+  function onPyMsg(m) {
+    var p;
+    m = m || {};
     if (m.type === 'progress') {
-      if (py.state === 'loading') {
-        py.loaded = +m.loaded || 0;
-        if (cur && cur.lang === 'py' && cur.state === 'loading') cur.statusText = pyStatusText();
-      } else if (cur && cur.lang === 'py') {
-        cur.statusText = m.phase === 'packages' && m.text ? shortPkgText(m.text) : 'Installing packages\u2026 ' + (Math.round((+m.loaded || 0) / 1e5) / 10) + ' MB';
-      }
-      if (!progT) progT = setTimeout(function () { progT = 0; bump(); }, 250);
+      if (py.state === 'ready' && cur && cur.lang === 'py' && m.phase === 'packages' && m.text) cur.statusText = shortPkgText(m.text);
+      progress();
     } else if (m.type === 'ready') {
       py.version = String(m.version || PY_VERSION);
       try { Cade.store.set(PYSEEN_KEY, PY_VERSION); } catch (x) {}
@@ -334,6 +341,8 @@
       if (init) init.resolve();
     } else if (m.type === 'initError') {
       crash(String(m.message || 'failed to start'));
+    } else if (m.type === 'crash') {
+      crash('the Python worker crashed (' + String(m.message || 'error') + ')');
     } else if ((p = py.pending[m.id])) {
       if (m.type === 'started') p.started();
       else if (m.type === 'out') p.out(m.chunks || [], +m.dropped || 0);
@@ -343,61 +352,144 @@
   function shortPkgText(t) {
     t = String(t);
     var m = /^Loading (.+)$/.exec(t);
-    if (m) return 'Loading ' + (m[1].length > 40 ? m[1].slice(0, 40) + '\u2026' : m[1]);
-    if (/^Installing /.test(t)) return t.length > 50 ? t.slice(0, 50) + '\u2026' : t;
-    return 'Loading packages\u2026';
+    if (m) return 'Loading ' + (m[1].length > 40 ? m[1].slice(0, 40) + '…' : m[1]);
+    if (/^Installing /.test(t)) return t.length > 50 ? t.slice(0, 50) + '…' : t;
+    return 'Loading packages…';
   }
-  function startWorker(count) {
-    return new Promise(function (resolve, reject) {
-      var w;
-      try { w = new Worker(WORKER_URL); } catch (e) { reject(new Error('Web Workers are unavailable here')); return; }
-      py.worker = w;
-      py.onInit = { resolve: resolve, reject: reject };
-      w.onmessage = onPyMsg;
-      w.onerror = function (ev) {
-        try { ev.preventDefault(); } catch (x) {}
-        crash('the Python worker crashed' + (ev && ev.message ? ' (' + ev.message + ')' : ''));
-      };
-      w.postMessage({ type: 'init', indexURL: PY_INDEX, count: count });
+
+  // The worker source is fetched as text from our own folder (precached) and
+  // only ever started inside the opaque-origin sandbox below.
+  var srcP = null;
+  function workerSource() {
+    if (!srcP) {
+      srcP = fetch(WORKER_URL).then(function (r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.text();
+      }).then(null, function (e) { srcP = null; throw new Error("couldn't load the Python worker (" + msg(e) + ')'); });
+    }
+    return srcP;
+  }
+  // Pyodide's files, fetched on the sandbox's behalf: ONLY under the pinned
+  // jsDelivr prefix (never the app's own origin), through the service worker
+  // (so they're cached for offline use), counted for the progress readout.
+  function proxyFetch(host, m) {
+    var url = '', allowed = false;
+    try { url = new URL(String(m.url || '')).href; allowed = url.indexOf(PY_INDEX) === 0 && url.indexOf('/../') === -1; } catch (e) {}
+    function reply(r, tr) {
+      if (py.host !== host) return;
+      r.__crpy = host.nonce; r.type = 'fetched'; r.rid = m.rid;
+      try { host.ifr.contentWindow.postMessage(r, '*', tr || []); } catch (e) {}
+    }
+    if (!allowed) { reply({ ok: false, error: 'blocked: ' + String(m.url || '').slice(0, 80) }); return; }
+    var opts = { credentials: 'omit' };
+    if (m.integrity) opts.integrity = String(m.integrity);
+    fetch(url, opts).then(function (res) {
+      if (!res.ok) { reply({ ok: false, status: res.status, error: 'HTTP ' + res.status + ' for ' + url }); return; }
+      var ct = res.headers.get('content-type') || '';
+      return readCounting(res, host).then(function (buf) { reply({ ok: true, status: res.status, ct: ct, buf: buf }, [buf]); });
+    }).then(null, function (e) { reply({ ok: false, error: msg(e) }); });
+  }
+  function countBytes(host, n) {
+    if (py.host !== host) return;
+    if (py.state === 'loading') py.loaded += n; else py.pkgBytes += n;
+    progress();
+  }
+  function readCounting(res, host) {
+    if (!res.body || typeof res.body.getReader !== 'function') {
+      return res.arrayBuffer().then(function (b) { countBytes(host, b.byteLength); return b; });
+    }
+    var reader = res.body.getReader(), chunks = [], total = 0;
+    function step() {
+      return reader.read().then(function (r) {
+        if (r.done) {
+          var out = new Uint8Array(total), o = 0;
+          for (var i = 0; i < chunks.length; i++) { out.set(chunks[i], o); o += chunks[i].byteLength; }
+          return out.buffer;
+        }
+        chunks.push(r.value); total += r.value.byteLength;
+        countBytes(host, r.value.byteLength);
+        return step();
+      });
+    }
+    return step();
+  }
+  // One Python session = one sandboxed iframe (sandbox="allow-scripts", no
+  // allow-same-origin) that hosts the worker and relays its messages.
+  function startHost(proxy) {
+    return workerSource().then(function (src) {
+      return new Promise(function (resolve, reject) {
+        var nonce = 'py' + Math.random().toString(36).slice(2) + Date.now().toString(36);
+        var ifr = document.createElement('iframe');
+        ifr.setAttribute('sandbox', 'allow-scripts'); // NOT allow-same-origin: opaque origin
+        ifr.setAttribute('aria-hidden', 'true');
+        ifr.setAttribute('tabindex', '-1');
+        ifr.title = 'Python sandbox';
+        ifr.className = 'cr-sandbox';
+        var host = { ifr: ifr, nonce: nonce, mode: '', onMsg: null };
+        host.post = function (m) { try { ifr.contentWindow.postMessage({ __crpy: nonce, type: 'cmd', m: m }, '*'); } catch (e) {} };
+        host.onMsg = function (e) {
+          if (py.host !== host || e.source !== ifr.contentWindow) return;
+          var d = e.data;
+          if (!d || d.__crpy !== nonce) return;
+          if (d.type === 'host-ready') {
+            try { ifr.contentWindow.postMessage({ __crpy: nonce, type: 'boot', src: src }, '*'); } catch (x) {}
+          } else if (d.type === 'mode') {
+            host.mode = String(d.mode || '');
+            host.post({ type: 'init', indexURL: PY_INDEX, proxy: proxy });
+          } else if (d.type === 'fetch') proxyFetch(host, d);
+          else if (d.type === 'w') onPyMsg(d.m);
+        };
+        py.host = host;
+        py.onInit = { resolve: resolve, reject: reject };
+        window.addEventListener('message', host.onMsg);
+        ifr.srcdoc = K.pyHostDoc(nonce);
+        (document.body || document.documentElement).appendChild(ifr);
+      });
     });
   }
+  function pyPost(m) { if (py.host) py.host.post(m); }
   function failPending(why) {
     var p = py.pending; py.pending = {};
     Object.keys(p).forEach(function (k) { try { p[k].dead(why); } catch (e) {} });
   }
-  function killWorker() {
-    if (py.worker) { try { py.worker.terminate(); } catch (e) {} }
-    py.worker = null;
+  // Removing the iframe ends the worker (or the page-hosted fallback) with it.
+  function killHost() {
+    var h = py.host;
+    py.host = null;
+    if (!h) return;
+    window.removeEventListener('message', h.onMsg);
+    try { h.ifr.srcdoc = ''; } catch (e) {}
+    try { h.ifr.remove(); } catch (e) {}
   }
   // The worker died or failed to start.
   function crash(why) {
     var init = py.onInit; py.onInit = null;
-    killWorker();
+    killHost();
     if (py.state === 'ready') { py.state = 'off'; py.ready = null; }
     failPending(why);
     if (init) init.reject(new Error(why));
     bump();
   }
-  // Stop / timeout: terminate the worker (the namespace goes with it).
+  // Stop / timeout: destroy the sandbox (the namespace goes with it).
   function pyKill() {
     var init = py.onInit; py.onInit = null;
-    killWorker();
+    killHost();
     py.state = 'off'; py.ready = null;
     failPending('Python stopped');
     if (init) { var e = new Error('stopped'); e.stopped = true; init.reject(e); }
     bump();
   }
   function pyEnsure() {
-    if (py.state === 'ready' && py.worker) return Promise.resolve();
+    if (py.state === 'ready' && py.host) return Promise.resolve();
     if (py.ready) return py.ready;
-    py.state = 'loading'; py.loaded = 0; py.error = '';
-    if (!pySeen()) toast('Downloading Python (~' + PY_DL_MB + ' MB, first run only)\u2026', 'info', 4000);
-    // The first attempt counts download bytes for the progress readout; if it
-    // fails for any reason, retry once without the counter.
-    var p = py.ready = startWorker(true).then(null, function (e) {
+    py.state = 'loading'; py.loaded = 0; py.pkgBytes = 0; py.error = '';
+    if (!pySeen()) toast('Downloading Python (~' + PY_DL_MB + ' MB, first run only)…', 'info', 4000);
+    // First attempt: files through the app (service-worker cache + progress).
+    // If that fails for any reason, retry once loading straight from jsDelivr.
+    var p = py.ready = startHost(true).then(null, function (e) {
       if (e && e.stopped) throw e;
       py.loaded = 0;
-      return startWorker(false);
+      return startHost(false);
     }).then(function () {
       py.state = 'ready'; py.error = '';
       bump();
@@ -431,7 +523,7 @@
       };
       pyEnsure().then(function () {
         if (finished) return;
-        if (!py.worker) { end({ status: 'error', text: nl(text) + '\u2716 Python stopped unexpectedly \u2014 run again', ms: 0 }); return; }
+        if (!py.host) { end({ status: 'error', text: nl(text) + '\u2716 Python stopped unexpectedly \u2014 run again', ms: 0 }); return; }
         var id = ++py.seq;
         job.state = 'running'; job.statusText = 'Running…'; bump();
         py.pending[id] = {
@@ -457,7 +549,8 @@
           },
           dead: function (why) { end({ status: 'error', text: nl(text) + '✖ ' + why, ms: Date.now() - t0 }); }
         };
-        py.worker.postMessage({ type: 'run', id: id, code: job.code, ns: job.room, requires: K.pyRequires(job.code) });
+        py.pkgBytes = 0;
+        pyPost({ type: 'run', id: id, code: job.code, ns: job.room, requires: K.pyRequires(job.code) });
       }, function (err) {
         var off = typeof navigator !== 'undefined' && navigator.onLine === false;
         end({ status: 'error', text: "✖ Couldn't start Python: " + msg(err) + (off ? " — you're offline; the first run needs a connection (~" + PY_DL_MB + ' MB)' : ''), ms: 0 });
@@ -553,13 +646,13 @@
   };
   E.pyLoad = function () { return pyEnsure().then(function () { toast('Python ' + py.version + ' ready', 'success', 1800); }, function (e) { toast("Couldn't start Python: " + msg(e), 'error', 4000); }); };
   E.pyReset = function () {
-    if (!py.worker || py.state !== 'ready') { toast('Python isn’t running — nothing to reset', 'info', 1800); return; }
-    py.worker.postMessage({ type: 'reset', ns: roomKey() });
+    if (!py.host || py.state !== 'ready') { toast('Python isn’t running — nothing to reset', 'info', 1800); return; }
+    pyPost({ type: 'reset', ns: roomKey() });
     toast('Python variables reset for this room', 'success', 1800);
   };
 
   E.pyUnload = function () {
-    if (!py.worker) { toast('Python isn\u2019t loaded', 'info', 1600); return; }
+    if (!py.host) { toast('Python isn\u2019t loaded', 'info', 1600); return; }
     if (cur && cur.lang === 'py' && cur.cancel) cur.cancel(); else pyKill();
     toast('Python unloaded', 'success', 1600);
   };
@@ -586,7 +679,7 @@
         '<label class="cr-field"><span>JavaScript timeout</span><span class="cr-num"><input type="number" inputmode="numeric" min="1" max="120" step="1" data-pref="jsTimeout"> s</span></label>' +
         '<label class="cr-field"><span>Python timeout</span><span class="cr-num"><input type="number" inputmode="numeric" min="1" max="600" step="1" data-pref="pyTimeout"> s</span></label>' +
         '<div class="cr-pyrow"><span class="cr-py-state"></span><button type="button" class="cr-btn" data-act="pyload">Load Python</button><button type="button" class="cr-btn" data-act="pyreset">Reset variables</button><button type="button" class="cr-btn" data-act="pyunload" title="Stop the Python worker and free its memory">Unload</button></div>' +
-        '<p class="cr-hint">JavaScript runs in a sandboxed frame with no access to your notes. Python ' + PY_VERSION + ' (Pyodide) runs in a background worker; variables persist per room. ' +
+        '<p class="cr-hint">JavaScript runs in a sandboxed frame with no access to your notes. Python ' + PY_VERSION + ' (Pyodide) runs in a separate sandboxed worker, also without access to your notes; variables persist per room. ' +
         'Packages you import load automatically; add <code># requires: name</code> for other pure-Python packages from PyPI. Shell blocks can’t run in a browser.</p>' +
       '</div></details>' +
       '<div class="cr-runs"><div class="cr-empty">Put the cursor in a ```js, ```ts, ```python or ```json block and press <b>Run block</b>. Output appears in an ```output block underneath (re-running replaces it).</div></div>';

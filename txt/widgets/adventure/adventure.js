@@ -68,7 +68,7 @@
     // looking
     'examine|x|inspect|check|study|observe|describe|view|watch|admire|scrutinize * => examine',
     'look|l at|on * => examine', 'look|l * => examine',
-    'look|l in|inside|into * => search', 'search|rummage|frisk * => search', 'search|rummage|look|l in|through|inside * => search',
+    'look|l in|inside|into * => search', 'search|rummage|frisk * => search', 'search|rummage in|through|inside * => search',
     'look|l through|thru * => lookthrough', 'peer|peek|gaze|squint|look through|into|in * => lookthrough',
     'look|l under|beneath|underneath|behind * => lookunder', 'look|l @ => lookdir',
     'read|peruse|consult * => read',
@@ -94,9 +94,12 @@
     'pull|tug|yank|drag|haul|jerk|draw * => pull', 'pull|tug|yank|drag|haul * down => pull', 'pull|tug|yank|drag down * => pull',
     'pull|tug|yank|drag|haul * with|using % => pull', 'pull down * with|using % => pull', 'pull * down with|using % => pull',
     'reach|hook|catch * with|using % => pull',
+    'push|press|move|shove|force * down => pull', 'push|press|move|shove|force|pull * up => push',
+    'raise|lift|hoist * => lift', 'lift|raise * up => lift', 'lower * => lower',
     'turn|rotate|twist|spin|crank|swivel|adjust|wheel * => turn',
     'turn|rotate|twist|spin|move|point|adjust|swing|aim|set|change|dial|face * to|toward|towards|at $ => set',
     'set|turn|rotate|spin|dial * # => set', 'set * => turn',
+    'turn|rotate|spin|point|swing|move|set|aim * @ => set',
     'dial|enter|type|key|input|punch|try # => dial', 'dial|enter|type|input # on|into * => dial',
     'turn|switch on * => switchon', 'turn|switch * on => switchon', 'turn|switch off * => switchoff', 'turn|switch * off => switchoff',
     'engage|activate|start|operate|power * => switchon', 'disengage|deactivate|stop * => switchoff',
@@ -113,7 +116,7 @@
     'write|scribble|sign => write', 'write|scribble $ => write',
     'eat|taste|bite|chew|lick|nibble|devour|consume * => eat', 'drink|sip|swallow|gulp|quaff * => drink', 'drink from * => drink',
     // people
-    'give|offer|hand|pass|feed|trade|donate|present|return * to % => give', 'give|offer|hand|feed % * => give', 'trade|swap|exchange * with % => give',
+    'give|offer|hand|pass|feed|trade|donate|present|return * to % => give', 'give|offer|hand|feed % * => give', 'trade|swap|exchange * with % => give', 'trade|swap|exchange * for % => tradefor',
     'show|display|present|wave * to|at % => show', 'show % * => show',
     'ask * about $ => ask', 'ask * for $ => askfor', 'ask about $ => ask', 'ask for $ => askfor', 'question|quiz|consult * about|on $ => ask',
     'tell * about $ => tell', 'tell about $ => tell', 'talk|speak|chat to|with * about $ => ask', 'talk|speak|chat about $ => ask',
@@ -817,6 +820,7 @@
       if (/^\s*sign\b/i.test(raw) && cc.dWords) { cc.iWords = cc.dWords; cc.dWords = null; }
     }
     if (cc.v === 'save' || cc.v === 'restore') cc.topic = raw.replace(/^\s*\S+\s*/, '').trim();
+    if (cc.v === 'set' && cc.dir && !cc.topic) cc.topic = DIRN[cc.dir];
     return cc;
   };
 
@@ -1238,6 +1242,13 @@
     var d = this.objs[c.d];
     if (d.npc) this.say(The(this, c.d) + ' would rather you didn’t.');
     else this.say(this.portable(c.d) ? 'Nothing happens, except that you are now holding ' + the(this, c.d) + ' at a slightly different angle.' : 'It doesn’t budge.');
+  };
+  A.lift = function (c) { A.pull.call(this, c); };
+  A.lower = function (c) { A.push.call(this, c); };
+  A.tradefor = function (c) {
+    var here = this.npcHere();
+    if (here.length === 1) { this.perform({ v: 'give', d: c.d, i: here[0] }); return; }
+    this.say(here.length ? 'Who do you want to trade with?' : 'There’s nobody here to trade with.');
   };
   A.turn = function (c) { this.say(this.objs[c.d].npc ? 'That would be rude.' : 'Nothing obvious happens.'); };
   A.set = function (c) { this.say('You can’t set ' + the(this, c.d) + ' to anything.'); };
@@ -1889,6 +1900,9 @@
       }
     });
     inp.addEventListener('input', function () { ui.auto = ''; root.classList.toggle('adv-has', !!inp.value.trim()); });
+    // Phones: while the soft keyboard is up, give the page the room the pad would take.
+    inp.addEventListener('focus', function () { if (ui && coarse()) root.classList.add('adv-typing'); });
+    inp.addEventListener('blur', function () { if (ui) root.classList.remove('adv-typing'); });
 
     root.addEventListener('click', function (e) {
       var t = e.target, el;

@@ -193,6 +193,7 @@ window.__cadeAdventureData = (function () {
   }
 
   function fitEyepiece(g, c) {
+    if (c.d === 'lens') return 'The lens belongs in the eyepiece — and the eyepiece in the telescope.';
     if (c.d !== 'eyepiece') return 'That doesn’t fit the eyepiece holder.';
     if (g.loc('eyepiece') === 'telescope') return 'The eyepiece is already in place.';
     if (!g.ensureHeld('eyepiece')) return true;
@@ -270,6 +271,8 @@ window.__cadeAdventureData = (function () {
     if (g.room() !== 'dome') return 'You’ve nothing to write in. (The logbook is up in the dome.)';
     if (!g.flag('seenScope')) return 'You lift the pencil on its string, then pause. A logbook is for observations, and you haven’t observed anything yet — not properly.';
     var t = String(c.topic || '').replace(/^["“‘']+|["”’']+$/g, '').trim();
+    // "write my name / an observation / it in the logbook" → the default entry.
+    if (/^(my |an? |the |our )?(name|names|signature|observation|observations|note|notes|it|entry|something|date|comet|hesper|what i saw|details|record)$/i.test(t)) t = '';
     if (t.length > 160) t = t.slice(0, 160) + '…';
     g.setFlag('logText', t || '');
     g.award('logbook', 5);
@@ -628,6 +631,7 @@ window.__cadeAdventureData = (function () {
       name: 'Attic',
       dark: true,
       darkDesc: 'It is pitch dark. Something rustles very close by, and there is a sharp, offended *chack!* The ladder is below you.',
+      on: { take: function (g, c) { if (c.d && g.loc(c.d) === 'nest' && c.d !== 'lens' && SHINY[c.d]) return 'Pim snaps at your fingers. A deal is a deal, and that is his now.'; } },
       desc: 'Under the slope of the roof, the attic is a clutter of trunks and broken chairs. A round window in the gable has lost a pane, and something has made itself very much at home: on top of an old wardrobe sits an enormous, untidy [nest]. The ladder leads down.',
       exits: { d: 'gallery', out: 'gallery' },
       sc: {
@@ -665,6 +669,8 @@ window.__cadeAdventureData = (function () {
       },
       sc: {
         'ribs|timber|timbers|ceiling': 'Curved oak ribs meeting at the top like the inside of a seashell.',
+        'dome|great dome|room': { d: function (g) { return 'The dome turns on a ring of iron wheels, driven from below. It faces ' + BEARINGS[g.p('bearingdial', 'bearing')] + '. The [bearing dial] controls it.'; },
+          on: { set: setBearing, turn: function (g, c) { return c.topic ? setBearing(g, c) : 'The bearing dial turns the dome. (Try TURN DIAL TO NORTH-EAST.)'; }, push: 'It weighs as much as a small church. The machinery turns it, not you.' } },
         'iron pier|pier': 'A massive iron column, bolted into the bedrock so that the telescope never feels the house tremble.',
         'control stand|stand|controls': 'A brass stand with a bearing dial for turning the dome and a lever for the shutter.',
         'lectern': 'A slanted wooden lectern holding the logbook.',
@@ -719,7 +725,7 @@ window.__cadeAdventureData = (function () {
         return 'Low in the north-east, just above the hills, hangs a small smudge of light with a faint tail, like a thumbprint on the glass of the sky: Hesper. To your bare eyes it’s a promise more than a sight.' +
           (g.room() === 'roof' ? ' Through the Great Refractor, you think, it would be something else entirely.' : '');
       },
-      on: { take: 'If only.', lookthrough: function (g) { return g.room() === 'dome' ? lookThrough(g) : true; } }
+      on: { take: 'If only.', lookthrough: function (g) { return g.room() === 'dome' ? lookThrough(g) : 'You can’t see through a comet — though, as it happens, faint stars shine right through its tail. You’d need the Great Refractor to see it properly.'; } }
     },
     observatory: {
       name: 'observatory', nouns: ['observatory', 'dome', 'house', 'building', 'wrenhallow'], adj: ['pale', 'great'], scenery: true,
@@ -1205,6 +1211,8 @@ window.__cadeAdventureData = (function () {
         push: function (g) { if (!g.p('clutch', 'engaged')) return 'It’s already disengaged.'; g.set('clutch', 'engaged', false); return 'You push the lever up. The clutch disengages with a clunk.' + (g.p('sluice', 'open') ? ' The gears grind to a halt.' : ''); },
         switchon: function (g) { return g.act('pull', 'clutch'); },
         switchoff: function (g) { return g.act('push', 'clutch'); },
+        lower: function (g) { return g.act('pull', 'clutch'); },
+        lift: function (g) { return g.act('push', 'clutch'); },
         turn: 'It moves up and down, not round. (PULL it to engage, PUSH it to disengage.)'
       }
     },
@@ -1220,6 +1228,8 @@ window.__cadeAdventureData = (function () {
       on: {
         open: function (g) { return openSluice(g); },
         pull: function (g) { return openSluice(g); },
+        lift: function (g) { return openSluice(g); },
+        lower: function (g) { return g.act('close', 'sluice'); },
         close: function (g) {
           if (!g.p('sluice', 'open')) return 'It’s already shut.';
           if (g.p('sluice', 'wedged')) return 'It’s wedged open. You’d have to take the wedge out first.';
@@ -1260,7 +1270,7 @@ window.__cadeAdventureData = (function () {
       initial: 'On one shelf lies a brass [eyepiece], engraved GREAT REFRACTOR.',
       note: function (g) { return g.loc('eyepiece') === 'telescope' ? 'in the telescope' : ''; },
       desc: function (g) { return 'A brass eyepiece about the length of your hand, engraved GREAT REFRACTOR — W.V. ' + (g.p('eyepiece', 'lens') ? 'A clear glass lens sits snugly in its socket.' : 'The socket at its end is empty: the lens is missing.'); },
-      on: { lookthrough: function (g) { return g.p('eyepiece', 'lens') ? 'Through the eyepiece alone, the world is a tiny upside-down blur. It needs the telescope.' : 'You look down an empty brass tube. Without its lens, it shows nothing but a small round view of the floor.'; } },
+      on: { lookthrough: function (g) { if (g.loc('eyepiece') === 'telescope') return lookThrough(g); return g.p('eyepiece', 'lens') ? 'Through the eyepiece alone, the world is a tiny upside-down blur. It needs the telescope.' : 'You look down an empty brass tube. Without its lens, it shows nothing but a small round view of the floor.'; } },
       rcv: {
         putin: function (g, c) { if (c.d === 'lens') return assembleEyepiece(g); },
         puton: function (g, c) { if (c.d === 'lens') return assembleEyepiece(g); },
@@ -1270,7 +1280,8 @@ window.__cadeAdventureData = (function () {
     windkey: {
       name: 'winding key', nouns: ['key', 'tag'], adj: ['winding', 'butterfly', 'clockwork'], loc: 'vault',
       initial: 'On another shelf lies a [winding key] with a handle shaped like a butterfly.',
-      desc: 'A brass key with a butterfly-shaped handle, the kind for winding clockwork. A paper tag tied to it says, simply, ‘C.’'
+      desc: 'A brass key with a butterfly-shaped handle, the kind for winding clockwork. A paper tag tied to it says, simply, ‘C.’',
+      on: { turn: function (g) { if (g.here('copernicus')) return windOwl(g, { i: 'windkey' }); }, use: function (g, c) { if (!c.i && g.here('copernicus')) return windOwl(g, { i: 'windkey' }); } }
     },
 
     // --- upstairs ---------------------------------------------------------------
@@ -1367,7 +1378,7 @@ window.__cadeAdventureData = (function () {
       name: 'hatch', nouns: ['hatch', 'trapdoor', 'ring'], adj: ['square', 'attic', 'iron'], loc: 'gallery', scenery: true, props: { down: false },
       desc: function (g) { return g.p('hatch', 'down') ? 'The hatch hangs open, and a folding ladder reaches down from it to the floor.' : 'A square hatch in the ceiling, high above you, with an iron ring set into it. Far out of reach.'; },
       on: {
-        open: function (g) { return pullHatch(g); }, pull: function (g) { return pullHatch(g); },
+        open: function (g) { return pullHatch(g); }, pull: function (g) { return pullHatch(g); }, lower: function (g) { return pullHatch(g); },
         unlock: function (g, c) { return c.i && c.i !== 'boathook' ? 'That won’t reach.' : pullHatch(g); },
         push: function (g) { return pullHatch(g); }, climb: function (g) { return g.p('hatch', 'down') ? (g.go('u'), true) : pullHatch(g); },
         close: 'You’d never get it open again without a fight. Leave it.', enter: function (g) { return g.p('hatch', 'down') ? (g.go('u'), true) : 'It’s far out of reach.'; }
@@ -1459,12 +1470,12 @@ window.__cadeAdventureData = (function () {
     shutterlever: {
       name: 'shutter lever', nouns: ['lever'], adj: ['shutter', 'brass'], loc: 'dome', scenery: true,
       desc: function (g) { return 'A brass lever on the control stand, marked SHUTTER, currently ' + (g.p('shutter', 'open') ? 'pulled down: OPEN.' : 'pushed up: CLOSED.'); },
-      on: { pull: pullShutter, push: closeShutter, switchon: pullShutter, switchoff: closeShutter, turn: 'It goes up and down, not round. PULL it to open the shutter, PUSH it to close.' }
+      on: { pull: pullShutter, push: closeShutter, switchon: pullShutter, switchoff: closeShutter, lower: pullShutter, lift: closeShutter, turn: 'It goes up and down, not round. PULL it to open the shutter, PUSH it to close.' }
     },
     shutter: {
       name: 'shutter', nouns: ['shutter', 'slit', 'slot'], adj: ['dome'], loc: 'dome', scenery: true, props: { open: false },
       desc: function (g) { return g.p('shutter', 'open') ? 'The shutter is open: a long slice of night sky, thick with stars, runs from the rim of the dome to the top.' : 'A long curved shutter in the dome, closed. It is worked by the lever on the control stand.'; },
-      on: { open: pullShutter, close: closeShutter, pull: pullShutter, push: 'It’s far overhead. The shutter lever on the control stand works it.', lookthrough: function (g) { return g.p('shutter', 'open') ? 'Stars, and the cold. The telescope would show you more.' : 'It’s closed.'; } }
+      on: { open: pullShutter, close: closeShutter, pull: pullShutter, lift: pullShutter, lower: closeShutter, push: 'It’s far overhead. The shutter lever on the control stand works it.', lookthrough: function (g) { return g.p('shutter', 'open') ? 'Stars, and the cold. The telescope would show you more.' : 'It’s closed.'; } }
     },
     logbook: {
       name: 'logbook', nouns: ['logbook', 'log', 'book', 'page'], adj: ['observing', 'open'], loc: 'dome', scenery: true,

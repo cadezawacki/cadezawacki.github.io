@@ -1,4 +1,4 @@
-/* Archive Utility — engine worker (classic worker; one per panel session).
+/* Archive Utility - engine worker (classic worker; one per panel session).
  *
  * Everything heavy happens here so the editor never stalls, and because the
  * Origin Private File System's synchronous access handles (the only OPFS
@@ -6,15 +6,15 @@
  *
  * Engines (fetched on first use, kept in our own Cache Storage bucket
  * CACHE below, loaded from blob: URLs with importScripts):
- *   - zip.js (BSD-3-Clause) — ZIP read/write, ZIP64, AES-256 / ZipCrypto.
- *   - 7z-wasm (7-Zip 24.09, GNU LGPL + unRAR restriction) — 7z create/extract
- *     with AES-256, and extraction of RAR, XZ, BZIP2, ZSTD, LZMA, CAB, ISO …
+ *   - zip.js (BSD-3-Clause) - ZIP read/write, ZIP64, AES-256 / ZipCrypto.
+ *   - 7z-wasm (7-Zip 24.09, GNU LGPL + unRAR restriction) - 7z create/extract
+ *     with AES-256, and extraction of RAR, XZ, BZIP2, ZSTD, LZMA, CAB, ISO ...
  *     NOTE (unRAR licence): the RAR decompression code inside 7zz.wasm may not
  *     be used to develop a RAR (WinRAR) compatible archiver.
  *   - TAR (ustar + PAX) and GZIP (native Compression Streams) are our own.
  *
- * Output never sits in memory when avoidable: it is written to a "spool" —
- * one OPFS temp file per job, written through a sync access handle — and
+ * Output never sits in memory when avoidable: it is written to a "spool" -
+ * one OPFS temp file per job, written through a sync access handle - and
  * handed back as disk-backed File slices. Without OPFS (old Safari, some
  * private modes) the spool falls back to an in-memory buffer.
  *
@@ -125,7 +125,7 @@
       try { hit = await cache.match(url); } catch (e) {}
       if (hit) return await hit.arrayBuffer();
     }
-    if (self.navigator && navigator.onLine === false) throw Fail('offline', 'You’re offline — the ' + name + ' engine downloads once, then works offline.');
+    if (self.navigator && navigator.onLine === false) throw Fail('offline', 'You\u2019re offline \u2014 the ' + name + ' engine downloads once, then works offline.');
     var res = await fetch(url, { mode: 'cors', credentials: 'omit' });
     if (!res.ok) throw new Error('HTTP ' + res.status + ' downloading the ' + name + ' engine');
     var buf;
@@ -190,7 +190,7 @@
   function ensure7z() {
     if (!szP) {
       szP = (async function () {
-        if (typeof WebAssembly !== 'object') throw Fail('nowasm', 'This browser can’t run the 7-Zip engine (no WebAssembly).');
+        if (typeof WebAssembly !== 'object') throw Fail('nowasm', 'This browser can\u2019t run the 7-Zip engine (no WebAssembly).');
         var cache = await openCache();
         var parts = await Promise.all([
           self.SevenZip ? null : getBytes(cache, ENG.sz.js, ENG.sz.jsSize, '7-Zip'),
@@ -227,7 +227,7 @@
         useOpfs = false; // private mode / unsupported: memory from now on
       }
     }
-    if (!memWarned) { memWarned = true; post({ id: curId, type: 'warn', message: 'No on-device temp storage here — output is kept in memory, so very large files may fail.' }); }
+    if (!memWarned) { memWarned = true; post({ id: curId, type: 'warn', message: 'No on-device temp storage here \u2014 output is kept in memory, so very large files may fail.' }); }
     sp.mem = new Uint8Array(1 << 20);
     sp.name = '';
     return sp;
@@ -246,7 +246,7 @@
         var cap = sp.mem.length;
         while (cap < need) cap = cap < 268435456 ? cap * 2 : cap + 268435456;
         var b;
-        try { b = new Uint8Array(cap); } catch (e) { throw Fail('memory', 'Out of memory — the output is too large for this device without temp storage.'); }
+        try { b = new Uint8Array(cap); } catch (e) { throw Fail('memory', 'Out of memory \u2014 the output is too large for this device without temp storage.'); }
         b.set(sp.mem.subarray(0, sp.end)); sp.mem = b;
       }
       sp.mem.set(u8, at);
@@ -646,7 +646,7 @@
         done += ab.byteLength;
         if (prog) prog.add(ab.byteLength, it.p);
       }
-      if (done !== it.s) throw new Error('“' + it.p + '” changed while it was being read');
+      if (done !== it.s) throw new Error('\u201c' + it.p + '\u201d changed while it was being read');
       total += done;
       var pad = (512 - (done % 512)) % 512;
       if (pad) { await w.write(new Uint8Array(pad)); total += pad; }
@@ -718,7 +718,7 @@
     return { zr: zr, zents: zents, entries: ents, comment: comment };
   }
   // Pick the password for an encrypted entry from the candidates (cheap check
-  // first; ZipCrypto's 1-byte check can pass a wrong one — CRC catches that).
+  // first; ZipCrypto's 1-byte check can pass a wrong one - CRC catches that).
   async function zipPassword(ze, pws) {
     for (var i = 0; i < pws.length; i++) {
       try {
@@ -730,13 +730,19 @@
     }
     return null;
   }
-  async function zipReadEntry(ze, ent, pws, ws, prog) {
+  // Resolve the password first, so no output file is created for an entry
+  // we can't decrypt.
+  async function zipOpts(ze, ent, pws) {
     var opts = { useWebWorkers: false, checkCrc32: true };
     if (ent.e) {
       var pw = await zipPassword(ze, pws);
       if (pw == null) throw Fail('password', 'Password required', { path: ent.p, wrong: pws.length > 0 });
       opts.password = pw;
     }
+    return opts;
+  }
+  async function zipReadEntry(ze, ent, pws, ws, prog, preOpts) {
+    var opts = preOpts || await zipOpts(ze, ent, pws);
     if (prog) {
       var last = 0;
       opts.onprogress = function (n) { prog.add(n - last); last = n; };
@@ -786,14 +792,14 @@
   function szRun(M, out, args) {
     var rc;
     try { rc = M.callMain(args); } catch (e) {
-      if (e && e.code) throw e; // our own (disk full …) from inside a sink write
+      if (e && e.code) throw e; // our own (disk full ...) from inside a sink write
       var msg = errMsg(e);
-      if (/memory|OOM|Aborted/i.test(msg)) throw Fail('memory', 'Out of memory — this archive needs more memory than the browser allows here.');
+      if (/memory|OOM|Aborted/i.test(msg)) throw Fail('memory', 'Out of memory \u2014 this archive needs more memory than the browser allows here.');
       throw Fail('engine', '7-Zip stopped unexpectedly (' + msg + ')');
     }
     var err = out.stderr();
     if (/Wrong password|encrypted archive/i.test(err)) throw Fail('password', 'Wrong password', { wrong: true });
-    if (rc === 8) throw Fail('memory', 'Out of memory — 7-Zip needs more memory than this device allows.');
+    if (rc === 8) throw Fail('memory', 'Out of memory \u2014 7-Zip needs more memory than this device allows.');
     if (rc >= 2) {
       var line = (err.split('\n').filter(function (l) { return /\S/.test(l); }).slice(-2).join(' ') || ('7-Zip exited with code ' + rc)).replace(/^ERROR:\s*/, '');
       if (/Can ?not open the file as archive|Unsupported/i.test(line)) throw Fail('format', 'Not a supported archive (or it is damaged).');
@@ -915,7 +921,7 @@
     var m = /^(\d{4})-(\d\d)-(\d\d) (\d\d):(\d\d):(\d\d)/.exec(s || '');
     return m ? +new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]) : 0;
   }
-  // Single-stream formats (xz, bzip2, zstd …) store no name: 7-Zip derives it
+  // Single-stream formats (xz, bzip2, zstd ...) store no name: 7-Zip derives it
   // from the archive name when extracting; do the same for the listing.
   function streamName(name) {
     var n = basename(name || 'archive');
@@ -1005,7 +1011,7 @@
 
   // ---- open ------------------------------------------------------------------------
   function volumeOrder(files) {
-    // First volume first: .001 / .part1.rar / .zip before .z01 / .7z.001 …
+    // First volume first: .001 / .part1.rar / .zip before .z01 / .7z.001 ...
     return files.slice().sort(function (a, b) {
       function key(n) {
         n = n.toLowerCase();
@@ -1031,7 +1037,7 @@
     if (fmt === 'zip' || fmt === 'exe') {
       try {
         var Z = await ensureZip();
-        stage('Reading ' + name + '…');
+        stage('Reading ' + name + '\u2026');
         var zo = await zipOpen(Z, main);
         sess.engine = 'zip'; sess.zr = zo.zr; sess.zents = zo.zents; sess.entries = zo.entries;
         res.entries = zo.entries; res.comment = zo.comment; res.label = 'ZIP';
@@ -1042,7 +1048,7 @@
       }
     }
     if (fmt === 'tar') {
-      stage('Reading ' + name + '…');
+      stage('Reading ' + name + '\u2026');
       var tl = await tarList(main, prog);
       sess.engine = 'tar'; sess.tar = main; sess.entries = tl.entries;
       res.entries = tl.entries; res.notes = tl.notes; res.label = 'TAR';
@@ -1052,7 +1058,7 @@
       var peek = await gunzipPeek(main, 512);
       if ((peek.length === 512 && isTarHeader(peek)) || /\.(tgz|taz|tar\.gz)$/.test(lower)) {
         return await openInnerTar(res, 'TAR.GZ', function (sp) {
-          stage('Decompressing ' + name + '…');
+          stage('Decompressing ' + name + '\u2026');
           return pumpStream(gunzipStream(main, prog), spAppender(sp));
         });
       }
@@ -1063,12 +1069,12 @@
       return res;
     }
     // Everything else: 7-Zip.
-    stage('Starting 7-Zip…');
+    stage('Starting 7-Zip\u2026');
     var li = await szList(files, pw);
     if (!li.entries.length && !li.type) throw Fail('format', 'Not a supported archive (or it is damaged).');
     var t = (li.type || '').toLowerCase();
     res.label = { '7z': '7z', rar: 'RAR', rar5: 'RAR', xz: 'XZ', bzip2: 'BZIP2', zstd: 'ZSTD', gzip: 'GZIP', lzma: 'LZMA', z: 'Z', cab: 'CAB', iso: 'ISO', tar: 'TAR', zip: 'ZIP', split: 'Split' }[t] || li.type || res.label;
-    // Compressed tarball (tar.xz / tar.bz2 / tar.zst …): decompress the outer
+    // Compressed tarball (tar.xz / tar.bz2 / tar.zst ...): decompress the outer
     // layer to temp storage once, then browse the tar with random access.
     if (/^(xz|bzip2|zstd|gzip|lzma|z)$/.test(t) && li.entries.length === 1 &&
       (/\.tar$/i.test(li.entries[0].p) || /\.(tbz2?|tbz|txz|tzst|tlz|tlzma|taz)$/.test(lower))) {
@@ -1085,13 +1091,13 @@
         sp = await newSpool('t');
         try { await fill(sp); f = await spFinish(sp); tmp = sp.name; } catch (e) { await spAbort(sp); throw e; }
       } else {
-        stage('Decompressing ' + name + '…');
+        stage('Decompressing ' + name + '\u2026');
         var ex = await szExtract(files, pw, null, prog, main.size);
         var reg = ex.regions.filter(function (r) { return !r.d; })[0];
         if (!reg) throw Fail('format', 'Empty archive');
         f = ex.file.slice(reg.off, reg.off + reg.size); tmp = ex.tmp;
       }
-      stage('Reading ' + name + '…');
+      stage('Reading ' + name + '\u2026');
       var tl2 = await tarList(f, new Prog(f.size, name));
       sess.engine = 'tar'; sess.tar = f; sess.entries = tl2.entries;
       res2.entries = tl2.entries; res2.notes = tl2.notes; res2.label = label;
@@ -1134,12 +1140,13 @@
         if (e.k === 'l') {
           // Symlinks can't be created here; hard links get the target's data.
           var tgt = e.hard ? findTarTarget(e.link) : null;
-          if (!tgt) { notes.push('Skipped link ' + e.p + ' → ' + e.link); continue; }
+          if (!tgt) { notes.push('Skipped link ' + e.p + ' \u2192 ' + e.link); continue; }
           await pumpBlob(sess.tar.slice(tgt.off, tgt.off + tgt.s), await sink.openFile(e.p, e.t), prog);
           continue;
         }
+        var zo = sess.engine === 'zip' ? await zipOpts(sess.zents[i], e, pws) : null;
         var ws = await sink.openFile(e.p, e.t);
-        if (sess.engine === 'zip') await zipReadEntry(sess.zents[i], e, pws, ws, prog);
+        if (sess.engine === 'zip') await zipReadEntry(sess.zents[i], e, pws, ws, prog, zo);
         else if (sess.engine === 'tar') await pumpBlob(sess.tar.slice(e.off, e.off + e.s), ws, prog);
         else if (sess.engine === 'gz') await pumpStream(gunzipStream(sess.main), ws, function (c) { prog.add(c.length); });
       }
@@ -1184,7 +1191,7 @@
       } finally { r.cancel().catch(noop); }
     } else {
       if (e.s > max) truncated = true;
-      if (e.s > 64 * 1048576) throw Fail('size', 'Too large to preview — extract it instead.');
+      if (e.s > 64 * 1048576) throw Fail('size', 'Too large to preview \u2014 extract it instead.');
       var ex = await szExtract(sess.files, pws[pws.length - 1] || sess.pw, [e.p], null, 0);
       var reg = ex.regions.filter(function (q) { return !q.d; })[0];
       if (reg) {
@@ -1275,7 +1282,7 @@
       } else if (fmt === 'tar' || fmt === 'tgz') {
         var dest = out.ws, piped = null;
         if (fmt === 'tgz') {
-          if (!hasCS) throw Fail('support', 'This browser can’t gzip (needs iOS / Safari 16.4 or newer).');
+          if (!hasCS) throw Fail('support', 'This browser can\u2019t gzip (needs iOS / Safari 16.4 or newer).');
           var cs = new CompressionStream('gzip');
           piped = cs.readable.pipeTo(out.ws);
           piped.catch(noop);
@@ -1288,7 +1295,7 @@
       } else if (fmt === 'gz') {
         var f = items.filter(function (x) { return !x.d; })[0];
         if (!f) throw Fail('state', 'Pick one file to gzip');
-        if (!hasCS) throw Fail('support', 'This browser can’t gzip (needs iOS / Safari 16.4 or newer).');
+        if (!hasCS) throw Fail('support', 'This browser can\u2019t gzip (needs iOS / Safari 16.4 or newer).');
         prog.label = f.p;
         await pumpStream(f.f.stream().pipeThrough(counter(prog)).pipeThrough(new CompressionStream('gzip')), out.ws);
       } else {
@@ -1343,7 +1350,7 @@
       throw e;
     }
   }
-  // Bundle already-extracted Files into one stored (uncompressed) ZIP — for
+  // Bundle already-extracted Files into one stored (uncompressed) ZIP - for
   // phones, where a folder can't be written but Files can unzip a .zip.
   async function opBundle(m) {
     var Z = await ensureZip();
@@ -1372,7 +1379,7 @@
   // Quick action: gunzip one file (no archive session needed).
   async function opGunzip(m) {
     var f = m.file;
-    if (!hasDS) throw Fail('support', 'This browser can’t gunzip (needs iOS / Safari 16.4 or newer).');
+    if (!hasDS) throw Fail('support', 'This browser can\u2019t gunzip (needs iOS / Safari 16.4 or newer).');
     var h = new Uint8Array(await f.slice(0, 4096).arrayBuffer());
     if (h[0] !== 0x1f || h[1] !== 0x8b) throw Fail('format', 'Not a gzip file.');
     var name = gzInnerName(h, f.name);

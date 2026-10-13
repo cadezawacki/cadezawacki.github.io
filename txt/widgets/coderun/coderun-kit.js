@@ -1107,6 +1107,87 @@
     return { html: b.text().replace(CFG_SLOT, JSON.stringify(cfg).replace(/</g, '\\u003c')), clean: clean.text(), cfg: cfg, full: !!full };
   };
 
+  // ---- Python host: runs INSIDE a sandbox="allow-scripts" srcdoc iframe ---------------------------
+  // Starts the worker source it is handed as a Worker from a blob: URL (then a
+  // data: URL); if the browser refuses workers in an opaque-origin frame, it
+  // runs the same source in this frame's page with a stand-in `self`. Relays
+  // worker <-> app messages; every message to the app carries the nonce.
+  // ES5 only. Shipped as source via Function.prototype.toString.
+  function PY_HOST(G, N) {
+    var P = G.parent, worker = null, shim = null, booted = false;
+    function up(m) { m.__crpy = N; try { P.postMessage(m, '*'); } catch (e) {} }
+    function fromWorker(d) {
+      if (!d || typeof d !== 'object') return;
+      if (d.type === 'fetch') up({ type: 'fetch', rid: d.rid, url: String(d.url || ''), integrity: String(d.integrity || '') });
+      else up({ type: 'w', m: d });
+    }
+    function toWorker(m, tr) {
+      if (worker) { worker.postMessage(m, tr || []); return; }
+      if (shim) G.setTimeout(function () { if (shim.onmessage) shim.onmessage({ data: m }); }, 0);
+    }
+    function mainThread(src, why) {
+      shim = {
+        onmessage: null,
+        postMessage: function (d) {
+          if (d && d.type === 'alive') { up({ type: 'mode', mode: 'page', why: String(why || '') }); return; }
+          fromWorker(d);
+        },
+        __cadeLoadScript: function (url) {
+          return new Promise(function (res, rej) {
+            var s = G.document.createElement('script');
+            s.src = url;
+            s.onload = function () { res(); };
+            s.onerror = function () { rej(new Error('could not load ' + url)); };
+            G.document.head.appendChild(s);
+          });
+        }
+      };
+      ['fetch', 'navigator', 'loadPyodide'].forEach(function (k) {
+        Object.defineProperty(shim, k, { get: function () { return G[k]; }, set: function (v) { G[k] = v; }, configurable: true, enumerable: true });
+      });
+      try { (new G.Function('self', 'importScripts', src))(shim, undefined); }
+      catch (e) { up({ type: 'w', m: { type: 'initError', message: 'Python host failed: ' + (e && e.message) } }); }
+    }
+    function boot(src) {
+      var urls = [], i = 0;
+      try { urls.push(G.URL.createObjectURL(new G.Blob([src], { type: 'text/javascript' }))); } catch (e) {}
+      urls.push('data:text/javascript;charset=utf-8,' + encodeURIComponent(src));
+      function next(why) {
+        if (i >= urls.length || typeof G.Worker !== 'function') { mainThread(src, why || 'no Worker'); return; }
+        var url = urls[i++], w = null, alive = false, t = 0;
+        try { w = new G.Worker(url); } catch (e) { next(e && e.message); return; }
+        t = G.setTimeout(function () { if (!alive) { try { w.terminate(); } catch (x) {} next('worker did not start'); } }, 5000);
+        w.onmessage = function (e) {
+          var d = e.data;
+          if (alive) { fromWorker(d); return; }
+          if (d && d.type === 'alive') { alive = true; G.clearTimeout(t); worker = w; up({ type: 'mode', mode: 'worker' }); }
+        };
+        w.onerror = function (ev) {
+          try { ev.preventDefault(); } catch (x) {}
+          if (!alive) { G.clearTimeout(t); try { w.terminate(); } catch (x) {} next(ev && ev.message); return; }
+          up({ type: 'w', m: { type: 'crash', message: String((ev && ev.message) || 'worker error') } });
+        };
+      }
+      next('');
+    }
+    G.addEventListener('message', function (e) {
+      if (e.source !== P) return;
+      var m = e.data;
+      if (!m || m.__crpy !== N) return;
+      if (m.type === 'boot') { if (!booted) { booted = true; boot(String(m.src || '')); } }
+      else if (m.type === 'fetched') {
+        toWorker({ type: 'fetched', rid: m.rid, ok: !!m.ok, status: m.status, ct: m.ct, buf: m.buf || null, error: m.error || '' }, m.buf && worker ? [m.buf] : null);
+      } else if (m.type === 'cmd') toWorker(m.m);
+    });
+    up({ type: 'host-ready' });
+  }
+  K.PY_HOST = PY_HOST;
+  // The host document for one Python session (nonce baked in).
+  K.pyHostDoc = function (nonce) {
+    return '<!doctype html><html><head><meta charset="utf-8"><script>\n(' + PY_HOST.toString() + ')(window, ' +
+      JSON.stringify(String(nonce)).replace(/</g, '\\u003c') + ');\n</script></head><body></body></html>';
+  };
+
   if (root) root.__cadeCodeRunKit = K;
   if (typeof module === 'object' && module && module.exports) module.exports = K;
 })(typeof window !== 'undefined' ? window : null);

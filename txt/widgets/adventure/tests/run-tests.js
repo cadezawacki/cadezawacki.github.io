@@ -229,6 +229,7 @@ function upTo(G, cmd) { for (var i = 0; i < WALK.length && WALK[i].cmd !== cmd; 
   has(G.say('give letter to pim'), 'withering contempt', 'Pim refuses dull gifts');
   has(G.say('show spoon to pim'), 'wants it', 'show shiny');
   has(G.say('put spoon in nest'), 'fair trade', 'put shiny in nest = trade');
+  has(G.say('take spoon'), 'A deal is a deal', 'no taking the payment back');
   G.say('d'); G.say('w');
   has(G.say('n'), 'locked', 'dome door locked without its key');
 })();
@@ -328,6 +329,57 @@ function upTo(G, cmd) { for (var i = 0; i < WALK.length && WALK[i].cmd !== cmd; 
   has(G.say('go to gatehouse'), 'Gatehouse Kitchen', 'go to an adjacent room by name');
   has(G.say('kiss thorne'), 'Get away with you');
   has(G.say('exits'), 'Exits: east', 'exits');
+})();
+
+// ---------------------------------------------------------------------------
+// 6. Alternative phrasings players will try at each puzzle (fresh game each).
+// ---------------------------------------------------------------------------
+(function phrasings() {
+  var ALT = [
+    ['show letter to thorne', ['give letter to mrs thorne', 'show thorne the letter', 'give her the letter', 'show mrs. thorne my letter'], 'gate key'],
+    ['push door', ['shove door', 'kick the door', 'force front door', 'shoulder door', 'barge door', 'push the front door'], 'stumble'],
+    ['fill lantern with oil', ['put oil in lantern', 'pour oil into lantern', 'fill lamp', 'use oil can on lantern', 'pour paraffin in lamp', 'refill lantern'], 'paraffin and possibility'],
+    ['light lantern', ['light lamp with matches', 'light lantern with a match', 'turn on lantern', 'use matches on lantern', 'ignite the lantern'], 'golden glow'],
+    ['oil bolt', ['put oil on bolt', 'pour oil on the bolt', 'use oil can on bolt', 'grease bolt', 'oil the cellar door', 'lubricate bolt with oil can'], 'rust drinks'],
+    ['pull bolt', ['slide bolt', 'unbolt door', 'unbolt', 'draw back bolt', 'open bolt', 'move bolt'], 'satisfied sigh'],
+    ['open globe', ['open the celestial globe', 'open globe'], 'small brass key'],
+    ['unlock drawer with small key', ['unlock drawer', 'open drawer', 'unlock desk drawer with brass key', 'use small key on drawer'], 'desk drawer'],
+    ['set dials to 2841', ['dial 2841', 'set dials 2841', 'turn dials to 2-8-4-1', 'enter 2841', 'set combination to 2841', 'type 2 8 4 1'], 'swings open'],
+    ['turn crank', ['open sluice', 'turn handle', 'lift sluice gate', 'raise sluice', 'crank the crank', 'pull crank', 'start wheel'], 'begins to turn'],
+    ['pull lever', ['engage clutch', 'pull clutch lever', 'push lever down', 'lower lever', 'pull clutch'], 'clutch'],
+    ['wind owl with winding key', ['wind owl', 'wind copernicus', 'use winding key on owl', 'put winding key in owl', 'turn winding key', 'wind up the owl', 'insert butterfly key into owl'], 'WHO has wound me'],
+    ['pull hatch with boathook', ['open hatch', 'pull hatch', 'use boathook on hatch', 'hook ring with boathook', 'open hatch with boathook', 'pull ring', 'lower hatch'], 'ladder'],
+    ['give spoon to pim', ['give spoon to magpie', 'give pim the spoon', 'trade spoon for lens', 'offer spoon to bird', 'put spoon in nest', 'give silver spoon to him'], 'fair trade'],
+    ['put lens in eyepiece', ['fit lens into eyepiece', 'insert lens in eyepiece', 'attach lens to eyepiece', 'use lens on eyepiece', 'put glass in eyepiece'], 'click'],
+    ['put eyepiece in telescope', ['fit eyepiece to telescope', 'insert eyepiece into refractor', 'attach eyepiece to telescope', 'put eyepiece on telescope', 'use eyepiece on telescope'], 'snugness'],
+    ['turn dial to north-east', ['turn dial to ne', 'turn dial northeast', 'set dial to north east', 'rotate dome to northeast', 'point telescope at comet', 'turn bearing dial to NE', 'turn dome northeast'], 'facing north-east'],
+    ['cut ivy with secateurs', ['cut ivy', 'prune the ivy', 'use secateurs on ivy', 'clip ivy with shears', 'cut through ivy with secateurs'], 'track is clear']
+  ];
+  ALT.forEach(function (a) {
+    a[1].forEach(function (phr) {
+      var G = H.newGame();
+      upTo(G, a[0]);
+      var out = G.say(phr);
+      if (out.indexOf('Which') === 0) out += '\n' + G.say('the first');
+      has(out, a[2], 'phrasing “' + phr + '” (for ' + a[0] + ')');
+    });
+  });
+  // After the shutter step: other ways to look.
+  ['look through telescope'].forEach(function () {
+    ['look in telescope', 'use telescope', 'look through eyepiece', 'look at comet', 'examine hesper', 'observe comet'].forEach(function (phr) {
+      var G = H.newGame();
+      upTo(G, 'look through telescope');
+      G.say('turn focus knob');
+      has(G.say(phr), 'two tails', 'phrasing “' + phr + '”');
+    });
+  });
+  ['write in logbook', 'sign logbook', 'write my name in the logbook', 'record observation in logbook', 'write in book'].forEach(function (phr) {
+    var G = H.newGame();
+    WALK.slice(0, -1).forEach(function (st) { G.say(st.cmd); });
+    var out = G.say(phr);
+    has(out, 'THE END — Hesper, recorded', 'phrasing “' + phr + '”');
+    has(out, 'Worth every hill', 'generic entry gets the default line: ' + phr);
+  });
 })();
 
 console.log((fails ? 'FAILED ' + fails : 'OK') + ' — ' + passes + ' passed');

@@ -91,7 +91,7 @@
   flex: 0 0 auto; display: flex; gap: 10px; padding: 8px 10px; border-top: 1px solid var(--border);
   background: var(--surface-2); max-height: 42%; overflow-y: auto;
 }
-.adv-pad[hidden] { display: none; }
+.adv-pad[hidden], .adv-typing .adv-pad { display: none; }
 .adv-padl { flex: 0 0 auto; display: flex; flex-direction: column; gap: 4px; }
 .adv-rose { display: grid; grid-template-columns: repeat(3, 40px); grid-auto-rows: 34px; gap: 3px; }
 .adv-ud { display: grid; grid-template-columns: repeat(4, 1fr); gap: 3px; }
@@ -163,7 +163,7 @@
 .adv-fsv { min-width: 36px; text-align: center; font: 11px var(--font-mono); color: var(--text-muted); }
 
 .adv-sheet {
-  position: absolute; inset: 0; z-index: 4; display: flex; align-items: flex-end; justify-content: center;
+  position: absolute; top: 0; right: 0; bottom: 0; left: 0; z-index: 4; display: flex; align-items: flex-end; justify-content: center;
   background: rgba(0, 0, 0, 0.28); padding: 10px;
 }
 .adv-sheet[hidden] { display: none; }
