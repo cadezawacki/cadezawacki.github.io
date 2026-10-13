@@ -42,46 +42,46 @@
   // ---- WMO weather codes -------------------------------------------------------
   // [label, glyph kind, emoji]
   var WMO = {
-    0: ['Clear', 'clear', '☀️'],
-    1: ['Mostly clear', 'mostly', '🌤️'],
-    2: ['Partly cloudy', 'partly', '⛅'],
-    3: ['Overcast', 'cloudy', '☁️'],
-    45: ['Fog', 'fog', '🌫️'],
-    48: ['Freezing fog', 'fog', '🌫️'],
-    51: ['Light drizzle', 'drizzle', '🌦️'],
-    53: ['Drizzle', 'drizzle', '🌦️'],
-    55: ['Heavy drizzle', 'drizzle', '🌧️'],
-    56: ['Freezing drizzle', 'sleet', '🌧️'],
-    57: ['Heavy freezing drizzle', 'sleet', '🌧️'],
-    61: ['Light rain', 'rain', '🌧️'],
-    63: ['Rain', 'rain', '🌧️'],
-    65: ['Heavy rain', 'heavy-rain', '🌧️'],
-    66: ['Freezing rain', 'sleet', '🌧️'],
-    67: ['Heavy freezing rain', 'sleet', '🌧️'],
-    71: ['Light snow', 'snow', '🌨️'],
-    73: ['Snow', 'snow', '🌨️'],
-    75: ['Heavy snow', 'heavy-snow', '❄️'],
-    77: ['Snow grains', 'snow', '🌨️'],
-    80: ['Light showers', 'showers', '🌦️'],
-    81: ['Showers', 'showers', '🌦️'],
-    82: ['Violent showers', 'heavy-rain', '🌧️'],
-    85: ['Snow showers', 'snow-showers', '🌨️'],
-    86: ['Heavy snow showers', 'heavy-snow', '❄️'],
-    95: ['Thunderstorm', 'thunder', '⛈️'],
-    96: ['Thunderstorm with hail', 'hail', '⛈️'],
-    99: ['Severe thunderstorm with hail', 'hail', '⛈️'],
+    0: ['Clear', 'clear', '\u2600\ufe0f'],
+    1: ['Mostly clear', 'mostly', '\ud83c\udf24\ufe0f'],
+    2: ['Partly cloudy', 'partly', '\u26c5'],
+    3: ['Overcast', 'cloudy', '\u2601\ufe0f'],
+    45: ['Fog', 'fog', '\ud83c\udf2b\ufe0f'],
+    48: ['Freezing fog', 'fog', '\ud83c\udf2b\ufe0f'],
+    51: ['Light drizzle', 'drizzle', '\ud83c\udf26\ufe0f'],
+    53: ['Drizzle', 'drizzle', '\ud83c\udf26\ufe0f'],
+    55: ['Heavy drizzle', 'drizzle', '\ud83c\udf27\ufe0f'],
+    56: ['Freezing drizzle', 'sleet', '\ud83c\udf27\ufe0f'],
+    57: ['Heavy freezing drizzle', 'sleet', '\ud83c\udf27\ufe0f'],
+    61: ['Light rain', 'rain', '\ud83c\udf27\ufe0f'],
+    63: ['Rain', 'rain', '\ud83c\udf27\ufe0f'],
+    65: ['Heavy rain', 'heavy-rain', '\ud83c\udf27\ufe0f'],
+    66: ['Freezing rain', 'sleet', '\ud83c\udf27\ufe0f'],
+    67: ['Heavy freezing rain', 'sleet', '\ud83c\udf27\ufe0f'],
+    71: ['Light snow', 'snow', '\ud83c\udf28\ufe0f'],
+    73: ['Snow', 'snow', '\ud83c\udf28\ufe0f'],
+    75: ['Heavy snow', 'heavy-snow', '\u2744\ufe0f'],
+    77: ['Snow grains', 'snow', '\ud83c\udf28\ufe0f'],
+    80: ['Light showers', 'showers', '\ud83c\udf26\ufe0f'],
+    81: ['Showers', 'showers', '\ud83c\udf26\ufe0f'],
+    82: ['Violent showers', 'heavy-rain', '\ud83c\udf27\ufe0f'],
+    85: ['Snow showers', 'snow-showers', '\ud83c\udf28\ufe0f'],
+    86: ['Heavy snow showers', 'heavy-snow', '\u2744\ufe0f'],
+    95: ['Thunderstorm', 'thunder', '\u26c8\ufe0f'],
+    96: ['Thunderstorm with hail', 'hail', '\u26c8\ufe0f'],
+    99: ['Severe thunderstorm with hail', 'hail', '\u26c8\ufe0f'],
   };
   function wmo(code, isDay) {
     var w = WMO[code];
     if (!w) {
       // Unknown future code: fall back to its decade's family.
       var c = Math.floor((+code || 0) / 10) * 10;
-      w = WMO[c] || WMO[c + 1] || WMO[c + 3] || ['Unknown', 'cloudy', '🌡️'];
+      w = WMO[c] || WMO[c + 1] || WMO[c + 3] || ['Unknown', 'cloudy', '\ud83c\udf21\ufe0f'];
     }
     var emoji = w[2];
     if (isDay === false || isDay === 0) {
-      if (w[1] === 'clear' || w[1] === 'mostly') emoji = '🌙';
-      else if (w[1] === 'partly') emoji = '☁️';
+      if (w[1] === 'clear' || w[1] === 'mostly') emoji = '\ud83c\udf19';
+      else if (w[1] === 'partly') emoji = '\u2601\ufe0f';
     }
     return { label: w[0], kind: w[1], emoji: emoji };
   }
@@ -125,25 +125,25 @@
   function savePrefs() { writeJSON(PREFS_KEY, prefs); }
 
   function tC(c) { return prefs.temp === 'F' ? c * 9 / 5 + 32 : c; }
-  function tStr(c) { return c == null || isNaN(c) ? '–' : Math.round(tC(c)) + '°'; }
-  function tUnit() { return '°' + prefs.temp; }
+  function tStr(c) { return c == null || isNaN(c) ? '\u2013' : Math.round(tC(c)) + '\u00b0'; }
+  function tUnit() { return '\u00b0' + prefs.temp; }
   var WIND_U = { kmh: ['km/h', 1], mph: ['mph', 1 / 1.609344], ms: ['m/s', 1 / 3.6], kn: ['kn', 1 / 1.852] };
   function wV(kmh) { return kmh * WIND_U[prefs.wind][1]; }
-  function wStr(kmh) { return kmh == null ? '–' : Math.round(wV(kmh)) + ' ' + WIND_U[prefs.wind][0]; }
+  function wStr(kmh) { return kmh == null ? '\u2013' : Math.round(wV(kmh)) + '\u00a0' + WIND_U[prefs.wind][0]; }
   function pStr(mm) {
-    if (mm == null) return '–';
-    if (prefs.precip === 'in') { var i = mm / 25.4; return (i < 0.1 && i > 0 ? i.toFixed(2) : i.toFixed(1)) + ' in'; }
-    return (mm < 10 ? mm.toFixed(1) : Math.round(mm)) + ' mm';
+    if (mm == null) return '\u2013';
+    if (prefs.precip === 'in') { var i = mm / 25.4; return (i < 0.1 && i > 0 ? i.toFixed(2) : i.toFixed(1)) + '\u00a0in'; }
+    return (mm < 10 ? mm.toFixed(1) : Math.round(mm)) + '\u00a0mm';
   }
   function milesFirst() { return prefs.wind === 'mph' || prefs.precip === 'in'; }
   function pressStr(hpa) {
-    if (hpa == null) return '–';
-    return prefs.precip === 'in' ? (hpa * 0.0295300).toFixed(2) + ' inHg' : Math.round(hpa) + ' hPa';
+    if (hpa == null) return '\u2013';
+    return prefs.precip === 'in' ? (hpa * 0.0295300).toFixed(2) + '\u00a0inHg' : Math.round(hpa) + '\u00a0hPa';
   }
   function visStr(m) {
-    if (m == null) return '–';
-    if (milesFirst()) { var mi = m / 1609.344; return (mi < 10 ? mi.toFixed(1) : Math.round(mi)) + ' mi'; }
-    var km = m / 1000; return (km < 10 ? km.toFixed(1) : Math.round(km)) + ' km';
+    if (m == null) return '\u2013';
+    if (milesFirst()) { var mi = m / 1609.344; return (mi < 10 ? mi.toFixed(1) : Math.round(mi)) + '\u00a0mi'; }
+    var km = m / 1000; return (km < 10 ? km.toFixed(1) : Math.round(km)) + '\u00a0km';
   }
   var DIRS = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
   function dirName(deg) { return deg == null ? '' : DIRS[Math.round(((deg % 360) + 360) % 360 / 22.5) % 16]; }
@@ -215,14 +215,16 @@
   }
   // tone: light | back | gray | dark
   function cloud(tf, tone, mini, cls) {
-    var g = '<g transform="' + tf + '"' + (cls ? ' class="' + cls + '"' : '') + '>';
+    // The animated class goes on a wrapper: a CSS transform animation would
+    // replace the transform attribute that positions the cloud.
+    var g = (cls ? '<g class="' + cls + '">' : '') + '<g transform="' + tf + '">';
     if (mini) {
       g += cloudShapes('wxm-halo') + cloudShapes('wxm-cl wxm-cl-' + tone);
     } else {
       g += '<g transform="translate(0 3)" opacity="0.18">' + cloudShapes('wx-cshadow') + '</g>' +
         cloudShapes('wx-cl', ' fill="url(#wx-gc-' + tone + ')"');
     }
-    return g + '</g>';
+    return g + '</g>' + (cls ? '</g>' : '');
   }
   function sun(cx, cy, r, mini) {
     var r1 = r * 1.38, r2 = r * 1.86, rays = '';
@@ -471,7 +473,7 @@
       var s = document.createElement('script');
       s.src = GEO_URL;
       s.onload = function () { if (window.__cadeGeo) resolve(window.__cadeGeo); else { geoLoading = null; reject(new Error('geo')); } };
-      s.onerror = function () { geoLoading = null; reject(new Error('Couldn’t load the location helper')); };
+      s.onerror = function () { geoLoading = null; reject(new Error('Couldn\u2019t load the location helper')); };
       document.head.appendChild(s);
     });
     return geoLoading;
@@ -514,18 +516,18 @@
     for (i = 1; i < n; i++) {
       if ((h.pp[i] || 0) >= 30) return 'Slight chance of ' + precipWord(wmo(h.code[i]).kind).toLowerCase() + ' around ' + hr(h.t[i], tz) + ' (' + h.pp[i] + '%)';
     }
-    if (m.c.wg != null && m.c.wg >= 50) return 'Gusty — gusts up to ' + wStr(m.c.wg);
+    if (m.c.wg != null && m.c.wg >= 50) return 'Gusty \u2014 gusts up to ' + wStr(m.c.wg);
     var di = todayIdx(m, Date.now());
-    if (m.d.uv[di] >= 8 && m.c.day) return 'Very high UV today (' + Math.round(m.d.uv[di]) + ') — sun protection advised';
+    if (m.d.uv[di] >= 8 && m.c.day) return 'Very high UV today (' + Math.round(m.d.uv[di]) + ') \u2014 sun protection advised';
     return 'No precipitation expected in the next 12 hours';
   }
   function headIcon(text) {
-    if (/^No precip/.test(text)) return '✓';
-    if (/Gust/.test(text)) return '≋';
-    if (/UV/.test(text)) return '☀';
-    if (/Snow/i.test(text)) return '❄';
-    if (/Storm/i.test(text)) return '⚡';
-    return '☂';
+    if (/^No precip/.test(text)) return '\u2713';
+    if (/Gust/.test(text)) return '\u224b';
+    if (/UV/.test(text)) return '\u2600';
+    if (/Snow/i.test(text)) return '\u2744';
+    if (/Storm/i.test(text)) return '\u26a1';
+    return '\u2602';
   }
 
   // ---- rendering -------------------------------------------------------------------------
@@ -540,7 +542,7 @@
     if (!S.loc) { renderEmpty(main); renderFoot(); return; }
     if (!m) {
       main.innerHTML = S.err
-        ? '<div class="wx-msg"><div class="wx-msg-t">Couldn’t load the weather</div><div class="wx-msg-s">' + esc(S.err) +
+        ? '<div class="wx-msg"><div class="wx-msg-t">Couldn\u2019t load the weather</div><div class="wx-msg-s">' + esc(S.err) +
           '</div><button class="wx-btn primary wx-retry" type="button">Try again</button></div>'
         : skeleton();
       renderFoot();
@@ -579,14 +581,14 @@
   function heroHTML(m, now) {
     var c = m.c, w = wmo(c.code, c.day), di = todayIdx(m, now);
     var stale = S.offline || S.failed || now - m.fetched > STALE_MS;
-    var badge = stale ? '<span class="wx-badge" title="Showing saved data">' + (navigator.onLine === false ? 'Offline · ' : 'Saved · ') + ago(m.fetched) + '</span>' : '';
+    var badge = stale ? '<span class="wx-badge" title="Showing saved data">' + (navigator.onLine === false ? 'Offline \u00b7 ' : 'Saved \u00b7 ') + ago(m.fetched) + '</span>' : '';
     var line = headline(m);
     return '<div class="wx-hero" data-sky="' + skyKey(m, now) + '">' +
       '<div class="wx-hero-fx" aria-hidden="true"></div>' +
       '<div class="wx-hero-row">' +
         '<div class="wx-hero-l">' +
           '<div class="wx-now">Now ' + badge + '</div>' +
-          '<div class="wx-temp">' + Math.round(tC(c.tp)) + '<span class="wx-deg">°</span></div>' +
+          '<div class="wx-temp">' + Math.round(tC(c.tp)) + '<span class="wx-deg">\u00b0</span></div>' +
           '<div class="wx-cond">' + esc(w.label) + '</div>' +
           '<div class="wx-hilo"><span>H ' + tStr(m.d.hi[di]) + '</span><span>L ' + tStr(m.d.lo[di]) + '</span><span>Feels ' + tStr(c.fl) + '</span></div>' +
         '</div>' +
@@ -657,7 +659,7 @@
     for (i = 0; i < n; i++) {
       var p = pts[i];
       s += '<circle class="wx-hdot' + (i === 0 ? ' now' : '') + '" cx="' + f1(p[0]) + '" cy="' + f1(p[1]) + '" r="' + (i === 0 ? 4 : 2.6) + '" stroke="' + tempColor(temps[i]) + '"/>';
-      s += '<text class="wx-htemp" x="' + f1(p[0]) + '" y="' + f1(p[1] - 9) + '" text-anchor="middle">' + Math.round(tC(temps[i])) + '°</text>';
+      s += '<text class="wx-htemp" x="' + f1(p[0]) + '" y="' + f1(p[1] - 9) + '" text-anchor="middle">' + Math.round(tC(temps[i])) + '\u00b0</text>';
       var pp = h.pp[i] || 0;
       if (pp > 0) {
         var bh = Math.max(2, pp / 100 * barMax);
@@ -692,20 +694,25 @@
         '<span class="wx-dhi">' + tStr(hi) + '</span></button>';
       if (open) {
         var date = fmt(d.t[i] + 12 * HOUR, tz, 'md', { weekday: 'long', month: 'short', day: 'numeric' });
-        out += '<div class="wx-dmore"><b>' + esc(date) + '</b> · ' + esc(wmo(d.code[i], 1).label) +
+        out += '<div class="wx-dmore"><b>' + esc(date) + '</b> \u00b7 ' + esc(wmo(d.code[i], 1).label) +
           '<div class="wx-dgrid">' +
-          '<span>↑ Sunrise <b>' + (d.sr[i] ? hm(d.sr[i], tz) : '–') + '</b></span>' +
-          '<span>↓ Sunset <b>' + (d.ss[i] ? hm(d.ss[i], tz) : '–') + '</b></span>' +
+          '<span>\u2191 Sunrise <b>' + (d.sr[i] ? hm(d.sr[i], tz) : '\u2013') + '</b></span>' +
+          '<span>\u2193 Sunset <b>' + (d.ss[i] ? hm(d.ss[i], tz) : '\u2013') + '</b></span>' +
           '<span>Wind <b>' + wStr(d.wm[i]) + ' ' + dirName(d.wd[i]) + '</b></span>' +
           '<span>Gusts <b>' + wStr(d.gm[i]) + '</b></span>' +
-          '<span>Precip. <b>' + pStr(d.ps[i]) + (pp != null ? ' · ' + pp + '%' : '') + '</b></span>' +
-          '<span>UV max <b>' + (d.uv[i] != null ? Math.round(d.uv[i]) + ' ' + uvLevel(d.uv[i])[1] : '–') + '</b></span>' +
+          '<span>Precip. <b>' + pStr(d.ps[i]) + (pp != null ? ' \u00b7 ' + pp + '%' : '') + '</b></span>' +
+          '<span>UV max <b>' + (d.uv[i] != null ? Math.round(d.uv[i]) + ' ' + uvLevel(d.uv[i])[1] : '\u2013') + '</b></span>' +
           '</div></div>';
       }
     }
     return out;
   }
 
+  // "1020 hPa" → big number + small unit
+  function big(str) {
+    var i = str.indexOf('\u00a0');
+    return i < 0 ? esc(str) : esc(str.slice(0, i)) + '<small> ' + esc(str.slice(i + 1)) + '</small>';
+  }
   function tile(cls, label, body, title) {
     return '<div class="wx-tile ' + cls + '"' + (title ? ' title="' + esc(title) + '"' : '') + '><div class="wx-tl">' + label + '</div>' + body + '</div>';
   }
@@ -727,20 +734,22 @@
     var comp = '<svg class="wx-comp" viewBox="0 0 80 80" aria-hidden="true"><g class="wx-comp-t">' + ticks + '</g>' +
       '<text x="40" y="20" text-anchor="middle">N</text><text x="62" y="43.5" text-anchor="middle">E</text><text x="40" y="66" text-anchor="middle">S</text><text x="18" y="43.5" text-anchor="middle">W</text>' +
       '<g transform="rotate(' + ((wd + 180) % 360) + ' 40 40)"><path class="wx-comp-a" d="M40 10 46 22H42V58H38V22H34Z"/><circle class="wx-comp-c" cx="40" cy="40" r="3.4"/></g></svg>';
-    out += tile('wx-wind', '≋ Wind',
-      '<div class="wx-wind-row">' + comp + '<div><div class="wx-big">' + Math.round(wV(c.ws || 0)) + '<small> ' + WIND_U[prefs.wind][0] + '</small></div>' +
-      '<div class="wx-sub">From ' + dirName(c.wd) + ' (' + Math.round(wd) + '°)</div>' +
-      '<div class="wx-sub">Gusts ' + wStr(c.wg) + '</div><div class="wx-sub faint">' + beaufort(c.ws || 0) + '</div></div></div>');
+    out += tile('wx-wind wide', '\u224b Wind',
+      '<div class="wx-wind-row">' + comp +
+      '<div class="wx-wind-main"><div class="wx-big">' + Math.round(wV(c.ws || 0)) + '<small> ' + WIND_U[prefs.wind][0] + '</small></div>' +
+      '<div class="wx-sub">' + beaufort(c.ws || 0) + '</div></div>' +
+      '<div class="wx-kv"><span>Gusts</span><b>' + wStr(c.wg) + '</b><span>From</span><b>' + (c.wd != null ? dirName(c.wd) + ' ' + Math.round(wd) + '\u00b0' : '\u2013') + '</b>' +
+      '<span>Today\u2019s max</span><b>' + wStr(d.wm[di]) + '</b></div></div>');
     // Humidity
     var dp = c.dp, comfort = dp == null ? '' : dp < 10 ? 'Dry' : dp < 16 ? 'Comfortable' : dp < 18 ? 'Humid' : dp < 21 ? 'Muggy' : 'Oppressive';
-    out += tile('', '◍ Humidity', '<div class="wx-big">' + (c.rh != null ? c.rh : '–') + '<small>%</small></div>' +
+    out += tile('', '\u25cd Humidity', '<div class="wx-big">' + (c.rh != null ? c.rh : '\u2013') + '<small>%</small></div>' +
       meter(c.rh || 0, 'linear-gradient(90deg,#7dd3fc,#3b82f6)') +
       '<div class="wx-sub">Dew point ' + tStr(dp) + '</div><div class="wx-sub faint">' + comfort + '</div>');
     // UV
     var uv = c.uv != null ? c.uv : 0, ul = uvLevel(uv);
-    out += tile('', '☀ UV index', '<div class="wx-big">' + Math.round(uv) + '<small> ' + ul[1] + '</small></div>' +
+    out += tile('', '\u2600 UV index', '<div class="wx-big">' + Math.round(uv) + '<small> ' + ul[1] + '</small></div>' +
       meter(uv / 11 * 100, null, 'linear-gradient(90deg,#3ea72d,#e2b007 30%,#f18b00 55%,#e53210 75%,#b567a4)') +
-      '<div class="wx-sub">Today’s max ' + (d.uv[di] != null ? Math.round(d.uv[di]) + ' · ' + uvLevel(d.uv[di])[1] : '–') + '</div>');
+      '<div class="wx-sub">Today\u2019s max ' + (d.uv[di] != null ? Math.round(d.uv[di]) + ' \u00b7 ' + uvLevel(d.uv[di])[1] : '\u2013') + '</div>');
     // Air quality
     if (m.aq && (m.aq.us != null || m.aq.eu != null)) {
       var eu = prefs.aqi === 'eu' && m.aq.eu != null || m.aq.us == null, v = eu ? m.aq.eu : m.aq.us, lv = aqiLevel(v, eu);
@@ -748,38 +757,38 @@
         : 'linear-gradient(90deg,#22c55e,#eab308 17%,#f97316 33%,#ef4444 50%,#a855f7 67%,#9f1239)';
       var pos = eu ? v : (v <= 300 ? v / 300 * 100 : 100);
       out += '<button class="wx-tile wx-aqtile" type="button" title="Switch between US and European AQI">' +
-        '<div class="wx-tl">☁ Air quality <span class="wx-tl-r">' + (eu ? 'EU AQI' : 'US AQI') + ' ⇄</span></div>' +
+        '<div class="wx-tl">\u2601 Air quality <span class="wx-tl-r">' + (eu ? 'EU AQI' : 'US AQI') + ' \u21c4</span></div>' +
         '<div class="wx-big" style="--wx-aq:' + lv[2] + '"><span class="wx-aqdot"></span>' + Math.round(v) + '</div>' +
         meter(pos, null, stops) +
-        '<div class="wx-sub">' + esc(lv[1]) + '</div><div class="wx-sub faint">PM2.5 ' + (m.aq.pm25 != null ? m.aq.pm25 + ' µg/m³' : '–') + '</div></button>';
+        '<div class="wx-sub">' + esc(lv[1]) + '</div><div class="wx-sub faint">PM2.5 ' + (m.aq.pm25 != null ? m.aq.pm25 + ' \u00b5g/m\u00b3' : '\u2013') + '</div></button>';
     } else {
-      out += tile('', '☁ Air quality', '<div class="wx-big">–</div><div class="wx-sub faint">Not available here</div>');
+      out += tile('', '\u2601 Air quality', '<div class="wx-big">\u2013</div><div class="wx-sub faint">Not available here</div>');
     }
     out += sunTile(m, now, di);
     // Pressure gauge (950–1050 hPa over 240°) + 3-hour trend.
     var ps = c.ps, trend = '', dps = h.ps[3] != null && h.ps[0] != null ? h.ps[3] - h.ps[0] : 0;
-    trend = dps > 1 ? '↗ Rising' : dps < -1 ? '↘ Falling' : '→ Steady';
+    trend = dps > 1 ? '\u2197 Rising' : dps < -1 ? '\u2198 Falling' : '\u2192 Steady';
     var frac = ps == null ? 0.5 : Math.max(0, Math.min(1, (ps - 950) / 100)), ang = (-120 + frac * 240) * RAD;
     var gauge = '<svg class="wx-gauge" viewBox="0 0 80 62" aria-hidden="true">' +
       '<path class="wx-gauge-t" d="' + arcPath(40, 40, 30, -120, 120) + '"/>' +
       '<path class="wx-gauge-f" d="' + arcPath(40, 40, 30, -120, -120 + frac * 240) + '"/>' +
       '<line class="wx-gauge-n" x1="40" y1="40" x2="' + f1(40 + Math.sin(ang) * 24) + '" y2="' + f1(40 - Math.cos(ang) * 24) + '"/>' +
       '<circle class="wx-comp-c" cx="40" cy="40" r="3"/><text x="13" y="60" text-anchor="middle">Low</text><text x="67" y="60" text-anchor="middle">High</text></svg>';
-    out += tile('wx-press', '◔ Pressure', '<div class="wx-press-row">' + gauge + '<div><div class="wx-big sm">' + pressStr(ps) + '</div><div class="wx-sub">' + trend + '</div></div></div>');
+    out += tile('wx-press', '\u25d4 Pressure', '<div class="wx-press-row">' + gauge + '<div><div class="wx-big sm">' + big(pressStr(ps)) + '</div><div class="wx-sub">' + trend + '</div></div></div>');
     // Visibility
-    var vis = c.vis, vdesc = vis == null ? '' : vis >= 20000 ? 'Excellent' : vis >= 10000 ? 'Good' : vis >= 4000 ? 'Moderate' : vis >= 1000 ? 'Poor' : 'Very poor · fog';
-    out += tile('', '◉ Visibility', '<div class="wx-big sm">' + visStr(vis) + '</div>' + meter(vis == null ? 0 : Math.min(100, vis / 240), 'linear-gradient(90deg,#94a3b8,#38bdf8)') + '<div class="wx-sub">' + vdesc + '</div>');
+    var vis = c.vis, vdesc = vis == null ? '' : vis >= 20000 ? 'Excellent' : vis >= 10000 ? 'Good' : vis >= 4000 ? 'Moderate' : vis >= 1000 ? 'Poor' : 'Very poor \u00b7 fog';
+    out += tile('', '\u25c9 Visibility', '<div class="wx-big sm">' + big(visStr(vis)) + '</div>' + meter(vis == null ? 0 : Math.min(100, vis / 240), 'linear-gradient(90deg,#94a3b8,#38bdf8)') + '<div class="wx-sub">' + vdesc + '</div>');
     // Precipitation next 24 h
     var tot = 0, first = -1;
     for (var i = 0; i < Math.min(24, h.t.length); i++) { tot += h.pr[i] || 0; if (first < 0 && (h.pp[i] || 0) >= 50) first = i; }
-    out += tile('', '☂ Precipitation', '<div class="wx-big sm">' + pStr(tot) + '</div><div class="wx-sub">in the next 24 h</div>' +
+    out += tile('', '\u2602 Precipitation', '<div class="wx-big sm">' + big(pStr(tot)) + '</div><div class="wx-sub">in the next 24 h</div>' +
       '<div class="wx-sub faint">' + (first >= 0 ? 'Likely from ' + (first === 0 ? 'now' : hr(h.t[first], tz)) : 'Chance stays below 50%') + '</div>');
     // Cloud cover
     var cc = c.cc != null ? c.cc : 0, cdesc = cc < 12 ? 'Clear' : cc < 38 ? 'Mostly clear' : cc < 70 ? 'Partly cloudy' : cc < 88 ? 'Mostly cloudy' : 'Overcast';
-    out += tile('', '☁ Cloud cover', '<div class="wx-big">' + cc + '<small>%</small></div>' + meter(cc, 'linear-gradient(90deg,#cbd5e1,#64748b)') + '<div class="wx-sub">' + cdesc + '</div>');
+    out += tile('', '\u2601 Cloud cover', '<div class="wx-big">' + cc + '<small>%</small></div>' + meter(cc, 'linear-gradient(90deg,#cbd5e1,#64748b)') + '<div class="wx-sub">' + cdesc + '</div>');
     // Feels like
     var diff = c.fl != null && c.tp != null ? c.fl - c.tp : 0;
-    out += tile('', '♨ Feels like', '<div class="wx-big">' + tStr(c.fl) + '</div><div class="wx-sub">' +
+    out += tile('', '\u2668 Feels like', '<div class="wx-big">' + tStr(c.fl) + '</div><div class="wx-sub">' +
       (Math.abs(diff) < 1.5 ? 'Similar to the actual temperature' : diff < 0 ? (c.ws > 10 ? 'Wind makes it feel colder' : 'Feels colder than it is') : (c.rh > 60 ? 'Humidity makes it feel warmer' : 'Feels warmer than it is')) + '</div>');
     return out;
   }
@@ -793,7 +802,7 @@
   function sunTile(m, now, di) {
     var d = m.d, tz = m.tz, sr = d.sr[di], ss = d.ss[di];
     if (!sr || !ss) {
-      return tile('wx-suntile', '☀ Sun', '<div class="wx-sub">' + (m.c.day ? 'The sun doesn’t set today' : 'The sun doesn’t rise today') + '</div>');
+      return tile('wx-suntile', '\u2600 Sun', '<div class="wx-sub">' + (m.c.day ? 'The sun doesn\u2019t set today' : 'The sun doesn\u2019t rise today') + '</div>');
     }
     var f = (now - sr) / (ss - sr), up = f >= 0 && f <= 1, cf = Math.max(0, Math.min(1, f));
     var X0 = 30, X1 = 330, CX = 180, RX = 150, RY = 66, HY = 86;
@@ -808,8 +817,8 @@
     }
     s += '<line class="wx-horizon" x1="6" y1="' + HY + '" x2="354" y2="' + HY + '"/>';
     if (up) s += '<circle class="wx-sunglow" cx="' + f1(sx) + '" cy="' + f1(sy) + '" r="13"/><circle class="wx-sundot" cx="' + f1(sx) + '" cy="' + f1(sy) + '" r="7"/>';
-    s += '<text class="wx-arc-l" x="' + X0 + '" y="104" text-anchor="middle">↑ ' + esc(hm(sr, tz)) + '</text>' +
-      '<text class="wx-arc-l" x="' + X1 + '" y="104" text-anchor="middle">↓ ' + esc(hm(ss, tz)) + '</text></svg>';
+    s += '<text class="wx-arc-l" x="' + X0 + '" y="104" text-anchor="middle">\u2191 ' + esc(hm(sr, tz)) + '</text>' +
+      '<text class="wx-arc-l" x="' + X1 + '" y="104" text-anchor="middle">\u2193 ' + esc(hm(ss, tz)) + '</text></svg>';
     var len = ss - sr, msg;
     if (now < sr) msg = 'Sunrise in ' + dur(sr - now);
     else if (now <= ss) msg = 'Sunset in ' + dur(ss - now);
@@ -819,7 +828,7 @@
       var delta = (d.ss[di + 1] - d.sr[di + 1]) - len, sec = Math.round(Math.abs(delta) / 1000);
       chg = 'Tomorrow ' + (sec < 30 ? 'about the same' : Math.floor(sec / 60) + 'm ' + (sec % 60) + 's ' + (delta < 0 ? 'shorter' : 'longer'));
     }
-    return tile('wx-suntile', '☀ Sunrise & sunset',
+    return tile('wx-suntile', '\u2600 Sunrise & sunset',
       s + '<div class="wx-sunfoot"><span><b>' + dur(len) + '</b> of daylight</span><span>' + esc(msg) + '</span></div>' +
       (chg ? '<div class="wx-sub faint wx-center">' + esc(chg) + '</div>' : ''));
   }
@@ -827,8 +836,8 @@
   function renderFoot() {
     var p = panel(); if (!p || !S) return;
     var f = p.querySelector('.wx-upd'), m = S.model;
-    var txt = S.busy ? 'Updating…' : m ? 'Updated ' + ago(m.fetched) : '';
-    if (m && (S.failed || S.offline)) txt = (navigator.onLine === false ? 'Offline' : 'Couldn’t refresh') + ' · data ' + ago(m.fetched);
+    var txt = S.busy ? 'Updating\u2026' : m ? 'Updated ' + ago(m.fetched) : '';
+    if (m && (S.failed || S.offline)) txt = (navigator.onLine === false ? 'Offline' : 'Couldn\u2019t refresh') + ' \u00b7 data ' + ago(m.fetched);
     f.textContent = txt;
     f.title = m ? 'Fetched ' + new Date(m.fetched).toLocaleString() : '';
     p.querySelector('.wx-refresh').classList.toggle('spin', !!S.busy);
@@ -842,10 +851,10 @@
     var m = S && S.model; if (!m) return '';
     var c = m.c, w = wmo(c.code, c.day), di = todayIdx(m, Date.now());
     var date = fmt(Date.now(), m.tz, 'mdy', { month: 'short', day: 'numeric' });
-    var wind = c.ws != null ? ' · Wind ' + wStr(c.ws).replace(' ', ' ') + (c.ws >= 2 ? ' ' + dirName(c.wd) : '') : '';
+    var wind = c.ws != null ? ' \u00b7 Wind ' + wStr(c.ws).replace('\u00a0', ' ') + (c.ws >= 2 ? ' ' + dirName(c.wd) : '') : '';
     return w.emoji + ' ' + Math.round(tC(c.tp)) + tUnit() + ', ' + w.label.toLowerCase() +
-      ' · H ' + tStr(m.d.hi[di]) + ' L ' + tStr(m.d.lo[di]) + wind +
-      ' — ' + date + ', ' + (S.loc ? S.loc.name : '');
+      ' \u00b7 H ' + tStr(m.d.hi[di]) + ' L ' + tStr(m.d.lo[di]) + wind +
+      ' \u2014 ' + date + ', ' + (S.loc ? S.loc.name : '');
   }
   function copyText(text) {
     var done = function () { Cade.showToast('Copied weather summary', 'success', 1400); };
@@ -862,7 +871,7 @@
   function insert(text) {
     var ed = Cade.editor;
     if (!ed || !text) return;
-    if (ed.state.readOnly) { Cade.showToast('Read-only mode — editing is locked', 'error', 2000); return; }
+    if (ed.state.readOnly) { Cade.showToast('Read-only mode \u2014 editing is locked', 'error', 2000); return; }
     ed.dispatch(ed.state.replaceSelection(text), { userEvent: 'input', scrollIntoView: true });
     Cade.showToast('Inserted weather summary', 'success', 1200);
   }
@@ -878,7 +887,7 @@
     if (!force && fresh) { S.failed = false; S.offline = false; render(); return; }
     if (navigator.onLine === false) {
       S.offline = true;
-      if (!S.model) S.err = 'You’re offline and there’s no saved forecast for this place yet.';
+      if (!S.model) S.err = 'You\u2019re offline and there\u2019s no saved forecast for this place yet.';
       render(); return;
     }
     S.busy = true; S.offline = false;
@@ -893,7 +902,7 @@
       if (!S || seq !== S.seq) return;
       S.failed = true;
       if (!S.model) S.err = (e && e.name === 'AbortError') ? 'The request timed out.' : (e && e.message) || 'Network error';
-      else Cade.showToast('Couldn’t refresh — showing saved data', 'error', 2200);
+      else Cade.showToast('Couldn\u2019t refresh \u2014 showing saved data', 'error', 2200);
     }).then(function () {
       if (!S || seq !== S.seq) return;
       S.busy = false;
@@ -934,12 +943,12 @@
     sh.className = 'wx-sheet';
     sh.setAttribute('data-kind', kind);
     var title = kind === 'units' ? 'Units' : 'Location';
-    sh.innerHTML = '<div class="wx-sheet-h"><span>' + title + '</span><button type="button" class="wx-ibtn wx-sheet-x" aria-label="Close">✕</button></div><div class="wx-sheet-b"></div>';
+    sh.innerHTML = '<div class="wx-sheet-h"><span>' + title + '</span><button type="button" class="wx-ibtn wx-sheet-x" aria-label="Close">\u2715</button></div><div class="wx-sheet-b"></div>';
     p.querySelector('.cade-panel-body').appendChild(sh);
     var b = sh.querySelector('.wx-sheet-b');
     if (kind === 'units') {
       b.innerHTML =
-        '<div class="wx-urow"><span>Temperature</span>' + seg('temp', [['C', '°C'], ['F', '°F']], prefs.temp) + '</div>' +
+        '<div class="wx-urow"><span>Temperature</span>' + seg('temp', [['C', '\u00b0C'], ['F', '\u00b0F']], prefs.temp) + '</div>' +
         '<div class="wx-urow"><span>Wind</span>' + seg('wind', [['kmh', 'km/h'], ['mph', 'mph'], ['ms', 'm/s'], ['kn', 'kn']], prefs.wind) + '</div>' +
         '<div class="wx-urow"><span>Precipitation</span>' + seg('precip', [['mm', 'mm'], ['in', 'in']], prefs.precip) + '</div>' +
         '<div class="wx-urow"><span>Air quality</span>' + seg('aqi', [['us', 'US AQI'], ['eu', 'EU AQI']], prefs.aqi) + '</div>' +
@@ -981,18 +990,18 @@
     var ex = panel();
     if (ex) { close(); return; }
     loadPrefs();
-    var p = Cade.mkPanel(PANEL_ID, '🌤 Weather',
+    var p = Cade.mkPanel(PANEL_ID, '\ud83c\udf24 Weather',
       defsSVG() +
       '<div class="wx-top">' +
-        '<button class="wx-place" type="button" title="Change location"><span class="wx-pin" aria-hidden="true">⌖</span>' +
-          '<span class="wx-ptxt"><span class="wx-pname">Loading…</span><span class="wx-psub"></span></span><span class="wx-caret" aria-hidden="true">▾</span></button>' +
-        '<button class="wx-ibtn wx-units-btn" type="button" title="Units">°C</button>' +
-        '<button class="wx-ibtn wx-refresh" type="button" title="Refresh" aria-label="Refresh">↻</button>' +
+        '<button class="wx-place" type="button" title="Change location"><span class="wx-pin" aria-hidden="true">\u2316</span>' +
+          '<span class="wx-ptxt"><span class="wx-pname">Loading\u2026</span><span class="wx-psub"></span></span><span class="wx-caret" aria-hidden="true">\u25be</span></button>' +
+        '<button class="wx-ibtn wx-units-btn" type="button" title="Units">\u00b0C</button>' +
+        '<button class="wx-ibtn wx-refresh" type="button" title="Refresh" aria-label="Refresh">\u21bb</button>' +
       '</div>' +
       '<div class="wx-scroll"><div class="wx-main"></div></div>' +
       '<div class="wx-foot">' +
-        '<button class="wx-btn primary wx-insert" type="button" title="Insert a one-line summary at the cursor">↵ Insert summary</button>' +
-        '<button class="wx-btn wx-copy" type="button" title="Copy the summary">⧉ Copy</button>' +
+        '<button class="wx-btn primary wx-insert" type="button" title="Insert a one-line summary at the cursor">\u21b5 Insert summary</button>' +
+        '<button class="wx-btn wx-copy" type="button" title="Copy the summary">\u29c9 Copy</button>' +
         '<span class="wx-upd" aria-live="polite"></span>' +
       '</div>');
     if (reduced()) p.classList.add('wx-still');
@@ -1067,14 +1076,14 @@
       if (S.loc) load(false);
     }, function (e) {
       if (S !== st) return;
-      p.querySelector('.wx-main').innerHTML = '<div class="wx-msg"><div class="wx-msg-t">Couldn’t start</div><div class="wx-msg-s">' + esc(e.message) + '</div></div>';
+      p.querySelector('.wx-main').innerHTML = '<div class="wx-msg"><div class="wx-msg-t">Couldn\u2019t start</div><div class="wx-msg-s">' + esc(e.message) + '</div></div>';
     });
   }
 
   Cade.registerWidget({
     name: 'Weather',
-    description: 'Forecast, hourly & 10-day outlook, air quality, UV, wind — insert a summary',
-    icon: '🌤',
+    description: 'Forecast, hourly & 10-day outlook, air quality, UV, wind \u2014 insert a summary',
+    icon: '\ud83c\udf24',
     tags: 'weather,forecast,temperature,rain,wind,humidity,uv,air quality,aqi,sunrise,sunset,climate,open-meteo',
     open: open,
     _test: { wmo: wmo, glyphSVG: glyphSVG, defsSVG: defsSVG, art: art, trim: trim, monoPath: monoPath, tempColor: tempColor,

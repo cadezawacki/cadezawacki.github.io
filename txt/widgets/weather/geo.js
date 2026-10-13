@@ -169,7 +169,7 @@
   // Browser geolocation (prompted only when the user presses the button).
   function locate() {
     return new Promise(function (resolve, reject) {
-      if (!navigator.geolocation) { reject(new Error('Location isn’t available in this browser')); return; }
+      if (!navigator.geolocation) { reject(new Error('Location isn\u2019t available in this browser')); return; }
       navigator.geolocation.getCurrentPosition(function (pos) {
         var lat = pos.coords.latitude, lon = pos.coords.longitude;
         var base = { lat: lat, lon: lon, source: 'gps', tz: deviceTz() };
@@ -183,9 +183,9 @@
           resolve(norm(base));
         });
       }, function (err) {
-        var msg = err && err.code === 1 ? 'Location permission denied — search for a city instead'
-          : err && err.code === 3 ? 'Location timed out — try again or search'
-          : 'Couldn’t get your location';
+        var msg = err && err.code === 1 ? 'Location permission denied \u2014 search for a city instead'
+          : err && err.code === 3 ? 'Location timed out \u2014 try again or search'
+          : 'Couldn\u2019t get your location';
         reject(new Error(msg));
       }, { enableHighAccuracy: false, timeout: 15000, maximumAge: 10 * 60000 });
     });
@@ -199,10 +199,10 @@
     var el = document.createElement('div');
     el.className = 'geo-pick';
     el.innerHTML =
-      '<div class="geo-search"><span class="geo-ico" aria-hidden="true">⌕</span>' +
-      '<input class="geo-q" type="search" placeholder="Search for a city…" autocomplete="off" autocorrect="off" ' +
+      '<div class="geo-search"><span class="geo-ico" aria-hidden="true">\u2315</span>' +
+      '<input class="geo-q" type="search" placeholder="Search for a city\u2026" autocomplete="off" autocorrect="off" ' +
       'autocapitalize="off" spellcheck="false" enterkeyhint="search" aria-label="Search for a city"></div>' +
-      '<button class="geo-loc" type="button"><span class="geo-loc-ico" aria-hidden="true">◎</span> Use my current location</button>' +
+      '<button class="geo-loc" type="button"><span class="geo-loc-ico" aria-hidden="true">\u25ce</span> Use my current location</button>' +
       '<div class="geo-res" role="listbox" aria-label="Search results"></div>' +
       '<div class="geo-saved"></div>';
     var q = el.querySelector('.geo-q'), res = el.querySelector('.geo-res'), saved = el.querySelector('.geo-saved');
@@ -212,11 +212,11 @@
     function row(loc, i, kind) {
       var cur = same(loc, opts.current);
       return '<div class="geo-item' + (kind === 'res' && i === sel ? ' sel' : '') + (cur ? ' cur' : '') + '" role="option" data-kind="' + kind + '" data-i="' + i + '" tabindex="-1">' +
-        '<span class="geo-flag" aria-hidden="true">' + (flag(loc.cc) || (loc.source === 'gps' ? '◎' : '•')) + '</span>' +
+        '<span class="geo-flag" aria-hidden="true">' + (flag(loc.cc) || (loc.source === 'gps' ? '\u25ce' : '\u2022')) + '</span>' +
         '<span class="geo-txt"><span class="geo-name">' + esc(loc.name) + '</span>' +
         '<span class="geo-sub">' + esc(sublabel(loc) || (loc.lat.toFixed(2) + ', ' + loc.lon.toFixed(2))) + '</span></span>' +
         (kind === 'saved' ? (cur ? '<span class="geo-cur">current</span>' : '') +
-          '<button class="geo-x" type="button" data-i="' + i + '" title="Forget this place" aria-label="Forget ' + esc(loc.name) + '">×</button>' : '') +
+          '<button class="geo-x" type="button" data-i="' + i + '" title="Forget this place" aria-label="Forget ' + esc(loc.name) + '">\u00d7</button>' : '') +
         '</div>';
     }
     function renderSaved() {
@@ -236,14 +236,14 @@
       if (ctrl) { try { ctrl.abort(); } catch (e) {} ctrl = null; }
       if (v.length < 2) { results = []; sel = -1; renderRes(''); return; }
       ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
-      renderRes('Searching…');
+      renderRes('Searching\u2026');
       search(v, ctrl && ctrl.signal).then(function (list) {
         if (dead) return;
         results = list; sel = list.length ? 0 : -1;
-        renderRes(list.length ? '' : 'No places found for “' + v + '”');
+        renderRes(list.length ? '' : 'No places found for \u201c' + v + '\u201d');
       }, function (e) {
         if (dead || (e && e.name === 'AbortError')) return;
-        renderRes(navigator.onLine === false ? 'You’re offline — saved places still work' : 'Search failed — try again');
+        renderRes(navigator.onLine === false ? 'You\u2019re offline \u2014 saved places still work' : 'Search failed \u2014 try again');
       });
     }
     q.addEventListener('input', function () { clearTimeout(timer); timer = setTimeout(run, 300); });
@@ -274,7 +274,7 @@
     locBtn.addEventListener('click', function () {
       locBtn.disabled = true;
       locBtn.classList.add('busy');
-      locBtn.lastChild.nodeValue = ' Locating…';
+      locBtn.lastChild.nodeValue = ' Locating\u2026';
       locate().then(function (loc) {
         if (dead) return;
         pick(loc);

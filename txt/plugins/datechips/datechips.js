@@ -551,10 +551,12 @@
     this.view.contentDOM.removeEventListener('mouseout', this.onOut);
   };
 
+  // The chip element's own position (exact even when other marks split it),
+  // else the pointer's.
   Chips.prototype.posFromEvent = function (e, el) {
     var p = null;
-    try { p = this.view.posAtCoords({ x: e.clientX, y: e.clientY }); } catch (x) {}
-    if (p == null) try { p = this.view.posAtDOM(el); } catch (x) { p = null; }
+    try { p = this.view.posAtDOM(el); } catch (x) {}
+    if (p == null) try { p = this.view.posAtCoords({ x: e.clientX, y: e.clientY }); } catch (x) { p = null; }
     return p;
   };
 

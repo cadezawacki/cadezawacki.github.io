@@ -915,7 +915,9 @@
   function onClick(e) {
     var t = e.target, b;
     if (!t.closest) return;
-    if (Date.now() - S.justDragged < 350 || Date.now() - S.suppressClick < 600) { e.preventDefault(); return; }
+    if (Date.now() - S.justDragged < 350) { e.preventDefault(); return; }
+    // The click a touch long-press (→ edit) leaves behind must not tick the card.
+    if (Date.now() - S.suppressClick < 600 && t.closest('.em-card')) { e.preventDefault(); return; }
     if (S.menu && !t.closest('.em-menu') && !t.closest('.em-menu-btn')) closeMenu();
     if ((b = t.closest('.em-menu-item'))) { menuAction(b.getAttribute('data-act')); return; }
     if (t.closest('.em-menu-btn')) { toggleMenu(t.closest('.em-menu-btn')); return; }

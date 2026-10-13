@@ -1,0 +1,144 @@
+/* 15-Puzzle styles. Theme variables throughout; the picture is a generated
+   image sliced across the tiles with background-size/position. */
+#fifteen-panel {
+  top: 56px; right: 12px; width: 360px; max-width: calc(100vw - 24px);
+  max-height: calc(100vh - 64px); max-height: calc(100dvh - 64px);
+}
+#fifteen-panel .cade-panel-body { padding: 8px 10px 10px; overflow-y: auto; overscroll-behavior: contain; }
+#fifteen-panel, #fifteen-panel * { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+
+.fp {
+  --fp-tile: var(--surface);
+  display: flex; flex-direction: column; gap: 8px; outline: none;
+  touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+}
+[data-theme="dark"] .fp { --fp-tile: var(--surface-2); }
+/* Custom properties never fall back on an unsupported value: gate color-mix(). */
+@supports (color: color-mix(in srgb, red 50%, blue)) {
+  .fp { --fp-tile: color-mix(in srgb, var(--accent) 12%, var(--surface)); }
+  [data-theme="dark"] .fp { --fp-tile: color-mix(in srgb, var(--accent) 18%, var(--surface-2)); }
+}
+.fp button {
+  font: inherit; color: var(--text); background: transparent; cursor: pointer;
+  border: 1px solid var(--border); border-radius: 6px;
+}
+.fp button:hover:not(:disabled) { background: var(--surface-hover); }
+
+.fp-seg { display: flex; gap: 2px; padding: 2px; border-radius: 8px; background: var(--surface-2); border: 1px solid var(--border); }
+.fp .fp-seg button {
+  flex: 1; border: none; border-radius: 6px; padding: 5px 4px; min-height: 30px;
+  font-size: var(--text-xs); font-weight: 600; color: var(--text-muted); font-variant-numeric: tabular-nums;
+}
+.fp .fp-seg button.on { background: var(--surface); color: var(--text); box-shadow: var(--shadow-sm); }
+
+.fp-hud { display: flex; align-items: center; gap: 10px; font-size: var(--text-xs); color: var(--text-muted); min-height: 20px; padding: 0 2px; }
+.fp-hud b { color: var(--text); font-variant-numeric: tabular-nums; }
+.fp-best { color: var(--text-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fp-time { margin-left: auto; font-family: var(--font-mono); font-variant-numeric: tabular-nums; color: var(--text); }
+
+/* Board: tiles are absolutely placed and moved by transform, so slides animate. */
+.fp-wrap { position: relative; touch-action: none; }
+.fp-wrap.fp-bump { animation: fp-shake 0.25s ease; }
+.fp-board {
+  position: relative; width: 100%; aspect-ratio: 1; box-sizing: border-box; overflow: hidden;
+  background: var(--surface-2); border: 3px solid var(--surface-2); border-radius: 10px; cursor: pointer;
+}
+.fp-t {
+  position: absolute; left: 0; top: 0; width: calc(100% / var(--n, 4)); height: calc(100% / var(--n, 4));
+  transition: transform 0.13s cubic-bezier(0.25, 0.8, 0.3, 1);
+}
+.fp-noanim .fp-t { transition: none; }
+.fp-ti {
+  position: absolute; inset: 2px; box-sizing: border-box; border-radius: 7px; overflow: hidden;
+  display: flex; align-items: center; justify-content: center;
+  background-color: var(--fp-tile); border: 1px solid var(--border); color: var(--text);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+  font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1;
+  font-size: min(28px, 7.4vw);
+  transition: border-color 0.2s, color 0.2s;
+}
+.fp-n3 .fp-ti { font-size: min(36px, 9.5vw); }
+.fp-n5 .fp-ti { font-size: min(22px, 5.8vw); }
+.fp-n6 .fp-ti { font-size: min(18px, 4.8vw); border-radius: 5px; }
+.fp-ti.fp-bump { animation: fp-shake 0.25s ease; }
+
+/* Hints: numbers on the picture, and tiles already home are marked. */
+.fp-hints:not(.fp-img) .fp-t.home .fp-ti { color: var(--accent); border-color: var(--accent); }
+.fp-img .fp-ti {
+  background-image: var(--fp-img); background-size: calc(var(--n, 4) * 100%) calc(var(--n, 4) * 100%);
+  background-repeat: no-repeat; border-color: rgba(0, 0, 0, 0.18);
+}
+.fp-img .fp-num { display: none; }
+.fp-img.fp-hints .fp-num {
+  display: block; position: absolute; left: 3px; top: 3px; padding: 2px 4px; border-radius: 4px;
+  background: rgba(0, 0, 0, 0.55); color: #fff; font-size: 11px;
+}
+.fp-img.fp-hints .fp-t.home .fp-num { background: var(--accent); }
+
+/* The missing tile slides in to complete a solved board. */
+.fp-last { opacity: 0; pointer-events: none; transition: opacity 0.45s ease 0.25s; }
+.fp-last .fp-ti { color: var(--accent); }
+.fp-board.won .fp-last { opacity: 1; }
+.fp-board.won .fp-t .fp-ti { animation: fp-wave 0.65s ease both; animation-delay: calc(var(--d, 0) * 70ms + 150ms); }
+
+.fp-tools { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; }
+.fp .fp-tool {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
+  padding: 4px 0; min-height: 42px; border-color: transparent;
+}
+.fp-ic { font-size: 16px; line-height: 1.1; }
+.fp-tl { font-size: 10px; color: var(--text-muted); white-space: nowrap; }
+.fp .fp-tool.on { border-color: var(--accent); }
+.fp .fp-tool.on .fp-tl { color: var(--accent); font-weight: 600; }
+
+/* Overlay: picture chooser, bests, win */
+.fp-ov { position: absolute; inset: 0; z-index: 3; display: none; align-items: center; justify-content: center; padding: 8px; }
+.fp-ov.show { display: flex; }
+.fp-card {
+  width: 100%; max-width: 300px; max-height: 100%; overflow-y: auto; box-sizing: border-box;
+  background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 10px;
+  box-shadow: var(--shadow-lg); padding: 12px; display: flex; flex-direction: column; gap: 6px; text-align: center;
+}
+.fp-title { font-size: var(--text-base); }
+.fp-sub { font-size: var(--text-xs); color: var(--text-muted); }
+.fp-hint { font-size: 10.5px; color: var(--text-faint); line-height: 1.45; }
+.fp-big { font-size: 30px; line-height: 1; animation: fp-pop 0.5s ease both; }
+.fp-winrow { display: flex; justify-content: center; gap: 22px; margin: 2px 0; }
+.fp-winrow div { display: flex; flex-direction: column; align-items: center; }
+.fp-winrow b { font-family: var(--font-mono); font-size: 22px; color: var(--accent); font-variant-numeric: tabular-nums; }
+.fp-winrow span { font-size: 10.5px; color: var(--text-muted); }
+.fp-acts { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; margin-top: 4px; }
+.fp-acts button { padding: 6px 12px; font-size: var(--text-sm); }
+.fp .fp-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.fp .fp-primary:hover:not(:disabled) { background: var(--accent-hover, var(--accent)); }
+.fp-pics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
+.fp .fp-pic {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
+  min-height: 46px; font-size: 22px; line-height: 1.1; padding: 2px;
+}
+.fp-pic span { font-size: 9.5px; color: var(--text-muted); }
+.fp .fp-pic.on { border-color: var(--accent); background: var(--accent-bg); }
+.fp-stats { width: 100%; border-collapse: collapse; font-size: var(--text-xs); font-variant-numeric: tabular-nums; }
+.fp-stats th { color: var(--text-muted); font-weight: 500; padding: 3px 2px; font-size: 10.5px; }
+.fp-stats td { padding: 4px 2px; border-top: 1px solid var(--border); }
+.fp-stats td:first-child { text-align: left; font-weight: 600; }
+
+@keyframes fp-shake { 0%, 100% { transform: translateX(0); } 30% { transform: translateX(-3px); } 70% { transform: translateX(3px); } }
+@keyframes fp-wave {
+  0% { transform: scale(1); }
+  40% { transform: scale(0.84); filter: brightness(1.15); }
+  75% { transform: scale(1.06); }
+  100% { transform: scale(1); }
+}
+@keyframes fp-pop { 0% { transform: scale(0.3); opacity: 0; } 70% { transform: scale(1.2); opacity: 1; } 100% { transform: scale(1); } }
+@media (prefers-reduced-motion: reduce) {
+  .fp-t, .fp-last { transition: none; }
+  .fp-board.won .fp-t .fp-ti, .fp-big, .fp-wrap.fp-bump, .fp-ti.fp-bump { animation: none; }
+}
+@media (pointer: coarse) {
+  .fp .fp-seg button { min-height: 36px; }
+  .fp .fp-tool { min-height: 46px; }
+}
+@media (max-width: 420px) {
+  #fifteen-panel .cade-panel-body { padding: 6px 8px 8px; }
+}

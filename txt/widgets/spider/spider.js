@@ -398,7 +398,7 @@
     if (!game || game.done || !core.won(st)) return;
     stopClock();
     game.done = 1;
-    var s = stat(game.suits), sc = score(), t = game.t, bestT = false, bestS = false;
+    var s = stat(game.suits), sc = score(), t = Math.round(game.t), bestT = false, bestS = false;
     s.w = (s.w || 0) + 1;
     s.cs = (s.cs || 0) + 1; s.ms = Math.max(s.ms || 0, s.cs);
     if (!s.bt || t < s.bt) { bestT = !!s.bt; s.bt = t; }
@@ -408,7 +408,7 @@
     var html = '<div class="sp-card"><div class="sp-big">🎉</div><b class="sp-title">You won!</b>' +
       '<div class="sp-sub">' + SUIT_LABEL[game.suits] + ' · deal #' + game.deal + '</div>' +
       '<div class="sp-winrow"><div><b>' + sc + '</b><span>score</span></div><div><b>' + fmtTime(t) + '</b><span>time</span></div><div><b>' + game.mv + '</b><span>moves</span></div></div>' +
-      '<div class="sp-sub">' + (bestS && bestT ? 'New best score and time!' : bestS ? 'New best score!' : bestT ? 'New best time!' : 'Best ' + s.bs + ' · ' + fmtTime(s.bt)) +
+      '<div class="sp-sub">' + (s.w === 1 ? 'First win with ' + SUIT_LABEL[game.suits] + '!' : bestS && bestT ? 'New best score and time!' : bestS ? 'New best score!' : bestT ? 'New best time!' : 'Best ' + s.bs + ' · ' + fmtTime(s.bt)) +
       (s.cs > 1 ? ' · streak ' + s.cs : '') + '</div>' +
       '<div class="sp-acts"><button class="sp-primary" data-act="newsame">New game</button><button data-act="newmenu">Change suits</button><button data-act="stats">Stats</button></div></div>';
     cascade(function () { if (ui && game.done) showOverlay('win', html); });

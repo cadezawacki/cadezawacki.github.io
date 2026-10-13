@@ -15,25 +15,35 @@
 
 .sp {
   --sp-felt: var(--surface-2);
-  --sp-felt: color-mix(in srgb, var(--accent) 13%, var(--surface-2));
   --sp-face: var(--surface);
   --sp-edge: var(--border);
-  --sp-edge: color-mix(in srgb, var(--text) 16%, var(--surface));
   --sp-ink: var(--text);
   --sp-red: #c62f39;
   --sp-back: var(--accent);
-  --sp-back: color-mix(in srgb, var(--accent) 82%, #000);
-  --sp-slot: var(--border);
-  --sp-slot: color-mix(in srgb, var(--text) 20%, transparent);
+  --sp-slot: var(--text-faint);
   display: flex; flex-direction: column; gap: 6px; outline: none;
   touch-action: manipulation; -webkit-tap-highlight-color: transparent;
 }
 [data-theme="dark"] .sp {
-  --sp-felt: color-mix(in srgb, var(--accent) 15%, var(--bg));
-  --sp-face: color-mix(in srgb, var(--text) 12%, var(--surface));
-  --sp-edge: color-mix(in srgb, var(--text) 24%, var(--surface));
+  --sp-felt: var(--bg);
+  --sp-face: var(--surface-2);
   --sp-red: #f47a80;
-  --sp-back: color-mix(in srgb, var(--accent) 62%, #000);
+}
+/* Custom properties never fall back on an unsupported value, so the richer
+   color-mix() shades are gated (older iOS keeps the plain theme colours). */
+@supports (color: color-mix(in srgb, red 50%, blue)) {
+  .sp {
+    --sp-felt: color-mix(in srgb, var(--accent) 13%, var(--surface-2));
+    --sp-edge: color-mix(in srgb, var(--text) 16%, var(--surface));
+    --sp-back: color-mix(in srgb, var(--accent) 82%, #000);
+    --sp-slot: color-mix(in srgb, var(--text) 20%, transparent);
+  }
+  [data-theme="dark"] .sp {
+    --sp-felt: color-mix(in srgb, var(--accent) 15%, var(--bg));
+    --sp-face: color-mix(in srgb, var(--text) 12%, var(--surface));
+    --sp-edge: color-mix(in srgb, var(--text) 24%, var(--surface));
+    --sp-back: color-mix(in srgb, var(--accent) 62%, #000);
+  }
 }
 
 .sp button {

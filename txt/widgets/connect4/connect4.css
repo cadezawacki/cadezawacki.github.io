@@ -11,15 +11,19 @@
   --c4-red: #e5484d; --c4-red-d: #b4262b;
   --c4-yel: #f5c400; --c4-yel-d: #c79400;
   --c4-board: var(--accent);
-  --c4-board: color-mix(in srgb, var(--accent) 88%, #000);
   --c4-hole: var(--surface-2);
   display: flex; flex-direction: column; gap: 8px; outline: none;
   touch-action: manipulation; -webkit-tap-highlight-color: transparent;
 }
 [data-theme="dark"] .c4 {
   --c4-red: #e5534b; --c4-red-d: #a42a24; --c4-yel: #e8bb17; --c4-yel-d: #b18700;
-  --c4-board: color-mix(in srgb, var(--accent) 70%, #000);
   --c4-hole: var(--bg);
+}
+/* Custom properties never fall back on an unsupported value, so the
+   color-mix() shades are gated (iOS < 16.2 keeps the plain accent). */
+@supports (color: color-mix(in srgb, red 50%, blue)) {
+  .c4 { --c4-board: color-mix(in srgb, var(--accent) 88%, #000); }
+  [data-theme="dark"] .c4 { --c4-board: color-mix(in srgb, var(--accent) 70%, #000); }
 }
 
 .c4 button {

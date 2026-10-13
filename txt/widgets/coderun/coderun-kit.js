@@ -288,7 +288,7 @@
             token('p', ')');
           } else if (top.semis.length >= 2) {
             var a = top.semis[0] + 1, b = top.semis[1];
-            if (!src.slice(a, b).trim()) add(a, check(L));
+            if (!src.slice(a, b).replace(/\/\*[\s\S]*?\*\/|\/\/[^\n]*/g, '').trim()) add(a, check(L));
             else { add(a, check(L) + '&&('); add(b, ')'); }
             count++;
             token('p', ')');
@@ -930,12 +930,14 @@
         return;
       }
       var l = ev.lineno || 0;
-      if (cfg.mode === 'run' && cfg.fb && !mainStarted && cfg.segs[0] && inRange(l, cfg.segs[0].s - 1, cfg.segs[0].n + 2)) {
+      // Before main() starts, the only thing that can fail is parsing a user
+      // script: the first failure is the loop-checked copy, so let the plain
+      // copy run instead; a second failure is the user's own syntax error.
+      if (cfg.mode === 'run' && cfg.fb && !mainStarted && !needFb) {
         needFb = true;
         try { ev.preventDefault(); } catch (e) {}
         return;
       }
-      if (cfg.mode === 'run' && cfg.fb && !needFb && cfg.segs[1] && inRange(l, cfg.segs[1].s - 1, cfg.segs[1].n + 2)) return;
       if (tripped && cfg.mode === 'run') { finish('timeout'); return; }
       var mp = mapLine(l), loc = mp ? { label: mp.label, line: mp.line, col: ev.colno || 0 } : null;
       var text = ev.error ? errText(ev.error, loc) : String(ev.message || 'Error').replace(/^Uncaught\s+/, '') + (loc ? ' (' + locStr(loc) + ')' : '');
@@ -1003,7 +1005,7 @@
   var CFG_SLOT = '\u0000CFG\u0000';
 
   // ES module syntax (static import / export) -> run as <script type=module>.
-  K.isModuleCode = function (code) { return /^[ \t]*(?:import[ \t]*(?:[\w${*'"]|\{)|export[ \t]+)/m.test(String(code)); };
+  K.isModuleCode = function (code) { return /^[ \t]*(?:import(?:[ \t]+[\w${*'"]|[ \t]*[{*'"])|export[ \t]+[\w{*])/m.test(String(code)); };
 
   // The sandbox document for one JS run. User code sits in its own lines
   // (user line k = document line segs[].s + k - 1) so error positions map back.

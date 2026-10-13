@@ -223,7 +223,7 @@
     ui.won = true;
     var n = save.n, g = game, st = stats[n] = stats[n] || {}, newT = false, newM = false;
     st.w = (st.w || 0) + 1;
-    if (!st.bt || g.t < st.bt) { newT = !!st.bt || st.w === 1; st.bt = g.t; }
+    if (!st.bt || g.t < st.bt) { newT = !!st.bt || st.w === 1; st.bt = Math.round(g.t); }
     if (!st.bm || g.mv < st.bm) { newM = !!st.bm || st.w === 1; st.bm = g.mv; }
     writeJSON(STATS_KEY, stats);
     delete save.slots[n];                     // solved: the next visit to this size reshuffles

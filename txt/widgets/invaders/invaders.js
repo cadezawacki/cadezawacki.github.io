@@ -218,6 +218,16 @@
 
   function coarse() { try { return window.matchMedia('(pointer: coarse)').matches; } catch (e) { return false; } }
   function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
+  // env(safe-area-inset-bottom) isn't readable from JS directly; measure a probe.
+  // Keeps the thumb pad clear of the iPhone home-indicator swipe zone.
+  function safeBottom() {
+    var d = document.createElement('div'), v = 0;
+    d.style.cssText = 'position:fixed;left:0;bottom:0;width:0;height:0;visibility:hidden;padding-bottom:env(safe-area-inset-bottom, 0px)';
+    document.body.appendChild(d);
+    try { v = parseFloat(getComputedStyle(d).paddingBottom) || 0; } catch (e) {}
+    d.remove();
+    return v;
+  }
   function loadPrefs() { try { return JSON.parse(Cade.store.get(PREF_KEY) || '{}') || {}; } catch (e) { return {}; } }
   function savePrefs(p) { try { Cade.store.set(PREF_KEY, JSON.stringify(p)); } catch (e) {} }
   function getHi() { try { return parseInt(Cade.store.get(HI_KEY) || '0', 10) || 0; } catch (e) { return 0; } }
@@ -670,7 +680,7 @@
       drawSprite(s, sp, fi, rows[i][2], 76 - sp.w / 2, y);
       txt(s, rows[i][1], 92, y, 7, P.ink, 'left', 500);
     }
-    txt(s, touch ? 'DRAG TO MOVE · TAP TO FIRE' : '← → MOVE · SPACE FIRE · P PAUSE', W / 2, 188, 7, P.dim, 'center', 500);
+    txt(s, touch ? 'DRAG TO MOVE \u00b7 TAP TO FIRE' : '\u2190 \u2192 MOVE \u00b7 SPACE FIRE \u00b7 P PAUSE', W / 2, 188, 7, P.dim, 'center', 500);
   }
   function veil(s, a) {
     var ctx = s.ctx;
@@ -686,7 +696,7 @@
       veil(s, 0.6);
       if (s.invaded) txt(s, 'THEY LANDED', W / 2, 78, 8, P.hot, 'center', 700);
       txt(s, 'GAME OVER', W / 2, 92, 16, P.ink, 'center', 800);
-      txt(s, 'SCORE ' + s.score + (s.newHi ? '  ·  NEW BEST!' : ''), W / 2, 116, 8, s.newHi ? P.accent : P.ink, 'center');
+      txt(s, 'SCORE ' + s.score + (s.newHi ? '  \u00b7  NEW BEST!' : ''), W / 2, 116, 8, s.newHi ? P.accent : P.ink, 'center');
       if (s.t - s.overAt > 1) txt(s, touch ? 'TAP TO PLAY AGAIN' : 'ENTER TO PLAY AGAIN', W / 2, 134, 7, P.dim, 'center');
     } else if (s.state === 'play' && s.msgT > 0) {
       s.ctx.globalAlpha = Math.min(1, s.msgT * 2);
@@ -746,7 +756,7 @@
     var maxW = narrow ? vw - 24 - extra : Math.min(W * 2, vw - 48 - extra);
     var chrome = p.offsetHeight - s.canvas.offsetHeight;   // title bar, button bar, pad
     var r = p.getBoundingClientRect();
-    var maxH = Math.max(160, vh - Math.max(0, r.top) - chrome - 10);
+    var maxH = Math.max(160, vh - Math.max(0, r.top) - chrome - 10 - safeBottom());
     var w = Math.floor(Math.max(170, Math.min(maxW, maxH * W / H))), h = Math.round(w * H / W);
     s.canvas.style.width = w + 'px'; s.canvas.style.height = h + 'px';
     p.style.width = (w + extra + 2) + 'px';  // + the panel's own border (global border-box)
@@ -787,7 +797,7 @@
         '<button type="button" class="inv-b" data-act="pause" tabindex="-1">Start</button>' +
         '<button type="button" class="inv-b" data-act="sound" tabindex="-1">Sound off</button>' +
         '<button type="button" class="inv-b" data-act="pad" tabindex="-1" title="Show/hide the touch buttons">Pad</button>' +
-        '<span class="inv-hint">←→ move · Space fire · P pause · Esc close</span>' +
+        '<span class="inv-hint">\u2190\u2192 move \u00b7 Space fire \u00b7 P pause \u00b7 Esc close</span>' +
       '</div>' +
       '<div class="inv-pad">' +
         '<div class="inv-pk" data-k="left" role="button" aria-label="Move left">' + SVG + '<path d="M15.5 5v14L5 12z"/></svg></div>' +
@@ -804,7 +814,7 @@
     teardown();
     try { reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { reduced = false; }
     var prefs = loadPrefs();
-    var p = Cade.mkPanel(PANEL, '👾 Invaders', bodyHtml());
+    var p = Cade.mkPanel(PANEL, '\ud83d\udc7e Invaders', bodyHtml());
     if (Cade.markGamePanel) Cade.markGamePanel(p);
     var canvas = p.querySelector('.inv-canvas');
     var s = {
@@ -829,6 +839,7 @@
     // needed — and never leak to the editor or app shortcuts underneath.
     s.onKey = function (e) {
       if (S !== s || e.ctrlKey || e.metaKey || e.altKey) return;
+      if (!s.canvas.isConnected) { teardown(); return; }   // panel removed without _onClose
       var tag = e.target && e.target.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
       var key = (e.key || '').toLowerCase(), down = e.type === 'keydown';
@@ -914,14 +925,16 @@
       updateBar(s);
       try { b.blur(); } catch (x) {}
     });
+    // iOS reliably honours touchend-class gestures for starting audio.
+    p.addEventListener('pointerup', function () { s.sfx.unlock(); });
     render(s);
     kick(s);
   }
 
   Cade.registerWidget({
     name: 'Invaders',
-    description: 'Hold the line against a marching alien formation — shields, mystery ship, waves',
-    icon: '👾',
+    description: 'Hold the line against a marching alien formation \u2014 shields, mystery ship, waves',
+    icon: '\ud83d\udc7e',
     tags: 'game,arcade,fun,train,invaders,aliens,space,shooter,retro',
     open: open
   });

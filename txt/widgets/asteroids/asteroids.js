@@ -147,6 +147,16 @@
 
   function coarse() { try { return window.matchMedia('(pointer: coarse)').matches; } catch (e) { return false; } }
   function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
+  // env(safe-area-inset-bottom) isn't readable from JS directly; measure a probe.
+  // Keeps the thumb pad clear of the iPhone home-indicator swipe zone.
+  function safeBottom() {
+    var d = document.createElement('div'), v = 0;
+    d.style.cssText = 'position:fixed;left:0;bottom:0;width:0;height:0;visibility:hidden;padding-bottom:env(safe-area-inset-bottom, 0px)';
+    document.body.appendChild(d);
+    try { v = parseFloat(getComputedStyle(d).paddingBottom) || 0; } catch (e) {}
+    d.remove();
+    return v;
+  }
   function loadPrefs() { try { return JSON.parse(Cade.store.get(PREF_KEY) || '{}') || {}; } catch (e) { return {}; } }
   function savePrefs(p) { try { Cade.store.set(PREF_KEY, JSON.stringify(p)); } catch (e) {} }
   function getHi() { try { return parseInt(Cade.store.get(HI_KEY) || '0', 10) || 0; } catch (e) { return 0; } }
@@ -664,10 +674,10 @@
     if (s.state === 'title') {
       text(ctx, P, 'ASTEROIDS', cx, cy - 36, 34, P.ship, 700, gl);
       text(ctx, P, touch ? 'Tap here or FIRE to start' : 'Press Enter or Space to start', cx, cy + 4, 13, P.ink, 600);
-      text(ctx, P, touch ? 'Thumb pad below · slide between buttons' : '← → turn · ↑ thrust · Space fire · Shift hyperspace', cx, cy + 26, 11, P.dim);
+      text(ctx, P, touch ? 'Thumb pad below \u00b7 slide between buttons' : '\u2190 \u2192 turn \u00b7 \u2191 thrust \u00b7 Space fire \u00b7 Shift hyperspace', cx, cy + 26, 11, P.dim);
     } else if (s.state === 'over') {
       text(ctx, P, 'GAME OVER', cx, cy - 28, 30, P.ink, 700, gl);
-      text(ctx, P, 'SCORE ' + s.score + (s.newHi ? '  ·  NEW BEST!' : '  ·  BEST ' + s.hi), cx, cy + 6, 13, s.newHi ? P.ship : P.ink, 600);
+      text(ctx, P, 'SCORE ' + s.score + (s.newHi ? '  \u00b7  NEW BEST!' : '  \u00b7  BEST ' + s.hi), cx, cy + 6, 13, s.newHi ? P.ship : P.ink, 600);
       if (s.t - s.overAt > 1) text(ctx, P, touch ? 'Tap to play again' : 'Enter to play again', cx, cy + 28, 12, P.dim);
     } else if (s.msgT > 0) {
       ctx.globalAlpha = Math.min(1, s.msgT * 2);
@@ -728,7 +738,7 @@
     var maxW = narrow ? vw - 24 - extra : Math.min(560, vw - 48 - extra);
     var chrome = p.offsetHeight - s.canvas.offsetHeight;   // title bar, button bar, thumb pad
     var r = p.getBoundingClientRect();
-    var maxH = Math.max(160, vh - Math.max(0, r.top) - chrome - 10);
+    var maxH = Math.max(160, vh - Math.max(0, r.top) - chrome - 10 - safeBottom());
     if (first) {
       // Pick the world's aspect for this screen: tall on phones, classic 4:3-ish on desktop.
       var asp = maxH / maxW;
@@ -784,7 +794,7 @@
         '<button type="button" class="ast-b" data-act="pause" tabindex="-1">Start</button>' +
         '<button type="button" class="ast-b" data-act="sound" tabindex="-1">Sound off</button>' +
         '<button type="button" class="ast-b" data-act="pad" tabindex="-1" title="Show/hide the touch controls">Pad</button>' +
-        '<span class="ast-hint">←→ turn · ↑ thrust · Space fire · Shift hyperspace · P pause</span>' +
+        '<span class="ast-hint">\u2190\u2192 turn \u00b7 \u2191 thrust \u00b7 Space fire \u00b7 Shift hyperspace \u00b7 P pause</span>' +
       '</div>' +
       '<div class="ast-pad">' +
         '<div class="ast-grp">' + pk('left', 'Turn left') + pk('right', 'Turn right') + '</div>' +
@@ -800,7 +810,7 @@
     teardown();
     try { reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { reduced = false; }
     var prefs = loadPrefs();
-    var p = Cade.mkPanel(PANEL, '☄️ Asteroids', bodyHtml());
+    var p = Cade.mkPanel(PANEL, '\u2604\ufe0f Asteroids', bodyHtml());
     if (Cade.markGamePanel) Cade.markGamePanel(p);
     var canvas = p.querySelector('.ast-canvas');
     var s = {
@@ -826,6 +836,7 @@
     // needed — and never leak to the editor or app shortcuts underneath.
     s.onKey = function (e) {
       if (S !== s || e.ctrlKey || e.metaKey || e.altKey) return;
+      if (!s.canvas.isConnected) { teardown(); return; }   // panel removed without _onClose
       var tag = e.target && e.target.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
       var key = (e.key || '').toLowerCase(), down = e.type === 'keydown';
@@ -884,14 +895,16 @@
       updateBar(s);
       try { b.blur(); } catch (x) {}
     });
+    // iOS reliably honours touchend-class gestures for starting audio.
+    p.addEventListener('pointerup', function () { s.sfx.unlock(); });
     render(s);
     kick(s);
   }
 
   Cade.registerWidget({
     name: 'Asteroids',
-    description: 'Vector rock-blaster — thrust, wrap, split rocks, dodge saucers',
-    icon: '☄️',
+    description: 'Vector rock-blaster \u2014 thrust, wrap, split rocks, dodge saucers',
+    icon: '\u2604\ufe0f',
     tags: 'game,arcade,fun,train,asteroids,space,shooter,retro,vector',
     open: open
   });

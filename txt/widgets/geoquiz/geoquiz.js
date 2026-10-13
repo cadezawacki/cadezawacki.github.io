@@ -1150,7 +1150,7 @@
     if ((b = t.closest('[data-opt]'))) { choose(+b.getAttribute('data-opt')); return; }
     if ((b = t.closest('[data-input]'))) {
       prefs.input = b.getAttribute('data-input'); savePrefs();
-      if (game && !game.over) game = null;
+      game = null;
       paint(); return;
     }
     if ((b = t.closest('[data-deck]'))) { prefs.deck = b.getAttribute('data-deck'); savePrefs(); ensureAtlasFor(); paint(); return; }
@@ -1200,8 +1200,7 @@
     if (k === 'region') prefs.region = t.value;
     else if (k === 'len') prefs.len = +t.value;
     savePrefs();
-    if (game && !game.over) game = null;
-    if (learn) learn = null;
+    game = null; learn = null;
     paint();
   }
 

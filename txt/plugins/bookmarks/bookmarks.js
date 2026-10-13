@@ -264,7 +264,7 @@
 
   // ---- commands --------------------------------------------------------------------------------
   function marksOf(view) { var v = view && view.state.field(field, false); return v ? v.marks : null; }
-  function offMsg() { toast('Line Bookmarks is off — Settings → Editor', 'info', 2400); }
+  function offMsg() { toast('Line Bookmarks is off \u2014 Settings \u2192 Editor', 'info', 2400); }
   function goTo(view, pos, focus) {
     view.dispatch({ selection: { anchor: pos }, effects: EditorView.scrollIntoView(pos, { y: 'center' }), userEvent: 'select' });
     if (focus) view.focus();
@@ -280,7 +280,7 @@
     view.dispatch({ effects: fx });
     if (!quiet && fx.length === 1) {
       var l = st.doc.lineAt(st.selection.main.head), on = marksOf(view).indexOf(l.from) >= 0;
-      toast(on ? 'Bookmarked line ' + l.number + ' · F2 / Shift+F2 to jump' : 'Bookmark removed', on ? 'success' : 'info', 1400);
+      toast(on ? 'Bookmarked line ' + l.number + ' \u00b7 F2 / Shift+F2 to jump' : 'Bookmark removed', on ? 'success' : 'info', 1400);
     }
     try { Cade.haptic(10); } catch (e) {}
     return true;
@@ -288,7 +288,7 @@
   function jump(view, dir, focus) {
     var marks = marksOf(view);
     if (!marks) { offMsg(); return true; }
-    if (!marks.length) { toast('No bookmarks yet — Ctrl/Cmd+F2 adds one', 'info', 2000); return true; }
+    if (!marks.length) { toast('No bookmarks yet \u2014 Ctrl/Cmd+F2 adds one', 'info', 2000); return true; }
     var cur = view.state.doc.lineAt(view.state.selection.main.head).from, t = -1, i;
     if (dir > 0) { for (i = 0; i < marks.length; i++) if (marks[i] > cur) { t = marks[i]; break; } if (t < 0) t = marks[0]; }
     else { for (i = marks.length - 1; i >= 0; i--) if (marks[i] < cur) { t = marks[i]; break; } if (t < 0) t = marks[marks.length - 1]; }
@@ -317,7 +317,7 @@
   }
   function preview(t) {
     t = t.replace(/\s+/g, ' ').trim();
-    return t ? (t.length > 140 ? t.slice(0, 140) + '…' : t) : '';
+    return t ? (t.length > 140 ? t.slice(0, 140) + '\u2026' : t) : '';
   }
   function renderPanel() {
     var p = document.getElementById(PANEL_ID);
@@ -327,15 +327,15 @@
     var ed = Cade.editor, marks = marksOf(ed), html = '';
     var room = roomName();
     if (!marks) {
-      body.innerHTML = '<div class="bm-empty">Line Bookmarks is turned off. Turn it on in Settings → Editor.</div>';
+      body.innerHTML = '<div class="bm-empty">Line Bookmarks is turned off. Turn it on in Settings \u2192 Editor.</div>';
       return;
     }
     html += '<div class="bm-bar"><span class="bm-room" title="' + esc(room) + '">' + esc(room) + '</span>' +
       '<span class="bm-count">' + marks.length + '</span><span class="bm-sp"></span>' +
-      '<button type="button" class="bm-btn" data-act="toggle" title="Toggle a bookmark on the caret’s line">⊕ Caret line</button>' +
+      '<button type="button" class="bm-btn" data-act="toggle" title="Toggle a bookmark on the caret\u2019s line">\u2295 Caret line</button>' +
       (marks.length ? '<button type="button" class="bm-btn bm-btn-danger" data-act="clear">Clear all</button>' : '') + '</div>';
     if (!marks.length) {
-      html += '<div class="bm-empty">No bookmarks in this room yet.<br><b>Ctrl/Cmd+F2</b> toggles one on the caret’s line, <b>F2</b> / <b>Shift+F2</b> jump between them. On touch: long-press a line number.</div>';
+      html += '<div class="bm-empty">No bookmarks in this room yet.<br><b>Ctrl/Cmd+F2</b> toggles one on the caret\u2019s line, <b>F2</b> / <b>Shift+F2</b> jump between them. On touch: long-press a line number.</div>';
     } else {
       var doc = ed.state.doc, cur = doc.lineAt(ed.state.selection.main.head).from;
       html += '<div class="bm-list">';
@@ -344,7 +344,7 @@
         html += '<div class="bm-row' + (marks[i] === cur ? ' on' : '') + '">' +
           '<button type="button" class="bm-go" data-i="' + i + '"><span class="bm-ln">' + l.number + '</span>' +
           '<span class="bm-txt' + (pv ? '' : ' bm-blank') + '">' + esc(pv || '(empty line)') + '</span></button>' +
-          '<button type="button" class="bm-x" data-del="' + i + '" title="Remove bookmark" aria-label="Remove bookmark on line ' + l.number + '">×</button></div>';
+          '<button type="button" class="bm-x" data-del="' + i + '" title="Remove bookmark" aria-label="Remove bookmark on line ' + l.number + '">\u00d7</button></div>';
       }
       html += '</div>';
     }
@@ -371,7 +371,7 @@
     Cade.closeAllMenus();
     var ex = document.getElementById(PANEL_ID);
     if (ex) { ex.remove(); if (ex._onClose) ex._onClose(); return; }
-    var p = Cade.mkPanel(PANEL_ID, '🔖 Bookmarks', '<div class="bm-body"></div>');
+    var p = Cade.mkPanel(PANEL_ID, '\ud83d\udd16 Bookmarks', '<div class="bm-body"></div>');
     p.querySelector('.bm-body').addEventListener('click', onPanelClick);
     p._onClose = function () { clearTimeout(panelTimer); };
     renderPanel();
@@ -486,22 +486,22 @@
     };
   }
   Cade.registerWidget({
-    name: 'Bookmarks', description: 'Bookmarked lines of this room — click to jump, remove, clear all',
-    icon: '🔖', tags: 'bookmark,bookmarks,mark,line,jump,goto,navigate,f2', open: openPanel,
+    name: 'Bookmarks', description: 'Bookmarked lines of this room \u2014 click to jump, remove, clear all',
+    icon: '\ud83d\udd16', tags: 'bookmark,bookmarks,mark,line,jump,goto,navigate,f2', open: openPanel,
   });
   Cade.registerWidget({
-    name: 'Toggle Bookmark', description: 'Bookmark the caret’s line, or remove its bookmark (Ctrl/Cmd+F2)',
-    icon: '📌', tags: 'bookmark,toggle,mark,line,pin',
+    name: 'Toggle Bookmark', description: 'Bookmark the caret\u2019s line, or remove its bookmark (Ctrl/Cmd+F2)',
+    icon: '\ud83d\udccc', tags: 'bookmark,toggle,mark,line,pin',
     open: withEditor(function (ed) { toggle(ed); if (fine()) ed.focus(); }),
   });
   Cade.registerWidget({
     name: 'Next Bookmark', description: 'Jump to the next bookmarked line (F2)',
-    icon: '⬇️', tags: 'bookmark,next,jump,goto,line,navigate',
+    icon: '\u2b07\ufe0f', tags: 'bookmark,next,jump,goto,line,navigate',
     open: withEditor(function (ed) { jump(ed, 1, fine()); }),
   });
   Cade.registerWidget({
     name: 'Previous Bookmark', description: 'Jump to the previous bookmarked line (Shift+F2)',
-    icon: '⬆️', tags: 'bookmark,previous,prev,jump,goto,line,navigate',
+    icon: '\u2b06\ufe0f', tags: 'bookmark,previous,prev,jump,goto,line,navigate',
     open: withEditor(function (ed) { jump(ed, -1, fine()); }),
   });
 
