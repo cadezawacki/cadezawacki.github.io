@@ -1,0 +1,54 @@
+/* Asteroids widget styles (loaded on demand via Cade.loadCSS). The panel is
+   sized and centred in JS (asteroids.js fit()) so the playfield always fits
+   the viewport, phone portrait included. */
+#asteroids-panel { top: calc(var(--menubar-h, 36px) + 10px); right: auto; max-width: calc(100vw - 8px); }
+#asteroids-panel .cade-panel-body { padding: 8px; overflow: hidden; }
+@media (max-width: 639px) {
+  /* Phones: the game owns the screen — start just under the notch, over the menu bar. */
+  #asteroids-panel { top: calc(env(safe-area-inset-top, 0px) + 6px); }
+}
+
+.ast-wrap { display: flex; flex-direction: column; gap: 6px; }
+.ast-canvas {
+  display: block; box-sizing: content-box; border: 1px solid var(--border); border-radius: 8px;
+  background: var(--surface-2); touch-action: none; -webkit-touch-callout: none; cursor: crosshair;
+}
+[data-theme="dark"] .ast-canvas { background: var(--bg); }
+
+.ast-bar { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.ast-b {
+  flex: 0 0 auto; font: inherit; font-size: var(--text-xs); line-height: 1.2; padding: 3px 10px; cursor: pointer;
+  border: 1px solid var(--border); border-radius: 999px; background: transparent; color: var(--text-muted);
+  -webkit-tap-highlight-color: transparent;
+}
+.ast-b:hover { color: var(--accent); border-color: var(--accent); }
+.ast-b.on { color: var(--accent); border-color: var(--accent); background: var(--surface-hover, rgba(127,127,127,0.12)); }
+.ast-hint {
+  flex: 1 1 auto; min-width: 0; text-align: right; font-size: var(--text-xs); color: var(--text-faint);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+/* Thumb pad: rotate on the left, thrust + fire on the right, hyperspace between. */
+.ast-pad { display: none; gap: 8px; align-items: stretch; touch-action: none; -webkit-touch-callout: none; }
+.ast-wrap.pad .ast-pad { display: flex; }
+.ast-grp { flex: 1 1 0; display: flex; gap: 6px; min-width: 0; }
+.ast-pk {
+  flex: 1 1 0; min-width: 0; height: 60px; display: flex; align-items: center; justify-content: center;
+  border: 1px solid var(--border); border-radius: 14px; background: var(--surface-2); color: var(--text-muted);
+  touch-action: none; -webkit-tap-highlight-color: transparent; cursor: pointer;
+  transition: background-color 80ms, color 80ms, transform 80ms;
+}
+.ast-pk.sm { flex: 0 0 46px; border-radius: 12px; }
+.ast-pk.fire { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); }
+.ast-pk.on { background: var(--accent); border-color: var(--accent); color: #fff; transform: scale(0.96); }
+.ast-pk svg { pointer-events: none; }
+
+@media (pointer: coarse) {
+  .ast-hint { display: none; }
+  .ast-b { min-height: 40px; padding: 6px 14px; }
+  .ast-bar { justify-content: center; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ast-pk { transition: none; }
+  .ast-pk.on { transform: none; }
+}

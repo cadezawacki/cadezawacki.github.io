@@ -1,0 +1,27 @@
+/* Spoiler Text plugin. Hidden = transparent glyphs + a blurred text-shadow
+   (CSS filter doesn't apply to inline boxes in WebKit), on a soft pill that
+   wraps across lines like text. */
+.cm-spl {
+  border-radius: 4px;
+  padding: 0 1px;
+  background-color: var(--surface-2);
+  background-color: color-mix(in srgb, var(--text-muted) 16%, transparent);
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+  transition: color 140ms ease, text-shadow 140ms ease, background-color 140ms ease;
+}
+.cm-spl:not(.cm-spl-on),
+.cm-spl:not(.cm-spl-on) * {
+  color: transparent !important;
+  text-shadow: 0 0 7px var(--text) !important;
+  text-decoration: none !important; /* spell squiggles would trace the words */
+  cursor: pointer;
+}
+.cm-spl-on {
+  background-color: var(--accent-bg);
+  background-color: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+/* The || markers: hidden, shown faint on the caret's line (like **, ~~). */
+.cm-spl-mk { display: none; }
+.cm-activeLine .cm-spl-mk { display: inline; color: var(--text-faint); }
+@media (prefers-reduced-motion: reduce) { .cm-spl { transition: none; } }

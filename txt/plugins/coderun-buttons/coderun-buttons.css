@@ -1,0 +1,38 @@
+/* Run buttons: chips at the end of a ``` opening line. */
+.cm-crun {
+  display: inline-flex; align-items: center; gap: 4px; margin-left: 10px;
+  vertical-align: 1px; line-height: 1; white-space: nowrap;
+  font-family: var(--font-body, -apple-system, sans-serif); font-size: 11px; font-style: normal; font-weight: 500;
+  -webkit-user-select: none; user-select: none;
+}
+.cm-crun-btn, .cm-crun-state {
+  position: relative; display: inline-flex; align-items: center; gap: 4px;
+  height: 18px; padding: 0 7px 0 5px; border-radius: 999px; box-sizing: border-box;
+  border: 1px solid var(--border); background: var(--surface); color: var(--text-muted);
+}
+.cm-crun-btn { cursor: pointer; transition: color 0.12s, border-color 0.12s, background-color 0.12s, opacity 0.12s; }
+.cm-crun-btn svg { width: 9px; height: 9px; flex: 0 0 auto; }
+.cm-crun-run { opacity: 0.75; }
+.cm-line:hover .cm-crun-run, .cm-crun-run:hover { opacity: 1; }
+.cm-crun-btn:hover { color: var(--accent); border-color: var(--accent); background: var(--accent-bg, rgba(15,149,152,0.08)); }
+.cm-crun.pressed .cm-crun-run { color: var(--accent); border-color: var(--accent); }
+.cm-crun-x { padding: 0; width: 18px; justify-content: center; opacity: 0.45; }
+.cm-crun-x:hover { opacity: 1; color: var(--error, #dc2626); border-color: var(--error, #dc2626); background: transparent; }
+.cm-crun-state { color: var(--accent); border-color: var(--accent); background: var(--accent-bg, rgba(15,149,152,0.08)); max-width: 220px; }
+.cm-crun-state > span:last-child { overflow: hidden; text-overflow: ellipsis; }
+.cm-crun-state.queued { color: var(--text-muted); border-color: var(--border); background: var(--surface-2, transparent); }
+.cm-crun-stop:hover { color: var(--error, #dc2626); border-color: var(--error, #dc2626); background: transparent; }
+.cm-crun-spin {
+  width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto;
+  border: 1.5px solid currentColor; border-right-color: transparent;
+  animation: cm-crun-spin 0.8s linear infinite;
+}
+@keyframes cm-crun-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .cm-crun-spin { animation-duration: 2.4s; } }
+/* Fingers: a bigger invisible hit area without changing the line height. */
+@media (pointer: coarse) {
+  .cm-crun { gap: 8px; }
+  .cm-crun-btn::after { content: ''; position: absolute; inset: -12px -6px; }
+  .cm-crun-run { opacity: 0.9; }
+}
+body.readonly .cm-crun { display: none; }

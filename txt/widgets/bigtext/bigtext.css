@@ -1,0 +1,108 @@
+/* Big Text overlay. Fixed high-contrast colour pairs on purpose: this is a
+   sign, not a themed panel. The edit box uses the app's theme variables. */
+.bt-ov {
+  --bt-bg: #000; --bt-fg: #fff;
+  position: fixed; inset: 0; z-index: 100000; outline: none;
+  background: var(--bt-bg); color: var(--bt-fg);
+  overscroll-behavior: contain; -webkit-user-select: none; user-select: none;
+  -webkit-tap-highlight-color: transparent; -webkit-text-size-adjust: 100%;
+}
+.bt-ov[data-bt="light"] { --bt-bg: #fff; --bt-fg: #000; }
+.bt-ov[data-bt="accent"] { --bt-bg: var(--accent, #0f9598); --bt-fg: #fff; }
+.bt-ov[data-bt="yellow"] { --bt-bg: #ffd60a; --bt-fg: #111; }
+
+.bt-stage {
+  position: absolute; inset: 0; overflow: hidden; touch-action: none; cursor: pointer;
+  background: var(--bt-bg); color: var(--bt-fg);
+}
+.bt-area {
+  position: absolute;
+  top: max(14px, env(safe-area-inset-top)); right: max(14px, env(safe-area-inset-right));
+  bottom: calc(68px + env(safe-area-inset-bottom)); left: max(14px, env(safe-area-inset-left));
+}
+.bt-multi .bt-area { top: calc(44px + env(safe-area-inset-top)); }
+.bt-box {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  display: flex; align-items: center; justify-content: center;
+}
+.bt-rot .bt-box { transform: translate(-50%, -50%) rotate(90deg); }
+.bt-text {
+  font-family: var(--font-body, -apple-system, BlinkMacSystemFont, sans-serif); font-weight: 700; font-size: 16px;
+  line-height: 1.08; letter-spacing: -0.01em; text-align: center; overflow: hidden;
+  white-space: normal; overflow-wrap: normal; word-break: normal; -webkit-hyphens: manual; hyphens: manual;
+}
+.bt-editing .bt-box { visibility: hidden; }
+
+/* Flash: a full colour inversion once a second (2 changes/s, under the
+   3-flashes-per-second seizure threshold). Reduced motion gets a soft pulse. */
+.bt-flashing .bt-stage { animation: bt-flash 1s steps(1, end) infinite; }
+@keyframes bt-flash {
+  0% { background: var(--bt-bg); color: var(--bt-fg); }
+  50% { background: var(--bt-fg); color: var(--bt-bg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .bt-flashing .bt-stage { animation: bt-pulse 1.6s ease-in-out infinite; }
+  @keyframes bt-pulse { 50% { opacity: 0.3; } }
+}
+
+.bt-count {
+  position: absolute; top: max(10px, env(safe-area-inset-top)); left: 50%; transform: translateX(-50%);
+  font: 600 13px/1 var(--font-body, sans-serif); font-variant-numeric: tabular-nums; letter-spacing: 0.04em;
+  padding: 6px 12px; border-radius: 999px; pointer-events: none;
+  background: rgba(127, 127, 127, 0.22); color: var(--bt-fg);
+}
+.bt-count[hidden] { display: none; }
+
+.bt-bar {
+  position: absolute; left: 50%; bottom: max(10px, env(safe-area-inset-bottom)); transform: translateX(-50%);
+  display: flex; gap: 2px; padding: 4px; border-radius: 999px; max-width: calc(100vw - 16px); overflow-x: auto; scrollbar-width: none;
+  background: rgba(127, 127, 127, 0.2); background: color-mix(in srgb, var(--bt-fg) 12%, var(--bt-bg));
+  border: 1px solid rgba(127, 127, 127, 0.3); border-color: color-mix(in srgb, var(--bt-fg) 20%, transparent);
+  -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+  transition: opacity 0.35s ease;
+}
+.bt-bar::-webkit-scrollbar { display: none; }
+.bt-idle .bt-bar { opacity: 0.28; }
+.bt-idle .bt-stage { cursor: none; }
+.bt-b {
+  flex: 0 0 auto; width: 44px; height: 44px; padding: 0; border: 0; border-radius: 999px; cursor: pointer;
+  background: transparent; color: var(--bt-fg); display: inline-flex; align-items: center; justify-content: center;
+  touch-action: manipulation;
+}
+.bt-b:hover { background: rgba(127, 127, 127, 0.25); }
+.bt-b:focus-visible { outline: 2px solid var(--bt-fg); outline-offset: -2px; }
+.bt-b.on { background: rgba(127, 127, 127, 0.35); background: color-mix(in srgb, var(--bt-fg) 26%, transparent); }
+.bt-b[disabled] { opacity: 0.3; cursor: default; }
+.bt-b[data-act="prev"], .bt-b[data-act="next"] { display: none; }
+.bt-multi .bt-b[data-act="prev"], .bt-multi .bt-b[data-act="next"] { display: inline-flex; }
+
+/* Edit box (also the prompt when there's nothing to show). */
+.bt-edit {
+  position: absolute; left: 50%; top: max(16%, calc(env(safe-area-inset-top) + 12px)); transform: translateX(-50%);
+  width: min(560px, calc(100vw - 24px)); box-sizing: border-box; padding: 12px;
+  display: flex; flex-direction: column; gap: 8px; -webkit-user-select: text; user-select: text;
+  background: var(--surface, #fff); color: var(--text, #111); border: 1px solid var(--border, #ddd);
+  border-radius: var(--radius-lg, 10px); box-shadow: var(--shadow-lg, 0 12px 40px rgba(0,0,0,0.3));
+}
+.bt-edit[hidden] { display: none; }
+.bt-ta {
+  width: 100%; box-sizing: border-box; min-height: 84px; resize: vertical; padding: 9px 10px;
+  font: 600 16px/1.35 var(--font-body, sans-serif); /* 16px: no iOS focus zoom */
+  color: var(--text, #111); background: var(--bg, #fafafa); border: 1px solid var(--border, #ddd);
+  border-radius: var(--radius-md, 6px); outline: none;
+}
+.bt-ta:focus { border-color: var(--accent, #0f9598); }
+.bt-eacts { display: flex; align-items: center; gap: 6px; }
+.bt-ehint { flex: 1; font-size: var(--text-xs, 12px); color: var(--text-faint, #999); }
+.bt-eb {
+  font: inherit; font-size: var(--text-sm, 13px); padding: 7px 14px; border-radius: var(--radius-md, 6px); cursor: pointer;
+  border: 1px solid var(--border, #ddd); background: var(--surface-2, transparent); color: var(--text, #111);
+}
+.bt-eb.primary { border-color: var(--accent, #0f9598); background: var(--accent, #0f9598); color: #fff; font-weight: 600; }
+@media (pointer: coarse) {
+  .bt-eb { padding: 10px 16px; }
+  .bt-b { width: 46px; height: 46px; }
+}
+@media (max-width: 400px) {
+  .bt-b { width: 40px; }
+}

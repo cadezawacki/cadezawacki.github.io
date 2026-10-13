@@ -1,0 +1,57 @@
+/* Line Bookmarks plugin. */
+/* A thin accent bar at the left edge of a bookmarked line — the marker that
+   stays visible while the line-number gutter is hidden. */
+.cm-editor .cm-line.cm-bm-line { box-shadow: inset 2px 0 0 var(--accent); }
+/* The bookmarked line's number becomes an accent tab (click removes it). */
+.cm-lineNumbers .cm-gutterElement.cm-bm-g {
+  color: var(--accent);
+  font-weight: 650;
+  background: var(--accent-bg);
+  box-shadow: inset 3px 0 0 var(--accent);
+  border-radius: 0 4px 4px 0;
+  cursor: pointer;
+}
+/* Long-press on a line number toggles a bookmark: no iOS callout there. */
+.cm-gutters { -webkit-touch-callout: none; }
+
+#bm-panel { top: 56px; right: 12px; width: 340px; max-width: calc(100vw - 24px); }
+#bm-panel .cade-panel-body { overflow: hidden; }
+.bm-body { display: flex; flex-direction: column; max-height: min(480px, calc(100vh - 120px)); }
+.bm-bar { display: flex; align-items: center; gap: 6px; padding: 8px 10px; border-bottom: 1px solid var(--border); flex: 0 0 auto; }
+.bm-room { min-width: 0; max-width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-xs); color: var(--text-muted); }
+.bm-count {
+  min-width: 18px; padding: 0 6px; border-radius: 999px; text-align: center;
+  font-size: 11px; line-height: 18px; background: var(--surface-2); color: var(--text-muted);
+}
+.bm-sp { flex: 1; }
+.bm-btn {
+  font: inherit; font-size: var(--text-xs); padding: 4px 9px; border-radius: var(--radius-md, 6px); cursor: pointer; white-space: nowrap;
+  border: 1px solid var(--border); background: var(--surface-2); color: var(--text);
+}
+.bm-btn:hover { background: var(--surface-hover); border-color: var(--accent); }
+.bm-btn-danger:hover { color: var(--danger, #ef4444); border-color: var(--danger, #ef4444); }
+.bm-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; padding: 4px; }
+.bm-row { display: flex; align-items: stretch; border-radius: var(--radius-md, 6px); }
+.bm-row:hover, .bm-row.on { background: var(--accent-bg); }
+.bm-go {
+  flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 10px; padding: 7px 8px;
+  border: 0; background: transparent; color: var(--text); font: inherit; text-align: left; cursor: pointer;
+}
+.bm-ln { flex: 0 0 auto; min-width: 2.6em; text-align: right; font-family: var(--font-mono); font-size: var(--text-xs); color: var(--accent); font-variant-numeric: tabular-nums; }
+.bm-txt { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-sm); }
+.bm-blank { color: var(--text-faint); font-style: italic; }
+.bm-x {
+  flex: 0 0 32px; border: 0; border-radius: var(--radius-md, 6px); background: transparent;
+  color: var(--text-faint); font-size: 16px; line-height: 1; cursor: pointer;
+}
+.bm-x:hover { color: var(--text); background: var(--surface-hover); }
+.bm-empty { padding: 16px 14px; font-size: var(--text-sm); color: var(--text-muted); line-height: 1.55; }
+.bm-empty b { color: var(--text); font-weight: 600; }
+@media (max-width: 560px) {
+  #bm-panel { left: 6px !important; right: 6px; width: auto; max-width: none; }
+}
+@media (pointer: coarse) {
+  .bm-go { padding: 12px 8px; }
+  .bm-x { flex-basis: 44px; }
+  .bm-btn { padding: 8px 12px; }
+}

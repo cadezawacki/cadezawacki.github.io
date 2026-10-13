@@ -1,0 +1,179 @@
+/* Spider Solitaire styles. Cards, felt and backs derive from theme variables,
+   so light and dark both work. Card size comes from JS (--cw / --ch): ten
+   columns always fit the panel width, down to an iPhone in portrait. */
+#spider-panel {
+  top: 56px; left: max(8px, calc(50vw - 390px)); width: min(780px, calc(100vw - 16px)); max-width: calc(100vw - 16px);
+  max-height: calc(100vh - 64px); max-height: calc(100dvh - 64px);
+}
+#spider-panel .cade-panel-body { padding: 6px 8px 8px; overflow-y: auto; overscroll-behavior: contain; }
+#spider-panel, #spider-panel * { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+@media (max-width: 600px) {
+  /* Phones: use (almost) the full width — every pixel goes to the cards. */
+  #spider-panel { left: 6px; width: calc(100vw - 12px); max-width: calc(100vw - 12px); }
+  #spider-panel .cade-panel-body { padding: 4px 4px 6px; }
+}
+
+.sp {
+  --sp-felt: var(--surface-2);
+  --sp-face: var(--surface);
+  --sp-edge: var(--border);
+  --sp-ink: var(--text);
+  --sp-red: #c62f39;
+  --sp-back: var(--accent);
+  --sp-slot: var(--text-faint);
+  display: flex; flex-direction: column; gap: 6px; outline: none;
+  touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+}
+[data-theme="dark"] .sp {
+  --sp-felt: var(--bg);
+  --sp-face: var(--surface-2);
+  --sp-red: #f47a80;
+}
+/* Custom properties never fall back on an unsupported value, so the richer
+   color-mix() shades are gated (older iOS keeps the plain theme colours). */
+@supports (color: color-mix(in srgb, red 50%, blue)) {
+  .sp {
+    --sp-felt: color-mix(in srgb, var(--accent) 13%, var(--surface-2));
+    --sp-edge: color-mix(in srgb, var(--text) 16%, var(--surface));
+    --sp-back: color-mix(in srgb, var(--accent) 82%, #000);
+    --sp-slot: color-mix(in srgb, var(--text) 20%, transparent);
+  }
+  [data-theme="dark"] .sp {
+    --sp-felt: color-mix(in srgb, var(--accent) 15%, var(--bg));
+    --sp-face: color-mix(in srgb, var(--text) 12%, var(--surface));
+    --sp-edge: color-mix(in srgb, var(--text) 24%, var(--surface));
+    --sp-back: color-mix(in srgb, var(--accent) 62%, #000);
+  }
+}
+
+.sp button {
+  font: inherit; color: var(--text); background: transparent; cursor: pointer;
+  border: 1px solid var(--border); border-radius: 6px;
+}
+.sp button:hover:not(:disabled) { background: var(--surface-hover); }
+.sp button:disabled { opacity: 0.4; cursor: default; }
+
+/* Top bar */
+.sp-top { display: flex; align-items: center; gap: 10px; font-size: var(--text-xs); color: var(--text-muted); min-height: 28px; padding: 0 2px; }
+.sp .sp-btn { font-size: var(--text-xs); font-weight: 600; padding: 3px 8px; min-height: 26px; white-space: nowrap; }
+.sp-hud { white-space: nowrap; }
+.sp-hud b { color: var(--text); font-variant-numeric: tabular-nums; }
+.sp-time { margin-left: auto; font-family: var(--font-mono); font-variant-numeric: tabular-nums; color: var(--text); white-space: nowrap; }
+
+/* Table: an isolated stacking context so card z-indexes stay inside it. */
+.sp-wrap { position: relative; }
+.sp-table {
+  position: relative; isolation: isolate; min-height: 220px; touch-action: none;
+  background: var(--sp-felt); border-radius: 8px;
+}
+.sp-slot {
+  position: absolute; left: 0; top: 0; width: var(--cw, 40px); height: var(--ch, 56px); box-sizing: border-box;
+  border: 1.5px dashed var(--sp-slot); border-radius: max(3px, calc(var(--cw, 40px) * 0.09));
+  transition: background-color 0.15s, border-color 0.15s;
+}
+.sp-found { border-style: solid; opacity: 0.6; }
+/* The stock outline only shows once it's empty; its count badge rides above the cards. */
+.sp-stock { z-index: 700; border-color: transparent; pointer-events: none; }
+.sp-stock.empty { border-color: var(--sp-slot); pointer-events: auto; cursor: pointer; }
+.sp-stock-n {
+  position: absolute; right: -3px; top: -5px; min-width: 15px; height: 15px; padding: 0 3px; box-sizing: border-box;
+  border-radius: 8px; background: var(--surface); color: var(--text); border: 1px solid var(--border);
+  font-size: 10px; line-height: 13px; text-align: center; font-variant-numeric: tabular-nums; font-weight: 600;
+}
+.sp-stock-n:empty { display: none; }
+.sp-slot.sp-ht { border-color: var(--accent); border-style: solid; background: var(--accent-bg); background: color-mix(in srgb, var(--accent) 16%, transparent); }
+
+/* Cards */
+.sp-c {
+  position: absolute; left: 0; top: 0; width: var(--cw, 40px); height: var(--ch, 56px); cursor: pointer;
+  transition: transform 0.26s cubic-bezier(0.2, 0.8, 0.25, 1);
+}
+.sp-noanim .sp-c, .sp-c.sp-drag { transition: none !important; }
+.sp-in {
+  position: absolute; inset: 0; box-sizing: border-box; overflow: hidden;
+  border-radius: max(3px, calc(var(--cw, 40px) * 0.09));
+  background: var(--sp-face); border: 1px solid var(--sp-edge); color: var(--sp-ink);
+  box-shadow: 0 1px 1.5px rgba(0, 0, 0, 0.14);
+}
+.sp-c.red .sp-in { color: var(--sp-red); }
+.sp-cr {
+  position: absolute; left: 6%; top: 1px; display: flex; align-items: baseline; white-space: nowrap;
+  font-family: var(--font-body); font-weight: 700; line-height: 1;
+  font-size: min(calc(var(--cw, 40px) * 0.44), 22px);
+}
+.sp-cr.ten b { letter-spacing: -0.09em; margin-left: -0.04em; }
+.sp-cr i { font-style: normal; font-size: 0.8em; margin-left: 0.05em; }
+.sp-pip { position: absolute; right: 7%; bottom: 4%; line-height: 1; font-size: min(calc(var(--cw, 40px) * 0.6), 36px); }
+.sp-c.dn .sp-in {
+  background-color: var(--sp-back);
+  background-image: repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.13) 0 2px, transparent 2px 6px),
+    repeating-linear-gradient(-45deg, rgba(255, 255, 255, 0.07) 0 2px, transparent 2px 6px);
+  border-color: rgba(0, 0, 0, 0.25);
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.16), 0 1px 1.5px rgba(0, 0, 0, 0.14);
+}
+.sp-c.dn .sp-in > * { display: none; }
+.sp-c.sp-sel .sp-in { box-shadow: 0 0 0 2px var(--accent), 0 3px 8px rgba(0, 0, 0, 0.18); }
+.sp-c.sp-drag .sp-in { box-shadow: 0 10px 22px rgba(0, 0, 0, 0.28); }
+.sp-c.sp-hs .sp-in, .sp-c.sp-ht .sp-in { animation: sp-glow 0.8s ease-in-out 2 alternate; }
+.sp-shake { animation: sp-shake 0.3s ease; }
+.sp-fx { position: absolute; left: 0; top: 0; width: 100%; height: 100%; z-index: 5000; border-radius: 8px; cursor: pointer; }
+
+/* Tool row */
+.sp-tools { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; }
+.sp .sp-tool {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
+  padding: 4px 0; min-height: 42px; border-color: transparent;
+}
+.sp-ti { position: relative; font-size: 16px; line-height: 1.1; }
+.sp-tl { font-size: 10px; color: var(--text-muted); white-space: nowrap; }
+.sp-badge {
+  position: absolute; top: -3px; right: -13px; min-width: 14px; height: 14px; padding: 0 3px; box-sizing: border-box;
+  border-radius: 7px; background: var(--accent); color: #fff; font-size: 9px; line-height: 14px; font-weight: 700; text-align: center;
+}
+
+/* Overlay: menus, stats, win */
+.sp-ov { position: absolute; inset: 0; z-index: 2; display: none; align-items: flex-start; justify-content: center; padding: 18px 8px; overflow: auto; }
+.sp-ov.show { display: flex; }
+.sp-card {
+  width: 100%; max-width: 320px; box-sizing: border-box;
+  background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 10px;
+  box-shadow: var(--shadow-lg); padding: 12px; display: flex; flex-direction: column; gap: 6px; text-align: center;
+}
+.sp-title { font-size: var(--text-base); }
+.sp-sub { font-size: var(--text-xs); color: var(--text-muted); }
+.sp-hint { font-size: 10.5px; color: var(--text-faint); line-height: 1.45; }
+.sp-big { font-size: 30px; line-height: 1; animation: sp-pop 0.5s ease both; }
+.sp-winrow { display: flex; justify-content: center; gap: 18px; margin: 4px 0; }
+.sp-winrow div { display: flex; flex-direction: column; align-items: center; }
+.sp-winrow b { font-family: var(--font-mono); font-size: 20px; color: var(--accent); font-variant-numeric: tabular-nums; }
+.sp-winrow span { font-size: 10.5px; color: var(--text-muted); }
+.sp-acts { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; margin-top: 4px; }
+.sp-acts button { padding: 6px 12px; font-size: var(--text-sm); }
+.sp .sp-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.sp .sp-primary:hover:not(:disabled) { background: var(--accent-hover, var(--accent)); }
+.sp-list { display: flex; flex-direction: column; gap: 4px; }
+.sp-list button { text-align: left; padding: 8px 10px; }
+.sp .sp-pick { display: flex; justify-content: space-between; align-items: center; gap: 8px; min-height: 42px; }
+.sp-pick span { font-size: var(--text-xs); color: var(--text-muted); white-space: nowrap; }
+.sp-pk-s { display: inline-block; min-width: 3.4em; letter-spacing: 0.08em; color: var(--text-muted); font-weight: 400; }
+.sp .sp-tog.on { color: var(--accent); }
+.sp-stats { width: 100%; border-collapse: collapse; font-size: var(--text-xs); font-variant-numeric: tabular-nums; }
+.sp-stats th { color: var(--text-muted); font-weight: 500; padding: 3px 2px; font-size: 10.5px; }
+.sp-stats td { padding: 4px 2px; border-top: 1px solid var(--border); }
+.sp-stats td:first-child { text-align: left; font-weight: 600; white-space: nowrap; }
+
+@keyframes sp-glow {
+  from { box-shadow: 0 0 0 0 var(--accent), 0 1px 1.5px rgba(0, 0, 0, 0.14); }
+  to { box-shadow: 0 0 0 3px var(--accent), 0 4px 12px rgba(0, 0, 0, 0.22); }
+}
+@keyframes sp-shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
+@keyframes sp-pop { 0% { transform: scale(0.3); opacity: 0; } 70% { transform: scale(1.2); opacity: 1; } 100% { transform: scale(1); } }
+@media (prefers-reduced-motion: reduce) {
+  .sp-c { transition: none; }
+  .sp-c.sp-hs .sp-in, .sp-c.sp-ht .sp-in, .sp-shake, .sp-big { animation: none; }
+  .sp-c.sp-hs .sp-in, .sp-c.sp-ht .sp-in { box-shadow: 0 0 0 3px var(--accent); }
+}
+@media (pointer: coarse) {
+  .sp .sp-tool { min-height: 46px; }
+  .sp .sp-btn { min-height: 32px; }
+}

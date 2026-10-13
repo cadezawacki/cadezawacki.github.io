@@ -1,0 +1,45 @@
+/* Shared location picker (geo.js) — used by Weather and Sun & Moon. */
+.geo-pick { display: flex; flex-direction: column; gap: 8px; min-height: 0; }
+.geo-search { position: relative; }
+.geo-ico { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--text-faint); font-size: 15px; pointer-events: none; }
+.geo-q {
+  width: 100%; box-sizing: border-box; padding: 9px 10px 9px 30px; font: inherit; font-size: var(--text-sm);
+  color: var(--text); background: var(--bg, var(--surface)); border: 1px solid var(--border); border-radius: var(--radius-md, 6px); outline: none;
+  -webkit-appearance: none; appearance: none;
+}
+.geo-q:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent); }
+.geo-loc {
+  display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%; min-height: 38px;
+  font: inherit; font-size: var(--text-sm); font-weight: 500; cursor: pointer; border-radius: var(--radius-md, 6px);
+  border: 1px solid var(--accent); color: var(--accent); background: transparent;
+}
+.geo-loc:hover:not([disabled]) { background: var(--accent-bg, rgba(15,149,152,0.08)); }
+.geo-loc[disabled] { opacity: 0.7; cursor: progress; }
+.geo-loc.busy .geo-loc-ico { display: inline-block; animation: geo-spin 1.2s linear infinite; }
+@keyframes geo-spin { to { transform: rotate(360deg); } }
+.geo-res:empty { display: none; }
+.geo-res, .geo-saved { display: flex; flex-direction: column; gap: 2px; }
+.geo-sec { font-size: var(--text-xs); color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.06em; padding: 6px 2px 2px; }
+.geo-hint { font-size: var(--text-xs); color: var(--text-faint); padding: 6px 2px; }
+.geo-item {
+  display: flex; align-items: center; gap: 9px; padding: 7px 8px; min-height: 40px; box-sizing: border-box;
+  border-radius: var(--radius-md, 6px); cursor: pointer; border: 1px solid transparent;
+}
+.geo-item:hover, .geo-item.sel { background: var(--surface-hover, rgba(127,127,127,0.12)); }
+.geo-item.sel { border-color: var(--border); }
+.geo-flag { flex: 0 0 22px; text-align: center; font-size: 17px; line-height: 1; color: var(--text-muted); }
+.geo-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.geo-name { font-size: var(--text-sm); color: var(--text); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.geo-sub { font-size: var(--text-xs); color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.geo-cur { font-size: 10px; color: var(--accent); border: 1px solid var(--accent); border-radius: 999px; padding: 0 6px; flex: 0 0 auto; }
+.geo-x {
+  flex: 0 0 auto; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 6px; cursor: pointer;
+  background: transparent; color: var(--text-faint); font-size: 16px; line-height: 1;
+}
+.geo-x:hover { color: var(--text); background: var(--surface-2, rgba(127,127,127,0.1)); }
+@media (pointer: coarse) {
+  .geo-item { min-height: 46px; }
+  .geo-x { width: 40px; height: 40px; }
+  .geo-loc { min-height: 44px; }
+  .geo-q { font-size: 16px; } /* iOS: < 16px zooms the page on focus */
+}

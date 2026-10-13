@@ -623,7 +623,14 @@
     if (active) blurEditor();
   }
   function onDocPointer(e) { if (P) setActive(P.contains(e.target)); }
-  function onDocFocus(e) { if (P && !P.contains(e.target)) setActive(false); }
+  // Focus settling right after opening (the Ctrl+K palette closing, the editor
+  // refocusing) must not hand the keyboard straight back.
+  var openedAt = 0;
+  function onDocFocus(e) {
+    if (!P || P.contains(e.target)) return;
+    if (Date.now() - openedAt < 600) { blurEditor(); return; }
+    setActive(false);
+  }
   function blurEditor() {
     try { if (Cade.editor && Cade.editor.hasFocus) Cade.editor.contentDOM.blur(); } catch (e) {}
   }
@@ -652,7 +659,7 @@
     P._onClose = cleanup;
     P.classList.add('wd-loading-on');
     P.classList.toggle('wd-hc', !!prefs.hc);
-    active = true;
+    active = true; openedAt = Date.now();
     blurEditor(); // the game takes the keyboard; on phones this also drops the soft keyboard
     document.addEventListener('keydown', onKey, true);
     document.addEventListener('pointerdown', onDocPointer, true);
