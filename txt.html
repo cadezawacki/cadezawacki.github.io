@@ -23339,10 +23339,35 @@ function _dlStamp() {
   const d = new Date(), p = n => String(n).padStart(2, '0');
   return d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + '-' + p(d.getHours()) + p(d.getMinutes());
 }
+// One imported file in the note: its own name is the sensible download
+// (just its contents), not a .zip. Only when the line above the fence really
+// is a file name (has an extension, or is e.g. Dockerfile).
+const _DL_BARE_NAMES = /^(dockerfile|containerfile|makefile|gnumakefile|gemfile|rakefile|procfile|jenkinsfile|vagrantfile|license|readme|\.[\w.-]+)$/i;
+function _dlBase(path) { return String(path || '').split(/[\/\\]/).pop().trim(); }
+function _dlExt(name) { const m = /\.([A-Za-z0-9]{1,12})$/.exec(name || ''); return m ? m[1].toLowerCase() : ''; }
+function _dlFileLike(path) {
+  const base = _dlBase(path);
+  return !!base && base.length <= 120 && !/[<>:"|?*]/.test(base) && (!!_dlExt(base) || _DL_BARE_NAMES.test(base));
+}
+function _dlSingleFile(files) {
+  if (files.length !== 1 || !_dlFileLike(files[0].path)) return null;
+  const base = _dlBase(files[0].path);
+  return { base, ext: _dlExt(base), content: files[0].content };
+}
+// Does the chosen name mean "that file" (same extension, or the same bare name)?
+function _dlIsSingleTarget(single, filename) {
+  if (!single) return false;
+  return single.ext ? _dlExt(filename) === single.ext : _dlBase(filename).toLowerCase() === single.base.toLowerCase();
+}
+let _dlSingle = null;
 window.openDownloadModal = function() {
   _dlDetectedFiles = _detectMultiDocFiles();
+  _dlSingle = _dlSingleFile(_dlDetectedFiles);
   const hint = document.getElementById('dl-split-hint');
-  if (_dlDetectedFiles.length) {
+  if (_dlSingle) {
+    document.getElementById('dl-filename').value = _dlSingle.base;
+    if (hint) hint.textContent = 'Imported file detected: ' + _dlSingle.base + ' downloads just its contents. Pick .zip to keep its path, or another extension to save the whole note.';
+  } else if (_dlDetectedFiles.some(f => _dlFileLike(f.path))) {
     document.getElementById('dl-filename').value = 'files-' + _dlStamp() + '.zip';
     if (hint) hint.textContent = 'Multi-doc detected: .zip splits into ' + _dlDetectedFiles.length + ' file' + (_dlDetectedFiles.length === 1 ? '' : 's') + ' (' + _dlDetectedFiles.slice(0, 3).map(f => f.path).join(', ') + (_dlDetectedFiles.length > 3 ? ', …' : '') + '). Any other extension saves the whole doc as one file.';
   } else {
@@ -23390,6 +23415,13 @@ window.confirmDownload = function() {
       closeDownloadModal();
       showToast(files.length ? ('Downloaded ' + files.length + ' file(s) in ' + filename) : ('Downloaded ' + filename), 'success', 2200);
     }).catch(err => showToast('Zip error: ' + err.message, 'error'));
+    return;
+  }
+  if (_dlIsSingleTarget(_dlSingle, filename)) {
+    // no extension (Dockerfile): a text/plain blob would get ".txt" appended
+    _dlSaveBlob(new Blob([_dlSingle.content], { type: _dlExt(filename) ? 'text/plain' : 'application/octet-stream' }), filename);
+    closeDownloadModal();
+    showToast('Downloaded ' + filename + ' (the imported file)', 'success', 2200);
     return;
   }
   _dlSaveBlob(new Blob([content], { type: 'text/plain' }), filename);
