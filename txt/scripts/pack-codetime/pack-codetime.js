@@ -72,7 +72,7 @@
         window.confirm('Also remove ' + res.docs + ' docstring' + (res.docs === 1 ? '' : 's') + '? (an emptied block gets "pass")')) {
       res = scStrip(R.text, lang, { docstrings: true });
     }
-    var kept = res.kept ? ' · kept ' + res.kept + ' directive' + (res.kept === 1 ? '' : 's') + ' / licence' : '';
+    var kept = res.kept ? ' \u00B7 kept ' + res.kept + ' directive' + (res.kept === 1 ? '' : 's') + ' / licence' : '';
     if (!res.count) { showToast('No comments found (' + lang + ')' + kept, 'info', 3000); return; }
     var live = window.Cade.editor, len = live.state.doc.length;
     live.dispatch({ changes: { from: Math.min(R.from, len), to: Math.min(R.to, len), insert: res.text }, userEvent: 'input' });
@@ -620,7 +620,7 @@
     try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'; } catch (e) { return 'UTC'; }
   }
 
-  // Abbreviations: a number = fixed offset in minutes (EST is always UTC−5);
+  // Abbreviations: a number = fixed offset in minutes (EST is always UTC\u22125);
   // a string = the generic, DST-following zone (ET follows New York).
   function tzAbbrs() {
     return {
@@ -686,7 +686,7 @@
       'Miami': 'America/New_York', 'Philadelphia': 'America/New_York', 'Detroit': 'America/Detroit', 'Toronto': 'America/Toronto',
       'Montreal': 'America/Toronto', 'Ottawa': 'America/Toronto', 'Halifax': 'America/Halifax', "St John's": 'America/St_Johns',
       'Bogota': 'America/Bogota', 'Lima': 'America/Lima', 'Santiago': 'America/Santiago',
-      'Buenos Aires': 'America/Argentina/Buenos_Aires', 'Sao Paulo': 'America/Sao_Paulo', 'S\\u00E3o Paulo': 'America/Sao_Paulo',
+      'Buenos Aires': 'America/Argentina/Buenos_Aires', 'Sao Paulo': 'America/Sao_Paulo', 'S\u00E3o Paulo': 'America/Sao_Paulo',
       'Rio de Janeiro': 'America/Sao_Paulo', 'Rio': 'America/Sao_Paulo', 'Caracas': 'America/Caracas',
       'Pacific': 'America/Los_Angeles', 'Mountain': 'America/Denver', 'Central': 'America/Chicago', 'Eastern': 'America/New_York',
       'Atlantic': 'America/Halifax', 'Alaska': 'America/Anchorage'
@@ -719,7 +719,7 @@
     var s = String(str || '').trim().replace(/^\(|\)$/g, '').replace(/\s+(?:standard\s+|daylight\s+)?time$/i, '').trim(), m;
     if (!s) return null;
     if (/^(?:local|here|device|mine|my time|this device)$/i.test(s)) return { id: tzDevice() };
-    if ((m = /^(?:UTC|GMT)?\s*([+\-\\u2212])\s*(\d{1,2})(?::?(\d{2}))?$/i.exec(s)) && /^(?:UTC|GMT|[+\-\\u2212])/i.test(s)) {
+    if ((m = /^(?:UTC|GMT)?\s*([+\-\u2212])\s*(\d{1,2})(?::?(\d{2}))?$/i.exec(s)) && /^(?:UTC|GMT|[+\-\u2212])/i.test(s)) {
       var off = (+m[2] * 60 + (+m[3] || 0)) * (m[1] === '+' ? 1 : -1);
       if (Math.abs(off) <= 14 * 60) return { fixed: off, label: tzOffLabel(off) };
     }
@@ -834,7 +834,7 @@
     ctStoreSet(KM, mode === 'replace' ? '2' : '1');
     var res = tzConvert(t, found, targets.list, src, mode, Date.now());
     if (res.text !== t) { if (ctx.selection) ctx.selection = res.text; else ctx.fullText = res.text; }
-    showToast('Converted ' + res.count + ' time' + (res.count === 1 ? '' : 's') + (res.notes.length ? ' · ' + res.notes.join(' · ') : ''),
+    showToast('Converted ' + res.count + ' time' + (res.count === 1 ? '' : 's') + (res.notes.length ? ' \u00B7 ' + res.notes.join(' \u00B7 ') : ''),
       res.notes.length ? 'info' : 'success', res.notes.length ? 7000 : 2500);
   };
 
@@ -858,7 +858,7 @@
     var byLen = function (a, b) { return b.length - a.length; };
     var ab = Object.keys(tzAbbrs()).filter(function (k) { return k !== 'Z' && k !== 'UK' && k !== 'UT'; }).sort(byLen);
     var cities = Object.keys(tzCities()).sort(byLen).map(esc);
-    return '(?:(?:UTC|GMT)\\s?[+\\-\\u2212]\\s?\\d{1,2}(?::?\\d{2})?' +
+    return '(?:(?:UTC|GMT)\\s?[+\\-\u2212]\\s?\\d{1,2}(?::?\\d{2})?' +
       '|[A-Z][A-Za-z]+(?:\\/[A-Z][A-Za-z_+\\-]+){1,2}' +
       '|(?:Pacific|Eastern|Central|Mountain|Atlantic|Alaska|Hawaii)(?:\\s+(?:Standard|Daylight))?(?:\\s+Time)?' +
       '|' + ab.join('|') + '|' + cities.join('|') + ')';
@@ -895,8 +895,8 @@
       var zs = m[7] || m[8] || null;
       out.push({ s: s, e: e, h: h, mi: mi, h12: h12, zoneStr: zs, zone: zs ? tzResolve(zs) : null });
     }
-    // "3–4pm PT", "11-1pm ET": the bare first hour borrows the meridiem and zone.
-    var rng = /(\d{1,2})(?::(\d{2}))?\s*(?:-|\\u2013|\\u2014|to)\s*(?=\d)/g;
+    // "3\u20134pm PT", "11-1pm ET": the bare first hour borrows the meridiem and zone.
+    var rng = /(\d{1,2})(?::(\d{2}))?\s*(?:-|\u2013|\u2014|to)\s*(?=\d)/g;
     while ((m = rng.exec(text))) {
       var rs = m.index, re2 = rs + m[1].length + (m[2] ? m[2].length + 1 : 0);
       if (/[\d:.\w]/.test(text.charAt(rs - 1)) || out.some(function (o) { return rs < o.e && re2 > o.s; })) continue;
@@ -907,7 +907,7 @@
       if (nx.h12) {
         if (h1 < 1 || h1 > 12) continue;
         var pm = nx.h >= 12, nh = (nx.h + 11) % 12 + 1;
-        if (h1 > nh && h1 !== 12) pm = !pm;                     // 11–1pm: 11 is am
+        if (h1 > nh && h1 !== 12) pm = !pm;                     // 11\u20131pm: 11 is am
         h1 = h1 % 12 + (pm ? 12 : 0);
       } else if (!m[2] || h1 > 23) continue;
       out.push({ s: rs, e: re2, h: h1, mi: mi1, h12: nx.h12, zoneStr: null, zone: null, rangeOf: nx });

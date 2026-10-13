@@ -25,6 +25,7 @@ window.__cadeAdventureData = (function () {
   var CODE = '2841';
   var SHINY = { thimble: 1, spoon: 1 };
   var WEDGES = { poker: 1, boathook: 1 };
+  var HOURS = ['twelve', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven'];
 
   function has(arr, x) { return arr.indexOf(x) !== -1; }
   function powered(g) { return g.p('sluice', 'open') && g.p('clutch', 'engaged'); }
@@ -642,6 +643,7 @@ window.__cadeAdventureData = (function () {
           '\n\nOn a brass control stand beside the pier are a [bearing dial] and a [shutter lever]. A [logbook] lies open on a lectern, with a [pencil] tied to it on a string. A low [door|roof door] leads out onto the roof walk to the east; the stair goes down.';
       },
       exits: { d: 'stair', e: { to: 'roof', door: 'roofdoor' }, out: { to: 'roof', door: 'roofdoor' } },
+      onEnter: function (g) { g.award('dometop', 3); },
       on: {
         dial: function (g, c) { return g.act('set', 'bearingdial', null, c.topic); },
         write: function (g, c) { return writeLog(g, c); }
@@ -886,8 +888,8 @@ window.__cadeAdventureData = (function () {
       rcv: {
         pour: function (g, c) { if (c.d === 'wateringcan') return waterFlower(g); },
         use: function (g, c) { if (c.d === 'wateringcan') return waterFlower(g); },
-        putin: function (g, c) { if (c.d === 'wateringcan') return waterFlower(g); },
-        puton: function (g, c) { if (c.d === 'wateringcan') return waterFlower(g); }
+        putin: function (g, c) { return c.d === 'wateringcan' ? waterFlower(g) : 'The moonflower isn’t a shelf.'; },
+        puton: function (g, c) { return c.d === 'wateringcan' ? waterFlower(g) : 'The moonflower isn’t a shelf.'; }
       }
     },
     bloom: {
@@ -1173,7 +1175,7 @@ window.__cadeAdventureData = (function () {
             if (!g.p('vaultdoor', 'locked')) return 'The dials are already set to ' + digits.split('').join('-') + ', and the door is open.';
             g.set('vaultdoor', 'locked', false);
             g.set('vaultdoor', 'open', true);
-            g.award('vault', 8);
+            g.award('vault', 9);
             return 'You turn the dials to 2-8-4-1. *Click. Click. Click. Click.* Then, from deep inside the door, a heavy *clunk* — and the steel door swings open on silent, oiled hinges. Your aunt, it seems, cared rather more for this lock than for the front door.';
           }
           return 'You turn the dials to ' + digits.split('').join('-') + ' and try the handle. Nothing.';
@@ -1393,7 +1395,8 @@ window.__cadeAdventureData = (function () {
       name: 'nest', nouns: ['nest'], adj: ['untidy', 'enormous', 'magpie'], loc: 'attic', scenery: true, container: true,
       props: { open: true },
       desc: 'A heap of twigs, string and stolen treasure: [bottle tops], a bent fork, a doorknob, sweet wrappers, a bicycle bell, and things that were once somebody’s buttons.',
-      on: { take: 'Pim would have something to say about that. Quite a lot, at volume.', search: function (g) { return g.dflt({ v: 'search', d: 'nest' }); } }
+      on: { take: 'Pim would have something to say about that. Quite a lot, at volume.' },
+      rcv: { putin: function (g, c) { return tradePim(g, c); }, puton: function (g, c) { return tradePim(g, c); } }
     },
     junk: {
       name: 'bottle tops', nouns: ['tops', 'junk', 'treasure', 'fork', 'doorknob', 'wrappers', 'bell', 'buttons', 'trinkets'], adj: ['bottle', 'bent', 'bicycle', 'stolen'], loc: 'nest', scenery: true, plural: true,
@@ -1530,7 +1533,7 @@ window.__cadeAdventureData = (function () {
     var m = g.moves(), r = g.room();
     if (g.p('sluice', 'open') && !g.p('sluice', 'wedged') && r === 'wheelpit' && g.timerLeft('sluice') === 2) g.say('The [counterweight] is sinking steadily. When it reaches the bottom, it will drag the sluice gate shut again.');
     if (m % 60 === 0 && m > 0) {
-      var hour = g.clock().replace(/:00/, '');
+      var hour = HOURS[Math.floor((20 * 60 + m) / 60) % 12];
       if (r === 'hall') g.say('The grandfather clock clears its throat and strikes ' + hour + '.');
       else if (r === 'gallery' && g.p('copernicus', 'wound')) g.say('Copernicus hoots the hour: ' + hour + '.');
     }
