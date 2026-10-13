@@ -427,6 +427,7 @@
     else if (act === 'random') openRandom();
     else if (act === 'open') openPuzzle(+el.getAttribute('data-i'), el.getAttribute('data-date') || '');
     else if (act === 'clear') { closeMenu(); clearAll(); }
+    else if (act === 'retry') { close(); open(); }
     else if (act === 'resetstats') { if (window.confirm('Reset crossword statistics?')) { stats = {}; writeJSON(STATS_KEY, stats); statsMenu(); } }
     else if (/^(chk|rev)-/.test(act)) {
       closeMenu();
@@ -473,8 +474,8 @@
       var m = cur.m[k];
       if (m === 'x') cls += ' bad'; else if (m === 'c') cls += ' ok'; else if (m === 'r') cls += ' rev';
       if (el.className !== cls) el.className = cls;
-      var let = el.lastChild, L = cur.g[k] || '';
-      if (let.textContent !== L) let.textContent = L;
+      var lt = el.lastChild, L = cur.g[k] || '';
+      if (lt.textContent !== L) lt.textContent = L;
     }
     ui.barNum.textContent = s.num + (s.dir === 'A' ? 'A' : 'D');
     ui.barText.textContent = s.clue;
@@ -617,7 +618,6 @@
     }, function () {
       if (!ui) return;
       showOverlay('msg', '<div class="xw-card xw-msg">Couldn’t load the puzzles (offline?).<div class="xw-acts"><button class="xw-primary" data-act="retry">Try again</button></div></div>');
-      ui.ov.querySelector('[data-act="retry"]').addEventListener('click', function () { close(); open(); });
     });
   }
 
