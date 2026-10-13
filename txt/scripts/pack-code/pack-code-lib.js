@@ -166,6 +166,11 @@
     css = css.replace(/\s*\{\s*/g, '{').replace(/\s*\}\s*/g, '}')
              .replace(/\s*;\s*/g, ';').replace(/\s*,\s*/g, ',')
              .replace(/:\s+/g, ':').replace(/\s*>\s*/g, '>');
+    // Space BEFORE ':' only inside declarations (segments ended by ';' or '}');
+    // selector segments (ended by '{') keep it, since "a :hover" != "a:hover".
+    css = css.replace(/(^|[{};])([^{};]*)(?=[;}])/g, function (m, pre, seg) { return pre + seg.replace(/\s+:/g, ':'); });
+    // Conditional at-rule preludes: "and (min-width : 1px)" -> "and (min-width:1px)"
+    css = css.replace(/@(media|supports|container)\b[^{]*/gi, function (m) { return m.replace(/\s*:\s*/g, ':'); });
     css = css.replace(/;}/g, '}');
     css = css.replace(/\s*!important/gi, '!important');
     // zero-length units
@@ -231,14 +236,16 @@
     var m, tokens = [];
     while ((m = re.exec(html))) tokens.push(m);
     var terser = null, pieces = [];
+    // pieces: {k:'text'|'tag', v, name}; names let us drop whitespace between block tags
+    function tagPiece(v, name) { pieces.push({ k: 'tag', v: v, name: name }); }
     for (var k = 0; k < tokens.length; k++) {
       var tk = tokens[k], full = tk[0];
-      if (/^<!--/.test(full)) { if (keepComment(full)) pieces.push(full); continue; }
+      if (/^<!--/.test(full)) { if (keepComment(full)) tagPiece(full, ''); continue; }
       if (tk[1]) {
         var tag = tk[1].toLowerCase(), attrs = tk[2] || '', inner = tk[3] || '';
         var open = '<' + tag + minifyHtmlAttrs(attrs) + '>', close = '</' + tag + '>';
-        if (tag === 'pre' || tag === 'textarea') { pieces.push(open + inner + close); continue; }
-        if (tag === 'style') { pieces.push(open + minifyCSS(inner) + close); continue; }
+        if (tag === 'pre' || tag === 'textarea') { tagPiece(open + inner + close, tag); continue; }
+        if (tag === 'style') { tagPiece(open + minifyCSS(inner) + close, tag); continue; }
         if (tag === 'script') {
           var typeM = /type\s*=\s*['"]?([^'">\s]+)/i.exec(attrs);
           var typ = typeM ? typeM[1].toLowerCase() : '';
@@ -250,15 +257,34 @@
               if (r && typeof r.code === 'string') inner = r.code;
             } catch (e) { /* keep inline script raw if it will not parse */ }
           }
-          pieces.push(open + inner + close); continue;
+          tagPiece(open + inner + close, tag); continue;
         }
       }
-      if (/^<\/?[a-zA-Z]/.test(full)) { pieces.push(minifyHtmlTag(full)); continue; }
-      // text (or stray '<')
-      pieces.push(full.replace(/\s+/g, ' '));
+      if (/^<\/?[a-zA-Z]/.test(full)) { tagPiece(minifyHtmlTag(full), (/^<\/?([a-zA-Z][\w:-]*)/.exec(full)[1] || '').toLowerCase()); continue; }
+      // text (or stray '<'); merge with a preceding text piece (comment removal
+      // leaves text runs adjacent) so their whitespace collapses together
+      var last = pieces[pieces.length - 1];
+      if (last && last.k === 'text') last.v += full; else pieces.push({ k: 'text', v: full });
     }
-    return pieces.join('').trim();
+    var out = '';
+    for (var q = 0; q < pieces.length; q++) {
+      var pc = pieces[q];
+      if (pc.k === 'tag') { out += pc.v; continue; }
+      var v = pc.v.replace(/\s+/g, ' ');
+      if (v === ' ') {
+        // whitespace-only between two block-level tags (or doc edge) renders nothing
+        var pv = pieces[q - 1], nx = pieces[q + 1];
+        if ((!pv || HTML_BLOCK[pv.name]) && (!nx || HTML_BLOCK[nx.name])) continue;
+      }
+      out += v;
+    }
+    return out.trim();
   }
+  var HTML_BLOCK = {};
+  ('html head body title meta link base script style noscript template div p ul ol li dl dt dd table caption colgroup col ' +
+   'thead tbody tfoot tr td th section article nav header footer main aside h1 h2 h3 h4 h5 h6 hgroup form fieldset legend ' +
+   'figure figcaption blockquote pre hr address details summary dialog menu option optgroup')
+    .split(' ').forEach(function (t) { HTML_BLOCK[t] = 1; });
 
   // HTML "obfuscate": UTF-8-safe base64 + document.write loader. Page still
   // renders when JS is on. Honestly limited: trivially reversible, needs JS,
