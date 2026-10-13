@@ -1,5 +1,5 @@
 /* QR Code widget styles. */
-#qr-panel { --qr-warn: #b45309; top: 56px; right: 12px; width: 360px; max-width: calc(100vw - 24px); max-height: calc(100vh - 80px); }
+#qr-panel { --qr-warn: #b45309; top: 56px; right: 12px; width: 360px; max-width: calc(100vw - 24px); max-height: calc(100vh - 80px); max-height: calc(100dvh - 80px); }
 #qr-panel .cade-panel-body { padding: 8px 12px 12px; display: flex; flex-direction: column; gap: 8px; overflow-y: auto; overscroll-behavior: contain; }
 #qr-panel [hidden] { display: none !important; }
 [data-theme="dark"] #qr-panel { --qr-warn: #fbbf24; }
@@ -97,7 +97,7 @@
 }
 
 @media (max-width: 560px) {
-  #qr-panel { left: 6px !important; right: 6px; width: auto; max-width: none; top: 48px; max-height: calc(100vh - 110px); }
+  #qr-panel { left: 6px !important; right: 6px; width: auto; max-width: none; top: 48px; max-height: calc(100vh - 110px); max-height: calc(100dvh - 110px); }
   .qr-lbl { flex-basis: 80px; }
 }
 @media (pointer: coarse) {

@@ -4,7 +4,7 @@
 .tp-ov {
   --tp-bg: #000; --tp-fg: #fafaf9; --tp-dim: #d6d3d1; --tp-head: #5eead4; --tp-faint: #a8a29e;
   --tp-band: rgba(15, 149, 152, 0.12); --tp-band-edge: rgba(18, 179, 183, 0.55);
-  --tp-shade: rgba(0, 0, 0, 0.62);
+  --tp-veil-rgb: 0, 0, 0; --tp-veil: 0.55; --tp-feather: 14px;
   position: fixed; inset: 0; z-index: 100000; overflow: hidden; outline: none;
   background: var(--tp-bg); color: var(--tp-fg);
   font-family: var(--font-body, -apple-system, BlinkMacSystemFont, sans-serif);
@@ -14,7 +14,7 @@
 .tp-ov.tp-light {
   --tp-bg: #fff; --tp-fg: #0c0a09; --tp-dim: #292524; --tp-head: #0b7c7e; --tp-faint: #57534e;
   --tp-band: rgba(15, 149, 152, 0.10); --tp-band-edge: rgba(15, 149, 152, 0.5);
-  --tp-shade: rgba(255, 255, 255, 0.7);
+  --tp-veil-rgb: 255, 255, 255;
 }
 
 /* ---- reading surface (mirrored as a whole) ---- */
@@ -52,9 +52,11 @@
 }
 .tp-guide::before { left: max(2px, env(safe-area-inset-left)); border-left-color: var(--accent, #0f9598); border-right-width: 0; }
 .tp-guide::after { right: max(2px, env(safe-area-inset-right)); border-right-color: var(--accent, #0f9598); border-left-width: 0; }
+/* Veils in the background colour over everything outside the reading line:
+   text there shows at the "Other lines" opacity, feathered at the band edge. */
 .tp-shade { position: absolute; left: 0; right: 0; pointer-events: none; }
-.tp-shade.top { top: 0; background: linear-gradient(to bottom, var(--tp-shade), transparent 140%); }
-.tp-shade.bot { bottom: 0; background: linear-gradient(to top, var(--tp-shade), transparent 160%); }
+.tp-shade.top { top: 0; background: linear-gradient(to bottom, rgba(var(--tp-veil-rgb), var(--tp-veil)) calc(100% - var(--tp-feather)), rgba(var(--tp-veil-rgb), 0)); }
+.tp-shade.bot { bottom: 0; background: linear-gradient(to top, rgba(var(--tp-veil-rgb), var(--tp-veil)) calc(100% - var(--tp-feather)), rgba(var(--tp-veil-rgb), 0)); }
 .tp-noguide .tp-guide, .tp-noguide .tp-shade { display: none; }
 
 .tp-cd {
@@ -72,7 +74,10 @@
 @media (prefers-reduced-motion: reduce) { .tp-cd.pop { animation: none; } }
 
 /* ---- progress / time ---- */
-.tp-hud { position: absolute; top: 0; left: 0; right: 0; pointer-events: none; }
+.tp-hud {
+  position: absolute; top: 0; left: 0; right: 0; pointer-events: none; padding-bottom: 10px;
+  background: linear-gradient(to bottom, var(--tp-bg) calc(100% - 10px), transparent); /* keeps the meta line legible over text */
+}
 .tp-prog { position: absolute; top: 0; left: 0; right: 0; height: 3px; background: rgba(127, 127, 127, 0.25); }
 .tp-prog i { display: block; height: 100%; background: var(--accent, #0f9598); transform-origin: 0 50%; transform: scaleX(0); }
 .tp-meta {

@@ -6,7 +6,7 @@
 
 #coderun-panel {
   top: 56px; right: 12px; width: 460px; max-width: calc(100vw - 24px);
-  height: min(600px, calc(100vh - 90px)); font-family: var(--font-body, inherit);
+  height: min(600px, calc(100vh - 90px)); height: min(600px, calc(100dvh - 90px)); font-family: var(--font-body, inherit);
 }
 #coderun-panel .cade-panel-body {
   padding: 8px 10px 10px; display: flex; flex-direction: column; gap: 7px;

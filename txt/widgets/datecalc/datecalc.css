@@ -1,5 +1,5 @@
 /* Date Calculator widget styles. */
-#datecalc-panel { top: 56px; right: 12px; width: 360px; max-width: calc(100vw - 24px); max-height: calc(100vh - 80px); }
+#datecalc-panel { top: 56px; right: 12px; width: 360px; max-width: calc(100vw - 24px); max-height: calc(100vh - 80px); max-height: calc(100dvh - 80px); }
 #datecalc-panel .cade-panel-body { padding: 8px 10px 10px; display: flex; flex-direction: column; gap: 7px; overflow: hidden; flex: 1; min-height: 0; }
 
 .dc-tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--border); flex: 0 0 auto; }

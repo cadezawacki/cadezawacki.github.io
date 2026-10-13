@@ -1270,10 +1270,16 @@
   }
 
   // The panel grows when settings open: keep its bottom edge on screen.
+  // Bottom of what's actually visible: iOS Safari's toolbar / home indicator
+  // and an open keyboard cover the end of the layout viewport.
+  function visibleBottom() {
+    var vv = window.visualViewport;
+    return vv ? Math.min(window.innerHeight, vv.offsetTop + vv.height) : window.innerHeight;
+  }
   function keepOnScreen() {
     var p = panelEl(); if (!p) return;
-    var r = p.getBoundingClientRect();
-    if (r.bottom > window.innerHeight - 8) p.style.top = Math.max(8, window.innerHeight - 8 - r.height) + 'px';
+    var r = p.getBoundingClientRect(), vb = visibleBottom();
+    if (r.bottom > vb - 8) p.style.top = Math.max(8, vb - 8 - r.height) + 'px';
   }
 
   function onClick(e) {
@@ -1457,7 +1463,7 @@
     // stylesheet has surely applied, since the first open loads it).
     var place = function () {
       if (!p.isConnected || p.style.left) return; // dragged: leave it alone
-      p.style.top = Math.max(56, window.innerHeight - p.offsetHeight - 76) + 'px';
+      p.style.top = Math.max(56, visibleBottom() - p.offsetHeight - 76) + 'px';
     };
     place();
     setTimeout(place, 200);

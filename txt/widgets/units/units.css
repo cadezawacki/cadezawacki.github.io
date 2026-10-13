@@ -1,5 +1,5 @@
 /* Unit Converter widget styles. */
-#units-panel { top: 56px; right: 12px; width: 380px; max-width: calc(100vw - 24px); height: min(560px, calc(100vh - 80px)); }
+#units-panel { top: 56px; right: 12px; width: 380px; max-width: calc(100vw - 24px); height: min(560px, calc(100vh - 80px)); height: min(560px, calc(100dvh - 80px)); }
 #units-panel .cade-panel-body { padding: 8px 10px 0; display: flex; flex-direction: column; gap: 7px; overflow: hidden; flex: 1; min-height: 0; }
 
 .un-tabs {
@@ -60,7 +60,7 @@
 .un-ib:hover { color: var(--accent); border-color: var(--accent); }
 
 @media (max-width: 560px) {
-  #units-panel { left: 6px !important; right: 6px; width: auto; max-width: none; top: 48px; height: calc(100vh - 110px); }
+  #units-panel { left: 6px !important; right: 6px; width: auto; max-width: none; top: 48px; height: calc(100vh - 110px); height: calc(100dvh - 110px); }
   .un-l { display: none; }
   .un-r { grid-template-columns: minmax(0, 1fr) auto auto; }
 }

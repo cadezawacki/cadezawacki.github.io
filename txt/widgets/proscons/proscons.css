@@ -1,7 +1,7 @@
 /* Pros & Cons widget styles. */
 #proscons-panel {
   --pc-pro: #16a34a; --pc-con: #dc2626;
-  top: 56px; right: 12px; width: 540px; max-width: calc(100vw - 24px); max-height: calc(100vh - 80px);
+  top: 56px; right: 12px; width: 540px; max-width: calc(100vw - 24px); max-height: calc(100vh - 80px); max-height: calc(100dvh - 80px);
 }
 [data-theme="dark"] #proscons-panel { --pc-pro: #4ade80; --pc-con: #f87171; }
 #proscons-panel .cade-panel-body { padding: 8px 12px 12px; display: flex; flex-direction: column; gap: 8px; overflow-y: auto; overscroll-behavior: contain; }
@@ -88,7 +88,7 @@
 .pc-acts { display: inline-flex; gap: 5px; }
 
 @media (max-width: 600px) {
-  #proscons-panel { left: 6px !important; right: 6px; width: auto; max-width: none; top: 48px; max-height: calc(100vh - 110px); }
+  #proscons-panel { left: 6px !important; right: 6px; width: auto; max-width: none; top: 48px; max-height: calc(100vh - 110px); max-height: calc(100dvh - 110px); }
   .pc-cols { grid-template-columns: 1fr; }
 }
 @media (pointer: coarse) {

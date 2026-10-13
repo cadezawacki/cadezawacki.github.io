@@ -14,6 +14,9 @@
 .cm-crun-btn svg { width: 9px; height: 9px; flex: 0 0 auto; }
 .cm-crun-run { opacity: 0.75; }
 .cm-line:hover .cm-crun-run, .cm-crun-run:hover { opacity: 1; }
+.cm-crun-run.cm-crun-guess { opacity: 0.45; border-style: dashed; }   /* no language: detected on press */
+.cm-line:hover .cm-crun-guess { opacity: 0.8; }
+.cm-crun-guess:hover { opacity: 1; }
 .cm-crun-btn:hover { color: var(--accent); border-color: var(--accent); background: var(--accent-bg, rgba(15,149,152,0.08)); }
 .cm-crun.pressed .cm-crun-run { color: var(--accent); border-color: var(--accent); }
 .cm-crun-x { padding: 0; width: 18px; justify-content: center; opacity: 0.45; }

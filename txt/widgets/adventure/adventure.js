@@ -1547,22 +1547,22 @@
       if (gi !== -1) { shown = inner.slice(0, gi); target = inner.slice(gi + 4); cmd = true; }
       else if (pi !== -1) { shown = inner.slice(0, pi); target = inner.slice(pi + 1); }
       else { shown = target = inner; }
-      return '<span class="' + (cmd ? 'adv-c' : 'adv-n') + '" role="button" tabindex="-1" data-' + (cmd ? 'c' : 'n') + '="' + target + '">' + shown + '</span>';
+      return '<span class="' + (cmd ? 'wh-c' : 'wh-n') + '" role="button" tabindex="-1" data-' + (cmd ? 'c' : 'n') + '="' + target + '">' + shown + '</span>';
     });
     h = h.replace(/\*([^*\n]+)\*/g, '<em>$1</em>');
     return h.split(/\n\n+/).map(function (p) { return '<p>' + p.replace(/\n/g, '<br>') + '</p>'; }).join('');
   }
   function blockEl(b) {
     var el = document.createElement('div');
-    el.className = 'adv-b adv-' + b.t;
-    if (b.t === 'cmd' || b.t === 'sub') el.innerHTML = '<span class="adv-gt" aria-hidden="true">&gt;</span> ' + esc(b.s);
+    el.className = 'wh-b wh-' + b.t;
+    if (b.t === 'cmd' || b.t === 'sub') el.innerHTML = '<span class="wh-gt" aria-hidden="true">&gt;</span> ' + esc(b.s);
     else if (b.t === 'title' || b.t === 'end') el.textContent = b.s;
-    else if (b.t === 'banner') el.innerHTML = '<div class="adv-bt">' + esc(b.s) + '</div><div class="adv-bs">' + esc(b.sub || '') + '</div>';
+    else if (b.t === 'banner') el.innerHTML = '<div class="wh-bt">' + esc(b.s) + '</div><div class="wh-bs">' + esc(b.sub || '') + '</div>';
     else if (b.t === 'exits') {
       var x = b.x || [];
-      el.innerHTML = x.length ? '<span class="adv-xl">Exits</span>' + x.map(function (e) {
-        return '<button type="button" class="adv-x" data-go="' + esc(e[0]) + '"' + (e[2] ? ' title="' + esc(e[2]) + '"' : '') + '>' + esc(e[1]) + (e[2] ? '<span class="adv-xt"> · ' + esc(e[2]) + '</span>' : '') + '</button>';
-      }).join('') : '<span class="adv-xl">No obvious exits</span>';
+      el.innerHTML = x.length ? '<span class="wh-xl">Exits</span>' + x.map(function (e) {
+        return '<button type="button" class="wh-x" data-go="' + esc(e[0]) + '"' + (e[2] ? ' title="' + esc(e[2]) + '"' : '') + '>' + esc(e[1]) + (e[2] ? '<span class="wh-xt"> · ' + esc(e[2]) + '</span>' : '') + '</button>';
+      }).join('') : '<span class="wh-xl">No obvious exits</span>';
     } else el.innerHTML = markup(b.s);
     return el;
   }
@@ -1585,8 +1585,8 @@
     var out = ui.out, first = null;
     // Older exit chips belong to rooms you've left: grey them out.
     if (blocks.some(function (b) { return b.t === 'exits'; })) {
-      var old = out.querySelectorAll('.adv-exits:not(.adv-old)');
-      for (var i = 0; i < old.length; i++) old[i].classList.add('adv-old');
+      var old = out.querySelectorAll('.wh-exits:not(.wh-old)');
+      for (var i = 0; i < old.length; i++) old[i].classList.add('wh-old');
     }
     blocks.forEach(function (b) {
       transcript.push(b);
@@ -1608,7 +1608,7 @@
     ui.loc.textContent = st.room;
     ui.meta.textContent = st.time + ' · ' + st.score + '/' + st.max + ' · ' + st.moves + (st.moves === 1 ? ' move' : ' moves');
     var dirs = st.ended ? [] : eng.allExitDirs();
-    var btns = ui.root.querySelectorAll('.adv-pad [data-go]');
+    var btns = ui.root.querySelectorAll('.wh-pad [data-go]');
     for (var i = 0; i < btns.length; i++) {
       var on = dirs.indexOf(btns[i].getAttribute('data-go')) !== -1;
       btns[i].classList.toggle('on', on);
@@ -1661,13 +1661,13 @@
   }
   function caretEnd() {
     var inp = ui.input;
-    ui.root.classList.toggle('adv-has', !!inp.value.trim());
+    ui.root.classList.toggle('wh-has', !!inp.value.trim());
     if (!coarse()) { try { inp.focus({ preventScroll: true }); inp.setSelectionRange(inp.value.length, inp.value.length); } catch (e) {} }
   }
   function submit() {
     var v = ui.input.value;
     ui.input.value = '';
-    ui.root.classList.remove('adv-has');
+    ui.root.classList.remove('wh-has');
     if (v.trim()) run(v);
   }
 
@@ -1682,35 +1682,35 @@
     if (open) {
       var vb = ui.menu.querySelector('[data-act="verbose"]');
       if (vb && eng) vb.textContent = eng.s.verbose ? 'Brief descriptions' : 'Verbose descriptions';
-      ui.menu.querySelector('.adv-fsv').textContent = prefs.fs + 'px';
+      ui.menu.querySelector('.wh-fsv').textContent = prefs.fs + 'px';
     }
   }
   function closeSheet() { if (ui && ui.sheet && !ui.sheet.hidden) { ui.sheet.hidden = true; ui.sheet.innerHTML = ''; } }
   function openSlots(mode) {
     closeMenu();
-    var list = slotStore.list(), h = '<div class="adv-sh-in"><div class="adv-sh-h"><b>' + (mode === 'save' ? 'Save game' : 'Restore game') + '</b><button type="button" class="adv-tb" data-act="sheet-x" aria-label="Close">×</button></div>';
+    var list = slotStore.list(), h = '<div class="wh-sh-in"><div class="wh-sh-h"><b>' + (mode === 'save' ? 'Save game' : 'Restore game') + '</b><button type="button" class="wh-tb" data-act="sheet-x" aria-label="Close">×</button></div>';
     if (mode === 'save') {
-      h += '<form class="adv-sv"><input class="adv-svn" maxlength="40" placeholder="Name this save" value="' + esc(eng ? eng.rooms[eng.s.room].name : '') + '" autocomplete="off"><button type="submit" class="adv-btn primary">Save</button></form>';
+      h += '<form class="wh-sv"><input class="wh-svn" maxlength="40" placeholder="Name this save" value="' + esc(eng ? eng.rooms[eng.s.room].name : '') + '" autocomplete="off"><button type="submit" class="wh-btn primary">Save</button></form>';
     }
-    h += list.length ? '<ul class="adv-sl">' + list.map(function (x) {
-      return '<li><div class="adv-sln"><b>' + esc(x.name) + '</b><span>' + esc(x.room) + ' · ' + x.score + ' pts · ' + x.moves + ' moves · ' + new Date(x.t).toLocaleDateString() + '</span></div>' +
-        (mode === 'save' ? '<button type="button" class="adv-btn" data-act="slot-over" data-n="' + esc(x.name) + '">Overwrite</button>' : '<button type="button" class="adv-btn primary" data-act="slot-load" data-n="' + esc(x.name) + '">Restore</button>') +
-        '<button type="button" class="adv-btn" data-act="slot-del" data-n="' + esc(x.name) + '" aria-label="Delete">✕</button></li>';
-    }).join('') + '</ul>' : '<p class="adv-sh-e">No saved games yet.</p>';
+    h += list.length ? '<ul class="wh-sl">' + list.map(function (x) {
+      return '<li><div class="wh-sln"><b>' + esc(x.name) + '</b><span>' + esc(x.room) + ' · ' + x.score + ' pts · ' + x.moves + ' moves · ' + new Date(x.t).toLocaleDateString() + '</span></div>' +
+        (mode === 'save' ? '<button type="button" class="wh-btn" data-act="slot-over" data-n="' + esc(x.name) + '">Overwrite</button>' : '<button type="button" class="wh-btn primary" data-act="slot-load" data-n="' + esc(x.name) + '">Restore</button>') +
+        '<button type="button" class="wh-btn" data-act="slot-del" data-n="' + esc(x.name) + '" aria-label="Delete">✕</button></li>';
+    }).join('') + '</ul>' : '<p class="wh-sh-e">No saved games yet.</p>';
     h += '</div>';
     ui.sheet.innerHTML = h;
     ui.sheet.hidden = false;
     ui.sheet.setAttribute('data-mode', mode);
-    var f = ui.sheet.querySelector('.adv-sv');
+    var f = ui.sheet.querySelector('.wh-sv');
     if (f) {
-      f.addEventListener('submit', function (e) { e.preventDefault(); var n = ui.sheet.querySelector('.adv-svn').value.trim(); closeSheet(); run('save ' + (n || 'quicksave'), { noHist: true }); });
+      f.addEventListener('submit', function (e) { e.preventDefault(); var n = ui.sheet.querySelector('.wh-svn').value.trim(); closeSheet(); run('save ' + (n || 'quicksave'), { noHist: true }); });
       if (!coarse()) { var inp = f.querySelector('input'); try { inp.focus(); inp.select(); } catch (e) {} }
     }
   }
   function showHelpSheet(which) {
     closeMenu();
     var txtS = which === 'about' ? DATA.about : DATA.help;
-    ui.sheet.innerHTML = '<div class="adv-sh-in"><div class="adv-sh-h"><b>' + (which === 'about' ? 'About' : 'How to play') + '</b><button type="button" class="adv-tb" data-act="sheet-x" aria-label="Close">×</button></div><div class="adv-sh-t">' + markup(txtS) + '</div></div>';
+    ui.sheet.innerHTML = '<div class="wh-sh-in"><div class="wh-sh-h"><b>' + (which === 'about' ? 'About' : 'How to play') + '</b><button type="button" class="wh-tb" data-act="sheet-x" aria-label="Close">×</button></div><div class="wh-sh-t">' + markup(txtS) + '</div></div>';
     ui.sheet.hidden = false;
   }
 
@@ -1735,8 +1735,8 @@
   }
   function setFont(d) {
     prefs.fs = Math.max(12, Math.min(22, (prefs.fs || 15) + d));
-    ui.root.style.setProperty('--adv-fs', prefs.fs + 'px');
-    var v = ui.menu.querySelector('.adv-fsv'); if (v) v.textContent = prefs.fs + 'px';
+    ui.root.style.setProperty('--wh-fs', prefs.fs + 'px');
+    var v = ui.menu.querySelector('.wh-fsv'); if (v) v.textContent = prefs.fs + 'px';
     writeJSON(PREFS_KEY, prefs);
   }
   function setPad(on) {
@@ -1777,33 +1777,33 @@
 
   function panelHtml() {
     var rose = [['nw', 'NW'], ['n', 'N'], ['ne', 'NE'], ['w', 'W'], ['look', 'Look'], ['e', 'E'], ['sw', 'SW'], ['s', 'S'], ['se', 'SE']].map(function (d) {
-      return d[0] === 'look' ? '<button type="button" class="adv-rb adv-look" data-act="look">Look</button>' : '<button type="button" class="adv-rb" data-go="' + d[0] + '" aria-label="Go ' + DIRN[d[0]] + '">' + d[1] + '</button>';
+      return d[0] === 'look' ? '<button type="button" class="wh-rb wh-look" data-act="look">Look</button>' : '<button type="button" class="wh-rb" data-go="' + d[0] + '" aria-label="Go ' + DIRN[d[0]] + '">' + d[1] + '</button>';
     }).join('');
-    var ud = [['u', 'Up'], ['d', 'Down'], ['in', 'In'], ['out', 'Out']].map(function (d) { return '<button type="button" class="adv-rb" data-go="' + d[0] + '">' + d[1] + '</button>'; }).join('');
-    var quick = [['inventory', 'Inventory'], ['wait', 'Wait'], ['hint', 'Hint'], ['undo', 'Undo']].map(function (d) { return '<button type="button" class="adv-chip adv-chip-q" data-act="' + d[0] + '">' + d[1] + '</button>'; }).join('');
-    var verbs = VERB_CHIPS.map(function (v) { return '<button type="button" class="adv-chip" data-verb="' + v + '">' + v + '</button>'; }).join('');
-    var words = WORD_CHIPS.map(function (v) { return '<button type="button" class="adv-chip adv-chip-w" data-word="' + v + '">' + v + '</button>'; }).join('');
-    return '<div class="adv" tabindex="-1">' +
-      '<div class="adv-status"><span class="adv-loc">Wrenhallow</span><span class="adv-meta"></span></div>' +
-      '<div class="adv-out" aria-live="polite"><div class="adv-loading">Loading the story…</div></div>' +
-      '<div class="adv-pad" hidden>' +
-        '<div class="adv-padl"><div class="adv-rose">' + rose + '</div><div class="adv-ud">' + ud + '</div></div>' +
-        '<div class="adv-padr"><div class="adv-chips">' + quick + '</div><div class="adv-chips">' + verbs + '</div><div class="adv-chips">' + words + '</div></div>' +
+    var ud = [['u', 'Up'], ['d', 'Down'], ['in', 'In'], ['out', 'Out']].map(function (d) { return '<button type="button" class="wh-rb" data-go="' + d[0] + '">' + d[1] + '</button>'; }).join('');
+    var quick = [['inventory', 'Inventory'], ['wait', 'Wait'], ['hint', 'Hint'], ['undo', 'Undo']].map(function (d) { return '<button type="button" class="wh-chip wh-chip-q" data-act="' + d[0] + '">' + d[1] + '</button>'; }).join('');
+    var verbs = VERB_CHIPS.map(function (v) { return '<button type="button" class="wh-chip" data-verb="' + v + '">' + v + '</button>'; }).join('');
+    var words = WORD_CHIPS.map(function (v) { return '<button type="button" class="wh-chip wh-chip-w" data-word="' + v + '">' + v + '</button>'; }).join('');
+    return '<div class="wh" tabindex="-1">' +
+      '<div class="wh-status"><span class="wh-loc">Wrenhallow</span><span class="wh-meta"></span></div>' +
+      '<div class="wh-out" aria-live="polite"><div class="wh-loading">Loading the story…</div></div>' +
+      '<div class="wh-pad" hidden>' +
+        '<div class="wh-padl"><div class="wh-rose">' + rose + '</div><div class="wh-ud">' + ud + '</div></div>' +
+        '<div class="wh-padr"><div class="wh-chips">' + quick + '</div><div class="wh-chips">' + verbs + '</div><div class="wh-chips">' + words + '</div></div>' +
       '</div>' +
-      '<div class="adv-inrow">' +
-        '<button type="button" class="adv-tb adv-padbtn" data-act="pad" title="Compass & verb buttons" aria-label="Compass and verb buttons" aria-pressed="false"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2.2 4.8-4.8 2.2 2.2-4.8z"/></svg></button>' +
-        '<label class="adv-field"><span class="adv-gt" aria-hidden="true">&gt;</span><input class="adv-in" type="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="send" aria-label="Command" placeholder="What do you do?"></label>' +
-        '<button type="button" class="adv-tb adv-send" data-act="send" aria-label="Send"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 10l-4 4 4 4"/><path d="M5 14h10a4 4 0 0 0 4-4V5"/></svg></button>' +
-        '<button type="button" class="adv-tb adv-menubtn" data-act="menu" aria-label="Menu" aria-haspopup="true" aria-expanded="false">⋯</button>' +
+      '<div class="wh-inrow">' +
+        '<button type="button" class="wh-tb wh-padbtn" data-act="pad" title="Compass & verb buttons" aria-label="Compass and verb buttons" aria-pressed="false"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2.2 4.8-4.8 2.2 2.2-4.8z"/></svg></button>' +
+        '<label class="wh-field"><span class="wh-gt" aria-hidden="true">&gt;</span><input class="wh-in" type="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="send" aria-label="Command" placeholder="What do you do?"></label>' +
+        '<button type="button" class="wh-tb wh-send" data-act="send" aria-label="Send"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 10l-4 4 4 4"/><path d="M5 14h10a4 4 0 0 0 4-4V5"/></svg></button>' +
+        '<button type="button" class="wh-tb wh-menubtn" data-act="menu" aria-label="Menu" aria-haspopup="true" aria-expanded="false">⋯</button>' +
       '</div>' +
-      '<div class="adv-menu" role="menu" hidden>' +
+      '<div class="wh-menu" role="menu" hidden>' +
         '<button type="button" data-act="hint">Hint</button><button type="button" data-act="undo">Undo last move</button><button type="button" data-act="score">Score</button>' +
         '<hr><button type="button" data-act="save">Save game…</button><button type="button" data-act="restore">Restore game…</button><button type="button" data-act="restart">Restart</button>' +
         '<hr><button type="button" data-act="insert">Insert transcript into document</button><button type="button" data-act="copy">Copy transcript</button><button type="button" data-act="clear">Clear screen</button>' +
-        '<hr><div class="adv-fs"><span>Text size</span><button type="button" data-act="fs-" aria-label="Smaller text">A−</button><span class="adv-fsv"></span><button type="button" data-act="fs+" aria-label="Larger text">A+</button></div>' +
+        '<hr><div class="wh-fs"><span>Text size</span><button type="button" data-act="fs-" aria-label="Smaller text">A−</button><span class="wh-fsv"></span><button type="button" data-act="fs+" aria-label="Larger text">A+</button></div>' +
         '<button type="button" data-act="verbose">Brief descriptions</button><button type="button" data-act="help">How to play</button><button type="button" data-act="about">About</button>' +
       '</div>' +
-      '<div class="adv-sheet" hidden></div>' +
+      '<div class="wh-sheet" hidden></div>' +
     '</div>';
   }
 
@@ -1873,15 +1873,15 @@
     var pr = readJSON(PREFS_KEY, {});
     if (pr && typeof pr === 'object') { if (pr.fs) prefs.fs = pr.fs; if (pr.pad != null) prefs.pad = pr.pad; }
     var p = Cade.mkPanel(PANEL_ID, ICON + ' The Comet at Wrenhallow', panelHtml());
-    var root = p.querySelector('.adv');
+    var root = p.querySelector('.wh');
     ui = {
-      panel: p, root: root, out: root.querySelector('.adv-out'), input: root.querySelector('.adv-in'),
-      loc: root.querySelector('.adv-loc'), meta: root.querySelector('.adv-meta'), pad: root.querySelector('.adv-pad'),
-      padBtn: root.querySelector('.adv-padbtn'), menu: root.querySelector('.adv-menu'), menuBtn: root.querySelector('.adv-menubtn'),
-      sheet: root.querySelector('.adv-sheet'), histPos: -1, draft: '', auto: '', active: true, openedAt: Date.now()
+      panel: p, root: root, out: root.querySelector('.wh-out'), input: root.querySelector('.wh-in'),
+      loc: root.querySelector('.wh-loc'), meta: root.querySelector('.wh-meta'), pad: root.querySelector('.wh-pad'),
+      padBtn: root.querySelector('.wh-padbtn'), menu: root.querySelector('.wh-menu'), menuBtn: root.querySelector('.wh-menubtn'),
+      sheet: root.querySelector('.wh-sheet'), histPos: -1, draft: '', auto: '', active: true, openedAt: Date.now()
     };
     p._onClose = teardown;
-    root.style.setProperty('--adv-fs', prefs.fs + 'px');
+    root.style.setProperty('--wh-fs', prefs.fs + 'px');
     setPad(prefs.pad == null ? coarse() : prefs.pad);
 
     var inp = ui.input;
@@ -1899,10 +1899,10 @@
         caretEnd();
       }
     });
-    inp.addEventListener('input', function () { ui.auto = ''; root.classList.toggle('adv-has', !!inp.value.trim()); });
+    inp.addEventListener('input', function () { ui.auto = ''; root.classList.toggle('wh-has', !!inp.value.trim()); });
     // Phones: while the soft keyboard is up, give the page the room the pad would take.
-    inp.addEventListener('focus', function () { if (ui && coarse()) root.classList.add('adv-typing'); });
-    inp.addEventListener('blur', function () { if (ui) root.classList.remove('adv-typing'); });
+    inp.addEventListener('focus', function () { if (ui && coarse()) root.classList.add('wh-typing'); });
+    inp.addEventListener('blur', function () { if (ui) root.classList.remove('wh-typing'); });
 
     root.addEventListener('click', function (e) {
       var t = e.target, el;
@@ -1910,20 +1910,20 @@
       if ((el = t.closest('[data-go]'))) { closeMenu(); run(DIRN[el.getAttribute('data-go')] || el.getAttribute('data-go'), { noHist: true }); return; }
       if ((el = t.closest('[data-verb]'))) { chipTap(el.getAttribute('data-verb'), true); return; }
       if ((el = t.closest('[data-word]'))) { chipTap(el.getAttribute('data-word'), false); return; }
-      if ((el = t.closest('.adv-n'))) { closeMenu(); nounTap(el.getAttribute('data-n')); return; }
-      if ((el = t.closest('.adv-c'))) { closeMenu(); run(el.getAttribute('data-c')); return; }
-      if (ui.menu && !ui.menu.hidden && !t.closest('.adv-menu')) closeMenu();
+      if ((el = t.closest('.wh-n'))) { closeMenu(); nounTap(el.getAttribute('data-n')); return; }
+      if ((el = t.closest('.wh-c'))) { closeMenu(); run(el.getAttribute('data-c')); return; }
+      if (ui.menu && !ui.menu.hidden && !t.closest('.wh-menu')) closeMenu();
     });
     // Buttons and tappable words must not steal focus from the input (keeps
     // the soft keyboard where it is) — except real text fields.
     root.addEventListener('mousedown', function (e) {
-      if (e.target.closest('button, .adv-n, .adv-c') && !e.target.closest('input')) e.preventDefault();
+      if (e.target.closest('button, .wh-n, .wh-c') && !e.target.closest('input')) e.preventDefault();
     });
 
     ui.onDocDown = function (e) {
       if (!ui) return;
       ui.active = ui.panel.contains(e.target);
-      if (ui.menu && !ui.menu.hidden && !e.target.closest('.adv-menu, .adv-menubtn')) closeMenu();
+      if (ui.menu && !ui.menu.hidden && !e.target.closest('.wh-menu, .wh-menubtn')) closeMenu();
     };
     ui.onFocus = function (e) {
       if (!ui || ui.panel.contains(e.target)) return;
@@ -1967,10 +1967,10 @@
     load().then(function () {
       if (ui !== mine) return;
       try { startEngine(); }
-      catch (err) { ui.out.innerHTML = '<div class="adv-loading">Something went wrong starting the story.</div>'; }
+      catch (err) { ui.out.innerHTML = '<div class="wh-loading">Something went wrong starting the story.</div>'; }
     }, function () {
       if (ui !== mine) return;
-      ui.out.innerHTML = '<div class="adv-loading">Couldn’t load the story' + (navigator.onLine ? '.' : ' — it needs one online visit to be cached for offline play.') + '</div>';
+      ui.out.innerHTML = '<div class="wh-loading">Couldn’t load the story' + (navigator.onLine ? '.' : ' — it needs one online visit to be cached for offline play.') + '</div>';
     });
   }
 

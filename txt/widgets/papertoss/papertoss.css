@@ -1,0 +1,65 @@
+/* Paper Toss widget styles (loaded on demand via Cade.loadCSS). */
+#papertoss-panel {
+  top: calc(var(--menubar-h, 36px) + 12px); right: 12px;
+  max-width: calc(100vw - 24px);
+  max-height: calc(100vh - var(--menubar-h, 36px) - 16px);
+  max-height: calc(100dvh - var(--menubar-h, 36px) - 16px);
+}
+#papertoss-panel .cade-panel-body { padding: 10px; overflow: hidden; }
+
+.pt { display: flex; flex-direction: column; gap: 8px; }
+.pt-stage { position: relative; margin: 0 auto; line-height: 0; }
+.pt-cv {
+  display: block; width: 100%; height: 100%; touch-action: none; cursor: grab;
+  -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent;
+  border-radius: 8px; background: var(--bg); box-shadow: 0 0 0 1px var(--border);
+}
+.pt-cv:active { cursor: grabbing; }
+/* Pause card over the canvas; the dimmer lives on the stage so it takes the
+   theme background at partial opacity in both themes. */
+.pt-stage.dim::after {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; bottom: 0; z-index: 1;
+  background: var(--bg); opacity: 0.6; border-radius: 8px; pointer-events: none;
+}
+.pt-ovl {
+  position: absolute; top: 0; left: 0; right: 0; bottom: 0; z-index: 2;
+  display: flex; align-items: center; justify-content: center; padding: 12px;
+  line-height: 1.3; border-radius: 8px; cursor: pointer;
+}
+.pt-card {
+  display: flex; flex-direction: column; align-items: stretch; gap: 10px; width: 100%; max-width: 220px;
+  padding: 16px 16px 14px; text-align: center; color: var(--text);
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg, 10px); box-shadow: var(--shadow-lg);
+}
+.pt-title { font-family: var(--font-mono, ui-monospace, monospace); font-weight: 700; font-size: 18px; letter-spacing: 0.04em; }
+.pt-go {
+  font: inherit; font-size: var(--text-sm); font-weight: 600; padding: 9px 12px; border-radius: 8px; cursor: pointer;
+  border: 1px solid var(--accent); background: var(--accent); color: #fff;
+}
+.pt-go:hover { filter: brightness(1.08); }
+.pt-note { font-size: var(--text-xs); color: var(--text-faint); }
+
+.pt-bar { display: flex; align-items: center; gap: 6px; min-height: 30px; }
+.pt-hint {
+  flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-family: var(--font-mono, ui-monospace, monospace); font-size: var(--text-xs); color: var(--text-muted);
+}
+.pt-hint b { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+.pt-sep { color: var(--text-faint); }
+.pt-ib {
+  flex: 0 0 auto; width: 32px; height: 30px; padding: 0; display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid var(--border); border-radius: 6px; background: var(--surface-2, transparent); color: var(--text-muted); cursor: pointer;
+}
+.pt-ib:hover { color: var(--accent); border-color: var(--accent); }
+.pt-ib.on { color: var(--accent); }
+.pt-ib:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.pt-live { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+@media (max-width: 560px) {
+  #papertoss-panel { left: 12px !important; right: 12px; top: calc(var(--menubar-h, 36px) + 6px); }
+  #papertoss-panel .cade-panel-body { padding: 8px 8px max(8px, env(safe-area-inset-bottom)); }
+}
+@media (pointer: coarse) {
+  .pt-ib { width: 42px; height: 40px; }
+  .pt-go { padding: 12px; }
+}

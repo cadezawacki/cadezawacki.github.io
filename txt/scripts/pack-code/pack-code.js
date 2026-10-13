@@ -1,5 +1,5 @@
-/* Code Pack - minify, obfuscate and beautify code (JS, Python, HTML, CSS,
-   plus JSON/XML). Script-pack module: registers 11 palette scripts, each a
+/* Code Pack - minify, obfuscate, unobfuscate and beautify code (JS, Python,
+   HTML, CSS, plus JSON/XML). Script-pack module: registers 12 palette scripts, each a
    thin wrapper that lazily loads the shared engine (pack-code-lib.js) on first
    run and delegates to it. The engine, in turn, lazy-loads terser /
    js-beautify / javascript-obfuscator from cdn.jsdelivr.net only when needed,
@@ -47,6 +47,7 @@
     html: "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='9 8 5 12 9 16'/><polyline points='15 8 19 12 15 16'/></svg>",
     py:   "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M12 3c-3 0-5 1-5 3v3h5'/><path d='M7 9H5c-2 0-3 1.5-3 3.5S3 16 5 16h2'/><path d='M12 21c3 0 5-1 5-3v-3h-5'/><path d='M17 15h2c2 0 3-1.5 3-3.5S21 8 19 8h-2'/></svg>",
     obf:  "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='3' y='11' width='18' height='10' rx='2'/><path d='M7 11V7a5 5 0 0 1 10 0v4'/><line x1='12' y1='15' x2='12' y2='17'/></svg>",
+    unobf: "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='3' y='11' width='18' height='10' rx='2'/><path d='M7 11V7a5 5 0 0 1 9.9-1'/><line x1='12' y1='15' x2='12' y2='17'/></svg>",
     beauty: "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M5 3v4'/><path d='M3 5h4'/><path d='M6 17v4'/><path d='M4 19h4'/><path d='M13 3l3 7 7 3-7 3-3 7-3-7-7-3 7-3 3-7z'/></svg>"
   };
 
@@ -124,6 +125,13 @@
     icon: I.obf,
     tags: 'obfuscate,css,escape,hex,class,stylesheet,scramble'
   }, 'await L.run(ctx, "obfuscate", "css");');
+
+  reg({
+    name: 'Unobfuscate Code',
+    description: 'Undo Obfuscate: decode JS string tables, unflatten & rename _0x names; unwrap Python / HTML loaders; unescape CSS',
+    icon: I.unobf,
+    tags: 'unobfuscate,deobfuscate,deobfuscator,unobfuscator,decode,reverse,unpack,readable,js,javascript,python,py,html,css,_0x,javascript-obfuscator'
+  }, 'await L.run(ctx, "unobfuscate", "auto");');
 
   reg({
     name: 'Beautify Code',

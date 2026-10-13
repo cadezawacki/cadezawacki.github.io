@@ -1,7 +1,7 @@
 /* Archive Utility widget styles. Theme variables only (light + dark). */
 #archive-panel {
   top: 56px; right: 12px; width: 500px; max-width: calc(100vw - 24px);
-  height: min(680px, calc(100vh - 80px));
+  height: min(680px, calc(100vh - 80px)); height: min(680px, calc(100dvh - 80px));
 }
 #archive-panel .cade-panel-body {
   position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 6px;

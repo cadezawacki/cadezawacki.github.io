@@ -1,7 +1,7 @@
 /* Eisenhower Matrix widget styles (loaded on demand via Cade.loadCSS). */
 #eisenhower-panel {
   top: 56px; width: min(760px, calc(100vw - 24px)); max-width: calc(100vw - 24px);
-  height: min(660px, calc(100vh - 90px)); min-width: 280px; min-height: 300px;
+  height: min(660px, calc(100vh - 90px)); height: min(660px, calc(100dvh - 90px)); min-width: 280px; min-height: 300px;
   resize: both; overflow: hidden;
   --em-q1: var(--error, #dc2626);
   --em-q2: var(--accent, #0f9598);

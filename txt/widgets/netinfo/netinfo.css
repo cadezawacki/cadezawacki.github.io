@@ -1,5 +1,5 @@
 /* Network Info widget styles. */
-#netinfo-panel { top: 56px; right: 12px; width: 400px; max-width: calc(100vw - 24px); height: min(760px, calc(100vh - 72px)); }
+#netinfo-panel { top: 56px; right: 12px; width: 400px; max-width: calc(100vw - 24px); height: min(760px, calc(100vh - 72px)); height: min(760px, calc(100dvh - 72px)); }
 #netinfo-panel .cade-panel-body { padding: 0; display: flex; flex-direction: column; overflow: hidden; flex: 1; min-height: 0; --ni-ok: #16a34a; --ni-bad: #dc2626; }
 [data-theme="dark"] #netinfo-panel .cade-panel-body { --ni-ok: #4ade80; --ni-bad: #f87171; }
 

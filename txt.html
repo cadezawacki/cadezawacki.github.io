@@ -21456,22 +21456,91 @@ function _mkPanel(id, title, bodyHtml) {
   if (GAME_PANEL_IDS.indexOf(id) !== -1) _watchGamePanel(p);
   p.querySelector('.cade-panel-x').addEventListener('click', () => { p.remove(); if (p._onClose) p._onClose(); });
   const head = p.querySelector('.cade-panel-head');
-  let sx, sy, ox, oy, drag = false;
+  // On a phone-width screen a drag only moves the panel up/down: switching it
+  // from its CSS left/right edges to an inline left (+ right:auto) would let a
+  // width:auto panel grow to its widest content and push the × off-screen.
+  let sx, sy, ox, oy, drag = false, vOnly = false;
   head.addEventListener('pointerdown', e => {
     if (e.target.classList.contains('cade-panel-x')) return;
     drag = true; sx = e.clientX; sy = e.clientY;
+    vOnly = window.innerWidth < 600;
     const r = p.getBoundingClientRect(); ox = r.left; oy = r.top;
-    p.style.right = 'auto'; p.style.left = ox + 'px'; p.style.top = oy + 'px';
+    if (!vOnly) { p.style.right = 'auto'; p.style.left = ox + 'px'; }
+    p.style.top = oy + 'px';
     try { head.setPointerCapture(e.pointerId); } catch {}
   });
   head.addEventListener('pointermove', e => {
     if (!drag) return;
-    p.style.left = Math.max(0, Math.min(window.innerWidth - 60, ox + e.clientX - sx)) + 'px';
+    if (!vOnly) p.style.left = Math.max(0, Math.min(window.innerWidth - 60, ox + e.clientX - sx)) + 'px';
     p.style.top = Math.max(0, Math.min(window.innerHeight - 40, oy + e.clientY - sy)) + 'px';
   });
-  head.addEventListener('pointerup', e => { drag = false; try { head.releasePointerCapture(e.pointerId); } catch {} });
+  head.addEventListener('pointerup', e => { drag = false; try { head.releasePointerCapture(e.pointerId); } catch {} _fitPanel(p); });
+  _watchPanelFit(p);
   return p;
 }
+
+// Keep every floating panel's header (and its ×) on screen: a panel that ends
+// up wider than the space to its right — content that loads later, a rotation,
+// a drag, a module's mobile CSS — is narrowed, and one pushed past an edge is
+// pulled back. One shared ResizeObserver; removed panels are unobserved.
+let _panelRO = null;
+function _fitPanel(p) {
+  if (!p || !p.isConnected) { if (_panelRO && p) _panelRO.unobserve(p); return; }
+  const r = p.getBoundingClientRect();
+  if (!r.width || !r.height) return;
+  const vw = document.documentElement.clientWidth || window.innerWidth, vh = window.innerHeight, m = 4;
+  if (r.right > vw + 0.5) {
+    if (r.width > vw - 2 * m) {
+      // Too wide for the screen: cap the width at what's left of the panel's left edge.
+      p.style.maxWidth = Math.max(160, vw - Math.max(0, r.left) - m) + 'px';
+      p.__fitMaxW = true;
+    } else if (p.style.left) {
+      p.style.left = Math.max(m, vw - r.width - m) + 'px';
+    } else {
+      p.style.right = m + 'px'; p.style.left = 'auto';
+    }
+  }
+  if (r.left < -0.5 && p.style.left) p.style.left = m + 'px';
+  if (r.top < 0) p.style.top = m + 'px';
+  else if (r.top > vh - 44) p.style.top = Math.max(m, vh - 44) + 'px';
+  // Bottom: what's actually visible ends above Safari's toolbar / the home
+  // indicator / an open keyboard (visualViewport), not at 100vh. Cap the height
+  // there so bottom controls (inputs, buttons) stay reachable; bodies scroll.
+  const vv = window.visualViewport;
+  const vb = vv ? Math.min(vh, vv.offsetTop + vv.height) : vh;
+  if (r.bottom > vb + 0.5) {
+    const minTop = 44; // stay below the app's menu bar
+    if (r.height <= vb - minTop - m) {
+      // It fits: lift it (bottom-anchored players, panels dragged low).
+      p.style.top = Math.max(minTop, vb - r.height - m) + 'px';
+      p.style.bottom = 'auto';
+    } else {
+      // Taller than the visible area: cap it there; its body scrolls.
+      p.style.maxHeight = Math.max(160, vb - Math.max(0, r.top) - m) + 'px';
+      p.__fitMaxH = true;
+    }
+  }
+}
+function _watchPanelFit(p) {
+  if (typeof ResizeObserver === 'function') {
+    if (!_panelRO) _panelRO = new ResizeObserver(entries => { for (const en of entries) _fitPanel(en.target); });
+    _panelRO.observe(p);
+  }
+  requestAnimationFrame(() => _fitPanel(p));
+  // Some widgets place themselves a moment after opening (stylesheet load,
+  // "mini player" positioning) without changing size — check again then.
+  setTimeout(() => _fitPanel(p), 400);
+}
+function _refitPanels() {
+  document.querySelectorAll('.cade-panel').forEach(el => {
+    if (el.__fitMaxW) { el.style.maxWidth = ''; el.__fitMaxW = false; }
+    if (el.__fitMaxH) { el.style.maxHeight = ''; el.__fitMaxH = false; }
+    _fitPanel(el);
+  });
+}
+window.addEventListener('resize', _refitPanels);
+// iOS: the keyboard and Safari's toolbars change only the visual viewport.
+if (window.visualViewport) window.visualViewport.addEventListener('resize', _refitPanels);
 window.__mkPanel = _mkPanel; // exposed for feature modules (window.Cade.mkPanel)
 window.__markGamePanel = (p) => { if (p && p.classList) _watchGamePanel(p); }; // Cade.markGamePanel
 
@@ -23243,7 +23312,12 @@ function _detectMultiDocFiles() {
     const beforeLines = before.trim().split('\n');
     const filePath = beforeLines[beforeLines.length - 1]?.trim();
     if (filePath && !filePath.includes('```')) {
-      files.push({ path: filePath, content: unescapeImportedFences(code) });
+      // The rest of the opening fence line is an info string (a language, e.g.
+      // "python" added by Identify Code Blocks), and import puts a newline
+      // after the fence and before the closing one: none of it is the file's.
+      const nl = code.indexOf('\n');
+      const body = nl === -1 ? code : code.slice(nl + 1).replace(/\n$/, '');
+      files.push({ path: filePath, content: unescapeImportedFences(body) });
     }
   }
   return files;

@@ -1,5 +1,5 @@
 /* Anagram Solver widget styles. */
-#anagram-panel { top: 56px; right: 12px; width: 420px; max-width: calc(100vw - 24px); height: min(580px, calc(100vh - 80px)); }
+#anagram-panel { top: 56px; right: 12px; width: 420px; max-width: calc(100vw - 24px); height: min(580px, calc(100vh - 80px)); height: min(580px, calc(100dvh - 80px)); }
 #anagram-panel .cade-panel-body { padding: 8px 10px 0; display: flex; flex-direction: column; gap: 6px; overflow: hidden; flex: 1; min-height: 0; }
 
 .ag-top { position: relative; flex: 0 0 auto; }
@@ -91,7 +91,7 @@
 .ag-btn:disabled { opacity: 0.45; cursor: default; }
 
 @media (max-width: 560px) {
-  #anagram-panel { left: 6px !important; right: 6px; width: auto; max-width: none; top: 48px; height: calc(100vh - 110px); }
+  #anagram-panel { left: 6px !important; right: 6px; width: auto; max-width: none; top: 48px; height: calc(100vh - 110px); height: calc(100dvh - 110px); }
 }
 @media (pointer: coarse) {
   .ag-w { padding: 6px 9px; font-size: 15px; }

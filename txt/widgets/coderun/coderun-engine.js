@@ -112,7 +112,8 @@
     var ed = Cade.editor; if (!ed) return null;
     var doc = ed.state.doc, best = null, bestD = Infinity;
     K.scanFences(doc).forEach(function (b) {
-      if (b.lang !== lang || b.close === -1 || K.codeOf(doc, b).text !== code) return;
+      // an untagged block may have been run under a detected language
+      if ((b.lang !== lang && (b.lang || String(b.info || '').trim())) || b.close === -1 || K.codeOf(doc, b).text !== code) return;
       var d = Math.abs(b.open - (nearLine || 0));
       if (d < bestD) { bestD = d; best = b; }
     });
@@ -566,8 +567,29 @@
     if (HP && HP.openAt) HP.openAt(c.from);
     else if (!Cade.runCommand('Live HTML Preview')) toast("Live HTML Preview isn't available", 'error');
   }
+  // No language after the ```: work it out now (this block only) from the
+  // file name above it or the code itself; complain only if that fails.
+  function detectFor(b, doc) {
+    var g = K.guessLang(K.codeOf(doc, b).text, K.fileHint(doc, b));
+    if (!g || !g.sure) {
+      toast("Couldn't tell what language this block is — add one after the ``` (js, ts, python, json) to run it", 'info', 4600);
+      return null;
+    }
+    var how = g.via === 'file' ? ' (from the file name)' : '';
+    if (!g.lang || g.lang === 'output' || !(K.RUNNABLE[g.lang] || g.lang === 'html' || g.lang === 'css' || g.lang === 'shell')) {
+      toast('Looks like ' + g.label + how + " — can't run " + g.label + ' here (runnable: js, ts, python, json; html opens the preview)', 'info', 5200);
+      return null;
+    }
+    if (K.RUNNABLE[g.lang]) toast('No language on this block — running it as ' + g.label + how + '. "Identify Code Blocks" can tag blocks for you.', 'info', 4200);
+    return g.lang;
+  }
   function runBlock(b, doc) {
     var lang = b.lang;
+    if (!lang && !String(b.info || '').trim()) {
+      lang = detectFor(b, doc);
+      if (!lang) return Promise.resolve('unsupported');
+      b.lang = lang;
+    }
     if (lang === 'html' || lang === 'css') { openPreview(b, doc); return Promise.resolve('preview'); }
     if (lang === 'shell') { toast(SHELL_MSG, 'info', 6000); return Promise.resolve('shell'); }
     if (!K.RUNNABLE[lang]) {
@@ -634,6 +656,37 @@
     ed.dispatch({ changes: rem.map(function (r) { return { from: r.from, to: r.to, insert: '' }; }), userEvent: 'delete' });
     toast('Cleared ' + rem.length + ' output block' + (rem.length === 1 ? '' : 's'), 'success', 1800);
     return rem.length;
+  };
+  // "Identify Code Blocks": add the detected language after the ``` of every
+  // block that has none (in the selection, or the whole note). Only sure
+  // guesses are written; one transaction, so a single undo reverts it.
+  E.identifyBlocks = function () {
+    var ed = Cade.editor;
+    if (!ed) return 0;
+    if (ed.state.readOnly) { toast('Read-only mode — editing is locked', 'error', 2000); return 0; }
+    var doc = ed.state.doc, sel = ed.state.selection.main;
+    var a = sel.empty ? 1 : doc.lineAt(sel.from).number, z = sel.empty ? doc.lines : doc.lineAt(sel.to).number;
+    var blocks = K.scanFences(doc).filter(function (b) {
+      return !String(b.info || '').trim() && b.close !== -1 && b.close >= a && b.open <= z;
+    });
+    if (!blocks.length) { toast(sel.empty ? 'Every code block already has a language' : 'No untagged code blocks in the selection', 'info', 2400); return 0; }
+    var changes = [], tally = {}, unsure = 0;
+    blocks.forEach(function (b) {
+      var g = K.guessLang(K.codeOf(doc, b).text, K.fileHint(doc, b));
+      if (!g || !g.sure) { unsure++; return; }
+      var line = doc.line(b.open), ticks = /^`+/.exec(line.text)[0].length;
+      changes.push({ from: line.from + ticks, to: line.to, insert: g.tag });
+      tally[g.label] = (tally[g.label] || 0) + 1;
+    });
+    if (!changes.length) {
+      toast("Couldn't identify " + (blocks.length === 1 ? 'the untagged block' : 'any of the ' + blocks.length + ' untagged blocks') + ' confidently — left as is', 'info', 3600);
+      return 0;
+    }
+    ed.dispatch({ changes: changes, userEvent: 'input' });
+    var parts = Object.keys(tally).map(function (k) { return tally[k] + ' ' + k; });
+    toast('Tagged ' + changes.length + ' code block' + (changes.length === 1 ? '' : 's') + ': ' + parts.join(', ') +
+      (unsure ? ' · ' + unsure + ' left as is (not sure)' : ''), 'success', 4200);
+    return changes.length;
   };
   // Remove the ```output block whose opening fence starts at pos.
   E.clearOutputAt = function (pos) {

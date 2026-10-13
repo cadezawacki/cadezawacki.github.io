@@ -13,14 +13,16 @@
  * loop runs only while playing or easing a jump; it stops otherwise.
  * Speed is in words per minute: px/s = wpm / 60 x (text height / words), so
  * changing the size or width keeps the reading pace; the remaining-time
- * estimate uses the same rate.
+ * estimate uses the same rate. The end is where the last line sits on the
+ * reading line; a ResizeObserver re-measures when the text re-wraps after
+ * opening (e.g. the web font arriving late on iOS), so the end stays reachable.
  *
  * CONTROLS: play / pause (Space, Enter, K, tap or click), speed (↑/↓, slider),
  * paragraph back / forward (←/→, PageUp/PageDown — Bluetooth page-turner
  * pedals send these), restart (Home), text size (+/−), width, mirror
  * horizontally / vertically for teleprompter glass, a reading-line band with
- * dimmed text around it, a 3-2-1 countdown before the first start, progress
- * and time left. Drag (or the wheel) nudges the position. Controls fade out
+ * the text around it dimmed to a set opacity, a 3-2-1 countdown before the
+ * first start, progress and time left. Drag (or the wheel) nudges the position. Controls fade out
  * while playing and come back on pause / mouse move.
  *
  * SCREEN: fixed overlay (safe-area aware) + Fullscreen API where available;
@@ -38,7 +40,7 @@
   var PREFS_KEY = 'cade-teleprompter-prefs';
   var MAX_CHARS = 300000;
   var WPM_MIN = 40, WPM_MAX = 400;
-  var DEF = { wpm: 140, font: 0, width: 82, guideY: 30, mx: false, my: false, guide: true, countdown: true, light: false };
+  var DEF = { wpm: 140, font: 0, width: 82, guideY: 30, others: 45, mx: false, my: false, guide: true, countdown: true, light: false };
   var P = {};
   var S = null;
 
@@ -173,6 +175,7 @@
     P.wpm = clampWpm(P.wpm);
     P.width = Math.max(40, Math.min(100, P.width));
     P.guideY = Math.max(15, Math.min(60, P.guideY));
+    P.others = Math.max(5, Math.min(100, Math.round(P.others)));
     if (P.font) P.font = Math.max(18, Math.min(140, P.font));
   }
   var saveT = 0;
@@ -238,22 +241,27 @@
     S.padTop = Math.max(0, S.guideY - lh / 2);
     c.style.paddingTop = S.padTop + 'px';
     c.style.paddingBottom = Math.max(0, vh - S.guideY - lh / 2) + 'px';
-    var els = c.children, stops = [], first = null, last = 0;
+    var els = c.children, stops = [], first = null, last = 0, lastEl = null;
     for (var i = 0; i < els.length; i++) {
       var top = els[i].offsetTop;
       if (first === null) first = top;
       last = top + els[i].offsetHeight;
+      lastEl = els[i];
       if (S.blocks[i].t !== 'hr') stops.push(top - S.padTop);
     }
     S.stops = stops;
     S.textH = first === null ? 0 : last - first;
-    S.maxPos = Math.max(0, c.scrollHeight - vh);
+    // The end: the middle of the last line on the reading line.
+    var lastLh = lastEl ? parseFloat(getComputedStyle(lastEl).lineHeight) || lh : lh;
+    S.maxPos = Math.max(0, last - lastLh / 2 - S.guideY);
+    S.measuredH = c.offsetHeight;
     S.pos = Math.min(S.maxPos, ratio * S.maxPos);
     S.guide.style.top = (S.guideY - lh * 0.62) + 'px';
     S.guide.style.height = (lh * 1.24) + 'px';
     S.shadeTop.style.height = Math.max(0, S.guideY - lh * 0.62) + 'px';
     S.shadeBot.style.top = (S.guideY + lh * 0.62) + 'px';
-    S.lastSecs = -1;
+    S.measuredVh = vh;
+    S.lastSecs = -1; S.lastPct = -1;
     render();
   }
   function speed() { return S ? pxPerSec(P.wpm, S.textH, S.totalWords) : 0; }
@@ -263,14 +271,11 @@
     S.content.style.transform = 'translate3d(0,' + (-S.pos).toFixed(2) + 'px,0)';
     var frac = S.maxPos > 0 ? S.pos / S.maxPos : 1;
     S.prog.style.transform = 'scaleX(' + frac.toFixed(4) + ')';
-    var v = speed(), secs = v > 0 ? Math.ceil((S.maxPos - S.pos) / v) : 0;
-    if (secs !== S.lastSecs) {
-      S.lastSecs = secs;
-      S.left.textContent = fmtTime(secs) + ' left';
-      S.pct.textContent = Math.round(frac * 100) + '%';
-    }
+    var v = speed(), secs = v > 0 ? Math.ceil((S.maxPos - S.pos) / v) : 0, pct = Math.round(frac * 100);
+    if (secs !== S.lastSecs) { S.lastSecs = secs; S.left.textContent = fmtTime(secs) + ' left'; }
+    if (pct !== S.lastPct) { S.lastPct = pct; S.pct.textContent = pct + '%'; }
     // Brighten the line block under the reading line.
-    var y = S.pos + 1, ci = stopAt(S.stops, y), stopEls = S.stopEls;
+    var y = S.pos >= S.maxPos - 0.5 ? Infinity : S.pos + 1, ci = stopAt(S.stops, y), stopEls = S.stopEls;
     if (ci !== S.cur) {
       if (S.cur >= 0 && stopEls[S.cur]) stopEls[S.cur].classList.remove('cur');
       if (ci >= 0 && stopEls[ci]) stopEls[ci].classList.add('cur');
@@ -382,6 +387,8 @@
     S.view.style.transform = (P.mx || P.my) ? 'scale(' + (P.mx ? -1 : 1) + ',' + (P.my ? -1 : 1) + ')' : '';
     S.ov.classList.toggle('tp-noguide', !P.guide);
     S.ov.classList.toggle('tp-light', !!P.light);
+    // Text outside the reading line shows at P.others % opacity (a veil of the background colour).
+    S.ov.style.setProperty('--tp-veil', (1 - P.others / 100).toFixed(2));
   }
   function syncSheet() {
     if (!S) return;
@@ -392,6 +399,8 @@
     sh.querySelector('[data-v="width"]').textContent = P.width + '%';
     sh.querySelector('[data-k="guideY"]').value = P.guideY;
     sh.querySelector('[data-v="guideY"]').textContent = P.guideY + '%';
+    sh.querySelector('[data-k="others"]').value = P.others;
+    sh.querySelector('[data-v="others"]').textContent = P.others + '%';
     sh.querySelectorAll('[data-tog]').forEach(function (b) {
       var on = !!P[b.getAttribute('data-tog')];
       b.classList.toggle('on', on);
@@ -488,6 +497,7 @@
     S = null;
     clearTimeout(s.cdT); clearTimeout(s.idleT);
     if (s.raf) cancelAnimationFrame(s.raf);
+    if (s.ro) s.ro.disconnect();
     if (resizeRaf) { cancelAnimationFrame(resizeRaf); resizeRaf = 0; }
     document.removeEventListener('keydown', onKey, true);
     window.removeEventListener('resize', onResize);
@@ -543,6 +553,7 @@
             '<span class="tp-pair">' + btn('smaller', 'Smaller (−)', '<b>A−</b>', 'sm') + btn('bigger', 'Bigger (+)', '<b>A+</b>', 'sm') + '</span></div>' +
           slider('width', 'Line width', 40, 100, 1) +
           slider('guideY', 'Reading line', 15, 60, 1) +
+          slider('others', 'Other lines', 5, 100, 5) +
           '<div class="tp-togs">' + tog('mx', '⇋ Mirror') + tog('my', '⇅ Flip') + tog('guide', 'Reading line') +
           tog('countdown', '3-2-1') + tog('light', 'Light') + '</div>' +
           '<div class="tp-help">Space / tap: play · ↑↓ speed · ←→ or PgUp/PgDn: paragraph (page-turner pedals) · ' +
@@ -573,9 +584,9 @@
       left: ov.querySelector('.tp-left'), pct: ov.querySelector('.tp-pct'), sheet: ov.querySelector('.tp-sheet'),
       wpmIn: ov.querySelector('.tp-wpm'), wpmV: ov.querySelector('.tp-wpmv'),
       blocks: blocks, stopEls: stopEls, stops: [], totalWords: words, textH: 0,
-      pos: 0, maxPos: 0, guideY: 0, padTop: 0, cur: -1, lastSecs: -1,
+      pos: 0, maxPos: 0, guideY: 0, padTop: 0, cur: -1, lastSecs: -1, lastPct: -1,
       playing: false, cd: false, needCd: true, cdT: 0, raf: 0, lastTs: 0, jump: null,
-      idleT: 0, wake: null, fsOurs: false, drag: null,
+      idleT: 0, wake: null, fsOurs: false, drag: null, ro: null, measuredH: -1, measuredVh: -1,
     };
 
     // ---- pointer: tap toggles play, drag nudges the position ----
@@ -634,11 +645,22 @@
       var k = e.target.getAttribute('data-k');
       if (k === 'font') setFont(+e.target.value);
       else if (k === 'width' || k === 'guideY') { P[k] = +e.target.value; syncSheet(); measure(); savePrefs(); }
+      else if (k === 'others') { P.others = +e.target.value; applyLook(); syncSheet(); savePrefs(); }
     });
     ov.querySelector('.tp-bar').addEventListener('pointermove', function () { poke(); });
 
     document.addEventListener('keydown', onKey, true);
     window.addEventListener('resize', onResize);
+    // Re-measure when the text re-wraps on its own (late web font) or the
+    // view changes size without a window resize. measure() records the
+    // height it laid out, so its own style writes don't loop back here.
+    if (window.ResizeObserver) {
+      S.ro = new ResizeObserver(function () {
+        if (S && (S.content.offsetHeight !== S.measuredH || S.view.clientHeight !== S.measuredVh)) onResize();
+      });
+      S.ro.observe(content);
+      S.ro.observe(S.view);
+    }
     document.addEventListener('visibilitychange', onVis);
     document.addEventListener('fullscreenchange', onFsChange);
     document.addEventListener('webkitfullscreenchange', onFsChange);

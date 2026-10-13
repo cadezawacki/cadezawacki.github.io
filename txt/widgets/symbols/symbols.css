@@ -1,5 +1,5 @@
 /* Symbols & Alt Codes widget styles. */
-#symbols-panel { top: 56px; right: 12px; width: 440px; max-width: calc(100vw - 24px); height: min(600px, calc(100vh - 80px)); }
+#symbols-panel { top: 56px; right: 12px; width: 440px; max-width: calc(100vw - 24px); height: min(600px, calc(100vh - 80px)); height: min(600px, calc(100dvh - 80px)); }
 #symbols-panel .cade-panel-body { padding: 8px 10px 0; display: flex; flex-direction: column; gap: 6px; overflow: hidden; flex: 1; min-height: 0; }
 
 .sy-q {
@@ -88,7 +88,7 @@
 .sy-btn.primary { border-color: var(--accent); color: var(--accent); }
 
 @media (max-width: 560px) {
-  #symbols-panel { left: 6px !important; right: 6px; width: auto; max-width: none; top: 48px; height: calc(100vh - 110px); }
+  #symbols-panel { left: 6px !important; right: 6px; width: auto; max-width: none; top: 48px; height: calc(100vh - 110px); height: calc(100dvh - 110px); }
   .sy-tags { display: none; }
 }
 @media (pointer: coarse) {
