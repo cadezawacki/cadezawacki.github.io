@@ -3934,6 +3934,17 @@ window.Cade = (function () {
     //      doesn't stack on top of it ----
     slashCodes() { return window.__cadeSlashCodes ? window.__cadeSlashCodes() : {}; },
     claimSlash(fn) { window.__cadeSlashClaim = typeof fn === 'function' ? fn : null; },
+    // ---- storage tools for dashboards (Storage Insights): open the core's own
+    //      cleanup dialogs, and the Firebase path fingerprint of the sync key
+    //      (images/<fp>, files/<fp>) without handing the key itself out ----
+    storage: {
+      openManager() { return window.__promptStorageCleanup ? window.__promptStorageCleanup(true) : undefined; },
+      openFileManager() { return window.openFileManager ? window.openFileManager() : undefined; },
+      keyFingerprint() {
+        const k = (window.__store && window.__store.get('cade-sync-key')) || '';
+        return k ? _computeKeyFingerprint(k) : Promise.resolve(null);
+      },
+    },
   };
   return api;
 })();

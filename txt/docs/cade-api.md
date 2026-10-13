@@ -210,3 +210,25 @@ per-module context right before injecting your script; that's why `loadCSS` /
 `--text-base`, `--text-sm`, `--text-xs`, `--font-mono`, `--space-1..4`. Theme is
 toggled via `[data-theme="light"]` on `<html>` — scope light overrides with that
 prefix.
+
+## Game panels — `Cade.markGamePanel(panel)`
+Call right after `Cade.mkPanel(...)` for arcade/action games. While any marked panel is
+open the core blocks pointer input aimed at the editor, blurs the editor (the iOS soft
+keyboard retracts) and disables text selection inside the panel. Released automatically
+when the last marked panel is removed. Text-input games (e.g. the text adventure) and
+puzzles that let you keep writing beside them should not use it.
+
+## Storage — `Cade.storage`
+| Call | Does |
+| --- | --- |
+| `Cade.storage.openManager()` | open the core "Manage Storage" dialog (per-room offline cleanup) |
+| `Cade.storage.openFileManager()` | open the core "Attached Files" manager |
+| `Cade.storage.keyFingerprint()` | `Promise<string\|null>` — the sync key's Firebase path fingerprint (`images/<fp>`, `files/<fp>`), `null` without sync |
+
+Core modals (`.modal-overlay`) render below floating panels — close your panel before
+opening them.
+
+## Service worker: `cache: 'no-store'`
+`fetch(url, { cache: 'no-store' })` bypasses the service worker entirely (nothing is
+stored in the versioned `cade-vN` cache). Use it for live data and for assets a module
+keeps in its own Cache Storage bucket (e.g. `cade-convert-v1`, `cade-tts-hd-v1`).

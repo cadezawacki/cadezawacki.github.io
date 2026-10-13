@@ -1206,7 +1206,7 @@
       "entry": "widgets/tts/tts.js",
       "css": "widgets/tts/tts.css",
       "precache": [
-        "widgets/tts/tts-worker.js"
+        "widgets/tts/tts-worker.js?v=4"
       ]
     },
     {

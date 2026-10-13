@@ -175,6 +175,12 @@ self.addEventListener('fetch', (e) => {
   // its own 'cade-tts-hd-v1' cache; caching them here too would store them twice.
   if (url.hostname.includes('huggingface.co') && url.pathname.includes('/piper-voices/')) return;
   if (url.hostname === 'cdn.jsdelivr.net' && /^\/npm\/(onnxruntime-web|phonemizer)@/.test(url.pathname)) return;
+  // Archive Utility (txt/widgets/archive) keeps zip.js + 7-Zip (wasm) in its own 'cade-archive-v1' cache.
+  if (url.hostname === 'cdn.jsdelivr.net' && /^\/npm\/(@zip\.js\/zip\.js|7z-wasm)@/.test(url.pathname)) return;
+  // A page that asks for no caching gets the network, untouched: live data
+  // (weather, IP / DNS lookups, speed tests) and assets a module keeps in its
+  // own cache bucket (File Converter's 'cade-convert-v1'). Never stored here.
+  if (request.cache === 'no-store') return;
 
   // Navigation (the HTML page itself): stale-while-revalidate with offline fallback.
   if (request.mode === 'navigate') {
