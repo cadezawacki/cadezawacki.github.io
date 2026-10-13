@@ -1,5 +1,5 @@
 /* Random Picker widget styles. */
-#picker-panel { top: 56px; right: 12px; width: 384px; max-width: calc(100vw - 24px); max-height: calc(100vh - 80px); }
+#picker-panel { top: 56px; right: 12px; width: 384px; max-width: calc(100vw - 24px); max-height: calc(100vh - 80px); max-height: calc(100dvh - 80px); }
 #picker-panel .cade-panel-body { padding: 0; display: flex; flex-direction: column; overflow: hidden; flex: 1; min-height: 0; }
 
 .rp-tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--border); flex: 0 0 auto; padding: 4px 10px 0; overflow-x: auto; scrollbar-width: none; }
@@ -174,7 +174,7 @@ select.rp-in option { background: var(--surface); color: var(--text); }
   .rp-pop, .rp-coinwrap.toss, .rp-pointer.kick { animation: none; }
 }
 @media (max-width: 560px) {
-  #picker-panel { left: 6px !important; right: 6px; width: auto; max-width: none; top: 48px; max-height: calc(100vh - 100px); }
+  #picker-panel { left: 6px !important; right: 6px; width: auto; max-width: none; top: 48px; max-height: calc(100vh - 100px); max-height: calc(100dvh - 100px); }
 }
 @media (pointer: coarse) {
   .rp-in { height: 40px; font-size: 16px; } /* under 16px iOS zooms the page on focus */

@@ -3,7 +3,7 @@
    theme variables only, so light and dark both work. */
 #adventure-panel {
   top: 56px; right: 12px; width: 560px; max-width: calc(100vw - 24px);
-  height: min(680px, calc(100vh - 80px)); min-height: 300px;
+  height: min(680px, calc(100vh - 80px)); height: min(680px, calc(100dvh - 80px)); min-height: 300px;
 }
 #adventure-panel .cade-panel-body { padding: 0; display: flex; flex-direction: column; flex: 1; min-height: 0; overflow: hidden; }
 
@@ -196,7 +196,7 @@
 
 /* ---- phones ------------------------------------------------------------------ */
 @media (max-width: 560px) {
-  #adventure-panel { left: 6px !important; right: 6px; width: auto; max-width: none; top: 48px; height: calc(100vh - 100px); }
+  #adventure-panel { left: 6px !important; right: 6px; width: auto; max-width: none; top: 48px; height: calc(100vh - 100px); height: calc(100dvh - 100px); }
   .adv-out { padding: 12px 14px 10px; }
   .adv-pad { flex-direction: column; gap: 6px; max-height: 46%; }
   .adv-padl { flex-direction: row; align-items: stretch; gap: 6px; }

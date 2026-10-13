@@ -1,6 +1,6 @@
 /* Live HTML Preview panel. */
 #htmlpreview-panel {
-  top: 56px; right: 12px; width: min(560px, 46vw); height: min(640px, calc(100vh - 90px));
+  top: 56px; right: 12px; width: min(560px, 46vw); height: min(640px, calc(100vh - 90px)); height: min(640px, calc(100dvh - 90px));
   min-width: 260px; max-width: calc(100vw - 24px); font-family: var(--font-body, inherit);
 }
 #htmlpreview-panel .cade-panel-body {

@@ -1,7 +1,7 @@
 /* Kanban board widget styles (loaded on demand via Cade.loadCSS). */
 #kanban-panel {
   top: 56px; width: min(960px, calc(100vw - 24px)); max-width: calc(100vw - 24px);
-  height: min(640px, calc(100vh - 90px)); min-width: 300px; min-height: 260px;
+  height: min(640px, calc(100vh - 90px)); height: min(640px, calc(100dvh - 90px)); min-width: 300px; min-height: 260px;
   resize: both; overflow: hidden;
 }
 #kanban-panel .cade-panel-body { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; padding: 0; }

@@ -1,7 +1,7 @@
 /* Weather widget styles. The hero card owns its colours (white text on a
    condition/time-of-day gradient, deepened a touch in dark theme); every
    other surface uses the app's theme variables. */
-#weather-panel { top: 56px; right: 12px; width: 420px; max-width: calc(100vw - 24px); height: min(780px, calc(100vh - 72px)); }
+#weather-panel { top: 56px; right: 12px; width: 420px; max-width: calc(100vw - 24px); height: min(780px, calc(100vh - 72px)); height: min(780px, calc(100dvh - 72px)); }
 #weather-panel .cade-panel-body {
   padding: 0; display: flex; flex-direction: column; overflow: hidden; flex: 1; min-height: 0; position: relative;
   --wx-rain: #2f7fe0; --wxm-sun: #f2a516; --wxm-moon: #d9a43a; --wxm-cloud: #c3cdd9; --wxm-cloud2: #9aa8b8;

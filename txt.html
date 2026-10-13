@@ -21503,6 +21503,23 @@ function _fitPanel(p) {
   if (r.left < -0.5 && p.style.left) p.style.left = m + 'px';
   if (r.top < 0) p.style.top = m + 'px';
   else if (r.top > vh - 44) p.style.top = Math.max(m, vh - 44) + 'px';
+  // Bottom: what's actually visible ends above Safari's toolbar / the home
+  // indicator / an open keyboard (visualViewport), not at 100vh. Cap the height
+  // there so bottom controls (inputs, buttons) stay reachable; bodies scroll.
+  const vv = window.visualViewport;
+  const vb = vv ? Math.min(vh, vv.offsetTop + vv.height) : vh;
+  if (r.bottom > vb + 0.5) {
+    const minTop = 44; // stay below the app's menu bar
+    if (r.height <= vb - minTop - m) {
+      // It fits: lift it (bottom-anchored players, panels dragged low).
+      p.style.top = Math.max(minTop, vb - r.height - m) + 'px';
+      p.style.bottom = 'auto';
+    } else {
+      // Taller than the visible area: cap it there; its body scrolls.
+      p.style.maxHeight = Math.max(160, vb - Math.max(0, r.top) - m) + 'px';
+      p.__fitMaxH = true;
+    }
+  }
 }
 function _watchPanelFit(p) {
   if (typeof ResizeObserver === 'function') {
@@ -21510,13 +21527,20 @@ function _watchPanelFit(p) {
     _panelRO.observe(p);
   }
   requestAnimationFrame(() => _fitPanel(p));
+  // Some widgets place themselves a moment after opening (stylesheet load,
+  // "mini player" positioning) without changing size — check again then.
+  setTimeout(() => _fitPanel(p), 400);
 }
-window.addEventListener('resize', () => {
+function _refitPanels() {
   document.querySelectorAll('.cade-panel').forEach(el => {
     if (el.__fitMaxW) { el.style.maxWidth = ''; el.__fitMaxW = false; }
+    if (el.__fitMaxH) { el.style.maxHeight = ''; el.__fitMaxH = false; }
     _fitPanel(el);
   });
-});
+}
+window.addEventListener('resize', _refitPanels);
+// iOS: the keyboard and Safari's toolbars change only the visual viewport.
+if (window.visualViewport) window.visualViewport.addEventListener('resize', _refitPanels);
 window.__mkPanel = _mkPanel; // exposed for feature modules (window.Cade.mkPanel)
 window.__markGamePanel = (p) => { if (p && p.classList) _watchGamePanel(p); }; // Cade.markGamePanel
 

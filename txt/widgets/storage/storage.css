@@ -1,7 +1,7 @@
 /* Storage Insights widget styles (loaded on demand via Cade.loadCSS). */
 #storage-insights-panel {
   top: 56px; right: 12px; width: 500px; max-width: calc(100vw - 24px);
-  height: min(720px, calc(100vh - 80px)); min-width: 280px;
+  height: min(720px, calc(100vh - 80px)); height: min(720px, calc(100dvh - 80px)); min-width: 280px;
   overflow: hidden;
   --si-docs: var(--ws-teal-fg, #0d9488);
   --si-snaps: var(--ws-purple-fg, #7c3aed);

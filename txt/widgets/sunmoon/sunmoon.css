@@ -1,5 +1,5 @@
 /* Sun & Moon widget styles. */
-#sunmoon-panel { top: 56px; right: 12px; width: 410px; max-width: calc(100vw - 24px); height: min(780px, calc(100vh - 72px)); }
+#sunmoon-panel { top: 56px; right: 12px; width: 410px; max-width: calc(100vw - 24px); height: min(780px, calc(100vh - 72px)); height: min(780px, calc(100dvh - 72px)); }
 #sunmoon-panel .cade-panel-body {
   padding: 0; display: flex; flex-direction: column; overflow: hidden; flex: 1; min-height: 0; position: relative;
   /* twilight bands: translucent so they sit on either theme */
