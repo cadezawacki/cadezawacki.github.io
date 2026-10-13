@@ -1,0 +1,123 @@
+# The Comet at Wrenhallow — walkthrough to the best ending, full 100 points.
+# Test fixture only (not shipped). One command per line; '#' starts a comment.
+# Lines may carry an expectation after '=>': the output must contain that text.
+
+read letter
+w                                   => Mrs. Thorne sits
+talk to thorne
+show letter to thorne               => gate key
+e
+n                                   => Overgrown Drive
+e
+e                                   => Potting Shed
+take oil can and secateurs
+w
+n                                   => Glasshouse
+take watering can
+s
+drop can                            => Which can do you mean
+oil                                 => Dropped
+take it
+fill can                            => rain butt
+n
+water moonflower                    => applause
+pick flower                         => Taken
+s
+w
+s                                   => Lane’s End
+e
+e                                   => Tarn Shore
+n                                   => Boathouse
+take lantern and boathook
+fill lantern with oil               => paraffin
+s
+w
+w
+w                                   => Gatehouse Kitchen
+give bloom to her                   => buttonhole
+e
+n
+n                                   => Front Porch
+open door                           => stuck
+push door                           => stumble
+n                                   => Rotunda
+w                                   => Library
+read almanac                        => NORTH-EAST
+read manual                         => poker
+spin globe                          => rattles
+open globe                          => small brass key
+take small key
+e
+n                                   => Study
+unlock drawer with small key        => You unlock
+open drawer                         => folded note
+take note
+read it                             => sea-blue
+s
+e                                   => Dining Room
+open sideboard                      => silver spoon
+take spoon
+e                                   => Kitchen
+take matches and poker
+light lantern                       => golden glow
+w
+w
+open cellar door                    => rusted solid
+oil bolt                            => rust drinks
+pull bolt                           => sigh
+d                                   => Cellar
+w                                   => doesn’t budge
+u
+s
+s
+w                                   => Yew Walk
+w                                   => Orrery Folly
+x orrery
+x mars                              => two
+x saturn                            => eight
+x jupiter                           => Four
+x neptune                           => single
+e
+e
+n
+n
+d
+set dials to 2841                   => swings open
+w                                   => Instrument Vault
+take all                            => winding key
+e
+n                                   => Wheel Pit
+turn crank                          => begins to turn
+wedge sluice with poker             => stays open
+s
+e                                   => Gear Room
+pull lever                          => contented grinding
+w
+u
+u                                   => Landing
+e                                   => Instrument Gallery
+wind owl with winding key           => WHO has wound me
+ask owl about magpie                => shinier
+take iron key
+pull hatch with boathook            => ladder
+u                                   => Pim
+take lens                           => fury
+give spoon to pim                   => fair trade
+take lens
+put lens in eyepiece                => click
+d
+w
+n                                   => Dome Stair
+u                                   => The Dome
+put eyepiece in telescope           => snugness
+turn dial to north-east             => facing north-east
+pull shutter lever                  => jams
+e                                   => Roof Walk
+x comet                             => Hesper
+cut ivy with secateurs              => track is clear
+w
+pull shutter lever                  => night sky
+look through telescope              => out of focus
+turn focus knob
+look through telescope              => two
+write "Two tails, one blue, one gold" in logbook   => THE END
