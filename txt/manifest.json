@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "version": "2026.10.13-8",
+  "version": "2026.10.13-9",
   "modules": [
     {
       "id": "crawler",
@@ -1420,14 +1420,16 @@
       "id": "decodelab",
       "type": "widget",
       "name": "Decode Lab",
-      "description": "Auto-decode mystery text: Base64/hex/Morse/… chains, Caesar, Vigenère, XOR & more, with frequency analysis",
+      "description": "Auto-decode mystery text: Base64/hex/Morse/… chains, Caesar, Vigenère, XOR & more, frequency analysis, offline translation to English",
       "icon": "🔓",
-      "tags": "decode,decoder,cipher,brute force,base64,caesar,vigenere,xor,crypto,ctf,frequency analysis,identify,magic,rot13,morse,hex,encoding,puzzle,cryptanalysis,kasiski,index of coincidence",
+      "tags": "decode,decoder,cipher,brute force,base64,caesar,vigenere,xor,crypto,ctf,frequency analysis,identify,magic,rot13,morse,hex,encoding,puzzle,cryptanalysis,kasiski,index of coincidence,translate,translation,offline translation,english",
       "entry": "widgets/decodelab/decodelab.js",
       "css": "widgets/decodelab/decodelab.css",
       "precache": [
         "widgets/decodelab/decodelab-core.js",
-        "widgets/decodelab/decodelab-data.js"
+        "widgets/decodelab/decodelab-data.js",
+        "widgets/decodelab/decodelab-translate.js",
+        "widgets/decodelab/decodelab-translate-worker.js?v=1"
       ]
     },
     {

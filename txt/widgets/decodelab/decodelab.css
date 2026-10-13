@@ -1,7 +1,7 @@
 /* Decode Lab widget styles. Theme colours come from the app's CSS variables only. */
 #decodelab-panel {
   top: 56px; right: 12px; width: 580px; max-width: calc(100vw - 24px);
-  height: min(740px, calc(100vh - 80px)); overflow: hidden;
+  height: min(740px, calc(100vh - 80px)); height: min(740px, calc(100dvh - 80px)); overflow: hidden;
 }
 @media (pointer: fine) { #decodelab-panel { resize: both; min-width: 320px; min-height: 360px; } }
 #decodelab-panel .cade-panel-body { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow: hidden; padding: 0; position: relative; }
@@ -232,9 +232,49 @@
 .dl-rdel { font: inherit; font-size: 10px; height: 100%; min-height: 22px; padding: 0 6px; border: 1px solid var(--border); border-left: 0; border-radius: 0 999px 999px 0; background: transparent; color: var(--text-faint); cursor: pointer; }
 .dl-rdel:hover { color: var(--error); }
 
+/* translation */
+.dl-trans { border-left: 3px solid var(--accent); padding: 2px 0 0 8px; display: flex; flex-direction: column; gap: 4px; }
+.dl-trans.busy { border-left-color: var(--border); }
+.dl-trans-h { font-size: var(--text-xs); font-weight: 600; color: var(--text); }
+.dl-trans-h span { font-weight: 400; color: var(--text-muted); margin-left: 6px; }
+.dl-trans .dl-out { max-height: 240px; }
+.dl-trbtn { border-color: var(--accent); color: var(--accent); }
+.dl-autotr { display: flex; align-items: center; gap: 7px; font-size: var(--text-xs); color: var(--text); padding: 2px 2px 0; cursor: pointer; }
+.dl-autotr input { width: 16px; height: 16px; accent-color: var(--accent); margin: 0; }
+.dl-autotr small { color: var(--text-muted); }
+.dl-tr-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: var(--text-xs); color: var(--text-muted); }
+.dl-tr-lab select { font: inherit; font-size: var(--text-sm); color: var(--text); background: var(--bg, var(--surface)); border: 1px solid var(--border); border-radius: var(--radius-sm, 4px); padding: 3px 5px; margin-left: 4px; max-width: 210px; }
+.dl-tr-det { color: var(--text-muted); }
+.dl-tr-to { color: var(--text); font-weight: 600; }
+.dl-tr-in {
+  width: 100%; box-sizing: border-box; min-height: 84px; max-height: 40vh; resize: vertical; padding: 7px 9px;
+  font: var(--text-sm)/1.45 var(--font-body, inherit); color: var(--text); background: var(--bg, var(--surface));
+  border: 1px solid var(--border); border-radius: var(--radius-md, 6px); outline: none;
+}
+.dl-tr-in:focus { border-color: var(--accent); }
+.dl-tr-act { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.dl-tr-act .dl-btn:disabled { opacity: 0.5; cursor: default; }
+.dl-tr-status { font-size: var(--text-xs); color: var(--text-muted); min-width: 0; }
+.dl-tr-prog { height: 4px; border-radius: 2px; background: var(--surface-2); overflow: hidden; }
+.dl-tr-prog[hidden] { display: none; }
+.dl-tr-prog i { display: block; height: 100%; width: 0; background: var(--accent); border-radius: 2px; transition: width 0.2s; }
+.dl-tr-list { display: flex; flex-direction: column; }
+.dl-lsum { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: var(--text-xs); color: var(--text); padding-bottom: 6px; border-bottom: 1px solid var(--border); }
+.dl-lrow { display: grid; grid-template-columns: 1fr auto minmax(64px, auto) auto; align-items: center; gap: 8px; padding: 5px 0; border-bottom: 1px solid var(--border); font-size: var(--text-xs); }
+.dl-lrow:last-child { border-bottom: 0; }
+.dl-lname { color: var(--text); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dl-lname small { color: var(--text-muted); margin-left: 4px; }
+.dl-lsz { color: var(--text-muted); font-variant-numeric: tabular-nums; text-align: right; }
+.dl-lst { color: var(--accent); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.dl-o-langs { height: auto; padding: 3px 9px; }
+@media (max-width: 560px) {
+  .dl-lrow { grid-template-columns: 1fr auto auto; }
+  .dl-lsz { display: none; }
+}
+
 /* phones: full width, stacked */
 @media (max-width: 560px) {
-  #decodelab-panel { left: 6px !important; right: 6px; width: auto; max-width: none; top: 48px; height: calc(100vh - 110px); }
+  #decodelab-panel { left: 6px !important; right: 6px; width: auto; max-width: none; top: 48px; height: calc(100vh - 110px); height: calc(100dvh - 110px); }
   .dl-status { flex-basis: 100%; order: 10; }
   .dl-clue-why, .dl-clue-ops { padding-left: 0; }
   .dl-hrow { grid-template-columns: 34% 1fr auto; }
@@ -253,4 +293,7 @@
   .dl-nb { width: 36px; height: 36px; }
   .dl-param input[type=text], .dl-param input[type=number], .dl-param select, .dl-m-q, .dl-in { font-size: 16px; } /* no iOS focus zoom */
   .dl-rdel { min-height: 34px; padding: 0 10px; }
+  .dl-tr-in, .dl-tr-lab select { font-size: 16px; }
+  .dl-autotr input { width: 22px; height: 22px; }
+  .dl-lrow { padding: 7px 0; }
 }
