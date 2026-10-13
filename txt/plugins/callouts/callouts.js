@@ -14,14 +14,22 @@
  * "-"/"+" in the doc: a click is a viewing action, so it must not create an
  * edit (no sync push / conflict with other devices, no undo entry) and it has
  * to work in read-only and locked rooms. Editing the marker resets the
- * override, so the text stays the source of truth. Hidden lines get a
- * display:none line class like the core's heading folds (block replaces can't
- * come from a plugin and this bundle exports no StateField); a caret that
- * lands inside a folded body (arrows, search, go-to) unfolds it.
+ * override, so the text stays the source of truth.
+ * A fold is what CM's own code folding uses: one replace decoration from the
+ * end of the header line to the end of the body, rendered as a "… N lines"
+ * pill. It swallows line breaks, so it must live in a StateField (plugins may
+ * not do that) — and then the line-number gutter skips the hidden lines
+ * cleanly, which display:none'd lines don't (their numbers stack). The bundle
+ * doesn't export StateField / StateEffect, so their classes are taken from
+ * instances it does hand out (history()'s field, scrollIntoView's effect). A
+ * caret that lands inside a fold (arrow right, search, go-to) unfolds it.
+ * The field keeps every foldable callout ("+" / "-") in the doc: one full scan
+ * on load, a ``` fence edit or a styling toggle; any other edit only rescans
+ * the touched lines and the quote block around them.
  *
  * Respects Settings → Markdown styling: when it's off, raw text and no folds.
- * Viewport-only, rebuilt on doc / viewport / setting / fold changes; selection
- * moves only check whether the caret entered a fold. Self-contained IIFE. */
+ * Styling is viewport-only, rebuilt on doc / viewport / setting / fold changes.
+ * Self-contained IIFE. */
 (function () {
   'use strict';
   if (typeof window.Cade === 'undefined') return;
@@ -30,7 +38,14 @@
   if (!CM || !CM.ViewPlugin || !CM.Decoration || !CM.WidgetType) return;
   Cade.loadCSS('callouts.css');
 
-  var ViewPlugin = CM.ViewPlugin, Decoration = CM.Decoration, WidgetType = CM.WidgetType;
+  var ViewPlugin = CM.ViewPlugin, Decoration = CM.Decoration, WidgetType = CM.WidgetType, EditorView = CM.EditorView;
+  var StateField = null, StateEffect = null;
+  try {
+    StateField = CM.history()[0].constructor;                // history() = [its StateField, …]
+    StateEffect = EditorView.scrollIntoView(0).constructor;  // a StateEffect instance
+    if (typeof StateField.define !== 'function' || typeof StateEffect.define !== 'function') StateField = StateEffect = null;
+  } catch (e) { StateField = StateEffect = null; }
+  var CAN_FOLD = !!StateField; // without them callouts still render, just never fold
 
   // "> [!type]± title" — 1 type, 2 fold marker, 3 gap, 4 title.
   var HEAD_RE = /^>[ \t]*\[!([A-Za-z][\w-]*)\]([+-]?)([ \t]*)(.*)$/;
@@ -147,16 +162,13 @@
   Pill.prototype.ignoreEvent = function () { return true; };
 
   function toggle(view, dom) {
-    var p = view.plugin(plugin);
-    if (!p) return;
+    if (!CAN_FOLD) return;
     var pos;
     try { pos = view.posAtDOM(dom); } catch (e) { return; }
     var st = view.state, line = st.doc.lineAt(pos), m = HEAD_RE.exec(line.text);
-    if (!m) return;
-    var folded = p.isFolded(line.from, m[2]);
-    p.setFold(line.from, m[2], !folded);
-    p.dirty = true;
-    var spec = {};
+    if (!m || !m[2]) return;
+    var folded = foldedAt(st, line.from);
+    var spec = { effects: foldFx.of({ pos: line.from, mk: m[2], folded: !folded }) };
     if (!folded) {
       // Folding with the caret inside the body: park it on the header so the
       // fold isn't immediately re-opened by the caret check.
@@ -171,62 +183,173 @@
   var MARK_GT_BLANK = Decoration.mark({ class: 'cm-co-gtb' });
   var MARK_MK = Decoration.mark({ class: 'cm-co-mk' });
   var MARK_TITLE = Decoration.mark({ class: 'cm-co-title' });
-  var HIDDEN = Decoration.line({ class: 'cm-co-hidden' });
   var lineDecos = {};
   function lineDeco(cls) { return lineDecos[cls] || (lineDecos[cls] = Decoration.line({ class: cls })); }
 
+  // ---- fold state (StateField) ------------------------------------------------------
+  // Value: { md, folds: overrides [{pos, mk, folded}], fences: [[from, to]],
+  //          heads: foldable callouts [{pos (header line start), mk, n (body lines)}],
+  //          byPos: {pos: folded}, deco: the replace decorations }.
+  function inFences(fences, pos) {
+    var lo = 0, hi = fences.length - 1;
+    while (lo <= hi) {
+      var mid = (lo + hi) >> 1, f = fences[mid];
+      if (pos < f[0]) hi = mid - 1; else if (pos > f[1]) lo = mid + 1; else return true;
+    }
+    return false;
+  }
+  // Whole doc, one pass: ``` fences (the core's rule: a line starting with ```)
+  // and every "+" / "-" callout with its body length.
+  function scanAll(doc) {
+    var fences = [], heads = [], open = -1, cur = null, pos = 0;
+    if (doc.lines > 200000) return { fences: fences, heads: heads };
+    for (var it = doc.iterLines(); !it.next().done;) {
+      var t = it.value, from = pos;
+      pos += t.length + 1;
+      if (t.charCodeAt(0) === 96 && t.lastIndexOf('```', 0) === 0) {
+        cur = null;
+        if (open < 0) open = from; else { fences.push([open, from + t.length]); open = -1; }
+        continue;
+      }
+      if (open >= 0) continue;
+      if (!isQuote(t)) { cur = null; continue; }
+      var m = t.indexOf('[!') >= 0 ? HEAD_RE.exec(t) : null;
+      if (m) { cur = m[2] ? { pos: from, mk: m[2], n: 0 } : null; if (cur) heads.push(cur); }
+      else if (cur && cur.n < MAX_BLOCK) cur.n++;
+    }
+    if (open >= 0) fences.push([open, doc.length]);
+    return { fences: fences, heads: heads };
+  }
+  function scanLines(doc, a, b, fences, out) {
+    for (var l = a; l <= b; l++) {
+      var line = doc.line(l), t = line.text;
+      if (!isQuote(t) || t.indexOf('[!') < 0) continue;
+      var m = HEAD_RE.exec(t);
+      if (!m || inFences(fences, line.from)) continue;
+      var e = blockEnd(doc, l);
+      if (m[2]) out.push({ pos: line.from, mk: m[2], n: e - l });
+      l = e;
+    }
+  }
+  // Did the edit touch a ``` fence line (old or new text)? Then fences — and so
+  // every callout below — may have changed.
+  function fenceTouched(tr) {
+    var hit = false, od = tr.startState.doc, nd = tr.state.doc;
+    tr.changes.iterChanges(function (fa, ta, fb, tb) {
+      if (hit) return;
+      var i, a = od.lineAt(fa).number, b = od.lineAt(ta).number;
+      if (b - a > 5000) { hit = true; return; }
+      for (i = a; i <= b && !hit; i++) if (od.line(i).text.lastIndexOf('```', 0) === 0) hit = true;
+      a = nd.lineAt(fb).number; b = nd.lineAt(tb).number;
+      if (b - a > 5000) { hit = true; return; }
+      for (i = a; i <= b && !hit; i++) if (nd.line(i).text.lastIndexOf('```', 0) === 0) hit = true;
+    });
+    return hit;
+  }
+  // Map the callouts through a non-fence edit and rescan only the touched lines,
+  // widened to the whole quote block(s) around them.
+  function rescanTouched(tr, heads, fences) {
+    var nd = tr.state.doc, ch = tr.changes, a = Infinity, b = 0;
+    ch.iterChangedRanges(function (fa, ta, fb, tb) {
+      a = Math.min(a, nd.lineAt(fb).number);
+      b = Math.max(b, nd.lineAt(tb).number);
+    });
+    a = Math.max(1, a - 1); b = Math.min(nd.lines, b + 1);
+    var cap = 0;
+    while (a > 1 && cap++ < MAX_BLOCK && isQuote(nd.line(a).text) && isQuote(nd.line(a - 1).text)) a--;
+    cap = 0;
+    while (b < nd.lines && cap++ < MAX_BLOCK && isQuote(nd.line(b).text) && isQuote(nd.line(b + 1).text)) b++;
+    var A = nd.line(a).from, B = nd.line(b).to, out = [], mid = [];
+    for (var i = 0; i < heads.length; i++) {
+      var p = ch.mapPos(heads[i].pos, 1);
+      if (p >= A && p <= B) continue; // inside the rescanned region
+      out.push({ pos: p, mk: heads[i].mk, n: heads[i].n });
+    }
+    scanLines(nd, a, b, fences, mid);
+    return out.concat(mid).sort(function (x, y) { return x.pos - y.pos; });
+  }
+  function override(folds, pos, mk) {
+    for (var i = 0; i < folds.length; i++) if (folds[i].pos === pos) return folds[i].mk === mk ? folds[i].folded : null;
+    return null;
+  }
+  function setOverride(folds, pos, mk, folded) {
+    var out = folds.filter(function (f) { return f.pos !== pos; });
+    out.push({ pos: pos, mk: mk, folded: folded });
+    if (out.length > 200) out.shift();
+    return out;
+  }
+
+  function computeFolds(v, st, tr) {
+    var md = mdOn(), doc = st.doc, fx = [], i;
+    if (tr) for (i = 0; i < tr.effects.length; i++) if (tr.effects[i].is(foldFx)) fx.push(tr.effects[i].value);
+    if (v && !tr.docChanged && !fx.length && md === v.md && !(tr.selection && v.deco.size)) return v;
+    var folds = v ? v.folds : [], heads = null, fences = null;
+    if (v && md === v.md && md) {
+      heads = v.heads; fences = v.fences;
+      if (tr.docChanged) {
+        var ch = tr.changes;
+        folds = folds.map(function (f) { return { pos: ch.mapPos(f.pos, 1), mk: f.mk, folded: f.folded }; });
+        if (fenceTouched(tr)) heads = null;
+        else {
+          fences = fences.map(function (f) { return [ch.mapPos(f[0], 1), ch.mapPos(f[1], -1)]; });
+          heads = rescanTouched(tr, heads, fences);
+        }
+      }
+    }
+    if (!md) { heads = []; fences = []; }
+    else if (!heads) { var sc = scanAll(doc); heads = sc.heads; fences = sc.fences; }
+    for (i = 0; i < fx.length; i++) folds = setOverride(folds, fx[i].pos, fx[i].mk, fx[i].folded);
+    // Resolve each fold; a caret / selection end inside one opens it.
+    var ranges = st.selection.ranges, byPos = {}, decos = [];
+    for (i = 0; i < heads.length; i++) {
+      var h = heads[i];
+      if (h.pos > doc.length) continue;
+      var hl = doc.lineAt(h.pos);
+      if (hl.from !== h.pos || h.n < 1) continue;
+      var ov = override(folds, h.pos, h.mk), folded = ov == null ? h.mk === '-' : ov;
+      var end = doc.line(Math.min(doc.lines, hl.number + h.n)).to;
+      if (folded) {
+        for (var j = 0; j < ranges.length; j++) {
+          var r = ranges[j];
+          if ((r.head > hl.to && r.head <= end) || (r.anchor > hl.to && r.anchor <= end)) {
+            folded = false; folds = setOverride(folds, h.pos, h.mk, false); break;
+          }
+        }
+      }
+      byPos[h.pos] = folded;
+      if (folded && end > hl.to) decos.push(Decoration.replace({ widget: new Pill(h.n) }).range(hl.to, end));
+    }
+    return { md: md, folds: folds, heads: heads, fences: fences, byPos: byPos, deco: Decoration.set(decos) };
+  }
+
+  var foldFx = CAN_FOLD ? StateEffect.define({
+    map: function (v, m) { return { pos: m.mapPos(v.pos, 1), mk: v.mk, folded: v.folded }; },
+  }) : null;
+  var foldField = CAN_FOLD ? StateField.define({
+    create: function (st) { return computeFolds(null, st, null); },
+    update: function (v, tr) { return computeFolds(v, tr.state, tr); },
+    provide: function (f) { return EditorView.decorations.from(f, function (v) { return v.deco; }); },
+  }) : null;
+  function foldedAt(st, pos) {
+    var v = foldField ? st.field(foldField, false) : null;
+    return !!(v && v.byPos[pos]);
+  }
+
+  // ---- styling (ViewPlugin, viewport only) -------------------------------------------
   function Callouts(view) {
     this.md = mdOn();
-    this.folds = [];   // view-local overrides { pos (header line start), mk, folded }
-    this.hidden = [];  // folded bodies from the last build { pos, mk, from, to }
-    this.dirty = false;
     this.decorations = this.build(view);
   }
 
-  Callouts.prototype.isFolded = function (pos, mk) {
-    for (var i = 0; i < this.folds.length; i++) {
-      var f = this.folds[i];
-      if (f.pos === pos) return f.mk === mk ? f.folded : mk === '-';
-    }
-    return mk === '-';
-  };
-  Callouts.prototype.setFold = function (pos, mk, folded) {
-    this.folds = this.folds.filter(function (f) { return f.pos !== pos; });
-    this.folds.push({ pos: pos, mk: mk, folded: folded });
-    if (this.folds.length > 200) this.folds.shift();
-  };
-
   Callouts.prototype.update = function (u) {
-    var rebuild = this.dirty || u.viewportChanged;
-    var md = mdOn();
-    if (md !== this.md) { this.md = md; rebuild = true; }
-    if (u.docChanged) {
-      var ch = u.changes;
-      this.folds.forEach(function (f) { f.pos = ch.mapPos(f.pos, 1); });
-      rebuild = true;
-    }
-    this.dirty = false;
-    if (rebuild) this.decorations = this.build(u.view);
-    if ((rebuild || u.selectionSet) && this.hidden.length && this.unfoldAtCaret(u.state)) {
+    var md = mdOn(), folds = foldField && u.startState.field(foldField, false) !== u.state.field(foldField, false);
+    if (u.docChanged || u.viewportChanged || folds || md !== this.md) {
+      this.md = md;
       this.decorations = this.build(u.view);
     }
   };
 
-  // Never leave a caret (or selection end) inside hidden lines.
-  Callouts.prototype.unfoldAtCaret = function (st) {
-    var rs = st.selection.ranges, hit = false;
-    for (var i = 0; i < this.hidden.length; i++) {
-      var hd = this.hidden[i];
-      for (var j = 0; j < rs.length; j++) {
-        var a = rs[j].anchor, b = rs[j].head;
-        if ((b >= hd.from && b <= hd.to) || (a >= hd.from && a <= hd.to)) { this.setFold(hd.pos, hd.mk, false); hit = true; break; }
-      }
-    }
-    return hit;
-  };
-
   Callouts.prototype.build = function (view) {
-    this.hidden = [];
     if (!this.md) return Decoration.none;
     var doc = view.state.doc, out = [], done = 0, vr = view.visibleRanges;
     for (var r = 0; r < vr.length; r++) {
@@ -247,18 +370,18 @@
           continue;
         }
         var e = blockEnd(doc, h);
-        this.decorate(doc, h, e, ln, last, out);
+        this.decorate(view.state, h, e, ln, last, out);
         done = e; ln = e + 1;
       }
     }
     return Decoration.set(out, true);
   };
 
-  Callouts.prototype.decorate = function (doc, h, e, visFrom, visTo, out) {
-    var hl = doc.line(h), m = HEAD_RE.exec(hl.text);
+  Callouts.prototype.decorate = function (st, h, e, visFrom, visTo, out) {
+    var doc = st.doc, hl = doc.line(h), m = HEAD_RE.exec(hl.text);
     var raw = m[1], t = CANON[raw.toLowerCase()] || 'note', mk = m[2], title = m[4];
-    var foldable = mk === '+' || mk === '-';
-    var folded = foldable && e > h && this.isFolded(hl.from, mk);
+    var foldable = CAN_FOLD && (mk === '+' || mk === '-');
+    var folded = foldable && e > h && foldedAt(st, hl.from);
     var base = 'cm-co cm-co-t-' + t;
     var bracket = hl.text.indexOf('[');
     var mkEnd = hl.text.length - title.length;
@@ -269,12 +392,7 @@
     out.push(MARK_MK.range(hl.from + bracket, hl.from + mkEnd));
     if (title.length) out.push(MARK_TITLE.range(hl.from + mkEnd, hl.to));
 
-    if (folded) {
-      out.push(Decoration.widget({ widget: new Pill(e - h), side: 1 }).range(hl.to));
-      for (var i = h + 1; i <= e; i++) out.push(HIDDEN.range(doc.line(i).from));
-      this.hidden.push({ pos: hl.from, mk: mk, from: doc.line(h + 1).from, to: doc.line(e).to });
-      return;
-    }
+    if (folded) return; // the body sits inside the field's replace decoration
     // Body: only the lines in view get styled.
     var a = Math.max(h + 1, visFrom), b = Math.min(e, visTo);
     for (var k = a; k <= b; k++) {
@@ -289,5 +407,5 @@
 
   var plugin = ViewPlugin.fromClass(Callouts, { decorations: function (v) { return v.decorations; } });
 
-  Cade.registerPlugin({ id: 'callouts', ext: plugin });
+  Cade.registerPlugin({ id: 'callouts', ext: foldField ? [foldField, plugin] : plugin });
 })();

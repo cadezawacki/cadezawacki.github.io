@@ -15,7 +15,6 @@
 .cm-editor .cm-line.cm-co.cm-md-quote { font-style: normal; color: inherit; }
 .cm-editor .cm-line.cm-co-head { padding-top: 3px; border-top-right-radius: 6px; }
 .cm-editor .cm-line.cm-co-end { padding-bottom: 3px; border-bottom-right-radius: 6px; }
-.cm-editor .cm-line.cm-co-hidden { display: none; }
 
 /* type colours (after the base rule: same specificity, later wins) */
 .cm-editor .cm-line.cm-co-t-note,
