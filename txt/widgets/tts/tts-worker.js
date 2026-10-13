@@ -28,6 +28,24 @@
   'use strict';
   var CACHE = 'cade-tts-hd-v1';
 
+  // Safari (incl. iOS) can't async-iterate a ReadableStream, and phonemizer.js
+  // unpacks its eSpeak data with `for await (chunk of stream)` — which threw
+  // "undefined is not a function (near '...A of e...')". Fill the gap first.
+  if (typeof ReadableStream !== 'undefined' && !ReadableStream.prototype[Symbol.asyncIterator]) {
+    ReadableStream.prototype[Symbol.asyncIterator] = async function* () {
+      var reader = this.getReader();
+      try {
+        for (;;) {
+          var r = await reader.read();
+          if (r.done) return;
+          yield r.value;
+        }
+      } finally {
+        reader.releaseLock();
+      }
+    };
+  }
+
   var ort = null, phonemize = null, session = null, cfg = null, idMap = null;
   var initP = null;
   var queue = [], busy = false;
