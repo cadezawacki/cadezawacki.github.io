@@ -8,7 +8,7 @@
  * 5x5 grids by backtracking: the most-constrained slot is filled first, each
  * slot's candidates come from per-position letter bitsets, and every placement
  * is forward-checked against the crossing slots. Black squares follow a few
- * 180-degree symmetric patterns (0, 2 or 4 blacks) in which every across/down
+ * 180-degree symmetric patterns (2 or 4 blacks) in which every across/down
  * entry is 3+ letters and every white cell is checked both ways.
  *
  * Variety: a word may appear in at most MAX_USE puzzles, less-used words are
@@ -33,9 +33,10 @@ var MAX_USE = 3;                     // appearances allowed per word across the 
 var NODE_LIMIT = 4000;               // backtracking nodes per attempt before giving up
 var N = 5;
 
-// Black-square patterns (rows top to bottom). Weights steer the mix.
+// Black-square patterns (rows top to bottom). Weights steer the mix. A fully
+// open grid would need a 5x5 double word square, and an exhaustive search
+// finds none among the list's common words, so every grid has 2 or 4 blacks.
 var PATTERNS = [
-  { w: 2, rows: ['.....', '.....', '.....', '.....', '.....'] },
   { w: 3, rows: ['#....', '.....', '.....', '.....', '....#'] },
   { w: 3, rows: ['....#', '.....', '.....', '.....', '#....'] },
   { w: 3, rows: ['#...#', '.....', '.....', '.....', '#...#'] },

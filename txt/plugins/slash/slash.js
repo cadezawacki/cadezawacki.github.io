@@ -120,10 +120,12 @@
     b.ln = lower(b.name);
     b.keyset = ' ' + lower(b.keys) + ' ';
     b.keyList = lower(b.keys).split(' ');
+    b.ini = initials(b.ln);
     b.hint = b.keys.split(' ')[0];
   });
 
   // ---- matching -----------------------------------------------------------------
+  function initials(s) { return s.split(/[^a-z0-9]+/).filter(Boolean).map(function (w) { return w.charAt(0); }).join(''); }
   function fuzzy(q, s) {
     var qi = 0;
     for (var i = 0; i < s.length && qi < q.length; i++) if (s.charCodeAt(i) === q.charCodeAt(qi)) qi++;
@@ -140,7 +142,8 @@
     if (it.lt && it.lt.indexOf(q) >= 0) return 600;  // tags
     if (it.ld && it.ld.indexOf(q) >= 0) return 500;  // description
     if (/\s/.test(q)) return 0; // past a space only real substrings count
-    if (fuzzy(q, n)) return 400;
+    if (q.length > 1 && it.ini && it.ini.indexOf(q) === 0) return 450; // /cb → Code block
+    if (fuzzy(q, n)) return n.charCodeAt(0) === q.charCodeAt(0) ? 420 : 400;
     if (it.keyList) for (var i = 0; i < it.keyList.length; i++) if (fuzzy(q, it.keyList[i])) return 350;
     return 0;
   }
@@ -150,7 +153,7 @@
     return list.filter(function (c) { return c && c.name; }).map(function (c) {
       return {
         kind: c.kind === 'widget' ? 'widget' : 'script', name: c.name, desc: c.description || '',
-        icon: c.icon || '', ln: lower(c.name), lt: lower(c.tags), ld: lower(c.description),
+        icon: c.icon || '', ln: lower(c.name), lt: lower(c.tags), ld: lower(c.description), ini: initials(lower(c.name)),
         hint: c.kind === 'widget' ? 'widget' : 'script',
       };
     });
