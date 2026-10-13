@@ -578,14 +578,16 @@
 
   // Ask for an output format (numbered list previewing `sampleNs`). Accepts a
   // number or a name (unix, ms, ns, iso, excel, kdb, date…); trailing "+" =
-  // keep the originals. Remembers the last choice under `key`.
-  function tsAskTarget(sampleNs, title, key, allowKeep) {
+  // keep the originals. Remembers the last choice under `key`. wholeSec: preview
+  // unix seconds without a fraction (what Insert Timestamp writes).
+  function tsAskTarget(sampleNs, title, key, allowKeep, wholeSec) {
     var T = tsTargets(), last = dpStoreGet(key) || 's', def = 1;
     var lines = T.map(function (t, i) {
       if (t[0] === last) def = i + 1;
       var label = t[1];
       while (label.length < 19) label += ' ';
-      return (i < 9 ? ' ' : '') + (i + 1) + '  ' + label + (tsTo(t[0], sampleNs) || '(n/a)');
+      var ns = wholeSec && t[0] === 's' ? sampleNs - sampleNs % 1000000000n : sampleNs;
+      return (i < 9 ? ' ' : '') + (i + 1) + '  ' + label + (tsTo(t[0], ns) || '(n/a)');
     });
     var msg = title + '\n' + lines.join('\n') + (allowKeep ? '\nAdd + to keep the originals (e.g. ' + def + '+). Dates without a zone are read as UTC.' : '');
     var ans = window.prompt(msg, String(def));
@@ -788,9 +790,10 @@
     toks.forEach(function (tok) {
       var out = tsTo(tgt.fmt, tok.ns);
       if (out == null) return;
+      if (out === tok.str.trim()) return;                       // already in that format
       if (tgt.keep) {
         if (!/^\s*→/.test(text.slice(tok.to))) changes.push({ from: t.from + tok.to, to: t.from + tok.to, insert: ' → ' + out });
-      } else if (out !== tok.str) {
+      } else {
         changes.push({ from: t.from + tok.from, to: t.from + tok.to, insert: out });
       }
     });
@@ -799,9 +802,11 @@
   };
 
   var tsInsertMain = function main(ctx) {
-    var tgt = tsAskTarget(BigInt(Date.now()) * 1000000n, 'Insert the current time as:', 'cade-devpack-ins-target', false);
+    var tgt = tsAskTarget(BigInt(Date.now()) * 1000000n, 'Insert the current time as:', 'cade-devpack-ins-target', false, true);
     if (!tgt) return;
-    var out = tsTo(tgt.fmt, BigInt(Date.now()) * 1000000n), sel = window.Cade.editor.state.selection.main;
+    var ms = Date.now();
+    if (tgt.fmt === 's') ms -= ms % 1000;                       // "now" in seconds = whole seconds, like date +%s
+    var out = tsTo(tgt.fmt, BigInt(ms) * 1000000n), sel = window.Cade.editor.state.selection.main;
     dpApply([{ from: sel.from, to: sel.to, insert: out }], out);
   };
 
@@ -822,13 +827,15 @@
 
   // Bash-style word splitting: '…', "…", $'…', backslash escapes and
   // backslash-newline continuations. Stops at an unquoted | ; < > or a
-  // leading & (pipes / redirects are not part of the request).
+  // leading & (pipes / redirects are not part of the request). out.ends[k]
+  // is the source offset just past token k.
   function curlTokens(s) {
     var out = [], cur = null, i = 0, n = s.length, c, j, buf;
+    out.ends = [];
     function add(x) { cur = (cur == null ? '' : cur) + x; }
     while (i < n) {
       c = s[i];
-      if (c === ' ' || c === '\t' || c === '\n' || c === '\r') { if (cur != null) { out.push(cur); cur = null; } i++; continue; }
+      if (c === ' ' || c === '\t' || c === '\n' || c === '\r') { if (cur != null) { out.push(cur); out.ends.push(i); cur = null; } i++; continue; }
       if (c === '\\') {
         if (s[i + 1] === '\n') { i += 2; continue; }
         if (s[i + 1] === '\r' && s[i + 2] === '\n') { i += 3; continue; }
@@ -857,7 +864,7 @@
       if (c === '#' && cur == null) { while (i < n && s[i] !== '\n') i++; continue; }
       add(c); i++;
     }
-    if (cur != null) out.push(cur);
+    if (cur != null) { out.push(cur); out.ends.push(Math.min(i, n)); }
     return out;
   }
 
@@ -941,9 +948,11 @@
       }
     }
     i = start + 1;
+    var end = args.ends[start];
     while (i < args.length) {
       var a = args[i++];
-      if (a === '--') { while (i < args.length) { if (r.url == null) r.url = args[i]; i++; } break; }
+      if (!/^-./.test(a) && a !== '--' && r.url != null) break;      // 2nd bare word: prose after the command
+      if (a === '--') { if (r.url == null && i < args.length) r.url = args[i++]; end = args.ends[i - 1]; break; }
       if (/^--./.test(a)) {
         var eq = a.indexOf('='), name = eq > 2 ? a.slice(2, eq) : a.slice(2);
         if (LONG_ARG.indexOf(' ' + name + ' ') >= 0) opt(name, eq > 2 ? a.slice(eq + 1) : args[i++]);
@@ -954,11 +963,13 @@
           if (SHORT_ARG[ch]) { opt(SHORT_ARG[ch], k + 1 < a.length ? a.slice(k + 1) : args[i++]); break; }
           if (SHORT_FLAG[ch]) opt(SHORT_FLAG[ch], null);
         }
-      } else if (r.url == null) r.url = a;
-      else r.notes.push('extra argument ignored: ' + a);
+      } else r.url = a;
+      end = args.ends[Math.min(i, args.length) - 1];
     }
     if (r.url == null) return { error: 'No URL in the curl command' };
-    return curlModel(r);
+    var model = curlModel(r);
+    model.end = end;
+    return model;
   }
 
   function curlHdr(m, name) {
@@ -1032,13 +1043,14 @@
     try { var v = val(); ws(); return i === n ? v : null; } catch (e) { return null; }
   }
 
-  // Would evaluating this JSON as a JS literal lose anything (big ints, dup keys)?
-  function curlJsonUnsafe(node) {
-    if (node.t === 'n') return !/[.eE]/.test(node.v) && !Number.isSafeInteger(Number(node.v));
-    if (node.t === 'a') return node.v.some(curlJsonUnsafe);
+  // Would re-emitting this JSON as a JS (or, with py, Python) literal lose
+  // anything? Duplicate keys collapse in both; integers beyond 2^53 only in JS.
+  function curlJsonUnsafe(node, py) {
+    if (node.t === 'n') return !py && !/[.eE]/.test(node.v) && !Number.isSafeInteger(Number(node.v));
+    if (node.t === 'a') return node.v.some(function (x) { return curlJsonUnsafe(x, py); });
     if (node.t === 'o') {
       var seen = {};
-      return node.v.some(function (kv) { if (seen['$' + kv[0]]) return true; seen['$' + kv[0]] = 1; return curlJsonUnsafe(kv[1]); });
+      return node.v.some(function (kv) { if (seen['$' + kv[0]]) return true; seen['$' + kv[0]] = 1; return curlJsonUnsafe(kv[1], py); });
     }
     return false;
   }
@@ -1230,7 +1242,7 @@
       var eq = c.indexOf('=');
       if (eq > 0) cookies.push([c.slice(0, eq).trim(), c.slice(eq + 1).trim()]);
     });
-    if (body.kind === 'json' && headers.some(function (h) { return /^content-type$/i.test(h[0]) && /^application\/json$/i.test(h[1].trim()); }) && !curlJsonUnsafe(body.node))
+    if (body.kind === 'json' && headers.some(function (h) { return /^content-type$/i.test(h[0]) && /^application\/json$/i.test(h[1].trim()); }) && !curlJsonUnsafe(body.node, true))
       headers = headers.filter(function (h) { return !/^content-type$/i.test(h[0]); });   // json= sets it
     if (body.kind === 'form') headers = headers.filter(function (h) { return !(/^content-type$/i.test(h[0]) && /^application\/x-www-form-urlencoded$/i.test(h[1].trim())); });
     function dict(name, pairs) {
@@ -1246,7 +1258,7 @@
     if (cookies.length) { blocks.push(dict('cookies', q(cookies))); args.push('cookies=cookies'); }
     if (headers.length) { blocks.push(dict('headers', q(headers))); args.push('headers=headers'); }
     if (body.kind === 'json') {
-      if (curlJsonUnsafe(body.node)) { blocks.push('data = ' + curlPyStr(body.raw) + (/[^\x00-\x7f]/.test(body.raw) ? '.encode()' : '')); args.push('data=data'); }
+      if (curlJsonUnsafe(body.node, true)) { blocks.push('data = ' + curlPyStr(body.raw) + (/[^\x00-\x7f]/.test(body.raw) ? '.encode()' : '')); args.push('data=data'); }
       else { blocks.push('json_data = ' + curlPyLit(body.node, '')); args.push('json=json_data'); }
     } else if (body.kind === 'form') {
       blocks.push(dict('data', q(body.pairs))); args.push('data=data');
@@ -1275,7 +1287,7 @@
     var call = head + args.join(', ') + ')';
     if (call.length > 100) call = (fn ? 'response = requests.' + fn + '(\n' : 'response = requests.request(\n    ' + curlPyStr(m.method) + ',\n') +
       args.map(function (a) { return '    ' + a + ','; }).join('\n') + '\n)';
-    return pre.concat(['import requests', ''], blocks.length ? [blocks.join('\n\n'), ''] : [], [call]).join('\n');
+    return ['import requests', ''].concat(pre.length ? pre.concat(['']) : [], blocks.length ? [blocks.join('\n\n'), ''] : [], [call]).join('\n');
   }
 
   // The curl command to convert: the selection, else the (multi-line, "\"-
@@ -1311,7 +1323,7 @@
     if (!best.col && best.a > 1 && best.b < n && /^\s*(?:```|~~~)/.test(doc.line(best.a - 1).text) && /^\s*(?:```|~~~)\s*$/.test(doc.line(best.b + 1).text)) {
       from = doc.line(best.a - 1).from; to = doc.line(best.b + 1).to;
     }
-    return { from: from, to: to, text: st.sliceDoc(from, to) };
+    return { from: from, to: to, text: st.sliceDoc(from, to), inline: best.col > 0 };
   }
 
   function curlRun(lang) {
@@ -1321,6 +1333,7 @@
     var model = curlParse(src);
     if (!model || model.error) { showToast(model ? model.error : 'Could not parse the curl command', 'error', 3000); return; }
     var code = lang === 'python' ? curlPython(model) : curlFetch(model);
+    if (loc.inline) loc.to = loc.from + model.end;          // "run: curl … and see" keeps " and see"
     var st = window.Cade.editor.state, out = '```' + (lang === 'python' ? 'python' : 'js') + '\n' + code + '\n```';
     var pre = loc.from > st.doc.lineAt(loc.from).from ? '\n' : '', post = loc.to < st.doc.lineAt(loc.to).to ? '\n' : '';
     dpApply([{ from: loc.from, to: loc.to, insert: pre + out + post }], code);
@@ -1406,13 +1419,20 @@
       var all = [10, 16, 2, 8].map(function (b) { return nbFmt(one.v, b, true); }).join(' = ') + nbTwos(one.v);
       changes.push({ from: t.from + lead, to: t.from + lead + trimmed.length, insert: all });
     } else {
-      nbScan(text).forEach(function (tok) {
+      // Blank out earlier "(= …)" annotations so a re-run doesn't annotate them.
+      var masked = text.replace(/ \(= [^)\n]*\)/g, function (s) { return Array(s.length + 1).join(' '); });
+      var seen = 0;
+      nbScan(masked).forEach(function (tok) {
+        seen++;
         if (/^ \(= /.test(text.slice(tok.to))) return;               // already annotated
         var other = [10, 16, 2, 8].filter(function (b) { return b !== tok.base; }).map(function (b) { return nbFmt(tok.v, b, true); });
         changes.push({ from: t.from + tok.to, to: t.from + tok.to, insert: ' (= ' + other.join(' = ') + ')' });
       });
     }
-    if (!changes.length) { showToast('No numbers found (decimal, 0x…, 0b…, 0o…)', 'error', 2500); return; }
+    if (!changes.length) {
+      showToast(seen ? 'Already annotated' : 'No numbers found (decimal, 0x…, 0b…, 0o…)', seen ? 'info' : 'error', 2500);
+      return;
+    }
     dpApply(changes, dpSplice(text, t.from, changes));
   };
 
