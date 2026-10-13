@@ -205,6 +205,24 @@
       if (typeof v.byteLength === 'number') return v.byteLength;                       // ArrayBuffer / view
       try { return JSON.stringify(v).length; } catch (e) { return 0; }
     }
+    // Big DATA files modules fetched from a CDN (word lists, datasets) that
+    // the service worker keeps in its bucket: re-downloadable, so clearable.
+    // Code (js/wasm/css/fonts) and the core's own precached assets are not.
+    var DATA_HOSTS = /(^|\.)(jsdelivr\.net|unpkg\.com|huggingface\.co|githubusercontent\.com|cdnjs\.cloudflare\.com)$/;
+    var CORE_ASSETS = /\/typo-js@|\/firebasejs\/|\/mp4box@|\/jszip\//;
+    var CODE_EXT = /\.(m?js|cjs|wasm|css|woff2?|ttf|otf|map)$/i;
+    var DATA_NAMES = [[/\/word-list@[^\/]+\/words\.txt$/, 'Anagram word list']];
+    function moduleData(url, bytes) {
+      if (!(bytes >= 262144)) return null;
+      var m = /^https?:\/\/([^\/?#]+)(\/[^?#]*)?/.exec(url);
+      if (!m || !DATA_HOSTS.test(m[1])) return null;
+      var path = m[2] || '/';
+      if (CORE_ASSETS.test(path) || CODE_EXT.test(path)) return null;
+      for (var i = 0; i < DATA_NAMES.length; i++) if (DATA_NAMES[i][0].test(path)) return { label: DATA_NAMES[i][1] };
+      var parts = path.split('/').filter(Boolean);
+      return { label: parts.length ? decodeURIComponentSafe(parts[parts.length - 1]) : m[1] };
+    }
+
     function relDays(ms, now) {
       if (!ms) return '';
       var d = Math.floor(((now || Date.now()) - ms) / 86400000);
@@ -219,7 +237,7 @@
       IDB_FB: IDB_FB, HD_BUCKET: HD_BUCKET, fmt: fmt, classifyKey: classifyKey, bucketKind: bucketKind, appBuckets: appBuckets,
       knownSize: knownSize, voiceId: voiceId, voiceLabel: voiceLabel, shortUrl: shortUrl, hashesIn: hashesIn, refsIndex: refsIndex,
       snapItems: snapItems, snapPlan: snapPlan, pruneSnaps: pruneSnaps, imageCandidates: imageCandidates,
-      fileMeta: fileMeta, valueSize: valueSize, relDays: relDays,
+      fileMeta: fileMeta, valueSize: valueSize, relDays: relDays, moduleData: moduleData,
     };
   })();
 
@@ -539,7 +557,7 @@
   // Cache Storage: sizes from Content-Length, the known-size table, or (last
   // resort) the body blob. Opaque (no-cors) entries can't be measured by a page.
   function scanCaches(gen) {
-    var C = { done: false, supported: !!window.caches, buckets: [], pending: false };
+    var C = { done: false, supported: !!window.caches, buckets: [], pending: false, data: [] };
     S.caches = C;
     if (!window.caches || !caches.keys) { C.done = true; return Promise.resolve(); }
     var regP = Promise.resolve(null);
@@ -569,6 +587,8 @@
                   if (m.opaque) B.opaque++;
                   B.bytes += m.bytes;
                   B.items.push({ url: req.url, bytes: m.bytes, opaque: !!m.opaque, est: !!m.est });
+                  var md = kind === 'app' && !m.opaque ? Logic.moduleData(req.url, m.bytes) : null;
+                  if (md) C.data.push({ bucket: name, url: req.url, bytes: m.bytes, label: md.label });
                   if (kind === 'hd') {
                     var v = Logic.voiceId(req.url);
                     if (v) {
@@ -590,11 +610,15 @@
   function measure(url, res) {
     if (!res) return { bytes: 0 };
     if (res.type === 'opaque' || res.type === 'opaqueredirect') return { bytes: 0, opaque: true };
-    var cl = parseInt(res.headers.get('content-length'), 10);
-    if (cl > 0) return { bytes: cl };
+    // Content-Length is the WIRE size: for compressed responses (and CORS ones,
+    // which hide Content-Encoding) the stored body is bigger, so read the
+    // body's size unless it's huge or one of the known pinned assets.
+    var cl = parseInt(res.headers.get('content-length'), 10), enc = res.headers.get('content-encoding');
+    if (cl > 0 && res.type === 'basic' && (!enc || enc === 'identity')) return { bytes: cl };
     var known = Logic.knownSize(url);
     if (known) return { bytes: known, est: true };
-    return res.blob().then(function (b) { return { bytes: b.size }; }, function () { return { bytes: 0 }; });
+    if (cl > 20 * 1048576) return { bytes: cl, est: true };
+    return res.blob().then(function (b) { return { bytes: b.size }; }, function () { return { bytes: cl > 0 ? cl : 0, est: cl > 0 }; });
   }
 
   function scanDbs() {
@@ -638,6 +662,13 @@
     return Logic.imageCandidates(S.idb.items, S.refs.protect, S.refs.serverOnly, pendingSet(), null);
   }
 
+  function modPlan() {
+    if (!S.idb || !S.idb.done || !S.caches || !S.caches.done) return null;
+    var idb = Object.keys(S.idb.mods).map(function (k) { return S.idb.mods[k]; }), data = S.caches.data || [], b = 0;
+    idb.forEach(function (m) { b += m.bytes; });
+    data.forEach(function (d) { b += d.bytes; });
+    return { idb: idb, data: data, bytes: b };
+  }
   function hdBucket() {
     if (!S.caches) return null;
     for (var i = 0; i < S.caches.buckets.length; i++) if (S.caches.buckets[i].kind === 'hd') return S.caches.buckets[i];
@@ -811,15 +842,14 @@
       }
     }
 
-    // 5) module data caches
-    if (S.idb && S.idb.done) {
-      var mods = Object.keys(S.idb.mods).map(function (k) { return S.idb.mods[k]; });
-      var mb = 0;
-      mods.forEach(function (m) { mb += m.bytes; });
-      h += actRow('mods', 'Module data caches', mods.length
-        ? mods.map(function (m) { return esc(m.def.label) + ' \u2014 ' + m.n + ' item' + (m.n === 1 ? '' : 's') + ', ' + esc(fmt(m.bytes)); }).join('<br>') +
-          '<div class="si-sub">' + esc(mods.map(function (m) { return m.def.note; }).join(' \u00b7 ')) + '</div>'
-        : 'No cached module data.', mods.length ? runBtn('mods', 'Free ' + esc(fmt(mb)), !ro, false) : '', { muted: !mods.length });
+    // 5) module data caches (IndexedDB lookups + big CDN data files)
+    var md = modPlan();
+    if (md) {
+      var mlines = md.idb.map(function (m) { return esc(m.def.label) + ' \u2014 ' + m.n + ' item' + (m.n === 1 ? '' : 's') + ', ' + esc(fmt(m.bytes)); })
+        .concat(md.data.map(function (d) { return esc(d.label) + ' \u2014 ' + esc(fmt(d.bytes)); }));
+      h += actRow('mods', 'Module data caches', mlines.length
+        ? mlines.join('<br>') + '<div class="si-sub">Downloaded or looked up on demand \u2014 fetched again the next time a feature needs it (needs internet then).</div>'
+        : 'No cached module data.', mlines.length ? runBtn('mods', 'Free ' + esc(fmt(md.bytes)), !ro, false) : '', { muted: !mlines.length });
     }
 
     // 6) handovers to the core's own flows
@@ -1188,27 +1218,31 @@
   }
 
   function actMods() {
-    if (!S.idb) return;
-    var mods = Object.keys(S.idb.mods).map(function (k) { return S.idb.mods[k]; });
-    if (!mods.length) return;
-    var b = 0;
-    mods.forEach(function (m) { b += m.bytes; });
+    var md = modPlan();
+    if (!md || !(md.idb.length || md.data.length)) return;
     askConfirm({
-      title: 'Clear module data caches?', ok: 'Free ' + fmt(b), safe: true,
-      body: 'Cached lookups only \u2014 they\u2019re fetched again the next time you use the feature (needs internet then).',
-      items: mods.map(function (m) { return m.def.label + ' \u2014 ' + m.n + ' item' + (m.n === 1 ? '' : 's'); }),
+      title: 'Clear module data caches?', ok: 'Free ' + fmt(md.bytes), safe: true,
+      body: 'Cached lookups and downloaded data files only \u2014 no documents or settings. Each is fetched again the next time its feature needs it; ' +
+        '<b>offline, that feature waits until you\u2019re back online</b>.',
+      items: md.idb.map(function (m) { return m.def.label + ' \u2014 ' + m.n + ' item' + (m.n === 1 ? '' : 's'); })
+        .concat(md.data.map(function (d) { return d.label + ' \u2014 ' + fmt(d.bytes); })),
       run: function () {
         work('mods', function () {
           var keys = [];
-          mods.forEach(function (m) { keys = keys.concat(m.keys); });
+          md.idb.forEach(function (m) { keys = keys.concat(m.keys); });
           return Cade.idbStore.keys().then(function (all) {
             // Index keys under the same prefix (e.g. dict:__index) go too.
             (all || []).forEach(function (k) {
               if (typeof k !== 'string' || keys.indexOf(k) !== -1) return;
-              for (var i = 0; i < mods.length; i++) if (k.indexOf(mods[i].def.prefix) === 0) { keys.push(k); return; }
+              for (var i = 0; i < md.idb.length; i++) if (k.indexOf(md.idb[i].def.prefix) === 0) { keys.push(k); return; }
             });
             return keys.reduce(function (ch, k) { return ch.then(function () { return Cade.idbStore.remove(k); }); }, Promise.resolve());
-          }).then(function () { return 'Module caches cleared \u2014 ' + fmt(b) + ' freed'; });
+          }).then(function () {
+            if (!md.data.length || !window.caches) return;
+            return md.data.reduce(function (ch, d) {
+              return ch.then(function () { return caches.open(d.bucket).then(function (c) { return c['delete'](d.url); }); });
+            }, Promise.resolve());
+          }).then(function () { return 'Module caches cleared \u2014 ' + fmt(md.bytes) + ' freed'; });
         });
       },
     });

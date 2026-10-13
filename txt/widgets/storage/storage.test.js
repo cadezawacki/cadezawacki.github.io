@@ -118,4 +118,16 @@ test('fileMeta / valueSize / relDays', function () {
   assert.strictEqual(L.relDays(0, n), '');
 });
 
+test('moduleData: big CDN data files only', function () {
+  var MB = 1048576;
+  assert.deepStrictEqual(L.moduleData('https://cdn.jsdelivr.net/npm/word-list@4.1.0/words.txt', 4 * MB), { label: 'Anagram word list' });
+  assert.deepStrictEqual(L.moduleData('https://cdn.jsdelivr.net/gh/x/y@1/data/cities.json', MB), { label: 'cities.json' });
+  assert.deepStrictEqual(L.moduleData('https://raw.githubusercontent.com/a/b/main/q%20a.csv', MB), { label: 'q a.csv' });
+  assert.strictEqual(L.moduleData('https://cdn.jsdelivr.net/npm/word-list@4.1.0/words.txt', 1000), null);         // small
+  assert.strictEqual(L.moduleData('https://cdn.jsdelivr.net/npm/typo-js@1.2.5/dictionaries/en_US/en_US.dic', MB), null); // core spell-check
+  assert.strictEqual(L.moduleData('https://cdn.jsdelivr.net/npm/terser@5.31.6/dist/bundle.min.js', MB), null);    // code
+  assert.strictEqual(L.moduleData('https://example.github.io/txt/widgets/crossword/crossword-data.js', MB), null); // same-origin module file
+  assert.strictEqual(L.moduleData('https://fonts.gstatic.com/s/x.json', MB), null);
+});
+
 console.log(passed + ' tests passed' + (process.exitCode ? ' (with failures)' : ''));

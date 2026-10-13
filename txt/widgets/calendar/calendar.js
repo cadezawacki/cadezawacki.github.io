@@ -49,7 +49,8 @@
      opening one first jumps into its own workspace, exactly as daycal did.
 
    window.__calAgenda(dateKey) returns that day's events (copies), exposed for
-   a future reminders integration. */
+   a future reminders integration. window.__calAddEventFor(dateKey, title,
+   'HH:MM'?) opens the add form prefilled (used by the datechips plugin). */
 (function () {
   'use strict';
   if (typeof window.Cade === 'undefined') return;
@@ -72,6 +73,7 @@
   var sel = null;          // selected dateKey 'YYYY-MM-DD'
   var form = null;         // null | { id: string|null } (null id = adding)
   var formFresh = false;   // skip draft capture on the render right after open
+  var prefill = null;      // one-shot form values from __calAddEventFor
 
   var blobStore = Cade.syncedBlob('calendar', {
     onChange: function (data) { state = normalize(data); render(); },
@@ -406,7 +408,8 @@
     if (!p) return;
     var body = p.querySelector('.cade-panel-body');
     if (!body) return;
-    var draft = (form && !formFresh) ? captureDraft() : null;
+    var draft = prefill || ((form && !formFresh) ? captureDraft() : null);
+    prefill = null;
     formFresh = false;
     var todayK = dateKey(new Date());
     var selK = sel || todayK;
@@ -526,6 +529,21 @@
       out.push({ id: e.id, date: e.date, start: e.start, end: e.end, title: e.title, cat: e.cat, color: e.color });
     }
     return out;
+  };
+  // For other modules (e.g. the datechips plugin): open the panel (if closed)
+  // on day `dk` with the add form prefilled — title and optional 'HH:MM'
+  // start; the user reviews and saves. Returns false for a bad date key.
+  window.__calAddEventFor = function (dk, title, time) {
+    dk = String(dk || '');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dk)) return false;
+    if (!document.getElementById('cal-panel')) open();
+    sel = dk;
+    month = new Date(+dk.slice(0, 4), +dk.slice(5, 7) - 1, 1);
+    form = { id: null };
+    formFresh = true;
+    prefill = { date: dk, start: normTime(time), end: '', title: String(title == null ? '' : title).slice(0, 200), cat: '', notify: '' };
+    render();
+    return true;
   };
   // Open (or create, then open) the selected day's daily-note room.
   window.__calDayNote = function () {

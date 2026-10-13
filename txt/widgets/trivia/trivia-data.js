@@ -66,7 +66,7 @@ window.__cadeTriviaData = {
     "17|m|How many chromosomes are in a typical human body cell?|46|23|44|48",
     "17|e|Which vitamin does human skin produce when exposed to sunlight?|Vitamin D|Vitamin C|Vitamin A|Vitamin K",
     "17|h|What is the most abundant element in the universe?|Hydrogen|Helium|Oxygen|Carbon",
-    "17|h|Which planet has the most extreme axial tilt, so that it appears to spin on its side?|Uranus|Neptune|Saturn|Venus",
+    "17|h|Which planet spins on its side, with an axial tilt of about 98°?|Uranus|Neptune|Saturn|Venus",
     "17|e|Sound travels faster in air than in water.|False",
     "17|m|Diamonds are made of carbon.|True",
     "17|h|Venus spins in the opposite direction to most planets in the Solar System.|True",

@@ -89,6 +89,23 @@ objects yourself. Namespacing convention: `cade-<feature>-<thing>`.
 `EditorView`, `basicSetup`, `highlightActiveLine`, `highlightActiveLineGutter`,
 `history`, `keymap`, `lineNumbers`, `redo`, `undo`.
 
+State, range and gutter primitives (same API as `@codemirror/state` /
+`@codemirror/view`):
+`StateField`, `StateEffect`, `Facet`, `Prec`, `RangeSet`, `MapMode`,
+`GutterMarker`, `gutter`, `gutterLineClass`. They are the inlined bundle's
+minified identifiers, so feature-detect them (`if (CM.StateField) …`) and
+keep a fallback where cheap. Notes:
+- A `StateField` can hold decorations that must map through edits or replace
+  line breaks (`provide: f => EditorView.decorations.from(f, v => v.deco)`).
+- `gutterLineClass.from(field, v => rangeSetOfMarkers)` adds a marker's
+  `elementClass` to every gutter element of a line — the way to tag line
+  numbers without adding a gutter column. A new `gutter({...})` column lives
+  inside `.cm-gutters`, which the core hides wholesale when line numbers are
+  off, so give such features a non-gutter fallback.
+- ES5 subclass of `GutterMarker`: `var M = function () {}; M.prototype =
+  Object.create(CM.GutterMarker.prototype); M.prototype.constructor = M;
+  M.prototype.elementClass = 'x'; M.prototype.eq = function (o) { return o instanceof M; };`
+
 Common usage:
 - Decorations: `Cade.CM.Decoration.mark({ class })`, `.replace({})`,
   `Decoration.set(ranges, true)`.
@@ -172,6 +189,15 @@ stale copies; call again when you need fresh values). Used by e.g. the
 | `roomsApi.switchRoom(name)` | switch to a room (async, may prompt for lock) |
 | `roomsApi.ensureRoom(name)` | add a room to the tab list without switching (no-op if it exists / invalid; joins the active workspace) |
 | `roomsApi.WS_ALL` / `roomsApi.WS_UNLABELED` | sentinel workspace ids |
+
+## Cross-module hooks (globals set by modules; feature-detect them)
+
+| Hook | Set by | Does |
+| --- | --- | --- |
+| `window.__calAddEventFor(dateKey, title, 'HH:MM'?)` | `widgets/calendar` (on load) | opens Calendar Events on that day with the add form prefilled; the user reviews + saves. `false` for a bad `YYYY-MM-DD`. The widget is lazy: when the hook is missing, `Cade.runCommand('Calendar Events')` loads + opens it, then the hook exists. |
+| `window.__calAgenda(dateKey)` | `widgets/calendar` | that day's events (copies) |
+| `window.__cadeDateParse(text, now?)` | `plugins/datechips` | natural-language / absolute dates in `text` → `[{from, to, y, mo, d, time:{h,mi}\|null, rel, …}]` |
+| `window.__cadeSpoilerToggle()` | `plugins/spoiler` | wrap / unwrap the editor selection in `\|\|…\|\|` |
 
 ## Internal (loader-only — don't call from modules)
 `Cade._setCurrent(ctx)`, `Cade._ctx()`, `Cade._configs`. The loader sets the

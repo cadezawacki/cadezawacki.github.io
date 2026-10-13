@@ -456,7 +456,7 @@
     if (document.getElementById(PANEL_ID)) { close(); return; }
     core = core || FifteenCore();
     loadState();
-    var p = Cade.mkPanel(PANEL_ID, '▦ 15-Puzzle', buildHtml());
+    var p = Cade.mkPanel(PANEL_ID, '\uD83E\uDDE9 15-Puzzle', buildHtml());
     try { Cade.markGamePanel(p); } catch (e) {}
     var root = p.querySelector('.fp');
     ui = {

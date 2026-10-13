@@ -617,7 +617,9 @@
   function onDown(e) {
     if (!ui || (e.button && e.button > 0)) return;
     if (ui.fx) { e.preventDefault(); finishFx(); return; }
-    if (ui.drag || ui.ovKind || !game || game.done) return;
+    // A drag whose pointerup never arrived (lost capture, second finger) is cancelled.
+    if (ui.drag) onUp({ pointerId: ui.drag.id }, true);
+    if (ui.ovKind || !game || game.done) return;
     e.preventDefault();
     try { ui.root.focus({ preventScroll: true }); } catch (x) {}
     ui.drag = { hit: hitTest(e), x0: e.clientX, y0: e.clientY, id: e.pointerId, started: false };
