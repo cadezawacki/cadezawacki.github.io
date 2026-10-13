@@ -529,9 +529,10 @@
     if (r.innerTar) { a.innerTar = r.innerTar.file; a.innerTarTmp = r.innerTar.tmp; }
     W.sess = a;
     buildTree(a);
-    // Small archives open fully expanded one level; folders of one child too.
+    // Small archives open fully expanded; otherwise a lone top folder opens.
     a.root.open = true;
-    if (a.root.kids.length === 1 && a.root.kids[0].dir) a.root.kids[0].open = true;
+    if (a.nodes.length <= 40) a.nodes.forEach(function (n) { if (n.dir) n.open = true; });
+    else if (a.root.kids.length === 1 && a.root.kids[0].dir) a.root.kids[0].open = true;
     renderExtract();
   }
   function closeArchive(silent) {

@@ -362,7 +362,7 @@
   var srcP = null;
   function workerSource() {
     if (!srcP) {
-      srcP = fetch(WORKER_URL).then(function (r) {
+      srcP = Promise.resolve().then(function () { return fetch(WORKER_URL); }).then(function (r) {
         if (!r.ok) throw new Error('HTTP ' + r.status);
         return r.text();
       }).then(null, function (e) { srcP = null; throw new Error("couldn't load the Python worker (" + msg(e) + ')'); });
