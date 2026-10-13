@@ -128,7 +128,7 @@
     var rows = '';
     if (c) {
       if (c.type) rows += kv('Link', c.type);
-      if (c.effectiveType) rows += kv('Effective type', String(c.effectiveType).toUpperCase(), 'Browser’s estimate of the network class');
+      if (c.effectiveType) rows += kv('Effective type', String(c.effectiveType).toUpperCase(), 'Browser\u2019s estimate of the network class');
       if (c.downlink != null) rows += kv('Downlink est.', c.downlink + ' Mbps', 'Browser estimate (capped at 10 Mbps in Chrome)');
       if (c.rtt != null) rows += kv('RTT est.', c.rtt + ' ms', 'Browser estimate, rounded to 25 ms');
       if (c.saveData != null) rows += kv('Data saver', c.saveData ? 'On' : 'Off');
@@ -136,7 +136,7 @@
     st.p.querySelector('.ni-status').innerHTML =
       '<div class="ni-online ' + (on ? 'on' : 'off') + '"><span class="ni-dot"></span>' + (on ? 'Online' : 'Offline') + '</div>' +
       (rows ? '<div class="ni-kvs">' + rows + '</div>'
-        : '<div class="ni-note">Connection details aren’t exposed by this browser (Safari / iOS and Firefox don’t implement the Network Information API). Run a ping or speed test below for real numbers.</div>');
+        : '<div class="ni-note">Connection details aren\u2019t exposed by this browser (Safari / iOS and Firefox don\u2019t implement the Network Information API). Run a ping or speed test below for real numbers.</div>');
   }
   function kv(k, v, title, copy) {
     return '<div class="ni-kv"' + (title ? ' title="' + esc(title) + '"' : '') + '><span class="ni-k">' + esc(k) + '</span><span class="ni-v">' +
@@ -180,7 +180,7 @@
         if (alt && alt.indexOf(':') === -1) st.ip.v4 = alt;
       }
       if (!st.ip.v6 && r[2] && r[2].ip && r[2].ip.indexOf(':') !== -1) st.ip.v6 = r[2].ip;
-      if (!st.ip.v4 && !st.ip.v6 && !st.ip.trace && !st.ip.geo) st.ip.err = navigator.onLine === false ? 'You’re offline.' : 'All lookups failed — a content blocker may be stopping them.';
+      if (!st.ip.v4 && !st.ip.v6 && !st.ip.trace && !st.ip.geo) st.ip.err = navigator.onLine === false ? 'You\u2019re offline.' : 'All lookups failed \u2014 a content blocker may be stopping them.';
       renderIP();
       sweep();
     });
@@ -193,23 +193,23 @@
       box.innerHTML = '<div class="ni-note">Looks up your public IP address, provider and approximate location using ipify, ipwho.is and Cloudflare. Nothing is sent until you press Check.</div>' + head;
       return;
     }
-    if (st.ipBusy && !ip) { box.innerHTML = '<div class="ni-loading"><span class="ni-spin"></span>Looking up…</div>' + head; return; }
+    if (st.ipBusy && !ip) { box.innerHTML = '<div class="ni-loading"><span class="ni-spin"></span>Looking up\u2026</div>' + head; return; }
     if (ip.err) { box.innerHTML = '<div class="ni-err">' + esc(ip.err) + '</div>' + head; return; }
     var g = ip.geo || {}, t = ip.trace || {}, rows = '';
     rows += kv('IPv4', ip.v4 || 'Not detected', ip.v4 ? 'Click to copy' : '', ip.v4 || '');
     rows += kv('IPv6', ip.v6 || 'Not detected', ip.v6 ? 'Click to copy' : 'No IPv6 connectivity from this network', ip.v6 || '');
-    if (g.isp || g.org) rows += kv('Provider', (g.isp || g.org) + (g.asn ? ' · AS' + g.asn : ''));
+    if (g.isp || g.org) rows += kv('Provider', (g.isp || g.org) + (g.asn ? ' \u00b7 AS' + g.asn : ''));
     if (g.city || g.country) {
       rows += kv('Location', (flag(g.cc) ? flag(g.cc) + ' ' : '') + [g.city, g.region, g.country].filter(Boolean).filter(function (v, i, a) { return a.indexOf(v) === i; }).join(', '),
-        'Approximate, from your IP (' + g.src + '). VPNs and iCloud Private Relay show the relay’s location.');
+        'Approximate, from your IP (' + g.src + '). VPNs and iCloud Private Relay show the relay\u2019s location.');
     }
     if (g.tz) rows += kv('Time zone', g.tz);
-    if (t.colo) rows += kv('Cloudflare edge', t.colo + (t.loc ? ' · ' + t.loc : ''), 'Nearest Cloudflare data centre (IATA airport code)');
-    if (t.http || t.tls) rows += kv('Protocol', [t.http && t.http.toUpperCase().replace('HTTP/', 'HTTP/'), t.tls].filter(Boolean).join(' · '));
+    if (t.colo) rows += kv('Cloudflare edge', t.colo + (t.loc ? ' \u00b7 ' + t.loc : ''), 'Nearest Cloudflare data centre (IATA airport code)');
+    if (t.http || t.tls) rows += kv('Protocol', [t.http && t.http.toUpperCase().replace('HTTP/', 'HTTP/'), t.tls].filter(Boolean).join(' \u00b7 '));
     if (t.warp && t.warp !== 'off') rows += kv('WARP', t.warp);
     if (t.gateway && t.gateway !== 'off') rows += kv('Gateway', t.gateway);
     box.innerHTML = '<div class="ni-kvs">' + rows + '</div>' +
-      '<div class="ni-sub">' + (st.ipBusy ? 'Refreshing…' : 'Checked ' + new Date(ip.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })) + '</div>' + head;
+      '<div class="ni-sub">' + (st.ipBusy ? 'Refreshing\u2026' : 'Checked ' + new Date(ip.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })) + '</div>' + head;
   }
 
   // ---- latency -------------------------------------------------------------------------
@@ -265,14 +265,14 @@
   function renderPing() {
     var st = S; if (!st) return;
     var box = st.p.querySelector('.ni-ping'), pg = st.ping;
-    st.p.querySelector('.ni-pingbtn').textContent = st.pingBusy ? '■ Stop' : pg ? '↻ Again' : '▶ Ping';
-    if (!pg) { box.innerHTML = '<div class="ni-note">12 tiny round-trips to Cloudflare’s nearest edge (after one warm-up); shows the median, best and jitter.</div>'; return; }
+    st.p.querySelector('.ni-pingbtn').textContent = st.pingBusy ? '\u25a0 Stop' : pg ? '\u21bb Again' : '\u25b6 Ping';
+    if (!pg) { box.innerHTML = '<div class="ni-note">12 tiny round-trips to Cloudflare\u2019s nearest edge (after one warm-up); shows the median, best and jitter.</div>'; return; }
     var s = pingStats(pg.samples);
     var mx = 1;
     pg.samples.forEach(function (v) { mx = Math.max(mx, v); });
     var bars = pg.samples.map(function (v) { return '<span class="ni-pbar" style="height:' + Math.max(6, v / mx * 100).toFixed(0) + '%" title="' + ms1(v) + ' ms"></span>'; }).join('');
     box.innerHTML = (s ? '<div class="ni-big"><b>' + ms1(s.med) + '</b><small> ms median</small></div>' +
-      '<div class="ni-mini">best ' + ms1(s.min) + ' · worst ' + ms1(s.max) + ' · jitter ' + ms1(s.jit) + ' ms' + (pg.tcp ? ' · TCP RTT ' + ms1(pg.tcp) + ' ms' : '') + '</div>' : '') +
+      '<div class="ni-mini">best ' + ms1(s.min) + ' \u00b7 worst ' + ms1(s.max) + ' \u00b7 jitter ' + ms1(s.jit) + ' ms' + (pg.tcp ? ' \u00b7 TCP RTT ' + ms1(pg.tcp) + ' ms' : '') + '</div>' : '') +
       '<div class="ni-pbars">' + bars + (st.pingBusy ? '<span class="ni-pbar pending"></span>' : '') + '</div>' +
       (pg.err ? '<div class="ni-err">' + esc(pg.err) + '</div>' : '');
   }
@@ -322,16 +322,16 @@
     var BUDGET_D = 9000, BUDGET_U = 6000;
     var dStart = now();
     var i = 0;
-    var raf = 0;
+    var raf = 0, lastPaint = 0;
     var stepDown = function () {
       if (sig && sig.aborted) return Promise.reject(abortErr());
       if (i >= DOWN_SIZES.length || now() - dStart > BUDGET_D) return Promise.resolve();
       var n = DOWN_SIZES[i];
       sp.label = 'Downloading ' + bytesStr(n);
       return downloadOnce(n, sig, function (got, secs) {
-        sp.total += 0; sp.cur = got;
         if (secs > 0.05) sp.live = mbps(got * 8, secs);
-        if (!raf) raf = requestAnimationFrame(function () { raf = 0; renderSpeed(); });
+        // Repaint the live figure a few times a second, not per chunk.
+        if (!raf && now() - lastPaint > 200) raf = requestAnimationFrame(function () { raf = 0; lastPaint = now(); renderSpeed(); });
       }).then(function (r) {
         sp.total += r.bytes;
         if (r.secs >= 0.08 || n >= 1e6) sp.down.push(mbps(r.bytes * 8, r.secs));
@@ -364,7 +364,7 @@
       sp.done = true;
     }, function (e) {
       if (e && e.name === 'AbortError') sp.cancelled = true;
-      else sp.err = (navigator.onLine === false ? 'Offline — ' : '') + 'Speed test failed' + (e && e.message ? ' (' + e.message + ')' : '');
+      else sp.err = (navigator.onLine === false ? 'Offline \u2014 ' : '') + 'Speed test failed' + (e && e.message ? ' (' + e.message + ')' : '');
     }).then(function () {
       if (raf) cancelAnimationFrame(raf);
       if (S !== st) return;
@@ -382,20 +382,20 @@
   function renderSpeed() {
     var st = S; if (!st) return;
     var box = st.p.querySelector('.ni-speed'), sp = st.speed;
-    st.p.querySelector('.ni-speedbtn').textContent = st.speedBusy ? '■ Cancel' : sp ? '↻ Again' : '▶ Run test';
+    st.p.querySelector('.ni-speedbtn').textContent = st.speedBusy ? '\u25a0 Cancel' : sp ? '\u21bb Again' : '\u25b6 Run test';
     if (!sp) {
-      box.innerHTML = '<div class="ni-note">Downloads growing chunks (100 kB → up to 50 MB, about 9 s) then uploads a few MB to Cloudflare’s speed-test servers. A rough figure — Wi-Fi, other tabs and the server all matter.</div>';
+      box.innerHTML = '<div class="ni-note">Downloads growing chunks (100 kB \u2192 up to 50 MB, about 9 s) then uploads a few MB to Cloudflare\u2019s speed-test servers. A rough figure \u2014 Wi-Fi, other tabs and the server all matter.</div>';
       return;
     }
     var d = speedResult(sp.down), u = speedResult(sp.up);
-    var live = st.speedBusy ? '<div class="ni-live"><span class="ni-spin"></span>' + esc(sp.label || sp.phase) + (sp.live ? ' · <b>' + fmtMbps(sp.live) + '</b> Mbps' : '') + '</div>' : '';
+    var live = st.speedBusy ? '<div class="ni-live"><span class="ni-spin"></span>' + esc(sp.label || sp.phase) + (sp.live ? ' \u00b7 <b>' + fmtMbps(sp.live) + '</b> Mbps' : '') + '</div>' : '';
     box.innerHTML = '<div class="ni-speeds">' +
-      '<div class="ni-sp"><span class="ni-sp-l">↓ Download</span><span class="ni-sp-v">' + (d != null ? fmtMbps(d) : st.speedBusy && sp.phase === 'Download' && sp.live ? fmtMbps(sp.live) : '–') + '</span><span class="ni-sp-u">Mbps</span></div>' +
-      '<div class="ni-sp"><span class="ni-sp-l">↑ Upload</span><span class="ni-sp-v">' + (u != null ? fmtMbps(u) : st.speedBusy && sp.phase === 'Upload' && sp.live ? fmtMbps(sp.live) : '–') + '</span><span class="ni-sp-u">Mbps</span></div>' +
+      '<div class="ni-sp"><span class="ni-sp-l">\u2193 Download</span><span class="ni-sp-v">' + (d != null ? fmtMbps(d) : st.speedBusy && sp.phase === 'Download' && sp.live ? fmtMbps(sp.live) : '\u2013') + '</span><span class="ni-sp-u">Mbps</span></div>' +
+      '<div class="ni-sp"><span class="ni-sp-l">\u2191 Upload</span><span class="ni-sp-v">' + (u != null ? fmtMbps(u) : st.speedBusy && sp.phase === 'Upload' && sp.live ? fmtMbps(sp.live) : '\u2013') + '</span><span class="ni-sp-u">Mbps</span></div>' +
       '</div>' + live +
       (sp.cancelled ? '<div class="ni-sub">Cancelled.</div>' : '') +
       (sp.err ? '<div class="ni-err">' + esc(sp.err) + '</div>' : '') +
-      (sp.done ? '<div class="ni-sub">' + bytesStr(sp.total) + ' downloaded · ' + sp.down.length + ' + ' + sp.up.length + ' transfers</div>' : '');
+      (sp.done ? '<div class="ni-sub">' + bytesStr(sp.total) + ' downloaded \u00b7 ' + sp.down.length + ' + ' + sp.up.length + ' transfers</div>' : '');
   }
 
   // ---- DNS --------------------------------------------------------------------------------
@@ -434,60 +434,67 @@
     var box = st.p.querySelector('.ni-dres'), dn = st.dns;
     st.p.querySelectorAll('.ni-res').forEach(function (b) { b.classList.toggle('on', b.getAttribute('data-r') === st.prefs.resolver); });
     if (!dn) { box.innerHTML = ''; return; }
-    if (dn.busy) { box.innerHTML = '<div class="ni-loading"><span class="ni-spin"></span>Asking ' + esc(RESOLVERS[dn.rk].name) + '…</div>'; return; }
-    var html = '', any = false, status = '';
+    if (dn.busy) { box.innerHTML = '<div class="ni-loading"><span class="ni-spin"></span>Asking ' + esc(RESOLVERS[dn.rk].name) + '\u2026</div>'; return; }
+    var html = '', any = false, status = '', seen = {};
     dn.res.forEach(function (r) {
       if (r._err) { html += '<div class="ni-drow err"><span class="ni-dt">' + r._type + '</span><span class="ni-dd">' + esc(r._err) + '</span><span></span></div>'; return; }
       if (r.Status !== 0) status = DNS_STATUS[r.Status] || ('status ' + r.Status);
       (r.Answer || []).forEach(function (a) {
         var tn = DNS_TYPES[a.type] || String(a.type);
         if (dn.type === 'ALL' && tn !== r._type && tn !== 'CNAME') return;
-        any = true;
         var data = tn === 'TXT' ? txt(a.data) : a.data;
+        if (seen[tn + ' ' + a.name + ' ' + data]) return; // a CNAME shows up in every type's answer
+        seen[tn + ' ' + a.name + ' ' + data] = 1;
+        any = true;
         html += '<div class="ni-drow"><span class="ni-dt">' + esc(tn) + '</span><button type="button" class="ni-dd ni-copyv" data-copy="' + esc(data) + '" title="Copy">' + esc(data) + '</button><span class="ni-dttl">' + (a.TTL != null ? a.TTL + 's' : '') + '</span></div>';
       });
     });
     var first = dn.res[0] || {};
-    var meta = esc(dn.name) + ' · ' + esc(RESOLVERS[dn.rk].name) + (first._ms ? ' · ' + Math.round(first._ms) + ' ms' : '') + (first.AD ? ' · DNSSEC ✓' : '');
-    if (!any) html += '<div class="ni-note">' + (status === 'NXDOMAIN' ? 'NXDOMAIN — this name doesn’t exist.' : status ? status : 'No ' + (dn.type === 'ALL' ? '' : dn.type + ' ') + 'records.') + '</div>';
-    box.innerHTML = '<div class="ni-sub">' + meta + (status && any ? ' · ' + status : '') + '</div><div class="ni-drows">' + html + '</div>';
+    var meta = esc(dn.name) + ' \u00b7 ' + esc(RESOLVERS[dn.rk].name) + (first._ms ? ' \u00b7 ' + Math.round(first._ms) + ' ms' : '') + (first.AD ? ' \u00b7 DNSSEC \u2713' : '');
+    if (!any) html += '<div class="ni-note">' + (status === 'NXDOMAIN' ? 'NXDOMAIN \u2014 this name doesn\u2019t exist.' : status ? status : 'No ' + (dn.type === 'ALL' ? '' : dn.type + ' ') + 'records.') + '</div>';
+    box.innerHTML = '<div class="ni-sub">' + meta + (status && any ? ' \u00b7 ' + status : '') + '</div><div class="ni-drows">' + html + '</div>';
   }
 
   // ---- report -------------------------------------------------------------------------------
   function report() {
     var st = S; if (!st) return '';
     var L = [], c = conn();
-    L.push('Network report — ' + new Date().toLocaleString([], { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }));
+    L.push('Network report \u2014 ' + new Date().toLocaleString([], { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }));
     var line = 'Status: ' + (navigator.onLine === false ? 'offline' : 'online');
     if (c) {
-      if (c.type) line += ' · ' + c.type;
-      if (c.effectiveType) line += ' · ' + c.effectiveType;
-      if (c.downlink != null) line += ' · ~' + c.downlink + ' Mbps';
-      if (c.rtt != null) line += ' · RTT ~' + c.rtt + ' ms';
-      if (c.saveData) line += ' · data saver';
+      if (c.type) line += ' \u00b7 ' + c.type;
+      if (c.effectiveType) line += ' \u00b7 ' + c.effectiveType;
+      if (c.downlink != null) line += ' \u00b7 ~' + c.downlink + ' Mbps';
+      if (c.rtt != null) line += ' \u00b7 RTT ~' + c.rtt + ' ms';
+      if (c.saveData) line += ' \u00b7 data saver';
     }
     L.push(line);
     var ip = st.ip;
     if (ip && !ip.err) {
-      L.push('Public IPv4: ' + (ip.v4 || '—'));
-      L.push('Public IPv6: ' + (ip.v6 || '—'));
+      L.push('Public IPv4: ' + (ip.v4 || '\u2014'));
+      L.push('Public IPv6: ' + (ip.v6 || '\u2014'));
       var g = ip.geo || {};
       if (g.isp || g.org) L.push('Provider: ' + (g.isp || g.org) + (g.asn ? ' (AS' + g.asn + ')' : ''));
       if (g.city || g.country) L.push('Location: ' + [g.city, g.region, g.country].filter(Boolean).join(', ') + ' (approx.)');
       var t = ip.trace || {};
-      if (t.colo) L.push('Cloudflare: ' + t.colo + (t.http ? ' · ' + t.http.toUpperCase() : '') + (t.tls ? ' · ' + t.tls : ''));
+      if (t.colo) L.push('Cloudflare: ' + t.colo + (t.http ? ' \u00b7 ' + t.http.toUpperCase() : '') + (t.tls ? ' \u00b7 ' + t.tls : ''));
     }
     var ps = st.ping && pingStats(st.ping.samples);
     if (ps) L.push('Latency: ' + ms1(ps.med) + ' ms median (best ' + ms1(ps.min) + ', jitter ' + ms1(ps.jit) + ') over ' + ps.n + ' pings');
     var sp = st.speed;
     if (sp && (sp.down.length || sp.up.length)) {
       var d = speedResult(sp.down), u = speedResult(sp.up);
-      L.push('Speed: ↓ ' + (d != null ? fmtMbps(d) + ' Mbps' : '—') + ' · ↑ ' + (u != null ? fmtMbps(u) + ' Mbps' : '—'));
+      L.push('Speed: \u2193 ' + (d != null ? fmtMbps(d) + ' Mbps' : '\u2014') + ' \u00b7 \u2191 ' + (u != null ? fmtMbps(u) + ' Mbps' : '\u2014'));
     }
     var dn = st.dns;
     if (dn && !dn.busy && dn.res.length) {
       var recs = [];
-      dn.res.forEach(function (r) { (r.Answer || []).forEach(function (a) { recs.push((DNS_TYPES[a.type] || a.type) + ' ' + (DNS_TYPES[a.type] === 'TXT' ? txt(a.data) : a.data)); }); });
+      dn.res.forEach(function (r) {
+        (r.Answer || []).forEach(function (a) {
+          var x = (DNS_TYPES[a.type] || a.type) + ' ' + (DNS_TYPES[a.type] === 'TXT' ? txt(a.data) : a.data);
+          if (recs.indexOf(x) === -1) recs.push(x);
+        });
+      });
       L.push('DNS ' + dn.name + ' ' + dn.type + ' (' + RESOLVERS[dn.rk].name + '): ' + (recs.length ? recs.slice(0, 12).join(' | ') : 'no records'));
     }
     return L.join('\n');
@@ -507,12 +514,12 @@
     if (panel()) { close(); return; }
     var prefs = readJSON(PREFS_KEY, {}) || {};
     prefs = { auto: !!prefs.auto, resolver: prefs.resolver === 'g' ? 'g' : 'cf' };
-    var p = Cade.mkPanel(PANEL_ID, '⇅ Network Info',
+    var p = Cade.mkPanel(PANEL_ID, '\u21c5 Network Info',
       '<div class="ni-scroll">' +
         card('ni-status', 'Connection') +
         card('ni-ip', 'Public IP', '<button type="button" class="ni-hbtn primary ni-ipbtn">Check</button>') +
-        card('ni-ping', 'Latency', '<button type="button" class="ni-hbtn ni-pingbtn">▶ Ping</button>') +
-        card('ni-speed', 'Speed test', '<button type="button" class="ni-hbtn ni-speedbtn">▶ Run test</button>') +
+        card('ni-ping', 'Latency', '<button type="button" class="ni-hbtn ni-pingbtn">\u25b6 Ping</button>') +
+        card('ni-speed', 'Speed test', '<button type="button" class="ni-hbtn ni-speedbtn">\u25b6 Run test</button>') +
         '<section class="ni-card"><div class="ni-h"><span>DNS lookup</span><span class="ni-resolvers" role="group" aria-label="Resolver">' +
           '<button type="button" class="ni-res" data-r="cf">Cloudflare</button><button type="button" class="ni-res" data-r="g">Google</button></span></div>' +
           '<form class="ni-dform" autocomplete="off"><input class="ni-dq" type="text" inputmode="url" placeholder="example.com" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="search" aria-label="Domain name">' +
@@ -520,7 +527,7 @@
           '<button type="submit" class="ni-hbtn primary">Look up</button></form>' +
           '<div class="ni-dres"></div></section>' +
       '</div>' +
-      '<div class="ni-foot"><button type="button" class="ni-btn primary ni-insert">↵ Insert report</button><button type="button" class="ni-btn ni-copy">⧉ Copy report</button></div>');
+      '<div class="ni-foot"><button type="button" class="ni-btn primary ni-insert">\u21b5 Insert report</button><button type="button" class="ni-btn ni-copy">\u29c9 Copy report</button></div>');
     var st = S = { p: p, prefs: prefs, ip: null, ipBusy: false, ipSeq: 0, ping: null, pingBusy: false, speed: null, speedBusy: false, dns: null, dnsSeq: 0 };
     function save() { writeJSON(PREFS_KEY, st.prefs); }
 
@@ -535,7 +542,7 @@
       else if (t.closest('.ni-copy')) copyText(report(), 'network report');
       else if (t.closest('.ni-insert')) {
         var ed = Cade.editor; if (!ed) return;
-        if (ed.state.readOnly) { Cade.showToast('Read-only mode — editing is locked', 'error', 2000); return; }
+        if (ed.state.readOnly) { Cade.showToast('Read-only mode \u2014 editing is locked', 'error', 2000); return; }
         ed.dispatch(ed.state.replaceSelection(report()), { userEvent: 'input', scrollIntoView: true });
         Cade.showToast('Inserted network report', 'success', 1200);
       }
@@ -569,7 +576,7 @@
   Cade.registerWidget({
     name: 'Network Info',
     description: 'Public IP & ISP, connection, latency, speed test and DNS lookup',
-    icon: '⇅',
+    icon: '\u21c5',
     tags: 'network,ip,ip address,ipv4,ipv6,isp,asn,ping,latency,speed test,bandwidth,dns,lookup,dig,mx,txt,connection,wifi,online',
     open: open,
     _test: { parseTrace: parseTrace, pingStats: pingStats, cleanHost: cleanHost, txt: txt, speedResult: speedResult, report: report,
