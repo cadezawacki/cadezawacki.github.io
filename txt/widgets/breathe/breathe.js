@@ -287,7 +287,9 @@
     var st = S; if (!st || !st.running) return;
     cancelAnimationFrame(st.raf);
     var el = st.paused ? st.pauseAt - st.t0 - st.pausedFor : now() - st.t0 - st.pausedFor;
-    var secs = Math.max(0, el / 1000), breaths = Math.floor(secs / st.cyc + 1e-6);
+    var secs = Math.max(0, el / 1000);
+    if (completed) secs = Math.min(secs, st.total * st.cyc); // the frame that noticed the end may come late
+    var breaths = Math.floor(secs / st.cyc + 1e-6);
     st.running = false; st.paused = false;
     unlockScreen(st);
     st.p.classList.remove('br-running', 'br-paused');
@@ -447,7 +449,7 @@
   }
 
   Cade.registerWidget({
-    name: 'Breathe',
+    name: 'Breathing Exercise',
     description: 'Guided breathing \u2014 box, 4-7-8, coherent, physiological sigh or custom',
     icon: '\u25ef',
     tags: 'breathe,breathing,breath,calm,relax,meditation,box breathing,4-7-8,coherent,sigh,stress,anxiety,focus,mindfulness',

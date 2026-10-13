@@ -426,7 +426,7 @@
         vis: c.visibility != null ? Math.round(c.visibility) : null, uv: r1(c.uv_index),
       },
       h: {
-        t: col(h.time, nH, function (x) { return x * 1000; }), tp: col(h.temperature_2m, nH, r1),
+        t: col(h.time, nH, function (x) { return x * 1000; }), tp: col(h.temperature_2m, nH, r1), fl: col(h.apparent_temperature, nH, r1),
         pp: col(h.precipitation_probability, nH), pr: col(h.precipitation, nH, r1), code: col(h.weather_code, nH),
         day: col(h.is_day, nH), ps: col(h.pressure_msl, nH, r1), ws: col(h.wind_speed_10m, nH, r1),
       },
@@ -450,7 +450,7 @@
     var fb = base +
       '&current=temperature_2m,apparent_temperature,relative_humidity_2m,dew_point_2m,is_day,precipitation,weather_code,' +
       'cloud_cover,pressure_msl,wind_speed_10m,wind_direction_10m,wind_gusts_10m,visibility,uv_index' +
-      '&hourly=temperature_2m,precipitation_probability,precipitation,weather_code,is_day,pressure_msl,wind_speed_10m' +
+      '&hourly=temperature_2m,apparent_temperature,precipitation_probability,precipitation,weather_code,is_day,pressure_msl,wind_speed_10m' +
       '&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,precipitation_sum,' +
       'sunrise,sunset,uv_index_max,wind_speed_10m_max,wind_gusts_10m_max,wind_direction_10m_dominant' +
       '&forecast_days=10&forecast_hours=48&wind_speed_unit=kmh&temperature_unit=celsius&precipitation_unit=mm';
@@ -530,10 +530,31 @@
     return '\u2602';
   }
 
+  // A saved reply shown later (offline, or after a long sleep) is re-based on
+  // the clock: hours already past are dropped and "now" comes from the
+  // forecast for the current hour instead of the old observation.
+  function effective(m, now) {
+    if (!m) return m;
+    var h = m.h, k = 0, key;
+    while (k + 1 < h.t.length && h.t[k + 1] <= now) k++;
+    var old = now - (m.c.t || m.fetched) >= 90 * 60000;
+    if (!k && !old) return m;
+    var e = { tz: m.tz, off: m.off, abbr: m.abbr, d: m.d, aq: m.aq, fetched: m.fetched, h: {}, c: {} };
+    for (key in h) e.h[key] = h[key].slice(k);
+    for (key in m.c) e.c[key] = m.c[key];
+    if (old && h.t.length > k) {
+      e.c.t = h.t[k]; e.c.tp = h.tp[k]; e.c.code = h.code[k]; e.c.day = h.day[k];
+      if (h.fl && h.fl[k] != null) e.c.fl = h.fl[k];
+      if (h.ps && h.ps[k] != null) e.c.ps = h.ps[k];
+      if (h.ws && h.ws[k] != null) e.c.ws = h.ws[k];
+    }
+    return e;
+  }
+
   // ---- rendering -------------------------------------------------------------------------
   function render() {
     var p = panel(); if (!p || !S) return;
-    var m = S.model;
+    var m = effective(S.model, Date.now());
     var name = p.querySelector('.wx-pname'), sub = p.querySelector('.wx-psub');
     name.textContent = S.loc ? S.loc.name : 'Choose a place';
     sub.textContent = S.loc ? (geo().sublabel(S.loc) || '') : '';
@@ -580,8 +601,9 @@
 
   function heroHTML(m, now) {
     var c = m.c, w = wmo(c.code, c.day), di = todayIdx(m, now);
-    var stale = S.offline || S.failed || now - m.fetched > STALE_MS;
-    var badge = stale ? '<span class="wx-badge" title="Showing saved data">' + (navigator.onLine === false ? 'Offline \u00b7 ' : 'Saved \u00b7 ') + ago(m.fetched) + '</span>' : '';
+    var age = now - m.fetched;
+    var stale = S.offline || (S.failed && age > 10 * 60000) || age > STALE_MS;
+    var badge = stale ? '<span class="wx-badge" title="Showing saved data">' + (navigator.onLine === false || S.offline ? 'Offline \u00b7 ' : 'Saved \u00b7 ') + ago(m.fetched) + '</span>' : '';
     var line = headline(m);
     return '<div class="wx-hero" data-sky="' + skyKey(m, now) + '">' +
       '<div class="wx-hero-fx" aria-hidden="true"></div>' +
@@ -851,7 +873,7 @@
 
   // ---- summary ------------------------------------------------------------------------
   function summary() {
-    var m = S && S.model; if (!m) return '';
+    var m = S && effective(S.model, Date.now()); if (!m) return '';
     var c = m.c, w = wmo(c.code, c.day), di = todayIdx(m, Date.now());
     var date = fmt(Date.now(), m.tz, 'mdy', { month: 'short', day: 'numeric' });
     var wind = c.ws != null ? ' \u00b7 Wind ' + wStr(c.ws).replace('\u00a0', ' ') + (c.ws >= 2 ? ' ' + dirName(c.wd) : '') : '';
@@ -1089,7 +1111,7 @@
     icon: '\ud83c\udf24',
     tags: 'weather,forecast,temperature,rain,wind,humidity,uv,air quality,aqi,sunrise,sunset,climate,open-meteo',
     open: open,
-    _test: { wmo: wmo, glyphSVG: glyphSVG, defsSVG: defsSVG, art: art, trim: trim, monoPath: monoPath, tempColor: tempColor,
+    _test: { wmo: wmo, effective: effective, glyphSVG: glyphSVG, defsSVG: defsSVG, art: art, trim: trim, monoPath: monoPath, tempColor: tempColor,
       headline: headline, hourlySVG: hourlySVG, tilesHTML: tilesHTML, dailyHTML: dailyHTML, heroHTML: heroHTML, skyKey: skyKey,
       crescentPath: crescentPath, setState: function (s) { S = s; }, setPrefs: function (p) { prefs = p; }, summary: summary },
   });

@@ -181,8 +181,10 @@
     if (job.lang === 'py') return runPy(job);
     if (job.lang === 'ts') {
       job.statusText = 'Loading TypeScript…'; bump();
+      job.cancel = function () { job.cancel = null; finishJob(job, { status: 'stopped', text: '■ Stopped', ms: 0 }); };
       return tsToJs(job.code).then(function (js) {
-        if (job.state === 'done') return { status: 'stopped', text: '', ms: 0 };
+        if (cur !== job) return { status: 'stopped', text: '', ms: 0 };
+        job.cancel = null;
         job.statusText = 'Running…'; bump();
         return runJS(job, js);
       }, function (e) {

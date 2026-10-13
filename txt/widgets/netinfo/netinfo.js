@@ -495,7 +495,9 @@
           if (recs.indexOf(x) === -1) recs.push(x);
         });
       });
-      L.push('DNS ' + dn.name + ' ' + dn.type + ' (' + RESOLVERS[dn.rk].name + '): ' + (recs.length ? recs.slice(0, 12).join(' | ') : 'no records'));
+      var bad = '';
+      dn.res.forEach(function (r) { if (!bad && r.Status) bad = DNS_STATUS[r.Status] || 'status ' + r.Status; });
+      L.push('DNS ' + dn.name + ' ' + dn.type + ' (' + RESOLVERS[dn.rk].name + '): ' + (recs.length ? recs.slice(0, 12).join(' | ') : bad || 'no records'));
     }
     return L.join('\n');
   }

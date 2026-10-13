@@ -338,7 +338,7 @@
   // with the app's privileges.
   function openInTab() {
     if (!st.built) { toast('Nothing to open yet', 'info'); return; }
-    var attr = st.built.html.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+    var attr = st.built.html.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     var title = (st.label || 'Preview');
     var wrapper = '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">' +
       '<title>Preview</title><style>html,body{margin:0;height:100%;background:#fff}iframe{display:block;border:0;width:100%;height:100%}</style></head>' +

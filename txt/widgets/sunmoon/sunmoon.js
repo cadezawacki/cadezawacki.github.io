@@ -77,7 +77,7 @@
     return ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'][Math.round(((deg % 360) + 360) % 360 / 22.5) % 16];
   }
   function f1(n) { return Math.round(n * 10) / 10; }
-  function deg1(n) { return (Math.round(n * 10) / 10).toFixed(1) + '\u00b0'; }
+  function deg1(n) { var v = (Math.round(n * 10) / 10).toFixed(1); return (v.charAt(0) === '-' ? '\u2212' + v.slice(1) : v) + '\u00b0'; }
   var PHASE_EMOJI = {
     'New Moon': '\ud83c\udf11', 'Waxing Crescent': '\ud83c\udf12', 'First Quarter': '\ud83c\udf13', 'Waxing Gibbous': '\ud83c\udf14',
     'Full Moon': '\ud83c\udf15', 'Waning Gibbous': '\ud83c\udf16', 'Last Quarter': '\ud83c\udf17', 'Waning Crescent': '\ud83c\udf18',

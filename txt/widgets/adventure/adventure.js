@@ -128,7 +128,8 @@
     'jump|hop|leap|skip => jump', 'jump over|off|on|into|across|onto * => jump',
     'sing|whistle|hum|chant => sing', 'dance|twirl => dance', 'yell|shout|scream|holler|shriek => yell', 'pray => pray',
     'think|ponder|contemplate|meditate|wonder => think', 'sleep|nap|snooze|doze => sleep', 'lie|lay down => sleep', 'go to sleep|bed => sleep',
-    'lie|lay|sleep on|in|down on|down in * => lieon', 'sit => sit', 'sit down => sit', 'sit on|in|down on|down in|at|upon * => sit',
+    'lie|lay|sleep on|in|upon * => lieon', 'lie|lay down on|in * => lieon', 'get into|in * => enter',
+    'sit => sit', 'sit down => sit', 'sit on|in|at|upon * => sit', 'sit down on|in * => sit',
     'swim|wade|dive|paddle => swim', 'swim|wade|dive in|into * => swim',
     'dig => dig', 'dig * => dig', 'dig in|with|at|up * => dig',
     'knock => knock', 'knock on|at * => knock', 'knock * => knock',
@@ -141,10 +142,11 @@
     'curse|swear|damn|drat|bother|blast => swear'
   ];
 
-  var GRAMMAR = [], VERBS = {}, LITS = {};
+  var GRAMMAR = [], VERBS = {}, LITS = {}, A_NAMES = /^[a-z]+$/;
   (function compile() {
     GRAMMAR_SRC.forEach(function (line, idx) {
       var parts = line.split('=>'), lhs = parts[0].trim().split(/\s+/), rhs = parts[1].trim().split(/\s+/);
+      if (!A_NAMES.test(rhs[0])) throw new Error('grammar: bad action in ' + line);
       var els = lhs.map(function (t) {
         if (t.length === 1 && '*%$#@'.indexOf(t) !== -1) return { slot: t };
         var alts = t.split('|');
@@ -558,7 +560,7 @@
     this.pending = null;
     this.flushAwards();
     this.say(txt(E.text, this.g));
-    this.say('*** THE END — ' + E.title + ' ***', 'end');
+    this.say('THE END — ' + E.title, 'end');
     var s = this.s, max = this.D.meta.maxScore;
     this.say('You scored ' + s.score + ' out of a possible ' + max + ', in ' + (s.moves + 1) + ' moves' + (s.hu ? ', with ' + s.hu + ' hint' + (s.hu === 1 ? '' : 's') : ', without a single hint') + '. That earns you the rank of ' + this.rank() + '.' +
       (s.score >= max ? ' A perfect score — Wrenhallow is yours in every sense.' : '') +
@@ -706,6 +708,10 @@
     var s = this.s;
     if (part.length === 1 && PRON[part[0]]) {
       var pr = part[0], ref = pr === 'it' ? s.it : pr === 'them' ? (s.them || s.it) : pr === 'him' ? s.him : s.her;
+      if ((pr === 'him' || pr === 'her') && (!ref || scope.indexOf(ref) === -1)) {
+        var self0 = this, ppl = scope.filter(function (id) { var d = self0.objs[id]; return d.npc && (d.gender || 'him') === pr; });
+        if (ppl.length === 1) ref = ppl[0];
+      }
       if (!ref) return { err: 'I’m not sure what “' + pr + '” refers to.' };
       var refs = [].concat(ref).filter(function (id) { return scope.indexOf(id) !== -1; });
       if (!refs.length) return { err: 'You can’t see ' + (Array.isArray(ref) ? 'them' : this.theName(ref)) + ' here.' };
@@ -713,10 +719,17 @@
     }
     var m = this.matchPhrase(part, scope);
     if (!m.ids.length) {
-      var self = this, unknown = part.filter(function (w) { return !self.vocab[w] && !isNum(w); });
+      var self = this, shown = part.slice();
+      var unknown = part.filter(function (w, i) {
+        if (self.vocab[w] || isNum(w) || (/s$/.test(w) && self.vocab[w.replace(/(ies|es|s)$/, function (x) { return x === 'ies' ? 'y' : ''; })]) || (/es$/.test(w) && self.vocab[w.slice(0, -1)])) return false;
+        // A typo of something that isn't here: say so in its proper spelling.
+        var fix = w.length >= 4 ? Object.keys(self.vocab).filter(function (v) { return Math.abs(v.length - w.length) <= 1 && near(w, v); }) : [];
+        if (fix.length === 1) { shown[i] = fix[0]; return false; }
+        return true;
+      });
       if (unknown.length) return { err: 'I don’t know the word “' + unknown[0] + '”.' };
       if (this.isDark()) return { err: 'It’s too dark to see anything like that.' };
-      return { err: 'You can’t see any ' + part.join(' ') + ' here.' };
+      return { err: 'You can’t see any ' + shown.join(' ') + ' here.' };
     }
     var notes = m.notes ? ['(I’m assuming you mean “' + m.fixed.join(' ') + '”.)'] : [];
     if (m.plural && multiOk) return { ids: m.ids, notes: notes };
@@ -916,6 +929,9 @@
     }
     var words = toks.filter(function (w) { return !NPSTOP[w] && w !== 'with' && w !== 'to' && w !== 'in' && w !== 'on' && w !== 'into' && w !== 'using'; });
     if (!words.length) return false;
+    // A reply that is itself a command ("north", "look", "take lamp") wins
+    // unless it also reads as an answer naming one of the things in question.
+    var looksLikeCommand = this.parse(toks).length > 0 && !(toks.length === 1 && this.vocab[toks[0]] && !DIRW[toks[0]]);
     if (p.kind === 'which') {
       var cc = p.cc, cands = p.cands, pick = null;
       var ord = { first: 0, '1st': 0, '1': 0, second: 1, '2nd': 1, '2': 1, third: 2, '3rd': 2, '3': 2, fourth: 3, last: cands.length - 1, former: 0, latter: cands.length - 1 };
@@ -934,7 +950,7 @@
           });
           m = this.matchWords(fixed, cands);
         }
-        if (!m.length) return false;
+        if (!m.length || (looksLikeCommand && VERBS[toks[0]] && !this.vocab[toks[0]])) return false;
         if (m.length > 1) { this.askWhich(cc, { ask: m, role: p.role, words: words }); return true; }
         pick = m;
       }
@@ -946,8 +962,9 @@
       return true;
     }
     if (p.kind === 'missing') {
+      if (looksLikeCommand && (VERBS[toks[0]] || DIRW[toks[0]]) && !this.vocab[toks[0]]) return false;
       var r2 = this.resolve(words, { v: p.c.v, d: p.c.d ? [p.c.d] : null }, p.role);
-      if (r2.err) { if (VERBS[toks[0]] && !this.vocab[toks[0]]) return false; this.say(r2.err, 'err'); return true; }
+      if (r2.err) { if (looksLikeCommand) return false; this.say(r2.err, 'err'); return true; }
       if (r2.ask) {
         var c0 = p.c, cc2 = { v: c0.v, raw: text, topic: c0.topic, dir: c0.dir, open: c0.openAfter };
         cc2.d = c0.d ? [c0.d] : null; cc2.i = c0.i ? [c0.i] : null;
@@ -1266,6 +1283,7 @@
       var here = this.npcHere();
       if (here.length !== 1) { this.say(here.length ? 'Who do you want to ask?' : 'There’s nobody here to ask.'); return; }
       id = here[0];
+      this.setPronoun(id);
       this.perform({ v: c.v, d: id, topic: c.topic });
       return;
     }
@@ -1281,6 +1299,7 @@
       var here = this.npcHere();
       if (!here.length) { this.say('You talk to yourself for a while. You are very understanding.'); return; }
       if (here.length > 1) { this.say('Who do you want to talk to?'); return; }
+      this.setPronoun(here[0]);
       this.perform({ v: 'talk', d: here[0] });
       return;
     }
@@ -1521,7 +1540,7 @@
     var el = document.createElement('div');
     el.className = 'adv-b adv-' + b.t;
     if (b.t === 'cmd' || b.t === 'sub') el.innerHTML = '<span class="adv-gt" aria-hidden="true">&gt;</span> ' + esc(b.s);
-    else if (b.t === 'title') el.textContent = b.s;
+    else if (b.t === 'title' || b.t === 'end') el.textContent = b.s;
     else if (b.t === 'banner') el.innerHTML = '<div class="adv-bt">' + esc(b.s) + '</div><div class="adv-bs">' + esc(b.sub || '') + '</div>';
     else if (b.t === 'exits') {
       var x = b.x || [];
@@ -1535,6 +1554,7 @@
     if (b.t === 'cmd') return '\n> ' + b.s;
     if (b.t === 'sub') return '> ' + b.s;
     if (b.t === 'title') return b.s;
+    if (b.t === 'end') return '*** ' + b.s + ' ***';
     if (b.t === 'banner') return b.s.toUpperCase() + '\n' + (b.sub || '') + '\n';
     if (b.t === 'exits') return b.s;
     return plain(b.s);
