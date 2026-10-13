@@ -62,12 +62,12 @@
   var HD_RUNTIME_WIRE = 3100000; // what the brotli'd runtime actually costs to download
   var HF = 'https://huggingface.co/rhasspy/piper-voices/resolve/c10ece1aade47bb51c153c893d14e5bf8e5b7117/';
   var HD_VOICES = [
-    { id: 'en_US-lessac-medium', label: 'Lessac — US English, female', path: 'en/en_US/lessac/medium/', size: 63201294 },
-    { id: 'en_US-amy-medium', label: 'Amy — US English, female', path: 'en/en_US/amy/medium/', size: 63201294 },
-    { id: 'en_US-ryan-medium', label: 'Ryan — US English, male', path: 'en/en_US/ryan/medium/', size: 63201294 },
-    { id: 'en_US-joe-medium', label: 'Joe — US English, male', path: 'en/en_US/joe/medium/', size: 63201294 },
-    { id: 'en_GB-alba-medium', label: 'Alba — British English, female', path: 'en/en_GB/alba/medium/', size: 63201294 },
-    { id: 'en_GB-northern_english_male-medium', label: 'Northern — British English, male', path: 'en/en_GB/northern_english_male/medium/', size: 63201294 },
+    { id: 'en_US-lessac-medium', label: 'Lessac \u2014 US English, female', path: 'en/en_US/lessac/medium/', size: 63201294 },
+    { id: 'en_US-amy-medium', label: 'Amy \u2014 US English, female', path: 'en/en_US/amy/medium/', size: 63201294 },
+    { id: 'en_US-ryan-medium', label: 'Ryan \u2014 US English, male', path: 'en/en_US/ryan/medium/', size: 63201294 },
+    { id: 'en_US-joe-medium', label: 'Joe \u2014 US English, male', path: 'en/en_US/joe/medium/', size: 63201294 },
+    { id: 'en_GB-alba-medium', label: 'Alba \u2014 British English, female', path: 'en/en_GB/alba/medium/', size: 63201294 },
+    { id: 'en_GB-northern_english_male-medium', label: 'Northern \u2014 British English, male', path: 'en/en_GB/northern_english_male/medium/', size: 63201294 },
   ];
   function hdVoice(id) {
     for (var i = 0; i < HD_VOICES.length; i++) if (HD_VOICES[i].id === id) return HD_VOICES[i];
@@ -106,11 +106,12 @@
   var RE_SKIPLINE = /^\s*(?:\[table(?::[^\]]*)?\]|@complete)\s*$/i;
   var RE_TABLE = /^\s*\|.*\|\s*$/;
   // alignment sentinel, quote(s), heading, list marker, task box
-  var RE_PREFIX = /^(\s*)(%%(?:center|right)%%\s?)?((?:>\s?)+)?(#{1,6}\s+)?((?:[-*+•]|\d{1,3}[.)]|[A-Za-z][.)])\s+)?(\[[ xX]\]\s+)?/;
+  var RE_PREFIX = /^(\s*)(%%(?:center|right)%%\s?)?((?:>\s?)+)?(#{1,6}\s+)?((?:[-*+\u2022]|\d{1,3}[.)]|[A-Za-z][.)])\s+)?(\[[ xX]\]\s+)?/;
   var INLINE = [
-    // [regex, handler(m, kill, prot)] — applied in order on the RAW line; a
-    // match starting inside already-removed or protected text is ignored.
-    [/[​-‏⁠﻿]/g, function (m, k) { k(m.index, m.index + m[0].length); }],
+    // [regex, handler(m, kill, protect), leadGroup] — applied in order on the
+    // RAW line; a match starting inside already-removed or protected text is
+    // ignored (leadGroup: group 1 is a boundary char, not part of the match).
+    [/[\u200b-\u200f\u2060\ufeff]/g, function (m, k) { k(m.index, m.index + m[0].length); }],
     [/!\[(?:img|file):[^\]\n]*\]/g, function (m, k) { k(m.index, m.index + m[0].length); }],   // core image / attachment tokens
     [/!\[[^\]\n]*\]\([^)\n]*\)/g, function (m, k) { k(m.index, m.index + m[0].length); }],     // markdown images
     [/`([^`\n]+)`/g, function (m, k, p) { var e = m.index + m[0].length; k(m.index, m.index + 1); k(e - 1, e); p(m.index + 1, e - 1); }],
@@ -134,9 +135,9 @@
     [/__([^_\n]+?)__/g, pair(2)],
     [/~~([^~\n]+?)~~/g, pair(2)],
     [/\*([^*\s][^*\n]*?)\*/g, pair(1)],
-    [/(^|[^\w])_([^_\n]+?)_(?!\w)/g, function (m, k) { var s = m.index + m[1].length, e = m.index + m[0].length; k(s, s + 1); k(e - 1, e); }],
+    [/(^|[^\w])_([^_\n]+?)_(?!\w)/g, function (m, k) { var s = m.index + m[1].length, e = m.index + m[0].length; k(s, s + 1); k(e - 1, e); }, true],
     [/\\([\\`*_{}[\]()#+\-.!|~%=>])/g, function (m, k) { k(m.index, m.index + 1); }],
-    [/(^|\s)#(?=[A-Za-z])/g, function (m, k) { var s = m.index + m[1].length; k(s, s + 1); }],      // #tag -> tag
+    [/(^|\s)#(?=[A-Za-z])/g, function (m, k) { var s = m.index + m[1].length; k(s, s + 1); }, true], // #tag -> tag
   ];
   function pair(n) { return function (m, k) { var e = m.index + m[0].length; k(m.index, m.index + n); k(e - n, e); }; }
 
@@ -167,8 +168,7 @@
       re.lastIndex = 0;
       while ((mm = re.exec(line)) !== null) {
         if (!mm[0].length) { re.lastIndex++; continue; }
-        // where the "real" match starts (skip a captured leading boundary char)
-        var st = mm.index + ((r === 15 || r === 17) ? mm[1].length : 0);
+        var st = mm.index + (INLINE[r][2] ? mm[1].length : 0);
         if (del[st] || prot[st]) continue;
         fn(mm, kill, protect);
       }
@@ -181,9 +181,11 @@
       var c = sub && sub[i] !== undefined ? sub[i] : line[i];
       for (var j = 0; j < c.length; j++) {
         var ch = c[j];
-        if (ch === '\t' || ch === ' ' || ch === ' ') {
+        if (ch === '\t' || ch === '\u00a0' || ch === ' ') {
           if (!s.length || s.charCodeAt(s.length - 1) === 32) continue;
           ch = ' ';
+        } else if ((ch === ',' || ch === '.') && s.charCodeAt(s.length - 1) === 32) {
+          s = s.slice(0, -1); p.pop(); // "cell , cell" -> "cell, cell"
         }
         s += ch; p.push(off);
       }
@@ -207,11 +209,12 @@
       // [.!?…] (+ closing quotes/brackets) followed by whitespace or the end
       var start = 0;
       for (var i = 0; i < s.length; i++) {
-        if ('.!?…'.indexOf(s[i]) < 0) continue;
+        if ('.!?\u2026'.indexOf(s[i]) < 0) continue;
         var j = i + 1;
-        while (j < s.length && '.!?…"\')]”’'.indexOf(s[j]) >= 0) j++;
+        while (j < s.length && '.!?\u2026"\')]\u201d\u2019'.indexOf(s[j]) >= 0) j++;
         if (j < s.length && s[j] !== ' ') { i = j - 1; continue; }
         while (j < s.length && s[j] === ' ') j++;
+        if (j < s.length && /[a-z]/.test(s[j])) { i = j - 1; continue; } // "p.m. in", "?" he said
         out.push([start, j]); start = j; i = j - 1;
       }
       if (start < s.length) out.push([start, s.length]);
@@ -223,7 +226,7 @@
       while (k + 1 < out.length) {
         var t = s.slice(cur[0], cur[1]).replace(/\s+$/, '');
         var nx = s.charAt(out[k + 1][0]);
-        if (ABBR_END.test(t) || INITIAL_END.test(t) || (/\betc\.$/i.test(t) && /[a-z]/.test(nx))) {
+        if (ABBR_END.test(t) || INITIAL_END.test(t) || (/(?:\betc\.|[?!]["'\u201d\u2019)]*)$/i.test(t) && /[a-z]/.test(nx))) {
           cur[1] = out[k + 1][1]; k++;
         } else break;
       }
@@ -235,7 +238,7 @@
   // Split [a,b) of s into chunks <= MAX_CHUNK, preferring clause breaks.
   function capChunks(s, a, b, out) {
     while (b - a > MAX_CHUNK) {
-      var win = s.slice(a, a + MAX_CHUNK), cut = -1, m, re = /[,;:)–—](?= )/g;
+      var win = s.slice(a, a + MAX_CHUNK), cut = -1, m, re = /[,;:)\u2013\u2014](?= )/g;
       while ((m = re.exec(win)) !== null) if (m.index > MAX_CHUNK * 0.35) cut = m.index + 1;
       if (cut < 0) { cut = win.lastIndexOf(' '); if (cut < MAX_CHUNK * 0.35) cut = -1; }
       if (cut < 0) cut = MAX_CHUNK;
@@ -275,7 +278,7 @@
   // outside a fence (selection scope: the user picked exactly this text).
   function extract(doc, from, to, fencesKnown) {
     var out = [], truncated = false;
-    var n0 = doc.lineAt(from).number, n1 = doc.lineAt(Math.max(from, to - 1 < from ? from : to)).number;
+    var n0 = doc.lineAt(from).number, n1 = doc.lineAt(to).number;
     var fence = fencesKnown && n0 > 1 && fenceStateAt(doc, n0) ? { from: from } : null;
     var cur = null, scanned = 0;
     function flush() {
@@ -300,7 +303,7 @@
       var c = cleanLine(text, line.from, from, to);
       if (!c.s) { if (c.kind !== 'text') flush(); continue; }
       var joinable = cur && cur.kind === c.kind && (c.kind === 'text' || c.kind === 'quote') &&
-        cur.lastLen >= 45 && !/[.!?:;]["')\]”’]*$/.test(cur.s);
+        cur.lastLen >= 45 && !/[.!?:;]["')\]\u201d\u2019]*$/.test(cur.s);
       if (joinable) {
         cur.s += ' '; cur.p.push(line.from - 1); // the newline
         cur.s += c.s; Array.prototype.push.apply(cur.p, c.p);
@@ -400,12 +403,20 @@
   // ======================================================================
   var R = {
     active: false, list: [], idx: 0, wordAt: 0,
-    doc: null, changes: null, detached: false,
+    doc: null, changes: null, detached: false, lastEdit: 0,
     state: 'idle', // idle | loading | playing | paused
   };
-  // Hooks can't be removed: return immediately unless a session is live.
+  var panelOpen = false, hintTimer = null;
+  // Hooks can't be removed: return immediately unless the panel is open.
   Cade.onEditorUpdate(function (u) {
-    if (!R.active || !u.docChanged) return;
+    if (!panelOpen) return;
+    if (!R.active) {
+      // idle: keep the "press play to read the selection / from the cursor" hint honest
+      if (u.selectionSet && !hintTimer) hintTimer = setTimeout(function () { hintTimer = null; if (R.state === 'idle') updateNow(); }, 250);
+      return;
+    }
+    if (!u.docChanged) return;
+    R.lastEdit = Date.now();
     if (u.startState.doc !== R.doc) { R.detached = true; return; }
     try { R.changes = R.changes ? R.changes.compose(u.changes) : u.changes; R.doc = u.state.doc; } catch (e) { R.detached = true; }
   });
@@ -422,7 +433,8 @@
     hl.on = true; hl.doc = R.doc;
     hl.sFrom = mapPos(s.from, 1); hl.sTo = Math.max(hl.sFrom, mapPos(s.to, -1));
     hl.wFrom = hl.wTo = -1;
-    nudge(scroll ? hl.sFrom : false);
+    // follow the reading, but not while the user is typing somewhere else
+    nudge(scroll && Date.now() - R.lastEdit > 4000 ? hl.sFrom : false);
   }
   function showWord(i, ci, cj) {
     var s = R.list[i];
@@ -443,7 +455,7 @@
   };
   var UA = navigator.userAgent || '';
   var IS_MOBILE = /Android|iPhone|iPad|iPod|Mobile/i.test(UA) || (navigator.maxTouchPoints > 1 && /Macintosh/.test(UA));
-  var IS_CHROMIUM = /Chrome\//.test(UA) && !/Edg\//.test(UA) ? true : /Edg\//.test(UA);
+  var IS_CHROME = /Chrome\//.test(UA) && !/Edg\//.test(UA);
   var USER_LANG = (navigator.language || 'en-US').toLowerCase();
   function baseLang(l) { return String(l || '').toLowerCase().replace('_', '-').split('-')[0]; }
   // Old MacinTalk novelty voices: never auto-pick these.
@@ -512,7 +524,7 @@
     var text = s.text.slice(offset);
     if (!/\S/.test(text)) { wsAdvance(); return; }
     var gen = ++WS.gen;
-    var u = new SpeechSynthesisUtterance(text);
+    var u = new window.SpeechSynthesisUtterance(text);
     var v = wsVoice();
     if (v) { u.voice = v; u.lang = v.lang; } else u.lang = navigator.language || 'en-US';
     u.rate = prefs.rate; u.pitch = prefs.pitch; u.volume = 1;
@@ -549,14 +561,14 @@
   }
   function wsError(err, v) {
     if (err === 'not-allowed') { // autoplay policy: needs a tap
-      pause(); toast('Tap ▶ to start reading (the browser blocked speech)', 'info', 3000);
+      pause(); toast('Tap \u25b6 to start reading (the browser blocked speech)', 'info', 3000);
       return;
     }
     if ((err === 'network' || err === 'synthesis-unavailable' || err === 'voice-unavailable') && v && v.localService === false) {
       var loc = bestVoice(true);
       if (loc && loc !== v) {
         WS_LOCAL_OVERRIDE = loc;
-        toast(v.name + ' needs the internet — using ' + loc.name, 'info', 3000);
+        toast(v.name + ' needs the internet \u2014 using ' + loc.name, 'info', 3000);
         wsSpeak(R.wordAt);
         return;
       }
@@ -569,9 +581,9 @@
   // voices go silent after ~15 s of one utterance unless poked.
   function wsWatch(v) {
     wsStopTimer();
-    var keepAlive = IS_CHROMIUM && !IS_MOBILE && v && v.localService === false;
+    var keepAlive = IS_CHROME && !IS_MOBILE && v && v.localService === false && /^google/i.test(v.name);
     WS.timer = setInterval(function () {
-      if (R.state !== 'playing' || prefs.engine === 'hd' && HD.active) { wsStopTimer(); return; }
+      if (R.state !== 'playing' || HD.active) { wsStopTimer(); return; }
       if (!panelEl()) { cleanup(); return; }
       var ss = window.speechSynthesis;
       if (ss.speaking) WS.sawSpeaking = true;
@@ -582,7 +594,7 @@
       }
       // Only trust "idle" on engines that report speaking at all.
       if (!WS.sawSpeaking) return;
-      if (++WS.idleTicks < 4) return;
+      if (++WS.idleTicks < 6) return; // ~3 s of silence with no end event
       WS.idleTicks = 0;
       if (!WS.started && !WS.retried) { WS.retried = true; wsSpeak(R.wordAt); return; }
       WS.retried = false;
@@ -599,6 +611,7 @@
     sampleRate: 22050, ctx: null,
     gen: 0, reqIdx: 0, schedIdx: 0, nextT: 0, got: {}, sched: [], ticker: null,
     dl: { loaded: 0, total: 0 }, cached: {}, onReady: null, waiting: false,
+    dirty: false,           // paused, then jumped: schedule must be rebuilt on resume
   };
   var AHEAD = 3; // sentences synthesized ahead of the one playing
 
@@ -632,7 +645,7 @@
       return;
     }
     hdTerminate();
-    if (!hdSupported()) { hdFail('this browser can’t run it (needs WebAssembly + Web Audio)'); return; }
+    if (!hdSupported()) { hdFail('this browser can\u2019t run it (needs WebAssembly + Web Audio)'); return; }
     var w;
     try { w = new Worker(WORKER_URL, { type: 'module' }); } catch (e) { hdFail('module workers are not supported'); return; }
     HD.worker = w; HD.workerVoice = id; HD.loading = true; HD.ready = false; HD.failed = '';
@@ -668,19 +681,21 @@
       hdAudio(m);
     }
   }
+  // The HD engine couldn't load: say why, and carry on with the standard
+  // voice for this session (the HD choice is kept so a retry is one tap away).
   function hdFail(msg) {
     var wasPlaying = R.state === 'loading' || (HD.active && (R.state === 'playing' || R.state === 'paused'));
+    var v = HD.workerVoice || prefs.hdVoice;
     hdTerminate();
     HD.failed = msg || 'failed to load';
-    var offline = navigator.onLine === false;
-    toast('HD voice unavailable' + (offline && !HD.cached[prefs.hdVoice] ? ' offline until it has been downloaded once' : ' — ' + HD.failed) +
-      '. Using the standard voice.', 'error', 4200);
-    prefs.engine = 'web'; savePrefs();
+    var offline = navigator.onLine === false && !HD.cached[v];
+    toast('HD voice unavailable \u2014 ' + (offline ? 'it needs one online download first' : HD.failed) +
+      (wasPlaying && WS.ok ? '. Using the standard voice.' : '.'), 'error', 4200);
     renderSettings();
     if (wasPlaying) {
       hdStopAudio();
       HD.active = false;
-      if (R.list.length && WS.ok) { R.state = 'playing'; showSentence(R.idx, true); updateNow(); wsSpeak(0); }
+      if (R.list.length && WS.ok) { R.state = 'playing'; showSentence(R.idx, true); updateNow(); wsSpeak(R.wordAt); }
       else stop();
     }
   }
@@ -718,6 +733,7 @@
     HD.ticker = setInterval(hdTick, 90);
   }
   function hdFill() {
+    if (!HD.worker) return;
     var f = hdPitchFactor(), ls = f / prefs.rate;
     while (HD.reqIdx < R.list.length && HD.reqIdx < R.idx + AHEAD + 1) {
       var i = HD.reqIdx++;
@@ -802,40 +818,44 @@
       toast(q.what === 'cursor' ? 'Nothing to read after the cursor' : 'Nothing to read here', 'info', 2200);
       return;
     }
-    if (q.truncated) toast('Long note — reading the first ' + Math.round(SCAN_LIMIT / 1000) + 'k characters', 'info', 3000);
+    if (q.truncated) toast('Long note \u2014 reading the first ' + Math.round(SCAN_LIMIT / 1000) + 'k characters', 'info', 3000);
     R.list = q.list; R.idx = q.start; R.wordAt = 0;
-    R.active = true; R.doc = ed.state.doc; R.changes = null; R.detached = false;
+    R.active = true; R.doc = ed.state.doc; R.changes = null; R.detached = false; R.lastEdit = 0;
     WS.errors = 0; WS.retried = false;
+    HD.active = false;
     if (useHd()) {
-      if (!hdSupported()) { hdFail('this browser can’t run it'); return; }
-      HD.active = true;
-      hdEnsureCtx(); // inside the tap (iOS)
-      if (HD.ready && HD.workerVoice === prefs.hdVoice) { R.state = 'playing'; hdStart(R.idx); }
-      else {
+      var id = prefs.hdVoice, have = HD.worker && HD.workerVoice === id;
+      if (!hdSupported()) {
+        toast('HD voice isn\u2019t supported in this browser \u2014 using the standard voice', 'info', 3200);
+      } else if (have || HD.cached[id] !== false) {
+        HD.active = true;
+        hdEnsureCtx(); // inside the tap (iOS unlock)
+        if (have && HD.ready) { R.state = 'playing'; hdStart(R.idx); return; }
         R.state = 'loading';
         showSentence(R.idx, true);
-        hdCheckCached(prefs.hdVoice).then(function (ok) {
+        updateNow();
+        var go = function () {
           if (R.state !== 'loading') return;
-          if (!ok && navigator.onLine === false) { hdFail('offline'); return; }
-          if (!ok) { // never auto-download ~66 MB from Play
-            HD.active = false; prefs.engine = 'web'; savePrefs(); renderSettings();
-            toast('HD voice isn’t downloaded yet — using the standard voice (⚙ to download)', 'info', 3800);
-            R.state = 'playing'; updateNow(); wsSpeak(0);
-            return;
-          }
-          hdLoad(prefs.hdVoice, function () {
+          R.state = 'playing'; hdStart(R.idx); setStatus();
+        };
+        if (have) hdLoad(id, go); // join the download / load already running
+        else {
+          hdCheckCached(id).then(function (ok) {
             if (R.state !== 'loading') return;
-            R.state = 'playing'; hdEnsureCtx(); hdStart(R.idx);
-            setStatus();
+            if (ok) { hdLoad(id, go); return; }
+            // Never start a ~66 MB download from Play: read with the standard voice.
+            HD.active = false; renderHd();
+            toast('HD voice isn\u2019t downloaded yet \u2014 using the standard voice (\u2699 \u2192 Download)', 'info', 3800);
+            if (!WS.ok) { stop(); return; }
+            R.state = 'playing'; showSentence(R.idx, true); updateNow(); wsSpeak(0);
           });
-          setStatus();
-        });
+        }
+        return;
+      } else {
+        toast('HD voice isn\u2019t downloaded yet \u2014 using the standard voice (\u2699 \u2192 Download)', 'info', 3800);
       }
-      updateNow();
-      return;
     }
-    if (!WS.ok) { toast('Speech isn’t supported in this browser', 'error', 3000); R.active = false; return; }
-    HD.active = false;
+    if (!WS.ok) { toast('Speech isn\u2019t supported in this browser', 'error', 3000); R.active = false; return; }
     R.state = 'playing';
     showSentence(R.idx, true);
     updateNow();
@@ -899,7 +919,8 @@
   }
 
   function cleanup() {
-    clearTimeout(restartTimer);
+    panelOpen = false;
+    clearTimeout(restartTimer); clearTimeout(hintTimer); hintTimer = null;
     stop();
     hdTerminate();
     if (HD.ctx) { try { HD.ctx.close(); } catch (e) {} HD.ctx = null; }
@@ -925,8 +946,8 @@
     if (!el) return;
     var t;
     if (R.state === 'loading') {
-      t = HD.dl.total && HD.dl.loaded < HD.dl.total ? 'Downloading HD voice… ' + Math.floor(100 * HD.dl.loaded / HD.dl.total) + '%' : 'Loading HD voice…';
-    } else if (R.state === 'playing') t = HD.active && HD.waiting ? 'Preparing audio…' : 'Reading';
+      t = HD.dl.total && HD.dl.loaded < HD.dl.total ? 'Downloading HD voice\u2026 ' + Math.floor(100 * HD.dl.loaded / HD.dl.total) + '%' : 'Loading HD voice\u2026';
+    } else if (R.state === 'playing') t = HD.active && HD.waiting ? 'Preparing audio\u2026' : 'Reading';
     else if (R.state === 'paused') t = 'Paused';
     else t = statusOverride || 'Ready';
     if (R.state !== 'idle') statusOverride = '';
@@ -955,9 +976,9 @@
   }
   function hintText() {
     var ed = Cade.editor, selEmpty = !ed || ed.state.selection.main.empty;
-    if (prefs.scope === 'doc') return 'Press ▶ to read the whole note.';
-    if (prefs.scope === 'sel' && !selEmpty) return 'Press ▶ to read the selection.';
-    return 'Press ▶ to read from the cursor' + (prefs.scope === 'sel' ? ' (or select text first).' : '.');
+    if (prefs.scope === 'doc') return 'Press \u25b6 to read the whole note.';
+    if (prefs.scope === 'sel' && !selEmpty) return 'Press \u25b6 to read the selection.';
+    return 'Press \u25b6 to read from the cursor' + (prefs.scope === 'sel' ? ' (or select text first).' : '.');
   }
 
   var PLAY_ICON = '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M8 5.5v13l11-6.5z" fill="currentColor"/></svg>';
@@ -982,10 +1003,10 @@
     if (!sel) return;
     if (useHd()) {
       sel.innerHTML = HD_VOICES.map(function (v) {
-        return '<option value="' + esc(v.id) + '"' + (v.id === prefs.hdVoice ? ' selected' : '') + '>' + esc(v.label) + (HD.cached[v.id] ? ' ✓' : '') + '</option>';
+        return '<option value="' + esc(v.id) + '"' + (v.id === prefs.hdVoice ? ' selected' : '') + '>' + esc(v.label) + (HD.cached[v.id] ? ' \u2713' : '') + '</option>';
       }).join('');
       sel.disabled = false;
-      sel.title = 'HD neural voices (English). ✓ = downloaded';
+      sel.title = 'HD neural voices (English). \u2713 = downloaded';
       return;
     }
     if (!WS.ok) { sel.innerHTML = '<option>Speech not supported</option>'; sel.disabled = true; return; }
@@ -995,16 +1016,16 @@
     vs.forEach(function (v) { (baseLang(v.lang) === baseLang(USER_LANG) ? mine : other).push(v); });
     other.sort(function (a, b) { return String(a.lang).localeCompare(b.lang) || String(a.name).localeCompare(b.name); });
     function opt(v) {
-      var k = voiceKey(v), label = v.name.replace(/\s*\(([^)]*)\)\s*$/, function (m, inner) { return /online|natural/i.test(inner) ? ' (' + inner + ')' : ' (' + inner + ')'; });
+      var k = voiceKey(v), label = v.name;
       return '<option value="' + esc(k) + '"' + (k === prefs.voice ? ' selected' : '') + '>' +
-        esc(label) + (v.localService === false ? ' ☁' : '') + ' · ' + esc(v.lang) + '</option>';
+        esc(label) + (v.localService === false ? ' \u2601' : '') + ' \u00b7 ' + esc(v.lang) + '</option>';
     }
-    var html = '<option value=""' + (!prefs.voice ? ' selected' : '') + '>Auto — ' + esc(best ? best.name : 'default') + '</option>';
+    var html = '<option value=""' + (!prefs.voice ? ' selected' : '') + '>Auto \u2014 ' + esc(best ? best.name : 'default') + '</option>';
     if (mine.length) html += '<optgroup label="' + esc(langName(baseLang(USER_LANG))) + '">' + mine.map(opt).join('') + '</optgroup>';
     if (other.length) html += '<optgroup label="Other languages">' + other.map(opt).join('') + '</optgroup>';
     sel.innerHTML = html;
     sel.disabled = false;
-    sel.title = '☁ = streams from the internet';
+    sel.title = '\u2601 = streams from the internet';
   }
 
   function renderHdProgress() {
@@ -1015,9 +1036,20 @@
     if (on) {
       var pct = Math.min(100, 100 * HD.dl.loaded / HD.dl.total);
       fill.style.width = pct.toFixed(1) + '%';
-      st.textContent = (HD.cached[HD.workerVoice] ? 'Loading… ' : 'Downloading… ') + Math.floor(pct) + '% · ' + mb(HD.dl.loaded) + ' of ' + mb(HD.dl.total);
+      st.textContent = (HD.cached[HD.workerVoice] ? 'Loading\u2026 ' : 'Downloading\u2026 ') + Math.floor(pct) + '% \u00b7 ' + mb(HD.dl.loaded) + ' of ' + mb(HD.dl.total);
     }
     setStatus();
+  }
+
+  // Look up which HD voices are already downloaded (cheap Cache Storage reads).
+  var hdChecking = false;
+  function hdCheckAll() {
+    if (hdChecking) return;
+    hdChecking = true;
+    Promise.all(HD_VOICES.map(function (v) { return hdCheckCached(v.id); })).then(function () {
+      hdChecking = false;
+      if (useHd()) { renderHd(); renderVoices(); }
+    }, function () { hdChecking = false; });
   }
 
   function renderHd() {
@@ -1030,29 +1062,31 @@
     var cached = HD.cached[v.id];
     var anyCached = Object.keys(HD.cached).some(function (k) { return HD.cached[k]; });
     var mine = HD.workerVoice === v.id;
+    var size = v.size + (anyCached ? 0 : HD_RUNTIME_WIRE);
     dl.hidden = true; cancel.hidden = true; rm.hidden = !anyCached;
+    box.querySelector('.tts-prog').hidden = true;
+    st.classList.remove('err');
     if (!hdSupported()) {
       st.textContent = 'Not available in this browser (needs WebAssembly, module workers & Web Audio).';
     } else if (mine && HD.loading) {
       cancel.hidden = false; rm.hidden = true;
-      if (!HD.dl.total) st.textContent = cached ? 'Loading voice…' : 'Starting download…';
+      st.textContent = cached ? 'Loading voice\u2026' : 'Starting download\u2026';
       renderHdProgress();
-      return;
     } else if (mine && HD.ready) {
-      st.textContent = 'Ready — runs on this device, works offline.';
+      st.textContent = 'Ready \u2014 runs on this device, works offline.';
+    } else if (HD.failed) {
+      st.textContent = 'Couldn\u2019t load the HD voice (' + HD.failed + ').';
+      st.classList.add('err');
+      dl.hidden = false; dl.textContent = cached ? 'Retry' : 'Retry download (' + mb(size) + ')';
     } else if (cached === true) {
-      st.textContent = 'Downloaded — loads when you press ▶.';
+      st.textContent = 'Downloaded \u2014 loads when you press \u25b6.';
     } else if (cached === false) {
-      var first = !anyCached;
-      st.textContent = 'Neural voice that runs on this device. One-time download ≈ ' +
-        mb(v.size + (first ? HD_RUNTIME_WIRE : 0)) + ', then works offline.';
-      dl.hidden = false;
-      dl.textContent = 'Download (' + mb(v.size + (first ? HD_RUNTIME_WIRE : 0)) + ')';
+      st.textContent = 'A natural-sounding neural voice that runs on this device. One-time download, then it works offline.';
+      dl.hidden = false; dl.textContent = 'Download (' + mb(size) + ')';
     } else {
-      st.textContent = 'Checking…';
-      hdCheckCached(v.id).then(function () { if (useHd()) { renderHd(); renderVoices(); } });
+      st.textContent = 'Checking\u2026';
+      hdCheckAll();
     }
-    box.querySelector('.tts-prog').hidden = true;
   }
 
   function renderSettings() {
@@ -1072,7 +1106,7 @@
       scopes[j].classList.toggle('on', son); scopes[j].setAttribute('aria-checked', son ? 'true' : 'false');
     }
     p.querySelector('.tts-rate').value = prefs.rate;
-    p.querySelector('.tts-rate-v').textContent = prefs.rate.toFixed(2).replace(/0$/, '') + '×';
+    p.querySelector('.tts-rate-v').textContent = prefs.rate.toFixed(2).replace(/0$/, '') + '\u00d7';
     p.querySelector('.tts-pitch').value = prefs.pitch;
     p.querySelector('.tts-pitch-v').textContent = prefs.pitch.toFixed(2).replace(/0$/, '');
     renderVoices();
@@ -1111,8 +1145,8 @@
     else if (act === 'next') jump(R.idx + 1);
     else if (act === 'settings') { prefs.settings = !prefs.settings; savePrefs(); renderSettings(); }
     else if (act === 'hd-dl') {
-      if (navigator.onLine === false) { toast('You’re offline — connect to download the HD voice', 'error', 3000); return; }
-      hdLoad(prefs.hdVoice, function () { toast('HD voice ready — works offline now', 'success', 2600); renderVoices(); });
+      if (navigator.onLine === false) { toast('You\u2019re offline \u2014 connect to download the HD voice', 'error', 3000); return; }
+      hdLoad(prefs.hdVoice, function () { toast('HD voice ready \u2014 works offline now', 'success', 2600); renderVoices(); });
     } else if (act === 'hd-cancel') {
       hdTerminate(); if (R.state === 'loading') stop();
       renderHd(); toast('Download cancelled', 'info', 1600);
@@ -1123,7 +1157,7 @@
         HD.cached = {};
         toast('HD voice data removed', 'success', 2000);
         renderHd(); renderVoices();
-      }, function () { toast('Couldn’t remove it', 'error', 2000); });
+      }, function () { toast('Couldn\u2019t remove it', 'error', 2000); });
     }
   }
 
@@ -1135,7 +1169,7 @@
     if (prefs.engine === 'web') hdTerminate(); // free ~150 MB of model memory
     savePrefs();
     renderSettings();
-    if (wasPlaying) setStatus('Engine changed — press ▶');
+    if (wasPlaying) setStatus('Engine changed \u2014 press \u25b6');
   }
 
   function onChange(e) {
@@ -1147,7 +1181,7 @@
           var playing = R.state !== 'idle';
           if (playing) stop();
           hdTerminate();
-          if (playing) setStatus('Voice changed — press ▶');
+          if (playing) setStatus('Voice changed \u2014 press \u25b6');
         }
         renderHd();
       } else {
@@ -1160,7 +1194,7 @@
     var t = e.target;
     if (t.classList.contains('tts-rate')) {
       prefs.rate = clamp(+t.value || 1, 0.5, 2);
-      q('.tts-rate-v').textContent = prefs.rate.toFixed(2).replace(/0$/, '') + '×';
+      q('.tts-rate-v').textContent = prefs.rate.toFixed(2).replace(/0$/, '') + '\u00d7';
       savePrefs(); restartSoon();
     } else if (t.classList.contains('tts-pitch')) {
       prefs.pitch = clamp(+t.value || 1, 0.5, 2);
@@ -1171,15 +1205,15 @@
   function onKey(e) {
     var t = e.target, tag = (t.tagName || '').toLowerCase();
     var field = tag === 'select' || tag === 'input' || tag === 'textarea';
-    if (e.key === 'Escape') {
+    if (e.key === 'Escape' && tag !== 'select') {
       e.preventDefault(); e.stopPropagation();
       if (R.state !== 'idle') { stop(); setStatus('Stopped'); } else close();
       return;
     }
     if (field) { e.stopPropagation(); return; }
-    if ((e.key === ' ' || e.key === 'k') && tag !== 'button') { e.preventDefault(); playPause(); }
-    else if (e.key === 'ArrowLeft' || e.key === 'j') { e.preventDefault(); jump(R.idx - 1); }
-    else if (e.key === 'ArrowRight' || e.key === 'l') { e.preventDefault(); jump(R.idx + 1); }
+    if (e.key === ' ' && tag !== 'button') { e.preventDefault(); playPause(); }
+    else if (e.key === 'ArrowLeft') { e.preventDefault(); jump(R.idx - 1); }
+    else if (e.key === 'ArrowRight') { e.preventDefault(); jump(R.idx + 1); }
     else return;
     e.stopPropagation();
   }
@@ -1212,16 +1246,16 @@
       return;
     }
     loadPrefs();
-    var p = Cade.mkPanel(PANEL_ID, '🔊 Read Aloud',
+    var p = Cade.mkPanel(PANEL_ID, '\ud83d\udd0a Read Aloud',
       '<div class="tts-now">' +
         '<div class="tts-line"><span class="tts-status" aria-live="polite">Ready</span><span class="tts-count"></span></div>' +
         '<div class="tts-text hint"></div>' +
         '<div class="tts-bar off" title="Jump to a sentence"><div class="tts-bar-fill"></div></div>' +
       '</div>' +
       '<div class="tts-ctrls">' +
-        '<button class="tts-btn" data-act="prev" title="Previous sentence (←)" aria-label="Previous sentence">' + PREV_ICON + '</button>' +
+        '<button class="tts-btn" data-act="prev" title="Previous sentence (\u2190)" aria-label="Previous sentence">' + PREV_ICON + '</button>' +
         '<button class="tts-btn tts-play" data-act="play" title="Read aloud (Space)" aria-label="Play">' + PLAY_ICON + '</button>' +
-        '<button class="tts-btn" data-act="next" title="Next sentence (→)" aria-label="Next sentence">' + NEXT_ICON + '</button>' +
+        '<button class="tts-btn" data-act="next" title="Next sentence (\u2192)" aria-label="Next sentence">' + NEXT_ICON + '</button>' +
         '<button class="tts-btn" data-act="stop" title="Stop (Esc)" aria-label="Stop">' + STOP_ICON + '</button>' +
         '<span class="tts-spacer"></span>' +
         '<button class="tts-btn tts-gear" data-act="settings" title="Voice, speed &amp; pitch" aria-label="Settings" aria-expanded="false">' + GEAR_ICON + '</button>' +
@@ -1251,6 +1285,7 @@
         '<label class="tts-row"><span class="tts-lbl">Pitch</span><input type="range" class="tts-pitch" min="0.5" max="2" step="0.05" aria-label="Pitch"><output class="tts-val tts-pitch-v"></output></label>' +
       '</div>');
     p._onClose = cleanup;
+    panelOpen = true;
     p.addEventListener('click', onClick);
     p.addEventListener('change', onChange);
     p.addEventListener('input', onInput);
@@ -1260,21 +1295,24 @@
     p.addEventListener('mousedown', function (e) {
       if (e.target.closest && e.target.closest('.tts-btn, .tts-sc, .tts-eng, .tts-bar')) e.preventDefault();
     });
-    // Sit like a mini player near the bottom-right corner.
-    try {
-      var h = p.offsetHeight;
-      p.style.top = Math.max(56, window.innerHeight - h - 76) + 'px';
-    } catch (e) {}
     watchVoices();
     renderSettings();
     updateNow();
-    if (!WS.ok && !hdSupported()) setStatus('Speech isn’t supported here');
+    // Sit like a mini player near the bottom-right corner (re-checked once the
+    // stylesheet has surely applied, since the first open loads it).
+    var place = function () {
+      if (!p.isConnected || p.style.left) return; // dragged: leave it alone
+      p.style.top = Math.max(56, window.innerHeight - p.offsetHeight - 76) + 'px';
+    };
+    place();
+    setTimeout(place, 200);
+    if (!WS.ok && !hdSupported()) setStatus('Speech isn\u2019t supported here');
   }
 
   Cade.registerWidget({
     name: 'Read Aloud',
-    description: 'Listen to your note — text-to-speech with live highlighting',
-    icon: '🔊',
+    description: 'Listen to your note \u2014 text-to-speech with live highlighting',
+    icon: '\ud83d\udd0a',
     tags: 'tts,text to speech,speech,read aloud,voice,speak,listen,audio,narrate,accessibility',
     open: open,
     // internals for offline tests (not used by the app)

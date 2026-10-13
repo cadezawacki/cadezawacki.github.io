@@ -106,3 +106,7 @@
   .qr-ecl { width: 38px; padding: 6px 0; }
   .qr-col input[type="color"] { width: 34px; height: 30px; }
 }
+@media (pointer: coarse) {
+  /* ≥16px stops iOS zooming the page when a field is focused. */
+  .qr-text, .qr-fld input, .qr-fld select, .qr-fld textarea { font-size: 16px; }
+}

@@ -149,7 +149,7 @@
   }
 
   // ---- text -> phoneme ids --------------------------------------------------
-  var PUNCT_RE = /(\s*[;:,.!?¡¿—…"«»“”(){}[\]]+\s*)+/g;
+  var PUNCT_RE = /(\s*[;:,.!?\u00a1\u00bf\u2014\u2026"\u00ab\u00bb\u201c\u201d(){}[\]]+\s*)+/g;
 
   // Punctuation is split off before phonemizing (see textToPhonemes), so
   // anything where "." or "," / ":" is NOT a clause break must be rewritten
@@ -159,10 +159,10 @@
   function digitsSpaced(d) { return d.split('').join(' '); }
   function normalizeText(t) {
     return String(t)
-      .replace(/[‘’ʼ]/g, "'")
-      .replace(/[“”«»]/g, '"')
-      .replace(/\s*[–—]\s*/g, ', ')
-      .replace(/…/g, '...')
+      .replace(/[\u2018\u2019\u02bc]/g, "'")
+      .replace(/[\u201c\u201d\u00ab\u00bb]/g, '"')
+      .replace(/\s*[\u2013\u2014]\s*/g, ', ')
+      .replace(/\u2026/g, '...')
       .replace(/&/g, ' and ')
       .replace(/\b(Dr|Mr|Mrs|Ms|Prof|Jr|Sr|Mt|Gen|Capt|Lt|Sgt)\.(?=\s|$)/g, function (m, a) { return ABBR[a]; })
       .replace(/\bSt\.(?=\s+[A-Z])/g, 'Saint').replace(/\bSt\.(?=\s|$)/g, 'Street')
@@ -192,8 +192,8 @@
     var out = '';
     for (var i = 0; i < p.length; i++) {
       var c = p[i];
-      if (c === '…') c = '.';
-      else if (c === '"' || c === '“' || c === '”' || c === '«' || c === '»' ||
+      if (c === '\u2026') c = '.';
+      else if (c === '"' || c === '\u201c' || c === '\u201d' || c === '\u00ab' || c === '\u00bb' ||
         c === '(' || c === ')' || c === '[' || c === ']' || c === '{' || c === '}') c = ' ';
       else if (/\s/.test(c)) c = ' ';
       if (c === ' ' ? out.slice(-1) !== ' ' : idMap[c]) out += c;
@@ -216,7 +216,7 @@
     for (var i = 0; i < pieces.length; i++) {
       var pc = pieces[i];
       if (pc.p) { out += cleanPunct(pc.s); continue; }
-      if (!/[A-Za-z0-9À-ɏ]/.test(pc.s)) { out += ' '; continue; }
+      if (!/[A-Za-z0-9\u00c0-\u024f]/.test(pc.s)) { out += ' '; continue; }
       var lines = await phonemize(pc.s, lang);
       out += lines.join(' ');
     }

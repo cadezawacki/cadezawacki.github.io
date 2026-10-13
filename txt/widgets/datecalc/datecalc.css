@@ -1,0 +1,66 @@
+/* Date Calculator widget styles. */
+#datecalc-panel { top: 56px; right: 12px; width: 360px; max-width: calc(100vw - 24px); max-height: calc(100vh - 80px); }
+#datecalc-panel .cade-panel-body { padding: 8px 10px 10px; display: flex; flex-direction: column; gap: 7px; overflow: hidden; flex: 1; min-height: 0; }
+
+.dc-tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--border); flex: 0 0 auto; }
+.dc-tab {
+  flex: 1; font: inherit; font-size: var(--text-xs); padding: 5px 4px 6px; cursor: pointer; white-space: nowrap;
+  background: transparent; border: 0; border-bottom: 2px solid transparent; color: var(--text-muted); margin-bottom: -1px;
+}
+.dc-tab:hover { color: var(--text); }
+.dc-tab.on { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+
+.dc-sec { display: flex; flex-direction: column; gap: 6px; flex: 0 0 auto; }
+.dc-sec[hidden] { display: none; }
+.dc-field { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; align-items: center; gap: 6px; font-size: var(--text-xs); color: var(--text-muted); }
+.dc-date, .dc-n, .dc-op, .dc-unit, .dc-fmt {
+  box-sizing: border-box; min-width: 0; height: 32px; padding: 0 8px; border-radius: 6px; font: inherit; font-size: var(--text-sm);
+  border: 1px solid var(--border); background: var(--bg, var(--surface)); color: var(--text); color-scheme: light;
+}
+.dc-date { width: 100%; font-family: var(--font-mono, ui-monospace, monospace); }
+.dc-date:focus, .dc-n:focus, .dc-op:focus, .dc-unit:focus, .dc-fmt:focus { border-color: var(--accent); outline: none; }
+/* native date-picker icon + popup follow the app theme, not the OS one */
+[data-theme="dark"] .dc-date, [data-theme="dark"] .dc-n, [data-theme="dark"] .dc-op, [data-theme="dark"] .dc-unit, [data-theme="dark"] .dc-fmt { color-scheme: dark; }
+.dc-today {
+  font: inherit; font-size: var(--text-xs); height: 32px; padding: 0 9px; border-radius: 6px; cursor: pointer;
+  border: 1px solid var(--border); background: var(--surface-2, transparent); color: var(--text-muted);
+}
+.dc-today:hover { color: var(--accent); border-color: var(--accent); }
+.dc-addrow { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 6px; }
+.dc-n { width: 100%; font-family: var(--font-mono, ui-monospace, monospace); }
+.dc-op, .dc-unit, .dc-fmt { cursor: pointer; }
+.dc-fmt { height: 26px; font-size: var(--text-xs); margin-left: 6px; }
+.dc-op option, .dc-unit option, .dc-fmt option { background: var(--surface); color: var(--text); }
+.dc-check { display: flex; align-items: center; gap: 6px; font-size: var(--text-xs); color: var(--text-muted); cursor: pointer; }
+
+.dc-out { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; border-top: 1px solid var(--border); padding-top: 6px; }
+.dc-note { font-size: var(--text-xs); color: var(--text-faint); margin: 0 2px 4px; }
+.dc-empty { font-size: var(--text-sm); color: var(--text-muted); padding: 10px 2px; }
+.dc-row {
+  display: flex; justify-content: space-between; align-items: baseline; gap: 10px; padding: 4px 6px; border-radius: 5px;
+  cursor: copy; font-size: var(--text-sm);
+}
+.dc-row:hover { background: var(--surface-hover, rgba(127,127,127,0.12)); }
+.dc-k { color: var(--text-muted); font-size: var(--text-xs); white-space: nowrap; }
+.dc-v { color: var(--text); text-align: right; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.dc-row.main .dc-v { font-weight: 700; font-size: 1.1em; color: var(--accent); }
+
+.dc-acts { display: flex; gap: 4px; align-items: center; flex: 0 0 auto; }
+.dc-btn {
+  font: inherit; font-size: var(--text-xs); padding: 4px 10px; border-radius: 6px; cursor: pointer; white-space: nowrap;
+  border: 1px solid var(--border); background: var(--surface-2, transparent); color: var(--text);
+}
+.dc-btn:hover { background: var(--surface-hover, rgba(127,127,127,0.15)); }
+.dc-btn.primary { border-color: var(--accent); color: var(--accent); }
+.dc-hint { margin-left: auto; font-size: var(--text-xs); color: var(--text-faint); }
+
+@media (max-width: 560px) {
+  #datecalc-panel { left: 6px !important; right: 6px; width: auto; max-width: none; top: 48px; }
+}
+@media (pointer: coarse) {
+  .dc-date, .dc-n, .dc-op, .dc-unit, .dc-today { height: 40px; }
+  .dc-tab { padding: 9px 4px 10px; }
+  .dc-row { padding: 7px 6px; }
+  .dc-btn { padding: 8px 12px; }
+  .dc-hint { display: none; }
+}

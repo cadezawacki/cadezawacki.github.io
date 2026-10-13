@@ -1,0 +1,94 @@
+/* Read Aloud widget: a compact mini player + the in-editor reading highlight. */
+#tts-panel { top: 56px; right: 12px; width: 300px; max-width: calc(100vw - 24px); }
+#tts-panel .cade-panel-body { padding: 8px 10px 10px; display: flex; flex-direction: column; gap: 7px; }
+
+/* ---- now reading ---- */
+.tts-now { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.tts-line { display: flex; align-items: baseline; gap: 8px; font-size: var(--text-xs); color: var(--text-muted); }
+.tts-status { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tts-status.busy::after { content: ''; display: inline-block; width: 6px; height: 6px; margin-left: 6px; border-radius: 50%; background: var(--accent); vertical-align: middle; animation: tts-pulse 1s ease-in-out infinite; }
+@keyframes tts-pulse { 0%, 100% { opacity: 0.25; } 50% { opacity: 1; } }
+.tts-count { flex: 0 0 auto; font-variant-numeric: tabular-nums; color: var(--text-faint); }
+.tts-text {
+  font-size: var(--text-sm); line-height: 1.35; color: var(--text);
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  min-height: calc(2 * 1.35em); overflow-wrap: anywhere;
+}
+.tts-text.hint { color: var(--text-faint); }
+.tts-bar { position: relative; height: 4px; border-radius: 2px; background: var(--surface-hover, rgba(127,127,127,0.18)); cursor: pointer; overflow: hidden; }
+.tts-bar::before { content: ''; position: absolute; left: 0; right: 0; top: -6px; bottom: -6px; } /* bigger hit area */
+.tts-bar.off { cursor: default; }
+.tts-bar-fill { height: 100%; width: 0; background: var(--accent); border-radius: 2px; transition: width 0.25s ease; }
+
+/* ---- transport ---- */
+.tts-ctrls { display: flex; align-items: center; gap: 4px; }
+.tts-spacer { flex: 1; }
+.tts-btn {
+  display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0;
+  border: 1px solid transparent; border-radius: 8px; background: transparent; color: var(--text); cursor: pointer;
+}
+.tts-btn:hover:not([disabled]) { background: var(--surface-hover, rgba(127,127,127,0.15)); }
+.tts-btn[disabled] { opacity: 0.35; cursor: default; }
+.tts-btn:focus-visible, .tts-sc:focus-visible, .tts-eng:focus-visible, .tts-sbtn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.tts-play { width: 40px; height: 40px; border-radius: 50%; background: var(--accent); color: #fff; }
+.tts-play:hover:not([disabled]) { background: var(--accent); filter: brightness(1.1); }
+.tts-gear.on { color: var(--accent); border-color: var(--border); }
+
+/* ---- segmented controls (scope / engine) ---- */
+.tts-seg { display: flex; border: 1px solid var(--border); border-radius: 7px; overflow: hidden; min-width: 0; }
+.tts-seg > button {
+  flex: 1 1 0; min-width: 0; font: inherit; font-size: var(--text-xs); padding: 4px 6px; cursor: pointer;
+  border: 0; border-left: 1px solid var(--border); background: transparent; color: var(--text-muted);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.tts-seg > button:first-child { border-left: 0; }
+.tts-seg > button:hover { color: var(--text); background: var(--surface-hover, rgba(127,127,127,0.12)); }
+.tts-seg > button.on { color: var(--accent); background: var(--accent-bg, rgba(15,149,152,0.12)); font-weight: 600; }
+
+/* ---- settings ---- */
+.tts-settings { display: flex; flex-direction: column; gap: 7px; border-top: 1px solid var(--border); padding-top: 8px; }
+.tts-settings[hidden], .tts-hd[hidden], .tts-prog[hidden], .tts-sbtn[hidden] { display: none; }
+.tts-row { display: flex; align-items: center; gap: 8px; font-size: var(--text-xs); color: var(--text-muted); min-width: 0; }
+.tts-row > .tts-seg { flex: 1; }
+.tts-lbl { flex: 0 0 44px; }
+.tts-voice {
+  flex: 1; min-width: 0; font: inherit; font-size: var(--text-xs); padding: 4px 6px; border-radius: 6px;
+  border: 1px solid var(--border); background: var(--bg, var(--surface)); color: var(--text);
+}
+.tts-voice:focus { outline: none; border-color: var(--accent); }
+.tts-row input[type="range"] { flex: 1; min-width: 0; accent-color: var(--accent); margin: 0; }
+.tts-val { flex: 0 0 38px; text-align: right; font-variant-numeric: tabular-nums; color: var(--text); }
+
+.tts-hd { display: flex; flex-direction: column; gap: 6px; padding: 7px 8px; border-radius: 7px; background: var(--surface-2, rgba(127,127,127,0.06)); border: 1px solid var(--border); }
+.tts-hd-status { font-size: var(--text-xs); color: var(--text-muted); line-height: 1.35; }
+.tts-hd-status.err { color: #ef4444; }
+.tts-prog { height: 6px; border-radius: 3px; background: var(--surface-hover, rgba(127,127,127,0.18)); overflow: hidden; }
+.tts-prog-fill { height: 100%; width: 0; background: var(--accent); transition: width 0.2s linear; }
+.tts-hd-acts { display: flex; gap: 6px; flex-wrap: wrap; }
+.tts-hd-acts:empty { display: none; }
+.tts-sbtn {
+  font: inherit; font-size: var(--text-xs); padding: 4px 10px; border-radius: 6px; cursor: pointer;
+  border: 1px solid var(--border); background: var(--surface, transparent); color: var(--text);
+}
+.tts-sbtn:hover { background: var(--surface-hover, rgba(127,127,127,0.15)); }
+.tts-sbtn.primary { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+
+/* ---- the reading highlight inside the editor ---- */
+.cm-tts-sent { background: rgba(15, 149, 152, 0.16); background: color-mix(in srgb, var(--accent) 18%, transparent); border-radius: 2px; }
+.cm-tts-word { background: rgba(15, 149, 152, 0.34); background: color-mix(in srgb, var(--accent) 38%, transparent); border-radius: 2px; box-shadow: 0 1px 0 var(--accent); }
+
+@media (max-width: 560px) {
+  #tts-panel { left: 12px !important; right: 12px; width: auto; max-width: none; }
+}
+@media (pointer: coarse) {
+  .tts-btn { width: 40px; height: 40px; }
+  .tts-play { width: 48px; height: 48px; }
+  .tts-seg > button { padding: 8px 6px; }
+  .tts-voice { padding: 8px 6px; font-size: 16px; } /* 16px: no iOS zoom-on-focus jump */
+  .tts-sbtn { padding: 8px 12px; }
+  .tts-row input[type="range"] { height: 28px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tts-bar-fill, .tts-prog-fill { transition: none; }
+  .tts-status.busy::after { animation: none; }
+}

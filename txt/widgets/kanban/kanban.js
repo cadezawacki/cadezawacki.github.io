@@ -766,7 +766,9 @@
     ed.dispatch({ changes: res.changes, userEvent: 'input.kanban' });
     if (opts.haptic) Cade.haptic(8);
     if (opts.toast) toast(opts.toast, 'success', 1600);
-    refresh({ force: true, reparse: res.pickLine != null, pickLine: res.pickLine, focus: (hadFocus || opts.focus) && res.focus ? res.focus : null });
+    // Keep keyboard users on the card they acted on; never pull focus from the editor.
+    var wantFocus = opts.focus === false ? false : hadFocus || opts.focus;
+    refresh({ force: true, reparse: res.pickLine != null, pickLine: res.pickLine, focus: wantFocus && res.focus ? res.focus : null });
     return res;
   }
 
@@ -1042,6 +1044,7 @@
     body.innerHTML = '<textarea class="kb-input kb-edit-input" rows="1" aria-label="Card text"></textarea>' +
       '<div class="kb-edit-hint">Enter saves · Shift+Enter new line · Esc cancels</div>';
     el.classList.add('kb-editing');
+    S.html = ''; // the DOM no longer matches the cached render
     var ta = body.querySelector('textarea');
     ta.value = val;
     S.editing = { kind: 'card', col: ref.col, ci: ref.ci, orig: val, el: ta };
@@ -1080,6 +1083,7 @@
     inp.setAttribute('aria-label', 'Column name');
     inp.value = raw;
     nameEl.parentNode.replaceChild(inp, nameEl);
+    S.html = '';
     S.editing = { kind: 'rename', col: i, orig: raw, el: inp };
     inp.focus();
     inp.select();

@@ -467,6 +467,7 @@
     description: 'Daily vocabulary word plus 340 writing prompts — fiction, journaling, poetry, worldbuilding, constraints…',
     icon: '✍',
     tags: 'prompt,prompts,writing prompt,word of the day,wotd,vocabulary,vocab,word,inspiration,idea,journal,journaling,poetry,fiction,story,worldbuilding,dialogue,six-word,micro,creative,writer,block,sprint',
-    open: open
+    open: open,
+    _t: { load: load, wordFor: function (off) { return data ? wordFor(off) : null; }, insertBlock: insertBlock }  // test hooks
   });
 })();
