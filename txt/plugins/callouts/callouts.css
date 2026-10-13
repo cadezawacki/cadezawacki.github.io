@@ -1,0 +1,93 @@
+/* Callouts plugin. Layered over the core's own .cm-callout line tint (#60):
+   the selectors below are more specific, so the box, colours and spacing here
+   win while the plugin is on. --co is the callout colour; titles mix it with
+   --text so they stay readable in both themes. */
+.cm-editor .cm-line.cm-co {
+  --co: #3b82f6;
+  border-left: 3px solid var(--co);
+  background: color-mix(in srgb, var(--co) 8%, transparent);
+  padding-left: 10px;
+  padding-right: 8px;
+}
+.cm-editor .cm-line.cm-co.cm-activeLine { background: color-mix(in srgb, var(--co) 14%, transparent); }
+/* Long callouts beyond the core's colour lookback get its plain-quote style
+   (italic, muted) — undo that inside a callout. */
+.cm-editor .cm-line.cm-co.cm-md-quote { font-style: normal; color: inherit; }
+.cm-editor .cm-line.cm-co-head { padding-top: 3px; border-top-right-radius: 6px; }
+.cm-editor .cm-line.cm-co-end { padding-bottom: 3px; border-bottom-right-radius: 6px; }
+
+/* type colours (after the base rule: same specificity, later wins) */
+.cm-editor .cm-line.cm-co-t-note,
+.cm-editor .cm-line.cm-co-t-info,
+.cm-editor .cm-line.cm-co-t-todo { --co: #3b82f6; }
+.cm-editor .cm-line.cm-co-t-abstract { --co: #06b6d4; }
+.cm-editor .cm-line.cm-co-t-tip { --co: #14b8a6; }
+.cm-editor .cm-line.cm-co-t-success { --co: #22c55e; }
+.cm-editor .cm-line.cm-co-t-important { --co: #8b5cf6; }
+.cm-editor .cm-line.cm-co-t-question { --co: #eab308; }
+.cm-editor .cm-line.cm-co-t-warning { --co: #f59e0b; }
+.cm-editor .cm-line.cm-co-t-failure,
+.cm-editor .cm-line.cm-co-t-danger { --co: #ef4444; }
+.cm-editor .cm-line.cm-co-t-bug { --co: #e11d48; }
+.cm-editor .cm-line.cm-co-t-example { --co: #a855f7; }
+.cm-editor .cm-line.cm-co-t-quote { --co: #94a3b8; }
+
+[data-theme="dark"] .cm-editor .cm-line.cm-co { background: color-mix(in srgb, var(--co) 11%, transparent); }
+[data-theme="dark"] .cm-editor .cm-line.cm-co.cm-activeLine { background: color-mix(in srgb, var(--co) 17%, transparent); }
+
+/* Markers: hidden, revealed (faint) on the caret's line so they stay editable. */
+.cm-co-gt,
+.cm-co-mk { display: none; }
+.cm-activeLine .cm-co-gt,
+.cm-activeLine .cm-co-mk { display: inline; color: var(--text-faint); }
+.cm-activeLine .cm-co-autolabel { display: none; }
+/* the ">" of an empty body line: invisible but still giving the line height */
+.cm-co-gtb { visibility: hidden; }
+.cm-activeLine .cm-co-gtb { visibility: visible; color: var(--text-faint); }
+
+/* Header: [chevron] icon Title */
+.cm-co-hw {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3em;
+  margin-right: 0.4em;
+  vertical-align: -0.125em;
+  color: var(--co);
+  -webkit-user-select: none;
+  user-select: none;
+}
+.cm-co-ic,
+.cm-co-chev { display: inline-flex; }
+.cm-co-ic svg,
+.cm-co-chev svg { width: 1em; height: 1em; display: block; }
+.cm-co-chev {
+  cursor: pointer;
+  border-radius: 3px;
+  color: var(--text-faint);
+  transition: transform 120ms ease, color 120ms ease;
+}
+.cm-co-chev:hover { color: var(--co); background: color-mix(in srgb, var(--co) 16%, transparent); }
+.cm-co-chev-closed { transform: rotate(-90deg); color: var(--co); }
+.cm-co-title,
+.cm-co-autolabel {
+  font-weight: 650;
+  color: color-mix(in srgb, var(--co) 70%, var(--text));
+}
+.cm-co-pill {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 0 7px;
+  border: 1px dashed color-mix(in srgb, var(--co) 55%, transparent);
+  border-radius: 999px;
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  color: var(--text-muted);
+  cursor: pointer;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.cm-co-pill:hover { color: var(--co); }
+@media (pointer: coarse) {
+  /* a finger-sized hit area without changing the line's layout */
+  .cm-co-chev { padding: 5px; margin: -5px -2px -5px -5px; }
+}

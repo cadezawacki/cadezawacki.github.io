@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "version": "2026.10.12-1",
+  "version": "2026.10.13-1",
   "modules": [
     {
       "id": "crawler",
@@ -766,6 +766,471 @@
         "widgets/arg/views/crafter.js",
         "widgets/arg/views/crafter.css"
       ]
+    },
+    {
+      "id": "calc",
+      "type": "widget",
+      "name": "Calculator",
+      "description": "Scratch calculator with units, %, variables & history — insert results",
+      "icon": "🧮",
+      "tags": "calc,calculator,math,compute,arithmetic,percent,units,convert,expression",
+      "entry": "widgets/calc/calc.js",
+      "css": "widgets/calc/calc.css",
+      "precache": [
+        "widgets/calc/calc-engine.js"
+      ]
+    },
+    {
+      "id": "units",
+      "type": "widget",
+      "name": "Unit Converter",
+      "description": "Convert length, weight, volume, cooking, temperature, speed, data, fuel & more",
+      "icon": "📐",
+      "tags": "unit,units,convert,converter,conversion,metric,imperial,length,weight,mass,volume,cooking,cups,temperature,celsius,fahrenheit,speed,data,bytes,pressure,energy,power,angle,fuel,mpg",
+      "entry": "widgets/units/units.js",
+      "css": "widgets/units/units.css",
+      "precache": [
+        "widgets/calc/calc-engine.js"
+      ]
+    },
+    {
+      "id": "datecalc",
+      "type": "widget",
+      "name": "Date Calculator",
+      "description": "Days between dates, business days, add/subtract days or months, week numbers",
+      "icon": "📅",
+      "tags": "date,dates,calculator,days,between,difference,duration,business days,workdays,add days,weeks,months,iso week,week number,day of year,countdown,unix timestamp",
+      "entry": "widgets/datecalc/datecalc.js",
+      "css": "widgets/datecalc/datecalc.css"
+    },
+    {
+      "id": "inline-math",
+      "type": "plugin",
+      "name": "Inline math (2+2= → ghost result)",
+      "description": "A line ending in = shows its answer as faint ghost text — Tab or click inserts it. Handles %, units (5 km in mi =) and variables (rate = 0.07)",
+      "entry": "plugins/inline-math/inline-math.js",
+      "css": "plugins/inline-math/inline-math.css",
+      "precache": [
+        "widgets/calc/calc-engine.js"
+      ],
+      "settingKey": "plugins.inline-math",
+      "section": "Editor",
+      "default": true
+    },
+    {
+      "id": "pack-code",
+      "type": "script-pack",
+      "name": "Code Pack",
+      "description": "Minify, obfuscate and beautify code: JavaScript, Python, HTML, CSS, JSON and XML",
+      "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='4 14 10 14 10 20'/><polyline points='20 10 14 10 14 4'/><line x1='14' y1='10' x2='21' y2='3'/><line x1='3' y1='21' x2='10' y2='14'/></svg>",
+      "tags": "minify,minifier,compress,uglify,terser,obfuscate,obfuscator,beautify,prettify,js,javascript,css,html,python,py,json,xml,code",
+      "entry": "scripts/pack-code/pack-code.js",
+      "precache": [
+        "scripts/pack-code/pack-code-lib.js"
+      ],
+      "scripts": [
+        {
+          "name": "Minify Code",
+          "description": "Auto-detect language and minify (JS, CSS, HTML, Python, JSON, XML)",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='4 14 10 14 10 20'/><polyline points='20 10 14 10 14 4'/><line x1='14' y1='10' x2='21' y2='3'/><line x1='3' y1='21' x2='10' y2='14'/></svg>",
+          "tags": "minify,minifier,compress,code,auto,detect,uglify,terser,js,javascript,css,html,python,py,json,xml"
+        },
+        {
+          "name": "Minify JS",
+          "description": "Minify JavaScript with terser (compress + mangle)",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='3' y='3' width='18' height='18' rx='2'/><path d='M8 10v5a1.5 1.5 0 0 1-3 0'/><path d='M13 15a1.5 1.5 0 0 0 3 0c0-2-3-1.5-3-3.5a1.5 1.5 0 0 1 3 0'/></svg>",
+          "tags": "minify,javascript,js,terser,compress,uglify,mangle"
+        },
+        {
+          "name": "Minify CSS",
+          "description": "Minify CSS: strip comments/whitespace, shorten colours, drop 0 units",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M4 3h16l-1.5 16L12 21l-6.5-2L4 3z'/><path d='M8 8h8l-.5 5L12 14l-3.5-1'/></svg>",
+          "tags": "minify,css,compress,stylesheet,shorten"
+        },
+        {
+          "name": "Minify HTML",
+          "description": "Minify HTML: collapse whitespace, strip comments, minify inline JS/CSS",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='9 8 5 12 9 16'/><polyline points='15 8 19 12 15 16'/></svg>",
+          "tags": "minify,html,compress,markup,whitespace"
+        },
+        {
+          "name": "Minify Python",
+          "description": "Minify Python: drop comments/docstrings/blank lines, 1-space indent",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M12 3c-3 0-5 1-5 3v3h5'/><path d='M7 9H5c-2 0-3 1.5-3 3.5S3 16 5 16h2'/><path d='M12 21c3 0 5-1 5-3v-3h-5'/><path d='M17 15h2c2 0 3-1.5 3-3.5S21 8 19 8h-2'/></svg>",
+          "tags": "minify,python,py,compress,docstring,comments,indent"
+        },
+        {
+          "name": "Obfuscate Code",
+          "description": "Auto-detect language and obfuscate (JS, Python, HTML, CSS)",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='3' y='11' width='18' height='10' rx='2'/><path d='M7 11V7a5 5 0 0 1 10 0v4'/><line x1='12' y1='15' x2='12' y2='17'/></svg>",
+          "tags": "obfuscate,obfuscator,auto,detect,code,protect,scramble,js,javascript,python,py,html,css"
+        },
+        {
+          "name": "Obfuscate JS",
+          "description": "Obfuscate JavaScript (string array + rotate + base64); prompts strength",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='3' y='11' width='18' height='10' rx='2'/><path d='M7 11V7a5 5 0 0 1 10 0v4'/><line x1='12' y1='15' x2='12' y2='17'/></svg>",
+          "tags": "obfuscate,obfuscator,javascript,js,protect,scramble,stringarray,base64"
+        },
+        {
+          "name": "Obfuscate Python",
+          "description": "Obfuscate Python into a zlib+base64 exec loader (reversible)",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='3' y='11' width='18' height='10' rx='2'/><path d='M7 11V7a5 5 0 0 1 10 0v4'/><line x1='12' y1='15' x2='12' y2='17'/></svg>",
+          "tags": "obfuscate,python,py,zlib,base64,exec,loader,protect"
+        },
+        {
+          "name": "Obfuscate HTML",
+          "description": "Obfuscate HTML into a base64 + document.write loader (reversible)",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='3' y='11' width='18' height='10' rx='2'/><path d='M7 11V7a5 5 0 0 1 10 0v4'/><line x1='12' y1='15' x2='12' y2='17'/></svg>",
+          "tags": "obfuscate,html,base64,document.write,loader,protect,scramble"
+        },
+        {
+          "name": "Obfuscate CSS",
+          "description": "Minify CSS and escape class/id names + strings as CSS hex escapes",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='3' y='11' width='18' height='10' rx='2'/><path d='M7 11V7a5 5 0 0 1 10 0v4'/><line x1='12' y1='15' x2='12' y2='17'/></svg>",
+          "tags": "obfuscate,css,escape,hex,class,stylesheet,scramble"
+        },
+        {
+          "name": "Beautify Code",
+          "description": "Pretty-print code: JS, CSS, HTML, JSON and XML (auto-detect)",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M5 3v4'/><path d='M3 5h4'/><path d='M6 17v4'/><path d='M4 19h4'/><path d='M13 3l3 7 7 3-7 3-3 7-3-7-7-3 7-3 3-7z'/></svg>",
+          "tags": "beautify,prettify,format,pretty,indent,code,js,javascript,css,html,json,xml,auto"
+        }
+      ]
+    },
+    {
+      "id": "pack-dev",
+      "type": "script-pack",
+      "name": "Dev Pack",
+      "description": "Developer tools: JWT decode, MD5/SHA hashes, timestamp <-> date (unix, ISO, Excel, kdb+/q), cURL -> fetch / Python requests, number bases",
+      "entry": "scripts/pack-dev/pack-dev.js",
+      "scripts": [
+        {
+          "name": "JWT Decode",
+          "description": "Decode a JWT's header + payload to pretty JSON below it, with iat / nbf / exp as local times (signature not verified)",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='7.5' cy='15.5' r='5.5'/><path d='M21 2l-9.6 9.6'/><path d='M15.5 7.5l3 3L22 7l-3-3'/></svg>",
+          "tags": "jwt,token,decode,auth,bearer,json,claims,exp,oauth,oidc,jws,jwe,dev"
+        },
+        {
+          "name": "Hash SHA-256",
+          "description": "Insert the SHA-256 hex digest of the selection (or line / document) on a new line below it",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><line x1='4' y1='9' x2='20' y2='9'/><line x1='4' y1='15' x2='20' y2='15'/><line x1='10' y1='3' x2='8' y2='21'/><line x1='16' y1='3' x2='14' y2='21'/></svg>",
+          "tags": "hash,sha256,sha-256,sha2,digest,checksum,crypto,dev"
+        },
+        {
+          "name": "Hash MD5",
+          "description": "Insert the MD5 hex digest of the selection (or line / document) on a new line below it",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><line x1='4' y1='9' x2='20' y2='9'/><line x1='4' y1='15' x2='20' y2='15'/><line x1='10' y1='3' x2='8' y2='21'/><line x1='16' y1='3' x2='14' y2='21'/></svg>",
+          "tags": "hash,md5,digest,checksum,crypto,dev"
+        },
+        {
+          "name": "Hash (all)",
+          "description": "Insert MD5, SHA-1, SHA-256 and SHA-512 hex digests of the selection (or line / document) below it",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><line x1='3' y1='8' x2='14' y2='8'/><line x1='3' y1='14' x2='14' y2='14'/><line x1='8' y1='3' x2='6.5' y2='19'/><line x1='12' y1='3' x2='10.5' y2='19'/><line x1='17' y1='12' x2='22' y2='12'/><line x1='17' y1='16' x2='22' y2='16'/><line x1='17' y1='20' x2='22' y2='20'/></svg>",
+          "tags": "hash,md5,sha1,sha-1,sha256,sha512,sha-512,digest,checksum,all,crypto,dev"
+        },
+        {
+          "name": "Hash…",
+          "description": "Pick MD5, SHA-1, SHA-256, SHA-384 or SHA-512 and insert the hex digest below the selection (or line / document)",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><line x1='4' y1='9' x2='20' y2='9'/><line x1='4' y1='15' x2='20' y2='15'/><line x1='10' y1='3' x2='8' y2='21'/><line x1='16' y1='3' x2='14' y2='21'/></svg>",
+          "tags": "hash,sha1,sha384,sha512,sha256,md5,digest,checksum,algorithm,crypto,dev"
+        },
+        {
+          "name": "Timestamps → Dates",
+          "description": "Annotate unix epochs (s / ms / µs / ns) with UTC + local dates; a lone number can be read as Excel serial or kdb+ q",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M21 7.5V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h3.5'/><path d='M16 2v4'/><path d='M8 2v4'/><path d='M3 10h5'/><path d='M17.5 17.5 16 16.3V14'/><circle cx='16' cy='16' r='6'/></svg>",
+          "tags": "timestamp,epoch,unix,date,time,excel,serial,kdb,q,kx,convert,human,readable,dev"
+        },
+        {
+          "name": "Dates → Timestamps…",
+          "description": "Convert ISO / RFC 2822 / kdb+ q / Excel dates and epochs to a chosen format (unix s/ms/ns, ISO, Excel, kdb+)",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='3' y='4' width='18' height='18' rx='2'/><path d='M16 2v4M8 2v4M3 10h18'/><path d='M7 16h9M13 13l3 3-3 3'/></svg>",
+          "tags": "timestamp,epoch,unix,date,time,iso,rfc2822,excel,serial,kdb,q,kx,convert,dev"
+        },
+        {
+          "name": "Insert Timestamp As…",
+          "description": "Insert the current time as unix s / ms / ns, ISO 8601, Excel serial, kdb+ timestamp / date…",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='3' y='4' width='18' height='18' rx='2'/><path d='M16 2v4M8 2v4M3 10h18M12 13v6M9 16h6'/></svg>",
+          "tags": "timestamp,insert,now,epoch,unix,iso,excel,serial,kdb,q,kx,date,time,dev"
+        },
+        {
+          "name": "cURL → fetch",
+          "description": "Turn a curl command (e.g. Chrome's Copy as cURL) into JavaScript fetch() code",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='2' y='4' width='20' height='16' rx='2'/><path d='M6 9l3 3-3 3'/><path d='M12 15h5'/></svg>",
+          "tags": "curl,fetch,javascript,js,node,http,request,api,convert,dev"
+        },
+        {
+          "name": "cURL → Python requests",
+          "description": "Turn a curl command (e.g. Chrome's Copy as cURL) into Python requests code",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='16 18 22 12 16 6'/><polyline points='8 6 2 12 8 18'/></svg>",
+          "tags": "curl,python,requests,http,request,api,convert,dev"
+        },
+        {
+          "name": "Number Base Convert",
+          "description": "Show numbers as decimal / hex / binary / octal (a lone number becomes 255 = 0xFF = 0b11111111 = 0o377)",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='14' y='14' width='4' height='6' rx='2'/><rect x='6' y='4' width='4' height='6' rx='2'/><path d='M6 20h4M14 10h4M6 14h2v6M14 4h2v6'/></svg>",
+          "tags": "number,base,hex,binary,octal,decimal,convert,radix,bits,dev"
+        },
+        {
+          "name": "To Hex",
+          "description": "Convert numbers (decimal, 0b…, 0o…) in place to hexadecimal 0x…",
+          "icon": "<svg viewBox='0 0 24 24'><text x='12' y='16.5' text-anchor='middle' font-size='12' font-weight='700' font-family='ui-monospace,Menlo,Consolas,monospace' fill='currentColor'>0x</text></svg>",
+          "tags": "hex,hexadecimal,number,base,convert,radix,dev"
+        },
+        {
+          "name": "To Binary",
+          "description": "Convert numbers (decimal, 0x…, 0o…, a lone bare hex) in place to binary 0b…",
+          "icon": "<svg viewBox='0 0 24 24'><text x='12' y='16.5' text-anchor='middle' font-size='12' font-weight='700' font-family='ui-monospace,Menlo,Consolas,monospace' fill='currentColor'>0b</text></svg>",
+          "tags": "binary,bits,number,base,convert,radix,dev"
+        },
+        {
+          "name": "To Decimal",
+          "description": "Convert 0x… / 0b… / 0o… numbers (or a lone bare hex like ff) in place to decimal",
+          "icon": "<svg viewBox='0 0 24 24'><text x='12' y='16.5' text-anchor='middle' font-size='12' font-weight='700' font-family='ui-monospace,Menlo,Consolas,monospace' fill='currentColor'>10</text></svg>",
+          "tags": "decimal,number,base,convert,radix,hex,binary,octal,dev"
+        }
+      ]
+    },
+    {
+      "id": "slash",
+      "type": "plugin",
+      "name": "Slash commands",
+      "description": "Type / at the start of a line or after a space for a quick menu: headings, lists, todo, quote, callouts, code block, table, divider, date/time, symbols, plus every widget and script",
+      "entry": "plugins/slash/slash.js",
+      "css": "plugins/slash/slash.css",
+      "settingKey": "plugins.slash",
+      "section": "Editor",
+      "default": true
+    },
+    {
+      "id": "smart-lists",
+      "type": "plugin",
+      "name": "Smart lists & pairs",
+      "description": "Tab / Shift-Tab indent list items with their children (renumbering), Backspace clears an empty marker, Enter continues > quotes, auto-pairs ** __ ~~ == ` and wraps selections",
+      "entry": "plugins/smart-lists/smart-lists.js",
+      "settingKey": "plugins.smart-lists",
+      "section": "Editor",
+      "default": true
+    },
+    {
+      "id": "callouts",
+      "type": "plugin",
+      "name": "Callouts",
+      "description": "Render > [!note] / [!tip] / [!warning] … blockquotes as coloured boxes with an icon and title; > [!type]- starts folded, + expanded",
+      "entry": "plugins/callouts/callouts.js",
+      "css": "plugins/callouts/callouts.css",
+      "settingKey": "plugins.callouts",
+      "section": "Editor",
+      "default": true
+    },
+    {
+      "id": "kanban",
+      "type": "widget",
+      "name": "Kanban Board",
+      "description": "Turn the document’s headings into columns and list items into drag-and-drop cards",
+      "icon": "📋",
+      "tags": "kanban,board,todo,tasks,columns,trello,project,cards,drag,planning",
+      "entry": "widgets/kanban/kanban.js",
+      "css": "widgets/kanban/kanban.css"
+    },
+    {
+      "id": "qr",
+      "type": "widget",
+      "name": "QR Code",
+      "description": "Make QR codes (text, URL, Wi-Fi, contact…) — insert, copy or save; scan with the camera or from an image",
+      "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='3' y='3' width='7' height='7' rx='1'/><rect x='14' y='3' width='7' height='7' rx='1'/><rect x='3' y='14' width='7' height='7' rx='1'/><path d='M14 14h3v3h-3zM21 14v.01M14 21h.01M17.5 21H21v-3.5'/></svg>",
+      "tags": "qr,qr code,qrcode,barcode,2d code,scan,scanner,reader,decode,camera,photo,generate,generator,maker,create,wifi,wi-fi,password,vcard,contact,email,sms,phone,link,url,share,code,png,svg,image",
+      "entry": "widgets/qr/qr.js",
+      "css": "widgets/qr/qr.css"
+    },
+    {
+      "id": "prompts",
+      "type": "widget",
+      "name": "Writing Prompts & Word of the Day",
+      "description": "Daily vocabulary word plus 340 writing prompts — fiction, journaling, poetry, worldbuilding, constraints…",
+      "icon": "✍",
+      "tags": "prompt,prompts,writing prompt,word of the day,wotd,vocabulary,vocab,word,inspiration,idea,journal,journaling,poetry,fiction,story,worldbuilding,dialogue,six-word,micro,creative,writer,block,sprint",
+      "entry": "widgets/prompts/prompts.js",
+      "css": "widgets/prompts/prompts.css",
+      "precache": [
+        "widgets/prompts/prompts-data.js"
+      ]
+    },
+    {
+      "id": "proscons",
+      "type": "widget",
+      "name": "Pros & Cons",
+      "description": "Weigh a decision: weighted pros vs cons, live verdict, saved decisions; import + / - lines, insert as a table",
+      "icon": "⚖",
+      "tags": "pros,cons,pros and cons,decision,decide,choice,choose,compare,weigh,weighted,list,verdict,should i,dilemma,matrix,table,advantages,disadvantages",
+      "entry": "widgets/proscons/proscons.js",
+      "css": "widgets/proscons/proscons.css"
+    },
+    {
+      "id": "sudoku",
+      "type": "widget",
+      "name": "Sudoku",
+      "description": "Classic 9×9 number puzzle — Easy to Expert, plus a Daily",
+      "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='3' y='3' width='18' height='18' rx='2'/><path d='M9 3v18M15 3v18M3 9h18M3 15h18' stroke-width='1'/><text x='12' y='14.6' font-size='7.5' font-weight='bold' text-anchor='middle' fill='currentColor' stroke='none'>9</text></svg>",
+      "tags": "game,sudoku,puzzle,numbers,logic,daily,brain,fun",
+      "entry": "widgets/sudoku/sudoku.js",
+      "css": "widgets/sudoku/sudoku.css"
+    },
+    {
+      "id": "crossword",
+      "type": "widget",
+      "name": "Mini Crossword",
+      "description": "Daily 5×5 crossword, plus an archive and random puzzles",
+      "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='1.8' stroke-linejoin='round'><rect x='3' y='3' width='18' height='18' rx='1.5'/><path d='M9 3v18M15 3v18M3 9h18M3 15h18'/><rect x='3' y='3' width='6' height='6' fill='currentColor'/><rect x='15' y='15' width='6' height='6' fill='currentColor'/></svg>",
+      "tags": "game,crossword,mini,puzzle,words,clues,daily,brain,fun",
+      "entry": "widgets/crossword/crossword.js",
+      "css": "widgets/crossword/crossword.css",
+      "precache": [
+        "widgets/crossword/crossword-data.js"
+      ]
+    },
+    {
+      "id": "pack-text",
+      "type": "script-pack",
+      "name": "Text Pack",
+      "description": "Wrap / unwrap paragraphs, transliterate to ASCII, redact, aLtErNaTiNg case",
+      "entry": "scripts/pack-text/pack-text.js",
+      "scripts": [
+        {
+          "name": "Alternating Case (aLtErNaTiNg)",
+          "description": "sPoNgEbOb mocking case — alternate lower/UPPER on every letter",
+          "icon": "🧽",
+          "tags": "alternating,case,spongebob,mocking,sarcasm,meme,studly,toggle,silly,funny"
+        },
+        {
+          "name": "Wrap at N Columns…",
+          "description": "Hard-wrap long lines at a width (default 80) — keeps indents, hangs list items, repeats > quotes, skips code/tables/headings",
+          "icon": "📏",
+          "tags": "wrap,hard wrap,columns,width,80,line length,reflow,fill,format,paragraph,markdown,email,commit,fmt"
+        },
+        {
+          "name": "Unwrap Paragraphs",
+          "description": "Join hard-wrapped lines back into paragraphs — keeps list items, quotes, headings, tables and code fences apart",
+          "icon": "📜",
+          "tags": "unwrap,unfill,join,lines,paragraph,reflow,hard wrap,merge,email,pdf,copy paste,newlines,hyphen"
+        },
+        {
+          "name": "Transliterate to ASCII",
+          "description": "Crème brûlée, Straße, Łódź, “smart” quotes — dashes… → plain ASCII (accents, ligatures, symbols, Greek & Cyrillic)",
+          "icon": "🔡",
+          "tags": "ascii,transliterate,accents,diacritics,remove accents,unidecode,deaccent,latin,plain text,slug,normalize,cyrillic,greek,smart quotes"
+        },
+        {
+          "name": "Redact Selection",
+          "description": "Black out the selected text with █ blocks (keeps spaces and line breaks)",
+          "icon": "⬛",
+          "tags": "redact,censor,black out,blackout,hide,mask,obscure,privacy,secret,classified,block"
+        }
+      ]
+    },
+    {
+      "id": "pack-fun",
+      "type": "script-pack",
+      "name": "Fun & Cipher Pack",
+      "description": "Pig Latin, leetspeak, Morse, NATO phonetic, Caesar/Vigenère/Atbash ciphers, upside-down & mirror text",
+      "entry": "scripts/pack-fun/pack-fun.js",
+      "scripts": [
+        {
+          "name": "Pig Latin",
+          "description": "Hello world → Ellohay orldway (keeps capitalization and punctuation)",
+          "icon": "🐷",
+          "tags": "pig latin,piglatin,igpay,atinlay,language game,fun,kids,silly,encode,word game"
+        },
+        {
+          "name": "Leetspeak",
+          "description": "Leet speak → 1337 5p34k (a→4 e→3 i→1 o→0 s→5 t→7 …)",
+          "icon": "👾",
+          "tags": "leet,leetspeak,1337,l33t,elite,hacker,gamer,numbers,fun,encode,internet"
+        },
+        {
+          "name": "Morse Code",
+          "description": "Text → .- / -... Morse, or Morse → text (auto-detects which way)",
+          "icon": "📡",
+          "tags": "morse,morse code,telegraph,dots,dashes,sos,radio,ham,encode,decode,translate,cw"
+        },
+        {
+          "name": "NATO Phonetic",
+          "description": "Spell out text as Alfa Bravo Charlie…, or turn NATO words back into text (auto-detects)",
+          "icon": "📻",
+          "tags": "nato,phonetic,alphabet,icao,spelling,alfa bravo,radio,military,pilot,spell out,call sign,encode,decode"
+        },
+        {
+          "name": "Caesar Cipher…",
+          "description": "Shift letters by N (default 3, negative to decode) — keeps case, digits and punctuation",
+          "icon": "🏛️",
+          "tags": "caesar,cipher,shift,rot,rotate,encrypt,decrypt,encode,decode,secret,classic,crypto"
+        },
+        {
+          "name": "Vigenère Encrypt…",
+          "description": "Encrypt letters with a keyword (Vigenère cipher) — keeps case and punctuation",
+          "icon": "🔐",
+          "tags": "vigenere,vigenère,cipher,encrypt,encode,key,keyword,polyalphabetic,secret,classic,crypto"
+        },
+        {
+          "name": "Vigenère Decrypt…",
+          "description": "Decrypt Vigenère-ciphered text with its keyword",
+          "icon": "🔓",
+          "tags": "vigenere,vigenère,cipher,decrypt,decode,key,keyword,polyalphabetic,secret,classic,crypto"
+        },
+        {
+          "name": "Atbash",
+          "description": "Reverse the alphabet A↔Z, B↔Y… (run again to decode)",
+          "icon": "🔃",
+          "tags": "atbash,cipher,reverse alphabet,hebrew,substitution,encrypt,decrypt,encode,decode,secret,classic"
+        },
+        {
+          "name": "Upside Down Text",
+          "description": "Hello → oʃʃǝH — flip text 180° (run again to turn it back)",
+          "icon": "🙃",
+          "tags": "upside down,flip,rotate,180,turn,australia,fun,silly,unicode,fancy,reverse,text art"
+        },
+        {
+          "name": "Mirror Text",
+          "description": "Reverse each line with mirrored look-alike letters (ƚxɘT ɿoɿɿiM) — run again to undo",
+          "icon": "🪞",
+          "tags": "mirror,reverse,backwards,flip,horizontal,da vinci,mirror writing,fun,unicode,fancy,text art"
+        }
+      ]
+    },
+    {
+      "id": "tts",
+      "type": "widget",
+      "name": "Read Aloud",
+      "description": "Listen to your note — text-to-speech with live highlighting",
+      "icon": "🔊",
+      "tags": "tts,text to speech,speech,read aloud,voice,speak,listen,audio,narrate,accessibility",
+      "entry": "widgets/tts/tts.js",
+      "css": "widgets/tts/tts.css",
+      "precache": [
+        "widgets/tts/tts-worker.js"
+      ]
+    },
+    {
+      "id": "wordle",
+      "type": "widget",
+      "name": "Word Guess",
+      "description": "Guess the five-letter word in six tries — daily puzzle & practice",
+      "icon": "🟩",
+      "tags": "game,word,wordle,word game,guess,puzzle,daily,five letters,5 letters,fun,train",
+      "entry": "widgets/wordle/wordle.js",
+      "css": "widgets/wordle/wordle.css",
+      "precache": [
+        "widgets/wordle/wordle-words.js"
+      ]
+    },
+    {
+      "id": "anagram",
+      "type": "widget",
+      "name": "Anagram Solver",
+      "description": "Unscramble letters (? = blank): anagrams & every word they make",
+      "icon": "🔤",
+      "tags": "anagram,unscramble,scrabble,words with friends,word finder,word unscrambler,crossword,pattern,jumble,letters,word game,solver",
+      "entry": "widgets/anagram/anagram.js",
+      "css": "widgets/anagram/anagram.css"
     }
   ]
 }

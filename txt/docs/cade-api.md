@@ -115,6 +115,19 @@ Common usage:
 | `Cade.baseURL()` | the current module's folder URL, e.g. `./txt/widgets/snake/` |
 | `Cade.asset(rel)` | `baseURL() + rel` — URL for an image/font/etc. in your folder |
 
+## Commands & editor context
+
+For alternative launchers (e.g. the `slash` plugin's "/" menu) and editor
+plugins that need the core's own view of the document.
+
+| Call | Does |
+| --- | --- |
+| `Cade.commands()` | array of `{ name, description, icon, tags, kind: 'widget'\|'script' }` — exactly the Ctrl+K palette's rows (deduped, lazy manifest stubs included). A fresh copy per call; cache it while a menu is open. |
+| `Cade.runCommand(name)` | run a palette row by name (case-insensitive) with the palette's own semantics: a widget opens, a lazy module loads first, a script applies to the selection → current non-empty line → whole doc. Returns `false` if no row has that name. |
+| `Cade.inCodeFence(pos)` | `true` when `pos` is inside a ``` fenced block (fence lines included), from the core's tracked fence state — O(log n), no doc scan. Current as of the last view update (plugins in the plugin compartment see this transaction's state). |
+| `Cade.slashCodes()` | copy of the core's `"/code"` → symbol map (`{ '->': '➞', check: '✓', … }`). Codes are case-sensitive. |
+| `Cade.claimSlash(fn)` | register `fn() → boolean`; while it returns `true` the core's `/code` autocomplete dropdown stays closed (so a module's own "/" menu doesn't get a second popup stacked on it). One claimant; pass `null` to release. |
+
 ## Per-account synced JSON — `Cade.syncedBlob(id, {onChange})`
 
 A small offline-first store that syncs across the account's devices when sync

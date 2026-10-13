@@ -1,0 +1,14 @@
+/* Inline math: the faint answer shown after a trailing "=". */
+.cm-imath-ghost {
+  color: var(--text-faint);
+  opacity: 0.85;
+  white-space: pre;
+  cursor: pointer;
+  border-radius: 3px;
+  transition: color 0.12s, background-color 0.12s;
+}
+.cm-imath-ghost:hover {
+  color: var(--accent);
+  opacity: 1;
+  background: var(--surface-hover, rgba(127, 127, 127, 0.12));
+}
