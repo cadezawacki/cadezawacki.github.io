@@ -1,4 +1,6 @@
-/* Decode Lab — on-device translation into English (lazy-loaded by decodelab.js).
+/* On-device translation, both ways: into English, out of English, and between
+ * two other languages through English (lazy-loaded by Decode Lab, the
+ * Translate widget and the inline ```Spanish chips).
  *
  * Engines, best first:
  *   1. Chrome's built-in Translator / LanguageDetector APIs (desktop Chrome
@@ -14,6 +16,8 @@
  *   M  huggingface.co/manateelazycat/firefox-translations-93-pairs (MPL-2.0 mirror, pinned commit)
  *   T  huggingface.co/TiberiuCristianLeon/Bergamot (mirror, pinned commit)
  * Mozilla's own CDN / GCS bucket send no CORS headers, hence the mirrors.
+ * English -> X models (RAW_TO) come only from this site's own mirrors
+ * (txt-models-b / -c), copied from Mozilla's CDN and hash-checked the same way.
  * Engine: @browsermt/bergamot-translator 0.4.9 (npm, via jsDelivr, pinned + hashed).
  *
  * Opus-MT (transformers.js) is not used: Bergamot already covers every
@@ -21,7 +25,11 @@
  * per language for no extra coverage.
  *
  * Pure helpers (chunking, detection, registry) are also exported for node
- * tests: module.exports = { create, chunkText, guessLang, langFromName, LANGS, ENGINE }. */
+ * tests: module.exports = { create, chunkText, guessLang, langFromName, route, LANGS, ENGINE }.
+ *
+ * Manager API: status(code, to), download(code, onProgress, to), translate(text,
+ * code, onProgress, to) — `to` defaults to 'en' — plus downloaded(), usage(),
+ * remove(code, 'from'|'to'|'both'), detect(text). */
 (function (root) {
   'use strict';
 
@@ -96,6 +104,64 @@
     ['th', 'Thai', 'ไทย', '2.0', { model: ['T', 'base-memory/then/model.then.intgemm.alphas.bin', 31561787, 'f70a501324743668b031bee19cd001a66839e8e5dfc0b4a1c44d5ea99d4e8d66'], lex: ['T', 'base-memory/then/lex.50.50.then.s2t.bin', 4487056, '3a7661a7f5c811c83f05f53008083b042fea0334fc6044ca1fda4982a8d48453'], vocab: ['T', 'base-memory/then/vocab.then.spm', 995429, 'b625d3dcdfa2b4bbec496c9a0a30d169c917464ac5ea75506c0699972fea95f0'] }],
     ['vi', 'Vietnamese', 'Tiếng Việt', '1.0', { model: ['M', 'vien/model.vien.intgemm.alphas.bin', 17141051, 'de4bf2b9ffb4d910e32720ec3a43655fb6f4062ce5219332f824fc1bdca7a5f4'], lex: ['M', 'vien/lex.50.50.vien.s2t.bin', 3910184, '3a071ed3d982f6eb6ee116b84067bf70041e4229e43ea65ecb6d7c2796e8851b'], vocab: ['M', 'vien/vocab.vien.spm', 757250, 'cb152765d1e71ea3cf96fdb339c764b7201be7b9ab32e20cfebcf16a20fc0939'] }],
   ];
+  // English -> X: Mozilla's own en->X models (one per language; Firefox runs
+  // the same ones), copied from Mozilla's attachment CDN — which sends no CORS
+  // headers — into txt-models-b / txt-models-c by their "Fetch models" Action.
+  // Self-hosted only: the URL is both the source and the cache key.
+  // X -> Y (neither English) pivots through English, as Firefox does.
+  var TO_BASES = {
+    B: 'https://cadezawacki.github.io/txt-models-b/en-x/',
+    C: 'https://cadezawacki.github.io/txt-models-c/en-x/',
+  };
+  // [code, Mozilla model version, files: [base, path, bytes, sha256], pre-release (Nightly only)?]
+  var RAW_TO = [
+    ['es', '2.1', { model: ['B', 'es/model.enes.intgemm.alphas.bin', 31561787, '3b1c399511c01c84c36fae5c0524df44096288efdc8236e182b5c97d7ad2244c'], lex: ['B', 'es/lex.50.50.enes.s2t.bin', 4198436, '7d51237c0a07027dcd61643cfbbb0f8c48597d19907ef53d2cae9d6bec2cf25c'], vocab: ['B', 'es/vocab.enes.spm', 816054, '5ae254fa9b15aa182e70fd2a6186b1333c63a29a48043a9224c6aa4fcac058ad'] }],
+    ['fr', '2.0', { model: ['B', 'fr/model.enfr.intgemm.alphas.bin', 31561787, '6322e296d4fecfe395a8d5723da4ec37ecbe6d7613bb1dfcf4b28e2a47498b68'], lex: ['B', 'fr/lex.50.50.enfr.s2t.bin', 4372936, '2585ed98d3af0bc949865aedeb390493d591f56870814376e73e4144c41ed059'], vocab: ['B', 'fr/vocab.enfr.spm', 814404, '783abf3abe075afdf8d85d233994bef2c3a064e935ab1bed946820aff6ac002a'] }],
+    ['de', '2.1', { model: ['B', 'de/model.ende.intgemm.alphas.bin', 31561787, '8df29d9494d19f47fd5d97c6a73474c6f657e9f81c1a607c431d02befdf3810f'], lex: ['B', 'de/lex.50.50.ende.s2t.bin', 4347672, '7ed39f1cffbd68a27ddf05bbfe068de2060f1d7e69f1a20e27ae923551dd7393'], vocab: ['B', 'de/vocab.ende.spm', 810073, '69f730becafa48e3bb2c244eab66456877c08959a02f2bd5519b5a3088b62f9c'] }],
+    ['it', '2.1', { model: ['B', 'it/model.enit.intgemm.alphas.bin', 31561787, '248f47568788ecc351da7e5e07064d4153b4f71e011364ae2c931ffeec4d1cc2'], lex: ['B', 'it/lex.50.50.enit.s2t.bin', 4133192, '8b21914804625b2777dae7fdb636eb78f02a3eb8b7bceaa50f29ac740961da93'], vocab: ['B', 'it/vocab.enit.spm', 812724, '3ef0211d4ae6db21440892f180f2019fe2bfc110a330ffa9d2eca9665e4f2bc5'] }],
+    ['pt', '2.1', { model: ['B', 'pt/model.enpt.intgemm.alphas.bin', 31561787, '07892fd2544ee79dcb643615d8f2debb9793fae16842e87c328e27a3dd26a770'], lex: ['B', 'pt/lex.50.50.enpt.s2t.bin', 3970340, 'ccb4c31c9e1899d77a200e71a86958e6ef6c8649627d0bbf3f873b57d9f236bd'], vocab: ['B', 'pt/vocab.enpt.spm', 816726, 'd9f46182823d5bbc84201252b2dfcac28f63e561f0ec827ed858f241864c9def'] }],
+    ['nl', '2.1', { model: ['B', 'nl/model.ennl.intgemm.alphas.bin', 31561787, '7e8402da61972dc2fdcf7147c7f1e12f7916a6d9349514ee7a731288357575a9'], lex: ['B', 'nl/lex.50.50.ennl.s2t.bin', 4030624, 'bb4922718f8ca6d746ad090c0a88110a664dc050ee3f311bce33698b4e1679e9'], vocab: ['B', 'nl/vocab.ennl.spm', 807708, 'c09588ca5662b230ed65bd39a07f58d9f7dd21c3a19e4aeb1bff39bf3b297c56'] }],
+    ['ru', '2.1a1', { model: ['B', 'ru/model.enru.intgemm.alphas.bin', 31561787, '184cb5cda528eeefc0f75f5d0035d787b71d74af135e3c5608d01ae02ecfb920'], lex: ['B', 'ru/lex.50.50.enru.s2t.bin', 2774540, '4d91839726b960e70b6d05c53d0cffd16262832b1c0e1ea99d66f412dcc6a239'], vocab: ['B', 'ru/vocab.enru.spm', 904455, '56ee63e14e8cb926c394242adc3ed7cc602644c3d33058cff2ce2959d52a6258'] }, 1],
+    ['uk', '2.2', { model: ['B', 'uk/model.enuk.intgemm.alphas.bin', 31561787, 'ed8bb4a811e1c45a259e91052080d25e5c8b4e2df0e59cb1521c04a57855ef97'], lex: ['B', 'uk/lex.50.50.enuk.s2t.bin', 3054364, 'dbfd4f8dc95da9c575164f7fc95ef00a2fb5f7d9f51b656559f99eeebdb57c87'], vocab: ['B', 'uk/vocab.enuk.spm', 922077, '4dd6a91feff71e745395dcc0d52f885848ca0d843d5f70628ca51b3be1b70b45'] }],
+    ['pl', '2.1', { model: ['B', 'pl/model.enpl.intgemm.alphas.bin', 31561787, 'b0b59716bcc8f46b8dc6ab5c32a2732acaad42a5a6d9ae9b472526a1bb0d71d4'], lex: ['B', 'pl/lex.50.50.enpl.s2t.bin', 3540052, 'd7d7b364673f633763c9f8f2e8ee9c7a184e92f4086e8b84abe870a2a8dbe5d5'], vocab: ['B', 'pl/vocab.enpl.spm', 821612, '2000f182efa8ce5f69bc3f9e574666b5bc2c0af684eedd32f69d15aa9021ea85'] }],
+    ['tr', '1.0', { model: ['B', 'tr/model.entr.intgemm.alphas.bin', 17141051, 'ea3cd4ee09de190df265c78d84260e277a9a8a3ddff05eb55d72afe7fc0fdbf4'], lex: ['B', 'tr/lex.50.50.entr.s2t.bin', 3261300, '3aba0be842bd4c192659c781e6fdce8eb9b2b1fff29a40d22f75da369d59f46f'], vocab: ['B', 'tr/vocab.entr.spm', 798793, 'a220363d60391f7ce3df8ec9785424dbc00c24d5786d1a4308cf8ca3ed3385c2'] }],
+    ['zh-Hans', '2.2', { model: ['B', 'zh-Hans/model.enzh.intgemm.alphas.bin', 43849787, '4e5accc141373565ddc8fa1565bceaa8d0c3482a82cab8131c719ebcc6c2157c'], lex: ['B', 'zh-Hans/lex.50.50.enzh.s2t.bin', 6506248, '4a5e5827788060f1d718a8132b69440929387514a045796e9b77f935db68c055'], srcvocab: ['B', 'zh-Hans/srcvocab.enzh.spm', 806952, 'bd9b65504acc6d9726dd281f7defc2adb7c2c22d0688fe2f84697de25197c8c5'], trgvocab: ['B', 'zh-Hans/trgvocab.enzh.spm', 772004, 'aded6993c36e440284d11cec3f6b8aef9c0e43188a772d80be342a713adf223d'] }],
+    ['zh-Hant', '2.0', { model: ['C', 'zh-Hant/model.enzh.intgemm.alphas.bin', 43849787, '559ab90d723a58c1f1e2ab7cc12137bc667af5ba3e325e3eb30b5cdc930db520'], lex: ['C', 'zh-Hant/lex.50.50.enzh.s2t.bin', 4057188, 'd891404d1436a7334df12539fe30a26f9e9f2b80bd42fdb8b5f8849e8a1e942b'], srcvocab: ['C', 'zh-Hant/srcvocab.enzh.spm', 803694, '2266df70492162a249ab1c0154f929bd6098b246544c666c1a0d5a24dde7d2ea'], trgvocab: ['C', 'zh-Hant/trgvocab.enzh.spm', 751671, '22b91a4436d70b91ab8777c677252ab5fae2bc284d71f977df5206c110e3444c'] }],
+    ['ja', '2.3', { model: ['B', 'ja/model.enja.intgemm.alphas.bin', 43849787, '59ae659f9bb63e4f81f474fe3c03d3f4499434b5f9e779fab7c12a45f31fd562'], lex: ['B', 'ja/lex.50.50.enja.s2t.bin', 4128360, 'edfb7eb47b98a2689b804ab3614c31b24f1257aa54b1154da3d85e1ae8152d9f'], srcvocab: ['B', 'ja/srcvocab.enja.spm', 796275, '970c98d174fc01e0339fbabbf45af36a4be3f26f819ec1a5ea1189f71e091889'], trgvocab: ['B', 'ja/trgvocab.enja.spm', 827144, '3b3d9f8f3a034d98d0a476f1794fa79c01e4e98a967ceb6777a66ba2d03ec1e1'] }],
+    ['ko', '2.0a1', { model: ['B', 'ko/model.enko.intgemm.alphas.bin', 59504955, '1c310a79b61b8824b2eb26b045db043d92722f3e66ea06998f7c89f48da9f6bc'], lex: ['B', 'ko/lex.50.50.enko.s2t.bin', 6676356, '7734265822ce315c72334ad538e698ab3900ab8e8f04bd43768d0aecad6b6df7'], vocab: ['B', 'ko/vocab.enko.spm', 1406926, '709bf0e425345e0e92ce41ed84348a1296a2107c92bdb6624404450ffecbd1f9'] }, 1],
+    ['ar', '2.2', { model: ['B', 'ar/model.enar.intgemm.alphas.bin', 31561787, 'ae659d7045fc2e5d6ba50583586a5d94ee4358d92c019847e37b57a0e627faa8'], lex: ['B', 'ar/lex.50.50.enar.s2t.bin', 3139692, '2b7194817c5dd9225ca90c0d908cc92e1d6d1f45625781a5feb037ac568d6a61'], vocab: ['B', 'ar/vocab.enar.spm', 863591, '8d93c54aa5e2044c416ec680b5ff9af0227bd698521666e8b1a1ea1b041fbae8'] }],
+    ['bg', '2.0', { model: ['C', 'bg/model.enbg.intgemm.alphas.bin', 31561787, 'e2b30db98ac6706efc893067a74e51f36f015a8f820fe8a4f0f5052fa6a22f30'], lex: ['C', 'bg/lex.50.50.enbg.s2t.bin', 3075948, '93d4ca4412db269cc4164cbfa04c08edd0f65690c8264d6215a0522d4a13ec1a'], vocab: ['C', 'bg/vocab.enbg.spm', 922482, '4bafad5fcc0e771ed82233d1e99d69dcb96487b430702f7e688615c8a61f3df4'] }],
+    ['bn', '1.0', { model: ['C', 'bn/model.enbn.intgemm.alphas.bin', 17141051, 'b63c8d5f8fdc1fcb8bbb2d20c751faab94af67ee1822427665119c93a11f6596'], lex: ['C', 'bn/lex.50.50.enbn.s2t.bin', 3207488, '74ad4234a0a9cf57b21d99b34fefc14f7c731d7e76da7940eb0155c13a234b5e'], vocab: ['C', 'bn/vocab.enbn.spm', 981226, '8895bebb290adc2a5ef46710d81be13d341883a8c6c233e0c060f968df0deef4'] }],
+    ['bs', '2.0', { model: ['C', 'bs/model.enbs.intgemm.alphas.bin', 31561787, '27575113fffad6c45a0bad36bd1823c4f319ed30f65ec134815b67bdae0d9f8d'], lex: ['C', 'bs/lex.50.50.enbs.s2t.bin', 3214628, '6847523f4d5df9425cda606e73f404c07e19452dac7659bdcc92743c46cba3c0'], vocab: ['C', 'bs/vocab.enbs.spm', 823444, 'dfed9c3e08e85a22feac7748a20fa981dca94f358115af2f45d704b9cc944cc8'] }],
+    ['ca', '2.0', { model: ['C', 'ca/model.enca.intgemm.alphas.bin', 31561787, '735881c99ff303e55eb2e92a3b86762523d5dd1a4797b2574b851062051426ee'], lex: ['C', 'ca/lex.50.50.enca.s2t.bin', 4344092, '8f2151a7fb75454f5167a8df8758ec02ab02c0302893851bad7caa6b729822fb'], vocab: ['C', 'ca/vocab.enca.spm', 810653, '64ebcb5f6cb5a954ced615e48a44a85e77a644e4910544014b299b8ee0fa1b1f'] }],
+    ['cs', '2.0', { model: ['C', 'cs/model.encs.intgemm.alphas.bin', 31561787, '1d7855f91c3e2b8ef79fbea62707d46ceb8a1ad01834ef6dd500f32a7006cc2c'], lex: ['C', 'cs/lex.50.50.encs.s2t.bin', 3572436, '699b9b59fe3acbcddf831380024b2e139f2cbe225dce96d59ade2b159318f58b'], vocab: ['C', 'cs/vocab.encs.spm', 815154, 'ee4b8ce15c8e1237c5f7a2d04741341beb0a5d5c09820f7ec08f13ee2b212755'] }],
+    ['da', '1.0', { model: ['C', 'da/model.enda.intgemm.alphas.bin', 17141051, '0157ed1162dd5a7a0fc6a3cc86014ec21cb47a8febf77164df24d8921270bb29'], lex: ['C', 'da/lex.50.50.enda.s2t.bin', 3864788, 'd183786cae59a5df06d5b00c58e3ec2a5791d302240a65540fc6a1da2b66eada'], vocab: ['C', 'da/vocab.enda.spm', 795349, 'b06349522bf053e4a6f01efc4d1450e4fe35717a938a82831988c087229c9619'] }],
+    ['el', '1.0', { model: ['C', 'el/model.enel.intgemm.alphas.bin', 17141051, '724b358d399c6b23444de36d76e9e2630c7024c29d9e617323b820a11631535a'], lex: ['C', 'el/lex.50.50.enel.s2t.bin', 2856724, 'c2acd9241eb8a1e5b13a43efa5723628839d6e3b3dc7b93e2f20990a6ab81e24'], vocab: ['C', 'el/vocab.enel.spm', 896168, '0ffc5569d7f400f03539c5fc3e28ff35f1d0381eba0ec866c44aef0c26f3ce5e'] }],
+    ['et', '2.0', { model: ['C', 'et/model.enet.intgemm.alphas.bin', 31561787, '36bdc87f8d500861a5d286ebd3ea58df530da87e31b8a233f5e9c46c300c281d'], lex: ['C', 'et/lex.50.50.enet.s2t.bin', 3488368, '259c60582f49449c226a6e5a369481c68322013f367e459e54c595686c05d4d8'], vocab: ['C', 'et/vocab.enet.spm', 817574, '89a3deea4ae7d674fb46a4dae39135dd4dfaac9786f2868d0b5bc5c0aca2ef83'] }],
+    ['fa', '1.1', { model: ['C', 'fa/model.enfa.intgemm.alphas.bin', 17141051, '456ad3952bcc59d208c76baba4dcef340ee4239416bd760d6fec27f9a16228f8'], lex: ['C', 'fa/lex.50.50.enfa.s2t.bin', 3631332, '8542e7fb2bfa3a11b89f8392b8adb0dbbf863cd34569488b7c4535a91c3ae6b4'], vocab: ['C', 'fa/vocab.enfa.spm', 843133, '6435d3d9d766159fe192ab90892540b438ad7adb7ab4ea4049f68d0b4cdea3bd'] }],
+    ['fi', '2.0', { model: ['C', 'fi/model.enfi.intgemm.alphas.bin', 31561787, '88b0caa4cc6980d632801cb2b1950748f1dc43ad2ac83678917ad86c720b5cdd'], lex: ['C', 'fi/lex.50.50.enfi.s2t.bin', 3490092, '26e95a87f87e4b0fa9a35524cf9fea691204504453877ba4ac81ccc66af1488c'], vocab: ['C', 'fi/vocab.enfi.spm', 818770, '6a866911427f2916609ae89c7f2f04a78de3fdd8aa183039ecba986635d4f246'] }],
+    ['gu', '1.0', { model: ['C', 'gu/model.engu.intgemm.alphas.bin', 17141051, '0f2c8bc7f13ecb9b89459e8fd9af6d8736e0f6b1c8f8a80f747fcdc030d0a588'], lex: ['C', 'gu/lex.50.50.engu.s2t.bin', 3179500, '5699d5f0f6265766c57e8e860596091d16a7ea68e9e181a3310b8b52d79f8b5e'], vocab: ['C', 'gu/vocab.engu.spm', 965095, '74ce11b041bfc527eedded78594498419c781c81a3fcb3384a3485af70cc2325'] }],
+    ['he', '1.0', { model: ['C', 'he/model.enhe.intgemm.alphas.bin', 17141051, 'e37ac6e6f131704c85deb94a657aa20afbb44db2879f44aec9c33a34f4467587'], lex: ['C', 'he/lex.50.50.enhe.s2t.bin', 3066048, '8795f4c5e19b4a196c9ed394c275a28a09e5ddbbf47ae16faa4446bf2b8bc7d9'], vocab: ['C', 'he/vocab.enhe.spm', 845017, '672b334afa84011200fdaee02c2fc7810910c35ae9ea7619be073c851703ce9e'] }],
+    ['hi', '1.0', { model: ['C', 'hi/model.enhi.intgemm.alphas.bin', 17141051, '18682fa6aa1c1b2f78a6fcbcb354755094d623e65436ef7821720c5213e11a49'], lex: ['C', 'hi/lex.50.50.enhi.s2t.bin', 3504820, 'b473f6fe41cdb7c1dbeeb714fc50314feab77b0af2b2da6f7830ee14492dd847'], vocab: ['C', 'hi/vocab.enhi.spm', 925360, '8017cbf812bae400794c424699b89de90db06ac7a4ca67a420013a9f68b270c1'] }],
+    ['hr', '1.0', { model: ['C', 'hr/model.enhr.intgemm.alphas.bin', 17141051, '29ba32235778da3e38cfeb0d7f36eaf8dc37c961ff8651d86f7cae7e29e97d88'], lex: ['C', 'hr/lex.50.50.enhr.s2t.bin', 3319896, 'b811d67aca11e12e6bd956c1b4a1e74c6162d71e9ac259bfff415fbb90c3f666'], vocab: ['C', 'hr/vocab.enhr.spm', 796935, '7b75fe5ee12743c787a393489d8810adc3ca6cefe0142e8993227dd125d224b3'] }],
+    ['hu', '2.1', { model: ['C', 'hu/model.enhu.intgemm.alphas.bin', 31561787, '0c42f56edca74b3f732a74c64553c47d0005b50cf095f43024601985fab5d461'], lex: ['C', 'hu/lex.50.50.enhu.s2t.bin', 3419024, 'b1c9763567bfa24082fee43a9c4cc05b8ceada949fa52f6686b11f70ce481238'], vocab: ['C', 'hu/vocab.enhu.spm', 832855, '8c3038afc15c5a3f7bb3c6fc4c4962907632b6f6d0ce7444974504bef19ef57b'] }],
+    ['id', '1.0', { model: ['C', 'id/model.enid.intgemm.alphas.bin', 17141051, 'f81f13eef703a4e0650ffc3138a0f4bab7b6c8bfd173ef1b7bda68d16b8bc7e8'], lex: ['C', 'id/lex.50.50.enid.s2t.bin', 3515428, 'd37f72bcab6e7bc52fd223350f95521b5810bb2486a97275f86077988fced3f4'], vocab: ['C', 'id/vocab.enid.spm', 773211, '61bc7db24d3b6de638a02a280580a273fe0c942ecbe8a8204b2f81978211db22'] }],
+    ['is', '2.0', { model: ['C', 'is/model.enis.intgemm.alphas.bin', 31561787, '459626236a49158aa555facd23e5f594e2f8416f4ebad32e0548af94c5b1ae0c'], lex: ['C', 'is/lex.50.50.enis.s2t.bin', 3837564, '4927d2bed702141b4ddd8a5e7034b27fb17312fdb7e3cc5f455ccf2e2f6670e0'], vocab: ['C', 'is/vocab.enis.spm', 809991, '61b2ea10edbe4cc61e36c833cacc2f55778ed9ca860cd382729060634d4b0adb'] }],
+    ['kn', '1.0', { model: ['C', 'kn/model.enkn.intgemm.alphas.bin', 17141051, '17a5ddc86e24f62c04aa15272930275812b5c1674bec50a877528680d5834d2d'], lex: ['C', 'kn/lex.50.50.enkn.s2t.bin', 2808304, '94b660f37c9c29a904b48498a7202846faaeef16f30668f356336c29cefc0f63'], vocab: ['C', 'kn/vocab.enkn.spm', 1065180, '1d41f1f6b67a8c29fa3aabbc7758b766bdd9acdbeec7d1277ab60c8e492c8b7a'] }],
+    ['lt', '2.1', { model: ['C', 'lt/model.enlt.intgemm.alphas.bin', 31561787, 'd27c676d9d761c2abfffec83956e32b2923f3f745b56acdbd84c49d888cdc94e'], lex: ['C', 'lt/lex.50.50.enlt.s2t.bin', 3421640, '5972c834218c7beea241dc8fe77c2e577a8d8b4eb3d3dc286d10ad890c64d374'], vocab: ['C', 'lt/vocab.enlt.spm', 806827, '5d38fe70ff4a50368af756b715b69519c9ee064c27cbceeabc90d4e1a10f25a8'] }],
+    ['lv', '2.1', { model: ['C', 'lv/model.enlv.intgemm.alphas.bin', 31561787, '715f9f444dffa0b39e71955c28bffd30afa4cc8300a192ec8fabb766cc5ba11d'], lex: ['C', 'lv/lex.50.50.enlv.s2t.bin', 3359096, 'd54b9bc278558444c5c25df5ae7339b73eee55cf79705f19fec672b6d55d959c'], vocab: ['C', 'lv/vocab.enlv.spm', 816287, '63146b49ce46ba1283b6956e38efdd4899d1a409cad9d2b6a06cbd4e32ca0808'] }],
+    ['ml', '1.0', { model: ['C', 'ml/model.enml.intgemm.alphas.bin', 17141051, 'c461749c8315f6417104cf4df32e5063e86cb101203f9629512294c1c8ab5337'], lex: ['C', 'ml/lex.50.50.enml.s2t.bin', 2532960, '4a37286742244a130548b79823c9707bc0e56f373361e2cb56402f82e862c2b0'], vocab: ['C', 'ml/vocab.enml.spm', 1109000, '8282614894087e4ffab325cbdb3aeeba35677f770ef8f253c189b392fe1f4d52'] }],
+    ['ms', '1.0', { model: ['C', 'ms/model.enms.intgemm.alphas.bin', 17141051, '3d6961462ffa711413d513624d7e6399b3560c2b0994daa73b0a45699e657af8'], lex: ['C', 'ms/lex.50.50.enms.s2t.bin', 3936428, 'be8fec4866c9ed2cf669adaea2e259c4c22f34838032eb0ee117c10fcb968c4c'], vocab: ['C', 'ms/vocab.enms.spm', 802440, 'c1f182330fb8c80778da36dd6e5bde59464db2390f623ea62817081cc759695a'] }],
+    ['ro', '1.0', { model: ['C', 'ro/model.enro.intgemm.alphas.bin', 17141051, 'aa98c415e5beb1c5ee2f7d2508a3bbba949be223d7d9e5e1788ad0ae8598dda5'], lex: ['C', 'ro/lex.50.50.enro.s2t.bin', 3739880, '508bce64a8bc906a99043ad2f4855b4662e06f8827c1c6a75ab83181b4f17f81'], vocab: ['C', 'ro/vocab.enro.spm', 801522, 'd89eedf6cbbcb30d7ed4b0b092189196ac2b010ec0c3ede33a6676b17ea1c95e'] }],
+    ['sk', '2.1', { model: ['C', 'sk/model.ensk.intgemm.alphas.bin', 31561787, 'e33af359fd58c8958104b1b74b3ea302800ccba2f125c1629e09d7f9dd9a3804'], lex: ['C', 'sk/lex.50.50.ensk.s2t.bin', 3356348, 'f3d1aec4ee5246d6a6ee5dc7ed4c6b18f6071c7baca69bf1344aef675b95515d'], vocab: ['C', 'sk/vocab.ensk.spm', 808888, 'cfa6a9e601d74686b117f041eb1ad9de94c34219110b67367d570a9e27026a46'] }],
+    ['sl', '2.1', { model: ['C', 'sl/model.ensl.intgemm.alphas.bin', 31561787, 'a34fc5cc2f52733f64e37f8512cf1ddc4723c08a7a1a59d01fc2b6e641fc2280'], lex: ['C', 'sl/lex.50.50.ensl.s2t.bin', 3428300, '2190798297bc12505f917189defcf451ab5bd2e815bc05df244dc291dc2ae63b'], vocab: ['C', 'sl/vocab.ensl.spm', 803212, '7cd295383c46824c05a05db76b543d3595f2516537dd22b77190a45c8919224d'] }],
+    ['sq', '2.0', { model: ['C', 'sq/model.ensq.intgemm.alphas.bin', 17141051, '8a90d17ab2798509e639e544caa1d577f7cf87c31b9ab7e53890c8d1d59b6eee'], lex: ['C', 'sq/lex.50.50.ensq.s2t.bin', 3303648, 'c901d1f5910315e0791720fa6f1275d79565e59d85013cf66b2f98cd9ba58ce1'], vocab: ['C', 'sq/vocab.ensq.spm', 820048, 'f27814dffca6102255ed7a338f2a83c16905a07e09444016187c768aaf9ac7b6'] }],
+    ['sr', '2.0', { model: ['C', 'sr/model.ensr.intgemm.alphas.bin', 31561787, 'd26e1c5a01f917c38ccda17d1bf116024ac4d988105e1bbf70bc5e8f9191c57a'], lex: ['C', 'sr/lex.50.50.ensr.s2t.bin', 2542096, 'b2ae22b4d7bc4295d25b8a55559ebbdbd8f728bc8de5c3d6f110bd44ce7d8962'], vocab: ['C', 'sr/vocab.ensr.spm', 922599, '7f54ba1554b7b1a89299a0ec5950535432f062b50a5f8c9bcd664a2444fa882a'] }],
+    ['sv', '1.0', { model: ['B', 'sv/model.ensv.intgemm.alphas.bin', 17141051, '65ea0db8e658435846f297384face62dbf1804cfc92de8388b0e368e6ecc25a7'], lex: ['B', 'sv/lex.50.50.ensv.s2t.bin', 3948180, '5761c39887a0e0cd3dd38d22cadc31cecd2a43b0514c4bba96b426736e7fd72d'], vocab: ['B', 'sv/vocab.ensv.spm', 793868, 'ff7e366ff4228107e58d76ca348e7dea2eb325452363d68e0047e97fb483e40e'] }],
+    ['te', '1.0', { model: ['C', 'te/model.ente.intgemm.alphas.bin', 17141051, 'a3fee2fcd39df975da28666c536adff60147dce59062fca6097bb42fb2a52500'], lex: ['C', 'te/lex.50.50.ente.s2t.bin', 2832156, 'ea44d146f6b4614586654d91d7b677ee617e2367be2eccd72e81aa0fa359b92c'], vocab: ['C', 'te/vocab.ente.spm', 1056424, '41d0828d103a07e0608c604102ba4418fcb06e82b3742c1abc6d3ec343673e93'] }],
+    ['th', '2.0', { model: ['C', 'th/model.enth.intgemm.alphas.bin', 31561787, '80e326097655fca75f841130da3338a849aa245374e1616448bcf37b9523a05a'], lex: ['C', 'th/lex.50.50.enth.s2t.bin', 3016612, '6961ce07f38e6c113a70855706aa7cad4cc828f986d1751c33f14699f885a2e8'], vocab: ['C', 'th/vocab.enth.spm', 993517, '5deff7093d558768f8c22406449202e27595f023cc383a2b66beed240ed46443'] }],
+    ['vi', '2.0', { model: ['C', 'vi/model.envi.intgemm.alphas.bin', 31561787, '04fa6044593a404c2aa02b3096f203880852df6f8f41e5eb966ed9f2b4366737'], lex: ['C', 'vi/lex.50.50.envi.s2t.bin', 4597684, '18116817fcd3d24dcdfd97cb57e9e60472800dae3b8a007f6f36d61d645f699c'], vocab: ['C', 'vi/vocab.envi.spm', 785200, '76daa9a49e393e50c865c889290e4dc36e9453e5e1ec9df7b9f3bc39ea782537'] }],
+  ];
   var LANGS = RAW.map(function (r) {
     var files = {}, size = 0;
     Object.keys(r[4]).forEach(function (k) {
@@ -103,10 +169,31 @@
       files[k] = { u: BASES[f[0]] + f[1], m: SELF[f[0]] ? SELF[f[0]] + f[1] : '', s: f[2], h: f[3] };
       size += f[2];
     });
-    return { code: r[0], name: r[1], native: r[2], version: r[3], files: files, size: size };
+    return { code: r[0], name: r[1], native: r[2], version: r[3], files: files, size: size, key: r[0] + '>en', to: null };
   });
   var BY_CODE = {};
   LANGS.forEach(function (L) { BY_CODE[L.code] = L; });
+  RAW_TO.forEach(function (r) {
+    var L = BY_CODE[r[0]];
+    if (!L) return;
+    var files = {}, size = 0;
+    Object.keys(r[2]).forEach(function (k) {
+      var f = r[2][k];
+      files[k] = { u: TO_BASES[f[0]] + f[1], m: '', s: f[2], h: f[3] };
+      size += f[2];
+    });
+    L.to = { key: 'en>' + r[0], version: r[1], files: files, size: size, pre: !!r[3] };
+  });
+  // The models a translation needs, in order: [X->en], [en->Y] or [X->en, en->Y]
+  // (null: not possible on device).
+  function route(from, to) {
+    to = to || 'en';
+    if (!from || from === to) return null;
+    var A = BY_CODE[from], B = BY_CODE[to];
+    if (to === 'en') return A ? [A] : null;
+    if (from === 'en') return B && B.to ? [B.to] : null;
+    return A && B && B.to ? [A, B.to] : null;
+  }
   var ENGINE_SIZE = ENGINE.glue.s + ENGINE.wasm.s;
   // Chrome's Translator API speaks plain BCP 47.
   function chromeCode(c) { return c === 'zh-Hans' ? 'zh' : c; }
@@ -120,6 +207,11 @@
   }
   var EXTRA_NAMES = { en: 'English', nb: 'Norwegian', be: 'Belarusian', la: 'Latin', ur: 'Urdu', ta: 'Tamil', mr: 'Marathi' };
   function langName(code) { return BY_CODE[code] ? BY_CODE[code].name : EXTRA_NAMES[code] || OTHER_NAME[code] || code; }
+  // 'Spanish' (into English), 'English → Spanish', 'Spanish → French'
+  function pairName(from, to) {
+    if (!to || to === 'en') return langName(from);
+    return langName(from) + ' \u2192 ' + langName(to);
+  }
 
   // ---- language names -> codes: ```Spanish, ```español, ```es-ES, ```zh-Hant ----
   // English and native names (any case, accents optional) and language tags.
@@ -176,6 +268,30 @@
     }
     var w = normName(raw.split(/[\s,;:(\[{]/)[0]); // "Spanish (Mexico)", "Español text"
     return w && w !== n && BY_NAME[w] ? BY_NAME[w] : '';
+  }
+
+  // ``` info string -> the translation it asks for, or null:
+  //   ```Spanish                         -> {from: 'es', to: 'en'}  (into English, as before)
+  //   ```English to Spanish, ```en>es, ```Spanish → French, ```de -> ja
+  //                                       -> {from, to}
+  //   ```to Spanish, ```> ja              -> {from: '' (detect), to}
+  // A two-letter code that is also a code-fence language (sv, pl …) counts here:
+  // the arrow / "to" makes it a language pair.
+  function pairPart(t) {
+    var c = langFromName(t);
+    if (c) return c;
+    t = String(t).trim().toLowerCase();
+    return t === 'en' || (BY_CODE[t] && /^[a-z]{2}$/.test(t)) ? t : '';
+  }
+  function pairFromInfo(info) {
+    var raw = String(info || '').trim().replace(/^[{.]+|\}+$/g, '');
+    if (!raw || raw.length > 64) return null;
+    var m = /^(.*?)\s*(?:->|=>|→|>)\s*(.+)$/.exec(raw) || /^(?:(.*?)\s+)?(?:to|into)\s+(.+)$/i.exec(raw);
+    if (!m) { var c = langFromName(raw); return c && BY_CODE[c] ? { from: c, to: 'en' } : null; }
+    var from = m[1] ? pairPart(m[1]) : '', to = pairPart(m[2]);
+    if (m[1] && !from) return null;
+    if (!to || from === to || (to !== 'en' && !(BY_CODE[to] && BY_CODE[to].to)) || (from && from !== 'en' && !BY_CODE[from])) return null;
+    return { from: from, to: to };
   }
 
   // ---- chunking: keep line structure, translate paragraphs / sentence groups ----
@@ -317,6 +433,11 @@
       });
     }
     function filesOf(L) { return Object.keys(L.files).map(function (k) { return L.files[k]; }); }
+    function allModels() {
+      var out = [];
+      LANGS.forEach(function (L) { out.push(L); if (L.to) out.push(L.to); });
+      return out;
+    }
 
     // Which registry files are in our bucket (one keys() call, cached until a change).
     function cached() {
@@ -332,32 +453,52 @@
     function invalidate() { cachedSet = null; }
     function hasAll(set, list) { return list.every(function (f) { return set[f.u]; }); }
 
-    function chromeAvail(code) {
+    function chromeAvail(code, to) {
+      var k = code + '>' + to;
       if (!hasChrome) return Promise.resolve('unavailable');
-      if (chrome[code]) return Promise.resolve(chrome[code]);
+      if (chrome[k]) return Promise.resolve(chrome[k]);
       // availability() itself can hang (seen in headless Chrome): give up after 5 s
-      return withTimeout(Promise.resolve().then(function () { return self.Translator.availability({ sourceLanguage: chromeCode(code), targetLanguage: 'en' }); }), 5000, 'availability timeout')
-        .then(function (a) { chrome[code] = a || 'unavailable'; return chrome[code]; }, function () { chrome[code] = 'unavailable'; return 'unavailable'; });
+      return withTimeout(Promise.resolve().then(function () { return self.Translator.availability({ sourceLanguage: chromeCode(code), targetLanguage: chromeCode(to) }); }), 5000, 'availability timeout')
+        .then(function (a) { chrome[k] = a || 'unavailable'; return chrome[k]; }, function () { chrome[k] = 'unavailable'; return 'unavailable'; });
     }
-    // -> { engine: 'chrome'|'bergamot'|'', ready: bool, needs: 'download'|'chrome-download'|'', size, label, why }
-    function status(code) {
-      var L = BY_CODE[code];
-      return Promise.all([chromeAvail(code), cached()]).then(function (r) {
+    function cantWhy(code, to) {
+      if (code === to) return 'Pick two different languages';
+      var bad = code !== 'en' && !BY_CODE[code] ? code : to !== 'en' && !(BY_CODE[to] && BY_CODE[to].to) ? to : '';
+      return (bad ? langName(bad) : 'This pair') + ' is not available for on-device translation';
+    }
+    // status(code, to = 'en')
+    // -> { engine: 'chrome'|'bergamot'|'', ready: bool, needs: 'download'|'chrome-download'|'', size, label, why, route, missing }
+    // size = bytes still to download (models not on the device yet, plus the engine if missing).
+    function status(code, to) {
+      to = to || 'en';
+      var rt = route(code, to);
+      if (!rt) return Promise.resolve({ engine: '', ready: false, label: '', why: cantWhy(code, to) });
+      return Promise.all([chromeAvail(code, to), cached()]).then(function (r) {
         var ca = r[0], set = r[1];
-        var berg = !!L && simd && storage, bergReady = berg && hasAll(set, filesOf(L)) && hasAll(set, [ENGINE.glue, ENGINE.wasm]);
+        var berg = simd && storage;
         var engineMissing = berg && !hasAll(set, [ENGINE.glue, ENGINE.wasm]);
+        var missing = berg ? rt.filter(function (m) { return !hasAll(set, filesOf(m)); }) : rt;
+        var label = 'On-device · Firefox Translations' + (rt.length > 1 ? ' (via English)' : '');
         if (ca === 'available') return { engine: 'chrome', ready: true, label: 'On-device · Chrome' };
-        if (bergReady) return { engine: 'bergamot', ready: true, label: 'On-device · Firefox Translations' };
+        if (berg && !engineMissing && !missing.length) return { engine: 'bergamot', ready: true, label: label, route: rt };
         if (ca === 'downloadable' || ca === 'downloading') return { engine: 'chrome', ready: false, needs: 'chrome-download', label: 'On-device · Chrome', size: 0 };
-        if (berg) return { engine: 'bergamot', ready: false, needs: 'download', label: 'On-device · Firefox Translations', size: L.size + (engineMissing ? ENGINE_SIZE : 0) };
-        var why = !L ? langName(code) + ' is not available for on-device translation' : !simd ? 'This browser lacks WebAssembly SIMD (needs iOS 16.4+ or a recent Chrome/Firefox)' : 'Cache Storage is unavailable (private browsing?)';
+        if (berg) {
+          var size = engineMissing ? ENGINE_SIZE : 0;
+          missing.forEach(function (m) { size += m.size; });
+          return { engine: 'bergamot', ready: false, needs: 'download', label: label, size: size, route: rt, missing: missing.map(function (m) { return m.key; }) };
+        }
+        var why = !simd ? 'This browser lacks WebAssembly SIMD (needs iOS 16.4+ or a recent Chrome/Firefox)' : 'Cache Storage is unavailable (private browsing?)';
         return { engine: '', ready: false, label: '', why: why };
       });
     }
+    // -> { es: true, … (into English), _to: { es: true, … } (from English), _engine: bool }
     function downloaded() {
       return cached().then(function (set) {
-        var out = {};
-        LANGS.forEach(function (L) { if (hasAll(set, filesOf(L))) out[L.code] = true; });
+        var out = { _to: {} };
+        LANGS.forEach(function (L) {
+          if (hasAll(set, filesOf(L))) out[L.code] = true;
+          if (L.to && hasAll(set, filesOf(L.to))) out._to[L.code] = true;
+        });
         out._engine = hasAll(set, [ENGINE.glue, ENGINE.wasm]);
         return out;
       });
@@ -365,38 +506,65 @@
     function usage() {
       return cached().then(function (set) {
         var known = {}, total = 0;
-        LANGS.forEach(function (L) { filesOf(L).forEach(function (f) { known[f.u] = f.s; }); });
+        allModels().forEach(function (m) { filesOf(m).forEach(function (f) { known[f.u] = f.s; }); });
         known[ENGINE.glue.u] = ENGINE.glue.s; known[ENGINE.wasm.u] = ENGINE.wasm.s;
         Object.keys(set).forEach(function (u) { total += known[u] || 0; });
         return total;
       });
     }
-    // Download (needs a user tap): Bergamot files into our bucket, or let Chrome fetch its model.
-    function download(code, onProgress) {
-      return status(code).then(function (st) {
+    // A self-hosted model that isn't up yet answers 404.
+    function friendly(e, models) {
+      if (!/HTTP 404/.test(e && e.message)) return e;
+      var m = models.filter(function (x) { return /^en>/.test(x.key); })[0];
+      return new Error((m ? 'English → ' + langName(m.key.slice(3)) : 'This language') + ' isn’t on the download server yet — try again later');
+    }
+    // download(code, onProgress, to = 'en') — needs a user tap: Bergamot files
+    // into our bucket (every model of the route), or let Chrome fetch its model.
+    // modelsOnly: download(code, onProgress, to, ['es>en']) fetches just those
+    // (the language manager's per-direction buttons).
+    function download(code, onProgress, to, only) {
+      to = to || 'en';
+      var models;
+      if (only) {
+        models = allModels().filter(function (m) { return only.indexOf(m.key) >= 0; });
+        if (!(simd && storage)) return status(code, to).then(function (st) { throw new Error(st.why || 'not available'); });
+        return fetchModels(models, onProgress).then(function () { return status(code, to); });
+      }
+      return status(code, to).then(function (st) {
         if (st.ready) return st;
         if (st.engine === 'chrome') {
-          return chromeTranslator(code, onProgress).then(function () { chrome[code] = 'available'; return status(code); }, function (e) {
+          return chromeTranslator(code, to, onProgress).then(function () { chrome[code + '>' + to] = 'available'; return status(code, to); }, function (e) {
             // Chrome stalled: offer the Firefox Translations download instead.
-            if (bergamotPossible(code)) return status(code);
+            if (bergamotPossible(code, to)) return status(code, to);
             throw e;
           });
         }
         if (st.engine !== 'bergamot') throw new Error(st.why || 'not available');
-        var L = BY_CODE[code], list = [ENGINE.glue, ENGINE.wasm].concat(filesOf(L));
-        return call({ type: 'download', files: list }, function (m) { if (onProgress && m.total) onProgress(m.loaded / m.total, m.stage); })
-          .then(function () { invalidate(); return status(code); }, function (e) { invalidate(); throw e; });
+        return fetchModels(st.route, onProgress).then(function () { return status(code, to); });
       });
     }
-    function remove(code) {
+    function fetchModels(models, onProgress) {
+      var list = [ENGINE.glue, ENGINE.wasm];
+      models.forEach(function (m) { list = list.concat(filesOf(m)); });
+      return call({ type: 'download', files: list }, function (m) { if (onProgress && m.total) onProgress(m.loaded / m.total, m.stage); })
+        .then(function () { invalidate(); }, function (e) { invalidate(); throw friendly(e, models); });
+    }
+    // remove(code, which = 'from'): 'from' = X -> English, 'to' = English -> X, 'both'
+    function remove(code, which) {
       var L = BY_CODE[code];
       if (!L || !storage) return Promise.resolve();
+      which = which || 'from';
+      var drop = [];
+      if (which !== 'to') drop.push(L);
+      if (which !== 'from' && L.to) drop.push(L.to);
       return cached().then(function (set) {
-        // a file another downloaded language also uses stays
+        // a file another downloaded model also uses stays
         var keep = {};
-        LANGS.forEach(function (o) { if (o !== L && hasAll(set, filesOf(o))) filesOf(o).forEach(function (f) { keep[f.u] = 1; }); });
+        allModels().forEach(function (o) { if (drop.indexOf(o) < 0 && hasAll(set, filesOf(o))) filesOf(o).forEach(function (f) { keep[f.u] = 1; }); });
         return caches.open(CACHE).then(function (c) {
-          return Promise.all(filesOf(L).filter(function (f) { return !keep[f.u]; }).map(function (f) { return c.delete(f.u); }));
+          var del = [];
+          drop.forEach(function (m) { filesOf(m).forEach(function (f) { if (!keep[f.u]) del.push(c.delete(f.u)); }); });
+          return Promise.all(del);
         });
       }).then(function () {
         invalidate();
@@ -412,7 +580,7 @@
     // Chrome's built-in translator can stall (no model fetch ever starts, e.g.
     // in some Chrome builds/headless): a promise that never settles would
     // leave the panel at 0% forever. Watchdogs turn silence into an error, the
-    // language is then treated as Chrome-unavailable for this session and
+    // pair is then treated as Chrome-unavailable for this session and
     // Firefox Translations takes over (see translate / download).
     function withTimeout(pr, ms, msg, kick) {
       return new Promise(function (resolve, reject) {
@@ -422,11 +590,12 @@
       });
     }
     var CHROME_QUIET_MS = 25000;
-    function chromeTranslator(code, onProgress) {
-      if (chromeTr[code]) return chromeTr[code];
+    function chromeTranslator(code, to, onProgress) {
+      var k = code + '>' + to;
+      if (chromeTr[k]) return chromeTr[k];
       var bump = null;
       var created = self.Translator.create({
-        sourceLanguage: chromeCode(code), targetLanguage: 'en',
+        sourceLanguage: chromeCode(code), targetLanguage: chromeCode(to),
         monitor: function (m) {
           m.addEventListener('downloadprogress', function (e) {
             if (bump) bump(); // still downloading: reset the quiet timer
@@ -434,58 +603,70 @@
           });
         },
       });
-      chromeTr[code] = withTimeout(created, CHROME_QUIET_MS, 'Chrome\u2019s translator didn\u2019t respond', function (reset) { bump = reset; });
-      chromeTr[code].catch(function () { delete chromeTr[code]; chrome[code] = 'unavailable'; });
-      return chromeTr[code];
+      chromeTr[k] = withTimeout(created, CHROME_QUIET_MS, 'Chrome’s translator didn’t respond', function (reset) { bump = reset; });
+      chromeTr[k].catch(function () { delete chromeTr[k]; chrome[k] = 'unavailable'; });
+      return chromeTr[k];
     }
-    function bergamotPossible(code) { return !!BY_CODE[code] && simd && storage; }
+    function bergamotPossible(code, to) { return !!route(code, to || 'en') && simd && storage; }
 
-    // translate(text, code, onProgress) -> {text, engine, label, from}
-    function translate(text, code, onProgress) {
-      return status(code).then(function (st) {
-        if (!st.ready) throw new Error(st.why || (langName(code) + ' is not downloaded yet'));
+    // translate(text, code, onProgress, to = 'en') -> {text, engine, label, from, to}
+    function translate(text, code, onProgress, to) {
+      to = to || 'en';
+      return status(code, to).then(function (st) {
+        if (!st.ready) throw new Error(st.why || (pairName(code, to) + ' is not downloaded yet'));
         var ch = chunkText(text, st.engine === 'chrome' ? 1500 : 600), out = new Array(ch.texts.length), done = 0, chars = 0;
         ch.texts.forEach(function (t) { chars += t.length; });
-        var tick = function (n) { done += n; if (onProgress) onProgress(chars ? Math.min(1, done / chars) : 1, 'translate'); };
-        var finish = function () { return { text: reassemble(ch, out), engine: st.engine, label: st.label, from: code }; };
+        var stages = st.route ? st.route.length : 1, stage = 0;
+        var frac = function () { return chars ? Math.min(1, (stage + done / chars) / stages) : 1; };
+        var tick = function (n) { done += n; if (onProgress) onProgress(frac(), 'translate'); };
+        var finish = function () { return { text: reassemble(ch, out), engine: st.engine, label: st.label, from: code, to: to }; };
         if (!ch.texts.length) return finish();
         if (st.engine === 'chrome') {
-          return chromeTranslator(code).then(function (tr) {
+          var k = code + '>' + to;
+          return chromeTranslator(code, to).then(function (tr) {
             var i = 0;
             var next = function () {
               if (i >= ch.texts.length) return finish();
-              var k = i++;
-              return withTimeout(tr.translate(ch.texts[k]), CHROME_QUIET_MS, 'Chrome\u2019s translator didn\u2019t respond')
-                .then(function (r) { out[k] = r; tick(ch.texts[k].length); return next(); });
+              var j = i++;
+              return withTimeout(tr.translate(ch.texts[j]), CHROME_QUIET_MS, 'Chrome’s translator didn’t respond')
+                .then(function (r) { out[j] = r; tick(ch.texts[j].length); return next(); });
             };
             return next();
           }).catch(function (e) {
-            // Chrome stalled or failed: stop using it for this language and
-            // retry on Firefox Translations if its model is already here
+            // Chrome stalled or failed: stop using it for this pair and
+            // retry on Firefox Translations if its models are already here
             // (otherwise the UI shows its download button via status()).
-            chrome[code] = 'unavailable'; delete chromeTr[code];
-            if (!bergamotPossible(code)) throw e;
-            return status(code).then(function (s2) {
-              if (s2.ready && s2.engine === 'bergamot') return translate(text, code, onProgress);
-              throw new Error('Chrome\u2019s translator isn\u2019t responding \u2014 download ' + langName(code) + ' for Firefox Translations instead');
+            chrome[k] = 'unavailable'; delete chromeTr[k];
+            if (!bergamotPossible(code, to)) throw e;
+            return status(code, to).then(function (s2) {
+              if (s2.ready && s2.engine === 'bergamot') return translate(text, code, onProgress, to);
+              throw new Error('Chrome’s translator isn’t responding — download ' + pairName(code, to) + ' for Firefox Translations instead');
             });
           });
         }
-        // Bergamot: batches of ~2000 characters so progress keeps moving
-        var L = BY_CODE[code], i0 = 0;
-        var batch = function () {
-          if (i0 >= ch.texts.length) return finish();
-          var start = i0, len = 0, list = [];
-          while (i0 < ch.texts.length && (list.length === 0 || (len + ch.texts[i0].length <= 2000 && list.length < 16))) { len += ch.texts[i0].length; list.push(ch.texts[i0]); i0++; }
-          return call({ type: 'translate', engine: ENGINE, lang: code, files: L.files, texts: list }, function (m) {
-            if (onProgress && m.stage !== 'download') onProgress(chars ? done / chars : 0, m.stage);
-          }).then(function (m) {
-            for (var q = 0; q < list.length; q++) out[start + q] = m.texts[q];
-            tick(len);
-            return batch();
-          });
+        // Bergamot: every chunk through the first model, then (pivot) through
+        // the second — two models stay loaded for a pivot, one otherwise.
+        // Batches of ~2000 characters so progress keeps moving.
+        var src = ch.texts.slice();
+        var runStage = function () {
+          if (stage >= stages) return finish();
+          var m = st.route[stage], i0 = 0;
+          done = 0;
+          var batch = function () {
+            if (i0 >= src.length) { for (var q = 0; q < src.length; q++) out[q] = src[q]; stage++; return runStage(); }
+            var start = i0, len = 0, list = [];
+            while (i0 < src.length && (list.length === 0 || (len + src[i0].length <= 2000 && list.length < 16))) { len += src[i0].length; list.push(src[i0]); i0++; }
+            return call({ type: 'translate', engine: ENGINE, lang: m.key, files: m.files, keep: stages, texts: list }, function (pm) {
+              if (onProgress && pm.stage !== 'download') onProgress(frac(), pm.stage);
+            }).then(function (pm) {
+              for (var q = 0; q < list.length; q++) src[start + q] = pm.texts[q];
+              tick(len);
+              return batch();
+            });
+          };
+          return batch();
         };
-        return batch();
+        return runStage();
       });
     }
 
@@ -516,7 +697,7 @@
     return {
       languages: function () { return LANGS.slice(); },
       lang: function (c) { return BY_CODE[c] || null; },
-      name: langName, fromName: langFromName,
+      name: langName, fromName: langFromName, pairName: pairName, pairFromInfo: pairFromInfo, route: route,
       engineSize: ENGINE_SIZE,
       hasChrome: hasChrome, simd: simd, storage: storage,
       status: status, downloaded: downloaded, usage: usage,
@@ -526,7 +707,7 @@
     };
   }
 
-  var api = { create: create, chunkText: chunkText, reassemble: reassemble, guessLang: guessLang, langFromName: langFromName, langName: langName, LANGS: LANGS, ENGINE: ENGINE, BASES: BASES, CACHE: CACHE };
+  var api = { create: create, chunkText: chunkText, reassemble: reassemble, guessLang: guessLang, langFromName: langFromName, pairFromInfo: pairFromInfo, langName: langName, pairName: pairName, route: route, LANGS: LANGS, ENGINE: ENGINE, BASES: BASES, TO_BASES: TO_BASES, CACHE: CACHE };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.__DecodeLabTranslate = api;
 })(typeof self !== 'undefined' ? self : this);

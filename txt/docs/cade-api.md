@@ -198,7 +198,8 @@ stale copies; call again when you need fresh values). Used by e.g. the
 | `window.__calAgenda(dateKey)` | `widgets/calendar` | that day's events (copies) |
 | `window.__cadeDateParse(text, now?)` | `plugins/datechips` | natural-language / absolute dates in `text` → `[{from, to, y, mo, d, time:{h,mi}\|null, rel, …}]` |
 | `window.__cadeSpoilerToggle()` | `plugins/spoiler` | wrap / unwrap the editor selection in `\|\|…\|\|` |
-| `window.__cadeTrInline` | `widgets/decodelab/decodelab-inline.js` (lazy: loaded by the `translate-blocks` chips and the "Translate to English" script) | on-device translation into a ```English block below the source: `translateAtCursor()` → Promise (rejects with a readable Error); chip API `statusAt / pressAt / consentAt / cancelAt(openFrom)`, `version` bumps on state changes |
+| `window.__cadeTrInline` | `widgets/decodelab/decodelab-inline.js` (lazy: loaded by the `translate-blocks` chips and the "Translate to English" script) | on-device translation into a ```English block below the source (or ```Spanish … for a pair fence: ```English to Spanish, ```en>es, ```to Spanish): `translateAtCursor()` → Promise (rejects with a readable Error); chip API `statusAt / pressAt / consentAt / cancelAt(openFrom)`, `version` bumps on state changes |
+| `window.__DecodeLabTranslate` | `widgets/decodelab/decodelab-translate.js` (lazy: Decode Lab, the Translate widget, the inline runtime) | the translator: `create({workerUrl, core})` → manager with `status(code, to)`, `download(code, onProgress, to)`, `translate(text, code, onProgress, to)` (`to` defaults to `'en'`; X → Y goes through English), `downloaded()`, `usage()`, `remove(code, 'from'\|'to'\|'both')`, `detect(text)`, `dispose()`; helpers `route`, `pairFromInfo`, `langFromName`, `LANGS` |
 
 ## Internal (loader-only — don't call from modules)
 `Cade._setCurrent(ctx)`, `Cade._ctx()`, `Cade._configs`. The loader sets the

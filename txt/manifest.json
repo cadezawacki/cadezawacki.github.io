@@ -1443,7 +1443,7 @@
       "id": "decodelab",
       "type": "widget",
       "name": "Decode Lab",
-      "description": "Auto-decode mystery text: Base64/hex/Morse/… chains, Caesar, Vigenère, XOR & more, frequency analysis, offline translation to English",
+      "description": "Auto-decode mystery text: Base64/hex/Morse/… chains, Caesar, Vigenère, XOR & more, frequency analysis, offline translation (to and from English)",
       "icon": "🔓",
       "tags": "decode,decoder,cipher,brute force,base64,caesar,vigenere,xor,crypto,ctf,frequency analysis,identify,magic,rot13,morse,hex,encoding,puzzle,cryptanalysis,kasiski,index of coincidence,translate,translation,translator,translate to english,offline translation,english,language,detect language,foreign language",
       "entry": "widgets/decodelab/decodelab.js",
@@ -1452,8 +1452,24 @@
         "widgets/decodelab/decodelab-core.js",
         "widgets/decodelab/decodelab-data.js",
         "widgets/decodelab/decodelab-translate.js",
-        "widgets/decodelab/decodelab-translate-worker.js?v=2",
+        "widgets/decodelab/decodelab-translate-worker.js?v=3",
         "widgets/decodelab/decodelab-inline.js"
+      ]
+    },
+    {
+      "id": "translate",
+      "type": "widget",
+      "name": "Translate",
+      "description": "Translate on this device, both ways — into English, from English, or between two languages; offline once a language is downloaded",
+      "icon": "🌐",
+      "tags": "translate,translation,translator,translate to english,translate from english,english to spanish,spanish to english,language,languages,offline translation,on-device,detect language,foreign language,interpreter,spanish,french,german,italian,portuguese,dutch,russian,ukrainian,polish,turkish,chinese,japanese,korean,arabic,hindi,greek,swedish,vietnamese,thai",
+      "entry": "widgets/translate/translate.js",
+      "css": "widgets/translate/translate.css",
+      "precache": [
+        "widgets/decodelab/decodelab-translate.js",
+        "widgets/decodelab/decodelab-translate-worker.js?v=3",
+        "widgets/decodelab/decodelab-core.js",
+        "widgets/decodelab/decodelab-data.js"
       ]
     },
     {
@@ -1477,7 +1493,7 @@
       "id": "translate-blocks",
       "type": "plugin",
       "name": "Translate buttons on language blocks",
-      "description": "A “Translate” chip on ```Spanish / ```español / ```es-ES … blocks (any of 46 languages; never on code) — writes the English below as a ```English block, on this device (one-time model download per language, size shown first)",
+      "description": "A “Translate” chip on ```Spanish / ```español / ```es-ES … blocks (any of 46 languages; never on code) — writes the English below as a ```English block; ```English to Spanish, ```en>es or ```to Spanish go the other way. On this device (one-time model download per direction, size shown first)",
       "entry": "plugins/translate-blocks/translate-blocks.js",
       "css": "plugins/translate-blocks/translate-blocks.css",
       "settingKey": "plugins.translate-blocks",
