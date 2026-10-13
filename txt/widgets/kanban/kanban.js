@@ -25,15 +25,15 @@
   // =========================================================================
   var Model = (function () {
     var HEAD_RE = /^(#{1,6})(?:[ \t]+(.*?))?[ \t]*$/;
-    var ITEM_RE = /^([ \t]*)([-*+•]|\d{1,9}[.)])(?:[ \t]+(.*))?$/;
+    var ITEM_RE = /^([ \t]*)([-*+\u2022]|\d{1,9}[.)])(?:[ \t]+(.*))?$/;
     var BARE_RE = /^([ \t]*)\[[ xX]\](?:[ \t]|$)/;   // core treats "[ ] x" as a todo line too
     var CHECK_RE = /^\[([ xX])\](?:[ \t]+|$)/;
     var FENCE_RE = /^[ \t]*(`{3,}|~{3,})/;
     var NUM_RE = /^\d+[.)]$/;
     var BLANK_RE = /^[ \t]*$/;
-    var STRIKE_G = /̶/g;
-    var HAS_STRIKE = /̶/;
-    var DONE_RE = /\b(?:done|complete|completed|finished|closed|shipped|resolved|archived?)\b|[✅✓✔]/i;
+    var STRIKE_G = /\u0336/g;
+    var HAS_STRIKE = /\u0336/;
+    var DONE_RE = /\b(?:done|complete|completed|finished|closed|shipped|resolved|archived?)\b|[\u2705\u2713\u2714]/i;
     var WIP_RE = /\s*[(\[]\s*(?:wip|max|limit)?\s*[:=]?\s*(\d{1,3})\s*[)\]]\s*$/i;
 
     function isBlank(s) { return BLANK_RE.test(s); }
@@ -346,7 +346,7 @@
     // Core's checkbox toggle strikes the text with U+0336 when ticking and strips
     // it when unticking; do the same so either path leaves the same text.
     function strike(s) {
-      return s.replace(STRIKE_G, '').replace(/[\uD800-\uDBFF][\uDC00-\uDFFF]|[^\n\r]/g, function (ch) { return ch + '̶'; });
+      return s.replace(STRIKE_G, '').replace(/[\uD800-\uDBFF][\uDC00-\uDFFF]|[^\n\r]/g, function (ch) { return ch + '\u0336'; });
     }
     function setCheck(line, on) {
       var m = matchItem(line);
@@ -530,7 +530,7 @@
       var col = b.columns[c];
       if (!col) return null;
       if (col.cards.length) return { error: 'Move or delete its cards first' };
-      if (col.sectionEnd > col.bodyEnd) return { error: 'It has sub-headings — remove them in the editor first' };
+      if (col.sectionEnd > col.bodyEnd) return { error: 'It has sub-headings \u2014 remove them in the editor first' };
       if (b.columns.length <= 2 && !b.marked) return { error: 'A board needs at least two columns' };
       if (col.notes.length && !force) return { confirm: true };
       var a = col.line, e = lastNonBlank(P, a, col.sectionEnd) + 1;
@@ -594,7 +594,7 @@
 
   var PANEL_ID = 'kanban-panel';
   var PREFS_KEY = 'cade-kanban-prefs';
-  var STRIKE_G = /̶/g;
+  var STRIKE_G = /\u0336/g;
   var INLINE_SRC = [
     '`([^`\\n]+)`',                                        // 1 code
     '\\[([^\\]\\n]+)\\]\\((https?:\\/\\/[^\\s)]+)\\)',     // 2,3 link
@@ -640,7 +640,7 @@
   // Inline markdown → safe HTML (everything escaped; only http(s) links).
   function inline(s, checked) {
     s = String(s).replace(STRIKE_G, '');
-    if (s.length > 600) s = s.slice(0, 600) + '…';
+    if (s.length > 600) s = s.slice(0, 600) + '\u2026';
     var re = new RegExp(INLINE_SRC, 'g'), out = '', last = 0, m;
     while ((m = re.exec(s))) {
       out += esc(s.slice(last, m.index));
@@ -649,7 +649,7 @@
       else if (m[4] != null || m[5] != null) out += '<strong>' + inline(m[4] != null ? m[4] : m[5], checked) + '</strong>';
       else if (m[6] != null) out += '<s>' + inline(m[6], checked) + '</s>';
       else if (m[7] != null || m[8] != null) out += '<em>' + inline(m[7] != null ? m[7] : m[8], checked) + '</em>';
-      else if (m[9] != null) out += '<a href="' + esc(m[9]) + '" target="_blank" rel="noopener noreferrer">' + esc(m[9].length > 48 ? m[9].slice(0, 46) + '…' : m[9]) + '</a>';
+      else if (m[9] != null) out += '<a href="' + esc(m[9]) + '" target="_blank" rel="noopener noreferrer">' + esc(m[9].length > 48 ? m[9].slice(0, 46) + '\u2026' : m[9]) + '</a>';
       else if (m[11] != null) out += esc(m[10]) + '<span class="kb-chip ' + (m[11].charAt(0) === '@' ? 'kb-at' : 'kb-hash') + '">' + esc(m[11]) + '</span>';
       else if (m[12] != null) {
         var cls = 'kb-chip kb-date' + (m[12] === TODAY ? ' kb-today' : m[12] < TODAY && !checked ? ' kb-overdue' : '');
@@ -742,13 +742,13 @@
     var ed = Cade.editor;
     if (!ed || !panelEl) return false;
     if (ed.state.readOnly) {
-      toast('Read-only mode — editing is locked', 'error', 2000);
+      toast('Read-only mode \u2014 editing is locked', 'error', 2000);
       S.html = ''; refresh({ force: true });
       return false;
     }
     var r = syncRefs(refs || []);
     if (!r) {
-      toast('The board changed — try again');
+      toast('The board changed \u2014 try again');
       S.html = ''; refresh({ force: true });
       return false;
     }
@@ -776,8 +776,8 @@
   function groupLabel(g) {
     var P = S.P, names = g.heads.map(function (k) { return P.heads[k].raw.replace(Model.WIP_RE, '') || '(untitled)'; });
     var parent = g.marked ? '@kanban' : g.parent >= 0 ? P.heads[g.parent].raw : '';
-    var s = (parent ? parent + ': ' : '') + names.join(' · ');
-    return s.length > 64 ? s.slice(0, 63) + '…' : s;
+    var s = (parent ? parent + ': ' : '') + names.join(' \u00b7 ');
+    return s.length > 64 ? s.slice(0, 63) + '\u2026' : s;
   }
 
   function cardInfo(P, card) {
@@ -807,7 +807,7 @@
       h += '<div class="kb-sub" style="padding-left:' + (depth * 12) + 'px">';
       if (m && m.check !== null) {
         h += '<input type="checkbox" class="kb-subcheck" tabindex="-1" data-off="' + (k + 1) + '"' + (m.check !== ' ' ? ' checked' : '') + (S.ro ? ' disabled' : '') + ' aria-label="Sub-task done">';
-      } else if (m) h += '<span class="kb-bullet" aria-hidden="true">•</span>';
+      } else if (m) h += '<span class="kb-bullet" aria-hidden="true">\u2022</span>';
       var done = m && m.check !== null && m.check !== ' ';
       h += '<span class="kb-subtext' + (done ? ' kb-subdone' : '') + '">' + inline(m ? m.text : l.trim(), done) + '</span></div>';
     });
@@ -819,23 +819,23 @@
     var label = info.text.replace(/[*_`~]/g, '').trim() || 'Empty card';
     var h = '<div class="kb-card' + (info.checked ? ' kb-done' : '') + '" tabindex="0" role="listitem" data-col="' + i +
       '" data-ci="' + j + '" aria-label="' + esc(label.slice(0, 120)) + '">';
-    if (!ro) h += '<span class="kb-grip" aria-hidden="true" title="Drag to move">⠿</span>';
+    if (!ro) h += '<span class="kb-grip" aria-hidden="true" title="Drag to move">\u283f</span>';
     if (info.hasCheck) {
       h += '<input type="checkbox" class="kb-check" tabindex="-1"' + (info.checked ? ' checked' : '') + (ro ? ' disabled' : '') + ' aria-label="Done">';
     }
     h += '<div class="kb-body"><div class="kb-text">' +
       (info.text.trim() ? inline(info.text, info.checked) : '<span class="kb-placeholder">(empty)</span>') + '</div>';
     if (info.extra) {
-      var lbl = info.items ? '☰ ' + info.items : '¶ ' + info.extra;
-      if (info.checks) lbl += ' · ☑ ' + info.done + '/' + info.checks;
+      var lbl = info.items ? '\u2630 ' + info.items : '\u00b6 ' + info.extra;
+      if (info.checks) lbl += ' \u00b7 \u2611 ' + info.done + '/' + info.checks;
       h += '<div class="kb-meta"><button type="button" class="kb-subs' + (open ? ' on' : '') + '" tabindex="-1" aria-expanded="' + open +
-        '" title="' + (open ? 'Hide' : 'Show') + ' sub-items">' + lbl + (open ? ' ▴' : ' ▾') + '</button></div>';
+        '" title="' + (open ? 'Hide' : 'Show') + ' sub-items">' + lbl + (open ? ' \u25b4' : ' \u25be') + '</button></div>';
       if (open) h += subsHtml(P, card, info);
     }
     h += '</div><div class="kb-acts">' +
-      '<button type="button" class="kb-icon kb-goto" tabindex="-1" title="Show in editor" aria-label="Show in editor">↗</button>' +
-      (ro ? '' : '<button type="button" class="kb-icon kb-edit" tabindex="-1" title="Edit (Enter / double-click)" aria-label="Edit card">✎</button>' +
-        '<button type="button" class="kb-icon kb-del" tabindex="-1" title="Delete (Del)" aria-label="Delete card">×</button>') +
+      '<button type="button" class="kb-icon kb-goto" tabindex="-1" title="Show in editor" aria-label="Show in editor">\u2197</button>' +
+      (ro ? '' : '<button type="button" class="kb-icon kb-edit" tabindex="-1" title="Edit (Enter / double-click)" aria-label="Edit card">\u270e</button>' +
+        '<button type="button" class="kb-icon kb-del" tabindex="-1" title="Delete (Del)" aria-label="Delete card">\u00d7</button>') +
       '</div></div>';
     return h;
   }
@@ -844,8 +844,8 @@
     var lines = col.notes.map(function (i) { return P.lines[i]; }).filter(function (l) { return l.trim() && !/^[ \t]*(```|~~~)/.test(l); });
     if (!lines.length) return '';
     var full = lines.join('\n');
-    return '<div class="kb-note" title="' + esc(full.length > 600 ? full.slice(0, 600) + '…' : full) + '">' +
-      lines.slice(0, 4).map(function (l) { return inline(l.trim(), false); }).join('<br>') + (lines.length > 4 ? ' …' : '') + '</div>';
+    return '<div class="kb-note" title="' + esc(full.length > 600 ? full.slice(0, 600) + '\u2026' : full) + '">' +
+      lines.slice(0, 4).map(function (l) { return inline(l.trim(), false); }).join('<br>') + (lines.length > 4 ? ' \u2026' : '') + '</div>';
   }
 
   function boardHtml() {
@@ -865,16 +865,16 @@
       var countTitle = toks.length ? shown + ' of ' + n + ' cards match' : n + ' card' + (n === 1 ? '' : 's') + (col.wip ? ' (WIP limit ' + col.wip + ')' : '');
       h += '<section class="kb-col' + (col.done ? ' kb-col-done' : '') + (over ? ' kb-over' : '') + '" data-col="' + i + '" aria-label="' + esc(col.name || 'Untitled') + '">' +
         '<header class="kb-col-head">' +
-          '<span class="kb-col-name" title="' + esc(col.raw || '(untitled)') + (ro ? '' : ' — double-click to rename') + '">' + esc(col.name || '(untitled)') + '</span>' +
+          '<span class="kb-col-name" title="' + esc(col.raw || '(untitled)') + (ro ? '' : ' \u2014 double-click to rename') + '">' + esc(col.name || '(untitled)') + '</span>' +
           '<span class="kb-count" title="' + esc(countTitle) + '">' + esc(count) + '</span>' +
-          '<button type="button" class="kb-icon kb-col-menu" title="Column actions" aria-haspopup="menu" aria-label="Column actions">⋯</button>' +
+          '<button type="button" class="kb-icon kb-col-menu" title="Column actions" aria-haspopup="menu" aria-label="Column actions">\u22ef</button>' +
         '</header>' + noteHtml(P, col) +
         '<div class="kb-list" role="list" data-col="' + i + '">' + cards +
           (shown ? '' : '<div class="kb-empty">' + (toks.length && n ? 'No matches' : 'No cards') + '</div>') +
         '</div>';
       if (!ro) {
         h += S.addCol === i
-          ? '<div class="kb-add-wrap kb-adding"><textarea class="kb-input kb-add-input" rows="2" placeholder="Card text — Enter to add, Shift+Enter for a new line (one card per line)" aria-label="New card"></textarea>' +
+          ? '<div class="kb-add-wrap kb-adding"><textarea class="kb-input kb-add-input" rows="2" placeholder="Card text \u2014 Enter to add, Shift+Enter for a new line (one card per line)" aria-label="New card"></textarea>' +
             '<div class="kb-row"><button type="button" class="kb-btn primary kb-add-ok">Add card</button><button type="button" class="kb-btn kb-add-cancel">Cancel</button></div></div>'
           : '<div class="kb-add-wrap"><button type="button" class="kb-add">+ Add card</button></div>';
       }
@@ -890,9 +890,9 @@
   }
 
   function emptyHtml() {
-    return '<div class="kb-es"><div class="kb-es-icon" aria-hidden="true">📋</div>' +
+    return '<div class="kb-es"><div class="kb-es-icon" aria-hidden="true">\ud83d\udccb</div>' +
       '<p class="kb-es-title">No board in this document yet</p>' +
-      '<p class="kb-es-hint">A board is two or more headings at the same level — <code>## Todo</code>, <code>## Doing</code>, <code>## Done</code> — ' +
+      '<p class="kb-es-hint">A board is two or more headings at the same level \u2014 <code>## Todo</code>, <code>## Doing</code>, <code>## Done</code> \u2014 ' +
       'with list items under them as cards. A line with <code>@kanban</code> makes every <code>##</code> heading a column.</p>' +
       (S.ro ? '<p class="kb-es-hint">Read-only mode is on.</p>' : '<button type="button" class="kb-btn primary kb-create">Create board here</button>') +
       '</div>';
@@ -902,7 +902,7 @@
     var p = panelEl, P = S.P, gs = P ? P.groups : [];
     var sel = p.querySelector('.kb-board');
     var opts = gs.map(function (g, i) { return '<option value="' + i + '">' + esc(groupLabel(g)) + '</option>'; }).join('') +
-      (S.ro || !gs.length ? '' : '<option value="new">＋ New board at cursor…</option>');
+      (S.ro || !gs.length ? '' : '<option value="new">\uff0b New board at cursor\u2026</option>');
     if (sel._kbHtml !== opts) { sel.innerHTML = opts; sel._kbHtml = opts; }
     sel.hidden = !gs.length;
     if (S.gi >= 0) sel.value = String(S.gi);
@@ -913,7 +913,7 @@
         total += c.cards.length;
         c.cards.forEach(function (k) { if (k.check !== null && k.check !== ' ') done++; });
       });
-      sum = total + ' card' + (total === 1 ? '' : 's') + (done ? ' · ' + done + ' done' : '');
+      sum = total + ' card' + (total === 1 ? '' : 's') + (done ? ' \u00b7 ' + done + ' done' : '');
     }
     p.querySelector('.kb-sum').textContent = sum;
     p.querySelector('.kb-ro').hidden = !S.ro;
@@ -994,7 +994,7 @@
     mutate([ref], function (P, b, r) { return Model.toggleSubCheck(P, b, r[0].col, r[0].ci, off); });
   }
   function deleteCardAt(ref) {
-    mutate([ref], function (P, b, r) { return Model.deleteCard(P, b, r[0].col, r[0].ci); }, { toast: 'Card deleted — Ctrl+Z to undo' });
+    mutate([ref], function (P, b, r) { return Model.deleteCard(P, b, r[0].col, r[0].ci); }, { toast: 'Card deleted \u2014 Ctrl+Z to undo' });
   }
   function moveRef(ref, tc, before, focus) {
     var col = S.board.columns[tc];
@@ -1028,7 +1028,7 @@
   }
   function gotoCard(ref) {
     var r = syncRefs([ref]);
-    if (!r) { toast('The board changed — try again'); refresh({ force: true }); return; }
+    if (!r) { toast('The board changed \u2014 try again'); refresh({ force: true }); return; }
     var card = S.board.columns[r[0].col].cards[r[0].ci];
     if (card) jumpToLine(card.start);
   }
@@ -1042,7 +1042,7 @@
     var val = Model.cardEditText(S.P, card);
     var body = el.querySelector('.kb-body');
     body.innerHTML = '<textarea class="kb-input kb-edit-input" rows="1" aria-label="Card text"></textarea>' +
-      '<div class="kb-edit-hint">Enter saves · Shift+Enter new line · Esc cancels</div>';
+      '<div class="kb-edit-hint">Enter saves \u00b7 Shift+Enter new line \u00b7 Esc cancels</div>';
     el.classList.add('kb-editing');
     S.html = ''; // the DOM no longer matches the cached render
     var ta = body.querySelector('textarea');
@@ -1101,7 +1101,7 @@
   function splitCards(v) {
     // Pasted lists arrive with their bullets/checkboxes; the card style comes from the column.
     return String(v).split(/\r?\n/).map(function (l) {
-      return l.replace(/^\s*(?:[-*+•]|\d{1,9}[.)])\s+/, '').replace(/^\[[ xX]\]\s*/, '').trim();
+      return l.replace(/^\s*(?:[-*+\u2022]|\d{1,9}[.)])\s+/, '').replace(/^\[[ xX]\]\s*/, '').trim();
     }).filter(Boolean);
   }
   function commitAdd() {
@@ -1134,7 +1134,7 @@
     var col = S.board && S.board.columns[i];
     if (!col) return;
     mutate([{ col: i, ci: Infinity }], function (P, b, r, force) { return Model.deleteColumn(P, b, r[0].col, force); },
-      { confirm: 'Delete column "' + (col.name || 'untitled') + '" and its note text?', toast: 'Column deleted — Ctrl+Z to undo' });
+      { confirm: 'Delete column "' + (col.name || 'untitled') + '" and its note text?', toast: 'Column deleted \u2014 Ctrl+Z to undo' });
   }
 
   function createBoardAtCursor() {
@@ -1145,7 +1145,7 @@
       var line = 0;
       try { line = ed.state.doc.lineAt(ed.state.selection.main.head).number - 1; } catch (e) {}
       return Model.createBoard(P, line, null);
-    }, { toast: 'Board created — Ctrl+Z to undo' });
+    }, { toast: 'Board created \u2014 Ctrl+Z to undo' });
   }
 
   // -- column menu --
@@ -1163,9 +1163,9 @@
     m.setAttribute('role', 'menu');
     m.innerHTML =
       (ro ? '' : '<button type="button" role="menuitem" class="kb-menu-item" data-act="add">+ Add card</button>' +
-        '<button type="button" role="menuitem" class="kb-menu-item" data-act="rename">✎ Rename</button>') +
-      '<button type="button" role="menuitem" class="kb-menu-item" data-act="jump">↗ Show heading in editor</button>' +
-      (ro ? '' : '<button type="button" role="menuitem" class="kb-menu-item kb-danger" data-act="del"' + (canDel ? '' : ' disabled title="Only an empty column can be deleted"') + '>× Delete column</button>');
+        '<button type="button" role="menuitem" class="kb-menu-item" data-act="rename">\u270e Rename</button>') +
+      '<button type="button" role="menuitem" class="kb-menu-item" data-act="jump">\u2197 Show heading in editor</button>' +
+      (ro ? '' : '<button type="button" role="menuitem" class="kb-menu-item kb-danger" data-act="del"' + (canDel ? '' : ' disabled title="Only an empty column can be deleted"') + '>\u00d7 Delete column</button>');
     panelEl.appendChild(m);
     var pr = panelEl.getBoundingClientRect(), br = btn.getBoundingClientRect();
     var left = Math.min(br.right - pr.left - m.offsetWidth, pr.width - m.offsetWidth - 6);
@@ -1255,6 +1255,8 @@
     el.parentNode.insertBefore(ph, el);
     el.classList.add('kb-dragging');
     panelEl.classList.add('kb-is-dragging');
+    document.documentElement.classList.add('kb-noselect');
+    window.addEventListener('keydown', onDragKey, true); // the hidden card may have lost focus
     S.drag = { el: el, ghost: ghost, ph: ph, offX: pr.x - r.left, offY: pr.y - r.top, col: pr.col, ci: pr.ci, target: { col: pr.col, before: pr.ci + 1 }, raf: 0, colEl: null };
     moveGhost();
     Cade.haptic(10);
@@ -1322,7 +1324,15 @@
     d.el.classList.remove('kb-dragging');
     if (d.colEl) d.colEl.classList.remove('kb-drop');
     if (panelEl) panelEl.classList.remove('kb-is-dragging');
+    document.documentElement.classList.remove('kb-noselect');
+    window.removeEventListener('keydown', onDragKey, true);
     S.drag = null;
+  }
+  function onDragKey(e) {
+    if (e.key !== 'Escape' || !S.drag) return;
+    e.preventDefault(); e.stopPropagation();
+    cancelDrag();
+    endPress();
   }
   function drop() {
     var d = S.drag, t = d.target;
@@ -1542,17 +1552,17 @@
     if (panelEl && panelEl.isConnected) { close(false); return; }
     loadPrefs();
     S = freshState();
-    var p = Cade.mkPanel(PANEL_ID, '📋 Kanban',
+    var p = Cade.mkPanel(PANEL_ID, '\ud83d\udccb Kanban',
       '<div class="kb-bar">' +
         '<select class="kb-board" aria-label="Board" hidden></select>' +
-        '<input class="kb-filter" type="search" placeholder="Filter cards…" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" enterkeyhint="search" aria-label="Filter cards">' +
+        '<input class="kb-filter" type="search" placeholder="Filter cards\u2026" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" enterkeyhint="search" aria-label="Filter cards">' +
         '<span class="kb-sum" aria-live="polite"></span>' +
-        '<button type="button" class="kb-tog kb-done-tog" aria-pressed="false" title="When on, moving a card into a Done column checks it off (and moving it out unchecks it)">☑ Auto-check in Done</button>' +
-        '<span class="kb-ro" hidden title="Read-only mode is on — the board is view-only">🔒 Read-only</span>' +
+        '<button type="button" class="kb-tog kb-done-tog" aria-pressed="false" title="When on, moving a card into a Done column checks it off (and moving it out unchecks it)">\u2611 Auto-check in Done</button>' +
+        '<span class="kb-ro" hidden title="Read-only mode is on \u2014 the board is view-only">\ud83d\udd12 Read-only</span>' +
       '</div>' +
       '<div class="kb-main"></div>' +
-      '<div class="kb-hint"><span class="kb-hint-fine">Drag cards · double-click to edit · focus a card: Alt+←/→ change column, Alt+↑/↓ reorder, Space ticks · Ctrl+Z undoes</span>' +
-      '<span class="kb-hint-coarse">Long-press a card (or drag ⠿) to move it · swipe for more columns · ✎ edits</span></div>');
+      '<div class="kb-hint"><span class="kb-hint-fine">Drag cards \u00b7 double-click to edit \u00b7 focus a card: Alt+\u2190/\u2192 change column, Alt+\u2191/\u2193 reorder, Space ticks \u00b7 Ctrl+Z undoes</span>' +
+      '<span class="kb-hint-coarse">Long-press a card (or drag \u283f) to move it \u00b7 swipe for more columns \u00b7 \u270e edits</span></div>');
     panelEl = p;
     // Wide and centred; mkPanel's header drag takes over from these inline values.
     var w = Math.min(960, window.innerWidth - 24);
@@ -1577,8 +1587,8 @@
 
   Cade.registerWidget({
     name: 'Kanban Board',
-    description: 'Turn the document’s headings into columns and list items into drag-and-drop cards',
-    icon: '📋',
+    description: 'Turn the document\u2019s headings into columns and list items into drag-and-drop cards',
+    icon: '\ud83d\udccb',
     tags: 'kanban,board,todo,tasks,columns,trello,project,cards,drag,planning',
     open: open,
   });

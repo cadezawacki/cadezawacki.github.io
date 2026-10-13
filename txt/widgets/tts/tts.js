@@ -616,16 +616,16 @@
   var AHEAD = 3; // sentences synthesized ahead of the one playing
 
   function hdSupported() {
-    return typeof WebAssembly === 'object' && typeof Worker === 'function' &&
-      !!(window.AudioContext || window.webkitAudioContext) && typeof BigInt64Array === 'function' &&
+    return typeof window.WebAssembly === 'object' && typeof window.Worker === 'function' &&
+      !!(window.AudioContext || window.webkitAudioContext) && typeof window.BigInt64Array === 'function' &&
       !!window.caches && window.isSecureContext !== false;
   }
   // Is everything for voice `id` already in our Cache Storage bucket?
   function hdCheckCached(id) {
     if (!window.caches) return Promise.resolve(false);
-    return caches.has(HD_CACHE).then(function (has) {
+    return window.caches.has(HD_CACHE).then(function (has) {
       if (!has) return false;
-      return caches.open(HD_CACHE).then(function (c) {
+      return window.caches.open(HD_CACHE).then(function (c) {
         var u = hdUrls(hdVoice(id)), keys = Object.keys(u);
         return Promise.all(keys.map(function (k) { return c.match(u[k]); })).then(function (rs) {
           return rs.every(Boolean);
@@ -647,7 +647,7 @@
     hdTerminate();
     if (!hdSupported()) { hdFail('this browser can\u2019t run it (needs WebAssembly + Web Audio)'); return; }
     var w;
-    try { w = new Worker(WORKER_URL, { type: 'module' }); } catch (e) { hdFail('module workers are not supported'); return; }
+    try { w = new window.Worker(WORKER_URL, { type: 'module' }); } catch (e) { hdFail('module workers are not supported'); return; }
     HD.worker = w; HD.workerVoice = id; HD.loading = true; HD.ready = false; HD.failed = '';
     HD.onReady = onReady || null;
     var v = hdVoice(id), u = hdUrls(v);
@@ -1153,7 +1153,7 @@
     } else if (act === 'hd-rm') {
       if (!window.confirm('Remove the downloaded HD voice data from this device?')) return;
       stop(); hdTerminate();
-      caches['delete'](HD_CACHE).then(function () {
+      window.caches['delete'](HD_CACHE).then(function () {
         HD.cached = {};
         toast('HD voice data removed', 'success', 2000);
         renderHd(); renderVoices();

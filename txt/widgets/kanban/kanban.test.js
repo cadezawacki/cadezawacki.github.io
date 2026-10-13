@@ -198,7 +198,7 @@ test('done column auto-check (doneMarks) with core-style strike', function () {
 });
 
 test('toggle check / sub check', function () {
-  var t = '## A\n- [ ] Do it\n  - [ ] sub\n- [x] D̶o̶n̶e̶\n## B';
+  var t = '## A\n- [ ] Do it\n  - [ ] sub\n- [x] D\u0336o\u0336n\u0336e\u0336\n## B';
   var r = boardOf(t);
   var out = apply(t, M.toggleCheck(r.P, r.b, 0, 0));
   assert.strictEqual(out.split('\n')[1], '- [x] ' + M.strike('Do it'));

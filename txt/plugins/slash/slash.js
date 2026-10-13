@@ -119,6 +119,7 @@
     b.kind = 'builtin';
     b.ln = lower(b.name);
     b.keyset = ' ' + lower(b.keys) + ' ';
+    b.keyList = lower(b.keys).split(' ');
     b.hint = b.keys.split(' ')[0];
   });
 
@@ -138,8 +139,9 @@
     if (it.keyset && it.keyset.indexOf(' ' + q) >= 0) return 760; // alias prefix
     if (it.lt && it.lt.indexOf(q) >= 0) return 600;  // tags
     if (it.ld && it.ld.indexOf(q) >= 0) return 500;  // description
+    if (/\s/.test(q)) return 0; // past a space only real substrings count
     if (fuzzy(q, n)) return 400;
-    if (it.keyset && fuzzy(q, it.keyset)) return 350;
+    if (it.keyList) for (var i = 0; i < it.keyList.length; i++) if (fuzzy(q, it.keyList[i])) return 350;
     return 0;
   }
   function loadCommands() {

@@ -78,6 +78,7 @@
   background: var(--accent-bg, transparent); box-sizing: border-box;
 }
 .kb-is-dragging, .kb-is-dragging * { cursor: grabbing !important; }
+.kb-noselect, .kb-noselect * { -webkit-user-select: none !important; user-select: none !important; }
 .kb-grip {
   flex: 0 0 auto; color: var(--text-faint); font-size: 12px; line-height: 20px; padding: 0 1px;
   cursor: grab; touch-action: none; opacity: 0.35;

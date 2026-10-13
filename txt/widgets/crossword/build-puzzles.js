@@ -166,9 +166,29 @@ function fill(pattern, idx, uses, rnd) {
       if (!bad) cand.push({ w: w, key: (uses[w] || 0) + rnd() * 1.5 });
     }
     cand.sort(function (a, b) { return a.key - b.key; });
+    cand = cand.slice(0, 60);
     var saved = S.cells.map(function (x) { return grid[x]; });
-    for (var c = 0; c < cand.length && c < 40; c++) {
-      var word = cand[c].w;
+    // Least-constraining value: prefer words that leave the crossing slots the
+    // most options (log-sum of their candidate counts); drop dead ends now.
+    var cross = [];
+    for (var s2 = 0; s2 < slots.length; s2++) {
+      if (s2 === best || placed[s2]) continue;
+      for (var e = 0; e < slots[s2].cells.length; e++) if (S.cells.indexOf(slots[s2].cells[e]) !== -1) { cross.push(slots[s2]); break; }
+    }
+    var scored = [];
+    for (var c0 = 0; c0 < cand.length; c0++) {
+      var cw = cand[c0].w, score = 0, dead = false;
+      for (var p0 = 0; p0 < S.cells.length; p0++) grid[S.cells[p0]] = cw[p0];
+      for (var x = 0; x < cross.length && !dead; x++) {
+        var cnt = count(candidates(cross[x]));
+        if (!cnt) dead = true; else score += Math.log(cnt);
+      }
+      if (!dead) scored.push({ w: cw, score: score - (uses[cw] || 0) * 0.7 + rnd() * 1.2 });
+    }
+    for (p0 = 0; p0 < S.cells.length; p0++) grid[S.cells[p0]] = saved[p0];
+    scored.sort(function (a, b) { return b.score - a.score; });
+    for (var c = 0; c < scored.length && c < 12; c++) {
+      var word = scored[c].w;
       for (var p = 0; p < S.cells.length; p++) grid[S.cells[p]] = word[p];
       placed[best] = word;
       if (rec()) return true;
