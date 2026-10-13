@@ -319,7 +319,6 @@
   }
   // Names the user's OS will accept (Chromium also rejects / \ . ..).
   function fsName(s) {
-    // eslint-disable-next-line no-control-regex
     s = s.replace(/[\u0000-\u001f<>:"|?*\\]/g, '_').replace(/[. ]+$/, '');
     return s || '_';
   }
@@ -789,13 +788,18 @@
       },
     });
   }
-  function szRun(M, out, args) {
+  // ctx.enc: the data being read is encrypted; ctx.pw: the password tried.
+  // This 7-Zip build can throw C++ exceptions but not catch them, so some
+  // failures (a wrong password on a small encrypted header, damaged data)
+  // escape callMain as a bare number instead of an error message.
+  function szRun(M, out, args, ctx) {
     var rc;
     try { rc = M.callMain(args); } catch (e) {
       if (e && e.code) throw e; // our own (disk full ...) from inside a sink write
       var msg = errMsg(e);
       if (/memory|OOM|Aborted/i.test(msg)) throw Fail('memory', 'Out of memory \u2014 this archive needs more memory than the browser allows here.');
-      throw Fail('engine', '7-Zip stopped unexpectedly (' + msg + ')');
+      if (ctx && ctx.enc) throw Fail('password', 'Wrong password', { wrong: !!ctx.pw });
+      throw Fail('damaged', 'The archive is damaged or not supported (7-Zip error ' + msg + ').');
     }
     var err = out.stderr();
     if (/Wrong password|encrypted archive/i.test(err)) throw Fail('password', 'Wrong password', { wrong: true });
@@ -957,14 +961,53 @@
     }
     return { type: type, entries: ents };
   }
-  async function szList(files, pw) {
+  // Does the archive encrypt its file list? (Then listing needs the password.)
+  function le64(b, o) {
+    return b[o] + b[o + 1] * 256 + b[o + 2] * 65536 + b[o + 3] * 16777216 +
+      (b[o + 4] + b[o + 5] * 256 + b[o + 6] * 65536 + b[o + 7] * 16777216) * 4294967296;
+  }
+  async function headerEncrypted(blob, h, fmt) {
+    try {
+      if (fmt === '7z') {
+        // Next header: kEncodedHeader (0x17) whose coders include 7zAES.
+        var off = 32 + le64(h, 12), size = le64(h, 20);
+        if (!(size > 0) || size > 16777216 || off + size > blob.size) return false;
+        var nh = new Uint8Array(await blob.slice(off, off + size).arrayBuffer());
+        if (nh[0] !== 0x17) return false;
+        for (var i = 0; i + 3 < nh.length; i++) {
+          if (nh[i] === 0x06 && nh[i + 1] === 0xf1 && nh[i + 2] === 0x07 && nh[i + 3] === 0x01) return true;
+        }
+        return false;
+      }
+      if (fmt === 'rar') {
+        if (h[6] === 0x01) { // RAR5: an archive-encryption header (type 4) comes first
+          var p = 12;
+          while (h[p] & 0x80) p++;
+          p++;
+          var type = 0, sh = 0;
+          do { type += (h[p] & 0x7f) * Math.pow(2, sh); sh += 7; } while ((h[p++] & 0x80) && sh < 35);
+          return type === 4;
+        }
+        return h[9] === 0x73 && !!((h[10] | (h[11] << 8)) & 0x80); // RAR4 MHD_PASSWORD
+      }
+    } catch (e) {}
+    return false;
+  }
+  function sessEnc(idx) {
+    if (!sess) return false;
+    if (sess.headEnc) return true;
+    var ents = sess.entries;
+    if (!idx) return ents.some(function (e) { return e.e; });
+    return idx.some(function (i) { return ents[i] && ents[i].e; });
+  }
+  async function szList(files, pw, enc) {
     var out = new SzOut(), M = await new7z(out);
     var paths = szMountInputs(M, files);
-    szRun(M, out, ['l', '-slt', '-sccUTF-8', pwArg(pw), paths[0]]);
+    szRun(M, out, ['l', '-slt', '-sccUTF-8', pwArg(pw), paths[0]], { enc: enc, pw: pw });
     return parse7zList(out.stdout(), files[0].name);
   }
   // Extract `sel` (archive paths; null = everything) into a spool.
-  async function szExtract(files, pw, sel, prog, total) {
+  async function szExtract(files, pw, sel, prog, total, enc) {
     var out = new SzOut(), M = await new7z(out);
     var paths = szMountInputs(M, files);
     var sp = await newSpool('x');
@@ -977,7 +1020,7 @@
         args.push('-i@/list.txt'); // a list file: no stack limit on long selections
       }
       if (prog) out.onPct = function (p) { prog.set(Math.round(total * p / 100)); };
-      var r = szRun(M, out, args);
+      var r = szRun(M, out, args, { enc: enc, pw: pw });
       var regions = collect();
       M = null;
       var f = await spFinish(sp);
@@ -1069,8 +1112,11 @@
       return res;
     }
     // Everything else: 7-Zip.
+    var whole = files.length > 1 ? new Blob(files) : main;
+    sess.headEnc = await headerEncrypted(whole, h, sniff(h, name));
+    if (sess.headEnc && !pw) throw Fail('password', 'Password required', { wrong: false });
     stage('Starting 7-Zip\u2026');
-    var li = await szList(files, pw);
+    var li = await szList(files, pw, sess.headEnc);
     if (!li.entries.length && !li.type) throw Fail('format', 'Not a supported archive (or it is damaged).');
     var t = (li.type || '').toLowerCase();
     res.label = { '7z': '7z', rar: 'RAR', rar5: 'RAR', xz: 'XZ', bzip2: 'BZIP2', zstd: 'ZSTD', gzip: 'GZIP', lzma: 'LZMA', z: 'Z', cab: 'CAB', iso: 'ISO', tar: 'TAR', zip: 'ZIP', split: 'Split' }[t] || li.type || res.label;
@@ -1081,6 +1127,7 @@
       return await openInnerTar(res, 'TAR.' + res.label, null);
     }
     sess.engine = '7z'; sess.entries = li.entries; sess.type = t;
+    if (sess.headEnc) li.entries.forEach(function (e) { if (!e.d) e.e = 1; });
     res.entries = li.entries;
     if (t === 'rar' || t === 'rar5') res.notes.push('RAR archives can be extracted but not created (RAR is proprietary).');
     return res;
@@ -1092,7 +1139,7 @@
         try { await fill(sp); f = await spFinish(sp); tmp = sp.name; } catch (e) { await spAbort(sp); throw e; }
       } else {
         stage('Decompressing ' + name + '\u2026');
-        var ex = await szExtract(files, pw, null, prog, main.size);
+        var ex = await szExtract(files, pw, null, prog, main.size, sess.headEnc);
         var reg = ex.regions.filter(function (r) { return !r.d; })[0];
         if (!reg) throw Fail('format', 'Empty archive');
         f = ex.file.slice(reg.off, reg.off + reg.size); tmp = ex.tmp;
@@ -1126,7 +1173,8 @@
     var notes = [];
     if (sess.engine === '7z') {
       var paths = m.sel ? idx.filter(function (i) { return !ents[i].d; }).map(function (i) { return ents[i].p; }) : null;
-      var ex = await szExtract(sess.files, pws[pws.length - 1] || sess.pw, paths, prog, prog.total);
+      var xpw = pws[pws.length - 1] || sess.pw;
+      var ex = await szExtract(sess.files, xpw, paths, prog, prog.total, sessEnc(idx));
       var r = await deliverRegions(m, ex, prog);
       if (ex.warn) r.warn = ex.warn;
       return r;
@@ -1192,7 +1240,8 @@
     } else {
       if (e.s > max) truncated = true;
       if (e.s > 64 * 1048576) throw Fail('size', 'Too large to preview \u2014 extract it instead.');
-      var ex = await szExtract(sess.files, pws[pws.length - 1] || sess.pw, [e.p], null, 0);
+      var rpw = pws[pws.length - 1] || sess.pw;
+      var ex = await szExtract(sess.files, rpw, [e.p], null, 0, sessEnc([m.i]));
       var reg = ex.regions.filter(function (q) { return !q.d; })[0];
       if (reg) {
         var ab = await ex.file.slice(reg.off, reg.off + Math.min(reg.size, max)).arrayBuffer();
@@ -1212,7 +1261,8 @@
       var out = new SzOut(), M = await new7z(out);
       var paths = szMountInputs(M, sess.files);
       out.onPct = function (p) { prog.set(Math.round(prog.total * p / 100)); };
-      try { szRun(M, out, ['t', paths[0], '-bsp1', '-sccUTF-8', pwArg(pws[pws.length - 1] || sess.pw)]); }
+      var tpw = pws[pws.length - 1] || sess.pw;
+      try { szRun(M, out, ['t', paths[0], '-bsp1', '-sccUTF-8', pwArg(tpw)], { enc: sessEnc(null), pw: tpw }); }
       catch (e) { if (e.code === 'password') throw e; errors.push({ p: '', m: errMsg(e) }); }
       return { ok: !errors.length, checked: ents.filter(function (e) { return !e.d; }).length, errors: errors };
     }
@@ -1315,15 +1365,22 @@
     FS.mkdir('/in');
     var files = items.filter(function (x) { return !x.d; });
     FS.mount(M.WORKERFS, { blobs: files.map(function (x) { return { name: x.p, data: x.f }; }) }, '/in');
+    // WORKERFS reports everything as mode 0777, which 7-Zip would record;
+    // store ordinary 0644 files / 0755 folders like the TAR writer does.
     items.forEach(function (x) {
       var parts = x.p.split('/'), cur = '/in';
       var upto = x.d ? parts.length : parts.length - 1;
       for (var i = 0; i < upto; i++) {
-        var next = cur + '/' + parts[i];
-        try { FS.lookupPath(next); } catch (e) { M.WORKERFS.createNode(FS.lookupPath(cur).node, parts[i], M.WORKERFS.DIR_MODE, 0); }
+        var next = cur + '/' + parts[i], dn;
+        try { dn = FS.lookupPath(next).node; } catch (e) { dn = M.WORKERFS.createNode(FS.lookupPath(cur).node, parts[i], M.WORKERFS.DIR_MODE, 0); }
+        dn.mode = 16877; // 040755
         cur = next;
       }
-      try { var n = FS.lookupPath('/in/' + x.p).node; n.mtime = n.atime = n.ctime = x.t; } catch (e) {}
+      try {
+        var n = FS.lookupPath('/in/' + x.p).node;
+        n.mtime = n.atime = n.ctime = x.t;
+        if (!x.d) n.mode = 33188; // 0100644
+      } catch (e) {}
     });
     var top = [];
     items.forEach(function (x) { var t0 = x.p.split('/')[0]; if (top.indexOf(t0) < 0) top.push(t0); });
@@ -1430,6 +1487,6 @@
   self.__archiveTest = {
     sniff: sniff, tarList: tarList, tarWrite: tarWrite, tarEntryHeaders: tarEntryHeaders, isTarHeader: isTarHeader,
     parsePax: parsePax, paxData: paxData, tarNum: tarNum, parse7zList: parse7zList, gzInnerName: gzInnerName,
-    safeParts: safeParts, streamName: streamName, OPS: OPS, setEngines: function (e) { ENG = e; },
+    safeParts: safeParts, streamName: streamName, headerEncrypted: headerEncrypted, OPS: OPS, setEngines: function (e) { ENG = e; },
   };
 })();

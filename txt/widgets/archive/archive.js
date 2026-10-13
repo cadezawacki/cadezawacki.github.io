@@ -189,6 +189,23 @@
     } catch (e) { return Promise.resolve(); }
   }
 
+  // A result's temp file is deleted a minute after it stops being shown (a
+  // download started from it may still be reading), unless it's in use again.
+  function retireTmp(name) {
+    if (!name || !S) return;
+    var t = setTimeout(function () {
+      if (!S) return;
+      S.timers = S.timers.filter(function (x) { return x !== t; });
+      if ((S.results && S.results.tmp === name) || (S.arc && S.arc.innerTarTmp === name)) return;
+      try {
+        navigator.storage.getDirectory().then(function (root) {
+          return root.getDirectoryHandle(TMP).then(function (d) { return d.removeEntry(name); });
+        }).catch(function () {});
+      } catch (e) {}
+    }, 60000);
+    S.timers.push(t);
+  }
+
   // ---- engines in Cache Storage ---------------------------------------------------
   function engineBytes() {
     if (!window.caches) return Promise.resolve(0);
@@ -209,9 +226,10 @@
     engineBytes().then(function (n) {
       if (!S || !el.isConnected) return;
       S.engBytes = n;
-      el.innerHTML = n
-        ? 'Engines saved for offline use (' + fmtBytes(n) + ') \u00b7 <button class="ar-link" data-act="rm-eng">Remove downloaded engines (' + fmtBytes(n) + ')</button>'
-        : 'Engines download once on first use (ZIP ' + fmtBytes(ENGINES.zip.size) + ', 7-Zip ' + fmtBytes(ENGINES.sz.jsSize + ENGINES.sz.wasmSize) + '), then work offline.';
+      el.innerHTML = (n
+        ? 'Engines saved for offline use. <button class="ar-link" data-act="rm-eng" type="button">Remove downloaded engines (' + fmtBytes(n) + ')</button>'
+        : 'Engines download once on first use (ZIP ' + fmtBytes(ENGINES.zip.size) + ', 7-Zip ' + fmtBytes(ENGINES.sz.jsSize + ENGINES.sz.wasmSize) + '), then work offline.') +
+        (PW_SESSION.length ? ' <button class="ar-link" data-act="pw-forget" type="button">Forget remembered passwords</button>' : '');
     });
   }
 
@@ -249,7 +267,9 @@
         if (!v) { inp.focus(); return; }
         var rem = m.querySelector('.ar-dlg-rem').checked;
         if (S) S.remember = rem;
-        if (rem) { PW_SESSION = PW_SESSION.filter(function (x) { return x !== v; }); PW_SESSION.push(v); if (PW_SESSION.length > 12) PW_SESSION.shift(); }
+        PW_SESSION = PW_SESSION.filter(function (x) { return x !== v; });
+        if (rem) { PW_SESSION.push(v); if (PW_SESSION.length > 12) PW_SESSION.shift(); }
+        renderEngines();
         finish(v);
       }
       inp.addEventListener('keydown', function (e) {
@@ -306,14 +326,17 @@
       job.done = m.done; job.total = m.total; job.text = m.label || '';
       job.eng = null;
     } else if (m.type === 'engine') {
-      job.eng = m;
+      job.eng = m; job.engSeen = true;
     } else if (m.type === 'stage') {
       job.text = m.text; job.eng = null;
     }
     renderJob();
   }
   function endJob(job) {
-    if (S && S.job === job) { S.job = null; renderJob(); renderBusy(); }
+    if (S && S.job === job) {
+      S.job = null; renderJob(); renderBusy();
+      if (job.engSeen) renderEngines(); // a first download changes the size shown
+    }
   }
   function cancelJob() {
     if (!S || !S.job) return;
@@ -420,6 +443,7 @@
     if (!S) return;
     var files = (r.files || []).filter(function (x) { return x.f; });
     var dirs = (r.files || []).filter(function (x) { return x.d; });
+    if (S.results && S.results.tmp && S.results.tmp !== r.tmp) retireTmp(S.results.tmp);
     S.results = { title: title, files: files, dirs: dirs, tmp: r.tmp || '', warn: r.warn || '' };
     renderResults();
   }
@@ -495,6 +519,7 @@
     var total = 0;
     files.forEach(function (f) { total += f.size; });
     var a = { files: files, name: files.length > 1 ? files.slice().sort(function (x, y) { return x.name < y.name ? -1 : 1; })[0].name : files[0].name, size: total, pws: [], key: arcKey(files), ready: false, openPw: '' };
+    if (S.results && S.results.tmp) retireTmp(S.results.tmp);
     S.arc = a; S.results = null; renderResults();
     setTab('extract');
     renderExtract();
@@ -537,6 +562,7 @@
   }
   function closeArchive(silent) {
     if (S.arc && W.w) { rpc('close', {}).catch(function () {}); }
+    if (S.arc && S.arc.innerTarTmp) retireTmp(S.arc.innerTarTmp);
     if (S.prev && S.prev.url) URL.revokeObjectURL(S.prev.url);
     S.arc = null; S.prev = null; S.q = '';
     W.sess = null;
@@ -846,6 +872,7 @@
     withPasswords(function (pws) {
       return runJob('Testing ' + S.arc.name, 'test', { passwords: pws }, { needsArchive: true });
     }).then(function (r) {
+      if (S.results && S.results.tmp) retireTmp(S.results.tmp);
       S.results = {
         report: true, ok: r.ok,
         title: r.ok ? '\u2713 All ' + plural(r.checked, 'file') + ' passed the integrity check' : '\u2717 ' + plural(r.errors.length, 'problem') + ' found',
@@ -1167,7 +1194,8 @@
       window.caches['delete'](CACHE).then(function () { toast('Engines removed', 'success'); renderEngines(); }, function () { toast('Couldn\u2019t remove them', 'error'); });
       return;
     }
-    if (act === 'res-close') { S.results = null; renderResults(); return; }
+    if (act === 'pw-forget') { PW_SESSION = []; if (S.arc) S.arc.pws = []; S.remember = false; renderEngines(); toast('Remembered passwords forgotten', 'success', 1600); return; }
+    if (act === 'res-close') { var old = S.results && S.results.tmp; S.results = null; renderResults(); retireTmp(old); return; }
     if (act === 'res-dl') { var x = S.results.files[+b.getAttribute('data-i')]; if (x) download(x.f); return; }
     if (act === 'res-share') { var y = S.results.files[+b.getAttribute('data-i')]; if (y) share([y.f]); return; }
     if (act === 'res-share-all') { share(S.results.files.map(function (z) { return z.f; })); return; }
@@ -1231,6 +1259,7 @@
     if (t.classList.contains('ar-lvl')) { prefs[prefs.fmt === '7z' ? 'szLevel' : 'zipLevel'] = +t.value; savePrefs(); renderCreate(); return; }
     if (t.classList.contains('ar-enc')) { prefs.method = t.value; savePrefs(); renderCreate(); return; }
     if (t.classList.contains('ar-encnames')) { prefs.encNames = t.checked; savePrefs(); return; }
+    if (t.classList.contains('ar-ask')) { prefs.ask = t.checked; savePrefs(); return; }
     if (t.classList.contains('ar-vol')) { prefs.vol = t.value; savePrefs(); renderCreate(); return; }
   }
   var qTimer = null;
@@ -1307,7 +1336,7 @@
     if (existing) { close(); return; }
     loadPrefs();
     clearTimeout(cleanupTimer); cleanupTimer = null;
-    S = { tab: prefs.tab === 'create' ? 'create' : 'extract', arc: null, items: [], results: null, job: null, urls: [], q: '', prev: null, cname: '', pw1: '', pw2: '', showPw: false, remember: PW_SESSION.length > 0 };
+    S = { tab: prefs.tab === 'create' ? 'create' : 'extract', arc: null, items: [], results: null, job: null, urls: [], timers: [], q: '', prev: null, cname: '', pw1: '', pw2: '', showPw: false, remember: PW_SESSION.length > 0 };
     // Stale temp files from a previous session go first; jobs wait for it.
     S.cleanP = cleanupTemps();
     var p = Cade.mkPanel(PANEL_ID, '\ud83d\udddc\ufe0f Archive Utility',
@@ -1321,7 +1350,9 @@
       '</div>' +
       '<div class="ar-job" hidden aria-live="polite"></div>' +
       '<div class="ar-res" hidden></div>' +
-      '<div class="ar-foot"><span class="ar-priv">\ud83d\udd12 Files never leave this device.</span> <span class="ar-eng"></span></div>' +
+      '<div class="ar-foot"><span class="ar-priv">\ud83d\udd12 Files never leave this device.</span> <span class="ar-eng"></span>' +
+        (canPickFile() ? ' <label class="ar-chk ar-ask-l"><input type="checkbox" class="ar-ask"' + (prefs.ask ? ' checked' : '') + '> Ask where to save</label>' : '') +
+      '</div>' +
       '<div class="ar-modal" hidden></div>' +
       '<input type="file" class="ar-f-arc" hidden multiple>' +
       '<input type="file" class="ar-f-files" hidden multiple>' +
@@ -1340,6 +1371,7 @@
       if (S) {
         if (S.prev && S.prev.url) URL.revokeObjectURL(S.prev.url);
         S.urls.forEach(function (u) { try { URL.revokeObjectURL(u); } catch (e) {} });
+        S.timers.forEach(clearTimeout); // the folder-wide cleanup below covers them
       }
       clearTimeout(qTimer);
       S = null;

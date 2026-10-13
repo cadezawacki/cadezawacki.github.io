@@ -242,3 +242,4 @@ select.ar-in { padding-right: 4px; }
   .ar-tab { padding: 9px 8px; }
   .ar-more { padding: 10px; }
 }
+.ar-ask-l { display: inline-flex; margin-left: 6px; vertical-align: middle; }

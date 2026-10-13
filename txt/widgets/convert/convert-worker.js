@@ -490,12 +490,22 @@
   }
   // The most useful error line(s) from the tail of the log.
   function ffError(lines) {
+    lines = lines.filter(function (l) { return !/^\s*Aborted\(\)\s*$/.test(l); });
     var bad = lines.filter(function (l) {
       return /error|invalid|unknown|not found|unsupported|failed|could not|cannot|no such|not implemented|does not|out of memory|abort/i.test(l) &&
         !/^\s*(built with|configuration:|lib\w+\s+\d)/.test(l);
     });
     var pick = (bad.length ? bad.slice(-2) : lines.slice(-2)).join(' — ').trim();
     return pick.length > 300 ? pick.slice(0, 300) + '…' : pick;
+  }
+
+  // 'memory' = the wasm heap couldn't grow (big input / output on a phone);
+  // 'crash' = the core trapped (an encoder bug) — either way the page throws
+  // this ffmpeg instance away.
+  function memCode(msg) {
+    if (/out of memory|Cannot enlarge memory|allocation failed|RangeError|Maximum call stack/i.test(msg)) return 'memory';
+    if (/memory access out of bounds|unreachable|RuntimeError/i.test(msg)) return 'crash';
+    return 'failed';
   }
 
   function loadFf(m) {
@@ -561,7 +571,7 @@
       try { size = FS.stat(outPath).size; } catch (e) { size = 0; }
       if (ret !== 0 || !size) {
         var msg = ffError(lines) || ('ffmpeg exited with code ' + ret);
-        throw CodedError(msg, /memory|abort/i.test(msg) ? 'memory' : 'failed');
+        throw CodedError(msg, memCode(msg));
       }
       // Hand MEMFS's own buffer over without a copy when we can see it.
       var data = null;
@@ -578,7 +588,7 @@
     } catch (e) {
       ffState = null;
       if (core) { try { core.FS.unlink(outPath); } catch (x) {} }
-      post({ type: 'error', id: m.id, message: errMsg(e), code: (e && e.code) || (/memory|RangeError/i.test(errMsg(e)) ? 'memory' : 'failed') });
+      post({ type: 'error', id: m.id, message: errMsg(e), code: (e && e.code) || memCode(errMsg(e)) });
     } finally {
       if (mounted) { try { core.FS.unmount('/in'); } catch (x) {} }
     }
@@ -661,5 +671,5 @@
   };
 
   // Exposed for the node smoke test only (harmless in the browser).
-  self.__convertWorkerTest = { parseFfLine: parseFfLine, ffError: ffError, hms: hms, even: even };
+  self.__convertWorkerTest = { parseFfLine: parseFfLine, ffError: ffError, hms: hms, even: even, memCode: memCode };
 })();

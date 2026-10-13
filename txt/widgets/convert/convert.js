@@ -29,11 +29,11 @@
   if (typeof window.Cade === 'undefined') return;
   var Cade = window.Cade;
   Cade.loadCSS('convert.css');
-  // Resolved now, while the loader's module context is ours. The ?v= tag
-  // changes whenever the worker protocol does, so a cached old worker can't
-  // pair with a newer panel.
-  var WORKER_URL = Cade.asset('convert-worker.js') + '?v=1';
-  var DOCS_URL = Cade.asset('convert-docs.js') + '?v=1';
+  // Resolved now, while the loader's module context is ours. No ?v= tag: the
+  // manifest precaches these exact URLs (offline from cold), and a release
+  // re-precaches them together with this file, so they can't drift apart.
+  var WORKER_URL = Cade.asset('convert-worker.js');
+  var DOCS_URL = Cade.asset('convert-docs.js');
   var esc = Cade.escapeHtml;
 
   var PANEL_ID = 'convert-panel';
@@ -260,7 +260,6 @@
     if (fmt === 'zip') fmt = zipKindFromHead(b) || 'zip';
     // MPEG-4 audio named .m4a/.aac etc. but branded generically.
     if (fmt === 'mp4' && (ext === 'm4a' || ext === 'm4b' || ext === 'aac')) fmt = 'm4a';
-    if (fmt === 'webm' && (ext === 'weba' || /^audio\//.test(mime || ''))) fmt = 'webm';
     var info = FMT[fmt] || FMT.bin;
     var hinted = EXT_FMT[ext];
     var mismatch = !!(ext && hinted && hinted !== fmt && FMT[fmt] && info[0] !== 'text' && fmt !== 'bin' &&
@@ -501,7 +500,11 @@
       a.push('-vf', 'fps=' + g[1] + ',' + gifScale(g[0]) + ',split[s0][s1];[s0]palettegen=stats_mode=diff[pal];[s1][pal]paletteuse=dither=bayer:bayer_scale=5', '-loop', '0', '-an');
     } else if (VIDEO_T[t]) {
       var cap = { '1080': 1080, '720': 720, '480': 480, smaller: 1080 }[p];
-      if (t === 'webm') a.push('-c:v', 'libvpx-vp9', '-b:v', '0', '-crf', p === 'smaller' ? '38' : p === 'original' ? '30' : '33', '-deadline', 'realtime', '-cpu-used', '8', '-row-mt', '1');
+      // VP8, not VP9: libvpx-vp9 crashes ("memory access out of bounds") in
+      // the single-threaded @ffmpeg/core 0.12.10 build. (The fast path uses
+      // the browser's own VP9 encoder.) VP8 needs -b:v as the cap for -crf.
+      if (t === 'webm') a.push('-c:v', 'libvpx', '-crf', { original: '8', '1080': '12', '720': '14', '480': '18', smaller: '28' }[p] || '14',
+        '-b:v', { original: '8M', '1080': '4M', '720': '2500k', '480': '1200k', smaller: '1M' }[p] || '2500k', '-deadline', 'realtime', '-cpu-used', '8');
       else a.push('-c:v', 'libx264', '-preset', 'veryfast', '-crf', p === 'smaller' ? '28' : p === 'original' ? '20' : '23', '-pix_fmt', 'yuv420p');
       a.push('-vf', cap ? capScale(cap) : 'scale=trunc(iw/2)*2:trunc(ih/2)*2');
       if (o.noAudio) a.push('-an');
@@ -588,7 +591,7 @@
   var S = {
     items: [], seq: 0, jobSeq: 0, running: null, session: '', caps: null, prefs: null,
     workers: {}, pending: {}, cached: {}, free: null, idleTimer: 0, libs: {}, libP: {}, docsP: null,
-    urls: [], pdfjsUrls: [],
+    urls: [],
   };
   function detectCaps() {
     var ua = navigator.userAgent || '';
@@ -720,9 +723,11 @@
     if (S.libP.pdfjs) return S.libP.pdfjs;
     S.libP.pdfjs = Promise.all([assetBytes('pdfjs', onDl), assetBytes('pdfjsw', onDl)]).then(function (bufs) {
       var lib = URL.createObjectURL(new Blob([bufs[0]], { type: 'text/javascript' }));
+      // The worker URL must outlive this call (pdf.js spawns a worker per
+      // document); it is ~1 MB and kept with the loaded library.
       var wrk = URL.createObjectURL(new Blob([bufs[1]], { type: 'text/javascript' }));
-      S.pdfjsUrls.push(lib, wrk);
       return import(lib).then(function (ns) {
+        URL.revokeObjectURL(lib);
         if (!ns || !ns.getDocument) throw new Error('PDF reader failed to load');
         // A blob: URL is same-origin, so pdf.js runs it as its module worker
         // (and falls back to an in-page "fake worker" importing it if not).
@@ -750,7 +755,12 @@
   // ============================================================================
   // OPFS temp files
   // ============================================================================
-  function tmpPath(it) { return [TMP_DIR, S.session, 'j' + it.id]; }
+  // A fresh folder per run, so deleting a previous run's files (async) can
+  // never race with the new run writing its output.
+  function tmpPath(it) {
+    if (!it.outPath) it.outPath = [TMP_DIR, S.session, 'j' + it.id + '-' + (it.run || 0)];
+    return it.outPath;
+  }
   function opfsTmpDir() {
     return navigator.storage.getDirectory().then(function (root) { return root.getDirectoryHandle(TMP_DIR, { create: true }); });
   }
@@ -1008,9 +1018,11 @@
     }
     pick.then(function () {
       list.forEach(function (it) {
+        releaseOutputs(it);
         it.state = 'queued'; it.error = ''; it.errCode = ''; it.note = ''; it.p = 0; it.stage = ''; it.dl = null;
         it.cancelled = false;
-        releaseOutputs(it);
+        it.run = (it.run || 0) + 1;
+        it.outPath = null;
         renderCard(it);
       });
       renderFoot();
@@ -1032,6 +1044,7 @@
     var fin = function () {
       S.running = null;
       refreshSpace();
+      refreshCached();
       pump();
     };
     runItem(next).then(function (outputs) {
@@ -1076,7 +1089,10 @@
     if (d && d.kind === 'handle') return Promise.resolve({ kind: 'handle', handle: d.handle, name: name });
     if (d && d.kind === 'dir') {
       return uniqueIn(d.dir, name).then(function (n) {
-        return d.dir.getFileHandle(n, { create: true }).then(function (h) { return { kind: 'handle', handle: h, name: n }; });
+        return d.dir.getFileHandle(n, { create: true }).then(function (h) {
+          // The empty file exists now; remove it again if the job fails.
+          return { kind: 'handle', handle: h, name: n, drop: function () { return d.dir.removeEntry(n).catch(noop); } };
+        });
       });
     }
     if (S.caps.opfs) return Promise.resolve({ kind: 'opfs', dir: tmpPath(it), name: name });
@@ -1123,7 +1139,9 @@
   function runFast(it) {
     var name = outName(baseOf(it.name), it.target, sameSuffix(it));
     if (!checkSpace(it, it.size * (it.preset === 'original' ? 1.05 : 0.8))) return Promise.reject(codedError('Not enough space', 'quota'));
+    var dest = null;
     return destFor(it, name).then(function (out) {
+      dest = out;
       if (out.kind === 'memory' && it.size > MEMORY_OK) throw codedError('This browser can\u2019t write temporary files, and the file is too big to convert in memory', 'nostore');
       setStage(it, 'Starting\u2026');
       return workerJob('main', { type: 'media', file: it.file, opts: mediaOpts(it), out: out, outMime: T[it.target].mime }, it).then(function (m) {
@@ -1131,13 +1149,17 @@
         return [{ name: out.name, size: m.size, mime: T[it.target].mime, file: m.file, saved: m.saved }];
       });
     }).catch(function (e) {
-      if (it.cancelled || e.code === 'canceled' || e.code === 'quota' || e.code === 'nostore' || e.code === 'offline') throw e;
-      // Fast path can't do this file/target here: fall back to ffmpeg.
-      if (S.prefs.autoFallback && (e.code === 'unsupported' || e.code === 'failed')) {
-        if (missingWire(['ffjs', 'ffwasm']) && navigator.onLine === false) throw e;
-        return runFfMedia(it, e.message);
-      }
-      throw e;
+      // A file created in a picked folder is removed first, so the ffmpeg
+      // retry can reuse its name.
+      return Promise.resolve(dest && dest.drop ? dest.drop() : null).then(function () {
+        if (it.cancelled || e.code === 'canceled' || e.code === 'quota' || e.code === 'nostore' || e.code === 'offline') throw e;
+        // Fast path can't do this file/target here: fall back to ffmpeg.
+        if (S.prefs.autoFallback && (e.code === 'unsupported' || e.code === 'failed')) {
+          if (missingWire(['ffjs', 'ffwasm']) && navigator.onLine === false) throw e;
+          return runFfMedia(it, e.message);
+        }
+        throw e;
+      });
     });
   }
   function runFfMedia(it, why) {
@@ -1158,7 +1180,9 @@
       return workerJob('ff', { type: 'ff', file: input, args: args, outFile: 'out.' + T[it.target].ext, outMime: T[it.target].mime, out: out, dur: expectDur(it) || (tv.end > 0 ? tv.end - (tv.start || 0) : 0) }, it)
         .then(function (m) { return [{ name: out.name, size: m.size, mime: T[it.target].mime, file: m.file, saved: m.saved }]; }, function (e) {
           killRole('ff'); // a failed core may be wedged (abort / OOM): start fresh next time
+          if (out.drop) out.drop();
           if (e.code === 'memory') e.message = 'Ran out of memory in the compatible engine \u2014 try a smaller preset, trim it, or use a desktop browser';
+          else if (e.code === 'crash') e.message = 'The compatible engine crashed on this file (' + e.message + ') \u2014 try another target format';
           throw e;
         });
     });
@@ -1289,7 +1313,11 @@
       if (t === 'ico') return icoFrom(src, base).then(done, fail);
       var sz = fitSize(src.w, src.h, maxSide, S.caps.maxArea);
       if (sz.scaled && !maxSide) it.note = 'Scaled to ' + sz.w + '\u00d7' + sz.h + ' (this device\u2019s canvas limit)';
-      if (t === 'pdf') return pdfFromSources([src], base, q, it).then(done, fail);
+      if (t === 'pdf') {
+        src.alpha = /^(png|gif|webp|svg|ico|bmp)$/.test(it.sn.fmt);
+        return encodeForPdf(src, q, maxSide).then(function (img) { src.free(); return pdfFromImages([img], base, it); }, fail)
+          .then(function (o) { return persist(it, o); });
+      }
       var c = drawTo(src, sz.w, sz.h, t === 'jpeg' ? '#ffffff' : '');
       src.free();
       setStage(it, 'Encoding\u2026');
@@ -1337,32 +1365,32 @@
       return fileOut(new Blob([buildIco(entries)], { type: 'image/x-icon' }), name, 'image/x-icon');
     });
   }
-  // Decoded sources -> one PDF (pdf-lib). Opaque images as JPEG, others PNG.
-  function pdfFromSources(srcs, base, q, it) {
-    return loadGlobal('pdflib', dlCb(it)).then(function (PDFLib) {
-      return loadDocs().then(function (D) {
-        var imgs = [];
-        var chain = Promise.resolve();
-        srcs.forEach(function (src) {
-          chain = chain.then(function () {
-            var sz = fitSize(src.w, src.h, 0, Math.min(S.caps.maxArea, 40000000));
-            var png = src.alpha;
-            var c = drawTo(src, sz.w, sz.h, png ? '' : '#ffffff');
-            return canvasBlob(c, png ? 'image/png' : 'image/jpeg', png ? undefined : Math.max(q, 0.8)).then(function (b) {
-              freeCanvas(c);
-              return b.arrayBuffer();
-            }).then(function (ab) { imgs.push({ bytes: new Uint8Array(ab), type: png ? 'png' : 'jpeg', width: sz.w, height: sz.h }); });
-          });
-        });
-        return chain.then(function () { return D.imagesToPdf(PDFLib, imgs, base); });
-      });
+  // A decoded image -> compressed bytes for a PDF page (then the pixels can
+  // go — iOS caps total canvas memory, so never hold many at once).
+  // Images that may be transparent stay PNG; photos become JPEG.
+  function encodeForPdf(src, q, maxSide) {
+    var sz = fitSize(src.w, src.h, maxSide || 0, Math.min(S.caps.maxArea, 40000000));
+    var png = !!src.alpha;
+    var c = drawTo(src, sz.w, sz.h, png ? '' : '#ffffff');
+    return canvasBlob(c, png ? 'image/png' : 'image/jpeg', png ? undefined : Math.max(q, 0.8)).then(function (b) {
+      freeCanvas(c);
+      return b.arrayBuffer();
+    }, function (e) { freeCanvas(c); throw e; }).then(function (ab) {
+      return { bytes: new Uint8Array(ab), type: png ? 'png' : 'jpeg', width: sz.w, height: sz.h };
+    });
+  }
+  function pdfFromImages(imgs, base, it) {
+    return Promise.all([loadGlobal('pdflib', dlCb(it)), loadDocs()]).then(function (r) {
+      return r[1].imagesToPdf(r[0], imgs, base);
     }).then(function (u8) { return fileOut(new Blob([u8], { type: 'application/pdf' }), base + '.pdf', 'application/pdf'); });
   }
-  // "Combine into PDF": a synthetic item over several image items.
+  // "Combine into PDF": a synthetic item over several image items, in list
+  // order. Each photo is decoded, capped at 3000 px and compressed before the
+  // next one is touched.
   function runCombine(it) {
     var srcItems = it.combine.map(itemById).filter(Boolean);
     if (!srcItems.length) return Promise.reject(codedError('The images were removed'));
-    var srcs = [], i = 0;
+    var imgs = [], i = 0, q = it.opts.quality || 0.86;
     var next = function () {
       if (it.cancelled) return Promise.reject(codedError('Cancelled', 'canceled'));
       if (i >= srcItems.length) return Promise.resolve();
@@ -1371,21 +1399,13 @@
       setProgress(it, (i - 1) / (srcItems.length + 1));
       return decodeImage(s).then(function (d) {
         d.alpha = /^(png|gif|webp|svg|ico|bmp)$/.test(s.sn.fmt);
-        // Keep pixels small enough that a dozen photos fit in iOS memory.
-        var sz = fitSize(d.w, d.h, 3000, S.caps.maxArea);
-        var c = drawTo(d, sz.w, sz.h, d.alpha ? '' : '#ffffff');
-        d.free();
-        srcs.push({ src: c, w: sz.w, h: sz.h, alpha: d.alpha, free: function () { freeCanvas(c); } });
-        return next();
+        return encodeForPdf(d, q, 3000).then(function (img) { d.free(); imgs.push(img); return next(); }, function (e) { d.free(); throw e; });
       });
     };
     return next().then(function () {
       setStage(it, 'Building PDF\u2026');
-      return pdfFromSources(srcs, it.base, it.opts.quality || 0.86, it);
-    }).then(function (o) {
-      srcs.forEach(function (s) { s.free(); });
-      return persist(it, o).then(function (x) { return [x]; });
-    }, function (e) { srcs.forEach(function (s) { s.free(); }); throw e; });
+      return pdfFromImages(imgs, it.base, it);
+    }).then(function (o) { return persist(it, o).then(function (x) { return [x]; }); });
   }
 
   // ---- PDF (pdf.js) ------------------------------------------------------------
@@ -1446,7 +1466,7 @@
       return step().then(function () {
         try { doc.destroy(); } catch (e) {}
         if (t === 'txt') {
-          var text = texts.join('\n\n\f\n\n').replace(/\n{4,}/g, '\n\n\n') + '\n';
+          var text = texts.join('\n\n').replace(/\n{4,}/g, '\n\n\n') + '\n';
           if (!text.trim()) it.note = 'No text layer found \u2014 this PDF may be scanned images';
           return [fileOut(text, base + '.txt', 'text/plain', text)];
         }
@@ -1580,13 +1600,11 @@
           '<option value="auto"' + (it.opts.engine === 'auto' ? ' selected' : '') + '>Auto (fast, ffmpeg fallback)</option>' +
           '<option value="ffmpeg"' + (it.opts.engine === 'ffmpeg' ? ' selected' : '') + '>Compatible \u00b7 ffmpeg</option></select></label>';
       }
-      var tv = trimVals(it);
       var gen = ffOptions({ target: t, preset: it.preset, mono: it.opts.mono, noAudio: it.sn.fmt === 'gif', big: it.size > 200 * 1024 * 1024, quality: it.opts.quality });
       h += '<label class="cv-opt cv-ff"><span>Custom ffmpeg options <i>(replace the generated ones; input, trim and output are added for you)</i></span>' +
         '<textarea rows="2" spellcheck="false" autocapitalize="off" autocorrect="off" data-f="ffArgs" placeholder="' + esc(joinArgs(gen)) + '">' + esc(it.opts.ffArgs) + '</textarea>' +
         (it.opts.ffArgs ? '<button class="cv-link" data-act="ffreset">Use generated options</button>' : '<button class="cv-link" data-act="ffcopy">Start from generated options</button>') +
         '</label>';
-      void tv;
     }
     return h;
   }
@@ -1730,9 +1748,10 @@
     if (!el) return;
     var prog = el.querySelector('.cv-prog');
     if (!prog) { renderCard(it); return; }
-    prog.classList.toggle('indet', it.p < 0 || (it.dl != null && it.dl.loaded < it.dl.total && false));
+    var downloading = !!(it.dl && it.dl.loaded < it.dl.total);
+    prog.classList.toggle('indet', it.p < 0 && !downloading);
     var bar = prog.querySelector('.cv-bar i'), txt = prog.querySelector('.cv-ptxt');
-    var frac = it.dl && it.dl.loaded < it.dl.total ? it.dl.loaded / it.dl.total : it.p;
+    var frac = downloading ? it.dl.loaded / it.dl.total : it.p;
     if (bar) bar.style.width = Math.max(0, Math.round((frac > 0 ? frac : 0) * 100)) + '%';
     if (txt) txt.textContent = progressText(it);
   }
@@ -1827,17 +1846,18 @@
       toast('Insert failed: ' + ((e && e.message) || e), 'error', 2600);
     });
   }
+  // Drop a run's results: blob URLs + its OPFS folder. `later` waits out a
+  // download / share that may still be reading them.
   function releaseOutputs(it, later) {
-    var urls = [];
+    var urls = [], path = it.outPath;
     it.outputs.forEach(function (o) { if (o.url) urls.push(o.url); o.url = null; });
+    it.outputs = [];
+    it.outPath = null;
     var fn = function () {
       urls.forEach(function (u) { try { URL.revokeObjectURL(u); } catch (e) {} });
-      if (S.session) removeTmp(tmpPath(it));
+      if (path) removeTmp(path);
     };
-    var path = S.session ? tmpPath(it) : null;
-    if (later) setTimeout(function () { urls.forEach(function (u) { try { URL.revokeObjectURL(u); } catch (e) {} }); if (path) removeTmp(path); }, GRACE_MS);
-    else fn();
-    it.outputs = [];
+    if (later) setTimeout(fn, GRACE_MS); else fn();
   }
   function removeItem(it) {
     if (it.state === 'running' || it.state === 'queued') cancelItem(it);
@@ -2042,14 +2062,12 @@
     if (progRaf) { (window.cancelAnimationFrame || clearTimeout)(progRaf); progRaf = 0; }
     S.items.forEach(function (it) { it.cancelled = true; if (it.abort) { try { it.abort(); } catch (e) {} } });
     // Downloads / shares may still be reading the files: release after a grace period.
-    var urls = S.urls.slice(), pdfUrls = S.pdfjsUrls.slice(), session = S.session, opfs = S.caps && S.caps.opfs;
+    var urls = S.urls.slice(), session = S.session, opfs = S.caps && S.caps.opfs;
     setTimeout(function () {
       urls.forEach(function (u) { try { URL.revokeObjectURL(u); } catch (e) {} });
       if (opfs && session) removeTmp([TMP_DIR, session]);
     }, GRACE_MS);
-    pdfUrls.forEach(function (u) { try { URL.revokeObjectURL(u); } catch (e) {} });
-    S.urls = []; S.pdfjsUrls = [];
-    S.libs = {}; delete S.libP.pdfjs;
+    S.urls = [];
     S.items = []; S.running = null; S.session = '';
   }
 
@@ -2079,7 +2097,7 @@
       '<div class="cv-list" aria-live="polite"></div>' +
       '<div class="cv-foot">' +
         '<div class="cv-acts">' +
-          '<button class="cv-btn primary cv-all" data-act="all" disabled>Convert</button>' +
+          '<button class="cv-btn solid cv-all" data-act="all" disabled>Convert</button>' +
           '<button class="cv-btn cv-combine" data-act="combine" hidden title="Put all images into one PDF, in this order">Combine into PDF</button>' +
           '<button class="cv-btn cv-clear" data-act="clear" hidden>Clear</button>' +
         '</div>' +
