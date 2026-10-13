@@ -1,7 +1,7 @@
 /* Line Bookmarks plugin. */
 /* A thin accent bar at the left edge of a bookmarked line — the marker that
    stays visible while the line-number gutter is hidden. */
-.cm-editor .cm-line.cm-bm-line { box-shadow: inset 3px 0 0 var(--accent); }
+.cm-editor .cm-line.cm-bm-line { box-shadow: inset 2px 0 0 var(--accent); }
 /* The bookmarked line's number becomes an accent tab (click removes it). */
 .cm-lineNumbers .cm-gutterElement.cm-bm-g {
   color: var(--accent);

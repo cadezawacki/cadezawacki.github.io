@@ -683,7 +683,9 @@
   // Rendering
   // =========================================================================
   function spin(label) { return '<span class="si-spin" aria-hidden="true"></span>' + (label ? '<span class="si-wait">' + esc(label) + '</span>' : ''); }
-  function sizeOrSpin(n) { return n == null ? spin('') : esc(fmt(n)); }
+  function sizeOrSpin(n) { return n == null ? (S.busy ? spin('') : '\u2014') : esc(fmt(n)); }
+  // Still measuring → spinner; measuring finished without an answer → say so.
+  function pend() { return S.busy ? spin('measuring') : 'Couldn\u2019t be measured in this browser.'; }
 
   function overviewHtml(cs) {
     var h = '<section class="si-card si-over">';
@@ -790,7 +792,7 @@
       [['0', 'keep all'], ['1', 'after 1 day'], ['7', 'after 7 days'], ['30', 'after 30 days']].map(function (o) {
         return '<option value="' + o[0] + '"' + (o[0] === auto ? ' selected' : '') + '>' + o[1] + '</option>';
       }).join('') + '</select>';
-    var sdesc = 'Older than ' + sel + ' \u00b7 ' + (plan == null ? spin('measuring') : plan.removed
+    var sdesc = 'Older than ' + sel + ' \u00b7 ' + (plan == null ? pend() : plan.removed
       ? plan.removed + ' snapshot' + (plan.removed === 1 ? '' : 's') + ' in ' + plan.rooms.length + ' room' + (plan.rooms.length === 1 ? '' : 's')
       : 'none that old') + '. The newest snapshot of every room is always kept.' +
       '<div class="si-sub">Auto-delete on this device: ' + autoSel + '</div>';
@@ -803,7 +805,7 @@
     } else {
       var ib = 0;
       (ip || []).forEach(function (c) { ib += c.bytes; });
-      var idesc = ip == null ? spin('measuring')
+      var idesc = ip == null ? pend()
         : ip.length ? ip.length + ' image' + (ip.length === 1 ? '' : 's') + '/file' + (ip.length === 1 ? '' : 's') + ' used only by rooms whose text isn\u2019t kept here (' +
           esc(uniqRooms(ip).slice(0, 3).join(', ')) + (uniqRooms(ip).length > 3 ? '\u2026' : '') + '). Each is checked against the server first; they download again when those rooms are opened online.'
         : 'Nothing to free \u2014 every local image is used by a document kept here, or still uploading.';
@@ -818,7 +820,7 @@
     } else {
       var ob = 0;
       (old || []).forEach(function (B) { ob += B.bytes; });
-      var adesc = old == null ? spin('measuring')
+      var adesc = old == null ? pend()
         : S.caches.pending ? 'An app update is installing right now \u2014 try again in a moment.'
         : old.length ? old.length + ' outdated cache' + (old.length === 1 ? '' : 's') + ' (' + esc(old.map(function (B) { return B.name; }).join(', ')) + '). The current version stays, so offline use is unaffected.'
         : 'Only the current version is cached.';
@@ -868,7 +870,7 @@
   // ---- rooms ---------------------------------------------------------------------
   function roomsHtml() {
     var h = '<section class="si-card"><h3 class="si-h">Largest rooms</h3>';
-    if (!S.rooms) return h + '<div class="si-note">' + spin('measuring') + '</div></section>';
+    if (!S.rooms) return h + '<div class="si-note">' + pend() + '</div></section>';
     var list = S.rooms.slice().sort(function (a, b) { return (b.total + b.img.bytes) - (a.total + a.img.bytes) || (b.modified || 0) - (a.modified || 0); });
     if (!list.length) return h + '<div class="si-note">No rooms on this device.</div></section>';
     var shown = prefs.allRooms ? list : list.slice(0, 8), t = now();
