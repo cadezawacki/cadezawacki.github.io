@@ -1,0 +1,29 @@
+name: Fetch models
+
+# Downloads every file in files.json from its source, verifies size + SHA-256,
+# and commits it here (in batches). Runs when files.json / the script change,
+# or by hand: Actions -> Fetch models -> Run workflow.
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: [files.json, fetch.py, .github/workflows/fetch.yml]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: fetch-models
+  cancel-in-progress: false
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download, verify and commit
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          python3 fetch.py
