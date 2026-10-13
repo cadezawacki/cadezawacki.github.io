@@ -83,8 +83,9 @@
 
   // Numbering follows the standard rule (a white cell starting an across or a
   // down entry gets the next number), matching build-puzzles.js.
-  function parse(idx) {
-    var f = data.p[idx].split('|'), g = f[0], num = [], across = [], down = [], n = 0, at = [];
+  function parse(idx) { return parseLine(data.p[idx], idx); }
+  function parseLine(line, idx) {
+    var f = line.split('|'), g = f[0], num = [], across = [], down = [], n = 0, at = [];
     function white(r, c) { return r >= 0 && r < N && c >= 0 && c < N && g.charAt(r * N + c) !== '#'; }
     for (var r = 0; r < N; r++) for (var c = 0; c < N; c++) {
       if (!white(r, c)) continue;
@@ -487,9 +488,9 @@
     });
     var on = ui.clueEls[s.i];
     if (on && !done) {
-      var box = on.parentNode.parentNode;
+      var box = on.parentNode.parentNode;                 // .xw-col (positioned, so offsetTop is relative to it)
       if (box.scrollHeight > box.clientHeight + 2) {
-        var top = on.offsetTop - box.offsetTop;
+        var top = on.offsetTop;
         if (top < box.scrollTop || top + on.offsetHeight > box.scrollTop + box.clientHeight) box.scrollTop = Math.max(0, top - 24);
       }
     }
@@ -545,7 +546,7 @@
     Cade.closeAllMenus();
     if (document.getElementById(PANEL_ID)) { close(); return; }
     loadState();
-    var p = Cade.mkPanel(PANEL_ID, '▦ Mini Crossword', panelHtml());
+    var p = Cade.mkPanel(PANEL_ID, '✎ Mini Crossword', panelHtml());
     var root = p.querySelector('.xw');
     ui = {
       panel: p, root: root, main: root.querySelector('.xw-main'), grid: root.querySelector('.xw-grid'),
@@ -652,6 +653,7 @@
     description: 'Daily 5×5 crossword, plus an archive and random puzzles',
     icon: ICON,
     tags: 'game,crossword,mini,puzzle,words,clues,daily,brain,fun',
-    open: open
+    open: open,
+    _parse: parseLine           // exposed for headless tests
   });
 })();

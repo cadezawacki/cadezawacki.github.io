@@ -13,7 +13,7 @@
 //   - Firebase realtime DB: bypass (live data, needs network)
 // ============================================
 
-const CACHE_VERSION = 117;
+const CACHE_VERSION = 118;
 const CACHE_NAME = `cade-v${CACHE_VERSION}`;
 
 // Same-origin pages to precache on install.
@@ -171,6 +171,10 @@ self.addEventListener('fetch', (e) => {
   if (url.hostname.includes('firebaseio.com')) return;
   // Bypass Google APIs (Firebase, etc.) for live data — but DO cache Google Fonts.
   if (url.hostname.includes('googleapis.com') && !url.hostname.startsWith('fonts.')) return;
+  // Read Aloud's HD voice (txt/widgets/tts) keeps its ~60 MB model + runtime in
+  // its own 'cade-tts-hd-v1' cache; caching them here too would store them twice.
+  if (url.hostname.includes('huggingface.co') && url.pathname.includes('/piper-voices/')) return;
+  if (url.hostname === 'cdn.jsdelivr.net' && /^\/npm\/(onnxruntime-web|phonemizer)@/.test(url.pathname)) return;
 
   // Navigation (the HTML page itself): stale-while-revalidate with offline fallback.
   if (request.mode === 'navigate') {

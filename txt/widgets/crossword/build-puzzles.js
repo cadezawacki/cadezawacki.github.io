@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /* build-puzzles.js — pre-generates the Mini Crossword puzzle set.
  *
- *   node txt/widgets/crossword/build-puzzles.js [count]      build (default 365)
+ *   node txt/widgets/crossword/build-puzzles.js [count]      build (default 300)
  *   node txt/widgets/crossword/build-puzzles.js --check      validate crossword-data.js
  *
  * Reads clues.tsv (WORD<TAB>clue<TAB>optional alt clue; 3-5 letters) and fills
@@ -11,7 +11,8 @@
  * 180-degree symmetric patterns (2 or 4 blacks) in which every across/down
  * entry is 3+ letters and every white cell is checked both ways.
  *
- * Variety: a word may appear in at most MAX_USE puzzles, less-used words are
+ * Variety: a word may appear in at most CAP_START puzzles (the cap rises one
+ * step at a time, up to CAP_MAX, only when fills stall), less-used words are
  * tried first, a word's alternative clue is used on its second appearance,
  * and no puzzle contains the same answer twice (or both CAT and CATS).
  * Deterministic: a seeded PRNG means the same list always builds the same set.
@@ -28,9 +29,11 @@ var DIR = __dirname;
 var LIST = path.join(DIR, 'clues.tsv');
 var OUT = path.join(DIR, 'crossword-data.js');
 var SEED = 'cade-mini-crossword-v1';
-var EPOCH = '2026-10-01';            // date of puzzle #1 for the Daily rotation
-var MAX_USE = 3;                     // appearances allowed per word across the set
-var NODE_LIMIT = 4000;               // backtracking nodes per attempt before giving up
+var EPOCH = '2026-06-01';            // date of puzzle #1 for the Daily rotation
+var CAP_START = 3;                   // appearances allowed per word across the set...
+var CAP_MAX = 8;                     // ...rising to at most this when fills stall
+var STALL = 120;                     // failed attempts in a row that raise the cap
+var NODE_LIMIT = 1500;               // backtracking nodes per attempt before giving up
 var N = 5;
 
 // Black-square patterns (rows top to bottom). Weights steer the mix. A fully
@@ -67,6 +70,9 @@ function giveaway(a, b) {
   if (a.length > b.length) { var t = a; a = b; b = t; }
   return a === b || [a + 'S', a + 'ES', a + 'D', a + 'ED', a + 'ER', a + 'ING', a + 'LY', a + 'Y'].indexOf(b) !== -1;
 }
+function echoes(clue, answer) {
+  return (clue.match(/[A-Za-z]+/g) || []).some(function (cw) { return giveaway(cw.toUpperCase(), answer); });
+}
 function loadList() {
   var words = {}, byLen = { 3: [], 4: [], 5: [] }, errs = [];
   fs.readFileSync(LIST, 'utf8').split('\n').forEach(function (line, i) {
@@ -78,7 +84,7 @@ function loadList() {
     var clues = f.slice(1);
     clues.forEach(function (c) {
       if (/[|\n]/.test(c)) errs.push('clue for ' + w + ' contains a separator');
-      (c.match(/[A-Za-z]+/g) || []).forEach(function (cw) { if (giveaway(cw.toUpperCase(), w)) errs.push('clue for ' + w + ' gives it away: ' + c); });
+      if (echoes(c, w)) errs.push('clue for ' + w + ' gives it away: ' + c);
     });
     words[w] = clues;
     byLen[w.length].push(w);
@@ -138,59 +144,67 @@ function fill(pattern, idx, uses, rnd) {
   var grid = pattern.split(''), slots = slotsFor(grid), nodes = 0;
   if (!slots) throw new Error('bad pattern ' + pattern);
   var placed = [];                        // slot index -> word
-  function candidates(s) {
-    var I = idx[s.cells.length], m = I.avail.slice();
+  // Scratch bitsets allocated once per attempt (allocating per node made the
+  // garbage collector the bottleneck): one per slot for the MRV scan, one per
+  // word length for the look-ahead counts.
+  var buf = slots.map(function (s) { return new Uint32Array(idx[s.cells.length].W); });
+  var tmp = { 3: new Uint32Array(idx[3].W), 4: new Uint32Array(idx[4].W), 5: new Uint32Array(idx[5].W) };
+  var cross = slots.map(function (s, i) {
+    var out = [];
+    slots.forEach(function (o, j) { if (j !== i && o.cells.some(function (c) { return s.cells.indexOf(c) !== -1; })) out.push(j); });
+    return out;
+  });
+  function candInto(s, m) {               // fills m with s's candidates, returns their count
+    var I = idx[s.cells.length], W = I.W, k, n = 0;
+    m.set(I.avail);
     for (var p = 0; p < s.cells.length; p++) {
       var ch = grid[s.cells[p]];
       if (ch === '.') continue;
       var b = I.pos[p][ch];
-      for (var k = 0; k < I.W; k++) m[k] &= b[k];
+      for (k = 0; k < W; k++) m[k] &= b[k];
     }
-    return m;
+    for (k = 0; k < W; k++) if (m[k]) n += popcount(m[k]);
+    return n;
   }
-  function count(m) { var n = 0; for (var k = 0; k < m.length; k++) if (m[k]) n += popcount(m[k]); return n; }
   function rec() {
     if (++nodes > NODE_LIMIT) return false;
-    var best = -1, bestMask = null, bestN = 1e9;
-    for (var s = 0; s < slots.length; s++) {
+    var best = -1, bestN = 1e9, s, k, p;
+    for (s = 0; s < slots.length; s++) {
       if (placed[s]) continue;
-      var m = candidates(slots[s]), n = count(m);
+      var n = candInto(slots[s], buf[s]);
       if (n === 0) return false;              // forward check: a crossing slot died
-      if (n < bestN) { bestN = n; best = s; bestMask = m; }
+      if (n < bestN) { bestN = n; best = s; }
     }
     if (best < 0) return true;                // every slot filled
-    var S = slots[best], I = idx[S.cells.length], cand = [];
-    for (var k = 0; k < I.W; k++) for (var bits = bestMask[k]; bits; bits &= bits - 1) {
+    var S = slots[best], I = idx[S.cells.length], mask = buf[best], cand = [];
+    for (k = 0; k < I.W; k++) for (var bits = mask[k]; bits; bits &= bits - 1) {
       var w = I.list[(k << 5) + (31 - Math.clz32(bits & -bits))];
       var bad = false;
       for (var q = 0; q < placed.length && !bad; q++) if (placed[q] && related(placed[q], w)) bad = true;
       if (!bad) cand.push({ w: w, key: (uses[w] || 0) + rnd() * 1.5 });
     }
     cand.sort(function (a, b) { return a.key - b.key; });
-    cand = cand.slice(0, 60);
+    if (cand.length > 60) cand.length = 60;
     var saved = S.cells.map(function (x) { return grid[x]; });
     // Least-constraining value: prefer words that leave the crossing slots the
     // most options (log-sum of their candidate counts); drop dead ends now.
-    var cross = [];
-    for (var s2 = 0; s2 < slots.length; s2++) {
-      if (s2 === best || placed[s2]) continue;
-      for (var e = 0; e < slots[s2].cells.length; e++) if (S.cells.indexOf(slots[s2].cells[e]) !== -1) { cross.push(slots[s2]); break; }
-    }
     var scored = [];
     for (var c0 = 0; c0 < cand.length; c0++) {
       var cw = cand[c0].w, score = 0, dead = false;
-      for (var p0 = 0; p0 < S.cells.length; p0++) grid[S.cells[p0]] = cw[p0];
-      for (var x = 0; x < cross.length && !dead; x++) {
-        var cnt = count(candidates(cross[x]));
+      for (p = 0; p < S.cells.length; p++) grid[S.cells[p]] = cw[p];
+      for (var x = 0; x < cross[best].length && !dead; x++) {
+        var o = cross[best][x];
+        if (placed[o]) continue;
+        var cnt = candInto(slots[o], tmp[slots[o].cells.length]);
         if (!cnt) dead = true; else score += Math.log(cnt);
       }
       if (!dead) scored.push({ w: cw, score: score - (uses[cw] || 0) * 0.7 + rnd() * 1.2 });
     }
-    for (p0 = 0; p0 < S.cells.length; p0++) grid[S.cells[p0]] = saved[p0];
+    for (p = 0; p < S.cells.length; p++) grid[S.cells[p]] = saved[p];
     scored.sort(function (a, b) { return b.score - a.score; });
     for (var c = 0; c < scored.length && c < 12; c++) {
       var word = scored[c].w;
-      for (var p = 0; p < S.cells.length; p++) grid[S.cells[p]] = word[p];
+      for (p = 0; p < S.cells.length; p++) grid[S.cells[p]] = word[p];
       placed[best] = word;
       if (rec()) return true;
       placed[best] = undefined;
@@ -207,26 +221,52 @@ function build(target) {
   var L = loadList(), idx = makeIndex(L.byLen), rnd = rngFrom(SEED), uses = {}, out = [], seen = {};
   var bag = [];
   PATTERNS.forEach(function (p, i) { for (var k = 0; k < p.w; k++) bag.push(i); });
-  var tries = 0, fails = {};
-  while (out.length < target && tries < target * 60) {
+  var tries = 0, fails = {}, cap = CAP_START, stall = 0;
+  // Words at the cap leave the pool; when fills stall the cap rises by one, so
+  // early puzzles use the freshest words and reuse grows only as needed.
+  function setAvail() {
+    [3, 4, 5].forEach(function (n) {
+      var I = idx[n];
+      I.avail.set(I.all);
+      I.list.forEach(function (w, wi) { if ((uses[w] || 0) >= cap) I.avail[wi >> 5] &= ~(1 << (wi & 31)); });
+    });
+  }
+  while (out.length < target && tries < target * 100) {
     tries++;
     var pi = bag[(rnd() * bag.length) | 0], pat = PATTERNS[pi].rows.join('');
     var res = fill(pat, idx, uses, rnd);
-    if (!res || seen[res.grid]) { fails[pi] = (fails[pi] || 0) + 1; continue; }
-    seen[res.grid] = 1;
+    if (!res || seen[res.grid]) {
+      fails[pi] = (fails[pi] || 0) + 1;
+      if (++stall >= STALL && cap < CAP_MAX) {
+        cap++; stall = 0; setAvail();
+        process.stderr.write('  reuse cap -> ' + cap + ' after ' + out.length + ' puzzles\n');
+      }
+      continue;
+    }
+    // Second appearance gets the alternative clue; a clue may not echo another
+    // answer in the same grid (STUCK clued "Trapped" next to TRAP).
     var clues = res.slots.map(function (s, si) {
       var w = res.words[si], cl = L.words[w], n = uses[w] || 0;
-      return cl[n % cl.length];
+      for (var k = 0; k < cl.length; k++) {
+        var c = cl[(n + k) % cl.length];
+        if (!res.words.some(function (o) { return o !== w && echoes(c, o); })) return c;
+      }
+      return null;
     });
-    res.words.forEach(function (w) {
-      uses[w] = (uses[w] || 0) + 1;
-      if (uses[w] >= MAX_USE) { var I = idx[w.length], wi = I.list.indexOf(w); I.avail[wi >> 5] &= ~(1 << (wi & 31)); }
-    });
+    if (clues.indexOf(null) !== -1) { fails[pi] = (fails[pi] || 0) + 1; continue; }
+    stall = 0;
+    seen[res.grid] = 1;
+    res.words.forEach(function (w) { uses[w] = (uses[w] || 0) + 1; });
+    setAvail();
     out.push(res.grid + '|' + clues.join('|'));
-    if (out.length % 50 === 0) process.stderr.write('  ' + out.length + ' puzzles (' + tries + ' attempts)\n');
+    if (out.length % 25 === 0) process.stderr.write('  ' + out.length + ' puzzles (' + tries + ' attempts)\n');
   }
-  var distinct = Object.keys(uses).length;
-  process.stderr.write('built ' + out.length + ' puzzles in ' + tries + ' attempts; ' + distinct + ' distinct answers used; failures by pattern ' + JSON.stringify(fails) + '\n');
+  // Mix early (fresh-word) and late (more reuse) puzzles across the calendar.
+  for (var k = out.length - 1; k > 0; k--) { var r = (rnd() * (k + 1)) | 0, t = out[k]; out[k] = out[r]; out[r] = t; }
+  var hist = {};
+  Object.keys(uses).forEach(function (w) { hist[uses[w]] = (hist[uses[w]] || 0) + 1; });
+  process.stderr.write('built ' + out.length + ' puzzles in ' + tries + ' attempts; ' + Object.keys(uses).length +
+    ' distinct answers; words by number of appearances ' + JSON.stringify(hist) + '; failures by pattern ' + JSON.stringify(fails) + '\n');
   return out;
 }
 
@@ -262,11 +302,12 @@ function check() {
       if (!L.words[w]) errs.push(tag + w + ' not in list');
       else if (L.words[w].indexOf(f[si + 1]) === -1) errs.push(tag + 'clue for ' + w + ' not from list');
       if (!f[si + 1]) errs.push(tag + 'missing clue for ' + w);
+      ws.forEach(function (o) { if (o !== w && f[si + 1] && echoes(f[si + 1], o)) errs.push(tag + 'clue for ' + w + ' echoes ' + o); });
       for (var sj = 0; sj < si; sj++) if (related(ws[sj], w)) errs.push(tag + 'repeated/related answers ' + ws[sj] + ' ' + w);
       uses[w] = (uses[w] || 0) + 1;
     });
   });
-  Object.keys(uses).forEach(function (w) { if (uses[w] > MAX_USE) errs.push(w + ' used ' + uses[w] + ' times'); });
+  Object.keys(uses).forEach(function (w) { if (uses[w] > CAP_MAX) errs.push(w + ' used ' + uses[w] + ' times'); });
   var nWords = Object.keys(L.words).length;
   console.log('list: ' + nWords + ' words (' + [3, 4, 5].map(function (n) { return L.byLen[n].length + 'x' + n; }).join(', ') + ')');
   console.log('puzzles: ' + D.p.length + ', black-square counts ' + JSON.stringify(blacks) + ', distinct answers ' + Object.keys(uses).length +
@@ -278,7 +319,7 @@ function check() {
 if (require.main === module) {
   if (process.argv[2] === '--check') check();
   else {
-    var target = +(process.argv[2] || 365);
+    var target = +(process.argv[2] || 300);
     var t0 = Date.now();
     writeData(build(target));
     process.stderr.write('wrote ' + path.relative(process.cwd(), OUT) + ' in ' + ((Date.now() - t0) / 1000).toFixed(1) + 's\n');
