@@ -61,7 +61,16 @@
   }
 
   function post(m, transfer) { self.postMessage(m, transfer || []); }
-  function errMsg(e) { return (e && (e.message || (typeof e === 'string' ? e : String(e)))) || 'unknown error'; }
+  function errMsg(e) {
+    if (e && e.name === 'QuotaExceededError') return 'Not enough free storage on this device for the output';
+    return (e && (e.message || (typeof e === 'string' ? e : String(e)))) || 'unknown error';
+  }
+  // Our own codes are strings; DOMExceptions carry legacy numeric codes.
+  function errCode(e, dflt) {
+    if (e && typeof e.code === 'string') return e.code;
+    if (e && e.name === 'QuotaExceededError') return 'quota';
+    return dflt || 'failed';
+  }
   function CodedError(message, code) { var e = new Error(message); e.code = code; return e; }
 
   // ---- converter downloads (Cache Storage backed, with byte progress) ------
@@ -80,7 +89,7 @@
       if (hit) return hit.arrayBuffer();
     }
     if (self.navigator && self.navigator.onLine === false) {
-      throw CodedError('Offline — the ' + (asset.label || 'converter') + ' needs one online download first', 'offline');
+      throw CodedError('Offline \u2014 the ' + (asset.label || 'converter') + ' needs one online download first', 'offline');
     }
     // cache:'no-store' keeps a second copy out of the HTTP cache (and lets the
     // app's service worker skip it); our bucket is the only copy.
@@ -119,7 +128,7 @@
         } }));
       } catch (e) {
         // Quota or private mode: it still works now, just not offline later.
-        post({ type: 'stage', id: id, text: 'Couldn’t keep the converter for offline use (' + errMsg(e) + ')' });
+        post({ type: 'stage', id: id, text: 'Couldn\u2019t keep the converter for offline use (' + errMsg(e) + ')' });
       }
     }
     return buf;
@@ -135,7 +144,7 @@
     if (MB) return Promise.resolve(MB);
     if (!mbP) {
       mbP = (async function () {
-        post({ type: 'stage', id: m.id, text: 'Loading fast engine…' });
+        post({ type: 'stage', id: m.id, text: 'Loading fast engine\u2026' });
         var buf = await getBytes(m.assets.mediabunny, m.id);
         // Kept alive for the worker's lifetime: the encoder extensions import
         // this exact URL so they share Mediabunny's encoder registry.
@@ -163,7 +172,7 @@
     var ok = false;
     try { ok = await MB.canEncodeAudio(codec, opts || {}); } catch (e) { ok = false; }
     if (ok) { extDone[codec] = 'native'; return; }
-    post({ type: 'stage', id: m.id, text: 'Loading ' + codec.toUpperCase() + ' encoder…' });
+    post({ type: 'stage', id: m.id, text: 'Loading ' + codec.toUpperCase() + ' encoder\u2026' });
     var src = textOf(await getBytes(m.assets[ex.asset], m.id));
     var patched = src.replace(/from\s*["']mediabunny["']/g, 'from"' + mbUrl + '"');
     var url = blobUrl(patched);
@@ -244,7 +253,7 @@
         };
       }
       await removeIt();
-      throw CodedError('This browser can’t write temporary files', 'nostore');
+      throw CodedError('This browser can\u2019t write temporary files', 'nostore');
     }
     return null; // memory: caller uses a BufferTarget
   }
@@ -295,7 +304,7 @@
           await w2.close();
         } catch (e2) { try { await w2.abort(); } catch (x2) {} throw e2; }
       } else {
-        throw CodedError('This browser can’t write temporary files', 'nostore');
+        throw CodedError('This browser can\u2019t write temporary files', 'nostore');
       }
     } catch (e3) {
       try { await dir.removeEntry(out.name); } catch (x3) {}
@@ -332,11 +341,11 @@
     try {
       await loadMB(m);
       if (job.cancelled) throw CodedError('Cancelled', 'canceled');
-      post({ type: 'stage', id: m.id, text: 'Reading…' });
+      post({ type: 'stage', id: m.id, text: 'Reading\u2026' });
       input = new MB.Input({ source: new MB.BlobSource(m.file), formats: MB.ALL_FORMATS });
       var canRead = false;
       try { canRead = await input.canRead(); } catch (e) { canRead = false; }
-      if (!canRead) throw CodedError('The fast engine can’t read this file', 'unsupported');
+      if (!canRead) throw CodedError('The fast engine can\u2019t read this file', 'unsupported');
       var vtrack = await input.getPrimaryVideoTrack();
       var atrack = await input.getPrimaryAudioTrack();
       var t = o.target, wantVideo = !!VIDEO_TARGETS[t];
@@ -368,7 +377,7 @@
           }
           var aCodec = null;
           try { aCodec = await MB.getFirstEncodableAudioCodec(aPref, encOpts); } catch (e) {}
-          if (!aCodec) throw CodedError('This browser can’t encode ' + aPref.join('/').toUpperCase() + ' audio', 'unsupported');
+          if (!aCodec) throw CodedError('This browser can\u2019t encode ' + aPref.join('/').toUpperCase() + ' audio', 'unsupported');
           aOpts.codec = aCodec;
           aOpts.forceTranscode = true;
           if (aCodec.indexOf('pcm') !== 0 && aCodec !== 'flac') {
@@ -397,7 +406,7 @@
         try { vCodec = await MB.getFirstEncodableVideoCodec(vPref, { width: even(outW), height: even(outH) }); } catch (e) {}
         var srcCodec = await vtrack.getCodec();
         var canCopy = o.preset === 'original' && srcCodec && vPref.indexOf(srcCodec) !== -1;
-        if (!vCodec && !canCopy) throw CodedError('This browser can’t encode ' + vPref.join('/').toUpperCase() + ' video', 'unsupported');
+        if (!vCodec && !canCopy) throw CodedError('This browser can\u2019t encode ' + vPref.join('/').toUpperCase() + ' video', 'unsupported');
         if (o.preset !== 'original') {
           vOpts.forceTranscode = true;
           vOpts.codec = vCodec;
@@ -434,10 +443,10 @@
       });
       if (!conv.isValid || lost.length) {
         var why = lost.length ? lost.map(function (d) { return d.track.type + ': ' + d.reason.replace(/_/g, ' '); }).join(', ') : 'nothing to convert';
-        throw CodedError('Fast engine can’t do this (' + why + ')', 'unsupported');
+        throw CodedError('Fast engine can\u2019t do this (' + why + ')', 'unsupported');
       }
       var copying = conv.utilizedTracks && wantVideo && o.preset === 'original' && canCopy;
-      post({ type: 'stage', id: m.id, text: copying ? 'Remuxing (no re-encode)…' : 'Converting…' });
+      post({ type: 'stage', id: m.id, text: copying ? 'Remuxing (no re-encode)\u2026' : 'Converting\u2026' });
       var lastP = 0;
       conv.onProgress = function (p, tsec) {
         var now = Date.now();
@@ -457,11 +466,11 @@
       var note = [];
       if (aOpts && extDone[aOpts.codec] === 'wasm') note.push(aOpts.codec.toUpperCase() + ' via wasm encoder');
       if (copying) note.push('no re-encode');
-      post({ type: 'done', id: m.id, file: res.file, size: res.size, saved: !!res.saved, note: note.join(' · ') });
+      post({ type: 'done', id: m.id, file: res.file, size: res.size, saved: !!res.saved, note: note.join(' \u00b7 ') });
     } catch (e) {
       var cancelled = job.cancelled || (e && e.name === 'ConversionCanceledError');
       if (sink) { try { await sink.discard(); } catch (x) {} }
-      post({ type: 'error', id: m.id, message: cancelled ? 'Cancelled' : errMsg(e), code: cancelled ? 'canceled' : (e && e.code) || 'failed' });
+      post({ type: 'error', id: m.id, message: cancelled ? 'Cancelled' : errMsg(e), code: cancelled ? 'canceled' : errCode(e) });
     } finally {
       if (input) { try { input.dispose(); } catch (x) {} }
       delete jobs[m.id];
@@ -495,8 +504,8 @@
       return /error|invalid|unknown|not found|unsupported|failed|could not|cannot|no such|not implemented|does not|out of memory|abort/i.test(l) &&
         !/^\s*(built with|configuration:|lib\w+\s+\d)/.test(l);
     });
-    var pick = (bad.length ? bad.slice(-2) : lines.slice(-2)).join(' — ').trim();
-    return pick.length > 300 ? pick.slice(0, 300) + '…' : pick;
+    var pick = (bad.length ? bad.slice(-2) : lines.slice(-2)).join(' \u2014 ').trim();
+    return pick.length > 300 ? pick.slice(0, 300) + '\u2026' : pick;
   }
 
   // 'memory' = the wasm heap couldn't grow (big input / output on a phone);
@@ -512,10 +521,10 @@
     if (ff) return Promise.resolve(ff);
     if (!ffP) {
       ffP = (async function () {
-        post({ type: 'stage', id: m.id, text: 'Loading compatible engine…' });
+        post({ type: 'stage', id: m.id, text: 'Loading compatible engine\u2026' });
         var js = await getBytes(m.assets.ffjs, m.id);
         var wasm = await getBytes(m.assets.ffwasm, m.id);
-        post({ type: 'stage', id: m.id, text: 'Starting compatible engine…' });
+        post({ type: 'stage', id: m.id, text: 'Starting compatible engine\u2026' });
         // The core always installs its own locateFile, so the
         // `new URL('ffmpeg-core.wasm', import.meta.url)` branch is dead code —
         // but a blob: URL is no valid base, so neutralise it anyway.
@@ -560,7 +569,7 @@
       mounted = true;
       var args = m.args.map(function (a) { return a === '{in}' ? '/in/' + m.file.name : a === '{out}' ? outPath : a; });
       ffState = { id: m.id, lines: [], dur: null, time: null, last: 0, expect: m.dur || 0 };
-      post({ type: 'stage', id: m.id, text: 'Converting (compatible engine)…' });
+      post({ type: 'stage', id: m.id, text: 'Converting (compatible engine)\u2026' });
       post({ type: 'progress', id: m.id, p: 0, t: 0 });
       core.setTimeout(-1);
       var ret;
@@ -580,7 +589,7 @@
         if (node && node.contents && node.contents.subarray) data = node.contents.subarray(0, node.usedBytes);
       } catch (e) {}
       if (!data) data = FS.readFile(outPath);
-      post({ type: 'stage', id: m.id, text: 'Saving…' });
+      post({ type: 'stage', id: m.id, text: 'Saving\u2026' });
       var res = await writeWhole(m.out, data, m.outMime);
       data = null;
       try { FS.unlink(outPath); } catch (e) {}
@@ -588,7 +597,7 @@
     } catch (e) {
       ffState = null;
       if (core) { try { core.FS.unlink(outPath); } catch (x) {} }
-      post({ type: 'error', id: m.id, message: errMsg(e), code: (e && e.code) || memCode(errMsg(e)) });
+      post({ type: 'error', id: m.id, message: errMsg(e), code: errCode(e, memCode(errMsg(e))) });
     } finally {
       if (mounted) { try { core.FS.unmount('/in'); } catch (x) {} }
     }
@@ -600,7 +609,7 @@
     if (heif) return Promise.resolve(heif);
     if (!heifP) {
       heifP = (async function () {
-        post({ type: 'stage', id: m.id, text: 'Loading HEIC decoder…' });
+        post({ type: 'stage', id: m.id, text: 'Loading HEIC decoder\u2026' });
         var url = blobUrl(await getBytes(m.assets.libheif, m.id));
         var mod;
         try { mod = await import(url); } finally { URL.revokeObjectURL(url); }
@@ -618,12 +627,12 @@
     var imgs = [], dec = null;
     try {
       var lib = await loadHeif(m);
-      post({ type: 'stage', id: m.id, text: 'Decoding HEIC…' });
+      post({ type: 'stage', id: m.id, text: 'Decoding HEIC\u2026' });
       var bytes = new Uint8Array(await m.file.arrayBuffer());
       dec = new lib.HeifDecoder();
       imgs = dec.decode(bytes) || [];
       bytes = null;
-      if (!imgs.length) throw CodedError('Couldn’t decode this HEIC/HEIF image', 'failed');
+      if (!imgs.length) throw CodedError('Couldn\u2019t decode this HEIC/HEIF image', 'failed');
       // The biggest top-level image is the photo (others are thumbnails/depth).
       var img = imgs[0], best = 0;
       imgs.forEach(function (im) { var a = im.get_width() * im.get_height(); if (a > best) { best = a; img = im; } });
@@ -634,7 +643,7 @@
       });
       post({ type: 'done', id: m.id, width: w, height: h, pixels: px.buffer }, [px.buffer]);
     } catch (e) {
-      post({ type: 'error', id: m.id, message: errMsg(e), code: (e && e.code) || 'failed' });
+      post({ type: 'error', id: m.id, message: errMsg(e), code: errCode(e) });
     } finally {
       imgs.forEach(function (im) { try { im.free(); } catch (x) {} });
       if (dec && dec.decoder && heif && heif.heif_context_free) { try { heif.heif_context_free(dec.decoder); } catch (x) {} }
@@ -646,7 +655,7 @@
       var res = await writeWhole(m.out, m.blob, m.mime);
       post({ type: 'done', id: m.id, file: res.file, size: res.size, saved: !!res.saved });
     } catch (e) {
-      post({ type: 'error', id: m.id, message: errMsg(e), code: (e && e.code) || 'failed' });
+      post({ type: 'error', id: m.id, message: errMsg(e), code: errCode(e) });
     }
   }
 

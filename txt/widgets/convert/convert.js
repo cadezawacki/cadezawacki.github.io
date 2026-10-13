@@ -700,8 +700,32 @@
       return hit ? hit.arrayBuffer() : fromNet();
     }, fromNet);
   }
+  // Safari can't `for await` over a ReadableStream; libraries that do (pdf.js
+  // inflates PDF streams that way) would throw or take a slow path there.
+  // Installed on first library load, and prepended to pdf.js's own worker.
+  function installStreamIter() {
+    var RS = typeof ReadableStream !== 'undefined' ? ReadableStream : null;
+    if (!RS || typeof Symbol === 'undefined' || !Symbol.asyncIterator || RS.prototype[Symbol.asyncIterator]) return;
+    RS.prototype[Symbol.asyncIterator] = function () {
+      var reader = this.getReader();
+      var release = function () { try { reader.releaseLock(); } catch (e) {} };
+      var it = {
+        next: function () {
+          return reader.read().then(function (r) { if (r.done) release(); return { done: !!r.done, value: r.value }; });
+        },
+        'return': function () {
+          var c = null;
+          try { c = reader.cancel(); } catch (e) {}
+          return Promise.resolve(c).then(function () { release(); return { done: true, value: undefined }; }, function () { release(); return { done: true, value: undefined }; });
+        },
+      };
+      it[Symbol.asyncIterator] = function () { return it; };
+      return it;
+    };
+  }
   // Classic UMD/IIFE library -> window global, via a blob: <script>.
   function loadGlobal(key, onDl) {
+    installStreamIter();
     var g = ASSETS[key].global;
     if (window[g]) return Promise.resolve(window[g]);
     if (S.libP[key]) return S.libP[key];
@@ -721,11 +745,13 @@
   function loadPdfjs(onDl) {
     if (S.libs.pdfjs) return Promise.resolve(S.libs.pdfjs);
     if (S.libP.pdfjs) return S.libP.pdfjs;
+    installStreamIter();
     S.libP.pdfjs = Promise.all([assetBytes('pdfjs', onDl), assetBytes('pdfjsw', onDl)]).then(function (bufs) {
       var lib = URL.createObjectURL(new Blob([bufs[0]], { type: 'text/javascript' }));
       // The worker URL must outlive this call (pdf.js spawns a worker per
-      // document); it is ~1 MB and kept with the loaded library.
-      var wrk = URL.createObjectURL(new Blob([bufs[1]], { type: 'text/javascript' }));
+      // document); it is ~1 MB and kept with the loaded library. The stream
+      // polyfill runs first inside that worker too.
+      var wrk = URL.createObjectURL(new Blob(['(' + installStreamIter.toString() + ')();\n', bufs[1]], { type: 'text/javascript' }));
       return import(lib).then(function (ns) {
         URL.revokeObjectURL(lib);
         if (!ns || !ns.getDocument) throw new Error('PDF reader failed to load');
@@ -1573,7 +1599,7 @@
   function warnings(it, pl) {
     var w = [];
     if (!it.sn || it.state === 'unsupported') return w;
-    if (pl.engine === 'ffmpeg' && (it.sn.cat === 'video' || it.sn.cat === 'image')) {
+    if (pl.engine === 'ffmpeg') {
       var video = T[it.target] && (T[it.target].kind === 'video' || T[it.target].kind === 'gif');
       if (video) w.push('Compatible engine is single-threaded \u2014 video re-encoding can take a while.');
       if (it.size > (S.caps.ios ? 250 : 1500) * 1024 * 1024) w.push('Big file for the compatible engine: it works in memory and may run out on this device. Trim it or pick a smaller preset.');
@@ -1984,6 +2010,7 @@
     if (f === 'target') {
       it.target = el.value;
       it.preset = defaultPreset(it.sn, it.target);
+      it.opts.ffArgs = ''; // custom options were written for the old target
       it.touched = true;
       S.prefs.targets[it.sn.fmt] = it.target;
       savePrefs();
@@ -2094,7 +2121,7 @@
         '</div>' +
         '<input class="cv-file" type="file" multiple hidden>' +
       '</div>' +
-      '<div class="cv-list" aria-live="polite"></div>' +
+      '<div class="cv-list"></div>' +
       '<div class="cv-foot">' +
         '<div class="cv-acts">' +
           '<button class="cv-btn solid cv-all" data-act="all" disabled>Convert</button>' +

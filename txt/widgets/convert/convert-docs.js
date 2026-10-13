@@ -15,7 +15,7 @@
   'use strict';
 
   // ---- small helpers -----------------------------------------------------------
-  var ENT = { amp: '&', lt: '<', gt: '>', quot: '"', apos: '\'', nbsp: ' ', '#39': '\'' };
+  var ENT = { amp: '&', lt: '<', gt: '>', quot: '"', apos: '\'', nbsp: '\u00a0', '#39': '\'' };
   function decodeEntities(s) {
     return String(s).replace(/&(#x[0-9a-f]+|#\d+|[a-z]+\d*);/gi, function (m, e) {
       var k = e.toLowerCase();
@@ -69,10 +69,10 @@
         if (tag === 'BR') { push('\n'); continue; }
         var block = BLOCK.test(tag);
         if (block) nl(/^(P|H[1-6]|UL|OL|TABLE|BLOCKQUOTE|PRE|HR)$/.test(tag) ? 2 : 1);
-        if (tag === 'LI') push(c.parentNode && /OL/i.test(c.parentNode.nodeName) ? (Array.prototype.indexOf.call(c.parentNode.children, c) + 1) + '. ' : '• ');
+        if (tag === 'LI') push(c.parentNode && /OL/i.test(c.parentNode.nodeName) ? (Array.prototype.indexOf.call(c.parentNode.children, c) + 1) + '. ' : '\u2022 ');
         if ((tag === 'TD' || tag === 'TH') && c.previousElementSibling) push('\t');
         if (tag === 'IMG') { var alt = c.getAttribute('alt'); if (alt) push('[' + alt + ']'); continue; }
-        if (tag === 'HR') { push('———'); nl(2); continue; }
+        if (tag === 'HR') { push('\u2014\u2014\u2014'); nl(2); continue; }
         walk(c, pre || tag === 'PRE');
         if (block) nl(/^(P|H[1-6]|UL|OL|TABLE|BLOCKQUOTE|PRE)$/.test(tag) ? 2 : 1);
       }
@@ -214,7 +214,7 @@
           case 'del': out = out.concat(inline(t.tokens, merge(st, 'strike'))); break;
           case 'codespan': out.push(run(t.text, merge(st, 'code'))); break;
           case 'br': out.push(new D.TextRun({ text: '', break: 1 })); break;
-          case 'checkbox': out.push(run(t.checked ? '☑ ' : '☐ ', st)); break;
+          case 'checkbox': out.push(run(t.checked ? '\u2611 ' : '\u2610 ', st)); break;
           case 'image': out.push(run('[image' + (t.text ? ': ' + t.text : '') + ']', merge(st, 'italics'))); break;
           case 'html': {
             var plain = String(t.text || '').replace(/<[^>]*>/g, '');
@@ -348,7 +348,7 @@
   function sheetRead(XLSX, src) {
     var fmt = src.fmt;
     if (fmt === 'json') {
-      var data = JSON.parse(String(src.text || '').replace(/^﻿/, ''));
+      var data = JSON.parse(String(src.text || '').replace(/^\ufeff/, ''));
       var wb = XLSX.utils.book_new();
       var add = function (name, v) {
         var ws;
@@ -373,7 +373,7 @@
       return wb;
     }
     if (fmt === 'csv' || fmt === 'tsv') {
-      var text = String(src.text || '').replace(/^﻿/, '');
+      var text = String(src.text || '').replace(/^\ufeff/, '');
       return XLSX.read(text, fmt === 'tsv' ? { type: 'string', FS: '\t' } : { type: 'string' });
     }
     return XLSX.read(new Uint8Array(src.bytes), { type: 'array', cellDates: true });
