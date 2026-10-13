@@ -995,6 +995,7 @@
     });
     if (!list.length) return;
     var media = list.filter(function (it) { return isMediaJob(it) && !it.combine; });
+    media.forEach(function (it) { it.dest = null; }); // ask again on every run
     var pick = Promise.resolve();
     if (media.length && S.caps.savePicker && S.prefs.saveToDisk) {
       if (media.length === 1 || !S.caps.dirPicker) {
@@ -1058,7 +1059,6 @@
       if (next.cancelled || (e && e.code === 'canceled')) { next.state = 'canceled'; next.error = ''; }
       else { next.state = 'error'; next.error = (e && e.message) || String(e); next.errCode = (e && e.code) || ''; }
       next.outputs = [];
-      if (next.dest && next.dest.kind === 'handle' && !next.retainDest) next.dest = null;
       if (itemById(next.id)) renderCard(next);
     }).then(fin, fin);
   }
