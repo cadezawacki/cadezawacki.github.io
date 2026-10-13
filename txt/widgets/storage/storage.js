@@ -1128,11 +1128,10 @@
     // asking the server, then confirm only what it actually holds.
     var gen = S.gen, protect = { i: {}, f: {} };
     Promise.resolve().then(function () {
-      if (S.snaps) {
-        S.snaps.stores.forEach(function (s) {
-          try { (JSON.parse(Cade.store.get(s.key) || '[]') || []).forEach(function (x) { if (x && x.c) Logic.hashesIn(x.c, protect); }); } catch (e) {}
-        });
-      }
+      Cade.store.keys().forEach(function (k) {
+        if (k.indexOf('cade-snap:') !== 0) return;
+        try { (JSON.parse(Cade.store.get(k) || '[]') || []).forEach(function (x) { if (x && x.c) Logic.hashesIn(x.c, protect); }); } catch (e) {}
+      });
       return collectRefs(gen, protect);
     }).then(function () {
       return serverListing();
