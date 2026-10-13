@@ -275,7 +275,7 @@
   ];
 
   var prefs = { snapDays: 30, allRooms: false, details: false };
-  var panelEl = null, lastYield = 0, renderTimer = 0;
+  var panelEl = null, lastYield = 0, renderTimer = 0, GEN = 0;   // GEN never resets, so a scan from a closed panel can't revive
   var S = fresh();
 
   function fresh() {
@@ -330,7 +330,7 @@
   // Measuring
   // =========================================================================
   function scan() {
-    var gen = ++S.gen;
+    var gen = S.gen = ++GEN;
     lastYield = now();
     S.busy = true; S.est = null; S.ls = null; S.rooms = null; S.snaps = null; S.idb = null; S.caches = null;
     S.dbs = undefined; S.refs = null; S.server = null; S.serverErr = '';
@@ -587,7 +587,7 @@
                   if (m.opaque) B.opaque++;
                   B.bytes += m.bytes;
                   B.items.push({ url: req.url, bytes: m.bytes, opaque: !!m.opaque, est: !!m.est });
-                  var md = kind === 'app' && !m.opaque ? Logic.moduleData(req.url, m.bytes) : null;
+                  var md = kind === 'app' && B.current && !m.opaque ? Logic.moduleData(req.url, m.bytes) : null;
                   if (md) C.data.push({ bucket: name, url: req.url, bytes: m.bytes, label: md.label });
                   if (kind === 'hd') {
                     var v = Logic.voiceId(req.url);
