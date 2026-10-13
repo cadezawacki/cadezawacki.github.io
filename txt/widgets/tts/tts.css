@@ -64,6 +64,9 @@
 .tts-hd-status.err { color: #ef4444; }
 .tts-prog { height: 6px; border-radius: 3px; background: var(--surface-hover, rgba(127,127,127,0.18)); overflow: hidden; }
 .tts-prog-fill { height: 100%; width: 0; background: var(--accent); transition: width 0.2s linear; }
+/* After the download: setup has no byte count, so the full bar pulses. */
+.tts-prog.busy .tts-prog-fill { animation: tts-busy 1.2s ease-in-out infinite alternate; }
+@keyframes tts-busy { from { opacity: 1; } to { opacity: 0.35; } }
 .tts-hd-acts { display: flex; gap: 6px; flex-wrap: wrap; }
 .tts-hd-acts:empty { display: none; }
 .tts-sbtn {
@@ -90,5 +93,6 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .tts-bar-fill, .tts-prog-fill { transition: none; }
+  .tts-prog.busy .tts-prog-fill { animation: none; }
   .tts-status.busy::after { animation: none; }
 }

@@ -40,7 +40,10 @@
   if (typeof window.Cade === 'undefined') return;
   var Cade = window.Cade;
   Cade.loadCSS('tts.css');
-  var WORKER_URL = Cade.asset('tts-worker.js'); // resolve now, while currentScript is us
+  // Resolved now, while currentScript is us. The ?v= tag changes whenever the
+  // worker's protocol does, so a stale cached worker can never pair with a
+  // newer panel (the service worker serves module files cache-first).
+  var WORKER_URL = Cade.asset('tts-worker.js') + '?v=3';
   var esc = Cade.escapeHtml;
 
   var PANEL_ID = 'tts-panel';
@@ -665,7 +668,7 @@
     HD.worker = w; HD.workerVoice = id; HD.loading = true; HD.ready = false; HD.failed = '';
     HD.onReady = onReady || null;
     var v = hdVoice(id), u = hdUrls(v);
-    HD.dl = { loaded: 0, total: 0 };
+    HD.dl = { loaded: 0, total: 0 }; HD.stage = '';
     w.onmessage = function (e) { hdMsg(w, e.data || {}); };
     w.onerror = function (e) {
       if (w !== HD.worker) return;
@@ -682,6 +685,9 @@
     hdWatch();
     if (m.type === 'progress') {
       HD.dl.loaded = m.loaded; HD.dl.total = m.total;
+      renderHdProgress();
+    } else if (m.type === 'stage') {
+      HD.stage = m.stage || '';
       renderHdProgress();
     } else if (m.type === 'ready') {
       HD.ready = true; HD.loading = false; HD.sampleRate = m.sampleRate || 22050;
@@ -1046,6 +1052,7 @@
     sel.title = '\u2601 = streams from the internet';
   }
 
+  var HD_STAGE_TEXT = { store: 'saving it for offline use', engine: 'starting the speech engine', voice: 'loading the voice' };
   function renderHdProgress() {
     var bar = q('.tts-prog'), fill = q('.tts-prog-fill'), st = q('.tts-hd-status');
     if (!bar) { setStatus(); return; }
@@ -1054,8 +1061,11 @@
     if (on) {
       var pct = Math.min(100, 100 * HD.dl.loaded / HD.dl.total);
       fill.style.width = pct.toFixed(1) + '%';
-      st.textContent = 'Downloading\u2026 ' + Math.floor(pct) + '% \u00b7 ' + mb(HD.dl.loaded) + ' of ' + mb(HD.dl.total) +
-        ' \u2014 keep this panel open';
+      bar.classList.toggle('busy', !!HD.stage);
+      st.textContent = HD.stage
+        ? 'Setting up \u2014 ' + (HD_STAGE_TEXT[HD.stage] || HD.stage) + '\u2026'
+        : 'Downloading\u2026 ' + Math.floor(pct) + '% \u00b7 ' + mb(HD.dl.loaded) + ' of ' + mb(HD.dl.total) +
+          ' \u2014 keep this panel open';
     }
     setStatus();
   }

@@ -18,6 +18,7 @@
  * Protocol (page <-> worker):
  *   -> {type:'init', files:{ort,glue,wasm,phon,model,config}, sizes:{same keys}}
  *   <- {type:'progress', loaded, total}   (bytes; only while downloading)
+ *   <- {type:'stage', stage:'store'|'engine'|'voice'}  (setup after the bytes are in)
  *   <- {type:'ready', sampleRate} | {type:'error', message}
  *   -> {type:'synth', id, text, lengthScale}
  *   <- {type:'audio', id, pcm:Float32Array (transferred), sampleRate} | {type:'synth-error', id, message}
@@ -74,32 +75,45 @@
     if (!res.ok) throw new Error('HTTP ' + res.status + ' fetching ' + url.split('/').pop());
     var buf;
     if (res.body && res.body.getReader) {
-      var reader = res.body.getReader(), chunks = [], got = 0;
+      // Stream straight into one buffer sized from the known (uncompressed)
+      // size, growing only if it's off — no chunk list + final copy, which
+      // used to double the voice's ~63 MB at peak (iOS kills greedy workers).
+      var reader = res.body.getReader(), got = 0;
+      var u8 = new Uint8Array(Math.max(progress.sizes[key] || 0, 65536));
       for (;;) {
         var r = await reader.read();
         if (r.done) break;
-        chunks.push(r.value);
-        got += r.value.length;
+        var c = r.value;
+        if (got + c.length > u8.length) {
+          var bigger = new Uint8Array(Math.max(u8.length * 2, got + c.length));
+          bigger.set(u8.subarray(0, got)); u8 = bigger;
+        }
+        u8.set(c, got);
+        got += c.length;
         report(key, got);
       }
-      var u8 = new Uint8Array(got), off = 0;
-      for (var i = 0; i < chunks.length; i++) { u8.set(chunks[i], off); off += chunks[i].length; }
-      chunks = null;
-      buf = u8.buffer;
+      buf = got === u8.length ? u8.buffer : u8.slice(0, got).buffer;
+      u8 = null;
     } else {
       buf = await res.arrayBuffer();
     }
     progress.sizes[key] = buf.byteLength; // exact once known
     report(key, buf.byteLength);
-    if (cache) {
-      try {
-        await cache.put(url, new Response(buf, { headers: { 'Content-Type': res.headers.get('Content-Type') || 'application/octet-stream' } }));
-      } catch (e) {
-        // Quota or private mode: it still works now, just not offline later.
-        post({ type: 'warn', message: 'Could not store HD voice for offline use (' + errMsg(e) + ')' });
-      }
-    }
+    if (cache) toStore.push({ url: url, buf: buf, type: res.headers.get('Content-Type') || 'application/octet-stream' });
     return buf;
+  }
+  // Downloads are written to Cache Storage one at a time after they all
+  // arrive (not in parallel with each other), keeping the peak memory low.
+  var toStore = [];
+  async function storeAll(cache) {
+    var failed = '';
+    while (toStore.length) {
+      var it = toStore.shift();
+      try { await cache.put(it.url, new Response(it.buf, { headers: { 'Content-Type': it.type } })); }
+      catch (e) { failed = failed || errMsg(e); }
+    }
+    // Quota or private mode: it still works now, just not offline later.
+    if (failed) post({ type: 'warn', message: 'Could not store HD voice for offline use (' + failed + ')' });
   }
 
   function blobUrl(buf) { return URL.createObjectURL(new Blob([buf], { type: 'text/javascript' })); }
@@ -135,6 +149,8 @@
       clearInterval(tick);
     }
     if (progress.any) flushProgress();
+    if (cache && toStore.length) { post({ type: 'stage', stage: 'store' }); await storeAll(cache); }
+    post({ type: 'stage', stage: 'engine' });
     var ns = await importFromBytes(b.ort);
     ort = ns && ns.InferenceSession ? ns : ns.default;
     ort.env.logLevel = 'error';
@@ -148,6 +164,7 @@
     cfg = JSON.parse(new TextDecoder().decode(b.config));
     idMap = cfg.phoneme_id_map;
     if (!idMap || !idMap._ || !idMap['^'] || !idMap.$) throw new Error('unexpected voice config');
+    post({ type: 'stage', stage: 'voice' });
     try {
       session = await ort.InferenceSession.create(new Uint8Array(b.model), {
         executionProviders: ['wasm'], graphOptimizationLevel: 'all',
