@@ -1,5 +1,5 @@
 /* Code Runner kit — shared, DOM-free helpers for the Code Runner (run ```
- * code blocks) and Live HTML Preview widgets, plus the source of the harness
+ * code blocks) and Live Preview widgets, plus the source of the harness
  * that runs INSIDE each sandboxed iframe.
  *
  * - Fence scanning uses the core's rule (a line starting with ``` opens or

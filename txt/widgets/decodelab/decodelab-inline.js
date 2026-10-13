@@ -1,6 +1,9 @@
 /* Decode Lab — translation inside the note (lazy). Loaded only when a
  * Translate chip (plugins/translate-blocks) is pressed or the "Translate to
  * English" palette script runs; exposes window.__cadeTrInline.
+ * A chip's block says the direction: ```Spanish -> English; ```English to
+ * Spanish / ```en>es / ```to Spanish (source detected) -> that language,
+ * written as a ```Spanish block.
  *
  * Same engine as Decode Lab's Translate tab (decodelab-translate.js): Chrome's
  * built-in Translator where it has the language, otherwise Firefox
@@ -23,7 +26,7 @@
   var SRC = (document.currentScript && document.currentScript.src) || '';
   var DL = /decodelab-inline\.js/.test(SRC) ? SRC.replace(/[?#].*$/, '').replace(/[^\/]*$/, '') : abs('./txt/widgets/decodelab/');
   var TR_URL = DL + 'decodelab-translate.js';
-  var TRW_URL = DL + 'decodelab-translate-worker.js?v=2'; // ?v= must match the manifest precache entry (and decodelab.js)
+  var TRW_URL = DL + 'decodelab-translate-worker.js?v=3'; // ?v= must match the manifest precache entry (and decodelab.js)
   var CORE_URL = DL + 'decodelab-core.js', DATA_URL = DL + 'decodelab-data.js';
   var IDLE_MS = 120000, CONSENT_MS = 120000;
 
@@ -122,23 +125,25 @@
     var j = jobAt(openFrom);
     if (j) return j === jobs[0] && j.started ? { state: 'busy', text: j.text } : { state: 'queued', text: 'Queued' };
     var c = consentAt(openFrom);
-    if (c) return { state: 'consent', text: c.st.needs === 'download' ? 'Download ' + fmtMB(c.st.size) : 'Download model', title: consentTitle(c.code, c.st) };
+    if (c) return { state: 'consent', text: c.st.needs === 'download' ? 'Download ' + fmtMB(c.st.size) : 'Download model', title: consentTitle(c.code, c.st, c.to) };
     return null;
   };
-  function consentTitle(code, st) {
-    var name = T().langName(code);
+  function consentTitle(code, st, to) {
+    var name = T().pairName(code, to);
     return st.needs === 'download'
       ? name + ' needs a one-time download of ' + fmtMB(st.size) + ' (' + st.label + '), kept on this device so it also works offline. Tap to download and translate.'
       : 'Chrome downloads its ' + name + ' model once (' + st.label + '). Tap to download and translate.';
   }
-  function notAvailable(code, st) {
+  function notAvailable(code, st, to) {
     var known = T().LANGS.some(function (L) { return L.code === code; });
-    return ((st && st.why) || T().langName(code) + ' is not available for on-device translation') +
-      (known ? '' : ' — on-device translation covers ' + T().LANGS.length + ' languages (Decode Lab → Translate lists them)');
+    return ((st && st.why) || T().pairName(code, to) + ' is not available for on-device translation') +
+      (known ? '' : ' — on-device translation covers ' + T().LANGS.length + ' languages (the Translate widget lists them)');
   }
 
   // ---- fences in the live document -------------------------------------------------------
   function codeOf(info) { return info ? T().langFromName(info) : ''; }
+  function pairOf(info) { return info ? T().pairFromInfo(info) : null; }
+  function toName(c) { return T().langName(c || 'en'); }
   // The block whose opening fence starts at openFrom (its closing fence is the next ``` line).
   function blockFrom(doc, openFrom) {
     if (openFrom == null || openFrom < 0 || openFrom > doc.length) return null;
@@ -169,18 +174,20 @@
     if (!b.close || b.close.number <= b.open.number + 1) return '';
     return doc.sliceString(doc.line(b.open.number + 1).from, doc.line(b.close.number - 1).to);
   }
-  var EN_RE = /^```\s*english\s*$/i;
-  // The ```English block right below line n (one blank line allowed).
-  function englishAfter(doc, n) {
+  // The ```English (```Spanish …) block right below line n (one blank line allowed).
+  function englishAfter(doc, n, name) {
+    name = String(name || 'English').toLowerCase();
     var k = n + 1;
     if (k <= doc.lines && !doc.line(k).text.trim()) k++;
-    if (k > doc.lines || !EN_RE.test(doc.line(k).text)) return null;
+    if (k > doc.lines) return null;
+    var t = doc.line(k).text;
+    if (!startsFence(t) || t.slice(3).trim().toLowerCase() !== name) return null;
     for (var m = k + 1; m <= doc.lines; m++) if (startsFence(doc.line(m).text)) return { from: doc.line(k).from, to: doc.line(m).to };
     return null; // unclosed: leave it alone
   }
-  function formatBlock(text) {
+  function formatBlock(text, name) {
     var lines = String(text || '').replace(/\r\n?/g, '\n').replace(/\s+$/, '').split('\n');
-    return '```English\n' + lines.map(function (l) { return startsFence(l) ? ' ' + l : l; }).join('\n') + '\n```';
+    return '```' + (name || 'English') + '\n' + lines.map(function (l) { return startsFence(l) ? ' ' + l : l; }).join('\n') + '\n```';
   }
   function liveBlock(job) {
     var ed = Cade.editor;
@@ -203,8 +210,8 @@
       if (job.anchor > doc.length) throw new Error('The text moved — the translation was not inserted');
       at = doc.lineAt(job.anchor).number;
     }
-    var ex = englishAfter(doc, at), from = doc.line(at).to;
-    var spec = { changes: { from: from, to: ex ? ex.to : from, insert: '\n' + formatBlock(english) }, userEvent: 'input.translate' };
+    var name = toName(job.to), ex = englishAfter(doc, at, name), from = doc.line(at).to;
+    var spec = { changes: { from: from, to: ex ? ex.to : from, insert: '\n' + formatBlock(english, name) }, userEvent: 'input.translate' };
     if (job.pill && CM.EditorView && CM.EditorView.scrollIntoView) spec.effects = CM.EditorView.scrollIntoView(from + 1, { y: 'nearest' });
     ed.dispatch(spec);
   }
@@ -247,14 +254,26 @@
   function run(job) {
     var m;
     var CANCEL = new Error('cancelled');
-    return manager().then(function (x) { m = x; return m.status(job.code); }).then(function (st) {
+    var to = job.to || 'en';
+    return manager().then(function (x) {
+      m = x;
+      if (job.code) return;
+      // ```to Spanish: which language is the block in?
+      var b = liveBlock(job), text = b ? bodyOf(Cade.editor.state.doc, b) : '';
+      job.text = 'Detecting…'; bump();
+      return withCore().then(function () { return m.detect(text); }).then(function (d) {
+        if (!d.code || d.conf < (d.via === 'chrome' ? 0.5 : 0.55)) throw new Error('Couldn\u2019t tell which language this block is in \u2014 name it, e.g. ```English to ' + toName(to));
+        if (d.code === to) throw new Error('This block is already ' + toName(to));
+        job.code = d.code;
+      });
+    }).then(function () { return m.status(job.code, to); }).then(function (st) {
       if (job.cancelled) throw CANCEL;
       if (st.ready) return st;
-      if (!st.needs) throw new Error(notAvailable(job.code, st));
+      if (!st.needs) throw new Error(notAvailable(job.code, st, to));
       if (!job.consented) throw needsError(st);
       job.consented = false;
       stage(job, 'download', 0);
-      return m.download(job.code, function (f, s) { stage(job, s || 'download', f); }).then(function (s2) {
+      return m.download(job.code, function (f, s) { stage(job, s || 'download', f); }, to).then(function (s2) {
         if (!s2.ready) throw needsError(s2); // Chrome gave up: Firefox Translations needs its own download
         return s2;
       });
@@ -265,10 +284,10 @@
       if (text == null) throw new Error('The block moved or the room changed — nothing was translated');
       if (!text.trim()) throw new Error('Nothing to translate');
       stage(job, 'translate', 0);
-      return m.translate(text, job.code, function (f, s) { stage(job, s, f); }).catch(function (e) {
+      return m.translate(text, job.code, function (f, s) { stage(job, s, f); }, to).catch(function (e) {
         if (job.cancelled) throw CANCEL;
         // Chrome stalled mid-way and Firefox Translations isn't downloaded yet
-        return m.status(job.code).then(function (st) { throw st.needs === 'download' ? needsError(st) : e; }, function () { throw e; });
+        return m.status(job.code, to).then(function (st) { throw st.needs === 'download' ? needsError(st) : e; }, function () { throw e; });
       });
     }).then(function (res) {
       if (job.cancelled) throw CANCEL;
@@ -291,18 +310,19 @@
     if (ed.state.readOnly) { toast('Read-only mode — editing is locked', 'error'); return; }
     if (jobAt(openFrom)) return;
     manager().then(function () {
-      var b = blockFrom(ed.state.doc, openFrom), code = b ? codeOf(b.info) : '';
-      if (!b || !code) { bump(); return; }
+      var b = blockFrom(ed.state.doc, openFrom), pr = b ? pairOf(b.info) : null;
+      if (!b || !pr) { bump(); return; }
       if (!b.close) { toast('Close the block with a ``` line first', 'info'); bump(); return; }
       if (!bodyOf(ed.state.doc, b).trim()) { toast('This block is empty', 'info'); bump(); return; }
-      var job = { kind: 'fence', openFrom: openFrom, info: b.info, code: code, consented: consented };
+      var job = { kind: 'fence', openFrom: openFrom, info: b.info, code: pr.from, to: pr.to, consented: consented };
       return enqueue(job).then(function () {}, function (e) {
         if (e.needs) {
-          // job.openFrom / job.doc have followed any edits made meanwhile
-          offerConsent({ openFrom: job.openFrom, info: job.info, code: code, st: e.needs, doc: job.doc, room: job.room, t: Date.now() });
+          // job.openFrom / job.doc have followed any edits made meanwhile (job.code: detected by now)
+          var name = T().pairName(job.code, job.to);
+          offerConsent({ openFrom: job.openFrom, info: job.info, code: job.code, to: job.to, st: e.needs, doc: job.doc, room: job.room, t: Date.now() });
           toast(e.needs.needs === 'download'
-            ? T().langName(code) + ' needs a one-time ' + fmtMB(e.needs.size) + ' download to translate on this device — tap “Download” on the block to start'
-            : 'Chrome needs to download its ' + T().langName(code) + ' model once — tap “Download” on the block to start', 'info', 5000);
+            ? name + ' needs a one-time ' + fmtMB(e.needs.size) + ' download to translate on this device — tap “Download” on the block to start'
+            : 'Chrome needs to download its ' + name + ' model once — tap “Download” on the block to start', 'info', 5000);
           return;
         }
         toast(e.message, 'error', 4500);

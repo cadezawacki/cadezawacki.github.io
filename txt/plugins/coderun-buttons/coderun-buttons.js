@@ -156,7 +156,7 @@
       button('cm-crun-x', 'clear', ICON_X, 'Remove this output');
     } else if (!st) {
       button('cm-crun-run' + (lang === 'guess' ? ' cm-crun-guess' : ''), 'run', ICON_PLAY + '<span>' + (lang === 'html' ? 'Preview' : 'Run') + '</span>',
-        lang === 'html' ? 'Open this block in Live HTML Preview'
+        lang === 'html' ? 'Open this block in Live Preview'
           : lang === 'guess' ? 'Run this block — it has no language, so it is detected when you press Run (Ctrl/⌘+Enter)'
           : 'Run this block (Ctrl/⌘+Enter)');
     } else {

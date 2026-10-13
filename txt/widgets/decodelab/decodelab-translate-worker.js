@@ -1,6 +1,6 @@
-/* Decode Lab — on-device translation worker: the Bergamot engine (the one
- * Firefox Translations runs; MPL-2.0) compiled to WebAssembly, translating
- * into English with Mozilla's int8 models.
+/* On-device translation worker: the Bergamot engine (the one Firefox
+ * Translations runs; MPL-2.0) compiled to WebAssembly, with Mozilla's int8
+ * models (X -> English and English -> X; X -> Y runs both, see keep).
  *
  * Classic worker (importScripts-era emscripten glue). Every byte it needs is
  * fetched only when the user taps Download, verified against the SHA-256 that
@@ -15,8 +15,10 @@
  *
  * Protocol (page <-> worker), every request carries an id:
  *   -> {type:'download', id, files:[{u, s, h}]}            fetch + verify + store
- *   -> {type:'translate', id, engine:{glue, wasm}, lang, files:{model, lex, vocab|srcvocab+trgvocab}, texts:[...]}
- *   -> {type:'free', id}                                     drop the loaded model
+ *   -> {type:'translate', id, engine:{glue, wasm}, lang, files:{model, lex, vocab|srcvocab+trgvocab}, keep, texts:[...]}
+ *        lang = model key ('es>en', 'en>fr'); keep = how many models may stay
+ *        loaded (1, or 2 while pivoting X -> en -> Y)
+ *   -> {type:'free', id}                                     drop the loaded models
  *   <- {type:'progress', id, loaded, total, stage}           stage: download | verify | engine | model
  *   <- {type:'done', id, texts?}  |  {type:'error', id, message}
  */
@@ -26,7 +28,7 @@ var Module = {}; // global: the emscripten glue picks it up
 
 var engineP = null;   // Promise<Module>
 var service = null;   // BlockingService
-var loaded = null;    // { lang, model }
+var loaded = [];      // [{ lang, model }], most recently used first
 
 var GEMM = {
   int8_prepare_a: 'int8PrepareAFallback',
@@ -155,13 +157,21 @@ function aligned(M, buf, align) {
   mem.getByteArrayView().set(bytes);
   return mem;
 }
-function freeModel() {
-  if (loaded) { try { loaded.model.delete(); } catch (e) {} loaded = null; }
+function freeModels(n) {
+  while (loaded.length > n) { var x = loaded.pop(); try { x.model.delete(); } catch (e) {} }
 }
-// One model in memory at a time: phones have little to spare.
-async function loadModel(id, M, lang, files) {
-  if (loaded && loaded.lang === lang) return loaded.model;
-  freeModel();
+// One model in memory at a time (phones have little to spare) — two while a
+// pivot translation needs both, so its batches don't reload them.
+async function loadModel(id, M, lang, files, keep) {
+  keep = keep > 1 ? 2 : 1;
+  for (var i = 0; i < loaded.length; i++) {
+    if (loaded[i].lang !== lang) continue;
+    var hit = loaded.splice(i, 1)[0];
+    loaded.unshift(hit);
+    freeModels(keep);
+    return hit.model;
+  }
+  freeModels(keep - 1);
   var list = [files.model, files.lex].concat(files.vocab ? [files.vocab] : [files.srcvocab, files.trgvocab]);
   await ensureFiles(id, list);
   post({ type: 'progress', id: id, stage: 'model', loaded: 0, total: 1 });
@@ -177,7 +187,7 @@ async function loadModel(id, M, lang, files) {
     'max-length-break: 128', 'mini-batch-words: 1024', 'workspace: 128', 'max-length-factor: 2.0',
   ].join('\n') + '\n';
   var tm = new M.TranslationModel(cfg, model, lex, vocabs, null);
-  loaded = { lang: lang, model: tm };
+  loaded.unshift({ lang: lang, model: tm });
   return tm;
 }
 function translate(M, model, texts) {
@@ -195,8 +205,8 @@ self.onmessage = function (e) {
     if (m.type === 'download') { await ensureFiles(m.id, m.files); post({ type: 'done', id: m.id }); }
     else if (m.type === 'translate') {
       var M = await loadEngine(m.id, m.engine);
-      var model = await loadModel(m.id, M, m.lang, m.files);
+      var model = await loadModel(m.id, M, m.lang, m.files, m.keep);
       post({ type: 'done', id: m.id, texts: translate(M, model, m.texts) });
-    } else if (m.type === 'free') { freeModel(); post({ type: 'done', id: m.id }); }
+    } else if (m.type === 'free') { freeModels(0); post({ type: 'done', id: m.id }); }
   })().catch(function (err) { post({ type: 'error', id: m.id, message: errMsg(err) }); });
 };

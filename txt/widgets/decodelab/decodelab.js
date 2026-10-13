@@ -9,7 +9,8 @@
  * FILES (all lazy — nothing loads until the widget is opened):
  *   decodelab-core.js  engine (decoders, ciphers, attacks, scoring, search)
  *   decodelab-data.js  language statistics (~220 KB, precached)
- *   decodelab-translate.js (+ -worker.js)  on-device translation into English,
+ *   decodelab-translate.js (+ -worker.js)  on-device translation (to / from English;
+ *                      shared with the Translate widget and the inline chips),
  *                      loaded only when a translation feature is used; models
  *                      download only on a tap (see that file)
  * The search runs in a Blob Web Worker built from the core's own source
@@ -25,7 +26,7 @@
   var CORE_URL = Cade.asset('decodelab-core.js');
   var DATA_URL = Cade.asset('decodelab-data.js');
   var TR_URL = Cade.asset('decodelab-translate.js');
-  var TRW_URL = Cade.asset('decodelab-translate-worker.js') + '?v=2'; // ?v= must match the manifest precache entry
+  var TRW_URL = Cade.asset('decodelab-translate-worker.js') + '?v=3'; // ?v= must match the manifest precache entry
   var esc = Cade.escapeHtml;
 
   var PANEL_ID = 'decodelab-panel';
@@ -37,7 +38,7 @@
   var ANALYZE_CAP = 300000;           // characters analysed
   var CLEAR = 70;                     // "clearly readable" score
 
-  var prefs = { depth: 3, budget: 6, lang: 'auto', tab: 'results', alang: '', autoTr: false, trFrom: 'auto' };
+  var prefs = { depth: 3, budget: 6, lang: 'auto', tab: 'results', alang: '', autoTr: false, trFrom: 'auto', trTo: 'en' };
   var core = null, loading = null, host = null, P = null, lastInput = '', lastBytes = null, lastFile = '';
   var TR = null, trLoading = null; // translation manager (decodelab-translate.js), per panel session
 
@@ -366,6 +367,7 @@
       else if (t.classList.contains('dl-o-lang')) { prefs.lang = t.value; savePrefs(); }
       else if (t.classList.contains('dl-alang')) { prefs.alang = t.value; savePrefs(); renderAnalysis(); }
       else if (t.classList.contains('dl-tr-from')) { prefs.trFrom = t.value; savePrefs(); P.tr.forced = ''; P.tr.out = null; P.tr.err = ''; renderTrOut(); updateTrStatus(); }
+      else if (t.classList.contains('dl-tr-tosel')) { prefs.trTo = t.value; savePrefs(); P.tr.out = null; P.tr.err = ''; renderTrOut(); updateTrStatus(); }
       else if (t.classList.contains('dl-autotr-cb')) { prefs.autoTr = t.checked; savePrefs(); if (prefs.autoTr) autoTranslate(); }
       else if (t.classList.contains('dl-filein')) { if (t.files && t.files[0]) readFile(t.files[0]); t.value = ''; }
       else manualChange(e, t);
@@ -1165,6 +1167,8 @@
 
   // ---- Translate tab ----------------------------------------------------------------
   function trFrom() { return P.tr.forced || (prefs.trFrom !== 'auto' ? prefs.trFrom : (P.tr.det && P.tr.det.code) || ''); }
+  function trTo() { return prefs.trTo === 'en' || TR.lang(prefs.trTo) ? prefs.trTo : 'en'; }
+  function goLabel() { return 'Translate \u2192 ' + TR.name(trTo()); }
   function renderTranslate() {
     if (!P) return;
     var pane = q('[data-pane="translate"]');
@@ -1174,19 +1178,22 @@
     pane.innerHTML = '<div class="dl-empty small">Loading the translator…</div>';
     loadTr().then(function () {
       if (P !== st || currentTab() !== 'translate') return;
-      var opts = '<option value="auto">Auto-detect</option>' + TR.languages().map(function (L) {
+      var opts = '<option value="auto">Auto-detect</option><option value="en"' + (prefs.trFrom === 'en' ? ' selected' : '') + '>English</option>' + TR.languages().map(function (L) {
         return '<option value="' + L.code + '"' + (prefs.trFrom === L.code ? ' selected' : '') + '>' + esc(L.name) + '</option>';
+      }).join('');
+      var toOpts = '<option value="en">English</option>' + TR.languages().map(function (L) {
+        return '<option value="' + L.code + '"' + (trTo() === L.code ? ' selected' : '') + '>' + esc(L.name) + '</option>';
       }).join('');
       pane.innerHTML =
         '<div class="dl-tr-bar"><label class="dl-tr-lab">From <select class="dl-tr-from" aria-label="Source language">' + opts + '</select></label>' +
-          '<span class="dl-tr-det"></span><span class="dl-sp"></span><span class="dl-tr-to">→ English</span></div>' +
-        '<textarea class="dl-tr-in" rows="4" placeholder="Text to translate into English (defaults to the input above)" spellcheck="false" aria-label="Text to translate"></textarea>' +
-        '<div class="dl-tr-act"><button class="dl-btn primary dl-tr-go">Translate → English</button><span class="dl-tr-status" aria-live="polite"></span></div>' +
+          '<span class="dl-tr-det"></span><span class="dl-sp"></span><label class="dl-tr-lab dl-tr-to">→ <select class="dl-tr-tosel" aria-label="Target language">' + toOpts + '</select></label></div>' +
+        '<textarea class="dl-tr-in" rows="4" placeholder="Text to translate (defaults to the input above)" spellcheck="false" aria-label="Text to translate"></textarea>' +
+        '<div class="dl-tr-act"><button class="dl-btn primary dl-tr-go">' + esc(goLabel()) + '</button><span class="dl-tr-status" aria-live="polite"></span></div>' +
         '<div class="dl-tr-prog" hidden><i></i></div>' +
         '<div class="dl-tr-out"></div>' +
         '<section class="dl-sec dl-tr-mgr"><h4>Languages on this device</h4>' +
-          '<p class="dl-note">Translation runs entirely on this device. ' + (TR.hasChrome ? 'Chrome\'s built-in translator is used where it has the language; otherwise ' : '') +
-          'the Firefox Translations engine (' + fmtMB(TR.engineSize) + ', downloaded once with the first language) with one model per language. Nothing downloads until you tap.' +
+          '<p class="dl-note">Translation runs entirely on this device' + (TR.hasChrome ? ': Chrome\'s built-in translator where it has the pair, otherwise ' : ', with ') +
+          'the Firefox Translations engine (' + fmtMB(TR.engineSize) + ', downloaded once with the first language) and one model per direction — between two other languages the text goes through English. Nothing downloads until you tap. (The Translate widget does the same in a bigger box.)' +
           (TR.simd ? '' : ' <b>This browser lacks WebAssembly SIMD — the Firefox engine needs iOS/Safari 16.4+ or a recent Chrome/Firefox.</b>') + '</p>' +
           '<div class="dl-tr-list"><div class="dl-note">Checking…</div></div></section>';
       var ti = pane.querySelector('.dl-tr-in');
@@ -1211,18 +1218,18 @@
     if (!P || !TR || currentTab() !== 'translate') return;
     var st = P, det = q('.dl-tr-det'), stat = q('.dl-tr-status'), go = q('.dl-tr-go');
     if (!det || !stat) return;
-    var d = P.tr.det, code = trFrom();
+    var d = P.tr.det, code = trFrom(), to = trTo();
     det.textContent = P.tr.forced ? 'Detected: ' + TR.name(P.tr.forced) : d && d.code ? 'Detected: ' + TR.name(d.code) + (d.conf ? ' (' + Math.round(d.conf * 100) + '%)' : '') : (P.tr.text || '').trim() ? 'Language not recognised — pick it' : '';
     if (P.tr.busy) return;
     if (!code) { stat.textContent = ''; go.disabled = !(P.tr.text || '').trim(); return; }
-    if (code === 'en') { stat.textContent = 'Already English.'; go.disabled = true; return; }
+    if (code === to) { stat.textContent = 'Already ' + TR.name(to) + '.'; go.disabled = true; return; }
     go.disabled = false;
-    TR.status(code).then(function (s) {
+    TR.status(code, to).then(function (s) {
       if (P !== st || P.tr.busy) return;
       P.tr.st = s;
-      if (s.ready) { stat.textContent = '✓ ' + s.label; go.textContent = 'Translate → English'; }
-      else if (s.needs === 'download') { stat.textContent = TR.name(code) + ' needs a one-time download of ' + fmtMB(s.size) + ' — ' + s.label; go.textContent = 'Download ' + fmtMB(s.size) + ' & translate'; }
-      else if (s.needs === 'chrome-download') { stat.textContent = 'Chrome will download its ' + TR.name(code) + ' model once — ' + s.label; go.textContent = 'Download & translate'; }
+      if (s.ready) { stat.textContent = '✓ ' + s.label; go.textContent = goLabel(); }
+      else if (s.needs === 'download') { stat.textContent = TR.pairName(code, to) + ' needs a one-time download of ' + fmtMB(s.size) + ' — ' + s.label; go.textContent = 'Download ' + fmtMB(s.size) + ' & translate'; }
+      else if (s.needs === 'chrome-download') { stat.textContent = 'Chrome will download its ' + TR.pairName(code, to) + ' model once — ' + s.label; go.textContent = 'Download & translate'; }
       else { stat.textContent = s.why || 'Not available'; go.disabled = true; }
     });
   }
@@ -1235,24 +1242,25 @@
   }
   function runTranslate() {
     if (!P || !TR || P.tr.busy) return;
-    var st = P, text = P.tr.text || '', code = trFrom();
+    var st = P, text = P.tr.text || '', code = trFrom(), to = trTo();
     if (!text.trim()) { toast('Nothing to translate'); return; }
     if (!code) { toast('Pick the source language'); return; }
+    if (code === to) { toast('Already ' + TR.name(to)); return; }
     P.tr.busy = true; P.tr.err = ''; P.tr.out = null;
     q('.dl-tr-go').disabled = true;
     renderTrOut();
     setTrProgress(0, 'translate');
-    TR.status(code).then(function (s) {
+    TR.status(code, to).then(function (s) {
       if (s.ready) return s;
       if (!s.needs) throw new Error(s.why || 'not available');
       setTrProgress(0, 'download');
-      return TR.download(code, function (f, stage) { if (P === st) setTrProgress(f, stage); }).then(function (s2) { if (P === st) renderTrList(); return s2; });
+      return TR.download(code, function (f, stage) { if (P === st) setTrProgress(f, stage); }, to).then(function (s2) { if (P === st) renderTrList(); return s2; });
     }).then(function () {
-      return TR.translate(text, code, function (f, stage) { if (P === st) setTrProgress(f, stage === 'translate' ? 'translate' : stage); });
+      return TR.translate(text, code, function (f, stage) { if (P === st) setTrProgress(f, stage === 'translate' ? 'translate' : stage); }, to);
     }).then(function (res) {
       if (P !== st) return;
       P.tr.busy = false; P.tr.out = res;
-      P.trReady[code] = res.label;
+      if (to === 'en') P.trReady[code] = res.label;
       setTrProgress(null); renderTrOut(); updateTrStatus();
     }, function (e) {
       if (P !== st) return;
@@ -1266,9 +1274,20 @@
     if (P.tr.err) { box.innerHTML = '<div class="dl-banner warn">⚠ ' + esc(P.tr.err) + '</div>'; return; }
     var o = P.tr.out;
     if (!o) { box.innerHTML = ''; return; }
-    box.innerHTML = '<div class="dl-card"><div class="dl-card-h"><div class="dl-chain"><span class="dl-cstep">English<small>' + esc(TR.name(o.from) + ' → English') + '</small></span></div><span class="dl-lang">' + esc(o.label) + '</span></div>' +
+    var toN = TR.name(o.to || 'en');
+    box.innerHTML = '<div class="dl-card"><div class="dl-card-h"><div class="dl-chain"><span class="dl-cstep">' + esc(toN) + '<small>' + esc(TR.name(o.from) + ' → ' + toN) + '</small></span></div><span class="dl-lang">' + esc(o.label) + '</span></div>' +
       '<pre class="dl-out">' + esc(o.text) + '</pre>' +
       '<div class="dl-acts"><button class="dl-abtn" data-tact="copy">Copy</button><button class="dl-abtn" data-tact="insert">Insert</button><button class="dl-abtn" data-tact="use">Use as input</button></div></div>';
+  }
+  // One cell per direction: X -> English and English -> X are separate models.
+  function trCell(L, dir, have) {
+    var key = dir === 'from' ? L.code + '>en' : 'en>' + L.code, m = dir === 'from' ? L : L.to;
+    var prog = P.tr.dl[key], err = P.tr.dlErr[key];
+    var label = dir === 'from' ? L.name + ' → English' : 'English → ' + L.name + (m.pre ? ' (preview model)' : '');
+    if (prog != null) return '<span class="dl-lst" data-k="' + key + '">' + Math.round(prog * 100) + '%</span>';
+    if (have) return '<button class="dl-sbtn dl-lhave" data-trm="' + dir + '" data-code="' + L.code + '" title="Remove ' + esc(label) + ' (' + fmtMB(m.size) + ')">✓ Remove</button>';
+    return '<button class="dl-sbtn dl-solve' + (err ? ' dl-lerr' : '') + '" data-tdl="' + dir + '" data-code="' + L.code + '" title="' + esc(err ? '⚠ ' + err : 'Download ' + label) + '"' +
+      (TR.simd && TR.storage ? '' : ' disabled') + '>' + (err ? '⚠ ' : '↓ ') + fmtMB(m.size) + '</button>';
   }
   function renderTrList() {
     if (!P || !TR) return;
@@ -1278,15 +1297,16 @@
       if (P !== st) return;
       var have = r[0], used = r[1], langs = TR.languages(), n = 0;
       var rows = langs.map(function (L) {
-        var got = !!have[L.code], prog = P.tr.dl[L.code], ch = P.tr.chrome[L.code];
-        if (got) n++;
-        var state = prog != null ? Math.round(prog * 100) + '%' : got ? '✓ on device' : ch === 'available' ? 'Chrome ✓' : '';
-        var btn = prog != null ? '' : got ? '<button class="dl-sbtn" data-trm="' + L.code + '">Remove</button>' : '<button class="dl-sbtn dl-solve" data-tdl="' + L.code + '"' + (TR.simd && TR.storage ? '' : ' disabled') + '>Download</button>';
+        if (have[L.code]) n++;
+        if (have._to[L.code]) n++;
+        var ch = P.tr.chrome[L.code];
         return '<div class="dl-lrow" data-code="' + L.code + '"><span class="dl-lname">' + esc(L.name) + ' <small>' + esc(L.native) + '</small></span>' +
-          '<span class="dl-lsz">' + fmtMB(L.size) + '</span><span class="dl-lst">' + esc(P.tr.dlErr[L.code] ? '⚠ ' + P.tr.dlErr[L.code] : state) + '</span>' + btn + '</div>';
+          '<span class="dl-lch">' + (ch === 'available' ? 'Chrome ✓' : ch === 'downloadable' ? 'Chrome ↓' : '') + '</span>' +
+          trCell(L, 'from', have[L.code]) + trCell(L, 'to', have._to[L.code]) + '</div>';
       }).join('');
-      box.innerHTML = '<div class="dl-lsum">' + n + ' language' + (n === 1 ? '' : 's') + ' on this device · ' + fmtMB(used) + ' used' + (have._engine ? ' (incl. ' + fmtMB(TR.engineSize) + ' engine)' : '') +
-        (used ? ' <button class="dl-sbtn" data-trmall="1">Remove all</button>' : '') + '</div>' + rows;
+      box.innerHTML = '<div class="dl-lsum">' + n + ' model' + (n === 1 ? '' : 's') + ' on this device · ' + fmtMB(used) + ' used' + (have._engine ? ' (incl. ' + fmtMB(TR.engineSize) + ' engine)' : '') +
+        (used ? ' <button class="dl-sbtn" data-trmall="1">Remove all</button>' : '') + '</div>' +
+        '<div class="dl-lrow dl-lhead"><span></span><span></span><span>→ English</span><span>English →</span></div>' + rows;
       if (TR.hasChrome) chromeBadges(langs.filter(function (L) { return P.tr.chrome[L.code] === undefined; }));
     });
   }
@@ -1297,8 +1317,8 @@
       TR.status(L.code).then(function (s) {
         if (P !== st) return;
         P.tr.chrome[L.code] = s.engine === 'chrome' ? (s.ready ? 'available' : 'downloadable') : 'no';
-        var row = q('.dl-lrow[data-code="' + L.code + '"] .dl-lst');
-        if (row && !row.textContent && s.engine === 'chrome') row.textContent = s.ready ? 'Chrome ✓' : 'Chrome ↓';
+        var row = q('.dl-lrow[data-code="' + L.code + '"] .dl-lch');
+        if (row && s.engine === 'chrome') row.textContent = s.ready ? 'Chrome ✓' : 'Chrome ↓';
       });
     });
   }
@@ -1316,26 +1336,28 @@
       return true;
     }
     if ((b = t.closest('[data-tdl]'))) {
-      var code = b.getAttribute('data-tdl');
-      P.tr.dl[code] = 0; delete P.tr.dlErr[code];
+      var code = b.getAttribute('data-code'), dir = b.getAttribute('data-tdl');
+      var from = dir === 'from' ? code : 'en', to = dir === 'from' ? 'en' : code, key = from + '>' + to;
+      P.tr.dl[key] = 0; delete P.tr.dlErr[key];
       renderTrList();
-      TR.download(code, function (f) {
+      TR.download(from, function (f) {
         if (P !== st) return;
-        P.tr.dl[code] = f;
-        var cell = q('.dl-lrow[data-code="' + code + '"] .dl-lst'); if (cell) cell.textContent = Math.round(f * 100) + '%';
-      }).then(function () {
+        P.tr.dl[key] = f;
+        var cell = q('.dl-lst[data-k="' + key + '"]'); if (cell) cell.textContent = Math.round(f * 100) + '%';
+      }, to, [key]).then(function () {
         if (P !== st) return;
-        delete P.tr.dl[code]; P.trReady[code] = 1; renderTrList(); updateTrStatus();
-        toast(TR.name(code) + ' is ready offline', 'success', 1600);
+        delete P.tr.dl[key]; if (to === 'en') P.trReady[code] = 1; renderTrList(); updateTrStatus();
+        toast(TR.pairName(from, to) + ' is ready offline', 'success', 1600);
       }, function (err) {
         if (P !== st) return;
-        delete P.tr.dl[code]; P.tr.dlErr[code] = err.message; renderTrList();
+        delete P.tr.dl[key]; P.tr.dlErr[key] = err.message; renderTrList();
+        toast(err.message, 'error', 3200);
       });
       return true;
     }
     if ((b = t.closest('[data-trm]'))) {
-      var rc = b.getAttribute('data-trm');
-      TR.remove(rc).then(function () { if (P === st) { delete P.trReady[rc]; renderTrList(); updateTrStatus(); } });
+      var rc = b.getAttribute('data-code'), rdir = b.getAttribute('data-trm');
+      TR.remove(rc, rdir).then(function () { if (P === st) { if (rdir === 'from') delete P.trReady[rc]; renderTrList(); updateTrStatus(); } });
       return true;
     }
     if (t.closest('[data-trmall]')) {
@@ -1353,7 +1375,7 @@
 
   Cade.registerWidget({
     name: 'Decode Lab',
-    description: 'Auto-decode mystery text: Base64/hex/Morse/… chains, Caesar, Vigenère, XOR & more, frequency analysis, offline translation to English',
+    description: 'Auto-decode mystery text: Base64/hex/Morse/… chains, Caesar, Vigenère, XOR & more, frequency analysis, offline translation (to and from English)',
     icon: '🔓',
     tags: 'decode,decoder,cipher,brute force,base64,caesar,vigenere,xor,crypto,ctf,frequency analysis,identify,magic,rot13,morse,hex,encoding,puzzle,cryptanalysis,kasiski,index of coincidence,translate,translation,translator,translate to english,offline translation,english,language,detect language,foreign language',
     open: open,

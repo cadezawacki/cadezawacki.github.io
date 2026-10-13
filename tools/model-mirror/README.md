@@ -1,15 +1,23 @@
 # Model mirror scaffolding
 
-Contents for the two GitHub Pages repos that self-host Decode Lab's translation
-models (Mozilla Firefox Translations / Bergamot, MPL-2.0), so the app fetches them
-from `https://cadezawacki.github.io/txt-models-a/` and `/txt-models-b/` instead of
-Hugging Face (`txt/widgets/decodelab/decodelab-translate.js`, `SELF`; the original
-URL is only a fallback and stays the cache key).
+Contents for the GitHub Pages repos that self-host the on-device translation
+models (Mozilla Firefox Translations / Bergamot, MPL-2.0) used by the Translate
+widget, Decode Lab and the inline ```Spanish chips, so the app fetches them from
+`https://cadezawacki.github.io/txt-models-{a,b,c}/` instead of third-party hosts
+(`txt/widgets/decodelab/decodelab-translate.js`):
+
+- X -> English (`SELF`): copies of what two Hugging Face mirrors serve; the original
+  URL is only a fallback and stays the cache key.
+- English -> X (`TO_BASES`, `en-x/<lang>/`): copied from Mozilla's attachment CDN,
+  which sends no CORS headers, so the mirror is the only source.
 
 | Folder | Repo | Files |
 | --- | --- | --- |
-| `txt-models-a/` | `cadezawacki/txt-models-a` | 100 files, ~812 MB |
-| `txt-models-b/` | `cadezawacki/txt-models-b` | 24 files, ~368 MB |
+| `txt-models-a/` | `cadezawacki/txt-models-a` | 100 files, ~812 MB (X -> English) |
+| `txt-models-b/` | `cadezawacki/txt-models-b` | 71 files, ~942 MB (X -> English for 9 languages; English -> X for the 15 most used) |
+| `txt-models-c/` | `cadezawacki/txt-models-c` | 94 files, ~908 MB (English -> X for the other 31 languages) |
+
+A GitHub Pages site may be at most 1 GB, hence three repos.
 
 Each folder is the repo's whole initial content: `files.json` (path, source url,
 size, sha256), `fetch.py` + `.github/workflows/fetch.yml` (the "Fetch models" Action:

@@ -2533,8 +2533,15 @@ body.split-open .mobile-toolbar { right: 50%; }
   font-size: 14px;
   padding: 3px 6px;
 }
+.find-opt { display: inline-flex; align-items: center; gap: 4px; font-size: var(--text-xs); color: var(--text-muted); white-space: nowrap; cursor: pointer; user-select: none; -webkit-user-select: none; }
+.find-opt input { margin: 0; accent-color: var(--accent); }
+.find-opt:has(input:checked) { color: var(--text); }
+@media (pointer: coarse) { .find-opt input { width: 18px; height: 18px; } }
 @media (max-width: 600px) {
   .find-input { width: 120px; }
+  /* phones: the option takes its own row after the buttons (and before "if…"'s row) */
+  .find-opt { order: 1; }
+  .find-cond-row { order: 2; }
 }
 
 /* Search match highlighting in the editor */
@@ -2698,10 +2705,15 @@ body.game-open .editor-wrap { -webkit-user-select: none; user-select: none; }
 .cade-panel-head .cade-panel-minbtn:hover { opacity: 1; background: var(--surface-hover, rgba(127,127,127,0.15)); }
 .cade-panel.cade-minimized { display: none !important; }
 .cade-panel-body { overflow: auto; }
-/* Minimized panels wait as chips in a dock above the footer (clear of the
-   phone's scroll buttons); a chip brings its panel back. */
+/* Minimized panels wait as chips in a dock just above the bottom chrome (clear
+   of the phone's scroll buttons); a chip brings its panel back. The dock hangs
+   off a zero-height anchor in the body's flex column right before the find &
+   replace bar (same order), so it sits above the footer — or above the find
+   bar while that is open — and follows the iOS keyboard pinning, with no
+   measuring. */
+#cade-panel-dock-anchor { position: relative; order: 5; flex: 0 0 0; height: 0; z-index: 4999; }
 #cade-panel-dock {
-  position: fixed; left: 4px; right: 4px; bottom: calc(18px + env(safe-area-inset-bottom) + 4px); z-index: 4999;
+  position: absolute; left: 4px; right: 4px; bottom: 4px;
   display: flex; gap: 6px; padding: 4px; overflow-x: auto; pointer-events: none; scrollbar-width: none;
 }
 #cade-panel-dock::-webkit-scrollbar { display: none; }
@@ -3263,6 +3275,7 @@ body.inbox-list .find-panel { display: none !important; }
   <input class="find-input" id="replace-input" type="text" placeholder="Replace with… (\n \t work)" autocomplete="off" spellcheck="false">
   <button class="find-btn" id="replace-one" title="Replace current match">Replace</button>
   <button class="find-btn" id="replace-all" title="Replace all matches">All</button>
+  <label class="find-opt" title="When a replacement leaves a line blank, delete the line instead of leaving a gap (a blank line that was already there stays)"><input type="checkbox" id="find-dropempty"> Delete emptied lines</label>
   <button class="find-btn find-toggle" id="find-cond-btn" title="Only if… — match only when text precedes/follows (no regex knowledge needed)">if…</button>
   <button class="find-btn find-close" id="find-close" title="Close (Esc)">×</button>
   <div class="find-cond-row" id="find-cond-row">
@@ -21053,6 +21066,52 @@ function findStep(delta) {
   revealCurrentMatch(false);
 }
 
+// Option (off by default, "Delete emptied lines"): a replacement that leaves a
+// line blank deletes that line too, so clearing whole lines leaves no gaps. A
+// blank line counts only if every original line it came from had text — blank
+// lines that were already there (or that a match ending in \n runs into) stay.
+// tr: the replacement transaction (not dispatched); ranges: the matches.
+// -> { changes (for tr.state), count } | null
+var _findDropEmpty = false;
+function _emptiedLineDeletes(tr, ranges) {
+  const nd = tr.state.doc, od = tr.startState.doc, back = tr.changes.invert(od);
+  const seen = new Set(), blank = [];
+  for (const r of ranges) {
+    const a = tr.changes.mapPos(r.from, -1), b = tr.changes.mapPos(r.to, 1);
+    for (let n = nd.lineAt(a).number, e = nd.lineAt(b).number; n <= e; n++) {
+      if (seen.has(n)) continue;
+      seen.add(n);
+      const L = nd.line(n);
+      if (L.text.trim()) continue;
+      const oa = od.lineAt(back.mapPos(L.from, -1)).number, ob = od.lineAt(back.mapPos(L.to, 1)).number;
+      let had = true;
+      for (let k = oa; k <= ob && had; k++) if (!od.line(k).text.trim()) had = false;
+      if (had) blank.push(n);
+    }
+  }
+  if (!blank.length) return null;
+  blank.sort((x, y) => x - y);
+  const del = [];
+  for (let i = 0; i < blank.length;) {
+    let j = i;
+    while (j + 1 < blank.length && blank[j + 1] === blank[j] + 1) j++;
+    const f = nd.line(blank[i]), l = nd.line(blank[j]);
+    if (l.number < nd.lines) del.push({ from: f.from, to: l.to + 1 });      // the lines + their line breaks
+    else if (f.number > 1) del.push({ from: f.from - 1, to: l.to });       // at the end: the break before them
+    else del.push({ from: f.from, to: l.to });
+    i = j + 1;
+  }
+  return { changes: tr.state.changes(del), count: blank.length };
+}
+// The replace transaction spec, with emptied lines removed when the option is on
+// (one transaction, so one Undo restores everything). -> { spec, dropped }
+function _replaceSpec(changes, ranges) {
+  if (!_findDropEmpty) return { spec: { changes }, dropped: 0 };
+  const tr = editor.state.update({ changes });
+  const d = _emptiedLineDeletes(tr, ranges);
+  return d ? { spec: { changes: tr.changes.compose(d.changes) }, dropped: d.count } : { spec: { changes }, dropped: 0 };
+}
+
 // Replacement text for one match. In regex mode, re-apply the pattern to the
 // matched substring so $1/$& group references work; (?:) wrapping is not
 // needed since we anchor implicitly by matching the same text.
@@ -21078,7 +21137,7 @@ window.findReplaceCurrent = function() {
   const m = searchState.matches[searchState.current];
   if (!m) return;
   const matchText = editor.state.doc.sliceString(m.from, m.to);
-  editor.dispatch({ changes: { from: m.from, to: m.to, insert: replacementFor(matchText) } });
+  editor.dispatch(_replaceSpec({ from: m.from, to: m.to, insert: replacementFor(matchText) }, [m]).spec);
   // Immediate recompute (skip the debounce) so the count + next-match are live.
   clearTimeout(_searchDocTimer);
   searchRecomputeAndRefresh(true);
@@ -21096,10 +21155,12 @@ window.findReplaceAll = function() {
     from: m.from, to: m.to,
     insert: replacementFor(doc.sliceString(m.from, m.to)),
   }));
-  editor.dispatch({ changes });
+  const r = _replaceSpec(changes, ms);
+  editor.dispatch(r.spec);
   clearTimeout(_searchDocTimer);
   searchRecomputeAndRefresh(false);
-  showToast(`Replaced ${changes.length} match${changes.length !== 1 ? 'es' : ''}`, 'success', 2000);
+  showToast(`Replaced ${changes.length} match${changes.length !== 1 ? 'es' : ''}` +
+    (r.dropped ? ` · removed ${r.dropped} emptied line${r.dropped !== 1 ? 's' : ''}` : ''), 'success', 2000);
 };
 
 window.openFindPanel = function() {
@@ -21210,6 +21271,10 @@ window.closeFindPanel = function() {
     regexBtn.classList.toggle('active', searchState.regex);
     searchRecomputeAndRefresh(true);
   });
+
+  const dropBox = document.getElementById('find-dropempty');
+  dropBox.checked = false;
+  dropBox.addEventListener('change', () => { _findDropEmpty = dropBox.checked; });
 
   const invertBtn = document.getElementById('find-invert');
   invertBtn.addEventListener('click', () => {
@@ -21580,11 +21645,16 @@ function _dockSync() {
 function _minimizePanel(p) {
   if (!p || _isMinimized(p)) return;
   if (!_panelDock || !_panelDock.isConnected) {
+    const anchor = document.createElement('div');
+    anchor.id = 'cade-panel-dock-anchor';
     _panelDock = document.createElement('div');
     _panelDock.id = 'cade-panel-dock';
     _panelDock.setAttribute('role', 'toolbar');
     _panelDock.setAttribute('aria-label', 'Minimized panels');
-    document.body.appendChild(_panelDock);
+    anchor.appendChild(_panelDock);
+    const fp = document.getElementById('find-panel');
+    if (fp && fp.parentNode === document.body) document.body.insertBefore(anchor, fp);
+    else document.body.appendChild(anchor);
   }
   // A panel closed while minimized (its widget toggled it, a room switch…) takes its chip with it.
   if (!_dockObserver) {

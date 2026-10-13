@@ -68,10 +68,14 @@
 .hp-frame { position: relative; overflow: hidden; flex: 0 0 auto; margin: 8px 0; background: #fff; box-shadow: var(--shadow-md, 0 4px 16px rgba(0,0,0,0.08)); border-radius: 4px; }
 .hp-panel:not(.hp-dev) .hp-frame { margin: 0; }
 .hp-iframe { display: block; border: 0; background: #fff; transform-origin: 0 0; }
+.hp-mdmode .hp-frame, .hp-mdmode .hp-iframe { background: var(--bg, #fff); }
+.hp-modes .hp-ib { font-weight: 600; letter-spacing: 0.01em; padding: 0 8px; }
 .hp-empty {
-  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; text-align: center;
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
   padding: 24px; color: var(--text-muted); font-size: var(--text-sm); line-height: 1.55; background: var(--surface);
 }
+/* one block of text inside the centring flex box (inline <code> must not become flex items) */
+.hp-empty-t { max-width: 34em; text-align: center; text-wrap: pretty; }
 .hp-empty[hidden] { display: none; }
 .hp-empty code { font-family: var(--font-mono, monospace); font-size: 0.92em; color: var(--text); }
 

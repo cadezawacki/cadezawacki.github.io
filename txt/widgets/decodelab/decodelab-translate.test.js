@@ -36,6 +36,40 @@ test('registry covers the requested languages with verified file records', funct
   assert.ok(/^https:\/\/cdn\.jsdelivr\.net\/npm\/@browsermt\/bergamot-translator@0\.4\.9\//.test(T.ENGINE.wasm.u));
 });
 
+test('registry: every language also has an English -> X model, self-hosted', function () {
+  T.LANGS.forEach(function (L) {
+    assert.ok(L.to, 'no en>' + L.code);
+    assert.strictEqual(L.to.key, 'en>' + L.code);
+    assert.ok(L.to.files.model && L.to.files.lex && (L.to.files.vocab || (L.to.files.srcvocab && L.to.files.trgvocab)), L.code);
+    Object.keys(L.to.files).forEach(function (k) {
+      var f = L.to.files[k];
+      assert.ok(/^https:\/\/cadezawacki\.github\.io\/txt-models-[bc]\/en-x\//.test(f.u), f.u);
+      assert.ok(f.u.indexOf('/en-x/' + L.code + '/') > 0, f.u);
+      assert.strictEqual(f.m, '');
+      assert.ok(/^[0-9a-f]{64}$/.test(f.h) && f.s > 1000, L.code + ' ' + k);
+    });
+    assert.ok(L.to.size > 10e6 && L.to.size < 80e6, L.code + ' to-size ' + L.to.size);
+  });
+  assert.deepStrictEqual(T.LANGS.filter(function (L) { return L.to.pre; }).map(function (L) { return L.code; }).sort(), ['ko', 'ru']);
+  // txt-models-b holds the 15 most asked-for; a GitHub Pages site stays under 1 GB
+  var b = 0, c = 0;
+  T.LANGS.forEach(function (L) { if (L.to.files.model.u.indexOf('/txt-models-b/') > 0) b += L.to.size; else c += L.to.size; });
+  assert.ok(b < 600e6 && c < 950e6, b + ' ' + c);
+});
+test('route: into English, out of English, and through English', function () {
+  var keys = function (r) { return r && r.map(function (m) { return m.key; }); };
+  assert.deepStrictEqual(keys(T.route('es')), ['es>en']);
+  assert.deepStrictEqual(keys(T.route('es', 'en')), ['es>en']);
+  assert.deepStrictEqual(keys(T.route('en', 'ja')), ['en>ja']);
+  assert.deepStrictEqual(keys(T.route('de', 'zh-Hant')), ['de>en', 'en>zh-Hant']);
+  assert.strictEqual(T.route('en', 'en'), null);
+  assert.strictEqual(T.route('es', 'es'), null);
+  assert.strictEqual(T.route('la', 'en'), null);
+  assert.strictEqual(T.route('en', 'la'), null);
+  assert.strictEqual(T.pairName('es'), 'Spanish');
+  assert.strictEqual(T.pairName('en', 'fr'), 'English → French');
+});
+
 // ---- chunking -----------------------------------------------------------------------
 test('chunkText keeps line breaks and spacing, splits long paragraphs', function () {
   var text = '  Hola mundo.\n\nSegunda línea  \r\nTercera';
@@ -156,6 +190,28 @@ test('translate-blocks plugin: its language table agrees with the translator', f
   });
 });
 
+test('pairFromInfo: ``` fences name a direction; the chips plugin agrees', function () {
+  var P = require('../../plugins/translate-blocks/translate-blocks.js');
+  var cases = {
+    'Spanish': ['es', 'en'], 'español': ['es', 'en'], 'English to Spanish': ['en', 'es'], 'en>es': ['en', 'es'], 'en > sv': ['en', 'sv'],
+    'Spanish → French': ['es', 'fr'], 'de -> ja': ['de', 'ja'], 'Deutsch => English': ['de', 'en'], 'to Spanish': ['', 'es'], '> ja': ['', 'ja'],
+    'into Japanese': ['', 'ja'], 'en-US to es-MX': ['en', 'es'], 'Chinese (Traditional) to English': ['zh-Hant', 'en'], 'English -> русский': ['en', 'ru'],
+    'English': null, 'sv': null, 'js': null, 'python': null, 'text to speech': null, 'c++ to python': null, 'to do': null, 'js > out': null,
+    'English to English': null, 'Latin to English': null, 'English to Latin': null, '': null,
+  };
+  Object.keys(cases).forEach(function (info) {
+    var want = cases[info], got = T.pairFromInfo(info);
+    assert.deepStrictEqual(got, want && { from: want[0], to: want[1] }, JSON.stringify(info));
+    assert.deepStrictEqual(P.pairOfInfo(info), got, 'plugin: ' + JSON.stringify(info));
+  });
+  T.LANGS.forEach(function (L) {
+    [L.name + ' to English', 'English to ' + L.name, 'to ' + L.native, L.code + '>en', 'en>' + L.code].forEach(function (info) {
+      assert.deepStrictEqual(P.pairOfInfo(info), T.pairFromInfo(info), info);
+      assert.ok(T.pairFromInfo(info), info);
+    });
+  });
+});
+
 // ---- engine choice (fake Chrome API + fake Cache Storage) ----------------------------------
 function FakeCaches() {
   var buckets = {};
@@ -202,6 +258,69 @@ test('engine choice: Chrome when it has the language, Bergamot otherwise', async
     assert.strictEqual(none.engine, '');
     m.dispose();
   } finally { delete global.self; delete global.caches; }
+});
+
+test('two-way: Chrome per pair, Bergamot route sizes, pivot through English', async function () {
+  global.caches = new FakeCaches();
+  var posted = [];
+  global.self = {
+    Translator: Object.assign(function () {}, {
+      availability: function (o) { return Promise.resolve(o.sourceLanguage === 'en' && o.targetLanguage === 'es' ? 'available' : 'unavailable'); },
+      create: function (o) { return Promise.resolve({ translate: function (t) { return Promise.resolve(o.targetLanguage.toUpperCase() + '(' + t + ')'); }, destroy: function () {} }); },
+    }),
+  };
+  // a stand-in worker: "downloads" into the fake cache, "translates" by tagging with the model key
+  global.Worker = function () {
+    var w = this;
+    this.postMessage = function (m) {
+      posted.push(m);
+      setImmediate(function () {
+        if (m.type === 'download') {
+          caches.open(T.CACHE).then(function (c) { return Promise.all(m.files.map(function (f) { return c.put(f.u, new Response(new Uint8Array(4))); })); })
+            .then(function () { w.onmessage({ data: { type: 'done', id: m.id } }); });
+        } else if (m.type === 'translate') w.onmessage({ data: { type: 'done', id: m.id, texts: m.texts.map(function (t) { return m.lang + '[' + t + ']'; }) } });
+        else w.onmessage({ data: { type: 'done', id: m.id } });
+      });
+    };
+    this.terminate = function () {};
+  };
+  try {
+    var m = T.create({ workerUrl: 'x', core: core });
+    var a = await m.status('en', 'es');
+    assert.deepStrictEqual([a.engine, a.ready], ['chrome', true]);
+    assert.strictEqual((await m.translate('Hello.', 'en', null, 'es')).text, 'ES(Hello.)');
+    var p = await m.status('es', 'fr');
+    assert.deepStrictEqual([p.engine, p.needs, p.missing], ['bergamot', 'download', ['es>en', 'en>fr']]);
+    assert.strictEqual(p.size, m.lang('es').size + m.lang('fr').to.size + m.engineSize);
+    assert.ok(/via English/.test(p.label));
+    // only the X->en half: the pivot then needs just the other model
+    await m.download('es', null, 'en', ['es>en']);
+    var p2 = await m.status('es', 'fr');
+    assert.deepStrictEqual([p2.missing, p2.size], [['en>fr'], m.lang('fr').to.size]);
+    var r = await m.download('es', null, 'fr');
+    assert.strictEqual(r.ready, true);
+    var have = await m.downloaded();
+    assert.ok(have.es && have._to.fr && !have.fr && !have._to.es && have._engine);
+    var steps = [];
+    var out = await m.translate('Hola.\n\nAdiós.', 'es', function (f) { steps.push(f); }, 'fr');
+    assert.strictEqual(out.text, 'en>fr[es>en[Hola.]]\n\nen>fr[es>en[Adiós.]]');
+    assert.deepStrictEqual([out.from, out.to], ['es', 'fr']);
+    assert.ok(steps.length && steps[steps.length - 1] === 1 && steps.every(function (f, i) { return !i || f >= steps[i - 1]; }), steps.join());
+    var tr = posted.filter(function (x) { return x.type === 'translate'; });
+    assert.deepStrictEqual(tr.map(function (x) { return x.lang + ':' + x.keep; }), ['es>en:2', 'en>fr:2']);
+    assert.strictEqual((await m.translate('Hola.', 'es')).text, 'es>en[Hola.]');
+    assert.strictEqual(posted.filter(function (x) { return x.type === 'translate'; }).pop().keep, 1);
+    // removing one direction keeps the other
+    await m.remove('fr', 'to');
+    have = await m.downloaded();
+    assert.ok(have.es && !have._to.fr);
+    assert.strictEqual(await m.usage(), m.lang('es').size + m.engineSize);
+    await m.remove('es', 'both');
+    assert.strictEqual(await m.usage(), m.engineSize);
+    var bad = await m.status('en', 'en');
+    assert.ok(!bad.engine && /different/.test(bad.why));
+    m.dispose();
+  } finally { delete global.self; delete global.caches; delete global.Worker; }
 });
 
 // ---- end-to-end with the real worker file (opt-in: downloads ~27 MB) -------------------------

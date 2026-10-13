@@ -4,9 +4,12 @@
  * ```Deutsch) and language tags (```es, ```es-ES, ```zh-Hant). Programming
  * languages never get one, and a bare code that is also a code-fence language
  * (pl, cs, el, ml, sv) only counts with a region (```pl-PL).
+ * A pair names the direction: ```English to Spanish, ```en>es,
+ * ```Spanish → French, ```to Japanese (source detected).
  *
- * Pressing it translates the block into English and writes a ```English block
- * directly below (pressing again replaces that block). The work is done by
+ * Pressing it translates the block — into English, or into the pair's target —
+ * and writes a ```English (```Spanish …) block directly below (pressing again
+ * replaces that block). The work is done by
  * widgets/decodelab/decodelab-inline.js — Decode Lab's translator: Chrome's
  * built-in Translator where it has the language, otherwise Firefox
  * Translations (Bergamot) with a one-time model download whose size the chip
@@ -18,7 +21,7 @@
  * block), mapped through edits and rescanned only when an edit touches a
  * backtick or a fence line. Nothing is loaded until a chip is pressed. Hidden
  * in read-only mode. Self-contained IIFE; the language table is also exported
- * for node tests (module.exports = { langOfInfo, NAMES }). */
+ * for node tests (module.exports = { langOfInfo, pairOfInfo, NAMES }). */
 (function () {
   'use strict';
 
@@ -102,7 +105,30 @@
     return w && w !== n && BY_NAME[w] ? BY_NAME[w] : '';
   }
 
-  if (typeof module !== 'undefined' && module.exports) { module.exports = { langOfInfo: langOfInfo, NAMES: NAMES }; return; }
+  // English, for pairs only (an ```English block alone gets no chip)
+  function isEnglish(t) {
+    t = String(t).trim();
+    return normName(t) === 'english' || /^en(?:[-_][a-z0-9]{2,8})*$/i.test(t);
+  }
+  function pairPart(t) {
+    if (isEnglish(t)) return 'en';
+    var c = langOfInfo(t);
+    if (c) return c;
+    t = String(t).trim().toLowerCase();
+    return NAMES[t] && /^[a-z]{2}$/.test(t) ? t : '';
+  }
+  // fence info -> {from, to} ('' from = detect) or null — see decodelab-translate.js pairFromInfo
+  function pairOfInfo(info) {
+    var raw = String(info || '').trim().replace(/^[{.]+|\}+$/g, '');
+    if (!raw || raw.length > 64) return null;
+    var m = /^(.*?)\s*(?:->|=>|\u2192|>)\s*(.+)$/.exec(raw) || /^(?:(.*?)\s+)?(?:to|into)\s+(.+)$/i.exec(raw);
+    if (!m) { var c = langOfInfo(raw); return c ? { from: c, to: 'en' } : null; }
+    var from = m[1] ? pairPart(m[1]) : '', to = pairPart(m[2]);
+    if ((m[1] && !from) || !to || from === to) return null;
+    return { from: from, to: to };
+  }
+
+  if (typeof module !== 'undefined' && module.exports) { module.exports = { langOfInfo: langOfInfo, pairOfInfo: pairOfInfo, NAMES: NAMES }; return; }
   if (typeof window === 'undefined' || typeof window.Cade === 'undefined') return;
   var Cade = window.Cade;
   var CM = Cade.CM;
@@ -182,11 +208,12 @@
   var ICON_DL = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.5v7.5M4.8 7l3.2 3.2L11.2 7M3 13.2h10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
   var ICON_X = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 4.5l7 7M11.5 4.5l-7 7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>';
 
-  function Chip(code, st) {
-    this.code = code;
+  function Chip(pair, st) {
+    this.pair = pair;
     this.st = st;
-    this.key = code + '|' + (st ? st.state + '|' + st.text : '');
+    this.key = pair.from + '>' + pair.to + '|' + (st ? st.state + '|' + st.text : '');
   }
+  function label(c) { return c === 'en' ? 'English' : LABEL[c] || c; }
   Chip.prototype = Object.create(WidgetType.prototype);
   Chip.prototype.constructor = Chip;
   Chip.prototype.eq = function (o) { return o.key === this.key; };
@@ -194,7 +221,8 @@
     var wrap = document.createElement('span');
     wrap.className = 'cm-trb';
     wrap.setAttribute('contenteditable', 'false');
-    var st = this.st, name = LABEL[this.code] || this.code;
+    var st = this.st, pr = this.pair;
+    var what = (pr.from ? 'this ' + label(pr.from) + ' block' : 'this block') + ' into ' + label(pr.to);
     function button(cls, act, html, title) {
       var b = document.createElement('span');
       b.className = 'cm-trb-btn ' + cls;
@@ -207,7 +235,7 @@
       return b;
     }
     if (!st) {
-      button('cm-trb-go', 'tr', ICON_TR + '<span>Translate</span>', 'Translate this ' + name + ' block into English (on this device) — written in a ```English block below');
+      button('cm-trb-go', 'tr', ICON_TR + '<span>Translate</span>', 'Translate ' + what + ' (on this device) — written in a ```' + label(pr.to) + ' block below');
     } else if (st.state === 'consent') {
       button('cm-trb-dl', 'dl', ICON_DL + '<span></span>', st.title || 'Download and translate');
       wrap.lastChild.lastChild.textContent = st.text;
@@ -253,10 +281,10 @@
         if (t.length > MAX_LINE || !startsFence(t)) continue;
         var info = t.slice(3).trim();
         if (!info) continue;                               // closing fence / untagged block
-        var code = langOfInfo(info);
-        if (!code || !isOpening(doc, line)) continue;
+        var pair = pairOfInfo(info);
+        if (!pair || !isOpening(doc, line)) continue;
         var st = R ? R.statusAt(line.from) : null;
-        out.push(Decoration.widget({ widget: new Chip(code, st), side: 1 }).range(line.to));
+        out.push(Decoration.widget({ widget: new Chip(pair, st), side: 1 }).range(line.to));
       }
     }
     return out.length ? Decoration.set(out, true) : Decoration.none;
