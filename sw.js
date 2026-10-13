@@ -11,9 +11,11 @@
 //   - mine.html + mine/assets/*: precached so Minesweeper (board art
 //     included) plays fully offline
 //   - Firebase realtime DB: bypass (live data, needs network)
+//   - Modules with their own cache buckets (Read Aloud HD, Archive Utility,
+//     Code Runner's Python 'cade-py-<version>'): bypass, so nothing is stored twice
 // ============================================
 
-const CACHE_VERSION = 132;
+const CACHE_VERSION = 137;
 const CACHE_NAME = `cade-v${CACHE_VERSION}`;
 
 // Same-origin pages to precache on install.
@@ -177,6 +179,11 @@ self.addEventListener('fetch', (e) => {
   if (url.hostname === 'cdn.jsdelivr.net' && /^\/npm\/(onnxruntime-web|phonemizer)@/.test(url.pathname)) return;
   // Archive Utility (txt/widgets/archive) keeps zip.js + 7-Zip (wasm) in its own 'cade-archive-v1' cache.
   if (url.hostname === 'cdn.jsdelivr.net' && /^\/npm\/(@zip\.js\/zip\.js|7z-wasm)@/.test(url.pathname)) return;
+  // Code Runner (txt/widgets/coderun) keeps Python (Pyodide) and the PyPI
+  // packages it installs in its own 'cade-py-<version>' cache, which app
+  // updates don't purge; caching them here too would store them twice.
+  if (url.hostname === 'cdn.jsdelivr.net' && url.pathname.startsWith('/pyodide/')) return;
+  if (url.hostname === 'pypi.org' || url.hostname === 'files.pythonhosted.org') return;
   // A page that asks for no caching gets the network, untouched: live data
   // (weather, IP / DNS lookups, speed tests) and assets a module keeps in its
   // own cache bucket (File Converter's 'cade-convert-v1'). Never stored here.

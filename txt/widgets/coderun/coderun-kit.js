@@ -658,9 +658,183 @@
     }
     return out;
   };
+  // PEP 503 name: "Python_DateUtil" -> "python-dateutil" (how lock files and indexes key packages).
+  K.pyCanon = function (name) { return String(name || '').trim().toLowerCase().replace(/[-_.]+/g, '-'); };
+  // "requests[socks]>=2; python_version>'3'" -> "requests" (canonical), '' if it isn't a name.
+  K.pyReqName = function (req) {
+    var m = /^\s*([A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?)/.exec(String(req || ''));
+    return m ? K.pyCanon(m[1]) : '';
+  };
+
+  // Popular compiled packages with no WebAssembly build: say so plainly (and
+  // what to use instead) rather than surfacing micropip's "Can't find a pure
+  // Python 3 wheel" or a bare ModuleNotFoundError.
+  var NO_WASM = {
+    polars: ['polars', 'pandas + pyarrow are available'],
+    'polars-runtime-32': 'polars', 'polars-runtime-64': 'polars', 'polars-runtime-compat': 'polars', 'polars-lts-cpu': 'polars', 'polars-u64-idx': 'polars',
+    duckdb: ['duckdb', 'sqlite3 (built in), pandas and pyarrow are available'],
+    torch: ['PyTorch', 'numpy, scipy and scikit-learn are available'], pytorch: 'torch', torchvision: 'torch', torchaudio: 'torch',
+    tensorflow: ['TensorFlow', 'numpy, scipy and scikit-learn are available'], 'tensorflow-cpu': 'tensorflow', keras: 'tensorflow',
+    jax: ['JAX', 'numpy and scipy are available'], jaxlib: 'jax',
+    psycopg2: ['psycopg2', 'database drivers need network sockets the browser doesn’t have; sqlite3 is built in'], 'psycopg2-binary': 'psycopg2', psycopg: 'psycopg2', mysqlclient: 'psycopg2',
+    numba: ['numba', 'numpy and scipy are available'], llvmlite: 'numba',
+    pyspark: ['PySpark', 'pandas + pyarrow are available'],
+    'opencv-contrib-python': ['opencv-contrib-python', 'opencv-python is available']
+  };
+  // Import names that differ from their package name.
+  var NO_WASM_IMPORT = { MySQLdb: 'mysqlclient' };
+  K.pyNoWasm = function (name) {
+    var c = K.pyCanon(name), e = Object.prototype.hasOwnProperty.call(NO_WASM, c) ? NO_WASM[c] : null;
+    if (typeof e === 'string') e = NO_WASM[e];
+    if (!e) return '';
+    return e[0] + ' has no WebAssembly build — it can’t run in the browser; ' + e[1];
+  };
+  // ModuleNotFoundError: No module named 'x.y' -> the explanation for 'x', if it's a known one.
+  K.pyNoWasmModule = function (mod) {
+    var top = String(mod || '').split('.')[0];
+    return K.pyNoWasm(Object.prototype.hasOwnProperty.call(NO_WASM_IMPORT, top) ? NO_WASM_IMPORT[top] : top);
+  };
+  // A package-loading failure, in plain words. `offline`: the browser says it
+  // has no network. Anything not recognised keeps its last traceback line,
+  // after `prefix`.
+  K.pyPkgError = function (text, offline, prefix) {
+    text = String(text || '');
+    var m = /Can't find a pure Python 3 wheel for:?\s*\[?'([^']+)'/.exec(text);
+    if (m) {
+      var name = K.pyReqName(m[1]);
+      return K.pyNoWasm(name) || (name + ' has no build that runs in the browser — PyPI has no pure-Python wheel or WebAssembly build of it (only compiled desktop builds or source code), so it can’t be installed here');
+    }
+    m = /Can't fetch metadata for '([^']+)'/.exec(text);
+    if (m) {
+      return offline ? 'Couldn’t install ' + m[1] + ' — you’re offline and it isn’t downloaded yet (add it under Options → Python packages and tap “Download for offline” while online)'
+        : 'Couldn’t find “' + m[1] + '” on PyPI — check the spelling';
+    }
+    if (offline && /Failed to fetch|NetworkError|Load failed|HTTP 50\d|offline|network|while loading/i.test(text)) {
+      var which = /while loading ([^:\s]+)/.exec(text);
+      return 'Couldn’t load ' + (which ? which[1] : 'packages') + ' — you’re offline and ' + (which ? 'it isn’t' : 'they aren’t') +
+        ' on this device yet (Options → Python packages → “Download for offline” while online)';
+    }
+    // keep the meaningful last line of a Python traceback
+    var lines = text.replace(/\s+$/, '').split('\n'), last = lines[lines.length - 1];
+    return (prefix || '') + (/^Traceback/.test(lines[0]) && last ? last : lines.join(' ').replace(/\s+/g, ' '));
+  };
+
+  // Which URLs the app fetches on the Python sandbox's behalf (an allowlist):
+  // Pyodide's pinned folder, PyPI's index JSON and PyPI's package files. https
+  // only, no credentials/port/query, no dot segments. Returns {kind, url}:
+  // 'py' / 'file' are immutable (cache-first), 'index' changes (network-first).
+  K.pyUrlKind = function (raw, index) {
+    var u;
+    try { u = new URL(String(raw || '')); } catch (e) { return null; }
+    if (u.protocol !== 'https:' || u.username || u.password || u.port || u.search) return null;
+    var path = u.pathname;
+    if (/(^|\/)(\.|%2e){1,2}(\/|$)|%2f|%5c|\\/i.test(path) || /(^|\/)(\.|%2e){1,2}(\/|$)/i.test(String(raw).split(/[?#]/)[0])) return null;
+    var href = u.origin + path; // the #fragment is never sent
+    if (index && href.indexOf(index) === 0 && href.length > index.length && /^[A-Za-z0-9._+\-\/]+$/.test(href.slice(index.length))) return { kind: 'py', url: href };
+    if (u.hostname === 'files.pythonhosted.org' && /^\/packages\/[A-Za-z0-9._+\-\/%]+$/.test(path)) return { kind: 'file', url: href };
+    if (u.hostname === 'pypi.org' && (/^\/simple\/[A-Za-z0-9._-]+\/$/.test(path) || /^\/pypi\/[A-Za-z0-9._-]+(\/[A-Za-z0-9._!+-]+)?\/json$/.test(path))) return { kind: 'index', url: href };
+    return null;
+  };
+  // Distribution a PyPI URL belongs to (wheel, its .metadata, or /simple/<name>/).
+  K.pyDistOfUrl = function (url) {
+    var m = /^https:\/\/pypi\.org\/simple\/([^\/]+)\/$/.exec(url);
+    if (m) return K.pyCanon(m[1]);
+    m = /^https:\/\/files\.pythonhosted\.org\/packages\/.*\/([^\/]+)\.whl(\.metadata)?$/.exec(url);
+    return m ? K.pyCanon(decodeURIComponent(m[1]).split('-')[0]) : '';
+  };
+  // Can micropip install this wheel here? 'pure' (py3-none-any), 'wasm' (built
+  // for this Pyodide ABI) or ''. abi: e.g. '2025_0'; py: e.g. '313'.
+  K.pyWheelKind = function (filename, abi, py) {
+    var m = /^(.+)\.whl$/.exec(String(filename || ''));
+    if (!m) return '';
+    var parts = m[1].split('-');
+    if (parts.length < 5) return '';
+    var plats = parts[parts.length - 1].split('.'), abis = parts[parts.length - 2].split('.'), pys = parts[parts.length - 3].split('.');
+    py = String(py || '313');
+    if (plats.indexOf('any') !== -1 && abis.indexOf('none') !== -1) {
+      return pys.some(function (t) { var v = /^(?:py|cp)(\d+)$/.exec(t); return v && v[1].charAt(0) === '3' && (v[1].length === 1 || +v[1] <= +py); }) ? 'pure' : '';
+    }
+    var wasm = plats.some(function (p) { return p === 'pyemscripten_' + abi + '_wasm32' || p === 'pyodide_' + abi + '_wasm32'; });
+    if (!wasm) return '';
+    return (abis.indexOf('cp' + py) !== -1 || abis.indexOf('abi3') !== -1 || abis.indexOf('none') !== -1) ? 'wasm' : '';
+  };
+  // A PEP 508 environment marker, evaluated for Pyodide (true when unsure).
+  K.pyMarker = function (marker, env) {
+    var s = String(marker || ''), toks = [], m;
+    var re = /^\s*(?:(\(|\))|('[^']*'|"[^"]*")|(===|==|!=|<=|>=|~=|<|>)|(not\s+in\b|in\b|and\b|or\b)|([A-Za-z_][A-Za-z0-9_.]*))/;
+    while (/\S/.test(s)) {
+      if (!(m = re.exec(s))) return true;
+      s = s.slice(m[0].length);
+      toks.push(m[1] ? { t: m[1] } : m[2] ? { t: 'str', v: m[2].slice(1, -1) } : m[3] ? { t: 'op', v: m[3] } : m[4] ? { t: m[4].replace(/\s+/, ' ') } : { t: 'var', v: m[5] });
+    }
+    var p = 0;
+    function ver(v) { return String(v).split('.').map(function (x) { return parseInt(x, 10) || 0; }); }
+    function cmpv(a, b) { a = ver(a); b = ver(b); for (var k = 0; k < Math.max(a.length, b.length); k++) { var d = (a[k] || 0) - (b[k] || 0); if (d) return d; } return 0; }
+    function val() {
+      var t = toks[p++];
+      if (!t) throw 0;
+      if (t.t === 'str') return { v: t.v };
+      if (t.t === 'var') { if (!Object.prototype.hasOwnProperty.call(env, t.v)) throw 0; return { v: env[t.v], isVar: t.v }; }
+      throw 0;
+    }
+    function cmp() {
+      if (toks[p] && toks[p].t === '(') { p++; var r = or(); if (!toks[p] || toks[p].t !== ')') throw 0; p++; return r; }
+      var a = val(), o = toks[p++], b = val();
+      if (!o) throw 0;
+      var op = o.t === 'op' ? o.v : o.t;
+      if (op === 'in') return b.v.indexOf(a.v) !== -1;
+      if (op === 'not in') return b.v.indexOf(a.v) === -1;
+      var isVer = /version|release/.test(a.isVar || b.isVar || '') && /^[\d.]+$/.test(a.v) && /^[\d.]+$/.test(b.v);
+      var d = isVer ? cmpv(a.v, b.v) : (a.v < b.v ? -1 : a.v > b.v ? 1 : 0);
+      if (op === '==' || op === '===') return d === 0;
+      if (op === '!=') return d !== 0;
+      if (op === '<') return d < 0;
+      if (op === '<=') return d <= 0;
+      if (op === '>') return d > 0;
+      return d >= 0; // >= and ~= (close enough for deciding whether a dependency applies)
+    }
+    function and() { var r = cmp(); while (toks[p] && toks[p].t === 'and') { p++; r = cmp() && r; } return r; }
+    function or() { var r = and(); while (toks[p] && toks[p].t === 'or') { p++; r = and() || r; } return r; }
+    try { var r = or(); return p === toks.length ? !!r : true; } catch (e) { return true; }
+  };
+  // requires_dist entries -> the dependency names that apply here (extras skipped).
+  K.pyDeps = function (requiresDist, env) {
+    var out = [];
+    (requiresDist || []).forEach(function (r) {
+      r = String(r || '');
+      var semi = r.indexOf(';'), marker = semi === -1 ? '' : r.slice(semi + 1);
+      if (/\bextra\b/.test(marker)) return;
+      if (marker && !K.pyMarker(marker, env)) return;
+      var n = K.pyReqName(r);
+      if (n && out.indexOf(n) === -1) out.push(n);
+    });
+    return out;
+  };
+  // Pyodide lock file: the package plus everything it depends on (canonical names).
+  K.pyLockClosure = function (lock, names) {
+    var pk = (lock && lock.packages) || {}, out = [], seen = {}, stack = (names || []).map(K.pyCanon);
+    while (stack.length) {
+      var n = stack.shift();
+      if (seen[n]) continue;
+      seen[n] = 1;
+      var e = pk[n];
+      if (!e) continue;
+      out.push(n);
+      (e.depends || []).forEach(function (d) { stack.push(K.pyCanon(d)); });
+    }
+    return out;
+  };
+  K.fmtBytes = function (n) {
+    n = +n || 0;
+    if (n < 1024) return n + ' B';
+    if (n < 1048576) return Math.max(1, Math.round(n / 1024)) + ' KB';
+    if (n < 1073741824) return (n / 1048576).toFixed(n < 104857600 ? 1 : 0) + ' MB';
+    return (n / 1073741824).toFixed(2) + ' GB';
+  };
   // Drop Pyodide's runner frames (and their source/caret lines) from a traceback.
-  K.cleanTraceback = function (msg) {
-    var lines = String(msg || '').replace(/\s+$/, '').split('\n'), out = [], skip = false;
+  // o.loadFailed: a package download failed before the run (the caller explains that).
+  K.cleanTraceback = function (msg, o) {
+    var lines = String(msg || '').replace(/\s+$/, '').split('\n'), out = [], skip = false, pyodidePkg = '';
     for (var k = 0; k < lines.length; k++) {
       var L = lines[k], m = /^  File "([^"]*)", line \d+/.exec(L);
       if (m) {
@@ -670,12 +844,25 @@
       }
       if (skip && /^    /.test(L)) continue;
       skip = false;
+      // Pyodide's "is included in the Pyodide distribution … micropip.install(…)"
+      // advice: the runner loads those itself, so it only confuses here.
+      var inc = /^The module '([^']+)' is included in the Pyodide distribution/.exec(L);
+      if (inc && /^ModuleNotFoundError\b/.test(out[out.length - 1] || '')) {
+        pyodidePkg = inc[1];
+        while (k + 1 < lines.length && !/^See https:\/\/pyodide\.org/.test(lines[k])) k++;
+        continue;
+      }
       out.push(L);
     }
     if (out.length === 2 && /^Traceback/.test(out[0])) out.shift();
     var lastLine = out[out.length - 1] || '';
     if (/^EOFError\b/.test(lastLine)) out.push("(input() can't read here — there's no keyboard input in the browser runner; set the value in code)");
-    if (/^ModuleNotFoundError\b/.test(lastLine)) out.push('(pure-Python packages from PyPI can be added with a "# requires: name" line)');
+    if (/^ModuleNotFoundError\b/.test(lastLine) && !(o && o.loadFailed)) {
+      var mod = /No module named '([^']+)'/.exec(lastLine), nw = mod ? K.pyNoWasmModule(mod[1]) : '';
+      if (nw) out.push('(' + nw + ')');
+      else if (pyodidePkg) out.push('(' + pyodidePkg + ' is one of Pyodide’s packages — it loads by itself when a block imports it at the top level)');
+      else out.push('(pure-Python packages from PyPI can be added with a "# requires: name" line)');
+    }
     return out.join('\n');
   };
 

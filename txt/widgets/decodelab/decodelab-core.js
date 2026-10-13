@@ -1632,21 +1632,37 @@
       return c;
     }
     var SCRIPT_KEYS = ['latin', 'cyr', 'greek', 'arabic', 'hebrew', 'cjk', 'deva', 'thai'];
+    // Capitals inside a word: random-case junk (Base64 …) has them everywhere;
+    // run-together words keep each capital at the start of a lowercase run
+    // ("DasWetterwarschön", "iPhone"), which is not penalised.
+    var CAMEL = /^[A-Za-z][a-z]*(?:[A-Z][a-z]{2,})+$/;
     function mixedCase(s) {
       var ws = s.match(/[A-Za-z]{3,}/g) || [], bad = 0;
       for (var i = 0; i < ws.length; i++) {
         var w = ws[i], r = w.slice(1);
-        if (r !== r.toLowerCase() && w !== w.toUpperCase()) bad++;
+        if (r !== r.toLowerCase() && w !== w.toUpperCase() && !CAMEL.test(w)) bad++;
       }
       return ws.length ? bad / ws.length : 0;
     }
-    function langModel(L, idx, words, spaced) {
+    // Text written without spaces, one run per line (or a few runs): its
+    // "words" are whole lines, so dictionary hits say nothing about it. Real
+    // prose averages 4–7 letters a word even in compounding languages.
+    function runOn(words, letters) {
+      if (words.length < 2) return false;
+      var long = 0;
+      for (var i = 0; i < words.length; i++) if (words[i].length >= 13) long += words[i].length;
+      return letters / words.length >= 9 || long >= letters * 0.6;
+    }
+    function langModel(L, idx, words, spaced, run) {
       var ng = ngNorm(L, idx), wh = words.length ? clamp(wordHits(words, L.words) / L.exp.wh, 0, 1.15) : 0, comb;
       if (ng < 0) comb = wh * 0.9;
       else if (spaced) comb = Math.max(0.55 * ng + 0.45 * wh, 0.72 * ng); // rare/technical vocabulary still reads
       else if (words.length >= 2 && words.some(function (w) { return w.length > 1; })) comb = 0.55 * ng + 0.45 * wh;
       else if (words.length && wh > 0) comb = Math.max(ng, 0.45 * ng + 0.55 * wh);
       else comb = ng;
+      // run-together lines read like one unspaced run: n-grams decide (as they
+      // already do when the same text is on a single line)
+      if (run && ng > comb) comb = ng;
       // "a b cd e" — real prose averages 4–5 letters a word
       if (words.length >= 4) {
         var wl = 0; for (var wi = 0; wi < words.length; wi++) wl += words[wi].length;
@@ -1663,13 +1679,13 @@
     }
     function latinModel(s) {
       var f = foldLatin(s), idx = latinIdx(f), words = f.match(/[a-z]+/g) || [];
-      var spaced = words.length >= 3 && /\s/.test(s);
+      var run = runOn(words, idx.length), spaced = !run && words.length >= 3 && /\s/.test(s);
       var acc = s.toLowerCase().match(/[à-öø-ɏ]/g) || [];
       // mojibake (legacy-charset views of random bytes) is dense with accents
       var accR = idx.length ? acc.length / idx.length : 0, accF = accR > 0.15 ? clamp(1 - (accR - 0.15) * 3.5, 0.15, 1) : 1;
       var best = null, second = null, all = [];
       for (var i = 0; i < LATIN.length; i++) {
-        var L = LATIN[i], m = langModel(L, idx, words, spaced);
+        var L = LATIN[i], m = langModel(L, idx, words, spaced, run);
         if (acc.length) {
           var a = 0;
           for (var j = 0; j < acc.length; j++) a += L.acc[acc[j]] ? 1 : -1;
@@ -1685,7 +1701,7 @@
     function singleModel(code, idx, words, s) {
       var L = LANGS[code];
       if (!L) return null;
-      var m = langModel(L, idx, words, words.length >= 3 && /\s/.test(s));
+      var run = runOn(words, idx.length), m = langModel(L, idx, words, !run && words.length >= 3 && /\s/.test(s), run);
       m.code = code; m.name = L.name;
       return { best: m, second: null, letters: idx.length };
     }

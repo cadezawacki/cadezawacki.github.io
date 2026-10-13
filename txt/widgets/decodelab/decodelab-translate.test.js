@@ -94,6 +94,68 @@ test('guessLang identifies the main languages offline', function () {
   assert.strictEqual(T.guessLang('The library is down the street, past the bank.', core).code, 'en');
 });
 
+test('guessLang: unspaced text split over lines (old Dutch report)', function () {
+  var nl = 'Tweeoogenblikkentredenin\neenmaetwijckt\nWerpteenschipwederhuyswaerts\nOmteleerenwatdentijtgelooft';
+  [nl, nl.replace(/\n/g, '')].forEach(function (s) {
+    var g = T.guessLang(s, core);
+    assert.strictEqual(g.code, 'nl', JSON.stringify(g));
+    assert.ok(g.conf >= 0.8, 'conf ' + g.conf);
+  });
+});
+
+// ---- language names: ``` fence info strings, typed names -------------------------------------
+var NAME_CASES = {
+  es: ['Spanish', 'spanish', 'SPANISH', 'Español', 'espanol', 'es', 'ES', 'es-ES', 'es_MX', 'Spanish (Mexico)', '{.spanish}', 'castellano'],
+  fr: ['French', 'Français', 'francais', 'fr', 'fr-CA'], de: ['German', 'Deutsch', 'de', 'de-AT'], nl: ['Dutch', 'Nederlands', 'nl', 'nl-BE'],
+  'zh-Hans': ['zh', 'zh-Hans', 'zh-CN', 'zh-Hans-CN', 'Chinese', 'Mandarin', '中文', '简体中文', 'Chinese (Simplified)'],
+  'zh-Hant': ['zh-Hant', 'zh-TW', 'zh-HK', 'zh-Hant-TW', 'Chinese (Traditional)', 'Traditional Chinese', '繁體中文'],
+  ja: ['Japanese', '日本語', 'ja', 'ja-JP'], ko: ['Korean', '한국어', 'ko'], ru: ['Russian', 'Русский', 'ru'], el: ['Greek', 'Ελληνικά', 'el-GR'],
+  pl: ['Polish', 'Polski', 'pl-PL'], cs: ['Czech', 'Čeština', 'cs-CZ'], sv: ['Swedish', 'Svenska', 'sv-SE'], ml: ['Malayalam', 'ml-IN'],
+  he: ['Hebrew', 'עברית', 'he', 'iw'], hi: ['Hindi', 'हिन्दी', 'हिंदी', 'hi'], vi: ['Vietnamese', 'Tiếng Việt', 'tieng viet', 'vi'],
+  id: ['Indonesian', 'Bahasa Indonesia', 'id'], ms: ['Malay', 'Bahasa Melayu'], pt: ['Portuguese', 'Português', 'pt-BR', 'pt_PT'],
+  uk: ['Ukrainian', 'Українська', 'uk'], fa: ['Persian', 'Farsi', 'فارسی'], th: ['Thai', 'ไทย'],
+};
+// programming languages and other fence infos: never a language (pl Perl, cs C#, el Emacs Lisp, ml OCaml, sv SystemVerilog)
+var NOT_NAMES = ['', 'js', 'javascript', 'ts', 'typescript', 'py', 'python', 'sh', 'bash', 'pl', 'perl', 'cs', 'csharp', 'el', 'ml', 'ocaml', 'sv',
+  'go', 'rs', 'rust', 'rb', 'json', 'html', 'css', 'sql', 'output', 'text', 'txt', 'diff', 'mermaid', 'md', 'es6', 'c', 'cpp', 'java', 'kotlin', 'swift', 'yaml', 'toml', 'ps', 'mk', 'r', 'lua', 'math'];
+test('langFromName: names, native names and tags; never code-fence languages', function () {
+  Object.keys(NAME_CASES).forEach(function (code) {
+    NAME_CASES[code].forEach(function (n) { assert.strictEqual(T.langFromName(n), code, JSON.stringify(n)); });
+  });
+  NOT_NAMES.forEach(function (n) { assert.strictEqual(T.langFromName(n), '', JSON.stringify(n)); });
+  // every registry language resolves from its English and native name
+  T.LANGS.forEach(function (L) {
+    assert.strictEqual(T.langFromName(L.name), L.code, L.name);
+    assert.strictEqual(T.langFromName(L.native), L.code, L.native);
+  });
+  // English and languages with no on-device model are recognised as such
+  assert.strictEqual(T.langFromName('English'), 'en');
+  assert.strictEqual(T.langFromName('en-GB'), 'en');
+  assert.strictEqual(T.langFromName('Latin'), 'la');
+  assert.strictEqual(T.langName('la'), 'Latin');
+  assert.strictEqual(T.langFromName('Norwegian'), 'nb');
+});
+test('translate-blocks plugin: its language table agrees with the translator', function () {
+  var P = require('../../plugins/translate-blocks/translate-blocks.js');
+  var codes = T.LANGS.map(function (L) { return L.code; }).sort();
+  assert.deepStrictEqual(Object.keys(P.NAMES).sort(), codes);
+  var all = [];
+  Object.keys(P.NAMES).forEach(function (c) { P.NAMES[c].split('|').forEach(function (n) { all.push(n); }); });
+  Object.keys(NAME_CASES).forEach(function (c) { all = all.concat(NAME_CASES[c]); });
+  T.LANGS.forEach(function (L) { all.push(L.name, L.native, L.code + '-XX'); });
+  all.forEach(function (n) {
+    var want = T.langFromName(n);
+    assert.ok(want && codes.indexOf(want) >= 0, 'translator: ' + n + ' -> ' + want);
+    assert.strictEqual(P.langOfInfo(n), want, 'plugin vs translator: ' + JSON.stringify(n));
+  });
+  // bare codes: the same answer (ambiguous ones are '' in both)
+  T.LANGS.forEach(function (L) { assert.strictEqual(P.langOfInfo(L.code), T.langFromName(L.code), L.code); });
+  // no chip for English, other languages or code
+  NOT_NAMES.concat(['English', 'english', 'en', 'en-US', 'Latin', 'Norwegian', 'Esperanto']).forEach(function (n) {
+    assert.strictEqual(P.langOfInfo(n), '', JSON.stringify(n));
+  });
+});
+
 // ---- engine choice (fake Chrome API + fake Cache Storage) ----------------------------------
 function FakeCaches() {
   var buckets = {};

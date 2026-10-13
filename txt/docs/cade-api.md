@@ -198,6 +198,7 @@ stale copies; call again when you need fresh values). Used by e.g. the
 | `window.__calAgenda(dateKey)` | `widgets/calendar` | that day's events (copies) |
 | `window.__cadeDateParse(text, now?)` | `plugins/datechips` | natural-language / absolute dates in `text` → `[{from, to, y, mo, d, time:{h,mi}\|null, rel, …}]` |
 | `window.__cadeSpoilerToggle()` | `plugins/spoiler` | wrap / unwrap the editor selection in `\|\|…\|\|` |
+| `window.__cadeTrInline` | `widgets/decodelab/decodelab-inline.js` (lazy: loaded by the `translate-blocks` chips and the "Translate to English" script) | on-device translation into a ```English block below the source: `translateAtCursor()` → Promise (rejects with a readable Error); chip API `statusAt / pressAt / consentAt / cancelAt(openFrom)`, `version` bumps on state changes |
 
 ## Internal (loader-only — don't call from modules)
 `Cade._setCurrent(ctx)`, `Cade._ctx()`, `Cade._configs`. The loader sets the
@@ -217,6 +218,22 @@ open the core blocks pointer input aimed at the editor, blurs the editor (the iO
 keyboard retracts) and disables text selection inside the panel. Released automatically
 when the last marked panel is removed. Text-input games (e.g. the text adventure) and
 puzzles that let you keep writing beside them should not use it.
+
+## Minimized panels — `Cade.isMinimized(el)`
+Every `mkPanel` panel has a Minimize button (–) beside ×: the panel is hidden (still in
+the DOM, class `cade-minimized`) and waits as a chip in a dock at the bottom; the chip,
+or running the widget's command again, restores it. While a game panel is minimized the
+editor is usable again.
+| Call / event | Does |
+| --- | --- |
+| `Cade.isMinimized(el)` | `true` when `el` (a panel or anything inside one) is minimized |
+| `Cade.minimizePanel(p)` / `Cade.restorePanel(p)` | do it from code |
+| `cade-panel-minimize` / `cade-panel-restore` | bubbling events dispatched on the panel |
+
+Modules with GLOBAL key handlers must return early (no `preventDefault`) while their panel
+is minimized — otherwise they steal the user's typing — and real-time games should pause
+on `cade-panel-minimize`. Guard with `Cade.isMinimized && Cade.isMinimized(panel)` (an
+older cached core may load a newer module).
 
 ## Storage — `Cade.storage`
 | Call | Does |

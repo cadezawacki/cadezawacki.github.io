@@ -1,0 +1,170 @@
+[
+ {
+  "path": "base-memory/zhen/model.zhen.intgemm.alphas.bin",
+  "url": "https://huggingface.co/TiberiuCristianLeon/Bergamot/resolve/18008da9d2922dde09dae47f5fee71cac4253701/base-memory/zhen/model.zhen.intgemm.alphas.bin",
+  "size": 43977787,
+  "sha256": "5cd149601802fc8a18124a1c1306144dbbedc058630c4ddb2d53aa76fa9c7c06",
+  "lang": "zh-Hans"
+ },
+ {
+  "path": "base-memory/zhen/lex.50.50.zhen.s2t.bin",
+  "url": "https://huggingface.co/TiberiuCristianLeon/Bergamot/resolve/18008da9d2922dde09dae47f5fee71cac4253701/base-memory/zhen/lex.50.50.zhen.s2t.bin",
+  "size": 9219192,
+  "sha256": "8524dd4c93ffd7f0ae7be32f77a7c14fea7cdbbebe34ea6ad0ec368d5ddd8b13",
+  "lang": "zh-Hans"
+ },
+ {
+  "path": "base-memory/zh_hanten/model.zh_hanten.intgemm.alphas.bin",
+  "url": "https://huggingface.co/TiberiuCristianLeon/Bergamot/resolve/18008da9d2922dde09dae47f5fee71cac4253701/base-memory/zh_hanten/model.zh_hanten.intgemm.alphas.bin",
+  "size": 43849787,
+  "sha256": "0aee91790894458f5d367551f6edcd4c9cb97852c34f221bcbf9f4701ebcf0cd",
+  "lang": "zh-Hant"
+ },
+ {
+  "path": "base-memory/zh_hanten/lex.50.50.zh_hanten.s2t.bin",
+  "url": "https://huggingface.co/TiberiuCristianLeon/Bergamot/resolve/18008da9d2922dde09dae47f5fee71cac4253701/base-memory/zh_hanten/lex.50.50.zh_hanten.s2t.bin",
+  "size": 6385944,
+  "sha256": "aa7daf6cfc85c0cd2c10e2944d66f6da55497c9c6408789f3adfded4074c2fb1",
+  "lang": "zh-Hant"
+ },
+ {
+  "path": "base-memory/zh_hanten/srcvocab.zh_hanten.spm",
+  "url": "https://huggingface.co/TiberiuCristianLeon/Bergamot/resolve/18008da9d2922dde09dae47f5fee71cac4253701/base-memory/zh_hanten/srcvocab.zh_hanten.spm",
+  "size": 769669,
+  "sha256": "5cc6a76611dbf86219f109141533606b15ecb34eee83673bb86b2c16b14734db",
+  "lang": "zh-Hant"
+ },
+ {
+  "path": "base-memory/zh_hanten/trgvocab.zh_hanten.spm",
+  "url": "https://huggingface.co/TiberiuCristianLeon/Bergamot/resolve/18008da9d2922dde09dae47f5fee71cac4253701/base-memory/zh_hanten/trgvocab.zh_hanten.spm",
+  "size": 812572,
+  "sha256": "7bf002db37c10d3b114cc5588d7fdcb16c57d0fd1e2c34354c22cc9f0b6c3c29",
+  "lang": "zh-Hant"
+ },
+ {
+  "path": "base-memory/jaen/model.jaen.intgemm.alphas.bin",
+  "url": "https://huggingface.co/TiberiuCristianLeon/Bergamot/resolve/18008da9d2922dde09dae47f5fee71cac4253701/base-memory/jaen/model.jaen.intgemm.alphas.bin",
+  "size": 43977787,
+  "sha256": "3a603e20bfe1be86071913f9e23ab5129075bc0a8490151020ac4821e4f17302",
+  "lang": "ja"
+ },
+ {
+  "path": "base-memory/jaen/lex.50.50.jaen.s2t.bin",
+  "url": "https://huggingface.co/TiberiuCristianLeon/Bergamot/resolve/18008da9d2922dde09dae47f5fee71cac4253701/base-memory/jaen/lex.50.50.jaen.s2t.bin",
+  "size": 9348172,
+  "sha256": "525f412f0d210536c2933c78ae395fa0bf2b5ee6cc5dda61ebc2e79410ebaee4",
+  "lang": "ja"
+ },
+ {
+  "path": "base-memory/koen/model.koen.intgemm.alphas.bin",
+  "url": "https://huggingface.co/TiberiuCristianLeon/Bergamot/resolve/18008da9d2922dde09dae47f5fee71cac4253701/base-memory/koen/model.koen.intgemm.alphas.bin",
+  "size": 43977787,
+  "sha256": "7cb30cbc0a86e242084756445268a2346136771c92b884d9b4ebb077f67d5507",
+  "lang": "ko"
+ },
+ {
+  "path": "base-memory/koen/lex.50.50.koen.s2t.bin",
+  "url": "https://huggingface.co/TiberiuCristianLeon/Bergamot/resolve/18008da9d2922dde09dae47f5fee71cac4253701/base-memory/koen/lex.50.50.koen.s2t.bin",
+  "size": 8617516,
+  "sha256": "b26291f063ce216a74239275f0485534a38111203e59d42a2a56ba62d6eeb196",
+  "lang": "ko"
+ },
+ {
+  "path": "base-memory/aren/model.aren.intgemm.alphas.bin",
+  "url": "https://huggingface.co/TiberiuCristianLeon/Bergamot/resolve/18008da9d2922dde09dae47f5fee71cac4253701/base-memory/aren/model.aren.intgemm.alphas.bin",
+  "size": 31561787,
+  "sha256": "7b7af0282dc5f4d8805b9a298c2fa828967e3f09ca10f1942ebeea0b2cfc12fa",
+  "lang": "ar"
+ },
+ {
+  "path": "base-memory/aren/lex.50.50.aren.s2t.bin",
+  "url": "https://huggingface.co/TiberiuCristianLeon/Bergamot/resolve/18008da9d2922dde09dae47f5fee71cac4253701/base-memory/aren/lex.50.50.aren.s2t.bin",
+  "size": 4627200,
+  "sha256": "4b45f14dbea40d368093a13563fc1ca48457ee70c1291c82b206f3baff210081",
+  "lang": "ar"
+ },
+ {
+  "path": "base-memory/bsen/model.bsen.intgemm.alphas.bin",
+  "url": "https://huggingface.co/TiberiuCristianLeon/Bergamot/resolve/18008da9d2922dde09dae47f5fee71cac4253701/base-memory/bsen/model.bsen.intgemm.alphas.bin",
+  "size": 31561787,
+  "sha256": "744c61ec0b987c44717f192fcebda7c2a1ac34f5cbfb56672771d28ff79c82c7",
+  "lang": "bs"
+ },
+ {
+  "path": "base-memory/bsen/lex.50.50.bsen.s2t.bin",
+  "url": "https://huggingface.co/TiberiuCristianLeon/Bergamot/resolve/18008da9d2922dde09dae47f5fee71cac4253701/base-memory/bsen/lex.50.50.bsen.s2t.bin",
+  "size": 5155408,
+  "sha256": "dccff06320cb87aaa6f93c246038b453d0d0c6f47fa3acd1162f104ac6a2c43f",
+  "lang": "bs"
+ },
+ {
+  "path": "base-memory/bsen/vocab.bsen.spm",
+  "url": "https://huggingface.co/TiberiuCristianLeon/Bergamot/resolve/18008da9d2922dde09dae47f5fee71cac4253701/base-memory/bsen/vocab.bsen.spm",
+  "size": 817335,
+  "sha256": "320561e2cef014a6d626a64822add3a387c91f609f23ea3b7f421d194075c14c",
+  "lang": "bs"
+ },
+ {
+  "path": "tiny/caen/model.caen.intgemm.alphas.bin",
+  "url": "https://huggingface.co/TiberiuCristianLeon/Bergamot/resolve/18008da9d2922dde09dae47f5fee71cac4253701/tiny/caen/model.caen.intgemm.alphas.bin",
+  "size": 17140899,
+  "sha256": "3a315266490d87f72adf9e5387ee567b2fb76a30018e51586b882b1d87bf5aed",
+  "lang": "ca"
+ },
+ {
+  "path": "tiny/caen/lex.50.50.caen.s2t.bin",
+  "url": "https://huggingface.co/TiberiuCristianLeon/Bergamot/resolve/18008da9d2922dde09dae47f5fee71cac4253701/tiny/caen/lex.50.50.caen.s2t.bin",
+  "size": 5244644,
+  "sha256": "a648be17d6f008feee687b455d00dbfaedba2ead8bee32658783c4325a8d3ece",
+  "lang": "ca"
+ },
+ {
+  "path": "tiny/caen/vocab.caen.spm",
+  "url": "https://huggingface.co/TiberiuCristianLeon/Bergamot/resolve/18008da9d2922dde09dae47f5fee71cac4253701/tiny/caen/vocab.caen.spm",
+  "size": 811443,
+  "sha256": "10a1f25e5640f596b547190082f87ba4994f8714693904c82a35d965b9cc7470",
+  "lang": "ca"
+ },
+ {
+  "path": "tiny/csen/model.csen.intgemm.alphas.bin",
+  "url": "https://huggingface.co/TiberiuCristianLeon/Bergamot/resolve/18008da9d2922dde09dae47f5fee71cac4253701/tiny/csen/model.csen.intgemm.alphas.bin",
+  "size": 17141051,
+  "sha256": "4ee5b7906f90ad2407232c077581a247b41ac3886d785be82c5d3657433106ae",
+  "lang": "cs"
+ },
+ {
+  "path": "tiny/csen/lex.50.50.csen.s2t.bin",
+  "url": "https://huggingface.co/TiberiuCristianLeon/Bergamot/resolve/18008da9d2922dde09dae47f5fee71cac4253701/tiny/csen/lex.50.50.csen.s2t.bin",
+  "size": 4839160,
+  "sha256": "4c302fa188e65ddc55d8191a632e08f66dde7a060cc93df55ef83f0629548385",
+  "lang": "cs"
+ },
+ {
+  "path": "tiny/csen/vocab.csen.spm",
+  "url": "https://huggingface.co/TiberiuCristianLeon/Bergamot/resolve/18008da9d2922dde09dae47f5fee71cac4253701/tiny/csen/vocab.csen.spm",
+  "size": 799978,
+  "sha256": "89c4f6f5cadbc72b25b30079fabf655b897a1bbeaf3eb8adf95d469e10ece265",
+  "lang": "cs"
+ },
+ {
+  "path": "base-memory/then/model.then.intgemm.alphas.bin",
+  "url": "https://huggingface.co/TiberiuCristianLeon/Bergamot/resolve/18008da9d2922dde09dae47f5fee71cac4253701/base-memory/then/model.then.intgemm.alphas.bin",
+  "size": 31561787,
+  "sha256": "f70a501324743668b031bee19cd001a66839e8e5dfc0b4a1c44d5ea99d4e8d66",
+  "lang": "th"
+ },
+ {
+  "path": "base-memory/then/lex.50.50.then.s2t.bin",
+  "url": "https://huggingface.co/TiberiuCristianLeon/Bergamot/resolve/18008da9d2922dde09dae47f5fee71cac4253701/base-memory/then/lex.50.50.then.s2t.bin",
+  "size": 4487056,
+  "sha256": "3a7661a7f5c811c83f05f53008083b042fea0334fc6044ca1fda4982a8d48453",
+  "lang": "th"
+ },
+ {
+  "path": "base-memory/then/vocab.then.spm",
+  "url": "https://huggingface.co/TiberiuCristianLeon/Bergamot/resolve/18008da9d2922dde09dae47f5fee71cac4253701/base-memory/then/vocab.then.spm",
+  "size": 995429,
+  "sha256": "b625d3dcdfa2b4bbec496c9a0a30d169c917464ac5ea75506c0699972fea95f0",
+  "lang": "th"
+ }
+]

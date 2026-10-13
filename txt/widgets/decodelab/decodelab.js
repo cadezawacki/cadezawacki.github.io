@@ -25,7 +25,7 @@
   var CORE_URL = Cade.asset('decodelab-core.js');
   var DATA_URL = Cade.asset('decodelab-data.js');
   var TR_URL = Cade.asset('decodelab-translate.js');
-  var TRW_URL = Cade.asset('decodelab-translate-worker.js') + '?v=1'; // ?v= must match the manifest precache entry
+  var TRW_URL = Cade.asset('decodelab-translate-worker.js') + '?v=2'; // ?v= must match the manifest precache entry
   var esc = Cade.escapeHtml;
 
   var PANEL_ID = 'decodelab-panel';
@@ -353,6 +353,7 @@
       if ((b = t.closest('.dl-atarget-x'))) { P.aTarget = null; renderAnalysis(); return; }
       if ((b = t.closest('[data-addop]'))) { addStep(b.getAttribute('data-addop')); setTab('manual'); return; }
       if (t.closest('.dl-o-langs')) { P.tr.mgr = true; setTab('translate'); return; }
+      if (t.closest('.dl-intr')) { var iv = currentInput(); P.tr.text = isBytes(iv) ? '' : iv; P.tr.fromInput = true; P.tr.forced = ''; P.tr.out = null; P.tr.err = ''; setTab('translate'); return; }
       if (translateClick(e, t)) return;
       if ((b = t.closest('.dl-ftbl'))) { var tb = b.parentNode.querySelector('.dl-table'); if (tb) { tb.hidden = !tb.hidden; b.textContent = tb.hidden ? 'Show table' : 'Hide table'; } return; }
       manualClick(e, t);
@@ -543,10 +544,13 @@
         return;
       }
     }
-    if (pr && pr.input && pr.input.score >= CLEAR) {
-      html += '<div class="dl-banner">The input already reads as <b>' + esc(pr.input.langName || 'text') + '</b> (score ' + pr.input.score + ') — the results below are other readings.</div>';
+    var readable = !!(pr && pr.input && pr.input.score >= CLEAR);
+    if (readable) {
+      var foreign = pr.input.lang && !NOT_LANG.test(pr.input.lang) && !isBytes(currentInput());
+      html += '<div class="dl-banner">The input already reads as <b>' + esc(pr.input.langName || 'text') + '</b> (score ' + pr.input.score + ') — the results below are other readings.' +
+        (foreign ? ' <button class="dl-abtn dl-trbtn dl-intr" title="Translate the input into English on this device">🌐 English</button>' : '') + '</div>';
     }
-    if (!P.running && pr) {
+    if (!P.running && pr && !readable) {
       var best = rs[0];
       if (!best || best.score < 40) html += '<div class="dl-banner warn">Nothing clearly readable yet. Try a deeper search or more time (⚙), check the <b>Analysis</b> tab for clues, or build it step by step in <b>Manual</b>.</div>';
     }
@@ -1351,7 +1355,7 @@
     name: 'Decode Lab',
     description: 'Auto-decode mystery text: Base64/hex/Morse/… chains, Caesar, Vigenère, XOR & more, frequency analysis, offline translation to English',
     icon: '🔓',
-    tags: 'decode,decoder,cipher,brute force,base64,caesar,vigenere,xor,crypto,ctf,frequency analysis,identify,magic,rot13,morse,hex,encoding,puzzle,cryptanalysis,kasiski,index of coincidence,translate,translation,offline translation,english',
+    tags: 'decode,decoder,cipher,brute force,base64,caesar,vigenere,xor,crypto,ctf,frequency analysis,identify,magic,rot13,morse,hex,encoding,puzzle,cryptanalysis,kasiski,index of coincidence,translate,translation,translator,translate to english,offline translation,english,language,detect language,foreign language',
     open: open,
   });
 })();

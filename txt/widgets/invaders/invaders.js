@@ -840,6 +840,7 @@
     s.onKey = function (e) {
       if (S !== s || e.ctrlKey || e.metaKey || e.altKey) return;
       if (!s.canvas.isConnected) { teardown(); return; }   // panel removed without _onClose
+      if (Cade.isMinimized && Cade.isMinimized(p)) return; // parked in the dock: keys belong to the editor
       var tag = e.target && e.target.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
       var key = (e.key || '').toLowerCase(), down = e.type === 'keydown';
@@ -862,6 +863,14 @@
     s.onBlur = function () { setPaused(s, true); };
     document.addEventListener('visibilitychange', s.onVis);
     window.addEventListener('blur', s.onBlur);
+    // Minimized to the dock: pause like a tab switch (Resume waits for the player
+    // after restore) and stop the attract loop meanwhile; restore restarts it.
+    p.addEventListener('cade-panel-minimize', function () {
+      if (S !== s) return;
+      setPaused(s, true);
+      if (s.raf) { cancelAnimationFrame(s.raf); s.raf = 0; }
+    });
+    p.addEventListener('cade-panel-restore', function () { if (S === s && !s.paused) kick(s); });
     s.onResize = function () { clearTimeout(s.resizeT); s.resizeT = setTimeout(function () { if (S === s) fit(s, false); }, 120); };
     window.addEventListener('resize', s.onResize);
     try {

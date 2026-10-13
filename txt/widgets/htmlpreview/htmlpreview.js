@@ -148,6 +148,7 @@
     timer = 0;
     var ed = Cade.editor;
     if (!panel || !K || !ed || !ifr) return;
+    if (Cade.isMinimized && Cade.isMinimized(panel)) return; // parked in the dock: catch up on restore
     var c = collect(ed.state.doc);
     if (!c) { // no html / css / js block left in the room
       st.key = ''; st.built = null;
@@ -436,6 +437,7 @@
     Cade.closeAllMenus();
     st = freshState();
     panel = Cade.mkPanel(PANEL_ID, 'Live HTML Preview', panelHTML());
+    panel.addEventListener('cade-panel-restore', function () { refresh(false); });
     panel.classList.add('hp-panel');
     var body = panel.querySelector('.cade-panel-body');
     ifr = document.createElement('iframe');
@@ -456,6 +458,7 @@
     }, true);
     window.addEventListener('message', onMessage);
     keyHandler = function (e) {
+      if (Cade.isMinimized && Cade.isMinimized(panel)) return; // parked in the dock: keys belong to the editor
       if (e.key === 'Escape' && panel && dockNow() === 'full' && !isPhone()) { e.preventDefault(); e.stopPropagation(); setDock('float'); }
     };
     document.addEventListener('keydown', keyHandler, true);

@@ -1,0 +1,702 @@
+[
+ {
+  "path": "iten/model.iten.intgemm.alphas.bin",
+  "url": "https://huggingface.co/manateelazycat/firefox-translations-93-pairs/resolve/32fd180b178abf56cb0ff01410ab23d470074966/iten/model.iten.intgemm.alphas.bin",
+  "size": 31561787,
+  "sha256": "21b70978ce2f3b4da7a06b5de86a09abe3acd30b9eee1b2ebb3582b9bad790bf",
+  "lang": "it"
+ },
+ {
+  "path": "iten/lex.50.50.iten.s2t.bin",
+  "url": "https://huggingface.co/manateelazycat/firefox-translations-93-pairs/resolve/32fd180b178abf56cb0ff01410ab23d470074966/iten/lex.50.50.iten.s2t.bin",
+  "size": 4713616,
+  "sha256": "0700d6d70b30490e68ff9deca0b45b80310745b491855bde3a13e1692d0cbce1",
+  "lang": "it"
+ },
+ {
+  "path": "iten/vocab.iten.spm",
+  "url": "https://huggingface.co/manateelazycat/firefox-translations-93-pairs/resolve/32fd180b178abf56cb0ff01410ab23d470074966/iten/vocab.iten.spm",
+  "size": 812724,
+  "sha256": "3ef0211d4ae6db21440892f180f2019fe2bfc110a330ffa9d2eca9665e4f2bc5",
+  "lang": "it"
+ },
+ {
+  "path": "pten/model.pten.intgemm.alphas.bin",
+  "url": "https://huggingface.co/manateelazycat/firefox-translations-93-pairs/resolve/32fd180b178abf56cb0ff01410ab23d470074966/pten/model.pten.intgemm.alphas.bin",
+  "size": 31561787,
+  "sha256": "7b854f1ec5a485dd33efd7c1bc01dd7d5a57f566957c5e47722af333f0ce9157",
+  "lang": "pt"
+ },
+ {
+  "path": "pten/lex.50.50.pten.s2t.bin",
+  "url": "https://huggingface.co/manateelazycat/firefox-translations-93-pairs/resolve/32fd180b178abf56cb0ff01410ab23d470074966/pten/lex.50.50.pten.s2t.bin",
+  "size": 4634492,
+  "sha256": "2685d8b6530be92a4db4cc61f15a097eb114552be15cb6c1699e9d2d99d24470",
+  "lang": "pt"
+ },
+ {
+  "path": "pten/vocab.pten.spm",
+  "url": "https://huggingface.co/manateelazycat/firefox-translations-93-pairs/resolve/32fd180b178abf56cb0ff01410ab23d470074966/pten/vocab.pten.spm",
+  "size": 816726,
+  "sha256": "d9f46182823d5bbc84201252b2dfcac28f63e561f0ec827ed858f241864c9def",
+  "lang": "pt"
+ },
+ {
+  "path": "nlen/model.nlen.intgemm.alphas.bin",
+  "url": "https://huggingface.co/manateelazycat/firefox-translations-93-pairs/resolve/32fd180b178abf56cb0ff01410ab23d470074966/nlen/model.nlen.intgemm.alphas.bin",
+  "size": 31561787,
+  "sha256": "ff987741ff15a5d94fff16cbef28f2b0a85a6e9547d982fad60ac09d16d11270",
+  "lang": "nl"
+ },
+ {
+  "path": "nlen/lex.50.50.nlen.s2t.bin",
+  "url": "https://huggingface.co/manateelazycat/firefox-translations-93-pairs/resolve/32fd180b178abf56cb0ff01410ab23d470074966/nlen/lex.50.50.nlen.s2t.bin",
+  "size": 4862412,
+  "sha256": "811ac8f9dcbd12706e2d73a7057a7bbe6b9f0607d15170ffe9439977e8229b41",
+  "lang": "nl"
+ },
+ {
+  "path": "nlen/vocab.nlen.spm",
+  "url": "https://huggingface.co/manateelazycat/firefox-translations-93-pairs/resolve/32fd180b178abf56cb0ff01410ab23d470074966/nlen/vocab.nlen.spm",
+  "size": 807708,
+  "sha256": "c09588ca5662b230ed65bd39a07f58d9f7dd21c3a19e4aeb1bff39bf3b297c56",
+  "lang": "nl"
+ },
+ {
+  "path": "ruen/model.ruen.intgemm.alphas.bin",
+  "url": "https://huggingface.co/manateelazycat/firefox-translations-93-pairs/resolve/32fd180b178abf56cb0ff01410ab23d470074966/ruen/model.ruen.intgemm.alphas.bin",
+  "size": 17141051,
+  "sha256": "b1d85c13cfbb05e1d326dd6f0fb5ef270a2011b547450260f96567a93f446c94",
+  "lang": "ru"
+ },
+ {
+  "path": "ruen/lex.50.50.ruen.s2t.bin",
+  "url": "https://huggingface.co/manateelazycat/firefox-translations-93-pairs/resolve/32fd180b178abf56cb0ff01410ab23d470074966/ruen/lex.50.50.ruen.s2t.bin",
+  "size": 4483844,
+  "sha256": "f654693577505fd38b1f3d220cdd4ffffbb45afb900a60cf751f0724eadc74e0",
+  "lang": "ru"
+ },
+ {
+  "path": "ruen/vocab.ruen.spm",
+  "url": "https://huggingface.co/manateelazycat/firefox-translations-93-pairs/resolve/32fd180b178abf56cb0ff01410ab23d470074966/ruen/vocab.ruen.spm",
+  "size": 905257,
+  "sha256": "93bdc941b16e523695c319f74778bca9fd8b75a25ad75020cdc98aef74cdc0fc",
+  "lang": "ru"
+ },
+ {
+  "path": "uken/model.uken.intgemm.alphas.bin",
+  "url": "https://huggingface.co/manateelazycat/firefox-translations-93-pairs/resolve/32fd180b178abf56cb0ff01410ab23d470074966/uken/model.uken.intgemm.alphas.bin",
+  "size": 17141051,
+  "sha256": "2e7b8bc9d2569d8b4ae244e964cdc343a0aa3735cc83ecb664be84a37cb45f48",
+  "lang": "uk"
+ },
+ {
+  "path": "uken/lex.50.50.uken.s2t.bin",
+  "url": "https://huggingface.co/manateelazycat/firefox-translations-93-pairs/resolve/32fd180b178abf56cb0ff01410ab23d470074966/uken/lex.50.50.uken.s2t.bin",
+  "size": 3914120,
+  "sha256": "32b5e0df493671a223cb5cb32430181cbb7fe6b5562c91dbc3d35410d37e5ff6",
+  "lang": "uk"
+ },
+ {
+  "path": "uken/vocab.uken.spm",
+  "url": "https://huggingface.co/manateelazycat/firefox-translations-93-pairs/resolve/32fd180b178abf56cb0ff01410ab23d470074966/uken/vocab.uken.spm",
+  "size": 886410,
+  "sha256": "8b51480dfc4ca2d7a08d2bfdaa9e57353ca97e6cf3d5f9aba4c0179d3665bfc0",
+  "lang": "uk"
+ },
+ {
+  "path": "plen/model.plen.intgemm.alphas.bin",
+  "url": "https://huggingface.co/manateelazycat/firefox-translations-93-pairs/resolve/32fd180b178abf56cb0ff01410ab23d470074966/plen/model.plen.intgemm.alphas.bin",
+  "size": 17140899,
+  "sha256": "172a5f1d44bf8dd6a6eec3868b13b33ce265f3530e898fe11a80b739b821726e",
+  "lang": "pl"
+ },
+ {
+  "path": "plen/lex.50.50.plen.s2t.bin",
+  "url": "https://huggingface.co/manateelazycat/firefox-translations-93-pairs/resolve/32fd180b178abf56cb0ff01410ab23d470074966/plen/lex.50.50.plen.s2t.bin",
+  "size": 4898024,
+  "sha256": "863afade0ba058fb0173fedef3d1fb14d0dcabc24c3b4584cb1fed8f84d6d879",
+  "lang": "pl"
+ },
+ {
+  "path": "enpl/vocab.enpl.spm",
+  "url": "https://huggingface.co/manateelazycat/firefox-translations-93-pairs/resolve/32fd180b178abf56cb0ff01410ab23d470074966/enpl/vocab.enpl.spm",
+  "size": 822587,
+  "sha256": "a1d27e6f5c0d29f406364ebf0382949d1c0affc750cec4380f3173150552f43e",
+  "lang": "pl"
+ },
+ {
+  "path": "tren/model.tren.intgemm.alphas.bin",
+  "url": "https://huggingface.co/manateelazycat/firefox-translations-93-pairs/resolve/32fd180b178abf56cb0ff01410ab23d470074966/tren/model.tren.intgemm.alphas.bin",
+  "size": 17140836,
+  "sha256": "bd18594ac5a7f1d9997e7ea5bd80272082219cf8b1ce604766e4f207eb86abbf",
+  "lang": "tr"
+ },
+ {
+  "path": "tren/lex.50.50.tren.s2t.bin",
+  "url": "https://huggingface.co/manateelazycat/firefox-translations-93-pairs/resolve/32fd180b178abf56cb0ff01410ab23d470074966/tren/lex.50.50.tren.s2t.bin",
+  "size": 4662492,
+  "sha256": "d3374ab5267a73ee1aa1d926a298bd349426835f40856991ee959bc5cd4f9fce",
+  "lang": "tr"
+ },
+ {
+  "path": "tren/vocab.tren.spm",
+  "url": "https://huggingface.co/manateelazycat/firefox-translations-93-pairs/resolve/32fd180b178abf56cb0ff01410ab23d470074966/tren/vocab.tren.spm",
+  "size": 811353,
+  "sha256": "ed328e589a3ccd70fd3ce7773fc3c01d8b7b18c687464cacf17fd40a8c0daadd",
+  "lang": "tr"
+ },
+ {
+  "path": "zhen/vocab.zhen.spm",
+  "url": "https://huggingface.co/manateelazycat/firefox-translations-93-pairs/resolve/32fd180b178abf56cb0ff01410ab23d470074966/zhen/vocab.zhen.spm",
+  "size": 1359697,
+  "sha256": "dff594318ab7d8b7b60b844ab98ebe6b932ae8045fab15235404c787715965b3",
+  "lang": "zh-Hans"
+ },
+ {
+  "path": "jaen/vocab.jaen.spm",
+  "url": "https://huggingface.co/manateelazycat/firefox-translations-93-pairs/resolve/32fd180b178abf56cb0ff01410ab23d470074966/jaen/vocab.jaen.spm",
+  "size": 1443222,
+  "sha256": "5cb217758bae05877bb3f0c2f612e4e7c1e4cb03c10db11f4a47098d7ae62919",
+  "lang": "ja"
+ },
+ {
+  "path": "koen/vocab.koen.spm",
+  "url": "https://huggingface.co/manateelazycat/firefox-translations-93-pairs/resolve/32fd180b178abf56cb0ff01410ab23d470074966/koen/vocab.koen.spm",
+  "size": 1410063,
+  "sha256": "1c72b740ab793cdc3a8f16913dd6b4e806c77421077dd2d85edeb7be38418598",
+  "lang": "ko"
+ },
+ {
+  "path": "aren/vocab.aren.spm",
+  "url": "https://huggingface.co/manateelazycat/firefox-translations-93-pairs/resolve/32fd180b178abf56cb0ff01410ab23d470074966/aren/vocab.aren.spm",
+  "size": 860035,
+  "sha256": "51b4ee3f828d10015464523d0b4f5a6c086b0b2a9bde716a581001cf6c260366",
+  "lang": "ar"
+ },
+ {
+  "path": "bnen/model.bnen.intgemm.alphas.bin",
+  "url": "https://huggingface.co/manateelazycat/firefox-translations-93-pairs/resolve/32fd180b178abf56cb0ff01410ab23d470074966/bnen/model.bnen.intgemm.alphas.bin",
+  "size": 17141051,
+  "sha256": "14c1d9e92918e8d04cb0ed351ae386c3b5d5c62a6dc601d9515f4c7e6c2a3a56",
+  "lang": "bn"
+ },
+ {
+  "path": "bnen/lex.50.50.bnen.s2t.bin",
+  "url": "https://huggingface.co/manateelazycat/firefox-translations-93-pairs/resolve/32fd180b178abf56cb0ff01410ab23d470074966/bnen/lex.50.50.bnen.s2t.bin",
+  "size": 4793596,
+  "sha256": "aea901a6bd8722962551c0349b8570af684444028b62bbff465be9931e6e9800",
+  "lang": "bn"
+ },
+ {
+  "path": "bnen/vocab.bnen.spm",
+  "url": "https://huggingface.co/manateelazycat/firefox-translations-93-pairs/resolve/32fd180b178abf56cb0ff01410ab23d470074966/bnen/vocab.bnen.spm",
+  "size": 981300,
+  "sha256": "8a6a4de992ccd47bae4227ec6420866374137d6cc88ed6e8b2f16b36322a9d37",
+  "lang": "bn"
+ },
+ {
+  "path": "daen/model.daen.intgemm.alphas.bin",
+  "url": "https://huggingface.co/manateelazycat/firefox-translations-93-pairs/resolve/32fd180b178abf56cb0ff01410ab23d470074966/daen/model.daen.intgemm.alphas.bin",
+  "size": 17141051,
+  "sha256": "2c1ace24220c905404bbb1de14bfeda8a391ef8d6c56f3b193a9d3e340d99b12",
+  "lang": "da"
+ },
+ {
+  "path": "daen/lex.50.50.daen.s2t.bin",
+  "url": "https://huggingface.co/manateelazycat/firefox-translations-93-pairs/resolve/32fd180b178abf56cb0ff01410ab23d470074966/daen/lex.50.50.daen.s2t.bin",
+  "size": 4489412,
+  "sha256": "e5f50fba646e0d3cedf2957575aa84c3bdca6798ce32ccd63c956fc043d774a3",
+  "lang": "da"
+ },
+ {
+  "path": "daen/vocab.daen.spm",
+  "url": "https://huggingface.co/manateelazycat/firefox-translations-93-pairs/resolve/32fd180b178abf56cb0ff01410ab23d470074966/daen/vocab.daen.spm",
+  "size": 796018,
+  "sha256": "b9392fcd9c53b802628d33a160f6eb52ca3d25a07ec9e015ab93b6bd5c7e8033",
+  "lang": "da"
+ },
+ {
+  "path": "elen/model.elen.intgemm.alphas.bin",
+  "url": "https://huggingface.co/manateelazycat/firefox-translations-93-pairs/resolve/32fd180b178abf56cb0ff01410ab23d470074966/elen/model.elen.intgemm.alphas.bin",
+  "size": 17141051,
+  "sha256": "0a43c3716156061494d995d0c88113e789f8d919e0c88a15bc1ad360e0482a8c",
+  "lang": "el"
+ },
+ {
+  "path": "elen/lex.50.50.elen.s2t.bin",
+  "url": "https://huggingface.co/manateelazycat/firefox-translations-93-pairs/resolve/32fd180b178abf56cb0ff01410ab23d470074966/elen/lex.50.50.elen.s2t.bin",
+  "size": 4295860,
+  "sha256": "2c969b069b3d230feddd17db2d74eb658a9b33b960d2d40adbca5496c9784e85",
+  "lang": "el"
+ },
+ {
+  "path": "elen/vocab.elen.spm",
+  "url": "https://huggingface.co/manateelazycat/firefox-translations-93-pairs/resolve/32fd180b178abf56cb0ff01410ab23d470074966/elen/vocab.elen.spm",
+  "size": 894960,
+  "sha256": "e1a1298cc2cf3968f3d7cc3b36bc463a4e1bf154272e8fb2f15142b54edc4349",
+  "lang": "el"
+ },
+ {
+  "path": "faen/model.faen.intgemm.alphas.bin",
+  "url": "https://huggingface.co/manateelazycat/firefox-translations-93-pairs/resolve/32fd180b178abf56cb0ff01410ab23d470074966/faen/model.faen.intgemm.alphas.bin",
+  "size": 17141051,
+  "sha256": "aa326306c177e11129de5bfeba518abc499c0b6005492766748a9c9ea6f4c712",
+  "lang": "fa"
+ },
+ {
+  "path": "faen/lex.50.50.faen.s2t.bin",
+  "url": "https://huggingface.co/manateelazycat/firefox-translations-93-pairs/resolve/32fd180b178abf56cb0ff01410ab23d470074966/faen/lex.50.50.faen.s2t.bin",
+  "size": 3896420,
+  "sha256": "4828cb060bd4375f8aabb85fed39c18aca52b738838394546f2ddbf707a6f28e",
+  "lang": "fa"
+ },
+ {
+  "path": "faen/vocab.faen.spm",
+  "url": "https://huggingface.co/manateelazycat/firefox-translations-93-pairs/resolve/32fd180b178abf56cb0ff01410ab23d470074966/faen/vocab.faen.spm",
+  "size": 843153,
+  "sha256": "bf36943053883d6c0fc98c2985f676a0a37042e796bad0e3df0a813d9d5393f4",
+  "lang": "fa"
+ },
+ {
+  "path": "fien/model.fien.intgemm.alphas.bin",
+  "url": "https://huggingface.co/manateelazycat/firefox-translations-93-pairs/resolve/32fd180b178abf56cb0ff01410ab23d470074966/fien/model.fien.intgemm.alphas.bin",
+  "size": 31561787,
+  "sha256": "e3887341f18bcc7787d9b59eb1229b56eefce18d49b7ebf1e62c55d65a377321",
+  "lang": "fi"
+ },
+ {
+  "path": "fien/lex.50.50.fien.s2t.bin",
+  "url": "https://huggingface.co/manateelazycat/firefox-translations-93-pairs/resolve/32fd180b178abf56cb0ff01410ab23d470074966/fien/lex.50.50.fien.s2t.bin",
+  "size": 5195132,
+  "sha256": "8bad431e07b062ba47f363b76e4656cc743fd608316d8a4830a4315e44ac9abb",
+  "lang": "fi"
+ },
+ {
+  "path": "fien/vocab.fien.spm",
+  "url": "https://huggingface.co/manateelazycat/firefox-translations-93-pairs/resolve/32fd180b178abf56cb0ff01410ab23d470074966/fien/vocab.fien.spm",
+  "size": 818770,
+  "sha256": "6a866911427f2916609ae89c7f2f04a78de3fdd8aa183039ecba986635d4f246",
+  "lang": "fi"
+ },
+ {
+  "path": "guen/model.guen.intgemm.alphas.bin",
+  "url": "https://huggingface.co/manateelazycat/firefox-translations-93-pairs/resolve/32fd180b178abf56cb0ff01410ab23d470074966/guen/model.guen.intgemm.alphas.bin",
+  "size": 17141051,
+  "sha256": "7b16e4e64f2776c73d87db01922c091738566b6a6092a42488cbaee1385cb4ab",
+  "lang": "gu"
+ },
+ {
+  "path": "guen/lex.50.50.guen.s2t.bin",
+  "url": "https://huggingface.co/manateelazycat/firefox-translations-93-pairs/resolve/32fd180b178abf56cb0ff01410ab23d470074966/guen/lex.50.50.guen.s2t.bin",
+  "size": 4197836,
+  "sha256": "af01dbec5a1555ddad7c4b19878ecda00e6f9d179ca76a40ab2413de6b081cb0",
+  "lang": "gu"
+ },
+ {
+  "path": "guen/vocab.guen.spm",
+  "url": "https://huggingface.co/manateelazycat/firefox-translations-93-pairs/resolve/32fd180b178abf56cb0ff01410ab23d470074966/guen/vocab.guen.spm",
+  "size": 965143,
+  "sha256": "6ad2aa442cc04398bd06b4f03a1027939bbfbaac5f87b3d21f667406f4f62704",
+  "lang": "gu"
+ },
+ {
+  "path": "heen/model.heen.intgemm.alphas.bin",
+  "url": "https://huggingface.co/manateelazycat/firefox-translations-93-pairs/resolve/32fd180b178abf56cb0ff01410ab23d470074966/heen/model.heen.intgemm.alphas.bin",
+  "size": 17141051,
+  "sha256": "7291cab3ec483b8cf524da96201fe947dca8c550132be21a06badeb946b5c079",
+  "lang": "he"
+ },
+ {
+  "path": "heen/lex.50.50.heen.s2t.bin",
+  "url": "https://huggingface.co/manateelazycat/firefox-translations-93-pairs/resolve/32fd180b178abf56cb0ff01410ab23d470074966/heen/lex.50.50.heen.s2t.bin",
+  "size": 4636028,
+  "sha256": "427c88732cb93b28d2a947cace79f62aabceb7d6f4438516e85994b14a73b68e",
+  "lang": "he"
+ },
+ {
+  "path": "heen/vocab.heen.spm",
+  "url": "https://huggingface.co/manateelazycat/firefox-translations-93-pairs/resolve/32fd180b178abf56cb0ff01410ab23d470074966/heen/vocab.heen.spm",
+  "size": 845177,
+  "sha256": "45f5d413b9208c5f24340ab0e20a63604a572784d289baa2d788deea946f79a2",
+  "lang": "he"
+ },
+ {
+  "path": "hien/model.hien.intgemm.alphas.bin",
+  "url": "https://huggingface.co/manateelazycat/firefox-translations-93-pairs/resolve/32fd180b178abf56cb0ff01410ab23d470074966/hien/model.hien.intgemm.alphas.bin",
+  "size": 17141051,
+  "sha256": "c82fd6ed3794b79fb9dde0718a22324502a408a9eca73497b5d0a4b8024ec6de",
+  "lang": "hi"
+ },
+ {
+  "path": "hien/lex.50.50.hien.s2t.bin",
+  "url": "https://huggingface.co/manateelazycat/firefox-translations-93-pairs/resolve/32fd180b178abf56cb0ff01410ab23d470074966/hien/lex.50.50.hien.s2t.bin",
+  "size": 4605984,
+  "sha256": "e789be33dfdb639e98f5cf9eb01aa945ec3c882f68f3c8860389cf846f0112d8",
+  "lang": "hi"
+ },
+ {
+  "path": "hien/vocab.hien.spm",
+  "url": "https://huggingface.co/manateelazycat/firefox-translations-93-pairs/resolve/32fd180b178abf56cb0ff01410ab23d470074966/hien/vocab.hien.spm",
+  "size": 925436,
+  "sha256": "9cbc02094ac2ebd75211b3bb6789a9d6fa112ce3c08e897f1645f18b21fbab00",
+  "lang": "hi"
+ },
+ {
+  "path": "hren/model.hren.intgemm.alphas.bin",
+  "url": "https://huggingface.co/manateelazycat/firefox-translations-93-pairs/resolve/32fd180b178abf56cb0ff01410ab23d470074966/hren/model.hren.intgemm.alphas.bin",
+  "size": 17141051,
+  "sha256": "fa6c8220d3f1c41eb75b720859971dbe3acb6bf63691656c58faa4cdc28d918d",
+  "lang": "hr"
+ },
+ {
+  "path": "hren/lex.50.50.hren.s2t.bin",
+  "url": "https://huggingface.co/manateelazycat/firefox-translations-93-pairs/resolve/32fd180b178abf56cb0ff01410ab23d470074966/hren/lex.50.50.hren.s2t.bin",
+  "size": 3860080,
+  "sha256": "c9ef83603e41f78d41fa601ba9c7196be58518bd964bfe364f325665bc8bc7d0",
+  "lang": "hr"
+ },
+ {
+  "path": "hren/vocab.hren.spm",
+  "url": "https://huggingface.co/manateelazycat/firefox-translations-93-pairs/resolve/32fd180b178abf56cb0ff01410ab23d470074966/hren/vocab.hren.spm",
+  "size": 796159,
+  "sha256": "4e9cc10e8ff4a4ed64fc90b45835385690e55f49b40e8efe471597d2e3a9cd24",
+  "lang": "hr"
+ },
+ {
+  "path": "huen/model.huen.intgemm.alphas.bin",
+  "url": "https://huggingface.co/manateelazycat/firefox-translations-93-pairs/resolve/32fd180b178abf56cb0ff01410ab23d470074966/huen/model.huen.intgemm.alphas.bin",
+  "size": 17140899,
+  "sha256": "518356dbb0c071739318601963a87580fb41732652f52bd3635246330c186d9e",
+  "lang": "hu"
+ },
+ {
+  "path": "huen/lex.50.50.huen.s2t.bin",
+  "url": "https://huggingface.co/manateelazycat/firefox-translations-93-pairs/resolve/32fd180b178abf56cb0ff01410ab23d470074966/huen/lex.50.50.huen.s2t.bin",
+  "size": 5162428,
+  "sha256": "fff56b2501258ec4c46a8fc715caee7aeb15d853f859cdfacd3ef9903ed2fff1",
+  "lang": "hu"
+ },
+ {
+  "path": "huen/vocab.huen.spm",
+  "url": "https://huggingface.co/manateelazycat/firefox-translations-93-pairs/resolve/32fd180b178abf56cb0ff01410ab23d470074966/huen/vocab.huen.spm",
+  "size": 820746,
+  "sha256": "0db772702235b02d1f29abafb7a49ed77e54c60245b3a46e90716e74263aedd6",
+  "lang": "hu"
+ },
+ {
+  "path": "iden/model.iden.intgemm.alphas.bin",
+  "url": "https://huggingface.co/manateelazycat/firefox-translations-93-pairs/resolve/32fd180b178abf56cb0ff01410ab23d470074966/iden/model.iden.intgemm.alphas.bin",
+  "size": 17141051,
+  "sha256": "eeed3d8c2c78ec7011b31b2419e1d2dfdf2a7cc0ee0dbb1fcd164c934cb5d328",
+  "lang": "id"
+ },
+ {
+  "path": "iden/lex.50.50.iden.s2t.bin",
+  "url": "https://huggingface.co/manateelazycat/firefox-translations-93-pairs/resolve/32fd180b178abf56cb0ff01410ab23d470074966/iden/lex.50.50.iden.s2t.bin",
+  "size": 4050348,
+  "sha256": "7a543087d4e9c1fe2f6b6f735b5e31aeadab80235e734c0388278722042ee3a2",
+  "lang": "id"
+ },
+ {
+  "path": "iden/vocab.iden.spm",
+  "url": "https://huggingface.co/manateelazycat/firefox-translations-93-pairs/resolve/32fd180b178abf56cb0ff01410ab23d470074966/iden/vocab.iden.spm",
+  "size": 772941,
+  "sha256": "a2dd1462abd17cccbbf3fefc562131f06b293f8ff6a5efad73ebb0176810d835",
+  "lang": "id"
+ },
+ {
+  "path": "isen/model.isen.intgemm.alphas.bin",
+  "url": "https://huggingface.co/manateelazycat/firefox-translations-93-pairs/resolve/32fd180b178abf56cb0ff01410ab23d470074966/isen/model.isen.intgemm.alphas.bin",
+  "size": 31561787,
+  "sha256": "d2c285755d37f710458f1a49db5391a123e4e41ca7bd9829dd87cc61e4907ee6",
+  "lang": "is"
+ },
+ {
+  "path": "isen/lex.50.50.isen.s2t.bin",
+  "url": "https://huggingface.co/manateelazycat/firefox-translations-93-pairs/resolve/32fd180b178abf56cb0ff01410ab23d470074966/isen/lex.50.50.isen.s2t.bin",
+  "size": 3951884,
+  "sha256": "0655d05ccaf3cd2a01f910ef542455b7b14e66d96f6c95889079b9ca1ee168cf",
+  "lang": "is"
+ },
+ {
+  "path": "isen/vocab.isen.spm",
+  "url": "https://huggingface.co/manateelazycat/firefox-translations-93-pairs/resolve/32fd180b178abf56cb0ff01410ab23d470074966/isen/vocab.isen.spm",
+  "size": 808315,
+  "sha256": "5c69f0c81f6198f5615ac5aad9d89eb81a46ae8ea396a9e8e274a76409d35e13",
+  "lang": "is"
+ },
+ {
+  "path": "knen/model.knen.intgemm.alphas.bin",
+  "url": "https://huggingface.co/manateelazycat/firefox-translations-93-pairs/resolve/32fd180b178abf56cb0ff01410ab23d470074966/knen/model.knen.intgemm.alphas.bin",
+  "size": 17141051,
+  "sha256": "49e8d3bd794b098047f7b177d9d0e6d3e49ac798c2b75bc132149cb46c5bfbfd",
+  "lang": "kn"
+ },
+ {
+  "path": "knen/lex.50.50.knen.s2t.bin",
+  "url": "https://huggingface.co/manateelazycat/firefox-translations-93-pairs/resolve/32fd180b178abf56cb0ff01410ab23d470074966/knen/lex.50.50.knen.s2t.bin",
+  "size": 4655776,
+  "sha256": "aa50a74f15e9ef8cf27a5b905c17037bd9d67883afde71b34c4138f9507fedfc",
+  "lang": "kn"
+ },
+ {
+  "path": "knen/vocab.knen.spm",
+  "url": "https://huggingface.co/manateelazycat/firefox-translations-93-pairs/resolve/32fd180b178abf56cb0ff01410ab23d470074966/knen/vocab.knen.spm",
+  "size": 1065636,
+  "sha256": "d729397a42dba5801f330927a9956527161d6e0711b59fcea7cd2e862e6f36cc",
+  "lang": "kn"
+ },
+ {
+  "path": "lten/model.lten.intgemm.alphas.bin",
+  "url": "https://huggingface.co/manateelazycat/firefox-translations-93-pairs/resolve/32fd180b178abf56cb0ff01410ab23d470074966/lten/model.lten.intgemm.alphas.bin",
+  "size": 17141051,
+  "sha256": "0aa4571ede6f68db2f14d2662875b4d2e6323aeccd75e3b4377ab9072a22db70",
+  "lang": "lt"
+ },
+ {
+  "path": "lten/lex.50.50.lten.s2t.bin",
+  "url": "https://huggingface.co/manateelazycat/firefox-translations-93-pairs/resolve/32fd180b178abf56cb0ff01410ab23d470074966/lten/lex.50.50.lten.s2t.bin",
+  "size": 4724124,
+  "sha256": "f687821f4074063031b7857bd61232b4ef520f3cbac5a80d59993b27bf10a032",
+  "lang": "lt"
+ },
+ {
+  "path": "lten/vocab.lten.spm",
+  "url": "https://huggingface.co/manateelazycat/firefox-translations-93-pairs/resolve/32fd180b178abf56cb0ff01410ab23d470074966/lten/vocab.lten.spm",
+  "size": 807623,
+  "sha256": "df3c6b7e9aa74ab4cce9f4ec73a44aac80be05fcd41ae55198a92c07c5ee3109",
+  "lang": "lt"
+ },
+ {
+  "path": "lven/model.lven.intgemm.alphas.bin",
+  "url": "https://huggingface.co/manateelazycat/firefox-translations-93-pairs/resolve/32fd180b178abf56cb0ff01410ab23d470074966/lven/model.lven.intgemm.alphas.bin",
+  "size": 17141051,
+  "sha256": "7a96dd363ae9b4485aa254ddbff042223a565a20bfe5ba0ba29b94d8ded0406a",
+  "lang": "lv"
+ },
+ {
+  "path": "lven/lex.50.50.lven.s2t.bin",
+  "url": "https://huggingface.co/manateelazycat/firefox-translations-93-pairs/resolve/32fd180b178abf56cb0ff01410ab23d470074966/lven/lex.50.50.lven.s2t.bin",
+  "size": 4214476,
+  "sha256": "dff852d317f80169899e2e1132277cf922fa7a117b060e09a14dd19c0e1a02b8",
+  "lang": "lv"
+ },
+ {
+  "path": "lven/vocab.lven.spm",
+  "url": "https://huggingface.co/manateelazycat/firefox-translations-93-pairs/resolve/32fd180b178abf56cb0ff01410ab23d470074966/lven/vocab.lven.spm",
+  "size": 815278,
+  "sha256": "585a265757c071f5694d1bb7e65b73f38b1d065a62cda61510fa6c54fb87d2c9",
+  "lang": "lv"
+ },
+ {
+  "path": "mlen/model.mlen.intgemm.alphas.bin",
+  "url": "https://huggingface.co/manateelazycat/firefox-translations-93-pairs/resolve/32fd180b178abf56cb0ff01410ab23d470074966/mlen/model.mlen.intgemm.alphas.bin",
+  "size": 17141051,
+  "sha256": "5480719a5a8ac43acdf28db1c89a4d60837a475e1120ea0c4e021c4d5b7e6fd6",
+  "lang": "ml"
+ },
+ {
+  "path": "mlen/lex.50.50.mlen.s2t.bin",
+  "url": "https://huggingface.co/manateelazycat/firefox-translations-93-pairs/resolve/32fd180b178abf56cb0ff01410ab23d470074966/mlen/lex.50.50.mlen.s2t.bin",
+  "size": 5017972,
+  "sha256": "afb882ad10c9540c12fa105e1e5418a54ec8117f11c4f17d998adf1d445e308c",
+  "lang": "ml"
+ },
+ {
+  "path": "mlen/vocab.mlen.spm",
+  "url": "https://huggingface.co/manateelazycat/firefox-translations-93-pairs/resolve/32fd180b178abf56cb0ff01410ab23d470074966/mlen/vocab.mlen.spm",
+  "size": 1109047,
+  "sha256": "c6b2150c85a18cae437d4e7245ef29d4b3629b2c611fce812d115a59c3b80efe",
+  "lang": "ml"
+ },
+ {
+  "path": "msen/model.msen.intgemm.alphas.bin",
+  "url": "https://huggingface.co/manateelazycat/firefox-translations-93-pairs/resolve/32fd180b178abf56cb0ff01410ab23d470074966/msen/model.msen.intgemm.alphas.bin",
+  "size": 17141051,
+  "sha256": "db5c9415591f8a35c5c72046227b9c9398acade5df8afb5e6ac9f11f7d6650d5",
+  "lang": "ms"
+ },
+ {
+  "path": "msen/lex.50.50.msen.s2t.bin",
+  "url": "https://huggingface.co/manateelazycat/firefox-translations-93-pairs/resolve/32fd180b178abf56cb0ff01410ab23d470074966/msen/lex.50.50.msen.s2t.bin",
+  "size": 4371896,
+  "sha256": "1ef575be54a310eeace84c52e609f2a8c292f3c4b170376ee6ee3524c0c30316",
+  "lang": "ms"
+ },
+ {
+  "path": "msen/vocab.msen.spm",
+  "url": "https://huggingface.co/manateelazycat/firefox-translations-93-pairs/resolve/32fd180b178abf56cb0ff01410ab23d470074966/msen/vocab.msen.spm",
+  "size": 802191,
+  "sha256": "6db8c20803d5f9c9fff2b6c3950f5bda4a9fa14aaef1d92818f8a3d53fd850f9",
+  "lang": "ms"
+ },
+ {
+  "path": "roen/model.roen.intgemm.alphas.bin",
+  "url": "https://huggingface.co/manateelazycat/firefox-translations-93-pairs/resolve/32fd180b178abf56cb0ff01410ab23d470074966/roen/model.roen.intgemm.alphas.bin",
+  "size": 17141051,
+  "sha256": "e7542557fc6dbafacddae7b48e67fcdb07bd67b3fb55a76139edf366eca5dbdb",
+  "lang": "ro"
+ },
+ {
+  "path": "roen/lex.50.50.roen.s2t.bin",
+  "url": "https://huggingface.co/manateelazycat/firefox-translations-93-pairs/resolve/32fd180b178abf56cb0ff01410ab23d470074966/roen/lex.50.50.roen.s2t.bin",
+  "size": 4691708,
+  "sha256": "d242745eadff6f345784fccf1d58046061501b28c8190ba5912a9da5f056cd2f",
+  "lang": "ro"
+ },
+ {
+  "path": "roen/vocab.roen.spm",
+  "url": "https://huggingface.co/manateelazycat/firefox-translations-93-pairs/resolve/32fd180b178abf56cb0ff01410ab23d470074966/roen/vocab.roen.spm",
+  "size": 800832,
+  "sha256": "2a690fbcd1b79bc9b99c43d582252720e0900245c82ecc813c8eb05cf063fd0c",
+  "lang": "ro"
+ },
+ {
+  "path": "sken/model.sken.intgemm.alphas.bin",
+  "url": "https://huggingface.co/manateelazycat/firefox-translations-93-pairs/resolve/32fd180b178abf56cb0ff01410ab23d470074966/sken/model.sken.intgemm.alphas.bin",
+  "size": 17141051,
+  "sha256": "1686f94838ace314719e945606a09a66dafd40847dd3fd352ad3f7a969aac62f",
+  "lang": "sk"
+ },
+ {
+  "path": "sken/lex.50.50.sken.s2t.bin",
+  "url": "https://huggingface.co/manateelazycat/firefox-translations-93-pairs/resolve/32fd180b178abf56cb0ff01410ab23d470074966/sken/lex.50.50.sken.s2t.bin",
+  "size": 4913324,
+  "sha256": "18577a7ded6b9957c948f2a384683f7ce09def42336c8141eee7ba86b79e2c8e",
+  "lang": "sk"
+ },
+ {
+  "path": "sken/vocab.sken.spm",
+  "url": "https://huggingface.co/manateelazycat/firefox-translations-93-pairs/resolve/32fd180b178abf56cb0ff01410ab23d470074966/sken/vocab.sken.spm",
+  "size": 808082,
+  "sha256": "7d25655bd15f34d77db5d2cb96a51c7943c5528f37f83b677a09bb0ea4e4f59b",
+  "lang": "sk"
+ },
+ {
+  "path": "slen/model.slen.intgemm.alphas.bin",
+  "url": "https://huggingface.co/manateelazycat/firefox-translations-93-pairs/resolve/32fd180b178abf56cb0ff01410ab23d470074966/slen/model.slen.intgemm.alphas.bin",
+  "size": 31561787,
+  "sha256": "9d15df58b60048366de4f7b6e727157ffdaea3a0fd1c1759ce232b057e2f991c",
+  "lang": "sl"
+ },
+ {
+  "path": "slen/lex.50.50.slen.s2t.bin",
+  "url": "https://huggingface.co/manateelazycat/firefox-translations-93-pairs/resolve/32fd180b178abf56cb0ff01410ab23d470074966/slen/lex.50.50.slen.s2t.bin",
+  "size": 4320484,
+  "sha256": "f456a49e437ccb4a547e4b51480e29c8b83f11e26a3713af35b078cd4dd255cc",
+  "lang": "sl"
+ },
+ {
+  "path": "slen/vocab.slen.spm",
+  "url": "https://huggingface.co/manateelazycat/firefox-translations-93-pairs/resolve/32fd180b178abf56cb0ff01410ab23d470074966/slen/vocab.slen.spm",
+  "size": 803078,
+  "sha256": "54ed331d3435e2bdc5b02462180197b77631f466fc0e61897b5469449857dd2b",
+  "lang": "sl"
+ },
+ {
+  "path": "sqen/model.sqen.intgemm.alphas.bin",
+  "url": "https://huggingface.co/manateelazycat/firefox-translations-93-pairs/resolve/32fd180b178abf56cb0ff01410ab23d470074966/sqen/model.sqen.intgemm.alphas.bin",
+  "size": 17141051,
+  "sha256": "4b0ce319e7c8f7e1836ce18cb6522c83268e8cff54f2a7f5dcef270250a44475",
+  "lang": "sq"
+ },
+ {
+  "path": "sqen/lex.50.50.sqen.s2t.bin",
+  "url": "https://huggingface.co/manateelazycat/firefox-translations-93-pairs/resolve/32fd180b178abf56cb0ff01410ab23d470074966/sqen/lex.50.50.sqen.s2t.bin",
+  "size": 4256516,
+  "sha256": "b2f51df0bc14b9f89a29d39652a80167ef413eb1579957ecea825cb0a7575c60",
+  "lang": "sq"
+ },
+ {
+  "path": "sqen/vocab.sqen.spm",
+  "url": "https://huggingface.co/manateelazycat/firefox-translations-93-pairs/resolve/32fd180b178abf56cb0ff01410ab23d470074966/sqen/vocab.sqen.spm",
+  "size": 820200,
+  "sha256": "6b7ce057b54ed983eb47087254ea8673e20a857739fc5b57874c80c3301bb91d",
+  "lang": "sq"
+ },
+ {
+  "path": "sren/model.sren.intgemm.alphas.bin",
+  "url": "https://huggingface.co/manateelazycat/firefox-translations-93-pairs/resolve/32fd180b178abf56cb0ff01410ab23d470074966/sren/model.sren.intgemm.alphas.bin",
+  "size": 17141051,
+  "sha256": "99c44e9690a7ed2c1f13468765c3b1db2b8a8ae739980e4056d45dca613a1966",
+  "lang": "sr"
+ },
+ {
+  "path": "sren/lex.50.50.sren.s2t.bin",
+  "url": "https://huggingface.co/manateelazycat/firefox-translations-93-pairs/resolve/32fd180b178abf56cb0ff01410ab23d470074966/sren/lex.50.50.sren.s2t.bin",
+  "size": 4628048,
+  "sha256": "476d9731a1fd44811466abf2292523f11eaad57f0fb7a5cd30391e7720c7071a",
+  "lang": "sr"
+ },
+ {
+  "path": "sren/vocab.sren.spm",
+  "url": "https://huggingface.co/manateelazycat/firefox-translations-93-pairs/resolve/32fd180b178abf56cb0ff01410ab23d470074966/sren/vocab.sren.spm",
+  "size": 822509,
+  "sha256": "5cdbad076c8f5b11e3342f5011e9f56f22558523ca82aec9bab621ddc7614bdc",
+  "lang": "sr"
+ },
+ {
+  "path": "sven/model.sven.intgemm.alphas.bin",
+  "url": "https://huggingface.co/manateelazycat/firefox-translations-93-pairs/resolve/32fd180b178abf56cb0ff01410ab23d470074966/sven/model.sven.intgemm.alphas.bin",
+  "size": 17141051,
+  "sha256": "92d79e2725718b84aed486473bdfcbe6bba3e7094922d4bead8a121cfa346372",
+  "lang": "sv"
+ },
+ {
+  "path": "sven/lex.50.50.sven.s2t.bin",
+  "url": "https://huggingface.co/manateelazycat/firefox-translations-93-pairs/resolve/32fd180b178abf56cb0ff01410ab23d470074966/sven/lex.50.50.sven.s2t.bin",
+  "size": 4645680,
+  "sha256": "1c4640765e806d905cdc4f51158f6f869c78709b9e8a43070877965fa13c160e",
+  "lang": "sv"
+ },
+ {
+  "path": "sven/vocab.sven.spm",
+  "url": "https://huggingface.co/manateelazycat/firefox-translations-93-pairs/resolve/32fd180b178abf56cb0ff01410ab23d470074966/sven/vocab.sven.spm",
+  "size": 793049,
+  "sha256": "93427195fac4125722ed778707478ef78cb77b3fdf1ed5b93bee9fd36e30a8ec",
+  "lang": "sv"
+ },
+ {
+  "path": "teen/model.teen.intgemm.alphas.bin",
+  "url": "https://huggingface.co/manateelazycat/firefox-translations-93-pairs/resolve/32fd180b178abf56cb0ff01410ab23d470074966/teen/model.teen.intgemm.alphas.bin",
+  "size": 17141051,
+  "sha256": "e2ec7b13ba6148eba309244ee17dc935f1b71e95bbf57154216f6247877abb7e",
+  "lang": "te"
+ },
+ {
+  "path": "teen/lex.50.50.teen.s2t.bin",
+  "url": "https://huggingface.co/manateelazycat/firefox-translations-93-pairs/resolve/32fd180b178abf56cb0ff01410ab23d470074966/teen/lex.50.50.teen.s2t.bin",
+  "size": 4815756,
+  "sha256": "5df84ca17e4cc76a73ef7d93f94f53a89f37a11a456f2b6373ff19c4ce4ef964",
+  "lang": "te"
+ },
+ {
+  "path": "teen/vocab.teen.spm",
+  "url": "https://huggingface.co/manateelazycat/firefox-translations-93-pairs/resolve/32fd180b178abf56cb0ff01410ab23d470074966/teen/vocab.teen.spm",
+  "size": 1056197,
+  "sha256": "dd57e1d68316ae32f9ba3f77223f317ce39cd1ef72e69e6b06b7c1d1ba954052",
+  "lang": "te"
+ },
+ {
+  "path": "vien/model.vien.intgemm.alphas.bin",
+  "url": "https://huggingface.co/manateelazycat/firefox-translations-93-pairs/resolve/32fd180b178abf56cb0ff01410ab23d470074966/vien/model.vien.intgemm.alphas.bin",
+  "size": 17141051,
+  "sha256": "de4bf2b9ffb4d910e32720ec3a43655fb6f4062ce5219332f824fc1bdca7a5f4",
+  "lang": "vi"
+ },
+ {
+  "path": "vien/lex.50.50.vien.s2t.bin",
+  "url": "https://huggingface.co/manateelazycat/firefox-translations-93-pairs/resolve/32fd180b178abf56cb0ff01410ab23d470074966/vien/lex.50.50.vien.s2t.bin",
+  "size": 3910184,
+  "sha256": "3a071ed3d982f6eb6ee116b84067bf70041e4229e43ea65ecb6d7c2796e8851b",
+  "lang": "vi"
+ },
+ {
+  "path": "vien/vocab.vien.spm",
+  "url": "https://huggingface.co/manateelazycat/firefox-translations-93-pairs/resolve/32fd180b178abf56cb0ff01410ab23d470074966/vien/vocab.vien.spm",
+  "size": 757250,
+  "sha256": "cb152765d1e71ea3cf96fdb339c764b7201be7b9ab32e20cfebcf16a20fc0939",
+  "lang": "vi"
+ }
+]

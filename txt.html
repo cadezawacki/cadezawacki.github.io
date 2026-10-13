@@ -402,6 +402,8 @@ body {
   .cm-autocomplete .cm-ac-item { min-height: 36px; }
   .spell-suggestion, .spell-action { min-height: 36px; }
   .cade-panel-head .cade-panel-x { min-width: 32px; text-align: center; }
+  .cade-panel-head .cade-panel-minbtn { min-width: 32px; text-align: center; margin-right: 30px; }
+  .cade-dock-chip { height: 36px; padding: 0 14px; }
 }
 .room-manager-name {
   font-family: var(--font-mono);
@@ -2691,7 +2693,28 @@ body.game-open .editor-wrap { -webkit-user-select: none; user-select: none; }
 .cade-panel-head .cade-panel-title { font-weight: 600; flex: 1; font-size: var(--text-sm); }
 .cade-panel-head .cade-panel-x { cursor: pointer; opacity: 0.6; padding: 0 6px; border-radius: 4px; font-size: 16px; line-height: 1; }
 .cade-panel-head .cade-panel-x:hover { opacity: 1; background: var(--surface-hover, rgba(127,127,127,0.15)); }
+/* Minimize: well apart from × so a loose tap can't hit the wrong one. */
+.cade-panel-head .cade-panel-minbtn { cursor: pointer; opacity: 0.6; padding: 0 6px; border-radius: 4px; font-size: 16px; line-height: 1; margin-right: 12px; }
+.cade-panel-head .cade-panel-minbtn:hover { opacity: 1; background: var(--surface-hover, rgba(127,127,127,0.15)); }
+.cade-panel.cade-minimized { display: none !important; }
 .cade-panel-body { overflow: auto; }
+/* Minimized panels wait as chips in a dock above the footer (clear of the
+   phone's scroll buttons); a chip brings its panel back. */
+#cade-panel-dock {
+  position: fixed; left: 4px; right: 4px; bottom: calc(18px + env(safe-area-inset-bottom) + 4px); z-index: 4999;
+  display: flex; gap: 6px; padding: 4px; overflow-x: auto; pointer-events: none; scrollbar-width: none;
+}
+#cade-panel-dock::-webkit-scrollbar { display: none; }
+#cade-panel-dock:empty { display: none; }
+.cade-dock-chip {
+  pointer-events: auto; flex: 0 0 auto; max-width: 180px; height: 30px; padding: 0 12px; border-radius: 999px;
+  display: inline-flex; align-items: center; gap: 6px; cursor: pointer; font: inherit; font-size: var(--text-xs); font-weight: 600;
+  color: var(--text); background: var(--surface); border: 1px solid var(--border); box-shadow: 0 1px 4px rgba(0, 0, 0, 0.14);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; touch-action: manipulation;
+}
+.cade-dock-chip:hover { border-color: var(--accent); }
+.cade-dock-chip::before { content: '▴'; color: var(--accent); font-size: 10px; }
+@media (max-width: 600px) { #cade-panel-dock { right: 52px; } }
 
 /* Outline widget styles now live in ./txt/widgets/outline/outline.css */
 
@@ -3895,6 +3918,15 @@ window.Cade = (function () {
     // A game panel owns input while open: editor pointer input is blocked, the
     // editor is blurred (soft keyboard retracts) and nothing is selectable.
     markGamePanel(p) { return window.__markGamePanel && window.__markGamePanel(p); },
+    // Minimize support for modules: is this panel (or the panel holding this
+    // element) tucked away in the dock? Listen for 'cade-panel-minimize' /
+    // 'cade-panel-restore' on the panel to pause / resume.
+    isMinimized(el) {
+      const p = el && el.closest ? el.closest('.cade-panel') : null;
+      return !!(p && window.__cadePanelMin && window.__cadePanelMin.isMinimized(p));
+    },
+    minimizePanel(p) { if (window.__cadePanelMin) window.__cadePanelMin.minimize(p); },
+    restorePanel(p) { if (window.__cadePanelMin) window.__cadePanelMin.restore(p); },
     showToast() { return window.showToast.apply(null, arguments); },
     haptic(ms) { return window.haptic ? window.haptic(ms) : undefined; },
     escapeHtml(s) { return window.escapeHtml(s); },
@@ -5857,6 +5889,7 @@ const SPELL_WORD_RE = /[A-Za-z]+(?:['’][A-Za-z]+)*/g;
 // Skip things that aren't really prose words to cut down on noise.
 function shouldSkipWord(w) {
   if (w.length < 2) return true;
+  if (w.length > 40) return true;                   // a letter run that long isn't an English word
   if (w === w.toUpperCase()) return true;           // ALL-CAPS acronyms (API, CSS)
   if (/[A-Z]/.test(w.slice(1))) return true;        // camelCase / mixedCase identifiers
   if (ignoredWords.has(w.toLowerCase())) return true;
@@ -8379,6 +8412,7 @@ async function loadSpellChecker() {
     // Defer the synchronous parse one tick so startup stays smooth.
     await new Promise(r => setTimeout(r, 0));
     spellChecker = new Typo('en_US', aff, dic, { platform: 'any' });
+    _spellIndex = null;
     refreshSpell();
   } catch (e) {
     if (!navigator.onLine) {
@@ -8474,10 +8508,85 @@ function addToDictionary(word) {
   refreshSpell();
 }
 
+// Suggestions. typo-js's own suggest() tries every 2-edit variant of the word
+// and dictionary-checks each: seconds for ordinary typos, and a long letter run
+// (e.g. text with the spaces stripped) never finishes and kills the tab on
+// iPhone. Instead: bounded Damerau-Levenshtein (<= 2 edits) against the
+// dictionary's words of similar length — tens of ms, nothing for long runs.
+let _spellIndex = null;  // word length -> [words], built on the first suggestion
+const _spellRows = [new Int32Array(64), new Int32Array(64), new Int32Array(64)];
+function _spellBuildIndex() {
+  const idx = new Map(), tbl = spellChecker.dictionaryTable || {}, fl = spellChecker.flags || {};
+  const bad = [fl.NOSUGGEST, fl.ONLYINCOMPOUND, fl.FORBIDDENWORD].filter(Boolean);
+  for (const w in tbl) {
+    if (w.length < 2 || w.length > 40 || !/^[A-Za-z][A-Za-z']*$/.test(w)) continue;
+    const rs = tbl[w];
+    if (bad.length && rs && rs.some(r => r && bad.some(b => r.indexOf(b) !== -1))) continue;
+    let a = idx.get(w.length);
+    if (!a) idx.set(w.length, a = []);
+    a.push(w);
+  }
+  return idx;
+}
+// Optimal-string-alignment distance, or max + 1 as soon as it can't be <= max.
+function _spellDist(a, b, max) {
+  const n = a.length, m = b.length;
+  let p2 = _spellRows[0], p = _spellRows[1], c = _spellRows[2];
+  for (let j = 0; j <= m; j++) p[j] = j;
+  for (let i = 1; i <= n; i++) {
+    c[0] = i;
+    let rowMin = i;
+    const ai = a.charCodeAt(i - 1), ai1 = i > 1 ? a.charCodeAt(i - 2) : -1;
+    for (let j = 1; j <= m; j++) {
+      const bj = b.charCodeAt(j - 1);
+      let v = p[j - 1] + (ai === bj ? 0 : 1);
+      if (p[j] + 1 < v) v = p[j] + 1;
+      if (c[j - 1] + 1 < v) v = c[j - 1] + 1;
+      if (i > 1 && j > 1 && ai === b.charCodeAt(j - 2) && ai1 === bj && p2[j - 2] + 1 < v) v = p2[j - 2] + 1;
+      c[j] = v;
+      if (v < rowMin) rowMin = v;
+    }
+    if (rowMin > max) return max + 1;
+    const t = p2; p2 = p; p = c; c = t;
+  }
+  return p[m];
+}
+function spellSuggest(word, limit) {
+  if (!spellChecker || !word || word.length > 40) return [];
+  if (!_spellIndex) _spellIndex = _spellBuildIndex();
+  const w = word.toLowerCase(), n = w.length, max = n <= 4 ? 1 : 2, out = [];
+  const sorted = w.split('').sort().join('');
+  for (let L = Math.max(2, n - max); L <= n + max; L++) {
+    const list = _spellIndex.get(L);
+    if (!list) continue;
+    for (const cand of list) {
+      const cl = cand.toLowerCase();
+      if (cl === w) continue;
+      const d = _spellDist(w, cl, max);
+      if (d > max) continue;
+      let pre = 0;
+      while (pre < 3 && pre < n && pre < cl.length && w[pre] === cl[pre]) pre++;
+      // same letters in another order (teh -> the, Thier -> Their) is the likeliest slip
+      const anagram = L === n && cl.split('').sort().join('') === sorted;
+      out.push({ cand, s: d * 10 - pre - (anagram ? 6 : 0) - (cand[0] === cand[0].toLowerCase() ? 0.5 : 0) + Math.abs(L - n) * 0.5 });
+    }
+  }
+  out.sort((a, b) => a.s - b.s);
+  const caps = /^[A-Z][a-z]/.test(word), seen = new Set(), res = [];
+  for (const o of out) {
+    const s = caps ? o.cand[0].toUpperCase() + o.cand.slice(1) : o.cand;
+    if (seen.has(s.toLowerCase())) continue;
+    seen.add(s.toLowerCase());
+    res.push(s);
+    if (res.length >= limit) break;
+  }
+  return res;
+}
+
 function openSpellPopup(target) {
   closeSpellPopup();
   let suggestions = [];
-  try { suggestions = spellChecker.suggest(target.word, 7) || []; } catch {}
+  try { suggestions = spellSuggest(target.word, 7); } catch {}
 
   const pop = document.createElement('div');
   pop.className = 'spell-popup';
@@ -12430,6 +12539,16 @@ function renderSplitHead(ms) {
 const WIDGETS = [];
 function registerWidget(w) {
   if (!w || !w.name || typeof w.open !== 'function') return;
+  // Running a widget whose panel is minimized brings that panel back instead
+  // of toggling it closed; panels made while it opens are tagged with its name.
+  const open = w.open;
+  w.open = function () {
+    const min = _minimizedPanelOf(w.name);
+    if (min) { _restorePanel(min); return; }
+    const prev = _openingWidget;
+    _openingWidget = w.name;
+    try { return open.apply(this, arguments); } finally { _openingWidget = prev; }
+  };
   WIDGETS.push(w);
 }
 window.registerWidget = registerWidget;
@@ -21415,6 +21534,7 @@ const GAME_PANEL_IDS = ['snake-panel', 'tetris-panel', 'g2048-panel', 'crawler-p
 // Attached only for the game's lifetime: a permanent non-passive touchstart
 // listener on document would put ALL touch scrolling on the slow path.
 function _blockEditorPointerForGame(e) {
+  if (!document.querySelector('.cade-game-panel:not(.cade-minimized)')) return; // every game is minimized
   const wrap = document.getElementById('editor-wrap');
   if (wrap && wrap.contains(e.target)) e.preventDefault();
 }
@@ -21422,7 +21542,7 @@ const _GAME_BLOCK_EVENTS = ['pointerdown', 'mousedown', 'touchstart'];
 let _gamePanelObserver = null;
 function _watchGamePanel(p) {
   p.classList.add('cade-game-panel');
-  document.body.classList.add('game-open');
+  if (!p.classList.contains('cade-minimized')) document.body.classList.add('game-open');
   // The game is the focus — drop editor focus so the soft keyboard retracts.
   try { editor.contentDOM.blur(); } catch {}
   if (_gamePanelObserver) return;
@@ -21442,6 +21562,73 @@ function _watchGamePanel(p) {
   _gamePanelObserver.observe(document.body, { childList: true });
 }
 
+// ---- Minimize: a panel waits as a chip in a dock at the bottom ----
+// The panel stays in the DOM (hidden), so its state survives. Modules hear
+// 'cade-panel-minimize' / 'cade-panel-restore' (dispatched on the panel,
+// bubbling) to pause and to ignore keys meanwhile (Cade.isMinimized(p)).
+var _openingWidget = null; // var: read by registerWidget, which can run before this line
+var _panelDock = null, _dockObserver = null;
+function _isMinimized(p) { return !!(p && p.classList && p.classList.contains('cade-minimized')); }
+function _syncGameOpen() {
+  document.body.classList.toggle('game-open', !!document.querySelector('.cade-game-panel:not(.cade-minimized)'));
+}
+function _dockSync() {
+  if (!_panelDock) return;
+  _panelDock.querySelectorAll('.cade-dock-chip').forEach(c => { if (!c.__panel || !c.__panel.isConnected) c.remove(); });
+  if (!_panelDock.childElementCount && _dockObserver) { _dockObserver.disconnect(); _dockObserver = null; }
+}
+function _minimizePanel(p) {
+  if (!p || _isMinimized(p)) return;
+  if (!_panelDock || !_panelDock.isConnected) {
+    _panelDock = document.createElement('div');
+    _panelDock.id = 'cade-panel-dock';
+    _panelDock.setAttribute('role', 'toolbar');
+    _panelDock.setAttribute('aria-label', 'Minimized panels');
+    document.body.appendChild(_panelDock);
+  }
+  // A panel closed while minimized (its widget toggled it, a room switch…) takes its chip with it.
+  if (!_dockObserver) {
+    _dockObserver = new MutationObserver(_dockSync);
+    _dockObserver.observe(document.body, { childList: true });
+  }
+  const t = (p.querySelector('.cade-panel-title') || {}).textContent || 'Panel';
+  const chip = document.createElement('button');
+  chip.type = 'button';
+  chip.className = 'cade-dock-chip';
+  chip.textContent = t;
+  chip.title = 'Restore ' + t;
+  chip.__panel = p;
+  chip.addEventListener('click', () => { if (p.isConnected) _restorePanel(p); else _dockSync(); });
+  _panelDock.appendChild(chip);
+  p.__dockChip = chip;
+  p.classList.add('cade-minimized');
+  _syncGameOpen();
+  p.dispatchEvent(new CustomEvent('cade-panel-minimize', { bubbles: true }));
+}
+function _restorePanel(p) {
+  if (!p || !_isMinimized(p)) return;
+  p.classList.remove('cade-minimized');
+  if (p.__dockChip) { p.__dockChip.remove(); p.__dockChip = null; }
+  _dockSync();
+  _syncGameOpen();
+  // A game takes the focus back (soft keyboard down), like when it opened.
+  if (p.classList.contains('cade-game-panel')) { try { editor.contentDOM.blur(); } catch {} }
+  requestAnimationFrame(() => _fitPanel(p));
+  p.dispatchEvent(new CustomEvent('cade-panel-restore', { bubbles: true }));
+}
+// The minimized panel a widget made (tagged when it opened; else by title).
+function _minimizedPanelOf(name) {
+  const lc = String(name || '').toLowerCase();
+  const list = document.querySelectorAll('.cade-panel.cade-minimized');
+  for (const p of list) if (p.__cadeWidget === name) return p;
+  for (const p of list) {
+    const t = ((p.querySelector('.cade-panel-title') || {}).textContent || '').toLowerCase();
+    if (lc && t.indexOf(lc) !== -1) return p;
+  }
+  return null;
+}
+window.__cadePanelMin = { minimize: _minimizePanel, restore: _restorePanel, isMinimized: _isMinimized };
+
 // Shared draggable, closeable floating panel.
 function _mkPanel(id, title, bodyHtml) {
   let p = document.getElementById(id);
@@ -21450,9 +21637,12 @@ function _mkPanel(id, title, bodyHtml) {
   p.className = 'cade-panel';
   p.id = id;
   p.innerHTML = '<div class="cade-panel-head"><span class="cade-panel-title"></span>' +
+    '<span class="cade-panel-minbtn" role="button" title="Minimize" aria-label="Minimize">–</span>' +
     '<span class="cade-panel-x" title="Close">×</span></div><div class="cade-panel-body">' + bodyHtml + '</div>';
   p.querySelector('.cade-panel-title').textContent = title;
+  p.__cadeWidget = _openingWidget || null;
   document.body.appendChild(p);
+  p.querySelector('.cade-panel-minbtn').addEventListener('click', e => { e.stopPropagation(); _minimizePanel(p); });
   if (GAME_PANEL_IDS.indexOf(id) !== -1) _watchGamePanel(p);
   p.querySelector('.cade-panel-x').addEventListener('click', () => { p.remove(); if (p._onClose) p._onClose(); });
   const head = p.querySelector('.cade-panel-head');
@@ -21461,7 +21651,7 @@ function _mkPanel(id, title, bodyHtml) {
   // width:auto panel grow to its widest content and push the × off-screen.
   let sx, sy, ox, oy, drag = false, vOnly = false;
   head.addEventListener('pointerdown', e => {
-    if (e.target.classList.contains('cade-panel-x')) return;
+    if (e.target.classList.contains('cade-panel-x') || e.target.classList.contains('cade-panel-minbtn')) return;
     drag = true; sx = e.clientX; sy = e.clientY;
     vOnly = window.innerWidth < 600;
     const r = p.getBoundingClientRect(); ox = r.left; oy = r.top;

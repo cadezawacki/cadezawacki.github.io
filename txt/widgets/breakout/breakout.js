@@ -134,12 +134,16 @@
     canvas.addEventListener('pointerdown', function (e) { e.preventDefault(); movePaddle(e.clientX); launch(s); });
     s._key = function (e) {
       if (!document.getElementById('game-panel')) return;
+      if (Cade.isMinimized && Cade.isMinimized(p)) return; // parked in the dock: keys belong to the editor
       if (e.key === 'Escape') { e.preventDefault(); close(); return; }
       if (e.key === ' ' || e.code === 'Space') { e.preventDefault(); launch(s); return; }
       if (e.key === 'ArrowLeft') { e.preventDefault(); s.paddle.x = Math.max(0, s.paddle.x - 26); if (!s.started) s.ball.x = s.paddle.x + BRK.PAD_W / 2; }
       else if (e.key === 'ArrowRight') { e.preventDefault(); s.paddle.x = Math.min(BRK.W - BRK.PAD_W, s.paddle.x + 26); if (!s.started) s.ball.x = s.paddle.x + BRK.PAD_W / 2; }
     };
     document.addEventListener('keydown', s._key, true);
+    // Minimized: freeze the ball; restore picks up on the same frame.
+    p.addEventListener('cade-panel-minimize', function () { if (raf) { cancelAnimationFrame(raf); raf = 0; } });
+    p.addEventListener('cade-panel-restore', function () { if (game === s && !raf) raf = requestAnimationFrame(loop); });
     render(s);
     if (!raf) raf = requestAnimationFrame(loop);
   }

@@ -21,7 +21,7 @@
  * per language for no extra coverage.
  *
  * Pure helpers (chunking, detection, registry) are also exported for node
- * tests: module.exports = { create, chunkText, guessLang, LANGS, ENGINE }. */
+ * tests: module.exports = { create, chunkText, guessLang, langFromName, LANGS, ENGINE }. */
 (function (root) {
   'use strict';
 
@@ -30,6 +30,15 @@
     S: 'https://bergamot.s3.amazonaws.com/models/',
     M: 'https://huggingface.co/manateelazycat/firefox-translations-93-pairs/resolve/32fd180b178abf56cb0ff01410ab23d470074966/',
     T: 'https://huggingface.co/TiberiuCristianLeon/Bergamot/resolve/18008da9d2922dde09dae47f5fee71cac4253701/',
+  };
+  // Self-hosted copies of what the two Hugging Face mirrors serve, on GitHub
+  // Pages under this app's own domain (repos txt-models-a / txt-models-b,
+  // filled by their "Fetch models" Action, SHA-256-checked). Tried first; the
+  // original URL stays the cache key (languages downloaded before stay
+  // downloaded) and is only fetched if the self-hosted copy fails.
+  var SELF = {
+    M: 'https://cadezawacki.github.io/txt-models-a/',
+    T: 'https://cadezawacki.github.io/txt-models-b/',
   };
   var ENG = 'https://cdn.jsdelivr.net/npm/@browsermt/bergamot-translator@0.4.9/worker/';
   var ENGINE = {
@@ -89,7 +98,11 @@
   ];
   var LANGS = RAW.map(function (r) {
     var files = {}, size = 0;
-    Object.keys(r[4]).forEach(function (k) { var f = r[4][k]; files[k] = { u: BASES[f[0]] + f[1], s: f[2], h: f[3] }; size += f[2]; });
+    Object.keys(r[4]).forEach(function (k) {
+      var f = r[4][k];
+      files[k] = { u: BASES[f[0]] + f[1], m: SELF[f[0]] ? SELF[f[0]] + f[1] : '', s: f[2], h: f[3] };
+      size += f[2];
+    });
     return { code: r[0], name: r[1], native: r[2], version: r[3], files: files, size: size };
   });
   var BY_CODE = {};
@@ -106,7 +119,64 @@
     return c.split('-')[0];
   }
   var EXTRA_NAMES = { en: 'English', nb: 'Norwegian', be: 'Belarusian', la: 'Latin', ur: 'Urdu', ta: 'Tamil', mr: 'Marathi' };
-  function langName(code) { return BY_CODE[code] ? BY_CODE[code].name : EXTRA_NAMES[code] || code; }
+  function langName(code) { return BY_CODE[code] ? BY_CODE[code].name : EXTRA_NAMES[code] || OTHER_NAME[code] || code; }
+
+  // ---- language names -> codes: ```Spanish, ```español, ```es-ES, ```zh-Hant ----
+  // English and native names (any case, accents optional) and language tags.
+  // A bare two-letter code that is also a common code-fence language (pl Perl,
+  // cs C#, el Emacs Lisp, ml OCaml, sv SystemVerilog) only counts with a region
+  // (pl-PL). plugins/translate-blocks keeps a copy of this table for its chips
+  // (the tests check that the two agree).
+  var ALIASES = {
+    es: 'castellano|castilian', pt: 'brazilian portuguese|brazilian|portugues do brasil', nl: 'flemish|vlaams',
+    'zh-Hans': 'chinese|simplified chinese|chinese simplified|mandarin|中文|汉语|普通话|简体|简体中文',
+    'zh-Hant': 'traditional chinese|chinese traditional|繁體|繁體中文|繁体中文|正體中文',
+    ja: 'nihongo', el: 'modern greek', fa: 'farsi|dari', he: 'ivrit', bn: 'bangla', ca: 'valencian', cs: 'cesky',
+    id: 'bahasa indonesia|indonesia', ms: 'bahasa melayu|melayu|bahasa malaysia', ro: 'moldovan', sl: 'slovene', hi: 'हिंदी', th: 'ภาษาไทย',
+  };
+  // Languages people name that have no on-device model (names only: their codes
+  // collide with too many code-fence languages, e.g. ps, mk, am).
+  var OTHER = {
+    en: 'english', nb: 'norwegian|norsk|bokmal|nynorsk', la: 'latin|latina', ur: 'urdu|اردو', ta: 'tamil|தமிழ்', mr: 'marathi|मराठी',
+    be: 'belarusian|беларуская', ga: 'irish|gaeilge', cy: 'welsh|cymraeg', eo: 'esperanto', hy: 'armenian|հայերեն', ka: 'georgian|ქართული',
+    eu: 'basque|euskara', gl: 'galician|galego', mt: 'maltese|malti', af: 'afrikaans', sw: 'swahili|kiswahili', tl: 'tagalog|filipino',
+    pa: 'punjabi|panjabi', ne: 'nepali', si: 'sinhala|sinhalese', km: 'khmer', my: 'burmese', am: 'amharic', mn: 'mongolian',
+    kk: 'kazakh', uz: 'uzbek', az: 'azerbaijani|azeri', mk: 'macedonian', yi: 'yiddish', lb: 'luxembourgish', zu: 'zulu', yo: 'yoruba',
+    sa: 'sanskrit', grc: 'ancient greek', ku: 'kurdish', ps: 'pashto', so: 'somali', ht: 'haitian creole', mi: 'maori', gd: 'scottish gaelic', fy: 'frisian',
+  };
+  var AMBIG = { pl: 1, cs: 1, el: 1, ml: 1, sv: 1 };
+  function normName(s) {
+    s = String(s).toLowerCase();
+    try { s = s.normalize('NFD').replace(/[̀-ͯ]/g, ''); } catch (e) {}
+    return s.replace(/[\s_()\[\]{}.,:;'"`\/|*!?=+]+/g, ' ').trim();
+  }
+  var BY_NAME = {}, OTHER_NAME = {};
+  LANGS.forEach(function (L) { BY_NAME[normName(L.name)] = L.code; BY_NAME[normName(L.native)] = L.code; });
+  Object.keys(ALIASES).forEach(function (c) { ALIASES[c].split('|').forEach(function (n) { BY_NAME[normName(n)] = c; }); });
+  Object.keys(OTHER).forEach(function (c) {
+    var names = OTHER[c].split('|');
+    OTHER_NAME[c] = names[0].replace(/(^|\s)\S/g, function (m) { return m.toUpperCase(); });
+    names.forEach(function (n) { if (!BY_NAME[normName(n)]) BY_NAME[normName(n)] = c; });
+  });
+  // -> code ('es', 'zh-Hant', 'en', 'la' …) or '' when it isn't a language
+  function langFromName(info) {
+    var raw = String(info || '').trim().replace(/^[{.]+|\}+$/g, '');
+    if (!raw || raw.length > 48) return '';
+    var n = normName(raw);
+    if (!n) return '';
+    if (BY_NAME[n]) return BY_NAME[n];
+    var parts = raw.split(/[-_]/);
+    if (/^[a-z]{2}$/i.test(parts[0]) && parts.every(function (p) { return /^[a-z0-9]{2,8}$/i.test(p); })) {
+      var base = parts[0].toLowerCase(), rest = parts.slice(1).join('-').toLowerCase();
+      if (base === 'zh') return /(^|-)(hant|tw|hk|mo)(-|$)/.test(rest) ? 'zh-Hant' : 'zh-Hans';
+      if (base === 'en') return 'en';
+      if (base === 'iw') return 'he';
+      if (BY_CODE[base] && (rest || !AMBIG[base])) return base;
+      return '';
+    }
+    var w = normName(raw.split(/[\s,;:(\[{]/)[0]); // "Spanish (Mexico)", "Español text"
+    return w && w !== n && BY_NAME[w] ? BY_NAME[w] : '';
+  }
 
   // ---- chunking: keep line structure, translate paragraphs / sentence groups ----
   var SENT = /[^.!?\u3002\uff01\uff1f\u061f\u0964]+(?:[.!?\u3002\uff01\uff1f\u061f\u0964]+["'\u201d\u2019)\]\u00bb]*\s*|$)/g;
@@ -446,7 +516,7 @@
     return {
       languages: function () { return LANGS.slice(); },
       lang: function (c) { return BY_CODE[c] || null; },
-      name: langName,
+      name: langName, fromName: langFromName,
       engineSize: ENGINE_SIZE,
       hasChrome: hasChrome, simd: simd, storage: storage,
       status: status, downloaded: downloaded, usage: usage,
@@ -456,7 +526,7 @@
     };
   }
 
-  var api = { create: create, chunkText: chunkText, reassemble: reassemble, guessLang: guessLang, LANGS: LANGS, ENGINE: ENGINE, BASES: BASES, CACHE: CACHE };
+  var api = { create: create, chunkText: chunkText, reassemble: reassemble, guessLang: guessLang, langFromName: langFromName, langName: langName, LANGS: LANGS, ENGINE: ENGINE, BASES: BASES, CACHE: CACHE };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.__DecodeLabTranslate = api;
 })(typeof self !== 'undefined' ? self : this);

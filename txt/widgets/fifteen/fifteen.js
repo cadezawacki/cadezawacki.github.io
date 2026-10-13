@@ -170,7 +170,7 @@
   function elapsed() { return game ? game.t + (runSince ? now() - runSince : 0) : 0; }
   function foldClock() { if (runSince && game) { var n = now(); game.t += n - runSince; runSince = n; } }
   function stopClock() { foldClock(); runSince = 0; }
-  function canRun() { return !!(ui && game && game.started && !ui.won && !ui.ovKind && !document.hidden); }
+  function canRun() { return !!(ui && game && game.started && !ui.won && !ui.ovKind && !document.hidden && !(Cade.isMinimized && Cade.isMinimized(ui.panel))); }
   function syncClock() { if (canRun()) { if (!runSince) runSince = now(); } else stopClock(); paintHud(); }
 
   // ---- game flow ----------------------------------------------------------------------
@@ -470,6 +470,9 @@
     ui.onKey = onKey;
     ui.onVis = function () { if (!ui) return; if (document.hidden) persist(); syncClock(); };
     ui.onHide = function () { persist(); };
+    // Minimized to the dock counts as hidden: the clock stops until restore.
+    p.addEventListener('cade-panel-minimize', function () { if (ui && ui.panel === p) { persist(); syncClock(); } });
+    p.addEventListener('cade-panel-restore', function () { if (ui && ui.panel === p) syncClock(); });
     document.addEventListener('keydown', ui.onKey, true);
     document.addEventListener('visibilitychange', ui.onVis);
     window.addEventListener('pagehide', ui.onHide);
@@ -523,6 +526,7 @@
 
   function onKey(e) {
     if (!ui) return;
+    if (Cade.isMinimized && Cade.isMinimized(ui.panel)) return; // parked in the dock: keys belong to the editor
     var ae = document.activeElement;
     if (ae && ae !== document.body && !ui.panel.contains(ae) && (ae.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName))) return;
     var k = e.key, handled = true;

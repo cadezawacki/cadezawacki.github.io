@@ -538,6 +538,7 @@
   var KEY2CODE = { ' ': 'Space', arrowup: 'ArrowUp', w: 'KeyW', enter: 'Enter', p: 'KeyP', escape: 'Escape' };
   function onKey(e) {
     if (!S || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (Cade.isMinimized && Cade.isMinimized(S.panel)) return; // parked in the dock: keys belong to the editor
     var t = e.target;
     if (t && t.tagName && /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) && !S.panel.contains(t)) return;
     var code = e.code || KEY2CODE[(e.key || '').toLowerCase()] || '';
@@ -627,6 +628,14 @@
     document.addEventListener('visibilitychange', S.onVis);
     S.onBlur = function () { pause(); };
     window.addEventListener('blur', S.onBlur);
+    // Minimized to the dock: pause like a tab switch (the pause card waits for the
+    // player after restore) and stop drawing meanwhile; restore restarts the loop.
+    p.addEventListener('cade-panel-minimize', function () {
+      if (!S || S.panel !== p) return;
+      pause();
+      if (S.raf) { cancelAnimationFrame(S.raf); S.raf = 0; }
+    });
+    p.addEventListener('cade-panel-restore', function () { if (S && S.panel === p) kick(); });
     S.onResize = function () {
       clearTimeout(S.resizeT);
       S.resizeT = setTimeout(function () { if (S) { layout(); draw(0); } }, 120);
