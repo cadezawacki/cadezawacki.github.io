@@ -234,7 +234,7 @@
   function loadCache() {
     if (cacheLoaded) return cacheLoaded;
     var st = idb();
-    cacheLoaded = (st ? st.get(CACHE_KEY).then(function (v) { return v; }, function () { return null; })
+    cacheLoaded = (st ? Promise.resolve().then(function () { return st.get(CACHE_KEY); }).then(null, function () { return null; })
       : Promise.resolve(readJSON(CACHE_KEY, null))).then(function (v) {
       if (typeof v === 'string') { try { v = JSON.parse(v); } catch (e) { v = null; } }
       cache = Array.isArray(v) ? v.filter(validQ) : [];
@@ -251,7 +251,7 @@
     cacheTimer = setTimeout(function () {
       var st = idb();
       try {
-        if (st) st.set(CACHE_KEY, JSON.stringify(cache)).catch(function () {});
+        if (st) { var pr = st.set(CACHE_KEY, JSON.stringify(cache)); if (pr && pr.then) pr.then(null, function () {}); }
         else writeJSON(CACHE_KEY, cache);
       } catch (e) {}
     }, 400);
@@ -310,13 +310,23 @@
     });
   }
 
+  var prefetchKey = '';
   function prefetchNext(f) {
     var key = optsKey(f);
     if (prefetching || (prefetched && prefetched.key === key)) return;
+    prefetchKey = key;
     prefetching = fetchQuestions(f, ROUND).then(function (qs) {
       prefetching = null;
       if (qs.length >= ROUND / 2) { prefetched = { key: key, qs: qs }; cacheAdd(qs); }
     }, function () { prefetching = null; });
+  }
+  // The prefetched round for these settings, waiting for one still in flight.
+  function takePrefetched(key) {
+    var wait = prefetching && prefetchKey === key ? prefetching : Promise.resolve();
+    return wait.then(function () {
+      if (prefetched && prefetched.key === key) { var qs = prefetched.qs; prefetched = null; return qs; }
+      return null;
+    });
   }
 
   // ---- local data ------------------------------------------------------------------------
@@ -363,14 +373,16 @@
     var offline = prefs.offline || navigator.onLine === false;
     var p;
     if (offline) p = Promise.resolve(localRound(f, prefs.offline ? 'pref' : 'offline'));
-    else if (prefetched && prefetched.key === key) { p = Promise.resolve({ qs: prefetched.qs, src: 'otdb' }); prefetched = null; }
     else {
       status = 'Fetching questions…';
       paint();
-      p = fetchQuestions(f, ROUND, function (ms) {
-        if (my !== roundSeq || !P) return;
-        status = 'Waiting for Open Trivia DB (one request per 5 s)…';
-        paint();
+      p = takePrefetched(key).then(function (ready) {
+        if (ready) return ready;
+        return fetchQuestions(f, ROUND, function () {
+          if (my !== roundSeq || !P) return;
+          status = 'Waiting for Open Trivia DB (one request per 5 s)…';
+          paint();
+        });
       }).then(function (qs) {
         cacheAdd(qs);
         if (qs.length >= ROUND) return { qs: qs, src: 'otdb' };
@@ -475,6 +487,7 @@
     game.over = true;
     stats.rounds++;
     stats.points += game.score;
+    game.newBest = game.score > stats.best && stats.rounds > 1;
     if (game.score > stats.best) stats.best = game.score;
     saveStats();
     paint();
@@ -570,7 +583,7 @@
   function reviewHtml() {
     var n = game.qs.length;
     var html = '<div class="tv-result"><div class="tv-result-big">' + fmt(game.score) + ' <small>pts</small></div><div class="tv-muted">' +
-      game.correct + ' / ' + n + ' correct · best streak ' + game.best + (game.score && game.score >= stats.best ? ' · <b>new best!</b>' : '') + '</div></div><div class="tv-review">';
+      game.correct + ' / ' + n + ' correct · best streak ' + game.best + (game.newBest ? ' · <b>new best!</b>' : '') + '</div></div><div class="tv-review">';
     game.qs.forEach(function (qn, i) {
       html += '<div class="tv-rv ' + (qn.ok ? 'ok' : 'bad') + '"><span class="tv-rv-n">' + (i + 1) + '</span><div class="tv-rv-t"><div>' + esc(qn.x.q) + '</div>' +
         '<div class="tv-rv-a"><b>' + esc(qn.x.a) + '</b>' + (!qn.ok ? ' <span class="tv-muted">(' + (qn.pick >= 0 ? 'you: ' + esc(qn.opts[qn.pick]) : 'no answer') + ')</span>' : '') +

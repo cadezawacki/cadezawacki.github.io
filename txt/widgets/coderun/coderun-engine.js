@@ -62,7 +62,7 @@
   // ---- state ----------------------------------------------------------------------------
   var queue = [], cur = null, seq = 0;
   var runs = []; // panel history, newest first
-  var py = { worker: null, state: 'off', ready: null, onInit: null, loaded: 0, text: '', version: '', pending: {}, seq: 0, attempts: 0, error: '' };
+  var py = { worker: null, state: 'off', ready: null, onInit: null, loaded: 0, version: '', pending: {}, seq: 0, error: '' };
   var E = window.__cadeCodeRun = { version: 0 };
 
   var nudgeT = 0;
@@ -322,20 +322,16 @@
         py.loaded = +m.loaded || 0;
         if (cur && cur.lang === 'py' && cur.state === 'loading') cur.statusText = pyStatusText();
       } else if (cur && cur.lang === 'py') {
-        cur.statusText = m.phase === 'packages' && m.text ? shortPkgText(m.text) : 'Installing packages… ' + (Math.round((+m.loaded || 0) / 1e5) / 10) + ' MB';
+        cur.statusText = m.phase === 'packages' && m.text ? shortPkgText(m.text) : 'Installing packages\u2026 ' + (Math.round((+m.loaded || 0) / 1e5) / 10) + ' MB';
       }
       if (!progT) progT = setTimeout(function () { progT = 0; bump(); }, 250);
     } else if (m.type === 'ready') {
-      py.state = 'ready'; py.version = String(m.version || PY_VERSION); py.error = '';
+      py.version = String(m.version || PY_VERSION);
       try { Cade.store.set(PYSEEN_KEY, PY_VERSION); } catch (x) {}
-      if (py.onInit) { py.onInit.resolve(); py.onInit = null; }
-      bump();
+      var init = py.onInit; py.onInit = null;
+      if (init) init.resolve();
     } else if (m.type === 'initError') {
-      var why = String(m.message || 'failed');
-      pyKill();
-      py.state = 'error'; py.error = why;
-      bump();
-      if (py._reject) { py._reject(new Error(why)); py._reject = null; }
+      crash(String(m.message || 'failed to start'));
     } else if ((p = py.pending[m.id])) {
       if (m.type === 'started') p.started();
       else if (m.type === 'out') p.out(m.chunks || [], +m.dropped || 0);
@@ -345,45 +341,72 @@
   function shortPkgText(t) {
     t = String(t);
     var m = /^Loading (.+)$/.exec(t);
-    if (m) return 'Loading ' + (m[1].length > 40 ? m[1].slice(0, 40) + '…' : m[1]);
-    if (/^Installing /.test(t)) return t.length > 50 ? t.slice(0, 50) + '…' : t;
-    return 'Loading packages…';
+    if (m) return 'Loading ' + (m[1].length > 40 ? m[1].slice(0, 40) + '\u2026' : m[1]);
+    if (/^Installing /.test(t)) return t.length > 50 ? t.slice(0, 50) + '\u2026' : t;
+    return 'Loading packages\u2026';
+  }
+  function startWorker(count) {
+    return new Promise(function (resolve, reject) {
+      var w;
+      try { w = new Worker(WORKER_URL); } catch (e) { reject(new Error('Web Workers are unavailable here')); return; }
+      py.worker = w;
+      py.onInit = { resolve: resolve, reject: reject };
+      w.onmessage = onPyMsg;
+      w.onerror = function (ev) {
+        try { ev.preventDefault(); } catch (x) {}
+        crash('the Python worker crashed' + (ev && ev.message ? ' (' + ev.message + ')' : ''));
+      };
+      w.postMessage({ type: 'init', indexURL: PY_INDEX, count: count });
+    });
+  }
+  function failPending(why) {
+    var p = py.pending; py.pending = {};
+    Object.keys(p).forEach(function (k) { try { p[k].dead(why); } catch (e) {} });
+  }
+  function killWorker() {
+    if (py.worker) { try { py.worker.terminate(); } catch (e) {} }
+    py.worker = null;
+  }
+  // The worker died or failed to start.
+  function crash(why) {
+    var init = py.onInit; py.onInit = null;
+    killWorker();
+    if (py.state === 'ready') { py.state = 'off'; py.ready = null; }
+    failPending(why);
+    if (init) init.reject(new Error(why));
+    bump();
+  }
+  // Stop / timeout: terminate the worker (the namespace goes with it).
+  function pyKill() {
+    var init = py.onInit; py.onInit = null;
+    killWorker();
+    py.state = 'off'; py.ready = null;
+    failPending('Python stopped');
+    if (init) { var e = new Error('stopped'); e.stopped = true; init.reject(e); }
+    bump();
   }
   function pyEnsure() {
     if (py.state === 'ready' && py.worker) return Promise.resolve();
     if (py.ready) return py.ready;
     py.state = 'loading'; py.loaded = 0; py.error = '';
-    if (!pySeen()) toast('Downloading Python (~' + PY_DL_MB + ' MB, first run only)…', 'info', 4000);
-    py.ready = new Promise(function (resolve, reject) {
-      var w;
-      try { w = new Worker(WORKER_URL); }
-      catch (e) { py.state = 'error'; py.ready = null; reject(new Error('Web Workers are unavailable here')); return; }
-      py.worker = w;
-      py.onInit = { resolve: resolve };
-      py._reject = reject;
-      w.onmessage = onPyMsg;
-      w.onerror = function (ev) {
-        try { ev.preventDefault(); } catch (x) {}
-        var why = 'Python worker crashed' + (ev && ev.message ? ': ' + ev.message : '');
-        var wasLoading = py.state === 'loading';
-        pyKill();
-        if (wasLoading && py._reject) { py._reject(new Error(why)); py._reject = null; }
-      };
-      // first attempt counts download progress; a retry skips the byte counter
-      w.postMessage({ type: 'init', indexURL: PY_INDEX, count: py.attempts++ === 0 });
+    if (!pySeen()) toast('Downloading Python (~' + PY_DL_MB + ' MB, first run only)\u2026', 'info', 4000);
+    // The first attempt counts download bytes for the progress readout; if it
+    // fails for any reason, retry once without the counter.
+    var p = py.ready = startWorker(true).then(null, function (e) {
+      if (e && e.stopped) throw e;
+      py.loaded = 0;
+      return startWorker(false);
+    }).then(function () {
+      py.state = 'ready'; py.error = '';
+      bump();
+    }, function (e) {
+      if (py.ready === p) py.ready = null;
+      if (!(e && e.stopped)) { py.state = 'error'; py.error = msg(e); }
+      bump();
+      throw e;
     });
-    py.ready.then(null, function () { py.ready = null; });
     bump();
-    return py.ready;
-  }
-  // Terminate the worker (stop / timeout / crash): the namespace goes with it.
-  function pyKill() {
-    if (py.worker) { try { py.worker.terminate(); } catch (e) {} }
-    py.worker = null; py.state = 'off'; py.ready = null; py.onInit = null;
-    var p = py.pending; py.pending = {};
-    Object.keys(p).forEach(function (k) { try { p[k].dead('Python stopped'); } catch (e) {} });
-    if (py._reject) { var r = py._reject; py._reject = null; r(new Error('stopped')); }
-    bump();
+    return p;
   }
   function runPy(job) {
     job.state = py.state === 'ready' ? 'running' : 'loading';
@@ -406,6 +429,7 @@
       };
       pyEnsure().then(function () {
         if (finished) return;
+        if (!py.worker) { end({ status: 'error', text: nl(text) + '\u2716 Python stopped unexpectedly \u2014 run again', ms: 0 }); return; }
         var id = ++py.seq;
         job.state = 'running'; job.statusText = 'Running…'; bump();
         py.pending[id] = {

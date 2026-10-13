@@ -665,11 +665,11 @@
     mutate(ref, function (P, t) { return Model.toggleDone(P, t); }, { haptic: true });
   }
   function moveTo(ref, q, focus) {
-    var Q = QUADS[q];
     mutate(ref, function (P, t) { return Model.setQuadrant(P, t, q, S.sentinel); }, {
       haptic: true, focus: focus,
       focusLine: focus ? function (res, t) { return t.line; } : null,
-      toast: q === 0 ? 'Moved to Unsorted' : 'Moved to ' + Q.name,
+      // the card visibly lands — only say where it went when that's out of sight
+      toast: q === 0 && !prefs.trayOpen ? 'Moved to Unsorted' : null,
     });
   }
   function jumpToLine(line) {
