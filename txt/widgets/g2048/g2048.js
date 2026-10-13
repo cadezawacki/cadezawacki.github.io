@@ -106,6 +106,7 @@
     p._onClose = function () { if (raf) { cancelAnimationFrame(raf); raf = 0; } if (state && state._key) document.removeEventListener('keydown', state._key, true); state = null; };
     state._key = function (e) {
       if (!document.getElementById('g2048-panel')) return;
+      if (Cade.isMinimized && Cade.isMinimized(p)) return; // parked in the dock: keys belong to the editor
       var k = e.key;
       if (k === 'Escape') { e.preventDefault(); close(); return; }
       if (k === ' ' || e.code === 'Space') { e.preventDefault(); reset(); return; }
@@ -125,6 +126,9 @@
       if (Math.abs(dx) > Math.abs(dy)) move(dx > 0 ? 'right' : 'left'); else move(dy > 0 ? 'down' : 'up');
     });
     canvas.style.touchAction = 'none';
+    // Minimized: no need to redraw a hidden board; restore starts the loop again.
+    p.addEventListener('cade-panel-minimize', function () { if (raf) { cancelAnimationFrame(raf); raf = 0; } });
+    p.addEventListener('cade-panel-restore', function () { if (state && !raf) raf = requestAnimationFrame(loop); });
     raf = requestAnimationFrame(loop);
   }
 

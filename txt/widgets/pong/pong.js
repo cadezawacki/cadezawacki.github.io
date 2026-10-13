@@ -501,6 +501,7 @@
 
   function onKey(e) {
     if (!S) return;
+    if (Cade.isMinimized && Cade.isMinimized(S.panel)) return; // parked in the dock: keys belong to the editor
     if (e.ctrlKey || e.metaKey || e.altKey) return;          // leave app shortcuts alone
     var t = e.target;
     if (t && t.tagName && /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) && !S.panel.contains(t)) return;
@@ -646,6 +647,8 @@
     document.addEventListener('visibilitychange', S.onVis);
     S.onBlur = function () { pause(); if (S) { S.held = {}; applyKeys(); } };
     window.addEventListener('blur', S.onBlur);
+    // Minimized to the dock: pause like a tab switch; the pause card waits after restore.
+    p.addEventListener('cade-panel-minimize', function () { if (S && S.panel === p) S.onBlur(); });
     S.onResize = function () {
       clearTimeout(S.resizeT);
       S.resizeT = setTimeout(function () { if (S) { layout(); draw(); } }, 120);

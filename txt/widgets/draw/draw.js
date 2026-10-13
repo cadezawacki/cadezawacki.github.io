@@ -1250,6 +1250,7 @@
     // Enter applies a pending crop.
     sess._key = function (e) {
       if (!document.getElementById(PANEL_ID)) return;
+      if (Cade.isMinimized && Cade.isMinimized(panel)) return; // parked in the dock: keys belong to the editor
       if (e.key === 'Escape') {
         e.preventDefault();
         if (S && (S.cropRect || S.cropUI)) { cancelCrop(); return; }

@@ -112,6 +112,7 @@
     p._onClose = function () { if (raf) { cancelAnimationFrame(raf); raf = 0; } if (state && state._key) document.removeEventListener('keydown', state._key, true); state = null; };
     state._key = function (e) {
       if (!document.getElementById('tetris-panel')) return;
+      if (Cade.isMinimized && Cade.isMinimized(p)) return; // parked in the dock: keys belong to the editor
       var k = e.key;
       if (k === 'Escape') { e.preventDefault(); close(); return; }
       if (k === ' ' || e.code === 'Space') { e.preventDefault(); if (over) reset(); else hardDrop(); return; }
@@ -121,6 +122,9 @@
       else if (k === 'ArrowDown') { e.preventDefault(); softDrop(); acc = 0; }
     };
     document.addEventListener('keydown', state._key, true);
+    // Minimized: stop the clock; restore carries on from the same frame (no time jump).
+    p.addEventListener('cade-panel-minimize', function () { if (raf) { cancelAnimationFrame(raf); raf = 0; } });
+    p.addEventListener('cade-panel-restore', function () { if (state && !raf) { last = 0; raf = requestAnimationFrame(loop); } });
     var sx = 0, sy = 0, tracking = false, lastMoveX = 0;
     canvas.addEventListener('pointerdown', function (e) { sx = e.clientX; sy = e.clientY; tracking = true; lastMoveX = e.clientX; });
     canvas.addEventListener('pointermove', function (e) {

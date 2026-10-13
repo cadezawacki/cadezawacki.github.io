@@ -1933,6 +1933,7 @@
     };
     ui.onKey = function (e) {
       if (!ui) return;
+      if (Cade.isMinimized && Cade.isMinimized(ui.panel)) return; // parked in the dock: keys belong to the editor
       var ae = document.activeElement, inside = ui.panel.contains(ae);
       if (e.key === 'Escape') {
         if (!inside && !(ui.active && (!ae || ae === document.body))) return;

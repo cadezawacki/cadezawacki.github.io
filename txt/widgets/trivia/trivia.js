@@ -415,10 +415,10 @@
 
   function current() { return game && !game.over ? game.qs[game.i] : null; }
 
-  // Per-question clock: pauses while the page is hidden.
+  // Per-question clock: pauses while the page is hidden (or the panel minimized).
   var clock = { start: 0, used: 0, running: false };
   function beginQuestion() {
-    clock = { start: now(), used: 0, running: !document.hidden };
+    clock = { start: now(), used: 0, running: !document.hidden && !(Cade.isMinimized && Cade.isMinimized(P)) };
     paint();
     startTick();
   }
@@ -442,8 +442,9 @@
   }
   function onVisibility() {
     if (!clock) return;
-    if (document.hidden && clock.running) { clock.used += now() - clock.start; clock.running = false; }
-    else if (!document.hidden && !clock.running) { clock.start = now(); clock.running = true; }
+    var away = document.hidden || (Cade.isMinimized && Cade.isMinimized(P));
+    if (away && clock.running) { clock.used += now() - clock.start; clock.running = false; }
+    else if (!away && !clock.running) { clock.start = now(); clock.running = true; }
   }
 
   function answer(idx) {
@@ -665,6 +666,7 @@
 
   function onKey(e) {
     if (!P || !P.isConnected || !active) return;
+    if (Cade.isMinimized && Cade.isMinimized(P)) return; // parked in the dock: keys belong to the editor
     if (e.ctrlKey || e.metaKey || e.altKey || e.isComposing) return;
     var t = e.target, tag = t && t.tagName;
     if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (t && t.isContentEditable)) return;
@@ -740,6 +742,9 @@
     document.addEventListener('pointerdown', onDocPointer, true);
     document.addEventListener('focusin', onDocFocus, true);
     document.addEventListener('visibilitychange', onVisibility);
+    // Minimized to the dock counts as hidden for the question clock.
+    P.addEventListener('cade-panel-minimize', onVisibility);
+    P.addEventListener('cade-panel-restore', onVisibility);
     P.addEventListener('click', onClick);
     P.addEventListener('change', onChange);
     P.addEventListener('mousedown', function (e) {

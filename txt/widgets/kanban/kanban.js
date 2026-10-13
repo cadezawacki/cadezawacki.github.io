@@ -1330,6 +1330,7 @@
   }
   function onDragKey(e) {
     if (e.key !== 'Escape' || !S.drag) return;
+    if (Cade.isMinimized && Cade.isMinimized(panelEl)) return; // parked in the dock: keys belong to the editor
     e.preventDefault(); e.stopPropagation();
     cancelDrag();
     endPress();

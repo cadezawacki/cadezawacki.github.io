@@ -150,7 +150,7 @@
   function elapsed() { return cur ? cur.t + (runSince ? now() - runSince : 0) : 0; }
   function foldClock() { if (runSince && cur) { var n = now(); cur.t += n - runSince; runSince = n; } }
   function stopClock() { foldClock(); runSince = 0; }
-  function canRun() { return !!(ui && cur && !cur.d && !paused && !ui.ovKind && !document.hidden); }
+  function canRun() { return !!(ui && cur && !cur.d && !paused && !ui.ovKind && !document.hidden && !(Cade.isMinimized && Cade.isMinimized(ui.panel))); }
   function syncClock() { if (canRun()) { if (!runSince) runSince = now(); } else stopClock(); paintTime(); }
   function paintTime() {
     if (!ui) return;
@@ -570,6 +570,14 @@
       syncClock();
     };
     ui.onHide = function () { saveProgress(); };
+    // Minimized to the dock counts as hidden: pause (the card waits after restore).
+    p.addEventListener('cade-panel-minimize', function () {
+      if (!ui || ui.panel !== p) return;
+      if (cur && !cur.d && !ui.ovKind) pause();
+      saveProgress();
+      syncClock();
+    });
+    p.addEventListener('cade-panel-restore', function () { if (ui && ui.panel === p) syncClock(); });
     document.addEventListener('keydown', ui.onKey, true);
     document.addEventListener('pointerdown', ui.onDocDown, true);
     document.addEventListener('visibilitychange', ui.onVis);
@@ -624,6 +632,7 @@
 
   function onKey(e) {
     if (!ui || !active || !puz) return;
+    if (Cade.isMinimized && Cade.isMinimized(ui.panel)) return; // parked in the dock: keys belong to the editor
     var ae = document.activeElement;
     if (ae && ae !== document.body && !ui.panel.contains(ae)) return; // typing elsewhere (editor, palette…)
     var k = e.key, handled = true;

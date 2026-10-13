@@ -798,6 +798,7 @@
 
   function onKey(e) {
     if (!ui) return;
+    if (Cade.isMinimized && Cade.isMinimized(ui.panel)) return; // parked in the dock: keys belong to the editor
     var ae = document.activeElement;
     if (ae && ae !== document.body && !ui.panel.contains(ae) && (ae.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName))) return;
     var k = e.key, mod = e.ctrlKey || e.metaKey, handled = true;

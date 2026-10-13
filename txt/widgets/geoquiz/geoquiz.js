@@ -1223,6 +1223,7 @@
 
   function onKey(e) {
     if (!P || !P.isConnected || !active) return;
+    if (Cade.isMinimized && Cade.isMinimized(P)) return; // parked in the dock: keys belong to the editor
     if (e.ctrlKey || e.metaKey || e.altKey || e.isComposing) return;
     var t = e.target, tag = t && t.tagName;
     if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (t && t.isContentEditable)) return;

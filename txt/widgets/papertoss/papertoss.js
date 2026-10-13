@@ -814,7 +814,7 @@
   // caret blinking for a while; it stops after 30 s without input (and never runs
   // with reduced motion, on blur or with the tab hidden).
   function idle() {
-    if (!S || S.rm || S.idleT || S.raf || S.paused || document.hidden) return;
+    if (!S || S.rm || S.idleT || S.raf || S.paused || document.hidden || (Cade.isMinimized && Cade.isMinimized(S.panel))) return;
     if (perfNow() > S.idleUntil) return;
     S.idleT = setTimeout(function () {
       if (!S) return;
@@ -1023,6 +1023,7 @@
   function isThrowKey(code) { return code === 'Space' || code === 'ArrowUp' || code === 'Enter' || code === 'NumpadEnter'; }
   function onKey(e) {
     if (!S || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (Cade.isMinimized && Cade.isMinimized(S.panel)) return; // parked in the dock: keys belong to the editor
     var t = e.target;
     if (t && t.tagName && /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) && !S.panel.contains(t)) return;
     var code = e.code || KEY2CODE[(e.key || '').toLowerCase()] || '', now = perfNow();
@@ -1187,6 +1188,10 @@
     window.addEventListener('blur', S.onBlur);
     S.onFocus = function () { poke(); };
     window.addEventListener('focus', S.onFocus);
+    // Minimized to the dock: same as hiding the tab (a throw in flight waits on the
+    // pause card; the idle tick stops); restore wakes the idle tick again.
+    p.addEventListener('cade-panel-minimize', function () { if (S && S.panel === p) pause(); });
+    p.addEventListener('cade-panel-restore', function () { if (S && S.panel === p) poke(); });
     S.onResize = function () {
       if (!S) return;
       clearTimeout(S.resizeT);

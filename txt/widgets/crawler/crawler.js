@@ -4118,6 +4118,7 @@
   function onKey(e) {
     var pan = document.getElementById('crawler-panel');
     if (!pan) return;
+    if (Cade.isMinimized && Cade.isMinimized(pan)) return; // parked in the dock: keys belong to the editor
     // Don't hijack keys while the user is typing in the editor / an input —
     // only act when the game itself holds focus, or focus is on nothing special.
     if (!pan.contains(document.activeElement) && isTyping(e)) return;
@@ -4260,6 +4261,9 @@
     // input
     ui.onKey = onKey;
     document.addEventListener('keydown', ui.onKey, true);
+    // Minimized to the dock: freeze the loop (drawing, auto-travel); restore picks up again.
+    panel.addEventListener('cade-panel-minimize', function () { state_teardown(); });
+    panel.addEventListener('cade-panel-restore', function () { if (ui && world && !raf) raf = requestAnimationFrame(render); });
     ui.onResize = function () { layoutCanvas(); };
     window.addEventListener('resize', ui.onResize);
     bindCanvasInput(canvas);
