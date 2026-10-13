@@ -23,7 +23,7 @@
  *   have offline (sizes, download, remove, load at start). One namespace per
  *   room; stop / timeout destroy the iframe.
  * - JSON: validated (line/column errors) and pretty-printed.
- * - Shell: explained, not run. HTML/CSS open the Live HTML Preview.
+ * - Shell: explained, not run. HTML/CSS open the Live Preview.
  *
  * Loaded on demand by the Code Runner widget, its palette scripts and the
  * "Run buttons" plugin (after coderun-kit.js). Exposes window.__cadeCodeRun.
@@ -718,7 +718,7 @@
     try { ed.dispatch({ selection: { anchor: c.from } }); } catch (e) {}
     var HP = window.__cadeHtmlPreview;
     if (HP && HP.openAt) HP.openAt(c.from);
-    else if (!Cade.runCommand('Live HTML Preview')) toast("Live HTML Preview isn't available", 'error');
+    else if (!Cade.runCommand('Live Preview')) toast("Live Preview isn't available", 'error');
   }
   // No language after the ```: work it out now (this block only) from the
   // file name above it or the code itself; complain only if that fails.
@@ -747,7 +747,7 @@
     if (lang === 'shell') { toast(SHELL_MSG, 'info', 6000); return Promise.resolve('shell'); }
     if (!K.RUNNABLE[lang]) {
       var w = (b.info || '').split(/\s/)[0];
-      toast(w ? "Can't run “" + w + '” blocks — runnable: js, ts, python, json (html opens the Live HTML Preview)'
+      toast(w ? "Can't run “" + w + '” blocks — runnable: js, ts, python, json (html opens the Live Preview)'
               : 'Add a language after the ``` (js, ts, python, json) to run this block', 'info', 4200);
       return Promise.resolve('unsupported');
     }

@@ -1404,14 +1404,15 @@
     {
       "id": "htmlpreview",
       "type": "widget",
-      "name": "Live HTML Preview",
-      "description": "Live-render the ```html block at the cursor (+ nearby css / js) in a sandbox — devices, console, full screen",
+      "name": "Live Preview",
+      "description": "See the note rendered as you type — Markdown in full (tables, tasks, callouts, images…) and ```html blocks as live pages (+ nearby css / js) — devices, console, full screen",
       "icon": "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"2\" y=\"4\" width=\"20\" height=\"16\" rx=\"2\"/><path d=\"M2 8h20\"/><polyline points=\"9 12 7 14 9 16\"/><polyline points=\"15 12 17 14 15 16\"/></svg>",
-      "tags": "html,css,js,javascript,preview,live,render,web,page,browser,sandbox,iframe,frontend,codepen,playground",
+      "tags": "markdown,md,preview,live preview,live html preview,render,rendered,reading view,read mode,html,css,js,javascript,live,web,page,browser,sandbox,iframe,frontend,codepen,playground",
       "entry": "widgets/htmlpreview/htmlpreview.js",
       "css": "widgets/htmlpreview/htmlpreview.css",
       "precache": [
-        "widgets/coderun/coderun-kit.js"
+        "widgets/coderun/coderun-kit.js",
+        "widgets/htmlpreview/htmlpreview-md.js"
       ]
     },
     {
