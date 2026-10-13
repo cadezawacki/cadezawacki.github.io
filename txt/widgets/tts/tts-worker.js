@@ -103,6 +103,17 @@
   }
 
   function blobUrl(buf) { return URL.createObjectURL(new Blob([buf], { type: 'text/javascript' })); }
+  // ORT's emscripten glue works out its .wasm address with
+  // new URL('ort-wasm-simd-threaded.wasm', import.meta.url) even when the
+  // bytes are handed over as wasmBinary. Imported from a blob: URL that is not
+  // a valid base, so it throws — outside any promise we can catch, which used
+  // to leave HD voice hanging at 100%. The address is never fetched (we supply
+  // the bytes), so swap the lookup for a plain object before importing.
+  function patchGlue(buf) {
+    var src = new TextDecoder().decode(buf);
+    var out = src.replace(/new URL\(("[^"]+\.wasm"),\s*import\.meta\.url\)/g, '({href:$1})');
+    return out === src ? buf : new TextEncoder().encode(out).buffer;
+  }
   async function importFromBytes(buf) {
     var url = blobUrl(buf);
     try { return await import(url); } finally { URL.revokeObjectURL(url); }
@@ -130,7 +141,7 @@
     ort.env.wasm.numThreads = 1;      // no SharedArrayBuffer without cross-origin isolation
     ort.env.wasm.proxy = false;       // we ARE the worker
     ort.env.wasm.wasmBinary = b.wasm; // wins over any path lookup
-    var glueUrl = blobUrl(b.glue);    // ORT imports its emscripten glue from here
+    var glueUrl = blobUrl(patchGlue(b.glue)); // ORT imports its emscripten glue from here
     ort.env.wasm.wasmPaths = { mjs: glueUrl };
     phonemize = (await importFromBytes(b.phon)).phonemize;
     if (typeof phonemize !== 'function') throw new Error('phonemizer failed to load');
@@ -283,6 +294,16 @@
       busy = false;
     }
   }
+
+  // Anything thrown outside init's promise chain (inside the libraries'
+  // own callbacks) must still end the load — report it instead of hanging.
+  function initCrashed(msg) {
+    if (!initP || session) return;
+    initP = null;
+    post({ type: 'error', message: msg || 'HD voice failed to start' });
+  }
+  self.addEventListener('error', function (e) { initCrashed(e && e.message); });
+  self.addEventListener('unhandledrejection', function (e) { initCrashed(errMsg(e && e.reason)); });
 
   self.onmessage = function (e) {
     var m = e.data || {};
