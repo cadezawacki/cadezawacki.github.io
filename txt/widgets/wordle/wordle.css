@@ -1,0 +1,157 @@
+/* Word Guess widget. Tile colours are panel-scoped variables: light by default,
+   [data-theme="dark"] overrides, .wd-hc = high-contrast (orange / blue). */
+#wordle-panel {
+  top: 56px; right: 12px; width: 384px; max-width: calc(100vw - 24px);
+  /* A game: taps must never select text, open the callout menu or zoom. */
+  -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent;
+  --wd-c: #6aaa64; --wd-p: #c9b458; --wd-a: #787c7e; --wd-on: #fff;
+  --wd-t: clamp(30px, min(calc((100vh - 370px) / 6.4), calc((100vw - 76px) / 5.6)), 58px);
+  --wd-t: clamp(30px, min(calc((100dvh - 370px) / 6.4), calc((100vw - 76px) / 5.6)), 58px);
+  --wd-kh: 50px;
+}
+[data-theme="dark"] #wordle-panel { --wd-c: #538d4e; --wd-p: #b59f3b; --wd-a: #3a3a3c; }
+#wordle-panel.wd-hc { --wd-c: #f5793a; --wd-p: #85c0f9; }
+#wordle-panel .cade-panel-body { padding: 8px 10px 10px; display: flex; flex-direction: column; gap: 8px; overflow: hidden; }
+
+/* --- top bar --- */
+.wd-bar { display: flex; align-items: center; gap: 4px; }
+.wd-modes { display: flex; flex: 1; min-width: 0; gap: 2px; padding: 2px; border-radius: 8px; background: var(--surface-2); border: 1px solid var(--border); }
+.wd-mode {
+  flex: 1; min-width: 0; font: inherit; font-size: var(--text-xs); font-weight: 600; padding: 4px 6px; border-radius: 6px;
+  border: 0; background: transparent; color: var(--text-muted); cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.wd-mode.on { background: var(--surface); color: var(--text); box-shadow: var(--shadow-sm); }
+.wd-ic {
+  flex: 0 0 auto; width: 30px; height: 30px; display: inline-flex; align-items: center; justify-content: center; padding: 0;
+  font: inherit; font-size: 15px; font-weight: 700; line-height: 1; border: 1px solid transparent; border-radius: 6px;
+  background: transparent; color: var(--text-muted); cursor: pointer;
+}
+.wd-ic:hover { color: var(--text); background: var(--surface-hover); }
+.wd-ic[hidden] { display: none; }
+
+/* --- board --- */
+.wd-main { position: relative; display: flex; justify-content: center; min-height: calc(var(--wd-t) * 6 + 25px); }
+.wd-board { display: grid; grid-template-rows: repeat(6, var(--wd-t)); gap: 5px; }
+.wd-row { display: grid; grid-template-columns: repeat(5, var(--wd-t)); gap: 5px; }
+.wd-tile {
+  display: flex; align-items: center; justify-content: center; box-sizing: border-box;
+  border: 2px solid var(--border); background: transparent; color: var(--text);
+  font-size: calc(var(--wd-t) * 0.56); font-weight: 700; line-height: 1; text-transform: uppercase;
+}
+.wd-tile[data-s="tbd"] { border-color: var(--text-faint); }
+.wd-tile[data-s="c"] { background: var(--wd-c); border-color: var(--wd-c); color: var(--wd-on); }
+.wd-tile[data-s="p"] { background: var(--wd-p); border-color: var(--wd-p); color: var(--wd-on); }
+.wd-tile[data-s="a"] { background: var(--wd-a); border-color: var(--wd-a); color: var(--wd-on); }
+
+.wd-tile.wd-pop { animation: wd-pop 100ms ease-in-out; }
+.wd-tile.wd-flip { animation: wd-flip 500ms ease-in-out; }
+.wd-tile.wd-bounce { animation: wd-bounce 1000ms ease; }
+.wd-row.wd-shake { animation: wd-shake 600ms ease-in-out; }
+@keyframes wd-pop { 0% { transform: scale(0.85); } 40% { transform: scale(1.1); } 100% { transform: scale(1); } }
+@keyframes wd-flip { 0% { transform: rotateX(0); } 50% { transform: rotateX(-90deg); } 100% { transform: rotateX(0); } }
+@keyframes wd-shake {
+  10%, 90% { transform: translateX(-1px); } 20%, 80% { transform: translateX(2px); }
+  30%, 50%, 70% { transform: translateX(-4px); } 40%, 60% { transform: translateX(4px); }
+}
+@keyframes wd-bounce {
+  0%, 20% { transform: translateY(0); } 40% { transform: translateY(-22px); } 50% { transform: translateY(4px); }
+  60% { transform: translateY(-11px); } 80% { transform: translateY(2px); } 100% { transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .wd-tile.wd-pop, .wd-tile.wd-flip, .wd-tile.wd-bounce, .wd-row.wd-shake { animation: none; }
+}
+
+.wd-toast {
+  position: absolute; top: 10px; left: 50%; transform: translateX(-50%); z-index: 6; max-width: 92%;
+  padding: 8px 12px; border-radius: 6px; background: var(--text); color: var(--surface);
+  font-size: var(--text-sm); font-weight: 700; text-align: center; pointer-events: none;
+  opacity: 0; transition: opacity 150ms;
+}
+.wd-toast.on { opacity: 1; }
+
+.wd-loading { display: none; position: absolute; inset: 0; z-index: 5; align-items: center; justify-content: center; text-align: center; padding: 12px; background: var(--surface); color: var(--text-muted); font-size: var(--text-sm); }
+#wordle-panel.wd-loading-on .wd-loading { display: flex; }
+
+/* --- on-screen keyboard --- */
+.wd-kb { display: flex; flex-direction: column; gap: 6px; }
+.wd-kr { display: flex; gap: 5px; }
+.wd-half { flex: 0.5 1 0; }
+.wd-key {
+  flex: 1 1 0; min-width: 0; height: var(--wd-kh); padding: 0; border: 0; border-radius: 5px; cursor: pointer;
+  background: var(--kbd-bg, var(--surface-2)); color: var(--text);
+  font-family: inherit; font-size: 14px; font-weight: 700; text-transform: uppercase; touch-action: manipulation;
+}
+.wd-key.wide { flex-grow: 1.55; font-size: 11px; }
+.wd-key[data-k="back"] { font-size: 18px; }
+.wd-key:hover { filter: brightness(0.96); }
+.wd-key:active { filter: brightness(0.88); }
+.wd-key[data-s="c"] { background: var(--wd-c); color: var(--wd-on); }
+.wd-key[data-s="p"] { background: var(--wd-p); color: var(--wd-on); }
+.wd-key[data-s="a"] { background: var(--wd-a); color: var(--wd-on); }
+
+.wd-hint { display: none; text-align: center; font-size: var(--text-xs); color: var(--text-faint); margin-top: -2px; }
+#wordle-panel.wd-idle .wd-hint { display: block; }
+#wordle-panel.wd-idle .wd-kb { opacity: 0.75; }
+
+/* --- sheets: help / stats / settings, over the board --- */
+.wd-sheet {
+  position: absolute; inset: 0; z-index: 4; overflow-y: auto; overscroll-behavior: contain;
+  padding: 2px 6px 10px; background: var(--surface); font-size: var(--text-sm); line-height: 1.45;
+}
+.wd-sheet[hidden] { display: none; }
+.wd-sheet p { margin: 6px 0; }
+.wd-sh-x {
+  position: absolute; top: 0; right: 0; width: 30px; height: 30px; padding: 0; cursor: pointer;
+  border: 0; border-radius: 6px; background: transparent; color: var(--text-muted); font-size: 18px; line-height: 1;
+}
+.wd-sh-x:hover { color: var(--text); background: var(--surface-hover); }
+.wd-sh-title { margin: 6px 30px 10px; text-align: center; font-weight: 700; font-size: var(--text-xs); letter-spacing: 0.08em; text-transform: uppercase; }
+.wd-sm { font-size: var(--text-xs); color: var(--text-muted); }
+.wd-center { text-align: center; }
+.wd-ex { display: flex; gap: 4px; margin-top: 8px; }
+.wd-ex .wd-tile { width: 30px; height: 30px; font-size: 17px; }
+
+.wd-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; text-align: center; }
+.wd-stat b { display: block; font-size: 26px; font-weight: 500; line-height: 1.15; font-variant-numeric: tabular-nums; }
+.wd-stat span { display: block; font-size: 10.5px; color: var(--text-muted); line-height: 1.2; }
+.wd-sub { margin: 12px 0 6px; text-align: center; font-weight: 700; font-size: var(--text-xs); letter-spacing: 0.08em; text-transform: uppercase; }
+.wd-dist { display: flex; flex-direction: column; gap: 4px; }
+.wd-dr { display: flex; align-items: center; gap: 6px; font-size: var(--text-xs); font-variant-numeric: tabular-nums; }
+.wd-dr > span { width: 10px; text-align: center; }
+.wd-db { box-sizing: border-box; min-width: 20px; padding: 1px 6px; text-align: right; font-weight: 700; background: var(--wd-a); color: var(--wd-on); }
+.wd-db.hi { background: var(--wd-c); }
+.wd-next { margin-top: 12px; text-align: center; font-size: var(--text-xs); color: var(--text-muted); }
+.wd-next b { display: block; font-size: 22px; font-weight: 500; color: var(--text); font-variant-numeric: tabular-nums; }
+.wd-acts { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; margin-top: 12px; }
+.wd-btn {
+  font: inherit; font-size: var(--text-xs); font-weight: 600; padding: 7px 12px; border-radius: 6px; cursor: pointer;
+  border: 1px solid var(--border); background: var(--surface-2); color: var(--text);
+}
+.wd-btn:hover { background: var(--surface-hover); }
+.wd-btn.primary { background: var(--wd-c); border-color: var(--wd-c); color: var(--wd-on); }
+.wd-btn.primary:hover { filter: brightness(1.06); }
+.wd-btn.danger { color: var(--error, #dc2626); }
+
+.wd-set { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border); }
+.wd-set > div { flex: 1; min-width: 0; }
+.wd-set-l { font-weight: 600; }
+.wd-set-h { font-size: var(--text-xs); color: var(--text-muted); }
+.wd-set.locked .wd-sw { opacity: 0.45; cursor: not-allowed; }
+.wd-sw {
+  flex: 0 0 auto; position: relative; width: 36px; height: 20px; padding: 0; border-radius: 999px; cursor: pointer;
+  border: 0; background: var(--border); transition: background 150ms;
+}
+.wd-sw i { position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,0.25); transition: transform 150ms; }
+.wd-sw.on { background: var(--wd-c); }
+.wd-sw.on i { transform: translateX(16px); }
+
+@media (max-width: 560px) {
+  #wordle-panel { left: 6px !important; right: 6px; width: auto; max-width: none; top: 48px; }
+  .wd-hint { display: none !important; }
+}
+@media (max-height: 640px) { #wordle-panel { --wd-kh: 42px; } }
+@media (pointer: coarse) {
+  .wd-key { font-size: 15px; }
+  .wd-ic { width: 34px; height: 34px; }
+  .wd-hint { display: none !important; }
+}
