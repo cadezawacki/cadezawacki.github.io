@@ -480,16 +480,19 @@
         i = e; continue;
       }
       if (src.substr(i, 9) === '<![CDATA[') { var ce = src.indexOf(']]>', i); i = ce < 0 ? n : ce + 3; continue; }
+      if (!/^<[a-zA-Z]/.test(src.substr(i, 2))) { i++; continue; }
+      // A start tag: skip it whole (attribute values may contain "<!--").
+      var k = i, quote = '';
+      while (k < n) {
+        var ch = src.charAt(k);
+        if (quote) { if (ch === quote) quote = ''; }
+        else if (ch === '"' || ch === "'") quote = ch;
+        else if (ch === '>') break;
+        k++;
+      }
+      var tagEnd = Math.min(k + 1, n);
       if ((m = /^<(script|style)\b/i.exec(src.substr(i, 8)))) {
-        var k = i, quote = '';
-        while (k < n) {
-          var ch = src.charAt(k);
-          if (quote) { if (ch === quote) quote = ''; }
-          else if (ch === '"' || ch === "'") quote = ch;
-          else if (ch === '>') break;
-          k++;
-        }
-        var tagEnd = Math.min(k + 1, n), name = m[1].toLowerCase(), tag = src.slice(i, tagEnd);
+        var name = m[1].toLowerCase(), tag = src.slice(i, tagEnd);
         var close = low.indexOf('</' + name, tagEnd);
         if (close < 0) close = n;
         var lang = null;
@@ -505,7 +508,7 @@
         }
         i = close + 2; continue;
       }
-      i++;
+      i = tagEnd;
     }
     return { cuts: cuts, st: st };
   }
@@ -523,8 +526,10 @@
         var ls = src.lastIndexOf('\n', a - 1) + 1, le = src.indexOf('\n', b);
         if (le < 0) le = src.length;
         var tailBlank = !src.slice(b, le).trim(), headBlank = !src.slice(ls, a).trim();
+        var pc = src.charAt(a - 1), nc = src.charAt(b);
         if (tailBlank && !headBlank) { while (a > Math.max(ls, lastEnd) && /[ \t]/.test(src.charAt(a - 1))) a--; }
-        else if (!tailBlank && (headBlank || /[ \t]/.test(src.charAt(a - 1)))) { while (b < le && /[ \t]/.test(src.charAt(b))) b++; }
+        else if (!tailBlank && /[ \t]/.test(nc) && (headBlank || /[ \t([{>]/.test(pc))) { while (b < le && /[ \t]/.test(src.charAt(b))) b++; }
+        else if (!tailBlank && /[ \t]/.test(pc) && /[)\]},;:.]/.test(nc)) { while (a > Math.max(ls, lastEnd) && /[ \t]/.test(src.charAt(a - 1))) a--; }
       }
       c.s = Math.max(a, lastEnd); c.e = Math.max(b, c.s); lastEnd = c.e;
     }
@@ -620,7 +625,7 @@
     try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'; } catch (e) { return 'UTC'; }
   }
 
-  // Abbreviations: a number = fixed offset in minutes (EST is always UTC\u22125);
+  // Abbreviations: a number = fixed offset in minutes (EST is always UTC-5);
   // a string = the generic, DST-following zone (ET follows New York).
   function tzAbbrs() {
     return {
@@ -698,6 +703,7 @@
   }
 
   function tzOffLabel(off) {
+    if (!off) return 'UTC';
     var a = Math.abs(off), h = Math.floor(a / 60), mi = a % 60;
     return 'UTC' + (off < 0 ? '-' : '+') + h + (mi ? ':' + (mi < 10 ? '0' : '') + mi : '');
   }
@@ -895,7 +901,7 @@
       var zs = m[7] || m[8] || null;
       out.push({ s: s, e: e, h: h, mi: mi, h12: h12, zoneStr: zs, zone: zs ? tzResolve(zs) : null });
     }
-    // "3\u20134pm PT", "11-1pm ET": the bare first hour borrows the meridiem and zone.
+    // "3-4pm PT", "11-1pm ET": the bare first hour borrows the meridiem and zone.
     var rng = /(\d{1,2})(?::(\d{2}))?\s*(?:-|\u2013|\u2014|to)\s*(?=\d)/g;
     while ((m = rng.exec(text))) {
       var rs = m.index, re2 = rs + m[1].length + (m[2] ? m[2].length + 1 : 0);
@@ -907,7 +913,7 @@
       if (nx.h12) {
         if (h1 < 1 || h1 > 12) continue;
         var pm = nx.h >= 12, nh = (nx.h + 11) % 12 + 1;
-        if (h1 > nh && h1 !== 12) pm = !pm;                     // 11\u20131pm: 11 is am
+        if (h1 > nh && h1 !== 12) pm = !pm;                     // 11-1pm: 11 is am
         h1 = h1 % 12 + (pm ? 12 : 0);
       } else if (!m[2] || h1 > 23) continue;
       out.push({ s: rs, e: re2, h: h1, mi: mi1, h12: nx.h12, zoneStr: null, zone: null, rangeOf: nx });
@@ -980,7 +986,7 @@
         if (f.iso && mode === 'replace') {
           var pad = function (x) { return (x < 10 ? '0' : '') + x; }, o = p.off, ao = Math.abs(o);
           str = p.y + '-' + pad(p.m) + '-' + pad(p.d) + 'T' + pad(p.h) + ':' + pad(p.mi) + (f.sec != null ? ':' + pad(p.s) : '') +
-            (o === 0 && f.abs != null && /Z$/.test(text.slice(f.s, f.e)) ? 'Z' : (o < 0 ? '-' : '+') + pad(Math.floor(ao / 60)) + ':' + pad(ao % 60));
+            (o === 0 && (tz.fixed === 0 || /^(?:Etc\/)?(?:UTC|GMT|UCT|Zulu)$/.test(tz.id || '')) ? 'Z' : (o < 0 ? '-' : '+') + pad(Math.floor(ao / 60)) + ':' + pad(ao % 60));
         } else {
           str = (f.iso ? tzFmtDate(p) + ', ' : '') + tzFmtTime(p.h, p.mi, f.iso ? true : f.h12) + ' ' + tzAbbr(tz, utc);
           if (!f.iso && f.date) {

@@ -123,7 +123,9 @@
     var W = 360, H = 176, X0 = 10, X1 = 350, YT = 12, YB = 146;
     var smp = R.sun.samples, lo = 90, hi = -90, i;
     for (i = 0; i < smp.length; i++) { lo = Math.min(lo, smp[i].v); hi = Math.max(hi, smp[i].v); }
-    var yMax = Math.max(24, hi + 10), yMin = Math.max(-54, Math.min(-24, lo - 4));
+    var mhi = -90;
+    for (i = 0; i < R.mpath.length; i++) mhi = Math.max(mhi, R.mpath[i].v);
+    var yMax = Math.min(90, Math.max(24, hi + 10, mhi + 6)), yMin = Math.max(-54, Math.min(-24, lo - 4));
     function x(t) { return X0 + (t - R.start) / (R.end - R.start) * (X1 - X0); }
     function y(a) { return YT + (yMax - Math.max(yMin, Math.min(yMax, a))) / (yMax - yMin) * (YB - YT); }
     var h0 = y(0);
@@ -306,7 +308,7 @@
     else if (sd.polarNight) out = '\ud83c\udf11 Polar night (sun stays down)';
     else out = '\u2600\ufe0f Sunrise ' + hm(sd.sunrise, tz) + ' \u00b7 Sunset ' + hm(sd.sunset, tz) + (sd.sunsetNextDay ? ' (+1)' : '');
     var dl = sd.dayLength - R.prevLen, s = Math.round(Math.abs(dl) / 1000);
-    out += ' \u00b7 Day ' + dur(sd.dayLength) + (s >= 1 ? ' (' + (dl < 0 ? '\u2212' : '+') + Math.floor(s / 60) + 'm ' + (s % 60) + 's)' : '');
+    out += ' \u00b7 Day ' + dur(sd.dayLength) + (s >= 1 ? ' (' + (dl < 0 ? '\u2212' : '+') + (s >= 60 ? Math.floor(s / 60) + 'm ' : '') + (s % 60) + 's)' : '');
     out += ' \u00b7 ' + (PHASE_EMOJI[R.phaseName] || '\ud83c\udf19') + ' ' + R.phaseName + ' ' + Math.round(R.illum.fraction * 100) + '%';
     out += ' \u2014 ' + fmt(R.start + 12 * HOUR, tz, 'md', { month: 'short', day: 'numeric' }) + ', ' + S.loc.name;
     return out;

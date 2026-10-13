@@ -1,7 +1,7 @@
 /* Geography Quiz — flags, capitals, continents, country shapes and "which
  * country is highlighted?" on a map, plus flash cards for learning.
  *
- * DATA: geo-data.js (~25 KB, precached) is loaded on first open: 197 sovereign
+ * DATA: geo-data.js (~16 KB, precached) is loaded on first open: 197 sovereign
  * states (193 UN members + Vatican City, Palestine, Kosovo, Taiwan) and 28
  * dependent territories that only appear with "Include territories" on. Flags
  * are emoji built from the ISO code (regional-indicator pairs); where the
@@ -104,11 +104,11 @@
   function norm(s) {
     s = String(s == null ? '' : s).toLowerCase();
     if (s.normalize) s = s.normalize('NFD');
-    return s.replace(/[̀-ͯ]/g, '')
-      .replace(/ß/g, 'ss').replace(/æ/g, 'ae').replace(/œ/g, 'oe').replace(/ø/g, 'o')
-      .replace(/[đð]/g, 'd').replace(/ł/g, 'l').replace(/ı/g, 'i').replace(/þ/g, 'th')
+    return s.replace(/[\u0300-\u036f]/g, '')
+      .replace(/\u00df/g, 'ss').replace(/\u00e6/g, 'ae').replace(/\u0153/g, 'oe').replace(/\u00f8/g, 'o')
+      .replace(/[\u0111\u00f0]/g, 'd').replace(/\u0142/g, 'l').replace(/\u0131/g, 'i').replace(/\u00fe/g, 'th')
       .replace(/&/g, ' and ')
-      .replace(/['`´‘’ʻʼ.]/g, '')
+      .replace(/['`\u00b4\u2018\u2019\u02bb\u02bc.]/g, '')
       .replace(/[^a-z0-9]+/g, ' ').trim()
       .replace(/\bst\b/g, 'saint').replace(/\bste\b/g, 'sainte')
       .replace(/^the /, '');
@@ -518,7 +518,7 @@
         return Array.prototype.join.call(ctx.getImageData(0, 0, 1, 1).data, ',');
       };
       var colour = function (t) { var a = px(t, '#fff'), b = px(t, '#000'); return a === b && b.indexOf('0,0,0,') !== 0; };
-      if (colour('😊') && !colour(flagEmoji('CH'))) {
+      if (colour('\ud83d\ude0a') && !colour(flagEmoji('CH'))) {
         var st = document.createElement('style');
         st.id = 'gq-flag-font';
         st.textContent = '@font-face{font-family:"Twemoji Country Flags";unicode-range:U+1F1E6-1F1FF;' +
@@ -690,7 +690,8 @@
   function inRegion(c) { return prefs.region === 'all' || c.conts.indexOf(prefs.region) !== -1; }
   function poolFor(key) {
     var all = basePool();
-    var list = all.filter(inRegion);
+    // A region filter would give away every Continents answer.
+    var list = key === 'continents' ? all : all.filter(inRegion);
     if (key === 'capitals' || key === 'capitals-rev') {
       list = list.filter(function (c) {
         if (c.nocap) return false;
@@ -998,7 +999,7 @@
     var html = '<div class="gq-start"><div class="gq-desc">' + esc(MODE_INFO[prefs.mode]) + '</div>';
     if (needsAtlas(prefs.mode) && !atlas) return html + needAtlasHtml() + '</div>';
     html += '<div class="gq-muted gq-small">' + pool.length + ' ' + (prefs.terr ? 'places' : 'countries') +
-      (prefs.region !== 'all' ? ' in ' + esc(CONT_NAME[prefs.region]) : '') + '</div>';
+      (prefs.region !== 'all' && key !== 'continents' ? ' in ' + esc(CONT_NAME[prefs.region]) : '') + '</div>';
     html += '<div class="gq-acts"><button class="gq-btn primary gq-go" data-act="start"' + (pool.length < 4 ? ' disabled' : '') + '>Start round <span class="gq-kbd">↵</span></button></div>';
     if (m.a) {
       html += '<div class="gq-mini-stats"><span><b>' + m.r + '</b> rounds</span><span><b>' + Math.round(m.c / m.a * 100) + '%</b> correct</span>' +
@@ -1086,8 +1087,10 @@
       html += '<div class="gq-seg" role="group" aria-label="Answer style"><button class="gq-segb' + (prefs.input === 'mc' ? ' on' : '') + '" data-input="mc">Choices</button>' +
         '<button class="gq-segb' + (prefs.input === 'type' ? ' on' : '') + '" data-input="type">Type</button></div>';
     }
-    html += '<select class="gq-sel" data-pref="region" aria-label="Region"><option value="all">World</option>' +
-      CONTS.map(function (c) { return '<option value="' + c[0] + '"' + (prefs.region === c[0] ? ' selected' : '') + '>' + c[1] + '</option>'; }).join('') + '</select>';
+    if (prefs.mode !== 'continents') {
+      html += '<select class="gq-sel" data-pref="region" aria-label="Region"><option value="all">World</option>' +
+        CONTS.map(function (c) { return '<option value="' + c[0] + '"' + (prefs.region === c[0] ? ' selected' : '') + '>' + c[1] + '</option>'; }).join('') + '</select>';
+    }
     if (prefs.mode !== 'learn') {
       html += '<select class="gq-sel" data-pref="len" aria-label="Questions per round">' + [[10, '10 Qs'], [20, '20 Qs'], [0, 'All']].map(function (o) {
         return '<option value="' + o[0] + '"' + (prefs.len === o[0] ? ' selected' : '') + '>' + o[1] + '</option>';

@@ -135,6 +135,7 @@
   color: var(--text); background: var(--bg, var(--surface)); border: 1px solid var(--border); border-radius: 8px; outline: none;
   -webkit-user-select: text; user-select: text;
 }
+#geoquiz-panel .gq-input { -webkit-user-select: text; user-select: text; } /* stays typeable even inside a game-marked panel */
 .gq-input:focus { border-color: var(--accent); }
 .gq-typerow.done .gq-btn { display: none; }
 .gq-shake { animation: gq-shake 400ms ease-in-out; }

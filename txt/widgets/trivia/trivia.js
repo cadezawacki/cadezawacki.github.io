@@ -61,7 +61,7 @@
   // Named HTML entities: the common ones, plus accented Latin letters built
   // from base letter + combining mark (eacute, ouml, ntilde, ccedil, aring…).
   var ENT = {
-    amp: '&', lt: '<', gt: '>', quot: '"', apos: '\'', nbsp: ' ', shy: '­',
+    amp: '&', lt: '<', gt: '>', quot: '"', apos: '\'', nbsp: '\u00a0', shy: '\u00ad',
     lsquo: '‘', rsquo: '’', ldquo: '“', rdquo: '”', sbquo: '‚', bdquo: '„',
     laquo: '«', raquo: '»', lsaquo: '‹', rsaquo: '›', hellip: '…', ndash: '–', mdash: '—',
     bull: '•', middot: '·', prime: '′', Prime: '″', deg: '°', times: '×', divide: '÷',
@@ -78,7 +78,7 @@
     Gamma: 'Γ', Delta: 'Δ', Theta: 'Θ', Lambda: 'Λ', Pi: 'Π', Sigma: 'Σ', Phi: 'Φ', Omega: 'Ω',
   };
   (function () {
-    var marks = { acute: '́', grave: '̀', circ: '̂', uml: '̈', tilde: '̃', ring: '̊', cedil: '̧' };
+    var marks = { acute: '\u0301', grave: '\u0300', circ: '\u0302', uml: '\u0308', tilde: '\u0303', ring: '\u030a', cedil: '\u0327' };
     'aeiouycnAEIOUYCN'.split('').forEach(function (l) {
       for (var m in marks) {
         var ch = (l + marks[m]).normalize ? (l + marks[m]).normalize('NFC') : '';

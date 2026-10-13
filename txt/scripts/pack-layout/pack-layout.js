@@ -226,6 +226,7 @@
     var t = s.replace(/\s+$/, '');
     if (!t) return false;
     if (/[.!?:…\u203D\u3002\uFF01\uFF1F]["'\u2019\u201D\u00BB)\]*_`\u300D\u300F]*$/.test(t)) return false;
+    if (/^[\p{Lu}\d][\p{L}\p{N} ]{0,30}:(?:\s|$)/u.test(next || '')) return false;   // "Attendees: ..." starts its own line
     var w = lpCols(t);
     return /[,;\u2013—-]$/.test(t) || w >= 50 || (w >= 25 && /^\p{Ll}/u.test(next || ''));
   }
