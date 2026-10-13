@@ -190,8 +190,8 @@
   var SUITS = [1, 2, 4];
   var SUIT_LABEL = { 1: '1 suit', 2: '2 suits', 4: '4 suits' };
   var SUIT_LEVEL = { 1: 'Beginner', 2: 'Intermediate', 4: 'Expert' };
-  // ︎ keeps iOS from drawing the suits as emoji.
-  var GLYPH = ['♠︎', '♥︎', '♣︎', '♦︎'];
+  // U+FE0E (text presentation) keeps iOS from drawing the suits as emoji.
+  var GLYPH = ['\u2660\uFE0E', '\u2665\uFE0E', '\u2663\uFE0E', '\u2666\uFE0E'];
   var RANKS = ['', 'A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
   var COLLECT_MS = 280;           // a finished run rests on its column this long before flying home
 
