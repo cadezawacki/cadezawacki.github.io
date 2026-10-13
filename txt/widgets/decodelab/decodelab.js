@@ -25,7 +25,7 @@
   var CORE_URL = Cade.asset('decodelab-core.js');
   var DATA_URL = Cade.asset('decodelab-data.js');
   var TR_URL = Cade.asset('decodelab-translate.js');
-  var TRW_URL = Cade.asset('decodelab-translate-worker.js') + '?v=1'; // ?v= must match the manifest precache entry
+  var TRW_URL = Cade.asset('decodelab-translate-worker.js') + '?v=2'; // ?v= must match the manifest precache entry
   var esc = Cade.escapeHtml;
 
   var PANEL_ID = 'decodelab-panel';

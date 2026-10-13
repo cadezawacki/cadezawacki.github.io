@@ -56,9 +56,9 @@ async function sha256(buf) {
 
 // Download one file with live progress into a single pre-sized buffer
 // (sizes are known up front, so no chunk list + copy doubling the peak).
-async function fetchBytes(f, onBytes) {
-  var res = await fetch(f.u, { mode: 'cors', credentials: 'omit', cache: 'no-store' });
-  if (!res.ok) throw new Error('HTTP ' + res.status + ' for ' + f.u.split('/').pop());
+async function fetchFrom(url, f, onBytes) {
+  var res = await fetch(url, { mode: 'cors', credentials: 'omit', cache: 'no-store' });
+  if (!res.ok) throw new Error('HTTP ' + res.status + ' for ' + url.split('/').pop());
   if (!res.body || !res.body.getReader) { var whole = await res.arrayBuffer(); onBytes(whole.byteLength); return whole; }
   var reader = res.body.getReader(), got = 0, u8 = new Uint8Array(Math.max(f.s || 0, 65536));
   for (;;) {
@@ -71,6 +71,22 @@ async function fetchBytes(f, onBytes) {
   }
   return got === u8.length ? u8.buffer : u8.slice(0, got).buffer;
 }
+// The self-hosted copy (f.m) first, then the original (f.u); a copy that
+// fails or doesn't match the published size / SHA-256 falls through.
+async function fetchVerified(f, onBytes, onVerify) {
+  var urls = f.m ? [f.m, f.u] : [f.u], err = null;
+  for (var i = 0; i < urls.length; i++) {
+    try {
+      var buf = await fetchFrom(urls[i], f, onBytes);
+      onVerify(buf);
+      var h = await sha256(buf);
+      if (h && f.h && h !== f.h) throw new Error('Checksum mismatch for ' + f.u.split('/').pop() + ' — download refused');
+      if (f.s && buf.byteLength !== f.s) throw new Error('Unexpected size for ' + f.u.split('/').pop());
+      return buf;
+    } catch (e) { err = e; }
+  }
+  throw err;
+}
 
 // Ensure every file is in the cache (downloading + verifying what is missing).
 async function ensureFiles(id, files) {
@@ -82,14 +98,12 @@ async function ensureFiles(id, files) {
     var f = files[i], hit = null;
     try { hit = await cache.match(f.u); } catch (e) { hit = null; }
     if (hit) { base += f.s || 0; continue; }
-    var buf = await fetchBytes(f, function (n) {
+    var buf = await fetchVerified(f, function (n) {
       var now = Date.now();
       if (now - last > 120) { last = now; post({ type: 'progress', id: id, stage: 'download', loaded: base + Math.min(n, f.s || n), total: total }); }
+    }, function (b) {
+      post({ type: 'progress', id: id, stage: 'verify', loaded: base + (f.s || b.byteLength), total: total });
     });
-    post({ type: 'progress', id: id, stage: 'verify', loaded: base + (f.s || buf.byteLength), total: total });
-    var h = await sha256(buf);
-    if (h && f.h && h !== f.h) throw new Error('Checksum mismatch for ' + f.u.split('/').pop() + ' — download refused');
-    if (f.s && buf.byteLength !== f.s) throw new Error('Unexpected size for ' + f.u.split('/').pop());
     await cache.put(f.u, new Response(buf, { headers: { 'Content-Type': 'application/octet-stream', 'Content-Length': String(buf.byteLength) } }));
     buf = null;
     base += f.s || 0;

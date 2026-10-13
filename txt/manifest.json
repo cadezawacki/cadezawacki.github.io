@@ -1452,7 +1452,7 @@
         "widgets/decodelab/decodelab-core.js",
         "widgets/decodelab/decodelab-data.js",
         "widgets/decodelab/decodelab-translate.js",
-        "widgets/decodelab/decodelab-translate-worker.js?v=1",
+        "widgets/decodelab/decodelab-translate-worker.js?v=2",
         "widgets/decodelab/decodelab-inline.js"
       ]
     },

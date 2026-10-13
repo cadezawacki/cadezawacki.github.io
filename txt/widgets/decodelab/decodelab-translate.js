@@ -31,6 +31,15 @@
     M: 'https://huggingface.co/manateelazycat/firefox-translations-93-pairs/resolve/32fd180b178abf56cb0ff01410ab23d470074966/',
     T: 'https://huggingface.co/TiberiuCristianLeon/Bergamot/resolve/18008da9d2922dde09dae47f5fee71cac4253701/',
   };
+  // Self-hosted copies of what the two Hugging Face mirrors serve, on GitHub
+  // Pages under this app's own domain (repos txt-models-a / txt-models-b,
+  // filled by their "Fetch models" Action, SHA-256-checked). Tried first; the
+  // original URL stays the cache key (languages downloaded before stay
+  // downloaded) and is only fetched if the self-hosted copy fails.
+  var SELF = {
+    M: 'https://cadezawacki.github.io/txt-models-a/',
+    T: 'https://cadezawacki.github.io/txt-models-b/',
+  };
   var ENG = 'https://cdn.jsdelivr.net/npm/@browsermt/bergamot-translator@0.4.9/worker/';
   var ENGINE = {
     glue: { u: ENG + 'bergamot-translator-worker.js', s: 80474, h: '748b2418418a2ffc6e70721aeb10098d8e6fb589ea156b91f4ae8bc3490d8f7a' },
@@ -89,7 +98,11 @@
   ];
   var LANGS = RAW.map(function (r) {
     var files = {}, size = 0;
-    Object.keys(r[4]).forEach(function (k) { var f = r[4][k]; files[k] = { u: BASES[f[0]] + f[1], s: f[2], h: f[3] }; size += f[2]; });
+    Object.keys(r[4]).forEach(function (k) {
+      var f = r[4][k];
+      files[k] = { u: BASES[f[0]] + f[1], m: SELF[f[0]] ? SELF[f[0]] + f[1] : '', s: f[2], h: f[3] };
+      size += f[2];
+    });
     return { code: r[0], name: r[1], native: r[2], version: r[3], files: files, size: size };
   });
   var BY_CODE = {};

@@ -23,7 +23,7 @@
   var SRC = (document.currentScript && document.currentScript.src) || '';
   var DL = /decodelab-inline\.js/.test(SRC) ? SRC.replace(/[?#].*$/, '').replace(/[^\/]*$/, '') : abs('./txt/widgets/decodelab/');
   var TR_URL = DL + 'decodelab-translate.js';
-  var TRW_URL = DL + 'decodelab-translate-worker.js?v=1'; // ?v= must match the manifest precache entry (and decodelab.js)
+  var TRW_URL = DL + 'decodelab-translate-worker.js?v=2'; // ?v= must match the manifest precache entry (and decodelab.js)
   var CORE_URL = DL + 'decodelab-core.js', DATA_URL = DL + 'decodelab-data.js';
   var IDLE_MS = 120000, CONSENT_MS = 120000;
 
