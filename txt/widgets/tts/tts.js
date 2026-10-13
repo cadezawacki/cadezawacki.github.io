@@ -32,9 +32,14 @@
  * player nudges it with an effect-only transaction. Positions are mapped
  * through edits made while reading; a room switch just drops the highlight.
  *
+ * LOCKED SCREEN (iOS): HD voice plays through an <audio> element in WAV
+ * chunks, which keeps going while the phone is locked, with lock-screen
+ * controls via Media Session. (The browser's own voices are paused by iOS
+ * when the screen locks; a page can't change that.)
+ *
  * Nothing runs until the panel opens; closing it stops speech, terminates the
- * worker, closes the AudioContext, clears the highlight and unregisters the
- * plugin. */
+ * worker, releases the audio element, clears the highlight and unregisters
+ * the plugin. */
 (function () {
   'use strict';
   if (typeof window.Cade === 'undefined') return;
@@ -607,21 +612,21 @@
   }
 
   // ======================================================================
-  // ENGINE 2: HD voice (Piper in a worker + Web Audio)
+  // ENGINE 2: HD voice (Piper in a worker, played through an <audio> element)
   // ======================================================================
   var HD = {
     active: false,          // engine in use for the current session
     worker: null, workerVoice: '', ready: false, loading: false, failed: '',
-    sampleRate: 22050, ctx: null,
-    gen: 0, reqIdx: 0, schedIdx: 0, nextT: 0, got: {}, sched: [], ticker: null,
+    sampleRate: 22050, el: null, cur: null, curUrl: null,
+    gen: 0, reqIdx: 0, chunkNext: 0, pcm: {}, ticker: null,
     dl: { loaded: 0, total: 0 }, cached: {}, onReady: null, waiting: false,
     dirty: false,           // paused, then jumped: schedule must be rebuilt on resume
   };
-  var AHEAD = 3; // sentences synthesized ahead of the one playing
+  var AHEAD = 12, AHEAD_HIDDEN = 60; // sentences synthesized ahead of the one playing
 
   function hdSupported() {
     return typeof window.WebAssembly === 'object' && typeof window.Worker === 'function' &&
-      !!(window.AudioContext || window.webkitAudioContext) && typeof window.BigInt64Array === 'function' &&
+      typeof window.Audio === 'function' && typeof window.Blob === 'function' && typeof window.BigInt64Array === 'function' &&
       !!window.caches && window.isSecureContext !== false;
   }
   // Is everything for voice `id` already in our Cache Storage bucket?
@@ -722,42 +727,106 @@
     }
   }
 
-  function hdEnsureCtx() {
-    if (!HD.ctx) {
-      var AC = window.AudioContext || window.webkitAudioContext;
-      HD.ctx = new AC();
+  // ---- playback through an <audio> element -------------------------------
+  // iOS suspends Web Audio when the screen locks, but a media element keeps
+  // playing (and gets lock-screen controls through Media Session). So the
+  // synthesized sentences are packed into WAV "chunks" played on ONE element:
+  // whatever is ready when a chunk ends is joined into the next one, so in the
+  // background — where script only wakes on media/worker events — a handful
+  // of src switches cover minutes of reading. While waiting for speech a
+  // silent loop keeps the audio session (and this page) alive.
+  // Pitch: the WAV header claims a sample rate f× the real one, so the clip
+  // plays f× faster and higher; lengthScale (f / rate) gives the time back.
+  var CHUNK_MAX_SEC = 180;
+  var SILENT_URL = null;
+  function wavBlob(parts, rate) {
+    var n = 0, k, i;
+    for (k = 0; k < parts.length; k++) n += parts[k].length;
+    var buf = new ArrayBuffer(44 + n * 2), v = new DataView(buf);
+    var str = function (o, t) { for (var j = 0; j < t.length; j++) v.setUint8(o + j, t.charCodeAt(j)); };
+    str(0, 'RIFF'); v.setUint32(4, 36 + n * 2, true); str(8, 'WAVE');
+    str(12, 'fmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+    v.setUint32(24, rate, true); v.setUint32(28, rate * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true);
+    str(36, 'data'); v.setUint32(40, n * 2, true);
+    var o = 44;
+    for (k = 0; k < parts.length; k++) {
+      var p = parts[k];
+      for (i = 0; i < p.length; i++, o += 2) {
+        var x = p[i] < -1 ? -1 : p[i] > 1 ? 1 : p[i];
+        v.setInt16(o, x < 0 ? x * 0x8000 : x * 0x7fff, true);
+      }
     }
-    var ctx = HD.ctx;
-    // iOS: resume + a silent blip inside the tap that started playback.
-    try { if (ctx.state !== 'running') ctx.resume(); } catch (e) {}
-    try {
-      var b = ctx.createBuffer(1, 1, 22050), s = ctx.createBufferSource();
-      s.buffer = b; s.connect(ctx.destination); s.start(0);
-    } catch (e) {}
-    return ctx;
+    return new Blob([buf], { type: 'audio/wav' });
+  }
+  function silentUrl() {
+    if (!SILENT_URL) SILENT_URL = URL.createObjectURL(wavBlob([new Float32Array(22050)], 22050)); // 1 s
+    return SILENT_URL;
+  }
+  function hdEnsureEl() {
+    if (!HD.el) {
+      var el = new window.Audio();
+      el.preload = 'auto';
+      el.setAttribute('playsinline', '');
+      el.addEventListener('ended', hdOnEnded);
+      el.addEventListener('timeupdate', hdTick);
+      el.addEventListener('pause', hdOnPauseEvt);
+      HD.el = el;
+    }
+    return HD.el;
+  }
+  function hdSetSrc(url, loop) {
+    var el = hdEnsureEl();
+    el.loop = !!loop;
+    el.src = url;
+    var pr = el.play();
+    if (pr && pr.catch) pr.catch(function (e) {
+      if (e && e.name === 'NotAllowedError' && R.state === 'playing' && HD.active) { R.state = 'paused'; updateNow(); }
+    });
+  }
+  // Inside the tap that starts playback: unlock the element (iOS) and keep the
+  // session alive with silence while the voice loads.
+  function hdUnlock() { hdSetSrc(silentUrl(), true); }
+  function hdRevoke() { if (HD.curUrl) { URL.revokeObjectURL(HD.curUrl); HD.curUrl = null; } }
+  function hdRelease() {
+    if (!HD.el) return;
+    try { HD.el.pause(); } catch (e) {}
+    HD.el.removeAttribute('src');
+    try { HD.el.load(); } catch (e) {}
+    hdRevoke();
+  }
+  // Paused from outside (a call, headphones unplugged…): follow it.
+  function hdOnPauseEvt() {
+    var el = HD.el;
+    if (!el || el.ended || !el.paused || !HD.active || R.state !== 'playing') return;
+    R.state = 'paused'; HD.dirty = false; updateNow();
   }
   function hdPitchFactor() { return Math.pow(prefs.pitch, 0.4); } // 0.5..2 -> ~0.76..1.32
   function hdStopAudio() {
     HD.gen++;
-    HD.sched.forEach(function (x) { try { x.src.onended = null; x.src.stop(); x.src.disconnect(); } catch (e) {} });
-    HD.sched = []; HD.got = {};
+    HD.pcm = {}; HD.cur = null;
     if (HD.ticker) { clearInterval(HD.ticker); HD.ticker = null; }
+    if (HD.el) { try { HD.el.pause(); } catch (e) {} }
     if (HD.worker) { try { HD.worker.postMessage({ type: 'cancel' }); } catch (e) {} }
   }
   // (Re)start HD playback at sentence i.
   function hdStart(i) {
     hdStopAudio();
     R.idx = i; R.wordAt = 0;
-    HD.reqIdx = i; HD.schedIdx = i; HD.nextT = 0; HD.waiting = true;
+    HD.reqIdx = i; HD.chunkNext = i; HD.waiting = true;
     showSentence(i, true);
     updateNow();
     hdFill();
-    HD.ticker = setInterval(hdTick, 90);
+    hdSetSrc(silentUrl(), true);
+    hdRevoke();
+    HD.ticker = setInterval(hdTick, 120);
   }
+  // Ask for sentences ahead of the one playing — far more when the page is
+  // hidden (locked phone), so playback never has to wait on the worker there.
   function hdFill() {
     if (!HD.worker) return;
-    var f = hdPitchFactor(), ls = f / prefs.rate;
-    while (HD.reqIdx < R.list.length && HD.reqIdx < R.idx + AHEAD + 1) {
+    var ls = hdPitchFactor() / prefs.rate;
+    var ahead = document.hidden ? AHEAD_HIDDEN : AHEAD;
+    while (HD.reqIdx < R.list.length && HD.reqIdx < R.idx + ahead + 1) {
       var i = HD.reqIdx++;
       HD.worker.postMessage({ type: 'synth', id: HD.gen + ':' + i, text: R.list[i].text, lengthScale: ls });
     }
@@ -767,60 +836,111 @@
     if (+parts[0] !== HD.gen) return; // stale (stopped / jumped since)
     var i = +parts[1];
     if (m.type === 'synth-error' || !m.pcm || !m.pcm.length) {
-      HD.got[i] = 'skip';
+      HD.pcm[i] = 'skip';
       if (m.type === 'synth-error') console.warn('[tts] HD synth failed:', m.message);
     } else {
-      try {
-        var buf = HD.ctx.createBuffer(1, m.pcm.length, m.sampleRate || HD.sampleRate);
-        if (buf.copyToChannel) buf.copyToChannel(m.pcm, 0); else buf.getChannelData(0).set(m.pcm);
-        HD.got[i] = buf;
-      } catch (e) { HD.got[i] = 'skip'; }
+      HD.pcm[i] = m.pcm;
+      if (m.sampleRate) HD.sampleRate = m.sampleRate;
     }
-    hdSchedule();
+    // Only while waiting (silence playing): a chunk that is speaking is
+    // followed by whatever has piled up when it ends.
+    if (R.state === 'playing' && HD.active && !HD.cur) hdNext();
   }
-  function hdSchedule() {
-    var ctx = HD.ctx, f = hdPitchFactor();
-    while (HD.got[HD.schedIdx]) {
-      var i = HD.schedIdx, buf = HD.got[i];
-      delete HD.got[i];
-      HD.schedIdx++;
-      if (buf === 'skip') continue;
-      var src = ctx.createBufferSource();
-      src.buffer = buf;
-      src.playbackRate.value = f;
-      src.connect(ctx.destination);
-      var t = Math.max(ctx.currentTime + 0.05, HD.nextT);
-      src.start(t);
-      var end = t + buf.duration / f;
-      HD.sched.push({ i: i, start: t, end: end, src: src });
-      // a beat between sentences, a longer one between paragraphs
-      HD.nextT = end + (R.list[i].para ? 0.38 : 0.1) / prefs.rate;
-      HD.waiting = false;
+  // Join the consecutive ready sentences from chunkNext into one WAV.
+  function hdBuildChunk() {
+    var hdr = Math.round(HD.sampleRate * hdPitchFactor());
+    var parts = [], marks = [], t = 0, i = HD.chunkNext;
+    while (i < R.list.length && HD.pcm[i] !== undefined && t < CHUNK_MAX_SEC) {
+      var p = HD.pcm[i];
+      delete HD.pcm[i];
+      if (p !== 'skip') {
+        var d = p.length / hdr;
+        marks.push({ i: i, t0: t, t1: t + d });
+        parts.push(p); t += d;
+        // a beat between sentences, a longer one between paragraphs
+        var g = Math.round((R.list[i].para ? 0.38 : 0.1) / prefs.rate * hdr);
+        parts.push(new Float32Array(g)); t += g / hdr;
+      }
+      i++;
     }
+    if (i === HD.chunkNext) return null;
+    HD.chunkNext = i;
+    if (!parts.length) return { empty: true };
+    return { url: URL.createObjectURL(wavBlob(parts, hdr)), marks: marks };
+  }
+  // Play the next chunk, or wait (silently) for the worker, or finish.
+  function hdNext() {
+    var c = hdBuildChunk();
+    while (c && c.empty) c = hdBuildChunk();
+    if (c) {
+      var old = HD.curUrl;
+      HD.cur = c; HD.curUrl = c.url; HD.waiting = false;
+      hdSetSrc(c.url, false);
+      if (old) URL.revokeObjectURL(old);
+      hdSetIdx(c.marks[0].i);
+      return;
+    }
+    if (HD.chunkNext >= R.list.length) { finish(); return; }
+    var wasCur = !!HD.cur;
+    HD.cur = null;
+    if (!HD.waiting || wasCur) { HD.waiting = true; setStatus(); hdSetSrc(silentUrl(), true); hdRevoke(); }
+    hdFill();
+  }
+  function hdOnEnded() {
+    if (R.state !== 'playing' || !HD.active || !HD.cur) return;
+    hdNext();
+  }
+  function hdSetIdx(i) {
+    if (i === R.idx && !HD.waiting) return;
+    R.idx = i;
+    showSentence(i, !document.hidden);
+    updateNow();
   }
   function hdTick() {
     if (!panelEl()) { cleanup(); return; }
-    if (R.state !== 'playing') return;
-    // iOS can suspend/"interrupt" the context behind our back (calls, Siri)
-    if (HD.ctx.state !== 'running') { try { HD.ctx.resume(); } catch (e) {} }
-    var now = HD.ctx.currentTime, cur = null;
-    for (var k = 0; k < HD.sched.length; k++) if (HD.sched[k].start <= now + 0.03) cur = HD.sched[k];
-    if (cur && cur.i !== R.idx && now < cur.end + 0.05) {
-      R.idx = cur.i;
-      showSentence(R.idx, true);
-      updateNow();
-    }
-    // drop finished sources
-    while (HD.sched.length && HD.sched[0].end < now - 0.2 && HD.sched.length > 1) {
-      var x = HD.sched.shift();
-      try { x.src.disconnect(); } catch (e) {}
+    if (R.state !== 'playing' || !HD.active) return;
+    if (HD.cur && HD.el) {
+      var t = HD.el.currentTime, marks = HD.cur.marks, m = null;
+      for (var k = 0; k < marks.length; k++) if (marks[k].t0 <= t + 0.03) m = marks[k];
+      if (m && m.i !== R.idx) hdSetIdx(m.i);
     }
     hdFill();
-    var last = HD.sched[HD.sched.length - 1];
-    var allDone = HD.schedIdx >= R.list.length && (!last || now >= last.end);
-    if (allDone) { finish(); return; }
-    var starving = !HD.sched.length || (last && now >= last.end);
-    if (starving !== HD.waiting) { HD.waiting = starving; setStatus(); }
+  }
+
+  // ---- lock screen / notification controls (Media Session) -------------------
+  // Only meaningful for HD (the browser voices aren't a media session), but
+  // harmless otherwise. Title = the sentence being read.
+  function msInit() {
+    var ms = navigator.mediaSession;
+    if (!ms) return;
+    var on = function (a, fn) { try { ms.setActionHandler(a, fn); } catch (e) {} };
+    on('play', function () { if (R.state === 'paused') resume(); });
+    on('pause', function () { pause(); });
+    on('stop', function () { stop(); setStatus('Stopped'); });
+    on('previoustrack', function () { jump(R.idx - 1); });
+    on('nexttrack', function () { jump(R.idx + 1); });
+  }
+  var msLast = '';
+  function msUpdate() {
+    var ms = navigator.mediaSession;
+    if (!ms) return;
+    try {
+      ms.playbackState = R.state === 'playing' || R.state === 'loading' ? 'playing' : R.state === 'paused' ? 'paused' : 'none';
+      var s = R.state !== 'idle' && R.list[R.idx];
+      var title = s ? (s.text.length > 90 ? s.text.slice(0, 89) + '\u2026' : s.text) : '';
+      if (!s || title === msLast || typeof window.MediaMetadata !== 'function') return;
+      msLast = title;
+      var room = '';
+      try { room = (Cade.roomsApi && Cade.roomsApi.activeRoom()) || ''; } catch (e) {}
+      ms.metadata = new window.MediaMetadata({ title: title, artist: 'Read Aloud', album: room ? String(room) : 'Cade.txt' });
+    } catch (e) {}
+  }
+  function msClear() {
+    var ms = navigator.mediaSession;
+    if (!ms) return;
+    ['play', 'pause', 'stop', 'previoustrack', 'nexttrack'].forEach(function (a) { try { ms.setActionHandler(a, null); } catch (e) {} });
+    try { ms.metadata = null; ms.playbackState = 'none'; } catch (e) {}
+    msLast = '';
   }
 
   // ======================================================================
@@ -847,13 +967,14 @@
     R.active = true; R.doc = ed.state.doc; R.changes = null; R.detached = false; R.lastEdit = 0;
     WS.errors = 0; WS.retried = false;
     HD.active = false;
+    msInit();
     if (useHd()) {
       var id = prefs.hdVoice, have = HD.worker && HD.workerVoice === id;
       if (!hdSupported()) {
         toast('HD voice isn\u2019t supported in this browser \u2014 using the standard voice', 'info', 3200);
       } else if (have || HD.cached[id] !== false) {
         HD.active = true;
-        hdEnsureCtx(); // inside the tap (iOS unlock)
+        hdUnlock(); // inside the tap (iOS unlock + keeps the session alive while loading)
         if (have && HD.ready) { R.state = 'playing'; hdStart(R.idx); return; }
         R.state = 'loading';
         showSentence(R.idx, true);
@@ -890,7 +1011,7 @@
     if (R.state !== 'playing' && R.state !== 'loading') return;
     if (R.state === 'loading') { stop(); return; }
     R.state = 'paused';
-    if (HD.active) { try { HD.ctx.suspend(); } catch (e) {} }
+    if (HD.active) { try { if (HD.el) HD.el.pause(); } catch (e) {} }
     else { wsStopTimer(); wsCancel(); }
     updateNow();
   }
@@ -898,8 +1019,12 @@
     if (R.state !== 'paused') return;
     R.state = 'playing';
     if (HD.active) {
-      hdEnsureCtx();
-      if (HD.dirty || !HD.sched.length) { HD.dirty = false; hdStart(R.idx); }
+      if (HD.dirty || !HD.el) { HD.dirty = false; hdStart(R.idx); }
+      else {
+        var pr = HD.el.play();
+        if (pr && pr.catch) pr.catch(function () {});
+        if (!HD.cur) hdNext();
+      }
     } else {
       showSentence(R.idx, false);
       wsSpeak(R.wordAt);
@@ -910,8 +1035,7 @@
     var was = R.state;
     R.state = 'idle'; R.active = false;
     wsStopTimer(); wsCancel();
-    hdStopAudio(); HD.active = false; HD.dirty = false;
-    if (HD.ctx && HD.ctx.state === 'suspended') { try { HD.ctx.resume(); } catch (e) {} }
+    hdStopAudio(); hdRelease(); HD.active = false; HD.dirty = false;
     clearHighlight();
     if (was !== 'idle') updateNow();
   }
@@ -947,7 +1071,8 @@
     clearTimeout(restartTimer); clearTimeout(hintTimer); hintTimer = null;
     stop();
     hdTerminate();
-    if (HD.ctx) { try { HD.ctx.close(); } catch (e) {} HD.ctx = null; }
+    hdRelease(); HD.el = null;
+    msClear();
     dropHl();
     if (WS.ok && voicesListener) {
       try { window.speechSynthesis.removeEventListener('voiceschanged', voicesListener); } catch (e) {}
@@ -997,6 +1122,7 @@
     p.querySelector('.tts-bar-fill').style.width = has ? (100 * (R.idx + 1) / R.list.length).toFixed(2) + '%' : '0%';
     p.querySelector('.tts-bar').classList.toggle('off', !has);
     setStatus();
+    msUpdate();
   }
   function hintText() {
     var ed = Cade.editor, selEmpty = !ed || ed.state.selection.main.empty;
