@@ -3880,6 +3880,9 @@ window.Cade = (function () {
     get Settings() { return window.Settings; },
     // ---- UI helpers ----
     mkPanel(id, t, html) { return window.__mkPanel(id, t, html); },
+    // A game panel owns input while open: editor pointer input is blocked, the
+    // editor is blurred (soft keyboard retracts) and nothing is selectable.
+    markGamePanel(p) { return window.__markGamePanel && window.__markGamePanel(p); },
     showToast() { return window.showToast.apply(null, arguments); },
     haptic(ms) { return window.haptic ? window.haptic(ms) : undefined; },
     escapeHtml(s) { return window.escapeHtml(s); },
@@ -21403,7 +21406,8 @@ function _watchGamePanel(p) {
   _GAME_BLOCK_EVENTS.forEach(t =>
     document.addEventListener(t, _blockEditorPointerForGame, { capture: true, passive: false }));
   _gamePanelObserver = new MutationObserver(() => {
-    if (GAME_PANEL_IDS.some(gid => document.getElementById(gid))) return;
+    // Any panel still marked as a game (built-in ids or Cade.markGamePanel) keeps the block.
+    if (document.querySelector('.cade-game-panel')) return;
     document.body.classList.remove('game-open');
     _GAME_BLOCK_EVENTS.forEach(t =>
       document.removeEventListener(t, _blockEditorPointerForGame, { capture: true }));
@@ -21446,6 +21450,7 @@ function _mkPanel(id, title, bodyHtml) {
   return p;
 }
 window.__mkPanel = _mkPanel; // exposed for feature modules (window.Cade.mkPanel)
+window.__markGamePanel = (p) => { if (p && p.classList) _watchGamePanel(p); }; // Cade.markGamePanel
 
 // B6: floating panels are absolutely positioned, so a viewport resize can leave
 // them orphaned off-screen. On a real width change (ignore mobile keyboard
