@@ -176,7 +176,9 @@
       same = false;
       var gone = goneLines(od, c)[L.number] === 1;
       if (gone && !ins.length) continue;
-      if (gone || c.tb > c.fb) lost.push({ text: L.text, near: ch.mapPos(p, 1), keep: gone ? -1 : q });
+      // `near`: the same offset inside the rewritten span (a whole-doc rewrite
+      // keeps every line where it was when its text is unchanged)
+      if (gone || c.tb > c.fb) lost.push({ text: L.text, near: c.fb + Math.min(p - c.fa, c.tb - c.fb), keep: gone ? -1 : q });
       else out.push(q);
     }
     if (same) return marks;
