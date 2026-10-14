@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "version": "2026.10.14-13",
+  "version": "2026.10.14-17",
   "modules": [
     {
       "id": "crawler",
@@ -1923,6 +1923,46 @@
       "tags": "game,puzzle,physics,draw,line,ink,ball,drop,cup,brain,crayon,fun,train",
       "entry": "widgets/inkdrop/inkdrop.js",
       "css": "widgets/inkdrop/inkdrop.css"
+    },
+    {
+      "id": "chessclock",
+      "type": "widget",
+      "name": "Chess Clock",
+      "description": "Two-player game clock — tap your side after you move; increment, Bronstein or delay, handicap, full screen for the table",
+      "icon": "♟️",
+      "tags": "chess,chess clock,clock,game clock,timer,blitz,bullet,rapid,classical,increment,fischer,bronstein,delay,handicap,two player,board game,go,shogi,scrabble,turn timer",
+      "entry": "widgets/chessclock/chessclock.js",
+      "css": "widgets/chessclock/chessclock.css"
+    },
+    {
+      "id": "scorekeeper",
+      "type": "widget",
+      "name": "Score Keeper",
+      "description": "Scores for 1–8 players at the table — tap to add, hold for big steps, count up or down, undo, rounds, insert as a table",
+      "icon": "🏆",
+      "tags": "score,scores,score keeper,scorekeeper,scoreboard,tally,counter,points,card game,board game,game night,life counter,life total,mtg,magic,darts,golf,hearts,rummy,uno,players,rounds,leaderboard",
+      "entry": "widgets/scorekeeper/scorekeeper.js",
+      "css": "widgets/scorekeeper/scorekeeper.css"
+    },
+    {
+      "id": "mergefiles",
+      "type": "widget",
+      "name": "Merge Files",
+      "description": "Combine many files — or a whole folder — into one document: filter by type, order, join with headers, one CSV header; to the note, a new note or a download",
+      "icon": "📑",
+      "tags": "merge,merge files,combine,combine files,concatenate,concat,cat,join files,files,folder,csv,append,import,bundle,one file,stitch",
+      "entry": "widgets/mergefiles/mergefiles.js",
+      "css": "widgets/mergefiles/mergefiles.css"
+    },
+    {
+      "id": "origami",
+      "type": "widget",
+      "name": "Origami",
+      "description": "Split the window into panes, each a room — split, close, move, clone, compare; layouts and presets",
+      "icon": "🪟",
+      "tags": "origami,split,panes,pane,tile,tiles,layout,side by side,columns,rows,grid,windows,multi,compare,clone,rooms",
+      "entry": "widgets/origami/origami.js",
+      "css": "widgets/origami/origami.css"
     }
   ]
 }

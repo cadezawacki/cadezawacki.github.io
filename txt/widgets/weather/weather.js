@@ -552,9 +552,16 @@
   }
 
   // ---- rendering -------------------------------------------------------------------------
+  // The footer chip while minimized: "☀️ 18°C".
+  function chipLabel() {
+    var m = S && effective(S.model, Date.now());
+    if (!m || !m.c || m.c.tp == null) return '\ud83c\udf24 Weather';
+    return wmo(m.c.code, m.c.day).emoji + ' ' + Math.round(tC(m.c.tp)) + tUnit();
+  }
   function render() {
     var p = panel(); if (!p || !S) return;
     var m = effective(S.model, Date.now());
+    if (p.__dockChip) p.__dockChip.textContent = chipLabel();
     var name = p.querySelector('.wx-pname'), sub = p.querySelector('.wx-psub');
     name.textContent = S.loc ? S.loc.name : 'Choose a place';
     sub.textContent = S.loc ? (geo().sublabel(S.loc) || '') : '';
@@ -1041,6 +1048,9 @@
         '<span class="wx-upd" aria-live="polite"></span>' +
       '</div>');
     if (reduced()) p.classList.add('wx-still');
+    // Minimize (–) waits in the footer showing the current temperature.
+    p.__cadeMinTo = 'footer';
+    p.__cadeMinLabel = function () { return chipLabel(); };
     S = { loc: null, model: null, modelKey: '', busy: false, failed: false, offline: false, err: null, seq: 0, openDay: -1, hScroll: 0, picker: null };
     var st = S;
 
