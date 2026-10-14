@@ -41,7 +41,10 @@
 .ori-one .ori-ib[data-act="close"] { display: none; }
 
 .ori-body { position: relative; flex: 1 1 auto; min-height: 0; min-width: 0; }
-.ori-body > .cm-editor { position: absolute; top: 0; right: 0; bottom: 0; left: 0; height: auto !important; }
+/* CodeMirror's base theme pins .cm-editor to `position: relative !important`; a
+   more specific !important wins, so each pane's editor fills its body and its
+   scroller (not the clipped pane) scrolls — wheel, trackpad and touch alike. */
+.editor-wrap.origami .ori-body > .cm-editor { position: absolute !important; top: 0; right: 0; bottom: 0; left: 0; height: auto !important; }
 /* The panes sit below the toolbar band, so the text doesn't need the big top
    padding that otherwise clears it; the sidebar offset moves onto the panes. */
 .editor-wrap.origami .ori .cm-scroller { padding: 8px var(--editor-hpad, var(--space-4, 16px)) var(--space-3, 12px) !important; }
