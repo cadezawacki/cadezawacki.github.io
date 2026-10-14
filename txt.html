@@ -9994,9 +9994,44 @@ function main(ctx) {
 // SCRIPT EXECUTION ENGINE
 // ============================================
 let lastScript = null;
+// What the last script typed into its prompt() / confirm() boxes, in order, so
+// "Rerun Last Script" can answer them the same way instead of asking again
+// (Box It… in the same style, Columnize with the same count…). Run a script
+// from the picker to be asked afresh. Kept only for a run nobody cancelled;
+// secure keyword prompts (encryption) always ask.
+let lastScriptAnswers = null; // { script, list: [{ kind: 'prompt'|'confirm', value }] }
 
-function executeScript(script) {
+// Swap window.prompt / window.confirm for recording (and, on a rerun,
+// replaying) versions while a script runs; returns the restore function.
+function _scriptDialogs(script, replay, answers) {
+  const saved = replay && lastScriptAnswers && lastScriptAnswers.script === script ? lastScriptAnswers.list : null;
+  let i = 0;
+  const wrap = (kind, native) => function () {
+    let v;
+    if (saved && i < saved.length && saved[i].kind === kind) v = saved[i++].value;
+    else { i = Infinity; v = native.apply(window, arguments); }   // off the recorded path: ask from here on
+    answers.push({ kind, value: v });
+    return v;
+  };
+  const np = window.prompt, nc = window.confirm;
+  const wp = wrap('prompt', np), wc = wrap('confirm', nc);
+  window.prompt = wp; window.confirm = wc;
+  let done = false;
+  return function restore() {
+    if (done) return;
+    done = true;
+    if (window.prompt === wp) window.prompt = np;
+    if (window.confirm === wc) window.confirm = nc;
+    answers.replayed = !!saved && i > 0 && i !== Infinity;
+    lastScriptAnswers = answers.length && !answers.some(a => a.kind === 'prompt' && a.value == null) ? { script, list: answers } : null;
+  };
+}
+
+function executeScript(script, replay) {
   lastScript = script;
+  const answers = [];
+  const restoreDialogs = _scriptDialogs(script, replay, answers);
+  const ranMsg = () => `Ran "${script.name}"` + (answers.replayed ? ' · same answers' : '');
   const state = editor.state;
   const sel = state.selection.main;
   const hasExplicitSelection = sel.from !== sel.to;
@@ -10050,7 +10085,7 @@ function executeScript(script) {
         ${script.code}
         await main(ctx);
       `);
-      fn(window, document, ctx, showToast, secureKeywordPrompt, encryptText, decryptText).then(() => {
+      fn(window, document, ctx, showToast, secureKeywordPrompt, encryptText, decryptText).finally(restoreDialogs).then(() => {
         // The doc may have changed while the script awaited (prompt open, sync
         // update applied) — clamp ranges to the live doc so dispatch can't
         // throw a RangeError on stale offsets.
@@ -10060,7 +10095,7 @@ function executeScript(script) {
         } else if (fullTextChanged) {
           editor.dispatch({ changes: { from: 0, to: liveLen, insert: newFullText } });
         }
-        showToast(`Ran "${script.name}"`, 'success', 2000);
+        showToast(ranMsg(), 'success', 2000);
       }).catch((e) => {
         showToast(`Script error: ${e.message}`, 'error', 5000);
         console.error('Script error:', e);
@@ -10070,16 +10105,17 @@ function executeScript(script) {
         ${script.code}
         main(ctx);
       `);
-      fn(window, document, ctx, showToast);
+      try { fn(window, document, ctx, showToast); } finally { restoreDialogs(); }
 
       if (editTextChanged && hasSelection) {
         editor.dispatch({ changes: { from: editFrom, to: editTo, insert: newEditText } });
       } else if (fullTextChanged) {
         editor.dispatch({ changes: { from: 0, to: fullText.length, insert: newFullText } });
       }
-      showToast(`Ran "${script.name}"`, 'success', 2000);
+      showToast(ranMsg(), 'success', 2000);
     }
   } catch (e) {
+    restoreDialogs();   // a script that didn't compile (no-op once the run has restored them)
     showToast(`Script error: ${e.message}`, 'error', 5000);
     console.error('Script error:', e);
   }
@@ -10088,7 +10124,7 @@ function executeScript(script) {
 window.rerunLastScript = function() {
   closeAllMenus();
   if (lastScript) {
-    executeScript(lastScript);
+    executeScript(lastScript, true);   // replays the last run's prompt answers
   } else {
     showToast('No previous script to rerun', 'error', 2500);
   }
@@ -12960,6 +12996,9 @@ document.getElementById('picker-search').addEventListener('input', (e) => {
   }
   pickerIndex = 0;
   renderPickerList();
+  // The list keeps its old scroll offset across re-renders; jump back to the
+  // top so the best match (row 0, selected) is always in view while typing.
+  document.getElementById('picker-list').scrollTop = 0;
 });
 
 document.getElementById('picker-search').addEventListener('keydown', (e) => {

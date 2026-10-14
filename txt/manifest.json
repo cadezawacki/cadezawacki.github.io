@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "version": "2026.10.14-17",
+  "version": "2026.10.14-19",
   "modules": [
     {
       "id": "crawler",
@@ -1963,6 +1963,16 @@
       "tags": "origami,split,panes,pane,tile,tiles,layout,side by side,columns,rows,grid,windows,multi,compare,clone,rooms",
       "entry": "widgets/origami/origami.js",
       "css": "widgets/origami/origami.css"
+    },
+    {
+      "id": "binaural",
+      "type": "widget",
+      "name": "Binaural Beats",
+      "description": "Brainwave beat generator — sleep, relax, meditate, focus & energy presets, journeys, noise beds, sleep timer, lock-screen playback",
+      "icon": "🎧",
+      "tags": "binaural,binaural beats,beats,brainwave,brain waves,isochronic,monaural,delta,theta,alpha,beta,gamma,40 hz,sleep,focus,study,meditation,meditate,relax,calm,white noise,pink noise,brown noise,rain,ocean,solfeggio,432,528,schumann,ambient,audio,sound,headphones",
+      "entry": "widgets/binaural/binaural.js",
+      "css": "widgets/binaural/binaural.css"
     }
   ]
 }
