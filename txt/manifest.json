@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "version": "2026.10.14-11",
+  "version": "2026.10.14-12",
   "modules": [
     {
       "id": "crawler",
@@ -1791,7 +1791,7 @@
       "id": "towerdefense",
       "type": "widget",
       "name": "Tower Defense",
-      "description": "ASCII tower defense — build, upgrade and hold 3 maps for 30 waves",
+      "description": "ASCII tower defense — 10 towers with specialisations, 13 enemy types, 8 maps of 30 waves and an Armory of perks",
       "icon": "🏰",
       "tags": "game,strategy,tower defense,td,towers,waves,defense,ascii,fun,train",
       "entry": "widgets/towerdefense/towerdefense.js",

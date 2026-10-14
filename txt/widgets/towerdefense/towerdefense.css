@@ -51,24 +51,45 @@
 .td-btn.arm { color: var(--error); border-color: var(--error); }
 
 /* Map select: an ASCII thumbnail per map. */
-.td-maps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.td-maps { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 5px; }
 .td-map {
-  display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 0; padding: 8px 2px 7px;
+  display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 0; padding: 6px 2px 6px;
   font: inherit; color: var(--text); background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-md, 6px);
   cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: manipulation;
 }
 .td-map:hover, .td-map:focus-visible { border-color: var(--accent); outline: none; }
 .td-map.locked { opacity: 0.5; cursor: default; }
 .td-map.locked:hover { border-color: var(--border); }
-.td-mini { margin: 0 0 3px; font: 700 7px/7px var(--font-mono, ui-monospace, monospace); letter-spacing: 0.05em; color: var(--text-faint); white-space: pre; }
+.td-mini { margin: 0 0 3px; font: 700 5.5px/5.5px var(--font-mono, ui-monospace, monospace); letter-spacing: 0.05em; color: var(--text-faint); white-space: pre; }
 .td-mini b { color: var(--text); font-weight: 800; }
 .td-mini i { color: var(--text-muted); font-style: normal; }
 .td-mini u { color: var(--tok-fn, var(--accent)); text-decoration: none; }
-.td-mname { font-weight: 700; font-size: 12px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.td-mdiff { font-size: 10px; color: var(--text-muted); white-space: nowrap; }
-.td-stars { font-size: 13px; letter-spacing: 0.08em; color: var(--tok-num, var(--accent)); }
-.td-lock { font-size: 11px; color: var(--text-muted); }
-.td-mbest { font-size: 10px; color: var(--text-faint); white-space: nowrap; }
+.td-mname { font-weight: 700; font-size: 10.5px; line-height: 1.15; max-width: 100%; text-align: center; overflow-wrap: break-word; letter-spacing: -0.02em; }
+.td-mdiff { font-size: 9.5px; color: var(--text-muted); white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.td-stars { font-size: 12px; letter-spacing: 0.06em; color: var(--tok-num, var(--accent)); }
+.td-lock { font-size: 10px; color: var(--text-muted); }
+.td-mbest { font-size: 9.5px; color: var(--text-faint); white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.td-card-title { max-width: 360px; }
+.td-armbtn { color: var(--tok-num, var(--accent)); }
+
+/* Armory: one row per perk, the list scrolls inside the card. */
+.td-card-arm { max-height: 100%; min-height: 0; }
+.td-perks { display: flex; flex-direction: column; gap: 4px; flex: 1 1 auto; min-height: 0; overflow: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; text-align: left; }
+.td-perk { display: flex; align-items: center; gap: 6px; padding: 5px 6px; border: 1px solid var(--border); border-radius: var(--radius-md, 6px); background: var(--surface-2); }
+.td-perk.on { border-color: var(--tok-num, var(--accent)); }
+.td-pk { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.td-pk b { font-size: 12px; color: var(--text); }
+.td-pk span { font-size: 10.5px; color: var(--text-muted); font-family: var(--font-body, sans-serif); }
+.td-pips { font-size: 11px; letter-spacing: 0.05em; color: var(--tok-num, var(--accent)); white-space: nowrap; }
+.td-pb {
+  flex: 0 0 auto; min-width: 36px; height: 34px; padding: 0 6px; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer;
+  color: var(--text-muted); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md, 6px);
+  -webkit-tap-highlight-color: transparent; touch-action: manipulation;
+}
+.td-pb-buy { color: var(--tok-num, var(--accent)); }
+.td-pb:hover:not(:disabled), .td-pb:focus-visible { border-color: var(--accent); outline: none; }
+.td-pb:disabled { opacity: 0.4; cursor: default; }
+.td-btn:disabled { opacity: 0.45; cursor: default; }
 
 /* Help: the text scrolls inside the card, "back" always stays in view. */
 .td-card-help { max-height: 100%; min-height: 0; }
@@ -83,7 +104,10 @@
 .td-help .td-bad { color: var(--error); }
 .td-help .td-pink { color: var(--tok-tag, var(--accent)); }
 .td-legend { border-collapse: collapse; }
-.td-legend td { padding: 1px 8px 1px 0; vertical-align: top; }
+.td-legend td { padding: 2px 8px 2px 0; vertical-align: top; }
+.td-legend small { color: var(--text-faint); font-size: 11px; }
+.td-legend .td-tn { font-family: var(--font-body, sans-serif); }
+.td-help .td-grn { color: var(--tok-str, var(--accent)); }
 .td-legend td:first-child { font-family: var(--font-mono, ui-monospace, monospace); font-weight: 800; white-space: nowrap; }
 .td-keys { font-size: 11.5px; color: var(--text-faint); }
 
@@ -93,18 +117,30 @@
 .td-c2 { color: var(--tok-fn, var(--accent)); }
 .td-c3 { color: var(--tok-kw, var(--accent)); }
 .td-c4 { color: var(--tok-bui, var(--accent)); }
+.td-c5 { color: var(--error, var(--accent)); }
+.td-c6 { color: var(--tok-tag, var(--accent)); }
+.td-c7 { color: var(--tok-str, var(--accent)); }
+.td-c8 { color: var(--text); }
+.td-c9 { color: var(--accent); }
 
-/* Row B: the build palette, or the selected tower's actions. */
-.td-ctx { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 5px; height: 44px; }
-.td-ctx-tower { grid-template-columns: repeat(3, minmax(0, 1fr)) 44px; }
+/* Row B: the 10-tower palette in one row (the map keeps its size), or the
+   selected tower's actions — upgrade (or the two specialisations at the
+   fork), aim, sell, close. */
+.td-ctx { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 3px; height: 44px; }
+.td-ctx-tower { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) 44px; grid-template-areas: "u u m s x"; gap: 5px; }
+.td-ctx-tower.fork { grid-template-areas: "u v m s x"; }
+.td-up { grid-area: u; } .td-up2 { grid-area: v; display: none !important; } .fork .td-up2 { display: flex !important; }
+.td-mode { grid-area: m; } .td-x { grid-area: x; } .td-sell { grid-area: s; }
+.fork .td-up, .fork .td-up2 { border-color: var(--accent); }
+.fork .td-up b, .fork .td-up2 b { color: var(--accent); }
 .td-tw, .td-act {
   height: 44px; min-width: 0; padding: 0 2px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
   font: inherit; color: var(--text); background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-md, 6px);
   cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: manipulation;
 }
-.td-tw b { font-size: 15px; font-weight: 800; line-height: 1.1; white-space: nowrap; }
-.td-act b { font-size: 12px; font-weight: 700; line-height: 1.2; white-space: nowrap; }
-.td-tw span, .td-act span { font-size: 11px; line-height: 1.2; color: var(--text-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.td-tw b { font-size: 17px; font-weight: 800; line-height: 1.1; white-space: nowrap; }
+.td-act b { font-size: 12px; font-weight: 700; line-height: 1.2; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.td-tw span, .td-act span { font-size: 10.5px; line-height: 1.2; color: var(--text-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .td-tw:hover, .td-act:hover:not(:disabled) { border-color: var(--text-faint); }
 .td-tw.armed { background: var(--surface); border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
 .td-tw.poor span, .td-act.poor span { color: var(--error); }

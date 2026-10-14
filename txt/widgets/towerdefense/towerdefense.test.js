@@ -53,9 +53,13 @@ test('registers in the app with the manifest entry\'s name', function () {
 });
 
 // ---------- maps ----------
-test('maps: 3+ maps, 12x16 art whose road matches the waypoints exactly', function () {
-  assert.ok(E.MAPS.length >= 3);
+test('maps: 8 maps, 12x16 art whose road matches the waypoints exactly', function () {
+  assert.ok(E.MAPS.length >= 8);
+  var ids = {};
   E.MAPS.forEach(function (M, mi) {
+    assert.ok(!ids[M.id], 'unique id ' + M.id); ids[M.id] = 1;
+    assert.ok(M.name && M.diff && M.gold > 0 && M.lives > 0 && M.hp > 0);
+    if (M.swap) Object.keys(M.swap).forEach(function (k) { assert.ok(E.ENEMIES[k] && E.ENEMIES[M.swap[k]], M.id + ' swap ' + k); });
     assert.strictEqual(M.art.length, E.ROWS, M.id + ' rows');
     M.art.forEach(function (row) { assert.strictEqual(row.length, E.COLS, M.id + ' row width'); assert.ok(/^[.#^~]+$/.test(row)); });
     var road = {};
@@ -97,10 +101,19 @@ test('waves: 30 per map, a boss every 10th, escalating; endless keeps growing', 
   for (var d = 1; d < 6; d++) assert.ok(decade(d) > decade(d - 1) * 1.3, 'decade ' + d);
   assert.ok(threat(30) > threat(20) && threat(20) > threat(10) && threat(10) > threat(1));
   assert.ok(E.waveCount(45) > E.waveCount(35), 'free-play waves grow');
-  // all enemy kinds appear in the 30 waves
+  // all enemy kinds appear in the 30 waves, each boss on its decade
   var kinds = {};
   for (n = 1; n <= 30; n++) E.waveSpec(n).forEach(function (gp) { kinds[gp.k] = 1; });
   assert.deepStrictEqual(Object.keys(kinds).sort(), Object.keys(E.ENEMIES).sort());
+  assert.ok(E.ENEMIES['@'].boss && E.ENEMIES['Ω'].boss && E.ENEMIES['W'].boss && E.ENEMIES['W'].fly);
+  // a map's swaps kick in from its swapFrom wave
+  var hollow = E.MAPS.map(function (M) { return M.id; }).indexOf('hollow'), M = E.MAPS[hollow];
+  assert.ok(hollow >= 0 && M.swapFrom > 1);
+  var early = E.waveSpec(4, hollow), late = E.waveSpec(14, hollow);
+  assert.ok(early.some(function (gp) { return gp.k === '>'; }), 'runners before the swap');
+  assert.ok(!late.some(function (gp) { return gp.k === '>'; }) && late.some(function (gp) { return gp.k === '?'; }), 'ghosts after it');
+  assert.strictEqual(late.filter(function (gp) { return gp.k === '?'; })[0].gap, E.ENEMIES['?'].gap);
+  assert.strictEqual(E.waveCount(14, hollow), E.waveCount(14), 'same head count');
 });
 
 // ---------- economy ----------
@@ -129,15 +142,43 @@ test('build / upgrade / sell: costs, valid cells, 70% refund', function () {
   assert.strictEqual(g.gold, before + v);
   assert.strictEqual(E.towerAt(g, 5, 4), null);
   assert.ok(E.canBuild(g, 5, 4));
-  // stats really improve with each level
+  // stats really improve with each level, and both specialisations beat level 3
+  function power(s) { return s.dmg * (s.rate || 1) * (1 + s.chain) * Math.max(1, s.multi) * Math.max(1, s.beams) * (1 + s.splash) + s.burn + s.income * 3 + s.buff * 400 + s.slow * 100 + s.detect; }
   E.TOWERS.forEach(function (Tw, ti) {
-    assert.ok(Tw.glyph && Tw.name && Tw.role);
+    assert.ok(Tw.glyph && Tw.name && Tw.role && Tw.spec.length === 2);
     for (var l = 1; l < 3; l++) {
       var s0 = E.towerStat(ti, l - 1), s1 = E.towerStat(ti, l);
-      assert.ok(s1.dmg > s0.dmg && s1.range >= s0.range && s1.rate >= s0.rate, Tw.key + ' lvl ' + l);
+      assert.ok(power(s1) > power(s0) && s1.range >= s0.range && s1.rate >= s0.rate, Tw.key + ' lvl ' + l);
     }
+    Tw.spec.forEach(function (sp, b) {
+      assert.ok(sp.key && sp.name && sp.note && sp.cost > Tw.cost[2], Tw.key + ' spec ' + b);
+      assert.ok(power(E.towerStat(ti, 3, b)) > power(E.towerStat(ti, 2)), Tw.key + ' spec ' + sp.key + ' is stronger');
+    });
+    assert.notDeepStrictEqual(E.towerStat(ti, 3, 0), E.towerStat(ti, 3, 1), Tw.key + ' specs differ');
   });
-  assert.ok(E.TOWERS.length >= 5);
+  assert.strictEqual(E.TOWERS.length, 10);
+});
+
+test('specialisation: level 4 is a choice of two, priced per branch', function () {
+  var g = E.newGame(0); g.gold = 5000;
+  var t = E.build(g, 5, 4, T.tesla);
+  assert.ok(E.upgrade(g, t) && E.upgrade(g, t));
+  assert.strictEqual(t.lvl, 2);
+  assert.strictEqual(E.upgrade(g, t), false, 'no branch, no specialisation');
+  assert.strictEqual(E.upgradeCost(t, 0), E.TOWERS[T.tesla].spec[0].cost);
+  assert.strictEqual(E.upgradeCost(t, 1), E.TOWERS[T.tesla].spec[1].cost);
+  var gold = g.gold;
+  assert.ok(E.upgrade(g, t, 1));
+  assert.strictEqual(t.lvl, E.MAX_LVL); assert.strictEqual(t.spec, 1);
+  assert.strictEqual(g.gold, gold - E.TOWERS[T.tesla].spec[1].cost);
+  assert.strictEqual(E.upgrade(g, t, 0), false, 'already specialised');
+  assert.strictEqual(E.upgradeCost(t, 0), 0);
+  assert.strictEqual(E.stats(g, t).stun, E.TOWERS[T.tesla].spec[1].stun);
+  // a spec only overrides what it names; the rest carries over from level 3
+  var vol = E.towerStat(T.arrow, 3, 1);
+  assert.strictEqual(vol.multi, 3);
+  assert.strictEqual(E.towerStat(T.frost, 3, 1).slowDur, 2);
+  assert.strictEqual(E.towerStat(T.flame, 3, 0).burnDur, E.TOWERS[T.flame].burnDur[2]);
 });
 
 test('waves: start, call early for a bonus, at most two spawning at once, clear bonus', function () {
@@ -188,10 +229,49 @@ test('targeting: first / last / strong / close, range, flyers vs cannons', funct
   assert.ok(Math.hypot(f.x - cn.x, f.y - cn.y) < 2.5, 'flyer in cannon range');
   assert.strictEqual(E.pickTarget(g2, cn, 6.25, false), null);
   assert.strictEqual(E.pickTarget(g2, ar, 6.76, true), f);
-  // cycling modes; frost has none
+  // cycling modes; frost, flame, bank and beacon have none
   assert.strictEqual(E.cycleMode(t), 0);
   var fr = E.build(g, 6, 4, T.frost); assert.strictEqual(E.cycleMode(fr), fr.mode);
+  ['flame', 'bank', 'beacon'].forEach(function (k) { assert.strictEqual(E.aims(T[k]), false, k); });
+  ['arrow', 'missile', 'beam', 'sniper'].forEach(function (k) { assert.strictEqual(E.aims(T[k]), true, k); });
   assert.strictEqual(E.MODES.length, 4);
+});
+
+test('ghosts: hidden until revealed by a beacon, a hit, a burn, or a flicker', function () {
+  var g = rich(0);
+  var ar = E.build(g, 3, 3, T.arrow), gh = enemyAt(g, '?', 5);
+  gh.ph = 1;                                  // mid-fade: not flickering into view
+  assert.strictEqual(E.visible(gh), false);
+  assert.strictEqual(E.pickTarget(g, ar, 9, true), null, 'arrows can\'t see it');
+  gh.ph = 0.1; assert.strictEqual(E.visible(gh), true, 'flickers into view'); gh.ph = 1;
+  E.hurt(g, gh, 1, false, null);
+  assert.ok(E.visible(gh) && E.pickTarget(g, ar, 9, true) === gh, 'a hit reveals it');
+  gh.revealT = 0; gh.burnT = 1; assert.ok(E.visible(gh), 'so does burning'); gh.burnT = 0;
+  // a beacon in range keeps it detected while it walks
+  var g2 = rich(0), b = E.build(g2, 4, 3, T.beacon), g2h = enemyAt(g2, '?', 4.5, 1e5);
+  g2h.ph = 1; g2.spawners.length = 0;
+  E.step(g2);
+  assert.ok(g2h.det, 'beacon detects');
+  assert.ok(E.stats(g2, b).detect >= E.TOWERS[T.beacon].detect[0]);
+  // frost (area) hits it unseen
+  var g3 = rich(0); g3.phase = 'wave';
+  E.build(g3, 3, 3, T.frost); var g3h = enemyAt(g3, '?', 5, 1e4); g3h.ph = 1;
+  E.step(g3);
+  assert.ok(g3h.hp < 1e4 && g3h.slowF > 0, 'area damage lands');
+});
+
+test('missiles pick flyers first and hit them harder', function () {
+  var g = rich(0);
+  var m = E.build(g, 3, 3, T.missile);
+  var gr = enemyAt(g, 'o', 7.6), fl = enemyAt(g, '&', 3);
+  m.mode = 0;
+  assert.strictEqual(E.pickTarget(g, m, 16, true), fl, 'flyer before the leading grunt');
+  var g2 = rich(0); g2.phase = 'wave';
+  E.build(g2, 2, 1, T.missile);
+  var f2 = enemyAt(g2, '&', 3, 1e4), hp0 = f2.hp; g2.spawners.length = 0;
+  for (var i = 0; i < 60; i++) { E.step(g2); g2.events.length = 0; }
+  var per = E.TOWERS[T.missile].dmg[0] * E.TOWERS[T.missile].airMul[0];
+  assert.ok(hp0 - f2.hp >= per - 1e-6, 'at least one full air hit: ' + (hp0 - f2.hp));
 });
 
 // ---------- damage ----------
@@ -234,6 +314,122 @@ test('damage: armour, sniper pierce, bounty, splash, chain, slow', function () {
   E.sell(g4, fr);
   run(g4, 3);
   assert.strictEqual(gr.slowF, 0, 'slow expired');
+});
+
+test('abilities: burn stops regen and healing, golems shrug off slows, splitters split', function () {
+  // a troll regenerates — unless it's burning
+  var g = rich(0); g.phase = 'wave'; g.spawners.length = 0;
+  var tr = enemyAt(g, 'T', 5, 1000); tr.hp = 500;
+  E.step(g);
+  assert.ok(tr.hp > 500, 'regenerates');
+  var hp = tr.hp; tr.burnT = 2; tr.burnD = 30;
+  E.step(g);
+  assert.ok(tr.hp < hp, 'burning: no regen, takes the burn');
+  // a healer mends its neighbours, but not burning ones
+  var g2 = rich(0); g2.phase = 'wave'; g2.spawners.length = 0;
+  var he = enemyAt(g2, 'h', 6, 1000), a = enemyAt(g2, 'o', 6.4, 100), b = enemyAt(g2, 'o', 5.6, 100);
+  a.hp = 50; b.hp = 50; b.burnT = 5; b.burnD = 0.0001; he.healT = 0.001;
+  E.step(g2);
+  assert.ok(a.hp > 60, 'healed ' + a.hp);
+  assert.ok(b.hp <= 50, 'burning: not healed');
+  // golems ignore frost's slow and tesla's stun
+  var g3 = rich(0); g3.phase = 'wave';
+  E.build(g3, 3, 3, T.frost); var go = enemyAt(g3, 'M', 5, 1e5);
+  E.step(g3);
+  assert.strictEqual(go.slowF, 0, 'not slowed');
+  // a splitter breaks into three grunts that count towards the wave
+  var g4 = rich(0); g4.phase = 'wave';
+  var sp = enemyAt(g4, '8', 8, 10), left = g4.waveLeft[1];
+  E.hurt(g4, sp, 100, true, null);
+  var kids = g4.enemies.filter(function (e) { return e.alive && e.k === 'o'; });
+  assert.strictEqual(kids.length, 3);
+  assert.strictEqual(g4.waveLeft[1], left - 1 + 3);
+  kids.forEach(function (k) { assert.ok(Math.abs(k.d - 8) < 1 && k.bounty === 1 && k.maxHp < E.ENEMIES.o.hp); });
+});
+
+test('abilities: shred, brittle, stun, scorch; the warlord calls escorts', function () {
+  var g = rich(0); g.phase = 'wave';
+  var tk = enemyAt(g, 'O', 5, 1e4); g.waveLeft[1] += 10;
+  tk.shred = 3; E.hurt(g, tk, 10, false, null);
+  assert.strictEqual(tk.hp, 1e4 - 9, 'armour 4 - 3 shred');
+  tk.shred = 0; tk.burnT = 1; tk.scorch = 4; E.hurt(g, tk, 10, false, null);
+  assert.strictEqual(tk.hp, 1e4 - 19, 'scorched: no armour while burning');
+  tk.burnT = 0; tk.brit = 0.3; tk.britT = 1; E.hurt(g, tk, 14, false, null);
+  assert.ok(Math.abs(tk.hp - (1e4 - 19 - 10 * 1.3)) < 1e-9, 'brittle: +30%');
+  // a Breaker cannon strips armour
+  var g2 = rich(0); g2.phase = 'wave'; g2.spawners.length = 0;
+  var c = E.build(g2, 3, 3, T.cannon); E.upgrade(g2, c); E.upgrade(g2, c); E.upgrade(g2, c, 1);
+  var t2 = enemyAt(g2, 'O', 5, 1e5);
+  for (var i = 0; i < 120; i++) { E.step(g2); g2.events.length = 0; }
+  assert.ok(t2.shred > 0, 'shredded');
+  // Overload stuns, bosses half as long
+  var g3 = rich(0); g3.phase = 'wave'; g3.spawners.length = 0;
+  var ts = E.build(g3, 3, 3, T.tesla); E.upgrade(g3, ts); E.upgrade(g3, ts); E.upgrade(g3, ts, 1);
+  var gr = enemyAt(g3, 'o', 5, 1e5);
+  E.step(g3);
+  assert.ok(gr.stunT > 0, 'stunned');
+  var d0 = gr.d; E.step(g3);
+  assert.strictEqual(gr.d, d0, 'stunned enemies stand still');
+  // the warlord's escorts
+  var g4 = rich(0); g4.phase = 'wave'; g4.spawners.length = 0;
+  var wl = enemyAt(g4, 'Ω', 10, 1e6); wl.sumT = 0.001;
+  E.step(g4);
+  assert.strictEqual(g4.enemies.filter(function (e) { return e.k === 'o'; }).length, E.ENEMIES['Ω'].summon.n);
+});
+
+test('beam ramps up on one target; banks pay each wave; beacons buff neighbours; taxes', function () {
+  var g = rich(0); g.phase = 'wave'; g.spawners.length = 0;
+  var bm = E.build(g, 3, 3, T.beam), e = enemyAt(g, 'O', 5, 1e6);
+  e.spd = 0;
+  E.step(g); var first = 1e6 - e.hp;
+  for (var i = 0; i < 240; i++) E.step(g);
+  var hp = e.hp; E.step(g);
+  var later = hp - e.hp, st = E.stats(g, bm);
+  assert.ok(Math.abs(first - st.dmg * E.STEP * (1 + (st.ramp - 1) * E.STEP / st.rampT)) < 1e-6, 'starts at base dps, armour ignored');
+  assert.ok(Math.abs(later - st.dmg * st.ramp * E.STEP) < 1e-6, 'fully ramped: x' + st.ramp);
+  // a bank pays as each wave starts
+  var g2 = E.newGame(0); g2.fxOn = false;
+  E.build(g2, 5, 4, T.bank);
+  var gold = g2.gold;
+  E.nextWave(g2);
+  assert.strictEqual(g2.gold, gold + E.TOWERS[T.bank].income[0]);
+  // a beacon buffs the towers around it (not itself or other support), the best one wins
+  var g3 = rich(0);
+  var ar = E.build(g3, 5, 4, T.arrow), far = E.build(g3, 9, 8, T.arrow), bk = E.build(g3, 6, 4, T.bank);
+  E.build(g3, 5, 5, T.beacon);
+  assert.ok(Math.abs(E.stats(g3, ar).dmg - E.TOWERS[T.arrow].dmg[0] * (1 + E.TOWERS[T.beacon].buff[0])) < 1e-9);
+  assert.strictEqual(E.stats(g3, far).dmg, E.TOWERS[T.arrow].dmg[0], 'out of the aura');
+  assert.strictEqual(E.stats(g3, bk).dmg, 0);
+  var w = E.build(g3, 4, 5, T.beacon); E.upgrade(g3, w); E.upgrade(g3, w); E.upgrade(g3, w, 0);
+  assert.ok(Math.abs(E.stats(g3, ar).dmg - E.TOWERS[T.arrow].dmg[0] * 1.4) < 1e-9, 'Warcry +40%');
+  assert.ok(Math.abs(E.stats(g3, ar).rate - E.TOWERS[T.arrow].rate[0] * 1.15) < 1e-9, 'and +15% speed');
+  // a tax office adds 40% to kills in its range
+  var g4 = rich(0); g4.phase = 'wave';
+  var tx = E.build(g4, 3, 3, T.bank); E.upgrade(g4, tx); E.upgrade(g4, tx); E.upgrade(g4, tx, 1); E.stats(g4, tx);
+  var v = enemyAt(g4, 'o', 5, 10); g4.waveLeft[1] += 5;
+  var before = g4.gold; E.hurt(g4, v, 100, true, null);
+  assert.strictEqual(g4.gold - before, Math.round(v.bounty * 1.4));
+});
+
+test('armory perks: costs, caps and what they change', function () {
+  assert.ok(E.PERKS.length >= 8);
+  assert.deepStrictEqual(E.cleanPerks({ chest: 9, bogus: 3, steel: -1 }), { chest: 3 });
+  assert.strictEqual(E.perkCost(E.cleanPerks({ steel: 2, scouts: 1 })), 2 * 2 + 3);
+  var total = E.PERKS.reduce(function (s, p) { return s + p.max * p.cost; }, 0);
+  assert.ok(total > E.MAPS.length * 3, 'can\'t buy everything: ' + total + ' vs ' + E.MAPS.length * 3 + ' stars');
+  var P = { chest: 2, walls: 1, steel: 3, optics: 1, plunder: 2, eng: 2, salvage: 2, scouts: 1, early: 1 };
+  var g = E.newGame(0, P), base = E.newGame(0);
+  assert.strictEqual(g.gold, base.gold + 100);
+  assert.strictEqual(g.maxLives, base.maxLives + 5); assert.strictEqual(g.lives, g.maxLives);
+  g.gold = 1e5;
+  var a = E.build(g, 5, 4, T.arrow), st = E.stats(g, a);
+  assert.ok(Math.abs(st.dmg - E.TOWERS[T.arrow].dmg[0] * 1.18) < 1e-9 && Math.abs(st.range - E.TOWERS[T.arrow].range[0] * 1.06) < 1e-9);
+  assert.strictEqual(st.detect, 1.2, 'scouts');
+  assert.strictEqual(E.upgradeCost(a), Math.round(E.TOWERS[T.arrow].cost[1] * 0.84));
+  assert.strictEqual(E.sellValue(a), Math.floor(a.spent * 0.9));
+  g.phase = 'wave';
+  var e = E.spawnEnemy(g, 'o', 1, 0);
+  assert.strictEqual(e.bounty, Math.round(E.bountyFor('o', 1) * 1.2));
 });
 
 test('leaks cost lives (bosses 5) and zero lives loses', function () {
@@ -291,8 +487,24 @@ test('save/restore round-trips and rejects junk', function () {
   run(g2, 5);
   assert.ok(g2.t > g.t);
   assert.strictEqual(E.restore(null), null);
-  assert.strictEqual(E.restore({ v: 2 }), null);
-  assert.strictEqual(E.restore({ v: 1, map: 99 }), null);
+  assert.strictEqual(E.restore({ v: 9, map: 0 }), null);
+  assert.strictEqual(E.restore({ v: 2, map: 99 }), null);
+  // specialisations, perks and the new status effects survive
+  var h = E.newGame(5, { steel: 2 }); h.fxOn = false; h.gold = 1e4;
+  var sp = E.build(h, 2, 6, T.sniper); E.upgrade(h, sp); E.upgrade(h, sp); E.upgrade(h, sp, 1);
+  E.build(h, 4, 6, T.flame);
+  E.nextWave(h); run(h, 20);
+  var hs = E.serialize(h), hj = JSON.stringify(hs), h2 = E.restore(JSON.parse(hj));
+  assert.strictEqual(JSON.stringify(E.serialize(h2)), hj);
+  assert.deepStrictEqual(h2.perks, { steel: 2 });
+  assert.strictEqual(E.towerAt(h2, 2, 6).spec, 1);
+  assert.strictEqual(E.towerAt(h2, 2, 6).lvl, 3);
+  // a save from the first version (no perks, no specs, short enemy rows) still loads
+  var v1 = JSON.parse(json); v1.v = 1; delete v1.perks;
+  v1.towers = v1.towers.map(function (a) { return a.slice(0, 10); });
+  v1.enemies = v1.enemies.map(function (a) { return a.slice(0, 10); });
+  var old = E.restore(v1);
+  assert.ok(old && old.towers.length === s.towers.length && old.enemies.length === s.enemies.length);
   // towers on bad cells are dropped, not crashing
   var bad = JSON.parse(json); bad.towers.push([999, 0, 0, 1, 0, 0, 0, 60, 0, 0]);
   assert.strictEqual(E.restore(bad).towers.length, s.towers.length);
@@ -302,14 +514,15 @@ test('save/restore round-trips and rejects junk', function () {
 // A scripted, human-style build for Meadow: towers in the pockets between the
 // road's switchbacks, then upgrades. Each step waits until it's affordable;
 // waves come on their own timer (no early calls).
+// ('s', c, r, branch) picks a specialisation.
 var MEADOW_PLAN = [
   ['b', 'arrow', 5, 4], ['b', 'arrow', 5, 8], ['b', 'cannon', 4, 4], ['b', 'frost', 6, 8],
   ['u', 5, 4], ['u', 5, 8], ['b', 'tesla', 6, 4], ['b', 'sniper', 4, 8],
-  ['u', 4, 4], ['u', 6, 8], ['b', 'arrow', 8, 11], ['u', 6, 4], ['u', 4, 8],
-  ['b', 'cannon', 7, 4], ['u', 5, 4], ['u', 5, 8], ['b', 'tesla', 8, 12], ['u', 8, 11],
-  ['u', 4, 4], ['u', 7, 4], ['b', 'sniper', 6, 9], ['u', 6, 4], ['u', 4, 8], ['u', 8, 12],
-  ['u', 6, 8], ['u', 7, 4], ['u', 8, 11], ['u', 6, 9], ['b', 'arrow', 3, 8], ['u', 8, 12],
-  ['u', 6, 9], ['u', 3, 8], ['u', 3, 8], ['b', 'cannon', 9, 8], ['u', 9, 8], ['u', 9, 8]
+  ['b', 'beacon', 5, 5], ['u', 4, 4], ['u', 6, 8], ['b', 'flame', 2, 7], ['u', 6, 4], ['u', 4, 8],
+  ['b', 'arrow', 8, 11], ['u', 5, 4], ['u', 5, 8], ['b', 'cannon', 7, 4], ['b', 'tesla', 8, 12], ['u', 8, 11],
+  ['u', 4, 4], ['u', 7, 4], ['u', 6, 4], ['u', 4, 8], ['s', 4, 8, 0], ['u', 8, 12], ['u', 2, 7],
+  ['b', 'sniper', 6, 9], ['s', 6, 4, 0], ['u', 6, 8], ['u', 7, 4], ['u', 8, 11], ['u', 6, 9], ['s', 4, 4, 1],
+  ['u', 8, 12], ['u', 6, 9], ['s', 5, 4, 0], ['u', 5, 5], ['b', 'missile', 3, 8], ['u', 3, 8], ['u', 2, 7], ['s', 6, 9, 1], ['u', 3, 8]
 ];
 function playPlan(mi, plan) {
   var g = E.newGame(mi); g.fxOn = false;
@@ -322,10 +535,10 @@ function playPlan(mi, plan) {
         if (g.gold < E.TOWERS[ty].cost[0]) return;
         assert.ok(E.build(g, p[2], p[3], ty), 'plan step ' + i + ' builds');
       } else {
-        var t = E.towerAt(g, p[1], p[2]);
+        var t = E.towerAt(g, p[1], p[2]), b = p[0] === 's' ? p[3] : undefined;
         assert.ok(t, 'plan step ' + i + ' has a tower');
-        if (g.gold < E.upgradeCost(t)) return;
-        assert.ok(E.upgrade(g, t));
+        if (g.gold < E.upgradeCost(t, b)) return;
+        assert.ok(E.upgrade(g, t, b), 'plan step ' + i + ' upgrades');
       }
       i++;
     }
@@ -342,7 +555,8 @@ test('Meadow is beatable with a reasonable scripted build (deterministic)', func
   var g = playPlan(0, MEADOW_PLAN), g2 = playPlan(0, MEADOW_PLAN);
   assert.strictEqual(g.phase, 'won', 'won (wave ' + g.wave + ', lives ' + g.lives + ')');
   assert.strictEqual(g.wave, 30);
-  assert.ok(g.lives >= 15, 'lives left ' + g.lives);
+  assert.ok(g.lives >= 12, 'lives left ' + g.lives);
+  assert.ok(g.towers.filter(function (t) { return t.lvl === E.MAX_LVL; }).length >= 5, 'specialised');
   assert.strictEqual(JSON.stringify(E.serialize(g)), JSON.stringify(E.serialize(g2)), 'deterministic');
   assert.ok(E.starsFor(g.lives, g.maxLives) >= 2);
   console.log('  Meadow scripted build: won with ' + g.lives + '/' + g.maxLives + ' lives, ' + g.kills + ' kills, ' + g.towers.length + ' towers, $' + g.gold + ' left');
@@ -390,11 +604,14 @@ function coverageCells(g, flyw) {
   return out.sort(function (a, b) { return b.n - a.n || a.r - b.r || a.c - b.c; });
 }
 var ORDERS = {
-  mix: 'arrow,arrow,cannon,frost,arrow,tesla,sniper,cannon,tesla,frost,sniper,cannon,tesla,arrow,sniper,cannon,tesla,frost,sniper,arrow',
-  arrows: 'arrow,arrow,arrow,cannon,arrow,frost,arrow,sniper,arrow,tesla,arrow,cannon,arrow,sniper,arrow,frost,arrow,tesla,arrow,sniper'
+  classic: 'arrow,arrow,cannon,frost,arrow,tesla,sniper,cannon,tesla,frost,sniper,cannon,tesla,arrow,sniper,cannon,tesla,frost,sniper,arrow',
+  smart: 'arrow,arrow,cannon,frost,sniper,beacon,tesla,missile,cannon,sniper,flame,beam,tesla,missile,frost,sniper,beam,cannon,arrow,tesla',
+  eco: 'arrow,bank,arrow,cannon,frost,beacon,bank,tesla,flame,missile,sniper,cannon,beam,tesla,frost,missile,sniper,flame,cannon,beam'
 };
-function botGame(mi, order, rate) {
-  var g = E.newGame(mi); g.fxOn = false;
+// The specialisation each tower takes (a fixed pick; both branches are close in value).
+var BRANCH = { arrow: 0, cannon: 1, frost: 1, tesla: 0, sniper: 0, flame: 0, missile: 1, beam: 1, bank: 0, beacon: 0 };
+function botGame(mi, order, rate, perks) {
+  var g = E.newGame(mi, perks); g.fxOn = false;
   var cells = coverageCells(g, 0.6), seq = ORDERS[order].split(',');
   function act() {
     var want = Math.min(seq.length, 2 + Math.floor(g.wave * rate));
@@ -406,9 +623,11 @@ function botGame(mi, order, rate) {
         E.build(g, cell.c, cell.r, ty);
       } else {
         var best = null;
-        g.towers.forEach(function (t) { if (t.lvl < 2 && (!best || t.lvl < best.lvl)) best = t; });
-        if (!best || g.gold < E.upgradeCost(best)) return;
-        E.upgrade(g, best);
+        g.towers.forEach(function (t) { if (t.lvl < E.MAX_LVL && (!best || t.lvl < best.lvl)) best = t; });
+        if (!best) return;
+        var b = BRANCH[E.TOWERS[best.type].key];
+        if (g.gold < E.upgradeCost(best, b)) return;
+        E.upgrade(g, best, b);
       }
     }
   }
@@ -416,14 +635,31 @@ function botGame(mi, order, rate) {
   while (g.phase === 'wave' && g.steps < 500000) { E.step(g); g.events.length = 0; if (g.steps % 30 === 0) act(); }
   return g;
 }
-test('balance: every map can be won; Twin Gates needs a better plan than Meadow', function () {
-  var m0 = botGame(0, 'mix', 0.45), m1 = botGame(1, 'mix', 0.45), m2 = botGame(2, 'mix', 0.45), m2b = botGame(2, 'arrows', 0.6);
-  assert.strictEqual(m0.phase, 'won', 'Meadow');
-  assert.strictEqual(m1.phase, 'won', 'Canyon');
-  assert.strictEqual(m2.phase, 'lost', 'Twin Gates beats the plain plan (wave ' + m2.wave + ')');
-  assert.ok(m2.wave >= 15, 'but not too early: wave ' + m2.wave);
-  assert.strictEqual(m2b.phase, 'won', 'Twin Gates falls to an arrow-heavy plan (lives ' + m2b.lives + ')');
-  console.log('  coverage bot: Meadow won ♥' + m0.lives + ' · Canyon won ♥' + m1.lives + ' · Twin Gates lost at wave ' + m2.wave + ' · arrow-heavy Twin Gates won ♥' + m2b.lives);
+test('balance: every map can be won, harder maps fall to more plans, perks help', function () {
+  // win rate of 3 build orders x 2 build paces per map, by difficulty
+  var res = E.MAPS.map(function (M, mi) {
+    var wins = 0, line = [];
+    Object.keys(ORDERS).forEach(function (o) {
+      [0.45, 0.6].forEach(function (r) {
+        var g = botGame(mi, o, r);
+        if (g.phase === 'won') wins++;
+        line.push(o + '@' + r + ':' + (g.phase === 'won' ? '♥' + g.lives : 'w' + g.wave));
+      });
+    });
+    return { id: M.id, diff: M.diff, wins: wins, line: line.join(' ') };
+  });
+  res.forEach(function (r) { assert.ok(r.wins >= 1, r.id + ' can be won: ' + r.line); });
+  var byDiff = { easy: [], medium: [], hard: [], expert: [] };
+  res.forEach(function (r) { byDiff[r.diff].push(r.wins); });
+  function avg(a) { return a.reduce(function (s, x) { return s + x; }, 0) / a.length; }
+  assert.ok(byDiff.easy[0] >= 5, 'Meadow falls to almost any plan: ' + res[0].line);
+  assert.ok(avg(byDiff.easy) > avg(byDiff.medium) && avg(byDiff.medium) >= avg(byDiff.hard) && avg(byDiff.hard) > avg(byDiff.expert),
+    'difficulty labels hold: ' + JSON.stringify(byDiff));
+  // stars spent in the Armory turn a lost expert map around
+  var sky = E.MAPS.map(function (M) { return M.id; }).indexOf('sky');
+  var plain = botGame(sky, 'smart', 0.45), perked = botGame(sky, 'smart', 0.45, { steel: 3, optics: 2, chest: 3, plunder: 2, eng: 2, walls: 1 });
+  assert.strictEqual(plain.phase, 'lost'); assert.strictEqual(perked.phase, 'won');
+  console.log('  bot wins (of 6) per map: ' + res.map(function (r) { return r.id + ' ' + r.wins; }).join(' · '));
 });
 
 test('pools: enemies, projectiles and effects are reused, not reallocated', function () {
