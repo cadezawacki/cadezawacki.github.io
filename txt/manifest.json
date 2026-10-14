@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "version": "2026.10.14-12",
+  "version": "2026.10.14-13",
   "modules": [
     {
       "id": "crawler",
@@ -1862,6 +1862,16 @@
       "precache": [
         "widgets/snippets/snippets-core.js"
       ]
+    },
+    {
+      "id": "code-comment",
+      "type": "plugin",
+      "name": "Code comments (Ctrl+/)",
+      "description": "Ctrl+/ (Cmd+/ on a Mac) inside a ``` code block comments or uncomments the selected lines in that block's language — // for JS, # for Python, -- for SQL, <!-- --> for HTML… — and guesses when the fence names no language",
+      "entry": "plugins/code-comment/code-comment.js",
+      "settingKey": "plugins.code-comment",
+      "section": "Editor",
+      "default": true
     },
     {
       "id": "snippet-expand",
