@@ -247,6 +247,8 @@ window.openTimer = function() {
   _timerMinimized = false;
   if (!_timer.running) _timerPrime();
   const p = Cade.mkPanel('timer-panel', 'Timer', _timerBodyHtml());
+  // Minimize (–) folds the timer into its live footer chip (⏱ 12:34), not the dock.
+  p.__cadeMinimize = () => window.timerMinimize();
   // The X (close): if a timer is live and the "minimize on close" pref is on,
   // keep it running with the footer chip; otherwise stop + dismiss fully.
   p._onClose = () => {

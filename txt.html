@@ -2744,6 +2744,8 @@ body.game-open .editor-wrap { -webkit-user-select: none; user-select: none; }
   padding: 0 6px; margin-left: 6px; border-radius: 4px; font-variant-numeric: tabular-nums;
   background: var(--surface-hover, rgba(127,127,127,0.15)); color: var(--accent);
 }
+/* A panel minimized into the footer (Weather…): a live chip like the timer's. */
+button.cade-footer-min { font: inherit; border: 0; line-height: inherit; max-width: 40vw; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; touch-action: manipulation; }
 .sync-action-grid { display: flex; flex-wrap: wrap; gap: 8px; }
 .sync-action-grid .btn { flex: 1 1 140px; }
 #sync-disconnect-btn { color: var(--danger, #ef4444); border-color: var(--danger, #ef4444); }
@@ -21819,6 +21821,11 @@ function _watchGamePanel(p) {
 // The panel stays in the DOM (hidden), so its state survives. Modules hear
 // 'cade-panel-minimize' / 'cade-panel-restore' (dispatched on the panel,
 // bubbling) to pause and to ignore keys meanwhile (Cade.isMinimized(p)).
+// A panel may instead wait in the footer as a live chip — set
+// p.__cadeMinTo = 'footer' and optionally p.__cadeMinLabel = () => text
+// (the module refreshes p.__dockChip.textContent while minimized) — or take
+// minimizing over entirely with p.__cadeMinimize = fn (the Timer folds into
+// its own footer chip). The footer is used only while it's visible (not in zen).
 var _openingWidget = null; // var: read by registerWidget, which can run before this line
 var _panelDock = null, _dockObserver = null;
 function _isMinimized(p) { return !!(p && p.classList && p.classList.contains('cade-minimized')); }
@@ -21826,12 +21833,33 @@ function _syncGameOpen() {
   document.body.classList.toggle('game-open', !!document.querySelector('.cade-game-panel:not(.cade-minimized)'));
 }
 function _dockSync() {
-  if (!_panelDock) return;
-  _panelDock.querySelectorAll('.cade-dock-chip').forEach(c => { if (!c.__panel || !c.__panel.isConnected) c.remove(); });
-  if (!_panelDock.childElementCount && _dockObserver) { _dockObserver.disconnect(); _dockObserver = null; }
+  document.querySelectorAll('.cade-dock-chip, .cade-footer-min').forEach(c => { if (!c.__panel || !c.__panel.isConnected) c.remove(); });
+  if (!document.querySelector('.cade-dock-chip, .cade-footer-min') && _dockObserver) { _dockObserver.disconnect(); _dockObserver = null; }
 }
 function _minimizePanel(p) {
   if (!p || _isMinimized(p)) return;
+  if (typeof p.__cadeMinimize === 'function') { try { p.__cadeMinimize(); } catch (e) { console.error(e); } return; }
+  const t = (p.querySelector('.cade-panel-title') || {}).textContent || 'Panel';
+  const footer = p.__cadeMinTo === 'footer' ? document.querySelector('.footer') : null;
+  if (footer && footer.offsetParent !== null) {
+    if (!_dockObserver) { _dockObserver = new MutationObserver(_dockSync); _dockObserver.observe(document.body, { childList: true }); }
+    const fc = document.createElement('button');
+    fc.type = 'button';
+    fc.className = 'footer-timer-chip cade-footer-min';
+    let label = t;
+    try { if (typeof p.__cadeMinLabel === 'function') label = p.__cadeMinLabel() || t; } catch {}
+    fc.textContent = label;
+    fc.title = 'Restore ' + t;
+    fc.__panel = p;
+    fc.addEventListener('click', () => { if (p.isConnected) _restorePanel(p); else _dockSync(); });
+    const after = document.getElementById('reminders-chip');
+    if (after && after.parentNode === footer) after.after(fc); else footer.insertBefore(fc, footer.querySelector('.footer-spacer'));
+    p.__dockChip = fc;
+    p.classList.add('cade-minimized');
+    _syncGameOpen();
+    p.dispatchEvent(new CustomEvent('cade-panel-minimize', { bubbles: true }));
+    return;
+  }
   if (!_panelDock || !_panelDock.isConnected) {
     const anchor = document.createElement('div');
     anchor.id = 'cade-panel-dock-anchor';
@@ -21849,7 +21877,6 @@ function _minimizePanel(p) {
     _dockObserver = new MutationObserver(_dockSync);
     _dockObserver.observe(document.body, { childList: true });
   }
-  const t = (p.querySelector('.cade-panel-title') || {}).textContent || 'Panel';
   const chip = document.createElement('button');
   chip.type = 'button';
   chip.className = 'cade-dock-chip';

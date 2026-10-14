@@ -232,6 +232,8 @@ editor is usable again.
 | `Cade.isMinimized(el)` | `true` when `el` (a panel or anything inside one) is minimized |
 | `Cade.minimizePanel(p)` / `Cade.restorePanel(p)` | do it from code |
 | `cade-panel-minimize` / `cade-panel-restore` | bubbling events dispatched on the panel |
+| `panel.__cadeMinTo = 'footer'` | minimize into the footer as a live chip instead of the dock (falls back to the dock while the footer is hidden, e.g. zen); optional `panel.__cadeMinLabel = () => text` labels it, and the module may update `panel.__dockChip.textContent` while minimized (Weather shows the temperature) |
+| `panel.__cadeMinimize = fn` | take minimizing over entirely (the Timer removes its panel and keeps running as its own footer chip) |
 
 Modules with GLOBAL key handlers must return early (no `preventDefault`) while their panel
 is minimized — otherwise they steal the user's typing — and real-time games should pause
