@@ -127,6 +127,41 @@ test('at least 8 presets in different styles, all sane', function () {
   var names2 = {};
   C.PRESETS.forEach(function (p) { assert.ok(!names2[p.name]); names2[p.name] = 1; });
 });
+test('focus presets: a mellow shelf with clean rows, humanize and mix applied', function () {
+  var focus = C.PRESETS.filter(function (p) { return p.group === 'focus'; });
+  assert.ok(focus.length >= 12, 'focus shelf');
+  C.PRESETS.forEach(function (ps) {
+    assert.ok(!ps.group || ps.group === 'focus', ps.name + ' group');
+    assert.ok(/^[ABCD]{1,16}$/.test(ps.chain) && ps.chain.split('').every(function (c) { return ps.pats['ABCD'.indexOf(c)]; }), ps.name + ' chain');
+    ps.pats.forEach(function (rows, pi) {
+      var lens = {};
+      Object.keys(rows).forEach(function (k) {
+        var note = k === 'BS' || k === 'KY';
+        lens[rows[k].length] = 1;
+        if (/v$/.test(k)) assert.ok(/^[.gxX]+$/.test(rows[k]) && rows[k.slice(0, 2)], ps.name + ' ' + k + ' overlay');
+        else if (note) assert.ok(/^[.0-9a-l]+$/.test(rows[k]), ps.name + ' ' + 'ABCD'[pi] + ' ' + k + ' degrees');
+        else assert.ok(/^[.gxX]+$/.test(rows[k]), ps.name + ' ' + 'ABCD'[pi] + ' ' + k + ' hits');
+      });
+      if (ps.group === 'focus') assert.strictEqual(Object.keys(lens).length, 1, ps.name + ' ' + 'ABCD'[pi] + ' rows share one length');
+    });
+  });
+  focus.forEach(function (ps) {
+    assert.ok(ps.bpm >= 60 && ps.bpm <= 180, ps.name + ' tempo');
+    var s = C.presetSong(C.PRESETS.indexOf(ps));
+    assert.strictEqual(s.human, ps.human || 0);
+    if (ps.vol) Object.keys(ps.vol).forEach(function (c) {
+      var t = C.TRACKS.findIndex(function (x) { return x.code === c; });
+      assert.ok(t >= 0, ps.name + ' vol track ' + c);
+      assert.strictEqual(s.mix[t].vol, ps.vol[c]);
+    });
+  });
+  var rain = C.presetSong(C.PRESETS.findIndex(function (p) { return p.name === 'Rainy Window'; }));
+  assert.strictEqual(rain.human, 25);
+  assert.strictEqual(rain.mix[C.SH].vol, 0.3);
+  assert.strictEqual(rain.mix[C.KK].vol, C.TRACKS[C.KK].vol, 'untouched tracks keep their default level');
+  var dnb = C.presetSong(C.PRESETS.findIndex(function (p) { return p.name === 'Liquid DnB'; }));
+  assert.strictEqual(dnb.pats[0].len, 32);
+});
 test('preset strings decode with velocities and note overlays', function () {
   var house = C.presetSong(0), techno = C.presetSong(2);
   assert.strictEqual(row(house.pats[0], C.KK), 'x---x---x---x---');

@@ -2841,10 +2841,26 @@ body.readonly .cm-img-grip { display: none; }
 .imp-root-x { flex: 0 0 auto; padding: 1px 8px; line-height: 1.4; }
 .imp-skips { font-size: var(--text-xs); color: var(--text-faint); line-height: 1.5; }
 /* The toggles stay one line each so the options don't outweigh the selection
-   they describe — the full explanation lives in each row's tooltip, and which
-   .gitignore is in play rides on the label instead of a second line. */
+   they describe — the full explanation lives in each row's tooltip; the label
+   counts the ignore files and the list under it names them. */
 .imp-opt .setting-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .imp-gi-src { color: var(--text-faint); font-family: var(--font-mono); font-size: var(--text-xs); }
+/* The ignore files in play — found ones say what they cover, hand-added ones
+   take the folder they came from. Scrolls on its own past a handful. */
+.imp-gi-list { max-height: 168px; overflow-y: auto; overscroll-behavior: contain; margin: 2px 0 var(--space-2); padding: 2px 10px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface-2, transparent); }
+.imp-gi-list[hidden] { display: none; }
+.imp-gi-row { display: flex; align-items: center; gap: var(--space-2); min-height: 30px; padding: 3px 0; font-size: var(--text-xs); border-bottom: 1px solid var(--border); }
+.imp-gi-row:last-child { border-bottom: none; }
+.imp-gi-name { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-mono); color: var(--text); }
+.imp-gi-where { flex: 1 1 auto; min-width: 0; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-faint); font-family: var(--font-mono); }
+.imp-gi-added { flex-wrap: wrap; row-gap: 4px; padding: 6px 0; }
+.imp-gi-peek { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: pre; color: var(--text-faint); font-family: var(--font-mono); }
+.imp-gi-in { flex: 1 1 100%; display: flex; align-items: center; gap: 6px; min-width: 0; color: var(--text-faint); }
+.imp-gi-in span { flex: 0 0 auto; }
+.imp-gi-scope { flex: 1 1 auto; min-width: 0; width: 100%; padding: 3px 7px; font: inherit; font-family: var(--font-mono); color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm, 4px); outline: none; }
+.imp-gi-scope:focus { border-color: var(--accent); }
+.imp-gi-scope.imp-gi-bad { border-color: var(--warning, #d97706); }
+@media (pointer: coarse) { .imp-gi-scope { font-size: 16px; padding: 6px 8px; } .imp-gi-row { min-height: 40px; } }
 
 @media (max-width: 768px) {
   #outline-panel, #pomodoro-panel, #cal-panel { right: 8px; left: 8px; width: auto; }
@@ -3659,7 +3675,7 @@ body.inbox-list .find-panel { display: none !important; }
         <div class="imp-drop-text">Drop folders here — add as many as you like</div>
         <div class="imp-drop-actions">
           <button class="btn" onclick="impPickFolder()">Choose Folder…</button>
-          <button class="btn" onclick="impPickGitignore()" title="Only used while this modal is open; never imported">Add .gitignore…</button>
+          <button class="btn" onclick="impPickGitignore()" title="Pick one or several — only used while this modal is open, never imported">Add .gitignore…</button>
         </div>
       </div>
       <div class="imp-stats" id="imp-stats"></div>
@@ -3680,7 +3696,7 @@ body.inbox-list .find-panel { display: none !important; }
           <label class="setting-toggle"><input type="checkbox" id="imp-opt-dot" checked><span class="toggle-track"></span><span class="toggle-thumb"></span></label>
         </div>
       </div>
-      <div class="setting-row imp-opt" title="Applies when an ignore file is present: one found at a picked folder's root covers that folder, a hand-added one covers the rest. Matched per folder root, and never imported.">
+      <div class="setting-row imp-opt" title="Every .gitignore inside a picked folder is used for its own subfolder, layered the way git does it (deeper files win, ! re-includes). Some browsers leave hidden files out of a folder pick — add those with Add .gitignore… and say which folder each came from. Ignore files are never imported.">
         <div class="setting-info">
           <div class="setting-label">Respect .gitignore <span class="imp-gi-src" id="imp-gi-hint"></span></div>
         </div>
@@ -3688,6 +3704,8 @@ body.inbox-list .find-panel { display: none !important; }
           <label class="setting-toggle"><input type="checkbox" id="imp-opt-gi" checked><span class="toggle-track"></span><span class="toggle-thumb"></span></label>
         </div>
       </div>
+      <div class="imp-gi-list" id="imp-gi-list" hidden></div>
+      <datalist id="imp-gi-dirs"></datalist>
     </div>
     <div class="modal-footer">
       <div class="imp-skips" id="imp-skips"></div>
@@ -3701,7 +3719,7 @@ body.inbox-list .find-panel { display: none !important; }
 <!-- Kept outside the overlay: a hidden input inside a display:none ancestor is
      a coin flip for programmatic .click() on some mobile browsers. -->
 <input type="file" id="import-folder-input" webkitdirectory directory multiple style="display:none;">
-<input type="file" id="import-gitignore-input" style="display:none;">
+<input type="file" id="import-gitignore-input" multiple style="display:none;">
 
 <!-- ========== CLIP / CAPTURE SETUP ========== -->
 <div class="modal-overlay" id="clip-overlay">
@@ -10261,7 +10279,13 @@ window.uploadFiles = function() {
 const _IMP_READ_CONCURRENCY = 8;   // parallel reads during the final import
 
 let _impRoots = [];             // [{ name, files: File[], bytes }] — one per picked/dropped folder
-let _impGiManual = null;        // { name, text } — .gitignore added by hand; applies to every root
+// .gitignore files added by hand — for browsers whose folder pick leaves hidden
+// files out. Each one says which folder it belongs to ('' = the top of every
+// picked folder), since a hand-picked file arrives with no path of its own.
+let _impGiAdded = [];           // [{ id, name, text, scope }]
+let _impGiSeq = 0;
+let _impGiListSig = '';         // what the ignore-file list was last built from
+let _impDirs = null;            // memo: every folder path in the selection (see _impDirSet)
 const _impGiByRoot = new Map(); // root name -> [{ name, dir, text }] — every .gitignore found under it
 let _impPlan = null;            // { files, bytes, skip } — what Import would take right now
 let _impBusy = false;           // an import is running; ignore re-entry and close requests
@@ -10410,7 +10434,10 @@ window.closeImportFolder = function() {
   const overlay = document.getElementById('import-folder-overlay');
   if (overlay) overlay.classList.remove('open');
   _impRoots = [];
-  _impGiManual = null;
+  _impGiAdded = [];
+  _impGiListSig = '';
+  const gl = document.getElementById('imp-gi-list'); if (gl) { gl.hidden = true; gl.innerHTML = ''; }
+  _impDirs = null;
   _impGiByRoot.clear();
   _impPlan = null;
   _impScans = 0;
@@ -10434,19 +10461,64 @@ window.impPickGitignore = function() {
   const input = document.getElementById('import-gitignore-input');
   if (!input || _impBusy) return;
   input.value = '';
-  input.onchange = async (e) => {
-    const f = e.target.files && e.target.files[0];
-    input.value = '';
-    if (!f) return;
-    try {
-      _impGiManual = { name: f.name || '.gitignore', text: await readFileAsText(f) };
-      for (const r of _impRoots) r.__giMatch = undefined;
-      const opt = document.getElementById('imp-opt-gi'); if (opt) opt.checked = true;
-      _impRender();
-    } catch { showToast('Could not read ' + (f.name || '.gitignore'), 'error', 2500); }
-  };
+  input.onchange = (e) => { const picked = Array.from(e.target.files || []); input.value = ''; _impAddGitignores(picked); };
   input.click();
 };
+
+// The first few patterns, so several files all called .gitignore can be told apart.
+function _giPeek(text) {
+  const rules = String(text || '').split(/\r?\n/).map(l => l.trim()).filter(l => l && l[0] !== '#');
+  return rules.length ? rules.slice(0, 4).join('  ') + (rules.length > 4 ? '  …' : '') : 'no rules';
+}
+
+// Adopt hand-picked or dropped ignore files. The same file twice (same name and
+// text) is one file; anything else stacks, each with its own folder.
+async function _impAddGitignores(files) {
+  let added = 0;
+  for (const f of files) {
+    const name = f.name || '.gitignore';
+    try {
+      const text = await readFileAsText(f);
+      if (_impGiAdded.some(g => g.name === name && g.text === text)) continue;
+      _impGiAdded.push({ id: ++_impGiSeq, name, text, scope: '', peek: _giPeek(text) });
+      added++;
+    } catch { showToast('Could not read ' + name, 'error', 2500); }
+  }
+  if (!added) return;
+  _impGiChanged();
+  const opt = document.getElementById('imp-opt-gi'); if (opt) opt.checked = true;
+  _impRender();
+  // Several at once can't all belong at the top — point at where to say so.
+  if (_impGiAdded.length > 1) {
+    const box = document.getElementById('imp-gi-list');
+    const empty = box && Array.from(box.querySelectorAll('.imp-gi-scope')).find(i => !i.value);
+    if (empty && !matchMedia('(pointer: coarse)').matches) empty.focus();
+  }
+}
+
+window.impRemoveGitignore = function(id) {
+  if (_impBusy) return;
+  _impGiAdded = _impGiAdded.filter(g => g.id !== id);
+  _impGiChanged();
+  _impRender();
+};
+
+// A hand-added file's folder changed: recompile the matchers and re-plan, but
+// leave the list (and the field being typed in) alone.
+let _impScopeTimer = 0;
+function _impScopeInput(e) {
+  const el = e.target;
+  if (!el || !el.classList || !el.classList.contains('imp-gi-scope')) return;
+  const g = _impGiAdded.find(x => x.id === +el.dataset.id);
+  if (!g) return;
+  g.scope = _impNormScope(el.value);
+  clearTimeout(_impScopeTimer);
+  _impScopeTimer = setTimeout(() => { _impGiChanged(); _impRender(); _impMarkScopes(); }, e.type === 'change' ? 0 : 160);
+}
+
+// Matchers are compiled per root and cached; any change to the set of ignore
+// files (or their folders) throws the cache away.
+function _impGiChanged() { for (const r of _impRoots) r.__giMatch = undefined; }
 
 // Group an incoming batch by the folder that was actually picked (the first
 // path segment) so the modal can list and drop whole roots. Re-picking the same
@@ -10457,18 +10529,15 @@ window.impPickGitignore = function() {
 async function _impAddFiles(fileList) {
   const files = Array.from(fileList || []);
   if (!files.length) return;
-  // A .gitignore arriving on its own — dropped or picked — is the ignore file,
-  // not a folder to import. Adopt it instead of making a one-file root out of
-  // the only file we're guaranteed never to import.
-  if (files.length === 1 && /(^|[\\/])\.gitignore$/.test(files[0].name || '')) {
-    try {
-      _impGiManual = { name: files[0].name || '.gitignore', text: await readFileAsText(files[0]) };
-      for (const r of _impRoots) r.__giMatch = undefined;
-      const opt = document.getElementById('imp-opt-gi'); if (opt) opt.checked = true;
-    } catch { showToast('Could not read .gitignore', 'error', 2500); }
-    _impRender();
+  // .gitignore files arriving on their own — dropped with no folder around
+  // them — are ignore files, not something to import. Adopt them instead of
+  // making a root out of the only files we're guaranteed never to import.
+  const loose = f => String(f.__impPath || f.webkitRelativePath || '').indexOf('/') < 0;
+  if (files.every(f => loose(f) && /\.gitignore$/i.test(f.name || ''))) {   // .gitignore, or renamed copies like api.gitignore
+    await _impAddGitignores(files);
     return;
   }
+  _impDirs = null;
   const byRoot = new Map();
   for (const f of files) {
     const p = String(f.__impPath || f.webkitRelativePath || f.relativePath || f.name || '')
@@ -10518,18 +10587,67 @@ window.impRemoveRoot = function(i) {
   if (!root) return;
   _impGiByRoot.delete(root.name);
   _impRoots.splice(i, 1);
+  _impDirs = null;
+  _impGiChanged();
   _impRender();
 };
 
-// The matcher for a root: a hand-added .gitignore is the outermost layer,
-// then every file found under the root, deeper files overriding shallower.
-// Compiled once per root and cached until the selection changes.
+// A typed folder → 'a/b' (no leading ./ or /, no trailing /, \ → /).
+function _impNormScope(v) {
+  return String(v || '').trim().replace(/\\/g, '/').replace(/^(\.\/|\/)+/, '').replace(/\/+$/, '').replace(/\/{2,}/g, '/');
+}
+
+// Where a hand-added file sits inside `root`, as a dir relative to that root
+// ('' = its top), or null when it belongs to a different root. A folder that
+// starts with a picked root's name is that root's; anything else is read
+// inside every root, so one picked folder never needs its own name typed.
+function _impScopeIn(root, scope) {
+  if (!scope) return '';
+  const first = scope.split('/')[0];
+  if (_impRoots.some(r => r.name && r.name === first)) {
+    if (root.name !== first) return null;
+    return scope === first ? '' : scope.slice(first.length + 1);
+  }
+  return scope;
+}
+
+// Every folder in the selection, as "root/sub" — memoized until the roots
+// change, and only ever built once a file has been added by hand.
+function _impDirSet() {
+  if (_impDirs) return _impDirs;
+  const set = new Set();
+  for (const r of _impRoots) {
+    if (r.name) set.add(r.name);
+    for (const f of r.files) {
+      const p = f.__impPath;
+      for (let i = p.indexOf('/'); i > 0; i = p.indexOf('/', i + 1)) set.add(p.slice(0, i));
+    }
+  }
+  return (_impDirs = set);
+}
+
+// True when a hand-added file's folder exists in at least one picked root.
+function _impScopeFound(scope) {
+  if (!scope || !_impRoots.length) return true;
+  const dirs = _impDirSet();
+  return _impRoots.some(r => {
+    const d = _impScopeIn(r, scope);
+    return d === '' || (d !== null && dirs.has(r.name ? r.name + '/' + d : d));
+  });
+}
+
+// The matcher for a root: the hand-added files and every file found under the
+// root, each anchored at its own folder and layered the way git layers them —
+// deeper files override shallower, and at the same depth a found file wins over
+// one added by hand. Compiled once per root and cached until anything changes.
 function _impMatcherFor(root) {
   if (root.__giMatch !== undefined) return root.__giMatch;
   const layers = [];
-  if (_impGiManual) {
-    if (!_impGiManual.__rules) _impGiManual.__rules = _giCompile(_impGiManual.text);
-    layers.push({ dir: '', rules: _impGiManual.__rules });
+  for (const g of _impGiAdded) {
+    const dir = _impScopeIn(root, g.scope);
+    if (dir === null) continue;
+    if (!g.__rules) g.__rules = _giCompile(g.text);
+    layers.push({ dir, rules: g.__rules });
   }
   for (const l of (_impGiByRoot.get(root.name) || [])) {
     if (!l.__rules) l.__rules = _giCompile(l.text);
@@ -10583,6 +10701,67 @@ function _impComputePlan() {
   return { files, bytes, skip };
 }
 
+// Every ignore file in play, one row each: the ones found in the picked folders
+// (with the folder they cover) and the ones added by hand, which carry a folder
+// field — a hand-picked file arrives with no path, so it can't know where it
+// lived. Rebuilt only when that set changes, so typing in a field keeps focus.
+function _impRenderGiList() {
+  const box = document.getElementById('imp-gi-list');
+  if (!box) return;
+  const found = [];
+  for (const [root, layers] of _impGiByRoot) for (const l of layers) found.push({ root, l });
+  found.sort((a, b) => (a.l.name < b.l.name ? -1 : a.l.name > b.l.name ? 1 : 0));
+  const sig = found.map(x => x.l.name).join('\n') + '\n#' + _impGiAdded.map(g => g.id).join(',') + '\n@' + _impRoots.map(r => r.name + ':' + r.files.length).join('/');
+  if (sig === _impGiListSig) { _impMarkScopes(); return; }
+  _impGiListSig = sig;
+  if (!found.length && !_impGiAdded.length) { box.hidden = true; box.innerHTML = ''; return; }
+  const multi = _impRoots.filter(r => r.name).length > 1;
+  let h = '';
+  for (const { root, l } of found) {
+    const where = l.dir ? (root ? root + '/' : '') + l.dir + '/' : (root ? root + '/' : 'top level');
+    h += '<div class="imp-gi-row"><span class="imp-gi-name" title="' + escapeHtml(l.name) + '">' + escapeHtml(l.name) + '</span>' +
+      '<span class="imp-gi-where">covers ' + escapeHtml(where) + '</span></div>';
+  }
+  for (const g of _impGiAdded) {
+    h += '<div class="imp-gi-row imp-gi-added"><span class="imp-gi-name" title="' + escapeHtml(g.name) + ' — added by hand">' + escapeHtml(g.name) + '</span>' +
+      '<span class="imp-gi-peek" title="' + escapeHtml(g.text.slice(0, 600)) + '">' + escapeHtml(g.peek) + '</span>' +
+      '<button class="btn imp-root-x" title="Stop using this file" onclick="impRemoveGitignore(' + g.id + ')">×</button>' +
+      '<label class="imp-gi-in"><span>lives in</span><input class="imp-gi-scope" data-id="' + g.id + '" list="imp-gi-dirs" value="' + escapeHtml(g.scope) + '"' +
+      ' placeholder="' + (multi ? 'top of every folder' : 'top level') + '" aria-label="Folder this ' + escapeHtml(g.name) + ' lives in"' +
+      ' autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"></label></div>';
+  }
+  box.innerHTML = h;
+  box.hidden = false;
+  // Folder suggestions for the hand-added rows (capped: a datalist of 40k
+  // entries helps nobody). One picked folder → paths inside it; several →
+  // led by the folder name, which is what scopes a file to one of them.
+  const dl = document.getElementById('imp-gi-dirs');
+  if (dl) {
+    let opts = '';
+    if (_impGiAdded.length) {
+      const one = !multi && _impRoots.length === 1 ? _impRoots[0].name : '';
+      const list = Array.from(_impDirSet()).map(d => (one && d.startsWith(one + '/')) ? d.slice(one.length + 1) : d)
+        .filter(d => d && d !== one).sort().slice(0, 800);
+      opts = list.map(d => '<option value="' + escapeHtml(d) + '">').join('');
+    }
+    dl.innerHTML = opts;
+  }
+  _impMarkScopes();
+}
+
+// Flag a hand-added file whose folder isn't in the selection (a typo, or the
+// root's name missing with several folders picked).
+function _impMarkScopes() {
+  const box = document.getElementById('imp-gi-list');
+  if (!box) return;
+  for (const el of box.querySelectorAll('.imp-gi-scope')) {
+    const g = _impGiAdded.find(x => x.id === +el.dataset.id);
+    const bad = !!g && !_impScopeFound(g.scope);
+    el.classList.toggle('imp-gi-bad', bad);
+    el.title = bad ? 'No folder called “' + g.scope + '” in the selection — its rules apply nowhere' : 'The folder this file came from (its patterns are relative to it). Empty = the top of each picked folder.';
+  }
+}
+
 function _impRender() {
   if (!_impIsOpen()) return;
   _impPlan = _impComputePlan();
@@ -10613,16 +10792,14 @@ function _impRender() {
 
   const hintEl = document.getElementById('imp-gi-hint');
   if (hintEl) {
-    const auto = [];
-    for (const layers of _impGiByRoot.values()) for (const l of layers) auto.push(l.name);
+    let found = 0;
+    for (const layers of _impGiByRoot.values()) found += layers.length;
     const bits = [];
-    if (auto.length) bits.push(auto.length === 1 ? auto[0] : auto.length + ' files found');
-    if (_impGiManual) bits.push(_impGiManual.name + ' (added)');
+    if (found) bits.push(found + ' found');
+    if (_impGiAdded.length) bits.push(_impGiAdded.length + ' added');
     hintEl.textContent = bits.length ? '· ' + bits.join(' + ') : '· none loaded';
-    hintEl.title = bits.length
-      ? 'Using ' + bits.join(' and ') + ' — matched per folder root, and never imported.'
-      : 'None found in the upload. Every .gitignore inside a picked folder is adopted automatically; add one by hand only if the folder has none.';
   }
+  _impRenderGiList();
 
   const skipsEl = document.getElementById('imp-skips');
   if (skipsEl) {
@@ -10773,6 +10950,9 @@ async function _impAcceptDrop(dt) {
     zone.classList.remove('over');
     if (!_impBusy) _impAcceptDrop(e.dataTransfer);
   });
+  // A hand-added .gitignore's folder field: re-plan as it's typed.
+  const giList = document.getElementById('imp-gi-list');
+  if (giList) { giList.addEventListener('input', _impScopeInput); giList.addEventListener('change', _impScopeInput); }
   // The toggles change the plan, never the selection: recompute and redraw.
   ['imp-opt-root', 'imp-opt-dot', 'imp-opt-gi'].forEach(id => {
     const el = document.getElementById(id);
