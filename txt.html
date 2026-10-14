@@ -217,7 +217,7 @@ body {
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-md);
   padding: var(--space-1);
-  z-index: 100;
+  z-index: 6100;
   animation: menuFadeIn 100ms ease-out;
   /* Stay well within the viewport and scroll — keep it short (long View menu).
      Fixed px fallback first, then dvh-aware cap for modern browsers. */
@@ -521,7 +521,7 @@ body {
   min-width: 240px;
   max-width: 320px;
   padding: 4px;
-  z-index: 450; /* above modal-overlay (300) so it works from inside Room Manager */
+  z-index: 6450; /* above modal-overlay (6300) so it works from inside Room Manager */
   max-height: 60vh;
   overflow-y: auto;
 }
@@ -747,7 +747,7 @@ body {
   box-shadow: var(--shadow-lg);
   min-width: 200px;
   padding: 4px;
-  z-index: 500;
+  z-index: 6500;
   display: none;
 }
 .rm-action-menu.open { display: block; }
@@ -1475,7 +1475,7 @@ body.split-open .mobile-toolbar { right: 50%; }
   position: fixed;
   inset: 0;
   background: rgba(0,0,0,0.3);
-  z-index: 300;
+  z-index: 6300;
   align-items: center;
   justify-content: center;
   padding: 28px 16px; /* visual breathing room even for max-height dialogs */
@@ -1901,7 +1901,7 @@ body.split-open .mobile-toolbar { right: 50%; }
 .mob-fmt-u { text-decoration: underline; text-underline-offset: 2px; }
 /* Highlight color picker popover (anchored above the dash button). */
 .hl-picker {
-  position: fixed; z-index: 1200; display: grid; grid-template-columns: repeat(3, 1fr);
+  position: fixed; z-index: 6950; display: grid; grid-template-columns: repeat(3, 1fr);
   gap: 6px; padding: 8px; background: var(--surface); border: 1px solid var(--border);
   border-radius: 10px; box-shadow: 0 8px 28px rgba(0,0,0,0.28);
 }
@@ -1997,7 +1997,7 @@ body.split-open .mobile-toolbar { right: 50%; }
      usable while a room is locked (item 4). */
   top: calc(36px + env(safe-area-inset-top));
   left: 0; right: 0; bottom: 0;
-  z-index: 600;
+  z-index: 6600;
   background: var(--bg);
   align-items: center;
   justify-content: center;
@@ -2166,7 +2166,7 @@ body.split-open .mobile-toolbar { right: 50%; }
 /* Suggestion popup shown on tap. */
 .spell-popup {
   position: fixed;
-  z-index: 500;
+  z-index: 6500;
   min-width: 150px;
   max-width: min(260px, calc(100vw - 16px));
   max-height: 280px;
@@ -2277,7 +2277,7 @@ body.split-open .mobile-toolbar { right: 50%; }
 /* Shared popover menu (link actions) */
 .cm-ctx-menu {
   position: fixed;
-  z-index: 400;
+  z-index: 6400;
   min-width: 160px;
   background: var(--surface);
   border: 1px solid var(--border);
@@ -2414,7 +2414,7 @@ body.split-open .mobile-toolbar { right: 50%; }
    ============================================ */
 .cm-autocomplete {
   position: fixed;
-  z-index: 400;
+  z-index: 6400;
   min-width: 220px;
   max-width: 320px;
   max-height: 260px;
@@ -2685,6 +2685,12 @@ body.split-open .mobile-toolbar { right: 50%; }
 }
 
 /* ===== Widgets (Round 2): outline, pomodoro, zen, clock, daily note ===== */
+/* Layers (z-index): editor chrome < 1000 · widget panels 5000 (minimized dock
+   4999) · game / zen badges 6000 · everything the app pops up — nav menus 6100,
+   dialogs 6300, context menu + autocomplete 6400, workspace menu 6450, room
+   menu + spelling 6500, room unlock 6600, inbox sheet 6900, highlight picker
+   6950 — so a menu or dialog never opens behind a widget · command picker and
+   quick switcher 7000 · toasts 7100 · file-drop overlay 9000. */
 .cade-panel {
   position: fixed; z-index: 5000; background: var(--surface); border: 1px solid var(--border);
   border-radius: var(--radius-lg); box-shadow: var(--shadow-lg); display: flex; flex-direction: column;
@@ -3002,7 +3008,7 @@ mark.ibx-hit { background: var(--ibx-hit-bg); color: inherit; border-radius: 2px
 .ibx-mode button[aria-pressed="true"] { background: var(--surface-hover); color: var(--text); }
 /* Row actions: a bottom sheet on phones, a centred card on desktop. */
 .ibx-sheet-wrap {
-  position: fixed; inset: 0; z-index: 900;
+  position: fixed; inset: 0; z-index: 6900;
   display: flex; align-items: flex-end; justify-content: center;
   background: rgba(0, 0, 0, 0.42);
 }
