@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "version": "2026.10.14-3",
+  "version": "2026.10.14-4",
   "modules": [
     {
       "id": "crawler",
@@ -1786,6 +1786,16 @@
       "tags": "money,finance,calculator,loan,mortgage,payment,amortization,interest,apr,rate,extra payment,payoff,savings,compound interest,investment,future value,retirement,goal,inflation,percent,percentage,percent change,vat,sales tax,discount,markup,margin,roi,return,cagr,break even,profit",
       "entry": "widgets/moneycalc/moneycalc.js",
       "css": "widgets/moneycalc/moneycalc.css"
+    },
+    {
+      "id": "towerdefense",
+      "type": "widget",
+      "name": "Tower Defense",
+      "description": "ASCII tower defense — build, upgrade and hold 3 maps for 30 waves",
+      "icon": "🏰",
+      "tags": "game,strategy,tower defense,td,towers,waves,defense,ascii,fun,train",
+      "entry": "widgets/towerdefense/towerdefense.js",
+      "css": "widgets/towerdefense/towerdefense.css"
     }
   ]
 }

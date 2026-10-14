@@ -1,0 +1,159 @@
+/* Tower Defense widget styles (loaded on demand via Cade.loadCSS). Theme variables only. */
+#towerdefense-panel {
+  top: calc(var(--menubar-h, 36px) + 12px); right: 12px;
+  max-width: calc(100vw - 24px);
+  max-height: calc(100vh - var(--menubar-h, 36px) - 16px);
+  max-height: calc(100dvh - var(--menubar-h, 36px) - 16px);
+}
+#towerdefense-panel .cade-panel-body { padding: 10px; overflow: hidden; }
+
+.td { display: flex; flex-direction: column; gap: 6px; margin: 0 auto; max-width: 100%; font-family: var(--font-mono, ui-monospace, monospace); }
+.td-stage { position: relative; margin: 0 auto; line-height: 0; }
+.td-cv {
+  display: block; width: 100%; height: 100%; touch-action: none; cursor: pointer;
+  -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent;
+  border-radius: 8px; background: var(--bg); box-shadow: 0 0 0 1px var(--border);
+}
+/* Menus over the map. The dimmer lives on the stage so it takes the theme
+   background at partial opacity in both themes. */
+.td-stage.dim::after {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; bottom: 0; z-index: 1;
+  background: var(--bg); opacity: 0.62; border-radius: 8px; pointer-events: none;
+}
+.td-ovl {
+  position: absolute; top: 0; left: 0; right: 0; bottom: 0; z-index: 2;
+  display: flex; align-items: center; justify-content: center; padding: 10px;
+  overflow: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
+  line-height: 1.35; border-radius: 8px;
+}
+.td-card {
+  display: flex; flex-direction: column; align-items: stretch; gap: 10px; width: 100%; max-width: 330px; margin: auto;
+  padding: 14px; text-align: center; color: var(--text);
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg, 10px); box-shadow: var(--shadow-lg);
+}
+.td-title { font-weight: 800; font-size: 16px; letter-spacing: 0.14em; color: var(--text); white-space: nowrap; }
+.td-title::before, .td-title::after { content: '--'; color: var(--accent); letter-spacing: 0; margin: 0 0.45em; font-weight: 500; }
+.td-sub { font-size: var(--text-sm, 13px); color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.td-note { font-size: var(--text-xs, 12px); color: var(--text-faint); }
+.td-new { font-size: var(--text-xs, 12px); font-weight: 700; letter-spacing: 0.08em; color: var(--accent); }
+.td-bigstars { font-size: 30px; line-height: 1; letter-spacing: 0.12em; color: var(--tok-num, var(--accent)); }
+.td-row { display: flex; gap: 6px; }
+.td-row > * { flex: 1 1 0; min-width: 0; }
+
+.td-go, .td-btn {
+  font: inherit; font-size: var(--text-sm, 13px); font-weight: 600; min-height: 40px; padding: 8px 10px; border-radius: var(--radius-md, 6px); cursor: pointer;
+  -webkit-tap-highlight-color: transparent; touch-action: manipulation;
+}
+.td-go { border: 1px solid var(--accent); background: transparent; color: var(--accent); }
+.td-go:hover, .td-go:focus-visible { background: var(--accent); color: var(--surface); outline: none; }
+.td-btn { border: 1px solid var(--border); background: var(--surface-2); color: var(--text-muted); }
+.td-btn:hover, .td-btn:focus-visible { color: var(--text); border-color: var(--text-faint); outline: none; }
+.td-btn.arm { color: var(--error); border-color: var(--error); }
+
+/* Map select: an ASCII thumbnail per map. */
+.td-maps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.td-map {
+  display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 0; padding: 8px 2px 7px;
+  font: inherit; color: var(--text); background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-md, 6px);
+  cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: manipulation;
+}
+.td-map:hover, .td-map:focus-visible { border-color: var(--accent); outline: none; }
+.td-map.locked { opacity: 0.5; cursor: default; }
+.td-map.locked:hover { border-color: var(--border); }
+.td-mini { margin: 0 0 3px; font: 700 7px/7px var(--font-mono, ui-monospace, monospace); letter-spacing: 0.05em; color: var(--text-faint); white-space: pre; }
+.td-mini b { color: var(--text); font-weight: 800; }
+.td-mini i { color: var(--text-muted); font-style: normal; }
+.td-mini u { color: var(--tok-fn, var(--accent)); text-decoration: none; }
+.td-mname { font-weight: 700; font-size: 12px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.td-mdiff { font-size: 10px; color: var(--text-muted); white-space: nowrap; }
+.td-stars { font-size: 13px; letter-spacing: 0.08em; color: var(--tok-num, var(--accent)); }
+.td-lock { font-size: 11px; color: var(--text-muted); }
+.td-mbest { font-size: 10px; color: var(--text-faint); white-space: nowrap; }
+
+/* Help: the text scrolls inside the card, "back" always stays in view. */
+.td-card-help { max-height: 100%; min-height: 0; }
+.td-help {
+  display: flex; flex-direction: column; gap: 8px; text-align: left; flex: 1 1 auto; min-height: 0;
+  overflow: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; padding-right: 2px;
+  font-family: var(--font-body, sans-serif); font-size: 12.5px; line-height: 1.45; color: var(--text-muted);
+}
+.td-help > * { flex: 0 0 auto; }
+.td-help b { color: var(--text); font-family: var(--font-mono, ui-monospace, monospace); }
+.td-help .td-acc { color: var(--accent); }
+.td-help .td-bad { color: var(--error); }
+.td-help .td-pink { color: var(--tok-tag, var(--accent)); }
+.td-legend { border-collapse: collapse; }
+.td-legend td { padding: 1px 8px 1px 0; vertical-align: top; }
+.td-legend td:first-child { font-family: var(--font-mono, ui-monospace, monospace); font-weight: 800; white-space: nowrap; }
+.td-keys { font-size: 11.5px; color: var(--text-faint); }
+
+/* Tower colours: the same theme-tuned tokens the canvas reads. */
+.td-c0 { color: var(--tok-num, var(--accent)); }
+.td-c1 { color: var(--ws-orange-fg, var(--accent)); }
+.td-c2 { color: var(--tok-fn, var(--accent)); }
+.td-c3 { color: var(--tok-kw, var(--accent)); }
+.td-c4 { color: var(--tok-bui, var(--accent)); }
+
+/* Row B: the build palette, or the selected tower's actions. */
+.td-ctx { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 5px; height: 44px; }
+.td-ctx-tower { grid-template-columns: repeat(3, minmax(0, 1fr)) 44px; }
+.td-tw, .td-act {
+  height: 44px; min-width: 0; padding: 0 2px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
+  font: inherit; color: var(--text); background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-md, 6px);
+  cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: manipulation;
+}
+.td-tw b { font-size: 15px; font-weight: 800; line-height: 1.1; white-space: nowrap; }
+.td-act b { font-size: 12px; font-weight: 700; line-height: 1.2; white-space: nowrap; }
+.td-tw span, .td-act span { font-size: 11px; line-height: 1.2; color: var(--text-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.td-tw:hover, .td-act:hover:not(:disabled) { border-color: var(--text-faint); }
+.td-tw.armed { background: var(--surface); border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.td-tw.poor span, .td-act.poor span { color: var(--error); }
+.td-tw.poor b { opacity: 0.55; }
+.td-act:disabled { cursor: default; opacity: 0.6; }
+.td-sell.arm { border-color: var(--error); box-shadow: inset 0 0 0 1px var(--error); }
+.td-sell.arm b { color: var(--error); }
+.td-x b { font-size: 15px; color: var(--text-muted); }
+.td-tw:focus-visible, .td-act:focus-visible, .td-ib:focus-visible, .td-next:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* Row A: lives / gold / wave, then pause, speed and the next-wave button. */
+.td-bar { display: flex; align-items: stretch; gap: 5px; }
+.td-stats {
+  flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; justify-content: center; gap: 1px;
+  font-size: 12px; line-height: 1.3; color: var(--text-muted); white-space: nowrap; overflow: hidden; font-variant-numeric: tabular-nums;
+}
+.td-stats > div:first-child { display: flex; gap: 10px; font-size: 14px; font-weight: 800; color: var(--text); }
+.td-lives { color: var(--error); }
+.td-gold { color: var(--tok-num, var(--text)); }
+.td-wave { overflow: hidden; text-overflow: ellipsis; }
+.td-stats.low .td-lives { text-decoration: underline wavy; text-underline-offset: 3px; }
+.td-ib, .td-next {
+  flex: 0 0 auto; height: 44px; padding: 0; display: inline-flex; align-items: center; justify-content: center;
+  font: inherit; border: 1px solid var(--border); border-radius: var(--radius-md, 6px); background: var(--surface-2); color: var(--text-muted);
+  cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: manipulation;
+}
+.td-ib { width: 44px; font-size: 13px; font-weight: 800; }
+.td-ib:hover { color: var(--accent); border-color: var(--accent); }
+.td-next { min-width: 108px; padding: 0 8px; flex-direction: column; gap: 1px; background: var(--accent); border-color: var(--accent); color: var(--surface); }
+.td-next b { font-size: 13px; font-weight: 800; white-space: nowrap; }
+.td-next span { font-size: 11px; opacity: 0.9; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.td-next span:empty { display: none; }
+.td-next.boss { background: var(--error); border-color: var(--error); }
+.td-next:disabled { background: transparent; border-color: var(--border); color: var(--text-faint); cursor: default; }
+.td-next:hover:not(:disabled) { filter: brightness(1.08); }
+
+/* Title screen: no game yet, the rows keep their space but aren't shown. */
+.td-nogame .td-ctx, .td-nogame .td-bar { visibility: hidden; }
+.td-blocked .td-ctx, .td-blocked .td-next, .td-blocked .td-spd { opacity: 0.4; pointer-events: none; }
+.td-live { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+@media (max-width: 560px) {
+  #towerdefense-panel { left: 6px !important; right: 6px; top: calc(var(--menubar-h, 36px) + 6px); max-width: none; }
+  #towerdefense-panel .cade-panel-body { padding: 6px 6px max(6px, env(safe-area-inset-bottom)); }
+  .td-card { padding: 12px 10px; gap: 9px; }
+  .td-ctx { gap: 4px; }
+  .td-bar { gap: 4px; }
+  .td-next { min-width: 100px; }
+}
+@media (pointer: coarse) {
+  .td-go, .td-btn { min-height: 44px; }
+}
