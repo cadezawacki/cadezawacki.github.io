@@ -3169,6 +3169,10 @@ body.inbox-list .find-panel { display: none !important; }
         <span>Split / Compare</span>
         <span></span>
       </button>
+      <button class="menu-item" onclick="closeAllMenus(); Cade.runCommand('Origami')" title="Split the window into panes, each showing a room">
+        <span>Origami panes</span>
+        <span></span>
+      </button>
       <button class="menu-item" onclick="openWhiteboard()">
         <span>Whiteboard</span>
         <span></span>
@@ -3992,6 +3996,11 @@ window.Cade = (function () {
     loadCSS(rel) { return window.__loadCSSOnce(this.baseURL() + rel); },
     // ---- editor lifecycle hook (CM6 ViewUpdate) for module refreshes ----
     onEditorUpdate(cb) { if (typeof cb === 'function') (window.__cadeUpdateHooks || (window.__cadeUpdateHooks = [])).push(cb); },
+    offEditorUpdate(cb) { const h = window.__cadeUpdateHooks; const i = h ? h.indexOf(cb) : -1; if (i >= 0) h.splice(i, 1); },
+    // ---- another room's text (local cache, else the server copy) — async ----
+    roomText(name) { return loadRoomTextAnywhere(name); },
+    // ---- extensions for a read-only view styled like the editor (no gutters) ----
+    readOnlyExtensions() { return [EditorView.lineWrapping, EditorState.readOnly.of(true), EditorView.editable.of(false), editorTheme]; },
     // ---- room system surface (read-mostly; see window.__roomsApi in core) ----
     get roomsApi() { return window.__roomsApi; },
     // ---- small per-account synced JSON store (encrypted; offline-first) ----
@@ -9462,7 +9471,7 @@ function saveRoomVersion(roomName, v) {
 window.toggleLineNumbers = function() {
   showLineNums = !showLineNums;
   store.set('cade-linenums', showLineNums);
-  const gutters = document.querySelector('.cm-gutters');
+  const gutters = editor.dom.querySelector('.cm-gutters');
   if (gutters) gutters.style.display = showLineNums ? '' : 'none';
   const _lnl = document.getElementById('linenums-label');
   if (_lnl) _lnl.textContent = showLineNums ? 'Hide Line Numbers' : 'Show Line Numbers';
@@ -9474,7 +9483,7 @@ window.toggleLineNumbers = function() {
   if (_lnl0) _lnl0.textContent = showLineNums ? 'Hide Line Numbers' : 'Show Line Numbers'; }
 if (!showLineNums) {
   setTimeout(() => {
-    const gutters = document.querySelector('.cm-gutters');
+    const gutters = editor.dom.querySelector('.cm-gutters');
     if (gutters) gutters.style.display = 'none';
   }, 50);
 }
@@ -12537,6 +12546,7 @@ function _splitCompareExts() {
 
 window.openSplit = async function(room) {
   closeAllMenus();
+  try { if (window.__cadeOrigami && window.__cadeOrigami.isOn()) window.__cadeOrigami.close(); } catch {}
   const wrap = document.getElementById('editor-wrap');
   const pane = document.getElementById('split-pane');
   if (!wrap || !pane) return;
@@ -16751,8 +16761,9 @@ async function _doSwitchRoom(name, firebaseUrl, baseEncKey) {
   try { if (typeof scheduleImageMigration === 'function') scheduleImageMigration(); } catch {}
   // Keep line-number gutter visibility in sync with the toggle (it's CSS-driven,
   // and swapping states can re-show a gutter the user had hidden).
-  try { const g = document.querySelector('.cm-gutters'); if (g) g.style.display = showLineNums ? '' : 'none'; } catch {}
+  try { const g = editor.dom.querySelector('.cm-gutters'); if (g) g.style.display = showLineNums ? '' : 'none'; } catch {}
   renderRoomTabs();
+  try { document.dispatchEvent(new CustomEvent('cade-room-switched', { detail: { room: name } })); } catch {}
   // Keep an open Snapshots panel pointed at the new room's history (#6).
   try { if (document.getElementById('snapshots-overlay').classList.contains('open')) renderSnapshotsList(); } catch {}
   _activeRoomReady = true; // local switch committed; same-room clicks now no-op
@@ -22247,6 +22258,7 @@ function _restoreWidget(name, attempt) {
 }
 setTimeout(() => {
   try { if (store.get('cade-outline-open') === '1') _restoreWidget('Outline'); } catch {}
+  try { if (store.get('cade-origami-on') === '1') _restoreWidget('Origami'); } catch {}
   try { if (store.get('cade-timer-open') === '1' || store.get('cade-pomo-open') === '1') _restoreWidget('Timer'); } catch {}
   try { if (store.get('cade-zen') === '1') window.toggleZen(); } catch {}
 }, 600);

@@ -128,6 +128,10 @@ Common usage:
 | Call | Does |
 | --- | --- |
 | `Cade.onEditorUpdate(cb)` | register `cb(viewUpdate)` run on every editor update. Inspect `update.docChanged`, `update.selectionSet`, `update.viewportChanged`, `update.view`, `update.state`. |
+| `Cade.offEditorUpdate(cb)` | unregister a callback added with `onEditorUpdate` |
+| `Cade.roomText(name)` | Promise of another room's text (this device's copy, else the server's) — the active room returns the editor's text |
+| `Cade.readOnlyExtensions()` | extensions for a read-only `EditorView` styled like the editor (wrapping, theme; no gutters) — Origami's mirror panes |
+| `cade-room-switched` (event on `document`, `detail.room`) | fired after every room switch commits locally |
 | `Cade.loadCSS(rel)` | inject `<link>` to `rel` resolved against the module folder. **Call at module-load time** (the folder context is only valid then). Deduped. |
 | `Cade.baseURL()` | the current module's folder URL, e.g. `./txt/widgets/snake/` |
 | `Cade.asset(rel)` | `baseURL() + rel` — URL for an image/font/etc. in your folder |

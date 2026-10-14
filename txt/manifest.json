@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "version": "2026.10.14-16",
+  "version": "2026.10.14-17",
   "modules": [
     {
       "id": "crawler",
@@ -1953,6 +1953,16 @@
       "tags": "merge,merge files,combine,combine files,concatenate,concat,cat,join files,files,folder,csv,append,import,bundle,one file,stitch",
       "entry": "widgets/mergefiles/mergefiles.js",
       "css": "widgets/mergefiles/mergefiles.css"
+    },
+    {
+      "id": "origami",
+      "type": "widget",
+      "name": "Origami",
+      "description": "Split the window into panes, each a room — split, close, move, clone, compare; layouts and presets",
+      "icon": "🪟",
+      "tags": "origami,split,panes,pane,tile,tiles,layout,side by side,columns,rows,grid,windows,multi,compare,clone,rooms",
+      "entry": "widgets/origami/origami.js",
+      "css": "widgets/origami/origami.css"
     }
   ]
 }
