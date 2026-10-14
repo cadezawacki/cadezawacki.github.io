@@ -91,11 +91,11 @@ function main(ctx) {
 
 registerScript(`/**
   {
-    "name": "Remove Empty Lines",
-    "description": "Remove all blank/empty lines",
+    "name": "Delete Blank Lines",
+    "description": "Delete blank lines (remove empty lines) — whitespace-only lines too; works on the selection or the whole note",
     "author": "Cade",
     "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><line x1='5' y1='12' x2='19' y2='12'/><line x1='12' y1='5' x2='12' y2='5.01'/><line x1='12' y1='19' x2='12' y2='19.01'/></svg>",
-    "tags": "remove,empty,blank,lines"
+    "tags": "delete,remove,empty,blank,lines,strip,whitespace,clean"
   }
 **/
 function main(ctx) {
