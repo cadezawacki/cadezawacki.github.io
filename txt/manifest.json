@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "version": "2026.10.14-9",
+  "version": "2026.10.14-10",
   "modules": [
     {
       "id": "crawler",
@@ -1903,6 +1903,16 @@
           "tags": "convert,units,recipe,metric,imperial,us,cups,grams,ml,ounces,pounds,fahrenheit,celsius,oven,temperature,kitchen,baking,measurements"
         }
       ]
+    },
+    {
+      "id": "inkdrop",
+      "type": "widget",
+      "name": "Ink Drop",
+      "description": "Draw lines, drop the ball, land it in the cup — 24 ASCII physics puzzles",
+      "icon": "🖋️",
+      "tags": "game,puzzle,physics,draw,line,ink,ball,drop,cup,brain,crayon,fun,train",
+      "entry": "widgets/inkdrop/inkdrop.js",
+      "css": "widgets/inkdrop/inkdrop.css"
     }
   ]
 }
