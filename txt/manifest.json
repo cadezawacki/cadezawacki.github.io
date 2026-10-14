@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "version": "2026.10.14-11",
+  "version": "2026.10.14-13",
   "modules": [
     {
       "id": "crawler",
@@ -160,10 +160,10 @@
           "tags": "unique,deduplicate,duplicate,lines,distinct,remove"
         },
         {
-          "name": "Remove Empty Lines",
-          "description": "Remove all blank/empty lines",
+          "name": "Delete Blank Lines",
+          "description": "Delete blank lines (remove empty lines) — whitespace-only lines too; works on the selection or the whole note",
           "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><line x1='5' y1='12' x2='19' y2='12'/><line x1='12' y1='5' x2='12' y2='5.01'/><line x1='12' y1='19' x2='12' y2='19.01'/></svg>",
-          "tags": "remove,empty,blank,lines"
+          "tags": "delete,remove,empty,blank,lines,strip,whitespace,clean"
         },
         {
           "name": "Number Lines",
@@ -1791,7 +1791,7 @@
       "id": "towerdefense",
       "type": "widget",
       "name": "Tower Defense",
-      "description": "ASCII tower defense — build, upgrade and hold 3 maps for 30 waves",
+      "description": "ASCII tower defense — 10 towers with specialisations, 13 enemy types, 8 maps of 30 waves and an Armory of perks",
       "icon": "🏰",
       "tags": "game,strategy,tower defense,td,towers,waves,defense,ascii,fun,train",
       "entry": "widgets/towerdefense/towerdefense.js",
@@ -1862,6 +1862,16 @@
       "precache": [
         "widgets/snippets/snippets-core.js"
       ]
+    },
+    {
+      "id": "code-comment",
+      "type": "plugin",
+      "name": "Code comments (Ctrl+/)",
+      "description": "Ctrl+/ (Cmd+/ on a Mac) inside a ``` code block comments or uncomments the selected lines in that block's language — // for JS, # for Python, -- for SQL, <!-- --> for HTML… — and guesses when the fence names no language",
+      "entry": "plugins/code-comment/code-comment.js",
+      "settingKey": "plugins.code-comment",
+      "section": "Editor",
+      "default": true
     },
     {
       "id": "snippet-expand",
