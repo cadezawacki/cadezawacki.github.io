@@ -11,7 +11,9 @@
  * read-only mirrors of their rooms; tap one and it becomes the live pane (the
  * app switches to its room, the caret lands where you tapped), while the pane
  * you left keeps showing its room. Two panes on the same room stay in step as
- * you type. "Compare…" opens the core's diff view for two rooms.
+ * you type. "Compare…" opens the core's diff view for two rooms. Note-driven
+ * panels (Kanban, Outline…) can be locked to a room (the core's room lock):
+ * tapping one whose room isn't live makes that room's pane live.
  *
  * Cost: nothing loads until Origami is opened. While it's on, mirrors are
  * plain read-only CodeMirror views (no gutters, no plugins); clones update
@@ -311,7 +313,7 @@
   }
 
   // ---- switching which pane is live ----
-  async function activate(id, at) {
+  async function activate(id, at, noFocus) {
     if (!O || id === O.live || O.busy) return;
     var p = paneById(id);
     if (!p) return;
@@ -337,8 +339,17 @@
         pos = Math.max(0, Math.min(pos, ed.state.doc.length));
         ed.dispatch({ selection: { anchor: pos } });
       }
-      try { ed.focus(); } catch (e) {}
+      if (!noFocus) { try { ed.focus(); } catch (e) {} }
     } finally { if (O) O.busy = false; }
+  }
+  // Cade.focusRoom (a locked panel tapped while its room isn't open): make the
+  // pane showing that room live — without focusing the editor, so a phone's
+  // keyboard stays down. False when no pane shows it (the core switches rooms).
+  function activateRoom(room) {
+    if (!O || O.busy) return false;
+    var p = panes(O.tree).filter(function (x) { return x.room === room && x.id !== O.live; })[0];
+    if (!p) return false;
+    return activate(p.id, null, true).then(function () { return true; });
   }
 
   // ---- editing the layout ----
@@ -605,6 +616,7 @@
     O.root.addEventListener('click', onHeadClickCapture, true);
     O.root.addEventListener('dblclick', onGutDbl);
     Cade.onEditorUpdate(onUpdate);
+    window.__cadeRoomActivator = activateRoom;
     document.addEventListener('cade-room-switched', onSwitched);
     document.addEventListener('visibilitychange', onVis);
     window.addEventListener('resize', onResize);
@@ -633,6 +645,7 @@
     s.wrap.classList.remove('origami');
     document.body.classList.remove('origami-on', 'ori-dragging', 'ori-dh', 'ori-dv');
     if (Cade.offEditorUpdate) Cade.offEditorUpdate(onUpdate);
+    if (window.__cadeRoomActivator === activateRoom) window.__cadeRoomActivator = null;
     document.removeEventListener('cade-room-switched', onSwitched);
     document.removeEventListener('visibilitychange', onVis);
     window.removeEventListener('resize', onResize);

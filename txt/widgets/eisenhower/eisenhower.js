@@ -457,6 +457,7 @@
   function refresh(opts) {
     opts = opts || {};
     if (!panelEl || !panelEl.isConnected) return;
+    if (Cade.roomAway && Cade.roomAway(panelEl)) return;   // locked to a room that isn't open: keep showing it
     var ed = Cade.editor;
     if (!ed) return;
     var room = activeRoom();
@@ -1108,6 +1109,8 @@
     p.addEventListener('touchmove', onTouchMove, { passive: false });
     window.addEventListener('resize', onResize);
     pollTimer = setInterval(poll, 800);
+    // Lock to a room (Origami, Ctrl+P…): refresh whenever its room is the open one again.
+    if (Cade.roomLock) { Cade.roomLock(p); p.addEventListener('cade-panel-room', function () { refresh(); }); }
     p.classList.toggle('em-coarse', isCoarse());
     refresh({ force: true });
   }

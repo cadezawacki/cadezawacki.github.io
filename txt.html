@@ -2712,6 +2712,33 @@ body.game-open .editor-wrap { -webkit-user-select: none; user-select: none; }
 .cade-panel-head .cade-panel-minbtn { cursor: pointer; opacity: 0.6; padding: 0 6px; border-radius: 4px; font-size: 16px; line-height: 1; margin-right: 12px; }
 .cade-panel-head .cade-panel-minbtn:hover { opacity: 1; background: var(--surface-hover, rgba(127,127,127,0.15)); }
 .cade-panel.cade-minimized { display: none !important; }
+/* Pop out (desktop): a button before minimize; the popped panel fills its own window. */
+.cade-panel-head .cade-panel-popbtn, .cade-panel-head .cade-panel-lockbtn {
+  display: inline-flex; align-items: center; gap: 4px; cursor: pointer; opacity: 0.6; padding: 2px 5px; border-radius: 4px; line-height: 1; color: var(--text-muted);
+}
+.cade-panel-head .cade-panel-popbtn svg, .cade-panel-head .cade-panel-lockbtn svg { width: 14px; height: 14px; flex: none; }
+.cade-panel-head .cade-panel-popbtn:hover, .cade-panel-head .cade-panel-lockbtn:hover { opacity: 1; background: var(--surface-hover, rgba(127,127,127,0.15)); }
+.cade-panel-head .cade-panel-popbtn.on { opacity: 1; color: var(--accent); }
+.cade-game-panel .cade-panel-popbtn { display: none; }
+@media (pointer: coarse) { .cade-panel-head .cade-panel-popbtn { display: none; } }
+body.cade-pop-body { margin: 0; height: 100vh; overflow: hidden; display: flex; background: var(--surface); color: var(--text); }
+.cade-panel.cade-popped {
+  position: relative !important; inset: auto !important; flex: 1 1 auto; min-width: 0; min-height: 0;
+  width: auto !important; height: auto !important; max-width: none !important; max-height: none !important;
+  margin: 0 !important; border: 0; border-radius: 0; box-shadow: none; resize: none !important; transform: none !important;
+}
+.cade-popped .cade-panel-head { cursor: default; }
+.cade-popped .cade-panel-minbtn { display: none; }
+.cade-popped > .cade-panel-body { flex: 1 1 auto; min-height: 0; }
+/* Room lock (note-driven panels): shown in Origami, or once locked. */
+.cade-panel-head .cade-panel-lockbtn { display: none; font-size: 11px; max-width: 38%; }
+body.origami-on .cade-panel-head .cade-panel-lockbtn, .cade-panel-head .cade-panel-lockbtn.on { display: inline-flex; }
+.cade-panel-head .cade-panel-lockbtn.on { opacity: 1; color: var(--accent); background: var(--accent-bg, rgba(20,184,166,0.12)); }
+.cade-lock-room { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-mono); }
+.cade-room-bar { flex: none; padding: 6px 10px; font-size: 12px; line-height: 1.35; color: var(--text); background: var(--accent-bg, rgba(20,184,166,0.12)); border-bottom: 1px solid var(--border); cursor: pointer; }
+.cade-room-bar[hidden] { display: none; }
+.cade-panel.cade-room-away > .cade-panel-body { opacity: 0.7; cursor: pointer; }
+.cade-panel.cade-room-stale > .cade-panel-body { visibility: hidden; }
 .cade-panel-body { overflow: auto; }
 /* Minimized panels wait as chips in a dock just above the bottom chrome (clear
    of the phone's scroll buttons); a chip brings its panel back. The dock hangs
@@ -4003,6 +4030,15 @@ window.Cade = (function () {
     readOnlyExtensions() { return [EditorView.lineWrapping, EditorState.readOnly.of(true), EditorView.editable.of(false), editorTheme]; },
     // ---- room system surface (read-mostly; see window.__roomsApi in core) ----
     get roomsApi() { return window.__roomsApi; },
+    // ---- room lock for panels that show the open note (see _roomLock in core) ----
+    roomLock(panel) { if (window.__roomLock) window.__roomLock(panel); },
+    roomAway(panel) { return !!(window.__roomAway && window.__roomAway(panel)); },
+    lockedRoom(panel) { return panel && panel.__roomLock ? panel.__roomLock.room : null; },
+    focusRoom(name) { return window.__focusRoom ? window.__focusRoom(name) : Promise.resolve(false); },
+    // ---- pop a panel out into its own window (desktop) / back in ----
+    popOut(panel) { return window.__popOutPanel ? window.__popOutPanel(panel) : undefined; },
+    popIn(panel) { if (window.__popInPanel) window.__popInPanel(panel); },
+    isPoppedOut(panel) { return !!(panel && panel.classList && panel.classList.contains('cade-popped')); },
     // ---- small per-account synced JSON store (encrypted; offline-first) ----
     syncedBlob(id, opts) { return window.__cadeSyncedBlob(id, opts); },
     // ---- command catalogue: the Ctrl+K palette's widgets + scripts (lazy
@@ -21968,6 +22004,10 @@ function _minimizedPanelOf(name) {
 window.__cadePanelMin = { minimize: _minimizePanel, restore: _restorePanel, isMinimized: _isMinimized };
 
 // Shared draggable, closeable floating panel.
+// Popped-out panels (see “Pop out” below _mkPanel) and the button's icon.
+const _popped = new Map(); // panel → { win, obs, bodyObs, closing }
+const _POP_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+  '<path d="M14 4h6v6"/><path d="M20 4l-8 8"/><path d="M18 14v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4"/></svg>';
 function _mkPanel(id, title, bodyHtml) {
   let p = document.getElementById(id);
   if (p) return p;
@@ -21975,12 +22015,17 @@ function _mkPanel(id, title, bodyHtml) {
   p.className = 'cade-panel';
   p.id = id;
   p.innerHTML = '<div class="cade-panel-head"><span class="cade-panel-title"></span>' +
+    '<span class="cade-panel-popbtn" role="button" tabindex="0" title="Pop out into its own window" aria-label="Pop out">' + _POP_SVG + '</span>' +
     '<span class="cade-panel-minbtn" role="button" title="Minimize" aria-label="Minimize">–</span>' +
     '<span class="cade-panel-x" title="Close">×</span></div><div class="cade-panel-body">' + bodyHtml + '</div>';
   p.querySelector('.cade-panel-title').textContent = title;
   p.__cadeWidget = _openingWidget || null;
   document.body.appendChild(p);
   p.querySelector('.cade-panel-minbtn').addEventListener('click', e => { e.stopPropagation(); _minimizePanel(p); });
+  const pop = p.querySelector('.cade-panel-popbtn');
+  pop.addEventListener('pointerdown', e => e.stopPropagation());   // a button, not a header drag
+  pop.addEventListener('click', e => { e.stopPropagation(); if (_popped.has(p)) _popInPanel(p); else _popOutPanel(p); });
+  pop.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pop.click(); } });
   if (GAME_PANEL_IDS.indexOf(id) !== -1) _watchGamePanel(p);
   p.querySelector('.cade-panel-x').addEventListener('click', () => { p.remove(); if (p._onClose) p._onClose(); });
   const head = p.querySelector('.cade-panel-head');
@@ -21990,6 +22035,7 @@ function _mkPanel(id, title, bodyHtml) {
   let sx, sy, ox, oy, drag = false, vOnly = false;
   head.addEventListener('pointerdown', e => {
     if (e.target.classList.contains('cade-panel-x') || e.target.classList.contains('cade-panel-minbtn')) return;
+    if (p.classList.contains('cade-popped')) return;   // its own window: nothing to drag
     drag = true; sx = e.clientX; sy = e.clientY;
     vOnly = window.innerWidth < 600;
     const r = p.getBoundingClientRect(); ox = r.left; oy = r.top;
@@ -22014,6 +22060,7 @@ function _mkPanel(id, title, bodyHtml) {
 let _panelRO = null;
 function _fitPanel(p) {
   if (!p || !p.isConnected) { if (_panelRO && p) _panelRO.unobserve(p); return; }
+  if (p.classList.contains('cade-popped')) return;   // popped out: its window is the frame
   const r = p.getBoundingClientRect();
   if (!r.width || !r.height) return;
   const vw = document.documentElement.clientWidth || window.innerWidth, vh = window.innerHeight, m = 4;
@@ -22070,6 +22117,216 @@ window.addEventListener('resize', _refitPanels);
 // iOS: the keyboard and Safari's toolbars change only the visual viewport.
 if (window.visualViewport) window.visualViewport.addEventListener('resize', _refitPanels);
 window.__mkPanel = _mkPanel; // exposed for feature modules (window.Cade.mkPanel)
+
+// ---- Room lock: keep a note-driven panel on one room ----------------------
+// Panels whose content IS the open note (Kanban, Eisenhower, Outline, Stats,
+// Live Preview) opt in with Cade.roomLock(panel); the lock button (shown in
+// Origami, or once locked) pins the panel to the room open now. While another
+// room is open — another Origami pane is live, Ctrl+P… — a locked panel keeps
+// showing its room (its module skips refreshes: Cade.roomAway(panel)), input
+// to it is held back so nothing can edit the wrong note, and a tap brings its
+// room back (in Origami its pane goes live). Modules refresh on the panel's
+// 'cade-panel-room' event, sent whenever its room is the open one again: a
+// room switch while unlocked, its own room coming back, or unlocking.
+const _lockPanels = new Set();
+const _LOCK_SVG = (on) => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+  '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="' + (on ? 'M8 11V7a4 4 0 0 1 8 0v4' : 'M8 11V7a4 4 0 0 1 7.6-1.7') + '"/></svg>';
+function _roomLockKey(p) { return 'cade-room-lock:' + (p.__cadeWidget || p.id); }
+function _roomAway(p) { const L = p && p.__roomLock; return !!(L && L.room && L.room !== activeRoom); }
+function _paintRoomLock(p) {
+  const L = p.__roomLock;
+  if (!L) return;
+  const away = _roomAway(p);
+  L.btn.classList.toggle('on', !!L.room);
+  L.btn.innerHTML = _LOCK_SVG(!!L.room) + (L.room ? '<span class="cade-lock-room"></span>' : '');
+  if (L.room) L.btn.lastChild.textContent = L.room;
+  L.btn.title = L.room ? 'Locked to “' + L.room + '” — click to unlock' : 'Lock to this note — keep showing it while another note is open';
+  L.btn.setAttribute('aria-pressed', L.room ? 'true' : 'false');
+  p.classList.toggle('cade-room-away', away);
+  if (!away) p.classList.remove('cade-room-stale');
+  L.bar.hidden = !away;
+  if (away) L.bar.querySelector('b').textContent = L.room;
+}
+function _panelRoomLive(p) { try { p.dispatchEvent(new CustomEvent('cade-panel-room', { detail: { room: activeRoom } })); } catch {} }
+function _setRoomLock(p, room) {
+  const L = p.__roomLock;
+  if (!L) return;
+  const wasAway = _roomAway(p);
+  L.room = room || null;
+  try { if (L.room) store.set(_roomLockKey(p), L.room); else store.remove(_roomLockKey(p)); } catch {}
+  _paintRoomLock(p);
+  if (wasAway && !_roomAway(p)) _panelRoomLive(p);
+}
+// Bring a room up to edit it: Origami makes the pane showing it live
+// (window.__cadeRoomActivator); otherwise an ordinary room switch.
+async function _focusRoom(room) {
+  if (!room || room === activeRoom) return true;
+  if (!rooms.includes(room)) return false;
+  try { if (typeof window.__cadeRoomActivator === 'function' && await window.__cadeRoomActivator(room)) return activeRoom === room; } catch {}
+  await window.switchRoom(room);
+  return activeRoom === room;
+}
+function _roomLock(p) {
+  if (!p || p.__roomLock) return;
+  const head = p.querySelector('.cade-panel-head');
+  if (!head) return;
+  const btn = document.createElement('span');
+  btn.className = 'cade-panel-lockbtn'; btn.setAttribute('role', 'button'); btn.tabIndex = 0;
+  head.insertBefore(btn, head.querySelector('.cade-panel-popbtn') || head.querySelector('.cade-panel-minbtn'));
+  const bar = document.createElement('div');
+  bar.className = 'cade-room-bar'; bar.hidden = true;
+  bar.innerHTML = '🔒 <b></b> isn’t open — tap to bring it back';
+  head.after(bar);
+  const L = p.__roomLock = { room: null, btn, bar };
+  let saved = '';
+  try { saved = store.get(_roomLockKey(p)) || ''; } catch {}
+  // A lock kept from last time on a room that isn't open: the module just drew
+  // the open room, so keep that hidden until its own room comes back.
+  if (saved && rooms.includes(saved)) { L.room = saved; if (saved !== activeRoom) p.classList.add('cade-room-stale'); }
+  btn.addEventListener('pointerdown', e => e.stopPropagation());   // a button, not a header drag
+  btn.addEventListener('click', e => { e.stopPropagation(); _setRoomLock(p, L.room ? null : activeRoom); });
+  btn.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); btn.click(); } });
+  // Away: the module never sees input (a scroll still scrolls); a tap brings the room back.
+  const hold = (e) => { if (_roomAway(p) && !head.contains(e.target)) e.stopPropagation(); };
+  ['pointerdown', 'mousedown', 'touchstart', 'pointerup', 'mouseup', 'touchend', 'dblclick', 'contextmenu',
+    'keydown', 'keyup', 'input', 'change', 'dragstart', 'drop', 'wheel', 'focusin'].forEach(t => p.addEventListener(t, hold, { capture: true, passive: t === 'touchstart' || t === 'wheel' }));
+  p.addEventListener('click', e => {
+    if (!_roomAway(p) || head.contains(e.target)) return;
+    e.stopPropagation(); e.preventDefault();
+    const room = L.room;
+    _focusRoom(room).then(ok => { if (!ok && _roomAway(p)) showToast('Couldn’t open “' + room + '”', 'error', 2500); });
+  }, true);
+  _lockPanels.add(p);
+  _paintRoomLock(p);
+}
+document.addEventListener('cade-room-switched', () => {
+  for (const p of _lockPanels) {
+    if (!p.isConnected) { _lockPanels.delete(p); continue; }
+    const L = p.__roomLock;
+    if (L.room && !rooms.includes(L.room)) { L.room = null; try { store.remove(_roomLockKey(p)); } catch {} }   // its room is gone
+    _paintRoomLock(p);
+    if (!_roomAway(p)) _panelRoomLive(p);
+  }
+});
+window.__roomLock = _roomLock;
+window.__roomAway = _roomAway;
+window.__focusRoom = _focusRoom;
+
+// ---- Pop out: a panel in its own window, beyond the app's frame -----------
+// Desktop only (a phone has no second window to put it in). Chrome / Edge open
+// an always-on-top Picture-in-Picture window; other browsers a pop-up window.
+// The panel's own DOM moves there — its listeners and state come along — with
+// the app's stylesheets and theme mirrored; closing that window, or the button
+// again, brings it home. The panel's × closes it and its window together.
+// document.getElementById also finds a popped-out panel and what's inside it,
+// so its module's lookups and open/close toggle keep working.
+(function () {
+  const gebi = Document.prototype.getElementById;
+  document.getElementById = function (id) {
+    const el = gebi.call(document, id);
+    if (el || !_popped.size) return el;
+    for (const p of _popped.keys()) {
+      if (p.id === id) return p;
+      try { const x = p.querySelector('#' + CSS.escape(id)); if (x) return x; } catch {}
+    }
+    return null;
+  };
+})();
+function _canPopOut() {
+  try { return matchMedia('(pointer: fine)').matches && (!!window.documentPictureInPicture || typeof window.open === 'function'); } catch { return false; }
+}
+function _popSyncTheme(d) {
+  const src = document.documentElement, dst = d.documentElement;
+  for (const a of ['data-theme', 'class', 'style', 'lang']) {
+    const v = src.getAttribute(a);
+    if (v == null) dst.removeAttribute(a); else dst.setAttribute(a, v);
+  }
+  d.body.className = document.body.className + ' cade-pop-body';
+}
+function _popAddSheet(d, n) {
+  if (n.nodeType !== 1 || !(n.tagName === 'STYLE' || (n.tagName === 'LINK' && /stylesheet/i.test(n.rel)))) return;
+  d.head.appendChild(n.cloneNode(true));
+}
+function _paintPopBtn(p) {
+  const b = p.querySelector('.cade-panel-popbtn');
+  if (!b) return;
+  const out = _popped.has(p);
+  b.classList.toggle('on', out);
+  b.title = out ? 'Back into the app window' : 'Pop out into its own window';
+  b.setAttribute('aria-label', out ? 'Pop back in' : 'Pop out');
+}
+async function _popOutPanel(p) {
+  if (!p || _popped.has(p) || !p.isConnected) return;
+  if (!_canPopOut()) { showToast('Pop-out windows need a desktop browser', 'info', 2500); return; }
+  if (_isMinimized(p)) _restorePanel(p);
+  const r = p.getBoundingClientRect(), w = Math.max(320, Math.round(r.width)), h = Math.max(220, Math.round(r.height));
+  let win = null;
+  if (window.documentPictureInPicture && !documentPictureInPicture.window) {
+    try { win = await documentPictureInPicture.requestWindow({ width: w, height: h }); } catch { win = null; }
+  }
+  if (!win) {
+    const left = Math.round((window.screenX || 0) + r.left), top = Math.round((window.screenY || 0) + (window.outerHeight - window.innerHeight) + r.top);
+    try { win = window.open('', '', 'popup=yes,width=' + w + ',height=' + h + ',left=' + left + ',top=' + top); } catch { win = null; }
+    if (!win) { showToast('Pop-up blocked — allow pop-ups for this site to pop panels out', 'error', 3500); return; }
+    win.document.open();
+    win.document.write('<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head><body></body></html>');
+    win.document.close();
+  }
+  if (!p.isConnected) { try { win.close(); } catch {} return; }
+  const d = win.document;
+  const base = d.createElement('base'); base.href = document.baseURI; d.head.appendChild(base);   // relative stylesheet / image URLs
+  document.head.querySelectorAll('link[rel~="stylesheet"], style').forEach(n => _popAddSheet(d, n));
+  try {   // constructed sheets (CodeMirror's) can't be shared between documents — copy their rules
+    const css = [...(document.adoptedStyleSheets || [])].map(sh => [...sh.cssRules].map(x => x.cssText).join('\n')).join('\n');
+    if (css) { const st = d.createElement('style'); st.textContent = css; d.head.appendChild(st); }
+  } catch {}
+  _popSyncTheme(d);
+  d.title = ((p.querySelector('.cade-panel-title') || {}).textContent || 'Panel') + ' — Cade.txt';
+  const st = { win, obs: null, bodyObs: null, closing: false, style: p.getAttribute('style') };
+  _popped.set(p, st);
+  p.classList.add('cade-popped');
+  d.body.appendChild(p);                                   // adopted: listeners and state come along
+  st.obs = new MutationObserver(muts => {
+    for (const m of muts) {
+      if (m.type === 'childList') m.addedNodes.forEach(n => _popAddSheet(d, n));
+      else _popSyncTheme(d);
+    }
+  });
+  st.obs.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'class', 'style'] });
+  st.obs.observe(document.body, { attributes: true, attributeFilter: ['class'] });
+  st.obs.observe(document.head, { childList: true });
+  // Its × (or its module closing it) took it out of the window: close the window too.
+  st.bodyObs = new MutationObserver(() => { if (!st.closing && p.ownerDocument !== document && !p.isConnected) _popDone(p, true); });
+  st.bodyObs.observe(d.body, { childList: true });
+  win.addEventListener('pagehide', () => _popInPanel(p, true));   // the window was closed: bring it home
+  _paintPopBtn(p);
+  try { p.dispatchEvent(new CustomEvent('cade-panel-popout', { bubbles: true })); } catch {}
+}
+function _popDone(p, closeWin) {
+  const st = _popped.get(p);
+  if (!st) return;
+  st.closing = true;
+  _popped.delete(p);
+  try { st.obs.disconnect(); st.bodyObs.disconnect(); } catch {}
+  if (closeWin) { try { st.win.close(); } catch {} }
+  _paintPopBtn(p);
+}
+function _popInPanel(p, fromClose) {
+  const st = _popped.get(p);
+  if (!st || st.closing) return;
+  st.closing = true;
+  if (p.ownerDocument !== document && p.isConnected) {
+    p.classList.remove('cade-popped');
+    if (st.style == null) p.removeAttribute('style'); else p.setAttribute('style', st.style);
+    document.body.appendChild(p);
+    requestAnimationFrame(() => _fitPanel(p));
+    try { p.dispatchEvent(new CustomEvent('cade-panel-popin', { bubbles: true })); } catch {}
+  }
+  _popDone(p, !fromClose);
+}
+window.addEventListener('pagehide', () => { for (const st of _popped.values()) { try { st.win.close(); } catch {} } });
+window.__popOutPanel = _popOutPanel;
+window.__popInPanel = _popInPanel;
 window.__markGamePanel = (p) => { if (p && p.classList) _watchGamePanel(p); }; // Cade.markGamePanel
 
 // B6: floating panels are absolutely positioned, so a viewport resize can leave
