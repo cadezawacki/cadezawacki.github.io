@@ -12960,6 +12960,9 @@ document.getElementById('picker-search').addEventListener('input', (e) => {
   }
   pickerIndex = 0;
   renderPickerList();
+  // The list keeps its old scroll offset across re-renders; jump back to the
+  // top so the best match (row 0, selected) is always in view while typing.
+  document.getElementById('picker-list').scrollTop = 0;
 });
 
 document.getElementById('picker-search').addEventListener('keydown', (e) => {
