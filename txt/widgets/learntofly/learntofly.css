@@ -1,0 +1,160 @@
+/* Learn to Fly widget styles (loaded on demand via Cade.loadCSS). */
+#learntofly-panel { top: calc(var(--menubar-h, 36px) + 12px); right: 12px; max-width: calc(100vw - 24px); }
+#learntofly-panel .cade-panel-body { padding: 10px; overflow: hidden; }
+#learntofly-panel .cade-panel-title { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Help / sound / pause in the panel header, before the core minimize button. */
+.ltf-hb { display: inline-flex; flex: none; gap: 4px; cursor: default; }
+.ltf-hb button {
+  width: 30px; height: 26px; padding: 0; display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid var(--border); border-radius: var(--radius-md, 6px); background: var(--surface-2); color: var(--text-muted);
+  cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: manipulation;
+}
+.ltf-hb button:hover:not(:disabled) { color: var(--accent); border-color: var(--accent); }
+.ltf-hb button.on { color: var(--accent); }
+.ltf-hb button:disabled { opacity: 0.35; cursor: default; }
+.ltf-hb button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+.ltf { display: flex; flex-direction: column; gap: 8px; width: var(--ltf-w, auto); margin: 0 auto; }
+.ltf-stage { position: relative; margin: 0 auto; line-height: 0; }
+.ltf-cv {
+  display: block; width: 100%; height: 100%; touch-action: none; cursor: pointer;
+  -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent;
+  border-radius: 8px; background: var(--bg); box-shadow: 0 0 0 1px var(--border);
+}
+/* Cards over the play field. The dimmer lives on the stage so it takes the
+   theme background at partial opacity in both themes. */
+.ltf-stage.dim::after, .ltf-stage.shop::after {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; bottom: 0; z-index: 1;
+  background: var(--bg); opacity: 0.55; border-radius: 8px; pointer-events: none;
+}
+.ltf-stage.shop::after { opacity: 0.3; }
+.ltf-ovl {
+  position: absolute; top: 0; left: 0; right: 0; bottom: 0; z-index: 2;
+  display: flex; align-items: center; justify-content: center; padding: 10px;
+  overflow: auto; overscroll-behavior: contain; line-height: 1.35; border-radius: 8px;
+}
+.ltf-card {
+  display: flex; flex-direction: column; gap: 8px; width: 100%; max-width: 344px; margin: auto; padding: 12px;
+  color: var(--text); font-family: var(--font-mono, ui-monospace, monospace); font-size: 12px; text-align: left;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md, 6px); box-shadow: var(--shadow-lg);
+}
+.ltf-card p { margin: 0; color: var(--text-muted); line-height: 1.45; }
+.ltf-card p b { color: var(--text); }
+.ltf-title { font-weight: 700; font-size: 15px; letter-spacing: 0.16em; text-align: center; white-space: nowrap; }
+.ltf-title::before, .ltf-title::after { content: '--'; color: var(--accent); letter-spacing: 0; margin: 0 0.5em; font-weight: 500; }
+.ltf-sub { text-align: center; color: var(--text-muted); }
+.ltf-note { text-align: center; color: var(--text-faint); font-size: 11px; }
+.ltf-new { text-align: center; color: var(--accent); font-weight: 700; font-size: 11px; letter-spacing: 0.04em; }
+.ltf-art { margin: 0 auto; font: inherit; font-weight: 700; line-height: 1.2; white-space: pre; color: var(--accent); }
+.ltf-tab {
+  margin: 0 auto; font: inherit; line-height: 1.5; white-space: pre; color: var(--text-muted);
+  font-variant-numeric: tabular-nums; max-width: 100%; overflow-x: auto;
+}
+.ltf-tab b { color: var(--text); font-weight: 700; }
+.ltf-tab i { font-style: normal; color: var(--text-faint); }
+.ltf-tab .g, .ltf-tab .g b { color: var(--accent); }
+.ltf-keys { display: flex; flex-direction: column; gap: 3px; padding: 8px 10px; border: 1px dashed var(--border); border-radius: var(--radius-md, 6px); color: var(--text-muted); }
+.ltf-keys b { color: var(--text); }
+.ltf-tip { font-size: 11px; }
+.ltf-go {
+  font: inherit; font-weight: 700; padding: 9px 12px; border-radius: var(--radius-md, 6px); cursor: pointer;
+  border: 1px solid var(--accent); background: transparent; color: var(--accent);
+}
+.ltf-go:hover, .ltf-go:focus-visible { background: var(--accent); color: #fff; outline: none; }
+.ltf-btns { display: flex; gap: 8px; }
+.ltf-btns .ltf-go { flex: 1; }
+
+/* the hangar: cash, tabs, upgrades, goals */
+.ltf-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.ltf-day { font-weight: 700; letter-spacing: 0.14em; }
+.ltf-day i { font-style: normal; color: var(--accent); font-size: 11px; letter-spacing: 0.04em; }
+.ltf-cash { font-weight: 700; font-size: 18px; color: var(--accent); font-variant-numeric: tabular-nums; }
+.ltf-tabs { display: flex; gap: 2px; padding: 2px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; }
+.ltf-tabs button {
+  flex: 1; font: inherit; font-weight: 600; color: var(--text-muted); background: transparent; border: 0; border-radius: 6px;
+  padding: 4px 8px; min-height: 28px; cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: manipulation;
+}
+.ltf-tabs button:hover:not(.on) { color: var(--text); }
+.ltf-tabs button.on { background: var(--surface); color: var(--text); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.14); }
+[data-theme="dark"] .ltf-tabs button.on { background: var(--surface-hover); }
+.ltf-tabs button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.ltf-list { display: flex; flex-direction: column; }
+.ltf-row { display: flex; align-items: center; gap: 8px; padding: 5px 0; border-bottom: 1px dashed var(--border); }
+.ltf-row:last-child { border-bottom: 0; }
+.ltf-ic { flex: 0 0 28px; text-align: center; color: var(--accent); font-weight: 700; white-space: pre; }
+.ltf-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.ltf-nm, .ltf-st { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ltf-nm span { color: var(--text-muted); }
+.ltf-st { color: var(--text-muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.ltf-st b { color: var(--text); font-weight: 600; }
+.ltf-st b.nx { color: var(--accent); }
+.ltf-pips { color: var(--text-faint); }
+.ltf-pips b { color: var(--accent); }
+.ltf-buy {
+  flex: 0 0 auto; min-width: 66px; height: 32px; padding: 0 8px; font: inherit; font-weight: 700; font-variant-numeric: tabular-nums;
+  border-radius: var(--radius-md, 6px); cursor: pointer; border: 1px solid var(--accent); background: var(--accent); color: #fff;
+  -webkit-tap-highlight-color: transparent; touch-action: manipulation;
+}
+.ltf-buy:hover:not(:disabled) { filter: brightness(1.08); }
+.ltf-buy:focus-visible { outline: 2px solid var(--text); outline-offset: 1px; }
+.ltf-buy:disabled { cursor: default; background: transparent; color: var(--text-faint); border-color: var(--border); }
+.ltf-buy.poor:disabled { color: var(--text-muted); }
+.ltf-row.max .ltf-buy { border-style: dashed; }
+.ltf-g { display: flex; gap: 8px; align-items: baseline; padding: 2px 0; color: var(--text-muted); }
+.ltf-g > span:nth-child(2) { flex: 1; min-width: 0; }
+.ltf-g b { font-weight: 600; color: var(--text-faint); font-variant-numeric: tabular-nums; }
+.ltf-g.ok { color: var(--text); }
+.ltf-g.ok .ltf-ck, .ltf-g.ok b { color: var(--accent); }
+.ltf-ck { color: var(--text-faint); }
+.ltf-g.fin { color: var(--text); font-weight: 700; border-bottom: 1px dashed var(--border); padding-bottom: 5px; margin-bottom: 3px; }
+.ltf-g.fin b { color: var(--accent); }
+.ltf-foot { display: flex; align-items: center; justify-content: space-between; gap: 4px 8px; flex-wrap: wrap; color: var(--text-faint); font-size: 11px; }
+.ltf-foot > span:first-child { flex: 1; min-width: 0; }
+.ltf-confirm { color: var(--text); }
+.ltf-lnk {
+  font: inherit; font-size: 11px; color: var(--text-muted); background: none; border: 0; padding: 3px 2px; cursor: pointer;
+  text-decoration: underline; text-underline-offset: 2px; -webkit-tap-highlight-color: transparent;
+}
+.ltf-lnk:hover { color: var(--accent); }
+.ltf-lnk.danger { color: var(--error, #dc2626); font-weight: 700; }
+
+/* the pad under the play field: held flight controls, or one big action */
+.ltf-pad { display: flex; gap: 8px; touch-action: none; -webkit-touch-callout: none; }
+.ltf-pk, .ltf-act {
+  flex: 1 1 0; min-width: 0; height: 46px; display: flex; align-items: center; justify-content: center; gap: 6px;
+  font: inherit; font-family: var(--font-mono, ui-monospace, monospace); font-size: 13px; font-weight: 700; letter-spacing: 0.08em;
+  text-transform: uppercase; border-radius: 12px; cursor: pointer; touch-action: none;
+  -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none;
+}
+.ltf-pk { border: 1px solid var(--border); background: var(--surface-2); color: var(--text-muted); transition: background-color 80ms, color 80ms, transform 80ms; }
+.ltf-pk:hover { color: var(--text); }
+.ltf-pk.on { background: var(--accent); border-color: var(--accent); color: #fff; transform: scale(0.97); }
+.ltf-pk.boost { flex-direction: column; gap: 4px; color: var(--accent); border-color: var(--accent); }
+.ltf-pk.boost.on { color: #fff; }
+.ltf-fuel { display: block; width: 62%; height: 4px; border-radius: 2px; background: var(--border); overflow: hidden; }
+.ltf-fuel i { display: block; width: 100%; height: 100%; background: currentColor; }
+.ltf-act { border: 1px solid var(--accent); background: var(--accent); color: #fff; font-size: 14px; letter-spacing: 0.12em; touch-action: manipulation; }
+.ltf-act:hover { filter: brightness(1.08); }
+.ltf-act:focus-visible, .ltf-pk:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+.ltf-act small { font-size: 10px; font-weight: 500; letter-spacing: 0.04em; text-transform: none; opacity: 0.75; }
+.ltf-live { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+@media (max-width: 560px) {
+  #learntofly-panel { left: 8px !important; right: 8px; max-width: none; top: calc(var(--menubar-h, 36px) + 6px); }
+  #learntofly-panel .cade-panel-body { padding: 8px 8px max(8px, env(safe-area-inset-bottom)); }
+  .ltf-ovl { padding: 6px; }
+  .ltf-card { padding: 10px; }
+}
+@media (pointer: coarse) {
+  .ltf-hb button { width: 40px; height: 34px; }
+  .ltf-pk, .ltf-act { height: 56px; }
+  .ltf-buy { height: 40px; }
+  .ltf-tabs button { min-height: 40px; }
+  .ltf-lnk { min-height: 40px; padding: 0 6px; }
+  .ltf-go { padding: 12px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ltf-pk { transition: none; }
+  .ltf-pk.on { transform: none; }
+}

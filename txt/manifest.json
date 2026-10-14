@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "version": "2026.10.14-5",
+  "version": "2026.10.14-6",
   "modules": [
     {
       "id": "crawler",
@@ -1819,6 +1819,16 @@
       "tags": "regex,regexp,regular expression,pattern,match,test,tester,replace,find,capture,group,explain,cheat sheet,library,email,url,ip,date,backtracking,developer,code",
       "entry": "widgets/regex/regex.js",
       "css": "widgets/regex/regex.css"
+    },
+    {
+      "id": "learntofly",
+      "type": "widget",
+      "name": "Learn to Fly",
+      "description": "Slide a penguin off a ramp, glide, upgrade your gear, smash the 10 km ice wall",
+      "icon": "🐧",
+      "tags": "game,arcade,fun,penguin,fly,glide,glider,rocket,upgrade,shop,learn to fly,flash,distance,ascii",
+      "entry": "widgets/learntofly/learntofly.js",
+      "css": "widgets/learntofly/learntofly.css"
     }
   ]
 }
