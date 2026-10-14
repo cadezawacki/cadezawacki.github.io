@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "version": "2026.10.14-4",
+  "version": "2026.10.14-5",
   "modules": [
     {
       "id": "crawler",
@@ -1796,6 +1796,29 @@
       "tags": "game,strategy,tower defense,td,towers,waves,defense,ascii,fun,train",
       "entry": "widgets/towerdefense/towerdefense.js",
       "css": "widgets/towerdefense/towerdefense.css"
+    },
+    {
+      "id": "passgen",
+      "type": "widget",
+      "name": "Password Generator",
+      "description": "Strong random passwords, passphrases, PINs & pronounceable ones — exact entropy, crack-time meter and a local password checker",
+      "icon": "🔐",
+      "tags": "password,passwords,generator,generate,passphrase,diceware,pin,random,secure,strong,entropy,strength,crack,checker,security,eff,wordlist,pronounceable,memorable,keygen",
+      "entry": "widgets/passgen/passgen.js",
+      "css": "widgets/passgen/passgen.css",
+      "precache": [
+        "widgets/passgen/passgen-words.js"
+      ]
+    },
+    {
+      "id": "regex",
+      "type": "widget",
+      "name": "Regex Tester",
+      "description": "Test regular expressions live — highlighted matches, groups, replace preview, plain-English explanation, ready-made patterns",
+      "icon": "🧪",
+      "tags": "regex,regexp,regular expression,pattern,match,test,tester,replace,find,capture,group,explain,cheat sheet,library,email,url,ip,date,backtracking,developer,code",
+      "entry": "widgets/regex/regex.js",
+      "css": "widgets/regex/regex.css"
     }
   ]
 }
