@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "version": "2026.10.14-8",
+  "version": "2026.10.14-9",
   "modules": [
     {
       "id": "crawler",
@@ -1849,6 +1849,60 @@
       "tags": "game,arcade,fun,train,bike,motorbike,motocross,dirt bike,hill climb,moto,racing,physics,stunts,flip,endless",
       "entry": "widgets/uphill/uphill.js",
       "css": "widgets/uphill/uphill.css"
+    },
+    {
+      "id": "snippets",
+      "type": "widget",
+      "name": "Snippets",
+      "description": "Reusable text with placeholders — insert templates, signatures and replies, or type ;abbreviations to expand them",
+      "icon": "✂️",
+      "tags": "snippets,snippet,text expander,expand,abbreviation,abbreviations,template,templates,boilerplate,canned response,reply,signature,macro,placeholder,insert,clipboard,meeting notes,journal",
+      "entry": "widgets/snippets/snippets.js",
+      "css": "widgets/snippets/snippets.css",
+      "precache": [
+        "widgets/snippets/snippets-core.js"
+      ]
+    },
+    {
+      "id": "snippet-expand",
+      "type": "plugin",
+      "name": "Snippet abbreviations",
+      "description": "Type a snippet abbreviation such as ;sig or ;mtg and press Tab, Space or Enter to expand it (manage them in the Snippets widget)",
+      "entry": "plugins/snippet-expand/snippet-expand.js",
+      "precache": [
+        "widgets/snippets/snippets-core.js",
+        "widgets/snippets/snippets.css"
+      ],
+      "settingKey": "plugins.snippet-expand",
+      "section": "Editor",
+      "default": true
+    },
+    {
+      "id": "kitchen-pack",
+      "type": "script-pack",
+      "name": "Kitchen Pack",
+      "description": "Scale recipes, sort shopping lists by aisle, convert recipe units",
+      "entry": "scripts/kitchen-pack/kitchen-pack.js",
+      "scripts": [
+        {
+          "name": "Scale Recipe…",
+          "description": "Scale every quantity by a factor (2, 0.5, x1.5) or servings (4 to 6) — kitchen-friendly fractions, skips steps, temperatures and times",
+          "icon": "⚖️",
+          "tags": "scale,recipe,servings,double,halve,triple,multiply,portions,ingredients,cooking,kitchen,baking,quantities,fractions,resize recipe"
+        },
+        {
+          "name": "Sort Shopping List by Aisle",
+          "description": "Group the list (or note) under Produce, Dairy, Meat, Pantry… headings — keeps checkboxes, merges duplicates, checked items last",
+          "icon": "🛒",
+          "tags": "shopping,grocery,groceries,list,aisle,sort,group,supermarket,store,produce,dairy,checklist,errands,food shopping,organize"
+        },
+        {
+          "name": "Convert Recipe Units",
+          "description": "US cups / oz / lb / °F ↔ metric g / ml / °C (picks the direction; cups of flour, sugar, butter… become grams)",
+          "icon": "🥄",
+          "tags": "convert,units,recipe,metric,imperial,us,cups,grams,ml,ounces,pounds,fahrenheit,celsius,oven,temperature,kitchen,baking,measurements"
+        }
+      ]
     }
   ]
 }
