@@ -15505,9 +15505,12 @@ window.forceSyncReload = async function() {
   try { persistContent(); } catch {}
   try {
     // Pull fresh app assets (JS/CSS/wasm/fonts) from the server, not the cache:
-    // wipe the service-worker caches and ask the SW to update + skip waiting.
+    // wipe the service worker's app cache ('cade-v<N>') and ask it to update +
+    // skip waiting. Only that one: what modules downloaded into their own
+    // buckets — HD voices, translation models, converters, Python, archive
+    // tools — is versioned by URL, never stale, and stays put.
     if (window.caches && caches.keys) {
-      const names = await caches.keys();
+      const names = (await caches.keys()).filter(n => /^cade-v\d+$/.test(n));
       await Promise.all(names.map(n => caches.delete(n)));
     }
     if (navigator.serviceWorker) {

@@ -2603,8 +2603,11 @@ window.ppcForceReload = async function () {
   try { closeModal('settings-overlay'); } catch {}
   showToast('Refreshing app…', 'success', 2000);
   try {
+    // Only the site service worker's app cache ('cade-v<N>'): Cache Storage is
+    // shared with Cade.txt, whose modules keep downloads (HD voices, translation
+    // models…) in their own buckets that must survive this.
     if (window.caches && caches.keys) {
-      const names = await caches.keys();
+      const names = (await caches.keys()).filter(n => /^cade-v\d+$/.test(n));
       await Promise.all(names.map(n => caches.delete(n)));
     }
     if (navigator.serviceWorker) {
