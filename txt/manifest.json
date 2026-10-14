@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "version": "2026.10.14-7",
+  "version": "2026.10.14-8",
   "modules": [
     {
       "id": "crawler",
@@ -1839,6 +1839,16 @@
       "tags": "music,beat,beats,beat maker,drum machine,drums,sequencer,step sequencer,groovebox,808,909,sound board,soundboard,pads,fx,synth,loop,bpm,tempo,drum tab,tab,wav,hip hop,house,techno,trap,reggaeton,lo-fi,jam,fun",
       "entry": "widgets/beats/beats.js",
       "css": "widgets/beats/beats.css"
+    },
+    {
+      "id": "uphill",
+      "type": "widget",
+      "name": "Uphill Rush",
+      "description": "ASCII dirt-bike stunts — 12 stages, endless mode, flips and upgrades",
+      "icon": "🏍️",
+      "tags": "game,arcade,fun,train,bike,motorbike,motocross,dirt bike,hill climb,moto,racing,physics,stunts,flip,endless",
+      "entry": "widgets/uphill/uphill.js",
+      "css": "widgets/uphill/uphill.css"
     }
   ]
 }
