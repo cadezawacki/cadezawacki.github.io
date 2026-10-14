@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "version": "2026.10.14-15",
+  "version": "2026.10.14-16",
   "modules": [
     {
       "id": "crawler",
@@ -1943,6 +1943,16 @@
       "tags": "score,scores,score keeper,scorekeeper,scoreboard,tally,counter,points,card game,board game,game night,life counter,life total,mtg,magic,darts,golf,hearts,rummy,uno,players,rounds,leaderboard",
       "entry": "widgets/scorekeeper/scorekeeper.js",
       "css": "widgets/scorekeeper/scorekeeper.css"
+    },
+    {
+      "id": "mergefiles",
+      "type": "widget",
+      "name": "Merge Files",
+      "description": "Combine many files — or a whole folder — into one document: filter by type, order, join with headers, one CSV header; to the note, a new note or a download",
+      "icon": "📑",
+      "tags": "merge,merge files,combine,combine files,concatenate,concat,cat,join files,files,folder,csv,append,import,bundle,one file,stitch",
+      "entry": "widgets/mergefiles/mergefiles.js",
+      "css": "widgets/mergefiles/mergefiles.css"
     }
   ]
 }

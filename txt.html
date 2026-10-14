@@ -8009,6 +8009,9 @@ function _isTextLikeFile(f) {
 // application/octet-stream — that's what browsers hand back for the unknown
 // extensions this whole change exists to rescue, so those go to the sniffer.
 function _isKnownBinaryFile(f) {
+  // A text extension beats the MIME guess: with Excel installed, Windows
+  // reports .csv as application/vnd.ms-excel, which would skip every CSV.
+  if (_TEXTLIKE_EXT_RE.test(f.name || '')) return false;
   const t = f.type || '';
   if (/^(image|audio|video)\//.test(t)) return true;
   if (/(pdf|zip|gzip|x-tar|x-7z|x-rar|msword|ms-excel|ms-powerpoint|officedocument|^font\/|x-font)/.test(t)) return true;
