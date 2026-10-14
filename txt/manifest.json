@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "version": "2026.10.14-1",
+  "version": "2026.10.14-2",
   "modules": [
     {
       "id": "crawler",
@@ -1756,6 +1756,16 @@
       "tags": "habit,habits,habit tracker,tracker,streak,streaks,daily,routine,goals,check in,checklist,heatmap,water,exercise,meditate,read,self improvement,consistency",
       "entry": "widgets/habits/habits.js",
       "css": "widgets/habits/habits.css"
+    },
+    {
+      "id": "worldclock",
+      "type": "widget",
+      "name": "World Clock",
+      "description": "Times in your places, a meeting planner that finds hours that suit everyone, and a time-zone converter",
+      "icon": "🕐",
+      "tags": "world clock,time zone,timezone,time zones,clock,clocks,cities,meeting planner,meeting,schedule,scheduler,overlap,working hours,convert time,time converter,utc,gmt,dst,daylight saving,jet lag,international,remote team",
+      "entry": "widgets/worldclock/worldclock.js",
+      "css": "widgets/worldclock/worldclock.css"
     }
   ]
 }
