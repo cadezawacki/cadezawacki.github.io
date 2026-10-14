@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "version": "2026.10.13-10",
+  "version": "2026.10.14-10",
   "modules": [
     {
       "id": "crawler",
@@ -1746,6 +1746,173 @@
       "tags": "random,picker,wheel,spin,raffle,draw,lottery,winner,team,teams,group,coin,flip,dice,roll,d20,number,generator,shuffle,choose,decide",
       "entry": "widgets/picker/picker.js",
       "css": "widgets/picker/picker.css"
+    },
+    {
+      "id": "habits",
+      "type": "widget",
+      "name": "Habit Tracker",
+      "description": "Daily habits with streaks, a week strip and a heatmap — check-offs or counters, any schedule; synced across your devices",
+      "icon": "🔥",
+      "tags": "habit,habits,habit tracker,tracker,streak,streaks,daily,routine,goals,check in,checklist,heatmap,water,exercise,meditate,read,self improvement,consistency",
+      "entry": "widgets/habits/habits.js",
+      "css": "widgets/habits/habits.css"
+    },
+    {
+      "id": "worldclock",
+      "type": "widget",
+      "name": "World Clock",
+      "description": "Times in your places, a meeting planner that finds hours that suit everyone, and a time-zone converter",
+      "icon": "🕐",
+      "tags": "world clock,time zone,timezone,time zones,clock,clocks,cities,meeting planner,meeting,schedule,scheduler,overlap,working hours,convert time,time converter,utc,gmt,dst,daylight saving,jet lag,international,remote team",
+      "entry": "widgets/worldclock/worldclock.js",
+      "css": "widgets/worldclock/worldclock.css"
+    },
+    {
+      "id": "splitbill",
+      "type": "widget",
+      "name": "Split the Bill",
+      "description": "Tip, tax and each person's share of a bill — or a group's shared expenses with balances and the fewest settle-up payments",
+      "icon": "🧾",
+      "tags": "split,bill,tip,tip calculator,gratuity,tax,restaurant,check,divide,share,people,group,expenses,trip,travel,roommates,flatmates,splitwise,iou,owe,debts,balance,settle up,money,currency",
+      "entry": "widgets/splitbill/splitbill.js",
+      "css": "widgets/splitbill/splitbill.css"
+    },
+    {
+      "id": "moneycalc",
+      "type": "widget",
+      "name": "Money Calculator",
+      "description": "Loan & mortgage payments with amortization, savings growth and goals, percentages, markup vs margin, ROI and break-even",
+      "icon": "💰",
+      "tags": "money,finance,calculator,loan,mortgage,payment,amortization,interest,apr,rate,extra payment,payoff,savings,compound interest,investment,future value,retirement,goal,inflation,percent,percentage,percent change,vat,sales tax,discount,markup,margin,roi,return,cagr,break even,profit",
+      "entry": "widgets/moneycalc/moneycalc.js",
+      "css": "widgets/moneycalc/moneycalc.css"
+    },
+    {
+      "id": "towerdefense",
+      "type": "widget",
+      "name": "Tower Defense",
+      "description": "ASCII tower defense — build, upgrade and hold 3 maps for 30 waves",
+      "icon": "🏰",
+      "tags": "game,strategy,tower defense,td,towers,waves,defense,ascii,fun,train",
+      "entry": "widgets/towerdefense/towerdefense.js",
+      "css": "widgets/towerdefense/towerdefense.css"
+    },
+    {
+      "id": "passgen",
+      "type": "widget",
+      "name": "Password Generator",
+      "description": "Strong random passwords, passphrases, PINs & pronounceable ones — exact entropy, crack-time meter and a local password checker",
+      "icon": "🔐",
+      "tags": "password,passwords,generator,generate,passphrase,diceware,pin,random,secure,strong,entropy,strength,crack,checker,security,eff,wordlist,pronounceable,memorable,keygen",
+      "entry": "widgets/passgen/passgen.js",
+      "css": "widgets/passgen/passgen.css",
+      "precache": [
+        "widgets/passgen/passgen-words.js"
+      ]
+    },
+    {
+      "id": "regex",
+      "type": "widget",
+      "name": "Regex Tester",
+      "description": "Test regular expressions live — highlighted matches, groups, replace preview, plain-English explanation, ready-made patterns",
+      "icon": "🧪",
+      "tags": "regex,regexp,regular expression,pattern,match,test,tester,replace,find,capture,group,explain,cheat sheet,library,email,url,ip,date,backtracking,developer,code",
+      "entry": "widgets/regex/regex.js",
+      "css": "widgets/regex/regex.css"
+    },
+    {
+      "id": "learntofly",
+      "type": "widget",
+      "name": "Learn to Fly",
+      "description": "Slide a penguin off a ramp, glide, upgrade your gear, smash the 10 km ice wall",
+      "icon": "🐧",
+      "tags": "game,arcade,fun,penguin,fly,glide,glider,rocket,upgrade,shop,learn to fly,flash,distance,ascii",
+      "entry": "widgets/learntofly/learntofly.js",
+      "css": "widgets/learntofly/learntofly.css"
+    },
+    {
+      "id": "beats",
+      "type": "widget",
+      "name": "Beat Maker",
+      "description": "Step sequencer + sound board — synthesized drums, bass & keys, preset grooves, FX pads, ASCII drum tab and WAV loop export",
+      "icon": "🥁",
+      "tags": "music,beat,beats,beat maker,drum machine,drums,sequencer,step sequencer,groovebox,808,909,sound board,soundboard,pads,fx,synth,loop,bpm,tempo,drum tab,tab,wav,hip hop,house,techno,trap,reggaeton,lo-fi,jam,fun",
+      "entry": "widgets/beats/beats.js",
+      "css": "widgets/beats/beats.css"
+    },
+    {
+      "id": "uphill",
+      "type": "widget",
+      "name": "Uphill Rush",
+      "description": "ASCII dirt-bike stunts — 12 stages, endless mode, flips and upgrades",
+      "icon": "🏍️",
+      "tags": "game,arcade,fun,train,bike,motorbike,motocross,dirt bike,hill climb,moto,racing,physics,stunts,flip,endless",
+      "entry": "widgets/uphill/uphill.js",
+      "css": "widgets/uphill/uphill.css"
+    },
+    {
+      "id": "snippets",
+      "type": "widget",
+      "name": "Snippets",
+      "description": "Reusable text with placeholders — insert templates, signatures and replies, or type ;abbreviations to expand them",
+      "icon": "✂️",
+      "tags": "snippets,snippet,text expander,expand,abbreviation,abbreviations,template,templates,boilerplate,canned response,reply,signature,macro,placeholder,insert,clipboard,meeting notes,journal",
+      "entry": "widgets/snippets/snippets.js",
+      "css": "widgets/snippets/snippets.css",
+      "precache": [
+        "widgets/snippets/snippets-core.js"
+      ]
+    },
+    {
+      "id": "snippet-expand",
+      "type": "plugin",
+      "name": "Snippet abbreviations",
+      "description": "Type a snippet abbreviation such as ;sig or ;mtg and press Tab, Space or Enter to expand it (manage them in the Snippets widget)",
+      "entry": "plugins/snippet-expand/snippet-expand.js",
+      "precache": [
+        "widgets/snippets/snippets-core.js",
+        "widgets/snippets/snippets.css"
+      ],
+      "settingKey": "plugins.snippet-expand",
+      "section": "Editor",
+      "default": true
+    },
+    {
+      "id": "kitchen-pack",
+      "type": "script-pack",
+      "name": "Kitchen Pack",
+      "description": "Scale recipes, sort shopping lists by aisle, convert recipe units",
+      "entry": "scripts/kitchen-pack/kitchen-pack.js",
+      "scripts": [
+        {
+          "name": "Scale Recipe…",
+          "description": "Scale every quantity by a factor (2, 0.5, x1.5) or servings (4 to 6) — kitchen-friendly fractions, skips steps, temperatures and times",
+          "icon": "⚖️",
+          "tags": "scale,recipe,servings,double,halve,triple,multiply,portions,ingredients,cooking,kitchen,baking,quantities,fractions,resize recipe"
+        },
+        {
+          "name": "Sort Shopping List by Aisle",
+          "description": "Group the list (or note) under Produce, Dairy, Meat, Pantry… headings — keeps checkboxes, merges duplicates, checked items last",
+          "icon": "🛒",
+          "tags": "shopping,grocery,groceries,list,aisle,sort,group,supermarket,store,produce,dairy,checklist,errands,food shopping,organize"
+        },
+        {
+          "name": "Convert Recipe Units",
+          "description": "US cups / oz / lb / °F ↔ metric g / ml / °C (picks the direction; cups of flour, sugar, butter… become grams)",
+          "icon": "🥄",
+          "tags": "convert,units,recipe,metric,imperial,us,cups,grams,ml,ounces,pounds,fahrenheit,celsius,oven,temperature,kitchen,baking,measurements"
+        }
+      ]
+    },
+    {
+      "id": "inkdrop",
+      "type": "widget",
+      "name": "Ink Drop",
+      "description": "Draw lines, drop the ball, land it in the cup — 24 ASCII physics puzzles",
+      "icon": "🖋️",
+      "tags": "game,puzzle,physics,draw,line,ink,ball,drop,cup,brain,crayon,fun,train",
+      "entry": "widgets/inkdrop/inkdrop.js",
+      "css": "widgets/inkdrop/inkdrop.css"
     }
   ]
 }
