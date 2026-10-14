@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "version": "2026.10.13-10",
+  "version": "2026.10.14-1",
   "modules": [
     {
       "id": "crawler",
@@ -1746,6 +1746,16 @@
       "tags": "random,picker,wheel,spin,raffle,draw,lottery,winner,team,teams,group,coin,flip,dice,roll,d20,number,generator,shuffle,choose,decide",
       "entry": "widgets/picker/picker.js",
       "css": "widgets/picker/picker.css"
+    },
+    {
+      "id": "habits",
+      "type": "widget",
+      "name": "Habit Tracker",
+      "description": "Daily habits with streaks, a week strip and a heatmap — check-offs or counters, any schedule; synced across your devices",
+      "icon": "🔥",
+      "tags": "habit,habits,habit tracker,tracker,streak,streaks,daily,routine,goals,check in,checklist,heatmap,water,exercise,meditate,read,self improvement,consistency",
+      "entry": "widgets/habits/habits.js",
+      "css": "widgets/habits/habits.css"
     }
   ]
 }
