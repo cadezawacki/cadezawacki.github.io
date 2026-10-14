@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "version": "2026.10.14-6",
+  "version": "2026.10.14-7",
   "modules": [
     {
       "id": "crawler",
@@ -1829,6 +1829,16 @@
       "tags": "game,arcade,fun,penguin,fly,glide,glider,rocket,upgrade,shop,learn to fly,flash,distance,ascii",
       "entry": "widgets/learntofly/learntofly.js",
       "css": "widgets/learntofly/learntofly.css"
+    },
+    {
+      "id": "beats",
+      "type": "widget",
+      "name": "Beat Maker",
+      "description": "Step sequencer + sound board — synthesized drums, bass & keys, preset grooves, FX pads, ASCII drum tab and WAV loop export",
+      "icon": "🥁",
+      "tags": "music,beat,beats,beat maker,drum machine,drums,sequencer,step sequencer,groovebox,808,909,sound board,soundboard,pads,fx,synth,loop,bpm,tempo,drum tab,tab,wav,hip hop,house,techno,trap,reggaeton,lo-fi,jam,fun",
+      "entry": "widgets/beats/beats.js",
+      "css": "widgets/beats/beats.css"
     }
   ]
 }
