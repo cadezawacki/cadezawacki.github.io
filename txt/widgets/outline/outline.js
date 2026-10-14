@@ -1,6 +1,7 @@
 /* Outline / table-of-contents widget for Cade.txt.
  * A floating panel listing the document's "# Heading" lines; click to jump.
- * Rebuilds on edit via Cade.onEditorUpdate. Self-contained IIFE. */
+ * Rebuilds on edit via Cade.onEditorUpdate and on a room switch; can be locked
+ * to one room (Cade.roomLock). Self-contained IIFE. */
 (function () {
   'use strict';
   if (typeof window.Cade === 'undefined') return;
@@ -12,6 +13,8 @@
   function build() {
     var list = document.getElementById('outline-list');
     if (!list) return;
+    var panel = document.getElementById('outline-panel');
+    if (panel && Cade.roomAway && Cade.roomAway(panel)) return;   // locked to a room that isn't open: keep showing it
     var doc = Cade.editor.state.doc;
     var items = [];
     var cap = Math.min(doc.lines, 6000);
@@ -36,6 +39,8 @@
     if (existing) { existing.remove(); Cade.store.set('cade-outline-open', '0'); return; }
     var p = Cade.mkPanel('outline-panel', 'Outline', '<div id="outline-list"></div>');
     p._onClose = function () { Cade.store.set('cade-outline-open', '0'); };
+    // Lock to a room (Origami, Ctrl+P…); rebuild whenever the panel's room is the open one again.
+    if (Cade.roomLock) { Cade.roomLock(p); p.addEventListener('cade-panel-room', build); }
     var list = document.getElementById('outline-list');
     if (list) list.addEventListener('click', function (e) {
       var b = e.target.closest ? e.target.closest('.outline-item') : null;

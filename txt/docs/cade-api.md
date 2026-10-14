@@ -244,6 +244,38 @@ is minimized — otherwise they steal the user's typing — and real-time games 
 on `cade-panel-minimize`. Guard with `Cade.isMinimized && Cade.isMinimized(panel)` (an
 older cached core may load a newer module).
 
+## Room lock — panels that show the open note
+Panels whose content *is* the open note (Kanban, Eisenhower, Outline, Text Stats, Live
+Preview) can be locked to one room. A lock button appears in the header in Origami (and
+stays once locked); it pins the panel to the room open now. While another room is open
+(another Origami pane is live, Ctrl+P…), a locked panel keeps showing its room, a bar says
+so, input to it is held back (so nothing edits the wrong note), and a tap brings its room
+back — in Origami by making that room's pane live, without focusing the editor. The lock
+is remembered per widget; reopened while its room isn't open, the panel's content stays
+hidden until it is.
+| Call / event | Does |
+| --- | --- |
+| `Cade.roomLock(panel)` | opt a panel in (call right after `mkPanel`) |
+| `Cade.roomAway(panel)` | `true` while locked to a room that isn't open — skip refreshes then |
+| `Cade.lockedRoom(panel)` | the locked room, or `null` |
+| `Cade.focusRoom(name)` | bring a room up to edit (Origami pane, else a room switch) → `Promise<boolean>` |
+| `cade-panel-room` | dispatched on an opted-in panel whenever its room is the open one again (a room switch while unlocked, its room coming back, unlocking) — refresh on it |
+
+## Pop out — a panel in its own window (desktop)
+Every panel header has a pop-out button on desktop (hidden on touch screens and game
+panels). Chrome / Edge open an always-on-top Picture-in-Picture window; other browsers a
+pop-up window. The panel's DOM moves there with its listeners and state; stylesheets
+(including ones loaded later) and the theme are mirrored. Closing that window, or the
+button again, brings it back; the panel's × closes both. `document.getElementById` also
+finds a popped-out panel and its contents. Caveats for modules: handlers on the app's
+`document` / `window` (keys, resize) don't see events in the other window, and an iframe
+reloads when it moves (listen for `message` on `panel.ownerDocument.defaultView`).
+| Call / event | Does |
+| --- | --- |
+| `Cade.popOut(panel)` / `Cade.popIn(panel)` | do it from code (`popOut` needs a user gesture) |
+| `Cade.isPoppedOut(panel)` | `true` while it lives in its own window |
+| `cade-panel-popout` / `cade-panel-popin` | bubbling events dispatched on the panel after the move |
+
 ## Storage — `Cade.storage`
 | Call | Does |
 | --- | --- |

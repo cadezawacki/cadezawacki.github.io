@@ -64,6 +64,7 @@
   function render() {
     var p = document.getElementById(PANEL_ID);
     if (!p) return;
+    if (Cade.roomAway && Cade.roomAway(p)) return;   // locked to a room that isn't open: keep its numbers
     var sel = null, scope = 'Document';
     try {
       var m = window.editor.state.selection.main;
@@ -107,7 +108,9 @@
     Cade.closeAllMenus();
     var existing = document.getElementById(PANEL_ID);
     if (existing) { existing.remove(); return; }
-    Cade.mkPanel(PANEL_ID, '📊 Text Stats', '');
+    var p = Cade.mkPanel(PANEL_ID, '📊 Text Stats', '');
+    // Lock to a room (Origami, Ctrl+P…); recount whenever the panel's room is the open one again.
+    if (Cade.roomLock) { Cade.roomLock(p); p.addEventListener('cade-panel-room', render); }
     render();
   }
 

@@ -227,6 +227,7 @@
     var ed = Cade.editor;
     if (!panel || !K || !ed || !ifr) return;
     if (Cade.isMinimized && Cade.isMinimized(panel)) return; // parked in the dock: catch up on restore
+    if (Cade.roomAway && Cade.roomAway(panel)) return;       // locked to a room that isn't open: keep showing it
     var mode = effectiveMode();
     panel.classList.toggle('hp-mdmode', mode === 'md');
     markMode();
@@ -337,7 +338,15 @@
   function shellPost(m) {
     if (!st.md || !st.md.ready || !ifr || !ifr.contentWindow) return;
     m.__md = st.md.token;
-    try { ifr.contentWindow.postMessage(m, '*'); } catch (e) {}
+    try {
+      // Popped out into its own window, that window is the frame's parent — and
+      // the shell only listens to its parent: post as that window.
+      var host = ifr.ownerDocument.defaultView;
+      if (host && host !== window) {
+        if (!host.__cadePost) host.__cadePost = new host.Function('w', 'm', 'w.postMessage(m, "*")');
+        host.__cadePost(ifr.contentWindow, m);
+      } else ifr.contentWindow.postMessage(m, '*');
+    } catch (e) {}
   }
   function sendRender() {
     var M = st.md;
@@ -742,6 +751,21 @@
     st.modeOverride = openOverride; openOverride = '';
     panel = Cade.mkPanel(PANEL_ID, 'Live Preview', panelHTML());
     panel.addEventListener('cade-panel-restore', function () { refresh(false); });
+    // Lock to a room (Origami, Ctrl+P…); re-render whenever the panel's room is the open one again.
+    if (Cade.roomLock) { Cade.roomLock(panel); panel.addEventListener('cade-panel-room', function () { refresh(true); }); }
+    // Popped out into its own window (or back): the frame reloads there, and it
+    // talks to that window — listen on it and rebuild the page.
+    var popWin = null;
+    var rehome = function () {
+      if (popWin) { try { popWin.removeEventListener('message', onMessage); } catch (e) {} popWin = null; }
+      var w = panel && panel.ownerDocument.defaultView;
+      if (w && w !== window) { popWin = w; w.addEventListener('message', onMessage); }
+      if (!panel || !st) return;
+      if (st.mode === 'md') startShell();
+      refresh(true);
+    };
+    panel.addEventListener('cade-panel-popout', rehome);
+    panel.addEventListener('cade-panel-popin', rehome);
     panel.classList.add('hp-panel');
     var body = panel.querySelector('.cade-panel-body');
     ifr = document.createElement('iframe');
@@ -772,6 +796,7 @@
     applyDock();
     panel._onClose = function () {
       window.removeEventListener('message', onMessage);
+      if (popWin) { try { popWin.removeEventListener('message', onMessage); } catch (e) {} popWin = null; }
       document.removeEventListener('keydown', keyHandler, true);
       window.removeEventListener('resize', layoutFrame);
       if (ro) { try { ro.disconnect(); } catch (e) {} ro = null; }
