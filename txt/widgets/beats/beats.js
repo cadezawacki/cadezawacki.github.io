@@ -4,9 +4,9 @@
  * samples): kick, snare, clap, closed / open hat, low tom, rim, cowbell,
  * shaker, a bass synth and a keys track (chord stabs, EP, pluck, lead, bell)
  * with a scale-aware note per step. Four patterns (A–D) per song, a chain
- * (song) mode, nine preset grooves, randomize / mutate, a pad screen of
- * one-shot FX that play over the loop (plus a kit bank that records into the
- * pattern, quantized), save / load in Cade.store, an ASCII drum tab that goes
+ * (song) mode, preset grooves plus a shelf of mellow focus loops, randomize /
+ * mutate, a pad screen of one-shot FX that play over the loop (plus a kit bank
+ * that records into the pattern, quantized), save / load in Cade.store, an ASCII drum tab that goes
  * into the note and comes back out of it, and a seamless WAV loop rendered
  * with OfflineAudioContext.
  *
@@ -226,7 +226,76 @@
         { KK: 'x.x.......xx....', SN: '....X..g.g..X..g', CH: 'x.x.x.x.x.x.x.x.', OH: '..........x.....', BS: '5.......3.......', KY: '5.......3.......' }] },
       { name: 'Lo-fi', style: 'lazy jazz chords', bpm: 78, swing: 45, key: 3, scale: 'major', kit: 'dusty', bass: 'sub', keys: 'keys', tone: 0.55, chain: 'AABB', pats: [
         { KK: 'x.....x...x.....', SN: '....x.......x...', CH: 'x.g.x.gxx.g.x.g.', RM: '..........g.....', BS: '0.....0...3.....', KY: '0.......3.......' },
-        { KK: 'x.....x...x...g.', SN: '....x.......x...', CH: 'x.g.x.gxx.g.x.gg', BS: '1.....1...4.....', KY: '1.......4.......' }] }
+        { KK: 'x.....x...x...g.', SN: '....x.......x...', CH: 'x.g.x.gxx.g.x.gg', BS: '1.....1...4.....', KY: '1.......4.......' }] },
+
+      // ---- focus: long, mellow loops to work to (group 'focus'; optional human % and per-track vol) ----
+      { name: 'Study Hall', group: 'focus', style: 'slow lo-fi I–vi–ii–V', bpm: 72, swing: 58, human: 20, key: 10, scale: 'major', kit: 'dusty', bass: 'sub', keys: 'keys', tone: 0.5, chain: 'ABCD', pats: [
+        { KK: 'x.......x.x.....', SN: '....x.......x...', CH: 'x.g.x.g.x.g.x.g.', SH: '..g...g...g...g.', BS: '0.........4.....', KY: '0.........0.....', KYv: '..........g.....' },
+        { KK: 'x.......x.x.....', SN: '....x.......x...', CH: 'x.g.x.g.x.g.x.g.', SH: '..g...g...g...g.', BS: '5.........5..4..', KY: '5.........5.....', KYv: '..........g.....' },
+        { KK: 'x.......x.x.....', SN: '....x.......x...', CH: 'x.g.x.g.x.g.x.g.', SH: '..g...g...g...g.', BS: '1.........1.....', KY: '1.........1.....', KYv: '..........g.....' },
+        { KK: 'x.......x.x...g.', SN: '....x.......x..g', CH: 'x.g.x.g.x.g.x.gg', SH: '..g...g...g...g.', BS: '4.........4...6.', KY: '4.........4.....', KYv: '..........g.....' }] },
+      { name: 'Rainy Window', group: 'focus', style: 'lo-fi + rain shaker', bpm: 80, swing: 48, human: 25, key: 9, scale: 'minor', kit: 'dusty', bass: 'sub', keys: 'keys', tone: 0.45, vol: { CH: 0.38, SH: 0.3 }, chain: 'ABCD', pats: [
+        { KK: 'x.....x...x.....', SN: '....x.......x...', CH: '..g...g...g...g.', SH: 'gggggggggggggggg', BS: '0.....0...0.....', KY: '0.......0.......', KYv: '........g.......' },
+        { KK: 'x.....x...x.....', SN: '....x.......x...', CH: '..g...g...g...g.', SH: 'gggggggggggggggg', BS: '3.....3...3.....', KY: '3.......3.......', KYv: '........g.......' },
+        { KK: 'x.....x...x.....', SN: '....x.......x...', CH: '..g...g...g...g.', SH: 'gggggggggggggggg', BS: '5.....5...5.....', KY: '5.......5.......', KYv: '........g.......' },
+        { KK: 'x.....x...x...g.', SN: '....x.......x...', CH: '..g...g...g.g.g.', SH: 'gggggggggggggggg', BS: '4.....4...4...6.', KY: '4.......4.......', KYv: '........g.......' }] },
+      { name: 'Chillhop', group: 'focus', style: 'jazzy ii–V–I', bpm: 86, swing: 52, human: 15, key: 9, scale: 'dorian', kit: 'dusty', bass: 'sub', keys: 'keys', tone: 0.6, chain: 'ABCD', pats: [
+        { KK: 'x......x..x.....', SN: '....x.......x...', CH: 'x.g.x.g.x.g.x.gg', BS: '0.........0...2.', KY: '0..........0....', KYv: '...........g....' },
+        { KK: 'x......x..x.....', SN: '....x.......x...', CH: 'x.g.x.g.x.g.x.gg', RM: '..........g.....', BS: '3.........3...5.', KY: '3..........3....', KYv: '...........g....' },
+        { KK: 'x......x..x.....', SN: '....x.......x...', CH: 'x.g.x.g.x.g.x.gg', BS: '6.........6...5.', KY: '6..........6....', KYv: '...........g....' },
+        { KK: 'x......x..x...g.', SN: '....x.......x..g', CH: 'x.g.x.g.x.g.x...', OH: '..............x.', BS: '4.........4...1.', KY: '4..........4....', KYv: '...........g....' }] },
+      { name: 'Neo-Soul', group: 'focus', style: 'drunk swing + 7ths', bpm: 84, swing: 64, human: 30, key: 7, scale: 'dorian', kit: 'dusty', bass: 'sub', keys: 'keys', tone: 0.6, chain: 'ABCD', pats: [
+        { KK: 'x......x.x......', SN: '....x.......x...', CH: 'x.xgx.x.xgx.x.xg', RM: '.g.....g........', BS: '0......0...2..3.', KY: '0.........0.....', KYv: '..........g.....' },
+        { KK: 'x......x.x......', SN: '....x.......x...', CH: 'x.xgx.x.xgx.x.xg', BS: '3......3...5..6.', KY: '3.........3.....', KYv: '..........g.....' },
+        { KK: 'x......x.x......', SN: '....x.......x...', CH: 'x.xgx.x.xgx.x.xg', RM: '.g.....g........', BS: '6......6...4..2.', KY: '6.........6.....', KYv: '..........g.....' },
+        { KK: 'x......x.x....x.', SN: '....x.......x.g.', CH: 'x.xgx.x.xgx.x...', OH: '..............x.', BS: '2......2...1..0.', KY: '2.........2.....', KYv: '..........g.....' }] },
+      { name: 'Jazz Club', group: 'focus', style: 'ride + walking bass', bpm: 70, swing: 62, human: 20, key: 0, scale: 'major', kit: 'studio', bass: 'sub', keys: 'keys', tone: 0.55, vol: { KK: 0.5, CH: 0.42, SH: 0.32 }, chain: 'AB', pats: [
+        { KK: 'g.g.g.g.g.g.g.g.', SN: '.....g.....g..g.', CH: 'x.Xgx.Xgx.Xgx.Xg', SH: '..x...x...x...x.', BS: '1.2.3.5.4.3.2.1.', KY: '1..1....4..4....', KYv: 'x..g....x..g....' },
+        { KK: 'g.g.g.g.g.g.g.g.', SN: '...g.......g..gg', CH: 'x.Xgx.Xgx.Xgx.Xg', SH: '..x...x...x...x.', BS: '0.2.4.2.5.4.3.2.', KY: '0..0....5..5....', KYv: 'x..g....x..g....' }] },
+      { name: 'Coffee Shop', group: 'focus', style: 'bossa nova', bpm: 72, swing: 0, human: 12, key: 7, scale: 'major', kit: 'studio', bass: 'sub', keys: 'keys', tone: 0.6, vol: { KK: 0.7, SH: 0.36 }, chain: 'ABCD', pats: [
+        { KK: 'x..gx..gx..gx..g', RM: 'x..x..x...x..x..', SH: 'gxgxgxgxgxgxgxgx', BS: '0..4....0..4....', KY: '0..0..0...0..0..', KYv: 'x..g..x...g..g..' },
+        { KK: 'x..gx..gx..gx..g', RM: 'x..x..x...x..x..', SH: 'gxgxgxgxgxgxgxgx', BS: '3..7....3..7....', KY: '3..3..3...3..3..', KYv: 'x..g..x...g..g..' },
+        { KK: 'x..gx..gx..gx..g', RM: 'x..x..x...x..x..', SH: 'gxgxgxgxgxgxgxgx', BS: '2..6....2..6....', KY: '2..2..2...2..2..', KYv: 'x..g..x...g..g..' },
+        { KK: 'x..gx..gx..gx..g', RM: '..x..x..x...x...', SH: 'gxgxgxgxgxgxgxgx', BS: '1..5....4..8....', KY: '1..1....4..4..4.', KYv: 'x..g....x..g..g.' }] },
+      { name: 'Ambient Pulse', group: 'focus', style: 'bells + slow sub', bpm: 70, swing: 0, key: 9, scale: 'pentmaj', kit: 'dusty', bass: 'sub', keys: 'bell', tone: 0.45, vol: { KK: 0.7, KY: 0.45 }, chain: 'ABAC', pats: [
+        { KK: 'x.........g.....', SH: 'g...g...g...g...', RM: '.......g........', BS: '0.......3.......', KY: '0..2..3...5..3..' },
+        { KK: 'x.........g.....', SH: 'g...g...g...g...', RM: '.......g.......g', BS: '4.......2.......', KY: '4..5..7...5..4..' },
+        { KK: 'x.........g.....', SH: 'g...g...g...g.g.', BS: '3.......1.......', KY: '3..5..6...5..2..' }] },
+      { name: 'Downtempo', group: 'focus', style: 'half-time trip-hop', bpm: 88, swing: 30, human: 15, key: 4, scale: 'harmonic', kit: 'dusty', bass: 'sub', keys: 'bell', tone: 0.55, vol: { KY: 0.42 }, chain: 'AABB', pats: [
+        { KK: 'x......x.x......', SN: '........X.......', CH: 'x.x.x.x.x.x.x.x.', RM: '...g......g.....', BS: '0.......0.....6.', KY: '4.....2.....0...' },
+        { KK: 'x......x.x....g.', SN: '........X.....g.', CH: 'x.x.x.x.x.x.xgx.', RM: '...g......g.....', BS: '5.......4.......', KY: '5.....4.....1...' }] },
+      { name: 'Lo-fi House', group: 'focus', style: 'muffled 4/4', bpm: 116, swing: 28, human: 15, key: 2, scale: 'dorian', kit: 'dusty', bass: 'sub', keys: 'keys', tone: 0.5, vol: { CH: 0.4 }, chain: 'AABB', pats: [
+        { KK: 'x...x...x...x...', CP: '....x.......x...', CH: '..x...x...x...x.', SH: 'g.g.g.g.g.g.g.g.', BS: '0.....0...0.....', KY: '..0.....0..0....', KYv: '..x.....g..x....' },
+        { KK: 'x...x...x...x...', CP: '....x.......x..g', CH: '..x...x...x...x.', SH: 'g.g.g.g.g.g.g.g.', RM: '...g......g.....', BS: '3.....3...3...2.', KY: '..3.....3..3....', KYv: '..x.....g..x....' }] },
+      { name: 'Deep House', group: 'focus', style: 'warm EP chords', bpm: 120, swing: 15, key: 7, scale: 'minor', kit: '909', bass: 'saw', keys: 'keys', tone: 0.62, vol: { CP: 0.45, OH: 0.32 }, chain: 'AABBCCDD', pats: [
+        { KK: 'x...x...x...x...', CP: '....x.......x...', OH: '..x...x...x...x.', SH: '.g.g.g.g.g.g.g.g', BS: '..0...0...0..0..', KY: '0.....0...0.....', KYv: 'x.....g...g.....' },
+        { KK: 'x...x...x...x...', CP: '....x.......x...', OH: '..x...x...x...x.', SH: '.g.g.g.g.g.g.g.g', BS: '..5...5...5..5..', KY: '5.....5...5.....', KYv: 'x.....g...g.....' },
+        { KK: 'x...x...x...x...', CP: '....x.......x...', OH: '..x...x...x...x.', SH: '.g.g.g.g.g.g.g.g', BS: '..3...3...3..3..', KY: '3.....3...3.....', KYv: 'x.....g...g.....' },
+        { KK: 'x...x...x...x...', CP: '....x.......x..g', OH: '..x...x...x...x.', SH: '.g.g.g.g.g.g.g.g', RM: '...g......g.....', BS: '..4...4...4..6..', KY: '4.....4...4.....', KYv: 'x.....g...g.....' }] },
+      { name: 'Afro House', group: 'focus', style: 'clave, toms + bells', bpm: 122, swing: 18, key: 9, scale: 'pentmin', kit: '909', bass: 'sub', keys: 'bell', tone: 0.68, vol: { TM: 0.5, KY: 0.4, CB: 0.26 }, chain: 'AAAB', pats: [
+        { KK: 'x...x...x...x...', CH: '..g...g...g...g.', SH: 'gxgxgxgxgxgxgxgx', RM: 'x..x..x...x.x...', TM: '......x..x....x.', BS: '0.....0...0..3..', KY: '5..3..4...3..2..' },
+        { KK: 'x...x...x...x...', CB: '..x...x...x...x.', SH: 'gxgxgxgxgxgxgxgx', RM: 'x..x..x...x.x...', TM: '......x..x..x.x.', BS: '3.....3...3..1..', KY: '7..5..6...5..3..' }] },
+      { name: 'Minimal', group: 'focus', style: 'hypnotic 3-over-4', bpm: 124, swing: 8, key: 9, scale: 'minor', kit: '909', bass: 'sub', keys: 'pluck', tone: 0.7, vol: { KY: 0.4 }, chain: 'AAABAAAC', pats: [
+        { KK: 'x...x...x...x...', CP: '....g.......g...', CH: '..x...x...x...x.', SH: '.g.g.g.g.g.g.g.g', RM: '..x..x..x..x..x.', BS: '..0...0...0..07.', KY: '0......4..2.....' },
+        { KK: 'x...x...x...x...', CP: '....g.......g...', OH: '..x...x...x...x.', SH: '.g.g.g.g.g.g.g.g', RM: '..x..x..x..x..x.', BS: '..0...0...0..07.', KY: '7......4..5.....' },
+        { KK: 'x...x...x...x.x.', CP: '....g.......x...', CH: '..x...x...x...x.', SH: '.g.g.g.g.g.g.g.g', TM: '..........x...x.', BS: '..3...3...3..37.', KY: '3......7..5.....' }] },
+      { name: 'Dub Techno', group: 'focus', style: 'echoing chord stabs', bpm: 118, swing: 0, key: 0, scale: 'minor', kit: '909', bass: 'sub', keys: 'stab', tone: 0.42, vol: { CH: 0.4, SH: 0.28 }, chain: 'AAABAAAB', pats: [
+        { KK: 'x...x...x...x...', CH: '..x...x...x...x.', SH: 'gggggggggggggggg', RM: '.......g.......g', BS: '..0.......0.....', KY: '...0..0..0......', KYv: '...x..g..g......' },
+        { KK: 'x...x...x...x...', CH: '..x...x...x...x.', SH: 'gggggggggggggggg', RM: '.......g....g..g', BS: '..5.......5.....', KY: '...5..5..5......', KYv: '...x..g..g......' }] },
+      { name: 'Motorik', group: 'focus', style: 'krautrock autobahn', bpm: 120, swing: 0, key: 9, scale: 'mixolydian', kit: 'studio', bass: 'saw', keys: 'bell', tone: 0.75, vol: { KY: 0.4 }, chain: 'AABAAACA', pats: [
+        { KK: 'x.......x.x.....', SN: '....x.......x...', CH: 'x.x.x.x.x.x.x.x.', BS: '0.0.0.0.0.0.0.0.', KY: '0.......4...2...' },
+        { KK: 'x.......x.x.....', SN: '....x.......x...', CH: 'x.x.x.x.x.x.x.x.', BS: '3.3.3.3.3.3.3.3.', KY: '3.......7...5...' },
+        { KK: 'x.......x.x.....', SN: '....x.......x.xx', CH: 'x.x.x.x.x.x.x...', OH: '..............x.', BS: '6.6.6.6.6.6.6.6.', KY: '6.......a...8...' }] },
+      { name: 'Synthwave', group: 'focus', style: 'gallop bass + arps', bpm: 98, swing: 0, key: 9, scale: 'minor', kit: 'studio', bass: 'saw', keys: 'pluck', tone: 0.8, vol: { KY: 0.42 }, chain: 'ABCD', pats: [
+        { KK: 'x.......x.x.....', SN: '....X.......X...', CH: 'x.x.x.x.x.x.x.x.', BS: '0.000.000.000.00', KY: '0.2.4.7.0.2.4.7.' },
+        { KK: 'x.......x.x.....', SN: '....X.......X...', CH: 'x.x.x.x.x.x.x.x.', BS: '5.555.555.555.55', KY: '2.5.7.9.2.5.7.9.' },
+        { KK: 'x.......x.x.....', SN: '....X.......X...', CH: 'x.x.x.x.x.x.x.x.', BS: '2.222.222.222.22', KY: '2.4.6.9.2.4.6.9.' },
+        { KK: 'x.......x.x.....', SN: '....X.......X...', CH: 'x.x.x.x.x.......', TM: '..........x.x.x.', BS: '6.666.666.666.66', KY: '3.6.8.a.3.6.8.a.' }] },
+      { name: 'Liquid DnB', group: 'focus', style: 'two-step + pads', bpm: 174, swing: 0, key: 11, scale: 'minor', kit: 'studio', bass: 'sub', keys: 'keys', tone: 0.7, vol: { SH: 0.34 }, chain: 'ABCD', pats: [
+        { KK: 'x.........x.....x.........x.....', SN: '....X.......X.......X.......X...', CH: 'x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.', SH: '.g.g.g.g.g.g.g.g.g.g.g.g.g.g.g.g', BS: '0.........0.....0.........7.....', KY: '0.....................0.........', KYv: '......................g.........' },
+        { KK: 'x.........x.....x.........x.....', SN: '....X.......X.......X.......X...', CH: 'x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.', SH: '.g.g.g.g.g.g.g.g.g.g.g.g.g.g.g.g', BS: '5.........5.....5.........5.....', KY: '5.....................5.........', KYv: '......................g.........' },
+        { KK: 'x.........x.....x.........x.....', SN: '....X.......X.......X.......X...', CH: 'x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.', SH: '.g.g.g.g.g.g.g.g.g.g.g.g.g.g.g.g', BS: '3.........3.....3.........3.....', KY: '3.....................3.........', KYv: '......................g.........' },
+        { KK: 'x.........x.....x.........x.x...', SN: '....X.......X.......X..g....X.g.', CH: 'x.x.x.x.x.x.x.x.x.x.x.x.x.x.....', OH: '..........................x.....', SH: '.g.g.g.g.g.g.g.g.g.g.g.g.g.g.g.g', BS: '4.........4.....4.........6.....', KY: '4.....................4.........', KYv: '......................g.........' }] }
     ];
     function velOf(ch) {
       switch (ch) {
@@ -246,6 +315,8 @@
       if (!ps) return s;
       s.name = ps.name; s.bpm = ps.bpm; s.swing = ps.swing; s.key = ps.key; s.scale = ps.scale; s.kit = ps.kit;
       s.bass = ps.bass; s.keys = ps.keys; s.tone = ps.tone != null ? ps.tone : 1; s.mode = 'song';
+      if (ps.human) s.human = clamp(ps.human, 0, 100);
+      if (ps.vol) Object.keys(ps.vol).forEach(function (c) { var t = codeIndex(c); if (t >= 0) s.mix[t].vol = clamp(ps.vol[c], 0, 1); });
       s.chain = ps.chain.split('').map(function (c) { return PAT_CH.indexOf(c); });
       ps.pats.forEach(function (rows, pi) {
         var p = s.pats[pi], len = 8;
@@ -1602,6 +1673,14 @@
   }
 
   // ---- songs: presets, save / load ----
+  function presetGrid(group) {
+    var h = '<div class="bt-presets">';
+    Core.PRESETS.forEach(function (ps, k) {
+      if ((ps.group || '') !== group) return;
+      h += '<button type="button" class="bt-pre" data-act="preset" data-i="' + k + '"><b>' + esc(ps.name) + '</b><small>' + ps.bpm + ' · ' + esc(ps.style) + '</small></button>';
+    });
+    return h + '</div>';
+  }
   function songIndex() { var a = loadJSON(K_INDEX); return Array.isArray(a) ? a.filter(function (x) { return x && x.id; }) : []; }
   function loadPreset(i) {
     pushUndo();
@@ -1978,9 +2057,9 @@
     h += '</div><div class="bt-line bt-cadd">';
     for (i = 0; i < Core.NPAT; i++) h += '<button type="button" class="bt-btn" data-act="cadd" data-p="' + i + '"' + (s.chain.length >= 16 ? ' disabled' : '') + '>+' + PAT_CH[i] + '</button>';
     h += '<button type="button" class="bt-btn" data-act="cpop"' + (s.chain.length < 2 ? ' disabled' : '') + ' aria-label="Remove the last">⌫</button></div>' +
-      '<div class="bt-h">── presets</div><div class="bt-presets">';
-    Core.PRESETS.forEach(function (ps, k) { h += '<button type="button" class="bt-pre" data-act="preset" data-i="' + k + '"><b>' + esc(ps.name) + '</b><small>' + ps.bpm + ' · ' + esc(ps.style) + '</small></button>'; });
-    h += '</div><div class="bt-h">── saved <small>' + idx.length + '</small></div>';
+      '<div class="bt-h">── grooves</div>' + presetGrid('') +
+      '<div class="bt-h">── focus <small>long, mellow loops to work to</small></div>' + presetGrid('focus') +
+      '<div class="bt-h">── saved <small>' + idx.length + '</small></div>';
     if (!idx.length) h += '<p class="bt-note">Nothing saved yet — SAVE keeps this song on this device.</p>';
     else {
       h += '<div class="bt-songs">';
