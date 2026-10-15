@@ -203,7 +203,7 @@
   function waveCount(mi, w) { var s = waveSpec(mi, w), c = 0; for (var i = 0; i < s.groups.length; i++) c += s.groups[i].n; return c; }
 
   // ---------------- tower stats ----------------
-  // Merged stats for type at level lvl (0..3) or branch b (0..2, lvl 4). Cached; never mutate.
+  // Merged stats for type at level lvl (0..3) or branch b (0..1, lvl 4). Cached; never mutate.
   var SCACHE = {};
   function towerStat(type, lvl, b) {
     var key = type * 10 + (lvl >= 4 ? 4 + b : lvl);
@@ -220,7 +220,7 @@
   function upgradeCost(g, t, b) {
     var T = TOWERS[t.type];
     if (t.lvl >= 4) return 0;
-    var c = t.lvl < 3 ? T.ups[t.lvl][0] : T.brs[b | 0][1];
+    var c = t.lvl < 3 ? T.ups[t.lvl][0] : T.brs[b === 1 ? 1 : 0][1];
     return Math.round(c * g.mod.upCost);
   }
   function sellValue(g, t) { return Math.floor(t.spent * g.mod.sell); }
@@ -401,7 +401,7 @@
   // Upgrade one level (lvl 0..2 → +1), or at lvl 3 take branch b (0..2).
   function upgrade(g, t, b) {
     if (!t || t.lvl >= 4 || g.phase === 'won' || g.phase === 'lost') return false;
-    if (t.lvl === 3 && !(b === 0 || b === 1 || b === 2)) return false;
+    if (t.lvl === 3 && !(b === 0 || b === 1)) return false;
     var cost = upgradeCost(g, t, b);
     if (g.gold < cost) return false;
     g.gold -= cost; t.spent += cost;
@@ -2215,7 +2215,7 @@
       var a = o.towers[i], rec = {};
       for (j = 0; j < TKEYS.length; j++) rec[TKEYS[j]] = a[j];
       if (!TOWERS[rec.type] || !inGrid(g, rec.c, rec.r) || towerAt(g, rec.c, rec.r)) continue;
-      var t = addTower(g, rec.type, rec.c, rec.r, clamp(rec.lvl | 0, 0, 4), rec.lvl >= 4 ? clamp(rec.br | 0, 0, 2) : -1, rec.spent);
+      var t = addTower(g, rec.type, rec.c, rec.r, clamp(rec.lvl | 0, 0, 4), rec.lvl >= 4 ? clamp(rec.br | 0, 0, 1) : -1, rec.spent);
       for (j = 0; j < TKEYS.length; j++) if (TKEYS[j] !== 'type' && TKEYS[j] !== 'c' && TKEYS[j] !== 'r') t[TKEYS[j]] = rec[TKEYS[j]];
       if (t.lvl < 4) t.br = -1;
     }

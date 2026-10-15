@@ -1,5 +1,5 @@
 /* Tower Defense V2 — "Glyph Defense": the expanded ASCII tower defense for
- * Cade.txt. 40 towers (three upgrades, then one of three final branches), 74
+ * Cade.txt. 40 towers (three upgrades, then one of two final forms), 74
  * glyph enemies (a–z, A–Z, digits, ? and !, and ten bosses), 35 maps over seven
  * regions — each region ends in an ULTRA map you pan and zoom around.
  *
@@ -20,7 +20,9 @@
   var PANEL_ID = 'towerdefense2-panel', TITLE = '🏯 Tower Defense V2';
   var PROG_KEY = 'cade-td2-progress', SAVE_KEY = 'cade-td2-save';
   var CELL = 30, CH = 8;                                  // logical units per cell; chunk size in cells
-  var BRACKETS = [['[', ']'], ['[', ']'], ['{', '}'], ['«', '»'], ['«', '»']], PIPS = ['', '·', '··', '···'];
+  var PIPS = ['', '·', '··', '···'];
+  // Role marks, shown in the corner of every tower tile, palette button and catalog entry; ~ = also builds on water.
+  var CATM = { atk: '†', ctl: '‖', sup: '+', eco: '$' }, CATW = { atk: 'attack', ctl: 'control', sup: 'support', eco: 'economy' };
   var SPEEDS = [1, 2, 3, 4];
   var E = null, S = null, loading = null;
 
@@ -182,7 +184,8 @@
       beam: css(pink), rocket: css(pink), flame: css(red), acid: css(dark ? [190, 230, 80] : [100, 140, 10]),
       shade: css(bg, 0.88), tipBorder: css(mix(bg, tx, 0.45)), green: css(green), blue: css(blue), purple: css(purple), teal: css(teal), amber: css(amber),
       dt: [css(mix(tx, bg, 0.15)), css(orange), css(blue), css(purple), css(dark ? [190, 230, 80] : [100, 140, 10]), css(teal), css(pink)],
-      tc: [], tdim: [], tile: []
+      tc: [], tdim: [], tile: [],
+      cat: { atk: css(orange), ctl: css(purple), sup: css(green), eco: css(amber) }, okFill: css(ac, dark ? 0.17 : 0.13)
     };
     for (var i = 0; i < E.TOWERS.length; i++) {
       var c = parseCol(E.TOWERS[i].col, [128, 128, 128]);
@@ -386,31 +389,62 @@
     }
     if (g) for (i = 0; i < g.towers.length; i++) {
       var tw = g.towers[i];
-      if (tw.c >= i0 && tw.c < i1 && tw.r >= j0 && tw.r < j1) drawTower(c, tw, 1);
+      if (tw.c >= i0 && tw.c < i1 && tw.r >= j0 && tw.r < j1) drawTower(c, tw, 1, lod);
     }
   }
-  function drawTower(c, t, solid) {
-    var k = S.col, Tw = E.TOWERS[t.type], x0 = t.c * CELL, y0 = t.r * CELL, cx = x0 + CELL / 2, cy = y0 + CELL / 2 - 2.5, br = BRACKETS[t.lvl];
-    if (solid) {
-      c.fillStyle = k.tile[t.type][Math.min(t.lvl, 4)]; c.fillRect(x0 + 1, y0 + 1, CELL - 2, CELL - 2);
-      if (t.lvl >= 4) { c.strokeStyle = k.tc[t.type]; c.lineWidth = 1; c.strokeRect(x0 + 1.5, y0 + 1.5, CELL - 3, CELL - 3); }
-    }
+  // A tower's tile: its own framed square. The frame brightens at level 3 and doubles for a final
+  // form (whose letter sits on the bottom edge); the role mark is top-left, level pips at the bottom.
+  function drawTower(c, t, solid, lod) {
+    var k = S.col, Tw = E.TOWERS[t.type], x0 = t.c * CELL, y0 = t.r * CELL, cx = x0 + CELL / 2, lv = Math.min(t.lvl, 4), fin = lv >= 4;
+    var fill = k.tile[t.type][lv], edge = lv >= 2 ? k.tc[t.type] : k.tdim[t.type];
+    if (solid) { c.fillStyle = fill; c.fillRect(x0 + 1, y0 + 1, CELL - 2, CELL - 2); }
+    c.strokeStyle = edge; c.lineWidth = 1;
+    c.strokeRect(x0 + 1.5, y0 + 1.5, CELL - 3, CELL - 3);
+    if (fin) c.strokeRect(x0 + 3.5, y0 + 3.5, CELL - 7, CELL - 7);
+    if (lod) return;
     c.textAlign = 'center'; c.textBaseline = 'middle';
-    c.font = S.fG; c.fillStyle = t.lvl >= 2 ? k.tc[t.type] : k.tdim[t.type];
-    c.fillText(br[0], cx - 9.5, cy); c.fillText(br[1], cx + 9.5, cy);
     c.font = S.fTower; c.fillStyle = k.tc[t.type];
-    c.fillText(Tw.g, cx, cy);
+    c.fillText(Tw.g, cx + 0.5, y0 + 14.5);
     c.font = S.fTiny;
-    c.fillText(t.lvl >= 4 ? 'ABC'.charAt(t.br) : PIPS[t.lvl], cx, y0 + CELL - 5.5);
+    c.fillStyle = k.cat[Tw.cat]; c.fillText(CATM[Tw.cat], x0 + 6.5, y0 + 7.5);
+    if (fin) {
+      c.fillStyle = fill; c.fillRect(cx - 4, y0 + CELL - 7, 8, 7);
+      c.fillStyle = k.tc[t.type]; c.fillText('AB'.charAt(t.br), cx, y0 + CELL - 3.5);
+    } else if (lv) { c.fillStyle = edge; c.fillText(PIPS[lv], cx, y0 + CELL - 6); }
   }
 
   // ---------------- per-frame drawing ----------------
   function setFont(c, f) { if (S.curFont !== f) { c.font = f; S.curFont = f; } }
   function ring(c, cx, cy, rad, color, fill) {
-    if (fill) { c.fillStyle = fill; c.beginPath(); c.arc(cx, cy, rad, 0, 6.2832); c.fill(); }
+    if (fill) cellsIn(c, cx / CELL, cy / CELL, rad / CELL, fill);
     var n = Math.max(20, Math.floor(rad * 6.2832 / 7)), i;
     c.fillStyle = color;
     for (i = 0; i < n; i++) { var a = i / n * 6.2832; c.fillText('·', cx + Math.cos(a) * rad, cy + Math.sin(a) * rad); }
+  }
+  // Tint every map cell whose centre is within r of (x, y) — reach shown on the grid, not as a disc.
+  function cellsIn(c, x, y, r, fill) {
+    var md = E.mapData(curMap()), i0 = Math.max(0, Math.floor(x - r)), i1 = Math.min(md.w - 1, Math.floor(x + r)), j0 = Math.max(0, Math.floor(y - r)), j1 = Math.min(md.h - 1, Math.floor(y + r)), r2 = r * r;
+    c.fillStyle = fill; c.beginPath();
+    for (var j = j0; j <= j1; j++) for (var i = i0; i <= i1; i++) {
+      var dx = i + 0.5 - x, dy = j + 0.5 - y;
+      if (dx * dx + dy * dy <= r2) c.rect(i * CELL, j * CELL, CELL, CELL);
+    }
+    c.fill();
+  }
+  // While a tower is armed, every tile it can go on shows a faint square (water and shore included).
+  function drawOk(c, g, type) {
+    var md = E.mapData(g.map), w = md.w, h = md.h, lv = 0, i, j;
+    for (i = 0; i < g.towers.length; i++) lv += g.towers[i].lvl + 1;
+    var key = type + ':' + g.towers.length + ':' + lv;
+    if (S.okG !== g || S.okKey !== key) {
+      var m = S.okMask && S.okMask.length === w * h ? S.okMask : (S.okMask = new Uint8Array(w * h));
+      for (j = 0; j < h; j++) for (i = 0; i < w; i++) m[j * w + i] = E.canPlace(g, i, j, type) ? 1 : 0;
+      S.okG = g; S.okKey = key;
+    }
+    var vr = viewRect(0), m2 = S.okMask, a0 = Math.max(0, Math.floor(vr.x0)), a1 = Math.min(w - 1, Math.floor(vr.x1)), b0 = Math.max(0, Math.floor(vr.y0)), b1 = Math.min(h - 1, Math.floor(vr.y1));
+    c.fillStyle = S.col.okFill; c.beginPath();
+    for (j = b0; j <= b1; j++) for (i = a0; i <= a1; i++) if (m2[j * w + i]) c.rect(i * CELL + 4, j * CELL + 4, CELL - 8, CELL - 8);
+    c.fill();
   }
   function lerp(a, b, t) { return a + (b - a) * t; }
   var ARC_CH = ['-', '\\', '|', '/'];
@@ -461,14 +495,16 @@
   // selection, range rings, support links, build preview, towers that just fired
   function drawSel(c, g) {
     var i, t = S.selT, sel = S.sel, armed = S.armed, k = S.col;
+    if (armed >= 0 && g.phase !== 'won' && g.phase !== 'lost') drawOk(c, g, armed);
     if (t) {
       var st = E.stats(g, t), sh = st.shape, rr = sh === 'mint' || sh === 'bank' ? 0 : E.isAttack(t.type) ? E.effRange(t) : st.range;
       if (rr > 0) ring(c, t.x * CELL, t.y * CELL, rr * CELL, k.ring, k.accentFill);
       if (sh === 'orbit') ring(c, t.x * CELL, t.y * CELL, (rr - (st.orbitW || 0.5)) * CELL, k.faint, null);
       if (st.minR) ring(c, t.x * CELL, t.y * CELL, st.minR * CELL, k.bad, null);
       if (t.links && t.links.length) {                 // a support: the towers it lifts
-        c.strokeStyle = k.tc[t.type]; c.lineWidth = 1;
-        for (i = 0; i < g.towers.length; i++) { var o = g.towers[i]; if (t.links.indexOf(o.id) >= 0) c.strokeRect(o.c * CELL + 3.5, o.r * CELL + 3.5, CELL - 7, CELL - 7); }
+        c.strokeStyle = k.tc[t.type]; c.lineWidth = 1.5; c.setLineDash([3, 2]);
+        for (i = 0; i < g.towers.length; i++) { var o = g.towers[i]; if (t.links.indexOf(o.id) >= 0) c.strokeRect(o.c * CELL - 0.25, o.r * CELL - 0.25, CELL + 0.5, CELL + 0.5); }
+        c.setLineDash([]);
       }
       if (sh === 'terra') {
         c.strokeStyle = k.tc[t.type]; c.lineWidth = 1;
@@ -492,7 +528,7 @@
     }
     for (i = 0; i < g.towers.length; i++) {
       var tw = g.towers[i];
-      if (tw.fireT > 0.06 && E.TOWERS[tw.type].shape !== 'beam') { setFont(c, S.fTower); c.fillStyle = k.text; c.fillText(E.TOWERS[tw.type].g, tw.x * CELL, tw.y * CELL - 2.5); }
+      if (tw.fireT > 0.06 && E.TOWERS[tw.type].shape !== 'beam') { setFont(c, S.fTower); c.fillStyle = k.text; c.fillText(E.TOWERS[tw.type].g, tw.x * CELL + 0.5, tw.y * CELL - 0.5); }
       if (tw.jamT > 0 || tw.yowlT > 0) { setFont(c, S.fTiny); c.fillStyle = k.bad; c.fillText(tw.jamT > 0 ? '⇲' : '~', tw.x * CELL + 11, tw.y * CELL - 10); }
       if (tw.nullT > 0) { setFont(c, S.fTiny); c.fillStyle = k.bad; c.fillText('ø', tw.x * CELL + 11, tw.y * CELL - 10); }
     }
@@ -923,7 +959,7 @@
     if (t) {
       Tw = E.TOWERS[t.type];
       var st = E.stats(g, t), br = t.lvl >= 4 ? Tw.brs[t.br] : null;
-      L.push((br ? br.name + ' (' + Tw.name + ')' : Tw.name) + '  ' + (t.lvl >= 4 ? 'final' : 'lv ' + (t.lvl + 1) + '/4'));
+      L.push(CATM[Tw.cat] + ' ' + (br ? br[0] + ' (' + Tw.name + ')' : Tw.name) + '  ' + (t.lvl >= 4 ? 'final ' + 'AB'.charAt(t.br) : 'lv ' + (t.lvl + 1) + '/4'));
       L.push(statLine(t.type, st, t));
       x = effectLine(st); if (x) L.push(x);
       var buffs = [];
@@ -936,15 +972,16 @@
       else if (E.aims(t)) L.push('aim ' + E.MODES[t.mode]);
       if (Tw.shape === 'prism') L.push('element: ' + DTN[E.PRISM_T[t.ptype]] + (st.auto ? ' (auto)' : ''));
       if (t.lvl < 3) L.push('next: ' + statLine(t.type, E.towerStat(t.type, t.lvl + 1)));
-      else if (t.lvl === 3) for (var b = 0; b < 3; b++) L.push('ABC'.charAt(b) + ' ' + Tw.brs[b][0] + ': ' + Tw.brs[b][2]);
+      else if (t.lvl === 3) for (var b = 0; b < 2; b++) L.push('AB'.charAt(b) + ' ' + Tw.brs[b][0] + ': ' + Tw.brs[b][2]);
       else L.push(br[2]);
       return L;
     }
     if (S.armed >= 0 && S.sel) {
       Tw = E.TOWERS[S.armed];
       var why = E.placeWhy(g, S.sel.c, S.sel.r, S.armed), cb = E.canBuildType(g, S.armed);
-      L.push(Tw.name + '  $' + Tw.cost);
-      L.push(Tw.role);
+      L.push(CATM[Tw.cat] + ' ' + Tw.name + '  $' + Tw.cost);
+      L.push(CATW[Tw.cat] + ' · ' + Tw.role);
+      L.push('builds on ' + landWords(Tw.land));
       L.push(statLine(S.armed, E.towerStat(S.armed, 0)));
       x = effectLine(E.towerStat(S.armed, 0)); if (x) L.push(x);
       L.push(why || cb ? (why || cb) : g.gold >= Tw.cost ? (S.coarse ? 'tap again to build' : 'click / enter to build') : 'need $' + (Tw.cost - g.gold) + ' more');
@@ -953,6 +990,10 @@
     if (S.sel) {
       var land = E.landOf(g, S.sel.c, S.sel.r);
       L.push({ G: 'grass', H: 'highland (+15% direct range)', S: 'shore', W: 'water', P: 'build pad' }[land] || 'can\'t build here');
+      if (land) {
+        var fits = g.loadout.filter(function (ti) { return E.canPlace(g, S.sel.c, S.sel.r, ti); }).map(function (ti) { return E.TOWERS[ti].g; });
+        L.push(fits.length ? 'fits: ' + fits.join(' ') : 'none of your towers fit here');
+      }
       L.push('pick a tower below');
       return L;
     }
@@ -993,7 +1034,7 @@
     // the tip is drawn in screen space at a fixed size, so it stays readable at any zoom
     c.save();
     c.setTransform(S.dpr, 0, 0, S.dpr, 0, 0);
-    var w = S.tipW, adv = S.tipAdv * sc, lh = 12 * sc, bw = (w + 4) * adv, bh = (L.length + 2) * lh;
+    var w = S.tipW, adv = S.tipAdv * sc, lh = 13.5 * sc, bw = (w + 4) * adv, bh = (L.length + 2) * lh;
     var px = (ax - S.cam.x) * S.cam.z, py = (ay - S.cam.y) * S.cam.z;
     var bx = clamp(px - bw / 2, 2, S.vw - bw - 2), by = py - bh - 6;
     if (by < 2) by = py + S.cam.z + 6;
@@ -1001,7 +1042,7 @@
     c.fillStyle = S.col.shade; c.fillRect(bx, by, bw, bh);
     c.textAlign = 'left'; c.textBaseline = 'middle';
     c.scale(sc, sc);
-    var X = bx / sc, Y = by / sc, LH = 12, A = S.tipAdv;
+    var X = bx / sc, Y = by / sc, LH = 13.5, A = S.tipAdv;
     c.font = S.fSm; c.fillStyle = S.col.tipBorder;
     c.fillText(S.tipBar, X, Y + LH / 2);
     c.fillText(S.tipBar, X, Y + bh / sc - LH / 2);
@@ -1148,7 +1189,8 @@
       h.ctxKey = '';
     }
     if (mode === 'build') {
-      var key = g.gold * 100 + (S.armed + 1) * 10 + (S.sel ? 1 : 0) + ':' + g.towers.length;
+      var sel = S.sel && !E.towerAt(g, S.sel.c, S.sel.r) ? S.sel : null;
+      var key = g.gold * 100 + (S.armed + 1) * 10 + ':' + (sel ? sel.c + ',' + sel.r : '') + ':' + g.towers.length + ':' + g.phase;
       if (h.ctxKey === key) return;
       h.ctxKey = key;
       var bs = h.ctx.querySelectorAll('[data-t]');
@@ -1157,24 +1199,25 @@
         bs[i].classList.toggle('armed', on);
         bs[i].classList.toggle('poor', g.gold < E.TOWERS[ti].cost);
         bs[i].classList.toggle('capped', !!why);
+        bs[i].classList.toggle('noland', !!sel && !why && !E.canPlace(g, sel.c, sel.r, ti));
         bs[i].setAttribute('aria-pressed', on ? 'true' : 'false');
       }
       return;
     }
     var Tw = E.TOWERS[t.type], fork = t.lvl === 3, top = t.lvl >= 4, sv = E.sellValue(g, t), arm = S.sellArm && perfNow() < S.sellArm;
-    var c0 = top ? 0 : E.upgradeCost(g, t, 0), c1 = fork ? E.upgradeCost(g, t, 1) : 0, c2 = fork ? E.upgradeCost(g, t, 2) : 0;
-    var key2 = [t.id, t.lvl, t.mode, t.ptype, t.bankOn, g.gold >= c0, g.gold >= c1, g.gold >= c2, !!arm, t.principal].join(':');
+    var c0 = top ? 0 : E.upgradeCost(g, t, 0), c1 = fork ? E.upgradeCost(g, t, 1) : 0;
+    var key2 = [t.id, t.lvl, t.mode, t.ptype, t.bankOn, g.gold >= c0, g.gold >= c1, !!arm, t.principal].join(':');
     if (h.ctxKey === key2) return;
     h.ctxKey = key2;
     var q = function (a) { return h.ctx.querySelector('[data-act="' + a + '"]'); };
-    var ub = q('up'), bA = q('b0'), bB = q('b1'), bC = q('b2'), mb = q('mode'), sb = q('sell');
+    var ub = q('up'), bA = q('b0'), bB = q('b1'), mb = q('mode'), sb = q('sell');
     h.ctx.classList.toggle('fork', fork);
     if (fork) {
-      [bA, bB, bC].forEach(function (bt, j) {
-        var cst = [c0, c1, c2][j];
-        bt.querySelector('b').textContent = 'ABC'.charAt(j) + ' ' + Tw.brs[j][0];
-        bt.querySelector('span').textContent = '$' + cst;
-        bt.title = Tw.brs[j][0] + ' — ' + Tw.brs[j][2] + ' (' + 'UIO'.charAt(j) + ')';
+      [bA, bB].forEach(function (bt, j) {
+        var cst = [c0, c1][j];
+        bt.querySelector('b').textContent = Tw.brs[j][0];
+        bt.querySelector('span').textContent = '[' + 'AB'.charAt(j) + '] $' + cst;
+        bt.title = Tw.brs[j][0] + ' — ' + Tw.brs[j][2] + ' (' + 'UI'.charAt(j) + ')';
         bt.classList.toggle('poor', g.gold < cst);
       });
     } else {
@@ -1193,12 +1236,18 @@
     sb.classList.toggle('arm', !!arm);
   }
   var DIGITS = '1234567890';
+  // The role mark (top-left) and the water mark (top-right) for a tower's button.
+  function marksHtml(ti) {
+    var T = E.TOWERS[ti];
+    return '<i class="td2-cm c-' + T.cat + '" aria-hidden="true">' + CATM[T.cat] + '</i>' + (T.land.indexOf('W') >= 0 ? '<i class="td2-wm" aria-hidden="true">~</i>' : '');
+  }
+  function towerAria(ti) { var T = E.TOWERS[ti]; return T.name + ', ' + CATW[T.cat] + (T.land.indexOf('W') >= 0 ? ', builds on water' : ''); }
   function paletteHtml() {
     var s = '', lo = S.g.loadout;
     for (var i = 0; i < lo.length; i++) {
       var T = E.TOWERS[lo[i]];
-      s += '<button type="button" class="td2-tw" data-t="' + lo[i] + '" title="' + esc(T.name + ' — ' + T.role + ' ($' + T.cost + ')' + (i < 10 ? ' · key ' + DIGITS.charAt(i) : '')) + '" aria-label="' + esc(T.name + ', $' + T.cost) + '" aria-pressed="false">' +
-        '<b style="color:' + S.col.tc[lo[i]] + '">' + esc(T.g) + '</b><span>$' + T.cost + '</span></button>';
+      s += '<button type="button" class="td2-tw" data-t="' + lo[i] + '" title="' + esc(CATM[T.cat] + ' ' + T.name + ' — ' + T.role + ' ($' + T.cost + ') · builds on ' + landWords(T.land) + (i < 10 ? ' · key ' + DIGITS.charAt(i) : '')) + '" aria-label="' + esc(towerAria(lo[i]) + ', $' + T.cost) + '" aria-pressed="false">' +
+        marksHtml(lo[i]) + '<b style="color:' + S.col.tc[lo[i]] + '">' + esc(T.g) + '</b><span>$' + T.cost + '</span></button>';
     }
     return s;
   }
@@ -1206,7 +1255,6 @@
     return '<button type="button" class="td2-act td2-up" data-act="up" title="Upgrade (U)"><b></b><span></span></button>' +
       '<button type="button" class="td2-act td2-br" data-act="b0"><b></b><span></span></button>' +
       '<button type="button" class="td2-act td2-br" data-act="b1"><b></b><span></span></button>' +
-      '<button type="button" class="td2-act td2-br" data-act="b2"><b></b><span></span></button>' +
       '<button type="button" class="td2-act td2-mode" data-act="mode" title="Aim (T)"><b></b><span></span></button>' +
       '<button type="button" class="td2-act td2-sell" data-act="sell" title="Sell (S)"><b></b><span></span></button>' +
       '<button type="button" class="td2-act td2-x" data-act="desel" title="Close (Esc)" aria-label="Deselect"><b>✕</b></button>';
@@ -1260,7 +1308,7 @@
           (open ? '<span class="td2-stars">' + starStr(pm.stars) + '</span><span class="td2-mbest">' + (pm.best ? 'best ' + pm.best : 'new') + '</span>'
             : '<span class="td2-lock">locked</span>') + '</button>';
       });
-      s += '</div><div class="td2-row"><button type="button" class="td2-btn" data-act="codex">codex</button>' +
+      s += '</div><div class="td2-row td2-row-fit"><button type="button" class="td2-btn" data-act="codex">codex</button>' +
         '<button type="button" class="td2-btn td2-armbtn" data-act="armory">armory ★' + free + '</button>' +
         '<button type="button" class="td2-btn" data-act="help">help</button>' +
         '<button type="button" class="td2-btn" data-act="sound">♪ ' + (S.snd.on ? 'on' : 'off') + '</button></div></div>';
@@ -1274,7 +1322,8 @@
         '<div class="td2-sub">★ ' + left + ' to spend · ' + have + ' earned' + (have ? '' : ' — win maps for stars') + '</div><div class="td2-list">';
       for (i = 0; i < E.D.PERKS.length; i++) {
         var P = E.D.PERKS[i], r = pk[P.id] | 0, pips = '';
-        for (var j = 0; j < P.max; j++) pips += j < r ? '●' : '○';
+        for (var j = 0; j < P.max; j++) pips += j < r ? '#' : '-';
+        pips = '[' + pips + ']';
         s += '<div class="td2-perk' + (r ? ' on' : '') + '"><div class="td2-pk"><b>' + esc(P.name) + '</b><span>' + esc(P.desc) + (P.max > 1 ? ' · up to ×' + P.max : '') + '</span></div>' +
           '<span class="td2-pips" aria-label="' + r + ' of ' + P.max + '">' + pips + '</span>' +
           '<button type="button" class="td2-pb" data-act="perk-" data-p="' + P.id + '"' + (r ? '' : ' disabled') + ' aria-label="Refund ' + esc(P.name) + '">−</button>' +
@@ -1289,12 +1338,13 @@
       return '<div class="td2-card td2-card-scroll"><div class="td2-title">HOW TO PLAY</div><div class="td2-help">' +
         '<p>Glyphs march down the <b>·</b> road from a gate <b class="td2-acc">↓</b> to an exit <b class="td2-bad">⌂</b>; each one that gets through costs <b>♥</b>. Hold out for every wave to win the map — stars for lives left — and unlock the next map and a new tower.</p>' +
         '<p><b>Letters rank by strength</b>: a is weakest, z strongest; <b>capitals</b> are tougher and split into their lowercase when they fall. Digits, <b>?</b> ghosts and <b>!</b> bells have tricks of their own, and the ten <b class="td2-bad">bosses</b> (@ Ω ₩ ₼ ₷ &amp; % ¶ ¤ ※) need real counters. Tap any enemy to read it; the <b>codex</b> lists all 74.</p>' +
-        '<p><b>Before each map</b> you pick a <b>loadout</b> — the towers you can build there (some maps limit the catalog or the slots). ' + (S.coarse ? 'Tap' : 'Click') + ' a tile, pick a tower, ' + (S.coarse ? 'tap' : 'click') + ' again to build. Towers upgrade three times, then take <b>one of three final forms</b> (A, B or C).</p>' +
-        '<p><b>Terrain</b>: grass <b>"</b>, highland <b>:</b> (+15% range for direct fire), shore <b>,</b> and water <b>~</b> (only some towers float). Ridges <b>^</b> block line of sight for direct fire; arcs, pulses and fields go over them.</p>' +
+        '<p><b>Before each map</b> you pick a <b>loadout</b> — the towers you can build there (some maps limit the catalog or the slots). ' + (S.coarse ? 'Tap' : 'Click') + ' a tile, pick a tower, ' + (S.coarse ? 'tap' : 'click') + ' again to build. Towers upgrade three times, then take <b>one of two final forms</b> (A or B).</p>' +
+        '<p><b>Reading a tower</b>: each sits in its own framed square. The corner mark is its role — <b class="c-atk">†</b> attack, <b class="c-ctl">‖</b> control (slows, stuns, moves foes), <b class="c-sup">+</b> support (lifts nearby towers), <b class="c-eco">$</b> economy. Dots along the bottom are its level; a doubled frame with A or B is a final form.</p>' +
+        '<p><b>Terrain</b>: grass <b>"</b>, highland <b>:</b> (+15% range for direct fire), shore <b>,</b> and water <b>~</b>. Towers marked <b class="td2-w">~</b> can also go on water. Pick a tower and every tile it fits on lights up; pick a tile and the towers that don\'t fit there dim. Ridges <b>^</b> block line of sight for direct fire; arcs, pulses and fields go over them.</p>' +
         '<p><b>Damage types</b>: physical (armor subtracts per hit), fire, frost, shock, acid, sonic, arcane. Weaknesses take ×1.5. Shields soak damage first. Hidden ghosts and burrowers need <b>true sight</b> (Sonic, Diamond) or a <b>Lantern</b>. Flyers follow the faint dotted lane and need anti-air.</p>' +
         '<p><b>ULTRA maps</b> are bigger than the screen: drag to pan, pinch or scroll to zoom, ⤢ to see it all; arrows at the edge point to foes out of view.</p>' +
         '<p><b>▶▶ Wave</b> calls the next wave early for bonus gold; each cleared wave pays. Speeds 1×–4×. The game pauses when you leave and is saved.</p>' +
-        (S.coarse ? '' : '<p class="td2-keys">Keys: 1–9, 0 loadout · Enter build · arrows move · U upgrade · U/I/O final A/B/C · S sell · T aim · E element · Space next wave · F speed · +/− zoom · P pause · Esc back</p>') +
+        (S.coarse ? '' : '<p class="td2-keys">Keys: 1–9, 0 loadout · Enter build · arrows move · U upgrade · U/I final A/B · S sell · T aim · E element · Space next wave · F speed · +/− zoom · P pause · Esc back</p>') +
         '</div><button type="button" class="td2-go" data-act="back">back</button></div>';
     }
     if (kind === 'pause' || kind === 'menu') {
@@ -1347,29 +1397,33 @@
       '<div class="td2-facts"><span>' + M.waves + ' waves</span><span>♥ ' + (M.lives + E.mods(S.prog.perks, M).lives) + '</span><span>$ ' + Math.round(E.startGold(mi) * E.mods(S.prog.perks, M).gold) + '</span>' +
       (M.unlock && !mapWon(mi) ? '<span title="Win to unlock">unlocks <b style="color:' + S.col.tc[E.TKEY[M.unlock]] + '">' + esc(E.TOWERS[E.TKEY[M.unlock]].g) + '</b></span>' : '') + '</div>' +
       '<div class="td2-h">enemies here</div><div class="td2-glyphs">' + pool + '</div>' +
-      '<div class="td2-h">loadout <small>' + lo.length + '/' + slots + ' · tap a tower to read it, again to add or remove</small></div><div class="td2-slots">';
+      '<div class="td2-h">loadout <small>' + lo.length + '/' + slots + ' · tap to read, again to add/remove</small></div><div class="td2-slots">';
     for (i = 0; i < slots; i++) {
       var t = lo[i];
-      s += t != null ? '<button type="button" class="td2-slot" data-act="lo-" data-t="' + t + '" title="' + esc(E.TOWERS[t].name) + ' — remove"><b style="color:' + S.col.tc[t] + '">' + esc(E.TOWERS[t].g) + '</b><span>$' + E.TOWERS[t].cost + '</span></button>'
+      s += t != null ? '<button type="button" class="td2-slot" data-act="lo-" data-t="' + t + '" title="' + esc(E.TOWERS[t].name) + ' — remove" aria-label="' + esc(towerAria(t)) + ' — remove">' + marksHtml(t) + '<b style="color:' + S.col.tc[t] + '">' + esc(E.TOWERS[t].g) + '</b><span>$' + E.TOWERS[t].cost + '</span></button>'
         : '<span class="td2-slot empty">·</span>';
     }
     s += '</div><div class="td2-cat">';
     ['atk', 'ctl', 'sup', 'eco'].forEach(function (cat) {
-      s += '<div class="td2-catrow"><span class="td2-catname">' + E.D.CAT[cat] + '</span><div class="td2-catgrid">';
+      s += '<div class="td2-catrow"><span class="td2-catname"><i class="c-' + cat + '">' + CATM[cat] + '</i> ' + E.D.CAT[cat] + '</span><div class="td2-catgrid">';
       for (var ti = 0; ti < E.TOWERS.length; ti++) {
         var T = E.TOWERS[ti];
         if (T.cat !== cat) continue;
         var has = !!own[ti], ok = E.allowed(mi, ti), inLo = lo.indexOf(ti) >= 0;
         s += '<button type="button" class="td2-ct' + (inLo ? ' on' : '') + (S.briefPick === ti ? ' pick' : '') + (has ? '' : ' locked') + (ok ? '' : ' banned') + '" data-act="lo+" data-t="' + ti + '"' +
-          ' title="' + esc(T.name + (has ? '' : ' (locked — win more maps)') + (ok ? '' : ' (not allowed on this map)') + ' — ' + T.role + ' · $' + T.cost) + '"' + (has && ok ? '' : ' aria-disabled="true"') + '>' +
-          '<b style="color:' + (has ? S.col.tc[ti] : '') + '">' + (has ? esc(T.g) : '?') + '</b></button>';
+          ' title="' + esc(T.name + (has ? '' : ' (locked — win more maps)') + (ok ? '' : ' (not allowed on this map)') + ' — ' + T.role + ' · $' + T.cost) + '" aria-label="' + esc(towerAria(ti) + (has ? '' : ', locked') + (ok ? '' : ', not allowed here')) + '"' + (has && ok ? '' : ' aria-disabled="true"') + '>' +
+          marksHtml(ti) + '<b style="color:' + (has ? S.col.tc[ti] : '') + '">' + (has ? esc(T.g) : '?') + '</b></button>';
       }
       s += '</div></div>';
     });
-    s += '</div><div class="td2-pick" id="td2-pickinfo">' + pickInfo(S.briefPick) + '</div>' +
+    s += '</div>' + legendHtml() + '<div class="td2-pick" id="td2-pickinfo">' + pickInfo(S.briefPick) + '</div>' +
       '<div class="td2-row td2-sticky"><button type="button" class="td2-btn" data-act="maps">← maps</button><button type="button" class="td2-btn" data-act="lo-auto">auto</button>' +
       '<button type="button" class="td2-go" data-act="deploy"' + (lo.length ? '' : ' disabled') + '>▶ deploy</button></div></div>';
     return s;
+  }
+  function legendHtml() {
+    return '<div class="td2-legend" aria-hidden="true">' + ['atk', 'ctl', 'sup', 'eco'].map(function (c) { return '<span><i class="c-' + c + '">' + CATM[c] + '</i>' + CATW[c] + '</span>'; }).join('') +
+      '<span><i class="td2-w">~</i>water ok</span></div>';
   }
   function glyphChip(k, boss) {
     var D = E.ENEMIES[k], known = seen(k);
@@ -1378,8 +1432,11 @@
   function pickInfo(ti) {
     if (ti == null || ti < 0) return '<span class="td2-note">tap a tower in the catalog to read it; tap again to add or remove it</span>';
     var T = E.TOWERS[ti], st = E.towerStat(ti, 0);
-    return '<b style="color:' + S.col.tc[ti] + '">' + esc(T.g) + ' ' + esc(T.name) + '</b> <span>$' + T.cost + ' · ' + esc(T.role) + '</span><br><small>' + esc(statLine(ti, st)) + (effectLine(st) ? ' · ' + esc(effectLine(st)) : '') +
-      ' · builds on ' + esc(landWords(T.land)) + '</small><br><small class="td2-brs">' + T.brs.map(function (b, j) { return 'ABC'.charAt(j) + ' ' + esc(b[0]) + ': ' + esc(b[2]); }).join(' · ') + '</small>';
+    return '<b style="color:' + S.col.tc[ti] + '">' + esc(T.g) + ' ' + esc(T.name) + '</b> <span>$' + T.cost + '</span><br>' +
+      '<span><i class="c-' + T.cat + '">' + CATM[T.cat] + ' ' + CATW[T.cat] + '</i> · ' + esc(T.role) + '</span><br>' +
+      '<small>' + (T.land.indexOf('W') >= 0 ? '<i class="td2-w">~</i> ' : '') + 'builds on ' + esc(landWords(T.land)) + '</small><br>' +
+      '<small>' + esc(statLine(ti, st)) + (effectLine(st) ? ' · ' + esc(effectLine(st)) : '') + '</small><br>' +
+      '<small class="td2-brs">' + T.brs.map(function (b, j) { return '[' + 'AB'.charAt(j) + '] ' + esc(b[0]) + ': ' + esc(b[2]); }).join('<br>') + '</small>';
   }
   function landWords(s) { var n = { G: 'grass', H: 'highland', S: 'shore', W: 'water' }, o = []; for (var i = 0; i < s.length; i++) o.push(n[s.charAt(i)]); return o.join(', '); }
   // A sensible loadout: what you own and the map allows, covering detection / anti-air as needed.
@@ -1399,13 +1456,14 @@
     if (tab === 'towers') {
       var own = ownedTowers();
       ['atk', 'ctl', 'sup', 'eco'].forEach(function (cat) {
-        s += '<div class="td2-h">' + E.D.CAT[cat] + '</div><div class="td2-catgrid">';
+        s += '<div class="td2-h"><i class="c-' + cat + '">' + CATM[cat] + '</i> ' + E.D.CAT[cat] + '</div><div class="td2-catgrid">';
         for (var ti = 0; ti < E.TOWERS.length; ti++) {
           var T = E.TOWERS[ti]; if (T.cat !== cat) continue;
-          s += '<button type="button" class="td2-ct' + (S.codexPick === 't' + ti ? ' on' : '') + (own[ti] ? '' : ' locked') + '" data-act="cpick" data-k="t' + ti + '" title="' + esc(T.name) + '"><b style="color:' + S.col.tc[ti] + '">' + esc(T.g) + '</b></button>';
+          s += '<button type="button" class="td2-ct' + (S.codexPick === 't' + ti ? ' on' : '') + (own[ti] ? '' : ' locked') + '" data-act="cpick" data-k="t' + ti + '" title="' + esc(T.name) + '" aria-label="' + esc(towerAria(ti)) + '">' + marksHtml(ti) + '<b style="color:' + S.col.tc[ti] + '">' + esc(T.g) + '</b></button>';
         }
         s += '</div>';
       });
+      s += legendHtml();
       s += '<div class="td2-detail">' + (S.codexPick && S.codexPick.charAt(0) === 't' ? towerDetail(+S.codexPick.slice(1)) : '<span class="td2-note">tap a tower</span>') + '</div>';
     } else if (tab === 'enemies') {
       var known = 0;
@@ -1434,15 +1492,15 @@
     return s;
   }
   function towerDetail(ti) {
-    var T = E.TOWERS[ti], s = '<div class="td2-dhead"><b style="color:' + S.col.tc[ti] + '">' + esc(T.g) + '</b> ' + esc(T.name) + ' <small>' + E.D.CAT[T.cat] + ' · ' + (T.type === 'none' ? 'no damage' : T.type) + ' · targets ' + (T.tgt === 'ally' ? 'towers' : T.tgt === 'none' ? '—' : T.tgt) + ' · ' + esc(landWords(T.land)) + '</small></div>';
+    var T = E.TOWERS[ti], s = '<div class="td2-dhead"><b style="color:' + S.col.tc[ti] + '">' + esc(T.g) + '</b> ' + esc(T.name) + ' <small><i class="c-' + T.cat + '">' + CATM[T.cat] + ' ' + CATW[T.cat] + '</i> · ' + (T.type === 'none' ? 'no damage' : T.type) + ' · targets ' + (T.tgt === 'ally' ? 'towers' : T.tgt === 'none' ? '—' : T.tgt) + ' · ' + (T.land.indexOf('W') >= 0 ? '<i class="td2-w">~</i> ' : '') + 'builds on ' + esc(landWords(T.land)) + '</small></div>';
     s += '<div class="td2-drole">' + esc(T.role) + '</div><table class="td2-dt">';
     for (var l = 0; l < 4; l++) {
       var st = E.towerStat(ti, l);
       s += '<tr><td>' + (l ? 'U' + l : 'T0') + '</td><td>$' + (l ? T.ups[l - 1][0] : T.cost) + '</td><td>' + esc(statLine(ti, st)) + (effectLine(st) ? '<br><small>' + esc(effectLine(st)) + '</small>' : '') + '</td></tr>';
     }
-    for (var b = 0; b < 3; b++) {
+    for (var b = 0; b < 2; b++) {
       var sb = E.towerStat(ti, 4, b);
-      s += '<tr class="br"><td>' + 'ABC'.charAt(b) + '</td><td>$' + T.brs[b][1] + '</td><td><b>' + esc(T.brs[b][0]) + '</b> — ' + esc(T.brs[b][2]) + '<br><small>' + esc(statLine(ti, sb)) + (effectLine(sb) ? ' · ' + esc(effectLine(sb)) : '') + '</small></td></tr>';
+      s += '<tr class="br"><td>' + 'AB'.charAt(b) + '</td><td>$' + T.brs[b][1] + '</td><td><b>' + esc(T.brs[b][0]) + '</b> — ' + esc(T.brs[b][2]) + '<br><small>' + esc(statLine(ti, sb)) + (effectLine(sb) ? ' · ' + esc(effectLine(sb)) : '') + '</small></td></tr>';
     }
     return s + '</table>';
   }
@@ -1558,7 +1616,7 @@
     var t = S.selT;
     if (!t) return;
     if (t.lvl >= 4) { flash('final form already'); return; }
-    if (t.lvl < 3) b = undefined; else if (!(b === 0 || b === 1 || b === 2)) { flash('pick a final form: A, B or C'); return; }
+    if (t.lvl < 3) b = undefined; else if (!(b === 0 || b === 1)) { flash('pick a final form: A or B'); return; }
     if (!E.upgrade(S.g, t, b)) { flash('need $' + (E.upgradeCost(S.g, t, b) - S.g.gold) + ' more', true); return; }
     if (t.lvl === 4) flash(E.TOWERS[t.type].brs[t.br][0] + '!');
     handleEvents(); S.tipKey = ''; syncHud(); redraw();
@@ -1834,7 +1892,7 @@
     var tt = b.getAttribute('data-t');
     if (tt != null) { armTower(+tt); return; }
     var a = b.getAttribute('data-act');
-    if (a === 'up') doUpgrade(); else if (a === 'b0') doUpgrade(0); else if (a === 'b1') doUpgrade(1); else if (a === 'b2') doUpgrade(2);
+    if (a === 'up') doUpgrade(); else if (a === 'b0') doUpgrade(0); else if (a === 'b1') doUpgrade(1);
     else if (a === 'mode') doMode(); else if (a === 'sell') doSell(); else if (a === 'desel') deselect();
   }
   function onBarClick(e) {
@@ -1886,7 +1944,6 @@
       case 'Enter': case 'NumpadEnter': e.preventDefault(); act(); if (S.armed >= 0 && S.sel) tryBuild(false); return;
       case 'KeyU': e.preventDefault(); doUpgrade(S.selT && S.selT.lvl === 3 ? 0 : undefined); return;
       case 'KeyI': e.preventDefault(); if (S.selT && S.selT.lvl === 3) doUpgrade(1); return;
-      case 'KeyO': e.preventDefault(); if (S.selT && S.selT.lvl === 3) doUpgrade(2); return;
       case 'KeyS': e.preventDefault(); doSell(); return;
       case 'KeyT': e.preventDefault(); doAim(); return;
       case 'KeyE': e.preventDefault(); doMode(); return;
@@ -2076,7 +2133,7 @@
 
   Cade.registerWidget({
     name: 'Tower Defense V2',
-    description: 'Glyph Defense — 40 towers with three final forms, 74 glyph enemies including 10 bosses, 35 maps over 7 regions with pan-and-zoom ULTRA maps, loadouts, codex and armory',
+    description: 'Glyph Defense — 40 towers with two final forms, 74 glyph enemies including 10 bosses, 35 maps over 7 regions with pan-and-zoom ULTRA maps, loadouts, codex and armory',
     icon: '🏯',
     tags: 'game,strategy,tower defense,td,td2,glyph defense,towers,waves,defense,ascii,fun,bosses,maps',
     open: open
