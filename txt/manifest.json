@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "version": "2026.10.15-1",
+  "version": "2026.10.15-2",
   "modules": [
     {
       "id": "crawler",
@@ -1801,7 +1801,7 @@
       "id": "towerdefense2",
       "type": "widget",
       "name": "Tower Defense V2",
-      "description": "Glyph Defense — 40 towers with three final forms, 74 glyph enemies including 10 bosses, 35 maps over 7 regions with pan-and-zoom ULTRA maps, loadouts, codex and armory",
+      "description": "Glyph Defense — 40 towers with two final forms, 74 glyph enemies including 10 bosses, 35 maps over 7 regions with pan-and-zoom ULTRA maps, loadouts, codex and armory",
       "icon": "🏯",
       "tags": "game,strategy,tower defense,td,td2,glyph defense,towers,waves,defense,ascii,fun,bosses,maps",
       "entry": "widgets/towerdefense2/td2.js",

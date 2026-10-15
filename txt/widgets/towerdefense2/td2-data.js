@@ -115,7 +115,7 @@
   ];
 
   // ---------------- towers ----------------
-  // Stats merge base → U1 → U2 → U3, then exactly one final branch A/B/C.
+  // Stats merge base → U1 → U2 → U3, then exactly one final branch A or B.
   // Vocabulary (engine): dmg int range minR pspd pierce maxT splash flight multi sec
   // burst burstGap focusT focusB resPen det revealHit slow slowDur freezeN freezeDur
   // brittle brittleDur burn burnDur regenCut corrode corrodeDur armRed armRedDur resCut
@@ -133,245 +133,205 @@
     { dmg: 20, int: 1, range: 3, pspd: 12 },
     [[45, { dmg: 27, int: 0.95, range: 3.2 }], [75, { dmg: 37, int: 0.9, range: 3.5 }], [115, { dmg: 50, int: 0.85, range: 3.8 }]],
     [['Longbow', 180, 'range 6, ignores half of armor', { dmg: 92, int: 1.2, range: 6, pierce: 0.5 }],
-      ['Quickscript', 205, 'rapid fire; every 5th arrow +20', { dmg: 33, int: 0.35, every5: 20 }],
       ['Forked Quill', 230, 'three arrows at three targets', { dmg: 43, int: 0.75, range: 4.2, multi: 3 }]]);
   tw('cannon', '◎', 'Full Stop Cannon', 'atk', '#cf6a24', 120, 'phys', 'ground', 'GHS', 'arc', 'splash for packed ground groups',
     { dmg: 48, int: 2.4, range: 3.3, splash: 0.65, maxT: 6, flight: 0.55 },
     [[65, { dmg: 66, int: 2.3, range: 3.5, splash: 0.75 }], [105, { dmg: 90, int: 2.15, range: 3.7, splash: 0.85, maxT: 7 }], [155, { dmg: 120, int: 2, range: 4, splash: 1, maxT: 8 }]],
     [['Siege Period', 245, '240 blast, r1.3, ignores half armor', { dmg: 240, int: 2.8, range: 5, splash: 1.3, maxT: 10, pierce: 0.5 }],
-      ['Scatter Sentence', 275, 'quick shells + a 2nd 42 blast', { dmg: 84, int: 1.4, after: 42, afterT: 0.4 }],
       ['Crater Maker', 300, 'leaves a crater: 35% slow for 3s', { dmg: 140, range: 4.2, splash: 1.15, crater: 0.35, craterDur: 3 }]]);
   tw('frost', '*', 'Asterisk Frost', 'atk', '#3a9fd8', 90, 'frost', 'both', 'GHSW', 'bolt', 'steady slowing shots',
     { dmg: 12, int: 1, range: 3, pspd: 10, slow: 0.25, slowDur: 2 },
     [[50, { dmg: 17, int: 0.95, range: 3.2, slow: 0.3, slowDur: 2.2 }], [85, { dmg: 24, int: 0.9, range: 3.4, slow: 0.35, slowDur: 2.5 }], [130, { dmg: 33, int: 0.85, range: 3.7, slow: 0.4, slowDur: 3 }]],
     [['Deep Freeze', 210, 'slow 50%; every 3rd hit freezes 0.8s', { dmg: 52, int: 0.9, range: 4, slow: 0.5, freezeN: 3, freezeDur: 0.8 }],
-      ['Hailstorm', 235, 'four shards at four targets', { dmg: 26, int: 0.65, range: 4, multi: 4, slow: 0.35 }],
-      ['Brittle Star', 255, 'slowed foes take +20% physical', { dmg: 45, int: 0.75, range: 4.2, brittle: 0.2, brittleDur: 3 }]]);
+      ['Hailstorm', 235, 'four shards at four targets', { dmg: 26, int: 0.65, range: 4, multi: 4, slow: 0.35 }]]);
   tw('sonic', '≈', 'Resonance Sonic', 'atk', '#8b5cf0', 150, 'sonic', 'both', 'GHS', 'ring', 'pulse that sees ghosts, tears shields',
     { dmg: 28, int: 1.7, range: 2.8, maxT: 6, shieldMul: 1.5, det: 1 },
     [[80, { dmg: 39, int: 1.6, range: 3, maxT: 7 }], [130, { dmg: 53, int: 1.5, range: 3.2, maxT: 8 }], [190, { dmg: 71, int: 1.4, range: 3.4, maxT: 9 }]],
-    [['Grand Resonator', 300, '12 targets, double shield damage', { dmg: 110, int: 1.5, range: 4.3, maxT: 12, shieldMul: 2 }],
-      ['Exorcist Bell', 325, 'struck foes revealed to all for 4s', { dmg: 88, int: 1, range: 3.6, revealHit: 4 }],
+    [['Grand Chord', 300, '12 targets, double shield damage', { dmg: 110, int: 1.5, range: 4.3, maxT: 12, shieldMul: 2 }],
       ['Mute Button', 350, 'silences struck foes 1.5s', { dmg: 84, int: 1.2, range: 3.6, silence: 1.5, silenceCd: 5 }]]);
   tw('flame', '§', 'Section Flame', 'atk', '#dc3c46', 110, 'fire', 'ground', 'GHS', 'cone', 'burning cone; stops regeneration',
     { dmg: 8, int: 0.5, range: 2.5, cone: 60, maxT: 5, burn: 4, burnDur: 3, regenCut: 0.25 },
     [[60, { dmg: 11, range: 2.7, burn: 6 }], [100, { dmg: 15, int: 0.45, range: 2.9, burn: 8, maxT: 6, regenCut: 0.35 }], [150, { dmg: 20, int: 0.4, range: 3.1, burn: 11, regenCut: 0.4 }]],
     [['Wildfire', 240, '80° cone, 8 targets, burn 18/s', { dmg: 26, range: 3.8, cone: 80, maxT: 8, burn: 18, burnDur: 4, regenCut: 0.5 }],
-      ['White Heat', 265, 'narrow 35°, burn 24/s', { dmg: 42, range: 3.2, cone: 35, maxT: 3, burn: 24, regenCut: 0.75 }],
-      ['Cinderwake', 285, 'leaves burning ground for 2s', { dmg: 24, int: 0.35, range: 3.3, burn: 13, regenCut: 0.5, wake: 8, wakeDur: 2 }]]);
+      ['White Heat', 265, 'narrow 35°, burn 24/s', { dmg: 42, range: 3.2, cone: 35, maxT: 3, burn: 24, regenCut: 0.75 }]]);
   tw('sniper', '⇈', 'Ascender Sniper', 'atk', '#b8552e', 180, 'phys', 'both', 'GH', 'hitscan', 'long-range heavy hits through armor',
     { dmg: 92, int: 3.2, range: 6, pierce: 0.5, minR: 1.2 },
     [[95, { dmg: 128, int: 3.1, range: 6.3 }], [150, { dmg: 177, int: 2.9, range: 6.6, pierce: 0.6 }], [220, { dmg: 240, int: 2.7, range: 7 }]],
     [['Horizon Needle', 340, '440 damage, range 9, ignores 80% armor', { dmg: 440, int: 3.1, range: 9, pierce: 0.8 }],
-      ['Double Tap', 375, 'two shots 0.2s apart', { dmg: 190, int: 2.2, burst: 2, burstGap: 0.2 }],
-      ['Execution Mark', 410, '+80% vs foes under 30% HP', { dmg: 280, int: 2.4, range: 7.5, execute: 0.8 }]]);
+      ['Double Tap', 375, 'two shots 0.2s apart', { dmg: 190, int: 2.2, burst: 2, burstGap: 0.2 }]]);
   tw('diamond', '♦', 'Diamond Arcane', 'atk', '#14a596', 120, 'arcane', 'both', 'GHSW', 'bolt', 'ghost hunter (true sight)',
     { dmg: 28, int: 1.1, range: 3.2, pspd: 9, resPen: 0.15, det: 1 },
     [[65, { dmg: 38, int: 1.05, range: 3.4 }], [105, { dmg: 52, int: 1, range: 3.7, resPen: 0.2 }], [155, { dmg: 70, int: 0.95, range: 4 }]],
     [['Soulglass', 245, 'struck foes revealed to all for 4s', { dmg: 122, range: 4.5, resPen: 0.35, revealHit: 4 }],
-      ['Diamond Fan', 270, 'three bolts at three targets', { dmg: 58, int: 0.8, range: 4.2, multi: 3 }],
-      ['Hauntbreaker', 295, '+60% damage to ghosts', { dmg: 92, int: 0.8, range: 4.2, resPen: 0.25, ghostB: 0.6 }]]);
+      ['Diamond Fan', 270, 'three bolts at three targets', { dmg: 58, int: 0.8, range: 4.2, multi: 3 }]]);
   tw('gatling', '→', 'Cursor Gatling', 'atk', '#72ad22', 200, 'phys', 'both', 'GHS', 'bolt', 'rapid fire; ramps on one target',
     { dmg: 7, int: 0.2, range: 3, pspd: 18, focusT: 2, focusB: 0.2 },
     [[100, { dmg: 10, range: 3.2 }], [160, { dmg: 14, int: 0.18, range: 3.4 }], [230, { dmg: 19, int: 0.17, range: 3.7, focusB: 0.25 }]],
-    [['Redline', 360, 'faster; +30% focus after 1.5s', { dmg: 29, int: 0.15, range: 4, focusB: 0.3, focusT: 1.5 }],
-      ['Armor Drill', 395, 'ignores 70% of armor', { dmg: 35, int: 0.2, range: 4, pierce: 0.7 }],
+    [['Armor Drill', 395, 'ignores 70% of armor', { dmg: 35, int: 0.2, range: 4, pierce: 0.7 }],
       ['Twin Cursor', 430, 'two streams at two targets', { dmg: 22, range: 4.2, multi: 2 }]]);
   tw('mortar', '↗', 'Comma Mortar', 'atk', '#d6a014', 220, 'phys', 'ground', 'GHS', 'arc', 'long-range artillery (min range 2)',
     { dmg: 96, int: 3.6, range: 6, minR: 2, splash: 1.25, maxT: 8, flight: 0.9 },
     [[110, { dmg: 132, int: 3.4, range: 6.2, splash: 1.35, maxT: 9 }], [175, { dmg: 181, int: 3.2, range: 6.5, splash: 1.45, maxT: 10 }], [255, { dmg: 245, int: 3, range: 6.8, splash: 1.55, maxT: 11 }]],
     [['Paragraph Bomb', 395, '460 blast, radius 2', { dmg: 460, int: 3.8, range: 8, splash: 2, maxT: 16, flight: 1.1 }],
-      ['Airburst Editor', 430, 'also hits flyers', { dmg: 210, int: 2.6, range: 7, splash: 1.7, maxT: 12, flight: 0.75, tgt: 'both' }],
-      ['Cluster Clause', 465, '+six 45-damage sub-blasts', { dmg: 180, int: 2.8, range: 7, splash: 1.5, maxT: 10, cluster: 45 }]]);
+      ['Airburst', 430, 'also hits flyers', { dmg: 210, int: 2.6, range: 7, splash: 1.7, maxT: 12, flight: 0.75, tgt: 'both' }]]);
   tw('flak', '⊙', 'Bullseye Flak', 'atk', '#4a8fe0', 130, 'phys', 'air', 'GHSW', 'flak', 'cheap anti-air splash',
     { dmg: 20, int: 0.8, range: 4, splash: 0.7, maxT: 5, pspd: 10 },
     [[70, { dmg: 28, int: 0.75, range: 4.2, splash: 0.75 }], [115, { dmg: 39, int: 0.7, range: 4.4, splash: 0.8, maxT: 6 }], [170, { dmg: 53, int: 0.65, range: 4.7, splash: 0.9 }]],
     [['Sky Fence', 270, 'wide flak that slows flyers 30%', { dmg: 78, int: 0.55, range: 5.8, splash: 1.2, maxT: 8, slow: 0.3, slowDur: 2 }],
-      ['Harpoon Lock', 295, 'one heavy shot, ignores 60% armor', { dmg: 140, int: 1, range: 5.2, splash: 0, maxT: 1, pierce: 0.6 }],
-      ['All-Terrain Fuse', 320, 'hits ground too (70%)', { dmg: 60, range: 4.8, maxT: 6, tgt: 'both', groundMul: 0.7 }]]);
+      ['Harpoon Lock', 295, 'one heavy shot, ignores 60% armor', { dmg: 140, int: 1, range: 5.2, splash: 0, maxT: 1, pierce: 0.6 }]]);
   tw('rail', '#', 'Hash Rail', 'atk', '#4f7fb0', 280, 'phys', 'both', 'GH', 'line', 'piercing line; loves straight roads',
     { dmg: 80, int: 2.8, range: 5.5, lineW: 0.25, pen: 4, keep: 0.75, pierce: 0.4 },
     [[140, { dmg: 112, int: 2.65, range: 5.8 }], [215, { dmg: 154, int: 2.5, range: 6.1, pen: 5, pierce: 0.5 }], [310, { dmg: 210, int: 2.35, range: 6.5, pen: 6, keep: 0.8 }]],
     [['Unbroken Line', 470, 'pierces 10, no falloff', { dmg: 290, int: 2.3, range: 7.5, lineW: 0.3, pen: 10, keep: 1 }],
-      ['Boss Stapler', 510, 'one 620 bolt, ignores 90% armor', { dmg: 620, int: 3.2, range: 7, pen: 1, pierce: 0.9 }],
-      ['Crosshatch', 550, 'two crossing lines', { dmg: 180, int: 2, range: 6.8, lineW: 0.3, lines: 2 }]]);
+      ['Boss Stapler', 510, 'one 620 bolt, ignores 90% armor', { dmg: 620, int: 3.2, range: 7, pen: 1, pierce: 0.9 }]]);
   tw('drone', '∴', 'Triad Drone', 'atk', '#2fb08c', 240, 'phys', 'both', 'GHSW', 'drones', 'three drones, three targets',
     { dmg: 14, int: 1, range: 4, multi: 3, pspd: 14 },
     [[120, { dmg: 19, int: 0.95, range: 4.2 }], [185, { dmg: 26, int: 0.9, range: 4.4 }], [270, { dmg: 35, int: 0.85, range: 4.6 }]],
-    [['Cloud Formation', 420, 'five drones', { dmg: 32, int: 0.8, range: 4.8, multi: 5 }],
-      ['Heavy Triad', 455, 'heavy rounds ignore half armor', { dmg: 68, int: 0.95, range: 5.2, pierce: 0.5 }],
-      ['Spotter Wing', 490, 'true sight; hits reveal for 3s', { dmg: 43, int: 0.8, range: 5, det: 1, revealHit: 3 }]]);
+    [['Drone Cloud', 420, 'five drones', { dmg: 32, int: 0.8, range: 4.8, multi: 5 }],
+      ['Heavy Triad', 455, 'heavy rounds ignore half armor', { dmg: 68, int: 0.95, range: 5.2, pierce: 0.5 }]]);
   tw('lightning', '⌁', 'Tilde Lightning', 'atk', '#4470e8', 180, 'shock', 'both', 'GHSW', 'chain', 'chain lightning through groups',
     { dmg: 34, int: 1.5, range: 3.3, chain: 3, chainR: 1.4, keep: 0.75 },
     [[90, { dmg: 47, int: 1.4, range: 3.5, chainR: 1.5 }], [145, { dmg: 65, int: 1.3, range: 3.7, chain: 4, chainR: 1.6 }], [210, { dmg: 88, int: 1.2, range: 4, chainR: 1.7, keep: 0.8 }]],
     [['Storm Sentence', 330, 'seven jumps', { dmg: 120, int: 1.15, range: 4.4, chain: 7, chainR: 2, keep: 0.85 }],
-      ['Capacitor', 360, 'stuns 0.35s', { dmg: 235, int: 1.8, range: 4.5, chain: 2, chainR: 1.8, keep: 0.9, stun: 0.35, stunCd: 4 }],
-      ['Fork Lightning', 390, 'two chains at once', { dmg: 78, int: 1, range: 4.3, chainR: 1.8, chains: 2 }]]);
+      ['Capacitor', 360, 'stuns 0.35s', { dmg: 235, int: 1.8, range: 4.5, chain: 2, chainR: 1.8, keep: 0.9, stun: 0.35, stunCd: 4 }]]);
   tw('mine', '⊗', 'Crossmark Mine', 'atk', '#7d7d86', 100, 'phys', 'ground', 'GHS', 'mine', 'lays mines on the road',
     { dmg: 80, int: 3.5, range: 3, trigR: 0.35, splash: 0.8, maxT: 6, mines: 3, mineLife: 12 },
     [[55, { dmg: 110, int: 3.3, range: 3.2, splash: 0.9 }], [90, { dmg: 150, int: 3.1, range: 3.4, splash: 1, maxT: 7, mines: 4 }], [140, { dmg: 205, int: 2.9, range: 3.6, splash: 1.1, maxT: 8 }]],
     [['Deep Charge', 225, '420 mines, ignore half armor', { dmg: 420, int: 3.2, range: 4, splash: 1.3, maxT: 10, pierce: 0.5 }],
-      ['Minefield', 250, 'up to 7 mines, laid fast', { dmg: 155, int: 1.5, range: 4.2, splash: 1, maxT: 7, mines: 7, mineLife: 16 }],
-      ['Glue Charge', 275, 'blasts slow 55% for 3s', { dmg: 245, int: 2.7, range: 4, splash: 1.2, slow: 0.55, slowDur: 3 }]]);
+      ['Minefield', 250, 'up to 7 mines, laid fast', { dmg: 155, int: 1.5, range: 4.2, splash: 1, maxT: 7, mines: 7, mineLife: 16 }]]);
   tw('beam', '∿', 'Sine Beam', 'atk', '#d4588a', 250, 'arcane', 'both', 'GHS', 'beam', 'sustained beam that focuses',
     { dmg: 14, int: 0.4, range: 4, focusT: 2, focusB: 0.2 },
     [[125, { dmg: 19, int: 0.38, range: 4.2 }], [195, { dmg: 26, int: 0.36, range: 4.4, focusB: 0.25 }], [280, { dmg: 35, int: 0.34, range: 4.6, focusB: 0.3 }]],
-    [['Singularity Beam', 435, 'focus +50%', { dmg: 54, int: 0.32, range: 5, focusB: 0.5 }],
-      ['Sweep Oscillator', 470, 'wide beam through five foes', { dmg: 30, int: 0.3, range: 4.8, pen: 5, lineW: 0.45, focusB: 0 }],
-      ['Phase Cutter', 505, 'quick focus, ignores 35 arcane resist', { dmg: 49, int: 0.32, range: 4.8, focusT: 1.5, resPen: 0.35 }]]);
+    [['Hyperfocus', 435, 'focus +50%', { dmg: 54, int: 0.32, range: 5, focusB: 0.5 }],
+      ['Sweep Beam', 470, 'wide beam through five foes', { dmg: 30, int: 0.3, range: 4.8, pen: 5, lineW: 0.45, focusB: 0 }]]);
   tw('boomer', '⌘', 'Command Boomerang', 'atk', '#bb7a3e', 140, 'phys', 'both', 'GHS', 'boomer', 'hits a line going out and back',
     { dmg: 25, int: 1.6, range: 3.6, lineW: 0.35, pen: 3, keep: 0.8 },
     [[75, { dmg: 34, int: 1.5, range: 3.8 }], [120, { dmg: 46, int: 1.4, range: 4, pen: 4 }], [175, { dmg: 62, int: 1.3, range: 4.2, keep: 0.85 }]],
     [['Wide Brackets', 280, 'wide; seven per pass', { dmg: 86, int: 1.25, range: 5, lineW: 0.6, pen: 7, keep: 0.9 }],
-      ['Return to Sender', 305, 'the return pass hits double', { dmg: 72, int: 1.2, range: 4.4, retMul: 2 }],
-      ['Triple Command', 330, 'three boomerangs in a fan', { dmg: 48, int: 1.25, range: 4.4, fan: 3 }]]);
+      ['Round Trip', 305, 'the return pass hits double', { dmg: 72, int: 1.2, range: 4.4, retMul: 2 }]]);
   tw('blade', '∩', 'Arch Chainblade', 'atk', '#9aa4ae', 160, 'phys', 'ground', 'GHS', 'orbit', 'orbiting blade (blind inside the ring)',
     { dmg: 70, int: 2, range: 2.5, orbitW: 0.5, maxT: 6, pierce: 0.25 },
     [[85, { dmg: 96, int: 1.9, range: 2.6, orbitW: 0.55, maxT: 7 }], [135, { dmg: 132, int: 1.8, range: 2.7, orbitW: 0.6, maxT: 8, pierce: 0.35 }], [200, { dmg: 180, int: 1.7, range: 2.8, orbitW: 0.65, maxT: 9 }]],
     [['Saturn Blade', 315, 'wide ring, 12 hits a turn', { dmg: 265, int: 1.6, range: 3.3, orbitW: 1, maxT: 12, pierce: 0.5 }],
-      ['Twin Arches', 345, 'two blades', { dmg: 145, int: 1.65, range: 2.9, orbitW: 0.7, maxT: 8, blades: 2 }],
       ['Pendulum Cut', 375, '120° sweeping cone, no blind spot', { dmg: 220, int: 1.3, range: 3, shape: 'cone', cone: 120, maxT: 9, pierce: 0.45 }]]);
   tw('swarm', '⌂', 'Hive Swarm', 'atk', '#d9a71e', 260, 'phys', 'both', 'GHSW', 'swarm', 'five drones swarm one foe',
     { dmg: 8, int: 0.8, range: 3.2, drones: 5, pspd: 8 },
     [[130, { dmg: 11, int: 0.75, range: 3.4 }], [200, { dmg: 15, int: 0.7, range: 3.6, pspd: 9 }], [290, { dmg: 20, int: 0.65, range: 3.8, pspd: 10 }]],
     [['Overhive', 450, 'eight drones', { dmg: 19, int: 0.6, range: 4.2, drones: 8, pspd: 12 }],
-      ['Metal Mites', 485, 'drones ignore 60% armor', { dmg: 32, range: 4, pierce: 0.6 }],
-      ['Royal Relay', 520, 'on a kill, jump straight to the next', { dmg: 26, int: 0.6, range: 4.3, xfer: 1, pspd: 12 }]]);
+      ['Metal Mites', 485, 'drones ignore 60% armor', { dmg: 32, range: 4, pierce: 0.6 }]]);
   tw('prism', '⏣', 'Hex Prism', 'atk', '#c8489e', 300, 'arcane', 'both', 'GHSW', 'prism', 'three rays; you pick the element',
     { dmg: 30, sec: 15, int: 1, range: 3.8, multi: 3 },
     [[150, { dmg: 42, sec: 21, int: 0.95, range: 4 }], [230, { dmg: 58, sec: 29, int: 0.9, range: 4.2 }], [330, { dmg: 79, sec: 39.5, int: 0.85, range: 4.4 }]],
-    [['Spectrum Solver', 500, 'each ray picks the weakest element', { dmg: 110, sec: 55, int: 0.8, range: 4.8, auto: 1 }],
-      ['Convergence', 540, 'one 210 ray, ignores 20 resist', { dmg: 210, int: 0.9, range: 5, multi: 1, sec: 0, resPen: 0.2 }],
+    [['Convergence', 540, 'one 210 ray, ignores 20 resist', { dmg: 210, int: 0.9, range: 5, multi: 1, sec: 0, resPen: 0.2 }],
       ['Kaleidoscope', 580, 'five rays', { dmg: 82, sec: 41, int: 0.8, range: 4.8, multi: 5 }]]);
   tw('acid', '⌖', 'Crosshair Acid', 'atk', '#8fb81e', 150, 'acid', 'both', 'GHSW', 'bolt', 'corrodes and strips armor',
     { dmg: 8, int: 1, range: 3.2, pspd: 10, corrode: 10, corrodeDur: 3, armRed: 3, armRedDur: 4 },
     [[80, { dmg: 11, int: 0.95, range: 3.4, corrode: 14, armRed: 5 }], [125, { dmg: 15, int: 0.9, range: 3.6, corrode: 20, armRed: 7 }], [185, { dmg: 21, int: 0.85, range: 3.9, corrode: 28, armRed: 10 }]],
     [['Etching Needle', 295, 'corrode 42/s, armor −18', { dmg: 35, int: 0.75, range: 4.4, corrode: 42, corrodeDur: 4, armRed: 18, armRedDur: 5 }],
-      ['Caustic Cloud', 320, 'lobbed acid splash (7 targets)', { dmg: 20, int: 1.2, range: 4.1, shape: 'arc', splash: 1.1, maxT: 7, flight: 0.8, corrode: 30, corrodeDur: 4, tgt: 'both' }],
-      ['Solvent Lens', 345, 'also cuts fire and shock resist 20', { dmg: 31, int: 0.75, range: 4.2, corrode: 38, resCut: 0.2 }]]);
+      ['Caustic Cloud', 320, 'lobbed acid splash (7 targets)', { dmg: 20, int: 1.2, range: 4.1, shape: 'arc', splash: 1.1, maxT: 7, flight: 0.8, corrode: 30, corrodeDur: 4, tgt: 'both' }]]);
   // ---- support ----
   tw('lantern', '◈', 'Lantern', 'sup', '#d6a321', 120, 'none', 'both', 'GHS', 'reveal', 'reveals ghosts and burrowers nearby',
     { range: 3, linger: 1 },
     [[90, { range: 3.3, linger: 1.5 }], [150, { range: 3.6, linger: 2 }], [240, { range: 4, linger: 2.5 }]],
     [['Lighthouse', 360, 'reveal radius 5', { range: 5 }],
-      ['Branding Light', 380, 'reveal lingers 8s', { linger: 8 }],
       ['Exorcist', 400, 'revealed ghosts slowed 20% inside', { exSlow: 0.2 }]]);
   tw('relay', '⊕', 'Signal Relay', 'sup', '#1e9a93', 140, 'none', 'ally', 'GHS', 'relay', 'shields towers from jams and yowls',
     { range: 2.5, cap: 3, supRed: 0.3 },
     [[100, { range: 2.8, supRed: 0.4 }], [170, { range: 3.1, cap: 4, supRed: 0.5 }], [260, { range: 3.5, cap: 5, supRed: 0.6 }]],
     [['Broadcaster', 390, 'radius 5, eight towers', { range: 5, cap: 8 }],
-      ['Hardened Signal', 410, 'jams and yowls −75%', { supRed: 0.75 }],
-      ['Clean Channel', 430, 'clears all jams every 12s', { cleanse: 12 }]]);
+      ['Firewall', 410, 'jams and yowls −75%', { supRed: 0.75 }]]);
   tw('metronome', '+', 'Metronome', 'sup', '#18a088', 120, 'none', 'ally', 'GHS', 'haste', 'nearby towers fire faster',
     { range: 2.5, cap: 3, haste: 0.15 },
     [[90, { range: 2.7, haste: 0.22 }], [150, { range: 3, cap: 4, haste: 0.3 }], [240, { range: 3.3, haste: 0.38 }]],
     [['Double Time', 360, '+50% fire rate', { haste: 0.5 }],
-      ['Orchestra', 380, 'radius 4.5, eight towers', { range: 4.5, cap: 8 }],
-      ['Soloist', 400, 'one tower: +50% rate, +20% damage', { range: 5, cap: 1, haste: 0.5, dmgB: 0.2 }]]);
+      ['Orchestra', 380, 'radius 4.5, eight towers', { range: 4.5, cap: 8 }]]);
   tw('amp', '⊣', 'Amplifier', 'sup', '#c03c68', 160, 'none', 'ally', 'GHS', 'amp', 'nearby towers hit harder',
     { range: 2.5, cap: 2, dmgB: 0.18 },
     [[110, { range: 2.8, dmgB: 0.25 }], [180, { range: 3.1, cap: 3, dmgB: 0.32 }], [280, { range: 3.5, cap: 4, dmgB: 0.4 }]],
     [['Overdrive', 420, '+50% damage', { dmgB: 0.5 }],
-      ['War Choir', 440, 'radius 4.5, seven towers', { range: 4.5, cap: 7 }],
-      ['Armor Hammer', 460, 'their hits ignore 20 armor', { armIgnore: 20 }]]);
+      ['War Choir', 440, 'radius 4.5, seven towers', { range: 4.5, cap: 7 }]]);
   tw('surveyor', '⌛', 'Surveyor', 'sup', '#3a74b4', 130, 'none', 'ally', 'GHS', 'survey', 'nearby towers reach further',
     { range: 2.5, cap: 3, rangeB: 0.12 },
     [[100, { range: 2.8, rangeB: 0.18 }], [160, { range: 3.1, cap: 4, rangeB: 0.25 }], [250, { range: 3.5, cap: 5, rangeB: 0.32 }]],
     [['Horizon', 380, '+40% range', { rangeB: 0.4 }],
-      ['Map Room', 400, 'radius 5, eight towers', { range: 5, cap: 8 }],
-      ['Ballistics', 420, 'their projectiles fly twice as fast', { pspdB: 1 }]]);
+      ['Map Room', 400, 'radius 5, eight towers', { range: 5, cap: 8 }]]);
   tw('echo', '⌬', 'Echo Chamber', 'sup', '#9160cc', 230, 'none', 'ally', 'GHS', 'echo', 'repeats a tower\'s big hit',
     { range: 3, cap: 1, echo: 0.25, echoCd: 4 },
     [[160, { range: 3.2, echo: 0.3 }], [250, { range: 3.4, echo: 0.35, echoCd: 3.5 }], [360, { range: 3.6, echo: 0.4, echoCd: 3 }]],
-    [['Perfect Refrain', 540, 'echo 50% every 2s', { echo: 0.5, echoCd: 2 }],
-      ['Duet', 560, 'two towers echo', { range: 4, cap: 2 }],
-      ['Ricochet Memory', 580, 'the echo hits a second foe', { ric: 1.5 }]]);
+    [['Refrain', 540, 'echo 50% every 2s', { echo: 0.5, echoCd: 2 }],
+      ['Duet', 560, 'two towers echo', { range: 4, cap: 2 }]]);
   tw('terra', '∑', 'Terraformer', 'sup', '#7a9646', 220, 'none', 'ally', 'GHS', 'terra', 'raises build pads beside the road',
     { range: 3, pads: 2 },
     [[150, { range: 3.5, pads: 3 }], [240, { range: 4, pads: 4 }], [350, { range: 4.5, pads: 5 }]],
     [['Causeway', 520, 'eight pads, radius 6', { range: 6, pads: 8 }],
-      ['Biome Workshop', 540, 'pads hold any attack tower', { anyPad: 1 }],
-      ['Engineered Platforms', 560, 'towers on pads +20% range', { padRange: 0.2 }]]);
+      ['Biome Workshop', 540, 'pads hold any attack tower', { anyPad: 1 }]]);
   // ---- control ----
   tw('etcher', '⊞', 'Etcher', 'ctl', '#6f9f25', 150, 'acid', 'both', 'GHS', 'etch', 'pulses that strip armor',
     { range: 3, int: 3, pulseR: 1, maxT: 6, armBreak: 8, armBreakDur: 5 },
     [[110, { range: 3.2, pulseR: 1.1, armBreak: 12 }], [180, { range: 3.4, int: 2.7, pulseR: 1.2, maxT: 8, armBreak: 18 }], [280, { range: 3.6, int: 2.5, pulseR: 1.3, maxT: 10, armBreak: 24, armBreakDur: 6 }]],
     [['Deep Etch', 420, 'armor −45', { armBreak: 45 }],
-      ['Acid Fog', 440, 'radius 2, 18 foes', { range: 4, pulseR: 2, maxT: 18 }],
-      ['Corrosion Primer', 460, 'also stops regeneration 6s', { noRegen: 6 }]]);
+      ['Acid Fog', 440, 'radius 2, 18 foes', { range: 4, pulseR: 2, maxT: 18 }]]);
   tw('mute', '⊟', 'Mute', 'ctl', '#7a58ad', 180, 'sonic', 'both', 'GHS', 'mute', 'silences enemy abilities',
     { range: 3, int: 7, pulseR: 1.2, maxT: 5, silence: 1.5 },
     [[130, { range: 3.2, pulseR: 1.3, maxT: 6, silence: 1.8 }], [210, { range: 3.4, int: 6.5, pulseR: 1.4, maxT: 7, silence: 2.1 }], [320, { range: 3.6, int: 6, pulseR: 1.5, maxT: 8, silence: 2.4 }]],
     [['Dead Air', 480, '3s silence', { silence: 3 }],
-      ['Broadcast Ban', 500, 'radius 2.3, 15 foes', { range: 4, pulseR: 2.3, maxT: 15 }],
-      ['Emergency Mute', 520, 'one foe, every 3s', { int: 3, maxT: 1, pulseR: 0, silence: 1.5 }]]);
+      ['Broadcast Ban', 500, 'radius 2.3, 15 foes', { range: 4, pulseR: 2.3, maxT: 15 }]]);
   tw('gravity', '⊠', 'Gravity Well', 'ctl', '#5c56b4', 190, 'arcane', 'both', 'GHS', 'grav', 'drops a slowing field',
     { range: 3, int: 6, field: 1.5, fieldDur: 3, maxT: 10, slow: 0.25 },
     [[130, { range: 3.2, field: 1.7, maxT: 12, slow: 0.3 }], [220, { range: 3.4, field: 1.9, fieldDur: 3.5, maxT: 14, slow: 0.35 }], [330, { range: 3.6, field: 2.1, fieldDur: 4, maxT: 16, slow: 0.4 }]],
     [['Event Horizon', 500, '55% slow', { slow: 0.55 }],
-      ['Wide Orbit', 520, 'radius 3 field', { range: 4.2, field: 3, maxT: 24 }],
       ['Singularity', 540, 'pulls foes 0.75 back', { int: 8, pull: 0.75 }]]);
   tw('gate', '⊚', 'Return Gate', 'ctl', '#b84aa8', 240, 'arcane', 'both', 'GHS', 'gate', 'teleports a foe back down the road',
     { range: 3, int: 8, tele: 1, maxT: 1 },
     [[160, { range: 3.2, tele: 1.5 }], [250, { range: 3.4, int: 7, tele: 2 }], [360, { range: 3.6, int: 6, tele: 2.5 }]],
     [['Full Recall', 540, '3 tiles back', { range: 4.2, tele: 3 }],
-      ['Group Return', 560, 'four foes, 1.5 back', { tele: 1.5, maxT: 4, pulseR: 1 }],
-      ['Anchor', 580, 'then slows 25% for 3s', { slow: 0.25, slowDur: 3 }]]);
+      ['Group Return', 560, 'four foes, 1.5 back', { tele: 1.5, maxT: 4, pulseR: 1 }]]);
   tw('barricade', '⊥', 'Barricade', 'ctl', '#977548', 100, 'none', 'ground', 'GHS', 'barr', 'projects a slowing strip on the road',
     { range: 2.5, int: 7, strip: 2, stripDur: 3, maxT: 8, slow: 0.3 },
     [[80, { range: 2.8, strip: 2.5, stripDur: 3.5, maxT: 10, slow: 0.35 }], [140, { range: 3, strip: 3, stripDur: 4, maxT: 12, slow: 0.4 }], [220, { range: 3.3, strip: 3.5, stripDur: 4.5, maxT: 14, slow: 0.45 }]],
     [['Roadworks', 330, '5-tile strip', { strip: 5, maxT: 20 }],
-      ['Heavy Barricade', 350, '60% slow', { slow: 0.6 }],
-      ['Switchyard', 370, 'two strips at once', { range: 4, strip: 2.5, strips: 2, maxT: 10 }]]);
+      ['Hard Stop', 350, '60% slow', { slow: 0.6 }]]);
   tw('tide', '∆', 'Tide Gate', 'ctl', '#1b8fae', 130, 'none', 'ground', 'SW', 'tide', 'soaks foes: +shock damage (water/shore)',
     { range: 3, int: 6, pulseR: 1.3, maxT: 8, wet: 0.2, wetDur: 4 },
     [[100, { range: 3.2, pulseR: 1.4, maxT: 10, wet: 0.25, wetDur: 5 }], [160, { range: 3.4, int: 5.5, pulseR: 1.5, maxT: 12, wet: 0.3 }], [250, { range: 3.6, int: 5, pulseR: 1.7, maxT: 14, wet: 0.35 }]],
-    [['Perfect Conductor', 380, 'wet: +50% shock', { wet: 0.5 }],
-      ['Steam Cloud', 400, 'radius 2.3, flyers too', { range: 4, pulseR: 2.3, maxT: 20, tgt: 'both' }],
-      ['Undertow', 420, 'wet foes also slowed 20%', { wetSlow: 0.2 }]]);
+    [['Conductor', 380, 'wet: +50% shock', { wet: 0.5 }],
+      ['Steam Cloud', 400, 'radius 2.3, flyers too', { range: 4, pulseR: 2.3, maxT: 20, tgt: 'both' }]]);
   tw('wind', '√', 'Crosswind', 'ctl', '#459dbb', 140, 'none', 'air', 'GHS', 'wind', 'gusts that slow flyers',
     { range: 3.2, int: 6, cone: 60, maxT: 8, slow: 0.2, slowDur: 3 },
     [[100, { range: 3.4, cone: 65, maxT: 10, slow: 0.25, slowDur: 3.5 }], [170, { range: 3.6, cone: 70, maxT: 12, slow: 0.3, slowDur: 4 }], [260, { range: 4, cone: 75, maxT: 14, slow: 0.35 }]],
     [['Headwind', 390, '90° gust, 45% slow', { range: 4.5, cone: 90, maxT: 20, slow: 0.45 }],
-      ['Ground Effect', 410, 'gusts ground foes too', { tgt: 'both', slow: 0.3 }],
       ['Landing Window', 430, 'grounds flyers 2s: anything can hit them', { land: 2 }]]);
   tw('drain', '∞', 'Null Battery', 'ctl', '#4a78d4', 170, 'shock', 'both', 'GHS', 'drain', 'drains shields (no health damage)',
     { range: 3, int: 2.5, drain: 120, pspd: 8 },
     [[120, { range: 3.2, int: 2.3, drain: 180 }], [200, { range: 3.4, int: 2, drain: 280, pspd: 9 }], [300, { range: 3.6, int: 1.8, drain: 420, pspd: 10 }]],
     [['Deep Discharge', 450, 'drains 800', { range: 4, drain: 800 }],
-      ['Parallel Circuit', 470, 'three shields at once', { multi: 3 }],
-      ['Recharge Lock', 490, 'blocks shield regrowth 4s', { lockSh: 4 }]]);
+      ['Parallel', 470, 'three shields at once', { multi: 3 }]]);
   tw('chrono', '↔', 'Chronostat', 'ctl', '#a07cc0', 260, 'arcane', 'both', 'GHS', 'chrono', 'stops time for a moment',
     { range: 3, int: 6, pulseR: 1.2, maxT: 5, stun: 0.35, bossSlow: 0.2, bossSlowDur: 1 },
     [[170, { range: 3.2, pulseR: 1.3, maxT: 6, stun: 0.45, bossSlowDur: 1.2 }], [270, { range: 3.4, pulseR: 1.4, maxT: 7, stun: 0.55, bossSlow: 0.25, bossSlowDur: 1.4 }], [390, { range: 3.6, pulseR: 1.5, maxT: 8, stun: 0.65, bossSlowDur: 1.6 }]],
     [['Held Moment', 590, '0.9s stop', { stun: 0.9, bossSlowDur: 2 }],
-      ['Wide Pause', 610, 'radius 2.4, 16 foes', { range: 4.2, pulseR: 2.4, maxT: 16 }],
-      ['Missed Beat', 630, 'delays abilities 2s, slows 20%', { stun: 0, delay: 2, slow: 0.2, slowDur: 2 }]]);
+      ['Wide Pause', 610, 'radius 2.4, 16 foes', { range: 4.2, pulseR: 2.4, maxT: 16 }]]);
   // ---- economy ----
   tw('mint', '$', 'Mint', 'eco', '#2f8c50', 120, 'none', 'none', 'GHS', 'mint', 'pays after every wave',
     { income: 20 },
     [[100, { income: 32 }], [170, { income: 52 }], [260, { income: 82 }]],
     [['Treasury', 390, '+130 a wave', { income: 130 }],
-      ['Relief Fund', 410, '+12 per life lost (max +48)', { relief: 12 }],
       ['Victory Bonds', 430, '+420 after each boss wave', { bonds: 420 }]]);
   tw('bank', '≡', 'Bank', 'eco', '#2c7046', 160, 'none', 'none', 'GHS', 'bank', 'locks credits for a wave, pays interest',
     { bankCap: 250, bankRate: 0.08, bankMax: 20 },
     [[120, { bankCap: 400, bankMax: 32 }], [190, { bankCap: 600, bankRate: 0.1, bankMax: 60 }], [290, { bankCap: 800, bankMax: 80 }]],
     [['Grand Vault', 440, 'holds 1500, pays up to 150', { bankCap: 1500, bankMax: 150 }],
-      ['High Yield', 460, '18% interest', { bankCap: 600, bankRate: 0.18, bankMax: 108 }],
-      ['Dividend Account', 480, '+35 a wave besides', { dividend: 35, bankMax: 115 }]]);
+      ['High Yield', 460, '18% interest', { bankCap: 600, bankRate: 0.18, bankMax: 108 }]]);
   tw('bounty', '⊓', 'Bounty Office', 'eco', '#8a9a38', 160, 'none', 'both', 'GHS', 'bounty', 'marks foes; marked kills pay extra',
     { range: 4, markEvery: 2, markDur: 8, marks: 2, markPay: 8, markMax: 3 },
     [[110, { range: 4.2, markPay: 10, markMax: 4 }], [180, { range: 4.5, markEvery: 1.8, markDur: 9, marks: 3, markPay: 14, markMax: 5 }], [280, { range: 4.8, markEvery: 1.5, markDur: 10, markPay: 18, markMax: 6 }]],
     [['Big Game', 420, 'capitals and bosses only: 38 each', { markElite: 1, markPay: 38, markMax: 5 }],
-      ['Public Contracts', 440, 'six marks, ten paid kills', { range: 6, markEvery: 1, marks: 6, markMax: 10 }],
-      ['Execution Warrant', 460, 'marked foes take +20% damage', { markVuln: 0.2 }]]);
+      ['Open Contracts', 440, 'six marks, ten paid kills', { range: 6, markEvery: 1, marks: 6, markMax: 10 }]]);
   tw('salvage', '⊔', 'Salvage Yard', 'eco', '#b0783c', 140, 'none', 'both', 'GHS', 'salvage', 'kills nearby pay extra',
     { range: 3, salvage: 2, salvageMax: 10 },
     [[100, { range: 3.3, salvage: 3, salvageMax: 11 }], [160, { range: 3.6, salvage: 4, salvageMax: 15 }], [250, { range: 4, salvage: 5, salvageMax: 18 }]],
-    [['Industrial Salvage', 380, '8 a kill', { salvage: 8, salvageMax: 20 }],
-      ['Wide Collection', 400, 'radius 6, 28 kills', { range: 6, salvageMax: 28 }],
-      ['Recovery Fund', 420, '+10 per leak (max 6)', { leakPay: 10, leakMax: 6 }]]);
+    [['Industrial', 380, '8 a kill', { salvage: 8, salvageMax: 20 }],
+      ['Wide Haul', 400, 'radius 6, 28 kills', { range: 6, salvageMax: 28 }]]);
   for (var ti = 0; ti < TOWERS.length; ti++) TKEY[TOWERS[ti].key] = ti;
 
   var START_TOWERS = ['arrow', 'cannon', 'frost', 'diamond', 'sonic', 'flak', 'lantern', 'mint'];

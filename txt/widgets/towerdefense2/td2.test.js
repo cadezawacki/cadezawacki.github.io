@@ -88,7 +88,7 @@ test('enemies: 74 glyphs — a–z, A–Z, 0–9, ?, ! and ten bosses; rank mean
     assert.strictEqual(e.res.length, 7);
   });
 });
-test('towers: 40, each with three upgrades and three final branches; glyphs are theirs alone', function () {
+test('towers: 40, each with three upgrades and two final forms with names that fit; glyphs are theirs alone', function () {
   assert.strictEqual(E.TOWERS.length, 40);
   var keys = {}, glyphs = {}, cats = { atk: 0, ctl: 0, sup: 0, eco: 0 };
   E.TOWERS.forEach(function (Tw, i) {
@@ -96,14 +96,14 @@ test('towers: 40, each with three upgrades and three final branches; glyphs are 
     assert.ok(!E.ENEMIES[Tw.g], Tw.g + ' is not also an enemy glyph');
     assert.ok(Tw.cat in cats, Tw.key + ' category'); cats[Tw.cat]++;
     assert.ok(/^[GHSW]+$/.test(Tw.land), Tw.key + ' terrain');
-    assert.ok(Tw.cost > 0 && Tw.ups.length === 3 && Tw.brs.length === 3, Tw.key);
+    assert.ok(Tw.cost > 0 && Tw.ups.length === 3 && Tw.brs.length === 2, Tw.key);
     Tw.ups.forEach(function (u) { assert.ok(u[0] > 0, Tw.key + ' upgrade cost'); });
-    Tw.brs.forEach(function (b) { assert.ok(b[0] && b[1] > 0 && b[2], Tw.key + ' branch'); });
+    Tw.brs.forEach(function (b) { assert.ok(b[0] && b[0].length <= 14 && b[1] > 0 && b[2], Tw.key + ' branch ' + b[0]); });
     if (E.isAttack(i)) {
       var t0 = E.towerStat(i, 0), t3 = E.towerStat(i, 3);
       assert.ok(t0.dmg > 0 && t0.int > 0 && t0.range > 0, Tw.key + ' base attack');
       assert.ok(t3.dmg / t3.int > t0.dmg / t0.int, Tw.key + ' upgrades raise damage per second');
-      for (var b = 0; b < 3; b++) { var sb = E.towerStat(i, 4, b); assert.ok(sb.dmg > 0 && sb.range > 0, Tw.key + ' branch ' + b); }
+      for (var b = 0; b < 2; b++) { var sb = E.towerStat(i, 4, b); assert.ok(sb.dmg > 0 && sb.range > 0, Tw.key + ' branch ' + b); }
     }
   });
   assert.deepStrictEqual(cats, { atk: 20, ctl: 9, sup: 7, eco: 4 });
@@ -339,7 +339,7 @@ test('every attack tower (and its final form) damages a stream of enemies', func
       var g = game(0), Tw = E.TOWERS[ty], c = cellNearRoad(g, ty);
       assert.ok(c, Tw.key + ' has a spot');
       var t = E.build(g, c[0], c[1], ty);
-      if (top) { E.upgrade(g, t); E.upgrade(g, t); E.upgrade(g, t); assert.ok(E.upgrade(g, t, ty % 3), Tw.key + ' branch'); assert.strictEqual(t.lvl, 4); }
+      if (top) { E.upgrade(g, t); E.upgrade(g, t); E.upgrade(g, t); assert.ok(E.upgrade(g, t, ty % 2), Tw.key + ' branch'); assert.strictEqual(t.lvl, 4); }
       g.phase = 'wave'; g.wave = 1; g.waveLeft[1] = 1e6;
       for (var s = 0; s < 60 * 30; s++) { if (s % 60 === 0 && s < 60 * 15) E.spawnEnemy(g, Tw.tgt === 'air' ? 'f' : 'a', 1, 3, 0, 0, true); E.step(g); g.events.length = 0; }
       assert.ok(t.dmg > 50, Tw.key + (top ? ' final' : '') + ' dealt ' + t.dmg);
@@ -352,7 +352,8 @@ test('upgrades: three levels, then the final form needs a branch; selling return
   E.upgrade(g, t); E.upgrade(g, t); E.upgrade(g, t);
   assert.strictEqual(t.lvl, 3);
   assert.ok(!E.upgrade(g, t), 'no branch, no upgrade');
-  assert.ok(E.upgrade(g, t, 2)); assert.strictEqual(t.br, 2); assert.strictEqual(t.lvl, 4);
+  assert.ok(!E.upgrade(g, t, 2), 'there is no third form');
+  assert.ok(E.upgrade(g, t, 1)); assert.strictEqual(t.br, 1); assert.strictEqual(t.lvl, 4);
   assert.strictEqual(E.stats(g, t).multi, 3, 'Forked Quill');
   assert.ok(!E.upgrade(g, t, 0), 'one final form only');
   assert.strictEqual(t.spent, 60 + 45 + 75 + 115 + 230);
@@ -500,7 +501,7 @@ test('bot: the first maps are winnable; every map runs ten waves cleanly', funct
   console.log('  bot: ' + res.join(' · '));
   E.MAPS.forEach(function (M, mi) {
     var g = E.newGame(mi, {}, []); g.loadout = ALL.slice(); g.gold = 1e6; g.fxOn = true; g.lives = 1e6;
-    for (var i = 0; i < 18; i++) { var ty = ALL[(i * 7) % 40], c = cellNearRoad(g, ty, i % E.mapData(mi).routes.length); if (c) { var t = E.build(g, c[0], c[1], ty); if (t && i % 2) { E.upgrade(g, t); E.upgrade(g, t); E.upgrade(g, t); E.upgrade(g, t, i % 3); } } }
+    for (var i = 0; i < 18; i++) { var ty = ALL[(i * 7) % 40], c = cellNearRoad(g, ty, i % E.mapData(mi).routes.length); if (c) { var t = E.build(g, c[0], c[1], ty); if (t && i % 2) { E.upgrade(g, t); E.upgrade(g, t); E.upgrade(g, t); E.upgrade(g, t, i % 2); } } }
     E.nextWave(g);
     for (var s = 0; s < 60 * 60 * 3 && g.wave < 10; s++) { E.step(g); g.events.length = 0; if (s % 600 === 0 && E.canCallWave(g)) E.nextWave(g); }
     assert.ok(g.wave >= 10 || g.phase === 'won', M.id + ' ran to wave ' + g.wave);
