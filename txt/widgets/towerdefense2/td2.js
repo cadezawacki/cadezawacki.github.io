@@ -185,7 +185,7 @@
       shade: css(bg, 0.88), tipBorder: css(mix(bg, tx, 0.45)), green: css(green), blue: css(blue), purple: css(purple), teal: css(teal), amber: css(amber),
       dt: [css(mix(tx, bg, 0.15)), css(orange), css(blue), css(purple), css(dark ? [190, 230, 80] : [100, 140, 10]), css(teal), css(pink)],
       tc: [], tdim: [], tile: [],
-      cat: { atk: css(orange), ctl: css(purple), sup: css(green), eco: css(amber) }, okFill: css(ac, dark ? 0.17 : 0.13)
+      cat: { atk: css(orange), ctl: css(purple), sup: css(green), eco: css(amber) }, noFill: css(mix(bg, tx, 0.5), dark ? 0.22 : 0.16), noMark: css(red, dark ? 0.75 : 0.6)
     };
     for (var i = 0; i < E.TOWERS.length; i++) {
       var c = parseCol(E.TOWERS[i].col, [128, 128, 128]);
@@ -431,20 +431,24 @@
     }
     c.fill();
   }
-  // While a tower is armed, every tile it can go on shows a faint square (water and shore included).
+  // While a tower is armed, ground it can't use (water for a land tower, grass for a Tide Gate…)
+  // is crossed out with a faint ×; roads, ridges and towers are plainly off-limits already.
   function drawOk(c, g, type) {
     var md = E.mapData(g.map), w = md.w, h = md.h, lv = 0, i, j;
     for (i = 0; i < g.towers.length; i++) lv += g.towers[i].lvl + 1;
     var key = type + ':' + g.towers.length + ':' + lv;
     if (S.okG !== g || S.okKey !== key) {
       var m = S.okMask && S.okMask.length === w * h ? S.okMask : (S.okMask = new Uint8Array(w * h));
-      for (j = 0; j < h; j++) for (i = 0; i < w; i++) m[j * w + i] = E.canPlace(g, i, j, type) ? 1 : 0;
+      for (j = 0; j < h; j++) for (i = 0; i < w; i++) m[j * w + i] = E.landOf(g, i, j) && !E.towerAt(g, i, j) && !E.canPlace(g, i, j, type) ? 1 : 0;
       S.okG = g; S.okKey = key;
     }
     var vr = viewRect(0), m2 = S.okMask, a0 = Math.max(0, Math.floor(vr.x0)), a1 = Math.min(w - 1, Math.floor(vr.x1)), b0 = Math.max(0, Math.floor(vr.y0)), b1 = Math.min(h - 1, Math.floor(vr.y1));
-    c.fillStyle = S.col.okFill; c.beginPath();
-    for (j = b0; j <= b1; j++) for (i = a0; i <= a1; i++) if (m2[j * w + i]) c.rect(i * CELL + 4, j * CELL + 4, CELL - 8, CELL - 8);
+    c.fillStyle = S.col.noFill; c.beginPath();
+    for (j = b0; j <= b1; j++) for (i = a0; i <= a1; i++) if (m2[j * w + i]) c.rect(i * CELL, j * CELL, CELL, CELL);
     c.fill();
+    if (S.cam.z < 14) return;
+    setFont(c, S.fMid); c.fillStyle = S.col.noMark;
+    for (j = b0; j <= b1; j++) for (i = a0; i <= a1; i++) if (m2[j * w + i]) c.fillText('×', i * CELL + CELL / 2, j * CELL + CELL / 2);
   }
   function lerp(a, b, t) { return a + (b - a) * t; }
   var ARC_CH = ['-', '\\', '|', '/'];
@@ -475,7 +479,8 @@
     S.curFont = null;
     drawEdge(c, g);
     drawNotes(c, g);
-    if (S.miniOn) { var showM = !fitsWhole(); if (S.miniShown !== showM) { S.miniShown = showM; S.mini.style.display = showM ? '' : 'none'; } if (showM) drawMini(); }
+    if (S.miniOn) { var showM = !fitsWhole() && !(S.armed >= 0 && !S.sel && !S.selT && !S.selE);   // the armed tower's card sits where the minimap is
+      if (S.miniShown !== showM) { S.miniShown = showM; S.mini.style.display = showM ? '' : 'none'; } if (showM) drawMini(); }
   }
   function drawBase(c, k) {
     // While zooming, reuse chunks rendered at the old scale (stretched), re-render once it settles.
@@ -976,15 +981,16 @@
       else L.push(br[2]);
       return L;
     }
-    if (S.armed >= 0 && S.sel) {
+    if (S.armed >= 0) {
       Tw = E.TOWERS[S.armed];
-      var why = E.placeWhy(g, S.sel.c, S.sel.r, S.armed), cb = E.canBuildType(g, S.armed);
+      var why = S.sel ? E.placeWhy(g, S.sel.c, S.sel.r, S.armed) : '', cb = E.canBuildType(g, S.armed);
       L.push(CATM[Tw.cat] + ' ' + Tw.name + '  $' + Tw.cost);
       L.push(CATW[Tw.cat] + ' · ' + Tw.role);
       L.push('builds on ' + landWords(Tw.land));
       L.push(statLine(S.armed, E.towerStat(S.armed, 0)));
       x = effectLine(E.towerStat(S.armed, 0)); if (x) L.push(x);
-      L.push(why || cb ? (why || cb) : g.gold >= Tw.cost ? (S.coarse ? 'tap again to build' : 'click / enter to build') : 'need $' + (Tw.cost - g.gold) + ' more');
+      L.push('final: A ' + Tw.brs[0][0] + ' · B ' + Tw.brs[1][0]);
+      L.push(why || cb ? (why || cb) : g.gold < Tw.cost ? 'need $' + (Tw.cost - g.gold) + ' more' : !S.sel ? (S.coarse ? 'tap a tile to place · ✕ to cancel' : 'click a tile to place · Esc to cancel') : (S.coarse ? 'tap again to build' : 'click / enter to build'));
       return L;
     }
     if (S.sel) {
@@ -1020,6 +1026,7 @@
     if (S.selE) { var e = E.enemyById(g, S.selE); if (!e) { S.selE = 0; return; } key = 'e' + e.id + ':' + Math.round(e.hp / e.maxHp * 40) + ':' + Math.round(e.sh) + ':' + (e.slowT > 0) + (e.burnT > 0) + (e.stunT > 0) + (e.silT > 0) + (e.markT > 0); }
     else if (t) key = t.id + ':' + t.lvl + ':' + t.mode + ':' + t.ptype + ':' + S.stamp + ':' + t.kills + ':' + Math.round(t.dmg / 50) + ':' + (t.jamT > 0) + (t.yowlT > 0) + (t.nullT > 0) + t.principal + t.bankOn;
     else if (sel) key = 's' + sel.c + ':' + sel.r + ':' + S.armed + ':' + (S.armed >= 0 && g.gold >= E.TOWERS[S.armed].cost);
+    else if (S.armed >= 0) key = 'a' + S.armed + ':' + (g.gold >= E.TOWERS[S.armed].cost) + ':' + !!E.canBuildType(g, S.armed);
     else return;
     var sc = S.coarse ? 1.05 : 1.2, maxC = Math.max(20, Math.floor((S.vw - 8) / (S.tipAdv * sc)) - 4);
     if (key !== S.tipKey || S.tipMax !== maxC) {
@@ -1030,7 +1037,8 @@
     if (!L || !L.length) return;
     var ax, ay;
     if (S.selE) { var e2 = E.enemyById(g, S.selE); ax = e2.x; ay = e2.y - 0.5; }
-    else { var cc = t || sel; ax = cc.c + 0.5; ay = cc.r; }
+    else if (t || sel) { var cc = t || sel; ax = cc.c + 0.5; ay = cc.r; }
+    else { ax = S.cam.x + S.vw / S.cam.z / 2; ay = -1e9; }            // armed, no tile yet: pinned to the top
     // the tip is drawn in screen space at a fixed size, so it stays readable at any zoom
     c.save();
     c.setTransform(S.dpr, 0, 0, S.dpr, 0, 0);
@@ -1038,6 +1046,7 @@
     var px = (ax - S.cam.x) * S.cam.z, py = (ay - S.cam.y) * S.cam.z;
     var bx = clamp(px - bw / 2, 2, S.vw - bw - 2), by = py - bh - 6;
     if (by < 2) by = py + S.cam.z + 6;
+    if (ay === -1e9) by = 4;
     if (by + bh > S.vh - 2) by = Math.max(2, S.vh - bh - 2);
     c.fillStyle = S.col.shade; c.fillRect(bx, by, bw, bh);
     c.textAlign = 'left'; c.textBaseline = 'middle';
@@ -1202,6 +1211,7 @@
         bs[i].classList.toggle('noland', !!sel && !why && !E.canPlace(g, sel.c, sel.r, ti));
         bs[i].setAttribute('aria-pressed', on ? 'true' : 'false');
       }
+      setDis(h.ctx.querySelector('.td2-pcx'), S.armed < 0 && !S.sel);
       return;
     }
     var Tw = E.TOWERS[t.type], fork = t.lvl === 3, top = t.lvl >= 4, sv = E.sellValue(g, t), arm = S.sellArm && perfNow() < S.sellArm;
@@ -1249,7 +1259,7 @@
       s += '<button type="button" class="td2-tw" data-t="' + lo[i] + '" title="' + esc(CATM[T.cat] + ' ' + T.name + ' — ' + T.role + ' ($' + T.cost + ') · builds on ' + landWords(T.land) + (i < 10 ? ' · key ' + DIGITS.charAt(i) : '')) + '" aria-label="' + esc(towerAria(lo[i]) + ', $' + T.cost) + '" aria-pressed="false">' +
         marksHtml(lo[i]) + '<b style="color:' + S.col.tc[lo[i]] + '">' + esc(T.g) + '</b><span>$' + T.cost + '</span></button>';
     }
-    return s;
+    return s + '<button type="button" class="td2-act td2-pcx" data-act="desel" title="Cancel (Esc)" aria-label="Cancel building" disabled><b>✕</b></button>';
   }
   function towerMenuHtml() {
     return '<button type="button" class="td2-act td2-up" data-act="up" title="Upgrade (U)"><b></b><span></span></button>' +

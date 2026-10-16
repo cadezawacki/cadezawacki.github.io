@@ -253,6 +253,10 @@
 
 /* Row B: the loadout palette, or the selected tower's actions. */
 .td2-ctx { display: grid; grid-template-columns: repeat(var(--n, 8), minmax(0, 1fr)); gap: 3px; height: 44px; }
+.td2-ctx-build { grid-template-columns: repeat(var(--n, 8), minmax(0, 1fr)) 30px; }
+.td2-pcx b { font-size: 14px; }
+.td2-pcx:not(:disabled) { border-color: var(--error); } .td2-pcx:not(:disabled) b { color: var(--error); }
+.td2-pcx:disabled { opacity: 0.35; }
 .td2-ctx-tower { grid-template-columns: minmax(0, 1.9fr) minmax(0, 1.9fr) minmax(0, 1fr) minmax(0, 1fr) 36px; grid-template-areas: "u u m s x"; gap: 3px; }
 .td2-ctx-tower.fork { grid-template-areas: "a b m s x"; }
 .td2-up { grid-area: u; }
