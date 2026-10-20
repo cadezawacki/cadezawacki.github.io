@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "version": "2026.10.20-1",
+  "version": "2026.10.20-2",
   "modules": [
     {
       "id": "crawler",
@@ -1228,6 +1228,16 @@
       "precache": [
         "widgets/wordle/wordle-words.js"
       ]
+    },
+    {
+      "id": "typing",
+      "type": "widget",
+      "name": "Typing Test",
+      "description": "How fast do you type? Timed and word-count tests, passages or your own note — live WPM, accuracy, a speed graph, personal bests and history",
+      "icon": "⌨",
+      "tags": "typing,typing test,speed,speed test,wpm,words per minute,keyboard,practice,touch typing,accuracy,monkeytype,game,train",
+      "entry": "widgets/typing/typing.js",
+      "css": "widgets/typing/typing.css"
     },
     {
       "id": "anagram",
