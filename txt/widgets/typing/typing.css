@@ -1,0 +1,118 @@
+/* Typing Test — loaded on demand via Cade.loadCSS. Theme variables only. */
+#typing-panel { top: calc(var(--menubar-h, 36px) + 12px); right: 12px; width: 560px; max-width: calc(100vw - 24px); }
+#typing-panel .cade-panel-body { padding: 10px 12px 12px; }
+.ty { display: flex; flex-direction: column; gap: 8px; font-family: var(--font-mono, ui-monospace, monospace); }
+
+.ty-bar { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.ty-seg { display: inline-flex; gap: 2px; padding: 2px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface-2); }
+.ty-bar > .ty-seg { flex: 1 1 auto; }
+.ty-bar > .ty-seg .ty-sb { flex: 1 1 0; }
+.ty-sb, .ty-tg, .ty-ib, .ty-btn {
+  font: inherit; font-size: 12.5px; cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: manipulation;
+  color: var(--text-muted); background: none; border: 0; border-radius: 5px;
+}
+.ty-sb { min-height: 28px; padding: 3px 9px; white-space: nowrap; }
+.ty-sb.on { background: var(--surface); color: var(--accent); font-weight: 700; box-shadow: inset 0 0 0 1px var(--border); }
+.ty-sb:hover:not(.on), .ty-tg:hover, .ty-ib:hover { color: var(--text); }
+.ty-ib { width: 32px; height: 32px; font-size: 16px; border: 1px solid var(--border); border-radius: 7px; }
+.ty-sub { min-height: 32px; }
+.ty-opt { display: none; align-items: center; gap: 6px; }
+[data-mode="time"] .ty-opt-time, [data-mode="words"] .ty-opt-words,
+[data-mode="time"] .ty-opt-mix, [data-mode="words"] .ty-opt-mix,
+[data-mode="passage"] .ty-opt-text, [data-mode="note"] .ty-opt-text { display: inline-flex; }
+.ty-tg { min-height: 28px; padding: 3px 9px; border: 1px solid var(--border); border-radius: 7px; white-space: nowrap; }
+.ty-tg.on { color: var(--accent); border-color: var(--accent); font-weight: 700; }
+.ty-src { font-size: 12px; color: var(--text-faint); }
+
+.ty-live { display: flex; align-items: baseline; gap: 14px; min-height: 22px; font-variant-numeric: tabular-nums; }
+.ty-live[hidden] { display: none; }
+.ty-clock { font-size: 18px; font-weight: 800; color: var(--accent); }
+.ty-lw { font-size: 14px; color: var(--text-muted); }
+.ty-sp { flex: 1 1 auto; }
+.ty-hint { font-size: 11px; color: var(--text-faint); }
+.ty-run .ty-hint { visibility: hidden; }
+@media (pointer: coarse) { .ty-hint { display: none; } }
+
+/* Three lines of text; the current word stays on the first or second. */
+.ty-box { position: relative; cursor: text; border-radius: 8px; }
+.ty-box[hidden] { display: none; }
+.ty-words {
+  --ty-lh: 1.6em;
+  font-size: 21px; line-height: var(--ty-lh); height: calc(var(--ty-lh) * 3); overflow: hidden; padding: 0 2px;
+  color: var(--text-faint); overflow-wrap: anywhere; -webkit-user-select: none; user-select: none;
+}
+.ty-w { display: inline-block; white-space: nowrap; }
+.ty-w i { font-style: normal; position: relative; }
+.ty-w i.k { color: var(--text); }
+.ty-w i.b { color: var(--error); }
+.ty-w i.x { color: var(--error); opacity: 0.65; }
+.ty-w.ty-err { text-decoration: underline; text-decoration-color: var(--error); text-underline-offset: 5px; }
+/* caret: a bar before the next character, or after a finished word */
+.ty-w i.c::before, .ty-w.ty-end::after {
+  content: ''; position: absolute; top: 0.18em; bottom: 0.14em; width: 2px; border-radius: 1px; background: var(--accent);
+  animation: ty-blink 1s steps(1) infinite;
+}
+.ty-w i.c::before { left: -1px; }
+.ty-w.ty-end { position: relative; }
+.ty-w.ty-end::after { right: -1px; }
+.ty-run .ty-w i.c::before, .ty-run .ty-w.ty-end::after { animation: none; }
+@keyframes ty-blink { 50% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .ty-w i.c::before, .ty-w.ty-end::after { animation: none; } }
+
+/* The real input: invisible, on top, 16px so iOS doesn't zoom. */
+.ty-in {
+  position: absolute; left: 0; top: 0; width: 100%; height: 100%; opacity: 0; font-size: 16px;
+  border: 0; padding: 0; margin: 0; background: transparent; color: transparent; caret-color: transparent; cursor: text;
+}
+.ty-cover {
+  position: absolute; inset: 0; display: none; align-items: center; justify-content: center; pointer-events: none;
+  background: color-mix(in srgb, var(--surface) 70%, transparent); backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px);
+  border-radius: 8px; font-size: 13px; color: var(--text-muted);
+}
+.ty-cover span { padding: 6px 12px; border: 1px dashed var(--border); border-radius: 6px; background: var(--surface); }
+.ty-blur .ty-cover { display: flex; }
+
+.ty-foot, .ty-row { display: flex; gap: 6px; }
+.ty-foot > *, .ty-row > * { flex: 1 1 0; }
+.ty-res:not([hidden]) ~ .ty-foot, .ty-hist:not([hidden]) ~ .ty-foot { display: none; }
+.ty-btn { min-height: 36px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface-2); color: var(--text-muted); font-weight: 600; }
+.ty-btn:hover, .ty-btn:focus-visible { color: var(--text); border-color: var(--text-faint); outline: none; }
+.ty-go { color: var(--accent); border-color: var(--accent); }
+
+/* Result */
+.ty-res, .ty-hist { display: flex; flex-direction: column; gap: 8px; }
+.ty-res[hidden], .ty-hist[hidden] { display: none; }
+.ty-big { display: flex; gap: 28px; align-items: flex-end; }
+.ty-big > div { display: flex; flex-direction: column; }
+.ty-big b { font-size: 46px; line-height: 1; color: var(--accent); font-variant-numeric: tabular-nums; }
+.ty-big > div + div b { color: var(--text); }
+.ty-big small { font-size: 11px; color: var(--text-muted); letter-spacing: 0.06em; text-transform: uppercase; margin-top: 3px; }
+.ty-big-s b { font-size: 30px; }
+.ty-pb { font-size: 13px; font-weight: 700; color: var(--tok-num, var(--accent)); }
+.ty-note { font-size: 12px; color: var(--text-muted); }
+.ty-graph {
+  margin: 0; padding: 6px 8px 2px; font: 18px/1 var(--font-mono, ui-monospace, monospace); letter-spacing: 0.02em; color: var(--accent);
+  background: var(--surface-2); border: 1px solid var(--border); border-radius: 7px; overflow: hidden; white-space: pre;
+}
+.ty-gx { font-size: 11px; line-height: 1.4; color: var(--error); }
+.ty-gl { display: flex; justify-content: space-between; font-size: 11px; color: var(--text-faint); margin-top: -4px; }
+.ty-facts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin: 0; }
+.ty-facts > div { padding: 5px 7px; border: 1px solid var(--border); border-radius: 7px; min-width: 0; }
+.ty-facts dt { font-size: 10.5px; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.05em; }
+.ty-facts dd { margin: 1px 0 0; font-size: 14px; font-weight: 700; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+.ty-facts .k { color: var(--text); } .ty-facts .b { color: var(--error); } .ty-facts .x { color: var(--error); opacity: 0.7; }
+.ty-h { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); }
+.ty-tbl { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.ty-tbl td { padding: 4px 4px; border-top: 1px solid var(--border); }
+.ty-tbl td.n { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
+.ty-tbl td.n:first-of-type { color: var(--accent); }
+.ty-tbl td.d { text-align: right; color: var(--text-faint); font-size: 11px; }
+
+@media (max-width: 560px) {
+  #typing-panel { left: 6px !important; right: 6px; top: calc(var(--menubar-h, 36px) + 6px); width: auto; max-width: none; }
+  #typing-panel .cade-panel-body { padding: 8px 8px 10px; }
+  .ty-words { font-size: 18px; }
+  .ty-sb, .ty-tg { padding: 3px 7px; font-size: 12px; }
+  .ty-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ty-big b { font-size: 40px; }
+}
