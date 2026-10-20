@@ -1332,6 +1332,11 @@
           if (st) return;
           st = oST(function () { st = 0; post({ type: 'scroll', x: G.pageXOffset || 0, y: G.pageYOffset || 0 }); }, 250);
         }, true);
+        // the app's Print button (only from the parent, only with this page's token)
+        G.addEventListener('message', function (e) {
+          var m = e.data;
+          if (e.source === G.parent && m && m.__crPrint === token) { try { G.print(); } catch (x) {} }
+        });
       }
     }
     function main(fn) {

@@ -4026,8 +4026,14 @@ window.Cade = (function () {
     offEditorUpdate(cb) { const h = window.__cadeUpdateHooks; const i = h ? h.indexOf(cb) : -1; if (i >= 0) h.splice(i, 1); },
     // ---- another room's text (local cache, else the server copy) — async ----
     roomText(name) { return loadRoomTextAnywhere(name); },
-    // ---- extensions for a read-only view styled like the editor (no gutters) ----
-    readOnlyExtensions() { return [EditorView.lineWrapping, EditorState.readOnly.of(true), EditorView.editable.of(false), editorTheme]; },
+    // ---- extensions for a read-only view styled like the editor (no gutters;
+    //      { lineNumbers: true } adds them when the editor shows its own) ----
+    readOnlyExtensions(opts) {
+      const x = [EditorView.lineWrapping, EditorState.readOnly.of(true), EditorView.editable.of(false), editorTheme];
+      if (opts && opts.lineNumbers && showLineNums) x.push(lineNumbers());
+      return x;
+    },
+    get lineNumbersOn() { return !!showLineNums; },
     // ---- room system surface (read-mostly; see window.__roomsApi in core) ----
     get roomsApi() { return window.__roomsApi; },
     // ---- room lock for panels that show the open note (see _roomLock in core) ----
@@ -5117,12 +5123,17 @@ function resolveListContinuation(state, line) {
   return null;
 }
 
+const LIST_MARKER_RE = /^(?:\s*(?:[-•*]\s+)?\[[ xX]\]\s|\s*\[\d+\]\s|\s*\d+[.)]\s|\s*[A-Za-z][.)]\s|\s*[-•*]\s)/;
 function handleListEnter(view) {
   const sel = view.state.selection.main;
   if (sel.from !== sel.to) return false;
   const line = view.state.doc.lineAt(sel.head);
   const result = resolveListContinuation(view.state, line);
   if (!result) return false;
+  // Cursor before (or inside) the marker — e.g. at the start of "[1] item" — means
+  // "push this line down", not "start the next item": let plain Enter handle it.
+  const marker = line.text.match(LIST_MARKER_RE);
+  if (marker && sel.head - line.from < marker[0].length) return false;
   if (result === 'empty') {
     view.dispatch({ changes: { from: line.from, to: line.to, insert: '' } });
     return true;
@@ -9511,6 +9522,7 @@ window.toggleLineNumbers = function() {
   if (gutters) gutters.style.display = showLineNums ? '' : 'none';
   const _lnl = document.getElementById('linenums-label');
   if (_lnl) _lnl.textContent = showLineNums ? 'Hide Line Numbers' : 'Show Line Numbers';
+  try { window.dispatchEvent(new CustomEvent('cade-linenums', { detail: showLineNums })); } catch {}
   closeAllMenus();
 };
 
@@ -14040,7 +14052,9 @@ const StreamXfer = (() => {
     if (!wrap) return false;
     const el = document.createElement('div');
     el.className = 'xfer-preview';
-    wrap.appendChild(el);
+    // Origami: the editor sits in a pane — cover just that pane, not the layout.
+    const host = wrap.classList.contains('origami') && editor.dom.parentElement && editor.dom.parentElement !== wrap ? editor.dom.parentElement : wrap;
+    host.appendChild(el);
     const exts = [EditorView.editable.of(false), EditorState.readOnly.of(true), editorTheme];
     if (_wrapMode !== 'none') exts.push(EditorView.lineWrapping);
     if (showLineNums) exts.push(lineNumbers());
@@ -14761,8 +14775,10 @@ const tabSync = (() => {
     clearTimeout(_roomsRefreshTimer);
     _roomsRefreshTimer = setTimeout(() => {
       try { rooms = JSON.parse(store.get('cade-rooms')) || []; } catch {}
-      try { workspaces = JSON.parse(store.get('cade-workspaces')) || []; } catch {}
+      try { const v = JSON.parse(store.get('cade-workspaces')); if (Array.isArray(v)) workspaces = v; } catch {}
       try { roomWorkspace = normalizeRoomWorkspace(JSON.parse(store.get('cade-room-workspace')) || {}); } catch {}
+      try { wsTombstones = JSON.parse(store.get('cade-ws-tomb')) || {}; roomWsTs = JSON.parse(store.get('cade-room-ws-ts')) || {}; } catch {}
+      try { _wsTakeSnap(); } catch {}
       try { roomMeta = JSON.parse(store.get('cade-room-meta')) || {}; } catch {}
       try { renderRoomTabs(); } catch {}
       try {
@@ -18664,12 +18680,68 @@ let roomMeta = {};
 let roomTombstones = {};
 let activeWorkspace = store.get('cade-active-workspace') || WS_ALL;
 
-try { workspaces = JSON.parse(store.get('cade-workspaces')) || []; } catch {}
-try { roomWorkspace = JSON.parse(store.get('cade-room-workspace')) || {}; } catch {}
+// A stored list that won't parse must not turn into [] (the next push would
+// publish that): fall back to the backup copy instead.
+{
+  const raw = store.get('cade-workspaces');
+  let ok = false;
+  try { const v = JSON.parse(raw); if (Array.isArray(v)) { workspaces = v; ok = true; } } catch {}
+  if (!ok && raw != null) {
+    const bak = _wsReadBackup();
+    if (bak) { workspaces = bak.workspaces; roomWorkspace = bak.roomWorkspace || {}; }
+  }
+}
+try { const rw = JSON.parse(store.get('cade-room-workspace')); if (rw && typeof rw === 'object') roomWorkspace = rw; } catch {}
 try { roomMeta = JSON.parse(store.get('cade-room-meta')) || {}; } catch {}
 try { roomTombstones = JSON.parse(store.get('cade-room-tomb')) || {}; } catch {}
 
 function saveRoomTombstones() { store.set('cade-room-tomb', JSON.stringify(roomTombstones)); }
+
+// ---- workspace merge stamps ----
+// Workspaces sync like rooms: merged by id (newer `mod` wins), deletions as
+// tombstones (`cade-ws-tomb`), each room's membership by its own stamp
+// (`cade-room-ws-ts`). saveWorkspaces() stamps whatever changed since the last
+// save, so no editing path needs to know about it.
+let wsTombstones = {}, roomWsTs = {};
+try { wsTombstones = JSON.parse(store.get('cade-ws-tomb')) || {}; } catch {}
+try { roomWsTs = JSON.parse(store.get('cade-room-ws-ts')) || {}; } catch {}
+let _wsSnap = null, _rwSnap = null;
+function _wsSig(w) { const o = { ...w }; delete o.mod; return JSON.stringify(o); }
+function _wsTakeSnap() {
+  _wsSnap = {}; _rwSnap = {};
+  workspaces.forEach(w => { if (w && w.id) _wsSnap[w.id] = _wsSig(w); });
+  Object.keys(roomWorkspace).forEach(n => { _rwSnap[n] = JSON.stringify(roomWorkspace[n]); });
+}
+function _wsStampChanges() {
+  if (!_wsSnap) { _wsTakeSnap(); return; }
+  const now = Date.now(), seen = {};
+  workspaces.forEach(w => {
+    if (!w || !w.id) return;
+    seen[w.id] = 1;
+    if (_wsSnap[w.id] !== _wsSig(w)) { w.mod = now; if (wsTombstones[w.id]) delete wsTombstones[w.id]; }
+  });
+  Object.keys(_wsSnap).forEach(id => { if (!seen[id]) wsTombstones[id] = now; });
+  const rooms2 = new Set([...Object.keys(_rwSnap), ...Object.keys(roomWorkspace)]);
+  rooms2.forEach(n => { const v = roomWorkspace[n] ? JSON.stringify(roomWorkspace[n]) : undefined; if (v !== _rwSnap[n]) roomWsTs[n] = now; });
+  _wsTakeSnap();
+}
+_wsTakeSnap();
+function _wsSaveStamps() {
+  const cut = Date.now() - 180 * 86400000; // forget tombstones after ~6 months
+  Object.keys(wsTombstones).forEach(id => { if (!(wsTombstones[id] > cut)) delete wsTombstones[id]; });
+  try { store.set('cade-ws-tomb', JSON.stringify(wsTombstones)); store.set('cade-room-ws-ts', JSON.stringify(roomWsTs)); } catch {}
+}
+// Rolling backup of the last non-empty workspace setup, for "Restore workspaces".
+function _wsWriteBackup() {
+  if (!workspaces.length) return;
+  try { store.set('cade-workspaces.bak', JSON.stringify({ ts: Date.now(), workspaces, roomWorkspace })); } catch {}
+}
+function _wsReadBackup() {
+  try {
+    const b = JSON.parse(store.get('cade-workspaces.bak'));
+    return b && Array.isArray(b.workspaces) && b.workspaces.length ? b : null;
+  } catch { return null; }
+}
 // Mark a room deleted account-wide. The next workspace-blob push carries the
 // tombstone to every device, whose merge purges the room locally.
 function tombstoneRoom(name) {
@@ -19143,6 +19215,9 @@ function workspacePillHtml(wsId, asLabel) {
 }
 
 function saveWorkspaces(skipSync) {
+  _wsStampChanges();
+  _wsSaveStamps();
+  _wsWriteBackup();
   store.set('cade-workspaces', JSON.stringify(workspaces));
   store.set('cade-room-workspace', JSON.stringify(roomWorkspace));
   store.set('cade-active-workspace', activeWorkspace);
@@ -19324,6 +19399,9 @@ function renderWorkspaceDropdown() {
   html += '<div class="ws-dd-divider"></div>';
   html += `<div class="ws-dd-action" onclick="openWorkspaceManager()">+ New workspace…</div>`;
   html += `<div class="ws-dd-action" onclick="openWorkspaceManager()">⚙ Manage workspaces…</div>`;
+  { const bak = _wsReadBackup(), have = new Set(workspaces.map(w => w.id));
+    const missing = bak ? bak.workspaces.filter(w => w && w.id && !have.has(w.id)).length : 0;
+    if (missing) html += `<div class="ws-dd-action" onclick="restoreWorkspacesFromBackup()">⟲ Restore ${missing} workspace${missing === 1 ? '' : 's'} from backup</div>`; }
   const fbConfigured = !!(store.get('cade-firebase-url') && store.get('cade-sync-key'));
   if (fbConfigured) {
     html += `<div class="ws-dd-action" onclick="forceWorkspaceSync()">↻ Refresh from cloud</div>`;
@@ -19834,6 +19912,7 @@ let _wsConfigRef = null;
 let _wsRemoteListener = null;
 let _wsAuxRef = null;          // legacy config/{fp}/workspaces — read on first load if main path empty
 let _wsLoadedFromCloud = false;
+let _wsPulledOnce = false; // this session has read the cloud blob (or found none)
 
 // A sane ceiling for the (encrypted) workspace-config blob. Real configs are a
 // few KB; anything past this is corruption/legacy bloat. The Firebase SDK parses
@@ -19876,15 +19955,16 @@ async function pushWorkspacesNow() {
     const db = initFirebase(fbUrl);
     const fp = _wsKeyFp || await _computeKeyFingerprint(baseKey);
     _wsKeyFp = fp;
-    // Fresh-client guard: a device that has never seen the cloud blob must not
-    // blind-push its (nearly empty) state over everyone's config — pull and
-    // merge first, then publish the merged result.
-    if (!store.get('cade-workspaces-ts')) {
+    // Never publish blind: until this session has read (and merged) the cloud
+    // blob, pull first — and if that read or its decryption fails, don't push
+    // at all (a fresh / stale device would otherwise overwrite everyone).
+    if (!_wsPulledOnce) {
       try {
         const snap = await db.ref(_wsConfigPath(fp)).once('value');
         const val = snap.val();
-        if (val) await applyRemoteWorkspaceBlob(val, baseKey, 'initial');
-      } catch (_) {}
+        if (val) { const r = await applyRemoteWorkspaceBlob(val, baseKey, 'initial'); if (r === null) return; }
+        _wsPulledOnce = true;
+      } catch (_) { return; }
     }
     // The blob now carries the ROOM LIST + meta + deletion tombstones, so tabs
     // created/moved/pinned/deleted on one device propagate to all of them.
@@ -19898,7 +19978,9 @@ async function pushWorkspacesNow() {
       if (!m.created) { m.created = Date.now(); stamped = true; }
     });
     if (stamped) { try { store.set('cade-room-meta', JSON.stringify(roomMeta)); } catch {} }
-    const blob = { ts: Date.now(), workspaces, roomWorkspace, rooms, roomMeta, tomb: roomTombstones };
+    _wsStampChanges();
+    _wsSaveStamps();
+    const blob = { ts: Date.now(), workspaces, roomWorkspace, rooms, roomMeta, tomb: roomTombstones, wsTomb: wsTombstones, rwTs: roomWsTs };
     _wsLastWriteTs = blob.ts;
     const encrypted = await encryptText(JSON.stringify(blob), baseKey);
     // Never publish a bloated blob — a giant value here is what spirals into the
@@ -19916,6 +19998,77 @@ async function pushWorkspacesNow() {
     showToast('Workspace sync (push) failed: ' + msg, 'error', 5000);
   }
 }
+
+// Merge a remote blob's workspaces / membership with ours (pure on its inputs
+// + the current globals; returns the result and whether the remote lacks any of it).
+function _wsMerge(blob, remoteNewer) {
+  const rWs = Array.isArray(blob.workspaces) ? blob.workspaces.filter(w => w && w.id) : [];
+  const rTomb = (blob.wsTomb && typeof blob.wsTomb === 'object') ? blob.wsTomb : {};
+  const rRw = normalizeRoomWorkspace((blob.roomWorkspace && typeof blob.roomWorkspace === 'object') ? blob.roomWorkspace : {});
+  const rRwTs = (blob.rwTs && typeof blob.rwTs === 'object') ? blob.rwTs : {};
+  const tomb = { ...wsTombstones };
+  for (const [id, ts] of Object.entries(rTomb)) if (typeof ts === 'number' && ts > (tomb[id] || 0)) tomb[id] = ts;
+  const L = {}, R = {};
+  workspaces.forEach(w => { if (w && w.id) L[w.id] = w; });
+  rWs.forEach(w => { R[w.id] = w; });
+  const dead = w => !!tomb[w.id] && tomb[w.id] >= (w.mod || 0);
+  const pick = id => {
+    const a = L[id], b = R[id];
+    if (!a || !b) return a || b;
+    if ((a.mod || 0) !== (b.mod || 0)) return (a.mod || 0) > (b.mod || 0) ? a : b;
+    return remoteNewer ? b : a;
+  };
+  const primary = remoteNewer ? rWs : workspaces, secondary = remoteNewer ? workspaces : rWs;
+  const out = [], used = {};
+  [primary, secondary].forEach(list => list.forEach(w => {
+    if (!w || !w.id || used[w.id]) return;
+    used[w.id] = 1;
+    const win = pick(w.id);
+    if (!dead(win)) out.push({ ...win });
+  }));
+  const ids = new Set(out.map(w => w.id));
+  out.forEach(w => { if (w.parentId && !ids.has(w.parentId)) w.parentId = null; });
+  // membership: per room, the newer stamp wins (ties: the newer blob)
+  const rw = {}, rwTs = { ...roomWsTs };
+  for (const n of new Set([...Object.keys(roomWorkspace), ...Object.keys(rRw), ...Object.keys(rRwTs)])) {
+    const lt = roomWsTs[n] || 0, rt = rRwTs[n] || 0;
+    // Unstamped on both sides (data from before stamps): a side that has a
+    // membership beats one that doesn't, so an old blob can't strip them.
+    const v = rt !== lt ? (rt > lt ? rRw[n] : roomWorkspace[n])
+      : (lt || rt) ? (remoteNewer ? rRw[n] : roomWorkspace[n])
+      : (remoteNewer ? (rRw[n] || roomWorkspace[n]) : (roomWorkspace[n] || rRw[n]));
+    rwTs[n] = Math.max(lt, rt) || rwTs[n];
+    const keep = (Array.isArray(v) ? v : v ? [v] : []).filter(id => ids.has(id));
+    if (keep.length) rw[n] = keep;
+  }
+  const sig = (ws, m) => JSON.stringify([ws.map(w => _wsSig(w) + (w.mod || 0)).sort(), Object.keys(m).sort().map(k => k + ':' + m[k].join(','))]);
+  const changedBeyondRemote = sig(out, rw) !== sig(rWs.filter(w => !dead(w)), (() => { const o = {}; for (const k in rRw) { const v = (Array.isArray(rRw[k]) ? rRw[k] : [rRw[k]]).filter(id => ids.has(id)); if (v.length) o[k] = v; } return o; })())
+    || JSON.stringify(Object.keys(tomb).sort().map(k => k + tomb[k])) !== JSON.stringify(Object.keys(rTomb).sort().map(k => k + rTomb[k]));
+  return { workspaces: out, roomWorkspace: rw, wsTomb: tomb, rwTs, changedBeyondRemote };
+}
+
+// Put back the workspaces from the last backup that aren't here now (and the
+// rooms' memberships in them), then sync that out.
+window.restoreWorkspacesFromBackup = function() {
+  try { document.getElementById('ws-dropdown').classList.remove('open'); } catch {}
+  const bak = _wsReadBackup();
+  if (!bak) { showToast('No workspace backup on this device', 'error', 3000); return; }
+  const have = new Set(workspaces.map(w => w.id));
+  const add = bak.workspaces.filter(w => w && w.id && !have.has(w.id));
+  if (!add.length) { showToast('Every backed-up workspace is already here', 'info', 2500); return; }
+  add.forEach(w => { delete wsTombstones[w.id]; workspaces.push({ ...w }); });
+  const addIds = new Set(add.map(w => w.id));
+  const brw = normalizeRoomWorkspace(bak.roomWorkspace || {});
+  Object.keys(brw).forEach(n => {
+    if (!rooms.includes(n)) return;
+    const ids = brw[n].filter(id => addIds.has(id));
+    if (ids.length) roomWorkspace[n] = Array.from(new Set([...(roomWorkspace[n] || []), ...ids]));
+  });
+  saveWorkspaces(); // stamps them as new, so the merge on every device keeps them
+  renderRoomTabs();
+  try { if (document.getElementById('room-manager-overlay').classList.contains('open')) { renderRoomManagerList(); renderWorkspaceManagerList(); } } catch {}
+  showToast('Restored ' + add.length + ' workspace' + (add.length === 1 ? '' : 's'), 'success', 2500);
+};
 
 async function applyRemoteWorkspaceBlob(encrypted, baseKey, source) {
   if (!encrypted) return false;
@@ -19938,10 +20091,10 @@ async function applyRemoteWorkspaceBlob(encrypted, baseKey, source) {
       if (source === 'remote' || source === 'initial') {
         console.warn('Workspace blob present but decrypt returned null — encryption key mismatch?');
       }
-      return false;
+      return null; // unreadable — callers must not push over it
     }
     const blob = JSON.parse(decrypted);
-    if (!blob || typeof blob !== 'object') return false;
+    if (!blob || typeof blob !== 'object') return null;
     const remoteTs = blob.ts || 0;
     // Skip echoes of our own writes
     if (Math.abs(remoteTs - _wsLastWriteTs) < 250) return false;
@@ -20045,11 +20198,18 @@ async function applyRemoteWorkspaceBlob(encrypted, baseKey, source) {
     roomTombstones = mergedTomb;
     _pruneTombstones();
 
-    if (remoteNewer) {
-      workspaces = Array.isArray(blob.workspaces) ? blob.workspaces : [];
-      // Tolerate both the legacy single-string and the new array shape on read.
-      roomWorkspace = normalizeRoomWorkspace((blob.roomWorkspace && typeof blob.roomWorkspace === 'object') ? blob.roomWorkspace : {});
-    }
+    // Workspaces: merged by id like rooms (never whole-list replace — a device
+    // with an empty or stale list used to wipe everyone's workspaces).
+    const wsBefore = workspaces.length;
+    _wsStampChanges(); // fold any unsaved local edits into the stamps first
+    if (wsBefore) _wsWriteBackup();
+    const wm = _wsMerge(blob, remoteNewer);
+    workspaces = wm.workspaces;
+    roomWorkspace = wm.roomWorkspace;
+    wsTombstones = wm.wsTomb;
+    roomWsTs = wm.rwTs;
+    _wsTakeSnap();
+    _wsSaveStamps();
     removedLocally.forEach(n => { delete roomWorkspace[n]; });
     // If activeWorkspace points to something deleted remotely, drop back to all
     if (activeWorkspace !== WS_ALL && activeWorkspace !== WS_UNLABELED && !getWorkspace(activeWorkspace)) {
@@ -20085,7 +20245,10 @@ async function applyRemoteWorkspaceBlob(encrypted, baseKey, source) {
       renderRoomTabs();
     }
 
-    if (roomsChangedBeyondRemote || tombChangedBeyondRemote || flagsChangedBeyondRemote) schedulePushWorkspaces();
+    if (roomsChangedBeyondRemote || tombChangedBeyondRemote || flagsChangedBeyondRemote || wm.changedBeyondRemote) schedulePushWorkspaces();
+    if (wsBefore && !workspaces.length && _wsReadBackup()) {
+      showToast('Workspaces were cleared by another device — ⟲ Restore from the workspace menu', 'error', 7000);
+    }
 
     if (remoteNewer) {
       if (source === 'initial' && !_wsLoadedFromCloud) {
@@ -20120,7 +20283,7 @@ async function ensureWorkspaceSync() {
       const msg = (e && (e.code || e.message)) || 'unknown';
       console.warn('Workspace sync read failed:', e);
       showToast('Workspace sync (read) failed: ' + msg, 'error', 5000);
-      return;
+      val = undefined; // still listen below; pushes wait until a read succeeds
     }
     if (!val) {
       // Fall back to the legacy `config/{fp}/workspaces` location for existing users
@@ -20135,13 +20298,16 @@ async function ensureWorkspaceSync() {
       } catch (_) { /* legacy path may be denied — that's fine */ }
     }
     const localHasData = workspaces.length > 0 || Object.keys(roomWorkspace).length > 0;
-    if (val) {
+    if (val === undefined) {
+      // read failed: nothing to merge with yet
+    } else if (val) {
       const applied = await applyRemoteWorkspaceBlob(val, baseKey, 'initial');
-      // If remote was older than local, push our newer data
-      if (!applied && localHasData) {
+      if (applied !== null) _wsPulledOnce = true;
+      // If remote was older than local, push our newer data (never over an unreadable blob)
+      if (applied === false && localHasData) {
         schedulePushWorkspaces();
       }
-    } else if (localHasData) {
+    } else if (!(_wsPulledOnce = true) || localHasData) { // no remote blob yet
       // No remote yet — push current local state so other devices can sync
       schedulePushWorkspaces();
     }
@@ -20152,7 +20318,8 @@ async function ensureWorkspaceSync() {
     _wsConfigRef = ref;
     _wsRemoteListener = ref.on('value', (s) => {
       const v = s.val();
-      if (v) applyRemoteWorkspaceBlob(v, baseKey, 'remote');
+      if (v) applyRemoteWorkspaceBlob(v, baseKey, 'remote').then(r => { if (r !== null) _wsPulledOnce = true; });
+      else _wsPulledOnce = true;
     });
   } catch (e) {
     console.warn('Workspace sync setup failed:', e);

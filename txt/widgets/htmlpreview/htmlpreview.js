@@ -20,7 +20,9 @@
  *   a single early return while it is closed. Scroll position survives updates.
  * - Device presets (fit / phone / tablet / desktop) in a scaled frame, console
  *   strip (log / warn / error / uncaught errors with editor line numbers),
- *   reload, pin to a block, open in a new tab, copy as one HTML file.
+ *   reload, pin to a block, open in a new tab, print, copy as one HTML file.
+ * - Tables (Markdown, ```csv / ```tsv blocks, or a note that is itself CSV /
+ *   TSV) sort by a header click and get a filter box from 4 rows.
  * - Floating (resizable), docked right, docked bottom or full screen; phones
  *   default to full screen.
  * Shares the sandbox kit with the Code Runner (widgets/coderun/coderun-kit.js).
@@ -338,6 +340,9 @@
   function shellPost(m) {
     if (!st.md || !st.md.ready || !ifr || !ifr.contentWindow) return;
     m.__md = st.md.token;
+    framePost(m);
+  }
+  function framePost(m) {
     try {
       // Popped out into its own window, that window is the frame's parent — and
       // the shell only listens to its parent: post as that window.
@@ -632,6 +637,15 @@
     else { try { w.opener = null; } catch (e) {} }
     setTimeout(function () { try { URL.revokeObjectURL(url); } catch (e) {} }, 120000);
   }
+  // Print what the preview shows: the frame prints itself (a print stylesheet
+  // gives the Markdown view a plain white page; filter boxes and markers hide).
+  function printPreview() {
+    if (st.mode === 'md') {
+      if (!st.md || !st.md.ready) { toast('Nothing to print yet', 'info'); return; }
+      shellPost({ type: 'print' });
+    } else if (st.built && ifr && ifr.contentWindow) framePost({ __crPrint: st.token });
+    else toast('Nothing to print yet', 'info');
+  }
   function onClick(e) {
     var t = e.target && e.target.closest ? e.target.closest('[data-act],[data-dev],[data-dock],[data-mode]') : null;
     if (!t) return;
@@ -661,6 +675,7 @@
       setTimeout(layoutFrame, 0);
     } else if (act === 'conclear') clearConsole();
     else if (act === 'tab') openInTab();
+    else if (act === 'print') printPreview();
     else if (act === 'copy') {
       var built = st.mode === 'md' ? mdBuilt() : st.built;
       if (built) copyText(built.clean, 'HTML file'); else toast('Nothing to copy yet', 'info');
@@ -702,6 +717,7 @@
     reload: '<svg viewBox="0 0 16 16"><path d="M13 8a5 5 0 1 1-1.5-3.6M13 2.5v3h-3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>',
     console: '<svg viewBox="0 0 16 16"><rect x="1.5" y="2.5" width="13" height="11" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M4.5 6.5l2 1.5-2 1.5M8.5 10h3" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>',
     tab: '<svg viewBox="0 0 16 16"><path d="M9 2.5h4.5V7M13.5 2.5L8 8M11.5 9.5v3a1 1 0 0 1-1 1h-7a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1h3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    print: '<svg viewBox="0 0 16 16"><path d="M4.5 6V2.5h7V6M4.5 11.5h-2a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h11a1 1 0 0 1 1 1v3.5a1 1 0 0 1-1 1h-2M4.5 9.5h7v4h-7z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>',
     copy: '<svg viewBox="0 0 16 16"><rect x="5.5" y="5.5" width="8" height="8" rx="1.3" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M10.5 3.5v-.5a1 1 0 0 0-1-1h-6a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h.5" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>',
     float: '<svg viewBox="0 0 16 16"><rect x="1.5" y="2.5" width="13" height="11" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.2"/><rect x="7.5" y="5" width="5" height="5" rx="1" fill="currentColor"/></svg>',
     side: '<svg viewBox="0 0 16 16"><rect x="1.5" y="2.5" width="13" height="11" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.2"/><path d="M9 2.5h4a1.5 1.5 0 0 1 1.5 1.5v8a1.5 1.5 0 0 1-1.5 1.5H9z" fill="currentColor"/></svg>',
@@ -725,6 +741,7 @@
         ib('data-act="reload"', I.reload, 'Reload') +
         ib('data-act="console"', I.console, 'Console', '<span class="hp-badge"></span>') +
         ib('data-act="tab"', I.tab, 'Open in a new tab') +
+        ib('data-act="print"', I.print, 'Print') +
         ib('data-act="copy"', I.copy, 'Copy as a single HTML file') +
         '<div class="hp-seg hp-docks" role="group" aria-label="Layout">' +
           ib('data-dock="float"', I.float, 'Floating window') + ib('data-dock="side"', I.side, 'Dock right') +
@@ -829,7 +846,7 @@
 
   Cade.registerWidget({
     name: 'Live Preview',
-    description: 'See the note rendered as you type — Markdown in full (tables, tasks, callouts, images…) and ```html blocks as live pages (+ nearby css / js) — devices, console, full screen',
+    description: 'See the note rendered as you type — Markdown in full (sortable, filterable tables and CSV, tasks, callouts, images…) and ```html blocks as live pages (+ nearby css / js) — devices, console, print, full screen',
     icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M2 8h20"/><polyline points="9 12 7 14 9 16"/><polyline points="15 12 17 14 15 16"/></svg>',
     tags: 'markdown,md,preview,live preview,live html preview,render,rendered,reading view,read mode,html,css,js,javascript,live,web,page,browser,sandbox,iframe,frontend,codepen,playground',
     open: toggle

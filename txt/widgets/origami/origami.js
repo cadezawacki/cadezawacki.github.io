@@ -16,7 +16,8 @@
  * tapping one whose room isn't live makes that room's pane live.
  *
  * Cost: nothing loads until Origami is opened. While it's on, mirrors are
- * plain read-only CodeMirror views (no gutters, no plugins); clones update
+ * plain read-only CodeMirror views (line numbers when the editor shows them,
+ * no plugins); clones update
  * from the editor's own change sets. The layout persists and comes back after
  * a reload. The layout tree below is pure and unit-tested:
  * node txt/widgets/origami/origami.test.js */
@@ -210,7 +211,7 @@
     var v = O.views[p.id];
     if (v && v.__room === p.room) return v;
     if (v) { try { v.destroy(); } catch (e) {} }
-    v = new CM.EditorView({ state: CM.EditorState.create({ doc: '', extensions: Cade.readOnlyExtensions() }) });
+    v = new CM.EditorView({ state: CM.EditorState.create({ doc: '', extensions: Cade.readOnlyExtensions({ lineNumbers: true }) }) });
     v.__room = p.room;
     v.dom.classList.add('ori-mirror');
     O.views[p.id] = v;
@@ -585,6 +586,13 @@
   }
 
   // ---- on / off ----
+  // Line numbers shown / hidden in the editor: rebuild the mirrors to match, so
+  // a pane's text doesn't jump sideways when it becomes the live one.
+  function onLineNums() {
+    if (!O) return;
+    for (var id in O.views) { try { O.views[id].destroy(); } catch (e) {} delete O.views[id]; }
+    render();
+  }
   function turnOn() {
     if (O) return;
     var ed = Cade.editor, wrap = document.getElementById('editor-wrap');
@@ -620,6 +628,7 @@
     document.addEventListener('cade-room-switched', onSwitched);
     document.addEventListener('visibilitychange', onVis);
     window.addEventListener('resize', onResize);
+    window.addEventListener('cade-linenums', onLineNums);
     sset(ON, '1');
     render();
   }
@@ -649,6 +658,7 @@
     document.removeEventListener('cade-room-switched', onSwitched);
     document.removeEventListener('visibilitychange', onVis);
     window.removeEventListener('resize', onResize);
+    window.removeEventListener('cade-linenums', onLineNums);
     sset(ON, '0');
     ed.scrollDOM.scrollTop = scroll;
     ed.requestMeasure();

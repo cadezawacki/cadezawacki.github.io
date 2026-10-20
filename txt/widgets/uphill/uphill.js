@@ -867,7 +867,28 @@
       }
       return out;
     }
+    // Stored form, size-capped: if the plain encoding is over maxLen chars, keep
+    // every k-th sample (k = 2, 4, …) behind a "k." prefix ('.' is not in the
+    // alphabet, so old plain strings still decode); decodeGhost resamples it
+    // back to GHOST_DT. Returns '' when it can't fit at all.
+    var GHOST_MAX = 200000;
+    function packGhost(arr, n, maxLen) {
+      maxLen = maxLen || GHOST_MAX;
+      var s = encodeGhost(arr, n);
+      for (var k = 2; s.length > maxLen && k <= 64; k *= 2) {
+        var m = Math.ceil(n / k), d = new Float32Array(m * 3);
+        for (var i = 0; i < m; i++) { d[i * 3] = arr[i * k * 3]; d[i * 3 + 1] = arr[i * k * 3 + 1]; d[i * 3 + 2] = arr[i * k * 3 + 2]; }
+        s = k + '.' + encodeGhost(d, m);
+      }
+      return s.length > maxLen ? '' : s;
+    }
     function decodeGhost(str) {
+      if (typeof str !== 'string') return null;
+      var pre = /^(\d{1,2})\./.exec(str), step = pre ? +pre[1] : 1;
+      if (pre) {
+        if (step < 1) return null;
+        str = str.slice(pre[0].length);
+      }
       var vals = [], prev = [0, 0, 0], scale = [20, 20, 100], k = 0, z = 0, mul = 1;
       for (var i = 0; i < str.length; i++) {
         var v = B64.indexOf(str.charAt(i));
@@ -879,7 +900,46 @@
         k = (k + 1) % 3; z = 0; mul = 1;
       }
       if (k !== 0) return null;
-      return new Float32Array(vals);
+      var m = vals.length / 3;
+      if (step === 1 || m < 2) return new Float32Array(vals);
+      var out = new Float32Array(((m - 1) * step + 1) * 3);       // back to one sample per GHOST_DT
+      for (var j = 0; j < out.length / 3; j++) {
+        var f = j / step, a = Math.min(m - 2, Math.floor(f)), t = f - a;
+        for (var q = 0; q < 3; q++) out[j * 3 + q] = vals[a * 3 + q] + (vals[a * 3 + 3 + q] - vals[a * 3 + q]) * t;
+      }
+      return out;
+    }
+    // The ghost's chassis at run time t, interpolated between samples (into out[0..2]:
+    // x, y, angle). False before the start or after the recording ends.
+    function ghostAt(gd, t, out) {
+      if (!gd || !(t >= 0)) return false;
+      var f = t / GHOST_DT, i = Math.floor(f), n = gd.length / 3;
+      if (i >= n - 1) return false;
+      var u = f - i, o = i * 3;
+      out[0] = gd[o] + (gd[o + 3] - gd[o]) * u;
+      out[1] = gd[o + 1] + (gd[o + 4] - gd[o + 1]) * u;
+      out[2] = gd[o + 2] + (gd[o + 5] - gd[o + 2]) * u;
+      return true;
+    }
+    // Metres the rider at x leads the ghost at run time t (negative: behind).
+    // Once the ghost's run is over it waits where it ended (the finish).
+    var _gq = [0, 0, 0];
+    function ghostLead(gd, t, x) {
+      if (!gd || gd.length < 6) return NaN;
+      var gx = ghostAt(gd, t, _gq) ? _gq[0] : t < 0 ? gd[0] : gd[gd.length - 3];
+      return x - gx;
+    }
+    // A finished stage run → save (best time, stars, star coins). Mutates save.st;
+    // newBest says the run's recording should replace the stored ghost.
+    var STAR_COINS = 15;
+    function stageResult(save, idx, t) {
+      var key = idx + 1, rec = save.st[key], prevStars = rec ? rec.s : 0, st = stars(idx, t);
+      var newBest = !!(t > 0) && (!rec || t < rec.t - 1e-6);
+      if (newBest) save.st[key] = { t: Math.round(t * 1000) / 1000, s: Math.max(st, prevStars) };
+      else if (rec && st > prevStars) rec.s = st;
+      var earned = Math.max(0, st - prevStars) * STAR_COINS;
+      save.coins += earned;
+      return { newBest: newBest, prev: rec ? rec.t : null, prevStars: prevStars, stars: st, earned: earned };
     }
 
     // =================== a simple riding bot (tests, stage validation) ===================
@@ -906,7 +966,8 @@
       SUS_DX: SUS_DX, SUS_DY: SUS_DY, SUS_STAT: SUS_STAT, CW_TERRAIN: 0.26,
       heightAt: heightAt, slopeAt: slopeAt, segAt: segAt, groundDist: groundDist, parseSrc: parseSrc,
       bikeParams: bikeParams, upLevel: upLevel, stars: stars, normSave: normSave, unlocked: unlocked, totalStars: totalStars,
-      encodeGhost: encodeGhost, decodeGhost: decodeGhost, bot: bot, wrapPi: wrapPi, clamp: clamp, rnd: rnd
+      encodeGhost: encodeGhost, decodeGhost: decodeGhost, packGhost: packGhost, GHOST_MAX: GHOST_MAX, ghostAt: ghostAt, ghostLead: ghostLead,
+      stageResult: stageResult, STAR_COINS: STAR_COINS, bot: bot, wrapPi: wrapPi, clamp: clamp, rnd: rnd
     };
   })();
 
@@ -921,13 +982,14 @@
 
   var PANEL_ID = 'uphill-panel';
   var SAVE_KEY = 'cade-uphill-save', GHOST_KEY = 'cade-uphill-ghost-', SOUND_KEY = 'cade-uphill-sound';
-  var STAR_COINS = 15, TAU = Math.PI * 2, CW = E.CW_TERRAIN, ROW_M = 0.42, REC_CAP = 9000;
+  var STAR_COINS = E.STAR_COINS, TAU = Math.PI * 2, CW = E.CW_TERRAIN, ROW_M = 0.42, REC_CAP = 9000;
   var clamp = E.clamp;
   var S = null;                                   // the live session (one panel at a time)
   if (window.__CADE_UNIT__) window.__CADE_UNIT__.uphill = { live: function () { return S; }, draw: function (a) { draw(a); }, E: E };   // test-only peek
 
   function sget(k) { try { return Cade.store.get(k); } catch (e) { return null; } }
   function sset(k, v) { try { Cade.store.set(k, v); } catch (e) {} }
+  function sdel(k) { try { Cade.store.remove(k); } catch (e) {} }
   function loadSave() { var o = null; try { o = JSON.parse(sget(SAVE_KEY) || 'null'); } catch (e) { o = null; } return E.normSave(o); }
   function writeSave() { if (S) sset(SAVE_KEY, JSON.stringify(S.save)); }
   function esc(s) { return String(s).replace(/[&<>"']/g, function (ch) { return '&#' + ch.charCodeAt(0) + ';'; }); }
@@ -1362,13 +1424,11 @@
     c.fillStyle = K.frame;
     g1(c, crashed ? 'X' : 'O', BP[18], BP[19], hp);       // helmet
   }
+  var GQ = new Float64Array(3);
+  function ghostOn(w) { return !!(S.ghost && S.save.ghost && w.mode === 'stage' && w.state !== 'ready'); }
   function drawGhost(c, w) {
-    var gd = S.ghost;
-    if (!gd || !S.save.ghost || w.mode !== 'stage' || w.state === 'ready') return;
-    var f = w.t / E.GHOST_DT, i = Math.floor(f), n = gd.length / 3;
-    if (i >= n - 1) return;
-    var t = f - i, o = i * 3;
-    var gx = lerp(gd[o], gd[o + 3], t), gy = lerp(gd[o + 1], gd[o + 4], t), ga = lerp(gd[o + 2], gd[o + 5], t);
+    if (!ghostOn(w) || !E.ghostAt(S.ghost, w.t, GQ)) return;
+    var gx = GQ[0], gy = GQ[1], ga = GQ[2];
     if (gx < V.x0 - 3 || gx > V.x1 + 3) return;
     var ppm = V.ppm, px = Math.max(8, 0.31 * ppm), step = px * S.adv * 0.92;
     _ca = Math.cos(ga); _sa = Math.sin(ga); _bx = gx; _by = gy;
@@ -1469,6 +1529,20 @@
         g1(c, k === pos ? '>' : cpk ? '+' : k < pos ? '=' : '-', cx, y, px * 0.8);
       }
       label(c, S.hudStage, W - pad, y + px * 1.2, px * 0.82, 600, 'right');
+      // ghost: metres ahead (+, accent) or behind (-) of your best run
+      if (ghostOn(w)) {
+        var lead = E.ghostLead(S.ghost, w.t, w.c.x), gp = px * 0.82, gy3 = y + px * 2.3, la = Math.abs(lead), gdec = la < 9.95 ? 1 : 0;
+        if (lead === lead) {
+          c.fillStyle = K.muted;
+          label(c, 'ghost', pad, gy3, gp, 600, 'left');
+          var ahead = Math.round(la * (gdec ? 10 : 1)) === 0 || lead > 0;
+          c.fillStyle = ahead ? K.accent : K.text;
+          x = pad + gp * S.adv * 6;
+          label(c, ahead ? '+' : '-', x, gy3, gp, 700, 'left');
+          x = numL(c, la, gdec, x + gp * S.adv, gy3, gp);
+          label(c, 'm', x + gp * S.adv * 0.15, gy3, gp, 700, 'left');
+        }
+      }
     } else {
       x = numL(c, Math.floor(w.dist), 0, pad, y, px * 1.25);
       label(c, 'm', x + adv * 0.3, y, px * 0.9, 700, 'left');
@@ -1673,17 +1747,14 @@
     if (S.w.coins > 0) { S.save.coins += S.w.coins; writeSave(); }
   }
   function finishStage() {
-    var w = S.w, idx = w.stage, t = w.final, key = idx + 1, rec = S.save.st[key];
-    var prevStars = rec ? rec.s : 0, stars = E.stars(idx, t), newBest = !rec || t < rec.t - 1e-6;
-    var wasLast = !E.unlocked(S.save, idx + 1);
-    if (newBest) {
-      S.save.st[key] = { t: Math.round(t * 1000) / 1000, s: Math.max(stars, prevStars) };
-      if (w.recN > 2) sset(GHOST_KEY + key, E.encodeGhost(w.rec, w.recN));
-    } else if (stars > prevStars) rec.s = stars;
-    var earned = Math.max(0, stars - prevStars) * STAR_COINS;
-    S.save.coins += earned;
+    var w = S.w, idx = w.stage, t = w.final, key = idx + 1;
+    var wasLast = !E.unlocked(S.save, idx + 1), r = E.stageResult(S.save, idx, t);
+    if (r.newBest) {                                // the new best's run becomes the ghost (never a stale one)
+      var gs = w.recN > 2 ? E.packGhost(w.rec, w.recN) : '';
+      if (gs) sset(GHOST_KEY + key, gs); else sdel(GHOST_KEY + key);
+    }
     writeSave();
-    S.result = { idx: idx, t: t, stars: stars, newBest: newBest, prev: rec ? rec.t : null, earned: earned, flips: w.flips, crashes: w.crashes,
+    S.result = { idx: idx, t: t, stars: r.stars, newBest: r.newBest, prev: r.prev, earned: r.earned, flips: w.flips, crashes: w.crashes,
       unlocked: wasLast && idx + 1 < E.STAGES.length };
     showOverlay('result');
   }
@@ -1726,7 +1797,7 @@
   }
   function controlsHtml() {
     if (S.touch) return '<div class="uh-help"><b>GAS</b> / <b>BRAKE</b> on the right, <b>LEAN</b> ◄ ► on the left — hold both. Lean back to wheelie and flip, forward to land. Keep your head off the dirt.</div>';
-    return '<div class="uh-help"><kbd>→</kbd><kbd>↑</kbd> gas · <kbd>←</kbd><kbd>↓</kbd> brake / reverse · <kbd>A</kbd><kbd>Z</kbd> lean back · <kbd>D</kbd><kbd>X</kbd> lean forward · <kbd>R</kbd> restart · <kbd>P</kbd> pause<br>' +
+    return '<div class="uh-help"><kbd>→</kbd><kbd>↑</kbd> gas · <kbd>←</kbd><kbd>↓</kbd> brake / reverse · <kbd>A</kbd><kbd>Z</kbd> lean back · <kbd>D</kbd><kbd>X</kbd> lean forward · <kbd>R</kbd> restart · <kbd>P</kbd> pause · <kbd>G</kbd> ghost<br>' +
       'Lean back to wheelie and flip, forward to land. Keep your head off the dirt.</div>';
   }
   function overlayHtml(kind) {
@@ -1845,8 +1916,15 @@
         S.snd.ensure(); S.snd.tone(880, 0.07, 'sine', 0.04);
         showOverlay(S.ovlKind);
         break;
-      case 'ghost': S.save.ghost = !S.save.ghost; writeSave(); showOverlay(S.ovlKind); break;
+      case 'ghost': toggleGhost(); break;
     }
+  }
+
+  function toggleGhost() {
+    if (!S) return;
+    S.save.ghost = !S.save.ghost; writeSave();
+    if (S.ovlKind === 'home') showOverlay('home');
+    else if (S.w && !S.raf) draw(1);              // paused / stopped: show the change now (no loop started)
   }
 
   // ---- header buttons (before the core Minimize) ----
@@ -1875,7 +1953,7 @@
     ArrowLeft: 'brake', ArrowDown: 'brake', KeyS: 'brake',
     KeyA: 'back', KeyZ: 'back', KeyD: 'fwd', KeyX: 'fwd'
   };
-  var KEY2CODE = { arrowright: 'ArrowRight', arrowup: 'ArrowUp', arrowleft: 'ArrowLeft', arrowdown: 'ArrowDown', w: 'KeyW', s: 'KeyS', a: 'KeyA', z: 'KeyZ', d: 'KeyD', x: 'KeyX', r: 'KeyR', p: 'KeyP', m: 'KeyM', escape: 'Escape', enter: 'Enter', ' ': 'Space' };
+  var KEY2CODE = { arrowright: 'ArrowRight', arrowup: 'ArrowUp', arrowleft: 'ArrowLeft', arrowdown: 'ArrowDown', w: 'KeyW', s: 'KeyS', a: 'KeyA', z: 'KeyZ', d: 'KeyD', x: 'KeyX', r: 'KeyR', p: 'KeyP', m: 'KeyM', g: 'KeyG', escape: 'Escape', enter: 'Enter', ' ': 'Space' };
   function keyCode(e) { return e.code || KEY2CODE[(e.key || '').toLowerCase()] || ''; }
   function onKey(e) {
     if (!S || e.ctrlKey || e.metaKey || e.altKey) return;
@@ -1893,6 +1971,7 @@
     if (code === 'KeyR') { e.preventDefault(); if (!e.repeat && S.w) restart(); return; }
     if (code === 'KeyP') { e.preventDefault(); if (!e.repeat) { if (S.paused) resume(); else pause(); } return; }
     if (code === 'KeyM') { e.preventDefault(); if (!e.repeat) { S.snd.on = !S.snd.on; sset(SOUND_KEY, S.snd.on ? '1' : '0'); S.snd.ensure(); if (!S.snd.on) S.snd.humStop(); if (S.ovlKind === 'home') showOverlay('home'); } return; }
+    if (code === 'KeyG') { e.preventDefault(); if (!e.repeat) toggleGhost(); return; }
     if (code === 'Escape') {
       e.preventDefault();
       if (S.paused) toMenu();
@@ -2048,7 +2127,7 @@
         '<div class="uh-pad uh-pad-l"><div class="uh-pk" data-k="back"><span class="uh-ar">◄</span><small>LEAN</small></div><div class="uh-pk" data-k="fwd"><span class="uh-ar">►</span><small>LEAN</small></div></div>' +
         '<div class="uh-pad uh-pad-r"><div class="uh-pk" data-k="brake"><b>BRAKE</b></div><div class="uh-pk uh-gas" data-k="gas"><b>GAS</b></div></div>' +
       '</div>' +
-      '<div class="uh-bar"><span><kbd>→</kbd> gas <kbd>←</kbd> brake <kbd>A</kbd><kbd>D</kbd> lean <kbd>R</kbd> restart <kbd>P</kbd> pause <kbd>M</kbd> sound</span></div>' +
+      '<div class="uh-bar"><span><kbd>→</kbd> gas <kbd>←</kbd> brake <kbd>A</kbd><kbd>D</kbd> lean <kbd>R</kbd> restart <kbd>P</kbd> pause <kbd>M</kbd> sound <kbd>G</kbd> ghost</span></div>' +
       '<div class="uh-ovl" style="display:none"></div><div class="uh-live" aria-live="polite"></div></div>';
     var p = Cade.mkPanel(PANEL_ID, '🏍️ Uphill Rush', body);
     if (Cade.markGamePanel) Cade.markGamePanel(p);
