@@ -113,6 +113,60 @@
     return '<div' + attrs + '><div class="md-co-h">' + head + '</div>' + inner + '</div>\n';
   }
 
+  // ---- CSV / TSV: a ```csv block, or a whole note that is one, renders as a table ----
+  var CSV_MAX_ROWS = 5000;
+  function parseDelim(text, d) {
+    var rows = [], row = [], f = '', q = false, i = 0, n = text.length, c;
+    for (; i < n; i++) {
+      c = text.charAt(i);
+      if (q) {
+        if (c === '"') { if (text.charAt(i + 1) === '"') { f += '"'; i++; } else q = false; }
+        else f += c;
+      } else if (c === '"' && f === '') q = true;
+      else if (c === d) { row.push(f); f = ''; }
+      else if (c === '\n') { row.push(f); rows.push(row); row = []; f = ''; }
+      else if (c !== '\r') f += c;
+    }
+    if (f !== '' || row.length) { row.push(f); rows.push(row); }
+    return rows.filter(function (r) { return r.length > 1 || r[0] !== ''; });
+  }
+  // The delimiter if every non-empty line (3+ of them) has the same number of
+  // them outside quotes — so prose with a few commas never turns into a table.
+  function sniffDelim(src) {
+    var lines = src.split('\n').filter(function (l) { return l.trim(); });
+    if (lines.length < 3 || /^\s*(#|[-*+] |>|```|\|)/m.test(src)) return '';
+    var cands = ['\t', ',', ';'];
+    for (var k = 0; k < cands.length; k++) {
+      var d = cands[k], want = -1, ok = true;
+      for (var i = 0; i < lines.length && ok; i++) {
+        var cnt = 0, q = false, l = lines[i];
+        for (var j = 0; j < l.length; j++) { var ch = l.charAt(j); if (ch === '"') q = !q; else if (ch === d && !q) cnt++; }
+        if (q) return '';                       // a quoted newline: leave such notes alone
+        if (want < 0) want = cnt; else if (cnt !== want) ok = false;
+      }
+      if (ok && want >= 1) return d;
+    }
+    return '';
+  }
+  function csvTable(text, d) {
+    var rows = parseDelim(text, d);
+    if (!rows.length) return '';
+    var head = rows[0], cols = 0, i, j, s;
+    for (i = 0; i < rows.length; i++) cols = Math.max(cols, rows[i].length);
+    s = '<table class="md-csv"><thead><tr>';
+    for (j = 0; j < cols; j++) s += '<th>' + esc(head[j] == null ? '' : head[j]) + '</th>';
+    s += '</tr></thead><tbody>';
+    var last = Math.min(rows.length, CSV_MAX_ROWS + 1);
+    for (i = 1; i < last; i++) {
+      s += '<tr>';
+      for (j = 0; j < cols; j++) s += '<td>' + esc(rows[i][j] == null ? '' : rows[i][j]) + '</td>';
+      s += '</tr>';
+    }
+    s += '</tbody></table>\n';
+    if (rows.length > last) s += '<p class="md-err">… showing the first ' + CSV_MAX_ROWS + ' of ' + (rows.length - 1) + ' rows.</p>\n';
+    return s;
+  }
+
   function fmtSize(n) { n = +n || 0; return n < 1024 ? n + ' B' : n < 1048576 ? (n / 1024).toFixed(n < 10240 ? 1 : 0) + ' KB' : (n / 1048576).toFixed(1) + ' MB'; }
 
   function create(marked) {
@@ -192,6 +246,7 @@
         },
         code: function (t) {
           var info = String(t.lang || '').trim(), lang = info.split(/\s+/)[0].toLowerCase();
+          if ((lang === 'csv' || lang === 'tsv') && t.text.trim()) return csvTable(t.text, lang === 'tsv' ? '\t' : sniffDelim(t.text) || ',');
           if (lang === 'html' && t.__l && cur && cur.embed) {
             var ek = cur.embed(t.__l, t.text);
             if (ek) return '<div class="md-embed" data-ek="' + esc(ek) + '"></div>\n';
@@ -231,6 +286,8 @@
       cur = cb || {}; slugs = {};
       src = String(src || '').replace(/\r\n?/g, '\n');
       var out = [], seen = {}, toks;
+      var dl = src.length < 2000000 ? sniffDelim(src) : '';
+      if (dl) { var th = csvTable(src, dl); cur = null; return [{ k: hash(th) + '.1', l: 1, h: th }]; }
       try { toks = M.lexer(src); } catch (e) { cur = null; return [{ k: 'err', l: 1, h: '<pre class="md-err">' + esc(src) + '</pre>' }]; }
       annotate(toks, src, 1);
       for (var i = 0; i < toks.length; i++) {
@@ -246,7 +303,7 @@
       cur = null;
       return out;
     }
-    return { render: render, shellDoc: shellDoc, staticDoc: staticDoc, highlight: highlight, hash: hash };
+    return { render: render, shellDoc: shellDoc, staticDoc: staticDoc, highlight: highlight, hash: hash, sniffDelim: sniffDelim, parseDelim: parseDelim, csvTable: csvTable };
   }
 
   // ---- the shell document (lives in the preview's sandboxed iframe) ----------------------------
@@ -280,6 +337,17 @@
     'table{border-collapse:collapse;margin:0 0 1em;display:block;overflow-x:auto;max-width:100%}',
     'th,td{border:1px solid var(--border);padding:5px 10px;vertical-align:top}th{background:var(--surface-2);text-align:left;font-weight:600}',
     'hr{border:0;border-top:1px solid var(--border);margin:1.4em 0}',
+    'table.md-csv td{white-space:pre-wrap;font-variant-numeric:tabular-nums}',
+    '.md-tw{margin:0 0 1em}.md-tw>table{margin:0}',
+    '.md-tf{display:flex;align-items:center;gap:8px;margin:0 0 6px}',
+    '.md-tf input{flex:1 1 auto;min-width:0;max-width:280px;font:13px var(--font-body);color:var(--text);background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:5px 9px;-webkit-appearance:none;appearance:none}',
+    '.md-tf input:focus{outline:none;border-color:var(--accent)}',
+    '.md-tf span{font:12px var(--font-body);color:var(--text-faint);white-space:nowrap}',
+    'th.md-sort{cursor:pointer;user-select:none;-webkit-user-select:none;white-space:nowrap}th.md-sort:hover{color:var(--accent)}',
+    'th.md-sort::after{content:"\\2195";margin-left:.4em;opacity:.3;font-size:.85em}',
+    'th.md-sort[aria-sort=ascending]::after{content:"\\25B2";opacity:.9;color:var(--accent)}th.md-sort[aria-sort=descending]::after{content:"\\25BC";opacity:.9;color:var(--accent)}',
+    'tr.md-hide{display:none}',
+    '@media print{:root{--bg:#fff;--surface:#fff;--surface-2:#f4f4f4;--text:#111;--text-muted:#444;--text-faint:#777;--border:#ccc}body{background:#fff;color:#111}.md{max-width:none;padding:0}.md-tf,.md-b.md-cur::before{display:none!important}table{display:table;overflow:visible}tr,img,pre,.md-co{break-inside:avoid}th.md-sort::after{content:none}.md-spoiler{background:none;color:inherit}.md-spoiler *{visibility:visible!important}}',
     'img{max-width:100%;height:auto;border-radius:6px}',
     '.md-cimg:not([src]){display:inline-block;width:120px;height:80px;background:var(--surface-2);border:1px dashed var(--border)}',
     'mark.md-hl{border-radius:3px;padding:0 .12em;color:inherit}',
@@ -315,6 +383,72 @@
       f.srcdoc = doc;
       ph.appendChild(f);
     }
+    // Tables: click a header to sort (again to reverse, a third time for the
+    // note's order); 4+ rows get a filter box. Kept across re-renders by the
+    // header row's text, so typing in the note doesn't reset them.
+    var tstate = {};
+    function cellKey(td) {
+      var t = (td ? td.textContent : '').trim(), n = t.replace(/[$€£¥%,\s]/g, '');
+      return /^[-+]?(\d+\.?\d*|\.\d+)(e[-+]?\d+)?$/i.test(n) ? { n: parseFloat(n), t: t } : { n: NaN, t: t.toLowerCase() };
+    }
+    function applyT(tb, s) {
+      var body = tb.tBodies[0];
+      if (!body) return;
+      var rows = Array.prototype.slice.call(body.rows), shown = 0;
+      rows.forEach(function (r, i) { if (r.__o == null) r.__o = i; });
+      if (s.col >= 0 && s.dir) {
+        var c = s.col, d = s.dir;
+        rows.sort(function (a, b) {
+          var x = cellKey(a.cells[c]), y = cellKey(b.cells[c]), r;
+          if (!isNaN(x.n) && !isNaN(y.n)) r = x.n - y.n;
+          else if (!isNaN(x.n) !== !isNaN(y.n)) r = isNaN(x.n) ? 1 : -1;   // numbers before text
+          else r = x.t < y.t ? -1 : x.t > y.t ? 1 : 0;
+          if (!x.t !== !y.t) return x.t ? -1 : 1;                           // blanks last either way
+          return (r || a.__o - b.__o) * (r ? d : 1);
+        });
+      } else rows.sort(function (a, b) { return a.__o - b.__o; });
+      var q = (s.q || '').toLowerCase().trim();
+      for (var i = 0; i < rows.length; i++) {
+        var hit = !q || rows[i].textContent.toLowerCase().indexOf(q) >= 0;
+        rows[i].classList.toggle('md-hide', !hit);
+        if (hit) shown++;
+        body.appendChild(rows[i]);
+      }
+      var hs = tb.tHead ? tb.tHead.rows[0].cells : [];
+      for (var j = 0; j < hs.length; j++) {
+        if (s.col === j && s.dir) hs[j].setAttribute('aria-sort', s.dir > 0 ? 'ascending' : 'descending');
+        else hs[j].removeAttribute('aria-sort');
+      }
+      if (tb.__cnt) tb.__cnt.textContent = q ? shown + ' of ' + rows.length : rows.length + ' rows';
+    }
+    function enhance(el) {
+      var ts = el.querySelectorAll('table'), seenK = {};
+      for (var i = 0; i < ts.length; i++) {
+        var tb = ts[i];
+        if (!tb.tHead || !tb.tBodies[0] || tb.__enh) continue;
+        tb.__enh = 1;
+        var sig = tb.tHead.textContent.trim().slice(0, 200), n = seenK[sig] = (seenK[sig] || 0) + 1, key = sig + '#' + n;
+        var s = tstate[key] || (tstate[key] = { col: -1, dir: 0, q: '' });
+        tb.__s = s;
+        var hs = tb.tHead.rows[0].cells;
+        for (var j = 0; j < hs.length; j++) { hs[j].className += ' md-sort'; hs[j].setAttribute('data-c', j); hs[j].title = 'Sort'; }
+        if (tb.tBodies[0].rows.length >= 4) {
+          var w = document.createElement('div'), bar = document.createElement('div'), inp = document.createElement('input'), cnt = document.createElement('span');
+          w.className = 'md-tw'; bar.className = 'md-tf';
+          inp.type = 'search'; inp.placeholder = 'Filter rows…'; inp.value = s.q; inp.setAttribute('aria-label', 'Filter rows');
+          inp.__t = tb;
+          bar.appendChild(inp); bar.appendChild(cnt);
+          tb.parentNode.insertBefore(w, tb);
+          w.appendChild(bar); w.appendChild(tb);
+          tb.__cnt = cnt;
+        }
+        if (s.dir || s.q || tb.__cnt) applyT(tb, s);
+      }
+    }
+    document.addEventListener('input', function (e) {
+      var t = e.target;
+      if (t && t.__t) { t.__t.__s.q = t.value; applyT(t.__t, t.__t.__s); }
+    });
     function fill(el) {
       var a = el.querySelectorAll('img[data-cimg]'), i;
       for (i = 0; i < a.length; i++) { var s = imgs[a[i].getAttribute('data-cimg')]; if (s && a[i].getAttribute('src') !== s) a[i].src = s; }
@@ -341,6 +475,7 @@
           el.setAttribute('data-k', b.k);
           el.innerHTML = b.h;
           fill(el);
+          enhance(el);
         }
         if (el.getAttribute('data-l') !== String(b.l)) el.setAttribute('data-l', String(b.l));
         if (el === ptr) ptr = ptr.nextElementSibling;
@@ -376,6 +511,7 @@
         else if (m.type === 'embeds') { (m.list || []).forEach(function (x) { embeds[x.ek] = x.html; }); fill(root); }
         else if (m.type === 'line') toLine(+m.line || 1, !!m.force);
         else if (m.type === 'vars') { var v = document.getElementById('md-vars'); if (v) v.textContent = m.css; }
+        else if (m.type === 'print') { try { window.print(); } catch (x) {} }
         return;
       }
       if (!m || typeof m !== 'object') return;
@@ -391,6 +527,15 @@
       if (!t || !t.closest) return;
       // the box flips when the note does (the block re-renders) — read-only notes stay as they are
       if (t.matches('input[type=checkbox][data-tl]')) { e.preventDefault(); up({ type: 'task', line: +t.getAttribute('data-tl') }); return; }
+      var th = t.closest('th.md-sort');
+      if (th) {
+        var tbl = th.closest('table'), s = tbl && tbl.__s, c = +th.getAttribute('data-c');
+        if (s) {
+          if (s.col !== c) { s.col = c; s.dir = 1; } else if (s.dir === 1) s.dir = -1; else { s.col = -1; s.dir = 0; }
+          applyT(tbl, s);
+        }
+        return;
+      }
       var sp = t.closest('.md-spoiler');
       if (sp) { sp.classList.toggle('shown'); e.preventDefault(); return; }
       var a = t.closest('a[href^="#"]');

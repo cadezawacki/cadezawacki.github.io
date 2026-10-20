@@ -288,6 +288,102 @@ test('ghost encoding round-trips within quantisation', function () {
   assert.strictEqual(E.decodeGhost('!!'), null);
 });
 
+test('ghost recording: one chassis sample per GHOST_DT of run time, none at the start line, capped by the buffer', function () {
+  var w = E.newWorld({ stage: 0 });
+  w.rec = new Float32Array(9000 * 3); w.recN = 0;
+  steps(w, 1);                                    // idle at the start: 'ready' records nothing
+  assert.strictEqual(w.recN, 0);
+  var xs = [];
+  for (var i = 0; i < 8 / E.STEP; i++) {
+    E.bot(w);
+    var n0 = w.recN;
+    E.step(w); w.events.length = 0;
+    if (w.recN > n0) xs.push([w.t, w.c.x, w.c.y, w.c.a]);
+  }
+  assert.ok(w.recN > 70 && Math.abs(w.recN - 1 - w.t / E.GHOST_DT) < 1, 'samples ' + w.recN + ' at t=' + w.t);
+  xs.forEach(function (s, k) {
+    assert.ok(Math.abs(s[0] - k * E.GHOST_DT) < E.STEP + 1e-9, 'sample ' + k + ' on time');
+    assert.strictEqual(w.rec[k * 3], Math.fround(s[1]));
+    assert.strictEqual(w.rec[k * 3 + 2], Math.fround(s[3]));
+  });
+  for (i = 1; i < w.recN; i++) assert.ok(w.rec[i * 3] >= w.rec[i * 3 - 3] - 0.05, 'moving forward');
+  // a short buffer stops recording instead of overflowing
+  var v = E.newWorld({ stage: 0 });
+  v.rec = new Float32Array(5 * 3); v.recN = 0;
+  steps(v, 3, function (v) { E.bot(v); });
+  assert.strictEqual(v.recN, 5);
+});
+
+test('ghost replay: interpolates the recorded run (round-trip through the stored form)', function () {
+  function run(rec) {
+    var w = E.newWorld({ stage: 1 }), out = [];
+    if (rec) { w.rec = rec; w.recN = 0; }
+    for (var i = 0; i < 10 / E.STEP; i++) { E.bot(w); E.step(w); w.events.length = 0; if (i % 37 === 0 && w.state === 'ride') out.push([w.t, w.c.x, w.c.y]); }
+    return { w: w, out: out };
+  }
+  var a = run(new Float32Array(9000 * 3)), gd = E.decodeGhost(E.packGhost(a.w.rec, a.w.recN));
+  assert.strictEqual(gd.length, a.w.recN * 3);
+  var b = run(null), q = [0, 0, 0];                // same inputs → same run: the ghost should sit on the bike
+  assert.ok(b.out.length > 20);
+  b.out.forEach(function (s) {
+    assert.ok(E.ghostAt(gd, s[0], q), 'ghost at ' + s[0]);
+    assert.ok(Math.abs(q[0] - s[1]) < 0.15 && Math.abs(q[1] - s[2]) < 0.15, 'ghost on the bike at t=' + s[0] + ': ' + q[0] + ' vs ' + s[1]);
+    assert.ok(Math.abs(E.ghostLead(gd, s[0], s[1])) < 0.15);
+  });
+  // midpoint interpolation, the ends, and the lead once the ghost has finished
+  var g = new Float32Array([0, 0, 0, 2, 1, 0.5, 6, 1, 1]);
+  assert.ok(E.ghostAt(g, E.GHOST_DT * 0.5, q));
+  assert.ok(Math.abs(q[0] - 1) < 1e-6 && Math.abs(q[1] - 0.5) < 1e-6 && Math.abs(q[2] - 0.25) < 1e-6);
+  assert.ok(E.ghostAt(g, E.GHOST_DT * 1.25, q) && Math.abs(q[0] - 3) < 1e-6);
+  assert.strictEqual(E.ghostAt(g, E.GHOST_DT * 2, q), false, 'past the end');
+  assert.strictEqual(E.ghostAt(g, -1, q), false);
+  assert.strictEqual(E.ghostAt(null, 0, q), false);
+  assert.ok(Math.abs(E.ghostLead(g, E.GHOST_DT * 0.5, 4) - 3) < 1e-6, 'ahead');
+  assert.ok(Math.abs(E.ghostLead(g, E.GHOST_DT * 0.5, 0) + 1) < 1e-6, 'behind');
+  assert.strictEqual(E.ghostLead(g, 99, 2), -4, 'finished ghost waits at its last spot');
+  assert.ok(isNaN(E.ghostLead(null, 1, 1)));
+});
+
+test('ghost size cap: long runs are decimated behind a prefix and still decode to GHOST_DT samples', function () {
+  var n = 4000, a = new Float32Array(n * 3);
+  for (var i = 0; i < n; i++) { a[i * 3] = i * 1.7; a[i * 3 + 1] = Math.sin(i / 40) * 5; a[i * 3 + 2] = Math.sin(i / 60); }
+  var plain = E.packGhost(a, n);
+  assert.strictEqual(plain, E.encodeGhost(a, n), 'under the cap: unchanged format');
+  assert.ok(plain.length < E.GHOST_MAX);
+  var cap = Math.floor(plain.length / 3), s = E.packGhost(a, n, cap);
+  assert.ok(s.length <= cap && /^(4|8)\./.test(s), 'decimated: ' + s.slice(0, 3) + ' ' + s.length + '/' + cap);
+  var k = +s.split('.')[0], b = E.decodeGhost(s), m = Math.ceil(n / k);
+  assert.strictEqual(b.length, ((m - 1) * k + 1) * 3);
+  for (i = 0; i < b.length / 3; i++) {
+    assert.ok(Math.abs(b[i * 3] - a[i * 3]) < 0.06, 'x ' + i);
+    assert.ok(Math.abs(b[i * 3 + 1] - a[i * 3 + 1]) < 0.12, 'y ' + i);
+  }
+  assert.strictEqual(E.packGhost(a, n, 5), '', 'too big even decimated → nothing');
+  assert.strictEqual(E.decodeGhost('2.!'), null);
+  assert.strictEqual(E.decodeGhost(null), null);
+});
+
+test('stage results: a faster run replaces the best (and the ghost); a slower one only adds stars', function () {
+  var s = E.normSave(null), p = E.STAGES[0].par;
+  var r = E.stageResult(s, 0, p[1] + 3);           // first finish: 1 star
+  assert.ok(r.newBest && r.prev === null && r.stars === 1 && r.earned === E.STAR_COINS);
+  assert.deepStrictEqual(s.st[1], { t: Math.round((p[1] + 3) * 1000) / 1000, s: 1 });
+  r = E.stageResult(s, 0, p[1] + 4);               // slower: nothing
+  assert.ok(!r.newBest && r.earned === 0);
+  assert.strictEqual(s.st[1].t, Math.round((p[1] + 3) * 1000) / 1000);
+  r = E.stageResult(s, 0, p[0] - 1);               // faster, 3 stars
+  assert.ok(r.newBest && r.prevStars === 1 && r.stars === 3 && r.earned === 2 * E.STAR_COINS);
+  assert.strictEqual(s.st[1].s, 3);
+  var t3 = s.st[1].t;
+  r = E.stageResult(s, 0, t3);                     // a tie is not a new best
+  assert.ok(!r.newBest);
+  s.st[1] = { t: 5, s: 1 };                        // a slower run with more stars than stored keeps the time
+  r = E.stageResult(s, 0, p[0] - 0.5);
+  assert.ok(!r.newBest && r.stars === 3 && r.earned === 2 * E.STAR_COINS);
+  assert.deepStrictEqual(s.st[1], { t: 5, s: 3 });
+  assert.strictEqual(s.coins, 5 * E.STAR_COINS);
+});
+
 test('save data is normalised; stars, unlocks and upgrades', function () {
   var s = E.normSave(null);
   assert.deepStrictEqual(s.st, {});

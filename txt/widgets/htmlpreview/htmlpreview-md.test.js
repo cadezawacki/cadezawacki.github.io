@@ -59,4 +59,15 @@ test('shell and static documents', function () {
   var d = R.staticDoc(b, ':root{}', { rabcd: 'data:image/jpeg;base64,AAAA' }, { E1: '<i>x</i>' });
   assert.ok(/srcdoc="&lt;i&gt;x&lt;\/i&gt;"/.test(d) && /src="data:image\/jpeg;base64,AAAA"/.test(d) && !/<script/.test(d));
 });
+test('CSV / TSV: a whole note or a ```csv block becomes a table; prose and Markdown do not', function () {
+  var b = R.render('name,qty,price\nApple,3,"1,20"\n"Pear ""green""",10,0.5\n', cb);
+  assert.strictEqual(b.length, 1);
+  assert.ok(/<table class="md-csv">/.test(b[0].h) && /<th>qty<\/th>/.test(b[0].h) && /<td>1,20<\/td>/.test(b[0].h) && /Pear &quot;green&quot;/.test(b[0].h), b[0].h);
+  assert.ok(/<td>y<\/td>/.test(html('a\tb\tc\nx\ty\tz\n1\t2\t3\na\tb\tc')));
+  assert.ok(/md-csv/.test(html('Intro\n\n```csv\na,b\n1,2\n```')));
+  assert.ok(!/md-csv/.test(html('Hello, world.\nI went home, then slept, again.\nOk.')), 'uneven commas: prose');
+  assert.ok(!/md-csv/.test(html('# a,b\nc,d\ne,f')), 'markdown stays markdown');
+  assert.ok(!/md-csv/.test(html('| a | b |\n|---|---|\n| 1 | 2 |')), 'a markdown table is not csv');
+  assert.deepStrictEqual(R.parseDelim('a,"b\nc",d\n1,2,3', ','), [['a', 'b\nc', 'd'], ['1', '2', '3']]);
+});
 console.log((process.exitCode ? 'FAILED, ' : '') + 'passed ' + passed);
