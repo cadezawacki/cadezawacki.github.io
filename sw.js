@@ -15,13 +15,15 @@
 //     Code Runner's Python 'cade-py-<version>'): bypass, so nothing is stored twice
 // ============================================
 
-const CACHE_VERSION = 179;
+const CACHE_VERSION = 180;
 const CACHE_NAME = `cade-v${CACHE_VERSION}`;
 
 // Same-origin pages to precache on install.
 // Note: we use absolute paths so the cache keys match navigation requests.
 const PRECACHE = [
   './txt.html',
+  // Plain-language matching for txt.html's Ctrl+K palette (loaded on first open).
+  './txt/widgets/intent/intent-core.js',
   './gif.html',
   './photo.html',
   './ppc.html',

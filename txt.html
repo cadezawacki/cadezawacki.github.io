@@ -1428,6 +1428,17 @@ body.split-open .mobile-toolbar { right: 50%; }
   text-overflow: ellipsis;
 }
 
+/* Plain-language match: which of the typed words this row answers. */
+.picker-item-hint {
+  font-size: 11px;
+  color: var(--text-faint);
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.picker-item-hint b { color: var(--accent); font-weight: 500; }
+
 .picker-empty {
   padding: var(--space-8) var(--space-4);
   text-align: center;
@@ -3471,7 +3482,7 @@ body.inbox-list .find-panel { display: none !important; }
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
       </svg>
-      <input class="picker-search" id="picker-search" type="text" placeholder="Search scripts & widgets..." autocomplete="off" spellcheck="false">
+      <input class="picker-search" id="picker-search" type="text" placeholder="Search, or say what you want…" autocomplete="off" spellcheck="false">
     </div>
     <div class="picker-list" id="picker-list"></div>
     <div class="picker-footer">
@@ -13053,11 +13064,74 @@ let pickerOpen = false;
 let pickerIndex = 0;
 let filteredScripts = pickerSource();
 
+// ---- Plain-language matching (./txt/widgets/intent/intent-core.js) ----------
+// Loaded the first time the palette opens; until it's there (or if it never
+// loads) the palette ranks exactly as before. With it, rows whose NAME the
+// query hits keep today's order on top and the rest are ranked by intent
+// ("sort these by length", "get rid of blank lines", "10 minute timer"), with a
+// "matches: …" hint. Picking a row teaches it the phrase (at most 200 kept).
+let _intent = null, _intentReq = false, _intentIdx = null, _intentIdxKey = '', _intentMem;
+const _pickerHints = new Map();   // row → the typed words it matched, for the list on screen
+function _intentLoad() {
+  if (_intent || _intentReq) return;
+  _intentReq = true;
+  const ready = () => {
+    _intent = window.__cadeIntentCore || null;
+    if (_intent && pickerOpen && document.getElementById('picker-search').value.trim()) _pickerFilter();
+  };
+  if (window.__cadeIntentCore) { ready(); return; }
+  const s = document.createElement('script');
+  s.src = './txt/widgets/intent/intent-core.js';
+  s.onload = ready;
+  document.head.appendChild(s);
+}
+function _intentMemory() {
+  if (_intentMem === undefined) { _intentMem = null; try { _intentMem = JSON.parse(store.get('cade-intent-picks') || 'null'); } catch {} }
+  return _intentMem;
+}
+// Remember which row a phrase led to. Name hits already rank first — no need.
+function _intentLearn(item) {
+  const q = document.getElementById('picker-search').value.trim();
+  if (!_intent || !item || q.length < 3 || scoreScript(q, item) >= 800) return;
+  try { _intentMem = _intent.learn(_intentMemory(), q, item.name); store.set('cade-intent-picks', JSON.stringify(_intentMem)); } catch {}
+}
+function _pickerFilter() {
+  const q = document.getElementById('picker-search').value.trim();
+  const src = pickerSource();
+  _pickerHints.clear();
+  let ranked = null;
+  if (q && _intent) {
+    try {
+      const key = src.length + '|' + scripts.length + '|' + WIDGETS.length;
+      if (key !== _intentIdxKey) { _intentIdx = _intent.buildIndex(src); _intentIdxKey = key; }
+      ranked = _intent.blend(q, src, scoreScript, { index: _intentIdx, memory: _intentMemory(), hasSelection: !editor.state.selection.main.empty });
+    } catch (e) { console.warn('intent ranking failed', e); ranked = null; }
+  }
+  if (!q) {
+    filteredScripts = src;
+  } else if (ranked) {
+    filteredScripts = ranked.map(r => { if (r.hint) _pickerHints.set(r.row, r.hint); return r.row; });
+  } else {
+    filteredScripts = src
+      .map(s => ({ s, score: scoreScript(q, s) }))
+      .filter(({ score }) => score > 0)
+      .sort((a, b) => b.score - a.score)
+      .map(({ s }) => s);
+  }
+  pickerIndex = 0;
+  renderPickerList();
+  // The list keeps its old scroll offset across re-renders; jump back to the
+  // top so the best match (row 0, selected) is always in view while typing.
+  document.getElementById('picker-list').scrollTop = 0;
+}
+
 window.openPicker = function() {
   closeAllMenus();
   pickerOpen = true;
   pickerIndex = 0;
   filteredScripts = pickerSource();
+  _pickerHints.clear();
+  _intentLoad();
   document.getElementById('picker-overlay').classList.add('open');
   const searchEl = document.getElementById('picker-search');
   searchEl.value = '';
@@ -13085,7 +13159,8 @@ function renderPickerList() {
       <div class="picker-item-icon">${s.icon || ''}</div>
       <div class="picker-item-info">
         <div class="picker-item-name">${s.name}</div>
-        <div class="picker-item-desc">${s.description}</div>
+        <div class="picker-item-desc">${s.description}</div>${_pickerHints.has(s) ? `
+        <div class="picker-item-hint">matches: ${_pickerHints.get(s).split(', ').map(w => '<b>' + escapeHtml(w) + '</b>').join(', ')}</div>` : ''}
       </div>
     </div>
   `).join('');
@@ -13093,6 +13168,7 @@ function renderPickerList() {
   listEl.querySelectorAll('.picker-item').forEach(el => {
     el.addEventListener('click', () => {
       const idx = parseInt(el.dataset.index);
+      _intentLearn(filteredScripts[idx]);
       runPickerItem(filteredScripts[idx]);
     });
     // Use mousemove instead of mouseenter — only fires on actual movement, not re-renders
@@ -13141,23 +13217,7 @@ function scoreScript(query, script) {
   return 0;
 }
 
-document.getElementById('picker-search').addEventListener('input', (e) => {
-  const q = e.target.value.trim();
-  if (!q) {
-    filteredScripts = pickerSource();
-  } else {
-    filteredScripts = pickerSource()
-      .map(s => ({ s, score: scoreScript(q, s) }))
-      .filter(({ score }) => score > 0)
-      .sort((a, b) => b.score - a.score)
-      .map(({ s }) => s);
-  }
-  pickerIndex = 0;
-  renderPickerList();
-  // The list keeps its old scroll offset across re-renders; jump back to the
-  // top so the best match (row 0, selected) is always in view while typing.
-  document.getElementById('picker-list').scrollTop = 0;
-});
+document.getElementById('picker-search').addEventListener('input', _pickerFilter);
 
 document.getElementById('picker-search').addEventListener('keydown', (e) => {
   if (e.key === 'ArrowDown') {
@@ -13173,6 +13233,7 @@ document.getElementById('picker-search').addEventListener('keydown', (e) => {
   } else if (e.key === 'Enter') {
     e.preventDefault();
     if (filteredScripts.length > 0) {
+      _intentLearn(filteredScripts[pickerIndex]);
       runPickerItem(filteredScripts[pickerIndex]);
     }
   } else if (e.key === 'Escape') {
