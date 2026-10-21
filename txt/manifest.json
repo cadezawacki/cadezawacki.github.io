@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "version": "2026.10.21-5",
+  "version": "2026.10.21-6",
   "modules": [
     {
       "id": "crawler",
@@ -1334,6 +1334,33 @@
       "entry": "widgets/thumbpad/thumbpad.js",
       "css": "widgets/thumbpad/thumbpad.css",
       "settingKey": "plugins.thumbpad",
+      "section": "Editor",
+      "default": true
+    },
+    {
+      "id": "voice",
+      "type": "widget",
+      "name": "Voice Note",
+      "description": "Record a voice memo into your note — a player with a waveform; the audio syncs encrypted to your other devices",
+      "icon": "🎙",
+      "tags": "voice,voice note,voice memo,memo,record,recording,recorder,audio,microphone,mic,dictaphone,speech,sound,waveform,podcast,listen",
+      "entry": "widgets/voice/voice.js",
+      "css": "widgets/voice/voice.css",
+      "precache": [
+        "widgets/voice/voice-core.js"
+      ]
+    },
+    {
+      "id": "voice-view",
+      "type": "plugin",
+      "name": "Voice notes in the editor",
+      "description": "Play ```voice blocks (made with Voice Note) as a card with a waveform — tap to seek, change the speed, download; ✎ shows its text",
+      "entry": "widgets/voice/voice-view.js",
+      "css": "widgets/voice/voice-view.css",
+      "precache": [
+        "widgets/voice/voice-core.js"
+      ],
+      "settingKey": "plugins.voice-view",
       "section": "Editor",
       "default": true
     },

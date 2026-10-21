@@ -17,8 +17,9 @@
  * ||spoilers||, pasted / drawn images (![img:…], resolved by the app), file
  * pills, footnotes ([^id] + "[^id]: text"), lightly highlighted code,
  * ```csv / ```tsv tables, ```postcard ASCII postcards in colour (decoded here,
- * no widget needed) and ```html blocks as live embedded pages (with the
- * ```css / ```js beside them).
+ * no widget needed), ```voice notes as a still waveform (no playback: the
+ * frame can't reach the file store) and ```html blocks as live embedded pages
+ * (with the ```css / ```js beside them).
  * cb: { embed(line, code) -> key | '', image(code, isRef, data) -> key }.
  * A private marked instance (new marked.Marked) — the File Converter's global
  * marked config is untouched. ES5. */
@@ -331,6 +332,25 @@
       (o.cap ? '<figcaption>' + esc(o.cap) + '</figcaption>' : '') + '</figure>\n';
   }
 
+  // ---- voice notes: a ```voice block (widgets/voice/voice-core.js has the format) renders as
+  // a still figure — 🎙 title · duration over its waveform glyphs (▁..█) drawn as bars. ----
+  function voice(info, text) {
+    var re = /"([^"]*)"?|(\S+)/g, m, first = true, title = '', dur = '', wave = '', i;
+    while ((m = re.exec(info))) {
+      if (first) { if (m[2] !== 'voice') return ''; first = false; continue; }
+      if (m[1] != null) { if (!title) title = m[1].trim(); continue; }
+      if (!dur && /^(?:\d{1,2}:)?\d{1,3}:[0-5]\d$/.test(m[2])) dur = m[2];
+    }
+    if (first) return '';
+    var lines = String(text).split('\n'), bars = '';
+    for (i = 0; i < lines.length && !wave; i++) if (/^[\u2581-\u2588]+$/.test(lines[i].trim())) wave = lines[i].trim();
+    for (i = 0; i < wave.length && i < 200; i++) bars += '<i class="v' + (wave.charCodeAt(i) - 0x2581) + '"></i>';
+    title = title || 'Voice note';
+    return '<figure class="md-vn" role="img" aria-label="' + esc('Voice note: ' + title + (dur ? ' \u00B7 ' + dur : '')) + '">' +
+      '<figcaption><span aria-hidden="true">🎙</span> <b>' + esc(title) + '</b>' + (dur ? ' \u00B7 ' + esc(dur) : '') + '</figcaption>' +
+      (bars ? '<div class="md-vn-w">' + bars + '</div>' : '') + '</figure>\n';
+  }
+
   function fmtSize(n) { n = +n || 0; return n < 1024 ? n + ' B' : n < 1048576 ? (n / 1024).toFixed(n < 10240 ? 1 : 0) + ' KB' : (n / 1048576).toFixed(1) + ' MB'; }
 
   function create(marked) {
@@ -412,6 +432,7 @@
           var info = String(t.lang || '').trim(), lang = info.split(/\s+/)[0].toLowerCase();
           if ((lang === 'csv' || lang === 'tsv') && t.text.trim()) return csvTable(t.text, lang === 'tsv' ? '\t' : sniffDelim(t.text) || ',');
           if (lang === 'postcard') { var pc = postcard(info, t.text); if (pc) return pc; }
+          if (lang === 'voice') { var vn = voice(info, t.text); if (vn) return vn; }
           if (lang === 'html' && t.__l && cur && cur.embed) {
             var ek = cur.embed(t.__l, t.text);
             if (ek) return '<div class="md-embed" data-ek="' + esc(ek) + '"></div>\n';
@@ -468,7 +489,7 @@
       cur = null;
       return out;
     }
-    return { render: render, shellDoc: shellDoc, staticDoc: staticDoc, highlight: highlight, hash: hash, sniffDelim: sniffDelim, parseDelim: parseDelim, csvTable: csvTable, postcard: postcard };
+    return { render: render, shellDoc: shellDoc, staticDoc: staticDoc, highlight: highlight, hash: hash, sniffDelim: sniffDelim, parseDelim: parseDelim, csvTable: csvTable, postcard: postcard, voice: voice };
   }
 
   // ---- the shell document (lives in the preview's sandboxed iframe) ----------------------------
@@ -537,6 +558,12 @@
     (function () { var s = ''; for (var i = 0; i < 64; i++) s += '.md-pc .k' + i + '{color:var(--k' + i + ')}'; return s; })(),
     '.md-pcw figcaption{margin:5px 2px 0;font-size:.88em;font-style:italic;color:var(--text-muted)}',
     '@media print{.md-pc{-webkit-print-color-adjust:exact;print-color-adjust:exact;font-size:min(10px,calc(680px / var(--pc-cols,64) / .6))}.md-pcw{break-inside:avoid}}',
+    // voice notes: the waveform's 8 levels as bar heights
+    '.md-vn{max-width:560px;margin:0 0 1em;padding:9px 14px 12px;border:1px solid var(--border);border-radius:10px;background:var(--surface-2)}',
+    '.md-vn figcaption{margin:0 0 7px;font-size:.92em;color:var(--text-muted)}.md-vn figcaption b{font-weight:600;color:var(--text)}',
+    '.md-vn-w{display:flex;align-items:center;gap:2px;height:30px}.md-vn-w i{flex:1 1 0;min-width:1px;max-width:5px;border-radius:2px;background:var(--accent)}',
+    (function () { var s = ''; for (var i = 0; i < 8; i++) s += '.md-vn-w .v' + i + '{height:' + Math.round(12 + i * 88 / 7) + '%}'; return s; })(),
+    '@media print{.md-vn{break-inside:avoid;-webkit-print-color-adjust:exact;print-color-adjust:exact}}',
     '.md-err{color:var(--text-muted)}',
     '.md-empty{color:var(--text-faint);text-align:center;padding:48px 12px}',
     '@media (max-width:520px){.md{padding:14px 14px 56px}body{font-size:15.5px}}',

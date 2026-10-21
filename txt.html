@@ -7308,7 +7308,26 @@ function _collectReferencedImageHashes() {
   return set;
 }
 let _imgGcTimer = null, _imgGcBusy = false;
-function scheduleImageGC() { clearTimeout(_imgGcTimer); _imgGcTimer = setTimeout(() => { gcOrphanImages().catch(() => {}); gcOrphanFiles().catch(() => {}); }, 4000); }
+function scheduleImageGC(ms) { clearTimeout(_imgGcTimer); _imgGcTimer = setTimeout(() => { gcOrphanImages().catch(() => {}); gcOrphanFiles().catch(() => {}); }, ms || 4000); }
+// Grace before an image/file whose token just left the note is deleted: undo
+// (or re-pasting it) within this window must still find its bytes — locally
+// and on the server. Hash → when it was last in the note (or just stored).
+// In-memory on purpose: a reload has no undo history to protect.
+const GC_GRACE_MS = 30 * 60 * 1000;
+const _gcGrace = new Map();
+function _gcHold(h) { if (h) _gcGrace.set(h, Date.now()); }
+// Orphans past their grace; when some are still held, look again once they expire.
+function _gcExpired(orphans) {
+  const now = Date.now(); let wait = 0;
+  const out = orphans.filter(h => {
+    const t = _gcGrace.get(h);
+    if (t == null || now - t >= GC_GRACE_MS) { _gcGrace.delete(h); return true; }
+    wait = Math.max(wait, GC_GRACE_MS - (now - t));
+    return false;
+  });
+  if (wait) scheduleImageGC(wait + 1000);
+  return out;
+}
 window.scheduleImageGC = scheduleImageGC;
 async function gcOrphanImages() {
   if (_imgGcBusy) return;
@@ -7319,7 +7338,7 @@ async function gcOrphanImages() {
     const imgHashes = allKeys.filter(k => typeof k === 'string' && k.indexOf('img:') === 0).map(k => k.slice(4));
     if (!imgHashes.length) return;
     const referenced = _collectReferencedImageHashes();
-    const orphans = imgHashes.filter(h => !referenced.has(h));
+    const orphans = _gcExpired(imgHashes.filter(h => !referenced.has(h)));
     if (!orphans.length) return;
     const baseKey = store.get('cade-sync-key') || '';
     const fbUrl = store.get('cade-firebase-url') || '';
@@ -7353,11 +7372,11 @@ function scheduleImgRemovalCheck() {
   _imgRemovalTimer = setTimeout(() => {
     const now = _liveDocImgHashes();
     let removed = false;
-    _lastDocImgHashes.forEach(h => { if (!now.has(h)) removed = true; });
+    _lastDocImgHashes.forEach(h => { if (!now.has(h)) { removed = true; _gcHold(h); } });
     _lastDocImgHashes = now;
     // Attached-file pills GC on the same debounce (their tokens delete the same way).
     const nowFiles = _liveDocFileHashes();
-    _lastDocFileHashes.forEach(h => { if (!nowFiles.has(h)) removed = true; });
+    _lastDocFileHashes.forEach(h => { if (!nowFiles.has(h)) { removed = true; _gcHold(h); } });
     _lastDocFileHashes = nowFiles;
     if (removed) scheduleImageGC();
   }, 2500);
@@ -7861,6 +7880,8 @@ async function _storeAttachment(file, nameOverride) {
   try { await idbStore.set('file:' + hash, payload); } catch {}
   _fileRefCachePut(hash, rec);
   _fileDelPendingRemove(hash); // re-attached content must not be reaped by a stale queued delete
+  _gcHold(hash);               // the caller may place its token a moment later
+  try { _lastDocFileHashes.add(hash); } catch {} // …and a quick delete of it still counts as a removal
   uploadFile(hash, payload); // fire-and-forget (queues if offline)
   return { token: '![file:' + name + '#' + hash + '|s' + raw.length + ']', hash, name, size: raw.length, encoded: rec.data.length };
 }
@@ -8084,7 +8105,7 @@ async function gcOrphanFiles() {
     const fileHashes = allKeys.filter(k => typeof k === 'string' && k.indexOf('file:') === 0).map(k => k.slice(5));
     if (!fileHashes.length) return;
     const referenced = _collectReferencedFileHashes();
-    const orphans = fileHashes.filter(h => !referenced.has(h));
+    const orphans = _gcExpired(fileHashes.filter(h => !referenced.has(h)));
     if (!orphans.length) return;
     const baseKey = store.get('cade-sync-key') || '';
     const fbUrl = store.get('cade-firebase-url') || '';
