@@ -45,7 +45,7 @@
 .dc-v { color: var(--text); text-align: right; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .dc-row.main .dc-v { font-weight: 700; font-size: 1.1em; color: var(--accent); }
 
-.dc-acts { display: flex; gap: 4px; align-items: center; flex: 0 0 auto; }
+.dc-acts { display: flex; flex-direction: row; gap: 4px; align-items: center; flex: 0 0 auto; }   /* row: datechips' own .dc-acts is a column */
 .dc-btn {
   font: inherit; font-size: var(--text-xs); padding: 4px 10px; border-radius: 6px; cursor: pointer; white-space: nowrap;
   border: 1px solid var(--border); background: var(--surface-2, transparent); color: var(--text);
@@ -64,3 +64,8 @@
   .dc-btn { padding: 8px 12px; }
   .dc-hint { display: none; }
 }
+
+/* Popped out into its own window: a short window would squeeze the results to a
+   sliver, so they keep a usable height and the whole body scrolls instead. */
+#datecalc-panel.cade-popped .cade-panel-body { overflow-y: auto; }
+.cade-popped .dc-out { min-height: 150px; }

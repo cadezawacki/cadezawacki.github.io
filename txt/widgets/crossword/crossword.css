@@ -168,3 +168,7 @@
   .xw { gap: 6px; }
   .xw .xw-kr { gap: 3px; }
 }
+
+/* Popped out into its own window: the (square) grid is sized from the window's
+   height too, so a short window shows it whole and a tall one grows it a bit. */
+.cade-popped .xw-left { max-width: min(480px, max(220px, calc(100vh - 150px))); }

@@ -192,3 +192,9 @@
   #ekg-panel.ekg-kb .ekg-mon { height: 52px; }
   #ekg-panel.ekg-kb .ekg-scope button { height: 21px; }
 }
+
+/* Popped out into its own window: the legend toggles wrap rather than scroll in
+   one row as on a phone, and the issue list grows into the window (the body
+   scrolls) instead of sitting in a short box. */
+.cade-popped .ekg-legend { flex-wrap: wrap; overflow-x: visible; margin: 0; padding: 0; }
+#ekg-panel.cade-popped .ekg-list { max-height: none; }

@@ -171,3 +171,8 @@
   opacity: 0.55;
 }
 .draw-resize:hover { opacity: 1; }
+
+/* Popped out into its own window: a canvas wider than the window shrinks to fit
+   (keeping its shape — pointer input maps through the canvas's on-screen rect,
+   so drawing stays exact) instead of pushing past the right edge. */
+.cade-popped .draw-canvas { max-width: 100%; height: auto !important; }

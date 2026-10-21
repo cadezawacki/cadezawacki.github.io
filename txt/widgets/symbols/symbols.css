@@ -97,3 +97,7 @@
   .sy-tab { width: 38px; height: 36px; }
   .sy-btn { padding: 8px 12px; }
 }
+
+/* Popped out into its own window: the category tabs wrap onto extra rows rather
+   than hide behind a sideways scroll. */
+.cade-popped .sy-tabs { flex-wrap: wrap; overflow-x: visible; }

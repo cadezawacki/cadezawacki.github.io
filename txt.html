@@ -2790,8 +2790,11 @@ body.game-open .editor-wrap { -webkit-user-select: none; user-select: none; }
 .cade-game-panel .cade-panel-popbtn { display: none; }
 @media (pointer: coarse) { .cade-panel-head .cade-panel-popbtn { display: none; } }
 body.cade-pop-body { margin: 0; height: 100vh; overflow: hidden; display: flex; background: var(--surface); color: var(--text); }
-.cade-panel.cade-popped {
-  position: relative !important; inset: auto !important; flex: 1 1 auto; min-width: 0; min-height: 0;
+/* The :not(#…) pair lifts this above a module's own `#x-panel { left: 6px !important }`
+   phone-sheet geometry, which the pop-out's narrow window would otherwise trigger.
+   Inside the window, target popped panels with `.cade-popped` / `body.cade-pop-body`. */
+.cade-panel.cade-popped:not(#cade-pop-x):not(#cade-pop-x) {
+  position: relative !important; inset: auto !important; flex: 1 1 auto; min-width: 0 !important; min-height: 0 !important;
   width: auto !important; height: auto !important; max-width: none !important; max-height: none !important;
   margin: 0 !important; border: 0; border-radius: 0; box-shadow: none; resize: none !important; transform: none !important;
 }

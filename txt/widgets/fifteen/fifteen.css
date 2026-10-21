@@ -142,3 +142,8 @@
 @media (max-width: 420px) {
   #fifteen-panel .cade-panel-body { padding: 6px 8px 8px; }
 }
+
+/* Popped out into its own window (Cade.popOut): the square board is sized from
+   the window's height as well as its width (~180px = header, size picker, moves
+   line and toolbar) and centred, so it never runs off the bottom. */
+.cade-popped .fp { width: min(100%, max(240px, calc(100vh - 180px))); margin: 0 auto; }

@@ -136,3 +136,9 @@
 @media (max-width: 420px) {
   #connect4-panel .cade-panel-body { padding: 6px 8px 8px; }
 }
+
+/* Popped out into its own window (Cade.popOut): the square board is sized from
+   the window's height as well as its width (~200px = header, mode row, status,
+   score line and toolbar), so a wide window doesn't push the board off the
+   bottom; it sits centred. */
+.cade-popped .c4 { width: min(100%, max(260px, calc(100vh - 200px))); margin: 0 auto; }
