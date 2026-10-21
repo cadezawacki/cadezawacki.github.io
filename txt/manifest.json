@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "version": "2026.10.21-8",
+  "version": "2026.10.22-1",
   "modules": [
     {
       "id": "crawler",
@@ -1336,6 +1336,16 @@
       "settingKey": "plugins.thumbpad",
       "section": "Editor",
       "default": true
+    },
+    {
+      "id": "typewriter",
+      "type": "plugin",
+      "name": "Typewriter sounds",
+      "description": "Plays a short key sound as you type in the editor — mechanical keyboard, typewriter (carriage return and bell) or soft laptop taps. Off unless you turn it on; once on, its style, volume and bell options appear in this section",
+      "entry": "widgets/typewriter/typewriter.js",
+      "settingKey": "plugins.typewriter",
+      "section": "Editor",
+      "default": false
     },
     {
       "id": "voice",
