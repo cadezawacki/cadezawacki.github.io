@@ -2,11 +2,11 @@
  * the editor. Off by default (Settings → Editor).
  *
  * Profiles, all synthesized here (no audio files):
- *   mechanical  tactile switch: a short noise click, the bottom-out clack and a
- *               low body thump; space / Enter get the stabilizer's deeper clack.
- *   typewriter  a sharp strike with a metallic type-bar tick and the escapement
- *               tick, a heavier thunk for space, a carriage-return zip (ratchet
- *               clicks + slide + end thunk) for Enter, and a bell "ding" when
+ *   mechanical  a rounded "thock": a muted click, the bottom-out and a low body
+ *               thump; space / Enter get the stabilizer's deeper thock.
+ *   typewriter  a soft wooden strike with the type bar and a faint escapement
+ *               tick, a heavier thunk for space, a carriage return (soft ratchet
+ *               + slide + settle) for Enter, and a gentle chime when
  *               Enter is pressed at the end of a line or a line passes the
  *               72-character margin (once per line).
  *   soft        muted laptop-keyboard taps, quiet.
@@ -151,103 +151,104 @@
   }
 
   // ---- the sounds ------------------------------------------------------------
+  // Tuned to be easy to listen to for a long time: no clangy inharmonic metal
+  // partials, noise kept in the low-mids, a slightly rounded attack, and every
+  // sound finally passed through a gentle low-pass (see WARM) — wood and felt
+  // rather than steel.
   function mechanical(kind, sr, rnd, J) {
     var o, d;
     if (kind === 'key' || kind === 'back') {
       var back = kind === 'back';
       o = new Float32Array(Math.round(0.12 * sr));
       d = 0.004 + rnd() * 0.002;                          // switch bottoms out
-      addNoise(o, sr, rnd, { f: (back ? 2900 : 3900) * J(0.1), q: 1.4, att: 0.0003, tau: 0.0025, gain: 1.1 });
-      addNoise(o, sr, rnd, { at: d, f: (back ? 1250 : 1650) * J(0.1), q: 0.9, att: 0.0004, tau: back ? 0.005 : 0.006, gain: 0.8 });
-      addTone(o, sr, { at: d, f: (back ? 185 : 215) * J(0.08), f1: back ? 135 : 150, glide: 0.01, tau: back ? 0.012 : 0.015, att: 0.001, gain: 0.3 });
-      addTone(o, sr, { at: d, f: 540 * J(0.1), tau: 0.008, att: 0.0008, gain: 0.2 });   // case resonance
-      return finish(o, sr, back ? 0.62 : 0.7);
+      addNoise(o, sr, rnd, { f: (back ? 1700 : 2100) * J(0.1), q: 0.8, att: 0.0008, tau: 0.0025, gain: 1.1 });
+      addNoise(o, sr, rnd, { at: d, type: 'lowpass', f: (back ? 900 : 1100) * J(0.1), q: 0.7, att: 0.0008, tau: back ? 0.006 : 0.007, gain: 0.8 });
+      addTone(o, sr, { at: d, f: (back ? 185 : 215) * J(0.08), f1: back ? 135 : 150, glide: 0.01, tau: back ? 0.013 : 0.016, att: 0.0012, gain: 0.45 }); // "thock"
+      addTone(o, sr, { at: d, f: 430 * J(0.08), tau: 0.008, att: 0.001, gain: 0.18 });   // case resonance
+      return finish(o, sr, back ? 0.55 : 0.62);
     }
     if (kind === 'space' || kind === 'enter') {
       var ent = kind === 'enter';
       o = new Float32Array(Math.round(0.15 * sr));
       d = 0.0025 + rnd() * 0.0015;
-      addNoise(o, sr, rnd, { f: (ent ? 1700 : 1150) * J(0.1), q: 0.9, att: 0.0004, tau: 0.004, gain: 1.6 });
-      addNoise(o, sr, rnd, { at: d, f: (ent ? 950 : 720) * J(0.1), q: 0.7, att: 0.0006, tau: 0.011, gain: 0.75 });
-      addTone(o, sr, { at: d, f: (ent ? 165 : 132) * J(0.06), f1: ent ? 112 : 95, glide: 0.015, tau: ent ? 0.022 : 0.026, att: 0.001, gain: 0.7 });
-      addNoise(o, sr, rnd, { at: d + 0.008 + rnd() * 0.004, f: 2600 * J(0.15), q: 1.5, att: 0.0003, tau: 0.002, gain: 0.25 }); // stabilizer rattle
-      return finish(o, sr, ent ? 0.85 : 0.8);
+      addNoise(o, sr, rnd, { type: 'lowpass', f: (ent ? 1300 : 1000) * J(0.1), q: 0.7, att: 0.001, tau: 0.004, gain: 1.2 });
+      addNoise(o, sr, rnd, { at: d, type: 'lowpass', f: (ent ? 800 : 650) * J(0.1), q: 0.7, att: 0.001, tau: 0.011, gain: 0.7 });
+      addTone(o, sr, { at: d, f: (ent ? 165 : 132) * J(0.06), f1: ent ? 112 : 95, glide: 0.015, tau: ent ? 0.022 : 0.026, att: 0.0015, gain: 0.75 });
+      addNoise(o, sr, rnd, { at: d + 0.008 + rnd() * 0.004, f: 1500 * J(0.15), q: 0.8, att: 0.0006, tau: 0.002, gain: 0.12 }); // stabilizer
+      return finish(o, sr, ent ? 0.72 : 0.7);
     }
     if (kind === 'paste') {
       o = new Float32Array(Math.round(0.12 * sr));
-      addNoise(o, sr, rnd, { type: 'lowpass', f: 1800 * J(0.1), q: 0.7, att: 0.001, tau: 0.008, gain: 0.8 });
-      addTone(o, sr, { f: 170 * J(0.06), f1: 130, glide: 0.012, tau: 0.018, att: 0.0015, gain: 0.6 });
-      return finish(o, sr, 0.42);
+      addNoise(o, sr, rnd, { type: 'lowpass', f: 1300 * J(0.1), q: 0.7, att: 0.0015, tau: 0.008, gain: 0.8 });
+      addTone(o, sr, { f: 170 * J(0.06), f1: 130, glide: 0.012, tau: 0.018, att: 0.002, gain: 0.6 });
+      return finish(o, sr, 0.38);
     }
     return null;
   }
 
   function carriageReturn(sr, rnd, J) {
     var o = new Float32Array(Math.round(0.5 * sr)), i;
-    addNoise(o, sr, rnd, { f: 2200 * J(0.08), q: 1, att: 0.0003, tau: 0.004, gain: 0.7 });      // lever
-    addTone(o, sr, { f: 300 * J(0.06), f1: 220, glide: 0.01, tau: 0.012, att: 0.0008, gain: 0.3 });
-    // Ratchet: the gaps shrink as the carriage speeds up.
+    addNoise(o, sr, rnd, { type: 'lowpass', f: 1400 * J(0.08), q: 0.7, att: 0.0008, tau: 0.004, gain: 0.6 });   // lever
+    addTone(o, sr, { f: 260 * J(0.06), f1: 200, glide: 0.01, tau: 0.012, att: 0.001, gain: 0.3 });
+    // Ratchet: soft wooden clicks, the gaps shrinking as the carriage speeds up.
     var n = 12 + Math.floor(rnd() * 4);
     for (i = 0; i < n; i++) {
       var t = 0.04 + 0.26 * Math.pow(i / (n - 1), 0.75);
-      addNoise(o, sr, rnd, { at: t, f: 3600 * J(0.15), q: 1.5, att: 0.0002, tau: 0.0012, gain: 0.35 * J(0.3) });
-      addTone(o, sr, { at: t, f: 2900 * J(0.05), tau: 0.003, att: 0.0003, gain: 0.05 });
+      addNoise(o, sr, rnd, { at: t, f: 1600 * J(0.15), q: 0.9, att: 0.0006, tau: 0.0015, gain: 0.2 * J(0.3) });
     }
-    addNoise(o, sr, rnd, { at: 0.03, f: 1400 * J(0.1), q: 0.5, att: 0.03, tau: 0.12, gain: 0.16 });   // slide
-    var end = 0.31 + rnd() * 0.01;                        // carriage hits the stop
-    addTone(o, sr, { at: end, f: 105 * J(0.05), f1: 75, glide: 0.02, tau: 0.03, att: 0.001, gain: 1 });
-    addNoise(o, sr, rnd, { at: end, type: 'lowpass', f: 1000, q: 0.7, att: 0.0004, tau: 0.012, gain: 0.8 });
-    addPartials(o, sr, 1900 * J(0.05), [[1, 0.15, 0.02], [1.6, 0.08, 0.015]], { at: end, att: 0.0004 });
-    return finish(o, sr, 0.62);
+    addNoise(o, sr, rnd, { at: 0.03, type: 'lowpass', f: 800 * J(0.1), q: 0.6, att: 0.03, tau: 0.12, gain: 0.14 });   // slide
+    var end = 0.31 + rnd() * 0.01;                        // carriage settles against the stop
+    addTone(o, sr, { at: end, f: 105 * J(0.05), f1: 75, glide: 0.02, tau: 0.03, att: 0.0015, gain: 0.9 });
+    addNoise(o, sr, rnd, { at: end, type: 'lowpass', f: 700, q: 0.7, att: 0.0008, tau: 0.012, gain: 0.6 });
+    return finish(o, sr, 0.5);
   }
 
+  // A soft chime (G6, near-harmonic partials, felt hammer) instead of a bright
+  // brass ding; two partials a hair apart give it a slow, gentle shimmer.
   function bell(sr, rnd, J) {
     var o = new Float32Array(Math.round(1.3 * sr));
-    var f0 = 2480 * J(0.01);
-    // Two near-unison partials beat slowly (the shimmer of a small bell).
-    addPartials(o, sr, f0, [[1, 1, 0.28], [1.0035, 0.5, 0.24], [2.41, 0.35, 0.14], [3.93, 0.2, 0.08], [5.86, 0.12, 0.05], [8.1, 0.06, 0.03]], { att: 0.0004 });
-    addNoise(o, sr, rnd, { f: 6000, q: 1.2, att: 0.0002, tau: 0.0015, gain: 0.25 });             // hammer
-    return finish(o, sr, 0.5);
+    var f0 = 1568 * J(0.005);
+    addPartials(o, sr, f0, [[1, 1, 0.42], [1.0025, 0.45, 0.36], [2.0, 0.16, 0.16], [3.0, 0.05, 0.07]], { att: 0.0025 });
+    addTone(o, sr, { f: f0 / 2, tau: 0.12, att: 0.003, gain: 0.18 });                             // warm body
+    addNoise(o, sr, rnd, { type: 'lowpass', f: 2500, q: 0.7, att: 0.0008, tau: 0.0015, gain: 0.06 }); // felt hammer
+    return finish(o, sr, 0.32);
   }
 
   function typewriter(kind, sr, rnd, J) {
     var o, d;
     if (kind === 'key') {
       o = new Float32Array(Math.round(0.12 * sr));
-      addNoise(o, sr, rnd, { f: 2800 * J(0.1), q: 0.7, att: 0.0002, tau: 0.0018, gain: 1.2 });       // strike
-      addPartials(o, sr, 3150 * J(0.05), [[1, 0.5, 0.012], [1.52, 0.35, 0.009], [2.31, 0.25, 0.007], [3.07, 0.15, 0.005]], { att: 0.0003 });
-      addTone(o, sr, { at: 0.0015, f: 240 * J(0.08), f1: 170, glide: 0.008, tau: 0.011, att: 0.0008, gain: 0.4 }); // type bar
-      addNoise(o, sr, rnd, { at: 0.001, type: 'lowpass', f: 1400, q: 0.7, att: 0.0005, tau: 0.014, gain: 0.45 });   // platen
+      addNoise(o, sr, rnd, { type: 'lowpass', f: 2000 * J(0.1), q: 0.7, att: 0.0008, tau: 0.0025, gain: 0.9 });   // strike
+      addTone(o, sr, { f: 420 * J(0.06), f1: 300, glide: 0.006, tau: 0.012, att: 0.001, gain: 0.45 });             // wooden knock
+      addTone(o, sr, { at: 0.0015, f: 220 * J(0.08), f1: 165, glide: 0.008, tau: 0.012, att: 0.001, gain: 0.4 });  // type bar
+      addNoise(o, sr, rnd, { at: 0.001, type: 'lowpass', f: 900, q: 0.7, att: 0.0008, tau: 0.015, gain: 0.5 });    // platen
       d = 0.022 + rnd() * 0.006;                          // escapement advances
-      addNoise(o, sr, rnd, { at: d, f: 4200 * J(0.1), q: 2, att: 0.0002, tau: 0.0015, gain: 0.25 });
-      addTone(o, sr, { at: d, f: 2600 * J(0.05), tau: 0.004, att: 0.0003, gain: 0.08 });
-      return finish(o, sr, 0.75);
+      addNoise(o, sr, rnd, { at: d, f: 1700 * J(0.1), q: 0.9, att: 0.0006, tau: 0.002, gain: 0.14 });
+      return finish(o, sr, 0.62);
     }
     if (kind === 'space') {
       o = new Float32Array(Math.round(0.16 * sr));
-      addNoise(o, sr, rnd, { type: 'lowpass', f: 900 * J(0.1), q: 0.8, att: 0.0006, tau: 0.012, gain: 1 });
-      addTone(o, sr, { f: 95 * J(0.06), f1: 68, glide: 0.02, tau: 0.032, att: 0.0012, gain: 1 });   // heavy thunk
-      addTone(o, sr, { f: 180 * J(0.06), f1: 140, glide: 0.01, tau: 0.015, att: 0.001, gain: 0.4 });
+      addNoise(o, sr, rnd, { type: 'lowpass', f: 520 * J(0.1), q: 0.7, att: 0.001, tau: 0.012, gain: 0.8 });
+      addTone(o, sr, { f: 95 * J(0.06), f1: 68, glide: 0.02, tau: 0.032, att: 0.0015, gain: 1 });   // thunk
+      addTone(o, sr, { f: 190 * J(0.06), f1: 145, glide: 0.01, tau: 0.016, att: 0.0012, gain: 0.5 });
       d = 0.018 + rnd() * 0.006;
-      addNoise(o, sr, rnd, { at: d, f: 3600 * J(0.1), q: 1.6, att: 0.0002, tau: 0.002, gain: 0.35 });
-      addTone(o, sr, { at: d, f: 2400 * J(0.05), tau: 0.006, att: 0.0003, gain: 0.12 });
-      return finish(o, sr, 0.8);
+      addNoise(o, sr, rnd, { at: d, f: 1300 * J(0.1), q: 0.9, att: 0.0006, tau: 0.002, gain: 0.1 });
+      return finish(o, sr, 0.68);
     }
     if (kind === 'back') {                                // carriage pulled back a step
       o = new Float32Array(Math.round(0.12 * sr));
-      addNoise(o, sr, rnd, { f: 1800 * J(0.1), q: 1, att: 0.0003, tau: 0.003, gain: 0.8 });
-      addPartials(o, sr, 2100 * J(0.05), [[1, 0.3, 0.01], [1.47, 0.2, 0.008], [2.09, 0.12, 0.006]], { att: 0.0003 });
-      addTone(o, sr, { f: 150 * J(0.06), f1: 120, glide: 0.01, tau: 0.018, att: 0.001, gain: 0.55 });
-      addNoise(o, sr, rnd, { at: 0.012 + rnd() * 0.004, f: 3200 * J(0.1), q: 1.5, att: 0.0002, tau: 0.0015, gain: 0.3 });
-      return finish(o, sr, 0.6);
+      addNoise(o, sr, rnd, { type: 'lowpass', f: 1300 * J(0.1), q: 0.7, att: 0.0008, tau: 0.003, gain: 0.8 });
+      addTone(o, sr, { f: 330 * J(0.06), f1: 250, glide: 0.006, tau: 0.01, att: 0.001, gain: 0.3 });
+      addTone(o, sr, { f: 150 * J(0.06), f1: 120, glide: 0.01, tau: 0.018, att: 0.0012, gain: 0.55 });
+      addNoise(o, sr, rnd, { at: 0.012 + rnd() * 0.004, f: 1500 * J(0.1), q: 0.9, att: 0.0006, tau: 0.0018, gain: 0.15 });
+      return finish(o, sr, 0.52);
     }
     if (kind === 'enter') return carriageReturn(sr, rnd, J);
     if (kind === 'paste') {
       o = new Float32Array(Math.round(0.12 * sr));
-      addNoise(o, sr, rnd, { type: 'lowpass', f: 1600 * J(0.1), q: 0.7, att: 0.0008, tau: 0.01, gain: 0.7 });
-      addTone(o, sr, { f: 200 * J(0.06), f1: 150, glide: 0.01, tau: 0.016, att: 0.001, gain: 0.45 });
-      addNoise(o, sr, rnd, { at: 0.02, f: 3800, q: 1.5, att: 0.0002, tau: 0.0015, gain: 0.15 });
-      return finish(o, sr, 0.42);
+      addNoise(o, sr, rnd, { type: 'lowpass', f: 1200 * J(0.1), q: 0.7, att: 0.0012, tau: 0.01, gain: 0.7 });
+      addTone(o, sr, { f: 200 * J(0.06), f1: 150, glide: 0.01, tau: 0.016, att: 0.0015, gain: 0.45 });
+      return finish(o, sr, 0.36);
     }
     return null;
   }
@@ -257,26 +258,37 @@
     if (kind === 'key' || kind === 'back') {
       var back = kind === 'back';
       o = new Float32Array(Math.round(0.08 * sr));
-      addNoise(o, sr, rnd, { type: 'lowpass', f: (back ? 1700 : 2200) * J(0.1), q: 0.7, att: 0.0008, tau: back ? 0.0025 : 0.003, gain: 0.8 });
-      addTone(o, sr, { f: (back ? 255 : 300) * J(0.1), f1: back ? 205 : 230, glide: 0.006, tau: back ? 0.006 : 0.007, att: 0.0008, gain: 0.35 });
-      addNoise(o, sr, rnd, { at: 0.002, f: 900 * J(0.1), q: 0.8, att: 0.0005, tau: 0.005, gain: 0.35 });
-      return finish(o, sr, back ? 0.27 : 0.3);
+      addNoise(o, sr, rnd, { type: 'lowpass', f: (back ? 1300 : 1600) * J(0.1), q: 0.7, att: 0.0012, tau: back ? 0.0025 : 0.003, gain: 0.7 });
+      addTone(o, sr, { f: (back ? 255 : 300) * J(0.1), f1: back ? 205 : 230, glide: 0.006, tau: back ? 0.006 : 0.007, att: 0.0012, gain: 0.4 });
+      addNoise(o, sr, rnd, { at: 0.002, type: 'lowpass', f: 700 * J(0.1), q: 0.7, att: 0.0008, tau: 0.005, gain: 0.35 });
+      return finish(o, sr, back ? 0.26 : 0.28);
     }
     if (kind === 'space' || kind === 'enter') {
       var ent = kind === 'enter';
       o = new Float32Array(Math.round(0.1 * sr));
-      addNoise(o, sr, rnd, { type: 'lowpass', f: (ent ? 1500 : 1200) * J(0.1), q: 0.7, att: 0.001, tau: 0.006, gain: 0.8 });
-      addTone(o, sr, { f: (ent ? 200 : 170) * J(0.06), f1: ent ? 150 : 130, glide: 0.01, tau: 0.013, att: 0.001, gain: 0.6 });
-      addNoise(o, sr, rnd, { at: 0.008 + rnd() * 0.003, type: 'lowpass', f: 2500, q: 0.7, att: 0.0004, tau: 0.002, gain: 0.2 });
-      return finish(o, sr, ent ? 0.36 : 0.34);
+      addNoise(o, sr, rnd, { type: 'lowpass', f: (ent ? 1100 : 900) * J(0.1), q: 0.7, att: 0.0015, tau: 0.006, gain: 0.8 });
+      addTone(o, sr, { f: (ent ? 200 : 170) * J(0.06), f1: ent ? 150 : 130, glide: 0.01, tau: 0.013, att: 0.0015, gain: 0.6 });
+      return finish(o, sr, ent ? 0.34 : 0.32);
     }
     if (kind === 'paste') {
       o = new Float32Array(Math.round(0.1 * sr));
-      addNoise(o, sr, rnd, { type: 'lowpass', f: 1000 * J(0.1), q: 0.7, att: 0.0012, tau: 0.008, gain: 0.8 });
-      addTone(o, sr, { f: 180 * J(0.06), tau: 0.01, att: 0.0012, gain: 0.5 });
+      addNoise(o, sr, rnd, { type: 'lowpass', f: 800 * J(0.1), q: 0.7, att: 0.0015, tau: 0.008, gain: 0.8 });
+      addTone(o, sr, { f: 180 * J(0.06), tau: 0.01, att: 0.0015, gain: 0.5 });
       return finish(o, sr, 0.18);
     }
     return null;
+  }
+  // The final gentle low-pass per profile (Hz): takes the edge off everything.
+  var WARM = { mechanical: 3200, typewriter: 2800, soft: 2000, bell: 5200 };
+  function warm(out, sr, f) {
+    if (!out || !(f < sr / 2.2)) return out;
+    var peak = 0, i;
+    for (i = 0; i < out.length; i++) { var a = Math.abs(out[i]); if (a > peak) peak = a; }
+    runFilter(out, biquad('lowpass', f, 0.6, sr));
+    var m = 0;
+    for (i = 0; i < out.length; i++) { var b = Math.abs(out[i]); if (b > m) m = b; }
+    if (m > 0 && peak > 0) { var k = Math.min(1, peak / m); for (i = 0; i < out.length; i++) out[i] *= k; }
+    return out;
   }
 
   // synth(profile, kind, sampleRate, variant) -> Float32Array (mono, |x| <= 1).
@@ -286,10 +298,9 @@
     var seed = ((variant | 0) + 1) * 2654435761 + (PROFILES.indexOf(profile) + 1) * 97 + (KINDS.indexOf(kind) + 1) * 7919;
     var rnd = prng(seed);
     var J = function (a) { return 1 + (rnd() * 2 - 1) * a; };
-    if (kind === 'bell') return bell(sr, rnd, J);
-    if (profile === 'typewriter') return typewriter(kind, sr, rnd, J);
-    if (profile === 'soft') return soft(kind, sr, rnd, J);
-    return mechanical(kind, sr, rnd, J);
+    if (kind === 'bell') return warm(bell(sr, rnd, J), sr, WARM.bell);
+    var out = profile === 'typewriter' ? typewriter(kind, sr, rnd, J) : profile === 'soft' ? soft(kind, sr, rnd, J) : mechanical(kind, sr, rnd, J);
+    return warm(out, sr, WARM[profile] || WARM.mechanical);
   }
   function isLong(profile, kind) { return kind === 'bell' || (profile === 'typewriter' && kind === 'enter'); }
   function variantsFor(profile, kind) { return isLong(profile, kind) ? CFG.longVariants : CFG.variants; }
