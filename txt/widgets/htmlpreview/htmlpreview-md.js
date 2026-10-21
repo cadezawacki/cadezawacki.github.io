@@ -547,10 +547,17 @@
     'input[type=checkbox]{margin:0 .45em 0 0;vertical-align:-2px;width:15px;height:15px;accent-color:var(--accent)}',
     'input[type=checkbox][data-tl]{cursor:pointer}',
     'li:has(>input:checked){color:var(--text-muted)}',
-    'table{border-collapse:collapse;margin:0 0 1em;display:block;overflow-x:auto;max-width:100%}',
-    'th,td{border:1px solid var(--border);padding:5px 10px;vertical-align:top}th{background:var(--surface-2);text-align:left;font-weight:600}',
+    // Tables are compact (tight cells, short cells kept on one line — see enhance())
+    // and scroll sideways when wide, with a thin visible scrollbar and soft edge
+    // shadows that show there's more (scrollbars are hidden on iOS until you swipe).
+    'table{border-collapse:collapse;margin:0 0 1em;display:block;overflow-x:auto;max-width:100%;-webkit-overflow-scrolling:touch;scrollbar-width:thin;scrollbar-color:var(--border) transparent;' +
+      'background:linear-gradient(to right,var(--bg) 30%,transparent) left/28px 100% no-repeat local,linear-gradient(to left,var(--bg) 30%,transparent) right/28px 100% no-repeat local,' +
+      'radial-gradient(farthest-side at 0 50%,rgba(0,0,0,.2),transparent) left/10px 100% no-repeat scroll,radial-gradient(farthest-side at 100% 50%,rgba(0,0,0,.2),transparent) right/10px 100% no-repeat scroll}',
+    'table::-webkit-scrollbar{height:7px}table::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px}table::-webkit-scrollbar-track{background:transparent}',
+    'th,td{border:1px solid var(--border);padding:3px 8px;vertical-align:top;font-size:.92em;line-height:1.4}th{background:var(--surface-2);text-align:left;font-weight:600;white-space:nowrap}',
+    'td.md-nw{white-space:nowrap}td:not(.md-nw){min-width:12ch;max-width:46ch}',
     'hr{border:0;border-top:1px solid var(--border);margin:1.4em 0}',
-    'table.md-csv td{white-space:pre-wrap;font-variant-numeric:tabular-nums}',
+    'table.md-csv td{white-space:pre-wrap;font-variant-numeric:tabular-nums}table.md-csv td.md-nw{white-space:pre}',
     '.md-tw{margin:0 0 1em}.md-tw>table{margin:0}',
     '.md-tf{display:flex;align-items:center;gap:8px;margin:0 0 6px}',
     '.md-tf input{flex:1 1 auto;min-width:0;max-width:280px;font:13px var(--font-body);color:var(--text);background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:5px 9px;-webkit-appearance:none;appearance:none}',
@@ -594,7 +601,7 @@
     '.md-err{color:var(--text-muted)}',
     '.md-text{white-space:pre-wrap;word-break:break-word;font:13px/1.55 var(--font-mono)}',
     '.md-empty{color:var(--text-faint);text-align:center;padding:48px 12px}',
-    '@media (max-width:520px){.md{padding:14px 14px 56px}body{font-size:15.5px}}',
+    '@media (max-width:520px){.md{padding:14px 14px 56px}body{font-size:15.5px}th,td{padding:3px 6px;font-size:.86em}td:not(.md-nw){min-width:10ch;max-width:30ch}}',
   ].join('\n');
 
   // Runs inside the sandboxed iframe (ES5, shipped via toString).
@@ -653,6 +660,15 @@
       }
       if (tb.__cnt) tb.__cnt.textContent = q ? shown + ' of ' + rows.length : rows.length + ' rows';
     }
+    // Short cells (a few words, a number, a date) stay on one line instead of
+    // wrapping into tall rows; long text still wraps within a sensible width.
+    function nowrapShort(tb) {
+      var bs = tb.tBodies;
+      for (var b = 0; b < bs.length; b++) for (var r = 0; r < bs[b].rows.length; r++) {
+        var cs = bs[b].rows[r].cells;
+        for (var c = 0; c < cs.length; c++) { var t = cs[c].textContent; if (t.length <= 32 && t.indexOf('\n') < 0) cs[c].classList.add('md-nw'); }
+      }
+    }
     function enhance(el) {
       var ts = el.querySelectorAll('table'), seenK = {};
       for (var i = 0; i < ts.length; i++) {
@@ -664,6 +680,7 @@
         tb.__s = s;
         var hs = tb.tHead.rows[0].cells;
         for (var j = 0; j < hs.length; j++) { hs[j].className += ' md-sort'; hs[j].setAttribute('data-c', j); hs[j].title = 'Sort'; }
+        nowrapShort(tb);
         if (tb.tBodies[0].rows.length >= 4) {
           var w = document.createElement('div'), bar = document.createElement('div'), inp = document.createElement('input'), cnt = document.createElement('span');
           w.className = 'md-tw'; bar.className = 'md-tf';
