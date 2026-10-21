@@ -1,0 +1,134 @@
+/* Remote — controller panel + the receiver's "connected" chip. Theme variables only. */
+#remote-panel {
+  top: calc(var(--menubar-h, 36px) + 12px); right: 12px; width: 400px; height: 640px;
+  max-width: calc(100vw - 24px); max-height: calc(100vh - var(--menubar-h, 36px) - 24px); max-height: calc(100dvh - var(--menubar-h, 36px) - 24px);
+  display: flex; flex-direction: column;
+  -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent;
+}
+#remote-panel .cade-panel-body { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; padding: 8px; overflow: hidden; }
+.rc { position: relative; flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 8px; outline: none; font-family: var(--font-mono, ui-monospace, monospace); }
+
+.rc-top { display: flex; gap: 6px; align-items: stretch; }
+.rc-dev {
+  flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 8px; min-height: 38px; padding: 0 10px; cursor: pointer;
+  font: inherit; font-size: 13px; font-weight: 700; color: var(--text); background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px;
+}
+.rc-dn { flex: 1 1 auto; min-width: 0; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rc-car { color: var(--text-faint); font-size: 10px; }
+.rc-dot { width: 9px; height: 9px; border-radius: 50%; flex: 0 0 auto; background: var(--text-faint); }
+.rc-dot.on { background: var(--success, #22c55e); box-shadow: 0 0 0 3px color-mix(in srgb, var(--success, #22c55e) 25%, transparent); }
+.rc-dot.mid { background: var(--warning, #f59e0b); }
+.rc-dot.bad { background: var(--error, #dc2626); }
+.rc-seg { display: flex; gap: 2px; padding: 2px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-2); }
+.rc-seg button { font: inherit; font-size: 12px; padding: 0 9px; border: 0; border-radius: 6px; background: none; color: var(--text-muted); cursor: pointer; white-space: nowrap; }
+.rc-seg button.on { background: var(--surface); color: var(--accent); font-weight: 700; box-shadow: inset 0 0 0 1px var(--border); }
+.rc-ctx { display: flex; align-items: baseline; gap: 10px; justify-content: space-between; font-size: 12.5px; min-height: 18px; }
+.rc-what { font-weight: 700; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rc-st { color: var(--text-muted); font-size: 11.5px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+/* ---- shared button look ---- */
+.rc-b, .rc-pill, .rc-clock {
+  font: inherit; cursor: pointer; touch-action: none; color: var(--text); background: var(--surface-2);
+  border: 1px solid var(--border); border-radius: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  transition: transform 60ms ease, background 60ms ease;
+}
+.rc-b.on, .rc-pill.on { background: color-mix(in srgb, var(--accent) 28%, var(--surface-2)); border-color: var(--accent); transform: scale(0.96); }
+.rc-b.off { opacity: 0.38; }
+.rc-bt { font-weight: 800; font-size: 15px; line-height: 1; pointer-events: none; }
+.rc-lb { font-size: 10px; color: var(--text-muted); line-height: 1.1; pointer-events: none; min-height: 11px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ---- gamepad ---- */
+.rc-pad, .rc-pres { flex: 1 1 auto; min-height: 0; display: none; flex-direction: column; gap: 10px; }
+#remote-panel[data-rcmode="pad"] .rc-pad, #remote-panel[data-rcmode="pres"] .rc-pres { display: flex; }
+.rc-sys { display: flex; justify-content: center; gap: 10px; }
+.rc-pill { min-width: 76px; height: 40px; border-radius: 20px; padding: 0 12px; }
+.rc-pill .rc-bt { font-size: 12px; font-weight: 700; }
+.rc-main { flex: 1 1 auto; min-height: 0; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.rc-dpad {
+  --s: min(46vw, 210px, 42vh);
+  position: relative; width: var(--s); height: var(--s); flex: 0 0 auto; touch-action: none; cursor: pointer;
+  border-radius: 50%; background: radial-gradient(circle, var(--surface-2) 0 55%, transparent 56%);
+}
+.rc-arm {
+  position: absolute; width: 34%; height: 34%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
+  font-size: 20px; color: var(--text-muted); background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; pointer-events: none;
+}
+.rc-arm.on { color: var(--accent); border-color: var(--accent); background: color-mix(in srgb, var(--accent) 22%, var(--surface-2)); }
+.rc-arm.off { opacity: 0.38; }
+.rc-u { left: 33%; top: 0; } .rc-d { left: 33%; bottom: 0; } .rc-l { left: 0; top: 33%; } .rc-r { right: 0; top: 33%; }
+.rc-hub { position: absolute; left: 36%; top: 36%; width: 28%; height: 28%; border-radius: 50%; background: var(--surface); border: 1px solid var(--border); pointer-events: none; }
+.rc-face { --f: min(19vw, 78px, 16vh); position: relative; width: calc(var(--f) * 2.5); height: calc(var(--f) * 2.5); flex: 0 0 auto; }
+.rc-f { position: absolute; width: var(--f); height: var(--f); border-radius: 50%; }
+.rc-f .rc-bt { font-size: 22px; }
+.rc-fy { left: calc(var(--f) * 0.75); top: 0; } .rc-fa { left: calc(var(--f) * 0.75); bottom: 0; }
+.rc-fx { left: 0; top: calc(var(--f) * 0.75); } .rc-fb { right: 0; top: calc(var(--f) * 0.75); }
+.rc-fa { background: color-mix(in srgb, var(--accent) 16%, var(--surface-2)); }
+.rc-fa .rc-bt { color: var(--accent); }
+.rc-fb .rc-bt { color: var(--error, #dc2626); }
+
+/* ---- presenter ---- */
+.rc-clock { flex: 0 0 auto; height: 44px; border-radius: 10px; font-size: 22px; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--text-muted); }
+.rc-clock.on { color: var(--accent); }
+.rc-next { flex: 1 1 auto; min-height: 110px; border-radius: 16px; background: color-mix(in srgb, var(--accent) 14%, var(--surface-2)); }
+.rc-next .rc-bt { font-size: 30px; color: var(--accent); }
+.rc-row { display: flex; gap: 8px; }
+.rc-row > .rc-b { flex: 1 1 0; height: 64px; }
+.rc-row4 > .rc-b { height: 48px; }
+.rc-strip {
+  flex: 0 0 auto; height: 58px; display: flex; align-items: center; justify-content: center; touch-action: none; cursor: ns-resize;
+  border: 1px dashed var(--border); border-radius: 12px; font-size: 11px; color: var(--text-faint);
+  background: repeating-linear-gradient(0deg, transparent 0 9px, color-mix(in srgb, var(--text) 6%, transparent) 9px 10px);
+}
+.rc-strip.on { border-color: var(--accent); color: var(--accent); }
+
+/* ---- device sheet ---- */
+.rc-sheet {
+  position: absolute; left: 0; right: 0; top: 46px; z-index: 2; max-height: calc(100% - 46px); overflow: auto; overscroll-behavior: contain;
+  padding: 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow-lg, 0 8px 24px rgba(0,0,0,0.2));
+  display: flex; flex-direction: column; gap: 8px; font-size: 13px;
+}
+.rc-sheet[hidden] { display: none; }
+.rc-sh-head { display: flex; align-items: center; justify-content: space-between; }
+.rc-x { font: inherit; width: 32px; height: 32px; border: 0; border-radius: 6px; background: none; color: var(--text-muted); cursor: pointer; }
+.rc-note { margin: 0; color: var(--text-muted); font-size: 12.5px; line-height: 1.45; }
+.rc-list { display: flex; flex-direction: column; gap: 6px; }
+.rc-item {
+  display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 6px 10px; cursor: pointer; text-align: left;
+  font: inherit; color: var(--text); background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px;
+}
+.rc-item.on { border-color: var(--accent); }
+.rc-ic { font-size: 20px; }
+.rc-in { flex: 1 1 auto; min-width: 0; font-weight: 700; overflow: hidden; text-overflow: ellipsis; }
+.rc-in small { font-weight: 400; color: var(--text-muted); }
+.rc-is { font-size: 11.5px; color: var(--accent); }
+.rc-btn { font: inherit; min-height: 38px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-2); color: var(--text); cursor: pointer; }
+.rc-me { display: flex; flex-direction: column; gap: 4px; padding-top: 6px; border-top: 1px dashed var(--border); }
+.rc-me label { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-muted); }
+.rc-name { flex: 1 1 auto; min-width: 0; font: inherit; font-size: 16px; padding: 6px 8px; color: var(--text); background: var(--surface-2); border: 1px solid var(--border); border-radius: 6px; -webkit-user-select: text; user-select: text; }
+.rc-me small { font-size: 11.5px; color: var(--text-faint); }
+
+/* Phones (and landscape phones): the controller takes the whole screen below the menu bar. */
+@media (max-width: 560px), (max-height: 500px) and (pointer: coarse) {
+  #remote-panel { top: var(--menubar-h, 36px) !important; left: 0 !important; right: 0; bottom: 0; width: auto; height: auto; max-width: none; max-height: none; border-radius: 0; }
+}
+@media (orientation: landscape) and (max-height: 500px) {
+  .rc-dpad { --s: min(62vh, 230px); }
+  .rc-face { --f: min(24vh, 86px); }
+  .rc-pres { display: none; }
+  #remote-panel[data-rcmode="pres"] .rc-pres { display: grid; grid-template-columns: 1.4fr 1fr; grid-template-rows: auto 1fr auto auto; }
+  #remote-panel[data-rcmode="pres"] .rc-clock { grid-column: 1 / -1; }
+  #remote-panel[data-rcmode="pres"] .rc-next { grid-row: 2 / 5; }
+  #remote-panel[data-rcmode="pres"] .rc-strip { display: none; }
+}
+
+/* ---- receiver: who is connected ---- */
+.rc-chip {
+  position: fixed; left: 12px; bottom: calc(12px + env(safe-area-inset-bottom)); z-index: 6000;
+  display: flex; align-items: center; gap: 8px; padding: 4px 4px 4px 10px; max-width: calc(100vw - 24px);
+  font: 12px var(--font-mono, ui-monospace, monospace); color: var(--text); background: var(--surface);
+  border: 1px solid var(--border); border-radius: 999px; box-shadow: var(--shadow-sm, 0 2px 8px rgba(0,0,0,0.12));
+}
+.rc-chip .rc-ct { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rc-chip .rc-x { width: 26px; height: 26px; border-radius: 50%; }
+.rc-chip .rc-x:hover { color: var(--error, #dc2626); background: var(--surface-2); }
+@media print { .rc-chip { display: none; } }

@@ -4047,6 +4047,24 @@ window.Cade = (function () {
     isPoppedOut(panel) { return !!(panel && panel.classList && panel.classList.contains('cade-popped')); },
     // ---- small per-account synced JSON store (encrypted; offline-first) ----
     syncedBlob(id, opts) { return window.__cadeSyncedBlob(id, opts); },
+    // ---- per-account cloud channels for modules that talk between this
+    //      account's devices (Remote control, Clipboard feed…). ref(kind, sub)
+    //      resolves to a Firebase ref under rooms/__cade_<kind>_<keyFp>/<sub>
+    //      (the existing rules already cover rooms/*), or null without sync set
+    //      up. seal(obj) / unseal(str) encrypt JSON with the sync key exactly as
+    //      rooms are (AES-GCM) — the key itself is never handed out. device is
+    //      this browser's identity: { id (per browser), tab (per page load),
+    //      inst (id-tab), name, kind: 'phone'|'tablet'|'desktop' } ----
+    cloud: {
+      configured() { const st = window.__store; return !!(st && st.get('cade-sync-key') && st.get('cade-firebase-url')); },
+      ref(kind, sub) { return window.__cadeCloudRef(kind, sub); },
+      seal(obj) { return window.__cadeCloudSeal(obj); },
+      unseal(str) { return window.__cadeCloudUnseal(str); },
+      get TIMESTAMP() { try { return firebase.database.ServerValue.TIMESTAMP; } catch { return Date.now(); } },
+      serverNow() { return Date.now() + (window.__cadeCloudOffset || 0); },
+      get device() { return window.__cadeDevice(); },
+      setDeviceName(name) { return window.__cadeSetDeviceName(name); },
+    },
     // ---- command catalogue: the Ctrl+K palette's widgets + scripts (lazy
     //      manifest stubs included) for other launchers, e.g. a "/" menu ----
     commands() { return window.__cadeCommands ? window.__cadeCommands() : []; },
@@ -20492,6 +20510,66 @@ window.__cadeSyncedBlob = function (id, opts) {
       _sbSchedulePush(id);
     },
   };
+};
+
+// ============================================
+// CLOUD CHANNELS + DEVICE IDENTITY (Cade.cloud) — see the API comment above
+// ============================================
+const _devTab = Math.random().toString(36).slice(2, 7);
+function _cadeDeviceGuess() {
+  const ua = navigator.userAgent || '', touchMac = /Macintosh/.test(ua) && navigator.maxTouchPoints > 1;
+  const os = /iPhone|iPod/.test(ua) ? 'iPhone' : (/iPad/.test(ua) || touchMac) ? 'iPad'
+    : /Android/.test(ua) ? (/Mobile/.test(ua) ? 'Android phone' : 'Android tablet')
+    : /CrOS/.test(ua) ? 'Chromebook' : /Mac/.test(ua) ? 'Mac' : /Windows/.test(ua) ? 'Windows PC' : /Linux/.test(ua) ? 'Linux PC' : 'Device';
+  const app = (window.navigator.standalone || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches)) ? ' app' : '';
+  if (/iPhone|iPad/.test(os)) return os + app;
+  const br = /Edg\//.test(ua) ? 'Edge' : /Firefox\//.test(ua) ? 'Firefox' : /Chrome\//.test(ua) ? 'Chrome' : /Safari\//.test(ua) ? 'Safari' : '';
+  return os + (br ? ' · ' + br : '') + app;
+}
+window.__cadeDevice = function () {
+  let id = store.get('cade-device-id');
+  if (!id || !/^[a-z0-9]{6,16}$/.test(id)) {
+    const a = crypto.getRandomValues(new Uint8Array(8));
+    id = Array.from(a, b => (b % 36).toString(36)).join('');
+    store.set('cade-device-id', id);
+  }
+  const ua = navigator.userAgent || '';
+  const kind = /iPhone|iPod|Android.*Mobile/.test(ua) ? 'phone'
+    : (/iPad|Android/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1)) ? 'tablet' : 'desktop';
+  const name = String(store.get('cade-device-name') || '').trim() || _cadeDeviceGuess();
+  return { id, tab: _devTab, inst: id + '-' + _devTab, name, kind };
+};
+window.__cadeSetDeviceName = function (name) {
+  name = String(name || '').replace(/\s+/g, ' ').trim().slice(0, 40);
+  if (name) store.set('cade-device-name', name); else store.remove('cade-device-name');
+  return window.__cadeDevice().name;
+};
+let _cloudFpKey = '', _cloudFp = null, _cloudOffsetHooked = false;
+window.__cadeCloudRef = async function (kind, sub) {
+  kind = String(kind || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  if (!kind) throw new Error('cloud: bad kind');
+  const key = store.get('cade-sync-key') || '', url = store.get('cade-firebase-url') || '';
+  if (!key || !url) return null;
+  if (_cloudFpKey !== key || !_cloudFp) { _cloudFp = await _computeKeyFingerprint(key); _cloudFpKey = key; }
+  let db;
+  try { db = initFirebase(url); } catch (e) { return null; }
+  if (!_cloudOffsetHooked) {   // server clock offset, for "seen 5 s ago" across devices
+    _cloudOffsetHooked = true;
+    try { db.ref('.info/serverTimeOffset').on('value', s => { window.__cadeCloudOffset = s.val() || 0; }); } catch {}
+  }
+  let path = 'rooms/__cade_' + kind + '_' + _cloudFp;
+  if (sub) path += '/' + String(sub).split('/').map(x => x.replace(/[.#$\[\]]/g, '_')).filter(Boolean).join('/');
+  return db.ref(path);
+};
+window.__cadeCloudSeal = function (obj) {
+  const key = store.get('cade-sync-key') || '';
+  if (!key) return Promise.reject(new Error('Sync is not set up'));
+  return encryptText(JSON.stringify(obj), key);
+};
+window.__cadeCloudUnseal = async function (str) {
+  const key = store.get('cade-sync-key') || '';
+  if (!key || typeof str !== 'string' || !str) return null;
+  try { const t = await decryptText(str, key); return t ? JSON.parse(t) : null; } catch { return null; }
 };
 
 // Initial pill render (before any rooms-related rendering)
