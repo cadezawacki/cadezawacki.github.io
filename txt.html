@@ -1824,6 +1824,93 @@ body.split-open .mobile-toolbar { right: 50%; }
 .setting-toggle input:checked ~ .toggle-track { background: var(--accent); }
 .setting-toggle input:checked ~ .toggle-thumb { transform: translateX(16px); }
 
+/* ===== Widget preferences modal (see WIDGET PREFERENCES in JS) =====
+   Desktop: a centred dialog like Preferences. Phone: a full-height sheet sized
+   to the visual viewport (JS sets --wp-top / --wp-h while it's open) so an
+   open keyboard never covers the field being edited. */
+.wp-dialog { width: 520px; }
+.wp-head-row { display: flex; align-items: center; gap: var(--space-2); }
+.wp-head-row .modal-title { flex: 1 1 auto; margin-bottom: 0; }
+.wp-x {
+  flex: 0 0 auto; width: 36px; height: 36px; border: none; background: none; color: var(--text-muted);
+  font-size: 22px; line-height: 1; border-radius: var(--radius-md); cursor: pointer;
+}
+.wp-x:hover { background: var(--surface-hover, var(--surface-2)); color: var(--text); }
+.wp-page { margin-top: var(--space-3); cursor: pointer; }
+.wp-desc { font-size: var(--text-xs); color: var(--text-faint); margin-top: var(--space-2); line-height: 1.45; }
+.wp-desc:empty { display: none; }
+.wp-desc .wp-off { color: var(--warning, var(--text-muted)); }
+.wp-field { padding: 10px 0; border-bottom: 1px solid var(--border); }
+.wp-field:last-child { border-bottom: none; }
+.wp-field[hidden] { display: none; }
+.wp-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); min-height: 32px; }
+label.wp-row { cursor: pointer; }
+.wp-info { min-width: 0; flex: 1 1 auto; display: block; }
+.wp-label { display: block; font-size: var(--text-sm); color: var(--text); }
+.wp-hint { display: block; font-size: var(--text-xs); color: var(--text-faint); margin-top: 2px; line-height: 1.4; }
+.wp-ctl { flex: 0 1 auto; min-width: 0; display: flex; align-items: center; gap: 8px; }
+.wp-ctl select.form-input { width: auto; max-width: 220px; }
+.wp-ctl input[type="number"].form-input { width: 110px; }
+.wp-ctl input[type="date"].form-input, .wp-ctl input[type="time"].form-input { width: auto; min-width: 130px; }
+.wp-wide { margin-top: 8px; }
+.wp-wide textarea.form-input { min-height: 84px; resize: vertical; line-height: 1.45; font-family: inherit; }
+.wp-color { width: 44px; height: 34px; padding: 2px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--bg); cursor: pointer; }
+.wp-color-hex { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--text-muted); min-width: 58px; }
+.wp-slider { display: flex; align-items: center; gap: var(--space-3); }
+.wp-slider input[type="range"] { flex: 1 1 auto; min-width: 0; height: 32px; accent-color: var(--accent); cursor: pointer; }
+.wp-slider output { flex: 0 0 auto; min-width: 64px; text-align: right; font-family: var(--font-mono); font-size: var(--text-xs); color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.wp-seg { display: flex; flex-wrap: wrap; gap: 6px; }
+.wp-opt { position: relative; cursor: pointer; }
+.wp-opt input { position: absolute; opacity: 0; width: 1px; height: 1px; pointer-events: none; }
+.wp-opt span {
+  display: inline-flex; align-items: center; min-height: 32px; padding: 4px 14px; border: 1px solid var(--border);
+  border-radius: 999px; font-size: var(--text-sm); color: var(--text-muted); background: var(--bg);
+  transition: background var(--transition), color var(--transition), border-color var(--transition);
+}
+.wp-opt input:checked + span { background: var(--accent); border-color: var(--accent); color: #fff; }
+.wp-opt input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+.wp-checks { display: flex; flex-direction: column; }
+.wp-chk { display: flex; align-items: center; gap: 10px; min-height: 34px; font-size: var(--text-sm); color: var(--text); cursor: pointer; }
+.wp-chk input { width: 18px; height: 18px; margin: 0; accent-color: var(--accent); flex: 0 0 auto; cursor: pointer; }
+.wp-heading {
+  font-size: var(--text-xs); color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.05em;
+  font-weight: 600; padding: var(--space-4) 0 2px; border-bottom: none;
+}
+.wp-field.wp-heading:first-child { padding-top: 0; }
+.wp-empty { padding: var(--space-6) 0; text-align: center; color: var(--text-muted); font-size: var(--text-sm); line-height: 1.5; }
+.wp-foot { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; }
+.wp-sync { display: flex; align-items: center; gap: 10px; flex: 1 1 220px; min-width: 0; cursor: pointer; }
+.wp-sync.wp-disabled { cursor: default; opacity: 0.6; }
+.wp-sync-text { min-width: 0; }
+.wp-sync-label { display: block; font-size: var(--text-sm); color: var(--text); }
+.wp-sync-hint { display: block; font-size: var(--text-xs); color: var(--text-faint); line-height: 1.35; }
+.wp-sync-hint:empty { display: none; }
+.wp-foot .modal-actions { margin-top: 0 !important; flex: 0 0 auto; margin-left: auto; }
+@media (max-width: 600px) {
+  #wprefs-overlay.open { padding: 0; align-items: stretch; top: var(--wp-top, 0px); bottom: auto; height: var(--wp-h, 100dvh); }
+  #wprefs-overlay .modal-dialog.wp-dialog {
+    width: 100%; max-width: none; height: 100%; max-height: none; margin: 0;
+    border: none; border-radius: 0; animation: wpSheetIn 180ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  #wprefs-overlay .modal-dialog.wp-dialog .modal-header { border-radius: 0; padding-top: calc(var(--space-3) + env(safe-area-inset-top)); }
+  #wprefs-overlay .modal-dialog.wp-dialog .modal-footer { border-radius: 0; padding-bottom: calc(var(--space-3) + env(safe-area-inset-bottom)); }
+  .wp-x { width: 44px; height: 44px; margin-right: -8px; }
+  .wp-page.form-input { min-height: 44px; }
+  .wp-row { min-height: 44px; }
+  .wp-ctl select.form-input { max-width: 180px; min-height: 40px; }
+  .wp-ctl input.form-input, .wp-wide input.form-input, .wp-wide textarea.form-input { min-height: 40px; font-size: 16px; }
+  .wp-ctl input[type="date"].form-input, .wp-ctl input[type="time"].form-input { min-width: 120px; }
+  .wp-color { width: 52px; height: 40px; font-size: 16px; }
+  .wp-slider input[type="range"] { height: 40px; }
+  .wp-opt span { min-height: 40px; padding: 4px 16px; font-size: 15px; }
+  .wp-chk { min-height: 44px; font-size: 15px; }
+  .wp-chk input { width: 22px; height: 22px; }
+  .wp-sync { min-height: 44px; flex-basis: 100%; }
+  .wp-foot .modal-actions { width: 100%; }
+  .wp-foot .modal-actions .btn { flex: 1 1 0; min-height: 44px; }
+}
+@keyframes wpSheetIn { from { transform: translateY(24px); opacity: 0.6; } to { transform: none; opacity: 1; } }
+
 /* Mobile toolbar */
 /* Floating toolbar: hovers over the editor just below the header (not its own
    layout row), so the editor reclaims that vertical space. Centered, with a
@@ -3161,8 +3248,8 @@ body.inbox-list .find-panel { display: none !important; }
         <kbd id="kbd-goto">Ctrl+G</kbd>
       </button>
       <div class="menu-separator"></div>
-      <button class="menu-item" onclick="importFiles()" title="Read files into the document as text; images embed, binaries attach">
-        <span>Import Files…</span>
+      <button class="menu-item" onclick="importFiles()" title="Read files into the document as text; images embed, binaries attach (Upload File… attaches instead)">
+        <span>Import Text…</span>
         <kbd id="kbd-import">Ctrl+Shift+I</kbd>
       </button>
       <button class="menu-item" onclick="openImportFolder()" title="Pick or drop whole folders; filter them, then import as path-tagged fenced text">
@@ -3247,6 +3334,10 @@ body.inbox-list .find-panel { display: none !important; }
       <div class="menu-separator"></div>
       <button class="menu-item" onclick="openSettings()">
         <span>Preferences</span>
+        <span></span>
+      </button>
+      <button class="menu-item" onclick="openWidgetPrefs()" title="Settings for widgets and features — opens on the widget you're using">
+        <span>Widget preferences…</span>
         <span></span>
       </button>
       <button class="menu-item" onclick="openRoomManager()">
@@ -3591,6 +3682,33 @@ body.inbox-list .find-panel { display: none !important; }
       <div class="modal-actions">
         <button class="btn" onclick="resetHotkeys()">Reset Hotkeys</button>
         <button class="btn btn-primary" onclick="closeSettings()">Done</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ========== WIDGET PREFERENCES MODAL (see WIDGET PREFERENCES in JS) ========== -->
+<div class="modal-overlay" id="wprefs-overlay">
+  <div class="modal-dialog modal-dialog-scroll wp-dialog" role="dialog" aria-modal="true" aria-labelledby="wp-title" tabindex="-1">
+    <div class="modal-header">
+      <div class="wp-head-row">
+        <div class="modal-title" id="wp-title">Widget preferences</div>
+        <button class="wp-x" type="button" id="wp-x" aria-label="Close" title="Close">×</button>
+      </div>
+      <select class="form-input wp-page" id="wp-page" aria-label="Preferences for"></select>
+      <div class="wp-desc" id="wp-desc"></div>
+    </div>
+    <div class="modal-body" id="wp-body"></div>
+    <div class="modal-footer">
+      <div class="wp-foot">
+        <label class="wp-sync" id="wp-sync-row">
+          <span class="setting-toggle"><input type="checkbox" id="wp-sync"><span class="toggle-track"></span><span class="toggle-thumb"></span></span>
+          <span class="wp-sync-text"><span class="wp-sync-label">Keep in sync on all my devices</span><span class="wp-sync-hint" id="wp-sync-hint"></span></span>
+        </label>
+        <div class="modal-actions">
+          <button class="btn" type="button" id="wp-reset">Reset to defaults</button>
+          <button class="btn btn-primary" type="button" id="wp-done">Done</button>
+        </div>
       </div>
     </div>
   </div>
@@ -4060,6 +4178,17 @@ window.Cade = (function () {
     isPoppedOut(panel) { return !!(panel && panel.classList && panel.classList.contains('cade-popped')); },
     // ---- small per-account synced JSON store (encrypted; offline-first) ----
     syncedBlob(id, opts) { return window.__cadeSyncedBlob(id, opts); },
+    // ---- Widget preferences (see WIDGET PREFERENCES in core):
+    //      Cade.prefs(id) → { get(key), all(), set(key, v), on(fn(key, value, all)) → off }
+    //      for a module whose manifest entry has "prefs" (or a define()d page);
+    //      Cade.prefs.open(id) opens the modal on that page;
+    //      Cade.prefs.define(id, { title, icon, description, fields }) adds a page ----
+    prefs: (function () {
+      const f = function (id) { return window.__cadePrefs(id); };
+      f.open = function (id) { return window.__cadePrefs.open(id); };
+      f.define = function (id, spec) { return window.__cadePrefs.define(id, spec); };
+      return f;
+    })(),
     // ---- per-account cloud channels for modules that talk between this
     //      account's devices (Remote control, Clipboard feed…). ref(kind, sub)
     //      resolves to a Firebase ref under rooms/__cade_<kind>_<keyFp>/<sub>
@@ -10311,7 +10440,7 @@ window.clearEditor = function() {
 };
 
 // ============================================
-// IMPORT FILES — multi-select files and append to editor in advFile.html style:
+// IMPORT TEXT (importFiles) — multi-select files and append to editor in advFile.html style:
 //   <filename>
 //   ```
 //   <contents>
@@ -10387,7 +10516,7 @@ async function expandZipFiles(files) {
 }
 
 // Append pre-formatted text at the very end of the document, on a fresh line
-// and separated from existing content by a blank one. Shared by Import Files
+// and separated from existing content by a blank one. Shared by Import Text
 // and Import Folder so both land identically.
 function appendTextToDocEnd(text) {
   if (!text) return;
@@ -10486,7 +10615,7 @@ window.uploadFiles = function() {
 // ============================================
 // IMPORT FOLDER
 // ============================================
-// Import Files… reads whatever you hand it, immediately. Import Folder PLANS
+// Import Text… reads whatever you hand it, immediately. Import Folder PLANS
 // first: pick or drop as many folders as you like, filter them down, and only
 // then read the survivors. Until Import is pressed this modal holds nothing but
 // File handles, paths and sizes — no contents — which is what keeps it usable
@@ -11062,7 +11191,7 @@ window.impRun = async function() {
       const f = files[i];
       try {
         // Known text extension goes straight through; anything else gets the
-        // same byte sniff Import Files uses, so a stray .pak or .dat sitting in
+        // same byte sniff Import Text uses, so a stray .pak or .dat sitting in
         // a source tree can't paste binary garbage into the document.
         if (_TEXTLIKE_EXT_RE.test(f.name) || await _sniffIsTextFile(f)) {
           parts[i] = formatImportedFile(f.__impOut || f.__impPath, await readFileAsText(f));
@@ -20522,6 +20651,10 @@ const _origSyncConnectForWs = window.syncConnect;
 // pushes catch up when sync creds + network exist.
 // ============================================
 const _syncedBlobs = new Map(); // id -> {data, ts, onChange, ref, listener, pushTimer, lastWriteTs, attached}
+// Who wrote a blob: one id per page load. Own echoes are recognised by it —
+// a timestamp window alone mistook another device's write made within 250 ms
+// of ours for our own echo, and both sides then kept their own copy.
+const _sbWriter = Math.random().toString(36).slice(2, 10);
 
 function _sbLocalKey(id) { return 'cade-blob:' + id; }
 function _sbPath(id, fp) { return `rooms/__cade_blob_${id}_${fp}/blob`; }
@@ -20557,7 +20690,7 @@ async function _sbPushNow(id) {
         if (snap.val()) await _sbApplyRemote(id, snap.val(), baseKey, 'initial');
       } catch {}
     }
-    const payload = { ts: Date.now(), data: b.data };
+    const payload = { ts: Date.now(), data: b.data, by: _sbWriter };
     b.lastWriteTs = payload.ts;
     const encrypted = await encryptText(JSON.stringify(payload), baseKey);
     if (typeof encrypted === 'string' && encrypted.length > WS_BLOB_MAX) {
@@ -20583,8 +20716,13 @@ async function _sbApplyRemote(id, encrypted, baseKey, source) {
     const payload = JSON.parse(decrypted);
     if (!payload || typeof payload !== 'object') return false;
     const remoteTs = payload.ts || 0;
-    if (Math.abs(remoteTs - (b.lastWriteTs || 0)) < 250) return false; // own echo
-    if (remoteTs <= b.ts) return false;                                // stale
+    if (payload.by ? payload.by === _sbWriter : Math.abs(remoteTs - (b.lastWriteTs || 0)) < 250) return false; // own echo
+    if (remoteTs <= b.ts) {                                            // stale
+      // The server holds an older copy than ours (two writes crossed and the
+      // older one landed last): put ours back so every device converges.
+      if (source === 'remote' && b.data != null && remoteTs < b.ts) _sbSchedulePush(id);
+      return false;
+    }
     b.data = payload.data;
     b.ts = remoteTs;
     _sbSaveLocal(id, b.data, b.ts);
@@ -23715,7 +23853,7 @@ const hotkeyLabels = {
   'openPicker': 'Open Script Picker',
   'rerunScript': 'Rerun Last Script',
   'clearEditor': 'Clear Editor',
-  'importFiles': 'Import Files',
+  'importFiles': 'Import Text',   // id unchanged so saved shortcuts keep working
   'importFolder': 'Import Folder',
   'uploadFiles': 'Upload File (attach)',
   'openSync': 'Open Sync',
@@ -24450,6 +24588,749 @@ document.getElementById('settings-overlay').addEventListener('click', (e) => {
 document.getElementById('settings-overlay').addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && !e.target.classList.contains('hotkey-input')) window.closeSettings();
 });
+
+// ============================================
+// WIDGET PREFERENCES (Cade.prefs + the "Widget preferences…" modal)
+// --------------------------------------------------------------------------
+// Per-widget / per-feature settings live here instead of the long Preferences
+// list. A page is either a manifest module entry with a "prefs" object
+// ({ title?, fields: [...] }, so the modal renders it without loading the
+// module) or a page declared in code with Cade.prefs.define(id, spec). Field
+// types: text, textarea, number, slider, toggle, checkbox (multi → array),
+// radio, select, date, time, color, heading; common keys key/label/hint/
+// default, plus min/max/step/unit, options [{value,label}], placeholder,
+// maxLength and showIf ("key" / "!key" of a toggle).
+//
+// Values: Cade.store `cade-prefs:<id>` holds the values that differ from the
+// defaults (JSON); reads fill in defaults and every read/write is coerced
+// against the schema (numbers clamped + stepped, options checked, booleans,
+// YYYY-MM-DD / HH:MM / #rrggbb). A page whose schema isn't known yet stores
+// what it's given and returns it raw.
+//
+// Sync (opt-in per page): one Cade.syncedBlob('prefs') holds
+// { <id>: { on, fat, at, values } } — `on` is the page's "Keep in sync on all my
+// devices" flag (fat = when it last flipped), `values` its non-default values
+// (at = when they last changed). The flag is account-wide: turning it on (or
+// off) on one device turns it on (off) on the others the next time they hear
+// from the blob, and the device that turned it on publishes its values. Last
+// writer wins per page by timestamp; since the blob itself is whole-document
+// last-writer-wins, every device re-publishes any page it holds a newer copy
+// of after merging a remote blob, so concurrent edits of different pages
+// converge. Local flags + timestamps: `cade-prefs-sync`.
+//
+// Listeners (P.on) fire for set(), modal edits, resets and sync updates; each
+// change is also dispatched as window 'cade-prefs-change' {id, key, value}.
+// The pure part (PrefsCore) is lifted out by txt/widgets/prefs/prefs.test.js —
+// keep it free of DOM / app references.
+// ============================================
+// <prefs-core>
+const PrefsCore = (function () {
+  'use strict';
+  const VALUE_TYPES = ['text', 'textarea', 'number', 'slider', 'toggle', 'checkbox', 'radio', 'select', 'date', 'time', 'color'];
+  const isObj = v => !!v && typeof v === 'object' && !Array.isArray(v);
+  const num = v => (typeof v === 'number' && isFinite(v)) ? v : (typeof v === 'string' && v.trim() && isFinite(Number(v)) ? Number(v) : null);
+  function decimals(n) {
+    const s = String(n), e = s.indexOf('e-');
+    if (e >= 0) return parseInt(s.slice(e + 2), 10) || 0;
+    const i = s.indexOf('.');
+    return i < 0 ? 0 : s.length - i - 1;
+  }
+  function clone(v) { return v == null ? v : JSON.parse(JSON.stringify(v)); }
+  function same(a, b) { return JSON.stringify(a) === JSON.stringify(b); }
+
+  // One field, cleaned; null when it can't be used (unknown type, no key, a
+  // choice field without options).
+  function normField(f) {
+    if (!isObj(f)) return null;
+    const type = String(f.type || '');
+    if (type === 'heading') return { type, label: String(f.label || '') };
+    if (VALUE_TYPES.indexOf(type) < 0) return null;
+    const key = typeof f.key === 'string' ? f.key.trim() : '';
+    if (!key) return null;
+    const o = { type, key, label: f.label != null ? String(f.label) : key };
+    if (f.hint) o.hint = String(f.hint);
+    if (typeof f.showIf === 'string' && f.showIf.replace(/^!/, '')) o.showIf = f.showIf;
+    if (type === 'number' || type === 'slider') {
+      let mn = num(f.min), mx = num(f.max), st = num(f.step);
+      if (type === 'slider') { if (mn == null) mn = 0; if (mx == null) mx = 100; }
+      if (mn != null && mx != null && mn > mx) { const t = mn; mn = mx; mx = t; }
+      if (mn != null) o.min = mn;
+      if (mx != null) o.max = mx;
+      if (st != null && st > 0) o.step = st; else if (type === 'slider') o.step = 1;
+      if (f.unit != null) o.unit = String(f.unit);
+    }
+    if (type === 'radio' || type === 'select' || type === 'checkbox') {
+      const seen = {};
+      o.options = (Array.isArray(f.options) ? f.options : []).map(x => isObj(x)
+        ? { value: x.value, label: x.label != null ? String(x.label) : String(x.value) }
+        : { value: x, label: String(x) })
+        .filter(x => (typeof x.value === 'string' || typeof x.value === 'number' || typeof x.value === 'boolean') && !seen[String(x.value)] && (seen[String(x.value)] = 1));
+      if (!o.options.length) return null;
+    }
+    if (type === 'text' || type === 'textarea') {
+      if (f.placeholder != null) o.placeholder = String(f.placeholder);
+      const ml = num(f.maxLength);
+      if (ml != null && ml > 0) o.maxLength = Math.floor(ml);
+    }
+    o.default = f.default;
+    o.default = defaultOf(o);
+    return o;
+  }
+
+  // Value for field f, or undefined when v isn't acceptable.
+  function coerce(f, v) {
+    if (!f || v === undefined || v === null) return undefined;
+    switch (f.type) {
+      case 'text': case 'textarea': {
+        if (typeof v !== 'string' && typeof v !== 'number') return undefined;
+        let s = String(v);
+        if (f.type === 'text') s = s.replace(/[\r\n]+/g, ' ');
+        if (f.maxLength && s.length > f.maxLength) s = s.slice(0, f.maxLength);
+        return s;
+      }
+      case 'number': case 'slider': {
+        let n = num(v);
+        if (n == null) return undefined;
+        if (f.min != null && n < f.min) n = f.min;
+        if (f.max != null && n > f.max) n = f.max;
+        if (f.step) {
+          const base = f.min != null ? f.min : 0, d = Math.min(10, Math.max(decimals(f.step), decimals(base)));
+          n = Number((base + Math.round(Number(((n - base) / f.step).toFixed(9))) * f.step).toFixed(d));   // toFixed(9): 0.35/0.1 is 3.4999…
+          if (f.max != null && n > f.max) n = Number((n - f.step).toFixed(d));
+          if (f.min != null && n < f.min) n = f.min;
+        }
+        return n;
+      }
+      case 'toggle':
+        if (v === true || v === 1 || v === 'true' || v === '1' || v === 'on') return true;
+        if (v === false || v === 0 || v === 'false' || v === '0' || v === 'off') return false;
+        return undefined;
+      case 'radio': case 'select': {
+        for (const o of f.options) if (String(o.value) === String(v)) return o.value;
+        return undefined;
+      }
+      case 'checkbox': {
+        if (!Array.isArray(v)) return undefined;
+        const want = v.map(String);
+        return f.options.filter(o => want.indexOf(String(o.value)) >= 0).map(o => o.value);
+      }
+      case 'date': {
+        if (typeof v !== 'string') return undefined;
+        if (v === '') return '';
+        const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v);
+        if (!m) return undefined;
+        const d = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3]));
+        return d.getUTCFullYear() === +m[1] && d.getUTCMonth() === +m[2] - 1 && d.getUTCDate() === +m[3] ? v : undefined;
+      }
+      case 'time': {
+        if (typeof v !== 'string') return undefined;
+        if (v === '') return '';
+        const m = /^(\d{1,2}):([0-5]\d)(?::[0-5]\d(?:\.\d+)?)?$/.exec(v);
+        if (!m || +m[1] > 23) return undefined;
+        return (m[1].length === 1 ? '0' : '') + m[1] + ':' + m[2];
+      }
+      case 'color': {
+        if (typeof v !== 'string') return undefined;
+        const m = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(v.trim());
+        if (!m) return undefined;
+        let h = m[1].toLowerCase();
+        if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
+        return '#' + h;
+      }
+    }
+    return undefined;
+  }
+  // The field's default, coerced; a type-appropriate fallback when the
+  // declared one is missing or invalid.
+  function defaultOf(f) {
+    const d = coerce(f, f.default);
+    if (d !== undefined) return d;
+    switch (f.type) {
+      case 'number': case 'slider': return coerce(f, f.min != null ? f.min : 0);
+      case 'toggle': return false;
+      case 'checkbox': return [];
+      case 'radio': case 'select': return f.options[0].value;
+      case 'color': return '#000000';
+      default: return '';
+    }
+  }
+  // A page spec: { id, title, icon, description, fields, keys: { key: field } }.
+  function normSpec(id, spec, fallback) {
+    spec = isObj(spec) ? spec : {};
+    fallback = fallback || {};
+    const fields = [], keys = {};
+    (Array.isArray(spec.fields) ? spec.fields : []).forEach(f => {
+      const n = normField(f);
+      if (!n || (n.key && keys[n.key])) return;
+      if (n.key) keys[n.key] = n;
+      fields.push(n);
+    });
+    return {
+      id,
+      title: String(spec.title || fallback.name || id),
+      icon: String(spec.icon || fallback.icon || ''),
+      description: String(spec.description || ''),
+      fields, keys,
+    };
+  }
+  // Every key's value: the stored one when valid, else the default.
+  function valuesOf(spec, stored) {
+    stored = isObj(stored) ? stored : {};
+    const out = {};
+    spec.fields.forEach(f => {
+      if (!f.key) return;
+      const v = coerce(f, stored[f.key]);
+      out[f.key] = clone(v === undefined ? f.default : v);
+    });
+    return out;
+  }
+  // Only what differs from the defaults (what gets stored / synced).
+  function diffOf(spec, values) {
+    const out = {};
+    spec.fields.forEach(f => {
+      if (!f.key || !values || !(f.key in values)) return;
+      const v = coerce(f, values[f.key]);
+      if (v !== undefined && !same(v, f.default)) out[f.key] = clone(v);
+    });
+    return out;
+  }
+  function visible(f, values) {
+    if (!f.showIf) return true;
+    const neg = f.showIf.charAt(0) === '!', k = neg ? f.showIf.slice(1) : f.showIf;
+    if (!values || !(k in values)) return true;
+    return neg ? !values[k] : !!values[k];
+  }
+  // Keys whose value differs between two value objects.
+  function changedKeys(a, b) {
+    a = a || {}; b = b || {};
+    const ks = Object.keys(a).concat(Object.keys(b).filter(k => !(k in a)));
+    return ks.filter(k => !same(a[k], b[k]));
+  }
+  // Dropdown order: open pages first (in the order given — most recent first),
+  // then the rest alphabetically by title.
+  function orderPages(pages, openIds) {
+    openIds = openIds || [];
+    const byId = {};
+    pages.forEach(p => { byId[p.id] = p; });
+    const open = [], seen = {};
+    openIds.forEach(id => { if (byId[id] && !seen[id]) { seen[id] = 1; open.push({ id, title: byId[id].title, icon: byId[id].icon || '', open: true }); } });
+    const rest = pages.filter(p => !seen[p.id]).map(p => ({ id: p.id, title: p.title, icon: p.icon || '', open: false }))
+      .sort((x, y) => x.title.localeCompare(y.title, undefined, { sensitivity: 'base' }) || (x.id < y.id ? -1 : x.id > y.id ? 1 : 0));
+    return open.concat(rest);
+  }
+  // Which page the modal opens on: the one asked for, else the focused/topmost
+  // open widget, else any open one, else the last page viewed, else the first.
+  function pickInitial(list, o) {
+    o = o || {};
+    const has = id => !!id && list.some(p => p.id === id);
+    if (has(o.want)) return o.want;
+    if (has(o.focused)) return o.focused;
+    const op = list.filter(p => p.open)[0];
+    if (op) return op.id;
+    if (has(o.last)) return o.last;
+    return list.length ? list[0].id : null;
+  }
+  // Merge a remote blob into the local sync state.
+  // local: { id: { on, fat, at } }; remote: { id: { on, fat, at, values } }.
+  // → { meta (new local state), adopt: { id: values to take }, push (bool:
+  //   this device holds something newer than the blob) }.
+  function syncMerge(local, remote) {
+    const meta = {}, adopt = {};
+    let push = false;
+    local = isObj(local) ? local : {};
+    remote = isObj(remote) ? remote : {};
+    Object.keys(local).forEach(id => { if (isObj(local[id])) meta[id] = { on: !!local[id].on, fat: +local[id].fat || 0, at: +local[id].at || 0 }; });
+    Object.keys(remote).forEach(id => {
+      const r = remote[id];
+      if (!isObj(r)) return;
+      const m = meta[id] || (meta[id] = { on: false, fat: 0, at: 0 });
+      const rf = +r.fat || 0, ra = +r.at || 0;
+      if (rf > m.fat) { m.on = !!r.on; m.fat = rf; }
+      if (m.on && r.on && ra > m.at && isObj(r.values)) { adopt[id] = clone(r.values); m.at = ra; }
+    });
+    Object.keys(meta).forEach(id => {
+      const m = meta[id], r = isObj(remote[id]) ? remote[id] : null;
+      if (!m.fat) return;   // never synced: not in the blob
+      if (!r || m.fat > (+r.fat || 0) || (m.on && m.at > (+r.at || 0))) push = true;
+    });
+    return { meta, adopt, push };
+  }
+  // The blob to publish: the remote one with this device's synced (or
+  // un-synced, to spread the "off") pages written over it.
+  function buildBlob(remote, meta, diffs) {
+    const out = isObj(remote) ? clone(remote) : {};
+    Object.keys(meta || {}).forEach(id => {
+      const m = meta[id];
+      if (!m || !m.fat) return;
+      const r = isObj(out[id]) ? out[id] : null;
+      const mine = m.fat > (r ? +r.fat || 0 : 0) || (m.on && m.at > (r ? +r.at || 0 : 0)) || !r;
+      if (!mine) return;
+      out[id] = { on: !!m.on, fat: m.fat, at: m.at || 0, values: clone(diffs && diffs[id]) || {} };
+    });
+    return out;
+  }
+  return { VALUE_TYPES, normField, normSpec, coerce, defaultOf, valuesOf, diffOf, visible, changedKeys, orderPages, pickInitial, syncMerge, buildBlob, same };
+})();
+// </prefs-core>
+
+(function () {
+  const KEY = id => 'cade-prefs:' + id;
+  const META_KEY = 'cade-prefs-sync', LAST_KEY = 'cade-prefs-last';
+  const defined = new Map();     // id -> spec from define()
+  const norm = new Map();        // id -> { src, spec } (normalised, recomputed when the source object changes)
+  const listeners = new Map();   // id -> Set<fn>
+  const handles = new Map();     // id -> the Cade.prefs(id) object
+  const rawCache = new Map();    // id -> { raw, val } parsed storage
+  const okId = id => typeof id === 'string' && /^[A-Za-z0-9_.-]{1,64}$/.test(id);
+
+  function rawSpec(id) {
+    if (defined.has(id)) return { src: defined.get(id), fb: (_manifestById.get(id) || {}) };
+    const m = _manifestById.get(id);
+    if (m && m.prefs && typeof m.prefs === 'object') return { src: m.prefs, fb: m };
+    return null;
+  }
+  function specOf(id) {
+    const r = rawSpec(id);
+    if (!r) return null;
+    const c = norm.get(id);
+    if (c && c.src === r.src) return c.spec;
+    let spec;
+    try { spec = PrefsCore.normSpec(id, r.src, r.fb); } catch (e) { console.warn('prefs: bad spec for ' + id, e); return null; }
+    norm.set(id, { src: r.src, spec });
+    return spec;
+  }
+  function readRaw(id) {
+    const raw = store.get(KEY(id));
+    const c = rawCache.get(id);
+    if (c && c.raw === raw) return c.val;
+    let val = {};
+    try { const o = raw ? JSON.parse(raw) : null; if (o && typeof o === 'object' && !Array.isArray(o)) val = o; } catch {}
+    rawCache.set(id, { raw, val });
+    return val;
+  }
+  function valuesOf(id) {
+    const spec = specOf(id), raw = readRaw(id);
+    return spec ? PrefsCore.valuesOf(spec, raw) : JSON.parse(JSON.stringify(raw));
+  }
+  // The stored form: non-default values, plus keys the schema doesn't know
+  // (kept so a schema that's behind/ahead of the data doesn't lose them).
+  function storedFor(id, values) {
+    const spec = specOf(id);
+    if (!spec) return JSON.parse(JSON.stringify(values || {}));
+    const out = PrefsCore.diffOf(spec, values), raw = readRaw(id);
+    Object.keys(raw).forEach(k => { if (!spec.keys[k]) out[k] = raw[k]; });
+    return out;
+  }
+  function writeStored(id, obj) {
+    try {
+      if (obj && Object.keys(obj).length) store.set(KEY(id), JSON.stringify(obj));
+      else store.remove(KEY(id));
+    } catch (e) { console.warn('prefs: save failed', e); }
+  }
+
+  // ---- sync state ----
+  let meta = null;
+  function getMeta() {
+    if (meta) return meta;
+    try { const o = JSON.parse(store.get(META_KEY) || 'null'); meta = o && typeof o === 'object' && !Array.isArray(o) ? o : {}; } catch { meta = {}; }
+    return meta;
+  }
+  function saveMeta() { try { store.set(META_KEY, JSON.stringify(getMeta())); } catch {} }
+  let blob = null, pushT = 0;
+  function blobH() {
+    if (!blob) { try { blob = window.__cadeSyncedBlob('prefs', { onChange: onRemote }); } catch (e) { console.warn('prefs: sync unavailable', e); } }
+    return blob;
+  }
+  function schedulePush() { clearTimeout(pushT); pushT = setTimeout(pushNow, 300); }
+  function pushNow() {
+    pushT = 0;
+    const b = blobH();
+    if (!b) return;
+    const m = getMeta(), diffs = {};
+    Object.keys(m).forEach(id => { if (m[id] && m[id].fat) diffs[id] = readRaw(id); });
+    const cur = b.get();
+    const next = PrefsCore.buildBlob(cur, m, diffs);
+    if (!PrefsCore.same(next, cur)) b.set(next);
+  }
+  function onRemote(data) {
+    const r = PrefsCore.syncMerge(getMeta(), data);
+    meta = r.meta; saveMeta();
+    Object.keys(r.adopt).forEach(id => {
+      const spec = specOf(id);
+      commit(id, spec ? PrefsCore.valuesOf(spec, r.adopt[id]) : r.adopt[id], 'sync', spec ? null : r.adopt[id]);
+    });
+    if (r.push) schedulePush();
+    if (ui.open) renderFoot();
+  }
+  function syncOn(id) { const m = getMeta()[id]; return !!(m && m.on); }
+  function setSync(id, on) {
+    const m = getMeta(), now = Date.now();
+    m[id] = { on: !!on, fat: now, at: on ? now : ((m[id] && m[id].at) || 0) };
+    saveMeta();
+    blobH();
+    schedulePush();
+  }
+
+  // ---- change propagation ----
+  // next: the page's full new values (raw object for an unknown schema; `raw`
+  // then replaces the stored data as is).
+  function commit(id, next, source, raw) {
+    const prev = valuesOf(id);
+    writeStored(id, raw ? JSON.parse(JSON.stringify(raw)) : storedFor(id, next));
+    const now = valuesOf(id);
+    const changed = PrefsCore.changedKeys(prev, now);
+    if (!changed.length) return false;
+    if (source !== 'sync' && syncOn(id)) { getMeta()[id].at = Date.now(); saveMeta(); schedulePush(); }
+    fire(id, changed, now);
+    if (ui.open && ui.page === id) {
+      if (source === 'modal') refreshVisibility(); else refreshControls();
+    }
+    return true;
+  }
+  function fire(id, keys, all) {
+    const subs = listeners.get(id);
+    keys.forEach(k => {
+      const v = all[k];
+      if (subs) Array.from(subs).forEach(fn => {
+        try { fn(k, v == null ? v : JSON.parse(JSON.stringify(v)), JSON.parse(JSON.stringify(all))); } catch (e) { console.error('prefs listener (' + id + ')', e); }
+      });
+      try { window.dispatchEvent(new CustomEvent('cade-prefs-change', { detail: { id, key: k, value: v } })); } catch {}
+    });
+  }
+  function setOne(id, key, value, source) {
+    const spec = specOf(id);
+    if (!spec) {   // schema not known (yet): keep what we're given
+      const raw = Object.assign({}, readRaw(id));
+      if (value === undefined) delete raw[key]; else raw[key] = value;
+      return commit(id, raw, source, raw);
+    }
+    const f = spec.keys[key];
+    if (!f) { console.warn('prefs: "' + id + '" has no field "' + key + '"'); return false; }
+    const v = PrefsCore.coerce(f, value);
+    if (v === undefined) { console.warn('prefs: invalid value for ' + id + '.' + key, value); return false; }
+    const next = valuesOf(id);
+    next[key] = v;
+    commit(id, next, source);
+    return true;
+  }
+
+  function handle(id) {
+    id = String(id || '');
+    if (handles.has(id)) return handles.get(id);
+    const h = {
+      get(key) {
+        const v = valuesOf(id)[key];
+        return v == null ? v : (typeof v === 'object' ? JSON.parse(JSON.stringify(v)) : v);
+      },
+      all() { return valuesOf(id); },
+      set(key, value) { try { return setOne(id, String(key), value, 'set'); } catch (e) { console.error('prefs.set', e); return false; } },
+      on(fn) {
+        if (typeof fn !== 'function') return function () {};
+        if (!listeners.has(id)) listeners.set(id, new Set());
+        listeners.get(id).add(fn);
+        return function () { const s = listeners.get(id); if (s) s.delete(fn); };
+      },
+    };
+    handles.set(id, h);
+    return h;
+  }
+  function define(id, spec) {
+    if (!okId(id)) throw new Error('prefs.define: bad id');
+    if (!spec || typeof spec !== 'object') throw new Error('prefs.define: spec must be an object');
+    defined.set(id, spec);
+    norm.delete(id);
+    if (ui.open) renderPicker();
+    return handle(id);
+  }
+  function pageIds() {
+    const ids = [];
+    _manifestById.forEach((m, id) => { if (m && m.prefs && typeof m.prefs === 'object' && !defined.has(id)) ids.push(id); });
+    defined.forEach((s, id) => ids.push(id));
+    return ids.filter(id => { const s = specOf(id); return s && s.fields.length; });
+  }
+
+  // ---- which widget panels are open (and which one was touched last) ----
+  let lastPanel = null;
+  const track = e => { const t = e.target; const p = t && t.closest ? t.closest('.cade-panel') : null; if (p) lastPanel = p; };
+  document.addEventListener('pointerdown', track, true);
+  document.addEventListener('focusin', track, true);
+  function panelPage(p, has) {
+    const cands = [];
+    if (p.dataset && p.dataset.prefs) cands.push(p.dataset.prefs);
+    if (p.__cadeWidget) _manifestById.forEach((m, id) => { if (m && m.name === p.__cadeWidget) cands.push(id); });
+    if (p.id) cands.push(p.id, p.id.replace(/^cade-/, '').replace(/-panel$/, ''));
+    for (const c of cands) if (has[c]) return c;
+    return null;
+  }
+  function openIds(has) {
+    const panels = Array.from(document.querySelectorAll('.cade-panel')).reverse();   // last appended ≈ topmost
+    if (lastPanel && lastPanel.isConnected) { panels.splice(panels.indexOf(lastPanel), 1); panels.unshift(lastPanel); }
+    const out = [];
+    panels.forEach(p => { const id = panelPage(p, has); if (id && out.indexOf(id) < 0) out.push(id); });
+    return out;
+  }
+
+  // ---- the modal ----
+  const ui = { open: false, page: null, list: [], vvOn: false };
+  const $ = id => document.getElementById(id);
+  const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const textIcon = ic => (ic && ic.indexOf('<') < 0 && ic.length <= 4) ? ic + ' ' : '';
+  const isPhone = () => window.matchMedia && window.matchMedia('(max-width: 600px)').matches;
+
+  function renderPicker() {
+    const ids = pageIds(), has = {};
+    ids.forEach(id => { has[id] = 1; });
+    const pages = ids.map(id => { const s = specOf(id); return { id, title: s.title, icon: s.icon }; });
+    ui.list = PrefsCore.orderPages(pages, openIds(has));
+    if (!ui.list.some(p => p.id === ui.page)) ui.page = PrefsCore.pickInitial(ui.list, { last: store.get(LAST_KEY) });
+    const sel = $('wp-page');
+    sel.innerHTML = ui.list.map(p => `<option value="${esc(p.id)}">${esc(textIcon(p.icon) + p.title + (p.open ? ' · open' : ''))}</option>`).join('');
+    sel.value = ui.page || '';
+    sel.style.display = ui.list.length ? '' : 'none';
+  }
+  function fieldHtml(f, vals, i) {
+    if (f.type === 'heading') return `<div class="wp-field wp-heading" data-i="${i}">${esc(f.label)}</div>`;
+    const v = vals[f.key], fid = 'wp-f-' + i;
+    const label = `<span class="wp-label">${esc(f.label)}</span>` + (f.hint ? `<span class="wp-hint">${esc(f.hint)}</span>` : '');
+    const attrs = `data-key="${esc(f.key)}" data-type="${f.type}"`;
+    const rng = f => (f.min != null ? ` min="${f.min}"` : '') + (f.max != null ? ` max="${f.max}"` : '') + ` step="${f.step || 'any'}"`;
+    let body;
+    switch (f.type) {
+      case 'toggle':
+        body = `<label class="wp-row" for="${fid}"><span class="wp-info">${label}</span><span class="setting-toggle"><input type="checkbox" id="${fid}" ${v ? 'checked' : ''}><span class="toggle-track"></span><span class="toggle-thumb"></span></span></label>`;
+        break;
+      case 'number':
+        body = `<div class="wp-row"><label class="wp-info" for="${fid}">${label}</label><span class="wp-ctl"><input class="form-input" type="number" inputmode="decimal" id="${fid}" value="${esc(v)}"${rng(f)}>${f.unit ? `<span class="wp-hint">${esc(f.unit)}</span>` : ''}</span></div>`;
+        break;
+      case 'select':
+        body = `<div class="wp-row"><label class="wp-info" for="${fid}">${label}</label><span class="wp-ctl"><select class="form-input" id="${fid}">` +
+          f.options.map(o => `<option value="${esc(o.value)}" ${String(o.value) === String(v) ? 'selected' : ''}>${esc(o.label)}</option>`).join('') + `</select></span></div>`;
+        break;
+      case 'date': case 'time':
+        body = `<div class="wp-row"><label class="wp-info" for="${fid}">${label}</label><span class="wp-ctl"><input class="form-input" type="${f.type}" id="${fid}" value="${esc(v)}"></span></div>`;
+        break;
+      case 'color':
+        body = `<div class="wp-row"><label class="wp-info" for="${fid}">${label}</label><span class="wp-ctl"><span class="wp-color-hex">${esc(v)}</span><input class="wp-color" type="color" id="${fid}" value="${esc(v)}"></span></div>`;
+        break;
+      case 'slider':
+        body = `<label class="wp-info" for="${fid}">${label}</label><div class="wp-wide wp-slider"><input type="range" id="${fid}" value="${esc(v)}"${rng(f)}><output for="${fid}">${esc(fmtSlider(f, v))}</output></div>`;
+        break;
+      case 'text':
+        body = `<label class="wp-info" for="${fid}">${label}</label><div class="wp-wide"><input class="form-input" type="text" id="${fid}" value="${esc(v)}"${f.placeholder ? ` placeholder="${esc(f.placeholder)}"` : ''}${f.maxLength ? ` maxlength="${f.maxLength}"` : ''} autocomplete="off"></div>`;
+        break;
+      case 'textarea':
+        body = `<label class="wp-info" for="${fid}">${label}</label><div class="wp-wide"><textarea class="form-input" id="${fid}" rows="3"${f.placeholder ? ` placeholder="${esc(f.placeholder)}"` : ''}${f.maxLength ? ` maxlength="${f.maxLength}"` : ''}>${esc(v)}</textarea></div>`;
+        break;
+      case 'radio':
+        body = `<span class="wp-info" id="${fid}-l">${label}</span><div class="wp-wide wp-seg" role="radiogroup" aria-labelledby="${fid}-l">` +
+          f.options.map((o, j) => `<label class="wp-opt"><input type="radio" name="${fid}" value="${esc(o.value)}" ${String(o.value) === String(v) ? 'checked' : ''}><span>${esc(o.label)}</span></label>`).join('') + `</div>`;
+        break;
+      case 'checkbox': {
+        const on = (v || []).map(String);
+        body = `<span class="wp-info" id="${fid}-l">${label}</span><div class="wp-wide wp-checks" role="group" aria-labelledby="${fid}-l">` +
+          f.options.map(o => `<label class="wp-chk"><input type="checkbox" value="${esc(o.value)}" ${on.indexOf(String(o.value)) >= 0 ? 'checked' : ''}><span>${esc(o.label)}</span></label>`).join('') + `</div>`;
+        break;
+      }
+    }
+    return `<div class="wp-field wp-t-${f.type}" ${attrs} data-i="${i}"${PrefsCore.visible(f, vals) ? '' : ' hidden'}>${body}</div>`;
+  }
+  function fmtSlider(f, v) { return String(v) + (f.unit ? (/^[%°]/.test(f.unit) ? '' : ' ') + f.unit : ''); }
+  function pluginNote(id) {
+    const m = _manifestById.get(id);
+    if (!m || m.type !== 'plugin' || !m.settingKey || !window.Settings) return '';
+    let on; try { on = Settings.get(m.settingKey); } catch {}
+    return on === false ? `<span class="wp-off">${esc(m.name || id)} is turned off — switch it on in Preferences → ${esc(m.section || 'Plugins')}.</span>` : '';
+  }
+  function renderPage() {
+    const body = $('wp-body'), desc = $('wp-desc');
+    const spec = ui.page ? specOf(ui.page) : null;
+    if (!spec) {
+      desc.innerHTML = '';
+      body.innerHTML = '<div class="wp-empty">Nothing has preferences yet.<br>Widgets that have options list them here.</div>';
+      $('wp-reset').disabled = true;
+      renderFoot();
+      return;
+    }
+    try { store.set(LAST_KEY, ui.page); } catch {}
+    const note = pluginNote(ui.page);
+    desc.innerHTML = esc(spec.description) + (spec.description && note ? ' ' : '') + note;
+    const vals = valuesOf(ui.page);
+    body.innerHTML = spec.fields.map((f, i) => fieldHtml(f, vals, i)).join('');
+    body.scrollTop = 0;
+    $('wp-reset').disabled = false;
+    renderFoot();
+  }
+  function renderFoot() {
+    const cb = $('wp-sync'), row = $('wp-sync-row'), hint = $('wp-sync-hint');
+    const cfg = !!(window.Cade && Cade.cloud.configured());
+    const has = !!(ui.page && specOf(ui.page));
+    cb.checked = has && syncOn(ui.page);
+    cb.disabled = !cfg || !has;
+    row.classList.toggle('wp-disabled', cb.disabled);
+    hint.textContent = !cfg ? 'Set up Sync first (the dot in the menu bar)' : (cb.checked ? 'Changes here reach your other devices' : 'Off: these settings stay on this device');
+  }
+  function refreshVisibility() {
+    const spec = specOf(ui.page);
+    if (!spec) return;
+    const vals = valuesOf(ui.page);
+    $('wp-body').querySelectorAll('.wp-field[data-i]').forEach(el => {
+      const f = spec.fields[+el.dataset.i];
+      if (f) el.hidden = !PrefsCore.visible(f, vals);
+    });
+  }
+  // Values changed elsewhere (code, sync, reset) while the page is shown.
+  function refreshControls() {
+    const spec = specOf(ui.page);
+    if (!spec) return;
+    const vals = valuesOf(ui.page), act = document.activeElement;
+    $('wp-body').querySelectorAll('.wp-field[data-key]').forEach(el => {
+      const f = spec.keys[el.dataset.key];
+      if (!f) return;
+      const v = vals[f.key];
+      el.hidden = !PrefsCore.visible(f, vals);
+      if (act && el.contains(act) && (f.type === 'text' || f.type === 'textarea' || f.type === 'number')) return;   // don't fight the typist
+      if (f.type === 'toggle') el.querySelector('input').checked = !!v;
+      else if (f.type === 'radio') el.querySelectorAll('input').forEach(r => { r.checked = String(r.value) === String(v); });
+      else if (f.type === 'checkbox') { const on = (v || []).map(String); el.querySelectorAll('input').forEach(c => { c.checked = on.indexOf(c.value) >= 0; }); }
+      else {
+        const inp = el.querySelector('input, select, textarea');
+        if (inp && inp.value !== String(v)) inp.value = String(v);
+        if (f.type === 'slider') el.querySelector('output').textContent = fmtSlider(f, v);
+        if (f.type === 'color') el.querySelector('.wp-color-hex').textContent = v;
+      }
+    });
+  }
+  function onEdit(e) {
+    const el = e.target.closest && e.target.closest('.wp-field[data-key]');
+    if (!el || !ui.page) return;
+    const spec = specOf(ui.page), f = spec && spec.keys[el.dataset.key];
+    if (!f) return;
+    const t = e.target;
+    let v;
+    switch (f.type) {
+      case 'toggle': v = t.checked; break;
+      case 'checkbox': v = Array.from(el.querySelectorAll('input:checked')).map(c => c.value); break;
+      case 'number': {
+        const n = Number(t.value);
+        if (t.value.trim() === '' || !isFinite(n)) return;   // half-typed: wait
+        // While typing, only in-range values apply ("1" on the way to "150"
+        // mustn't clamp to the minimum); leaving the field clamps.
+        if (e.type === 'input' && ((f.min != null && n < f.min) || (f.max != null && n > f.max))) return;
+        v = t.value;
+        break;
+      }
+      default: v = t.value;
+    }
+    setOne(ui.page, f.key, v, 'modal');
+    const cur = valuesOf(ui.page)[f.key];
+    if (f.type === 'slider') el.querySelector('output').textContent = fmtSlider(f, cur);
+    if (f.type === 'color') el.querySelector('.wp-color-hex').textContent = cur;
+    // Clamped / stepped: show the stored value once the edit is finished.
+    if (e.type === 'change' && (f.type === 'number' || f.type === 'text') && t.value !== String(cur)) t.value = String(cur);
+  }
+  function fitViewport() {
+    const vv = window.visualViewport, ov = $('wprefs-overlay');
+    if (!vv || !isPhone()) { ov.style.removeProperty('--wp-top'); ov.style.removeProperty('--wp-h'); return; }
+    ov.style.setProperty('--wp-top', Math.round(vv.offsetTop || 0) + 'px');
+    ov.style.setProperty('--wp-h', Math.round(vv.height) + 'px');
+    const a = document.activeElement;
+    // Keep the field being typed in above the keyboard (text-entry fields only).
+    if (a && ov.contains(a) && a.matches('textarea, input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=color])')) { try { a.scrollIntoView({ block: 'nearest' }); } catch {} }
+  }
+  function open(id) {
+    try { closeAllMenus(); } catch {}
+    const ov = $('wprefs-overlay');
+    if (!ov) return;
+    ui.page = null;
+    const ids = pageIds(), has = {};
+    ids.forEach(x => { has[x] = 1; });
+    let focused = null;
+    if (lastPanel && lastPanel.isConnected) focused = panelPage(lastPanel, has);
+    renderPicker();
+    ui.page = PrefsCore.pickInitial(ui.list, { want: id, focused, last: store.get(LAST_KEY) });
+    $('wp-page').value = ui.page || '';
+    ui.open = true;
+    renderPage();
+    ov.classList.add('open');
+    if (window.visualViewport && !ui.vvOn) {
+      ui.vvOn = true;
+      window.visualViewport.addEventListener('resize', fitViewport);
+      window.visualViewport.addEventListener('scroll', fitViewport);
+    }
+    fitViewport();
+    try { ov.querySelector('.wp-dialog').focus({ preventScroll: true }); } catch {}
+  }
+  function close() {
+    const ov = $('wprefs-overlay');
+    if (!ov || !ui.open) return;
+    ui.open = false;
+    ov.classList.remove('open');
+    if (ui.vvOn) {
+      ui.vvOn = false;
+      window.visualViewport.removeEventListener('resize', fitViewport);
+      window.visualViewport.removeEventListener('scroll', fitViewport);
+    }
+    if (!(window.matchMedia && matchMedia('(pointer: coarse)').matches)) { try { editor.focus(); } catch {} }
+  }
+  function reset() {
+    const id = ui.page, spec = id && specOf(id);
+    if (!spec) return;
+    const defs = {};
+    spec.fields.forEach(f => { if (f.key) defs[f.key] = f.default; });
+    const changed = commit(id, defs, 'reset');   // (keys the schema doesn't know are kept)
+    renderPage();
+    showToast(changed ? spec.title + ': back to defaults' : spec.title + ' already uses the defaults', 'success', 1800);
+  }
+
+  (function wire() {
+    const ov = $('wprefs-overlay');
+    if (!ov) return;
+    $('wp-page').addEventListener('change', e => { ui.page = e.target.value; renderPage(); });
+    const body = $('wp-body');
+    body.addEventListener('input', e => {
+      const el = e.target.closest && e.target.closest('.wp-field[data-key]');
+      // toggles / radios / checkboxes / selects commit on change; the rest live
+      if (el && /^(text|textarea|number|slider|color|date|time)$/.test(el.dataset.type)) onEdit(e);
+    });
+    body.addEventListener('change', onEdit);
+    body.addEventListener('focusin', () => { if (isPhone() && ui.open) setTimeout(() => { if (ui.open) fitViewport(); }, 300); });
+    $('wp-sync').addEventListener('change', e => {
+      if (!ui.page) return;
+      if (!Cade.cloud.configured()) { e.target.checked = false; renderFoot(); return; }
+      setSync(ui.page, e.target.checked);
+      renderFoot();
+      showToast(e.target.checked ? 'These settings now sync to your other devices' : 'These settings stay on this device now', 'success', 2200);
+    });
+    $('wp-reset').addEventListener('click', reset);
+    $('wp-done').addEventListener('click', close);
+    $('wp-x').addEventListener('click', close);
+    ov.addEventListener('click', e => { if (e.target === ov) close(); });
+    ov.addEventListener('keydown', e => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); } });
+  })();
+
+  const api = function (id) { return handle(id); };
+  api.open = function (id) { open(id == null ? null : String(id)); };
+  api.define = define;
+  api.close = close;
+  api._core = PrefsCore;
+  window.__cadePrefs = api;
+  window.openWidgetPrefs = function () { open(null); };
+
+  // Core feature pages.
+  define('codeblocks', {
+    title: 'Code blocks', icon: '⌨',
+    description: 'How fenced code blocks (``` … ```) in your notes behave.',
+    fields: [
+      { key: 'linked', type: 'toggle', label: 'Link code blocks of the same language', hint: 'Blocks of one language in a note share variables and re-run when an earlier one changes (notebook mode)', default: true },
+    ],
+  });
+  try {
+    registerWidget({ name: 'Widget preferences', description: 'Settings for widgets and features — opens on the widget you are using', icon: '⚙', tags: 'preferences,settings,options,widgets,config,prefs', open: () => open(null) });
+  } catch (e) { console.warn(e); }
+  // Join the account's prefs blob a little after boot (a no-op without Sync;
+  // ensureSyncedBlobs attaches it once Sync is set up).
+  setTimeout(blobH, 1500);
+})();
 
 // Focus editor on load
 setTimeout(() => editor.focus(), 100);

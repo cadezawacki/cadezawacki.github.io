@@ -9,7 +9,7 @@
  * totals, and a destination: append to the note or insert at the cursor (one
  * editor transaction = one Undo), a new note, a download, or the clipboard.
  *
- * Robustness follows the core's Import Files / Import Folder (own copies —
+ * Robustness follows the core's Import Text / Import Folder (own copies —
  * txt.html is untouched): directory entries are read in batches until empty,
  * binary files are recognised by name / type and by sniffing their first
  * bytes, text is decoded BOM → UTF-8 → Windows-1252, every file has a size

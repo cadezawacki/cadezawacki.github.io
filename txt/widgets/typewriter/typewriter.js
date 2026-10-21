@@ -38,11 +38,11 @@
  * suspended then). Turning the plugin off (ViewPlugin destroy) stops every
  * voice, closes the AudioContext and drops the buffers.
  *
- * Settings: the core makes the on/off toggle from the manifest; this file
- * registers three more in the same 'Editor' section when it loads (style,
- * volume, bell). registerSetting has no "unregister", so while the plugin is
- * off a tiny stylesheet hides those rows (they'd be harmless anyway — their
- * apply() only updates this file's config).
+ * Settings: the core makes the on/off toggle (Preferences → Editor) from the
+ * manifest. Style, volume and bell live in View → Widget preferences: the
+ * manifest entry's "prefs" (= SCHEMA below) and Cade.prefs('typewriter'),
+ * listened to live while the plugin is on. Values from the old Preferences
+ * rows (cade-pref:typewriter.*) are moved over once.
  *
  * Debug/test hook: window.__cadeTypewriter.state() / .render(profile, kind,
  * sampleRate, variant). Pure synthesis + logic is exported for node tests. */
@@ -64,6 +64,18 @@
     delayMax: 0.003,    // start jitter, seconds
   };
   var PROFILES = ['mechanical', 'typewriter', 'soft'];
+  // Widget preferences page — must equal the manifest entry's "prefs".
+  var SCHEMA = {
+    title: 'Typewriter sounds',
+    fields: [
+      { key: 'profile', type: 'radio', label: 'Style', default: 'typewriter',
+        hint: 'Mechanical keyboard, a typewriter (carriage return and bell) or soft laptop taps',
+        options: [{ value: 'mechanical', label: 'Mechanical' }, { value: 'typewriter', label: 'Typewriter' }, { value: 'soft', label: 'Soft' }] },
+      { key: 'volume', type: 'slider', label: 'Volume', default: 50, min: 10, max: 100, step: 5, unit: '%' },
+      { key: 'bell', type: 'toggle', label: 'Bell at end of line', default: true,
+        hint: 'Typewriter style: a ding when you press Enter at the end of a line, and when a line passes ' + CFG.margin + ' characters' },
+    ],
+  };
   var KINDS = ['key', 'space', 'enter', 'back', 'paste', 'bell'];
 
   // Small fast seeded PRNG (mulberry32) — variants are reproducible.
@@ -409,7 +421,7 @@
 
   var api = {
     CFG: CFG, PROFILES: PROFILES, KINDS: KINDS, prng: prng, synth: synth, isLong: isLong, variantsFor: variantsFor,
-    jitter: jitter, volumeGain: volumeGain, classifyKey: classifyKey, classifyChange: classifyChange,
+    SCHEMA: SCHEMA, jitter: jitter, volumeGain: volumeGain, classifyKey: classifyKey, classifyChange: classifyChange,
     makeThrottle: makeThrottle, makePool: makePool, makeMarginBell: makeMarginBell, makeCredits: makeCredits,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
@@ -424,43 +436,43 @@
     refs: 0, stopT: 0, ctx: null, master: null, born: 0, bufs: {}, prerT: 0,
     pool: makePool(CFG.maxVoices), longPool: makePool(CFG.maxLong),
     throttle: makeThrottle(), credits: makeCredits(CFG.creditMs), margin: makeMarginBell(CFG.margin),
-    rnd: Math.random, hideEl: null, visOn: false,
+    rnd: Math.random, prefsOff: null, visOn: false,
     played: 0, kinds: {}, lastKind: null, contexts: 0,
   };
   function now() { return (window.performance && performance.now) ? performance.now() : Date.now(); }
 
-  // ---- settings (registered once, when this file first loads) ----------------
-  var HIDE_CSS = '#settings-sections .setting-row:has([data-setting-key^="typewriter."]){display:none}';
-  function hideRows(on) {
-    if (on && !S.hideEl) {
-      S.hideEl = document.createElement('style');
-      S.hideEl.textContent = HIDE_CSS;
-      document.head.appendChild(S.hideEl);
-    } else if (!on && S.hideEl) { S.hideEl.remove(); S.hideEl = null; }
+  // ---- preferences (Widget preferences page "typewriter") ----------------------
+  function prefsOf(id, fields) {
+    if (Cade.prefs) return Cade.prefs(id);
+    var d = {}; fields.forEach(function (f) { if (f.key) d[f.key] = f.default; });
+    return { get: function (k) { return d[k]; }, all: function () { var o = {}; for (var k in d) o[k] = d[k]; return o; }, set: function (k, v) { d[k] = v; }, on: function () { return function () {}; } };
   }
-  function reg(def) { try { Cade.registerSetting(def); } catch (e) { console.error(e); } }
-  reg({
-    key: 'typewriter.profile', label: 'Typewriter sounds: style', type: 'select', default: 'typewriter', section: 'Editor',
-    hint: 'Mechanical keyboard, a typewriter (carriage return and bell) or soft laptop taps',
-    options: [{ value: 'mechanical', label: 'Mechanical' }, { value: 'typewriter', label: 'Typewriter' }, { value: 'soft', label: 'Soft' }],
-    apply: function (v) {
-      conf.profile = PROFILES.indexOf(v) >= 0 ? v : 'typewriter';
-      if (S.ctx) schedulePrerender();
-    },
-  });
-  reg({
-    key: 'typewriter.volume', label: 'Typewriter sounds: volume', type: 'select', default: '50', section: 'Editor',
-    options: [10, 20, 30, 40, 50, 60, 70, 80, 90, 100].map(function (n) { return { value: String(n), label: n + '%' }; }),
-    apply: function (v) {
-      conf.volume = Number(v) || 50;
+  var P = prefsOf('typewriter', SCHEMA.fields);
+  // One-time move of the values set in the old Preferences rows.
+  (function migrate() {
+    var st = Cade.store;
+    if (!st || !Cade.prefs) return;
+    ['profile', 'volume', 'bell'].forEach(function (k) {
+      var old = 'cade-pref:typewriter.' + k, v = st.get(old);
+      if (v == null) return;
+      try { P.set(k, k === 'volume' ? Number(v) : k === 'bell' ? String(v) === 'true' : v); } catch (e) {}
+      st.remove(old);
+    });
+  })();
+  function applyPref(key, v) {
+    if (key === 'profile') {
+      var p = PROFILES.indexOf(v) >= 0 ? v : 'typewriter';
+      if (p !== conf.profile) { conf.profile = p; if (S.ctx) schedulePrerender(); }
+    } else if (key === 'volume') {
+      conf.volume = Math.max(10, Math.min(100, Number(v) || 50));
       if (S.master) { try { S.master.gain.setTargetAtTime(volumeGain(conf.volume), S.ctx.currentTime, 0.01); } catch (e) {} }
-    },
-  });
-  reg({
-    key: 'typewriter.bell', label: 'Typewriter sounds: bell at end of line', type: 'toggle', default: true, section: 'Editor',
-    hint: 'Typewriter style: a ding when you press Enter at the end of a line, and when a line passes ' + CFG.margin + ' characters',
-    apply: function (v) { conf.bell = !!v; },
-  });
+    } else if (key === 'bell') conf.bell = v !== false;
+  }
+  function loadPrefs() {
+    var all = P.all() || {};
+    ['profile', 'volume', 'bell'].forEach(function (k) { if (k in all) applyPref(k, all[k]); });
+  }
+  loadPrefs();
 
   // ---- audio -------------------------------------------------------------------
   function ensureCtx() {
@@ -568,7 +580,7 @@
     }
     S.ctx = null; S.master = null; S.bufs = {};
     S.pool.clear(); S.longPool.clear(); S.margin.reset();
-    hideRows(true);
+    if (S.prefsOff) { S.prefsOff(); S.prefsOff = null; }
   }
 
   // ---- the editor side ----------------------------------------------------------
@@ -665,7 +677,7 @@
   var plugin = CM.ViewPlugin.define(function (view) {
     S.refs++;
     clearTimeout(S.stopT); S.stopT = 0;
-    hideRows(false);
+    if (!S.prefsOff) { loadPrefs(); S.prefsOff = P.on(applyPref); }   // live changes while on
     var detach = attach(view);
     return {
       update: onUpdate,

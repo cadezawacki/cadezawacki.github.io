@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "version": "2026.10.22-2",
+  "version": "2026.10.22-3",
   "modules": [
     {
       "id": "crawler",
@@ -1354,11 +1354,54 @@
       "id": "typewriter",
       "type": "plugin",
       "name": "Typewriter sounds",
-      "description": "Plays a short key sound as you type in the editor — mechanical keyboard, typewriter (carriage return and bell) or soft laptop taps. Off unless you turn it on; once on, its style, volume and bell options appear in this section",
+      "description": "Plays a short key sound as you type in the editor — mechanical keyboard, typewriter (carriage return and bell) or soft laptop taps. Off unless you turn it on; its style, volume and bell are in View → Widget preferences",
       "entry": "widgets/typewriter/typewriter.js",
       "settingKey": "plugins.typewriter",
       "section": "Editor",
-      "default": false
+      "default": false,
+      "prefs": {
+        "title": "Typewriter sounds",
+        "fields": [
+          {
+            "key": "profile",
+            "type": "radio",
+            "label": "Style",
+            "default": "typewriter",
+            "hint": "Mechanical keyboard, a typewriter (carriage return and bell) or soft laptop taps",
+            "options": [
+              {
+                "value": "mechanical",
+                "label": "Mechanical"
+              },
+              {
+                "value": "typewriter",
+                "label": "Typewriter"
+              },
+              {
+                "value": "soft",
+                "label": "Soft"
+              }
+            ]
+          },
+          {
+            "key": "volume",
+            "type": "slider",
+            "label": "Volume",
+            "default": 50,
+            "min": 10,
+            "max": 100,
+            "step": 5,
+            "unit": "%"
+          },
+          {
+            "key": "bell",
+            "type": "toggle",
+            "label": "Bell at end of line",
+            "default": true,
+            "hint": "Typewriter style: a ding when you press Enter at the end of a line, and when a line passes 72 characters"
+          }
+        ]
+      }
     },
     {
       "id": "voice",

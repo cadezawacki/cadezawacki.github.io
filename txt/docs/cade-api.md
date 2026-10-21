@@ -149,6 +149,46 @@ plugins that need the core's own view of the document.
 | `Cade.slashCodes()` | copy of the core's `"/code"` → symbol map (`{ '->': '➞', check: '✓', … }`). Codes are case-sensitive. |
 | `Cade.claimSlash(fn)` | register `fn() → boolean`; while it returns `true` the core's `/code` autocomplete dropdown stays closed (so a module's own "/" menu doesn't get a second popup stacked on it). One claimant; pass `null` to release. |
 
+## Widget preferences — `Cade.prefs(id)`
+
+Per-widget / per-feature settings belong here, not in `registerSetting` (that
+long Preferences list keeps only on/off toggles). The "Widget preferences…"
+modal (View menu, or "Widget preferences" in Ctrl+K) shows one page per
+module whose manifest entry has `"prefs"`, plus pages added with
+`Cade.prefs.define`; it opens on the widget panel you touched last.
+
+```jsonc
+// manifest entry
+"prefs": { "title": "Speed Reader", "fields": [
+  { "key": "wpm", "type": "slider", "label": "Speed", "default": 350, "min": 100, "max": 1000, "step": 25, "unit": "wpm" },
+  { "key": "ctx", "type": "toggle", "label": "Show surrounding text", "default": true, "hint": "…" },
+  { "key": "dim", "type": "slider", "label": "Opacity around it", "default": 25, "min": 0, "max": 100, "step": 5, "unit": "%", "showIf": "ctx" }
+] }
+```
+Field types: `text`, `textarea`, `number`, `slider`, `toggle`, `checkbox`
+(multi → array), `radio`, `select`, `date` (`YYYY-MM-DD`), `time` (`HH:MM`),
+`color` (`#rrggbb`), `heading` (no value). Keys: `key`, `type`, `label`,
+`hint`, `default`; `min`/`max`/`step`/`unit`; `options: [{value,label}]`;
+`placeholder`, `maxLength`; `showIf: "key"` / `"!key"` (a toggle).
+
+```js
+var P = Cade.prefs('speedreader');
+P.get('wpm');                 // stored value, else the default — always valid for the schema
+P.all();                      // { key: value } with defaults filled in
+P.set('wpm', 400);            // validated (clamped / stepped / option-checked); false if rejected
+var off = P.on(function (key, value, all) { … });   // set(), modal edits, reset, sync — call off() on close
+Cade.prefs.open('speedreader');                     // the modal on that page (e.g. a ⚙ in your panel)
+Cade.prefs.define('codeblocks', { title: 'Code blocks', icon: '⌨', description: '…', fields: [ … ] });
+window.addEventListener('cade-prefs-change', e => e.detail /* { id, key, value } */);
+```
+Stored per device in `Cade.store` `cade-prefs:<id>` (only non-default values).
+Each page has a "Keep in sync on all my devices" toggle (needs Sync): it is
+account-wide (on/off on one device switches the others), synced pages travel
+in `Cade.syncedBlob('prefs')`, last writer wins per page, and remote changes
+fire `P.on` live. The panel→page match uses the widget name the panel was
+opened under, else `panel.dataset.prefs`, else the panel id (`<id>` /
+`<id>-panel`).
+
 ## Per-account synced JSON — `Cade.syncedBlob(id, {onChange})`
 
 A small offline-first store that syncs across the account's devices when sync
