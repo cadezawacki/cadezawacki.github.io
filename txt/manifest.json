@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "version": "2026.10.21-3",
+  "version": "2026.10.21-8",
   "modules": [
     {
       "id": "crawler",
@@ -696,7 +696,9 @@
       "tags": "symbol,symbols,unicode,emoji,alt,altcode,alt code,character,special character,glyph,arrow,math,copyright,degree,accent,insert,kaomoji",
       "entry": "widgets/symbols/symbols.js",
       "css": "widgets/symbols/symbols.css",
-      "precache": ["widgets/symbols/symbols-data.js"]
+      "precache": [
+        "widgets/symbols/symbols-data.js"
+      ]
     },
     {
       "id": "dict",
@@ -1047,7 +1049,10 @@
       "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='3' y='3' width='7' height='7' rx='1'/><rect x='14' y='3' width='7' height='7' rx='1'/><rect x='3' y='14' width='7' height='7' rx='1'/><path d='M14 14h3v3h-3zM21 14v.01M14 21h.01M17.5 21H21v-3.5'/></svg>",
       "tags": "qr,qr code,qrcode,barcode,2d code,scan,scanner,reader,decode,camera,photo,generate,generator,maker,create,wifi,wi-fi,password,vcard,contact,email,sms,phone,link,url,share,code,png,svg,image",
       "entry": "widgets/qr/qr.js",
-      "css": "widgets/qr/qr.css"
+      "css": "widgets/qr/qr.css",
+      "precache": [
+        "widgets/qr/qr-core.js"
+      ]
     },
     {
       "id": "prompts",
@@ -1320,6 +1325,114 @@
       "settingKey": "plugins.postcard-view",
       "section": "Editor",
       "default": true
+    },
+    {
+      "id": "thumbpad",
+      "type": "plugin",
+      "name": "Thumb cursor pad",
+      "description": "On phones and tablets: a small trackpad above the keyboard — slide to move the cursor, double-tap to select a word, tap Select (or long-press the pad) to extend the selection. Turn off here if you don't want it",
+      "entry": "widgets/thumbpad/thumbpad.js",
+      "css": "widgets/thumbpad/thumbpad.css",
+      "settingKey": "plugins.thumbpad",
+      "section": "Editor",
+      "default": true
+    },
+    {
+      "id": "voice",
+      "type": "widget",
+      "name": "Voice Note",
+      "description": "Record a voice memo into your note — a player with a waveform; the audio syncs encrypted to your other devices",
+      "icon": "🎙",
+      "tags": "voice,voice note,voice memo,memo,record,recording,recorder,audio,microphone,mic,dictaphone,speech,sound,waveform,podcast,listen",
+      "entry": "widgets/voice/voice.js",
+      "css": "widgets/voice/voice.css",
+      "precache": [
+        "widgets/voice/voice-core.js"
+      ]
+    },
+    {
+      "id": "voice-view",
+      "type": "plugin",
+      "name": "Voice notes in the editor",
+      "description": "Play ```voice blocks (made with Voice Note) as a card with a waveform — tap to seek, change the speed, download; ✎ shows its text",
+      "entry": "widgets/voice/voice-view.js",
+      "css": "widgets/voice/voice-view.css",
+      "precache": [
+        "widgets/voice/voice-core.js"
+      ],
+      "settingKey": "plugins.voice-view",
+      "section": "Editor",
+      "default": true
+    },
+    {
+      "id": "beam",
+      "type": "widget",
+      "name": "Beam",
+      "description": "Send files straight to your other devices — direct over Wi-Fi, nothing stored in the cloud, no size limit — or as a QR stream with no network at all",
+      "icon": "📡",
+      "tags": "beam,send,share,transfer,airdrop,nearby,files,file,photo,devices,phone,laptop,ipad,wifi,p2p,peer,qr,qr stream,inbox,multi-device",
+      "entry": "widgets/beam/beam.js",
+      "css": "widgets/beam/beam.css",
+      "precache": [
+        "widgets/beam/beam-link.js",
+        "widgets/beam/beam-core.js",
+        "widgets/beam/beam-qr.js",
+        "widgets/beam/beam-qr-core.js",
+        "widgets/beam/beam-qr.css",
+        "widgets/qr/qr-core.js"
+      ],
+      "fileMenu": [
+        {
+          "label": "📡 Beam to another device",
+          "kind": "beam"
+        },
+        {
+          "label": "▦ Send as a QR stream",
+          "kind": "beam-qr"
+        }
+      ]
+    },
+    {
+      "id": "beam-recv",
+      "type": "plugin",
+      "name": "Receive files from my other devices",
+      "description": "While this screen is open, Beam on your other devices (same Sync) can send files straight to it — accepted automatically and kept in Beam’s Inbox for 7 days. Uses nothing while the page is hidden",
+      "entry": "widgets/beam/beam-recv.js",
+      "precache": [
+        "widgets/beam/beam-core.js",
+        "widgets/beam/beam-link.js",
+        "widgets/beam/beam.css"
+      ],
+      "settingKey": "plugins.beam-recv",
+      "section": "Devices",
+      "default": true
+    },
+    {
+      "id": "ekg",
+      "type": "widget",
+      "name": "Prose EKG",
+      "description": "Your writing’s heartbeat: sentence lengths as an EKG, run-on tails, complex sentences, passive voice and grammar slips marked right in the note",
+      "icon": "〰",
+      "tags": "writing,prose,sentences,sentence length,rhythm,readability,grammar,style,passive voice,run-on,lint,proofread,ekg",
+      "entry": "widgets/ekg/ekg.js",
+      "css": "widgets/ekg/ekg.css",
+      "precache": [
+        "widgets/ekg/ekg-core.js",
+        "widgets/ekg/ekg-view.js"
+      ]
+    },
+    {
+      "id": "danger",
+      "type": "widget",
+      "name": "Dangerous Mode",
+      "description": "Keep writing or lose it — set a word or time goal; stop typing for a few seconds and this session’s text fades and is deleted. Reach the goal to keep it",
+      "icon": "☠",
+      "tags": "dangerous,danger,dangerous mode,writing,write,first draft,draft,sprint,word goal,word count,focus,flow,timer,deadline,hardcore,most dangerous writing app,productivity",
+      "entry": "widgets/danger/danger.js",
+      "css": "widgets/danger/danger.css",
+      "precache": [
+        "widgets/danger/danger-core.js"
+      ]
     },
     {
       "id": "anagram",
@@ -1898,7 +2011,11 @@
       "tags": "game,strategy,tower defense,td,td2,glyph defense,towers,waves,defense,ascii,fun,bosses,maps",
       "entry": "widgets/towerdefense2/td2.js",
       "css": "widgets/towerdefense2/td2.css",
-      "precache": ["widgets/towerdefense2/td2-maps.js", "widgets/towerdefense2/td2-data.js", "widgets/towerdefense2/td2-engine.js"]
+      "precache": [
+        "widgets/towerdefense2/td2-maps.js",
+        "widgets/towerdefense2/td2-data.js",
+        "widgets/towerdefense2/td2-engine.js"
+      ]
     },
     {
       "id": "passgen",

@@ -1,0 +1,84 @@
+/* Thumb cursor pad — the strip above the keyboard (see thumbpad.js).
+   A zero-height row in the body's flex column, ordered after the editor
+   (order 0) and before the find bar / panel dock (5) and footer (10), so the
+   pad sits at the bottom of the editor area and follows the core's keyboard
+   pinning without any measuring. Editor chrome layer (< 1000). */
+.cade-tp-anchor { position: relative; order: 4; flex: 0 0 0; height: 0; z-index: 900; }
+.cade-tp-anchor[hidden] { display: none; }
+body.sel-mode .cade-tp-anchor { display: none; }          /* the core's Select mode owns touches then */
+
+.cade-tp {
+  position: absolute; left: 8px; right: 8px; bottom: 6px;
+  max-width: 640px; margin: 0 auto;
+  height: 44px; box-sizing: border-box; padding: 0 3px;
+  display: flex; align-items: stretch; gap: 3px;
+  background: var(--surface, #fff); color: var(--text-muted, #78716c);
+  border: 1px solid var(--border, #e2e0dc); border-radius: 12px;
+  box-shadow: var(--shadow-sm, 0 1px 3px rgba(0,0,0,.06)), 0 4px 14px rgba(0,0,0,.10);
+  touch-action: none; user-select: none; -webkit-user-select: none;
+  -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent;
+  font-family: var(--font-body, system-ui, sans-serif);
+  animation: cade-tp-in 140ms ease-out;
+}
+@keyframes cade-tp-in { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: none; } }
+
+.cade-tp-b {
+  flex: 0 0 auto; min-width: 40px; height: 100%; margin: 0; padding: 0 6px;
+  display: flex; align-items: center; justify-content: center;
+  border: 0; border-radius: 9px; background: none; color: inherit;
+  font: inherit; font-size: 13px; font-weight: 600; line-height: 1; cursor: pointer;
+  touch-action: none; -webkit-tap-highlight-color: transparent; outline: none;
+}
+.cade-tp-b svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
+.cade-tp-b.is-down { background: var(--surface-2, #f5f5f4); color: var(--text, #1c1917); }
+.cade-tp-sel { min-width: 58px; margin: 6px 0; height: auto; border: 1px solid var(--border, #e2e0dc); border-radius: 8px; font-size: 12.5px; letter-spacing: .01em; }
+.cade-tp-sel.on { background: var(--accent, #0f9598); border-color: var(--accent, #0f9598); color: var(--surface, #fff); }
+.cade-tp-sel.on.is-down { filter: brightness(1.1); }
+.cade-tp-col { min-width: 40px; color: var(--text-faint, #a8a29e); }
+
+/* The trackpad: a recessed area with a faint dot grid that drifts with each step. */
+.cade-tp-pad {
+  position: relative; flex: 1 1 auto; min-width: 64px; margin: 5px 2px; overflow: hidden;
+  border-radius: 8px; background: var(--surface-2, #f5f5f4);
+  box-shadow: inset 0 0 0 1px var(--border, #e2e0dc);
+  display: flex; align-items: center; justify-content: center;
+  touch-action: none; cursor: grab;
+}
+.cade-tp-pad::before {
+  content: ''; position: absolute; inset: 0; pointer-events: none; opacity: .55;
+  background-image: radial-gradient(circle, var(--text-faint, #a8a29e) 0.9px, transparent 1.4px);
+  background-size: 8px 9px; background-position: var(--tp-g, 0 0);
+}
+.cade-tp-hint {
+  position: relative; padding: 1px 7px; border-radius: 6px; background: var(--surface-2, #f5f5f4);
+  font-size: 11px; line-height: 1.3; color: var(--text-faint, #a8a29e);
+  white-space: nowrap; overflow: hidden; text-overflow: clip; max-width: 100%; pointer-events: none;
+}
+.cade-tp-pad.is-down .cade-tp-hint { opacity: 0; transition: opacity 120ms; }
+.cade-tp-glow { position: absolute; inset: 0; background: var(--accent, #0f9598); opacity: 0; pointer-events: none; border-radius: inherit; }
+.cade-tp.selecting .cade-tp-pad,
+.cade-tp.extending .cade-tp-pad { box-shadow: inset 0 0 0 1.5px var(--accent, #0f9598); }
+.cade-tp.selecting .cade-tp-hint,
+.cade-tp.extending .cade-tp-hint { color: var(--accent, #0f9598); }
+.cade-tp.extending .cade-tp-pad.is-down .cade-tp-hint { opacity: 1; }
+
+/* Collapsed: only a small handle at the right edge. */
+.cade-tp-handle { display: none; }
+.cade-tp.collapsed { left: auto; width: 46px; height: 42px; padding: 0; margin: 0; background: var(--surface, #fff); opacity: .92; }
+.cade-tp.collapsed > * { display: none; }
+.cade-tp.collapsed > .cade-tp-handle { display: flex; width: 100%; min-width: 0; padding: 0; color: var(--text-muted, #78716c); }
+
+/* Keep the core's bottom-right scroll buttons and the minimized-panel dock clear of the pad. */
+body.cade-tp-on:not(.sel-mode) .mobile-scroll-btns { transform: translateY(-50px); }
+body.cade-tp-on:not(.sel-mode) #cade-panel-dock { bottom: 54px; }
+
+/* Landscape phones: every pixel above the keyboard counts. */
+@media (orientation: landscape) and (max-height: 500px) {
+  .cade-tp { height: 40px; bottom: 4px; }
+  .cade-tp-pad { margin: 4px 2px; }
+  .cade-tp-sel { margin: 4px 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cade-tp { animation: none; }
+  .cade-tp-glow { display: none; }
+}

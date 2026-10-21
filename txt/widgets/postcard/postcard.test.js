@@ -76,12 +76,16 @@ test('editor plugin registers its StateField under the manifest id (and loads it
   var CM = {
     StateField: { define: function (spec) { defined = spec; return { field: true }; } },
     Decoration: { none: { size: 0 }, line: function () { return { range: function () {} }; }, replace: function () { return { range: function () {} }; }, set: function () {} },
-    WidgetType: WT, EditorView: { decorations: { from: function () {} } }
+    WidgetType: WT, EditorView: { decorations: { from: function () {} }, atomicRanges: { of: function () {} } },
+    StateEffect: { define: function () { return { of: function (v) { return v; } }; } },
+    EditorState: { transactionFilter: { of: function () { return { guard: true }; } } },
+    Prec: { high: function (x) { return x; } }, keymap: { of: function (b) { return { keys: b }; } }
   };
   var src = fs.readFileSync(path.join(__dirname, 'postcard-view.js'), 'utf8');
   var win = { Cade: { CM: CM, loadCSS: function (p) { css.push(p); }, asset: function (p) { return p; }, registerPlugin: function (o) { reg = o; } }, addEventListener: function () {} };
   new Function('window', 'module', src)(win, undefined);
-  assert.ok(reg && reg.id === 'postcard-view' && reg.ext && reg.ext.field, 'registered');
+  assert.ok(reg && reg.id === 'postcard-view' && Array.isArray(reg.ext) && reg.ext[0].field, 'registered');
+  assert.ok(reg.ext.some(function (x) { return x && x.guard; }) && reg.ext.some(function (x) { return x && x.keys && x.keys[0].key === 'Escape'; }), 'edge guard + Escape');
   assert.ok(defined && typeof defined.create === 'function' && typeof defined.update === 'function' && typeof defined.provide === 'function');
   assert.deepStrictEqual(css, ['postcard-view.css']);
 });
@@ -432,16 +436,21 @@ test('view: scan finds the same blocks as the core, with the header facts the ba
   assert.strictEqual(V.plainArt(blk), c.lines.join('\n'));
   assert.deepStrictEqual(V.head('```postcard "a 3x3 b" 10x4 paper'), { cols: 10, rows: 4, bg: 'paper', style: '', cap: 'a 3x3 b' });
 });
-test('view: a block opens (raw text) only while a selection end is inside it', function () {
+test('view: only the block opened with ✎ shows raw, and only while a selection end is inside it', function () {
   var blocks = [{ from: 10, to: 50 }, { from: 60, to: 90 }];
   function sel(pairs) { return { ranges: pairs.map(function (p) { return { anchor: p[0], head: p[1] }; }) }; }
-  assert.strictEqual(V.openKey(sel([[0, 0]]), blocks), '00');
-  assert.strictEqual(V.openKey(sel([[10, 10]]), blocks), '10');
-  assert.strictEqual(V.openKey(sel([[50, 50]]), blocks), '10');
-  assert.strictEqual(V.openKey(sel([[51, 51]]), blocks), '00');
-  assert.strictEqual(V.openKey(sel([[0, 100]]), blocks), '00', 'select-all keeps the cards');
-  assert.strictEqual(V.openKey(sel([[0, 70]]), blocks), '01');
-  assert.strictEqual(V.openKey(sel([[0, 0], [65, 65]]), blocks), '01');
+  // nothing opened: a caret inside, at an edge or a selection across never shows the text
+  assert.strictEqual(V.openKey(sel([[10, 10]]), blocks, -1), '00');
+  assert.strictEqual(V.openKey(sel([[30, 30]]), blocks, -1), '00');
+  assert.strictEqual(V.openKey(sel([[0, 70]]), blocks, -1), '00');
+  // opened with ✎ (edit = its from)
+  assert.strictEqual(V.openKey(sel([[30, 30]]), blocks, 10), '10');
+  assert.strictEqual(V.openKey(sel([[10, 10]]), blocks, 10), '10');
+  assert.strictEqual(V.openKey(sel([[50, 50]]), blocks, 10), '10');
+  assert.strictEqual(V.openKey(sel([[51, 51]]), blocks, 10), '00', 'the selection left it');
+  assert.strictEqual(V.openKey(sel([[0, 100]]), blocks, 10), '00', 'select-all keeps the cards');
+  assert.strictEqual(V.openKey(sel([[65, 65]]), blocks, 10), '00', 'a caret in another card doesn\u2019t open that one');
+  assert.strictEqual(V.openKey(sel([[0, 0], [65, 65]]), blocks, 60), '01');
 });
 
 test('PNG file name: a slug of the caption, or the date when there is none', function () {

@@ -1,0 +1,75 @@
+/* Voice notes in the editor — the player card (voice-view.js). Theme variables
+   only; the waveform canvas reads --accent / --text-faint. */
+/* No vertical margins on a block widget (CM measures its border box): the
+   spacing is padding on the outer box. */
+.cm-vn { padding: 6px 0 10px; white-space: normal; font-size: 13px; line-height: 1.3; -webkit-user-select: none; user-select: none; }
+/* contain: the title / date never widen the editor's content (no intrinsic width) */
+.cm-vn-box {
+  width: min(100%, 560px); overflow: hidden; contain: inline-size;
+  border: 1px solid var(--border); border-radius: 12px; background: var(--surface-2);
+}
+.cm-vn-main { display: flex; align-items: center; gap: 12px; padding: 10px 12px 7px; }
+.cm-vn-play {
+  flex: none; display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; padding: 0;
+  color: #fff; background: var(--accent); border: 0; border-radius: 50%; cursor: pointer;
+  touch-action: manipulation; -webkit-tap-highlight-color: transparent; box-shadow: var(--shadow-sm, none);
+}
+.cm-vn-play:hover { background: var(--accent-hover, var(--accent)); }
+.cm-vn-play svg { width: 20px; height: 20px; fill: currentColor; }
+.cm-vn-play .cm-vn-i-play { margin-left: 2px; }
+.cm-vn-i-pause, .cm-vn-i-spin, .cm-vn-on .cm-vn-i-play, .cm-vn-loading .cm-vn-i-play, .cm-vn-loading .cm-vn-i-pause { display: none; }
+.cm-vn-on .cm-vn-i-pause, .cm-vn-loading .cm-vn-i-spin { display: block; }
+.cm-vn-i-spin { fill: none !important; stroke: currentColor; stroke-width: 2.6; stroke-linecap: round; animation: cm-vn-spin 0.8s linear infinite; }
+@keyframes cm-vn-spin { to { transform: rotate(360deg); } }
+.cm-vn-mid { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.cm-vn-wave { height: 36px; cursor: pointer; touch-action: pan-y; -webkit-tap-highlight-color: transparent; }
+.cm-vn-wave canvas { display: block; width: 100%; height: 100%; }
+.cm-vn-row { display: flex; align-items: center; gap: 10px; min-height: 18px; }
+.cm-vn-time { flex: none; font: 11.5px var(--font-mono); color: var(--text-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.cm-vn-msg { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; justify-content: flex-end; gap: 6px; font-family: var(--font-body); font-size: 12px; color: var(--text-muted); }
+.cm-vn-msg span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cm-vn-msg button {
+  flex: none; min-height: 24px; padding: 2px 8px; font: inherit; font-weight: 650; color: var(--accent); cursor: pointer;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 999px; touch-action: manipulation;
+}
+.cm-vn-msg button:hover { border-color: var(--accent); }
+.cm-vn-bar {
+  display: flex; align-items: center; gap: 8px; min-height: 34px; padding: 2px 3px 2px 12px;
+  border-top: 1px solid var(--border); font-family: var(--font-body); color: var(--text-muted);
+}
+.cm-vn-cap { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); font-weight: 600; }
+.cm-vn-cap::before { content: '\1F399\FE0E'; margin-right: 6px; color: var(--text-faint); font-weight: 400; }
+.cm-vn-meta { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; text-align: right; font: 11px var(--font-mono); color: var(--text-faint); white-space: nowrap; }
+.cm-vn-hasmsg .cm-vn-meta, .cm-vn-msg:empty { display: none; }
+.cm-vn-acts { flex: none; display: inline-flex; gap: 1px; }
+.cm-vn-acts button {
+  display: inline-flex; align-items: center; justify-content: center; min-width: 30px; height: 28px; padding: 0;
+  color: var(--text-faint); background: none; border: 0; border-radius: 6px; cursor: pointer;
+  touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+}
+.cm-vn-acts button:hover { color: var(--text); background: var(--surface); }
+.cm-vn-acts svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.cm-vn-acts .cm-vn-rate { min-width: 38px; padding: 0 4px; font: 600 11.5px var(--font-mono); color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.cm-vn-acts button.cm-vn-armed { color: var(--error); background: var(--error-bg, transparent); }
+.cm-vn-acts button.cm-vn-busy { opacity: 0.5; }
+/* a narrow card: a message takes the time's place */
+@media (max-width: 560px) {
+  .cm-vn-hasmsg .cm-vn-time { display: none; }
+  .cm-vn-hasmsg .cm-vn-msg { justify-content: space-between; }
+}
+/* ✓ Done on the opening fence while the plain text is shown */
+.cm-editor .cm-vn-done {
+  margin-left: 10px; padding: 2px 10px; font: 600 12px var(--font-mono, ui-monospace, monospace); vertical-align: 1px;
+  color: var(--accent); background: var(--surface-2); border: 1px solid var(--border); border-radius: 999px; cursor: pointer;
+}
+.cm-editor .cm-vn-done:hover { border-color: var(--accent); }
+/* phones: 40 px touch targets */
+@media (pointer: coarse) {
+  .cm-vn-acts button { min-width: 40px; height: 40px; }
+  .cm-vn-acts .cm-vn-rate { min-width: 44px; }
+  .cm-vn-msg button { position: relative; min-height: 28px; }
+  .cm-vn-msg button::after { content: ''; position: absolute; inset: -8px -4px; } /* a 44 px hit area, the card keeps its height */
+  .cm-vn-bar { padding-left: 10px; }
+  .cm-editor .cm-vn-done { position: relative; padding: 6px 14px; font-size: 13px; }
+  .cm-editor .cm-vn-done::after { content: ''; position: absolute; inset: -6px -4px; }
+}

@@ -1,0 +1,112 @@
+/* Voice Note — the recorder panel (voice.js). Theme variables only. */
+#voice-panel { top: calc(var(--menubar-h, 36px) + 12px); right: 12px; width: 380px; max-width: calc(100vw - 24px); max-height: calc(100vh - var(--menubar-h, 36px) - 24px); }
+#voice-panel .cade-panel-body { padding: 0 12px 12px; }
+.vn { display: flex; flex-direction: column; gap: 10px; font-family: var(--font-body); }
+.vn [hidden] { display: none !important; }
+
+.vn-tabs { display: flex; gap: 2px; margin: 8px 0 0; padding: 2px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-2); }
+.vn-tab { flex: 1 1 0; min-height: 32px; font: inherit; font-size: 12.5px; font-weight: 600; color: var(--text-muted); background: none; border: 0; border-radius: 6px; cursor: pointer; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+.vn-tab.on { background: var(--surface); color: var(--accent); box-shadow: inset 0 0 0 1px var(--border); }
+.vn-cnt { font-weight: 500; color: var(--text-faint); }
+
+/* which part shows */
+.vn-idle, .vn-live, .vn-review { display: none; }
+[data-state="idle"] .vn-idle, [data-state="starting"] .vn-idle { display: flex; }
+[data-state="rec"] .vn-live, [data-state="paused"] .vn-live { display: flex; }
+[data-state="review"] .vn-review { display: flex; }
+
+/* idle: the big button */
+.vn-idle { flex-direction: column; align-items: center; gap: 12px; padding: 18px 0 8px; text-align: center; }
+.vn-big {
+  position: relative; display: flex; align-items: center; justify-content: center; width: 92px; height: 92px; padding: 0;
+  background: var(--surface); border: 2px solid var(--border); border-radius: 50%; cursor: pointer; box-shadow: var(--shadow-sm, none);
+  touch-action: manipulation; -webkit-tap-highlight-color: transparent; transition: transform .12s ease, border-color .15s;
+}
+.vn-big:hover { border-color: var(--error); }
+.vn-big:active { transform: scale(0.96); }
+.vn-big:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--error) 35%, transparent); }
+.vn-big-dot { width: 54px; height: 54px; border-radius: 50%; background: var(--error); transition: border-radius .2s, width .2s, height .2s; }
+[data-state="starting"] .vn-big-dot { width: 30px; height: 30px; border-radius: 7px; animation: vn-pulse 1s ease-in-out infinite; }
+.vn-hint { display: flex; flex-direction: column; gap: 2px; }
+.vn-hint b { font-size: 15px; font-weight: 600; color: var(--text); }
+.vn-hint span { font-size: 12px; color: var(--text-faint); }
+.vn-wait { display: none; font-size: 13px; color: var(--text-muted); }
+[data-state="starting"] .vn-hint { display: none; }
+[data-state="starting"] .vn-wait { display: block; }
+.vn-err {
+  max-width: 100%; padding: 8px 10px; font-size: 12.5px; line-height: 1.4; text-align: left; color: var(--error);
+  background: var(--error-bg, transparent); border: 1px solid color-mix(in srgb, var(--error) 35%, transparent); border-radius: 8px;
+}
+
+/* recording */
+.vn-live { flex-direction: column; align-items: stretch; gap: 10px; padding-top: 4px; }
+.vn-scope { height: 76px; border-radius: 10px; background: var(--surface-2); border: 1px solid var(--border); overflow: hidden; }
+.vn-scope canvas { display: block; width: 100%; height: 100%; }
+.vn-clock { display: flex; align-items: baseline; justify-content: center; gap: 8px; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.vn-el { font-size: 34px; font-weight: 600; line-height: 1; color: var(--text); letter-spacing: -0.02em; }
+.vn-lim { font-size: 13px; color: var(--text-faint); }
+.vn-rdot { align-self: center; width: 11px; height: 11px; border-radius: 50%; background: var(--error); animation: vn-pulse 1.2s ease-in-out infinite; }
+[data-state="paused"] .vn-rdot { animation: none; background: var(--text-faint); }
+[data-state="paused"] .vn-el { color: var(--text-muted); }
+.vn-warn .vn-el, .vn-warn .vn-lim { color: var(--warning, var(--error)); }
+@keyframes vn-pulse { 50% { opacity: 0.35; } }
+.vn-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+
+.vn-btn {
+  min-height: 42px; padding: 6px 12px; font: inherit; font-size: 14px; font-weight: 600; color: var(--text-muted); cursor: pointer; white-space: nowrap;
+  background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+}
+.vn-btn:hover, .vn-btn:focus-visible { color: var(--text); border-color: var(--text-faint); outline: none; }
+.vn-btn:disabled { opacity: 0.6; cursor: default; }
+.vn-stop { color: #fff; background: var(--error); border-color: var(--error); }
+.vn-stop:hover, .vn-stop:focus-visible { color: #fff; border-color: var(--error); filter: brightness(1.08); }
+.vn-go { color: #fff; background: var(--accent); border-color: var(--accent); }
+.vn-go:hover, .vn-go:focus-visible { color: #fff; background: var(--accent-hover, var(--accent)); border-color: var(--accent-hover, var(--accent)); }
+
+/* review */
+.vn-review { flex-direction: column; gap: 10px; padding-top: 4px; }
+.vn-prev { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-2); }
+.vn-pp, .vn-lp {
+  flex: none; display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; padding: 0;
+  color: #fff; background: var(--accent); border: 0; border-radius: 50%; cursor: pointer; touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+}
+.vn-pp:hover, .vn-lp:hover { background: var(--accent-hover, var(--accent)); }
+.vn-lp:disabled { opacity: 0.4; cursor: default; }
+/* ▶ / ❚❚ / spinner drawn in CSS: a triangle, two bars, a ring */
+.vn-pp-i { display: block; width: 0; height: 0; margin-left: 4px; border-style: solid; border-width: 8px 0 8px 13px; border-color: transparent transparent transparent currentColor; }
+.vn-playing .vn-pp-i, .vn-lp.on .vn-pp-i { width: 12px; height: 15px; margin: 0; border: 0; border-left: 4px solid currentColor; border-right: 4px solid currentColor; }
+.vn-lp.busy .vn-pp-i { width: 16px; height: 16px; margin: 0; border: 2.5px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: vn-spin .8s linear infinite; }
+@keyframes vn-spin { to { transform: rotate(360deg); } }
+.vn-pmid { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.vn-pwave { height: 38px; cursor: pointer; touch-action: pan-y; }
+.vn-pwave canvas { display: block; width: 100%; height: 100%; }
+.vn-ptime { font: 11.5px var(--font-mono); color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.vn-tl { display: flex; flex-direction: column; gap: 4px; }
+.vn-tl span { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-faint); }
+.vn-title {
+  width: 100%; box-sizing: border-box; height: 40px; padding: 6px 10px; font: inherit; font-size: 16px; color: var(--text);
+  background: var(--surface); border: 1px solid var(--border); border-radius: 8px; -webkit-appearance: none; appearance: none;
+}
+.vn-title:focus { outline: none; border-color: var(--accent); }
+.vn-acts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.vn-acts .vn-go { grid-column: 1 / -1; }
+
+/* In this note */
+.vn-list { display: flex; flex-direction: column; gap: 6px; padding-top: 2px; }
+.vn-none { padding: 26px 8px; text-align: center; font-size: 13px; color: var(--text-muted); }
+.vn-li { display: flex; align-items: center; gap: 8px; }
+.vn-lp { width: 40px; height: 40px; }
+.vn-item {
+  flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; padding: 6px 10px; font: inherit; text-align: left; color: var(--text); cursor: pointer;
+  background: var(--surface-2); border: 1px solid var(--border); border-radius: 9px; touch-action: manipulation;
+}
+.vn-item:hover { border-color: var(--text-faint); }
+.vn-item b { font-size: 13.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vn-glyphs { overflow: hidden; white-space: nowrap; font: 11px/1.1 var(--font-mono); letter-spacing: -0.5px; color: var(--accent); }
+.vn-item small { font: 11px var(--font-mono); color: var(--text-faint); }
+
+@media (max-width: 560px) {
+  #voice-panel { left: 6px !important; right: 6px; top: calc(var(--menubar-h, 36px) + 6px); width: auto; max-width: none; }
+  #voice-panel .cade-panel-body { padding: 0 10px 12px; }
+  .vn-tab { min-height: 40px; }
+}

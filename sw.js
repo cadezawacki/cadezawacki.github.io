@@ -15,7 +15,7 @@
 //     Code Runner's Python 'cade-py-<version>'): bypass, so nothing is stored twice
 // ============================================
 
-const CACHE_VERSION = 173;
+const CACHE_VERSION = 179;
 const CACHE_NAME = `cade-v${CACHE_VERSION}`;
 
 // Same-origin pages to precache on install.
@@ -61,6 +61,9 @@ const PRECACHE_CROSS_ORIGIN = [
   'https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js',
   'https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js',
   'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js',
+  // QR decoder for Safari (no BarcodeDetector): the QR Code widget's scanner and
+  // Beam's QR stream, which is meant to work with no network at all.
+  'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js',
   // Spell-checker library — loaded via <script>, so an opaque cache entry is fine.
   'https://cdn.jsdelivr.net/npm/typo-js@1.2.5/typo.js',
   // MP4/MOV demuxer used by gif.html's video-to-GIF import (WebCodecs path).

@@ -7,7 +7,7 @@
   position: relative; width: min(100%, var(--pc-w, 600px)); overflow: hidden;
   border: 1px solid var(--border); border-radius: 10px; background: var(--surface-2);
 }
-.cm-pc-card { cursor: text; line-height: 0; background: #111110; }
+.cm-pc-card { cursor: default; line-height: 0; background: #111110; }
 .cm-pc-light .cm-pc-card { background: #fafaf9; }
 .cm-pc-paper .cm-pc-card { background: #f2e8d5; }
 .cm-pc-card canvas { display: block; width: 100%; height: auto; }
@@ -57,3 +57,11 @@
   .editor-wrap .cm-editor .cm-line.cm-pc-raw { font-size: min(16px, calc((100vw - 84px) / var(--pc-cols, 64) / 0.6)) !important; }
   .editor-wrap .cm-editor .cm-line.cm-pc-rawc { font-size: 11px !important; }
 }
+
+/* ✓ Done on the opening fence while the raw text is shown */
+.cm-editor .cm-pc-done {
+  margin-left: 10px; padding: 2px 10px; font: 600 12px var(--font-mono, ui-monospace, monospace); vertical-align: 1px;
+  color: var(--accent); background: var(--surface-2); border: 1px solid var(--border); border-radius: 999px; cursor: pointer;
+}
+.cm-editor .cm-pc-done:hover { border-color: var(--accent); }
+@media (pointer: coarse) { .cm-editor .cm-pc-done { padding: 6px 14px; font-size: 13px; } }

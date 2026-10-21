@@ -127,4 +127,16 @@ test('```postcard: a card made by the widget renders cell for cell', function ()
   }
   assert.ok(cells > 100);
 });
+test('```voice blocks render as a still figure: 🎙 title · duration over the waveform as bars', function () {
+  var h = html('```voice 0:42 "Idea <b>"\n\u2581\u2582\u2588\n![file:voice-2026-10-21-1532.m4a#0123456789abcdef|s10]\n```');
+  assert.ok(/^<figure class="md-vn" role="img" aria-label="Voice note: Idea &lt;b&gt; \u00B7 0:42">/.test(h), h);
+  assert.ok(/<b>Idea &lt;b&gt;<\/b> \u00B7 0:42<\/figcaption>/.test(h), h);
+  assert.ok(h.indexOf('<div class="md-vn-w"><i class="v0"></i><i class="v1"></i><i class="v7"></i></div></figure>') > 0, h);
+  assert.ok(!/md-file|!\[file:|md-code/.test(h), 'no pill, no token text, no code box');
+  var u = html('```voice "Later" 1:05 x\n```');
+  assert.ok(/<b>Later<\/b> \u00B7 1:05/.test(u) && !/md-vn-w/.test(u), 'any order; no waveform line, no bars');
+  assert.ok(/<b>Voice note<\/b><\/figcaption>/.test(html('```voice\n```')), 'untitled, no duration');
+  assert.ok(/md-code/.test(html('```voiceover\nx\n```')), 'another language is code');
+  assert.ok(/\.md-vn-w \.v0\{height:12%\}/.test(require('./htmlpreview-md.js').CSS) && /\.md-vn-w \.v7\{height:100%\}/.test(require('./htmlpreview-md.js').CSS));
+});
 console.log((process.exitCode ? 'FAILED, ' : '') + 'passed ' + passed);
