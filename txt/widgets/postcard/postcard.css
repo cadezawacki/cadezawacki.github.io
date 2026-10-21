@@ -1,0 +1,119 @@
+/* ASCII Postcard — the panel (postcard.js). Theme variables only; the card
+   colours themselves come from postcard-core.js. */
+#postcard-panel { top: calc(var(--menubar-h, 36px) + 12px); right: 12px; width: 520px; max-width: calc(100vw - 24px); max-height: calc(100vh - var(--menubar-h, 36px) - 24px); }
+#postcard-panel .cade-panel-body { padding: 0 12px 12px; }
+.pc { display: flex; flex-direction: column; gap: 8px; font-family: var(--font-body); }
+
+.pc-tabs { display: flex; gap: 2px; margin: 8px 0 0; padding: 2px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-2); }
+.pc-tab { flex: 1 1 0; min-height: 30px; font: inherit; font-size: 12.5px; font-weight: 600; color: var(--text-muted); background: none; border: 0; border-radius: 6px; cursor: pointer; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+.pc-tab.on { background: var(--surface); color: var(--accent); box-shadow: inset 0 0 0 1px var(--border); }
+.pc-cnt { font-weight: 500; color: var(--text-faint); }
+.pc-make { display: flex; flex-direction: column; gap: 8px; }
+.pc-make[hidden], .pc-list[hidden] { display: none; }
+
+/* The preview stays in view while the controls scroll under it. */
+.pc-stage {
+  position: sticky; top: 0; z-index: 2; display: flex; align-items: center; justify-content: center;
+  min-height: 150px; padding: 6px 0; margin: 0 -2px; background: var(--surface); border-radius: 10px; outline: none;
+  -webkit-tap-highlight-color: transparent; touch-action: manipulation;
+}
+.pc-stage::after { content: ''; position: absolute; left: 0; right: 0; bottom: -1px; height: 1px; background: var(--border); }
+.pc-stage:focus-visible { box-shadow: 0 0 0 2px var(--accent); }
+.pc-cv { display: block; max-width: 100%; height: auto; border-radius: 6px; box-shadow: 0 1px 0 var(--border), 0 0 0 1px var(--border); }
+.pc-cv[hidden] { display: none; }
+.pc-empty {
+  display: flex; flex-direction: column; align-items: center; gap: 4px; width: 100%; padding: 22px 10px; cursor: pointer;
+  border: 1.5px dashed var(--border); border-radius: 10px; color: var(--text-muted); text-align: center;
+}
+.pc-empty b { color: var(--text); font-size: 15px; font-weight: 600; }
+.pc-empty span { font-size: 12px; color: var(--text-faint); }
+.pc-empty-i { font-size: 30px; line-height: 1; margin-bottom: 2px; filter: grayscale(0.2); }
+.pc-has .pc-empty { display: none; }
+.pc-dropping {
+  position: absolute; inset: 0; display: none; align-items: center; justify-content: center; border-radius: 10px;
+  border: 2px dashed var(--accent); background: color-mix(in srgb, var(--accent) 14%, var(--surface)); color: var(--accent); font-weight: 700;
+}
+.pc-drag .pc-dropping { display: flex; }
+
+/* visually hidden, not display:none — older iOS won't open a hidden picker */
+.pc-file { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; overflow: hidden; clip-path: inset(50%); }
+.pc-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.pc-meta { margin-left: auto; font: 11.5px var(--font-mono); color: var(--text-faint); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.pc-btn {
+  min-height: 34px; padding: 5px 11px; font: inherit; font-size: 13px; font-weight: 600; color: var(--text-muted); cursor: pointer;
+  background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+}
+.pc-btn:hover, .pc-btn:focus-visible { color: var(--text); border-color: var(--text-faint); outline: none; }
+.pc-btn[hidden] { display: none; }
+.pc-go { color: #fff; background: var(--accent); border-color: var(--accent); }
+.pc-go:hover, .pc-go:focus-visible { color: #fff; background: var(--accent-hover, var(--accent)); border-color: var(--accent-hover, var(--accent)); }
+
+.pc-ctl { display: flex; flex-direction: column; gap: 7px; }
+.pc-f { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.pc-l { flex: 0 0 62px; font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-faint); }
+.pc-seg { display: flex; flex: 1 1 auto; gap: 2px; min-width: 0; padding: 2px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-2); }
+.pc-sb {
+  flex: 1 1 0; min-width: 0; min-height: 28px; padding: 3px 4px; font: inherit; font-size: 12.5px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  background: none; border: 0; border-radius: 6px; cursor: pointer; touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+}
+.pc-sb:hover:not(.on) { color: var(--text); }
+.pc-sb.on { background: var(--surface); color: var(--accent); font-weight: 700; box-shadow: inset 0 0 0 1px var(--border); }
+.pc-tint { flex: none; width: 34px; height: 30px; padding: 0 2px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface-2); cursor: pointer; display: none; }
+[data-mode="tint"] .pc-tint { display: block; }
+.pc-only-text, .pc-only-color { display: none; }
+[data-style="text"] .pc-only-text, [data-mode="color"] .pc-only-color { display: flex; }
+
+.pc-in {
+  flex: 1 1 0; min-width: 0; height: 32px; padding: 4px 9px; font: inherit; font-size: 14px; color: var(--text);
+  background: var(--surface); border: 1px solid var(--border); border-radius: 7px; -webkit-appearance: none; appearance: none;
+}
+.pc-in:focus { outline: none; border-color: var(--accent); }
+.pc-date { flex: 0 1 128px; }
+
+.pc-sls { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 14px; }
+.pc-sl { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.pc-sl .pc-l { flex-basis: 62px; }
+.pc-sl input[type=range] { flex: 1 1 auto; min-width: 0; height: 28px; margin: 0; accent-color: var(--accent); touch-action: pan-y; }
+.pc-v {
+  flex: 0 0 40px; min-height: 24px; padding: 0; font: 12px var(--font-mono); color: var(--text-muted); text-align: right; font-variant-numeric: tabular-nums;
+  background: none; border: 0; border-radius: 4px; cursor: pointer;
+}
+.pc-v:hover { color: var(--accent); }
+.pc-tgs { flex-wrap: wrap; gap: 6px; }
+.pc-tg {
+  min-height: 30px; padding: 3px 11px; font: inherit; font-size: 12.5px; color: var(--text-muted); cursor: pointer;
+  background: none; border: 1px solid var(--border); border-radius: 999px; touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+}
+.pc-tg.on { color: var(--accent); border-color: var(--accent); background: color-mix(in srgb, var(--accent) 9%, transparent); font-weight: 650; }
+
+.pc-acts { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 6px; position: sticky; bottom: -12px; padding: 8px 0 12px; margin-bottom: -12px; background: var(--surface); }
+.pc-acts:not(:has(.pc-share:not([hidden]))) { grid-template-columns: 2fr 1fr 1fr; }
+.pc-acts .pc-btn { padding: 5px 6px; }
+#postcard-panel:not(.pc-has) .pc-acts .pc-btn { opacity: 0.55; }
+
+/* In this note */
+.pc-list { display: flex; flex-direction: column; gap: 6px; padding-top: 2px; }
+.pc-none { padding: 26px 8px; text-align: center; font-size: 13px; color: var(--text-muted); }
+.pc-item {
+  display: flex; align-items: center; gap: 10px; width: 100%; padding: 6px; font: inherit; text-align: left; color: var(--text); cursor: pointer;
+  background: var(--surface-2); border: 1px solid var(--border); border-radius: 9px; touch-action: manipulation;
+}
+.pc-item:hover { border-color: var(--text-faint); }
+.pc-thumb { flex: 0 0 66px; display: flex; align-items: center; justify-content: center; height: 54px; overflow: hidden; border-radius: 6px; }
+.pc-thumb-dark { background: #111110; } .pc-thumb-light { background: #fafaf9; box-shadow: inset 0 0 0 1px var(--border); } .pc-thumb-paper { background: #f2e8d5; }
+.pc-thumb canvas { display: block; max-width: 66px; max-height: 54px; }
+.pc-it { display: flex; flex-direction: column; min-width: 0; gap: 2px; }
+.pc-it b { font-size: 13.5px; font-weight: 600; font-style: italic; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pc-it small { font: 11px var(--font-mono); color: var(--text-faint); }
+
+@media (max-width: 560px) {
+  #postcard-panel { left: 6px !important; right: 6px; top: calc(var(--menubar-h, 36px) + 6px); width: auto; max-width: none; }
+  #postcard-panel .cade-panel-body { padding: 0 8px 10px; }
+  .pc-sls { grid-template-columns: 1fr; gap: 2px; }
+  .pc-l { flex-basis: 54px; font-size: 10.5px; }
+  .pc-sb { font-size: 12px; padding: 3px 2px; }
+  .pc-in { font-size: 16px; } /* no iOS zoom on focus */
+  .pc-acts { bottom: -10px; margin-bottom: -10px; padding-bottom: 10px; }
+  .pc-acts .pc-btn { white-space: nowrap; }
+  .pc-wide { display: none; }
+}

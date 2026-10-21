@@ -70,4 +70,61 @@ test('CSV / TSV: a whole note or a ```csv block becomes a table; prose and Markd
   assert.ok(!/md-csv/.test(html('| a | b |\n|---|---|\n| 1 | 2 |')), 'a markdown table is not csv');
   assert.deepStrictEqual(R.parseDelim('a,"b\nc",d\n1,2,3', ','), [['a', 'b\nc', 'd'], ['1', '2', '3']]);
 });
+test('```postcard blocks render as coloured text (runs share a span); mono / broken colour data as one colour', function () {
+  // a 4×2 card: palette [red, blue], cells r r b b / r · b b ("·" = blank: joins the run)
+  var zlib = require('zlib');
+  var body = [2, 255, 0, 0, 0, 0, 255, 0, 0, 1, 1, 0, 0, 1, 1];
+  function line(bytes, deflate) {
+    var b = Buffer.from(bytes), d = deflate ? zlib.deflateRawSync(b) : b;
+    return '~ ' + Buffer.concat([Buffer.from([1, deflate ? 1 : 0]), d]).toString('base64');
+  }
+  var art = '#@<&\n# %@';
+  [false, true].forEach(function (deflate) {
+    var h = html('```postcard 4x2 classic color dark "Lisbon, 21 Oct"\n' + art + '\n' + line(body, deflate) + '\n```');
+    assert.ok(/<figure class="md-pcw"><pre class="md-pc md-pc-dark" style="--pc-cols:4;--k0:#ff0000;--k1:#0000ff"/.test(h), h);
+    assert.ok(h.indexOf('<i class=k0>#@</i><i class=k1>&lt;&amp;\n</i><i class=k0># </i><i class=k1>%@</i></pre>') > 0, h);
+    assert.ok(/<figcaption>Lisbon, 21 Oct<\/figcaption>/.test(h) && !/~ /.test(h), 'caption shown, colour line hidden');
+  });
+  // corrupt / mismatched colour data: plain art in one colour, the data line never shows
+  [line([2, 255, 0, 0, 0, 0, 255, 0, 0, 1, 1], false), line(body.slice(0, 14).concat([7]), false), '~ AAAA!!', line(body, true).slice(0, 20)].forEach(function (cl, k) {
+    var h = html('```postcard 4x2 classic color\n' + art + '\n' + cl + '\n```');
+    assert.ok(/class="md-pc md-pc-mono"/.test(h) && !/<i class/.test(h) && />#@&lt;&amp;\n# %@<\/pre>/.test(h), k + ': ' + h);
+  });
+  // a header that says another size: the colours can't line up → one colour
+  assert.ok(!/<i class/.test(html('```postcard 5x2 classic color\n' + art + '\n' + line(body, true) + '\n```')));
+  // green / sepia / tint: one ink on their paper; mono uses the theme
+  assert.ok(/md-pc-paper" style="--pc-cols:3;color:#6b4423"/.test(html('```postcard 3x1 classic sepia paper\n.:#\n```')));
+  assert.ok(/style="--pc-cols:3;color:#3dff7a"/.test(html('```postcard 3x1 classic green\n.:#\n```')));
+  assert.ok(/style="--pc-cols:3;color:#aabbcc"/.test(html('```postcard 3x1 classic tint:#abc light\n.:#\n```')));
+  assert.ok(/md-pc md-pc-mono/.test(html('```postcard 3x1 classic mono\n.:#\n```')));
+  // not a postcard → ordinary code
+  assert.ok(/md-code/.test(html('```postcards\nx\n```')));
+  assert.ok(/\.md-pc \.k63\{color:var\(--k63\)\}/.test(require('./htmlpreview-md.js').CSS) && /print-color-adjust:exact/.test(require('./htmlpreview-md.js').CSS));
+});
+test('```postcard: a card made by the widget renders cell for cell', function () {
+  var PC = require('../postcard/postcard-core.js'), zlib = require('zlib');
+  var img = PC.demoImage(240, 160), c = PC.convert(img.data, img.width, img.height, { cols: 40, style: 'dense', mode: 'color', colors: 16, caption: 'Sunset' });
+  var h = html(PC.toText(c, PC.encodeColorsSync(c, zlib.deflateRawSync)));
+  var pre = /<pre[^>]*>([\s\S]*)<\/pre>/.exec(h)[1];
+  var text = pre.replace(/<[^>]+>/g, '').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&amp;/g, '&');
+  assert.strictEqual(text, c.lines.join('\n'));
+  // every visible character sits in a span of its own palette colour
+  var re = /<i class=k(\d+)>([^<]*)/g, m, pos = 0, flat = c.lines.join('\n'), cells = 0;
+  var unesc = function (s) { return s.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&amp;/g, '&'); };
+  var before = pre.slice(0, pre.indexOf('<i'));
+  pos = unesc(before).length;
+  while ((m = re.exec(pre))) {
+    var s = unesc(m[2]);
+    for (var i = 0; i < s.length; i++, pos++) {
+      var ch = s.charAt(i);
+      if (ch === '\n' || ch === ' ') continue;
+      var row = flat.slice(0, pos).split('\n').length - 1, col = pos - flat.lastIndexOf('\n', pos - 1) - 1;
+      assert.strictEqual(+m[1], c.idx[row * c.cols + col], 'cell ' + row + ',' + col);
+      cells++;
+    }
+    var close = pre.indexOf('<', re.lastIndex), gap = pre.slice(re.lastIndex, close);
+    pos += unesc(gap).length;
+  }
+  assert.ok(cells > 100);
+});
 console.log((process.exitCode ? 'FAILED, ' : '') + 'passed ' + passed);

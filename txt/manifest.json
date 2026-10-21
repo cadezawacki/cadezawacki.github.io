@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "version": "2026.10.21-1",
+  "version": "2026.10.21-2",
   "modules": [
     {
       "id": "crawler",
@@ -1292,6 +1292,33 @@
       ],
       "settingKey": "plugins.clipfeed-capture",
       "section": "Devices",
+      "default": true
+    },
+    {
+      "id": "postcard",
+      "type": "widget",
+      "name": "ASCII Postcard",
+      "description": "Turn a photo into coloured text art kept in your note — classic, dense, blocks, braille, edges or your own words; copy it, save a PNG or share it. A visual diary that is still just text",
+      "icon": "🖼",
+      "tags": "ascii,ascii art,postcard,photo,picture,image,camera,text art,braille,diary,journal,memory,art,colour,color,png,share,convert,draw",
+      "entry": "widgets/postcard/postcard.js",
+      "css": "widgets/postcard/postcard.css",
+      "precache": [
+        "widgets/postcard/postcard-core.js"
+      ]
+    },
+    {
+      "id": "postcard-view",
+      "type": "plugin",
+      "name": "ASCII postcards in the editor",
+      "description": "Show ```postcard blocks (made with ASCII Postcard) as their coloured picture; put the caret in one to edit its text",
+      "entry": "widgets/postcard/postcard-view.js",
+      "css": "widgets/postcard/postcard-view.css",
+      "precache": [
+        "widgets/postcard/postcard-core.js"
+      ],
+      "settingKey": "plugins.postcard-view",
+      "section": "Editor",
       "default": true
     },
     {
