@@ -15,7 +15,7 @@
 //     Code Runner's Python 'cade-py-<version>'): bypass, so nothing is stored twice
 // ============================================
 
-const CACHE_VERSION = 186;
+const CACHE_VERSION = 187;
 const CACHE_NAME = `cade-v${CACHE_VERSION}`;
 
 // Same-origin pages to precache on install.
@@ -24,6 +24,9 @@ const PRECACHE = [
   './txt.html',
   // Plain-language matching for txt.html's Ctrl+K palette (loaded on first open).
   './txt/widgets/intent/intent-core.js',
+  // Sync conflicts: three-way merge + the line-by-line merge screen (loaded when needed).
+  './txt/widgets/merge/merge-core.js',
+  './txt/widgets/merge/merge-ui.js',
   './gif.html',
   './photo.html',
   './ppc.html',

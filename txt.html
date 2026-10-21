@@ -1626,37 +1626,7 @@ body.split-open .mobile-toolbar { right: 50%; }
 
 .btn-danger:hover { background: var(--error-bg); }
 
-/* Sync Conflict modal: vertical stack of full-width choices */
-.sync-conflict-actions {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  margin-top: var(--space-2);
-}
-.sync-conflict-btn {
-  width: 100%;
-  text-align: left;
-  padding: 10px 14px;
-  line-height: 1.35;
-}
-.sync-conflict-btn:hover { border-color: var(--accent); }
-/* Item 10: inline diff — local-only lines red, server-only green. */
-.sync-conflict-diff {
-  max-height: 200px; overflow: auto; margin: 0 0 var(--space-4);
-  border: 1px solid var(--border); border-radius: var(--radius-sm);
-  font-family: var(--font-mono); font-size: var(--text-xs); line-height: 1.5;
-  background: var(--bg);
-}
-.sync-conflict-diff:empty { display: none; }
-.scd-line { padding: 0 8px; white-space: pre-wrap; word-break: break-word; }
-.scd-line.del { background: rgba(229, 72, 77, 0.12); color: #e5484d; }
-.scd-line.add { background: rgba(34, 197, 94, 0.12); color: #16a34a; }
-.scd-line.ctx { color: var(--text-faint); }
-.scd-line.gap { color: var(--text-faint); text-align: center; user-select: none; }
-.scd-head { padding: 3px 8px; font-family: var(--font-body); color: var(--text-muted); border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--surface); }
-.scd-head b.local { color: #e5484d; } .scd-head b.server { color: #16a34a; }
-.sync-conflict-btn .scb-title { font-weight: 600; }
-.sync-conflict-btn .scb-desc { display: block; font-size: var(--text-xs); color: var(--text-muted); margin-top: 2px; }
+/* Sync Conflict: the merge screen styles itself (txt/widgets/merge/merge-ui.js). */
 
 .dl-quick-picks {
   display: flex;
@@ -3627,40 +3597,7 @@ body.inbox-list .find-panel { display: none !important; }
   </div>
 </div>
 
-<!-- ========== SYNC CONFLICT MODAL ========== -->
-<div class="modal-overlay" id="sync-conflict-overlay">
-  <div class="modal-dialog" style="max-width: 460px;">
-    <div class="modal-title">Sync Conflict</div>
-    <div class="modal-desc">
-      Offline changes to “<span id="sync-conflict-room"></span>” conflict with the
-      latest synced version. Choose how to resolve. Closing this dialog keeps both
-      copies by saving the server version as a new document.
-    </div>
-    <div class="sync-conflict-diff" id="sync-conflict-diff"></div>
-    <div class="sync-conflict-actions">
-      <button class="btn sync-conflict-btn" data-choice="local">
-        <span class="scb-title">Local</span>
-        <span class="scb-desc">Keep this device's version, replace the server copy.</span>
-      </button>
-      <button class="btn sync-conflict-btn" data-choice="server">
-        <span class="scb-title">Server</span>
-        <span class="scb-desc">Keep the server version, replace this device's copy.</span>
-      </button>
-      <button class="btn sync-conflict-btn" data-choice="append-down">
-        <span class="scb-title">Append ⬇️</span>
-        <span class="scb-desc">Append the server version below the local version.</span>
-      </button>
-      <button class="btn sync-conflict-btn" data-choice="append-up">
-        <span class="scb-title">Append ⬆️</span>
-        <span class="scb-desc">Append the server version above the local version.</span>
-      </button>
-      <button class="btn sync-conflict-btn" data-choice="new">
-        <span class="scb-title">New</span>
-        <span class="scb-desc">Keep local here; save the server version as a new document.</span>
-      </button>
-    </div>
-  </div>
-</div>
+<!-- Sync Conflict: the merge screen is built on demand by txt/widgets/merge/merge-ui.js. -->
 
 <!-- ========== SETTINGS MODAL ========== -->
 <div class="modal-overlay" id="settings-overlay">
@@ -15115,8 +15052,8 @@ const tabSync = (() => {
 // session), reconnecting must not blindly clobber either side. On the first
 // time the stream goes live for a room (`pendingReconcile`), we fetch the most
 // recent server text and reconcile it against local using a deterministic
-// decision tree, falling back to an explicit "Sync Conflict" modal when the
-// two genuinely diverge. While the stream stays live, normal real-time sync
+// decision tree and a three-way merge, opening the merge screen only when both
+// sides changed the same lines. While the stream stays live, normal real-time sync
 // (the `.on('value')` listener + broadcast) runs untouched.
 // ============================================
 
@@ -15343,7 +15280,11 @@ async function reconcileRoom() {
   }
 
   // --- Offline edits present: version-aware decision tree ---------------------
+  // With a synced base the containment shortcuts below are skipped: a real
+  // three-way merge keeps edits they would drop (a line deleted here while the
+  // other device appended one "contains" this side, yet both changes count).
   const localVer = loadRoomVersion(roomName);
+  const hasBase = loadRoomSynced(roomName) != null;
   if (serverText === localText) {
     saveRoomSynced(roomName, localText);                 // already identical
     if (serverVer != null) { saveRoomVersion(roomName, serverVer); syncState.serverVersion = serverVer; }
@@ -15356,18 +15297,15 @@ async function reconcileRoom() {
     await applyResolvedLocal(roomName, localText);        // incoming blank, local has content → local
   } else if (localText === '') {
     applyResolvedServer(roomName, serverText, serverVer); // local blank, incoming has content → server
-  } else if (localText.includes(serverText)) {
+  } else if (!hasBase && localText.includes(serverText)) {
     await applyResolvedLocal(roomName, localText);        // entire incoming already inside local → local
-  } else if (serverText.includes(localText)) {
+  } else if (!hasBase && serverText.includes(localText)) {
     applyResolvedServer(roomName, serverText, serverVer); // server strictly extended local → adopt server
   } else {
     // Both sides changed since the last sync. When they changed different
-    // lines that isn't a conflict at all — merge; ask only when the same lines
-    // were changed two different ways.
-    const base = loadRoomSynced(roomName);
-    const merged = base != null ? _merge3(base, localText, serverText) : null;
-    if (merged != null) await applyResolvedMerge(roomName, merged);
-    else await showSyncConflictModal(roomName, localText, serverText); // genuine conflict → ask
+    // lines that isn't a conflict at all — merge (and say so); open the merge
+    // screen only for lines changed two different ways.
+    await _reconcileDivergent(roomName, localText, serverText, serverVer);
   }
   if (!syncState.pageTypeApplied) { syncState.pageTypeApplied = true; applyPageType(); }
 }
@@ -15438,7 +15376,8 @@ async function _pushResolved(roomName, text) {
 }
 
 // Adopt a three-way merge of local and server and push it, so every device
-// converges on it.
+// converges on it. It lands as its own undo step ('input.merge' never joins
+// the typing before it), so Undo in the editor steps back to the offline text.
 async function applyResolvedMerge(roomName, merged) {
   // Switched rooms while reconcile awaited — park the merge in that room's
   // cache. It's dirty against the base, so its next reconcile pushes it.
@@ -15446,7 +15385,12 @@ async function applyResolvedMerge(roomName, merged) {
     store.set('cade-room-cache:' + roomName, merged);
     return;
   }
-  dispatchRemoteDoc(merged);
+  const cur = editor.state.doc.toString();
+  if (cur !== merged) {
+    syncState.suppressUpdate = true;   // pushed below, not by the broadcast path
+    try { editor.dispatch({ changes: _minimalRemoteChange(cur, merged), userEvent: 'input.merge' }); }
+    finally { syncState.suppressUpdate = false; }
+  }
   persistContent();
   redecorateAfterRemote();
   await _pushResolved(roomName, merged);
@@ -15459,6 +15403,8 @@ async function applyResolvedMerge(roomName, merged) {
 // into one section here while another device tidied a different one is two
 // independent changes — so merge line by line the way version control does.
 //
+// This inline copy is the fallback for when txt/widgets/merge/merge-core.js
+// (which also reports conflicts hunk by hunk for the merge screen) can't load.
 // Hunks come from the split view's patience diff (base → each side). Two hunks
 // collide when their base ranges overlap, or when both insert at the same
 // point. An identical collision is taken once; two different insertions at one
@@ -15576,121 +15522,145 @@ async function applyResolvedNew(roomName, localText, serverText) {
   showToast('Conflict saved as new doc: ' + conflictName, 'success', 4000);
 }
 
-// --- Conflict diff (item 10) --------------------------------------------------
-// Bounded line diff: strip the common prefix/suffix, then LCS over what's left
-// (≤400×400 lines — beyond that, show the two changed blocks side by side
-// without pairing). Renders with 2 context lines around each change.
-function _lineDiffOps(aText, bText) {
-  const a = aText.split('\n'), b = bText.split('\n');
-  let pre = 0;
-  while (pre < a.length && pre < b.length && a[pre] === b[pre]) pre++;
-  let sufA = a.length, sufB = b.length;
-  while (sufA > pre && sufB > pre && a[sufA - 1] === b[sufB - 1]) { sufA--; sufB--; }
-  const midA = a.slice(pre, sufA), midB = b.slice(pre, sufB);
-  const ops = [];
-  a.slice(0, pre).forEach(s => ops.push({ t: '=', s }));
-  if (midA.length * midB.length > 160000) {
-    // Too big to pair line-by-line — dump the blocks.
-    midA.forEach(s => ops.push({ t: '-', s }));
-    midB.forEach(s => ops.push({ t: '+', s }));
-  } else if (midA.length || midB.length) {
-    const n = midA.length, m = midB.length;
-    const dp = Array.from({ length: n + 1 }, () => new Uint16Array(m + 1));
-    for (let i = n - 1; i >= 0; i--) {
-      for (let j = m - 1; j >= 0; j--) {
-        dp[i][j] = midA[i] === midB[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
-      }
-    }
-    let i = 0, j = 0;
-    while (i < n && j < m) {
-      if (midA[i] === midB[j]) { ops.push({ t: '=', s: midA[i] }); i++; j++; }
-      else if (dp[i + 1][j] >= dp[i][j + 1]) { ops.push({ t: '-', s: midA[i] }); i++; }
-      else { ops.push({ t: '+', s: midB[j] }); j++; }
-    }
-    while (i < n) { ops.push({ t: '-', s: midA[i++] }); }
-    while (j < m) { ops.push({ t: '+', s: midB[j++] }); }
+// --- Sync Conflict: merge core + merge screen (txt/widgets/merge/) ----------------
+// merge-core.js (three-way merge, hunks, per-line choices, word diff) and
+// merge-ui.js (the GitHub-style merge screen) load the first time a reconnect
+// finds both sides changed. Big documents are merged in a worker running the
+// same merge-core.js. If the files can't load, reconcile falls back to the
+// inline _merge3 and, for a real conflict, to the safe default (keep both).
+const MERGE_BASE = './txt/widgets/merge/';
+const MERGE_WORKER_MIN = 200000;   // chars across the three texts before using the worker
+let _mergeLibP = null;
+function _loadMergeLib() {
+  if (!_mergeLibP) {
+    const one = (file, glob) => window[glob] ? Promise.resolve() : loadScriptOnce(MERGE_BASE + file);
+    _mergeLibP = Promise.race([
+      Promise.all([one('merge-core.js', '__cadeMergeCore'), one('merge-ui.js', '__cadeMergeUI')]),
+      new Promise((_, rej) => setTimeout(() => rej(new Error('merge-load-timeout')), 10000)),
+    ]).then(() => {
+      if (!window.__cadeMergeCore || !window.__cadeMergeUI) throw new Error('merge-lib-missing');
+      return { core: window.__cadeMergeCore, ui: window.__cadeMergeUI };
+    }).catch((e) => { _mergeLibP = null; throw e; });
   }
-  a.slice(sufA).forEach(s => ops.push({ t: '=', s }));
-  return ops;
-}
-function _renderConflictDiff(localText, serverText) {
-  const el = document.getElementById('sync-conflict-diff');
-  if (!el) return;
-  let ops;
-  try { ops = _lineDiffOps(localText, serverText); } catch { el.innerHTML = ''; return; }
-  const changed = ops.filter(o => o.t !== '=').length;
-  if (!changed) { el.innerHTML = ''; return; }
-  // Keep 2 context lines around changes; collapse the rest.
-  const keep = new Array(ops.length).fill(false);
-  ops.forEach((o, i) => {
-    if (o.t === '=') return;
-    for (let k = Math.max(0, i - 2); k <= Math.min(ops.length - 1, i + 2); k++) keep[k] = true;
-  });
-  const rows = [`<div class="scd-head"><b class="local">− local</b> · <b class="server">+ server</b> · ${changed} changed line${changed === 1 ? '' : 's'}</div>`];
-  let gap = false, shown = 0;
-  for (let i = 0; i < ops.length && shown < 300; i++) {
-    if (!keep[i]) { gap = true; continue; }
-    if (gap) { rows.push('<div class="scd-line gap">···</div>'); gap = false; }
-    const o = ops[i];
-    const cls = o.t === '-' ? 'del' : o.t === '+' ? 'add' : 'ctx';
-    const sign = o.t === '=' ? ' ' : o.t;
-    rows.push(`<div class="scd-line ${cls}">${sign} ${escapeHtml(o.s.length > 300 ? o.s.slice(0, 300) + '…' : o.s)}</div>`);
-    shown++;
-  }
-  if (shown >= 300) rows.push('<div class="scd-line gap">··· (diff truncated)</div>');
-  el.innerHTML = rows.join('');
-  el.scrollTop = 0;
+  return _mergeLibP;
 }
 
-// --- Sync Conflict modal ------------------------------------------------------
-// Returns a promise that resolves once the conflict is handled. Abandoning the
-// modal (Escape / backdrop click) defaults to option 5 ("New") so a conflict is
-// never silently dropped.
-function showSyncConflictModal(roomName, localText, serverText) {
+// merge3 (or merge2 when there's no synced base) — off the main thread for big
+// documents, so a phone doesn't freeze while the line diff runs.
+function _computeMerge(core, base, local, server) {
+  const op = base == null ? 'merge2' : 'merge3';
+  const args = base == null ? [local, server] : [base, local, server];
+  const size = local.length + server.length + (base ? base.length : 0);
+  const inline = () => core[op].apply(null, args);
+  if (size < MERGE_WORKER_MIN || typeof Worker !== 'function') return Promise.resolve(inline());
   return new Promise((resolve) => {
-    const overlay = document.getElementById('sync-conflict-overlay');
-    const roomSpan = document.getElementById('sync-conflict-room');
-    if (roomSpan) roomSpan.textContent = roomName;
-    try { _renderConflictDiff(localText, serverText); } catch {}
-    const btns = Array.from(overlay.querySelectorAll('.sync-conflict-btn'));
-    let settled = false;
-
-    const cleanup = () => {
-      overlay.classList.remove('open');
-      overlay.removeEventListener('click', onBackdrop);
-      document.removeEventListener('keydown', onKey, true);
-      btns.forEach(b => b.removeEventListener('click', onClick));
-    };
-
-    const finish = async (choice) => {
-      if (settled) return;
-      settled = true;
-      cleanup();
-      try {
-        if (choice === 'local') await applyResolvedLocal(roomName, localText);
-        else if (choice === 'server') applyResolvedServer(roomName, serverText);
-        else if (choice === 'append-down') await applyResolvedAppend(roomName, localText, serverText, 'down');
-        else if (choice === 'append-up') await applyResolvedAppend(roomName, localText, serverText, 'up');
-        else await applyResolvedNew(roomName, localText, serverText); // 'new' or abandoned
-      } catch (e) {
-        console.error('Conflict resolution failed:', e);
-      }
-      resolve();
-    };
-
-    const onClick = (e) => finish(e.currentTarget.getAttribute('data-choice'));
-    const onBackdrop = (e) => { if (e.target === overlay) finish('new'); };
-    const onKey = (e) => {
-      if (e.key === 'Escape') { e.stopPropagation(); e.preventDefault(); finish('new'); }
-    };
-
-    btns.forEach(b => b.addEventListener('click', onClick));
-    overlay.addEventListener('click', onBackdrop);
-    document.addEventListener('keydown', onKey, true);
-    closeAllMenus();
-    overlay.classList.add('open');
+    let w, done = false;
+    const end = (r) => { if (done) return; done = true; clearTimeout(t); try { w && w.terminate(); } catch {} resolve(r || inline()); };
+    const t = setTimeout(() => end(null), 30000);
+    try {
+      w = new Worker(MERGE_BASE + 'merge-core.js');
+      w.onmessage = (e) => end(e.data && e.data.res ? e.data.res : null);
+      w.onerror = () => end(null);
+      w.postMessage({ id: 1, op, args });
+    } catch { end(null); }
   });
 }
+
+function _mergeTime(ts) {
+  if (!ts) return '';
+  const d = new Date(ts), now = new Date();
+  const time = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  return 'last edit ' + (d.toDateString() === now.toDateString() ? time : d.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ', ' + time);
+}
+function _mergeLabels(roomName, serverVer) {
+  let mt = 0;
+  try { mt = roomMeta[roomName] && roomMeta[roomName].modified; } catch {}
+  return {
+    mine: 'This device (offline edits)', mineTime: _mergeTime(mt),
+    theirs: 'Other device / server', theirsTime: serverVer != null ? 'version ' + serverVer : '',
+  };
+}
+
+// Both this device (offline) and the server changed the room since the last
+// sync. Merge what doesn't overlap without asking (with a toast to review or
+// undo it); open the merge screen only for lines both sides changed. Called
+// from reconcileRoom with conflictResolving held, so live sync waits.
+async function _reconcileDivergent(roomName, localText, serverText, serverVer) {
+  const base = loadRoomSynced(roomName);
+  let lib = null, res = null;
+  try {
+    lib = await _loadMergeLib();
+    res = await _computeMerge(lib.core, base, localText, serverText);
+  } catch (e) { console.warn('Merge screen unavailable:', e); }
+  if (!res) {
+    const merged = base != null ? _merge3(base, localText, serverText) : null;
+    if (merged != null) await applyResolvedMerge(roomName, merged);
+    else await applyResolvedNew(roomName, localText, serverText);
+    return;
+  }
+  if (!res.conflicts) {
+    const merged = res.merged;
+    await applyResolvedMerge(roomName, merged);
+    // Tell the user only when both sides really contributed.
+    if (merged !== localText && merged !== serverText && syncState.roomName === roomName) {
+      _lastAutoMerge = { roomName, base, localText, serverText, merged, res, serverVer, at: Date.now() };
+      lib.ui.toast({
+        text: 'Merged your offline edits with changes from your other device — tap to review',
+        onReview: () => openMergeReview(),
+        onUndo: () => undoAutoMerge(),
+      });
+    }
+    return;
+  }
+  const d = await lib.ui.open({ room: roomName, res, core: lib.core, labels: _mergeLabels(roomName, serverVer) });
+  try {
+    if (d.action === 'apply') await applyResolvedMerge(roomName, d.text);
+    else if (d.action === 'local') await applyResolvedLocal(roomName, localText);
+    else if (d.action === 'server') applyResolvedServer(roomName, serverText, serverVer);
+    else if (d.action === 'append-down') await applyResolvedAppend(roomName, localText, serverText, 'down');
+    else if (d.action === 'append-up') await applyResolvedAppend(roomName, localText, serverText, 'up');
+    else await applyResolvedNew(roomName, localText, serverText); // 'new' or closed — keep both
+  } catch (e) {
+    console.error('Conflict resolution failed:', e);
+  }
+  try { if (syncState.roomName === roomName) editor.focus(); } catch {}
+}
+
+// The last automatic merge, for the toast's Review / Undo.
+let _lastAutoMerge = null;
+function _autoMergeLive() {
+  const m = _lastAutoMerge;
+  return !!m && (syncState.roomName || activeRoom) === m.roomName && editor.state.doc.toString() === m.merged;
+}
+// Replace the document as an ordinary edit (undoable, and synced by the normal
+// broadcast path — unlike dispatchRemoteDoc, which is silent).
+function _replaceDocAsEdit(text) {
+  const cur = editor.state.doc.toString();
+  if (cur === text) return;
+  editor.dispatch({ changes: _minimalRemoteChange(cur, text), userEvent: 'input.merge', scrollIntoView: false });
+}
+function undoAutoMerge() {
+  const m = _lastAutoMerge;
+  if (!m) return;
+  if (!_autoMergeLive()) { showToast('You\'ve edited since the merge — use Undo in the editor to step back', 'info', 4000); return; }
+  _replaceDocAsEdit(m.localText);
+  _lastAutoMerge = null;
+  showToast('Merge undone — your offline version is back', 'success', 3000);
+}
+async function openMergeReview() {
+  const m = _lastAutoMerge;
+  if (!m) return;
+  let lib;
+  try { lib = await _loadMergeLib(); } catch { return; }
+  if (lib.ui.isOpen()) return;   // never displace a merge that's waiting for an answer
+  const live = _autoMergeLive();
+  const d = await lib.ui.open({ room: m.roomName, res: m.res, core: lib.core, mode: 'review', canUndo: live, labels: _mergeLabels(m.roomName, m.serverVer) });
+  if (!_autoMergeLive()) return;
+  if (d.action === 'undo') undoAutoMerge();
+  else if (d.action === 'apply' && d.text !== m.merged) { _replaceDocAsEdit(d.text); m.merged = d.text; }
+  try { editor.focus(); } catch {}
+}
+window.__cadeMergeDebug = { reconcileDivergent: _reconcileDivergent, openMergeReview, undoAutoMerge };
 
 window.openSyncModal = function() {
   closeAllMenus();
