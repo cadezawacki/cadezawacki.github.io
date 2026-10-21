@@ -3978,6 +3978,8 @@ window.Cade = (function () {
     registerWidget(w) { return window.registerWidget(w); },
     registerScript(src) { return window.__registerScript(src); },
     registerPlugin(spec) { return window.__registerPlugin(spec); },
+    // A widget that adds an editor extension while it's open takes it out again on close.
+    unregisterPlugin(id) { return window.__unregisterPlugin && window.__unregisterPlugin(id); },
     registerSetting(def) { return window.registerSetting(def); },
     // ---- core handles ----
     get editor() { return window.editor; },
@@ -4076,6 +4078,43 @@ window.Cade = (function () {
     //      doesn't stack on top of it ----
     slashCodes() { return window.__cadeSlashCodes ? window.__cadeSlashCodes() : {}; },
     claimSlash(fn) { window.__cadeSlashClaim = typeof fn === 'function' ? fn : null; },
+    // ---- attached files (the Upload File store: content-addressed, compressed,
+    //      encrypted and synced, GC'd once no note refers to them) ----
+    files: {
+      get MAX_BYTES() { return FILE_MAX_BYTES; },
+      // Store a File/Blob without touching the note → { token, hash, name,
+      // size, encoded }; put `token` in the note to keep it. Rejects with a
+      // user-facing message (too big, unreadable, no crypto).
+      store(file, name) { return _storeAttachment(file, name); },
+      // Store it and drop a pill at the cursor (Upload File).
+      attach(file) { return insertAttachmentFile(file); },
+      // { name, mime, size, blob, checked } or null while the bytes aren't
+      // here yet; rejects 'checksum' / 'decode' on damaged data.
+      get(hash) { return _readAttachment(hash); },
+      // The file tokens in a text: [{ name, hash, size, index, length }].
+      tokens(text) {
+        const out = []; if (!text || text.indexOf('![file:') === -1) return out;
+        const re = new RegExp(FILE_TOKEN_RE.source, 'g'); let m;
+        while ((m = re.exec(text)) !== null) out.push({ name: m[1], hash: m[2], size: m[3] ? +m[3] : null, index: m.index, length: m[0].length });
+        return out;
+      },
+      // Save a Blob as a download (iPhone: Safari's download sheet).
+      save(blob, name) { return _dlSaveBlob(blob, name || 'file'); },
+      // Add an item to a file pill's menu: { label, command, kind } — picking
+      // it runs the palette command `command` with the file handed over
+      // (take(kind) → { hash, name } within a minute, once).
+      addMenuItem(item) {
+        const l = window.__cadeFileMenuItems || (window.__cadeFileMenuItems = []);
+        if (item && item.label && item.command && !l.some(x => x.label === item.label)) l.push(item);
+      },
+      take(kind) {
+        const h = window.__cadeFileHandoff;
+        if (!h || h.kind !== kind || Date.now() - h.at > 60000) return null;
+        window.__cadeFileHandoff = null;
+        return { hash: h.hash, name: h.name };
+      },
+      fmtBytes(n) { return _fmtBytes(n); },
+    },
     // ---- storage tools for dashboards (Storage Insights): open the core's own
     //      cleanup dialogs, and the Firebase path fingerprint of the sync key
     //      (images/<fp>, files/<fp>) without handing the key itself out ----
@@ -7796,15 +7835,16 @@ function _sanitizeAttachmentName(name) {
   return n;
 }
 
-// Attach ANY file: compress + checksum + content-address, store the payload
-// out-of-document, and insert a pill token. Mirrors insertImageFile.
-async function insertAttachmentFile(file) {
-  if (!file) return;
-  if (file.size > FILE_MAX_BYTES) { showToast('File too large to attach (max 25 MB): ' + file.name, 'error', 4000); return; }
-  const name = _sanitizeAttachmentName(file.name);
-  if (file.size > 2 * 1024 * 1024) showToast('Encoding ' + name + '…', 'info', 1500);
+// Store ANY file: compress + checksum + content-address, keep the payload
+// out-of-document (IndexedDB + encrypted upload, queued while offline). Resolves
+// { token, hash, name, size, encoded } — the caller places the token. Rejects
+// with a user-facing message. (Cade.files.store for modules.)
+async function _storeAttachment(file, nameOverride) {
+  if (!file) throw new Error('No file');
+  const name = _sanitizeAttachmentName(nameOverride || file.name);
+  if (file.size > FILE_MAX_BYTES) throw new Error('File too large to attach (max 25 MB): ' + name);
   let raw;
-  try { raw = new Uint8Array(await file.arrayBuffer()); } catch { showToast('Could not read ' + name, 'error', 3000); return; }
+  try { raw = new Uint8Array(await file.arrayBuffer()); } catch { throw new Error('Could not read ' + name); }
   let sha = '';
   try { sha = await _sha256Hex(raw); } catch {}
   // Compress; keep raw when it doesn't help (zip/jpg/mp4 are already packed).
@@ -7817,41 +7857,61 @@ async function insertAttachmentFile(file) {
   const payload = JSON.stringify(rec);
   let hash = null;
   try { hash = await _imgHash(payload); } catch {}
-  if (!hash) { showToast('Attach failed (crypto unavailable in this browser)', 'error', 3500); return; }
+  if (!hash) throw new Error('Attach failed (crypto unavailable in this browser)');
   try { await idbStore.set('file:' + hash, payload); } catch {}
   _fileRefCachePut(hash, rec);
   _fileDelPendingRemove(hash); // re-attached content must not be reaped by a stale queued delete
   uploadFile(hash, payload); // fire-and-forget (queues if offline)
-  const token = '![file:' + name + '#' + hash + '|s' + raw.length + ']';
+  return { token: '![file:' + name + '#' + hash + '|s' + raw.length + ']', hash, name, size: raw.length, encoded: rec.data.length };
+}
+
+// Attach ANY file as a pill token at the cursor. Mirrors insertImageFile.
+async function insertAttachmentFile(file) {
+  if (!file) return;
+  if (file.size > 2 * 1024 * 1024) showToast('Encoding ' + _sanitizeAttachmentName(file.name) + '…', 'info', 1500);
+  let r;
+  try { r = await _storeAttachment(file); } catch (e) { showToast((e && e.message) || 'Attach failed', 'error', 4000); return; }
   const sel = editor.state.selection.main;
   const doc = editor.state.doc;
   const pre = (sel.from > 0 && doc.sliceString(sel.from - 1, sel.from) !== '\n') ? '\n' : '';
-  editor.dispatch({ changes: { from: sel.from, to: sel.to, insert: pre + token + '\n' }, selection: { anchor: sel.from + pre.length + token.length + 1 } });
+  editor.dispatch({ changes: { from: sel.from, to: sel.to, insert: pre + r.token + '\n' }, selection: { anchor: sel.from + pre.length + r.token.length + 1 } });
   // Seed the removal-check baseline immediately: without this, attaching and
   // deleting within one debounce window (2.5s) would never trigger the GC.
-  try { _lastDocFileHashes.add(hash); } catch {}
-  showToast('Attached ' + name + ' (' + _fmtBytes(raw.length) + ' → ' + _fmtBytes(rec.data.length) + ' encoded)', 'success', 2500);
+  try { _lastDocFileHashes.add(r.hash); } catch {}
+  showToast('Attached ' + r.name + ' (' + _fmtBytes(r.size) + ' → ' + _fmtBytes(r.encoded) + ' encoded)', 'success', 2500);
 }
 window.insertAttachmentFile = insertAttachmentFile;
 
-// Decode + integrity-check + save (the browser port of decode_from_txt.py).
-async function downloadFileAttachment(hash, fallbackName) {
+// An attached file's bytes, decoded and integrity-checked: { name, mime, size,
+// blob, checked } — null while they aren't here yet (still uploading from the
+// sender, or offline). Throws 'checksum' / 'decode' on damaged data.
+// (Cade.files.get for modules.)
+async function _readAttachment(hash) {
   let rec = null;
   try { rec = await resolveFileRef(hash); } catch {}
-  if (!rec) { showToast('File bytes not available yet (still uploading from the sender, or offline) — try again shortly', 'error', 4000); return; }
+  if (!rec) return null;
+  let bytes;
   try {
-    let bytes = _b64ToBytes(rec.data);
+    bytes = _b64ToBytes(rec.data);
     if (rec.enc === 'deflate-raw') bytes = await _inflateBytes(bytes);
-    if (rec.sha256 && (await _sha256Hex(bytes)) !== rec.sha256) {
-      showToast('Checksum mismatch — the file data is corrupted', 'error', 4500);
-      return;
-    }
-    const outName = rec.name || fallbackName || 'file';
-    _dlSaveBlob(new Blob([bytes], { type: rec.mime || 'application/octet-stream' }), outName);
-    showToast('Restored ' + outName + ' (' + _fmtBytes(bytes.length) + (rec.sha256 ? ', checksum OK' : '') + ')', 'success', 2800);
-  } catch {
-    showToast('File decode failed — was the data modified or truncated?', 'error', 4000);
+  } catch { throw new Error('decode'); }
+  if (rec.sha256 && (await _sha256Hex(bytes)) !== rec.sha256) throw new Error('checksum');
+  return { name: rec.name || 'file', mime: rec.mime || '', size: bytes.length, blob: new Blob([bytes], { type: rec.mime || 'application/octet-stream' }), checked: !!rec.sha256 };
+}
+
+// Decode + integrity-check + save (the browser port of decode_from_txt.py).
+async function downloadFileAttachment(hash, fallbackName) {
+  let f = null;
+  try { f = await _readAttachment(hash); }
+  catch (e) {
+    if (e && e.message === 'checksum') showToast('Checksum mismatch — the file data is corrupted', 'error', 4500);
+    else showToast('File decode failed — was the data modified or truncated?', 'error', 4000);
+    return;
   }
+  if (!f) { showToast('File bytes not available yet (still uploading from the sender, or offline) — try again shortly', 'error', 4000); return; }
+  const outName = f.name || fallbackName || 'file';
+  _dlSaveBlob(f.blob, outName);
+  showToast('Restored ' + outName + ' (' + _fmtBytes(f.size) + (f.checked ? ', checksum OK' : '') + ')', 'success', 2800);
 }
 window.downloadFileAttachment = downloadFileAttachment;
 
@@ -7904,6 +7964,17 @@ function showFileMenu(x, y, name, hash, posOf) {
     { label: '⬇ Download ' + name, run: () => downloadFileAttachment(hash, name) },
     { label: '⎘ Copy as encoded text', run: () => copyFileAsText(hash, name) },
   ];
+  // Items modules add (Beam: send to a device / as a QR stream). Their code
+  // may not be loaded yet, so each item only names a command to run and what
+  // to hand it (Cade.files.take on the other side).
+  const extra = (window.__cadeFileMenuItems || []).filter(it => it && it.label && it.command);
+  if (extra.length) {
+    items.push({ sep: true });
+    extra.forEach(it => items.push({ label: it.label, run: () => {
+      window.__cadeFileHandoff = { kind: it.kind || it.command, hash, name, at: Date.now() };
+      if (!window.__cadeRunCommand || !window.__cadeRunCommand(it.command)) showToast(it.command + ' isn’t available', 'error', 2500);
+    } }));
+  }
   if (!document.body.classList.contains('readonly')) {
     items.push({ sep: true });
     items.push({ label: '🗑 Remove from document', run: removeToken });
@@ -24700,6 +24771,9 @@ async function bootModules() {
     try {
       if (m.type === 'widget') {
         registerWidgetStub(m);
+        // Items the widget adds to a file pill's menu ("fileMenu": [{ label,
+        // kind }]) — picking one opens the widget with that file handed over.
+        if (Array.isArray(m.fileMenu)) m.fileMenu.forEach(it => { if (it && it.label) window.Cade.files.addMenuItem({ label: it.label, kind: it.kind || m.id, command: m.name }); });
         // Eager widgets (e.g. reminders) run background logic from boot, not
         // just when first opened. Rare — costs a fetch on every load.
         if (m.eager) loadModule(m).catch(() => {});
