@@ -89,7 +89,9 @@ test('envelopes: fast attack, key sounds die out within ~150 ms, bell rings ~1 s
   T.PROFILES.forEach(function (p) {
     ['key', 'space', 'back', 'paste'].concat(p === 'typewriter' ? [] : ['enter']).forEach(function (k) {
       var x = T.synth(p, k, SR, 0);
-      assert.ok(attackMs(x) < 3, p + ' ' + k + ' attack ' + attackMs(x));
+      // mechanical swells into its bottom-out over a few ms (a rounded thock); the rest strike at once
+      var lim = p === 'mechanical' && (k === 'key' || k === 'back') ? 8 : 3;
+      assert.ok(attackMs(x) < lim, p + ' ' + k + ' attack ' + attackMs(x));
       var t40 = tailMs(x, 0.01);
       assert.ok(t40 < 150, p + ' ' + k + ' −40 dB at ' + t40);
     });
@@ -108,29 +110,31 @@ test('envelopes: fast attack, key sounds die out within ~150 ms, bell rings ~1 s
   assert.ok(ms(pk) > 250 && ms(pk) < 380, 'end thunk at ' + ms(pk));
 });
 
-test('profiles sound different: brightness and loudness', function () {
+test('profiles sound different, and all of them are warm (no metallic treble)', function () {
   var c = {}, e = {};
   T.PROFILES.forEach(function (p) { var x = T.synth(p, 'key', SR, 0); c[p] = centroid(x); e[p] = energy(x); });
-  assert.ok(c.typewriter > c.soft * 1.3, 'typewriter brighter than soft ' + JSON.stringify(c));
-  assert.ok(c.mechanical > c.soft * 1.2, 'mechanical brighter than soft ' + JSON.stringify(c));
-  // typewriter: metallic strike puts far more of its energy above 3 kHz
+  // warm: almost nothing above 3 kHz in any key sound, nor in the chime
   var hi = {}; T.PROFILES.forEach(function (p) { hi[p] = bandShare(T.synth(p, 'key', SR, 0), 3000, 24000); });
-  assert.ok(hi.typewriter > hi.mechanical * 2 && hi.typewriter > hi.soft * 4, 'treble share ' + JSON.stringify(hi));
+  T.PROFILES.forEach(function (p) { assert.ok(hi[p] < 0.03, 'treble share ' + JSON.stringify(hi)); });
+  assert.ok(bandShare(T.synth('typewriter', 'bell', SR, 0), 3000, 24000) < 0.05, 'the chime is soft, not a bright ding');
+  T.PROFILES.forEach(function (p) { assert.ok(c[p] < 1800, 'centroid ' + JSON.stringify(c)); });
+  // soft is the darkest and quietest
+  assert.ok(c.soft <= c.typewriter && c.soft < c.mechanical, 'soft is darkest ' + JSON.stringify(c));
   // envelope shape: mechanical peaks at the bottom-out (a few ms in), typewriter at the strike
   var pkMs = function (x) { var e = envelope(x), m = 0; for (var i = 1; i < e.length; i++) if (e[i] > e[m]) m = i; return m * 5; };
   assert.ok(pkMs(T.synth('mechanical', 'key', SR, 0)) >= 5 && pkMs(T.synth('typewriter', 'key', SR, 0)) === 0);
   assert.ok(e.soft < e.mechanical * 0.4 && e.soft < e.typewriter * 0.4, 'soft is quiet ' + JSON.stringify(e));
   // the typewriter space bar is a heavier, darker thunk than its keys
-  assert.ok(centroid(T.synth('typewriter', 'space', SR, 0)) < c.typewriter * 0.6);
+  assert.ok(centroid(T.synth('typewriter', 'space', SR, 0)) < c.typewriter);
   // each kind is its own sound within a profile
   T.PROFILES.forEach(function (p) {
     var k = T.synth(p, 'key', SR, 0), b = T.synth(p, 'back', SR, 0), s = T.synth(p, 'space', SR, 0);
     assert.ok(Math.abs(centroid(k) - centroid(b)) > 80 || Math.abs(energy(k) - energy(b)) > energy(k) * 0.15, p + ' key vs back');
     assert.ok(Math.abs(centroid(k) - centroid(s)) > 150, p + ' key vs space');
   });
-  // the bell is tonal and high
+  // the bell is a tonal chime, pitched well above the keys but not piercing
   var bc = centroid(T.synth('typewriter', 'bell', SR, 0));
-  assert.ok(bc > 2000 && bc < 5000, 'bell centroid ' + bc);
+  assert.ok(bc > 1200 && bc < 3200, 'bell centroid ' + bc);   // (the treble share above is the real warmth check)
 });
 
 test('per-keystroke variation stays within bounds', function () {
