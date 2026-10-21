@@ -26,6 +26,7 @@
 .cm-pc-acts button:hover { color: var(--text); background: var(--surface); }
 .cm-pc-acts svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .cm-pc-acts button.cm-pc-armed { color: var(--error); background: var(--error-bg); }
+.cm-pc-acts button.cm-pc-busy { opacity: 0.5; pointer-events: none; }
 .cm-pc-bad .cm-pc-card::after {
   content: 'This postcard could not be drawn — edit the text'; display: block; padding: 10px 12px; line-height: 1.4;
   font: 12px var(--font-body); color: var(--text-muted); background: var(--surface-2);

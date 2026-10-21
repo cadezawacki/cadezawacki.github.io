@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "version": "2026.10.21-2",
+  "version": "2026.10.21-3",
   "modules": [
     {
       "id": "crawler",
@@ -1311,7 +1311,7 @@
       "id": "postcard-view",
       "type": "plugin",
       "name": "ASCII postcards in the editor",
-      "description": "Show ```postcard blocks (made with ASCII Postcard) as their coloured picture; put the caret in one to edit its text",
+      "description": "Show ```postcard blocks (made with ASCII Postcard) as their coloured picture; put the caret in one to edit its text, or save it as a PNG",
       "entry": "widgets/postcard/postcard-view.js",
       "css": "widgets/postcard/postcard-view.css",
       "precache": [
