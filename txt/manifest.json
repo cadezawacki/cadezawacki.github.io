@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "version": "2026.10.22-5",
+  "version": "2026.10.22-6",
   "modules": [
     {
       "id": "crawler",
@@ -2026,14 +2026,16 @@
       "id": "convert",
       "type": "widget",
       "name": "File Converter",
-      "description": "Convert video, audio, photos (HEIC), PDF, Word & spreadsheets on this device — files never leave it",
+      "description": "Convert video, audio, photos (HEIC), PDF, Word, spreadsheets & documents (pandoc: ODT, EPUB, LaTeX, Jupyter…) on this device — files never leave it",
       "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M4 8h13l-3.5-3.5'/><path d='M20 16H7l3.5 3.5'/></svg>",
-      "tags": "convert,converter,file converter,transcode,compress,video,audio,image,photo,heic,heif,jpeg,jpg,png,webp,gif,ico,favicon,svg,mp4,mov,webm,mkv,avi,mp3,m4a,aac,wav,flac,ogg,opus,extract audio,pdf,pdf to text,pdf to png,images to pdf,docx,word,markdown,html,xlsx,excel,csv,tsv,json,ods,ffmpeg,offline,private",
+      "tags": "convert,converter,file converter,transcode,compress,video,audio,image,photo,heic,heif,jpeg,jpg,png,webp,gif,ico,favicon,svg,mp4,mov,webm,mkv,avi,mp3,m4a,aac,wav,flac,ogg,opus,extract audio,pdf,pdf to text,pdf to png,images to pdf,docx,word,markdown,html,xlsx,excel,csv,tsv,json,ods,ffmpeg,offline,private,pandoc,document converter,odt,opendocument,epub,ebook,rtf,latex,tex,rst,restructuredtext,org,org mode,mediawiki,wiki,textile,asciidoc,typst,ipynb,jupyter,notebook,pptx,powerpoint,docbook,export note,note to word,import document",
       "entry": "widgets/convert/convert.js",
       "css": "widgets/convert/convert.css",
       "precache": [
         "widgets/convert/convert-worker.js",
-        "widgets/convert/convert-docs.js"
+        "widgets/convert/convert-docs.js",
+        "widgets/convert/convert-pandoc.js",
+        "widgets/convert/convert-pandoc-worker.js"
       ]
     },
     {
