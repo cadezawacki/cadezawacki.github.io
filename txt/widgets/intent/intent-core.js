@@ -14,7 +14,8 @@
  *              → countdown …);
  *   tokens     split, stop words dropped (a few — open/start/play — only hint
  *              that a widget is wanted), simple stemming (-s/-es/-ies/-ing/
- *              -ed/-ly, -ise → -ize, final -e) and a concept table that folds
+ *              -ed/-ly, -ise → -ize, final -e; irregular past forms — ran,
+ *              wrote, hid, threw — map to their verb first) and a concept table that folds
  *              synonyms together (remove ≈ delete ≈ strip, unique → remove +
  *              duplicate, caps → upper …). A few concepts are "related" and
  *              match each other at half strength (blank ~ whitespace,
@@ -165,6 +166,16 @@
     titlecase: ['title', 'case'], qrcode: ['qr'], wordcount: ['count', 'word'],
     unbullet: ['bullet'], untab: ['tab'], renumber: ['renumber', 'number'], slug: ['slug', 'kebab'],
   };
+  // Irregular past forms → the verb, so "ran the code" or "threw out blank lines" meet
+  // run / throw. Derived offline from the compromise NLP library's conjugation data for
+  // the verbs this vocabulary and the catalogue use (no runtime dependency).
+  var IRREGULAR = {
+    beaten: 'beat', became: 'become', began: 'begin', begun: 'begin', broke: 'break', broken: 'break', chose: 'choose', chosen: 'choose',
+    drew: 'draw', drawn: 'draw', drove: 'drive', driven: 'drive', dug: 'dig', ate: 'eat', eaten: 'eat', found: 'find', flew: 'fly', flown: 'fly',
+    grew: 'grow', grown: 'grow', hid: 'hide', hidden: 'hide', held: 'hold', kept: 'keep', ran: 'run', sang: 'sing', sung: 'sing', sent: 'send',
+    shown: 'show', shrank: 'shrink', shrunk: 'shrink', slept: 'sleep', sought: 'seek', spoke: 'speak', spoken: 'speak', spun: 'spin',
+    struck: 'strike', threw: 'throw', thrown: 'throw', undid: 'undo', undone: 'undo', woke: 'wake', woken: 'wake', wrote: 'write', written: 'write'
+  };
   // Concepts that half-match each other.
   var RELATED = {
     blank: ['whitespace'], whitespace: ['blank'], line: ['list'], list: ['line'],
@@ -220,6 +231,7 @@
     s = s.replace(/[↔⇄]|<->/g, ' and ').replace(/[→⇒⟶]|->|=>/g, ' to ');
     s = s.replace(/['’](s|re|ll|ve|d|t)\b/g, '$1').replace(/['’]/g, '');
     s = s.replace(/&/g, ' and ').replace(/[^a-z0-9]+/g, ' ');
+    s = s.replace(/[a-z]+/g, function (w) { return IRREGULAR[w] || w; });
     s = ' ' + s + ' ';
     for (var i = 0; i < PHRASES.length; i++) s = s.replace(PHRASES[i][0], PHRASES[i][1]);
     return s.replace(/\s+/g, ' ').trim();
@@ -505,7 +517,7 @@
     normalize: normalize, stem: stem, analyze: analyze, conceptsOf: conceptsOf,
     buildIndex: buildIndex, rank: rank, blend: blend,
     learn: learn, memoryKey: memoryKey, MAX_PHRASES: MAX_PHRASES,
-    CONCEPTS: CONCEPTS, STOP: STOP_SET,
+    CONCEPTS: CONCEPTS, STOP: STOP_SET, IRREGULAR: IRREGULAR,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   if (root) root.__cadeIntentCore = api;

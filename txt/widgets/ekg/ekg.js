@@ -18,7 +18,14 @@
  * safe fix exists). It follows the caret and re-analyses ~250 ms after
  * typing stops (cached per paragraph, so only the edited one is redone).
  * On phones it is a short strip whose drawer starts closed and hides while
- * the keyboard is up. */
+ * the keyboard is up.
+ *
+ * While the panel is open, nlp-client.js runs the compromise NLP library in a
+ * worker (lazily, from the CDN; cached by the service worker afterwards) and
+ * hands the analyzer part-of-speech tags for the paragraphs whose checks can
+ * use them (its/it's, then/than, comma splices). Until they arrive — or
+ * offline, or if the library fails — the word-list rules apply as before;
+ * when they do, only the paragraphs that waited are redone. */
 (function () {
   'use strict';
   if (typeof window === 'undefined' || typeof window.Cade === 'undefined') return;
@@ -38,7 +45,7 @@
   var CLASS_NAMES = { s: 'short', m: 'medium', l: 'long', r: 'run-on' };
   var DEFAULT_CATS = { strip: true, tails: true, complex: true, grammar: true, passive: true, filler: false };
 
-  var core = null, an = null, view = null, loading = null;
+  var core = null, an = null, view = null, loading = null, nlpOff = null;
   var prefs = null, P = null, el = {}, isOpen = false;
   var timer = 0, flashTimer = 0, ro = null, vv = null, mon = null, lastKey = '', cur = null;
 
@@ -148,6 +155,7 @@
     load().then(function () {
       if (P !== p) return;                     // closed while loading
       isOpen = true;
+      startTags();
       Cade.registerPlugin({ id: PLUGIN_ID, ext: view.ext });
       Cade.onEditorUpdate(onUpdate);
       document.addEventListener('cade-room-switched', onRoom);
@@ -175,6 +183,8 @@
     }
     if (ro) { ro.disconnect(); ro = null; }
     if (vv) { vv.removeEventListener('resize', onKeyboard); vv = null; }
+    if (nlpOff) { nlpOff(); nlpOff = null; }
+    if (an) an.setPos(null);
     if (an && an.cache.size > 4000) an.clear();
     P = null; el = {}; mon = null; cur = null; lastKey = '';
   }
@@ -182,6 +192,28 @@
     var p = P;
     cleanup();
     if (p) p.remove();
+  }
+
+  // ---- part-of-speech tags (optional) ------------------------------------------------------
+  // Loaded after the panel is up; nothing waits for it and a failure changes nothing.
+  function startTags() {
+    var p = P;
+    (window.__cadeNlp ? Promise.resolve() : addScript(BASE + 'nlp-client.js')).then(function () {
+      var nl = window.__cadeNlp;
+      if (!nl || P !== p || !isOpen || nlpOff) return;
+      nlpOff = nl.acquire(onTags);
+      an.setPos(function (text) { return nl.get(text); });
+      refreshView(); schedule(30);
+    }, function () {});
+  }
+  // The marks follow every answer; a whole-note panel waits until a long note is all tagged
+  // (re-listing a thousand issues each second would only make the page stutter).
+  function onTags() {
+    if (!isOpen || !an || !an.settle()) return;            // nothing reads differently: nothing to redraw
+    refreshView();
+    var nl = window.__cadeNlp, busy = nl && nl.pending() > 0;
+    if (prefs.scope === 'note' && busy) return;
+    if (!timer) schedule(60);
   }
 
   // ---- events --------------------------------------------------------------------------

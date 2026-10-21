@@ -23,6 +23,21 @@
  * The grammar / style checks are deliberately conservative — each one has an
  * exception list and is tested for false positives as much as for hits.
  *
+ * Optional part-of-speech tags (the compromise library, run in nlp-worker.js
+ * via nlp-client.js; Analyzer({ pos }) / setPos) widen three checks: its →
+ * it's before a gerund or predicate adjective ("its raining", "its hard to
+ * say"), then → than after any comparative the tagger knows ("taller then
+ * John") — and no longer when a clause follows ("shorter then the nights
+ * grew") — and comma splices with any subject + finite verb after the
+ * sentence's first comma ("I love pizza, my wife hates it"). Tags are asked
+ * for only when a rule has a candidate; a paragraph analysed while its tags
+ * were still on the way is marked pend and settle() redoes it. Measured and
+ * NOT used: compromise's sentence splitter (32 of the 53 split cases right vs
+ * 53) and its passive / adjective verdicts (on real prose it calls "was
+ * received", "are equipped" adjectives: it would have dropped ~60 true
+ * passives per 100k words to drop ~20 stative ones). Hyphenated compound
+ * adjectives ("old-fashioned", "left-handed") are never passives either way.
+ *
  * Analyzer caches results per paragraph text (LRU), so re-analysing a note
  * after an edit only redoes the paragraph that changed. Offsets in a cached
  * result are relative to its block; callers add block.from. */
@@ -520,8 +535,75 @@
   var RE_WELCOME = /\b(your)([ \t]+)welcome\b(?![ \t]*[A-Za-z0-9])/gi;
   var RE_THEN = new RegExp('\\b(more|less|rather|fewer|other|' + THAN_ADJ + ')([ \\t]+)(then)([ \\t]+)([A-Za-z0-9$£€]+)', 'gi');
   var RE_ITS = /\b(its)([ \t]+)(a|an|the|not|been|gonna)\b/gi;
+  var ITS_NEXT = set('a an the not been gonna');
   var RE_ITSOWN = /\b(it['’]s)([ \t]+)own\b/gi;
   var RE_SPLICE = /,([ \t]+)(?:(?:it|i|he|she|we|they|this|there|you)[ \t]+(?:is|was|are|were|am|has|had|have|will|would|can|could|should|did|does|do|isn['’]t|wasn['’]t|aren['’]t|weren['’]t|don['’]t|doesn['’]t|didn['’]t|can['’]t|won['’]t)|it['’]s|i['’]m|they['’]re|we['’]re|you['’]re|he['’]s|she['’]s|there['’]s|i['’]ve|we['’]ve|they['’]ve|i['’]ll|we['’]ll|they['’]ll|it['’]ll)\b/gi;
+
+  // ---- optional part-of-speech tags (compromise, run in nlp-worker.js) -----------------
+  // A paragraph's tags arrive as { s: [start], e: [end], b: [tag bits], r: [root or ''] }
+  // with offsets into the paragraph (block-relative, same as the masked text). Rules
+  // only consult them to confirm or widen a candidate the word lists already found, so
+  // without them (offline, still loading, failed) every rule behaves as before.
+  var NLP_TAGS = ['Noun', 'Pronoun', 'ProperNoun', 'Person', 'Place', 'Organization', 'Verb', 'Gerund', 'Infinitive', 'PastTense',
+    'PresentTense', 'Participle', 'Passive', 'Copula', 'Auxiliary', 'Modal', 'Adjective', 'Comparative', 'Superlative', 'Adverb',
+    'Determiner', 'Possessive', 'Preposition', 'Conjunction', 'Value', 'Date', 'Plural', 'Acronym', 'Imperative', 'Negative'];
+  var TB = {}, TAG_IX = {};
+  for (var ti0 = 0; ti0 < NLP_TAGS.length; ti0++) { TB[NLP_TAGS[ti0]] = 1 << ti0; TAG_IX[NLP_TAGS[ti0]] = ti0; }
+  // The text compromise sees: opaque words become x-runs, gaps become spaces (same length).
+  function nlpPrep(t) { return t.replace(/\u0001/g, 'x').replace(/\u0002/g, ' '); }
+  function nlpRoot(t, bits, tf, model) {
+    var w = String(t.normal || t.text || '').toLowerCase().replace(/['’]s$/, '').replace(/['’]$/, ''), out = '';
+    if (!tf || !w) return '';
+    try {
+      if ((bits & TB.Verb) && !(bits & (TB.Auxiliary | TB.Copula | TB.Modal))) {
+        var tense = bits & TB.Gerund ? 'Gerund' : bits & TB.Participle ? 'Participle' : bits & TB.PastTense ? 'PastTense' : bits & TB.PresentTense ? 'PresentTense' : '';
+        if (tense === 'PresentTense') {
+          // only a plain third-person -s / -es / -ies (the library also "un-conjugates" pass, dare)
+          if (/[^s]s$/.test(w)) {
+            out = tf.verb.toInfinitive(w, model, tense);
+            if (out !== w.slice(0, -1) && out !== w.slice(0, -2) && out !== w.slice(0, -3) + 'y') out = '';
+          }
+        } else if (tense) {
+          out = tf.verb.toInfinitive(w, model, tense);
+          if ((!out || out === w) && tense === 'PastTense') out = tf.verb.toInfinitive(w, model, 'Participle');
+        }
+      } else if ((bits & TB.Noun) && (bits & TB.Plural) && !(bits & TB.Pronoun)) out = tf.noun.toSingular(w, model);
+    } catch (e) { out = ''; }
+    return out && out !== w && /^[a-z][a-z'-]*$/.test(out) ? out : '';
+  }
+  // Tag one prepared paragraph with compromise (nlp = the library's main function).
+  function nlpEncode(nlp, text) {
+    var doc = nlp(text), tf = null, model = null, out = { s: [], e: [], b: [], r: [] };
+    doc.compute('offset');
+    try { tf = nlp.methods().two.transform; model = nlp.model(); } catch (e) {}
+    var docs = doc.docs || [];
+    for (var i = 0; i < docs.length; i++) {
+      for (var j = 0; j < docs[i].length; j++) {
+        var t = docs[i][j];
+        if (!t.text || !t.offset) continue;                // implicit terms ("'s" → is)
+        var bits = 0;
+        t.tags.forEach(function (g) { var x = TAG_IX[g]; if (x != null) bits |= 1 << x; });
+        out.s.push(t.offset.start); out.e.push(t.offset.start + t.offset.length); out.b.push(bits);
+        out.r.push(nlpRoot(t, bits, tf, model));
+      }
+    }
+    return out;
+  }
+  // Index of the term covering offset p (start <= p < end), or -1.
+  function posAt(P, p) {
+    var lo = 0, hi = P.s.length - 1;
+    while (lo <= hi) { var mid = (lo + hi) >> 1; if (P.e[mid] <= p) lo = mid + 1; else if (P.s[mid] > p) hi = mid - 1; else return mid; }
+    return -1;
+  }
+  function posBits(P, p) { var i = posAt(P, p); return i < 0 ? 0 : P.b[i]; }
+  var FINITE_NOT = TB.Gerund | TB.Participle;
+  // A finite verb ("hates", "were", "arrive") — not "shining" or a bare participle.
+  function finiteVerb(b) {
+    if (!(b & TB.Verb)) return false;
+    if (b & (TB.Copula | TB.Auxiliary | TB.Modal)) return true;
+    return !(b & FINITE_NOT) && !!(b & (TB.PastTense | TB.PresentTense));
+  }
+  var HYPHEN_PRE = set('re co pre de un non mis over under out');
 
   function capFirst(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
   function sameCase(model, word) { return /^[A-Z]/.test(model) ? capFirst(word) : word; }
@@ -533,8 +615,50 @@
   }
   function isAdv(w) { return !!ADV[w] || (w.length > 4 && /ly$/.test(w) && !LY_NOT[w]); }
 
+  // Is t[a, b) only spaces (no punctuation between two words)?
+  function onlySpace(t, a, b) { for (var i = a; i < b; i++) if (!isSpaceC(t.charCodeAt(i))) return false; return true; }
+  // The clause before a comma (head = the sentence up to it) looks independent: it starts with
+  // a subject, has a verb, isn't quoted / bracketed / subordinate. verbIn(a, b) = POS says
+  // head[a, b) holds a finite verb (null: word lists only).
+  function spliceLeft(head, ws, verbIn) {
+    var cs = Math.max(head.lastIndexOf(','), head.lastIndexOf(';'), head.lastIndexOf(':'), head.lastIndexOf('—'), head.lastIndexOf('–'));
+    var clause = head.slice(cs + 1), cw = clause.match(/[A-Za-z0-9'’]+/g) || [];
+    if (cw.length < 3 || /["“”]/.test(head) || head.lastIndexOf('(') > head.lastIndexOf(')') || /\)\s*$/.test(head)) return false;
+    // ("On Windows, you can…", "For most uses, this is…" are introductory phrases)
+    var c0 = cw[0].toLowerCase().replace(/’/g, "'");
+    if (!SUBJ[c0]) return false;
+    var verb = PRONOUN[c0];
+    for (var v2 = 1; v2 < cw.length && !verb; v2++) {
+      var cv = cw[v2].toLowerCase().replace(/’/g, "'");
+      verb = !!(AUX[cv] || PAST[cv] || /^\w+'(?:s|re|ve|ll|d|m)$|n't$/.test(cv) || (cv.length > 3 && /ed$/.test(cv)));
+    }
+    if (!verb && verbIn) verb = verbIn(cs + 1, head.length);
+    if (!verb) return false;
+    for (var q = 0; q < cw.length; q++) if (SUBORD[cw[q].toLowerCase()]) return false;
+    return !(ws[0] && SUBORD[ws[0].lw]);
+  }
+
+  // "I think its …": verbs that take a whole clause
+  var SAY = set('think thought know knew guess hope believe say said says mean feel felt suppose reckon bet sure');
+  var SPLICE_NOT = set('that which who whom whose where when what whichever whatever wherever however as than so more less most a an');
+  var OBJ_PRON = set('me him her us them mine yours ours theirs his hers');
+  // Word index starting exactly at offset p, or -1.
+  function wordIndexAt(ws, p) { for (var i = 0; i < ws.length; i++) { if (ws[i].from === p) return i; if (ws[i].from > p) break; } return -1; }
+  // From word k on: a noun phrase that goes on with a finite verb ("the nights grew",
+  // "I went") — i.e. a clause, not the object of a comparison ("than the house", "than me").
+  function clauseAfter(TP, ws, t, k) {
+    var n = k, b;
+    if (OBJ_PRON[ws[n].lw]) n++;
+    else {
+      while (n < ws.length && n < k + 4 && ((b = posBits(TP, ws[n].from)) & (TB.Determiner | TB.Possessive | TB.Adjective | TB.Value)) && (!(b & TB.Noun) || (b & TB.Possessive))) n++;
+      if (n < ws.length && (posBits(TP, ws[n].from) & (TB.Noun | TB.Pronoun))) n++;
+    }
+    return n > k && n < ws.length && onlySpace(t, ws[n - 1].to, ws[n].from) && finiteVerb(posBits(TP, ws[n].from));
+  }
+
   // Issues of one sentence. sub = the masked sentence; positions are block-relative.
-  function checkSentence(t, src, s, ws, ups, out) {
+  // pos() → the paragraph's part-of-speech tags or null (see nlpEncode).
+  function checkSentence(t, src, s, ws, ups, out, pos) {
     var base = s.from, sub = t.slice(s.from, s.to), m, a, b, first = ws[0] && !ws[0].op ? ws[0].from : -1;
     var apos = src.indexOf('’') >= 0 && src.indexOf("'") < 0 ? '’' : "'";
     function add(type, from, to, message, fix) {
@@ -636,12 +760,34 @@
       add('welcome', a, a + m[0].length, '“your welcome” → “you' + apos + 're welcome”', { from: a, to: a + 4, insert: sameCase(m[1], 'you' + apos + 're') });
     }
     // more then / better then …
+    var thenAt = Object.create(null);
     RE_THEN.lastIndex = 0;
     while ((m = RE_THEN.exec(sub))) {
       var cmp = m[1].toLowerCase(), nx2 = m[5].toLowerCase();
       if (!THAN_STRONG[cmp] && !THAN_NEXT[nx2] && !/^[\d$£€]/.test(nx2)) continue;
       a = base + m.index + m[1].length + m[2].length;
+      if (!THAN_STRONG[cmp]) {                     // with tags: "shorter then the nights grew" is a clause
+        var wk = wordIndexAt(ws, a + 4 + m[4].length), TP0 = wk > 0 ? pos() : null;
+        if (TP0 && clauseAfter(TP0, ws, t, wk)) continue;
+      }
       add('then', base + m.index, a + 4, '“' + cmp + ' then” → “' + cmp + ' than”', { from: a, to: a + 4, insert: sameCase(m[3], 'than') });
+      thenAt[a] = 1;
+    }
+    // … any other comparative the tagger knows ("taller then me", "quieter then usual"),
+    // as long as what follows is a noun phrase that doesn't go on as a clause ("colder then it snowed")
+    for (var th = 1; th < ws.length - 1; th++) {
+      if (ws[th].lw !== 'then' || thenAt[ws[th].from] || ws[th - 1].op || ws[th + 1].op) continue;
+      if (!onlySpace(t, ws[th - 1].to, ws[th].from) || !onlySpace(t, ws[th].to, ws[th + 1].from)) continue;
+      var TP = pos();
+      if (!TP) break;
+      var cb = posBits(TP, ws[th - 1].from), nl = ws[th + 1].lw;
+      if (!(cb & TB.Comparative) || THAN_STRONG[ws[th - 1].lw]) continue;
+      var nb0 = posBits(TP, ws[th + 1].from);
+      if (!(THAN_NEXT[nl] || /^[\d$£€]/.test(nl) || (nb0 & (TB.Noun | TB.ProperNoun | TB.Determiner | TB.Possessive | TB.Value | TB.Date)))) continue;
+      if ((nb0 & TB.Pronoun) && !THAN_NEXT[nl] && !(nb0 & TB.Possessive)) continue;      // "then I went": a subject
+      if (clauseAfter(TP, ws, t, th + 1)) continue;
+      var cw0 = src.slice(ws[th - 1].from, ws[th - 1].to);
+      add('then', ws[th - 1].from, ws[th].to, '“' + cw0.toLowerCase() + ' then” → “' + cw0.toLowerCase() + ' than”', { from: ws[th].from, to: ws[th].to, insert: sameCase(src.slice(ws[th].from, ws[th].to), 'than') });
     }
     // its / it's
     RE_ITS.lastIndex = 0;
@@ -654,25 +800,72 @@
       a = base + m.index;
       add('its', a, a + m[0].length, '“it’s own” → “its own”', { from: a, to: a + m[1].length, insert: sameCase(m[1], 'its') });
     }
+    // … and with tags: "its raining", "its getting late", "its (so) cold today", "its hard to say" —
+    // "its" opening a clause (sentence start, after a conjunction or a comma) before a gerund
+    // or a predicate adjective; "its rising cost", "its simple design", "chased its tail" stay
+    for (var ii = 0; ii < ws.length - 1; ii++) {
+      if (ws[ii].lw !== 'its' || ws[ii].op || ITS_NEXT[ws[ii + 1].lw] || ws[ii + 1].lw === 'own') continue;
+      if (!onlySpace(t, ws[ii].to, ws[ii + 1].from)) continue;
+      var IP = pos();
+      if (!IP) break;
+      if (ii > 0 && onlySpace(t, ws[ii - 1].to, ws[ii].from) && !(posBits(IP, ws[ii - 1].from) & TB.Conjunction) && !SAY[ws[ii - 1].lw]) continue;
+      var ik = ii + 1;
+      if ((posBits(IP, ws[ik].from) & TB.Adverb) && ik + 1 < ws.length && onlySpace(t, ws[ik].to, ws[ik + 1].from)) ik++;
+      var ib = posBits(IP, ws[ik].from), inb = ik + 1 < ws.length && onlySpace(t, ws[ik].to, ws[ik + 1].from) ? posBits(IP, ws[ik + 1].from) : 0;
+      var pred = (ib & TB.Gerund) ? !(inb & TB.Noun) && !finiteVerb(inb) :
+        (ib & TB.Adjective) && !(ib & (TB.Superlative | TB.Comparative | TB.Noun | TB.Value)) && !(inb & (TB.Noun | TB.Adjective | TB.Value)) && !finiteVerb(inb);
+      if (!pred || ws[ik].op) continue;
+      a = ws[ii].from;
+      var nw0 = src.slice(ws[ii + 1].from, ws[ii + 1].to).toLowerCase();
+      add('its', a, ws[ii + 1].to, '“its ' + nw0 + '” → “it' + apos + 's ' + nw0 + '”', { from: a, to: a + 3, insert: sameCase(src.slice(a, a + 3), 'it' + apos + 's') });
+    }
     // comma splice: ", it was …" after an independent-looking clause
+    var spliceAt = Object.create(null);
     RE_SPLICE.lastIndex = 0;
     while ((m = RE_SPLICE.exec(sub))) {
-      var head = sub.slice(0, m.index), cs = Math.max(head.lastIndexOf(','), head.lastIndexOf(';'), head.lastIndexOf(':'), head.lastIndexOf('—'), head.lastIndexOf('–'));
-      var clause = head.slice(cs + 1), cw = clause.match(/[A-Za-z0-9'’]+/g) || [];
-      if (cw.length < 3 || /["“”]/.test(head) || head.lastIndexOf('(') > head.lastIndexOf(')') || /\)\s*$/.test(head)) continue;
-      // the part before the comma must look like a clause: a subject first, then a verb
-      // ("On Windows, you can…", "For most uses, this is…" are introductory phrases)
-      var c0 = cw[0].toLowerCase().replace(/’/g, "'");
-      if (!SUBJ[c0]) continue;
-      var verb = PRONOUN[c0];
-      for (var v2 = 1; v2 < cw.length && !verb; v2++) { var cv = cw[v2].toLowerCase().replace(/’/g, "'"); verb = !!(AUX[cv] || PAST[cv] || /^\w+'(?:s|re|ve|ll|d|m)$|n't$/.test(cv) || (cv.length > 3 && /ed$/.test(cv))); }
-      if (!verb) continue;
-      var subord = false;
-      for (var q = 0; q < cw.length && !subord; q++) if (SUBORD[cw[q].toLowerCase()]) subord = true;
-      if (!subord && ws[0] && SUBORD[ws[0].lw]) subord = true;
-      if (subord) continue;
+      if (!spliceLeft(sub.slice(0, m.index), ws, null)) continue;
       a = base + m.index;
+      spliceAt[a] = 1;
       add('splice', a, a + m[0].length, 'Possible comma splice — try a full stop, a semicolon or “and”');
+    }
+    // … and with tags: any subject + finite verb after the comma ("I love pizza, my wife hates
+    // it", "The sun was shining, the birds were singing"); not "her eyes shining", "a doctor,"
+    if (sub.indexOf(',') >= 0) {
+      var SP = null, wi = 0;
+      var verbIn = function (x, y) {
+        for (var q = 0; q < ws.length; q++) { var w = ws[q], o = w.from - base; if (o >= x && o < y && !w.op && finiteVerb(posBits(SP, w.from))) return true; }
+        return false;
+      };
+      for (var ci = sub.indexOf(','); ci >= 0; ci = sub.indexOf(',', ci + 1)) {
+        if (spliceAt[base + ci] || !/[ \t]/.test(sub.charAt(ci + 1))) continue;
+        while (wi < ws.length && ws[wi].from < base + ci) wi++;
+        if (wi >= ws.length - 1 || wi < 1 || ws[wi].op) continue;
+        if (SPLICE_NOT[ws[wi].lw] || !onlySpace(t, base + ci + 1, ws[wi].from)) continue;     // ", that it is", ', “This'
+        // only the sentence's first joint, after a plain clause from the sentence start (a clause
+        // after an earlier comma may still hang on an "If …" or be part of a list)
+        if (/[,;:—–]/.test(sub.slice(0, ci)) || /^(?:that|this|these|those)$/.test(ws[0].lw)) break;
+        // a short tail is a tag or an aside: ", I think,", ", you know.", ", all things considered"
+        var tail = 0, te = wi;
+        while (te < ws.length && tail < 4) { tail++; if (te + 1 < ws.length && !onlySpace(t, ws[te].to, ws[te + 1].from)) break; te++; }
+        if (tail < 4) continue;
+        if (!SP && !(SP = pos())) break;
+        var sk = wi, sb = posBits(SP, ws[sk].from), adj = 0;
+        if ((sb & TB.Adjective) && !(sb & (TB.Determiner | TB.Possessive))) continue;          // "a deep, intricate character"
+        if ((sb & (TB.Determiner | TB.Possessive)) && !(sb & TB.Noun && !(sb & TB.Possessive))) sk++;
+        while (sk < ws.length && adj < 2 && (posBits(SP, ws[sk].from) & TB.Adjective) && !(posBits(SP, ws[sk].from) & (TB.Noun | TB.Comparative | TB.Superlative))) { sk++; adj++; }
+        if (sk >= ws.length - 1) continue;
+        sb = posBits(SP, ws[sk].from);
+        if (!(sb & (TB.Noun | TB.ProperNoun | TB.Pronoun | TB.Value)) || (sb & (TB.Comparative | TB.Superlative))) continue;
+        if (sk + 2 < ws.length && (posBits(SP, ws[sk + 1].from) & TB.Noun) && !(posBits(SP, ws[sk + 1].from) & (TB.Verb | TB.Pronoun))) sk++;   // "the bus driver"
+        var vb = posBits(SP, ws[sk + 1].from), clean = true;
+        for (var g0 = wi; g0 <= sk && clean; g0++) if (!onlySpace(t, ws[g0].to, ws[g0 + 1].from)) clean = false;
+        if (!clean || !finiteVerb(vb) || (vb & TB.Noun)) continue;
+        if (ws[sk + 2] && ws[sk + 2].lw === 'by') continue;                                  // "Santa Barbara, followed by"
+        if ((sb & TB.ProperNoun) && (posBits(SP, ws[wi - 1].from) & TB.ProperNoun)) continue;  // "California, Santa Barbara"
+        if (/\b(?:that|what|whether|which|who)\b/i.test(sub.slice(0, ci))) continue;          // "estimates that …, climate change could"
+        if (!spliceLeft(sub.slice(0, ci), ws, verbIn)) continue;
+        add('splice', base + ci, ws[sk + 1].to, 'Possible comma splice — try a full stop, a semicolon or “and”');
+      }
     }
     // passive voice: be + (adverb) + past participle
     for (var k = 0; k < ws.length - 1; k++) {
@@ -682,8 +875,9 @@
       while (j < ws.length && j <= k + 2 && isAdv(ws[j].lw) && ws[j].lw !== 'being') j++;
       if (j < ws.length && ws[j].lw === 'being' && ws[k].lw !== 'being') j++;
       if (j >= ws.length || ws[j].op) continue;
-      var p = ws[j].lw;
+      var p = ws[j].lw, hy = p.indexOf('-');
       if (!isPP(p) || ADJ_PP[p]) continue;
+      if (hy > 0 && !HYPHEN_PRE[p.slice(0, hy)]) continue;     // old-fashioned, left-handed: compound adjectives
       for (var g = k; g < j && gaps; g++) if (!/^[ \t\n]+$/.test(t.slice(ws[g].to, ws[g + 1].from))) gaps = false;
       if (!gaps) continue;
       if (p === 'used' && ws[j + 1] && ws[j + 1].lw === 'to') continue;
@@ -695,8 +889,20 @@
   }
 
   // ---- a paragraph -------------------------------------------------------------------------
-  function analyzePara(src) {
-    var mk = mask(src), t = mk.t, raw = split(t, mk.breaks), sents = [], wsets = [], k;
+  // provider(text) → tags for the prepared paragraph text, null (none: word lists only) or
+  // undefined (not there yet: the result is marked pend so the Analyzer redoes it later).
+  // It is asked at most once, and only when a rule has a candidate to check.
+  function analyzePara(src, provider) {
+    var mk = mask(src), t = mk.t, raw = split(t, mk.breaks), sents = [], wsets = [], k, P, pend = false, want = false, ask = '';
+    function pos() {
+      if (P === undefined) {
+        want = true;
+        ask = provider ? nlpPrep(t) : '';
+        P = provider ? provider(ask) : null;
+        if (P === undefined) { pend = true; P = null; }
+      }
+      return P;
+    }
     for (k = 0; k < raw.length; k++) {
       var r = raw[k], ws = tokenize(t, r.from, r.to), real = 0;
       for (var q = 0; q < ws.length; q++) if (!ws[q].op) real++;
@@ -708,9 +914,11 @@
     }
     var ups = 0, issues = [];
     for (k = 0; k < sents.length; k++) if (sents[k].first === 'u') ups++;
-    for (k = 0; k < sents.length; k++) checkSentence(t, src, sents[k], wsets[k], ups, issues);
+    for (k = 0; k < sents.length; k++) checkSentence(t, src, sents[k], wsets[k], ups, issues, pos);
     issues.sort(function (x, y) { return x.from - y.from || x.to - y.to; });
-    return { sents: sents, issues: issues };
+    var r = { sents: sents, issues: issues, pend: pend, want: want, tagged: !!P };
+    if (pend) r.ask = ask;               // what to look for when settling
+    return r;
   }
 
   // ---- stats -----------------------------------------------------------------------------------
@@ -755,11 +963,41 @@
     if (is.fix) o.fix = { from: is.fix.from + off, to: is.fix.to + off, insert: is.fix.insert, expect: is.fix.expect };
     return o;
   }
-  function Analyzer(opts) { this.cache = new Map(); this.max = (opts && opts.max) || 20000; this.hits = 0; this.misses = 0; }
+  function Analyzer(opts) {
+    this.cache = new Map(); this.max = (opts && opts.max) || 20000; this.hits = 0; this.misses = 0;
+    this.pos = (opts && opts.pos) || null;
+  }
+  // Tags from now on (fn as for analyzePara; null = word lists only). Results that waited
+  // for tags are redone on their next use; finished ones stay.
+  Analyzer.prototype.setPos = function (fn) {
+    var c = this.cache;
+    this.pos = fn || null;
+    if (fn) c.forEach(function (r, k) { if (r.want && !r.tagged) c.delete(k); });
+  };
+  // Forget the paragraphs that were analysed while their tags were missing → how many.
+  Analyzer.prototype.dropPending = function () {
+    var n = 0, c = this.cache;
+    c.forEach(function (r, k) { if (r.pend) { c.delete(k); n++; } });
+    return n;
+  };
+  // Redo the waiting paragraphs whose tags have arrived → how many now read differently
+  // (their issues changed). Those still waiting stay as they are.
+  Analyzer.prototype.settle = function () {
+    var c = this.cache, pos = this.pos, todo = [], changed = 0;
+    if (!pos) return 0;
+    c.forEach(function (r, k) { if (r.pend && pos(r.ask) !== undefined) todo.push(k); });
+    for (var i = 0; i < todo.length; i++) {
+      var old = c.get(todo[i]), r = analyzePara(todo[i], pos);
+      c.set(todo[i], r);
+      if (issueSig(old.issues) !== issueSig(r.issues)) changed++;
+    }
+    return changed;
+  };
+  function issueSig(a) { var s = ''; for (var i = 0; i < a.length; i++) s += a[i].type + a[i].from + ':' + a[i].to + ';'; return s; }
   Analyzer.prototype.para = function (text) {
     var c = this.cache, r = c.get(text);
     if (r) { c.delete(text); c.set(text, r); this.hits++; return r; }
-    r = analyzePara(text);
+    r = analyzePara(text, this.pos);
     this.misses++;
     c.set(text, r);
     if (c.size > this.max) { var it = c.keys(); while (c.size > this.max) c.delete(it.next().value); }
@@ -806,6 +1044,7 @@
     WORD: WORD, GAP: GAP, SHORT: SHORT, MEDIUM: MEDIUM, LONG: LONG, TAIL: TAIL, TAIL_LEVELS: TAIL_LEVELS, COMPLEX: COMPLEX,
     scanBlocks: scanBlocks, mask: mask, split: split, tokenize: tokenize, syllables: syllables, classOf: classOf, tailLevel: tailLevel, tailIntensity: tailIntensity,
     vowelSound: vowelSound, analyzePara: analyzePara, stats: stats, catOf: catOf, Analyzer: Analyzer,
+    NLP_TAGS: NLP_TAGS, TAG: TB, nlpPrep: nlpPrep, nlpEncode: nlpEncode, posAt: posAt, posBits: posBits,
     blockAt: blockAt, firstBlockFrom: firstBlockFrom, sentenceAt: sentenceAt, textOf: textOf,
     // convenience: sentences of a plain piece of text (one paragraph per block)
     sentences: function (text) { var a = new Analyzer(); return a.analyze(text).sentences; }

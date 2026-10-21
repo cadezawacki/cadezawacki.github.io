@@ -15,6 +15,19 @@
  *   on, the key is a light Porter stem (steps 1a–1c: plurals, -ed, -ing, y→i),
  *   so run / runs / running and idea / ideas share a key.
  *
+ *   Part-of-speech tags (optional; see ekg/nlp-client.js — the compromise
+ *   library in a worker): with them a word is keyed by its root first, so
+ *   irregular forms meet too (wrote / written / write, children / child,
+ *   mice / mouse), in context ("the saw" stays a noun, "I saw" is see).
+ *   "Skip names" leaves out proper nouns: capitalised words inside a sentence,
+ *   and at a sentence start when the same word is capitalised inside one
+ *   elsewhere in the paragraph — or, with tags, when the tagger calls it a
+ *   person, place or organisation ("Elizabeth smiled." opening a paragraph).
+ *   (The tagger's broader "proper noun" also catches capitalised common words
+ *   at a sentence start — "Happy", "Tease" — so it isn't trusted alone.)
+ *   Until a paragraph's tags arrive it is keyed without them and marked
+ *   pend, so Engine.dropPending() makes the next pass redo just those.
+ *
  * Severity of an occurrence = that of its nearest other occurrence (before or
  * after), from a combined distance
  *
@@ -44,7 +57,7 @@
   'use strict';
 
   var W_WORD = 0.06, W_SENT = 1, AVG_SENT = 15, WORDS_PER_TAPER = 24, CURVE = 1.5, MIN_SEV = 0.05, LEVELS = 6;
-  var DEFAULTS = { taper: 5, stem: true, minLen: 3, ignore: '', style: 'tint' };
+  var DEFAULTS = { taper: 5, stem: true, minLen: 3, ignore: '', names: false, style: 'tint' };
 
   // The sentence splitter (Prose EKG's core) — the page loads it before this file is used.
   var ekg = null;
@@ -139,6 +152,7 @@
     o.taper = Math.max(1, Math.min(20, +o.taper || DEFAULTS.taper));
     o.minLen = Math.max(1, Math.min(20, Math.round(+o.minLen || DEFAULTS.minLen)));
     o.stem = !!o.stem;
+    o.names = !!o.names;
     o.D = o.taper * (W_SENT + AVG_SENT * W_WORD);
     o.capW = Math.round(o.taper * WORDS_PER_TAPER);
     var ig = Object.create(null), list = String(o.ignore || '').split(/[,;\n]+/);
@@ -149,9 +163,12 @@
       if (o.stem) ig[stem(w)] = 1;
     }
     o.ignoreSet = ig;
-    o.sig = [o.taper, o.stem ? 1 : 0, o.minLen, Object.keys(ig).sort().join(',')].join('|');
+    o.sig = [o.taper, o.stem ? 1 : 0, o.minLen, Object.keys(ig).sort().join(','), o.names ? 1 : 0].join('|');
     return o;
   }
+
+  // The same options without stemming (cached on cfg as .exact).
+  function exactOf(cfg) { var o = {}; for (var k in cfg) o[k] = cfg[k]; o.stem = false; o.exact = null; return o; }
 
   // ’ → ', drop a possessive ('s / s'); '' for a contraction.
   function clean(w) {
@@ -190,24 +207,55 @@
   function level(sev) { return sev < MIN_SEV ? 0 : Math.max(1, Math.min(LEVELS, Math.ceil(sev * LEVELS))); }
 
   // ---- a block's words --------------------------------------------------------------------
+  function isCap(text, i) { var c = text.charAt(i); return c !== c.toLowerCase(); }
+  function allCaps(w) { return w.length > 1 && w === w.toUpperCase(); }
   // Summary of one block of prose: n words (all of them), s sentences, and the candidate
   // occurrences occ: [{ from, to, key, lw, w (word index), s (sentence index) }], block-relative.
-  function blockInfo(text, cfg) {
+  // provider(text) → tags | null | undefined, as for Prose EKG's analyzePara.
+  function blockInfo(text, cfg, provider) {
+    cfg = cfg && cfg.ignoreSet ? cfg : compile(cfg);
     var E = sentenceCore(), mk = E.mask(text), t = mk.t, raw = E.split(t, mk.breaks);
-    var occ = [], n = 0, s = 0;
-    for (var i = 0; i < raw.length; i++) {
-      var ws = E.tokenize(t, raw[i].from, raw[i].to), real = 0;
-      for (var k = 0; k < ws.length; k++) {
-        var x = ws[k];
+    var occ = [], n = 0, s = 0, P = null, pend = false, want = false, i, k, x;
+    if (provider && (cfg.stem || cfg.names) && E.nlpPrep) {
+      want = true;
+      var ask = E.nlpPrep(t);
+      P = provider(ask);
+      if (P === undefined) { pend = true; P = null; }
+    }
+    var NAME = P ? E.TAG.Person | E.TAG.Place | E.TAG.Organization : 0;
+    var sents = [], capIn = null;
+    for (i = 0; i < raw.length; i++) sents.push(E.tokenize(t, raw[i].from, raw[i].to));
+    if (cfg.names) {
+      // words capitalised inside a sentence somewhere in this paragraph
+      capIn = Object.create(null);
+      for (i = 0; i < sents.length; i++) for (k = 1; k < sents[i].length; k++) { x = sents[i][k]; if (!x.op && isCap(text, x.from) && !allCaps(text.slice(x.from, x.to))) capIn[x.lw] = 1; }
+    }
+    for (i = 0; i < sents.length; i++) {
+      var ws = sents[i], real = 0, first = true;
+      for (k = 0; k < ws.length; k++) {
+        x = ws[k];
         if (x.op) continue;
         real++;
-        var key = normalize(x.lw, cfg);
+        var key = normalize(x.lw, cfg), j = -1;
+        if (key && P) { j = E.posAt(P, x.from); if (j >= 0 && (P.s[j] !== x.from || P.e[j] !== x.to)) j = -1; }
+        if (key && cfg.names && isCap(text, x.from)) {
+          var name = !allCaps(text.slice(x.from, x.to)) && (!first || !!capIn[x.lw] || (j >= 0 && !!(P.b[j] & NAME)));
+          if (name) key = '';
+        }
+        if (key && cfg.stem && j >= 0) {
+          if (P.r[j]) key = normalize(P.r[j], cfg);
+          // a singular noun keeps its -s (news ≠ new, series, physics)
+          else if ((P.b[j] & E.TAG.Noun) && !(P.b[j] & E.TAG.Plural) && /s$/.test(x.lw)) key = normalize(x.lw, cfg.exact || (cfg.exact = exactOf(cfg)));
+        }
         if (key) occ.push({ from: x.from, to: x.to, key: key, lw: x.lw, w: n, s: s });
         n++;
+        first = false;
       }
       if (real) s++;
     }
-    return { n: n, s: s, occ: occ };
+    var r = { n: n, s: s, occ: occ, pend: pend, want: want, tagged: !!P };
+    if (pend) r.ask = ask;
+    return r;
   }
 
   // Every word of a plain text with its key ('' = never flagged) and sentence index.
@@ -232,20 +280,46 @@
   // ---- the engine ----------------------------------------------------------------------------
   function textOf(src, b) { return typeof src === 'string' ? src.slice(b.from, b.to) : src.sliceString(b.from, b.to); }
 
-  function Engine(opts) { this.cache = new Map(); this.max = 20000; this.cfg = null; this.setOptions(opts); }
+  function Engine(opts) { this.cache = new Map(); this.max = 20000; this.cfg = null; this.pos = null; this.setOptions(opts); }
+  // Part-of-speech tags from now on (fn as for blockInfo; null = none). Blocks keyed while
+  // tags were wanted but missing are redone on their next use.
+  Engine.prototype.setPos = function (fn) {
+    var c = this.cache;
+    this.pos = fn || null;
+    if (fn) c.forEach(function (r, k) { if (r.want && !r.tagged) c.delete(k); });
+  };
+  // Redo the waiting blocks whose tags have arrived → how many now key differently.
+  Engine.prototype.settle = function () {
+    var c = this.cache, pos = this.pos, cfg = this.cfg, todo = [], changed = 0;
+    if (!pos) return 0;
+    c.forEach(function (r, k) { if (r.pend && pos(r.ask) !== undefined) todo.push(k); });
+    for (var i = 0; i < todo.length; i++) {
+      var old = c.get(todo[i]), r = blockInfo(todo[i], cfg, pos);
+      c.set(todo[i], r);
+      if (occSig(old.occ) !== occSig(r.occ)) changed++;
+    }
+    return changed;
+  };
+  function occSig(a) { var s = ''; for (var i = 0; i < a.length; i++) s += a[i].from + a[i].key + ';'; return s; }
+  // Forget the blocks still waiting for their tags → how many.
+  Engine.prototype.dropPending = function () {
+    var n = 0, c = this.cache;
+    c.forEach(function (r, k) { if (r.pend) { c.delete(k); n++; } });
+    return n;
+  };
   // Returns true when the change affects the results (the cache is then dropped if needed).
   Engine.prototype.setOptions = function (opts) {
     var c = compile(opts), old = this.cfg;
     this.cfg = c;
     if (!old) return true;
-    var keysChanged = old.stem !== c.stem || old.minLen !== c.minLen || old.sig.split('|')[3] !== c.sig.split('|')[3];
+    var keysChanged = old.stem !== c.stem || old.minLen !== c.minLen || old.names !== c.names || old.sig.split('|')[3] !== c.sig.split('|')[3];
     if (keysChanged) this.cache.clear();
     return old.sig !== c.sig;
   };
   Engine.prototype.info = function (text) {
     var c = this.cache, r = c.get(text);
     if (r) { c.delete(text); c.set(text, r); return r; }
-    r = blockInfo(text, this.cfg);
+    r = blockInfo(text, this.cfg, this.pos);
     c.set(text, r);
     if (c.size > this.max) { var it = c.keys(); while (c.size > this.max) c.delete(it.next().value); }
     return r;

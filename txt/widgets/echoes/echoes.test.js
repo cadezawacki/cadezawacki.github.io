@@ -25,14 +25,15 @@ var MANIFEST = {
   tags: 'writing,prose,repetition,repeated words,echo,echoes,word choice,style,proofread,lint,highlight',
   entry: 'widgets/echoes/echoes.js',
   css: 'widgets/echoes/echoes.css',
-  precache: ['widgets/echoes/echoes-core.js', 'widgets/ekg/ekg-core.js'],
+  precache: ['widgets/echoes/echoes-core.js', 'widgets/ekg/ekg-core.js', 'widgets/ekg/nlp-client.js', 'widgets/ekg/nlp-worker.js'],
   prefs: {
     title: 'Word Echoes',
     fields: [
       { key: 'taper', type: 'slider', label: 'Fade out after', default: 5, min: 2, max: 10, step: 1, unit: 'sentences', hint: 'How far apart two uses of a word can be and still be marked. Nearer repeats are always stronger.' },
-      { key: 'stem', type: 'toggle', label: 'Match word forms', default: true, hint: 'run / runs / running and idea / ideas count as the same word' },
+      { key: 'stem', type: 'toggle', label: 'Match word forms', default: true, hint: 'run / runs / running and idea / ideas count as the same word — and, once the language data has loaded, irregular forms too (ran, wrote / written, children → child)' },
       { key: 'minLen', type: 'number', label: 'Shortest word to check', default: 3, min: 2, max: 8, step: 1, unit: 'letters' },
       { key: 'ignore', type: 'text', label: 'Also ignore these words', default: '', placeholder: 'e.g. said, Anna, river', hint: 'Comma-separated. Common words (the, a, than, with…) are always ignored.' },
+      { key: 'names', type: 'toggle', label: 'Skip names', default: false, hint: 'People, places and other proper nouns are never marked' },
       { key: 'style', type: 'radio', label: 'Highlight style', default: 'tint', options: [{ value: 'tint', label: 'Tint' }, { value: 'underline', label: 'Underline' }] }
     ]
   }
@@ -64,7 +65,9 @@ test('registers under the manifest entry', function () {
 });
 test('preferences schema equals the manifest "prefs" and the core defaults', function () {
   var e = entry(), s = loadWidget().prefs;
-  assert.deepStrictEqual(JSON.parse(JSON.stringify(s)), e.prefs);
+  // (until txt/manifest.json carries the new "Skip names" field, compare with the proposed entry)
+  var want = e.prefs && e.prefs.fields.some(function (f) { return f.key === 'names'; }) ? e.prefs : MANIFEST.prefs;
+  assert.deepStrictEqual(JSON.parse(JSON.stringify(s)), want);
   var types = ['text', 'textarea', 'number', 'slider', 'toggle', 'checkbox', 'radio', 'select', 'date', 'time', 'color', 'heading'];
   s.fields.forEach(function (f) {
     assert.ok(types.indexOf(f.type) >= 0, f.type);
@@ -260,5 +263,75 @@ test('a 100k-word note stays responsive', function () {
   assert.ok(t2 - t1 < 1500, 'cold whole-note index ' + (t2 - t1) + 'ms');
   assert.ok(t3 - t2 < 300, 'after an edit: rescan + window + index ' + (t3 - t2) + 'ms');
 });
+
+// ---- names ---------------------------------------------------------------------------------------
+test('"Skip names": capitalised words inside a sentence (and the same word opening one) are left out', function () {
+  var t = 'Anna met Robert at the harbor. Later Anna smiled at Robert near the harbor.';
+  var on = marks(t, { names: true }), off = marks(t, { names: false });
+  assert.ok(of(off, 'anna').length === 2 && of(off, 'robert').length === 2, 'marked when off');
+  assert.strictEqual(of(on, 'anna').length + of(on, 'robert').length, 0, 'names skipped');
+  assert.strictEqual(of(on, 'harbor').length, 2, 'words still marked');
+  // a capitalised common word opening a sentence is not a name; an acronym is not either
+  var t2 = 'Rivers flood. The rivers rise. NASA builds rockets and NASA tests rockets.';
+  var m2 = marks(t2, { names: true });
+  assert.strictEqual(of(m2, 'rivers').length, 2);
+  assert.strictEqual(of(m2, 'nasa').length, 2);
+  var e = new C.Engine({ names: false }); e.index(t);
+  assert.strictEqual(e.setOptions({ names: true }), true);
+  assert.strictEqual(e.cache.size, 0, 'keys change: cache reset');
+});
+
+// ---- part-of-speech tags (optional: Prose EKG's nlp-client.js / compromise) ----------------------
+var EKG = C.sentenceCore();
+function tagsFor(map) { return function (t) { return Object.prototype.hasOwnProperty.call(map, t) ? map[t] : undefined; }; }
+test('tags: roots re-key words; until they arrive a block is pending and redone once', function () {
+  var t = 'The children ran. A child runs.', map = {}, e = new C.Engine();
+  e.setPos(tagsFor(map));
+  assert.strictEqual(e.window(t, null, 0, t.length).length, 0, 'the stemmer alone: ran ≠ runs, children ≠ child');
+  assert.strictEqual(e.cache.get(t).pend, true);
+  var T = EKG.TAG, s = t.indexOf.bind(t);
+  map[EKG.nlpPrep(EKG.mask(t).t)] = { s: [0, s('children'), s('ran'), 18, s('child '), s('runs')], e: [3, s('children') + 8, s('ran') + 3, 19, s('child ') + 5, s('runs') + 4],
+    b: [T.Determiner, T.Noun | T.Plural, T.Verb | T.PastTense, T.Determiner, T.Noun, T.Verb | T.PresentTense], r: ['', 'child', 'run', '', '', 'run'] };
+  assert.strictEqual(e.settle(), 1, 'keys changed');
+  assert.strictEqual(e.settle(), 0);
+  var w = e.window(t, null, 0, t.length).map(function (m) { return t.slice(m.from, m.to); }).sort();
+  assert.deepStrictEqual(w, ['child', 'children', 'ran', 'runs']);
+  // a provider with nothing settles on the stemmer; stemming off asks for nothing
+  var asked = 0, e2 = new C.Engine({ stem: false });
+  e2.setPos(function () { asked++; return null; });
+  e2.index(t);
+  assert.strictEqual(asked, 0);
+});
+
+// The real tagger, when a copy of compromise is at hand (never vendored into the repo):
+// CADE_COMPROMISE=/path/to/compromise.js node txt/widgets/echoes/echoes.test.js
+var nlp = null;
+try { nlp = require(process.env.CADE_COMPROMISE || 'compromise'); } catch (e) { nlp = null; }
+if (!nlp) console.log('echoes: compromise tests skipped (set CADE_COMPROMISE=/path/to/compromise.js)');
+else {
+  var tagged = function (opts) { var e = new C.Engine(opts); e.setPos(function (t) { return EKG.nlpEncode(nlp, t); }); return e; };
+  var echoedT = function (t, opts) { return tagged(opts).window(t, null, 0, t.length).map(function (m) { return t.slice(m.from, m.to).toLowerCase(); }); };
+  test('compromise: irregular forms echo each other; different words do not', function () {
+    [['The children played outside.', 'Each child had a kite.', 'children', 'child'], ['She wrote a long letter.', 'Then she would write another.', 'wrote', 'write'],
+      ['The mice hid in the barn.', 'One mouse was brave.', 'mice', 'mouse'], ['They ate the cake.', 'We eat cake too.', 'ate', 'eat'],
+      ['He caught the ball.', 'Try to catch it.', 'caught', 'catch'], ['The women laughed.', 'One woman cried.', 'women', 'woman'],
+      ['It was written in ink.', 'She will write again.', 'written', 'write'], ['We received it.', 'They receive mail.', 'received', 'receive']].forEach(function (c) {
+      var t = c[0] + ' ' + c[1], ws = echoedT(t);
+      assert.ok(ws.indexOf(c[2]) >= 0 && ws.indexOf(c[3]) >= 0, t + ' → ' + ws.join(','));
+      assert.strictEqual(marks(t).filter(function (m) { return m.text.toLowerCase() === c[2]; }).length, 0, 'the stemmer alone misses ' + c[2]);
+    });
+    [['The news spread.', 'The new car came.'], ['He saw the saw.', 'I saw it.'], ['Rosings is big.', 'The sun rose.']].forEach(function (c) {
+      var t = c[0] + ' ' + c[1], ws = echoedT(t);
+      assert.ok(!(ws.indexOf('news') >= 0 && ws.indexOf('new') >= 0) && !(ws.indexOf('rosings') >= 0), t + ' → ' + ws.join(','));
+    });
+  });
+  test('compromise: "Skip names" also catches a name opening a paragraph', function () {
+    var t = 'Elizabeth walked to the garden. She liked the garden. Elizabeth sat.';
+    assert.strictEqual(marks(t, { names: true }).filter(function (m) { return m.text === 'Elizabeth'; }).length, 2, 'without tags: both open a sentence');
+    var ws = echoedT(t, { names: true });
+    assert.strictEqual(ws.indexOf('elizabeth'), -1);
+    assert.ok(ws.indexOf('garden') >= 0);
+  });
+}
 
 console.log('echoes: ' + passed + ' passed');

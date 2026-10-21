@@ -314,6 +314,8 @@ var RULES = [
   ['I am tired.', 'passive', 0], ['She is interested in art.', 'passive', 0], ['He is used to it.', 'passive', 0], ['There is limited time.', 'passive', 0],
   ['It is red.', 'passive', 0], ['She was born in May.', 'passive', 0], ['The need is great.', 'passive', 0], ['He is a wicked man.', 'passive', 0],
   ['We were excited.', 'passive', 0], ['It is based on facts.', 'passive', 0], ['The shop is a hundred years old.', 'passive', 0],
+  ['The house is old-fashioned.', 'passive', 0], ['He is left-handed.', 'passive', 0], ['The room is air-conditioned.', 'passive', 0],
+  ['He was re-elected in May.', 'passive', 1], ['The rule was over-ruled.', 'passive', 1],
   // filler (style)
   ['This is very good and really just fine.', 'filler', 3], ['This is good.', 'filler', 0],
 ];
@@ -430,4 +432,245 @@ test('the cache is bounded', function () {
   assert.strictEqual(A.hits, 1);
 });
 
-console.log((process.exitCode ? 'FAILED, ' : '') + 'ekg: ' + passed + ' passed');
+// ---- part-of-speech tags (optional: compromise in nlp-worker.js) ------------------------------
+// A stand-in provider: tags for known texts, undefined ("not there yet") for the rest.
+function fakeTags(map, log) {
+  return function (text) { if (log) log.push(text); return Object.prototype.hasOwnProperty.call(map, text) ? map[text] : undefined; };
+}
+test('nlpPrep keeps every offset; posAt / posBits find the term covering an offset', function () {
+  var m = C.mask('See `code` and ![img:ab12] here.');
+  var p = C.nlpPrep(m.t);
+  assert.strictEqual(p.length, m.t.length);
+  assert.ok(!/[\u0001\u0002]/.test(p));
+  var P = { s: [0, 4, 9], e: [3, 8, 12], b: [C.TAG.Verb, C.TAG.Noun, C.TAG.Adjective], r: ['', '', ''] };
+  assert.strictEqual(C.posAt(P, 0), 0); assert.strictEqual(C.posAt(P, 7), 1); assert.strictEqual(C.posAt(P, 8), -1); assert.strictEqual(C.posAt(P, 11), 2);
+  assert.strictEqual(C.posBits(P, 5), C.TAG.Noun); assert.strictEqual(C.posBits(P, 99), 0);
+  assert.strictEqual(C.NLP_TAGS.length <= 31, true, 'tag bits fit an int');
+});
+test('tags are asked for only when a rule has a candidate — once per paragraph', function () {
+  var log = [], A = new C.Analyzer({ pos: fakeTags({}, log) });
+  A.analyze('The cat sat on the mat. We left early.\n\nIt is fine.');
+  assert.strictEqual(log.length, 0, 'no candidate, no request');
+  A.analyze('Its raining, we left. Its late, it is cold, the end.');
+  assert.strictEqual(log.length, 1);
+  assert.strictEqual(log[0].length, 'Its raining, we left. Its late, it is cold, the end.'.length);
+});
+test('pending tags: the paragraph is redone once they arrive; without a provider nothing changes', function () {
+  var src = 'Its raining again.', map = {}, A = new C.Analyzer({ pos: fakeTags(map) });
+  var r1 = A.analyze(src);
+  assert.strictEqual(r1.issues.filter(function (i) { return i.type === 'its'; }).length, 0, 'word lists only meanwhile');
+  assert.strictEqual(A.cache.get(src).pend, true);
+  map[C.nlpPrep(src)] = { s: [0, 4, 12], e: [3, 11, 17], b: [C.TAG.Noun | C.TAG.Possessive, C.TAG.Verb | C.TAG.Gerund | C.TAG.PresentTense, C.TAG.Adverb], r: ['', 'rain', ''] };
+  var other = 'We left, the dog barked loudly at us.', B0 = A.analyze(other);
+  assert.strictEqual(A.cache.get(other).pend, true);
+  // settle(): redo the waiting paragraphs whose tags are in; count those that now read differently
+  assert.strictEqual(A.settle(), 1, 'its raining: one more issue');
+  assert.strictEqual(A.cache.get(src).pend, false);
+  assert.strictEqual(A.cache.get(other).pend, true, 'still waiting');
+  map[C.nlpPrep(C.mask(other).t)] = { s: [], e: [], b: [], r: [] };
+  assert.strictEqual(A.settle(), 0, 'tags that change nothing: nothing to redraw');
+  assert.strictEqual(A.cache.get(other).pend, false);
+  assert.strictEqual(A.analyze(other).issues.length, B0.issues.length);
+  assert.strictEqual(A.dropPending(), 0);
+  var r2 = A.analyze(src), its = r2.issues.filter(function (i) { return i.type === 'its'; });
+  assert.strictEqual(its.length, 1);
+  assert.strictEqual(apply(src, its[0].fix), "It's raining again.");
+  // a provider that has nothing (failed / offline) settles on the word lists
+  var B = new C.Analyzer({ pos: function () { return null; } });
+  B.analyze(src);
+  assert.strictEqual(B.cache.get(src).pend, false);
+  // switching tags on redoes what wanted them, keeps the rest
+  var D = new C.Analyzer();
+  D.analyze('Its raining again.\n\nThe cat sat.');
+  D.setPos(fakeTags(map));
+  assert.strictEqual(D.cache.size, 1);
+  assert.strictEqual(D.analyze('Its raining again.\n\nThe cat sat.').issues.filter(function (i) { return i.type === 'its'; }).length, 1);
+});
+test('the worker pins an exact compromise version; the client is shared and optional', function () {
+  var w = fs.readFileSync(path.join(__dirname, 'nlp-worker.js'), 'utf8');
+  assert.ok(/https:\/\/cdn\.jsdelivr\.net\/npm\/compromise@\d+\.\d+\.\d+\/builds\/compromise\.js/.test(w), 'pinned URL');
+  assert.ok(/importScripts\('ekg-core\.js'\)/.test(w));
+  var src = fs.readFileSync(path.join(__dirname, 'ekg.js'), 'utf8');
+  assert.ok(/nlp-client\.js/.test(src) && /setPos\(null\)/.test(src), 'loaded lazily, released on close');
+});
+
+// The real tagger, when a copy of compromise is at hand (never vendored into the repo):
+// CADE_COMPROMISE=/path/to/compromise.js node txt/widgets/ekg/ekg.test.js
+var nlp = null;
+try { nlp = require(process.env.CADE_COMPROMISE || 'compromise'); } catch (e) { nlp = null; }
+var TAGGED = [
+  ["Its raining again.", "its", 1],
+  ["Its getting late.", "its", 1],
+  ["Its so cold today.", "its", 1],
+  ["Its hard to say.", "its", 1],
+  ["Its clear that we lost.", "its", 1],
+  ["Its okay.", "its", 1],
+  ["Its broken again.", "its", 1],
+  ["I think its true.", "its", 1],
+  ["Well, its fine by me.", "its", 0],   // (a known miss: the tagger reads "fine" as a noun)
+  ["We left because its late.", "its", 1],
+  ["Its really easy.", "its", 1],
+  ["Its going to rain.", "its", 1],
+  ["Its opening hours are short.", "its", 0],
+  ["Its rising cost worries us.", "its", 0],
+  ["We like its simple design.", "its", 0],
+  ["The city and its surrounding area.", "its", 0],
+  ["Its red paint peeled.", "its", 0],
+  ["Its true colours showed.", "its", 0],
+  ["Its fine print matters.", "its", 0],
+  ["Its best feature is speed.", "its", 0],
+  ["The dog chased its tail.", "its", 0],
+  ["The team did its best.", "its", 0],
+  ["The cat licked its paws clean.", "its", 0],
+  ["The company and its many staff.", "its", 0],
+  ["The bird spread its wings.", "its", 0],
+  ["The film lost its charm.", "its", 0],
+  ["Its colour is red.", "its", 0],
+  ["The town and its people.", "its", 0],
+  ["It kept its cool.", "its", 0],
+  ["The plan has its merits.", "its", 0],
+  ["The tree and its fallen leaves.", "its", 0],
+  ["Its growing popularity surprised us.", "its", 0],
+  ["He is taller then John.", "then", 1],
+  ["She runs faster then her sister.", "then", 1],
+  ["It is quieter then usual.", "then", 1],
+  ["The second test was harder then the first.", "then", 1],
+  ["This box is heavier then that one.", "then", 1],
+  ["My car is newer then yours.", "then", 1],
+  ["He is wiser then his years.", "then", 1],
+  ["She sings louder then anyone.", "then", 1],
+  ["Today is warmer then yesterday.", "then", 1],
+  ["It is cheaper then the old one.", "then", 1],
+  ["It got colder then it snowed.", "then", 0],
+  ["Wait a bit longer then try again.", "then", 0],
+  ["I felt better then I went home.", "then", 0],
+  ["We walked further then we stopped.", "then", 0],
+  ["Things got harder then.", "then", 0],
+  ["It was cooler then, but now it is hot.", "then", 0],
+  ["The days got shorter then the nights grew long.", "then", 0],
+  ["Turn it lower then leave it.", "then", 0],
+  ["He grew older then wiser.", "then", 0],
+  ["Go faster, then slow down.", "then", 0],
+  ["I love pizza, my wife hates it.", "splice", 1],
+  ["The sun was shining, the birds were singing.", "splice", 1],
+  ["I bought eggs, milk was out of stock.", "splice", 1],
+  ["We missed the bus, the next one came an hour later.", "splice", 1],
+  ["She opened the door, the cat ran out.", "splice", 1],
+  ["The party starts at eight, the guests arrive early.", "splice", 1],
+  ["I like apples, my brother likes pears.", "splice", 1],
+  ["We have three kids, the oldest is ten.", "splice", 1],
+  ["The shop closed early, the owner went home.", "splice", 1],
+  ["The car broke down, the engine was old.", "splice", 1],
+  ["My brother, a doctor, works late.", "splice", 0],
+  ["After dinner, the kids played outside.", "splice", 0],
+  ["When the rain stopped, the kids went out.", "splice", 0],
+  ["The man, who was tired, sat down.", "splice", 0],
+  ["Apples, pears and plums are fruit.", "splice", 0],
+  ["I bought apples, bananas, and pears.", "splice", 0],
+  ["If you want, the car is yours.", "splice", 0],
+  ["Yesterday, the team won.", "splice", 0],
+  ["In 2020, the company grew.", "splice", 0],
+  ["Tired and hungry, the hikers stopped.", "splice", 0],
+  ["She smiled, her eyes shining.", "splice", 0],
+  ["He ran fast, the wind in his hair.", "splice", 0],
+  ["The house, the car and the boat were sold.", "splice", 0],
+  ["The more you practice, the better you get.", "splice", 0],
+  ["Dear John, the meeting is at five.", "splice", 0],
+  ["To be honest, the plan is bad.", "splice", 0],
+  ["The day after, the police came.", "splice", 0],
+  ["We met Anna, a friend of Sam.", "splice", 0],
+  ["She bought a lamp, a rug, and a chair.", "splice", 0],
+  ["Whatever you do, the answer is no.", "splice", 0]
+];
+if (!nlp) console.log('ekg: compromise tests skipped (set CADE_COMPROMISE=/path/to/compromise.js)');
+else {
+  var tagsOf = function (t) { return C.nlpEncode(nlp, t); };
+  var issuesT = function (src, type) { return new C.Analyzer({ pos: tagsOf }).analyze(src).issues.filter(function (i) { return i.type === type; }); };
+  test('compromise: nlpEncode gives offsets onto the words, tag bits and roots', function () {
+    var t = 'The children wrote letters; she went home and ran.', P = C.nlpEncode(nlp, t);
+    assert.ok(P.s.length === P.e.length && P.e.length === P.b.length && P.b.length === P.r.length && P.s.length >= 9);
+    var root = {};
+    for (var i = 0; i < P.s.length; i++) { assert.ok(/^[A-Za-z]+$/.test(t.slice(P.s[i], P.e[i])), t.slice(P.s[i], P.e[i])); root[t.slice(P.s[i], P.e[i])] = P.r[i]; }
+    assert.strictEqual(root.children, 'child'); assert.strictEqual(root.wrote, 'write'); assert.strictEqual(root.went, 'go'); assert.strictEqual(root.ran, 'run'); assert.strictEqual(root.letters, 'letter');
+    assert.ok(C.posBits(P, t.indexOf('children')) & C.TAG.Noun);
+    assert.ok(C.posBits(P, t.indexOf('wrote')) & C.TAG.Verb);
+  });
+  test('compromise: every rule of the word-list table still holds with tags', function () {
+    var bad = RULES.filter(function (c) { return issuesT(c[0], c[1]).length !== c[2]; }).map(function (c) { return c[1] + ': ' + c[0]; });
+    assert.deepStrictEqual(bad, []);
+  });
+  TAGGED.forEach(function (c, i) {
+    test('compromise ' + c[1] + ' #' + (i + 1) + (c[2] ? ' hit: ' : ' guard: ') + c[0].slice(0, 40), function () {
+      var got = issuesT(c[0], c[1]);
+      assert.strictEqual(got.length, c[2], JSON.stringify(got.map(function (x) { return x.message; })));
+      // the guards hold without tags too — except one the word lists get wrong and tags put right
+      if (!c[2]) assert.strictEqual(issues(c[0], c[1]).length, /shorter then the nights/.test(c[0]) ? 1 : 0, 'without tags');
+    });
+  });
+  test('compromise: tag fixes produce the corrected text', function () {
+    [['Its getting late.', "It's getting late."], ['He is taller then John.', 'He is taller than John.']].forEach(function (c) {
+      var is = new C.Analyzer({ pos: tagsOf }).analyze(c[0]).issues.filter(function (i) { return i.fix; });
+      assert.ok(is.length, c[0]);
+      assert.strictEqual(apply(c[0], is[0].fix), c[1]);
+    });
+  });
+  test('compromise: with tags already cached the analysis stays fast', function () {
+    var doc = bigDoc(20000), store = new Map();
+    var A = new C.Analyzer({ pos: function (t) { var r = store.get(t); if (!r) { r = C.nlpEncode(nlp, t); store.set(t, r); } return r; } });
+    A.analyze(doc);                                  // tags every paragraph that asks
+    var B = new C.Analyzer({ pos: function (t) { return store.get(t) || null; } }), t0 = Date.now();
+    B.analyze(doc);
+    var withTags = Date.now() - t0, D = new C.Analyzer(), t1 = Date.now();
+    D.analyze(doc);
+    var without = Date.now() - t1;
+    assert.ok(withTags < Math.max(400, without * 3), withTags + ' ms with tags vs ' + without + ' ms without');
+  });
+}
+
+// The shared client (nlp-client.js) with a stand-in Worker: lazily started, results cached,
+// pending answers settle on failure, the worker ends when the last panel lets go.
+var asyncTests = [];
+asyncTests.push(function clientLifecycle() {
+  var workers = [], docListeners = {};
+  function FakeWorker(url) { this.url = url; this.msgs = []; this.dead = false; workers.push(this); var self = this; setTimeout(function () { self.onmessage({ data: { type: 'ready', version: 'x' } }); }, 0); }
+  FakeWorker.prototype.postMessage = function (m) {
+    var self = this; this.msgs.push(m);
+    setTimeout(function () { if (!self.dead) self.onmessage({ data: { type: 'tags', id: m.id, texts: m.texts, out: m.texts.map(function (t) { return { s: [0], e: [t.length], b: [1], r: [''] }; }) } }); }, 0);
+  };
+  FakeWorker.prototype.terminate = function () { this.dead = true; };
+  var win = {}, doc = { hidden: false, currentScript: { src: 'https://x.test/txt/widgets/ekg/nlp-client.js' },
+    addEventListener: function (k, f) { docListeners[k] = f; }, removeEventListener: function (k) { delete docListeners[k]; } };
+  new Function('window', 'document', 'Worker', fs.readFileSync(path.join(__dirname, 'nlp-client.js'), 'utf8'))(win, doc, FakeWorker);
+  var N = win.__cadeNlp, notes = 0;
+  assert.strictEqual(N.WORKER_URL, 'https://x.test/txt/widgets/ekg/nlp-worker.js');
+  assert.strictEqual(N.get('a'), null, 'nobody holds it: no tags');
+  var off = N.acquire(function () { notes++; });
+  assert.strictEqual(workers.length, 1);
+  assert.strictEqual(N.get('hello'), undefined, 'asked for');
+  assert.strictEqual(N.get('hello'), undefined);
+  return wait(200).then(function () {
+    assert.ok(notes >= 1, 'notified');
+    assert.deepStrictEqual(N.get('hello').e, [5]);
+    assert.strictEqual(workers[0].msgs.length, 1, 'asked once');
+    var off2 = N.acquire(function () {});
+    assert.strictEqual(workers.length, 1, 'shared');
+    off(); assert.ok(!workers[0].dead, 'still held');
+    off2(); assert.ok(workers[0].dead, 'terminated when released');
+    assert.strictEqual(N.status(), 'idle');
+    assert.ok(N.get('hello'), 'cache kept');
+    // a failing worker: pending questions settle on null
+    var off3 = N.acquire(function () {});
+    var w2 = workers[1];
+    assert.strictEqual(N.get('other'), undefined);
+    w2.onmessage({ data: { type: 'fail', error: 'offline' } });
+    assert.strictEqual(N.status(), 'failed');
+    assert.strictEqual(N.get('other'), null);
+    off3();
+  });
+});
+function wait(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+asyncTests.reduce(function (p, fn) {
+  return p.then(function () { return fn(); }).then(function () { passed++; }, function (e) { console.error('FAIL ' + fn.name + '\n' + (e.stack || e)); process.exitCode = 1; });
+}, Promise.resolve()).then(function () {
+  console.log((process.exitCode ? 'FAILED, ' : '') + 'ekg: ' + passed + ' passed');
+});

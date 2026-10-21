@@ -21,7 +21,15 @@
  * mark, class, chip and listener goes with it. Only the blocks around the
  * visible range are analysed for marks (cached per paragraph); the whole-note
  * index behind the list and the chip is rebuilt lazily, at most once per
- * document version. */
+ * document version.
+ *
+ * While the panel is open, Prose EKG's nlp-client.js tags the paragraphs
+ * with the compromise NLP library in a worker (loaded lazily from the CDN),
+ * so word forms can meet by their root (wrote / written / write, children /
+ * child) and "Skip names" can tell names from words. Until the tags arrive —
+ * or offline, or if the library fails — the light stemmer and a
+ * capital-letter rule do the job; when they do, only the paragraphs that
+ * waited are re-keyed. */
 (function () {
   'use strict';
   if (typeof window === 'undefined' || typeof window.Cade === 'undefined') return;
@@ -36,16 +44,17 @@
     title: 'Word Echoes',
     fields: [
       { key: 'taper', type: 'slider', label: 'Fade out after', default: 5, min: 2, max: 10, step: 1, unit: 'sentences', hint: 'How far apart two uses of a word can be and still be marked. Nearer repeats are always stronger.' },
-      { key: 'stem', type: 'toggle', label: 'Match word forms', default: true, hint: 'run / runs / running and idea / ideas count as the same word' },
+      { key: 'stem', type: 'toggle', label: 'Match word forms', default: true, hint: 'run / runs / running and idea / ideas count as the same word — and, once the language data has loaded, irregular forms too (ran, wrote / written, children → child)' },
       { key: 'minLen', type: 'number', label: 'Shortest word to check', default: 3, min: 2, max: 8, step: 1, unit: 'letters' },
       { key: 'ignore', type: 'text', label: 'Also ignore these words', default: '', placeholder: 'e.g. said, Anna, river', hint: 'Comma-separated. Common words (the, a, than, with…) are always ignored.' },
+      { key: 'names', type: 'toggle', label: 'Skip names', default: false, hint: 'People, places and other proper nouns are never marked' },
       { key: 'style', type: 'radio', label: 'Highlight style', default: 'tint', options: [{ value: 'tint', label: 'Tint' }, { value: 'underline', label: 'Underline' }] }
     ]
   };
 
   window.__cadeEchoesPrefs = PREFS;      // (read by the tests)
 
-  var core = null, engine = null, viewApi = null, loading = null;
+  var core = null, engine = null, viewApi = null, loading = null, nlpOff = null;
   var P = null, el = {}, isOpen = false, isOn = false, prefs = null, opts = null, offPrefs = null;
   var listTimer = 0, focusNow = null;
   var dc = { doc: null, blocks: null, index: null };
@@ -344,6 +353,7 @@
       engine.setOptions(opts);
       isOpen = true; isOn = false;
       setOn(true);
+      startTags();
       offPrefs = prefs.on(onPrefs);
       Cade.onEditorUpdate(onUpdate);
       document.addEventListener('cade-room-switched', onRoom);
@@ -365,6 +375,8 @@
     }
     isOpen = false; isOn = false;
     if (offPrefs) { try { offPrefs(); } catch (e) {} offPrefs = null; }
+    if (nlpOff) { nlpOff(); nlpOff = null; }
+    if (engine) engine.setPos(null);
     dc = { doc: null, blocks: null, index: null };
     if (engine && engine.cache.size > 4000) engine.clear();
     P = null; el = {}; focusNow = null;
@@ -373,6 +385,29 @@
     var p = P;
     cleanup();
     if (p) p.remove();
+  }
+
+  // ---- part-of-speech tags (optional) ------------------------------------------------------
+  // Loaded after the panel is up (shared with Prose EKG); nothing waits for it.
+  function startTags() {
+    var p = P;
+    (window.__cadeNlp ? Promise.resolve() : addScript(BASE + '../ekg/nlp-client.js')).then(function () {
+      var nl = window.__cadeNlp;
+      if (!nl || P !== p || !isOpen || nlpOff) return;
+      nlpOff = nl.acquire(onTags);
+      engine.setPos(function (text) { return nl.get(text); });
+      dc.index = null;
+      refreshView();
+      scheduleList(60);
+    }, function () {});
+  }
+  // The marks follow every answer; the whole-note list waits until the note is all tagged.
+  function onTags() {
+    if (!isOpen || !engine || !engine.settle()) return;    // no key changed: nothing to redraw
+    dc.index = null;
+    refreshView();
+    var nl = window.__cadeNlp;
+    if (!(nl && nl.pending() > 0)) scheduleList(LIST_DEBOUNCE);
   }
 
   // ---- events --------------------------------------------------------------------------

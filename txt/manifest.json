@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "version": "2026.10.22-6",
+  "version": "2026.10.22-7",
   "modules": [
     {
       "id": "crawler",
@@ -1528,7 +1528,9 @@
       "css": "widgets/ekg/ekg.css",
       "precache": [
         "widgets/ekg/ekg-core.js",
-        "widgets/ekg/ekg-view.js"
+        "widgets/ekg/ekg-view.js",
+        "widgets/ekg/nlp-client.js",
+        "widgets/ekg/nlp-worker.js"
       ]
     },
     {
@@ -1542,7 +1544,9 @@
       "css": "widgets/echoes/echoes.css",
       "precache": [
         "widgets/echoes/echoes-core.js",
-        "widgets/ekg/ekg-core.js"
+        "widgets/ekg/ekg-core.js",
+        "widgets/ekg/nlp-client.js",
+        "widgets/ekg/nlp-worker.js"
       ],
       "prefs": {
         "title": "Word Echoes",
@@ -1563,7 +1567,7 @@
             "type": "toggle",
             "label": "Match word forms",
             "default": true,
-            "hint": "run / runs / running and idea / ideas count as the same word"
+            "hint": "run / runs / running and idea / ideas count as the same word — and, once the language data has loaded, irregular forms too (ran, wrote / written, children → child)"
           },
           {
             "key": "minLen",
@@ -1582,6 +1586,13 @@
             "default": "",
             "placeholder": "e.g. said, Anna, river",
             "hint": "Comma-separated. Common words (the, a, than, with…) are always ignored."
+          },
+          {
+            "key": "names",
+            "type": "toggle",
+            "label": "Skip names",
+            "default": false,
+            "hint": "People, places and other proper nouns are never marked"
           },
           {
             "key": "style",
