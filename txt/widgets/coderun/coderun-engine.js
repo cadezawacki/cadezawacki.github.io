@@ -24,6 +24,10 @@
  *   room; stop / timeout destroy the iframe.
  * - JSON: validated (line/column errors) and pretty-printed.
  * - Shell: explained, not run. HTML/CSS open the Live Preview.
+ * - Linked blocks (Cade.prefs('codeblocks') 'linked', default on): js / ts /
+ *   python runs go to the notebook (../notebook/notebook-engine.js, loaded on
+ *   the first such run) — one live scope per language per note, dependents
+ *   re-run, rich output. E._nb is the bridge it uses for Python and TS.
  *
  * Loaded on demand by the Code Runner widget, its palette scripts and the
  * "Run buttons" plugin (after coderun-kit.js). Exposes window.__cadeCodeRun.
@@ -37,6 +41,9 @@
   Cade.loadCSS('coderun.css');
 
   var WORKER_URL = Cade.asset('coderun-py-worker.js'); // resolve now, while currentScript is us
+  function absURL(u) { try { return new URL(u, location.href).href; } catch (e) { return u; } }
+  var NB_DIR = absURL(WORKER_URL).replace(/coderun\/coderun-py-worker\.js(\?.*)?$/, 'notebook/');
+  var NB_CORE = NB_DIR + 'notebook-core.js', NB_ENGINE = NB_DIR + 'notebook-engine.js';
   var PY_VERSION = '0.29.5';
   var PY_INDEX = 'https://cdn.jsdelivr.net/pyodide/v' + PY_VERSION + '/full/';
   var PY_DL_MB = '5.3';            // compressed download: wasm + stdlib + loader
@@ -78,6 +85,50 @@
   var runs = []; // panel history, newest first
   var py = { host: null, state: 'off', ready: null, onInit: null, loaded: 0, pkgBytes: 0, version: '', pending: {}, ops: {}, seq: 0, error: '', preloading: false };
   var E = window.__cadeCodeRun = { version: 0 };
+
+  // ---- linked blocks: the notebook takes js / ts / python runs ------------------------------
+  // The contract's fallback until the core has Cade.prefs (shared with the
+  // notebook through window.__cadePrefsFallback, so a set() there is seen here).
+  function prefsOf(id, fields) {
+    if (typeof Cade.prefs === 'function') { try { var p = Cade.prefs(id); if (p && typeof p.get === 'function') return p; } catch (e) {} }
+    var reg = window.__cadePrefsFallback || (window.__cadePrefsFallback = {});
+    if (reg[id]) return reg[id];
+    var d = {}, ls = [];
+    fields.forEach(function (f) { if (f.key) d[f.key] = f.default; });
+    return (reg[id] = {
+      fallback: true,
+      get: function (k) { return d[k]; },
+      all: function () { var o = {}; for (var k in d) o[k] = d[k]; return o; },
+      set: function (k, v) { d[k] = v; var all = this.all(); ls.slice().forEach(function (fn) { try { fn(k, v, all); } catch (e) {} }); },
+      on: function (fn) { ls.push(fn); return function () { var i = ls.indexOf(fn); if (i >= 0) ls.splice(i, 1); }; }
+    });
+  }
+  function linkedOn() {
+    try { return prefsOf('codeblocks', [{ key: 'linked', type: 'toggle', default: true }]).get('linked') !== false; } catch (e) { return true; }
+  }
+  function nbLang(lang) { return lang === 'js' || lang === 'ts' || lang === 'py'; }
+  function nbLoaded() { return window.__cadeNotebook || null; }
+  function loadScript(url) {
+    var L = window.__cadeCrLoads || (window.__cadeCrLoads = {});
+    if (L[url]) return L[url];
+    L[url] = new Promise(function (res, rej) {
+      var sc = document.createElement('script');
+      sc.src = url; sc.async = false;
+      sc.onload = function () { res(); };
+      sc.onerror = function () { delete L[url]; rej(new Error('The notebook failed to load (offline?)')); };
+      document.head.appendChild(sc);
+    });
+    return L[url];
+  }
+  function loadNotebook() {
+    if (window.__cadeNotebook) return Promise.resolve(window.__cadeNotebook);
+    return loadScript(NB_CORE).then(function () { return loadScript(NB_ENGINE); }).then(function () {
+      if (!window.__cadeNotebook) throw new Error('The notebook failed to start');
+      return window.__cadeNotebook;
+    });
+  }
+  E._loadNotebook = loadNotebook;
+  E.linkedOn = linkedOn;
 
   var nudgeT = 0;
   // State changed: re-render the editor chips (empty transaction; dispatching
@@ -138,11 +189,13 @@
     return null;
   }
   E.statusAt = function (openFrom) {
+    var N = nbLoaded(), ns = N ? N.statusAt(openFrom) : null;
+    if (ns) return ns;
     var j = isQueued(openFrom);
     if (!j) return null;
     return { state: j === cur ? j.state : 'queued', text: j === cur ? (j.statusText || 'Running…') : 'Queued' };
   };
-  E.busy = function () { return !!cur || queue.length > 0; };
+  E.busy = function () { var N = nbLoaded(); return !!cur || queue.length > 0 || !!(N && N.busy()); };
 
   function titleOf(code) {
     var first = '';
@@ -338,9 +391,11 @@
   }
   var progT = 0;
   function progress() {
-    if (cur && cur.lang === 'py') {
-      if (cur.state === 'loading') cur.statusText = pyStatusText();
-      else if (py.pkgBytes) cur.statusText = 'Loading packages… ' + (Math.round(py.pkgBytes / 1e5) / 10) + ' MB';
+    var pj = cur && cur.lang === 'py' ? cur : py.nbJob;
+    if (pj) {
+      if (pj.state === 'loading') pj.statusText = pyStatusText();
+      else if (py.pkgBytes) pj.statusText = 'Loading packages… ' + (Math.round(py.pkgBytes / 1e5) / 10) + ' MB';
+      if (pj.nb && pj.nb.onStatus) pj.nb.onStatus(pj.state, pj.statusText);
     }
     if (!progT) progT = setTimeout(function () { progT = 0; bump(); }, 250);
   }
@@ -348,7 +403,8 @@
     var p;
     m = m || {};
     if (m.type === 'progress') {
-      if (py.state === 'ready' && cur && cur.lang === 'py' && m.phase === 'packages' && m.text) cur.statusText = shortPkgText(m.text);
+      var pj = cur && cur.lang === 'py' ? cur : py.nbJob;
+      if (py.state === 'ready' && pj && m.phase === 'packages' && m.text) pj.statusText = shortPkgText(m.text);
       progress();
     } else if (m.type === 'ready') {
       py.version = String(m.version || PY_VERSION);
@@ -360,7 +416,7 @@
       var errs = Array.isArray(m.errors) ? m.errors : [];
       if (errs.length) toast("Couldn't load at start: " + K.pyPkgError(errs.join('\n'), isOffline(), ''), 'error', 6000);
       bump();
-    } else if (m.type === 'pkgsDone') {
+    } else if (m.type === 'pkgsDone' || m.type === 'varsDone') {
       var op = py.ops[m.id];
       if (op) { delete py.ops[m.id]; op(m); }
     } else if (m.type === 'initError') {
@@ -370,6 +426,7 @@
     } else if ((p = py.pending[m.id])) {
       if (m.type === 'started') p.started();
       else if (m.type === 'out') p.out(m.chunks || [], +m.dropped || 0);
+      else if (m.type === 'display') { if (p.display) p.display(m.item); }
       else if (m.type === 'done') { delete py.pending[m.id]; p.done(m); }
     }
   }
@@ -596,6 +653,8 @@
     var h = py.host;
     py.host = null;
     if (!h) return;
+    // every namespace went with it: the notebook marks its Python blocks stale
+    nbHook('pyDown');
     window.removeEventListener('message', h.onMsg);
     try { h.ifr.srcdoc = ''; } catch (e) {}
     try { h.ifr.remove(); } catch (e) {}
@@ -647,23 +706,28 @@
     bump();
     return p;
   }
-  function runPy(job) {
+  // o (notebook runs): { timeout, rich, onOut(text), onDisplay(itemJSON), onStatus(state, text) }
+  function runPy(job, o) {
     // "# requires: polars" can never work here — say why without starting Python
     var nw = '';
     K.pyRequires(job.code).some(function (r) { nw = K.pyNoWasm(K.pyReqName(r)); return !!nw; });
     if (nw) return Promise.resolve({ status: 'error', text: '✖ ' + nw, ms: 0 });
     job.state = py.state === 'ready' ? 'running' : 'loading';
     job.statusText = job.state === 'loading' ? pyStatusText() : 'Running…';
-    bump();
+    function status() { bump(); if (o && o.onStatus) o.onStatus(job.state, job.statusText); }
+    status();
+    if (o) py.nbJob = job;
     return new Promise(function (resolve) {
       var finished = false, text = '', killT = 0, t0 = Date.now();
-      var timeout = clamp(prefs.pyTimeout, 1, 600) * 1000;
+      var timeout = clamp(o && o.timeout ? o.timeout : prefs.pyTimeout, 1, 600) * 1000;
       function nl(t) { return t && !/\n$/.test(t) ? t + '\n' : t; }
       function end(res) {
         if (finished) return;
         finished = true;
         clearTimeout(killT);
         job.cancel = null;
+        if (py.nbJob === job) py.nbJob = null;
+        if (o) res.out = text;
         resolve(res);
       }
       job.cancel = function () {
@@ -674,11 +738,11 @@
         if (finished) return;
         if (!py.host) { end({ status: 'error', text: nl(text) + '\u2716 Python stopped unexpectedly \u2014 run again', ms: 0 }); return; }
         var id = ++py.seq;
-        job.state = 'running'; job.statusText = 'Running…'; bump();
+        job.state = 'running'; job.statusText = 'Running…'; status();
         py.pending[id] = {
           started: function () {
             t0 = Date.now();
-            job.statusText = 'Running…'; bump();
+            job.statusText = 'Running…'; status();
             killT = setTimeout(function () {
               end({ status: 'timeout', text: nl(text) + '⏱ Timed out after ' + K.fmtMs(timeout) + ' — Python restarted (variables were reset)', ms: timeout });
               pyKill();
@@ -688,8 +752,9 @@
             for (var i = 0; i < chunks.length; i++) if (text.length < MAX_TEXT) text += String(chunks[i][1]);
             if (dropped) text += '\n… ' + dropped + ' more characters of output dropped\n';
             job.liveText = text;
-            liveUpdate(job);
+            if (o && o.onOut) o.onOut(text); else liveUpdate(job);
           },
+          display: function (item) { if (o && o.onDisplay) o.onDisplay(item); },
           done: function (m) {
             var t = text, off = isOffline(), failed = !!(m.loadErrors && m.loadErrors.length);
             if (m.error && m.stage === 'packages') t = nl(t) + '✖ ' + K.pyPkgError(String(m.error).replace(/^Could not load packages:\s*/, ''), off || offlineFor(m.error), 'Could not load packages: ');
@@ -699,12 +764,23 @@
             if (failed && m.error && /ModuleNotFoundError/.test(m.error)) {
               t += '\n(' + K.pyPkgError(m.loadErrors.join('\n'), off, 'a package failed to download: ') + ')';
             }
-            end({ status: m.error ? 'error' : 'ok', text: t, ms: +m.ms || 0 });
+            var r = { status: m.error ? 'error' : 'ok', text: t, ms: +m.ms || 0 };
+            if (o) {
+              r.result = m.result != null ? String(m.result) : null;
+              r.rich = m.rich || null;
+              if (m.error) {
+                var lines = [], re = /File "block\.py", line (\d+)/g, mm;
+                while ((mm = re.exec(String(m.error)))) lines.push(+mm[1]);
+                r.errText = t.slice(text.length).replace(/^\n/, '');
+                r.errLine = lines.length ? lines[lines.length - 1] : 0;
+              }
+            }
+            end(r);
           },
           dead: function (why) { end({ status: 'error', text: nl(text) + '✖ ' + why, ms: Date.now() - t0 }); }
         };
         py.pkgBytes = 0;
-        pyPost({ type: 'run', id: id, code: job.code, ns: job.room, requires: K.pyRequires(job.code), auto: autoSpec() });
+        pyPost({ type: 'run', id: id, code: job.code, ns: job.room, requires: K.pyRequires(job.code), auto: autoSpec(), rich: !!(o && o.rich) });
       }, function (err) {
         var off = typeof navigator !== 'undefined' && navigator.onLine === false;
         end({ status: 'error', text: "✖ Couldn't start Python: " + msg(err) + (off ? " — you're offline; the first run needs a connection (~" + PY_DL_MB + ' MB)' : ''), ms: 0 });
@@ -753,6 +829,13 @@
     }
     if (b.close === -1) { toast('Close the code block with ``` first', 'info'); return Promise.resolve('unclosed'); }
     if (isQueued(b.openFrom)) { toast('Already running — use Stop to cancel', 'info'); return Promise.resolve('busy'); }
+    if (nbLang(lang) && linkedOn()) {
+      var from = b.openFrom;
+      return loadNotebook().then(function (N) { return N.runCell(from, lang); }, function (e) {
+        toast(msg(e) + ' — running this block on its own', 'error', 3600);
+        return enqueue(b, doc).promise;
+      });
+    }
     return enqueue(b, doc).promise;
   }
   E.runBlockAt = function (pos) {
@@ -773,20 +856,47 @@
     var ed = Cade.editor;
     return ed ? E.runBlockAt(ed.state.selection.main.head) : Promise.resolve('no-editor');
   };
-  E.runAll = function () {
+  // above: only blocks that end before this position ("Run Code Blocks Above")
+  function runMany(above) {
     var ed = Cade.editor;
     if (!ed) return Promise.resolve();
-    var doc = ed.state.doc;
-    var list = K.scanFences(doc).filter(function (b) { return K.RUNNABLE[b.lang] && b.close !== -1 && !isQueued(b.openFrom); });
-    if (!list.length) { toast('No runnable code blocks here (js, ts, python, json)', 'info'); return Promise.resolve(); }
+    var doc = ed.state.doc, linked = linkedOn();
+    var list = K.scanFences(doc).filter(function (b) {
+      return K.RUNNABLE[b.lang] && b.close !== -1 && !isQueued(b.openFrom) && (above == null || doc.line(b.close).to < above);
+    });
+    var nbList = linked ? list.filter(function (b) { return nbLang(b.lang); }) : [];
+    if (nbList.length) {
+      list = list.filter(function (b) { return !nbLang(b.lang); });
+      var nbP = loadNotebook().then(function (N) { return above == null ? N.runAll() : N.runAbove(above); }, function (e) { toast(msg(e), 'error', 3600); });
+      return Promise.all([nbP, list.length ? queueMany(list, doc) : null]);
+    }
+    if (!list.length) { toast(above == null ? 'No runnable code blocks here (js, ts, python, json)' : 'No runnable code blocks above the cursor', 'info'); return Promise.resolve(); }
+    return queueMany(list, doc);
+  }
+  E.runAll = function () { return runMany(null); };
+  E.runAbove = function () {
+    var ed = Cade.editor;
+    if (!ed) return Promise.resolve();
+    var doc = ed.state.doc, head = ed.state.selection.main.head, b = K.blockAt(K.scanFences(doc), doc.lineAt(head).number);
+    return runMany(b ? doc.line(b.open).from : head);
+  };
+  // Restart: the note's linked runtimes (notebook), else Python's variables for this room.
+  E.restart = function () {
+    var N = nbLoaded();
+    if (N && linkedOn()) return N.restart();
+    E.pyReset();
+  };
+  function queueMany(list, doc) {
     var bt = { total: list.length, done: 0, errors: 0, stopped: false };
     var p = new Promise(function (res) { bt.resolve = res; });
     toast('Running ' + list.length + ' code block' + (list.length === 1 ? '' : 's') + '…', 'info', 1800);
     list.forEach(function (b) { enqueue(b, doc, bt); });
     return p;
-  };
+  }
   // Stop one block (openFrom given) or everything.
   E.stop = function (openFrom) {
+    var N = nbLoaded(), nbStopped = N ? N.stop(openFrom) : false;
+    if (nbStopped && openFrom != null) { bump(); return; }
     if (openFrom != null) {
       for (var i = 0; i < queue.length; i++) {
         if (queue[i].openFrom === openFrom) { var j = queue.splice(i, 1)[0]; drop(j, 'stopped'); bump(); return; }
@@ -797,7 +907,7 @@
     var q = queue; queue = [];
     q.forEach(function (j) { if (j.batch) j.batch.stopped = true; drop(j, 'stopped'); });
     if (cur) { if (cur.batch) cur.batch.stopped = true; if (cur.cancel) cur.cancel(); }
-    else if (!q.length) toast('Nothing is running', 'info', 1600);
+    else if (!q.length && !nbStopped) toast('Nothing is running', 'info', 1600);
     bump();
   };
   E.clearOutputs = function () {
@@ -854,6 +964,7 @@
   E.pyReset = function () {
     if (!py.host || py.state !== 'ready') { toast('Python isn’t running — nothing to reset', 'info', 1800); return; }
     pyPost({ type: 'reset', ns: roomKey() });
+    nbHook('pyReset', roomKey());
     toast('Python variables reset for this room', 'success', 1800);
   };
 
@@ -861,6 +972,41 @@
     if (!py.host) { toast('Python isn\u2019t loaded', 'info', 1600); return; }
     if (cur && cur.lang === 'py' && cur.cancel) cur.cancel(); else pyKill();
     toast('Python unloaded', 'success', 1600);
+  };
+
+  // ---- the notebook's bridge ---------------------------------------------------------------------------
+  // Python runs into the note's namespace (one per room, the same one Code
+  // Runner uses), TS transform, Pyodide state; nbHook tells the notebook when
+  // Python's namespaces went away.
+  function nbHook(name, arg) {
+    var N = nbLoaded();
+    if (N && N._hooks && typeof N._hooks[name] === 'function') { try { N._hooks[name](arg); } catch (e) {} }
+  }
+  E._nb = {
+    K: K,
+    bump: bump,
+    // -> { promise -> {status, out, result, rich, errText, errLine, ms, text}, cancel() }
+    pyRun: function (code, ns, o) {
+      var job = { lang: 'py', code: String(code), room: String(ns), state: 'queued', statusText: '', items: null, liveText: '', nb: o || {} };
+      var p = runPy(job, o || {});
+      return { promise: p, cancel: function () { if (job.cancel) job.cancel(); } };
+    },
+    pyReady: function () { return py.state === 'ready' && !!py.host; },
+    pyLoading: function () { return py.state === 'loading'; },
+    pyStatus: function () { return pyStatusText(); },
+    pyReset: function (ns) { if (py.host && py.state === 'ready') pyPost({ type: 'reset', ns: String(ns) }); },
+    // -> Promise<[[name, type, preview]] | null> (null: Python isn't running — never starts it)
+    pyVars: function (ns) {
+      if (!py.host || py.state !== 'ready') return Promise.resolve(null);
+      return new Promise(function (resolve) {
+        var id = 'v' + (++py.seq), t = setTimeout(function () { delete py.ops[id]; resolve(null); }, 8000);
+        py.ops[id] = function (m) { clearTimeout(t); resolve(Array.isArray(m.list) ? m.list : null); };
+        pyPost({ type: 'vars', id: id, ns: String(ns) });
+      });
+    },
+    tsToJs: function (code) { return tsToJs(code); },
+    jsTimeout: function () { return prefs.jsTimeout; },
+    pyTimeout: function () { return prefs.pyTimeout; }
   };
 
   // ---- Python packages (Options -> "Python packages") ----------------------------------------------

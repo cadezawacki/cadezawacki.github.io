@@ -23,8 +23,12 @@
  *        {type:'started', id}  {type:'out', id, chunks:[['o'|'e', text]], dropped}
  *        {type:'done', id, ms, result|null, error|null}  {type:'fetch', rid, url, integrity}
  *        {type:'preloaded', errors:[…]}  {type:'pkgsDone', id, ok, info|error}
+ *        {type:'display', id, item}  (display() / matplotlib figures, notebook runs; item = JSON text)
+ *        {type:'varsDone', id, list:[[name, type, preview]]}
  *   in : {type:'init', indexURL, proxy, preload:{lock, pypi, imports}}
- *        {type:'run', id, code, ns, requires, auto:[{name, imports}]}
+ *        {type:'run', id, code, ns, requires, auto:[{name, imports}], rich}
+ *        (rich: a notebook run — 'done' also carries `rich`, an output item for the value)
+ *        {type:'vars', id, ns}  (the notebook's variables panel)
  *        {type:'pkgs', id, names}  (install PyPI packages = download them into the app's cache)
  *        {type:'reset', ns}  {type:'fetched', rid, ok, status, ct, buf, error}
  *
@@ -33,7 +37,8 @@
  * the app stops a run by destroying the iframe. As defence in depth, storage
  * and messaging globals are also deleted before user code runs. */
 'use strict';
-var py = null, runFn = null, nsFn = null, infoFn = null, importFn = null, forgetFn = null, spaces = {};
+var py = null, runFn = null, nsFn = null, infoFn = null, importFn = null, forgetFn = null, richFn = null, varsFn = null, spaces = {};
+var curRich = false;
 var INDEX = '', proxyOn = false, rid = 0, waiting = {};
 var PYPI_RE = /^https:\/\/(pypi\.org|files\.pythonhosted\.org)\//;
 // One thing at a time: start-up preloads, runs and package downloads queue up
@@ -114,6 +119,119 @@ var HELPER = [
   '        import micropip',
   '        micropip.uninstall(gone)',
   '    return len(gone)',
+  // ---- notebook: rich values, display(), inline matplotlib, variables ----
+  'import os, json, base64, io',
+  "os.environ.setdefault('MPLBACKEND', 'AGG')",
+  'def _cade_repr(o):',
+  '    try:',
+  '        return repr(o)',
+  '    except BaseException as e:',
+  "        return '<repr failed: %r>' % (e,)",
+  'def _cade_short(s, n=200):',
+  "    s = str(s).replace('\\n', ' ')",
+  "    return s if len(s) <= n else s[:n - 1] + '\u2026'",
+  'def _cade_tree(o, depth, budget, seen):',
+  '    if isinstance(o, dict):',
+  '        items = list(o.items())',
+  '    else:',
+  '        items = list(enumerate(list(o)[:101]))',
+  "    head = '%s(%d)' % (type(o).__name__, len(o))",
+  '    kids = []',
+  '    for k, v in items[:100]:',
+  '        key = k if isinstance(k, str) else _cade_repr(k)',
+  '        if isinstance(v, (dict, list, tuple, set, frozenset)) and len(v) and depth < 5 and budget[0] > 0 and id(v) not in seen:',
+  '            budget[0] -= 1',
+  '            seen.add(id(v))',
+  '            kids.append([str(key)[:80], _cade_tree(v, depth + 1, budget, seen)])',
+  '            seen.discard(id(v))',
+  '        else:',
+  '            kids.append([str(key)[:80], _cade_short(_cade_repr(v), 300)])',
+  "    return {'h': head, 'c': kids, 'more': max(0, len(o) - 100)}",
+  'def _cade_rich(o):',
+  '    try:',
+  '        if o is None:',
+  '            return None',
+  "        mod = getattr(type(o), '__module__', '') or ''",
+  "        if mod.startswith('matplotlib') and hasattr(o, 'savefig'):",
+  '            buf = io.BytesIO()',
+  "            o.savefig(buf, format='png', bbox_inches='tight')",
+  "            return {'k': 'image', 'src': 'data:image/png;base64,' + base64.b64encode(buf.getvalue()).decode('ascii')}",
+  '        if not isinstance(o, type):',
+  "            for m in ('_repr_html_', '_repr_svg_'):",
+  '                f = getattr(o, m, None)',
+  '                if callable(f):',
+  '                    h = f()',
+  '                    if isinstance(h, tuple):',
+  '                        h = h[0]',
+  '                    if h:',
+  "                        return {'k': 'html', 'html': str(h)[:2000000], 'text': _cade_repr(o)[:20000]}",
+  "            f = getattr(o, '_repr_png_', None)",
+  '            if callable(f):',
+  '                b = f()',
+  '                if isinstance(b, tuple):',
+  '                    b = b[0]',
+  '                if isinstance(b, bytes) and b:',
+  "                    return {'k': 'image', 'src': 'data:image/png;base64,' + base64.b64encode(b).decode('ascii')}",
+  '        if isinstance(o, list) and o and all(isinstance(x, dict) for x in o[:50]):',
+  '            cols = []',
+  '            for r in o[:500]:',
+  '                if isinstance(r, dict):',
+  '                    for c in r:',
+  '                        if c not in cols and len(cols) < 40:',
+  '                            cols.append(c)',
+  '            rows = []',
+  '            for i, r in enumerate(o[:500]):',
+  '                d = r if isinstance(r, dict) else {}',
+  "                rows.append([str(i)] + [(_cade_short(d[c]) if isinstance(d[c], str) else _cade_short(_cade_repr(d[c]))) if c in d else '' for c in cols])",
+  "            return {'k': 'table', 'cols': ['(index)'] + [str(c) for c in cols], 'rows': rows, 'total': len(o), 'text': _cade_repr(o)[:20000]}",
+  '        if isinstance(o, (dict, list, tuple, set, frozenset)) and len(o):',
+  "            return {'k': 'tree', 'tree': _cade_tree(o, 0, [1500], {id(o)}), 'text': _cade_repr(o)[:20000]}",
+  '    except BaseException:',
+  '        return None',
+  '    return None',
+  'def display(*objs):',
+  '    for o in objs:',
+  "        it = {'k': 'text', 'text': o} if isinstance(o, str) else (_cade_rich(o) or {'k': 'text', 'text': _cade_repr(o)})",
+  '        _cade_emit_js(json.dumps(it, default=str))',
+  'def _cade_figs():',
+  "    plt = sys.modules.get('matplotlib.pyplot')",
+  '    if plt is None:',
+  '        return',
+  '    try:',
+  '        for n in plt.get_fignums():',
+  '            display(plt.figure(n))',
+  "        plt.close('all')",
+  '    except BaseException:',
+  '        pass',
+  'async def _cade_run_rich(src, ns):',
+  '    try:',
+  "        r = await eval_code_async(src, ns, filename='block.py')",
+  '    finally:',
+  '        try:',
+  '            sys.stdout.flush()',
+  '            sys.stderr.flush()',
+  '        except Exception:',
+  '            pass',
+  '        _cade_figs()',
+  "    out = {'r': None, 'rich': None}",
+  '    if r is not None:',
+  "        out['r'] = _cade_repr(r)",
+  "        out['rich'] = _cade_rich(r)",
+  '    return json.dumps(out, default=str)',
+  'def _cade_vars(ns):',
+  '    out = []',
+  '    for k, v in list(ns.items()):',
+  "        if k.startswith('_'):",
+  '            continue',
+  '        t = type(v).__name__',
+  '        if isinstance(v, type):',
+  "            t = 'class'",
+  '        out.append([k, t, _cade_short(_cade_repr(v), 160)])',
+  '        if len(out) >= 400:',
+  '            break',
+  '    return json.dumps(out)',
+  'import builtins',
+  'builtins.display = display',
   'def _cade_import(mods):',
   '    import importlib',
   '    bad = []',
@@ -209,7 +327,17 @@ function setup() {
   py.setStderr({ write: function (b) { out('e', decE.decode(b, { stream: true })); return b.length; }, isatty: false });
   py.setStdin({ stdin: function () { return null; } }); // EOF: input() raises EOFError
   var g = py.globals.get('dict')();
+  // display(): an output item for a notebook run; plain text otherwise (Code Runner)
+  g.set('_cade_emit_js', function (s) {
+    s = String(s);
+    if (curRich) { flushOut(); post({ type: 'display', id: curId, item: s.length > 4e6 ? '{"k":"text","text":"(output too large to show)"}' : s }); return; }
+    var it = null;
+    try { it = JSON.parse(s); } catch (e) {}
+    out('o', (it && it.text != null ? String(it.text) : '[' + ((it && it.k) || 'output') + ']') + '\n');
+  });
   py.runPython(HELPER, { globals: g, filename: '<cade>' });
+  richFn = g.get('_cade_run_rich');
+  varsFn = g.get('_cade_vars');
   runFn = g.get('_cade_run');
   nsFn = g.get('_cade_ns');
   infoFn = g.get('_cade_info');
@@ -346,14 +474,24 @@ function runNow(m) {
   return prepare(m, loadErrs).then(function () {
     post({ type: 'started', id: m.id });
     t0 = now();
-    return runFn(m.code, ns);
+    curRich = !!m.rich;
+    return (curRich ? richFn : runFn)(m.code, ns);
   }, function (e) {
     throw { pkg: true, e: e };
   }).then(function (r) {
+    var ms = Math.round(now() - t0);
     flushOut();
-    post({ type: 'done', id: m.id, ms: Math.round(now() - t0), result: r == null ? null : String(r), error: null });
+    if (curRich) {
+      curRich = false;
+      var j = {};
+      try { j = JSON.parse(String(r)); } catch (x) {}
+      post({ type: 'done', id: m.id, ms: ms, result: j.r == null ? null : String(j.r), rich: j.rich || null, error: null });
+      return;
+    }
+    post({ type: 'done', id: m.id, ms: ms, result: r == null ? null : String(r), error: null });
   }, function (e) {
     flushOut();
+    curRich = false;
     if (e && e.pkg) post({ type: 'done', id: m.id, ms: 0, result: null, error: 'Could not load packages: ' + msg(e.e), stage: 'packages' });
     else post({ type: 'done', id: m.id, ms: t0 ? Math.round(now() - t0) : 0, result: null, error: msg(e), python: !!(e && e.type), loadErrors: loadErrs });
   });
@@ -370,6 +508,13 @@ self.onmessage = function (e) {
   else if (m.type === 'pkgs') {
     if (!py || !infoFn) post({ type: 'pkgsDone', id: m.id, ok: false, error: 'Python is not loaded' });
     else task(function () { return pkgs(m); });
+  }
+  else if (m.type === 'vars') {
+    task(function () {
+      var d = spaces[m.ns], list = [];
+      try { if (d && varsFn) list = JSON.parse(String(varsFn(d))); } catch (x) {}
+      post({ type: 'varsDone', id: m.id, list: list });
+    });
   }
   else if (m.type === 'reset') {
     var d = spaces[m.ns];

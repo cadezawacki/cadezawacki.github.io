@@ -38,4 +38,12 @@
   .cm-crun-btn::after { content: ''; position: absolute; inset: -12px -6px; }
   .cm-crun-run { opacity: 0.9; }
 }
+/* Notebook state of a block that has run (linked blocks). */
+.cm-crun-badge {
+  display: inline-flex; align-items: center; height: 18px; padding: 0 6px; border-radius: 999px; box-sizing: border-box;
+  font-variant-numeric: tabular-nums; color: var(--text-muted); background: var(--surface-2, transparent); border: 1px solid transparent;
+}
+.cm-crun-b-fresh { color: var(--success, #16a34a); }
+.cm-crun-b-stale { color: var(--warning, #d97706); border-color: currentColor; background: transparent; }
+.cm-crun-b-error { color: var(--error, #dc2626); }
 body.readonly .cm-crun { display: none; }
