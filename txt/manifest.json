@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "version": "2026.10.22-8",
+  "version": "2026.10.22-9",
   "modules": [
     {
       "id": "crawler",
@@ -1755,7 +1755,7 @@
       "id": "danger",
       "type": "widget",
       "name": "Dangerous Mode",
-      "description": "Keep writing or lose it — set a word or time goal; stop typing for a few seconds and this session’s text fades and is deleted. Reach the goal to keep it",
+      "description": "Keep writing or lose it — set a word or time goal; stop typing for a few seconds and this session’s words start being removed from the end until you type again. Reach the goal to keep them",
       "icon": "☠",
       "tags": "dangerous,danger,dangerous mode,writing,write,first draft,draft,sprint,word goal,word count,focus,flow,timer,deadline,hardcore,most dangerous writing app,productivity",
       "entry": "widgets/danger/danger.js",
