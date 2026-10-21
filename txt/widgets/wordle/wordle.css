@@ -155,3 +155,11 @@
   .wd-ic { width: 34px; height: 34px; }
   .wd-hint { display: none !important; }
 }
+
+/* Popped out into its own window: tiles are sized from that window's height
+   (≈262px of it is header, top bar and keyboard) so the keyboard stays on
+   screen in a short window and the board grows in a tall one; a window too
+   small for even the smallest tiles scrolls rather than cutting keys off. */
+#wordle-panel.cade-popped { --wd-t: clamp(22px, min(calc((100vh - 262px) / 6.4), calc((100vw - 76px) / 5.6)), 64px); }
+#wordle-panel.cade-popped .cade-panel-body { overflow-y: auto; }
+@media (max-height: 420px) { #wordle-panel.cade-popped { --wd-kh: 36px; } }

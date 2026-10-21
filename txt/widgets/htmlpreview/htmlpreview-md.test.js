@@ -139,4 +139,35 @@ test('```voice blocks render as a still figure: 🎙 title · duration over the 
   assert.ok(/md-code/.test(html('```voiceover\nx\n```')), 'another language is code');
   assert.ok(/\.md-vn-w \.v0\{height:12%\}/.test(require('./htmlpreview-md.js').CSS) && /\.md-vn-w \.v7\{height:100%\}/.test(require('./htmlpreview-md.js').CSS));
 });
+test('```xml / ```soap / ```json blocks go to cb.tree (content line, offset 1); without it they stay code', function () {
+  var calls = [], tcb = { embed: cb.embed, image: cb.image, tree: function (lang, text, line, off) { calls.push([lang, text, line, off]); return '<div class="tv-blk">T' + calls.length + '</div>\n'; } };
+  var b = R.render('# x\n\n```xml\n<a/>\n```\n\n```soap\n<s/>\n```\n\n```json\n{"a":1}\n```\n\n```wsdl\n<w/>\n```\n\n```jsonc\n{}\n```', tcb);
+  assert.deepStrictEqual(calls, [['xml', '<a/>', 4, 1], ['soap', '<s/>', 8, 1], ['json', '{"a":1}', 12, 1], ['xml', '<w/>', 16, 1]]);
+  assert.ok(/tv-blk">T1/.test(b[1].h) && b[1].l === 3 && /md-code/.test(b[5].h), JSON.stringify(b));
+  assert.ok(/md-code/.test(html('```xml\n<a/>\n```')), 'no cb.tree: highlighted code as before');
+  assert.ok(/md-code/.test(R.render('```xml\n<a/>\n```', { tree: function () { return ''; } })[0].h), 'cb.tree declines: code');
+});
+test('render opts: as xml / json / text / csv / md, line0 offsets lines; auto asks cb.sniff', function () {
+  var seen = [], tcb = { embed: cb.embed, image: cb.image, tree: function (lang, text, line, off) { seen.push([lang, line, off]); return '<div>TREE</div>'; }, sniff: function (src) { return /^</.test(src) ? 'xml' : ''; } };
+  var x = R.render('<a/>', tcb, { as: 'xml', line0: 40 });
+  assert.deepStrictEqual([x.length, x[0].l, x[0].h], [1, 40, '<div>TREE</div>']);
+  assert.deepStrictEqual(seen.pop(), ['xml', 40, 0]);
+  assert.ok(/<pre class="md-text">a &lt;b&gt;<\/pre>/.test(R.render('a <b>', tcb, { as: 'text' })[0].h));
+  assert.ok(/md-csv/.test(R.render('a;b\n1;2', tcb, { as: 'csv' })[0].h));
+  assert.ok(/md-code/.test(R.render('{"a":1}', {}, { as: 'json' })[0].h), 'no tree callback: highlighted code');
+  var m = R.render('# T\n\n- [ ] task\n\n```html\n<b>x</b>\n```', cb, { as: 'md', line0: 10 });
+  assert.deepStrictEqual(m.map(function (q) { return q.l; }), [10, 12, 14]);
+  assert.ok(/data-tl="12"/.test(m[1].h) && /data-ek="E14"/.test(m[2].h), 'task lines and embeds use editor lines');
+  assert.ok(!/md-csv/.test(R.render('a,b\n1,2\n3,4', cb, { as: 'md' })[0].h), 'md means Markdown even if it looks like CSV');
+  var w = R.render('<note><to>x</to></note>', tcb);
+  assert.deepStrictEqual([w.length, w[0].h, seen.pop()], [1, '<div>TREE</div>', ['xml', 1, 0]]);
+  assert.ok(/<h1/.test(R.render('# not xml', tcb)[0].h), 'auto: markdown when the sniff says no');
+});
+test('shellDoc / staticDoc take the tree view\'s css + js (js runs before the shell)', function () {
+  var s = R.shellDoc('tok', ':root{}', { css: '.tv{color:red}', js: 'window.__cadeTV={init:function(){},mount:function(){}};var x="</script>";' });
+  assert.ok(/\.tv\{color:red\}<\/style>/.test(s) && s.indexOf('window.__cadeTV') < s.indexOf('(function SHELL') && s.indexOf('"<\\/script>"') > 0, s.slice(-600));
+  assert.ok(/<script>\(function SHELL/.test(R.shellDoc('tok', ':root{}')), 'no ext: as before');
+  var d = R.staticDoc([{ h: '<div class="tv" data-tv="k"></div>' }], ':root{}', {}, {}, { css: '.tv{x:1}', html: function (h) { return h.replace('data-tv="k"', 'data-done'); } });
+  assert.ok(/\.tv\{x:1\}/.test(d) && /data-done/.test(d) && !/<script/.test(d));
+});
 console.log((process.exitCode ? 'FAILED, ' : '') + 'passed ' + passed);

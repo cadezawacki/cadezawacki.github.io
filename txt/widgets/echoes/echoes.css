@@ -125,3 +125,11 @@
   .cm-echoes-chip { bottom: 14px; padding-left: 14px; font-size: 14px; }
   .cm-echoes-chip button { width: 40px; height: 40px; }
 }
+
+/* Popped out (its own desktop window): a narrow window trips the phone rules
+   above, but it has height to spare — the word chips wrap instead of scrolling
+   in one row, and the heading, hint and focus bar come back (the note's chip
+   is in the other window). */
+.cade-popped .echo-top { flex-wrap: wrap; overflow-x: visible; margin: 0; padding: 0; }
+.cade-popped .echo-top-h, .cade-popped .echo-hint { display: block; }
+.cade-popped .echo-focus:not([hidden]) { display: flex; }

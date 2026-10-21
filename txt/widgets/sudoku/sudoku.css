@@ -158,3 +158,20 @@
   .sd { gap: 6px; }
   .sd-tl { font-size: 9px; }
 }
+
+/* Popped out into its own window: the board is sized by the window's height as
+   well as its width (it's square), so a wide window doesn't push the number
+   pad off the bottom. ~196px = panel header + top row + tools + pad + gaps. */
+.cade-popped .sd { width: min(100%, max(280px, calc(100vh - 196px))); margin: 0 auto; }
+/* …and in a short, wide pop-out the tools and a 3×3 number pad sit beside the
+   board instead of below it, so everything fits without scrolling. */
+@media (max-height: 480px) and (min-width: 560px) {
+  .cade-popped .sd {
+    width: auto; display: grid; grid-template-columns: min(calc(100vh - 100px), 58%) minmax(0, 1fr);
+    grid-template-rows: auto auto 1fr; column-gap: 12px; align-items: start;
+  }
+  .cade-popped .sd-top { grid-column: 1 / -1; }
+  .cade-popped .sd-wrap { grid-column: 1; grid-row: 2 / 4; }
+  .cade-popped .sd-tools { grid-column: 2; grid-row: 2; }
+  .cade-popped .sd-pad { grid-column: 2; grid-row: 3; grid-template-columns: repeat(3, 1fr); }
+}

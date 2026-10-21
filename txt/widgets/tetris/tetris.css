@@ -1,2 +1,6 @@
 .tetris-canvas { display: block; border-radius: 8px; background: #0c0e12; touch-action: none; width: 140px; max-width: 50vw; }
 .tetris-status { display: flex; justify-content: space-between; align-items: center; margin-top: 6px; font-size: var(--text-xs); color: var(--text-muted); gap: 10px; }
+
+/* Popped out into its own window (Cade.popOut): the fixed-size board sits in
+   the middle of the window rather than in its top-left corner. */
+.cade-popped .tetris-canvas { margin-left: auto; margin-right: auto; }

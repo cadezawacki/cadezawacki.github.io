@@ -218,3 +218,9 @@
   .rx-cb { min-height: 40px; }
   .rx-cb input { width: 20px; height: 20px; }
 }
+
+/* Popped out into its own window: a short window would squeeze the results
+   pane to nothing under the pattern and test text, so it keeps a usable height
+   and the whole body scrolls instead. */
+#regex-panel.cade-popped .cade-panel-body { overflow-y: auto; }
+.cade-popped .rx-panes { min-height: 160px; }

@@ -75,3 +75,7 @@
 /* native select arrows/popups follow the app theme, not the OS one */
 .un-from, .un-to { color-scheme: light; }
 [data-theme="dark"] .un-from, [data-theme="dark"] .un-to { color-scheme: dark; }
+
+/* Popped out into its own window: every category is visible at once (they wrap)
+   instead of most hiding off the right edge of a sideways scroller. */
+.cade-popped .un-tabs { flex-wrap: wrap; overflow-x: visible; row-gap: 4px; }

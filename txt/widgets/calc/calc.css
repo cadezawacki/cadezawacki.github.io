@@ -86,3 +86,8 @@
   .ca-btn { padding: 7px 11px; }
   .ca-foot > span { display: none; }
 }
+
+/* Popped out into its own window: the history grows into the window's height
+   (its 240px cap is for a floating panel), and variable chips wrap. */
+.cade-popped .ca-hist { max-height: none; }
+.cade-popped .ca-vars { flex-wrap: wrap; overflow-x: visible; }

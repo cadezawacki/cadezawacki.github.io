@@ -16,3 +16,7 @@
   color: var(--text-muted);
   gap: 8px;
 }
+
+/* Popped out into its own window (Cade.popOut): the fixed-size board sits in
+   the middle of the window rather than in its top-left corner. */
+.cade-popped .brk-canvas { margin-left: auto; margin-right: auto; }

@@ -173,3 +173,7 @@
 @media (prefers-reduced-motion: reduce) {
   .bn-prog i, .bn-play, .bn-p, .bn-adj summary::before { transition: none; }
 }
+
+/* Popped out into its own window: the preset groups wrap instead of scrolling
+   sideways, so every group stays in view at any window width. */
+.cade-popped .bn-tabs { flex-wrap: wrap; overflow-x: visible; }

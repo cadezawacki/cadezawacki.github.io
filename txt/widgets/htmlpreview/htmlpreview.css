@@ -56,6 +56,20 @@
 }
 .hp-src-text { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-muted); }
 .hp-size { flex: 0 0 auto; white-space: nowrap; font-variant-numeric: tabular-nums; }
+/* selection mode: "Selection [Auto · XML ▾] ×" */
+.hp-sel { display: inline-flex; align-items: center; gap: 6px; flex: 0 0 auto; font-family: var(--font-body, inherit); }
+.hp-sel[hidden] { display: none; }
+.hp-sel-l { font-weight: 600; color: var(--accent); }
+.hp-as {
+  font: inherit; font-size: var(--text-xs, 12px); color: var(--text); background: var(--surface); cursor: pointer;
+  border: 1px solid var(--border); border-radius: var(--radius-md, 6px); height: 22px; padding: 0 4px; max-width: 46vw;
+}
+.hp-as:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.hp-sel-x {
+  display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; padding: 0; cursor: pointer;
+  font: 15px/1 var(--font-body, inherit); color: var(--text-muted); background: none; border: 1px solid transparent; border-radius: var(--radius-md, 6px);
+}
+.hp-sel-x:hover { color: var(--text); border-color: var(--border); }
 .hp-pin-dot { display: none; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); flex: 0 0 auto; }
 .hp-pinned .hp-pin-dot { display: inline-block; }
 
@@ -116,11 +130,15 @@
 /* Phones: full screen (or bottom sheet); the float / side layouts don't apply. */
 @media (max-width: 560px) {
   .hp-docks [data-dock="float"], .hp-docks [data-dock="side"] { display: none; }
+  .hp-selmode .hp-size { display: none; } /* room for "lines 5–8" next to the badge */
   .hp-seg [data-dev="tablet"], .hp-seg [data-dev="desktop"] { display: none; }
   #htmlpreview-panel.hp-bottom { height: 50vh; }
 }
 @media (pointer: coarse) {
   .hp-ib { min-width: 40px; height: 38px; }
+  .hp-as { height: 40px; font-size: 16px; padding: 0 8px; }
+  .hp-sel-x { width: 40px; height: 40px; font-size: 20px; }
+  .hp-selmode .hp-src { padding-top: 2px; padding-bottom: 2px; }
   .hp-ib svg { width: 17px; height: 17px; }
   .hp-link { padding: 8px 6px; }
   .hp-side .hp-resize { width: 14px; }
