@@ -2,7 +2,14 @@
  * is previewed as Markdown). Exposes window.__cadeMdPreview (module.exports in
  * node for tests):
  *
- *   create(marked) -> { render(src, cb) -> [{k, l, h}], shellDoc(token, vars), staticDoc(blocks, vars, imgs, embeds) }
+ *   create(marked) -> { render(src, cb, opts) -> [{k, l, h}], shellDoc(token, vars, ext), staticDoc(blocks, vars, imgs, embeds, ext) }
+ *
+ * opts: { as: 'auto' (the whole note: Markdown, or one table / tree when the note
+ * is CSV / TSV, XML, SOAP or JSON) | 'md' | 'xml' | 'soap' | 'json' | 'csv' | 'tsv' |
+ * 'text', line0: the editor line of src's first line } — Live Preview renders a
+ * selection with these. ext: { css, js (run in the shell before it starts),
+ * html(body) for the static page } — the XML / SOAP / JSON tree views
+ * (htmlpreview-tree.js).
  *
  * render() turns the note into top-level blocks of HTML: k = a key (content
  * hash + occurrence), l = the block's first editor line, h = its HTML. The
@@ -16,11 +23,12 @@
  * highlights (%%yellow|text%%, %%bg/fg|text%%, legacy ==color|text==),
  * ||spoilers||, pasted / drawn images (![img:…], resolved by the app), file
  * pills, footnotes ([^id] + "[^id]: text"), lightly highlighted code,
- * ```csv / ```tsv tables, ```postcard ASCII postcards in colour (decoded here,
+ * ```csv / ```tsv tables, ```xml / ```soap / ```json trees (via cb.tree), ```postcard ASCII postcards in colour (decoded here,
  * no widget needed), ```voice notes as a still waveform (no playback: the
  * frame can't reach the file store) and ```html blocks as live embedded pages
  * (with the ```css / ```js beside them).
- * cb: { embed(line, code) -> key | '', image(code, isRef, data) -> key }.
+ * cb: { embed(line, code) -> key | '', image(code, isRef, data) -> key,
+ *       tree(lang, text, line, off) -> block HTML | '', sniff(src) -> 'xml' | 'json' | '' }.
  * A private marked instance (new marked.Marked) — the File Converter's global
  * marked config is untouched. ES5. */
 (function (root) {
@@ -351,6 +359,9 @@
       (bars ? '<div class="md-vn-w">' + bars + '</div>' : '') + '</figure>\n';
   }
 
+  // fence languages drawn as trees (when the app gives a cb.tree)
+  var TREE_LANGS = { xml: 'xml', soap: 'soap', wsdl: 'xml', xsd: 'xml', xsl: 'xml', xslt: 'xml', rss: 'xml', atom: 'xml', plist: 'xml', json: 'json', geojson: 'json' };
+
   function fmtSize(n) { n = +n || 0; return n < 1024 ? n + ' B' : n < 1048576 ? (n / 1024).toFixed(n < 10240 ? 1 : 0) + ' KB' : (n / 1048576).toFixed(1) + ' MB'; }
 
   function create(marked) {
@@ -433,6 +444,10 @@
           if ((lang === 'csv' || lang === 'tsv') && t.text.trim()) return csvTable(t.text, lang === 'tsv' ? '\t' : sniffDelim(t.text) || ',');
           if (lang === 'postcard') { var pc = postcard(info, t.text); if (pc) return pc; }
           if (lang === 'voice') { var vn = voice(info, t.text); if (vn) return vn; }
+          if (TREE_LANGS[lang] && cur && cur.tree && t.text.trim()) {
+            var tr = cur.tree(TREE_LANGS[lang], t.text, t.__l ? t.__l + 1 : 0, 1);
+            if (tr) return tr;
+          }
           if (lang === 'html' && t.__l && cur && cur.embed) {
             var ek = cur.embed(t.__l, t.text);
             if (ek) return '<div class="md-embed" data-ek="' + esc(ek) + '"></div>\n';
@@ -468,14 +483,26 @@
       }
     }
 
-    function render(src, cb) {
+    function one(h, l) { cur = null; return [{ k: hash(h) + '.1', l: l, h: h }]; }
+    function render(src, cb, opts) {
       cur = cb || {}; slugs = {};
       src = String(src || '').replace(/\r\n?/g, '\n');
+      var as = (opts && opts.as) || 'auto', line0 = (opts && opts.line0) || 1;
       var out = [], seen = {}, toks;
-      var dl = src.length < 2000000 ? sniffDelim(src) : '';
-      if (dl) { var th = csvTable(src, dl); cur = null; return [{ k: hash(th) + '.1', l: 1, h: th }]; }
-      try { toks = M.lexer(src); } catch (e) { cur = null; return [{ k: 'err', l: 1, h: '<pre class="md-err">' + esc(src) + '</pre>' }]; }
-      annotate(toks, src, 1);
+      if (as === 'xml' || as === 'soap' || as === 'json') {
+        var tv = cur.tree ? cur.tree(as, src, line0, 0) : '';
+        return one(tv || '<div class="md-code"><pre><code>' + highlight(src, as === 'json' ? 'json' : 'xml') + '</code></pre></div>\n', line0);
+      }
+      if (as === 'text') return one('<pre class="md-text">' + esc(src) + '</pre>\n', line0);
+      if (as === 'csv' || as === 'tsv') return one(csvTable(src, as === 'tsv' ? '\t' : sniffDelim(src) || ',') || '<p class="md-err">(empty)</p>', line0);
+      if (as === 'auto') {
+        var dl = src.length < 2000000 ? sniffDelim(src) : '';
+        if (dl) return one(csvTable(src, dl), line0);
+        var ty = cur.sniff ? cur.sniff(src) : '';
+        if (ty && cur.tree) { var th = cur.tree(ty, src, line0, 0); if (th) return one(th, line0); }
+      }
+      try { toks = M.lexer(src); } catch (e) { cur = null; return [{ k: 'err', l: line0, h: '<pre class="md-err">' + esc(src) + '</pre>' }]; }
+      annotate(toks, src, line0);
       for (var i = 0; i < toks.length; i++) {
         var t = toks[i];
         if (t.type === 'space' || t.type === 'def') continue;
@@ -565,14 +592,16 @@
     (function () { var s = ''; for (var i = 0; i < 8; i++) s += '.md-vn-w .v' + i + '{height:' + Math.round(12 + i * 88 / 7) + '%}'; return s; })(),
     '@media print{.md-vn{break-inside:avoid;-webkit-print-color-adjust:exact;print-color-adjust:exact}}',
     '.md-err{color:var(--text-muted)}',
+    '.md-text{white-space:pre-wrap;word-break:break-word;font:13px/1.55 var(--font-mono)}',
     '.md-empty{color:var(--text-faint);text-align:center;padding:48px 12px}',
     '@media (max-width:520px){.md{padding:14px 14px 56px}body{font-size:15.5px}}',
   ].join('\n');
 
   // Runs inside the sandboxed iframe (ES5, shipped via toString).
   function SHELL(TOKEN) {
-    var P = window.parent, root = document.getElementById('md'), imgs = {}, embeds = {}, curEl = null;
+    var P = window.parent, root = document.getElementById('md'), imgs = {}, embeds = {}, trees = {}, curEl = null, TV = window.__cadeTV;
     function up(m) { m.__md = TOKEN; try { P.postMessage(m, '*'); } catch (e) {} }
+    if (TV) TV.init(up);
     function blockOf(el) { while (el && el.parentNode !== root) el = el.parentNode; return el; }
     function mount(ph) {
       if (ph.firstChild) return;
@@ -657,6 +686,9 @@
       for (i = 0; i < a.length; i++) { var s = imgs[a[i].getAttribute('data-cimg')]; if (s && a[i].getAttribute('src') !== s) a[i].src = s; }
       var e = el.querySelectorAll('.md-embed[data-ek]');
       for (i = 0; i < e.length; i++) mount(e[i]);
+      if (!TV) return;
+      var t = el.querySelectorAll('.tv[data-tv]');
+      for (i = 0; i < t.length; i++) { var d = trees[t[i].getAttribute('data-tv')]; if (d) TV.mount(t[i], d); }
     }
     function render(list) {
       var want = {}, have = {}, i, kids;
@@ -676,6 +708,7 @@
           el = document.createElement('div');
           el.className = 'md-b';
           el.setAttribute('data-k', b.k);
+          el.setAttribute('data-l', String(b.l));
           el.innerHTML = b.h;
           fill(el);
           enhance(el);
@@ -687,10 +720,11 @@
       if (!list.length) root.innerHTML = '<div class="md-empty">This note is empty.</div>';
       else { var em = root.querySelector('.md-empty'); if (em) em.remove(); }
       // forget images / pages no block uses any more (the app forgets them too)
-      var live = {}, ph = root.querySelectorAll('[data-ek],[data-cimg]'), k2;
-      for (i = 0; i < ph.length; i++) live[ph[i].getAttribute('data-ek') || ph[i].getAttribute('data-cimg')] = 1;
+      var live = {}, ph = root.querySelectorAll('[data-ek],[data-cimg],[data-tv]'), k2;
+      for (i = 0; i < ph.length; i++) live[ph[i].getAttribute('data-ek') || ph[i].getAttribute('data-cimg') || ph[i].getAttribute('data-tv')] = 1;
       for (k2 in embeds) if (!live[k2]) delete embeds[k2];
       for (k2 in imgs) if (!live[k2]) delete imgs[k2];
+      for (k2 in trees) if (!live[k2]) delete trees[k2];
     }
     function toLine(n, force) {
       var kids = root.children, best = null;
@@ -712,6 +746,7 @@
         if (m.type === 'render') render(m.blocks || []);
         else if (m.type === 'img') { imgs[m.key] = m.src; fill(root); }
         else if (m.type === 'embeds') { (m.list || []).forEach(function (x) { embeds[x.ek] = x.html; }); fill(root); }
+        else if (m.type === 'trees') { (m.list || []).forEach(function (x) { trees[x.tk] = x.data; }); fill(root); }
         else if (m.type === 'line') toLine(+m.line || 1, !!m.force);
         else if (m.type === 'vars') { var v = document.getElementById('md-vars'); if (v) v.textContent = m.css; }
         else if (m.type === 'print') { try { window.print(); } catch (x) {} }
@@ -730,6 +765,8 @@
       if (!t || !t.closest) return;
       // the box flips when the note does (the block re-renders) — read-only notes stay as they are
       if (t.matches('input[type=checkbox][data-tl]')) { e.preventDefault(); up({ type: 'task', line: +t.getAttribute('data-tl') }); return; }
+      var g = t.closest('[data-goto]');
+      if (g) { up({ type: 'goto', line: +g.getAttribute('data-goto') }); return; }
       var th = t.closest('th.md-sort');
       if (th) {
         var tbl = th.closest('table'), s = tbl && tbl.__s, c = +th.getAttribute('data-c');
@@ -756,19 +793,23 @@
   }
 
   // vars: CSS text for :root (--bg, --text, … taken from the app's theme)
-  function shellDoc(token, vars) {
+  function shellDoc(token, vars, ext) {
+    ext = ext || {};
     return '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">' +
-      '<base target="_blank"><title>Preview</title><style id="md-vars">' + vars + '</style><style>' + CSS + '</style></head>' +
-      '<body><article id="md" class="md"></article><script>(' + SHELL.toString() + ')(' + JSON.stringify(String(token)) + ');<\/script></body></html>';
+      '<base target="_blank"><title>Preview</title><style id="md-vars">' + vars + '</style><style>' + CSS + (ext.css ? '\n' + ext.css : '') + '</style></head>' +
+      '<body><article id="md" class="md"></article>' + (ext.js ? '<script>' + String(ext.js).replace(/<\/script/gi, '<\\/script') + '<\/script>' : '') +
+      '<script>(' + SHELL.toString() + ')(' + JSON.stringify(String(token)) + ');<\/script></body></html>';
   }
   // A standalone page (Copy / Open in a new tab): images inlined, html blocks as sandboxed frames.
-  function staticDoc(blocks, vars, imgs, embeds) {
+  function staticDoc(blocks, vars, imgs, embeds, ext) {
+    ext = ext || {};
     var body = blocks.map(function (b) { return b.h; }).join('\n')
       .replace(/<img class="md-cimg" alt="image" data-cimg="([^"]*)"/g, function (m0, k) { return imgs[k] ? '<img class="md-cimg" alt="image" src="' + esc(imgs[k]) + '"' : m0; })
       .replace(/<div class="md-embed" data-ek="([^"]*)"><\/div>/g, function (m0, k) {
         return embeds[k] ? '<div class="md-embed"><iframe class="md-embed-f" style="height:360px" sandbox="allow-scripts allow-modals allow-forms allow-popups" srcdoc="' + esc(embeds[k]) + '"></iframe></div>' : '';
       });
-    return '<!doctype html>\n<html>\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1">\n<title>Note</title>\n<style>\n' + vars + '\n' + CSS +
+    if (ext.html) body = ext.html(body);
+    return '<!doctype html>\n<html>\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1">\n<title>Note</title>\n<style>\n' + vars + '\n' + CSS + (ext.css ? '\n' + ext.css : '') +
       '\n.md-spoiler:hover{background:var(--surface-2);color:inherit}.md-spoiler:hover *{visibility:visible}\n</style>\n</head>\n<body>\n<article class="md">\n' + body + '\n</article>\n</body>\n</html>\n';
   }
 

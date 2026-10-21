@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "version": "2026.10.22-9",
+  "version": "2026.10.23-1",
   "modules": [
     {
       "id": "crawler",
@@ -362,6 +362,68 @@
           "description": "Apply ROT13 cipher (rotate letters by 13)",
           "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='3' y='11' width='18' height='11' rx='2' ry='2'/><path d='M7 11V7a5 5 0 0 1 10 0v4'/></svg>",
           "tags": "rot13,cipher,encode,decode,crypto,fun"
+        }
+      ]
+    },
+    {
+      "id": "pack-markup",
+      "type": "script-pack",
+      "name": "Markup Pack",
+      "description": "XML, SOAP, JSON, HTML and Markdown: convert between them (XML ↔ JSON, SOAP ↔ JSON, XML / SOAP / JSON → Markdown or HTML, HTML / Markdown → a JSON or XML document tree) and validate XML — on the selection, the ``` block at the cursor or the note",
+      "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='8 6 3 12 8 18'/><polyline points='16 6 21 12 16 18'/><line x1='14' y1='4' x2='10' y2='20'/></svg>",
+      "tags": "xml,soap,json,html,markdown,md,convert,converter,xml to json,json to xml,soap to json,json to soap,html to markdown,markdown to html,html to json,markdown to json,validate,well-formed,envelope,namespaces,document tree,wsdl",
+      "entry": "scripts/pack-markup/pack-markup.js",
+      "precache": [
+        "scripts/pack-markup/markup-core.js"
+      ],
+      "scripts": [
+        {
+          "name": "Convert to JSON",
+          "description": "XML (namespaces kept as prefixed keys, \"@attr\", \"#text\", repeats → arrays), a SOAP envelope (Body payload, or {fault}) or HTML / Markdown (a document tree of sections, paragraphs, lists, tables, code, links) → JSON — the selection, the ``` block at the cursor or the note",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M8 3H7a2 2 0 0 0-2 2v5a2 2 0 0 1-2 2 2 2 0 0 1 2 2v5a2 2 0 0 0 2 2h1'/><path d='M16 21h1a2 2 0 0 0 2-2v-5a2 2 0 0 1 2-2 2 2 0 0 1-2-2V5a2 2 0 0 0-2-2h-1'/></svg>",
+          "tags": "convert,json,xml to json,soap to json,html to json,markdown to json,md to json,xml,soap,html,markdown,md,document tree,parse,envelope,namespaces"
+        },
+        {
+          "name": "XML → JSON (strip namespaces)",
+          "description": "XML or SOAP → JSON with the namespace prefixes and xmlns declarations dropped (\"soap:Body\" → \"Body\")",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M8 3H7a2 2 0 0 0-2 2v5a2 2 0 0 1-2 2 2 2 0 0 1 2 2v5a2 2 0 0 0 2 2h1'/><path d='M16 21h1a2 2 0 0 0 2-2v-5a2 2 0 0 1 2-2 2 2 0 0 1-2-2V5a2 2 0 0 0-2-2h-1'/></svg>",
+          "tags": "xml,json,xml to json,convert,strip,namespaces,prefixes,xmlns,soap,local name"
+        },
+        {
+          "name": "Convert to XML",
+          "description": "JSON (a single top-level key is the root; arrays → repeated elements; \"@attr\" / \"#text\" honoured; invalid names escaped as _xHHHH_) or HTML / Markdown (the document tree) → XML",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='8 6 3 12 8 18'/><polyline points='16 6 21 12 16 18'/><line x1='14' y1='4' x2='10' y2='20'/></svg>",
+          "tags": "convert,xml,json to xml,html to xml,markdown to xml,md to xml,json,html,markdown,md,document tree,elements"
+        },
+        {
+          "name": "JSON → XML…",
+          "description": "JSON → XML with the root element name you choose",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='8 6 3 12 8 18'/><polyline points='16 6 21 12 16 18'/><line x1='14' y1='4' x2='10' y2='20'/></svg>",
+          "tags": "json,xml,json to xml,convert,root,element,name,prompt"
+        },
+        {
+          "name": "JSON → SOAP Envelope…",
+          "description": "Wrap JSON parameters in a SOAP 1.1 / 1.2 envelope — asks for the operation name, its namespace and the version ({\"fault\": {…}} becomes a Fault)",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='3' y='5' width='18' height='14' rx='2'/><polyline points='3 7 12 13 21 7'/></svg>",
+          "tags": "soap,envelope,json to soap,wsdl,web service,request,operation,namespace,fault,xml,convert,1.1,1.2"
+        },
+        {
+          "name": "Convert to Markdown",
+          "description": "XML, a SOAP envelope, JSON (headings for top-level keys, tables for lists of records, nested lists) or HTML → readable Markdown",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='2' y='5' width='20' height='14' rx='2'/><path d='M6 15V9l2.5 3L11 9v6'/><path d='M17 9v6M15 13l2 2 2-2'/></svg>",
+          "tags": "convert,markdown,md,xml to markdown,json to markdown,soap to markdown,html to markdown,html to md,readable,table,list"
+        },
+        {
+          "name": "Convert to HTML",
+          "description": "XML, a SOAP envelope, JSON (headings, definition lists, tables — escaped) or Markdown → a clean HTML fragment",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M4 3h16l-1.5 16L12 21l-6.5-2L4 3z'/><path d='M15.5 8H8.5l.3 3.5h6.4l-.4 3.5-2.8 1-2.8-1'/></svg>",
+          "tags": "convert,html,markdown to html,md to html,xml to html,json to html,soap to html,render,table,definition list"
+        },
+        {
+          "name": "Validate XML",
+          "description": "Check that the selection, the ``` block at the cursor or the note is well-formed XML (with namespaces) — the first error with its line and column, the cursor moved there; SOAP envelopes are recognised",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z'/><polyline points='9 12 11 14 15 10'/></svg>",
+          "tags": "validate,xml,well-formed,wellformed,check,lint,parse,error,soap,namespaces,xsd,wsdl"
         }
       ]
     },
@@ -2025,14 +2087,16 @@
       "id": "htmlpreview",
       "type": "widget",
       "name": "Live Preview",
-      "description": "See the note rendered as you type — Markdown in full (sortable, filterable tables and CSV, tasks, callouts, images…) and ```html blocks as live pages (+ nearby css / js) — devices, console, print, full screen",
+      "description": "See the note rendered as you type — Markdown in full (sortable, filterable tables and CSV, tasks, callouts, images…), ```html blocks as live pages (+ nearby css / js), XML / SOAP / JSON as collapsible trees (SOAP envelopes and Faults at a glance) — or select any snippet (HTML, XML, JSON, Markdown…) and preview just that; devices, console, print, full screen",
       "icon": "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"2\" y=\"4\" width=\"20\" height=\"16\" rx=\"2\"/><path d=\"M2 8h20\"/><polyline points=\"9 12 7 14 9 16\"/><polyline points=\"15 12 17 14 15 16\"/></svg>",
-      "tags": "markdown,md,preview,live preview,live html preview,render,rendered,reading view,read mode,html,css,js,javascript,live,web,page,browser,sandbox,iframe,frontend,codepen,playground",
+      "tags": "markdown,md,preview,live preview,live html preview,render,rendered,reading view,read mode,html,css,js,javascript,live,web,page,browser,sandbox,iframe,frontend,codepen,playground,xml,soap,json,tree,viewer,xpath,jsonpath,envelope,fault,wsdl,selection,snippet",
       "entry": "widgets/htmlpreview/htmlpreview.js",
       "css": "widgets/htmlpreview/htmlpreview.css",
       "precache": [
         "widgets/coderun/coderun-kit.js",
-        "widgets/htmlpreview/htmlpreview-md.js"
+        "widgets/htmlpreview/htmlpreview-md.js",
+        "widgets/htmlpreview/htmlpreview-tree.js",
+        "scripts/pack-markup/markup-core.js"
       ]
     },
     {

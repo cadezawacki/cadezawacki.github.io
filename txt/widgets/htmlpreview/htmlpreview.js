@@ -10,6 +10,18 @@
  *   ```javascript blocks right before / after it in the same section).
  * - Auto (default): HTML while the cursor is in an html / css / js block,
  *   Markdown everywhere else.
+ * - XML / SOAP / JSON: ```xml / ```soap / ```json blocks (and a note that is
+ *   itself XML or JSON) render as collapsible trees (htmlpreview-tree.js, parsed
+ *   by scripts/pack-markup/markup-core.js): syntax colours, namespaces, counts,
+ *   expand / collapse all, XPath / JSONPath to copy, errors with line / column.
+ *   SOAP 1.1 / 1.2 envelopes get a SOAP view (header entries, operation +
+ *   namespace, parameters as nested tables, Faults up front).
+ * - Selection: run Live Preview with text selected and it previews just that —
+ *   no ``` fence needed. The type is sniffed (HTML fragment / page, XML, SOAP,
+ *   JSON, CSV / TSV, else Markdown); a badge shows it and can override it (HTML /
+ *   Markdown / XML / JSON / Text). HTML renders exactly as an ```html block would.
+ *   What is previewed: the selection (while the badge shows; edits inside it
+ *   update live; × or a mode button returns) > the block at the cursor > the note.
  *
  * - Sandbox: allow-scripts allow-modals allow-forms allow-popups, never
  *   allow-same-origin, so the page can't reach the app, its storage or cookies.
@@ -38,6 +50,8 @@
   var KIT_URL = abs(/widgets\/htmlpreview\/$/.test(BASE) ? BASE.replace(/widgets\/htmlpreview\/$/, 'widgets/coderun/coderun-kit.js') : './txt/widgets/coderun/coderun-kit.js');
 
   var MD_URL = abs(Cade.asset('htmlpreview-md.js'));
+  var TREE_URL = abs(Cade.asset('htmlpreview-tree.js'));
+  var CORE_URL = abs(/widgets\/htmlpreview\/$/.test(BASE) ? BASE.replace(/widgets\/htmlpreview\/$/, 'scripts/pack-markup/markup-core.js') : './txt/scripts/pack-markup/markup-core.js');
   // marked (MIT) for the Markdown view: pinned, SHA-256-checked, kept in our own
   // Cache Storage bucket so it survives app updates and works offline (the File
   // Converter's bucket is checked first — same file).
@@ -125,11 +139,23 @@
       document.head.appendChild(s);
     });
   }
+  // The XML / SOAP / JSON trees: the markup core (shared with the Markup Pack) + the tree view. Local files.
+  var CORE = null, TV = null, TVX = null, coreP = null;
+  function loadCore() {
+    if (CORE) return Promise.resolve(CORE);
+    if (coreP) return coreP;
+    coreP = Promise.all([window.__cadeMarkup ? 0 : addScript(CORE_URL, null), window.__cadeTreeView ? 0 : addScript(TREE_URL, null)]).then(function () {
+      if (!window.__cadeMarkup || !window.__cadeTreeView) throw new Error('Preview failed to start');
+      CORE = window.__cadeMarkup; TV = window.__cadeTreeView; TVX = TV.ext();
+      return CORE;
+    }, function () { coreP = null; throw new Error('Preview failed to load (offline?)'); });
+    return coreP;
+  }
   function loadMd() {
     if (MDM) return Promise.resolve(MDM);
     if (mdP) return mdP;
     var lib = window.marked && window.marked.Marked ? Promise.resolve() : markedText().then(function (t) { return addScript(MARKED.url, t); });
-    mdP = Promise.all([lib, window.__cadeMdPreview ? 0 : addScript(MD_URL, null)]).then(function () {
+    mdP = Promise.all([lib, window.__cadeMdPreview ? 0 : addScript(MD_URL, null), loadCore().catch(function () {})]).then(function () {
       if (!window.marked || !window.marked.Marked || !window.__cadeMdPreview) throw new Error('Markdown preview failed to start');
       MDM = window.__cadeMdPreview.create(window.marked);
       return MDM;
@@ -142,7 +168,7 @@
   var st = null; // per-open state
   function freshState() {
     return { anchor: null, pinned: false, key: '', token: '', scroll: null, cache: { doc: null, blocks: null },
-      con: [], errs: 0, built: null, label: '', mode: '', modeOverride: '', md: null };
+      con: [], errs: 0, built: null, label: '', mode: '', modeOverride: '', md: null, sel: null };
   }
 
   // ---- blocks ------------------------------------------------------------------------------------
@@ -230,6 +256,9 @@
     if (!panel || !K || !ed || !ifr) return;
     if (Cade.isMinimized && Cade.isMinimized(panel)) return; // parked in the dock: catch up on restore
     if (Cade.roomAway && Cade.roomAway(panel)) return;       // locked to a room that isn't open: keep showing it
+    if (st.sel && st.sel.doc !== ed.state.doc) endSel();     // another note: the selection is gone
+    if (st.sel) { refreshSel(force); return; }
+    markSel(null);
     var mode = effectiveMode();
     panel.classList.toggle('hp-mdmode', mode === 'md');
     markMode();
@@ -287,18 +316,26 @@
   Cade.onEditorUpdate(function (u) {
     if (!panel || !st) return;
     if (u.docChanged) {
+      var S = st.sel;
+      if (S && S.doc === u.startState.doc) {
+        var whole = false, len0 = u.startState.doc.length;
+        u.changes.iterChangedRanges(function (fa, ta) { if (fa === 0 && ta === len0 && len0) whole = true; });
+        S.from = u.changes.mapPos(S.from, -1); S.to = u.changes.mapPos(S.to, 1); S.doc = u.state.doc;
+        if (whole || S.to <= S.from) endSel();   // the note was replaced, or the selected text deleted
+      }
       if (st.anchor && st.anchor.doc === u.startState.doc) {
         st.anchor.openFrom = u.changes.mapPos(st.anchor.openFrom, 1);
         st.anchor.doc = u.state.doc;
       }
       // Markdown re-renders the whole note: give long notes a little more breathing room
       schedule(st.mode === 'md' ? Math.min(1200, 250 + (u.state.doc.length >> 12)) : 300);
-    } else if (u.selectionSet && !st.pinned) schedule(150);
+    } else if (u.selectionSet && !st.pinned && !st.sel) schedule(150);
   });
 
   // ---- Markdown view ----------------------------------------------------------------------------
   // One shell document stays in the iframe; blocks are swapped by key (see htmlpreview-md.js).
-  function refreshMd(force) {
+  // src (selection mode): { text, line0, as } — else the whole note.
+  function refreshMd(force, src) {
     if (!MDM) {
       showEmpty(true, 'Loading the Markdown renderer…');
       loadMd().then(function () { if (panel) refresh(true); }, function (e) { if (panel) showEmpty(true, e.message); });
@@ -307,30 +344,130 @@
     var ed = Cade.editor, doc = ed.state.doc;
     if (st.mode !== 'md' || !st.md) startShell();
     showEmpty(false);
-    var M = st.md;
-    if (force || M.doc !== doc) {
-      M.doc = doc; M.used = {}; M.usedImgs = {};
-      var big = doc.length > MD_MAX;
-      M.blocks = MDM.render(big ? doc.sliceString(0, MD_MAX) : doc.toString(), { embed: embedFor, image: imageFor });
-      if (big) M.blocks.push({ k: 'cap', l: doc.lineAt(MD_MAX).number, h: '<p class="md-err">… the rest of this note (' + Math.round(doc.length / 1000) + 'k characters in all) is too long to preview.</p>' });
+    var M = st.md, sk = src ? src.as + '|' + src.line0 : '';
+    if (force || M.doc !== doc || M.srcKey !== sk || (src && M.srcText !== src.text)) {
+      M.doc = doc; M.used = {}; M.usedImgs = {}; M.usedTrees = {}; M.srcKey = sk; M.srcText = src ? src.text : null; M.sniffed = '';
+      var cb = { embed: embedFor, image: imageFor, tree: treeFor, sniff: sniffNote };
+      if (src) M.blocks = MDM.render(src.text.length > MD_MAX ? src.text.slice(0, MD_MAX) : src.text, cb, { as: src.as, line0: src.line0 });
+      else {
+        var big = doc.length > MD_MAX;
+        M.blocks = MDM.render(big ? doc.sliceString(0, MD_MAX) : doc.toString(), cb);
+        if (big) M.blocks.push({ k: 'cap', l: doc.lineAt(MD_MAX).number, h: '<p class="md-err">… the rest of this note (' + Math.round(doc.length / 1000) + 'k characters in all) is too long to preview.</p>' });
+      }
       Object.keys(M.embeds).forEach(function (k) { if (!M.used[k]) { delete M.embeds[k]; delete M.sentEmbeds[k]; } });
       Object.keys(M.imgs).forEach(function (k) { if (!M.usedImgs[k]) { delete M.imgs[k]; delete M.sentImgs[k]; } });
+      Object.keys(M.trees).forEach(function (k) { if (!M.usedTrees[k]) { delete M.trees[k]; delete M.sentTrees[k]; } });
       resolveImages();
       sendRender();
-      setLabelText('Markdown · ' + M.blocks.length + ' block' + (M.blocks.length === 1 ? '' : 's') + (modePref() === 'auto' ? '  (auto)' : ''));
+      if (!src) setLabelText((M.sniffed ? M.sniffed.toUpperCase() + ' · the whole note' : 'Markdown · ' + M.blocks.length + ' block' + (M.blocks.length === 1 ? '' : 's')) + (modePref() === 'auto' ? '  (auto)' : ''));
     }
     syncLine(false);
+  }
+
+  // ---- XML / SOAP / JSON trees ------------------------------------------------------------------
+  var treeCache = [], lastParse = null;
+  // cb.tree for the Markdown renderer: the block's HTML; its tree data goes to the frame keyed by tk
+  function treeFor(lang, text, line, off) {
+    var M = st.md;
+    if (!TV || !CORE || !M) return '';
+    var r = null, i;
+    for (i = 0; i < treeCache.length; i++) {
+      var c = treeCache[i];
+      if (c.lang === lang && c.off === off && c.text === text && (c.r.tk || c.line === line)) { r = c.r; break; } // errors carry their line
+    }
+    if (!r) {
+      r = TV.build(CORE, lang === 'soap' ? 'xml' : lang, text, { line: line || 1, off: off, parsed: lastParse, highlight: MDM.highlight, hash: MDM.hash });
+      treeCache.unshift({ lang: lang, off: off, line: line, text: text, r: r });
+      if (treeCache.length > 8) treeCache.pop();
+    }
+    if (r.tk) { M.usedTrees[r.tk] = 1; if (!M.trees[r.tk]) M.trees[r.tk] = r.data; }
+    return r.h;
+  }
+  // cb.sniff: a whole note that is XML / SOAP (well-formed, or starting with <?xml) or valid JSON is one tree
+  function sniffNote(src) {
+    var M = st.md, m = /^\s*([<{\[])/.exec(src.slice(0, 4000));
+    if (!CORE || !m) return '';
+    if (m[1] !== '<') { try { JSON.parse(src); M.sniffed = 'json'; return 'json'; } catch (e) { return ''; } }
+    var s = CORE.sniff(src);
+    if ((s.type !== 'xml' && s.type !== 'soap') || (s.xml.error && !/^\s*<\?xml/.test(src))) return '';
+    lastParse = { text: src, result: s.xml };
+    M.sniffed = s.type;
+    return 'xml';
+  }
+
+  // ---- selection mode -----------------------------------------------------------------------------
+  var AS_LABEL = { html: 'HTML', markdown: 'Markdown', md: 'Markdown', xml: 'XML', soap: 'SOAP', json: 'JSON', csv: 'CSV', tsv: 'TSV', text: 'Text' };
+  // the editor's selection, if it holds something to preview
+  function editorSel() {
+    var ed = Cade.editor, s = ed && ed.state.selection.main;
+    if (!s || s.empty || !/\S/.test(ed.state.sliceDoc(s.from, Math.min(s.to, s.from + 4000)))) return null;
+    return { from: s.from, to: s.to };
+  }
+  function startSel(r) {
+    st.sel = { from: r.from, to: r.to, doc: Cade.editor.state.doc, as: '', det: '', detText: null };
+    st.pinned = false;
+    if (panel) markPin();
+  }
+  function endSel() { st.sel = null; markSel(null); }
+  function selType(text) {
+    var S = st.sel;
+    if (S.detText !== text) {
+      var t = CORE.sniff(text).type;
+      if ((t === 'markdown' || t === 'text') && MDM) { var d = MDM.sniffDelim(text); t = d ? (d === '\t' ? 'tsv' : 'csv') : 'markdown'; }
+      if (t === 'text') t = 'markdown';
+      S.det = t; S.detText = text;
+    }
+    return S.det;
+  }
+  function refreshSel(force) {
+    var S = st.sel, ed = Cade.editor, doc = ed.state.doc;
+    if (!CORE) {
+      showEmpty(true, 'Loading…');
+      loadCore().then(function () { if (panel) refresh(true); }, function (e) { if (panel) showEmpty(true, e.message); });
+      return;
+    }
+    var text = doc.sliceString(S.from, S.to), det = selType(text), type = S.as || det;
+    var l0 = doc.lineAt(S.from).number, l1 = doc.lineAt(Math.max(S.from, S.to - 1)).number;
+    markSel(det, l0, l1);
+    panel.classList.toggle('hp-mdmode', type !== 'html');
+    markMode();
+    if (type !== 'html') { refreshMd(force, { text: text, line0: l0, as: type === 'markdown' ? 'md' : type }); return; }
+    // HTML: exactly what an ```html block with this text shows
+    if (st.mode !== 'html') { leaveMd(); st.mode = 'html'; st.key = ''; markPin(); applyConsole(); }
+    var parts = { html: { text: text, line: l0 }, css: [], js: [] }, key = 'sel' + JSON.stringify(parts);
+    if (!force && key === st.key) return;
+    st.key = key; st.label = 'Selection';
+    st.token = 'hp' + Math.random().toString(36).slice(2);
+    var built;
+    try { built = K.buildPreviewDoc(parts, { token: st.token, scroll: st.scroll }); }
+    catch (e) { toast('Preview failed: ' + (e && e.message), 'error'); return; }
+    st.built = built;
+    showEmpty(false);
+    clearConsole();
+    ifr.srcdoc = built.html;
+  }
+  // the badge: "Selection [Auto · XML ▾] ×" and the lines it covers
+  function markSel(det, l0, l1) {
+    var b = panel && panel.querySelector('.hp-sel');
+    if (!b) return;
+    b.hidden = !det;
+    panel.classList.toggle('hp-selmode', !!det);
+    if (!det) return;
+    var sel = b.querySelector('.hp-as'), auto = sel.options[0], lbl = 'Auto · ' + (AS_LABEL[det] || det);
+    if (auto.textContent !== lbl) auto.textContent = lbl;
+    if (sel.value !== st.sel.as) sel.value = st.sel.as;
+    setLabelText(l0 === l1 ? 'line ' + l0 : 'lines ' + l0 + '–' + l1);
   }
   function startShell() {
     leaveMd();
     st.mode = 'md'; st.key = ''; st.built = null;
     st.token = 'hp' + Math.random().toString(36).slice(2);
     st.md = { token: 'md' + Math.random().toString(36).slice(2), ready: false, keys: {}, doc: null, blocks: [], embeds: {}, sentEmbeds: {},
-      imgs: {}, sentImgs: {}, pending: [], used: {}, usedImgs: {}, lastLine: 0, vars: themeVars(), mo: null };
+      imgs: {}, sentImgs: {}, trees: {}, sentTrees: {}, usedTrees: {}, pending: [], used: {}, usedImgs: {}, lastLine: 0, vars: themeVars(), mo: null, srcKey: '', srcText: null, sniffed: '' };
     clearConsole();
     markPin();
     applyConsole();
-    ifr.srcdoc = MDM.shellDoc(st.md.token, st.md.vars);
+    ifr.srcdoc = MDM.shellDoc(st.md.token, st.md.vars, TVX);
     watchTheme();
   }
   function leaveMd() {
@@ -359,6 +496,9 @@
     var add = [];
     Object.keys(M.embeds).forEach(function (ek) { if (!M.sentEmbeds[ek]) { M.sentEmbeds[ek] = 1; add.push({ ek: ek, html: M.embeds[ek].html }); } });
     if (add.length) shellPost({ type: 'embeds', list: add });
+    var addT = [];
+    Object.keys(M.trees).forEach(function (tk) { if (!M.sentTrees[tk]) { M.sentTrees[tk] = 1; addT.push({ tk: tk, data: M.trees[tk] }); } });
+    if (addT.length) shellPost({ type: 'trees', list: addT });
     var next = {};
     var list = M.blocks.map(function (b) { var known = M.keys[b.k]; next[b.k] = 1; return known ? { k: b.k, l: b.l } : b; });
     M.keys = next;
@@ -421,11 +561,15 @@
   function onShell(m) {
     var M = st.md;
     if (m.type === 'ready' || m.type === 'resync') {
-      M.ready = true; M.keys = {}; M.sentEmbeds = {}; M.sentImgs = {};
+      M.ready = true; M.keys = {}; M.sentEmbeds = {}; M.sentImgs = {}; M.sentTrees = {};
       sendRender();
       if (m.type === 'ready') { M.lastLine = 0; syncLine(true); }
     } else if (m.type === 'task') toggleTask(+m.line);
     else if (m.type === 'goto') gotoLine(+m.line);
+    else if (m.type === 'copy') { // a tree's XPath / JSONPath: the frame copies when it can, else the app does
+      if (m.ok) toast((m.what || 'Path') + ' copied', 'success', 1500);
+      else copyText(String(m.text || ''), String(m.what || 'Path'));
+    }
   }
   var TASK_RE = /^(\s*(?:>\s*)*(?:[-*+]|\d+[.)])\s+\[)([ xX])\]/;
   function toggleTask(n) {
@@ -446,7 +590,7 @@
     if (!isPhone()) ed.focus();
   }
   // The note's colours and fonts, so the preview matches the theme.
-  var VARS = ['--bg', '--surface', '--surface-2', '--text', '--text-muted', '--text-faint', '--border', '--accent', '--font-body', '--font-mono'];
+  var VARS = ['--bg', '--surface', '--surface-2', '--text', '--text-muted', '--text-faint', '--border', '--accent', '--error', '--font-body', '--font-mono'];
   function isDarkColor(c) {
     var m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})/i.exec(c) || /(\d+)[,\s]+(\d+)[,\s]+(\d+)/.exec(c);
     if (!m) return false;
@@ -477,7 +621,7 @@
     if (!M || !MDM) return null;
     var embeds = {};
     Object.keys(M.embeds).forEach(function (k) { embeds[k] = M.embeds[k].clean; });
-    var html = MDM.staticDoc(M.blocks, themeVars(), M.imgs, embeds);
+    var html = MDM.staticDoc(M.blocks, themeVars(), M.imgs, embeds, TVX ? { css: TVX.css, html: function (h) { return TV.staticize(h, M.trees); } } : null);
     return { html: html, clean: html };
   }
 
@@ -651,6 +795,7 @@
     if (!t) return;
     var dev = t.getAttribute('data-dev'), dock = t.getAttribute('data-dock'), act = t.getAttribute('data-act'), mode = t.getAttribute('data-mode');
     if (mode) {
+      if (st.sel) endSel();
       prefs.mode = mode; st.modeOverride = ''; savePrefs();
       if (st.pinned) { st.pinned = false; markPin(); }
       refresh(true);
@@ -674,6 +819,7 @@
       renderConsole();
       setTimeout(layoutFrame, 0);
     } else if (act === 'conclear') clearConsole();
+    else if (act === 'unsel') { endSel(); refresh(true); }
     else if (act === 'tab') openInTab();
     else if (act === 'print') printPreview();
     else if (act === 'copy') {
@@ -691,7 +837,7 @@
     setTimeout(layoutFrame, 0);
   }
   function markMode() {
-    var b = panel.querySelectorAll('[data-mode]'), m = modePref();
+    var b = panel.querySelectorAll('[data-mode]'), m = st.sel ? '' : modePref();
     for (var i = 0; i < b.length; i++) b[i].classList.toggle('on', b[i].getAttribute('data-mode') === m);
   }
   function markPin() {
@@ -748,7 +894,12 @@
           ib('data-dock="bottom"', I.bottom, 'Dock bottom') + ib('data-dock="full"', I.full, 'Full screen') +
         '</div>' +
       '</div>' +
-      '<div class="hp-src"><span class="hp-pin-dot" title="Pinned"></span><span class="hp-src-text"></span><span class="hp-size"></span></div>' +
+      '<div class="hp-src"><span class="hp-pin-dot" title="Pinned"></span>' +
+        '<span class="hp-sel" hidden><span class="hp-sel-l">Selection</span>' +
+          '<select class="hp-as" aria-label="Preview the selection as"><option value="">Auto</option><option value="html">HTML</option><option value="md">Markdown</option>' +
+          '<option value="xml">XML / SOAP</option><option value="json">JSON</option><option value="text">Text</option></select>' +
+          '<button type="button" class="hp-sel-x" data-act="unsel" title="Stop previewing the selection" aria-label="Stop previewing the selection">×</button></span>' +
+        '<span class="hp-src-text"></span><span class="hp-size"></span></div>' +
       '<div class="hp-stage"><div class="hp-frame"></div>' +
         '<div class="hp-empty" hidden><div class="hp-empty-t"></div></div>' +
       '</div>' +
@@ -762,10 +913,12 @@
     p.remove();
     if (p._onClose) p._onClose();
   }
-  function openPanel() {
+  function openPanel(noSel) {
     Cade.closeAllMenus();
     st = freshState();
     st.modeOverride = openOverride; openOverride = '';
+    var r = noSel ? null : editorSel();
+    if (r) startSel(r);
     panel = Cade.mkPanel(PANEL_ID, 'Live Preview', panelHTML());
     panel.addEventListener('cade-panel-restore', function () { refresh(false); });
     // Lock to a room (Origami, Ctrl+P…); re-render whenever the panel's room is the open one again.
@@ -795,6 +948,11 @@
     var cb = panel.querySelector('[data-act="console"]');
     if (cb) cb.classList.toggle('on', prefs.con);
     body.addEventListener('click', onClick);
+    panel.querySelector('.hp-as').addEventListener('change', function (e) {
+      if (!st || !st.sel) return;
+      st.sel.as = e.target.value;
+      refresh(true);
+    });
     var handle = panel.querySelector('.hp-resize');
     handle.addEventListener('pointerdown', startResize);
     // While docked, dragging the title bar must not move the panel.
@@ -821,18 +979,31 @@
       if (conT) { clearTimeout(conT); conT = 0; }
       try { if (ifr) ifr.srcdoc = ''; } catch (e) {}
       leaveMd();
+      treeCache = []; lastParse = null;
       ifr = null; panel = null; st = null; keyHandler = null;
     };
     var ready = function () { if (panel) refresh(true); };
     if (K) ready();
     else loadKit().then(ready, function (e) { toast(e.message, 'error', 3500); close(); });
   }
-  function toggle() { if (panel) close(); else openPanel(); }
+  // Run with text selected: preview that selection (a new selection retargets the open panel); else open / close.
+  function toggle() {
+    if (!panel) { openPanel(); return; }
+    var r = editorSel();
+    if (r && st && !(st.sel && st.sel.from === r.from && st.sel.to === r.to)) {
+      startSel(r);
+      if (Cade.isMinimized && Cade.isMinimized(panel) && Cade.restorePanel) Cade.restorePanel(panel);
+      if (K) refresh(true);
+      return;
+    }
+    close();
+  }
 
   // For the Code Runner: open (or retarget) the preview at an html/css block.
   window.__cadeHtmlPreview = {
     openAt: function (pos) {
-      if (!panel) { openOverride = prefs.mode === 'md' ? 'auto' : ''; openPanel(); return; }
+      if (!panel) { openOverride = prefs.mode === 'md' ? 'auto' : ''; openPanel(true); return; }
+      if (st.sel) endSel();
       if (prefs.mode === 'md') st.modeOverride = 'auto'; // the Preview chip asks for the page
       st.pinned = false;
       panel.classList.remove('hp-pinned');
@@ -846,9 +1017,9 @@
 
   Cade.registerWidget({
     name: 'Live Preview',
-    description: 'See the note rendered as you type — Markdown in full (sortable, filterable tables and CSV, tasks, callouts, images…) and ```html blocks as live pages (+ nearby css / js) — devices, console, print, full screen',
+    description: 'See the note rendered as you type — Markdown in full (sortable, filterable tables and CSV, tasks, callouts, images…), ```html blocks as live pages (+ nearby css / js), XML / SOAP / JSON as collapsible trees (SOAP envelopes and Faults at a glance) — or select any snippet (HTML, XML, JSON, Markdown…) and preview just that; devices, console, print, full screen',
     icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M2 8h20"/><polyline points="9 12 7 14 9 16"/><polyline points="15 12 17 14 15 16"/></svg>',
-    tags: 'markdown,md,preview,live preview,live html preview,render,rendered,reading view,read mode,html,css,js,javascript,live,web,page,browser,sandbox,iframe,frontend,codepen,playground',
+    tags: 'markdown,md,preview,live preview,live html preview,render,rendered,reading view,read mode,html,css,js,javascript,live,web,page,browser,sandbox,iframe,frontend,codepen,playground,xml,soap,json,tree,viewer,xpath,jsonpath,envelope,fault,wsdl,selection,snippet',
     open: toggle
   });
 })();
