@@ -1,7 +1,10 @@
 /* ASCII Postcard view — renders each ```postcard block (see postcard-core.js
- * for the format) as its coloured card while the caret is elsewhere; put the
- * caret in it (click the card, ✎, or arrow into it) and the raw text is back
- * for editing, set small and tight (1 character = 1 cell) so the art lines up.
+ * for the format) as its coloured card. The card stays a card: tapping it,
+ * arrowing past it or a caret landing next to it never opens it (rendered
+ * blocks are atomic for cursor motion). Only ✎ shows the raw text, set small
+ * and tight (1 character = 1 cell) so the art lines up; ✓ Done, Escape or
+ * moving the selection out of the block closes it again. Typing right before
+ * or after a card goes on its own line instead of into the fence.
  * A bar under the card: caption · size, and ✎ edit / ⧉ copy the plain art /
  * ⤓ download it as a PNG picture / 🗑 delete (tap twice). Read-only notes render too; delete is refused.
  *
@@ -10,7 +13,8 @@
  * that, while the note has no "```postcard" line at all, an edit only looks at
  * the lines it touched; with postcards, an edit that touches a ``` line
  * rescans, any other edit maps the blocks and re-hashes only the one it hit.
- * A caret move only re-checks which blocks hold a selection end. Widgets are
+ * A caret move only re-checks whether the block being edited still holds a
+ * selection end. Widgets are
  * equal by content hash, so CM keeps their DOM; canvases are drawn when they
  * first scroll near the viewport (IntersectionObserver) from a small LRU of
  * rendered cards (by hash × width; device pixel ratio capped at 2, width at
@@ -57,14 +61,17 @@
     }
     return { n: n, blocks: blocks };
   }
-  // Which blocks hold a selection end ("1") → shown raw.
-  function openKey(sel, blocks) {
+  // Which block is shown raw ("1"): only the one opened with ✎ (it starts at
+  // `edit`), and only while a selection end is still inside it.
+  function openKey(sel, blocks, edit) {
     var k = '';
     for (var i = 0; i < blocks.length; i++) {
       var b = blocks[i], on = false;
-      for (var j = 0; j < sel.ranges.length && !on; j++) {
-        var r = sel.ranges[j];
-        on = (r.head >= b.from && r.head <= b.to) || (r.anchor >= b.from && r.anchor <= b.to);
+      if (b.from === edit) {
+        for (var j = 0; j < sel.ranges.length && !on; j++) {
+          var r = sel.ranges[j];
+          on = (r.head >= b.from && r.head <= b.to) || (r.anchor >= b.from && r.anchor <= b.to);
+        }
       }
       k += on ? '1' : '0';
     }
@@ -90,6 +97,7 @@
   if (!CM || !CM.StateField || !CM.Decoration || !CM.WidgetType || !CM.EditorView) return;
   Cade.loadCSS('postcard-view.css');
   var StateField = CM.StateField, Decoration = CM.Decoration, WidgetType = CM.WidgetType, EditorView = CM.EditorView;
+  var editFx = CM.StateEffect.define();   // value: the from of the block to show raw, or -1
   var CORE_URL = Cade.asset('postcard-core.js');
 
   function loadCore() {
@@ -213,7 +221,7 @@
     wrap.setAttribute('contenteditable', 'false');
     wrap.style.setProperty('--pc-w', cssW + 'px');
     var cap = b.cap || 'ASCII postcard';
-    wrap.innerHTML = '<div class="cm-pc-box"><div class="cm-pc-card" title="Edit the text"><canvas width="' + W + '" height="' + cardHeight(b.cols, b.rows, W) + '"></canvas></div>' +
+    wrap.innerHTML = '<div class="cm-pc-box"><div class="cm-pc-card"><canvas width="' + W + '" height="' + cardHeight(b.cols, b.rows, W) + '"></canvas></div>' +
       '<div class="cm-pc-bar"><span class="cm-pc-cap"></span><span class="cm-pc-meta"></span><span class="cm-pc-acts">' +
       '<button type="button" tabindex="-1" data-act="edit" title="Edit the text" aria-label="Edit">' + ICON.edit + '</button>' +
       '<button type="button" tabindex="-1" data-act="copy" title="Copy the art as plain text" aria-label="Copy">' + ICON.copy + '</button>' +
@@ -229,7 +237,8 @@
     wrap.addEventListener('pointerdown', function (e) { if (e.target.closest && e.target.closest('[data-act="png"]')) pngOf(wrap.__pc.b); });
     wrap.addEventListener('click', function (e) {
       e.preventDefault(); e.stopPropagation();
-      var btn = e.target.closest ? e.target.closest('[data-act]') : null, act = btn ? btn.getAttribute('data-act') : 'edit';
+      var btn = e.target.closest ? e.target.closest('[data-act]') : null, act = btn ? btn.getAttribute('data-act') : '';
+      if (!act) return;   // the picture itself: stays a picture
       var v = wrap.__pc.view, from;
       try { from = v.posAtDOM(wrap); } catch (x) { return; }
       var st = v.state, doc = st.doc;
@@ -241,7 +250,7 @@
       if (!blk) return;
       if (act === 'edit') {
         var at = Math.min(doc.length, L.to + 1);
-        v.dispatch({ selection: { anchor: at }, scrollIntoView: true, userEvent: 'select' });
+        v.dispatch({ selection: { anchor: at }, effects: editFx.of(blk.from), scrollIntoView: true, userEvent: 'select' });
         v.focus();
       } else if (act === 'png') {
         if (lastPng.h === blk.h && lastPng.r) { savePng(lastPng.r); return; }
@@ -309,42 +318,140 @@
     }
     return out;
   }
+  // ✓ Done at the end of the opening fence while a block is shown raw.
+  function Done(from) { this.from = from; }
+  Done.prototype = Object.create(WidgetType.prototype);
+  Done.prototype.constructor = Done;
+  Done.prototype.eq = function (o) { return o.from === this.from; };
+  Done.prototype.toDOM = function (view) {
+    var b = document.createElement('button'), from = this.from;
+    b.type = 'button'; b.tabIndex = -1; b.className = 'cm-pc-done'; b.textContent = '\u2713 Done';
+    b.title = 'Show the postcard again (Esc)';
+    b.addEventListener('mousedown', function (e) { e.preventDefault(); });
+    b.addEventListener('click', function (e) { e.preventDefault(); e.stopPropagation(); closeEdit(view); });
+    return b;
+  };
+  Done.prototype.ignoreEvent = function () { return true; };
+  // Back to the card: caret just after the block (on the next line when there is one).
+  function closeEdit(view) {
+    var v = view.state.field(field, false);
+    if (!v || v.edit < 0) return false;
+    var b = null;
+    for (var i = 0; i < v.blocks.length; i++) if (v.blocks[i].from === v.edit) b = v.blocks[i];
+    var doc = view.state.doc, at = b ? (b.to < doc.length ? b.to + 1 : b.to) : view.state.selection.main.head;
+    view.dispatch({ selection: { anchor: at }, effects: editFx.of(-1), scrollIntoView: true, userEvent: 'select' });
+    return true;
+  }
+
   var RAWC = Decoration.line({ class: 'cm-pc-rawc' }), rawDeco = {};
   function rawLine(cols) { return rawDeco[cols] || (rawDeco[cols] = Decoration.line({ class: 'cm-pc-raw', attributes: { style: '--pc-cols:' + cols } })); }
+  // Decorations, and the rendered cards alone as the atomic ranges.
   function build(doc, blocks, key) {
-    var out = [];
+    var out = [], cards = [];
     for (var i = 0; i < blocks.length; i++) {
       var b = blocks[i];
       if (!b.ok) continue;
-      if (key.charAt(i) === '0') { out.push(Decoration.replace({ widget: new Card(b), block: true }).range(b.from, b.to)); continue; }
+      if (key.charAt(i) === '0') { var c = Decoration.replace({ widget: new Card(b), block: true }).range(b.from, b.to); out.push(c); cards.push(c); continue; }
       // raw: one character per cell, so the art reads while it's edited
       var a = doc.lineAt(b.from).number + 1, z = doc.lineAt(b.to).number - 1, deco = rawLine(b.cols);
+      out.push(Decoration.widget({ widget: new Done(b.from), side: 1 }).range(doc.lineAt(b.from).to));
       for (var l = a; l <= z; l++) {
         var line = doc.line(l);
         out.push((l === z && l - a >= 1 && COLOR_RE.test(line.text.slice(0, 64)) ? RAWC : deco).range(line.from));
       }
     }
-    return out.length ? Decoration.set(out) : Decoration.none;
+    return { deco: out.length ? Decoration.set(out, true) : Decoration.none, atom: cards.length ? Decoration.set(cards) : Decoration.none };
+  }
+  function fxEdit(tr, edit) {
+    for (var i = 0; i < tr.effects.length; i++) if (tr.effects[i].is(editFx)) edit = tr.effects[i].value;
+    return edit;
   }
   function compute(v, st, tr) {
-    var sc;
+    var sc, edit = v ? v.edit : -1;
+    if (tr && tr.docChanged && edit >= 0) edit = tr.changes.mapPos(edit, 1);
+    if (tr && tr.effects.length) edit = fxEdit(tr, edit);
     if (!v) sc = scan(st.doc);
     else if (tr.docChanged) {
       if (!v.n) { if (!postcardTyped(tr)) return v; sc = scan(st.doc); }  // the common case: no postcards
       else if (fenceTouched(tr)) sc = scan(st.doc);
       else sc = { n: v.n, blocks: v.blocks.length ? remap(tr, v.blocks) : v.blocks };
-    } else if (tr.selection && v.blocks.length) sc = v;
+    } else if ((tr.selection || edit !== v.edit) && v.blocks.length) sc = v;
     else return v;
-    if (!sc.blocks.length) return v && !v.blocks.length && v.n === sc.n ? v : { n: sc.n, blocks: sc.blocks, key: '', deco: Decoration.none };
-    var key = openKey(st.selection, sc.blocks);
-    if (v && sc === v && key === v.key) return v;          // the caret moved; nothing opened or closed
-    return { n: sc.n, blocks: sc.blocks, key: key, deco: build(st.doc, sc.blocks, key) };
+    if (!sc.blocks.length) return v && !v.blocks.length && v.n === sc.n ? v : { n: sc.n, blocks: sc.blocks, key: '', edit: -1, deco: Decoration.none, atom: Decoration.none };
+    var key = openKey(st.selection, sc.blocks, edit);
+    if (key.indexOf('1') < 0) edit = -1;                    // the selection left it: a card again
+    if (v && sc === v && key === v.key && edit === v.edit) return v;   // the caret moved; nothing opened or closed
+    var d = build(st.doc, sc.blocks, key);
+    return { n: sc.n, blocks: sc.blocks, key: key, edit: edit, deco: d.deco, atom: d.atom };
   }
   var field = StateField.define({
     create: function (st) { return compute(null, st, null); },
     update: function (v, tr) { return compute(v, tr.state, tr); },
-    provide: function (f) { return EditorView.decorations.from(f, function (v) { return v.deco; }); },
+    provide: function (f) {
+      return [
+        EditorView.decorations.from(f, function (v) { return v.deco; }),
+        // cursor motion steps over a rendered card instead of into its text
+        EditorView.atomicRanges.of(function (view) { var v = view.state.field(f, false); return v ? v.atom : Decoration.none; }),
+      ];
+    },
   });
+  // A rendered card's two edges (the start of its ``` line and the end of its
+  // closing ```) are not places to type: the browser can't put its caret
+  // there, and text typed or joined there would vanish into the hidden fence.
+  // So an empty caret that lands on an edge steps over the card in the
+  // direction it was going (a card first or last in the note gets a blank
+  // line to stand on), Backspace after a card / Delete before it steps over
+  // it instead of merging lines, and typing at an edge goes on its own line.
+  function closedBlocks(v) {
+    var out = [];
+    for (var i = 0; i < v.blocks.length; i++) if (v.blocks[i].ok && v.key.charAt(i) === '0') out.push(v.blocks[i]);
+    return out;
+  }
+  var edgeGuard = CM.EditorState.transactionFilter.of(function (tr) {
+    var v = tr.startState.field(field, false);
+    if (!v || !v.blocks.length) return tr;
+    var cards = closedBlocks(v);
+    if (!cards.length) return tr;
+    var doc = tr.startState.doc, ro = tr.startState.readOnly, i, b;
+    if (tr.docChanged) {
+      var n = 0, join = null, fix = null, typing = tr.isUserEvent('input') && !tr.isUserEvent('input.type.compose');
+      tr.changes.iterChanges(function (fa, ta, fb, tb, ins) {
+        n++;
+        for (var k = 0; k < cards.length; k++) {
+          var c = cards[k];
+          if (!ins.length && ((fa === c.to && ta === c.to + 1) || (fa === c.from - 1 && ta === c.from))) join = c;
+          else if (typing && ins.length && fa === ta) {
+            var t = ins.toString();
+            if (fa === c.to && t.charAt(0) !== '\n') fix = { at: fa, insert: '\n' + t, caret: fa + 1 + t.length };
+            else if (fa === c.from && t.charAt(t.length - 1) !== '\n') fix = { at: fa, insert: t + '\n', caret: fa + t.length };
+          }
+        }
+      });
+      if (n !== 1) return tr;
+      if (join && tr.isUserEvent('delete')) {
+        var back = tr.isUserEvent('delete.backward');
+        return { selection: { anchor: back ? Math.max(0, join.from - 1) : Math.min(doc.length, join.to + 1) }, scrollIntoView: true, userEvent: 'select' };
+      }
+      if (fix) return { changes: { from: fix.at, insert: fix.insert }, selection: { anchor: fix.caret }, scrollIntoView: true, userEvent: 'input.type' };
+      return tr;
+    }
+    if (!tr.selection || tr.selection.ranges.length !== 1 || !tr.selection.main.empty) return tr;
+    var h = tr.selection.main.head, prev = tr.startState.selection.main.head;
+    for (i = 0; i < cards.length; i++) {
+      b = cards[i];
+      if (h !== b.from && h !== b.to) continue;
+      var fwd = h === b.from ? prev < b.from : prev <= b.to;
+      var spec = { effects: tr.effects, scrollIntoView: tr.scrollIntoView, userEvent: 'select' };
+      if (fwd && b.to < doc.length) spec.selection = { anchor: b.to + 1 };
+      else if (!fwd && b.from > 0) spec.selection = { anchor: b.from - 1 };
+      else if (ro) return tr;
+      else if (fwd) { spec.changes = { from: doc.length, insert: '\n' }; spec.selection = { anchor: doc.length + 1 }; }
+      else { spec.changes = { from: 0, insert: '\n' }; spec.selection = { anchor: 0 }; }
+      return spec;
+    }
+    return tr;
+  });
+  var escKey = CM.Prec.high(CM.keymap.of([{ key: 'Escape', run: closeEdit }]));
 
-  Cade.registerPlugin({ id: 'postcard-view', ext: field });
+  Cade.registerPlugin({ id: 'postcard-view', ext: [field, edgeGuard, escKey] });
 })();
