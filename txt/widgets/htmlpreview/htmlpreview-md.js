@@ -15,8 +15,10 @@
  * typed, headings with anchors, callouts ("> [!tip] Title", "-" / "+" fold),
  * highlights (%%yellow|text%%, %%bg/fg|text%%, legacy ==color|text==),
  * ||spoilers||, pasted / drawn images (![img:…], resolved by the app), file
- * pills, footnotes ([^id] + "[^id]: text"), lightly highlighted code, and
- * ```html blocks as live embedded pages (with the ```css / ```js beside them).
+ * pills, footnotes ([^id] + "[^id]: text"), lightly highlighted code,
+ * ```csv / ```tsv tables, ```postcard ASCII postcards in colour (decoded here,
+ * no widget needed) and ```html blocks as live embedded pages (with the
+ * ```css / ```js beside them).
  * cb: { embed(line, code) -> key | '', image(code, isRef, data) -> key }.
  * A private marked instance (new marked.Marked) — the File Converter's global
  * marked config is untouched. ES5. */
@@ -167,6 +169,168 @@
     return s;
   }
 
+  // ---- ASCII postcards: a ```postcard block (widgets/postcard/postcard-core.js has the
+  // format) renders as coloured text — runs of one colour share a span. A copy of
+  // the minimal decoder (base64 + raw inflate + palette) so this file stands alone;
+  // anything that doesn't add up renders the art in one colour. ----
+  var PC_PAPER = { dark: 1, light: 1, paper: 1 };
+  var PC_INK = { green: { dark: '#3dff7a', light: '#0a7d32', paper: '#2f6b2f' }, sepia: { dark: '#d9b77e', light: '#704214', paper: '#6b4423' } };
+  var PC_COLOR_RE = /^~ ?[A-Za-z0-9+/=_-]{4,}\s*$/;
+  function pcInfo(info) {
+    var re = /"([^"]*)"?|(\S+)/g, m, first = true, o = { cols: 0, rows: 0, style: 'classic', mode: '', tint: '#e07a5f', bg: 'dark', cap: '' };
+    while ((m = re.exec(info))) {
+      if (first) { if ((m[2] || '').toLowerCase() !== 'postcard') return null; first = false; continue; }
+      if (m[1] != null) { if (!o.cap) o.cap = m[1].trim(); continue; }
+      var t = m[2].toLowerCase(), d = /^(\d{1,3})x(\d{1,3})$/.exec(t), tm = /^tint(?:[:=]?#?([0-9a-f]{6}|[0-9a-f]{3}))?$/.exec(t);
+      if (d) { o.cols = +d[1]; o.rows = +d[2]; }
+      else if (PC_PAPER[t]) o.bg = t;
+      else if (t === 'color' || t === 'colour' || t === 'mono' || t === 'green' || t === 'sepia') o.mode = t === 'colour' ? 'color' : t;
+      else if (tm) { o.mode = 'tint'; if (tm[1]) o.tint = '#' + (tm[1].length === 3 ? tm[1].replace(/(.)/g, '$1$1') : tm[1]); }
+      else if (/^(classic|dense|blocks|braille|edges|text)$/.test(t)) o.style = t;
+    }
+    return first ? null : o;
+  }
+  var B64A = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+  function pcB64(s) {
+    s = s.replace(/[\s=]+/g, '').replace(/-/g, '+').replace(/_/g, '/');
+    var out = [], acc = 0, bits = 0;
+    for (var i = 0; i < s.length; i++) {
+      var v = B64A.indexOf(s.charAt(i));
+      if (v < 0) return null;
+      acc = (acc << 6) | v; bits += 6;
+      if (bits >= 8) { bits -= 8; out.push((acc >> bits) & 255); }
+    }
+    return out;
+  }
+  // raw DEFLATE (after puff.c); throws on bad data or more than max bytes
+  var PC_LB = [3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 17, 19, 23, 27, 31, 35, 43, 51, 59, 67, 83, 99, 115, 131, 163, 195, 227, 258];
+  var PC_LE = [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 0];
+  var PC_DB = [1, 2, 3, 4, 5, 7, 9, 13, 17, 25, 33, 49, 65, 97, 129, 193, 257, 385, 513, 769, 1025, 1537, 2049, 3073, 4097, 6145, 8193, 12289, 16385, 24577];
+  var PC_DE = [0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13];
+  var PC_CL = [16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15];
+  function pcHuff(l, off, n) {
+    var c = [], o = [0, 0], s = [], i, left = 1;
+    for (i = 0; i < 16; i++) c[i] = 0;
+    for (i = 0; i < n; i++) c[l[off + i] || 0]++;
+    for (i = 1; i < 16; i++) { left = left * 2 - c[i]; if (left < 0) throw new Error('code'); }
+    for (i = 1; i < 15; i++) o[i + 1] = o[i] + c[i];
+    for (i = 0; i < n; i++) if (l[off + i]) s[o[l[off + i]]++] = i;
+    return { c: c, s: s };
+  }
+  function pcInflate(src, max) {
+    var out = [], pos = 0, bb = 0, bc = 0, last, type, i, F = null;
+    function bits(k) {
+      while (bc < k) { if (pos >= src.length) throw new Error('eof'); bb |= src[pos++] << bc; bc += 8; }
+      var v = bb & ((1 << k) - 1); bb >>>= k; bc -= k; return v;
+    }
+    function dec(h) {
+      var code = 0, first = 0, idx = 0;
+      for (var len = 1; len < 16; len++) {
+        code |= bits(1);
+        if (code - h.c[len] < first) return h.s[idx + code - first];
+        idx += h.c[len]; first = (first + h.c[len]) << 1; code <<= 1;
+      }
+      throw new Error('code');
+    }
+    function codes(L, D) {
+      for (;;) {
+        var s = dec(L);
+        if (s < 256) { if (out.length >= max) throw new Error('long'); out.push(s); continue; }
+        if (s === 256) return;
+        s -= 257;
+        if (s >= 29) throw new Error('len');
+        var len = PC_LB[s] + bits(PC_LE[s]), ds = dec(D);
+        if (ds >= 30) throw new Error('dist');
+        var d = PC_DB[ds] + bits(PC_DE[ds]);
+        if (d > out.length || out.length + len > max) throw new Error('dist');
+        while (len--) out.push(out[out.length - d]);
+      }
+    }
+    do {
+      last = bits(1); type = bits(2);
+      if (type === 0) {
+        bb = bc = 0;
+        var n = src[pos] | src[pos + 1] << 8, nn = src[pos + 2] | src[pos + 3] << 8;
+        pos += 4;
+        if (n !== (~nn & 0xffff) || pos + n > src.length || out.length + n > max) throw new Error('stored');
+        for (i = 0; i < n; i++) out.push(src[pos++]);
+      } else if (type === 1) {
+        if (!F) { F = []; for (i = 0; i < 288; i++) F[i] = i < 144 ? 8 : i < 256 ? 9 : i < 280 ? 7 : 8; for (; i < 318; i++) F[i] = 5; }
+        codes(pcHuff(F, 0, 288), pcHuff(F, 288, 30));
+      } else if (type === 2) {
+        var nl = bits(5) + 257, nd = bits(5) + 1, nc = bits(4) + 4, ls = [];
+        if (nl > 286 || nd > 30) throw new Error('counts');
+        for (i = 0; i < 19; i++) ls[i] = 0;
+        for (i = 0; i < nc; i++) ls[PC_CL[i]] = bits(3);
+        var lc = pcHuff(ls, 0, 19);
+        ls = [];
+        while (ls.length < nl + nd) {
+          var sym = dec(lc), rep, val = 0;
+          if (sym < 16) { ls.push(sym); continue; }
+          if (sym === 16) { if (!ls.length) throw new Error('rep'); val = ls[ls.length - 1]; rep = 3 + bits(2); }
+          else rep = sym === 17 ? 3 + bits(3) : 11 + bits(7);
+          if (ls.length + rep > nl + nd) throw new Error('rep');
+          while (rep--) ls.push(val);
+        }
+        if (!ls[256]) throw new Error('eob');
+        codes(pcHuff(ls, 0, nl), pcHuff(ls, nl, nd));
+      } else throw new Error('type');
+    } while (!last);
+    return out;
+  }
+  // '~ base64' → { pal: ['#rrggbb'…], idx: [] } or null
+  function pcColors(line, cells) {
+    try {
+      var b = pcB64(line.replace(/^\s*~\s*/, ''));
+      if (!b || b.length < 3 || b[0] !== 1 || (b[1] & ~1)) return null;
+      var body = b.slice(2);
+      if (b[1] & 1) body = pcInflate(body, 1 + 192 + cells);
+      var n = body[0], pal = [], i;
+      if (!(n >= 1 && n <= 64) || body.length !== 1 + n * 3 + cells) return null;
+      for (i = 0; i < n; i++) pal.push('#' + [body[1 + i * 3], body[2 + i * 3], body[3 + i * 3]].map(function (v) { return (v < 16 ? '0' : '') + v.toString(16); }).join(''));
+      var idx = body.slice(1 + n * 3);
+      for (i = 0; i < cells; i++) if (idx[i] >= n) return null;
+      return { pal: pal, idx: idx };
+    } catch (e) { return null; }
+  }
+  function pcFit(s, n) {
+    var a = Array.from(String(s || '').replace(/\t/g, ' ')).slice(0, n);
+    while (a.length < n) a.push(' ');
+    return a;
+  }
+  function postcard(info, text) {
+    var o = pcInfo(info);
+    if (!o) return '';
+    var body = String(text).split('\n'), c = null, y, x;
+    if (body.length > 1 && PC_COLOR_RE.test(body[body.length - 1])) { var cl = body.pop(); if (!o.mode || o.mode === 'color') c = pcColors(cl, o.cols * o.rows); }
+    var cols = o.cols, rows = o.rows;
+    if (!cols || !rows || cols > 400 || rows > 400) { c = null; rows = body.length; cols = 1; for (y = 0; y < rows; y++) cols = Math.max(cols, Array.from(body[y]).length); cols = Math.min(cols, 400); }
+    var style = '--pc-cols:' + cols, cls = 'md-pc md-pc-' + o.bg, h = '';
+    if (c) {
+      for (var k = 0; k < c.pal.length; k++) style += ';--k' + k + ':' + c.pal[k];
+      var cur = -1;
+      for (y = 0; y < rows; y++) {
+        var line = pcFit(body[y], cols);
+        for (x = 0; x < cols; x++) {
+          var ch = line[x], ci = c.idx[y * cols + x];
+          if (ch !== ' ' && ch !== '\u2800' && ci !== cur) { if (cur >= 0) h += '</i>'; h += '<i class=k' + ci + '>'; cur = ci; }
+          h += esc(ch);   // blanks join the current run: invisible either way
+        }
+        if (y < rows - 1) h += '\n';
+      }
+      if (cur >= 0) h += '</i>';
+    } else {
+      var lines = [];
+      for (y = 0; y < rows; y++) lines.push(pcFit(body[y], cols).join('').replace(/\s+$/, ''));
+      h = esc(lines.join('\n'));
+      if (o.mode === 'tint') style += ';color:' + o.tint;
+      else if (PC_INK[o.mode]) style += ';color:' + PC_INK[o.mode][o.bg];
+      else if (o.mode !== 'color' || !c) cls = 'md-pc md-pc-mono';
+    }
+    return '<figure class="md-pcw"><pre class="' + cls + '" style="' + style + '" role="img" aria-label="' + esc('ASCII postcard' + (o.cap ? ': ' + o.cap : '')) + '">' + h + '</pre>' +
+      (o.cap ? '<figcaption>' + esc(o.cap) + '</figcaption>' : '') + '</figure>\n';
+  }
+
   function fmtSize(n) { n = +n || 0; return n < 1024 ? n + ' B' : n < 1048576 ? (n / 1024).toFixed(n < 10240 ? 1 : 0) + ' KB' : (n / 1048576).toFixed(1) + ' MB'; }
 
   function create(marked) {
@@ -247,6 +411,7 @@
         code: function (t) {
           var info = String(t.lang || '').trim(), lang = info.split(/\s+/)[0].toLowerCase();
           if ((lang === 'csv' || lang === 'tsv') && t.text.trim()) return csvTable(t.text, lang === 'tsv' ? '\t' : sniffDelim(t.text) || ',');
+          if (lang === 'postcard') { var pc = postcard(info, t.text); if (pc) return pc; }
           if (lang === 'html' && t.__l && cur && cur.embed) {
             var ek = cur.embed(t.__l, t.text);
             if (ek) return '<div class="md-embed" data-ek="' + esc(ek) + '"></div>\n';
@@ -303,7 +468,7 @@
       cur = null;
       return out;
     }
-    return { render: render, shellDoc: shellDoc, staticDoc: staticDoc, highlight: highlight, hash: hash, sniffDelim: sniffDelim, parseDelim: parseDelim, csvTable: csvTable };
+    return { render: render, shellDoc: shellDoc, staticDoc: staticDoc, highlight: highlight, hash: hash, sniffDelim: sniffDelim, parseDelim: parseDelim, csvTable: csvTable, postcard: postcard };
   }
 
   // ---- the shell document (lives in the preview's sandboxed iframe) ----------------------------
@@ -361,6 +526,17 @@
     '.md-co-b{margin-top:6px}.md-co-b>:last-child{margin-bottom:0}',
     '.md-embed{margin:0 0 1em;border:1px solid var(--border);border-radius:8px;overflow:hidden;background:#fff;min-height:40px}',
     '.md-embed-f{display:block;width:100%;height:160px;border:0;background:#fff}',
+    // ASCII postcards: one character per cell (a cell is half as wide as tall), sized to fit the column
+    '.md-pcw{margin:0 0 1em}',
+    '.md-pc{display:inline-block;max-width:100%;margin:0;padding:12px 14px;border:0;border-radius:8px;overflow:hidden;white-space:pre;tab-size:1;' +
+      'font-family:var(--font-mono);font-size:min(13px,calc((min(100vw,780px) - 76px) / var(--pc-cols,64) / .6));line-height:1.2;letter-spacing:0;' +
+      'font-variant-ligatures:none;font-feature-settings:"liga" 0,"calt" 0}',
+    '.md-pc i{font-style:normal}',
+    '.md-pc-dark{background:#111110;color:#e7e5e3}.md-pc-light{background:#fafaf9;color:#1c1917;box-shadow:inset 0 0 0 1px var(--border)}.md-pc-paper{background:#f2e8d5;color:#3b3024}',
+    '.md-pc-mono{background:var(--surface-2);color:var(--text);box-shadow:inset 0 0 0 1px var(--border)}',
+    (function () { var s = ''; for (var i = 0; i < 64; i++) s += '.md-pc .k' + i + '{color:var(--k' + i + ')}'; return s; })(),
+    '.md-pcw figcaption{margin:5px 2px 0;font-size:.88em;font-style:italic;color:var(--text-muted)}',
+    '@media print{.md-pc{-webkit-print-color-adjust:exact;print-color-adjust:exact;font-size:min(10px,calc(680px / var(--pc-cols,64) / .6))}.md-pcw{break-inside:avoid}}',
     '.md-err{color:var(--text-muted)}',
     '.md-empty{color:var(--text-faint);text-align:center;padding:48px 12px}',
     '@media (max-width:520px){.md{padding:14px 14px 56px}body{font-size:15.5px}}',
