@@ -1,0 +1,189 @@
+/* Beam — the widget panel (Send · QR stream · Inbox) and the receiver's card. Theme variables only. */
+#beam-panel {
+  top: calc(var(--menubar-h, 36px) + 12px); right: 12px; width: 400px;
+  max-width: calc(100vw - 24px); max-height: calc(100vh - var(--menubar-h, 36px) - 24px); max-height: calc(100dvh - var(--menubar-h, 36px) - 24px);
+  display: flex; flex-direction: column;
+}
+#beam-panel .cade-panel-body { flex: 1 1 auto; min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 0; -webkit-overflow-scrolling: touch; }
+.beam { display: flex; flex-direction: column; min-height: 100%; outline: none; font-size: 13px; color: var(--text); }
+.beam-tabs {
+  position: sticky; top: 0; z-index: 1; display: flex; gap: 2px; padding: 8px; background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.beam-tabs button {
+  flex: 1 1 0; min-height: 34px; font: inherit; font-weight: 600; color: var(--text-muted); background: none; border: 1px solid transparent;
+  border-radius: 8px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+}
+.beam-tabs button.on { color: var(--accent); background: var(--surface-2); border-color: var(--border); }
+.beam-badge { min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; font-size: 11px; line-height: 18px; color: var(--surface); background: var(--accent); box-sizing: border-box; }
+.beam-badge[hidden] { display: none; }
+
+.beam-pane { display: none; flex-direction: column; gap: 10px; padding: 10px 12px 14px; }
+#beam-panel[data-tab="send"] .beam-pane[data-pane="send"],
+#beam-panel[data-tab="qr"] .beam-pane[data-pane="qr"],
+#beam-panel[data-tab="inbox"] .beam-pane[data-pane="inbox"] { display: flex; }
+.beam-sync, .beam-nosync { display: flex; flex-direction: column; gap: 10px; }
+.beam-sync[hidden], .beam-nosync[hidden] { display: none; }
+.beam-h { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-faint); margin-top: 2px; }
+.beam-note { margin: 0; color: var(--text-muted); font-size: 12.5px; line-height: 1.5; }
+.beam-note b { color: var(--text); }
+.beam-center { text-align: center; padding: 18px 8px 4px; }
+
+.beam-btn, .beam-acts button {
+  font: inherit; min-height: 36px; padding: 0 12px; color: var(--text); background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: 8px; cursor: pointer; white-space: nowrap;
+}
+.beam-btn:hover, .beam-acts button:hover { border-color: var(--accent); }
+.beam-sm { min-height: 30px; padding: 0 10px; font-size: 12px; }
+.beam-x {
+  font: inherit; font-size: 16px; line-height: 1; width: 32px; height: 32px; flex: 0 0 auto; border: 0; border-radius: 6px; background: none;
+  color: var(--text-muted); cursor: pointer;
+}
+.beam-x:hover { color: var(--error, #dc2626); background: var(--surface-2); }
+.beam-acts .dim { opacity: 0.5; }
+
+/* ---- Send: devices ---- */
+.beam-devs { display: flex; flex-direction: column; gap: 6px; }
+.beam-dev {
+  display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 6px 10px; text-align: left; cursor: pointer;
+  font: inherit; color: var(--text); background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px;
+}
+.beam-dev.on { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.beam-dev-ic { font-size: 20px; }
+.beam-dev-n { flex: 1 1 auto; min-width: 0; font-weight: 700; overflow: hidden; text-overflow: ellipsis; }
+.beam-dev-n small { display: block; font-weight: 400; font-size: 11.5px; color: var(--text-muted); }
+.beam-check {
+  width: 22px; height: 22px; flex: 0 0 auto; border-radius: 50%; border: 1.5px solid var(--border); display: flex; align-items: center; justify-content: center;
+  font-size: 13px; font-weight: 800; color: var(--surface);
+}
+.beam-dev.on .beam-check { background: var(--accent); border-color: var(--accent); }
+.beam-me { display: flex; flex-direction: column; gap: 4px; }
+.beam-me label { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-muted); }
+.beam-name {
+  flex: 1 1 auto; min-width: 0; font: inherit; font-size: 16px; padding: 6px 8px; color: var(--text); background: var(--surface-2);
+  border: 1px solid var(--border); border-radius: 6px;
+}
+.beam-me small { font-size: 11.5px; color: var(--text-faint); }
+
+/* ---- Send: files ---- */
+.beam-drop {
+  display: flex; flex-direction: column; gap: 8px; padding: 10px; border: 1.5px dashed var(--border); border-radius: 10px; outline: none;
+}
+.beam-drop:focus-visible { border-color: var(--accent); }
+#beam-panel.beam-over .beam-drop { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.beam-pick { display: flex; flex-wrap: wrap; gap: 6px; }
+.beam-pick .beam-btn { flex: 1 1 auto; }
+.beam-hint { font-size: 11.5px; color: var(--text-faint); text-align: center; }
+.beam-drop.has .beam-hint { display: none; }
+.beam-file, .beam-qr-input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; overflow: hidden; }
+.beam-picked, .beam-job-files, .beam-in-list, .beam-files { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.beam-picked:empty { display: none; }
+.beam-pf, .beam-cf, .beam-ir { display: flex; align-items: center; gap: 8px; min-height: 40px; }
+.beam-ic { width: 36px; height: 36px; flex: 0 0 auto; display: flex; align-items: center; justify-content: center; font-size: 18px; border-radius: 6px; background: var(--surface-2); }
+.beam-th { width: 44px; height: 44px; flex: 0 0 auto; object-fit: cover; border-radius: 6px; border: 1px solid var(--border); background: var(--surface-2); }
+.beam-pf-n, .beam-cf-n { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+.beam-pf-n b, .beam-cf-n b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.beam-pf-n small, .beam-cf-n small { font-size: 11.5px; color: var(--text-muted); font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.beam-go {
+  font: inherit; font-weight: 700; min-height: 44px; padding: 0 14px; border-radius: 10px; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: var(--surface); background: var(--accent); border: 1px solid var(--accent);
+}
+.beam-go:disabled { color: var(--text-muted); background: var(--surface-2); border-color: var(--border); cursor: default; }
+
+/* ---- Send: transfers ---- */
+.beam-jobs { display: flex; flex-direction: column; gap: 8px; }
+.beam-jobs:empty { display: none; }
+.beam-job { display: flex; flex-direction: column; gap: 6px; padding: 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-2); }
+.beam-job.done { border-color: color-mix(in srgb, var(--success, #22c55e) 55%, var(--border)); }
+.beam-job.error { border-color: color-mix(in srgb, var(--error, #dc2626) 55%, var(--border)); }
+.beam-job-h { display: flex; align-items: center; gap: 8px; }
+.beam-job-to { font-weight: 700; flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.beam-job-p { flex: 1 1 auto; font-size: 11.5px; color: var(--accent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.beam-job.done .beam-job-p { color: var(--text-muted); }
+.beam-job-s { font-size: 12px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.beam-job.error .beam-job-s { color: var(--error, #dc2626); }
+.beam-job-files li { display: grid; grid-template-columns: 1fr auto; align-items: center; column-gap: 8px; font-size: 12px; }
+.beam-job-files:has(li:only-child) { display: none; }
+.beam-jf-n { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.beam-jf-p { color: var(--text-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.beam-mini { grid-column: 1 / -1; height: 3px; border-radius: 2px; background: var(--border); overflow: hidden; }
+.beam-bar { height: 6px; border-radius: 3px; background: var(--border); overflow: hidden; }
+.beam-bar[hidden] { display: none; }
+.beam-bar i, .beam-mini i { display: block; height: 100%; width: 0; background: var(--accent); border-radius: inherit; transition: width 240ms linear; }
+.beam-job.done .beam-mini i { background: var(--success, #22c55e); }
+
+/* ---- QR stream ---- */
+.beam-seg { display: flex; gap: 2px; padding: 2px; border: 1px solid var(--border); border-radius: 9px; background: var(--surface-2); align-self: center; }
+.beam-seg button { font: inherit; min-height: 34px; min-width: 96px; padding: 0 14px; border: 0; border-radius: 7px; background: none; color: var(--text-muted); cursor: pointer; }
+.beam-seg button.on { background: var(--surface); color: var(--accent); font-weight: 700; box-shadow: inset 0 0 0 1px var(--border); }
+.beam-qr-file { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+#beam-panel[data-qr="receive"] .beam-qr-file { display: none; }
+.beam-qr-fn { flex: 1 1 140px; min-width: 0; font-size: 12px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.beam-qr-host { display: flex; flex-direction: column; min-height: 200px; }
+
+/* ---- Inbox ---- */
+.beam-in-live { display: flex; flex-direction: column; gap: 8px; }
+.beam-in-live:empty { display: none; }
+.beam-in-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 30px; }
+.beam-in-sum { font-size: 12px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.beam-in-head [hidden] { display: none; }
+.beam-ir { padding: 6px 0; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+.beam-ir:last-child { border-bottom: 0; }
+.beam-acts { display: flex; gap: 4px; align-items: center; flex: 0 0 auto; }
+.beam-acts button { min-height: 32px; padding: 0 9px; font-size: 12px; }
+.beam-acts .beam-x { padding: 0; min-height: 32px; font-size: 14px; }
+.beam-empty { padding: 24px 6px; text-align: center; }
+
+/* ---- receiver: the card (bottom-left, above the footer) ---- */
+.beam-card {
+  position: fixed; left: 12px; bottom: calc(26px + env(safe-area-inset-bottom)); z-index: 6000;
+  width: 360px; max-width: calc(100vw - 24px); max-height: min(60vh, 520px); overflow: auto; overscroll-behavior: contain;
+  display: flex; flex-direction: column; gap: 6px; padding: 8px 8px 6px 10px; box-sizing: border-box;
+  font: 12.5px var(--font-mono, ui-monospace, monospace); color: var(--text); background: var(--surface);
+  border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow-lg, 0 8px 24px rgba(0,0,0,0.2));
+}
+.beam-card-list { display: flex; flex-direction: column; gap: 8px; }
+.beam-sec { display: flex; flex-direction: column; gap: 5px; }
+.beam-sec + .beam-sec { padding-top: 8px; border-top: 1px dashed var(--border); }
+.beam-card-h { display: flex; align-items: center; gap: 6px; }
+.beam-card-t {
+  flex: 0 1 auto; min-width: 0; min-height: 32px; padding: 0; text-align: left; font: inherit; font-weight: 700; color: inherit; background: none; border: 0; cursor: default;
+}
+/* the name may take two lines; the numbers next to it never get pushed out */
+.beam-card-t span { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
+.beam-sec.old:not(.open) .beam-card-t span { -webkit-line-clamp: 1; }
+.beam-card-n { flex: 1 0 auto; font-weight: 700; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.beam-sec.live .beam-card-n { color: var(--accent); }
+.beam-sec.old .beam-card-t { cursor: pointer; }
+.beam-sec.old:not(.open) .beam-files, .beam-sec.old:not(.open) .beam-card-sub { display: none; }
+.beam-sec.old:not(.open) .beam-card-t, .beam-sec.old:not(.open) .beam-card-n { font-weight: 400; color: var(--text-muted); }
+.beam-sec.one.live .beam-files { display: none; }
+.beam-card-sub { font-size: 11.5px; color: var(--text-muted); font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.beam-card-sub:empty { display: none; }
+.beam-sec.bad .beam-card-sub { color: var(--error, #dc2626); white-space: normal; }
+.beam-files:empty { display: none; }
+.beam-files { max-height: 260px; overflow: auto; }
+.beam-cf { flex-wrap: wrap; }
+.beam-cf.bad .beam-cf-s, .beam-cf.gone .beam-cf-s { color: var(--error, #dc2626); }
+.beam-cf .beam-acts { margin-left: auto; }
+.beam-card-foot { font-size: 10.5px; color: var(--text-faint); text-align: right; padding-right: 4px; }
+.beam-card:not(:has(.beam-cf.kept, .beam-cf.done)) .beam-card-foot { display: none; }
+@media print { .beam-card { display: none; } }
+
+/* Touch: bigger targets. */
+@media (pointer: coarse) {
+  .beam-btn, .beam-acts button, .beam-acts .beam-x { min-height: 40px; }
+  .beam-x { width: 40px; height: 40px; }
+  .beam-tabs button { min-height: 40px; }
+  .beam-seg button { min-height: 40px; }
+  .beam-hint { display: none; }
+}
+/* Phones: the panel takes the screen below the menu bar; the card spans the width
+   (and stays out of the way while Beam itself is open — its Inbox shows the same). */
+@media (max-width: 560px) {
+  body:has(#beam-panel:not(.cade-minimized)) .beam-card { display: none; }
+  #beam-panel { top: var(--menubar-h, 36px) !important; left: 0 !important; right: 0; bottom: 0; width: auto; height: auto; max-width: none; max-height: none; border-radius: 0; }
+  .beam-card { left: 8px; right: 8px; width: auto; max-width: none; }
+  .beam-cf .beam-acts { width: 100%; justify-content: flex-end; }
+  .beam-ir .beam-acts { width: 100%; justify-content: flex-end; }
+}

@@ -16946,6 +16946,10 @@ async function _doSwitchRoom(name, firebaseUrl, baseEncKey) {
   if (_savedState && _savedState.doc.toString() === cached) {
     // Restore this room's own state — preserves its undo history and cursor.
     editor.setState(_savedState);
+    // …but its plugin compartment is a snapshot from when it was saved: bring
+    // it to the plugins active NOW (a widget's extension added or removed
+    // since, a Settings toggle) so nothing stale comes back or goes missing.
+    try { _pluginReconfigure(); } catch {}
   } else {
     // First visit this session, or the cache changed while we were away (e.g.
     // a remote sync): start a clean state so undo can't reach into the
