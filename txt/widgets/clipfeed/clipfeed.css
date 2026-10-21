@@ -1,0 +1,177 @@
+/* Clipboard feed widget (loaded on demand via Cade.loadCSS). Theme comes from
+   the app's CSS variables only, so light and dark both follow
+   [data-theme] on <html>. Classes: cbf-*; the capture plugin's chip styles
+   itself (clipfeed-capture.js) so this file never loads at boot. */
+#clipfeed-panel {
+  top: 56px; right: 12px; width: 400px; max-width: calc(100vw - 24px);
+  max-height: calc(100vh - 80px); max-height: calc(100dvh - 80px);
+}
+#clipfeed-panel .cade-panel-body { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; overflow: hidden; padding: 0; }
+.cbf-root { position: relative; display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
+
+/* ---- top: compose + filter ---- */
+.cbf-top { flex: none; display: flex; flex-direction: column; gap: 8px; padding: 10px 10px 8px; border-bottom: 1px solid var(--border); }
+.cbf-compose { display: flex; align-items: flex-end; gap: 6px; }
+.cbf-btn {
+  flex: none; display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 36px; padding: 0 12px;
+  font: inherit; font-size: var(--text-sm); font-weight: 600; color: var(--text); white-space: nowrap; cursor: pointer;
+  background: var(--surface-2, transparent); border: 1px solid var(--border); border-radius: var(--radius-md, 6px); touch-action: manipulation;
+}
+.cbf-btn:hover { background: var(--surface-hover); }
+.cbf-btn svg { width: 16px; height: 16px; flex: none; }
+.cbf-paste { color: var(--accent); border-color: var(--accent); background: var(--accent-bg); }
+.cbf-paste:hover { background: var(--accent-bg); filter: brightness(0.97); }
+.cbf-in {
+  flex: 1 1 auto; min-width: 0; height: 36px; min-height: 36px; max-height: 132px; box-sizing: border-box; margin: 0; padding: 8px 10px; resize: none;
+  font: 14px/1.4 var(--font-body, inherit); color: var(--text); background: var(--bg, var(--surface));
+  border: 1px solid var(--border); border-radius: var(--radius-md, 6px); outline: none; overflow-y: auto;
+}
+.cbf-in:focus, .cbf-q:focus { border-color: var(--accent); }
+.cbf-send {
+  flex: none; width: 36px; height: 36px; display: inline-flex; align-items: center; justify-content: center; padding: 0; cursor: pointer;
+  color: #fff; background: var(--accent); border: 1px solid var(--accent); border-radius: var(--radius-md, 6px); touch-action: manipulation;
+}
+.cbf-send svg { width: 17px; height: 17px; }
+.cbf-send:disabled { opacity: 0.35; cursor: default; }
+.cbf-send:not(:disabled):hover { background: var(--accent-hover, var(--accent)); }
+.cbf-bar { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.cbf-search { position: relative; flex: 1 1 auto; min-width: 0; display: flex; align-items: center; margin: 0; }
+.cbf-search svg { position: absolute; left: 9px; width: 14px; height: 14px; color: var(--text-faint); pointer-events: none; }
+.cbf-q {
+  width: 100%; min-width: 0; height: 32px; box-sizing: border-box; padding: 0 8px 0 29px; margin: 0;
+  font: 14px/1.2 var(--font-body, inherit); color: var(--text); background: var(--bg, var(--surface));
+  border: 1px solid var(--border); border-radius: var(--radius-md, 6px); outline: none; -webkit-appearance: none; appearance: none;
+}
+.cbf-count { flex: none; font-size: var(--text-xs); color: var(--text-muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.cbf-clear {
+  flex: none; height: 32px; padding: 0 8px; font: inherit; font-size: var(--text-xs); color: var(--text-muted); cursor: pointer;
+  background: transparent; border: 0; border-radius: var(--radius-sm, 4px); touch-action: manipulation;
+}
+.cbf-clear:hover { color: var(--error, #dc2626); background: var(--surface-hover); }
+.cbf-clear[hidden], .cbf-hint[hidden], .cbf-link-btn[hidden], .cbf-morebtn[hidden], .cbf-empty[hidden], .cbf-menu[hidden], .cbf-drop[hidden] { display: none; }
+.cbf-hint {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 6px 9px; font-size: var(--text-xs); line-height: 1.45;
+  color: var(--text-muted); background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-md, 6px);
+}
+.cbf-hint-t { flex: 1 1 200px; min-width: 0; }
+.cbf-hint.cbf-busy { color: var(--accent); }
+.cbf-link-btn { flex: none; padding: 2px 0; font: inherit; font-weight: 600; color: var(--accent); background: none; border: 0; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+
+/* ---- feed ---- */
+.cbf-scroll {
+  flex: 1 1 auto; min-height: 90px; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
+  padding: 8px 10px 12px; outline: none; display: flex; flex-direction: column;
+}
+.cbf-list { display: flex; flex-direction: column; gap: 7px; }
+.cbf-empty { padding: 26px 18px; text-align: center; font-size: var(--text-sm); line-height: 1.55; color: var(--text-muted); }
+.cbf-morebtn { align-self: center; margin-top: 10px; font-weight: 500; color: var(--text-muted); }
+
+.cbf-card {
+  position: relative; flex: none; padding: 8px 10px 4px 11px; cursor: pointer; outline: none; min-width: 0;
+  background: var(--bg, var(--surface)); border: 1px solid var(--border); border-radius: var(--radius-md, 6px);
+  transition: border-color 0.15s, background-color 0.15s, box-shadow 0.15s;
+}
+.cbf-card:hover { border-color: color-mix(in srgb, var(--accent) 55%, var(--border)); }
+.cbf-card:focus-visible { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-bg); }
+.cbf-card:active { background: var(--surface-hover); }
+.cbf-card.cbf-menuon { border-color: var(--accent); }
+/* from this device: a thin accent edge + a dot before the device name */
+.cbf-card.cbf-own { box-shadow: inset 3px 0 0 color-mix(in srgb, var(--accent) 45%, transparent); }
+.cbf-card.cbf-own .cbf-src::before { content: ''; display: inline-block; width: 6px; height: 6px; margin: 0 5px 1px 0; border-radius: 50%; background: var(--accent); opacity: 0.75; vertical-align: middle; }
+.cbf-card.cbf-pinned { background: var(--surface-2); }
+.cbf-card.cbf-lastpin { margin-bottom: 7px; }
+.cbf-card.cbf-lastpin::after { content: ''; position: absolute; left: 6px; right: 6px; bottom: -11px; border-bottom: 1px dashed var(--border); pointer-events: none; }
+.cbf-card.cbf-copied { border-color: var(--success, #16a34a); }
+.cbf-card.cbf-gone { display: none; }
+.cbf-card.cbf-new { animation: cbf-in 0.32s cubic-bezier(0.16, 1, 0.3, 1); }
+@keyframes cbf-in { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+
+.cbf-body { min-width: 0; }
+.cbf-text {
+  margin: 0; font: 12.5px/1.45 var(--font-mono); color: var(--text); white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word;
+  max-height: calc(1.45em * 6); overflow: hidden; tab-size: 4;
+}
+.cbf-urlrow { display: flex; align-items: center; gap: 6px; min-width: 0; margin-bottom: 2px; }
+.cbf-host { font-weight: 600; font-size: var(--text-sm); color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cbf-text.cbf-urltext { font-size: 11.5px; color: var(--text-muted); max-height: calc(1.45em * 2); }
+.cbf-more { margin-top: 2px; font-size: 11px; color: var(--text-faint); font-variant-numeric: tabular-nums; }
+.cbf-open {
+  display: inline-flex; align-items: center; gap: 4px; max-width: 100%; margin-top: 5px; padding: 2px 8px 2px 6px;
+  font-size: 11.5px; font-weight: 600; color: var(--accent); text-decoration: none; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+  background: var(--accent-bg); border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent); border-radius: 999px;
+}
+.cbf-open svg { width: 12px; height: 12px; flex: none; }
+.cbf-open span { overflow: hidden; text-overflow: ellipsis; }
+.cbf-open:hover { border-color: var(--accent); }
+.cbf-img {
+  display: block; max-width: 100%; max-height: 150px; width: auto; height: auto; object-fit: contain; border-radius: var(--radius-sm, 4px);
+  background: var(--surface-2); border: 1px solid var(--border); -webkit-user-drag: none;
+}
+.cbf-ph {
+  height: 34px; border-radius: var(--radius-sm, 4px);
+  background: linear-gradient(90deg, var(--surface-2) 0%, var(--surface-hover) 50%, var(--surface-2) 100%); background-size: 200% 100%;
+  animation: cbf-shimmer 1.1s linear infinite;
+}
+@keyframes cbf-shimmer { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+.cbf-unread { font-size: var(--text-xs); color: var(--text-muted); font-style: italic; padding: 2px 0; }
+
+.cbf-meta { display: flex; align-items: center; gap: 0; margin-top: 4px; min-height: 28px; font-size: 11px; color: var(--text-faint); }
+.cbf-src { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cbf-tag { flex: none; margin: 0 4px; padding: 0 5px; font-size: 10px; line-height: 16px; color: var(--text-muted); border: 1px solid var(--border); border-radius: 999px; }
+.cbf-ok { display: none; flex: none; margin-right: 6px; font-weight: 600; color: var(--success, #16a34a); }
+.cbf-copied .cbf-ok { display: inline; }
+.cbf-ib {
+  flex: none; width: 30px; height: 28px; display: inline-flex; align-items: center; justify-content: center; padding: 0;
+  font: inherit; font-size: 16px; line-height: 1; color: var(--text-faint); background: transparent; border: 0;
+  border-radius: var(--radius-sm, 4px); cursor: pointer; touch-action: manipulation;
+}
+.cbf-ib svg { width: 15px; height: 15px; }
+.cbf-ib:hover { color: var(--text); background: var(--surface-hover); }
+.cbf-pinb.on { color: var(--accent); --cbf-pin-fill: color-mix(in srgb, var(--accent) 35%, transparent); }
+.cbf-delb:hover { color: var(--error, #dc2626); }
+.cbf-moreb { font-size: 18px; letter-spacing: 1px; }
+
+/* ---- ⋯ menu ---- */
+.cbf-menu {
+  position: absolute; z-index: 3; min-width: 200px; max-width: calc(100% - 16px); padding: 4px; display: flex; flex-direction: column;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md, 6px); box-shadow: var(--shadow-md);
+}
+.cbf-menu button {
+  text-align: left; font: inherit; font-size: var(--text-sm); color: var(--text); background: transparent; border: 0;
+  padding: 9px 10px; border-radius: var(--radius-sm, 4px); cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.cbf-menu button:hover, .cbf-menu button:focus-visible { background: var(--surface-hover); outline: none; }
+.cbf-menu button.danger { color: var(--error, #dc2626); }
+
+/* ---- drop target ---- */
+.cbf-drop {
+  position: absolute; inset: 4px; z-index: 4; display: flex; align-items: center; justify-content: center; pointer-events: none;
+  font-weight: 600; color: var(--accent); background: color-mix(in srgb, var(--surface) 82%, transparent);
+  border: 2px dashed var(--accent); border-radius: var(--radius-md, 6px);
+}
+
+/* ---- phones: full width ---- */
+@media (max-width: 560px) {
+  #clipfeed-panel {
+    left: 6px !important; right: 6px; width: auto; max-width: none; top: 48px;
+    max-height: calc(100vh - 110px); max-height: calc(100dvh - 110px);
+  }
+  .cbf-top { padding: 8px 8px 7px; }
+  .cbf-scroll { padding: 7px 8px 10px; }
+  .cbf-paste { padding: 0 10px; gap: 5px; }
+}
+/* touch: ≥ 40px targets, 16px inputs (no iOS focus zoom), no text callout on long-press */
+@media (pointer: coarse) {
+  .cbf-in, .cbf-q { font-size: 16px; }
+  .cbf-btn, .cbf-send { height: 42px; min-width: 42px; }
+  .cbf-in { height: 42px; min-height: 42px; padding: 10px 11px; }
+  .cbf-q, .cbf-clear { height: 38px; }
+  .cbf-ib { width: 40px; height: 36px; }
+  .cbf-meta { min-height: 36px; margin-top: 2px; }
+  .cbf-card { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; padding-bottom: 2px; }
+  .cbf-menu button { padding: 12px; font-size: var(--text-base, 14px); }
+  .cbf-open { padding: 5px 10px 5px 8px; font-size: 12.5px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cbf-card.cbf-new, .cbf-ph { animation: none; }
+}

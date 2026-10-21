@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "version": "2026.10.20-2",
+  "version": "2026.10.21-1",
   "modules": [
     {
       "id": "crawler",
@@ -1238,6 +1238,61 @@
       "tags": "typing,typing test,speed,speed test,wpm,words per minute,keyboard,practice,touch typing,accuracy,monkeytype,game,train",
       "entry": "widgets/typing/typing.js",
       "css": "widgets/typing/typing.css"
+    },
+    {
+      "id": "remote",
+      "type": "widget",
+      "name": "Remote",
+      "description": "Use your phone as a game controller or presenter remote for your other devices — D-pad, buttons and tilt for the games; next, play, speed and scroll for the Teleprompter, Big Text or the note",
+      "icon": "🎮",
+      "tags": "remote,controller,gamepad,game controller,joystick,presenter,clicker,slides,teleprompter,phone,devices,control,tilt,multi-device",
+      "entry": "widgets/remote/remote.js",
+      "css": "widgets/remote/remote.css",
+      "precache": [
+        "widgets/remote/remote-link.js",
+        "widgets/remote/remote-host.js"
+      ]
+    },
+    {
+      "id": "remote-recv",
+      "type": "plugin",
+      "name": "Let my other devices control this one",
+      "description": "While this screen is open, the Remote widget on your other devices (same Sync) can drive its games, Teleprompter, Big Text or note. Uses nothing while the page is hidden",
+      "entry": "widgets/remote/remote-recv.js",
+      "precache": [
+        "widgets/remote/remote-link.js",
+        "widgets/remote/remote-host.js",
+        "widgets/remote/remote.css"
+      ],
+      "settingKey": "plugins.remote-recv",
+      "section": "Devices",
+      "default": true
+    },
+    {
+      "id": "clipfeed",
+      "type": "widget",
+      "name": "Clipboard",
+      "description": "Synced clipboard feed — copy on one device, tap the card to copy it on another (text, links and images)",
+      "icon": "📋",
+      "tags": "clipboard,copy,paste,sync,devices,share,transfer,history,feed,phone,laptop,image,screenshot,link,universal clipboard",
+      "entry": "widgets/clipfeed/clipfeed.js",
+      "css": "widgets/clipfeed/clipfeed.css",
+      "precache": [
+        "widgets/clipfeed/clipfeed-model.js"
+      ]
+    },
+    {
+      "id": "clipfeed-capture",
+      "type": "plugin",
+      "name": "Share copies to my Clipboard feed",
+      "description": "Text you copy or cut in the app (and what its Copy buttons copy) goes to the Clipboard widget's feed — synced to your other devices when Sync is set up, end-to-end encrypted. Passwords and the Clipboard's own copies are skipped",
+      "entry": "widgets/clipfeed/clipfeed-capture.js",
+      "precache": [
+        "widgets/clipfeed/clipfeed-model.js"
+      ],
+      "settingKey": "plugins.clipfeed-capture",
+      "section": "Devices",
+      "default": true
     },
     {
       "id": "anagram",
