@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "version": "2026.10.21-8",
+  "version": "2026.10.22-2",
   "modules": [
     {
       "id": "crawler",
@@ -688,6 +688,19 @@
       "css": "widgets/colorpick/colorpick.css"
     },
     {
+      "id": "palette",
+      "type": "widget",
+      "name": "Photo Palette",
+      "description": "Pull the main colours out of a photo or the live camera — colour cards with HEX, RGB and HSL to copy, a palette for your note or a PNG strip",
+      "icon": "🖌",
+      "tags": "palette,colour palette,color palette,colours,colors,extract,photo,picture,image,camera,swatch,swatches,hex,rgb,hsl,oklch,css,design,theme,scheme,copy",
+      "entry": "widgets/palette/palette.js",
+      "css": "widgets/palette/palette.css",
+      "precache": [
+        "widgets/palette/palette-core.js"
+      ]
+    },
+    {
       "id": "symbols",
       "type": "widget",
       "name": "Symbols & Alt Codes",
@@ -1336,6 +1349,16 @@
       "settingKey": "plugins.thumbpad",
       "section": "Editor",
       "default": true
+    },
+    {
+      "id": "typewriter",
+      "type": "plugin",
+      "name": "Typewriter sounds",
+      "description": "Plays a short key sound as you type in the editor — mechanical keyboard, typewriter (carriage return and bell) or soft laptop taps. Off unless you turn it on; once on, its style, volume and bell options appear in this section",
+      "entry": "widgets/typewriter/typewriter.js",
+      "settingKey": "plugins.typewriter",
+      "section": "Editor",
+      "default": false
     },
     {
       "id": "voice",
