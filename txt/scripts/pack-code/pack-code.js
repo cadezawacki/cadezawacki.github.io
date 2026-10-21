@@ -1,8 +1,10 @@
 /* Code Pack - minify, obfuscate, unobfuscate and beautify code (JS, Python,
-   HTML, CSS, plus JSON/XML). Script-pack module: registers 12 palette scripts, each a
+   HTML, CSS, plus JSON/XML; Beautify also TS, SCSS/Less, Vue, Markdown, YAML,
+   GraphQL). Script-pack module: registers 14 palette scripts, each a
    thin wrapper that lazily loads the shared engine (pack-code-lib.js) on first
    run and delegates to it. The engine, in turn, lazy-loads terser /
-   js-beautify / javascript-obfuscator from cdn.jsdelivr.net only when needed,
+   js-beautify / javascript-obfuscator / Prettier (only the plugins a language
+   needs) from cdn.jsdelivr.net only when needed,
    so this module costs nothing until a user actually runs one of its scripts.
 
    Input resolution (done by the engine against the live CodeMirror state):
@@ -135,8 +137,22 @@
 
   reg({
     name: 'Beautify Code',
-    description: 'Pretty-print code: JS, CSS, HTML, JSON and XML (auto-detect)',
+    description: 'Pretty-print the selection, the ``` block at the cursor or the note with Prettier: JS, TS, JSX, CSS, SCSS, Less, HTML, Vue, Markdown, YAML, GraphQL; plus JSON and XML',
     icon: I.beauty,
-    tags: 'beautify,prettify,format,pretty,indent,code,js,javascript,css,html,json,xml,auto'
+    tags: 'beautify,prettify,prettier,format,pretty,indent,code,js,javascript,ts,typescript,jsx,tsx,css,scss,less,html,vue,markdown,md,yaml,yml,graphql,json,xml,auto'
   }, 'await L.run(ctx, "beautify", "auto");');
+
+  reg({
+    name: 'Format Code Blocks',
+    description: 'Prettier-format every ``` code block in the note (or the selection) by its fence language; unlabelled and unsupported blocks are left alone',
+    icon: I.beauty,
+    tags: 'format,beautify,prettier,prettify,code,blocks,fences,fenced,markdown,all,js,ts,css,html,json,yaml,graphql'
+  }, 'await L.formatBlocks();');
+
+  reg({
+    name: 'Beautify Options…',
+    description: 'Set print width, indent (spaces or tabs), semicolons, quotes and trailing commas for Beautify Code and Format Code Blocks',
+    icon: I.beauty,
+    tags: 'beautify,prettier,format,options,settings,width,indent,tabs,spaces,semicolons,quotes,trailing,commas'
+  }, 'await L.formatOptions();');
 })();

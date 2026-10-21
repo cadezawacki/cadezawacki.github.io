@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "version": "2026.10.22-7",
+  "version": "2026.10.22-8",
   "modules": [
     {
       "id": "crawler",
@@ -838,11 +838,12 @@
       "name": "Code Pack",
       "description": "Minify, obfuscate, unobfuscate and beautify code: JavaScript, Python, HTML, CSS, JSON and XML",
       "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='4 14 10 14 10 20'/><polyline points='20 10 14 10 14 4'/><line x1='14' y1='10' x2='21' y2='3'/><line x1='3' y1='21' x2='10' y2='14'/></svg>",
-      "tags": "minify,minifier,compress,uglify,terser,obfuscate,obfuscator,unobfuscate,deobfuscate,beautify,prettify,js,javascript,css,html,python,py,json,xml,code",
+      "tags": "minify,minifier,compress,uglify,terser,obfuscate,obfuscator,unobfuscate,deobfuscate,beautify,prettify,js,javascript,css,html,python,py,json,xml,code,ts,typescript,scss,less,vue,markdown,yaml,graphql,prettier",
       "entry": "scripts/pack-code/pack-code.js",
       "precache": [
         "scripts/pack-code/pack-code-lib.js",
-        "scripts/pack-code/pack-code-unobf.js"
+        "scripts/pack-code/pack-code-unobf.js",
+        "scripts/pack-code/pack-code-format.js"
       ],
       "scripts": [
         {
@@ -913,9 +914,21 @@
         },
         {
           "name": "Beautify Code",
-          "description": "Pretty-print code: JS, CSS, HTML, JSON and XML (auto-detect)",
+          "description": "Pretty-print the selection, the ``` block at the cursor or the note with Prettier: JS, TS, JSX, CSS, SCSS, Less, HTML, Vue, Markdown, YAML, GraphQL; plus JSON and XML",
           "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M5 3v4'/><path d='M3 5h4'/><path d='M6 17v4'/><path d='M4 19h4'/><path d='M13 3l3 7 7 3-7 3-3 7-3-7-7-3 7-3 3-7z'/></svg>",
-          "tags": "beautify,prettify,format,pretty,indent,code,js,javascript,css,html,json,xml,auto"
+          "tags": "beautify,prettify,prettier,format,pretty,indent,code,js,javascript,ts,typescript,jsx,tsx,css,scss,less,html,vue,markdown,md,yaml,yml,graphql,json,xml,auto"
+        },
+        {
+          "name": "Format Code Blocks",
+          "description": "Prettier-format every ``` code block in the note (or the selection) by its fence language; unlabelled and unsupported blocks are left alone",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M5 3v4'/><path d='M3 5h4'/><path d='M6 17v4'/><path d='M4 19h4'/><path d='M13 3l3 7 7 3-7 3-3 7-3-7-7-3 7-3 3-7z'/></svg>",
+          "tags": "format,beautify,prettier,prettify,code,blocks,fences,fenced,markdown,all,js,ts,css,html,json,yaml,graphql"
+        },
+        {
+          "name": "Beautify Options…",
+          "description": "Set print width, indent (spaces or tabs), semicolons, quotes and trailing commas for Beautify Code and Format Code Blocks",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M5 3v4'/><path d='M3 5h4'/><path d='M6 17v4'/><path d='M4 19h4'/><path d='M13 3l3 7 7 3-7 3-3 7-3-7-7-3 7-3 3-7z'/></svg>",
+          "tags": "beautify,prettier,format,options,settings,width,indent,tabs,spaces,semicolons,quotes,trailing,commas"
         }
       ]
     },
