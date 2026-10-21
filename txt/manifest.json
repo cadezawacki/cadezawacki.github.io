@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "version": "2026.10.22-1",
+  "version": "2026.10.22-2",
   "modules": [
     {
       "id": "crawler",
@@ -686,6 +686,19 @@
       "tags": "color,colour,picker,eyedropper,dropper,hex,rgb,rgba,hsl,swatch,palette",
       "entry": "widgets/colorpick/colorpick.js",
       "css": "widgets/colorpick/colorpick.css"
+    },
+    {
+      "id": "palette",
+      "type": "widget",
+      "name": "Photo Palette",
+      "description": "Pull the main colours out of a photo or the live camera — colour cards with HEX, RGB and HSL to copy, a palette for your note or a PNG strip",
+      "icon": "🖌",
+      "tags": "palette,colour palette,color palette,colours,colors,extract,photo,picture,image,camera,swatch,swatches,hex,rgb,hsl,oklch,css,design,theme,scheme,copy",
+      "entry": "widgets/palette/palette.js",
+      "css": "widgets/palette/palette.css",
+      "precache": [
+        "widgets/palette/palette-core.js"
+      ]
     },
     {
       "id": "symbols",
