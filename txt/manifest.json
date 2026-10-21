@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "version": "2026.10.22-3",
+  "version": "2026.10.22-4",
   "modules": [
     {
       "id": "crawler",
@@ -1404,6 +1404,50 @@
       }
     },
     {
+      "id": "boldread",
+      "type": "plugin",
+      "name": "Bold-start reading",
+      "description": "Bolds the first letters of each word so your eye can skim faster — purely visual, the text is unchanged. Skips code, links, headings and the line you are editing; strength in Widget preferences",
+      "entry": "widgets/boldread/boldread.js",
+      "css": "widgets/boldread/boldread.css",
+      "settingKey": "plugins.boldread",
+      "section": "Editor",
+      "default": false,
+      "prefs": {
+        "title": "Bold-start reading",
+        "fields": [
+          {
+            "key": "strength",
+            "type": "radio",
+            "label": "Fixation strength",
+            "default": "medium",
+            "hint": "How much of the start of each word is bold: light about a third, medium about half, strong about two thirds",
+            "options": [
+              {
+                "value": "light",
+                "label": "Light"
+              },
+              {
+                "value": "medium",
+                "label": "Medium"
+              },
+              {
+                "value": "strong",
+                "label": "Strong"
+              }
+            ]
+          },
+          {
+            "key": "skipCaret",
+            "type": "toggle",
+            "label": "Leave the line I’m editing plain",
+            "default": true,
+            "hint": "While you type, the caret’s line shows no bold, so the text you are changing stays still"
+          }
+        ]
+      }
+    },
+    {
       "id": "voice",
       "type": "widget",
       "name": "Voice Note",
@@ -1486,6 +1530,202 @@
         "widgets/ekg/ekg-core.js",
         "widgets/ekg/ekg-view.js"
       ]
+    },
+    {
+      "id": "echoes",
+      "type": "widget",
+      "name": "Word Echoes",
+      "description": "Highlights only the words you repeat — the closer the repeat, the stronger the tint; tap a word to see every echo",
+      "icon": "🔁",
+      "tags": "writing,prose,repetition,repeated words,echo,echoes,word choice,style,proofread,lint,highlight",
+      "entry": "widgets/echoes/echoes.js",
+      "css": "widgets/echoes/echoes.css",
+      "precache": [
+        "widgets/echoes/echoes-core.js",
+        "widgets/ekg/ekg-core.js"
+      ],
+      "prefs": {
+        "title": "Word Echoes",
+        "fields": [
+          {
+            "key": "taper",
+            "type": "slider",
+            "label": "Fade out after",
+            "default": 5,
+            "min": 2,
+            "max": 10,
+            "step": 1,
+            "unit": "sentences",
+            "hint": "How far apart two uses of a word can be and still be marked. Nearer repeats are always stronger."
+          },
+          {
+            "key": "stem",
+            "type": "toggle",
+            "label": "Match word forms",
+            "default": true,
+            "hint": "run / runs / running and idea / ideas count as the same word"
+          },
+          {
+            "key": "minLen",
+            "type": "number",
+            "label": "Shortest word to check",
+            "default": 3,
+            "min": 2,
+            "max": 8,
+            "step": 1,
+            "unit": "letters"
+          },
+          {
+            "key": "ignore",
+            "type": "text",
+            "label": "Also ignore these words",
+            "default": "",
+            "placeholder": "e.g. said, Anna, river",
+            "hint": "Comma-separated. Common words (the, a, than, with…) are always ignored."
+          },
+          {
+            "key": "style",
+            "type": "radio",
+            "label": "Highlight style",
+            "default": "tint",
+            "options": [
+              {
+                "value": "tint",
+                "label": "Tint"
+              },
+              {
+                "value": "underline",
+                "label": "Underline"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "speedread",
+      "type": "widget",
+      "name": "Speed Reader",
+      "description": "Read the note or selection one word (or a few) at a time in one spot, focus letter highlighted — tap to play, hold to read, scrub, back a sentence",
+      "icon": "⚡",
+      "tags": "speed reader,speed reading,rsvp,spritz,read,reading,fast,focus,words per minute,wpm,skim,study",
+      "entry": "widgets/speedread/speedread.js",
+      "css": "widgets/speedread/speedread.css",
+      "precache": [
+        "widgets/speedread/speedread-core.js"
+      ],
+      "prefs": {
+        "title": "Speed Reader",
+        "fields": [
+          {
+            "key": "chunk",
+            "type": "number",
+            "label": "Words shown at a time",
+            "default": 1,
+            "min": 1,
+            "max": 5,
+            "step": 1
+          },
+          {
+            "key": "wpm",
+            "type": "slider",
+            "label": "Speed",
+            "default": 350,
+            "min": 100,
+            "max": 1000,
+            "step": 25,
+            "unit": "wpm"
+          },
+          {
+            "key": "ctx",
+            "type": "toggle",
+            "label": "Show the text around it",
+            "default": true,
+            "hint": "The words before and after the current one, faded"
+          },
+          {
+            "key": "dim",
+            "type": "slider",
+            "label": "Opacity of the text around it",
+            "default": 25,
+            "min": 0,
+            "max": 100,
+            "step": 5,
+            "unit": "%",
+            "showIf": "ctx",
+            "hint": "0 hides it"
+          },
+          {
+            "key": "ctxPos",
+            "type": "radio",
+            "label": "Where it goes",
+            "default": "inline",
+            "showIf": "ctx",
+            "options": [
+              {
+                "value": "inline",
+                "label": "Same line"
+              },
+              {
+                "value": "lines",
+                "label": "A line above and below"
+              }
+            ]
+          },
+          {
+            "key": "orp",
+            "type": "toggle",
+            "label": "Highlight the focus letter",
+            "default": true,
+            "hint": "One letter of each word in the accent colour, always at the same spot"
+          },
+          {
+            "key": "pause",
+            "type": "slider",
+            "label": "Pause at sentence ends",
+            "default": 2,
+            "min": 1,
+            "max": 4,
+            "step": 0.25,
+            "unit": "×",
+            "hint": "Commas get half as much extra, paragraphs a little more; long words and numbers always get a bit longer"
+          },
+          {
+            "key": "size",
+            "type": "slider",
+            "label": "Text size",
+            "default": 44,
+            "min": 24,
+            "max": 96,
+            "step": 4,
+            "unit": "px"
+          },
+          {
+            "key": "start",
+            "type": "radio",
+            "label": "Start from",
+            "default": "caret",
+            "options": [
+              {
+                "value": "caret",
+                "label": "The caret"
+              },
+              {
+                "value": "top",
+                "label": "The start of the note"
+              }
+            ],
+            "hint": "A selection is always read from its start"
+          },
+          {
+            "key": "moveCaret",
+            "type": "toggle",
+            "label": "Move the caret to where I stopped",
+            "default": true,
+            "hint": "When you close the reader"
+          }
+        ]
+      }
     },
     {
       "id": "danger",

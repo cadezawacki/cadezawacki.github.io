@@ -1,0 +1,6 @@
+/* Bold-start reading plugin. Marks get cm-br-w when the editor font keeps
+   the same advance widths in bold (then real font-weight), else cm-br-s: a
+   thin stroke in the text colour that thickens the glyphs without moving
+   anything. Either way no reflow and no line-height change. */
+.cm-br-w { font-weight: 700; }
+.cm-br-s { -webkit-text-stroke: 0.04em currentColor; }
