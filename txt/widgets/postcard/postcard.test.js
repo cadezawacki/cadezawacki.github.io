@@ -42,7 +42,7 @@ var WIDGET_ENTRY = {
 };
 var PLUGIN_ENTRY = {
   id: 'postcard-view', type: 'plugin', name: 'ASCII postcards in the editor',
-  description: 'Show ```postcard blocks (made with ASCII Postcard) as their coloured picture; put the caret in one to edit its text',
+  description: 'Show ```postcard blocks (made with ASCII Postcard) as their coloured picture; put the caret in one to edit its text, or save it as a PNG',
   entry: 'widgets/postcard/postcard-view.js', css: 'widgets/postcard/postcard-view.css', precache: ['widgets/postcard/postcard-core.js'],
   settingKey: 'plugins.postcard-view', section: 'Editor', default: true
 };
@@ -442,6 +442,15 @@ test('view: a block opens (raw text) only while a selection end is inside it', f
   assert.strictEqual(V.openKey(sel([[0, 100]]), blocks), '00', 'select-all keeps the cards');
   assert.strictEqual(V.openKey(sel([[0, 70]]), blocks), '01');
   assert.strictEqual(V.openKey(sel([[0, 0], [65, 65]]), blocks), '01');
+});
+
+test('PNG file name: a slug of the caption, or the date when there is none', function () {
+  assert.strictEqual(PC.pngName('Lisbon — 21 Oct 2026'), 'postcard-lisbon-21-oct-2026.png');
+  assert.strictEqual(PC.pngName('  ¡Olá!  '), 'postcard-ol.png');
+  assert.strictEqual(PC.pngName('', new Date(2026, 0, 5)), 'postcard-2026-01-05.png');
+  assert.strictEqual(PC.pngName('🌅', new Date(2026, 9, 21)), 'postcard-2026-10-21.png');
+  var long = PC.pngName(new Array(30).join('ab cd '));
+  assert.ok(long.length <= 'postcard-.png'.length + 48 && !/-\.png$/.test(long), long);
 });
 
 Promise.all(pending).then(function () {

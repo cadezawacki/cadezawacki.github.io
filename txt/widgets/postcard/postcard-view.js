@@ -3,7 +3,7 @@
  * caret in it (click the card, ✎, or arrow into it) and the raw text is back
  * for editing, set small and tight (1 character = 1 cell) so the art lines up.
  * A bar under the card: caption · size, and ✎ edit / ⧉ copy the plain art /
- * 🗑 delete (tap twice). Read-only notes render too; delete is refused.
+ * ⤓ download it as a PNG picture / 🗑 delete (tap twice). Read-only notes render too; delete is refused.
  *
  * Cheap by design: a StateField (block widgets can't come from a ViewPlugin)
  * that keeps the postcard blocks of the doc. One line scan on load; after
@@ -118,6 +118,24 @@
     });
   }
 
+  // ---- PNG export (one at a time; the last one is kept for a quick second tap) ----
+  // (when it's ready by the click, it is saved inside the tap itself — Safari wants that)
+  var lastPng = { h: '', p: null, r: null };
+  function pngOf(b) {
+    if (lastPng.h === b.h && lastPng.p) return lastPng.p;
+    var p = loadCore().then(function (PC) {
+      var card = PC.parseBlock(b.text);
+      return PC.toPng(card).then(function (blob) { return { PC: PC, card: card, blob: blob }; });
+    });
+    var slot = lastPng = { h: b.h, p: p, r: null };
+    p.then(function (r) { slot.r = r; }, function () { if (lastPng === slot) lastPng = { h: '', p: null, r: null }; });
+    return p;
+  }
+  function savePng(r) {
+    r.PC.download(r.blob, r.PC.pngName(r.card.caption));
+    toast('Postcard saved as a PNG', 'success');
+  }
+
   // ---- canvases ------------------------------------------------------------------
   var cards = new Map(), masters = new Map(), masterPx = 0, MASTER_BUDGET = 8e6;
   function cardOf(PC, b) {
@@ -177,6 +195,7 @@
     edit: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>',
     copy: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></svg>',
     del: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg>',
+    png: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5M4 17v3h16v-3"/></svg>',
   };
 
   function Card(b) { this.b = b; this.h = b.h; }
@@ -198,6 +217,7 @@
       '<div class="cm-pc-bar"><span class="cm-pc-cap"></span><span class="cm-pc-meta"></span><span class="cm-pc-acts">' +
       '<button type="button" tabindex="-1" data-act="edit" title="Edit the text" aria-label="Edit">' + ICON.edit + '</button>' +
       '<button type="button" tabindex="-1" data-act="copy" title="Copy the art as plain text" aria-label="Copy">' + ICON.copy + '</button>' +
+      '<button type="button" tabindex="-1" data-act="png" title="Download as a PNG picture" aria-label="Download PNG">' + ICON.png + '</button>' +
       '<button type="button" tabindex="-1" data-act="del" title="Delete this postcard" aria-label="Delete">' + ICON.del + '</button></span></div></div>';
     wrap.querySelector('.cm-pc-card').setAttribute('aria-label', 'ASCII postcard: ' + cap);
     wrap.querySelector('.cm-pc-cap').textContent = b.cap;
@@ -205,6 +225,8 @@
     wrap.__pc = { b: b, view: view, painted: false };
     var armed = 0;
     wrap.addEventListener('mousedown', function (e) { e.preventDefault(); }); // keep focus / no caret drag
+    // start building the picture on press, so the click can save it at once
+    wrap.addEventListener('pointerdown', function (e) { if (e.target.closest && e.target.closest('[data-act="png"]')) pngOf(wrap.__pc.b); });
     wrap.addEventListener('click', function (e) {
       e.preventDefault(); e.stopPropagation();
       var btn = e.target.closest ? e.target.closest('[data-act]') : null, act = btn ? btn.getAttribute('data-act') : 'edit';
@@ -221,6 +243,11 @@
         var at = Math.min(doc.length, L.to + 1);
         v.dispatch({ selection: { anchor: at }, scrollIntoView: true, userEvent: 'select' });
         v.focus();
+      } else if (act === 'png') {
+        if (lastPng.h === blk.h && lastPng.r) { savePng(lastPng.r); return; }
+        btn.classList.add('cm-pc-busy');
+        pngOf(blk).then(function (r) { btn.classList.remove('cm-pc-busy'); savePng(r); },
+          function () { btn.classList.remove('cm-pc-busy'); toast('Couldn\u2019t make the picture', 'error'); });
       } else if (act === 'copy') {
         copyText(plainArt(blk.text)).then(function () { toast('Postcard copied as text', 'success'); }, function () { toast('Copy failed', 'error'); });
       } else if (act === 'del') {

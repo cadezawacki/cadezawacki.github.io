@@ -360,25 +360,13 @@
       if (ok) res(); else rej(new Error('copy failed'));
     });
   }
-  function pngBlob() {
-    var c = finalCard(), cv = document.createElement('canvas');
-    var cw = Math.max(6, Math.min(16, 2400 / (c.cols + 2)));
-    return PC.fontReady(PC.monoFont()).then(function () {
-      PC.render(cv, c, { width: Math.round(cw * (c.cols + 2)), font: PC.monoFont(), caption: true, captionFont: PC.bodyFont() });
-      return new Promise(function (res, rej) { cv.toBlob(function (b) { cv.width = cv.height = 0; if (b) res(b); else rej(new Error('png')); }, 'image/png'); });
-    });
-  }
+  function pngBlob() { return PC.toPng(finalCard()); }
   function fileName() {
     var d = new Date(), p = function (n) { return (n < 10 ? '0' : '') + n; };
     var place = (el.place.value || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 30);
     return 'postcard-' + d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + (place ? '-' + place : '') + '.png';
   }
-  function download(blob, name) {
-    var url = URL.createObjectURL(blob), a = document.createElement('a');
-    a.href = url; a.download = name; a.rel = 'noopener';
-    document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
-  }
+  function download(blob, name) { PC.download(blob, name); }
   function savePng() {
     if (needPic()) return;
     pngBlob().then(function (b) { download(b, fileName()); }, function () { toast('Couldn’t make the picture', 'error'); });
@@ -432,10 +420,11 @@
     var html = '';
     bl.forEach(function (b, i) {
       var c = b.card;
-      html += '<button type="button" class="pc-item" data-line="' + b.line + '">' +
+      html += '<div class="pc-li"><button type="button" class="pc-item" data-line="' + b.line + '">' +
         '<span class="pc-thumb pc-thumb-' + esc(c ? c.bg : 'dark') + '"><canvas data-i="' + i + '"></canvas></span>' +
         '<span class="pc-it"><b>' + esc(c && c.caption ? c.caption : 'Untitled postcard') + '</b>' +
-        '<small>' + (c ? c.cols + '×' + c.rows + ' · ' + esc(c.style) + ' · ' : '') + 'line ' + b.line + '</small></span></button>';
+        '<small>' + (c ? c.cols + '×' + c.rows + ' · ' + esc(c.style) + ' · ' : '') + 'line ' + b.line + '</small></span></button>' +
+        (c ? '<button type="button" class="pc-dl" data-png="' + i + '" title="Download as a PNG picture" aria-label="Download PNG">⤓ PNG</button>' : '') + '</div>';
     });
     el.list.innerHTML = html;
     var font = PC.monoFont();
@@ -447,6 +436,17 @@
         if (c) PC.render(cvs[i], c, { width: Math.round(132 * dpr), font: font });
       }
     });
+  }
+  // ⤓ PNG on a postcard in the list
+  function listPng(i, btn) {
+    var bl = noteBlocks(), c = bl[i] && bl[i].card;
+    if (!c) return;
+    btn.disabled = true;
+    PC.toPng(c).then(function (blob) {
+      btn.disabled = false;
+      PC.download(blob, PC.pngName(c.caption));
+      toast('Postcard saved as a PNG', 'success');
+    }, function () { btn.disabled = false; toast('Couldn\u2019t make the picture', 'error'); });
   }
   function jumpTo(line) {
     var ed = Cade.editor, CM = Cade.CM;
@@ -473,6 +473,7 @@
     var a = b.getAttribute('data-act');
     if (b.hasAttribute('data-tab')) { showTab(b.getAttribute('data-tab')); return; }
     if (b.hasAttribute('data-line')) { jumpTo(+b.getAttribute('data-line')); return; }
+    if (b.hasAttribute('data-png')) { listPng(+b.getAttribute('data-png'), b); return; }
     var changed = true;
     if (b.hasAttribute('data-style')) prefs.style = b.getAttribute('data-style');
     else if (b.hasAttribute('data-mode')) { prefs.mode = b.getAttribute('data-mode'); if (prefs.mode === 'green' && prefs.bg !== 'dark') prefs.bg = 'dark'; }

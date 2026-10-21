@@ -823,6 +823,35 @@
     return (fontWaits[fam] = p.then(function () {}));
   }
 
+  // ===================================================================== PNG
+  // A card as a PNG picture with its caption strip (crisp: ~6–16 px a cell,
+  // about 2400 px wide at most). Resolves to a Blob.
+  function toPng(card) {
+    return fontReady(monoFont()).then(function () {
+      var cv = document.createElement('canvas'), cw = Math.max(6, Math.min(16, 2400 / (card.cols + 2)));
+      render(cv, card, { width: Math.round(cw * (card.cols + 2)), font: monoFont(), caption: true, captionFont: bodyFont() });
+      return new Promise(function (res, rej) {
+        cv.toBlob(function (b) { cv.width = cv.height = 0; if (b) res(b); else rej(new Error('Couldn\u2019t make the picture')); }, 'image/png');
+      });
+    });
+  }
+  // "postcard-lisbon-21-oct-2026.png", or the date when there's no caption.
+  function pngName(caption, now) {
+    var slug = String(caption || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 48).replace(/-+$/, '');
+    if (!slug) {
+      var d = now || new Date(), z = function (n) { return (n < 10 ? '0' : '') + n; };
+      slug = d.getFullYear() + '-' + z(d.getMonth() + 1) + '-' + z(d.getDate());
+    }
+    return 'postcard-' + slug + '.png';
+  }
+  // Save a Blob as a file (iPhone: Safari's download prompt → Files / share).
+  function download(blob, name) {
+    var url = URL.createObjectURL(blob), a = document.createElement('a');
+    a.href = url; a.download = name; a.rel = 'noopener';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
+  }
+
   // ===================================================================== demo image
   // A procedural sunset (RGBA), for "Try a sample" and the tests.
   function demoImage(w, h) {
@@ -866,6 +895,7 @@
     toText: toText, cardToText: cardToText, plainText: plainText, hash: hash,
     colorsOf: colorsOf, layout: layout, opsOf: opsOf, draw: draw, render: render,
     monoFont: monoFont, bodyFont: bodyFont, fontReady: fontReady, demoImage: demoImage,
+    toPng: toPng, pngName: pngName, download: download,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.__cadePostcard = api;

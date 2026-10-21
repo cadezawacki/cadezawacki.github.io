@@ -99,6 +99,14 @@
   background: var(--surface-2); border: 1px solid var(--border); border-radius: 9px; touch-action: manipulation;
 }
 .pc-item:hover { border-color: var(--text-faint); }
+.pc-li { display: flex; gap: 6px; align-items: stretch; }
+.pc-li > .pc-item { flex: 1 1 auto; min-width: 0; }
+.pc-dl {
+  flex: 0 0 auto; padding: 0 12px; font: inherit; font-size: 12.5px; font-weight: 700; color: var(--accent); cursor: pointer; touch-action: manipulation;
+  background: var(--surface-2); border: 1px solid var(--border); border-radius: 9px; white-space: nowrap;
+}
+.pc-dl:hover, .pc-dl:focus-visible { border-color: var(--accent); outline: none; }
+.pc-dl:disabled { opacity: 0.5; cursor: default; }
 .pc-thumb { flex: 0 0 66px; display: flex; align-items: center; justify-content: center; height: 54px; overflow: hidden; border-radius: 6px; }
 .pc-thumb-dark { background: #111110; } .pc-thumb-light { background: #fafaf9; box-shadow: inset 0 0 0 1px var(--border); } .pc-thumb-paper { background: #f2e8d5; }
 .pc-thumb canvas { display: block; max-width: 66px; max-height: 54px; }
